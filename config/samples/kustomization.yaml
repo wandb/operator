@@ -1,0 +1,4 @@
+## Append samples you want in your CSV to this file as resources ##
+resources:
+- wandb.com_v1_weightsandbiases.yaml
+#+kubebuilder:scaffold:manifestskustomizesamples

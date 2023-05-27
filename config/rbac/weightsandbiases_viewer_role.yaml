@@ -1,0 +1,27 @@
+# permissions for end users to view weightsandbiases.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: clusterrole
+    app.kubernetes.io/instance: weightsandbiases-viewer-role
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: operator
+    app.kubernetes.io/part-of: operator
+    app.kubernetes.io/managed-by: kustomize
+  name: weightsandbiases-viewer-role
+rules:
+  - apiGroups:
+      - apps.wandb.com
+    resources:
+      - weightsandbiases
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - apps.wandb.com
+    resources:
+      - weightsandbiases/status
+    verbs:
+      - get
