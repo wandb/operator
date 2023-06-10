@@ -31,8 +31,8 @@ import (
 	networkingv1 "k8s.io/api/networking/v1"
 
 	apiv1 "github.com/wandb/operator/api/v1"
-	wandbcomv1 "github.com/wandb/operator/api/v1"
 	"github.com/wandb/operator/controllers/internal/ctrlqueue"
+	"github.com/wandb/operator/pkg/wandb/cdk8s/state"
 	"k8s.io/apimachinery/pkg/api/errors"
 )
 
@@ -58,16 +58,90 @@ type WeightsAndBiasesReconciler struct {
 func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := ctrllog.FromContext(ctx)
 
-	log.Info("Reconciling Weights & Biases")
-
 	wandb := &apiv1.WeightsAndBiases{}
 	if err := r.Get(ctx, req.NamespacedName, wandb); err != nil {
 		if errors.IsNotFound(err) {
 			return ctrlqueue.DoNotRequeue()
 		}
-		// could not get GitLab resource
 		return ctrlqueue.Requeue(err)
 	}
+
+	log.Info("Found Weights & Biases instance, processing the spec...", "Spec", wandb.Spec)
+
+	state, err := state.NewState(ctx, r.Client, wandb.Namespace, wandb.Name, rel)
+
+	// latest, _ := release.GetLatestRelease(wandb)
+
+	// cdkManager := cdk8s.NewManager(ctx, wandb, r.Client, r.Scheme)
+
+	// isUpgrade := cdkManager.IsUpgrade(latest)
+	// log.Info(
+	// 	"version upgrade",
+	// 	"upgrade", isUpgrade,
+	// 	"current version", cdkManager.Config.Version(),
+	// 	"desired version", latest.Version(),
+	// )
+
+	// if isUpgrade {
+	// 	log.Info("New release found, updating...", "release", latest)
+	// 	cdkManager.Update(latest)
+	// 	latest.Download()
+	// 	latest.Install()
+	// }
+
+	// cdkManager.Apply(latest, wandb)
+
+	// hasConfigChanaged := cdkManager.HasConfigChanaged()
+	// if hasConfigChanaged {
+	// 	m.Apply()
+	// }
+
+	// cdkManager := cdk8s.NewManager(ctx, wandb, r.Client, r.Scheme)
+	// if cdkManager.IsNewRelease(latest) {
+	// 	log.Info("New release found, updating...", "release", latest)
+	// 	cdkManager.Update(release)
+	// }
+
+	// if cdkManager.IsNewRelease(latest) || cdkManager.ConfigHasChanged() {
+	// 	cdkManager.Apply()
+	// }
+
+	// log.Info("Downloading version", "version", release.Version())
+	// err := release.Download()
+	// if err == nil {
+	// 	log.Info("Installing release", "version", release.Version())
+	// 	release.Install()
+	// 	config := map[string]interface{}{
+	// 		"mysql": map[string]interface{}{
+	// 			"database": "wandb_local",
+	// 			"port":     3306,
+	// 			"user":     "wandb",
+	// 			"host":     "localhost",
+	// 			"password": map[string]interface{}{
+	// 				"secret": "mysql",
+	// 				"key":    "password",
+	// 			},
+	// 		},
+	// 		"bucket": map[string]interface{}{
+	// 			"connectionString": "s3://wandb-local",
+	// 			"region":           "us-east-1",
+	// 		},
+	// 	}
+
+	// 	log.Info("Generating manifests")
+
+	// 	err := release.Generate(config)
+	// 	if err != nil {
+	// 		log.Error(err, "Failed to generate release")
+	// 	}
+
+	// 	manifests := path.Join(release.Directory(), "dist")
+	// 	log.Info("Applying manifests", "manifests", manifests)
+	// 	err = cdk8s.Apply(r.Client, manifests, wandb, r.Scheme)
+	// 	if err != nil {
+	// 		log.Error(err, "Failed to apply release")
+	// 	}
+	// }
 
 	return ctrlqueue.DoNotRequeue()
 }
@@ -75,7 +149,7 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 // SetupWithManager sets up the controller with the Manager.
 func (r *WeightsAndBiasesReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	builder := ctrl.NewControllerManagedBy(mgr).
-		For(&wandbcomv1.WeightsAndBiases{}).
+		For(&apiv1.WeightsAndBiases{}).
 		Owns(&corev1.Secret{}).
 		Owns(&corev1.ConfigMap{}).
 		Owns(&corev1.Service{}).
