@@ -1,0 +1,9 @@
+apiVersion: apps.wandb.com/v1
+kind: WeightsAndBiases
+metadata:
+  labels:
+    app.kubernetes.io/name: weightsandbiases
+    app.kubernetes.io/instance: wandb
+  name: wandb
+spec:
+  releasePath: ../cdk8s

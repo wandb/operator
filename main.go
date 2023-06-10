@@ -33,7 +33,6 @@ import (
 
 	wandbcomv1 "github.com/wandb/operator/api/v1"
 	"github.com/wandb/operator/controllers"
-	"github.com/wandb/operator/pkg/helm/charts"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -66,11 +65,6 @@ func main() {
 
 	logger := zap.New(zap.UseFlagOptions(&opts))
 	ctrl.SetLogger(logger)
-
-	if err := charts.LoadCharts(logger, "./charts"); err != nil {
-		setupLog.Error(err, "unable to populate global chart collection")
-		os.Exit(1)
-	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,

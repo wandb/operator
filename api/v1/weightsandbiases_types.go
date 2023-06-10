@@ -17,10 +17,7 @@ limitations under the License.
 package v1
 
 import (
-	"encoding/json"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	runtime "k8s.io/apimachinery/pkg/runtime"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN! NOTE: json tags are
@@ -34,52 +31,9 @@ type WeightsAndBiasesSpec struct {
 
 	// The specification of Weights & Biases Chart that is used to deploy the
 	// instance.
-	Chart ChartSpec `json:"chart,omitempty"`
-}
 
-// ChartSpec specifies GitLab Chart version and values.
-type ChartSpec struct {
-	// +kubebuilder:validation:Optional
-	// +kubebuilder:validation:Pattern=`^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$`
-	// ChartVersion is the semantic version of the GitLab Chart.
-	Version string `json:"version,omitempty"`
-
-	// +kubebuilder:validation:Optional
-	// +kubebuilder:pruning:PreserveUnknownFields
-	// ChartValues is the set of Helm values that is used to render the GitLab Chart.
-	Values ChartValues `json:"values,omitempty"`
-}
-
-// Unstructured values for rendering GitLab Chart.
-// +k8s:deepcopy-gen=false
-type ChartValues struct {
-	// Object is a JSON compatible map with string, float, int, bool, []interface{}, or
-	// map[string]interface{} children.
-	Object map[string]interface{} `json:"-"`
-}
-
-// MarshalJSON ensures that the unstructured object produces proper
-// JSON when passed to Go's standard JSON library.
-func (u *ChartValues) MarshalJSON() ([]byte, error) {
-	return json.Marshal(u.Object)
-}
-
-// UnmarshalJSON ensures that the unstructured object properly decodes
-// JSON when passed to Go's standard JSON library.
-func (u *ChartValues) UnmarshalJSON(data []byte) error {
-	m := make(map[string]interface{})
-	if err := json.Unmarshal(data, &m); err != nil {
-		return err
-	}
-
-	u.Object = m
-
-	return nil
-}
-
-// Declaring this here prevents it from being generated.
-func (u *ChartValues) DeepCopyInto(out *ChartValues) {
-	out.Object = runtime.DeepCopyJSON(u.Object)
+	Cdk8sVersion string `json:"version"`
+	ReleasePath  string `json:"releasePath"`
 }
 
 // WeightsAndBiasesStatus defines the observed state of WeightsAndBiases
