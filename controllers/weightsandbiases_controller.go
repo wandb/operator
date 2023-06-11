@@ -25,14 +25,12 @@ import (
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
-	appsv1 "k8s.io/api/apps/v1"
-	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
-	networkingv1 "k8s.io/api/networking/v1"
 
 	apiv1 "github.com/wandb/operator/api/v1"
 	"github.com/wandb/operator/controllers/internal/ctrlqueue"
-	"github.com/wandb/operator/pkg/wandb/cdk8s/state"
+	"github.com/wandb/operator/pkg/wandb/cdk8s"
+	"github.com/wandb/operator/pkg/wandb/cdk8s/config"
 	"k8s.io/apimachinery/pkg/api/errors"
 )
 
@@ -68,7 +66,77 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	log.Info("Found Weights & Biases instance, processing the spec...", "Spec", wandb.Spec)
 
-	state, err := state.NewState(ctx, r.Client, wandb.Namespace, wandb.Name, rel)
+	cdkManager := cdk8s.NewManager(ctx, wandb)
+	configManager := config.NewManager(ctx, r.Client, wandb, r.Scheme)
+
+	wantedRelease, err := cdkManager.GetLatestSupportedRelease()
+	if err != nil {
+		wantedRelease, _ = cdkManager.GetDownloadedRelease()
+		if wantedRelease == nil {
+			log.Error(err, "Failed to find any release already downloaded.")
+			return ctrlqueue.Requeue(err)
+		}
+	}
+
+	if wandb.Spec.Cdk8sVersion != "" {
+		wantedRelease = cdkManager.GetSpecRelease()
+		if wantedRelease == nil {
+			log.Error(err, "Failed to find any release already downloaded.")
+			return ctrlqueue.Requeue(err)
+		}
+	}
+
+	if err != nil {
+		log.Error(err, "Failed to get a release")
+		return ctrlqueue.Requeue(err)
+	}
+
+	cfg, err := configManager.GetDesiredState()
+	if err != nil {
+		if !errors.IsNotFound(err) {
+			log.Error(err, "Failed to get config")
+			return ctrlqueue.Requeue(err)
+		}
+
+		log.Info("No config found. Creating config")
+		configManager.CreateLatest(wantedRelease, nil)
+	}
+
+	if cfg.Release == nil || cfg.Config == nil {
+		log.Error(err, "No config found. Admin console has not created config.")
+		return ctrlqueue.Requeue(err)
+	}
+
+	if err := configManager.Reconcile(cfg); err != nil {
+		log.Error(err, "Failed to apply config changes")
+		return ctrlqueue.DoNotRequeue()
+	}
+
+	if _, err := configManager.Backup(cfg); err != nil {
+		log.Error(err, "Failed to backup config")
+		return ctrlqueue.Requeue(err)
+	}
+
+	// Version has chanaged
+	if wantedRelease.Version() != cfg.Release.Version() {
+		log.Info(
+			"version changed",
+			"current", cfg.Release.Version(),
+			"desired version", wantedRelease.Version(),
+		)
+		cfg.SetRelease(wantedRelease)
+		if err := configManager.Reconcile(cfg); err != nil {
+			log.Error(err, "Failed to upgrade")
+			return ctrlqueue.DoNotRequeue()
+		}
+
+		if _, err := configManager.Backup(cfg); err != nil {
+			log.Error(err, "Failed to backup config with updated version")
+			return ctrlqueue.Requeue(err)
+		}
+	}
+
+	// Create a backup of the current config.
 
 	// latest, _ := release.GetLatestRelease(wandb)
 
@@ -152,12 +220,6 @@ func (r *WeightsAndBiasesReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&apiv1.WeightsAndBiases{}).
 		Owns(&corev1.Secret{}).
 		Owns(&corev1.ConfigMap{}).
-		Owns(&corev1.Service{}).
-		Owns(&corev1.PersistentVolumeClaim{}).
-		Owns(&appsv1.Deployment{}).
-		Owns(&appsv1.StatefulSet{}).
-		Owns(&batchv1.Job{}).
-		Owns(&networkingv1.Ingress{}).
 		WithEventFilter(predicate.GenerationChangedPredicate{})
 	return builder.Complete(r)
 }

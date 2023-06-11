@@ -13,6 +13,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
+func NewLocalRelease(path string) Release {
+	return &LocalRelease{path, "dev"}
+}
+
 type LocalRelease struct {
 	codePath string
 	version  string

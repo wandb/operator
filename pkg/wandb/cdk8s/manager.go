@@ -4,87 +4,53 @@ import (
 	"context"
 
 	"github.com/Masterminds/semver"
-	apiv1 "github.com/wandb/operator/api/v1"
-	"github.com/wandb/operator/pkg/wandb/cdk8s/config"
+	v1 "github.com/wandb/operator/api/v1"
 	"github.com/wandb/operator/pkg/wandb/cdk8s/release"
-	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const SupportedVersions = "~1"
 
 func NewManager(
 	ctx context.Context,
-	wandb *apiv1.WeightsAndBiases,
-	client client.Client,
-	scheme *runtime.Scheme,
+	wandb *v1.WeightsAndBiases,
 ) *Manager {
 	c, _ := semver.NewConstraint(SupportedVersions)
 	return &Manager{
-		versionConstraints: c,
 		ctx:                ctx,
 		wandb:              wandb,
-		Client:             client,
-		Scheme:             scheme,
-		Config:             config.NewManager(ctx, wandb, client, scheme),
+		versionConstraints: c,
 	}
 }
 
 type Manager struct {
-	versionConstraints *semver.Constraints
 	ctx                context.Context
-	wandb              *apiv1.WeightsAndBiases
-	Client             client.Client
-	Scheme             *runtime.Scheme
-	Config             *config.Manager
+	wandb              *v1.WeightsAndBiases
+	versionConstraints *semver.Constraints
 }
 
-func (m Manager) IsUpgrade(release release.Release) bool {
-	if m.CurrentVersion().Equal(release.Version()) {
-		return false
+func (m Manager) GetLatestSupportedRelease() (release.Release, error) {
+	return nil, nil
+}
+
+func (m Manager) GetDownloadedRelease() (release.Release, error) {
+	return nil, nil
+}
+
+func (m Manager) GetSpecRelease() release.Release {
+	version := m.wandb.Spec.Cdk8sVersion
+	if v, err := semver.NewVersion(version); err == nil {
+		return &release.GithubRelease{
+			Repo: "wandb/cdk8s",
+			Tag:  v.String(),
+		}
 	}
-	withinConstraints, _ := m.versionConstraints.Validate(release.Version())
-	if !withinConstraints {
-		return false
-	}
-	return release.Version().GreaterThan(m.CurrentVersion())
+	return release.NewLocalRelease(version)
 }
 
-func (m Manager) IsDowngrade(release release.Release) bool {
-	if m.CurrentVersion().Equal(release.Version()) {
-		return false
-	}
-	withinConstraints, _ := m.versionConstraints.Validate(release.Version())
-	if !withinConstraints {
-		return false
-	}
-	return release.Version().LessThan(m.CurrentVersion())
+func (m Manager) GetLatestRelease() (release.Release, error) {
+	return release.GetLatestRelease(m.wandb)
 }
 
-func (m Manager) HasConfigChanaged() bool {
-	return false
-}
-
-func (m Manager) CurrentConfig() interface{} {
-	return nil
-}
-
-func (m Manager) CurrentVersion() *semver.Version {
-	return semver.MustParse("1.0.0")
-}
-
-func (m Manager) ApplyWithVersion(release release.Release) error {
-	if !m.IsUpgrade(release) {
-		return nil
-	}
-	return m.Apply(release, config)
-}
-
-func (m Manager) Apply(release release.Release, config interface{}) error {
-	err := release.Apply(
-		m.ctx,
-		m.Client,
-		m.wandb,
-		m.Scheme,
-	)
+func (m Manager) InstalledReleases() []release.Release {
+	return []release.Release{}
 }

@@ -4,6 +4,8 @@ metadata:
   labels:
     app.kubernetes.io/name: weightsandbiases
     app.kubernetes.io/instance: wandb
+    wandb.ai/console/default: true
   name: wandb
 spec:
+  # Replace this with the path to the git cdk8s repo
   releasePath: ../cdk8s

@@ -8,17 +8,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func GetLatestGithubRelease(repo string) (*GithubRelease, error) {
+func GetLatestGithubRelease(repo string) (Release, error) {
 	return &GithubRelease{repo, ""}, nil
 }
 
 type GithubRelease struct {
-	repo string
-	tag  string
-}
-
-func (*GithubRelease) Apply(ctx context.Context, client client.Client, owner v1.Object, scheme *runtime.Scheme) error {
-	panic("unimplemented")
+	Repo string
+	Tag  string
 }
 
 func (*GithubRelease) Directory() string {
@@ -41,6 +37,11 @@ func (*GithubRelease) Version() string {
 	panic("unimplemented")
 }
 
-func NewLocalRelease(path string) Release {
-	return &LocalRelease{path, "dev"}
+func (*GithubRelease) Apply(
+	ctx context.Context,
+	client client.Client,
+	owner v1.Object,
+	scheme *runtime.Scheme,
+) error {
+	panic("unimplemented")
 }
