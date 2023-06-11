@@ -66,6 +66,23 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	log.Info("Found Weights & Biases instance, processing the spec...", "Spec", wandb.Spec)
 
+	// 	config := map[string]interface{}{
+	// 		"mysql": map[string]interface{}{
+	// 			"database": "wandb_local",
+	// 			"port":     3306,
+	// 			"user":     "wandb",
+	// 			"host":     "localhost",
+	// 			"password": map[string]interface{}{
+	// 				"secret": "mysql",
+	// 				"key":    "password",
+	// 			},
+	// 		},
+	// 		"bucket": map[string]interface{}{
+	// 			"connectionString": "s3://wandb-local",
+	// 			"region":           "us-east-1",
+	// 		},
+	// 	}
+
 	cdkManager := cdk8s.NewManager(ctx, wandb)
 	configManager := config.NewManager(ctx, r.Client, wandb, r.Scheme)
 
@@ -103,7 +120,7 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	if cfg.Release == nil || cfg.Config == nil {
-		log.Error(err, "No config found. Admin console has not created config.")
+		log.Error(err, "No valid config found. Admin console has set config values.")
 		return ctrlqueue.Requeue(err)
 	}
 
@@ -125,6 +142,7 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			"desired version", wantedRelease.Version(),
 		)
 		cfg.SetRelease(wantedRelease)
+
 		if err := configManager.Reconcile(cfg); err != nil {
 			log.Error(err, "Failed to upgrade")
 			return ctrlqueue.DoNotRequeue()
@@ -135,81 +153,6 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			return ctrlqueue.Requeue(err)
 		}
 	}
-
-	// Create a backup of the current config.
-
-	// latest, _ := release.GetLatestRelease(wandb)
-
-	// cdkManager := cdk8s.NewManager(ctx, wandb, r.Client, r.Scheme)
-
-	// isUpgrade := cdkManager.IsUpgrade(latest)
-	// log.Info(
-	// 	"version upgrade",
-	// 	"upgrade", isUpgrade,
-	// 	"current version", cdkManager.Config.Version(),
-	// 	"desired version", latest.Version(),
-	// )
-
-	// if isUpgrade {
-	// 	log.Info("New release found, updating...", "release", latest)
-	// 	cdkManager.Update(latest)
-	// 	latest.Download()
-	// 	latest.Install()
-	// }
-
-	// cdkManager.Apply(latest, wandb)
-
-	// hasConfigChanaged := cdkManager.HasConfigChanaged()
-	// if hasConfigChanaged {
-	// 	m.Apply()
-	// }
-
-	// cdkManager := cdk8s.NewManager(ctx, wandb, r.Client, r.Scheme)
-	// if cdkManager.IsNewRelease(latest) {
-	// 	log.Info("New release found, updating...", "release", latest)
-	// 	cdkManager.Update(release)
-	// }
-
-	// if cdkManager.IsNewRelease(latest) || cdkManager.ConfigHasChanged() {
-	// 	cdkManager.Apply()
-	// }
-
-	// log.Info("Downloading version", "version", release.Version())
-	// err := release.Download()
-	// if err == nil {
-	// 	log.Info("Installing release", "version", release.Version())
-	// 	release.Install()
-	// 	config := map[string]interface{}{
-	// 		"mysql": map[string]interface{}{
-	// 			"database": "wandb_local",
-	// 			"port":     3306,
-	// 			"user":     "wandb",
-	// 			"host":     "localhost",
-	// 			"password": map[string]interface{}{
-	// 				"secret": "mysql",
-	// 				"key":    "password",
-	// 			},
-	// 		},
-	// 		"bucket": map[string]interface{}{
-	// 			"connectionString": "s3://wandb-local",
-	// 			"region":           "us-east-1",
-	// 		},
-	// 	}
-
-	// 	log.Info("Generating manifests")
-
-	// 	err := release.Generate(config)
-	// 	if err != nil {
-	// 		log.Error(err, "Failed to generate release")
-	// 	}
-
-	// 	manifests := path.Join(release.Directory(), "dist")
-	// 	log.Info("Applying manifests", "manifests", manifests)
-	// 	err = cdk8s.Apply(r.Client, manifests, wandb, r.Scheme)
-	// 	if err != nil {
-	// 		log.Error(err, "Failed to apply release")
-	// 	}
-	// }
 
 	return ctrlqueue.DoNotRequeue()
 }
