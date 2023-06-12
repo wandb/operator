@@ -112,6 +112,26 @@ func (m Manager) CreateLatest(release release.Release, config interface{}) (*Con
 	)
 }
 
+func (m Manager) SetDesiredState(cfg *Config) error {
+	name := m.LatestConfigName()
+	namespace := m.owner.GetNamespace()
+
+	err := WriteToConfigMap(
+		m.ctx, m.client, m.owner, m.scheme,
+		name, namespace,
+		cfg,
+	)
+	if err != nil {
+		return err
+	}
+
+	if _, err = m.backupLatest(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (m Manager) GetDesiredState() (*Config, error) {
 	name := m.LatestConfigName()
 	namespace := m.owner.GetNamespace()
@@ -124,14 +144,26 @@ func (m Manager) GetBackup(version int) (*Config, error) {
 	return GetFromConfigMap(m.ctx, m.client, name, namespace)
 }
 
-func (m Manager) Backup(config *Config) (string, error) {
+func (m Manager) getLastBackup() (*Config, error) {
 	current := m.getCount()
-	lastBackup, err := m.GetBackup(current)
-	isFound := err != nil && !errors.IsNotFound(err)
-	if isFound && config.Equals(lastBackup) {
-		return "", fmt.Errorf("config is the same as the last backup")
+	return m.GetBackup(current)
+}
+
+func (m Manager) backupLatest() (string, error) {
+	config, err := m.GetDesiredState()
+	if err != nil {
+		return "", err
 	}
 
+	lastBackup, _ := m.getLastBackup()
+	if lastBackup != nil {
+		if config.Equals(lastBackup) {
+			name := fmt.Sprintf("%s-config-v%d", m.owner.GetName(), m.getCount())
+			return name, nil
+		}
+	}
+
+	current := m.getCount()
 	next := current + 1
 	if err := m.updateConfigCount(next); err != nil {
 		return "", err

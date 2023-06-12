@@ -1,11 +1,11 @@
-package cdk8s
+package release
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/Masterminds/semver"
 	v1 "github.com/wandb/operator/api/v1"
-	"github.com/wandb/operator/pkg/wandb/cdk8s/release"
 )
 
 const SupportedVersions = "~1"
@@ -28,29 +28,29 @@ type Manager struct {
 	versionConstraints *semver.Constraints
 }
 
-func (m Manager) GetLatestSupportedRelease() (release.Release, error) {
-	return nil, nil
+func (m Manager) GetLatestSupportedRelease() (Release, error) {
+	return nil, fmt.Errorf("not implemented")
 }
 
-func (m Manager) GetDownloadedRelease() (release.Release, error) {
-	return nil, nil
+func (m Manager) GetLatestDownloadedRelease() (Release, error) {
+	return nil, fmt.Errorf("not implemented")
 }
 
-func (m Manager) GetSpecRelease() release.Release {
+func (m Manager) GetSpecRelease() Release {
 	version := m.wandb.Spec.Cdk8sVersion
 	if v, err := semver.NewVersion(version); err == nil {
-		return &release.GithubRelease{
+		return &GithubRelease{
 			Repo: "wandb/cdk8s",
 			Tag:  v.String(),
 		}
 	}
-	return release.NewLocalRelease(version)
+	return NewLocalRelease(version)
 }
 
-func (m Manager) GetLatestRelease() (release.Release, error) {
-	return release.GetLatestRelease(m.wandb)
+func (m Manager) GetLatestRelease() (Release, error) {
+	return GetLatestRelease(m.wandb)
 }
 
-func (m Manager) InstalledReleases() []release.Release {
-	return []release.Release{}
+func (m Manager) InstalledReleases() []Release {
+	return []Release{}
 }

@@ -1,0 +1,23 @@
+apiVersion: v1
+data:
+  config: '{"mysql":{"database":"wandb_local","port":3306,"user":"wandb","host":"localhost","password":{"secret":"mysql","key":"password"}},"bucket":{"connectionString":"s3://wandb-local","region":"us-east-1"}}'
+  release: ../cdk8s
+kind: ConfigMap
+metadata:
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"v1","data":{"config":"{\"mysql\":{\"database\":\"wandb_local\",\"port\":3306,\"user\":\"wandb\",\"host\":\"localhost\",\"password\":{\"secret\":\"mysql\",\"key\":\"password\",},},\"bucket\":{\"connectionString\":\"s3://wandb-local\",\"region\":\"us-east-1\",}}","release":"../cdk8s"},"kind":"ConfigMap","metadata":{"annotations":{},"creationTimestamp":"2023-06-11T23:52:17Z","labels":{"wandb.ai/release-version":"cdk8s"},"name":"wandb-config-latest","namespace":"default","ownerReferences":[{"apiVersion":"apps.wandb.com/v1","blockOwnerDeletion":true,"controller":true,"kind":"WeightsAndBiases","name":"wandb","uid":"40adec82-7560-4beb-87c5-86a2666a804a"}],"resourceVersion":"981480","uid":"9aea9a99-a9fe-46f2-82a7-4708437f118a"}}
+  creationTimestamp: "2023-06-11T23:52:17Z"
+  labels:
+    wandb.ai/release-version: cdk8s
+  name: wandb-config-latest
+  namespace: default
+  ownerReferences:
+    - apiVersion: apps.wandb.com/v1
+      blockOwnerDeletion: true
+      controller: true
+      kind: WeightsAndBiases
+      name: wandb
+      uid: 40adec82-7560-4beb-87c5-86a2666a804a
+  resourceVersion: "981584"
+  uid: 9aea9a99-a9fe-46f2-82a7-4708437f118a

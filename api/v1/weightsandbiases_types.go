@@ -32,8 +32,8 @@ type WeightsAndBiasesSpec struct {
 	// The specification of Weights & Biases Chart that is used to deploy the
 	// instance.
 
-	Cdk8sVersion string `json:"version"`
-	ReleasePath  string `json:"releasePath"`
+	Cdk8sVersion string `json:"version,omitempty"`
+	ReleasePath  string `json:"releasePath,omitempty"`
 }
 
 // WeightsAndBiasesStatus defines the observed state of WeightsAndBiases
@@ -41,9 +41,9 @@ type WeightsAndBiasesStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	Phase      string             `json:"phase,omitempty"`
-	Version    string             `json:"version,omitempty"`
-	Conditions []metav1.Condition `json:"conditions"`
+	Phase   string `json:"phase,omitempty"`
+	Version string `json:"version,omitempty"`
+	// Conditions []metav1.Condition `json:"conditions"`
 }
 
 //+kubebuilder:object:root=true

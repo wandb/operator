@@ -14,7 +14,7 @@ import (
 func GetLatestRelease(wandb *apiv1.WeightsAndBiases) (Release, error) {
 	// Use a local directory for the release. Useful for development
 	if wandb.Spec.ReleasePath != "" {
-		return &LocalRelease{wandb.Spec.ReleasePath, "dev"}, nil
+		return &LocalRelease{wandb.Spec.ReleasePath}, nil
 	}
 	return GetLatestGithubRelease("wandb/cdk8s")
 }

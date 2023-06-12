@@ -1,0 +1,10 @@
+apiVersion: v1
+data:
+  config: '{"mysql":{"database":"wandb_local","port":3306,"user":"wandb","host":"localhost","password":{"secret":"mysql","key":"password"}},"bucket":{"connectionString":"s3://wandb-local","region":"us-east-1"}}'
+  release: ../cdk8s
+kind: ConfigMap
+metadata:
+  labels:
+    wandb.ai/release-version: cdk8s
+  name: wandb-config-latest
+  namespace: default

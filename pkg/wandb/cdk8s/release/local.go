@@ -14,12 +14,11 @@ import (
 )
 
 func NewLocalRelease(path string) Release {
-	return &LocalRelease{path, "dev"}
+	return &LocalRelease{path}
 }
 
 type LocalRelease struct {
 	codePath string
-	version  string
 }
 
 // Generate implements Release.
@@ -27,11 +26,13 @@ func (r LocalRelease) Generate(m interface{}) error {
 	b, _ := json.Marshal(m)
 	cmd := exec.Command("pnpm", "run", "gen", "--json="+string(b))
 	cmd.Dir = r.Directory()
-	return cmd.Run()
+	output, err := cmd.CombinedOutput()
+	fmt.Println(string(output))
+	return err
 }
 
 func (r LocalRelease) Version() string {
-	return r.version
+	return r.codePath
 }
 
 func (r LocalRelease) Download() error {
@@ -41,7 +42,9 @@ func (r LocalRelease) Download() error {
 func (r LocalRelease) Install() error {
 	cmd := exec.Command("pnpm", "install", "--frozen-lockfile")
 	cmd.Dir = r.Directory()
-	return cmd.Run()
+	_, err := cmd.CombinedOutput()
+	// fmt.Println(string(output))
+	return err
 }
 
 func (r LocalRelease) Directory() string {

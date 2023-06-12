@@ -21,6 +21,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -29,8 +30,8 @@ import (
 
 	apiv1 "github.com/wandb/operator/api/v1"
 	"github.com/wandb/operator/controllers/internal/ctrlqueue"
-	"github.com/wandb/operator/pkg/wandb/cdk8s"
 	"github.com/wandb/operator/pkg/wandb/cdk8s/config"
+	"github.com/wandb/operator/pkg/wandb/status"
 	"k8s.io/apimachinery/pkg/api/errors"
 )
 
@@ -64,105 +65,103 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrlqueue.Requeue(err)
 	}
 
-	log.Info("Found Weights & Biases instance, processing the spec...", "Spec", wandb.Spec)
+	log.Info("=== Found Weights & Biases instance, processing the spec...", "Spec", wandb.Spec)
 
-	// 	config := map[string]interface{}{
-	// 		"mysql": map[string]interface{}{
-	// 			"database": "wandb_local",
-	// 			"port":     3306,
-	// 			"user":     "wandb",
-	// 			"host":     "localhost",
-	// 			"password": map[string]interface{}{
-	// 				"secret": "mysql",
-	// 				"key":    "password",
-	// 			},
-	// 		},
-	// 		"bucket": map[string]interface{}{
-	// 			"connectionString": "s3://wandb-local",
-	// 			"region":           "us-east-1",
-	// 		},
-	// 	}
+	statusManager := status.NewManager(ctx, r.Client, wandb)
+	err := statusManager.Set(status.Initializing)
+	if err != nil {
+		log.Error(err, "Failed to set status")
+	}
 
-	cdkManager := cdk8s.NewManager(ctx, wandb)
+	log.Info("Get wanted release version...")
+	wantedRelease, err := r.getWantedRelease(ctx, wandb)
+	if err != nil {
+		log.Error(err, "Failed to get wanted release version")
+		return ctrlqueue.DoNotRequeue()
+	}
+	log.Info("Wanted release found", "version", wantedRelease.Version())
+
+	statusManager.Set(status.Loading)
 	configManager := config.NewManager(ctx, r.Client, wandb, r.Scheme)
-
-	wantedRelease, err := cdkManager.GetLatestSupportedRelease()
-	if err != nil {
-		wantedRelease, _ = cdkManager.GetDownloadedRelease()
-		if wantedRelease == nil {
-			log.Error(err, "Failed to find any release already downloaded.")
-			return ctrlqueue.Requeue(err)
-		}
-	}
-
-	if wandb.Spec.Cdk8sVersion != "" {
-		wantedRelease = cdkManager.GetSpecRelease()
-		if wantedRelease == nil {
-			log.Error(err, "Failed to find any release already downloaded.")
-			return ctrlqueue.Requeue(err)
-		}
-	}
-
-	if err != nil {
-		log.Error(err, "Failed to get a release")
-		return ctrlqueue.Requeue(err)
-	}
-
 	cfg, err := configManager.GetDesiredState()
 	if err != nil {
+		log.Error(err, "Failed to get desiered config")
+		return ctrlqueue.DoNotRequeue()
+	}
+
+	log.Info("Config values:", "version", cfg.Release.Version(), "config", cfg.Config)
+	if err != nil || cfg == nil {
 		if !errors.IsNotFound(err) {
 			log.Error(err, "Failed to get config")
 			return ctrlqueue.Requeue(err)
 		}
 
-		log.Info("No config found. Creating config")
-		configManager.CreateLatest(wantedRelease, nil)
-	}
-
-	if cfg.Release == nil || cfg.Config == nil {
-		log.Error(err, "No valid config found. Admin console has set config values.")
-		return ctrlqueue.Requeue(err)
-	}
-
-	if err := configManager.Reconcile(cfg); err != nil {
-		log.Error(err, "Failed to apply config changes")
-		return ctrlqueue.DoNotRequeue()
-	}
-
-	if _, err := configManager.Backup(cfg); err != nil {
-		log.Error(err, "Failed to backup config")
-		return ctrlqueue.Requeue(err)
-	}
-
-	// Version has chanaged
-	if wantedRelease.Version() != cfg.Release.Version() {
-		log.Info(
-			"version changed",
-			"current", cfg.Release.Version(),
-			"desired version", wantedRelease.Version(),
-		)
-		cfg.SetRelease(wantedRelease)
-
-		if err := configManager.Reconcile(cfg); err != nil {
-			log.Error(err, "Failed to upgrade")
-			return ctrlqueue.DoNotRequeue()
-		}
-
-		if _, err := configManager.Backup(cfg); err != nil {
-			log.Error(err, "Failed to backup config with updated version")
+		log.Info("No config found. Creating config...", "name", configManager.LatestConfigName())
+		if _, err := configManager.CreateLatest(wantedRelease, nil); err != nil {
+			log.Error(err, "Failed to create config")
 			return ctrlqueue.Requeue(err)
 		}
 	}
 
+	// If we get to this point the above config has been created and something
+	// happen to trigger the reconcile function. However the config is not valid
+	if cfg.Config == nil {
+		log.Info("Config is null (default config).")
+		statusManager.Set(status.InvalidConfig)
+
+		// Lets update the version incase it has changed.
+		cfg.SetRelease(wantedRelease)
+		configManager.SetDesiredState(cfg)
+
+		return ctrlqueue.DoNotRequeue()
+	}
+
+	statusManager.Set(status.Loading)
+	log.Info("Applying config changes...", "version", cfg.Release.Version())
+	if err := r.applyConfig(ctx, wandb, cfg); err != nil {
+		// TODO: Implement rollback
+		log.Error(err, "Failed to apply config changes.")
+		return ctrlqueue.DoNotRequeue()
+	}
+	log.Info("Succesfully applied config", "version", cfg.Release.Version())
+
+	if wantedRelease.Version() != cfg.Release.Version() {
+		log.Info(
+			"Version changed. Applying...",
+			"current", cfg.Release.Version(),
+			"desired version", wantedRelease.Version(),
+		)
+
+		statusManager.Set(status.Loading)
+
+		cfg.SetRelease(wantedRelease)
+
+		if err := r.applyConfig(ctx, wandb, cfg); err != nil {
+			// TODO: Implement rollback
+			log.Error(err, "Failed to upgrade to new version.")
+			return ctrlqueue.DoNotRequeue()
+		}
+
+		// Only if succesful do we save the state to a config map.
+		if err := configManager.SetDesiredState(cfg); err != nil {
+			log.Error(err, "Failed to set desired state")
+			return ctrlqueue.DoNotRequeue()
+		}
+	}
+
+	// All done! Everything is up to date.
+	statusManager.Set(status.Completed)
 	return ctrlqueue.DoNotRequeue()
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *WeightsAndBiasesReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	builder := ctrl.NewControllerManagedBy(mgr).
-		For(&apiv1.WeightsAndBiases{}).
+		For(
+			&apiv1.WeightsAndBiases{},
+			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
+		).
 		Owns(&corev1.Secret{}).
-		Owns(&corev1.ConfigMap{}).
-		WithEventFilter(predicate.GenerationChangedPredicate{})
+		Owns(&corev1.ConfigMap{})
 	return builder.Complete(r)
 }
