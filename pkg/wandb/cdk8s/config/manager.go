@@ -180,19 +180,3 @@ func (m Manager) backupLatest() (string, error) {
 	)
 	return name, err
 }
-
-func (m Manager) Reconcile(cfg *Config) error {
-	if err := cfg.Release.Download(); err != nil {
-		return err
-	}
-	if err := cfg.Release.Install(); err != nil {
-		return err
-	}
-	if err := cfg.Release.Generate(cfg.Config); err != nil {
-		return err
-	}
-	if err := cfg.Release.Apply(m.ctx, m.client, m.owner, m.scheme); err != nil {
-		return err
-	}
-	return nil
-}

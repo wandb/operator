@@ -33,6 +33,7 @@ import (
 
 	wandbcomv1 "github.com/wandb/operator/api/v1"
 	"github.com/wandb/operator/controllers"
+	"github.com/wandb/operator/pkg/wandb/api"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -107,6 +108,8 @@ func main() {
 		setupLog.Error(err, "unable to set up ready check")
 		os.Exit(1)
 	}
+
+	api.New(logger.WithName("api"), mgr.GetClient(), mgr.GetScheme())
 
 	setupLog.Info("starting manager")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
