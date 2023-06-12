@@ -125,7 +125,7 @@ func (m Manager) SetDesiredState(cfg *Config) error {
 		return err
 	}
 
-	if _, err = m.backupLatest(); err != nil {
+	if _, err = m.BackupLatest(); err != nil {
 		return err
 	}
 
@@ -149,7 +149,7 @@ func (m Manager) getLastBackup() (*Config, error) {
 	return m.GetBackup(current)
 }
 
-func (m Manager) backupLatest() (string, error) {
+func (m Manager) BackupLatest() (string, error) {
 	config, err := m.GetDesiredState()
 	if err != nil {
 		return "", err

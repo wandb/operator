@@ -89,6 +89,8 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrlqueue.DoNotRequeue()
 	}
 
+	configManager.BackupLatest()
+
 	log.Info("Config values:", "version", cfg.Release.Version(), "config", cfg.Config)
 	if err != nil || cfg == nil {
 		if !errors.IsNotFound(err) {
