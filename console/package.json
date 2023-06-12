@@ -11,8 +11,10 @@
   },
   "dependencies": {
     "@codemirror/lang-json": "^6.0.1",
+    "@codemirror/lint": "^6.2.2",
     "@tanstack/react-query": "^4.29.12",
     "@uiw/react-codemirror": "^4.21.3",
+    "ajv": "^8.12.0",
     "axios": "^1.4.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
