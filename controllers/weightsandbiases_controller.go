@@ -85,24 +85,26 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	configManager := config.NewManager(ctx, r.Client, wandb, r.Scheme)
 	cfg, err := configManager.GetDesiredState()
 	if err != nil {
-		log.Error(err, "Failed to get desiered config")
-		return ctrlqueue.DoNotRequeue()
+		if errors.IsNotFound(err) {
+			log.Info("No config found. Creating config...", "name", configManager.LatestConfigName())
+			cfg, err = configManager.CreateLatest(wantedRelease, nil)
+			if err != nil {
+				log.Error(err, "Failed to create config")
+				return ctrlqueue.Requeue(err)
+			}
+		} else {
+			log.Error(err, "Failed to get desired config")
+			return ctrlqueue.DoNotRequeue()
+		}
 	}
 
 	configManager.BackupLatest()
 
 	log.Info("Config values:", "version", cfg.Release.Version(), "config", cfg.Config)
-	if err != nil || cfg == nil {
-		if !errors.IsNotFound(err) {
-			log.Error(err, "Failed to get config")
-			return ctrlqueue.Requeue(err)
-		}
+	if err != nil {
+		log.Error(err, "Failed to get config")
+		return ctrlqueue.Requeue(err)
 
-		log.Info("No config found. Creating config...", "name", configManager.LatestConfigName())
-		if _, err := configManager.CreateLatest(wantedRelease, nil); err != nil {
-			log.Error(err, "Failed to create config")
-			return ctrlqueue.Requeue(err)
-		}
 	}
 
 	// If we get to this point the above config has been created and something
@@ -125,7 +127,7 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		log.Error(err, "Failed to apply config changes.")
 		return ctrlqueue.DoNotRequeue()
 	}
-	log.Info("Succesfully applied config", "version", cfg.Release.Version())
+	log.Info("Successfully applied config", "version", cfg.Release.Version())
 
 	if wantedRelease.Version() != cfg.Release.Version() {
 		log.Info(

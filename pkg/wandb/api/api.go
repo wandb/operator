@@ -28,12 +28,69 @@ func enableCORS(handler http.Handler) http.Handler {
 		}
 	})
 }
+
+// func isPasswordValid(settings *settings.Settings, w http.ResponseWriter, r *http.Request) bool {
+// 	password := r.Header.Get("Authorization")
+// 	if password == "" {
+// 		http.Error(w, "Authorization password must be provided", http.StatusUnauthorized)
+// 		return false
+// 	}
+
+// 	hashedPassword := strings.Replace(password, "Password ", "", 1)
+// 	if !settings.IsPassword(hashedPassword) {
+// 		http.Error(w, "Invalid password", http.StatusForbidden)
+// 		return false
+// 	}
+// 	return true
+// }
+
+// func passwordAuthMiddleware(settings *settings.Settings, handler http.HandlerFunc) http.HandlerFunc {
+// 	return func(w http.ResponseWriter, r *http.Request) {
+// 		if !isPasswordValid(settings, w, r) {
+// 			return
+// 		}
+
+// 		// If the password is valid, call the handler
+// 		handler.ServeHTTP(w, r)
+// 	}
+// }
+
 func New(log logr.Logger, c client.Client, scheme *runtime.Scheme) {
 	ctx := context.Background()
+
+	// settings := settings.New(c)
 
 	log.Info("Initalizing API server")
 
 	api := http.NewServeMux()
+
+	// api.HandleFunc("/api/v1/password", func(w http.ResponseWriter, r *http.Request) {
+	// 	if r.Method == "POST" {
+	// 		if !isPasswordValid(settings, w, r) {
+	// 			return
+	// 		}
+
+	// 		decoder := json.NewDecoder(r.Body)
+	// 		var pw string
+	// 		err := decoder.Decode(&pw)
+	// 		if err != nil {
+	// 			panic(err)
+	// 		}
+	// 		defer r.Body.Close()
+	// 		settings.SetPassword(pw)
+	// 		_, _ = w.Write([]byte("ok"))
+	// 		return
+	// 	}
+
+	// 	if r.Method == "GET" {
+	// 		val := json.Marshal(map[string]interface{}{
+
+	// 		})
+	// 		_, _ = w.Write([]byte(val))
+	// 		return
+	// 	}
+	// })
+
 	api.HandleFunc("/api/v1/config/latest", func(w http.ResponseWriter, r *http.Request) {
 		configName := "wandb-config-latest"
 		configNamespace := "default"
