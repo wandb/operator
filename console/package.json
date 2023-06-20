@@ -12,12 +12,19 @@
   "dependencies": {
     "@codemirror/lang-json": "^6.0.1",
     "@codemirror/lint": "^6.2.2",
+    "@makotot/ghostui": "^2.0.0",
+    "@tailwindcss/forms": "^0.5.3",
     "@tanstack/react-query": "^4.29.12",
+    "@uiw/codemirror-theme-vscode": "^4.21.3",
+    "@uiw/codemirror-themes": "^4.21.3",
     "@uiw/react-codemirror": "^4.21.3",
     "ajv": "^8.12.0",
     "axios": "^1.4.0",
+    "immer": "^10.0.2",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "react-icons": "^4.9.0",
+    "react-router-dom": "^6.13.0"
   },
   "devDependencies": {
     "@tanstack/eslint-plugin-query": "^4.29.9",

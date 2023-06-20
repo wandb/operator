@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/wandb/operator/pkg/utils/kubeclient"
 	"github.com/wandb/operator/pkg/wandb/cdk8s/release"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -54,10 +55,8 @@ func CreateWithConfigMap(
 		return nil, err
 	}
 
-	if err := client.Create(ctx, configMap); err != nil {
-		if err := client.Update(ctx, configMap); err != nil {
-			return nil, err
-		}
+	if err := kubeclient.CreateOrUpdate(ctx, client, configMap); err != nil {
+		return nil, err
 	}
 
 	return &Config{Release: release, Config: config}, nil

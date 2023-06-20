@@ -23,6 +23,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
@@ -30,6 +31,7 @@ import (
 
 	apiv1 "github.com/wandb/operator/api/v1"
 	"github.com/wandb/operator/controllers/internal/ctrlqueue"
+	"github.com/wandb/operator/pkg/utils"
 	"github.com/wandb/operator/pkg/wandb/cdk8s/config"
 	"github.com/wandb/operator/pkg/wandb/status"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -120,9 +122,39 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrlqueue.DoNotRequeue()
 	}
 
+	// log.Info("Reconciling Minio deployment")
+	// if err = minio.ReconcileDelete(ctx, r.Client); err != nil {
+	// 	return ctrlqueue.Requeue(err)
+	// }
+
+	// bucketConnectionString, _ := minio.GetConnectionString(ctx, r.Client)
+
+	gvk, _ := apiutil.GVKForObject(wandb, r.Scheme)
+	config := map[string]interface{}{
+		// "bucket": map[string]interface{}{
+		// 	"connectionString": bucketConnectionString,
+		// 	"region":           minio.RegionName,
+		// },
+		"global": map[string]interface{}{
+			"metadata": map[string]interface{}{
+				"ownerReferences": []map[string]interface{}{
+					{
+						"apiVersion":         gvk.GroupVersion().String(),
+						"blockOwnerDeletion": true,
+						"controller":         true,
+						"kind":               gvk.Kind,
+						"name":               wandb.GetName(),
+						"uid":                wandb.GetUID(),
+					},
+				},
+			},
+		},
+	}
+	finalCfg, _ := utils.Merge(config, cfg.Config)
+
 	statusManager.Set(status.Loading)
 	log.Info("Applying config changes...", "version", cfg.Release.Version())
-	if err := r.applyConfig(ctx, wandb, cfg); err != nil {
+	if err := r.applyConfig(ctx, wandb, cfg.Release, finalCfg); err != nil {
 		// TODO: Implement rollback
 		log.Error(err, "Failed to apply config changes.")
 		return ctrlqueue.DoNotRequeue()
@@ -140,7 +172,7 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 		cfg.SetRelease(wantedRelease)
 
-		if err := r.applyConfig(ctx, wandb, cfg); err != nil {
+		if err := r.applyConfig(ctx, wandb, cfg.Release, finalCfg); err != nil {
 			// TODO: Implement rollback
 			log.Error(err, "Failed to upgrade to new version.")
 			return ctrlqueue.DoNotRequeue()

@@ -10,6 +10,8 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/wandb/operator/pkg/wandb/cdk8s/config"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -55,12 +57,25 @@ func enableCORS(handler http.Handler) http.Handler {
 // 	}
 // }
 
+func clientListHandler(
+	ctx context.Context,
+	c client.Client,
+	list client.ObjectList,
+	opts ...client.ListOption,
+) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		c.List(ctx, list, opts...)
+		js, _ := json.Marshal(list)
+		_, _ = w.Write([]byte(js))
+	}
+}
+
 func New(log logr.Logger, c client.Client, scheme *runtime.Scheme) {
 	ctx := context.Background()
 
 	// settings := settings.New(c)
 
-	log.Info("Initalizing API server")
+	log.Info("Initializing API server")
 
 	api := http.NewServeMux()
 
@@ -91,10 +106,16 @@ func New(log logr.Logger, c client.Client, scheme *runtime.Scheme) {
 	// 	}
 	// })
 
+	namespace := "default"
+
+	api.HandleFunc("/api/v1/k8s/pods", clientListHandler(ctx, c, &corev1.PodList{}, client.InNamespace(namespace)))
+	api.HandleFunc("/api/v1/k8s/services", clientListHandler(ctx, c, &corev1.ServiceList{}, client.InNamespace(namespace)))
+	api.HandleFunc("/api/v1/k8s/stateful-sets", clientListHandler(ctx, c, &appsv1.StatefulSetList{}, client.InNamespace(namespace)))
+	api.HandleFunc("/api/v1/k8s/deployments", clientListHandler(ctx, c, &appsv1.DeploymentList{}, client.InNamespace(namespace)))
+
 	api.HandleFunc("/api/v1/config/latest", func(w http.ResponseWriter, r *http.Request) {
 		configName := "wandb-config-latest"
-		configNamespace := "default"
-		latest, _ := config.GetFromConfigMap(ctx, c, configName, configNamespace)
+		latest, _ := config.GetFromConfigMap(ctx, c, configName, namespace)
 
 		if r.Method == "POST" {
 			decoder := json.NewDecoder(r.Body)
@@ -110,7 +131,7 @@ func New(log logr.Logger, c client.Client, scheme *runtime.Scheme) {
 				scheme,
 
 				configName,
-				configNamespace,
+				namespace,
 
 				latest.Release,
 				cfg,
@@ -120,7 +141,7 @@ func New(log logr.Logger, c client.Client, scheme *runtime.Scheme) {
 		}
 
 		if r.Method == "GET" {
-			latest, _ := config.GetFromConfigMap(ctx, c, configName, configNamespace)
+			latest, _ := config.GetFromConfigMap(ctx, c, configName, namespace)
 			js, _ := json.Marshal(latest.Config)
 			_, _ = w.Write([]byte(js))
 			return

@@ -15,6 +15,30 @@ import (
 const name = "wandb-console"
 const namespace = "wandb-system"
 
+func GetOrCreateSecret(ctx context.Context, c client.Client) (*corev1.Secret, error) {
+	configMap := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+	}
+	objKey := client.ObjectKey{Name: name, Namespace: namespace}
+	err := c.Get(ctx, objKey, configMap)
+
+	if err != nil {
+		if errors.IsNotFound(err) {
+			err := c.Create(ctx, configMap)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			return nil, err
+		}
+	}
+
+	return configMap, nil
+}
+
 func GetOrCreateConfig(ctx context.Context, c client.Client) (*corev1.ConfigMap, error) {
 	configMap := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{

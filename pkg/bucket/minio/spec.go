@@ -15,13 +15,15 @@ import (
 )
 
 const RootUser = "minio"
-const RootPassword = ""
+const RootPassword = "miniowandb"
 const RegionName = "us-east-1"
+const BucketName = "wandb"
 
 func CreateBucketJob(endpoint string) *batchv1.Job {
 	return &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "create-bucket",
+			Namespace: "wandb",
+			Name:      "create-bucket",
 		},
 		Spec: batchv1.JobSpec{
 			Template: corev1.PodTemplateSpec{
@@ -38,7 +40,8 @@ func CreateBucketJob(endpoint string) *batchv1.Job {
 							Env: []corev1.EnvVar{
 								{Name: "MINIO_ACCESS_KEY", Value: RootUser},
 								{Name: "MINIO_SECRET_KEY", Value: RootPassword},
-								{Name: "MINIO_SERVER_ENDPOINT", Value: endpoint},
+								{Name: "MINIO_SERVER_ENDPOINT", Value: endpoint + ":9000"},
+								{Name: "BUCKET_NAME", Value: BucketName},
 							},
 							Command: []string{
 								"/bin/sh",
@@ -61,10 +64,11 @@ echo "Bucket created."`,
 	}
 }
 
-func PresistanceVolumeClaim() *corev1.PersistentVolumeClaim {
+func PersistanceVolumeClaim() *corev1.PersistentVolumeClaim {
 	return &corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "wandb-minio-data",
+			Namespace: "wandb",
+			Name:      "wandb-minio-data",
 		},
 		Spec: corev1.PersistentVolumeClaimSpec{
 			AccessModes: []corev1.PersistentVolumeAccessMode{
@@ -82,7 +86,8 @@ func PresistanceVolumeClaim() *corev1.PersistentVolumeClaim {
 func Deployment() *appsv1.Deployment {
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "minio",
+			Namespace: "wandb",
+			Name:      "minio",
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: pointer.Int32(1),
@@ -115,6 +120,10 @@ func Deployment() *appsv1.Deployment {
 							Ports: []corev1.ContainerPort{
 								{ContainerPort: 9000},
 								{ContainerPort: 9090},
+							},
+							Command: []string{"/bin/bash", "-c"},
+							Args: []string{
+								"minio server /data --console-address :9090",
 							},
 							LivenessProbe: &corev1.Probe{
 								ProbeHandler: corev1.ProbeHandler{
@@ -153,7 +162,8 @@ func Deployment() *appsv1.Deployment {
 func Service() *corev1.Service {
 	return &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "minio-service",
+			Namespace: "wandb",
+			Name:      "minio-service",
 		},
 		Spec: corev1.ServiceSpec{
 			Selector: map[string]string{
@@ -161,16 +171,18 @@ func Service() *corev1.Service {
 			},
 			Ports: []corev1.ServicePort{
 				{
+					Name:       "api",
 					Protocol:   "TCP",
 					Port:       9000,
 					TargetPort: intstr.FromInt(9000),
-					NodePort:   int32(30000),
+					NodePort:   int32(31300),
 				},
 				{
+					Name:       "console",
 					Protocol:   "TCP",
 					Port:       9090,
 					TargetPort: intstr.FromInt(9090),
-					NodePort:   int32(31000),
+					NodePort:   int32(31400),
 				},
 			},
 			Type: corev1.ServiceTypeNodePort,
@@ -178,7 +190,7 @@ func Service() *corev1.Service {
 	}
 }
 
-func GetBucketHost(ctx context.Context, c client.Client) (string, error) {
+func GetHost(ctx context.Context, c client.Client) (string, error) {
 	nodes := &corev1.NodeList{}
 	c.List(ctx, nodes)
 	if err := c.List(ctx, nodes); err != nil {
