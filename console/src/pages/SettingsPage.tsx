@@ -1,7 +1,40 @@
 import React, { useEffect, useState } from 'react'
 import { TopNavbar } from '../common/TopNavbar'
-import { useConfigQuery } from '../common/api'
+import { useConfigMutation, useConfigQuery } from '../common/api'
 import { MdWarning } from 'react-icons/md'
+
+const LicenseCard: React.FC = () => {
+  const { data } = useConfigQuery()
+  const { mutate } = useConfigMutation()
+
+  const [license, setLicense] = useState<string>('')
+  useEffect(() => setLicense(data.license), [data])
+  return (
+    <form
+      onSubmit={(e) => {
+        console.log({ ...data, license })
+        e.preventDefault()
+        if (license === data.license) return
+        mutate({ ...data, license })
+      }}
+    >
+      <h2 className="text-neutral-300 text-xl">License</h2>
+      <p className="text-neutral-400 mt-1">
+        Configure and check license status.
+      </p>
+      <div className="rounded-md bg-neutral-800 p-6 my-4 grid gap-2">
+        <textarea
+          value={license}
+          onChange={(e) => setLicense(e.target.value)}
+          className="border border-neutral-700 text-white rounded-md bg-transparent placeholder:text-neutral-500 px-2 py-1"
+        />
+      </div>
+      <button className="text-black font-semibold hover:bg-green-400 rounded-md py-2 bg-green-500 px-4">
+        Save
+      </button>
+    </form>
+  )
+}
 
 type BucketConfig = {
   connectionString: string
@@ -11,52 +44,108 @@ type BucketConfig = {
 const BucketCard: React.FC<{
   value: BucketConfig
   onChange: (value: BucketConfig) => void
-}> = ({ value }) => {
-  const isS3 = value.connectionString?.startsWith('s3://')
+}> = ({ value, onChange }) => {
   return (
-    <div>
+    <form>
       <h2 className="text-neutral-300 text-xl">Bucket</h2>
-      <div>
-        <input
-          className="px-2 text-lg bg-neutral-700 rounded-md"
-          value={value.connectionString}
-        />
-        {isS3 && (
+      <p className="text-neutral-400 mt-1">
+        Connection settings for the S3 compatible storage. Note, changing the
+        Bucket connection will not migrate the data automatically.
+      </p>
+      <div className="rounded-md bg-neutral-800 p-6 my-4 grid gap-4">
+        <div className="flex items-center gap-4">
+          <div className="flex-grow max-w-[300px]">
+            <label
+              className="block text-neutral-300 text-sm font-bold mb-1"
+              htmlFor="host"
+            >
+              Bucket
+            </label>
+            <input
+              id="host"
+              value={value.connectionString}
+              onChange={(e) =>
+                onChange({ ...value, connectionString: e.target.value })
+              }
+              className="w-full border border-neutral-700 rounded-md bg-transparent placeholder:text-neutral-500 px-2 py-1"
+              placeholder="host"
+            />
+          </div>
+          <div className="flex-grow max-w-[300px]">
+            <label
+              className="block text-neutral-300 text-sm font-bold mb-1"
+              htmlFor="region"
+            >
+              AWS Region
+            </label>
+            <input
+              id="region"
+              value={value.region}
+              onChange={(e) =>
+                onChange({ ...value, connectionString: e.target.value })
+              }
+              className="w-full border border-neutral-700 rounded-md bg-transparent placeholder:text-neutral-500 px-2 py-1"
+              placeholder="AWS Region"
+            />
+          </div>
+        </div>
+        <div className="flex-grow max-w-[300px]">
+          <label
+            className="block text-neutral-300 text-sm font-bold mb-1"
+            htmlFor="kmsKey"
+          >
+            KMS Key ARN
+          </label>
           <input
-            className="text-lg bg-neutral-700 rounded-md"
-            value={value.region}
+            id="kmsKey"
+            value={value.kmsKey}
+            onChange={(e) =>
+              onChange({ ...value, connectionString: e.target.value })
+            }
+            className="w-full border border-neutral-700 rounded-md bg-transparent placeholder:text-neutral-500 px-2 py-1"
+            placeholder="KMS Key ARN"
           />
-        )}
+        </div>
       </div>
-      <button className="mt-4 text-black font-semibold hover:bg-green-400 rounded-md py-2 bg-green-500 px-4">
+      <button
+        type="submit"
+        className="text-black font-semibold hover:bg-green-400 rounded-md py-2 bg-green-500 px-4"
+      >
         Save
       </button>
-    </div>
+    </form>
   )
 }
 
 type MysqlConfig = {
   host: string
-  port: string
+  port: number
   database: string
   username: string
   password: string
 }
 
-const DatabaseCard: React.FC<{
-  value?: MysqlConfig
-  onChange?: (v: MysqlConfig) => void
-}> = ({ value, onChange }) => {
-  const [config, setConfig] = useState<MysqlConfig>(
-    value != null
-      ? value
-      : { database: '', host: '', password: '', port: '', username: '' },
-  )
-  const [isExternal, setExternal] = useState(value != null)
+const DatabaseCard: React.FC = () => {
+  const { data } = useConfigQuery()
+  const { mutate } = useConfigMutation()
+  const database = data.mysql
+  const [config, setConfig] = useState<MysqlConfig>({
+    database: '',
+    host: '',
+    password: '',
+    port: 3306,
+    username: '',
+  })
+  const [isExternal, setExternal] = useState(database != null)
   return (
-    <div>
+    <form onSubmit={() => mutate(JSON.stringify({ ...data, mysql: config }))}>
       <h2 className="text-neutral-300 text-xl">MySQL</h2>
-      {value == null && (
+      <p className="text-neutral-400 mt-1">
+        Connection settings for the MySQL database. Note, changing the MySQL
+        connection will not migrate the data automatically to the new instance.
+      </p>
+
+      {database == null && (
         <div className="inline-block items-center border border-neutral-700 rounded-lg p-1 my-4">
           <button
             className={`rounded-md px-2 py-1 mr-2 ${
@@ -77,62 +166,102 @@ const DatabaseCard: React.FC<{
         </div>
       )}
 
-      <div className="rounded-md bg-neutral-800 p-4">
+      <div className="rounded-md bg-neutral-800 p-6">
         {isExternal ? (
-          <form
-            onSubmit={(e) => {
-              onChange?.(config)
-              e.preventDefault()
-            }}
-          >
-            <div>
-              <input
-                value={config?.host}
-                onChange={(e) => setConfig({ ...config, host: e.target.value })}
-                className="border border-neutral-700 rounded-md bg-transparent placeholder:text-neutral-500 px-2 py-1"
-                placeholder="host"
-              />
+          <div>
+            <div className="text-neutral-300">Connection</div>
+            <div className="flex items-center gap-4">
+              <div className="flex-grow max-w-[300px]">
+                <label
+                  className="block text-neutral-300 text-sm font-bold mb-1"
+                  htmlFor="host"
+                >
+                  Host
+                </label>
+                <input
+                  id="host"
+                  value={config?.host}
+                  onChange={(e) =>
+                    setConfig({ ...config, host: e.target.value })
+                  }
+                  className="w-full border border-neutral-700 rounded-md bg-transparent placeholder:text-neutral-500 px-2 py-1"
+                  placeholder="host"
+                />
+              </div>
+              <div>
+                <label
+                  className="block text-neutral-300 text-sm font-bold mb-1"
+                  htmlFor="database"
+                >
+                  Database
+                </label>
+                <input
+                  value={config?.database}
+                  onChange={(e) =>
+                    setConfig({ ...config, database: e.target.value })
+                  }
+                  className="w-40 border border-neutral-700 rounded-md bg-transparent placeholder:text-neutral-500 px-2 py-1"
+                  placeholder="Database"
+                  id="database"
+                />
+              </div>
+              <div>
+                <label
+                  className="block text-neutral-300 text-sm font-bold mb-1"
+                  htmlFor="port"
+                >
+                  Port
+                </label>
+                <input
+                  type="number"
+                  value={config?.port}
+                  onChange={(e) =>
+                    setConfig({ ...config, port: e.target.valueAsNumber })
+                  }
+                  className="w-20 border border-neutral-700 rounded-md bg-transparent placeholder:text-neutral-500 px-2 py-1"
+                  placeholder="port"
+                  id="port"
+                />
+              </div>
             </div>
-            <div>
-              <input
-                value={config?.database}
-                onChange={(e) =>
-                  setConfig({ ...config, database: e.target.value })
-                }
-                className="border border-neutral-700 rounded-md bg-transparent placeholder:text-neutral-500 px-2 py-1"
-                placeholder="database"
-              />
+            <div className="mt-2 text-neutral-300">Authentication</div>
+            <div className="items-center flex gap-4">
+              <div>
+                <label
+                  className="block text-neutral-300 text-sm font-bold mb-1"
+                  htmlFor="port"
+                >
+                  Username
+                </label>
+                <input
+                  value={config?.username}
+                  onChange={(e) =>
+                    setConfig({ ...config, username: e.target.value })
+                  }
+                  className="border border-neutral-700 rounded-md bg-transparent placeholder:text-neutral-500 px-2 py-1"
+                  placeholder="username"
+                  id="username"
+                />
+              </div>
+              <div>
+                <label
+                  className="block text-neutral-300 text-sm font-bold mb-1"
+                  htmlFor="port"
+                >
+                  Password
+                </label>
+                <input
+                  value={config?.password}
+                  onChange={(e) =>
+                    setConfig({ ...config, password: e.target.value })
+                  }
+                  className="border border-neutral-700 rounded-md bg-transparent placeholder:text-neutral-500 px-2 py-1"
+                  placeholder="password"
+                  type="Password"
+                />
+              </div>
             </div>
-            <div>
-              <input
-                value={config?.port}
-                onChange={(e) => setConfig({ ...config, port: e.target.value })}
-                className="border border-neutral-700 rounded-md bg-transparent placeholder:text-neutral-500 px-2 py-1"
-                placeholder="port"
-              />
-            </div>
-            <div>
-              <input
-                value={config?.username}
-                onChange={(e) =>
-                  setConfig({ ...config, username: e.target.value })
-                }
-                className="border border-neutral-700 rounded-md bg-transparent placeholder:text-neutral-500 px-2 py-1"
-                placeholder="username"
-              />
-            </div>
-            <div>
-              <input
-                value={config?.password}
-                onChange={(e) =>
-                  setConfig({ ...config, password: e.target.value })
-                }
-                className="border border-neutral-700 rounded-md bg-transparent placeholder:text-neutral-500 px-2 py-1"
-                placeholder="password"
-                type="password"
-              />
-            </div>
-          </form>
+          </div>
         ) : (
           <div className="text-center">
             <p className="text-red-400 text-lg">
@@ -147,10 +276,13 @@ const DatabaseCard: React.FC<{
         )}
       </div>
 
-      <button className="mt-4 text-black font-semibold hover:bg-green-400 rounded-md py-2 bg-green-500 px-4">
+      <button
+        type="submit"
+        className="mt-4 text-black font-semibold hover:bg-green-400 rounded-md py-2 bg-green-500 px-4"
+      >
         Save
       </button>
-    </div>
+    </form>
   )
 }
 
@@ -169,10 +301,11 @@ export const SettingsPage: React.FC = () => {
   return (
     <>
       <TopNavbar />
-      <div className="max-w-5xl mx-auto mt-10">
+      <div className="max-w-5xl mx-auto mt-10 mb-20">
         <h1 className="text-3xl font-semibold tracking-wide mb-4">Settings</h1>
 
-        <div className="grid gap-8 mt-8">
+        <div className="grid gap-8 my-8 max-w-[650px]">
+          <LicenseCard />
           <BucketCard
             value={config.bucket}
             onChange={(bucket) => {
@@ -180,7 +313,6 @@ export const SettingsPage: React.FC = () => {
             }}
           />
           <DatabaseCard />
-          <h2 className="text-neutral-300 text-xl mt-6">Authentication</h2>
         </div>
       </div>
     </>

@@ -112,6 +112,7 @@ func New(log logr.Logger, c client.Client, scheme *runtime.Scheme) {
 	api.HandleFunc("/api/v1/k8s/services", clientListHandler(ctx, c, &corev1.ServiceList{}, client.InNamespace(namespace)))
 	api.HandleFunc("/api/v1/k8s/stateful-sets", clientListHandler(ctx, c, &appsv1.StatefulSetList{}, client.InNamespace(namespace)))
 	api.HandleFunc("/api/v1/k8s/deployments", clientListHandler(ctx, c, &appsv1.DeploymentList{}, client.InNamespace(namespace)))
+	api.HandleFunc("/api/v1/k8s/nodes", clientListHandler(ctx, c, &corev1.NodeList{}))
 
 	api.HandleFunc("/api/v1/config/latest", func(w http.ResponseWriter, r *http.Request) {
 		configName := "wandb-config-latest"

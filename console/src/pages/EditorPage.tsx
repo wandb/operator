@@ -6,7 +6,7 @@ import { useConfigMutation, useConfigQuery } from '../common/api'
 import { TopNavbar } from '../common/TopNavbar'
 
 export const EditorPage: React.FC = () => {
-  const [config, setConfig] = useState<string>('')
+  const [config, setConfig] = useState('')
 
   const format = useCallback(() => {
     setConfig((c) => JSON.stringify(JSON.parse(c), null, 2))
@@ -58,7 +58,7 @@ export const EditorPage: React.FC = () => {
         <div className="py-4">
           <button
             disabled={!isValidJson}
-            onClick={() => mutate(config)}
+            onClick={() => mutate(JSON.parse(config))}
             className="bg-green-600 hover:bg-green-500 disabled:opacity-50 rounded-md text-white px-4 py-2"
           >
             Save

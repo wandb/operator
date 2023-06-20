@@ -12,6 +12,7 @@ export const usePodListQuery = () => {
 
 export const useDeploymentsQuery = () => {
   return useQuery({
+    refetchInterval: 1000,
     queryKey: ['deployments'],
     queryFn: async () =>
       (await axios.get('http://localhost:9090/api/v1/k8s/deployments')).data,
@@ -23,6 +24,14 @@ export const useServicesQuery = () => {
     queryKey: ['services'],
     queryFn: async () =>
       (await axios.get('http://localhost:9090/api/v1/k8s/services')).data,
+  })
+}
+export const useNodesQuery = () => {
+  return useQuery({
+    queryKey: ['nodes'],
+    refetchInterval: 1000,
+    queryFn: async () =>
+      (await axios.get('http://localhost:9090/api/v1/k8s/nodes')).data,
   })
 }
 
@@ -44,8 +53,11 @@ export const useConfigQuery = () => {
 
 export const useConfigMutation = () => {
   return useMutation(
-    (d: string) => {
-      return axios.post('http://localhost:9090/api/v1/config/latest', d)
+    (d: any) => {
+      return axios.post(
+        'http://localhost:9090/api/v1/config/latest',
+        JSON.stringify(d),
+      )
     },
     {
       onSuccess: () => {
