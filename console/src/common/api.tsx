@@ -54,10 +54,7 @@ export const useConfigQuery = () => {
 export const useConfigMutation = () => {
   return useMutation(
     (d: any) => {
-      return axios.post(
-        'http://localhost:9090/api/v1/config/latest',
-        JSON.stringify(d),
-      )
+      return axios.post('http://localhost:9090/api/v1/config/latest', d)
     },
     {
       onSuccess: () => {

@@ -30,7 +30,7 @@ export const EditorPage: React.FC = () => {
   useEffect(() => setCurrentConfig(), [setCurrentConfig])
 
   const { mutate } = useConfigMutation()
-
+  console.log(config)
   if (isLoading && config != '') return <div>Loading...</div>
   return (
     <>
