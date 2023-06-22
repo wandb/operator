@@ -4,25 +4,10 @@ import (
 	"context"
 
 	"github.com/wandb/operator/pkg/utils/kubeclient"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func upsertNamespace(ctx context.Context, c client.Client, namespace string) error {
-	ns := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: namespace,
-		},
-	}
-	if err := c.Create(ctx, ns); err != nil {
-		if !errors.IsAlreadyExists(err) {
-			return err
-		}
-	}
-	return nil
-}
+const Namespace = "wandb"
 
 func ReconcileDelete(ctx context.Context, c client.Client) error {
 	pvc := PersistanceVolumeClaim()
@@ -41,7 +26,7 @@ func ReconcileDelete(ctx context.Context, c client.Client) error {
 }
 
 func ReconcileCreate(ctx context.Context, c client.Client) error {
-	if err := upsertNamespace(ctx, c, "wandb"); err != nil {
+	if err := kubeclient.UpsertNamespace(ctx, c, Namespace); err != nil {
 		return err
 	}
 

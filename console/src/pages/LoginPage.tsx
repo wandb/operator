@@ -1,14 +1,16 @@
 import React, { useState } from 'react'
 import { MdOutlineKey } from 'react-icons/md'
-import { useSetPasswordMutation, useViewer } from '../common/api'
+import { useLoginMutation, useViewer } from '../common/api'
 import { Navigate } from 'react-router-dom'
 
-export const SetPasswordPage: React.FC = () => {
+export const LoginPage: React.FC = () => {
   const viewer = useViewer()
-  const { mutate, isError, error } = useSetPasswordMutation()
   const [password, setPassword] = useState('')
-  if (viewer.data?.isPasswordSet) return <Navigate to="/" replace />
 
+  const { mutate, isError, error } = useLoginMutation()
+
+  if (viewer.data?.loggedIn) return <Navigate to="/" replace />
+  console.log(viewer.data)
   return (
     <div className="container mx-auto max-w-2xl pt-16">
       <form
@@ -21,9 +23,7 @@ export const SetPasswordPage: React.FC = () => {
         <h1 className="font-serif text-4xl">Weights &amp; Biases Console</h1>
 
         <p className="mt-4 text-xl font-thin text-neutral-300">
-          The root password serves as the key to log in to the console. In case
-          you forget this password, you will have to reset it directly by
-          establishing a connection with the Kubernetes cluster.
+          Login using your root password.
         </p>
 
         <input
@@ -39,7 +39,7 @@ export const SetPasswordPage: React.FC = () => {
           className="mt-6 text-md flex items-center rounded-md bg-yellow-400 p-3 px-5 text-lg font-semibold text-black disabled:bg-neutral-400"
         >
           <MdOutlineKey className="mr-2" />
-          Set Password
+          Login
         </button>
 
         {isError && error != null && (

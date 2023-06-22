@@ -36,6 +36,8 @@ spec:
           spec:
             description: WeightsAndBiasesSpec defines the desired state of WeightsAndBiases
             properties:
+              license:
+                type: string
               releasePath:
                 type: string
               version:

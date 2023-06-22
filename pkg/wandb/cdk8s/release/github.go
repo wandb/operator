@@ -25,7 +25,7 @@ func (*GithubRelease) Download() error {
 	panic("unimplemented")
 }
 
-func (*GithubRelease) Generate(m interface{}) error {
+func (*GithubRelease) Generate(m map[string]interface{}) error {
 	panic("unimplemented")
 }
 

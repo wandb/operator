@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/go-logr/logr"
-	"github.com/wandb/operator/pkg/wandb/cdk8s/config"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -18,7 +17,9 @@ import (
 
 func enableCORS(handler http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
+		origin := r.Header.Get("Origin")
+		w.Header().Set("Access-Control-Allow-Origin", origin)
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
 		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
 		w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
 
@@ -30,32 +31,6 @@ func enableCORS(handler http.Handler) http.Handler {
 		}
 	})
 }
-
-// func isPasswordValid(settings *settings.Settings, w http.ResponseWriter, r *http.Request) bool {
-// 	password := r.Header.Get("Authorization")
-// 	if password == "" {
-// 		http.Error(w, "Authorization password must be provided", http.StatusUnauthorized)
-// 		return false
-// 	}
-
-// 	hashedPassword := strings.Replace(password, "Password ", "", 1)
-// 	if !settings.IsPassword(hashedPassword) {
-// 		http.Error(w, "Invalid password", http.StatusForbidden)
-// 		return false
-// 	}
-// 	return true
-// }
-
-// func passwordAuthMiddleware(settings *settings.Settings, handler http.HandlerFunc) http.HandlerFunc {
-// 	return func(w http.ResponseWriter, r *http.Request) {
-// 		if !isPasswordValid(settings, w, r) {
-// 			return
-// 		}
-
-// 		// If the password is valid, call the handler
-// 		handler.ServeHTTP(w, r)
-// 	}
-// }
 
 func clientListHandler(
 	ctx context.Context,
@@ -73,81 +48,31 @@ func clientListHandler(
 func New(log logr.Logger, c client.Client, scheme *runtime.Scheme) {
 	ctx := context.Background()
 
-	// settings := settings.New(c)
-
 	log.Info("Initializing API server")
 
-	api := http.NewServeMux()
-
-	// api.HandleFunc("/api/v1/password", func(w http.ResponseWriter, r *http.Request) {
-	// 	if r.Method == "POST" {
-	// 		if !isPasswordValid(settings, w, r) {
-	// 			return
-	// 		}
-
-	// 		decoder := json.NewDecoder(r.Body)
-	// 		var pw string
-	// 		err := decoder.Decode(&pw)
-	// 		if err != nil {
-	// 			panic(err)
-	// 		}
-	// 		defer r.Body.Close()
-	// 		settings.SetPassword(pw)
-	// 		_, _ = w.Write([]byte("ok"))
-	// 		return
-	// 	}
-
-	// 	if r.Method == "GET" {
-	// 		val := json.Marshal(map[string]interface{}{
-
-	// 		})
-	// 		_, _ = w.Write([]byte(val))
-	// 		return
-	// 	}
-	// })
-
+	// TODO: make this configurable, this assumes it always deploy into default
+	// namespace with name wandb
 	namespace := "default"
+
+	api := http.NewServeMux()
+	pwd := &PasswordMiddleware{ctx, c, []string{
+		"/api/v1/password",
+		"/api/v1/viewer",
+		"/api/v1/login",
+	}}
+	api.HandleFunc("/api/v1/password", pwd.Password())
+	api.HandleFunc("/api/v1/login", pwd.Login())
+	api.HandleFunc("/api/v1/viewer", pwd.Viewer())
+	api.HandleFunc("/api/v1/logout", pwd.Logout())
+
+	cfg := &ConfigMiddleware{ctx, c, scheme}
+	api.HandleFunc("/api/v1/config/latest", cfg.Latest())
 
 	api.HandleFunc("/api/v1/k8s/pods", clientListHandler(ctx, c, &corev1.PodList{}, client.InNamespace(namespace)))
 	api.HandleFunc("/api/v1/k8s/services", clientListHandler(ctx, c, &corev1.ServiceList{}, client.InNamespace(namespace)))
 	api.HandleFunc("/api/v1/k8s/stateful-sets", clientListHandler(ctx, c, &appsv1.StatefulSetList{}, client.InNamespace(namespace)))
 	api.HandleFunc("/api/v1/k8s/deployments", clientListHandler(ctx, c, &appsv1.DeploymentList{}, client.InNamespace(namespace)))
 	api.HandleFunc("/api/v1/k8s/nodes", clientListHandler(ctx, c, &corev1.NodeList{}))
-
-	api.HandleFunc("/api/v1/config/latest", func(w http.ResponseWriter, r *http.Request) {
-		configName := "wandb-config-latest"
-		latest, _ := config.GetFromConfigMap(ctx, c, configName, namespace)
-
-		if r.Method == "POST" {
-			decoder := json.NewDecoder(r.Body)
-			var cfg interface{}
-			err := decoder.Decode(&cfg)
-			if err != nil {
-				panic(err)
-			}
-			defer r.Body.Close()
-			config.UpdateWithConfigMap(
-				ctx,
-				c,
-				scheme,
-
-				configName,
-				namespace,
-
-				latest.Release,
-				cfg,
-			)
-			_, _ = w.Write([]byte("ok"))
-			return
-		}
-
-		if r.Method == "GET" {
-			latest, _ := config.GetFromConfigMap(ctx, c, configName, namespace)
-			js, _ := json.Marshal(latest.Config)
-			_, _ = w.Write([]byte(js))
-			return
-		}
-	})
 
 	consoleUI := http.FileServer(http.Dir("console/dist"))
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -161,8 +86,9 @@ func New(log logr.Logger, c client.Client, scheme *runtime.Scheme) {
 
 	go func() {
 		corsAPI := enableCORS(api)
+		authAPI := pwd.Auth(corsAPI)
 		log.Info("Starting API server", "port", port)
-		err := http.ListenAndServe(fmt.Sprintf(":%d", port), corsAPI)
+		err := http.ListenAndServe(fmt.Sprintf(":%d", port), authAPI)
 		if err != nil {
 			log.Error(err, "Failed to start API server")
 			os.Exit(1)

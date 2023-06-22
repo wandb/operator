@@ -21,7 +21,7 @@ type LocalRelease struct {
 }
 
 // Generate implements Release.
-func (r LocalRelease) Generate(m interface{}) error {
+func (r LocalRelease) Generate(m map[string]interface{}) error {
 	b, _ := json.Marshal(m)
 
 	dist := path.Join(r.Directory(), "dist")

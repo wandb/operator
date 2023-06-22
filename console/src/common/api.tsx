@@ -2,6 +2,58 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import axios from 'axios'
 import { client } from '../client'
 
+axios.defaults.withCredentials = true
+
+export const useViewer = () => {
+  return useQuery({
+    queryKey: ['viewer'],
+    queryFn: async () =>
+      (
+        await axios.get<{ isPasswordSet: boolean; loggedIn: boolean }>(
+          'http://localhost:9090/api/v1/viewer',
+        )
+      ).data,
+  })
+}
+
+export const useSetPasswordMutation = () => {
+  return useMutation(
+    (d: string) => {
+      return axios.post('http://localhost:9090/api/v1/password', d)
+    },
+    {
+      onSuccess: () => {
+        client.invalidateQueries(['viewer'])
+      },
+    },
+  )
+}
+
+export const useLoginMutation = () => {
+  return useMutation(
+    (d: string) => {
+      return axios.post('http://localhost:9090/api/v1/login', d)
+    },
+    {
+      onSuccess: () => {
+        client.invalidateQueries(['viewer'])
+      },
+    },
+  )
+}
+export const useLogoutMutation = () => {
+  return useMutation(
+    () => {
+      return axios.get('http://localhost:9090/api/v1/logout')
+    },
+    {
+      onSuccess: () => {
+        client.invalidateQueries(['viewer'])
+      },
+    },
+  )
+}
+
 export const usePodListQuery = () => {
   return useQuery({
     queryKey: ['pods'],

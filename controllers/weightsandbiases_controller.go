@@ -23,7 +23,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
@@ -31,7 +30,7 @@ import (
 
 	apiv1 "github.com/wandb/operator/api/v1"
 	"github.com/wandb/operator/controllers/internal/ctrlqueue"
-	"github.com/wandb/operator/pkg/utils"
+	"github.com/wandb/operator/pkg/wandb/cdk8s"
 	"github.com/wandb/operator/pkg/wandb/cdk8s/config"
 	"github.com/wandb/operator/pkg/wandb/status"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -75,21 +74,37 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		log.Error(err, "Failed to set status")
 	}
 
-	log.Info("Get wanted release version...")
-	wantedRelease, err := r.getWantedRelease(ctx, wandb)
-	if err != nil {
-		log.Error(err, "Failed to get wanted release version")
-		return ctrlqueue.DoNotRequeue()
-	}
-	log.Info("Wanted release found", "version", wantedRelease.Version())
-
 	statusManager.Set(status.Loading)
 	configManager := config.NewManager(ctx, r.Client, wandb, r.Scheme)
-	cfg, err := configManager.GetDesiredState()
+	usersConfig, err := configManager.GetDesiredState()
+
+	var license string
+	if usersConfig != nil {
+		if l, exists := usersConfig.Config["license"]; exists {
+			if ls, ok := l.(string); ok {
+				license = ls
+			}
+		}
+	}
+	if wandb.Spec.License != "" {
+		license = wandb.Spec.License
+	}
+
+	// Apply configs in least to most priority order
+	desiredState := config.Merge(
+		usersConfig,
+		cdk8s.Github(),
+		cdk8s.Deployment(license),
+		cdk8s.Operator(wandb, r.Scheme),
+	)
+
 	if err != nil {
 		if errors.IsNotFound(err) {
 			log.Info("No config found. Creating config...", "name", configManager.LatestConfigName())
-			cfg, err = configManager.CreateLatest(wantedRelease, nil)
+			usersConfig, err = configManager.CreateLatest(
+				desiredState.Release,
+				map[string]interface{}{},
+			)
 			if err != nil {
 				log.Error(err, "Failed to create config")
 				return ctrlqueue.Requeue(err)
@@ -102,84 +117,40 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	configManager.BackupLatest()
 
-	log.Info("Config values:", "version", cfg.Release.Version(), "config", cfg.Config)
+	log.Info("Config values:", "version", usersConfig.Release.Version(), "config", usersConfig.Config)
 	if err != nil {
 		log.Error(err, "Failed to get config")
 		return ctrlqueue.Requeue(err)
 
 	}
 
-	// If we get to this point the above config has been created and something
-	// happen to trigger the reconcile function. However the config is not valid
-	if cfg.Config == nil {
-		log.Info("Config is null (default config).")
-		statusManager.Set(status.InvalidConfig)
-
-		// Lets update the version incase it has changed.
-		cfg.SetRelease(wantedRelease)
-		configManager.SetDesiredState(cfg)
-
-		return ctrlqueue.DoNotRequeue()
-	}
-
-	// log.Info("Reconciling Minio deployment")
-	// if err = minio.ReconcileDelete(ctx, r.Client); err != nil {
-	// 	return ctrlqueue.Requeue(err)
-	// }
-
-	// bucketConnectionString, _ := minio.GetConnectionString(ctx, r.Client)
-
-	gvk, _ := apiutil.GVKForObject(wandb, r.Scheme)
-	config := map[string]interface{}{
-		// "bucket": map[string]interface{}{
-		// 	"connectionString": bucketConnectionString,
-		// 	"region":           minio.RegionName,
-		// },
-		"global": map[string]interface{}{
-			"metadata": map[string]interface{}{
-				"ownerReferences": []map[string]interface{}{
-					{
-						"apiVersion":         gvk.GroupVersion().String(),
-						"blockOwnerDeletion": true,
-						"controller":         true,
-						"kind":               gvk.Kind,
-						"name":               wandb.GetName(),
-						"uid":                wandb.GetUID(),
-					},
-				},
-			},
-		},
-	}
-	finalCfg, _ := utils.Merge(config, cfg.Config)
-
 	statusManager.Set(status.Loading)
-	log.Info("Applying config changes...", "version", cfg.Release.Version())
-	if err := r.applyConfig(ctx, wandb, cfg.Release, finalCfg); err != nil {
+	log.Info("Applying config changes...", "version", usersConfig.Release.Version())
+	if err := r.applyConfig(ctx, wandb, usersConfig.Release, desiredState.Config); err != nil {
 		// TODO: Implement rollback
 		log.Error(err, "Failed to apply config changes.")
 		return ctrlqueue.DoNotRequeue()
 	}
-	log.Info("Successfully applied config", "version", cfg.Release.Version())
+	log.Info("Successfully applied config", "version", usersConfig.Release.Version())
 
-	if wantedRelease.Version() != cfg.Release.Version() {
+	if desiredState.Release.Version() != usersConfig.Release.Version() {
 		log.Info(
 			"Version changed. Applying...",
-			"current", cfg.Release.Version(),
-			"desired version", wantedRelease.Version(),
+			"current", usersConfig.Release.Version(),
+			"desired version", desiredState.Release.Version(),
 		)
 
 		statusManager.Set(status.Loading)
+		usersConfig.SetRelease(desiredState.Release)
 
-		cfg.SetRelease(wantedRelease)
-
-		if err := r.applyConfig(ctx, wandb, cfg.Release, finalCfg); err != nil {
+		if err := r.applyConfig(ctx, wandb, usersConfig.Release, desiredState.Config); err != nil {
 			// TODO: Implement rollback
 			log.Error(err, "Failed to upgrade to new version.")
 			return ctrlqueue.DoNotRequeue()
 		}
 
 		// Only if succesful do we save the state to a config map.
-		if err := configManager.SetDesiredState(cfg); err != nil {
+		if err := configManager.SetDesiredState(usersConfig); err != nil {
 			log.Error(err, "Failed to set desired state")
 			return ctrlqueue.DoNotRequeue()
 		}

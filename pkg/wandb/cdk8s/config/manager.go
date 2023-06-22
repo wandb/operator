@@ -102,7 +102,7 @@ func (m Manager) LatestConfigName() string {
 	return fmt.Sprintf("%s-config-latest", m.owner.GetName())
 }
 
-func (m Manager) CreateLatest(release release.Release, config interface{}) (*Config, error) {
+func (m Manager) CreateLatest(release release.Release, config map[string]interface{}) (*Config, error) {
 	name := m.LatestConfigName()
 	namespace := m.owner.GetNamespace()
 	return CreateWithConfigMap(

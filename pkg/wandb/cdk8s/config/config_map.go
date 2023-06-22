@@ -31,7 +31,7 @@ func CreateWithConfigMap(
 	configMapName string,
 	configMapNamespace string,
 	release release.Release,
-	config interface{},
+	config map[string]interface{},
 ) (*Config, error) {
 	configJson, err := json.Marshal(config)
 	if err != nil {
@@ -89,7 +89,7 @@ func GetFromConfigMap(
 			"config map %s/%s does not have a `config` key", configMapName, configMapNamespace)
 	}
 
-	var config interface{}
+	var config map[string]interface{}
 	err = json.Unmarshal([]byte(configString), &config)
 	if err != nil {
 		return nil, err
@@ -138,7 +138,7 @@ func UpdateWithConfigMap(
 	configMapName string,
 	configMapNamespace string,
 	release release.Release,
-	config interface{},
+	config map[string]interface{},
 ) (*Config, error) {
 	configMap := &corev1.ConfigMap{}
 	objKey := client.ObjectKey{Name: configMapName, Namespace: configMapNamespace}

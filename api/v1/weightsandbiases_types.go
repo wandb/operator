@@ -34,6 +34,7 @@ type WeightsAndBiasesSpec struct {
 
 	Cdk8sVersion string `json:"version,omitempty"`
 	ReleasePath  string `json:"releasePath,omitempty"`
+	License      string `json:"license,omitempty"`
 }
 
 // WeightsAndBiasesStatus defines the observed state of WeightsAndBiases

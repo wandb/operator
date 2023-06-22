@@ -12,7 +12,7 @@ func (r *WeightsAndBiasesReconciler) applyConfig(
 	ctx context.Context,
 	wandb *apiv1.WeightsAndBiases,
 	release release.Release,
-	cfg interface{},
+	cfg map[string]interface{},
 ) error {
 	log := ctrllog.FromContext(ctx)
 
