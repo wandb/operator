@@ -47,7 +47,6 @@ func (r LocalRelease) Install() error {
 	cmd := exec.Command("pnpm", "install", "--frozen-lockfile")
 	cmd.Dir = r.Directory()
 	_, err := cmd.CombinedOutput()
-	// fmt.Println(string(output))
 	return err
 }
 

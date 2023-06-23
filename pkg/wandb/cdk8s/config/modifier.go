@@ -1,5 +1,7 @@
 package config
 
+import "fmt"
+
 type Modifier interface {
 	Recommend() *Config
 	Override() *Config
@@ -8,7 +10,7 @@ type Modifier interface {
 // Merge will combine all the configs from the channels passed in. Last channel
 // will take precedent. If a channel returns nil for recommend or override, it will be skipped
 func Merge(inputConfig *Config, providers ...Modifier) *Config {
-	cfg := &Config{}
+	cfg := &Config{Config: map[string]interface{}{}}
 
 	for _, channel := range providers {
 		if channel == nil {
@@ -31,6 +33,8 @@ func Merge(inputConfig *Config, providers ...Modifier) *Config {
 			cfg.Merge(c)
 		}
 	}
+
+	fmt.Println("config merged", cfg.Config)
 
 	return cfg
 }

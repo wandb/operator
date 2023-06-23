@@ -5,13 +5,16 @@ import { EditorPage } from './pages/EditorPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { SetPasswordPage } from './pages/SetPasswordPage'
-import { useViewer } from './common/api'
 import { LoginPage } from './pages/LoginPage'
+import axios from 'axios'
+import { useProfileQuery } from './common/api/auth'
+
+axios.defaults.withCredentials = true
 
 const AuthRequired: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
-  const { data, isLoading } = useViewer()
+  const { data, isLoading } = useProfileQuery()
   const { pathname } = useLocation()
 
   if (isLoading || data == null) return null
@@ -20,8 +23,9 @@ const AuthRequired: React.FC<{ children: React.ReactNode }> = ({
   if (data?.isPasswordSet && pathname == '/welcome')
     return <Navigate to="/" replace />
 
-  if (!data.loggedIn) return <Navigate to="/login" replace />
-  if (data?.loggedIn && pathname == '/login') return <Navigate to="/" replace />
+  if (!data.isLoggedIn) return <Navigate to="/login" replace />
+  if (data?.isLoggedIn && pathname == '/login')
+    return <Navigate to="/" replace />
 
   return <>{children}</>
 }

@@ -2,8 +2,11 @@ import CodeMirror from '@uiw/react-codemirror'
 import { json } from '@codemirror/lang-json'
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { vscodeDark } from '@uiw/codemirror-theme-vscode'
-import { useConfigMutation, useConfigQuery } from '../common/api'
 import { TopNavbar } from '../common/TopNavbar'
+import {
+  useLatestConfigMutation,
+  useLatestConfigQuery,
+} from '../common/api/config'
 
 export const EditorPage: React.FC = () => {
   const [config, setConfig] = useState('')
@@ -21,16 +24,15 @@ export const EditorPage: React.FC = () => {
     }
   }, [config])
 
-  const { isLoading, data } = useConfigQuery()
+  const { isLoading, data } = useLatestConfigQuery()
   const setCurrentConfig = useCallback(
-    () => setConfig(JSON.stringify(data, null, 2)),
+    () => setConfig(JSON.stringify(data?.config ?? {}, null, 2)),
     [setConfig, data],
   )
 
   useEffect(() => setCurrentConfig(), [setCurrentConfig])
 
-  const { mutate } = useConfigMutation()
-  console.log(config)
+  const { mutate, isLoading: mutating } = useLatestConfigMutation()
   if (isLoading && config != '') return <div>Loading...</div>
   return (
     <>
@@ -57,8 +59,8 @@ export const EditorPage: React.FC = () => {
 
         <div className="py-4">
           <button
-            disabled={!isValidJson}
-            onClick={() => mutate(JSON.parse(config))}
+            disabled={!isValidJson || mutating}
+            onClick={() => mutate({ config: JSON.parse(config) })}
             className="bg-green-600 hover:bg-green-500 disabled:opacity-50 rounded-md text-white px-4 py-2"
           >
             Save

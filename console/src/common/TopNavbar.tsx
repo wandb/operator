@@ -1,7 +1,7 @@
 import { Link, NavLink } from 'react-router-dom'
 import { WBLogo } from './WBLogo'
 import { MdLogout } from 'react-icons/md'
-import { useLogoutMutation } from './api'
+import { useLogoutMutation } from './api/auth'
 
 const DashboardButton: React.FC = () => {
   return (

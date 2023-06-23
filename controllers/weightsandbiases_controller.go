@@ -117,7 +117,7 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	configManager.BackupLatest()
 
-	log.Info("Config values:", "version", usersConfig.Release.Version(), "config", usersConfig.Config)
+	log.Info("Config values:", "version", desiredState.Release.Version(), "config", desiredState.Config)
 	if err != nil {
 		log.Error(err, "Failed to get config")
 		return ctrlqueue.Requeue(err)

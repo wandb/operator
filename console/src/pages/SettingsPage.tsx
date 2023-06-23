@@ -1,21 +1,24 @@
 import React, { useEffect, useState } from 'react'
 import { TopNavbar } from '../common/TopNavbar'
-import { useConfigMutation, useConfigQuery } from '../common/api'
 import { MdWarning } from 'react-icons/md'
+import {
+  useLatestConfigMutation,
+  useLatestConfigQuery,
+} from '../common/api/config'
 
 const LicenseCard: React.FC = () => {
-  const { data } = useConfigQuery()
-  const { mutate } = useConfigMutation()
+  const { data } = useLatestConfigQuery()
+  const { mutate } = useLatestConfigMutation()
 
   const [license, setLicense] = useState<string>('')
-  useEffect(() => setLicense(data.license), [data])
+  useEffect(() => setLicense(data?.config.license), [data])
   return (
     <form
       onSubmit={(e) => {
         console.log({ ...data, license })
         e.preventDefault()
-        if (license === data.license) return
-        mutate({ ...data, license })
+        if (license === data?.config.license) return
+        mutate({ config: { ...data?.config, license } })
       }}
     >
       <h2 className="text-neutral-300 text-xl">License</h2>
@@ -126,9 +129,9 @@ type MysqlConfig = {
 }
 
 const DatabaseCard: React.FC = () => {
-  const { data } = useConfigQuery()
-  const { mutate } = useConfigMutation()
-  const database = data.mysql
+  const { data } = useLatestConfigQuery()
+  const { mutate } = useLatestConfigMutation()
+  const database = data?.config.mysql
   const [config, setConfig] = useState<MysqlConfig>({
     database: '',
     host: '',
@@ -138,7 +141,9 @@ const DatabaseCard: React.FC = () => {
   })
   const [isExternal, setExternal] = useState(database != null)
   return (
-    <form onSubmit={() => mutate(JSON.stringify({ ...data, mysql: config }))}>
+    <form
+      onSubmit={() => mutate({ config: { ...data?.config, mysql: config } })}
+    >
       <h2 className="text-neutral-300 text-xl">MySQL</h2>
       <p className="text-neutral-400 mt-1">
         Connection settings for the MySQL database. Note, changing the MySQL
@@ -288,7 +293,7 @@ const DatabaseCard: React.FC = () => {
 
 export const SettingsPage: React.FC = () => {
   const [config, setConfig] = useState<any>({ bucket: {} })
-  const { data, isLoading } = useConfigQuery()
+  const { data, isLoading } = useLatestConfigQuery()
   useEffect(() => {
     if (data == null) return
     setConfig(data)

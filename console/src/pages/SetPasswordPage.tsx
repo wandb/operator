@@ -1,10 +1,10 @@
 import React, { useState } from 'react'
 import { MdOutlineKey } from 'react-icons/md'
-import { useSetPasswordMutation, useViewer } from '../common/api'
 import { Navigate } from 'react-router-dom'
+import { useProfileQuery } from '../common/api/auth'
 
 export const SetPasswordPage: React.FC = () => {
-  const viewer = useViewer()
+  const viewer = useProfileQuery()
   const { mutate, isError, error } = useSetPasswordMutation()
   const [password, setPassword] = useState('')
   if (viewer.data?.isPasswordSet) return <Navigate to="/" replace />
@@ -50,4 +50,7 @@ export const SetPasswordPage: React.FC = () => {
       </form>
     </div>
   )
+}
+function useSetPasswordMutation(): { mutate: any; isError: any; error: any } {
+  throw new Error('Function not implemented.')
 }

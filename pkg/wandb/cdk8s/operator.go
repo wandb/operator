@@ -43,20 +43,18 @@ func (c operatorChannel) Override() *config.Config {
 		return &config.Config{}
 	}
 
-	if version != "" {
-		if v, err := semver.NewVersion(version); err == nil {
-			return &config.Config{
-				Release: &release.GithubRelease{
-					Repo: "wandb/cdk8s",
-					Tag:  v.String(),
-				},
-			}
-		}
+	if v, err := semver.NewVersion(version); err == nil {
 		return &config.Config{
-			Release: release.NewLocalRelease(version),
+			Release: &release.GithubRelease{
+				Repo: "wandb/cdk8s",
+				Tag:  v.String(),
+			},
 		}
 	}
-	return &config.Config{}
+
+	return &config.Config{
+		Release: release.NewLocalRelease(version),
+	}
 }
 
 func Operator(wandb *v1.WeightsAndBiases, scheme *runtime.Scheme) config.Modifier {

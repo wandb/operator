@@ -36,6 +36,11 @@ func (s *Config) Merge(config *Config) {
 		s.SetRelease(config.Release)
 	}
 
+	if s.Config == nil {
+		s.SetConfig(config.Config)
+		return
+	}
+
 	if config.Config != nil {
 		if cfg, err := utils.Merge(s.Config, config.Config); err != nil {
 			if cfgMap, ok := cfg.(map[string]interface{}); ok {

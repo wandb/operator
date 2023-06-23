@@ -1,15 +1,15 @@
 import React, { useState } from 'react'
 import { MdOutlineKey } from 'react-icons/md'
-import { useLoginMutation, useViewer } from '../common/api'
 import { Navigate } from 'react-router-dom'
+import { useLoginMutation, useProfileQuery } from '../common/api/auth'
 
 export const LoginPage: React.FC = () => {
-  const viewer = useViewer()
+  const viewer = useProfileQuery()
   const [password, setPassword] = useState('')
 
   const { mutate, isError, error } = useLoginMutation()
 
-  if (viewer.data?.loggedIn) return <Navigate to="/" replace />
+  if (viewer.data?.isLoggedIn) return <Navigate to="/" replace />
   console.log(viewer.data)
   return (
     <div className="container mx-auto max-w-2xl pt-16">
