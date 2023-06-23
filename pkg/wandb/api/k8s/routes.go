@@ -88,4 +88,33 @@ func Routes(router *gin.RouterGroup) {
 		}
 		c.JSON(200, ss)
 	})
+
+	router.GET("/namespaces", func(c *gin.Context) {
+		namespaces, err := clientset.CoreV1().Namespaces().List(c, metav1.ListOptions{})
+		if err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(200, namespaces)
+	})
+
+	router.GET("/:namespace/services", func(c *gin.Context) {
+		namespace := c.Param("namespace")
+		services, err := clientset.CoreV1().Services(namespace).List(c, metav1.ListOptions{})
+		if err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(200, services)
+	})
+
+	router.GET("/:namespace/events", func(c *gin.Context) {
+		namespace := c.Param("namespace")
+		services, err := clientset.CoreV1().Events(namespace).List(c, metav1.ListOptions{})
+		if err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(200, services)
+	})
 }

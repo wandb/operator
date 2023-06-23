@@ -8,9 +8,12 @@ import { sum } from 'lodash'
 import { format } from 'date-fns'
 import {
   getDeployments,
+  getEvents,
+  getNamespaces,
   getNodes,
   getPodLogs,
   getPods,
+  getServices,
   getStatefulSets,
   useDeploymentsQuery,
   useNodesQuery,
@@ -315,17 +318,31 @@ const Debug: React.FC = () => {
 
     try {
       // Get k8s resources
-      const [nodes, pods, deployments, statefulSets] = await Promise.all([
+      const [
+        nodes,
+        pods,
+        deployments,
+        statefulSets,
+        events,
+        namespaces,
+        services,
+      ] = await Promise.all([
         getNodes(),
         getPods(),
         getDeployments(),
         getStatefulSets(),
+        getEvents(),
+        getNamespaces(),
+        getServices(),
       ])
       const k8s = zip.folder('k8s')
       k8s?.file('nodes.json', JSON.stringify(nodes, null, 2))
       k8s?.file('pods.json', JSON.stringify(pods, null, 2))
       k8s?.file('deployments.json', JSON.stringify(deployments, null, 2))
       k8s?.file('stateful-sets.json', JSON.stringify(statefulSets, null, 2))
+      k8s?.file('events.json', JSON.stringify(events, null, 2))
+      k8s?.file('namespaces.json', JSON.stringify(namespaces, null, 2))
+      k8s?.file('services.json', JSON.stringify(services, null, 2))
 
       // Get pod logs
       const logs = zip.folder('logs')

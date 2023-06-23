@@ -93,3 +93,18 @@ export const useStatefulSetsQuery = (namespace = 'default') => {
     queryFn: async () => (await getStatefulSets(namespace)).data,
   })
 }
+
+export const getNamespaces = () =>
+  instance.get<{
+    items: Array<any>
+  }>(`/v1/k8s/namespaces`)
+
+export const getServices = (namespace = 'default') =>
+  instance.get<{
+    items: Array<any>
+  }>(`/v1/k8s/${namespace}/services`)
+
+export const getEvents = (namespace = 'default') =>
+  instance.get<{
+    items: Array<any>
+  }>(`/v1/k8s/${namespace}/events`)
