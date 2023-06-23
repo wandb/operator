@@ -1,7 +1,5 @@
 package config
 
-import "fmt"
-
 type Modifier interface {
 	Recommend() *Config
 	Override() *Config
@@ -33,8 +31,6 @@ func Merge(inputConfig *Config, providers ...Modifier) *Config {
 			cfg.Merge(c)
 		}
 	}
-
-	fmt.Println("config merged", cfg.Config)
 
 	return cfg
 }

@@ -19,72 +19,77 @@ export const useNodesQuery = () => {
   })
 }
 
+export const getPods = (namespace = 'default') =>
+  instance.get<{
+    items: Array<{
+      metadata: { name: string; generatedName: string }
+      status: {
+        phase: string
+        containerStatuses: Array<{ ready: boolean }>
+      }
+      spec: {
+        containers: Array<{
+          name: string
+          image: string
+          nodeName: string
+        }>
+      }
+    }>
+  }>(`/v1/k8s/${namespace}/pods`)
+
 export const usePodsQuery = (namespace = 'default') => {
   return useQuery({
     queryKey: ['pods'],
     refetchInterval: 10_000,
-    queryFn: async () =>
-      (
-        await instance.get<{
-          items: Array<{
-            metadata: { name: string; generatedName: string }
-            status: { phase: string }
-            spec: {
-              containers: Array<{
-                name: string
-                image: string
-                nodeName: string
-              }>
-            }
-          }>
-        }>(`/v1/k8s/${namespace}/pods`)
-      ).data,
+    queryFn: async () => (await getPods(namespace)).data,
   })
 }
+
+export const getPodLogs = (name: string, namespace = 'default') =>
+  instance.get<string>(`/v1/k8s/${namespace}/pods/${name}/logs`)
 
 export const usePodsLogsQuery = (name: string, namespace = 'default') => {
   return useQuery({
     queryKey: ['pods', name, 'logs'],
     refetchInterval: 60_000,
-    queryFn: async () =>
-      (await instance.get<string>(`/v1/k8s/${namespace}/pods/${name}/logs`))
-        .data,
+    queryFn: async () => (await getPodLogs(name, namespace)).data,
   })
 }
+
+export const getDeployments = (namespace = 'default') =>
+  instance.get<{
+    items: Array<{
+      metadata: { name: string }
+      status: { replicas?: number; readyReplicas?: number }
+      spec: {
+        template: { spec: { containers: Array<{ image: string }> } }
+      }
+    }>
+  }>(`/v1/k8s/${namespace}/deployments`)
 
 export const useDeploymentsQuery = (namespace = 'default') => {
   return useQuery({
     refetchInterval: 10_000,
     queryKey: ['deployments'],
-    queryFn: async () =>
-      (
-        await instance.get<{
-          items: Array<{
-            metadata: { name: string }
-            status: { replicas?: number; readyReplicas?: number }
-            spec: {
-              template: { spec: { containers: Array<{ image: string }> } }
-            }
-          }>
-        }>(`/v1/k8s/${namespace}/deployments`)
-      ).data,
+    queryFn: async () => (await getDeployments(namespace)).data,
   })
 }
+
+export const getStatefulSets = (namespace = 'default') =>
+  instance.get<{
+    items: Array<{
+      metadata: { name: string }
+      status: { replicas?: number; readyReplicas?: number }
+      spec: {
+        template: { spec: { containers: Array<{ image: string }> } }
+      }
+    }>
+  }>(`/v1/k8s/${namespace}/stateful-sets`)
+
 export const useStatefulSetsQuery = (namespace = 'default') => {
   return useQuery({
     refetchInterval: 10_000,
     queryKey: ['stateful-sets'],
-    queryFn: async () =>
-      (
-        await instance.get<{
-          items: Array<{
-            metadata: { name: string }
-            status: { replicas?: number; readyReplicas?: number }
-            spec: {
-              template: { spec: { containers: Array<{ image: string }> } }
-            }
-          }>
-        }>(`/v1/k8s/${namespace}/stateful-sets`)
-      ).data,
+    queryFn: async () => (await getStatefulSets(namespace)).data,
   })
 }

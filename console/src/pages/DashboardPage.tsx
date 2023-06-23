@@ -7,28 +7,35 @@ import { instance } from '../common/api/instance'
 import { sum } from 'lodash'
 import { format } from 'date-fns'
 import {
+  getDeployments,
   getNodes,
+  getPodLogs,
+  getPods,
+  getStatefulSets,
   useDeploymentsQuery,
   useNodesQuery,
   usePodsQuery,
   useStatefulSetsQuery,
 } from '../common/api/k8s'
-import { useLatestConfigQuery } from '../common/api/config'
+import { getLatestConfig, useLatestConfigQuery } from '../common/api/config'
 import { LogDialog } from '../common/PodLogs'
+import JSZip from 'jszip'
+import { saveAs } from 'file-saver'
 
 const PodRow: React.FC<{
   metadata: { name: string }
-  status: { phase: string }
+  status: { phase: string; containerStatuses: Array<{ ready: boolean }> }
 }> = (item) => {
   const [showLogs, setShowLogs] = useState(false)
+  const ready = item.status.containerStatuses.every((c) => c.ready)
   return (
     <>
       <button
-        className="flex items-center gap-2"
+        className="flex items-center gap-2 hover:bg-neutral-700/50 w-full rounded-md px-2"
         onClick={() => setShowLogs(true)}
       >
         <div className="mr-2">
-          {item.status.phase === 'Running' ? (
+          {ready ? (
             <MdCircle className="text-green-400 w-3" />
           ) : (
             <MdCircle className="text-red-400 w-3" />
@@ -36,7 +43,9 @@ const PodRow: React.FC<{
         </div>
         <div>
           {item.metadata.name.replace('wandb-', '')}{' '}
-          <span className="text-neutral-500">({item.status.phase})</span>
+          <span className="text-neutral-500">
+            ({ready ? item.status.phase : 'Unhealthy'})
+          </span>
         </div>
       </button>
       <LogDialog
@@ -288,12 +297,87 @@ const MemoryUsage: React.FC = () => {
 const Version: React.FC = () => {
   const config = useLatestConfigQuery()
   return (
-    <div className="rounded-md bg-neutral-800 px-4 py-3 col-span-2">
+    <div className="rounded-md bg-neutral-800 px-4 py-3">
       <div className="text-lg mb-1">System Info</div>
       <div className="flex items-center">
         <div className="font-semibold text-neutral-400 mr-2">Version</div>
         <div>{config.data?.version}</div>
       </div>
+    </div>
+  )
+}
+
+const Debug: React.FC = () => {
+  const [loading, setLoading] = useState(false)
+  const download = async () => {
+    const zip = new JSZip()
+    setLoading(true)
+
+    try {
+      // Get k8s resources
+      const [nodes, pods, deployments, statefulSets] = await Promise.all([
+        getNodes(),
+        getPods(),
+        getDeployments(),
+        getStatefulSets(),
+      ])
+      const k8s = zip.folder('k8s')
+      k8s?.file('nodes.json', JSON.stringify(nodes, null, 2))
+      k8s?.file('pods.json', JSON.stringify(pods, null, 2))
+      k8s?.file('deployments.json', JSON.stringify(deployments, null, 2))
+      k8s?.file('stateful-sets.json', JSON.stringify(statefulSets, null, 2))
+
+      // Get pod logs
+      const logs = zip.folder('logs')
+      const podLogs = await Promise.all(
+        pods.data.items.map(async (p) => ({
+          name: p.metadata.name,
+          logs: await getPodLogs(p.metadata.name),
+        })),
+      )
+      for (const p of podLogs) {
+        logs?.file(`${p.name}.log`, p.logs.data)
+      }
+
+      // Get config
+      const [latestConfig] = await Promise.all([getLatestConfig()])
+      zip.file('config.json', JSON.stringify(latestConfig, null, 2))
+
+      // Download bundle
+      const blob = await zip.generateAsync({ type: 'blob' })
+      const d = new Date().toISOString()
+      saveAs(blob, `bundle-${d}.zip`)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="rounded-md bg-neutral-800 px-4 py-3">
+      <div className="text-lg mb-1">Support Bundle</div>
+      {/* <div className="grid mb-4 mt-2 grid-cols-3">
+        <div className="flex items-center ">
+          <input
+            id="default-checkbox"
+            type="checkbox"
+            checked
+            className="w-4 h-4 text-blue-600 bg-neutral-100 border-neutral-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-neutral-800 focus:ring-2 dark:bg-neutral-700 dark:border-neutral-600"
+          />
+          <label
+            htmlFor="default-checkbox"
+            className="ml-2 text-sm  text-neutral-900 dark:text-neutral-300"
+          >
+            Pod logs
+          </label>
+        </div>
+      </div> */}
+      <button
+        disabled={loading}
+        onClick={() => download()}
+        className="rounded-md text-center w-full bg-neutral-700 p-2 hover:bg-neutral-500/50 disabled:opacity-50"
+      >
+        Download Bundle
+      </button>
     </div>
   )
 }
@@ -306,6 +390,7 @@ export const DashboardPage: React.FC = () => {
         <h1 className="text-3xl font-semibold tracking-wide mb-4">Dashboard</h1>
         <div className="grid grid-cols-2 gap-4">
           <Version />
+          <Debug />
           <PodsStatus />
           <ServicesStatus />
           <NodesStatus />
