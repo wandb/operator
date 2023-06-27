@@ -17,7 +17,10 @@ limitations under the License.
 package v1
 
 import (
+	"encoding/json"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	runtime "k8s.io/apimachinery/pkg/runtime"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN! NOTE: json tags are
@@ -32,9 +35,41 @@ type WeightsAndBiasesSpec struct {
 	// The specification of Weights & Biases Chart that is used to deploy the
 	// instance.
 
-	Cdk8sVersion string `json:"version,omitempty"`
-	ReleasePath  string `json:"releasePath,omitempty"`
-	License      string `json:"license,omitempty"`
+	Version string       `json:"version,omitempty"`
+	License string       `json:"license,omitempty"`
+	Config  ConfigValues `json:"config,omitempty"`
+}
+
+// Unstructured values for rendering GitLab Chart.
+// +k8s:deepcopy-gen=false
+type ConfigValues struct {
+	// Object is a JSON compatible map with string, float, int, bool, []interface{}, or
+	// map[string]interface{} children.
+	Object map[string]interface{} `json:"-"`
+}
+
+// MarshalJSON ensures that the unstructured object produces proper
+// JSON when passed to Go's standard JSON library.
+func (u *ConfigValues) MarshalJSON() ([]byte, error) {
+	return json.Marshal(u.Object)
+}
+
+// UnmarshalJSON ensures that the unstructured object properly decodes
+// JSON when passed to Go's standard JSON library.
+func (u *ConfigValues) UnmarshalJSON(data []byte) error {
+	m := make(map[string]interface{})
+	if err := json.Unmarshal(data, &m); err != nil {
+		return err
+	}
+
+	u.Object = m
+
+	return nil
+}
+
+// Declaring this here prevents it from being generated.
+func (u *ConfigValues) DeepCopyInto(out *ConfigValues) {
+	out.Object = runtime.DeepCopyJSON(u.Object)
 }
 
 // WeightsAndBiasesStatus defines the observed state of WeightsAndBiases

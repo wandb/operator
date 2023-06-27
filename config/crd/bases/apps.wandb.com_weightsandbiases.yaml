@@ -36,9 +36,10 @@ spec:
           spec:
             description: WeightsAndBiasesSpec defines the desired state of WeightsAndBiases
             properties:
+              config:
+                description: Unstructured values for rendering GitLab Chart.
+                type: object
               license:
-                type: string
-              releasePath:
                 type: string
               version:
                 type: string

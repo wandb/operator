@@ -37,10 +37,12 @@ func (c operatorChannel) Recommend() *config.Config {
 }
 
 func (c operatorChannel) Override() *config.Config {
-	version := c.wandb.Spec.Cdk8sVersion
+	version := c.wandb.Spec.Version
+	cfg := c.wandb.Spec.Config.Object
+
 	// Spec doesn't have a version, so we don't need to override anything
 	if version == "" {
-		return &config.Config{}
+		return &config.Config{Config: cfg}
 	}
 
 	if v, err := semver.NewVersion(version); err == nil {
@@ -49,11 +51,13 @@ func (c operatorChannel) Override() *config.Config {
 				Repo: "wandb/cdk8s",
 				Tag:  v.String(),
 			},
+			Config: cfg,
 		}
 	}
 
 	return &config.Config{
 		Release: release.NewLocalRelease(version),
+		Config:  cfg,
 	}
 }
 

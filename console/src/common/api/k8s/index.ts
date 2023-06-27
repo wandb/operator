@@ -25,7 +25,17 @@ export const getPods = (namespace = 'default') =>
       metadata: { name: string; generatedName: string }
       status: {
         phase: string
-        containerStatuses: Array<{ ready: boolean }>
+
+        containerStatuses: Array<{
+          name: string
+          ready: boolean
+          restartCount: number
+        }>
+        initContainerStatuses?: Array<{
+          name: string
+          ready: boolean
+          restartCount: number
+        }>
       }
       spec: {
         containers: Array<{
@@ -37,10 +47,14 @@ export const getPods = (namespace = 'default') =>
     }>
   }>(`/v1/k8s/${namespace}/pods`)
 
-export const usePodsQuery = (namespace = 'default') => {
+export const usePodsQuery = (
+  namespace = 'default',
+  opts?: { refetchInterval: number },
+) => {
   return useQuery({
     queryKey: ['pods'],
     refetchInterval: 10_000,
+    ...opts,
     queryFn: async () => (await getPods(namespace)).data,
   })
 }

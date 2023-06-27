@@ -45,6 +45,9 @@ type WeightsAndBiasesReconciler struct {
 //+kubebuilder:rbac:groups=apps.wandb.com,resources=weightsandbiases,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=apps.wandb.com,resources=weightsandbiases/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=apps.wandb.com,resources=weightsandbiases/finalizers,verbs=update
+//+kubebuilder:rbac:groups="",resources=secrets;configmaps;configmaps,verbs=update;delete;get;list;create;watch
+//+kubebuilder:rbac:groups="",resources=pods;services;nodes,verbs=update;delete;get;list;create;watch
+//+kubebuilder:rbac:groups=app,resources=deployments,verbs=update;delete;get;list;create;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
