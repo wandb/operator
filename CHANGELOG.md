@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.0.1](https://github.com/wandb/operator/compare/v1.0.0...v1.0.1) (2023-06-28)
+
+
+### Bug Fixes
+
+* rename docker variables ([274e20c](https://github.com/wandb/operator/commit/274e20cc8e8bff9f0d856b3b41528051ea8eae0c))
+
 ## 1.0.0 (2023-06-28)
 
 
