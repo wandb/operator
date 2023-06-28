@@ -44,13 +44,8 @@ jobs:
 
       - name: Build and Push
         run: |
-          VERSION=${{ steps.release.outputs.new_release_version }}
-          make docker-build docker-push
-
-          VERSION=${{ steps.release.outputs.new_release_major_version }}.${{ steps.release.outputs.new_release_minor_version }}
-          make docker-build docker-push
-
-          VERSION=${{ steps.release.outputs.new_release_major_version }}
-          make docker-build docker-push
+          VERSION=${{ steps.release.outputs.new_release_version }} make docker-build docker-push
+          VERSION=${{ steps.release.outputs.new_release_major_version }}.${{ steps.release.outputs.new_release_minor_version }} make docker-build docker-push
+          VERSION=${{ steps.release.outputs.new_release_major_version }} make docker-build docker-push
         env:
           IMAGE_TAG_BASE: wandb/controller
