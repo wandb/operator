@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.0.7](https://github.com/wandb/operator/compare/v1.0.6...v1.0.7) (2023-06-28)
+
+
+### Bug Fixes
+
+* rename versioning step name ([77bf4ed](https://github.com/wandb/operator/commit/77bf4ed30fc3ae729c6fe33ae4e35d4d3226caa7))
+
 ### [1.0.6](https://github.com/wandb/operator/compare/v1.0.5...v1.0.6) (2023-06-28)
 
 
