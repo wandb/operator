@@ -20,7 +20,7 @@ jobs:
           fetch-depth: 0
 
       - name: Versioning
-        id: version
+        id: release
         uses: cycjimmy/semantic-release-action@v3
         with:
           semantic_version: 19.0.2
@@ -49,8 +49,6 @@ jobs:
       - name: Build and Push
         run: |
           make docker-build docker-push
-
-          echo "wandb/controller:${{ steps.release.outputs.new_release_version }}"
 
           docker tag wandb/controller:latest wandb/controller:${{ steps.release.outputs.new_release_version }}
           docker push wandb/controller:${{ steps.release.outputs.new_release_version }}
