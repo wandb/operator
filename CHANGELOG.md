@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.0.4](https://github.com/wandb/operator/compare/v1.0.3...v1.0.4) (2023-06-28)
+
+
+### Bug Fixes
+
+* install go version ([6664b4b](https://github.com/wandb/operator/commit/6664b4b1aa3d6e807c51d080b9fa858cdb452ee9))
+
 ### [1.0.3](https://github.com/wandb/operator/compare/v1.0.2...v1.0.3) (2023-06-28)
 
 
