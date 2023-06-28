@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.0.6](https://github.com/wandb/operator/compare/v1.0.5...v1.0.6) (2023-06-28)
+
+
+### Bug Fixes
+
+* upgrade semantic to v3 ([594c463](https://github.com/wandb/operator/commit/594c463187dde87150abdca81b0135f650e5eccc))
+
 ### [1.0.5](https://github.com/wandb/operator/compare/v1.0.4...v1.0.5) (2023-06-28)
 
 
