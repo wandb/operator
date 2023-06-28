@@ -50,14 +50,14 @@ jobs:
         run: |
           make docker-build docker-push
 
-          VERSION=${{ steps.release.outputs.new_release_version }}
-          docker tag wandb/controller:latest wandb/controller:${VERSION}
+          docker tag wandb/controller:latest wandb/controller:${{ steps.release.outputs.new_release_version }}
+          docker push wandb/controller:${{ steps.release.outputs.new_release_version }}
 
-          VERSION=${{ steps.release.outputs.new_release_major_version }}.${{ steps.release.outputs.new_release_minor_version }}
-          docker tag wandb/controller:latest wandb/controller:${VERSION}
+          docker tag wandb/controller:latest wandb/controller:${{ steps.release.outputs.new_release_major_version }}.${{ steps.release.outputs.new_release_minor_version }}
+          docker push wandb/controller:${{ steps.release.outputs.new_release_major_version }}.${{ steps.release.outputs.new_release_minor_version }}
 
-          VERSION=${{ steps.release.outputs.new_release_major_version }}
-          docker tag wandb/controller:latest wandb/controller:${VERSION}
+          docker tag wandb/controller:latest wandb/controller:${{ steps.release.outputs.new_release_major_version }}
+          docker push wandb/controller:${{ steps.release.outputs.new_release_major_version }}
         env:
           IMAGE_TAG_BASE: wandb/controller
           VERSION: latest
