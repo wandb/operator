@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.0.5](https://github.com/wandb/operator/compare/v1.0.4...v1.0.5) (2023-06-28)
+
+
+### Bug Fixes
+
+* push images to dockerhub ([d4cdd27](https://github.com/wandb/operator/commit/d4cdd27519f02444af9dc81b3080ce49d20bd75f))
+
 ### [1.0.4](https://github.com/wandb/operator/compare/v1.0.3...v1.0.4) (2023-06-28)
 
 
