@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.0.2](https://github.com/wandb/operator/compare/v1.0.1...v1.0.2) (2023-06-28)
+
+
+### Bug Fixes
+
+* clean up env for image push ([7213ed2](https://github.com/wandb/operator/commit/7213ed23aa67eb3a221d4d58a133eabcaa533012))
+
 ### [1.0.1](https://github.com/wandb/operator/compare/v1.0.0...v1.0.1) (2023-06-28)
 
 
