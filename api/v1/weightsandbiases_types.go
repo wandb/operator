@@ -40,7 +40,7 @@ type WeightsAndBiasesSpec struct {
 	Config  ConfigValues `json:"config,omitempty"`
 }
 
-// Unstructured values for rendering GitLab Chart.
+// Unstructured values for rendering CDK8s Config.
 // +k8s:deepcopy-gen=false
 type ConfigValues struct {
 	// Object is a JSON compatible map with string, float, int, bool, []interface{}, or
