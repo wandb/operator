@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.0.8](https://github.com/wandb/operator/compare/v1.0.7...v1.0.8) (2023-06-29)
+
+
+### Bug Fixes
+
+* add pnpm, node and git to docker image ([176b6f0](https://github.com/wandb/operator/commit/176b6f083369b3929b7cc2574dd30a54aae6f5b2))
+
 ### [1.0.7](https://github.com/wandb/operator/compare/v1.0.6...v1.0.7) (2023-06-28)
 
 
