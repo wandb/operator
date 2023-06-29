@@ -26,7 +26,12 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o manager main.go
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
-FROM gcr.io/distroless/static:nonroot
+FROM node:20-alpine
+
+RUN apk update && apk add --no-cache libc6-compat git curl
+RUN corepack enable
+RUN corepack enable && corepack prepare pnpm@8.6.5 --activate 
+
 WORKDIR /
 COPY --from=builder /workspace/manager .
 USER 65532:65532
