@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.0](https://github.com/wandb/operator/compare/v1.0.8...v1.1.0) (2023-06-30)
+
+
+### Features
+
+* Add support for release from a git repository ([8a6b073](https://github.com/wandb/operator/commit/8a6b07375f4885a767ba5688166d69c158d4abc9))
+
 ### [1.0.8](https://github.com/wandb/operator/compare/v1.0.7...v1.0.8) (2023-06-29)
 
 
