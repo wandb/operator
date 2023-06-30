@@ -2,6 +2,7 @@ package config
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -19,7 +20,11 @@ func releaseToAnnotation(release release.Release) string {
 	v1 := strings.ReplaceAll(release.Version(), "/", "-")
 	v2 := strings.Replace(v1, ".", "-", -1)
 	v3 := strings.Trim(v2, "-")
-	return v3
+	str := hex.EncodeToString([]byte(v3))
+	if len(str) > 63 {
+		str = str[:63]
+	}
+	return str
 }
 
 func CreateWithConfigMap(
@@ -81,7 +86,7 @@ func GetFromConfigMap(
 		return nil, fmt.Errorf(
 			"config map %s/%s does not have a `release` key", configMapName, configMapNamespace)
 	}
-	rel := release.NewLocalRelease(relV)
+	rel, _ := release.ReleaseFromString(relV)
 
 	configString, ok := configMap.Data["config"]
 	if !ok {

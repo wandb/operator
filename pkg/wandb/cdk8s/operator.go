@@ -1,7 +1,6 @@
 package cdk8s
 
 import (
-	"github.com/Masterminds/semver"
 	v1 "github.com/wandb/operator/api/v1"
 	"github.com/wandb/operator/pkg/wandb/cdk8s/config"
 	"github.com/wandb/operator/pkg/wandb/cdk8s/release"
@@ -37,28 +36,17 @@ func (c operatorChannel) Recommend() *config.Config {
 }
 
 func (c operatorChannel) Override() *config.Config {
+	cfg := &config.Config{}
+
+	cfg.SetConfig(c.wandb.Spec.Config.Object)
+
 	version := c.wandb.Spec.Version
-	cfg := c.wandb.Spec.Config.Object
-
-	// Spec doesn't have a version, so we don't need to override anything
-	if version == "" {
-		return &config.Config{Config: cfg}
+	release, err := release.ReleaseFromString(version)
+	if err == nil {
+		cfg.SetRelease(release)
 	}
 
-	if v, err := semver.NewVersion(version); err == nil {
-		return &config.Config{
-			Release: &release.GithubRelease{
-				Repo: "wandb/cdk8s",
-				Tag:  v.String(),
-			},
-			Config: cfg,
-		}
-	}
-
-	return &config.Config{
-		Release: release.NewLocalRelease(version),
-		Config:  cfg,
-	}
+	return cfg
 }
 
 func Operator(wandb *v1.WeightsAndBiases, scheme *runtime.Scheme) config.Modifier {

@@ -3,6 +3,7 @@ package release
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"path"
 
@@ -16,17 +17,23 @@ const Cdk8sSupportedVersions = "~1"
 
 func ReleaseFromString(version string) (Release, error) {
 	if v, err := semver.NewVersion(version); err == nil {
-
 		constraint, _ := semver.NewConstraint(Cdk8sSupportedVersions)
 		if !constraint.Check(v) {
 			return nil, fmt.Errorf("cdk8s version %s is not supported. Supported versions: %s", v, Cdk8sSupportedVersions)
 		}
-
+		fmt.Println("using github release", v)
 		return &GithubRelease{
 			Repo: "wandb/cdk8s",
 			Tag:  v.String(),
 		}, nil
 	}
+
+	if _, err := url.ParseRequestURI(version); err == nil {
+		fmt.Println("using git release", version)
+		return NewGitRelease(version), nil
+	}
+
+	fmt.Println("using local release", version)
 	return NewLocalRelease(version), nil
 }
 
