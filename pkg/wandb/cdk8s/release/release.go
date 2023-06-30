@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/url"
-	"os"
-	"path"
 
 	"github.com/Masterminds/semver"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -35,14 +33,6 @@ func ReleaseFromString(version string) (Release, error) {
 
 	fmt.Println("using local release", version)
 	return NewLocalRelease(version), nil
-}
-
-// InstallDirectory returns the directory where cdk8s versions are installed
-func InstallDirectory() string {
-	dirname, _ := os.UserHomeDir()
-	path := path.Join(dirname, "operator", "cdk8s")
-	os.MkdirAll(path, 0755)
-	return path
 }
 
 // Release represents a cdk8s release
