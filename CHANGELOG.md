@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.1.2](https://github.com/wandb/operator/compare/v1.1.1...v1.1.2) (2023-06-30)
+
+
+### Bug Fixes
+
+* Serve console with gin ([c9e04aa](https://github.com/wandb/operator/commit/c9e04aad530e95570fdf9a83b68228cf44904cac))
+
 ### [1.1.1](https://github.com/wandb/operator/compare/v1.1.0...v1.1.1) (2023-06-30)
 
 
