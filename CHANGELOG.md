@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.1.1](https://github.com/wandb/operator/compare/v1.1.0...v1.1.1) (2023-06-30)
+
+
+### Bug Fixes
+
+* Add console namespace and service name to config properties ([0b9efef](https://github.com/wandb/operator/commit/0b9efef1a47e53ec1352e1a350ca7b53ed1a2b8b))
+
 ## [1.1.0](https://github.com/wandb/operator/compare/v1.0.8...v1.1.0) (2023-06-30)
 
 
