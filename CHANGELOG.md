@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.1.3](https://github.com/wandb/operator/compare/v1.1.2...v1.1.3) (2023-06-30)
+
+
+### Bug Fixes
+
+* add applied config to download bundle ([bef77c2](https://github.com/wandb/operator/commit/bef77c2b03f81b3b4ea096dee547b00ea53eacf3))
+
 ### [1.1.2](https://github.com/wandb/operator/compare/v1.1.1...v1.1.2) (2023-06-30)
 
 
