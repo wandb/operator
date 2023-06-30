@@ -10,7 +10,6 @@ export const LoginPage: React.FC = () => {
   const { mutate, isError, error } = useLoginMutation()
 
   if (viewer.data?.isLoggedIn) return <Navigate to="/" replace />
-  console.log(viewer.data)
   return (
     <div className="container mx-auto max-w-2xl pt-16">
       <form

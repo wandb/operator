@@ -20,7 +20,12 @@ import {
   usePodsQuery,
   useStatefulSetsQuery,
 } from '../common/api/k8s'
-import { getLatestConfig, useLatestConfigQuery } from '../common/api/config'
+import {
+  getAppliedConfig,
+  getLatestConfig,
+  getWandbSpec,
+  useAppliedConfigQuery,
+} from '../common/api/config'
 import { LogDialog } from '../common/PodLogs'
 import JSZip from 'jszip'
 import { saveAs } from 'file-saver'
@@ -30,7 +35,7 @@ const PodRow: React.FC<{
   status: { phase: string; containerStatuses: Array<{ ready: boolean }> }
 }> = (item) => {
   const [showLogs, setShowLogs] = useState(false)
-  const ready = item.status.containerStatuses.every((c) => c.ready)
+  const ready = item.status.containerStatuses?.every((c) => c.ready)
   return (
     <>
       <button
@@ -301,7 +306,7 @@ const MemoryUsage: React.FC = () => {
 }
 
 const SystemInfo: React.FC = () => {
-  const config = useLatestConfigQuery()
+  const config = useAppliedConfigQuery()
   return (
     <div className="rounded-md bg-neutral-800 px-4 py-3">
       <div className="text-lg mb-1">System Info</div>
@@ -323,6 +328,19 @@ const SystemInfo: React.FC = () => {
   )
 }
 
+async function promiseAllWithNullOnFail<T>(
+  promises: Promise<T>[],
+): Promise<(T | null)[]> {
+  return Promise.all(
+    promises.map((promise) =>
+      promise.catch((err) => {
+        console.error(err)
+        return null
+      }),
+    ),
+  )
+}
+
 const Debug: React.FC = () => {
   const [loading, setLoading] = useState(false)
   const download = async () => {
@@ -339,7 +357,7 @@ const Debug: React.FC = () => {
         events,
         namespaces,
         services,
-      ] = await Promise.all([
+      ] = await promiseAllWithNullOnFail([
         getNodes(),
         getPods(),
         getDeployments(),
@@ -359,19 +377,29 @@ const Debug: React.FC = () => {
 
       // Get pod logs
       const logs = zip.folder('logs')
-      const podLogs = await Promise.all(
-        pods.data.items.map(async (p) => ({
+      const podLogs = await promiseAllWithNullOnFail(
+        pods?.data.items.map(async (p) => ({
           name: p.metadata.name,
           logs: await getPodLogs(p.metadata.name),
-        })),
+        })) ?? [],
       )
       for (const p of podLogs) {
+        if (p == null) continue
         logs?.file(`${p.name}.log`, p.logs.data)
       }
 
       // Get config
-      const [latestConfig] = await Promise.all([getLatestConfig()])
-      zip.file('config.json', JSON.stringify(latestConfig, null, 2))
+      const [latestConfig, appliedConfig, wandbSpec] =
+        await promiseAllWithNullOnFail([
+          getLatestConfig(),
+          getAppliedConfig(),
+          getWandbSpec(),
+        ])
+
+      const config = zip.folder('config')
+      config?.file('latest.json', JSON.stringify(latestConfig?.data, null, 2))
+      config?.file('applied.json', JSON.stringify(appliedConfig?.data, null, 2))
+      config?.file('spec.json', JSON.stringify(wandbSpec?.data, null, 2))
 
       // Download bundle
       const blob = await zip.generateAsync({ type: 'blob' })
