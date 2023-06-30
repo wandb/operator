@@ -7,13 +7,13 @@ import (
 
 func AuthRequired(client client.Client) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		cookie, err := c.Request.Cookie(CookieAuthName)
+		pwd, err := getPasswordFromRequest(c.Request)
 		if err != nil {
 			c.AbortWithStatusJSON(401, gin.H{"error": "unauthorized"})
 			return
 		}
 
-		if !isPassword(c, client, cookie.Value) {
+		if !isPassword(c, client, pwd) {
 			c.AbortWithStatusJSON(401, gin.H{"error": "unauthorized"})
 			return
 		}

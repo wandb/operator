@@ -1,5 +1,6 @@
 # Build the manager binary
-FROM golang:1.20 as builder
+FROM golang:1.20 as manager-builder
+
 ARG TARGETOS
 ARG TARGETARCH
 
@@ -24,6 +25,14 @@ COPY controllers/ controllers/
 # by leaving it empty we can ensure that the container and binary shipped on it will have the same platform.
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o manager main.go
 
+FROM node:20-alpine as console-builder
+
+WORKDIR /workspace
+COPY console/ console/
+
+RUN npm install -g pnpm
+RUN cd console && pnpm install && pnpm run build
+
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
 FROM node:20-alpine
@@ -33,7 +42,8 @@ RUN corepack enable
 RUN corepack enable && corepack prepare pnpm@8.6.5 --activate 
 
 WORKDIR /
-COPY --from=builder /workspace/manager .
+COPY --from=manager-builder /workspace/manager .
+COPY --from=console-builder /workspace/console/dist ./console
 USER 65532:65532
 
 ENV GIN_MODE=release

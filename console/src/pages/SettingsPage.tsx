@@ -583,15 +583,11 @@ const StatusCard: React.FC = () => {
 
 export const SettingsPage: React.FC = () => {
   const [config, setConfig] = useState<any>({ bucket: {} })
-  const { data, isLoading } = useLatestConfigQuery()
+  const { data, error, isInitialLoading } = useLatestConfigQuery()
   useEffect(() => {
     if (data == null) return
     setConfig(data)
   }, [config, setConfig, data])
-
-  if (isLoading) {
-    return null
-  }
 
   return (
     <>
@@ -599,15 +595,40 @@ export const SettingsPage: React.FC = () => {
       <div className="max-w-5xl mx-auto mt-10 mb-20">
         <h1 className="text-3xl font-semibold tracking-wide mb-4">Settings</h1>
 
-        <div className="flex items-start my-12">
-          <div className="grid gap-8 max-w-[700px]">
-            <LicenseCard />
-            <BucketCard />
-            <DatabaseCard />
-            <SsoCard />
-          </div>
-          <StatusCard />
-        </div>
+        {isInitialLoading ? (
+          <div>Loading...</div>
+        ) : (
+          <>
+            {error != null ? (
+              <div>
+                <p>
+                  Config not found! Once a config is found it will be shown
+                  here.
+                </p>
+                <div className="text-neutral-400 mt-4">
+                  <p>This can happen if</p>
+                  <ul className="mt-2">
+                    <li>- Weights &amp; Biases is being provisioned</li>
+                    <li>
+                      - You have not deployed Weights & Biases custom resource
+                      definition
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-start my-12">
+                <div className="grid gap-8 max-w-[700px]">
+                  <LicenseCard />
+                  <BucketCard />
+                  <DatabaseCard />
+                  <SsoCard />
+                </div>
+                <StatusCard />
+              </div>
+            )}
+          </>
+        )}
       </div>
     </>
   )

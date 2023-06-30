@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"net/http"
+	"net/url"
 
 	"github.com/wandb/operator/pkg/utils/kubeclient"
 	corev1 "k8s.io/api/core/v1"
@@ -16,7 +17,7 @@ const PasswordKey = "password"
 
 const CookieAuthName = "wandb_console_auth"
 
-func GetPassword(ctx context.Context, c client.Client) (string, error) {
+func getPasswordFromCluster(ctx context.Context, c client.Client) (string, error) {
 	kubeclient.UpsertNamespace(ctx, c, Namespace)
 
 	secret := &corev1.Secret{
@@ -49,19 +50,25 @@ func setPassword(ctx context.Context, c client.Client, password string) error {
 }
 
 func isPasswordSet(ctx context.Context, c client.Client) bool {
-	p, err := GetPassword(ctx, c)
+	p, err := getPasswordFromCluster(ctx, c)
 	return err == nil && p != ""
 }
 
 func isPassword(ctx context.Context, c client.Client, password string) bool {
-	p, _ := GetPassword(ctx, c)
+	p, _ := getPasswordFromCluster(ctx, c)
 	return p == password && p != ""
 }
 
-func getPassword(r *http.Request) (string, error) {
+func getPasswordFromRequest(r *http.Request) (string, error) {
 	cookie, err := r.Cookie(CookieAuthName)
 	if err != nil {
 		return "", err
 	}
-	return cookie.Value, nil
+
+	decodedString, err := url.QueryUnescape(cookie.Value)
+	if err != nil {
+		return "", err
+	}
+
+	return decodedString, nil
 }

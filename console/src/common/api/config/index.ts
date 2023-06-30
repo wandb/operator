@@ -12,7 +12,7 @@ export const getLatestConfig = (namespace = 'default', name = 'wandb') =>
 export const useLatestConfigQuery = (namespace = 'default', name = 'wandb') => {
   return useQuery({
     queryKey: ['latest', 'config'],
-    refetchInterval: 10_000,
+    retry: 0,
     queryFn: async () => (await getLatestConfig(namespace, name)).data,
   })
 }

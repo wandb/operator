@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { TopNavbar } from '../common/TopNavbar'
-import { MdCircle } from 'react-icons/md'
+import { MdArrowDropUp, MdCircle } from 'react-icons/md'
 import { Area, AreaChart, ResponsiveContainer, XAxis, YAxis } from 'recharts'
 import colors from 'tailwindcss/colors'
 import { instance } from '../common/api/instance'
@@ -65,9 +65,11 @@ const PodsStatus: React.FC = () => {
 
   const items = deployments.data?.items ?? []
 
+  if (items.length === 0 && !deployments.isLoading) return null
+
   return (
     <div className="rounded-md bg-neutral-800 px-4 py-3">
-      <div className="text-lg mb-1">Instances</div>
+      <div className="text-lg mb-1">Pods</div>
       {items.map((item) => (
         <PodRow key={item.metadata.name} {...item} />
       ))}
@@ -75,7 +77,7 @@ const PodsStatus: React.FC = () => {
   )
 }
 
-const ServicesStatus: React.FC = () => {
+const DeploymentsStatus: React.FC = () => {
   const deployments = useDeploymentsQuery()
   const statefulSets = useStatefulSetsQuery()
   const items = [
@@ -83,9 +85,10 @@ const ServicesStatus: React.FC = () => {
     ...(statefulSets.data?.items ?? []),
   ].sort((a: any, b: any) => a.metadata.name.localeCompare(b.metadata.name))
 
+  if (items.length === 0 && !deployments.isLoading) return null
   return (
     <div className="rounded-md bg-neutral-800 px-4 py-3">
-      <div className="text-lg mb-1">Services</div>
+      <div className="text-lg mb-1">Deployments</div>
       {items.map((item) => {
         const { readyReplicas, replicas } = item.status
         const images = item.spec.template.spec.containers.map((c) => c.image)
@@ -297,14 +300,24 @@ const MemoryUsage: React.FC = () => {
   )
 }
 
-const Version: React.FC = () => {
+const SystemInfo: React.FC = () => {
   const config = useLatestConfigQuery()
   return (
     <div className="rounded-md bg-neutral-800 px-4 py-3">
       <div className="text-lg mb-1">System Info</div>
       <div className="flex items-center">
-        <div className="font-semibold text-neutral-400 mr-2">Version</div>
-        <div>{config.data?.version}</div>
+        {!config.isError ? (
+          <>
+            <div className="font-semibold text-neutral-400 mr-2">Version</div>
+            <div>{config.data?.version}</div>
+          </>
+        ) : (
+          <>
+            <div className="text-neutral-400">
+              <p>Could not find version information.</p>
+            </div>
+          </>
+        )}
       </div>
     </div>
   )
@@ -371,7 +384,7 @@ const Debug: React.FC = () => {
 
   return (
     <div className="rounded-md bg-neutral-800 px-4 py-3">
-      <div className="text-lg mb-1">Support Bundle</div>
+      <div className="text-lg mb-2">Support Bundle</div>
       {/* <div className="grid mb-4 mt-2 grid-cols-3">
         <div className="flex items-center ">
           <input
@@ -400,19 +413,34 @@ const Debug: React.FC = () => {
 }
 
 export const DashboardPage: React.FC = () => {
+  const [showMore, setShowMore] = useState(false)
   return (
     <>
       <TopNavbar />
       <div className="max-w-5xl mx-auto mt-10">
         <h1 className="text-3xl font-semibold tracking-wide mb-4">Dashboard</h1>
         <div className="grid grid-cols-2 gap-4">
-          <Version />
+          <SystemInfo />
           <Debug />
           <PodsStatus />
-          <ServicesStatus />
-          <NodesStatus />
+          <DeploymentsStatus />
+
           <CpuUsage />
           <MemoryUsage />
+        </div>
+        <div className="mt-4">
+          <button
+            onClick={() => setShowMore(!showMore)}
+            className={`w-full text-left flex items-center px-2 my-4 hover:bg-neutral-800 rounded-md`}
+          >
+            <MdArrowDropUp className={`mr-2 ${!showMore && 'rotate-90'}`} />
+            {showMore ? 'Hide' : 'More'}
+          </button>
+          {showMore && (
+            <div className="grid grid-cols-2 gap-4 rounded-lg border border-neutral-800 p-4">
+              <NodesStatus />
+            </div>
+          )}
         </div>
       </div>
     </>

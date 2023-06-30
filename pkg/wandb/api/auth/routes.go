@@ -13,7 +13,8 @@ type PasswordInput struct {
 
 func Routes(router *gin.RouterGroup, client client.Client) {
 	router.GET("/profile", func(c *gin.Context) {
-		pwd, _ := getPassword(c.Request)
+		pwd, _ := getPasswordFromRequest(c.Request)
+
 		c.JSON(200, gin.H{
 			"isPasswordSet": isPasswordSet(c, client),
 			"isLoggedIn":    isPassword(c, client, pwd),

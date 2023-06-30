@@ -124,7 +124,6 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	if err != nil {
 		log.Error(err, "Failed to get config")
 		return ctrlqueue.Requeue(err)
-
 	}
 
 	statusManager.Set(status.Loading)

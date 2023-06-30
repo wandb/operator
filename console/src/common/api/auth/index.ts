@@ -23,13 +23,13 @@ export const useLogoutMutation = () => {
 export const useLoginMutation = () => {
   return useMutation(
     (password: string) => instance.post('/v1/auth/login', { password }),
-    { onSuccess: () => client.invalidateQueries(['profile']) },
+    { onSuccess: () => client.invalidateQueries(['login']) },
   )
 }
 
 export const usePasswordMutation = () => {
   return useMutation(
     (password: string) => instance.post('/v1/auth/password', { password }),
-    { onSuccess: () => client.invalidateQueries(['profile']) },
+    { onSuccess: () => client.invalidateQueries(['password']) },
   )
 }
