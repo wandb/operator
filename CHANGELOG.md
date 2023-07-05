@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.1.4](https://github.com/wandb/operator/compare/v1.1.3...v1.1.4) (2023-07-05)
+
+
+### Bug Fixes
+
+* Add debugging for installing release ([893ebd9](https://github.com/wandb/operator/commit/893ebd99c585ad1f49e9f2275a7f3f6b28a1f36f))
+
 ### [1.1.3](https://github.com/wandb/operator/compare/v1.1.2...v1.1.3) (2023-06-30)
 
 
