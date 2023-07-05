@@ -30,11 +30,9 @@ FROM node:20-alpine as console-builder
 WORKDIR /workspace
 COPY console/ console/
 
-RUN npm install -g pnpm
+RUN npm install -g pnpm@8.6.5
 RUN cd console && pnpm install && pnpm run build
 
-# Use distroless as minimal base image to package the manager binary
-# Refer to https://github.com/GoogleContainerTools/distroless for more details
 FROM node:20-alpine
 
 RUN apk update && apk add --no-cache libc6-compat git curl
