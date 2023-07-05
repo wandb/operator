@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.1.5](https://github.com/wandb/operator/compare/v1.1.4...v1.1.5) (2023-07-05)
+
+
+### Bug Fixes
+
+* Clean up docker image ([ef7c629](https://github.com/wandb/operator/commit/ef7c62922dc583c788c913167ef39304fe7d2b90))
+
 ### [1.1.4](https://github.com/wandb/operator/compare/v1.1.3...v1.1.4) (2023-07-05)
 
 
