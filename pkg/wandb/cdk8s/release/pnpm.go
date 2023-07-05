@@ -12,12 +12,14 @@ func PnpmGenerate(dir string, m map[string]interface{}) error {
 
 	dist := path.Join(dir, "dist")
 	rm := exec.Command("rm", "-rf", dist)
-	rm.Run()
+	rmOutput, _ := rm.CombinedOutput()
+	fmt.Println(string(rmOutput))
 
 	cmd := exec.Command("pnpm", "run", "gen", "--json="+string(b))
 	cmd.Dir = dir
 	output, err := cmd.CombinedOutput()
 	fmt.Println(string(output))
+
 	return err
 }
 

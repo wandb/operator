@@ -36,14 +36,14 @@ RUN cd console && pnpm install && pnpm run build
 FROM node:20-alpine
 
 RUN apk update && apk add --no-cache libc6-compat git curl
-RUN corepack enable
-RUN corepack enable && corepack prepare pnpm@8.6.5 --activate 
+RUN npm install -g pnpm@8.6.5
+
+RUN mkdir /tmp/git/ && chmod 777 /tmp/git/
 
 WORKDIR /
+
 COPY --from=manager-builder /workspace/manager .
 COPY --from=console-builder /workspace/console/dist ./console
 USER 65532:65532
-
-ENV GIN_MODE=release
 
 ENTRYPOINT ["/manager"]
