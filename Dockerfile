@@ -38,7 +38,7 @@ FROM node:20-alpine
 RUN apk update && apk add --no-cache libc6-compat git curl
 RUN npm install -g pnpm@8.6.5
 
-RUN mkdir /tmp/git/ && chmod 777 /tmp/git/
+RUN mkdir /tmp/git && chmod 777 /tmp/git && chmod 777 /tmp
 
 WORKDIR /
 
