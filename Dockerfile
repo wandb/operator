@@ -31,12 +31,12 @@ WORKDIR /workspace
 COPY console/ console/
 
 RUN npm install -g pnpm@8.6.6
-RUN cd console && pnpm install --prod && pnpm run build
+RUN cd console && pnpm install --frozen-lockfile && pnpm run build
 
 FROM node:20-alpine
 
 RUN apk update && apk add --no-cache libc6-compat git curl
-RUN npm install -g pnpm@8.6.5
+RUN npm install -g pnpm@8.6.6
 
 RUN mkdir /tmp/git && chmod 777 /tmp/git && chmod 777 /tmp
 
