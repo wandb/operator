@@ -1,3 +1,6 @@
+ARG KUBECTL_VERSION=1.27.3
+ARG PNPM_VERSION=8.6.6
+
 # Build the manager binary
 FROM golang:1.20 as manager-builder
 
@@ -30,13 +33,17 @@ FROM node:20-alpine as console-builder
 WORKDIR /workspace
 COPY console/ console/
 
-RUN npm install -g pnpm@8.6.6
+RUN npm install -g pnpm@$PNPM_VERSION
 RUN cd console && pnpm install --frozen-lockfile && pnpm run build
 
 FROM node:20-alpine
 
 RUN apk update && apk add --no-cache libc6-compat git curl
-RUN npm install -g pnpm@8.6.6
+RUN npm install -g pnpm@$PNPM_VERSION
+
+# Install kubectl
+RUN curl -LO "https://storage.googleapis.com/kubernetes-release/release/v$KUBECTL_VERSION/bin/linux/amd64/kubectl"
+RUN chmod +x ./kubectl && mv ./kubectl /usr/local/bin/kubectl
 
 RUN mkdir /tmp/git && chmod 777 /tmp/git && chmod 777 /tmp
 
