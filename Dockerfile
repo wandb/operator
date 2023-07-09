@@ -30,8 +30,8 @@ FROM node:20-alpine as console-builder
 WORKDIR /workspace
 COPY console/ console/
 
-RUN npm install -g pnpm@8.6.5
-RUN cd console && pnpm install && pnpm run build
+RUN npm install -g pnpm@8.6.6
+RUN cd console && pnpm install --prod && pnpm run build
 
 FROM node:20-alpine
 

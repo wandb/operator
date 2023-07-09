@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 
 	apiv1 "github.com/wandb/operator/api/v1"
 	"github.com/wandb/operator/pkg/wandb/cdk8s/release"
@@ -24,17 +25,20 @@ func (r *WeightsAndBiasesReconciler) applyConfig(
 
 	log.Info("Install upgrade release", "version", rel.Version())
 	if err := rel.Install(); err != nil {
+		fmt.Println(err)
 		log.Error(err, "Failed to install release")
 		return err
 	}
 
 	log.Info("Generating upgrade", "version", rel.Version())
 	if err := rel.Generate(cfg); err != nil {
+		fmt.Println(err)
 		log.Error(err, "Failed to generate release")
 		return err
 	}
 
 	if err := rel.Apply(ctx, r.Client, wandb, r.Scheme); err != nil {
+		fmt.Println(err)
 		log.Error(err, "Failed to apply config")
 		return err
 	}

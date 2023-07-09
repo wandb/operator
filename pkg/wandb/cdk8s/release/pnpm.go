@@ -24,7 +24,7 @@ func PnpmGenerate(dir string, m map[string]interface{}) error {
 }
 
 func PnpmInstall(dir string) error {
-	cmd := exec.Command("pnpm", "install", "--frozen-lockfile")
+	cmd := exec.Command("pnpm", "install", "--prod")
 	cmd.Dir = dir
 	output, err := cmd.CombinedOutput()
 	fmt.Println(string(output))
