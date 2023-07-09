@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.1.9](https://github.com/wandb/operator/compare/v1.1.8...v1.1.9) (2023-07-09)
+
+
+### Bug Fixes
+
+* Install kubectl in docker image ([e5df9de](https://github.com/wandb/operator/commit/e5df9de6cc61335e22cfd6c185b4b0b5c926bada))
+
 ### [1.1.8](https://github.com/wandb/operator/compare/v1.1.7...v1.1.8) (2023-07-09)
 
 
