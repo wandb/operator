@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.1.7](https://github.com/wandb/operator/compare/v1.1.6...v1.1.7) (2023-07-09)
+
+
+### Bug Fixes
+
+* lock pnpm version ([c2608f7](https://github.com/wandb/operator/commit/c2608f766056a93bc5621be9b46ea68e1cc5f589))
+
 ### [1.1.6](https://github.com/wandb/operator/compare/v1.1.5...v1.1.6) (2023-07-05)
 
 
