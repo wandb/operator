@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.1.8](https://github.com/wandb/operator/compare/v1.1.7...v1.1.8) (2023-07-09)
+
+
+### Bug Fixes
+
+* docker build ([d160a9c](https://github.com/wandb/operator/commit/d160a9c5aa43fc8bff9dc2d3488367aa4b897827))
+
 ### [1.1.7](https://github.com/wandb/operator/compare/v1.1.6...v1.1.7) (2023-07-09)
 
 
