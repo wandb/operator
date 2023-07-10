@@ -17,6 +17,10 @@ func (c operatorChannel) Recommend() *config.Config {
 	gvk, _ := apiutil.GVKForObject(c.wandb, c.scheme)
 	return &config.Config{
 		Config: map[string]interface{}{
+			"console": map[string]interface{}{
+				"name":      c.wandb.GetName(),
+				"namespace": c.wandb.GetNamespace(),
+			},
 			"global": map[string]interface{}{
 				"metadata": map[string]interface{}{
 					"ownerReferences": []map[string]interface{}{
