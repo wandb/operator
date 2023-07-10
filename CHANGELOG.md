@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.1.11](https://github.com/wandb/operator/compare/v1.1.10...v1.1.11) (2023-07-10)
+
+
+### Bug Fixes
+
+* set namespace when running kubectl apply ([1d6f00c](https://github.com/wandb/operator/commit/1d6f00cd33f87b98b7c8c92c84ffecf19d9facc3))
+
 ### [1.1.10](https://github.com/wandb/operator/compare/v1.1.9...v1.1.10) (2023-07-10)
 
 
