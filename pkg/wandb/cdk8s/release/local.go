@@ -43,5 +43,5 @@ func (r LocalRelease) Apply(
 	owner v1.Object,
 	scheme *runtime.Scheme,
 ) error {
-	return KubectlApply(r.Directory())
+	return KubectlApply(r.Directory(), owner.GetNamespace())
 }
