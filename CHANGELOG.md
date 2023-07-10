@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.1.12](https://github.com/wandb/operator/compare/v1.1.11...v1.1.12) (2023-07-10)
+
+
+### Bug Fixes
+
+* remove console ([fba45ee](https://github.com/wandb/operator/commit/fba45ee9235cbdc72b6013b86b275a8012eb8aa7))
+
 ### [1.1.11](https://github.com/wandb/operator/compare/v1.1.10...v1.1.11) (2023-07-10)
 
 
