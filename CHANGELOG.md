@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.1.13](https://github.com/wandb/operator/compare/v1.1.12...v1.1.13) (2023-07-10)
+
+
+### Bug Fixes
+
+* pass spec namespace and name ([79d77f2](https://github.com/wandb/operator/commit/79d77f2859a041bba92838992f3b706ab9bce7b1))
+
 ### [1.1.12](https://github.com/wandb/operator/compare/v1.1.11...v1.1.12) (2023-07-10)
 
 
