@@ -28,14 +28,6 @@ COPY controllers/ controllers/
 # by leaving it empty we can ensure that the container and binary shipped on it will have the same platform.
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o manager main.go
 
-FROM node:20-alpine as console-builder
-
-WORKDIR /workspace
-COPY console/ console/
-
-RUN npm install -g pnpm@$PNPM_VERSION
-RUN cd console && pnpm install --frozen-lockfile && pnpm run build
-
 FROM node:20-alpine
 
 RUN apk update && apk add --no-cache libc6-compat git curl
@@ -46,8 +38,6 @@ RUN npm install -g pnpm@$PNPM_VERSION
 RUN curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl
 RUN chmod +x ./kubectl
 RUN mv ./kubectl /usr/local/bin
-
-RUN kubectl version --client
 
 RUN mkdir /tmp/git && chmod 777 /tmp/git && chmod 777 /tmp
 

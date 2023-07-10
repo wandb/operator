@@ -1,8 +1,6 @@
 package cdk8s
 
 import (
-	"os"
-
 	v1 "github.com/wandb/operator/api/v1"
 	"github.com/wandb/operator/pkg/wandb/cdk8s/config"
 	"github.com/wandb/operator/pkg/wandb/cdk8s/release"
@@ -19,10 +17,6 @@ func (c operatorChannel) Recommend() *config.Config {
 	gvk, _ := apiutil.GVKForObject(c.wandb, c.scheme)
 	return &config.Config{
 		Config: map[string]interface{}{
-			"console": map[string]interface{}{
-				"name":      os.Getenv("WANDB_MANAGER_CONSOLE_SERVICE_NAME"),
-				"namespace": os.Getenv("WANDB_MANAGER_CONSOLE_SERVICE_NAMESPACE"),
-			},
 			"global": map[string]interface{}{
 				"metadata": map[string]interface{}{
 					"ownerReferences": []map[string]interface{}{
