@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0](https://github.com/wandb/operator/compare/v1.1.13...v1.2.0) (2023-07-12)
+
+
+### Features
+
+* Add events recording ([388d37b](https://github.com/wandb/operator/commit/388d37bec08eb594cdc161d6a4661ca96947bc9a))
+
 ### [1.1.13](https://github.com/wandb/operator/compare/v1.1.12...v1.1.13) (2023-07-10)
 
 
