@@ -24,7 +24,7 @@ func NewGitRelease(url *url.URL, repo string) Release {
 	gr := &GitRelease{
 		url:  url,
 		repo: repo,
-		path: "/tmp/git/" + path,
+		path: "/tmp/git/" + strings.Trim(path, "/"),
 	}
 
 	urlRef := url.Query().Get("ref")
