@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.2.1](https://github.com/wandb/operator/compare/v1.2.0...v1.2.1) (2023-07-12)
+
+
+### Bug Fixes
+
+* Remove ui building step ([08ee985](https://github.com/wandb/operator/commit/08ee985c4fafec27d0fd8b706a8b47224a94e980))
+
 ## [1.2.0](https://github.com/wandb/operator/compare/v1.1.13...v1.2.0) (2023-07-12)
 
 
