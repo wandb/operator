@@ -44,7 +44,6 @@ RUN mkdir /tmp/git && chmod 777 /tmp/git && chmod 777 /tmp
 WORKDIR /
 
 COPY --from=manager-builder /workspace/manager .
-COPY --from=console-builder /workspace/console/dist ./console
 USER 65532:65532
 
 ENV DEPLOYER_API_URL=https://deploy.wandb.ai/api
