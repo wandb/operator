@@ -12,7 +12,7 @@ type Status string
 const (
 	Initializing   Status = "Initializing"
 	Downloading    Status = "Downloading"
-	Installing     Status = "Install"
+	Installing     Status = "Installing"
 	Loading        Status = "Loading"
 	Generating     Status = "Generating"
 	Applying       Status = "Applying"

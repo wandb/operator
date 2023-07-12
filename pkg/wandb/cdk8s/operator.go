@@ -13,7 +13,7 @@ type operatorChannel struct {
 	scheme *runtime.Scheme
 }
 
-func (c operatorChannel) Recommend() *config.Config {
+func (c operatorChannel) Recommend(_ *config.Config) *config.Config {
 	gvk, _ := apiutil.GVKForObject(c.wandb, c.scheme)
 	return &config.Config{
 		Config: map[string]interface{}{
@@ -39,7 +39,7 @@ func (c operatorChannel) Recommend() *config.Config {
 	}
 }
 
-func (c operatorChannel) Override() *config.Config {
+func (c operatorChannel) Override(_ *config.Config) *config.Config {
 	cfg := &config.Config{}
 
 	cfg.SetConfig(c.wandb.Spec.Config.Object)

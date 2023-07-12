@@ -91,8 +91,9 @@ func main() {
 	}
 
 	if err = (&controllers.WeightsAndBiasesReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorderFor("weightsandbiases"),
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "WeightsAndBiases")
 		os.Exit(1)

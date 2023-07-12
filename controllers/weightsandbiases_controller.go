@@ -18,11 +18,14 @@ package controllers
 
 import (
 	"context"
+	"reflect"
 
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
@@ -39,7 +42,8 @@ import (
 // WeightsAndBiasesReconciler reconciles a WeightsAndBiases object
 type WeightsAndBiasesReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
 }
 
 //+kubebuilder:rbac:groups=apps.wandb.com,resources=weightsandbiases,verbs=get;list;watch;create;update;patch;delete
@@ -77,7 +81,8 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		log.Error(err, "Failed to set status")
 	}
 
-	statusManager.Set(status.Loading)
+	r.Recorder.Event(wandb, corev1.EventTypeNormal, "Reconciling", "Reconciling")
+
 	configManager := config.NewManager(ctx, r.Client, wandb, r.Scheme)
 	usersConfig, err := configManager.GetDesiredState()
 
@@ -93,22 +98,25 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		license = wandb.Spec.License
 	}
 
+	r.Recorder.Event(wandb, corev1.EventTypeNormal, "LoadingConfig", "Loading desired configuration")
 	// Apply configs in least to most priority order
 	desiredState := config.Merge(
 		usersConfig,
 		cdk8s.Github(),
-		cdk8s.Deployment(license),
+		cdk8s.Deployer(license),
 		cdk8s.Operator(wandb, r.Scheme),
 	)
 
 	if err != nil {
 		if errors.IsNotFound(err) {
+			r.Recorder.Event(wandb, corev1.EventTypeNormal, "CreatingConfig", "Creating config")
 			log.Info("No config found. Creating config...", "name", configManager.LatestConfigName())
 			usersConfig, err = configManager.CreateLatest(
 				desiredState.Release,
 				map[string]interface{}{},
 			)
 			if err != nil {
+				statusManager.Set(status.InvalidConfig)
 				log.Error(err, "Failed to create config")
 				return ctrlqueue.Requeue(err)
 			}
@@ -118,17 +126,21 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 	}
 
+	r.Recorder.Event(wandb, corev1.EventTypeNormal, "ConfigBackup", "Creating a copy of config")
 	configManager.BackupLatest()
 
 	log.Info("Config values:", "version", desiredState.Release.Version(), "config", desiredState.Config)
 	if err != nil {
+		statusManager.Set(status.InvalidConfig)
 		log.Error(err, "Failed to get config")
 		return ctrlqueue.Requeue(err)
 	}
 
 	statusManager.Set(status.Loading)
 	log.Info("Applying config changes...", "version", usersConfig.Release.Version())
-	if err := r.applyConfig(ctx, wandb, usersConfig.Release, desiredState.Config); err != nil {
+	if err := r.applyConfig(ctx, wandb, statusManager, usersConfig.Release, desiredState.Config); err != nil {
+		statusManager.Set(status.InvalidConfig)
+		r.Recorder.Event(wandb, corev1.EventTypeNormal, "ApplyFailed", "Valid to apply config changes")
 		// TODO: Implement rollback
 		log.Error(err, "Failed to apply config changes.")
 		return ctrlqueue.DoNotRequeue()
@@ -136,6 +148,7 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	log.Info("Successfully applied config", "version", usersConfig.Release.Version())
 
 	if desiredState.Release.Version() != usersConfig.Release.Version() {
+		r.Recorder.Event(wandb, corev1.EventTypeNormal, "VersionChangeDetected", "Version change detected ("+usersConfig.Release.Version()+" -> "+desiredState.Release.Version()+")")
 		log.Info(
 			"Version changed. Applying...",
 			"current", usersConfig.Release.Version(),
@@ -145,13 +158,15 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		statusManager.Set(status.Loading)
 		usersConfig.SetRelease(desiredState.Release)
 
-		if err := r.applyConfig(ctx, wandb, usersConfig.Release, desiredState.Config); err != nil {
+		if err := r.applyConfig(ctx, wandb, statusManager, usersConfig.Release, desiredState.Config); err != nil {
+			statusManager.Set(status.InvalidVersion)
+			r.Recorder.Event(wandb, corev1.EventTypeNormal, "VersionApplyFailed", "Valid to apply version changes")
 			// TODO: Implement rollback
 			log.Error(err, "Failed to upgrade to new version.")
 			return ctrlqueue.DoNotRequeue()
 		}
 
-		// Only if succesful do we save the state to a config map.
+		// Only if successful do we save the state to a config map.
 		if err := configManager.SetDesiredState(usersConfig); err != nil {
 			log.Error(err, "Failed to set desired state")
 			return ctrlqueue.DoNotRequeue()
@@ -168,9 +183,25 @@ func (r *WeightsAndBiasesReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	builder := ctrl.NewControllerManagedBy(mgr).
 		For(
 			&apiv1.WeightsAndBiases{},
-			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
+			builder.WithPredicates(annotationChangedPredicate{}),
 		).
 		Owns(&corev1.Secret{}).
 		Owns(&corev1.ConfigMap{})
 	return builder.Complete(r)
+}
+
+// annotationChangedPredicate implements the Predicate interface. It is used to
+// watch changes in the annotation of the Custom Resource.
+type annotationChangedPredicate struct {
+	predicate.Funcs
+}
+
+// It checks if there is an update event and only returns true if the
+// annotations have changed. We use annotations to trigger a reconcile
+// functions.
+func (a annotationChangedPredicate) Update(e event.UpdateEvent) bool {
+	return !reflect.DeepEqual(
+		e.ObjectOld.GetAnnotations(),
+		e.ObjectNew.GetAnnotations(),
+	)
 }

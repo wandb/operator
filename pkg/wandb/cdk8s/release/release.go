@@ -25,8 +25,8 @@ func ReleaseFromString(version string) (Release, error) {
 		}, nil
 	}
 
-	if _, err := url.ParseRequestURI(version); err == nil {
-		return NewGitRelease(version), nil
+	if url, err := url.ParseRequestURI(version); err == nil {
+		return NewGitRelease(url, version), nil
 	}
 
 	return NewLocalRelease(version), nil
