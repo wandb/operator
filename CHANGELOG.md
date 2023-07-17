@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.2.2](https://github.com/wandb/operator/compare/v1.2.1...v1.2.2) (2023-07-17)
+
+
+### Bug Fixes
+
+* Use deployer release channels ([480b380](https://github.com/wandb/operator/commit/480b38055826405b1fcf3ff3508e65d4e2cc10b3))
+
 ### [1.2.1](https://github.com/wandb/operator/compare/v1.2.0...v1.2.1) (2023-07-12)
 
 
