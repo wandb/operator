@@ -1,6 +1,8 @@
 package cdk8s
 
 import (
+	"os"
+
 	v1 "github.com/wandb/operator/api/v1"
 	"github.com/wandb/operator/pkg/wandb/cdk8s/config"
 	"github.com/wandb/operator/pkg/wandb/cdk8s/release"
@@ -14,10 +16,17 @@ type operatorChannel struct {
 }
 
 func (c operatorChannel) Recommend(_ *config.Config) *config.Config {
+	opNs := os.Getenv("OPERATOR_NAMESPACE")
+	if opNs == "" {
+		opNs = "wandb"
+	}
 	gvk, _ := apiutil.GVKForObject(c.wandb, c.scheme)
 	return &config.Config{
 		Config: map[string]interface{}{
 			"console": map[string]interface{}{
+				"operator": map[string]interface{}{
+					"namespace": os.Getenv("OPERATOR_NAMESPACE"),
+				},
 				"name":      c.wandb.GetName(),
 				"namespace": c.wandb.GetNamespace(),
 			},

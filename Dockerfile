@@ -46,6 +46,7 @@ WORKDIR /
 COPY --from=manager-builder /workspace/manager .
 USER 65532:65532
 
+ENV OPERATOR_MODE=production
 ENV DEPLOYER_API_URL=https://deploy.wandb.ai/api
 
 ENTRYPOINT ["/manager"]
