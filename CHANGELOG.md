@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.2.3](https://github.com/wandb/operator/compare/v1.2.2...v1.2.3) (2023-07-18)
+
+
+### Bug Fixes
+
+* Add operator namespace env ([846731a](https://github.com/wandb/operator/commit/846731a43e1abd757fb9a5ff5d4f47651d6023dc))
+
 ### [1.2.2](https://github.com/wandb/operator/compare/v1.2.1...v1.2.2) (2023-07-17)
 
 
