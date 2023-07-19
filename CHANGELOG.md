@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.2.5](https://github.com/wandb/operator/compare/v1.2.4...v1.2.5) (2023-07-19)
+
+
+### Bug Fixes
+
+* Default to dev mode ([d961f77](https://github.com/wandb/operator/commit/d961f77f854d72f37329bf0609c02cf9bf940a82))
+
 ### [1.2.4](https://github.com/wandb/operator/compare/v1.2.3...v1.2.4) (2023-07-19)
 
 
