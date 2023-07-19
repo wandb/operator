@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.2.4](https://github.com/wandb/operator/compare/v1.2.3...v1.2.4) (2023-07-19)
+
+
+### Bug Fixes
+
+* Output json format logs ([90af7b6](https://github.com/wandb/operator/commit/90af7b65a749c5456734778fbf24d398f604371f))
+
 ### [1.2.3](https://github.com/wandb/operator/compare/v1.2.2...v1.2.3) (2023-07-18)
 
 
