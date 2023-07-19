@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.2.6](https://github.com/wandb/operator/compare/v1.2.5...v1.2.6) (2023-07-19)
+
+
+### Bug Fixes
+
+* Preserve unknown fields ([565a25f](https://github.com/wandb/operator/commit/565a25f6c4f01c5aa2321c432affb0f26a337d28))
+
 ### [1.2.5](https://github.com/wandb/operator/compare/v1.2.4...v1.2.5) (2023-07-19)
 
 
