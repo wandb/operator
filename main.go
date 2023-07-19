@@ -39,8 +39,6 @@ import (
 var (
 	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
-
-	mode = os.Getenv("OPERATOR_MODE")
 )
 
 func init() {
@@ -61,8 +59,7 @@ func main() {
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
 
-	development := mode != "production"
-	opts := zap.Options{Development: development}
+	opts := zap.Options{Development: false}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
 
