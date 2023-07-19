@@ -35,9 +35,13 @@ type WeightsAndBiasesSpec struct {
 	// The specification of Weights & Biases Chart that is used to deploy the
 	// instance.
 
-	Version string       `json:"version,omitempty"`
-	License string       `json:"license,omitempty"`
-	Config  ConfigValues `json:"config,omitempty"`
+	// +kubebuilder:validation:Optional
+	Version string `json:"version,omitempty"`
+	// +kubebuilder:validation:Optional
+	License string `json:"license,omitempty"`
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:pruning:PreserveUnknownFields
+	Config ConfigValues `json:"config,omitempty"`
 }
 
 // Unstructured values for rendering CDK8s Config.
