@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.2.7](https://github.com/wandb/operator/compare/v1.2.6...v1.2.7) (2023-07-20)
+
+
+### Bug Fixes
+
+* x-kubernetes-preserve-unknown-fields ([bedac52](https://github.com/wandb/operator/commit/bedac525823b5d9bcb50ab8de931a8431f92eecc))
+
 ### [1.2.6](https://github.com/wandb/operator/compare/v1.2.5...v1.2.6) (2023-07-19)
 
 
