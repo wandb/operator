@@ -107,6 +107,8 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		cdk8s.Operator(wandb, r.Scheme),
 	)
 
+	log.Info("Desired config", "version", desiredState.Release.Version(), "config", desiredState.Config)
+
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.Recorder.Event(wandb, corev1.EventTypeNormal, "CreatingConfig", "Creating config")
