@@ -17,15 +17,15 @@ import (
 )
 
 func ManagerStateName(prefix string) string {
-	return fmt.Sprintf("%s-manager", prefix)
+	return fmt.Sprintf("%s-spec-manager", prefix)
 }
 
 func UserSpecName(prefix string) string {
-	return fmt.Sprintf("%s-user-spec", prefix)
+	return fmt.Sprintf("%s-spec-user", prefix)
 }
 
 func BackupSpecName(prefix string, version int) string {
-	return fmt.Sprintf("%s-spec-v%d", prefix, version)
+	return fmt.Sprintf("%s-spec-backup-v%d", prefix, version)
 }
 
 func New(

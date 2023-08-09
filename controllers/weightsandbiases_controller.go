@@ -108,13 +108,16 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	// TODO: Implement a way to get the latest config
 	// cdk8s.Deployer(license)
 
+	userInputSpec, err := specManager.GetUserInput()
+	if userInputSpec == nil {
+		log.Info("No user spec found, creating a new one")
+		userInputSpec := &spec.Spec{Config: map[string]interface{}{}}
+		specManager.SetUserInput(userInputSpec)
+	}
+
 	desiredSpec := &spec.Spec{}
 	desiredSpec.Merge(operator.Defaults(wandb, r.Scheme))
-	userInputSpec, err := specManager.GetUserInput()
-	if userInputSpec != nil {
-		desiredSpec.Merge(userInputSpec)
-		log.Info("user spec", "spec", userInputSpec)
-	}
+	desiredSpec.Merge(userInputSpec)
 	desiredSpec.Merge(operator.Spec(wandb))
 
 	log.Info("Desired spec", "spec", desiredSpec)
