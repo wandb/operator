@@ -36,17 +36,17 @@ type WeightsAndBiasesSpec struct {
 	// instance.
 
 	// +kubebuilder:validation:Optional
-	Version string `json:"version,omitempty"`
-	// +kubebuilder:validation:Optional
-	License string `json:"license,omitempty"`
+	// +kubebuilder:pruning:PreserveUnknownFields
+	Release Object `json:"release,omitempty"`
+
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:pruning:PreserveUnknownFields
-	Config ConfigValues `json:"config,omitempty"`
+	Config Object `json:"config,omitempty"`
 }
 
 // Unstructured values for rendering CDK8s Config.
 // +k8s:deepcopy-gen=false
-type ConfigValues struct {
+type Object struct {
 	// Object is a JSON compatible map with string, float, int, bool, []interface{}, or
 	// map[string]interface{} children.
 	Object map[string]interface{} `json:"-"`
@@ -54,13 +54,13 @@ type ConfigValues struct {
 
 // MarshalJSON ensures that the unstructured object produces proper
 // JSON when passed to Go's standard JSON library.
-func (u *ConfigValues) MarshalJSON() ([]byte, error) {
+func (u *Object) MarshalJSON() ([]byte, error) {
 	return json.Marshal(u.Object)
 }
 
 // UnmarshalJSON ensures that the unstructured object properly decodes
 // JSON when passed to Go's standard JSON library.
-func (u *ConfigValues) UnmarshalJSON(data []byte) error {
+func (u *Object) UnmarshalJSON(data []byte) error {
 	m := make(map[string]interface{})
 	if err := json.Unmarshal(data, &m); err != nil {
 		return err
@@ -72,7 +72,7 @@ func (u *ConfigValues) UnmarshalJSON(data []byte) error {
 }
 
 // Declaring this here prevents it from being generated.
-func (u *ConfigValues) DeepCopyInto(out *ConfigValues) {
+func (u *Object) DeepCopyInto(out *Object) {
 	out.Object = runtime.DeepCopyJSON(u.Object)
 }
 

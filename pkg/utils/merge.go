@@ -2,6 +2,7 @@ package utils
 
 import (
 	"errors"
+	"fmt"
 	"reflect"
 )
 
@@ -70,4 +71,17 @@ func Merge(src, dst interface{}) (interface{}, error) {
 	default:
 		return src, nil
 	}
+}
+
+func MergeMapString(a, b interface{}) (map[string]interface{}, error) {
+	mr, err := Merge(a, b)
+	if err != nil {
+		return nil, err
+	}
+
+	if m, ok := mr.(map[string]interface{}); ok {
+		return m, nil
+	}
+
+	return nil, fmt.Errorf("failed to merge map[string]interface{}: %v", mr)
 }

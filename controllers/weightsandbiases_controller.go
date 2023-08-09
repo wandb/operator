@@ -33,8 +33,10 @@ import (
 
 	apiv1 "github.com/wandb/operator/api/v1"
 	"github.com/wandb/operator/controllers/internal/ctrlqueue"
-	"github.com/wandb/operator/pkg/wandb/cdk8s"
-	"github.com/wandb/operator/pkg/wandb/cdk8s/config"
+	"github.com/wandb/operator/pkg/wandb/spec"
+	"github.com/wandb/operator/pkg/wandb/spec/operator"
+	"github.com/wandb/operator/pkg/wandb/spec/state"
+	"github.com/wandb/operator/pkg/wandb/spec/state/configmap"
 	"github.com/wandb/operator/pkg/wandb/status"
 	"k8s.io/apimachinery/pkg/api/errors"
 )
@@ -66,7 +68,7 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	log := ctrllog.FromContext(ctx)
 
 	wandb := &apiv1.WeightsAndBiases{}
-	if err := r.Get(ctx, req.NamespacedName, wandb); err != nil {
+	if err := r.Client.Get(ctx, req.NamespacedName, wandb); err != nil {
 		if errors.IsNotFound(err) {
 			return ctrlqueue.DoNotRequeue()
 		}
@@ -83,96 +85,62 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	r.Recorder.Event(wandb, corev1.EventTypeNormal, "Reconciling", "Reconciling")
 
-	configManager := config.NewManager(ctx, r.Client, wandb, r.Scheme)
-	usersConfig, err := configManager.GetDesiredState()
-
-	var license string
-	if usersConfig != nil {
-		if l, exists := usersConfig.Config["license"]; exists {
-			if ls, ok := l.(string); ok {
-				license = ls
-			}
-		}
-	}
-	if wandb.Spec.License != "" {
-		license = wandb.Spec.License
-	}
+	configMapState := configmap.New(ctx, r.Client, wandb, r.Scheme)
+	specManager := state.New(ctx, r.Client, wandb, r.Scheme, configMapState)
 
 	r.Recorder.Event(wandb, corev1.EventTypeNormal, "LoadingConfig", "Loading desired configuration")
-	// Apply configs in least to most priority order
-	desiredState := config.Merge(
-		usersConfig,
-		cdk8s.Github(),
-		cdk8s.Deployer(license),
-		cdk8s.Operator(wandb, r.Scheme),
-	)
 
-	log.Info("Desired config", "version", desiredState.Release.Version(), "config", desiredState.Config)
+	// var license string
+	// if userInputSpec != nil {
+	// 	if l, exists := userInputSpec.Config["license"]; exists {
+	// 		if ls, ok := l.(string); ok {
+	// 			license = ls
+	// 		}
+	// 	}
+	// }
 
-	if err != nil {
-		if errors.IsNotFound(err) {
-			r.Recorder.Event(wandb, corev1.EventTypeNormal, "CreatingConfig", "Creating config")
-			log.Info("No config found. Creating config...", "name", configManager.LatestConfigName())
-			usersConfig, err = configManager.CreateLatest(
-				desiredState.Release,
-				map[string]interface{}{},
-			)
-			if err != nil {
-				statusManager.Set(status.InvalidConfig)
-				log.Error(err, "Failed to create config")
-				return ctrlqueue.Requeue(err)
-			}
-		} else {
-			log.Error(err, "Failed to get desired config")
-			return ctrlqueue.DoNotRequeue()
-		}
+	// if l, exists := wandb.Spec.Config.Object["license"]; exists {
+	// 	if ls, ok := l.(string); ok {
+	// 		license = ls
+	// 	}
+	// }
+
+	// TODO: Implement a way to get the latest config
+	// cdk8s.Deployer(license)
+
+	desiredSpec := &spec.Spec{}
+	desiredSpec.Merge(operator.Defaults(wandb, r.Scheme))
+	userInputSpec, err := specManager.GetUserInput()
+	if userInputSpec != nil {
+		desiredSpec.Merge(userInputSpec)
+		log.Info("user spec", "spec", userInputSpec)
 	}
+	desiredSpec.Merge(operator.Spec(wandb))
 
-	r.Recorder.Event(wandb, corev1.EventTypeNormal, "ConfigBackup", "Creating a copy of config")
-	configManager.BackupLatest()
+	log.Info("Desired spec", "spec", desiredSpec)
+	log.Info("Applying desired spec", "spec", desiredSpec)
 
-	log.Info("Config values:", "version", desiredState.Release.Version(), "config", desiredState.Config)
-	if err != nil {
+	if desiredSpec.Release == nil {
 		statusManager.Set(status.InvalidConfig)
-		log.Error(err, "Failed to get config")
-		return ctrlqueue.Requeue(err)
+		log.Error(err, "No release type was found in the spec")
+		return ctrlqueue.DoNotRequeue()
 	}
 
 	statusManager.Set(status.Loading)
-	log.Info("Applying config changes...", "version", usersConfig.Release.Version())
-	if err := r.applyConfig(ctx, wandb, statusManager, usersConfig.Release, desiredState.Config); err != nil {
+	log.Info("Applying spec...", "spec", desiredSpec)
+	if err := desiredSpec.Apply(ctx, r.Client, wandb, r.Scheme); err != nil {
 		statusManager.Set(status.InvalidConfig)
-		r.Recorder.Event(wandb, corev1.EventTypeNormal, "ApplyFailed", "Valid to apply config changes")
-		// TODO: Implement rollback
+		r.Recorder.Event(wandb, corev1.EventTypeNormal, "ApplyFailed", "Invalid config for apply")
 		log.Error(err, "Failed to apply config changes.")
 		return ctrlqueue.DoNotRequeue()
 	}
-	log.Info("Successfully applied config", "version", usersConfig.Release.Version())
+	log.Info("Successfully applied spec", "spec", desiredSpec)
 
-	if desiredState.Release.Version() != usersConfig.Release.Version() {
-		r.Recorder.Event(wandb, corev1.EventTypeNormal, "VersionChangeDetected", "Version change detected ("+usersConfig.Release.Version()+" -> "+desiredState.Release.Version()+")")
-		log.Info(
-			"Version changed. Applying...",
-			"current", usersConfig.Release.Version(),
-			"desired version", desiredState.Release.Version(),
-		)
-
-		statusManager.Set(status.Loading)
-		usersConfig.SetRelease(desiredState.Release)
-
-		if err := r.applyConfig(ctx, wandb, statusManager, usersConfig.Release, desiredState.Config); err != nil {
-			statusManager.Set(status.InvalidVersion)
-			r.Recorder.Event(wandb, corev1.EventTypeNormal, "VersionApplyFailed", "Valid to apply version changes")
-			// TODO: Implement rollback
-			log.Error(err, "Failed to upgrade to new version.")
-			return ctrlqueue.DoNotRequeue()
-		}
-
-		// Only if successful do we save the state to a config map.
-		if err := configManager.SetDesiredState(usersConfig); err != nil {
-			log.Error(err, "Failed to set desired state")
-			return ctrlqueue.DoNotRequeue()
-		}
+	r.Recorder.Event(wandb, corev1.EventTypeNormal, "ConfigBackup", "Creating a copy of desired state")
+	if err := specManager.Backup(desiredSpec); err != nil {
+		r.Recorder.Event(wandb, corev1.EventTypeNormal, "BackupFailed", "Failed to backup desired state")
+		log.Error(err, "Failed to backup sucessful spec.")
+		return ctrlqueue.DoNotRequeue()
 	}
 
 	// All done! Everything is up to date.

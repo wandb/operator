@@ -1,4 +1,4 @@
-package release
+package cdk8s
 
 import (
 	"fmt"

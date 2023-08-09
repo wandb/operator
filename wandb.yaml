@@ -7,4 +7,5 @@ metadata:
     wandb.ai/console-default: "true"
   name: wandb
 spec:
-  version: ../cdk8s
+  release:
+    directory: ../cdk8s
