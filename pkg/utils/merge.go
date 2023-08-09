@@ -64,7 +64,6 @@ func Merge(src, dst interface{}) (interface{}, error) {
 		}
 		return src, nil
 	case reflect.Slice:
-		//return append(src.([]interface{}), dst.([]interface{})...), nil
 		srcSlice := convertSlice(src)
 		dstSlice := convertSlice(dst)
 		return append(srcSlice, dstSlice...), nil
