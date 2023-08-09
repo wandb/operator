@@ -34,8 +34,8 @@ func GetCdk8sGitSpec(s interface{}) *Cdk8sGit {
 }
 
 type Cdk8sGit struct {
-	URL    string `validate:"required"`
-	Branch string
+	URL    string `validate:"required" json:"url"`
+	Branch string `json:"branch"`
 }
 
 func (c *Cdk8sGit) Validate() error {
@@ -57,9 +57,12 @@ func (c Cdk8sGit) Apply(
 	scheme *runtime.Scheme,
 	config map[string]interface{},
 ) error {
+	os.MkdirAll(c.Path(), 0755)
+
 	rm := exec.Command("rm", "-rf", c.Path())
 	rm.Run()
-	os.MkdirAll(c.Path(), 0755)
+
+	fmt.Println(c.Path())
 
 	if err := clone(c.URL, "", c.Path()); err != nil {
 		return err
@@ -70,9 +73,7 @@ func (c Cdk8sGit) Apply(
 }
 
 func clone(url string, branch string, to string) error {
-	fmt.Println("cloning", url, "into", to)
-
-	g, err := git.PlainClone(url, false, &git.CloneOptions{
+	g, err := git.PlainClone(to, false, &git.CloneOptions{
 		URL:      url,
 		Progress: os.Stdout,
 		Depth:    1,

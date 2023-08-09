@@ -40,11 +40,11 @@ func (c Cdk8sLocal) Apply(
 	scheme *runtime.Scheme,
 	config map[string]interface{},
 ) error {
-	if err := PnpmGenerate(c.Directory, config); err != nil {
+	if err := PnpmInstall(c.Directory); err != nil {
 		return err
 	}
 
-	if err := PnpmInstall(c.Directory); err != nil {
+	if err := PnpmGenerate(c.Directory, config); err != nil {
 		return err
 	}
 
