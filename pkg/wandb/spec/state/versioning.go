@@ -75,7 +75,6 @@ func (m Manager) Backup(s *spec.Spec) error {
 		cA, _ := json.Marshal(latest.Config)
 		cB, _ := json.Marshal(s.Config)
 		isConfigSame := string(cA) == string(cB)
-		fmt.Println(string(cA), string(cB))
 
 		if isConfigSame && reflect.DeepEqual(s.Release, latest.Release) {
 			return nil
