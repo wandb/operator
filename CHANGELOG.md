@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.2.8](https://github.com/wandb/operator/compare/v1.2.7...v1.2.8) (2023-08-09)
+
+
+### Bug Fixes
+
+* Refactor specs ([7c6da34](https://github.com/wandb/operator/commit/7c6da34a5572407fec6e4a8164f2678ff506669e))
+
 ### [1.2.7](https://github.com/wandb/operator/compare/v1.2.6...v1.2.7) (2023-07-20)
 
 
