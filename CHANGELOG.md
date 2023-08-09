@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.2.11](https://github.com/wandb/operator/compare/v1.2.10...v1.2.11) (2023-08-09)
+
+
+### Bug Fixes
+
+* Git release pulls correctly ([d47aebd](https://github.com/wandb/operator/commit/d47aebd258cff8fee928b0abc40f2c3c497129b1))
+
 ### [1.2.10](https://github.com/wandb/operator/compare/v1.2.9...v1.2.10) (2023-08-09)
 
 
