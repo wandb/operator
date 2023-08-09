@@ -146,7 +146,6 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrlqueue.DoNotRequeue()
 	}
 
-	// All done! Everything is up to date.
 	statusManager.Set(status.Completed)
 	return ctrlqueue.DoNotRequeue()
 }
