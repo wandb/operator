@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.2.12](https://github.com/wandb/operator/compare/v1.2.11...v1.2.12) (2023-08-10)
+
+
+### Bug Fixes
+
+* merge func ([94aa0d0](https://github.com/wandb/operator/commit/94aa0d0a08e64c9f31c025f6a55dd9ba062faa07))
+* remove submodule ([bdb408a](https://github.com/wandb/operator/commit/bdb408afbd75fcc32b319b6a15e63ae1018508d7))
+* Rename config spec cfs ([672100a](https://github.com/wandb/operator/commit/672100a5985bc48e4daca57b11992ea2b065a8a7))
+* rename configs ([8727281](https://github.com/wandb/operator/commit/8727281c3cef49fcebaa360a142e3a561a93e383))
+
 ### [1.2.11](https://github.com/wandb/operator/compare/v1.2.10...v1.2.11) (2023-08-09)
 
 
