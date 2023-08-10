@@ -21,12 +21,13 @@ func Defaults(wandb *v1.WeightsAndBiases, scheme *runtime.Scheme) *spec.Spec {
 	return &spec.Spec{
 		Release: nil,
 		Config: map[string]interface{}{
-			"console": map[string]interface{}{
-				"operator": map[string]interface{}{
-					"namespace": os.Getenv("OPERATOR_NAMESPACE"),
-				},
-				"name":      wandb.GetName(),
-				"namespace": wandb.GetNamespace(),
+			"operator": map[string]interface{}{
+				"namespace": os.Getenv("OPERATOR_NAMESPACE"),
+			},
+			"customResource": map[string]interface{}{
+				"name":       wandb.GetName(),
+				"namespace":  wandb.GetNamespace(),
+				"apiVersion": wandb.APIVersion,
 			},
 			"global": map[string]interface{}{
 				"metadata": map[string]interface{}{
