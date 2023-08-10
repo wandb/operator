@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.2.13](https://github.com/wandb/operator/compare/v1.2.12...v1.2.13) (2023-08-10)
+
+
+### Bug Fixes
+
+* add operator properties to config ([b5f48f0](https://github.com/wandb/operator/commit/b5f48f0a02ab6c03006e8ecb7195d551e61ecf8e))
+
 ### [1.2.12](https://github.com/wandb/operator/compare/v1.2.11...v1.2.12) (2023-08-10)
 
 
