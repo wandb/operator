@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.0](https://github.com/wandb/operator/compare/v1.3.0...v1.4.0) (2023-08-11)
+
+
+### Features
+
+* Support for deploymenting via jobs ([da801ea](https://github.com/wandb/operator/commit/da801eace75d336bf47c2b21fead504c18559ee4))
+
 ## [1.3.0](https://github.com/wandb/operator/compare/v1.2.13...v1.3.0) (2023-08-11)
 
 
