@@ -34,7 +34,7 @@ func GetCdk8sJobSpec(s interface{}) *Cdk8sJobSpec {
 }
 
 type Cdk8sJobSpec struct {
-	Image string `json:"image" validator:"required"`
+	Image string `json:"image" validate:"required"`
 }
 
 func (c *Cdk8sJobSpec) Validate() error {
@@ -87,6 +87,9 @@ func (s Cdk8sJobSpec) Apply(
 									MountPath: "/cdk8s/dist",
 									Name:      "generated-manifests",
 								},
+							},
+							Env: []corev1.EnvVar{
+								{Name: "KUBECTL_APPLYSET", Value: "true"},
 							},
 						},
 					},
