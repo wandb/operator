@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.0](https://github.com/wandb/operator/compare/v1.2.13...v1.3.0) (2023-08-11)
+
+
+### Features
+
+* Add active-state cm ([#2](https://github.com/wandb/operator/issues/2)) ([5a6c4c3](https://github.com/wandb/operator/commit/5a6c4c355b415ad3d182644ade95e69274da5b9e))
+
 ### [1.2.13](https://github.com/wandb/operator/compare/v1.2.12...v1.2.13) (2023-08-10)
 
 
