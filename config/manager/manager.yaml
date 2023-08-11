@@ -72,6 +72,11 @@ spec:
             - --leader-elect
           image: controller:latest
           name: manager
+          env:
+            - name: SERVICE_ACCOUNT_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.serviceAccountName
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:

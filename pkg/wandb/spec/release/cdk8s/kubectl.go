@@ -6,6 +6,10 @@ import (
 	"path"
 )
 
+func KubectApplyCmd(folder string, namespace string) *exec.Cmd {
+	return exec.Command("kubectl", "apply", "-f", folder, "--prune", "-l", "app=wandb", "-n", namespace)
+}
+
 func KubectlApply(dir string, namespace string) error {
 	folder := path.Join(dir, "dist")
 	cmd := exec.Command("kubectl", "apply", "-f", folder, "--prune", "-l", "app=wandb", "-n", namespace)

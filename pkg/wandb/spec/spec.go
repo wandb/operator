@@ -5,6 +5,7 @@ import (
 
 	v1 "github.com/wandb/operator/api/v1"
 	"github.com/wandb/operator/pkg/utils"
+	"github.com/wandb/operator/pkg/wandb/spec/release/cdk8s"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -30,6 +31,7 @@ func (s *Spec) Apply(
 	wandb *v1.WeightsAndBiases,
 	scheme *runtime.Scheme,
 ) error {
+	cdk8s.WaitForJobCompletion(ctx, wandb, client)
 	return s.Release.Apply(ctx, client, wandb, scheme, s.Config)
 }
 
@@ -51,6 +53,10 @@ func (s *Spec) MergeConfig(config map[string]interface{}) (err error) {
 }
 
 func (s *Spec) Merge(spec *Spec) {
+	if spec == nil {
+		return
+	}
+
 	if spec.Release != nil {
 		s.Release = spec.Release
 	}

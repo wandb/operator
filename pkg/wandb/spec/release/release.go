@@ -3,7 +3,6 @@ package release
 import (
 	"github.com/wandb/operator/pkg/wandb/spec"
 	"github.com/wandb/operator/pkg/wandb/spec/release/cdk8s"
-	"github.com/wandb/operator/pkg/wandb/spec/release/pod"
 )
 
 func Get(maybeRelease interface{}) spec.Release {
@@ -11,7 +10,7 @@ func Get(maybeRelease interface{}) spec.Release {
 		return nil
 	}
 
-	if s := pod.GetJobSpec(maybeRelease); s != nil {
+	if s := cdk8s.GetCdk8sJobSpec(maybeRelease); s != nil {
 		return s
 	}
 

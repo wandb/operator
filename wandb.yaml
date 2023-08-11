@@ -8,4 +8,5 @@ metadata:
   name: wandb
 spec:
   release:
-    directory: ../cdk8s
+    image: wandb/cdk8s:1.1.1
+  config: {}
