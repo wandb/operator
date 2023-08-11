@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.4.2](https://github.com/wandb/operator/compare/v1.4.1...v1.4.2) (2023-08-11)
+
+
+### Bug Fixes
+
+* Using validate for job spec ([5c7ff66](https://github.com/wandb/operator/commit/5c7ff667506dbf0ae89096d8704c586301a2b608))
+
 ### [1.4.1](https://github.com/wandb/operator/compare/v1.4.0...v1.4.1) (2023-08-11)
 
 
