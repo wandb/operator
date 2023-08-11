@@ -10,8 +10,6 @@ import (
 type Status string
 
 const (
-	Initializing   Status = "Initializing"
-	Downloading    Status = "Downloading"
 	Installing     Status = "Installing"
 	Loading        Status = "Loading"
 	Generating     Status = "Generating"

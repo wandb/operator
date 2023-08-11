@@ -3,6 +3,7 @@ package cdk8s
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"time"
 
@@ -34,7 +35,8 @@ func GetCdk8sJobSpec(s interface{}) *Cdk8sJobSpec {
 }
 
 type Cdk8sJobSpec struct {
-	Image string `json:"image" validate:"required"`
+	Image string            `json:"image" validate:"required"`
+	Envs  map[string]string `json:"envs"`
 }
 
 func (c *Cdk8sJobSpec) Validate() error {
@@ -53,6 +55,13 @@ func (s Cdk8sJobSpec) Apply(
 		serviceAccount = createAdminServiceAccount(ctx, c, wandb)
 	}
 
+	envs := []corev1.EnvVar{}
+	if s.Envs != nil {
+		for k, v := range s.Envs {
+			envs = append(envs, corev1.EnvVar{Name: k, Value: v})
+		}
+	}
+
 	tru := true
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
@@ -66,13 +75,14 @@ func (s Cdk8sJobSpec) Apply(
 					AutomountServiceAccountToken: &tru,
 					InitContainers: []corev1.Container{
 						{
-							Name:    "gen",
+							Name:    "generate",
 							Image:   s.Image,
 							Command: PnpmGenerateBuildCmd(config).Args,
+							Env:     envs,
 							VolumeMounts: []corev1.VolumeMount{
 								{
 									MountPath: "/cdk8s/dist",
-									Name:      "generated-manifests",
+									Name:      "manifests",
 								},
 							},
 						},
@@ -82,17 +92,18 @@ func (s Cdk8sJobSpec) Apply(
 							Name:    "apply",
 							Image:   s.Image,
 							Command: KubectApplyCmd("/cdk8s/dist", wandb.GetNamespace()).Args,
+							Env:     envs,
 							VolumeMounts: []corev1.VolumeMount{
 								{
 									MountPath: "/cdk8s/dist",
-									Name:      "generated-manifests",
+									Name:      "manifests",
 								},
 							},
 						},
 					},
 					Volumes: []corev1.Volume{
 						{
-							Name: "generated-manifests",
+							Name: "manifests",
 							VolumeSource: corev1.VolumeSource{
 								EmptyDir: &corev1.EmptyDirVolumeSource{},
 							},
@@ -104,13 +115,15 @@ func (s Cdk8sJobSpec) Apply(
 		},
 	}
 
-	WaitForJobCompletion(ctx, wandb, c)
+	if err := WaitForJobCompletion(ctx, wandb, c); err != nil {
+		fmt.Println(err)
+	}
 
 	deletePolicy := metav1.DeletePropagationBackground
-	deleteOptions := &client.DeleteOptions{
-		PropagationPolicy: &deletePolicy,
+	deleteOptions := &client.DeleteOptions{PropagationPolicy: &deletePolicy}
+	if err := c.Delete(ctx, job, deleteOptions); err != nil {
+		fmt.Println(err)
 	}
-	c.Delete(ctx, job, deleteOptions)
 
 	if err := controllerutil.SetControllerReference(wandb, job, scheme); err != nil {
 		return err
@@ -121,7 +134,9 @@ func (s Cdk8sJobSpec) Apply(
 	}
 
 	// Don't delete so we can debug better
-	WaitForJobCompletion(ctx, wandb, c)
+	if err := WaitForJobCompletion(ctx, wandb, c); err != nil {
+		fmt.Println(err)
+	}
 
 	return nil
 }

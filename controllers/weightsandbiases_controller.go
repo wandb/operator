@@ -77,14 +77,9 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	log.Info("=== Found Weights & Biases instance, processing the spec...", "Spec", wandb.Spec)
 
-	statusManager := status.NewManager(ctx, r.Client, wandb)
-	err := statusManager.Set(status.Initializing)
-	if err != nil {
-		log.Error(err, "Failed to set status")
-	}
-
 	r.Recorder.Event(wandb, corev1.EventTypeNormal, "Reconciling", "Reconciling")
 
+	statusManager := status.NewManager(ctx, r.Client, wandb)
 	configMapState := configmap.New(ctx, r.Client, wandb, r.Scheme)
 	specManager := state.New(ctx, r.Client, wandb, r.Scheme, configMapState)
 
