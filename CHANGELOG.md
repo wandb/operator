@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.4.3](https://github.com/wandb/operator/compare/v1.4.2...v1.4.3) (2023-08-11)
+
+
+### Bug Fixes
+
+* reorder backup ([ab66486](https://github.com/wandb/operator/commit/ab66486bddecb74bcda55e342d58ff168120905c))
+
 ### [1.4.2](https://github.com/wandb/operator/compare/v1.4.1...v1.4.2) (2023-08-11)
 
 
