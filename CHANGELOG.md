@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.4.1](https://github.com/wandb/operator/compare/v1.4.0...v1.4.1) (2023-08-11)
+
+
+### Bug Fixes
+
+* Use cdk8s image for apply container ([189bc08](https://github.com/wandb/operator/commit/189bc08173ad0ce433b28ec8ed00a933a6916b14))
+
 ## [1.4.0](https://github.com/wandb/operator/compare/v1.3.0...v1.4.0) (2023-08-11)
 
 
