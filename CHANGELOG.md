@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.4.1](https://github.com/wandb/operator/compare/v1.4.0...v1.4.1) (2023-08-11)
+
+
+### Bug Fixes
+
+* Use cdk8s image for apply container ([189bc08](https://github.com/wandb/operator/commit/189bc08173ad0ce433b28ec8ed00a933a6916b14))
+
+## [1.4.0](https://github.com/wandb/operator/compare/v1.3.0...v1.4.0) (2023-08-11)
+
+
+### Features
+
+* Support for deploymenting via jobs ([da801ea](https://github.com/wandb/operator/commit/da801eace75d336bf47c2b21fead504c18559ee4))
+
+## [1.3.0](https://github.com/wandb/operator/compare/v1.2.13...v1.3.0) (2023-08-11)
+
+
+### Features
+
+* Add active-state cm ([#2](https://github.com/wandb/operator/issues/2)) ([5a6c4c3](https://github.com/wandb/operator/commit/5a6c4c355b415ad3d182644ade95e69274da5b9e))
+
 ### [1.2.13](https://github.com/wandb/operator/compare/v1.2.12...v1.2.13) (2023-08-10)
 
 
