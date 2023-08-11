@@ -139,18 +139,20 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 	log.Info("Successfully applied spec", "spec", desiredSpec)
 
+	if err := specManager.SetActive(desiredSpec); err != nil {
+		r.Recorder.Event(wandb, corev1.EventTypeNormal, "SetActiveFailed", "Failed to save active state")
+		log.Error(err, "Failed to save active sucessful spec.")
+		return ctrlqueue.DoNotRequeue()
+	}
+	log.Info("Successfully saved active state")
+
 	r.Recorder.Event(wandb, corev1.EventTypeNormal, "SavingConfig", "Creating a copy of desired state")
 	if err := specManager.Backup(desiredSpec); err != nil {
 		r.Recorder.Event(wandb, corev1.EventTypeNormal, "BackupFailed", "Failed to backup desired state")
 		log.Error(err, "Failed to backup sucessful spec.")
 		return ctrlqueue.DoNotRequeue()
 	}
-
-	if err := specManager.SetActive(desiredSpec); err != nil {
-		r.Recorder.Event(wandb, corev1.EventTypeNormal, "SetActiveFailed", "Failed to save active state")
-		log.Error(err, "Failed to save active sucessful spec.")
-		return ctrlqueue.DoNotRequeue()
-	}
+	log.Info("Successfully backed up")
 
 	statusManager.Set(status.Completed)
 	return ctrlqueue.DoNotRequeue()
