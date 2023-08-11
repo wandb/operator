@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.4.4](https://github.com/wandb/operator/compare/v1.4.3...v1.4.4) (2023-08-11)
+
+
+### Bug Fixes
+
+* Jobs work? ([9972d26](https://github.com/wandb/operator/commit/9972d26f5a1131fd3c6c26481b882cb5e447ed31))
+
 ### [1.4.3](https://github.com/wandb/operator/compare/v1.4.2...v1.4.3) (2023-08-11)
 
 
