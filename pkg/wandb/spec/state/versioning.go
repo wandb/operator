@@ -28,6 +28,10 @@ func BackupSpecName(prefix string, version int) string {
 	return fmt.Sprintf("%s-spec-backup-v%d", prefix, version)
 }
 
+func ActiveSpecName(prefix string) string {
+	return fmt.Sprintf("%s-spec-active", prefix)
+}
+
 func New(
 	ctx context.Context,
 	client client.Client,
@@ -91,6 +95,12 @@ func (m Manager) Backup(s *spec.Spec) error {
 		return err
 	}
 
+	return m.state.Set(namespace, name, s)
+}
+
+func (m Manager) SetActive(s *spec.Spec) error {
+	namespace := m.owner.GetNamespace()
+	name := ActiveSpecName(m.owner.GetName())
 	return m.state.Set(namespace, name, s)
 }
 
