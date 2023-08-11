@@ -80,7 +80,7 @@ func (s Cdk8sJobSpec) Apply(
 					Containers: []corev1.Container{
 						{
 							Name:    "apply",
-							Image:   "bitnami/kubectl:1.26",
+							Image:   s.Image,
 							Command: KubectApplyCmd("/cdk8s/dist", wandb.GetNamespace()).Args,
 							VolumeMounts: []corev1.VolumeMount{
 								{
