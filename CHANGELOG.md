@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.0](https://github.com/wandb/operator/compare/v1.4.4...v1.5.0) (2023-08-12)
+
+
+### Features
+
+* Use container based deployments only ([3e6b222](https://github.com/wandb/operator/commit/3e6b22238bdfa9c6f545200e0b8b52a268d2d18d))
+
 ### [1.4.4](https://github.com/wandb/operator/compare/v1.4.3...v1.4.4) (2023-08-11)
 
 
