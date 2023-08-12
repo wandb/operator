@@ -5,7 +5,6 @@ import (
 
 	v1 "github.com/wandb/operator/api/v1"
 	"github.com/wandb/operator/pkg/utils"
-	"github.com/wandb/operator/pkg/wandb/spec/release/cdk8s"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -20,6 +19,10 @@ type Release interface {
 	) error
 }
 
+type Validatable interface {
+	Validate() error
+}
+
 type Spec struct {
 	Release Release
 	Config  map[string]interface{}
@@ -31,7 +34,6 @@ func (s *Spec) Apply(
 	wandb *v1.WeightsAndBiases,
 	scheme *runtime.Scheme,
 ) error {
-	cdk8s.WaitForJobCompletion(ctx, wandb, client)
 	return s.Release.Apply(ctx, client, wandb, scheme, s.Config)
 }
 

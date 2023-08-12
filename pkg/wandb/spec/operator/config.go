@@ -1,4 +1,4 @@
-package cdk8s
+package operator
 
 import (
 	"os"

@@ -9,12 +9,16 @@ import (
 
 func PnpmGenerateDevCmd(m map[string]interface{}) *exec.Cmd {
 	b, _ := json.Marshal(m)
-	return exec.Command("pnpm", "run", "gen", "--json="+string(b))
+	cmd := exec.Command("pnpm", "run", "gen")
+	cmd.Env = append(cmd.Env, "CONFIG="+string(b))
+	return cmd
 }
 
 func PnpmGenerateBuildCmd(m map[string]interface{}) *exec.Cmd {
 	b, _ := json.Marshal(m)
-	return exec.Command("pnpm", "run", "start", "--json="+string(b))
+	cmd := exec.Command("pnpm", "run", "start")
+	cmd.Env = append(cmd.Env, "CONFIG="+string(b))
+	return cmd
 }
 
 func PnpmGenerate(dir string, m map[string]interface{}) error {
@@ -31,8 +35,12 @@ func PnpmGenerate(dir string, m map[string]interface{}) error {
 	return err
 }
 
+func PnpmInstallCmd() *exec.Cmd {
+	return exec.Command("pnpm", "install", "--frozen-lockfile")
+}
+
 func PnpmInstall(dir string) error {
-	cmd := exec.Command("pnpm", "install", "--frozen-lockfile")
+	cmd := PnpmInstallCmd()
 	cmd.Dir = dir
 	output, err := cmd.CombinedOutput()
 	fmt.Println(string(output))

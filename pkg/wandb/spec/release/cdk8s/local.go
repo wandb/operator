@@ -2,28 +2,12 @@ package cdk8s
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/go-playground/validator/v10"
 	v1 "github.com/wandb/operator/api/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
-
-func GetCdk8sLocalSpec(s interface{}) *Cdk8sLocal {
-	release := &Cdk8sLocal{}
-	specBytes, _ := json.Marshal(s)
-
-	if err := json.Unmarshal(specBytes, release); err != nil {
-		return nil
-	}
-
-	if err := release.Validate(); err != nil {
-		return nil
-	}
-
-	return release
-}
 
 type Cdk8sLocal struct {
 	Directory string `validate:"required,dir" json:"directory"`
