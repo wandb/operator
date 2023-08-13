@@ -2,7 +2,6 @@ package k8s
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"time"
@@ -19,32 +18,17 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
-func GetContainerSpec(s interface{}) *ContainerSpec {
-	spec := &ContainerSpec{}
-	specBytes, _ := json.Marshal(s)
-
-	if err := json.Unmarshal(specBytes, spec); err != nil {
-		return nil
-	}
-
-	if err := spec.Validate(); err != nil {
-		return nil
-	}
-
-	return spec
-}
-
-type ContainerSpec struct {
+type ContainerRelease struct {
 	Image   string            `json:"image" validate:"required"`
 	Envs    map[string]string `json:"envs"`
 	Command []string          `json:"command"`
 }
 
-func (c *ContainerSpec) Validate() error {
+func (c *ContainerRelease) Validate() error {
 	return validator.New().Struct(c)
 }
 
-func (s ContainerSpec) Apply(
+func (s ContainerRelease) Apply(
 	ctx context.Context,
 	c client.Client,
 	wandb *v1.WeightsAndBiases,

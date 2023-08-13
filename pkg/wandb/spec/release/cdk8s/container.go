@@ -61,7 +61,7 @@ func (s ContainerRelease) Apply(
 	}
 	cmds = append(cmds, strings.Join(KubectApplyCmd("/cdk8s/dist", wandb.GetNamespace()).Args, " "))
 
-	container := k8s.ContainerSpec{
+	container := k8s.ContainerRelease{
 		Image: s.Image,
 		Envs:  s.Envs,
 		Command: []string{

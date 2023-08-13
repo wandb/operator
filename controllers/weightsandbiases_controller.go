@@ -38,6 +38,7 @@ import (
 	"github.com/wandb/operator/pkg/wandb/spec/state"
 	"github.com/wandb/operator/pkg/wandb/spec/state/configmap"
 	"github.com/wandb/operator/pkg/wandb/status"
+
 	"k8s.io/apimachinery/pkg/api/errors"
 )
 
@@ -75,7 +76,7 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrlqueue.Requeue(err)
 	}
 
-	log.Info("=== Found Weights & Biases instance, processing the spec...", "Spec", wandb.Spec)
+	log.Info("=== Found Weights & Biases instance, processing the spec...", "Spec", wandb.Spec, "start", true)
 
 	r.Recorder.Event(wandb, corev1.EventTypeNormal, "Reconciling", "Reconciling")
 
@@ -147,7 +148,7 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		log.Error(err, "Failed to backup sucessful spec.")
 		return ctrlqueue.DoNotRequeue()
 	}
-	log.Info("Successfully backed up")
+	log.Info("Successfully backed up", "end", true)
 
 	statusManager.Set(status.Completed)
 	return ctrlqueue.DoNotRequeue()

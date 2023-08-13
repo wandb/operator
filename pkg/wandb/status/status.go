@@ -10,12 +10,9 @@ import (
 type Status string
 
 const (
-	Installing     Status = "Installing"
 	Loading        Status = "Loading"
-	Generating     Status = "Generating"
 	Applying       Status = "Applying"
 	InvalidConfig  Status = "Invalid Config"
-	InvalidVersion Status = "Invalid Version"
 	Completed      Status = "Completed"
 )
 
