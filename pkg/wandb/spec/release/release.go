@@ -29,8 +29,8 @@ type ValidatableRelease interface {
 
 func Get(maybeRelease interface{}) spec.Release {
 	releases := []ValidatableRelease{
-		&cdk8s.Cdk8sContainer{},
-		&cdk8s.Cdk8sLocal{},
+		&cdk8s.ContainerRelease{},
+		&cdk8s.LocalRelease{},
 	}
 
 	var errs []error

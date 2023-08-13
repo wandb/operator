@@ -17,7 +17,7 @@ type Git struct {
 }
 
 // A single application container that you want to run within a pod.
-type Cdk8sContainer struct {
+type ContainerRelease struct {
 	// Container image name. More info:
 	// https://kubernetes.io/docs/concepts/containers/images
 	Image string `json:"image"`
@@ -27,11 +27,11 @@ type Cdk8sContainer struct {
 	Git *Git `json:"git,omitempty"`
 }
 
-func (c Cdk8sContainer) Validate() error {
+func (c ContainerRelease) Validate() error {
 	return validator.New().Struct(c)
 }
 
-func (s Cdk8sContainer) Apply(
+func (s ContainerRelease) Apply(
 	ctx context.Context,
 	c client.Client,
 	wandb *v1.WeightsAndBiases,
