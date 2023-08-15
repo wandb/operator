@@ -8,5 +8,5 @@ metadata:
   name: wandb
 spec:
   release:
-    image: wandb/cdk8s:1.1.6
+    image: wandb/cdk8s:1.2
   config: {}

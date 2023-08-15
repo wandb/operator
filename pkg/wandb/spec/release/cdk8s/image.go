@@ -62,7 +62,10 @@ func (s Cdk8sJobSpec) Apply(
 		}
 	}
 
-	tru := true
+	tru := true // This should be a global variable trueWhile
+	args, kubectlEnvs := ComposeKubectApplyCmd("/cdk8s/dist", wandb.GetNamespace())
+	envs = append(envs, kubectlEnvs...)
+
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      wandb.GetName() + "-apply",
@@ -91,7 +94,7 @@ func (s Cdk8sJobSpec) Apply(
 						{
 							Name:    "apply",
 							Image:   s.Image,
-							Command: KubectApplyCmd("/cdk8s/dist", wandb.GetNamespace()).Args,
+							Command: args,
 							Env:     envs,
 							VolumeMounts: []corev1.VolumeMount{
 								{
