@@ -59,6 +59,8 @@ func (s ContainerRelease) Apply(
 	} else {
 		cmds = append(cmds, strings.Join(PnpmGenerateBuildCmd(config).Args, " "))
 	}
+
+	s.Envs["KUBECTL_APPLYSET"] = "true"
 	cmds = append(cmds, strings.Join(KubectApplyCmd("/cdk8s/dist", wandb.GetNamespace()).Args, " "))
 
 	container := k8s.ContainerRelease{
