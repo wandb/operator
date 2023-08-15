@@ -10,7 +10,7 @@ func GitCloneCmd(url string, folder string) *exec.Cmd {
 }
 
 func KubectApplyCmd(folder string, namespace string) *exec.Cmd {
-	return exec.Command("kubectl", "apply", "-f", folder, "--prune", "-l", "app=wandb", "-n", namespace)
+	return exec.Command("kubectl", "apply", "-f", folder, "--prune", "--applyset", "applyset", "-n", namespace)
 }
 
 func PnpmGenerateDevCmd(m map[string]interface{}) *exec.Cmd {

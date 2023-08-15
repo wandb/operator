@@ -50,7 +50,6 @@ func PnpmInstall(dir string) error {
 	return err
 }
 
-
 func PnpmGenerate(dir string, m map[string]interface{}) error {
 	dist := path.Join(dir, "dist")
 	rm := exec.Command("rm", "-rf", dist)
