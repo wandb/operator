@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.6.1](https://github.com/wandb/operator/compare/v1.6.0...v1.6.1) (2023-08-17)
+
+
+### Bug Fixes
+
+* Simplify docker image ([1cf55e4](https://github.com/wandb/operator/commit/1cf55e4c926dfb4122a4ff30b4bea6161cfc8a22))
+
 ## [1.6.0](https://github.com/wandb/operator/compare/v1.5.0...v1.6.0) (2023-08-17)
 
 
