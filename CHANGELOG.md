@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.0](https://github.com/wandb/operator/compare/v1.5.0...v1.6.0) (2023-08-17)
+
+
+### Features
+
+* Add helm support ([077765c](https://github.com/wandb/operator/commit/077765ca9c45115dddac24508377b4d5912c160a))
+
 ## [1.5.0](https://github.com/wandb/operator/compare/v1.4.4...v1.5.0) (2023-08-12)
 
 
