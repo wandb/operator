@@ -23,17 +23,17 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	corev1 "k8s.io/api/core/v1"
 
 	apiv1 "github.com/wandb/operator/api/v1"
 	"github.com/wandb/operator/controllers/internal/ctrlqueue"
 	"github.com/wandb/operator/pkg/wandb/spec"
+	"github.com/wandb/operator/pkg/wandb/spec/channel/deployer"
 	"github.com/wandb/operator/pkg/wandb/spec/operator"
 	"github.com/wandb/operator/pkg/wandb/spec/state"
 	"github.com/wandb/operator/pkg/wandb/spec/state/configmap"
@@ -41,6 +41,8 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/errors"
 )
+
+const resFinalizer = "finalizer.app.wandb.com"
 
 // WeightsAndBiasesReconciler reconciles a WeightsAndBiases object
 type WeightsAndBiasesReconciler struct {
@@ -68,6 +70,12 @@ type WeightsAndBiasesReconciler struct {
 func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := ctrllog.FromContext(ctx)
 
+	log.Info(
+		"=== Reconciling Weights & Biases instance...",
+		"NamespacedName", req.NamespacedName,
+		"Name", req.Name,
+	)
+
 	wandb := &apiv1.WeightsAndBiases{}
 	if err := r.Client.Get(ctx, req.NamespacedName, wandb); err != nil {
 		if errors.IsNotFound(err) {
@@ -76,7 +84,10 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrlqueue.Requeue(err)
 	}
 
-	log.Info("=== Found Weights & Biases instance, processing the spec...", "Spec", wandb.Spec, "start", true)
+	log.Info(
+		"Found Weights & Biases instance, processing the spec...",
+		"Spec", wandb.Spec,
+	)
 
 	r.Recorder.Event(wandb, corev1.EventTypeNormal, "Reconciling", "Reconciling")
 
@@ -86,24 +97,6 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	r.Recorder.Event(wandb, corev1.EventTypeNormal, "LoadingConfig", "Loading desired configuration")
 
-	// var license string
-	// if userInputSpec != nil {
-	// 	if l, exists := userInputSpec.Config["license"]; exists {
-	// 		if ls, ok := l.(string); ok {
-	// 			license = ls
-	// 		}
-	// 	}
-	// }
-
-	// if l, exists := wandb.Spec.Config.Object["license"]; exists {
-	// 	if ls, ok := l.(string); ok {
-	// 		license = ls
-	// 	}
-	// }
-
-	// TODO: Implement a way to get the latest config
-	// cdk8s.Deployer(license)
-
 	userInputSpec, err := specManager.GetUserInput()
 	if userInputSpec == nil {
 		log.Info("No user spec found, creating a new one")
@@ -111,47 +104,98 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		specManager.SetUserInput(userInputSpec)
 	}
 
-	desiredSpec := &spec.Spec{}
+	crdSpec := operator.Spec(wandb)
+	license := crdSpec.Config.GetString("license")
+	if license == "" && userInputSpec != nil {
+		license = userInputSpec.Config.GetString("license")
+	}
+
+	deployerChannel := deployer.New(license)
+	deployerSpec, _ := deployerChannel.Get()
+	if err != nil {
+		log.Info("Failed to get spec from deployer", "error", err)
+	}
+
+	desiredSpec := new(spec.Spec)
 	desiredSpec.Merge(operator.Defaults(wandb, r.Scheme))
 	desiredSpec.Merge(userInputSpec)
-	desiredSpec.Merge(operator.Spec(wandb))
+	desiredSpec.Merge(deployerSpec)
+	desiredSpec.Merge(crdSpec)
 
 	log.Info("Desired spec", "spec", desiredSpec)
-	log.Info("Applying desired spec", "spec", desiredSpec)
 
 	if desiredSpec.Release == nil {
 		statusManager.Set(status.InvalidConfig)
 		log.Error(err, "No release type was found in the spec")
 		return ctrlqueue.DoNotRequeue()
 	}
+	t := reflect.TypeOf(desiredSpec.Release)
+	typ := t.Name()
+	if t.Kind() == reflect.Ptr {
+		typ = "*" + t.Elem().Name()
+	}
+	log.Info("Found release type "+typ, "release", reflect.TypeOf(desiredSpec.Release))
 
 	statusManager.Set(status.Loading)
-	log.Info("Applying spec...", "spec", desiredSpec)
-	if err := desiredSpec.Apply(ctx, r.Client, wandb, r.Scheme); err != nil {
-		statusManager.Set(status.InvalidConfig)
-		r.Recorder.Event(wandb, corev1.EventTypeNormal, "ApplyFailed", "Invalid config for apply")
-		log.Error(err, "Failed to apply config changes.")
-		return ctrlqueue.DoNotRequeue()
-	}
-	log.Info("Successfully applied spec", "spec", desiredSpec)
 
-	if err := specManager.SetActive(desiredSpec); err != nil {
-		r.Recorder.Event(wandb, corev1.EventTypeNormal, "SetActiveFailed", "Failed to save active state")
-		log.Error(err, "Failed to save active sucessful spec.")
-		return ctrlqueue.DoNotRequeue()
-	}
-	log.Info("Successfully saved active state")
+	hasNotBeenFlaggedForDeletion := wandb.ObjectMeta.DeletionTimestamp.IsZero()
 
-	r.Recorder.Event(wandb, corev1.EventTypeNormal, "SavingConfig", "Creating a copy of desired state")
-	if err := specManager.Backup(desiredSpec); err != nil {
-		r.Recorder.Event(wandb, corev1.EventTypeNormal, "BackupFailed", "Failed to backup desired state")
-		log.Error(err, "Failed to backup sucessful spec.")
-		return ctrlqueue.DoNotRequeue()
-	}
-	log.Info("Successfully backed up", "end", true)
+	if hasNotBeenFlaggedForDeletion {
+		if !ctrlqueue.ContainsString(wandb.GetFinalizers(), resFinalizer) {
+			wandb.ObjectMeta.Finalizers = append(wandb.ObjectMeta.Finalizers, resFinalizer)
+			if err := r.Client.Update(ctx, wandb); err != nil {
+				return ctrlqueue.Requeue(err)
+			}
+		}
 
-	statusManager.Set(status.Completed)
+		currentActiveSpec, _ := specManager.GetActive()
+		if currentActiveSpec != nil {
+			log.Info("Active spec found", "spec", currentActiveSpec)
+			if currentActiveSpec.IsEqual(desiredSpec) {
+				log.Info("No changes found")
+				return ctrlqueue.RequeueWithDelay(
+					ctrlqueue.CheckForUpdatesFrequency,
+				)
+			}
+		}
+
+		log.Info("Applying spec...", "spec", desiredSpec)
+		if err := desiredSpec.Apply(ctx, r.Client, wandb, r.Scheme); err != nil {
+			statusManager.Set(status.InvalidConfig)
+			r.Recorder.Event(wandb, corev1.EventTypeNormal, "ApplyFailed", "Invalid config for apply")
+			log.Error(err, "Failed to apply config changes.")
+			return ctrlqueue.DoNotRequeue()
+		}
+		log.Info("Successfully applied spec", "spec", desiredSpec)
+
+		if err := specManager.SetActive(desiredSpec); err != nil {
+			r.Recorder.Event(wandb, corev1.EventTypeNormal, "SetActiveFailed", "Failed to save active state")
+			log.Error(err, "Failed to save active sucessful spec.")
+			return ctrlqueue.DoNotRequeue()
+		}
+		log.Info("Successfully saved active spec")
+
+		statusManager.Set(status.Completed)
+		return ctrlqueue.RequeueWithDelay(ctrlqueue.CheckForUpdatesFrequency)
+	}
+
+	if ctrlqueue.ContainsString(wandb.ObjectMeta.Finalizers, resFinalizer) {
+		log.Info("Deprovisioning", "release", reflect.TypeOf(desiredSpec.Release))
+		if err := desiredSpec.Prune(ctx, r.Client, wandb, r.Scheme); err != nil {
+			log.Error(err, "Failed to cleanup deployment.")
+			return ctrlqueue.DoNotRequeue()
+		}
+		log.Info("Successfully cleaned up resources")
+
+		controllerutil.RemoveFinalizer(wandb, resFinalizer)
+		r.Client.Update(ctx, wandb)
+	}
+
 	return ctrlqueue.DoNotRequeue()
+}
+
+func (r *WeightsAndBiasesReconciler) Delete(e event.DeleteEvent) bool {
+	return !e.DeleteStateUnknown
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -159,25 +203,9 @@ func (r *WeightsAndBiasesReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	builder := ctrl.NewControllerManagedBy(mgr).
 		For(
 			&apiv1.WeightsAndBiases{},
-			builder.WithPredicates(annotationChangedPredicate{}),
+			// builder.WithPredicates(annotationChangedPredicate{}),
 		).
 		Owns(&corev1.Secret{}).
 		Owns(&corev1.ConfigMap{})
 	return builder.Complete(r)
-}
-
-// annotationChangedPredicate implements the Predicate interface. It is used to
-// watch changes in the annotation of the Custom Resource.
-type annotationChangedPredicate struct {
-	predicate.Funcs
-}
-
-// It checks if there is an update event and only returns true if the
-// annotations have changed. We use annotations to trigger a reconcile
-// functions.
-func (a annotationChangedPredicate) Update(e event.UpdateEvent) bool {
-	return !reflect.DeepEqual(
-		e.ObjectOld.GetAnnotations(),
-		e.ObjectNew.GetAnnotations(),
-	)
 }

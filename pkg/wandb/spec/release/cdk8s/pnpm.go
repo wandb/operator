@@ -1,2 +1,0 @@
-package cdk8s
-

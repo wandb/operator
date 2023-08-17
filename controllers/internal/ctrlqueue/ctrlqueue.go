@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	defaultRequeueDelay = 10 * time.Second
+	CheckForUpdatesFrequency = time.Hour * 2
 )
 
 func DoNotRequeue() (ctrl.Result, error) {
@@ -18,6 +18,16 @@ func Requeue(err error) (ctrl.Result, error) {
 	return ctrl.Result{}, err
 }
 
-func RequeueWithDelay() (ctrl.Result, error) {
-	return ctrl.Result{RequeueAfter: defaultRequeueDelay}, nil
+func RequeueWithDelay(delay time.Duration) (ctrl.Result, error) {
+	return ctrl.Result{RequeueAfter: delay}, nil
+}
+
+func ContainsString(slice []string, s string) bool {
+	for _, v := range slice {
+		if v == s {
+			return true
+		}
+	}
+
+	return false
 }

@@ -10,10 +10,10 @@ import (
 type Status string
 
 const (
-	Loading        Status = "Loading"
-	Applying       Status = "Applying"
-	InvalidConfig  Status = "Invalid Config"
-	Completed      Status = "Completed"
+	Loading       Status = "Loading"
+	Applying      Status = "Applying"
+	InvalidConfig Status = "Invalid Config"
+	Completed     Status = "Completed"
 )
 
 func NewManager(

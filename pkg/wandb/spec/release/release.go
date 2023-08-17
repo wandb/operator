@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/wandb/operator/pkg/wandb/spec"
-	"github.com/wandb/operator/pkg/wandb/spec/release/cdk8s"
+	"github.com/wandb/operator/pkg/wandb/spec/release/helm"
 )
 
 func Is(v spec.Validatable, data interface{}) error {
@@ -23,14 +23,13 @@ func Is(v spec.Validatable, data interface{}) error {
 }
 
 type ValidatableRelease interface {
-	spec.Release
+	spec.HelmRelease
 	spec.Validatable
 }
 
-func Get(maybeRelease interface{}) spec.Release {
+func Get(maybeRelease interface{}) spec.HelmRelease {
 	releases := []ValidatableRelease{
-		&cdk8s.ContainerRelease{},
-		&cdk8s.LocalRelease{},
+		&helm.LocalRelease{},
 	}
 
 	var errs []error
