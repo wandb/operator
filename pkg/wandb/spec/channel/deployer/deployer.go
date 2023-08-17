@@ -1,35 +1,48 @@
 package deployer
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 	"net/http"
 
+	"github.com/wandb/operator/pkg/utils"
 	"github.com/wandb/operator/pkg/wandb/spec"
-	"github.com/wandb/operator/pkg/wandb/spec/channel"
 )
 
 const (
 	DeployerAPI = "https://deploy.wandb.ai/api/v1/operator/channel"
 )
 
-func New(license string) channel.Channel {
-	return &DeployerChannel{
-		license: license,
-	}
+func GetURL() string {
+	return utils.Getenv("DEPLOYER_CHANNEL_URL", DeployerAPI)
 }
 
-type DeployerChannel struct {
-	license string
+type Payload struct {
+	Release  spec.Release      `json:"release"`
+	Metadata map[string]string `json:"metadata"`
 }
 
-func (c DeployerChannel) Get() (*spec.Spec, error) {
+// GetSpec returns the spec for the given license. If the license or an empty
+// string it will pull down the latest stable version.
+func GetSpec(license string, activeState *spec.Spec) (*spec.Spec, error) {
+	url := GetURL()
 	client := &http.Client{}
-	req, err := http.NewRequest("GET", DeployerAPI, nil)
+
+	// Config can hold secrets. We shouldn't submit it.
+	payload := &Payload{
+		Metadata: activeState.Metadata,
+		Release:  activeState.Release,
+	}
+
+	payloadBytes, _ := json.Marshal(payload)
+	body := bytes.NewReader(payloadBytes)
+	req, err := http.NewRequest(http.MethodPost, url, body)
 	if err != nil {
 		return nil, err
 	}
-	req.SetBasicAuth("license", c.license)
+	req.Header.Set("Content-Type", "application/json")
+	req.SetBasicAuth("license", license)
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -37,15 +50,16 @@ func (c DeployerChannel) Get() (*spec.Spec, error) {
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	resBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
 
 	var spec spec.Spec
-	err = json.Unmarshal(body, &spec)
+	err = json.Unmarshal(resBody, &spec)
 	if err != nil {
 		return nil, err
 	}
+
 	return &spec, nil
 }

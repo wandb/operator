@@ -13,6 +13,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+// LocalRelease release is used for reference a helm chart that is stored
+// locally. This can be a tar file or a directory.
+//
+// It is commonly used for internal development for testing of the helm chart,
+// or for air-gapped instance where it points to the chart bundle with the
+// controller docker image.
 type LocalRelease struct {
 	Path string `validate:"required" json:"path"`
 }
@@ -25,6 +31,14 @@ func (r *LocalRelease) Chart() (*chart.Chart, error) {
 	return loader.Load(r.Path)
 }
 
+func (r *LocalRelease) getActionableChart(wandb *v1.WeightsAndBiases) (*helm.ActionableChart, error) {
+	chart, err := loader.Load(r.Path)
+	if err != nil {
+		return nil, err
+	}
+	return getActionableChart(chart, wandb)
+}
+
 func (r *LocalRelease) Apply(
 	ctx context.Context,
 	c client.Client,
@@ -32,12 +46,7 @@ func (r *LocalRelease) Apply(
 	scheme *runtime.Scheme,
 	config spec.Config,
 ) error {
-	chart, err := loader.Load(r.Path)
-	if err != nil {
-		return err
-	}
-
-	actionableChart, err := getActionableChart(chart, wandb)
+	actionableChart, err := r.getActionableChart(wandb)
 	if err != nil {
 		return err
 	}
@@ -53,12 +62,7 @@ func (r *LocalRelease) Prune(
 	scheme *runtime.Scheme,
 	_ spec.Config,
 ) error {
-	chart, err := loader.Load(r.Path)
-	if err != nil {
-		return err
-	}
-
-	actionableChart, err := getActionableChart(chart, wandb)
+	actionableChart, err := r.getActionableChart(wandb)
 	if err != nil {
 		return err
 	}

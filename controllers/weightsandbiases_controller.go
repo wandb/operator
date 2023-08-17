@@ -36,7 +36,8 @@ import (
 	"github.com/wandb/operator/pkg/wandb/spec/channel/deployer"
 	"github.com/wandb/operator/pkg/wandb/spec/operator"
 	"github.com/wandb/operator/pkg/wandb/spec/state"
-	"github.com/wandb/operator/pkg/wandb/spec/state/configmap"
+	"github.com/wandb/operator/pkg/wandb/spec/state/secrets"
+	"github.com/wandb/operator/pkg/wandb/spec/utils"
 	"github.com/wandb/operator/pkg/wandb/status"
 
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -60,10 +61,6 @@ type WeightsAndBiasesReconciler struct {
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the WeightsAndBiases object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.14.1/pkg/reconcile
@@ -92,12 +89,12 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	r.Recorder.Event(wandb, corev1.EventTypeNormal, "Reconciling", "Reconciling")
 
 	statusManager := status.NewManager(ctx, r.Client, wandb)
-	configMapState := configmap.New(ctx, r.Client, wandb, r.Scheme)
+	configMapState := secrets.New(ctx, r.Client, wandb, r.Scheme)
 	specManager := state.New(ctx, r.Client, wandb, r.Scheme, configMapState)
 
 	r.Recorder.Event(wandb, corev1.EventTypeNormal, "LoadingConfig", "Loading desired configuration")
 
-	userInputSpec, err := specManager.GetUserInput()
+	userInputSpec, _ := specManager.GetUserInput()
 	if userInputSpec == nil {
 		log.Info("No user spec found, creating a new one")
 		userInputSpec := &spec.Spec{Config: map[string]interface{}{}}
@@ -105,13 +102,14 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	crdSpec := operator.Spec(wandb)
-	license := crdSpec.Config.GetString("license")
-	if license == "" && userInputSpec != nil {
-		license = userInputSpec.Config.GetString("license")
-	}
 
-	deployerChannel := deployer.New(license)
-	deployerSpec, _ := deployerChannel.Get()
+	currentActiveSpec, err := specManager.GetActive()
+	if err != nil {
+		// This can happen on first one.
+		log.Info("No active spec found.")
+	}
+	license := utils.GetLicense(crdSpec, userInputSpec)
+	deployerSpec, err := deployer.GetSpec(license, currentActiveSpec)
 	if err != nil {
 		log.Info("Failed to get spec from deployer", "error", err)
 	}
@@ -148,7 +146,6 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			}
 		}
 
-		currentActiveSpec, _ := specManager.GetActive()
 		if currentActiveSpec != nil {
 			log.Info("Active spec found", "spec", currentActiveSpec)
 			if currentActiveSpec.IsEqual(desiredSpec) {

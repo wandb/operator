@@ -10,6 +10,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+type Metadata map[string]string
+
 type Release interface {
 	Apply(
 		context.Context,
@@ -37,9 +39,20 @@ type Validatable interface {
 	Validate() error
 }
 
+// Spec is the top level object that contains all the information needed to
+// deploy an instances.
 type Spec struct {
+	// Used for tracking extra information. This maybe useful in channels for
+	// determining information such as the last time the service was pinged and
+	// contain information of which version the spec is on.
+	Metadata Metadata `json:"metadata"`
+
+	// Release contains information about what version of the service to deploy.
 	Release Release `json:"release"`
-	Config  Config  `json:"config"`
+
+	// Config contains information about how to configure the release. This is
+	// passed into the release via the Apply command to generate the manifests.
+	Config Config `json:"config"`
 }
 
 func (s *Spec) Apply(
@@ -50,6 +63,7 @@ func (s *Spec) Apply(
 ) error {
 	return s.Release.Apply(ctx, client, wandb, scheme, s.Config)
 }
+
 func (s *Spec) Prune(
 	ctx context.Context,
 	client client.Client,

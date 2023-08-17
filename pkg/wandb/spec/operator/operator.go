@@ -31,6 +31,7 @@ func Defaults(wandb *v1.WeightsAndBiases, scheme *runtime.Scheme) *spec.Spec {
 	}
 }
 
+// Spec returns the spec for the given CRD.
 func Spec(wandb *v1.WeightsAndBiases) *spec.Spec {
 	return &spec.Spec{
 		Release: release.Get(wandb.Spec.Release.Object),

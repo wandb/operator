@@ -27,6 +27,7 @@ type ValidatableRelease interface {
 	spec.Validatable
 }
 
+// Get returns tries to match the spec of a given type to a release.
 func Get(maybeRelease interface{}) spec.HelmRelease {
 	releases := []ValidatableRelease{
 		&helm.LocalRelease{},

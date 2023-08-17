@@ -24,6 +24,7 @@ import (
 // nested objects.
 type Config map[string]interface{}
 
+// AsMap returns the underlying map. This maybe be useful for external libraries.
 func (v Config) AsMap() map[string]interface{} {
 	return v
 }

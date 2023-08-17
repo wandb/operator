@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	CheckForUpdatesFrequency = time.Hour * 2
+	CheckForUpdatesFrequency = time.Hour * 1
 )
 
 func DoNotRequeue() (ctrl.Result, error) {
