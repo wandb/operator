@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.7.0](https://github.com/wandb/operator/compare/v1.6.1...v1.7.0) (2023-08-17)
+
+
+### Features
+
+* use secrets instead of configmaps ([049797f](https://github.com/wandb/operator/commit/049797feafa971a07cedadf510e7b6497ac2cbfd))
+
 ### [1.6.1](https://github.com/wandb/operator/compare/v1.6.0...v1.6.1) (2023-08-17)
 
 
