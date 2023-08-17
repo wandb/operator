@@ -28,23 +28,9 @@ COPY controllers/ controllers/
 # by leaving it empty we can ensure that the container and binary shipped on it will have the same platform.
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o manager main.go
 
-FROM node:20-alpine
-
-RUN apk update && apk add --no-cache libc6-compat git curl
-RUN npm install -g pnpm@$PNPM_VERSION
-
-# Install kubectl
-# TODO: We should lock this version down.
-RUN curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl
-RUN chmod +x ./kubectl
-RUN mv ./kubectl /usr/local/bin
-
-RUN mkdir /tmp/git && chmod 777 /tmp/git && chmod 777 /tmp
-
-WORKDIR /
+FROM gcr.io/distroless/static-debian11
 
 COPY --from=manager-builder /workspace/manager .
-USER 65532:65532
 
 ENV OPERATOR_MODE=production
 ENV DEPLOYER_API_URL=https://deploy.wandb.ai/api
