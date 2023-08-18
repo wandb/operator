@@ -19,7 +19,6 @@ func GetURL() string {
 }
 
 type Payload struct {
-	Release  spec.Release      `json:"release"`
 	Metadata map[string]string `json:"metadata"`
 }
 
@@ -29,10 +28,10 @@ func GetSpec(license string, activeState *spec.Spec) (*spec.Spec, error) {
 	url := GetURL()
 	client := &http.Client{}
 
-	// Config can hold secrets. We shouldn't submit it.
-	payload := &Payload{
-		Metadata: activeState.Metadata,
-		Release:  activeState.Release,
+	payload := new(Payload)
+	if activeState != nil {
+		// Config can hold secrets. We shouldn't submit it.
+		payload.Metadata = activeState.Metadata
 	}
 
 	payloadBytes, _ := json.Marshal(payload)

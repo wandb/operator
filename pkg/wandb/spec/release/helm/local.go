@@ -23,23 +23,21 @@ type LocalRelease struct {
 	Path string `validate:"required" json:"path"`
 }
 
-func (c *LocalRelease) Validate() error {
+func (c LocalRelease) Validate() error {
 	return validator.New().Struct(c)
 }
 
-func (r *LocalRelease) Chart() (*chart.Chart, error) {
+func (r LocalRelease) Chart() (*chart.Chart, error) {
 	return loader.Load(r.Path)
 }
 
 func (r *LocalRelease) getActionableChart(wandb *v1.WeightsAndBiases) (*helm.ActionableChart, error) {
-	chart, err := loader.Load(r.Path)
-	if err != nil {
-		return nil, err
-	}
-	return getActionableChart(chart, wandb)
+	namespace := wandb.GetNamespace()
+	releaseName := wandb.GetName()
+	return helm.NewActionableChart(releaseName, namespace)
 }
 
-func (r *LocalRelease) Apply(
+func (r LocalRelease) Apply(
 	ctx context.Context,
 	c client.Client,
 	wandb *v1.WeightsAndBiases,
@@ -51,11 +49,16 @@ func (r *LocalRelease) Apply(
 		return err
 	}
 
-	_, err = actionableChart.Apply(config)
+	chart, err := loader.Load(r.Path)
+	if err != nil {
+		return err
+	}
+
+	_, err = actionableChart.Apply(chart, config)
 	return err
 }
 
-func (r *LocalRelease) Prune(
+func (r LocalRelease) Prune(
 	ctx context.Context,
 	c client.Client,
 	wandb *v1.WeightsAndBiases,
@@ -69,13 +72,4 @@ func (r *LocalRelease) Prune(
 
 	_, err = actionableChart.Uninstall()
 	return err
-}
-
-func getActionableChart(
-	chart *chart.Chart,
-	wandb *v1.WeightsAndBiases,
-) (*helm.ActionableChart, error) {
-	namespace := wandb.GetNamespace()
-	releaseName := wandb.GetName()
-	return helm.NewActionableChart(chart, releaseName, namespace)
 }

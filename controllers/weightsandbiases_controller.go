@@ -67,12 +67,6 @@ type WeightsAndBiasesReconciler struct {
 func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := ctrllog.FromContext(ctx)
 
-	log.Info(
-		"=== Reconciling Weights & Biases instance...",
-		"NamespacedName", req.NamespacedName,
-		"Name", req.Name,
-	)
-
 	wandb := &apiv1.WeightsAndBiases{}
 	if err := r.Client.Get(ctx, req.NamespacedName, wandb); err != nil {
 		if errors.IsNotFound(err) {
@@ -80,6 +74,12 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 		return ctrlqueue.Requeue(err)
 	}
+
+	log.Info(
+		"=== Reconciling Weights & Biases instance...",
+		"NamespacedName", req.NamespacedName,
+		"Name", req.Name,
+	)
 
 	log.Info(
 		"Found Weights & Biases instance, processing the spec...",
@@ -122,23 +122,23 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	log.Info("Desired spec", "spec", desiredSpec)
 
-	if desiredSpec.Release == nil {
-		statusManager.Set(status.InvalidConfig)
-		log.Error(err, "No release type was found in the spec")
-		return ctrlqueue.DoNotRequeue()
-	}
-	t := reflect.TypeOf(desiredSpec.Release)
-	typ := t.Name()
-	if t.Kind() == reflect.Ptr {
-		typ = "*" + t.Elem().Name()
-	}
-	log.Info("Found release type "+typ, "release", reflect.TypeOf(desiredSpec.Release))
-
-	statusManager.Set(status.Loading)
-
 	hasNotBeenFlaggedForDeletion := wandb.ObjectMeta.DeletionTimestamp.IsZero()
 
 	if hasNotBeenFlaggedForDeletion {
+		if desiredSpec.Release == nil {
+			statusManager.Set(status.InvalidConfig)
+			log.Error(err, "No release type was found in the spec")
+			return ctrlqueue.DoNotRequeue()
+		}
+		t := reflect.TypeOf(desiredSpec.Release)
+		typ := t.Name()
+		if t.Kind() == reflect.Ptr {
+			typ = "*" + t.Elem().Name()
+		}
+		log.Info("Found release type "+typ, "release", reflect.TypeOf(desiredSpec.Release))
+
+		statusManager.Set(status.Loading)
+
 		if !ctrlqueue.ContainsString(wandb.GetFinalizers(), resFinalizer) {
 			wandb.ObjectMeta.Finalizers = append(wandb.ObjectMeta.Finalizers, resFinalizer)
 			if err := r.Client.Update(ctx, wandb); err != nil {
@@ -177,12 +177,14 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	if ctrlqueue.ContainsString(wandb.ObjectMeta.Finalizers, resFinalizer) {
-		log.Info("Deprovisioning", "release", reflect.TypeOf(desiredSpec.Release))
-		if err := desiredSpec.Prune(ctx, r.Client, wandb, r.Scheme); err != nil {
-			log.Error(err, "Failed to cleanup deployment.")
-			return ctrlqueue.DoNotRequeue()
+		if desiredSpec.Release != nil {
+			log.Info("Deprovisioning", "release", reflect.TypeOf(desiredSpec.Release))
+			if err := desiredSpec.Prune(ctx, r.Client, wandb, r.Scheme); err != nil {
+				log.Error(err, "Failed to cleanup deployment.")
+				return ctrlqueue.DoNotRequeue()
+			}
+			log.Info("Successfully cleaned up resources")
 		}
-		log.Info("Successfully cleaned up resources")
 
 		controllerutil.RemoveFinalizer(wandb, resFinalizer)
 		r.Client.Update(ctx, wandb)

@@ -7,8 +7,10 @@ import (
 	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chartutil"
 	"helm.sh/helm/v3/pkg/cli"
+	"helm.sh/helm/v3/pkg/getter"
 	"helm.sh/helm/v3/pkg/release"
 	"helm.sh/helm/v3/pkg/releaseutil"
+	"helm.sh/helm/v3/pkg/repo"
 )
 
 const (
@@ -21,7 +23,7 @@ var (
 
 // GetConfig returns a helm action configuration. Namespace is used to determine
 // where to store the versions
-func GetConfig(namespace string) (*action.Configuration, error) {
+func InitConfig(namespace string) (*action.Configuration, error) {
 	settings := cli.New()
 	settings.SetNamespace(namespace)
 	config := new(action.Configuration)
@@ -31,30 +33,62 @@ func GetConfig(namespace string) (*action.Configuration, error) {
 		secretsStorageDriver,
 		noopLogger,
 	)
-	config.Releases.MaxHistory = 20
 	return config, err
 }
 
-func NewActionableChart(chart *chart.Chart, releaseName string, namespace string) (*ActionableChart, error) {
+func DownloadChart(repoURL string, name string) (string, error) {
+	settings := cli.New()
+	providers := getter.All(settings)
+
+	entry := new(repo.Entry)
+	entry.URL = repoURL
+	entry.Name = name
+
+	file := repo.NewFile()
+	file.Update(entry)
+
+	chartRepo, err := repo.NewChartRepository(entry, providers)
+	if err != nil {
+		return "", err
+	}
+
+	_, err = chartRepo.DownloadIndexFile()
+	if err != nil {
+		return "", err
+	}
+
+	chartURL, err := repo.FindChartInRepoURL(
+		repoURL, name,
+		"", "", "", "",
+		providers,
+	)
+	if err != nil {
+		return "", err
+	}
+
+	client := action.NewPull()
+	client.Settings = settings
+	return client.Run(chartURL)
+}
+
+func NewActionableChart(releaseName string, namespace string) (*ActionableChart, error) {
 	if err := chartutil.ValidateReleaseName(releaseName); err != nil {
 		return nil, fmt.Errorf("release name %q", releaseName)
 	}
 
-	config, err := GetConfig(namespace)
+	config, err := InitConfig(namespace)
 	if err != nil {
 		return nil, err
 	}
 
 	return &ActionableChart{
 		releaseName: releaseName,
-		chart:       chart,
 		config:      config,
 	}, nil
 }
 
 type ActionableChart struct {
 	releaseName string
-	chart       *chart.Chart
 	config      *action.Configuration
 	namespace   string
 }
@@ -74,18 +108,18 @@ func (c *ActionableChart) isInstalled() bool {
 	return true
 }
 
-func (c *ActionableChart) Apply(values map[string]interface{}) (*release.Release, error) {
+func (c *ActionableChart) Apply(chart *chart.Chart, values map[string]interface{}) (*release.Release, error) {
 	if c.isInstalled() {
-		return c.Upgrade(values)
+		return c.Upgrade(chart, values)
 	}
-	return c.Install(values)
+	return c.Install(chart, values)
 }
 
-func (c *ActionableChart) Install(values map[string]interface{}) (*release.Release, error) {
+func (c *ActionableChart) Install(chart *chart.Chart, values map[string]interface{}) (*release.Release, error) {
 	client := action.NewInstall(c.config)
 	client.ReleaseName = c.releaseName
 	client.Namespace = c.namespace
-	return client.Run(c.chart, values)
+	return client.Run(chart, values)
 }
 
 func (c *ActionableChart) History() ([]*release.Release, error) {
@@ -97,10 +131,10 @@ func (c *ActionableChart) Rollback(version int) error {
 	return client.Run(c.releaseName)
 }
 
-func (c *ActionableChart) Upgrade(values map[string]interface{}) (*release.Release, error) {
+func (c *ActionableChart) Upgrade(chart *chart.Chart, values map[string]interface{}) (*release.Release, error) {
 	client := action.NewUpgrade(c.config)
 	client.Namespace = c.namespace
-	return client.Run(c.releaseName, c.chart, values)
+	return client.Run(c.releaseName, chart, values)
 }
 
 func (c *ActionableChart) Uninstall() (*release.UninstallReleaseResponse, error) {

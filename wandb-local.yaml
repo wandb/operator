@@ -8,5 +8,5 @@ metadata:
   name: wandb
 spec:
   release:
-    path: ../helm-charts/charts/wandb
+    path: ../helm-charts/charts/operator-wandb
   config: {}
