@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.8.1](https://github.com/wandb/operator/compare/v1.8.0...v1.8.1) (2023-08-18)
+
+
+### Bug Fixes
+
+* Charts download ([57355ce](https://github.com/wandb/operator/commit/57355ceaa2e7760941e93bf476fb2fdf09056aba))
+
 ## [1.8.0](https://github.com/wandb/operator/compare/v1.7.0...v1.8.0) (2023-08-18)
 
 
