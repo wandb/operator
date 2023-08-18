@@ -8,6 +8,7 @@ metadata:
   name: wandb
 spec:
   release:
-    url: https://charts.wandb.io
+    url: https://charts.wandb.ai
     name: operator-wandb
+    version: 0.1.0
   config: {}

@@ -4,6 +4,9 @@ import "github.com/wandb/operator/pkg/wandb/spec"
 
 func GetLicense(specs ...*spec.Spec) string {
 	for _, s := range specs {
+		if s == nil {
+			continue
+		}
 		if s.Config == nil {
 			continue
 		}

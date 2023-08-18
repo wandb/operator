@@ -23,9 +23,8 @@ var (
 
 // GetConfig returns a helm action configuration. Namespace is used to determine
 // where to store the versions
-func InitConfig(namespace string) (*action.Configuration, error) {
+func InitConfig(namespace string) (*cli.EnvSettings, *action.Configuration, error) {
 	settings := cli.New()
-	settings.SetNamespace(namespace)
 	config := new(action.Configuration)
 	err := config.Init(
 		settings.RESTClientGetter(),
@@ -33,7 +32,7 @@ func InitConfig(namespace string) (*action.Configuration, error) {
 		secretsStorageDriver,
 		noopLogger,
 	)
-	return config, err
+	return settings, config, err
 }
 
 func DownloadChart(repoURL string, name string) (string, error) {
@@ -76,7 +75,7 @@ func NewActionableChart(releaseName string, namespace string) (*ActionableChart,
 		return nil, fmt.Errorf("release name %q", releaseName)
 	}
 
-	config, err := InitConfig(namespace)
+	_, config, err := InitConfig(namespace)
 	if err != nil {
 		return nil, err
 	}

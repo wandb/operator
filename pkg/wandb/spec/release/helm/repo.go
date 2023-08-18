@@ -2,13 +2,16 @@ package helm
 
 import (
 	"context"
+	"fmt"
+	"os"
 
 	"github.com/go-playground/validator/v10"
 	v1 "github.com/wandb/operator/api/v1"
+	"github.com/wandb/operator/pkg/helm"
 	"github.com/wandb/operator/pkg/wandb/spec"
-	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/cli"
+	"helm.sh/helm/v3/pkg/downloader"
 	"helm.sh/helm/v3/pkg/getter"
 	"helm.sh/helm/v3/pkg/repo"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -39,7 +42,10 @@ func (c RepoRelease) Validate() error {
 }
 
 func (r RepoRelease) ToLocalRelease() (*LocalRelease, error) {
+	fmt.Println("===================================")
 	chartPath, err := r.downloadChart()
+	fmt.Println("ran")
+	fmt.Println(err)
 	if err != nil {
 		return nil, err
 	}
@@ -56,6 +62,9 @@ func (r RepoRelease) Apply(
 	scheme *runtime.Scheme,
 	config spec.Config,
 ) error {
+	fmt.Println("=====================================")
+	// fmt.Println(chartPath)
+	// fmt.Println(err)
 	local, err := r.ToLocalRelease()
 	if err != nil {
 		return err
@@ -93,12 +102,10 @@ func (r RepoRelease) downloadChart() (string, error) {
 	if err != nil {
 		return "", err
 	}
-
 	_, err = chartRepo.DownloadIndexFile()
 	if err != nil {
 		return "", err
 	}
-
 	chartURL, err := repo.FindChartInRepoURL(
 		entry.URL, entry.Name, r.Version,
 		"", "", "",
@@ -108,11 +115,32 @@ func (r RepoRelease) downloadChart() (string, error) {
 		return "", err
 	}
 
-	client := action.NewPull()
-	client.Username = entry.Username
-	client.Password = entry.Password
-	client.Version = r.Version
-	client.Settings = settings
+	_, cfg, err := helm.InitConfig("")
+	if err != nil {
+		return "", err
+	}
 
-	return client.Run(chartURL)
+	client := downloader.ChartDownloader{
+		Verify:  downloader.VerifyNever,
+		Getters: getter.All(settings),
+		Options: []getter.Option{
+			getter.WithBasicAuth(r.Username, r.Password),
+			// TODO: Add support for other auth methods
+			// getter.WithPassCredentialsAll(r.PassCredentialsAll),
+			// getter.WithTLSClientConfig(r.CertFile, r.KeyFile, r.CaFile),
+			// getter.WithInsecureSkipVerifyTLS(r.InsecureSkipTLSverify),
+		},
+		RegistryClient:   cfg.RegistryClient,
+		RepositoryConfig: settings.RepositoryConfig,
+		RepositoryCache:  settings.RepositoryCache,
+	}
+
+	dest := "./charts"
+	os.MkdirAll(dest, 0755)
+	saved, _, err := client.DownloadTo(chartURL, r.Version, dest)
+	if err != nil {
+		return "", err
+	}
+
+	return saved, err
 }

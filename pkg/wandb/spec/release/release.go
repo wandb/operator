@@ -9,9 +9,13 @@ import (
 )
 
 func Is(v spec.Validatable, data interface{}) error {
-	specBytes, _ := json.Marshal(data)
+	specBytes, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
 
 	if err := json.Unmarshal(specBytes, v); err != nil {
+		fmt.Println("unmarshal error", err)
 		return err
 	}
 
@@ -30,21 +34,15 @@ type ValidatableRelease interface {
 // Get returns tries to match the spec of a given type to a release.
 func Get(maybeRelease interface{}) spec.HelmRelease {
 	releases := []ValidatableRelease{
-		helm.LocalRelease{},
-		helm.RepoRelease{},
+		new(helm.LocalRelease),
+		new(helm.RepoRelease),
 	}
 
-	var errs []error
 	for _, release := range releases {
 		if err := Is(release, maybeRelease); err != nil {
-			errs = append(errs, err)
 			continue
 		}
 		return release
-	}
-
-	for _, err := range errs {
-		fmt.Println(err)
 	}
 
 	return nil

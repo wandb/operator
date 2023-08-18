@@ -23,10 +23,12 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	corev1 "k8s.io/api/core/v1"
 
@@ -181,9 +183,9 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			log.Info("Deprovisioning", "release", reflect.TypeOf(desiredSpec.Release))
 			if err := desiredSpec.Prune(ctx, r.Client, wandb, r.Scheme); err != nil {
 				log.Error(err, "Failed to cleanup deployment.")
-				return ctrlqueue.DoNotRequeue()
+			} else {
+				log.Info("Successfully cleaned up resources")
 			}
-			log.Info("Successfully cleaned up resources")
 		}
 
 		controllerutil.RemoveFinalizer(wandb, resFinalizer)
@@ -200,11 +202,51 @@ func (r *WeightsAndBiasesReconciler) Delete(e event.DeleteEvent) bool {
 // SetupWithManager sets up the controller with the Manager.
 func (r *WeightsAndBiasesReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	builder := ctrl.NewControllerManagedBy(mgr).
-		For(
-			&apiv1.WeightsAndBiases{},
-			// builder.WithPredicates(annotationChangedPredicate{}),
-		).
-		Owns(&corev1.Secret{}).
+		For(&apiv1.WeightsAndBiases{}, builder.WithPredicates(filterWBEvents{})).
+		Owns(&corev1.Secret{}, builder.WithPredicates(filterSecretEvents{})).
 		Owns(&corev1.ConfigMap{})
 	return builder.Complete(r)
+}
+
+type filterWBEvents struct {
+	predicate.Funcs
+}
+
+func (filterWBEvents) Update(e event.UpdateEvent) bool {
+	// Checking whether the Object's Generation has changed. If it has not
+	// (indicating a non-spec change), it returns false - thus ignoring the
+	// event.
+	return e.ObjectOld.GetGeneration() != e.ObjectNew.GetGeneration()
+}
+
+func (filterWBEvents) Create(e event.CreateEvent) bool {
+	return true
+}
+
+func (filterWBEvents) Delete(e event.DeleteEvent) bool {
+	return true
+}
+
+func (filterWBEvents) Generic(e event.GenericEvent) bool {
+	return false
+}
+
+type filterSecretEvents struct {
+	predicate.Funcs
+}
+
+func (filterSecretEvents) Update(e event.UpdateEvent) bool {
+	return true
+}
+
+func (filterSecretEvents) Create(e event.CreateEvent) bool {
+	return false
+}
+
+func (filterSecretEvents) Delete(e event.DeleteEvent) bool {
+	return true
+}
+
+func (filterSecretEvents) Generic(e event.GenericEvent) bool {
+	return false
 }
