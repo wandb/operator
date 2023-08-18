@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.0](https://github.com/wandb/operator/compare/v1.7.0...v1.8.0) (2023-08-18)
+
+
+### Features
+
+* Add support for helm repo releases ([dfef752](https://github.com/wandb/operator/commit/dfef75205de39bc08765eb2143ac6cfd9b5dca43))
+
 ## [1.7.0](https://github.com/wandb/operator/compare/v1.6.1...v1.7.0) (2023-08-17)
 
 
