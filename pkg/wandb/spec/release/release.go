@@ -15,7 +15,6 @@ func Is(v spec.Validatable, data interface{}) error {
 	}
 
 	if err := json.Unmarshal(specBytes, v); err != nil {
-		fmt.Println("unmarshal error", err)
 		return err
 	}
 

@@ -2,7 +2,6 @@ package helm
 
 import (
 	"context"
-	"fmt"
 	"os"
 
 	"github.com/go-playground/validator/v10"
@@ -42,10 +41,7 @@ func (c RepoRelease) Validate() error {
 }
 
 func (r RepoRelease) ToLocalRelease() (*LocalRelease, error) {
-	fmt.Println("===================================")
 	chartPath, err := r.downloadChart()
-	fmt.Println("ran")
-	fmt.Println(err)
 	if err != nil {
 		return nil, err
 	}
@@ -62,9 +58,6 @@ func (r RepoRelease) Apply(
 	scheme *runtime.Scheme,
 	config spec.Config,
 ) error {
-	fmt.Println("=====================================")
-	// fmt.Println(chartPath)
-	// fmt.Println(err)
 	local, err := r.ToLocalRelease()
 	if err != nil {
 		return err
