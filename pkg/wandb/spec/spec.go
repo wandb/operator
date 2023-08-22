@@ -12,13 +12,13 @@ import (
 
 type Metadata map[string]string
 
-type Release interface {
+type Chart interface {
 	Apply(
 		context.Context,
 		client.Client,
 		*v1.WeightsAndBiases,
 		*runtime.Scheme,
-		Config,
+		Values,
 	) error
 
 	Prune(
@@ -26,12 +26,9 @@ type Release interface {
 		client.Client,
 		*v1.WeightsAndBiases,
 		*runtime.Scheme,
-		Config,
+		Values,
 	) error
-}
 
-type HelmRelease interface {
-	Release
 	Chart() (*chart.Chart, error)
 }
 
@@ -47,12 +44,12 @@ type Spec struct {
 	// contain information of which version the spec is on.
 	Metadata Metadata `json:"metadata"`
 
-	// Release contains information about what version of the service to deploy.
-	Release Release `json:"release"`
+	// Chart contains information about what version of the service to deploy.
+	Chart Chart `json:"chart"`
 
-	// Config contains information about how to configure the release. This is
-	// passed into the release via the Apply command to generate the manifests.
-	Config Config `json:"config"`
+	// Values contains information about how to configure the chart. This is
+	// passed into the chart via the Apply command to generate the manifests.
+	Values Values `json:"values"`
 }
 
 func (s *Spec) Apply(
@@ -61,7 +58,7 @@ func (s *Spec) Apply(
 	wandb *v1.WeightsAndBiases,
 	scheme *runtime.Scheme,
 ) error {
-	return s.Release.Apply(ctx, client, wandb, scheme, s.Config)
+	return s.Chart.Apply(ctx, client, wandb, scheme, s.Values)
 }
 
 func (s *Spec) Prune(
@@ -70,29 +67,29 @@ func (s *Spec) Prune(
 	wandb *v1.WeightsAndBiases,
 	scheme *runtime.Scheme,
 ) error {
-	return s.Release.Prune(ctx, client, wandb, scheme, s.Config)
+	return s.Chart.Prune(ctx, client, wandb, scheme, s.Values)
 }
 
-func (s *Spec) SetRelease(release Release) {
-	s.Release = release
+func (s *Spec) SetChart(chart Chart) {
+	s.Chart = chart
 }
 
-func (s *Spec) SetConfig(config Config) {
-	s.Config = config
+func (s *Spec) SetValues(values Values) {
+	s.Values = values
 }
 
 func (s *Spec) IsEqual(spec *Spec) bool {
-	isReleaseEqual := reflect.DeepEqual(s.Release, spec.Release)
-	isValuesEqual := reflect.DeepEqual(s.Config, spec.Config)
+	isReleaseEqual := reflect.DeepEqual(s.Chart, spec.Chart)
+	isValuesEqual := reflect.DeepEqual(s.Values, spec.Values)
 	return isReleaseEqual && isValuesEqual
 }
 
-func (s *Spec) mergeConfig(config Config) (err error) {
-	if s.Config == nil {
-		s.Config = config
+func (s *Spec) mergeConfig(values Values) (err error) {
+	if s.Values == nil {
+		s.Values = values
 		return nil
 	}
-	if err := s.Config.Merge(config); err != nil {
+	if err := s.Values.Merge(values); err != nil {
 		return err
 	}
 	return nil
@@ -102,10 +99,10 @@ func (s *Spec) Merge(spec *Spec) {
 	if spec == nil {
 		return
 	}
-	if spec.Release != nil {
-		s.Release = spec.Release
+	if spec.Chart != nil {
+		s.Chart = spec.Chart
 	}
-	if spec.Config != nil {
-		s.mergeConfig(spec.Config)
+	if spec.Values != nil {
+		s.mergeConfig(spec.Values)
 	}
 }

@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"github.com/wandb/operator/pkg/wandb/spec"
-	"github.com/wandb/operator/pkg/wandb/spec/release"
+	"github.com/wandb/operator/pkg/wandb/spec/charts"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -42,24 +42,24 @@ func read(
 	}
 
 	spec := &spec.Spec{
-		Config: config,
+		Values: config,
 	}
 
-	releaseJson, ok := configMap.Data["release"]
+	chartJson, ok := configMap.Data["chart"]
 	if !ok {
 		return nil, fmt.Errorf(
-			"config map %s/%s does not have a `release` key", objKey.Namespace, objKey.Name)
+			"secret %s/%s does not have a `release` key", objKey.Namespace, objKey.Name)
 	}
 
-	var maybeRelease interface{}
-	err = json.Unmarshal([]byte(releaseJson), &maybeRelease)
+	var maybeChart interface{}
+	err = json.Unmarshal([]byte(chartJson), &maybeChart)
 	if err != nil {
 		return nil, err
 	}
 
-	release := release.Get(maybeRelease)
-	spec.SetRelease(release)
-	if release == nil {
+	chart := charts.Get(maybeChart)
+	spec.SetChart(chart)
+	if chart == nil {
 		return spec, fmt.Errorf("could not find a matching release in config map %s/%s", objKey.Namespace, objKey.Name)
 	}
 	return spec, nil
@@ -73,11 +73,11 @@ func write(
 	objKey client.ObjectKey,
 	spec *spec.Spec,
 ) error {
-	releaseJson, err := json.Marshal(spec.Release)
+	releaseJson, err := json.Marshal(spec.Chart)
 	if err != nil {
 		return nil
 	}
-	configJson, err := json.Marshal(spec.Config)
+	configJson, err := json.Marshal(spec.Values)
 	if err != nil {
 		return nil
 	}

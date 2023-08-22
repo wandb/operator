@@ -1,11 +1,11 @@
-package release
+package charts
 
 import (
 	"encoding/json"
 	"fmt"
 
 	"github.com/wandb/operator/pkg/wandb/spec"
-	"github.com/wandb/operator/pkg/wandb/spec/release/helm"
+	"github.com/wandb/operator/pkg/wandb/spec/charts/helm"
 )
 
 func Is(v spec.Validatable, data interface{}) error {
@@ -26,12 +26,12 @@ func Is(v spec.Validatable, data interface{}) error {
 }
 
 type ValidatableRelease interface {
-	spec.HelmRelease
+	spec.Chart
 	spec.Validatable
 }
 
 // Get returns tries to match the spec of a given type to a release.
-func Get(maybeRelease interface{}) spec.HelmRelease {
+func Get(maybeRelease interface{}) spec.Chart {
 	releases := []ValidatableRelease{
 		new(helm.LocalRelease),
 		new(helm.RepoRelease),

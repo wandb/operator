@@ -56,7 +56,7 @@ func (r RepoRelease) Apply(
 	c client.Client,
 	wandb *v1.WeightsAndBiases,
 	scheme *runtime.Scheme,
-	config spec.Config,
+	config spec.Values,
 ) error {
 	local, err := r.ToLocalRelease()
 	if err != nil {
@@ -70,7 +70,7 @@ func (r RepoRelease) Prune(
 	c client.Client,
 	wandb *v1.WeightsAndBiases,
 	scheme *runtime.Scheme,
-	config spec.Config,
+	config spec.Values,
 ) error {
 	local, err := r.ToLocalRelease()
 	if err != nil {

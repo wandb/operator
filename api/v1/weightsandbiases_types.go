@@ -37,11 +37,11 @@ type WeightsAndBiasesSpec struct {
 
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:pruning:PreserveUnknownFields
-	Release Object `json:"release,omitempty"`
+	Chart Object `json:"chart,omitempty"`
 
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:pruning:PreserveUnknownFields
-	Config Object `json:"config,omitempty"`
+	Values Object `json:"values,omitempty"`
 }
 
 // Unstructured values for rendering CDK8s Config.

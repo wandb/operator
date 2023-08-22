@@ -5,7 +5,7 @@ import (
 
 	v1 "github.com/wandb/operator/api/v1"
 	"github.com/wandb/operator/pkg/wandb/spec"
-	"github.com/wandb/operator/pkg/wandb/spec/release"
+	"github.com/wandb/operator/pkg/wandb/spec/charts"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 )
@@ -19,8 +19,8 @@ func Defaults(wandb *v1.WeightsAndBiases, scheme *runtime.Scheme) *spec.Spec {
 	}
 	gvk, _ := apiutil.GVKForObject(wandb, scheme)
 	return &spec.Spec{
-		Release: nil,
-		Config: map[string]interface{}{
+		Chart: nil,
+		Values: map[string]interface{}{
 			"global": map[string]interface{}{
 				"operator": map[string]interface{}{
 					"apiVersion": gvk.GroupVersion().String(),
@@ -34,7 +34,7 @@ func Defaults(wandb *v1.WeightsAndBiases, scheme *runtime.Scheme) *spec.Spec {
 // Spec returns the spec for the given CRD.
 func Spec(wandb *v1.WeightsAndBiases) *spec.Spec {
 	return &spec.Spec{
-		Release: release.Get(wandb.Spec.Release.Object),
-		Config:  wandb.Spec.Config.Object,
+		Chart:  charts.Get(wandb.Spec.Chart.Object),
+		Values: wandb.Spec.Values.Object,
 	}
 }

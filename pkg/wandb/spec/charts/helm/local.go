@@ -42,7 +42,7 @@ func (r LocalRelease) Apply(
 	c client.Client,
 	wandb *v1.WeightsAndBiases,
 	scheme *runtime.Scheme,
-	config spec.Config,
+	values spec.Values,
 ) error {
 	actionableChart, err := r.getActionableChart(wandb)
 	if err != nil {
@@ -54,7 +54,7 @@ func (r LocalRelease) Apply(
 		return err
 	}
 
-	_, err = actionableChart.Apply(chart, config)
+	_, err = actionableChart.Apply(chart, values)
 	return err
 }
 
@@ -63,7 +63,7 @@ func (r LocalRelease) Prune(
 	c client.Client,
 	wandb *v1.WeightsAndBiases,
 	scheme *runtime.Scheme,
-	_ spec.Config,
+	_ spec.Values,
 ) error {
 	actionableChart, err := r.getActionableChart(wandb)
 	if err != nil {

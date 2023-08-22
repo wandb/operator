@@ -99,7 +99,7 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	userInputSpec, _ := specManager.GetUserInput()
 	if userInputSpec == nil {
 		log.Info("No user spec found, creating a new one")
-		userInputSpec := &spec.Spec{Config: map[string]interface{}{}}
+		userInputSpec := &spec.Spec{Values: map[string]interface{}{}}
 		specManager.SetUserInput(userInputSpec)
 	}
 
@@ -127,17 +127,17 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	hasNotBeenFlaggedForDeletion := wandb.ObjectMeta.DeletionTimestamp.IsZero()
 
 	if hasNotBeenFlaggedForDeletion {
-		if desiredSpec.Release == nil {
+		if desiredSpec.Chart == nil {
 			statusManager.Set(status.InvalidConfig)
 			log.Error(err, "No release type was found in the spec")
 			return ctrlqueue.DoNotRequeue()
 		}
-		t := reflect.TypeOf(desiredSpec.Release)
+		t := reflect.TypeOf(desiredSpec.Chart)
 		typ := t.Name()
 		if t.Kind() == reflect.Ptr {
 			typ = "*" + t.Elem().Name()
 		}
-		log.Info("Found release type "+typ, "release", reflect.TypeOf(desiredSpec.Release))
+		log.Info("Found release type "+typ, "release", reflect.TypeOf(desiredSpec.Chart))
 
 		statusManager.Set(status.Loading)
 
@@ -179,8 +179,8 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	if ctrlqueue.ContainsString(wandb.ObjectMeta.Finalizers, resFinalizer) {
-		if desiredSpec.Release != nil {
-			log.Info("Deprovisioning", "release", reflect.TypeOf(desiredSpec.Release))
+		if desiredSpec.Chart != nil {
+			log.Info("Deprovisioning", "release", reflect.TypeOf(desiredSpec.Chart))
 			if err := desiredSpec.Prune(ctx, r.Client, wandb, r.Scheme); err != nil {
 				log.Error(err, "Failed to cleanup deployment.")
 			} else {

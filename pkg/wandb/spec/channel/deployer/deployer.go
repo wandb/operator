@@ -1,8 +1,8 @@
 package deployer
 
 import (
-	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 
@@ -18,25 +18,13 @@ func GetURL() string {
 	return utils.Getenv("DEPLOYER_CHANNEL_URL", DeployerAPI)
 }
 
-type Payload struct {
-	Metadata map[string]string `json:"metadata"`
-}
-
 // GetSpec returns the spec for the given license. If the license or an empty
 // string it will pull down the latest stable version.
 func GetSpec(license string, activeState *spec.Spec) (*spec.Spec, error) {
 	url := GetURL()
 	client := &http.Client{}
 
-	payload := new(Payload)
-	if activeState != nil {
-		// Config can hold secrets. We shouldn't submit it.
-		payload.Metadata = activeState.Metadata
-	}
-
-	payloadBytes, _ := json.Marshal(payload)
-	body := bytes.NewReader(payloadBytes)
-	req, err := http.NewRequest(http.MethodPost, url, body)
+	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -53,6 +41,8 @@ func GetSpec(license string, activeState *spec.Spec) (*spec.Spec, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	fmt.Println("resBody: ", string(resBody))
 
 	var spec spec.Spec
 	err = json.Unmarshal(resBody, &spec)

@@ -6,9 +6,4 @@ metadata:
     app.kubernetes.io/instance: wandb
     wandb.ai/console-default: "true"
   name: wandb
-spec:
-  chart:
-    url: https://charts.wandb.ai
-    name: operator-wandb
-    version: 0.1.0
-  values: {}
+spec: {}

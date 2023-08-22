@@ -13,7 +13,7 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-// Config holds an arbitrary tree-like data structure, such as parsed JSON or
+// Values holds an arbitrary tree-like data structure, such as parsed JSON or
 // YAML. It can be used to represent Helm-like values.
 //
 // You can use convenient accessors to work with this data structure.
@@ -22,10 +22,10 @@ import (
 // type of the embedded lists and objects. To avoid any error or an unexpected
 // behavior use `[]interface{}` for lists and `map[string]interface{}` for
 // nested objects.
-type Config map[string]interface{}
+type Values map[string]interface{}
 
 // AsMap returns the underlying map. This maybe be useful for external libraries.
-func (v Config) AsMap() map[string]interface{} {
+func (v Values) AsMap() map[string]interface{} {
 	return v
 }
 
@@ -34,7 +34,7 @@ func (v Config) AsMap() map[string]interface{} {
 //
 // It will return an error, if the key does not exist or can not be traversed,
 // for example nested keys of a leaf node of the tree.
-func (v Config) GetValue(key string) (interface{}, error) {
+func (v Values) GetValue(key string) (interface{}, error) {
 	cursor := v
 	keyElements := []string{}
 
@@ -74,7 +74,7 @@ func (v Config) GetValue(key string) (interface{}, error) {
 // or an empty string.
 //
 // Use `HasKey` to check if the `key` exist.
-func (v Config) GetString(key string, defaultValue ...string) string {
+func (v Values) GetString(key string, defaultValue ...string) string {
 	defaultValueToUse := ""
 	if len(defaultValue) > 0 {
 		defaultValueToUse = defaultValue[0]
@@ -102,7 +102,7 @@ func (v Config) GetString(key string, defaultValue ...string) string {
 // optional `defaultValue` or `false`.
 //
 // Use `HasKey` to check if the `key` exist.
-func (v Config) GetBool(key string, defaultValue ...bool) bool {
+func (v Values) GetBool(key string, defaultValue ...bool) bool {
 	defaultValueToUse := false
 	if len(defaultValue) > 0 {
 		defaultValueToUse = defaultValue[0]
@@ -121,7 +121,7 @@ func (v Config) GetBool(key string, defaultValue ...bool) bool {
 // and it does not support array indexing. When it returns `true` the getter
 // methods, e.g. `GetValue`, can successfully retrieve the associated value of
 // the key.
-func (v Config) HasKey(key string) bool {
+func (v Values) HasKey(key string) bool {
 	if _, err := v.GetValue(key); err == nil {
 		return true
 	}
@@ -136,7 +136,7 @@ func (v Config) HasKey(key string) bool {
 // the provided value. It will create any intermediate nested object that
 // doesn't exist. But it will return an error when the key can not be traversed,
 // for example nested keys of a leaf node of the tree.
-func (v Config) SetValue(key string, value interface{}) error {
+func (v Values) SetValue(key string, value interface{}) error {
 	if key == "" {
 		return errors.Errorf("can not set the root element")
 	}
@@ -178,7 +178,7 @@ func (v Config) SetValue(key string, value interface{}) error {
 // values as valid values.
 //
 // It retruns an error if the underlying merge utility encounters an error.
-func (v Config) Merge(newValues Config) error {
+func (v Values) Merge(newValues Values) error {
 	if err := mergo.Merge(&v, newValues, mergo.WithOverride); err != nil {
 		return errors.Wrapf(err, "can not merge new values")
 	}
@@ -194,7 +194,7 @@ func (v Config) Merge(newValues Config) error {
 //
 // It uses Helm SDK coalesce function and does not return an error when fails
 // to merge specific entries. Therefore it may lead to an incorrect output.
-func (v Config) Coalesce(newValues Config) {
+func (v Values) Coalesce(newValues Values) {
 	chartutil.CoalesceTables(v, newValues)
 }
 
@@ -202,7 +202,7 @@ func (v Config) Coalesce(newValues Config) {
 // This is similar to `--set key=value` command argument of Helm. It does not
 // support multiple keys and values. It returns an error if it can not parse
 // the key or assign the value.
-func (v Config) AddHelmValue(key, value string) error {
+func (v Values) AddHelmValue(key, value string) error {
 	if err := strvals.ParseInto(fmt.Sprintf("%s=%s", key, value), v); err != nil {
 		return errors.Wrapf(err, "failed to set value: %s=%s", key, value)
 	}
@@ -214,7 +214,7 @@ func (v Config) AddHelmValue(key, value string) error {
 //
 // It will return an error if it fails to parse the YAML content or encounters
 // an error while merging. For more details see `Merge` function.
-func (v Config) AddFromYAML(content string) error {
+func (v Values) AddFromYAML(content string) error {
 	return v.AddFromYAMLBuffer([]byte(content))
 }
 
@@ -222,8 +222,8 @@ func (v Config) AddFromYAML(content string) error {
 //
 // It will return an error if it fails to parse the YAML content or encounters
 // an error while merging. For more details see `Merge` function.
-func (v Config) AddFromYAMLBuffer(content []byte) error {
-	newValues := Config{}
+func (v Values) AddFromYAMLBuffer(content []byte) error {
+	newValues := Values{}
 
 	if err := yaml.Unmarshal(content, &newValues); err != nil {
 		return errors.Wrapf(err, "failed to parse yaml content")
@@ -236,7 +236,7 @@ func (v Config) AddFromYAMLBuffer(content []byte) error {
 //
 // It will return an error if it fails to read or parse the YAML file or
 // encounters an error while merging. For more details see `Merge` function.
-func (v Config) AddFromYAMLFile(filePath string) error {
+func (v Values) AddFromYAMLFile(filePath string) error {
 	fileContent, err := os.ReadFile(filePath)
 	if err != nil {
 		return errors.Wrapf(err, "failed to read file: %s", filePath)

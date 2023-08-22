@@ -7,11 +7,11 @@ func GetLicense(specs ...*spec.Spec) string {
 		if s == nil {
 			continue
 		}
-		if s.Config == nil {
+		if s.Values == nil {
 			continue
 		}
 
-		license := s.Config.GetString("license")
+		license := s.Values.GetString("license")
 		if license != "" {
 			return license
 		}
