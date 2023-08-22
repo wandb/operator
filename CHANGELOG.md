@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.8.2](https://github.com/wandb/operator/compare/v1.8.1...v1.8.2) (2023-08-22)
+
+
+### Bug Fixes
+
+* Rename config -> values and release -> chart ([519cd1b](https://github.com/wandb/operator/commit/519cd1bc225971ab4e4d0552c28184266a1bcde2))
+
 ### [1.8.1](https://github.com/wandb/operator/compare/v1.8.0...v1.8.1) (2023-08-18)
 
 
