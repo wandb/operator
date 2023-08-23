@@ -25,6 +25,7 @@ var (
 // where to store the versions
 func InitConfig(namespace string) (*cli.EnvSettings, *action.Configuration, error) {
 	settings := cli.New()
+	settings.SetNamespace(namespace)
 	config := new(action.Configuration)
 	err := config.Init(
 		settings.RESTClientGetter(),

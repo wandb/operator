@@ -169,11 +169,12 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 		if err := specManager.SetActive(desiredSpec); err != nil {
 			r.Recorder.Event(wandb, corev1.EventTypeNormal, "SetActiveFailed", "Failed to save active state")
-			log.Error(err, "Failed to save active sucessful spec.")
+			log.Error(err, "Failed to save active successful spec.")
 			return ctrlqueue.DoNotRequeue()
 		}
 		log.Info("Successfully saved active spec")
 
+		r.Recorder.Event(wandb, corev1.EventTypeNormal, "Completed", "Completed reconcile successfully")
 		statusManager.Set(status.Completed)
 		return ctrlqueue.RequeueWithDelay(ctrlqueue.CheckForUpdatesFrequency)
 	}
