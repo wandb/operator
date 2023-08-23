@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.8.5](https://github.com/wandb/operator/compare/v1.8.4...v1.8.5) (2023-08-23)
+
+
+### Bug Fixes
+
+* Pass namespace into chart ([e8e0b8f](https://github.com/wandb/operator/commit/e8e0b8fa88f237c3fbbf858da2fd9333631ebec2))
+
 ### [1.8.4](https://github.com/wandb/operator/compare/v1.8.3...v1.8.4) (2023-08-23)
 
 
