@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.8.3](https://github.com/wandb/operator/compare/v1.8.2...v1.8.3) (2023-08-23)
+
+
+### Bug Fixes
+
+* Properly parse chart from deployer ([5eabdfe](https://github.com/wandb/operator/commit/5eabdfe600729b1046b334d1388dae34e97011f9))
+
 ### [1.8.2](https://github.com/wandb/operator/compare/v1.8.1...v1.8.2) (2023-08-22)
 
 
