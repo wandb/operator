@@ -7,6 +7,6 @@ metadata:
     wandb.ai/console-default: "true"
   name: wandb
 spec:
-  release:
+  chart:
     path: ../helm-charts/charts/operator-wandb
-  config: {}
+  values: {}

@@ -42,7 +42,7 @@ type Spec struct {
 	// Used for tracking extra information. This maybe useful in channels for
 	// determining information such as the last time the service was pinged and
 	// contain information of which version the spec is on.
-	Metadata Metadata `json:"metadata"`
+	Metadata *Metadata `json:"metadata"`
 
 	// Chart contains information about what version of the service to deploy.
 	Chart Chart `json:"chart"`

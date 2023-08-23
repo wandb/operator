@@ -6,4 +6,5 @@ metadata:
     app.kubernetes.io/instance: wandb
     wandb.ai/console-default: "true"
   name: wandb
+# Should use stable from deployer
 spec: {}

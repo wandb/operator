@@ -8,6 +8,7 @@ import (
 
 	"github.com/wandb/operator/pkg/utils"
 	"github.com/wandb/operator/pkg/wandb/spec"
+	"github.com/wandb/operator/pkg/wandb/spec/charts"
 )
 
 const (
@@ -16,6 +17,12 @@ const (
 
 func GetURL() string {
 	return utils.Getenv("DEPLOYER_CHANNEL_URL", DeployerAPI)
+}
+
+type SpecUnknownChart struct {
+	Metadata *spec.Metadata `json:"metadata"`
+	Values   *spec.Values   `json:"values"`
+	Chart    interface{}    `json:"chart"`
 }
 
 // GetSpec returns the spec for the given license. If the license or an empty
@@ -29,7 +36,9 @@ func GetSpec(license string, activeState *spec.Spec) (*spec.Spec, error) {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.SetBasicAuth("license", license)
+	if license != "" {
+		req.SetBasicAuth("license", license)
+	}
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -44,11 +53,19 @@ func GetSpec(license string, activeState *spec.Spec) (*spec.Spec, error) {
 
 	fmt.Println("resBody: ", string(resBody))
 
-	var spec spec.Spec
-	err = json.Unmarshal(resBody, &spec)
+	var specUnknown SpecUnknownChart
+	err = json.Unmarshal(resBody, &specUnknown)
 	if err != nil {
+		fmt.Println("error: ", err)
 		return nil, err
 	}
 
-	return &spec, nil
+	spec := new(spec.Spec)
+	spec.Metadata = specUnknown.Metadata
+	spec.Chart = charts.Get(specUnknown.Chart)
+	if spec.Values != nil {
+		spec.Values = *specUnknown.Values
+	}
+
+	return spec, nil
 }
