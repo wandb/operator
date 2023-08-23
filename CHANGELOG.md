@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.8.4](https://github.com/wandb/operator/compare/v1.8.3...v1.8.4) (2023-08-23)
+
+
+### Bug Fixes
+
+* Properly set namespace for deployments ([53f51a9](https://github.com/wandb/operator/commit/53f51a9db2cd9fdc615430050c32f55f30dd7a95))
+
 ### [1.8.3](https://github.com/wandb/operator/compare/v1.8.2...v1.8.3) (2023-08-23)
 
 
