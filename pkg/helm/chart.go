@@ -84,6 +84,7 @@ func NewActionableChart(releaseName string, namespace string) (*ActionableChart,
 	return &ActionableChart{
 		releaseName: releaseName,
 		config:      config,
+		namespace:   namespace,
 	}, nil
 }
 
