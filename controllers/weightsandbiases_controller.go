@@ -152,6 +152,7 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			log.Info("Active spec found", "spec", currentActiveSpec)
 			if currentActiveSpec.IsEqual(desiredSpec) {
 				log.Info("No changes found")
+				statusManager.Set(status.Completed)
 				return ctrlqueue.RequeueWithDelay(
 					ctrlqueue.CheckForUpdatesFrequency,
 				)
@@ -170,6 +171,7 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		if err := specManager.SetActive(desiredSpec); err != nil {
 			r.Recorder.Event(wandb, corev1.EventTypeNormal, "SetActiveFailed", "Failed to save active state")
 			log.Error(err, "Failed to save active successful spec.")
+			statusManager.Set(status.InvalidConfig)
 			return ctrlqueue.DoNotRequeue()
 		}
 		log.Info("Successfully saved active spec")

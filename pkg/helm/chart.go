@@ -103,20 +103,24 @@ func (c *ActionableChart) isInstalled() bool {
 	releaseutil.Reverse(h, releaseutil.SortByRevision)
 	rel := h[0]
 	st := rel.Info.Status
-	if st == release.StatusUninstalled || st == release.StatusFailed {
-		return false
-	}
-	return true
+
+	return !(st == release.StatusUninstalled || st == release.StatusFailed)
 }
 
-func (c *ActionableChart) Apply(chart *chart.Chart, values map[string]interface{}) (*release.Release, error) {
+func (c *ActionableChart) Apply(
+	chart *chart.Chart,
+	values map[string]interface{},
+) (*release.Release, error) {
 	if c.isInstalled() {
 		return c.Upgrade(chart, values)
 	}
 	return c.Install(chart, values)
 }
 
-func (c *ActionableChart) Install(chart *chart.Chart, values map[string]interface{}) (*release.Release, error) {
+func (c *ActionableChart) Install(
+	chart *chart.Chart,
+	values map[string]interface{},
+) (*release.Release, error) {
 	client := action.NewInstall(c.config)
 	client.ReleaseName = c.releaseName
 	client.Namespace = c.namespace
