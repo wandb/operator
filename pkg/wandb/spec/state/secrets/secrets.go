@@ -29,14 +29,14 @@ func read(
 		return nil, err
 	}
 
-	configJson, ok := configMap.Data["config"]
+	valuesJson, ok := configMap.Data["values"]
 	if !ok {
 		return nil, fmt.Errorf(
 			"config map %s/%s does not have a `config` key", objKey.Namespace, objKey.Name)
 	}
 
 	var config map[string]interface{}
-	err = json.Unmarshal([]byte(configJson), &config)
+	err = json.Unmarshal([]byte(valuesJson), &config)
 	if err != nil {
 		return nil, err
 	}
@@ -73,11 +73,11 @@ func write(
 	objKey client.ObjectKey,
 	spec *spec.Spec,
 ) error {
-	releaseJson, err := json.Marshal(spec.Chart)
+	chartJson, err := json.Marshal(spec.Chart)
 	if err != nil {
 		return nil
 	}
-	configJson, err := json.Marshal(spec.Values)
+	valuesJson, err := json.Marshal(spec.Values)
 	if err != nil {
 		return nil
 	}
@@ -87,8 +87,8 @@ func write(
 			Namespace: objKey.Namespace,
 		},
 		Data: map[string][]byte{
-			"release": releaseJson,
-			"config":  configJson,
+			"chart": chartJson,
+			"values":  valuesJson,
 		},
 	}
 	if err := controllerutil.SetControllerReference(owner, secret, scheme); err != nil {
