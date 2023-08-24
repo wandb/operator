@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.8.6](https://github.com/wandb/operator/compare/v1.8.5...v1.8.6) (2023-08-24)
+
+
+### Bug Fixes
+
+* secrets stored with correct values ([f6d61e9](https://github.com/wandb/operator/commit/f6d61e93ec52f9ecccc2737ffd6822f5e33ebd6c))
+
 ### [1.8.5](https://github.com/wandb/operator/compare/v1.8.4...v1.8.5) (2023-08-23)
 
 
