@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.8.7](https://github.com/wandb/operator/compare/v1.8.6...v1.8.7) (2023-08-24)
+
+
+### Bug Fixes
+
+* Properly update complete status ([86a5196](https://github.com/wandb/operator/commit/86a5196e04522ccb45d7f5d81f57447670de795c))
+
 ### [1.8.6](https://github.com/wandb/operator/compare/v1.8.5...v1.8.6) (2023-08-24)
 
 
