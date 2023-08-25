@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.8.8](https://github.com/wandb/operator/compare/v1.8.7...v1.8.8) (2023-08-25)
+
+
+### Bug Fixes
+
+* Channel spec not getting applied correctly ([6e763a8](https://github.com/wandb/operator/commit/6e763a8379e3d7d6c1541f0293e1a9142302150f))
+
 ### [1.8.7](https://github.com/wandb/operator/compare/v1.8.6...v1.8.7) (2023-08-24)
 
 
