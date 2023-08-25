@@ -2,15 +2,13 @@ package spec
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
-	"github.com/imdario/mergo"
 	"github.com/pkg/errors"
+	"github.com/wandb/operator/pkg/utils"
 
 	"helm.sh/helm/v3/pkg/chartutil"
 	"helm.sh/helm/v3/pkg/strvals"
-	"sigs.k8s.io/yaml"
 )
 
 // Values holds an arbitrary tree-like data structure, such as parsed JSON or
@@ -172,18 +170,8 @@ func (v Values) SetValue(key string, value interface{}) error {
 // Merge uses deep copy to merge the content of another data structure. It
 // overrides the existing keys with their associated new values and copies the
 // missing keys.
-//
-// Merge can traverse nested values, it does not deep copy slices and treats
-// them as scalar values. It does not do any type checking and treats `nil`
-// values as valid values.
-//
-// It retruns an error if the underlying merge utility encounters an error.
-func (v Values) Merge(newValues Values) error {
-	if err := mergo.Merge(&v, newValues, mergo.WithOverride); err != nil {
-		return errors.Wrapf(err, "can not merge new values")
-	}
-
-	return nil
+func (v Values) Merge(newValues Values) (Values, error) {
+	return utils.MergeMapString(v.AsMap(), newValues.AsMap())
 }
 
 // Coalesce uses Helm-style coalesce to merge the content of another data
@@ -208,39 +196,4 @@ func (v Values) AddHelmValue(key, value string) error {
 	}
 
 	return nil
-}
-
-// AddFromYAML merges the values from the provided YAML.
-//
-// It will return an error if it fails to parse the YAML content or encounters
-// an error while merging. For more details see `Merge` function.
-func (v Values) AddFromYAML(content string) error {
-	return v.AddFromYAMLBuffer([]byte(content))
-}
-
-// AddFromYAMLBuffer merges the values from the provided YAML.
-//
-// It will return an error if it fails to parse the YAML content or encounters
-// an error while merging. For more details see `Merge` function.
-func (v Values) AddFromYAMLBuffer(content []byte) error {
-	newValues := Values{}
-
-	if err := yaml.Unmarshal(content, &newValues); err != nil {
-		return errors.Wrapf(err, "failed to parse yaml content")
-	}
-
-	return v.Merge(newValues)
-}
-
-// AddFromYAMLFile merges the values from the specified YAML file.
-//
-// It will return an error if it fails to read or parse the YAML file or
-// encounters an error while merging. For more details see `Merge` function.
-func (v Values) AddFromYAMLFile(filePath string) error {
-	fileContent, err := os.ReadFile(filePath)
-	if err != nil {
-		return errors.Wrapf(err, "failed to read file: %s", filePath)
-	}
-
-	return v.AddFromYAMLBuffer(fileContent)
 }

@@ -89,9 +89,11 @@ func (s *Spec) mergeConfig(values Values) (err error) {
 		s.Values = values
 		return nil
 	}
-	if err := s.Values.Merge(values); err != nil {
+	mergedValues, err := s.Values.Merge(values)
+	if err != nil {
 		return err
 	}
+	s.Values = mergedValues
 	return nil
 }
 

@@ -63,8 +63,8 @@ func GetSpec(license string, activeState *spec.Spec) (*spec.Spec, error) {
 	spec := new(spec.Spec)
 	spec.Metadata = specUnknown.Metadata
 	spec.Chart = charts.Get(specUnknown.Chart)
-	if spec.Values != nil {
-		spec.Values = *specUnknown.Values
+	if specUnknown.Values != nil {
+		spec.SetValues(*specUnknown.Values)
 	}
 
 	return spec, nil

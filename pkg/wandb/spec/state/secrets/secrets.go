@@ -87,8 +87,8 @@ func write(
 			Namespace: objKey.Namespace,
 		},
 		Data: map[string][]byte{
-			"chart": chartJson,
-			"values":  valuesJson,
+			"chart":  chartJson,
+			"values": valuesJson,
 		},
 	}
 	if err := controllerutil.SetControllerReference(owner, secret, scheme); err != nil {

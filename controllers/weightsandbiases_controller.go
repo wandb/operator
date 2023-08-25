@@ -110,7 +110,8 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		// This can happen on first one.
 		log.Info("No active spec found.")
 	}
-	license := utils.GetLicense(crdSpec, userInputSpec)
+
+	license := utils.GetLicense(crdSpec, userInputSpec, currentActiveSpec)
 	deployerSpec, err := deployer.GetSpec(license, currentActiveSpec)
 	if err != nil {
 		log.Info("Failed to get spec from deployer", "error", err)
@@ -118,8 +119,8 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	desiredSpec := new(spec.Spec)
 	desiredSpec.Merge(operator.Defaults(wandb, r.Scheme))
-	desiredSpec.Merge(userInputSpec)
 	desiredSpec.Merge(deployerSpec)
+	desiredSpec.Merge(userInputSpec)
 	desiredSpec.Merge(crdSpec)
 
 	log.Info("Desired spec", "spec", desiredSpec)
