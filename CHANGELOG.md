@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.8.10](https://github.com/wandb/operator/compare/v1.8.9...v1.8.10) (2023-08-28)
+
+
+### Bug Fixes
+
+* Secret reading metadata ([6dab7ed](https://github.com/wandb/operator/commit/6dab7edb7ceacaaf4bd61e99a71df7ea17fbcc69))
+
 ### [1.8.9](https://github.com/wandb/operator/compare/v1.8.8...v1.8.9) (2023-08-28)
 
 
