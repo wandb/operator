@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.8.9](https://github.com/wandb/operator/compare/v1.8.8...v1.8.9) (2023-08-28)
+
+
+### Bug Fixes
+
+* Save active spec metadata ([47bd862](https://github.com/wandb/operator/commit/47bd8621d7ed7faef83ae421c2c0f8fa1c902ea9))
+
 ### [1.8.8](https://github.com/wandb/operator/compare/v1.8.7...v1.8.8) (2023-08-25)
 
 
