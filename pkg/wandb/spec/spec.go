@@ -101,6 +101,19 @@ func (s *Spec) Merge(spec *Spec) {
 	if spec == nil {
 		return
 	}
+
+	if spec.Metadata != nil {
+		if s.Metadata == nil {
+			s.Metadata = spec.Metadata
+		} else {
+			newMetadata := *s.Metadata
+			for k, v := range *spec.Metadata {
+				newMetadata[k] = v
+			}
+			s.Metadata = &newMetadata
+		}
+	}
+
 	if spec.Chart != nil {
 		s.Chart = spec.Chart
 	}

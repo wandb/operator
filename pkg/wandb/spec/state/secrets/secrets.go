@@ -22,30 +22,35 @@ func read(
 	scheme *runtime.Scheme,
 	objKey client.ObjectKey,
 ) (*spec.Spec, error) {
-	configMap := &corev1.Secret{}
+	secret := &corev1.Secret{}
 
-	err := c.Get(ctx, objKey, configMap)
+	err := c.Get(ctx, objKey, secret)
 	if err != nil {
 		return nil, err
 	}
 
-	valuesJson, ok := configMap.Data["values"]
+	valuesJson, ok := secret.Data["values"]
 	if !ok {
 		return nil, fmt.Errorf(
-			"config map %s/%s does not have a `config` key", objKey.Namespace, objKey.Name)
+			"secret %s/%s does not have a `values` key", objKey.Namespace, objKey.Name)
 	}
 
-	var config map[string]interface{}
-	err = json.Unmarshal([]byte(valuesJson), &config)
+	spec := &spec.Spec{}
+
+	err = json.Unmarshal([]byte(valuesJson), &spec.Values)
 	if err != nil {
 		return nil, err
 	}
 
-	spec := &spec.Spec{
-		Values: config,
+	metadataJson, ok := secret.Data["metadata"]
+	if ok {
+		err = json.Unmarshal([]byte(metadataJson), spec.Metadata)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	chartJson, ok := configMap.Data["chart"]
+	chartJson, ok := secret.Data["chart"]
 	if !ok {
 		return nil, fmt.Errorf(
 			"secret %s/%s does not have a `release` key", objKey.Namespace, objKey.Name)
@@ -62,6 +67,7 @@ func read(
 	if chart == nil {
 		return spec, fmt.Errorf("could not find a matching release in config map %s/%s", objKey.Namespace, objKey.Name)
 	}
+
 	return spec, nil
 }
 
@@ -77,18 +83,27 @@ func write(
 	if err != nil {
 		return nil
 	}
+
 	valuesJson, err := json.Marshal(spec.Values)
 	if err != nil {
 		return nil
 	}
+
+	metadataJson, err := json.Marshal(spec.Metadata)
+	fmt.Println("metadataJson", string(metadataJson))
+	if err != nil {
+		return nil
+	}
+
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      objKey.Name,
 			Namespace: objKey.Namespace,
 		},
 		Data: map[string][]byte{
-			"chart":  chartJson,
-			"values": valuesJson,
+			"chart":    chartJson,
+			"values":   valuesJson,
+			"metadata": metadataJson,
 		},
 	}
 	if err := controllerutil.SetControllerReference(owner, secret, scheme); err != nil {

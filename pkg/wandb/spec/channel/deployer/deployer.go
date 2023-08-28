@@ -51,8 +51,6 @@ func GetSpec(license string, activeState *spec.Spec) (*spec.Spec, error) {
 		return nil, err
 	}
 
-	fmt.Println("resBody: ", string(resBody))
-
 	var specUnknown SpecUnknownChart
 	err = json.Unmarshal(resBody, &specUnknown)
 	if err != nil {
