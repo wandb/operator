@@ -37,14 +37,14 @@ func read(
 
 	spec := &spec.Spec{}
 
-	err = json.Unmarshal([]byte(valuesJson), &spec.Values)
+	err = json.Unmarshal(valuesJson, &spec.Values)
 	if err != nil {
 		return nil, err
 	}
 
 	metadataJson, ok := secret.Data["metadata"]
 	if ok {
-		err = json.Unmarshal([]byte(metadataJson), spec.Metadata)
+		err = json.Unmarshal(metadataJson, &spec.Metadata)
 		if err != nil {
 			return nil, err
 		}
@@ -57,7 +57,7 @@ func read(
 	}
 
 	var maybeChart interface{}
-	err = json.Unmarshal([]byte(chartJson), &maybeChart)
+	err = json.Unmarshal(chartJson, &maybeChart)
 	if err != nil {
 		return nil, err
 	}
