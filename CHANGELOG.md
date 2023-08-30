@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.8.11](https://github.com/wandb/operator/compare/v1.8.10...v1.8.11) (2023-08-30)
+
+
+### Bug Fixes
+
+* correctly check if chart is installed based on status ([384d330](https://github.com/wandb/operator/commit/384d3309cd9789825d699a424085d83b60ffcd74))
+
 ### [1.8.10](https://github.com/wandb/operator/compare/v1.8.9...v1.8.10) (2023-08-28)
 
 
