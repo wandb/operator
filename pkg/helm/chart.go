@@ -104,7 +104,8 @@ func (c *ActionableChart) isInstalled() bool {
 	rel := h[0]
 	st := rel.Info.Status
 
-	return !(st == release.StatusUninstalled || st == release.StatusFailed)
+	return st != release.StatusUninstalled
+
 }
 
 func (c *ActionableChart) Apply(
