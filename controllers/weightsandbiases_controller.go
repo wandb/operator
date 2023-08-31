@@ -68,6 +68,12 @@ type WeightsAndBiasesReconciler struct {
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.14.1/pkg/reconcile
 func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := ctrllog.FromContext(ctx)
+	log.Info(
+		"=== Reconciling Weights & Biases instance...",
+		"NamespacedName", req.NamespacedName,
+		"Name", req.Name,
+		"start", true,
+	)
 
 	wandb := &apiv1.WeightsAndBiases{}
 	if err := r.Client.Get(ctx, req.NamespacedName, wandb); err != nil {
@@ -76,12 +82,6 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 		return ctrlqueue.Requeue(err)
 	}
-
-	log.Info(
-		"=== Reconciling Weights & Biases instance...",
-		"NamespacedName", req.NamespacedName,
-		"Name", req.Name,
-	)
 
 	log.Info(
 		"Found Weights & Biases instance, processing the spec...",
@@ -107,7 +107,8 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	currentActiveSpec, err := specManager.GetActive()
 	if err != nil {
-		// This can happen on first one.
+		// This scenario can happen if we have not successfully deploy in the
+		// past.
 		log.Info("No active spec found.")
 	}
 
@@ -115,6 +116,21 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	deployerSpec, err := deployer.GetSpec(license, currentActiveSpec)
 	if err != nil {
 		log.Info("Failed to get spec from deployer", "error", err)
+		// This scenario may occur if the user disables networking, or if the deployer
+		// is not operational, and a version has been deployed successfully. Rather than
+		// reverting to the container defaults, we've stored the most recent successful
+		// deployer release in the cache
+		if deployerSpec, err = specManager.Get("latest-cached-release"); err != nil {
+			log.Error(err, "No cached release found for deployer spec", err, "error")
+		}
+	}
+
+	if deployerSpec != nil {
+		if err := specManager.Set("latest-cached-release", deployerSpec); err != nil {
+			r.Recorder.Event(wandb, corev1.EventTypeNormal, "SecretWriteFailed", "Unable to write secret to kubernetes")
+			log.Error(err, "Unable to save latest release.")
+			return ctrlqueue.DoNotRequeue()
+		}
 	}
 
 	desiredSpec := new(spec.Spec)

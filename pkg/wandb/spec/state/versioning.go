@@ -65,3 +65,17 @@ func (m Manager) SetActive(s *spec.Spec) error {
 	name := ActiveSpecName(m.owner.GetName())
 	return m.state.Set(namespace, name, s)
 }
+
+func (m Manager) Get(name string) (*spec.Spec, error) {
+	namespace := m.owner.GetNamespace()
+	ownerName := m.owner.GetName()
+	finalName := fmt.Sprintf("%s-%s", ownerName, name)
+	return m.state.Get(finalName, namespace)
+}
+
+func (m Manager) Set(name string, s *spec.Spec) error {
+	namespace := m.owner.GetNamespace()
+	ownerName := m.owner.GetName()
+	finalName := fmt.Sprintf("%s-%s", ownerName, name)
+	return m.state.Set(finalName, namespace, s)
+}
