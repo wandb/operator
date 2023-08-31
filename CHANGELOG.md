@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.9.0](https://github.com/wandb/operator/compare/v1.8.11...v1.9.0) (2023-08-31)
+
+
+### Features
+
+* Add caching for deployer release requests ([1185b40](https://github.com/wandb/operator/commit/1185b40169004f5b05a8f04440a31cff30c30fb9))
+
 ### [1.8.11](https://github.com/wandb/operator/compare/v1.8.10...v1.8.11) (2023-08-30)
 
 
