@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.9.3](https://github.com/wandb/operator/compare/v1.9.2...v1.9.3) (2023-09-01)
+
+
+### Bug Fixes
+
+* Assign metadata instead of merging it ([908c839](https://github.com/wandb/operator/commit/908c83959d57efff1d3b5fd5e29221239ba96218))
+
 ### [1.9.2](https://github.com/wandb/operator/compare/v1.9.1...v1.9.2) (2023-09-01)
 
 
