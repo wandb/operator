@@ -104,11 +104,7 @@ func (s *Spec) Merge(spec *Spec) {
 	}
 
 	if spec.Metadata != nil {
-		if s.Metadata == nil {
-			s.Metadata = spec.Metadata
-		} else {
-			s.Metadata = spec.Metadata
-		}
+		s.Metadata = spec.Metadata
 	}
 
 	if spec.Chart != nil {
