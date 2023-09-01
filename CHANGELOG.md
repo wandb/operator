@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.9.1](https://github.com/wandb/operator/compare/v1.9.0...v1.9.1) (2023-09-01)
+
+
+### Bug Fixes
+
+* Setting cached release namespace incorrectly ([e585555](https://github.com/wandb/operator/commit/e585555b888844019fa1a0995173c65fc3c4d234))
+
 ## [1.9.0](https://github.com/wandb/operator/compare/v1.8.11...v1.9.0) (2023-08-31)
 
 
