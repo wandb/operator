@@ -11,7 +11,7 @@ func GetLicense(specs ...*spec.Spec) string {
 			continue
 		}
 
-		license := s.Values.GetString("license")
+		license := s.Values.GetString("global.license")
 		if license != "" {
 			return license
 		}

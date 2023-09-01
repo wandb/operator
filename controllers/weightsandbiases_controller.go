@@ -112,7 +112,7 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		log.Info("No active spec found.")
 	}
 
-	license := utils.GetLicense(crdSpec, userInputSpec, currentActiveSpec)
+	license := utils.GetLicense(currentActiveSpec, crdSpec, userInputSpec)
 	deployerSpec, err := deployer.GetSpec(license, currentActiveSpec)
 	if err != nil {
 		log.Info("Failed to get spec from deployer", "error", err)
