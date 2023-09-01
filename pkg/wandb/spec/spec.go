@@ -79,9 +79,10 @@ func (s *Spec) SetValues(values Values) {
 }
 
 func (s *Spec) IsEqual(spec *Spec) bool {
+	isMetadataEqual := reflect.DeepEqual(&s.Metadata, &spec.Metadata)
 	isReleaseEqual := reflect.DeepEqual(s.Chart, spec.Chart)
 	isValuesEqual := reflect.DeepEqual(s.Values, spec.Values)
-	return isReleaseEqual && isValuesEqual
+	return isReleaseEqual && isValuesEqual && isMetadataEqual
 }
 
 func (s *Spec) mergeConfig(values Values) (err error) {
@@ -106,11 +107,7 @@ func (s *Spec) Merge(spec *Spec) {
 		if s.Metadata == nil {
 			s.Metadata = spec.Metadata
 		} else {
-			newMetadata := *s.Metadata
-			for k, v := range *spec.Metadata {
-				newMetadata[k] = v
-			}
-			s.Metadata = &newMetadata
+			s.Metadata = spec.Metadata
 		}
 	}
 
