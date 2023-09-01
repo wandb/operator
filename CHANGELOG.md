@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.9.2](https://github.com/wandb/operator/compare/v1.9.1...v1.9.2) (2023-09-01)
+
+
+### Bug Fixes
+
+* properly get license ([6ff6533](https://github.com/wandb/operator/commit/6ff65333d0161e3c0211aa6be3a151cc499473fa))
+
 ### [1.9.1](https://github.com/wandb/operator/compare/v1.9.0...v1.9.1) (2023-09-01)
 
 
