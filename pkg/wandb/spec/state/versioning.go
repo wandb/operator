@@ -70,12 +70,12 @@ func (m Manager) Get(name string) (*spec.Spec, error) {
 	namespace := m.owner.GetNamespace()
 	ownerName := m.owner.GetName()
 	finalName := fmt.Sprintf("%s-%s", ownerName, name)
-	return m.state.Get(finalName, namespace)
+	return m.state.Get(namespace, finalName)
 }
 
 func (m Manager) Set(name string, s *spec.Spec) error {
 	namespace := m.owner.GetNamespace()
 	ownerName := m.owner.GetName()
 	finalName := fmt.Sprintf("%s-%s", ownerName, name)
-	return m.state.Set(finalName, namespace, s)
+	return m.state.Set(namespace, finalName, s)
 }
