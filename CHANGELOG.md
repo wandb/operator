@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.9.4](https://github.com/wandb/operator/compare/v1.9.3...v1.9.4) (2023-09-02)
+
+
+### Bug Fixes
+
+* Correct merge order ([cd49cef](https://github.com/wandb/operator/commit/cd49cefdf248293bb1ffd95c52edab6bfdf284be))
+
 ### [1.9.3](https://github.com/wandb/operator/compare/v1.9.2...v1.9.3) (2023-09-01)
 
 
