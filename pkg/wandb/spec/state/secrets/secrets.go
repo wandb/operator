@@ -90,7 +90,6 @@ func write(
 	}
 
 	metadataJson, err := json.Marshal(spec.Metadata)
-	fmt.Println("metadataJson", string(metadataJson))
 	if err != nil {
 		return nil
 	}

@@ -72,7 +72,7 @@ func Merge(src, dst interface{}) (interface{}, error) {
 	}
 }
 
-func MergeMapString(a, b interface{}) (map[string]interface{}, error) {
+func MergeMapString(a, b map[string]interface{}) (map[string]interface{}, error) {
 	mr, err := Merge(a, b)
 	if err != nil {
 		return nil, err

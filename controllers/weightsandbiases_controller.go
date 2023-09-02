@@ -134,16 +134,27 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	desiredSpec := new(spec.Spec)
-	desiredSpec.Merge(operator.Defaults(wandb, r.Scheme))
-	desiredSpec.Merge(deployerSpec)
-	desiredSpec.Merge(userInputSpec)
+	// First takes precedence
 	desiredSpec.Merge(crdSpec)
+	desiredSpec.Merge(userInputSpec)
+	desiredSpec.Merge(deployerSpec)
+	desiredSpec.Merge(operator.Defaults(wandb, r.Scheme))
 
 	log.Info("Desired spec", "spec", desiredSpec)
 
 	hasNotBeenFlaggedForDeletion := wandb.ObjectMeta.DeletionTimestamp.IsZero()
-
 	if hasNotBeenFlaggedForDeletion {
+		if currentActiveSpec != nil {
+			log.Info("Active spec found", "spec", currentActiveSpec)
+			if currentActiveSpec.IsEqual(desiredSpec) {
+				log.Info("No changes found")
+				statusManager.Set(status.Completed)
+				return ctrlqueue.RequeueWithDelay(
+					ctrlqueue.CheckForUpdatesFrequency,
+				)
+			}
+		}
+
 		if desiredSpec.Chart == nil {
 			statusManager.Set(status.InvalidConfig)
 			log.Error(err, "No release type was found in the spec")
@@ -162,17 +173,6 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			wandb.ObjectMeta.Finalizers = append(wandb.ObjectMeta.Finalizers, resFinalizer)
 			if err := r.Client.Update(ctx, wandb); err != nil {
 				return ctrlqueue.Requeue(err)
-			}
-		}
-
-		if currentActiveSpec != nil {
-			log.Info("Active spec found", "spec", currentActiveSpec)
-			if currentActiveSpec.IsEqual(desiredSpec) {
-				log.Info("No changes found")
-				statusManager.Set(status.Completed)
-				return ctrlqueue.RequeueWithDelay(
-					ctrlqueue.CheckForUpdatesFrequency,
-				)
 			}
 		}
 
