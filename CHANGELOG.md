@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.10.0](https://github.com/wandb/operator/compare/v1.9.4...v1.10.0) (2023-09-23)
+
+
+### Features
+
+* Add option to set reconcileFrequency ([484c014](https://github.com/wandb/operator/commit/484c014a950db59c37cb529952233123548de3b5))
+
 ### [1.9.4](https://github.com/wandb/operator/compare/v1.9.3...v1.9.4) (2023-09-02)
 
 
