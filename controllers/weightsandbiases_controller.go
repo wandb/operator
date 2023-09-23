@@ -80,7 +80,7 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		if errors.IsNotFound(err) {
 			return ctrlqueue.DoNotRequeue()
 		}
-		return ctrlqueue.Requeue(err)
+		return ctrlqueue.RequeueWithError(err)
 	}
 
 	log.Info(
@@ -149,16 +149,14 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			if currentActiveSpec.IsEqual(desiredSpec) {
 				log.Info("No changes found")
 				statusManager.Set(status.Completed)
-				return ctrlqueue.RequeueWithDelay(
-					ctrlqueue.CheckForUpdatesFrequency,
-				)
+				return ctrlqueue.Requeue(desiredSpec)
 			}
 		}
 
 		if desiredSpec.Chart == nil {
 			statusManager.Set(status.InvalidConfig)
 			log.Error(err, "No release type was found in the spec")
-			return ctrlqueue.DoNotRequeue()
+			return ctrlqueue.Requeue(desiredSpec)
 		}
 		t := reflect.TypeOf(desiredSpec.Chart)
 		typ := t.Name()
@@ -172,7 +170,7 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		if !ctrlqueue.ContainsString(wandb.GetFinalizers(), resFinalizer) {
 			wandb.ObjectMeta.Finalizers = append(wandb.ObjectMeta.Finalizers, resFinalizer)
 			if err := r.Client.Update(ctx, wandb); err != nil {
-				return ctrlqueue.Requeue(err)
+				return ctrlqueue.Requeue(desiredSpec)
 			}
 		}
 
@@ -181,7 +179,7 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			statusManager.Set(status.InvalidConfig)
 			r.Recorder.Event(wandb, corev1.EventTypeNormal, "ApplyFailed", "Invalid config for apply")
 			log.Error(err, "Failed to apply config changes.")
-			return ctrlqueue.DoNotRequeue()
+			return ctrlqueue.Requeue(desiredSpec)
 		}
 		log.Info("Successfully applied spec", "spec", desiredSpec)
 
@@ -189,13 +187,14 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			r.Recorder.Event(wandb, corev1.EventTypeNormal, "SetActiveFailed", "Failed to save active state")
 			log.Error(err, "Failed to save active successful spec.")
 			statusManager.Set(status.InvalidConfig)
-			return ctrlqueue.DoNotRequeue()
+			return ctrlqueue.Requeue(desiredSpec)
 		}
 		log.Info("Successfully saved active spec")
 
 		r.Recorder.Event(wandb, corev1.EventTypeNormal, "Completed", "Completed reconcile successfully")
 		statusManager.Set(status.Completed)
-		return ctrlqueue.RequeueWithDelay(ctrlqueue.CheckForUpdatesFrequency)
+
+		return ctrlqueue.Requeue(desiredSpec)
 	}
 
 	if ctrlqueue.ContainsString(wandb.ObjectMeta.Finalizers, resFinalizer) {

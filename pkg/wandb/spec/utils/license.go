@@ -1,6 +1,8 @@
 package utils
 
-import "github.com/wandb/operator/pkg/wandb/spec"
+import (
+	"github.com/wandb/operator/pkg/wandb/spec"
+)
 
 func GetLicense(specs ...*spec.Spec) string {
 	for _, s := range specs {
