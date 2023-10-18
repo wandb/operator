@@ -98,16 +98,19 @@ func (s *Spec) mergeConfig(values Values) (err error) {
 	return nil
 }
 
+// Merge merges the given spec into the current spec. The currently spec will
+// take precedence. This means, if the current spec has a value for a key, the
+// new spec will not override it. Likewise, charts & metadata cannot be merged,
+// so if a chart/metadata value is set, the one passed in will be ignored.
 func (s *Spec) Merge(spec *Spec) {
 	if spec == nil {
 		return
 	}
 
-	if spec.Metadata != nil {
+	if s.Metadata == nil {
 		s.Metadata = spec.Metadata
 	}
-
-	if spec.Chart != nil {
+	if s.Chart == nil {
 		s.Chart = spec.Chart
 	}
 	if spec.Values != nil {
