@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.10.1](https://github.com/wandb/operator/compare/v1.10.0...v1.10.1) (2023-10-18)
+
+
+### Bug Fixes
+
+* Properly merge chart specs together ([37c41bc](https://github.com/wandb/operator/commit/37c41bcb18fe5e2de67f4b19c02cc292f743adfc))
+
 ## [1.10.0](https://github.com/wandb/operator/compare/v1.9.4...v1.10.0) (2023-09-23)
 
 
