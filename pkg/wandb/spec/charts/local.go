@@ -30,7 +30,6 @@ func (c LocalRelease) Validate() error {
 }
 
 func (r LocalRelease) Chart() (*chart.Chart, error) {
-	// check if last 4 characters are .b64
 	if len(r.Path) > 4 && r.Path[len(r.Path)-4:] == ".b64" {
 		return r.decodeChart()
 	}
