@@ -30,14 +30,6 @@ func (c LocalRelease) Validate() error {
 }
 
 func (r LocalRelease) Chart() (*chart.Chart, error) {
-	if len(r.Path) > 4 && r.Path[len(r.Path)-4:] == ".b64" {
-		return r.decodeChart()
-	}
-
-	return loader.Load(r.Path)
-}
-
-func (r LocalRelease) decodeChart() (*chart.Chart, error) {
 	file, err := os.ReadFile(r.Path)
 	if err != nil {
 		return nil, err
@@ -45,7 +37,7 @@ func (r LocalRelease) decodeChart() (*chart.Chart, error) {
 
 	decoded, err := base64.StdEncoding.DecodeString(string(file))
 	if err != nil {
-		return nil, err
+		return loader.Load(r.Path)
 	}
 
 	tmpfile, err := os.CreateTemp("", "decoded-chart.tgz")
