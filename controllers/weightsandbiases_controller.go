@@ -20,6 +20,7 @@ import (
 	"context"
 	"os"
 	"reflect"
+	"strings"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
@@ -116,10 +117,9 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	license := utils.GetLicense(currentActiveSpec, crdSpec, userInputSpec)
 	log.Info("License", "license", license)
 
-	// do not ping deployer if airgapped
-	airgapped := os.Getenv("AIRGAPPED") == "true"
+	isAirgapped := strings.EqualFold(os.Getenv("AIRGAPPED"), "true")
 	var deployerSpec *spec.Spec
-	if !airgapped {
+	if !isAirgapped {
 		deployerSpec, err = deployer.GetSpec(license, currentActiveSpec)
 		if err != nil {
 			log.Info("Failed to get spec from deployer", "error", err)
