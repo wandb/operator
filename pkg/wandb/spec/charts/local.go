@@ -2,6 +2,8 @@ package charts
 
 import (
 	"context"
+	"encoding/base64"
+	"os"
 
 	"github.com/go-playground/validator/v10"
 	v1 "github.com/wandb/operator/api/v1"
@@ -28,7 +30,30 @@ func (c LocalRelease) Validate() error {
 }
 
 func (r LocalRelease) Chart() (*chart.Chart, error) {
-	return loader.Load(r.Path)
+	file, err := os.ReadFile(r.Path)
+	if err != nil {
+		return nil, err
+	}
+
+	decoded, err := base64.StdEncoding.DecodeString(string(file))
+	if err != nil {
+		return loader.Load(r.Path)
+	}
+
+	tmpfile, err := os.CreateTemp("", "decoded-chart.tgz")
+	if err != nil {
+		return nil, err
+	}
+	defer os.Remove(tmpfile.Name())
+
+	if _, err := tmpfile.Write(decoded); err != nil {
+		return nil, err
+	}
+	if err := tmpfile.Close(); err != nil {
+		return nil, err
+	}
+
+	return loader.Load(tmpfile.Name())
 }
 
 func (r *LocalRelease) getActionableChart(wandb *v1.WeightsAndBiases) (*helm.ActionableChart, error) {
@@ -49,7 +74,7 @@ func (r LocalRelease) Apply(
 		return err
 	}
 
-	chart, err := loader.Load(r.Path)
+	chart, err := r.Chart()
 	if err != nil {
 		return err
 	}

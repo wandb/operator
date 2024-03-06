@@ -18,7 +18,9 @@ package controllers
 
 import (
 	"context"
+	"os"
 	"reflect"
+	"strings"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
@@ -114,23 +116,28 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	license := utils.GetLicense(currentActiveSpec, crdSpec, userInputSpec)
 	log.Info("License", "license", license)
-	deployerSpec, err := deployer.GetSpec(license, currentActiveSpec)
-	if err != nil {
-		log.Info("Failed to get spec from deployer", "error", err)
-		// This scenario may occur if the user disables networking, or if the deployer
-		// is not operational, and a version has been deployed successfully. Rather than
-		// reverting to the container defaults, we've stored the most recent successful
-		// deployer release in the cache
-		if deployerSpec, err = specManager.Get("latest-cached-release"); err != nil {
-			log.Error(err, "No cached release found for deployer spec", err, "error")
-		}
-	}
 
-	if deployerSpec != nil {
-		if err := specManager.Set("latest-cached-release", deployerSpec); err != nil {
-			r.Recorder.Event(wandb, corev1.EventTypeNormal, "SecretWriteFailed", "Unable to write secret to kubernetes")
-			log.Error(err, "Unable to save latest release.")
-			return ctrlqueue.DoNotRequeue()
+	isAirgapped := strings.EqualFold(os.Getenv("AIRGAPPED"), "true")
+	var deployerSpec *spec.Spec
+	if !isAirgapped {
+		deployerSpec, err = deployer.GetSpec(license, currentActiveSpec)
+		if err != nil {
+			log.Info("Failed to get spec from deployer", "error", err)
+			// This scenario may occur if the user disables networking, or if the deployer
+			// is not operational, and a version has been deployed successfully. Rather than
+			// reverting to the container defaults, we've stored the most recent successful
+			// deployer release in the cache
+			if deployerSpec, err = specManager.Get("latest-cached-release"); err != nil {
+				log.Error(err, "No cached release found for deployer spec", err, "error")
+			}
+		}
+
+		if deployerSpec != nil {
+			if err := specManager.Set("latest-cached-release", deployerSpec); err != nil {
+				r.Recorder.Event(wandb, corev1.EventTypeNormal, "SecretWriteFailed", "Unable to write secret to kubernetes")
+				log.Error(err, "Unable to save latest release.")
+				return ctrlqueue.DoNotRequeue()
+			}
 		}
 	}
 
