@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.11.1](https://github.com/wandb/operator/compare/v1.11.0...v1.11.1) (2024-03-06)
+
+
+### Bug Fixes
+
+* Bump controller tools version to latest ([#13](https://github.com/wandb/operator/issues/13)) ([c52dbb6](https://github.com/wandb/operator/commit/c52dbb6f2d8524f09c8599b9343d095f8f324f3f))
+
 ## [1.11.0](https://github.com/wandb/operator/compare/v1.10.1...v1.11.0) (2024-03-06)
 
 
