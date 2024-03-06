@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.11.0](https://github.com/wandb/operator/compare/v1.10.1...v1.11.0) (2024-03-06)
+
+
+### Features
+
+* **operator:** Add airgapped support ([#12](https://github.com/wandb/operator/issues/12)) ([bfd3796](https://github.com/wandb/operator/commit/bfd37965e9c8385309ecdbe566d8c914f6ea8c86))
+
+
+### Bug Fixes
+
+* add license log ([#11](https://github.com/wandb/operator/issues/11)) ([e129fab](https://github.com/wandb/operator/commit/e129fab56dfb8e04cafb5fd3839aaea33f9492ec))
+
 ### [1.10.1](https://github.com/wandb/operator/compare/v1.10.0...v1.10.1) (2023-10-18)
 
 
