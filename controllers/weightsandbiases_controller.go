@@ -18,12 +18,9 @@ package controllers
 
 import (
 	"context"
-	"os"
-	"reflect"
-	"strings"
-
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
+	"reflect"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -52,8 +49,10 @@ const resFinalizer = "finalizer.app.wandb.com"
 // WeightsAndBiasesReconciler reconciles a WeightsAndBiases object
 type WeightsAndBiasesReconciler struct {
 	client.Client
-	Scheme   *runtime.Scheme
-	Recorder record.EventRecorder
+	IsAirgapped    bool
+	DeployerClient deployer.DeployerInterface
+	Scheme         *runtime.Scheme
+	Recorder       record.EventRecorder
 }
 
 //+kubebuilder:rbac:groups=apps.wandb.com,resources=weightsandbiases,verbs=get;list;watch;create;update;patch;delete
@@ -117,10 +116,9 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	license := utils.GetLicense(currentActiveSpec, crdSpec, userInputSpec)
 	log.Info("License", "license", license)
 
-	isAirgapped := strings.EqualFold(os.Getenv("AIRGAPPED"), "true")
 	var deployerSpec *spec.Spec
-	if !isAirgapped {
-		deployerSpec, err = deployer.GetSpec(license, currentActiveSpec)
+	if !r.IsAirgapped {
+		deployerSpec, err = r.DeployerClient.GetSpec(license, currentActiveSpec)
 		if err != nil {
 			log.Info("Failed to get spec from deployer", "error", err)
 			// This scenario may occur if the user disables networking, or if the deployer
