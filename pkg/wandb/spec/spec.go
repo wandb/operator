@@ -117,3 +117,38 @@ func (s *Spec) Merge(spec *Spec) {
 		s.mergeConfig(spec.Values)
 	}
 }
+
+func (s *Spec) SensitiveValuesMasked() *Spec {
+	if s.Values != nil {
+		return &Spec{
+			Metadata: s.Metadata,
+			Chart:    s.Chart,
+			Values:   maskValues(s.Values),
+		}
+	}
+	return s
+}
+
+var sensitiveKeys = map[string]bool{
+	"secret":    true,
+	"accessKey": true,
+}
+
+func maskValues(values map[string]interface{}) map[string]interface{} {
+	newValues := make(map[string]interface{})
+	for key, value := range values {
+		switch v := value.(type) {
+		case map[string]interface{}:
+			newValues[key] = maskValues(v)
+		case string:
+			if sensitiveKeys[key] {
+				newValues[key] = "***"
+			} else {
+				newValues[key] = value
+			}
+		default:
+			newValues[key] = value
+		}
+	}
+	return newValues
+}
