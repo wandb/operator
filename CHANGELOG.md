@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.11.2](https://github.com/wandb/operator/compare/v1.11.1...v1.11.2) (2024-06-27)
+
+
+### Bug Fixes
+
+* Mask sensitive values in log ([#14](https://github.com/wandb/operator/issues/14)) ([514336d](https://github.com/wandb/operator/commit/514336da58a6200753a71d219801a6da7bfc6860))
+
 ### [1.11.1](https://github.com/wandb/operator/compare/v1.11.0...v1.11.1) (2024-03-06)
 
 
