@@ -148,12 +148,12 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	desiredSpec.Merge(deployerSpec)
 	desiredSpec.Merge(operator.Defaults(wandb, r.Scheme))
 
-	log.Info("Desired spec", "spec", desiredSpec)
+	log.Info("Desired spec", "spec", desiredSpec.SensitiveValuesMasked())
 
 	hasNotBeenFlaggedForDeletion := wandb.ObjectMeta.DeletionTimestamp.IsZero()
 	if hasNotBeenFlaggedForDeletion {
 		if currentActiveSpec != nil {
-			log.Info("Active spec found", "spec", currentActiveSpec)
+			log.Info("Active spec found", "spec", currentActiveSpec.SensitiveValuesMasked())
 			if currentActiveSpec.IsEqual(desiredSpec) {
 				log.Info("No changes found")
 				statusManager.Set(status.Completed)
