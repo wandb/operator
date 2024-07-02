@@ -53,6 +53,7 @@ type WeightsAndBiasesReconciler struct {
 	DeployerClient deployer.DeployerInterface
 	Scheme         *runtime.Scheme
 	Recorder       record.EventRecorder
+	DryRun         bool
 }
 
 //+kubebuilder:rbac:groups=apps.wandb.com,resources=weightsandbiases,verbs=get;list;watch;create;update;patch;delete
@@ -181,11 +182,13 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 
 		log.Info("Applying spec...", "spec", desiredSpec)
-		if err := desiredSpec.Apply(ctx, r.Client, wandb, r.Scheme); err != nil {
-			statusManager.Set(status.InvalidConfig)
-			r.Recorder.Event(wandb, corev1.EventTypeNormal, "ApplyFailed", "Invalid config for apply")
-			log.Error(err, "Failed to apply config changes.")
-			return ctrlqueue.Requeue(desiredSpec)
+		if !r.DryRun {
+			if err := desiredSpec.Apply(ctx, r.Client, wandb, r.Scheme); err != nil {
+				statusManager.Set(status.InvalidConfig)
+				r.Recorder.Event(wandb, corev1.EventTypeNormal, "ApplyFailed", "Invalid config for apply")
+				log.Error(err, "Failed to apply config changes.")
+				return ctrlqueue.Requeue(desiredSpec)
+			}
 		}
 		log.Info("Successfully applied spec", "spec", desiredSpec)
 
@@ -206,10 +209,12 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	if ctrlqueue.ContainsString(wandb.ObjectMeta.Finalizers, resFinalizer) {
 		if desiredSpec.Chart != nil {
 			log.Info("Deprovisioning", "release", reflect.TypeOf(desiredSpec.Chart))
-			if err := desiredSpec.Prune(ctx, r.Client, wandb, r.Scheme); err != nil {
-				log.Error(err, "Failed to cleanup deployment.")
-			} else {
-				log.Info("Successfully cleaned up resources")
+			if !r.DryRun {
+				if err := desiredSpec.Prune(ctx, r.Client, wandb, r.Scheme); err != nil {
+					log.Error(err, "Failed to cleanup deployment.")
+				} else {
+					log.Info("Successfully cleaned up resources")
+				}
 			}
 		}
 
