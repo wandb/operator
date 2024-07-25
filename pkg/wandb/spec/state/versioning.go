@@ -3,7 +3,6 @@ package state
 import (
 	"context"
 	"fmt"
-
 	"github.com/wandb/operator/pkg/wandb/spec"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"

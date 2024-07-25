@@ -62,7 +62,7 @@ var recorder *record.FakeRecorder
 var reconciler *WeightsAndBiasesReconciler
 
 var _ = Describe("WeightsandbiasesController", func() {
-	Describe("Reconcile", func() {
+	Describe("DryRun Reconcile", func() {
 		BeforeEach(func() {
 			ctx := context.Background()
 			recorder = record.NewFakeRecorder(10)
@@ -136,5 +136,8 @@ var _ = Describe("WeightsandbiasesController", func() {
 				Expect(event).To(ContainSubstring("Completed reconcile successfully"))
 			})
 		})
+	})
+	Describe("Reconcile and Apply", func() {
+
 	})
 })

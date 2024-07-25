@@ -21,6 +21,22 @@ var (
 	noopLogger = func(_ string, _ ...interface{}) {}
 )
 
+type ActionableChartInterface interface {
+	Apply(
+		chart *chart.Chart,
+		values map[string]interface{},
+	) (*release.Release, error)
+	Install(
+		chart *chart.Chart,
+		values map[string]interface{},
+	) (*release.Release, error)
+	History() ([]*release.Release, error)
+	Rollback(version int) error
+	Upgrade(chart *chart.Chart, values map[string]interface{}) (*release.Release, error)
+	Uninstall() (*release.UninstallReleaseResponse, error)
+	GetRelease(version int) (*release.Release, error)
+}
+
 // GetConfig returns a helm action configuration. Namespace is used to determine
 // where to store the versions
 func InitConfig(namespace string) (*cli.EnvSettings, *action.Configuration, error) {

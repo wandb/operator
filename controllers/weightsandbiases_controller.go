@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"github.com/wandb/operator/pkg/wandb/spec/state"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	"reflect"
@@ -36,7 +37,6 @@ import (
 	"github.com/wandb/operator/pkg/wandb/spec"
 	"github.com/wandb/operator/pkg/wandb/spec/channel/deployer"
 	"github.com/wandb/operator/pkg/wandb/spec/operator"
-	"github.com/wandb/operator/pkg/wandb/spec/state"
 	"github.com/wandb/operator/pkg/wandb/spec/state/secrets"
 	"github.com/wandb/operator/pkg/wandb/spec/utils"
 	"github.com/wandb/operator/pkg/wandb/status"
