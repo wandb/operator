@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/wandb/operator/pkg/wandb/spec"
-	"github.com/wandb/operator/pkg/wandb/spec/state"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -15,7 +14,7 @@ func New(
 	c client.Client,
 	owner metav1.Object,
 	scheme *runtime.Scheme,
-) state.State {
+) *State {
 	return &State{
 		ctx:    ctx,
 		owner:  owner,

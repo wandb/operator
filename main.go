@@ -18,7 +18,10 @@ package main
 
 import (
 	"flag"
+	"fmt"
+	"github.com/wandb/operator/pkg/wandb/spec/channel/deployer"
 	"os"
+	"strings"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -50,18 +53,21 @@ func init() {
 }
 
 func main() {
-	var metricsAddr string
-	var enableLeaderElection bool
-	var probeAddr string
+	var metricsAddr, deployerAPI, probeAddr string
+	var enableLeaderElection, airgapped bool
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
+	flag.StringVar(&deployerAPI, "deployer-channel-url", "", "URL of the deployer channel")
+
+	flag.BoolVar(&airgapped, "airgapped", false, "Enable airgapped mode")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
 
 	opts := zap.Options{Development: true}
 	opts.BindFlags(flag.CommandLine)
+	SetFlagsFromEnvironment()
 	flag.Parse()
 
 	logger := zap.New(zap.UseFlagOptions(&opts))
@@ -92,9 +98,11 @@ func main() {
 	}
 
 	if err = (&controllers.WeightsAndBiasesReconciler{
-		Recorder: mgr.GetEventRecorderFor("weightsandbiases"),
-		Client:   mgr.GetClient(),
-		Scheme:   mgr.GetScheme(),
+		IsAirgapped:    airgapped,
+		Recorder:       mgr.GetEventRecorderFor("weightsandbiases"),
+		Client:         mgr.GetClient(),
+		Scheme:         mgr.GetScheme(),
+		DeployerClient: &deployer.DeployerClient{DeployerChannelUrl: deployerAPI},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "WeightsAndBiases")
 		os.Exit(1)
@@ -115,4 +123,20 @@ func main() {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
+}
+
+func SetFlagsFromEnvironment() []error {
+	var errors []error
+
+	flag.VisitAll(func(f *flag.Flag) {
+		name := strings.ToUpper(strings.Replace(f.Name, "-", "_", -1))
+		if value, ok := os.LookupEnv(name); ok {
+			err := flag.Set(f.Name, value)
+			if err != nil {
+				errors = append(errors, fmt.Errorf("failed setting flag from environment: %w", err))
+			}
+		}
+	})
+
+	return errors
 }

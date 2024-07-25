@@ -1,5 +1,7 @@
 package spec
 
+//go:generate go run github.com/maxbrunsfeld/counterfeiter/v6 -generate
+
 import (
 	"context"
 	"reflect"
@@ -12,6 +14,7 @@ import (
 
 type Metadata map[string]string
 
+//counterfeiter:generate . Chart
 type Chart interface {
 	Apply(
 		context.Context,

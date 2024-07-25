@@ -1,5 +1,7 @@
 package deployer
 
+//go:generate go run github.com/maxbrunsfeld/counterfeiter/v6 -generate
+
 import (
 	"encoding/json"
 	"errors"
@@ -8,7 +10,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/wandb/operator/pkg/utils"
 	"github.com/wandb/operator/pkg/wandb/spec"
 	"github.com/wandb/operator/pkg/wandb/spec/charts"
 )
@@ -17,8 +18,20 @@ const (
 	DeployerAPI = "https://deploy.wandb.ai/api/v1/operator/channel"
 )
 
-func GetURL() string {
-	return utils.Getenv("DEPLOYER_CHANNEL_URL", DeployerAPI)
+//counterfeiter:generate . DeployerInterface
+type DeployerInterface interface {
+	GetSpec(license string, activeState *spec.Spec) (*spec.Spec, error)
+}
+
+type DeployerClient struct {
+	DeployerChannelUrl string
+}
+
+func (c *DeployerClient) getURL() string {
+	if c.DeployerChannelUrl == "" {
+		c.DeployerChannelUrl = DeployerAPI
+	}
+	return c.DeployerChannelUrl
 }
 
 type SpecUnknownChart struct {
@@ -29,8 +42,8 @@ type SpecUnknownChart struct {
 
 // GetSpec returns the spec for the given license. If the license or an empty
 // string it will pull down the latest stable version.
-func GetSpec(license string, activeState *spec.Spec) (*spec.Spec, error) {
-	url := GetURL()
+func (c *DeployerClient) GetSpec(license string, activeState *spec.Spec) (*spec.Spec, error) {
+	url := c.getURL()
 	client := &http.Client{}
 
 	maxRetries := 5
@@ -46,10 +59,7 @@ func GetSpec(license string, activeState *spec.Spec) (*spec.Spec, error) {
 		}
 
 		resp, err := client.Do(req)
-		if err != nil {
-			if i == maxRetries-1 {
-				return nil, err
-			}
+		if err != nil || resp.StatusCode != http.StatusOK {
 			time.Sleep(time.Second * 2)
 			continue
 		}
