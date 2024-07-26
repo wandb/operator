@@ -22,17 +22,7 @@ rules:
   - events
   verbs:
   - create
-- apiGroups:
-  - app
-  resources:
-  - deployments
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - update
-  - watch
+  - patch
 - apiGroups:
   - apps.wandb.com
   resources:
