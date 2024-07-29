@@ -8,7 +8,11 @@ rules:
   - ""
   resources:
   - configmaps
+  - events
+  - persistentvolumeclaims
   - secrets
+  - serviceaccounts
+  - services
   verbs:
   - create
   - delete
@@ -19,10 +23,39 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - events
+  - namespaces
+  - nodes
+  - pods
+  - pods/log
+  - serviceaccounts
+  - services
+  verbs:
+  - get
+  - list
+- apiGroups:
+  - apps
+  resources:
+  - controllerrevisions
+  - daemonsets
+  - deployments
+  - replicasets
+  - statefulsets
   verbs:
   - create
-  - patch
+  - delete
+  - get
+  - list
+  - update
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - daemonsets/status
+  - deployments/status
+  - replicasets/status
+  - statefulsets/status
+  verbs:
+  - get
 - apiGroups:
   - apps.wandb.com
   resources:
@@ -49,3 +82,38 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - autoscaling
+  resources:
+  - horizontalpodautoscalers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - update
+  - watch
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - ingresses
+  - networkpolicies
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - update
+  - watch
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - rolebindings
+  - roles
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - update
+  - watch
