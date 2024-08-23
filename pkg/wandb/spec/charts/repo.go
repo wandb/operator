@@ -128,6 +128,9 @@ func (r RepoRelease) downloadChart() (string, error) {
 		Options: []getter.Option{
 			getter.WithBasicAuth(r.Username, r.Password),
 			// TODO: Add support for other auth methods
+			// getter.WithPassCredentialsAll(r.PassCredentialsAll),
+			// getter.WithTLSClientConfig(r.CertFile, r.KeyFile, r.CaFile),
+			// getter.WithInsecureSkipVerifyTLS(r.InsecureSkipTLSverify),
 		},
 		RegistryClient:   cfg.RegistryClient,
 		RepositoryConfig: settings.RepositoryConfig,
