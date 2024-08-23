@@ -29,7 +29,7 @@ COPY controllers/ controllers/
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o manager main.go
 
 # Create a helm cache directory, set group ownership and permissions, and apply the sticky bit
-RUN mkdir -p /.cache && chmod 1775 /.cache
+RUN mkdir -p /.cache && chmod 1777 /.cache
 
 FROM gcr.io/distroless/static-debian11
 
