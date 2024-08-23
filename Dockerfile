@@ -7,6 +7,9 @@ FROM golang:1.20 AS manager-builder
 ARG TARGETOS
 ARG TARGETARCH
 
+# Install ACL package for setfacl command
+RUN apt-get update && apt-get install -y acl && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /workspace
 # Copy the Go Modules manifests
 COPY go.mod go.mod
@@ -29,7 +32,7 @@ COPY controllers/ controllers/
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o manager main.go
 
 # Create a helm cache directory, set group ownership and permissions, and apply the sticky bit
-RUN mkdir -p /helm && chmod 1777 /helm
+RUN mkdir -p /helm && chmod 1777 /helm && setfacl -d -m u::rwx,g::rwx,o::rwx /helm
 
 FROM gcr.io/distroless/static-debian11
 
