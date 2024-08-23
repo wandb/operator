@@ -32,6 +32,12 @@ FROM gcr.io/distroless/static-debian11
 
 COPY --from=manager-builder /workspace/manager .
 
+# Create a cache directory and set group ownership and permissions
+RUN mkdir -p /cache && \
+    chmod 775 /cache
+
+# Set HELM_CACHE_HOME environment variable
+ENV HELM_CACHE_HOME=/cache
 ENV OPERATOR_MODE=production
 ENV DEPLOYER_API_URL=https://deploy.wandb.ai/api
 
