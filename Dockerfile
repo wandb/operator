@@ -2,7 +2,7 @@ ARG KUBECTL_VERSION=1.27.3
 ARG PNPM_VERSION=8.6.6
 
 # Build the manager binary
-FROM golang:1.20 as manager-builder
+FROM golang:1.20 AS manager-builder
 
 ARG TARGETOS
 ARG TARGETARCH
@@ -28,16 +28,14 @@ COPY controllers/ controllers/
 # by leaving it empty we can ensure that the container and binary shipped on it will have the same platform.
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o manager main.go
 
+# Create a helm cache directory, set group ownership and permissions, and apply the sticky bit
+RUN mkdir -p /.cache && chmod 1775 /.cache
+
 FROM gcr.io/distroless/static-debian11
 
 COPY --from=manager-builder /workspace/manager .
+COPY --from=manager-builder /.cache /.cache
 
-# Create a cache directory and set group ownership and permissions
-RUN mkdir -p /cache && \
-    chmod 775 /cache
-
-# Set HELM_CACHE_HOME environment variable
-ENV HELM_CACHE_HOME=/cache
 ENV OPERATOR_MODE=production
 ENV DEPLOYER_API_URL=https://deploy.wandb.ai/api
 
