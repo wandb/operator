@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"github.com/wandb/operator/pkg/wandb/spec/channel/deployer"
 	"os"
+
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"strings"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
@@ -53,7 +55,7 @@ func init() {
 }
 
 func main() {
-	var metricsAddr, deployerAPI, probeAddr string
+	var metricsAddr, deployerAPI, probeAddr, isolationNamespaces string
 	var enableLeaderElection, airgapped bool
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
@@ -64,6 +66,7 @@ func main() {
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
+	flag.StringVar(&isolationNamespaces, "isolation-namespaces", "", "Specify namespaces that the controller should monitor when operating in namespace isolation mode.")
 
 	opts := zap.Options{Development: true}
 	opts.BindFlags(flag.CommandLine)
@@ -73,7 +76,12 @@ func main() {
 	logger := zap.New(zap.UseFlagOptions(&opts))
 	ctrl.SetLogger(logger)
 
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+	var namespaces []string
+	if isolationNamespaces != "" {
+		namespaces = strings.Split(isolationNamespaces, ",")
+	}
+
+	managerOptions := ctrl.Options{
 		Scheme:                 scheme,
 		MetricsBindAddress:     metricsAddr,
 		Port:                   9443,
@@ -91,7 +99,13 @@ func main() {
 		// if you are doing or is intended to do any operation such as perform cleanups
 		// after the manager stops then its usage might be unsafe.
 		// LeaderElectionReleaseOnCancel: true,
-	})
+	}
+
+	if len(namespaces) > 0 {
+		managerOptions.NewCache = cache.MultiNamespacedCacheBuilder(namespaces)
+	}
+
+	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), managerOptions)
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)

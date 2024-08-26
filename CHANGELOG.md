@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.12.0](https://github.com/wandb/operator/compare/v1.11.2...v1.12.0) (2024-07-29)
+
+
+### Features
+
+* Allow the operator to support installation without cluster level permissions ([#16](https://github.com/wandb/operator/issues/16)) ([6f29a3e](https://github.com/wandb/operator/commit/6f29a3e436b0d7a467d0ce457de985c9f1f7a3de))
+
 ### [1.11.2](https://github.com/wandb/operator/compare/v1.11.1...v1.11.2) (2024-06-27)
 
 

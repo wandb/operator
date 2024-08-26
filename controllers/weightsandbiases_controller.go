@@ -59,9 +59,13 @@ type WeightsAndBiasesReconciler struct {
 //+kubebuilder:rbac:groups=apps.wandb.com,resources=weightsandbiases,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=apps.wandb.com,resources=weightsandbiases/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=apps.wandb.com,resources=weightsandbiases/finalizers,verbs=update
-//+kubebuilder:rbac:groups="",resources=secrets;configmaps;configmaps,verbs=update;delete;get;list;create;watch
-//+kubebuilder:rbac:groups="",resources=pods;services;nodes,verbs=update;delete;get;list;create;watch
-//+kubebuilder:rbac:groups=app,resources=deployments,verbs=update;delete;get;list;create;watch
+//+kubebuilder:rbac:groups="",resources=configmaps;events;persistentvolumeclaims;secrets;serviceaccounts;services,verbs=update;delete;get;list;create;watch
+//+kubebuilder:rbac:groups="",resources=nodes;namespaces;pods;pods/log;serviceaccounts;services,verbs=get;list
+//+kubebuilder:rbac:groups=apps,resources=deployments;controllerrevisions;daemonsets;replicasets;statefulsets,verbs=update;delete;get;list;create;watch
+//+kubebuilder:rbac:groups=apps,resources=deployments/status;daemonsets/status;replicasets/status;statefulsets/status,verbs=get
+//+kubebuilder:rbac:groups=autoscaling,resources=horizontalpodautoscalers,verbs=update;delete;get;list;create;watch
+//+kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses;networkpolicies,verbs=update;delete;get;list;create;watch
+//+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles;rolebindings,verbs=update;delete;get;list;create;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
