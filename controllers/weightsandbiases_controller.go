@@ -18,12 +18,10 @@ package controllers
 
 import (
 	"context"
-	"os"
-	"reflect"
-	"strings"
-
+	"github.com/wandb/operator/pkg/wandb/spec/state"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
+	"reflect"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -39,7 +37,6 @@ import (
 	"github.com/wandb/operator/pkg/wandb/spec"
 	"github.com/wandb/operator/pkg/wandb/spec/channel/deployer"
 	"github.com/wandb/operator/pkg/wandb/spec/operator"
-	"github.com/wandb/operator/pkg/wandb/spec/state"
 	"github.com/wandb/operator/pkg/wandb/spec/state/secrets"
 	"github.com/wandb/operator/pkg/wandb/spec/utils"
 	"github.com/wandb/operator/pkg/wandb/status"
@@ -52,8 +49,11 @@ const resFinalizer = "finalizer.app.wandb.com"
 // WeightsAndBiasesReconciler reconciles a WeightsAndBiases object
 type WeightsAndBiasesReconciler struct {
 	client.Client
-	Scheme   *runtime.Scheme
-	Recorder record.EventRecorder
+	IsAirgapped    bool
+	DeployerClient deployer.DeployerInterface
+	Scheme         *runtime.Scheme
+	Recorder       record.EventRecorder
+	DryRun         bool
 }
 
 //+kubebuilder:rbac:groups=apps.wandb.com,resources=weightsandbiases,verbs=get;list;watch;create;update;patch;delete
@@ -121,10 +121,9 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	license := utils.GetLicense(currentActiveSpec, crdSpec, userInputSpec)
 	log.Info("License", "license", license)
 
-	isAirgapped := strings.EqualFold(os.Getenv("AIRGAPPED"), "true")
 	var deployerSpec *spec.Spec
-	if !isAirgapped {
-		deployerSpec, err = deployer.GetSpec(license, currentActiveSpec)
+	if !r.IsAirgapped {
+		deployerSpec, err = r.DeployerClient.GetSpec(license, currentActiveSpec)
 		if err != nil {
 			log.Info("Failed to get spec from deployer", "error", err)
 			// This scenario may occur if the user disables networking, or if the deployer
@@ -187,11 +186,13 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 
 		log.Info("Applying spec...", "spec", desiredSpec)
-		if err := desiredSpec.Apply(ctx, r.Client, wandb, r.Scheme); err != nil {
-			statusManager.Set(status.InvalidConfig)
-			r.Recorder.Event(wandb, corev1.EventTypeNormal, "ApplyFailed", "Invalid config for apply")
-			log.Error(err, "Failed to apply config changes.")
-			return ctrlqueue.Requeue(desiredSpec)
+		if !r.DryRun {
+			if err := desiredSpec.Apply(ctx, r.Client, wandb, r.Scheme); err != nil {
+				statusManager.Set(status.InvalidConfig)
+				r.Recorder.Event(wandb, corev1.EventTypeNormal, "ApplyFailed", "Invalid config for apply")
+				log.Error(err, "Failed to apply config changes.")
+				return ctrlqueue.Requeue(desiredSpec)
+			}
 		}
 		log.Info("Successfully applied spec", "spec", desiredSpec)
 
@@ -212,10 +213,12 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	if ctrlqueue.ContainsString(wandb.ObjectMeta.Finalizers, resFinalizer) {
 		if desiredSpec.Chart != nil {
 			log.Info("Deprovisioning", "release", reflect.TypeOf(desiredSpec.Chart))
-			if err := desiredSpec.Prune(ctx, r.Client, wandb, r.Scheme); err != nil {
-				log.Error(err, "Failed to cleanup deployment.")
-			} else {
-				log.Info("Successfully cleaned up resources")
+			if !r.DryRun {
+				if err := desiredSpec.Prune(ctx, r.Client, wandb, r.Scheme); err != nil {
+					log.Error(err, "Failed to cleanup deployment.")
+				} else {
+					log.Info("Successfully cleaned up resources")
+				}
 			}
 		}
 
