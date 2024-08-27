@@ -3,6 +3,7 @@ package charts
 import (
 	"context"
 	"os"
+	"path/filepath"
 
 	"github.com/go-playground/validator/v10"
 	v1 "github.com/wandb/operator/api/v1"
@@ -89,7 +90,15 @@ func (r RepoRelease) downloadChart() (string, error) {
 	file := repo.NewFile()
 	file.Update(entry)
 
+	// Initialize Helm CLI settings respecting environment variables
 	settings := cli.New()
+	if helmCache := os.Getenv("HELM_CACHE_HOME"); helmCache != "" {
+		settings.RepositoryCache = filepath.Join(helmCache, "repository")
+	}
+	if helmConfig := os.Getenv("HELM_CONFIG_HOME"); helmConfig != "" {
+		settings.RepositoryConfig = filepath.Join(helmConfig, "repositories.yaml")
+	}
+
 	providers := getter.All(settings)
 	chartRepo, err := repo.NewChartRepository(entry, providers)
 	if err != nil {
@@ -128,7 +137,11 @@ func (r RepoRelease) downloadChart() (string, error) {
 		RepositoryCache:  settings.RepositoryCache,
 	}
 
-	dest := "./charts"
+	// Use HELM_DATA_HOME as the destination directory if set, or fallback to a default location
+	dest := filepath.Join(os.Getenv("HELM_DATA_HOME"), "charts")
+	if dest == "" {
+		dest = "./charts"
+	}
 	os.MkdirAll(dest, 0755)
 	saved, _, err := client.DownloadTo(chartURL, r.Version, dest)
 	if err != nil {

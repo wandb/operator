@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.12.1](https://github.com/wandb/operator/compare/v1.12.0...v1.12.1) (2024-08-26)
+
+
+### Bug Fixes
+
+* Support Openshift permissions schema for the helm cache ([#17](https://github.com/wandb/operator/issues/17)) ([b498f79](https://github.com/wandb/operator/commit/b498f79a439464fab8d14eb76cc8ead499a80208))
+
 ## [1.12.0](https://github.com/wandb/operator/compare/v1.11.2...v1.12.0) (2024-07-29)
 
 
