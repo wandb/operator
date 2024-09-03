@@ -127,7 +127,11 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		deployerSpec, err = r.DeployerClient.GetSpec(license, currentActiveSpec)
 		if err != nil {
 			log.Info("Failed to get spec from deployer", "error", err)
-			// Attempt to retrieve the cached release
+			// This scenario may occur if the user disables networking, or if the deployer
+			// is not operational, and a version has been deployed successfully. Rather than
+			// reverting to the container defaults, we've stored the most recent successful
+			// deployer release in the cache
+            // Attempt to retrieve the cached release
 			if deployerSpec, err = specManager.Get("latest-cached-release"); err != nil {
 				log.Error(err, "No cached release found for deployer spec", err, "error")
 			} else {
