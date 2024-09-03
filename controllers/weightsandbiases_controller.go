@@ -137,13 +137,13 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				log.Error(err, "No cached release found for deployer spec", err, "error")
 			}
 			if r.Debug {
-				log.Info("Using cached deployer spec", "spec", deployerSpec)
+				log.Info("Using cached deployer spec", "spec", deployerSpec.SensitiveValuesMasked())
 			}
 		}
 
 		if deployerSpec != nil {
 			if r.Debug {
-				log.Info("Writing deployer spec to cache", "spec", deployerSpec)
+				log.Info("Writing deployer spec to cache", "spec", deployerSpec.SensitiveValuesMasked())
 			}
 			if err := specManager.Set("latest-cached-release", deployerSpec); err != nil {
 				r.Recorder.Event(wandb, corev1.EventTypeNormal, "SecretWriteFailed", "Unable to write secret to kubernetes")
@@ -223,7 +223,7 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				return ctrlqueue.Requeue(desiredSpec)
 			}
 		}
-		log.Info("Successfully applied spec", "spec", desiredSpec)
+		log.Info("Successfully applied spec", "spec", desiredSpec.SensitiveValuesMasked())
 
 		if err := specManager.SetActive(desiredSpec); err != nil {
 			r.Recorder.Event(wandb, corev1.EventTypeNormal, "SetActiveFailed", "Failed to save active state")
