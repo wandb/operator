@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.12.5](https://github.com/wandb/operator/compare/v1.12.4...v1.12.5) (2024-09-03)
+
+
+### Bug Fixes
+
+* Debug logging errors ([#26](https://github.com/wandb/operator/issues/26)) ([a641621](https://github.com/wandb/operator/commit/a64162125994b9c43f5253f3fb9f097773740bc7))
+
 ### [1.12.4](https://github.com/wandb/operator/compare/v1.12.3...v1.12.4) (2024-09-03)
 
 
