@@ -88,26 +88,30 @@ func (s *Spec) IsEqual(spec *Spec) bool {
 	return isReleaseEqual && isValuesEqual && isMetadataEqual
 }
 
-func (s *Spec) mergeConfig(values Values) (err error) {
+func (s *Spec) mergeConfig(newValues map[string]interface{}) error {
 	if s.Values == nil {
-		s.Values = values
-		return nil
+		s.Values = make(map[string]interface{})
 	}
-	mergedValues, err := s.Values.Merge(values)
-	if err != nil {
-		return err
+
+	for key, newValue := range newValues {
+		if existingValue, exists := s.Values[key]; exists {
+			if _, ok := existingValue.(map[string]interface{}); ok {
+				if newMap, ok := newValue.(map[string]interface{}); ok {
+					if err := s.mergeConfig(newMap); err != nil {
+						return err
+					}
+					continue
+				}
+			}
+		}
+		s.Values[key] = newValue
 	}
-	s.Values = mergedValues
 	return nil
 }
 
-// Merge merges the given spec into the current spec. The currently spec will
-// take precedence. This means, if the current spec has a value for a key, the
-// new spec will not override it. Likewise, charts & metadata cannot be merged,
-// so if a chart/metadata value is set, the one passed in will be ignored.
-func (s *Spec) Merge(spec *Spec) {
+func (s *Spec) Merge(spec *Spec) error {
 	if spec == nil {
-		return
+		return nil
 	}
 
 	if s.Metadata == nil {
@@ -117,8 +121,11 @@ func (s *Spec) Merge(spec *Spec) {
 		s.Chart = spec.Chart
 	}
 	if spec.Values != nil {
-		s.mergeConfig(spec.Values)
+		if err := s.mergeConfig(spec.Values); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 func (s *Spec) SensitiveValuesMasked() *Spec {
