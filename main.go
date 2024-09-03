@@ -19,11 +19,13 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/wandb/operator/pkg/wandb/spec/channel/deployer"
 	"os"
 
-	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"github.com/wandb/operator/pkg/wandb/spec/channel/deployer"
+
 	"strings"
+
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -56,13 +58,14 @@ func init() {
 
 func main() {
 	var metricsAddr, deployerAPI, probeAddr, isolationNamespaces string
-	var enableLeaderElection, airgapped bool
+	var enableLeaderElection, airgapped, debug bool
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.StringVar(&deployerAPI, "deployer-channel-url", "", "URL of the deployer channel")
 
 	flag.BoolVar(&airgapped, "airgapped", false, "Enable airgapped mode")
+	flag.BoolVar(&debug, "debug", false, "Enable debug mode")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
@@ -117,6 +120,7 @@ func main() {
 		Client:         mgr.GetClient(),
 		Scheme:         mgr.GetScheme(),
 		DeployerClient: &deployer.DeployerClient{DeployerChannelUrl: deployerAPI},
+		Debug:          debug,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "WeightsAndBiases")
 		os.Exit(1)
