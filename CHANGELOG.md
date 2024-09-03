@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.12.4](https://github.com/wandb/operator/compare/v1.12.3...v1.12.4) (2024-09-03)
+
+
+### Bug Fixes
+
+* Log the diff of specs ([#23](https://github.com/wandb/operator/issues/23)) ([c0ea0d8](https://github.com/wandb/operator/commit/c0ea0d8c4e4c3375ff0765c980952c3cbb064df9))
+
 ### [1.12.3](https://github.com/wandb/operator/compare/v1.12.2...v1.12.3) (2024-09-03)
 
 
