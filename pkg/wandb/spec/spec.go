@@ -105,9 +105,9 @@ func (s *Spec) mergeConfig(values Values) (err error) {
 // take precedence. This means, if the current spec has a value for a key, the
 // new spec will not override it. Likewise, charts & metadata cannot be merged,
 // so if a chart/metadata value is set, the one passed in will be ignored.
-func (s *Spec) Merge(spec *Spec) {
+func (s *Spec) Merge(spec *Spec) (err error) {
 	if spec == nil {
-		return
+		return nil
 	}
 
 	if s.Metadata == nil {
@@ -117,8 +117,12 @@ func (s *Spec) Merge(spec *Spec) {
 		s.Chart = spec.Chart
 	}
 	if spec.Values != nil {
-		s.mergeConfig(spec.Values)
+		err = s.mergeConfig(spec.Values)
+		if err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 func (s *Spec) SensitiveValuesMasked() *Spec {
