@@ -1,1 +1,10 @@
-{}
+{
+  "go.lintTool": "golangci-lint",
+  "go.lintFlags": ["run", "--enable=errcheck"],
+  "go.toolsEnvVars": {
+    "GO111MODULE": "on"
+  },
+  "go.lintOnSave": "package",
+  "go.vetOnSave": "package",
+  "go.useLanguageServer": true
+}
