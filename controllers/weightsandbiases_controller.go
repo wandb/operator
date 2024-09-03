@@ -191,6 +191,9 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				statusManager.Set(status.Completed)
 				return ctrlqueue.Requeue(desiredSpec)
 			}
+			if r.Debug {
+				log.Info("Specs are not equal", "diff", currentActiveSpec.DiffValues(desiredSpec))
+			}
 		}
 
 		if desiredSpec.Chart == nil {

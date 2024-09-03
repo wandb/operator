@@ -88,6 +88,41 @@ func (s *Spec) IsEqual(spec *Spec) bool {
 	return isReleaseEqual && isValuesEqual && isMetadataEqual
 }
 
+func (s *Spec) DiffValues(other *Spec) map[string]interface{} {
+	return diffMaps(s.Values, other.Values)
+}
+
+func diffMaps(a, b map[string]interface{}) map[string]interface{} {
+	diff := make(map[string]interface{})
+	for key, aValue := range a {
+		if bValue, ok := b[key]; ok {
+			if !reflect.DeepEqual(aValue, bValue) {
+				switch aValue.(type) {
+				case map[string]interface{}:
+					if bMap, ok := bValue.(map[string]interface{}); ok {
+						nestedDiff := diffMaps(aValue.(map[string]interface{}), bMap)
+						if len(nestedDiff) > 0 {
+							diff[key] = nestedDiff
+						}
+					} else {
+						diff[key] = aValue
+					}
+				default:
+					diff[key] = aValue
+				}
+			}
+		} else {
+			diff[key] = aValue
+		}
+	}
+	for key, bValue := range b {
+		if _, ok := a[key]; !ok {
+			diff[key] = bValue
+		}
+	}
+	return diff
+}
+
 func (s *Spec) mergeConfig(values Values) (err error) {
 	if s.Values == nil {
 		s.Values = values
