@@ -55,6 +55,7 @@ type WeightsAndBiasesReconciler struct {
 	Scheme         *runtime.Scheme
 	Recorder       record.EventRecorder
 	DryRun         bool
+	Debug          bool
 }
 
 //+kubebuilder:rbac:groups=apps.wandb.com,resources=weightsandbiases,verbs=get;list;watch;create;update;patch;delete
@@ -131,7 +132,7 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			// is not operational, and a version has been deployed successfully. Rather than
 			// reverting to the container defaults, we've stored the most recent successful
 			// deployer release in the cache
-            // Attempt to retrieve the cached release
+			// Attempt to retrieve the cached release
 			if deployerSpec, err = specManager.Get("latest-cached-release"); err != nil {
 				log.Error(err, "No cached release found for deployer spec", err, "error")
 			} else {
@@ -150,11 +151,31 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	desiredSpec := new(spec.Spec)
+
+	if r.Debug {
+		log.Info("Initial desired spec", "spec", desiredSpec.SensitiveValuesMasked())
+	}
+
 	// First takes precedence
 	desiredSpec.Merge(crdSpec)
+	if r.Debug {
+		log.Info("Desired spec after merging crdSpec", "spec", desiredSpec.SensitiveValuesMasked())
+	}
+
 	desiredSpec.Merge(userInputSpec)
+	if r.Debug {
+		log.Info("Desired spec after merging userInputSpec", "spec", desiredSpec.SensitiveValuesMasked())
+	}
+
 	desiredSpec.Merge(deployerSpec)
+	if r.Debug {
+		log.Info("Desired spec after merging deployerSpec", "spec", desiredSpec.SensitiveValuesMasked())
+	}
+
 	desiredSpec.Merge(operator.Defaults(wandb, r.Scheme))
+	if r.Debug {
+		log.Info("Desired spec after merging operator defaults", "spec", desiredSpec.SensitiveValuesMasked())
+	}
 
 	log.Info("Desired spec", "spec", desiredSpec.SensitiveValuesMasked())
 
