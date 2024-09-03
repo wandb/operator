@@ -190,6 +190,9 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				log.Info("No changes found")
 				statusManager.Set(status.Completed)
 				return ctrlqueue.Requeue(desiredSpec)
+			} else {
+				diff := currentActiveSpec.DiffValues(desiredSpec)
+				log.Info("Changes found", "diff", diff)
 			}
 		}
 
