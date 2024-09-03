@@ -18,10 +18,11 @@ package controllers
 
 import (
 	"context"
+	"reflect"
+
 	"github.com/wandb/operator/pkg/wandb/spec/state"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
-	"reflect"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -113,7 +114,7 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	currentActiveSpec, err := specManager.GetActive()
 	if err != nil {
-		// This scenario can happen if we have not successfully deploy in the
+		// This scenario can happen if we have not successfully deployed in the
 		// past.
 		log.Info("No active spec found.")
 	}
@@ -126,16 +127,16 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		deployerSpec, err = r.DeployerClient.GetSpec(license, currentActiveSpec)
 		if err != nil {
 			log.Info("Failed to get spec from deployer", "error", err)
-			// This scenario may occur if the user disables networking, or if the deployer
-			// is not operational, and a version has been deployed successfully. Rather than
-			// reverting to the container defaults, we've stored the most recent successful
-			// deployer release in the cache
+			// Attempt to retrieve the cached release
 			if deployerSpec, err = specManager.Get("latest-cached-release"); err != nil {
 				log.Error(err, "No cached release found for deployer spec", err, "error")
+			} else {
+				log.Info("Using cached deployer spec", "cachedSpec", deployerSpec)
 			}
 		}
 
 		if deployerSpec != nil {
+			log.Info("Writing deployer spec to cache", "cachedSpec", deployerSpec)
 			if err := specManager.Set("latest-cached-release", deployerSpec); err != nil {
 				r.Recorder.Event(wandb, corev1.EventTypeNormal, "SecretWriteFailed", "Unable to write secret to kubernetes")
 				log.Error(err, "Unable to save latest release.")
