@@ -2,19 +2,22 @@ package controllers
 
 import (
 	"context"
+	"time"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	wandbcomv1 "github.com/wandb/operator/api/v1"
 	"github.com/wandb/operator/pkg/wandb/spec"
 	"github.com/wandb/operator/pkg/wandb/spec/channel/deployer/deployerfakes"
 	"github.com/wandb/operator/pkg/wandb/spec/charts"
+	"github.com/wandb/operator/pkg/wandb/spec/state"
+	"github.com/wandb/operator/pkg/wandb/spec/state/secrets"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"time"
 )
 
 var deployerSpec = spec.Spec{
@@ -135,6 +138,78 @@ var _ = Describe("WeightsandbiasesController", func() {
 				event = <-recorder.Events
 				Expect(event).To(ContainSubstring("Completed reconcile successfully"))
 			})
+		})
+	})
+	Describe("Reconcile with _releaseId set", func() {
+		BeforeEach(func() {
+			ctx := context.Background()
+			recorder = record.NewFakeRecorder(10)
+			deployerClient := &deployerfakes.FakeDeployerInterface{}
+			deployerClient.GetSpecReturns(&deployerSpec, nil)
+			reconciler = &WeightsAndBiasesReconciler{
+				Client:         k8sClient,
+				IsAirgapped:    false,
+				DeployerClient: deployerClient,
+				Scheme:         scheme.Scheme,
+				Recorder:       recorder,
+				DryRun:         true,
+			}
+			wandb := wandbcomv1.WeightsAndBiases{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-release-id",
+					Namespace: "default",
+				},
+				Spec: wandbcomv1.WeightsAndBiasesSpec{
+					Chart: wandbcomv1.Object{Object: map[string]interface{}{}},
+					Values: wandbcomv1.Object{Object: map[string]interface{}{
+						"global": map[string]interface{}{
+							"host": "https://qa-google.wandb.io",
+						},
+					}},
+				},
+			}
+			err := k8sClient.Create(ctx, &wandb)
+			Expect(err).ToNot(HaveOccurred())
+
+			// Create UserSpec with _releaseId
+			userSpec := &spec.Spec{
+				Values: map[string]interface{}{
+					"_releaseId": "0b901113-8135-48ae-bdaf-6fa82b4b2d28",
+				},
+			}
+			err = state.New(ctx, k8sClient, &wandb, scheme.Scheme, secrets.New(ctx, k8sClient, &wandb, scheme.Scheme)).SetUserInput(userSpec)
+			Expect(err).ToNot(HaveOccurred())
+
+			res, err := reconciler.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: wandb.Name, Namespace: wandb.Namespace}})
+			Expect(err).ToNot(HaveOccurred())
+			Expect(res).To(Equal(ctrl.Result{RequeueAfter: time.Duration(1 * time.Hour)}))
+		})
+
+		AfterEach(func() {
+			ctx := context.Background()
+			wandb := wandbcomv1.WeightsAndBiases{}
+			err := k8sClient.Get(ctx, types.NamespacedName{Name: "test-release-id", Namespace: "default"}, &wandb)
+			Expect(err).ToNot(HaveOccurred())
+			err = k8sClient.Delete(ctx, &wandb)
+			Expect(err).ToNot(HaveOccurred())
+			err = k8sClient.Delete(ctx, &v1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "test-release-id-spec-active", Namespace: "default"}})
+			Expect(err).ToNot(HaveOccurred())
+			_, err = reconciler.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: wandb.Name, Namespace: wandb.Namespace}})
+			Expect(err).ToNot(HaveOccurred())
+			err = k8sClient.Get(ctx, types.NamespacedName{Name: "test-release-id", Namespace: "default"}, &wandb)
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("Should use the specified _releaseId from UserSpec in the final spec", func() {
+			ctx := context.Background()
+			wandb := wandbcomv1.WeightsAndBiases{}
+			err := k8sClient.Get(ctx, types.NamespacedName{Name: "test-release-id", Namespace: "default"}, &wandb)
+			Expect(err).ToNot(HaveOccurred())
+
+			specManager := state.New(ctx, k8sClient, &wandb, scheme.Scheme, secrets.New(ctx, k8sClient, &wandb, scheme.Scheme))
+			activeSpec, err := specManager.GetActive()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(activeSpec.Values["_releaseId"]).To(Equal("0b901113-8135-48ae-bdaf-6fa82b4b2d28"))
 		})
 	})
 	Describe("Reconcile and Apply", func() {

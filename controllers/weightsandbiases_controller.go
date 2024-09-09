@@ -111,6 +111,14 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		specManager.SetUserInput(userInputSpec)
 	}
 
+	var releaseID string
+	if userInputSpec != nil {
+		if releaseIDValue, ok := userInputSpec.Values["_releaseId"].(string); ok {
+			releaseID = releaseIDValue
+			log.Info("Version Pinning is enabled", "releaseId:", releaseID)
+		}
+	}
+
 	crdSpec := operator.Spec(wandb)
 
 	currentActiveSpec, err := specManager.GetActive()
@@ -125,7 +133,11 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	var deployerSpec *spec.Spec
 	if !r.IsAirgapped {
-		deployerSpec, err = r.DeployerClient.GetSpec(license, currentActiveSpec)
+		deployerSpec, err = r.DeployerClient.GetSpec(deployer.GetSpecOptions{
+			License:     license,
+			ActiveState: currentActiveSpec,
+			ReleaseId:   releaseID,
+		})
 		if err != nil {
 			log.Info("Failed to get spec from deployer", "error", err)
 			// This scenario may occur if the user disables networking, or if the deployer

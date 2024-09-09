@@ -1,11 +1,13 @@
 package deployer
 
 import (
-	"github.com/wandb/operator/pkg/wandb/spec"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
+
+	"github.com/wandb/operator/pkg/wandb/spec"
 )
 
 func TestDeployerClient_GetSpec(t *testing.T) {
@@ -64,9 +66,12 @@ func TestDeployerClient_GetSpec(t *testing.T) {
 			server := tt.fields.testServer(tt.args.license)
 			defer server.Close()
 			c := &DeployerClient{
-				DeployerChannelUrl: server.URL,
+				DeployerAPI: server.URL,
 			}
-			got, err := c.GetSpec(tt.args.license, tt.args.activeState)
+			got, err := c.GetSpec(GetSpecOptions{
+				License:     tt.args.license,
+				ActiveState: tt.args.activeState,
+			})
 			if (err != nil) != tt.wantErr {
 				t.Errorf("GetSpec() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -82,26 +87,46 @@ func TestDeployerClient_GetSpec(t *testing.T) {
 	}
 }
 
-func TestDeployerClient_getURL(t *testing.T) {
-	type fields struct {
-		DeployerChannelUrl string
-		HttpClient         *http.Client
-	}
+func TestDeployerClient_getDeployerURL(t *testing.T) {
 	tests := []struct {
-		name   string
-		fields fields
-		want   string
+		name               string
+		deployerChannelUrl string
+		deployerReleaseURL string
+		releaseId          string
+		want               string
 	}{
-		{"No Deployer Channel URL provided", fields{"", nil}, DeployerAPI},
-		{"User Provided Deployer Channel URL", fields{"https://test-url.example.com", nil}, "https://test-url.example.com"},
+		{
+			name:      "No releaseId, default channel URL",
+			releaseId: "",
+			want:      DeployerAPI + DeployerChannelPath,
+		},
+		{
+			name:               "No releaseId, custom channel URL",
+			deployerChannelUrl: "https://custom-channel.example.com",
+			releaseId:          "",
+			want:               "https://custom-channel.example.com" + DeployerChannelPath,
+		},
+		{
+			name:      "With releaseId, default release URL",
+			releaseId: "123",
+			want:      DeployerAPI + strings.Replace(DeployerReleaseAPIPath, ":versionId", "123", 1),
+		},
+		{
+			name:               "With releaseId, custom release URL",
+			deployerChannelUrl: "https://custom-release.example.com",
+			releaseId:          "456",
+			want:               "https://custom-release.example.com/api/v1/operator/channel/release/456",
+		},
 	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := &DeployerClient{
-				DeployerChannelUrl: tt.fields.DeployerChannelUrl,
+				DeployerAPI: tt.deployerChannelUrl,
 			}
-			if got := c.getURL(); got != tt.want {
-				t.Errorf("getURL() = %v, want %v", got, tt.want)
+			got := c.getDeployerURL(GetSpecOptions{ReleaseId: tt.releaseId})
+			if got != tt.want {
+				t.Errorf("getDeployerURL() = %v, want %v", got, tt.want)
 			}
 		})
 	}
