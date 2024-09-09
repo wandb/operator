@@ -98,24 +98,24 @@ func TestDeployerClient_getDeployerURL(t *testing.T) {
 		{
 			name:      "No releaseId, default channel URL",
 			releaseId: "",
-			want:      DeployerAPI,
+			want:      DeployerAPI + DeployerChannelPath,
 		},
 		{
 			name:               "No releaseId, custom channel URL",
 			deployerChannelUrl: "https://custom-channel.example.com",
 			releaseId:          "",
-			want:               "https://custom-channel.example.com",
+			want:               "https://custom-channel.example.com" + DeployerChannelPath,
 		},
 		{
 			name:      "With releaseId, default release URL",
 			releaseId: "123",
-			want:      strings.Replace(DeployerReleaseAPI, ":versionId", "123", 1),
+			want:      DeployerAPI + strings.Replace(DeployerReleaseAPIPath, ":versionId", "123", 1),
 		},
 		{
 			name:               "With releaseId, custom release URL",
-			deployerReleaseURL: "https://custom-release.example.com/:versionId",
+			deployerChannelUrl: "https://custom-release.example.com",
 			releaseId:          "456",
-			want:               "https://custom-release.example.com/456",
+			want:               "https://custom-release.example.com/api/v1/operator/channel/release/456",
 		},
 	}
 
@@ -125,7 +125,7 @@ func TestDeployerClient_getDeployerURL(t *testing.T) {
 				DeployerChannelUrl: tt.deployerChannelUrl,
 				DeployerReleaseURL: tt.deployerReleaseURL,
 			}
-			got := c.getDeployerURL(tt.releaseId)
+			got := c.getDeployerURL(GetSpecOptions{ReleaseId: tt.releaseId})
 			if got != tt.want {
 				t.Errorf("getDeployerURL() = %v, want %v", got, tt.want)
 			}

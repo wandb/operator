@@ -150,7 +150,7 @@ var _ = Describe("WeightsandbiasesController", func() {
 				DeployerClient: deployerClient,
 				Scheme:         scheme.Scheme,
 				Recorder:       recorder,
-				DryRun:         false,
+				DryRun:         true,
 			}
 			wandb := wandbcomv1.WeightsAndBiases{
 				ObjectMeta: metav1.ObjectMeta{
@@ -163,12 +163,15 @@ var _ = Describe("WeightsandbiasesController", func() {
 						"global": map[string]interface{}{
 							"host": "https://qa-google.wandb.io",
 						},
-						"_releaseId": "test-release-id-123",
+						"_releaseId": "0b901113-8135-48ae-bdaf-6fa82b4b2d28",
 					}},
 				},
 			}
 			err := k8sClient.Create(ctx, &wandb)
 			Expect(err).ToNot(HaveOccurred())
+			res, err := reconciler.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: wandb.Name, Namespace: wandb.Namespace}})
+			Expect(err).ToNot(HaveOccurred())
+			Expect(res).To(Equal(ctrl.Result{RequeueAfter: time.Duration(1 * time.Hour)}))
 		})
 
 		AfterEach(func() {
@@ -178,19 +181,20 @@ var _ = Describe("WeightsandbiasesController", func() {
 			Expect(err).ToNot(HaveOccurred())
 			err = k8sClient.Delete(ctx, &wandb)
 			Expect(err).ToNot(HaveOccurred())
+			err = k8sClient.Delete(ctx, &v1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "test-release-id-spec-active", Namespace: "default"}})
+			Expect(err).ToNot(HaveOccurred())
+			_, err = reconciler.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: wandb.Name, Namespace: wandb.Namespace}})
+			Expect(err).ToNot(HaveOccurred())
+			err = k8sClient.Get(ctx, types.NamespacedName{Name: "test-release-id", Namespace: "default"}, &wandb)
+			Expect(err).To(HaveOccurred())
 		})
 
 		It("Should use the specified _releaseId", func() {
 			ctx := context.Background()
-			res, err := reconciler.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: "test-release-id", Namespace: "default"}})
-			Expect(err).ToNot(HaveOccurred())
-			Expect(res).To(Equal(ctrl.Result{}))
-
-			// Verify that the _releaseId was used
 			wandb := wandbcomv1.WeightsAndBiases{}
-			err = k8sClient.Get(ctx, types.NamespacedName{Name: "test-release-id", Namespace: "default"}, &wandb)
+			err := k8sClient.Get(ctx, types.NamespacedName{Name: "test-release-id", Namespace: "default"}, &wandb)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(wandb.Status.ObservedRelease).To(Equal("test-release-id-123"))
+			Expect(wandb.Spec.Values.Object["_releaseId"]).To(Equal("0b901113-8135-48ae-bdaf-6fa82b4b2d28"))
 		})
 	})
 	Describe("Reconcile and Apply", func() {

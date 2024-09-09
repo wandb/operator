@@ -16,8 +16,9 @@ import (
 )
 
 const (
-	DeployerAPI        = "https://deploy.wandb.ai/api/v1/operator/channel"
-	DeployerReleaseAPI = "https://deploy.wandb.ai/api/v1/operator/channel/release/:versionId"
+	DeployerAPI            = "https://deploy.wandb.ai"
+	DeployerChannelPath    = "/api/v1/operator/channel"
+	DeployerReleaseAPIPath = "/api/v1/operator/channel/release/:versionId"
 )
 
 type GetSpecOptions struct {
@@ -42,24 +43,24 @@ type SpecUnknownChart struct {
 	Chart    interface{}    `json:"chart"`
 }
 
-func (c *DeployerClient) getDeployerURL(releaseId string) string {
-	if releaseId == "" {
-		if c.DeployerChannelUrl == "" {
-			return DeployerAPI
-		}
-		return c.DeployerChannelUrl
+func (c *DeployerClient) getDeployerURL(opts GetSpecOptions) string {
+	var url string
+	if c.DeployerChannelUrl != "" {
+		url = c.DeployerChannelUrl
+	} else {
+		url = DeployerAPI
 	}
 
-	if c.DeployerReleaseURL == "" {
-		c.DeployerReleaseURL = DeployerReleaseAPI
+	if opts.ReleaseId != "" {
+		return url + strings.Replace(DeployerReleaseAPIPath, ":versionId", opts.ReleaseId, 1)
 	}
-	return strings.Replace(c.DeployerReleaseURL, ":versionId", releaseId, 1)
+	return url + DeployerChannelPath
 }
 
 // GetSpec returns the spec for the given license. If the license or an empty
 // string it will pull down the latest stable version.
 func (c *DeployerClient) GetSpec(opts GetSpecOptions) (*spec.Spec, error) {
-	url := c.getDeployerURL(opts.ReleaseId)
+	url := c.getDeployerURL(opts)
 
 	client := &http.Client{}
 
