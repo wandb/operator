@@ -33,8 +33,7 @@ type DeployerInterface interface {
 }
 
 type DeployerClient struct {
-	DeployerChannelUrl string
-	DeployerReleaseURL string
+	DeployerAPI string
 }
 
 type SpecUnknownChart struct {
@@ -45,8 +44,8 @@ type SpecUnknownChart struct {
 
 func (c *DeployerClient) getDeployerURL(opts GetSpecOptions) string {
 	var url string
-	if c.DeployerChannelUrl != "" {
-		url = c.DeployerChannelUrl
+	if c.DeployerAPI != "" {
+		url = c.DeployerAPI
 	} else {
 		url = DeployerAPI
 	}

@@ -119,7 +119,7 @@ func main() {
 		Recorder:       mgr.GetEventRecorderFor("weightsandbiases"),
 		Client:         mgr.GetClient(),
 		Scheme:         mgr.GetScheme(),
-		DeployerClient: &deployer.DeployerClient{DeployerChannelUrl: deployerAPI},
+		DeployerClient: &deployer.DeployerClient{DeployerAPI: deployerAPI},
 		Debug:          debug,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "WeightsAndBiases")

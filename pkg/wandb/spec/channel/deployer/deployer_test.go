@@ -66,7 +66,7 @@ func TestDeployerClient_GetSpec(t *testing.T) {
 			server := tt.fields.testServer(tt.args.license)
 			defer server.Close()
 			c := &DeployerClient{
-				DeployerChannelUrl: server.URL,
+				DeployerAPI: server.URL,
 			}
 			got, err := c.GetSpec(GetSpecOptions{
 				License:     tt.args.license,
@@ -122,8 +122,7 @@ func TestDeployerClient_getDeployerURL(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := &DeployerClient{
-				DeployerChannelUrl: tt.deployerChannelUrl,
-				DeployerReleaseURL: tt.deployerReleaseURL,
+				DeployerAPI: tt.deployerChannelUrl,
 			}
 			got := c.getDeployerURL(GetSpecOptions{ReleaseId: tt.releaseId})
 			if got != tt.want {
