@@ -111,7 +111,7 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		specManager.SetUserInput(userInputSpec)
 	}
 
-	releaseID := ""
+	var releaseID string
 	if userInputSpec != nil {
 		if releaseIDValue, ok := userInputSpec.Values["_releaseId"].(string); ok {
 			releaseID = releaseIDValue
