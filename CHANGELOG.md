@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.13.0](https://github.com/wandb/operator/compare/v1.12.5...v1.13.0) (2024-09-09)
+
+
+### Features
+
+* Release Version Pinning Init ([#28](https://github.com/wandb/operator/issues/28)) ([dfe8bda](https://github.com/wandb/operator/commit/dfe8bda333a73b95bce748c953119292134a6347))
+
 ### [1.12.5](https://github.com/wandb/operator/compare/v1.12.4...v1.12.5) (2024-09-03)
 
 
