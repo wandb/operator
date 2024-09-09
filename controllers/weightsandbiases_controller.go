@@ -115,6 +115,7 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	if userInputSpec != nil {
 		if releaseIDValue, ok := userInputSpec.Values["_releaseId"].(string); ok {
 			releaseID = releaseIDValue
+			log.Info("Version Pinning is enabled", "releaseId:", releaseID)
 		}
 	}
 
