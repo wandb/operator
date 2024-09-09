@@ -84,6 +84,7 @@ type WeightsAndBiasesStatus struct {
 	Phase   string `json:"phase,omitempty"`
 	Version string `json:"version,omitempty"`
 	// Conditions []metav1.Condition `json:"conditions"`
+	ObservedRelease string `json:"observedRelease,omitempty"`
 }
 
 //+kubebuilder:object:root=true

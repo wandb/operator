@@ -53,6 +53,9 @@ spec:
           status:
             description: WeightsAndBiasesStatus defines the observed state of WeightsAndBiases
             properties:
+              observedRelease:
+                description: Conditions []metav1.Condition `json:"conditions"`
+                type: string
               phase:
                 type: string
               version:
