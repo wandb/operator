@@ -111,6 +111,14 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		specManager.SetUserInput(userInputSpec)
 	}
 
+	var releaseID string
+	if userInputSpec != nil {
+		if releaseIDValue, ok := userInputSpec.Values["_releaseId"].(string); ok {
+			releaseID = releaseIDValue
+			log.Info("Version Pinning is enabled", "releaseId:", releaseID)
+		}
+	}
+
 	crdSpec := operator.Spec(wandb)
 
 	currentActiveSpec, err := specManager.GetActive()
@@ -125,7 +133,11 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	var deployerSpec *spec.Spec
 	if !r.IsAirgapped {
-		deployerSpec, err = r.DeployerClient.GetSpec(license, currentActiveSpec)
+		deployerSpec, err = r.DeployerClient.GetSpec(deployer.GetSpecOptions{
+			License:     license,
+			ActiveState: currentActiveSpec,
+			ReleaseId:   releaseID,
+		})
 		if err != nil {
 			log.Info("Failed to get spec from deployer", "error", err)
 			// This scenario may occur if the user disables networking, or if the deployer
@@ -160,22 +172,34 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	// First takes precedence
-	desiredSpec.Merge(crdSpec)
+	if err := desiredSpec.Merge(crdSpec); err != nil {
+		log.Error(err, "Failed to merge CRD spec into desired spec")
+		return ctrlqueue.RequeueWithError(err)
+	}
 	if r.Debug {
 		log.Info("Desired spec after merging crdSpec", "spec", desiredSpec.SensitiveValuesMasked())
 	}
 
-	desiredSpec.Merge(userInputSpec)
+	if err := desiredSpec.Merge(userInputSpec); err != nil {
+		log.Error(err, "Failed to merge user input spec into desired spec")
+		return ctrlqueue.RequeueWithError(err)
+	}
 	if r.Debug {
 		log.Info("Desired spec after merging userInputSpec", "spec", desiredSpec.SensitiveValuesMasked())
 	}
 
-	desiredSpec.Merge(deployerSpec)
+	if err := desiredSpec.Merge(deployerSpec); err != nil {
+		log.Error(err, "Failed to merge deployer spec into desired spec")
+		return ctrlqueue.RequeueWithError(err)
+	}
 	if r.Debug {
 		log.Info("Desired spec after merging deployerSpec", "spec", desiredSpec.SensitiveValuesMasked())
 	}
 
-	desiredSpec.Merge(operator.Defaults(wandb, r.Scheme))
+	if err := desiredSpec.Merge(operator.Defaults(wandb, r.Scheme)); err != nil {
+		log.Error(err, "Failed to merge operator defaults into desired spec")
+		return ctrlqueue.RequeueWithError(err)
+	}
 	if r.Debug {
 		log.Info("Desired spec after merging operator defaults", "spec", desiredSpec.SensitiveValuesMasked())
 	}

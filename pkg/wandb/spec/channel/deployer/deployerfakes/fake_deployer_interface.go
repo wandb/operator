@@ -9,11 +9,10 @@ import (
 )
 
 type FakeDeployerInterface struct {
-	GetSpecStub        func(string, *spec.Spec) (*spec.Spec, error)
+	GetSpecStub        func(deployer.GetSpecOptions) (*spec.Spec, error)
 	getSpecMutex       sync.RWMutex
 	getSpecArgsForCall []struct {
-		arg1 string
-		arg2 *spec.Spec
+		arg1 deployer.GetSpecOptions
 	}
 	getSpecReturns struct {
 		result1 *spec.Spec
@@ -23,33 +22,22 @@ type FakeDeployerInterface struct {
 		result1 *spec.Spec
 		result2 error
 	}
-	GetURLStub        func() string
-	getURLMutex       sync.RWMutex
-	getURLArgsForCall []struct {
-	}
-	getURLReturns struct {
-		result1 string
-	}
-	getURLReturnsOnCall map[int]struct {
-		result1 string
-	}
 	invocations      map[string][][]interface{}
 	invocationsMutex sync.RWMutex
 }
 
-func (fake *FakeDeployerInterface) GetSpec(arg1 string, arg2 *spec.Spec) (*spec.Spec, error) {
+func (fake *FakeDeployerInterface) GetSpec(arg1 deployer.GetSpecOptions) (*spec.Spec, error) {
 	fake.getSpecMutex.Lock()
 	ret, specificReturn := fake.getSpecReturnsOnCall[len(fake.getSpecArgsForCall)]
 	fake.getSpecArgsForCall = append(fake.getSpecArgsForCall, struct {
-		arg1 string
-		arg2 *spec.Spec
-	}{arg1, arg2})
+		arg1 deployer.GetSpecOptions
+	}{arg1})
 	stub := fake.GetSpecStub
 	fakeReturns := fake.getSpecReturns
-	fake.recordInvocation("GetSpec", []interface{}{arg1, arg2})
+	fake.recordInvocation("GetSpec", []interface{}{arg1})
 	fake.getSpecMutex.Unlock()
 	if stub != nil {
-		return stub(arg1, arg2)
+		return stub(arg1)
 	}
 	if specificReturn {
 		return ret.result1, ret.result2
@@ -63,17 +51,17 @@ func (fake *FakeDeployerInterface) GetSpecCallCount() int {
 	return len(fake.getSpecArgsForCall)
 }
 
-func (fake *FakeDeployerInterface) GetSpecCalls(stub func(string, *spec.Spec) (*spec.Spec, error)) {
+func (fake *FakeDeployerInterface) GetSpecCalls(stub func(deployer.GetSpecOptions) (*spec.Spec, error)) {
 	fake.getSpecMutex.Lock()
 	defer fake.getSpecMutex.Unlock()
 	fake.GetSpecStub = stub
 }
 
-func (fake *FakeDeployerInterface) GetSpecArgsForCall(i int) (string, *spec.Spec) {
+func (fake *FakeDeployerInterface) GetSpecArgsForCall(i int) deployer.GetSpecOptions {
 	fake.getSpecMutex.RLock()
 	defer fake.getSpecMutex.RUnlock()
 	argsForCall := fake.getSpecArgsForCall[i]
-	return argsForCall.arg1, argsForCall.arg2
+	return argsForCall.arg1
 }
 
 func (fake *FakeDeployerInterface) GetSpecReturns(result1 *spec.Spec, result2 error) {
@@ -102,66 +90,11 @@ func (fake *FakeDeployerInterface) GetSpecReturnsOnCall(i int, result1 *spec.Spe
 	}{result1, result2}
 }
 
-func (fake *FakeDeployerInterface) GetURL() string {
-	fake.getURLMutex.Lock()
-	ret, specificReturn := fake.getURLReturnsOnCall[len(fake.getURLArgsForCall)]
-	fake.getURLArgsForCall = append(fake.getURLArgsForCall, struct {
-	}{})
-	stub := fake.GetURLStub
-	fakeReturns := fake.getURLReturns
-	fake.recordInvocation("GetURL", []interface{}{})
-	fake.getURLMutex.Unlock()
-	if stub != nil {
-		return stub()
-	}
-	if specificReturn {
-		return ret.result1
-	}
-	return fakeReturns.result1
-}
-
-func (fake *FakeDeployerInterface) GetURLCallCount() int {
-	fake.getURLMutex.RLock()
-	defer fake.getURLMutex.RUnlock()
-	return len(fake.getURLArgsForCall)
-}
-
-func (fake *FakeDeployerInterface) GetURLCalls(stub func() string) {
-	fake.getURLMutex.Lock()
-	defer fake.getURLMutex.Unlock()
-	fake.GetURLStub = stub
-}
-
-func (fake *FakeDeployerInterface) GetURLReturns(result1 string) {
-	fake.getURLMutex.Lock()
-	defer fake.getURLMutex.Unlock()
-	fake.GetURLStub = nil
-	fake.getURLReturns = struct {
-		result1 string
-	}{result1}
-}
-
-func (fake *FakeDeployerInterface) GetURLReturnsOnCall(i int, result1 string) {
-	fake.getURLMutex.Lock()
-	defer fake.getURLMutex.Unlock()
-	fake.GetURLStub = nil
-	if fake.getURLReturnsOnCall == nil {
-		fake.getURLReturnsOnCall = make(map[int]struct {
-			result1 string
-		})
-	}
-	fake.getURLReturnsOnCall[i] = struct {
-		result1 string
-	}{result1}
-}
-
 func (fake *FakeDeployerInterface) Invocations() map[string][][]interface{} {
 	fake.invocationsMutex.RLock()
 	defer fake.invocationsMutex.RUnlock()
 	fake.getSpecMutex.RLock()
 	defer fake.getSpecMutex.RUnlock()
-	fake.getURLMutex.RLock()
-	defer fake.getURLMutex.RUnlock()
 	copiedInvocations := map[string][][]interface{}{}
 	for key, value := range fake.invocations {
 		copiedInvocations[key] = value

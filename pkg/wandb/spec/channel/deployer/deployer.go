@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/wandb/operator/pkg/wandb/spec"
@@ -15,23 +16,24 @@ import (
 )
 
 const (
-	DeployerAPI = "https://deploy.wandb.ai/api/v1/operator/channel"
+	DeployerAPI            = "https://deploy.wandb.ai"
+	DeployerChannelPath    = "/api/v1/operator/channel"
+	DeployerReleaseAPIPath = "/api/v1/operator/channel/release/:versionId"
 )
+
+type GetSpecOptions struct {
+	License     string
+	ActiveState *spec.Spec
+	ReleaseId   string
+}
 
 //counterfeiter:generate . DeployerInterface
 type DeployerInterface interface {
-	GetSpec(license string, activeState *spec.Spec) (*spec.Spec, error)
+	GetSpec(opts GetSpecOptions) (*spec.Spec, error)
 }
 
 type DeployerClient struct {
-	DeployerChannelUrl string
-}
-
-func (c *DeployerClient) getURL() string {
-	if c.DeployerChannelUrl == "" {
-		c.DeployerChannelUrl = DeployerAPI
-	}
-	return c.DeployerChannelUrl
+	DeployerAPI string
 }
 
 type SpecUnknownChart struct {
@@ -40,10 +42,25 @@ type SpecUnknownChart struct {
 	Chart    interface{}    `json:"chart"`
 }
 
+func (c *DeployerClient) getDeployerURL(opts GetSpecOptions) string {
+	var url string
+	if c.DeployerAPI != "" {
+		url = c.DeployerAPI
+	} else {
+		url = DeployerAPI
+	}
+
+	if opts.ReleaseId != "" {
+		return url + strings.Replace(DeployerReleaseAPIPath, ":versionId", opts.ReleaseId, 1)
+	}
+	return url + DeployerChannelPath
+}
+
 // GetSpec returns the spec for the given license. If the license or an empty
 // string it will pull down the latest stable version.
-func (c *DeployerClient) GetSpec(license string, activeState *spec.Spec) (*spec.Spec, error) {
-	url := c.getURL()
+func (c *DeployerClient) GetSpec(opts GetSpecOptions) (*spec.Spec, error) {
+	url := c.getDeployerURL(opts)
+
 	client := &http.Client{}
 
 	maxRetries := 5
@@ -54,8 +71,8 @@ func (c *DeployerClient) GetSpec(license string, activeState *spec.Spec) (*spec.
 		}
 
 		req.Header.Set("Content-Type", "application/json")
-		if license != "" {
-			req.SetBasicAuth("license", license)
+		if opts.License != "" {
+			req.SetBasicAuth("license", opts.License)
 		}
 
 		resp, err := client.Do(req)
