@@ -22,6 +22,7 @@ import (
 
 	"github.com/wandb/operator/pkg/wandb/spec/state"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -46,6 +47,7 @@ import (
 )
 
 const resFinalizer = "finalizer.app.wandb.com"
+const licenseSecretName = "wandb-license-secret" // Constant for the secret name
 
 // WeightsAndBiasesReconciler reconciles a WeightsAndBiases object
 type WeightsAndBiasesReconciler struct {
@@ -128,7 +130,30 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		log.Info("No active spec found.")
 	}
 
-	license := utils.GetLicense(currentActiveSpec, crdSpec, userInputSpec)
+	var license string
+	// Try to fetch the license from Kubernetes secret
+	secret := &corev1.Secret{}
+	secretKey := types.NamespacedName{
+		Namespace: req.Namespace,
+		Name:      licenseSecretName,
+	}
+
+	err = r.Client.Get(ctx, secretKey, secret)
+	if err == nil {
+		if secret.Data != nil {
+			if value, exists := secret.Data["license"]; exists {
+				license = string(value)
+				log.Info("License fetched from secret", "license", license)
+			}
+		}
+	} else {
+		if !errors.IsNotFound(err) {
+			return ctrlqueue.RequeueWithError(err)
+		}
+		// Secret not found, or other error, fallback to GetLicense
+		license = utils.GetLicense(currentActiveSpec, crdSpec, userInputSpec)
+		log.Info("License fetched from string", "license", license)
+	}
 
 	var deployerSpec *spec.Spec
 	if !r.IsAirgapped {
