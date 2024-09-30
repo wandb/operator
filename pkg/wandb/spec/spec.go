@@ -139,6 +139,8 @@ func (s *Spec) SensitiveValuesMasked() *Spec {
 var sensitiveKeys = map[string]bool{
 	"secret":    true,
 	"accessKey": true,
+	"license":   true,
+	"password":  true,
 }
 
 func maskValues(values map[string]interface{}) map[string]interface{} {
