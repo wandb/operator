@@ -21,7 +21,7 @@ metadata:
         }
       ]
     capabilities: Basic Install
-    categories: "Machine Learning,Data Science"
+    categories: "AI/Machine Learning,Developer Tools"
     certified: "false"
     repository: https://github.com/wandb/operator
     description: "Operator for Weights and Biases, enabling seamless integration and management of machine learning experiments in Kubernetes environments."
@@ -34,6 +34,8 @@ spec:
     - kind: WeightsAndBiases
       name: weightsandbiases.apps.wandb.com
       version: v1
+      description: WeightsAndBiases is a custom resource for managing W&B configurations.
+      displayName: Weights And Biases
   description: |-
     The Weights and Biases Operator simplifies the management of machine learning experiments, tracking, and infrastructure. It integrates with Kubernetes to deploy and manage Weights and Biases instances.
     Features:
@@ -128,7 +130,7 @@ spec:
           - patch
           - update
         - apiGroups:
-          - autoscaling
+          - autoscaling/v2
           resources:
           - horizontalpodautoscalers
           verbs:
@@ -285,6 +287,7 @@ spec:
   - email: abhinav.garg@domain.com
     name: Abhinav Garg
   maturity: alpha
+  minKubeVersion: 1.23.0
   provider:
     name: Weights & Biases
     url: https://wandb.ai
