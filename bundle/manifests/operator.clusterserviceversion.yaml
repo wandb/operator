@@ -24,6 +24,7 @@ metadata:
     categories: "AI/Machine Learning,Developer Tools"
     certified: "false"
     repository: https://github.com/wandb/operator
+    containerImage: quay.io/wandb_tools/wandb-operator:v1.0.0
     description: "Operator for Weights and Biases, enabling seamless integration and management of machine learning experiments in Kubernetes environments."
   name: wandb-operator.v1.0.0
   namespace: placeholder
