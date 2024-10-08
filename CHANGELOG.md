@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.15.0](https://github.com/wandb/operator/compare/v1.14.0...v1.15.0) (2024-10-08)
+
+
+### Features
+
+* Prevent Logging of Sensitive info in Plain Text ([#35](https://github.com/wandb/operator/issues/35)) ([9a752fd](https://github.com/wandb/operator/commit/9a752fd98ce2be5c0cb08be3a003f6c8187e6971))
+
 ## [1.14.0](https://github.com/wandb/operator/compare/v1.13.0...v1.14.0) (2024-09-30)
 
 
