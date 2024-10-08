@@ -129,7 +129,6 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	license := utils.GetLicense(currentActiveSpec, crdSpec, userInputSpec)
-	// log.Info("License", "license", license)
 
 	var deployerSpec *spec.Spec
 	if !r.IsAirgapped {
