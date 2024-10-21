@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.16.0](https://github.com/wandb/operator/compare/v1.15.0...v1.16.0) (2024-10-21)
+
+
+### Features
+
+* Make wandb operator available on OperatorHub ([#32](https://github.com/wandb/operator/issues/32)) ([1a59dab](https://github.com/wandb/operator/commit/1a59dab8ed1cb865df2df70be711bef9284876df))
+
 ## [1.15.0](https://github.com/wandb/operator/compare/v1.14.0...v1.15.0) (2024-10-08)
 
 
