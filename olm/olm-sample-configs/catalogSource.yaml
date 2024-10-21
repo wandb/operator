@@ -1,0 +1,12 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: CatalogSource
+metadata:
+  name: wandb-operator-catalog
+  labels:
+    app.kubernetes.io/part-of: wandb-operator
+spec:
+  sourceType: grpc
+  image: quay.io/wandb_tools/wandb-operator-index:<release_tag>
+  updateStrategy:
+    registryPoll:
+      interval: 5m

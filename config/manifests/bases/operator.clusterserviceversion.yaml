@@ -1,0 +1,51 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: '[]'
+    capabilities: Basic Install
+  name: operator.v0.0.0
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions: {}
+  description: |-
+    The Weights and Biases Operator simplifies the management of machine learning experiments, tracking, and infrastructure. It integrates with Kubernetes to deploy and manage Weights and Biases instances.
+    Features:
+    - Experiment Tracking
+    - Hyperparameter Tuning
+    - Model Management
+    - Integration with popular ML frameworks
+  displayName: Weights & Biases Operator
+  icon:
+  - base64data: ""
+    mediatype: ""
+  install:
+    spec:
+      deployments: null
+    strategy: ""
+  installModes:
+  - supported: false
+    type: OwnNamespace
+  - supported: false
+    type: SingleNamespace
+  - supported: false
+    type: MultiNamespace
+  - supported: true
+    type: AllNamespaces
+  keywords:
+  - machine learning
+  - experiment tracking
+  - ML infrastructure
+  - weights and biases
+  links:
+  - name: Weights & Biases Documentation
+    url: https://docs.wandb.ai/
+  maintainers:
+  - email: abhinav.garg@domain.com
+    name: Abhinav Garg
+  maturity: alpha
+  provider:
+    name: Weights & Biases
+    url: https://wandb.ai
+  version: 0.0.0
