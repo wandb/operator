@@ -38,6 +38,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	wandbcomv1 "github.com/wandb/operator/api/v1"
 	"github.com/wandb/operator/controllers"
@@ -85,9 +87,11 @@ func main() {
 	}
 
 	managerOptions := ctrl.Options{
-		Scheme:                 scheme,
-		MetricsBindAddress:     metricsAddr,
-		Port:                   9443,
+		Scheme:  scheme,
+		Metrics: server.Options{BindAddress: metricsAddr},
+		WebhookServer: webhook.NewServer(webhook.Options{
+			Port: 9443,
+		}),
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "895e3013.wandb.com",
@@ -105,7 +109,10 @@ func main() {
 	}
 
 	if len(namespaces) > 0 {
-		managerOptions.NewCache = cache.MultiNamespacedCacheBuilder(namespaces)
+		managerOptions.Cache = cache.Options{DefaultNamespaces: map[string]cache.Config{}}
+		for _, ns := range namespaces {
+			managerOptions.Cache.DefaultNamespaces[ns] = cache.Config{}
+		}
 	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), managerOptions)
