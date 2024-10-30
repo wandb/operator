@@ -71,7 +71,7 @@ func main() {
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
-	flag.StringVar(&isolationNamespaces, "isolation-namespaces", "", "Specify namespaces that the controller should monitor when operating in namespace isolation mode.")
+	flag.StringVar(&isolationNamespaces, "isolation-namespaces", "", "Specify namespaces (as a comma separated string) that the controller should monitor when operating in namespace isolation mode.")
 
 	opts := zap.Options{Development: true}
 	opts.BindFlags(flag.CommandLine)
@@ -81,13 +81,19 @@ func main() {
 	logger := zap.New(zap.UseFlagOptions(&opts))
 	ctrl.SetLogger(logger)
 
-	var namespaces []string
+	cacheOptions := cache.Options{}
 	if isolationNamespaces != "" {
-		namespaces = strings.Split(isolationNamespaces, ",")
+		namespaces := strings.Split(isolationNamespaces, ",")
+		namespacesCacheConfig := map[string]cache.Config{}
+		for _, ns := range namespaces {
+			namespacesCacheConfig[ns] = cache.Config{}
+		}
+		cacheOptions.DefaultNamespaces = namespacesCacheConfig
 	}
 
 	managerOptions := ctrl.Options{
 		Scheme:  scheme,
+		Cache:   cacheOptions,
 		Metrics: server.Options{BindAddress: metricsAddr},
 		WebhookServer: webhook.NewServer(webhook.Options{
 			Port: 9443,
@@ -106,13 +112,6 @@ func main() {
 		// if you are doing or is intended to do any operation such as perform cleanups
 		// after the manager stops then its usage might be unsafe.
 		// LeaderElectionReleaseOnCancel: true,
-	}
-
-	if len(namespaces) > 0 {
-		managerOptions.Cache = cache.Options{DefaultNamespaces: map[string]cache.Config{}}
-		for _, ns := range namespaces {
-			managerOptions.Cache.DefaultNamespaces[ns] = cache.Config{}
-		}
 	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), managerOptions)
