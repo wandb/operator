@@ -1,8 +1,7 @@
 ARG KUBECTL_VERSION=1.27.3
-ARG PNPM_VERSION=8.6.6
 
 # Build the manager binary
-FROM golang:1.20 AS manager-builder
+FROM golang:1.23 AS manager-builder
 
 ARG TARGETOS
 ARG TARGETARCH

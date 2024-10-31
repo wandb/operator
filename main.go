@@ -38,6 +38,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	wandbcomv1 "github.com/wandb/operator/api/v1"
 	"github.com/wandb/operator/controllers"
@@ -69,7 +71,7 @@ func main() {
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
-	flag.StringVar(&isolationNamespaces, "isolation-namespaces", "", "Specify namespaces that the controller should monitor when operating in namespace isolation mode.")
+	flag.StringVar(&isolationNamespaces, "isolation-namespaces", "", "Specify namespaces (as a comma separated string) that the controller should monitor when operating in namespace isolation mode.")
 
 	opts := zap.Options{Development: true}
 	opts.BindFlags(flag.CommandLine)
@@ -79,15 +81,23 @@ func main() {
 	logger := zap.New(zap.UseFlagOptions(&opts))
 	ctrl.SetLogger(logger)
 
-	var namespaces []string
+	cacheOptions := cache.Options{}
 	if isolationNamespaces != "" {
-		namespaces = strings.Split(isolationNamespaces, ",")
+		namespaces := strings.Split(isolationNamespaces, ",")
+		namespacesCacheConfig := map[string]cache.Config{}
+		for _, ns := range namespaces {
+			namespacesCacheConfig[ns] = cache.Config{}
+		}
+		cacheOptions.DefaultNamespaces = namespacesCacheConfig
 	}
 
 	managerOptions := ctrl.Options{
-		Scheme:                 scheme,
-		MetricsBindAddress:     metricsAddr,
-		Port:                   9443,
+		Scheme:  scheme,
+		Cache:   cacheOptions,
+		Metrics: server.Options{BindAddress: metricsAddr},
+		WebhookServer: webhook.NewServer(webhook.Options{
+			Port: 9443,
+		}),
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "895e3013.wandb.com",
@@ -102,10 +112,6 @@ func main() {
 		// if you are doing or is intended to do any operation such as perform cleanups
 		// after the manager stops then its usage might be unsafe.
 		// LeaderElectionReleaseOnCancel: true,
-	}
-
-	if len(namespaces) > 0 {
-		managerOptions.NewCache = cache.MultiNamespacedCacheBuilder(namespaces)
 	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), managerOptions)
