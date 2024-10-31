@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.16.1](https://github.com/wandb/operator/compare/v1.16.0...v1.16.1) (2024-10-31)
+
+
+### Bug Fixes
+
+* Bump deps ([#36](https://github.com/wandb/operator/issues/36)) ([eefb59c](https://github.com/wandb/operator/commit/eefb59c16bfa9f4bc19a96dab8de4efdaab96bf1))
+
 ## [1.16.0](https://github.com/wandb/operator/compare/v1.15.0...v1.16.0) (2024-10-21)
 
 
