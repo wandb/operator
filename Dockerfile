@@ -30,7 +30,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o manager main.go
 # Create a helm cache directory, set group ownership and permissions, and apply the sticky bit
 RUN mkdir -p /helm/.cache/helm /helm/.config/helm /helm/.local/share/helm && chmod -R 1777 /helm
 
-FROM gcr.io/distroless/static-debian11
+FROM registry.access.redhat.com/ubi9/ubi
 
 COPY --from=manager-builder /workspace/manager .
 COPY --from=manager-builder /helm /helm
