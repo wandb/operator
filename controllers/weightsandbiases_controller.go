@@ -211,7 +211,7 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			log.Info("Active spec found", "spec", currentActiveSpec.SensitiveValuesMasked())
 			if currentActiveSpec.IsEqual(desiredSpec) {
 				log.Info("No changes found")
-				statusManager.Set(status.Completed)
+				statusManager.SetPhase(status.Completed, "No changes detected, reconciliation completed.") // Set phase to Completed with message
 				return ctrlqueue.Requeue(desiredSpec)
 			} else {
 				diff := currentActiveSpec.DiffValues(desiredSpec)
@@ -220,7 +220,7 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 
 		if desiredSpec.Chart == nil {
-			statusManager.Set(status.InvalidConfig)
+			statusManager.SetPhase(status.InvalidConfig, "No release type was found in the spec.") // Set phase to InvalidConfig with message
 			log.Error(err, "No release type was found in the spec")
 			return ctrlqueue.Requeue(desiredSpec)
 		}
@@ -231,7 +231,7 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 		log.Info("Found release type "+typ, "release", reflect.TypeOf(desiredSpec.Chart))
 
-		statusManager.Set(status.Loading)
+		statusManager.SetPhase(status.Loading, "Loading spec and initializing deployment.") // Set phase to Loading with message
 
 		if !ctrlqueue.ContainsString(wandb.GetFinalizers(), resFinalizer) {
 			wandb.ObjectMeta.Finalizers = append(wandb.ObjectMeta.Finalizers, resFinalizer)
@@ -241,20 +241,22 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 
 		log.Info("Applying spec...", "spec", desiredSpec.SensitiveValuesMasked())
+		statusManager.SetPhase(status.Deploying, "Deployment process is starting.") // Set phase to Deploying
 		if !r.DryRun {
 			if err := desiredSpec.Apply(ctx, r.Client, wandb, r.Scheme); err != nil {
-				statusManager.Set(status.InvalidConfig)
+				statusManager.SetPhase(status.InvalidConfig, "Invalid config for apply.") // Set phase to Failure if deployment fails
 				r.Recorder.Event(wandb, corev1.EventTypeNormal, "ApplyFailed", "Invalid config for apply")
 				log.Error(err, "Failed to apply config changes.")
 				return ctrlqueue.Requeue(desiredSpec)
 			}
 		}
 		log.Info("Successfully applied spec", "spec", desiredSpec.SensitiveValuesMasked())
+		statusManager.SetPhase(status.Success, "Deployment successful.") // Set phase to Success
 
 		if err := specManager.SetActive(desiredSpec); err != nil {
 			r.Recorder.Event(wandb, corev1.EventTypeNormal, "SetActiveFailed", "Failed to save active state")
 			log.Error(err, "Failed to save active successful spec.")
-			statusManager.Set(status.InvalidConfig)
+			statusManager.SetPhase(status.InvalidConfig, "Invalid config for apply.") // Set phase to Failure if deployment fails
 			return ctrlqueue.Requeue(desiredSpec)
 		}
 		if r.Debug {
@@ -262,7 +264,7 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 
 		r.Recorder.Event(wandb, corev1.EventTypeNormal, "Completed", "Completed reconcile successfully")
-		statusManager.Set(status.Completed)
+		statusManager.SetPhase(status.Completed, "Reconciliation completed successfully.") // Set phase to Completed with message
 
 		return ctrlqueue.Requeue(desiredSpec)
 	}

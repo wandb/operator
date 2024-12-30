@@ -81,9 +81,13 @@ type WeightsAndBiasesStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
+	// Overall phase of the deployment
 	Phase   string `json:"phase,omitempty"`
 	Version string `json:"version,omitempty"`
-	// Conditions []metav1.Condition `json:"conditions"`
+	// High-level message about the status (e.g., errors or progress info)
+	Message string `json:"message,omitempty"`
+	// Detailed conditions for individual resources
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
 //+kubebuilder:object:root=true
