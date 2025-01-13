@@ -141,6 +141,7 @@ func (c *ActionableChart) Install(
 	client := action.NewInstall(c.config)
 	client.ReleaseName = c.releaseName
 	client.Namespace = c.namespace
+	client.Wait = true
 	return client.Run(chart, values)
 }
 
@@ -161,6 +162,7 @@ func (c *ActionableChart) Upgrade(chart *chart.Chart, values map[string]interfac
 
 func (c *ActionableChart) Uninstall() (*release.UninstallReleaseResponse, error) {
 	client := action.NewUninstall(c.config)
+	client.Wait = true
 	return client.Run(c.releaseName)
 }
 
