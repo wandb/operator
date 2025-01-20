@@ -262,6 +262,54 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 
 		r.Recorder.Event(wandb, corev1.EventTypeNormal, "Completed", "Completed reconcile successfully")
+		var managedResources []client.Object
+		resourceKinds := []struct {
+			name string
+			list client.ObjectList
+		}{
+			{"Deployment", &appsv1.DeploymentList{}},
+			{"StatefulSet", &appsv1.StatefulSetList{}},
+			{"Ingress", &networkingv1.IngressList{}},
+			{"DaemonSet", &appsv1.DaemonSetList{}},
+		}
+
+		for _, resourceKind := range resourceKinds {
+			log.Info("Fetching resources", "kind", resourceKind.name)
+
+			// List resources with Helm's labels
+			labels := client.MatchingLabels{
+				"app.kubernetes.io/managed-by": "Helm",
+				"app.kubernetes.io/name":       "wandb",
+			}
+			if err := r.Client.List(ctx, resourceKind.list, client.InNamespace(wandb.Namespace), labels); err != nil {
+				log.Error(err, "Failed to list resources", "kind", resourceKind.name)
+				continue
+			}
+
+			// Add resources to the managedResources slice
+			items := reflect.ValueOf(resourceKind.list).Elem().FieldByName("Items")
+			for i := 0; i < items.Len(); i++ {
+				resource := items.Index(i).Addr().Interface().(client.Object)
+				managedResources = append(managedResources, resource)
+				log.Info("Found resource", "name", resource.GetName(), "kind", resourceKind.name)
+			}
+		}
+
+		// Add ownerReference to managed resources
+		for _, resource := range managedResources {
+			// Set ownerReference to the WeightsAndBiases CR
+			if err := controllerutil.SetControllerReference(wandb, resource, r.Scheme); err != nil {
+				log.Error(err, "Failed to set owner reference", "resource", resource.GetName(), "kind", resource.GetObjectKind().GroupVersionKind().Kind)
+				continue
+			}
+
+			// Update the resource with the new ownerReference
+			if err := r.Client.Update(ctx, resource); err != nil {
+				log.Error(err, "Failed to update resource with owner reference", "resource", resource.GetName(), "kind", resource.GetObjectKind().GroupVersionKind().Kind)
+			} else {
+				log.Info("Owner reference added successfully", "resource", resource.GetName(), "kind", resource.GetObjectKind().GroupVersionKind().Kind)
+			}
+		}
 		statusManager.Set(status.Completed)
 
 		return ctrlqueue.Requeue(desiredSpec)
