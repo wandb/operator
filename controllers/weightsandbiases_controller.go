@@ -21,6 +21,8 @@ import (
 	"reflect"
 
 	"github.com/wandb/operator/pkg/wandb/spec/state"
+	appsv1 "k8s.io/api/apps/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -279,7 +281,7 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			// List resources with Helm's labels
 			labels := client.MatchingLabels{
 				"app.kubernetes.io/managed-by": "Helm",
-				"app.kubernetes.io/name":       "wandb",
+				"app.kubernetes.io/instance":   "wandb",
 			}
 			if err := r.Client.List(ctx, resourceKind.list, client.InNamespace(wandb.Namespace), labels); err != nil {
 				log.Error(err, "Failed to list resources", "kind", resourceKind.name)
