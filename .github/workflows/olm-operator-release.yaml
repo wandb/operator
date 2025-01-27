@@ -47,8 +47,6 @@ jobs:
           echo "Updating CSV for version ${{ env.VERSION }}"
           sed -i "s/1.0.0/${{ env.VERSION }}/g" olm/olm-catalog/manifests/wandb-operator.clusterserviceversion.yaml
 
-          cat olm/olm-catalog/manifests/wandb-operator.clusterserviceversion.yaml
-
       # Build & Publish the Bundle
       - name: Build and Publish Bundle
         run: |
@@ -72,7 +70,7 @@ jobs:
           VERSION_DIR="community-operators/operators/wandb-operator/${{ env.VERSION }}"
           mkdir -p $VERSION_DIR
           cp -r olm/olm-catalog/* $VERSION_DIR/
-          ls -la community-operators/operators/wandb-operator/${{ env.VERSION }}
+          ls -la community-operators/operators/wandb-operator/${{ env.VERSION }}/olm-catalog/manifests/wandb-operator.clusterserviceversion.yaml
 
       # - name: Set up GitHub CLI
       #   uses: cli/cli-action@v2
