@@ -72,7 +72,7 @@ jobs:
           rm -rf community-operators/operators/wandb-operator/${{ env.VERSION }}/ci.yaml
 
       - name: Set up GitHub CLI
-        uses: github/cli-action@v2
+        uses: github/cli@v2
 
       - name: Commit changes and create a Pull Request
         run: |
