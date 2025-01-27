@@ -76,6 +76,7 @@ jobs:
           cd community-operators
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
+          git checkout -b add-$VERSION  # Create and checkout the branch
           git add .
           git commit -m "Add release $VERSION for wandb-operator"
           git push origin add-$VERSION --force
