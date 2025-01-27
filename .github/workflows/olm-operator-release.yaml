@@ -1,10 +1,12 @@
 name: "OperatorHub Release Workflow"
 on:
-  pull_request:
-    branches:
-      - main
-    paths:
-      - 'operator/olm/**'
+  workflow_dispatch:  # This enables manual trigger
+# on:
+#   pull_request:
+#     branches:
+#       - main
+#     paths:
+#       - 'operator/olm/**'
 
 jobs:
   release:
