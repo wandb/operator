@@ -1,6 +1,6 @@
 name: "OperatorHub Release Workflow"
 on:
-  workflow_dispatch:  # This enables manual trigger
+  workflow_dispatch:
 # on:
 #   pull_request:
 #     branches:
