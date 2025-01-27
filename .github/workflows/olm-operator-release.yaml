@@ -71,7 +71,7 @@ jobs:
           mkdir -p $VERSION_DIR
           cp -r olm/olm-catalog/* $VERSION_DIR/
           rm -rf community-operators/operators/wandb-operator/${{ env.VERSION }}/ci.yaml
-          ls -la community-operators/operators/wandb-operator/${{ env.VERSION }}/manifests/wandb-operator.clusterserviceversion.yaml
+          cat community-operators/operators/wandb-operator/${{ env.VERSION }}/manifests/wandb-operator.clusterserviceversion.yaml
 
       # - name: Set up GitHub CLI
       #   uses: cli/cli-action@v2
