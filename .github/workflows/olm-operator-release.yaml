@@ -71,17 +71,14 @@ jobs:
           mkdir -p $VERSION_DIR
           cp -r olm/olm-catalog/* $VERSION_DIR/
           rm -rf community-operators/operators/wandb-operator/${{ env.VERSION }}/ci.yaml
-          cat community-operators/operators/wandb-operator/${{ env.VERSION }}/manifests/wandb-operator.clusterserviceversion.yaml
 
-      # - name: Set up GitHub CLI
-      #   uses: cli/cli-action@v2
+      - name: Set up GitHub CLI
+        uses: cli/cli-action@v2
 
-      # - name: Commit changes and create a Pull Request
-      #   run: |
-      #     cd community-operators
-      #     git add .
-      #     git commit -m "Add release $VERSION for wandb-operator"
-      #     git push origin add-$VERSION --force
-      #     gh pr create --title "Add $VERSION for wandb-operator" --body "This PR adds the $VERSION release of wandb-operator." --base main --head add-$VERSION
-      #   env:
-      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Commit changes and create a Pull Request
+        run: |
+          cd community-operators
+          git add .
+          git commit -m "Add release $VERSION for wandb-operator"
+          git push origin add-$VERSION --force
+          gh pr create --title "Add $VERSION for wandb-operator" --body "This PR adds the $VERSION release of wandb-operator." --base main --head add-$VERSION
