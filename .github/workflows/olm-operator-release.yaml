@@ -78,3 +78,5 @@ jobs:
           git commit -m "Add release $VERSION for wandb-operator"
           git push origin add-$VERSION --force
           gh pr create --title "Add $VERSION for wandb-operator" --body "This PR adds the $VERSION release of wandb-operator." --base main --head add-$VERSION
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
