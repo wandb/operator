@@ -1,6 +1,5 @@
 name: "OperatorHub Release Workflow"
 on:
-  workflow_dispatch:
   push:
     branches:
       - feature/olm-operator-release
@@ -73,7 +72,7 @@ jobs:
           rm -rf community-operators/operators/wandb-operator/${{ env.VERSION }}/ci.yaml
 
       - name: Set up GitHub CLI
-        uses: cli/cli-action@v2
+        uses: github/cli-action@v2
 
       - name: Commit changes and create a Pull Request
         run: |
