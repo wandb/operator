@@ -71,9 +71,6 @@ jobs:
           cp -r olm/olm-catalog/* $VERSION_DIR/
           rm -rf community-operators/operators/wandb-operator/${{ env.VERSION }}/ci.yaml
 
-      - name: Set up GitHub CLI
-        uses: github/cli@v2
-
       - name: Commit changes and create a Pull Request
         run: |
           cd community-operators
