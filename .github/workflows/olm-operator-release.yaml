@@ -1,6 +1,9 @@
 name: "OperatorHub Release Workflow"
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - feature/olm-operator-release
 # on:
 #   pull_request:
 #     branches:
