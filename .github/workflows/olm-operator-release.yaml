@@ -77,12 +77,12 @@ jobs:
       - name: Commit changes and create a Pull Request
         run: |
           cd community-operators
-          git config --global user.name "GitHub Actions"
-          git config --global user.email "actions@github.com"
-          git checkout -b add-$VERSION  # Create and checkout the branch
+          # git config --global user.name "GitHub Actions"
+          # git config --global user.email "actions@github.com"
+          git checkout -b add-${{ env.VERSION }}  # Create and checkout the branch
           git add .
-          git commit -m "Add release $VERSION for wandb-operator"
-          git push origin add-$VERSION --force
-          gh pr create --title "Add $VERSION for wandb-operator" --body "This PR adds the $VERSION release of wandb-operator." --base main --head add-$VERSION
+          git commit -m "Add release ${{ env.VERSION }} for wandb-operator"
+          git push origin add-${{ env.VERSION }} --force
+          gh pr create --title "Add ${{ env.VERSION }} for wandb-operator" --body "This PR adds the ${{ env.VERSION }} release of wandb-operator." --base main --head add-${{ env.VERSION }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
