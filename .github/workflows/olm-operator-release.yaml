@@ -49,29 +49,30 @@ jobs:
 
           cat olm/olm-catalog/manifests/wandb-operator.clusterserviceversion.yaml
 
-      # # Build & Publish the Bundle
-      # - name: Build and Publish Bundle
-      #   run: |
-      #     docker build -t quay.io/wandb_tools/wandb-operator:v${{ env.VERSION }} -f operator/olm/olm-catalog/bundle.Dockerfile operator/olm/olm-catalog/
-      #     docker push quay.io/wandb_tools/wandb-operator:v${{ env.VERSION }}
+      # Build & Publish the Bundle
+      - name: Build and Publish Bundle
+        run: |
+          docker build -t quay.io/wandb_tools/wandb-operator:v${{ env.VERSION }} -f olm/olm-catalog/bundle.Dockerfile olm/olm-catalog/
+          # docker push quay.io/wandb_tools/wandb-operator:v${{ env.VERSION }}
 
       # - name: Update OPM Index
       #   run: |
       #     opm index add --container-tool=docker --bundles=quay.io/wandb_tools/wandb-operator:v1.0.0,quay.io/wandb_tools/wandb-operator:v${{ env.VERSION }} --tag  quay.io/wandb_tools/wandb-operator-index:v${{ env.VERSION }}
 
-      # # Checkout Community Operators Repository
-      # - name: Checkout Community Operators Repository
-      #   uses: actions/checkout@v3
-      #   with:
-      #     repository: k8s-operatorhub/community-operators
-      #     path: community-operators
+      # Checkout Community Operators Repository
+      - name: Checkout Community Operators Repository
+        uses: actions/checkout@v3
+        with:
+          repository: k8s-operatorhub/community-operators
+          path: community-operators
 
-      # # Create a new versioned directory and copy files
-      # - name: Create versioned directory and copy files
-      #   run: |
-      #     VERSION_DIR="community-operators/operators/wandb-operator/${{ env.VERSION }}"
-      #     mkdir -p $VERSION_DIR
-      #     cp -r operator/olm/olm-catalog/* $VERSION_DIR/
+      # Create a new versioned directory and copy files
+      - name: Create versioned directory and copy files
+        run: |
+          VERSION_DIR="community-operators/operators/wandb-operator/${{ env.VERSION }}"
+          mkdir -p $VERSION_DIR
+          cp -r olm/olm-catalog/* $VERSION_DIR/
+          ls -la community-operators/operators/wandb-operator/${{ env.VERSION }}
 
       # - name: Set up GitHub CLI
       #   uses: cli/cli-action@v2
