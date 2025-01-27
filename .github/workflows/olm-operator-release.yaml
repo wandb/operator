@@ -84,7 +84,7 @@ jobs:
           cd community-operators
           git checkout -b add-${{ env.VERSION }}  # Create and checkout the branch
           git add .
-          git commit -m "Add release ${{ env.VERSION }} for wandb-operator" --author="github-actions[bot] <github-actions[bot]@users.noreply.github.com>" --no-gpg-sign
+          git commit -m "Add release ${{ env.VERSION }} for wandb-operator" --no-gpg-sign
           git push origin add-${{ env.VERSION }} --force
           gh pr create --title "Add ${{ env.VERSION }} for wandb-operator" --body "This PR adds the ${{ env.VERSION }} release of wandb-operator." --base main --head add-${{ env.VERSION }}
         env:
