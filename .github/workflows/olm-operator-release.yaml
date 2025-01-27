@@ -35,7 +35,7 @@ jobs:
 
       - name: Build Operator Image
         run: |
-          docker build -t quay.io/wandb_tools/wandb-k8s-operator:${{ env.VERSION }} -f operator/Dockerfile operator/
+          docker build -t quay.io/wandb_tools/wandb-k8s-operator:${{ env.VERSION }} .
 
       # - name: Push Operator Image
       #   run: |
