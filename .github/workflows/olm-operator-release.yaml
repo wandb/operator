@@ -41,11 +41,13 @@ jobs:
       #   run: |
       #     docker push quay.io/wandb_tools/wandb-k8s-operator:${{ env.VERSION }}
 
-      # # Update the CSV for the new version
-      # - name: Update CSV
-      #   run: |
-      #     echo "Updating CSV for version ${{ env.VERSION }}"
-      #     sed -i "s/1.0.0/${{ env.VERSION }}/g" operator/olm/olm-catalog/manifests/wandb-operator.clusterserviceversion.yaml
+      # Update the CSV for the new version
+      - name: Update CSV
+        run: |
+          echo "Updating CSV for version ${{ env.VERSION }}"
+          sed -i "s/1.0.0/${{ env.VERSION }}/g" olm/olm-catalog/manifests/wandb-operator.clusterserviceversion.yaml
+
+          cat olm/olm-catalog/manifests/wandb-operator.clusterserviceversion.yaml
 
       # # Build & Publish the Bundle
       # - name: Build and Publish Bundle
