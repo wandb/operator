@@ -22,12 +22,11 @@ jobs:
       - name: Extract version from version.txt file
         id: extract_version
         run: |
-          ls -la
-          if [[ ! -f wandb/operator/version.txt ]]; then
+          if [[ ! -f version.txt ]]; then
             echo "version.txt file not found!"
             exit 1
           fi
-          VERSION=$(cat wandb/operator/version.txt)
+          VERSION=$(cat version.txt)
           echo "VERSION=$VERSION" >> $GITHUB_ENV
 
 
