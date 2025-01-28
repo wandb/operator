@@ -3,6 +3,12 @@ on:
   push:
     branches:
       - feature/olm-operator-release
+# on:
+#   pull_request:
+#     branches:
+#       - main
+#     paths:
+#       - 'operator/olm/**'
 
 jobs:
   release:
@@ -24,6 +30,7 @@ jobs:
           fi
           VERSION=$(cat version.txt)
           echo "VERSION=$VERSION" >> $GITHUB_ENV
+
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
@@ -48,17 +55,19 @@ jobs:
           docker build -t quay.io/wandb_tools/wandb-operator:v${{ env.VERSION }} -f olm/olm-catalog/bundle.Dockerfile olm/olm-catalog/
           # docker push quay.io/wandb_tools/wandb-operator:v${{ env.VERSION }}
 
-      - name: Checkout the forked repository
+      # - name: Update OPM Index
+      #   run: |
+      #     opm index add --container-tool=docker --bundles=quay.io/wandb_tools/wandb-operator:v1.0.0,quay.io/wandb_tools/wandb-operator:v${{ env.VERSION }} --tag  quay.io/wandb_tools/wandb-operator-index:v${{ env.VERSION }}
+
+      # Checkout Community Operators Repository
+      - name: Checkout Community Operators Repository
         uses: actions/checkout@v3
         with:
-          repository: amanpruthi/community-operators 
-          path: community-operators 
+          repository: k8s-operatorhub/community-operators
+          path: community-operators
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create a new branch for version ${{ env.VERSION }}
-        run: |
-          git checkout -b add-${{ env.VERSION }}
-
+      # Create a new versioned directory and copy files
       - name: Create versioned directory and copy files
         run: |
           VERSION_DIR="community-operators/operators/wandb-operator/${{ env.VERSION }}"
@@ -66,18 +75,15 @@ jobs:
           cp -r olm/olm-catalog/* $VERSION_DIR/
           rm -rf community-operators/operators/wandb-operator/${{ env.VERSION }}/ci.yaml
 
-      - name: Stage, commit, and push changes
+      - name: Commit changes and create a Pull Request
         run: |
+          cd community-operators
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b add-${{ env.VERSION }}  # Create and checkout the branch
           git add .
           git commit -m "Add release ${{ env.VERSION }} for wandb-operator" --no-gpg-sign
-          git push origin add-${{ env.VERSION }}
-
-      - name: Create a pull request
-        uses: repo-sync/pull-request@v2
-        with:
-          destination_branch: main
-          source_branch: add-${{ env.VERSION }}
-          pr_title: "Add ${{ env.VERSION }} for wandb-operator"
-          pr_body: "This PR adds the ${{ env.VERSION }} release of wandb-operator."
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-
+          git push origin add-${{ env.VERSION }} --force
+          gh pr create --title "Add ${{ env.VERSION }} for wandb-operator" --body "This PR adds the ${{ env.VERSION }} release of wandb-operator." --base main --head add-${{ env.VERSION }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
