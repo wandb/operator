@@ -74,16 +74,10 @@ jobs:
           cp -r olm/olm-catalog/* $VERSION_DIR/
           rm -rf community-operators/operators/wandb-operator/${{ env.VERSION }}/ci.yaml
 
-      - name: Set Git user name and email locally
-        run: |
-          git config user.name "GitHub Actions Bot"
-          git config user.email "actions@github.com"
-
       - name: Commit changes and create a Pull Request
         run: |
           cd community-operators
           git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git checkout -b add-${{ env.VERSION }}  # Create and checkout the branch
           git add .
           git commit -m "Add release ${{ env.VERSION }} for wandb-operator" --no-gpg-sign
