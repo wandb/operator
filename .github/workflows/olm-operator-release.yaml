@@ -28,8 +28,11 @@ jobs:
             echo "version.txt file not found!"
             exit 1
           fi
-          VERSION=$(cat version.txt)
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          PREVIOUS_VERSION=$(grep "^previous:" version.txt | cut -d' ' -f2)
+          LATEST_VERSION=$(grep "^latest:" version.txt | cut -d' ' -f2)
+
+          echo "PREVIOUS_VERSION=$PREVIOUS_VERSION" >> $GITHUB_ENV
+          echo "LATEST_VERSION=$LATEST_VERSION" >> $GITHUB_ENV
 
 
       - name: Set up Docker Buildx
@@ -37,27 +40,27 @@ jobs:
 
       - name: Build Operator Image
         run: |
-          docker build -t quay.io/wandb_tools/wandb-k8s-operator:${{ env.VERSION }} .
+          docker build -t quay.io/wandb_tools/wandb-k8s-operator:${{ env.LATEST_VERSION }} .
 
       # - name: Push Operator Image
       #   run: |
-      #     docker push quay.io/wandb_tools/wandb-k8s-operator:${{ env.VERSION }}
+      #     docker push quay.io/wandb_tools/wandb-k8s-operator:${{ env.LATEST_VERSION }}
 
       # Update the CSV for the new version
       - name: Update CSV
         run: |
-          echo "Updating CSV for version ${{ env.VERSION }}"
-          sed -i "s/1.0.0/${{ env.VERSION }}/g" olm/olm-catalog/manifests/wandb-operator.clusterserviceversion.yaml
+          echo "Updating CSV for version ${{ env.LATEST_VERSION }}"
+          sed -i "s/${{ env.PREVIOUS_VERSION }}/${{ env.LATEST_VERSION }}/g" olm/olm-catalog/manifests/wandb-operator.clusterserviceversion.yaml
 
       # Build & Publish the Bundle
       - name: Build and Publish Bundle
         run: |
-          docker build -t quay.io/wandb_tools/wandb-operator:v${{ env.VERSION }} -f olm/olm-catalog/bundle.Dockerfile olm/olm-catalog/
-          # docker push quay.io/wandb_tools/wandb-operator:v${{ env.VERSION }}
+          docker build -t quay.io/wandb_tools/wandb-operator:v${{ env.LATEST_VERSION }} -f olm/olm-catalog/bundle.Dockerfile olm/olm-catalog/
+          # docker push quay.io/wandb_tools/wandb-operator:v${{ env.LATEST_VERSION }}
 
       # - name: Update OPM Index
       #   run: |
-      #     opm index add --container-tool=docker --bundles=quay.io/wandb_tools/wandb-operator:v1.0.0,quay.io/wandb_tools/wandb-operator:v${{ env.VERSION }} --tag  quay.io/wandb_tools/wandb-operator-index:v${{ env.VERSION }}
+      #     opm index add --container-tool=docker --bundles=quay.io/wandb_tools/wandb-operator:v${{ env.PREVIOUS_VERSION }},quay.io/wandb_tools/wandb-operator:v${{ env.LATEST_VERSION }} --tag  quay.io/wandb_tools/wandb-operator-index:v${{ env.LATEST_VERSION }}
 
       # Checkout Community Operators Repository
       - name: Checkout Community Operators Repository
@@ -70,20 +73,20 @@ jobs:
       # Create a new versioned directory and copy files
       - name: Create versioned directory and copy files
         run: |
-          VERSION_DIR="community-operators/operators/wandb-operator/${{ env.VERSION }}"
+          VERSION_DIR="community-operators/operators/wandb-operator/${{ env.LATEST_VERSION }}"
           mkdir -p $VERSION_DIR
           cp -r olm/olm-catalog/* $VERSION_DIR/
-          rm -rf community-operators/operators/wandb-operator/${{ env.VERSION }}/ci.yaml
+          rm -rf community-operators/operators/wandb-operator/${{ env.LATEST_VERSION }}/ci.yaml
 
       - name: Commit changes and create a Pull Request
         run: |
           cd community-operators
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git checkout -b add-${{ env.VERSION }}  # Create and checkout the branch
+          git checkout -b add-${{ env.LATEST_VERSION }}  # Create and checkout the branch
           git add .
-          git commit -m "Add release ${{ env.VERSION }} for wandb-operator" --no-gpg-sign
-          git push origin add-${{ env.VERSION }} --force
-          gh pr create --title "Add ${{ env.VERSION }} for wandb-operator" --body "This PR adds the ${{ env.VERSION }} release of wandb-operator." --base main --head add-${{ env.VERSION }}
+          git commit -m "Add release ${{ env.LATEST_VERSION }} for wandb-operator" --no-gpg-sign
+          git push origin add-${{ env.LATEST_VERSION }} --force
+          gh pr create --title "Add ${{ env.LATEST_VERSION }} for wandb-operator" --body "This PR adds the ${{ env.LATEST_VERSION }} release of wandb-operator." --base main --head add-${{ env.LATEST_VERSION }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
