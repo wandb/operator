@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.17.0](https://github.com/wandb/operator/compare/v1.16.1...v1.17.0) (2025-01-28)
+
+
+### Features
+
+* Replace base image with RHEL UBI ([#44](https://github.com/wandb/operator/issues/44)) ([12497d2](https://github.com/wandb/operator/commit/12497d22bae3d5d94a72236eb587adc0f8753a1e))
+
 ### [1.16.1](https://github.com/wandb/operator/compare/v1.16.0...v1.16.1) (2024-10-31)
 
 
