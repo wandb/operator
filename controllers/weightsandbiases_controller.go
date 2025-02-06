@@ -18,8 +18,8 @@ package controllers
 
 import (
 	"context"
-	"reflect"
 	"github.com/go-logr/logr"
+	"reflect"
 
 	"github.com/wandb/operator/pkg/wandb/spec/state"
 	appsv1 "k8s.io/api/apps/v1"
@@ -303,6 +303,9 @@ func (r *WeightsAndBiasesReconciler) discoverAndPatchResources(ctx context.Conte
 		{"StatefulSet", &appsv1.StatefulSetList{}},
 		{"Ingress", &networkingv1.IngressList{}},
 		{"DaemonSet", &appsv1.DaemonSetList{}},
+		{"Service", &corev1.ServiceList{}},
+		{"ConfigMap", &corev1.ConfigMapList{}},
+		{"Secret", &corev1.SecretList{}},
 	}
 
 	// Discover resources
@@ -311,7 +314,7 @@ func (r *WeightsAndBiasesReconciler) discoverAndPatchResources(ctx context.Conte
 
 		labels := client.MatchingLabels{
 			"app.kubernetes.io/managed-by": "Helm",
-			"app.kubernetes.io/instance":  wandb.ObjectMeta.Name,
+			"app.kubernetes.io/instance":   wandb.ObjectMeta.Name,
 		}
 		if err := r.Client.List(ctx, resourceKind.list, client.InNamespace(wandb.Namespace), labels); err != nil {
 			log.Error(err, "Failed to list resources", "kind", resourceKind.name)
@@ -328,7 +331,7 @@ func (r *WeightsAndBiasesReconciler) discoverAndPatchResources(ctx context.Conte
 
 	// Add owner references to discovered resources
 	for _, resource := range managedResources {
-		if err := controllerutil.SetControllerReference(wandb, resource, r.Scheme); err != nil {
+		if err := controllerutil.SetOwnerReference(wandb, resource, r.Scheme); err != nil {
 			log.Error(err, "Failed to set owner reference", "resource", resource.GetName(), "kind", resource.GetObjectKind().GroupVersionKind().Kind)
 			continue
 		}
@@ -340,7 +343,6 @@ func (r *WeightsAndBiasesReconciler) discoverAndPatchResources(ctx context.Conte
 	}
 	return nil
 }
-
 
 func (r *WeightsAndBiasesReconciler) Delete(e event.DeleteEvent) bool {
 	return !e.DeleteStateUnknown
