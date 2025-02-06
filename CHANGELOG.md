@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.18.0](https://github.com/wandb/operator/compare/v1.17.0...v1.18.0) (2025-02-06)
+
+
+### Features
+
+* Adding owner ref and wait and timeout  to uninstall  ([#51](https://github.com/wandb/operator/issues/51)) ([f21fd6d](https://github.com/wandb/operator/commit/f21fd6da1ff13fd66882683a1f6752aaa1854613))
+
 ## [1.17.0](https://github.com/wandb/operator/compare/v1.16.1...v1.17.0) (2025-01-28)
 
 
