@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"reflect"
 
 	"github.com/wandb/operator/pkg/wandb/spec/state"
@@ -306,6 +307,8 @@ func (r *WeightsAndBiasesReconciler) discoverAndPatchResources(ctx context.Conte
 		{"Service", &corev1.ServiceList{}},
 		{"ConfigMap", &corev1.ConfigMapList{}},
 		{"Secret", &corev1.SecretList{}},
+		{"Role", &rbacv1.RoleList{}},
+		{"RoleBinding", &rbacv1.RoleBindingList{}},
 	}
 
 	// Discover resources
