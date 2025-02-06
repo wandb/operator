@@ -18,7 +18,6 @@ package controllers
 
 import (
 	"context"
-	"github.com/go-logr/logr"
 	"reflect"
 
 	"github.com/wandb/operator/pkg/wandb/spec/state"
@@ -265,7 +264,7 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 
 		r.Recorder.Event(wandb, corev1.EventTypeNormal, "Completed", "Completed reconcile successfully")
-		if err := r.discoverAndPatchResources(ctx, wandb, log); err != nil {
+		if err := r.discoverAndPatchResources(ctx, wandb); err != nil {
 			log.Error(err, "Failed to discover and patch resources")
 			return ctrlqueue.Requeue(desiredSpec)
 		}
@@ -293,7 +292,8 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	return ctrlqueue.DoNotRequeue()
 }
 
-func (r *WeightsAndBiasesReconciler) discoverAndPatchResources(ctx context.Context, wandb *apiv1.WeightsAndBiases, log logr.Logger) error {
+func (r *WeightsAndBiasesReconciler) discoverAndPatchResources(ctx context.Context, wandb *apiv1.WeightsAndBiases) error {
+	log := ctrllog.FromContext(ctx)
 	var managedResources []client.Object
 	resourceKinds := []struct {
 		name string
