@@ -12,6 +12,7 @@ import (
 	"github.com/wandb/operator/pkg/wandb/spec/charts"
 	"github.com/wandb/operator/pkg/wandb/spec/state"
 	"github.com/wandb/operator/pkg/wandb/spec/state/secrets"
+
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -212,7 +213,98 @@ var _ = Describe("WeightsandbiasesController", func() {
 			Expect(activeSpec.Values["_releaseId"]).To(Equal("0b901113-8135-48ae-bdaf-6fa82b4b2d28"))
 		})
 	})
-	Describe("Reconcile and Apply", func() {
-
-	})
+	//TODO(dpanzella): Uncomment after fixing the helm kubernetes client to not be the default
+	//Describe("Reconcile and Apply", func() {
+	//	BeforeEach(func() {
+	//		ctx := context.Background()
+	//		recorder = record.NewFakeRecorder(10)
+	//		deployerClient := &deployerfakes.FakeDeployerInterface{}
+	//		deployerClient.GetSpecReturns(&deployerSpec, nil)
+	//		reconciler = &WeightsAndBiasesReconciler{
+	//			Client:         k8sClient,
+	//			IsAirgapped:    false,
+	//			DeployerClient: deployerClient,
+	//			Scheme:         scheme.Scheme,
+	//			Recorder:       recorder,
+	//			DryRun:         false,
+	//		}
+	//		wandb := wandbcomv1.WeightsAndBiases{
+	//			ObjectMeta: metav1.ObjectMeta{
+	//				Name:      "test",
+	//				Namespace: "default",
+	//			},
+	//			Spec: wandbcomv1.WeightsAndBiasesSpec{
+	//				Chart: wandbcomv1.Object{Object: map[string]interface{}{}},
+	//				Values: wandbcomv1.Object{Object: map[string]interface{}{
+	//					"global": map[string]interface{}{
+	//						"host": "https://qa-google.wandb.io",
+	//					},
+	//					"ingress": map[string]interface{}{
+	//						"annotations": map[string]interface{}{
+	//							"ingress.gcp.kubernetes.io/pre-shared-cert":   "wandb-qa-local-cert-content-hawk",
+	//							"kubernetes.io/ingress.class":                 "gce",
+	//							"kubernetes.io/ingress.global-static-ip-name": "wandb-qa-local-operator-address",
+	//						},
+	//						"nameOverride": "wandb-qa-local",
+	//					},
+	//				}},
+	//			},
+	//		}
+	//		err := k8sClient.Create(ctx, &wandb)
+	//		Expect(err).ToNot(HaveOccurred())
+	//		res, err := reconciler.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: wandb.Name, Namespace: wandb.Namespace}})
+	//		Expect(err).ToNot(HaveOccurred())
+	//		Expect(res).To(Equal(ctrl.Result{RequeueAfter: time.Duration(1 * time.Hour)}))
+	//	})
+	//	AfterEach(func() {
+	//		ctx := context.Background()
+	//		wandb := wandbcomv1.WeightsAndBiases{}
+	//		err := k8sClient.Get(ctx, types.NamespacedName{Name: "test", Namespace: "default"}, &wandb)
+	//		Expect(err).ToNot(HaveOccurred())
+	//		err = k8sClient.Delete(ctx, &wandb)
+	//		Expect(err).ToNot(HaveOccurred())
+	//		err = k8sClient.Delete(ctx, &v1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "test-spec-active", Namespace: "default"}})
+	//		Expect(err).ToNot(HaveOccurred())
+	//		err = k8sClient.Get(ctx, types.NamespacedName{Name: "test", Namespace: "default"}, &wandb)
+	//		Expect(err).ToNot(HaveOccurred())
+	//		controllerutil.RemoveFinalizer(&wandb, resFinalizer)
+	//		err = k8sClient.Update(ctx, &wandb)
+	//		Expect(err).ToNot(HaveOccurred())
+	//		err = k8sClient.Get(ctx, types.NamespacedName{Name: "test", Namespace: "default"}, &wandb)
+	//		Expect(err).To(HaveOccurred())
+	//	})
+	//	Context("When a WeightsAndBiases instance is created", func() {
+	//		It("Should add the finalizer to the instance", func() {
+	//			ctx := context.Background()
+	//			wandb := wandbcomv1.WeightsAndBiases{}
+	//			err := k8sClient.Get(ctx, types.NamespacedName{Name: "test", Namespace: "default"}, &wandb)
+	//			Expect(err).ToNot(HaveOccurred())
+	//			Expect(wandb.ObjectMeta.Finalizers).To(ContainElement(resFinalizer))
+	//		})
+	//		It("Should record a sequence of events", func() {
+	//			Expect(recorder.Events).To(HaveLen(3))
+	//			event := <-recorder.Events
+	//			Expect(event).To(ContainSubstring("Normal Reconciling Reconciling"))
+	//			event = <-recorder.Events
+	//			Expect(event).To(ContainSubstring("Normal LoadingConfig Loading desired configuration"))
+	//			event = <-recorder.Events
+	//			Expect(event).To(ContainSubstring("Completed reconcile successfully"))
+	//		})
+	//		It("Should add ownerrefs to the resources", func() {
+	//			ctx := context.Background()
+	//			labels := client.MatchingLabels{
+	//				"app.kubernetes.io/managed-by": "Helm",
+	//				"app.kubernetes.io/instance":   "test",
+	//			}
+	//			deploymentList := appsv1.DeploymentList{}
+	//			err := k8sClient.List(ctx, &deploymentList, labels)
+	//			Expect(err).ToNot(HaveOccurred())
+	//			for _, deployment := range deploymentList.Items {
+	//				ownerRefs := deployment.GetOwnerReferences()
+	//				Expect(ownerRefs).To(HaveLen(1))
+	//				Expect(ownerRefs[0].Name).To(Equal("test"))
+	//			}
+	//		})
+	//	})
+	//})
 })
