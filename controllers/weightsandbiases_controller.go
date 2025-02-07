@@ -18,9 +18,12 @@ package controllers
 
 import (
 	"context"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"reflect"
 
 	"github.com/wandb/operator/pkg/wandb/spec/state"
+	appsv1 "k8s.io/api/apps/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -287,6 +290,10 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 
 		r.Recorder.Event(wandb, corev1.EventTypeNormal, "Completed", "Completed reconcile successfully")
+		if err := r.discoverAndPatchResources(ctx, wandb); err != nil {
+			log.Error(err, "Failed to discover and patch resources")
+			return ctrlqueue.Requeue(desiredSpec)
+		}
 		statusManager.Set(status.Completed)
 
 		return ctrlqueue.Requeue(desiredSpec)
@@ -309,6 +316,60 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	return ctrlqueue.DoNotRequeue()
+}
+
+func (r *WeightsAndBiasesReconciler) discoverAndPatchResources(ctx context.Context, wandb *apiv1.WeightsAndBiases) error {
+	log := ctrllog.FromContext(ctx)
+	var managedResources []client.Object
+	resourceKinds := []struct {
+		name string
+		list client.ObjectList
+	}{
+		{"Deployment", &appsv1.DeploymentList{}},
+		{"StatefulSet", &appsv1.StatefulSetList{}},
+		{"Ingress", &networkingv1.IngressList{}},
+		{"DaemonSet", &appsv1.DaemonSetList{}},
+		{"Service", &corev1.ServiceList{}},
+		{"ConfigMap", &corev1.ConfigMapList{}},
+		{"Secret", &corev1.SecretList{}},
+		{"Role", &rbacv1.RoleList{}},
+		{"RoleBinding", &rbacv1.RoleBindingList{}},
+	}
+
+	// Discover resources
+	for _, resourceKind := range resourceKinds {
+		log.Info("Fetching resources managed by Helm chart 'wandb'", "kind", resourceKind.name)
+
+		labels := client.MatchingLabels{
+			"app.kubernetes.io/managed-by": "Helm",
+			"app.kubernetes.io/instance":   wandb.ObjectMeta.Name,
+		}
+		if err := r.Client.List(ctx, resourceKind.list, client.InNamespace(wandb.Namespace), labels); err != nil {
+			log.Error(err, "Failed to list resources", "kind", resourceKind.name)
+			continue
+		}
+
+		items := reflect.ValueOf(resourceKind.list).Elem().FieldByName("Items")
+		for i := 0; i < items.Len(); i++ {
+			resource := items.Index(i).Addr().Interface().(client.Object)
+			managedResources = append(managedResources, resource)
+			log.Info("Found resource", "name", resource.GetName(), "kind", resourceKind.name)
+		}
+	}
+
+	// Add owner references to discovered resources
+	for _, resource := range managedResources {
+		if err := controllerutil.SetOwnerReference(wandb, resource, r.Scheme); err != nil {
+			log.Error(err, "Failed to set owner reference", "resource", resource.GetName(), "kind", resource.GetObjectKind().GroupVersionKind().Kind)
+			continue
+		}
+		if err := r.Client.Update(ctx, resource); err != nil {
+			log.Error(err, "Failed to update resource with owner reference", "resource", resource.GetName(), "kind", resource.GetObjectKind().GroupVersionKind().Kind)
+		} else {
+			log.Info("Owner reference added successfully", "resource", resource.GetName(), "kind", resource.GetObjectKind().GroupVersionKind().Kind)
+		}
+	}
+	return nil
 }
 
 func (r *WeightsAndBiasesReconciler) Delete(e event.DeleteEvent) bool {
