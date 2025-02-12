@@ -1,0 +1,67 @@
+---
+apiVersion: apps.wandb.com/v1
+kind: WeightsAndBiases
+metadata:
+  labels:
+    app.kubernetes.io/name: weightsandbiases
+    app.kubernetes.io/instance: weightsandbiases-sample
+    app.kubernetes.io/part-of: operator
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: operator
+  name: wandb-default
+spec:
+  chart:
+    url: https://charts.wandb.ai
+    name: "operator-wandb"
+    version: "0.25.1-PR338-c06d6bc"
+  values:
+    global:
+      bucket:
+        provider: "s3"
+        name: "minio.minio.svc.cluster.local:9000/bucket"
+        region: "us-east-1"
+        accessKey: "minio"
+        secretKey: "minio123"
+
+    app:
+      resources:
+        requests:
+          cpu: "100m"
+        memory: "128Mi"
+
+    parquet:
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "128Mi"
+
+    weave:
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "128Mi"
+
+    console:
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "128Mi"
+
+    ingress:
+      install: false
+      create: false
+
+    mysql:
+      install: true
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "128Mi"
+    redis:
+      install: true
+      auth:
+        enabled: true
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "128Mi"

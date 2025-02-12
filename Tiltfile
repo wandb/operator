@@ -64,6 +64,8 @@ DIRNAME = os.path.basename(os. getcwd())
 
 local(manifests() + generate())
 
+local_resource('Minio', 'kubectl apply -f ./hack/testing-manifests/minio/minio.yaml')
+
 local_resource('CRD', manifests() + 'kustomize build config/crd | kubectl apply -f -', deps=["api"])
 
 local_resource('RBAC', 'kustomize build config/rbac | kubectl apply -f -', deps=["config/rbac"])
@@ -75,7 +77,7 @@ deps.append('api')
 
 local_resource('Watch&Compile', generate() + binary(), deps=deps, ignore=['*/*/zz_generated.deepcopy.go'])
 
-local_resource('Sample YAML', 'kustomize build ./config/samples | kubectl apply -f -', deps=["./config/samples"], resource_deps=["controller-manager"])
+local_resource('Sample YAML', 'kubectl apply -f ./hack/testing-manifests/wandb/default.yaml', deps=["./hack/testing-manifests/wandb/default.yaml"], resource_deps=["controller-manager"])
 
 docker_build_with_restart(IMG, '.',
  dockerfile_contents=DOCKERFILE,
