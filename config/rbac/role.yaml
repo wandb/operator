@@ -4,6 +4,10 @@ kind: ClusterRole
 metadata:
   name: manager-role
 rules:
+- nonResourceURLs:
+  - /metrics
+  verbs:
+  - get
 - apiGroups:
   - ""
   resources:
@@ -18,20 +22,31 @@ rules:
   - delete
   - get
   - list
+  - patch
   - update
   - watch
 - apiGroups:
   - ""
   resources:
+  - endpoints
+  - ingresses
   - namespaces
+  - namespaces/status
   - nodes
+  - nodes/metrics
+  - nodes/proxy
+  - nodes/spec
+  - nodes/stats
   - pods
   - pods/log
-  - serviceaccounts
-  - services
+  - pods/status
+  - replicationcontrollers
+  - replicationcontrollers/status
+  - resourcequotas
   verbs:
   - get
   - list
+  - watch
 - apiGroups:
   - apps
   resources:
@@ -45,6 +60,7 @@ rules:
   - delete
   - get
   - list
+  - patch
   - update
   - watch
 - apiGroups:
@@ -91,23 +107,80 @@ rules:
   - delete
   - get
   - list
+  - patch
   - update
+  - watch
+- apiGroups:
+  - batch
+  resources:
+  - cronjobs
+  - jobs
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - cloud.google.com
+  resources:
+  - backendconfigs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - events.k8s.io
+  resources:
+  - events
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - extensions
+  resources:
+  - daemonsets
+  - deployments
+  - ingresses
+  - ingresses/status
+  - replicasets
+  verbs:
+  - get
+  - list
   - watch
 - apiGroups:
   - networking.k8s.io
   resources:
   - ingresses
+  - ingresses/status
   - networkpolicies
   verbs:
   - create
   - delete
   - get
   - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - policy
+  resources:
+  - poddisruptionbudgets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
   - update
   - watch
 - apiGroups:
   - rbac.authorization.k8s.io
   resources:
+  - clusterrolebindings
+  - clusterroles
   - rolebindings
   - roles
   verbs:
@@ -115,5 +188,6 @@ rules:
   - delete
   - get
   - list
+  - patch
   - update
   - watch
