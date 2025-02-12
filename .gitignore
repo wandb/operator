@@ -29,4 +29,4 @@ Dockerfile.cross
 /cdk8s
 /git
 
-local.tiltfile
+tilt-settings.json

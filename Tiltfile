@@ -1,10 +1,22 @@
-allowed_k8s_contexts = []
+# default values
+settings = {
+    "allowedContexts": [
+        "docker-desktop",
+        "minikube",
+        "kind-kind",
+    ],
+    "installMinio": True,
+    "installWandb": True,
+    "wandbCRD": "default",
+}
 
-# Remember to add `local.tiltfile` to .gitignore
-if os.path.exists('local.tiltfile'):
-  load_dynamic('local.tiltfile')
+# global settings
+settings.update(read_json(
+    "tilt-settings.json",
+    default = {},
+))
 
-allow_k8s_contexts(allowed_k8s_contexts)
+allow_k8s_contexts(settings.get("allowed_k8s_contexts"))
 
 os.putenv('PATH', './bin:' + os.getenv('PATH'))
 
@@ -64,7 +76,8 @@ DIRNAME = os.path.basename(os. getcwd())
 
 local(manifests() + generate())
 
-local_resource('Minio', 'kubectl apply -f ./hack/testing-manifests/minio/minio.yaml')
+if settings.get("installMinio"):
+    local_resource('Minio', 'kubectl apply -f ./hack/testing-manifests/minio/minio.yaml')
 
 local_resource('CRD', manifests() + 'kustomize build config/crd | kubectl apply -f -', deps=["api"])
 
@@ -77,7 +90,8 @@ deps.append('api')
 
 local_resource('Watch&Compile', generate() + binary(), deps=deps, ignore=['*/*/zz_generated.deepcopy.go'])
 
-local_resource('Sample YAML', 'kubectl apply -f ./hack/testing-manifests/wandb/default.yaml', deps=["./hack/testing-manifests/wandb/default.yaml"], resource_deps=["controller-manager"])
+if settings.get("installWandb"):
+    local_resource('Sample YAML', 'kubectl apply -f ./hack/testing-manifests/wandb/' + settings.get('wandbCRD') + '.yaml', deps=["./hack/testing-manifests/wandb/default.yaml"], resource_deps=["controller-manager"])
 
 docker_build_with_restart(IMG, '.',
  dockerfile_contents=DOCKERFILE,
