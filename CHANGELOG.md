@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.18.1](https://github.com/wandb/operator/compare/v1.18.0...v1.18.1) (2025-02-13)
+
+
+### Bug Fixes
+
+* Add Tilt configs for local development ([#53](https://github.com/wandb/operator/issues/53)) ([5ef82b5](https://github.com/wandb/operator/commit/5ef82b5da39a8d9a7bfc696db46cb4c6c667164c))
+
 ## [1.18.0](https://github.com/wandb/operator/compare/v1.17.0...v1.18.0) (2025-02-06)
 
 
