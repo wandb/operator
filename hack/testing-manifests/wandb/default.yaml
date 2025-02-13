@@ -13,7 +13,7 @@ spec:
   chart:
     url: https://charts.wandb.ai
     name: "operator-wandb"
-    version: "0.25.1-PR338-c06d6bc"
+    version: "0.26.3"
   values:
     global:
       bucket:
