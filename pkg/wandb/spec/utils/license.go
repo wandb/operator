@@ -2,8 +2,10 @@ package utils
 
 import (
 	"context"
+	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
@@ -35,7 +37,7 @@ func GetLicense(specs ...*spec.Spec) string {
 		if secretName != "" && secretKey != "" {
 			license := getLicenseFromSecret(kubeClient, secretName, secretKey, secretNamespace)
 			if license != "" {
-				log.Info("License retrieved from Kubernetes secret", "secretName", secretName, "namespace", secretNamespace)
+				log.Info("License retrieved from Kubernetes secret")
 				return license
 			}
 		}
@@ -54,7 +56,13 @@ func createKubeClient() (client.Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	kubeClient, err := client.New(kubeConfig, client.Options{})
+	if kubeConfig.Host == "" {
+		return nil, fmt.Errorf("invalid kubernetes configuration: empty host")
+	}
+
+	kubeClient, err := client.New(kubeConfig, client.Options{
+		Scheme: scheme.Scheme,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -64,23 +72,28 @@ func createKubeClient() (client.Client, error) {
 func getLicenseFromSecret(kubeClient client.Client, secretName, secretKey, secretNamespace string) string {
 	log := ctrllog.Log.WithName("getLicenseFromSecret")
 	secret := &corev1.Secret{}
-	ctx := context.TODO()
 
-	err := kubeClient.Get(ctx, client.ObjectKey{Name: secretName, Namespace: secretNamespace}, secret)
+	err := kubeClient.Get(context.Background(), client.ObjectKey{Name: secretName, Namespace: secretNamespace}, secret)
 	if err != nil {
-		log.Error(err, "Error retrieving secret", "secretName", secretName, "namespace", secretNamespace)
+		log.Error(err, "Error retrieving secret")
 		return ""
 	}
 
 	if secret.Data == nil {
-		log.Info("Secret has no data", "secretName", secretName, "namespace", secretNamespace)
+		log.Info("Secret has no data")
 		return ""
 	}
 	license, exists := secret.Data[secretKey]
 	if !exists {
-		log.Info("Key not found in secret", "secretKey", secretKey, "secretName", secretName, "namespace", secretNamespace)
+		log.Info("Key not found in secret")
 		return ""
 	}
-	log.Info("Successfully retrieved license from secret", "secretName", secretName, "namespace", secretNamespace)
+
+	if len(license) == 0 {
+		log.Info("Empty license value in secret")
+		return ""
+	}
+
+	log.Info("Successfully retrieved license from secret")
 	return string(license)
 }
