@@ -15,8 +15,24 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: stable
+          go-version: 1.24
       - name: Install dependencies
         run: go get .
       - name: Tests
         run: make test
+
+  dependency-check:
+    name: Dependency Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.24
+      - name: Install dependencies
+        run: go get .
+      - name: Check for changes in go.mod or go.sum
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum
