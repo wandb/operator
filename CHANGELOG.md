@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.18.2](https://github.com/wandb/operator/compare/v1.18.1...v1.18.2) (2025-02-21)
+
+
+### Bug Fixes
+
+* Update to fix some CVEs ([#55](https://github.com/wandb/operator/issues/55)) ([9a34cbe](https://github.com/wandb/operator/commit/9a34cbefc02ffde76fcd50cb644bcf1a7b1aec79))
+
 ### [1.18.1](https://github.com/wandb/operator/compare/v1.18.0...v1.18.1) (2025-02-13)
 
 
