@@ -35,4 +35,4 @@ jobs:
       - name: Check for changes in go.mod or go.sum
         run: |
           go mod tidy
-          git status --exit-code
+          git diff --exit-code go.mod go.sum
