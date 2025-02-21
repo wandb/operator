@@ -30,3 +30,4 @@ Dockerfile.cross
 /git
 
 tilt-settings.json
+/tilt_bin

@@ -1,7 +1,7 @@
 ARG KUBECTL_VERSION=1.27.3
 
 # Build the manager binary
-FROM golang:1.23 AS manager-builder
+FROM golang:1.24 AS manager-builder
 
 ARG TARGETOS
 ARG TARGETARCH
