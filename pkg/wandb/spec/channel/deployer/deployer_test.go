@@ -3,131 +3,97 @@ package deployer
 import (
 	"net/http"
 	"net/http/httptest"
-	"reflect"
 	"strings"
 	"testing"
+	"time"
 
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 	"github.com/wandb/operator/pkg/wandb/spec"
 )
 
-func TestDeployerClient_GetSpec(t *testing.T) {
-	type fields struct {
-		testServer func(license string) *httptest.Server
-	}
-	type args struct {
-		license     string
-		activeState *spec.Spec
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		want    *spec.Spec
-		wantErr bool
-	}{
-		{
-			"Test the HTTP request has expected headers and returns 200",
-			fields{
-				testServer: func(license string) *httptest.Server {
-					server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-						if r.Header.Get("Content-Type") != "application/json" {
-							t.Errorf("Expected Content-Type: application/json header, got: %s", r.Header.Get("Accept"))
-						}
-						if username, _, _ := r.BasicAuth(); username != license {
-							t.Errorf("Expected BasicAuth to match %s, got: %s", license, username)
-						}
-						w.WriteHeader(http.StatusOK)
-						_, _ = w.Write([]byte(`{}`))
-					}))
-					return server
-				},
-			},
-			args{license: "license", activeState: &spec.Spec{}},
-			&spec.Spec{},
-			false,
-		}, {
-			"Test the HTTP request fails repeatedly",
-			fields{
-				testServer: func(license string) *httptest.Server {
-					server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-						w.WriteHeader(http.StatusBadGateway)
-						_, _ = w.Write([]byte(`{}`))
-					}))
-					return server
-				},
-			},
-			args{license: "license", activeState: &spec.Spec{}},
-			nil,
-			true,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			server := tt.fields.testServer(tt.args.license)
-			defer server.Close()
-			c := &DeployerClient{
-				DeployerAPI: server.URL,
+func TestDeployer(t *testing.T) {
+	RegisterFailHandler(Fail)
+	RunSpecs(t, "Deployer Suite")
+}
+
+var _ = Describe("DeployerClient", func() {
+	Describe("GetSpec", func() {
+		var server *httptest.Server
+		var client *DeployerClient
+
+		AfterEach(func() {
+			if server != nil {
+				server.Close()
 			}
-			got, err := c.GetSpec(GetSpecOptions{
-				License:     tt.args.license,
-				ActiveState: tt.args.activeState,
+		})
+
+		Context("when the HTTP request is successful", func() {
+			BeforeEach(func() {
+				server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					Expect(r.Header.Get("Content-Type")).To(Equal("application/json"), "Expected Content-Type: application/json header")
+					username, _, _ := r.BasicAuth()
+					Expect(username).To(Equal("license"), "Expected BasicAuth to match license")
+					w.WriteHeader(http.StatusOK)
+					_, _ = w.Write([]byte(`{}`))
+				}))
+				client = &DeployerClient{
+					DeployerAPI: server.URL,
+				}
 			})
-			if (err != nil) != tt.wantErr {
-				t.Errorf("GetSpec() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if tt.wantErr && err.Error() != "all retries failed" {
-				t.Errorf("GetSpec() error = %v, expected %v", err, "all retries failed")
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("GetSpec() got = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
 
-func TestDeployerClient_getDeployerURL(t *testing.T) {
-	tests := []struct {
-		name               string
-		deployerChannelUrl string
-		deployerReleaseURL string
-		releaseId          string
-		want               string
-	}{
-		{
-			name:      "No releaseId, default channel URL",
-			releaseId: "",
-			want:      DeployerAPI + DeployerChannelPath,
-		},
-		{
-			name:               "No releaseId, custom channel URL",
-			deployerChannelUrl: "https://custom-channel.example.com",
-			releaseId:          "",
-			want:               "https://custom-channel.example.com" + DeployerChannelPath,
-		},
-		{
-			name:      "With releaseId, default release URL",
-			releaseId: "123",
-			want:      DeployerAPI + strings.Replace(DeployerReleaseAPIPath, ":versionId", "123", 1),
-		},
-		{
-			name:               "With releaseId, custom release URL",
-			deployerChannelUrl: "https://custom-release.example.com",
-			releaseId:          "456",
-			want:               "https://custom-release.example.com/api/v1/operator/channel/release/456",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			c := &DeployerClient{
-				DeployerAPI: tt.deployerChannelUrl,
-			}
-			got := c.getDeployerURL(GetSpecOptions{ReleaseId: tt.releaseId})
-			if got != tt.want {
-				t.Errorf("getDeployerURL() = %v, want %v", got, tt.want)
-			}
+			It("should make a request with correct headers and return successfully", func() {
+				got, err := client.GetSpec(GetSpecOptions{
+					License:     "license",
+					ActiveState: &spec.Spec{},
+					RetryDelay:  time.Millisecond,
+				})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(got).To(Equal(&spec.Spec{}))
+			})
 		})
-	}
-}
+
+		Context("when the HTTP request fails repeatedly", func() {
+			BeforeEach(func() {
+				server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(http.StatusBadGateway)
+					_, _ = w.Write([]byte(`{}`))
+				}))
+				client = &DeployerClient{
+					DeployerAPI: server.URL,
+				}
+			})
+
+			It("should return an error after all retries fail", func() {
+				got, err := client.GetSpec(GetSpecOptions{
+					License:     "license",
+					ActiveState: &spec.Spec{},
+					RetryDelay:  10 * time.Millisecond,
+				})
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(Equal("all retries failed"))
+				Expect(got).To(BeNil())
+			})
+		})
+	})
+
+	Describe("getDeployerURL", func() {
+		DescribeTable("should return the correct URL based on inputs",
+			func(deployerChannelUrl, releaseId, expected string) {
+				client := &DeployerClient{
+					DeployerAPI: deployerChannelUrl,
+				}
+				got := client.getDeployerURL(GetSpecOptions{ReleaseId: releaseId})
+				Expect(got).To(Equal(expected))
+			},
+			Entry("No releaseId, default channel URL",
+				"", "", DeployerAPI+DeployerChannelPath),
+			Entry("No releaseId, custom channel URL",
+				"https://custom-channel.example.com", "", "https://custom-channel.example.com"+DeployerChannelPath),
+			Entry("With releaseId, default release URL",
+				"", "123", DeployerAPI+strings.Replace(DeployerReleaseAPIPath, ":versionId", "123", 1)),
+			Entry("With releaseId, custom release URL",
+				"https://custom-release.example.com", "456", "https://custom-release.example.com/api/v1/operator/channel/release/456"),
+		)
+	})
+})

@@ -33,6 +33,7 @@ var deployerSpec = spec.Spec{
 		URL:     "https://charts.wandb.ai",
 		Name:    "operator-wandb",
 		Version: "0.14.3",
+		Debug:   false,
 	},
 	Values: spec.Values{
 		"app": map[string]interface{}{

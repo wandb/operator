@@ -1,0 +1,122 @@
+---
+apiVersion: apps.wandb.com/v1
+kind: WeightsAndBiases
+metadata:
+  labels:
+    app.kubernetes.io/name: weightsandbiases
+    app.kubernetes.io/instance: weightsandbiases-sample
+    app.kubernetes.io/part-of: operator
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: operator
+  name: wandb-default
+spec:
+  chart:
+    url: http://chartmuseum:8080
+    name: "operator-wandb"
+    version: "0.26.9"
+    username: "admin"
+    password: "admin"
+  values:
+    global:
+      bucket:
+        provider: "s3"
+        name: "minio.minio.svc.cluster.local:9000/bucket"
+        region: "us-east-1"
+        accessKey: "minio"
+        secretKey: "minio123"
+
+    app:
+      image:
+        repository: "registry:5000/local"
+        tag: "0.66.0"
+      resources:
+        requests:
+          cpu: "100m"
+        memory: "129Mi"
+
+    parquet:
+      image:
+        repository: "registry:5000/local"
+        tag: "0.66.0"
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "128Mi"
+
+    weave:
+      image:
+        repository: "registry:5000/local"
+        tag: "0.66.0"
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "128Mi"
+
+    console:
+      image:
+        repository: "registry:5000/console"
+        tag: "2.15.2"
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "128Mi"
+
+    controller:
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "128Mi"
+
+    weaveTrace:
+      image:
+        repository: "registry:5000/weave-trace"
+        tag: "0.66.0"
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "128Mi"
+
+    opentelemetryCollector:
+      image:
+        repository: "registry:5000/opentelemetry-collector-contrib"
+        tag: "0.97.0"
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "128Mi"
+
+    prometheus:
+      image:
+        repository: "registry:5000/prometheus"
+        tag: "v2.47.0"
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "128Mi"
+      configReloader:
+        image:
+          repository: "registry:5000/prometheus-config-reloader"
+          tag: "v0.67.0"
+
+    ingress:
+      install: false
+      create: false
+
+    mysql:
+      install: true
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "128Mi"
+
+    redis:
+      image:
+        repository: "registry:5000/redis"
+        tag: "7.2.4-debian-12-r9"
+      install: true
+      auth:
+        enabled: true
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "128Mi"

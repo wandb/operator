@@ -1,0 +1,14 @@
+apiVersion: kind.x-k8s.io/v1alpha4
+kind: Cluster
+containerdConfigPatches:
+  - |-
+    [plugins."io.containerd.grpc.v1.cri".registry.mirrors."registry:5000"]
+      endpoint = ["http://registry:5000"]
+    [plugins."io.containerd.grpc.v1.cri".registry.configs."registry:5000".auth]
+      username = "admin"
+      password = "admin"
+    [plugins."io.containerd.grpc.v1.cri".registry.configs."registry:5000".tls]
+      insecure_skip_verify = true
+networking:
+  ipFamily: dual
+  apiServerAddress: "127.0.0.1"
