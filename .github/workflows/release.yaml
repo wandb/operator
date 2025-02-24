@@ -32,7 +32,7 @@ jobs:
 
       - name: Versioning
         id: release
-        uses: cycjimmy/semantic-release-action@v3
+        uses: cycjimmy/semantic-release-action@v4
         with:
           semantic_version: 19.0.2
           extra_plugins: |
