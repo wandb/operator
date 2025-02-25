@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.18.4](https://github.com/wandb/operator/compare/v1.18.3...v1.18.4) (2025-02-25)
+
+
+### Bug Fixes
+
+* Release needs ginkgo ([#65](https://github.com/wandb/operator/issues/65)) ([c51df78](https://github.com/wandb/operator/commit/c51df78123d5f4ceca17fa4fc40efa5a52342a51))
+
 ### [1.18.3](https://github.com/wandb/operator/compare/v1.18.2...v1.18.3) (2025-02-25)
 
 
