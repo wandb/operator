@@ -105,9 +105,6 @@ if settings.get("installWandb"):
         resource_deps=["operator-controller-manager"]
     )
 
-    #local_resource('Sample YAML', 'kubectl apply -f ./hack/testing-manifests/wandb/' + settings.get('wandbCRD') +
-    #               '.yaml', deps=["./hack/testing-manifests/wandb/" + settings.get('wandbCRD') + ".yaml"], resource_deps=["controller-manager"])
-
 docker_build_with_restart(IMG, '.',
                           dockerfile_contents=DOCKERFILE,
                           entrypoint='/manager',
