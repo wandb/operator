@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.18.3](https://github.com/wandb/operator/compare/v1.18.2...v1.18.3) (2025-02-25)
+
+
+### Bug Fixes
+
+* Basic Auth Fix ([#56](https://github.com/wandb/operator/issues/56)) ([414b2cf](https://github.com/wandb/operator/commit/414b2cf518da23a35f1032f32fc0b183292aa270))
+
 ### [1.18.2](https://github.com/wandb/operator/compare/v1.18.1...v1.18.2) (2025-02-21)
 
 
