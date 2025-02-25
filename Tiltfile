@@ -23,7 +23,7 @@ os.putenv('PATH', './bin:' + os.getenv('PATH'))
 load('ext://restart_process', 'docker_build_with_restart')
 
 DOCKERFILE = '''
-FROM registry.access.redhat.com/ubi9/ubi
+FROM registry.access.redhat.com/ubi9/ubi-micro
 
 ADD tilt_bin/manager /manager
 
@@ -104,7 +104,7 @@ local_resource('Watch&Compile', generate() + binary(),
 
 if settings.get("installWandb"):
     local_resource('Sample YAML', 'kubectl apply -f ./hack/testing-manifests/wandb/' + settings.get('wandbCRD') +
-                   '.yaml', deps=["./hack/testing-manifests/wandb/default.yaml"], resource_deps=["controller-manager"])
+                   '.yaml', deps=["./hack/testing-manifests/wandb/" + settings.get('wandbCRD') + ".yaml"], resource_deps=["controller-manager"])
 
 docker_build_with_restart(IMG, '.',
                           dockerfile_contents=DOCKERFILE,
