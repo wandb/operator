@@ -46,6 +46,9 @@ jobs:
         with:
           go-version: 1.24
 
+      - name: Install Ginkgo
+        run: go install github.com/onsi/ginkgo/v2/ginkgo@latest
+
       - name: Build and Push
         run: |
           make docker-build docker-push
