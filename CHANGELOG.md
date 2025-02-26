@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.18.5](https://github.com/wandb/operator/compare/v1.18.4...v1.18.5) (2025-02-26)
+
+
+### Bug Fixes
+
+* TLS ([#67](https://github.com/wandb/operator/issues/67)) ([0d3013c](https://github.com/wandb/operator/commit/0d3013c969d84b51b172fc0a5569a8f20b0a1f4b))
+
 ### [1.18.4](https://github.com/wandb/operator/compare/v1.18.3...v1.18.4) (2025-02-25)
 
 
