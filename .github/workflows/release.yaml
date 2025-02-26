@@ -29,7 +29,7 @@ jobs:
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
-        
+
       - name: Versioning
         id: release
         uses: cycjimmy/semantic-release-action@v3
@@ -44,7 +44,10 @@ jobs:
 
       - uses: actions/setup-go@v4
         with:
-          go-version: stable
+          go-version: 1.24
+
+      - name: Install Ginkgo
+        run: go install github.com/onsi/ginkgo/v2/ginkgo@latest
 
       - name: Build and Push
         run: |

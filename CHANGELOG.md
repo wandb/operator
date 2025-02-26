@@ -2,6 +2,34 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.18.5](https://github.com/wandb/operator/compare/v1.18.4...v1.18.5) (2025-02-26)
+
+
+### Bug Fixes
+
+* TLS ([#67](https://github.com/wandb/operator/issues/67)) ([0d3013c](https://github.com/wandb/operator/commit/0d3013c969d84b51b172fc0a5569a8f20b0a1f4b))
+
+### [1.18.4](https://github.com/wandb/operator/compare/v1.18.3...v1.18.4) (2025-02-25)
+
+
+### Bug Fixes
+
+* Release needs ginkgo ([#65](https://github.com/wandb/operator/issues/65)) ([c51df78](https://github.com/wandb/operator/commit/c51df78123d5f4ceca17fa4fc40efa5a52342a51))
+
+### [1.18.3](https://github.com/wandb/operator/compare/v1.18.2...v1.18.3) (2025-02-25)
+
+
+### Bug Fixes
+
+* Basic Auth Fix ([#56](https://github.com/wandb/operator/issues/56)) ([414b2cf](https://github.com/wandb/operator/commit/414b2cf518da23a35f1032f32fc0b183292aa270))
+
+### [1.18.2](https://github.com/wandb/operator/compare/v1.18.1...v1.18.2) (2025-02-21)
+
+
+### Bug Fixes
+
+* Update to fix some CVEs ([#55](https://github.com/wandb/operator/issues/55)) ([9a34cbe](https://github.com/wandb/operator/commit/9a34cbefc02ffde76fcd50cb644bcf1a7b1aec79))
+
 ### [1.18.1](https://github.com/wandb/operator/compare/v1.18.0...v1.18.1) (2025-02-13)
 
 

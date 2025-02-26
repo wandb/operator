@@ -18,8 +18,9 @@ package controllers
 
 import (
 	"context"
-	rbacv1 "k8s.io/api/rbac/v1"
 	"reflect"
+
+	rbacv1 "k8s.io/api/rbac/v1"
 
 	"github.com/wandb/operator/pkg/wandb/spec/state"
 	appsv1 "k8s.io/api/apps/v1"
@@ -147,6 +148,7 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			License:     license,
 			ActiveState: currentActiveSpec,
 			ReleaseId:   releaseID,
+			Debug:       r.Debug,
 		})
 		if err != nil {
 			log.Info("Failed to get spec from deployer", "error", err)
@@ -156,7 +158,7 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			// deployer release in the cache
 			// Attempt to retrieve the cached release
 			if deployerSpec, err = specManager.Get("latest-cached-release"); err != nil {
-				log.Error(err, "No cached release found for deployer spec", err, "error")
+				log.Info("No cached release found", "error", err.Error())
 			}
 			if r.Debug {
 				log.Info("Using cached deployer spec", "spec", deployerSpec.SensitiveValuesMasked())
