@@ -17,7 +17,7 @@ settings.update(read_json(
 ))
 
 # Configure global watch settings with a 2-second debounce
-watch_settings(ignore=["tilt_bin", "**/.git", "**/*.out"])
+watch_settings(ignore=["**/.git", "**/*.out"])
 
 allow_k8s_contexts(settings.get("allowed_k8s_contexts"))
 
