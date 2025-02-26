@@ -16,6 +16,20 @@ import (
 func GetLicense(specs ...*spec.Spec) string {
 	log := ctrllog.Log.WithName("GetLicense")
 
+	// First check if license is directly provided in values
+	for _, s := range specs {
+		if s == nil || s.Values == nil {
+			continue
+		}
+
+		license := s.Values.GetString("global.license")
+		if license != "" {
+			log.Info("License retrieved from values.yaml")
+			return license
+		}
+	}
+
+	// Then try to get from secret if no direct license was found
 	kubeClient, err := createKubeClient()
 	if err != nil {
 		log.Error(err, "Error creating Kubernetes client")
@@ -40,12 +54,6 @@ func GetLicense(specs ...*spec.Spec) string {
 				log.Info("License retrieved from Kubernetes secret")
 				return license
 			}
-		}
-
-		license := s.Values.GetString("global.license")
-		if license != "" {
-			log.Info("License retrieved from values.yaml")
-			return license
 		}
 	}
 	return ""
