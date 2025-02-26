@@ -32,6 +32,9 @@ RUN mkdir -p /helm/.cache/helm /helm/.config/helm /helm/.local/share/helm && chm
 
 FROM registry.access.redhat.com/ubi9/ubi-micro
 
+# Install CA certificates
+COPY --from=registry.access.redhat.com/ubi9/ubi-minimal:latest /etc/pki/ca-trust /etc/pki/ca-trust
+
 COPY --from=manager-builder /workspace/manager .
 COPY --from=manager-builder /helm /helm
 

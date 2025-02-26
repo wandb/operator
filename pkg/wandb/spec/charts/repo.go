@@ -123,10 +123,15 @@ func (r RepoRelease) downloadChart() (string, error) {
 	entry.Username = r.Username
 	entry.Password = r.Password
 
-	// Skip TLS verification for all URLs in development/testing environments
-	entry.InsecureSkipTLSverify = true
-	if r.Debug {
-		log.Info("TLS verification disabled", "url", r.URL)
+	parsedURL, err := url.Parse(r.URL)
+	if err != nil {
+		log.Error(err, "Failed to parse URL for TLS verification check")
+		return "", err
+	}
+
+	entry.InsecureSkipTLSverify = parsedURL.Scheme == "http"
+	if entry.InsecureSkipTLSverify && r.Debug {
+		log.Info("TLS verification disabled for HTTP URL", "url", r.URL)
 	}
 
 	if r.Debug {

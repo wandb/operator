@@ -27,6 +27,7 @@ type GetSpecOptions struct {
 	ReleaseId   string
 	Debug       bool
 	RetryDelay  time.Duration
+	Timeout     time.Duration
 }
 
 //counterfeiter:generate . DeployerInterface

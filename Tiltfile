@@ -16,6 +16,9 @@ settings.update(read_json(
     default={},
 ))
 
+# Configure global watch settings with a 2-second debounce
+watch_settings(ignore=["tilt_bin", "**/.git", "**/*.out"])
+
 allow_k8s_contexts(settings.get("allowed_k8s_contexts"))
 
 os.putenv('PATH', './bin:' + os.getenv('PATH'))
@@ -24,6 +27,8 @@ load('ext://restart_process', 'docker_build_with_restart')
 
 DOCKERFILE = '''
 FROM registry.access.redhat.com/ubi9/ubi-micro
+
+COPY --from=registry.access.redhat.com/ubi9/ubi-minimal:latest /etc/pki/ca-trust /etc/pki/ca-trust
 
 ADD tilt_bin/manager /manager
 
