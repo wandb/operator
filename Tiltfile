@@ -26,9 +26,7 @@ os.putenv('PATH', './bin:' + os.getenv('PATH'))
 load('ext://restart_process', 'docker_build_with_restart')
 
 DOCKERFILE = '''
-FROM registry.access.redhat.com/ubi9/ubi-micro
-
-COPY --from=registry.access.redhat.com/ubi9/ubi-minimal:latest /etc/pki/ca-trust /etc/pki/ca-trust
+FROM registry.access.redhat.com/ubi9/ubi-minimal
 
 ADD tilt_bin/manager /manager
 

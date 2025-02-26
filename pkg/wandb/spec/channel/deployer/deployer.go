@@ -64,7 +64,13 @@ func (c *DeployerClient) getDeployerURL(opts GetSpecOptions) string {
 func (c *DeployerClient) GetSpec(opts GetSpecOptions) (*spec.Spec, error) {
 	url := c.getDeployerURL(opts)
 
-	client := &http.Client{}
+	client := &http.Client{
+		Timeout: opts.Timeout,
+	}
+
+	if opts.Timeout == 0 {
+		client.Timeout = 30 * time.Second
+	}
 
 	retryDelay := opts.RetryDelay
 	if retryDelay == 0 {
