@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.19.0](https://github.com/wandb/operator/compare/v1.18.5...v1.19.0) (2025-02-27)
+
+
+### Features
+
+* Updated license.go file to include the feature for licenseSecret as well ([#54](https://github.com/wandb/operator/issues/54)) ([bb55caa](https://github.com/wandb/operator/commit/bb55caa1c893332af74e704ab959ff7e3ef10119))
+
 ### [1.18.5](https://github.com/wandb/operator/compare/v1.18.4...v1.18.5) (2025-02-26)
 
 
