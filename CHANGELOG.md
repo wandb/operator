@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.19.1](https://github.com/wandb/operator/compare/v1.19.0...v1.19.1) (2025-03-04)
+
+
+### Bug Fixes
+
+* Bump deps ([#70](https://github.com/wandb/operator/issues/70)) ([11ba9f8](https://github.com/wandb/operator/commit/11ba9f8fbb113aee141db396d552c811cde1a9a7))
+
 ## [1.19.0](https://github.com/wandb/operator/compare/v1.18.5...v1.19.0) (2025-02-27)
 
 
