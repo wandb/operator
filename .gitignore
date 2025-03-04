@@ -36,3 +36,5 @@ junit.xml
 
 tilt-settings.json
 /tilt_bin
+
+.DS_Store
