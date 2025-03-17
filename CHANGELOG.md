@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.19.2](https://github.com/wandb/operator/compare/v1.19.1...v1.19.2) (2025-03-17)
+
+
+### Bug Fixes
+
+* Local_resource and kubectl apply could risk deploying to the wrong context ([#66](https://github.com/wandb/operator/issues/66)) ([a90a270](https://github.com/wandb/operator/commit/a90a27013d1e8b13922fdcd3e11b8d683df204f8))
+
 ### [1.19.1](https://github.com/wandb/operator/compare/v1.19.0...v1.19.1) (2025-03-04)
 
 
