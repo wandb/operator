@@ -42,26 +42,6 @@ IMG = 'controller:latest'
 CONTROLLERGEN = 'rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases;'
 DISABLE_SECURITY_CONTEXT = True
 
-
-def yaml():
-    data = local('cd config/manager; kustomize edit set image controller=' +
-                 IMG + '; cd ../..; kustomize build config/manager')
-    if DISABLE_SECURITY_CONTEXT:
-        decoded = decode_yaml_stream(data)
-        if decoded:
-            for d in decoded:
-                # Live update conflicts with SecurityContext, until a better solution, just remove it
-                if d["kind"] == "Deployment":
-                    if "securityContext" in d['spec']['template']['spec']:
-                        d['spec']['template']['spec'].pop('securityContext')
-                    for c in d['spec']['template']['spec']['containers']:
-                        if "securityContext" in c:
-                            c.pop('securityContext')
-
-        return encode_yaml_stream(decoded)
-    return data
-
-
 def manifests():
     return 'controller-gen ' + CONTROLLERGEN
 
@@ -73,8 +53,7 @@ def generate():
 def vetfmt():
     return 'go vet ./...; go fmt ./...'
 
-# build to tilt_bin beause kubebuilder has a dockerignore for bin/
-
+# build to tilt_bin because kubebuilder has a dockerignore for bin/
 
 def binary():
     return 'CGO_ENABLED=0 GOOS=linux GO111MODULE=on go build -o tilt_bin/manager main.go'
@@ -88,16 +67,30 @@ DIRNAME = os.path.basename(os. getcwd())
 local(manifests() + generate())
 
 if settings.get("installMinio"):
-    local_resource(
-        'Minio', 'kubectl apply -f ./hack/testing-manifests/minio/minio.yaml')
+    k8s_yaml('./hack/testing-manifests/minio/minio.yaml')
+    k8s_resource(
+        'minio',
+        'Minio',
+        objects=[
+            'minio:service',
+            'minio:namespace'
+        ]
+    )
 
-local_resource('CRD', manifests() +
-               'kustomize build config/crd | kubectl apply -f -', deps=["api"])
+k8s_yaml(local(manifests() + 'kustomize build config/default'))
 
-local_resource(
-    'RBAC', 'kustomize build config/rbac | kubectl apply -f -', deps=["config/rbac"])
-
-k8s_yaml(yaml())
+k8s_resource(
+    new_name='CRD',
+    objects=['weightsandbiases.apps.wandb.com:customresourcedefinition'])
+k8s_resource(
+    new_name='RBAC',
+    objects=[
+        'operator-manager-role:clusterrole',
+        'operator-manager-rolebinding:clusterrolebinding',
+        'operator-leader-election-role:role',
+        'operator-leader-election-rolebinding:rolebinding'
+    ]
+)
 
 deps = ['controllers', 'pkg', 'main.go']
 deps.append('api')
@@ -106,8 +99,14 @@ local_resource('Watch&Compile', generate() + binary(),
                deps=deps, ignore=['*/*/zz_generated.deepcopy.go'])
 
 if settings.get("installWandb"):
-    local_resource('Sample YAML', 'kubectl apply -f ./hack/testing-manifests/wandb/' + settings.get('wandbCRD') +
-                   '.yaml', deps=["./hack/testing-manifests/wandb/" + settings.get('wandbCRD') + ".yaml"], resource_deps=["controller-manager"])
+    k8s_yaml('./hack/testing-manifests/wandb/' + settings.get('wandbCRD') + '.yaml')
+    k8s_resource(
+        new_name='Wandb',
+        objects=[
+            'wandb-default:weightsandbiases'
+        ],
+        resource_deps=["operator-controller-manager"]
+    )
 
 docker_build_with_restart(IMG, '.',
                           dockerfile_contents=DOCKERFILE,
