@@ -140,7 +140,7 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		log.Info("No active spec found.")
 	}
 
-	license := utils.GetLicense(currentActiveSpec, crdSpec, userInputSpec)
+	license := utils.GetLicense(ctx, r.Client, wandb, crdSpec, userInputSpec)
 
 	var deployerSpec *spec.Spec
 	if !r.IsAirgapped {

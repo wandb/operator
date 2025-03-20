@@ -19,6 +19,11 @@ settings.update(read_json(
 # Configure global watch settings with a 2-second debounce
 watch_settings(ignore=["**/.git", "**/*.out"])
 
+if k8s_context() in settings.get("allowedContexts"):
+    print("Context is allowed")
+else:
+    fail("Selected context is not in allow list")
+
 allow_k8s_contexts(settings.get("allowed_k8s_contexts"))
 
 os.putenv('PATH', './bin:' + os.getenv('PATH'))
