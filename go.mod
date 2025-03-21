@@ -6,7 +6,7 @@ require (
 	github.com/go-logr/logr v1.4.2
 	github.com/go-playground/validator/v10 v10.25.0
 	github.com/maxbrunsfeld/counterfeiter/v6 v6.8.1
-	github.com/onsi/ginkgo/v2 v2.22.2
+	github.com/onsi/ginkgo/v2 v2.23.2
 	github.com/onsi/gomega v1.36.2
 	github.com/pkg/errors v0.9.1
 	helm.sh/helm/v3 v3.17.1
