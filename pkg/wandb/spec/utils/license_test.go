@@ -82,6 +82,8 @@ var _ = Describe("License", func() {
 					},
 				}
 				Expect(utils.GetLicense(context.Background(), k8sClient, testWandb, testSpec)).To(Equal("test-license"))
+				err = k8sClient.Delete(context.Background(), licenseSecret)
+				Expect(err).NotTo(HaveOccurred())
 			})
 		})
 		Context("when the license is not set", func() {
