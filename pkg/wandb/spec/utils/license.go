@@ -38,7 +38,7 @@ func GetLicense(ctx context.Context, k8sClient client.Client, wandb v1.Object, s
 		secretNamespace := wandb.GetNamespace()
 
 		if secretName != "" && secretKey != "" {
-			license := getLicenseFromSecret(k8sClient, secretName, secretKey, secretNamespace)
+			license := getLicenseFromSecret(ctx, k8sClient, secretName, secretKey, secretNamespace)
 			if license != "" {
 				log.Info("License retrieved from Kubernetes secret")
 				return license
@@ -48,11 +48,11 @@ func GetLicense(ctx context.Context, k8sClient client.Client, wandb v1.Object, s
 	return ""
 }
 
-func getLicenseFromSecret(k8sClient client.Client, secretName, secretKey, secretNamespace string) string {
-	log := ctrllog.Log.WithName("getLicenseFromSecret")
+func getLicenseFromSecret(ctx context.Context, k8sClient client.Client, secretName, secretKey, secretNamespace string) string {
+	log := ctrllog.FromContext(ctx).WithName("getLicenseFromSecret")
 	secret := &corev1.Secret{}
 
-	err := k8sClient.Get(context.Background(), client.ObjectKey{Name: secretName, Namespace: secretNamespace}, secret)
+	err := k8sClient.Get(ctx, client.ObjectKey{Name: secretName, Namespace: secretNamespace}, secret)
 	if err != nil {
 		log.Error(err, "Error retrieving secret")
 		return ""
