@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.19.3](https://github.com/wandb/operator/compare/v1.19.2...v1.19.3) (2025-03-26)
+
+
+### Bug Fixes
+
+* Look for secret in namespace of wandb CR ([#78](https://github.com/wandb/operator/issues/78)) ([e374c9a](https://github.com/wandb/operator/commit/e374c9a058909204221d69c160342379754e305c))
+
 ### [1.19.2](https://github.com/wandb/operator/compare/v1.19.1...v1.19.2) (2025-03-17)
 
 
