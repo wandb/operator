@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package controllers
+package controller
 
 import (
 	"context"
@@ -38,7 +38,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	apiv1 "github.com/wandb/operator/api/v1"
-	"github.com/wandb/operator/controllers/internal/ctrlqueue"
+	"github.com/wandb/operator/internal/controller/ctrlqueue"
 	"github.com/wandb/operator/pkg/wandb/spec"
 	"github.com/wandb/operator/pkg/wandb/spec/channel/deployer"
 	"github.com/wandb/operator/pkg/wandb/spec/operator"
