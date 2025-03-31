@@ -29,10 +29,9 @@ FROM registry.access.redhat.com/ubi9/ubi-minimal
 WORKDIR /
 COPY --from=builder /workspace/manager .
 
-# Create a helm cache directory, set group ownership and permissions, and apply the sticky bit
-RUN mkdir -p /helm/.cache/helm /helm/.config/helm /helm/.local/share/helm && chmod -R 1777 /helm
+# Create a helm cache directory and set ownership to the non-root user
+RUN mkdir -p /helm/.cache/helm /helm/.config/helm /helm/.local/share/helm && chown -R 65532:65532 /helm
 
-# TODO(dpanzella): This was added by kubebuilder v4, but not sure if we want it or not
 USER 65532:65532
 
 ENV HELM_CACHE_HOME=/helm/.cache/helm
