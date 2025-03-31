@@ -33,7 +33,7 @@ COPY --from=builder /workspace/manager .
 RUN mkdir -p /helm/.cache/helm /helm/.config/helm /helm/.local/share/helm && chmod -R 1777 /helm
 
 # TODO(dpanzella): This was added by kubebuilder v4, but not sure if we want it or not
-# USER 65532:65532
+USER 65532:65532
 
 ENV HELM_CACHE_HOME=/helm/.cache/helm
 ENV HELM_CONFIG_HOME=/helm/.config/helm
