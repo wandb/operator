@@ -13,7 +13,7 @@ spec:
   chart:
     url: https://charts.wandb.ai
     name: "operator-wandb"
-    version: "0.26.3"
+    version: "0.28.6"
   values:
     global:
       bucket:
@@ -60,9 +60,10 @@ spec:
 
     redis:
       install: true
-      auth:
-        enabled: true
       resources:
         requests:
           cpu: "100m"
           memory: "128Mi"
+
+    reloader:
+      install: true
