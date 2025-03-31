@@ -1,0 +1,9 @@
+apiVersion: apps.wandb.com/v2
+kind: Application
+metadata:
+  labels:
+    app.kubernetes.io/name: operator
+    app.kubernetes.io/managed-by: kustomize
+  name: application-sample
+spec:
+  # TODO(user): Add fields here

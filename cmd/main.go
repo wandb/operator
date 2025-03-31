@@ -26,9 +26,10 @@ import (
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
+	_ "k8s.io/client-go/plugin/pkg/client/auth"
+
 	"github.com/wandb/operator/internal/controller"
 	"github.com/wandb/operator/pkg/wandb/spec/channel/deployer"
-	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -43,6 +44,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	appsv1 "github.com/wandb/operator/api/v1"
+	appsv2 "github.com/wandb/operator/api/v2"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -55,6 +57,7 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
 	utilruntime.Must(appsv1.AddToScheme(scheme))
+	utilruntime.Must(appsv2.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -237,6 +240,13 @@ func main() {
 		Debug:          debug,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "WeightsAndBiases")
+		os.Exit(1)
+	}
+	if err = (&controller.ApplicationReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Application")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder

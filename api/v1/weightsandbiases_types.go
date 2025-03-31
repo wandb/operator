@@ -87,6 +87,7 @@ type WeightsAndBiasesStatus struct {
 }
 
 //+kubebuilder:object:root=true
+//+kubebuilder:storageversion
 //+kubebuilder:subresource:status
 //+kubebuilder:resource:shortName=wandb
 //+operator-sdk:csv:customresourcedefinitions:displayName="Weights & Biases"

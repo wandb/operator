@@ -3,6 +3,7 @@
 # It should be run by config/default
 resources:
 - bases/apps.wandb.com_weightsandbiases.yaml
+- bases/apps.wandb.com_applications.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:

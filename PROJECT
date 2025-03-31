@@ -21,4 +21,21 @@ resources:
   kind: WeightsAndBiases
   path: github.com/wandb/operator/api/v1
   version: v1
+- api:
+    crdVersion: v1
+    namespaced: true
+  domain: wandb.com
+  group: apps
+  kind: WeightsAndBiases
+  path: github.com/wandb/operator/api/v2
+  version: v2
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: wandb.com
+  group: apps
+  kind: Application
+  path: github.com/wandb/operator/api/v2
+  version: v2
 version: "3"

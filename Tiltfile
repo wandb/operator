@@ -90,7 +90,7 @@ k8s_yaml(local(manifests() + 'kustomize build config/default'))
 
 k8s_resource(
     new_name='CRD',
-    objects=['weightsandbiases.apps.wandb.com:customresourcedefinition'])
+    objects=['weightsandbiases.apps.wandb.com:customresourcedefinition', 'applications.apps.wandb.com:customresourcedefinition'])
 k8s_resource(
     new_name='RBAC',
     objects=[

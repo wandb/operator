@@ -75,6 +75,7 @@ rules:
 - apiGroups:
   - apps.wandb.com
   resources:
+  - applications
   - weightsandbiases
   verbs:
   - create
@@ -87,12 +88,14 @@ rules:
 - apiGroups:
   - apps.wandb.com
   resources:
+  - applications/finalizers
   - weightsandbiases/finalizers
   verbs:
   - update
 - apiGroups:
   - apps.wandb.com
   resources:
+  - applications/status
   - weightsandbiases/status
   verbs:
   - get
