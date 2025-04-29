@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package controllers
+package controller
 
 import (
 	"context"
@@ -38,7 +38,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	apiv1 "github.com/wandb/operator/api/v1"
-	"github.com/wandb/operator/controllers/internal/ctrlqueue"
+	"github.com/wandb/operator/internal/controller/ctrlqueue"
 	"github.com/wandb/operator/pkg/wandb/spec"
 	"github.com/wandb/operator/pkg/wandb/spec/channel/deployer"
 	"github.com/wandb/operator/pkg/wandb/spec/operator"
@@ -70,7 +70,7 @@ type WeightsAndBiasesReconciler struct {
 //+kubebuilder:rbac:groups=apps,resources=deployments;controllerrevisions;daemonsets;replicasets;statefulsets,verbs=update;delete;get;list;create;patch;watch
 //+kubebuilder:rbac:groups=apps,resources=deployments/status;daemonsets/status;replicasets/status;statefulsets/status,verbs=get
 //+kubebuilder:rbac:groups=autoscaling,resources=horizontalpodautoscalers,verbs=update;delete;get;list;patch;create;watch
-//+kubebuilder:rbac:groups=batch,resources=cronjobs;jobs,verbs=get;list;watch
+//+kubebuilder:rbac:groups=batch,resources=cronjobs;jobs,verbs=get;list;watch;create;delete
 //+kubebuilder:rbac:groups=events.k8s.io,resources=events,verbs=list;watch
 //+kubebuilder:rbac:groups=cloud.google.com,resources=backendconfigs,verbs=update;delete;get;list;patch;create;watch
 //+kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses;ingresses/status;networkpolicies,verbs=update;delete;get;list;create;patch;watch
