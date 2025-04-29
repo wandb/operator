@@ -1,5 +1,5 @@
 .PHONY: test-ginko
-test: manifests generate fmt vet envtest ginkgo ## Run tests.
+test-ginko: manifests generate fmt vet envtest ginkgo ## Run tests.
 	@echo "Running tests..."
 	@KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" \
 	ginkgo -p -r --compilers=4 --timeout=5m --fail-fast --race --trace --randomize-all \

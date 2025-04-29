@@ -230,4 +230,4 @@ $(GINKGO): $(LOCALBIN)
 	test -s $(LOCALBIN)/ginkgo || GOBIN=$(LOCALBIN) go install github.com/onsi/ginkgo/v2/ginkgo@latest
 
 
-include dep-management.mk olm.mk
+include dep-management.mk olm.mk ginko.mk
