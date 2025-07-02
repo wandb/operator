@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"reflect"
+	"time"
 
 	rbacv1 "k8s.io/api/rbac/v1"
 
@@ -290,6 +291,7 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			if !r.DryRun {
 				if err := desiredSpec.Prune(ctx, r.Client, wandb, r.Scheme); err != nil {
 					log.Error(err, "Failed to cleanup deployment.")
+					return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
 				} else {
 					log.Info("Successfully cleaned up resources")
 				}
