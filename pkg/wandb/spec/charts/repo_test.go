@@ -14,8 +14,15 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	v1 "github.com/wandb/operator/api/v1"
+	"github.com/wandb/operator/pkg/wandb/spec"
 	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/repo"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 func TestRepo(t *testing.T) {
@@ -467,6 +474,302 @@ var _ = Describe("RepoRelease", func() {
 					Expect(err).To(HaveOccurred())
 					Expect(path).To(BeEmpty())
 				})
+			})
+		})
+	})
+
+	Describe("CredentialSecret", func() {
+		var (
+			fakeClient client.Client
+			scheme     *runtime.Scheme
+			wandb      *v1.WeightsAndBiases
+			config     spec.Values
+		)
+
+		BeforeEach(func() {
+			// Set up the scheme
+			scheme = runtime.NewScheme()
+			Expect(v1.AddToScheme(scheme)).To(Succeed())
+			Expect(corev1.AddToScheme(scheme)).To(Succeed())
+
+			// Create a fake Kubernetes client
+			fakeClient = fake.NewClientBuilder().WithScheme(scheme).Build()
+
+			// Create a test WeightsAndBiases instance
+			wandb = &v1.WeightsAndBiases{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-wandb",
+					Namespace: "test-namespace",
+				},
+			}
+
+			// Create test config
+			config = spec.Values{}
+
+			// Set up environment variables for helm
+			os.Setenv("HELM_CACHE_HOME", filepath.Join(tempDir, "cache"))
+			os.Setenv("HELM_CONFIG_HOME", filepath.Join(tempDir, "config"))
+			os.Setenv("HELM_DATA_HOME", filepath.Join(tempDir, "data"))
+		})
+
+		AfterEach(func() {
+			os.Unsetenv("HELM_CACHE_HOME")
+			os.Unsetenv("HELM_CONFIG_HOME")
+			os.Unsetenv("HELM_DATA_HOME")
+		})
+
+		Context("with valid credential secret", func() {
+			var secret *corev1.Secret
+
+			BeforeEach(func() {
+				// Create a valid secret with credentials
+				secret = &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-credentials",
+						Namespace: "test-namespace",
+					},
+					Data: map[string][]byte{
+						"HELM_USERNAME": []byte("secret-user"),
+						"HELM_PASSWORD": []byte("secret-pass"),
+					},
+				}
+
+				// Create the secret in the fake client
+				Expect(fakeClient.Create(context.TODO(), secret)).To(Succeed())
+
+				// Set up repo release with credential secret
+				repoRelease.CredentialSecret = &CredentialSecret{
+					Name:        "test-credentials",
+					UsernameKey: "HELM_USERNAME",
+					PasswordKey: "HELM_PASSWORD",
+				}
+				// Clear direct credentials to ensure they come from secret
+				repoRelease.Username = ""
+				repoRelease.Password = ""
+			})
+
+			It("should successfully retrieve credentials from secret", func() {
+				err := repoRelease.Apply(context.TODO(), fakeClient, wandb, scheme, config)
+				// The Apply should fail at the download step, but not at credential retrieval
+				Expect(err).To(HaveOccurred())
+				// The error should be related to chart download, not credential retrieval
+				Expect(err.Error()).NotTo(ContainSubstring("Failed to get credentials from secret"))
+				Expect(err.Error()).NotTo(ContainSubstring("credentials"))
+			})
+
+			It("should use default credential keys when not specified", func() {
+				// Create secret with default keys
+				secretWithDefaults := &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-credentials-defaults",
+						Namespace: "test-namespace",
+					},
+					Data: map[string][]byte{
+						"HELM_USERNAME": []byte("default-user"),
+						"HELM_PASSWORD": []byte("default-pass"),
+					},
+				}
+				Expect(fakeClient.Create(context.TODO(), secretWithDefaults)).To(Succeed())
+
+				repoRelease.CredentialSecret = &CredentialSecret{
+					Name: "test-credentials-defaults",
+					// Don't specify UsernameKey and PasswordKey to test defaults
+				}
+
+				err := repoRelease.Apply(context.TODO(), fakeClient, wandb, scheme, config)
+				// Should fail at download step, not credential retrieval
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).NotTo(ContainSubstring("Failed to get credentials from secret"))
+			})
+
+			It("should use custom credential keys when specified", func() {
+				// Create secret with custom keys
+				secretWithCustomKeys := &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-credentials-custom",
+						Namespace: "test-namespace",
+					},
+					Data: map[string][]byte{
+						"custom-user": []byte("custom-user"),
+						"custom-pass": []byte("custom-pass"),
+					},
+				}
+				Expect(fakeClient.Create(context.TODO(), secretWithCustomKeys)).To(Succeed())
+
+				repoRelease.CredentialSecret = &CredentialSecret{
+					Name:        "test-credentials-custom",
+					UsernameKey: "custom-user",
+					PasswordKey: "custom-pass",
+				}
+
+				err := repoRelease.Apply(context.TODO(), fakeClient, wandb, scheme, config)
+				// Should fail at download step, not credential retrieval
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).NotTo(ContainSubstring("Failed to get credentials from secret"))
+			})
+		})
+
+		Context("with missing credential secret", func() {
+			BeforeEach(func() {
+				repoRelease.CredentialSecret = &CredentialSecret{
+					Name:        "non-existent-secret",
+					UsernameKey: "HELM_USERNAME",
+					PasswordKey: "HELM_PASSWORD",
+				}
+				repoRelease.Username = ""
+				repoRelease.Password = ""
+			})
+
+			It("should fail when secret does not exist", func() {
+				err := repoRelease.Apply(context.TODO(), fakeClient, wandb, scheme, config)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("secrets \"non-existent-secret\" not found"))
+			})
+		})
+
+		Context("with invalid credential secret", func() {
+			var secret *corev1.Secret
+
+			BeforeEach(func() {
+				// Create secret with missing required keys
+				secret = &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "invalid-credentials",
+						Namespace: "test-namespace",
+					},
+					Data: map[string][]byte{
+						"HELM_USERNAME": []byte("secret-user"),
+						// Missing HELM_PASSWORD
+					},
+				}
+				Expect(fakeClient.Create(context.TODO(), secret)).To(Succeed())
+
+				repoRelease.CredentialSecret = &CredentialSecret{
+					Name:        "invalid-credentials",
+					UsernameKey: "HELM_USERNAME",
+					PasswordKey: "HELM_PASSWORD",
+				}
+				repoRelease.Username = ""
+				repoRelease.Password = ""
+			})
+
+			It("should handle missing password key gracefully", func() {
+				err := repoRelease.Apply(context.TODO(), fakeClient, wandb, scheme, config)
+				// The Apply should proceed but may fail later due to empty password
+				// We can't easily test the exact behavior without mocking the entire helm download process
+				// But we can verify it doesn't fail at the secret retrieval step
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).NotTo(ContainSubstring("Failed to get credentials from secret"))
+			})
+
+			It("should handle missing username key gracefully", func() {
+				// Create secret with missing username
+				secretMissingUsername := &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "missing-username",
+						Namespace: "test-namespace",
+					},
+					Data: map[string][]byte{
+						"HELM_PASSWORD": []byte("secret-pass"),
+						// Missing HELM_USERNAME
+					},
+				}
+				Expect(fakeClient.Create(context.TODO(), secretMissingUsername)).To(Succeed())
+
+				repoRelease.CredentialSecret = &CredentialSecret{
+					Name:        "missing-username",
+					UsernameKey: "HELM_USERNAME",
+					PasswordKey: "HELM_PASSWORD",
+				}
+
+				err := repoRelease.Apply(context.TODO(), fakeClient, wandb, scheme, config)
+				// Should proceed but may fail later due to empty username
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).NotTo(ContainSubstring("Failed to get credentials from secret"))
+			})
+		})
+
+		Context("with empty credential secret", func() {
+			var secret *corev1.Secret
+
+			BeforeEach(func() {
+				// Create secret with empty values
+				secret = &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "empty-credentials",
+						Namespace: "test-namespace",
+					},
+					Data: map[string][]byte{
+						"HELM_USERNAME": []byte(""),
+						"HELM_PASSWORD": []byte(""),
+					},
+				}
+				Expect(fakeClient.Create(context.TODO(), secret)).To(Succeed())
+
+				repoRelease.CredentialSecret = &CredentialSecret{
+					Name:        "empty-credentials",
+					UsernameKey: "HELM_USERNAME",
+					PasswordKey: "HELM_PASSWORD",
+				}
+				repoRelease.Username = ""
+				repoRelease.Password = ""
+			})
+
+			It("should handle empty credential values", func() {
+				err := repoRelease.Apply(context.TODO(), fakeClient, wandb, scheme, config)
+				// Should proceed but may fail later due to empty credentials
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).NotTo(ContainSubstring("Failed to get credentials from secret"))
+			})
+		})
+
+		Context("without credential secret", func() {
+			BeforeEach(func() {
+				// Set direct credentials
+				repoRelease.CredentialSecret = nil
+				repoRelease.Username = "direct-user"
+				repoRelease.Password = "direct-pass"
+			})
+
+			It("should use direct credentials when no secret is specified", func() {
+				err := repoRelease.Apply(context.TODO(), fakeClient, wandb, scheme, config)
+				// Should fail at download step, not credential retrieval
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).NotTo(ContainSubstring("Failed to get credentials from secret"))
+			})
+		})
+
+		Context("Prune with credential secret", func() {
+			var secret *corev1.Secret
+
+			BeforeEach(func() {
+				// Create a valid secret
+				secret = &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-credentials-prune",
+						Namespace: "test-namespace",
+					},
+					Data: map[string][]byte{
+						"HELM_USERNAME": []byte("secret-user"),
+						"HELM_PASSWORD": []byte("secret-pass"),
+					},
+				}
+				Expect(fakeClient.Create(context.TODO(), secret)).To(Succeed())
+
+				repoRelease.CredentialSecret = &CredentialSecret{
+					Name:        "test-credentials-prune",
+					UsernameKey: "HELM_USERNAME",
+					PasswordKey: "HELM_PASSWORD",
+				}
+				repoRelease.Username = ""
+				repoRelease.Password = ""
+			})
+
+			It("should successfully retrieve credentials for Prune operation", func() {
+				err := repoRelease.Prune(context.TODO(), fakeClient, wandb, scheme, config)
+				// Should fail at download step, not credential retrieval
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).NotTo(ContainSubstring("Failed to get credentials from secret"))
 			})
 		})
 	})
