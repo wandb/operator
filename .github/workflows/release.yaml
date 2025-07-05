@@ -49,18 +49,14 @@ jobs:
       - name: Install Ginkgo
         run: go install github.com/onsi/ginkgo/v2/ginkgo@latest
 
-      - name: Build and Push
-        run: |
-          make docker-build docker-push
-
-          docker tag wandb/controller:latest wandb/controller:${{ steps.release.outputs.new_release_version }}
-          docker push wandb/controller:${{ steps.release.outputs.new_release_version }}
-
-          docker tag wandb/controller:latest wandb/controller:${{ steps.release.outputs.new_release_major_version }}.${{ steps.release.outputs.new_release_minor_version }}
-          docker push wandb/controller:${{ steps.release.outputs.new_release_major_version }}.${{ steps.release.outputs.new_release_minor_version }}
-
-          docker tag wandb/controller:latest wandb/controller:${{ steps.release.outputs.new_release_major_version }}
-          docker push wandb/controller:${{ steps.release.outputs.new_release_major_version }}
-        env:
-          IMAGE_TAG_BASE: wandb/controller
-          VERSION: latest
+      - name: Build and Push Multi-arch Images
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: |
+            sqaisar/wandb-operator:latest
+            sqaisar/wandb-operator:${{ steps.release.outputs.new_release_version }}
+            sqaisar/wandb-operator:${{ steps.release.outputs.new_release_major_version }}.${{ steps.release.outputs.new_release_minor_version }}
+            sqaisar/wandb-operator:${{ steps.release.outputs.new_release_major_version }}
