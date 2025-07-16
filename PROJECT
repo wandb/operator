@@ -4,8 +4,9 @@
 # More info: https://book.kubebuilder.io/reference/project-config.html
 domain: wandb.com
 layout:
-- go.kubebuilder.io/v3
+- go.kubebuilder.io/v4
 plugins:
+  go.kubebuilder.io/v4: {}
   manifests.sdk.operatorframework.io/v2: {}
   scorecard.sdk.operatorframework.io/v2: {}
 projectName: operator
@@ -16,7 +17,7 @@ resources:
     namespaced: true
   controller: true
   domain: wandb.com
-  group: wandb.com
+  group: apps
   kind: WeightsAndBiases
   path: github.com/wandb/operator/api/v1
   version: v1
