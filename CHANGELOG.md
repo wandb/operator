@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.20.0](https://github.com/wandb/operator/compare/v1.19.3...v1.20.0) (2025-07-02)
+
+
+### Features
+
+* Add reading helm username and password from a secret ([#95](https://github.com/wandb/operator/issues/95)) ([41e76ab](https://github.com/wandb/operator/commit/41e76ab13301be41012b0cb0d61d26ceccca9882))
+
 ### [1.19.3](https://github.com/wandb/operator/compare/v1.19.2...v1.19.3) (2025-03-26)
 
 

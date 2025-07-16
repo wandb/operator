@@ -3,6 +3,7 @@ package charts
 import (
 	"context"
 	"fmt"
+	corev1 "k8s.io/api/core/v1"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -22,6 +23,9 @@ import (
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
+const CredentialUsernameKey = "HELM_USERNAME"
+const CredentialPasswordKey = "HELM_PASSWORD"
+
 type RepoRelease struct {
 	URL  string `validate:"required,url" json:"url"`
 	Name string `validate:"required" json:"name"`
@@ -32,9 +36,17 @@ type RepoRelease struct {
 	// Optional repository name override. If not set, will be derived from URL.
 	RepoName string `json:"repoName,omitempty"`
 
-	Password string `json:"password"`
-	Username string `json:"username"`
-	Debug    bool   `json:"debug"`
+	CredentialSecret *CredentialSecret `json:"credentialSecret,omitempty"`
+	Password         string            `json:"password"`
+	Username         string            `json:"username"`
+
+	Debug bool `json:"debug"`
+}
+
+type CredentialSecret struct {
+	Name        string `json:"name"`
+	UsernameKey string `json:"usernameKey"`
+	PasswordKey string `json:"passwordKey"`
 }
 
 // deriveRepoName generates a repository name from the URL if one isn't explicitly set
@@ -87,6 +99,29 @@ func (r RepoRelease) Apply(
 	scheme *runtime.Scheme,
 	config spec.Values,
 ) error {
+	log := ctrllog.Log.WithName("chart-repo")
+	if r.CredentialSecret != nil {
+		if r.CredentialSecret.UsernameKey == "" {
+			r.CredentialSecret.UsernameKey = CredentialUsernameKey
+		}
+		if r.CredentialSecret.PasswordKey == "" {
+			r.CredentialSecret.PasswordKey = CredentialPasswordKey
+		}
+		log.Info("Retrieving credentials from secret",
+			"name", r.CredentialSecret.Name,
+			"usernameKey", r.CredentialSecret.UsernameKey,
+			"passwordKey", r.CredentialSecret.PasswordKey)
+
+		secret := &corev1.Secret{}
+		err := c.Get(ctx, client.ObjectKey{Name: r.CredentialSecret.Name, Namespace: wandb.Namespace}, secret)
+		if err != nil {
+			log.Error(err, "Failed to get credentials from secret")
+			return err
+		}
+		r.Username = string(secret.Data[r.CredentialSecret.UsernameKey])
+		r.Password = string(secret.Data[r.CredentialSecret.PasswordKey])
+	}
+
 	local, err := r.ToLocalRelease()
 	if err != nil {
 		return err
