@@ -2,6 +2,90 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.20.0](https://github.com/wandb/operator/compare/v1.19.3...v1.20.0) (2025-07-02)
+
+
+### Features
+
+* Add reading helm username and password from a secret ([#95](https://github.com/wandb/operator/issues/95)) ([41e76ab](https://github.com/wandb/operator/commit/41e76ab13301be41012b0cb0d61d26ceccca9882))
+
+### [1.19.3](https://github.com/wandb/operator/compare/v1.19.2...v1.19.3) (2025-03-26)
+
+
+### Bug Fixes
+
+* Look for secret in namespace of wandb CR ([#78](https://github.com/wandb/operator/issues/78)) ([e374c9a](https://github.com/wandb/operator/commit/e374c9a058909204221d69c160342379754e305c))
+
+### [1.19.2](https://github.com/wandb/operator/compare/v1.19.1...v1.19.2) (2025-03-17)
+
+
+### Bug Fixes
+
+* Local_resource and kubectl apply could risk deploying to the wrong context ([#66](https://github.com/wandb/operator/issues/66)) ([a90a270](https://github.com/wandb/operator/commit/a90a27013d1e8b13922fdcd3e11b8d683df204f8))
+
+### [1.19.1](https://github.com/wandb/operator/compare/v1.19.0...v1.19.1) (2025-03-04)
+
+
+### Bug Fixes
+
+* Bump deps ([#70](https://github.com/wandb/operator/issues/70)) ([11ba9f8](https://github.com/wandb/operator/commit/11ba9f8fbb113aee141db396d552c811cde1a9a7))
+
+## [1.19.0](https://github.com/wandb/operator/compare/v1.18.5...v1.19.0) (2025-02-27)
+
+
+### Features
+
+* Updated license.go file to include the feature for licenseSecret as well ([#54](https://github.com/wandb/operator/issues/54)) ([bb55caa](https://github.com/wandb/operator/commit/bb55caa1c893332af74e704ab959ff7e3ef10119))
+
+### [1.18.5](https://github.com/wandb/operator/compare/v1.18.4...v1.18.5) (2025-02-26)
+
+
+### Bug Fixes
+
+* TLS ([#67](https://github.com/wandb/operator/issues/67)) ([0d3013c](https://github.com/wandb/operator/commit/0d3013c969d84b51b172fc0a5569a8f20b0a1f4b))
+
+### [1.18.4](https://github.com/wandb/operator/compare/v1.18.3...v1.18.4) (2025-02-25)
+
+
+### Bug Fixes
+
+* Release needs ginkgo ([#65](https://github.com/wandb/operator/issues/65)) ([c51df78](https://github.com/wandb/operator/commit/c51df78123d5f4ceca17fa4fc40efa5a52342a51))
+
+### [1.18.3](https://github.com/wandb/operator/compare/v1.18.2...v1.18.3) (2025-02-25)
+
+
+### Bug Fixes
+
+* Basic Auth Fix ([#56](https://github.com/wandb/operator/issues/56)) ([414b2cf](https://github.com/wandb/operator/commit/414b2cf518da23a35f1032f32fc0b183292aa270))
+
+### [1.18.2](https://github.com/wandb/operator/compare/v1.18.1...v1.18.2) (2025-02-21)
+
+
+### Bug Fixes
+
+* Update to fix some CVEs ([#55](https://github.com/wandb/operator/issues/55)) ([9a34cbe](https://github.com/wandb/operator/commit/9a34cbefc02ffde76fcd50cb644bcf1a7b1aec79))
+
+### [1.18.1](https://github.com/wandb/operator/compare/v1.18.0...v1.18.1) (2025-02-13)
+
+
+### Bug Fixes
+
+* Add Tilt configs for local development ([#53](https://github.com/wandb/operator/issues/53)) ([5ef82b5](https://github.com/wandb/operator/commit/5ef82b5da39a8d9a7bfc696db46cb4c6c667164c))
+
+## [1.18.0](https://github.com/wandb/operator/compare/v1.17.0...v1.18.0) (2025-02-06)
+
+
+### Features
+
+* Adding owner ref and wait and timeout  to uninstall  ([#51](https://github.com/wandb/operator/issues/51)) ([f21fd6d](https://github.com/wandb/operator/commit/f21fd6da1ff13fd66882683a1f6752aaa1854613))
+
+## [1.17.0](https://github.com/wandb/operator/compare/v1.16.1...v1.17.0) (2025-01-28)
+
+
+### Features
+
+* Replace base image with RHEL UBI ([#44](https://github.com/wandb/operator/issues/44)) ([12497d2](https://github.com/wandb/operator/commit/12497d22bae3d5d94a72236eb587adc0f8753a1e))
+
 ### [1.16.1](https://github.com/wandb/operator/compare/v1.16.0...v1.16.1) (2024-10-31)
 
 

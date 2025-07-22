@@ -58,6 +58,12 @@ else
 GOBIN=$(shell go env GOBIN)
 endif
 
+# Set environment variables to suppress linker warnings on macOS
+ifeq ($(shell uname),Darwin)
+	export CGO_LDFLAGS=-Wl,-w
+	export LDFLAGS=-w
+endif
+
 # Setting SHELL to bash allows bash commands to be executed by recipes.
 # Options are set to exit when a recipe line exits non-zero or a piped command fails.
 SHELL = /usr/bin/env bash -o pipefail
@@ -102,8 +108,103 @@ vet: ## Run go vet against code.
 	go vet ./...
 
 .PHONY: test
-test: manifests generate fmt vet envtest ## Run tests.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test ./... -coverprofile cover.out
+test: manifests generate fmt vet envtest ginkgo ## Run tests.
+	@echo "Running tests..."
+	@KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" \
+	ginkgo -p -r --compilers=4 --timeout=5m --fail-fast --race --trace --randomize-all \
+		--output-interceptor-mode=none \
+		--no-color=false \
+		--show-node-events \
+		--json-report=report.json \
+		--junit-report=junit.xml || exit 1
+	@echo "All tests passed!"
+
+.PHONY: test-verbose
+test-verbose: manifests generate fmt vet envtest ginkgo ## Run tests with verbose output.
+	@echo "Running tests in verbose mode..."
+	@KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" \
+	ginkgo -p -r -v --compilers=4 --timeout=5m --fail-fast --race --trace --randomize-all \
+		--output-interceptor-mode=none \
+		--no-color=false \
+		--show-node-events \
+		--json-report=report.json \
+		--junit-report=junit.xml || exit 1
+	@echo "All tests passed!"
+
+.PHONY: test-watch
+test-watch: manifests generate fmt vet envtest ginkgo ## Run tests in watch mode.
+	@echo "Running tests in watch mode..."
+	@KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" \
+	ginkgo watch -p -r --compilers=4 --timeout=5m --fail-fast --race --trace --randomize-all \
+		--output-interceptor-mode=none \
+		--no-color=false \
+		--show-node-events \
+		--json-report=report.json \
+		--junit-report=junit.xml || exit 1
+
+.PHONY: test-coverage
+test-coverage: manifests generate fmt vet envtest ginkgo ## Run tests with coverage report.
+	@echo "Running tests with coverage..."
+	@KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" \
+	ginkgo -p -r --compilers=4 --timeout=5m --fail-fast --race --trace --randomize-all \
+		--output-interceptor-mode=none \
+		--no-color=false \
+		--show-node-events \
+		--json-report=report.json \
+		--junit-report=junit.xml \
+		--coverprofile=coverage.out || exit 1
+	@echo "Generating coverage report..."
+	@go tool cover -html=coverage.out -o coverage.html
+	@echo "Coverage report generated at coverage.html"
+
+.PHONY: safe-bump-deps
+safe-bump-deps:
+	go get -u ./...
+	go mod tidy
+
+.PHONY: major-bump-deps
+major-bump-deps:
+	go get $(shell go list -m all | grep -v "indirect" | grep -v "github.com/wandb/operator" | cut -d' ' -f1)@latest
+	go mod tidy
+
+.PHONY: find-deprecated
+find-deprecated:
+	@echo "Checking for deprecation warnings in dependencies..."
+	@go list -u -m -json all | jq -r 'select(.Deprecated != null) | "\(.Path) - \(.Deprecated)"'
+	@echo "Checking for deprecation notices in source code comments..."
+	@grep -r --include="*.go" "Deprecated" . || echo "No deprecation notices found in comments."
+	@echo "Checking build with extra deprecation warnings..."
+	@go build -gcflags='-m -d=deprecation' ./... 2>&1 | grep -i "deprecated" || echo "No deprecation warnings during build."
+
+.PHONY: check-vulnerabilities
+check-vulnerabilities:
+	@echo "Checking Go version compatibility..."
+	@GO_VERSION=$$(go version | awk '{print $$3}' | sed 's/go//'); \
+	GO_VERSION_REQUIRED=$$(grep -E "^go [0-9]+\.[0-9]+(\.[0-9]+)?" go.mod | awk '{print $$2}'); \
+	if [ "$$(printf '%s\n' "$$GO_VERSION_REQUIRED" "$$GO_VERSION" | sort -V | head -n1)" != "$$GO_VERSION_REQUIRED" ]; then \
+		echo "Error: This project requires Go $$GO_VERSION_REQUIRED but you have Go $$GO_VERSION"; \
+		echo "Please upgrade your Go installation to at least $$GO_VERSION_REQUIRED before running this command."; \
+		exit 1; \
+	fi; \
+	echo "Go version OK ($$GO_VERSION)"
+	@echo "Installing/updating govulncheck..."
+	@go install golang.org/x/vuln/cmd/govulncheck@latest
+	@echo "Checking for vulnerable dependencies..."
+	@govulncheck ./...
+
+.PHONY: list-outdated
+list-outdated:
+	@echo "Listing outdated direct dependencies..."
+	@go list -u -m -json all | jq -r 'select(.Update != null and .Main != true and .Indirect != true) | "\(.Path): \(.Version) -> \(.Update.Version)"'
+
+.PHONY: list-all-outdated
+list-all-outdated:
+	@echo "Listing ALL outdated dependencies (including transitive dependencies)..."
+	@go list -u -m -json all | jq -r 'select(.Update != null) | "\(.Path): \(.Version) -> \(.Update.Version) \(if .Indirect then "(indirect)" else "" end)"'
+
+.PHONY: clean-mod-cache
+clean-mod-cache:
+	go clean -modcache
 
 debug: controller-gen
 	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases -w
@@ -179,6 +280,7 @@ $(LOCALBIN):
 KUSTOMIZE ?= $(LOCALBIN)/kustomize
 CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
 ENVTEST ?= $(LOCALBIN)/setup-envtest
+GINKGO ?= $(LOCALBIN)/ginkgo
 
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v4.2.0
@@ -260,3 +362,9 @@ catalog-build: opm ## Build a catalog image.
 .PHONY: catalog-push
 catalog-push: ## Push a catalog image.
 	$(MAKE) docker-push IMG=$(CATALOG_IMG)
+
+.PHONY: ginkgo
+ginkgo: $(GINKGO) ## Download ginkgo locally if necessary.
+$(GINKGO): $(LOCALBIN)
+	test -s $(LOCALBIN)/ginkgo || GOBIN=$(LOCALBIN) go install github.com/onsi/ginkgo/v2/ginkgo@latest
+

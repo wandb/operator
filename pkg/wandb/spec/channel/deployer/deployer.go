@@ -25,6 +25,9 @@ type GetSpecOptions struct {
 	License     string
 	ActiveState *spec.Spec
 	ReleaseId   string
+	Debug       bool
+	RetryDelay  time.Duration
+	Timeout     time.Duration
 }
 
 //counterfeiter:generate . DeployerInterface
@@ -61,7 +64,18 @@ func (c *DeployerClient) getDeployerURL(opts GetSpecOptions) string {
 func (c *DeployerClient) GetSpec(opts GetSpecOptions) (*spec.Spec, error) {
 	url := c.getDeployerURL(opts)
 
-	client := &http.Client{}
+	client := &http.Client{
+		Timeout: opts.Timeout,
+	}
+
+	if opts.Timeout == 0 {
+		client.Timeout = 30 * time.Second
+	}
+
+	retryDelay := opts.RetryDelay
+	if retryDelay == 0 {
+		retryDelay = 2 * time.Second
+	}
 
 	maxRetries := 5
 	for i := 0; i < maxRetries; i++ {
@@ -77,7 +91,7 @@ func (c *DeployerClient) GetSpec(opts GetSpecOptions) (*spec.Spec, error) {
 
 		resp, err := client.Do(req)
 		if err != nil || resp.StatusCode != http.StatusOK {
-			time.Sleep(time.Second * 2)
+			time.Sleep(retryDelay)
 			continue
 		}
 		defer resp.Body.Close()

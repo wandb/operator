@@ -20,7 +20,11 @@ import (
 	"context"
 	"reflect"
 
+	rbacv1 "k8s.io/api/rbac/v1"
+
 	"github.com/wandb/operator/pkg/wandb/spec/state"
+	appsv1 "k8s.io/api/apps/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -61,13 +65,21 @@ type WeightsAndBiasesReconciler struct {
 //+kubebuilder:rbac:groups=apps.wandb.com,resources=weightsandbiases,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=apps.wandb.com,resources=weightsandbiases/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=apps.wandb.com,resources=weightsandbiases/finalizers,verbs=update
-//+kubebuilder:rbac:groups="",resources=configmaps;events;persistentvolumeclaims;secrets;serviceaccounts;services,verbs=update;delete;get;list;create;watch
-//+kubebuilder:rbac:groups="",resources=nodes;namespaces;pods;pods/log;serviceaccounts;services,verbs=get;list
-//+kubebuilder:rbac:groups=apps,resources=deployments;controllerrevisions;daemonsets;replicasets;statefulsets,verbs=update;delete;get;list;create;watch
+//+kubebuilder:rbac:groups="",resources=configmaps;events;persistentvolumeclaims;secrets;serviceaccounts;services,verbs=update;delete;get;list;create;patch;watch
+//+kubebuilder:rbac:groups="",resources=endpoints;ingresses;nodes;nodes/spec;nodes/stats;nodes/metrics;nodes/proxy;namespaces;namespaces/status;replicationcontrollers;replicationcontrollers/status;resourcequotas;pods;pods/log;pods/status,verbs=get;list;watch
+//+kubebuilder:rbac:groups=apps,resources=deployments;controllerrevisions;daemonsets;replicasets;statefulsets,verbs=update;delete;get;list;create;patch;watch
 //+kubebuilder:rbac:groups=apps,resources=deployments/status;daemonsets/status;replicasets/status;statefulsets/status,verbs=get
-//+kubebuilder:rbac:groups=autoscaling,resources=horizontalpodautoscalers,verbs=update;delete;get;list;create;watch
-//+kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses;networkpolicies,verbs=update;delete;get;list;create;watch
-//+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles;rolebindings,verbs=update;delete;get;list;create;watch
+//+kubebuilder:rbac:groups=autoscaling,resources=horizontalpodautoscalers,verbs=update;delete;get;list;patch;create;watch
+//+kubebuilder:rbac:groups=batch,resources=cronjobs;jobs,verbs=get;list;watch;create;delete;patch
+//+kubebuilder:rbac:groups=events.k8s.io,resources=events,verbs=list;watch
+//+kubebuilder:rbac:groups=cloud.google.com,resources=backendconfigs,verbs=update;delete;get;list;patch;create;watch
+//+kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses;ingresses/status;networkpolicies,verbs=update;delete;get;list;create;patch;watch
+//+kubebuilder:rbac:groups=policy,resources=poddisruptionbudgets,verbs=update;delete;get;list;patch;create;watch
+//+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles;rolebindings;clusterroles;clusterrolebindings,verbs=update;delete;get;list;patch;create;watch
+//+kubebuilder:rbac:urls=/metrics,verbs=get
+
+// Deprecated/Erroneously required RBAC rules
+//+kubebuilder:rbac:groups=extensions,resources=daemonsets;deployments;replicasets;ingresses;ingresses/status,verbs=get;list;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -128,7 +140,7 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		log.Info("No active spec found.")
 	}
 
-	license := utils.GetLicense(currentActiveSpec, crdSpec, userInputSpec)
+	license := utils.GetLicense(ctx, r.Client, wandb, crdSpec, userInputSpec)
 
 	var deployerSpec *spec.Spec
 	if !r.IsAirgapped {
@@ -136,6 +148,7 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			License:     license,
 			ActiveState: currentActiveSpec,
 			ReleaseId:   releaseID,
+			Debug:       r.Debug,
 		})
 		if err != nil {
 			log.Info("Failed to get spec from deployer", "error", err)
@@ -145,7 +158,7 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			// deployer release in the cache
 			// Attempt to retrieve the cached release
 			if deployerSpec, err = specManager.Get("latest-cached-release"); err != nil {
-				log.Error(err, "No cached release found for deployer spec", err, "error")
+				log.Info("No cached release found", "error", err.Error())
 			}
 			if r.Debug {
 				log.Info("Using cached deployer spec", "spec", deployerSpec.SensitiveValuesMasked())
@@ -262,6 +275,10 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 
 		r.Recorder.Event(wandb, corev1.EventTypeNormal, "Completed", "Completed reconcile successfully")
+		if err := r.discoverAndPatchResources(ctx, wandb); err != nil {
+			log.Error(err, "Failed to discover and patch resources")
+			return ctrlqueue.Requeue(desiredSpec)
+		}
 		statusManager.Set(status.Completed)
 
 		return ctrlqueue.Requeue(desiredSpec)
@@ -284,6 +301,60 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	return ctrlqueue.DoNotRequeue()
+}
+
+func (r *WeightsAndBiasesReconciler) discoverAndPatchResources(ctx context.Context, wandb *apiv1.WeightsAndBiases) error {
+	log := ctrllog.FromContext(ctx)
+	var managedResources []client.Object
+	resourceKinds := []struct {
+		name string
+		list client.ObjectList
+	}{
+		{"Deployment", &appsv1.DeploymentList{}},
+		{"StatefulSet", &appsv1.StatefulSetList{}},
+		{"Ingress", &networkingv1.IngressList{}},
+		{"DaemonSet", &appsv1.DaemonSetList{}},
+		{"Service", &corev1.ServiceList{}},
+		{"ConfigMap", &corev1.ConfigMapList{}},
+		{"Secret", &corev1.SecretList{}},
+		{"Role", &rbacv1.RoleList{}},
+		{"RoleBinding", &rbacv1.RoleBindingList{}},
+	}
+
+	// Discover resources
+	for _, resourceKind := range resourceKinds {
+		log.Info("Fetching resources managed by Helm chart 'wandb'", "kind", resourceKind.name)
+
+		labels := client.MatchingLabels{
+			"app.kubernetes.io/managed-by": "Helm",
+			"app.kubernetes.io/instance":   wandb.ObjectMeta.Name,
+		}
+		if err := r.Client.List(ctx, resourceKind.list, client.InNamespace(wandb.Namespace), labels); err != nil {
+			log.Error(err, "Failed to list resources", "kind", resourceKind.name)
+			continue
+		}
+
+		items := reflect.ValueOf(resourceKind.list).Elem().FieldByName("Items")
+		for i := 0; i < items.Len(); i++ {
+			resource := items.Index(i).Addr().Interface().(client.Object)
+			managedResources = append(managedResources, resource)
+			log.Info("Found resource", "name", resource.GetName(), "kind", resourceKind.name)
+		}
+	}
+
+	// Add owner references to discovered resources
+	for _, resource := range managedResources {
+		if err := controllerutil.SetOwnerReference(wandb, resource, r.Scheme); err != nil {
+			log.Error(err, "Failed to set owner reference", "resource", resource.GetName(), "kind", resource.GetObjectKind().GroupVersionKind().Kind)
+			continue
+		}
+		if err := r.Client.Update(ctx, resource); err != nil {
+			log.Error(err, "Failed to update resource with owner reference", "resource", resource.GetName(), "kind", resource.GetObjectKind().GroupVersionKind().Kind)
+		} else {
+			log.Info("Owner reference added successfully", "resource", resource.GetName(), "kind", resource.GetObjectKind().GroupVersionKind().Kind)
+		}
+	}
+	return nil
 }
 
 func (r *WeightsAndBiasesReconciler) Delete(e event.DeleteEvent) bool {
