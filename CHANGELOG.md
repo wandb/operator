@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.20.1](https://github.com/wandb/operator/compare/v1.20.0...v1.20.1) (2025-07-25)
+
+
+### Bug Fixes
+
+* Handle errors for failed to retreive user spec.  Don't return an error for invalid chart config in spec. ([#96](https://github.com/wandb/operator/issues/96)) ([4254c64](https://github.com/wandb/operator/commit/4254c645ff81d6f1c9dec6fcd3c38e7ec5e01a5e))
+
 ## [1.20.0](https://github.com/wandb/operator/compare/v1.19.3...v1.20.0) (2025-07-02)
 
 
