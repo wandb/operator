@@ -84,7 +84,7 @@ var _ = Describe("Manager", func() {
 				Values:   map[string]interface{}{"foo": "bar"},
 			}
 			result, err := state.Get("default", "test-name")
-			Expect(err.Error()).To(Equal("could not find a matching release in config map default/test-name"))
+			Expect(err).To(BeNil())
 			Expect(result).To(Equal(expectedSpec))
 		})
 		It("should return the spec when the secret and has proper values", func() {
