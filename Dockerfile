@@ -25,7 +25,7 @@ COPY controllers/ controllers/
 # was called. For example, if we call make docker-build in a local env which has the Apple Silicon M1 SO
 # the docker BUILDPLATFORM arg will be linux/arm64 when for Apple x86 it will be linux/amd64. Therefore,
 # by leaving it empty we can ensure that the container and binary shipped on it will have the same platform.
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o manager main.go
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -a -o manager main.go
 
 # Create a helm cache directory, set group ownership and permissions, and apply the sticky bit
 RUN mkdir -p /helm/.cache/helm /helm/.config/helm /helm/.local/share/helm && chmod -R 1777 /helm
