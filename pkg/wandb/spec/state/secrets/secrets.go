@@ -64,9 +64,6 @@ func read(
 
 	chart := charts.Get(maybeChart)
 	spec.SetChart(chart)
-	if chart == nil {
-		return spec, fmt.Errorf("could not find a matching release in config map %s/%s", objKey.Namespace, objKey.Name)
-	}
 
 	return spec, nil
 }

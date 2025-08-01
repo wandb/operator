@@ -140,6 +140,18 @@ var _ = Describe("WeightsandbiasesController", func() {
 				event = <-recorder.Events
 				Expect(event).To(ContainSubstring("Completed reconcile successfully"))
 			})
+			It("Should create an empty User Spec", func() {
+				ctx := context.Background()
+				wandb := wandbcomv1.WeightsAndBiases{}
+				err := k8sClient.Get(ctx, types.NamespacedName{Name: "test", Namespace: "default"}, &wandb)
+				Expect(err).ToNot(HaveOccurred())
+				specManager := state.New(ctx, k8sClient, &wandb, scheme.Scheme, secrets.New(ctx, k8sClient, &wandb, scheme.Scheme))
+				userSpec, err := specManager.GetUserInput()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(userSpec.Values).To(BeEmpty())
+				Expect(userSpec.Chart).To(BeNil())
+				Expect(userSpec.Metadata).To(BeNil())
+			})
 		})
 	})
 	Describe("Reconcile with _releaseId set", func() {
