@@ -14,12 +14,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package controllers
+package controller
 
 import (
 	"context"
-	rbacv1 "k8s.io/api/rbac/v1"
 	"reflect"
+	"time"
+
+	rbacv1 "k8s.io/api/rbac/v1"
 
 	"github.com/wandb/operator/pkg/wandb/spec/state"
 	appsv1 "k8s.io/api/apps/v1"
@@ -37,7 +39,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	apiv1 "github.com/wandb/operator/api/v1"
-	"github.com/wandb/operator/controllers/internal/ctrlqueue"
+	"github.com/wandb/operator/internal/controller/ctrlqueue"
 	"github.com/wandb/operator/pkg/wandb/spec"
 	"github.com/wandb/operator/pkg/wandb/spec/channel/deployer"
 	"github.com/wandb/operator/pkg/wandb/spec/operator"
@@ -294,6 +296,7 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			if !r.DryRun {
 				if err := desiredSpec.Prune(ctx, r.Client, wandb, r.Scheme); err != nil {
 					log.Error(err, "Failed to cleanup deployment.")
+					return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
 				} else {
 					log.Info("Successfully cleaned up resources")
 				}
