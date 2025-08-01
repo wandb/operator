@@ -22,7 +22,6 @@ import (
 	"time"
 
 	rbacv1 "k8s.io/api/rbac/v1"
-	"reflect"
 
 	"github.com/wandb/operator/pkg/wandb/spec/state"
 	appsv1 "k8s.io/api/apps/v1"
