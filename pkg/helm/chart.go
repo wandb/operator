@@ -15,6 +15,7 @@ import (
 
 const (
 	secretsStorageDriver = "secrets"
+	maxReleasesToKeep    = 10
 )
 
 var (
@@ -49,6 +50,7 @@ func InitConfig(namespace string) (*cli.EnvSettings, *action.Configuration, erro
 		secretsStorageDriver,
 		noopLogger,
 	)
+	config.Releases.MaxHistory = maxReleasesToKeep
 	return settings, config, err
 }
 
