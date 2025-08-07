@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.20.3](https://github.com/wandb/operator/compare/v1.20.2...v1.20.3) (2025-08-07)
+
+
+### Bug Fixes
+
+* Prune old helm releases, for real ([#98](https://github.com/wandb/operator/issues/98)) ([8f9b9c6](https://github.com/wandb/operator/commit/8f9b9c6b2d8af37569d6bc68b44aec9b6cda7e30))
+
 ### [1.20.2](https://github.com/wandb/operator/compare/v1.20.1...v1.20.2) (2025-08-06)
 
 
