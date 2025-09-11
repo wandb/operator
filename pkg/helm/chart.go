@@ -15,6 +15,7 @@ import (
 
 const (
 	secretsStorageDriver = "secrets"
+	maxReleasesToKeep    = 10
 )
 
 var (
@@ -49,6 +50,7 @@ func InitConfig(namespace string) (*cli.EnvSettings, *action.Configuration, erro
 		secretsStorageDriver,
 		noopLogger,
 	)
+	config.Releases.MaxHistory = maxReleasesToKeep
 	return settings, config, err
 }
 
@@ -156,6 +158,7 @@ func (c *ActionableChart) Rollback(version int) error {
 func (c *ActionableChart) Upgrade(chart *chart.Chart, values map[string]interface{}) (*release.Release, error) {
 	client := action.NewUpgrade(c.config)
 	client.Namespace = c.namespace
+	client.MaxHistory = maxReleasesToKeep
 	return client.Run(c.releaseName, chart, values)
 }
 
