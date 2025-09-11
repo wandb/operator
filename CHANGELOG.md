@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.21.1](https://github.com/wandb/operator/compare/v1.21.0...v1.21.1) (2025-09-11)
+
+
+### Bug Fixes
+
+* Explicitly specify the desired value if IMG for make ([#99](https://github.com/wandb/operator/issues/99)) ([68a68f3](https://github.com/wandb/operator/commit/68a68f3b6c1653b182a7d5a869c0445bc0f989ae))
+
 ## [1.21.0](https://github.com/wandb/operator/compare/v1.20.3...v1.21.0) (2025-09-11)
 
 
