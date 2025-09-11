@@ -51,6 +51,7 @@ jobs:
 
       - name: Build and Push
         run: |
+          export IMG=$IMAGE_TAG_BASE:$VERSION
           make docker-build docker-push
 
           docker tag wandb/controller:latest wandb/controller:${{ steps.release.outputs.new_release_version }}
