@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.21.0](https://github.com/wandb/operator/compare/v1.20.3...v1.21.0) (2025-09-11)
+
+
+### Features
+
+* Upgrade from kubebuilder v3 to v4 ([#89](https://github.com/wandb/operator/issues/89)) ([34ea709](https://github.com/wandb/operator/commit/34ea70971cd6a9be915e03ba472a32c2136fad7a))
+
 ### [1.20.3](https://github.com/wandb/operator/compare/v1.20.2...v1.20.3) (2025-08-07)
 
 
