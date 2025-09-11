@@ -35,6 +35,10 @@ FROM registry.access.redhat.com/ubi9/ubi-minimal
 
 ADD tilt_bin/manager /manager
 
+RUN mkdir -p /helm/.cache/helm /helm/.config/helm /helm/.local/share/helm && chown -R 65532:65532 /helm
+
+USER 65532:65532
+
 ENV HELM_CACHE_HOME=/helm/.cache/helm
 ENV HELM_CONFIG_HOME=/helm/.config/helm
 ENV HELM_DATA_HOME=/helm/.local/share/helm
@@ -61,7 +65,7 @@ def vetfmt():
 # build to tilt_bin because kubebuilder has a dockerignore for bin/
 
 def binary():
-    return 'CGO_ENABLED=0 GOOS=linux GO111MODULE=on go build -o tilt_bin/manager main.go'
+    return 'CGO_ENABLED=0 GOOS=linux GO111MODULE=on go build -o tilt_bin/manager cmd/main.go'
 
 
 installed = local("which kubebuilder")
@@ -97,7 +101,7 @@ k8s_resource(
     ]
 )
 
-deps = ['controllers', 'pkg', 'main.go']
+deps = ['controllers', 'pkg', 'cmd/main.go']
 deps.append('api')
 
 local_resource('Watch&Compile', generate() + binary(),
