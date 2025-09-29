@@ -10,6 +10,7 @@
 
 - A Kubernetes cluster (e.g. [kind](https://kind.sigs.k8s.io/))
 - [Tilt](https://tilt.dev/)
+- [jq](https://stedolan.github.io/jq/) for some helper scripts
 
 #### Install Kind
 
@@ -18,10 +19,25 @@ create a cluster:
 
 ```bash
 brew install kind
+```
+
+#### Create a Cluster
+
+```bash
 kind create cluster
 ```
 
 This will create a new kind cluster with the name `kind`. The kubernetes context will be called `kind-kind`.
+
+Alternatively, you can use the provided scripts to manage the kind cluster:
+
+```bash
+# Create cluster (uses kindClusterName from tilt-settings.json if present)
+./scripts/setup_kind.sh
+
+# Delete cluster
+./scripts/teardown_kind.sh
+```
 
 #### Install Tilt
 
@@ -51,6 +67,7 @@ By default, Tilt is configured to only allow connections to the following Kubern
 
 - `docker-desktop`
 - `kind-kind`
+- `kind-wandb-operator`
 - `minikube`
 
 Please add any additional contexts to the `allowedContexts` list in your `tilt-settings.json` file.

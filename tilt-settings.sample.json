@@ -1,5 +1,6 @@
 {
-  "allowedContexts": ["docker-desktop", "minikube", "kind-kind"],
+  "allowedContexts": ["docker-desktop", "minikube", "kind-kind", "kind-wandb-operator"],
+  "kindClusterName": "wandb-operator",
   "installMinio": true,
   "installWandb": true,
   "wandbCRD": "default"

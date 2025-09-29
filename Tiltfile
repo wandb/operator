@@ -20,9 +20,9 @@ settings.update(read_json(
 watch_settings(ignore=["**/.git", "**/*.out"])
 
 if k8s_context() in settings.get("allowedContexts"):
-    print("Context is allowed")
+    print("Context is allowed: " + k8s_context())
 else:
-    fail("Selected context is not in allow list")
+    fail("Selected context is not in allow list: " + k8s_context())
 
 allow_k8s_contexts(settings.get("allowed_k8s_contexts"))
 
