@@ -2,6 +2,7 @@ package helm
 
 import (
 	"fmt"
+	"time"
 
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart"
@@ -165,7 +166,7 @@ func (c *ActionableChart) Upgrade(chart *chart.Chart, values map[string]interfac
 func (c *ActionableChart) Uninstall() (*release.UninstallReleaseResponse, error) {
 	client := action.NewUninstall(c.config)
 	client.Wait = true
-	client.Timeout = 600
+	client.Timeout = 600 * time.Second
 	return client.Run(c.releaseName)
 }
 
