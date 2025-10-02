@@ -23,23 +23,42 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-// WeightsAndBiasesSpec defines the desired state of WeightsAndBiases.
-type WeightsAndBiasesSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+type WBSpecProfile string
 
-	// Foo is an example field of WeightsAndBiases. Edit weightsandbiases_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
-}
+const (
+	WBSpecProfileDev     WBSpecProfile = "dev"
+	WBSpecProfileStaging WBSpecProfile = "staging"
+	WBSpecProfileProd    WBSpecProfile = "prod"
+)
 
-// WeightsAndBiasesStatus defines the observed state of WeightsAndBiases.
-type WeightsAndBiasesStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-}
+type WBStreamingType string
 
-// +kubebuilder:object:root=true
-// +kubebuilder:subresource:status
+const (
+	WBKafkaStreaming WBStreamingType = "kafka"
+)
+
+type WBPhaseType string
+
+const (
+	WBPhaseReady       WBPhaseType = "Ready"
+	WBPhaseError       WBPhaseType = "Error"
+	WBPhaseReconciling WBPhaseType = "Reconciling"
+	WBPhaseDeleting    WBPhaseType = "Deleting"
+)
+
+type WBInfraStatusType string
+
+const (
+	WBInfraStatusReady    WBInfraStatusType = "Ready"
+	WBInfraStatusError    WBInfraStatusType = "Error"
+	WBInfraStatusPending  WBInfraStatusType = "Pending"
+	WBInfraStatusMissing  WBInfraStatusType = "Missing"
+	WBInfraStatusDeleting WBInfraStatusType = "Deleting"
+)
+
+//+kubebuilder:object:root=true
+//+kubebuilder:subresource:status
+//+kubebuilder:resource:shortName=wandb
 
 // WeightsAndBiases is the Schema for the weightsandbiases API.
 type WeightsAndBiases struct {
@@ -61,4 +80,52 @@ type WeightsAndBiasesList struct {
 
 func init() {
 	SchemeBuilder.Register(&WeightsAndBiases{}, &WeightsAndBiasesList{})
+}
+
+type ConfigMapReference struct {
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
+	Key       string `json:"key,omitempty"`
+}
+
+// WeightsAndBiasesSpec defines the desired state of WeightsAndBiases.
+type WeightsAndBiasesSpec struct {
+	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
+	// Important: Run "make" to regenerate code after modifying this file
+
+	// Profile is akin to high-level environment info
+	Profile string `json:"profile,omitempty"`
+
+	Infra WBInfraSpec `json:"infra,omitempty"`
+}
+
+type WBStreamingSpec struct {
+	Enabled      bool                `json:"enabled"`
+	Type         WBStreamingType     `json:"type"`
+	ConfigMapRef *ConfigMapReference `json:"configMapRef,omitempty"`
+}
+
+type WBInfraSpec struct {
+	Streaming WBStreamingSpec `json:"streaming,omitempty"`
+}
+
+type WBStreamingStatus struct {
+	Ready                bool              `json:"ready"`
+	ReconciliationStatus WBInfraStatusType `json:"reconciliationStatus,omitempty" default:"Missing"`
+	LastReconciled       metav1.Time       `json:"lastReconciled,omitempty"`
+}
+
+type WBInfraStatus struct {
+	StreamingStatus WBStreamingStatus `json:"streamingStatus,omitempty"`
+}
+
+type WBComponentStatus struct {
+	InfraStatus WBInfraStatus `json:"infraStatus,omitempty"`
+}
+
+// WeightsAndBiasesStatus defines the observed state of WeightsAndBiases.
+type WeightsAndBiasesStatus struct {
+	Phase              WBPhaseType       `json:"phase,omitempty"`
+	ComponentStatus    WBComponentStatus `json:"componentStatus,omitempty"`
+	ObservedGeneration int64             `json:"observedGeneration"`
 }

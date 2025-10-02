@@ -1,10 +1,8 @@
-apiVersion: apps.wandb.com/v2
+apiVersion: wandb.ai/v2
 kind: WeightsAndBiases
 metadata:
-  labels:
-    app.kubernetes.io/name: operator
-    app.kubernetes.io/managed-by: kustomize
   name: weightsandbiases-sample
+  namespace: wandb-system
 spec:
   profile: dev
   infra:

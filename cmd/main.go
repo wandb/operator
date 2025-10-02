@@ -24,13 +24,12 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/wandb/operator/internal/controller/wandb_v2"
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	"github.com/wandb/operator/internal/controller"
-	"github.com/wandb/operator/pkg/wandb/spec/channel/deployer"
-
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -231,13 +230,21 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&controller.WeightsAndBiasesReconciler{
-		IsAirgapped:    airgapped,
-		Recorder:       mgr.GetEventRecorderFor("weightsandbiases"),
-		Client:         mgr.GetClient(),
-		Scheme:         mgr.GetScheme(),
-		DeployerClient: &deployer.DeployerClient{DeployerAPI: deployerAPI},
-		Debug:          debug,
+	//if err = (&controller.WeightsAndBiasesReconciler{
+	//	IsAirgapped:    airgapped,
+	//	Recorder:       mgr.GetEventRecorderFor("weightsandbiases"),
+	//	Client:         mgr.GetClient(),
+	//	Scheme:         mgr.GetScheme(),
+	//	DeployerClient: &deployer.DeployerClient{DeployerAPI: deployerAPI},
+	//	Debug:          debug,
+	//}).SetupWithManager(mgr); err != nil {
+	//	setupLog.Error(err, "unable to create controller", "controller", "WeightsAndBiases")
+	//	os.Exit(1)
+	//}
+	if err = (&wandb_v2.WeightsAndBiasesV2Reconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+		Debug:  debug,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "WeightsAndBiases")
 		os.Exit(1)

@@ -7,7 +7,7 @@ settings = {
     ],
     "installMinio": True,
     "installWandb": True,
-    "wandbCRD": "default",
+    "wandbCRD": "default_v1",
 }
 
 # global settings
@@ -86,7 +86,9 @@ if settings.get("installMinio"):
         ]
     )
 
-k8s_yaml(local(manifests() + 'kustomize build config/default'))
+kust_yaml = local(manifests() + 'kustomize build config/default')
+#print(kust_yaml)
+k8s_yaml(kust_yaml)
 
 k8s_resource(
     new_name='CRD',
@@ -108,7 +110,9 @@ local_resource('Watch&Compile', generate() + binary(),
                deps=deps, ignore=['*/*/zz_generated.deepcopy.go'])
 
 if settings.get("installWandb"):
-    k8s_yaml('./hack/testing-manifests/wandb/' + settings.get('wandbCRD') + '.yaml')
+    testing_yaml = read_file('./hack/testing-manifests/wandb/' + settings.get('wandbCRD') + '.yaml')
+    #print(testing_yaml)
+    k8s_yaml(testing_yaml)
     k8s_resource(
         new_name='Wandb',
         objects=[

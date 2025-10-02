@@ -1,0 +1,74 @@
+---
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: strimzi-cluster-operator-watched
+  labels:
+    app: strimzi
+rules:
+  - apiGroups:
+      - ''
+    resources:
+      - pods
+    verbs:
+      - watch
+      - list
+  - apiGroups:
+      - kafka.strimzi.io
+    resources:
+      - kafkas
+      - kafkanodepools
+      - kafkaconnects
+      - kafkaconnectors
+      - kafkabridges
+      - kafkamirrormaker2s
+      - kafkarebalances
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - patch
+      - update
+  - apiGroups:
+      - kafka.strimzi.io
+    resources:
+      - kafkas/status
+      - kafkanodepools/status
+      - kafkaconnects/status
+      - kafkaconnectors/status
+      - kafkabridges/status
+      - kafkamirrormaker2s/status
+      - kafkarebalances/status
+    verbs:
+      - get
+      - patch
+      - update
+  - apiGroups:
+      - core.strimzi.io
+    resources:
+      - strimzipodsets
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - delete
+      - patch
+      - update
+  - apiGroups:
+      - core.strimzi.io
+    resources:
+      - strimzipodsets/status
+    verbs:
+      - get
+      - patch
+      - update
+  - apiGroups:
+      - kafka.strimzi.io
+    resources:
+      - kafkarebalances
+    verbs:
+      - delete
+

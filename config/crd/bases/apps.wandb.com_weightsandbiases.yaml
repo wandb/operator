@@ -88,13 +88,63 @@ spec:
           spec:
             description: WeightsAndBiasesSpec defines the desired state of WeightsAndBiases.
             properties:
-              foo:
-                description: Foo is an example field of WeightsAndBiases. Edit weightsandbiases_types.go
-                  to remove/update
+              infra:
+                properties:
+                  streaming:
+                    properties:
+                      configMapRef:
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            type: string
+                          namespace:
+                            type: string
+                        required:
+                        - name
+                        - namespace
+                        type: object
+                      enabled:
+                        type: boolean
+                      type:
+                        type: string
+                    required:
+                    - enabled
+                    - type
+                    type: object
+                type: object
+              profile:
+                description: Profile is akin to high-level environment info
                 type: string
             type: object
           status:
             description: WeightsAndBiasesStatus defines the observed state of WeightsAndBiases.
+            properties:
+              componentStatus:
+                properties:
+                  infraStatus:
+                    properties:
+                      streamingStatus:
+                        properties:
+                          lastReconciled:
+                            format: date-time
+                            type: string
+                          ready:
+                            type: boolean
+                          reconciliationStatus:
+                            type: string
+                        required:
+                        - ready
+                        type: object
+                    type: object
+                type: object
+              observedGeneration:
+                format: int64
+                type: integer
+              phase:
+                type: string
+            required:
+            - observedGeneration
             type: object
         type: object
     served: true
