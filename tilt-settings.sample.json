@@ -3,5 +3,5 @@
   "kindClusterName": "wandb-operator",
   "installMinio": true,
   "installWandb": true,
-  "wandbCRD": "default_v1"
+  "wandbCrName": "wandb-default-v1"
 }

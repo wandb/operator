@@ -7,7 +7,7 @@ settings = {
     ],
     "installMinio": True,
     "installWandb": True,
-    "wandbCRD": "default_v1",
+    "wandbCrName": "wandb-default-v1",
 }
 
 # global settings
@@ -17,7 +17,8 @@ settings.update(read_json(
 ))
 
 # Configure global watch settings with a 2-second debounce
-watch_settings(ignore=["**/.git", "**/*.out"])
+# Ignore patched-crds.yaml from triggering local_resource rebuilds (but k8s_yaml still watches it)
+watch_settings(ignore=["**/.git", "**/*.out", "config/crd/patched-crds.yaml"])
 
 if k8s_context() in settings.get("allowedContexts"):
     print("Context is allowed: " + k8s_context())
@@ -86,13 +87,28 @@ if settings.get("installMinio"):
         ]
     )
 
-kust_yaml = local(manifests() + 'kustomize build config/default')
-#print(kust_yaml)
-k8s_yaml(kust_yaml)
+# Build controller deployment and RBAC from config/default
+# This includes CRDs, but we'll apply them again from the watched file below
+print("==> Building controller and RBAC manifests from config/default...")
+default_yaml = local('kustomize build config/default')
+k8s_yaml(default_yaml)
 
-k8s_resource(
-    new_name='CRD',
-    objects=['weightsandbiases.apps.wandb.com:customresourcedefinition', 'applications.apps.wandb.com:customresourcedefinition'])
+# Generate initial patched CRDs file
+local(
+    'echo "==> Generating initial patched CRDs..." && ' +
+    'kustomize build config/crd > config/crd/patched-crds.yaml'
+)
+
+# Apply the patched CRDs file - Tilt watches this file and reapplies when Regenerate-CRDs updates it
+# CRDs will be applied twice initially (once from default_yaml, once from this file)
+# but subsequent updates only come from this watched file
+k8s_yaml('config/crd/patched-crds.yaml', allow_duplicates=True)
+
+# Note: We don't create a separate k8s_resource for the CRDs from patched-crds.yaml
+# because they're already tracked from the default_yaml above
+# The CRD resources will appear as:
+# - weightsandbiases.apps.wandb.com (from config/default)
+# - applications.apps.wandb.com (from config/default)
 k8s_resource(
     new_name='RBAC',
     objects=[
@@ -109,14 +125,30 @@ deps.append('api')
 local_resource('Watch&Compile', generate() + binary(),
                deps=deps, ignore=['*/*/zz_generated.deepcopy.go'])
 
+local_resource('Regenerate-CRDs',
+               'echo "==> Regenerating CRDs from api/ types..." && ' +
+               manifests() +
+               'echo "==> Generated CRDs written to config/crd/bases/:" && ' +
+               'ls -1 config/crd/bases/ && ' +
+               'echo "==> Building patched CRDs with kustomize..." && ' +
+               'kustomize build config/crd > config/crd/patched-crds.yaml && ' +
+               'echo "==> Patched CRDs written to config/crd/patched-crds.yaml" && ' +
+               'echo "==> Tilt will automatically reapply CRDs to cluster"',
+               deps=['api'],
+               ignore=[
+                   '*/*/zz_generated.deepcopy.go',
+                   'config/crd/bases',
+                   'config/crd/patched-crds.yaml'
+               ])
+
 if settings.get("installWandb"):
-    testing_yaml = read_file('./hack/testing-manifests/wandb/' + settings.get('wandbCRD') + '.yaml')
+    testing_yaml = read_file('./hack/testing-manifests/wandb/' + settings.get('wandbCrName') + '.yaml')
     #print(testing_yaml)
     k8s_yaml(testing_yaml)
     k8s_resource(
         new_name='Wandb',
         objects=[
-            'wandb-default:weightsandbiases'
+            settings.get('wandbCrName') + ':weightsandbiases'
         ],
         resource_deps=["operator-controller-manager"]
     )
