@@ -20,6 +20,7 @@ echo "Creating kind cluster: $CLUSTER_NAME"
 
 if kind get clusters | grep -q "^$CLUSTER_NAME$"; then
     echo "Kind cluster '$CLUSTER_NAME' already exists"
+    kubectl config use-context "kind-$CLUSTER_NAME"
     exit 0
 fi
 
