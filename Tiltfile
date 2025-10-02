@@ -10,8 +10,10 @@ settings = {
         "kind-kind",
     ],
     "installMinio": True,
+    "installStrimzi": False,
     "installWandb": True,
     "wandbCrName": "wandb-default-v1",
+    "strimziVersion": "0.44.0",
 }
 
 # Override with user settings from tilt-settings.json
@@ -80,6 +82,8 @@ def manifests():
 def generate():
     return 'controller-gen object:headerFile="hack/boilerplate.go.txt" paths="./...";'
 
+def rebuild():
+    return 'make'
 
 def vetfmt():
     return 'go vet ./...; go fmt ./...'
@@ -106,9 +110,10 @@ local(ensure_dist_dir() + ' && ' + manifests() + generate() + 'mkdir -p ' + DIST
 
 ################################################################################
 # STEP 2: OPTIONAL DEPENDENCIES
-# Install Minio for local S3-compatible storage if enabled
+# Install optional components for development/testing
 ################################################################################
 
+# Install Minio for local S3-compatible storage
 if settings.get("installMinio"):
     local('cp ./hack/testing-manifests/minio/minio.yaml ' + DIST_DIR + '/minio.yaml')
     k8s_yaml(DIST_DIR + '/minio.yaml')
@@ -119,6 +124,19 @@ if settings.get("installMinio"):
             'minio:service',
             'minio:namespace'
         ]
+    )
+
+# Install Strimzi Kafka Operator
+if settings.get("installStrimzi"):
+    strimzi_version = settings.get("strimziVersion")
+    strimzi_url = 'https://github.com/strimzi/strimzi-kafka-operator/releases/download/' + strimzi_version + '/strimzi-cluster-operator-' + strimzi_version + '.yaml'
+
+    local('curl -sL ' + strimzi_url + ' > ' + DIST_DIR + '/strimzi-operator.yaml')
+    k8s_yaml(DIST_DIR + '/strimzi-operator.yaml')
+    k8s_resource(
+        workload='strimzi-cluster-operator',
+        new_name='Strimzi Kafka Operator',
+        labels=['strimzi']
     )
 
 ################################################################################
@@ -166,9 +184,9 @@ k8s_resource(
 # Automatically recompile controller binary when source code changes
 ################################################################################
 
-deps = ['controllers', 'pkg', 'cmd/main.go', 'api']
+deps = ['controllers', 'pkg', 'cmd/main.go', 'api', 'internal']
 
-local_resource('Watch&Compile', generate() + binary(),
+local_resource('Watch&Rebuild', rebuild() + "; " + binary(),
                deps=deps, ignore=['*/*/zz_generated.deepcopy.go'])
 
 ################################################################################
@@ -200,15 +218,10 @@ local_resource('Regenerate-CRDs',
 ################################################################################
 
 if settings.get("installWandb"):
-    local_resource(
-        'Copy-Wandb-CR',
-        'cp ./hack/testing-manifests/wandb/' + settings.get('wandbCrName') + '.yaml ' +
-        DIST_DIR + '/test-wandb-cr.yaml',
-        deps=['./hack/testing-manifests/wandb/' + settings.get('wandbCrName') + '.yaml']
-    )
+    local('cp ./hack/testing-manifests/wandb/' + settings.get('wandbCrName') + '.yaml ' + DIST_DIR + '/test-wandb-cr.yaml')
     k8s_yaml(DIST_DIR + '/test-wandb-cr.yaml')
     k8s_resource(
-        new_name='Apply Wandb CR',
+        new_name='Wandb CR',
         objects=[
             settings.get('wandbCrName') + ':weightsandbiases'
         ],

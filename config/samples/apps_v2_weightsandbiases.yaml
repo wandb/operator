@@ -7,10 +7,6 @@ metadata:
   name: weightsandbiases-sample
 spec:
   profile: dev
-  infra:
-    streaming:
-      enabled: true
-      type: kafka
-      configMapRef:
-        name: kafka-operator-templates
-        namespace: wandb-system
+  streaming:
+    enabled: true
+    type: kafka

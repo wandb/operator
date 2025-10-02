@@ -50,6 +50,7 @@ type WBInfraStatusType string
 
 const (
 	WBInfraStatusReady    WBInfraStatusType = "Ready"
+	WBInfraStatusDisabled WBInfraStatusType = "Disabled"
 	WBInfraStatusError    WBInfraStatusType = "Error"
 	WBInfraStatusPending  WBInfraStatusType = "Pending"
 	WBInfraStatusMissing  WBInfraStatusType = "Missing"
@@ -82,12 +83,6 @@ func init() {
 	SchemeBuilder.Register(&WeightsAndBiases{}, &WeightsAndBiasesList{})
 }
 
-type ConfigMapReference struct {
-	Name      string `json:"name"`
-	Namespace string `json:"namespace"`
-	Key       string `json:"key,omitempty"`
-}
-
 // WeightsAndBiasesSpec defines the desired state of WeightsAndBiases.
 type WeightsAndBiasesSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
@@ -96,17 +91,12 @@ type WeightsAndBiasesSpec struct {
 	// Profile is akin to high-level environment info
 	Profile string `json:"profile,omitempty"`
 
-	Infra WBInfraSpec `json:"infra,omitempty"`
+	Streaming WBStreamingSpec `json:"streaming,omitempty"`
 }
 
 type WBStreamingSpec struct {
-	Enabled      bool                `json:"enabled"`
-	Type         WBStreamingType     `json:"type"`
-	ConfigMapRef *ConfigMapReference `json:"configMapRef,omitempty"`
-}
-
-type WBInfraSpec struct {
-	Streaming WBStreamingSpec `json:"streaming,omitempty"`
+	Enabled bool            `json:"enabled"`
+	Type    WBStreamingType `json:"type"`
 }
 
 type WBStreamingStatus struct {
@@ -115,17 +105,9 @@ type WBStreamingStatus struct {
 	LastReconciled       metav1.Time       `json:"lastReconciled,omitempty"`
 }
 
-type WBInfraStatus struct {
-	StreamingStatus WBStreamingStatus `json:"streamingStatus,omitempty"`
-}
-
-type WBComponentStatus struct {
-	InfraStatus WBInfraStatus `json:"infraStatus,omitempty"`
-}
-
 // WeightsAndBiasesStatus defines the observed state of WeightsAndBiases.
 type WeightsAndBiasesStatus struct {
 	Phase              WBPhaseType       `json:"phase,omitempty"`
-	ComponentStatus    WBComponentStatus `json:"componentStatus,omitempty"`
+	StreamingStatus    WBStreamingStatus `json:"streamingStatus,omitempty"`
 	ObservedGeneration int64             `json:"observedGeneration"`
 }

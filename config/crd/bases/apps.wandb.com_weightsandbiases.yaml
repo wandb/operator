@@ -88,61 +88,40 @@ spec:
           spec:
             description: WeightsAndBiasesSpec defines the desired state of WeightsAndBiases.
             properties:
-              infra:
-                properties:
-                  streaming:
-                    properties:
-                      configMapRef:
-                        properties:
-                          key:
-                            type: string
-                          name:
-                            type: string
-                          namespace:
-                            type: string
-                        required:
-                        - name
-                        - namespace
-                        type: object
-                      enabled:
-                        type: boolean
-                      type:
-                        type: string
-                    required:
-                    - enabled
-                    - type
-                    type: object
-                type: object
               profile:
                 description: Profile is akin to high-level environment info
                 type: string
+              streaming:
+                properties:
+                  enabled:
+                    type: boolean
+                  type:
+                    type: string
+                required:
+                - enabled
+                - type
+                type: object
             type: object
           status:
             description: WeightsAndBiasesStatus defines the observed state of WeightsAndBiases.
             properties:
-              componentStatus:
-                properties:
-                  infraStatus:
-                    properties:
-                      streamingStatus:
-                        properties:
-                          lastReconciled:
-                            format: date-time
-                            type: string
-                          ready:
-                            type: boolean
-                          reconciliationStatus:
-                            type: string
-                        required:
-                        - ready
-                        type: object
-                    type: object
-                type: object
               observedGeneration:
                 format: int64
                 type: integer
               phase:
                 type: string
+              streamingStatus:
+                properties:
+                  lastReconciled:
+                    format: date-time
+                    type: string
+                  ready:
+                    type: boolean
+                  reconciliationStatus:
+                    type: string
+                required:
+                - ready
+                type: object
             required:
             - observedGeneration
             type: object
