@@ -36,6 +36,6 @@ junit.xml
 
 tilt-settings.json
 /tilt_bin
-config/crd/patched-crds.yaml
+/dist
 
 .DS_Store

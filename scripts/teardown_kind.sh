@@ -26,3 +26,9 @@ fi
 kind delete cluster --name "$CLUSTER_NAME"
 
 echo "Kind cluster '$CLUSTER_NAME' deleted successfully"
+
+if [[ -d "dist" ]]; then
+    echo "Cleaning dist/ directory..."
+    rm -rf dist
+    echo "dist/ directory removed"
+fi
