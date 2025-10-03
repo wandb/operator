@@ -3,5 +3,6 @@
   "kindClusterName": "wandb-operator",
   "installMinio": true,
   "installWandb": true,
+  "installKafka": false,
   "wandbCrName": "wandb-default-v1"
 }

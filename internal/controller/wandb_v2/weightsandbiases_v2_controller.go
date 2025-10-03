@@ -57,6 +57,9 @@ type WeightsAndBiasesV2Reconciler struct {
 //+kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses;ingresses/status;networkpolicies,verbs=update;delete;get;list;create;patch;watch
 //+kubebuilder:rbac:groups=policy,resources=poddisruptionbudgets,verbs=update;delete;get;list;patch;create;watch
 //+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles;rolebindings;clusterroles;clusterrolebindings,verbs=update;delete;get;list;patch;create;watch
+//+kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,verbs=get;list;watch
+//+kubebuilder:rbac:groups=kafka.strimzi.io,resources=*,verbs=get;list;watch
+//+kubebuilder:rbac:groups=core.strimzi.io,resources=*,verbs=get;list;watch
 //+kubebuilder:rbac:urls=/metrics,verbs=get
 
 // Deprecated/Erroneously required RBAC rules
@@ -100,7 +103,7 @@ func (r *WeightsAndBiasesV2Reconciler) Reconcile(ctx context.Context, req ctrl.R
 // SetupWithManager sets up the controller with the Manager.
 func (r *WeightsAndBiasesV2Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 	builder := ctrl.NewControllerManagedBy(mgr).
-		For(&apiv2.WeightsAndBiases{}, builder.WithPredicates(filterWBEvents{})).
+		For(&apiv2.WeightsAndBiases{} /*, builder.WithPredicates(filterWBEvents{})*/).
 		Owns(&corev1.Secret{}, builder.WithPredicates(filterSecretEvents{})).
 		Owns(&corev1.ConfigMap{})
 	return builder.Complete(r)

@@ -10,10 +10,10 @@ settings = {
         "kind-kind",
     ],
     "installMinio": True,
-    "installStrimzi": False,
+    "installKafka": False,
     "installWandb": True,
     "wandbCrName": "wandb-default-v1",
-    "strimziVersion": "0.44.0",
+    "kafkaOperatorVersion": "0.44.0",
 }
 
 # Override with user settings from tilt-settings.json
@@ -127,16 +127,16 @@ if settings.get("installMinio"):
     )
 
 # Install Strimzi Kafka Operator
-if settings.get("installStrimzi"):
-    strimzi_version = settings.get("strimziVersion")
-    strimzi_url = 'https://github.com/strimzi/strimzi-kafka-operator/releases/download/' + strimzi_version + '/strimzi-cluster-operator-' + strimzi_version + '.yaml'
+if settings.get("installKafka"):
+    op_version = settings.get("kafkaOperatorVersion")
+    op_url = 'https://github.com/strimzi/strimzi-kafka-operator/releases/download/' + op_version + '/strimzi-cluster-operator-' + op_version + '.yaml'
 
-    local('curl -sL ' + strimzi_url + ' > ' + DIST_DIR + '/strimzi-operator.yaml')
+    local('curl -sL ' + op_url + ' > ' + DIST_DIR + '/strimzi-operator.yaml')
     k8s_yaml(DIST_DIR + '/strimzi-operator.yaml')
     k8s_resource(
         workload='strimzi-cluster-operator',
         new_name='Strimzi Kafka Operator',
-        labels=['strimzi']
+        labels=['infra']
     )
 
 ################################################################################
