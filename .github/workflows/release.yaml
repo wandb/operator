@@ -30,6 +30,13 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
 
+      - name: Login to quay.io
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.QUAY_USERNAME }}
+          password: ${{ secrets.QUAY_TOKEN }}
+          registry: quay.io
+
       - name: Versioning
         id: release
         uses: cycjimmy/semantic-release-action@v3
@@ -49,11 +56,16 @@ jobs:
       - name: Install Ginkgo
         run: go install github.com/onsi/ginkgo/v2/ginkgo@latest
 
-      - name: Build and Push
+      - name: Build and Push Latest
         run: |
           export IMG=$IMAGE_TAG_BASE:$VERSION
           make docker-build docker-push
+        env:
+          IMAGE_TAG_BASE: wandb/controller
+          VERSION: latest
 
+      - name: Tag and Push to Docker Hub
+        run: |
           docker tag wandb/controller:latest wandb/controller:${{ steps.release.outputs.new_release_version }}
           docker push wandb/controller:${{ steps.release.outputs.new_release_version }}
 
@@ -62,6 +74,15 @@ jobs:
 
           docker tag wandb/controller:latest wandb/controller:${{ steps.release.outputs.new_release_major_version }}
           docker push wandb/controller:${{ steps.release.outputs.new_release_major_version }}
-        env:
-          IMAGE_TAG_BASE: wandb/controller
-          VERSION: latest
+
+
+      - name: Tag and Push to Quay.io
+        run: |
+          docker tag wandb/controller:latest quay.io/wandb_tools/wandb-k8s-operator:${{ steps.release.outputs.new_release_version }}
+          docker push quay.io/wandb_tools/wandb-k8s-operator:${{ steps.release.outputs.new_release_version }}
+          
+          docker tag wandb/controller:latest quay.io/wandb_tools/wandb-k8s-operator:${{ steps.release.outputs.new_release_major_version }}.${{ steps.release.outputs.new_release_minor_version }}
+          docker push quay.io/wandb_tools/wandb-k8s-operator:${{ steps.release.outputs.new_release_major_version }}.${{ steps.release.outputs.new_release_minor_version }}
+          
+          docker tag wandb/controller:latest quay.io/wandb_tools/wandb-k8s-operator:${{ steps.release.outputs.new_release_major_version }}
+          docker push quay.io/wandb_tools/wandb-k8s-operator:${{ steps.release.outputs.new_release_major_version }}
