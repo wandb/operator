@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.21.2](https://github.com/wandb/operator/compare/v1.21.1...v1.21.2) (2025-10-02)
+
+
+### Bug Fixes
+
+* Timeout is a duration so we need to specify the correct value ([#100](https://github.com/wandb/operator/issues/100)) ([e6988a3](https://github.com/wandb/operator/commit/e6988a358e3d0529cbab95bd88157f7585b74975))
+
 ### [1.21.1](https://github.com/wandb/operator/compare/v1.21.0...v1.21.1) (2025-09-11)
 
 
