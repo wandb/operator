@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	ndbv1 "github.com/mysql/ndb-operator/pkg/apis/ndbcontroller/v1"
 	"github.com/wandb/operator/internal/controller/wandb_v2"
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -59,6 +60,7 @@ func init() {
 	utilruntime.Must(appsv1.AddToScheme(scheme))
 	utilruntime.Must(appsv2.AddToScheme(scheme))
 	utilruntime.Must(apiextensionsv1.AddToScheme(scheme))
+	utilruntime.Must(ndbv1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 

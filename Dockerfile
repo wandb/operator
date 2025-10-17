@@ -27,7 +27,7 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o ma
 
 FROM registry.access.redhat.com/ubi9/ubi-minimal
 WORKDIR /
-COPY --from=builder /workspace/manager .
+COPY --from=manager-builder /workspace/manager .
 
 # Create a helm cache directory and set ownership to the non-root user
 RUN mkdir -p /helm/.cache/helm /helm/.config/helm /helm/.local/share/helm && chown -R 65532:65532 /helm

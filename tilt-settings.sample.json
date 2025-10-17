@@ -4,5 +4,5 @@
   "installMinio": true,
   "installWandb": true,
   "installKafka": false,
-  "wandbCrName": "wandb-default-v1"
+  "wandbCrName": "wandb-dev-v2"
 }

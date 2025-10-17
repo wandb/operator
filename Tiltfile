@@ -109,7 +109,7 @@ DIRNAME = os.path.basename(os. getcwd())
 local(ensure_dist_dir() + ' && ' + manifests() + generate() + 'mkdir -p ' + DIST_DIR + '/crd-bases && cp config/crd/bases/*.yaml ' + DIST_DIR + '/crd-bases/')
 
 ################################################################################
-# STEP 2: OPTIONAL DEPENDENCIES
+# STEP 2: INFRA COMPONENTS
 # Install optional components for development/testing
 ################################################################################
 
@@ -123,21 +123,31 @@ if settings.get("installMinio"):
         objects=[
             'minio:service',
             'minio:namespace'
-        ]
+        ],
+        labels="infra",
     )
 
-# Install Strimzi Kafka Operator
-if settings.get("installKafka"):
-    op_version = settings.get("kafkaOperatorVersion")
-    op_url = 'https://github.com/strimzi/strimzi-kafka-operator/releases/download/' + op_version + '/strimzi-cluster-operator-' + op_version + '.yaml'
+local_resource(
+    'mysql-op-helm-install',
+    cmd='if ! helm repo list | grep -q "^ndb-operator-repo"; then ' +
+        'helm repo add ndb-operator-repo https://mysql.github.io/mysql-ndb-operator/ && ' +
+        'helm repo update; ' +
+        'fi && ' +
+        'helm install ndb-operator ndb-operator-repo/ndb-operator --namespace=ndb-operator --create-namespace',
+    labels=['infra'],
+    auto_init=False,
+    trigger_mode=TRIGGER_MODE_MANUAL,
+)
 
-    local('curl -sL ' + op_url + ' > ' + DIST_DIR + '/strimzi-operator.yaml')
-    k8s_yaml(DIST_DIR + '/strimzi-operator.yaml')
-    k8s_resource(
-        workload='strimzi-cluster-operator',
-        new_name='Strimzi Kafka Operator',
-        labels=['infra']
-    )
+local_resource(
+    'mysql-op-helm-uninstall',
+    cmd='helm uninstall ndb-operator --namespace ndb-operator',
+    labels=['infra'],
+    auto_init=False,
+    trigger_mode=TRIGGER_MODE_MANUAL,
+)
+
+
 
 ################################################################################
 # STEP 3: DEPLOY CONTROLLER AND RBAC
@@ -169,6 +179,17 @@ k8s_yaml(DIST_DIR + '/patched-crds.yaml', allow_duplicates=True)
 # Group RBAC resources under a single Tilt resource for easier management
 ################################################################################
 
+local_resource('Regenerate-RBAC',
+               'echo "==> Regenerating RBAC from controller annotations..." && ' +
+               manifests() +
+               'echo "==> Building controller and RBAC manifests..." && ' +
+               'kustomize build config/default > ' + DIST_DIR + '/controller-and-rbac.yaml && ' +
+               'echo "==> RBAC manifests updated in ' + DIST_DIR + '/controller-and-rbac.yaml"',
+               deps=['internal/controller'],
+               labels="wandb",
+               auto_init=False,
+               trigger_mode=TRIGGER_MODE_MANUAL)
+
 k8s_resource(
     new_name='RBAC',
     objects=[
@@ -176,7 +197,8 @@ k8s_resource(
         'operator-manager-rolebinding:clusterrolebinding',
         'operator-leader-election-role:role',
         'operator-leader-election-rolebinding:rolebinding'
-    ]
+    ],
+    labels="wandb"
 )
 
 ################################################################################
@@ -187,7 +209,9 @@ k8s_resource(
 deps = ['controllers', 'pkg', 'cmd/main.go', 'api', 'internal']
 
 local_resource('Watch&Rebuild', rebuild() + "; " + binary(),
-               deps=deps, ignore=['*/*/zz_generated.deepcopy.go'])
+               deps=deps,
+               labels="wandb",
+               ignore=['*/*/zz_generated.deepcopy.go'])
 
 ################################################################################
 # STEP 7: WATCH AND REGENERATE CRDs
@@ -207,6 +231,7 @@ local_resource('Regenerate-CRDs',
                'echo "==> Patched CRDs written to ' + DIST_DIR + '/patched-crds.yaml" && ' +
                'echo "==> Tilt will automatically reapply CRDs to cluster"',
                deps=['api'],
+               labels="wandb",
                ignore=[
                    '*/*/zz_generated.deepcopy.go',
                    'config/crd/bases'
@@ -221,11 +246,12 @@ if settings.get("installWandb"):
     local('cp ./hack/testing-manifests/wandb/' + settings.get('wandbCrName') + '.yaml ' + DIST_DIR + '/test-wandb-cr.yaml')
     k8s_yaml(DIST_DIR + '/test-wandb-cr.yaml')
     k8s_resource(
-        new_name='Wandb CR',
+        new_name='Install dev CR',
         objects=[
             settings.get('wandbCrName') + ':weightsandbiases'
         ],
-        resource_deps=["operator-controller-manager"]
+        resource_deps=["operator-controller-manager"],
+        labels="wandb"
     )
 
 ################################################################################
@@ -239,5 +265,47 @@ docker_build_with_restart(IMG, '.',
                           only=['./tilt_bin/manager'],
                           live_update=[
                               sync('./tilt_bin/manager', '/manager'),
-                          ]
+                          ],
                           )
+
+
+# ============================================================================
+# OLM - Operator Lifecycle Manager
+# ============================================================================
+
+# Install OLM on the Kind cluster
+local_resource(
+    "olm-install",
+    cmd="curl -sL https://github.com/operator-framework/operator-lifecycle-manager/releases/download/v0.28.0/install.sh | bash -s v0.28.0",
+    labels=["OLM"],
+    auto_init=False,
+    trigger_mode=TRIGGER_MODE_MANUAL,
+)
+
+# Check OLM status
+local_resource(
+    "olm-status",
+    cmd="echo '=== OLM Namespaces ===' && kubectl get namespaces olm operators 2>/dev/null || echo 'OLM namespaces not found' && echo '' && echo '=== OLM Pods ===' && kubectl get pods -n olm 2>/dev/null || echo 'No pods in olm namespace' && echo '' && echo '=== Operator Pods ===' && kubectl get pods -n operators 2>/dev/null || echo 'No pods in operators namespace'",
+    labels=["OLM"],
+    auto_init=False,
+    trigger_mode=TRIGGER_MODE_MANUAL,
+)
+
+# View OLM package manifests
+local_resource(
+    "olm-packages",
+    cmd="kubectl get packagemanifest -n olm",
+    labels=["OLM"],
+    auto_init=False,
+    trigger_mode=TRIGGER_MODE_MANUAL,
+)
+
+# Uninstall OLM from the Kind cluster
+local_resource(
+    "olm-uninstall",
+    cmd="kubectl delete apiservices.apiregistration.k8s.io v1.packages.operators.coreos.com && kubectl delete namespace olm && kubectl delete namespace operators",
+    labels=["OLM"],
+    auto_init=False,
+    trigger_mode=TRIGGER_MODE_MANUAL,
+)
+

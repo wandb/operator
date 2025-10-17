@@ -46,6 +46,8 @@ type WeightsAndBiasesV2Reconciler struct {
 //+kubebuilder:rbac:groups=apps.wandb.com,resources=weightsandbiases,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=apps.wandb.com,resources=weightsandbiases/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=apps.wandb.com,resources=weightsandbiases/finalizers,verbs=update
+//+kubebuilder:rbac:groups=mysql.oracle.com,resources=ndbclusters,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=mysql.oracle.com,resources=ndbclusters/status,verbs=get
 //+kubebuilder:rbac:groups="",resources=configmaps;events;persistentvolumeclaims;secrets;serviceaccounts;services,verbs=update;delete;get;list;create;patch;watch
 //+kubebuilder:rbac:groups="",resources=endpoints;ingresses;nodes;nodes/spec;nodes/stats;nodes/metrics;nodes/proxy;namespaces;namespaces/status;replicationcontrollers;replicationcontrollers/status;resourcequotas;pods;pods/log;pods/status,verbs=get;list;watch
 //+kubebuilder:rbac:groups=apps,resources=deployments;controllerrevisions;daemonsets;replicasets;statefulsets,verbs=update;delete;get;list;create;patch;watch
@@ -57,9 +59,6 @@ type WeightsAndBiasesV2Reconciler struct {
 //+kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses;ingresses/status;networkpolicies,verbs=update;delete;get;list;create;patch;watch
 //+kubebuilder:rbac:groups=policy,resources=poddisruptionbudgets,verbs=update;delete;get;list;patch;create;watch
 //+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles;rolebindings;clusterroles;clusterrolebindings,verbs=update;delete;get;list;patch;create;watch
-//+kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,verbs=get;list;watch
-//+kubebuilder:rbac:groups=kafka.strimzi.io,resources=*,verbs=get;list;watch
-//+kubebuilder:rbac:groups=core.strimzi.io,resources=*,verbs=get;list;watch
 //+kubebuilder:rbac:urls=/metrics,verbs=get
 
 // Deprecated/Erroneously required RBAC rules
@@ -89,10 +88,14 @@ func (r *WeightsAndBiasesV2Reconciler) Reconcile(ctx context.Context, req ctrl.R
 
 	log.Info(
 		"Found Weights & Biases V2 instance, processing the spec...",
-		"Spec", wandb.Spec,
+		"Spec", wandb.Spec, "Name", wandb.Name, "UID", wandb.UID, "Generation", wandb.Generation,
 	)
 
-	result, err := r.handleKafkaOperator(ctx, wandb, req)
+	for _, owner := range wandb.GetOwnerReferences() {
+		log.Info("EXISTING WandB owner: ", "Name", owner.Name, "Kind", owner.Kind, "UID", owner.UID)
+	}
+
+	result, err := r.handleMysql(ctx, wandb, req)
 	if err != nil {
 		return result, err
 	}

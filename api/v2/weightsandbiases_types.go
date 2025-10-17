@@ -31,11 +31,7 @@ const (
 	WBSpecProfileProd    WBSpecProfile = "prod"
 )
 
-type WBStreamingType string
-
-const (
-	WBKafkaStreaming WBStreamingType = "kafka"
-)
+type WBDatabaseType string
 
 type WBPhaseType string
 
@@ -91,15 +87,14 @@ type WeightsAndBiasesSpec struct {
 	// Profile is akin to high-level environment info
 	Profile string `json:"profile,omitempty"`
 
-	Streaming WBStreamingSpec `json:"streaming,omitempty"`
+	Database WBDatabaseSpec `json:"database,omitempty"`
 }
 
-type WBStreamingSpec struct {
-	Enabled bool            `json:"enabled"`
-	Type    WBStreamingType `json:"type"`
+type WBDatabaseSpec struct {
+	Enabled bool `json:"enabled"`
 }
 
-type WBStreamingStatus struct {
+type WBDatabaseStatus struct {
 	Ready                bool              `json:"ready"`
 	ReconciliationStatus WBInfraStatusType `json:"reconciliationStatus,omitempty" default:"Missing"`
 	LastReconciled       metav1.Time       `json:"lastReconciled,omitempty"`
@@ -107,7 +102,7 @@ type WBStreamingStatus struct {
 
 // WeightsAndBiasesStatus defines the observed state of WeightsAndBiases.
 type WeightsAndBiasesStatus struct {
-	Phase              WBPhaseType       `json:"phase,omitempty"`
-	StreamingStatus    WBStreamingStatus `json:"streamingStatus,omitempty"`
-	ObservedGeneration int64             `json:"observedGeneration"`
+	Phase              WBPhaseType      `json:"phase,omitempty"`
+	StreamingStatus    WBDatabaseStatus `json:"streamingStatus,omitempty"`
+	ObservedGeneration int64            `json:"observedGeneration"`
 }

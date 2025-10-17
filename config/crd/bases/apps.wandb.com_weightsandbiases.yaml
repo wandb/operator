@@ -88,19 +88,16 @@ spec:
           spec:
             description: WeightsAndBiasesSpec defines the desired state of WeightsAndBiases.
             properties:
-              profile:
-                description: Profile is akin to high-level environment info
-                type: string
-              streaming:
+              database:
                 properties:
                   enabled:
                     type: boolean
-                  type:
-                    type: string
                 required:
                 - enabled
-                - type
                 type: object
+              profile:
+                description: Profile is akin to high-level environment info
+                type: string
             type: object
           status:
             description: WeightsAndBiasesStatus defines the observed state of WeightsAndBiases.
