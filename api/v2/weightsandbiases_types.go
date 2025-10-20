@@ -91,18 +91,30 @@ type WeightsAndBiasesSpec struct {
 }
 
 type WBDatabaseSpec struct {
-	Enabled bool `json:"enabled"`
+	Enabled bool         `json:"enabled"`
+	Backup  WBBackupSpec `json:"backup,omitempty"`
+}
+
+type WBBackupSpec struct {
+	Enabled bool `json:"enabled,omitempty"`
 }
 
 type WBDatabaseStatus struct {
 	Ready                bool              `json:"ready"`
 	ReconciliationStatus WBInfraStatusType `json:"reconciliationStatus,omitempty" default:"Missing"`
 	LastReconciled       metav1.Time       `json:"lastReconciled,omitempty"`
+	BackupStatus         WBBackupStatus    `json:"backupStatus,omitempty"`
+}
+
+type WBBackupStatus struct {
+	LastBackupTime *metav1.Time `json:"lastBackupTime,omitempty"`
+	State          string       `json:"state,omitempty"`
+	Message        string       `json:"message,omitempty"`
 }
 
 // WeightsAndBiasesStatus defines the observed state of WeightsAndBiases.
 type WeightsAndBiasesStatus struct {
 	Phase              WBPhaseType      `json:"phase,omitempty"`
-	StreamingStatus    WBDatabaseStatus `json:"streamingStatus,omitempty"`
+	DatabaseStatus     WBDatabaseStatus `json:"databaseStatus,omitempty"`
 	ObservedGeneration int64            `json:"observedGeneration"`
 }

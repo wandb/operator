@@ -7,3 +7,5 @@ spec:
   profile: dev
   database:
     enabled: true
+    backup:
+      enabled: true

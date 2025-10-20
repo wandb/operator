@@ -22,6 +22,7 @@ import (
 	apiv2 "github.com/wandb/operator/api/v2"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -32,7 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
-const resFinalizer = "finalizer.app.wandb.com"
+const dbFinalizer = "db.app.wandb.com"
 
 // WeightsAndBiasesV2Reconciler reconciles a WeightsAndBiases object
 type WeightsAndBiasesV2Reconciler struct {
@@ -78,6 +79,8 @@ func (r *WeightsAndBiasesV2Reconciler) Reconcile(ctx context.Context, req ctrl.R
 		"start", true,
 	)
 
+	var ctrlState CtrlState
+
 	wandb := &apiv2.WeightsAndBiases{}
 	if err := r.Client.Get(ctx, req.NamespacedName, wandb); err != nil {
 		if errors.IsNotFound(err) {
@@ -91,13 +94,9 @@ func (r *WeightsAndBiasesV2Reconciler) Reconcile(ctx context.Context, req ctrl.R
 		"Spec", wandb.Spec, "Name", wandb.Name, "UID", wandb.UID, "Generation", wandb.Generation,
 	)
 
-	for _, owner := range wandb.GetOwnerReferences() {
-		log.Info("EXISTING WandB owner: ", "Name", owner.Name, "Kind", owner.Kind, "UID", owner.UID)
-	}
-
-	result, err := r.handleMysql(ctx, wandb, req)
-	if err != nil {
-		return result, err
+	ctrlState = r.handleMysql(ctx, wandb, req)
+	if ctrlState.isDone() {
+		return ctrlState.reconcileResult()
 	}
 
 	return ctrl.Result{}, nil
@@ -110,6 +109,21 @@ func (r *WeightsAndBiasesV2Reconciler) SetupWithManager(mgr ctrl.Manager) error 
 		Owns(&corev1.Secret{}, builder.WithPredicates(filterSecretEvents{})).
 		Owns(&corev1.ConfigMap{})
 	return builder.Complete(r)
+}
+
+func (r *WeightsAndBiasesV2Reconciler) updateDbBackupStatus(ctx context.Context, wandb *apiv2.WeightsAndBiases, state, message string) {
+	log := ctrl.LoggerFrom(ctx)
+	now := metav1.Now()
+
+	wandb.Status.DatabaseStatus.BackupStatus = apiv2.WBBackupStatus{
+		LastBackupTime: &now,
+		State:          state,
+		Message:        message,
+	}
+
+	if err := r.Client.Status().Update(ctx, wandb); err != nil {
+		log.Error(err, "Failed to update backup status")
+	}
 }
 
 type filterWBEvents struct {

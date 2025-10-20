@@ -90,6 +90,11 @@ spec:
             properties:
               database:
                 properties:
+                  backup:
+                    properties:
+                      enabled:
+                        type: boolean
+                    type: object
                   enabled:
                     type: boolean
                 required:
@@ -109,6 +114,16 @@ spec:
                 type: string
               streamingStatus:
                 properties:
+                  backupStatus:
+                    properties:
+                      lastBackupTime:
+                        format: date-time
+                        type: string
+                      message:
+                        type: string
+                      state:
+                        type: string
+                    type: object
                   lastReconciled:
                     format: date-time
                     type: string
