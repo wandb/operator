@@ -4,5 +4,6 @@
   "installMinio": true,
   "installWandb": true,
   "installKafka": false,
+  "installMysqlOperator": true,
   "wandbCrName": "wandb-dev-v2"
 }

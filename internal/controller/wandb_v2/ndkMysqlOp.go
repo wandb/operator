@@ -32,7 +32,7 @@ func mysqlNamespacedName(req ctrl.Request) types.NamespacedName {
 	}
 }
 
-func (r *WeightsAndBiasesV2Reconciler) handleMysql(
+func (r *WeightsAndBiasesV2Reconciler) handleNdkMysql(
 	ctx context.Context, wandb *apiv2.WeightsAndBiases, req ctrl.Request,
 ) CtrlState {
 	var err error

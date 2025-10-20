@@ -12,6 +12,8 @@ settings = {
     "installMinio": True,
     "installKafka": False,
     "installWandb": True,
+    "installMysqlOperator": False,
+    "mysqlOperatorType": "percona",  # or "mysql-operator"
     "wandbCrName": "wandb-default-v1",
     "kafkaOperatorVersion": "0.44.0",
 }
@@ -127,25 +129,52 @@ if settings.get("installMinio"):
         labels="infra",
     )
 
-local_resource(
-    'mysql-op-helm-install',
-    cmd='if ! helm repo list | grep -q "^ndb-operator-repo"; then ' +
-        'helm repo add ndb-operator-repo https://mysql.github.io/mysql-ndb-operator/ && ' +
-        'helm repo update; ' +
-        'fi && ' +
-        'helm install ndb-operator ndb-operator-repo/ndb-operator --namespace=ndb-operator --create-namespace',
-    labels=['infra'],
-    auto_init=False,
-    trigger_mode=TRIGGER_MODE_MANUAL,
-)
+if settings.get("installMysqlOperator"):
+    if settings.get("mysqlOperatorType") == "percona":
+        print("==> Installing Percona MySQL Operator...")
+        local_resource(
+            'percona-mysql-op-helm-install',
+            cmd='if ! helm repo list | grep -q "^percona"; then ' +
+                'helm repo add percona https://percona.github.io/percona-helm-charts/ && ' +
+                'helm repo update; ' +
+                'fi && ' +
+                'helm install percona-mysql-operator percona/pxc-operator --namespace=percona-mysql-operator --create-namespace',
+            labels=['infra'],
+            auto_init=False,
+            trigger_mode=TRIGGER_MODE_MANUAL,
+        )
 
-local_resource(
-    'mysql-op-helm-uninstall',
-    cmd='helm uninstall ndb-operator --namespace ndb-operator',
-    labels=['infra'],
-    auto_init=False,
-    trigger_mode=TRIGGER_MODE_MANUAL,
-)
+        local_resource(
+            'percona-mysql-op-helm-uninstall',
+            cmd='helm uninstall percona-mysql-operator --namespace percona-mysql-operator',
+            labels=['infra'],
+            auto_init=False,
+            trigger_mode=TRIGGER_MODE_MANUAL,
+        )
+    elif settings.get("mysqlOperatorType") == "ndb":
+        print("==> Installing MySQL NDB Operator...")
+        local_resource(
+            'mysql-op-helm-install',
+            cmd='if ! helm repo list | grep -q "^ndb-operator-repo"; then ' +
+                'helm repo add ndb-operator-repo https://mysql.github.io/mysql-ndb-operator/ && ' +
+                'helm repo update; ' +
+                'fi && ' +
+                'helm install ndb-operator ndb-operator-repo/ndb-operator --namespace=ndb-operator --create-namespace',
+            labels=['infra'],
+            auto_init=False,
+            trigger_mode=TRIGGER_MODE_MANUAL,
+        )
+
+        local_resource(
+            'mysql-op-helm-uninstall',
+            cmd='helm uninstall ndb-operator --namespace ndb-operator',
+            labels=['infra'],
+            auto_init=False,
+            trigger_mode=TRIGGER_MODE_MANUAL,
+        )
+
+    else:
+        fail("Unknown mysqlOperatorType: " + settings.get("mysqlOperatorType"))
 
 
 
@@ -243,15 +272,14 @@ local_resource('Regenerate-CRDs',
 ################################################################################
 
 if settings.get("installWandb"):
-    local('cp ./hack/testing-manifests/wandb/' + settings.get('wandbCrName') + '.yaml ' + DIST_DIR + '/test-wandb-cr.yaml')
-    k8s_yaml(DIST_DIR + '/test-wandb-cr.yaml')
-    k8s_resource(
-        new_name='Install dev CR',
-        objects=[
-            settings.get('wandbCrName') + ':weightsandbiases'
-        ],
+    local_resource(
+        'Install dev CR',
+        cmd='cp ./hack/testing-manifests/wandb/' + settings.get('wandbCrName') + '.yaml ' + DIST_DIR + '/test-wandb-cr.yaml && ' +
+            'kubectl apply -f ' + DIST_DIR + '/test-wandb-cr.yaml',
         resource_deps=["operator-controller-manager"],
-        labels="wandb"
+        labels="wandb",
+        auto_init=False,
+        trigger_mode=TRIGGER_MODE_MANUAL
     )
 
 ################################################################################

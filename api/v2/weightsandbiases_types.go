@@ -33,6 +33,11 @@ const (
 
 type WBDatabaseType string
 
+const (
+	WBDatabaseTypeNDB     WBDatabaseType = "ndb"
+	WBDatabaseTypePercona WBDatabaseType = "percona"
+)
+
 type WBPhaseType string
 
 const (
@@ -91,12 +96,39 @@ type WeightsAndBiasesSpec struct {
 }
 
 type WBDatabaseSpec struct {
-	Enabled bool         `json:"enabled"`
-	Backup  WBBackupSpec `json:"backup,omitempty"`
+	Enabled     bool           `json:"enabled"`
+	Type        WBDatabaseType `json:"type,omitempty"`
+	StorageSize string         `json:"storageSize,omitempty"`
+	Backup      WBBackupSpec   `json:"backup,omitempty"`
 }
 
 type WBBackupSpec struct {
-	Enabled bool `json:"enabled,omitempty"`
+	Enabled        bool                    `json:"enabled,omitempty"`
+	StorageName    string                  `json:"storageName,omitempty"`
+	StorageType    WBBackupStorageType     `json:"storageType,omitempty"`
+	S3             *WBBackupS3Spec         `json:"s3,omitempty"`
+	Filesystem     *WBBackupFilesystemSpec `json:"filesystem,omitempty"`
+	TimeoutSeconds int                     `json:"timeoutSeconds,omitempty"`
+}
+
+type WBBackupStorageType string
+
+const (
+	WBBackupStorageTypeS3         WBBackupStorageType = "s3"
+	WBBackupStorageTypeFilesystem WBBackupStorageType = "filesystem"
+)
+
+type WBBackupS3Spec struct {
+	Bucket            string `json:"bucket"`
+	Region            string `json:"region,omitempty"`
+	CredentialsSecret string `json:"credentialsSecret,omitempty"`
+	EndpointURL       string `json:"endpointUrl,omitempty"`
+}
+
+type WBBackupFilesystemSpec struct {
+	StorageSize      string   `json:"storageSize,omitempty"`
+	StorageClassName string   `json:"storageClassName,omitempty"`
+	AccessModes      []string `json:"accessModes,omitempty"`
 }
 
 type WBDatabaseStatus struct {
@@ -107,9 +139,13 @@ type WBDatabaseStatus struct {
 }
 
 type WBBackupStatus struct {
+	BackupName     string       `json:"backupName,omitempty"`
+	StartedAt      *metav1.Time `json:"startedAt,omitempty"`
+	CompletedAt    *metav1.Time `json:"completedAt,omitempty"`
 	LastBackupTime *metav1.Time `json:"lastBackupTime,omitempty"`
 	State          string       `json:"state,omitempty"`
 	Message        string       `json:"message,omitempty"`
+	RequeueAfter   int64        `json:"requeueAfter,omitempty"`
 }
 
 // WeightsAndBiasesStatus defines the observed state of WeightsAndBiases.

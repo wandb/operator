@@ -30,6 +30,7 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
+	pxcv1 "github.com/percona/percona-xtradb-cluster-operator/pkg/apis/pxc/v1"
 	"github.com/wandb/operator/internal/controller"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -61,6 +62,7 @@ func init() {
 	utilruntime.Must(appsv2.AddToScheme(scheme))
 	utilruntime.Must(apiextensionsv1.AddToScheme(scheme))
 	utilruntime.Must(ndbv1.AddToScheme(scheme))
+	utilruntime.Must(pxcv1.SchemeBuilder.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 

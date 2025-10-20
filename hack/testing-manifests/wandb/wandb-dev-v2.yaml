@@ -7,3 +7,15 @@ spec:
   profile: dev
   database:
     enabled: true
+    type: percona
+    storageSize: 5Gi
+    backup:
+      enabled: true
+      storageName: default-backup
+      storageType: filesystem
+      filesystem:
+        storageSize: 5Gi
+        storageClassName: standard
+        accessModes:
+          - ReadWriteOnce
+      timeoutSeconds: 600

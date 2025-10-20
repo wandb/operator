@@ -94,9 +94,43 @@ spec:
                     properties:
                       enabled:
                         type: boolean
+                      filesystem:
+                        properties:
+                          accessModes:
+                            items:
+                              type: string
+                            type: array
+                          storageClassName:
+                            type: string
+                          storageSize:
+                            type: string
+                        type: object
+                      s3:
+                        properties:
+                          bucket:
+                            type: string
+                          credentialsSecret:
+                            type: string
+                          endpointUrl:
+                            type: string
+                          region:
+                            type: string
+                        required:
+                        - bucket
+                        type: object
+                      storageName:
+                        type: string
+                      storageType:
+                        type: string
+                      timeoutSeconds:
+                        type: integer
                     type: object
                   enabled:
                     type: boolean
+                  storageSize:
+                    type: string
+                  type:
+                    type: string
                 required:
                 - enabled
                 type: object
@@ -107,19 +141,25 @@ spec:
           status:
             description: WeightsAndBiasesStatus defines the observed state of WeightsAndBiases.
             properties:
-              observedGeneration:
-                format: int64
-                type: integer
-              phase:
-                type: string
-              streamingStatus:
+              databaseStatus:
                 properties:
                   backupStatus:
                     properties:
+                      backupName:
+                        type: string
+                      completedAt:
+                        format: date-time
+                        type: string
                       lastBackupTime:
                         format: date-time
                         type: string
                       message:
+                        type: string
+                      requeueAfter:
+                        format: int64
+                        type: integer
+                      startedAt:
+                        format: date-time
                         type: string
                       state:
                         type: string
@@ -134,6 +174,11 @@ spec:
                 required:
                 - ready
                 type: object
+              observedGeneration:
+                format: int64
+                type: integer
+              phase:
+                type: string
             required:
             - observedGeneration
             type: object

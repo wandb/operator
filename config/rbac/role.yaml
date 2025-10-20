@@ -200,6 +200,26 @@ rules:
   - update
   - watch
 - apiGroups:
+  - pxc.percona.com
+  resources:
+  - perconaxtradbclusterbackups
+  - perconaxtradbclusters
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - pxc.percona.com
+  resources:
+  - perconaxtradbclusterbackups/status
+  - perconaxtradbclusters/status
+  verbs:
+  - get
+- apiGroups:
   - rbac.authorization.k8s.io
   resources:
   - clusterrolebindings

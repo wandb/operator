@@ -18,10 +18,11 @@ package wandb_v2
 
 import (
 	"context"
+	"errors"
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	machErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
@@ -49,6 +50,10 @@ type WeightsAndBiasesV2Reconciler struct {
 //+kubebuilder:rbac:groups=apps.wandb.com,resources=weightsandbiases/finalizers,verbs=update
 //+kubebuilder:rbac:groups=mysql.oracle.com,resources=ndbclusters,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=mysql.oracle.com,resources=ndbclusters/status,verbs=get
+//+kubebuilder:rbac:groups=pxc.percona.com,resources=perconaxtradbclusters,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=pxc.percona.com,resources=perconaxtradbclusters/status,verbs=get
+//+kubebuilder:rbac:groups=pxc.percona.com,resources=perconaxtradbclusterbackups,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=pxc.percona.com,resources=perconaxtradbclusterbackups/status,verbs=get
 //+kubebuilder:rbac:groups="",resources=configmaps;events;persistentvolumeclaims;secrets;serviceaccounts;services,verbs=update;delete;get;list;create;patch;watch
 //+kubebuilder:rbac:groups="",resources=endpoints;ingresses;nodes;nodes/spec;nodes/stats;nodes/metrics;nodes/proxy;namespaces;namespaces/status;replicationcontrollers;replicationcontrollers/status;resourcequotas;pods;pods/log;pods/status,verbs=get;list;watch
 //+kubebuilder:rbac:groups=apps,resources=deployments;controllerrevisions;daemonsets;replicasets;statefulsets,verbs=update;delete;get;list;create;patch;watch
@@ -83,7 +88,7 @@ func (r *WeightsAndBiasesV2Reconciler) Reconcile(ctx context.Context, req ctrl.R
 
 	wandb := &apiv2.WeightsAndBiases{}
 	if err := r.Client.Get(ctx, req.NamespacedName, wandb); err != nil {
-		if errors.IsNotFound(err) {
+		if machErrors.IsNotFound(err) {
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, err
@@ -94,12 +99,43 @@ func (r *WeightsAndBiasesV2Reconciler) Reconcile(ctx context.Context, req ctrl.R
 		"Spec", wandb.Spec, "Name", wandb.Name, "UID", wandb.UID, "Generation", wandb.Generation,
 	)
 
-	ctrlState = r.handleMysql(ctx, wandb, req)
+	ctrlState = r.handleDatabase(ctx, wandb, req)
 	if ctrlState.isDone() {
 		return ctrlState.reconcileResult()
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *WeightsAndBiasesV2Reconciler) handleDatabase(
+	ctx context.Context, wandb *apiv2.WeightsAndBiases, req ctrl.Request,
+) CtrlState {
+	log := ctrllog.FromContext(ctx)
+
+	if !wandb.Spec.Database.Enabled {
+		log.Info("Database not enabled, skipping")
+		return CtrlContinue()
+	}
+
+	dbType := wandb.Spec.Database.Type
+	if dbType == "" {
+		dbType = apiv2.WBDatabaseTypeNDB
+		log.Info("Database type not specified, defaulting to NDB")
+	}
+
+	switch dbType {
+	case apiv2.WBDatabaseTypeNDB:
+		log.Info("Handling NDB MySQL database")
+		return r.handleNdkMysql(ctx, wandb, req)
+
+	case apiv2.WBDatabaseTypePercona:
+		log.Info("Handling Percona XtraDB Cluster database")
+		return r.handlePerconaMysql(ctx, wandb, req)
+
+	default:
+		log.Error(nil, "Unknown database type", "type", dbType)
+		return CtrlError(errors.New("unknown database type: " + string(dbType)))
+	}
 }
 
 // SetupWithManager sets up the controller with the Manager.
