@@ -38,13 +38,14 @@ const (
 	WBDatabaseTypePercona WBDatabaseType = "percona"
 )
 
-type WBPhaseType string
+type WBStateType string
 
 const (
-	WBPhaseReady       WBPhaseType = "Ready"
-	WBPhaseError       WBPhaseType = "Error"
-	WBPhaseReconciling WBPhaseType = "Reconciling"
-	WBPhaseDeleting    WBPhaseType = "Deleting"
+	WBStateReady          WBStateType = "Ready"
+	WBStateError          WBStateType = "Error"
+	WBStateInfraUpdate    WBStateType = "InfraUpdate"
+	WBStateDeleting       WBStateType = "Deleting"
+	WBStateDeletionPaused WBStateType = "DeletionPaused"
 )
 
 type WBInfraStatusType string
@@ -61,6 +62,8 @@ const (
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
 //+kubebuilder:resource:shortName=wandb
+//+kubebuilder:printcolumn:name="State",type=string,JSONPath=`.status.state`
+//+kubebuilder:printcolumn:name="DB State",type=string,JSONPath=`.status.databaseStatus.state`
 
 // WeightsAndBiases is the Schema for the weightsandbiases API.
 type WeightsAndBiases struct {
@@ -132,10 +135,10 @@ type WBBackupFilesystemSpec struct {
 }
 
 type WBDatabaseStatus struct {
-	Ready                bool              `json:"ready"`
-	ReconciliationStatus WBInfraStatusType `json:"reconciliationStatus,omitempty" default:"Missing"`
-	LastReconciled       metav1.Time       `json:"lastReconciled,omitempty"`
-	BackupStatus         WBBackupStatus    `json:"backupStatus,omitempty"`
+	Ready          bool           `json:"ready"`
+	State          string         `json:"state,omitempty" default:"Missing"`
+	LastReconciled metav1.Time    `json:"lastReconciled,omitempty"`
+	BackupStatus   WBBackupStatus `json:"backupStatus,omitempty"`
 }
 
 type WBBackupStatus struct {
@@ -150,7 +153,8 @@ type WBBackupStatus struct {
 
 // WeightsAndBiasesStatus defines the observed state of WeightsAndBiases.
 type WeightsAndBiasesStatus struct {
-	Phase              WBPhaseType      `json:"phase,omitempty"`
+	State              WBStateType      `json:"state,omitempty"`
+	Message            string           `json:"message,omitempty"`
 	DatabaseStatus     WBDatabaseStatus `json:"databaseStatus,omitempty"`
 	ObservedGeneration int64            `json:"observedGeneration"`
 }

@@ -13,7 +13,8 @@ settings = {
     "installKafka": False,
     "installWandb": True,
     "installMysqlOperator": False,
-    "mysqlOperatorType": "percona",  # or "mysql-operator"
+    "mysqlOperatorType": "percona",  # or "ndb"
+    "autoDeployOperator": True,
     "wandbCrName": "wandb-default-v1",
     "kafkaOperatorVersion": "0.44.0",
 }
@@ -295,6 +296,11 @@ docker_build_with_restart(IMG, '.',
                               sync('./tilt_bin/manager', '/manager'),
                           ],
                           )
+
+if not settings.get("autoDeployOperator"):
+    k8s_resource('operator-controller-manager',
+                 auto_init=False,
+                 trigger_mode=TRIGGER_MODE_MANUAL)
 
 
 # ============================================================================

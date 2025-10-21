@@ -63,7 +63,14 @@ spec:
     storage: true
     subresources:
       status: {}
-  - name: v2
+  - additionalPrinterColumns:
+    - jsonPath: .status.state
+      name: State
+      type: string
+    - jsonPath: .status.databaseStatus.state
+      name: DB State
+      type: string
+    name: v2
     schema:
       openAPIV3Schema:
         description: WeightsAndBiases is the Schema for the weightsandbiases API.
@@ -169,15 +176,17 @@ spec:
                     type: string
                   ready:
                     type: boolean
-                  reconciliationStatus:
+                  state:
                     type: string
                 required:
                 - ready
                 type: object
+              message:
+                type: string
               observedGeneration:
                 format: int64
                 type: integer
-              phase:
+              state:
                 type: string
             required:
             - observedGeneration

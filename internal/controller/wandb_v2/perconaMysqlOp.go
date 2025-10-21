@@ -18,9 +18,26 @@ import (
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
+var defaultDbRequeueSeconds = 30
+var defaultDbRequeueDuration = time.Duration(defaultDbRequeueSeconds) * time.Second
+
 type wandbPerconaMysqlWrapper struct {
 	installed bool
 	obj       *pxcv1.PerconaXtraDBCluster
+}
+
+func (w *wandbPerconaMysqlWrapper) IsReady() bool {
+	if !w.installed || w.obj == nil {
+		return false
+	}
+	return w.obj.Status.Ready == w.obj.Status.Size
+}
+
+func (w *wandbPerconaMysqlWrapper) GetStatus() string {
+	if !w.installed || w.obj == nil {
+		return "NotInstalled"
+	}
+	return string(w.obj.Status.Status)
 }
 
 type wandbPerconaMysqlDoReconcile interface {
@@ -55,7 +72,7 @@ func (r *WeightsAndBiasesV2Reconciler) handlePerconaMysql(
 		return CtrlError(err)
 	}
 
-	if reconciliation, err = computePerconaReconcileDrift(ctx, desiredPercona, actualPercona); err != nil {
+	if reconciliation, err = computePerconaReconcileDrift(ctx, wandb, desiredPercona, actualPercona); err != nil {
 		return CtrlError(err)
 	}
 
@@ -150,6 +167,26 @@ func desiredPerconaMysql(
 			TLS: &pxcv1.TLSSpec{
 				Enabled: &tlsEnabled,
 			},
+			Backup: &pxcv1.PXCScheduledBackup{
+				Image: "perconalab/percona-xtradb-cluster-operator:main-pxc8.0-backup",
+				Storages: map[string]*pxcv1.BackupStorageSpec{
+					"default-backup": &pxcv1.BackupStorageSpec{
+						Type: pxcv1.BackupStorageFilesystem,
+						Volume: &pxcv1.VolumeSpec{
+							PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
+								AccessModes: []corev1.PersistentVolumeAccessMode{
+									corev1.ReadWriteOnce,
+								},
+								Resources: corev1.VolumeResourceRequirements{
+									Requests: corev1.ResourceList{
+										corev1.ResourceStorage: resource.MustParse("7Gi"),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
 			HAProxy: &pxcv1.HAProxySpec{
 				PodSpec: pxcv1.PodSpec{
 					Enabled: false,
@@ -167,18 +204,28 @@ func desiredPerconaMysql(
 }
 
 func computePerconaReconcileDrift(
-	ctx context.Context, desiredPercona, actualPercona wandbPerconaMysqlWrapper,
+	ctx context.Context, wandb *apiv2.WeightsAndBiases, desiredPercona, actualPercona wandbPerconaMysqlWrapper,
 ) (
 	wandbPerconaMysqlDoReconcile, error,
 ) {
 	if !desiredPercona.installed && actualPercona.installed {
 		return &wandbPerconaMysqlDelete{
 			actual: actualPercona,
+			wandb:  wandb,
 		}, nil
 	}
 	if desiredPercona.installed && !actualPercona.installed {
 		return &wandbPerconaMysqlCreate{
 			desired: desiredPercona,
+			wandb:   wandb,
+		}, nil
+	}
+	if actualPercona.GetStatus() != wandb.Status.DatabaseStatus.State ||
+		actualPercona.IsReady() != wandb.Status.DatabaseStatus.Ready {
+		return &wandbPerconaMysqlStausUpdate{
+			wandb:  wandb,
+			status: actualPercona.GetStatus(),
+			ready:  actualPercona.IsReady(),
 		}, nil
 	}
 	return nil, nil
@@ -186,28 +233,61 @@ func computePerconaReconcileDrift(
 
 type wandbPerconaMysqlCreate struct {
 	desired wandbPerconaMysqlWrapper
+	wandb   *apiv2.WeightsAndBiases
 }
 
 func (c *wandbPerconaMysqlCreate) Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) CtrlState {
+	var err error
 	log := ctrl.LoggerFrom(ctx)
 	log.Info("Installing Percona XtraDB Cluster")
-	if err := r.Create(ctx, c.desired.obj); err != nil {
+	if err = r.Create(ctx, c.desired.obj); err != nil {
 		return CtrlError(err)
 	}
-	return CtrlContinue()
+	wandb := c.wandb
+	wandb.Status.State = apiv2.WBStateInfraUpdate
+	wandb.Status.Message = "Creating Database"
+	if err = r.Status().Update(ctx, wandb); err != nil {
+		return CtrlError(err)
+	}
+	return CtrlDone(ctrl.Result{RequeueAfter: defaultDbRequeueDuration})
 }
 
 type wandbPerconaMysqlDelete struct {
 	actual wandbPerconaMysqlWrapper
+	wandb  *apiv2.WeightsAndBiases
 }
 
 func (d *wandbPerconaMysqlDelete) Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) CtrlState {
+	var err error
 	log := ctrl.LoggerFrom(ctx)
 	log.Info("Uninstalling Percona XtraDB Cluster")
-	if err := r.Delete(ctx, d.actual.obj); err != nil {
+	if err = r.Delete(ctx, d.actual.obj); err != nil {
 		return CtrlError(err)
 	}
-	return CtrlContinue()
+	wandb := d.wandb
+	wandb.Status.State = apiv2.WBStateInfraUpdate
+	wandb.Status.Message = "Deleting Database"
+	if err = r.Status().Update(ctx, wandb); err != nil {
+		return CtrlError(err)
+	}
+	return CtrlDone(ctrl.Result{RequeueAfter: defaultDbRequeueDuration})
+}
+
+type wandbPerconaMysqlStausUpdate struct {
+	wandb  *apiv2.WeightsAndBiases
+	status string
+	ready  bool
+}
+
+func (s *wandbPerconaMysqlStausUpdate) Execute(
+	ctx context.Context, r *WeightsAndBiasesV2Reconciler,
+) CtrlState {
+	s.wandb.Status.DatabaseStatus.State = s.status
+	s.wandb.Status.DatabaseStatus.Ready = s.ready
+	if err := r.Status().Update(ctx, s.wandb); err != nil {
+		return CtrlError(err)
+	}
+	return CtrlDone(ctrl.Result{RequeueAfter: defaultDbRequeueDuration})
 }
 
 func (w *wandbPerconaMysqlWrapper) maybeHandleDeletion(
@@ -215,8 +295,30 @@ func (w *wandbPerconaMysqlWrapper) maybeHandleDeletion(
 ) CtrlState {
 	log := ctrllog.FromContext(ctx)
 
+	requeueSeconds := wandb.Status.DatabaseStatus.BackupStatus.RequeueAfter
+	if requeueSeconds == 0 {
+		requeueSeconds = 30
+	}
+	requeueDuration := time.Duration(requeueSeconds) * time.Second
+
+	var deletionPaused = wandb.Status.State == apiv2.WBStateDeletionPaused
+	var backupEnabled = wandb.Spec.Database.Backup.Enabled
 	var flaggedForDeletion = !wandb.ObjectMeta.DeletionTimestamp.IsZero()
 	var hasDbFinalizer = ctrlqueue.ContainsString(wandb.GetFinalizers(), dbFinalizer)
+
+	if flaggedForDeletion && !backupEnabled {
+		log.Info("During deletion, database backup is disabled. Proceeding with deletion...")
+		controllerutil.RemoveFinalizer(wandb, dbFinalizer)
+		if err := reconciler.Client.Update(ctx, wandb); err != nil {
+			return CtrlError(err)
+		}
+		return CtrlDone(ctrl.Result{RequeueAfter: defaultDbRequeueDuration})
+	}
+
+	if deletionPaused && backupEnabled {
+		log.Info("Deletion paused for Percona XtraDB Cluster Backup; disable backups to continue with deletion")
+		return CtrlDone(ctrl.Result{RequeueAfter: requeueDuration})
+	}
 
 	if !hasDbFinalizer && !flaggedForDeletion {
 		wandb.ObjectMeta.Finalizers = append(wandb.ObjectMeta.Finalizers, dbFinalizer)
@@ -228,24 +330,29 @@ func (w *wandbPerconaMysqlWrapper) maybeHandleDeletion(
 
 	if flaggedForDeletion {
 		if err := w.handleDatabaseBackup(ctx, wandb, reconciler); err != nil {
-			log.Error(err, "Failed to backup database before deletion")
-			return CtrlError(err)
+			log.Info("Failed to backup database, pausing deletion")
+			wandb.ObjectMeta.DeletionTimestamp = nil
+			if err = reconciler.Update(ctx, wandb); err != nil {
+				return CtrlError(err)
+			}
+			wandb.Status.State = apiv2.WBStateDeletionPaused
+			wandb.Status.Message = "Database backup before deletion failed, deletion paused. Disable backups to continue with deletion."
+			if err = reconciler.Status().Update(ctx, wandb); err != nil {
+				return CtrlError(err)
+			}
+			return CtrlDone(ctrl.Result{RequeueAfter: requeueDuration})
 		}
 
 		if wandb.Status.DatabaseStatus.BackupStatus.State == "InProgress" {
 			log.Info("Backup in progress, requeuing", "backup", wandb.Status.DatabaseStatus.BackupStatus.BackupName)
-			requeueSeconds := wandb.Status.DatabaseStatus.BackupStatus.RequeueAfter
-			if requeueSeconds == 0 {
-				requeueSeconds = 30
-			}
-			return CtrlDone(ctrl.Result{RequeueAfter: time.Duration(requeueSeconds) * time.Second})
+			return CtrlDone(ctrl.Result{RequeueAfter: requeueDuration})
 		}
 
 		controllerutil.RemoveFinalizer(wandb, dbFinalizer)
 		if err := reconciler.Client.Update(ctx, wandb); err != nil {
 			return CtrlError(err)
 		}
-		return CtrlDone(ctrl.Result{})
+		return CtrlDone(ctrl.Result{RequeueAfter: defaultDbRequeueDuration})
 	}
 	return CtrlContinue()
 }
@@ -254,6 +361,11 @@ func (w *wandbPerconaMysqlWrapper) handleDatabaseBackup(
 	ctx context.Context, wandb *apiv2.WeightsAndBiases, reconciler *WeightsAndBiasesV2Reconciler,
 ) error {
 	log := ctrl.LoggerFrom(ctx)
+
+	if w.obj == nil {
+		log.Info("Percona XtraDB Cluster object is nil, skipping backup")
+		return nil
+	}
 
 	if !wandb.Spec.Database.Enabled {
 		log.Info("Database not enabled, skipping backup")

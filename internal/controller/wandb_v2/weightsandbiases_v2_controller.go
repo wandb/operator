@@ -19,6 +19,7 @@ package wandb_v2
 import (
 	"context"
 	"errors"
+	"time"
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	corev1 "k8s.io/api/core/v1"
@@ -70,6 +71,9 @@ type WeightsAndBiasesV2Reconciler struct {
 // Deprecated/Erroneously required RBAC rules
 //+kubebuilder:rbac:groups=extensions,resources=daemonsets;deployments;replicasets;ingresses;ingresses/status,verbs=get;list;watch
 
+var defaultRequeueMinutes = 2
+var defaultRequeueDuration = time.Duration(defaultRequeueMinutes) * time.Minute
+
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 //
@@ -104,6 +108,12 @@ func (r *WeightsAndBiasesV2Reconciler) Reconcile(ctx context.Context, req ctrl.R
 		return ctrlState.reconcileResult()
 	}
 
+	wandb.Status.State = apiv2.WBStateReady
+	wandb.Status.Message = ""
+	if err := r.Status().Update(ctx, wandb); err != nil {
+		log.Error(err, "Failed to update status")
+		return ctrl.Result{}, err
+	}
 	return ctrl.Result{}, nil
 }
 
