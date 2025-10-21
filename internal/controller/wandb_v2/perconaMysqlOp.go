@@ -117,6 +117,7 @@ func desiredPerconaMysql(
 	if err != nil {
 		return result, errors.New("invalid storage size: " + storageSize)
 	}
+	tlsEnabled := false
 
 	pxc := &pxcv1.PerconaXtraDBCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -127,7 +128,9 @@ func desiredPerconaMysql(
 			CRVersion:   "1.18.0",
 			SecretsName: "wandb-percona-mysql-secrets",
 			Unsafe: pxcv1.UnsafeFlags{
-				PXCSize: true,
+				PXCSize:   true,
+				TLS:       true,
+				ProxySize: true,
 			},
 			PXC: &pxcv1.PXCSpec{
 				PodSpec: &pxcv1.PodSpec{
@@ -144,6 +147,9 @@ func desiredPerconaMysql(
 					},
 				},
 			},
+			TLS: &pxcv1.TLSSpec{
+				Enabled: &tlsEnabled,
+			},
 			HAProxy: &pxcv1.HAProxySpec{
 				PodSpec: pxcv1.PodSpec{
 					Enabled: false,
@@ -151,7 +157,7 @@ func desiredPerconaMysql(
 			},
 			LogCollector: &pxcv1.LogCollectorSpec{
 				Enabled: true,
-				Image:   "percona/percona-xtradb-cluster-operator:main-log-collector",
+				Image:   "perconalab/percona-xtradb-cluster-operator:main-logcollector",
 			},
 		},
 	}
