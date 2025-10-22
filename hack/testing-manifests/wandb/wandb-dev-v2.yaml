@@ -10,12 +10,4 @@ spec:
     type: percona
     storageSize: 5Gi
     backup:
-      enabled: true
-      storageName: default-backup
-      storageType: filesystem
-      filesystem:
-        storageSize: 6Gi
-        storageClassName: standard
-        accessModes:
-          - ReadWriteOnce
-      timeoutSeconds: 600
+      enabled: false
