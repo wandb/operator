@@ -64,7 +64,7 @@ func (r *WeightsAndBiasesV2Reconciler) handlePerconaMysql(
 		return CtrlError(err)
 	}
 
-	if ctrlState := actualPercona.maybeHandleDeletion(ctx, wandb, r); ctrlState.isDone() {
+	if ctrlState := actualPercona.maybeHandleDeletion(ctx, wandb, actualPercona, r); ctrlState.isDone() {
 		return ctrlState
 	}
 
@@ -135,6 +135,7 @@ func desiredPerconaMysql(
 		return result, errors.New("invalid storage size: " + storageSize)
 	}
 	tlsEnabled := false
+	wandbBackupSpec := wandb.Spec.Database.Backup
 
 	pxc := &pxcv1.PerconaXtraDBCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -167,26 +168,6 @@ func desiredPerconaMysql(
 			TLS: &pxcv1.TLSSpec{
 				Enabled: &tlsEnabled,
 			},
-			Backup: &pxcv1.PXCScheduledBackup{
-				Image: "perconalab/percona-xtradb-cluster-operator:main-pxc8.0-backup",
-				Storages: map[string]*pxcv1.BackupStorageSpec{
-					"default-backup": &pxcv1.BackupStorageSpec{
-						Type: pxcv1.BackupStorageFilesystem,
-						Volume: &pxcv1.VolumeSpec{
-							PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{
-									corev1.ReadWriteOnce,
-								},
-								Resources: corev1.VolumeResourceRequirements{
-									Requests: corev1.ResourceList{
-										corev1.ResourceStorage: resource.MustParse("7Gi"),
-									},
-								},
-							},
-						},
-					},
-				},
-			},
 			HAProxy: &pxcv1.HAProxySpec{
 				PodSpec: pxcv1.PodSpec{
 					Enabled: false,
@@ -197,6 +178,34 @@ func desiredPerconaMysql(
 				Image:   "perconalab/percona-xtradb-cluster-operator:main-logcollector",
 			},
 		},
+	}
+
+	if wandbBackupSpec.Enabled {
+		storageName := "default-backup"
+		if wandbBackupSpec.StorageName != "" {
+			storageName = wandbBackupSpec.StorageName
+		}
+		if wandbBackupSpec.StorageType != apiv2.WBBackupStorageTypeFilesystem {
+			return result, errors.New("only filesystem backup storage type is supported for now for Percona XtraDB Cluster")
+		}
+		pxc.Spec.Backup = &pxcv1.PXCScheduledBackup{
+			Image: "perconalab/percona-xtradb-cluster-operator:main-pxc8.0-backup",
+			Storages: map[string]*pxcv1.BackupStorageSpec{
+				storageName: {
+					Type: pxcv1.BackupStorageFilesystem,
+					Volume: &pxcv1.VolumeSpec{
+						PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
+							AccessModes: wandbBackupSpec.Filesystem.AccessModes,
+							Resources: corev1.VolumeResourceRequirements{
+								Requests: corev1.ResourceList{
+									corev1.ResourceStorage: wandbBackupSpec.Filesystem.StorageSize,
+								},
+							},
+						},
+					},
+				},
+			},
+		}
 	}
 
 	result.obj = pxc
@@ -246,6 +255,7 @@ func (c *wandbPerconaMysqlCreate) Execute(ctx context.Context, r *WeightsAndBias
 	wandb := c.wandb
 	wandb.Status.State = apiv2.WBStateInfraUpdate
 	wandb.Status.Message = "Creating Database"
+	wandb.Status.DatabaseStatus.State = string(pxcv1.AppStateInit)
 	if err = r.Status().Update(ctx, wandb); err != nil {
 		return CtrlError(err)
 	}
@@ -291,7 +301,7 @@ func (s *wandbPerconaMysqlStausUpdate) Execute(
 }
 
 func (w *wandbPerconaMysqlWrapper) maybeHandleDeletion(
-	ctx context.Context, wandb *apiv2.WeightsAndBiases, reconciler *WeightsAndBiasesV2Reconciler,
+	ctx context.Context, wandb *apiv2.WeightsAndBiases, actualPercona wandbPerconaMysqlWrapper, reconciler *WeightsAndBiasesV2Reconciler,
 ) CtrlState {
 	log := ctrllog.FromContext(ctx)
 
@@ -345,6 +355,14 @@ func (w *wandbPerconaMysqlWrapper) maybeHandleDeletion(
 
 		if wandb.Status.DatabaseStatus.BackupStatus.State == "InProgress" {
 			log.Info("Backup in progress, requeuing", "backup", wandb.Status.DatabaseStatus.BackupStatus.BackupName)
+			if wandb.Status.State != apiv2.WBStateDeleting {
+				wandb.Status.State = apiv2.WBStateDeleting
+				wandb.Status.DatabaseStatus.State = string(pxcv1.AppStateStopping)
+				wandb.Status.Message = "Waiting for database backup to complete before deletion"
+				if err := reconciler.Status().Update(ctx, wandb); err != nil {
+					return CtrlError(err)
+				}
+			}
 			return CtrlDone(ctrl.Result{RequeueAfter: requeueDuration})
 		}
 
@@ -352,6 +370,12 @@ func (w *wandbPerconaMysqlWrapper) maybeHandleDeletion(
 		if err := reconciler.Client.Update(ctx, wandb); err != nil {
 			return CtrlError(err)
 		}
+		if actualPercona.obj != nil {
+			if err := reconciler.Client.Delete(ctx, actualPercona.obj); err != nil {
+				return CtrlError(err)
+			}
+		}
+
 		return CtrlDone(ctrl.Result{RequeueAfter: defaultDbRequeueDuration})
 	}
 	return CtrlContinue()

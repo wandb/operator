@@ -108,12 +108,11 @@ func (r *WeightsAndBiasesV2Reconciler) Reconcile(ctx context.Context, req ctrl.R
 		return ctrlState.reconcileResult()
 	}
 
-	wandb.Status.State = apiv2.WBStateReady
-	wandb.Status.Message = ""
-	if err := r.Status().Update(ctx, wandb); err != nil {
-		log.Error(err, "Failed to update status")
-		return ctrl.Result{}, err
+	ctrlState = r.inferState(ctx, wandb)
+	if ctrlState.isDone() {
+		return ctrlState.reconcileResult()
 	}
+
 	return ctrl.Result{}, nil
 }
 
@@ -146,6 +145,29 @@ func (r *WeightsAndBiasesV2Reconciler) handleDatabase(
 		log.Error(nil, "Unknown database type", "type", dbType)
 		return CtrlError(errors.New("unknown database type: " + string(dbType)))
 	}
+}
+
+func (r *WeightsAndBiasesV2Reconciler) inferState(
+	ctx context.Context, wandb *apiv2.WeightsAndBiases,
+) CtrlState {
+	newState := wandb.Status.State
+	curState := wandb.Status.State
+	log := ctrl.LoggerFrom(ctx)
+	databaseStatus := wandb.Status.DatabaseStatus
+
+	if databaseStatus.State == "ready" {
+		newState = apiv2.WBStateReady
+	}
+
+	if curState != newState {
+		wandb.Status.State = newState
+		if err := r.Status().Update(ctx, wandb); err != nil {
+			log.Error(err, "Failed to update Weights & Biases state", "from", curState, "to", newState)
+			return CtrlError(err)
+		}
+		return CtrlDone(ctrl.Result{RequeueAfter: defaultRequeueDuration})
+	}
+	return CtrlContinue()
 }
 
 // SetupWithManager sets up the controller with the Manager.

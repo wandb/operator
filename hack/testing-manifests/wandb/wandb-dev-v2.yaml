@@ -14,7 +14,7 @@ spec:
       storageName: default-backup
       storageType: filesystem
       filesystem:
-        storageSize: 5Gi
+        storageSize: 6Gi
         storageClassName: standard
         accessModes:
           - ReadWriteOnce

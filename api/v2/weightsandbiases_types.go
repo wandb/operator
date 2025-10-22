@@ -17,6 +17,8 @@ limitations under the License.
 package v2
 
 import (
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -129,9 +131,9 @@ type WBBackupS3Spec struct {
 }
 
 type WBBackupFilesystemSpec struct {
-	StorageSize      string   `json:"storageSize,omitempty"`
-	StorageClassName string   `json:"storageClassName,omitempty"`
-	AccessModes      []string `json:"accessModes,omitempty"`
+	StorageSize      resource.Quantity                   `json:"storageSize,omitempty"`
+	StorageClassName string                              `json:"storageClassName,omitempty"`
+	AccessModes      []corev1.PersistentVolumeAccessMode `json:"accessModes,omitempty"`
 }
 
 type WBDatabaseStatus struct {
