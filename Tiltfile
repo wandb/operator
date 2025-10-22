@@ -14,6 +14,7 @@ settings = {
     "installWandb": True,
     "installMysqlOperator": False,
     "mysqlOperatorType": "percona",  # or "ndb"
+    "installRedisOperator": False,
     "autoDeployOperator": True,
     "wandbCrName": "wandb-default-v1",
     "kafkaOperatorVersion": "0.44.0",
@@ -177,7 +178,27 @@ if settings.get("installMysqlOperator"):
     else:
         fail("Unknown mysqlOperatorType: " + settings.get("mysqlOperatorType"))
 
+if settings.get("installRedisOperator"):
+    print("==> Installing Redis Operator...")
+    local_resource(
+        'redis-op-helm-install',
+        cmd='if ! helm repo list | grep -q \"^ot-helm\"; then ' +
+            'helm repo add ot-helm https://ot-container-kit.github.io/helm-charts/ && ' +
+            'helm repo update; ' +
+            'fi && ' +
+            'helm install redis-operator ot-helm/redis-operator --namespace=ot-operators --create-namespace',
+        labels=['infra'],
+        auto_init=False,
+        trigger_mode=TRIGGER_MODE_MANUAL,
+    )
 
+    local_resource(
+        'redis-op-helm-uninstall',
+        cmd='helm uninstall redis-operator --namespace ot-operators',
+        labels=['infra'],
+        auto_init=False,
+        trigger_mode=TRIGGER_MODE_MANUAL,
+    )
 
 ################################################################################
 # STEP 3: DEPLOY CONTROLLER AND RBAC
@@ -251,6 +272,7 @@ local_resource('Watch&Rebuild', rebuild() + "; " + binary(),
 local_resource('Regenerate-CRDs',
                'echo "==> Regenerating CRDs from api/ types..." && ' +
                manifests() +
+               generate() +
                'echo "==> Generated CRDs written to config/crd/bases/:" && ' +
                'ls -1 config/crd/bases/ && ' +
                'echo "==> Copying CRD bases to dist/crd-bases/..." && ' +
@@ -277,7 +299,6 @@ if settings.get("installWandb"):
         'Install dev CR',
         cmd='cp ./hack/testing-manifests/wandb/' + settings.get('wandbCrName') + '.yaml ' + DIST_DIR + '/test-wandb-cr.yaml && ' +
             'kubectl apply -f ' + DIST_DIR + '/test-wandb-cr.yaml',
-        resource_deps=["operator-controller-manager"],
         labels="wandb",
         auto_init=False,
         trigger_mode=TRIGGER_MODE_MANUAL

@@ -5,6 +5,7 @@
   "installWandb": true,
   "installKafka": false,
   "installMysqlOperator": true,
+  "installRedisOperator": true,
   "autoDeployOperator": true,
   "wandbCrName": "wandb-dev-v2"
 }

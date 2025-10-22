@@ -19,3 +19,6 @@ spec:
         accessModes:
           - ReadWriteOnce
       timeoutSeconds: 600
+  redis:
+    enabled: true
+    storageSize: 1Gi

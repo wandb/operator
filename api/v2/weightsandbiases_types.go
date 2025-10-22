@@ -65,7 +65,8 @@ const (
 //+kubebuilder:subresource:status
 //+kubebuilder:resource:shortName=wandb
 //+kubebuilder:printcolumn:name="State",type=string,JSONPath=`.status.state`
-//+kubebuilder:printcolumn:name="DB State",type=string,JSONPath=`.status.databaseStatus.state`
+//+kubebuilder:printcolumn:name="Database",type=string,JSONPath=`.status.databaseStatus.state`
+//+kubebuilder:printcolumn:name="Redis",type=string,JSONPath=`.status.redisStatus.state`
 
 // WeightsAndBiases is the Schema for the weightsandbiases API.
 type WeightsAndBiases struct {
@@ -98,6 +99,7 @@ type WeightsAndBiasesSpec struct {
 	Profile string `json:"profile,omitempty"`
 
 	Database WBDatabaseSpec `json:"database,omitempty"`
+	Redis    WBRedisSpec    `json:"redis,omitempty"`
 }
 
 type WBDatabaseSpec struct {
@@ -105,6 +107,11 @@ type WBDatabaseSpec struct {
 	Type        WBDatabaseType `json:"type,omitempty"`
 	StorageSize string         `json:"storageSize,omitempty"`
 	Backup      WBBackupSpec   `json:"backup,omitempty"`
+}
+
+type WBRedisSpec struct {
+	Enabled     bool   `json:"enabled"`
+	StorageSize string `json:"storageSize,omitempty"`
 }
 
 type WBBackupSpec struct {
@@ -158,5 +165,12 @@ type WeightsAndBiasesStatus struct {
 	State              WBStateType      `json:"state,omitempty"`
 	Message            string           `json:"message,omitempty"`
 	DatabaseStatus     WBDatabaseStatus `json:"databaseStatus,omitempty"`
+	RedisStatus        WBRedisStatus    `json:"redisStatus,omitempty"`
 	ObservedGeneration int64            `json:"observedGeneration"`
+}
+
+type WBRedisStatus struct {
+	Ready          bool        `json:"ready"`
+	State          string      `json:"state,omitempty" default:"Missing"`
+	LastReconciled metav1.Time `json:"lastReconciled,omitempty"`
 }

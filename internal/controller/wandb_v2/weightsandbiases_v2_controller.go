@@ -55,6 +55,8 @@ type WeightsAndBiasesV2Reconciler struct {
 //+kubebuilder:rbac:groups=pxc.percona.com,resources=perconaxtradbclusters/status,verbs=get
 //+kubebuilder:rbac:groups=pxc.percona.com,resources=perconaxtradbclusterbackups,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=pxc.percona.com,resources=perconaxtradbclusterbackups/status,verbs=get
+//+kubebuilder:rbac:groups=redis.redis.opstreelabs.in,resources=redis,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=redis.redis.opstreelabs.in,resources=redis/status,verbs=get
 //+kubebuilder:rbac:groups="",resources=configmaps;events;persistentvolumeclaims;secrets;serviceaccounts;services,verbs=update;delete;get;list;create;patch;watch
 //+kubebuilder:rbac:groups="",resources=endpoints;ingresses;nodes;nodes/spec;nodes/stats;nodes/metrics;nodes/proxy;namespaces;namespaces/status;replicationcontrollers;replicationcontrollers/status;resourcequotas;pods;pods/log;pods/status,verbs=get;list;watch
 //+kubebuilder:rbac:groups=apps,resources=deployments;controllerrevisions;daemonsets;replicasets;statefulsets,verbs=update;delete;get;list;create;patch;watch
@@ -108,6 +110,11 @@ func (r *WeightsAndBiasesV2Reconciler) Reconcile(ctx context.Context, req ctrl.R
 		return ctrlState.reconcileResult()
 	}
 
+	ctrlState = r.handleRedis(ctx, wandb, req)
+	if ctrlState.isDone() {
+		return ctrlState.reconcileResult()
+	}
+
 	ctrlState = r.inferState(ctx, wandb)
 	if ctrlState.isDone() {
 		return ctrlState.reconcileResult()
@@ -154,8 +161,12 @@ func (r *WeightsAndBiasesV2Reconciler) inferState(
 	curState := wandb.Status.State
 	log := ctrl.LoggerFrom(ctx)
 	databaseStatus := wandb.Status.DatabaseStatus
+	redisStatus := wandb.Status.RedisStatus
 
-	if databaseStatus.State == "ready" {
+	databaseReady := !wandb.Spec.Database.Enabled || databaseStatus.State == "ready"
+	redisReady := !wandb.Spec.Redis.Enabled || redisStatus.State == "ready"
+
+	if databaseReady && redisReady {
 		newState = apiv2.WBStateReady
 	}
 

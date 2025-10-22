@@ -120,10 +120,6 @@ func desiredPerconaMysql(
 	}
 
 	result.installed = true
-	gvk := wandb.GroupVersionKind()
-	if gvk.GroupVersion().Group == "" || gvk.GroupVersion().Version == "" || gvk.Kind == "" {
-		return result, errors.New("no GroupKindVersion for WeightsAndBiases CR")
-	}
 
 	storageSize := wandb.Spec.Database.StorageSize
 	if storageSize == "" {
@@ -249,10 +245,13 @@ func (c *wandbPerconaMysqlCreate) Execute(ctx context.Context, r *WeightsAndBias
 	var err error
 	log := ctrl.LoggerFrom(ctx)
 	log.Info("Installing Percona XtraDB Cluster")
+	wandb := c.wandb
+	if err = controllerutil.SetOwnerReference(wandb, c.desired.obj, r.Scheme); err != nil {
+		return CtrlError(err)
+	}
 	if err = r.Create(ctx, c.desired.obj); err != nil {
 		return CtrlError(err)
 	}
-	wandb := c.wandb
 	wandb.Status.State = apiv2.WBStateInfraUpdate
 	wandb.Status.Message = "Creating Database"
 	wandb.Status.DatabaseStatus.State = string(pxcv1.AppStateInit)

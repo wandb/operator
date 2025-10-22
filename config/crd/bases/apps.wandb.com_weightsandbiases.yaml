@@ -68,7 +68,10 @@ spec:
       name: State
       type: string
     - jsonPath: .status.databaseStatus.state
-      name: DB State
+      name: Database
+      type: string
+    - jsonPath: .status.redisStatus.state
+      name: Redis
       type: string
     name: v2
     schema:
@@ -148,6 +151,15 @@ spec:
               profile:
                 description: Profile is akin to high-level environment info
                 type: string
+              redis:
+                properties:
+                  enabled:
+                    type: boolean
+                  storageSize:
+                    type: string
+                required:
+                - enabled
+                type: object
             type: object
           status:
             description: WeightsAndBiasesStatus defines the observed state of WeightsAndBiases.
@@ -190,6 +202,18 @@ spec:
               observedGeneration:
                 format: int64
                 type: integer
+              redisStatus:
+                properties:
+                  lastReconciled:
+                    format: date-time
+                    type: string
+                  ready:
+                    type: boolean
+                  state:
+                    type: string
+                required:
+                - ready
+                type: object
               state:
                 type: string
             required:

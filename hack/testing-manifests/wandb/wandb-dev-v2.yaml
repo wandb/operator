@@ -11,3 +11,6 @@ spec:
     storageSize: 5Gi
     backup:
       enabled: false
+  redis:
+    enabled: true
+    storageSize: 1Gi
