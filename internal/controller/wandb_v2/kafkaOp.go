@@ -61,8 +61,7 @@ func (w *wandbKafkaWrapper) GetStatus() string {
 	}
 
 	kafkaReady := false
-	nodePoolReady := false
-	var kafkaReason, nodePoolReason string
+	var kafkaReason string
 
 	for _, condition := range w.kafkaObj.Status.Conditions {
 		if condition.Type == "Ready" {
@@ -75,27 +74,12 @@ func (w *wandbKafkaWrapper) GetStatus() string {
 		}
 	}
 
-	for _, condition := range w.nodePoolObj.Status.Conditions {
-		if condition.Type == "Ready" {
-			if condition.Status == metav1.ConditionTrue {
-				nodePoolReady = true
-			} else {
-				nodePoolReason = condition.Reason
-			}
-			break
-		}
-	}
-
-	if kafkaReady && nodePoolReady {
+	if kafkaReady {
 		return "ready"
 	}
 
 	if !kafkaReady && kafkaReason != "" {
 		return "Kafka:" + kafkaReason
-	}
-
-	if !nodePoolReady && nodePoolReason != "" {
-		return "NodePool:" + nodePoolReason
 	}
 
 	return "pending"
@@ -134,7 +118,7 @@ func (r *WeightsAndBiasesV2Reconciler) handleKafka(
 		return CtrlError(err)
 	}
 
-	if ctrlState := actualKafka.maybeHandleDeletion(ctx, wandb, actualKafka, r); ctrlState.isDone() {
+	if ctrlState := actualKafka.maybeHandleDeletion(ctx, wandb, actualKafka, r); ctrlState.shouldExit(HandlerScope) {
 		return ctrlState
 	}
 
@@ -232,11 +216,15 @@ func getDesiredKafka(
 			Labels: map[string]string{
 				"app": "wandb-kafka",
 			},
+			Annotations: map[string]string{
+				"strimzi.io/node-pools": "enabled",
+			},
 		},
 		Spec: strimziv1beta2.KafkaSpec{
 			Kafka: strimziv1beta2.KafkaClusterSpec{
 				Version:         "4.1.0",
 				MetadataVersion: "4.1-IV0",
+				Replicas:        0, // critical when in KRaft mode
 				Listeners: []strimziv1beta2.GenericKafkaListener{
 					{
 						Name: "plain",
@@ -274,9 +262,15 @@ func getDesiredKafka(
 			Replicas: replicas,
 			Roles:    []string{"broker", "controller"},
 			Storage: strimziv1beta2.KafkaStorage{
-				Type:        "jbod",
-				Size:        storageSize,
-				DeleteClaim: false,
+				Type: "jbod",
+				Volumes: []strimziv1beta2.StorageVolume{
+					{
+						ID:          0,
+						Type:        "persistent-claim",
+						Size:        storageSize,
+						DeleteClaim: true,
+					},
+				},
 			},
 		},
 	}
@@ -372,7 +366,7 @@ func (c *wandbNodePoolCreate) Execute(ctx context.Context, r *WeightsAndBiasesV2
 		log.Error(err, "Failed to update status after creating Kafka NodePool")
 		return CtrlError(err)
 	}
-	return CtrlDone(ctrl.Result{RequeueAfter: defaultKafkaRequeueDuration})
+	return CtrlDone(HandlerScope)
 }
 
 type wandbNodePoolDelete struct {
@@ -397,7 +391,7 @@ func (d *wandbNodePoolDelete) Execute(ctx context.Context, r *WeightsAndBiasesV2
 		log.Error(err, "Failed to update status after deleting Kafka NodePool")
 		return CtrlError(err)
 	}
-	return CtrlDone(ctrl.Result{RequeueAfter: defaultKafkaRequeueDuration})
+	return CtrlDone(HandlerScope)
 }
 
 type wandbKafkaCreate struct {
@@ -428,7 +422,7 @@ func (c *wandbKafkaCreate) Execute(ctx context.Context, r *WeightsAndBiasesV2Rec
 		log.Error(err, "Failed to update status after creating Kafka")
 		return CtrlError(err)
 	}
-	return CtrlDone(ctrl.Result{RequeueAfter: defaultKafkaRequeueDuration})
+	return CtrlDone(HandlerScope)
 }
 
 type wandbKafkaDelete struct {
@@ -453,7 +447,7 @@ func (d *wandbKafkaDelete) Execute(ctx context.Context, r *WeightsAndBiasesV2Rec
 		log.Error(err, "Failed to update status after deleting Kafka")
 		return CtrlError(err)
 	}
-	return CtrlDone(ctrl.Result{RequeueAfter: defaultKafkaRequeueDuration})
+	return CtrlDone(HandlerScope)
 }
 
 type wandbKafkaStatusUpdate struct {
@@ -473,7 +467,7 @@ func (s *wandbKafkaStatusUpdate) Execute(
 		log.Error(err, "Failed to update Kafka status")
 		return CtrlError(err)
 	}
-	return CtrlDone(ctrl.Result{RequeueAfter: defaultKafkaRequeueDuration})
+	return CtrlDone(HandlerScope)
 }
 
 func (w *wandbKafkaWrapper) maybeHandleDeletion(
@@ -481,11 +475,11 @@ func (w *wandbKafkaWrapper) maybeHandleDeletion(
 ) CtrlState {
 	log := ctrllog.FromContext(ctx)
 
-	requeueSeconds := wandb.Status.KafkaStatus.BackupStatus.RequeueAfter
-	if requeueSeconds == 0 {
-		requeueSeconds = 30
-	}
-	requeueDuration := time.Duration(requeueSeconds) * time.Second
+	//requeueSeconds := wandb.Status.KafkaStatus.BackupStatus.RequeueAfter
+	//if requeueSeconds == 0 {
+	//	requeueSeconds = 30
+	//}
+	//requeueDuration := time.Duration(requeueSeconds) * time.Second
 
 	var deletionPaused = wandb.Status.State == apiv2.WBStateDeletionPaused
 	var backupEnabled = wandb.Spec.Kafka.Backup.Enabled
@@ -493,18 +487,18 @@ func (w *wandbKafkaWrapper) maybeHandleDeletion(
 	var hasKafkaFinalizer = ctrlqueue.ContainsString(wandb.GetFinalizers(), kafkaFinalizer)
 
 	if flaggedForDeletion && !backupEnabled {
-		log.Info("During deletion, Kafka backup is disabled. Proceeding with deletion...")
+		log.Info("Kafka backup is disabled.")
 		controllerutil.RemoveFinalizer(wandb, kafkaFinalizer)
 		if err := reconciler.Client.Update(ctx, wandb); err != nil {
 			log.Error(err, "Failed to remove Kafka finalizer")
 			return CtrlError(err)
 		}
-		return CtrlDone(ctrl.Result{RequeueAfter: defaultKafkaRequeueDuration})
+		return CtrlContinue()
 	}
 
 	if deletionPaused && backupEnabled {
 		log.Info("Deletion paused for Kafka Backup; disable backups to continue with deletion")
-		return CtrlDone(ctrl.Result{RequeueAfter: requeueDuration})
+		return CtrlContinue()
 	}
 
 	if !hasKafkaFinalizer && !flaggedForDeletion {
@@ -530,7 +524,7 @@ func (w *wandbKafkaWrapper) maybeHandleDeletion(
 				log.Error(err, "Failed to update status to deletion paused")
 				return CtrlError(err)
 			}
-			return CtrlDone(ctrl.Result{RequeueAfter: requeueDuration})
+			return CtrlDone(HandlerScope)
 		}
 
 		if wandb.Status.KafkaStatus.BackupStatus.State == "InProgress" {
@@ -544,7 +538,7 @@ func (w *wandbKafkaWrapper) maybeHandleDeletion(
 					return CtrlError(err)
 				}
 			}
-			return CtrlDone(ctrl.Result{RequeueAfter: requeueDuration})
+			return CtrlDone(HandlerScope)
 		}
 
 		controllerutil.RemoveFinalizer(wandb, kafkaFinalizer)
@@ -567,7 +561,7 @@ func (w *wandbKafkaWrapper) maybeHandleDeletion(
 			}
 		}
 
-		return CtrlDone(ctrl.Result{RequeueAfter: defaultKafkaRequeueDuration})
+		return CtrlDone(HandlerScope)
 	}
 	return CtrlContinue()
 }

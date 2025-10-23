@@ -95,8 +95,20 @@ type KafkaStorage struct {
 	Class       string                `json:"class,omitempty"`
 	DeleteClaim bool                  `json:"deleteClaim,omitempty"`
 	Selector    map[string]string     `json:"selector,omitempty"`
-	Volumes     []corev1.Volume       `json:"volumes,omitempty"`
+	Volumes     []StorageVolume       `json:"volumes,omitempty"`
 	Kraft       *KRaftMetadataStorage `json:"kraftMetadata,omitempty"`
+}
+
+// StorageVolume defines a single storage volume for JBOD configurations
+type StorageVolume struct {
+	ID            int32             `json:"id"`
+	Type          string            `json:"type"`
+	Size          string            `json:"size,omitempty"`
+	SizeLimit     string            `json:"sizeLimit,omitempty"`
+	Class         string            `json:"class,omitempty"`
+	Selector      map[string]string `json:"selector,omitempty"`
+	DeleteClaim   bool              `json:"deleteClaim,omitempty"`
+	KraftMetadata string            `json:"kraftMetadata,omitempty"`
 }
 
 // KRaftMetadataStorage defines KRaft metadata storage

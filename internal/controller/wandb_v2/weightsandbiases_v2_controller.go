@@ -97,9 +97,9 @@ func (r *WeightsAndBiasesV2Reconciler) Reconcile(ctx context.Context, req ctrl.R
 	wandb := &apiv2.WeightsAndBiases{}
 	if err := r.Client.Get(ctx, req.NamespacedName, wandb); err != nil {
 		if machErrors.IsNotFound(err) {
-			return ctrl.Result{}, nil
+			return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
 		}
-		return ctrl.Result{}, err
+		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, err
 	}
 
 	log.Info(
@@ -108,26 +108,26 @@ func (r *WeightsAndBiasesV2Reconciler) Reconcile(ctx context.Context, req ctrl.R
 	)
 
 	ctrlState = r.handleDatabase(ctx, wandb, req)
-	if ctrlState.isDone() {
-		return ctrlState.reconcileResult()
+	if ctrlState.shouldExit(ReconcilerScope) {
+		return ctrlState.reconcilerResult()
 	}
 
 	ctrlState = r.handleRedis(ctx, wandb, req)
-	if ctrlState.isDone() {
-		return ctrlState.reconcileResult()
+	if ctrlState.shouldExit(ReconcilerScope) {
+		return ctrlState.reconcilerResult()
 	}
 
 	ctrlState = r.handleKafka(ctx, wandb, req)
-	if ctrlState.isDone() {
-		return ctrlState.reconcileResult()
+	if ctrlState.shouldExit(ReconcilerScope) {
+		return ctrlState.reconcilerResult()
 	}
 
 	ctrlState = r.inferState(ctx, wandb)
-	if ctrlState.isDone() {
-		return ctrlState.reconcileResult()
+	if ctrlState.shouldExit(ReconcilerScope) {
+		return ctrlState.reconcilerResult()
 	}
 
-	return ctrl.Result{}, nil
+	return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
 }
 
 func (r *WeightsAndBiasesV2Reconciler) handleDatabase(
@@ -181,7 +181,7 @@ func (r *WeightsAndBiasesV2Reconciler) inferState(
 			log.Error(err, "Failed to update Weights & Biases state", "from", curState, "to", newState)
 			return CtrlError(err)
 		}
-		return CtrlDone(ctrl.Result{RequeueAfter: defaultRequeueDuration})
+		return CtrlDone(HandlerScope)
 	}
 	return CtrlContinue()
 }

@@ -64,7 +64,7 @@ func (r *WeightsAndBiasesV2Reconciler) handlePerconaMysql(
 		return CtrlError(err)
 	}
 
-	if ctrlState := actualPercona.maybeHandleDeletion(ctx, wandb, actualPercona, r); ctrlState.isDone() {
+	if ctrlState := actualPercona.maybeHandleDeletion(ctx, wandb, actualPercona, r); ctrlState.shouldExit(HandlerScope) {
 		return ctrlState
 	}
 
@@ -258,7 +258,7 @@ func (c *wandbPerconaMysqlCreate) Execute(ctx context.Context, r *WeightsAndBias
 	if err = r.Status().Update(ctx, wandb); err != nil {
 		return CtrlError(err)
 	}
-	return CtrlDone(ctrl.Result{RequeueAfter: defaultDbRequeueDuration})
+	return CtrlDone(HandlerScope)
 }
 
 type wandbPerconaMysqlDelete struct {
@@ -279,7 +279,7 @@ func (d *wandbPerconaMysqlDelete) Execute(ctx context.Context, r *WeightsAndBias
 	if err = r.Status().Update(ctx, wandb); err != nil {
 		return CtrlError(err)
 	}
-	return CtrlDone(ctrl.Result{RequeueAfter: defaultDbRequeueDuration})
+	return CtrlDone(HandlerScope)
 }
 
 type wandbPerconaMysqlStausUpdate struct {
@@ -296,7 +296,7 @@ func (s *wandbPerconaMysqlStausUpdate) Execute(
 	if err := r.Status().Update(ctx, s.wandb); err != nil {
 		return CtrlError(err)
 	}
-	return CtrlDone(ctrl.Result{RequeueAfter: defaultDbRequeueDuration})
+	return CtrlDone(HandlerScope)
 }
 
 func (w *wandbPerconaMysqlWrapper) maybeHandleDeletion(
@@ -304,11 +304,11 @@ func (w *wandbPerconaMysqlWrapper) maybeHandleDeletion(
 ) CtrlState {
 	log := ctrllog.FromContext(ctx)
 
-	requeueSeconds := wandb.Status.DatabaseStatus.BackupStatus.RequeueAfter
-	if requeueSeconds == 0 {
-		requeueSeconds = 30
-	}
-	requeueDuration := time.Duration(requeueSeconds) * time.Second
+	//requeueSeconds := wandb.Status.DatabaseStatus.BackupStatus.RequeueAfter
+	//if requeueSeconds == 0 {
+	//	requeueSeconds = 30
+	//}
+	//requeueDuration := time.Duration(requeueSeconds) * time.Second
 
 	var deletionPaused = wandb.Status.State == apiv2.WBStateDeletionPaused
 	var backupEnabled = wandb.Spec.Database.Backup.Enabled
@@ -316,17 +316,17 @@ func (w *wandbPerconaMysqlWrapper) maybeHandleDeletion(
 	var hasDbFinalizer = ctrlqueue.ContainsString(wandb.GetFinalizers(), dbFinalizer)
 
 	if flaggedForDeletion && !backupEnabled {
-		log.Info("During deletion, database backup is disabled. Proceeding with deletion...")
+		log.Info("Database backup is disabled.")
 		controllerutil.RemoveFinalizer(wandb, dbFinalizer)
 		if err := reconciler.Client.Update(ctx, wandb); err != nil {
 			return CtrlError(err)
 		}
-		return CtrlDone(ctrl.Result{RequeueAfter: defaultDbRequeueDuration})
+		return CtrlContinue()
 	}
 
 	if deletionPaused && backupEnabled {
 		log.Info("Deletion paused for Percona XtraDB Cluster Backup; disable backups to continue with deletion")
-		return CtrlDone(ctrl.Result{RequeueAfter: requeueDuration})
+		return CtrlContinue()
 	}
 
 	if !hasDbFinalizer && !flaggedForDeletion {
@@ -349,7 +349,7 @@ func (w *wandbPerconaMysqlWrapper) maybeHandleDeletion(
 			if err = reconciler.Status().Update(ctx, wandb); err != nil {
 				return CtrlError(err)
 			}
-			return CtrlDone(ctrl.Result{RequeueAfter: requeueDuration})
+			return CtrlDoneUntil(ReconcilerScope, defaultDbRequeueDuration)
 		}
 
 		if wandb.Status.DatabaseStatus.BackupStatus.State == "InProgress" {
@@ -362,7 +362,7 @@ func (w *wandbPerconaMysqlWrapper) maybeHandleDeletion(
 					return CtrlError(err)
 				}
 			}
-			return CtrlDone(ctrl.Result{RequeueAfter: requeueDuration})
+			return CtrlDone(HandlerScope)
 		}
 
 		controllerutil.RemoveFinalizer(wandb, dbFinalizer)
@@ -375,7 +375,7 @@ func (w *wandbPerconaMysqlWrapper) maybeHandleDeletion(
 			}
 		}
 
-		return CtrlDone(ctrl.Result{RequeueAfter: defaultDbRequeueDuration})
+		return CtrlDone(HandlerScope)
 	}
 	return CtrlContinue()
 }

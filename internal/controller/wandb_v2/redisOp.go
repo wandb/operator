@@ -215,7 +215,7 @@ func (c *wandbRedisCreate) Execute(ctx context.Context, r *WeightsAndBiasesV2Rec
 	if err = r.Status().Update(ctx, wandb); err != nil {
 		return CtrlError(err)
 	}
-	return CtrlDone(ctrl.Result{RequeueAfter: defaultRedisRequeueDuration})
+	return CtrlDone(HandlerScope)
 }
 
 type wandbRedisDelete struct {
@@ -236,7 +236,7 @@ func (d *wandbRedisDelete) Execute(ctx context.Context, r *WeightsAndBiasesV2Rec
 	if err = r.Status().Update(ctx, wandb); err != nil {
 		return CtrlError(err)
 	}
-	return CtrlDone(ctrl.Result{RequeueAfter: defaultRedisRequeueDuration})
+	return CtrlDone(HandlerScope)
 }
 
 type wandbRedisStatusUpdate struct {
@@ -255,5 +255,5 @@ func (s *wandbRedisStatusUpdate) Execute(
 	if err := r.Status().Update(ctx, s.wandb); err != nil {
 		return CtrlError(err)
 	}
-	return CtrlDone(ctrl.Result{RequeueAfter: defaultRedisRequeueDuration})
+	return CtrlDone(HandlerScope)
 }

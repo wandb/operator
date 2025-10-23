@@ -1,50 +1,63 @@
 package wandb_v2
 
 import (
-	"errors"
+	"time"
 
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
+// CtrlScope defines the scope of the controller operation for determining
+// that level of the reconciliation loop is complete.
+// A larger numeric scope value indicates a broader scope.
+type CtrlScope int
+
+const (
+	NoScope         CtrlScope = 0 // an `exitScope` of NoScope is simply to continue
+	HandlerScope    CtrlScope = 1
+	ReconcilerScope CtrlScope = 2
+)
+
 type CtrlState interface {
-	isDone() bool
-	reconcileResult() (ctrl.Result, error)
+	shouldExit(scope CtrlScope) bool
+	reconcilerResult() (ctrl.Result, error)
 }
 
 func CtrlError(err error) CtrlState {
 	return &ctrlStateImpl{
-		done:   true,
-		err:    err,
-		result: ctrl.Result{},
+		exitScope: ReconcilerScope,
+		err:       err,
+		result:    ctrl.Result{},
 	}
 }
 
 func CtrlContinue() CtrlState {
+	return CtrlDone(NoScope)
+}
+
+func CtrlDoneUntil(scope CtrlScope, requeueAfter time.Duration) CtrlState {
 	return &ctrlStateImpl{
-		done: false,
+		exitScope: scope,
+		result:    ctrl.Result{RequeueAfter: requeueAfter},
 	}
 }
 
-func CtrlDone(result ctrl.Result) CtrlState {
+func CtrlDone(scope CtrlScope) CtrlState {
 	return &ctrlStateImpl{
-		done:   true,
-		result: result,
+		exitScope: scope,
+		result:    ctrl.Result{},
 	}
 }
 
 type ctrlStateImpl struct {
-	done   bool
-	err    error
-	result ctrl.Result
+	exitScope CtrlScope
+	err       error
+	result    ctrl.Result
 }
 
-func (d *ctrlStateImpl) isDone() bool {
-	return d.done
+func (d *ctrlStateImpl) shouldExit(scope CtrlScope) bool {
+	return d.exitScope >= scope
 }
 
-func (d *ctrlStateImpl) reconcileResult() (ctrl.Result, error) {
-	if !d.isDone() {
-		return ctrl.Result{}, errors.New("returning undone reconcile result")
-	}
+func (d *ctrlStateImpl) reconcilerResult() (ctrl.Result, error) {
 	return d.result, d.err
 }
