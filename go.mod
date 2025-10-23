@@ -5,10 +5,10 @@ go 1.24.4
 godebug default=go1.23
 
 require (
+	github.com/OT-CONTAINER-KIT/redis-operator v0.22.1
 	github.com/go-logr/logr v1.4.3
 	github.com/go-playground/validator/v10 v10.26.0
 	github.com/maxbrunsfeld/counterfeiter/v6 v6.11.2
-	github.com/mysql/ndb-operator v0.0.0-20250618134843-0f0ead5acfd5
 	github.com/onsi/ginkgo/v2 v2.23.4
 	github.com/onsi/gomega v1.38.0
 	github.com/percona/percona-xtradb-cluster-operator v1.18.0
@@ -33,7 +33,6 @@ require (
 	github.com/Masterminds/semver/v3 v3.3.0 // indirect
 	github.com/Masterminds/sprig/v3 v3.3.0 // indirect
 	github.com/Masterminds/squirrel v1.5.4 // indirect
-	github.com/OT-CONTAINER-KIT/redis-operator v0.22.1 // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
 	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
@@ -189,5 +188,3 @@ require (
 	sigs.k8s.io/structured-merge-diff/v4 v4.6.0 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
-
-replace github.com/mysql/ndb-operator => github.com/mysql/mysql-ndb-operator v0.0.0-20250618134843-0f0ead5acfd5

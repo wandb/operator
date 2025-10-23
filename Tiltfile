@@ -12,7 +12,6 @@ settings = {
     "installMinio": True,
     "installWandb": True,
     "installMysqlOperator": False,
-    "mysqlOperatorType": "percona",  # or "ndb"
     "installRedisOperator": False,
     "installKafkaOperator": False,
     "autoDeployOperator": True,
@@ -131,51 +130,26 @@ if settings.get("installMinio"):
     )
 
 if settings.get("installMysqlOperator"):
-    if settings.get("mysqlOperatorType") == "percona":
-        print("==> Installing Percona MySQL Operator...")
-        local_resource(
-            'percona-mysql-op-helm-install',
-            cmd='if ! helm repo list | grep -q "^percona"; then ' +
-                'helm repo add percona https://percona.github.io/percona-helm-charts/ && ' +
-                'helm repo update; ' +
-                'fi && ' +
-                'helm install percona-mysql-operator percona/pxc-operator --namespace=percona-mysql-operator --create-namespace',
-            labels=['infra'],
-            auto_init=False,
-            trigger_mode=TRIGGER_MODE_MANUAL,
-        )
+    print("==> Installing Percona MySQL Operator...")
+    local_resource(
+        'percona-mysql-op-helm-install',
+        cmd='if ! helm repo list | grep -q "^percona"; then ' +
+            'helm repo add percona https://percona.github.io/percona-helm-charts/ && ' +
+            'helm repo update; ' +
+            'fi && ' +
+            'helm install percona-mysql-operator percona/pxc-operator --namespace=percona-mysql-operator --create-namespace',
+        labels=['infra'],
+        auto_init=False,
+        trigger_mode=TRIGGER_MODE_MANUAL,
+    )
 
-        local_resource(
-            'percona-mysql-op-helm-uninstall',
-            cmd='helm uninstall percona-mysql-operator --namespace percona-mysql-operator',
-            labels=['infra'],
-            auto_init=False,
-            trigger_mode=TRIGGER_MODE_MANUAL,
-        )
-    elif settings.get("mysqlOperatorType") == "ndb":
-        print("==> Installing MySQL NDB Operator...")
-        local_resource(
-            'mysql-op-helm-install',
-            cmd='if ! helm repo list | grep -q "^ndb-operator-repo"; then ' +
-                'helm repo add ndb-operator-repo https://mysql.github.io/mysql-ndb-operator/ && ' +
-                'helm repo update; ' +
-                'fi && ' +
-                'helm install ndb-operator ndb-operator-repo/ndb-operator --namespace=ndb-operator --create-namespace',
-            labels=['infra'],
-            auto_init=False,
-            trigger_mode=TRIGGER_MODE_MANUAL,
-        )
-
-        local_resource(
-            'mysql-op-helm-uninstall',
-            cmd='helm uninstall ndb-operator --namespace ndb-operator',
-            labels=['infra'],
-            auto_init=False,
-            trigger_mode=TRIGGER_MODE_MANUAL,
-        )
-
-    else:
-        fail("Unknown mysqlOperatorType: " + settings.get("mysqlOperatorType"))
+    local_resource(
+        'percona-mysql-op-helm-uninstall',
+        cmd='helm uninstall percona-mysql-operator --namespace percona-mysql-operator',
+        labels=['infra'],
+        auto_init=False,
+        trigger_mode=TRIGGER_MODE_MANUAL,
+    )
 
 if settings.get("installRedisOperator"):
     print("==> Installing Redis Operator...")
@@ -207,7 +181,7 @@ if settings.get("installKafkaOperator"):
             'helm repo add strimzi https://strimzi.io/charts/ && ' +
             'helm repo update; ' +
             'fi && ' +
-            'helm install strimzi-kafka-operator strimzi/strimzi-kafka-operator --namespace=kafka --create-namespace --set 'watchNamespaces={default}'',
+            "helm install strimzi-kafka-operator strimzi/strimzi-kafka-operator --namespace=kafka --create-namespace --set 'watchNamespaces={default}'",
         labels=['infra'],
         auto_init=False,
         trigger_mode=TRIGGER_MODE_MANUAL,

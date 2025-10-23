@@ -25,7 +25,6 @@ import (
 	"strings"
 
 	redisv1beta2 "github.com/OT-CONTAINER-KIT/redis-operator/api/redis/v1beta2"
-	ndbv1 "github.com/mysql/ndb-operator/pkg/apis/ndbcontroller/v1"
 	strimziv1beta2 "github.com/wandb/operator/api/strimzi/v1beta2"
 	"github.com/wandb/operator/internal/controller/wandb_v2"
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
@@ -63,7 +62,6 @@ func init() {
 	utilruntime.Must(appsv1.AddToScheme(scheme))
 	utilruntime.Must(appsv2.AddToScheme(scheme))
 	utilruntime.Must(apiextensionsv1.AddToScheme(scheme))
-	utilruntime.Must(ndbv1.AddToScheme(scheme))
 	utilruntime.Must(pxcv1.SchemeBuilder.AddToScheme(scheme))
 	utilruntime.Must(redisv1beta2.AddToScheme(scheme))
 	utilruntime.Must(strimziv1beta2.AddToScheme(scheme))

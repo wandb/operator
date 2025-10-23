@@ -49,8 +49,6 @@ type WeightsAndBiasesV2Reconciler struct {
 //+kubebuilder:rbac:groups=apps.wandb.com,resources=weightsandbiases,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=apps.wandb.com,resources=weightsandbiases/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=apps.wandb.com,resources=weightsandbiases/finalizers,verbs=update
-//+kubebuilder:rbac:groups=mysql.oracle.com,resources=ndbclusters,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=mysql.oracle.com,resources=ndbclusters/status,verbs=get
 //+kubebuilder:rbac:groups=pxc.percona.com,resources=perconaxtradbclusters,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=pxc.percona.com,resources=perconaxtradbclusters/status,verbs=get
 //+kubebuilder:rbac:groups=pxc.percona.com,resources=perconaxtradbclusterbackups,verbs=get;list;watch;create;update;patch;delete
@@ -144,15 +142,11 @@ func (r *WeightsAndBiasesV2Reconciler) handleDatabase(
 
 	dbType := wandb.Spec.Database.Type
 	if dbType == "" {
-		dbType = apiv2.WBDatabaseTypeNDB
-		log.Info("Database type not specified, defaulting to NDB")
+		dbType = apiv2.WBDatabaseTypePercona
+		log.Info("Database type not specified, defaulting to Percona")
 	}
 
 	switch dbType {
-	case apiv2.WBDatabaseTypeNDB:
-		log.Info("Handling NDB MySQL database")
-		return r.handleNdkMysql(ctx, wandb, req)
-
 	case apiv2.WBDatabaseTypePercona:
 		log.Info("Handling Percona XtraDB Cluster database")
 		return r.handlePerconaMysql(ctx, wandb, req)

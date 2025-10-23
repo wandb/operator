@@ -176,24 +176,6 @@ rules:
   verbs:
   - get
 - apiGroups:
-  - mysql.oracle.com
-  resources:
-  - ndbclusters
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - mysql.oracle.com
-  resources:
-  - ndbclusters/status
-  verbs:
-  - get
-- apiGroups:
   - networking.k8s.io
   resources:
   - ingresses

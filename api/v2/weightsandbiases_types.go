@@ -36,7 +36,6 @@ const (
 type WBDatabaseType string
 
 const (
-	WBDatabaseTypeNDB     WBDatabaseType = "ndb"
 	WBDatabaseTypePercona WBDatabaseType = "percona"
 )
 
@@ -106,7 +105,7 @@ type WeightsAndBiasesSpec struct {
 
 type WBDatabaseSpec struct {
 	Enabled     bool           `json:"enabled"`
-	Type        WBDatabaseType `json:"type,omitempty"`
+	Type        WBDatabaseType `json:"type,omitempty" default:"percona"`
 	StorageSize string         `json:"storageSize,omitempty"`
 	Backup      WBBackupSpec   `json:"backup,omitempty"`
 }
