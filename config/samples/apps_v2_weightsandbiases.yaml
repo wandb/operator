@@ -19,3 +19,20 @@ spec:
         accessModes:
           - ReadWriteOnce
       timeoutSeconds: 600
+  redis:
+    enabled: true
+    storageSize: 1Gi
+  kafka:
+    enabled: true
+    storageSize: 10Gi
+    replicas: 1
+    backup:
+      enabled: true
+      storageName: default-backup
+      storageType: filesystem
+      filesystem:
+        storageSize: 5Gi
+        storageClassName: standard
+        accessModes:
+          - ReadWriteOnce
+      timeoutSeconds: 600

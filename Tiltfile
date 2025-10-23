@@ -10,14 +10,13 @@ settings = {
         "kind-kind",
     ],
     "installMinio": True,
-    "installKafka": False,
     "installWandb": True,
     "installMysqlOperator": False,
     "mysqlOperatorType": "percona",  # or "ndb"
     "installRedisOperator": False,
+    "installKafkaOperator": False,
     "autoDeployOperator": True,
     "wandbCrName": "wandb-default-v1",
-    "kafkaOperatorVersion": "0.44.0",
 }
 
 # Override with user settings from tilt-settings.json
@@ -200,6 +199,28 @@ if settings.get("installRedisOperator"):
         trigger_mode=TRIGGER_MODE_MANUAL,
     )
 
+if settings.get("installKafkaOperator"):
+    print("==> Installing Strimzi Kafka Operator...")
+    local_resource(
+        'kafka-op-helm-install',
+        cmd='if ! helm repo list | grep -q \"^strimzi\"; then ' +
+            'helm repo add strimzi https://strimzi.io/charts/ && ' +
+            'helm repo update; ' +
+            'fi && ' +
+            'helm install strimzi-kafka-operator strimzi/strimzi-kafka-operator --namespace=kafka --create-namespace --set 'watchNamespaces={default}'',
+        labels=['infra'],
+        auto_init=False,
+        trigger_mode=TRIGGER_MODE_MANUAL,
+    )
+
+    local_resource(
+        'kafka-op-helm-uninstall',
+        cmd='helm uninstall strimzi-kafka-operator --namespace kafka',
+        labels=['infra'],
+        auto_init=False,
+        trigger_mode=TRIGGER_MODE_MANUAL,
+    )
+
 ################################################################################
 # STEP 3: DEPLOY CONTROLLER AND RBAC
 # Build controller deployment and RBAC from config/default
@@ -262,7 +283,7 @@ deps = ['controllers', 'pkg', 'cmd/main.go', 'api', 'internal']
 local_resource('Watch&Rebuild', rebuild() + "; " + binary(),
                deps=deps,
                labels="wandb",
-               ignore=['*/*/zz_generated.deepcopy.go'])
+               ignore=['*/*/zz_generated.deepcopy.go', '*/*/*/zz_generated.deepcopy.go'],)
 
 ################################################################################
 # STEP 7: WATCH AND REGENERATE CRDs
@@ -283,6 +304,8 @@ local_resource('Regenerate-CRDs',
                'echo "==> Patched CRDs written to ' + DIST_DIR + '/patched-crds.yaml" && ' +
                'echo "==> Tilt will automatically reapply CRDs to cluster"',
                deps=['api'],
+               auto_init=False,
+               trigger_mode=TRIGGER_MODE_MANUAL,
                labels="wandb",
                ignore=[
                    '*/*/zz_generated.deepcopy.go',

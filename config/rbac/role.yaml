@@ -156,6 +156,26 @@ rules:
   - list
   - watch
 - apiGroups:
+  - kafka.strimzi.io
+  resources:
+  - kafkanodepools
+  - kafkas
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - kafka.strimzi.io
+  resources:
+  - kafkanodepools/status
+  - kafkas/status
+  verbs:
+  - get
+- apiGroups:
   - mysql.oracle.com
   resources:
   - ndbclusters

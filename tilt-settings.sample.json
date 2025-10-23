@@ -3,9 +3,9 @@
   "kindClusterName": "wandb-operator",
   "installMinio": true,
   "installWandb": true,
-  "installKafka": false,
   "installMysqlOperator": true,
   "installRedisOperator": true,
+  "installKafkaOperator": true,
   "autoDeployOperator": true,
   "wandbCrName": "wandb-dev-v2"
 }

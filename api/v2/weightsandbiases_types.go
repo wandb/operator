@@ -67,6 +67,7 @@ const (
 //+kubebuilder:printcolumn:name="State",type=string,JSONPath=`.status.state`
 //+kubebuilder:printcolumn:name="Database",type=string,JSONPath=`.status.databaseStatus.state`
 //+kubebuilder:printcolumn:name="Redis",type=string,JSONPath=`.status.redisStatus.state`
+//+kubebuilder:printcolumn:name="Kafka",type=string,JSONPath=`.status.kafkaStatus.state`
 
 // WeightsAndBiases is the Schema for the weightsandbiases API.
 type WeightsAndBiases struct {
@@ -100,6 +101,7 @@ type WeightsAndBiasesSpec struct {
 
 	Database WBDatabaseSpec `json:"database,omitempty"`
 	Redis    WBRedisSpec    `json:"redis,omitempty"`
+	Kafka    WBKafkaSpec    `json:"kafka,omitempty"`
 }
 
 type WBDatabaseSpec struct {
@@ -112,6 +114,21 @@ type WBDatabaseSpec struct {
 type WBRedisSpec struct {
 	Enabled     bool   `json:"enabled"`
 	StorageSize string `json:"storageSize,omitempty"`
+}
+
+type WBKafkaSpec struct {
+	Enabled     bool              `json:"enabled"`
+	StorageSize string            `json:"storageSize,omitempty"`
+	Replicas    int32             `json:"replicas,omitempty"`
+	Backup      WBKafkaBackupSpec `json:"backup,omitempty"`
+}
+
+type WBKafkaBackupSpec struct {
+	Enabled        bool                    `json:"enabled,omitempty"`
+	StorageName    string                  `json:"storageName,omitempty"`
+	StorageType    WBBackupStorageType     `json:"storageType,omitempty"`
+	Filesystem     *WBBackupFilesystemSpec `json:"filesystem,omitempty"`
+	TimeoutSeconds int                     `json:"timeoutSeconds,omitempty"`
 }
 
 type WBBackupSpec struct {
@@ -166,6 +183,7 @@ type WeightsAndBiasesStatus struct {
 	Message            string           `json:"message,omitempty"`
 	DatabaseStatus     WBDatabaseStatus `json:"databaseStatus,omitempty"`
 	RedisStatus        WBRedisStatus    `json:"redisStatus,omitempty"`
+	KafkaStatus        WBKafkaStatus    `json:"kafkaStatus,omitempty"`
 	ObservedGeneration int64            `json:"observedGeneration"`
 }
 
@@ -173,4 +191,11 @@ type WBRedisStatus struct {
 	Ready          bool        `json:"ready"`
 	State          string      `json:"state,omitempty" default:"Missing"`
 	LastReconciled metav1.Time `json:"lastReconciled,omitempty"`
+}
+
+type WBKafkaStatus struct {
+	Ready          bool           `json:"ready"`
+	State          string         `json:"state,omitempty" default:"Missing"`
+	LastReconciled metav1.Time    `json:"lastReconciled,omitempty"`
+	BackupStatus   WBBackupStatus `json:"backupStatus,omitempty"`
 }
