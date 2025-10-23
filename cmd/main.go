@@ -25,6 +25,7 @@ import (
 	"strings"
 
 	redisv1beta2 "github.com/OT-CONTAINER-KIT/redis-operator/api/redis/v1beta2"
+	miniov2 "github.com/minio/operator/pkg/apis/minio.min.io/v2"
 	strimziv1beta2 "github.com/wandb/operator/api/strimzi/v1beta2"
 	"github.com/wandb/operator/internal/controller/wandb_v2"
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
@@ -65,6 +66,7 @@ func init() {
 	utilruntime.Must(pxcv1.SchemeBuilder.AddToScheme(scheme))
 	utilruntime.Must(redisv1beta2.AddToScheme(scheme))
 	utilruntime.Must(strimziv1beta2.AddToScheme(scheme))
+	utilruntime.Must(miniov2.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 

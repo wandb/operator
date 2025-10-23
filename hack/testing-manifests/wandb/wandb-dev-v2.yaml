@@ -20,3 +20,9 @@ spec:
     replicas: 1
     backup:
       enabled: false
+  objStorage:
+    enabled: true
+    storageSize: 10Gi
+    replicas: 1
+    backup:
+      enabled: false

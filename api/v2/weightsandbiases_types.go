@@ -67,6 +67,7 @@ const (
 //+kubebuilder:printcolumn:name="Database",type=string,JSONPath=`.status.databaseStatus.state`
 //+kubebuilder:printcolumn:name="Redis",type=string,JSONPath=`.status.redisStatus.state`
 //+kubebuilder:printcolumn:name="Kafka",type=string,JSONPath=`.status.kafkaStatus.state`
+//+kubebuilder:printcolumn:name="ObjStorage",type=string,JSONPath=`.status.objStorageStatus.state`
 
 // WeightsAndBiases is the Schema for the weightsandbiases API.
 type WeightsAndBiases struct {
@@ -98,9 +99,10 @@ type WeightsAndBiasesSpec struct {
 	// Profile is akin to high-level environment info
 	Profile string `json:"profile,omitempty"`
 
-	Database WBDatabaseSpec `json:"database,omitempty"`
-	Redis    WBRedisSpec    `json:"redis,omitempty"`
-	Kafka    WBKafkaSpec    `json:"kafka,omitempty"`
+	Database   WBDatabaseSpec   `json:"database,omitempty"`
+	Redis      WBRedisSpec      `json:"redis,omitempty"`
+	Kafka      WBKafkaSpec      `json:"kafka,omitempty"`
+	ObjStorage WBObjStorageSpec `json:"objStorage,omitempty"`
 }
 
 type WBDatabaseSpec struct {
@@ -123,6 +125,21 @@ type WBKafkaSpec struct {
 }
 
 type WBKafkaBackupSpec struct {
+	Enabled        bool                    `json:"enabled,omitempty"`
+	StorageName    string                  `json:"storageName,omitempty"`
+	StorageType    WBBackupStorageType     `json:"storageType,omitempty"`
+	Filesystem     *WBBackupFilesystemSpec `json:"filesystem,omitempty"`
+	TimeoutSeconds int                     `json:"timeoutSeconds,omitempty"`
+}
+
+type WBObjStorageSpec struct {
+	Enabled     bool                   `json:"enabled"`
+	StorageSize string                 `json:"storageSize,omitempty"`
+	Replicas    int32                  `json:"replicas,omitempty"`
+	Backup      WBObjStorageBackupSpec `json:"backup,omitempty"`
+}
+
+type WBObjStorageBackupSpec struct {
 	Enabled        bool                    `json:"enabled,omitempty"`
 	StorageName    string                  `json:"storageName,omitempty"`
 	StorageType    WBBackupStorageType     `json:"storageType,omitempty"`
@@ -178,12 +195,13 @@ type WBBackupStatus struct {
 
 // WeightsAndBiasesStatus defines the observed state of WeightsAndBiases.
 type WeightsAndBiasesStatus struct {
-	State              WBStateType      `json:"state,omitempty"`
-	Message            string           `json:"message,omitempty"`
-	DatabaseStatus     WBDatabaseStatus `json:"databaseStatus,omitempty"`
-	RedisStatus        WBRedisStatus    `json:"redisStatus,omitempty"`
-	KafkaStatus        WBKafkaStatus    `json:"kafkaStatus,omitempty"`
-	ObservedGeneration int64            `json:"observedGeneration"`
+	State              WBStateType        `json:"state,omitempty"`
+	Message            string             `json:"message,omitempty"`
+	DatabaseStatus     WBDatabaseStatus   `json:"databaseStatus,omitempty"`
+	RedisStatus        WBRedisStatus      `json:"redisStatus,omitempty"`
+	KafkaStatus        WBKafkaStatus      `json:"kafkaStatus,omitempty"`
+	ObjStorageStatus   WBObjStorageStatus `json:"objStorageStatus,omitempty"`
+	ObservedGeneration int64              `json:"observedGeneration"`
 }
 
 type WBRedisStatus struct {
@@ -193,6 +211,13 @@ type WBRedisStatus struct {
 }
 
 type WBKafkaStatus struct {
+	Ready          bool           `json:"ready"`
+	State          string         `json:"state,omitempty" default:"Missing"`
+	LastReconciled metav1.Time    `json:"lastReconciled,omitempty"`
+	BackupStatus   WBBackupStatus `json:"backupStatus,omitempty"`
+}
+
+type WBObjStorageStatus struct {
 	Ready          bool           `json:"ready"`
 	State          string         `json:"state,omitempty" default:"Missing"`
 	LastReconciled metav1.Time    `json:"lastReconciled,omitempty"`

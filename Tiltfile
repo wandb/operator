@@ -14,6 +14,7 @@ settings = {
     "installMysqlOperator": False,
     "installRedisOperator": False,
     "installKafkaOperator": False,
+    "installMinioOperator": False,
     "autoDeployOperator": True,
     "wandbCrName": "wandb-default-v1",
 }
@@ -190,6 +191,28 @@ if settings.get("installKafkaOperator"):
     local_resource(
         'kafka-op-helm-uninstall',
         cmd='helm uninstall strimzi-kafka-operator --namespace kafka',
+        labels=['infra'],
+        auto_init=False,
+        trigger_mode=TRIGGER_MODE_MANUAL,
+    )
+
+if settings.get("installMinioOperator"):
+    print("==> Installing MinIO Operator...")
+    local_resource(
+        'minio-op-helm-install',
+        cmd='if ! helm repo list | grep -q "^minio-operator"; then ' +
+            'helm repo add minio-operator https://operator.min.io && ' +
+            'helm repo update; ' +
+            'fi && ' +
+            'helm install minio-operator minio-operator/operator --namespace=minio-operator --create-namespace',
+        labels=['infra'],
+        auto_init=False,
+        trigger_mode=TRIGGER_MODE_MANUAL,
+    )
+
+    local_resource(
+        'minio-op-helm-uninstall',
+        cmd='helm uninstall minio-operator --namespace minio-operator',
         labels=['infra'],
         auto_init=False,
         trigger_mode=TRIGGER_MODE_MANUAL,

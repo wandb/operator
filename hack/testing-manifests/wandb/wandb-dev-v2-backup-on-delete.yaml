@@ -36,3 +36,17 @@ spec:
         accessModes:
           - ReadWriteOnce
       timeoutSeconds: 600
+  objStorage:
+    enabled: true
+    storageSize: 10Gi
+    replicas: 1
+    backup:
+      enabled: true
+      storageName: default-backup
+      storageType: filesystem
+      filesystem:
+        storageSize: 5Gi
+        storageClassName: standard
+        accessModes:
+          - ReadWriteOnce
+      timeoutSeconds: 600
