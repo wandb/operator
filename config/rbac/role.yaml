@@ -125,6 +125,24 @@ rules:
   - list
   - watch
 - apiGroups:
+  - clickhouse.altinity.com
+  resources:
+  - clickhouseinstallations
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - clickhouse.altinity.com
+  resources:
+  - clickhouseinstallations/status
+  verbs:
+  - get
+- apiGroups:
   - cloud.google.com
   resources:
   - backendconfigs

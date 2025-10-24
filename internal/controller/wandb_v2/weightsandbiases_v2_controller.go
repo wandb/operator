@@ -61,6 +61,8 @@ type WeightsAndBiasesV2Reconciler struct {
 //+kubebuilder:rbac:groups=kafka.strimzi.io,resources=kafkanodepools/status,verbs=get
 //+kubebuilder:rbac:groups=minio.min.io,resources=tenants,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=minio.min.io,resources=tenants/status,verbs=get
+//+kubebuilder:rbac:groups=clickhouse.altinity.com,resources=clickhouseinstallations,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=clickhouse.altinity.com,resources=clickhouseinstallations/status,verbs=get
 //+kubebuilder:rbac:groups="",resources=configmaps;events;persistentvolumeclaims;secrets;serviceaccounts;services,verbs=update;delete;get;list;create;patch;watch
 //+kubebuilder:rbac:groups="",resources=endpoints;ingresses;nodes;nodes/spec;nodes/stats;nodes/metrics;nodes/proxy;namespaces;namespaces/status;replicationcontrollers;replicationcontrollers/status;resourcequotas;pods;pods/log;pods/status,verbs=get;list;watch
 //+kubebuilder:rbac:groups=apps,resources=deployments;controllerrevisions;daemonsets;replicasets;statefulsets,verbs=update;delete;get;list;create;patch;watch
@@ -129,6 +131,11 @@ func (r *WeightsAndBiasesV2Reconciler) Reconcile(ctx context.Context, req ctrl.R
 		return ctrlState.reconcilerResult()
 	}
 
+	ctrlState = r.handleClickHouse(ctx, wandb, req)
+	if ctrlState.shouldExit(ReconcilerScope) {
+		return ctrlState.reconcilerResult()
+	}
+
 	ctrlState = r.inferState(ctx, wandb)
 	if ctrlState.shouldExit(ReconcilerScope) {
 		return ctrlState.reconcilerResult()
@@ -174,13 +181,15 @@ func (r *WeightsAndBiasesV2Reconciler) inferState(
 	redisStatus := wandb.Status.RedisStatus
 	kafkaStatus := wandb.Status.KafkaStatus
 	objStorageStatus := wandb.Status.ObjStorageStatus
+	clickhouseStatus := wandb.Status.ClickHouseStatus
 
 	databaseReady := !wandb.Spec.Database.Enabled || databaseStatus.State == "ready"
 	redisReady := !wandb.Spec.Redis.Enabled || redisStatus.State == "ready"
 	kafkaReady := !wandb.Spec.Kafka.Enabled || kafkaStatus.State == "ready"
 	objStorageReady := !wandb.Spec.ObjStorage.Enabled || objStorageStatus.State == "ready"
+	clickhouseReady := !wandb.Spec.ClickHouse.Enabled || clickhouseStatus.State == "ready"
 
-	if databaseReady && redisReady && kafkaReady && objStorageReady {
+	if databaseReady && redisReady && kafkaReady && objStorageReady && clickhouseReady {
 		newState = apiv2.WBStateReady
 	}
 

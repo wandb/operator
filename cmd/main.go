@@ -25,6 +25,7 @@ import (
 	"strings"
 
 	redisv1beta2 "github.com/OT-CONTAINER-KIT/redis-operator/api/redis/v1beta2"
+	chiv1 "github.com/altinity/clickhouse-operator/pkg/apis/clickhouse.altinity.com/v1"
 	miniov2 "github.com/minio/operator/pkg/apis/minio.min.io/v2"
 	strimziv1beta2 "github.com/wandb/operator/api/strimzi/v1beta2"
 	"github.com/wandb/operator/internal/controller/wandb_v2"
@@ -67,6 +68,7 @@ func init() {
 	utilruntime.Must(redisv1beta2.AddToScheme(scheme))
 	utilruntime.Must(strimziv1beta2.AddToScheme(scheme))
 	utilruntime.Must(miniov2.AddToScheme(scheme))
+	utilruntime.Must(chiv1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 

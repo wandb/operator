@@ -15,6 +15,7 @@ settings = {
     "installRedisOperator": False,
     "installKafkaOperator": False,
     "installMinioOperator": False,
+    "installClickHouseOperator": False,
     "autoDeployOperator": True,
     "wandbCrName": "wandb-default-v1",
 }
@@ -213,6 +214,24 @@ if settings.get("installMinioOperator"):
     local_resource(
         'minio-op-helm-uninstall',
         cmd='helm uninstall minio-operator --namespace minio-operator',
+        labels=['infra'],
+        auto_init=False,
+        trigger_mode=TRIGGER_MODE_MANUAL,
+    )
+
+if settings.get("installClickHouseOperator"):
+    print("==> Installing ClickHouse Operator...")
+    local_resource(
+        'clickhouse-op-install',
+        cmd='kubectl apply -f https://raw.githubusercontent.com/Altinity/clickhouse-operator/master/deploy/operator/clickhouse-operator-install-bundle.yaml',
+        labels=['infra'],
+        auto_init=False,
+        trigger_mode=TRIGGER_MODE_MANUAL,
+    )
+
+    local_resource(
+        'clickhouse-op-uninstall',
+        cmd='kubectl delete -f https://raw.githubusercontent.com/Altinity/clickhouse-operator/master/deploy/operator/clickhouse-operator-install-bundle.yaml',
         labels=['infra'],
         auto_init=False,
         trigger_mode=TRIGGER_MODE_MANUAL,

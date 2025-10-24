@@ -68,6 +68,7 @@ const (
 //+kubebuilder:printcolumn:name="Redis",type=string,JSONPath=`.status.redisStatus.state`
 //+kubebuilder:printcolumn:name="Kafka",type=string,JSONPath=`.status.kafkaStatus.state`
 //+kubebuilder:printcolumn:name="ObjStorage",type=string,JSONPath=`.status.objStorageStatus.state`
+//+kubebuilder:printcolumn:name="ClickHouse",type=string,JSONPath=`.status.clickhouseStatus.state`
 
 // WeightsAndBiases is the Schema for the weightsandbiases API.
 type WeightsAndBiases struct {
@@ -103,6 +104,7 @@ type WeightsAndBiasesSpec struct {
 	Redis      WBRedisSpec      `json:"redis,omitempty"`
 	Kafka      WBKafkaSpec      `json:"kafka,omitempty"`
 	ObjStorage WBObjStorageSpec `json:"objStorage,omitempty"`
+	ClickHouse WBClickHouseSpec `json:"clickhouse,omitempty"`
 }
 
 type WBDatabaseSpec struct {
@@ -140,6 +142,22 @@ type WBObjStorageSpec struct {
 }
 
 type WBObjStorageBackupSpec struct {
+	Enabled        bool                    `json:"enabled,omitempty"`
+	StorageName    string                  `json:"storageName,omitempty"`
+	StorageType    WBBackupStorageType     `json:"storageType,omitempty"`
+	Filesystem     *WBBackupFilesystemSpec `json:"filesystem,omitempty"`
+	TimeoutSeconds int                     `json:"timeoutSeconds,omitempty"`
+}
+
+type WBClickHouseSpec struct {
+	Enabled     bool                   `json:"enabled"`
+	StorageSize string                 `json:"storageSize,omitempty"`
+	Replicas    int32                  `json:"replicas,omitempty"`
+	Version     string                 `json:"version,omitempty"`
+	Backup      WBClickHouseBackupSpec `json:"backup,omitempty"`
+}
+
+type WBClickHouseBackupSpec struct {
 	Enabled        bool                    `json:"enabled,omitempty"`
 	StorageName    string                  `json:"storageName,omitempty"`
 	StorageType    WBBackupStorageType     `json:"storageType,omitempty"`
@@ -201,6 +219,7 @@ type WeightsAndBiasesStatus struct {
 	RedisStatus        WBRedisStatus      `json:"redisStatus,omitempty"`
 	KafkaStatus        WBKafkaStatus      `json:"kafkaStatus,omitempty"`
 	ObjStorageStatus   WBObjStorageStatus `json:"objStorageStatus,omitempty"`
+	ClickHouseStatus   WBClickHouseStatus `json:"clickhouseStatus,omitempty"`
 	ObservedGeneration int64              `json:"observedGeneration"`
 }
 
@@ -218,6 +237,13 @@ type WBKafkaStatus struct {
 }
 
 type WBObjStorageStatus struct {
+	Ready          bool           `json:"ready"`
+	State          string         `json:"state,omitempty" default:"Missing"`
+	LastReconciled metav1.Time    `json:"lastReconciled,omitempty"`
+	BackupStatus   WBBackupStatus `json:"backupStatus,omitempty"`
+}
+
+type WBClickHouseStatus struct {
 	Ready          bool           `json:"ready"`
 	State          string         `json:"state,omitempty" default:"Missing"`
 	LastReconciled metav1.Time    `json:"lastReconciled,omitempty"`

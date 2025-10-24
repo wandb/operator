@@ -26,3 +26,9 @@ spec:
     replicas: 1
     backup:
       enabled: false
+  clickhouse:
+    enabled: true
+    storageSize: 10Gi
+    replicas: 1
+    backup:
+      enabled: false
