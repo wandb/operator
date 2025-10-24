@@ -158,6 +158,7 @@ func getDesiredMinio(
 		replicas = 1
 	}
 
+	configSecretName := namespacedName.Name + "-config"
 	tenant := &miniov2.Tenant{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      namespacedName.Name,
@@ -168,6 +169,9 @@ func getDesiredMinio(
 		},
 		Spec: miniov2.TenantSpec{
 			Image: "quay.io/minio/minio:latest",
+			Configuration: &corev1.LocalObjectReference{
+				Name: configSecretName,
+			},
 			Pools: []miniov2.Pool{
 				{
 					Name:             "pool-0",
@@ -239,6 +243,42 @@ func (c *wandbMinioCreate) Execute(ctx context.Context, r *WeightsAndBiasesV2Rec
 	log := ctrl.LoggerFrom(ctx)
 	log.Info("Installing MinIO Tenant")
 	wandb := c.wandb
+
+	configSecretName := c.desired.obj.Name + "-config"
+	configSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      configSecretName,
+			Namespace: c.desired.obj.Namespace,
+		},
+		Type: corev1.SecretTypeOpaque,
+		StringData: map[string]string{
+			"config.env": `export MINIO_ROOT_USER="admin"
+export MINIO_ROOT_PASSWORD="admin123456"
+export MINIO_BROWSER="on"`,
+		},
+	}
+
+	if err = controllerutil.SetOwnerReference(wandb, configSecret, r.Scheme); err != nil {
+		log.Error(err, "Failed to set owner reference for MinIO config secret")
+		return CtrlError(err)
+	}
+
+	existingSecret := &corev1.Secret{}
+	err = r.Get(ctx, types.NamespacedName{Name: configSecretName, Namespace: c.desired.obj.Namespace}, existingSecret)
+	if err != nil && machErrors.IsNotFound(err) {
+		if err = r.Create(ctx, configSecret); err != nil {
+			log.Error(err, "Failed to create MinIO config secret")
+			return CtrlError(err)
+		}
+		log.Info("Created MinIO configuration secret", "secret", configSecretName)
+	} else if err != nil {
+		log.Error(err, "Failed to check for existing MinIO config secret")
+		return CtrlError(err)
+	}
+
+	c.desired.obj.Spec.Configuration = &corev1.LocalObjectReference{
+		Name: configSecretName,
+	}
 
 	if err = controllerutil.SetOwnerReference(wandb, c.desired.obj, r.Scheme); err != nil {
 		log.Error(err, "Failed to set owner reference for MinIO Tenant")
