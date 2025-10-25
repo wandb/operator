@@ -9,6 +9,7 @@ import (
 	strimziv1beta2 "github.com/wandb/operator/api/strimzi/v1beta2"
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/ctrlqueue"
+	corev1 "k8s.io/api/core/v1"
 	machErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -18,9 +19,6 @@ import (
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-var defaultKafkaRequeueSeconds = 30
-var defaultKafkaRequeueDuration = time.Duration(defaultKafkaRequeueSeconds) * time.Second
-
 const kafkaFinalizer = "kafka.app.wandb.com"
 
 type wandbKafkaWrapper struct {
@@ -28,6 +26,8 @@ type wandbKafkaWrapper struct {
 	nodePoolInstalled bool
 	kafkaObj          *strimziv1beta2.Kafka
 	nodePoolObj       *strimziv1beta2.KafkaNodePool
+	secretInstalled   bool
+	secret            *corev1.Secret
 }
 
 func (w *wandbKafkaWrapper) IsReady() bool {
@@ -45,10 +45,18 @@ func (w *wandbKafkaWrapper) IsReady() bool {
 		}
 	}
 
+	// Check if NodePool has Ready condition set to True
 	for _, condition := range w.nodePoolObj.Status.Conditions {
 		if condition.Type == "Ready" && condition.Status == metav1.ConditionTrue {
 			nodePoolReady = true
 			break
+		}
+	}
+
+	// If NodePool has no conditions, consider it ready if it has replicas and observed generation matches
+	if !nodePoolReady && len(w.nodePoolObj.Status.Conditions) == 0 {
+		if w.nodePoolObj.Status.Replicas > 0 && w.nodePoolObj.Status.ObservedGeneration > 0 {
+			nodePoolReady = true
 		}
 	}
 
@@ -122,12 +130,12 @@ func (r *WeightsAndBiasesV2Reconciler) handleKafka(
 		return ctrlState
 	}
 
-	if desiredKafka, err = getDesiredKafka(ctx, wandb, namespacedName); err != nil {
+	if desiredKafka, err = getDesiredKafka(ctx, wandb, namespacedName, actualKafka); err != nil {
 		log.Error(err, "Failed to get desired Kafka configuration")
 		return CtrlError(err)
 	}
 
-	if reconciliation, err = computeKafkaReconcileDrift(ctx, wandb, desiredKafka, actualKafka); err != nil {
+	if reconciliation, err = computeKafkaReconcileDrift(ctx, wandb, desiredKafka, actualKafka, r); err != nil {
 		log.Error(err, "Failed to compute Kafka reconcile drift")
 		return CtrlError(err)
 	}
@@ -149,6 +157,8 @@ func getActualKafka(
 		nodePoolInstalled: false,
 		kafkaObj:          nil,
 		nodePoolObj:       nil,
+		secretInstalled:   false,
+		secret:            nil,
 	}
 
 	obj := &strimziv1beta2.Kafka{}
@@ -173,18 +183,34 @@ func getActualKafka(
 		return result, err
 	}
 
+	secretNamespacedName := types.NamespacedName{
+		Name:      "wandb-kafka-connection",
+		Namespace: namespacedName.Namespace,
+	}
+	secret := &corev1.Secret{}
+	err = reconciler.Get(ctx, secretNamespacedName, secret)
+	if err == nil {
+		result.secret = secret
+		result.secretInstalled = true
+	} else if !machErrors.IsNotFound(err) {
+		return result, err
+	}
+
 	return result, nil
 }
 
 func getDesiredKafka(
-	ctx context.Context, wandb *apiv2.WeightsAndBiases, namespacedName types.NamespacedName,
+	_ context.Context, wandb *apiv2.WeightsAndBiases, namespacedName types.NamespacedName, actual wandbKafkaWrapper,
 ) (
 	wandbKafkaWrapper, error,
 ) {
 	result := wandbKafkaWrapper{
-		kafkaInstalled: false,
-		kafkaObj:       nil,
-		nodePoolObj:    nil,
+		kafkaInstalled:    false,
+		kafkaObj:          nil,
+		nodePoolObj:       nil,
+		secretInstalled:   false,
+		secret:            nil,
+		nodePoolInstalled: false,
 	}
 
 	if !wandb.Spec.Kafka.Enabled {
@@ -284,11 +310,39 @@ func getDesiredKafka(
 
 	result.kafkaObj = kafka
 	result.nodePoolObj = nodePool
+
+	if actual.IsReady() && actual.kafkaObj != nil && len(actual.kafkaObj.Status.Listeners) > 0 {
+		var bootstrapServers string
+		for _, listener := range actual.kafkaObj.Status.Listeners {
+			if listener.Name == "plain" {
+				bootstrapServers = listener.BootstrapServers
+				break
+			}
+		}
+
+		if bootstrapServers != "" {
+			namespace := namespacedName.Namespace
+			connectionSecret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "wandb-kafka-connection",
+					Namespace: namespace,
+				},
+				Type: corev1.SecretTypeOpaque,
+				StringData: map[string]string{
+					"KAFKA_BOOTSTRAP_SERVERS": bootstrapServers,
+				},
+			}
+
+			result.secret = connectionSecret
+			result.secretInstalled = true
+		}
+	}
+
 	return result, nil
 }
 
 func computeKafkaReconcileDrift(
-	ctx context.Context, wandb *apiv2.WeightsAndBiases, desiredKafka, actualKafka wandbKafkaWrapper,
+	_ context.Context, wandb *apiv2.WeightsAndBiases, desiredKafka, actualKafka wandbKafkaWrapper, _ client.Reader,
 ) (
 	wandbKafkaDoReconcile, error,
 ) {
@@ -311,6 +365,11 @@ func computeKafkaReconcileDrift(
 
 	// Check Kafka CR (requires NodePool to exist)
 	if !desiredKafka.kafkaInstalled && actualKafka.kafkaInstalled {
+		if actualKafka.secretInstalled {
+			return &wandbKafkaConnInfoDelete{
+				wandb: wandb,
+			}, nil
+		}
 		return &wandbKafkaDelete{
 			actual: actualKafka,
 			wandb:  wandb,
@@ -318,6 +377,13 @@ func computeKafkaReconcileDrift(
 	}
 	if desiredKafka.kafkaInstalled && !actualKafka.kafkaInstalled {
 		return &wandbKafkaCreate{
+			desired: desiredKafka,
+			wandb:   wandb,
+		}, nil
+	}
+
+	if desiredKafka.secretInstalled && !actualKafka.secretInstalled {
+		return &wandbKafkaConnInfoCreate{
 			desired: desiredKafka,
 			wandb:   wandb,
 		}, nil
@@ -693,4 +759,65 @@ func (k *KafkaBackupExecutor) EnsureKafkaBackup(ctx context.Context, currentStat
 	}
 
 	return state, result, nil
+}
+
+type wandbKafkaConnInfoCreate struct {
+	desired wandbKafkaWrapper
+	wandb   *apiv2.WeightsAndBiases
+}
+
+func (c *wandbKafkaConnInfoCreate) Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) CtrlState {
+	log := ctrl.LoggerFrom(ctx)
+	log.Info("Creating Kafka connection secret")
+
+	if c.desired.secret == nil {
+		log.Error(nil, "Desired secret is nil")
+		return CtrlError(errors.New("desired secret is nil"))
+	}
+
+	if err := controllerutil.SetOwnerReference(c.wandb, c.desired.secret, r.Scheme); err != nil {
+		log.Error(err, "Failed to set owner reference for Kafka connection secret")
+		return CtrlError(err)
+	}
+
+	if err := r.Create(ctx, c.desired.secret); err != nil {
+		log.Error(err, "Failed to create Kafka connection secret")
+		return CtrlError(err)
+	}
+
+	log.Info("Kafka connection secret created successfully")
+	return CtrlDone(HandlerScope)
+}
+
+type wandbKafkaConnInfoDelete struct {
+	wandb *apiv2.WeightsAndBiases
+}
+
+func (d *wandbKafkaConnInfoDelete) Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) CtrlState {
+	log := ctrl.LoggerFrom(ctx)
+	log.Info("Deleting Kafka connection secret")
+
+	namespacedName := types.NamespacedName{
+		Name:      "wandb-kafka-connection",
+		Namespace: d.wandb.Namespace,
+	}
+
+	secret := &corev1.Secret{}
+	err := r.Get(ctx, namespacedName, secret)
+	if err != nil {
+		if machErrors.IsNotFound(err) {
+			log.Info("Kafka connection secret already deleted")
+			return CtrlContinue()
+		}
+		log.Error(err, "Failed to get Kafka connection secret for deletion")
+		return CtrlError(err)
+	}
+
+	if err := r.Delete(ctx, secret); err != nil {
+		log.Error(err, "Failed to delete Kafka connection secret")
+		return CtrlError(err)
+	}
+
+	log.Info("Kafka connection secret deleted successfully")
+	return CtrlDone(HandlerScope)
 }

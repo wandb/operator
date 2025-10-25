@@ -23,8 +23,10 @@ import (
 const minioFinalizer = "minio.app.wandb.com"
 
 type wandbMinioWrapper struct {
-	installed bool
-	obj       *miniov2.Tenant
+	installed       bool
+	obj             *miniov2.Tenant
+	secretInstalled bool
+	secret          *corev1.Secret
 }
 
 func (w *wandbMinioWrapper) IsReady() bool {
@@ -88,7 +90,7 @@ func (r *WeightsAndBiasesV2Reconciler) handleMinio(
 		return ctrlState
 	}
 
-	if desiredMinio, err = getDesiredMinio(ctx, wandb, namespacedName); err != nil {
+	if desiredMinio, err = getDesiredMinio(ctx, wandb, namespacedName, actualMinio); err != nil {
 		log.Error(err, "Failed to get desired MinIO configuration")
 		return CtrlError(err)
 	}
@@ -111,8 +113,10 @@ func getActualMinio(
 	wandbMinioWrapper, error,
 ) {
 	result := wandbMinioWrapper{
-		installed: false,
-		obj:       nil,
+		installed:       false,
+		obj:             nil,
+		secretInstalled: false,
+		secret:          nil,
 	}
 
 	obj := &miniov2.Tenant{}
@@ -124,17 +128,32 @@ func getActualMinio(
 		return result, err
 	}
 
+	secretNamespacedName := types.NamespacedName{
+		Name:      "wandb-minio-connection",
+		Namespace: namespacedName.Namespace,
+	}
+	secret := &corev1.Secret{}
+	err = reconciler.Get(ctx, secretNamespacedName, secret)
+	if err == nil {
+		result.secret = secret
+		result.secretInstalled = true
+	} else if !machErrors.IsNotFound(err) {
+		return result, err
+	}
+
 	return result, nil
 }
 
 func getDesiredMinio(
-	ctx context.Context, wandb *apiv2.WeightsAndBiases, namespacedName types.NamespacedName,
+	_ context.Context, wandb *apiv2.WeightsAndBiases, namespacedName types.NamespacedName, actual wandbMinioWrapper,
 ) (
 	wandbMinioWrapper, error,
 ) {
 	result := wandbMinioWrapper{
-		installed: false,
-		obj:       nil,
+		installed:       false,
+		obj:             nil,
+		secretInstalled: false,
+		secret:          nil,
 	}
 
 	if !wandb.Spec.ObjStorage.Enabled {
@@ -202,15 +221,46 @@ func getDesiredMinio(
 	}
 
 	result.obj = tenant
+
+	if actual.IsReady() {
+		namespace := namespacedName.Namespace
+		minioEndpoint := "https://minio." + namespace + ".svc.cluster.local:443"
+		minioConfigSecretName := "wandb-minio-config"
+		minioConfigSecretKey := "config.env"
+		minioConfigMountPath := "/etc/minio/config/minioConfig.env"
+
+		connectionSecret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "wandb-minio-connection",
+				Namespace: namespace,
+			},
+			Type: corev1.SecretTypeOpaque,
+			StringData: map[string]string{
+				"MINIO_ENDPOINT":           minioEndpoint,
+				"MINIO_CONFIG_SECRET_NAME": minioConfigSecretName,
+				"MINIO_CONFIG_SECRET_KEY":  minioConfigSecretKey,
+				"MINIO_CONFIG_MOUNT_PATH":  minioConfigMountPath,
+			},
+		}
+
+		result.secret = connectionSecret
+		result.secretInstalled = true
+	}
+
 	return result, nil
 }
 
 func computeMinioReconcileDrift(
-	ctx context.Context, wandb *apiv2.WeightsAndBiases, desiredMinio, actualMinio wandbMinioWrapper,
+	_ context.Context, wandb *apiv2.WeightsAndBiases, desiredMinio, actualMinio wandbMinioWrapper,
 ) (
 	wandbMinioDoReconcile, error,
 ) {
 	if !desiredMinio.installed && actualMinio.installed {
+		if actualMinio.secretInstalled {
+			return &wandbMinioConnInfoDelete{
+				wandb: wandb,
+			}, nil
+		}
 		return &wandbMinioDelete{
 			actual: actualMinio,
 			wandb:  wandb,
@@ -222,6 +272,14 @@ func computeMinioReconcileDrift(
 			wandb:   wandb,
 		}, nil
 	}
+
+	if desiredMinio.secretInstalled && !actualMinio.secretInstalled {
+		return &wandbMinioConnInfoCreate{
+			desired: desiredMinio,
+			wandb:   wandb,
+		}, nil
+	}
+
 	if actualMinio.GetStatus() != wandb.Status.ObjStorageStatus.State ||
 		actualMinio.IsReady() != wandb.Status.ObjStorageStatus.Ready {
 		return &wandbMinioStatusUpdate{
@@ -555,4 +613,65 @@ func (m *MinioBackupExecutor) EnsureMinioBackup(ctx context.Context, currentStat
 	}
 
 	return state, result, nil
+}
+
+type wandbMinioConnInfoCreate struct {
+	desired wandbMinioWrapper
+	wandb   *apiv2.WeightsAndBiases
+}
+
+func (c *wandbMinioConnInfoCreate) Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) CtrlState {
+	log := ctrl.LoggerFrom(ctx)
+	log.Info("Creating MinIO connection secret")
+
+	if c.desired.secret == nil {
+		log.Error(nil, "Desired secret is nil")
+		return CtrlError(errors.New("desired secret is nil"))
+	}
+
+	if err := controllerutil.SetOwnerReference(c.wandb, c.desired.secret, r.Scheme); err != nil {
+		log.Error(err, "Failed to set owner reference for MinIO connection secret")
+		return CtrlError(err)
+	}
+
+	if err := r.Create(ctx, c.desired.secret); err != nil {
+		log.Error(err, "Failed to create MinIO connection secret")
+		return CtrlError(err)
+	}
+
+	log.Info("MinIO connection secret created successfully")
+	return CtrlDone(HandlerScope)
+}
+
+type wandbMinioConnInfoDelete struct {
+	wandb *apiv2.WeightsAndBiases
+}
+
+func (d *wandbMinioConnInfoDelete) Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) CtrlState {
+	log := ctrl.LoggerFrom(ctx)
+	log.Info("Deleting MinIO connection secret")
+
+	namespacedName := types.NamespacedName{
+		Name:      "wandb-minio-connection",
+		Namespace: d.wandb.Namespace,
+	}
+
+	secret := &corev1.Secret{}
+	err := r.Get(ctx, namespacedName, secret)
+	if err != nil {
+		if machErrors.IsNotFound(err) {
+			log.Info("MinIO connection secret already deleted")
+			return CtrlContinue()
+		}
+		log.Error(err, "Failed to get MinIO connection secret for deletion")
+		return CtrlError(err)
+	}
+
+	if err := r.Delete(ctx, secret); err != nil {
+		log.Error(err, "Failed to delete MinIO connection secret")
+		return CtrlError(err)
+	}
+
+	log.Info("MinIO connection secret deleted successfully")
+	return CtrlDone(HandlerScope)
 }

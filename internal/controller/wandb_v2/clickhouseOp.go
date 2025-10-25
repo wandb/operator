@@ -23,8 +23,10 @@ import (
 const clickhouseFinalizer = "clickhouse.app.wandb.com"
 
 type wandbClickHouseWrapper struct {
-	installed bool
-	obj       *chiv1.ClickHouseInstallation
+	installed       bool
+	obj             *chiv1.ClickHouseInstallation
+	secretInstalled bool
+	secret          *corev1.Secret
 }
 
 func (w *wandbClickHouseWrapper) IsReady() bool {
@@ -97,7 +99,7 @@ func (r *WeightsAndBiasesV2Reconciler) handleClickHouse(
 		return ctrlState
 	}
 
-	if desiredClickHouse, err = getDesiredClickHouse(ctx, wandb, namespacedName); err != nil {
+	if desiredClickHouse, err = getDesiredClickHouse(ctx, wandb, namespacedName, actualClickHouse); err != nil {
 		log.Error(err, "Failed to get desired ClickHouse configuration")
 		return CtrlError(err)
 	}
@@ -120,8 +122,10 @@ func getActualClickHouse(
 	wandbClickHouseWrapper, error,
 ) {
 	result := wandbClickHouseWrapper{
-		installed: false,
-		obj:       nil,
+		installed:       false,
+		obj:             nil,
+		secretInstalled: false,
+		secret:          nil,
 	}
 
 	obj := &chiv1.ClickHouseInstallation{}
@@ -133,17 +137,32 @@ func getActualClickHouse(
 		return result, err
 	}
 
+	secretNamespacedName := types.NamespacedName{
+		Name:      "wandb-clickhouse-connection",
+		Namespace: namespacedName.Namespace,
+	}
+	secret := &corev1.Secret{}
+	err = reconciler.Get(ctx, secretNamespacedName, secret)
+	if err == nil {
+		result.secret = secret
+		result.secretInstalled = true
+	} else if !machErrors.IsNotFound(err) {
+		return result, err
+	}
+
 	return result, nil
 }
 
 func getDesiredClickHouse(
-	ctx context.Context, wandb *apiv2.WeightsAndBiases, namespacedName types.NamespacedName,
+	_ context.Context, wandb *apiv2.WeightsAndBiases, namespacedName types.NamespacedName, actual wandbClickHouseWrapper,
 ) (
 	wandbClickHouseWrapper, error,
 ) {
 	result := wandbClickHouseWrapper{
-		installed: false,
-		obj:       nil,
+		installed:       false,
+		obj:             nil,
+		secretInstalled: false,
+		secret:          nil,
 	}
 
 	if !wandb.Spec.ClickHouse.Enabled {
@@ -220,15 +239,44 @@ func getDesiredClickHouse(
 	}
 
 	result.obj = chi
+
+	if actual.IsReady() {
+		namespace := namespacedName.Namespace
+		clickhouseHost := "clickhouse-wandb-clickhouse." + namespace + ".svc.cluster.local"
+		clickhousePort := "9000"
+		clickhouseHTTPPort := "8123"
+
+		connectionSecret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "wandb-clickhouse-connection",
+				Namespace: namespace,
+			},
+			Type: corev1.SecretTypeOpaque,
+			StringData: map[string]string{
+				"CLICKHOUSE_HOST":      clickhouseHost,
+				"CLICKHOUSE_PORT":      clickhousePort,
+				"CLICKHOUSE_HTTP_PORT": clickhouseHTTPPort,
+			},
+		}
+
+		result.secret = connectionSecret
+		result.secretInstalled = true
+	}
+
 	return result, nil
 }
 
 func computeClickHouseReconcileDrift(
-	ctx context.Context, wandb *apiv2.WeightsAndBiases, desiredClickHouse, actualClickHouse wandbClickHouseWrapper,
+	_ context.Context, wandb *apiv2.WeightsAndBiases, desiredClickHouse, actualClickHouse wandbClickHouseWrapper,
 ) (
 	wandbClickHouseDoReconcile, error,
 ) {
 	if !desiredClickHouse.installed && actualClickHouse.installed {
+		if actualClickHouse.secretInstalled {
+			return &wandbClickHouseConnInfoDelete{
+				wandb: wandb,
+			}, nil
+		}
 		return &wandbClickHouseDelete{
 			actual: actualClickHouse,
 			wandb:  wandb,
@@ -240,6 +288,14 @@ func computeClickHouseReconcileDrift(
 			wandb:   wandb,
 		}, nil
 	}
+
+	if desiredClickHouse.secretInstalled && !actualClickHouse.secretInstalled {
+		return &wandbClickHouseConnInfoCreate{
+			desired: desiredClickHouse,
+			wandb:   wandb,
+		}, nil
+	}
+
 	if actualClickHouse.GetStatus() != wandb.Status.ClickHouseStatus.State ||
 		actualClickHouse.IsReady() != wandb.Status.ClickHouseStatus.Ready {
 		return &wandbClickHouseStatusUpdate{
@@ -537,4 +593,65 @@ func (c *ClickHouseBackupExecutor) EnsureClickHouseBackup(ctx context.Context, c
 	}
 
 	return state, result, nil
+}
+
+type wandbClickHouseConnInfoCreate struct {
+	desired wandbClickHouseWrapper
+	wandb   *apiv2.WeightsAndBiases
+}
+
+func (c *wandbClickHouseConnInfoCreate) Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) CtrlState {
+	log := ctrl.LoggerFrom(ctx)
+	log.Info("Creating ClickHouse connection secret")
+
+	if c.desired.secret == nil {
+		log.Error(nil, "Desired secret is nil")
+		return CtrlError(errors.New("desired secret is nil"))
+	}
+
+	if err := controllerutil.SetOwnerReference(c.wandb, c.desired.secret, r.Scheme); err != nil {
+		log.Error(err, "Failed to set owner reference for ClickHouse connection secret")
+		return CtrlError(err)
+	}
+
+	if err := r.Create(ctx, c.desired.secret); err != nil {
+		log.Error(err, "Failed to create ClickHouse connection secret")
+		return CtrlError(err)
+	}
+
+	log.Info("ClickHouse connection secret created successfully")
+	return CtrlDone(HandlerScope)
+}
+
+type wandbClickHouseConnInfoDelete struct {
+	wandb *apiv2.WeightsAndBiases
+}
+
+func (d *wandbClickHouseConnInfoDelete) Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) CtrlState {
+	log := ctrl.LoggerFrom(ctx)
+	log.Info("Deleting ClickHouse connection secret")
+
+	namespacedName := types.NamespacedName{
+		Name:      "wandb-clickhouse-connection",
+		Namespace: d.wandb.Namespace,
+	}
+
+	secret := &corev1.Secret{}
+	err := r.Get(ctx, namespacedName, secret)
+	if err != nil {
+		if machErrors.IsNotFound(err) {
+			log.Info("ClickHouse connection secret already deleted")
+			return CtrlContinue()
+		}
+		log.Error(err, "Failed to get ClickHouse connection secret for deletion")
+		return CtrlError(err)
+	}
+
+	if err := r.Delete(ctx, secret); err != nil {
+		log.Error(err, "Failed to delete ClickHouse connection secret")
+		return CtrlError(err)
+	}
+
+	log.Info("ClickHouse connection secret deleted successfully")
+	return CtrlDone(HandlerScope)
 }

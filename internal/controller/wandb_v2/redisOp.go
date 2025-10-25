@@ -3,7 +3,6 @@ package wandb_v2
 import (
 	"context"
 	"errors"
-	"time"
 
 	common "github.com/OT-CONTAINER-KIT/redis-operator/api/common/v1beta2"
 	redisv1beta2 "github.com/OT-CONTAINER-KIT/redis-operator/api/redis/v1beta2"
@@ -17,12 +16,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
-var defaultRedisRequeueSeconds = 30
-var defaultRedisRequeueDuration = time.Duration(defaultRedisRequeueSeconds) * time.Second
-
 type wandbRedisWrapper struct {
-	installed bool
-	obj       *redisv1beta2.Redis
+	installed       bool
+	obj             *redisv1beta2.Redis
+	secretInstalled bool
+	secret          *corev1.Secret
 }
 
 func (w *wandbRedisWrapper) IsReady() bool {
@@ -71,7 +69,7 @@ func (r *WeightsAndBiasesV2Reconciler) handleRedis(
 		return CtrlError(err)
 	}
 
-	if desiredRedis, err = getDesiredRedis(ctx, wandb, namespacedName); err != nil {
+	if desiredRedis, err = getDesiredRedis(ctx, wandb, namespacedName, actualRedis); err != nil {
 		return CtrlError(err)
 	}
 
@@ -92,8 +90,10 @@ func getActualRedis(
 	wandbRedisWrapper, error,
 ) {
 	result := wandbRedisWrapper{
-		installed: false,
-		obj:       nil,
+		installed:       false,
+		obj:             nil,
+		secretInstalled: false,
+		secret:          nil,
 	}
 	obj := &redisv1beta2.Redis{}
 	err := reconciler.Get(ctx, namespacedName, obj)
@@ -105,17 +105,33 @@ func getActualRedis(
 	}
 	result.obj = obj
 	result.installed = true
+
+	secretNamespacedName := types.NamespacedName{
+		Name:      "wandb-redis-connection",
+		Namespace: namespacedName.Namespace,
+	}
+	secret := &corev1.Secret{}
+	err = reconciler.Get(ctx, secretNamespacedName, secret)
+	if err == nil {
+		result.secret = secret
+		result.secretInstalled = true
+	} else if !machErrors.IsNotFound(err) {
+		return result, err
+	}
+
 	return result, nil
 }
 
 func getDesiredRedis(
-	_ context.Context, wandb *apiv2.WeightsAndBiases, namespacedName types.NamespacedName,
+	_ context.Context, wandb *apiv2.WeightsAndBiases, namespacedName types.NamespacedName, actual wandbRedisWrapper,
 ) (
 	wandbRedisWrapper, error,
 ) {
 	result := wandbRedisWrapper{
-		installed: false,
-		obj:       nil,
+		installed:       false,
+		obj:             nil,
+		secretInstalled: false,
+		secret:          nil,
 	}
 
 	if !wandb.Spec.Redis.Enabled {
@@ -162,15 +178,42 @@ func getDesiredRedis(
 	}
 
 	result.obj = redis
+
+	if actual.IsReady() {
+		namespace := namespacedName.Namespace
+		redisHost := "wandb-redis." + namespace + ".svc.cluster.local"
+		redisPort := "6379"
+
+		connectionSecret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "wandb-redis-connection",
+				Namespace: namespace,
+			},
+			Type: corev1.SecretTypeOpaque,
+			StringData: map[string]string{
+				"REDIS_HOST": redisHost,
+				"REDIS_PORT": redisPort,
+			},
+		}
+
+		result.secret = connectionSecret
+		result.secretInstalled = true
+	}
+
 	return result, nil
 }
 
 func computeRedisReconcileDrift(
-	_ context.Context, wandb *apiv2.WeightsAndBiases, desiredRedis, actualRedis wandbRedisWrapper,
+	ctx context.Context, wandb *apiv2.WeightsAndBiases, desiredRedis, actualRedis wandbRedisWrapper,
 ) (
 	wandbRedisDoReconcile, error,
 ) {
 	if !desiredRedis.installed && actualRedis.installed {
+		if actualRedis.secretInstalled {
+			return &wandbRedisConnInfoDelete{
+				wandb: wandb,
+			}, nil
+		}
 		return &wandbRedisDelete{
 			actual: actualRedis,
 			wandb:  wandb,
@@ -182,6 +225,14 @@ func computeRedisReconcileDrift(
 			wandb:   wandb,
 		}, nil
 	}
+
+	if desiredRedis.secretInstalled && !actualRedis.secretInstalled {
+		return &wandbRedisConnInfoCreate{
+			desired: desiredRedis,
+			wandb:   wandb,
+		}, nil
+	}
+
 	if actualRedis.GetStatus() != wandb.Status.RedisStatus.State ||
 		actualRedis.IsReady() != wandb.Status.RedisStatus.Ready {
 		return &wandbRedisStatusUpdate{
@@ -255,5 +306,66 @@ func (s *wandbRedisStatusUpdate) Execute(
 	if err := r.Status().Update(ctx, s.wandb); err != nil {
 		return CtrlError(err)
 	}
+	return CtrlDone(HandlerScope)
+}
+
+type wandbRedisConnInfoCreate struct {
+	desired wandbRedisWrapper
+	wandb   *apiv2.WeightsAndBiases
+}
+
+func (c *wandbRedisConnInfoCreate) Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) CtrlState {
+	log := ctrl.LoggerFrom(ctx)
+	log.Info("Creating Redis connection secret")
+
+	if c.desired.secret == nil {
+		log.Error(nil, "Desired secret is nil")
+		return CtrlError(errors.New("desired secret is nil"))
+	}
+
+	if err := controllerutil.SetOwnerReference(c.wandb, c.desired.secret, r.Scheme); err != nil {
+		log.Error(err, "Failed to set owner reference for Redis connection secret")
+		return CtrlError(err)
+	}
+
+	if err := r.Create(ctx, c.desired.secret); err != nil {
+		log.Error(err, "Failed to create Redis connection secret")
+		return CtrlError(err)
+	}
+
+	log.Info("Redis connection secret created successfully")
+	return CtrlDone(HandlerScope)
+}
+
+type wandbRedisConnInfoDelete struct {
+	wandb *apiv2.WeightsAndBiases
+}
+
+func (d *wandbRedisConnInfoDelete) Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) CtrlState {
+	log := ctrl.LoggerFrom(ctx)
+	log.Info("Deleting Redis connection secret")
+
+	namespacedName := types.NamespacedName{
+		Name:      "wandb-redis-connection",
+		Namespace: d.wandb.Namespace,
+	}
+
+	secret := &corev1.Secret{}
+	err := r.Get(ctx, namespacedName, secret)
+	if err != nil {
+		if machErrors.IsNotFound(err) {
+			log.Info("Redis connection secret already deleted")
+			return CtrlContinue()
+		}
+		log.Error(err, "Failed to get Redis connection secret for deletion")
+		return CtrlError(err)
+	}
+
+	if err := r.Delete(ctx, secret); err != nil {
+		log.Error(err, "Failed to delete Redis connection secret")
+		return CtrlError(err)
+	}
+
+	log.Info("Redis connection secret deleted successfully")
 	return CtrlDone(HandlerScope)
 }

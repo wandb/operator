@@ -22,8 +22,10 @@ var defaultDbRequeueSeconds = 30
 var defaultDbRequeueDuration = time.Duration(defaultDbRequeueSeconds) * time.Second
 
 type wandbPerconaMysqlWrapper struct {
-	installed bool
-	obj       *pxcv1.PerconaXtraDBCluster
+	installed       bool
+	obj             *pxcv1.PerconaXtraDBCluster
+	secretInstalled bool
+	secret          *corev1.Secret
 }
 
 func (w *wandbPerconaMysqlWrapper) IsReady() bool {
@@ -68,7 +70,7 @@ func (r *WeightsAndBiasesV2Reconciler) handlePerconaMysql(
 		return ctrlState
 	}
 
-	if desiredPercona, err = desiredPerconaMysql(ctx, wandb, namespacedName); err != nil {
+	if desiredPercona, err = desiredPerconaMysql(ctx, wandb, namespacedName, r, actualPercona); err != nil {
 		return CtrlError(err)
 	}
 
@@ -89,8 +91,10 @@ func actualPerconaMysql(
 	wandbPerconaMysqlWrapper, error,
 ) {
 	result := wandbPerconaMysqlWrapper{
-		installed: false,
-		obj:       nil,
+		installed:       false,
+		obj:             nil,
+		secretInstalled: false,
+		secret:          nil,
 	}
 	obj := &pxcv1.PerconaXtraDBCluster{}
 	err := reconciler.Get(ctx, namespacedName, obj)
@@ -102,17 +106,33 @@ func actualPerconaMysql(
 	}
 	result.obj = obj
 	result.installed = true
+
+	secretNamespacedName := types.NamespacedName{
+		Name:      "wandb-mysql-connection",
+		Namespace: namespacedName.Namespace,
+	}
+	secret := &corev1.Secret{}
+	err = reconciler.Get(ctx, secretNamespacedName, secret)
+	if err == nil {
+		result.secret = secret
+		result.secretInstalled = true
+	} else if !machErrors.IsNotFound(err) {
+		return result, err
+	}
+
 	return result, nil
 }
 
 func desiredPerconaMysql(
-	ctx context.Context, wandb *apiv2.WeightsAndBiases, namespacedName types.NamespacedName,
+	ctx context.Context, wandb *apiv2.WeightsAndBiases, namespacedName types.NamespacedName, reconciler *WeightsAndBiasesV2Reconciler, actual wandbPerconaMysqlWrapper,
 ) (
 	wandbPerconaMysqlWrapper, error,
 ) {
 	result := wandbPerconaMysqlWrapper{
-		installed: false,
-		obj:       nil,
+		installed:       false,
+		obj:             nil,
+		secretInstalled: false,
+		secret:          nil,
 	}
 
 	if !wandb.Spec.Database.Enabled {
@@ -205,6 +225,46 @@ func desiredPerconaMysql(
 	}
 
 	result.obj = pxc
+
+	if actual.IsReady() {
+		namespace := namespacedName.Namespace
+
+		sourceSecretName := types.NamespacedName{
+			Name:      "wandb-percona-mysql-secrets",
+			Namespace: namespace,
+		}
+		sourceSecret := &corev1.Secret{}
+		if err := reconciler.Get(ctx, sourceSecretName, sourceSecret); err != nil {
+			return result, err
+		}
+
+		mysqlPassword, ok := sourceSecret.Data["root"]
+		if !ok {
+			return result, errors.New("root key not found in wandb-percona-mysql-secrets")
+		}
+
+		mysqlHost := "wandb-percona-mysql-pxc." + namespace + ".svc.cluster.local"
+		mysqlPort := "3306"
+		mysqlUser := "root"
+
+		connectionSecret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "wandb-mysql-connection",
+				Namespace: namespace,
+			},
+			Type: corev1.SecretTypeOpaque,
+			StringData: map[string]string{
+				"MYSQL_HOST":     mysqlHost,
+				"MYSQL_PORT":     mysqlPort,
+				"MYSQL_USER":     mysqlUser,
+				"MYSQL_PASSWORD": string(mysqlPassword),
+			},
+		}
+
+		result.secret = connectionSecret
+		result.secretInstalled = true
+	}
+
 	return result, nil
 }
 
@@ -214,6 +274,11 @@ func computePerconaReconcileDrift(
 	wandbPerconaMysqlDoReconcile, error,
 ) {
 	if !desiredPercona.installed && actualPercona.installed {
+		if actualPercona.secretInstalled {
+			return &wandbMysqlConnInfoDelete{
+				wandb: wandb,
+			}, nil
+		}
 		return &wandbPerconaMysqlDelete{
 			actual: actualPercona,
 			wandb:  wandb,
@@ -225,6 +290,14 @@ func computePerconaReconcileDrift(
 			wandb:   wandb,
 		}, nil
 	}
+
+	if desiredPercona.secretInstalled && !actualPercona.secretInstalled {
+		return &wandbMysqlConnInfoCreate{
+			desired: desiredPercona,
+			wandb:   wandb,
+		}, nil
+	}
+
 	if actualPercona.GetStatus() != wandb.Status.DatabaseStatus.State ||
 		actualPercona.IsReady() != wandb.Status.DatabaseStatus.Ready {
 		return &wandbPerconaMysqlStausUpdate{
@@ -459,4 +532,65 @@ func (w *wandbPerconaMysqlWrapper) handleDatabaseBackup(
 	}
 
 	return err
+}
+
+type wandbMysqlConnInfoCreate struct {
+	desired wandbPerconaMysqlWrapper
+	wandb   *apiv2.WeightsAndBiases
+}
+
+func (c *wandbMysqlConnInfoCreate) Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) CtrlState {
+	log := ctrl.LoggerFrom(ctx)
+	log.Info("Creating MySQL connection secret")
+
+	if c.desired.secret == nil {
+		log.Error(nil, "Desired secret is nil")
+		return CtrlError(errors.New("desired secret is nil"))
+	}
+
+	if err := controllerutil.SetOwnerReference(c.wandb, c.desired.secret, r.Scheme); err != nil {
+		log.Error(err, "Failed to set owner reference for MySQL connection secret")
+		return CtrlError(err)
+	}
+
+	if err := r.Create(ctx, c.desired.secret); err != nil {
+		log.Error(err, "Failed to create MySQL connection secret")
+		return CtrlError(err)
+	}
+
+	log.Info("MySQL connection secret created successfully")
+	return CtrlDone(HandlerScope)
+}
+
+type wandbMysqlConnInfoDelete struct {
+	wandb *apiv2.WeightsAndBiases
+}
+
+func (d *wandbMysqlConnInfoDelete) Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) CtrlState {
+	log := ctrl.LoggerFrom(ctx)
+	log.Info("Deleting MySQL connection secret")
+
+	namespacedName := types.NamespacedName{
+		Name:      "wandb-mysql-connection",
+		Namespace: d.wandb.Namespace,
+	}
+
+	secret := &corev1.Secret{}
+	err := r.Get(ctx, namespacedName, secret)
+	if err != nil {
+		if machErrors.IsNotFound(err) {
+			log.Info("MySQL connection secret already deleted")
+			return CtrlContinue()
+		}
+		log.Error(err, "Failed to get MySQL connection secret for deletion")
+		return CtrlError(err)
+	}
+
+	if err := r.Delete(ctx, secret); err != nil {
+		log.Error(err, "Failed to delete MySQL connection secret")
+		return CtrlError(err)
+	}
+
+	log.Info("MySQL connection secret deleted successfully")
+	return CtrlDone(HandlerScope)
 }
