@@ -227,7 +227,7 @@ func getDesiredMinio(
 		minioEndpoint := "https://minio." + namespace + ".svc.cluster.local:443"
 		minioConfigSecretName := "wandb-minio-config"
 		minioConfigSecretKey := "config.env"
-		minioConfigMountPath := "/etc/minio/config/minioConfig.env"
+		minioConfigMountPath := "/etc/minio/config.env"
 
 		connectionSecret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{

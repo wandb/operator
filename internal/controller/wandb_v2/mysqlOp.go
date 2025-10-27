@@ -48,7 +48,7 @@ type wandbPerconaMysqlDoReconcile interface {
 
 func perconaMysqlNamespacedName(req ctrl.Request) types.NamespacedName {
 	return types.NamespacedName{
-		Name:      "wandb-percona-mysql",
+		Name:      "wandb-mysql",
 		Namespace: req.Namespace,
 	}
 }
@@ -61,8 +61,10 @@ func (r *WeightsAndBiasesV2Reconciler) handlePerconaMysql(
 	var actualPercona wandbPerconaMysqlWrapper
 	var reconciliation wandbPerconaMysqlDoReconcile
 	var namespacedName = perconaMysqlNamespacedName(req)
+	log := ctrllog.FromContext(ctx)
 
 	if actualPercona, err = actualPerconaMysql(ctx, r, namespacedName); err != nil {
+		log.Error(err, "Failed to get actual Percona MySQL")
 		return CtrlError(err)
 	}
 
@@ -71,10 +73,12 @@ func (r *WeightsAndBiasesV2Reconciler) handlePerconaMysql(
 	}
 
 	if desiredPercona, err = desiredPerconaMysql(ctx, wandb, namespacedName, r, actualPercona); err != nil {
+		log.Error(err, "Failed to compute desired Percona MySQL state")
 		return CtrlError(err)
 	}
 
 	if reconciliation, err = computePerconaReconcileDrift(ctx, wandb, desiredPercona, actualPercona); err != nil {
+		log.Error(err, "Failed to compute Percona MySQL reconciliation drift")
 		return CtrlError(err)
 	}
 
@@ -159,8 +163,7 @@ func desiredPerconaMysql(
 			Namespace: namespacedName.Namespace,
 		},
 		Spec: pxcv1.PerconaXtraDBClusterSpec{
-			CRVersion:   "1.18.0",
-			SecretsName: "wandb-percona-mysql-secrets",
+			CRVersion: "1.18.0",
 			Unsafe: pxcv1.UnsafeFlags{
 				PXCSize:   true,
 				TLS:       true,
@@ -230,20 +233,23 @@ func desiredPerconaMysql(
 		namespace := namespacedName.Namespace
 
 		sourceSecretName := types.NamespacedName{
-			Name:      "wandb-percona-mysql-secrets",
+			Name:      namespacedName.Name + "-secrets",
 			Namespace: namespace,
 		}
 		sourceSecret := &corev1.Secret{}
 		if err := reconciler.Get(ctx, sourceSecretName, sourceSecret); err != nil {
+			if machErrors.IsNotFound(err) {
+				return result, nil
+			}
 			return result, err
 		}
 
 		mysqlPassword, ok := sourceSecret.Data["root"]
 		if !ok {
-			return result, errors.New("root key not found in wandb-percona-mysql-secrets")
+			return result, errors.New("root key not found in " + sourceSecretName.Name)
 		}
 
-		mysqlHost := "wandb-percona-mysql-pxc." + namespace + ".svc.cluster.local"
+		mysqlHost := "wandb-mysql-pxc." + namespace + ".svc.cluster.local"
 		mysqlPort := "3306"
 		mysqlUser := "root"
 
@@ -320,15 +326,18 @@ func (c *wandbPerconaMysqlCreate) Execute(ctx context.Context, r *WeightsAndBias
 	log.Info("Installing Percona XtraDB Cluster")
 	wandb := c.wandb
 	if err = controllerutil.SetOwnerReference(wandb, c.desired.obj, r.Scheme); err != nil {
+		log.Error(err, "Failed to set owner reference for Percona XtraDB Cluster")
 		return CtrlError(err)
 	}
 	if err = r.Create(ctx, c.desired.obj); err != nil {
+		log.Error(err, "Failed to create Percona XtraDB Cluster")
 		return CtrlError(err)
 	}
 	wandb.Status.State = apiv2.WBStateInfraUpdate
 	wandb.Status.Message = "Creating Database"
 	wandb.Status.DatabaseStatus.State = string(pxcv1.AppStateInit)
 	if err = r.Status().Update(ctx, wandb); err != nil {
+		log.Error(err, "Failed to update status after creating Percona XtraDB Cluster")
 		return CtrlError(err)
 	}
 	return CtrlDone(HandlerScope)
@@ -344,12 +353,14 @@ func (d *wandbPerconaMysqlDelete) Execute(ctx context.Context, r *WeightsAndBias
 	log := ctrl.LoggerFrom(ctx)
 	log.Info("Uninstalling Percona XtraDB Cluster")
 	if err = r.Delete(ctx, d.actual.obj); err != nil {
+		log.Error(err, "Failed to delete Percona XtraDB Cluster")
 		return CtrlError(err)
 	}
 	wandb := d.wandb
 	wandb.Status.State = apiv2.WBStateInfraUpdate
 	wandb.Status.Message = "Deleting Database"
 	if err = r.Status().Update(ctx, wandb); err != nil {
+		log.Error(err, "Failed to update status after deleting Percona XtraDB Cluster")
 		return CtrlError(err)
 	}
 	return CtrlDone(HandlerScope)
@@ -364,9 +375,11 @@ type wandbPerconaMysqlStausUpdate struct {
 func (s *wandbPerconaMysqlStausUpdate) Execute(
 	ctx context.Context, r *WeightsAndBiasesV2Reconciler,
 ) CtrlState {
+	log := ctrllog.FromContext(ctx)
 	s.wandb.Status.DatabaseStatus.State = s.status
 	s.wandb.Status.DatabaseStatus.Ready = s.ready
 	if err := r.Status().Update(ctx, s.wandb); err != nil {
+		log.Error(err, "Failed to update Percona MySQL status")
 		return CtrlError(err)
 	}
 	return CtrlDone(HandlerScope)
@@ -392,6 +405,7 @@ func (w *wandbPerconaMysqlWrapper) maybeHandleDeletion(
 		log.Info("Database backup is disabled.")
 		controllerutil.RemoveFinalizer(wandb, dbFinalizer)
 		if err := reconciler.Client.Update(ctx, wandb); err != nil {
+			log.Error(err, "Failed to remove database finalizer")
 			return CtrlError(err)
 		}
 		return CtrlContinue()
@@ -405,6 +419,7 @@ func (w *wandbPerconaMysqlWrapper) maybeHandleDeletion(
 	if !hasDbFinalizer && !flaggedForDeletion {
 		wandb.ObjectMeta.Finalizers = append(wandb.ObjectMeta.Finalizers, dbFinalizer)
 		if err := reconciler.Client.Update(ctx, wandb); err != nil {
+			log.Error(err, "Failed to add database finalizer")
 			return CtrlError(err)
 		}
 		return CtrlContinue()
@@ -415,11 +430,13 @@ func (w *wandbPerconaMysqlWrapper) maybeHandleDeletion(
 			log.Info("Failed to backup database, pausing deletion")
 			wandb.ObjectMeta.DeletionTimestamp = nil
 			if err = reconciler.Update(ctx, wandb); err != nil {
+				log.Error(err, "Failed to clear deletion timestamp")
 				return CtrlError(err)
 			}
 			wandb.Status.State = apiv2.WBStateDeletionPaused
 			wandb.Status.Message = "Database backup before deletion failed, deletion paused. Disable backups to continue with deletion."
 			if err = reconciler.Status().Update(ctx, wandb); err != nil {
+				log.Error(err, "Failed to update status to deletion paused")
 				return CtrlError(err)
 			}
 			return CtrlDoneUntil(ReconcilerScope, defaultDbRequeueDuration)
@@ -432,6 +449,7 @@ func (w *wandbPerconaMysqlWrapper) maybeHandleDeletion(
 				wandb.Status.DatabaseStatus.State = string(pxcv1.AppStateStopping)
 				wandb.Status.Message = "Waiting for database backup to complete before deletion"
 				if err := reconciler.Status().Update(ctx, wandb); err != nil {
+					log.Error(err, "Failed to update status while waiting for backup")
 					return CtrlError(err)
 				}
 			}
@@ -440,10 +458,12 @@ func (w *wandbPerconaMysqlWrapper) maybeHandleDeletion(
 
 		controllerutil.RemoveFinalizer(wandb, dbFinalizer)
 		if err := reconciler.Client.Update(ctx, wandb); err != nil {
+			log.Error(err, "Failed to remove database finalizer before deletion")
 			return CtrlError(err)
 		}
 		if actualPercona.obj != nil {
 			if err := reconciler.Client.Delete(ctx, actualPercona.obj); err != nil {
+				log.Error(err, "Failed to delete Percona XtraDB Cluster object")
 				return CtrlError(err)
 			}
 		}
@@ -544,8 +564,9 @@ func (c *wandbMysqlConnInfoCreate) Execute(ctx context.Context, r *WeightsAndBia
 	log.Info("Creating MySQL connection secret")
 
 	if c.desired.secret == nil {
-		log.Error(nil, "Desired secret is nil")
-		return CtrlError(errors.New("desired secret is nil"))
+		err := errors.New("desired secret is nil")
+		log.Error(err, "Desired MySQL connection secret is nil")
+		return CtrlError(err)
 	}
 
 	if err := controllerutil.SetOwnerReference(c.wandb, c.desired.secret, r.Scheme); err != nil {

@@ -1,5 +1,8 @@
 # Image URL to use all building/pushing image targets
-IMG ?= controller:latest
+CONTROLLER_IMG ?= controller:latest
+CANARY_IMG ?= wandb-canary:latest
+KIND_CLUSTER ?= wandb-operator
+
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -94,46 +97,110 @@ lint-config: golangci-lint ## Verify golangci-lint linter configuration
 ##@ Build
 
 .PHONY: build
-build: manifests generate fmt vet ## Build manager binary.
-	go build -o bin/manager cmd/main.go
+build: build-controller build-canary ## Build all binaries.
+
+.PHONY: build-controller
+build-controller: manifests generate fmt vet ## Build controller binary.
+	go build -o bin/manager cmd/controller/main.go
+
+.PHONY: build-canary
+build-canary: fmt vet ## Build canary binary.
+	go build -o bin/canary cmd/canary/main.go
 
 .PHONY: run
 run: manifests generate fmt vet ## Run a controller from your host.
-	go run ./cmd/main.go
+	go run ./cmd/controller/main.go
 
 # If you wish to build the manager image targeting other platforms you can use the --platform flag.
 # (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 .PHONY: docker-build
-docker-build: ## Build docker image with the manager.
-	$(CONTAINER_TOOL) build -t ${IMG} .
+docker-build: docker-build-controller docker-build-canary ## Build all docker images.
+
+.PHONY: docker-build-controller
+docker-build-controller: ## Build controller docker image.
+	$(CONTAINER_TOOL) build -t ${CONTROLLER_IMG} -f Dockerfile.controller .
+
+.PHONY: docker-build-canary
+docker-build-canary: ## Build canary docker image.
+	$(CONTAINER_TOOL) build -t ${CANARY_IMG} -f Dockerfile.canary .
 
 .PHONY: docker-push
-docker-push: ## Push docker image with the manager.
-	$(CONTAINER_TOOL) push ${IMG}
+docker-push: docker-push-controller docker-push-canary ## Push all docker images.
+
+.PHONY: docker-push-controller
+docker-push-controller: ## Push controller docker image.
+	$(CONTAINER_TOOL) push ${CONTROLLER_IMG}
+
+.PHONY: docker-push-canary
+docker-push-canary: ## Push canary docker image.
+	$(CONTAINER_TOOL) push ${CANARY_IMG}
 
 # PLATFORMS defines the target platforms for the manager image be built to provide support to multiple
-# architectures. (i.e. make docker-buildx IMG=myregistry/mypoperator:0.0.1). To use this option you need to:
+# architectures. (i.e. make docker-buildx CONTROLLER_IMG=myregistry/mypoperator:0.0.1). To use this option you need to:
 # - be able to use docker buildx. More info: https://docs.docker.com/build/buildx/
 # - have enabled BuildKit. More info: https://docs.docker.com/develop/develop-images/build_enhancements/
-# - be able to push the image to your registry (i.e. if you do not set a valid value via IMG=<myregistry/image:<tag>> then the export will fail)
+# - be able to push the image to your registry (i.e. if you do not set a valid value via CONTROLLER_IMG=<myregistry/image:<tag>> then the export will fail)
 # To adequately provide solutions that are compatible with multiple platforms, you should consider using this option.
 PLATFORMS ?= linux/arm64,linux/amd64,linux/s390x,linux/ppc64le
 .PHONY: docker-buildx
-docker-buildx: ## Build and push docker image for the manager for cross-platform support
-	# copy existing Dockerfile and insert --platform=${BUILDPLATFORM} into Dockerfile.cross, and preserve the original Dockerfile
-	sed -e '1 s/\(^FROM\)/FROM --platform=\$$\{BUILDPLATFORM\}/; t' -e ' 1,// s//FROM --platform=\$$\{BUILDPLATFORM\}/' Dockerfile > Dockerfile.cross
-	- $(CONTAINER_TOOL) buildx create --name operator-builder
-	$(CONTAINER_TOOL) buildx use operator-builder
-	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${IMG} -f Dockerfile.cross .
-	- $(CONTAINER_TOOL) buildx rm operator-builder
+docker-buildx: docker-buildx-controller docker-buildx-canary ## Build and push all docker images for cross-platform support
+
+.PHONY: docker-buildx-controller
+docker-buildx-controller: ## Build controller docker image for cross-platform support
+	sed -e '1 s/\(^FROM\)/FROM --platform=\$$\{BUILDPLATFORM\}/; t' -e ' 1,// s//FROM --platform=\$$\{BUILDPLATFORM\}/' Dockerfile.controller > Dockerfile.cross
+	- $(CONTAINER_TOOL) buildx create --name controller-builder
+	$(CONTAINER_TOOL) buildx use controller-builder
+	- $(CONTAINER_TOOL) buildx build --load --platform=linux/arm64 --tag ${CONTROLLER_IMG} -f Dockerfile.cross .
+	- $(CONTAINER_TOOL) buildx rm controller-builder
 	rm Dockerfile.cross
+
+.PHONY: docker-buildx-canary
+docker-buildx-canary: ## Build canary docker image for cross-platform support
+	sed -e '1 s/\(^FROM\)/FROM --platform=\$$\{BUILDPLATFORM\}/; t' -e ' 1,// s//FROM --platform=\$$\{BUILDPLATFORM\}/' Dockerfile.canary > Dockerfile.canary.cross
+	- $(CONTAINER_TOOL) buildx create --name canary-builder
+	$(CONTAINER_TOOL) buildx use canary-builder
+	- $(CONTAINER_TOOL) buildx build --load --platform=linux/arm64 --tag ${CANARY_IMG} -f Dockerfile.canary.cross .
+	- $(CONTAINER_TOOL) buildx rm canary-builder
+	rm Dockerfile.canary.cross
+
+.PHONY: docker-buildx-push
+docker-buildx-push: docker-buildx-push-controller docker-buildx-push-canary ## Build and push all docker images for cross-platform support
+
+.PHONY: docker-buildx-push-controller
+docker-buildx-push-controller: ## Build and push controller docker image for cross-platform support
+	sed -e '1 s/\(^FROM\)/FROM --platform=\$$\{BUILDPLATFORM\}/; t' -e ' 1,// s//FROM --platform=\$$\{BUILDPLATFORM\}/' Dockerfile.controller > Dockerfile.cross
+	- $(CONTAINER_TOOL) buildx create --name controller-builder
+	$(CONTAINER_TOOL) buildx use controller-builder
+	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${CONTROLLER_IMG} -f Dockerfile.cross .
+	- $(CONTAINER_TOOL) buildx rm controller-builder
+	rm Dockerfile.cross
+
+.PHONY: docker-buildx-push-canary
+docker-buildx-push-canary: ## Build and push canary docker image for cross-platform support
+	sed -e '1 s/\(^FROM\)/FROM --platform=\$$\{BUILDPLATFORM\}/; t' -e ' 1,// s//FROM --platform=\$$\{BUILDPLATFORM\}/' Dockerfile.canary > Dockerfile.canary.cross
+	- $(CONTAINER_TOOL) buildx create --name canary-builder
+	$(CONTAINER_TOOL) buildx use canary-builder
+	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${CANARY_IMG} -f Dockerfile.canary.cross .
+	- $(CONTAINER_TOOL) buildx rm canary-builder
+	rm Dockerfile.canary.cross
 
 .PHONY: build-installer
 build-installer: manifests generate kustomize ## Generate a consolidated YAML with CRDs and deployment.
 	mkdir -p dist
-	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
+	cd config/manager && $(KUSTOMIZE) edit set image controller=${CONTROLLER_IMG}
 	$(KUSTOMIZE) build config/default > dist/install.yaml
+
+.PHONY: kind-load
+kind-load: kind-load-controller kind-load-canary ## Load all docker images into kind cluster
+
+.PHONY: kind-load-controller
+kind-load-controller: ## Load controller docker image into kind cluster
+	kind load docker-image ${CONTROLLER_IMG} --name ${KIND_CLUSTER}
+
+.PHONY: kind-load-canary
+kind-load-canary: ## Load canary docker image into kind cluster
+	kind load docker-image ${CANARY_IMG} --name ${KIND_CLUSTER}
 
 ##@ Deployment
 
@@ -151,7 +218,7 @@ uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified 
 
 .PHONY: deploy
 deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
-	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
+	cd config/manager && $(KUSTOMIZE) edit set image controller=${CONTROLLER_IMG}
 	$(KUSTOMIZE) build config/default | $(KUBECTL) apply -f -
 
 .PHONY: undeploy

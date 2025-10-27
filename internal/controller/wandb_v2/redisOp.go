@@ -66,14 +66,17 @@ func (r *WeightsAndBiasesV2Reconciler) handleRedis(
 	log.Info("Handling Redis")
 
 	if actualRedis, err = getActualRedis(ctx, r, namespacedName); err != nil {
+		log.Error(err, "Failed to get actual Redis")
 		return CtrlError(err)
 	}
 
 	if desiredRedis, err = getDesiredRedis(ctx, wandb, namespacedName, actualRedis); err != nil {
+		log.Error(err, "Failed to compute desired Redis state")
 		return CtrlError(err)
 	}
 
 	if reconciliation, err = computeRedisReconcileDrift(ctx, wandb, desiredRedis, actualRedis); err != nil {
+		log.Error(err, "Failed to compute Redis reconciliation drift")
 		return CtrlError(err)
 	}
 
@@ -255,15 +258,18 @@ func (c *wandbRedisCreate) Execute(ctx context.Context, r *WeightsAndBiasesV2Rec
 	log.Info("Installing Redis")
 	wandb := c.wandb
 	if err = controllerutil.SetOwnerReference(wandb, c.desired.obj, r.Scheme); err != nil {
+		log.Error(err, "Failed to set owner reference for Redis")
 		return CtrlError(err)
 	}
 	if err = r.Create(ctx, c.desired.obj); err != nil {
+		log.Error(err, "Failed to create Redis")
 		return CtrlError(err)
 	}
 	wandb.Status.State = apiv2.WBStateInfraUpdate
 	wandb.Status.Message = "Creating Redis"
 	wandb.Status.RedisStatus.State = "pending"
 	if err = r.Status().Update(ctx, wandb); err != nil {
+		log.Error(err, "Failed to update status after creating Redis")
 		return CtrlError(err)
 	}
 	return CtrlDone(HandlerScope)
@@ -279,12 +285,14 @@ func (d *wandbRedisDelete) Execute(ctx context.Context, r *WeightsAndBiasesV2Rec
 	log := ctrl.LoggerFrom(ctx)
 	log.Info("Uninstalling Redis")
 	if err = r.Delete(ctx, d.actual.obj); err != nil {
+		log.Error(err, "Failed to delete Redis")
 		return CtrlError(err)
 	}
 	wandb := d.wandb
 	wandb.Status.State = apiv2.WBStateInfraUpdate
 	wandb.Status.Message = "Deleting Redis"
 	if err = r.Status().Update(ctx, wandb); err != nil {
+		log.Error(err, "Failed to update status after deleting Redis")
 		return CtrlError(err)
 	}
 	return CtrlDone(HandlerScope)
@@ -304,6 +312,7 @@ func (s *wandbRedisStatusUpdate) Execute(
 	s.wandb.Status.RedisStatus.State = s.status
 	s.wandb.Status.RedisStatus.Ready = s.ready
 	if err := r.Status().Update(ctx, s.wandb); err != nil {
+		log.Error(err, "Failed to update Redis status")
 		return CtrlError(err)
 	}
 	return CtrlDone(HandlerScope)
@@ -319,8 +328,9 @@ func (c *wandbRedisConnInfoCreate) Execute(ctx context.Context, r *WeightsAndBia
 	log.Info("Creating Redis connection secret")
 
 	if c.desired.secret == nil {
-		log.Error(nil, "Desired secret is nil")
-		return CtrlError(errors.New("desired secret is nil"))
+		err := errors.New("desired secret is nil")
+		log.Error(err, "Desired Redis connection secret is nil")
+		return CtrlError(err)
 	}
 
 	if err := controllerutil.SetOwnerReference(c.wandb, c.desired.secret, r.Scheme); err != nil {

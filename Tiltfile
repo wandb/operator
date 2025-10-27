@@ -10,14 +10,15 @@ settings = {
         "kind-kind",
     ],
     "installMinio": True,
-    "installWandb": True,
-    "installMysqlOperator": False,
-    "installRedisOperator": False,
-    "installKafkaOperator": False,
-    "installMinioOperator": False,
-    "installClickHouseOperator": False,
+    "displayMysqlOperator": False,
+    "displayRedisOperator": False,
+    "displayKafkaOperator": False,
+    "displayMinioOperator": False,
+    "displayClickHouseOperator": False,
     "autoDeployOperator": True,
     "wandbCrName": "wandb-default-v1",
+    "displayCanary": False,
+    "olmEnabled": False,
 }
 
 # Override with user settings from tilt-settings.json
@@ -62,12 +63,21 @@ ENV HELM_CONFIG_HOME=/helm/.config/helm
 ENV HELM_DATA_HOME=/helm/.local/share/helm
 '''
 
+CANARY_DOCKERFILE = '''
+FROM registry.access.redhat.com/ubi9/ubi-minimal
+
+ADD tilt_bin/canary /canary
+
+USER 65532:65532
+'''
+
 DOMAIN = "wandb.com"
 GROUP = "apps"
 VERSION = "v1"
 KIND = "wandb"
 IMG = 'controller:latest'
-CONTROLLERGEN = 'rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases;'
+CANARY_IMG = 'wandb-canary:latest'
+CONTROLLERGEN = 'rbac:roleName=manager-role crd webhook paths="./..." output:crd:artirefacts:config=config/crd/bases;'
 DISABLE_SECURITY_CONTEXT = True
 DIST_DIR = 'dist'
 
@@ -94,7 +104,10 @@ def vetfmt():
 
 
 def binary():
-    return 'CGO_ENABLED=0 GOOS=linux GO111MODULE=on go build -o tilt_bin/manager cmd/main.go'
+    return 'CGO_ENABLED=0 GOOS=linux GO111MODULE=on go build -o tilt_bin/manager cmd/controller/main.go'
+
+def canary_binary():
+    return 'CGO_ENABLED=0 GOOS=linux GO111MODULE=on go build -o tilt_bin/canary cmd/canary/main.go'
 
 ################################################################################
 # PREREQUISITES CHECK
@@ -131,7 +144,7 @@ if settings.get("installMinio"):
         labels="infra",
     )
 
-if settings.get("installMysqlOperator"):
+if settings.get("displayMysqlOperator"):
     print("==> Installing Percona MySQL Operator...")
     local_resource(
         'percona-mysql-op-helm-install',
@@ -139,7 +152,21 @@ if settings.get("installMysqlOperator"):
             'helm repo add percona https://percona.github.io/percona-helm-charts/ && ' +
             'helm repo update; ' +
             'fi && ' +
-            'helm install percona-mysql-operator percona/pxc-operator --namespace=percona-mysql-operator --create-namespace',
+            'helm install percona-mysql-operator percona/pxc-operator --namespace=percona-mysql-operator --create-namespace --set watchNamespace="percona-mysql-operator\\,default"',
+        labels=['infra'],
+        auto_init=False,
+        trigger_mode=TRIGGER_MODE_MANUAL,
+    )
+
+    local_resource(
+        'percona-mysql-op-rbac-default',
+        cmd='kubectl get role percona-mysql-operator-pxc-operator -n percona-mysql-operator -o json | ' +
+            'jq \'.metadata.namespace = "default" | del(.metadata.uid, .metadata.resourceVersion, .metadata.creationTimestamp, .metadata.annotations["kubectl.kubernetes.io/last-applied-configuration"])\' | ' +
+            'kubectl apply -f - && ' +
+            'kubectl create rolebinding percona-mysql-operator-pxc-operator -n default ' +
+            '--role=percona-mysql-operator-pxc-operator ' +
+            '--serviceaccount=percona-mysql-operator:percona-mysql-operator-pxc-operator --dry-run=client -o yaml | ' +
+            'kubectl apply -f -',
         labels=['infra'],
         auto_init=False,
         trigger_mode=TRIGGER_MODE_MANUAL,
@@ -153,7 +180,7 @@ if settings.get("installMysqlOperator"):
         trigger_mode=TRIGGER_MODE_MANUAL,
     )
 
-if settings.get("installRedisOperator"):
+if settings.get("displayRedisOperator"):
     print("==> Installing Redis Operator...")
     local_resource(
         'redis-op-helm-install',
@@ -175,7 +202,7 @@ if settings.get("installRedisOperator"):
         trigger_mode=TRIGGER_MODE_MANUAL,
     )
 
-if settings.get("installKafkaOperator"):
+if settings.get("displayKafkaOperator"):
     print("==> Installing Strimzi Kafka Operator...")
     local_resource(
         'kafka-op-helm-install',
@@ -197,7 +224,7 @@ if settings.get("installKafkaOperator"):
         trigger_mode=TRIGGER_MODE_MANUAL,
     )
 
-if settings.get("installMinioOperator"):
+if settings.get("displayMinioOperator"):
     print("==> Installing MinIO Operator...")
     local_resource(
         'minio-op-helm-install',
@@ -219,7 +246,7 @@ if settings.get("installMinioOperator"):
         trigger_mode=TRIGGER_MODE_MANUAL,
     )
 
-if settings.get("installClickHouseOperator"):
+if settings.get("displayClickHouseOperator"):
     print("==> Installing ClickHouse Operator...")
     local_resource(
         'clickhouse-op-install',
@@ -294,7 +321,7 @@ k8s_resource(
 # Automatically recompile controller binary when source code changes
 ################################################################################
 
-deps = ['controllers', 'pkg', 'cmd/main.go', 'api', 'internal']
+deps = ['controllers', 'pkg', 'cmd/controller/main.go', 'api', 'internal']
 
 local_resource('Watch&Rebuild', rebuild() + "; " + binary(),
                deps=deps,
@@ -333,15 +360,46 @@ local_resource('Regenerate-CRDs',
 # Install a Wandb CR for testing if enabled
 ################################################################################
 
-if settings.get("installWandb"):
-    local_resource(
-        'Install dev CR',
-        cmd='cp ./hack/testing-manifests/wandb/' + settings.get('wandbCrName') + '.yaml ' + DIST_DIR + '/test-wandb-cr.yaml && ' +
-            'kubectl apply -f ' + DIST_DIR + '/test-wandb-cr.yaml',
-        labels="wandb",
-        auto_init=False,
-        trigger_mode=TRIGGER_MODE_MANUAL
-    )
+local_resource(
+    'Install dev CR',
+    cmd='cp ./hack/testing-manifests/wandb/' + settings.get('wandbCrName') + '.yaml ' + DIST_DIR + '/test-wandb-cr.yaml && ' +
+        'kubectl apply -f ' + DIST_DIR + '/test-wandb-cr.yaml',
+    labels="wandb",
+    auto_init=False,
+    trigger_mode=TRIGGER_MODE_MANUAL
+)
+
+################################################################################
+# CANARY: BUILD AND DEPLOY CONNECTIVITY TESTER
+# Build and deploy canary application for testing infrastructure connectivity
+################################################################################
+
+if settings.get("displayCanary"):
+    local('cp ./hack/testing-manifests/canary/canary.yaml ' + DIST_DIR + '/canary.yaml')
+
+    local_resource('build canary',
+                   cmd='make docker-buildx-canary',
+                   labels="canary",
+                   auto_init=False,
+                   trigger_mode=TRIGGER_MODE_MANUAL)
+
+    local_resource('load canary into kind',
+                   cmd='make kind-load-canary',
+                   labels="canary",
+                   auto_init=False,
+                   trigger_mode=TRIGGER_MODE_MANUAL)
+
+    local_resource('install wandb-canary',
+                   cmd='kubectl apply -f ' + DIST_DIR + '/canary.yaml',
+                   labels="canary",
+                   auto_init=False,
+                   trigger_mode=TRIGGER_MODE_MANUAL)
+
+    local_resource('uninstall wandb-canary',
+                   cmd='kubectl delete -f ' + DIST_DIR + '/canary.yaml',
+                   labels="canary",
+                   auto_init=False,
+                   trigger_mode=TRIGGER_MODE_MANUAL)
 
 ################################################################################
 # STEP 9: BUILD AND DEPLOY CONTROLLER IMAGE
@@ -367,39 +425,40 @@ if not settings.get("autoDeployOperator"):
 # OLM - Operator Lifecycle Manager
 # ============================================================================
 
-# Install OLM on the Kind cluster
-local_resource(
-    "olm-install",
-    cmd="curl -sL https://github.com/operator-framework/operator-lifecycle-manager/releases/download/v0.28.0/install.sh | bash -s v0.28.0",
-    labels=["OLM"],
-    auto_init=False,
-    trigger_mode=TRIGGER_MODE_MANUAL,
-)
+if settings.get("olmEnabled"):
+    # Install OLM on the Kind cluster
+    local_resource(
+        "olm-install",
+        cmd="curl -sL https://github.com/operator-framework/operator-lifecycle-manager/releases/download/v0.28.0/install.sh | bash -s v0.28.0",
+        labels=["OLM"],
+        auto_init=False,
+        trigger_mode=TRIGGER_MODE_MANUAL,
+    )
 
-# Check OLM status
-local_resource(
-    "olm-status",
-    cmd="echo '=== OLM Namespaces ===' && kubectl get namespaces olm operators 2>/dev/null || echo 'OLM namespaces not found' && echo '' && echo '=== OLM Pods ===' && kubectl get pods -n olm 2>/dev/null || echo 'No pods in olm namespace' && echo '' && echo '=== Operator Pods ===' && kubectl get pods -n operators 2>/dev/null || echo 'No pods in operators namespace'",
-    labels=["OLM"],
-    auto_init=False,
-    trigger_mode=TRIGGER_MODE_MANUAL,
-)
+    # Check OLM status
+    local_resource(
+        "olm-status",
+        cmd="echo '=== OLM Namespaces ===' && kubectl get namespaces olm operators 2>/dev/null || echo 'OLM namespaces not found' && echo '' && echo '=== OLM Pods ===' && kubectl get pods -n olm 2>/dev/null || echo 'No pods in olm namespace' && echo '' && echo '=== Operator Pods ===' && kubectl get pods -n operators 2>/dev/null || echo 'No pods in operators namespace'",
+        labels=["OLM"],
+        auto_init=False,
+        trigger_mode=TRIGGER_MODE_MANUAL,
+    )
 
-# View OLM package manifests
-local_resource(
-    "olm-packages",
-    cmd="kubectl get packagemanifest -n olm",
-    labels=["OLM"],
-    auto_init=False,
-    trigger_mode=TRIGGER_MODE_MANUAL,
-)
+    # View OLM package manifests
+    local_resource(
+        "olm-packages",
+        cmd="kubectl get packagemanifest -n olm",
+        labels=["OLM"],
+        auto_init=False,
+        trigger_mode=TRIGGER_MODE_MANUAL,
+    )
 
-# Uninstall OLM from the Kind cluster
-local_resource(
-    "olm-uninstall",
-    cmd="kubectl delete apiservices.apiregistration.k8s.io v1.packages.operators.coreos.com && kubectl delete namespace olm && kubectl delete namespace operators",
-    labels=["OLM"],
-    auto_init=False,
-    trigger_mode=TRIGGER_MODE_MANUAL,
-)
+    # Uninstall OLM from the Kind cluster
+    local_resource(
+        "olm-uninstall",
+        cmd="kubectl delete apiservices.apiregistration.k8s.io v1.packages.operators.coreos.com && kubectl delete namespace olm && kubectl delete namespace operators",
+        labels=["OLM"],
+        auto_init=False,
+        trigger_mode=TRIGGER_MODE_MANUAL,
+    )
 

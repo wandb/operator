@@ -24,6 +24,14 @@ if kind get clusters | grep -q "^$CLUSTER_NAME$"; then
     exit 0
 fi
 
-kind create cluster --name "$CLUSTER_NAME"
+cat <<EOF | kind create cluster --name "$CLUSTER_NAME" --config=-
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+- role: control-plane
+- role: worker
+- role: worker
+- role: worker
+EOF
 
-echo "Kind cluster '$CLUSTER_NAME' created successfully"
+echo "Kind cluster '$CLUSTER_NAME' created successfully with 3 worker nodes"

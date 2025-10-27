@@ -1,0 +1,124 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: wandb-canary
+  namespace: default
+  labels:
+    app: wandb-canary
+spec:
+  schedule: "*/5 * * * *"
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: wandb-canary
+        spec:
+          containers:
+            - name: canary
+              image: wandb-canary:latest
+              imagePullPolicy: IfNotPresent
+              env:
+                - name: MYSQL_HOST
+                  valueFrom:
+                    secretKeyRef:
+                      name: wandb-mysql-connection
+                      key: MYSQL_HOST
+                      optional: true
+                - name: MYSQL_PORT
+                  valueFrom:
+                    secretKeyRef:
+                      name: wandb-mysql-connection
+                      key: MYSQL_PORT
+                      optional: true
+                - name: MYSQL_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: wandb-mysql-connection
+                      key: MYSQL_USER
+                      optional: true
+                - name: MYSQL_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: wandb-mysql-connection
+                      key: MYSQL_PASSWORD
+                      optional: true
+                - name: REDIS_HOST
+                  valueFrom:
+                    secretKeyRef:
+                      name: wandb-redis-connection
+                      key: REDIS_HOST
+                      optional: true
+                - name: REDIS_PORT
+                  valueFrom:
+                    secretKeyRef:
+                      name: wandb-redis-connection
+                      key: REDIS_PORT
+                      optional: true
+                - name: MINIO_ENDPOINT
+                  valueFrom:
+                    secretKeyRef:
+                      name: wandb-minio-connection
+                      key: MINIO_ENDPOINT
+                      optional: true
+                - name: MINIO_CONFIG_SECRET_NAME
+                  valueFrom:
+                    secretKeyRef:
+                      name: wandb-minio-connection
+                      key: MINIO_CONFIG_SECRET_NAME
+                      optional: true
+                - name: MINIO_CONFIG_SECRET_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: wandb-minio-connection
+                      key: MINIO_CONFIG_SECRET_KEY
+                      optional: true
+                - name: MINIO_CONFIG_MOUNT_PATH
+                  valueFrom:
+                    secretKeyRef:
+                      name: wandb-minio-connection
+                      key: MINIO_CONFIG_MOUNT_PATH
+                      optional: true
+                - name: KAFKA_BOOTSTRAP_SERVERS
+                  valueFrom:
+                    secretKeyRef:
+                      name: wandb-kafka-connection
+                      key: KAFKA_BOOTSTRAP_SERVERS
+                      optional: true
+                - name: CLICKHOUSE_HOST
+                  valueFrom:
+                    secretKeyRef:
+                      name: wandb-clickhouse-connection
+                      key: CLICKHOUSE_HOST
+                      optional: true
+                - name: CLICKHOUSE_PORT
+                  valueFrom:
+                    secretKeyRef:
+                      name: wandb-clickhouse-connection
+                      key: CLICKHOUSE_PORT
+                      optional: true
+                - name: CLICKHOUSE_HTTP_PORT
+                  valueFrom:
+                    secretKeyRef:
+                      name: wandb-clickhouse-connection
+                      key: CLICKHOUSE_HTTP_PORT
+                      optional: true
+              volumeMounts:
+                - name: minio-config
+                  mountPath: /etc/minio
+                  readOnly: true
+                - name: minio-tls
+                  mountPath: /etc/minio-tls
+                  readOnly: true
+          volumes:
+            - name: minio-config
+              secret:
+                secretName: wandb-minio-config
+                optional: true
+            - name: minio-tls
+              secret:
+                secretName: wandb-minio-tls
+                optional: true
+          restartPolicy: OnFailure

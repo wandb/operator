@@ -33,7 +33,7 @@ These types were generated to enable the W&B operator to manage Kafka clusters d
    This creates `zz_generated.deepcopy.go` with required DeepCopy methods for all types.
 
 4. **Registered with Operator Scheme**:
-   Updated `cmd/main.go` to include:
+   Updated `cmd/controller/main.go` to include:
    ```go
    import strimziv1beta2 "github.com/wandb/operator/api/strimzi/v1beta2"
 
