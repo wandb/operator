@@ -1,0 +1,34 @@
+apiVersion: apps.wandb.com/v2
+kind: WeightsAndBiases
+metadata:
+  name: wandb-small-v2
+  namespace: default
+spec:
+  profile: small
+  database:
+    enabled: true
+    type: percona
+    storageSize: 5Gi
+    backup:
+      enabled: false
+  redis:
+    enabled: true
+    storageSize: 1Gi
+  kafka:
+    enabled: true
+    storageSize: 10Gi
+    replicas: 3
+    backup:
+      enabled: false
+  objStorage:
+    enabled: true
+    storageSize: 10Gi
+    replicas: 3
+    backup:
+      enabled: false
+  clickhouse:
+    enabled: true
+    storageSize: 10Gi
+    replicas: 3
+    backup:
+      enabled: false

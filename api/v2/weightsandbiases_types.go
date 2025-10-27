@@ -92,13 +92,20 @@ func init() {
 	SchemeBuilder.Register(&WeightsAndBiases{}, &WeightsAndBiasesList{})
 }
 
+type WBProfile string
+
+const (
+	WBProfileDev   WBProfile = "dev"
+	WBProfileSmall WBProfile = "small"
+)
+
 // WeightsAndBiasesSpec defines the desired state of WeightsAndBiases.
 type WeightsAndBiasesSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
 	// Profile is akin to high-level environment info
-	Profile string `json:"profile,omitempty"`
+	Profile WBProfile `json:"profile,omitempty"`
 
 	Database   WBDatabaseSpec   `json:"database,omitempty"`
 	Redis      WBRedisSpec      `json:"redis,omitempty"`

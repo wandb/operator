@@ -116,22 +116,38 @@ func (r *WeightsAndBiasesV2Reconciler) Reconcile(ctx context.Context, req ctrl.R
 		return ctrlState.reconcilerResult()
 	}
 
-	ctrlState = r.handleRedis(ctx, wandb, req)
+	if wandb.Spec.Profile == apiv2.WBProfileDev {
+		ctrlState = r.handleRedis(ctx, wandb, req)
+	} else {
+		ctrlState = r.handleRedisHA(ctx, wandb, req)
+	}
 	if ctrlState.shouldExit(ReconcilerScope) {
 		return ctrlState.reconcilerResult()
 	}
 
-	ctrlState = r.handleKafka(ctx, wandb, req)
+	if wandb.Spec.Profile == apiv2.WBProfileDev {
+		ctrlState = r.handleKafka(ctx, wandb, req)
+	} else {
+		ctrlState = r.handleKafkaHA(ctx, wandb, req)
+	}
 	if ctrlState.shouldExit(ReconcilerScope) {
 		return ctrlState.reconcilerResult()
 	}
 
-	ctrlState = r.handleMinio(ctx, wandb, req)
+	if wandb.Spec.Profile == apiv2.WBProfileDev {
+		ctrlState = r.handleMinio(ctx, wandb, req)
+	} else {
+		ctrlState = r.handleMinioHA(ctx, wandb, req)
+	}
 	if ctrlState.shouldExit(ReconcilerScope) {
 		return ctrlState.reconcilerResult()
 	}
 
-	ctrlState = r.handleClickHouse(ctx, wandb, req)
+	if wandb.Spec.Profile == apiv2.WBProfileDev {
+		ctrlState = r.handleClickHouse(ctx, wandb, req)
+	} else {
+		ctrlState = r.handleClickHouseHA(ctx, wandb, req)
+	}
 	if ctrlState.shouldExit(ReconcilerScope) {
 		return ctrlState.reconcilerResult()
 	}
@@ -162,8 +178,13 @@ func (r *WeightsAndBiasesV2Reconciler) handleDatabase(
 
 	switch dbType {
 	case apiv2.WBDatabaseTypePercona:
-		log.Info("Handling Percona XtraDB Cluster database")
-		return r.handlePerconaMysql(ctx, wandb, req)
+		if wandb.Spec.Profile == apiv2.WBProfileDev {
+			log.Info("Handling Percona XtraDB Cluster database (dev)")
+			return r.handlePerconaMysql(ctx, wandb, req)
+		} else {
+			log.Info("Handling Percona XtraDB Cluster database (HA)")
+			return r.handlePerconaMysqlHA(ctx, wandb, req)
+		}
 
 	default:
 		log.Error(nil, "Unknown database type", "type", dbType)
