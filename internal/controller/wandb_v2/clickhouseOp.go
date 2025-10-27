@@ -2,6 +2,7 @@ package wandb_v2
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"time"
@@ -186,6 +187,19 @@ func getDesiredClickHouse(
 		replicas = 1
 	}
 
+	canaryUsername := "test_user"
+	canaryPassword := "test_password"
+	passwordSha256 := fmt.Sprintf("%x", sha256.Sum256([]byte(canaryPassword)))
+	settings := chiv1.NewSettings()
+	settings.Set(
+		fmt.Sprintf("%s/password_sha256_hex", canaryUsername),
+		chiv1.NewSettingScalar(passwordSha256),
+	)
+	settings.Set(
+		fmt.Sprintf("%s/networks/ip", canaryUsername),
+		chiv1.NewSettingScalar("::/0"),
+	)
+
 	chi := &chiv1.ClickHouseInstallation{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      namespacedName.Name,
@@ -205,6 +219,7 @@ func getDesiredClickHouse(
 						},
 					},
 				},
+				Users: settings,
 			},
 			Defaults: &chiv1.Defaults{
 				Templates: &chiv1.TemplatesList{
@@ -253,9 +268,11 @@ func getDesiredClickHouse(
 			},
 			Type: corev1.SecretTypeOpaque,
 			StringData: map[string]string{
-				"CLICKHOUSE_HOST":      clickhouseHost,
-				"CLICKHOUSE_PORT":      clickhousePort,
-				"CLICKHOUSE_HTTP_PORT": clickhouseHTTPPort,
+				"CLICKHOUSE_CANARY_USERNAME": canaryUsername,
+				"CLICKHOUSE_CANARY_PASSWORD": canaryPassword,
+				"CLICKHOUSE_HOST":            clickhouseHost,
+				"CLICKHOUSE_PORT":            clickhousePort,
+				"CLICKHOUSE_HTTP_PORT":       clickhouseHTTPPort,
 			},
 		}
 

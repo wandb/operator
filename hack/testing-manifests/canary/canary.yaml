@@ -105,6 +105,18 @@ spec:
                       name: wandb-clickhouse-connection
                       key: CLICKHOUSE_HTTP_PORT
                       optional: true
+                - name: CLICKHOUSE_CANARY_USERNAME
+                  valueFrom:
+                    secretKeyRef:
+                      name: wandb-clickhouse-connection
+                      key: CLICKHOUSE_CANARY_USERNAME
+                      optional: true
+                - name: CLICKHOUSE_CANARY_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: wandb-clickhouse-connection
+                      key: CLICKHOUSE_CANARY_PASSWORD
+                      optional: true
               volumeMounts:
                 - name: minio-config
                   mountPath: /etc/minio
