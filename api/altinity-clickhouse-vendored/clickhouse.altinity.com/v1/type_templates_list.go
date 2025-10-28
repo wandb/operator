@@ -14,7 +14,7 @@
 
 package v1
 
-import "github.com/altinity/clickhouse-operator/pkg/util"
+import "github.com/wandb/operator/api/altinity-clickhouse-vendored/util"
 
 // TemplatesList defines references to .spec.templates to be used
 type TemplatesList struct {

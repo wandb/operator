@@ -18,9 +18,9 @@ import (
 	apps "k8s.io/api/apps/v1"
 	core "k8s.io/api/core/v1"
 
-	"github.com/altinity/clickhouse-operator/pkg/util"
 	"github.com/wandb/operator/api/altinity-clickhouse-vendored/common/types"
 	"github.com/wandb/operator/api/altinity-clickhouse-vendored/swversion"
+	"github.com/wandb/operator/api/altinity-clickhouse-vendored/util"
 )
 
 // Host defines host (a data replica within a shard) of .spec.configuration.clusters[n].shards[m]

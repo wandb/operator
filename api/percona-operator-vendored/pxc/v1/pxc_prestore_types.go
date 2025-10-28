@@ -36,16 +36,7 @@ type PITR struct {
 	GTID         string           `json:"gtid"`
 }
 
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
-
 // PerconaXtraDBClusterRestore is the Schema for the perconaxtradbclusterrestores API
-// +k8s:openapi-gen=true
-// +kubebuilder:subresource:status
-// +kubebuilder:resource:shortName="pxc-restore";"pxc-restores"
-// +kubebuilder:printcolumn:name="Cluster",type="string",JSONPath=".spec.pxcCluster",description="Cluster name"
-// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.state",description="Job status"
-// +kubebuilder:printcolumn:name="Completed",type="date",JSONPath=".status.completed",description="Completed time"
-// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 type PerconaXtraDBClusterRestore struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -53,8 +44,6 @@ type PerconaXtraDBClusterRestore struct {
 	Spec   PerconaXtraDBClusterRestoreSpec   `json:"spec,omitempty"`
 	Status PerconaXtraDBClusterRestoreStatus `json:"status,omitempty"`
 }
-
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // PerconaXtraDBClusterRestoreList contains a list of PerconaXtraDBClusterRestore
 type PerconaXtraDBClusterRestoreList struct {

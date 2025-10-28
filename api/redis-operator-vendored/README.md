@@ -20,6 +20,25 @@ The webhook code references `webhook.Validator` which doesn't exist in any contr
 
 ## Changes Made
 
+### Removed Code Generation Annotations
+
+All code generation annotations have been removed from vendored code:
+- `+kubebuilder:*` annotations (e.g., `+kubebuilder:validation:*`, `+kubebuilder:default:*`, `+kubebuilder:object:*`)
+- `+k8s:*` annotations (e.g., `+k8s:deepcopy-gen:*`, `+k8s:openapi-gen=true`)
+
+These annotations are only needed when running code generators like controller-gen or deepcopy-gen, which we explicitly do not do for vendored APIs. The Makefile's `generate` target only processes our own `./api/v1` and `./api/v2` types.
+
+Files affected:
+- `common/v1beta2/common_types.go`
+- `common/v1beta2/groupversion_info.go`
+- `redis/v1beta2/redis_types.go`
+- `redis/v1beta2/groupversion_info.go`
+- `redisreplication/v1beta2/redisreplication_types.go`
+- `redisreplication/v1beta2/groupversion_info.go`
+- `redissentinel/v1beta2/redissentinel_types.go`
+- `redissentinel/v1beta2/redissentinel_webhook.go`
+- `redissentinel/v1beta2/groupversion_info.go`
+
 ### api/redissentinel/v1beta2/redissentinel_webhook.go
 - **Line 26-28**: Commented out unused webhook import
 - **Line 46-47**: Commented out the problematic `var _ webhook.Validator = &RedisSentinel{}` interface check
@@ -40,6 +59,11 @@ We vendored the API type definitions needed for our operator:
 - `redis/v1beta2/` - Redis CRD types (standalone Redis)
 - `redisreplication/v1beta2/` - RedisReplication CRD types (HA replication)
 - `redissentinel/v1beta2/` - RedisSentinel CRD types (HA monitoring)
+
+### Removed Content
+- All test files (`*_test.go`)
+- Unused CRD types (RedisCluster)
+- Internal operator logic and controllers
 
 ## License
 

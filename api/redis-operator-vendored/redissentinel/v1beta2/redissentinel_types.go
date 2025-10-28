@@ -7,8 +7,6 @@ import (
 )
 
 type RedisSentinelSpec struct {
-	// +kubebuilder:validation:Minimum=1
-	// +kubebuilder:default=3
 	Size                          *int32                            `json:"clusterSize"`
 	KubernetesConfig              common.KubernetesConfig           `json:"kubernetesConfig"`
 	RedisExporter                 *common.RedisExporter             `json:"redisExporter,omitempty"`
@@ -44,10 +42,6 @@ type RedisSentinelConfig struct {
 
 type RedisSentinelStatus struct{}
 
-// +kubebuilder:object:root=true
-// +kubebuilder:subresource:status
-//+kubebuilder:storageversion
-
 // Redis is the Schema for the redis API
 type RedisSentinel struct {
 	metav1.TypeMeta   `json:",inline"`
@@ -60,8 +54,6 @@ type RedisSentinel struct {
 func (rs *RedisSentinel) GetStatefulSetName() string {
 	return rs.Name + "-sentinel"
 }
-
-// +kubebuilder:object:root=true
 
 // RedisList contains a list of Redis
 type RedisSentinelList struct {

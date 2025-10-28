@@ -52,10 +52,6 @@ type RedisSpec struct {
 // RedisStatus defines the observed state of Redis
 type RedisStatus struct{}
 
-// +kubebuilder:object:root=true
-// +kubebuilder:subresource:status
-// +kubebuilder:storageversion
-
 // Redis is the Schema for the redis API
 type Redis struct {
 	metav1.TypeMeta   `json:",inline"`
@@ -64,8 +60,6 @@ type Redis struct {
 	Spec   RedisSpec   `json:"spec"`
 	Status RedisStatus `json:"status,omitempty"`
 }
-
-// +kubebuilder:object:root=true
 
 // RedisList contains a list of Redis
 type RedisList struct {

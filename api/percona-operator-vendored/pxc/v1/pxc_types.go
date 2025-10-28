@@ -1,5 +1,3 @@
-// +kubebuilder:validation:Optional
-
 package v1
 
 import (
@@ -97,7 +95,6 @@ type PXCSpec struct {
 }
 
 // ServiceExpose defines the configuration options for exposing a k8s Service.
-// +kubebuilder:validation:XValidation:rule="!(has(self.loadBalancerClass)) || self.type == 'LoadBalancer'",message="'loadBalancerClass' can only be set when service type is 'LoadBalancer'"
 type ServiceExpose struct {
 	// Deprecated: for ExposePrimary you don't need to specify this flag.
 	Enabled bool               `json:"enabled,omitempty"`
@@ -212,16 +209,13 @@ type PITRSpec struct {
 }
 
 type PXCScheduledBackupSchedule struct {
-	// +kubebuilder:validation:Required
-	Name string `json:"name,omitempty"`
-	// +kubebuilder:validation:Required
+	Name     string `json:"name,omitempty"`
 	Schedule string `json:"schedule,omitempty"`
 	// Deprecated: Use Retention instead. This field will be removed after version 1.21.
 	Keep int `json:"keep,omitempty"`
 	// +optional
-	Retention *PXCScheduledBackupRetention `json:"retention,omitempty"`
-	// +kubebuilder:validation:Required
-	StorageName string `json:"storageName,omitempty"`
+	Retention   *PXCScheduledBackupRetention `json:"retention,omitempty"`
+	StorageName string                       `json:"storageName,omitempty"`
 }
 
 type PXCScheduledBackupRetentionType string
@@ -232,16 +226,11 @@ const (
 
 // PXCScheduledBackupRetention defines how backups are retained.
 type PXCScheduledBackupRetention struct {
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Enum=count
 	Type PXCScheduledBackupRetentionType `json:"type,omitempty"`
 
-	// +kubebuilder:validation:Minimum=0
 	Count int `json:"count,omitempty"`
 
 	// When set to true (the default), backups will be deleted from storage.
-	// +kubebuilder:validation:Required
-	// +kubebuilder:default=true
 	DeleteFromStorage bool `json:"deleteFromStorage"`
 }
 
@@ -330,20 +319,7 @@ type AppStatus struct {
 	Ready int32 `json:"ready,omitempty"`
 }
 
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
-
 // PerconaXtraDBCluster is the Schema for the perconaxtradbclusters API
-// +k8s:openapi-gen=true
-// +kubebuilder:subresource:status
-// +kubebuilder:subresource:scale:specpath=.spec.pxc.size,statuspath=.status.pxc.size,selectorpath=.status.pxc.labelSelectorPath
-// +kubebuilder:pruning:PreserveUnknownFields
-// +kubebuilder:resource:shortName="pxc";"pxcs"
-// +kubebuilder:printcolumn:name="Endpoint",type="string",JSONPath=".status.host"
-// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.state"
-// +kubebuilder:printcolumn:name="PXC",type="string",JSONPath=".status.pxc.ready",description="Ready pxc nodes"
-// +kubebuilder:printcolumn:name="proxysql",type="string",JSONPath=".status.proxysql.ready",description="Ready proxysql nodes"
-// +kubebuilder:printcolumn:name="haproxy",type="string",JSONPath=".status.haproxy.ready",description="Ready haproxy nodes"
-// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 type PerconaXtraDBCluster struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -489,8 +465,6 @@ func (cr *PerconaXtraDBCluster) Validate() error {
 
 	return nil
 }
-
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // PerconaXtraDBClusterList contains a list of PerconaXtraDBCluster
 type PerconaXtraDBClusterList struct {
@@ -844,12 +818,10 @@ func ContainsVolume(vs []corev1.Volume, name string) bool {
 	return false
 }
 
-// +kubebuilder:object:generate=false
 type CustomVolumeGetter func(nsName, cvName, cmName string, useDefaultVolume bool) (corev1.Volume, error)
 
 var NoCustomVolumeErr = errors.New("no custom volume found")
 
-// +kubebuilder:object:generate=false
 type App interface {
 	InitContainers(cr *PerconaXtraDBCluster, initImageName string) []corev1.Container
 	AppContainer(spec *PodSpec, secrets string, cr *PerconaXtraDBCluster, availableVolumes []corev1.Volume) (corev1.Container, error)
@@ -860,7 +832,6 @@ type App interface {
 	Labels() map[string]string
 }
 
-// +kubebuilder:object:generate=false
 type StatefulApp interface {
 	App
 	Name() string

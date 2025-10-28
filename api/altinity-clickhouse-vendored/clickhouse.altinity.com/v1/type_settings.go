@@ -22,9 +22,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/altinity/clickhouse-operator/pkg/util"
-	"github.com/altinity/clickhouse-operator/pkg/xml"
 	"github.com/wandb/operator/api/altinity-clickhouse-vendored/common/types"
+	"github.com/wandb/operator/api/altinity-clickhouse-vendored/util"
+	"github.com/wandb/operator/api/altinity-clickhouse-vendored/xml"
 	"gopkg.in/d4l3k/messagediff.v1"
 )
 

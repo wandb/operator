@@ -96,7 +96,7 @@ func desiredPerconaMysqlHA(
 			PXC: &pxcv1.PXCSpec{
 				PodSpec: &pxcv1.PodSpec{
 					Size:  3,
-					Image: "perconalab/percona-xtradb-cluster-operator:main-pxc8.0",
+					Image: "percona/percona-xtradb-cluster:8.0.43-34.1",
 					VolumeSpec: &pxcv1.VolumeSpec{
 						PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
 							Resources: corev1.VolumeResourceRequirements{
@@ -113,12 +113,14 @@ func desiredPerconaMysqlHA(
 			},
 			HAProxy: &pxcv1.HAProxySpec{
 				PodSpec: pxcv1.PodSpec{
-					Enabled: false,
+					Enabled: true,
+					Size:    3,
+					Image:   "percona/percona-xtradb-cluster-operator:1.18.0-haproxy",
 				},
 			},
 			LogCollector: &pxcv1.LogCollectorSpec{
 				Enabled: true,
-				Image:   "perconalab/percona-xtradb-cluster-operator:main-logcollector",
+				Image:   "percona/pmm-client:2",
 			},
 		},
 	}
@@ -132,7 +134,7 @@ func desiredPerconaMysqlHA(
 			return result, errors.New("only filesystem backup storage type is supported for now for Percona XtraDB Cluster")
 		}
 		pxc.Spec.Backup = &pxcv1.PXCScheduledBackup{
-			Image: "perconalab/percona-xtradb-cluster-operator:main-pxc8.0-backup",
+			Image: "percona/percona-xtradb-cluster-operator:1.18.0-pxc8.0-backup",
 			Storages: map[string]*pxcv1.BackupStorageSpec{
 				storageName: {
 					Type: pxcv1.BackupStorageFilesystem,

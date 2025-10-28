@@ -35,8 +35,6 @@ const (
 // log is for logging in this package.
 var redissentinellog = logf.Log.WithName("redissentinel-v1beta2-validation")
 
-// +kubebuilder:webhook:path=/validate-redis-redis-opstreelabs-in-v1beta2-redissentinel,mutating=false,failurePolicy=fail,sideEffects=None,groups=redis.redis.opstreelabs.in,resources=redissentinels,verbs=create;update,versions=v1beta2,name=validate-redissentinel.redis.opstreelabs.in,admissionReviewVersions=v1
-
 // SetupWebhookWithManager will setup the manager
 func (r *RedisSentinel) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewWebhookManagedBy(mgr).

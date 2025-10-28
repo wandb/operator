@@ -23,8 +23,8 @@ import (
 	"github.com/imdario/mergo"
 	"gopkg.in/yaml.v3"
 
-	"github.com/altinity/clickhouse-operator/pkg/util"
 	"github.com/wandb/operator/api/altinity-clickhouse-vendored/common/types"
+	"github.com/wandb/operator/api/altinity-clickhouse-vendored/util"
 )
 
 func (cr *ClickHouseInstallation) GetSpec() ICRSpec {

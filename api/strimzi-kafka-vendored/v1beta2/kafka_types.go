@@ -30,17 +30,15 @@ type KafkaSpec struct {
 
 // KafkaClusterSpec defines the Kafka cluster configuration
 type KafkaClusterSpec struct {
-	Version         string                 `json:"version,omitempty"`
-	MetadataVersion string                 `json:"metadataVersion,omitempty"`
-	Replicas        int32                  `json:"replicas,omitempty"`
-	Listeners       []GenericKafkaListener `json:"listeners,omitempty"`
-	// +kubebuilder:pruning:PreserveUnknownFields
-	// +kubebuilder:validation:Type=object
-	Config    map[string]string            `json:"config,omitempty"`
-	Storage   *KafkaStorage                `json:"storage,omitempty"`
-	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
-	Rack      *Rack                        `json:"rack,omitempty"`
-	Template  *KafkaClusterTemplate        `json:"template,omitempty"`
+	Version         string                       `json:"version,omitempty"`
+	MetadataVersion string                       `json:"metadataVersion,omitempty"`
+	Replicas        int32                        `json:"replicas,omitempty"`
+	Listeners       []GenericKafkaListener       `json:"listeners,omitempty"`
+	Config          map[string]string            `json:"config,omitempty"`
+	Storage         *KafkaStorage                `json:"storage,omitempty"`
+	Resources       *corev1.ResourceRequirements `json:"resources,omitempty"`
+	Rack            *Rack                        `json:"rack,omitempty"`
+	Template        *KafkaClusterTemplate        `json:"template,omitempty"`
 }
 
 // GenericKafkaListener represents a Kafka listener configuration
@@ -167,10 +165,8 @@ type MetadataTemplate struct {
 
 // ZooKeeperSpec defines the ZooKeeper configuration
 type ZooKeeperSpec struct {
-	Replicas int32        `json:"replicas,omitempty"`
-	Storage  KafkaStorage `json:"storage"`
-	// +kubebuilder:pruning:PreserveUnknownFields
-	// +kubebuilder:validation:Type=object
+	Replicas  int32                        `json:"replicas,omitempty"`
+	Storage   KafkaStorage                 `json:"storage"`
 	Config    map[string]string            `json:"config,omitempty"`
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
 	Template  *ZooKeeperClusterTemplate    `json:"template,omitempty"`
@@ -209,9 +205,7 @@ type EntityUserOperatorSpec struct {
 
 // EntityOperatorLogging defines logging configuration
 type EntityOperatorLogging struct {
-	Type string `json:"type,omitempty"`
-	// +kubebuilder:pruning:PreserveUnknownFields
-	// +kubebuilder:validation:Type=object
+	Type       string            `json:"type,omitempty"`
 	LoggerName map[string]string `json:"loggers,omitempty"`
 }
 
@@ -257,10 +251,6 @@ type ListenerAddress struct {
 	Port int32  `json:"port,omitempty"`
 }
 
-// +kubebuilder:object:root=true
-// +kubebuilder:subresource:status
-// +kubebuilder:resource:path=kafkas,scope=Namespaced,categories=strimzi
-
 // Kafka is the Schema for the kafkas API
 type Kafka struct {
 	metav1.TypeMeta   `json:",inline"`
@@ -269,8 +259,6 @@ type Kafka struct {
 	Spec   KafkaSpec   `json:"spec,omitempty"`
 	Status KafkaStatus `json:"status,omitempty"`
 }
-
-// +kubebuilder:object:root=true
 
 // KafkaList contains a list of Kafka
 type KafkaList struct {

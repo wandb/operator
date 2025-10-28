@@ -16,7 +16,6 @@ limitations under the License.
 
 // Package v1beta2 contains API Schema definitions for the Strimzi Kafka API v1beta2
 // These types are generated to interact with Strimzi Kafka Operator CRDs
-// +kubebuilder:object:generate=true
 // +groupName=kafka.strimzi.io
 package v1beta2
 

@@ -19,8 +19,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/altinity/clickhouse-operator/pkg/util"
 	"github.com/wandb/operator/api/altinity-clickhouse-vendored/common/types"
+	"github.com/wandb/operator/api/altinity-clickhouse-vendored/util"
 )
 
 // Settings value can be one of:

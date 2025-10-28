@@ -14,6 +14,21 @@ To have full control over the CRD API types and avoid unexpected breaking change
 
 ## Changes Made
 
+### Removed Code Generation Annotations
+
+All code generation annotations have been removed from vendored code:
+- `+kubebuilder:*` annotations (e.g., `+kubebuilder:validation:*`, `+kubebuilder:default:*`)
+- `+k8s:*` annotations (e.g., `+k8s:deepcopy-gen:*`, `+k8s:openapi-gen=true`)
+
+These annotations are only needed when running code generators like controller-gen or deepcopy-gen, which we explicitly do not do for vendored APIs. The Makefile's `generate` target only processes our own `./api/v1` and `./api/v2` types.
+
+Files affected:
+- `pxc/v1/doc.go`
+- `pxc/v1/register.go`
+- `pxc/v1/pxc_types.go`
+- `pxc/v1/pxc_backup_types.go`
+- `pxc/v1/pxc_prestore_types.go`
+
 ### api/percona-operator-vendored/pxc/v1/vendored_helpers.go
 - **Created new file**: Added vendored helper types and functions to replace dependencies on internal Percona packages:
   - `Platform` type and constants (from `pkg/version`)
@@ -47,6 +62,11 @@ We vendored the API type definitions needed for our operator:
   - `pxc_prestore_types.go` - Restore-related types
   - `zz_generated.deepcopy.go` - Generated DeepCopy methods
   - `vendored_helpers.go` - Helper types and functions (new file)
+
+### Removed Content
+- All test files (`*_test.go`)
+- Unused CRD types
+- Internal operator logic and controllers
 
 ## License
 

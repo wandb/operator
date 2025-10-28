@@ -72,10 +72,6 @@ type KafkaNodePoolStatus struct {
 	Roles              []string           `json:"roles,omitempty"`
 }
 
-// +kubebuilder:object:root=true
-// +kubebuilder:subresource:status
-// +kubebuilder:resource:path=kafkanodepools,scope=Namespaced,categories=strimzi
-
 // KafkaNodePool is the Schema for the kafkanodepools API
 type KafkaNodePool struct {
 	metav1.TypeMeta   `json:",inline"`
@@ -84,8 +80,6 @@ type KafkaNodePool struct {
 	Spec   KafkaNodePoolSpec   `json:"spec,omitempty"`
 	Status KafkaNodePoolStatus `json:"status,omitempty"`
 }
-
-// +kubebuilder:object:root=true
 
 // KafkaNodePoolList contains a list of KafkaNodePool
 type KafkaNodePoolList struct {

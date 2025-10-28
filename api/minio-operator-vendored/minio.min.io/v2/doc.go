@@ -12,7 +12,6 @@
 // You should have received a copy of the GNU Affero General Public License, version 3,
 // along with this program.  If not, see <http://www.gnu.org/licenses/>
 
-// +k8s:deepcopy-gen=package,register
 // go:generate controller-gen crd:trivialVersions=true paths=. output:dir=.
 
 // Package v2 - This page provides a quick automatically generated reference for the MinIO Operator `minio.min.io/v2` CRD. For more complete documentation on the MinIO Operator CRD, see https://min.io/docs/minio/kubernetes/upstream/index.html[MinIO Kubernetes Documentation]. +

@@ -18,9 +18,9 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/altinity/clickhouse-operator/pkg/util"
-	"github.com/altinity/clickhouse-operator/pkg/version"
 	"github.com/wandb/operator/api/altinity-clickhouse-vendored/common/types"
+	"github.com/wandb/operator/api/altinity-clickhouse-vendored/util"
+	"github.com/wandb/operator/api/altinity-clickhouse-vendored/version"
 )
 
 const (

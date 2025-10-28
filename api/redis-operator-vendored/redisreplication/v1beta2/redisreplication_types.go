@@ -42,12 +42,6 @@ type RedisReplicationStatus struct {
 	MasterNode string `json:"masterNode,omitempty"`
 }
 
-// +kubebuilder:object:root=true
-// +kubebuilder:subresource:status
-// +kubebuilder:storageversion
-// +kubebuilder:printcolumn:name="Master",type="string",JSONPath=".status.masterNode"
-// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
-
 // Redis is the Schema for the redis API
 type RedisReplication struct {
 	metav1.TypeMeta   `json:",inline"`
@@ -60,8 +54,6 @@ type RedisReplication struct {
 func (rr *RedisReplication) GetStatefulSetName() string {
 	return rr.Name
 }
-
-// +kubebuilder:object:root=true
 
 // RedisList contains a list of Redis
 type RedisReplicationList struct {

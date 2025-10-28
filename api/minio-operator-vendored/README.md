@@ -14,6 +14,18 @@ To have full control over the CRD API types and avoid unexpected breaking change
 
 ## Changes Made
 
+### Removed Code Generation Annotations
+
+All code generation annotations have been removed from vendored code:
+- `+kubebuilder:*` annotations (e.g., `+kubebuilder:validation:*`, `+kubebuilder:default:*`)
+- `+k8s:*` annotations (e.g., `+k8s:deepcopy-gen:*`, `+k8s:openapi-gen=true`)
+
+These annotations are only needed when running code generators like controller-gen or deepcopy-gen, which we explicitly do not do for vendored APIs. The Makefile's `generate` target only processes our own `./api/v1` and `./api/v2` types.
+
+Files affected:
+- `minio.min.io/v2/doc.go`
+- `minio.min.io/v2/types.go`
+
 ### api/minio-operator-vendored/minio.min.io/v2/vendored_helpers.go
 - **Created new file**: Added vendored helper constants to replace dependencies on internal MinIO packages:
   - Certificate file name constants: `PublicCertFile`, `PrivateKeyFile`, `CAPublicCertFile` (from `pkg/certs`)
@@ -49,6 +61,11 @@ We vendored the API type definitions needed for our operator:
   - `zz_generated.deepcopy.go` - Generated DeepCopy methods
   - `zz_generated.defaults.go` - Generated default values
   - `vendored_helpers.go` - Helper constants (new file)
+
+### Removed Content
+- All test files (`*_test.go`)
+- Unused CRD types (Job, PolicyBinding)
+- Internal operator logic and controllers
 
 ## License
 

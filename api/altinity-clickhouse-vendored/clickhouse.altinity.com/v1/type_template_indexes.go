@@ -17,7 +17,7 @@ package v1
 // HostTemplatesIndex describes index of host templates
 type HostTemplatesIndex struct {
 	// templates maps 'name of the template' -> 'template itself'
-	// Note: unexported fields cannot have json tags
+	// VENDORED CHANGE: Removed json/yaml tags from unexported field
 	templates map[string]*HostTemplate
 }
 
@@ -72,7 +72,7 @@ func (i *HostTemplatesIndex) Walk(f func(template *HostTemplate)) {
 // PodTemplatesIndex describes index of pod templates
 type PodTemplatesIndex struct {
 	// templates maps 'name of the template' -> 'template itself'
-	// Note: unexported fields cannot have json tags
+	// VENDORED CHANGE: Removed json/yaml tags from unexported field
 	templates map[string]*PodTemplate
 }
 
@@ -127,7 +127,7 @@ func (i *PodTemplatesIndex) Walk(f func(template *PodTemplate)) {
 // VolumeClaimTemplatesIndex describes index of volume claim templates
 type VolumeClaimTemplatesIndex struct {
 	// templates maps 'name of the template' -> 'template itself'
-	// Note: unexported fields cannot have json tags
+	// VENDORED CHANGE: Removed json/yaml tags from unexported field
 	templates map[string]*VolumeClaimTemplate
 }
 
@@ -182,7 +182,7 @@ func (i *VolumeClaimTemplatesIndex) Walk(f func(template *VolumeClaimTemplate)) 
 // ServiceTemplatesIndex describes index of service templates
 type ServiceTemplatesIndex struct {
 	// templates maps 'name of the template' -> 'template itself'
-	// Note: unexported fields cannot have json tags
+	// VENDORED CHANGE: Removed json/yaml tags from unexported field
 	templates map[string]*ServiceTemplate
 }
 

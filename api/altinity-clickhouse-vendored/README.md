@@ -1,137 +1,126 @@
-# Altinity ClickHouse Operator - Vendored API
+# Altinity ClickHouse Operator API Vendored Code
 
-This directory contains vendored CRD API types from the Altinity ClickHouse Operator.
+This directory contains vendored API types from the [Altinity ClickHouse Operator](https://github.com/Altinity/clickhouse-operator) project.
 
 ## Source
 
 - **Repository**: https://github.com/Altinity/clickhouse-operator
-- **Version**: master (commit from 2025-10-28)
+- **Version**: v0.0.0-20251007061817-0cf33cf23815 (pseudo-version from Oct 7, 2024)
 - **Date Vendored**: 2025-10-28
 
-## What Was Vendored
+## Reason for Vendoring
 
-The following directories from `pkg/apis/` were copied:
-- `clickhouse.altinity.com/v1` - ClickHouse Installation CRD types
-- `common/types` - Common type definitions
-- `deployment` - Deployment-related types
-- `metrics` - Metrics types
-- `swversion` - Software version types
+To have full control over the CRD API types and avoid unexpected breaking changes when the upstream operator updates. This allows the W&B operator to manage ClickHouse installations while controlling when and how we adopt upstream changes.
 
-The `clickhouse-keeper.altinity.com` API was excluded as it is not used by this project.
+Additionally, the upstream operator has several code generation issues that prevent direct use:
+- DeepCopy methods contain mutex copying errors that fail go vet
+- Many interface types that are incompatible with controller-gen
+- Complex dependencies on internal packages
 
 ## Changes Made
 
-### Import Path 
-All imports were updated from:
-```go
-github.com/altinity/clickhouse-operator/pkg/apis/...
-```
-to:
-```go
-github.com/wandb/operator/api/altinity-clickhouse-vendored/...
-```
+### No Code Generation or Annotations
 
-### Mutex Handling in DeepCopy Methods
-The generated `zz_generated.deepcopy.go` file had multiple issues with copying sync.Mutex and sync.RWMutex fields, which Go does not allow. The following changes were made:
+**Important**: Unlike our own API types (api/v1, api/v2), we do NOT run controller-gen on ANY vendored code. The vendored types and their DeepCopy methods are used as-is from upstream. This means:
 
-1. **Removed shallow copies** that would copy mutexes:
-   - Removed `*out = *in` lines from DeepCopyInto methods for types containing mutexes
-   - Added explicit field-by-field copying for value types
-   - Left mutex fields uncopied (they remain zero-valued)
+- No code generation annotations needed (e.g., `+kubebuilder:*`, `+k8s:*`)
+- DeepCopy methods already exist in `zz_generated.deepcopy.go` from upstream
+- We only fix compilation errors, not regenerate code
 
-2. **Types modified**:
-   - `ClickHouseInstallation`
-   - `ClickHouseInstallationRuntime`
-   - `ClickHouseInstallationTemplate`
-   - `ClickHouseOperatorConfiguration`
-   - `OperatorConfig`
-   - `OperatorConfigCHI`
-   - `OperatorConfigCHIRuntime`
-   - `OperatorConfigTemplate`
-   - `Status`
+All code generation annotations have been removed:
+- `+k8s:*` annotations (e.g., `+k8s:deepcopy-gen:*`, `+k8s:openapi-gen=true`)
+
+Files affected:
+- `clickhouse.altinity.com/v1/doc.go`
+- `clickhouse.altinity.com/v1/types.go`
+- `clickhouse.altinity.com/v1/api_resources.go`
+
+The Makefile's `generate` target only processes `./api/v1` and `./api/v2`, explicitly excluding all vendored APIs:
+- `api/altinity-clickhouse-vendored/...`
+- `api/percona-operator-vendored/...`
+- `api/minio-operator-vendored/...`
+- `api/redis-operator-vendored/...`
+- `api/strimzi-kafka-vendored/...`
+
+### DeepCopy Mutex Fixes
+
+The following DeepCopyInto methods in `clickhouse.altinity.com/v1/zz_generated.deepcopy.go` were fixed to avoid copying sync.Mutex and sync.RWMutex:
+
+- **ClickHouseInstallation** (lines 518-537): Removed `*out = *in` shallow copy, commented out mutex field copies
+- **ClickHouseInstallationRuntime** (lines 591-608): Removed `*out = *in` shallow copy, commented out `commonConfigMutex` copy
+- **ClickHouseInstallationTemplate** (lines 621-639): Removed `*out = *in` shallow copy, commented out mutex field copies
+- **ClickHouseOperatorConfiguration** (lines 695-701): Removed `*out = *in` shallow copy
+- **OperatorConfig** (lines 1402-1447): Removed `*out = *in` shallow copy
+- **OperatorConfigCHI** (lines 1531-1535): Removed `*out = *in` shallow copy
+- **OperatorConfigCHIRuntime** (lines 1548-1570): Removed `*out = *in` shallow copy, commented out `mutex` field copy
+- **OperatorConfigTemplate** (lines 1981-1985): Removed `*out = *in` shallow copy
+- **Status** (lines 2603-2700): Removed `*out = *in` shallow copy, explicitly copied all non-mutex fields, commented out `mu` field copy
+
+### Mutex Copy in MergeFrom
+
+- **clickhouse.altinity.com/v1/type_configuration_chop.go** (line 792): Changed `mergo.Merge(c, *from, ...)` to `mergo.Merge(c, from, ...)` to pass pointer instead of dereferencing (which would copy mutexes)
 
 ### Struct Tag Fixes
-Fixed malformed struct tags in `type_configuration_chop.go`:
-- `OperatorConfigWatchNamespaces.Include` - Added missing closing backtick
-- `OperatorConfigWatchNamespaces.Exclude` - Added missing closing backtick
 
-### Unexported Field Fixes
-Removed json/yaml tags from unexported fields in `type_template_indexes.go`:
-- `HostTemplatesIndex.templates`
-- `PodTemplatesIndex.templates`
-- `VolumeClaimTemplatesIndex.templates`
-- `ServiceTemplatesIndex.templates`
+- **clickhouse.altinity.com/v1/type_configuration_chop.go** (lines 176-177): Fixed missing closing quotes in struct tags for `OperatorConfigWatchNamespaces` fields
 
-Go does not allow json tags on unexported fields.
+### Generic Type Format String Fix
 
-### Commented Out Unused Code
-Using the `/** UNUSED CODE ... */` pattern:
+- **util/map.go** (line 248): Changed format specifier from `%s` to `%v` to support any comparable type in generic map printing function
 
-1. **MergeFrom method** in `type_configuration_chop.go`:
-   - Function uses `mergo.Merge()` which attempts to copy mutex fields
-   - Not used by wandb/operator controller code
-   - Commented out the function and the mergo import
+### Unexported Field JSON Tag Fixes
 
-2. **Test files**: All `*_test.go` files were removed as they are not needed in production.
+- **clickhouse.altinity.com/v1/type_template_indexes.go**: Removed json/yaml tags from unexported `templates` fields in:
+  - `HostTemplatesIndex` (line 21)
+  - `PodTemplatesIndex` (line 76)
+  - `VolumeClaimTemplatesIndex` (line 131)
+  - `ServiceTemplatesIndex` (line 186)
 
-## Types Used by wandb/operator
+### Import Path Updates
 
-The wandb/operator project uses only a subset of the vendored types:
+All import paths have been updated from `github.com/altinity/clickhouse-operator/pkg/` to the vendored paths:
+- `github.com/wandb/operator/api/altinity-clickhouse-vendored/clickhouse.altinity.com/v1`
+- `github.com/wandb/operator/api/altinity-clickhouse-vendored/common/`
+- `github.com/wandb/operator/api/altinity-clickhouse-vendored/deployment/`
+- `github.com/wandb/operator/api/altinity-clickhouse-vendored/metrics/`
+- `github.com/wandb/operator/api/altinity-clickhouse-vendored/swversion/`
+- `github.com/wandb/operator/api/altinity-clickhouse-vendored/util/`
+- `github.com/wandb/operator/api/altinity-clickhouse-vendored/version/`
+- `github.com/wandb/operator/api/altinity-clickhouse-vendored/xml/`
 
-### Core Types
-- `ClickHouseInstallation` - Main CRD for ClickHouse installations
-- `ChiSpec` - Specification for ClickHouseInstallation
-- `Configuration` - Configuration section with clusters and users
-- `Cluster` - Cluster definition
-- `ChiClusterLayout` - Layout with shard and replica counts
-- `Defaults` - Default settings
-- `TemplatesList` - List of template references
-- `Templates` - Templates for pods, volumes, etc.
-- `VolumeClaimTemplate` - Volume claim template definition
+## What Was Vendored
 
-### Settings Types
-- `Settings` - User settings container
-- `SettingScalar` - Scalar setting value
-- Functions: `NewSettings()`, `NewSettingScalar()`
+We vendored the API type definitions and utility packages needed for our operator:
 
-### Status
-- `Status` - Installation status (used via `ClickHouseInstallation.Status`)
-- Constant: `StatusCompleted` - Status value indicating completed installation
+### API Types
+- `clickhouse.altinity.com/v1/` - Main ClickHouseInstallation CRD types
+  - All type definition files (`type_*.go`)
+  - Generated DeepCopy methods (`zz_generated.deepcopy.go`)
+  - API registration and scheme builder
+  - Configuration helpers
 
-### Unused Types
-The following types are defined but not used by wandb/operator:
-- `ClickHouseInstallationTemplate`
-- `ClickHouseOperatorConfiguration`
-- All `OperatorConfig*` types
-- ClickHouse Keeper types (entire `clickhouse-keeper.altinity.com` API)
+### Supporting Packages
+- `common/` - Common types and constants shared across the operator
+- `deployment/` - Deployment-related types and utilities
+- `metrics/` - Metrics collection types and helpers
+- `swversion/` - Software version handling and parsing
+- `util/` - Complete utility package with helper functions
+- `version/` - Version information and utilities
+- `xml/` - XML configuration handling
 
-## Why Vendored
+### Removed Content
+- All test files (`*_test.go`)
+- Benchmark files (`*_bench_test.go`)
+- Test data directories
 
-The ClickHouse operator API was vendored for the following reasons:
+## Known Issues
 
-1. **Dependency Management**: The upstream operator has many internal package dependencies (pkg/util, pkg/version, etc.) that are tightly coupled to the operator's runtime behavior. Vendoring allows us to use just the CRD type definitions without pulling in the entire operator codebase.
-
-2. **Mutex DeepCopy Issues**: The upstream generated code has issues with mutex copying in DeepCopy methods that cause compilation errors. These needed to be fixed locally.
-
-3. **Code Quality Issues**: The upstream code has several quality issues (malformed struct tags, unexported fields with json tags) that needed correction.
-
-4. **Version Stability**: Vendoring ensures we have a stable set of types that won't change unexpectedly with upstream updates.
-
-5. **Minimal Footprint**: By vendoring, we can remove test files and unused code, reducing the codebase size.
+None. All go vet errors and warnings from the vendored code have been fixed.
 
 ## License
 
-The vendored code is licensed under the Apache License 2.0, as indicated in the source file headers. The original license is maintained in all vendored files.
+The vendored code maintains its original Apache 2.0 license from the Altinity ClickHouse Operator project.
 
-## Updating
+## Removal
 
-If this vendored code needs to be updated in the future:
-
-1. Download the latest `pkg/apis/` directory from the ClickHouse operator repository
-2. Update import paths from `github.com/altinity/clickhouse-operator/pkg/apis/` to the vendored path
-3. Remove test files: `find . -name "*_test.go" -delete`
-4. Fix mutex DeepCopy issues in `zz_generated.deepcopy.go` (comment out `*out = *in` lines and handle fields individually)
-5. Fix any malformed struct tags or unexported field issues
-6. Comment out any functions that cause mutex copying errors (like `MergeFrom`)
-7. Run `make build` to verify compilation
-8. Update this README with the new version and any additional changes
+This vendored copy should be reviewed when upgrading to newer versions of the ClickHouse operator. Note that any new version will likely require similar mutex copying fixes in the DeepCopy methods, as this is a pattern throughout the upstream codebase.

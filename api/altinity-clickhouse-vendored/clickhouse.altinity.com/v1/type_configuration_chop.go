@@ -26,14 +26,14 @@ import (
 	"time"
 
 	log "github.com/golang/glog"
-	// "github.com/imdario/mergo" // Unused - MergeFrom function is commented out
+	"github.com/imdario/mergo"
 	"gopkg.in/yaml.v3"
 
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/altinity/clickhouse-operator/pkg/util"
 	"github.com/wandb/operator/api/altinity-clickhouse-vendored/common/types"
 	"github.com/wandb/operator/api/altinity-clickhouse-vendored/deployment"
+	"github.com/wandb/operator/api/altinity-clickhouse-vendored/util"
 )
 
 const (
@@ -172,6 +172,7 @@ type OperatorConfigWatch struct {
 }
 
 type OperatorConfigWatchNamespaces struct {
+	// VENDORED CHANGE: Fixed missing closing quotes in struct tags
 	Include *types.Strings `json:"include" yaml:"include"`
 	Exclude *types.Strings `json:"exclude" yaml:"exclude"`
 }
@@ -782,20 +783,19 @@ type OperatorConfig struct {
 	RevisionHistoryLimit int `json:"revisionHistoryLimit" yaml:"revisionHistoryLimit"`
 }
 
-/** UNUSED CODE - mergo.Merge copies mutex which is not allowed
 // MergeFrom merges
 func (c *OperatorConfig) MergeFrom(from *OperatorConfig) error {
 	if from == nil {
 		return nil
 	}
 
-	if err := mergo.Merge(c, *from, mergo.WithAppendSlice, mergo.WithOverride); err != nil {
+	// VENDORED CHANGE: Pass pointer to avoid copying mutexes
+	if err := mergo.Merge(c, from, mergo.WithAppendSlice, mergo.WithOverride); err != nil {
 		return fmt.Errorf("FAIL merge config Error: %q", err)
 	}
 
 	return nil
 }
-*/
 
 // readCHITemplates build OperatorConfig.CHITemplate from template files content
 func (c *OperatorConfig) readCHITemplates() (errs []error) {

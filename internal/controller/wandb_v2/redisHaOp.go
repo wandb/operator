@@ -135,7 +135,7 @@ func getActualRedisHA(
 	}
 
 	sentinelNamespacedName := types.NamespacedName{
-		Name:      "wandb-redis-sentinel",
+		Name:      "wandb-redis",
 		Namespace: namespacedName.Namespace,
 	}
 	sentinelObj := &redissentinelv1beta2.RedisSentinel{}
@@ -228,7 +228,7 @@ func getDesiredRedisHA(
 
 	redisSentinel := &redissentinelv1beta2.RedisSentinel{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "wandb-redis-sentinel",
+			Name:      "wandb-redis",
 			Namespace: namespacedName.Namespace,
 		},
 		Spec: redissentinelv1beta2.RedisSentinelSpec{

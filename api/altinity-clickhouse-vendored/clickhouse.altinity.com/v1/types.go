@@ -32,7 +32,6 @@ const (
 )
 
 // +genclient
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // ClickHouseInstallation defines the Installation of a ClickHouse Database Cluster
 type ClickHouseInstallation struct {
@@ -89,14 +88,12 @@ func (runtime *ClickHouseInstallationRuntime) GetReferenceSoftwareVersion() *swv
 
 // +genclient
 // +genclient:noStatus
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // ClickHouseInstallationTemplate defines ClickHouseInstallation template
 type ClickHouseInstallationTemplate ClickHouseInstallation
 
 // +genclient
 // +genclient:noStatus
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // ClickHouseOperatorConfiguration defines CHOp config
 type ClickHouseOperatorConfiguration struct {
@@ -106,8 +103,6 @@ type ClickHouseOperatorConfiguration struct {
 	Status          string         `json:"status" yaml:"status"`
 }
 
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
-
 // ClickHouseInstallationList defines a list of ClickHouseInstallation resources
 type ClickHouseInstallationList struct {
 	meta.TypeMeta `json:",inline"  yaml:",inline"`
@@ -115,16 +110,12 @@ type ClickHouseInstallationList struct {
 	Items         []ClickHouseInstallation `json:"items" yaml:"items"`
 }
 
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
-
 // ClickHouseInstallationTemplateList defines CHI template list
 type ClickHouseInstallationTemplateList struct {
 	meta.TypeMeta `json:",inline"  yaml:",inline"`
 	meta.ListMeta `json:"metadata" yaml:"metadata"`
 	Items         []ClickHouseInstallationTemplate `json:"items" yaml:"items"`
 }
-
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // ClickHouseOperatorConfigurationList defines CHI operator config list
 type ClickHouseOperatorConfigurationList struct {

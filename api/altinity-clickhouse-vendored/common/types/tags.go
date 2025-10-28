@@ -17,7 +17,7 @@ package types
 import (
 	"encoding/json"
 
-	"github.com/altinity/clickhouse-operator/pkg/util"
+	"github.com/wandb/operator/api/altinity-clickhouse-vendored/util"
 )
 
 type Tag string

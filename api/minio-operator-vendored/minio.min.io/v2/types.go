@@ -22,17 +22,6 @@ import (
 
 // Tenant is a https://kubernetes.io/docs/concepts/overview/working-with-objects/kubernetes-objects/[Kubernetes object] describing a MinIO Tenant. +
 // +genclient
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
-// +k8s:defaulter-gen=true
-// +kubebuilder:object:root=true
-// +kubebuilder:object:generate=true
-// +kubebuilder:subresource:status
-// +kubebuilder:resource:scope=Namespaced,shortName=tenant,singular=tenant
-// +kubebuilder:printcolumn:name="State",type="string",JSONPath=".status.currentState"
-// +kubebuilder:printcolumn:name="Health",type="string",JSONPath=".status.healthStatus"
-// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
-// +kubebuilder:metadata:annotations=operator.min.io/version=v7.1.1
-// +kubebuilder:storageversion
 type Tenant struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -650,19 +639,15 @@ type CustomCertificateConfig struct {
 // See the https://min.io/docs/minio/kubernetes/upstream/operations/install-deploy-manage/deploy-minio-tenant.html#procedure-command-line[MinIO Operator CRD] reference for the `pools` object for examples and more complete documentation. +
 type Pool struct {
 	// *Required*
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:MinLength=1
 	// Specify the name of the pool. The Operator automatically generates the pool name if this field is omitted.
 	Name string `json:"name"`
 	// *Required*
-	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="servers is immutable"
 	//
 	// The number of MinIO server pods to deploy in the pool. The minimum value is `2`.
 	//
 	// The MinIO Operator requires a minimum of `4` volumes per pool. Specifically, the result of `pools.servers X pools.volumesPerServer` must be greater than `4`. +
 	Servers int32 `json:"servers"`
 	// *Required* +
-	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="volumesPerServer is immutable"
 	//
 	// The number of Persistent Volume Claims to generate for each MinIO server pod in the pool. +
 	//
@@ -907,8 +892,6 @@ type KESConfig struct {
 	// +optional
 	Env []corev1.EnvVar `json:"env,omitempty"`
 }
-
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // TenantList is a list of Tenant resources
 type TenantList struct {
