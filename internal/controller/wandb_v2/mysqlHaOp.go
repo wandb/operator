@@ -113,9 +113,7 @@ func desiredPerconaMysqlHA(
 			},
 			HAProxy: &pxcv1.HAProxySpec{
 				PodSpec: pxcv1.PodSpec{
-					Enabled: true,
-					Size:    3,
-					Image:   "perconalab/percona-xtradb-cluster-operator:main-haproxy",
+					Enabled: false,
 				},
 			},
 			LogCollector: &pxcv1.LogCollectorSpec{
