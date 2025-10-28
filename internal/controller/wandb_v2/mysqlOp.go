@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	pxcv1 "github.com/percona/percona-xtradb-cluster-operator/pkg/apis/pxc/v1"
+	pxcv1 "github.com/wandb/operator/api/percona-operator-vendored/pxc/v1"
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/ctrlqueue"
 	corev1 "k8s.io/api/core/v1"

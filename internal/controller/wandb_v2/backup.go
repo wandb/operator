@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	pxcv1 "github.com/percona/percona-xtradb-cluster-operator/pkg/apis/pxc/v1"
+	pxcv1 "github.com/wandb/operator/api/percona-operator-vendored/pxc/v1"
 	machErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"

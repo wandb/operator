@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	strimziv1beta2 "github.com/wandb/operator/api/strimzi/v1beta2"
+	strimziv1beta2 "github.com/wandb/operator/api/strimzi-kafka-vendored/v1beta2"
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/ctrlqueue"
 	corev1 "k8s.io/api/core/v1"

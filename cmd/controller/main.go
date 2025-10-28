@@ -24,16 +24,18 @@ import (
 	"path/filepath"
 	"strings"
 
-	redisv1beta2 "github.com/OT-CONTAINER-KIT/redis-operator/api/redis/v1beta2"
-	chiv1 "github.com/altinity/clickhouse-operator/pkg/apis/clickhouse.altinity.com/v1"
-	miniov2 "github.com/minio/operator/pkg/apis/minio.min.io/v2"
-	strimziv1beta2 "github.com/wandb/operator/api/strimzi/v1beta2"
+	chiv1 "github.com/wandb/operator/api/altinity-clickhouse-vendored/clickhouse.altinity.com/v1"
+	miniov2 "github.com/wandb/operator/api/minio-operator-vendored/minio.min.io/v2"
+	redisv1beta2 "github.com/wandb/operator/api/redis-operator-vendored/redis/v1beta2"
+	redisreplicationv1beta2 "github.com/wandb/operator/api/redis-operator-vendored/redisreplication/v1beta2"
+	redissentinelv1beta2 "github.com/wandb/operator/api/redis-operator-vendored/redissentinel/v1beta2"
+	strimziv1beta2 "github.com/wandb/operator/api/strimzi-kafka-vendored/v1beta2"
 	"github.com/wandb/operator/internal/controller/wandb_v2"
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
-	pxcv1 "github.com/percona/percona-xtradb-cluster-operator/pkg/apis/pxc/v1"
+	pxcv1 "github.com/wandb/operator/api/percona-operator-vendored/pxc/v1"
 	"github.com/wandb/operator/internal/controller"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -66,6 +68,8 @@ func init() {
 	utilruntime.Must(apiextensionsv1.AddToScheme(scheme))
 	utilruntime.Must(pxcv1.SchemeBuilder.AddToScheme(scheme))
 	utilruntime.Must(redisv1beta2.AddToScheme(scheme))
+	utilruntime.Must(redisreplicationv1beta2.AddToScheme(scheme))
+	utilruntime.Must(redissentinelv1beta2.AddToScheme(scheme))
 	utilruntime.Must(strimziv1beta2.AddToScheme(scheme))
 	utilruntime.Must(miniov2.AddToScheme(scheme))
 	utilruntime.Must(chiv1.AddToScheme(scheme))

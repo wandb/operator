@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	strimziv1beta2 "github.com/wandb/operator/api/strimzi/v1beta2"
+	strimziv1beta2 "github.com/wandb/operator/api/strimzi-kafka-vendored/v1beta2"
 	apiv2 "github.com/wandb/operator/api/v2"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

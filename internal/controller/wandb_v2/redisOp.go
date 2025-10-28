@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 
-	common "github.com/OT-CONTAINER-KIT/redis-operator/api/common/v1beta2"
-	redisv1beta2 "github.com/OT-CONTAINER-KIT/redis-operator/api/redis/v1beta2"
+	common "github.com/wandb/operator/api/redis-operator-vendored/common/v1beta2"
+	redisv1beta2 "github.com/wandb/operator/api/redis-operator-vendored/redis/v1beta2"
 	apiv2 "github.com/wandb/operator/api/v2"
 	corev1 "k8s.io/api/core/v1"
 	machErrors "k8s.io/apimachinery/pkg/api/errors"

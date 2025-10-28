@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	miniov2 "github.com/minio/operator/pkg/apis/minio.min.io/v2"
+	miniov2 "github.com/wandb/operator/api/minio-operator-vendored/minio.min.io/v2"
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/ctrlqueue"
 	corev1 "k8s.io/api/core/v1"
