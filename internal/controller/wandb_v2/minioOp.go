@@ -195,7 +195,7 @@ func getDesiredMinio(
 				{
 					Name:             "pool-0",
 					Servers:          replicas,
-					VolumesPerServer: 4,
+					VolumesPerServer: 1,
 					VolumeClaimTemplate: &corev1.PersistentVolumeClaim{
 						Spec: corev1.PersistentVolumeClaimSpec{
 							AccessModes: []corev1.PersistentVolumeAccessMode{
