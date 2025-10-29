@@ -111,16 +111,15 @@ func desiredPerconaMysqlHA(
 			TLS: &pxcv1.TLSSpec{
 				Enabled: &tlsEnabled,
 			},
-			HAProxy: &pxcv1.HAProxySpec{
+			ProxySQL: &pxcv1.ProxySQLSpec{
 				PodSpec: pxcv1.PodSpec{
 					Enabled: true,
 					Size:    3,
-					Image:   "percona/haproxy:2.8",
+					Image:   "percona/proxysql2:2.7.3",
+					VolumeSpec: &pxcv1.VolumeSpec{
+						EmptyDir: &corev1.EmptyDirVolumeSource{},
+					},
 				},
-			},
-			LogCollector: &pxcv1.LogCollectorSpec{
-				Enabled: true,
-				Image:   "percona/pmm-client:3.4",
 			},
 		},
 	}
@@ -175,7 +174,7 @@ func desiredPerconaMysqlHA(
 			return result, errors.New("root key not found in " + sourceSecretName.Name)
 		}
 
-		mysqlHost := "wandb-mysql-haproxy." + namespace + ".svc.cluster.local"
+		mysqlHost := "wandb-mysql-proxysql." + namespace + ".svc.cluster.local"
 		mysqlPort := "3306"
 		mysqlUser := "root"
 

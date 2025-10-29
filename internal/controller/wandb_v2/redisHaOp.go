@@ -197,6 +197,7 @@ func getDesiredRedisHA(
 	}
 
 	clusterSize := int32(3)
+	masterName := namespacedName.Name
 
 	redisReplication := &redisreplicationv1beta2.RedisReplication{
 		ObjectMeta: metav1.ObjectMeta{
@@ -240,6 +241,7 @@ func getDesiredRedisHA(
 			RedisSentinelConfig: &redissentinelv1beta2.RedisSentinelConfig{
 				RedisSentinelConfig: common.RedisSentinelConfig{
 					RedisReplicationName: namespacedName.Name,
+					MasterGroupName:      namespacedName.Name,
 				},
 			},
 		},
@@ -252,7 +254,6 @@ func getDesiredRedisHA(
 		namespace := namespacedName.Namespace
 		sentinelHost := "wandb-redis-sentinel." + namespace + ".svc.cluster.local"
 		sentinelPort := "26379"
-		masterName := namespacedName.Name
 
 		connectionSecret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
