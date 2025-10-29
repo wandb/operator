@@ -7,6 +7,7 @@ godebug default=go1.23
 require (
 	github.com/ClickHouse/clickhouse-go/v2 v2.40.3
 	github.com/IBM/sarama v1.46.2
+	github.com/Masterminds/semver/v3 v3.3.0
 	github.com/altinity/clickhouse-operator v0.0.0-20251007061817-0cf33cf23815
 	github.com/cert-manager/cert-manager v1.18.2
 	github.com/flosch/pongo2/v6 v6.0.0
@@ -15,7 +16,10 @@ require (
 	github.com/go-playground/validator/v10 v10.26.0
 	github.com/go-sql-driver/mysql v1.9.3
 	github.com/golang-jwt/jwt/v4 v4.5.2
+	github.com/golang/glog v1.2.3
+	github.com/google/uuid v1.6.0
 	github.com/hashicorp/go-version v1.7.0
+	github.com/imdario/mergo v0.3.16
 	github.com/maxbrunsfeld/counterfeiter/v6 v6.11.2
 	github.com/miekg/dns v1.1.64
 	github.com/minio/madmin-go/v3 v3.0.100
@@ -24,7 +28,11 @@ require (
 	github.com/onsi/gomega v1.38.0
 	github.com/pkg/errors v0.9.1
 	github.com/redis/go-redis/v9 v9.11.0
+	github.com/sanity-io/litter v1.3.0
 	github.com/stretchr/testify v1.11.1
+	golang.org/x/exp v0.0.0-20241217172543-b2144cdd0a67
+	gopkg.in/d4l3k/messagediff.v1 v1.2.1
+	gopkg.in/yaml.v3 v3.0.1
 	helm.sh/helm/v3 v3.17.2
 	k8s.io/api v0.33.3
 	k8s.io/apiextensions-apiserver v0.33.3
@@ -45,7 +53,6 @@ require (
 	github.com/ClickHouse/ch-go v0.68.0 // indirect
 	github.com/MakeNowJust/heredoc v1.0.0 // indirect
 	github.com/Masterminds/goutils v1.1.1 // indirect
-	github.com/Masterminds/semver/v3 v3.3.0 // indirect
 	github.com/Masterminds/sprig/v3 v3.3.0 // indirect
 	github.com/Masterminds/squirrel v1.5.4 // indirect
 	github.com/andybalholm/brotli v1.2.0 // indirect
@@ -99,7 +106,6 @@ require (
 	github.com/gobwas/glob v0.2.3 // indirect
 	github.com/goccy/go-json v0.10.5 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
-	github.com/golang/glog v1.2.3 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/gomodule/redigo v2.0.0+incompatible // indirect
@@ -109,7 +115,6 @@ require (
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/pprof v0.0.0-20250403155104-27863c87afa6 // indirect
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/mux v1.8.1 // indirect
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674 // indirect
 	github.com/gosuri/uitable v0.0.4 // indirect
@@ -119,7 +124,6 @@ require (
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/hashicorp/go-uuid v1.0.3 // indirect
 	github.com/huandu/xstrings v1.5.0 // indirect
-	github.com/imdario/mergo v0.3.16 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jcmturner/aescts/v2 v2.0.0 // indirect
 	github.com/jcmturner/dnsutils/v2 v2.0.0 // indirect
@@ -174,7 +178,6 @@ require (
 	github.com/rubenv/sql-migrate v1.7.1 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/safchain/ethtool v0.5.10 // indirect
-	github.com/sanity-io/litter v1.3.0 // indirect
 	github.com/secure-io/sio-go v0.3.1 // indirect
 	github.com/segmentio/asm v1.2.0 // indirect
 	github.com/shirou/gopsutil/v3 v3.24.5 // indirect
@@ -209,7 +212,6 @@ require (
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/crypto v0.43.0 // indirect
-	golang.org/x/exp v0.0.0-20241217172543-b2144cdd0a67 // indirect
 	golang.org/x/mod v0.28.0 // indirect
 	golang.org/x/net v0.46.0 // indirect
 	golang.org/x/oauth2 v0.28.0 // indirect
@@ -224,10 +226,8 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250115164207-1a7da9e5054f // indirect
 	google.golang.org/grpc v1.70.0 // indirect
 	google.golang.org/protobuf v1.36.6 // indirect
-	gopkg.in/d4l3k/messagediff.v1 v1.2.1 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.12.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 	k8s.io/apiserver v0.33.3 // indirect
 	k8s.io/cli-runtime v0.32.2 // indirect
 	k8s.io/component-base v0.33.3 // indirect
