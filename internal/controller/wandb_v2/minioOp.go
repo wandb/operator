@@ -58,9 +58,13 @@ type wandbMinioDoReconcile interface {
 }
 
 func minioNamespacedName(req ctrl.Request) types.NamespacedName {
+	namespace := req.Namespace
+	if namespace == "" {
+		namespace = "default"
+	}
 	return types.NamespacedName{
 		Name:      "wandb-minio",
-		Namespace: req.Namespace,
+		Namespace: namespace,
 	}
 }
 

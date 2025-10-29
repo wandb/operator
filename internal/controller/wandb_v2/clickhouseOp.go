@@ -68,9 +68,13 @@ type wandbClickHouseDoReconcile interface {
 }
 
 func clickhouseNamespacedName(req ctrl.Request) types.NamespacedName {
+	namespace := req.Namespace
+	if namespace == "" {
+		namespace = "default"
+	}
 	return types.NamespacedName{
 		Name:      "wandb-clickhouse",
-		Namespace: req.Namespace,
+		Namespace: namespace,
 	}
 }
 

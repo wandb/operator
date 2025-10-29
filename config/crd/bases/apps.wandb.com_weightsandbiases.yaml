@@ -14,7 +14,7 @@ spec:
     shortNames:
     - wandb
     singular: weightsandbiases
-  scope: Namespaced
+  scope: Cluster
   versions:
   - name: v1
     schema:

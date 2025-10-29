@@ -62,7 +62,7 @@ const (
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
-//+kubebuilder:resource:shortName=wandb
+//+kubebuilder:resource:scope=Cluster,shortName=wandb
 //+kubebuilder:printcolumn:name="State",type=string,JSONPath=`.status.state`
 //+kubebuilder:printcolumn:name="Database",type=string,JSONPath=`.status.databaseStatus.state`
 //+kubebuilder:printcolumn:name="Redis",type=string,JSONPath=`.status.redisStatus.state`

@@ -47,9 +47,13 @@ type wandbPerconaMysqlDoReconcile interface {
 }
 
 func perconaMysqlNamespacedName(req ctrl.Request) types.NamespacedName {
+	namespace := req.Namespace
+	if namespace == "" {
+		namespace = "default"
+	}
 	return types.NamespacedName{
 		Name:      "wandb-mysql",
-		Namespace: req.Namespace,
+		Namespace: namespace,
 	}
 }
 

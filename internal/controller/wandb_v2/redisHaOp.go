@@ -59,13 +59,6 @@ type wandbRedisHADoReconcile interface {
 	Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) CtrlState
 }
 
-func redisHANamespacedName(req ctrl.Request) types.NamespacedName {
-	return types.NamespacedName{
-		Name:      "wandb-redis",
-		Namespace: req.Namespace,
-	}
-}
-
 func (r *WeightsAndBiasesV2Reconciler) handleRedisHA(
 	ctx context.Context, wandb *apiv2.WeightsAndBiases, req ctrl.Request,
 ) CtrlState {
@@ -74,7 +67,7 @@ func (r *WeightsAndBiasesV2Reconciler) handleRedisHA(
 	var actualRedis wandbRedisHAWrapper
 	var reconciliation wandbRedisHADoReconcile
 	log := ctrl.LoggerFrom(ctx)
-	namespacedName := redisHANamespacedName(req)
+	namespacedName := redisNamespacedName(req)
 
 	if !wandb.Spec.Redis.Enabled {
 		log.Info("Redis not enabled, skipping")

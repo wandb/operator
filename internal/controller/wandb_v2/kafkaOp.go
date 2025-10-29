@@ -98,9 +98,13 @@ type wandbKafkaDoReconcile interface {
 }
 
 func kafkaNamespacedName(req ctrl.Request) types.NamespacedName {
+	namespace := req.Namespace
+	if namespace == "" {
+		namespace = "default"
+	}
 	return types.NamespacedName{
 		Name:      "wandb-kafka",
-		Namespace: req.Namespace,
+		Namespace: namespace,
 	}
 }
 
