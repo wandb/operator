@@ -2,6 +2,55 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.21.2](https://github.com/wandb/operator/compare/v1.21.1...v1.21.2) (2025-10-02)
+
+
+### Bug Fixes
+
+* Timeout is a duration so we need to specify the correct value ([#100](https://github.com/wandb/operator/issues/100)) ([e6988a3](https://github.com/wandb/operator/commit/e6988a358e3d0529cbab95bd88157f7585b74975))
+
+### [1.21.1](https://github.com/wandb/operator/compare/v1.21.0...v1.21.1) (2025-09-11)
+
+
+### Bug Fixes
+
+* Explicitly specify the desired value if IMG for make ([#99](https://github.com/wandb/operator/issues/99)) ([68a68f3](https://github.com/wandb/operator/commit/68a68f3b6c1653b182a7d5a869c0445bc0f989ae))
+
+## [1.21.0](https://github.com/wandb/operator/compare/v1.20.3...v1.21.0) (2025-09-11)
+
+
+### Features
+
+* Upgrade from kubebuilder v3 to v4 ([#89](https://github.com/wandb/operator/issues/89)) ([34ea709](https://github.com/wandb/operator/commit/34ea70971cd6a9be915e03ba472a32c2136fad7a))
+
+### [1.20.3](https://github.com/wandb/operator/compare/v1.20.2...v1.20.3) (2025-08-07)
+
+
+### Bug Fixes
+
+* Prune old helm releases, for real ([#98](https://github.com/wandb/operator/issues/98)) ([8f9b9c6](https://github.com/wandb/operator/commit/8f9b9c6b2d8af37569d6bc68b44aec9b6cda7e30))
+
+### [1.20.2](https://github.com/wandb/operator/compare/v1.20.1...v1.20.2) (2025-08-06)
+
+
+### Bug Fixes
+
+* Prune old helm releases ([#97](https://github.com/wandb/operator/issues/97)) ([1dc6ef1](https://github.com/wandb/operator/commit/1dc6ef139202a109eb718dfb4880dedaa02f2ffc))
+
+### [1.20.1](https://github.com/wandb/operator/compare/v1.20.0...v1.20.1) (2025-07-25)
+
+
+### Bug Fixes
+
+* Handle errors for failed to retreive user spec.  Don't return an error for invalid chart config in spec. ([#96](https://github.com/wandb/operator/issues/96)) ([4254c64](https://github.com/wandb/operator/commit/4254c645ff81d6f1c9dec6fcd3c38e7ec5e01a5e))
+
+## [1.20.0](https://github.com/wandb/operator/compare/v1.19.3...v1.20.0) (2025-07-02)
+
+
+### Features
+
+* Add reading helm username and password from a secret ([#95](https://github.com/wandb/operator/issues/95)) ([41e76ab](https://github.com/wandb/operator/commit/41e76ab13301be41012b0cb0d61d26ceccca9882))
+
 ### [1.19.3](https://github.com/wandb/operator/compare/v1.19.2...v1.19.3) (2025-03-26)
 
 

@@ -1,8 +1,9 @@
 .PHONY: test-ginko
-test: manifests generate fmt vet envtest ginkgo ## Run tests.
+test-ginko: manifests generate fmt vet envtest ginkgo ## Run tests.
 	@echo "Running tests..."
 	@KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" \
 	ginkgo -p -r --compilers=4 --timeout=5m --fail-fast --race --trace --randomize-all \
+		--skip-package e2e \
 		--output-interceptor-mode=none \
 		--no-color=false \
 		--show-node-events \
@@ -15,6 +16,7 @@ test-verbose: manifests generate fmt vet envtest ginkgo ## Run tests with verbos
 	@echo "Running tests in verbose mode..."
 	@KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" \
 	ginkgo -p -r -v --compilers=4 --timeout=5m --fail-fast --race --trace --randomize-all \
+		--skip-package e2e \
 		--output-interceptor-mode=none \
 		--no-color=false \
 		--show-node-events \
@@ -27,6 +29,7 @@ test-watch: manifests generate fmt vet envtest ginkgo ## Run tests in watch mode
 	@echo "Running tests in watch mode..."
 	@KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" \
 	ginkgo watch -p -r --compilers=4 --timeout=5m --fail-fast --race --trace --randomize-all \
+		--skip-package e2e \
 		--output-interceptor-mode=none \
 		--no-color=false \
 		--show-node-events \
@@ -38,6 +41,7 @@ test-coverage: manifests generate fmt vet envtest ginkgo ## Run tests with cover
 	@echo "Running tests with coverage..."
 	@KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" \
 	ginkgo -p -r --compilers=4 --timeout=5m --fail-fast --race --trace --randomize-all \
+		--skip-package e2e \
 		--output-interceptor-mode=none \
 		--no-color=false \
 		--show-node-events \

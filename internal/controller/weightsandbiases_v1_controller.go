@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"reflect"
+	"time"
 
 	rbacv1 "k8s.io/api/rbac/v1"
 
@@ -71,6 +72,7 @@ type WeightsAndBiasesReconciler struct {
 //+kubebuilder:rbac:groups=apps,resources=deployments/status;daemonsets/status;replicasets/status;statefulsets/status,verbs=get
 //+kubebuilder:rbac:groups=autoscaling,resources=horizontalpodautoscalers,verbs=update;delete;get;list;patch;create;watch
 //+kubebuilder:rbac:groups=batch,resources=cronjobs;jobs,verbs=get;list;watch;create;delete
+//+kubebuilder:rbac:groups=batch,resources=cronjobs;jobs,verbs=get;list;watch;create;delete;patch
 //+kubebuilder:rbac:groups=events.k8s.io,resources=events,verbs=list;watch
 //+kubebuilder:rbac:groups=cloud.google.com,resources=backendconfigs,verbs=update;delete;get;list;patch;create;watch
 //+kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses;ingresses/status;networkpolicies,verbs=update;delete;get;list;create;patch;watch
@@ -116,19 +118,23 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	r.Recorder.Event(wandb, corev1.EventTypeNormal, "LoadingConfig", "Loading desired configuration")
 
-	userInputSpec, _ := specManager.GetUserInput()
-	if userInputSpec == nil {
-		log.Info("No user spec found, creating a new one")
-		userInputSpec := &spec.Spec{Values: map[string]interface{}{}}
-		specManager.SetUserInput(userInputSpec)
+	userInputSpec, err := specManager.GetUserInput()
+	if errors.IsNotFound(err) {
+		log.Info("No user input spec found, creating a new one")
+		userInputSpec = &spec.Spec{Values: map[string]interface{}{}}
+		err = specManager.SetUserInput(userInputSpec)
+		if err != nil {
+			return ctrlqueue.RequeueWithError(err)
+		}
+	} else if err != nil {
+		log.Error(err, "error retrieving user input spec")
+		return ctrlqueue.RequeueWithError(err)
 	}
 
 	var releaseID string
-	if userInputSpec != nil {
-		if releaseIDValue, ok := userInputSpec.Values["_releaseId"].(string); ok {
-			releaseID = releaseIDValue
-			log.Info("Version Pinning is enabled", "releaseId:", releaseID)
-		}
+	if releaseIDValue, ok := userInputSpec.Values["_releaseId"].(string); ok {
+		releaseID = releaseIDValue
+		log.Info("Version Pinning is enabled", "releaseId:", releaseID)
 	}
 
 	crdSpec := operator.Spec(wandb)
@@ -204,6 +210,7 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		log.Error(err, "Failed to merge deployer spec into desired spec")
 		return ctrlqueue.RequeueWithError(err)
 	}
+
 	if r.Debug {
 		log.Info("Desired spec after merging deployerSpec", "spec", desiredSpec.SensitiveValuesMasked())
 	}
@@ -290,6 +297,7 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			if !r.DryRun {
 				if err := desiredSpec.Prune(ctx, r.Client, wandb, r.Scheme); err != nil {
 					log.Error(err, "Failed to cleanup deployment.")
+					return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
 				} else {
 					log.Info("Successfully cleaned up resources")
 				}
