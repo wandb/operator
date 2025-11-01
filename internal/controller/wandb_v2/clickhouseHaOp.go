@@ -8,6 +8,7 @@ import (
 
 	chiv1 "github.com/wandb/operator/api/altinity-clickhouse-vendored/clickhouse.altinity.com/v1"
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/internal/controller/wandb_v2/common"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -17,7 +18,7 @@ import (
 
 func (r *WeightsAndBiasesV2Reconciler) handleClickHouseHA(
 	ctx context.Context, wandb *apiv2.WeightsAndBiases, req ctrl.Request,
-) CtrlState {
+) common.CtrlState {
 	var err error
 	var desiredClickHouse wandbClickHouseWrapper
 	var actualClickHouse wandbClickHouseWrapper
@@ -27,35 +28,35 @@ func (r *WeightsAndBiasesV2Reconciler) handleClickHouseHA(
 
 	if !wandb.Spec.ClickHouse.Enabled {
 		log.Info("ClickHouse not enabled, skipping")
-		return CtrlContinue()
+		return common.CtrlContinue()
 	}
 
 	log.Info("Handling ClickHouse HA")
 
 	if actualClickHouse, err = getActualClickHouse(ctx, r, namespacedName); err != nil {
 		log.Error(err, "Failed to get actual ClickHouse HA resources")
-		return CtrlError(err)
+		return common.CtrlError(err)
 	}
 
-	if ctrlState := actualClickHouse.maybeHandleDeletion(ctx, wandb, actualClickHouse, r); ctrlState.shouldExit(HandlerScope) {
+	if ctrlState := actualClickHouse.maybeHandleDeletion(ctx, wandb, actualClickHouse, r); ctrlState.ShouldExit(common.HandlerScope) {
 		return ctrlState
 	}
 
 	if desiredClickHouse, err = getDesiredClickHouseHA(ctx, wandb, namespacedName, actualClickHouse); err != nil {
 		log.Error(err, "Failed to get desired ClickHouse HA configuration")
-		return CtrlError(err)
+		return common.CtrlError(err)
 	}
 
 	if reconciliation, err = computeClickHouseReconcileDrift(ctx, wandb, desiredClickHouse, actualClickHouse); err != nil {
 		log.Error(err, "Failed to compute ClickHouse HA reconcile drift")
-		return CtrlError(err)
+		return common.CtrlError(err)
 	}
 
 	if reconciliation != nil {
 		return reconciliation.Execute(ctx, r)
 	}
 
-	return CtrlContinue()
+	return common.CtrlContinue()
 }
 
 func getDesiredClickHouseHA(

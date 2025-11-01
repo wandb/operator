@@ -1,4 +1,4 @@
-package wandb_v2
+package common
 
 import (
 	"time"
@@ -18,8 +18,8 @@ const (
 )
 
 type CtrlState interface {
-	shouldExit(scope CtrlScope) bool
-	reconcilerResult() (ctrl.Result, error)
+	ShouldExit(scope CtrlScope) bool
+	ReconcilerResult() (ctrl.Result, error)
 }
 
 func CtrlError(err error) CtrlState {
@@ -54,10 +54,10 @@ type ctrlStateImpl struct {
 	result    ctrl.Result
 }
 
-func (d *ctrlStateImpl) shouldExit(scope CtrlScope) bool {
+func (d *ctrlStateImpl) ShouldExit(scope CtrlScope) bool {
 	return d.exitScope >= scope
 }
 
-func (d *ctrlStateImpl) reconcilerResult() (ctrl.Result, error) {
+func (d *ctrlStateImpl) ReconcilerResult() (ctrl.Result, error) {
 	return d.result, d.err
 }

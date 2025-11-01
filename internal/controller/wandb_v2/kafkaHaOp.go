@@ -6,6 +6,7 @@ import (
 
 	strimziv1beta2 "github.com/wandb/operator/api/strimzi-kafka-vendored/v1beta2"
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/internal/controller/wandb_v2/common"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -14,7 +15,7 @@ import (
 
 func (r *WeightsAndBiasesV2Reconciler) handleKafkaHA(
 	ctx context.Context, wandb *apiv2.WeightsAndBiases, req ctrl.Request,
-) CtrlState {
+) common.CtrlState {
 	var err error
 	var desiredKafka wandbKafkaWrapper
 	var actualKafka wandbKafkaWrapper
@@ -24,35 +25,35 @@ func (r *WeightsAndBiasesV2Reconciler) handleKafkaHA(
 
 	if !wandb.Spec.Kafka.Enabled {
 		log.Info("Kafka not enabled, skipping")
-		return CtrlContinue()
+		return common.CtrlContinue()
 	}
 
 	log.Info("Handling Kafka HA")
 
 	if actualKafka, err = getActualKafka(ctx, r, namespacedName); err != nil {
 		log.Error(err, "Failed to get actual Kafka HA resources")
-		return CtrlError(err)
+		return common.CtrlError(err)
 	}
 
-	if ctrlState := actualKafka.maybeHandleDeletion(ctx, wandb, actualKafka, r); ctrlState.shouldExit(HandlerScope) {
+	if ctrlState := actualKafka.maybeHandleDeletion(ctx, wandb, actualKafka, r); ctrlState.ShouldExit(common.HandlerScope) {
 		return ctrlState
 	}
 
 	if desiredKafka, err = getDesiredKafkaHA(ctx, wandb, namespacedName, actualKafka); err != nil {
 		log.Error(err, "Failed to get desired Kafka HA configuration")
-		return CtrlError(err)
+		return common.CtrlError(err)
 	}
 
 	if reconciliation, err = computeKafkaReconcileDrift(ctx, wandb, desiredKafka, actualKafka, r); err != nil {
 		log.Error(err, "Failed to compute Kafka HA reconcile drift")
-		return CtrlError(err)
+		return common.CtrlError(err)
 	}
 
 	if reconciliation != nil {
 		return reconciliation.Execute(ctx, r)
 	}
 
-	return CtrlContinue()
+	return common.CtrlContinue()
 }
 
 func getDesiredKafkaHA(

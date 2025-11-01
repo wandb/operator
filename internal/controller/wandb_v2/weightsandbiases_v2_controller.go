@@ -22,6 +22,7 @@ import (
 	"time"
 
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/internal/controller/wandb_v2/common"
 	corev1 "k8s.io/api/core/v1"
 	machErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -96,7 +97,7 @@ func (r *WeightsAndBiasesV2Reconciler) Reconcile(ctx context.Context, req ctrl.R
 		"start", true,
 	)
 
-	var ctrlState CtrlState
+	var ctrlState common.CtrlState
 
 	wandb := &apiv2.WeightsAndBiases{}
 	if err := r.Client.Get(ctx, req.NamespacedName, wandb); err != nil {
@@ -112,8 +113,8 @@ func (r *WeightsAndBiasesV2Reconciler) Reconcile(ctx context.Context, req ctrl.R
 	)
 
 	ctrlState = r.handleDatabase(ctx, wandb, req)
-	if ctrlState.shouldExit(ReconcilerScope) {
-		return ctrlState.reconcilerResult()
+	if ctrlState.ShouldExit(common.ReconcilerScope) {
+		return ctrlState.ReconcilerResult()
 	}
 
 	if wandb.Spec.Profile == apiv2.WBProfileDev {
@@ -121,8 +122,8 @@ func (r *WeightsAndBiasesV2Reconciler) Reconcile(ctx context.Context, req ctrl.R
 	} else {
 		ctrlState = r.handleRedisHA(ctx, wandb, req)
 	}
-	if ctrlState.shouldExit(ReconcilerScope) {
-		return ctrlState.reconcilerResult()
+	if ctrlState.ShouldExit(common.ReconcilerScope) {
+		return ctrlState.ReconcilerResult()
 	}
 
 	if wandb.Spec.Profile == apiv2.WBProfileDev {
@@ -130,8 +131,8 @@ func (r *WeightsAndBiasesV2Reconciler) Reconcile(ctx context.Context, req ctrl.R
 	} else {
 		ctrlState = r.handleKafkaHA(ctx, wandb, req)
 	}
-	if ctrlState.shouldExit(ReconcilerScope) {
-		return ctrlState.reconcilerResult()
+	if ctrlState.ShouldExit(common.ReconcilerScope) {
+		return ctrlState.ReconcilerResult()
 	}
 
 	if wandb.Spec.Profile == apiv2.WBProfileDev {
@@ -139,8 +140,8 @@ func (r *WeightsAndBiasesV2Reconciler) Reconcile(ctx context.Context, req ctrl.R
 	} else {
 		ctrlState = r.handleMinioHA(ctx, wandb, req)
 	}
-	if ctrlState.shouldExit(ReconcilerScope) {
-		return ctrlState.reconcilerResult()
+	if ctrlState.ShouldExit(common.ReconcilerScope) {
+		return ctrlState.ReconcilerResult()
 	}
 
 	if wandb.Spec.Profile == apiv2.WBProfileDev {
@@ -148,13 +149,13 @@ func (r *WeightsAndBiasesV2Reconciler) Reconcile(ctx context.Context, req ctrl.R
 	} else {
 		ctrlState = r.handleClickHouseHA(ctx, wandb, req)
 	}
-	if ctrlState.shouldExit(ReconcilerScope) {
-		return ctrlState.reconcilerResult()
+	if ctrlState.ShouldExit(common.ReconcilerScope) {
+		return ctrlState.ReconcilerResult()
 	}
 
 	ctrlState = r.inferState(ctx, wandb)
-	if ctrlState.shouldExit(ReconcilerScope) {
-		return ctrlState.reconcilerResult()
+	if ctrlState.ShouldExit(common.ReconcilerScope) {
+		return ctrlState.ReconcilerResult()
 	}
 
 	return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
@@ -162,12 +163,12 @@ func (r *WeightsAndBiasesV2Reconciler) Reconcile(ctx context.Context, req ctrl.R
 
 func (r *WeightsAndBiasesV2Reconciler) handleDatabase(
 	ctx context.Context, wandb *apiv2.WeightsAndBiases, req ctrl.Request,
-) CtrlState {
+) common.CtrlState {
 	log := ctrllog.FromContext(ctx)
 
 	if !wandb.Spec.Database.Enabled {
 		log.Info("Database not enabled, skipping")
-		return CtrlContinue()
+		return common.CtrlContinue()
 	}
 
 	dbType := wandb.Spec.Database.Type
@@ -188,13 +189,13 @@ func (r *WeightsAndBiasesV2Reconciler) handleDatabase(
 
 	default:
 		log.Error(nil, "Unknown database type", "type", dbType)
-		return CtrlError(errors.New("unknown database type: " + string(dbType)))
+		return common.CtrlError(errors.New("unknown database type: " + string(dbType)))
 	}
 }
 
 func (r *WeightsAndBiasesV2Reconciler) inferState(
 	ctx context.Context, wandb *apiv2.WeightsAndBiases,
-) CtrlState {
+) common.CtrlState {
 	newState := wandb.Status.State
 	curState := wandb.Status.State
 	log := ctrl.LoggerFrom(ctx)
@@ -218,11 +219,11 @@ func (r *WeightsAndBiasesV2Reconciler) inferState(
 		wandb.Status.State = newState
 		if err := r.Status().Update(ctx, wandb); err != nil {
 			log.Error(err, "Failed to update Weights & Biases state", "from", curState, "to", newState)
-			return CtrlError(err)
+			return common.CtrlError(err)
 		}
-		return CtrlDone(HandlerScope)
+		return common.CtrlDone(common.HandlerScope)
 	}
-	return CtrlContinue()
+	return common.CtrlContinue()
 }
 
 // SetupWithManager sets up the controller with the Manager.

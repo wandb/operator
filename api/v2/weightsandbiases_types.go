@@ -25,14 +25,6 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-type WBSpecProfile string
-
-const (
-	WBSpecProfileDev     WBSpecProfile = "dev"
-	WBSpecProfileStaging WBSpecProfile = "staging"
-	WBSpecProfileProd    WBSpecProfile = "prod"
-)
-
 type WBDatabaseType string
 
 const (
@@ -122,8 +114,23 @@ type WBDatabaseSpec struct {
 }
 
 type WBRedisSpec struct {
-	Enabled     bool   `json:"enabled"`
-	StorageSize string `json:"storageSize,omitempty"`
+	Enabled     bool                 `json:"enabled"`
+	StorageSize string               `json:"storageSize,omitempty"`
+	Config      *WBRedisConfig       `json:"config,omitempty"`
+	Sentinel    *WBRedisSentinelSpec `json:"sentinel,omitempty"`
+}
+
+type WBRedisConfig struct {
+	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+}
+
+type WBRedisSentinelSpec struct {
+	Enabled bool                   `json:"enabled"`
+	Config  *WBRedisSentinelConfig `json:"config,omitempty"`
+}
+
+type WBRedisSentinelConfig struct {
+	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 }
 
 type WBKafkaSpec struct {

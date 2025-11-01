@@ -7,6 +7,7 @@ import (
 	common "github.com/wandb/operator/api/redis-operator-vendored/common/v1beta2"
 	redisv1beta2 "github.com/wandb/operator/api/redis-operator-vendored/redis/v1beta2"
 	apiv2 "github.com/wandb/operator/api/v2"
+	common2 "github.com/wandb/operator/internal/controller/wandb_v2/common"
 	corev1 "k8s.io/api/core/v1"
 	machErrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -38,7 +39,7 @@ func (w *wandbRedisWrapper) GetStatus() string {
 }
 
 type wandbRedisDoReconcile interface {
-	Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) CtrlState
+	Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) common2.CtrlState
 }
 
 func redisNamespacedName(req ctrl.Request) types.NamespacedName {
@@ -54,7 +55,7 @@ func redisNamespacedName(req ctrl.Request) types.NamespacedName {
 
 func (r *WeightsAndBiasesV2Reconciler) handleRedis(
 	ctx context.Context, wandb *apiv2.WeightsAndBiases, req ctrl.Request,
-) CtrlState {
+) common2.CtrlState {
 	var err error
 	var desiredRedis wandbRedisWrapper
 	var actualRedis wandbRedisWrapper
@@ -64,31 +65,31 @@ func (r *WeightsAndBiasesV2Reconciler) handleRedis(
 
 	if !wandb.Spec.Redis.Enabled {
 		log.Info("Redis not enabled, skipping")
-		return CtrlContinue()
+		return common2.CtrlContinue()
 	}
 
 	log.Info("Handling Redis")
 
 	if actualRedis, err = getActualRedis(ctx, r, namespacedName); err != nil {
 		log.Error(err, "Failed to get actual Redis")
-		return CtrlError(err)
+		return common2.CtrlError(err)
 	}
 
 	if desiredRedis, err = getDesiredRedis(ctx, wandb, namespacedName, actualRedis); err != nil {
 		log.Error(err, "Failed to compute desired Redis state")
-		return CtrlError(err)
+		return common2.CtrlError(err)
 	}
 
 	if reconciliation, err = computeRedisReconcileDrift(ctx, wandb, desiredRedis, actualRedis); err != nil {
 		log.Error(err, "Failed to compute Redis reconciliation drift")
-		return CtrlError(err)
+		return common2.CtrlError(err)
 	}
 
 	if reconciliation != nil {
 		return reconciliation.Execute(ctx, r)
 	}
 
-	return CtrlContinue()
+	return common2.CtrlContinue()
 }
 
 func getActualRedis(
@@ -256,27 +257,27 @@ type wandbRedisCreate struct {
 	wandb   *apiv2.WeightsAndBiases
 }
 
-func (c *wandbRedisCreate) Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) CtrlState {
+func (c *wandbRedisCreate) Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) common2.CtrlState {
 	var err error
 	log := ctrl.LoggerFrom(ctx)
 	log.Info("Installing Redis")
 	wandb := c.wandb
 	if err = controllerutil.SetOwnerReference(wandb, c.desired.obj, r.Scheme); err != nil {
 		log.Error(err, "Failed to set owner reference for Redis")
-		return CtrlError(err)
+		return common2.CtrlError(err)
 	}
 	if err = r.Create(ctx, c.desired.obj); err != nil {
 		log.Error(err, "Failed to create Redis")
-		return CtrlError(err)
+		return common2.CtrlError(err)
 	}
 	wandb.Status.State = apiv2.WBStateInfraUpdate
 	wandb.Status.Message = "Creating Redis"
 	wandb.Status.RedisStatus.State = "pending"
 	if err = r.Status().Update(ctx, wandb); err != nil {
 		log.Error(err, "Failed to update status after creating Redis")
-		return CtrlError(err)
+		return common2.CtrlError(err)
 	}
-	return CtrlDone(HandlerScope)
+	return common2.CtrlDone(common2.HandlerScope)
 }
 
 type wandbRedisDelete struct {
@@ -284,22 +285,22 @@ type wandbRedisDelete struct {
 	wandb  *apiv2.WeightsAndBiases
 }
 
-func (d *wandbRedisDelete) Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) CtrlState {
+func (d *wandbRedisDelete) Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) common2.CtrlState {
 	var err error
 	log := ctrl.LoggerFrom(ctx)
 	log.Info("Uninstalling Redis")
 	if err = r.Delete(ctx, d.actual.obj); err != nil {
 		log.Error(err, "Failed to delete Redis")
-		return CtrlError(err)
+		return common2.CtrlError(err)
 	}
 	wandb := d.wandb
 	wandb.Status.State = apiv2.WBStateInfraUpdate
 	wandb.Status.Message = "Deleting Redis"
 	if err = r.Status().Update(ctx, wandb); err != nil {
 		log.Error(err, "Failed to update status after deleting Redis")
-		return CtrlError(err)
+		return common2.CtrlError(err)
 	}
-	return CtrlDone(HandlerScope)
+	return common2.CtrlDone(common2.HandlerScope)
 }
 
 type wandbRedisStatusUpdate struct {
@@ -310,16 +311,16 @@ type wandbRedisStatusUpdate struct {
 
 func (s *wandbRedisStatusUpdate) Execute(
 	ctx context.Context, r *WeightsAndBiasesV2Reconciler,
-) CtrlState {
+) common2.CtrlState {
 	log := ctrl.LoggerFrom(ctx)
 	log.Info("Updating Redis status", "status", s.status, "ready", s.ready)
 	s.wandb.Status.RedisStatus.State = s.status
 	s.wandb.Status.RedisStatus.Ready = s.ready
 	if err := r.Status().Update(ctx, s.wandb); err != nil {
 		log.Error(err, "Failed to update Redis status")
-		return CtrlError(err)
+		return common2.CtrlError(err)
 	}
-	return CtrlDone(HandlerScope)
+	return common2.CtrlDone(common2.HandlerScope)
 }
 
 type wandbRedisConnInfoCreate struct {
@@ -327,35 +328,35 @@ type wandbRedisConnInfoCreate struct {
 	wandb   *apiv2.WeightsAndBiases
 }
 
-func (c *wandbRedisConnInfoCreate) Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) CtrlState {
+func (c *wandbRedisConnInfoCreate) Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) common2.CtrlState {
 	log := ctrl.LoggerFrom(ctx)
 	log.Info("Creating Redis connection secret")
 
 	if c.desired.secret == nil {
 		err := errors.New("desired secret is nil")
 		log.Error(err, "Desired Redis connection secret is nil")
-		return CtrlError(err)
+		return common2.CtrlError(err)
 	}
 
 	if err := controllerutil.SetOwnerReference(c.wandb, c.desired.secret, r.Scheme); err != nil {
 		log.Error(err, "Failed to set owner reference for Redis connection secret")
-		return CtrlError(err)
+		return common2.CtrlError(err)
 	}
 
 	if err := r.Create(ctx, c.desired.secret); err != nil {
 		log.Error(err, "Failed to create Redis connection secret")
-		return CtrlError(err)
+		return common2.CtrlError(err)
 	}
 
 	log.Info("Redis connection secret created successfully")
-	return CtrlDone(HandlerScope)
+	return common2.CtrlDone(common2.HandlerScope)
 }
 
 type wandbRedisConnInfoDelete struct {
 	wandb *apiv2.WeightsAndBiases
 }
 
-func (d *wandbRedisConnInfoDelete) Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) CtrlState {
+func (d *wandbRedisConnInfoDelete) Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) common2.CtrlState {
 	log := ctrl.LoggerFrom(ctx)
 	log.Info("Deleting Redis connection secret")
 
@@ -369,17 +370,17 @@ func (d *wandbRedisConnInfoDelete) Execute(ctx context.Context, r *WeightsAndBia
 	if err != nil {
 		if machErrors.IsNotFound(err) {
 			log.Info("Redis connection secret already deleted")
-			return CtrlContinue()
+			return common2.CtrlContinue()
 		}
 		log.Error(err, "Failed to get Redis connection secret for deletion")
-		return CtrlError(err)
+		return common2.CtrlError(err)
 	}
 
 	if err := r.Delete(ctx, secret); err != nil {
 		log.Error(err, "Failed to delete Redis connection secret")
-		return CtrlError(err)
+		return common2.CtrlError(err)
 	}
 
 	log.Info("Redis connection secret deleted successfully")
-	return CtrlDone(HandlerScope)
+	return common2.CtrlDone(common2.HandlerScope)
 }

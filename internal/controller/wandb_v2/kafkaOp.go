@@ -9,6 +9,7 @@ import (
 	strimziv1beta2 "github.com/wandb/operator/api/strimzi-kafka-vendored/v1beta2"
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/ctrlqueue"
+	"github.com/wandb/operator/internal/controller/wandb_v2/common"
 	corev1 "k8s.io/api/core/v1"
 	machErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -94,7 +95,7 @@ func (w *wandbKafkaWrapper) GetStatus() string {
 }
 
 type wandbKafkaDoReconcile interface {
-	Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) CtrlState
+	Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) common.CtrlState
 }
 
 func kafkaNamespacedName(req ctrl.Request) types.NamespacedName {
@@ -110,7 +111,7 @@ func kafkaNamespacedName(req ctrl.Request) types.NamespacedName {
 
 func (r *WeightsAndBiasesV2Reconciler) handleKafka(
 	ctx context.Context, wandb *apiv2.WeightsAndBiases, req ctrl.Request,
-) CtrlState {
+) common.CtrlState {
 	var err error
 	var desiredKafka wandbKafkaWrapper
 	var actualKafka wandbKafkaWrapper
@@ -120,35 +121,35 @@ func (r *WeightsAndBiasesV2Reconciler) handleKafka(
 
 	if !wandb.Spec.Kafka.Enabled {
 		log.Info("Kafka not enabled, skipping")
-		return CtrlContinue()
+		return common.CtrlContinue()
 	}
 
 	log.Info("Handling Kafka")
 
 	if actualKafka, err = getActualKafka(ctx, r, namespacedName); err != nil {
 		log.Error(err, "Failed to get actual Kafka resources")
-		return CtrlError(err)
+		return common.CtrlError(err)
 	}
 
-	if ctrlState := actualKafka.maybeHandleDeletion(ctx, wandb, actualKafka, r); ctrlState.shouldExit(HandlerScope) {
+	if ctrlState := actualKafka.maybeHandleDeletion(ctx, wandb, actualKafka, r); ctrlState.ShouldExit(common.HandlerScope) {
 		return ctrlState
 	}
 
 	if desiredKafka, err = getDesiredKafka(ctx, wandb, namespacedName, actualKafka); err != nil {
 		log.Error(err, "Failed to get desired Kafka configuration")
-		return CtrlError(err)
+		return common.CtrlError(err)
 	}
 
 	if reconciliation, err = computeKafkaReconcileDrift(ctx, wandb, desiredKafka, actualKafka, r); err != nil {
 		log.Error(err, "Failed to compute Kafka reconcile drift")
-		return CtrlError(err)
+		return common.CtrlError(err)
 	}
 
 	if reconciliation != nil {
 		return reconciliation.Execute(ctx, r)
 	}
 
-	return CtrlContinue()
+	return common.CtrlContinue()
 }
 
 func getActualKafka(
@@ -413,7 +414,7 @@ type wandbNodePoolCreate struct {
 	wandb   *apiv2.WeightsAndBiases
 }
 
-func (c *wandbNodePoolCreate) Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) CtrlState {
+func (c *wandbNodePoolCreate) Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) common.CtrlState {
 	var err error
 	log := ctrl.LoggerFrom(ctx)
 	log.Info("Installing Kafka NodePool")
@@ -421,12 +422,12 @@ func (c *wandbNodePoolCreate) Execute(ctx context.Context, r *WeightsAndBiasesV2
 
 	if err = controllerutil.SetOwnerReference(wandb, c.desired.nodePoolObj, r.Scheme); err != nil {
 		log.Error(err, "Failed to set owner reference for Kafka NodePool")
-		return CtrlError(err)
+		return common.CtrlError(err)
 	}
 
 	if err = r.Create(ctx, c.desired.nodePoolObj); err != nil {
 		log.Error(err, "Failed to create Kafka NodePool")
-		return CtrlError(err)
+		return common.CtrlError(err)
 	}
 
 	wandb.Status.State = apiv2.WBStateInfraUpdate
@@ -434,9 +435,9 @@ func (c *wandbNodePoolCreate) Execute(ctx context.Context, r *WeightsAndBiasesV2
 	wandb.Status.KafkaStatus.State = "pending"
 	if err = r.Status().Update(ctx, wandb); err != nil {
 		log.Error(err, "Failed to update status after creating Kafka NodePool")
-		return CtrlError(err)
+		return common.CtrlError(err)
 	}
-	return CtrlDone(HandlerScope)
+	return common.CtrlDone(common.HandlerScope)
 }
 
 type wandbNodePoolDelete struct {
@@ -444,14 +445,14 @@ type wandbNodePoolDelete struct {
 	wandb  *apiv2.WeightsAndBiases
 }
 
-func (d *wandbNodePoolDelete) Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) CtrlState {
+func (d *wandbNodePoolDelete) Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) common.CtrlState {
 	var err error
 	log := ctrl.LoggerFrom(ctx)
 	log.Info("Uninstalling Kafka NodePool")
 
 	if err = r.Delete(ctx, d.actual.nodePoolObj); err != nil {
 		log.Error(err, "Failed to delete Kafka NodePool")
-		return CtrlError(err)
+		return common.CtrlError(err)
 	}
 
 	wandb := d.wandb
@@ -459,9 +460,9 @@ func (d *wandbNodePoolDelete) Execute(ctx context.Context, r *WeightsAndBiasesV2
 	wandb.Status.Message = "Deleting Kafka NodePool"
 	if err = r.Status().Update(ctx, wandb); err != nil {
 		log.Error(err, "Failed to update status after deleting Kafka NodePool")
-		return CtrlError(err)
+		return common.CtrlError(err)
 	}
-	return CtrlDone(HandlerScope)
+	return common.CtrlDone(common.HandlerScope)
 }
 
 type wandbKafkaCreate struct {
@@ -469,7 +470,7 @@ type wandbKafkaCreate struct {
 	wandb   *apiv2.WeightsAndBiases
 }
 
-func (c *wandbKafkaCreate) Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) CtrlState {
+func (c *wandbKafkaCreate) Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) common.CtrlState {
 	var err error
 	log := ctrl.LoggerFrom(ctx)
 	log.Info("Installing Kafka")
@@ -477,12 +478,12 @@ func (c *wandbKafkaCreate) Execute(ctx context.Context, r *WeightsAndBiasesV2Rec
 
 	if err = controllerutil.SetOwnerReference(wandb, c.desired.kafkaObj, r.Scheme); err != nil {
 		log.Error(err, "Failed to set owner reference for Kafka")
-		return CtrlError(err)
+		return common.CtrlError(err)
 	}
 
 	if err = r.Create(ctx, c.desired.kafkaObj); err != nil {
 		log.Error(err, "Failed to create Kafka")
-		return CtrlError(err)
+		return common.CtrlError(err)
 	}
 
 	wandb.Status.State = apiv2.WBStateInfraUpdate
@@ -490,9 +491,9 @@ func (c *wandbKafkaCreate) Execute(ctx context.Context, r *WeightsAndBiasesV2Rec
 	wandb.Status.KafkaStatus.State = "pending"
 	if err = r.Status().Update(ctx, wandb); err != nil {
 		log.Error(err, "Failed to update status after creating Kafka")
-		return CtrlError(err)
+		return common.CtrlError(err)
 	}
-	return CtrlDone(HandlerScope)
+	return common.CtrlDone(common.HandlerScope)
 }
 
 type wandbKafkaDelete struct {
@@ -500,14 +501,14 @@ type wandbKafkaDelete struct {
 	wandb  *apiv2.WeightsAndBiases
 }
 
-func (d *wandbKafkaDelete) Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) CtrlState {
+func (d *wandbKafkaDelete) Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) common.CtrlState {
 	var err error
 	log := ctrl.LoggerFrom(ctx)
 	log.Info("Uninstalling Kafka")
 
 	if err = r.Delete(ctx, d.actual.kafkaObj); err != nil {
 		log.Error(err, "Failed to delete Kafka")
-		return CtrlError(err)
+		return common.CtrlError(err)
 	}
 
 	wandb := d.wandb
@@ -515,9 +516,9 @@ func (d *wandbKafkaDelete) Execute(ctx context.Context, r *WeightsAndBiasesV2Rec
 	wandb.Status.Message = "Deleting Kafka"
 	if err = r.Status().Update(ctx, wandb); err != nil {
 		log.Error(err, "Failed to update status after deleting Kafka")
-		return CtrlError(err)
+		return common.CtrlError(err)
 	}
-	return CtrlDone(HandlerScope)
+	return common.CtrlDone(common.HandlerScope)
 }
 
 type wandbKafkaStatusUpdate struct {
@@ -528,21 +529,21 @@ type wandbKafkaStatusUpdate struct {
 
 func (s *wandbKafkaStatusUpdate) Execute(
 	ctx context.Context, r *WeightsAndBiasesV2Reconciler,
-) CtrlState {
+) common.CtrlState {
 	log := ctrl.LoggerFrom(ctx)
 	log.Info("Updating Kafka status", "status", s.status, "ready", s.ready)
 	s.wandb.Status.KafkaStatus.State = s.status
 	s.wandb.Status.KafkaStatus.Ready = s.ready
 	if err := r.Status().Update(ctx, s.wandb); err != nil {
 		log.Error(err, "Failed to update Kafka status")
-		return CtrlError(err)
+		return common.CtrlError(err)
 	}
-	return CtrlDone(HandlerScope)
+	return common.CtrlDone(common.HandlerScope)
 }
 
 func (w *wandbKafkaWrapper) maybeHandleDeletion(
 	ctx context.Context, wandb *apiv2.WeightsAndBiases, actualKafka wandbKafkaWrapper, reconciler *WeightsAndBiasesV2Reconciler,
-) CtrlState {
+) common.CtrlState {
 	log := ctrllog.FromContext(ctx)
 
 	//requeueSeconds := wandb.Status.KafkaStatus.BackupStatus.RequeueAfter
@@ -561,23 +562,23 @@ func (w *wandbKafkaWrapper) maybeHandleDeletion(
 		controllerutil.RemoveFinalizer(wandb, kafkaFinalizer)
 		if err := reconciler.Client.Update(ctx, wandb); err != nil {
 			log.Error(err, "Failed to remove Kafka finalizer")
-			return CtrlError(err)
+			return common.CtrlError(err)
 		}
-		return CtrlContinue()
+		return common.CtrlContinue()
 	}
 
 	if deletionPaused && backupEnabled {
 		log.Info("Deletion paused for Kafka Backup; disable backups to continue with deletion")
-		return CtrlContinue()
+		return common.CtrlContinue()
 	}
 
 	if !hasKafkaFinalizer && !flaggedForDeletion {
 		wandb.ObjectMeta.Finalizers = append(wandb.ObjectMeta.Finalizers, kafkaFinalizer)
 		if err := reconciler.Client.Update(ctx, wandb); err != nil {
 			log.Error(err, "Failed to add Kafka finalizer")
-			return CtrlError(err)
+			return common.CtrlError(err)
 		}
-		return CtrlContinue()
+		return common.CtrlContinue()
 	}
 
 	if flaggedForDeletion {
@@ -586,15 +587,15 @@ func (w *wandbKafkaWrapper) maybeHandleDeletion(
 			wandb.ObjectMeta.DeletionTimestamp = nil
 			if err = reconciler.Update(ctx, wandb); err != nil {
 				log.Error(err, "Failed to update WeightsAndBiases during backup failure")
-				return CtrlError(err)
+				return common.CtrlError(err)
 			}
 			wandb.Status.State = apiv2.WBStateDeletionPaused
 			wandb.Status.Message = "Kafka backup before deletion failed, deletion paused. Disable backups to continue with deletion."
 			if err = reconciler.Status().Update(ctx, wandb); err != nil {
 				log.Error(err, "Failed to update status to deletion paused")
-				return CtrlError(err)
+				return common.CtrlError(err)
 			}
-			return CtrlDone(HandlerScope)
+			return common.CtrlDone(common.HandlerScope)
 		}
 
 		if wandb.Status.KafkaStatus.BackupStatus.State == "InProgress" {
@@ -605,35 +606,35 @@ func (w *wandbKafkaWrapper) maybeHandleDeletion(
 				wandb.Status.Message = "Waiting for Kafka backup to complete before deletion"
 				if err := reconciler.Status().Update(ctx, wandb); err != nil {
 					log.Error(err, "Failed to update status while backup in progress")
-					return CtrlError(err)
+					return common.CtrlError(err)
 				}
 			}
-			return CtrlDone(HandlerScope)
+			return common.CtrlDone(common.HandlerScope)
 		}
 
 		controllerutil.RemoveFinalizer(wandb, kafkaFinalizer)
 		if err := reconciler.Client.Update(ctx, wandb); err != nil {
 			log.Error(err, "Failed to remove Kafka finalizer after backup")
-			return CtrlError(err)
+			return common.CtrlError(err)
 		}
 
 		if actualKafka.kafkaObj != nil {
 			if err := reconciler.Client.Delete(ctx, actualKafka.kafkaObj); err != nil {
 				log.Error(err, "Failed to delete Kafka resource during cleanup")
-				return CtrlError(err)
+				return common.CtrlError(err)
 			}
 		}
 
 		if actualKafka.nodePoolObj != nil {
 			if err := reconciler.Client.Delete(ctx, actualKafka.nodePoolObj); err != nil {
 				log.Error(err, "Failed to delete Kafka NodePool during cleanup")
-				return CtrlError(err)
+				return common.CtrlError(err)
 			}
 		}
 
-		return CtrlDone(HandlerScope)
+		return common.CtrlDone(common.HandlerScope)
 	}
-	return CtrlContinue()
+	return common.CtrlContinue()
 }
 
 func (w *wandbKafkaWrapper) handleKafkaBackup(
@@ -770,34 +771,34 @@ type wandbKafkaConnInfoCreate struct {
 	wandb   *apiv2.WeightsAndBiases
 }
 
-func (c *wandbKafkaConnInfoCreate) Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) CtrlState {
+func (c *wandbKafkaConnInfoCreate) Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) common.CtrlState {
 	log := ctrl.LoggerFrom(ctx)
 	log.Info("Creating Kafka connection secret")
 
 	if c.desired.secret == nil {
 		log.Error(nil, "Desired secret is nil")
-		return CtrlError(errors.New("desired secret is nil"))
+		return common.CtrlError(errors.New("desired secret is nil"))
 	}
 
 	if err := controllerutil.SetOwnerReference(c.wandb, c.desired.secret, r.Scheme); err != nil {
 		log.Error(err, "Failed to set owner reference for Kafka connection secret")
-		return CtrlError(err)
+		return common.CtrlError(err)
 	}
 
 	if err := r.Create(ctx, c.desired.secret); err != nil {
 		log.Error(err, "Failed to create Kafka connection secret")
-		return CtrlError(err)
+		return common.CtrlError(err)
 	}
 
 	log.Info("Kafka connection secret created successfully")
-	return CtrlDone(HandlerScope)
+	return common.CtrlDone(common.HandlerScope)
 }
 
 type wandbKafkaConnInfoDelete struct {
 	wandb *apiv2.WeightsAndBiases
 }
 
-func (d *wandbKafkaConnInfoDelete) Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) CtrlState {
+func (d *wandbKafkaConnInfoDelete) Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) common.CtrlState {
 	log := ctrl.LoggerFrom(ctx)
 	log.Info("Deleting Kafka connection secret")
 
@@ -811,17 +812,17 @@ func (d *wandbKafkaConnInfoDelete) Execute(ctx context.Context, r *WeightsAndBia
 	if err != nil {
 		if machErrors.IsNotFound(err) {
 			log.Info("Kafka connection secret already deleted")
-			return CtrlContinue()
+			return common.CtrlContinue()
 		}
 		log.Error(err, "Failed to get Kafka connection secret for deletion")
-		return CtrlError(err)
+		return common.CtrlError(err)
 	}
 
 	if err := r.Delete(ctx, secret); err != nil {
 		log.Error(err, "Failed to delete Kafka connection secret")
-		return CtrlError(err)
+		return common.CtrlError(err)
 	}
 
 	log.Info("Kafka connection secret deleted successfully")
-	return CtrlDone(HandlerScope)
+	return common.CtrlDone(common.HandlerScope)
 }

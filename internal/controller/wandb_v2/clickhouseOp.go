@@ -10,6 +10,7 @@ import (
 	chiv1 "github.com/wandb/operator/api/altinity-clickhouse-vendored/clickhouse.altinity.com/v1"
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/ctrlqueue"
+	"github.com/wandb/operator/internal/controller/wandb_v2/common"
 	corev1 "k8s.io/api/core/v1"
 	machErrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -64,7 +65,7 @@ func (w *wandbClickHouseWrapper) GetStatus() string {
 }
 
 type wandbClickHouseDoReconcile interface {
-	Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) CtrlState
+	Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) common.CtrlState
 }
 
 func clickhouseNamespacedName(req ctrl.Request) types.NamespacedName {
@@ -80,7 +81,7 @@ func clickhouseNamespacedName(req ctrl.Request) types.NamespacedName {
 
 func (r *WeightsAndBiasesV2Reconciler) handleClickHouse(
 	ctx context.Context, wandb *apiv2.WeightsAndBiases, req ctrl.Request,
-) CtrlState {
+) common.CtrlState {
 	var err error
 	var desiredClickHouse wandbClickHouseWrapper
 	var actualClickHouse wandbClickHouseWrapper
@@ -90,35 +91,35 @@ func (r *WeightsAndBiasesV2Reconciler) handleClickHouse(
 
 	if !wandb.Spec.ClickHouse.Enabled {
 		log.Info("ClickHouse not enabled, skipping")
-		return CtrlContinue()
+		return common.CtrlContinue()
 	}
 
 	log.Info("Handling ClickHouse")
 
 	if actualClickHouse, err = getActualClickHouse(ctx, r, namespacedName); err != nil {
 		log.Error(err, "Failed to get actual ClickHouse resources")
-		return CtrlError(err)
+		return common.CtrlError(err)
 	}
 
-	if ctrlState := actualClickHouse.maybeHandleDeletion(ctx, wandb, actualClickHouse, r); ctrlState.shouldExit(HandlerScope) {
+	if ctrlState := actualClickHouse.maybeHandleDeletion(ctx, wandb, actualClickHouse, r); ctrlState.ShouldExit(common.HandlerScope) {
 		return ctrlState
 	}
 
 	if desiredClickHouse, err = getDesiredClickHouse(ctx, wandb, namespacedName, actualClickHouse); err != nil {
 		log.Error(err, "Failed to get desired ClickHouse configuration")
-		return CtrlError(err)
+		return common.CtrlError(err)
 	}
 
 	if reconciliation, err = computeClickHouseReconcileDrift(ctx, wandb, desiredClickHouse, actualClickHouse); err != nil {
 		log.Error(err, "Failed to compute ClickHouse reconcile drift")
-		return CtrlError(err)
+		return common.CtrlError(err)
 	}
 
 	if reconciliation != nil {
 		return reconciliation.Execute(ctx, r)
 	}
 
-	return CtrlContinue()
+	return common.CtrlContinue()
 }
 
 func getActualClickHouse(
@@ -333,7 +334,7 @@ type wandbClickHouseCreate struct {
 	wandb   *apiv2.WeightsAndBiases
 }
 
-func (c *wandbClickHouseCreate) Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) CtrlState {
+func (c *wandbClickHouseCreate) Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) common.CtrlState {
 	var err error
 	log := ctrl.LoggerFrom(ctx)
 	log.Info("Installing ClickHouse")
@@ -341,12 +342,12 @@ func (c *wandbClickHouseCreate) Execute(ctx context.Context, r *WeightsAndBiases
 
 	if err = controllerutil.SetOwnerReference(wandb, c.desired.obj, r.Scheme); err != nil {
 		log.Error(err, "Failed to set owner reference for ClickHouse")
-		return CtrlError(err)
+		return common.CtrlError(err)
 	}
 
 	if err = r.Create(ctx, c.desired.obj); err != nil {
 		log.Error(err, "Failed to create ClickHouse")
-		return CtrlError(err)
+		return common.CtrlError(err)
 	}
 
 	wandb.Status.State = apiv2.WBStateInfraUpdate
@@ -354,9 +355,9 @@ func (c *wandbClickHouseCreate) Execute(ctx context.Context, r *WeightsAndBiases
 	wandb.Status.ClickHouseStatus.State = "pending"
 	if err = r.Status().Update(ctx, wandb); err != nil {
 		log.Error(err, "Failed to update status after creating ClickHouse")
-		return CtrlError(err)
+		return common.CtrlError(err)
 	}
-	return CtrlDone(HandlerScope)
+	return common.CtrlDone(common.HandlerScope)
 }
 
 type wandbClickHouseDelete struct {
@@ -364,14 +365,14 @@ type wandbClickHouseDelete struct {
 	wandb  *apiv2.WeightsAndBiases
 }
 
-func (d *wandbClickHouseDelete) Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) CtrlState {
+func (d *wandbClickHouseDelete) Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) common.CtrlState {
 	var err error
 	log := ctrl.LoggerFrom(ctx)
 	log.Info("Uninstalling ClickHouse")
 
 	if err = r.Delete(ctx, d.actual.obj); err != nil {
 		log.Error(err, "Failed to delete ClickHouse")
-		return CtrlError(err)
+		return common.CtrlError(err)
 	}
 
 	wandb := d.wandb
@@ -379,9 +380,9 @@ func (d *wandbClickHouseDelete) Execute(ctx context.Context, r *WeightsAndBiases
 	wandb.Status.Message = "Deleting ClickHouse"
 	if err = r.Status().Update(ctx, wandb); err != nil {
 		log.Error(err, "Failed to update status after deleting ClickHouse")
-		return CtrlError(err)
+		return common.CtrlError(err)
 	}
-	return CtrlDone(HandlerScope)
+	return common.CtrlDone(common.HandlerScope)
 }
 
 type wandbClickHouseStatusUpdate struct {
@@ -392,21 +393,21 @@ type wandbClickHouseStatusUpdate struct {
 
 func (s *wandbClickHouseStatusUpdate) Execute(
 	ctx context.Context, r *WeightsAndBiasesV2Reconciler,
-) CtrlState {
+) common.CtrlState {
 	log := ctrl.LoggerFrom(ctx)
 	log.Info("Updating ClickHouse status", "status", s.status, "ready", s.ready)
 	s.wandb.Status.ClickHouseStatus.State = s.status
 	s.wandb.Status.ClickHouseStatus.Ready = s.ready
 	if err := r.Status().Update(ctx, s.wandb); err != nil {
 		log.Error(err, "Failed to update ClickHouse status")
-		return CtrlError(err)
+		return common.CtrlError(err)
 	}
-	return CtrlDone(HandlerScope)
+	return common.CtrlDone(common.HandlerScope)
 }
 
 func (w *wandbClickHouseWrapper) maybeHandleDeletion(
 	ctx context.Context, wandb *apiv2.WeightsAndBiases, actualClickHouse wandbClickHouseWrapper, reconciler *WeightsAndBiasesV2Reconciler,
-) CtrlState {
+) common.CtrlState {
 	log := ctrllog.FromContext(ctx)
 
 	var deletionPaused = wandb.Status.State == apiv2.WBStateDeletionPaused
@@ -419,23 +420,23 @@ func (w *wandbClickHouseWrapper) maybeHandleDeletion(
 		controllerutil.RemoveFinalizer(wandb, clickhouseFinalizer)
 		if err := reconciler.Client.Update(ctx, wandb); err != nil {
 			log.Error(err, "Failed to remove ClickHouse finalizer")
-			return CtrlError(err)
+			return common.CtrlError(err)
 		}
-		return CtrlContinue()
+		return common.CtrlContinue()
 	}
 
 	if deletionPaused && backupEnabled {
 		log.Info("Deletion paused for ClickHouse Backup; disable backups to continue with deletion")
-		return CtrlContinue()
+		return common.CtrlContinue()
 	}
 
 	if !hasClickHouseFinalizer && !flaggedForDeletion {
 		wandb.ObjectMeta.Finalizers = append(wandb.ObjectMeta.Finalizers, clickhouseFinalizer)
 		if err := reconciler.Client.Update(ctx, wandb); err != nil {
 			log.Error(err, "Failed to add ClickHouse finalizer")
-			return CtrlError(err)
+			return common.CtrlError(err)
 		}
-		return CtrlContinue()
+		return common.CtrlContinue()
 	}
 
 	if flaggedForDeletion {
@@ -444,15 +445,15 @@ func (w *wandbClickHouseWrapper) maybeHandleDeletion(
 			wandb.ObjectMeta.DeletionTimestamp = nil
 			if err = reconciler.Update(ctx, wandb); err != nil {
 				log.Error(err, "Failed to update WeightsAndBiases during backup failure")
-				return CtrlError(err)
+				return common.CtrlError(err)
 			}
 			wandb.Status.State = apiv2.WBStateDeletionPaused
 			wandb.Status.Message = "ClickHouse backup before deletion failed, deletion paused. Disable backups to continue with deletion."
 			if err = reconciler.Status().Update(ctx, wandb); err != nil {
 				log.Error(err, "Failed to update status to deletion paused")
-				return CtrlError(err)
+				return common.CtrlError(err)
 			}
-			return CtrlDone(HandlerScope)
+			return common.CtrlDone(common.HandlerScope)
 		}
 
 		if wandb.Status.ClickHouseStatus.BackupStatus.State == "InProgress" {
@@ -463,28 +464,28 @@ func (w *wandbClickHouseWrapper) maybeHandleDeletion(
 				wandb.Status.Message = "Waiting for ClickHouse backup to complete before deletion"
 				if err := reconciler.Status().Update(ctx, wandb); err != nil {
 					log.Error(err, "Failed to update status while backup in progress")
-					return CtrlError(err)
+					return common.CtrlError(err)
 				}
 			}
-			return CtrlDone(HandlerScope)
+			return common.CtrlDone(common.HandlerScope)
 		}
 
 		controllerutil.RemoveFinalizer(wandb, clickhouseFinalizer)
 		if err := reconciler.Client.Update(ctx, wandb); err != nil {
 			log.Error(err, "Failed to remove ClickHouse finalizer after backup")
-			return CtrlError(err)
+			return common.CtrlError(err)
 		}
 
 		if actualClickHouse.obj != nil {
 			if err := reconciler.Client.Delete(ctx, actualClickHouse.obj); err != nil {
 				log.Error(err, "Failed to delete ClickHouse during cleanup")
-				return CtrlError(err)
+				return common.CtrlError(err)
 			}
 		}
 
-		return CtrlDone(HandlerScope)
+		return common.CtrlDone(common.HandlerScope)
 	}
-	return CtrlContinue()
+	return common.CtrlContinue()
 }
 
 func (w *wandbClickHouseWrapper) handleClickHouseBackup(
@@ -621,34 +622,34 @@ type wandbClickHouseConnInfoCreate struct {
 	wandb   *apiv2.WeightsAndBiases
 }
 
-func (c *wandbClickHouseConnInfoCreate) Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) CtrlState {
+func (c *wandbClickHouseConnInfoCreate) Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) common.CtrlState {
 	log := ctrl.LoggerFrom(ctx)
 	log.Info("Creating ClickHouse connection secret")
 
 	if c.desired.secret == nil {
 		log.Error(nil, "Desired secret is nil")
-		return CtrlError(errors.New("desired secret is nil"))
+		return common.CtrlError(errors.New("desired secret is nil"))
 	}
 
 	if err := controllerutil.SetOwnerReference(c.wandb, c.desired.secret, r.Scheme); err != nil {
 		log.Error(err, "Failed to set owner reference for ClickHouse connection secret")
-		return CtrlError(err)
+		return common.CtrlError(err)
 	}
 
 	if err := r.Create(ctx, c.desired.secret); err != nil {
 		log.Error(err, "Failed to create ClickHouse connection secret")
-		return CtrlError(err)
+		return common.CtrlError(err)
 	}
 
 	log.Info("ClickHouse connection secret created successfully")
-	return CtrlDone(HandlerScope)
+	return common.CtrlDone(common.HandlerScope)
 }
 
 type wandbClickHouseConnInfoDelete struct {
 	wandb *apiv2.WeightsAndBiases
 }
 
-func (d *wandbClickHouseConnInfoDelete) Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) CtrlState {
+func (d *wandbClickHouseConnInfoDelete) Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) common.CtrlState {
 	log := ctrl.LoggerFrom(ctx)
 	log.Info("Deleting ClickHouse connection secret")
 
@@ -662,17 +663,17 @@ func (d *wandbClickHouseConnInfoDelete) Execute(ctx context.Context, r *WeightsA
 	if err != nil {
 		if machErrors.IsNotFound(err) {
 			log.Info("ClickHouse connection secret already deleted")
-			return CtrlContinue()
+			return common.CtrlContinue()
 		}
 		log.Error(err, "Failed to get ClickHouse connection secret for deletion")
-		return CtrlError(err)
+		return common.CtrlError(err)
 	}
 
 	if err := r.Delete(ctx, secret); err != nil {
 		log.Error(err, "Failed to delete ClickHouse connection secret")
-		return CtrlError(err)
+		return common.CtrlError(err)
 	}
 
 	log.Info("ClickHouse connection secret deleted successfully")
-	return CtrlDone(HandlerScope)
+	return common.CtrlDone(common.HandlerScope)
 }
