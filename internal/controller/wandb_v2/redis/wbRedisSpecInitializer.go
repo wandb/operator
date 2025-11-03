@@ -34,13 +34,16 @@ func initializeWbRedisSpec(profile v2.WBProfile) (*v2.WBRedisSpec, error) {
 	var spec v2.WBRedisSpec
 	var sentinelSpec *v2.WBRedisSentinelSpec
 
-	if sentinelSpec, err = initializeWbRedisSentinelSpec(profile); err == nil {
+	if sentinelSpec, err = initializeWbRedisSentinelSpec(profile); err != nil {
 		return nil, err
 	}
 	spec = v2.WBRedisSpec{
 		Enabled: true,
 		Config: &v2.WBRedisConfig{
-			Resources: v1.ResourceRequirements{},
+			Resources: v1.ResourceRequirements{
+				Requests: v1.ResourceList{},
+				Limits:   v1.ResourceList{},
+			},
 		},
 		Sentinel: sentinelSpec,
 	}
@@ -93,7 +96,6 @@ func initializeWbRedisSpec(profile v2.WBProfile) (*v2.WBRedisSpec, error) {
 func initializeWbRedisSentinelSpec(profile v2.WBProfile) (*v2.WBRedisSentinelSpec, error) {
 	var err error
 	var cpuRequest, cpuLimit, memoryRequest, memoryLimit resource.Quantity
-	var sentinelSpec v2.WBRedisSentinelSpec
 
 	switch profile {
 	case v2.WBProfileDev:
@@ -114,6 +116,15 @@ func initializeWbRedisSentinelSpec(profile v2.WBProfile) (*v2.WBRedisSentinelSpe
 		break
 	default:
 		return nil, fmt.Errorf("invalid profile: %v", profile)
+	}
+
+	sentinelSpec := v2.WBRedisSentinelSpec{
+		Config: &v2.WBRedisSentinelConfig{
+			Resources: v1.ResourceRequirements{
+				Requests: v1.ResourceList{},
+				Limits:   v1.ResourceList{},
+			},
+		},
 	}
 
 	if !cpuRequest.IsZero() {
