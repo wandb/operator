@@ -19,6 +19,7 @@ settings = {
     "wandbCrName": "wandb-default-v1",
     "displayCanary": False,
     "olmEnabled": False,
+    "localWebhookDev": False,
 }
 
 # Override with user settings from tilt-settings.json
@@ -77,7 +78,7 @@ VERSION = "v1"
 KIND = "wandb"
 IMG = 'controller:latest'
 CANARY_IMG = 'wandb-canary:latest'
-CONTROLLERGEN = 'rbac:roleName=manager-role crd webhook paths="./..." output:crd:artirefacts:config=config/crd/bases;'
+CONTROLLERGEN = 'rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases;'
 DISABLE_SECURITY_CONTEXT = True
 DIST_DIR = 'dist'
 
@@ -266,13 +267,20 @@ if settings.get("displayClickHouseOperator"):
 
 ################################################################################
 # STEP 3: DEPLOY CONTROLLER AND RBAC
-# Build controller deployment and RBAC from config/default
-# This includes CRDs, but we'll apply them again from the watched file below
+# Build controller deployment and RBAC from config/default OR local-dev config
 ################################################################################
 
-print("==> Building controller and RBAC manifests from config/default...")
-local('kustomize build config/default > ' + DIST_DIR + '/controller-and-rbac.yaml')
-k8s_yaml(DIST_DIR + '/controller-and-rbac.yaml')
+if settings.get("localWebhookDev"):
+    print("==> Local webhook development mode enabled")
+    print("    Using config/local-dev (CRDs, RBAC, webhook with local URL)")
+    print("    Controller will NOT be deployed to cluster")
+    print("    Run controller manually with: make run-local-webhook")
+    local('kustomize build config/local-dev > ' + DIST_DIR + '/local-dev-config.yaml')
+    k8s_yaml(DIST_DIR + '/local-dev-config.yaml')
+else:
+    print("==> Building controller and RBAC manifests from config/default...")
+    local('kustomize build config/default > ' + DIST_DIR + '/controller-and-rbac.yaml')
+    k8s_yaml(DIST_DIR + '/controller-and-rbac.yaml')
 
 ################################################################################
 # STEP 4: GENERATE AND APPLY PATCHED CRDs
@@ -402,23 +410,39 @@ if settings.get("displayCanary"):
                    trigger_mode=TRIGGER_MODE_MANUAL)
 
 ################################################################################
-# STEP 9: BUILD AND DEPLOY CONTROLLER IMAGE
-# Build controller image with live update support for fast iteration
+# LOCAL WEBHOOK DEVELOPMENT
+# Helper resources for local webhook development
 ################################################################################
 
-docker_build_with_restart(IMG, '.',
-                          dockerfile_contents=DOCKERFILE,
-                          entrypoint='/manager',
-                          only=['./tilt_bin/manager'],
-                          live_update=[
-                              sync('./tilt_bin/manager', '/manager'),
-                          ],
-                          )
+if settings.get("localWebhookDev"):
+    local_resource(
+        'Setup-Local-Webhook-Certs',
+        cmd='./scripts/setup-local-webhook.sh',
+        labels="webhook",
+        auto_init=False,
+        trigger_mode=TRIGGER_MODE_MANUAL
+    )
 
-if not settings.get("autoDeployOperator"):
-    k8s_resource('operator-controller-manager',
-                 auto_init=False,
-                 trigger_mode=TRIGGER_MODE_MANUAL)
+################################################################################
+# STEP 9: BUILD AND DEPLOY CONTROLLER IMAGE
+# Build controller image with live update support for fast iteration
+# (Skipped in local webhook development mode)
+################################################################################
+
+if not settings.get("localWebhookDev"):
+    docker_build_with_restart(IMG, '.',
+                              dockerfile_contents=DOCKERFILE,
+                              entrypoint='/manager',
+                              only=['./tilt_bin/manager'],
+                              live_update=[
+                                  sync('./tilt_bin/manager', '/manager'),
+                              ],
+                              )
+
+    if not settings.get("autoDeployOperator"):
+        k8s_resource('operator-controller-manager',
+                     auto_init=False,
+                     trigger_mode=TRIGGER_MODE_MANUAL)
 
 
 # ============================================================================

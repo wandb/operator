@@ -68,7 +68,7 @@ func (r *WeightsAndBiasesV2Reconciler) handleRedisHA(
 	var actualRedis wandbRedisHAWrapper
 	var reconciliation wandbRedisHADoReconcile
 	log := ctrl.LoggerFrom(ctx)
-	namespacedName := redisNamespacedName(req)
+	namespacedName := redisNamespacedName(wandb)
 
 	if !wandb.Spec.Redis.Enabled {
 		log.Info("Redis not enabled, skipping")
@@ -82,7 +82,7 @@ func (r *WeightsAndBiasesV2Reconciler) handleRedisHA(
 		return common2.CtrlError(err)
 	}
 
-	if ctrlState := actualRedis.maybeHandleDeletion(ctx, wandb, actualRedis, r); ctrlState.ShouldExit(common2.HandlerScope) {
+	if ctrlState := actualRedis.maybeHandleDeletion(ctx, wandb, actualRedis, r); ctrlState.ShouldExit(common2.PackageScope) {
 		return ctrlState
 	}
 
@@ -349,7 +349,7 @@ func (c *wandbRedisHAReplicationCreate) Execute(ctx context.Context, r *WeightsA
 		log.Error(err, "Failed to update status after creating Redis Replication")
 		return common2.CtrlError(err)
 	}
-	return common2.CtrlDone(common2.HandlerScope)
+	return common2.CtrlDone(common2.PackageScope)
 }
 
 type wandbRedisHASentinelCreate struct {
@@ -375,7 +375,7 @@ func (c *wandbRedisHASentinelCreate) Execute(ctx context.Context, r *WeightsAndB
 		log.Error(err, "Failed to update status after creating Redis Sentinel")
 		return common2.CtrlError(err)
 	}
-	return common2.CtrlDone(common2.HandlerScope)
+	return common2.CtrlDone(common2.PackageScope)
 }
 
 type wandbRedisHAReplicationDelete struct {
@@ -397,7 +397,7 @@ func (d *wandbRedisHAReplicationDelete) Execute(ctx context.Context, r *WeightsA
 		log.Error(err, "Failed to update status after deleting Redis Replication")
 		return common2.CtrlError(err)
 	}
-	return common2.CtrlDone(common2.HandlerScope)
+	return common2.CtrlDone(common2.PackageScope)
 }
 
 type wandbRedisHASentinelDelete struct {
@@ -419,7 +419,7 @@ func (d *wandbRedisHASentinelDelete) Execute(ctx context.Context, r *WeightsAndB
 		log.Error(err, "Failed to update status after deleting Redis Sentinel")
 		return common2.CtrlError(err)
 	}
-	return common2.CtrlDone(common2.HandlerScope)
+	return common2.CtrlDone(common2.PackageScope)
 }
 
 type wandbRedisHAStatusUpdate struct {
@@ -439,7 +439,7 @@ func (s *wandbRedisHAStatusUpdate) Execute(
 		log.Error(err, "Failed to update Redis HA status")
 		return common2.CtrlError(err)
 	}
-	return common2.CtrlDone(common2.HandlerScope)
+	return common2.CtrlDone(common2.PackageScope)
 }
 
 type wandbRedisHAConnInfoCreate struct {
@@ -468,7 +468,7 @@ func (c *wandbRedisHAConnInfoCreate) Execute(ctx context.Context, r *WeightsAndB
 	}
 
 	log.Info("Redis HA connection secret created successfully")
-	return common2.CtrlDone(common2.HandlerScope)
+	return common2.CtrlDone(common2.PackageScope)
 }
 
 type wandbRedisHAConnInfoDelete struct {
@@ -479,9 +479,13 @@ func (d *wandbRedisHAConnInfoDelete) Execute(ctx context.Context, r *WeightsAndB
 	log := ctrl.LoggerFrom(ctx)
 	log.Info("Deleting Redis HA connection secret")
 
+	namespace := d.wandb.Spec.Redis.Namespace
+	if namespace == "" {
+		namespace = d.wandb.Namespace
+	}
 	namespacedName := types.NamespacedName{
 		Name:      "wandb-redis-connection",
-		Namespace: d.wandb.Namespace,
+		Namespace: namespace,
 	}
 
 	secret := &corev1.Secret{}
@@ -501,5 +505,5 @@ func (d *wandbRedisHAConnInfoDelete) Execute(ctx context.Context, r *WeightsAndB
 	}
 
 	log.Info("Redis HA connection secret deleted successfully")
-	return common2.CtrlDone(common2.HandlerScope)
+	return common2.CtrlDone(common2.PackageScope)
 }

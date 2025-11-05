@@ -1,7 +1,8 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="controller:build-run" type="GoApplicationRunConfiguration" factoryName="Go Application">
+  <configuration default="false" name="v2:ctrl" type="GoApplicationRunConfiguration" factoryName="Go Application">
     <module name="operator" />
     <working_directory value="$PROJECT_DIR$" />
+    <parameters value="--v2-controller=true --v2-webhook=false --v1-controller=false" />
     <EXTENSION ID="software.aws.toolkits.jetbrains.core.execution.GoAwsConnectionRunConfigurationExtension">
       <option name="credential" />
       <option name="region" />

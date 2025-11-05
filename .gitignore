@@ -39,3 +39,6 @@ tilt-settings.json
 /dist
 
 .DS_Store
+
+# Local webhook development certificates
+.local-webhook-certs/

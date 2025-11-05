@@ -221,7 +221,7 @@ func (r *WeightsAndBiasesV2Reconciler) inferState(
 			log.Error(err, "Failed to update Weights & Biases state", "from", curState, "to", newState)
 			return common.CtrlError(err)
 		}
-		return common.CtrlDone(common.HandlerScope)
+		return common.CtrlDone(common.PackageScope)
 	}
 	return common.CtrlContinue()
 }

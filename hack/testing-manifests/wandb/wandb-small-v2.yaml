@@ -2,7 +2,6 @@ apiVersion: apps.wandb.com/v2
 kind: WeightsAndBiases
 metadata:
   name: wandb-small-v2
-  namespace: default
 spec:
   profile: small
   database:

@@ -59,7 +59,7 @@ func reconcileOpstreeRedis(
 		ctx:        ctx,
 		desired:    desired,
 		actual:     actual,
-		status:     &wandb.Status.DatabaseStatus,
+		status:     &wandb.Status.RedisStatus,
 		reconciler: reconciler,
 	}
 
@@ -128,8 +128,8 @@ func reconcileOpstree(snapshot opstreeSnapshot) common.CtrlState {
 	var state common.CtrlState
 
 	for _, h := range allHandlers {
-		state = h.reconcile(snapshot)
-		if state.ShouldExit(common.HandlerScope) {
+		state = h.reconcile()
+		if state.ShouldExit(common.PackageScope) {
 			return state
 		}
 	}

@@ -42,10 +42,10 @@ type wandbRedisDoReconcile interface {
 	Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) common2.CtrlState
 }
 
-func redisNamespacedName(req ctrl.Request) types.NamespacedName {
-	namespace := req.Namespace
+func redisNamespacedName(wandb *apiv2.WeightsAndBiases) types.NamespacedName {
+	namespace := wandb.Spec.Redis.Namespace
 	if namespace == "" {
-		namespace = "default"
+		namespace = wandb.Namespace
 	}
 	return types.NamespacedName{
 		Name:      "wandb-redis",
@@ -61,7 +61,7 @@ func (r *WeightsAndBiasesV2Reconciler) handleRedis(
 	var actualRedis wandbRedisWrapper
 	var reconciliation wandbRedisDoReconcile
 	log := ctrl.LoggerFrom(ctx)
-	namespacedName := redisNamespacedName(req)
+	namespacedName := redisNamespacedName(wandb)
 
 	if !wandb.Spec.Redis.Enabled {
 		log.Info("Redis not enabled, skipping")
@@ -277,7 +277,7 @@ func (c *wandbRedisCreate) Execute(ctx context.Context, r *WeightsAndBiasesV2Rec
 		log.Error(err, "Failed to update status after creating Redis")
 		return common2.CtrlError(err)
 	}
-	return common2.CtrlDone(common2.HandlerScope)
+	return common2.CtrlDone(common2.PackageScope)
 }
 
 type wandbRedisDelete struct {
@@ -300,7 +300,7 @@ func (d *wandbRedisDelete) Execute(ctx context.Context, r *WeightsAndBiasesV2Rec
 		log.Error(err, "Failed to update status after deleting Redis")
 		return common2.CtrlError(err)
 	}
-	return common2.CtrlDone(common2.HandlerScope)
+	return common2.CtrlDone(common2.PackageScope)
 }
 
 type wandbRedisStatusUpdate struct {
@@ -320,7 +320,7 @@ func (s *wandbRedisStatusUpdate) Execute(
 		log.Error(err, "Failed to update Redis status")
 		return common2.CtrlError(err)
 	}
-	return common2.CtrlDone(common2.HandlerScope)
+	return common2.CtrlDone(common2.PackageScope)
 }
 
 type wandbRedisConnInfoCreate struct {
@@ -349,7 +349,7 @@ func (c *wandbRedisConnInfoCreate) Execute(ctx context.Context, r *WeightsAndBia
 	}
 
 	log.Info("Redis connection secret created successfully")
-	return common2.CtrlDone(common2.HandlerScope)
+	return common2.CtrlDone(common2.PackageScope)
 }
 
 type wandbRedisConnInfoDelete struct {
@@ -360,9 +360,13 @@ func (d *wandbRedisConnInfoDelete) Execute(ctx context.Context, r *WeightsAndBia
 	log := ctrl.LoggerFrom(ctx)
 	log.Info("Deleting Redis connection secret")
 
+	namespace := d.wandb.Spec.Redis.Namespace
+	if namespace == "" {
+		namespace = d.wandb.Namespace
+	}
 	namespacedName := types.NamespacedName{
 		Name:      "wandb-redis-connection",
-		Namespace: d.wandb.Namespace,
+		Namespace: namespace,
 	}
 
 	secret := &corev1.Secret{}
@@ -382,5 +386,5 @@ func (d *wandbRedisConnInfoDelete) Execute(ctx context.Context, r *WeightsAndBia
 	}
 
 	log.Info("Redis connection secret deleted successfully")
-	return common2.CtrlDone(common2.HandlerScope)
+	return common2.CtrlDone(common2.PackageScope)
 }

@@ -24,7 +24,7 @@ func (r *WeightsAndBiasesV2Reconciler) handleClickHouseHA(
 	var actualClickHouse wandbClickHouseWrapper
 	var reconciliation wandbClickHouseDoReconcile
 	log := ctrl.LoggerFrom(ctx)
-	namespacedName := clickhouseNamespacedName(req)
+	namespacedName := clickhouseNamespacedName(wandb)
 
 	if !wandb.Spec.ClickHouse.Enabled {
 		log.Info("ClickHouse not enabled, skipping")
@@ -38,7 +38,7 @@ func (r *WeightsAndBiasesV2Reconciler) handleClickHouseHA(
 		return common.CtrlError(err)
 	}
 
-	if ctrlState := actualClickHouse.maybeHandleDeletion(ctx, wandb, actualClickHouse, r); ctrlState.ShouldExit(common.HandlerScope) {
+	if ctrlState := actualClickHouse.maybeHandleDeletion(ctx, wandb, actualClickHouse, r); ctrlState.ShouldExit(common.PackageScope) {
 		return ctrlState
 	}
 

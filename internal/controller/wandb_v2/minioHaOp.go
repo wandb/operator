@@ -22,7 +22,7 @@ func (r *WeightsAndBiasesV2Reconciler) handleMinioHA(
 	var actualMinio wandbMinioWrapper
 	var reconciliation wandbMinioDoReconcile
 	log := ctrl.LoggerFrom(ctx)
-	namespacedName := minioNamespacedName(req)
+	namespacedName := minioNamespacedName(wandb)
 
 	if !wandb.Spec.ObjStorage.Enabled {
 		log.Info("ObjStorage not enabled, skipping")
@@ -36,7 +36,7 @@ func (r *WeightsAndBiasesV2Reconciler) handleMinioHA(
 		return common.CtrlError(err)
 	}
 
-	if ctrlState := actualMinio.maybeHandleDeletion(ctx, wandb, actualMinio, r); ctrlState.ShouldExit(common.HandlerScope) {
+	if ctrlState := actualMinio.maybeHandleDeletion(ctx, wandb, actualMinio, r); ctrlState.ShouldExit(common.PackageScope) {
 		return ctrlState
 	}
 

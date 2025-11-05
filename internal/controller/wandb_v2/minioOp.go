@@ -58,10 +58,10 @@ type wandbMinioDoReconcile interface {
 	Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) common.CtrlState
 }
 
-func minioNamespacedName(req ctrl.Request) types.NamespacedName {
-	namespace := req.Namespace
+func minioNamespacedName(wandb *apiv2.WeightsAndBiases) types.NamespacedName {
+	namespace := wandb.Spec.ObjStorage.Namespace
 	if namespace == "" {
-		namespace = "default"
+		namespace = wandb.Namespace
 	}
 	return types.NamespacedName{
 		Name:      "wandb-minio",
@@ -77,7 +77,7 @@ func (r *WeightsAndBiasesV2Reconciler) handleMinio(
 	var actualMinio wandbMinioWrapper
 	var reconciliation wandbMinioDoReconcile
 	log := ctrl.LoggerFrom(ctx)
-	namespacedName := minioNamespacedName(req)
+	namespacedName := minioNamespacedName(wandb)
 
 	if !wandb.Spec.ObjStorage.Enabled {
 		log.Info("ObjStorage not enabled, skipping")
@@ -91,7 +91,7 @@ func (r *WeightsAndBiasesV2Reconciler) handleMinio(
 		return common.CtrlError(err)
 	}
 
-	if ctrlState := actualMinio.maybeHandleDeletion(ctx, wandb, actualMinio, r); ctrlState.ShouldExit(common.HandlerScope) {
+	if ctrlState := actualMinio.maybeHandleDeletion(ctx, wandb, actualMinio, r); ctrlState.ShouldExit(common.PackageScope) {
 		return ctrlState
 	}
 
@@ -360,7 +360,7 @@ export MINIO_BROWSER="on"`,
 		log.Error(err, "Failed to update status after creating MinIO Tenant")
 		return common.CtrlError(err)
 	}
-	return common.CtrlDone(common.HandlerScope)
+	return common.CtrlDone(common.PackageScope)
 }
 
 type wandbMinioDelete struct {
@@ -385,7 +385,7 @@ func (d *wandbMinioDelete) Execute(ctx context.Context, r *WeightsAndBiasesV2Rec
 		log.Error(err, "Failed to update status after deleting MinIO Tenant")
 		return common.CtrlError(err)
 	}
-	return common.CtrlDone(common.HandlerScope)
+	return common.CtrlDone(common.PackageScope)
 }
 
 type wandbMinioStatusUpdate struct {
@@ -405,7 +405,7 @@ func (s *wandbMinioStatusUpdate) Execute(
 		log.Error(err, "Failed to update MinIO status")
 		return common.CtrlError(err)
 	}
-	return common.CtrlDone(common.HandlerScope)
+	return common.CtrlDone(common.PackageScope)
 }
 
 func (w *wandbMinioWrapper) maybeHandleDeletion(
@@ -456,7 +456,7 @@ func (w *wandbMinioWrapper) maybeHandleDeletion(
 				log.Error(err, "Failed to update status to deletion paused")
 				return common.CtrlError(err)
 			}
-			return common.CtrlDone(common.HandlerScope)
+			return common.CtrlDone(common.PackageScope)
 		}
 
 		if wandb.Status.ObjStorageStatus.BackupStatus.State == "InProgress" {
@@ -470,7 +470,7 @@ func (w *wandbMinioWrapper) maybeHandleDeletion(
 					return common.CtrlError(err)
 				}
 			}
-			return common.CtrlDone(common.HandlerScope)
+			return common.CtrlDone(common.PackageScope)
 		}
 
 		controllerutil.RemoveFinalizer(wandb, minioFinalizer)
@@ -486,7 +486,7 @@ func (w *wandbMinioWrapper) maybeHandleDeletion(
 			}
 		}
 
-		return common.CtrlDone(common.HandlerScope)
+		return common.CtrlDone(common.PackageScope)
 	}
 	return common.CtrlContinue()
 }
@@ -645,7 +645,7 @@ func (c *wandbMinioConnInfoCreate) Execute(ctx context.Context, r *WeightsAndBia
 	}
 
 	log.Info("MinIO connection secret created successfully")
-	return common.CtrlDone(common.HandlerScope)
+	return common.CtrlDone(common.PackageScope)
 }
 
 type wandbMinioConnInfoDelete struct {
@@ -656,9 +656,13 @@ func (d *wandbMinioConnInfoDelete) Execute(ctx context.Context, r *WeightsAndBia
 	log := ctrl.LoggerFrom(ctx)
 	log.Info("Deleting MinIO connection secret")
 
+	namespace := d.wandb.Spec.ObjStorage.Namespace
+	if namespace == "" {
+		namespace = d.wandb.Namespace
+	}
 	namespacedName := types.NamespacedName{
 		Name:      "wandb-minio-connection",
-		Namespace: d.wandb.Namespace,
+		Namespace: namespace,
 	}
 
 	secret := &corev1.Secret{}
@@ -678,5 +682,5 @@ func (d *wandbMinioConnInfoDelete) Execute(ctx context.Context, r *WeightsAndBia
 	}
 
 	log.Info("MinIO connection secret deleted successfully")
-	return common.CtrlDone(common.HandlerScope)
+	return common.CtrlDone(common.PackageScope)
 }

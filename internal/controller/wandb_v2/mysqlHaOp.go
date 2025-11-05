@@ -23,7 +23,7 @@ func (r *WeightsAndBiasesV2Reconciler) handlePerconaMysqlHA(
 	var desiredPercona wandbPerconaMysqlWrapper
 	var actualPercona wandbPerconaMysqlWrapper
 	var reconciliation wandbPerconaMysqlDoReconcile
-	var namespacedName = perconaMysqlNamespacedName(req)
+	var namespacedName = perconaMysqlNamespacedName(wandb)
 	log := ctrllog.FromContext(ctx)
 
 	if actualPercona, err = actualPerconaMysql(ctx, r, namespacedName); err != nil {
@@ -31,7 +31,7 @@ func (r *WeightsAndBiasesV2Reconciler) handlePerconaMysqlHA(
 		return common.CtrlError(err)
 	}
 
-	if ctrlState := actualPercona.maybeHandleDeletion(ctx, wandb, actualPercona, r); ctrlState.ShouldExit(common.HandlerScope) {
+	if ctrlState := actualPercona.maybeHandleDeletion(ctx, wandb, actualPercona, r); ctrlState.ShouldExit(common.PackageScope) {
 		return ctrlState
 	}
 

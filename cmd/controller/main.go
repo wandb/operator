@@ -31,6 +31,9 @@ import (
 	redissentinelv1beta2 "github.com/wandb/operator/api/redis-operator-vendored/redissentinel/v1beta2"
 	strimziv1beta2 "github.com/wandb/operator/api/strimzi-kafka-vendored/v1beta2"
 	"github.com/wandb/operator/internal/controller/wandb_v2"
+	webhookv2 "github.com/wandb/operator/internal/webhook/v2"
+	"github.com/wandb/operator/pkg/wandb/spec/channel/deployer"
+
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
@@ -87,7 +90,7 @@ func main() {
 	var enableHTTP2 bool
 	var tlsOpts []func(*tls.Config)
 	var deployerAPI, isolationNamespaces string
-	var debug, airgapped bool
+	var debug, airgapped, v1Controller, v2Controller, v2Webhook bool
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
@@ -112,6 +115,10 @@ func main() {
 	flag.StringVar(&isolationNamespaces, "isolation-namespaces", "", "Specify namespaces (as a comma separated string) that the controller should monitor when operating in namespace isolation mode.")
 
 	flag.BoolVar(&debug, "debug", false, "Enable debug mode")
+
+	flag.BoolVar(&v1Controller, "v1-controller", false, "Enable WandB V1 controller")
+	flag.BoolVar(&v2Controller, "v2-controller", true, "Enable WandB V2 controller")
+	flag.BoolVar(&v2Webhook, "v2-webhook", true, "Enable WandB V2 validating webhook")
 
 	opts := zap.Options{
 		Development: true,
@@ -246,24 +253,28 @@ func main() {
 		os.Exit(1)
 	}
 
-	//if err = (&controller.WeightsAndBiasesReconciler{
-	//	IsAirgapped:    airgapped,
-	//	Recorder:       mgr.GetEventRecorderFor("weightsandbiases"),
-	//	Client:         mgr.GetClient(),
-	//	Scheme:         mgr.GetScheme(),
-	//	DeployerClient: &deployer.DeployerClient{DeployerAPI: deployerAPI},
-	//	Debug:          debug,
-	//}).SetupWithManager(mgr); err != nil {
-	//	setupLog.Error(err, "unable to create controller", "controller", "WeightsAndBiases")
-	//	os.Exit(1)
-	//}
-	if err = (&wandb_v2.WeightsAndBiasesV2Reconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-		Debug:  debug,
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "WeightsAndBiases")
-		os.Exit(1)
+	if v1Controller {
+		if err = (&controller.WeightsAndBiasesReconciler{
+			IsAirgapped:    airgapped,
+			Recorder:       mgr.GetEventRecorderFor("weightsandbiases"),
+			Client:         mgr.GetClient(),
+			Scheme:         mgr.GetScheme(),
+			DeployerClient: &deployer.DeployerClient{DeployerAPI: deployerAPI},
+			Debug:          debug,
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "WeightsAndBiases V1")
+			os.Exit(1)
+		}
+	}
+	if v2Controller {
+		if err = (&wandb_v2.WeightsAndBiasesV2Reconciler{
+			Client: mgr.GetClient(),
+			Scheme: mgr.GetScheme(),
+			Debug:  debug,
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "WeightsAndBiases")
+			os.Exit(1)
+		}
 	}
 	if err = (&controller.ApplicationReconciler{
 		Client: mgr.GetClient(),
@@ -271,6 +282,13 @@ func main() {
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Application")
 		os.Exit(1)
+	}
+
+	if v2Webhook {
+		if err = (&webhookv2.WeightsAndBiasesCustomValidator{}).SetupWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create webhook", "webhook", "WeightsAndBiases V2")
+			os.Exit(1)
+		}
 	}
 	// +kubebuilder:scaffold:builder
 

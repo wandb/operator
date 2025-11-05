@@ -68,10 +68,10 @@ type wandbClickHouseDoReconcile interface {
 	Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) common.CtrlState
 }
 
-func clickhouseNamespacedName(req ctrl.Request) types.NamespacedName {
-	namespace := req.Namespace
+func clickhouseNamespacedName(wandb *apiv2.WeightsAndBiases) types.NamespacedName {
+	namespace := wandb.Spec.ClickHouse.Namespace
 	if namespace == "" {
-		namespace = "default"
+		namespace = wandb.Namespace
 	}
 	return types.NamespacedName{
 		Name:      "wandb-clickhouse",
@@ -87,7 +87,7 @@ func (r *WeightsAndBiasesV2Reconciler) handleClickHouse(
 	var actualClickHouse wandbClickHouseWrapper
 	var reconciliation wandbClickHouseDoReconcile
 	log := ctrl.LoggerFrom(ctx)
-	namespacedName := clickhouseNamespacedName(req)
+	namespacedName := clickhouseNamespacedName(wandb)
 
 	if !wandb.Spec.ClickHouse.Enabled {
 		log.Info("ClickHouse not enabled, skipping")
@@ -101,7 +101,7 @@ func (r *WeightsAndBiasesV2Reconciler) handleClickHouse(
 		return common.CtrlError(err)
 	}
 
-	if ctrlState := actualClickHouse.maybeHandleDeletion(ctx, wandb, actualClickHouse, r); ctrlState.ShouldExit(common.HandlerScope) {
+	if ctrlState := actualClickHouse.maybeHandleDeletion(ctx, wandb, actualClickHouse, r); ctrlState.ShouldExit(common.PackageScope) {
 		return ctrlState
 	}
 
@@ -357,7 +357,7 @@ func (c *wandbClickHouseCreate) Execute(ctx context.Context, r *WeightsAndBiases
 		log.Error(err, "Failed to update status after creating ClickHouse")
 		return common.CtrlError(err)
 	}
-	return common.CtrlDone(common.HandlerScope)
+	return common.CtrlDone(common.PackageScope)
 }
 
 type wandbClickHouseDelete struct {
@@ -382,7 +382,7 @@ func (d *wandbClickHouseDelete) Execute(ctx context.Context, r *WeightsAndBiases
 		log.Error(err, "Failed to update status after deleting ClickHouse")
 		return common.CtrlError(err)
 	}
-	return common.CtrlDone(common.HandlerScope)
+	return common.CtrlDone(common.PackageScope)
 }
 
 type wandbClickHouseStatusUpdate struct {
@@ -402,7 +402,7 @@ func (s *wandbClickHouseStatusUpdate) Execute(
 		log.Error(err, "Failed to update ClickHouse status")
 		return common.CtrlError(err)
 	}
-	return common.CtrlDone(common.HandlerScope)
+	return common.CtrlDone(common.PackageScope)
 }
 
 func (w *wandbClickHouseWrapper) maybeHandleDeletion(
@@ -453,7 +453,7 @@ func (w *wandbClickHouseWrapper) maybeHandleDeletion(
 				log.Error(err, "Failed to update status to deletion paused")
 				return common.CtrlError(err)
 			}
-			return common.CtrlDone(common.HandlerScope)
+			return common.CtrlDone(common.PackageScope)
 		}
 
 		if wandb.Status.ClickHouseStatus.BackupStatus.State == "InProgress" {
@@ -467,7 +467,7 @@ func (w *wandbClickHouseWrapper) maybeHandleDeletion(
 					return common.CtrlError(err)
 				}
 			}
-			return common.CtrlDone(common.HandlerScope)
+			return common.CtrlDone(common.PackageScope)
 		}
 
 		controllerutil.RemoveFinalizer(wandb, clickhouseFinalizer)
@@ -483,7 +483,7 @@ func (w *wandbClickHouseWrapper) maybeHandleDeletion(
 			}
 		}
 
-		return common.CtrlDone(common.HandlerScope)
+		return common.CtrlDone(common.PackageScope)
 	}
 	return common.CtrlContinue()
 }
@@ -642,7 +642,7 @@ func (c *wandbClickHouseConnInfoCreate) Execute(ctx context.Context, r *WeightsA
 	}
 
 	log.Info("ClickHouse connection secret created successfully")
-	return common.CtrlDone(common.HandlerScope)
+	return common.CtrlDone(common.PackageScope)
 }
 
 type wandbClickHouseConnInfoDelete struct {
@@ -653,9 +653,13 @@ func (d *wandbClickHouseConnInfoDelete) Execute(ctx context.Context, r *WeightsA
 	log := ctrl.LoggerFrom(ctx)
 	log.Info("Deleting ClickHouse connection secret")
 
+	namespace := d.wandb.Spec.ClickHouse.Namespace
+	if namespace == "" {
+		namespace = d.wandb.Namespace
+	}
 	namespacedName := types.NamespacedName{
 		Name:      "wandb-clickhouse-connection",
-		Namespace: d.wandb.Namespace,
+		Namespace: namespace,
 	}
 
 	secret := &corev1.Secret{}
@@ -675,5 +679,5 @@ func (d *wandbClickHouseConnInfoDelete) Execute(ctx context.Context, r *WeightsA
 	}
 
 	log.Info("ClickHouse connection secret deleted successfully")
-	return common.CtrlDone(common.HandlerScope)
+	return common.CtrlDone(common.PackageScope)
 }

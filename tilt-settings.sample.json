@@ -9,6 +9,7 @@
   "displayClickHouseOperator": true,
   "displayCanary": false,
   "autoDeployOperator": true,
+  "localWebhookDev": false,
   "wandbCrName": "wandb-dev-v2",
   "olmEnabled": false
 }

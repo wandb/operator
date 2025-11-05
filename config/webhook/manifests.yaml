@@ -10,17 +10,18 @@ webhooks:
     service:
       name: webhook-service
       namespace: system
-      path: /validate-redis-redis-opstreelabs-in-v1beta2-redissentinel
+      path: /validate-apps-wandb-com-v2-weightsandbiases
   failurePolicy: Fail
-  name: validate-redissentinel.redis.opstreelabs.in
+  name: vweightsandbiases.wandb.com
   rules:
   - apiGroups:
-    - redis.redis.opstreelabs.in
+    - apps.wandb.com
     apiVersions:
-    - v1beta2
+    - v2
     operations:
     - CREATE
     - UPDATE
+    - DELETE
     resources:
-    - redissentinels
+    - weightsandbiases
   sideEffects: None

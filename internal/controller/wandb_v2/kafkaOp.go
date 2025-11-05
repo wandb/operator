@@ -98,10 +98,10 @@ type wandbKafkaDoReconcile interface {
 	Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) common.CtrlState
 }
 
-func kafkaNamespacedName(req ctrl.Request) types.NamespacedName {
-	namespace := req.Namespace
+func kafkaNamespacedName(wandb *apiv2.WeightsAndBiases) types.NamespacedName {
+	namespace := wandb.Spec.Kafka.Namespace
 	if namespace == "" {
-		namespace = "default"
+		namespace = wandb.Namespace
 	}
 	return types.NamespacedName{
 		Name:      "wandb-kafka",
@@ -117,7 +117,7 @@ func (r *WeightsAndBiasesV2Reconciler) handleKafka(
 	var actualKafka wandbKafkaWrapper
 	var reconciliation wandbKafkaDoReconcile
 	log := ctrl.LoggerFrom(ctx)
-	namespacedName := kafkaNamespacedName(req)
+	namespacedName := kafkaNamespacedName(wandb)
 
 	if !wandb.Spec.Kafka.Enabled {
 		log.Info("Kafka not enabled, skipping")
@@ -131,7 +131,7 @@ func (r *WeightsAndBiasesV2Reconciler) handleKafka(
 		return common.CtrlError(err)
 	}
 
-	if ctrlState := actualKafka.maybeHandleDeletion(ctx, wandb, actualKafka, r); ctrlState.ShouldExit(common.HandlerScope) {
+	if ctrlState := actualKafka.maybeHandleDeletion(ctx, wandb, actualKafka, r); ctrlState.ShouldExit(common.PackageScope) {
 		return ctrlState
 	}
 
@@ -437,7 +437,7 @@ func (c *wandbNodePoolCreate) Execute(ctx context.Context, r *WeightsAndBiasesV2
 		log.Error(err, "Failed to update status after creating Kafka NodePool")
 		return common.CtrlError(err)
 	}
-	return common.CtrlDone(common.HandlerScope)
+	return common.CtrlDone(common.PackageScope)
 }
 
 type wandbNodePoolDelete struct {
@@ -462,7 +462,7 @@ func (d *wandbNodePoolDelete) Execute(ctx context.Context, r *WeightsAndBiasesV2
 		log.Error(err, "Failed to update status after deleting Kafka NodePool")
 		return common.CtrlError(err)
 	}
-	return common.CtrlDone(common.HandlerScope)
+	return common.CtrlDone(common.PackageScope)
 }
 
 type wandbKafkaCreate struct {
@@ -493,7 +493,7 @@ func (c *wandbKafkaCreate) Execute(ctx context.Context, r *WeightsAndBiasesV2Rec
 		log.Error(err, "Failed to update status after creating Kafka")
 		return common.CtrlError(err)
 	}
-	return common.CtrlDone(common.HandlerScope)
+	return common.CtrlDone(common.PackageScope)
 }
 
 type wandbKafkaDelete struct {
@@ -518,7 +518,7 @@ func (d *wandbKafkaDelete) Execute(ctx context.Context, r *WeightsAndBiasesV2Rec
 		log.Error(err, "Failed to update status after deleting Kafka")
 		return common.CtrlError(err)
 	}
-	return common.CtrlDone(common.HandlerScope)
+	return common.CtrlDone(common.PackageScope)
 }
 
 type wandbKafkaStatusUpdate struct {
@@ -538,7 +538,7 @@ func (s *wandbKafkaStatusUpdate) Execute(
 		log.Error(err, "Failed to update Kafka status")
 		return common.CtrlError(err)
 	}
-	return common.CtrlDone(common.HandlerScope)
+	return common.CtrlDone(common.PackageScope)
 }
 
 func (w *wandbKafkaWrapper) maybeHandleDeletion(
@@ -595,7 +595,7 @@ func (w *wandbKafkaWrapper) maybeHandleDeletion(
 				log.Error(err, "Failed to update status to deletion paused")
 				return common.CtrlError(err)
 			}
-			return common.CtrlDone(common.HandlerScope)
+			return common.CtrlDone(common.PackageScope)
 		}
 
 		if wandb.Status.KafkaStatus.BackupStatus.State == "InProgress" {
@@ -609,7 +609,7 @@ func (w *wandbKafkaWrapper) maybeHandleDeletion(
 					return common.CtrlError(err)
 				}
 			}
-			return common.CtrlDone(common.HandlerScope)
+			return common.CtrlDone(common.PackageScope)
 		}
 
 		controllerutil.RemoveFinalizer(wandb, kafkaFinalizer)
@@ -632,7 +632,7 @@ func (w *wandbKafkaWrapper) maybeHandleDeletion(
 			}
 		}
 
-		return common.CtrlDone(common.HandlerScope)
+		return common.CtrlDone(common.PackageScope)
 	}
 	return common.CtrlContinue()
 }
@@ -791,7 +791,7 @@ func (c *wandbKafkaConnInfoCreate) Execute(ctx context.Context, r *WeightsAndBia
 	}
 
 	log.Info("Kafka connection secret created successfully")
-	return common.CtrlDone(common.HandlerScope)
+	return common.CtrlDone(common.PackageScope)
 }
 
 type wandbKafkaConnInfoDelete struct {
@@ -802,9 +802,13 @@ func (d *wandbKafkaConnInfoDelete) Execute(ctx context.Context, r *WeightsAndBia
 	log := ctrl.LoggerFrom(ctx)
 	log.Info("Deleting Kafka connection secret")
 
+	namespace := d.wandb.Spec.Kafka.Namespace
+	if namespace == "" {
+		namespace = d.wandb.Namespace
+	}
 	namespacedName := types.NamespacedName{
 		Name:      "wandb-kafka-connection",
-		Namespace: d.wandb.Namespace,
+		Namespace: namespace,
 	}
 
 	secret := &corev1.Secret{}
@@ -824,5 +828,5 @@ func (d *wandbKafkaConnInfoDelete) Execute(ctx context.Context, r *WeightsAndBia
 	}
 
 	log.Info("Kafka connection secret deleted successfully")
-	return common.CtrlDone(common.HandlerScope)
+	return common.CtrlDone(common.PackageScope)
 }

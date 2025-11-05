@@ -53,14 +53,16 @@ const (
 )
 
 //+kubebuilder:object:root=true
+//+kubebuilder:storageversion
 //+kubebuilder:subresource:status
-//+kubebuilder:resource:scope=Cluster,shortName=wandb
+//+kubebuilder:resource:shortName=wandb
 //+kubebuilder:printcolumn:name="State",type=string,JSONPath=`.status.state`
 //+kubebuilder:printcolumn:name="Database",type=string,JSONPath=`.status.databaseStatus.state`
 //+kubebuilder:printcolumn:name="Redis",type=string,JSONPath=`.status.redisStatus.state`
 //+kubebuilder:printcolumn:name="Kafka",type=string,JSONPath=`.status.kafkaStatus.state`
 //+kubebuilder:printcolumn:name="ObjStorage",type=string,JSONPath=`.status.objStorageStatus.state`
 //+kubebuilder:printcolumn:name="ClickHouse",type=string,JSONPath=`.status.clickhouseStatus.state`
+//+kubebuilder:webhook:path=/validate-apps-wandb-com-v2-weightsandbiases,mutating=false,failurePolicy=fail,sideEffects=None,groups=apps.wandb.com,resources=weightsandbiases,verbs=create;update;delete,versions=v2,name=vweightsandbiases.wandb.com,admissionReviewVersions=v1
 
 // WeightsAndBiases is the Schema for the weightsandbiases API.
 type WeightsAndBiases struct {
@@ -111,6 +113,9 @@ type WBDatabaseSpec struct {
 	Type        WBDatabaseType `json:"type,omitempty" default:"percona"`
 	StorageSize string         `json:"storageSize,omitempty"`
 	Backup      WBBackupSpec   `json:"backup,omitempty"`
+	// Namespace is the target namespace for database resources.
+	// If not specified, defaults to the WeightsAndBiases resource's namespace.
+	Namespace string `json:"namespace,omitempty"`
 }
 
 type WBRedisSpec struct {
@@ -118,6 +123,9 @@ type WBRedisSpec struct {
 	StorageSize string               `json:"storageSize,omitempty"`
 	Config      *WBRedisConfig       `json:"config,omitempty"`
 	Sentinel    *WBRedisSentinelSpec `json:"sentinel,omitempty"`
+	// Namespace is the target namespace for Redis resources.
+	// If not specified, defaults to the WeightsAndBiases resource's namespace.
+	Namespace string `json:"namespace,omitempty"`
 }
 
 type WBRedisConfig struct {
@@ -138,6 +146,9 @@ type WBKafkaSpec struct {
 	StorageSize string            `json:"storageSize,omitempty"`
 	Replicas    int32             `json:"replicas,omitempty"`
 	Backup      WBKafkaBackupSpec `json:"backup,omitempty"`
+	// Namespace is the target namespace for Kafka resources.
+	// If not specified, defaults to the WeightsAndBiases resource's namespace.
+	Namespace string `json:"namespace,omitempty"`
 }
 
 type WBKafkaBackupSpec struct {
@@ -153,6 +164,9 @@ type WBObjStorageSpec struct {
 	StorageSize string                 `json:"storageSize,omitempty"`
 	Replicas    int32                  `json:"replicas,omitempty"`
 	Backup      WBObjStorageBackupSpec `json:"backup,omitempty"`
+	// Namespace is the target namespace for object storage resources.
+	// If not specified, defaults to the WeightsAndBiases resource's namespace.
+	Namespace string `json:"namespace,omitempty"`
 }
 
 type WBObjStorageBackupSpec struct {
@@ -169,6 +183,9 @@ type WBClickHouseSpec struct {
 	Replicas    int32                  `json:"replicas,omitempty"`
 	Version     string                 `json:"version,omitempty"`
 	Backup      WBClickHouseBackupSpec `json:"backup,omitempty"`
+	// Namespace is the target namespace for ClickHouse resources.
+	// If not specified, defaults to the WeightsAndBiases resource's namespace.
+	Namespace string `json:"namespace,omitempty"`
 }
 
 type WBClickHouseBackupSpec struct {

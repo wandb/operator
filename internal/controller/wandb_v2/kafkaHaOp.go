@@ -21,7 +21,7 @@ func (r *WeightsAndBiasesV2Reconciler) handleKafkaHA(
 	var actualKafka wandbKafkaWrapper
 	var reconciliation wandbKafkaDoReconcile
 	log := ctrl.LoggerFrom(ctx)
-	namespacedName := kafkaNamespacedName(req)
+	namespacedName := kafkaNamespacedName(wandb)
 
 	if !wandb.Spec.Kafka.Enabled {
 		log.Info("Kafka not enabled, skipping")
@@ -35,7 +35,7 @@ func (r *WeightsAndBiasesV2Reconciler) handleKafkaHA(
 		return common.CtrlError(err)
 	}
 
-	if ctrlState := actualKafka.maybeHandleDeletion(ctx, wandb, actualKafka, r); ctrlState.ShouldExit(common.HandlerScope) {
+	if ctrlState := actualKafka.maybeHandleDeletion(ctx, wandb, actualKafka, r); ctrlState.ShouldExit(common.PackageScope) {
 		return ctrlState
 	}
 

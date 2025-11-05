@@ -14,7 +14,7 @@ spec:
     shortNames:
     - wandb
     singular: weightsandbiases
-  scope: Cluster
+  scope: Namespaced
   versions:
   - name: v1
     schema:
@@ -60,7 +60,7 @@ spec:
             type: object
         type: object
     served: true
-    storage: true
+    storage: false
     subresources:
       status: {}
   - additionalPrinterColumns:
@@ -137,6 +137,11 @@ spec:
                     type: object
                   enabled:
                     type: boolean
+                  namespace:
+                    description: |-
+                      Namespace is the target namespace for ClickHouse resources.
+                      If not specified, defaults to the WeightsAndBiases resource's namespace.
+                    type: string
                   replicas:
                     format: int32
                     type: integer
@@ -190,6 +195,11 @@ spec:
                     type: object
                   enabled:
                     type: boolean
+                  namespace:
+                    description: |-
+                      Namespace is the target namespace for database resources.
+                      If not specified, defaults to the WeightsAndBiases resource's namespace.
+                    type: string
                   storageSize:
                     type: string
                   type:
@@ -227,6 +237,11 @@ spec:
                     type: object
                   enabled:
                     type: boolean
+                  namespace:
+                    description: |-
+                      Namespace is the target namespace for Kafka resources.
+                      If not specified, defaults to the WeightsAndBiases resource's namespace.
+                    type: string
                   replicas:
                     format: int32
                     type: integer
@@ -265,6 +280,11 @@ spec:
                     type: object
                   enabled:
                     type: boolean
+                  namespace:
+                    description: |-
+                      Namespace is the target namespace for object storage resources.
+                      If not specified, defaults to the WeightsAndBiases resource's namespace.
+                    type: string
                   replicas:
                     format: int32
                     type: integer
@@ -343,6 +363,11 @@ spec:
                     type: object
                   enabled:
                     type: boolean
+                  namespace:
+                    description: |-
+                      Namespace is the target namespace for Redis resources.
+                      If not specified, defaults to the WeightsAndBiases resource's namespace.
+                    type: string
                   sentinel:
                     properties:
                       config:
@@ -579,6 +604,6 @@ spec:
             type: object
         type: object
     served: true
-    storage: false
+    storage: true
     subresources:
       status: {}

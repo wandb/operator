@@ -47,10 +47,10 @@ type wandbPerconaMysqlDoReconcile interface {
 	Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) common.CtrlState
 }
 
-func perconaMysqlNamespacedName(req ctrl.Request) types.NamespacedName {
-	namespace := req.Namespace
+func perconaMysqlNamespacedName(wandb *apiv2.WeightsAndBiases) types.NamespacedName {
+	namespace := wandb.Spec.Database.Namespace
 	if namespace == "" {
-		namespace = "default"
+		namespace = wandb.Namespace
 	}
 	return types.NamespacedName{
 		Name:      "wandb-mysql",
@@ -65,7 +65,7 @@ func (r *WeightsAndBiasesV2Reconciler) handlePerconaMysql(
 	var desiredPercona wandbPerconaMysqlWrapper
 	var actualPercona wandbPerconaMysqlWrapper
 	var reconciliation wandbPerconaMysqlDoReconcile
-	var namespacedName = perconaMysqlNamespacedName(req)
+	var namespacedName = perconaMysqlNamespacedName(wandb)
 	log := ctrllog.FromContext(ctx)
 
 	if actualPercona, err = actualPerconaMysql(ctx, r, namespacedName); err != nil {
@@ -73,7 +73,7 @@ func (r *WeightsAndBiasesV2Reconciler) handlePerconaMysql(
 		return common.CtrlError(err)
 	}
 
-	if ctrlState := actualPercona.maybeHandleDeletion(ctx, wandb, actualPercona, r); ctrlState.ShouldExit(common.HandlerScope) {
+	if ctrlState := actualPercona.maybeHandleDeletion(ctx, wandb, actualPercona, r); ctrlState.ShouldExit(common.PackageScope) {
 		return ctrlState
 	}
 
@@ -345,7 +345,7 @@ func (c *wandbPerconaMysqlCreate) Execute(ctx context.Context, r *WeightsAndBias
 		log.Error(err, "Failed to update status after creating Percona XtraDB Cluster")
 		return common.CtrlError(err)
 	}
-	return common.CtrlDone(common.HandlerScope)
+	return common.CtrlDone(common.PackageScope)
 }
 
 type wandbPerconaMysqlDelete struct {
@@ -368,7 +368,7 @@ func (d *wandbPerconaMysqlDelete) Execute(ctx context.Context, r *WeightsAndBias
 		log.Error(err, "Failed to update status after deleting Percona XtraDB Cluster")
 		return common.CtrlError(err)
 	}
-	return common.CtrlDone(common.HandlerScope)
+	return common.CtrlDone(common.PackageScope)
 }
 
 type wandbPerconaMysqlStausUpdate struct {
@@ -387,7 +387,7 @@ func (s *wandbPerconaMysqlStausUpdate) Execute(
 		log.Error(err, "Failed to update Percona MySQL status")
 		return common.CtrlError(err)
 	}
-	return common.CtrlDone(common.HandlerScope)
+	return common.CtrlDone(common.PackageScope)
 }
 
 func (w *wandbPerconaMysqlWrapper) maybeHandleDeletion(
@@ -458,7 +458,7 @@ func (w *wandbPerconaMysqlWrapper) maybeHandleDeletion(
 					return common.CtrlError(err)
 				}
 			}
-			return common.CtrlDone(common.HandlerScope)
+			return common.CtrlDone(common.PackageScope)
 		}
 
 		controllerutil.RemoveFinalizer(wandb, dbFinalizer)
@@ -473,7 +473,7 @@ func (w *wandbPerconaMysqlWrapper) maybeHandleDeletion(
 			}
 		}
 
-		return common.CtrlDone(common.HandlerScope)
+		return common.CtrlDone(common.PackageScope)
 	}
 	return common.CtrlContinue()
 }
@@ -585,7 +585,7 @@ func (c *wandbMysqlConnInfoCreate) Execute(ctx context.Context, r *WeightsAndBia
 	}
 
 	log.Info("MySQL connection secret created successfully")
-	return common.CtrlDone(common.HandlerScope)
+	return common.CtrlDone(common.PackageScope)
 }
 
 type wandbMysqlConnInfoDelete struct {
@@ -596,9 +596,13 @@ func (d *wandbMysqlConnInfoDelete) Execute(ctx context.Context, r *WeightsAndBia
 	log := ctrl.LoggerFrom(ctx)
 	log.Info("Deleting MySQL connection secret")
 
+	namespace := d.wandb.Spec.Database.Namespace
+	if namespace == "" {
+		namespace = d.wandb.Namespace
+	}
 	namespacedName := types.NamespacedName{
 		Name:      "wandb-mysql-connection",
-		Namespace: d.wandb.Namespace,
+		Namespace: namespace,
 	}
 
 	secret := &corev1.Secret{}
@@ -618,5 +622,5 @@ func (d *wandbMysqlConnInfoDelete) Execute(ctx context.Context, r *WeightsAndBia
 	}
 
 	log.Info("MySQL connection secret deleted successfully")
-	return common.CtrlDone(common.HandlerScope)
+	return common.CtrlDone(common.PackageScope)
 }

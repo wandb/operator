@@ -13,7 +13,7 @@ type CtrlScope int
 
 const (
 	NoScope         CtrlScope = 0 // an `exitScope` of NoScope is simply to continue
-	HandlerScope    CtrlScope = 1
+	PackageScope    CtrlScope = 1
 	ReconcilerScope CtrlScope = 2
 )
 

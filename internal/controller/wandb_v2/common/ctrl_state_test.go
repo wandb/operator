@@ -18,7 +18,7 @@ var _ = Describe("CtrlState", func() {
 
 			Expect(state).ToNot(BeNil())
 			Expect(state.ShouldExit(common.NoScope)).To(BeTrue())
-			Expect(state.ShouldExit(common.HandlerScope)).To(BeTrue())
+			Expect(state.ShouldExit(common.PackageScope)).To(BeTrue())
 			Expect(state.ShouldExit(common.ReconcilerScope)).To(BeTrue())
 
 			result, returnedErr := state.ReconcilerResult()
@@ -42,7 +42,7 @@ var _ = Describe("CtrlState", func() {
 
 			Expect(state).ToNot(BeNil())
 			Expect(state.ShouldExit(common.NoScope)).To(BeTrue())
-			Expect(state.ShouldExit(common.HandlerScope)).To(BeFalse())
+			Expect(state.ShouldExit(common.PackageScope)).To(BeFalse())
 			Expect(state.ShouldExit(common.ReconcilerScope)).To(BeFalse())
 
 			result, err := state.ReconcilerResult()
@@ -58,7 +58,7 @@ var _ = Describe("CtrlState", func() {
 
 				Expect(state).ToNot(BeNil())
 				Expect(state.ShouldExit(common.NoScope)).To(BeTrue())
-				Expect(state.ShouldExit(common.HandlerScope)).To(BeFalse())
+				Expect(state.ShouldExit(common.PackageScope)).To(BeFalse())
 				Expect(state.ShouldExit(common.ReconcilerScope)).To(BeFalse())
 
 				result, err := state.ReconcilerResult()
@@ -67,13 +67,13 @@ var _ = Describe("CtrlState", func() {
 			})
 		})
 
-		Context("when scope is HandlerScope", func() {
-			It("should exit at HandlerScope and higher", func() {
-				state := common.CtrlDone(common.HandlerScope)
+		Context("when scope is PackageScope", func() {
+			It("should exit at PackageScope and higher", func() {
+				state := common.CtrlDone(common.PackageScope)
 
 				Expect(state).ToNot(BeNil())
 				Expect(state.ShouldExit(common.NoScope)).To(BeTrue())
-				Expect(state.ShouldExit(common.HandlerScope)).To(BeTrue())
+				Expect(state.ShouldExit(common.PackageScope)).To(BeTrue())
 				Expect(state.ShouldExit(common.ReconcilerScope)).To(BeFalse())
 
 				result, err := state.ReconcilerResult()
@@ -88,7 +88,7 @@ var _ = Describe("CtrlState", func() {
 
 				Expect(state).ToNot(BeNil())
 				Expect(state.ShouldExit(common.NoScope)).To(BeTrue())
-				Expect(state.ShouldExit(common.HandlerScope)).To(BeTrue())
+				Expect(state.ShouldExit(common.PackageScope)).To(BeTrue())
 				Expect(state.ShouldExit(common.ReconcilerScope)).To(BeTrue())
 
 				result, err := state.ReconcilerResult()
@@ -106,7 +106,7 @@ var _ = Describe("CtrlState", func() {
 
 				Expect(state).ToNot(BeNil())
 				Expect(state.ShouldExit(common.NoScope)).To(BeTrue())
-				Expect(state.ShouldExit(common.HandlerScope)).To(BeFalse())
+				Expect(state.ShouldExit(common.PackageScope)).To(BeFalse())
 				Expect(state.ShouldExit(common.ReconcilerScope)).To(BeFalse())
 
 				result, err := state.ReconcilerResult()
@@ -115,14 +115,14 @@ var _ = Describe("CtrlState", func() {
 			})
 		})
 
-		Context("when scope is HandlerScope", func() {
-			It("should exit at HandlerScope and higher with requeue", func() {
+		Context("when scope is PackageScope", func() {
+			It("should exit at PackageScope and higher with requeue", func() {
 				duration := 10 * time.Second
-				state := common.CtrlDoneUntil(common.HandlerScope, duration)
+				state := common.CtrlDoneUntil(common.PackageScope, duration)
 
 				Expect(state).ToNot(BeNil())
 				Expect(state.ShouldExit(common.NoScope)).To(BeTrue())
-				Expect(state.ShouldExit(common.HandlerScope)).To(BeTrue())
+				Expect(state.ShouldExit(common.PackageScope)).To(BeTrue())
 				Expect(state.ShouldExit(common.ReconcilerScope)).To(BeFalse())
 
 				result, err := state.ReconcilerResult()
@@ -138,7 +138,7 @@ var _ = Describe("CtrlState", func() {
 
 				Expect(state).ToNot(BeNil())
 				Expect(state.ShouldExit(common.NoScope)).To(BeTrue())
-				Expect(state.ShouldExit(common.HandlerScope)).To(BeTrue())
+				Expect(state.ShouldExit(common.PackageScope)).To(BeTrue())
 				Expect(state.ShouldExit(common.ReconcilerScope)).To(BeTrue())
 
 				result, err := state.ReconcilerResult()
@@ -149,7 +149,7 @@ var _ = Describe("CtrlState", func() {
 
 		Context("when duration is zero", func() {
 			It("should handle zero duration", func() {
-				state := common.CtrlDoneUntil(common.HandlerScope, 0)
+				state := common.CtrlDoneUntil(common.PackageScope, 0)
 
 				Expect(state).ToNot(BeNil())
 				result, err := state.ReconcilerResult()
@@ -176,21 +176,21 @@ var _ = Describe("CtrlState", func() {
 			It("should correctly compare NoScope exit state", func() {
 				state := common.CtrlDone(common.NoScope)
 				Expect(state.ShouldExit(common.NoScope)).To(BeTrue())
-				Expect(state.ShouldExit(common.HandlerScope)).To(BeFalse())
+				Expect(state.ShouldExit(common.PackageScope)).To(BeFalse())
 				Expect(state.ShouldExit(common.ReconcilerScope)).To(BeFalse())
 			})
 
-			It("should correctly compare HandlerScope exit state", func() {
-				state := common.CtrlDone(common.HandlerScope)
+			It("should correctly compare PackageScope exit state", func() {
+				state := common.CtrlDone(common.PackageScope)
 				Expect(state.ShouldExit(common.NoScope)).To(BeTrue())
-				Expect(state.ShouldExit(common.HandlerScope)).To(BeTrue())
+				Expect(state.ShouldExit(common.PackageScope)).To(BeTrue())
 				Expect(state.ShouldExit(common.ReconcilerScope)).To(BeFalse())
 			})
 
 			It("should correctly compare ReconcilerScope exit state", func() {
 				state := common.CtrlDone(common.ReconcilerScope)
 				Expect(state.ShouldExit(common.NoScope)).To(BeTrue())
-				Expect(state.ShouldExit(common.HandlerScope)).To(BeTrue())
+				Expect(state.ShouldExit(common.PackageScope)).To(BeTrue())
 				Expect(state.ShouldExit(common.ReconcilerScope)).To(BeTrue())
 			})
 		})
@@ -208,7 +208,7 @@ var _ = Describe("CtrlState", func() {
 
 		It("should return result with requeue duration", func() {
 			duration := 30 * time.Second
-			state := common.CtrlDoneUntil(common.HandlerScope, duration)
+			state := common.CtrlDoneUntil(common.PackageScope, duration)
 			result, err := state.ReconcilerResult()
 			Expect(err).To(BeNil())
 			Expect(result.RequeueAfter).To(Equal(duration))
@@ -226,10 +226,10 @@ var _ = Describe("CtrlState", func() {
 	Describe("Scope constants", func() {
 		It("should have correct numeric ordering", func() {
 			Expect(int(common.NoScope)).To(Equal(0))
-			Expect(int(common.HandlerScope)).To(Equal(1))
+			Expect(int(common.PackageScope)).To(Equal(1))
 			Expect(int(common.ReconcilerScope)).To(Equal(2))
-			Expect(common.NoScope < common.HandlerScope).To(BeTrue())
-			Expect(common.HandlerScope < common.ReconcilerScope).To(BeTrue())
+			Expect(common.NoScope < common.PackageScope).To(BeTrue())
+			Expect(common.PackageScope < common.ReconcilerScope).To(BeTrue())
 		})
 	})
 
@@ -237,14 +237,14 @@ var _ = Describe("CtrlState", func() {
 		Context("when handler needs to continue", func() {
 			It("should allow reconciler to continue processing", func() {
 				state := common.CtrlContinue()
-				Expect(state.ShouldExit(common.HandlerScope)).To(BeFalse())
+				Expect(state.ShouldExit(common.PackageScope)).To(BeFalse())
 			})
 		})
 
 		Context("when handler is done", func() {
 			It("should exit handler but allow reconciler to continue", func() {
-				state := common.CtrlDone(common.HandlerScope)
-				Expect(state.ShouldExit(common.HandlerScope)).To(BeTrue())
+				state := common.CtrlDone(common.PackageScope)
+				Expect(state.ShouldExit(common.PackageScope)).To(BeTrue())
 				Expect(state.ShouldExit(common.ReconcilerScope)).To(BeFalse())
 			})
 		})
@@ -252,7 +252,7 @@ var _ = Describe("CtrlState", func() {
 		Context("when reconciler encounters error", func() {
 			It("should exit all scopes", func() {
 				state := common.CtrlError(errors.New("fatal error"))
-				Expect(state.ShouldExit(common.HandlerScope)).To(BeTrue())
+				Expect(state.ShouldExit(common.PackageScope)).To(BeTrue())
 				Expect(state.ShouldExit(common.ReconcilerScope)).To(BeTrue())
 			})
 		})

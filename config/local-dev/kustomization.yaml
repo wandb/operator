@@ -1,0 +1,14 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- ../crd
+- ../webhook
+
+namespace: operator-system
+namePrefix: operator-
+
+patches:
+- path: webhook_local_patch.yaml
+  target:
+    kind: ValidatingWebhookConfiguration
