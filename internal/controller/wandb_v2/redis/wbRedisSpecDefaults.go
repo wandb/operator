@@ -1,7 +1,6 @@
 package redis
 
 import (
-	"errors"
 	"fmt"
 
 	v2 "github.com/wandb/operator/api/v2"
@@ -28,14 +27,14 @@ const (
 	SmallSentinelMemoryLimit   = "256Mi"
 )
 
-func initializeWbRedisSpec(profile v2.WBProfile) (*v2.WBRedisSpec, error) {
+func wbRedisSpecDefaults(profile v2.WBProfile) (v2.WBRedisSpec, error) {
 	var err error
 	var storageRequest, cpuRequest, cpuLimit, memoryRequest, memoryLimit resource.Quantity
 	var spec v2.WBRedisSpec
 	var sentinelSpec *v2.WBRedisSentinelSpec
 
-	if sentinelSpec, err = initializeWbRedisSentinelSpec(profile); err != nil {
-		return nil, err
+	if sentinelSpec, err = _wbRedisSentinelSpecDefaults(profile); err != nil {
+		return spec, err
 	}
 	spec = v2.WBRedisSpec{
 		Enabled: true,
@@ -50,28 +49,28 @@ func initializeWbRedisSpec(profile v2.WBProfile) (*v2.WBRedisSpec, error) {
 	switch profile {
 	case v2.WBProfileDev:
 		if storageRequest, err = resource.ParseQuantity(DevStorageRequest); err != nil {
-			return nil, err
+			return spec, err
 		}
 		break
 	case v2.WBProfileSmall:
 		if storageRequest, err = resource.ParseQuantity(SmallStorageRequest); err != nil {
-			return nil, err
+			return spec, err
 		}
 		if cpuRequest, err = resource.ParseQuantity(SmallReplicaCpuRequest); err != nil {
-			return nil, err
+			return spec, err
 		}
 		if cpuLimit, err = resource.ParseQuantity(SmallReplicaCpuLimit); err != nil {
-			return nil, err
+			return spec, err
 		}
 		if memoryRequest, err = resource.ParseQuantity(SmallReplicaMemoryRequest); err != nil {
-			return nil, err
+			return spec, err
 		}
 		if memoryLimit, err = resource.ParseQuantity(SmallReplicaMemoryLimit); err != nil {
-			return nil, err
+			return spec, err
 		}
 		break
 	default:
-		return nil, fmt.Errorf("invalid profile: %v", profile)
+		return spec, fmt.Errorf("invalid profile: %v", profile)
 	}
 
 	if !storageRequest.IsZero() {
@@ -90,10 +89,10 @@ func initializeWbRedisSpec(profile v2.WBProfile) (*v2.WBRedisSpec, error) {
 		spec.Config.Resources.Limits[v1.ResourceMemory] = memoryLimit
 	}
 
-	return &spec, nil
+	return spec, nil
 }
 
-func initializeWbRedisSentinelSpec(profile v2.WBProfile) (*v2.WBRedisSentinelSpec, error) {
+func _wbRedisSentinelSpecDefaults(profile v2.WBProfile) (*v2.WBRedisSentinelSpec, error) {
 	var err error
 	var cpuRequest, cpuLimit, memoryRequest, memoryLimit resource.Quantity
 
@@ -143,22 +142,6 @@ func initializeWbRedisSentinelSpec(profile v2.WBProfile) (*v2.WBRedisSentinelSpe
 	return &sentinelSpec, nil
 }
 
-func validateWbRedisSpec(wbSpec *v2.WBRedisSpec) error {
-	if wbSpec == nil {
-		return errors.New("bad spec: WBRedisSpec is nil")
-	}
-	if wbSpec.Config == nil {
-		return errors.New("bad spec: WBRedisSpec.Config is nil")
-	}
-	if wbSpec.Config.Resources.Requests.Storage() == nil {
-		return errors.New("bad spec: WBRedisSpec.Config.Resources.Requests.Storage is nil")
-	}
-	return nil
-}
-
-func wbRedisSentinelEnabled(wbSpec *v2.WBRedisSpec) bool {
-	if wbSpec == nil || wbSpec.Sentinel == nil {
-		return false
-	}
-	return wbSpec.Sentinel.Enabled
+func wbRedisSentinelEnabled(wbSpec v2.WBRedisSpec) bool {
+	return wbSpec.Sentinel != nil && wbSpec.Sentinel.Enabled
 }

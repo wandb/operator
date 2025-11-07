@@ -7,7 +7,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/types"
-	ctrl "sigs.k8s.io/controller-runtime"
 )
 
 var _ = Describe("OpstreeDesired", func() {
@@ -27,18 +26,9 @@ var _ = Describe("OpstreeDesired", func() {
 	})
 
 	Describe("desiredOpstreeRedis", func() {
-		Context("when WBRedisSpec is nil", func() {
-			It("should return an error", func() {
-				redis, err := desiredOpstreeRedis(namespacedName, nil)
-				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("WBRedisSpec is nil"))
-				Expect(redis).To(BeNil())
-			})
-		})
-
 		Context("when WBRedisSpec.Config is nil", func() {
 			It("should return an error", func() {
-				wbSpec := &v2.WBRedisSpec{}
+				wbSpec := v2.WBRedisSpec{}
 				redis, err := desiredOpstreeRedis(namespacedName, wbSpec)
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("WBRedisSpec.Config is nil"))
@@ -48,7 +38,7 @@ var _ = Describe("OpstreeDesired", func() {
 
 		Context("when Sentinel is enabled", func() {
 			It("should return nil without error", func() {
-				wbSpec := &v2.WBRedisSpec{
+				wbSpec := v2.WBRedisSpec{
 					Config: &v2.WBRedisConfig{
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
@@ -68,7 +58,7 @@ var _ = Describe("OpstreeDesired", func() {
 
 		Context("when Sentinel is disabled", func() {
 			It("should return a Redis resource", func() {
-				wbSpec := &v2.WBRedisSpec{
+				wbSpec := v2.WBRedisSpec{
 					Config: &v2.WBRedisConfig{
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
@@ -92,7 +82,7 @@ var _ = Describe("OpstreeDesired", func() {
 
 		Context("when Sentinel is nil", func() {
 			It("should return a Redis resource", func() {
-				wbSpec := &v2.WBRedisSpec{
+				wbSpec := v2.WBRedisSpec{
 					Config: &v2.WBRedisConfig{
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
@@ -110,18 +100,9 @@ var _ = Describe("OpstreeDesired", func() {
 	})
 
 	Describe("desiredOpstreeSentinel", func() {
-		Context("when WBRedisSpec is nil", func() {
-			It("should return an error", func() {
-				sentinel, err := desiredOpstreeSentinel(namespacedName, nil)
-				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("WBRedisSpec is nil"))
-				Expect(sentinel).To(BeNil())
-			})
-		})
-
 		Context("when WBRedisSpec.Config is nil", func() {
 			It("should return an error", func() {
-				wbSpec := &v2.WBRedisSpec{}
+				wbSpec := v2.WBRedisSpec{}
 				sentinel, err := desiredOpstreeSentinel(namespacedName, wbSpec)
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("WBRedisSpec.Config is nil"))
@@ -131,7 +112,7 @@ var _ = Describe("OpstreeDesired", func() {
 
 		Context("when Sentinel is disabled", func() {
 			It("should return nil without error", func() {
-				wbSpec := &v2.WBRedisSpec{
+				wbSpec := v2.WBRedisSpec{
 					Config: &v2.WBRedisConfig{
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
@@ -148,7 +129,7 @@ var _ = Describe("OpstreeDesired", func() {
 
 		Context("when Sentinel is nil", func() {
 			It("should return nil without error", func() {
-				wbSpec := &v2.WBRedisSpec{
+				wbSpec := v2.WBRedisSpec{
 					Config: &v2.WBRedisConfig{
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
@@ -166,7 +147,7 @@ var _ = Describe("OpstreeDesired", func() {
 
 		Context("when Sentinel is enabled", func() {
 			It("should return a RedisSentinel resource", func() {
-				wbSpec := &v2.WBRedisSpec{
+				wbSpec := v2.WBRedisSpec{
 					Config: &v2.WBRedisConfig{
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
@@ -194,18 +175,9 @@ var _ = Describe("OpstreeDesired", func() {
 	})
 
 	Describe("desiredOpstreeReplication", func() {
-		Context("when WBRedisSpec is nil", func() {
-			It("should return an error", func() {
-				replication, err := desiredOpstreeReplication(namespacedName, nil)
-				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("WBRedisSpec is nil"))
-				Expect(replication).To(BeNil())
-			})
-		})
-
 		Context("when WBRedisSpec.Config is nil", func() {
 			It("should return an error", func() {
-				wbSpec := &v2.WBRedisSpec{}
+				wbSpec := v2.WBRedisSpec{}
 				replication, err := desiredOpstreeReplication(namespacedName, wbSpec)
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("WBRedisSpec.Config is nil"))
@@ -215,7 +187,7 @@ var _ = Describe("OpstreeDesired", func() {
 
 		Context("when Sentinel is disabled", func() {
 			It("should return nil without error", func() {
-				wbSpec := &v2.WBRedisSpec{
+				wbSpec := v2.WBRedisSpec{
 					Config: &v2.WBRedisConfig{
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
@@ -232,7 +204,7 @@ var _ = Describe("OpstreeDesired", func() {
 
 		Context("when Sentinel is nil", func() {
 			It("should return nil without error", func() {
-				wbSpec := &v2.WBRedisSpec{
+				wbSpec := v2.WBRedisSpec{
 					Config: &v2.WBRedisConfig{
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
@@ -250,7 +222,7 @@ var _ = Describe("OpstreeDesired", func() {
 
 		Context("when Sentinel is enabled", func() {
 			It("should return a RedisReplication resource", func() {
-				wbSpec := &v2.WBRedisSpec{
+				wbSpec := v2.WBRedisSpec{
 					Config: &v2.WBRedisConfig{
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
@@ -277,33 +249,4 @@ var _ = Describe("OpstreeDesired", func() {
 		})
 	})
 
-	Describe("desiredOpstreeNamespacedName", func() {
-		Context("when request has namespace", func() {
-			It("should return NamespacedName with request namespace and NamePrefix", func() {
-				req := ctrl.Request{
-					NamespacedName: types.NamespacedName{
-						Namespace: "custom-namespace",
-						Name:      "some-name",
-					},
-				}
-				result := desiredOpstreeNamespacedName(req)
-				Expect(result.Namespace).To(Equal("custom-namespace"))
-				Expect(result.Name).To(Equal(NamePrefix))
-			})
-		})
-
-		Context("when request has empty namespace", func() {
-			It("should return NamespacedName with default namespace and NamePrefix", func() {
-				req := ctrl.Request{
-					NamespacedName: types.NamespacedName{
-						Namespace: "",
-						Name:      "some-name",
-					},
-				}
-				result := desiredOpstreeNamespacedName(req)
-				Expect(result.Namespace).To(Equal(DefaultNamespace))
-				Expect(result.Name).To(Equal(NamePrefix))
-			})
-		})
-	})
 })

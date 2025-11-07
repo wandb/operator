@@ -587,6 +587,19 @@ spec:
                 type: integer
               redisStatus:
                 properties:
+                  connection:
+                    properties:
+                      REDIS_HOST:
+                        type: string
+                      REDIS_MASTER_NAME:
+                        type: string
+                      REDIS_PORT:
+                        type: string
+                      REDIS_SENTINEL_HOST:
+                        type: string
+                      REDIS_SENTINEL_PORT:
+                        type: string
+                    type: object
                   lastReconciled:
                     format: date-time
                     type: string

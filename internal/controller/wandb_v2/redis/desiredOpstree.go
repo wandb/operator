@@ -1,6 +1,8 @@
 package redis
 
 import (
+	"context"
+
 	common "github.com/wandb/operator/api/redis-operator-vendored/common/v1beta2"
 	"github.com/wandb/operator/api/redis-operator-vendored/redis/v1beta2"
 	redisv1beta2 "github.com/wandb/operator/api/redis-operator-vendored/redis/v1beta2"
@@ -18,18 +20,42 @@ const (
 	OpstreeSentinelImage = "quay.io/opstree/redis-sentinel:v7.0.12"
 )
 
+// desiredOpstree delegates to *build* the desired CRs for all OpsTree Redis CRs we work with:
+// Redis, RedisReplication, RedisSentinel
+func desiredOpstree(
+	ctx context.Context,
+	desiredRedis v2.WBRedisSpec,
+	namespacedName types.NamespacedName,
+) (opstree, error) {
+	log := ctrl.LoggerFrom(ctx)
+
+	var err error
+	var result = opstree{}
+
+	if result.standalone, err = desiredOpstreeRedis(namespacedName, desiredRedis); err != nil {
+		log.Error(err, "Failed to build desired opstree redis")
+		return result, err
+	}
+
+	if result.replication, err = desiredOpstreeReplication(namespacedName, desiredRedis); err != nil {
+		log.Error(err, "Failed to build desired opstree replication")
+		return result, err
+	}
+
+	if result.sentinel, err = desiredOpstreeSentinel(namespacedName, desiredRedis); err != nil {
+		log.Error(err, "Failed to build desired opstree sentinel")
+		return result, err
+	}
+
+	return result, nil
+}
+
 // desiredOpstreeRedis will create an opstree Redis, unless `WbRedisSpec.Sentinel.Enabled` == true.
 func desiredOpstreeRedis(
-	namespacedName types.NamespacedName, wbSpec *v2.WBRedisSpec,
+	namespacedName types.NamespacedName, wbSpec v2.WBRedisSpec,
 ) (
 	*v1beta2.Redis, error,
 ) {
-	var err error
-
-	if err = validateWbRedisSpec(wbSpec); err != nil {
-		return nil, err
-	}
-
 	if wbRedisSentinelEnabled(wbSpec) {
 		return nil, nil
 	}
@@ -64,16 +90,10 @@ func desiredOpstreeRedis(
 
 // desiredOpstreeSentinel will build an opstree RedisSentinel, unless `wbRedisSentinelEnabled()` is false
 func desiredOpstreeSentinel(
-	namespacedName types.NamespacedName, wbSpec *v2.WBRedisSpec,
+	namespacedName types.NamespacedName, wbSpec v2.WBRedisSpec,
 ) (
 	*redissentinelv1beta2.RedisSentinel, error,
 ) {
-	var err error
-
-	if err = validateWbRedisSpec(wbSpec); err != nil {
-		return nil, err
-	}
-
 	if !wbRedisSentinelEnabled(wbSpec) {
 		return nil, nil
 	}
@@ -103,16 +123,10 @@ func desiredOpstreeSentinel(
 
 // desiredOpstreeReplication will build an opstree RedisSentinel, unless `wbRedisSentinelEnabled()` is false
 func desiredOpstreeReplication(
-	namespacedName types.NamespacedName, wbSpec *v2.WBRedisSpec,
+	namespacedName types.NamespacedName, wbSpec v2.WBRedisSpec,
 ) (
 	*redisreplicationv1beta2.RedisReplication, error,
 ) {
-	var err error
-
-	if err = validateWbRedisSpec(wbSpec); err != nil {
-		return nil, err
-	}
-
 	if !wbRedisSentinelEnabled(wbSpec) {
 		return nil, nil
 	}
@@ -146,15 +160,4 @@ func desiredOpstreeReplication(
 		},
 	}
 	return &result, nil
-}
-
-func desiredOpstreeNamespacedName(req ctrl.Request) types.NamespacedName {
-	namespace := req.Namespace
-	if namespace == "" {
-		namespace = DefaultNamespace
-	}
-	return types.NamespacedName{
-		Namespace: namespace,
-		Name:      NamePrefix,
-	}
 }

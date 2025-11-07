@@ -255,9 +255,18 @@ type WeightsAndBiasesStatus struct {
 }
 
 type WBRedisStatus struct {
-	Ready          bool        `json:"ready"`
-	State          string      `json:"state,omitempty" default:"Missing"`
-	LastReconciled metav1.Time `json:"lastReconciled,omitempty"`
+	Ready          bool              `json:"ready"`
+	State          string            `json:"state,omitempty" default:"Missing"`
+	LastReconciled metav1.Time       `json:"lastReconciled,omitempty"`
+	Connection     WBRedisConnection `json:"connection,omitempty"`
+}
+
+type WBRedisConnection struct {
+	RedisHost         string `json:"REDIS_HOST,omitempty"`
+	RedisPort         string `json:"REDIS_PORT,omitempty"`
+	RedisSentinelHost string `json:"REDIS_SENTINEL_HOST,omitempty"`
+	RedisSentinelPort string `json:"REDIS_SENTINEL_PORT,omitempty"`
+	RedisMasterName   string `json:"REDIS_MASTER_NAME,omitempty"`
 }
 
 type WBKafkaStatus struct {

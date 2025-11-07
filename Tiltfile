@@ -313,17 +313,6 @@ local_resource('Regenerate-RBAC',
                auto_init=False,
                trigger_mode=TRIGGER_MODE_MANUAL)
 
-k8s_resource(
-    new_name='RBAC',
-    objects=[
-        'operator-manager-role:clusterrole',
-        'operator-manager-rolebinding:clusterrolebinding',
-        'operator-leader-election-role:role',
-        'operator-leader-election-rolebinding:rolebinding'
-    ],
-    labels="wandb"
-)
-
 ################################################################################
 # STEP 6: WATCH AND COMPILE CONTROLLER
 # Automatically recompile controller binary when source code changes

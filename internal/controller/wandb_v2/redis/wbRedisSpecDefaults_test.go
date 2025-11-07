@@ -8,69 +8,11 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
-var _ = Describe("WbRedisSpecInitializer", func() {
-	Describe("validateWbRedisSpec", func() {
-		Context("when WBRedisSpec is nil", func() {
-			It("should return an error", func() {
-				err := validateWbRedisSpec(nil)
-				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("WBRedisSpec is nil"))
-			})
-		})
-
-		Context("when WBRedisSpec.Config is nil", func() {
-			It("should return an error", func() {
-				spec := &v2.WBRedisSpec{}
-				err := validateWbRedisSpec(spec)
-				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("WBRedisSpec.Config is nil"))
-			})
-		})
-
-		Context("when storage request is not set", func() {
-			It("should pass validation since Storage() never returns nil", func() {
-				spec := &v2.WBRedisSpec{
-					Config: &v2.WBRedisConfig{
-						Resources: corev1.ResourceRequirements{
-							Requests: corev1.ResourceList{},
-						},
-					},
-				}
-				err := validateWbRedisSpec(spec)
-				Expect(err).ToNot(HaveOccurred())
-			})
-		})
-
-		Context("when WBRedisSpec is valid", func() {
-			It("should return no error", func() {
-				storageSize, err := resource.ParseQuantity("1Gi")
-				Expect(err).ToNot(HaveOccurred())
-				spec := &v2.WBRedisSpec{
-					Config: &v2.WBRedisConfig{
-						Resources: corev1.ResourceRequirements{
-							Requests: corev1.ResourceList{
-								corev1.ResourceStorage: storageSize,
-							},
-						},
-					},
-				}
-				err = validateWbRedisSpec(spec)
-				Expect(err).ToNot(HaveOccurred())
-			})
-		})
-	})
-
+var _ = Describe("wbRedisSpecDefaults", func() {
 	Describe("wbRedisSentinelEnabled", func() {
-		Context("when WBRedisSpec is nil", func() {
-			It("should return false", func() {
-				result := wbRedisSentinelEnabled(nil)
-				Expect(result).To(BeFalse())
-			})
-		})
-
 		Context("when Sentinel is nil", func() {
 			It("should return false", func() {
-				spec := &v2.WBRedisSpec{
+				spec := v2.WBRedisSpec{
 					Sentinel: nil,
 				}
 				result := wbRedisSentinelEnabled(spec)
@@ -80,7 +22,7 @@ var _ = Describe("WbRedisSpecInitializer", func() {
 
 		Context("when Sentinel is disabled", func() {
 			It("should return false", func() {
-				spec := &v2.WBRedisSpec{
+				spec := v2.WBRedisSpec{
 					Sentinel: &v2.WBRedisSentinelSpec{
 						Enabled: false,
 					},
@@ -92,7 +34,7 @@ var _ = Describe("WbRedisSpecInitializer", func() {
 
 		Context("when Sentinel is enabled", func() {
 			It("should return true", func() {
-				spec := &v2.WBRedisSpec{
+				spec := v2.WBRedisSpec{
 					Sentinel: &v2.WBRedisSentinelSpec{
 						Enabled: true,
 					},
@@ -103,10 +45,10 @@ var _ = Describe("WbRedisSpecInitializer", func() {
 		})
 	})
 
-	Describe("initializeWbRedisSpec", func() {
+	Describe("wbRedisSpecDefaults", func() {
 		Context("when profile is Dev", func() {
 			It("should return a redis spec with storage only and no sentinel", func() {
-				spec, err := initializeWbRedisSpec(v2.WBProfileDev)
+				spec, err := wbRedisSpecDefaults(v2.WBProfileDev)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(spec).ToNot(BeNil())
 				Expect(spec.Enabled).To(BeTrue())
@@ -130,7 +72,7 @@ var _ = Describe("WbRedisSpecInitializer", func() {
 
 		Context("when profile is Small", func() {
 			It("should return a redis spec with full resource requirements and sentinel", func() {
-				spec, err := initializeWbRedisSpec(v2.WBProfileSmall)
+				spec, err := wbRedisSpecDefaults(v2.WBProfileSmall)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(spec).ToNot(BeNil())
 				Expect(spec.Enabled).To(BeTrue())
@@ -174,7 +116,7 @@ var _ = Describe("WbRedisSpecInitializer", func() {
 
 		Context("when profile is invalid", func() {
 			It("should return an error", func() {
-				spec, err := initializeWbRedisSpec(v2.WBProfile("invalid"))
+				spec, err := wbRedisSpecDefaults(v2.WBProfile("invalid"))
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("invalid profile"))
 				Expect(spec).To(BeNil())
