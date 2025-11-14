@@ -1,0 +1,70 @@
+package strimzi
+
+import (
+	"context"
+	"fmt"
+
+	strimziv1beta2 "github.com/wandb/operator/api/strimzi-kafka-vendored/v1beta2"
+	"github.com/wandb/operator/internal/model"
+	ctrl "sigs.k8s.io/controller-runtime"
+)
+
+func (a *strimziKafka) createKafka(
+	ctx context.Context, desiredKafka *strimziv1beta2.Kafka,
+) *model.Results {
+	log := ctrl.LoggerFrom(ctx)
+	results := model.InitResults()
+
+	if a.kafka != nil {
+		msg := "cannot create Kafka CR when it already exists"
+		err := model.NewKafkaError(model.KafkaErrFailedToCreate, msg)
+		log.Error(err, msg)
+		results.AddErrors(err)
+		return results
+	}
+
+	if err := a.client.Create(ctx, desiredKafka); err != nil {
+		log.Error(err, "Failed to create Kafka CR")
+		results.AddErrors(model.NewKafkaError(
+			model.KafkaErrFailedToCreate,
+			fmt.Sprintf("failed to create Kafka CR: %v", err),
+		))
+		return results
+	}
+
+	results.AddStatuses(
+		model.NewKafkaStatus(model.KafkaCreated, fmt.Sprintf("Created Kafka CR: %s", KafkaName)),
+	)
+
+	return results
+}
+
+func (a *strimziKafka) createNodePool(
+	ctx context.Context, desiredNodePool *strimziv1beta2.KafkaNodePool,
+) *model.Results {
+	log := ctrl.LoggerFrom(ctx)
+	results := model.InitResults()
+
+	if a.nodePool != nil {
+		msg := "cannot create KafkaNodePool CR when it already exists"
+		err := model.NewKafkaError(model.KafkaErrFailedToCreate, msg)
+		log.Error(err, msg)
+		results.AddErrors(err)
+		return results
+	}
+
+	if err := a.client.Create(ctx, desiredNodePool); err != nil {
+		log.Error(err, "Failed to create KafkaNodePool CR")
+		results.AddErrors(model.NewKafkaError(
+			model.KafkaErrFailedToCreate,
+			fmt.Sprintf("failed to create KafkaNodePool CR: %v", err),
+		))
+		return results
+	}
+
+	results.AddStatuses(
+		model.NewKafkaStatus(model.KafkaNodePoolCreated, fmt.Sprintf("Created KafkaNodePool CR: %s", NodePoolName)),
+	)
+
+	return results
+}

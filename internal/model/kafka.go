@@ -20,7 +20,7 @@ type KafkaConfig struct {
 	Namespace         string
 	StorageSize       string
 	Replicas          int32
-	Resources         ResourceRequirements
+	Resources         v1.ResourceRequirements
 	ReplicationConfig KafkaReplicationConfig
 }
 
@@ -30,11 +30,6 @@ type KafkaReplicationConfig struct {
 	OffsetsTopicRF           int32
 	TransactionStateRF       int32
 	TransactionStateISR      int32
-}
-
-type ResourceRequirements struct {
-	Requests v1.ResourceList
-	Limits   v1.ResourceList
 }
 
 func (k KafkaConfig) IsHighAvailability() bool {
