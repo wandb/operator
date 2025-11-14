@@ -3,7 +3,7 @@ kind: WeightsAndBiases
 metadata:
   name: wandb-dev-v2
 spec:
-  profile: dev
+  size: dev
   database:
     enabled: true
     type: percona

@@ -9,7 +9,6 @@ import (
 	"github.com/wandb/operator/internal/model"
 	machErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -21,7 +20,6 @@ type opstreeRedis struct {
 	sentinel    *redissentinelv1beta2.RedisSentinel
 	client      client.Client
 	owner       metav1.Object
-	scheme      *runtime.Scheme
 }
 
 // Initialize delegates to *get* all OpsTree Redis CRs we work with:
@@ -37,30 +35,45 @@ func Initialize(
 	log := ctrl.LoggerFrom(ctx)
 
 	var err error
+	var standalone = &redisv1beta2.Redis{}
+	var replication = &redisreplicationv1beta2.RedisReplication{}
+	var sentinel = &redissentinelv1beta2.RedisSentinel{}
 	var result = opstreeRedis{
 		client:      client,
 		owner:       owner,
-		standalone:  &redisv1beta2.Redis{},
-		replication: &redisreplicationv1beta2.RedisReplication{},
-		sentinel:    &redissentinelv1beta2.RedisSentinel{},
+		standalone:  nil,
+		replication: nil,
+		sentinel:    nil,
 	}
 
-	err = client.Get(ctx, standaloneNamespacedName(redisConfig.Namespace), result.standalone)
-	if err != nil && !machErrors.IsNotFound(err) {
-		log.Error(err, "error getting actual opstree redis standalone")
-		return nil, err
+	err = client.Get(ctx, standaloneNamespacedName(redisConfig.Namespace), standalone)
+	if err != nil {
+		if !machErrors.IsNotFound(err) {
+			log.Error(err, "error getting actual opstree redis standalone")
+			return nil, err
+		}
+	} else {
+		result.standalone = standalone
 	}
 
-	err = client.Get(ctx, sentinelNamespacedName(redisConfig.Namespace), result.sentinel)
-	if err != nil && !machErrors.IsNotFound(err) {
-		log.Error(err, "error getting actual opstree redis sentinel")
-		return nil, err
+	err = client.Get(ctx, sentinelNamespacedName(redisConfig.Namespace), sentinel)
+	if err != nil {
+		if !machErrors.IsNotFound(err) {
+			log.Error(err, "error getting actual opstree redis sentinel")
+			return nil, err
+		}
+	} else {
+		result.sentinel = sentinel
 	}
 
-	err = client.Get(ctx, replicationNamespacedName(redisConfig.Namespace), result.replication)
-	if err != nil && !machErrors.IsNotFound(err) {
-		log.Error(err, "error getting actual opstree redis replication")
-		return nil, err
+	err = client.Get(ctx, replicationNamespacedName(redisConfig.Namespace), replication)
+	if err != nil {
+		if !machErrors.IsNotFound(err) {
+			log.Error(err, "error getting actual opstree redis replication")
+			return nil, err
+		}
+	} else {
+		result.replication = replication
 	}
 
 	return &result, nil
@@ -175,7 +188,7 @@ func (a *opstreeRedis) createSentinel(
 		return results
 	}
 
-	if err = controllerutil.SetOwnerReference(a.owner, desiredSentinel, a.scheme); err != nil {
+	if err = controllerutil.SetOwnerReference(a.owner, desiredSentinel, a.client.Scheme()); err != nil {
 		log.Error(err, "Failed to set owner reference for RedisSentinel")
 		results.AddErrors(err)
 		return results
@@ -219,7 +232,7 @@ func (a *opstreeRedis) createReplication(
 		return results
 	}
 
-	if err = controllerutil.SetOwnerReference(a.owner, desiredReplication, a.scheme); err != nil {
+	if err = controllerutil.SetOwnerReference(a.owner, desiredReplication, a.client.Scheme()); err != nil {
 		log.Error(err, "Failed to set owner reference for RedisReplication")
 		results.AddErrors(err)
 		return results
@@ -271,7 +284,7 @@ func (a *opstreeRedis) createStandalone(
 		return results
 	}
 
-	if err = controllerutil.SetOwnerReference(a.owner, desiredStandalone, a.scheme); err != nil {
+	if err = controllerutil.SetOwnerReference(a.owner, desiredStandalone, a.client.Scheme()); err != nil {
 		log.Error(err, "Failed to set owner reference for RedisStandalone")
 		results.AddErrors(err)
 		return results

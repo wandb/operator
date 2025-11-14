@@ -16,6 +16,8 @@ const (
 
 	DevStorageRequest = "100Mi"
 
+	DefaultNamespace = "default"
+
 	SmallStorageRequest        = "2Gi"
 	SmallReplicaCpuRequest     = "250m"
 	SmallReplicaCpuLimit       = "500m"

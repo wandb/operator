@@ -52,11 +52,11 @@ func Redis(actual v2.WBRedisSpec, defaultValues v2.WBRedisSpec) (v2.WBRedisSpec,
 	}
 
 	redisSpec.StorageSize = merge.Coalesce(actual.StorageSize, defaultValues.StorageSize)
+	redisSpec.Namespace = merge.Coalesce(actual.Namespace, defaultValues.Namespace)
 
 	///////////////////////////////////////////
 	// Values without overrides
 	redisSpec.Enabled = actual.Enabled
-	redisSpec.Namespace = actual.Namespace
 
 	return redisSpec, nil
 }

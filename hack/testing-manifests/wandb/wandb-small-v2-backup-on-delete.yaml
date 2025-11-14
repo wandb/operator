@@ -3,7 +3,7 @@ kind: WeightsAndBiases
 metadata:
   name: wandb-small-v2
 spec:
-  profile: small
+  size: small
   database:
     enabled: true
     type: percona
