@@ -64,3 +64,11 @@ func (r *Results) getKafkaErrors() []KafkaInfraError {
 func (r *Results) getKafkaStatusDetails() []KafkaStatusDetail {
 	return utils.FilterMapFunc(r.StatusList, func(s InfraStatus) (KafkaStatusDetail, bool) { return s.ToKafkaStatusDetail() })
 }
+
+func (r *Results) getMySQLErrors() []MySQLInfraError {
+	return utils.FilterMapFunc(r.ErrorList, func(err error) (MySQLInfraError, bool) { return ToMySQLInfraError(err) })
+}
+
+func (r *Results) getMySQLStatusDetails() []MySQLStatusDetail {
+	return utils.FilterMapFunc(r.StatusList, func(s InfraStatus) (MySQLStatusDetail, bool) { return s.ToMySQLStatusDetail() })
+}
