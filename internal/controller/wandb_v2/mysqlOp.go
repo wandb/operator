@@ -47,7 +47,7 @@ type wandbPerconaMysqlDoReconcile interface {
 }
 
 func perconaMysqlNamespacedName(wandb *apiv2.WeightsAndBiases) types.NamespacedName {
-	namespace := wandb.Spec.Database.Namespace
+	namespace := wandb.Spec.MySQL.Namespace
 	if namespace == "" {
 		namespace = wandb.Namespace
 	}
@@ -67,7 +67,7 @@ func (r *WeightsAndBiasesV2Reconciler) handlePerconaMysql(
 	var namespacedName = perconaMysqlNamespacedName(wandb)
 	log := ctrllog.FromContext(ctx)
 
-	if !wandb.Spec.Database.Enabled {
+	if !wandb.Spec.MySQL.Enabled {
 		log.Info("Database not enabled, skipping")
 		return ctrlqueue.CtrlContinue()
 	}
@@ -148,13 +148,13 @@ func desiredPerconaMysql(
 		secret:          nil,
 	}
 
-	if !wandb.Spec.Database.Enabled {
+	if !wandb.Spec.MySQL.Enabled {
 		return result, nil
 	}
 
 	result.installed = true
 
-	storageSize := wandb.Spec.Database.StorageSize
+	storageSize := wandb.Spec.MySQL.StorageSize
 	if storageSize == "" {
 		storageSize = "20Gi"
 	}
@@ -164,7 +164,7 @@ func desiredPerconaMysql(
 		return result, errors.New("invalid storage size: " + storageSize)
 	}
 	tlsEnabled := false
-	wandbBackupSpec := wandb.Spec.Database.Backup
+	wandbBackupSpec := wandb.Spec.MySQL.Backup
 
 	pxc := &pxcv1.PerconaXtraDBCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -313,8 +313,8 @@ func computePerconaReconcileDrift(
 		}, nil
 	}
 
-	if actualPercona.GetStatus() != string(wandb.Status.DatabaseStatus.State) ||
-		actualPercona.IsReady() != wandb.Status.DatabaseStatus.Ready {
+	if actualPercona.GetStatus() != string(wandb.Status.MySQLStatus.State) ||
+		actualPercona.IsReady() != wandb.Status.MySQLStatus.Ready {
 		return &wandbPerconaMysqlStausUpdate{
 			wandb:  wandb,
 			status: actualPercona.GetStatus(),
@@ -343,7 +343,7 @@ func (c *wandbPerconaMysqlCreate) Execute(ctx context.Context, r *WeightsAndBias
 		return ctrlqueue.CtrlError(err)
 	}
 	wandb.Status.State = apiv2.WBStateUpdating
-	wandb.Status.DatabaseStatus.State = apiv2.WBStateUpdating
+	wandb.Status.MySQLStatus.State = apiv2.WBStateUpdating
 	if err = r.Status().Update(ctx, wandb); err != nil {
 		log.Error(err, "Failed to update status after creating Percona XtraDB Cluster")
 		return ctrlqueue.CtrlError(err)
@@ -383,8 +383,8 @@ func (s *wandbPerconaMysqlStausUpdate) Execute(
 	ctx context.Context, r *WeightsAndBiasesV2Reconciler,
 ) ctrlqueue.CtrlState {
 	log := ctrllog.FromContext(ctx)
-	s.wandb.Status.DatabaseStatus.State = apiv2.WBStateUpdating
-	s.wandb.Status.DatabaseStatus.Ready = s.ready
+	s.wandb.Status.MySQLStatus.State = apiv2.WBStateUpdating
+	s.wandb.Status.MySQLStatus.Ready = s.ready
 	if err := r.Status().Update(ctx, s.wandb); err != nil {
 		log.Error(err, "Failed to update Percona MySQL status")
 		return ctrlqueue.CtrlError(err)
@@ -397,14 +397,14 @@ func (w *wandbPerconaMysqlWrapper) maybeHandleDeletion(
 ) ctrlqueue.CtrlState {
 	log := ctrllog.FromContext(ctx)
 
-	//requeueSeconds := wandb.Status.DatabaseStatus.BackupStatus.RequeueAfter
+	//requeueSeconds := wandb.Status.MySQLStatus.BackupStatus.RequeueAfter
 	//if requeueSeconds == 0 {
 	//	requeueSeconds = 30
 	//}
 	//requeueDuration := time.Duration(requeueSeconds) * time.Second
 
 	var deletionPaused = wandb.Status.State == apiv2.WBStateOffline
-	var backupEnabled = wandb.Spec.Database.Backup.Enabled
+	var backupEnabled = wandb.Spec.MySQL.Backup.Enabled
 	var flaggedForDeletion = !wandb.ObjectMeta.DeletionTimestamp.IsZero()
 	var hasDbFinalizer = ctrlqueue.ContainsString(wandb.GetFinalizers(), dbFinalizer)
 
@@ -448,11 +448,11 @@ func (w *wandbPerconaMysqlWrapper) maybeHandleDeletion(
 			return ctrlqueue.CtrlDoneUntil(ctrlqueue.ReconcilerScope, defaultDbRequeueDuration)
 		}
 
-		if wandb.Status.DatabaseStatus.BackupStatus.State == "InProgress" {
-			log.Info("Backup in progress, requeuing", "backup", wandb.Status.DatabaseStatus.BackupStatus.BackupName)
+		if wandb.Status.MySQLStatus.BackupStatus.State == "InProgress" {
+			log.Info("Backup in progress, requeuing", "backup", wandb.Status.MySQLStatus.BackupStatus.BackupName)
 			if wandb.Status.State != apiv2.WBStateDeleting {
 				wandb.Status.State = apiv2.WBStateDeleting
-				wandb.Status.DatabaseStatus.State = apiv2.WBStateDeleting
+				wandb.Status.MySQLStatus.State = apiv2.WBStateDeleting
 				if err := reconciler.Status().Update(ctx, wandb); err != nil {
 					log.Error(err, "Failed to update status while waiting for backup")
 					return ctrlqueue.CtrlError(err)
@@ -488,12 +488,12 @@ func (w *wandbPerconaMysqlWrapper) handleDatabaseBackup(
 		return nil
 	}
 
-	if !wandb.Spec.Database.Enabled {
+	if !wandb.Spec.MySQL.Enabled {
 		log.Info("Database not enabled, skipping backup")
 		return nil
 	}
 
-	if !wandb.Spec.Database.Backup.Enabled {
+	if !wandb.Spec.MySQL.Backup.Enabled {
 		log.Info("Database backup not enabled, skipping backup")
 		//reconciler.updateDbBackupStatus(ctx, wandb, "Skipped", "Backup disabled in spec")
 		return nil
@@ -501,7 +501,7 @@ func (w *wandbPerconaMysqlWrapper) handleDatabaseBackup(
 
 	log.Info("Executing database backup before deletion")
 
-	storageName := wandb.Spec.Database.Backup.StorageName
+	storageName := wandb.Spec.MySQL.Backup.StorageName
 	if storageName == "" {
 		storageName = "default-backup"
 	}
@@ -511,20 +511,20 @@ func (w *wandbPerconaMysqlWrapper) handleDatabaseBackup(
 		ClusterName:    w.obj.GetName(),
 		Namespace:      w.obj.Namespace,
 		StorageName:    storageName,
-		TimeoutSeconds: wandb.Spec.Database.Backup.TimeoutSeconds,
+		TimeoutSeconds: wandb.Spec.MySQL.Backup.TimeoutSeconds,
 	}
 
 	currentBackupState := &BackupState{
-		BackupName:  wandb.Status.DatabaseStatus.BackupStatus.BackupName,
-		StartedAt:   wandb.Status.DatabaseStatus.BackupStatus.StartedAt,
-		CompletedAt: wandb.Status.DatabaseStatus.BackupStatus.CompletedAt,
-		State:       wandb.Status.DatabaseStatus.BackupStatus.State,
+		BackupName:  wandb.Status.MySQLStatus.BackupStatus.BackupName,
+		StartedAt:   wandb.Status.MySQLStatus.BackupStatus.StartedAt,
+		CompletedAt: wandb.Status.MySQLStatus.BackupStatus.CompletedAt,
+		State:       wandb.Status.MySQLStatus.BackupStatus.State,
 	}
 
 	newState, result, err := executor.EnsureBackup(ctx, currentBackupState)
 
 	if newState != nil {
-		wandb.Status.DatabaseStatus.BackupStatus = apiv2.WBBackupStatus{
+		wandb.Status.MySQLStatus.BackupStatus = apiv2.WBBackupStatus{
 			BackupName:     newState.BackupName,
 			StartedAt:      newState.StartedAt,
 			CompletedAt:    newState.CompletedAt,
@@ -534,8 +534,8 @@ func (w *wandbPerconaMysqlWrapper) handleDatabaseBackup(
 		}
 
 		if result.InProgress {
-			wandb.Status.DatabaseStatus.BackupStatus.State = "InProgress"
-			wandb.Status.DatabaseStatus.BackupStatus.RequeueAfter = int64(result.RequeueAfter.Seconds())
+			wandb.Status.MySQLStatus.BackupStatus.State = "InProgress"
+			wandb.Status.MySQLStatus.BackupStatus.RequeueAfter = int64(result.RequeueAfter.Seconds())
 		}
 
 		if statusErr := reconciler.Client.Status().Update(ctx, wandb); statusErr != nil {
@@ -596,7 +596,7 @@ func (d *wandbMysqlConnInfoDelete) Execute(ctx context.Context, r *WeightsAndBia
 	log := ctrl.LoggerFrom(ctx)
 	log.Info("Deleting MySQL connection secret")
 
-	namespace := d.wandb.Spec.Database.Namespace
+	namespace := d.wandb.Spec.MySQL.Namespace
 	if namespace == "" {
 		namespace = d.wandb.Namespace
 	}

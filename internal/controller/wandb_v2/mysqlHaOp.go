@@ -26,7 +26,7 @@ func (r *WeightsAndBiasesV2Reconciler) handlePerconaMysqlHA(
 	var namespacedName = perconaMysqlNamespacedName(wandb)
 	log := ctrllog.FromContext(ctx)
 
-	if !wandb.Spec.Database.Enabled {
+	if !wandb.Spec.MySQL.Enabled {
 		log.Info("Database not enabled, skipping")
 		return ctrlqueue.CtrlContinue()
 	}
@@ -69,13 +69,13 @@ func desiredPerconaMysqlHA(
 		secret:          nil,
 	}
 
-	if !wandb.Spec.Database.Enabled {
+	if !wandb.Spec.MySQL.Enabled {
 		return result, nil
 	}
 
 	result.installed = true
 
-	storageSize := wandb.Spec.Database.StorageSize
+	storageSize := wandb.Spec.MySQL.StorageSize
 	if storageSize == "" {
 		storageSize = "20Gi"
 	}
@@ -85,7 +85,7 @@ func desiredPerconaMysqlHA(
 		return result, errors.New("invalid storage size: " + storageSize)
 	}
 	tlsEnabled := false
-	wandbBackupSpec := wandb.Spec.Database.Backup
+	wandbBackupSpec := wandb.Spec.MySQL.Backup
 
 	pxc := &pxcv1.PerconaXtraDBCluster{
 		ObjectMeta: metav1.ObjectMeta{
