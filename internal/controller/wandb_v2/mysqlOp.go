@@ -67,6 +67,11 @@ func (r *WeightsAndBiasesV2Reconciler) handlePerconaMysql(
 	var namespacedName = perconaMysqlNamespacedName(wandb)
 	log := ctrllog.FromContext(ctx)
 
+	if !wandb.Spec.Database.Enabled {
+		log.Info("Database not enabled, skipping")
+		return ctrlqueue.CtrlContinue()
+	}
+
 	if actualPercona, err = actualPerconaMysql(ctx, r, namespacedName); err != nil {
 		log.Error(err, "Failed to get actual Percona MySQL")
 		return ctrlqueue.CtrlError(err)

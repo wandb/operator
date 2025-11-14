@@ -4,8 +4,8 @@ import (
 	"context"
 
 	apiv2 "github.com/wandb/operator/api/v2"
-	"github.com/wandb/operator/internal/controller/wandb_v2/redis"
-	"github.com/wandb/operator/internal/controller/wandb_v2/redis/opstree"
+	"github.com/wandb/operator/internal/controller/infra/redis"
+	"github.com/wandb/operator/internal/controller/infra/redis/opstree"
 	"github.com/wandb/operator/internal/model"
 )
 

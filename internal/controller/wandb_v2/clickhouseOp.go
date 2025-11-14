@@ -494,7 +494,7 @@ func (w *wandbClickHouseWrapper) handleClickHouseBackup(
 	}
 
 	if !wandb.Spec.ClickHouse.Enabled {
-		log.Info("ClickHouse not enabled, skipping backup")
+		log.Info("ClickHouse not enabled, skipping")
 		return nil
 	}
 

@@ -18,7 +18,6 @@ package wandb_v2
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	apiv2 "github.com/wandb/operator/api/v2"
@@ -77,7 +76,7 @@ type WeightsAndBiasesV2Reconciler struct {
 // Deprecated/Erroneously required RBAC rules
 //+kubebuilder:rbac:groups=extensions,resources=daemonsets;deployments;replicasets;ingresses;ingresses/status,verbs=get;list;watch
 
-var defaultRequeueMinutes = 2
+var defaultRequeueMinutes = 1
 var defaultRequeueDuration = time.Duration(defaultRequeueMinutes) * time.Minute
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -112,6 +111,9 @@ func (r *WeightsAndBiasesV2Reconciler) Reconcile(ctx context.Context, req ctrl.R
 
 	infraConfig := model.BuildInfraConfig().
 		AddRedisSpec(&(wandb.Spec.Redis), wandb.Spec.Size)
+
+	/////////////////////////
+	// Redis
 	result := r.reconcileRedis(ctx, infraConfig, wandb)
 	criticalErrors := result.GetCriticalErrors()
 	if len(criticalErrors) > 0 {
@@ -126,11 +128,19 @@ func (r *WeightsAndBiasesV2Reconciler) Reconcile(ctx context.Context, req ctrl.R
 	//	return ctrlState.ReconcilerResult()
 	//}
 
-	ctrlState = r.handleDatabase(ctx, wandb, req)
+	/////////////////////////
+	// Database
+	if wandb.Spec.Size == apiv2.WBSizeDev {
+		ctrlState = r.handlePerconaMysql(ctx, wandb, req)
+	} else {
+		ctrlState = r.handlePerconaMysqlHA(ctx, wandb, req)
+	}
 	if ctrlState.ShouldExit(ctrlqueue.ReconcilerScope) {
 		return ctrlState.ReconcilerResult()
 	}
 
+	/////////////////////////
+	// Kafka
 	if wandb.Spec.Size == apiv2.WBSizeDev {
 		ctrlState = r.handleKafka(ctx, wandb, req)
 	} else {
@@ -140,6 +150,8 @@ func (r *WeightsAndBiasesV2Reconciler) Reconcile(ctx context.Context, req ctrl.R
 		return ctrlState.ReconcilerResult()
 	}
 
+	/////////////////////////
+	// Minio
 	if wandb.Spec.Size == apiv2.WBSizeDev {
 		ctrlState = r.handleMinio(ctx, wandb, req)
 	} else {
@@ -149,6 +161,8 @@ func (r *WeightsAndBiasesV2Reconciler) Reconcile(ctx context.Context, req ctrl.R
 		return ctrlState.ReconcilerResult()
 	}
 
+	/////////////////////////
+	// Clickhouse
 	if wandb.Spec.Size == apiv2.WBSizeDev {
 		ctrlState = r.handleClickHouse(ctx, wandb, req)
 	} else {
@@ -163,38 +177,6 @@ func (r *WeightsAndBiasesV2Reconciler) Reconcile(ctx context.Context, req ctrl.R
 	}
 
 	return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
-}
-
-func (r *WeightsAndBiasesV2Reconciler) handleDatabase(
-	ctx context.Context, wandb *apiv2.WeightsAndBiases, req ctrl.Request,
-) ctrlqueue.CtrlState {
-	log := ctrllog.FromContext(ctx)
-
-	if !wandb.Spec.Database.Enabled {
-		log.Info("Database not enabled, skipping")
-		return ctrlqueue.CtrlContinue()
-	}
-
-	dbType := wandb.Spec.Database.Type
-	if dbType == "" {
-		dbType = apiv2.WBDatabaseTypePercona
-		log.Info("Database type not specified, defaulting to Percona")
-	}
-
-	switch dbType {
-	case apiv2.WBDatabaseTypePercona:
-		if wandb.Spec.Size == apiv2.WBSizeDev {
-			log.Info("Handling Percona XtraDB Cluster database (dev)")
-			return r.handlePerconaMysql(ctx, wandb, req)
-		} else {
-			log.Info("Handling Percona XtraDB Cluster database (HA)")
-			return r.handlePerconaMysqlHA(ctx, wandb, req)
-		}
-
-	default:
-		log.Error(nil, "Unknown database type", "type", dbType)
-		return ctrlqueue.CtrlError(errors.New("unknown database type: " + string(dbType)))
-	}
 }
 
 func (r *WeightsAndBiasesV2Reconciler) inferState(
