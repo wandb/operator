@@ -10,8 +10,8 @@ const (
 	Redis      infraName = "redis"
 	MySQL      infraName = "mysql"
 	Kafka      infraName = "kafka"
+	Minio      infraName = "minio"
 	Clickhouse infraName = "clickhouse"
-	ObjStorage infraName = "object_storage"
 )
 
 type Results struct {
@@ -71,4 +71,12 @@ func (r *Results) getMySQLErrors() []MySQLInfraError {
 
 func (r *Results) getMySQLStatusDetails() []MySQLStatusDetail {
 	return utils.FilterMapFunc(r.StatusList, func(s InfraStatus) (MySQLStatusDetail, bool) { return s.ToMySQLStatusDetail() })
+}
+
+func (r *Results) getMinioErrors() []MinioInfraError {
+	return utils.FilterMapFunc(r.ErrorList, func(err error) (MinioInfraError, bool) { return ToMinioInfraError(err) })
+}
+
+func (r *Results) getMinioStatusDetails() []MinioStatusDetail {
+	return utils.FilterMapFunc(r.StatusList, func(s InfraStatus) (MinioStatusDetail, bool) { return s.ToMinioStatusDetail() })
 }

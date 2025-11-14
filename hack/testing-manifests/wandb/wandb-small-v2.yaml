@@ -16,12 +16,10 @@ spec:
     replicas: 3
     backup:
       enabled: false
-  objStorage:
+  minio:
     enabled: true
     storageSize: 10Gi
     replicas: 3
-    backup:
-      enabled: false
   clickhouse:
     enabled: true
     storageSize: 10Gi

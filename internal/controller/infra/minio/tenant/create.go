@@ -1,0 +1,64 @@
+package tenant
+
+import (
+	"context"
+	"fmt"
+
+	miniov2 "github.com/wandb/operator/api/minio-operator-vendored/minio.min.io/v2"
+	"github.com/wandb/operator/internal/model"
+	corev1 "k8s.io/api/core/v1"
+	ctrl "sigs.k8s.io/controller-runtime"
+)
+
+func (a *minioTenant) createSecret(
+	ctx context.Context, desiredSecret *corev1.Secret,
+) *model.Results {
+	log := ctrl.LoggerFrom(ctx)
+	results := model.InitResults()
+
+	if a.configSecret != nil {
+		return results
+	}
+
+	if err := a.client.Create(ctx, desiredSecret); err != nil {
+		log.Error(err, "Failed to create config secret")
+		results.AddErrors(model.NewMinioError(
+			model.MinioErrFailedToCreate,
+			fmt.Sprintf("failed to create config secret: %v", err),
+		))
+		return results
+	}
+
+	log.Info("Created Minio config secret", "secret", desiredSecret.Name)
+	return results
+}
+
+func (a *minioTenant) createTenant(
+	ctx context.Context, desiredTenant *miniov2.Tenant,
+) *model.Results {
+	log := ctrl.LoggerFrom(ctx)
+	results := model.InitResults()
+
+	if a.tenant != nil {
+		msg := "cannot create Tenant CR when it already exists"
+		err := model.NewMinioError(model.MinioErrFailedToCreate, msg)
+		log.Error(err, msg)
+		results.AddErrors(err)
+		return results
+	}
+
+	if err := a.client.Create(ctx, desiredTenant); err != nil {
+		log.Error(err, "Failed to create Tenant CR")
+		results.AddErrors(model.NewMinioError(
+			model.MinioErrFailedToCreate,
+			fmt.Sprintf("failed to create Tenant CR: %v", err),
+		))
+		return results
+	}
+
+	results.AddStatuses(
+		model.NewMinioStatus(model.MinioCreated, fmt.Sprintf("Created Tenant CR: %s", TenantName)),
+	)
+
+	return results
+}

@@ -58,7 +58,7 @@ type wandbMinioDoReconcile interface {
 }
 
 func minioNamespacedName(wandb *apiv2.WeightsAndBiases) types.NamespacedName {
-	namespace := wandb.Spec.ObjStorage.Namespace
+	namespace := wandb.Spec.Minio.Namespace
 	if namespace == "" {
 		namespace = wandb.Namespace
 	}
@@ -78,7 +78,7 @@ func (r *WeightsAndBiasesV2Reconciler) handleMinio(
 	log := ctrl.LoggerFrom(ctx)
 	namespacedName := minioNamespacedName(wandb)
 
-	if !wandb.Spec.ObjStorage.Enabled {
+	if !wandb.Spec.Minio.Enabled {
 		log.Info("ObjStorage not enabled, skipping")
 		return ctrlqueue.CtrlContinue()
 	}
@@ -160,13 +160,13 @@ func getDesiredMinio(
 		secret:          nil,
 	}
 
-	if !wandb.Spec.ObjStorage.Enabled {
+	if !wandb.Spec.Minio.Enabled {
 		return result, nil
 	}
 
 	result.installed = true
 
-	storageSize := wandb.Spec.ObjStorage.StorageSize
+	storageSize := wandb.Spec.Minio.StorageSize
 	if storageSize == "" {
 		storageSize = "10Gi"
 	}
@@ -176,7 +176,7 @@ func getDesiredMinio(
 		return result, errors.New("invalid storage size: " + storageSize)
 	}
 
-	replicas := wandb.Spec.ObjStorage.Replicas
+	replicas := wandb.Spec.Minio.Replicas
 	if replicas == 0 {
 		replicas = 1
 	}
@@ -217,7 +217,7 @@ func getDesiredMinio(
 		},
 	}
 
-	wandbBackupSpec := wandb.Spec.ObjStorage.Backup
+	wandbBackupSpec := wandb.Spec.Minio.Backup
 	if wandbBackupSpec.Enabled {
 		if wandbBackupSpec.StorageType != apiv2.WBBackupStorageTypeFilesystem {
 			return result, errors.New("only filesystem backup storage type is supported for MinIO")
@@ -284,8 +284,8 @@ func computeMinioReconcileDrift(
 		}, nil
 	}
 
-	if actualMinio.GetStatus() != string(wandb.Status.ObjStorageStatus.State) ||
-		actualMinio.IsReady() != wandb.Status.ObjStorageStatus.Ready {
+	if actualMinio.GetStatus() != string(wandb.Status.MinioStatus.State) ||
+		actualMinio.IsReady() != wandb.Status.MinioStatus.Ready {
 		return &wandbMinioStatusUpdate{
 			wandb:  wandb,
 			status: actualMinio.GetStatus(),
@@ -353,7 +353,7 @@ export MINIO_BROWSER="on"`,
 	}
 
 	wandb.Status.State = apiv2.WBStateUpdating
-	wandb.Status.ObjStorageStatus.State = "pending"
+	wandb.Status.MinioStatus.State = "pending"
 	if err = r.Status().Update(ctx, wandb); err != nil {
 		log.Error(err, "Failed to update status after creating MinIO Tenant")
 		return ctrlqueue.CtrlError(err)
@@ -396,8 +396,8 @@ func (s *wandbMinioStatusUpdate) Execute(
 ) ctrlqueue.CtrlState {
 	log := ctrl.LoggerFrom(ctx)
 	log.Info("Updating MinIO status", "status", s.status, "ready", s.ready)
-	s.wandb.Status.ObjStorageStatus.State = apiv2.WBStateUpdating
-	s.wandb.Status.ObjStorageStatus.Ready = s.ready
+	s.wandb.Status.MinioStatus.State = apiv2.WBStateUpdating
+	s.wandb.Status.MinioStatus.Ready = s.ready
 	if err := r.Status().Update(ctx, s.wandb); err != nil {
 		log.Error(err, "Failed to update MinIO status")
 		return ctrlqueue.CtrlError(err)
@@ -411,7 +411,7 @@ func (w *wandbMinioWrapper) maybeHandleDeletion(
 	log := ctrllog.FromContext(ctx)
 
 	var deletionPaused = wandb.Status.State == apiv2.WBStateOffline
-	var backupEnabled = wandb.Spec.ObjStorage.Backup.Enabled
+	var backupEnabled = wandb.Spec.Minio.Backup.Enabled
 	var flaggedForDeletion = !wandb.ObjectMeta.DeletionTimestamp.IsZero()
 	var hasMinioFinalizer = ctrlqueue.ContainsString(wandb.GetFinalizers(), minioFinalizer)
 
@@ -455,11 +455,11 @@ func (w *wandbMinioWrapper) maybeHandleDeletion(
 			return ctrlqueue.CtrlDone(ctrlqueue.PackageScope)
 		}
 
-		if wandb.Status.ObjStorageStatus.BackupStatus.State == "InProgress" {
-			log.Info("Backup in progress, requeuing", "backup", wandb.Status.ObjStorageStatus.BackupStatus.BackupName)
+		if wandb.Status.MinioStatus.BackupStatus.State == "InProgress" {
+			log.Info("Backup in progress, requeuing", "backup", wandb.Status.MinioStatus.BackupStatus.BackupName)
 			if wandb.Status.State != apiv2.WBStateDeleting {
 				wandb.Status.State = apiv2.WBStateDeleting
-				wandb.Status.ObjStorageStatus.State = "stopping"
+				wandb.Status.MinioStatus.State = "stopping"
 				if err := reconciler.Status().Update(ctx, wandb); err != nil {
 					log.Error(err, "Failed to update status while backup in progress")
 					return ctrlqueue.CtrlError(err)
@@ -496,19 +496,19 @@ func (w *wandbMinioWrapper) handleMinioBackup(
 		return nil
 	}
 
-	if !wandb.Spec.ObjStorage.Enabled {
+	if !wandb.Spec.Minio.Enabled {
 		log.Info("ObjStorage not enabled, skipping backup")
 		return nil
 	}
 
-	if !wandb.Spec.ObjStorage.Backup.Enabled {
+	if !wandb.Spec.Minio.Backup.Enabled {
 		log.Info("MinIO backup not enabled, skipping backup")
 		return nil
 	}
 
 	log.Info("Executing MinIO backup before deletion")
 
-	storageName := wandb.Spec.ObjStorage.Backup.StorageName
+	storageName := wandb.Spec.Minio.Backup.StorageName
 	if storageName == "" {
 		storageName = "default-backup"
 	}
@@ -518,20 +518,20 @@ func (w *wandbMinioWrapper) handleMinioBackup(
 		TenantName:     w.obj.GetName(),
 		Namespace:      w.obj.Namespace,
 		StorageName:    storageName,
-		TimeoutSeconds: wandb.Spec.ObjStorage.Backup.TimeoutSeconds,
+		TimeoutSeconds: wandb.Spec.Minio.Backup.TimeoutSeconds,
 	}
 
 	currentBackupState := &BackupState{
-		BackupName:  wandb.Status.ObjStorageStatus.BackupStatus.BackupName,
-		StartedAt:   wandb.Status.ObjStorageStatus.BackupStatus.StartedAt,
-		CompletedAt: wandb.Status.ObjStorageStatus.BackupStatus.CompletedAt,
-		State:       wandb.Status.ObjStorageStatus.BackupStatus.State,
+		BackupName:  wandb.Status.MinioStatus.BackupStatus.BackupName,
+		StartedAt:   wandb.Status.MinioStatus.BackupStatus.StartedAt,
+		CompletedAt: wandb.Status.MinioStatus.BackupStatus.CompletedAt,
+		State:       wandb.Status.MinioStatus.BackupStatus.State,
 	}
 
 	newState, result, err := executor.EnsureMinioBackup(ctx, currentBackupState)
 
 	if newState != nil {
-		wandb.Status.ObjStorageStatus.BackupStatus = apiv2.WBBackupStatus{
+		wandb.Status.MinioStatus.BackupStatus = apiv2.WBBackupStatus{
 			BackupName:     newState.BackupName,
 			StartedAt:      newState.StartedAt,
 			CompletedAt:    newState.CompletedAt,
@@ -541,8 +541,8 @@ func (w *wandbMinioWrapper) handleMinioBackup(
 		}
 
 		if result.InProgress {
-			wandb.Status.ObjStorageStatus.BackupStatus.State = "InProgress"
-			wandb.Status.ObjStorageStatus.BackupStatus.RequeueAfter = int64(result.RequeueAfter.Seconds())
+			wandb.Status.MinioStatus.BackupStatus.State = "InProgress"
+			wandb.Status.MinioStatus.BackupStatus.RequeueAfter = int64(result.RequeueAfter.Seconds())
 		}
 
 		if statusErr := reconciler.Client.Status().Update(ctx, wandb); statusErr != nil {
@@ -570,7 +570,7 @@ func (r *WeightsAndBiasesV2Reconciler) updateMinioBackupStatus(ctx context.Conte
 	log := ctrl.LoggerFrom(ctx)
 	now := metav1.Now()
 
-	wandb.Status.ObjStorageStatus.BackupStatus = apiv2.WBBackupStatus{
+	wandb.Status.MinioStatus.BackupStatus = apiv2.WBBackupStatus{
 		LastBackupTime: &now,
 		State:          state,
 		Message:        message,
@@ -651,7 +651,7 @@ func (d *wandbMinioConnInfoDelete) Execute(ctx context.Context, r *WeightsAndBia
 	log := ctrl.LoggerFrom(ctx)
 	log.Info("Deleting MinIO connection secret")
 
-	namespace := d.wandb.Spec.ObjStorage.Namespace
+	namespace := d.wandb.Spec.Minio.Namespace
 	if namespace == "" {
 		namespace = d.wandb.Namespace
 	}

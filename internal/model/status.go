@@ -47,6 +47,6 @@ func (i InfraStatus) IsClickhouseStatus() bool {
 	return i.infraName == Clickhouse
 }
 
-func (i InfraStatus) IsObjStorageStatus() bool {
-	return i.infraName == ObjStorage
+func (i InfraStatus) IsMinioStatus() bool {
+	return i.infraName == Minio
 }

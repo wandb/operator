@@ -33,7 +33,7 @@ import (
 //+kubebuilder:printcolumn:name="MySQL",type=string,JSONPath=`.status.mysqlStatus.state`
 //+kubebuilder:printcolumn:name="Redis",type=string,JSONPath=`.status.redisStatus.state`
 //+kubebuilder:printcolumn:name="Kafka",type=string,JSONPath=`.status.kafkaStatus.state`
-//+kubebuilder:printcolumn:name="ObjStorage",type=string,JSONPath=`.status.objStorageStatus.state`
+//+kubebuilder:printcolumn:name="Minio",type=string,JSONPath=`.status.minioStatus.state`
 //+kubebuilder:printcolumn:name="ClickHouse",type=string,JSONPath=`.status.clickhouseStatus.state`
 //+kubebuilder:webhook:path=/validate-apps-wandb-com-v2-weightsandbiases,mutating=false,failurePolicy=fail,sideEffects=None,groups=apps.wandb.com,resources=weightsandbiases,verbs=create;update;delete,versions=v2,name=vweightsandbiases.wandb.com,admissionReviewVersions=v1
 
@@ -77,7 +77,7 @@ type WeightsAndBiasesSpec struct {
 	MySQL      WBMySQLSpec      `json:"mysql,omitempty"`
 	Redis      WBRedisSpec      `json:"redis,omitempty"`
 	Kafka      WBKafkaSpec      `json:"kafka,omitempty"`
-	ObjStorage WBObjStorageSpec `json:"objStorage,omitempty"`
+	Minio      WBMinioSpec      `json:"minio,omitempty"`
 	ClickHouse WBClickHouseSpec `json:"clickhouse,omitempty"`
 }
 
@@ -143,17 +143,23 @@ type WBKafkaBackupSpec struct {
 	TimeoutSeconds int                     `json:"timeoutSeconds,omitempty"`
 }
 
-type WBObjStorageSpec struct {
-	Enabled     bool                   `json:"enabled"`
-	StorageSize string                 `json:"storageSize,omitempty"`
-	Replicas    int32                  `json:"replicas,omitempty"`
-	Backup      WBObjStorageBackupSpec `json:"backup,omitempty"`
-	// Namespace is the target namespace for object storage resources.
+type WBMinioSpec struct {
+	Enabled     bool           `json:"enabled"`
+	StorageSize string         `json:"storageSize,omitempty"`
+	Replicas    int32          `json:"replicas,omitempty"`
+	Config      *WBMinioConfig `json:"config,omitempty"`
+	// Deprecated: Backup is not implemented in the refactored Minio code
+	Backup WBMinioBackupSpec `json:"backup,omitempty"`
+	// Namespace is the target namespace for Minio resources.
 	// If not specified, defaults to the WeightsAndBiases resource's namespace.
 	Namespace string `json:"namespace,omitempty"`
 }
 
-type WBObjStorageBackupSpec struct {
+type WBMinioConfig struct {
+	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+}
+
+type WBMinioBackupSpec struct {
 	Enabled        bool                    `json:"enabled,omitempty"`
 	StorageName    string                  `json:"storageName,omitempty"`
 	StorageType    WBBackupStorageType     `json:"storageType,omitempty"`
@@ -215,7 +221,7 @@ type WeightsAndBiasesStatus struct {
 	MySQLStatus        WBMySQLStatus      `json:"mysqlStatus,omitempty"`
 	RedisStatus        WBRedisStatus      `json:"redisStatus,omitempty"`
 	KafkaStatus        WBKafkaStatus      `json:"kafkaStatus,omitempty"`
-	ObjStorageStatus   WBObjStorageStatus `json:"objStorageStatus,omitempty"`
+	MinioStatus        WBMinioStatus      `json:"minioStatus,omitempty"`
 	ClickHouseStatus   WBClickHouseStatus `json:"clickhouseStatus,omitempty"`
 	ObservedGeneration int64              `json:"observedGeneration"`
 }
@@ -320,12 +326,20 @@ type WBKafkaStatus struct {
 	BackupStatus   WBBackupStatus    `json:"backupStatus,omitempty"`
 }
 
-type WBObjStorageStatus struct {
-	Ready          bool             `json:"ready"`
-	State          WBStateType      `json:"state,omitempty" default:"Unknown"`
-	Details        []WBStatusDetail `json:"details,omitempty"`
-	LastReconciled metav1.Time      `json:"lastReconciled,omitempty"`
-	BackupStatus   WBBackupStatus   `json:"backupStatus,omitempty"`
+type WBMinioStatus struct {
+	Ready          bool              `json:"ready"`
+	State          WBStateType       `json:"state,omitempty" default:"Unknown"`
+	Details        []WBStatusDetail  `json:"details,omitempty"`
+	LastReconciled metav1.Time       `json:"lastReconciled,omitempty"`
+	Connection     WBMinioConnection `json:"connection,omitempty"`
+	// Deprecated: BackupStatus is not implemented in the refactored Minio code
+	BackupStatus WBBackupStatus `json:"backupStatus,omitempty"`
+}
+
+type WBMinioConnection struct {
+	MinioHost      string `json:"MINIO_HOST,omitempty"`
+	MinioPort      string `json:"MINIO_PORT,omitempty"`
+	MinioAccessKey string `json:"MINIO_ACCESS_KEY,omitempty"`
 }
 
 type WBClickHouseStatus struct {

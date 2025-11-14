@@ -24,7 +24,7 @@ func (r *WeightsAndBiasesV2Reconciler) handleMinioHA(
 	log := ctrl.LoggerFrom(ctx)
 	namespacedName := minioNamespacedName(wandb)
 
-	if !wandb.Spec.ObjStorage.Enabled {
+	if !wandb.Spec.Minio.Enabled {
 		log.Info("ObjStorage not enabled, skipping")
 		return ctrlqueue.CtrlContinue()
 	}
@@ -69,13 +69,13 @@ func getDesiredMinioHA(
 		secret:          nil,
 	}
 
-	if !wandb.Spec.ObjStorage.Enabled {
+	if !wandb.Spec.Minio.Enabled {
 		return result, nil
 	}
 
 	result.installed = true
 
-	storageSize := wandb.Spec.ObjStorage.StorageSize
+	storageSize := wandb.Spec.Minio.StorageSize
 	if storageSize == "" {
 		storageSize = "10Gi"
 	}
@@ -123,7 +123,7 @@ func getDesiredMinioHA(
 		},
 	}
 
-	wandbBackupSpec := wandb.Spec.ObjStorage.Backup
+	wandbBackupSpec := wandb.Spec.Minio.Backup
 	if wandbBackupSpec.Enabled {
 		if wandbBackupSpec.StorageType != apiv2.WBBackupStorageTypeFilesystem {
 			return result, errors.New("only filesystem backup storage type is supported for MinIO")

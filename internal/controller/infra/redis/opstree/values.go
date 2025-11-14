@@ -6,7 +6,7 @@ const (
 	namePrefix       = "wandb-redis"
 	standaloneName   = "wandb-redis"
 	replicationName  = "wandb-redis"
-	sentinelName     = "wandb-redis-sentinel"
+	sentinelName     = "wandb-redis"
 	standaloneImage  = "quay.io/opstree/redis:v7.0.15"
 	replicationImage = "quay.io/opstree/redis:v7.0.15"
 	sentinelImage    = "quay.io/opstree/redis-sentinel:v7.0.12"
