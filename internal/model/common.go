@@ -53,10 +53,6 @@ func (r *Results) getRedisErrors() []RedisInfraError {
 	return utils.FilterMapFunc(r.ErrorList, func(err error) (RedisInfraError, bool) { return ToRedisInfraError(err) })
 }
 
-func (r *Results) getInfraStatuses(infraName infraName) []InfraStatus {
-	return utils.FilterFunc(r.StatusList, func(i InfraStatus) bool { return i.infraName == infraName })
-}
-
 func (r *Results) getRedisStatusDetails() []RedisStatusDetail {
 	return utils.FilterMapFunc(r.StatusList, func(s InfraStatus) (RedisStatusDetail, bool) { return s.ToRedisStatusDetail() })
 }
