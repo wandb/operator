@@ -569,6 +569,13 @@ spec:
                       state:
                         type: string
                     type: object
+                  connection:
+                    properties:
+                      KAFKA_HOST:
+                        type: string
+                      KAFKA_PORT:
+                        type: string
+                    type: object
                   details:
                     items:
                       properties:

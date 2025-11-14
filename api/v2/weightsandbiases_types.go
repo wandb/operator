@@ -294,12 +294,18 @@ type WBRedisConnection struct {
 	RedisMasterName   string `json:"REDIS_MASTER_NAME,omitempty"`
 }
 
+type WBKafkaConnection struct {
+	KafkaHost string `json:"KAFKA_HOST,omitempty"`
+	KafkaPort string `json:"KAFKA_PORT,omitempty"`
+}
+
 type WBKafkaStatus struct {
-	Ready          bool             `json:"ready"`
-	State          WBStateType      `json:"state,omitempty" default:"Unknown"`
-	Details        []WBStatusDetail `json:"details,omitempty"`
-	LastReconciled metav1.Time      `json:"lastReconciled,omitempty"`
-	BackupStatus   WBBackupStatus   `json:"backupStatus,omitempty"`
+	Ready          bool              `json:"ready"`
+	State          WBStateType       `json:"state,omitempty" default:"Unknown"`
+	Details        []WBStatusDetail  `json:"details,omitempty"`
+	LastReconciled metav1.Time       `json:"lastReconciled,omitempty"`
+	Connection     WBKafkaConnection `json:"connection,omitempty"`
+	BackupStatus   WBBackupStatus    `json:"backupStatus,omitempty"`
 }
 
 type WBObjStorageStatus struct {
