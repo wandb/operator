@@ -111,7 +111,8 @@ func (r *WeightsAndBiasesV2Reconciler) Reconcile(ctx context.Context, req ctrl.R
 
 	infraConfig := model.BuildInfraConfig().
 		AddRedisSpec(&(wandb.Spec.Redis), wandb.Spec.Size).
-		AddKafkaSpec(&(wandb.Spec.Kafka), wandb.Spec.Size)
+		AddKafkaSpec(&(wandb.Spec.Kafka), wandb.Spec.Size).
+		AddMySQLSpec(&(wandb.Spec.MySQL), wandb.Spec.Size)
 
 	/////////////////////////
 	// Redis
@@ -131,16 +132,11 @@ func (r *WeightsAndBiasesV2Reconciler) Reconcile(ctx context.Context, req ctrl.R
 
 	/////////////////////////
 	// MySQL
-	// TODO(MYSQL_REFACTOR): Temporarily disabled during Phase 0 refactor
-	// Will be replaced with r.reconcileMySQL() in Phase 4
-	//if wandb.Spec.Size == apiv2.WBSizeDev {
-	//	ctrlState = r.handlePerconaMysql(ctx, wandb, req)
-	//} else {
-	//	ctrlState = r.handlePerconaMysqlHA(ctx, wandb, req)
-	//}
-	//if ctrlState.ShouldExit(ctrlqueue.ReconcilerScope) {
-	//	return ctrlState.ReconcilerResult()
-	//}
+	result = r.reconcileMySQL(ctx, infraConfig, wandb)
+	criticalErrors = result.GetCriticalErrors()
+	if len(criticalErrors) > 0 {
+		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, criticalErrors[0]
+	}
 
 	/////////////////////////
 	// Kafka

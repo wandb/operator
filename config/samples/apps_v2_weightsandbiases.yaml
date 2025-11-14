@@ -4,20 +4,9 @@ metadata:
   name: wandb-dev-v2
 spec:
   size: dev
-  database:
+  mysql:
     enabled: true
-    type: percona
     storageSize: 5Gi
-    backup:
-      enabled: true
-      storageName: default-backup
-      storageType: filesystem
-      filesystem:
-        storageSize: 5Gi
-        storageClassName: standard
-        accessModes:
-          - ReadWriteOnce
-      timeoutSeconds: 600
   redis:
     enabled: true
     storageSize: 1Gi
