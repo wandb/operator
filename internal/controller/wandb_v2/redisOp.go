@@ -1,7 +1,5 @@
 package wandb_v2
 
-/*
-
 import (
 	"context"
 	"errors"
@@ -10,7 +8,6 @@ import (
 	redisv1beta2 "github.com/wandb/operator/api/redis-operator-vendored/redis/v1beta2"
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/ctrlqueue"
-	common2 "github.com/wandb/operator/internal/controller/wandb_v2/model"
 	corev1 "k8s.io/api/core/v1"
 	machErrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -42,7 +39,7 @@ func (w *wandbRedisWrapper) GetStatus() string {
 }
 
 type wandbRedisDoReconcile interface {
-	Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) ctrlqueue.CtrlScope
+	Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) ctrlqueue.CtrlState
 }
 
 func redisNamespacedName(wandb *apiv2.WeightsAndBiases) types.NamespacedName {
@@ -244,7 +241,7 @@ func computeRedisReconcileDrift(
 		}, nil
 	}
 
-	if actualRedis.GetStatus() != wandb.Status.RedisStatus.State ||
+	if actualRedis.GetStatus() != string(wandb.Status.RedisStatus.State) ||
 		actualRedis.IsReady() != wandb.Status.RedisStatus.Ready {
 		return &wandbRedisStatusUpdate{
 			wandb:  wandb,
@@ -274,7 +271,6 @@ func (c *wandbRedisCreate) Execute(ctx context.Context, r *WeightsAndBiasesV2Rec
 		return ctrlqueue.CtrlError(err)
 	}
 	wandb.Status.State = apiv2.WBStateUpdating
-	wandb.Status.Message = "Creating Redis"
 	wandb.Status.RedisStatus.State = "pending"
 	if err = r.Status().Update(ctx, wandb); err != nil {
 		log.Error(err, "Failed to update status after creating Redis")
@@ -298,7 +294,6 @@ func (d *wandbRedisDelete) Execute(ctx context.Context, r *WeightsAndBiasesV2Rec
 	}
 	wandb := d.wandb
 	wandb.Status.State = apiv2.WBStateUpdating
-	wandb.Status.Message = "Deleting Redis"
 	if err = r.Status().Update(ctx, wandb); err != nil {
 		log.Error(err, "Failed to update status after deleting Redis")
 		return ctrlqueue.CtrlError(err)
@@ -317,7 +312,7 @@ func (s *wandbRedisStatusUpdate) Execute(
 ) ctrlqueue.CtrlState {
 	log := ctrl.LoggerFrom(ctx)
 	log.Info("Updating Redis status", "status", s.status, "ready", s.ready)
-	s.wandb.Status.RedisStatus.State = s.status
+	s.wandb.Status.RedisStatus.State = apiv2.WBStateUpdating
 	s.wandb.Status.RedisStatus.Ready = s.ready
 	if err := r.Status().Update(ctx, s.wandb); err != nil {
 		log.Error(err, "Failed to update Redis status")
@@ -391,4 +386,3 @@ func (d *wandbRedisConnInfoDelete) Execute(ctx context.Context, r *WeightsAndBia
 	log.Info("Redis connection secret deleted successfully")
 	return ctrlqueue.CtrlDone(ctrlqueue.PackageScope)
 }
-*/

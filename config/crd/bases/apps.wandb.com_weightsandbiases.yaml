@@ -369,6 +369,8 @@ spec:
                     properties:
                       config:
                         properties:
+                          masterName:
+                            type: string
                           resources:
                             description: ResourceRequirements describes the compute
                               resource requirements.

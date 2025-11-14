@@ -117,7 +117,8 @@ type WBRedisSentinelSpec struct {
 }
 
 type WBRedisSentinelConfig struct {
-	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+	MasterName string                      `json:"masterName,omitempty"`
+	Resources  corev1.ResourceRequirements `json:"resources,omitempty"`
 }
 
 type WBKafkaSpec struct {

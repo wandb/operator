@@ -25,7 +25,7 @@ func (r *WeightsAndBiasesV2Reconciler) reconcileRedis(
 		return results
 	}
 
-	if actual, err = opstree.Initialize(ctx, r.Client, redisConfig, wandb); err != nil {
+	if actual, err = opstree.Initialize(ctx, r.Client, redisConfig, wandb, r.Scheme); err != nil {
 		results.AddErrors(err)
 		return results
 	}

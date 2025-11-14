@@ -96,7 +96,6 @@ func (r *WeightsAndBiasesV2Reconciler) Reconcile(ctx context.Context, req ctrl.R
 
 	var err error
 	var ctrlState ctrlqueue.CtrlState
-	var infraConfig model.InfraConfig
 
 	wandb := &apiv2.WeightsAndBiases{}
 	if err := r.Client.Get(ctx, req.NamespacedName, wandb); err != nil {
@@ -111,18 +110,25 @@ func (r *WeightsAndBiasesV2Reconciler) Reconcile(ctx context.Context, req ctrl.R
 		"Spec", wandb.Spec, "Name", wandb.Name, "UID", wandb.UID, "Generation", wandb.Generation,
 	)
 
-	infraConfig = model.BuildInfraConfig().
+	infraConfig := model.BuildInfraConfig().
 		AddRedisSpec(&(wandb.Spec.Redis), wandb.Spec.Size)
-
-	ctrlState = r.handleDatabase(ctx, wandb, req)
-	if ctrlState.ShouldExit(ctrlqueue.ReconcilerScope) {
-		return ctrlState.ReconcilerResult()
-	}
-
 	result := r.reconcileRedis(ctx, infraConfig, wandb)
 	criticalErrors := result.GetCriticalErrors()
 	if len(criticalErrors) > 0 {
 		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, result.GetCriticalErrors()[0]
+	}
+	//if wandb.Spec.Size == apiv2.WBSizeDev {
+	//	ctrlState = r.handleRedis(ctx, wandb, req)
+	//} else {
+	//	ctrlState = r.handleRedisHA(ctx, wandb, req)
+	//}
+	//if ctrlState.ShouldExit(ctrlqueue.ReconcilerScope) {
+	//	return ctrlState.ReconcilerResult()
+	//}
+
+	ctrlState = r.handleDatabase(ctx, wandb, req)
+	if ctrlState.ShouldExit(ctrlqueue.ReconcilerScope) {
+		return ctrlState.ReconcilerResult()
 	}
 
 	if wandb.Spec.Size == apiv2.WBSizeDev {

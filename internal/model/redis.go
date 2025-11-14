@@ -44,6 +44,7 @@ func (i *InfraConfigBuilder) GetRedisConfig() (RedisConfig, error) {
 	if i.mergedRedis != nil {
 		details.Enabled = i.mergedRedis.Enabled
 		details.Namespace = i.mergedRedis.Namespace
+		details.StorageSize = resource.MustParse(i.mergedRedis.StorageSize)
 		if i.mergedRedis.Config != nil {
 			details.Requests = i.mergedRedis.Config.Resources.Requests
 			details.Limits = i.mergedRedis.Config.Resources.Limits
@@ -52,6 +53,7 @@ func (i *InfraConfigBuilder) GetRedisConfig() (RedisConfig, error) {
 			details.Sentinel.Enabled = i.mergedRedis.Sentinel.Enabled
 			details.Sentinel.ReplicaCount = defaults.ReplicaSentinelCount
 			if i.mergedRedis.Sentinel.Config != nil {
+				details.Sentinel.MasterGroupName = i.mergedRedis.Sentinel.Config.MasterName
 				details.Sentinel.Requests = i.mergedRedis.Sentinel.Config.Resources.Requests
 				details.Sentinel.Limits = i.mergedRedis.Sentinel.Config.Resources.Limits
 			}

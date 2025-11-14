@@ -39,7 +39,8 @@ func Redis(profile v2.WBSize) (v2.WBRedisSpec, error) {
 		return spec, err
 	}
 	spec = v2.WBRedisSpec{
-		Enabled: true,
+		Enabled:   true,
+		Namespace: DefaultNamespace,
 		Config: &v2.WBRedisConfig{
 			Resources: v1.ResourceRequirements{
 				Requests: v1.ResourceList{},
@@ -76,7 +77,7 @@ func Redis(profile v2.WBSize) (v2.WBRedisSpec, error) {
 	}
 
 	if !storageRequest.IsZero() {
-		spec.Config.Resources.Requests[v1.ResourceStorage] = storageRequest
+		spec.StorageSize = storageRequest.String()
 	}
 	if !cpuRequest.IsZero() {
 		spec.Config.Resources.Requests[v1.ResourceCPU] = cpuRequest
@@ -120,6 +121,7 @@ func _wbRedisSentinelSpecDefaults(profile v2.WBSize) (*v2.WBRedisSentinelSpec, e
 	}
 
 	sentinelSpec := v2.WBRedisSentinelSpec{
+		Enabled: true,
 		Config: &v2.WBRedisSentinelConfig{
 			Resources: v1.ResourceRequirements{
 				Requests: v1.ResourceList{},

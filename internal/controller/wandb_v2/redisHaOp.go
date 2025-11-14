@@ -1,6 +1,5 @@
 package wandb_v2
 
-/*
 import (
 	"context"
 	"errors"
@@ -10,7 +9,6 @@ import (
 	redissentinelv1beta2 "github.com/wandb/operator/api/redis-operator-vendored/redissentinel/v1beta2"
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/ctrlqueue"
-	common2 "github.com/wandb/operator/internal/controller/wandb_v2/model"
 	corev1 "k8s.io/api/core/v1"
 	machErrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -315,7 +313,7 @@ func computeRedisHAReconcileDrift(
 		}, nil
 	}
 
-	if actual.GetStatus() != wandb.Status.RedisStatus.State ||
+	if actual.GetStatus() != string(wandb.Status.RedisStatus.State) ||
 		actual.IsReady() != wandb.Status.RedisStatus.Ready {
 		return &wandbRedisHAStatusUpdate{
 			wandb:  wandb,
@@ -345,7 +343,6 @@ func (c *wandbRedisHAReplicationCreate) Execute(ctx context.Context, r *WeightsA
 		return ctrlqueue.CtrlError(err)
 	}
 	wandb.Status.State = apiv2.WBStateUpdating
-	wandb.Status.Message = "Creating Redis Replication"
 	wandb.Status.RedisStatus.State = "pending"
 	if err := r.Status().Update(ctx, wandb); err != nil {
 		log.Error(err, "Failed to update status after creating Redis Replication")
@@ -372,7 +369,6 @@ func (c *wandbRedisHASentinelCreate) Execute(ctx context.Context, r *WeightsAndB
 		return ctrlqueue.CtrlError(err)
 	}
 	wandb.Status.State = apiv2.WBStateUpdating
-	wandb.Status.Message = "Creating Redis Sentinel"
 	if err := r.Status().Update(ctx, wandb); err != nil {
 		log.Error(err, "Failed to update status after creating Redis Sentinel")
 		return ctrlqueue.CtrlError(err)
@@ -394,7 +390,6 @@ func (d *wandbRedisHAReplicationDelete) Execute(ctx context.Context, r *WeightsA
 	}
 	wandb := d.wandb
 	wandb.Status.State = apiv2.WBStateUpdating
-	wandb.Status.Message = "Deleting Redis Replication"
 	if err := r.Status().Update(ctx, wandb); err != nil {
 		log.Error(err, "Failed to update status after deleting Redis Replication")
 		return ctrlqueue.CtrlError(err)
@@ -416,7 +411,6 @@ func (d *wandbRedisHASentinelDelete) Execute(ctx context.Context, r *WeightsAndB
 	}
 	wandb := d.wandb
 	wandb.Status.State = apiv2.WBStateUpdating
-	wandb.Status.Message = "Deleting Redis Sentinel"
 	if err := r.Status().Update(ctx, wandb); err != nil {
 		log.Error(err, "Failed to update status after deleting Redis Sentinel")
 		return ctrlqueue.CtrlError(err)
@@ -435,7 +429,7 @@ func (s *wandbRedisHAStatusUpdate) Execute(
 ) ctrlqueue.CtrlState {
 	log := ctrl.LoggerFrom(ctx)
 	log.Info("Updating Redis HA status", "status", s.status, "ready", s.ready)
-	s.wandb.Status.RedisStatus.State = s.status
+	s.wandb.Status.RedisStatus.State = apiv2.WBStateUpdating
 	s.wandb.Status.RedisStatus.Ready = s.ready
 	if err := r.Status().Update(ctx, s.wandb); err != nil {
 		log.Error(err, "Failed to update Redis HA status")
@@ -509,4 +503,3 @@ func (d *wandbRedisHAConnInfoDelete) Execute(ctx context.Context, r *WeightsAndB
 	log.Info("Redis HA connection secret deleted successfully")
 	return ctrlqueue.CtrlDone(ctrlqueue.PackageScope)
 }
-*/

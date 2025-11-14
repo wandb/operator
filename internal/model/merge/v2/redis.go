@@ -32,6 +32,10 @@ func Redis(actual v2.WBRedisSpec, defaultValues v2.WBRedisSpec) (v2.WBRedisSpec,
 				actual.Sentinel.Config.Resources,
 				defaultValues.Sentinel.Config.Resources,
 			)
+			sentinelConfig.MasterName = merge.Coalesce(
+				actual.Sentinel.Config.MasterName,
+				defaultValues.Sentinel.Config.MasterName,
+			)
 			redisSentinel.Config = &sentinelConfig
 		}
 		redisSpec.Sentinel = &redisSentinel
@@ -51,7 +55,7 @@ func Redis(actual v2.WBRedisSpec, defaultValues v2.WBRedisSpec) (v2.WBRedisSpec,
 		redisSpec.Config = &redisConfig
 	}
 
-	redisSpec.StorageSize = merge.Coalesce(actual.StorageSize, defaultValues.StorageSize)
+	redisSpec.StorageSize = merge.CoalesceQuantity(actual.StorageSize, defaultValues.StorageSize)
 	redisSpec.Namespace = merge.Coalesce(actual.Namespace, defaultValues.Namespace)
 
 	///////////////////////////////////////////

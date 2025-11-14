@@ -129,4 +129,114 @@ var _ = Describe("Comparable", func() {
 			})
 		})
 	})
+
+	Describe("CoalesceQuantity", func() {
+		Context("with valid quantity strings", func() {
+			It("should return actual when actual is non-empty and valid", func() {
+				result := CoalesceQuantity("100Mi", "50Mi")
+				Expect(result).To(Equal("100Mi"))
+			})
+
+			It("should return default when actual is empty", func() {
+				result := CoalesceQuantity("", "50Mi")
+				Expect(result).To(Equal("50Mi"))
+			})
+
+			It("should return empty string when both are empty", func() {
+				result := CoalesceQuantity("", "")
+				Expect(result).To(Equal(""))
+			})
+
+			It("should handle CPU quantities", func() {
+				result := CoalesceQuantity("2", "1")
+				Expect(result).To(Equal("2"))
+			})
+
+			It("should handle millicpu quantities", func() {
+				result := CoalesceQuantity("500m", "250m")
+				Expect(result).To(Equal("500m"))
+			})
+
+			It("should handle various memory units", func() {
+				result := CoalesceQuantity("2Gi", "1Gi")
+				Expect(result).To(Equal("2Gi"))
+			})
+		})
+
+		Context("with zero value", func() {
+			It("should return default when actual is '0'", func() {
+				result := CoalesceQuantity("0", "100Mi")
+				Expect(result).To(Equal("100Mi"))
+			})
+
+			It("should return empty string when both are '0'", func() {
+				result := CoalesceQuantity("0", "0")
+				Expect(result).To(Equal(""))
+			})
+
+			It("should return empty string when actual is '0' and default is empty", func() {
+				result := CoalesceQuantity("0", "")
+				Expect(result).To(Equal(""))
+			})
+
+			It("should return empty string when actual is empty and default is '0'", func() {
+				result := CoalesceQuantity("", "0")
+				Expect(result).To(Equal(""))
+			})
+
+			It("should treat '0Mi' as zero and return default", func() {
+				result := CoalesceQuantity("0Mi", "50Mi")
+				Expect(result).To(Equal("50Mi"))
+			})
+
+			It("should treat '0Gi' as zero and return default", func() {
+				result := CoalesceQuantity("0Gi", "1Gi")
+				Expect(result).To(Equal("1Gi"))
+			})
+		})
+
+		Context("with invalid quantity strings", func() {
+			It("should return default when actual is invalid", func() {
+				result := CoalesceQuantity("invalid", "50Mi")
+				Expect(result).To(Equal("50Mi"))
+			})
+
+			It("should return empty string when both are invalid", func() {
+				result := CoalesceQuantity("invalid", "also-invalid")
+				Expect(result).To(Equal(""))
+			})
+
+			It("should return actual when actual is valid and default is invalid", func() {
+				result := CoalesceQuantity("100Mi", "invalid")
+				Expect(result).To(Equal("100Mi"))
+			})
+		})
+
+		Context("integration scenarios", func() {
+			It("should handle storage size specifications", func() {
+				result := CoalesceQuantity("10Gi", "5Gi")
+				Expect(result).To(Equal("10Gi"))
+			})
+
+			It("should provide fallback for missing storage size", func() {
+				result := CoalesceQuantity("", "5Gi")
+				Expect(result).To(Equal("5Gi"))
+			})
+
+			It("should handle mixed unit formats", func() {
+				result := CoalesceQuantity("1024Mi", "1Gi")
+				Expect(result).To(Equal("1Gi"))
+			})
+
+			It("should handle very large quantities", func() {
+				result := CoalesceQuantity("1Ti", "500Gi")
+				Expect(result).To(Equal("1Ti"))
+			})
+
+			It("should handle very small CPU quantities", func() {
+				result := CoalesceQuantity("100m", "50m")
+				Expect(result).To(Equal("100m"))
+			})
+		})
+	})
 })
