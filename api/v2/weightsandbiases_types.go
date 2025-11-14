@@ -25,18 +25,12 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-type WBDatabaseType string
-
-const (
-	WBDatabaseTypePercona WBDatabaseType = "percona"
-)
-
 //+kubebuilder:object:root=true
 //+kubebuilder:storageversion
 //+kubebuilder:subresource:status
 //+kubebuilder:resource:shortName=wandb
 //+kubebuilder:printcolumn:name="State",type=string,JSONPath=`.status.state`
-//+kubebuilder:printcolumn:name="Database",type=string,JSONPath=`.status.databaseStatus.state`
+//+kubebuilder:printcolumn:name="MySQL",type=string,JSONPath=`.status.mysqlStatus.state`
 //+kubebuilder:printcolumn:name="Redis",type=string,JSONPath=`.status.redisStatus.state`
 //+kubebuilder:printcolumn:name="Kafka",type=string,JSONPath=`.status.kafkaStatus.state`
 //+kubebuilder:printcolumn:name="ObjStorage",type=string,JSONPath=`.status.objStorageStatus.state`
@@ -80,21 +74,26 @@ type WeightsAndBiasesSpec struct {
 	// Size is akin to high-level environment info
 	Size WBSize `json:"size,omitempty"`
 
-	Database   WBDatabaseSpec   `json:"database,omitempty"`
+	MySQL      WBMySQLSpec      `json:"mysql,omitempty"`
 	Redis      WBRedisSpec      `json:"redis,omitempty"`
 	Kafka      WBKafkaSpec      `json:"kafka,omitempty"`
 	ObjStorage WBObjStorageSpec `json:"objStorage,omitempty"`
 	ClickHouse WBClickHouseSpec `json:"clickhouse,omitempty"`
 }
 
-type WBDatabaseSpec struct {
+type WBMySQLSpec struct {
 	Enabled     bool           `json:"enabled"`
-	Type        WBDatabaseType `json:"type,omitempty" default:"percona"`
 	StorageSize string         `json:"storageSize,omitempty"`
-	Backup      WBBackupSpec   `json:"backup,omitempty"`
-	// Namespace is the target namespace for database resources.
+	Config      *WBMySQLConfig `json:"config,omitempty"`
+	// Deprecated: Backup is not implemented in the refactored MySQL code
+	Backup WBBackupSpec `json:"backup,omitempty"`
+	// Namespace is the target namespace for MySQL resources.
 	// If not specified, defaults to the WeightsAndBiases resource's namespace.
 	Namespace string `json:"namespace,omitempty"`
+}
+
+type WBMySQLConfig struct {
+	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 }
 
 type WBRedisSpec struct {
@@ -213,7 +212,7 @@ type WBBackupFilesystemSpec struct {
 // WeightsAndBiasesStatus defines the observed state of WeightsAndBiases.
 type WeightsAndBiasesStatus struct {
 	State              WBStateType        `json:"state,omitempty"`
-	DatabaseStatus     WBDatabaseStatus   `json:"databaseStatus,omitempty"`
+	MySQLStatus        WBMySQLStatus      `json:"mysqlStatus,omitempty"`
 	RedisStatus        WBRedisStatus      `json:"redisStatus,omitempty"`
 	KafkaStatus        WBKafkaStatus      `json:"kafkaStatus,omitempty"`
 	ObjStorageStatus   WBObjStorageStatus `json:"objStorageStatus,omitempty"`
@@ -265,12 +264,20 @@ type WBStatusDetail struct {
 	Message string      `json:"message"`
 }
 
-type WBDatabaseStatus struct {
-	Ready          bool             `json:"ready"`
-	State          WBStateType      `json:"state,omitempty" default:"Unknown"`
-	Details        []WBStatusDetail `json:"details,omitempty"`
-	LastReconciled metav1.Time      `json:"lastReconciled,omitempty"`
-	BackupStatus   WBBackupStatus   `json:"backupStatus,omitempty"`
+type WBMySQLStatus struct {
+	Ready          bool              `json:"ready"`
+	State          WBStateType       `json:"state,omitempty" default:"Unknown"`
+	Details        []WBStatusDetail  `json:"details,omitempty"`
+	LastReconciled metav1.Time       `json:"lastReconciled,omitempty"`
+	Connection     WBMySQLConnection `json:"connection,omitempty"`
+	// Deprecated: BackupStatus is not implemented in the refactored MySQL code
+	BackupStatus WBBackupStatus `json:"backupStatus,omitempty"`
+}
+
+type WBMySQLConnection struct {
+	MySQLHost string `json:"MYSQL_HOST,omitempty"`
+	MySQLPort string `json:"MYSQL_PORT,omitempty"`
+	MySQLUser string `json:"MYSQL_USER,omitempty"`
 }
 
 type WBBackupStatus struct {

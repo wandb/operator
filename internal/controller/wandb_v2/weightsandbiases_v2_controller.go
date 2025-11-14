@@ -130,15 +130,17 @@ func (r *WeightsAndBiasesV2Reconciler) Reconcile(ctx context.Context, req ctrl.R
 	//}
 
 	/////////////////////////
-	// Database
-	if wandb.Spec.Size == apiv2.WBSizeDev {
-		ctrlState = r.handlePerconaMysql(ctx, wandb, req)
-	} else {
-		ctrlState = r.handlePerconaMysqlHA(ctx, wandb, req)
-	}
-	if ctrlState.ShouldExit(ctrlqueue.ReconcilerScope) {
-		return ctrlState.ReconcilerResult()
-	}
+	// MySQL
+	// TODO(MYSQL_REFACTOR): Temporarily disabled during Phase 0 refactor
+	// Will be replaced with r.reconcileMySQL() in Phase 4
+	//if wandb.Spec.Size == apiv2.WBSizeDev {
+	//	ctrlState = r.handlePerconaMysql(ctx, wandb, req)
+	//} else {
+	//	ctrlState = r.handlePerconaMysqlHA(ctx, wandb, req)
+	//}
+	//if ctrlState.ShouldExit(ctrlqueue.ReconcilerScope) {
+	//	return ctrlState.ReconcilerResult()
+	//}
 
 	/////////////////////////
 	// Kafka

@@ -8,7 +8,7 @@ type infraName string
 
 const (
 	Redis      infraName = "redis"
-	Database   infraName = "database"
+	MySQL      infraName = "mysql"
 	Kafka      infraName = "kafka"
 	Clickhouse infraName = "clickhouse"
 	ObjStorage infraName = "object_storage"

@@ -35,8 +35,8 @@ func (i InfraStatus) IsRedisStatus() bool {
 	return i.infraName == Redis
 }
 
-func (i InfraStatus) IsDatabaseStatus() bool {
-	return i.infraName == Database
+func (i InfraStatus) IsMySQLStatus() bool {
+	return i.infraName == MySQL
 }
 
 func (i InfraStatus) IsKafkaStatus() bool {
