@@ -293,9 +293,6 @@ spec:
                 required:
                 - enabled
                 type: object
-              profile:
-                description: Profile is akin to high-level environment info
-                type: string
               redis:
                 properties:
                   config:
@@ -444,6 +441,9 @@ spec:
                 required:
                 - enabled
                 type: object
+              size:
+                description: Size is akin to high-level environment info
+                type: string
             type: object
           status:
             description: WeightsAndBiasesStatus defines the observed state of WeightsAndBiases.
@@ -471,6 +471,21 @@ spec:
                       state:
                         type: string
                     type: object
+                  details:
+                    items:
+                      properties:
+                        code:
+                          type: string
+                        message:
+                          type: string
+                        state:
+                          type: string
+                      required:
+                      - code
+                      - message
+                      - state
+                      type: object
+                    type: array
                   lastReconciled:
                     format: date-time
                     type: string
@@ -504,6 +519,21 @@ spec:
                       state:
                         type: string
                     type: object
+                  details:
+                    items:
+                      properties:
+                        code:
+                          type: string
+                        message:
+                          type: string
+                        state:
+                          type: string
+                      required:
+                      - code
+                      - message
+                      - state
+                      type: object
+                    type: array
                   lastReconciled:
                     format: date-time
                     type: string
@@ -537,6 +567,21 @@ spec:
                       state:
                         type: string
                     type: object
+                  details:
+                    items:
+                      properties:
+                        code:
+                          type: string
+                        message:
+                          type: string
+                        state:
+                          type: string
+                      required:
+                      - code
+                      - message
+                      - state
+                      type: object
+                    type: array
                   lastReconciled:
                     format: date-time
                     type: string
@@ -547,8 +592,6 @@ spec:
                 required:
                 - ready
                 type: object
-              message:
-                type: string
               objStorageStatus:
                 properties:
                   backupStatus:
@@ -572,6 +615,21 @@ spec:
                       state:
                         type: string
                     type: object
+                  details:
+                    items:
+                      properties:
+                        code:
+                          type: string
+                        message:
+                          type: string
+                        state:
+                          type: string
+                      required:
+                      - code
+                      - message
+                      - state
+                      type: object
+                    type: array
                   lastReconciled:
                     format: date-time
                     type: string
@@ -600,6 +658,21 @@ spec:
                       REDIS_SENTINEL_PORT:
                         type: string
                     type: object
+                  details:
+                    items:
+                      properties:
+                        code:
+                          type: string
+                        message:
+                          type: string
+                        state:
+                          type: string
+                      required:
+                      - code
+                      - message
+                      - state
+                      type: object
+                    type: array
                   lastReconciled:
                     format: date-time
                     type: string

@@ -18,13 +18,13 @@ CRD types for standalone Redis (single instance):
 ### redis_types.go
 **Line 20**: Updated import path to use vendored common package
 ```go
-common "github.com/wandb/operator/api/redis-operator-vendored/common/v1beta2"
+common "github.com/wandb/operator/api/redis-operator-vendored/model/v1beta2"
 ```
 
 ### zz_generated.deepcopy.go
 **Line 24**: Updated import path to use vendored common package
 ```go
-commonv1beta2 "github.com/wandb/operator/api/redis-operator-vendored/common/v1beta2"
+commonv1beta2 "github.com/wandb/operator/api/redis-operator-vendored/model/v1beta2"
 ```
 
 **Reason**: This package doesn't have the webhook.Validator bug, but it needs to be vendored for type consistency since it uses the `common/v1beta2` types which are also vendored.

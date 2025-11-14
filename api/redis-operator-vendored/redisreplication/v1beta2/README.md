@@ -18,5 +18,5 @@ CRD types for Redis replication setup (primary + replicas):
 ### redisreplication_types.go
 **Line 4**: Updated import path to use vendored common package
 ```go
-common "github.com/wandb/operator/api/redis-operator-vendored/common/v1beta2"
+common "github.com/wandb/operator/api/redis-operator-vendored/model/v1beta2"
 ```

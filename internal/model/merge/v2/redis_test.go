@@ -1,4 +1,4 @@
-package redis
+package v2
 
 import (
 	. "github.com/onsi/ginkgo/v2"
@@ -8,7 +8,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
-var _ = Describe("wbRedisSpecsMerge", func() {
+var _ = Describe("Redis", func() {
 	Describe("Sentinel merging", func() {
 		Context("when both Sentinel values are nil", func() {
 			It("should result in nil Sentinel", func() {
@@ -19,7 +19,7 @@ var _ = Describe("wbRedisSpecsMerge", func() {
 					Sentinel: nil,
 				}
 
-				result, err := wbRedisSpecsMerge(actual, defaults)
+				result, err := Redis(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.Sentinel).To(BeNil())
 			})
@@ -43,7 +43,7 @@ var _ = Describe("wbRedisSpecsMerge", func() {
 					},
 				}
 
-				result, err := wbRedisSpecsMerge(actual, defaults)
+				result, err := Redis(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.Sentinel).ToNot(BeNil())
 				Expect(result.Sentinel.Enabled).To(BeTrue())
@@ -70,7 +70,7 @@ var _ = Describe("wbRedisSpecsMerge", func() {
 					Sentinel: nil,
 				}
 
-				result, err := wbRedisSpecsMerge(actual, defaults)
+				result, err := Redis(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.Sentinel).ToNot(BeNil())
 				Expect(result.Sentinel.Enabled).To(BeFalse())
@@ -107,7 +107,7 @@ var _ = Describe("wbRedisSpecsMerge", func() {
 					},
 				}
 
-				result, err := wbRedisSpecsMerge(actual, defaults)
+				result, err := Redis(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.Sentinel).ToNot(BeNil())
 				Expect(result.Sentinel.Enabled).To(BeTrue())
@@ -138,7 +138,7 @@ var _ = Describe("wbRedisSpecsMerge", func() {
 					},
 				}
 
-				result, err := wbRedisSpecsMerge(actual, defaults)
+				result, err := Redis(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.Sentinel).ToNot(BeNil())
 				Expect(result.Sentinel.Enabled).To(BeTrue())
@@ -168,7 +168,7 @@ var _ = Describe("wbRedisSpecsMerge", func() {
 					},
 				}
 
-				result, err := wbRedisSpecsMerge(actual, defaults)
+				result, err := Redis(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.Sentinel).ToNot(BeNil())
 				Expect(result.Sentinel.Enabled).To(BeTrue())
@@ -188,7 +188,7 @@ var _ = Describe("wbRedisSpecsMerge", func() {
 					Config: nil,
 				}
 
-				result, err := wbRedisSpecsMerge(actual, defaults)
+				result, err := Redis(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.Config).To(BeNil())
 			})
@@ -215,7 +215,7 @@ var _ = Describe("wbRedisSpecsMerge", func() {
 					},
 				}
 
-				result, err := wbRedisSpecsMerge(actual, defaults)
+				result, err := Redis(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.Config).ToNot(BeNil())
 				Expect(result.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(resource.MustParse("500m")))
@@ -241,7 +241,7 @@ var _ = Describe("wbRedisSpecsMerge", func() {
 					Config: nil,
 				}
 
-				result, err := wbRedisSpecsMerge(actual, defaults)
+				result, err := Redis(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.Config).ToNot(BeNil())
 				Expect(result.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(resource.MustParse("250m")))
@@ -278,7 +278,7 @@ var _ = Describe("wbRedisSpecsMerge", func() {
 					},
 				}
 
-				result, err := wbRedisSpecsMerge(actual, defaults)
+				result, err := Redis(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.Config).ToNot(BeNil())
 				Expect(result.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(resource.MustParse("750m")))
@@ -300,7 +300,7 @@ var _ = Describe("wbRedisSpecsMerge", func() {
 					StorageSize: "10Gi",
 				}
 
-				result, err := wbRedisSpecsMerge(actual, defaults)
+				result, err := Redis(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.StorageSize).To(Equal("10Gi"))
 			})
@@ -315,7 +315,7 @@ var _ = Describe("wbRedisSpecsMerge", func() {
 					StorageSize: "10Gi",
 				}
 
-				result, err := wbRedisSpecsMerge(actual, defaults)
+				result, err := Redis(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.StorageSize).To(Equal("20Gi"))
 			})
@@ -330,7 +330,7 @@ var _ = Describe("wbRedisSpecsMerge", func() {
 					StorageSize: "",
 				}
 
-				result, err := wbRedisSpecsMerge(actual, defaults)
+				result, err := Redis(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.StorageSize).To(Equal(""))
 			})
@@ -347,7 +347,7 @@ var _ = Describe("wbRedisSpecsMerge", func() {
 					Enabled: false,
 				}
 
-				result, err := wbRedisSpecsMerge(actual, defaults)
+				result, err := Redis(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.Enabled).To(BeTrue())
 			})
@@ -362,7 +362,7 @@ var _ = Describe("wbRedisSpecsMerge", func() {
 					Enabled: true,
 				}
 
-				result, err := wbRedisSpecsMerge(actual, defaults)
+				result, err := Redis(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.Enabled).To(BeFalse())
 			})
@@ -379,7 +379,7 @@ var _ = Describe("wbRedisSpecsMerge", func() {
 					Namespace: "default-namespace",
 				}
 
-				result, err := wbRedisSpecsMerge(actual, defaults)
+				result, err := Redis(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.Namespace).To(Equal("custom-namespace"))
 			})
@@ -394,7 +394,7 @@ var _ = Describe("wbRedisSpecsMerge", func() {
 					Namespace: "default-namespace",
 				}
 
-				result, err := wbRedisSpecsMerge(actual, defaults)
+				result, err := Redis(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.Namespace).To(Equal(""))
 			})
@@ -428,7 +428,7 @@ var _ = Describe("wbRedisSpecsMerge", func() {
 					},
 				}
 
-				result, err := wbRedisSpecsMerge(actual, defaults)
+				result, err := Redis(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.Enabled).To(BeFalse())
 				Expect(result.Namespace).To(Equal(""))
@@ -488,7 +488,7 @@ var _ = Describe("wbRedisSpecsMerge", func() {
 					},
 				}
 
-				result, err := wbRedisSpecsMerge(actual, defaults)
+				result, err := Redis(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.Enabled).To(BeFalse())
 				Expect(result.Namespace).To(Equal("actual-namespace"))
@@ -558,7 +558,7 @@ var _ = Describe("wbRedisSpecsMerge", func() {
 					},
 				}
 
-				result, err := wbRedisSpecsMerge(actual, defaults)
+				result, err := Redis(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.Enabled).To(BeTrue())
 				Expect(result.Namespace).To(Equal("prod"))
@@ -585,7 +585,7 @@ var _ = Describe("wbRedisSpecsMerge", func() {
 				actual := v2.WBRedisSpec{}
 				defaults := v2.WBRedisSpec{}
 
-				result, err := wbRedisSpecsMerge(actual, defaults)
+				result, err := Redis(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.Enabled).To(BeFalse())
 				Expect(result.Namespace).To(Equal(""))

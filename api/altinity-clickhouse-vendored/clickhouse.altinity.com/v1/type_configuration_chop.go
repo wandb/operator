@@ -253,7 +253,7 @@ type OperatorConfigAddons struct {
 type OperatorConfigFile struct {
 	Path struct {
 		// Paths where to look for additional ClickHouse config .xml files to be mounted into Pod
-		Common string `json:"common" yaml:"common"`
+		Common string `json:"model" yaml:"model"`
 		Host   string `json:"host"   yaml:"host"`
 		User   string `json:"user"   yaml:"user"`
 	} `json:"path" yaml:"path"`

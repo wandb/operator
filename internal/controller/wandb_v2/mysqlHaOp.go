@@ -6,7 +6,7 @@ import (
 
 	pxcv1 "github.com/wandb/operator/api/percona-operator-vendored/pxc/v1"
 	apiv2 "github.com/wandb/operator/api/v2"
-	"github.com/wandb/operator/internal/controller/wandb_v2/common"
+	"github.com/wandb/operator/internal/controller/ctrlqueue"
 	corev1 "k8s.io/api/core/v1"
 	machErrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -18,7 +18,7 @@ import (
 
 func (r *WeightsAndBiasesV2Reconciler) handlePerconaMysqlHA(
 	ctx context.Context, wandb *apiv2.WeightsAndBiases, req ctrl.Request,
-) common.CtrlState {
+) ctrlqueue.CtrlState {
 	var err error
 	var desiredPercona wandbPerconaMysqlWrapper
 	var actualPercona wandbPerconaMysqlWrapper
@@ -28,28 +28,28 @@ func (r *WeightsAndBiasesV2Reconciler) handlePerconaMysqlHA(
 
 	if actualPercona, err = actualPerconaMysql(ctx, r, namespacedName); err != nil {
 		log.Error(err, "Failed to get actual Percona MySQL HA")
-		return common.CtrlError(err)
+		return ctrlqueue.CtrlError(err)
 	}
 
-	if ctrlState := actualPercona.maybeHandleDeletion(ctx, wandb, actualPercona, r); ctrlState.ShouldExit(common.PackageScope) {
+	if ctrlState := actualPercona.maybeHandleDeletion(ctx, wandb, actualPercona, r); ctrlState.ShouldExit(ctrlqueue.PackageScope) {
 		return ctrlState
 	}
 
 	if desiredPercona, err = desiredPerconaMysqlHA(ctx, wandb, namespacedName, r, actualPercona); err != nil {
 		log.Error(err, "Failed to compute desired Percona MySQL HA state")
-		return common.CtrlError(err)
+		return ctrlqueue.CtrlError(err)
 	}
 
 	if reconciliation, err = computePerconaReconcileDrift(ctx, wandb, desiredPercona, actualPercona); err != nil {
 		log.Error(err, "Failed to compute Percona MySQL HA reconciliation drift")
-		return common.CtrlError(err)
+		return ctrlqueue.CtrlError(err)
 	}
 
 	if reconciliation != nil {
 		return reconciliation.Execute(ctx, r)
 	}
 
-	return common.CtrlContinue()
+	return ctrlqueue.CtrlContinue()
 }
 
 func desiredPerconaMysqlHA(

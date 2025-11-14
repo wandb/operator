@@ -22,18 +22,15 @@ import (
 	"time"
 
 	apiv2 "github.com/wandb/operator/api/v2"
-	"github.com/wandb/operator/internal/controller/wandb_v2/common"
+	"github.com/wandb/operator/internal/controller/ctrlqueue"
+	"github.com/wandb/operator/internal/model"
 	corev1 "k8s.io/api/core/v1"
 	machErrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/event"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
 const dbFinalizer = "db.app.wandb.com"
@@ -97,7 +94,9 @@ func (r *WeightsAndBiasesV2Reconciler) Reconcile(ctx context.Context, req ctrl.R
 		"start", true,
 	)
 
-	var ctrlState common.CtrlState
+	var err error
+	var ctrlState ctrlqueue.CtrlState
+	var infraConfig model.InfraConfig
 
 	wandb := &apiv2.WeightsAndBiases{}
 	if err := r.Client.Get(ctx, req.NamespacedName, wandb); err != nil {
@@ -112,50 +111,49 @@ func (r *WeightsAndBiasesV2Reconciler) Reconcile(ctx context.Context, req ctrl.R
 		"Spec", wandb.Spec, "Name", wandb.Name, "UID", wandb.UID, "Generation", wandb.Generation,
 	)
 
+	infraConfig = model.BuildInfraConfig().
+		AddRedisSpec(&(wandb.Spec.Redis), wandb.Spec.Size)
+
 	ctrlState = r.handleDatabase(ctx, wandb, req)
-	if ctrlState.ShouldExit(common.ReconcilerScope) {
+	if ctrlState.ShouldExit(ctrlqueue.ReconcilerScope) {
 		return ctrlState.ReconcilerResult()
 	}
 
-	if wandb.Spec.Profile == apiv2.WBProfileDev {
-		ctrlState = r.handleRedis(ctx, wandb, req)
-	} else {
-		ctrlState = r.handleRedisHA(ctx, wandb, req)
-	}
-	if ctrlState.ShouldExit(common.ReconcilerScope) {
-		return ctrlState.ReconcilerResult()
+	result := r.reconcileRedis(ctx, infraConfig, wandb)
+	criticalErrors := result.GetCriticalErrors()
+	if len(criticalErrors) > 0 {
+		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, result.GetCriticalErrors()[0]
 	}
 
-	if wandb.Spec.Profile == apiv2.WBProfileDev {
+	if wandb.Spec.Size == apiv2.WBSizeDev {
 		ctrlState = r.handleKafka(ctx, wandb, req)
 	} else {
 		ctrlState = r.handleKafkaHA(ctx, wandb, req)
 	}
-	if ctrlState.ShouldExit(common.ReconcilerScope) {
+	if ctrlState.ShouldExit(ctrlqueue.ReconcilerScope) {
 		return ctrlState.ReconcilerResult()
 	}
 
-	if wandb.Spec.Profile == apiv2.WBProfileDev {
+	if wandb.Spec.Size == apiv2.WBSizeDev {
 		ctrlState = r.handleMinio(ctx, wandb, req)
 	} else {
 		ctrlState = r.handleMinioHA(ctx, wandb, req)
 	}
-	if ctrlState.ShouldExit(common.ReconcilerScope) {
+	if ctrlState.ShouldExit(ctrlqueue.ReconcilerScope) {
 		return ctrlState.ReconcilerResult()
 	}
 
-	if wandb.Spec.Profile == apiv2.WBProfileDev {
+	if wandb.Spec.Size == apiv2.WBSizeDev {
 		ctrlState = r.handleClickHouse(ctx, wandb, req)
 	} else {
 		ctrlState = r.handleClickHouseHA(ctx, wandb, req)
 	}
-	if ctrlState.ShouldExit(common.ReconcilerScope) {
+	if ctrlState.ShouldExit(ctrlqueue.ReconcilerScope) {
 		return ctrlState.ReconcilerResult()
 	}
 
-	ctrlState = r.inferState(ctx, wandb)
-	if ctrlState.ShouldExit(common.ReconcilerScope) {
-		return ctrlState.ReconcilerResult()
+	if err = r.inferState(ctx, wandb); err != nil {
+		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, err
 	}
 
 	return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
@@ -163,12 +161,12 @@ func (r *WeightsAndBiasesV2Reconciler) Reconcile(ctx context.Context, req ctrl.R
 
 func (r *WeightsAndBiasesV2Reconciler) handleDatabase(
 	ctx context.Context, wandb *apiv2.WeightsAndBiases, req ctrl.Request,
-) common.CtrlState {
+) ctrlqueue.CtrlState {
 	log := ctrllog.FromContext(ctx)
 
 	if !wandb.Spec.Database.Enabled {
 		log.Info("Database not enabled, skipping")
-		return common.CtrlContinue()
+		return ctrlqueue.CtrlContinue()
 	}
 
 	dbType := wandb.Spec.Database.Type
@@ -179,7 +177,7 @@ func (r *WeightsAndBiasesV2Reconciler) handleDatabase(
 
 	switch dbType {
 	case apiv2.WBDatabaseTypePercona:
-		if wandb.Spec.Profile == apiv2.WBProfileDev {
+		if wandb.Spec.Size == apiv2.WBSizeDev {
 			log.Info("Handling Percona XtraDB Cluster database (dev)")
 			return r.handlePerconaMysql(ctx, wandb, req)
 		} else {
@@ -189,52 +187,36 @@ func (r *WeightsAndBiasesV2Reconciler) handleDatabase(
 
 	default:
 		log.Error(nil, "Unknown database type", "type", dbType)
-		return common.CtrlError(errors.New("unknown database type: " + string(dbType)))
+		return ctrlqueue.CtrlError(errors.New("unknown database type: " + string(dbType)))
 	}
 }
 
 func (r *WeightsAndBiasesV2Reconciler) inferState(
 	ctx context.Context, wandb *apiv2.WeightsAndBiases,
-) common.CtrlState {
-	newState := wandb.Status.State
-	curState := wandb.Status.State
+) error {
 	log := ctrl.LoggerFrom(ctx)
-	databaseStatus := wandb.Status.DatabaseStatus
+
 	redisStatus := wandb.Status.RedisStatus
-	kafkaStatus := wandb.Status.KafkaStatus
-	objStorageStatus := wandb.Status.ObjStorageStatus
-	clickhouseStatus := wandb.Status.ClickHouseStatus
 
-	databaseReady := !wandb.Spec.Database.Enabled || databaseStatus.State == "ready"
-	redisReady := !wandb.Spec.Redis.Enabled || redisStatus.State == "ready"
-	kafkaReady := !wandb.Spec.Kafka.Enabled || kafkaStatus.State == "ready"
-	objStorageReady := !wandb.Spec.ObjStorage.Enabled || objStorageStatus.State == "ready"
-	clickhouseReady := !wandb.Spec.ClickHouse.Enabled || clickhouseStatus.State == "ready"
+	wandb.Status.State = redisStatus.State
 
-	if databaseReady && redisReady && kafkaReady && objStorageReady && clickhouseReady {
-		newState = apiv2.WBStateReady
+	if err := r.Status().Update(ctx, wandb); err != nil {
+		log.Error(err, "Failed to update status")
+		return err
 	}
-
-	if curState != newState {
-		wandb.Status.State = newState
-		if err := r.Status().Update(ctx, wandb); err != nil {
-			log.Error(err, "Failed to update Weights & Biases state", "from", curState, "to", newState)
-			return common.CtrlError(err)
-		}
-		return common.CtrlDone(common.PackageScope)
-	}
-	return common.CtrlContinue()
+	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *WeightsAndBiasesV2Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 	builder := ctrl.NewControllerManagedBy(mgr).
 		For(&apiv2.WeightsAndBiases{} /*, builder.WithPredicates(filterWBEvents{})*/).
-		Owns(&corev1.Secret{}, builder.WithPredicates(filterSecretEvents{})).
+		Owns(&corev1.Secret{} /*builder.WithPredicates(filterSecretEvents{})*/).
 		Owns(&corev1.ConfigMap{})
 	return builder.Complete(r)
 }
 
+/*
 func (r *WeightsAndBiasesV2Reconciler) updateDbBackupStatus(ctx context.Context, wandb *apiv2.WeightsAndBiases, state, message string) {
 	log := ctrl.LoggerFrom(ctx)
 	now := metav1.Now()
@@ -292,3 +274,4 @@ func (filterSecretEvents) Delete(e event.DeleteEvent) bool {
 func (filterSecretEvents) Generic(e event.GenericEvent) bool {
 	return false
 }
+*/

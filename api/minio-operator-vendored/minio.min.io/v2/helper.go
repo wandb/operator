@@ -1173,7 +1173,7 @@ func (t *Tenant) HasEnv(envName string) bool {
 	return false
 }
 
-// Suffix returns the longest common suffix of the provided strings
+// Suffix returns the longest model suffix of the provided strings
 func lcpSuffix(strs []string) string {
 	return lcp(strs, false)
 }

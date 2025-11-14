@@ -8,7 +8,6 @@ import (
 	pxcv1 "github.com/wandb/operator/api/percona-operator-vendored/pxc/v1"
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/ctrlqueue"
-	"github.com/wandb/operator/internal/controller/wandb_v2/common"
 	corev1 "k8s.io/api/core/v1"
 	machErrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -44,7 +43,7 @@ func (w *wandbPerconaMysqlWrapper) GetStatus() string {
 }
 
 type wandbPerconaMysqlDoReconcile interface {
-	Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) common.CtrlState
+	Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) ctrlqueue.CtrlState
 }
 
 func perconaMysqlNamespacedName(wandb *apiv2.WeightsAndBiases) types.NamespacedName {
@@ -60,7 +59,7 @@ func perconaMysqlNamespacedName(wandb *apiv2.WeightsAndBiases) types.NamespacedN
 
 func (r *WeightsAndBiasesV2Reconciler) handlePerconaMysql(
 	ctx context.Context, wandb *apiv2.WeightsAndBiases, req ctrl.Request,
-) common.CtrlState {
+) ctrlqueue.CtrlState {
 	var err error
 	var desiredPercona wandbPerconaMysqlWrapper
 	var actualPercona wandbPerconaMysqlWrapper
@@ -70,28 +69,28 @@ func (r *WeightsAndBiasesV2Reconciler) handlePerconaMysql(
 
 	if actualPercona, err = actualPerconaMysql(ctx, r, namespacedName); err != nil {
 		log.Error(err, "Failed to get actual Percona MySQL")
-		return common.CtrlError(err)
+		return ctrlqueue.CtrlError(err)
 	}
 
-	if ctrlState := actualPercona.maybeHandleDeletion(ctx, wandb, actualPercona, r); ctrlState.ShouldExit(common.PackageScope) {
+	if ctrlState := actualPercona.maybeHandleDeletion(ctx, wandb, actualPercona, r); ctrlState.ShouldExit(ctrlqueue.PackageScope) {
 		return ctrlState
 	}
 
 	if desiredPercona, err = desiredPerconaMysql(ctx, wandb, namespacedName, r, actualPercona); err != nil {
 		log.Error(err, "Failed to compute desired Percona MySQL state")
-		return common.CtrlError(err)
+		return ctrlqueue.CtrlError(err)
 	}
 
 	if reconciliation, err = computePerconaReconcileDrift(ctx, wandb, desiredPercona, actualPercona); err != nil {
 		log.Error(err, "Failed to compute Percona MySQL reconciliation drift")
-		return common.CtrlError(err)
+		return ctrlqueue.CtrlError(err)
 	}
 
 	if reconciliation != nil {
 		return reconciliation.Execute(ctx, r)
 	}
 
-	return common.CtrlContinue()
+	return ctrlqueue.CtrlContinue()
 }
 
 func actualPerconaMysql(
@@ -309,7 +308,7 @@ func computePerconaReconcileDrift(
 		}, nil
 	}
 
-	if actualPercona.GetStatus() != wandb.Status.DatabaseStatus.State ||
+	if actualPercona.GetStatus() != string(wandb.Status.DatabaseStatus.State) ||
 		actualPercona.IsReady() != wandb.Status.DatabaseStatus.Ready {
 		return &wandbPerconaMysqlStausUpdate{
 			wandb:  wandb,
@@ -325,27 +324,26 @@ type wandbPerconaMysqlCreate struct {
 	wandb   *apiv2.WeightsAndBiases
 }
 
-func (c *wandbPerconaMysqlCreate) Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) common.CtrlState {
+func (c *wandbPerconaMysqlCreate) Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) ctrlqueue.CtrlState {
 	var err error
 	log := ctrl.LoggerFrom(ctx)
 	log.Info("Installing Percona XtraDB Cluster")
 	wandb := c.wandb
 	if err = controllerutil.SetOwnerReference(wandb, c.desired.obj, r.Scheme); err != nil {
 		log.Error(err, "Failed to set owner reference for Percona XtraDB Cluster")
-		return common.CtrlError(err)
+		return ctrlqueue.CtrlError(err)
 	}
 	if err = r.Create(ctx, c.desired.obj); err != nil {
 		log.Error(err, "Failed to create Percona XtraDB Cluster")
-		return common.CtrlError(err)
+		return ctrlqueue.CtrlError(err)
 	}
-	wandb.Status.State = apiv2.WBStateInfraUpdate
-	wandb.Status.Message = "Creating Database"
-	wandb.Status.DatabaseStatus.State = string(pxcv1.AppStateInit)
+	wandb.Status.State = apiv2.WBStateUpdating
+	wandb.Status.DatabaseStatus.State = apiv2.WBStateUpdating
 	if err = r.Status().Update(ctx, wandb); err != nil {
 		log.Error(err, "Failed to update status after creating Percona XtraDB Cluster")
-		return common.CtrlError(err)
+		return ctrlqueue.CtrlError(err)
 	}
-	return common.CtrlDone(common.PackageScope)
+	return ctrlqueue.CtrlDone(ctrlqueue.PackageScope)
 }
 
 type wandbPerconaMysqlDelete struct {
@@ -353,22 +351,21 @@ type wandbPerconaMysqlDelete struct {
 	wandb  *apiv2.WeightsAndBiases
 }
 
-func (d *wandbPerconaMysqlDelete) Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) common.CtrlState {
+func (d *wandbPerconaMysqlDelete) Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) ctrlqueue.CtrlState {
 	var err error
 	log := ctrl.LoggerFrom(ctx)
 	log.Info("Uninstalling Percona XtraDB Cluster")
 	if err = r.Delete(ctx, d.actual.obj); err != nil {
 		log.Error(err, "Failed to delete Percona XtraDB Cluster")
-		return common.CtrlError(err)
+		return ctrlqueue.CtrlError(err)
 	}
 	wandb := d.wandb
-	wandb.Status.State = apiv2.WBStateInfraUpdate
-	wandb.Status.Message = "Deleting Database"
+	wandb.Status.State = apiv2.WBStateUpdating
 	if err = r.Status().Update(ctx, wandb); err != nil {
 		log.Error(err, "Failed to update status after deleting Percona XtraDB Cluster")
-		return common.CtrlError(err)
+		return ctrlqueue.CtrlError(err)
 	}
-	return common.CtrlDone(common.PackageScope)
+	return ctrlqueue.CtrlDone(ctrlqueue.PackageScope)
 }
 
 type wandbPerconaMysqlStausUpdate struct {
@@ -379,20 +376,20 @@ type wandbPerconaMysqlStausUpdate struct {
 
 func (s *wandbPerconaMysqlStausUpdate) Execute(
 	ctx context.Context, r *WeightsAndBiasesV2Reconciler,
-) common.CtrlState {
+) ctrlqueue.CtrlState {
 	log := ctrllog.FromContext(ctx)
-	s.wandb.Status.DatabaseStatus.State = s.status
+	s.wandb.Status.DatabaseStatus.State = apiv2.WBStateUpdating
 	s.wandb.Status.DatabaseStatus.Ready = s.ready
 	if err := r.Status().Update(ctx, s.wandb); err != nil {
 		log.Error(err, "Failed to update Percona MySQL status")
-		return common.CtrlError(err)
+		return ctrlqueue.CtrlError(err)
 	}
-	return common.CtrlDone(common.PackageScope)
+	return ctrlqueue.CtrlDone(ctrlqueue.PackageScope)
 }
 
 func (w *wandbPerconaMysqlWrapper) maybeHandleDeletion(
 	ctx context.Context, wandb *apiv2.WeightsAndBiases, actualPercona wandbPerconaMysqlWrapper, reconciler *WeightsAndBiasesV2Reconciler,
-) common.CtrlState {
+) ctrlqueue.CtrlState {
 	log := ctrllog.FromContext(ctx)
 
 	//requeueSeconds := wandb.Status.DatabaseStatus.BackupStatus.RequeueAfter
@@ -401,7 +398,7 @@ func (w *wandbPerconaMysqlWrapper) maybeHandleDeletion(
 	//}
 	//requeueDuration := time.Duration(requeueSeconds) * time.Second
 
-	var deletionPaused = wandb.Status.State == apiv2.WBStateDeletionPaused
+	var deletionPaused = wandb.Status.State == apiv2.WBStateOffline
 	var backupEnabled = wandb.Spec.Database.Backup.Enabled
 	var flaggedForDeletion = !wandb.ObjectMeta.DeletionTimestamp.IsZero()
 	var hasDbFinalizer = ctrlqueue.ContainsString(wandb.GetFinalizers(), dbFinalizer)
@@ -411,23 +408,23 @@ func (w *wandbPerconaMysqlWrapper) maybeHandleDeletion(
 		controllerutil.RemoveFinalizer(wandb, dbFinalizer)
 		if err := reconciler.Client.Update(ctx, wandb); err != nil {
 			log.Error(err, "Failed to remove database finalizer")
-			return common.CtrlError(err)
+			return ctrlqueue.CtrlError(err)
 		}
-		return common.CtrlContinue()
+		return ctrlqueue.CtrlContinue()
 	}
 
 	if deletionPaused && backupEnabled {
 		log.Info("Deletion paused for Percona XtraDB Cluster Backup; disable backups to continue with deletion")
-		return common.CtrlContinue()
+		return ctrlqueue.CtrlContinue()
 	}
 
 	if !hasDbFinalizer && !flaggedForDeletion {
 		wandb.ObjectMeta.Finalizers = append(wandb.ObjectMeta.Finalizers, dbFinalizer)
 		if err := reconciler.Client.Update(ctx, wandb); err != nil {
 			log.Error(err, "Failed to add database finalizer")
-			return common.CtrlError(err)
+			return ctrlqueue.CtrlError(err)
 		}
-		return common.CtrlContinue()
+		return ctrlqueue.CtrlContinue()
 	}
 
 	if flaggedForDeletion {
@@ -436,46 +433,44 @@ func (w *wandbPerconaMysqlWrapper) maybeHandleDeletion(
 			wandb.ObjectMeta.DeletionTimestamp = nil
 			if err = reconciler.Update(ctx, wandb); err != nil {
 				log.Error(err, "Failed to clear deletion timestamp")
-				return common.CtrlError(err)
+				return ctrlqueue.CtrlError(err)
 			}
-			wandb.Status.State = apiv2.WBStateDeletionPaused
-			wandb.Status.Message = "Database backup before deletion failed, deletion paused. Disable backups to continue with deletion."
+			wandb.Status.State = apiv2.WBStateOffline
 			if err = reconciler.Status().Update(ctx, wandb); err != nil {
 				log.Error(err, "Failed to update status to deletion paused")
-				return common.CtrlError(err)
+				return ctrlqueue.CtrlError(err)
 			}
-			return common.CtrlDoneUntil(common.ReconcilerScope, defaultDbRequeueDuration)
+			return ctrlqueue.CtrlDoneUntil(ctrlqueue.ReconcilerScope, defaultDbRequeueDuration)
 		}
 
 		if wandb.Status.DatabaseStatus.BackupStatus.State == "InProgress" {
 			log.Info("Backup in progress, requeuing", "backup", wandb.Status.DatabaseStatus.BackupStatus.BackupName)
 			if wandb.Status.State != apiv2.WBStateDeleting {
 				wandb.Status.State = apiv2.WBStateDeleting
-				wandb.Status.DatabaseStatus.State = string(pxcv1.AppStateStopping)
-				wandb.Status.Message = "Waiting for database backup to complete before deletion"
+				wandb.Status.DatabaseStatus.State = apiv2.WBStateDeleting
 				if err := reconciler.Status().Update(ctx, wandb); err != nil {
 					log.Error(err, "Failed to update status while waiting for backup")
-					return common.CtrlError(err)
+					return ctrlqueue.CtrlError(err)
 				}
 			}
-			return common.CtrlDone(common.PackageScope)
+			return ctrlqueue.CtrlDone(ctrlqueue.PackageScope)
 		}
 
 		controllerutil.RemoveFinalizer(wandb, dbFinalizer)
 		if err := reconciler.Client.Update(ctx, wandb); err != nil {
 			log.Error(err, "Failed to remove database finalizer before deletion")
-			return common.CtrlError(err)
+			return ctrlqueue.CtrlError(err)
 		}
 		if actualPercona.obj != nil {
 			if err := reconciler.Client.Delete(ctx, actualPercona.obj); err != nil {
 				log.Error(err, "Failed to delete Percona XtraDB Cluster object")
-				return common.CtrlError(err)
+				return ctrlqueue.CtrlError(err)
 			}
 		}
 
-		return common.CtrlDone(common.PackageScope)
+		return ctrlqueue.CtrlDone(ctrlqueue.PackageScope)
 	}
-	return common.CtrlContinue()
+	return ctrlqueue.CtrlContinue()
 }
 
 func (w *wandbPerconaMysqlWrapper) handleDatabaseBackup(
@@ -495,7 +490,7 @@ func (w *wandbPerconaMysqlWrapper) handleDatabaseBackup(
 
 	if !wandb.Spec.Database.Backup.Enabled {
 		log.Info("Database backup not enabled, skipping backup")
-		reconciler.updateDbBackupStatus(ctx, wandb, "Skipped", "Backup disabled in spec")
+		//reconciler.updateDbBackupStatus(ctx, wandb, "Skipped", "Backup disabled in spec")
 		return nil
 	}
 
@@ -544,7 +539,7 @@ func (w *wandbPerconaMysqlWrapper) handleDatabaseBackup(
 	}
 
 	if err != nil && !result.InProgress {
-		reconciler.updateDbBackupStatus(ctx, wandb, "Failed", err.Error())
+		//reconciler.updateDbBackupStatus(ctx, wandb, "Failed", err.Error())
 		return err
 	}
 
@@ -564,35 +559,35 @@ type wandbMysqlConnInfoCreate struct {
 	wandb   *apiv2.WeightsAndBiases
 }
 
-func (c *wandbMysqlConnInfoCreate) Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) common.CtrlState {
+func (c *wandbMysqlConnInfoCreate) Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) ctrlqueue.CtrlState {
 	log := ctrl.LoggerFrom(ctx)
 	log.Info("Creating MySQL connection secret")
 
 	if c.desired.secret == nil {
 		err := errors.New("desired secret is nil")
 		log.Error(err, "Desired MySQL connection secret is nil")
-		return common.CtrlError(err)
+		return ctrlqueue.CtrlError(err)
 	}
 
 	if err := controllerutil.SetOwnerReference(c.wandb, c.desired.secret, r.Scheme); err != nil {
 		log.Error(err, "Failed to set owner reference for MySQL connection secret")
-		return common.CtrlError(err)
+		return ctrlqueue.CtrlError(err)
 	}
 
 	if err := r.Create(ctx, c.desired.secret); err != nil {
 		log.Error(err, "Failed to create MySQL connection secret")
-		return common.CtrlError(err)
+		return ctrlqueue.CtrlError(err)
 	}
 
 	log.Info("MySQL connection secret created successfully")
-	return common.CtrlDone(common.PackageScope)
+	return ctrlqueue.CtrlDone(ctrlqueue.PackageScope)
 }
 
 type wandbMysqlConnInfoDelete struct {
 	wandb *apiv2.WeightsAndBiases
 }
 
-func (d *wandbMysqlConnInfoDelete) Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) common.CtrlState {
+func (d *wandbMysqlConnInfoDelete) Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) ctrlqueue.CtrlState {
 	log := ctrl.LoggerFrom(ctx)
 	log.Info("Deleting MySQL connection secret")
 
@@ -610,17 +605,17 @@ func (d *wandbMysqlConnInfoDelete) Execute(ctx context.Context, r *WeightsAndBia
 	if err != nil {
 		if machErrors.IsNotFound(err) {
 			log.Info("MySQL connection secret already deleted")
-			return common.CtrlContinue()
+			return ctrlqueue.CtrlContinue()
 		}
 		log.Error(err, "Failed to get MySQL connection secret for deletion")
-		return common.CtrlError(err)
+		return ctrlqueue.CtrlError(err)
 	}
 
 	if err := r.Delete(ctx, secret); err != nil {
 		log.Error(err, "Failed to delete MySQL connection secret")
-		return common.CtrlError(err)
+		return ctrlqueue.CtrlError(err)
 	}
 
 	log.Info("MySQL connection secret deleted successfully")
-	return common.CtrlDone(common.PackageScope)
+	return ctrlqueue.CtrlDone(ctrlqueue.PackageScope)
 }

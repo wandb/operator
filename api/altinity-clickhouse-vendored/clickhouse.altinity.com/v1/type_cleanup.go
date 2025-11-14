@@ -96,7 +96,7 @@ func (t *Cleanup) SetDefaults() *Cleanup {
 const (
 	ObjectsCleanupUnspecified = "Unspecified"
 	ObjectsCleanupRetain      = "Retain"
-	ObjectsCleanupDelete      = "Delete"
+	ObjectsCleanupDelete      = "DeleteAll"
 )
 
 // ObjectsCleanup specifies object cleanup struct

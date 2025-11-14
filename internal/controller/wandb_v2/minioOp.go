@@ -9,7 +9,6 @@ import (
 	miniov2 "github.com/wandb/operator/api/minio-operator-vendored/minio.min.io/v2"
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/ctrlqueue"
-	"github.com/wandb/operator/internal/controller/wandb_v2/common"
 	corev1 "k8s.io/api/core/v1"
 	machErrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -55,7 +54,7 @@ func (w *wandbMinioWrapper) GetStatus() string {
 }
 
 type wandbMinioDoReconcile interface {
-	Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) common.CtrlState
+	Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) ctrlqueue.CtrlState
 }
 
 func minioNamespacedName(wandb *apiv2.WeightsAndBiases) types.NamespacedName {
@@ -71,7 +70,7 @@ func minioNamespacedName(wandb *apiv2.WeightsAndBiases) types.NamespacedName {
 
 func (r *WeightsAndBiasesV2Reconciler) handleMinio(
 	ctx context.Context, wandb *apiv2.WeightsAndBiases, req ctrl.Request,
-) common.CtrlState {
+) ctrlqueue.CtrlState {
 	var err error
 	var desiredMinio wandbMinioWrapper
 	var actualMinio wandbMinioWrapper
@@ -81,35 +80,35 @@ func (r *WeightsAndBiasesV2Reconciler) handleMinio(
 
 	if !wandb.Spec.ObjStorage.Enabled {
 		log.Info("ObjStorage not enabled, skipping")
-		return common.CtrlContinue()
+		return ctrlqueue.CtrlContinue()
 	}
 
 	log.Info("Handling MinIO")
 
 	if actualMinio, err = getActualMinio(ctx, r, namespacedName); err != nil {
 		log.Error(err, "Failed to get actual MinIO resources")
-		return common.CtrlError(err)
+		return ctrlqueue.CtrlError(err)
 	}
 
-	if ctrlState := actualMinio.maybeHandleDeletion(ctx, wandb, actualMinio, r); ctrlState.ShouldExit(common.PackageScope) {
+	if ctrlState := actualMinio.maybeHandleDeletion(ctx, wandb, actualMinio, r); ctrlState.ShouldExit(ctrlqueue.PackageScope) {
 		return ctrlState
 	}
 
 	if desiredMinio, err = getDesiredMinio(ctx, wandb, namespacedName, actualMinio); err != nil {
 		log.Error(err, "Failed to get desired MinIO configuration")
-		return common.CtrlError(err)
+		return ctrlqueue.CtrlError(err)
 	}
 
 	if reconciliation, err = computeMinioReconcileDrift(ctx, wandb, desiredMinio, actualMinio); err != nil {
 		log.Error(err, "Failed to compute MinIO reconcile drift")
-		return common.CtrlError(err)
+		return ctrlqueue.CtrlError(err)
 	}
 
 	if reconciliation != nil {
 		return reconciliation.Execute(ctx, r)
 	}
 
-	return common.CtrlContinue()
+	return ctrlqueue.CtrlContinue()
 }
 
 func getActualMinio(
@@ -285,7 +284,7 @@ func computeMinioReconcileDrift(
 		}, nil
 	}
 
-	if actualMinio.GetStatus() != wandb.Status.ObjStorageStatus.State ||
+	if actualMinio.GetStatus() != string(wandb.Status.ObjStorageStatus.State) ||
 		actualMinio.IsReady() != wandb.Status.ObjStorageStatus.Ready {
 		return &wandbMinioStatusUpdate{
 			wandb:  wandb,
@@ -301,7 +300,7 @@ type wandbMinioCreate struct {
 	wandb   *apiv2.WeightsAndBiases
 }
 
-func (c *wandbMinioCreate) Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) common.CtrlState {
+func (c *wandbMinioCreate) Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) ctrlqueue.CtrlState {
 	var err error
 	log := ctrl.LoggerFrom(ctx)
 	log.Info("Installing MinIO Tenant")
@@ -323,7 +322,7 @@ export MINIO_BROWSER="on"`,
 
 	if err = controllerutil.SetOwnerReference(wandb, configSecret, r.Scheme); err != nil {
 		log.Error(err, "Failed to set owner reference for MinIO config secret")
-		return common.CtrlError(err)
+		return ctrlqueue.CtrlError(err)
 	}
 
 	existingSecret := &corev1.Secret{}
@@ -331,12 +330,12 @@ export MINIO_BROWSER="on"`,
 	if err != nil && machErrors.IsNotFound(err) {
 		if err = r.Create(ctx, configSecret); err != nil {
 			log.Error(err, "Failed to create MinIO config secret")
-			return common.CtrlError(err)
+			return ctrlqueue.CtrlError(err)
 		}
 		log.Info("Created MinIO configuration secret", "secret", configSecretName)
 	} else if err != nil {
 		log.Error(err, "Failed to check for existing MinIO config secret")
-		return common.CtrlError(err)
+		return ctrlqueue.CtrlError(err)
 	}
 
 	c.desired.obj.Spec.Configuration = &corev1.LocalObjectReference{
@@ -345,22 +344,21 @@ export MINIO_BROWSER="on"`,
 
 	if err = controllerutil.SetOwnerReference(wandb, c.desired.obj, r.Scheme); err != nil {
 		log.Error(err, "Failed to set owner reference for MinIO Tenant")
-		return common.CtrlError(err)
+		return ctrlqueue.CtrlError(err)
 	}
 
 	if err = r.Create(ctx, c.desired.obj); err != nil {
 		log.Error(err, "Failed to create MinIO Tenant")
-		return common.CtrlError(err)
+		return ctrlqueue.CtrlError(err)
 	}
 
-	wandb.Status.State = apiv2.WBStateInfraUpdate
-	wandb.Status.Message = "Creating MinIO"
+	wandb.Status.State = apiv2.WBStateUpdating
 	wandb.Status.ObjStorageStatus.State = "pending"
 	if err = r.Status().Update(ctx, wandb); err != nil {
 		log.Error(err, "Failed to update status after creating MinIO Tenant")
-		return common.CtrlError(err)
+		return ctrlqueue.CtrlError(err)
 	}
-	return common.CtrlDone(common.PackageScope)
+	return ctrlqueue.CtrlDone(ctrlqueue.PackageScope)
 }
 
 type wandbMinioDelete struct {
@@ -368,24 +366,23 @@ type wandbMinioDelete struct {
 	wandb  *apiv2.WeightsAndBiases
 }
 
-func (d *wandbMinioDelete) Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) common.CtrlState {
+func (d *wandbMinioDelete) Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) ctrlqueue.CtrlState {
 	var err error
 	log := ctrl.LoggerFrom(ctx)
 	log.Info("Uninstalling MinIO Tenant")
 
 	if err = r.Delete(ctx, d.actual.obj); err != nil {
 		log.Error(err, "Failed to delete MinIO Tenant")
-		return common.CtrlError(err)
+		return ctrlqueue.CtrlError(err)
 	}
 
 	wandb := d.wandb
-	wandb.Status.State = apiv2.WBStateInfraUpdate
-	wandb.Status.Message = "Deleting MinIO"
+	wandb.Status.State = apiv2.WBStateUpdating
 	if err = r.Status().Update(ctx, wandb); err != nil {
 		log.Error(err, "Failed to update status after deleting MinIO Tenant")
-		return common.CtrlError(err)
+		return ctrlqueue.CtrlError(err)
 	}
-	return common.CtrlDone(common.PackageScope)
+	return ctrlqueue.CtrlDone(ctrlqueue.PackageScope)
 }
 
 type wandbMinioStatusUpdate struct {
@@ -396,24 +393,24 @@ type wandbMinioStatusUpdate struct {
 
 func (s *wandbMinioStatusUpdate) Execute(
 	ctx context.Context, r *WeightsAndBiasesV2Reconciler,
-) common.CtrlState {
+) ctrlqueue.CtrlState {
 	log := ctrl.LoggerFrom(ctx)
 	log.Info("Updating MinIO status", "status", s.status, "ready", s.ready)
-	s.wandb.Status.ObjStorageStatus.State = s.status
+	s.wandb.Status.ObjStorageStatus.State = apiv2.WBStateUpdating
 	s.wandb.Status.ObjStorageStatus.Ready = s.ready
 	if err := r.Status().Update(ctx, s.wandb); err != nil {
 		log.Error(err, "Failed to update MinIO status")
-		return common.CtrlError(err)
+		return ctrlqueue.CtrlError(err)
 	}
-	return common.CtrlDone(common.PackageScope)
+	return ctrlqueue.CtrlDone(ctrlqueue.PackageScope)
 }
 
 func (w *wandbMinioWrapper) maybeHandleDeletion(
 	ctx context.Context, wandb *apiv2.WeightsAndBiases, actualMinio wandbMinioWrapper, reconciler *WeightsAndBiasesV2Reconciler,
-) common.CtrlState {
+) ctrlqueue.CtrlState {
 	log := ctrllog.FromContext(ctx)
 
-	var deletionPaused = wandb.Status.State == apiv2.WBStateDeletionPaused
+	var deletionPaused = wandb.Status.State == apiv2.WBStateOffline
 	var backupEnabled = wandb.Spec.ObjStorage.Backup.Enabled
 	var flaggedForDeletion = !wandb.ObjectMeta.DeletionTimestamp.IsZero()
 	var hasMinioFinalizer = ctrlqueue.ContainsString(wandb.GetFinalizers(), minioFinalizer)
@@ -423,23 +420,23 @@ func (w *wandbMinioWrapper) maybeHandleDeletion(
 		controllerutil.RemoveFinalizer(wandb, minioFinalizer)
 		if err := reconciler.Client.Update(ctx, wandb); err != nil {
 			log.Error(err, "Failed to remove MinIO finalizer")
-			return common.CtrlError(err)
+			return ctrlqueue.CtrlError(err)
 		}
-		return common.CtrlContinue()
+		return ctrlqueue.CtrlContinue()
 	}
 
 	if deletionPaused && backupEnabled {
 		log.Info("Deletion paused for MinIO Backup; disable backups to continue with deletion")
-		return common.CtrlContinue()
+		return ctrlqueue.CtrlContinue()
 	}
 
 	if !hasMinioFinalizer && !flaggedForDeletion {
 		wandb.ObjectMeta.Finalizers = append(wandb.ObjectMeta.Finalizers, minioFinalizer)
 		if err := reconciler.Client.Update(ctx, wandb); err != nil {
 			log.Error(err, "Failed to add MinIO finalizer")
-			return common.CtrlError(err)
+			return ctrlqueue.CtrlError(err)
 		}
-		return common.CtrlContinue()
+		return ctrlqueue.CtrlContinue()
 	}
 
 	if flaggedForDeletion {
@@ -448,15 +445,14 @@ func (w *wandbMinioWrapper) maybeHandleDeletion(
 			wandb.ObjectMeta.DeletionTimestamp = nil
 			if err = reconciler.Update(ctx, wandb); err != nil {
 				log.Error(err, "Failed to update WeightsAndBiases during backup failure")
-				return common.CtrlError(err)
+				return ctrlqueue.CtrlError(err)
 			}
-			wandb.Status.State = apiv2.WBStateDeletionPaused
-			wandb.Status.Message = "MinIO backup before deletion failed, deletion paused. Disable backups to continue with deletion."
+			wandb.Status.State = apiv2.WBStateOffline
 			if err = reconciler.Status().Update(ctx, wandb); err != nil {
 				log.Error(err, "Failed to update status to deletion paused")
-				return common.CtrlError(err)
+				return ctrlqueue.CtrlError(err)
 			}
-			return common.CtrlDone(common.PackageScope)
+			return ctrlqueue.CtrlDone(ctrlqueue.PackageScope)
 		}
 
 		if wandb.Status.ObjStorageStatus.BackupStatus.State == "InProgress" {
@@ -464,31 +460,30 @@ func (w *wandbMinioWrapper) maybeHandleDeletion(
 			if wandb.Status.State != apiv2.WBStateDeleting {
 				wandb.Status.State = apiv2.WBStateDeleting
 				wandb.Status.ObjStorageStatus.State = "stopping"
-				wandb.Status.Message = "Waiting for MinIO backup to complete before deletion"
 				if err := reconciler.Status().Update(ctx, wandb); err != nil {
 					log.Error(err, "Failed to update status while backup in progress")
-					return common.CtrlError(err)
+					return ctrlqueue.CtrlError(err)
 				}
 			}
-			return common.CtrlDone(common.PackageScope)
+			return ctrlqueue.CtrlDone(ctrlqueue.PackageScope)
 		}
 
 		controllerutil.RemoveFinalizer(wandb, minioFinalizer)
 		if err := reconciler.Client.Update(ctx, wandb); err != nil {
 			log.Error(err, "Failed to remove MinIO finalizer after backup")
-			return common.CtrlError(err)
+			return ctrlqueue.CtrlError(err)
 		}
 
 		if actualMinio.obj != nil {
 			if err := reconciler.Client.Delete(ctx, actualMinio.obj); err != nil {
 				log.Error(err, "Failed to delete MinIO Tenant during cleanup")
-				return common.CtrlError(err)
+				return ctrlqueue.CtrlError(err)
 			}
 		}
 
-		return common.CtrlDone(common.PackageScope)
+		return ctrlqueue.CtrlDone(ctrlqueue.PackageScope)
 	}
-	return common.CtrlContinue()
+	return ctrlqueue.CtrlContinue()
 }
 
 func (w *wandbMinioWrapper) handleMinioBackup(
@@ -625,34 +620,34 @@ type wandbMinioConnInfoCreate struct {
 	wandb   *apiv2.WeightsAndBiases
 }
 
-func (c *wandbMinioConnInfoCreate) Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) common.CtrlState {
+func (c *wandbMinioConnInfoCreate) Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) ctrlqueue.CtrlState {
 	log := ctrl.LoggerFrom(ctx)
 	log.Info("Creating MinIO connection secret")
 
 	if c.desired.secret == nil {
 		log.Error(nil, "Desired secret is nil")
-		return common.CtrlError(errors.New("desired secret is nil"))
+		return ctrlqueue.CtrlError(errors.New("desired secret is nil"))
 	}
 
 	if err := controllerutil.SetOwnerReference(c.wandb, c.desired.secret, r.Scheme); err != nil {
 		log.Error(err, "Failed to set owner reference for MinIO connection secret")
-		return common.CtrlError(err)
+		return ctrlqueue.CtrlError(err)
 	}
 
 	if err := r.Create(ctx, c.desired.secret); err != nil {
 		log.Error(err, "Failed to create MinIO connection secret")
-		return common.CtrlError(err)
+		return ctrlqueue.CtrlError(err)
 	}
 
 	log.Info("MinIO connection secret created successfully")
-	return common.CtrlDone(common.PackageScope)
+	return ctrlqueue.CtrlDone(ctrlqueue.PackageScope)
 }
 
 type wandbMinioConnInfoDelete struct {
 	wandb *apiv2.WeightsAndBiases
 }
 
-func (d *wandbMinioConnInfoDelete) Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) common.CtrlState {
+func (d *wandbMinioConnInfoDelete) Execute(ctx context.Context, r *WeightsAndBiasesV2Reconciler) ctrlqueue.CtrlState {
 	log := ctrl.LoggerFrom(ctx)
 	log.Info("Deleting MinIO connection secret")
 
@@ -670,17 +665,17 @@ func (d *wandbMinioConnInfoDelete) Execute(ctx context.Context, r *WeightsAndBia
 	if err != nil {
 		if machErrors.IsNotFound(err) {
 			log.Info("MinIO connection secret already deleted")
-			return common.CtrlContinue()
+			return ctrlqueue.CtrlContinue()
 		}
 		log.Error(err, "Failed to get MinIO connection secret for deletion")
-		return common.CtrlError(err)
+		return ctrlqueue.CtrlError(err)
 	}
 
 	if err := r.Delete(ctx, secret); err != nil {
 		log.Error(err, "Failed to delete MinIO connection secret")
-		return common.CtrlError(err)
+		return ctrlqueue.CtrlError(err)
 	}
 
 	log.Info("MinIO connection secret deleted successfully")
-	return common.CtrlDone(common.PackageScope)
+	return ctrlqueue.CtrlDone(ctrlqueue.PackageScope)
 }

@@ -1,4 +1,4 @@
-package redis
+package defaults
 
 import (
 	"fmt"
@@ -27,7 +27,7 @@ const (
 	SmallSentinelMemoryLimit   = "256Mi"
 )
 
-func wbRedisSpecDefaults(profile v2.WBProfile) (v2.WBRedisSpec, error) {
+func Redis(profile v2.WBSize) (v2.WBRedisSpec, error) {
 	var err error
 	var storageRequest, cpuRequest, cpuLimit, memoryRequest, memoryLimit resource.Quantity
 	var spec v2.WBRedisSpec
@@ -47,12 +47,12 @@ func wbRedisSpecDefaults(profile v2.WBProfile) (v2.WBRedisSpec, error) {
 		Sentinel: sentinelSpec,
 	}
 	switch profile {
-	case v2.WBProfileDev:
+	case v2.WBSizeDev:
 		if storageRequest, err = resource.ParseQuantity(DevStorageRequest); err != nil {
 			return spec, err
 		}
 		break
-	case v2.WBProfileSmall:
+	case v2.WBSizeSmall:
 		if storageRequest, err = resource.ParseQuantity(SmallStorageRequest); err != nil {
 			return spec, err
 		}
@@ -92,14 +92,14 @@ func wbRedisSpecDefaults(profile v2.WBProfile) (v2.WBRedisSpec, error) {
 	return spec, nil
 }
 
-func _wbRedisSentinelSpecDefaults(profile v2.WBProfile) (*v2.WBRedisSentinelSpec, error) {
+func _wbRedisSentinelSpecDefaults(profile v2.WBSize) (*v2.WBRedisSentinelSpec, error) {
 	var err error
 	var cpuRequest, cpuLimit, memoryRequest, memoryLimit resource.Quantity
 
 	switch profile {
-	case v2.WBProfileDev:
+	case v2.WBSizeDev:
 		return nil, nil
-	case v2.WBProfileSmall:
+	case v2.WBSizeSmall:
 		if cpuRequest, err = resource.ParseQuantity(SmallSentinelCpuRequest); err != nil {
 			return nil, err
 		}
@@ -142,6 +142,6 @@ func _wbRedisSentinelSpecDefaults(profile v2.WBProfile) (*v2.WBRedisSentinelSpec
 	return &sentinelSpec, nil
 }
 
-func wbRedisSentinelEnabled(wbSpec v2.WBRedisSpec) bool {
+func RedisSentinelEnabled(wbSpec v2.WBRedisSpec) bool {
 	return wbSpec.Sentinel != nil && wbSpec.Sentinel.Enabled
 }

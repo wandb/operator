@@ -1,14 +1,13 @@
-package common_test
+package merge
 
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/wandb/operator/internal/controller/wandb_v2/common"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
-var _ = Describe("MergeResources", func() {
+var _ = Describe("Resources", func() {
 	Describe("merging resource limits and requests", func() {
 		Context("when both actual and defaults have values", func() {
 			It("should merge with actual taking precedence", func() {
@@ -31,7 +30,7 @@ var _ = Describe("MergeResources", func() {
 					},
 				}
 
-				result := common.MergeResources(actual, defaults)
+				result := Resources(actual, defaults)
 
 				Expect(result.Limits).To(HaveLen(2))
 				Expect(result.Limits[corev1.ResourceCPU]).To(Equal(resource.MustParse("2")))
@@ -64,7 +63,7 @@ var _ = Describe("MergeResources", func() {
 					},
 				}
 
-				result := common.MergeResources(actual, defaults)
+				result := Resources(actual, defaults)
 
 				Expect(result.Limits[corev1.ResourceCPU]).To(Equal(resource.MustParse("4")))
 				Expect(result.Limits[corev1.ResourceMemory]).To(Equal(resource.MustParse("4Gi")))
@@ -87,7 +86,7 @@ var _ = Describe("MergeResources", func() {
 					},
 				}
 
-				result := common.MergeResources(actual, defaults)
+				result := Resources(actual, defaults)
 
 				Expect(result.Limits).To(Equal(defaults.Limits))
 				Expect(result.Requests).To(Equal(defaults.Requests))
@@ -108,7 +107,7 @@ var _ = Describe("MergeResources", func() {
 				}
 				defaults := corev1.ResourceRequirements{}
 
-				result := common.MergeResources(actual, defaults)
+				result := Resources(actual, defaults)
 
 				Expect(result.Limits).To(Equal(actual.Limits))
 				Expect(result.Requests).To(Equal(actual.Requests))
@@ -120,7 +119,7 @@ var _ = Describe("MergeResources", func() {
 				actual := corev1.ResourceRequirements{}
 				defaults := corev1.ResourceRequirements{}
 
-				result := common.MergeResources(actual, defaults)
+				result := Resources(actual, defaults)
 
 				Expect(result.Limits).To(BeEmpty())
 				Expect(result.Requests).To(BeEmpty())
@@ -142,7 +141,7 @@ var _ = Describe("MergeResources", func() {
 					},
 				}
 
-				result := common.MergeResources(actual, defaults)
+				result := Resources(actual, defaults)
 
 				Expect(result.Limits[corev1.ResourceStorage]).To(Equal(resource.MustParse("10Gi")))
 				Expect(result.Limits[corev1.ResourceEphemeralStorage]).To(Equal(resource.MustParse("1Gi")))
@@ -161,7 +160,7 @@ var _ = Describe("MergeResources", func() {
 					},
 				}
 
-				result := common.MergeResources(actual, defaults)
+				result := Resources(actual, defaults)
 
 				Expect(result.Limits["nvidia.com/gpu"]).To(Equal(resource.MustParse("2")))
 				Expect(result.Limits[corev1.ResourceCPU]).To(Equal(resource.MustParse("4")))
@@ -185,7 +184,7 @@ var _ = Describe("MergeResources", func() {
 					},
 				}
 
-				result := common.MergeResources(actual, defaults)
+				result := Resources(actual, defaults)
 
 				Expect(result.Claims).To(HaveLen(3))
 				claimNames := make(map[string]bool)
@@ -210,7 +209,7 @@ var _ = Describe("MergeResources", func() {
 					},
 				}
 
-				result := common.MergeResources(actual, defaults)
+				result := Resources(actual, defaults)
 
 				Expect(result.Claims).To(HaveLen(2))
 				claimNames := make([]string, 0, len(result.Claims))
@@ -232,7 +231,7 @@ var _ = Describe("MergeResources", func() {
 				}
 				defaults := corev1.ResourceRequirements{}
 
-				result := common.MergeResources(actual, defaults)
+				result := Resources(actual, defaults)
 
 				Expect(result.Claims).To(HaveLen(2))
 				Expect(result.Claims[0].Name).To(Equal("claim1"))
@@ -250,7 +249,7 @@ var _ = Describe("MergeResources", func() {
 					},
 				}
 
-				result := common.MergeResources(actual, defaults)
+				result := Resources(actual, defaults)
 
 				Expect(result.Claims).To(HaveLen(2))
 				claimNames := make([]string, 0, len(result.Claims))
@@ -267,7 +266,7 @@ var _ = Describe("MergeResources", func() {
 				actual := corev1.ResourceRequirements{}
 				defaults := corev1.ResourceRequirements{}
 
-				result := common.MergeResources(actual, defaults)
+				result := Resources(actual, defaults)
 
 				Expect(result.Claims).To(BeEmpty())
 			})
@@ -304,7 +303,7 @@ var _ = Describe("MergeResources", func() {
 					},
 				}
 
-				result := common.MergeResources(actual, defaults)
+				result := Resources(actual, defaults)
 
 				Expect(result.Limits).To(HaveLen(2))
 				Expect(result.Limits[corev1.ResourceCPU]).To(Equal(resource.MustParse("2")))
@@ -348,7 +347,7 @@ var _ = Describe("MergeResources", func() {
 					},
 				}
 
-				result := common.MergeResources(actual, defaults)
+				result := Resources(actual, defaults)
 
 				Expect(result.Limits[corev1.ResourceCPU]).To(Equal(resource.MustParse("8")))
 				Expect(result.Limits[corev1.ResourceMemory]).To(Equal(resource.MustParse("16Gi")))
@@ -374,7 +373,7 @@ var _ = Describe("MergeResources", func() {
 					},
 				}
 
-				result := common.MergeResources(actual, defaults)
+				result := Resources(actual, defaults)
 
 				Expect(result.Limits).To(HaveLen(2))
 				Expect(result.Limits[corev1.ResourceCPU]).To(Equal(resource.MustParse("3")))
@@ -383,130 +382,6 @@ var _ = Describe("MergeResources", func() {
 				Expect(result.Requests).To(HaveLen(2))
 				Expect(result.Requests[corev1.ResourceCPU]).To(Equal(resource.MustParse("1")))
 				Expect(result.Requests[corev1.ResourceMemory]).To(Equal(resource.MustParse("2Gi")))
-			})
-		})
-	})
-
-	Describe("Coalesce", func() {
-		Context("with string values", func() {
-			It("should return actual when actual is non-empty", func() {
-				result := common.Coalesce("actual", "default")
-				Expect(result).To(Equal("actual"))
-			})
-
-			It("should return default when actual is empty", func() {
-				result := common.Coalesce("", "default")
-				Expect(result).To(Equal("default"))
-			})
-
-			It("should return default when both are empty", func() {
-				result := common.Coalesce("", "")
-				Expect(result).To(Equal(""))
-			})
-
-			It("should handle empty default with non-empty actual", func() {
-				result := common.Coalesce("actual", "")
-				Expect(result).To(Equal("actual"))
-			})
-		})
-
-		Context("with integer values", func() {
-			It("should return actual when actual is non-zero", func() {
-				result := common.Coalesce(42, 10)
-				Expect(result).To(Equal(42))
-			})
-
-			It("should return default when actual is zero", func() {
-				result := common.Coalesce(0, 10)
-				Expect(result).To(Equal(10))
-			})
-
-			It("should handle negative values", func() {
-				result := common.Coalesce(-5, 10)
-				Expect(result).To(Equal(-5))
-			})
-
-			It("should return zero default when actual is zero", func() {
-				result := common.Coalesce(0, 0)
-				Expect(result).To(Equal(0))
-			})
-		})
-
-		Context("with boolean values", func() {
-			It("should return actual when actual is true", func() {
-				result := common.Coalesce(true, false)
-				Expect(result).To(BeTrue())
-			})
-
-			It("should return default when actual is false", func() {
-				result := common.Coalesce(false, true)
-				Expect(result).To(BeTrue())
-			})
-
-			It("should handle both false", func() {
-				result := common.Coalesce(false, false)
-				Expect(result).To(BeFalse())
-			})
-		})
-
-		Context("with float values", func() {
-			It("should return actual when actual is non-zero", func() {
-				result := common.Coalesce(3.14, 2.71)
-				Expect(result).To(Equal(3.14))
-			})
-
-			It("should return default when actual is zero", func() {
-				result := common.Coalesce(0.0, 2.71)
-				Expect(result).To(Equal(2.71))
-			})
-
-			It("should handle negative floats", func() {
-				result := common.Coalesce(-1.5, 2.71)
-				Expect(result).To(Equal(-1.5))
-			})
-		})
-
-		Context("with custom comparable types", func() {
-			type CustomString string
-
-			It("should work with type aliases", func() {
-				result := common.Coalesce(CustomString("actual"), CustomString("default"))
-				Expect(result).To(Equal(CustomString("actual")))
-			})
-
-			It("should return default for empty type alias", func() {
-				result := common.Coalesce(CustomString(""), CustomString("default"))
-				Expect(result).To(Equal(CustomString("default")))
-			})
-		})
-
-		Context("integration scenarios", func() {
-			It("should be usable in merge functions", func() {
-				actualSize := "10Gi"
-				defaultSize := "5Gi"
-				result := common.Coalesce(actualSize, defaultSize)
-				Expect(result).To(Equal("10Gi"))
-			})
-
-			It("should handle missing actual values", func() {
-				var actualSize string
-				defaultSize := "5Gi"
-				result := common.Coalesce(actualSize, defaultSize)
-				Expect(result).To(Equal("5Gi"))
-			})
-
-			It("should work with resource quantities", func() {
-				actualReplicas := int32(5)
-				defaultReplicas := int32(3)
-				result := common.Coalesce(actualReplicas, defaultReplicas)
-				Expect(result).To(Equal(int32(5)))
-			})
-
-			It("should provide fallback for unset replica counts", func() {
-				actualReplicas := int32(0)
-				defaultReplicas := int32(3)
-				result := common.Coalesce(actualReplicas, defaultReplicas)
-				Expect(result).To(Equal(int32(3)))
 			})
 		})
 	})

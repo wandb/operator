@@ -262,9 +262,9 @@ var _ = Describe("WeightsandbiasesController", func() {
 	//		wandb := wandbcomv1.WeightsAndBiases{}
 	//		err := k8sClient.Get(ctx, types.NamespacedName{Name: "test", Namespace: "default"}, &wandb)
 	//		Expect(err).ToNot(HaveOccurred())
-	//		err = k8sClient.Delete(ctx, &wandb)
+	//		err = k8sClient.DeleteAll(ctx, &wandb)
 	//		Expect(err).ToNot(HaveOccurred())
-	//		err = k8sClient.Delete(ctx, &v1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "test-spec-active", Namespace: "default"}})
+	//		err = k8sClient.DeleteAll(ctx, &v1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "test-spec-active", Namespace: "default"}})
 	//		Expect(err).ToNot(HaveOccurred())
 	//		err = k8sClient.Get(ctx, types.NamespacedName{Name: "test", Namespace: "default"}, &wandb)
 	//		Expect(err).ToNot(HaveOccurred())

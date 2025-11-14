@@ -31,27 +31,6 @@ const (
 	WBDatabaseTypePercona WBDatabaseType = "percona"
 )
 
-type WBStateType string
-
-const (
-	WBStateReady          WBStateType = "Ready"
-	WBStateError          WBStateType = "Error"
-	WBStateInfraUpdate    WBStateType = "InfraUpdate"
-	WBStateDeleting       WBStateType = "Deleting"
-	WBStateDeletionPaused WBStateType = "DeletionPaused"
-)
-
-type WBInfraStatusType string
-
-const (
-	WBInfraStatusReady    WBInfraStatusType = "Ready"
-	WBInfraStatusDisabled WBInfraStatusType = "Disabled"
-	WBInfraStatusError    WBInfraStatusType = "Error"
-	WBInfraStatusPending  WBInfraStatusType = "Pending"
-	WBInfraStatusMissing  WBInfraStatusType = "Missing"
-	WBInfraStatusDeleting WBInfraStatusType = "Deleting"
-)
-
 //+kubebuilder:object:root=true
 //+kubebuilder:storageversion
 //+kubebuilder:subresource:status
@@ -86,11 +65,11 @@ func init() {
 	SchemeBuilder.Register(&WeightsAndBiases{}, &WeightsAndBiasesList{})
 }
 
-type WBProfile string
+type WBSize string
 
 const (
-	WBProfileDev   WBProfile = "dev"
-	WBProfileSmall WBProfile = "small"
+	WBSizeDev   WBSize = "dev"
+	WBSizeSmall WBSize = "small"
 )
 
 // WeightsAndBiasesSpec defines the desired state of WeightsAndBiases.
@@ -98,8 +77,8 @@ type WeightsAndBiasesSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// Profile is akin to high-level environment info
-	Profile WBProfile `json:"profile,omitempty"`
+	// Size is akin to high-level environment info
+	Size WBSize `json:"size,omitempty"`
 
 	Database   WBDatabaseSpec   `json:"database,omitempty"`
 	Redis      WBRedisSpec      `json:"redis,omitempty"`
@@ -225,11 +204,67 @@ type WBBackupFilesystemSpec struct {
 	AccessModes      []corev1.PersistentVolumeAccessMode `json:"accessModes,omitempty"`
 }
 
+// WeightsAndBiasesStatus defines the observed state of WeightsAndBiases.
+type WeightsAndBiasesStatus struct {
+	State              WBStateType        `json:"state,omitempty"`
+	DatabaseStatus     WBDatabaseStatus   `json:"databaseStatus,omitempty"`
+	RedisStatus        WBRedisStatus      `json:"redisStatus,omitempty"`
+	KafkaStatus        WBKafkaStatus      `json:"kafkaStatus,omitempty"`
+	ObjStorageStatus   WBObjStorageStatus `json:"objStorageStatus,omitempty"`
+	ClickHouseStatus   WBClickHouseStatus `json:"clickhouseStatus,omitempty"`
+	ObservedGeneration int64              `json:"observedGeneration"`
+}
+
+type WBStateType string
+
+const (
+	WBStateError    WBStateType = "Error"
+	WBStateDegraded WBStateType = "Degraded"
+	WBStateUpdating WBStateType = "Updating"
+	WBStateDeleting WBStateType = "Deleting"
+	WBStateOffline  WBStateType = "Offline"
+	WBStateReady    WBStateType = "Ready"
+	WBStateUnknown  WBStateType = "Unknown"
+)
+
+var statePrecedence = map[WBStateType]int{
+	WBStateError:    1,
+	WBStateDegraded: 2,
+	WBStateUpdating: 3,
+	WBStateDeleting: 4,
+	WBStateOffline:  5,
+	WBStateReady:    50,
+	WBStateUnknown:  99,
+}
+
+// WorseThan is used to determine the case where, given a series of
+// states describing a system, select the state that is the worst and use that
+// to as the overall state of the system.
+func (left WBStateType) WorseThan(right WBStateType) bool {
+	var leftValue = statePrecedence[WBStateUnknown]
+	var rightValue = statePrecedence[WBStateUnknown]
+	var ok bool
+	if _, ok = statePrecedence[left]; ok {
+		leftValue = statePrecedence[left]
+	}
+	if _, ok = statePrecedence[right]; ok {
+		rightValue = statePrecedence[right]
+	}
+	return leftValue > rightValue
+}
+
+type WBStatusDetail struct {
+	State   WBStateType `json:"state"`
+	Code    string      `json:"code"`
+	Message string      `json:"message"`
+}
+
 type WBDatabaseStatus struct {
-	Ready          bool           `json:"ready"`
-	State          string         `json:"state,omitempty" default:"Missing"`
-	LastReconciled metav1.Time    `json:"lastReconciled,omitempty"`
-	BackupStatus   WBBackupStatus `json:"backupStatus,omitempty"`
+	Ready          bool             `json:"ready"`
+	State          WBStateType      `json:"state,omitempty" default:"Unknown"`
+	Details        []WBStatusDetail `json:"details,omitempty"`
+	LastReconciled metav1.Time      `json:"lastReconciled,omitempty"`
+	BackupStatus   WBBackupStatus   `json:"backupStatus,omitempty"`
 }
 
 type WBBackupStatus struct {
@@ -242,21 +277,10 @@ type WBBackupStatus struct {
 	RequeueAfter   int64        `json:"requeueAfter,omitempty"`
 }
 
-// WeightsAndBiasesStatus defines the observed state of WeightsAndBiases.
-type WeightsAndBiasesStatus struct {
-	State              WBStateType        `json:"state,omitempty"`
-	Message            string             `json:"message,omitempty"`
-	DatabaseStatus     WBDatabaseStatus   `json:"databaseStatus,omitempty"`
-	RedisStatus        WBRedisStatus      `json:"redisStatus,omitempty"`
-	KafkaStatus        WBKafkaStatus      `json:"kafkaStatus,omitempty"`
-	ObjStorageStatus   WBObjStorageStatus `json:"objStorageStatus,omitempty"`
-	ClickHouseStatus   WBClickHouseStatus `json:"clickhouseStatus,omitempty"`
-	ObservedGeneration int64              `json:"observedGeneration"`
-}
-
 type WBRedisStatus struct {
 	Ready          bool              `json:"ready"`
-	State          string            `json:"state,omitempty" default:"Missing"`
+	State          WBStateType       `json:"state,omitempty" default:"Unknown"`
+	Details        []WBStatusDetail  `json:"details,omitempty"`
 	LastReconciled metav1.Time       `json:"lastReconciled,omitempty"`
 	Connection     WBRedisConnection `json:"connection,omitempty"`
 }
@@ -270,22 +294,25 @@ type WBRedisConnection struct {
 }
 
 type WBKafkaStatus struct {
-	Ready          bool           `json:"ready"`
-	State          string         `json:"state,omitempty" default:"Missing"`
-	LastReconciled metav1.Time    `json:"lastReconciled,omitempty"`
-	BackupStatus   WBBackupStatus `json:"backupStatus,omitempty"`
+	Ready          bool             `json:"ready"`
+	State          WBStateType      `json:"state,omitempty" default:"Unknown"`
+	Details        []WBStatusDetail `json:"details,omitempty"`
+	LastReconciled metav1.Time      `json:"lastReconciled,omitempty"`
+	BackupStatus   WBBackupStatus   `json:"backupStatus,omitempty"`
 }
 
 type WBObjStorageStatus struct {
-	Ready          bool           `json:"ready"`
-	State          string         `json:"state,omitempty" default:"Missing"`
-	LastReconciled metav1.Time    `json:"lastReconciled,omitempty"`
-	BackupStatus   WBBackupStatus `json:"backupStatus,omitempty"`
+	Ready          bool             `json:"ready"`
+	State          WBStateType      `json:"state,omitempty" default:"Unknown"`
+	Details        []WBStatusDetail `json:"details,omitempty"`
+	LastReconciled metav1.Time      `json:"lastReconciled,omitempty"`
+	BackupStatus   WBBackupStatus   `json:"backupStatus,omitempty"`
 }
 
 type WBClickHouseStatus struct {
-	Ready          bool           `json:"ready"`
-	State          string         `json:"state,omitempty" default:"Missing"`
-	LastReconciled metav1.Time    `json:"lastReconciled,omitempty"`
-	BackupStatus   WBBackupStatus `json:"backupStatus,omitempty"`
+	Ready          bool             `json:"ready"`
+	State          WBStateType      `json:"state,omitempty" default:"Unknown"`
+	Details        []WBStatusDetail `json:"details,omitempty"`
+	LastReconciled metav1.Time      `json:"lastReconciled,omitempty"`
+	BackupStatus   WBBackupStatus   `json:"backupStatus,omitempty"`
 }

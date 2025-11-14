@@ -1,13 +1,13 @@
-package redis
+package v2
 
 import (
 	v2 "github.com/wandb/operator/api/v2"
-	"github.com/wandb/operator/internal/controller/wandb_v2/common"
+	"github.com/wandb/operator/internal/model/merge"
 )
 
-// wbRedisSpecsMerge will create a new WBRedisSpec with defaultValues applied if not
+// Redis will create a new WBRedisSpec with defaultValues applied if not
 // present in actual. It should *never* be saved into the CR!
-func wbRedisSpecsMerge(actual v2.WBRedisSpec, defaultValues v2.WBRedisSpec) (v2.WBRedisSpec, error) {
+func Redis(actual v2.WBRedisSpec, defaultValues v2.WBRedisSpec) (v2.WBRedisSpec, error) {
 	var redisSpec v2.WBRedisSpec
 
 	/////////////////////////////////////////////
@@ -28,7 +28,7 @@ func wbRedisSpecsMerge(actual v2.WBRedisSpec, defaultValues v2.WBRedisSpec) (v2.
 		} else {
 			// merge as new Sentinel.Config
 			var sentinelConfig v2.WBRedisSentinelConfig
-			sentinelConfig.Resources = common.MergeResources(
+			sentinelConfig.Resources = merge.Resources(
 				actual.Sentinel.Config.Resources,
 				defaultValues.Sentinel.Config.Resources,
 			)
@@ -44,14 +44,14 @@ func wbRedisSpecsMerge(actual v2.WBRedisSpec, defaultValues v2.WBRedisSpec) (v2.
 	} else {
 		// merge as new Config
 		var redisConfig v2.WBRedisConfig
-		redisConfig.Resources = common.MergeResources(
+		redisConfig.Resources = merge.Resources(
 			actual.Config.Resources,
 			defaultValues.Config.Resources,
 		)
 		redisSpec.Config = &redisConfig
 	}
 
-	redisSpec.StorageSize = common.Coalesce(actual.StorageSize, defaultValues.StorageSize)
+	redisSpec.StorageSize = merge.Coalesce(actual.StorageSize, defaultValues.StorageSize)
 
 	///////////////////////////////////////////
 	// Values without overrides

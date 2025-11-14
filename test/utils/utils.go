@@ -80,7 +80,7 @@ func UninstallPrometheusOperator() {
 // IsPrometheusCRDsInstalled checks if any Prometheus CRDs are installed
 // by verifying the existence of key CRDs related to Prometheus.
 func IsPrometheusCRDsInstalled() bool {
-	// List of common Prometheus CRDs
+	// List of model Prometheus CRDs
 	prometheusCRDs := []string{
 		"prometheuses.monitoring.coreos.com",
 		"prometheusrules.monitoring.coreos.com",
@@ -135,7 +135,7 @@ func InstallCertManager() error {
 // IsCertManagerCRDsInstalled checks if any Cert Manager CRDs are installed
 // by verifying the existence of key CRDs related to Cert Manager.
 func IsCertManagerCRDsInstalled() bool {
-	// List of common Cert Manager CRDs
+	// List of model Cert Manager CRDs
 	certManagerCRDs := []string{
 		"certificates.cert-manager.io",
 		"issuers.cert-manager.io",

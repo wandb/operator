@@ -6,7 +6,7 @@ import (
 
 	strimziv1beta2 "github.com/wandb/operator/api/strimzi-kafka-vendored/v1beta2"
 	apiv2 "github.com/wandb/operator/api/v2"
-	"github.com/wandb/operator/internal/controller/wandb_v2/common"
+	"github.com/wandb/operator/internal/controller/ctrlqueue"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -15,7 +15,7 @@ import (
 
 func (r *WeightsAndBiasesV2Reconciler) handleKafkaHA(
 	ctx context.Context, wandb *apiv2.WeightsAndBiases, req ctrl.Request,
-) common.CtrlState {
+) ctrlqueue.CtrlState {
 	var err error
 	var desiredKafka wandbKafkaWrapper
 	var actualKafka wandbKafkaWrapper
@@ -25,35 +25,35 @@ func (r *WeightsAndBiasesV2Reconciler) handleKafkaHA(
 
 	if !wandb.Spec.Kafka.Enabled {
 		log.Info("Kafka not enabled, skipping")
-		return common.CtrlContinue()
+		return ctrlqueue.CtrlContinue()
 	}
 
 	log.Info("Handling Kafka HA")
 
 	if actualKafka, err = getActualKafka(ctx, r, namespacedName); err != nil {
 		log.Error(err, "Failed to get actual Kafka HA resources")
-		return common.CtrlError(err)
+		return ctrlqueue.CtrlError(err)
 	}
 
-	if ctrlState := actualKafka.maybeHandleDeletion(ctx, wandb, actualKafka, r); ctrlState.ShouldExit(common.PackageScope) {
+	if ctrlState := actualKafka.maybeHandleDeletion(ctx, wandb, actualKafka, r); ctrlState.ShouldExit(ctrlqueue.PackageScope) {
 		return ctrlState
 	}
 
 	if desiredKafka, err = getDesiredKafkaHA(ctx, wandb, namespacedName, actualKafka); err != nil {
 		log.Error(err, "Failed to get desired Kafka HA configuration")
-		return common.CtrlError(err)
+		return ctrlqueue.CtrlError(err)
 	}
 
 	if reconciliation, err = computeKafkaReconcileDrift(ctx, wandb, desiredKafka, actualKafka, r); err != nil {
 		log.Error(err, "Failed to compute Kafka HA reconcile drift")
-		return common.CtrlError(err)
+		return ctrlqueue.CtrlError(err)
 	}
 
 	if reconciliation != nil {
 		return reconciliation.Execute(ctx, r)
 	}
 
-	return common.CtrlContinue()
+	return ctrlqueue.CtrlContinue()
 }
 
 func getDesiredKafkaHA(

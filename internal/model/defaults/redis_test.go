@@ -1,4 +1,4 @@
-package redis
+package defaults
 
 import (
 	. "github.com/onsi/ginkgo/v2"
@@ -8,14 +8,14 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
-var _ = Describe("wbRedisSpecDefaults", func() {
-	Describe("wbRedisSentinelEnabled", func() {
+var _ = Describe("Redis", func() {
+	Describe("RedisSentinelEnabled", func() {
 		Context("when Sentinel is nil", func() {
 			It("should return false", func() {
 				spec := v2.WBRedisSpec{
 					Sentinel: nil,
 				}
-				result := wbRedisSentinelEnabled(spec)
+				result := RedisSentinelEnabled(spec)
 				Expect(result).To(BeFalse())
 			})
 		})
@@ -27,7 +27,7 @@ var _ = Describe("wbRedisSpecDefaults", func() {
 						Enabled: false,
 					},
 				}
-				result := wbRedisSentinelEnabled(spec)
+				result := RedisSentinelEnabled(spec)
 				Expect(result).To(BeFalse())
 			})
 		})
@@ -39,16 +39,16 @@ var _ = Describe("wbRedisSpecDefaults", func() {
 						Enabled: true,
 					},
 				}
-				result := wbRedisSentinelEnabled(spec)
+				result := RedisSentinelEnabled(spec)
 				Expect(result).To(BeTrue())
 			})
 		})
 	})
 
-	Describe("wbRedisSpecDefaults", func() {
+	Describe("Redis", func() {
 		Context("when profile is Dev", func() {
 			It("should return a redis spec with storage only and no sentinel", func() {
-				spec, err := wbRedisSpecDefaults(v2.WBProfileDev)
+				spec, err := Redis(v2.WBSizeDev)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(spec).ToNot(BeNil())
 				Expect(spec.Enabled).To(BeTrue())
@@ -72,7 +72,7 @@ var _ = Describe("wbRedisSpecDefaults", func() {
 
 		Context("when profile is Small", func() {
 			It("should return a redis spec with full resource requirements and sentinel", func() {
-				spec, err := wbRedisSpecDefaults(v2.WBProfileSmall)
+				spec, err := Redis(v2.WBSizeSmall)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(spec).ToNot(BeNil())
 				Expect(spec.Enabled).To(BeTrue())
@@ -116,7 +116,7 @@ var _ = Describe("wbRedisSpecDefaults", func() {
 
 		Context("when profile is invalid", func() {
 			It("should return an error", func() {
-				spec, err := wbRedisSpecDefaults(v2.WBProfile("invalid"))
+				spec, err := Redis(v2.WBSize("invalid"))
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("invalid profile"))
 				Expect(spec).To(BeNil())

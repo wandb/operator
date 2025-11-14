@@ -263,7 +263,7 @@ func (s *Settings) DeleteKey(key string) {
 	if !s.HasKey(key) {
 		return
 	}
-	// Delete storage key
+	// DeleteAll storage key
 	delete(s.data, key)
 }
 
@@ -621,7 +621,7 @@ func (s *Settings) normalizeKeys() {
 		s.SetKey(normalizedKey, s.GetKey(unNormalizedKey))
 	}
 
-	// Delete entries with un-normalized keys
+	// DeleteAll entries with un-normalized keys
 	for _, unNormalizedKey := range keysToNormalize {
 		s.DeleteKey(unNormalizedKey)
 	}
@@ -649,7 +649,7 @@ func (s *Settings) applyMacrosOnKeys(macros *util.Replacer) {
 		s.SetKey(modifiedKey, s.GetKey(originalKey))
 	}
 
-	// Delete entries with before-modification keys
+	// DeleteAll entries with before-modification keys
 	for _, beforeModificationKey := range keysToModify {
 		s.DeleteKey(beforeModificationKey)
 	}
