@@ -110,7 +110,8 @@ func (r *WeightsAndBiasesV2Reconciler) Reconcile(ctx context.Context, req ctrl.R
 	)
 
 	infraConfig := model.BuildInfraConfig().
-		AddRedisSpec(&(wandb.Spec.Redis), wandb.Spec.Size)
+		AddRedisSpec(&(wandb.Spec.Redis), wandb.Spec.Size).
+		AddKafkaSpec(&(wandb.Spec.Kafka), wandb.Spec.Size)
 
 	/////////////////////////
 	// Redis
@@ -141,14 +142,19 @@ func (r *WeightsAndBiasesV2Reconciler) Reconcile(ctx context.Context, req ctrl.R
 
 	/////////////////////////
 	// Kafka
-	if wandb.Spec.Size == apiv2.WBSizeDev {
-		ctrlState = r.handleKafka(ctx, wandb, req)
-	} else {
-		ctrlState = r.handleKafkaHA(ctx, wandb, req)
+	result = r.reconcileKafka(ctx, infraConfig, wandb)
+	criticalErrors = result.GetCriticalErrors()
+	if len(criticalErrors) > 0 {
+		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, criticalErrors[0]
 	}
-	if ctrlState.ShouldExit(ctrlqueue.ReconcilerScope) {
-		return ctrlState.ReconcilerResult()
-	}
+	//if wandb.Spec.Size == apiv2.WBSizeDev {
+	//	ctrlState = r.handleKafka(ctx, wandb, req)
+	//} else {
+	//	ctrlState = r.handleKafkaHA(ctx, wandb, req)
+	//}
+	//if ctrlState.ShouldExit(ctrlqueue.ReconcilerScope) {
+	//	return ctrlState.ReconcilerResult()
+	//}
 
 	/////////////////////////
 	// Minio
