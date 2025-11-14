@@ -168,14 +168,20 @@ type WBMinioBackupSpec struct {
 }
 
 type WBClickHouseSpec struct {
-	Enabled     bool                   `json:"enabled"`
-	StorageSize string                 `json:"storageSize,omitempty"`
-	Replicas    int32                  `json:"replicas,omitempty"`
-	Version     string                 `json:"version,omitempty"`
-	Backup      WBClickHouseBackupSpec `json:"backup,omitempty"`
+	Enabled     bool                `json:"enabled"`
+	StorageSize string              `json:"storageSize,omitempty"`
+	Replicas    int32               `json:"replicas,omitempty"`
+	Version     string              `json:"version,omitempty"`
+	Config      *WBClickHouseConfig `json:"config,omitempty"`
+	// Deprecated: Backup is not implemented in the refactored ClickHouse code
+	Backup WBClickHouseBackupSpec `json:"backup,omitempty"`
 	// Namespace is the target namespace for ClickHouse resources.
 	// If not specified, defaults to the WeightsAndBiases resource's namespace.
 	Namespace string `json:"namespace,omitempty"`
+}
+
+type WBClickHouseConfig struct {
+	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 }
 
 type WBClickHouseBackupSpec struct {
@@ -343,9 +349,17 @@ type WBMinioConnection struct {
 }
 
 type WBClickHouseStatus struct {
-	Ready          bool             `json:"ready"`
-	State          WBStateType      `json:"state,omitempty" default:"Unknown"`
-	Details        []WBStatusDetail `json:"details,omitempty"`
-	LastReconciled metav1.Time      `json:"lastReconciled,omitempty"`
-	BackupStatus   WBBackupStatus   `json:"backupStatus,omitempty"`
+	Ready          bool                   `json:"ready"`
+	State          WBStateType            `json:"state,omitempty" default:"Unknown"`
+	Details        []WBStatusDetail       `json:"details,omitempty"`
+	LastReconciled metav1.Time            `json:"lastReconciled,omitempty"`
+	Connection     WBClickHouseConnection `json:"connection,omitempty"`
+	// Deprecated: BackupStatus is not implemented in the refactored ClickHouse code
+	BackupStatus WBBackupStatus `json:"backupStatus,omitempty"`
+}
+
+type WBClickHouseConnection struct {
+	ClickHouseHost string `json:"CLICKHOUSE_HOST,omitempty"`
+	ClickHousePort string `json:"CLICKHOUSE_PORT,omitempty"`
+	ClickHouseUser string `json:"CLICKHOUSE_USER,omitempty"`
 }

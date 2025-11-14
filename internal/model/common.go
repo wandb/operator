@@ -80,3 +80,11 @@ func (r *Results) getMinioErrors() []MinioInfraError {
 func (r *Results) getMinioStatusDetails() []MinioStatusDetail {
 	return utils.FilterMapFunc(r.StatusList, func(s InfraStatus) (MinioStatusDetail, bool) { return s.ToMinioStatusDetail() })
 }
+
+func (r *Results) getClickHouseErrors() []ClickHouseInfraError {
+	return utils.FilterMapFunc(r.ErrorList, func(err error) (ClickHouseInfraError, bool) { return ToClickHouseInfraError(err) })
+}
+
+func (r *Results) getClickHouseStatusDetails() []ClickHouseStatusDetail {
+	return utils.FilterMapFunc(r.StatusList, func(s InfraStatus) (ClickHouseStatusDetail, bool) { return s.ToClickHouseStatusDetail() })
+}

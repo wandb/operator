@@ -24,5 +24,3 @@ spec:
     enabled: true
     storageSize: 10Gi
     replicas: 3
-    backup:
-      enabled: false

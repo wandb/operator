@@ -21,7 +21,6 @@ import (
 	"time"
 
 	apiv2 "github.com/wandb/operator/api/v2"
-	"github.com/wandb/operator/internal/controller/ctrlqueue"
 	"github.com/wandb/operator/internal/model"
 	corev1 "k8s.io/api/core/v1"
 	machErrors "k8s.io/apimachinery/pkg/api/errors"
@@ -94,7 +93,6 @@ func (r *WeightsAndBiasesV2Reconciler) Reconcile(ctx context.Context, req ctrl.R
 	)
 
 	var err error
-	var ctrlState ctrlqueue.CtrlState
 
 	wandb := &apiv2.WeightsAndBiases{}
 	if err := r.Client.Get(ctx, req.NamespacedName, wandb); err != nil {
@@ -113,7 +111,8 @@ func (r *WeightsAndBiasesV2Reconciler) Reconcile(ctx context.Context, req ctrl.R
 		AddRedisSpec(&(wandb.Spec.Redis), wandb.Spec.Size).
 		AddKafkaSpec(&(wandb.Spec.Kafka), wandb.Spec.Size).
 		AddMySQLSpec(&(wandb.Spec.MySQL), wandb.Spec.Size).
-		AddMinioSpec(&(wandb.Spec.Minio), wandb.Spec.Size)
+		AddMinioSpec(&(wandb.Spec.Minio), wandb.Spec.Size).
+		AddClickHouseSpec(&(wandb.Spec.ClickHouse), wandb.Spec.Size)
 
 	/////////////////////////
 	// Redis
@@ -164,14 +163,11 @@ func (r *WeightsAndBiasesV2Reconciler) Reconcile(ctx context.Context, req ctrl.R
 	}
 
 	/////////////////////////
-	// Clickhouse
-	if wandb.Spec.Size == apiv2.WBSizeDev {
-		ctrlState = r.handleClickHouse(ctx, wandb, req)
-	} else {
-		ctrlState = r.handleClickHouseHA(ctx, wandb, req)
-	}
-	if ctrlState.ShouldExit(ctrlqueue.ReconcilerScope) {
-		return ctrlState.ReconcilerResult()
+	// ClickHouse
+	result = r.reconcileClickHouse(ctx, infraConfig, wandb)
+	criticalErrors = result.GetCriticalErrors()
+	if len(criticalErrors) > 0 {
+		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, criticalErrors[0]
 	}
 
 	if err = r.inferState(ctx, wandb); err != nil {

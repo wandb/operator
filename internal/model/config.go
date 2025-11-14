@@ -9,6 +9,7 @@ type InfraConfig interface {
 	GetKafkaConfig() (KafkaConfig, error)
 	GetMySQLConfig() (MySQLConfig, error)
 	GetMinioConfig() (MinioConfig, error)
+	GetClickHouseConfig() (ClickHouseConfig, error)
 }
 
 func BuildInfraConfig() *InfraConfigBuilder {
@@ -16,10 +17,11 @@ func BuildInfraConfig() *InfraConfigBuilder {
 }
 
 type InfraConfigBuilder struct {
-	errors      []error
-	size        apiv2.WBSize
-	mergedRedis *apiv2.WBRedisSpec
-	mergedKafka *apiv2.WBKafkaSpec
-	mergedMySQL *apiv2.WBMySQLSpec
-	mergedMinio *apiv2.WBMinioSpec
+	errors           []error
+	size             apiv2.WBSize
+	mergedRedis      *apiv2.WBRedisSpec
+	mergedKafka      *apiv2.WBKafkaSpec
+	mergedMySQL      *apiv2.WBMySQLSpec
+	mergedMinio      *apiv2.WBMinioSpec
+	mergedClickHouse *apiv2.WBClickHouseSpec
 }

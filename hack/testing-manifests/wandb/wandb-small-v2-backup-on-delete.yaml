@@ -32,13 +32,3 @@ spec:
     enabled: true
     storageSize: 10Gi
     replicas: 3
-    backup:
-      enabled: true
-      storageName: default-backup
-      storageType: filesystem
-      filesystem:
-        storageSize: 5Gi
-        storageClassName: standard
-        accessModes:
-          - ReadWriteOnce
-      timeoutSeconds: 600
