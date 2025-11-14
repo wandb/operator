@@ -73,3 +73,20 @@ func ToRedisInfraError(err error) (RedisInfraError, bool) {
 	result.reason = infraError.reason
 	return result, true
 }
+
+func ToKafkaInfraError(err error) (KafkaInfraError, bool) {
+	var infraError InfraError
+	var ok bool
+	infraError, ok = ToInfraError(err)
+	if !ok {
+		return KafkaInfraError{}, false
+	}
+	result := KafkaInfraError{}
+	if infraError.infraName != Kafka {
+		return result, false
+	}
+	result.infraName = infraError.infraName
+	result.code = infraError.code
+	result.reason = infraError.reason
+	return result, true
+}

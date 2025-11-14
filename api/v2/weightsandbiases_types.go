@@ -125,10 +125,15 @@ type WBKafkaSpec struct {
 	Enabled     bool              `json:"enabled"`
 	StorageSize string            `json:"storageSize,omitempty"`
 	Replicas    int32             `json:"replicas,omitempty"`
+	Config      *WBKafkaConfig    `json:"config,omitempty"`
 	Backup      WBKafkaBackupSpec `json:"backup,omitempty"`
 	// Namespace is the target namespace for Kafka resources.
 	// If not specified, defaults to the WeightsAndBiases resource's namespace.
 	Namespace string `json:"namespace,omitempty"`
+}
+
+type WBKafkaConfig struct {
+	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 }
 
 type WBKafkaBackupSpec struct {

@@ -56,3 +56,11 @@ func (r *Results) getRedisErrors() []RedisInfraError {
 func (r *Results) getRedisStatusDetails() []RedisStatusDetail {
 	return utils.FilterMapFunc(r.StatusList, func(s InfraStatus) (RedisStatusDetail, bool) { return s.ToRedisStatusDetail() })
 }
+
+func (r *Results) getKafkaErrors() []KafkaInfraError {
+	return utils.FilterMapFunc(r.ErrorList, func(err error) (KafkaInfraError, bool) { return ToKafkaInfraError(err) })
+}
+
+func (r *Results) getKafkaStatusDetails() []KafkaStatusDetail {
+	return utils.FilterMapFunc(r.StatusList, func(s InfraStatus) (KafkaStatusDetail, bool) { return s.ToKafkaStatusDetail() })
+}

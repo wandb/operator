@@ -6,6 +6,7 @@ import (
 
 type InfraConfig interface {
 	GetRedisConfig() (RedisConfig, error)
+	GetKafkaConfig() (KafkaConfig, error)
 }
 
 func BuildInfraConfig() *InfraConfigBuilder {
@@ -14,5 +15,7 @@ func BuildInfraConfig() *InfraConfigBuilder {
 
 type InfraConfigBuilder struct {
 	errors      []error
+	size        apiv2.WBSize
 	mergedRedis *apiv2.WBRedisSpec
+	mergedKafka *apiv2.WBKafkaSpec
 }

@@ -19,6 +19,18 @@ func (i InfraStatus) ToRedisStatusDetail() (RedisStatusDetail, bool) {
 	return result, true
 }
 
+func (i InfraStatus) ToKafkaStatusDetail() (KafkaStatusDetail, bool) {
+	result := KafkaStatusDetail{}
+	if i.infraName != Kafka {
+		return result, false
+	}
+	result.infraName = i.infraName
+	result.code = i.code
+	result.message = i.message
+	result.hidden = i.hidden
+	return result, true
+}
+
 func (i InfraStatus) IsRedisStatus() bool {
 	return i.infraName == Redis
 }
