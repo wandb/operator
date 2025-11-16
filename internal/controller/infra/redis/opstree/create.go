@@ -3,10 +3,10 @@ package opstree
 import (
 	"context"
 
-	redisv1beta2 "github.com/wandb/operator/api/redis-operator-vendored/redis/v1beta2"
-	redisreplicationv1beta2 "github.com/wandb/operator/api/redis-operator-vendored/redisreplication/v1beta2"
-	redissentinelv1beta2 "github.com/wandb/operator/api/redis-operator-vendored/redissentinel/v1beta2"
 	"github.com/wandb/operator/internal/model"
+	redisv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redis/v1beta2"
+	redisreplicationv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redisreplication/v1beta2"
+	redissentinelv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redissentinel/v1beta2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )

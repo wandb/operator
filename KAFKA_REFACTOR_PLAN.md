@@ -14,7 +14,7 @@ The current Kafka implementation uses an **old pattern** with separate dev/HA ha
 |------|-------|---------|
 | `internal/controller/wandb_v2/kafkaOp.go` | 826 | Main dev Kafka handler + backup logic |
 | `internal/controller/wandb_v2/kafkaHaOp.go` | 192 | HA-specific handler |
-| `api/strimzi-kafka-vendored/v1beta2/kafka_types.go` | 200+ | Strimzi Kafka CRD types |
+| `internal/vendored/strimzi-kafka/v1beta2/kafka_types.go` | 200+ | Strimzi Kafka CRD types |
 | `internal/canary/kafka.go` | 40 | Health check test using Sarama |
 | `weightsandbiases_v2_controller.go` | 144-151 | Controller integration (conditional routing) |
 

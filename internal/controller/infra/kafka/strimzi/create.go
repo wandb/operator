@@ -4,13 +4,13 @@ import (
 	"context"
 	"fmt"
 
-	strimziv1beta2 "github.com/wandb/operator/api/strimzi-kafka-vendored/v1beta2"
 	"github.com/wandb/operator/internal/model"
+	v1beta3 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1beta2"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
 func (a *strimziKafka) createKafka(
-	ctx context.Context, desiredKafka *strimziv1beta2.Kafka,
+	ctx context.Context, desiredKafka *v1beta3.Kafka,
 ) *model.Results {
 	log := ctrl.LoggerFrom(ctx)
 	results := model.InitResults()
@@ -40,7 +40,7 @@ func (a *strimziKafka) createKafka(
 }
 
 func (a *strimziKafka) createNodePool(
-	ctx context.Context, desiredNodePool *strimziv1beta2.KafkaNodePool,
+	ctx context.Context, desiredNodePool *v1beta3.KafkaNodePool,
 ) *model.Results {
 	log := ctrl.LoggerFrom(ctx)
 	results := model.InitResults()

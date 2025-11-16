@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"strconv"
 
-	strimziv1beta2 "github.com/wandb/operator/api/strimzi-kafka-vendored/v1beta2"
 	"github.com/wandb/operator/internal/model"
+	v1beta3 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1beta2"
 )
 
 func (a *strimziKafka) updateKafka(
-	ctx context.Context, desiredKafka *strimziv1beta2.Kafka,
+	ctx context.Context, desiredKafka *v1beta3.Kafka,
 ) *model.Results {
 	results := model.InitResults()
 
@@ -30,7 +30,7 @@ func (a *strimziKafka) updateKafka(
 }
 
 func (a *strimziKafka) updateNodePool(
-	ctx context.Context, desiredNodePool *strimziv1beta2.KafkaNodePool,
+	ctx context.Context, desiredNodePool *v1beta3.KafkaNodePool,
 ) *model.Results {
 	results := model.InitResults()
 

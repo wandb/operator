@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"time"
 
-	chiv1 "github.com/wandb/operator/api/altinity-clickhouse-vendored/clickhouse.altinity.com/v1"
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/ctrlqueue"
+	v2 "github.com/wandb/operator/internal/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
 	corev1 "k8s.io/api/core/v1"
 	machErrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -25,7 +25,7 @@ const clickhouseFinalizer = "clickhouse.app.wandb.com"
 
 type wandbClickHouseWrapper struct {
 	installed       bool
-	obj             *chiv1.ClickHouseInstallation
+	obj             *v2.ClickHouseInstallation
 	secretInstalled bool
 	secret          *corev1.Secret
 }
@@ -39,7 +39,7 @@ func (w *wandbClickHouseWrapper) IsReady() bool {
 		return false
 	}
 
-	return w.obj.Status.Status == chiv1.StatusCompleted
+	return w.obj.Status.Status == v2.StatusCompleted
 }
 
 func (w *wandbClickHouseWrapper) GetStatus() string {
@@ -52,7 +52,7 @@ func (w *wandbClickHouseWrapper) GetStatus() string {
 	}
 
 	status := w.obj.Status.Status
-	if status == chiv1.StatusCompleted {
+	if status == v2.StatusCompleted {
 		return "ready"
 	}
 
@@ -133,7 +133,7 @@ func getActualClickHouse(
 		secret:          nil,
 	}
 
-	obj := &chiv1.ClickHouseInstallation{}
+	obj := &v2.ClickHouseInstallation{}
 	err := reconciler.Get(ctx, namespacedName, obj)
 	if err == nil {
 		result.obj = obj
@@ -194,17 +194,17 @@ func getDesiredClickHouse(
 	canaryUsername := "test_user"
 	canaryPassword := "test_password"
 	passwordSha256 := fmt.Sprintf("%x", sha256.Sum256([]byte(canaryPassword)))
-	settings := chiv1.NewSettings()
+	settings := v2.NewSettings()
 	settings.Set(
 		fmt.Sprintf("%s/password_sha256_hex", canaryUsername),
-		chiv1.NewSettingScalar(passwordSha256),
+		v2.NewSettingScalar(passwordSha256),
 	)
 	settings.Set(
 		fmt.Sprintf("%s/networks/ip", canaryUsername),
-		chiv1.NewSettingScalar("::/0"),
+		v2.NewSettingScalar("::/0"),
 	)
 
-	chi := &chiv1.ClickHouseInstallation{
+	chi := &v2.ClickHouseInstallation{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      namespacedName.Name,
 			Namespace: namespacedName.Namespace,
@@ -212,12 +212,12 @@ func getDesiredClickHouse(
 				"app": "wandb-clickhouse",
 			},
 		},
-		Spec: chiv1.ChiSpec{
-			Configuration: &chiv1.Configuration{
-				Clusters: []*chiv1.Cluster{
+		Spec: v2.ChiSpec{
+			Configuration: &v2.Configuration{
+				Clusters: []*v2.Cluster{
 					{
 						Name: "cluster",
-						Layout: &chiv1.ChiClusterLayout{
+						Layout: &v2.ChiClusterLayout{
 							ShardsCount:   1,
 							ReplicasCount: int(replicas),
 						},
@@ -225,13 +225,13 @@ func getDesiredClickHouse(
 				},
 				Users: settings,
 			},
-			Defaults: &chiv1.Defaults{
-				Templates: &chiv1.TemplatesList{
+			Defaults: &v2.Defaults{
+				Templates: &v2.TemplatesList{
 					DataVolumeClaimTemplate: "default-volume",
 				},
 			},
-			Templates: &chiv1.Templates{
-				VolumeClaimTemplates: []chiv1.VolumeClaimTemplate{
+			Templates: &v2.Templates{
+				VolumeClaimTemplates: []v2.VolumeClaimTemplate{
 					{
 						Name: "default-volume",
 						Spec: corev1.PersistentVolumeClaimSpec{

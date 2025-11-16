@@ -24,13 +24,14 @@ import (
 	"path/filepath"
 	"strings"
 
-	chiv1 "github.com/wandb/operator/api/altinity-clickhouse-vendored/clickhouse.altinity.com/v1"
-	miniov2 "github.com/wandb/operator/api/minio-operator-vendored/minio.min.io/v2"
-	redisv1beta2 "github.com/wandb/operator/api/redis-operator-vendored/redis/v1beta2"
-	redisreplicationv1beta2 "github.com/wandb/operator/api/redis-operator-vendored/redisreplication/v1beta2"
-	redissentinelv1beta2 "github.com/wandb/operator/api/redis-operator-vendored/redissentinel/v1beta2"
-	strimziv1beta2 "github.com/wandb/operator/api/strimzi-kafka-vendored/v1beta2"
 	"github.com/wandb/operator/internal/controller/wandb_v2"
+	chiv1 "github.com/wandb/operator/internal/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
+	miniov2 "github.com/wandb/operator/internal/vendored/minio-operator/minio.min.io/v2"
+	pxcv1 "github.com/wandb/operator/internal/vendored/percona-operator/pxc/v1"
+	redisv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redis/v1beta2"
+	redisreplicationv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redisreplication/v1beta2"
+	redissentinelv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redissentinel/v1beta2"
+	strimziv1beta2 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1beta2"
 	webhookv2 "github.com/wandb/operator/internal/webhook/v2"
 	"github.com/wandb/operator/pkg/wandb/spec/channel/deployer"
 
@@ -38,7 +39,6 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
-	pxcv1 "github.com/wandb/operator/api/percona-operator-vendored/pxc/v1"
 	"github.com/wandb/operator/internal/controller"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/runtime"

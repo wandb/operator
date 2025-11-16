@@ -5,8 +5,8 @@ import (
 	"crypto/sha256"
 	"fmt"
 
-	chiv1 "github.com/wandb/operator/api/altinity-clickhouse-vendored/clickhouse.altinity.com/v1"
 	"github.com/wandb/operator/internal/model"
+	v2 "github.com/wandb/operator/internal/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -21,7 +21,7 @@ func buildDesiredCHI(
 	clickhouseConfig model.ClickHouseConfig,
 	owner metav1.Object,
 	scheme *runtime.Scheme,
-) (*chiv1.ClickHouseInstallation, *model.Results) {
+) (*v2.ClickHouseInstallation, *model.Results) {
 	log := ctrl.LoggerFrom(ctx)
 	results := model.InitResults()
 
@@ -35,18 +35,18 @@ func buildDesiredCHI(
 
 	// Create user settings with password
 	passwordSha256 := fmt.Sprintf("%x", sha256.Sum256([]byte(ClickHousePassword)))
-	settings := chiv1.NewSettings()
+	settings := v2.NewSettings()
 	settings.Set(
 		fmt.Sprintf("%s/password_sha256_hex", ClickHouseUser),
-		chiv1.NewSettingScalar(passwordSha256),
+		v2.NewSettingScalar(passwordSha256),
 	)
 	settings.Set(
 		fmt.Sprintf("%s/networks/ip", ClickHouseUser),
-		chiv1.NewSettingScalar("::/0"),
+		v2.NewSettingScalar("::/0"),
 	)
 
 	// Build ClickHouseInstallation spec
-	chi := &chiv1.ClickHouseInstallation{
+	chi := &v2.ClickHouseInstallation{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      CHIName,
 			Namespace: clickhouseConfig.Namespace,
@@ -54,12 +54,12 @@ func buildDesiredCHI(
 				"app": CHIName,
 			},
 		},
-		Spec: chiv1.ChiSpec{
-			Configuration: &chiv1.Configuration{
-				Clusters: []*chiv1.Cluster{
+		Spec: v2.ChiSpec{
+			Configuration: &v2.Configuration{
+				Clusters: []*v2.Cluster{
 					{
 						Name: ClusterName,
-						Layout: &chiv1.ChiClusterLayout{
+						Layout: &v2.ChiClusterLayout{
 							ShardsCount:   ShardsCount,
 							ReplicasCount: int(clickhouseConfig.Replicas),
 						},
@@ -67,13 +67,13 @@ func buildDesiredCHI(
 				},
 				Users: settings,
 			},
-			Defaults: &chiv1.Defaults{
-				Templates: &chiv1.TemplatesList{
+			Defaults: &v2.Defaults{
+				Templates: &v2.TemplatesList{
 					DataVolumeClaimTemplate: VolumeTemplateName,
 				},
 			},
-			Templates: &chiv1.Templates{
-				VolumeClaimTemplates: []chiv1.VolumeClaimTemplate{
+			Templates: &v2.Templates{
+				VolumeClaimTemplates: []v2.VolumeClaimTemplate{
 					{
 						Name: VolumeTemplateName,
 						Spec: corev1.PersistentVolumeClaimSpec{
@@ -94,7 +94,7 @@ func buildDesiredCHI(
 
 	// Add pod template with resources if specified
 	if len(clickhouseConfig.Resources.Requests) > 0 || len(clickhouseConfig.Resources.Limits) > 0 {
-		chi.Spec.Templates.PodTemplates = []chiv1.PodTemplate{
+		chi.Spec.Templates.PodTemplates = []v2.PodTemplate{
 			{
 				Name: "default-pod",
 				Spec: corev1.PodSpec{

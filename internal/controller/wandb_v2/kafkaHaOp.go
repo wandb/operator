@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 
-	strimziv1beta2 "github.com/wandb/operator/api/strimzi-kafka-vendored/v1beta2"
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/ctrlqueue"
+	v1beta3 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1beta2"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -84,7 +84,7 @@ func getDesiredKafkaHA(
 
 	replicas := int32(3)
 
-	kafka := &strimziv1beta2.Kafka{
+	kafka := &v1beta3.Kafka{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      namespacedName.Name,
 			Namespace: namespacedName.Namespace,
@@ -95,12 +95,12 @@ func getDesiredKafkaHA(
 				"strimzi.io/node-pools": "enabled",
 			},
 		},
-		Spec: strimziv1beta2.KafkaSpec{
-			Kafka: strimziv1beta2.KafkaClusterSpec{
+		Spec: v1beta3.KafkaSpec{
+			Kafka: v1beta3.KafkaClusterSpec{
 				Version:         "4.1.0",
 				MetadataVersion: "4.1-IV0",
 				Replicas:        0,
-				Listeners: []strimziv1beta2.GenericKafkaListener{
+				Listeners: []v1beta3.GenericKafkaListener{
 					{
 						Name: "plain",
 						Port: 9092,
@@ -125,7 +125,7 @@ func getDesiredKafkaHA(
 		},
 	}
 
-	nodePool := &strimziv1beta2.KafkaNodePool{
+	nodePool := &v1beta3.KafkaNodePool{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "wandb-kafka-pool",
 			Namespace: namespacedName.Namespace,
@@ -133,12 +133,12 @@ func getDesiredKafkaHA(
 				"strimzi.io/cluster": namespacedName.Name,
 			},
 		},
-		Spec: strimziv1beta2.KafkaNodePoolSpec{
+		Spec: v1beta3.KafkaNodePoolSpec{
 			Replicas: replicas,
 			Roles:    []string{"broker", "controller"},
-			Storage: strimziv1beta2.KafkaStorage{
+			Storage: v1beta3.KafkaStorage{
 				Type: "jbod",
-				Volumes: []strimziv1beta2.StorageVolume{
+				Volumes: []v1beta3.StorageVolume{
 					{
 						ID:          0,
 						Type:        "persistent-claim",

@@ -5,9 +5,9 @@ import (
 	"errors"
 	"time"
 
-	pxcv1 "github.com/wandb/operator/api/percona-operator-vendored/pxc/v1"
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/ctrlqueue"
+	pxcv1 "github.com/wandb/operator/internal/vendored/percona-operator/pxc/v1"
 	corev1 "k8s.io/api/core/v1"
 	machErrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"

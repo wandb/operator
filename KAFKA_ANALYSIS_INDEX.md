@@ -58,7 +58,7 @@ Provides quick navigation through all analysis materials.
 - **kafkaHaOp.go** (192 lines) - HA-specific handler
 
 ### API & Configuration
-- **api/strimzi-kafka-vendored/v1beta2/kafka_types.go** - Strimzi CRD types
+- **internal/vendored/strimzi-kafka/v1beta2/kafka_types.go** - Strimzi CRD types
 - **api/v2/weightsandbiases_types.go** - WBKafkaSpec definition
 - **internal/canary/kafka.go** (40 lines) - Health check
 

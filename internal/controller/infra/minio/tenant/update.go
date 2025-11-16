@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strconv"
 
-	miniov2 "github.com/wandb/operator/api/minio-operator-vendored/minio.min.io/v2"
 	"github.com/wandb/operator/internal/model"
+	miniov2 "github.com/wandb/operator/internal/vendored/minio-operator/minio.min.io/v2"
 )
 
 func (a *minioTenant) updateTenant(

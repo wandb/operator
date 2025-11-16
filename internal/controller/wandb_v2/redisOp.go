@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 
-	common "github.com/wandb/operator/api/redis-operator-vendored/common/v1beta2"
-	redisv1beta2 "github.com/wandb/operator/api/redis-operator-vendored/redis/v1beta2"
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/ctrlqueue"
+	common "github.com/wandb/operator/internal/vendored/redis-operator/common/v1beta2"
+	redisv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redis/v1beta2"
 	corev1 "k8s.io/api/core/v1"
 	machErrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"

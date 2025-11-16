@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"time"
 
-	strimziv1beta2 "github.com/wandb/operator/api/strimzi-kafka-vendored/v1beta2"
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/ctrlqueue"
+	v1beta3 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1beta2"
 	corev1 "k8s.io/api/core/v1"
 	machErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -24,8 +24,8 @@ const kafkaFinalizer = "kafka.app.wandb.com"
 type wandbKafkaWrapper struct {
 	kafkaInstalled    bool
 	nodePoolInstalled bool
-	kafkaObj          *strimziv1beta2.Kafka
-	nodePoolObj       *strimziv1beta2.KafkaNodePool
+	kafkaObj          *v1beta3.Kafka
+	nodePoolObj       *v1beta3.KafkaNodePool
 	secretInstalled   bool
 	secret            *corev1.Secret
 }
@@ -165,7 +165,7 @@ func getActualKafka(
 		secret:            nil,
 	}
 
-	obj := &strimziv1beta2.Kafka{}
+	obj := &v1beta3.Kafka{}
 	err := reconciler.Get(ctx, namespacedName, obj)
 	if err == nil {
 		result.kafkaObj = obj
@@ -178,7 +178,7 @@ func getActualKafka(
 		Name:      "wandb-kafka-pool",
 		Namespace: namespacedName.Namespace,
 	}
-	nodePoolObj := &strimziv1beta2.KafkaNodePool{}
+	nodePoolObj := &v1beta3.KafkaNodePool{}
 	err = reconciler.Get(ctx, nodePoolNamespacedName, nodePoolObj)
 	if err == nil {
 		result.nodePoolObj = nodePoolObj
@@ -239,7 +239,7 @@ func getDesiredKafka(
 		replicas = 1
 	}
 
-	kafka := &strimziv1beta2.Kafka{
+	kafka := &v1beta3.Kafka{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      namespacedName.Name,
 			Namespace: namespacedName.Namespace,
@@ -250,12 +250,12 @@ func getDesiredKafka(
 				"strimzi.io/node-pools": "enabled",
 			},
 		},
-		Spec: strimziv1beta2.KafkaSpec{
-			Kafka: strimziv1beta2.KafkaClusterSpec{
+		Spec: v1beta3.KafkaSpec{
+			Kafka: v1beta3.KafkaClusterSpec{
 				Version:         "4.1.0",
 				MetadataVersion: "4.1-IV0",
 				Replicas:        0, // critical when in KRaft mode
-				Listeners: []strimziv1beta2.GenericKafkaListener{
+				Listeners: []v1beta3.GenericKafkaListener{
 					{
 						Name: "plain",
 						Port: 9092,
@@ -280,7 +280,7 @@ func getDesiredKafka(
 		},
 	}
 
-	nodePool := &strimziv1beta2.KafkaNodePool{
+	nodePool := &v1beta3.KafkaNodePool{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "wandb-kafka-pool",
 			Namespace: namespacedName.Namespace,
@@ -288,12 +288,12 @@ func getDesiredKafka(
 				"strimzi.io/cluster": namespacedName.Name,
 			},
 		},
-		Spec: strimziv1beta2.KafkaNodePoolSpec{
+		Spec: v1beta3.KafkaNodePoolSpec{
 			Replicas: replicas,
 			Roles:    []string{"broker", "controller"},
-			Storage: strimziv1beta2.KafkaStorage{
+			Storage: v1beta3.KafkaStorage{
 				Type: "jbod",
-				Volumes: []strimziv1beta2.StorageVolume{
+				Volumes: []v1beta3.StorageVolume{
 					{
 						ID:          0,
 						Type:        "persistent-claim",

@@ -3,13 +3,12 @@ package opstree
 import (
 	"context"
 
-	common "github.com/wandb/operator/api/redis-operator-vendored/common/v1beta2"
-	"github.com/wandb/operator/api/redis-operator-vendored/redis/v1beta2"
-	redisv1beta2 "github.com/wandb/operator/api/redis-operator-vendored/redis/v1beta2"
-	redisreplicationv1beta2 "github.com/wandb/operator/api/redis-operator-vendored/redisreplication/v1beta2"
-	redissentinelv1beta2 "github.com/wandb/operator/api/redis-operator-vendored/redissentinel/v1beta2"
 	"github.com/wandb/operator/internal/model"
 	"github.com/wandb/operator/internal/model/defaults"
+	common "github.com/wandb/operator/internal/vendored/redis-operator/common/v1beta2"
+	redisv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redis/v1beta2"
+	redisreplicationv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redisreplication/v1beta2"
+	redissentinelv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redissentinel/v1beta2"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -20,7 +19,7 @@ func buildDesiredStandalone(
 	ctx context.Context,
 	redisConfig model.RedisConfig,
 ) (
-	*v1beta2.Redis, *model.Results,
+	*redisv1beta2.Redis, *model.Results,
 ) {
 	log := ctrl.LoggerFrom(ctx)
 	var results = model.InitResults()

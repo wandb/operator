@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	pxcv1 "github.com/wandb/operator/api/percona-operator-vendored/pxc/v1"
 	"github.com/wandb/operator/internal/model"
+	pxcv1 "github.com/wandb/operator/internal/vendored/percona-operator/pxc/v1"
 	machErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"

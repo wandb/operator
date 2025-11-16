@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strconv"
 
-	strimziv1beta2 "github.com/wandb/operator/api/strimzi-kafka-vendored/v1beta2"
 	"github.com/wandb/operator/internal/model"
+	v1beta3 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1beta2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -19,11 +19,11 @@ func buildDesiredKafka(
 	kafkaConfig model.KafkaConfig,
 	owner metav1.Object,
 	scheme *runtime.Scheme,
-) (*strimziv1beta2.Kafka, *model.Results) {
+) (*v1beta3.Kafka, *model.Results) {
 	log := ctrl.LoggerFrom(ctx)
 	results := model.InitResults()
 
-	kafka := &strimziv1beta2.Kafka{
+	kafka := &v1beta3.Kafka{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      KafkaName,
 			Namespace: kafkaConfig.Namespace,
@@ -34,12 +34,12 @@ func buildDesiredKafka(
 				"strimzi.io/node-pools": "enabled",
 			},
 		},
-		Spec: strimziv1beta2.KafkaSpec{
-			Kafka: strimziv1beta2.KafkaClusterSpec{
+		Spec: v1beta3.KafkaSpec{
+			Kafka: v1beta3.KafkaClusterSpec{
 				Version:         KafkaVersion,
 				MetadataVersion: KafkaMetadataVersion,
 				Replicas:        0, // CRITICAL: Must be 0 when using node pools in KRaft mode
-				Listeners: []strimziv1beta2.GenericKafkaListener{
+				Listeners: []v1beta3.GenericKafkaListener{
 					{
 						Name: PlainListenerName,
 						Port: PlainListenerPort,
@@ -86,11 +86,11 @@ func buildDesiredNodePool(
 	kafkaConfig model.KafkaConfig,
 	owner metav1.Object,
 	scheme *runtime.Scheme,
-) (*strimziv1beta2.KafkaNodePool, *model.Results) {
+) (*v1beta3.KafkaNodePool, *model.Results) {
 	log := ctrl.LoggerFrom(ctx)
 	results := model.InitResults()
 
-	nodePool := &strimziv1beta2.KafkaNodePool{
+	nodePool := &v1beta3.KafkaNodePool{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      NodePoolName,
 			Namespace: kafkaConfig.Namespace,
@@ -98,12 +98,12 @@ func buildDesiredNodePool(
 				"strimzi.io/cluster": KafkaName,
 			},
 		},
-		Spec: strimziv1beta2.KafkaNodePoolSpec{
+		Spec: v1beta3.KafkaNodePoolSpec{
 			Replicas: kafkaConfig.Replicas,
 			Roles:    []string{RoleBroker, RoleController},
-			Storage: strimziv1beta2.KafkaStorage{
+			Storage: v1beta3.KafkaStorage{
 				Type: "jbod",
-				Volumes: []strimziv1beta2.StorageVolume{
+				Volumes: []v1beta3.StorageVolume{
 					{
 						ID:          0,
 						Type:        StorageType,

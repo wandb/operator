@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	strimziv1beta2 "github.com/wandb/operator/api/strimzi-kafka-vendored/v1beta2"
 	"github.com/wandb/operator/internal/model"
+	v1beta3 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1beta2"
 	machErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -15,8 +15,8 @@ import (
 )
 
 type strimziKafka struct {
-	kafka    *strimziv1beta2.Kafka
-	nodePool *strimziv1beta2.KafkaNodePool
+	kafka    *v1beta3.Kafka
+	nodePool *v1beta3.KafkaNodePool
 	config   model.KafkaConfig
 	client   client.Client
 	owner    metav1.Object
@@ -33,8 +33,8 @@ func Initialize(
 ) (*strimziKafka, error) {
 	log := ctrl.LoggerFrom(ctx)
 
-	var kafka = &strimziv1beta2.Kafka{}
-	var nodePool = &strimziv1beta2.KafkaNodePool{}
+	var kafka = &v1beta3.Kafka{}
+	var nodePool = &v1beta3.KafkaNodePool{}
 	var result = strimziKafka{
 		config:   kafkaConfig,
 		client:   client,

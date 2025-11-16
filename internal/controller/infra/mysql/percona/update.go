@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strconv"
 
-	pxcv1 "github.com/wandb/operator/api/percona-operator-vendored/pxc/v1"
 	"github.com/wandb/operator/internal/model"
+	pxcv1 "github.com/wandb/operator/internal/vendored/percona-operator/pxc/v1"
 )
 
 func (a *perconaPXC) updatePXC(

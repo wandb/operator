@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	chiv1 "github.com/wandb/operator/api/altinity-clickhouse-vendored/clickhouse.altinity.com/v1"
 	"github.com/wandb/operator/internal/model"
+	chiv1 "github.com/wandb/operator/internal/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
