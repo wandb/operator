@@ -6,10 +6,20 @@ import (
 	"slices"
 
 	apiv2 "github.com/wandb/operator/api/v2"
-	"github.com/wandb/operator/internal/model/defaults"
-	mergev2 "github.com/wandb/operator/internal/model/merge/v2"
+	mergev2 "github.com/wandb/operator/internal/controller/translator/v2"
 	v1 "k8s.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
+)
+
+// Default values
+const (
+	DevKafkaStorageSize   = "1Gi"
+	SmallKafkaStorageSize = "5Gi"
+
+	SmallKafkaCpuRequest    = "500m"
+	SmallKafkaCpuLimit      = "1000m"
+	SmallKafkaMemoryRequest = "1Gi"
+	SmallKafkaMemoryLimit   = "2Gi"
 )
 
 /////////////////////////////////////////////////
@@ -65,11 +75,11 @@ func (i *InfraConfigBuilder) AddKafkaSpec(actual *apiv2.WBKafkaSpec, size apiv2.
 	i.size = size
 	var err error
 	var defaultSpec, merged apiv2.WBKafkaSpec
-	if defaultSpec, err = defaults.Kafka(size); err != nil {
+	if defaultSpec, err = mergev2.BuildKafkaDefaults(size); err != nil {
 		i.errors = append(i.errors, err)
 		return i
 	}
-	if merged, err = mergev2.Kafka(*actual, defaultSpec); err != nil {
+	if merged, err = mergev2.BuildKafkaSpec(*actual, defaultSpec); err != nil {
 		i.errors = append(i.errors, err)
 		return i
 	} else {

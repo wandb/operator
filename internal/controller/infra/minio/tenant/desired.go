@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/wandb/operator/internal/model"
-	"github.com/wandb/operator/internal/model/defaults"
 	miniov2 "github.com/wandb/operator/internal/vendored/minio-operator/minio.min.io/v2"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -43,7 +42,7 @@ func buildDesiredTenant(
 			},
 		},
 		Spec: miniov2.TenantSpec{
-			Image: defaults.MinioImage,
+			Image: model.MinioImage,
 			Configuration: &corev1.LocalObjectReference{
 				Name: TenantName + "-config",
 			},

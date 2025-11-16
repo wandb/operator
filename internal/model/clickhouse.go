@@ -5,10 +5,25 @@ import (
 	"fmt"
 
 	apiv2 "github.com/wandb/operator/api/v2"
-	"github.com/wandb/operator/internal/model/defaults"
-	mergev2 "github.com/wandb/operator/internal/model/merge/v2"
+	mergev2 "github.com/wandb/operator/internal/controller/translator/v2"
 	v1 "k8s.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
+)
+
+// Default values
+const (
+	// Storage sizes
+	DevClickHouseStorageSize   = "10Gi"
+	SmallClickHouseStorageSize = "10Gi"
+
+	// Resource requests/limits for small size
+	SmallClickHouseCpuRequest    = "500m"
+	SmallClickHouseCpuLimit      = "1000m"
+	SmallClickHouseMemoryRequest = "1Gi"
+	SmallClickHouseMemoryLimit   = "2Gi"
+
+	// ClickHouse version
+	ClickHouseVersion = "23.8"
 )
 
 /////////////////////////////////////////////////
@@ -51,11 +66,11 @@ func (i *InfraConfigBuilder) AddClickHouseSpec(actual *apiv2.WBClickHouseSpec, s
 	i.size = size
 	var err error
 	var defaultSpec, merged apiv2.WBClickHouseSpec
-	if defaultSpec, err = defaults.ClickHouse(size); err != nil {
+	if defaultSpec, err = mergev2.BuildClickHouseDefaults(size); err != nil {
 		i.errors = append(i.errors, err)
 		return i
 	}
-	if merged, err = mergev2.ClickHouse(*actual, defaultSpec); err != nil {
+	if merged, err = mergev2.BuildClickHouseSpec(*actual, defaultSpec); err != nil {
 		i.errors = append(i.errors, err)
 		return i
 	} else {

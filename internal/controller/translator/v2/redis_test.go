@@ -8,7 +8,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
-var _ = Describe("Redis", func() {
+var _ = Describe("BuildRedisSpec", func() {
 	Describe("Sentinel merging", func() {
 		Context("when both Sentinel values are nil", func() {
 			It("should result in nil Sentinel", func() {
@@ -19,7 +19,7 @@ var _ = Describe("Redis", func() {
 					Sentinel: nil,
 				}
 
-				result, err := Redis(actual, defaults)
+				result, err := BuildRedisSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.Sentinel).To(BeNil())
 			})
@@ -43,7 +43,7 @@ var _ = Describe("Redis", func() {
 					},
 				}
 
-				result, err := Redis(actual, defaults)
+				result, err := BuildRedisSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.Sentinel).ToNot(BeNil())
 				Expect(result.Sentinel.Enabled).To(BeTrue())
@@ -70,7 +70,7 @@ var _ = Describe("Redis", func() {
 					Sentinel: nil,
 				}
 
-				result, err := Redis(actual, defaults)
+				result, err := BuildRedisSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.Sentinel).ToNot(BeNil())
 				Expect(result.Sentinel.Enabled).To(BeFalse())
@@ -107,7 +107,7 @@ var _ = Describe("Redis", func() {
 					},
 				}
 
-				result, err := Redis(actual, defaults)
+				result, err := BuildRedisSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.Sentinel).ToNot(BeNil())
 				Expect(result.Sentinel.Enabled).To(BeTrue())
@@ -138,7 +138,7 @@ var _ = Describe("Redis", func() {
 					},
 				}
 
-				result, err := Redis(actual, defaults)
+				result, err := BuildRedisSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.Sentinel).ToNot(BeNil())
 				Expect(result.Sentinel.Enabled).To(BeTrue())
@@ -168,7 +168,7 @@ var _ = Describe("Redis", func() {
 					},
 				}
 
-				result, err := Redis(actual, defaults)
+				result, err := BuildRedisSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.Sentinel).ToNot(BeNil())
 				Expect(result.Sentinel.Enabled).To(BeTrue())
@@ -188,7 +188,7 @@ var _ = Describe("Redis", func() {
 					Config: nil,
 				}
 
-				result, err := Redis(actual, defaults)
+				result, err := BuildRedisSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.Config).To(BeNil())
 			})
@@ -215,7 +215,7 @@ var _ = Describe("Redis", func() {
 					},
 				}
 
-				result, err := Redis(actual, defaults)
+				result, err := BuildRedisSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.Config).ToNot(BeNil())
 				Expect(result.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(resource.MustParse("500m")))
@@ -241,7 +241,7 @@ var _ = Describe("Redis", func() {
 					Config: nil,
 				}
 
-				result, err := Redis(actual, defaults)
+				result, err := BuildRedisSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.Config).ToNot(BeNil())
 				Expect(result.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(resource.MustParse("250m")))
@@ -278,7 +278,7 @@ var _ = Describe("Redis", func() {
 					},
 				}
 
-				result, err := Redis(actual, defaults)
+				result, err := BuildRedisSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.Config).ToNot(BeNil())
 				Expect(result.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(resource.MustParse("750m")))
@@ -300,7 +300,7 @@ var _ = Describe("Redis", func() {
 					StorageSize: "10Gi",
 				}
 
-				result, err := Redis(actual, defaults)
+				result, err := BuildRedisSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.StorageSize).To(Equal("10Gi"))
 			})
@@ -315,7 +315,7 @@ var _ = Describe("Redis", func() {
 					StorageSize: "10Gi",
 				}
 
-				result, err := Redis(actual, defaults)
+				result, err := BuildRedisSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.StorageSize).To(Equal("20Gi"))
 			})
@@ -330,7 +330,7 @@ var _ = Describe("Redis", func() {
 					StorageSize: "",
 				}
 
-				result, err := Redis(actual, defaults)
+				result, err := BuildRedisSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.StorageSize).To(Equal(""))
 			})
@@ -347,7 +347,7 @@ var _ = Describe("Redis", func() {
 					Enabled: false,
 				}
 
-				result, err := Redis(actual, defaults)
+				result, err := BuildRedisSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.Enabled).To(BeTrue())
 			})
@@ -362,7 +362,7 @@ var _ = Describe("Redis", func() {
 					Enabled: true,
 				}
 
-				result, err := Redis(actual, defaults)
+				result, err := BuildRedisSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.Enabled).To(BeFalse())
 			})
@@ -379,7 +379,7 @@ var _ = Describe("Redis", func() {
 					Namespace: "default-namespace",
 				}
 
-				result, err := Redis(actual, defaults)
+				result, err := BuildRedisSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.Namespace).To(Equal("custom-namespace"))
 			})
@@ -394,7 +394,7 @@ var _ = Describe("Redis", func() {
 					Namespace: "default-namespace",
 				}
 
-				result, err := Redis(actual, defaults)
+				result, err := BuildRedisSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.Namespace).To(Equal(""))
 			})
@@ -428,7 +428,7 @@ var _ = Describe("Redis", func() {
 					},
 				}
 
-				result, err := Redis(actual, defaults)
+				result, err := BuildRedisSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.Enabled).To(BeFalse())
 				Expect(result.Namespace).To(Equal(""))
@@ -488,7 +488,7 @@ var _ = Describe("Redis", func() {
 					},
 				}
 
-				result, err := Redis(actual, defaults)
+				result, err := BuildRedisSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.Enabled).To(BeFalse())
 				Expect(result.Namespace).To(Equal("actual-namespace"))
@@ -558,7 +558,7 @@ var _ = Describe("Redis", func() {
 					},
 				}
 
-				result, err := Redis(actual, defaults)
+				result, err := BuildRedisSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.Enabled).To(BeTrue())
 				Expect(result.Namespace).To(Equal("prod"))
@@ -585,7 +585,7 @@ var _ = Describe("Redis", func() {
 				actual := v2.WBRedisSpec{}
 				defaults := v2.WBRedisSpec{}
 
-				result, err := Redis(actual, defaults)
+				result, err := BuildRedisSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.Enabled).To(BeFalse())
 				Expect(result.Namespace).To(Equal(""))
@@ -593,6 +593,145 @@ var _ = Describe("Redis", func() {
 				Expect(result.Config).To(BeNil())
 				Expect(result.Sentinel).To(BeNil())
 			})
+		})
+	})
+})
+
+var _ = Describe("BuildRedisDefaults", func() {
+	Describe("RedisSentinelEnabled", func() {
+		Context("when Sentinel is nil", func() {
+			It("should return false", func() {
+				spec := v2.WBRedisSpec{
+					Sentinel: nil,
+				}
+				result := RedisSentinelEnabled(spec)
+				Expect(result).To(BeFalse())
+			})
+		})
+
+		Context("when Sentinel is disabled", func() {
+			It("should return false", func() {
+				spec := v2.WBRedisSpec{
+					Sentinel: &v2.WBRedisSentinelSpec{
+						Enabled: false,
+					},
+				}
+				result := RedisSentinelEnabled(spec)
+				Expect(result).To(BeFalse())
+			})
+		})
+
+		Context("when Sentinel is enabled", func() {
+			It("should return true", func() {
+				spec := v2.WBRedisSpec{
+					Sentinel: &v2.WBRedisSentinelSpec{
+						Enabled: true,
+					},
+				}
+				result := RedisSentinelEnabled(spec)
+				Expect(result).To(BeTrue())
+			})
+		})
+	})
+
+	Describe("Redis", func() {
+		Context("when profile is Dev", func() {
+			It("should return a redis spec with storage only and no sentinel", func() {
+				spec, err := BuildRedisDefaults(v2.WBSizeDev)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(spec.Enabled).To(BeTrue())
+				Expect(spec.Config).ToNot(BeNil())
+				Expect(spec.Sentinel).To(BeNil())
+
+				Expect(spec.StorageSize).To(Equal(DevStorageRequest))
+
+				_, hasCPURequest := spec.Config.Resources.Requests[corev1.ResourceCPU]
+				Expect(hasCPURequest).To(BeFalse())
+				_, hasCPULimit := spec.Config.Resources.Limits[corev1.ResourceCPU]
+				Expect(hasCPULimit).To(BeFalse())
+				_, hasMemoryRequest := spec.Config.Resources.Requests[corev1.ResourceMemory]
+				Expect(hasMemoryRequest).To(BeFalse())
+				_, hasMemoryLimit := spec.Config.Resources.Limits[corev1.ResourceMemory]
+				Expect(hasMemoryLimit).To(BeFalse())
+			})
+		})
+
+		Context("when profile is Small", func() {
+			It("should return a redis spec with full resource requirements and sentinel", func() {
+				spec, err := BuildRedisDefaults(v2.WBSizeSmall)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(spec.Enabled).To(BeTrue())
+				Expect(spec.Config).ToNot(BeNil())
+
+				Expect(spec.StorageSize).To(Equal(SmallStorageRequest))
+				cpuRequest, err := resource.ParseQuantity(SmallReplicaCpuRequest)
+				Expect(err).ToNot(HaveOccurred())
+				cpuLimit, err := resource.ParseQuantity(SmallReplicaCpuLimit)
+				Expect(err).ToNot(HaveOccurred())
+				memoryRequest, err := resource.ParseQuantity(SmallReplicaMemoryRequest)
+				Expect(err).ToNot(HaveOccurred())
+				memoryLimit, err := resource.ParseQuantity(SmallReplicaMemoryLimit)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(spec.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(cpuRequest))
+				Expect(spec.Config.Resources.Limits[corev1.ResourceCPU]).To(Equal(cpuLimit))
+				Expect(spec.Config.Resources.Requests[corev1.ResourceMemory]).To(Equal(memoryRequest))
+				Expect(spec.Config.Resources.Limits[corev1.ResourceMemory]).To(Equal(memoryLimit))
+
+				Expect(spec.Sentinel).ToNot(BeNil())
+				Expect(spec.Sentinel.Config).ToNot(BeNil())
+
+				sentinelCpuRequest, err := resource.ParseQuantity(SmallSentinelCpuRequest)
+				Expect(err).ToNot(HaveOccurred())
+				sentinelCpuLimit, err := resource.ParseQuantity(SmallSentinelCpuLimit)
+				Expect(err).ToNot(HaveOccurred())
+				sentinelMemoryRequest, err := resource.ParseQuantity(SmallSentinelMemoryRequest)
+				Expect(err).ToNot(HaveOccurred())
+				sentinelMemoryLimit, err := resource.ParseQuantity(SmallSentinelMemoryLimit)
+				Expect(err).ToNot(HaveOccurred())
+
+				Expect(spec.Sentinel.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(sentinelCpuRequest))
+				Expect(spec.Sentinel.Config.Resources.Limits[corev1.ResourceCPU]).To(Equal(sentinelCpuLimit))
+				Expect(spec.Sentinel.Config.Resources.Requests[corev1.ResourceMemory]).To(Equal(sentinelMemoryRequest))
+				Expect(spec.Sentinel.Config.Resources.Limits[corev1.ResourceMemory]).To(Equal(sentinelMemoryLimit))
+			})
+		})
+
+		Context("when profile is invalid", func() {
+			It("should return an error", func() {
+				_, err := BuildRedisDefaults(v2.WBSize("invalid"))
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("invalid profile"))
+			})
+		})
+	})
+
+	Describe("Constants", func() {
+		It("should have valid resource quantity constants", func() {
+			quantities := map[string]string{
+				"DevStorageRequest":          DevStorageRequest,
+				"SmallStorageRequest":        SmallStorageRequest,
+				"SmallReplicaCpuRequest":     SmallReplicaCpuRequest,
+				"SmallReplicaCpuLimit":       SmallReplicaCpuLimit,
+				"SmallReplicaMemoryRequest":  SmallReplicaMemoryRequest,
+				"SmallReplicaMemoryLimit":    SmallReplicaMemoryLimit,
+				"SmallSentinelCpuRequest":    SmallSentinelCpuRequest,
+				"SmallSentinelCpuLimit":      SmallSentinelCpuLimit,
+				"SmallSentinelMemoryRequest": SmallSentinelMemoryRequest,
+				"SmallSentinelMemoryLimit":   SmallSentinelMemoryLimit,
+			}
+
+			for name, value := range quantities {
+				_, err := resource.ParseQuantity(value)
+				Expect(err).ToNot(HaveOccurred(), "Failed to parse %s: %s", name, value)
+			}
+		})
+
+		It("should have valid replica sentinel count", func() {
+			Expect(ReplicaSentinelCount).To(Equal(3))
+		})
+
+		It("should have valid default sentinel group", func() {
+			Expect(DefaultSentinelGroup).To(Equal("gorilla"))
 		})
 	})
 })

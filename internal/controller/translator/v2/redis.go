@@ -1,9 +1,10 @@
-package defaults
+package v2
 
 import (
 	"fmt"
 
 	v2 "github.com/wandb/operator/api/v2"
+	merge2 "github.com/wandb/operator/internal/controller/translator/utils"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
@@ -29,13 +30,64 @@ const (
 	SmallSentinelMemoryLimit   = "256Mi"
 )
 
-func Redis(profile v2.WBSize) (v2.WBRedisSpec, error) {
+// BuildRedisSpec will create a new WBRedisSpec with defaultValues applied if not
+// present in actual. It should *never* be saved into the CR!
+func BuildRedisSpec(actual v2.WBRedisSpec, defaultValues v2.WBRedisSpec) (v2.WBRedisSpec, error) {
+	var redisSpec v2.WBRedisSpec
+
+	if actual.Sentinel == nil {
+		redisSpec.Sentinel = defaultValues.Sentinel.DeepCopy()
+	} else if defaultValues.Sentinel == nil {
+		redisSpec.Sentinel = actual.Sentinel.DeepCopy()
+	} else {
+		var redisSentinel v2.WBRedisSentinelSpec
+		redisSentinel.Enabled = actual.Sentinel.Enabled
+		if actual.Sentinel.Config == nil {
+			redisSentinel.Config = defaultValues.Sentinel.Config.DeepCopy()
+		} else if defaultValues.Sentinel.Config == nil {
+			redisSentinel.Config = actual.Sentinel.Config.DeepCopy()
+		} else {
+			var sentinelConfig v2.WBRedisSentinelConfig
+			sentinelConfig.Resources = merge2.Resources(
+				actual.Sentinel.Config.Resources,
+				defaultValues.Sentinel.Config.Resources,
+			)
+			sentinelConfig.MasterName = merge2.Coalesce(
+				actual.Sentinel.Config.MasterName,
+				defaultValues.Sentinel.Config.MasterName,
+			)
+			redisSentinel.Config = &sentinelConfig
+		}
+		redisSpec.Sentinel = &redisSentinel
+	}
+
+	if actual.Config == nil {
+		redisSpec.Config = defaultValues.Config.DeepCopy()
+	} else if defaultValues.Config == nil {
+		redisSpec.Config = actual.Config.DeepCopy()
+	} else {
+		var redisConfig v2.WBRedisConfig
+		redisConfig.Resources = merge2.Resources(
+			actual.Config.Resources,
+			defaultValues.Config.Resources,
+		)
+		redisSpec.Config = &redisConfig
+	}
+
+	redisSpec.StorageSize = merge2.CoalesceQuantity(actual.StorageSize, defaultValues.StorageSize)
+	redisSpec.Namespace = actual.Namespace
+	redisSpec.Enabled = actual.Enabled
+
+	return redisSpec, nil
+}
+
+func BuildRedisDefaults(profile v2.WBSize) (v2.WBRedisSpec, error) {
 	var err error
 	var storageRequest, cpuRequest, cpuLimit, memoryRequest, memoryLimit resource.Quantity
 	var spec v2.WBRedisSpec
 	var sentinelSpec *v2.WBRedisSentinelSpec
 
-	if sentinelSpec, err = _wbRedisSentinelSpecDefaults(profile); err != nil {
+	if sentinelSpec, err = buildRedisSentinelSpecDefaults(profile); err != nil {
 		return spec, err
 	}
 	spec = v2.WBRedisSpec{
@@ -54,7 +106,6 @@ func Redis(profile v2.WBSize) (v2.WBRedisSpec, error) {
 		if storageRequest, err = resource.ParseQuantity(DevStorageRequest); err != nil {
 			return spec, err
 		}
-		break
 	case v2.WBSizeSmall:
 		if storageRequest, err = resource.ParseQuantity(SmallStorageRequest); err != nil {
 			return spec, err
@@ -71,7 +122,6 @@ func Redis(profile v2.WBSize) (v2.WBRedisSpec, error) {
 		if memoryLimit, err = resource.ParseQuantity(SmallReplicaMemoryLimit); err != nil {
 			return spec, err
 		}
-		break
 	default:
 		return spec, fmt.Errorf("invalid profile: %v", profile)
 	}
@@ -95,7 +145,7 @@ func Redis(profile v2.WBSize) (v2.WBRedisSpec, error) {
 	return spec, nil
 }
 
-func _wbRedisSentinelSpecDefaults(profile v2.WBSize) (*v2.WBRedisSentinelSpec, error) {
+func buildRedisSentinelSpecDefaults(profile v2.WBSize) (*v2.WBRedisSentinelSpec, error) {
 	var err error
 	var cpuRequest, cpuLimit, memoryRequest, memoryLimit resource.Quantity
 
@@ -115,7 +165,6 @@ func _wbRedisSentinelSpecDefaults(profile v2.WBSize) (*v2.WBRedisSentinelSpec, e
 		if memoryLimit, err = resource.ParseQuantity(SmallSentinelMemoryLimit); err != nil {
 			return nil, err
 		}
-		break
 	default:
 		return nil, fmt.Errorf("invalid profile: %v", profile)
 	}

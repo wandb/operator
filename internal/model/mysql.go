@@ -5,10 +5,31 @@ import (
 	"fmt"
 
 	apiv2 "github.com/wandb/operator/api/v2"
-	"github.com/wandb/operator/internal/model/defaults"
-	mergev2 "github.com/wandb/operator/internal/model/merge/v2"
+	mergev2 "github.com/wandb/operator/internal/controller/translator/v2"
 	v1 "k8s.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
+)
+
+// Default values
+const (
+	// Storage sizes
+	DevMySQLStorageSize   = "1Gi"
+	SmallMySQLStorageSize = "10Gi"
+
+	// Resource requests/limits for small size
+	SmallMySQLCpuRequest    = "500m"
+	SmallMySQLCpuLimit      = "1000m"
+	SmallMySQLMemoryRequest = "1Gi"
+	SmallMySQLMemoryLimit   = "2Gi"
+
+	// Percona XtraDB Cluster images
+	DevPXCImage   = "perconalab/percona-xtradb-cluster-operator:main-pxc8.0"
+	SmallPXCImage = "percona/percona-xtradb-cluster:8.0"
+
+	// Component images
+	ProxySQLImage     = "percona/proxysql2:2.7.3"
+	LogCollectorImage = "perconalab/percona-xtradb-cluster-operator:main-logcollector"
+	CRVersion         = "1.18.0"
 )
 
 /////////////////////////////////////////////////
@@ -82,11 +103,11 @@ func (i *InfraConfigBuilder) AddMySQLSpec(actual *apiv2.WBMySQLSpec, size apiv2.
 	i.size = size
 	var err error
 	var defaultSpec, merged apiv2.WBMySQLSpec
-	if defaultSpec, err = defaults.MySQL(size); err != nil {
+	if defaultSpec, err = mergev2.BuildMySQLDefaults(size); err != nil {
 		i.errors = append(i.errors, err)
 		return i
 	}
-	if merged, err = mergev2.MySQL(*actual, defaultSpec); err != nil {
+	if merged, err = mergev2.BuildMySQLSpec(*actual, defaultSpec); err != nil {
 		i.errors = append(i.errors, err)
 		return i
 	} else {
@@ -122,22 +143,22 @@ func GetMySQLConfigForSize(size apiv2.WBSize) (MySQLSizeConfig, error) {
 	switch size {
 	case apiv2.WBSizeDev:
 		return MySQLSizeConfig{
-			PXCImage:             defaults.DevPXCImage,
+			PXCImage:             DevPXCImage,
 			ProxySQLEnabled:      false,
 			ProxySQLReplicas:     0,
 			ProxySQLImage:        "",
 			TLSEnabled:           false,
 			LogCollectorEnabled:  true,
-			LogCollectorImage:    defaults.LogCollectorImage,
+			LogCollectorImage:    LogCollectorImage,
 			AllowUnsafePXCSize:   true,
 			AllowUnsafeProxySize: true,
 		}, nil
 	case apiv2.WBSizeSmall:
 		return MySQLSizeConfig{
-			PXCImage:             defaults.SmallPXCImage,
+			PXCImage:             SmallPXCImage,
 			ProxySQLEnabled:      true,
 			ProxySQLReplicas:     3,
-			ProxySQLImage:        defaults.ProxySQLImage,
+			ProxySQLImage:        ProxySQLImage,
 			TLSEnabled:           true,
 			LogCollectorEnabled:  false,
 			LogCollectorImage:    "",

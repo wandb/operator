@@ -1,4 +1,4 @@
-package merge
+package v2
 
 import (
 	"testing"
@@ -7,7 +7,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-func TestMerge(t *testing.T) {
+func TestTranslator(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "Merge Suite")
+	RunSpecs(t, "Translator Suite")
 }

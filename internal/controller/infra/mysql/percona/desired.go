@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/wandb/operator/internal/model"
-	"github.com/wandb/operator/internal/model/defaults"
 	pxcv1 "github.com/wandb/operator/internal/vendored/percona-operator/pxc/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -43,7 +42,7 @@ func buildDesiredPXC(
 			},
 		},
 		Spec: pxcv1.PerconaXtraDBClusterSpec{
-			CRVersion: defaults.CRVersion,
+			CRVersion: model.CRVersion,
 			Unsafe: pxcv1.UnsafeFlags{
 				PXCSize:   mysqlConfig.AllowUnsafePXCSize,
 				TLS:       !mysqlConfig.TLSEnabled, // Unsafe TLS flag is inverse of TLS enabled

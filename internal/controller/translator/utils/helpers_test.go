@@ -1,4 +1,4 @@
-package merge
+package utils
 
 import (
 	"testing"

@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/wandb/operator/internal/model"
-	"github.com/wandb/operator/internal/model/defaults"
 	common "github.com/wandb/operator/internal/vendored/redis-operator/common/v1beta2"
 	redisv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redis/v1beta2"
 	redisreplicationv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redisreplication/v1beta2"
@@ -104,7 +103,7 @@ func buildDesiredSentinel(
 			RedisSentinelConfig: &redissentinelv1beta2.RedisSentinelConfig{
 				RedisSentinelConfig: common.RedisSentinelConfig{
 					RedisReplicationName: namePrefix,
-					MasterGroupName:      defaults.DefaultSentinelGroup,
+					MasterGroupName:      model.DefaultSentinelGroup,
 				},
 			},
 		},

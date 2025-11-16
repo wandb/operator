@@ -5,10 +5,25 @@ import (
 	"fmt"
 
 	apiv2 "github.com/wandb/operator/api/v2"
-	"github.com/wandb/operator/internal/model/defaults"
-	mergev2 "github.com/wandb/operator/internal/model/merge/v2"
+	mergev2 "github.com/wandb/operator/internal/controller/translator/v2"
 	v1 "k8s.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
+)
+
+// Default values
+const (
+	// Storage sizes
+	DevMinioStorageSize   = "10Gi"
+	SmallMinioStorageSize = "10Gi"
+
+	// Resource requests/limits for small size
+	SmallMinioCpuRequest    = "500m"
+	SmallMinioCpuLimit      = "1000m"
+	SmallMinioMemoryRequest = "1Gi"
+	SmallMinioMemoryLimit   = "2Gi"
+
+	// Minio image
+	MinioImage = "quay.io/minio/minio:latest"
 )
 
 /////////////////////////////////////////////////
@@ -63,11 +78,11 @@ func (i *InfraConfigBuilder) AddMinioSpec(actual *apiv2.WBMinioSpec, size apiv2.
 	i.size = size
 	var err error
 	var defaultSpec, merged apiv2.WBMinioSpec
-	if defaultSpec, err = defaults.Minio(size); err != nil {
+	if defaultSpec, err = mergev2.BuildMinioDefaults(size); err != nil {
 		i.errors = append(i.errors, err)
 		return i
 	}
-	if merged, err = mergev2.Minio(*actual, defaultSpec); err != nil {
+	if merged, err = mergev2.BuildMinioSpec(*actual, defaultSpec); err != nil {
 		i.errors = append(i.errors, err)
 		return i
 	} else {
@@ -88,13 +103,13 @@ func GetMinioConfigForSize(size apiv2.WBSize) (MinioSizeConfig, error) {
 		return MinioSizeConfig{
 			Servers:          1,
 			VolumesPerServer: 1,
-			Image:            defaults.MinioImage,
+			Image:            MinioImage,
 		}, nil
 	case apiv2.WBSizeSmall:
 		return MinioSizeConfig{
 			Servers:          3,
 			VolumesPerServer: 4,
-			Image:            defaults.MinioImage,
+			Image:            MinioImage,
 		}, nil
 	default:
 		return MinioSizeConfig{}, fmt.Errorf("unsupported size for Minio: %s (only 'dev' and 'small' are supported)", size)
