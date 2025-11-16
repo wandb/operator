@@ -2,15 +2,19 @@ package model
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	mergev2 "github.com/wandb/operator/internal/controller/translator/v2"
+	"github.com/wandb/operator/internal/utils"
 	v1 "k8s.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
+/////////////////////////////////////////////////
 // Default values
+
 const (
 	// Storage sizes
 	DevClickHouseStorageSize   = "10Gi"
@@ -106,6 +110,22 @@ type ClickHouseInfraError struct {
 
 func (c ClickHouseInfraError) clickhouseCode() ClickHouseErrorCode {
 	return ClickHouseErrorCode(c.code)
+}
+
+func ToClickHouseInfraError(err error) (ClickHouseInfraError, bool) {
+	var infraErr InfraError
+	ok := errors.As(err, &infraErr)
+	if !ok {
+		return ClickHouseInfraError{}, false
+	}
+	if infraErr.infraName != Clickhouse {
+		return ClickHouseInfraError{}, false
+	}
+	return ClickHouseInfraError{infraErr}, true
+}
+
+func (r *Results) getClickHouseErrors() []ClickHouseInfraError {
+	return utils.FilterMapFunc(r.ErrorList, func(err error) (ClickHouseInfraError, bool) { return ToClickHouseInfraError(err) })
 }
 
 /////////////////////////////////////////////////
@@ -227,17 +247,6 @@ func (r *Results) ExtractClickHouseStatus(ctx context.Context) apiv2.WBClickHous
 	return wbStatus
 }
 
-func ToClickHouseInfraError(err error) (ClickHouseInfraError, bool) {
-	infraErr, ok := err.(InfraError)
-	if !ok {
-		return ClickHouseInfraError{}, false
-	}
-	if infraErr.infraName != Clickhouse {
-		return ClickHouseInfraError{}, false
-	}
-	return ClickHouseInfraError{infraErr}, true
-}
-
 func (i InfraStatus) ToClickHouseStatusDetail() (ClickHouseStatusDetail, bool) {
 	result := ClickHouseStatusDetail{}
 	if i.infraName != Clickhouse {
@@ -248,4 +257,8 @@ func (i InfraStatus) ToClickHouseStatusDetail() (ClickHouseStatusDetail, bool) {
 	result.message = i.message
 	result.hidden = i.hidden
 	return result, true
+}
+
+func (r *Results) getClickHouseStatusDetails() []ClickHouseStatusDetail {
+	return utils.FilterMapFunc(r.StatusList, func(s InfraStatus) (ClickHouseStatusDetail, bool) { return s.ToClickHouseStatusDetail() })
 }

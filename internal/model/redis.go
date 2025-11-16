@@ -8,12 +8,15 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	mergev2 "github.com/wandb/operator/internal/controller/translator/v2"
+	"github.com/wandb/operator/internal/utils"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
+/////////////////////////////////////////////////
 // Default values
+
 const (
 	// ReplicaSentinelCount is applicable when sentinel-mode is ON -- pod count of redis replicas and sentinels
 	ReplicaSentinelCount = 3
@@ -123,6 +126,30 @@ type RedisInfraError struct {
 func (r RedisInfraError) redisCode() RedisErrorCode {
 	return RedisErrorCode(r.code)
 }
+
+func ToRedisInfraError(err error) (RedisInfraError, bool) {
+	var infraError InfraError
+	var ok bool
+	infraError, ok = ToInfraError(err)
+	if !ok {
+		return RedisInfraError{}, false
+	}
+	result := RedisInfraError{}
+	if infraError.infraName != Redis {
+		return result, false
+	}
+	result.infraName = infraError.infraName
+	result.code = infraError.code
+	result.reason = infraError.reason
+	return result, true
+}
+
+func (r *Results) getRedisErrors() []RedisInfraError {
+	return utils.FilterMapFunc(r.ErrorList, func(err error) (RedisInfraError, bool) { return ToRedisInfraError(err) })
+}
+
+/////////////////////////////////////////////////
+// Redis Status
 
 /////////////////////////////////////////////////
 // Redis Status
@@ -308,4 +335,8 @@ func (r *Results) ExtractRedisStatus(ctx context.Context) apiv2.WBRedisStatus {
 	}
 
 	return wbStatus
+}
+
+func (r *Results) getRedisStatusDetails() []RedisStatusDetail {
+	return utils.FilterMapFunc(r.StatusList, func(s InfraStatus) (RedisStatusDetail, bool) { return s.ToRedisStatusDetail() })
 }

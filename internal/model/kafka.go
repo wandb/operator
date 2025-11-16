@@ -7,11 +7,14 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	mergev2 "github.com/wandb/operator/internal/controller/translator/v2"
+	"github.com/wandb/operator/internal/utils"
 	v1 "k8s.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
+/////////////////////////////////////////////////
 // Default values
+
 const (
 	DevKafkaStorageSize   = "1Gi"
 	SmallKafkaStorageSize = "5Gi"
@@ -151,6 +154,27 @@ func (k KafkaInfraError) kafkaCode() KafkaErrorCode {
 	return KafkaErrorCode(k.code)
 }
 
+func ToKafkaInfraError(err error) (KafkaInfraError, bool) {
+	var infraError InfraError
+	var ok bool
+	infraError, ok = ToInfraError(err)
+	if !ok {
+		return KafkaInfraError{}, false
+	}
+	result := KafkaInfraError{}
+	if infraError.infraName != Kafka {
+		return result, false
+	}
+	result.infraName = infraError.infraName
+	result.code = infraError.code
+	result.reason = infraError.reason
+	return result, true
+}
+
+func (r *Results) getKafkaErrors() []KafkaInfraError {
+	return utils.FilterMapFunc(r.ErrorList, func(err error) (KafkaInfraError, bool) { return ToKafkaInfraError(err) })
+}
+
 /////////////////////////////////////////////////
 // Kafka Status
 
@@ -182,6 +206,25 @@ func (k KafkaStatusDetail) kafkaCode() KafkaInfraCode {
 	return KafkaInfraCode(k.code)
 }
 
+type KafkaConnInfo struct {
+	Host string
+	Port string
+}
+
+type KafkaConnDetail struct {
+	KafkaStatusDetail
+	connInfo KafkaConnInfo
+}
+
+func NewKafkaConnDetail(connInfo KafkaConnInfo) InfraStatus {
+	return InfraStatus{
+		infraName: Kafka,
+		code:      string(KafkaConnection),
+		message:   fmt.Sprintf("kafka://%s:%s", connInfo.Host, connInfo.Port),
+		hidden:    connInfo,
+	}
+}
+
 func (k KafkaStatusDetail) ToKafkaConnDetail() (KafkaConnDetail, bool) {
 	if k.kafkaCode() != KafkaConnection {
 		return KafkaConnDetail{}, false
@@ -202,25 +245,6 @@ func (k KafkaStatusDetail) ToKafkaConnDetail() (KafkaConnDetail, bool) {
 	}
 	result.connInfo = connInfo
 	return result, true
-}
-
-type KafkaConnInfo struct {
-	Host string
-	Port string
-}
-
-type KafkaConnDetail struct {
-	KafkaStatusDetail
-	connInfo KafkaConnInfo
-}
-
-func NewKafkaConnDetail(connInfo KafkaConnInfo) InfraStatus {
-	return InfraStatus{
-		infraName: Kafka,
-		code:      string(KafkaConnection),
-		message:   fmt.Sprintf("kafka://%s:%s", connInfo.Host, connInfo.Port),
-		hidden:    connInfo,
-	}
 }
 
 /////////////////////////////////////////////////
@@ -282,4 +306,8 @@ func (r *Results) ExtractKafkaStatus(ctx context.Context) apiv2.WBKafkaStatus {
 	}
 
 	return wbStatus
+}
+
+func (r *Results) getKafkaStatusDetails() []KafkaStatusDetail {
+	return utils.FilterMapFunc(r.StatusList, func(s InfraStatus) (KafkaStatusDetail, bool) { return s.ToKafkaStatusDetail() })
 }

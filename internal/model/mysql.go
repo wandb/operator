@@ -2,15 +2,19 @@ package model
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	mergev2 "github.com/wandb/operator/internal/controller/translator/v2"
+	"github.com/wandb/operator/internal/utils"
 	v1 "k8s.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
+/////////////////////////////////////////////////
 // Default values
+
 const (
 	// Storage sizes
 	DevMySQLStorageSize   = "1Gi"
@@ -199,6 +203,22 @@ func (m MySQLInfraError) mysqlCode() MySQLErrorCode {
 	return MySQLErrorCode(m.code)
 }
 
+func ToMySQLInfraError(err error) (MySQLInfraError, bool) {
+	var infraErr InfraError
+	ok := errors.As(err, &infraErr)
+	if !ok {
+		return MySQLInfraError{}, false
+	}
+	if infraErr.infraName != MySQL {
+		return MySQLInfraError{}, false
+	}
+	return MySQLInfraError{infraErr}, true
+}
+
+func (r *Results) getMySQLErrors() []MySQLInfraError {
+	return utils.FilterMapFunc(r.ErrorList, func(err error) (MySQLInfraError, bool) { return ToMySQLInfraError(err) })
+}
+
 /////////////////////////////////////////////////
 // MySQL Status
 
@@ -318,17 +338,6 @@ func (r *Results) ExtractMySQLStatus(ctx context.Context) apiv2.WBMySQLStatus {
 	return wbStatus
 }
 
-func ToMySQLInfraError(err error) (MySQLInfraError, bool) {
-	infraErr, ok := err.(InfraError)
-	if !ok {
-		return MySQLInfraError{}, false
-	}
-	if infraErr.infraName != MySQL {
-		return MySQLInfraError{}, false
-	}
-	return MySQLInfraError{infraErr}, true
-}
-
 func (i InfraStatus) ToMySQLStatusDetail() (MySQLStatusDetail, bool) {
 	result := MySQLStatusDetail{}
 	if i.infraName != MySQL {
@@ -339,4 +348,8 @@ func (i InfraStatus) ToMySQLStatusDetail() (MySQLStatusDetail, bool) {
 	result.message = i.message
 	result.hidden = i.hidden
 	return result, true
+}
+
+func (r *Results) getMySQLStatusDetails() []MySQLStatusDetail {
+	return utils.FilterMapFunc(r.StatusList, func(s InfraStatus) (MySQLStatusDetail, bool) { return s.ToMySQLStatusDetail() })
 }

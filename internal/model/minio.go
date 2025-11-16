@@ -2,15 +2,19 @@ package model
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	mergev2 "github.com/wandb/operator/internal/controller/translator/v2"
+	"github.com/wandb/operator/internal/utils"
 	v1 "k8s.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
+/////////////////////////////////////////////////
 // Default values
+
 const (
 	// Storage sizes
 	DevMinioStorageSize   = "10Gi"
@@ -145,6 +149,22 @@ func (m MinioInfraError) minioCode() MinioErrorCode {
 	return MinioErrorCode(m.code)
 }
 
+func ToMinioInfraError(err error) (MinioInfraError, bool) {
+	var infraErr InfraError
+	ok := errors.As(err, &infraErr)
+	if !ok {
+		return MinioInfraError{}, false
+	}
+	if infraErr.infraName != Minio {
+		return MinioInfraError{}, false
+	}
+	return MinioInfraError{infraErr}, true
+}
+
+func (r *Results) getMinioErrors() []MinioInfraError {
+	return utils.FilterMapFunc(r.ErrorList, func(err error) (MinioInfraError, bool) { return ToMinioInfraError(err) })
+}
+
 /////////////////////////////////////////////////
 // Minio Status
 
@@ -264,17 +284,6 @@ func (r *Results) ExtractMinioStatus(ctx context.Context) apiv2.WBMinioStatus {
 	return wbStatus
 }
 
-func ToMinioInfraError(err error) (MinioInfraError, bool) {
-	infraErr, ok := err.(InfraError)
-	if !ok {
-		return MinioInfraError{}, false
-	}
-	if infraErr.infraName != Minio {
-		return MinioInfraError{}, false
-	}
-	return MinioInfraError{infraErr}, true
-}
-
 func (i InfraStatus) ToMinioStatusDetail() (MinioStatusDetail, bool) {
 	result := MinioStatusDetail{}
 	if i.infraName != Minio {
@@ -285,4 +294,8 @@ func (i InfraStatus) ToMinioStatusDetail() (MinioStatusDetail, bool) {
 	result.message = i.message
 	result.hidden = i.hidden
 	return result, true
+}
+
+func (r *Results) getMinioStatusDetails() []MinioStatusDetail {
+	return utils.FilterMapFunc(r.StatusList, func(s InfraStatus) (MinioStatusDetail, bool) { return s.ToMinioStatusDetail() })
 }
