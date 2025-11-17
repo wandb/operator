@@ -327,13 +327,15 @@ var _ = Describe("BuildMySQLSpec", func() {
 })
 
 var _ = Describe("BuildMySQLDefaults", func() {
+	const testOwnerNamespace = "test-namespace"
+
 	Describe("Dev profile", func() {
 		Context("when profile is Dev", func() {
 			It("should return a MySQL spec with storage only and no resources", func() {
-				spec, err := BuildMySQLDefaults(v2.WBSizeDev, testingOwnerNamespace)
+				spec, err := BuildMySQLDefaults(v2.WBSizeDev, testOwnerNamespace)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(spec.Enabled).To(BeTrue())
-				Expect(spec.Namespace).To(Equal(testingOwnerNamespace))
+				Expect(spec.Namespace).To(Equal(testOwnerNamespace))
 				Expect(spec.StorageSize).To(Equal(DevMySQLStorageSize))
 				Expect(spec.Config).To(BeNil())
 			})
@@ -343,10 +345,10 @@ var _ = Describe("BuildMySQLDefaults", func() {
 	Describe("Small profile", func() {
 		Context("when profile is Small", func() {
 			It("should return a MySQL spec with full resource requirements", func() {
-				spec, err := BuildMySQLDefaults(v2.WBSizeSmall, testingOwnerNamespace)
+				spec, err := BuildMySQLDefaults(v2.WBSizeSmall, testOwnerNamespace)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(spec.Enabled).To(BeTrue())
-				Expect(spec.Namespace).To(Equal(testingOwnerNamespace))
+				Expect(spec.Namespace).To(Equal(testOwnerNamespace))
 				Expect(spec.StorageSize).To(Equal(SmallMySQLStorageSize))
 				Expect(spec.Config).ToNot(BeNil())
 
@@ -370,7 +372,7 @@ var _ = Describe("BuildMySQLDefaults", func() {
 	Describe("Invalid profile", func() {
 		Context("when profile is invalid", func() {
 			It("should return an error", func() {
-				_, err := BuildMySQLDefaults(v2.WBSize("invalid"), testingOwnerNamespace)
+				_, err := BuildMySQLDefaults(v2.WBSize("invalid"), testOwnerNamespace)
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("unsupported size for MySQL"))
 				Expect(err.Error()).To(ContainSubstring("only 'dev' and 'small' are supported"))

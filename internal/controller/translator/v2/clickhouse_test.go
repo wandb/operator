@@ -117,9 +117,11 @@ var _ = Describe("BuildClickHouseSpec", func() {
 })
 
 var _ = Describe("BuildClickHouseDefaults", func() {
+	const testOwnerNamespace = "test-namespace"
+
 	Context("when profile is Dev", func() {
 		It("should return dev defaults with 1 replica", func() {
-			spec, err := BuildClickHouseDefaults(v2.WBSizeDev, testingOwnerNamespace)
+			spec, err := BuildClickHouseDefaults(v2.WBSizeDev, testOwnerNamespace)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(spec.Enabled).To(BeTrue())
 			Expect(spec.Version).To(Equal(ClickHouseVersion))
@@ -131,7 +133,7 @@ var _ = Describe("BuildClickHouseDefaults", func() {
 
 	Context("when profile is Small", func() {
 		It("should return small defaults with 3 replicas and resources", func() {
-			spec, err := BuildClickHouseDefaults(v2.WBSizeSmall, testingOwnerNamespace)
+			spec, err := BuildClickHouseDefaults(v2.WBSizeSmall, testOwnerNamespace)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(spec.Enabled).To(BeTrue())
 			Expect(spec.Version).To(Equal(ClickHouseVersion))
@@ -144,7 +146,7 @@ var _ = Describe("BuildClickHouseDefaults", func() {
 
 	Context("when profile is invalid", func() {
 		It("should return error", func() {
-			_, err := BuildClickHouseDefaults(v2.WBSize("invalid"), testingOwnerNamespace)
+			_, err := BuildClickHouseDefaults(v2.WBSize("invalid"), testOwnerNamespace)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("unsupported size for ClickHouse"))
 		})

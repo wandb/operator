@@ -23,13 +23,16 @@ var _ = Describe("BuildKafkaSpec", func() {
 
 		Context("when actual Config is nil", func() {
 			It("should use default Config", func() {
+				defaultCpuRequest := resource.MustParse("500m")
+				defaultMemoryRequest := resource.MustParse("1Gi")
+
 				actual := v2.WBKafkaSpec{Config: nil}
 				defaults := v2.WBKafkaSpec{
 					Config: &v2.WBKafkaConfig{
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
-								corev1.ResourceCPU:    resource.MustParse("500m"),
-								corev1.ResourceMemory: resource.MustParse("1Gi"),
+								corev1.ResourceCPU:    defaultCpuRequest,
+								corev1.ResourceMemory: defaultMemoryRequest,
 							},
 						},
 					},
@@ -38,16 +41,45 @@ var _ = Describe("BuildKafkaSpec", func() {
 				result, err := BuildKafkaSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.Config).ToNot(BeNil())
-				Expect(result.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(resource.MustParse("500m")))
+				Expect(result.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(defaultCpuRequest))
+				Expect(result.Config.Resources.Requests[corev1.ResourceMemory]).To(Equal(defaultMemoryRequest))
+			})
+		})
+
+		Context("when default Config is nil", func() {
+			It("should use actual Config", func() {
+				actualCpuRequest := resource.MustParse("250m")
+
+				actual := v2.WBKafkaSpec{
+					Config: &v2.WBKafkaConfig{
+						Resources: corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceCPU: actualCpuRequest,
+							},
+						},
+					},
+				}
+				defaults := v2.WBKafkaSpec{Config: nil}
+
+				result, err := BuildKafkaSpec(actual, defaults)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(result.Config).ToNot(BeNil())
+				Expect(result.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(actualCpuRequest))
 			})
 		})
 
 		Context("when both Config values exist", func() {
 			It("should merge resources with actual taking precedence", func() {
+				actualCpuRequest := resource.MustParse("750m")
+				defaultCpuRequest := resource.MustParse("500m")
+				defaultMemoryRequest := resource.MustParse("1Gi")
+
 				actual := v2.WBKafkaSpec{
 					Config: &v2.WBKafkaConfig{
 						Resources: corev1.ResourceRequirements{
-							Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("750m")},
+							Requests: corev1.ResourceList{
+								corev1.ResourceCPU: actualCpuRequest,
+							},
 						},
 					},
 				}
@@ -55,8 +87,8 @@ var _ = Describe("BuildKafkaSpec", func() {
 					Config: &v2.WBKafkaConfig{
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
-								corev1.ResourceCPU:    resource.MustParse("500m"),
-								corev1.ResourceMemory: resource.MustParse("1Gi"),
+								corev1.ResourceCPU:    defaultCpuRequest,
+								corev1.ResourceMemory: defaultMemoryRequest,
 							},
 						},
 					},
@@ -64,61 +96,146 @@ var _ = Describe("BuildKafkaSpec", func() {
 
 				result, err := BuildKafkaSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(result.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(resource.MustParse("750m")))
-				Expect(result.Config.Resources.Requests[corev1.ResourceMemory]).To(Equal(resource.MustParse("1Gi")))
+				Expect(result.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(actualCpuRequest))
+				Expect(result.Config.Resources.Requests[corev1.ResourceMemory]).To(Equal(defaultMemoryRequest))
 			})
 		})
 	})
 
-	Describe("StorageSize and Namespace merging", func() {
-		It("should merge correctly", func() {
-			actual := v2.WBKafkaSpec{StorageSize: "20Gi"}
-			defaults := v2.WBKafkaSpec{StorageSize: "10Gi", Namespace: "default"}
+	Describe("StorageSize merging", func() {
+		Context("when actual StorageSize is empty", func() {
+			It("should use default StorageSize", func() {
+				defaultStorageSize := "10Gi"
 
-			result, err := BuildKafkaSpec(actual, defaults)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(result.StorageSize).To(Equal("20Gi"))
-			Expect(result.Namespace).To(Equal("default"))
+				actual := v2.WBKafkaSpec{StorageSize: ""}
+				defaults := v2.WBKafkaSpec{StorageSize: defaultStorageSize}
+
+				result, err := BuildKafkaSpec(actual, defaults)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(result.StorageSize).To(Equal(defaultStorageSize))
+			})
+		})
+
+		Context("when actual StorageSize is set", func() {
+			It("should use actual StorageSize", func() {
+				actualStorageSize := "20Gi"
+				defaultStorageSize := "10Gi"
+
+				actual := v2.WBKafkaSpec{StorageSize: actualStorageSize}
+				defaults := v2.WBKafkaSpec{StorageSize: defaultStorageSize}
+
+				result, err := BuildKafkaSpec(actual, defaults)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(result.StorageSize).To(Equal(actualStorageSize))
+			})
+		})
+
+		Context("when both StorageSize values are empty", func() {
+			It("should result in empty StorageSize", func() {
+				actual := v2.WBKafkaSpec{StorageSize: ""}
+				defaults := v2.WBKafkaSpec{StorageSize: ""}
+
+				result, err := BuildKafkaSpec(actual, defaults)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(result.StorageSize).To(Equal(""))
+			})
+		})
+	})
+
+	Describe("Namespace merging", func() {
+		Context("when actual Namespace is empty", func() {
+			It("should use default Namespace", func() {
+				defaultNamespace := "default-namespace"
+
+				actual := v2.WBKafkaSpec{Namespace: ""}
+				defaults := v2.WBKafkaSpec{Namespace: defaultNamespace}
+
+				result, err := BuildKafkaSpec(actual, defaults)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(result.Namespace).To(Equal(defaultNamespace))
+			})
+		})
+
+		Context("when actual Namespace is set", func() {
+			It("should use actual Namespace", func() {
+				actualNamespace := "custom-namespace"
+				defaultNamespace := "default-namespace"
+
+				actual := v2.WBKafkaSpec{Namespace: actualNamespace}
+				defaults := v2.WBKafkaSpec{Namespace: defaultNamespace}
+
+				result, err := BuildKafkaSpec(actual, defaults)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(result.Namespace).To(Equal(actualNamespace))
+			})
 		})
 	})
 
 	Describe("Enabled field", func() {
-		It("should always use actual Enabled", func() {
-			actual := v2.WBKafkaSpec{Enabled: false}
-			defaults := v2.WBKafkaSpec{Enabled: true}
+		Context("when actual Enabled is true", func() {
+			It("should use actual value regardless of default", func() {
+				actual := v2.WBKafkaSpec{Enabled: true}
+				defaults := v2.WBKafkaSpec{Enabled: false}
 
-			result, err := BuildKafkaSpec(actual, defaults)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(result.Enabled).To(BeFalse())
+				result, err := BuildKafkaSpec(actual, defaults)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(result.Enabled).To(BeTrue())
+			})
+		})
+
+		Context("when actual Enabled is false", func() {
+			It("should use actual value regardless of default", func() {
+				actual := v2.WBKafkaSpec{Enabled: false}
+				defaults := v2.WBKafkaSpec{Enabled: true}
+
+				result, err := BuildKafkaSpec(actual, defaults)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(result.Enabled).To(BeFalse())
+			})
 		})
 	})
 })
 
 var _ = Describe("BuildKafkaDefaults", func() {
+	const testOwnerNamespace = "test-namespace"
+
 	Context("when profile is Dev", func() {
-		It("should return dev defaults", func() {
-			spec, err := BuildKafkaDefaults(v2.WBSizeDev, testingOwnerNamespace)
+		It("should return complete dev defaults", func() {
+			spec, err := BuildKafkaDefaults(v2.WBSizeDev, testOwnerNamespace)
 			Expect(err).ToNot(HaveOccurred())
+
 			Expect(spec.Enabled).To(BeTrue())
+			Expect(spec.Namespace).To(Equal(testOwnerNamespace))
 			Expect(spec.StorageSize).To(Equal(DevKafkaStorageSize))
 			Expect(spec.Config).To(BeNil())
 		})
 	})
 
 	Context("when profile is Small", func() {
-		It("should return small defaults with resources", func() {
-			spec, err := BuildKafkaDefaults(v2.WBSizeSmall, testingOwnerNamespace)
+		It("should return complete small defaults with all resource fields", func() {
+			spec, err := BuildKafkaDefaults(v2.WBSizeSmall, testOwnerNamespace)
 			Expect(err).ToNot(HaveOccurred())
+
 			Expect(spec.Enabled).To(BeTrue())
+			Expect(spec.Namespace).To(Equal(testOwnerNamespace))
 			Expect(spec.StorageSize).To(Equal(SmallKafkaStorageSize))
 			Expect(spec.Config).ToNot(BeNil())
-			Expect(spec.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(resource.MustParse(SmallKafkaCpuRequest)))
+
+			expectedCpuRequest, _ := resource.ParseQuantity(SmallKafkaCpuRequest)
+			expectedCpuLimit, _ := resource.ParseQuantity(SmallKafkaCpuLimit)
+			expectedMemoryRequest, _ := resource.ParseQuantity(SmallKafkaMemoryRequest)
+			expectedMemoryLimit, _ := resource.ParseQuantity(SmallKafkaMemoryLimit)
+
+			Expect(spec.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(expectedCpuRequest))
+			Expect(spec.Config.Resources.Limits[corev1.ResourceCPU]).To(Equal(expectedCpuLimit))
+			Expect(spec.Config.Resources.Requests[corev1.ResourceMemory]).To(Equal(expectedMemoryRequest))
+			Expect(spec.Config.Resources.Limits[corev1.ResourceMemory]).To(Equal(expectedMemoryLimit))
 		})
 	})
 
 	Context("when profile is invalid", func() {
 		It("should return error", func() {
-			_, err := BuildKafkaDefaults(v2.WBSize("invalid"), testingOwnerNamespace)
+			_, err := BuildKafkaDefaults(v2.WBSize("invalid"), testOwnerNamespace)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("unsupported size for Kafka"))
 		})
