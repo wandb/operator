@@ -6,7 +6,7 @@ import (
 
 	"github.com/wandb/operator/internal/model"
 	pxcv1 "github.com/wandb/operator/internal/vendored/percona-operator/pxc/v1"
-	machErrors "k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -48,7 +48,7 @@ func Initialize(
 	}
 	err := client.Get(ctx, pxcKey, pxc)
 	if err != nil {
-		if !machErrors.IsNotFound(err) {
+		if !apierrors.IsNotFound(err) {
 			log.Error(err, "error getting actual PXC CR")
 			return nil, err
 		}

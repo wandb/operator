@@ -6,7 +6,7 @@ import (
 
 	"github.com/wandb/operator/internal/model"
 	v1beta3 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1beta2"
-	machErrors "k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -51,7 +51,7 @@ func Initialize(
 	}
 	err := client.Get(ctx, kafkaKey, kafka)
 	if err != nil {
-		if !machErrors.IsNotFound(err) {
+		if !apierrors.IsNotFound(err) {
 			log.Error(err, "error getting actual Kafka CR")
 			return nil, err
 		}
@@ -66,7 +66,7 @@ func Initialize(
 	}
 	err = client.Get(ctx, nodePoolKey, nodePool)
 	if err != nil {
-		if !machErrors.IsNotFound(err) {
+		if !apierrors.IsNotFound(err) {
 			log.Error(err, "error getting actual KafkaNodePool CR")
 			return nil, err
 		}

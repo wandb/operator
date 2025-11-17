@@ -3,7 +3,7 @@ package v2
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	v2 "github.com/wandb/operator/api/v2"
+	apiv2 "github.com/wandb/operator/api/v2"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
@@ -12,10 +12,10 @@ var _ = Describe("BuildRedisSpec", func() {
 	Describe("Sentinel merging", func() {
 		Context("when both Sentinel values are nil", func() {
 			It("should result in nil Sentinel", func() {
-				actual := v2.WBRedisSpec{
+				actual := apiv2.WBRedisSpec{
 					Sentinel: nil,
 				}
-				defaults := v2.WBRedisSpec{
+				defaults := apiv2.WBRedisSpec{
 					Sentinel: nil,
 				}
 
@@ -27,13 +27,13 @@ var _ = Describe("BuildRedisSpec", func() {
 
 		Context("when actual Sentinel is nil", func() {
 			It("should use default Sentinel", func() {
-				actual := v2.WBRedisSpec{
+				actual := apiv2.WBRedisSpec{
 					Sentinel: nil,
 				}
-				defaults := v2.WBRedisSpec{
-					Sentinel: &v2.WBRedisSentinelSpec{
+				defaults := apiv2.WBRedisSpec{
+					Sentinel: &apiv2.WBRedisSentinelSpec{
 						Enabled: true,
-						Config: &v2.WBRedisSentinelConfig{
+						Config: &apiv2.WBRedisSentinelConfig{
 							Resources: corev1.ResourceRequirements{
 								Requests: corev1.ResourceList{
 									corev1.ResourceCPU: resource.MustParse("100m"),
@@ -54,10 +54,10 @@ var _ = Describe("BuildRedisSpec", func() {
 
 		Context("when default Sentinel is nil", func() {
 			It("should use actual Sentinel", func() {
-				actual := v2.WBRedisSpec{
-					Sentinel: &v2.WBRedisSentinelSpec{
+				actual := apiv2.WBRedisSpec{
+					Sentinel: &apiv2.WBRedisSentinelSpec{
 						Enabled: false,
-						Config: &v2.WBRedisSentinelConfig{
+						Config: &apiv2.WBRedisSentinelConfig{
 							Resources: corev1.ResourceRequirements{
 								Requests: corev1.ResourceList{
 									corev1.ResourceCPU: resource.MustParse("200m"),
@@ -66,7 +66,7 @@ var _ = Describe("BuildRedisSpec", func() {
 						},
 					},
 				}
-				defaults := v2.WBRedisSpec{
+				defaults := apiv2.WBRedisSpec{
 					Sentinel: nil,
 				}
 
@@ -81,10 +81,10 @@ var _ = Describe("BuildRedisSpec", func() {
 
 		Context("when both Sentinel values exist with Config", func() {
 			It("should merge Sentinel resources with actual taking precedence", func() {
-				actual := v2.WBRedisSpec{
-					Sentinel: &v2.WBRedisSentinelSpec{
+				actual := apiv2.WBRedisSpec{
+					Sentinel: &apiv2.WBRedisSentinelSpec{
 						Enabled: true,
-						Config: &v2.WBRedisSentinelConfig{
+						Config: &apiv2.WBRedisSentinelConfig{
 							Resources: corev1.ResourceRequirements{
 								Requests: corev1.ResourceList{
 									corev1.ResourceCPU: resource.MustParse("300m"),
@@ -93,10 +93,10 @@ var _ = Describe("BuildRedisSpec", func() {
 						},
 					},
 				}
-				defaults := v2.WBRedisSpec{
-					Sentinel: &v2.WBRedisSentinelSpec{
+				defaults := apiv2.WBRedisSpec{
+					Sentinel: &apiv2.WBRedisSentinelSpec{
 						Enabled: false,
-						Config: &v2.WBRedisSentinelConfig{
+						Config: &apiv2.WBRedisSentinelConfig{
 							Resources: corev1.ResourceRequirements{
 								Requests: corev1.ResourceList{
 									corev1.ResourceCPU:    resource.MustParse("100m"),
@@ -119,16 +119,16 @@ var _ = Describe("BuildRedisSpec", func() {
 
 		Context("when both Sentinel values exist but actual Config is nil", func() {
 			It("should use default Sentinel Config", func() {
-				actual := v2.WBRedisSpec{
-					Sentinel: &v2.WBRedisSentinelSpec{
+				actual := apiv2.WBRedisSpec{
+					Sentinel: &apiv2.WBRedisSentinelSpec{
 						Enabled: true,
 						Config:  nil,
 					},
 				}
-				defaults := v2.WBRedisSpec{
-					Sentinel: &v2.WBRedisSentinelSpec{
+				defaults := apiv2.WBRedisSpec{
+					Sentinel: &apiv2.WBRedisSentinelSpec{
 						Enabled: false,
-						Config: &v2.WBRedisSentinelConfig{
+						Config: &apiv2.WBRedisSentinelConfig{
 							Resources: corev1.ResourceRequirements{
 								Requests: corev1.ResourceList{
 									corev1.ResourceCPU: resource.MustParse("100m"),
@@ -149,10 +149,10 @@ var _ = Describe("BuildRedisSpec", func() {
 
 		Context("when both Sentinel values exist but default Config is nil", func() {
 			It("should use actual Sentinel Config", func() {
-				actual := v2.WBRedisSpec{
-					Sentinel: &v2.WBRedisSentinelSpec{
+				actual := apiv2.WBRedisSpec{
+					Sentinel: &apiv2.WBRedisSentinelSpec{
 						Enabled: true,
-						Config: &v2.WBRedisSentinelConfig{
+						Config: &apiv2.WBRedisSentinelConfig{
 							Resources: corev1.ResourceRequirements{
 								Requests: corev1.ResourceList{
 									corev1.ResourceCPU: resource.MustParse("200m"),
@@ -161,8 +161,8 @@ var _ = Describe("BuildRedisSpec", func() {
 						},
 					},
 				}
-				defaults := v2.WBRedisSpec{
-					Sentinel: &v2.WBRedisSentinelSpec{
+				defaults := apiv2.WBRedisSpec{
+					Sentinel: &apiv2.WBRedisSentinelSpec{
 						Enabled: false,
 						Config:  nil,
 					},
@@ -181,10 +181,10 @@ var _ = Describe("BuildRedisSpec", func() {
 	Describe("Config merging", func() {
 		Context("when both Config values are nil", func() {
 			It("should result in nil Config", func() {
-				actual := v2.WBRedisSpec{
+				actual := apiv2.WBRedisSpec{
 					Config: nil,
 				}
-				defaults := v2.WBRedisSpec{
+				defaults := apiv2.WBRedisSpec{
 					Config: nil,
 				}
 
@@ -196,11 +196,11 @@ var _ = Describe("BuildRedisSpec", func() {
 
 		Context("when actual Config is nil", func() {
 			It("should use default Config", func() {
-				actual := v2.WBRedisSpec{
+				actual := apiv2.WBRedisSpec{
 					Config: nil,
 				}
-				defaults := v2.WBRedisSpec{
-					Config: &v2.WBRedisConfig{
+				defaults := apiv2.WBRedisSpec{
+					Config: &apiv2.WBRedisConfig{
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
 								corev1.ResourceCPU:     resource.MustParse("500m"),
@@ -228,8 +228,8 @@ var _ = Describe("BuildRedisSpec", func() {
 
 		Context("when default Config is nil", func() {
 			It("should use actual Config", func() {
-				actual := v2.WBRedisSpec{
-					Config: &v2.WBRedisConfig{
+				actual := apiv2.WBRedisSpec{
+					Config: &apiv2.WBRedisConfig{
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
 								corev1.ResourceCPU: resource.MustParse("250m"),
@@ -237,7 +237,7 @@ var _ = Describe("BuildRedisSpec", func() {
 						},
 					},
 				}
-				defaults := v2.WBRedisSpec{
+				defaults := apiv2.WBRedisSpec{
 					Config: nil,
 				}
 
@@ -250,8 +250,8 @@ var _ = Describe("BuildRedisSpec", func() {
 
 		Context("when both Config values exist", func() {
 			It("should merge resources with actual taking precedence", func() {
-				actual := v2.WBRedisSpec{
-					Config: &v2.WBRedisConfig{
+				actual := apiv2.WBRedisSpec{
+					Config: &apiv2.WBRedisConfig{
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
 								corev1.ResourceCPU: resource.MustParse("750m"),
@@ -262,8 +262,8 @@ var _ = Describe("BuildRedisSpec", func() {
 						},
 					},
 				}
-				defaults := v2.WBRedisSpec{
-					Config: &v2.WBRedisConfig{
+				defaults := apiv2.WBRedisSpec{
+					Config: &apiv2.WBRedisConfig{
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
 								corev1.ResourceCPU:     resource.MustParse("500m"),
@@ -293,10 +293,10 @@ var _ = Describe("BuildRedisSpec", func() {
 	Describe("StorageSize merging", func() {
 		Context("when actual StorageSize is empty", func() {
 			It("should use default StorageSize", func() {
-				actual := v2.WBRedisSpec{
+				actual := apiv2.WBRedisSpec{
 					StorageSize: "",
 				}
-				defaults := v2.WBRedisSpec{
+				defaults := apiv2.WBRedisSpec{
 					StorageSize: "10Gi",
 				}
 
@@ -308,10 +308,10 @@ var _ = Describe("BuildRedisSpec", func() {
 
 		Context("when actual StorageSize is set", func() {
 			It("should use actual StorageSize", func() {
-				actual := v2.WBRedisSpec{
+				actual := apiv2.WBRedisSpec{
 					StorageSize: "20Gi",
 				}
-				defaults := v2.WBRedisSpec{
+				defaults := apiv2.WBRedisSpec{
 					StorageSize: "10Gi",
 				}
 
@@ -323,10 +323,10 @@ var _ = Describe("BuildRedisSpec", func() {
 
 		Context("when both StorageSize values are empty", func() {
 			It("should result in empty StorageSize", func() {
-				actual := v2.WBRedisSpec{
+				actual := apiv2.WBRedisSpec{
 					StorageSize: "",
 				}
-				defaults := v2.WBRedisSpec{
+				defaults := apiv2.WBRedisSpec{
 					StorageSize: "",
 				}
 
@@ -340,10 +340,10 @@ var _ = Describe("BuildRedisSpec", func() {
 	Describe("Enabled field", func() {
 		Context("when actual Enabled is true", func() {
 			It("should always use actual Enabled regardless of default", func() {
-				actual := v2.WBRedisSpec{
+				actual := apiv2.WBRedisSpec{
 					Enabled: true,
 				}
-				defaults := v2.WBRedisSpec{
+				defaults := apiv2.WBRedisSpec{
 					Enabled: false,
 				}
 
@@ -355,10 +355,10 @@ var _ = Describe("BuildRedisSpec", func() {
 
 		Context("when actual Enabled is false", func() {
 			It("should always use actual Enabled regardless of default", func() {
-				actual := v2.WBRedisSpec{
+				actual := apiv2.WBRedisSpec{
 					Enabled: false,
 				}
-				defaults := v2.WBRedisSpec{
+				defaults := apiv2.WBRedisSpec{
 					Enabled: true,
 				}
 
@@ -372,10 +372,10 @@ var _ = Describe("BuildRedisSpec", func() {
 	Describe("Namespace field", func() {
 		Context("when actual Namespace is set", func() {
 			It("should always use actual Namespace regardless of default", func() {
-				actual := v2.WBRedisSpec{
+				actual := apiv2.WBRedisSpec{
 					Namespace: "custom-namespace",
 				}
-				defaults := v2.WBRedisSpec{
+				defaults := apiv2.WBRedisSpec{
 					Namespace: "default-namespace",
 				}
 
@@ -387,10 +387,10 @@ var _ = Describe("BuildRedisSpec", func() {
 
 		Context("when actual Namespace is empty", func() {
 			It("should always use actual Namespace regardless of default", func() {
-				actual := v2.WBRedisSpec{
+				actual := apiv2.WBRedisSpec{
 					Namespace: "",
 				}
-				defaults := v2.WBRedisSpec{
+				defaults := apiv2.WBRedisSpec{
 					Namespace: "default-namespace",
 				}
 
@@ -404,21 +404,21 @@ var _ = Describe("BuildRedisSpec", func() {
 	Describe("Complete spec merging", func() {
 		Context("when actual is completely empty", func() {
 			It("should return all default values except Enabled and Namespace", func() {
-				actual := v2.WBRedisSpec{}
-				defaults := v2.WBRedisSpec{
+				actual := apiv2.WBRedisSpec{}
+				defaults := apiv2.WBRedisSpec{
 					Enabled:     true,
 					Namespace:   "default",
 					StorageSize: "10Gi",
-					Config: &v2.WBRedisConfig{
+					Config: &apiv2.WBRedisConfig{
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
 								corev1.ResourceCPU: resource.MustParse("500m"),
 							},
 						},
 					},
-					Sentinel: &v2.WBRedisSentinelSpec{
+					Sentinel: &apiv2.WBRedisSentinelSpec{
 						Enabled: true,
-						Config: &v2.WBRedisSentinelConfig{
+						Config: &apiv2.WBRedisSentinelConfig{
 							Resources: corev1.ResourceRequirements{
 								Requests: corev1.ResourceList{
 									corev1.ResourceCPU: resource.MustParse("100m"),
@@ -442,11 +442,11 @@ var _ = Describe("BuildRedisSpec", func() {
 
 		Context("when actual has all values set", func() {
 			It("should use actual values for all fields", func() {
-				actual := v2.WBRedisSpec{
+				actual := apiv2.WBRedisSpec{
 					Enabled:     false,
 					Namespace:   "actual-namespace",
 					StorageSize: "25Gi",
-					Config: &v2.WBRedisConfig{
+					Config: &apiv2.WBRedisConfig{
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
 								corev1.ResourceCPU:    resource.MustParse("1"),
@@ -454,9 +454,9 @@ var _ = Describe("BuildRedisSpec", func() {
 							},
 						},
 					},
-					Sentinel: &v2.WBRedisSentinelSpec{
+					Sentinel: &apiv2.WBRedisSentinelSpec{
 						Enabled: false,
-						Config: &v2.WBRedisSentinelConfig{
+						Config: &apiv2.WBRedisSentinelConfig{
 							Resources: corev1.ResourceRequirements{
 								Requests: corev1.ResourceList{
 									corev1.ResourceCPU: resource.MustParse("200m"),
@@ -465,20 +465,20 @@ var _ = Describe("BuildRedisSpec", func() {
 						},
 					},
 				}
-				defaults := v2.WBRedisSpec{
+				defaults := apiv2.WBRedisSpec{
 					Enabled:     true,
 					Namespace:   "default-namespace",
 					StorageSize: "10Gi",
-					Config: &v2.WBRedisConfig{
+					Config: &apiv2.WBRedisConfig{
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
 								corev1.ResourceCPU: resource.MustParse("500m"),
 							},
 						},
 					},
-					Sentinel: &v2.WBRedisSentinelSpec{
+					Sentinel: &apiv2.WBRedisSentinelSpec{
 						Enabled: true,
-						Config: &v2.WBRedisSentinelConfig{
+						Config: &apiv2.WBRedisSentinelConfig{
 							Resources: corev1.ResourceRequirements{
 								Requests: corev1.ResourceList{
 									corev1.ResourceCPU: resource.MustParse("100m"),
@@ -502,20 +502,20 @@ var _ = Describe("BuildRedisSpec", func() {
 
 		Context("when merging complex partial specs", func() {
 			It("should correctly merge all nested fields", func() {
-				actual := v2.WBRedisSpec{
+				actual := apiv2.WBRedisSpec{
 					Enabled:     true,
 					Namespace:   "prod",
 					StorageSize: "50Gi",
-					Config: &v2.WBRedisConfig{
+					Config: &apiv2.WBRedisConfig{
 						Resources: corev1.ResourceRequirements{
 							Limits: corev1.ResourceList{
 								corev1.ResourceCPU: resource.MustParse("2"),
 							},
 						},
 					},
-					Sentinel: &v2.WBRedisSentinelSpec{
+					Sentinel: &apiv2.WBRedisSentinelSpec{
 						Enabled: true,
-						Config: &v2.WBRedisSentinelConfig{
+						Config: &apiv2.WBRedisSentinelConfig{
 							Resources: corev1.ResourceRequirements{
 								Limits: corev1.ResourceList{
 									corev1.ResourceMemory: resource.MustParse("256Mi"),
@@ -524,11 +524,11 @@ var _ = Describe("BuildRedisSpec", func() {
 						},
 					},
 				}
-				defaults := v2.WBRedisSpec{
+				defaults := apiv2.WBRedisSpec{
 					Enabled:     false,
 					Namespace:   "dev",
 					StorageSize: "10Gi",
-					Config: &v2.WBRedisConfig{
+					Config: &apiv2.WBRedisConfig{
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
 								corev1.ResourceCPU:     resource.MustParse("500m"),
@@ -541,9 +541,9 @@ var _ = Describe("BuildRedisSpec", func() {
 							},
 						},
 					},
-					Sentinel: &v2.WBRedisSentinelSpec{
+					Sentinel: &apiv2.WBRedisSentinelSpec{
 						Enabled: false,
-						Config: &v2.WBRedisSentinelConfig{
+						Config: &apiv2.WBRedisSentinelConfig{
 							Resources: corev1.ResourceRequirements{
 								Requests: corev1.ResourceList{
 									corev1.ResourceCPU:    resource.MustParse("100m"),
@@ -582,8 +582,8 @@ var _ = Describe("BuildRedisSpec", func() {
 	Describe("Edge cases", func() {
 		Context("when both specs are completely empty", func() {
 			It("should return an empty spec without error", func() {
-				actual := v2.WBRedisSpec{}
-				defaults := v2.WBRedisSpec{}
+				actual := apiv2.WBRedisSpec{}
+				defaults := apiv2.WBRedisSpec{}
 
 				result, err := BuildRedisSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
@@ -601,7 +601,7 @@ var _ = Describe("BuildRedisDefaults", func() {
 	Describe("RedisSentinelEnabled", func() {
 		Context("when Sentinel is nil", func() {
 			It("should return false", func() {
-				spec := v2.WBRedisSpec{
+				spec := apiv2.WBRedisSpec{
 					Sentinel: nil,
 				}
 				result := RedisSentinelEnabled(spec)
@@ -611,8 +611,8 @@ var _ = Describe("BuildRedisDefaults", func() {
 
 		Context("when Sentinel is disabled", func() {
 			It("should return false", func() {
-				spec := v2.WBRedisSpec{
-					Sentinel: &v2.WBRedisSentinelSpec{
+				spec := apiv2.WBRedisSpec{
+					Sentinel: &apiv2.WBRedisSentinelSpec{
 						Enabled: false,
 					},
 				}
@@ -623,8 +623,8 @@ var _ = Describe("BuildRedisDefaults", func() {
 
 		Context("when Sentinel is enabled", func() {
 			It("should return true", func() {
-				spec := v2.WBRedisSpec{
-					Sentinel: &v2.WBRedisSentinelSpec{
+				spec := apiv2.WBRedisSpec{
+					Sentinel: &apiv2.WBRedisSentinelSpec{
 						Enabled: true,
 					},
 				}
@@ -637,7 +637,7 @@ var _ = Describe("BuildRedisDefaults", func() {
 	Describe("Redis", func() {
 		Context("when profile is Dev", func() {
 			It("should return a redis spec with storage only and no sentinel", func() {
-				spec, err := BuildRedisDefaults(v2.WBSizeDev, testingOwnerNamespace)
+				spec, err := BuildRedisDefaults(apiv2.WBSizeDev, testingOwnerNamespace)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(spec.Enabled).To(BeTrue())
 				Expect(spec.Config).ToNot(BeNil())
@@ -658,7 +658,7 @@ var _ = Describe("BuildRedisDefaults", func() {
 
 		Context("when profile is Small", func() {
 			It("should return a redis spec with full resource requirements and sentinel", func() {
-				spec, err := BuildRedisDefaults(v2.WBSizeSmall, testingOwnerNamespace)
+				spec, err := BuildRedisDefaults(apiv2.WBSizeSmall, testingOwnerNamespace)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(spec.Enabled).To(BeTrue())
 				Expect(spec.Config).ToNot(BeNil())
@@ -698,7 +698,7 @@ var _ = Describe("BuildRedisDefaults", func() {
 
 		Context("when profile is invalid", func() {
 			It("should return an error", func() {
-				_, err := BuildRedisDefaults(v2.WBSize("invalid"), testingOwnerNamespace)
+				_, err := BuildRedisDefaults(apiv2.WBSize("invalid"), testingOwnerNamespace)
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("invalid profile"))
 			})

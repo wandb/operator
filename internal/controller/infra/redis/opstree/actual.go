@@ -7,7 +7,7 @@ import (
 	redisv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redis/v1beta2"
 	redisreplicationv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redisreplication/v1beta2"
 	redissentinelv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redissentinel/v1beta2"
-	machErrors "k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -53,7 +53,7 @@ func Initialize(
 
 	err = client.Get(ctx, standaloneNamespacedName(redisConfig.Namespace), standalone)
 	if err != nil {
-		if !machErrors.IsNotFound(err) {
+		if !apierrors.IsNotFound(err) {
 			log.Error(err, "error getting actual opstree redis standalone")
 			return nil, err
 		}
@@ -63,7 +63,7 @@ func Initialize(
 
 	err = client.Get(ctx, sentinelNamespacedName(redisConfig.Namespace), sentinel)
 	if err != nil {
-		if !machErrors.IsNotFound(err) {
+		if !apierrors.IsNotFound(err) {
 			log.Error(err, "error getting actual opstree redis sentinel")
 			return nil, err
 		}
@@ -73,7 +73,7 @@ func Initialize(
 
 	err = client.Get(ctx, replicationNamespacedName(redisConfig.Namespace), replication)
 	if err != nil {
-		if !machErrors.IsNotFound(err) {
+		if !apierrors.IsNotFound(err) {
 			log.Error(err, "error getting actual opstree redis replication")
 			return nil, err
 		}

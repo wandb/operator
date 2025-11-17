@@ -3,7 +3,7 @@ package v2
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	v2 "github.com/wandb/operator/api/v2"
+	apiv2 "github.com/wandb/operator/api/v2"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
@@ -12,10 +12,10 @@ var _ = Describe("BuildMySQLSpec", func() {
 	Describe("Config merging", func() {
 		Context("when both Config values are nil", func() {
 			It("should result in nil Config", func() {
-				actual := v2.WBMySQLSpec{
+				actual := apiv2.WBMySQLSpec{
 					Config: nil,
 				}
-				defaults := v2.WBMySQLSpec{
+				defaults := apiv2.WBMySQLSpec{
 					Config: nil,
 				}
 
@@ -27,11 +27,11 @@ var _ = Describe("BuildMySQLSpec", func() {
 
 		Context("when actual Config is nil", func() {
 			It("should use default Config", func() {
-				actual := v2.WBMySQLSpec{
+				actual := apiv2.WBMySQLSpec{
 					Config: nil,
 				}
-				defaults := v2.WBMySQLSpec{
-					Config: &v2.WBMySQLConfig{
+				defaults := apiv2.WBMySQLSpec{
+					Config: &apiv2.WBMySQLConfig{
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
 								corev1.ResourceCPU:    resource.MustParse("500m"),
@@ -57,8 +57,8 @@ var _ = Describe("BuildMySQLSpec", func() {
 
 		Context("when default Config is nil", func() {
 			It("should use actual Config", func() {
-				actual := v2.WBMySQLSpec{
-					Config: &v2.WBMySQLConfig{
+				actual := apiv2.WBMySQLSpec{
+					Config: &apiv2.WBMySQLConfig{
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
 								corev1.ResourceCPU: resource.MustParse("250m"),
@@ -66,7 +66,7 @@ var _ = Describe("BuildMySQLSpec", func() {
 						},
 					},
 				}
-				defaults := v2.WBMySQLSpec{
+				defaults := apiv2.WBMySQLSpec{
 					Config: nil,
 				}
 
@@ -79,8 +79,8 @@ var _ = Describe("BuildMySQLSpec", func() {
 
 		Context("when both Config values exist", func() {
 			It("should merge resources with actual taking precedence", func() {
-				actual := v2.WBMySQLSpec{
-					Config: &v2.WBMySQLConfig{
+				actual := apiv2.WBMySQLSpec{
+					Config: &apiv2.WBMySQLConfig{
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
 								corev1.ResourceCPU: resource.MustParse("750m"),
@@ -91,8 +91,8 @@ var _ = Describe("BuildMySQLSpec", func() {
 						},
 					},
 				}
-				defaults := v2.WBMySQLSpec{
-					Config: &v2.WBMySQLConfig{
+				defaults := apiv2.WBMySQLSpec{
+					Config: &apiv2.WBMySQLConfig{
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
 								corev1.ResourceCPU:    resource.MustParse("500m"),
@@ -120,10 +120,10 @@ var _ = Describe("BuildMySQLSpec", func() {
 	Describe("StorageSize merging", func() {
 		Context("when actual StorageSize is empty", func() {
 			It("should use default StorageSize", func() {
-				actual := v2.WBMySQLSpec{
+				actual := apiv2.WBMySQLSpec{
 					StorageSize: "",
 				}
-				defaults := v2.WBMySQLSpec{
+				defaults := apiv2.WBMySQLSpec{
 					StorageSize: "10Gi",
 				}
 
@@ -135,10 +135,10 @@ var _ = Describe("BuildMySQLSpec", func() {
 
 		Context("when actual StorageSize is set", func() {
 			It("should use actual StorageSize", func() {
-				actual := v2.WBMySQLSpec{
+				actual := apiv2.WBMySQLSpec{
 					StorageSize: "20Gi",
 				}
-				defaults := v2.WBMySQLSpec{
+				defaults := apiv2.WBMySQLSpec{
 					StorageSize: "10Gi",
 				}
 
@@ -150,10 +150,10 @@ var _ = Describe("BuildMySQLSpec", func() {
 
 		Context("when both StorageSize values are empty", func() {
 			It("should result in empty StorageSize", func() {
-				actual := v2.WBMySQLSpec{
+				actual := apiv2.WBMySQLSpec{
 					StorageSize: "",
 				}
-				defaults := v2.WBMySQLSpec{
+				defaults := apiv2.WBMySQLSpec{
 					StorageSize: "",
 				}
 
@@ -167,10 +167,10 @@ var _ = Describe("BuildMySQLSpec", func() {
 	Describe("Namespace merging", func() {
 		Context("when actual Namespace is empty", func() {
 			It("should use default Namespace", func() {
-				actual := v2.WBMySQLSpec{
+				actual := apiv2.WBMySQLSpec{
 					Namespace: "",
 				}
-				defaults := v2.WBMySQLSpec{
+				defaults := apiv2.WBMySQLSpec{
 					Namespace: "default-namespace",
 				}
 
@@ -182,10 +182,10 @@ var _ = Describe("BuildMySQLSpec", func() {
 
 		Context("when actual Namespace is set", func() {
 			It("should use actual Namespace", func() {
-				actual := v2.WBMySQLSpec{
+				actual := apiv2.WBMySQLSpec{
 					Namespace: "custom-namespace",
 				}
-				defaults := v2.WBMySQLSpec{
+				defaults := apiv2.WBMySQLSpec{
 					Namespace: "default-namespace",
 				}
 
@@ -197,10 +197,10 @@ var _ = Describe("BuildMySQLSpec", func() {
 
 		Context("when both Namespace values are empty", func() {
 			It("should result in empty Namespace", func() {
-				actual := v2.WBMySQLSpec{
+				actual := apiv2.WBMySQLSpec{
 					Namespace: "",
 				}
-				defaults := v2.WBMySQLSpec{
+				defaults := apiv2.WBMySQLSpec{
 					Namespace: "",
 				}
 
@@ -214,10 +214,10 @@ var _ = Describe("BuildMySQLSpec", func() {
 	Describe("Enabled field", func() {
 		Context("when actual Enabled is true", func() {
 			It("should always use actual Enabled regardless of default", func() {
-				actual := v2.WBMySQLSpec{
+				actual := apiv2.WBMySQLSpec{
 					Enabled: true,
 				}
-				defaults := v2.WBMySQLSpec{
+				defaults := apiv2.WBMySQLSpec{
 					Enabled: false,
 				}
 
@@ -229,10 +229,10 @@ var _ = Describe("BuildMySQLSpec", func() {
 
 		Context("when actual Enabled is false", func() {
 			It("should always use actual Enabled regardless of default", func() {
-				actual := v2.WBMySQLSpec{
+				actual := apiv2.WBMySQLSpec{
 					Enabled: false,
 				}
-				defaults := v2.WBMySQLSpec{
+				defaults := apiv2.WBMySQLSpec{
 					Enabled: true,
 				}
 
@@ -246,12 +246,12 @@ var _ = Describe("BuildMySQLSpec", func() {
 	Describe("Complete spec merging", func() {
 		Context("when actual is completely empty", func() {
 			It("should return all default values except Enabled", func() {
-				actual := v2.WBMySQLSpec{}
-				defaults := v2.WBMySQLSpec{
+				actual := apiv2.WBMySQLSpec{}
+				defaults := apiv2.WBMySQLSpec{
 					Enabled:     true,
 					Namespace:   "default",
 					StorageSize: "10Gi",
-					Config: &v2.WBMySQLConfig{
+					Config: &apiv2.WBMySQLConfig{
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
 								corev1.ResourceCPU: resource.MustParse("500m"),
@@ -272,11 +272,11 @@ var _ = Describe("BuildMySQLSpec", func() {
 
 		Context("when actual has all values set", func() {
 			It("should use actual values for all fields", func() {
-				actual := v2.WBMySQLSpec{
+				actual := apiv2.WBMySQLSpec{
 					Enabled:     false,
 					Namespace:   "actual-namespace",
 					StorageSize: "25Gi",
-					Config: &v2.WBMySQLConfig{
+					Config: &apiv2.WBMySQLConfig{
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
 								corev1.ResourceCPU:    resource.MustParse("2"),
@@ -285,11 +285,11 @@ var _ = Describe("BuildMySQLSpec", func() {
 						},
 					},
 				}
-				defaults := v2.WBMySQLSpec{
+				defaults := apiv2.WBMySQLSpec{
 					Enabled:     true,
 					Namespace:   "default-namespace",
 					StorageSize: "10Gi",
-					Config: &v2.WBMySQLConfig{
+					Config: &apiv2.WBMySQLConfig{
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
 								corev1.ResourceCPU: resource.MustParse("500m"),
@@ -312,8 +312,8 @@ var _ = Describe("BuildMySQLSpec", func() {
 	Describe("Edge cases", func() {
 		Context("when both specs are completely empty", func() {
 			It("should return an empty spec without error", func() {
-				actual := v2.WBMySQLSpec{}
-				defaults := v2.WBMySQLSpec{}
+				actual := apiv2.WBMySQLSpec{}
+				defaults := apiv2.WBMySQLSpec{}
 
 				result, err := BuildMySQLSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
@@ -332,7 +332,7 @@ var _ = Describe("BuildMySQLDefaults", func() {
 	Describe("Dev profile", func() {
 		Context("when profile is Dev", func() {
 			It("should return a MySQL spec with storage only and no resources", func() {
-				spec, err := BuildMySQLDefaults(v2.WBSizeDev, testOwnerNamespace)
+				spec, err := BuildMySQLDefaults(apiv2.WBSizeDev, testOwnerNamespace)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(spec.Enabled).To(BeTrue())
 				Expect(spec.Namespace).To(Equal(testOwnerNamespace))
@@ -345,7 +345,7 @@ var _ = Describe("BuildMySQLDefaults", func() {
 	Describe("Small profile", func() {
 		Context("when profile is Small", func() {
 			It("should return a MySQL spec with full resource requirements", func() {
-				spec, err := BuildMySQLDefaults(v2.WBSizeSmall, testOwnerNamespace)
+				spec, err := BuildMySQLDefaults(apiv2.WBSizeSmall, testOwnerNamespace)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(spec.Enabled).To(BeTrue())
 				Expect(spec.Namespace).To(Equal(testOwnerNamespace))
@@ -372,7 +372,7 @@ var _ = Describe("BuildMySQLDefaults", func() {
 	Describe("Invalid profile", func() {
 		Context("when profile is invalid", func() {
 			It("should return an error", func() {
-				_, err := BuildMySQLDefaults(v2.WBSize("invalid"), testOwnerNamespace)
+				_, err := BuildMySQLDefaults(apiv2.WBSize("invalid"), testOwnerNamespace)
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("unsupported size for MySQL"))
 				Expect(err.Error()).To(ContainSubstring("only 'dev' and 'small' are supported"))

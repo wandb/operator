@@ -46,7 +46,7 @@ import (
 	"github.com/wandb/operator/pkg/wandb/spec/utils"
 	"github.com/wandb/operator/pkg/wandb/status"
 
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 const resFinalizer = "finalizer.app.wandb.com"
@@ -97,7 +97,7 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	wandb := &apiv1.WeightsAndBiases{}
 	if err := r.Client.Get(ctx, req.NamespacedName, wandb); err != nil {
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			return ctrlqueue.DoNotRequeue()
 		}
 		return ctrlqueue.RequeueWithError(err)

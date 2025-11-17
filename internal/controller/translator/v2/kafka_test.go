@@ -3,7 +3,7 @@ package v2
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	v2 "github.com/wandb/operator/api/v2"
+	apiv2 "github.com/wandb/operator/api/v2"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
@@ -12,8 +12,8 @@ var _ = Describe("BuildKafkaSpec", func() {
 	Describe("Config merging", func() {
 		Context("when both Config values are nil", func() {
 			It("should result in nil Config", func() {
-				actual := v2.WBKafkaSpec{Config: nil}
-				defaults := v2.WBKafkaSpec{Config: nil}
+				actual := apiv2.WBKafkaSpec{Config: nil}
+				defaults := apiv2.WBKafkaSpec{Config: nil}
 
 				result, err := BuildKafkaSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
@@ -26,9 +26,9 @@ var _ = Describe("BuildKafkaSpec", func() {
 				defaultCpuRequest := resource.MustParse("500m")
 				defaultMemoryRequest := resource.MustParse("1Gi")
 
-				actual := v2.WBKafkaSpec{Config: nil}
-				defaults := v2.WBKafkaSpec{
-					Config: &v2.WBKafkaConfig{
+				actual := apiv2.WBKafkaSpec{Config: nil}
+				defaults := apiv2.WBKafkaSpec{
+					Config: &apiv2.WBKafkaConfig{
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
 								corev1.ResourceCPU:    defaultCpuRequest,
@@ -50,8 +50,8 @@ var _ = Describe("BuildKafkaSpec", func() {
 			It("should use actual Config", func() {
 				actualCpuRequest := resource.MustParse("250m")
 
-				actual := v2.WBKafkaSpec{
-					Config: &v2.WBKafkaConfig{
+				actual := apiv2.WBKafkaSpec{
+					Config: &apiv2.WBKafkaConfig{
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
 								corev1.ResourceCPU: actualCpuRequest,
@@ -59,7 +59,7 @@ var _ = Describe("BuildKafkaSpec", func() {
 						},
 					},
 				}
-				defaults := v2.WBKafkaSpec{Config: nil}
+				defaults := apiv2.WBKafkaSpec{Config: nil}
 
 				result, err := BuildKafkaSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
@@ -74,8 +74,8 @@ var _ = Describe("BuildKafkaSpec", func() {
 				defaultCpuRequest := resource.MustParse("500m")
 				defaultMemoryRequest := resource.MustParse("1Gi")
 
-				actual := v2.WBKafkaSpec{
-					Config: &v2.WBKafkaConfig{
+				actual := apiv2.WBKafkaSpec{
+					Config: &apiv2.WBKafkaConfig{
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
 								corev1.ResourceCPU: actualCpuRequest,
@@ -83,8 +83,8 @@ var _ = Describe("BuildKafkaSpec", func() {
 						},
 					},
 				}
-				defaults := v2.WBKafkaSpec{
-					Config: &v2.WBKafkaConfig{
+				defaults := apiv2.WBKafkaSpec{
+					Config: &apiv2.WBKafkaConfig{
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
 								corev1.ResourceCPU:    defaultCpuRequest,
@@ -107,8 +107,8 @@ var _ = Describe("BuildKafkaSpec", func() {
 			It("should use default StorageSize", func() {
 				defaultStorageSize := "10Gi"
 
-				actual := v2.WBKafkaSpec{StorageSize: ""}
-				defaults := v2.WBKafkaSpec{StorageSize: defaultStorageSize}
+				actual := apiv2.WBKafkaSpec{StorageSize: ""}
+				defaults := apiv2.WBKafkaSpec{StorageSize: defaultStorageSize}
 
 				result, err := BuildKafkaSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
@@ -121,8 +121,8 @@ var _ = Describe("BuildKafkaSpec", func() {
 				actualStorageSize := "20Gi"
 				defaultStorageSize := "10Gi"
 
-				actual := v2.WBKafkaSpec{StorageSize: actualStorageSize}
-				defaults := v2.WBKafkaSpec{StorageSize: defaultStorageSize}
+				actual := apiv2.WBKafkaSpec{StorageSize: actualStorageSize}
+				defaults := apiv2.WBKafkaSpec{StorageSize: defaultStorageSize}
 
 				result, err := BuildKafkaSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
@@ -132,8 +132,8 @@ var _ = Describe("BuildKafkaSpec", func() {
 
 		Context("when both StorageSize values are empty", func() {
 			It("should result in empty StorageSize", func() {
-				actual := v2.WBKafkaSpec{StorageSize: ""}
-				defaults := v2.WBKafkaSpec{StorageSize: ""}
+				actual := apiv2.WBKafkaSpec{StorageSize: ""}
+				defaults := apiv2.WBKafkaSpec{StorageSize: ""}
 
 				result, err := BuildKafkaSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
@@ -147,8 +147,8 @@ var _ = Describe("BuildKafkaSpec", func() {
 			It("should use default Namespace", func() {
 				defaultNamespace := "default-namespace"
 
-				actual := v2.WBKafkaSpec{Namespace: ""}
-				defaults := v2.WBKafkaSpec{Namespace: defaultNamespace}
+				actual := apiv2.WBKafkaSpec{Namespace: ""}
+				defaults := apiv2.WBKafkaSpec{Namespace: defaultNamespace}
 
 				result, err := BuildKafkaSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
@@ -161,8 +161,8 @@ var _ = Describe("BuildKafkaSpec", func() {
 				actualNamespace := "custom-namespace"
 				defaultNamespace := "default-namespace"
 
-				actual := v2.WBKafkaSpec{Namespace: actualNamespace}
-				defaults := v2.WBKafkaSpec{Namespace: defaultNamespace}
+				actual := apiv2.WBKafkaSpec{Namespace: actualNamespace}
+				defaults := apiv2.WBKafkaSpec{Namespace: defaultNamespace}
 
 				result, err := BuildKafkaSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
@@ -174,8 +174,8 @@ var _ = Describe("BuildKafkaSpec", func() {
 	Describe("Enabled field", func() {
 		Context("when actual Enabled is true", func() {
 			It("should use actual value regardless of default", func() {
-				actual := v2.WBKafkaSpec{Enabled: true}
-				defaults := v2.WBKafkaSpec{Enabled: false}
+				actual := apiv2.WBKafkaSpec{Enabled: true}
+				defaults := apiv2.WBKafkaSpec{Enabled: false}
 
 				result, err := BuildKafkaSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
@@ -185,8 +185,8 @@ var _ = Describe("BuildKafkaSpec", func() {
 
 		Context("when actual Enabled is false", func() {
 			It("should use actual value regardless of default", func() {
-				actual := v2.WBKafkaSpec{Enabled: false}
-				defaults := v2.WBKafkaSpec{Enabled: true}
+				actual := apiv2.WBKafkaSpec{Enabled: false}
+				defaults := apiv2.WBKafkaSpec{Enabled: true}
 
 				result, err := BuildKafkaSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
@@ -201,7 +201,7 @@ var _ = Describe("BuildKafkaDefaults", func() {
 
 	Context("when profile is Dev", func() {
 		It("should return complete dev defaults", func() {
-			spec, err := BuildKafkaDefaults(v2.WBSizeDev, testOwnerNamespace)
+			spec, err := BuildKafkaDefaults(apiv2.WBSizeDev, testOwnerNamespace)
 			Expect(err).ToNot(HaveOccurred())
 
 			Expect(spec.Enabled).To(BeTrue())
@@ -213,7 +213,7 @@ var _ = Describe("BuildKafkaDefaults", func() {
 
 	Context("when profile is Small", func() {
 		It("should return complete small defaults with all resource fields", func() {
-			spec, err := BuildKafkaDefaults(v2.WBSizeSmall, testOwnerNamespace)
+			spec, err := BuildKafkaDefaults(apiv2.WBSizeSmall, testOwnerNamespace)
 			Expect(err).ToNot(HaveOccurred())
 
 			Expect(spec.Enabled).To(BeTrue())
@@ -235,7 +235,7 @@ var _ = Describe("BuildKafkaDefaults", func() {
 
 	Context("when profile is invalid", func() {
 		It("should return error", func() {
-			_, err := BuildKafkaDefaults(v2.WBSize("invalid"), testOwnerNamespace)
+			_, err := BuildKafkaDefaults(apiv2.WBSize("invalid"), testOwnerNamespace)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("unsupported size for Kafka"))
 		})

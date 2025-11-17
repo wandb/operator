@@ -7,7 +7,7 @@ import (
 	"github.com/wandb/operator/internal/model"
 	miniov2 "github.com/wandb/operator/internal/vendored/minio-operator/minio.min.io/v2"
 	corev1 "k8s.io/api/core/v1"
-	machErrors "k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -52,7 +52,7 @@ func Initialize(
 	}
 	err := client.Get(ctx, tenantKey, tenant)
 	if err != nil {
-		if !machErrors.IsNotFound(err) {
+		if !apierrors.IsNotFound(err) {
 			log.Error(err, "error getting actual Tenant CR")
 			return nil, err
 		}
@@ -67,7 +67,7 @@ func Initialize(
 	}
 	err = client.Get(ctx, secretKey, configSecret)
 	if err != nil {
-		if !machErrors.IsNotFound(err) {
+		if !apierrors.IsNotFound(err) {
 			log.Error(err, "error getting actual config secret")
 			return nil, err
 		}

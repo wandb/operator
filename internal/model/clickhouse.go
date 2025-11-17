@@ -6,9 +6,9 @@ import (
 	"fmt"
 
 	apiv2 "github.com/wandb/operator/api/v2"
-	mergev2 "github.com/wandb/operator/internal/controller/translator/v2"
+	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
 	"github.com/wandb/operator/internal/utils"
-	v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
@@ -23,7 +23,7 @@ type ClickHouseConfig struct {
 	StorageSize string
 	Replicas    int32
 	Version     string
-	Resources   v1.ResourceRequirements
+	Resources   corev1.ResourceRequirements
 }
 
 func (c ClickHouseConfig) IsHighAvailability() bool {
@@ -52,11 +52,11 @@ func (i *InfraConfigBuilder) AddClickHouseSpec(actual *apiv2.WBClickHouseSpec, s
 	i.size = size
 	var err error
 	var defaultSpec, merged apiv2.WBClickHouseSpec
-	if defaultSpec, err = mergev2.BuildClickHouseDefaults(size, i.ownerNamespace); err != nil {
+	if defaultSpec, err = translatorv2.BuildClickHouseDefaults(size, i.ownerNamespace); err != nil {
 		i.errors = append(i.errors, err)
 		return i
 	}
-	if merged, err = mergev2.BuildClickHouseSpec(*actual, defaultSpec); err != nil {
+	if merged, err = translatorv2.BuildClickHouseSpec(*actual, defaultSpec); err != nil {
 		i.errors = append(i.errors, err)
 		return i
 	} else {

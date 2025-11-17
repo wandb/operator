@@ -3,7 +3,7 @@ package v2
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	v2 "github.com/wandb/operator/api/v2"
+	apiv2 "github.com/wandb/operator/api/v2"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
@@ -12,8 +12,8 @@ var _ = Describe("BuildMinioSpec", func() {
 	Describe("Config merging", func() {
 		Context("when both Config values are nil", func() {
 			It("should result in nil Config", func() {
-				actual := v2.WBMinioSpec{Config: nil}
-				defaults := v2.WBMinioSpec{Config: nil}
+				actual := apiv2.WBMinioSpec{Config: nil}
+				defaults := apiv2.WBMinioSpec{Config: nil}
 
 				result, err := BuildMinioSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
@@ -25,9 +25,9 @@ var _ = Describe("BuildMinioSpec", func() {
 			It("should use default Config", func() {
 				defaultCpuRequest := resource.MustParse("500m")
 
-				actual := v2.WBMinioSpec{Config: nil}
-				defaults := v2.WBMinioSpec{
-					Config: &v2.WBMinioConfig{
+				actual := apiv2.WBMinioSpec{Config: nil}
+				defaults := apiv2.WBMinioSpec{
+					Config: &apiv2.WBMinioConfig{
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
 								corev1.ResourceCPU: defaultCpuRequest,
@@ -47,8 +47,8 @@ var _ = Describe("BuildMinioSpec", func() {
 			It("should use actual Config", func() {
 				actualCpuRequest := resource.MustParse("1")
 
-				actual := v2.WBMinioSpec{
-					Config: &v2.WBMinioConfig{
+				actual := apiv2.WBMinioSpec{
+					Config: &apiv2.WBMinioConfig{
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
 								corev1.ResourceCPU: actualCpuRequest,
@@ -56,7 +56,7 @@ var _ = Describe("BuildMinioSpec", func() {
 						},
 					},
 				}
-				defaults := v2.WBMinioSpec{Config: nil}
+				defaults := apiv2.WBMinioSpec{Config: nil}
 
 				result, err := BuildMinioSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
@@ -71,8 +71,8 @@ var _ = Describe("BuildMinioSpec", func() {
 				defaultCpuRequest := resource.MustParse("500m")
 				defaultMemoryRequest := resource.MustParse("1Gi")
 
-				actual := v2.WBMinioSpec{
-					Config: &v2.WBMinioConfig{
+				actual := apiv2.WBMinioSpec{
+					Config: &apiv2.WBMinioConfig{
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
 								corev1.ResourceCPU: actualCpuRequest,
@@ -80,8 +80,8 @@ var _ = Describe("BuildMinioSpec", func() {
 						},
 					},
 				}
-				defaults := v2.WBMinioSpec{
-					Config: &v2.WBMinioConfig{
+				defaults := apiv2.WBMinioSpec{
+					Config: &apiv2.WBMinioConfig{
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
 								corev1.ResourceCPU:    defaultCpuRequest,
@@ -104,8 +104,8 @@ var _ = Describe("BuildMinioSpec", func() {
 			It("should use default StorageSize", func() {
 				defaultStorageSize := "10Gi"
 
-				actual := v2.WBMinioSpec{StorageSize: ""}
-				defaults := v2.WBMinioSpec{StorageSize: defaultStorageSize}
+				actual := apiv2.WBMinioSpec{StorageSize: ""}
+				defaults := apiv2.WBMinioSpec{StorageSize: defaultStorageSize}
 
 				result, err := BuildMinioSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
@@ -118,8 +118,8 @@ var _ = Describe("BuildMinioSpec", func() {
 				actualStorageSize := "50Gi"
 				defaultStorageSize := "10Gi"
 
-				actual := v2.WBMinioSpec{StorageSize: actualStorageSize}
-				defaults := v2.WBMinioSpec{StorageSize: defaultStorageSize}
+				actual := apiv2.WBMinioSpec{StorageSize: actualStorageSize}
+				defaults := apiv2.WBMinioSpec{StorageSize: defaultStorageSize}
 
 				result, err := BuildMinioSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
@@ -133,8 +133,8 @@ var _ = Describe("BuildMinioSpec", func() {
 			It("should use default Namespace", func() {
 				defaultNamespace := "default-namespace"
 
-				actual := v2.WBMinioSpec{Namespace: ""}
-				defaults := v2.WBMinioSpec{Namespace: defaultNamespace}
+				actual := apiv2.WBMinioSpec{Namespace: ""}
+				defaults := apiv2.WBMinioSpec{Namespace: defaultNamespace}
 
 				result, err := BuildMinioSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
@@ -147,8 +147,8 @@ var _ = Describe("BuildMinioSpec", func() {
 				actualNamespace := "custom-namespace"
 				defaultNamespace := "default-namespace"
 
-				actual := v2.WBMinioSpec{Namespace: actualNamespace}
-				defaults := v2.WBMinioSpec{Namespace: defaultNamespace}
+				actual := apiv2.WBMinioSpec{Namespace: actualNamespace}
+				defaults := apiv2.WBMinioSpec{Namespace: defaultNamespace}
 
 				result, err := BuildMinioSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
@@ -162,8 +162,8 @@ var _ = Describe("BuildMinioSpec", func() {
 			actualReplicas := int32(5)
 			defaultReplicas := int32(3)
 
-			actual := v2.WBMinioSpec{Replicas: actualReplicas}
-			defaults := v2.WBMinioSpec{Replicas: defaultReplicas}
+			actual := apiv2.WBMinioSpec{Replicas: actualReplicas}
+			defaults := apiv2.WBMinioSpec{Replicas: defaultReplicas}
 
 			result, err := BuildMinioSpec(actual, defaults)
 			Expect(err).ToNot(HaveOccurred())
@@ -174,8 +174,8 @@ var _ = Describe("BuildMinioSpec", func() {
 	Describe("Enabled field", func() {
 		Context("when actual Enabled is true", func() {
 			It("should use actual value regardless of default", func() {
-				actual := v2.WBMinioSpec{Enabled: true}
-				defaults := v2.WBMinioSpec{Enabled: false}
+				actual := apiv2.WBMinioSpec{Enabled: true}
+				defaults := apiv2.WBMinioSpec{Enabled: false}
 
 				result, err := BuildMinioSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
@@ -185,8 +185,8 @@ var _ = Describe("BuildMinioSpec", func() {
 
 		Context("when actual Enabled is false", func() {
 			It("should use actual value regardless of default", func() {
-				actual := v2.WBMinioSpec{Enabled: false}
-				defaults := v2.WBMinioSpec{Enabled: true}
+				actual := apiv2.WBMinioSpec{Enabled: false}
+				defaults := apiv2.WBMinioSpec{Enabled: true}
 
 				result, err := BuildMinioSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
@@ -201,7 +201,7 @@ var _ = Describe("BuildMinioDefaults", func() {
 
 	Context("when profile is Dev", func() {
 		It("should return complete dev defaults", func() {
-			spec, err := BuildMinioDefaults(v2.WBSizeDev, testOwnerNamespace)
+			spec, err := BuildMinioDefaults(apiv2.WBSizeDev, testOwnerNamespace)
 			Expect(err).ToNot(HaveOccurred())
 
 			Expect(spec.Enabled).To(BeTrue())
@@ -213,7 +213,7 @@ var _ = Describe("BuildMinioDefaults", func() {
 
 	Context("when profile is Small", func() {
 		It("should return complete small defaults with all resource fields", func() {
-			spec, err := BuildMinioDefaults(v2.WBSizeSmall, testOwnerNamespace)
+			spec, err := BuildMinioDefaults(apiv2.WBSizeSmall, testOwnerNamespace)
 			Expect(err).ToNot(HaveOccurred())
 
 			Expect(spec.Enabled).To(BeTrue())
@@ -235,7 +235,7 @@ var _ = Describe("BuildMinioDefaults", func() {
 
 	Context("when profile is invalid", func() {
 		It("should return error", func() {
-			_, err := BuildMinioDefaults(v2.WBSize("invalid"), testOwnerNamespace)
+			_, err := BuildMinioDefaults(apiv2.WBSize("invalid"), testOwnerNamespace)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("unsupported size for Minio"))
 		})

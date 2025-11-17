@@ -3,9 +3,9 @@ package v2
 import (
 	"fmt"
 
-	v2 "github.com/wandb/operator/api/v2"
+	apiv2 "github.com/wandb/operator/api/v2"
 	merge2 "github.com/wandb/operator/internal/controller/translator/utils"
-	v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
@@ -21,15 +21,15 @@ const (
 
 // BuildKafkaSpec will create a new WBKafkaSpec with defaultValues applied if not
 // present in actual. It should *never* be saved into the CR!
-func BuildKafkaSpec(actual v2.WBKafkaSpec, defaultValues v2.WBKafkaSpec) (v2.WBKafkaSpec, error) {
-	var kafkaSpec v2.WBKafkaSpec
+func BuildKafkaSpec(actual apiv2.WBKafkaSpec, defaultValues apiv2.WBKafkaSpec) (apiv2.WBKafkaSpec, error) {
+	var kafkaSpec apiv2.WBKafkaSpec
 
 	if actual.Config == nil {
 		kafkaSpec.Config = defaultValues.Config.DeepCopy()
 	} else if defaultValues.Config == nil {
 		kafkaSpec.Config = actual.Config.DeepCopy()
 	} else {
-		var kafkaConfig v2.WBKafkaConfig
+		var kafkaConfig apiv2.WBKafkaConfig
 		kafkaConfig.Resources = merge2.Resources(
 			actual.Config.Resources,
 			defaultValues.Config.Resources,
@@ -45,21 +45,21 @@ func BuildKafkaSpec(actual v2.WBKafkaSpec, defaultValues v2.WBKafkaSpec) (v2.WBK
 	return kafkaSpec, nil
 }
 
-func BuildKafkaDefaults(profile v2.WBSize, ownerNamespace string) (v2.WBKafkaSpec, error) {
+func BuildKafkaDefaults(profile apiv2.WBSize, ownerNamespace string) (apiv2.WBKafkaSpec, error) {
 	var err error
 	var storageSize string
-	var spec v2.WBKafkaSpec
+	var spec apiv2.WBKafkaSpec
 
-	spec = v2.WBKafkaSpec{
+	spec = apiv2.WBKafkaSpec{
 		Enabled:   true,
 		Namespace: ownerNamespace,
 	}
 
 	switch profile {
-	case v2.WBSizeDev:
+	case apiv2.WBSizeDev:
 		storageSize = DevKafkaStorageSize
 		spec.StorageSize = storageSize
-	case v2.WBSizeSmall:
+	case apiv2.WBSizeSmall:
 		storageSize = SmallKafkaStorageSize
 		spec.StorageSize = storageSize
 
@@ -77,15 +77,15 @@ func BuildKafkaDefaults(profile v2.WBSize, ownerNamespace string) (v2.WBKafkaSpe
 			return spec, err
 		}
 
-		spec.Config = &v2.WBKafkaConfig{
-			Resources: v1.ResourceRequirements{
-				Requests: v1.ResourceList{
-					v1.ResourceCPU:    cpuRequest,
-					v1.ResourceMemory: memoryRequest,
+		spec.Config = &apiv2.WBKafkaConfig{
+			Resources: corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceCPU:    cpuRequest,
+					corev1.ResourceMemory: memoryRequest,
 				},
-				Limits: v1.ResourceList{
-					v1.ResourceCPU:    cpuLimit,
-					v1.ResourceMemory: memoryLimit,
+				Limits: corev1.ResourceList{
+					corev1.ResourceCPU:    cpuLimit,
+					corev1.ResourceMemory: memoryLimit,
 				},
 			},
 		}

@@ -3,9 +3,9 @@ package v2
 import (
 	"fmt"
 
-	v2 "github.com/wandb/operator/api/v2"
+	apiv2 "github.com/wandb/operator/api/v2"
 	merge2 "github.com/wandb/operator/internal/controller/translator/utils"
-	v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
@@ -30,22 +30,22 @@ const (
 
 // BuildRedisSpec will create a new WBRedisSpec with defaultValues applied if not
 // present in actual. It should *never* be saved into the CR!
-func BuildRedisSpec(actual v2.WBRedisSpec, defaultValues v2.WBRedisSpec) (v2.WBRedisSpec, error) {
-	var redisSpec v2.WBRedisSpec
+func BuildRedisSpec(actual apiv2.WBRedisSpec, defaultValues apiv2.WBRedisSpec) (apiv2.WBRedisSpec, error) {
+	var redisSpec apiv2.WBRedisSpec
 
 	if actual.Sentinel == nil {
 		redisSpec.Sentinel = defaultValues.Sentinel.DeepCopy()
 	} else if defaultValues.Sentinel == nil {
 		redisSpec.Sentinel = actual.Sentinel.DeepCopy()
 	} else {
-		var redisSentinel v2.WBRedisSentinelSpec
+		var redisSentinel apiv2.WBRedisSentinelSpec
 		redisSentinel.Enabled = actual.Sentinel.Enabled
 		if actual.Sentinel.Config == nil {
 			redisSentinel.Config = defaultValues.Sentinel.Config.DeepCopy()
 		} else if defaultValues.Sentinel.Config == nil {
 			redisSentinel.Config = actual.Sentinel.Config.DeepCopy()
 		} else {
-			var sentinelConfig v2.WBRedisSentinelConfig
+			var sentinelConfig apiv2.WBRedisSentinelConfig
 			sentinelConfig.Resources = merge2.Resources(
 				actual.Sentinel.Config.Resources,
 				defaultValues.Sentinel.Config.Resources,
@@ -64,7 +64,7 @@ func BuildRedisSpec(actual v2.WBRedisSpec, defaultValues v2.WBRedisSpec) (v2.WBR
 	} else if defaultValues.Config == nil {
 		redisSpec.Config = actual.Config.DeepCopy()
 	} else {
-		var redisConfig v2.WBRedisConfig
+		var redisConfig apiv2.WBRedisConfig
 		redisConfig.Resources = merge2.Resources(
 			actual.Config.Resources,
 			defaultValues.Config.Resources,
@@ -79,32 +79,32 @@ func BuildRedisSpec(actual v2.WBRedisSpec, defaultValues v2.WBRedisSpec) (v2.WBR
 	return redisSpec, nil
 }
 
-func BuildRedisDefaults(profile v2.WBSize, ownerNamespace string) (v2.WBRedisSpec, error) {
+func BuildRedisDefaults(profile apiv2.WBSize, ownerNamespace string) (apiv2.WBRedisSpec, error) {
 	var err error
 	var storageRequest, cpuRequest, cpuLimit, memoryRequest, memoryLimit resource.Quantity
-	var spec v2.WBRedisSpec
-	var sentinelSpec *v2.WBRedisSentinelSpec
+	var spec apiv2.WBRedisSpec
+	var sentinelSpec *apiv2.WBRedisSentinelSpec
 
 	if sentinelSpec, err = buildRedisSentinelSpecDefaults(profile); err != nil {
 		return spec, err
 	}
-	spec = v2.WBRedisSpec{
+	spec = apiv2.WBRedisSpec{
 		Enabled:   true,
 		Namespace: ownerNamespace,
-		Config: &v2.WBRedisConfig{
-			Resources: v1.ResourceRequirements{
-				Requests: v1.ResourceList{},
-				Limits:   v1.ResourceList{},
+		Config: &apiv2.WBRedisConfig{
+			Resources: corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{},
+				Limits:   corev1.ResourceList{},
 			},
 		},
 		Sentinel: sentinelSpec,
 	}
 	switch profile {
-	case v2.WBSizeDev:
+	case apiv2.WBSizeDev:
 		if storageRequest, err = resource.ParseQuantity(DevStorageRequest); err != nil {
 			return spec, err
 		}
-	case v2.WBSizeSmall:
+	case apiv2.WBSizeSmall:
 		if storageRequest, err = resource.ParseQuantity(SmallStorageRequest); err != nil {
 			return spec, err
 		}
@@ -128,29 +128,29 @@ func BuildRedisDefaults(profile v2.WBSize, ownerNamespace string) (v2.WBRedisSpe
 		spec.StorageSize = storageRequest.String()
 	}
 	if !cpuRequest.IsZero() {
-		spec.Config.Resources.Requests[v1.ResourceCPU] = cpuRequest
+		spec.Config.Resources.Requests[corev1.ResourceCPU] = cpuRequest
 	}
 	if !cpuLimit.IsZero() {
-		spec.Config.Resources.Limits[v1.ResourceCPU] = cpuLimit
+		spec.Config.Resources.Limits[corev1.ResourceCPU] = cpuLimit
 	}
 	if !memoryRequest.IsZero() {
-		spec.Config.Resources.Requests[v1.ResourceMemory] = memoryRequest
+		spec.Config.Resources.Requests[corev1.ResourceMemory] = memoryRequest
 	}
 	if !memoryLimit.IsZero() {
-		spec.Config.Resources.Limits[v1.ResourceMemory] = memoryLimit
+		spec.Config.Resources.Limits[corev1.ResourceMemory] = memoryLimit
 	}
 
 	return spec, nil
 }
 
-func buildRedisSentinelSpecDefaults(profile v2.WBSize) (*v2.WBRedisSentinelSpec, error) {
+func buildRedisSentinelSpecDefaults(profile apiv2.WBSize) (*apiv2.WBRedisSentinelSpec, error) {
 	var err error
 	var cpuRequest, cpuLimit, memoryRequest, memoryLimit resource.Quantity
 
 	switch profile {
-	case v2.WBSizeDev:
+	case apiv2.WBSizeDev:
 		return nil, nil
-	case v2.WBSizeSmall:
+	case apiv2.WBSizeSmall:
 		if cpuRequest, err = resource.ParseQuantity(SmallSentinelCpuRequest); err != nil {
 			return nil, err
 		}
@@ -167,32 +167,32 @@ func buildRedisSentinelSpecDefaults(profile v2.WBSize) (*v2.WBRedisSentinelSpec,
 		return nil, fmt.Errorf("invalid profile: %v", profile)
 	}
 
-	sentinelSpec := v2.WBRedisSentinelSpec{
+	sentinelSpec := apiv2.WBRedisSentinelSpec{
 		Enabled: true,
-		Config: &v2.WBRedisSentinelConfig{
-			Resources: v1.ResourceRequirements{
-				Requests: v1.ResourceList{},
-				Limits:   v1.ResourceList{},
+		Config: &apiv2.WBRedisSentinelConfig{
+			Resources: corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{},
+				Limits:   corev1.ResourceList{},
 			},
 		},
 	}
 
 	if !cpuRequest.IsZero() {
-		sentinelSpec.Config.Resources.Requests[v1.ResourceCPU] = cpuRequest
+		sentinelSpec.Config.Resources.Requests[corev1.ResourceCPU] = cpuRequest
 	}
 	if !cpuLimit.IsZero() {
-		sentinelSpec.Config.Resources.Limits[v1.ResourceCPU] = cpuLimit
+		sentinelSpec.Config.Resources.Limits[corev1.ResourceCPU] = cpuLimit
 	}
 	if !memoryRequest.IsZero() {
-		sentinelSpec.Config.Resources.Requests[v1.ResourceMemory] = memoryRequest
+		sentinelSpec.Config.Resources.Requests[corev1.ResourceMemory] = memoryRequest
 	}
 	if !memoryLimit.IsZero() {
-		sentinelSpec.Config.Resources.Limits[v1.ResourceMemory] = memoryLimit
+		sentinelSpec.Config.Resources.Limits[corev1.ResourceMemory] = memoryLimit
 	}
 
 	return &sentinelSpec, nil
 }
 
-func RedisSentinelEnabled(wbSpec v2.WBRedisSpec) bool {
+func RedisSentinelEnabled(wbSpec apiv2.WBRedisSpec) bool {
 	return wbSpec.Sentinel != nil && wbSpec.Sentinel.Enabled
 }

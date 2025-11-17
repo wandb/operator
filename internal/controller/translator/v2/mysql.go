@@ -3,9 +3,9 @@ package v2
 import (
 	"fmt"
 
-	v2 "github.com/wandb/operator/api/v2"
+	apiv2 "github.com/wandb/operator/api/v2"
 	merge2 "github.com/wandb/operator/internal/controller/translator/utils"
-	v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
@@ -21,15 +21,15 @@ const (
 
 // BuildMySQLSpec will create a new WBMySQLSpec with defaultValues applied if not
 // present in actual. It should *never* be saved into the CR!
-func BuildMySQLSpec(actual v2.WBMySQLSpec, defaultValues v2.WBMySQLSpec) (v2.WBMySQLSpec, error) {
-	var mysqlSpec v2.WBMySQLSpec
+func BuildMySQLSpec(actual apiv2.WBMySQLSpec, defaultValues apiv2.WBMySQLSpec) (apiv2.WBMySQLSpec, error) {
+	var mysqlSpec apiv2.WBMySQLSpec
 
 	if actual.Config == nil {
 		mysqlSpec.Config = defaultValues.Config.DeepCopy()
 	} else if defaultValues.Config == nil {
 		mysqlSpec.Config = actual.Config.DeepCopy()
 	} else {
-		var mysqlConfig v2.WBMySQLConfig
+		var mysqlConfig apiv2.WBMySQLConfig
 		mysqlConfig.Resources = merge2.Resources(
 			actual.Config.Resources,
 			defaultValues.Config.Resources,
@@ -45,19 +45,19 @@ func BuildMySQLSpec(actual v2.WBMySQLSpec, defaultValues v2.WBMySQLSpec) (v2.WBM
 	return mysqlSpec, nil
 }
 
-func BuildMySQLDefaults(profile v2.WBSize, ownerNamespace string) (v2.WBMySQLSpec, error) {
+func BuildMySQLDefaults(profile apiv2.WBSize, ownerNamespace string) (apiv2.WBMySQLSpec, error) {
 	var err error
 	var storageSize string
-	spec := v2.WBMySQLSpec{
+	spec := apiv2.WBMySQLSpec{
 		Enabled:   true,
 		Namespace: ownerNamespace,
 	}
 
 	switch profile {
-	case v2.WBSizeDev:
+	case apiv2.WBSizeDev:
 		storageSize = DevMySQLStorageSize
 		spec.StorageSize = storageSize
-	case v2.WBSizeSmall:
+	case apiv2.WBSizeSmall:
 		storageSize = SmallMySQLStorageSize
 		spec.StorageSize = storageSize
 
@@ -75,15 +75,15 @@ func BuildMySQLDefaults(profile v2.WBSize, ownerNamespace string) (v2.WBMySQLSpe
 			return spec, err
 		}
 
-		spec.Config = &v2.WBMySQLConfig{
-			Resources: v1.ResourceRequirements{
-				Requests: v1.ResourceList{
-					v1.ResourceCPU:    cpuRequest,
-					v1.ResourceMemory: memoryRequest,
+		spec.Config = &apiv2.WBMySQLConfig{
+			Resources: corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceCPU:    cpuRequest,
+					corev1.ResourceMemory: memoryRequest,
 				},
-				Limits: v1.ResourceList{
-					v1.ResourceCPU:    cpuLimit,
-					v1.ResourceMemory: memoryLimit,
+				Limits: corev1.ResourceList{
+					corev1.ResourceCPU:    cpuLimit,
+					corev1.ResourceMemory: memoryLimit,
 				},
 			},
 		}

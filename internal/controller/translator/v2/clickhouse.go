@@ -3,9 +3,9 @@ package v2
 import (
 	"fmt"
 
-	v2 "github.com/wandb/operator/api/v2"
+	apiv2 "github.com/wandb/operator/api/v2"
 	merge2 "github.com/wandb/operator/internal/controller/translator/utils"
-	v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
@@ -26,15 +26,15 @@ const (
 
 // BuildClickHouseSpec will create a new WBClickHouseSpec with defaultValues applied if not
 // present in actual. It should *never* be saved into the CR!
-func BuildClickHouseSpec(actual v2.WBClickHouseSpec, defaultValues v2.WBClickHouseSpec) (v2.WBClickHouseSpec, error) {
-	var clickhouseSpec v2.WBClickHouseSpec
+func BuildClickHouseSpec(actual apiv2.WBClickHouseSpec, defaultValues apiv2.WBClickHouseSpec) (apiv2.WBClickHouseSpec, error) {
+	var clickhouseSpec apiv2.WBClickHouseSpec
 
 	if actual.Config == nil {
 		clickhouseSpec.Config = defaultValues.Config.DeepCopy()
 	} else if defaultValues.Config == nil {
 		clickhouseSpec.Config = actual.Config.DeepCopy()
 	} else {
-		var clickhouseConfig v2.WBClickHouseConfig
+		var clickhouseConfig apiv2.WBClickHouseConfig
 		clickhouseConfig.Resources = merge2.Resources(
 			actual.Config.Resources,
 			defaultValues.Config.Resources,
@@ -52,21 +52,21 @@ func BuildClickHouseSpec(actual v2.WBClickHouseSpec, defaultValues v2.WBClickHou
 	return clickhouseSpec, nil
 }
 
-func BuildClickHouseDefaults(profile v2.WBSize, ownerNamespace string) (v2.WBClickHouseSpec, error) {
+func BuildClickHouseDefaults(profile apiv2.WBSize, ownerNamespace string) (apiv2.WBClickHouseSpec, error) {
 	var err error
 	var storageSize string
-	spec := v2.WBClickHouseSpec{
+	spec := apiv2.WBClickHouseSpec{
 		Enabled:   true,
 		Namespace: ownerNamespace,
 		Version:   ClickHouseVersion,
 	}
 
 	switch profile {
-	case v2.WBSizeDev:
+	case apiv2.WBSizeDev:
 		storageSize = DevClickHouseStorageSize
 		spec.StorageSize = storageSize
 		spec.Replicas = 1
-	case v2.WBSizeSmall:
+	case apiv2.WBSizeSmall:
 		storageSize = SmallClickHouseStorageSize
 		spec.StorageSize = storageSize
 		spec.Replicas = 3
@@ -85,15 +85,15 @@ func BuildClickHouseDefaults(profile v2.WBSize, ownerNamespace string) (v2.WBCli
 			return spec, err
 		}
 
-		spec.Config = &v2.WBClickHouseConfig{
-			Resources: v1.ResourceRequirements{
-				Requests: v1.ResourceList{
-					v1.ResourceCPU:    cpuRequest,
-					v1.ResourceMemory: memoryRequest,
+		spec.Config = &apiv2.WBClickHouseConfig{
+			Resources: corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceCPU:    cpuRequest,
+					corev1.ResourceMemory: memoryRequest,
 				},
-				Limits: v1.ResourceList{
-					v1.ResourceCPU:    cpuLimit,
-					v1.ResourceMemory: memoryLimit,
+				Limits: corev1.ResourceList{
+					corev1.ResourceCPU:    cpuLimit,
+					corev1.ResourceMemory: memoryLimit,
 				},
 			},
 		}

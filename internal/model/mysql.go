@@ -6,9 +6,9 @@ import (
 	"fmt"
 
 	apiv2 "github.com/wandb/operator/api/v2"
-	mergev2 "github.com/wandb/operator/internal/controller/translator/v2"
+	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
 	"github.com/wandb/operator/internal/utils"
-	v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
@@ -36,7 +36,7 @@ type MySQLConfig struct {
 	// Storage and resources
 	StorageSize string
 	Replicas    int32
-	Resources   v1.ResourceRequirements
+	Resources   corev1.ResourceRequirements
 
 	// Percona XtraDB specific
 	PXCImage            string
@@ -97,11 +97,11 @@ func (i *InfraConfigBuilder) AddMySQLSpec(actual *apiv2.WBMySQLSpec, size apiv2.
 	i.size = size
 	var err error
 	var defaultSpec, merged apiv2.WBMySQLSpec
-	if defaultSpec, err = mergev2.BuildMySQLDefaults(size, i.ownerNamespace); err != nil {
+	if defaultSpec, err = translatorv2.BuildMySQLDefaults(size, i.ownerNamespace); err != nil {
 		i.errors = append(i.errors, err)
 		return i
 	}
-	if merged, err = mergev2.BuildMySQLSpec(*actual, defaultSpec); err != nil {
+	if merged, err = translatorv2.BuildMySQLSpec(*actual, defaultSpec); err != nil {
 		i.errors = append(i.errors, err)
 		return i
 	} else {

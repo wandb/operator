@@ -7,9 +7,9 @@ import (
 	"slices"
 
 	apiv2 "github.com/wandb/operator/api/v2"
-	mergev2 "github.com/wandb/operator/internal/controller/translator/v2"
+	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
 	"github.com/wandb/operator/internal/utils"
-	v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
@@ -21,8 +21,8 @@ type RedisConfig struct {
 	Enabled     bool
 	Namespace   string
 	StorageSize resource.Quantity
-	Requests    v1.ResourceList
-	Limits      v1.ResourceList
+	Requests    corev1.ResourceList
+	Limits      corev1.ResourceList
 	Sentinel    sentinelConfig
 }
 
@@ -30,8 +30,8 @@ type sentinelConfig struct {
 	Enabled         bool
 	MasterGroupName string
 	ReplicaCount    int
-	Requests        v1.ResourceList
-	Limits          v1.ResourceList
+	Requests        corev1.ResourceList
+	Limits          corev1.ResourceList
 }
 
 func (r RedisConfig) IsHighAvailability() bool {
@@ -51,7 +51,7 @@ func (i *InfraConfigBuilder) GetRedisConfig() (RedisConfig, error) {
 		}
 		if i.mergedRedis.Sentinel != nil {
 			details.Sentinel.Enabled = i.mergedRedis.Sentinel.Enabled
-			details.Sentinel.ReplicaCount = mergev2.ReplicaSentinelCount
+			details.Sentinel.ReplicaCount = translatorv2.ReplicaSentinelCount
 			if i.mergedRedis.Sentinel.Config != nil {
 				details.Sentinel.MasterGroupName = i.mergedRedis.Sentinel.Config.MasterName
 				details.Sentinel.Requests = i.mergedRedis.Sentinel.Config.Resources.Requests
@@ -65,11 +65,11 @@ func (i *InfraConfigBuilder) GetRedisConfig() (RedisConfig, error) {
 func (i *InfraConfigBuilder) AddRedisSpec(actual *apiv2.WBRedisSpec, size apiv2.WBSize) *InfraConfigBuilder {
 	var err error
 	var defaultSpec, merged apiv2.WBRedisSpec
-	if defaultSpec, err = mergev2.BuildRedisDefaults(size, i.ownerNamespace); err != nil {
+	if defaultSpec, err = translatorv2.BuildRedisDefaults(size, i.ownerNamespace); err != nil {
 		i.errors = append(i.errors, err)
 		return i
 	}
-	if merged, err = mergev2.BuildRedisSpec(*actual, defaultSpec); err != nil {
+	if merged, err = translatorv2.BuildRedisSpec(*actual, defaultSpec); err != nil {
 		i.errors = append(i.errors, err)
 		return i
 	} else {

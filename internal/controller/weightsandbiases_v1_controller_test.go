@@ -6,14 +6,14 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	wandbcomv1 "github.com/wandb/operator/api/v1"
+	apiv1 "github.com/wandb/operator/api/v1"
 	"github.com/wandb/operator/pkg/wandb/spec"
 	"github.com/wandb/operator/pkg/wandb/spec/channel/deployer/deployerfakes"
 	"github.com/wandb/operator/pkg/wandb/spec/charts"
 	"github.com/wandb/operator/pkg/wandb/spec/state"
 	"github.com/wandb/operator/pkg/wandb/spec/state/secrets"
 
-	v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -81,14 +81,14 @@ var _ = Describe("WeightsandbiasesController", func() {
 				Recorder:       recorder,
 				DryRun:         true,
 			}
-			wandb := wandbcomv1.WeightsAndBiases{
+			wandb := apiv1.WeightsAndBiases{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test",
 					Namespace: "default",
 				},
-				Spec: wandbcomv1.WeightsAndBiasesSpec{
-					Chart: wandbcomv1.Object{Object: map[string]interface{}{}},
-					Values: wandbcomv1.Object{Object: map[string]interface{}{
+				Spec: apiv1.WeightsAndBiasesSpec{
+					Chart: apiv1.Object{Object: map[string]interface{}{}},
+					Values: apiv1.Object{Object: map[string]interface{}{
 						"global": map[string]interface{}{
 							"host": "https://qa-google.wandb.io",
 						},
@@ -111,12 +111,12 @@ var _ = Describe("WeightsandbiasesController", func() {
 		})
 		AfterEach(func() {
 			ctx := context.Background()
-			wandb := wandbcomv1.WeightsAndBiases{}
+			wandb := apiv1.WeightsAndBiases{}
 			err := k8sClient.Get(ctx, types.NamespacedName{Name: "test", Namespace: "default"}, &wandb)
 			Expect(err).ToNot(HaveOccurred())
 			err = k8sClient.Delete(ctx, &wandb)
 			Expect(err).ToNot(HaveOccurred())
-			err = k8sClient.Delete(ctx, &v1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "test-spec-active", Namespace: "default"}})
+			err = k8sClient.Delete(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "test-spec-active", Namespace: "default"}})
 			Expect(err).ToNot(HaveOccurred())
 			_, err = reconciler.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: wandb.Name, Namespace: wandb.Namespace}})
 			Expect(err).ToNot(HaveOccurred())
@@ -126,7 +126,7 @@ var _ = Describe("WeightsandbiasesController", func() {
 		Context("When a WeightsAndBiases instance is created", func() {
 			It("Should add the finalizer to the instance", func() {
 				ctx := context.Background()
-				wandb := wandbcomv1.WeightsAndBiases{}
+				wandb := apiv1.WeightsAndBiases{}
 				err := k8sClient.Get(ctx, types.NamespacedName{Name: "test", Namespace: "default"}, &wandb)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(wandb.ObjectMeta.Finalizers).To(ContainElement(resFinalizer))
@@ -156,14 +156,14 @@ var _ = Describe("WeightsandbiasesController", func() {
 				Recorder:       recorder,
 				DryRun:         true,
 			}
-			wandb := wandbcomv1.WeightsAndBiases{
+			wandb := apiv1.WeightsAndBiases{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-release-id",
 					Namespace: "default",
 				},
-				Spec: wandbcomv1.WeightsAndBiasesSpec{
-					Chart: wandbcomv1.Object{Object: map[string]interface{}{}},
-					Values: wandbcomv1.Object{Object: map[string]interface{}{
+				Spec: apiv1.WeightsAndBiasesSpec{
+					Chart: apiv1.Object{Object: map[string]interface{}{}},
+					Values: apiv1.Object{Object: map[string]interface{}{
 						"global": map[string]interface{}{
 							"host": "https://qa-google.wandb.io",
 						},
@@ -189,12 +189,12 @@ var _ = Describe("WeightsandbiasesController", func() {
 
 		AfterEach(func() {
 			ctx := context.Background()
-			wandb := wandbcomv1.WeightsAndBiases{}
+			wandb := apiv1.WeightsAndBiases{}
 			err := k8sClient.Get(ctx, types.NamespacedName{Name: "test-release-id", Namespace: "default"}, &wandb)
 			Expect(err).ToNot(HaveOccurred())
 			err = k8sClient.Delete(ctx, &wandb)
 			Expect(err).ToNot(HaveOccurred())
-			err = k8sClient.Delete(ctx, &v1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "test-release-id-spec-active", Namespace: "default"}})
+			err = k8sClient.Delete(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "test-release-id-spec-active", Namespace: "default"}})
 			Expect(err).ToNot(HaveOccurred())
 			_, err = reconciler.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: wandb.Name, Namespace: wandb.Namespace}})
 			Expect(err).ToNot(HaveOccurred())
@@ -204,7 +204,7 @@ var _ = Describe("WeightsandbiasesController", func() {
 
 		It("Should use the specified _releaseId from UserSpec in the final spec", func() {
 			ctx := context.Background()
-			wandb := wandbcomv1.WeightsAndBiases{}
+			wandb := apiv1.WeightsAndBiases{}
 			err := k8sClient.Get(ctx, types.NamespacedName{Name: "test-release-id", Namespace: "default"}, &wandb)
 			Expect(err).ToNot(HaveOccurred())
 

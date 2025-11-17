@@ -1,12 +1,12 @@
 package v2
 
 import (
-	appsv2 "github.com/wandb/operator/api/v2"
+	apiv2 "github.com/wandb/operator/api/v2"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
-func (v *WeightsAndBiasesCustomValidator) validateRedisSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
+func (v *WeightsAndBiasesCustomValidator) validateRedisSpec(wandb *apiv2.WeightsAndBiases) field.ErrorList {
 	var errors field.ErrorList
 	redisPath := field.NewPath("spec").Child("redis")
 	spec := wandb.Spec.Redis
@@ -38,7 +38,7 @@ func (v *WeightsAndBiasesCustomValidator) validateRedisSpec(wandb *appsv2.Weight
 	return errors
 }
 
-func (v *WeightsAndBiasesCustomValidator) validateRedisChanges(newWandb, oldWandb *appsv2.WeightsAndBiases) field.ErrorList {
+func (v *WeightsAndBiasesCustomValidator) validateRedisChanges(newWandb, oldWandb *apiv2.WeightsAndBiases) field.ErrorList {
 	var errors field.ErrorList
 	redisPath := field.NewPath("spec").Child("redis")
 	newSpec := newWandb.Spec.Redis

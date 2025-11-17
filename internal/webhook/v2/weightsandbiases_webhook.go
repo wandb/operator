@@ -25,26 +25,26 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	ctrl "sigs.k8s.io/controller-runtime"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	appsv2 "github.com/wandb/operator/api/v2"
+	apiv2 "github.com/wandb/operator/api/v2"
 )
 
-var whLog = logf.Log.WithName("wandb-v2-webhook")
+var whLog = ctrllog.Log.WithName("wandb-v2-webhook")
 
 type WeightsAndBiasesCustomValidator struct{}
 
 func (v *WeightsAndBiasesCustomValidator) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewWebhookManagedBy(mgr).
-		For(&appsv2.WeightsAndBiases{}).
+		For(&apiv2.WeightsAndBiases{}).
 		WithValidator(v).
 		Complete()
 }
 
 func (v *WeightsAndBiasesCustomValidator) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
-	wandb, ok := obj.(*appsv2.WeightsAndBiases)
+	wandb, ok := obj.(*apiv2.WeightsAndBiases)
 	if !ok {
 		return nil, fmt.Errorf("expected a WeightsAndBiases object but got %T", obj)
 	}
@@ -57,13 +57,13 @@ func (v *WeightsAndBiasesCustomValidator) ValidateUpdate(ctx context.Context, ol
 	var specWarnings, changeWarnings admission.Warnings
 	var err error
 
-	newWandb, ok := newObj.(*appsv2.WeightsAndBiases)
+	newWandb, ok := newObj.(*apiv2.WeightsAndBiases)
 	if !ok {
 		return nil, fmt.Errorf("expected a WeightsAndBiases object for the newObj but got %T", newObj)
 	}
 	whLog.Info("validate update", "name", newWandb.Name)
 
-	oldWandb, ok := oldObj.(*appsv2.WeightsAndBiases)
+	oldWandb, ok := oldObj.(*apiv2.WeightsAndBiases)
 	if !ok {
 		return nil, fmt.Errorf("expected a WeightsAndBiases object for the oldObj but got %T", oldObj)
 	}
@@ -76,7 +76,7 @@ func (v *WeightsAndBiasesCustomValidator) ValidateUpdate(ctx context.Context, ol
 }
 
 func (v *WeightsAndBiasesCustomValidator) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
-	wandb, ok := obj.(*appsv2.WeightsAndBiases)
+	wandb, ok := obj.(*apiv2.WeightsAndBiases)
 	if !ok {
 		return nil, fmt.Errorf("expected a WeightsAndBiases object but got %T", obj)
 	}
@@ -85,7 +85,7 @@ func (v *WeightsAndBiasesCustomValidator) ValidateDelete(ctx context.Context, ob
 	return nil, nil
 }
 
-func (v *WeightsAndBiasesCustomValidator) validateSpec(ctx context.Context, newWandb *appsv2.WeightsAndBiases) (admission.Warnings, error) {
+func (v *WeightsAndBiasesCustomValidator) validateSpec(ctx context.Context, newWandb *apiv2.WeightsAndBiases) (admission.Warnings, error) {
 	var allErrors field.ErrorList
 	var warnings admission.Warnings
 
@@ -102,7 +102,7 @@ func (v *WeightsAndBiasesCustomValidator) validateSpec(ctx context.Context, newW
 	)
 }
 
-func (v *WeightsAndBiasesCustomValidator) validateChanges(ctx context.Context, newWandb *appsv2.WeightsAndBiases, oldWandb *appsv2.WeightsAndBiases) (admission.Warnings, error) {
+func (v *WeightsAndBiasesCustomValidator) validateChanges(ctx context.Context, newWandb *apiv2.WeightsAndBiases, oldWandb *apiv2.WeightsAndBiases) (admission.Warnings, error) {
 	var allErrors field.ErrorList
 	var warnings admission.Warnings
 
