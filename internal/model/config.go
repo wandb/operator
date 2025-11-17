@@ -12,12 +12,15 @@ type InfraConfig interface {
 	GetClickHouseConfig() (ClickHouseConfig, error)
 }
 
-func BuildInfraConfig() *InfraConfigBuilder {
-	return &InfraConfigBuilder{}
+func BuildInfraConfig(ownerNamespace string) *InfraConfigBuilder {
+	return &InfraConfigBuilder{
+		ownerNamespace: ownerNamespace,
+	}
 }
 
 type InfraConfigBuilder struct {
 	errors           []error
+	ownerNamespace   string
 	size             apiv2.WBSize
 	mergedRedis      *apiv2.WBRedisSpec
 	mergedKafka      *apiv2.WBKafkaSpec

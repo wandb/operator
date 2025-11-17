@@ -7,6 +7,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	apiv2 "github.com/wandb/operator/api/v2"
+	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
@@ -41,160 +42,297 @@ var _ = Describe("Minio Model", func() {
 				})
 			})
 		})
+	})
 
-		Describe("GetMinioConfig", func() {
-			Context("when mergedMinio is nil", func() {
-				It("should return empty config", func() {
-					builder := &InfraConfigBuilder{}
-					config, err := builder.GetMinioConfig()
-					Expect(err).NotTo(HaveOccurred())
-					Expect(config.Enabled).To(BeFalse())
-					Expect(config.Namespace).To(BeEmpty())
-				})
-			})
-
-			Context("when mergedMinio has basic config for dev size", func() {
-				It("should return config with basic fields and dev defaults", func() {
-					builder := &InfraConfigBuilder{
-						mergedMinio: &apiv2.WBMinioSpec{
-							Enabled:     true,
-							Namespace:   "test-namespace",
-							StorageSize: "50Gi",
-						},
-						size: apiv2.WBSizeDev,
+	Describe("InfraConfigBuilder", func() {
+		Describe("AddMinioSpec and GetMinioConfig", func() {
+			Context("with dev size and empty actual spec", func() {
+				It("should use all dev defaults except Enabled, Namespace, and Replicas", func() {
+					namespaceOverride := "custom-minio-namespace"
+					replicasFromActual := int32(1)
+					actual := apiv2.WBMinioSpec{
+						Enabled:   true,
+						Namespace: namespaceOverride,
+						Replicas:  replicasFromActual,
 					}
+					builder := BuildInfraConfig(testingOwnerNamespace).AddMinioSpec(&actual, apiv2.WBSizeDev)
+
+					Expect(builder.errors).To(BeEmpty())
 					config, err := builder.GetMinioConfig()
-					Expect(err).NotTo(HaveOccurred())
+					Expect(err).ToNot(HaveOccurred())
+
 					Expect(config.Enabled).To(BeTrue())
-					Expect(config.Namespace).To(Equal("test-namespace"))
-					Expect(config.StorageSize).To(Equal("50Gi"))
+					Expect(config.Namespace).To(Equal(namespaceOverride))
+					Expect(config.StorageSize).To(Equal(translatorv2.DevMinioStorageSize))
 					Expect(config.Servers).To(Equal(int32(1)))
 					Expect(config.VolumesPerServer).To(Equal(int32(1)))
 					Expect(config.Image).To(Equal(MinioImage))
+					Expect(config.Resources.Requests).To(BeEmpty())
+					Expect(config.Resources.Limits).To(BeEmpty())
 				})
 			})
 
-			Context("when mergedMinio has config for small size", func() {
-				It("should return config with small size defaults", func() {
-					builder := &InfraConfigBuilder{
-						mergedMinio: &apiv2.WBMinioSpec{
-							Enabled:     true,
-							StorageSize: "100Gi",
-						},
-						size: apiv2.WBSizeSmall,
+			Context("with small size and empty actual spec", func() {
+				It("should use all small defaults including resources except Enabled, Namespace, and Replicas", func() {
+					namespaceOverride := "custom-minio-namespace"
+					replicasFromActual := int32(3)
+					actual := apiv2.WBMinioSpec{
+						Enabled:   true,
+						Namespace: namespaceOverride,
+						Replicas:  replicasFromActual,
 					}
+					builder := BuildInfraConfig(testingOwnerNamespace).AddMinioSpec(&actual, apiv2.WBSizeSmall)
+
+					Expect(builder.errors).To(BeEmpty())
 					config, err := builder.GetMinioConfig()
-					Expect(err).NotTo(HaveOccurred())
+					Expect(err).ToNot(HaveOccurred())
+
 					Expect(config.Enabled).To(BeTrue())
+					Expect(config.Namespace).To(Equal(namespaceOverride))
+					Expect(config.StorageSize).To(Equal(translatorv2.SmallMinioStorageSize))
 					Expect(config.Servers).To(Equal(int32(3)))
 					Expect(config.VolumesPerServer).To(Equal(int32(4)))
 					Expect(config.Image).To(Equal(MinioImage))
+					Expect(config.Resources.Requests[v1.ResourceCPU]).To(Equal(resource.MustParse(translatorv2.SmallMinioCpuRequest)))
+					Expect(config.Resources.Requests[v1.ResourceMemory]).To(Equal(resource.MustParse(translatorv2.SmallMinioMemoryRequest)))
+					Expect(config.Resources.Limits[v1.ResourceCPU]).To(Equal(resource.MustParse(translatorv2.SmallMinioCpuLimit)))
+					Expect(config.Resources.Limits[v1.ResourceMemory]).To(Equal(resource.MustParse(translatorv2.SmallMinioMemoryLimit)))
 				})
 			})
 
-			Context("when mergedMinio has config with resources", func() {
-				It("should populate resource limits and requests", func() {
-					resources := v1.ResourceRequirements{
-						Requests: v1.ResourceList{
-							v1.ResourceCPU:    resource.MustParse("500m"),
-							v1.ResourceMemory: resource.MustParse("1Gi"),
-						},
-						Limits: v1.ResourceList{
-							v1.ResourceCPU:    resource.MustParse("1000m"),
-							v1.ResourceMemory: resource.MustParse("2Gi"),
-						},
-					}
-					builder := &InfraConfigBuilder{
-						mergedMinio: &apiv2.WBMinioSpec{
-							Enabled:     true,
-							StorageSize: "50Gi",
-							Config: &apiv2.WBMinioConfig{
-								Resources: resources,
-							},
-						},
-						size: apiv2.WBSizeDev,
-					}
-					config, err := builder.GetMinioConfig()
-					Expect(err).NotTo(HaveOccurred())
-					Expect(config.Resources.Requests).NotTo(BeEmpty())
-					Expect(config.Resources.Limits).NotTo(BeEmpty())
-					Expect(config.Resources.Requests[v1.ResourceCPU]).To(Equal(resource.MustParse("500m")))
-					Expect(config.Resources.Limits[v1.ResourceMemory]).To(Equal(resource.MustParse("2Gi")))
-				})
-			})
-
-			Context("when size is invalid", func() {
-				It("should return error", func() {
-					builder := &InfraConfigBuilder{
-						mergedMinio: &apiv2.WBMinioSpec{
-							Enabled: true,
-						},
-						size: "invalid-size",
-					}
-					_, err := builder.GetMinioConfig()
-					Expect(err).To(HaveOccurred())
-					Expect(err.Error()).To(ContainSubstring("unsupported size"))
-				})
-			})
-		})
-
-		Describe("AddMinioSpec", func() {
-			Context("when merging with dev size", func() {
-				It("should successfully merge and store spec", func() {
-					actual := apiv2.WBMinioSpec{
-						Enabled: true,
-					}
-					builder := &InfraConfigBuilder{}
-					result := builder.AddMinioSpec(&actual, apiv2.WBSizeDev)
-					Expect(result).To(Equal(builder))
-					Expect(builder.mergedMinio).NotTo(BeNil())
-					Expect(builder.mergedMinio.Enabled).To(BeTrue())
-					Expect(builder.size).To(Equal(apiv2.WBSizeDev))
-					Expect(builder.errors).To(BeEmpty())
-				})
-			})
-
-			Context("when merging with small size", func() {
-				It("should successfully merge with small defaults", func() {
-					actual := apiv2.WBMinioSpec{
-						Enabled: true,
-					}
-					builder := &InfraConfigBuilder{}
-					result := builder.AddMinioSpec(&actual, apiv2.WBSizeSmall)
-					Expect(result).To(Equal(builder))
-					Expect(builder.mergedMinio).NotTo(BeNil())
-					Expect(builder.mergedMinio.Enabled).To(BeTrue())
-					Expect(builder.size).To(Equal(apiv2.WBSizeSmall))
-					Expect(builder.errors).To(BeEmpty())
-				})
-			})
-
-			Context("when building defaults fails", func() {
-				It("should append error and return builder", func() {
-					actual := apiv2.WBMinioSpec{
-						Enabled: true,
-					}
-					builder := &InfraConfigBuilder{}
-					result := builder.AddMinioSpec(&actual, "invalid-size")
-					Expect(result).To(Equal(builder))
-					Expect(builder.errors).NotTo(BeEmpty())
-				})
-			})
-
-			Context("when actual spec has custom values", func() {
-				It("should preserve custom values during merge", func() {
+			Context("with small size and storage override", func() {
+				It("should use override storage and default resources", func() {
+					storageSizeOverride := "50Gi"
+					namespaceOverride := "custom-minio-namespace"
+					replicasFromActual := int32(3)
 					actual := apiv2.WBMinioSpec{
 						Enabled:     true,
-						Namespace:   "custom-ns",
-						StorageSize: "500Gi",
+						Namespace:   namespaceOverride,
+						Replicas:    replicasFromActual,
+						StorageSize: storageSizeOverride,
 					}
-					builder := &InfraConfigBuilder{}
-					result := builder.AddMinioSpec(&actual, apiv2.WBSizeDev)
-					Expect(result).To(Equal(builder))
-					Expect(builder.mergedMinio).NotTo(BeNil())
-					Expect(builder.mergedMinio.Namespace).To(Equal("custom-ns"))
-					Expect(builder.mergedMinio.StorageSize).To(Equal("500Gi"))
+					builder := BuildInfraConfig(testingOwnerNamespace).AddMinioSpec(&actual, apiv2.WBSizeSmall)
+
 					Expect(builder.errors).To(BeEmpty())
+					config, err := builder.GetMinioConfig()
+					Expect(err).ToNot(HaveOccurred())
+
+					Expect(config.Enabled).To(BeTrue())
+					Expect(config.Namespace).To(Equal(namespaceOverride))
+					Expect(config.StorageSize).To(Equal(storageSizeOverride))
+					Expect(config.StorageSize).NotTo(Equal(translatorv2.SmallMinioStorageSize))
+					Expect(config.Servers).To(Equal(int32(3)))
+					Expect(config.VolumesPerServer).To(Equal(int32(4)))
+					Expect(config.Image).To(Equal(MinioImage))
+					Expect(config.Resources.Requests[v1.ResourceCPU]).To(Equal(resource.MustParse(translatorv2.SmallMinioCpuRequest)))
+					Expect(config.Resources.Requests[v1.ResourceMemory]).To(Equal(resource.MustParse(translatorv2.SmallMinioMemoryRequest)))
+					Expect(config.Resources.Limits[v1.ResourceCPU]).To(Equal(resource.MustParse(translatorv2.SmallMinioCpuLimit)))
+					Expect(config.Resources.Limits[v1.ResourceMemory]).To(Equal(resource.MustParse(translatorv2.SmallMinioMemoryLimit)))
+				})
+			})
+
+			Context("with small size and namespace using default", func() {
+				It("should use default namespace when not provided", func() {
+					replicasFromActual := int32(3)
+					actual := apiv2.WBMinioSpec{
+						Enabled:  true,
+						Replicas: replicasFromActual,
+					}
+					builder := BuildInfraConfig(testingOwnerNamespace).AddMinioSpec(&actual, apiv2.WBSizeSmall)
+
+					Expect(builder.errors).To(BeEmpty())
+					config, err := builder.GetMinioConfig()
+					Expect(err).ToNot(HaveOccurred())
+
+					Expect(config.Enabled).To(BeTrue())
+					Expect(config.Namespace).To(Equal(testingOwnerNamespace))
+					Expect(config.StorageSize).To(Equal(translatorv2.SmallMinioStorageSize))
+					Expect(config.Servers).To(Equal(int32(3)))
+				})
+			})
+
+			Context("with small size and replicas override", func() {
+				It("should use override replicas value", func() {
+					namespaceOverride := "custom-minio-namespace"
+					replicasOverride := int32(5)
+					actual := apiv2.WBMinioSpec{
+						Enabled:   true,
+						Namespace: namespaceOverride,
+						Replicas:  replicasOverride,
+					}
+					builder := BuildInfraConfig(testingOwnerNamespace).AddMinioSpec(&actual, apiv2.WBSizeSmall)
+
+					Expect(builder.errors).To(BeEmpty())
+					config, err := builder.GetMinioConfig()
+					Expect(err).ToNot(HaveOccurred())
+
+					Expect(config.Enabled).To(BeTrue())
+					Expect(config.Namespace).To(Equal(namespaceOverride))
+					Expect(config.StorageSize).To(Equal(translatorv2.SmallMinioStorageSize))
+					Expect(config.Servers).To(Equal(int32(3)))
+					Expect(config.VolumesPerServer).To(Equal(int32(4)))
+				})
+			})
+
+			Context("with small size and resource overrides", func() {
+				It("should use override resources and default storage", func() {
+					cpuRequestOverride := "2"
+					cpuLimitOverride := "4"
+					memoryRequestOverride := "4Gi"
+					memoryLimitOverride := "8Gi"
+					namespaceOverride := "custom-minio-namespace"
+					replicasFromActual := int32(3)
+					actual := apiv2.WBMinioSpec{
+						Enabled:   true,
+						Namespace: namespaceOverride,
+						Replicas:  replicasFromActual,
+						Config: &apiv2.WBMinioConfig{
+							Resources: v1.ResourceRequirements{
+								Requests: v1.ResourceList{
+									v1.ResourceCPU:    resource.MustParse(cpuRequestOverride),
+									v1.ResourceMemory: resource.MustParse(memoryRequestOverride),
+								},
+								Limits: v1.ResourceList{
+									v1.ResourceCPU:    resource.MustParse(cpuLimitOverride),
+									v1.ResourceMemory: resource.MustParse(memoryLimitOverride),
+								},
+							},
+						},
+					}
+					builder := BuildInfraConfig(testingOwnerNamespace).AddMinioSpec(&actual, apiv2.WBSizeSmall)
+
+					Expect(builder.errors).To(BeEmpty())
+					config, err := builder.GetMinioConfig()
+					Expect(err).ToNot(HaveOccurred())
+
+					Expect(config.Enabled).To(BeTrue())
+					Expect(config.Namespace).To(Equal(namespaceOverride))
+					Expect(config.StorageSize).To(Equal(translatorv2.SmallMinioStorageSize))
+					Expect(config.Servers).To(Equal(int32(3)))
+					Expect(config.VolumesPerServer).To(Equal(int32(4)))
+					Expect(config.Image).To(Equal(MinioImage))
+					Expect(config.Resources.Requests[v1.ResourceCPU]).To(Equal(resource.MustParse(cpuRequestOverride)))
+					Expect(config.Resources.Requests[v1.ResourceCPU]).NotTo(Equal(resource.MustParse(translatorv2.SmallMinioCpuRequest)))
+					Expect(config.Resources.Requests[v1.ResourceMemory]).To(Equal(resource.MustParse(memoryRequestOverride)))
+					Expect(config.Resources.Requests[v1.ResourceMemory]).NotTo(Equal(resource.MustParse(translatorv2.SmallMinioMemoryRequest)))
+					Expect(config.Resources.Limits[v1.ResourceCPU]).To(Equal(resource.MustParse(cpuLimitOverride)))
+					Expect(config.Resources.Limits[v1.ResourceCPU]).NotTo(Equal(resource.MustParse(translatorv2.SmallMinioCpuLimit)))
+					Expect(config.Resources.Limits[v1.ResourceMemory]).To(Equal(resource.MustParse(memoryLimitOverride)))
+					Expect(config.Resources.Limits[v1.ResourceMemory]).NotTo(Equal(resource.MustParse(translatorv2.SmallMinioMemoryLimit)))
+				})
+			})
+
+			Context("with small size and partial resource overrides", func() {
+				It("should merge override and default resources", func() {
+					cpuLimitOverride := "2"
+					namespaceOverride := "custom-minio-namespace"
+					replicasFromActual := int32(3)
+					actual := apiv2.WBMinioSpec{
+						Enabled:   true,
+						Namespace: namespaceOverride,
+						Replicas:  replicasFromActual,
+						Config: &apiv2.WBMinioConfig{
+							Resources: v1.ResourceRequirements{
+								Limits: v1.ResourceList{
+									v1.ResourceCPU: resource.MustParse(cpuLimitOverride),
+								},
+							},
+						},
+					}
+					builder := BuildInfraConfig(testingOwnerNamespace).AddMinioSpec(&actual, apiv2.WBSizeSmall)
+
+					Expect(builder.errors).To(BeEmpty())
+					config, err := builder.GetMinioConfig()
+					Expect(err).ToNot(HaveOccurred())
+
+					Expect(config.Enabled).To(BeTrue())
+					Expect(config.Namespace).To(Equal(namespaceOverride))
+					Expect(config.StorageSize).To(Equal(translatorv2.SmallMinioStorageSize))
+					Expect(config.Servers).To(Equal(int32(3)))
+					Expect(config.VolumesPerServer).To(Equal(int32(4)))
+					Expect(config.Resources.Requests[v1.ResourceCPU]).To(Equal(resource.MustParse(translatorv2.SmallMinioCpuRequest)))
+					Expect(config.Resources.Requests[v1.ResourceMemory]).To(Equal(resource.MustParse(translatorv2.SmallMinioMemoryRequest)))
+					Expect(config.Resources.Limits[v1.ResourceCPU]).To(Equal(resource.MustParse(cpuLimitOverride)))
+					Expect(config.Resources.Limits[v1.ResourceCPU]).NotTo(Equal(resource.MustParse(translatorv2.SmallMinioCpuLimit)))
+					Expect(config.Resources.Limits[v1.ResourceMemory]).To(Equal(resource.MustParse(translatorv2.SmallMinioMemoryLimit)))
+				})
+			})
+
+			Context("with small size and all overrides", func() {
+				It("should use all override values", func() {
+					storageSizeOverride := "100Gi"
+					namespaceOverride := "custom-minio-namespace"
+					replicasOverride := int32(7)
+					cpuRequestOverride := "3"
+					cpuLimitOverride := "6"
+					memoryRequestOverride := "8Gi"
+					memoryLimitOverride := "16Gi"
+					actual := apiv2.WBMinioSpec{
+						Enabled:     true,
+						Namespace:   namespaceOverride,
+						Replicas:    replicasOverride,
+						StorageSize: storageSizeOverride,
+						Config: &apiv2.WBMinioConfig{
+							Resources: v1.ResourceRequirements{
+								Requests: v1.ResourceList{
+									v1.ResourceCPU:    resource.MustParse(cpuRequestOverride),
+									v1.ResourceMemory: resource.MustParse(memoryRequestOverride),
+								},
+								Limits: v1.ResourceList{
+									v1.ResourceCPU:    resource.MustParse(cpuLimitOverride),
+									v1.ResourceMemory: resource.MustParse(memoryLimitOverride),
+								},
+							},
+						},
+					}
+					builder := BuildInfraConfig(testingOwnerNamespace).AddMinioSpec(&actual, apiv2.WBSizeSmall)
+
+					Expect(builder.errors).To(BeEmpty())
+					config, err := builder.GetMinioConfig()
+					Expect(err).ToNot(HaveOccurred())
+
+					Expect(config.Enabled).To(BeTrue())
+					Expect(config.Namespace).To(Equal(namespaceOverride))
+					Expect(config.StorageSize).To(Equal(storageSizeOverride))
+					Expect(config.StorageSize).NotTo(Equal(translatorv2.SmallMinioStorageSize))
+					Expect(config.Servers).To(Equal(int32(3)))
+					Expect(config.VolumesPerServer).To(Equal(int32(4)))
+					Expect(config.Image).To(Equal(MinioImage))
+					Expect(config.Resources.Requests[v1.ResourceCPU]).To(Equal(resource.MustParse(cpuRequestOverride)))
+					Expect(config.Resources.Requests[v1.ResourceCPU]).NotTo(Equal(resource.MustParse(translatorv2.SmallMinioCpuRequest)))
+					Expect(config.Resources.Requests[v1.ResourceMemory]).To(Equal(resource.MustParse(memoryRequestOverride)))
+					Expect(config.Resources.Requests[v1.ResourceMemory]).NotTo(Equal(resource.MustParse(translatorv2.SmallMinioMemoryRequest)))
+					Expect(config.Resources.Limits[v1.ResourceCPU]).To(Equal(resource.MustParse(cpuLimitOverride)))
+					Expect(config.Resources.Limits[v1.ResourceCPU]).NotTo(Equal(resource.MustParse(translatorv2.SmallMinioCpuLimit)))
+					Expect(config.Resources.Limits[v1.ResourceMemory]).To(Equal(resource.MustParse(memoryLimitOverride)))
+					Expect(config.Resources.Limits[v1.ResourceMemory]).NotTo(Equal(resource.MustParse(translatorv2.SmallMinioMemoryLimit)))
+				})
+			})
+
+			Context("with disabled spec", func() {
+				It("should respect enabled false and use defaults for other fields", func() {
+					namespaceOverride := "custom-minio-namespace"
+					replicasFromActual := int32(0)
+					actual := apiv2.WBMinioSpec{
+						Enabled:   false,
+						Namespace: namespaceOverride,
+						Replicas:  replicasFromActual,
+					}
+					builder := BuildInfraConfig(testingOwnerNamespace).AddMinioSpec(&actual, apiv2.WBSizeSmall)
+
+					Expect(builder.errors).To(BeEmpty())
+					config, err := builder.GetMinioConfig()
+					Expect(err).ToNot(HaveOccurred())
+
+					Expect(config.Enabled).To(BeFalse())
+					Expect(config.Namespace).To(Equal(namespaceOverride))
+					Expect(config.StorageSize).To(Equal(translatorv2.SmallMinioStorageSize))
+					Expect(config.Servers).To(Equal(int32(3)))
+					Expect(config.VolumesPerServer).To(Equal(int32(4)))
+					Expect(config.Resources.Requests[v1.ResourceCPU]).To(Equal(resource.MustParse(translatorv2.SmallMinioCpuRequest)))
+					Expect(config.Resources.Requests[v1.ResourceMemory]).To(Equal(resource.MustParse(translatorv2.SmallMinioMemoryRequest)))
+					Expect(config.Resources.Limits[v1.ResourceCPU]).To(Equal(resource.MustParse(translatorv2.SmallMinioCpuLimit)))
+					Expect(config.Resources.Limits[v1.ResourceMemory]).To(Equal(resource.MustParse(translatorv2.SmallMinioMemoryLimit)))
 				})
 			})
 		})
@@ -314,18 +452,21 @@ var _ = Describe("Minio Model", func() {
 			Describe("ToMinioConnDetail", func() {
 				Context("when status is connection type with connection info", func() {
 					It("should convert successfully", func() {
+						host := "minio.example.com"
+						port := "9000"
+						accessKey := "test-access-key"
 						connInfo := MinioConnInfo{
-							Host:      "minio.example.com",
-							Port:      "9000",
-							AccessKey: "test-access-key",
+							Host:      host,
+							Port:      port,
+							AccessKey: accessKey,
 						}
 						status := NewMinioConnDetail(connInfo)
 						detail := MinioStatusDetail{status}
 						connDetail, ok := detail.ToMinioConnDetail()
 						Expect(ok).To(BeTrue())
-						Expect(connDetail.connInfo.Host).To(Equal("minio.example.com"))
-						Expect(connDetail.connInfo.Port).To(Equal("9000"))
-						Expect(connDetail.connInfo.AccessKey).To(Equal("test-access-key"))
+						Expect(connDetail.connInfo.Host).To(Equal(host))
+						Expect(connDetail.connInfo.Port).To(Equal(port))
+						Expect(connDetail.connInfo.AccessKey).To(Equal(accessKey))
 					})
 				})
 
@@ -359,10 +500,13 @@ var _ = Describe("Minio Model", func() {
 
 		Describe("NewMinioConnDetail", func() {
 			It("should create connection detail with info", func() {
+				host := "test-host"
+				port := "9000"
+				accessKey := "test-key"
 				connInfo := MinioConnInfo{
-					Host:      "test-host",
-					Port:      "9000",
-					AccessKey: "test-key",
+					Host:      host,
+					Port:      port,
+					AccessKey: accessKey,
 				}
 				status := NewMinioConnDetail(connInfo)
 				Expect(status.infraName).To(Equal(Minio))
@@ -437,19 +581,22 @@ var _ = Describe("Minio Model", func() {
 
 		Context("when results have connection status", func() {
 			It("should populate connection info in status", func() {
+				host := "minio.example.com"
+				port := "9000"
+				accessKey := "test-access-key"
 				results := InitResults()
 				connInfo := MinioConnInfo{
-					Host:      "minio.example.com",
-					Port:      "9000",
-					AccessKey: "test-access-key",
+					Host:      host,
+					Port:      port,
+					AccessKey: accessKey,
 				}
 				connStatus := NewMinioConnDetail(connInfo)
 				results.AddStatuses(connStatus)
 
 				status := results.ExtractMinioStatus(ctx)
-				Expect(status.Connection.MinioHost).To(Equal("minio.example.com"))
-				Expect(status.Connection.MinioPort).To(Equal("9000"))
-				Expect(status.Connection.MinioAccessKey).To(Equal("test-access-key"))
+				Expect(status.Connection.MinioHost).To(Equal(host))
+				Expect(status.Connection.MinioPort).To(Equal(port))
+				Expect(status.Connection.MinioAccessKey).To(Equal(accessKey))
 			})
 		})
 

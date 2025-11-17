@@ -11,14 +11,14 @@ import (
 
 const (
 	// Storage sizes
-	devMinioStorageSize   = "10Gi"
-	smallMinioStorageSize = "10Gi"
+	DevMinioStorageSize   = "10Gi"
+	SmallMinioStorageSize = "10Gi"
 
 	// Resource requests/limits for small size
-	smallMinioCpuRequest    = "500m"
-	smallMinioCpuLimit      = "1000m"
-	smallMinioMemoryRequest = "1Gi"
-	smallMinioMemoryLimit   = "2Gi"
+	SmallMinioCpuRequest    = "500m"
+	SmallMinioCpuLimit      = "1000m"
+	SmallMinioMemoryRequest = "1Gi"
+	SmallMinioMemoryLimit   = "2Gi"
 )
 
 // BuildMinioSpec will create a new WBMinioSpec with defaultValues applied if not
@@ -48,33 +48,33 @@ func BuildMinioSpec(actual v2.WBMinioSpec, defaultValues v2.WBMinioSpec) (v2.WBM
 	return minioSpec, nil
 }
 
-func BuildMinioDefaults(profile v2.WBSize) (v2.WBMinioSpec, error) {
+func BuildMinioDefaults(profile v2.WBSize, ownerNamespace string) (v2.WBMinioSpec, error) {
 	var err error
 	var storageSize string
 	spec := v2.WBMinioSpec{
 		Enabled:   true,
-		Namespace: defaultNamespace,
+		Namespace: ownerNamespace,
 	}
 
 	switch profile {
 	case v2.WBSizeDev:
-		storageSize = devMinioStorageSize
+		storageSize = DevMinioStorageSize
 		spec.StorageSize = storageSize
 	case v2.WBSizeSmall:
-		storageSize = smallMinioStorageSize
+		storageSize = SmallMinioStorageSize
 		spec.StorageSize = storageSize
 
 		var cpuRequest, cpuLimit, memoryRequest, memoryLimit resource.Quantity
-		if cpuRequest, err = resource.ParseQuantity(smallMinioCpuRequest); err != nil {
+		if cpuRequest, err = resource.ParseQuantity(SmallMinioCpuRequest); err != nil {
 			return spec, err
 		}
-		if cpuLimit, err = resource.ParseQuantity(smallMinioCpuLimit); err != nil {
+		if cpuLimit, err = resource.ParseQuantity(SmallMinioCpuLimit); err != nil {
 			return spec, err
 		}
-		if memoryRequest, err = resource.ParseQuantity(smallMinioMemoryRequest); err != nil {
+		if memoryRequest, err = resource.ParseQuantity(SmallMinioMemoryRequest); err != nil {
 			return spec, err
 		}
-		if memoryLimit, err = resource.ParseQuantity(smallMinioMemoryLimit); err != nil {
+		if memoryLimit, err = resource.ParseQuantity(SmallMinioMemoryLimit); err != nil {
 			return spec, err
 		}
 

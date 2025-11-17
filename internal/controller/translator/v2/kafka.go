@@ -10,13 +10,13 @@ import (
 )
 
 const (
-	devKafkaStorageSize   = "1Gi"
-	smallKafkaStorageSize = "5Gi"
+	DevKafkaStorageSize   = "1Gi"
+	SmallKafkaStorageSize = "5Gi"
 
-	smallKafkaCpuRequest    = "500m"
-	smallKafkaCpuLimit      = "1000m"
-	smallKafkaMemoryRequest = "1Gi"
-	smallKafkaMemoryLimit   = "2Gi"
+	SmallKafkaCpuRequest    = "500m"
+	SmallKafkaCpuLimit      = "1000m"
+	SmallKafkaMemoryRequest = "1Gi"
+	SmallKafkaMemoryLimit   = "2Gi"
 )
 
 // BuildKafkaSpec will create a new WBKafkaSpec with defaultValues applied if not
@@ -45,35 +45,35 @@ func BuildKafkaSpec(actual v2.WBKafkaSpec, defaultValues v2.WBKafkaSpec) (v2.WBK
 	return kafkaSpec, nil
 }
 
-func BuildKafkaDefaults(profile v2.WBSize) (v2.WBKafkaSpec, error) {
+func BuildKafkaDefaults(profile v2.WBSize, ownerNamespace string) (v2.WBKafkaSpec, error) {
 	var err error
 	var storageSize string
 	var spec v2.WBKafkaSpec
 
 	spec = v2.WBKafkaSpec{
 		Enabled:   true,
-		Namespace: defaultNamespace,
+		Namespace: ownerNamespace,
 	}
 
 	switch profile {
 	case v2.WBSizeDev:
-		storageSize = devKafkaStorageSize
+		storageSize = DevKafkaStorageSize
 		spec.StorageSize = storageSize
 	case v2.WBSizeSmall:
-		storageSize = smallKafkaStorageSize
+		storageSize = SmallKafkaStorageSize
 		spec.StorageSize = storageSize
 
 		var cpuRequest, cpuLimit, memoryRequest, memoryLimit resource.Quantity
-		if cpuRequest, err = resource.ParseQuantity(smallKafkaCpuRequest); err != nil {
+		if cpuRequest, err = resource.ParseQuantity(SmallKafkaCpuRequest); err != nil {
 			return spec, err
 		}
-		if cpuLimit, err = resource.ParseQuantity(smallKafkaCpuLimit); err != nil {
+		if cpuLimit, err = resource.ParseQuantity(SmallKafkaCpuLimit); err != nil {
 			return spec, err
 		}
-		if memoryRequest, err = resource.ParseQuantity(smallKafkaMemoryRequest); err != nil {
+		if memoryRequest, err = resource.ParseQuantity(SmallKafkaMemoryRequest); err != nil {
 			return spec, err
 		}
-		if memoryLimit, err = resource.ParseQuantity(smallKafkaMemoryLimit); err != nil {
+		if memoryLimit, err = resource.ParseQuantity(SmallKafkaMemoryLimit); err != nil {
 			return spec, err
 		}
 

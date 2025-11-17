@@ -97,28 +97,28 @@ var _ = Describe("BuildKafkaSpec", func() {
 var _ = Describe("BuildKafkaDefaults", func() {
 	Context("when profile is Dev", func() {
 		It("should return dev defaults", func() {
-			spec, err := BuildKafkaDefaults(v2.WBSizeDev)
+			spec, err := BuildKafkaDefaults(v2.WBSizeDev, testingOwnerNamespace)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(spec.Enabled).To(BeTrue())
-			Expect(spec.StorageSize).To(Equal(devKafkaStorageSize))
+			Expect(spec.StorageSize).To(Equal(DevKafkaStorageSize))
 			Expect(spec.Config).To(BeNil())
 		})
 	})
 
 	Context("when profile is Small", func() {
 		It("should return small defaults with resources", func() {
-			spec, err := BuildKafkaDefaults(v2.WBSizeSmall)
+			spec, err := BuildKafkaDefaults(v2.WBSizeSmall, testingOwnerNamespace)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(spec.Enabled).To(BeTrue())
-			Expect(spec.StorageSize).To(Equal(smallKafkaStorageSize))
+			Expect(spec.StorageSize).To(Equal(SmallKafkaStorageSize))
 			Expect(spec.Config).ToNot(BeNil())
-			Expect(spec.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(resource.MustParse(smallKafkaCpuRequest)))
+			Expect(spec.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(resource.MustParse(SmallKafkaCpuRequest)))
 		})
 	})
 
 	Context("when profile is invalid", func() {
 		It("should return error", func() {
-			_, err := BuildKafkaDefaults(v2.WBSize("invalid"))
+			_, err := BuildKafkaDefaults(v2.WBSize("invalid"), testingOwnerNamespace)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("unsupported size for Kafka"))
 		})

@@ -330,11 +330,11 @@ var _ = Describe("BuildMySQLDefaults", func() {
 	Describe("Dev profile", func() {
 		Context("when profile is Dev", func() {
 			It("should return a MySQL spec with storage only and no resources", func() {
-				spec, err := BuildMySQLDefaults(v2.WBSizeDev)
+				spec, err := BuildMySQLDefaults(v2.WBSizeDev, testingOwnerNamespace)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(spec.Enabled).To(BeTrue())
-				Expect(spec.Namespace).To(Equal(defaultNamespace))
-				Expect(spec.StorageSize).To(Equal(devMySQLStorageSize))
+				Expect(spec.Namespace).To(Equal(testingOwnerNamespace))
+				Expect(spec.StorageSize).To(Equal(DevMySQLStorageSize))
 				Expect(spec.Config).To(BeNil())
 			})
 		})
@@ -343,20 +343,20 @@ var _ = Describe("BuildMySQLDefaults", func() {
 	Describe("Small profile", func() {
 		Context("when profile is Small", func() {
 			It("should return a MySQL spec with full resource requirements", func() {
-				spec, err := BuildMySQLDefaults(v2.WBSizeSmall)
+				spec, err := BuildMySQLDefaults(v2.WBSizeSmall, testingOwnerNamespace)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(spec.Enabled).To(BeTrue())
-				Expect(spec.Namespace).To(Equal(defaultNamespace))
-				Expect(spec.StorageSize).To(Equal(smallMySQLStorageSize))
+				Expect(spec.Namespace).To(Equal(testingOwnerNamespace))
+				Expect(spec.StorageSize).To(Equal(SmallMySQLStorageSize))
 				Expect(spec.Config).ToNot(BeNil())
 
-				cpuRequest, err := resource.ParseQuantity(smallMySQLCpuRequest)
+				cpuRequest, err := resource.ParseQuantity(SmallMySQLCpuRequest)
 				Expect(err).ToNot(HaveOccurred())
-				cpuLimit, err := resource.ParseQuantity(smallMySQLCpuLimit)
+				cpuLimit, err := resource.ParseQuantity(SmallMySQLCpuLimit)
 				Expect(err).ToNot(HaveOccurred())
-				memoryRequest, err := resource.ParseQuantity(smallMySQLMemoryRequest)
+				memoryRequest, err := resource.ParseQuantity(SmallMySQLMemoryRequest)
 				Expect(err).ToNot(HaveOccurred())
-				memoryLimit, err := resource.ParseQuantity(smallMySQLMemoryLimit)
+				memoryLimit, err := resource.ParseQuantity(SmallMySQLMemoryLimit)
 				Expect(err).ToNot(HaveOccurred())
 
 				Expect(spec.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(cpuRequest))
@@ -370,7 +370,7 @@ var _ = Describe("BuildMySQLDefaults", func() {
 	Describe("Invalid profile", func() {
 		Context("when profile is invalid", func() {
 			It("should return an error", func() {
-				_, err := BuildMySQLDefaults(v2.WBSize("invalid"))
+				_, err := BuildMySQLDefaults(v2.WBSize("invalid"), testingOwnerNamespace)
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("unsupported size for MySQL"))
 				Expect(err.Error()).To(ContainSubstring("only 'dev' and 'small' are supported"))
@@ -381,12 +381,12 @@ var _ = Describe("BuildMySQLDefaults", func() {
 	Describe("Constants validation", func() {
 		It("should have valid resource quantity constants", func() {
 			quantities := map[string]string{
-				"devMySQLStorageSize":     devMySQLStorageSize,
-				"smallMySQLStorageSize":   smallMySQLStorageSize,
-				"smallMySQLCpuRequest":    smallMySQLCpuRequest,
-				"smallMySQLCpuLimit":      smallMySQLCpuLimit,
-				"smallMySQLMemoryRequest": smallMySQLMemoryRequest,
-				"smallMySQLMemoryLimit":   smallMySQLMemoryLimit,
+				"DevMySQLStorageSize":     DevMySQLStorageSize,
+				"SmallMySQLStorageSize":   SmallMySQLStorageSize,
+				"SmallMySQLCpuRequest":    SmallMySQLCpuRequest,
+				"SmallMySQLCpuLimit":      SmallMySQLCpuLimit,
+				"SmallMySQLMemoryRequest": SmallMySQLMemoryRequest,
+				"SmallMySQLMemoryLimit":   SmallMySQLMemoryLimit,
 			}
 
 			for name, value := range quantities {

@@ -16,16 +16,6 @@ import (
 // Default values
 
 const (
-	// Storage sizes
-	DevMinioStorageSize   = "10Gi"
-	SmallMinioStorageSize = "10Gi"
-
-	// Resource requests/limits for small size
-	SmallMinioCpuRequest    = "500m"
-	SmallMinioCpuLimit      = "1000m"
-	SmallMinioMemoryRequest = "1Gi"
-	SmallMinioMemoryLimit   = "2Gi"
-
 	// Minio image
 	MinioImage = "quay.io/minio/minio:latest"
 )
@@ -82,7 +72,7 @@ func (i *InfraConfigBuilder) AddMinioSpec(actual *apiv2.WBMinioSpec, size apiv2.
 	i.size = size
 	var err error
 	var defaultSpec, merged apiv2.WBMinioSpec
-	if defaultSpec, err = mergev2.BuildMinioDefaults(size); err != nil {
+	if defaultSpec, err = mergev2.BuildMinioDefaults(size, i.ownerNamespace); err != nil {
 		i.errors = append(i.errors, err)
 		return i
 	}

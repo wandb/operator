@@ -3,6 +3,7 @@ package opstree
 import (
 	"context"
 
+	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
 	"github.com/wandb/operator/internal/model"
 	common "github.com/wandb/operator/internal/vendored/redis-operator/common/v1beta2"
 	redisv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redis/v1beta2"
@@ -103,7 +104,7 @@ func buildDesiredSentinel(
 			RedisSentinelConfig: &redissentinelv1beta2.RedisSentinelConfig{
 				RedisSentinelConfig: common.RedisSentinelConfig{
 					RedisReplicationName: namePrefix,
-					MasterGroupName:      model.DefaultSentinelGroup,
+					MasterGroupName:      translatorv2.DefaultSentinelGroup,
 				},
 			},
 		},

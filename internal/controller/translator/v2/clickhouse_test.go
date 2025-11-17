@@ -119,11 +119,11 @@ var _ = Describe("BuildClickHouseSpec", func() {
 var _ = Describe("BuildClickHouseDefaults", func() {
 	Context("when profile is Dev", func() {
 		It("should return dev defaults with 1 replica", func() {
-			spec, err := BuildClickHouseDefaults(v2.WBSizeDev)
+			spec, err := BuildClickHouseDefaults(v2.WBSizeDev, testingOwnerNamespace)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(spec.Enabled).To(BeTrue())
-			Expect(spec.Version).To(Equal(clickHouseVersion))
-			Expect(spec.StorageSize).To(Equal(devClickHouseStorageSize))
+			Expect(spec.Version).To(Equal(ClickHouseVersion))
+			Expect(spec.StorageSize).To(Equal(DevClickHouseStorageSize))
 			Expect(spec.Replicas).To(Equal(int32(1)))
 			Expect(spec.Config).To(BeNil())
 		})
@@ -131,20 +131,20 @@ var _ = Describe("BuildClickHouseDefaults", func() {
 
 	Context("when profile is Small", func() {
 		It("should return small defaults with 3 replicas and resources", func() {
-			spec, err := BuildClickHouseDefaults(v2.WBSizeSmall)
+			spec, err := BuildClickHouseDefaults(v2.WBSizeSmall, testingOwnerNamespace)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(spec.Enabled).To(BeTrue())
-			Expect(spec.Version).To(Equal(clickHouseVersion))
-			Expect(spec.StorageSize).To(Equal(smallClickHouseStorageSize))
+			Expect(spec.Version).To(Equal(ClickHouseVersion))
+			Expect(spec.StorageSize).To(Equal(SmallClickHouseStorageSize))
 			Expect(spec.Replicas).To(Equal(int32(3)))
 			Expect(spec.Config).ToNot(BeNil())
-			Expect(spec.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(resource.MustParse(smallClickHouseCpuRequest)))
+			Expect(spec.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(resource.MustParse(SmallClickHouseCpuRequest)))
 		})
 	})
 
 	Context("when profile is invalid", func() {
 		It("should return error", func() {
-			_, err := BuildClickHouseDefaults(v2.WBSize("invalid"))
+			_, err := BuildClickHouseDefaults(v2.WBSize("invalid"), testingOwnerNamespace)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("unsupported size for ClickHouse"))
 		})

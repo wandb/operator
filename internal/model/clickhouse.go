@@ -13,24 +13,6 @@ import (
 )
 
 /////////////////////////////////////////////////
-// Default values
-
-const (
-	// Storage sizes
-	DevClickHouseStorageSize   = "10Gi"
-	SmallClickHouseStorageSize = "10Gi"
-
-	// Resource requests/limits for small size
-	SmallClickHouseCpuRequest    = "500m"
-	SmallClickHouseCpuLimit      = "1000m"
-	SmallClickHouseMemoryRequest = "1Gi"
-	SmallClickHouseMemoryLimit   = "2Gi"
-
-	// ClickHouse version
-	ClickHouseVersion = "23.8"
-)
-
-/////////////////////////////////////////////////
 // ClickHouse Config
 
 type ClickHouseConfig struct {
@@ -70,7 +52,7 @@ func (i *InfraConfigBuilder) AddClickHouseSpec(actual *apiv2.WBClickHouseSpec, s
 	i.size = size
 	var err error
 	var defaultSpec, merged apiv2.WBClickHouseSpec
-	if defaultSpec, err = mergev2.BuildClickHouseDefaults(size); err != nil {
+	if defaultSpec, err = mergev2.BuildClickHouseDefaults(size, i.ownerNamespace); err != nil {
 		i.errors = append(i.errors, err)
 		return i
 	}

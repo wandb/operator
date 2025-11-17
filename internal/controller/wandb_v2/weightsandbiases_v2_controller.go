@@ -107,7 +107,7 @@ func (r *WeightsAndBiasesV2Reconciler) Reconcile(ctx context.Context, req ctrl.R
 		"Spec", wandb.Spec, "Name", wandb.Name, "UID", wandb.UID, "Generation", wandb.Generation,
 	)
 
-	infraConfig := model.BuildInfraConfig().
+	infraConfig := model.BuildInfraConfig(wandb.Namespace).
 		AddRedisSpec(&(wandb.Spec.Redis), wandb.Spec.Size).
 		AddKafkaSpec(&(wandb.Spec.Kafka), wandb.Spec.Size).
 		AddMySQLSpec(&(wandb.Spec.MySQL), wandb.Spec.Size).

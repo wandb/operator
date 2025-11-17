@@ -95,28 +95,28 @@ var _ = Describe("BuildMinioSpec", func() {
 var _ = Describe("BuildMinioDefaults", func() {
 	Context("when profile is Dev", func() {
 		It("should return dev defaults", func() {
-			spec, err := BuildMinioDefaults(v2.WBSizeDev)
+			spec, err := BuildMinioDefaults(v2.WBSizeDev, testingOwnerNamespace)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(spec.Enabled).To(BeTrue())
-			Expect(spec.StorageSize).To(Equal(devMinioStorageSize))
+			Expect(spec.StorageSize).To(Equal(DevMinioStorageSize))
 			Expect(spec.Config).To(BeNil())
 		})
 	})
 
 	Context("when profile is Small", func() {
 		It("should return small defaults with resources", func() {
-			spec, err := BuildMinioDefaults(v2.WBSizeSmall)
+			spec, err := BuildMinioDefaults(v2.WBSizeSmall, testingOwnerNamespace)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(spec.Enabled).To(BeTrue())
-			Expect(spec.StorageSize).To(Equal(smallMinioStorageSize))
+			Expect(spec.StorageSize).To(Equal(SmallMinioStorageSize))
 			Expect(spec.Config).ToNot(BeNil())
-			Expect(spec.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(resource.MustParse(smallMinioCpuRequest)))
+			Expect(spec.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(resource.MustParse(SmallMinioCpuRequest)))
 		})
 	})
 
 	Context("when profile is invalid", func() {
 		It("should return error", func() {
-			_, err := BuildMinioDefaults(v2.WBSize("invalid"))
+			_, err := BuildMinioDefaults(v2.WBSize("invalid"), testingOwnerNamespace)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("unsupported size for Minio"))
 		})

@@ -13,19 +13,6 @@ import (
 )
 
 /////////////////////////////////////////////////
-// Default values
-
-const (
-	DevKafkaStorageSize   = "1Gi"
-	SmallKafkaStorageSize = "5Gi"
-
-	SmallKafkaCpuRequest    = "500m"
-	SmallKafkaCpuLimit      = "1000m"
-	SmallKafkaMemoryRequest = "1Gi"
-	SmallKafkaMemoryLimit   = "2Gi"
-)
-
-/////////////////////////////////////////////////
 // Kafka Config
 
 type KafkaConfig struct {
@@ -78,7 +65,7 @@ func (i *InfraConfigBuilder) AddKafkaSpec(actual *apiv2.WBKafkaSpec, size apiv2.
 	i.size = size
 	var err error
 	var defaultSpec, merged apiv2.WBKafkaSpec
-	if defaultSpec, err = mergev2.BuildKafkaDefaults(size); err != nil {
+	if defaultSpec, err = mergev2.BuildKafkaDefaults(size, i.ownerNamespace); err != nil {
 		i.errors = append(i.errors, err)
 		return i
 	}

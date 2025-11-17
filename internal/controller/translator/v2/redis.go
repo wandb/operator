@@ -17,8 +17,6 @@ const (
 
 	DevStorageRequest = "100Mi"
 
-	DefaultNamespace = "default"
-
 	SmallStorageRequest        = "2Gi"
 	SmallReplicaCpuRequest     = "250m"
 	SmallReplicaCpuLimit       = "500m"
@@ -75,13 +73,13 @@ func BuildRedisSpec(actual v2.WBRedisSpec, defaultValues v2.WBRedisSpec) (v2.WBR
 	}
 
 	redisSpec.StorageSize = merge2.CoalesceQuantity(actual.StorageSize, defaultValues.StorageSize)
-	redisSpec.Namespace = actual.Namespace
+	redisSpec.Namespace = merge2.Coalesce(actual.Namespace, defaultValues.Namespace)
 	redisSpec.Enabled = actual.Enabled
 
 	return redisSpec, nil
 }
 
-func BuildRedisDefaults(profile v2.WBSize) (v2.WBRedisSpec, error) {
+func BuildRedisDefaults(profile v2.WBSize, ownerNamespace string) (v2.WBRedisSpec, error) {
 	var err error
 	var storageRequest, cpuRequest, cpuLimit, memoryRequest, memoryLimit resource.Quantity
 	var spec v2.WBRedisSpec
@@ -92,7 +90,7 @@ func BuildRedisDefaults(profile v2.WBSize) (v2.WBRedisSpec, error) {
 	}
 	spec = v2.WBRedisSpec{
 		Enabled:   true,
-		Namespace: DefaultNamespace,
+		Namespace: ownerNamespace,
 		Config: &v2.WBRedisConfig{
 			Resources: v1.ResourceRequirements{
 				Requests: v1.ResourceList{},

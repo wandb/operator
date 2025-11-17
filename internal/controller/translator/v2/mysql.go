@@ -10,15 +10,13 @@ import (
 )
 
 const (
-	// Storage sizes
-	devMySQLStorageSize   = "1Gi"
-	smallMySQLStorageSize = "10Gi"
+	DevMySQLStorageSize   = "1Gi"
+	SmallMySQLStorageSize = "10Gi"
 
-	// Resource requests/limits for small size
-	smallMySQLCpuRequest    = "500m"
-	smallMySQLCpuLimit      = "1000m"
-	smallMySQLMemoryRequest = "1Gi"
-	smallMySQLMemoryLimit   = "2Gi"
+	SmallMySQLCpuRequest    = "500m"
+	SmallMySQLCpuLimit      = "1000m"
+	SmallMySQLMemoryRequest = "1Gi"
+	SmallMySQLMemoryLimit   = "2Gi"
 )
 
 // BuildMySQLSpec will create a new WBMySQLSpec with defaultValues applied if not
@@ -47,33 +45,33 @@ func BuildMySQLSpec(actual v2.WBMySQLSpec, defaultValues v2.WBMySQLSpec) (v2.WBM
 	return mysqlSpec, nil
 }
 
-func BuildMySQLDefaults(profile v2.WBSize) (v2.WBMySQLSpec, error) {
+func BuildMySQLDefaults(profile v2.WBSize, ownerNamespace string) (v2.WBMySQLSpec, error) {
 	var err error
 	var storageSize string
 	spec := v2.WBMySQLSpec{
 		Enabled:   true,
-		Namespace: defaultNamespace,
+		Namespace: ownerNamespace,
 	}
 
 	switch profile {
 	case v2.WBSizeDev:
-		storageSize = devMySQLStorageSize
+		storageSize = DevMySQLStorageSize
 		spec.StorageSize = storageSize
 	case v2.WBSizeSmall:
-		storageSize = smallMySQLStorageSize
+		storageSize = SmallMySQLStorageSize
 		spec.StorageSize = storageSize
 
 		var cpuRequest, cpuLimit, memoryRequest, memoryLimit resource.Quantity
-		if cpuRequest, err = resource.ParseQuantity(smallMySQLCpuRequest); err != nil {
+		if cpuRequest, err = resource.ParseQuantity(SmallMySQLCpuRequest); err != nil {
 			return spec, err
 		}
-		if cpuLimit, err = resource.ParseQuantity(smallMySQLCpuLimit); err != nil {
+		if cpuLimit, err = resource.ParseQuantity(SmallMySQLCpuLimit); err != nil {
 			return spec, err
 		}
-		if memoryRequest, err = resource.ParseQuantity(smallMySQLMemoryRequest); err != nil {
+		if memoryRequest, err = resource.ParseQuantity(SmallMySQLMemoryRequest); err != nil {
 			return spec, err
 		}
-		if memoryLimit, err = resource.ParseQuantity(smallMySQLMemoryLimit); err != nil {
+		if memoryLimit, err = resource.ParseQuantity(SmallMySQLMemoryLimit); err != nil {
 			return spec, err
 		}
 

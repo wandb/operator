@@ -11,20 +11,17 @@ import (
 
 const (
 	// Storage sizes
-	devClickHouseStorageSize   = "10Gi"
-	smallClickHouseStorageSize = "10Gi"
+	DevClickHouseStorageSize   = "10Gi"
+	SmallClickHouseStorageSize = "10Gi"
 
 	// Resource requests/limits for small size
-	smallClickHouseCpuRequest    = "500m"
-	smallClickHouseCpuLimit      = "1000m"
-	smallClickHouseMemoryRequest = "1Gi"
-	smallClickHouseMemoryLimit   = "2Gi"
+	SmallClickHouseCpuRequest    = "500m"
+	SmallClickHouseCpuLimit      = "1000m"
+	SmallClickHouseMemoryRequest = "1Gi"
+	SmallClickHouseMemoryLimit   = "2Gi"
 
 	// ClickHouse version
-	clickHouseVersion = "23.8"
-
-	// DefaultNamespace is the default namespace for all resources
-	defaultNamespace = "wandb"
+	ClickHouseVersion = "23.8"
 )
 
 // BuildClickHouseSpec will create a new WBClickHouseSpec with defaultValues applied if not
@@ -55,36 +52,36 @@ func BuildClickHouseSpec(actual v2.WBClickHouseSpec, defaultValues v2.WBClickHou
 	return clickhouseSpec, nil
 }
 
-func BuildClickHouseDefaults(profile v2.WBSize) (v2.WBClickHouseSpec, error) {
+func BuildClickHouseDefaults(profile v2.WBSize, ownerNamespace string) (v2.WBClickHouseSpec, error) {
 	var err error
 	var storageSize string
 	spec := v2.WBClickHouseSpec{
 		Enabled:   true,
-		Namespace: defaultNamespace,
-		Version:   clickHouseVersion,
+		Namespace: ownerNamespace,
+		Version:   ClickHouseVersion,
 	}
 
 	switch profile {
 	case v2.WBSizeDev:
-		storageSize = devClickHouseStorageSize
+		storageSize = DevClickHouseStorageSize
 		spec.StorageSize = storageSize
 		spec.Replicas = 1
 	case v2.WBSizeSmall:
-		storageSize = smallClickHouseStorageSize
+		storageSize = SmallClickHouseStorageSize
 		spec.StorageSize = storageSize
 		spec.Replicas = 3
 
 		var cpuRequest, cpuLimit, memoryRequest, memoryLimit resource.Quantity
-		if cpuRequest, err = resource.ParseQuantity(smallClickHouseCpuRequest); err != nil {
+		if cpuRequest, err = resource.ParseQuantity(SmallClickHouseCpuRequest); err != nil {
 			return spec, err
 		}
-		if cpuLimit, err = resource.ParseQuantity(smallClickHouseCpuLimit); err != nil {
+		if cpuLimit, err = resource.ParseQuantity(SmallClickHouseCpuLimit); err != nil {
 			return spec, err
 		}
-		if memoryRequest, err = resource.ParseQuantity(smallClickHouseMemoryRequest); err != nil {
+		if memoryRequest, err = resource.ParseQuantity(SmallClickHouseMemoryRequest); err != nil {
 			return spec, err
 		}
-		if memoryLimit, err = resource.ParseQuantity(smallClickHouseMemoryLimit); err != nil {
+		if memoryLimit, err = resource.ParseQuantity(SmallClickHouseMemoryLimit); err != nil {
 			return spec, err
 		}
 

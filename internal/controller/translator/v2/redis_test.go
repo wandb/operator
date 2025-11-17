@@ -637,7 +637,7 @@ var _ = Describe("BuildRedisDefaults", func() {
 	Describe("Redis", func() {
 		Context("when profile is Dev", func() {
 			It("should return a redis spec with storage only and no sentinel", func() {
-				spec, err := BuildRedisDefaults(v2.WBSizeDev)
+				spec, err := BuildRedisDefaults(v2.WBSizeDev, testingOwnerNamespace)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(spec.Enabled).To(BeTrue())
 				Expect(spec.Config).ToNot(BeNil())
@@ -658,7 +658,7 @@ var _ = Describe("BuildRedisDefaults", func() {
 
 		Context("when profile is Small", func() {
 			It("should return a redis spec with full resource requirements and sentinel", func() {
-				spec, err := BuildRedisDefaults(v2.WBSizeSmall)
+				spec, err := BuildRedisDefaults(v2.WBSizeSmall, testingOwnerNamespace)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(spec.Enabled).To(BeTrue())
 				Expect(spec.Config).ToNot(BeNil())
@@ -698,7 +698,7 @@ var _ = Describe("BuildRedisDefaults", func() {
 
 		Context("when profile is invalid", func() {
 			It("should return an error", func() {
-				_, err := BuildRedisDefaults(v2.WBSize("invalid"))
+				_, err := BuildRedisDefaults(v2.WBSize("invalid"), testingOwnerNamespace)
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("invalid profile"))
 			})

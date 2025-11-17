@@ -16,16 +16,6 @@ import (
 // Default values
 
 const (
-	// Storage sizes
-	DevMySQLStorageSize   = "1Gi"
-	SmallMySQLStorageSize = "10Gi"
-
-	// Resource requests/limits for small size
-	SmallMySQLCpuRequest    = "500m"
-	SmallMySQLCpuLimit      = "1000m"
-	SmallMySQLMemoryRequest = "1Gi"
-	SmallMySQLMemoryLimit   = "2Gi"
-
 	// Percona XtraDB Cluster images
 	DevPXCImage   = "perconalab/percona-xtradb-cluster-operator:main-pxc8.0"
 	SmallPXCImage = "percona/percona-xtradb-cluster:8.0"
@@ -107,7 +97,7 @@ func (i *InfraConfigBuilder) AddMySQLSpec(actual *apiv2.WBMySQLSpec, size apiv2.
 	i.size = size
 	var err error
 	var defaultSpec, merged apiv2.WBMySQLSpec
-	if defaultSpec, err = mergev2.BuildMySQLDefaults(size); err != nil {
+	if defaultSpec, err = mergev2.BuildMySQLDefaults(size, i.ownerNamespace); err != nil {
 		i.errors = append(i.errors, err)
 		return i
 	}
