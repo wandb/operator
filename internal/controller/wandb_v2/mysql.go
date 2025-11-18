@@ -41,7 +41,7 @@ func (r *WeightsAndBiasesV2Reconciler) reconcileMySQL(
 		return results
 	}
 
-	wandb.Status.MySQLStatus = model.ExtractMySQLStatus(ctx, results)
+	wandb.Status.MySQLStatus = translatorv2.ExtractMySQLStatus(ctx, results)
 	if err = r.Status().Update(ctx, wandb); err != nil {
 		results.AddErrors(err)
 	}

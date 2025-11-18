@@ -6,6 +6,7 @@ import (
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/translator/utils"
 	"github.com/wandb/operator/internal/model"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // BuildMinioConfig will create a new model.MinioConfig with defaultConfig applied if not
@@ -42,10 +43,54 @@ func ExtractMinioStatus(ctx context.Context, results *model.Results) apiv2.WBMin
 	)
 }
 
-func TranslateMinioStatus(ctx context.Context, model model.MinioStatus) apiv2.WBMinioStatus {
+func TranslateMinioStatus(ctx context.Context, m model.MinioStatus) apiv2.WBMinioStatus {
 	var result apiv2.WBMinioStatus
+	var details []apiv2.WBStatusDetail
+
+	for _, err := range m.Errors {
+		details = append(details, apiv2.WBStatusDetail{
+			State:   apiv2.WBStateError,
+			Code:    err.Code(),
+			Message: err.Reason(),
+		})
+	}
+
+	for _, detail := range m.Details {
+		state := translateMinioStatusCode(detail.Code())
+		details = append(details, apiv2.WBStatusDetail{
+			State:   state,
+			Code:    detail.Code(),
+			Message: detail.Message(),
+		})
+	}
+
+	result.Connection = apiv2.WBMinioConnection{
+		MinioHost:      m.Connection.Host,
+		MinioPort:      m.Connection.Port,
+		MinioAccessKey: m.Connection.AccessKey,
+	}
+
+	result.Ready = m.Ready
+	result.Details = details
+	result.State = computeOverallState(details, m.Ready)
+	result.LastReconciled = metav1.Now()
 
 	return result
+}
+
+func translateMinioStatusCode(code string) apiv2.WBStateType {
+	switch code {
+	case string(model.MinioCreatedCode):
+		return apiv2.WBStateUpdating
+	case string(model.MinioUpdatedCode):
+		return apiv2.WBStateUpdating
+	case string(model.MinioDeletedCode):
+		return apiv2.WBStateDeleting
+	case string(model.MinioConnectionCode):
+		return apiv2.WBStateReady
+	default:
+		return apiv2.WBStateUnknown
+	}
 }
 
 func (i *InfraConfigBuilder) AddMinioConfig(actual apiv2.WBMinioSpec) *InfraConfigBuilder {

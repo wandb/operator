@@ -1,6 +1,8 @@
 package v2
 
 import (
+	"context"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	apiv2 "github.com/wandb/operator/api/v2"
@@ -701,6 +703,239 @@ var _ = Describe("TranslateRedisSpec", func() {
 
 			Expect(config.Enabled).To(Equal(spec.Enabled))
 			Expect(config.Sentinel.Enabled).To(BeFalse())
+		})
+	})
+})
+
+var _ = Describe("TranslateRedisStatus", func() {
+	var ctx context.Context
+
+	BeforeEach(func() {
+		ctx = context.Background()
+	})
+
+	Context("when model status has no errors or details", func() {
+		It("should return ready status when Ready is true with Sentinel connection", func() {
+			modelStatus := model.RedisStatus{
+				Ready: true,
+				Connection: model.RedisConnection{
+					SentinelHost:   "redis-sentinel.example.com",
+					SentinelPort:   "26379",
+					SentinelMaster: "mymaster",
+				},
+			}
+
+			result := TranslateRedisStatus(ctx, modelStatus)
+
+			Expect(result.Ready).To(BeTrue())
+			Expect(result.State).To(Equal(apiv2.WBStateReady))
+			Expect(result.Details).To(BeEmpty())
+			Expect(result.Connection.RedisSentinelHost).To(Equal("redis-sentinel.example.com"))
+			Expect(result.Connection.RedisSentinelPort).To(Equal("26379"))
+			Expect(result.Connection.RedisMasterName).To(Equal("mymaster"))
+			Expect(result.LastReconciled.IsZero()).To(BeFalse())
+		})
+
+		It("should return ready status when Ready is true with Standalone connection", func() {
+			modelStatus := model.RedisStatus{
+				Ready: true,
+				Connection: model.RedisConnection{
+					RedisHost: "redis.example.com",
+					RedisPort: "6379",
+				},
+			}
+
+			result := TranslateRedisStatus(ctx, modelStatus)
+
+			Expect(result.Ready).To(BeTrue())
+			Expect(result.State).To(Equal(apiv2.WBStateReady))
+			Expect(result.Details).To(BeEmpty())
+			Expect(result.Connection.RedisHost).To(Equal("redis.example.com"))
+			Expect(result.Connection.RedisPort).To(Equal("6379"))
+			Expect(result.LastReconciled.IsZero()).To(BeFalse())
+		})
+
+		It("should return unknown status when Ready is false", func() {
+			modelStatus := model.RedisStatus{
+				Ready: false,
+			}
+
+			result := TranslateRedisStatus(ctx, modelStatus)
+
+			Expect(result.Ready).To(BeFalse())
+			Expect(result.State).To(Equal(apiv2.WBStateUnknown))
+			Expect(result.Details).To(BeEmpty())
+		})
+	})
+
+	Context("when model status has errors", func() {
+		It("should translate errors to status details with Error state", func() {
+			modelStatus := model.RedisStatus{
+				Ready: false,
+				Errors: []model.RedisInfraError{
+					{InfraError: model.NewRedisError(model.RedisDeploymentConflictCode, "deployment conflict")},
+				},
+			}
+
+			result := TranslateRedisStatus(ctx, modelStatus)
+
+			Expect(result.Ready).To(BeFalse())
+			Expect(result.State).To(Equal(apiv2.WBStateError))
+			Expect(result.Details).To(HaveLen(1))
+			Expect(result.Details[0].State).To(Equal(apiv2.WBStateError))
+			Expect(result.Details[0].Code).To(Equal(string(model.RedisDeploymentConflictCode)))
+			Expect(result.Details[0].Message).To(Equal("deployment conflict"))
+		})
+	})
+
+	Context("when model status has status details", func() {
+		It("should translate RedisSentinelCreated to Updating state", func() {
+			modelStatus := model.RedisStatus{
+				Ready: false,
+				Details: []model.RedisStatusDetail{
+					{InfraStatusDetail: model.NewRedisStatusDetail(model.RedisSentinelCreatedCode, "Sentinel created")},
+				},
+			}
+
+			result := TranslateRedisStatus(ctx, modelStatus)
+
+			Expect(result.Details).To(HaveLen(1))
+			Expect(result.Details[0].State).To(Equal(apiv2.WBStateUpdating))
+			Expect(result.Details[0].Code).To(Equal(string(model.RedisSentinelCreatedCode)))
+			Expect(result.State).To(Equal(apiv2.WBStateUpdating))
+		})
+
+		It("should translate RedisReplicationCreated to Updating state", func() {
+			modelStatus := model.RedisStatus{
+				Ready: false,
+				Details: []model.RedisStatusDetail{
+					{InfraStatusDetail: model.NewRedisStatusDetail(model.RedisReplicationCreatedCode, "Replication created")},
+				},
+			}
+
+			result := TranslateRedisStatus(ctx, modelStatus)
+
+			Expect(result.Details[0].State).To(Equal(apiv2.WBStateUpdating))
+			Expect(result.State).To(Equal(apiv2.WBStateUpdating))
+		})
+
+		It("should translate RedisStandaloneCreated to Updating state", func() {
+			modelStatus := model.RedisStatus{
+				Ready: false,
+				Details: []model.RedisStatusDetail{
+					{InfraStatusDetail: model.NewRedisStatusDetail(model.RedisStandaloneCreatedCode, "Standalone created")},
+				},
+			}
+
+			result := TranslateRedisStatus(ctx, modelStatus)
+
+			Expect(result.Details[0].State).To(Equal(apiv2.WBStateUpdating))
+			Expect(result.State).To(Equal(apiv2.WBStateUpdating))
+		})
+
+		It("should translate RedisSentinelDeleted to Deleting state", func() {
+			modelStatus := model.RedisStatus{
+				Ready: false,
+				Details: []model.RedisStatusDetail{
+					{InfraStatusDetail: model.NewRedisStatusDetail(model.RedisSentinelDeletedCode, "Sentinel deleted")},
+				},
+			}
+
+			result := TranslateRedisStatus(ctx, modelStatus)
+
+			Expect(result.Details[0].State).To(Equal(apiv2.WBStateDeleting))
+			Expect(result.State).To(Equal(apiv2.WBStateDeleting))
+		})
+
+		It("should translate RedisReplicationDeleted to Deleting state", func() {
+			modelStatus := model.RedisStatus{
+				Ready: false,
+				Details: []model.RedisStatusDetail{
+					{InfraStatusDetail: model.NewRedisStatusDetail(model.RedisReplicationDeletedCode, "Replication deleted")},
+				},
+			}
+
+			result := TranslateRedisStatus(ctx, modelStatus)
+
+			Expect(result.Details[0].State).To(Equal(apiv2.WBStateDeleting))
+			Expect(result.State).To(Equal(apiv2.WBStateDeleting))
+		})
+
+		It("should translate RedisStandaloneDeleted to Deleting state", func() {
+			modelStatus := model.RedisStatus{
+				Ready: false,
+				Details: []model.RedisStatusDetail{
+					{InfraStatusDetail: model.NewRedisStatusDetail(model.RedisStandaloneDeletedCode, "Standalone deleted")},
+				},
+			}
+
+			result := TranslateRedisStatus(ctx, modelStatus)
+
+			Expect(result.Details[0].State).To(Equal(apiv2.WBStateDeleting))
+			Expect(result.State).To(Equal(apiv2.WBStateDeleting))
+		})
+
+		It("should translate RedisSentinelConnection to Ready state", func() {
+			modelStatus := model.RedisStatus{
+				Ready: true,
+				Details: []model.RedisStatusDetail{
+					{InfraStatusDetail: model.NewRedisStatusDetail(model.RedisSentinelConnectionCode, "sentinel connection established")},
+				},
+			}
+
+			result := TranslateRedisStatus(ctx, modelStatus)
+
+			Expect(result.Details[0].State).To(Equal(apiv2.WBStateReady))
+			Expect(result.State).To(Equal(apiv2.WBStateReady))
+		})
+
+		It("should translate RedisStandaloneConnection to Ready state", func() {
+			modelStatus := model.RedisStatus{
+				Ready: true,
+				Details: []model.RedisStatusDetail{
+					{InfraStatusDetail: model.NewRedisStatusDetail(model.RedisStandaloneConnectionCode, "standalone connection established")},
+				},
+			}
+
+			result := TranslateRedisStatus(ctx, modelStatus)
+
+			Expect(result.Details[0].State).To(Equal(apiv2.WBStateReady))
+			Expect(result.State).To(Equal(apiv2.WBStateReady))
+		})
+	})
+
+	Context("when model status has both errors and details", func() {
+		It("should use worst state according to WorseThan", func() {
+			modelStatus := model.RedisStatus{
+				Ready: false,
+				Errors: []model.RedisInfraError{
+					{InfraError: model.NewRedisError(model.RedisDeploymentConflictCode, "deployment conflict")},
+				},
+				Details: []model.RedisStatusDetail{
+					{InfraStatusDetail: model.NewRedisStatusDetail(model.RedisSentinelCreatedCode, "Sentinel created")},
+				},
+			}
+
+			result := TranslateRedisStatus(ctx, modelStatus)
+
+			Expect(result.Details).To(HaveLen(2))
+			Expect(result.State).To(Equal(apiv2.WBStateUpdating))
+		})
+	})
+
+	Context("when model status has multiple details with different states", func() {
+		It("should compute worst state correctly", func() {
+			modelStatus := model.RedisStatus{
+				Ready: false,
+				Details: []model.RedisStatusDetail{
+					{InfraStatusDetail: model.NewRedisStatusDetail(model.RedisReplicationCreatedCode, "replication creating")},
+					{InfraStatusDetail: model.NewRedisStatusDetail(model.RedisSentinelDeletedCode, "sentinel deleting")},
+				},
+			}
+
+			result := TranslateRedisStatus(ctx, modelStatus)
+
+			Expect(result.State).To(Equal(apiv2.WBStateDeleting))
 		})
 	})
 })

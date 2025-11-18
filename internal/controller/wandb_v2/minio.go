@@ -41,7 +41,7 @@ func (r *WeightsAndBiasesV2Reconciler) reconcileMinio(
 		return results
 	}
 
-	wandb.Status.MinioStatus = model.ExtractMinioStatus(ctx, results)
+	wandb.Status.MinioStatus = translatorv2.ExtractMinioStatus(ctx, results)
 	if err = r.Status().Update(ctx, wandb); err != nil {
 		results.AddErrors(err)
 	}

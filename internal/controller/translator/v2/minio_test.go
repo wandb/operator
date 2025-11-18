@@ -1,6 +1,8 @@
 package v2
 
 import (
+	"context"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	apiv2 "github.com/wandb/operator/api/v2"
@@ -326,6 +328,168 @@ var _ = Describe("TranslateMinioSpec", func() {
 			Expect(config.StorageSize).To(Equal(spec.StorageSize))
 			Expect(config.Resources.Requests[corev1.ResourceCPU]).To(Equal(overrideMinioCpuRequest))
 			Expect(config.Resources.Limits[corev1.ResourceMemory]).To(Equal(overrideMinioMemoryLimit))
+		})
+	})
+})
+
+var _ = Describe("TranslateMinioStatus", func() {
+	var ctx context.Context
+
+	BeforeEach(func() {
+		ctx = context.Background()
+	})
+
+	Context("when model status has no errors or details", func() {
+		It("should return ready status when Ready is true", func() {
+			modelStatus := model.MinioStatus{
+				Ready: true,
+				Connection: model.MinioConnection{
+					Host:      "minio.example.com",
+					Port:      "9000",
+					AccessKey: "admin",
+				},
+			}
+
+			result := TranslateMinioStatus(ctx, modelStatus)
+
+			Expect(result.Ready).To(BeTrue())
+			Expect(result.State).To(Equal(apiv2.WBStateReady))
+			Expect(result.Details).To(BeEmpty())
+			Expect(result.Connection.MinioHost).To(Equal("minio.example.com"))
+			Expect(result.Connection.MinioPort).To(Equal("9000"))
+			Expect(result.Connection.MinioAccessKey).To(Equal("admin"))
+			Expect(result.LastReconciled.IsZero()).To(BeFalse())
+		})
+
+		It("should return unknown status when Ready is false", func() {
+			modelStatus := model.MinioStatus{
+				Ready: false,
+			}
+
+			result := TranslateMinioStatus(ctx, modelStatus)
+
+			Expect(result.Ready).To(BeFalse())
+			Expect(result.State).To(Equal(apiv2.WBStateUnknown))
+			Expect(result.Details).To(BeEmpty())
+		})
+	})
+
+	Context("when model status has errors", func() {
+		It("should translate errors to status details with Error state", func() {
+			modelStatus := model.MinioStatus{
+				Ready: false,
+				Errors: []model.MinioInfraError{
+					{InfraError: model.NewMinioError(model.MinioErrFailedToCreateCode, "creation failed")},
+					{InfraError: model.NewMinioError(model.MinioErrFailedToUpdateCode, "update failed")},
+				},
+			}
+
+			result := TranslateMinioStatus(ctx, modelStatus)
+
+			Expect(result.Ready).To(BeFalse())
+			Expect(result.State).To(Equal(apiv2.WBStateError))
+			Expect(result.Details).To(HaveLen(2))
+			Expect(result.Details[0].State).To(Equal(apiv2.WBStateError))
+			Expect(result.Details[0].Code).To(Equal(string(model.MinioErrFailedToCreateCode)))
+			Expect(result.Details[0].Message).To(Equal("creation failed"))
+			Expect(result.Details[1].State).To(Equal(apiv2.WBStateError))
+			Expect(result.Details[1].Code).To(Equal(string(model.MinioErrFailedToUpdateCode)))
+			Expect(result.Details[1].Message).To(Equal("update failed"))
+		})
+	})
+
+	Context("when model status has status details", func() {
+		It("should translate MinioCreated to Updating state", func() {
+			modelStatus := model.MinioStatus{
+				Ready: false,
+				Details: []model.MinioStatusDetail{
+					{InfraStatusDetail: model.NewMinioStatusDetail(model.MinioCreatedCode, "Minio created")},
+				},
+			}
+
+			result := TranslateMinioStatus(ctx, modelStatus)
+
+			Expect(result.Details).To(HaveLen(1))
+			Expect(result.Details[0].State).To(Equal(apiv2.WBStateUpdating))
+			Expect(result.Details[0].Code).To(Equal(string(model.MinioCreatedCode)))
+			Expect(result.State).To(Equal(apiv2.WBStateUpdating))
+		})
+
+		It("should translate MinioUpdated to Updating state", func() {
+			modelStatus := model.MinioStatus{
+				Ready: false,
+				Details: []model.MinioStatusDetail{
+					{InfraStatusDetail: model.NewMinioStatusDetail(model.MinioUpdatedCode, "Minio updated")},
+				},
+			}
+
+			result := TranslateMinioStatus(ctx, modelStatus)
+
+			Expect(result.Details[0].State).To(Equal(apiv2.WBStateUpdating))
+			Expect(result.State).To(Equal(apiv2.WBStateUpdating))
+		})
+
+		It("should translate MinioDeleted to Deleting state", func() {
+			modelStatus := model.MinioStatus{
+				Ready: false,
+				Details: []model.MinioStatusDetail{
+					{InfraStatusDetail: model.NewMinioStatusDetail(model.MinioDeletedCode, "Minio deleted")},
+				},
+			}
+
+			result := TranslateMinioStatus(ctx, modelStatus)
+
+			Expect(result.Details[0].State).To(Equal(apiv2.WBStateDeleting))
+			Expect(result.State).To(Equal(apiv2.WBStateDeleting))
+		})
+
+		It("should translate MinioConnection to Ready state", func() {
+			modelStatus := model.MinioStatus{
+				Ready: true,
+				Details: []model.MinioStatusDetail{
+					{InfraStatusDetail: model.NewMinioStatusDetail(model.MinioConnectionCode, "connection established")},
+				},
+			}
+
+			result := TranslateMinioStatus(ctx, modelStatus)
+
+			Expect(result.Details[0].State).To(Equal(apiv2.WBStateReady))
+			Expect(result.State).To(Equal(apiv2.WBStateReady))
+		})
+	})
+
+	Context("when model status has both errors and details", func() {
+		It("should use worst state according to WorseThan", func() {
+			modelStatus := model.MinioStatus{
+				Ready: false,
+				Errors: []model.MinioInfraError{
+					{InfraError: model.NewMinioError(model.MinioErrFailedToCreateCode, "creation failed")},
+				},
+				Details: []model.MinioStatusDetail{
+					{InfraStatusDetail: model.NewMinioStatusDetail(model.MinioCreatedCode, "Minio created")},
+				},
+			}
+
+			result := TranslateMinioStatus(ctx, modelStatus)
+
+			Expect(result.Details).To(HaveLen(2))
+			Expect(result.State).To(Equal(apiv2.WBStateUpdating))
+		})
+	})
+
+	Context("when model status has multiple details with different states", func() {
+		It("should compute worst state correctly", func() {
+			modelStatus := model.MinioStatus{
+				Ready: false,
+				Details: []model.MinioStatusDetail{
+					{InfraStatusDetail: model.NewMinioStatusDetail(model.MinioUpdatedCode, "updating")},
+					{InfraStatusDetail: model.NewMinioStatusDetail(model.MinioDeletedCode, "deleting")},
+				},
+			}
+
+			result := TranslateMinioStatus(ctx, modelStatus)
+
+			Expect(result.State).To(Equal(apiv2.WBStateDeleting))
 		})
 	})
 })

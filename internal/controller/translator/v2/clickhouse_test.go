@@ -1,6 +1,8 @@
 package v2
 
 import (
+	"context"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	apiv2 "github.com/wandb/operator/api/v2"
@@ -396,6 +398,168 @@ var _ = Describe("TranslateClickHouseSpec", func() {
 			Expect(config.Replicas).To(Equal(spec.Replicas))
 			Expect(config.Version).To(Equal(spec.Version))
 			Expect(config.Resources).To(Equal(corev1.ResourceRequirements{}))
+		})
+	})
+})
+
+var _ = Describe("TranslateClickHouseStatus", func() {
+	var ctx context.Context
+
+	BeforeEach(func() {
+		ctx = context.Background()
+	})
+
+	Context("when model status has no errors or details", func() {
+		It("should return ready status when Ready is true", func() {
+			modelStatus := model.ClickHouseStatus{
+				Ready: true,
+				Connection: model.ClickHouseConnection{
+					Host: "ch.example.com",
+					Port: "9000",
+					User: "admin",
+				},
+			}
+
+			result := TranslateClickHouseStatus(ctx, modelStatus)
+
+			Expect(result.Ready).To(BeTrue())
+			Expect(result.State).To(Equal(apiv2.WBStateReady))
+			Expect(result.Details).To(BeEmpty())
+			Expect(result.Connection.ClickHouseHost).To(Equal("ch.example.com"))
+			Expect(result.Connection.ClickHousePort).To(Equal("9000"))
+			Expect(result.Connection.ClickHouseUser).To(Equal("admin"))
+			Expect(result.LastReconciled.IsZero()).To(BeFalse())
+		})
+
+		It("should return unknown status when Ready is false", func() {
+			modelStatus := model.ClickHouseStatus{
+				Ready: false,
+			}
+
+			result := TranslateClickHouseStatus(ctx, modelStatus)
+
+			Expect(result.Ready).To(BeFalse())
+			Expect(result.State).To(Equal(apiv2.WBStateUnknown))
+			Expect(result.Details).To(BeEmpty())
+		})
+	})
+
+	Context("when model status has errors", func() {
+		It("should translate errors to status details with Error state", func() {
+			modelStatus := model.ClickHouseStatus{
+				Ready: false,
+				Errors: []model.ClickHouseInfraError{
+					{InfraError: model.NewClickHouseError(model.ClickHouseErrFailedToCreateCode, "creation failed")},
+					{InfraError: model.NewClickHouseError(model.ClickHouseErrFailedToUpdateCode, "update failed")},
+				},
+			}
+
+			result := TranslateClickHouseStatus(ctx, modelStatus)
+
+			Expect(result.Ready).To(BeFalse())
+			Expect(result.State).To(Equal(apiv2.WBStateError))
+			Expect(result.Details).To(HaveLen(2))
+			Expect(result.Details[0].State).To(Equal(apiv2.WBStateError))
+			Expect(result.Details[0].Code).To(Equal(string(model.ClickHouseErrFailedToCreateCode)))
+			Expect(result.Details[0].Message).To(Equal("creation failed"))
+			Expect(result.Details[1].State).To(Equal(apiv2.WBStateError))
+			Expect(result.Details[1].Code).To(Equal(string(model.ClickHouseErrFailedToUpdateCode)))
+			Expect(result.Details[1].Message).To(Equal("update failed"))
+		})
+	})
+
+	Context("when model status has status details", func() {
+		It("should translate ClickHouseCreated to Updating state", func() {
+			modelStatus := model.ClickHouseStatus{
+				Ready: false,
+				Details: []model.ClickHouseStatusDetail{
+					{InfraStatusDetail: model.NewClickHouseStatusDetail(model.ClickHouseCreatedCode, "ClickHouse created")},
+				},
+			}
+
+			result := TranslateClickHouseStatus(ctx, modelStatus)
+
+			Expect(result.Details).To(HaveLen(1))
+			Expect(result.Details[0].State).To(Equal(apiv2.WBStateUpdating))
+			Expect(result.Details[0].Code).To(Equal(string(model.ClickHouseCreatedCode)))
+			Expect(result.State).To(Equal(apiv2.WBStateUpdating))
+		})
+
+		It("should translate ClickHouseUpdated to Updating state", func() {
+			modelStatus := model.ClickHouseStatus{
+				Ready: false,
+				Details: []model.ClickHouseStatusDetail{
+					{InfraStatusDetail: model.NewClickHouseStatusDetail(model.ClickHouseUpdatedCode, "ClickHouse updated")},
+				},
+			}
+
+			result := TranslateClickHouseStatus(ctx, modelStatus)
+
+			Expect(result.Details[0].State).To(Equal(apiv2.WBStateUpdating))
+			Expect(result.State).To(Equal(apiv2.WBStateUpdating))
+		})
+
+		It("should translate ClickHouseDeleted to Deleting state", func() {
+			modelStatus := model.ClickHouseStatus{
+				Ready: false,
+				Details: []model.ClickHouseStatusDetail{
+					{InfraStatusDetail: model.NewClickHouseStatusDetail(model.ClickHouseDeletedCode, "ClickHouse deleted")},
+				},
+			}
+
+			result := TranslateClickHouseStatus(ctx, modelStatus)
+
+			Expect(result.Details[0].State).To(Equal(apiv2.WBStateDeleting))
+			Expect(result.State).To(Equal(apiv2.WBStateDeleting))
+		})
+
+		It("should translate ClickHouseConnection to Ready state", func() {
+			modelStatus := model.ClickHouseStatus{
+				Ready: true,
+				Details: []model.ClickHouseStatusDetail{
+					{InfraStatusDetail: model.NewClickHouseStatusDetail(model.ClickHouseConnectionCode, "connection established")},
+				},
+			}
+
+			result := TranslateClickHouseStatus(ctx, modelStatus)
+
+			Expect(result.Details[0].State).To(Equal(apiv2.WBStateReady))
+			Expect(result.State).To(Equal(apiv2.WBStateReady))
+		})
+	})
+
+	Context("when model status has both errors and details", func() {
+		It("should use worst state according to WorseThan", func() {
+			modelStatus := model.ClickHouseStatus{
+				Ready: false,
+				Errors: []model.ClickHouseInfraError{
+					{InfraError: model.NewClickHouseError(model.ClickHouseErrFailedToCreateCode, "creation failed")},
+				},
+				Details: []model.ClickHouseStatusDetail{
+					{InfraStatusDetail: model.NewClickHouseStatusDetail(model.ClickHouseCreatedCode, "ClickHouse created")},
+				},
+			}
+
+			result := TranslateClickHouseStatus(ctx, modelStatus)
+
+			Expect(result.Details).To(HaveLen(2))
+			Expect(result.State).To(Equal(apiv2.WBStateUpdating))
+		})
+	})
+
+	Context("when model status has multiple details with different states", func() {
+		It("should compute worst state correctly", func() {
+			modelStatus := model.ClickHouseStatus{
+				Ready: false,
+				Details: []model.ClickHouseStatusDetail{
+					{InfraStatusDetail: model.NewClickHouseStatusDetail(model.ClickHouseUpdatedCode, "updating")},
+					{InfraStatusDetail: model.NewClickHouseStatusDetail(model.ClickHouseDeletedCode, "deleting")},
+				},
+			}
+
+			result := TranslateClickHouseStatus(ctx, modelStatus)
+
+			Expect(result.State).To(Equal(apiv2.WBStateDeleting))
 		})
 	})
 })

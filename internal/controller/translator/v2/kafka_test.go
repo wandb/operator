@@ -1,6 +1,8 @@
 package v2
 
 import (
+	"context"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	apiv2 "github.com/wandb/operator/api/v2"
@@ -338,6 +340,208 @@ var _ = Describe("TranslateKafkaSpec", func() {
 			Expect(config.StorageSize).To(Equal(spec.StorageSize))
 			Expect(config.Resources.Requests[corev1.ResourceCPU]).To(Equal(overrideKafkaCpuRequest))
 			Expect(config.Resources.Limits[corev1.ResourceCPU]).To(Equal(overrideKafkaCpuLimit))
+		})
+	})
+})
+
+var _ = Describe("TranslateKafkaStatus", func() {
+	var ctx context.Context
+
+	BeforeEach(func() {
+		ctx = context.Background()
+	})
+
+	Context("when model status has no errors or details", func() {
+		It("should return ready status when Ready is true", func() {
+			modelStatus := model.KafkaStatus{
+				Ready: true,
+				Connection: model.KafkaConnection{
+					Host: "kafka.example.com",
+					Port: "9092",
+				},
+			}
+
+			result := TranslateKafkaStatus(ctx, modelStatus)
+
+			Expect(result.Ready).To(BeTrue())
+			Expect(result.State).To(Equal(apiv2.WBStateReady))
+			Expect(result.Details).To(BeEmpty())
+			Expect(result.Connection.KafkaHost).To(Equal("kafka.example.com"))
+			Expect(result.Connection.KafkaPort).To(Equal("9092"))
+			Expect(result.LastReconciled.IsZero()).To(BeFalse())
+		})
+
+		It("should return unknown status when Ready is false", func() {
+			modelStatus := model.KafkaStatus{
+				Ready: false,
+			}
+
+			result := TranslateKafkaStatus(ctx, modelStatus)
+
+			Expect(result.Ready).To(BeFalse())
+			Expect(result.State).To(Equal(apiv2.WBStateUnknown))
+			Expect(result.Details).To(BeEmpty())
+		})
+	})
+
+	Context("when model status has errors", func() {
+		It("should translate errors to status details with Error state", func() {
+			modelStatus := model.KafkaStatus{
+				Ready: false,
+				Errors: []model.KafkaInfraError{
+					{InfraError: model.NewKafkaError(model.KafkaErrFailedToCreateCode, "creation failed")},
+					{InfraError: model.NewKafkaError(model.KafkaErrFailedToUpdateCode, "update failed")},
+				},
+			}
+
+			result := TranslateKafkaStatus(ctx, modelStatus)
+
+			Expect(result.Ready).To(BeFalse())
+			Expect(result.State).To(Equal(apiv2.WBStateError))
+			Expect(result.Details).To(HaveLen(2))
+			Expect(result.Details[0].State).To(Equal(apiv2.WBStateError))
+			Expect(result.Details[0].Code).To(Equal(string(model.KafkaErrFailedToCreateCode)))
+			Expect(result.Details[0].Message).To(Equal("creation failed"))
+			Expect(result.Details[1].State).To(Equal(apiv2.WBStateError))
+			Expect(result.Details[1].Code).To(Equal(string(model.KafkaErrFailedToUpdateCode)))
+			Expect(result.Details[1].Message).To(Equal("update failed"))
+		})
+	})
+
+	Context("when model status has status details", func() {
+		It("should translate KafkaCreated to Updating state", func() {
+			modelStatus := model.KafkaStatus{
+				Ready: false,
+				Details: []model.KafkaStatusDetail{
+					{InfraStatusDetail: model.NewKafkaStatusDetail(model.KafkaCreatedCode, "Kafka created")},
+				},
+			}
+
+			result := TranslateKafkaStatus(ctx, modelStatus)
+
+			Expect(result.Details).To(HaveLen(1))
+			Expect(result.Details[0].State).To(Equal(apiv2.WBStateUpdating))
+			Expect(result.Details[0].Code).To(Equal(string(model.KafkaCreatedCode)))
+			Expect(result.State).To(Equal(apiv2.WBStateUpdating))
+		})
+
+		It("should translate KafkaUpdated to Updating state", func() {
+			modelStatus := model.KafkaStatus{
+				Ready: false,
+				Details: []model.KafkaStatusDetail{
+					{InfraStatusDetail: model.NewKafkaStatusDetail(model.KafkaUpdatedCode, "Kafka updated")},
+				},
+			}
+
+			result := TranslateKafkaStatus(ctx, modelStatus)
+
+			Expect(result.Details[0].State).To(Equal(apiv2.WBStateUpdating))
+			Expect(result.State).To(Equal(apiv2.WBStateUpdating))
+		})
+
+		It("should translate KafkaDeleted to Deleting state", func() {
+			modelStatus := model.KafkaStatus{
+				Ready: false,
+				Details: []model.KafkaStatusDetail{
+					{InfraStatusDetail: model.NewKafkaStatusDetail(model.KafkaDeletedCode, "Kafka deleted")},
+				},
+			}
+
+			result := TranslateKafkaStatus(ctx, modelStatus)
+
+			Expect(result.Details[0].State).To(Equal(apiv2.WBStateDeleting))
+			Expect(result.State).To(Equal(apiv2.WBStateDeleting))
+		})
+
+		It("should translate KafkaNodePoolCreated to Updating state", func() {
+			modelStatus := model.KafkaStatus{
+				Ready: false,
+				Details: []model.KafkaStatusDetail{
+					{InfraStatusDetail: model.NewKafkaStatusDetail(model.KafkaNodePoolCreatedCode, "NodePool created")},
+				},
+			}
+
+			result := TranslateKafkaStatus(ctx, modelStatus)
+
+			Expect(result.Details[0].State).To(Equal(apiv2.WBStateUpdating))
+			Expect(result.State).To(Equal(apiv2.WBStateUpdating))
+		})
+
+		It("should translate KafkaNodePoolUpdated to Updating state", func() {
+			modelStatus := model.KafkaStatus{
+				Ready: false,
+				Details: []model.KafkaStatusDetail{
+					{InfraStatusDetail: model.NewKafkaStatusDetail(model.KafkaNodePoolUpdatedCode, "NodePool updated")},
+				},
+			}
+
+			result := TranslateKafkaStatus(ctx, modelStatus)
+
+			Expect(result.Details[0].State).To(Equal(apiv2.WBStateUpdating))
+			Expect(result.State).To(Equal(apiv2.WBStateUpdating))
+		})
+
+		It("should translate KafkaNodePoolDeleted to Deleting state", func() {
+			modelStatus := model.KafkaStatus{
+				Ready: false,
+				Details: []model.KafkaStatusDetail{
+					{InfraStatusDetail: model.NewKafkaStatusDetail(model.KafkaNodePoolDeletedCode, "NodePool deleted")},
+				},
+			}
+
+			result := TranslateKafkaStatus(ctx, modelStatus)
+
+			Expect(result.Details[0].State).To(Equal(apiv2.WBStateDeleting))
+			Expect(result.State).To(Equal(apiv2.WBStateDeleting))
+		})
+
+		It("should translate KafkaConnection to Ready state", func() {
+			modelStatus := model.KafkaStatus{
+				Ready: true,
+				Details: []model.KafkaStatusDetail{
+					{InfraStatusDetail: model.NewKafkaStatusDetail(model.KafkaConnectionCode, "connection established")},
+				},
+			}
+
+			result := TranslateKafkaStatus(ctx, modelStatus)
+
+			Expect(result.Details[0].State).To(Equal(apiv2.WBStateReady))
+			Expect(result.State).To(Equal(apiv2.WBStateReady))
+		})
+	})
+
+	Context("when model status has both errors and details", func() {
+		It("should use worst state according to WorseThan", func() {
+			modelStatus := model.KafkaStatus{
+				Ready: false,
+				Errors: []model.KafkaInfraError{
+					{InfraError: model.NewKafkaError(model.KafkaErrFailedToCreateCode, "creation failed")},
+				},
+				Details: []model.KafkaStatusDetail{
+					{InfraStatusDetail: model.NewKafkaStatusDetail(model.KafkaCreatedCode, "Kafka created")},
+				},
+			}
+
+			result := TranslateKafkaStatus(ctx, modelStatus)
+
+			Expect(result.Details).To(HaveLen(2))
+			Expect(result.State).To(Equal(apiv2.WBStateUpdating))
+		})
+	})
+
+	Context("when model status has multiple details with different states", func() {
+		It("should compute worst state correctly", func() {
+			modelStatus := model.KafkaStatus{
+				Ready: false,
+				Details: []model.KafkaStatusDetail{
+					{InfraStatusDetail: model.NewKafkaStatusDetail(model.KafkaUpdatedCode, "updating")},
+					{InfraStatusDetail: model.NewKafkaStatusDetail(model.KafkaDeletedCode, "deleting")},
+				},
+			}
+
+			result := TranslateKafkaStatus(ctx, modelStatus)
+
+			Expect(result.State).To(Equal(apiv2.WBStateDeleting))
 		})
 	})
 })

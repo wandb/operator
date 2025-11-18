@@ -6,6 +6,7 @@ import (
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/translator/utils"
 	"github.com/wandb/operator/internal/model"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // BuildKafkaConfig will create a new model.KafkaConfig with defaultConfig applied if not
@@ -42,10 +43,59 @@ func ExtractKafkaStatus(ctx context.Context, results *model.Results) apiv2.WBKaf
 	)
 }
 
-func TranslateKafkaStatus(ctx context.Context, model model.KafkaStatus) apiv2.WBKafkaStatus {
+func TranslateKafkaStatus(ctx context.Context, m model.KafkaStatus) apiv2.WBKafkaStatus {
 	var result apiv2.WBKafkaStatus
+	var details []apiv2.WBStatusDetail
+
+	for _, err := range m.Errors {
+		details = append(details, apiv2.WBStatusDetail{
+			State:   apiv2.WBStateError,
+			Code:    err.Code(),
+			Message: err.Reason(),
+		})
+	}
+
+	for _, detail := range m.Details {
+		state := translateKafkaStatusCode(detail.Code())
+		details = append(details, apiv2.WBStatusDetail{
+			State:   state,
+			Code:    detail.Code(),
+			Message: detail.Message(),
+		})
+	}
+
+	result.Connection = apiv2.WBKafkaConnection{
+		KafkaHost: m.Connection.Host,
+		KafkaPort: m.Connection.Port,
+	}
+
+	result.Ready = m.Ready
+	result.Details = details
+	result.State = computeOverallState(details, m.Ready)
+	result.LastReconciled = metav1.Now()
 
 	return result
+}
+
+func translateKafkaStatusCode(code string) apiv2.WBStateType {
+	switch code {
+	case string(model.KafkaCreatedCode):
+		return apiv2.WBStateUpdating
+	case string(model.KafkaUpdatedCode):
+		return apiv2.WBStateUpdating
+	case string(model.KafkaDeletedCode):
+		return apiv2.WBStateDeleting
+	case string(model.KafkaNodePoolCreatedCode):
+		return apiv2.WBStateUpdating
+	case string(model.KafkaNodePoolUpdatedCode):
+		return apiv2.WBStateUpdating
+	case string(model.KafkaNodePoolDeletedCode):
+		return apiv2.WBStateDeleting
+	case string(model.KafkaConnectionCode):
+		return apiv2.WBStateReady
+	default:
+		return apiv2.WBStateUnknown
+	}
 }
 
 func (i *InfraConfigBuilder) AddKafkaConfig(actual apiv2.WBKafkaSpec) *InfraConfigBuilder {

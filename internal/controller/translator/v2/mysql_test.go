@@ -1,6 +1,8 @@
 package v2
 
 import (
+	"context"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	apiv2 "github.com/wandb/operator/api/v2"
@@ -465,6 +467,168 @@ var _ = Describe("TranslateMySQLSpec", func() {
 			Expect(config.StorageSize).To(Equal(spec.StorageSize))
 			Expect(config.Resources.Requests[corev1.ResourceCPU]).To(Equal(overrideMySQLCpuRequest))
 			Expect(config.Resources.Limits[corev1.ResourceMemory]).To(Equal(overrideMySQLMemoryLimit))
+		})
+	})
+})
+
+var _ = Describe("TranslateMySQLStatus", func() {
+	var ctx context.Context
+
+	BeforeEach(func() {
+		ctx = context.Background()
+	})
+
+	Context("when model status has no errors or details", func() {
+		It("should return ready status when Ready is true", func() {
+			modelStatus := model.MySQLStatus{
+				Ready: true,
+				Connection: model.MySQLConnection{
+					Host: "mysql.example.com",
+					Port: "3306",
+					User: "admin",
+				},
+			}
+
+			result := TranslateMySQLStatus(ctx, modelStatus)
+
+			Expect(result.Ready).To(BeTrue())
+			Expect(result.State).To(Equal(apiv2.WBStateReady))
+			Expect(result.Details).To(BeEmpty())
+			Expect(result.Connection.MySQLHost).To(Equal("mysql.example.com"))
+			Expect(result.Connection.MySQLPort).To(Equal("3306"))
+			Expect(result.Connection.MySQLUser).To(Equal("admin"))
+			Expect(result.LastReconciled.IsZero()).To(BeFalse())
+		})
+
+		It("should return unknown status when Ready is false", func() {
+			modelStatus := model.MySQLStatus{
+				Ready: false,
+			}
+
+			result := TranslateMySQLStatus(ctx, modelStatus)
+
+			Expect(result.Ready).To(BeFalse())
+			Expect(result.State).To(Equal(apiv2.WBStateUnknown))
+			Expect(result.Details).To(BeEmpty())
+		})
+	})
+
+	Context("when model status has errors", func() {
+		It("should translate errors to status details with Error state", func() {
+			modelStatus := model.MySQLStatus{
+				Ready: false,
+				Errors: []model.MySQLInfraError{
+					{InfraError: model.NewMySQLError(model.MySQLErrFailedToCreateCode, "creation failed")},
+					{InfraError: model.NewMySQLError(model.MySQLErrFailedToUpdateCode, "update failed")},
+				},
+			}
+
+			result := TranslateMySQLStatus(ctx, modelStatus)
+
+			Expect(result.Ready).To(BeFalse())
+			Expect(result.State).To(Equal(apiv2.WBStateError))
+			Expect(result.Details).To(HaveLen(2))
+			Expect(result.Details[0].State).To(Equal(apiv2.WBStateError))
+			Expect(result.Details[0].Code).To(Equal(string(model.MySQLErrFailedToCreateCode)))
+			Expect(result.Details[0].Message).To(Equal("creation failed"))
+			Expect(result.Details[1].State).To(Equal(apiv2.WBStateError))
+			Expect(result.Details[1].Code).To(Equal(string(model.MySQLErrFailedToUpdateCode)))
+			Expect(result.Details[1].Message).To(Equal("update failed"))
+		})
+	})
+
+	Context("when model status has status details", func() {
+		It("should translate MySQLCreated to Updating state", func() {
+			modelStatus := model.MySQLStatus{
+				Ready: false,
+				Details: []model.MySQLStatusDetail{
+					{InfraStatusDetail: model.NewMySQLStatusDetail(model.MySQLCreatedCode, "MySQL created")},
+				},
+			}
+
+			result := TranslateMySQLStatus(ctx, modelStatus)
+
+			Expect(result.Details).To(HaveLen(1))
+			Expect(result.Details[0].State).To(Equal(apiv2.WBStateUpdating))
+			Expect(result.Details[0].Code).To(Equal(string(model.MySQLCreatedCode)))
+			Expect(result.State).To(Equal(apiv2.WBStateUpdating))
+		})
+
+		It("should translate MySQLUpdated to Updating state", func() {
+			modelStatus := model.MySQLStatus{
+				Ready: false,
+				Details: []model.MySQLStatusDetail{
+					{InfraStatusDetail: model.NewMySQLStatusDetail(model.MySQLUpdatedCode, "MySQL updated")},
+				},
+			}
+
+			result := TranslateMySQLStatus(ctx, modelStatus)
+
+			Expect(result.Details[0].State).To(Equal(apiv2.WBStateUpdating))
+			Expect(result.State).To(Equal(apiv2.WBStateUpdating))
+		})
+
+		It("should translate MySQLDeleted to Deleting state", func() {
+			modelStatus := model.MySQLStatus{
+				Ready: false,
+				Details: []model.MySQLStatusDetail{
+					{InfraStatusDetail: model.NewMySQLStatusDetail(model.MySQLDeletedCode, "MySQL deleted")},
+				},
+			}
+
+			result := TranslateMySQLStatus(ctx, modelStatus)
+
+			Expect(result.Details[0].State).To(Equal(apiv2.WBStateDeleting))
+			Expect(result.State).To(Equal(apiv2.WBStateDeleting))
+		})
+
+		It("should translate MySQLConnection to Ready state", func() {
+			modelStatus := model.MySQLStatus{
+				Ready: true,
+				Details: []model.MySQLStatusDetail{
+					{InfraStatusDetail: model.NewMySQLStatusDetail(model.MySQLConnectionCode, "connection established")},
+				},
+			}
+
+			result := TranslateMySQLStatus(ctx, modelStatus)
+
+			Expect(result.Details[0].State).To(Equal(apiv2.WBStateReady))
+			Expect(result.State).To(Equal(apiv2.WBStateReady))
+		})
+	})
+
+	Context("when model status has both errors and details", func() {
+		It("should use worst state according to WorseThan", func() {
+			modelStatus := model.MySQLStatus{
+				Ready: false,
+				Errors: []model.MySQLInfraError{
+					{InfraError: model.NewMySQLError(model.MySQLErrFailedToCreateCode, "creation failed")},
+				},
+				Details: []model.MySQLStatusDetail{
+					{InfraStatusDetail: model.NewMySQLStatusDetail(model.MySQLCreatedCode, "MySQL created")},
+				},
+			}
+
+			result := TranslateMySQLStatus(ctx, modelStatus)
+
+			Expect(result.Details).To(HaveLen(2))
+			Expect(result.State).To(Equal(apiv2.WBStateUpdating))
+		})
+	})
+
+	Context("when model status has multiple details with different states", func() {
+		It("should compute worst state correctly", func() {
+			modelStatus := model.MySQLStatus{
+				Ready: false,
+				Details: []model.MySQLStatusDetail{
+					{InfraStatusDetail: model.NewMySQLStatusDetail(model.MySQLUpdatedCode, "updating")},
+					{InfraStatusDetail: model.NewMySQLStatusDetail(model.MySQLDeletedCode, "deleting")},
+				},
+			}
+
+			result := TranslateMySQLStatus(ctx, modelStatus)
+
+			Expect(result.State).To(Equal(apiv2.WBStateDeleting))
 		})
 	})
 })

@@ -6,6 +6,7 @@ import (
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/translator/utils"
 	"github.com/wandb/operator/internal/model"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // BuildClickHouseConfig will create a new WBClickHouseSpec with defaultValues applied if not
@@ -46,10 +47,54 @@ func ExtractClickHouseStatus(ctx context.Context, results *model.Results) apiv2.
 	)
 }
 
-func TranslateClickHouseStatus(ctx context.Context, model model.ClickHouseStatus) apiv2.WBClickHouseStatus {
+func TranslateClickHouseStatus(ctx context.Context, m model.ClickHouseStatus) apiv2.WBClickHouseStatus {
 	var result apiv2.WBClickHouseStatus
+	var details []apiv2.WBStatusDetail
+
+	for _, err := range m.Errors {
+		details = append(details, apiv2.WBStatusDetail{
+			State:   apiv2.WBStateError,
+			Code:    err.Code(),
+			Message: err.Reason(),
+		})
+	}
+
+	for _, detail := range m.Details {
+		state := translateClickHouseStatusCode(detail.Code())
+		details = append(details, apiv2.WBStatusDetail{
+			State:   state,
+			Code:    detail.Code(),
+			Message: detail.Message(),
+		})
+	}
+
+	result.Connection = apiv2.WBClickHouseConnection{
+		ClickHouseHost: m.Connection.Host,
+		ClickHousePort: m.Connection.Port,
+		ClickHouseUser: m.Connection.User,
+	}
+
+	result.Ready = m.Ready
+	result.Details = details
+	result.State = computeOverallState(details, m.Ready)
+	result.LastReconciled = metav1.Now()
 
 	return result
+}
+
+func translateClickHouseStatusCode(code string) apiv2.WBStateType {
+	switch code {
+	case string(model.ClickHouseCreatedCode):
+		return apiv2.WBStateUpdating
+	case string(model.ClickHouseUpdatedCode):
+		return apiv2.WBStateUpdating
+	case string(model.ClickHouseDeletedCode):
+		return apiv2.WBStateDeleting
+	case string(model.ClickHouseConnectionCode):
+		return apiv2.WBStateReady
+	default:
+		return apiv2.WBStateUnknown
+	}
 }
 
 func (i *InfraConfigBuilder) AddClickHouseConfig(actual apiv2.WBClickHouseSpec) *InfraConfigBuilder {
