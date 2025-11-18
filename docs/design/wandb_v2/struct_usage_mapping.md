@@ -51,17 +51,15 @@ This document maps struct definitions and their usage (reads/writes) across the 
 - 📝 **Defined**: `api/v2/weightsandbiases_types.go:84`
 - 📖 **Read by**:
   - `internal/controller/translator/v2/mysql.go` - BuildMySQLSpec(), BuildMySQLDefaults()
-  - `internal/model/config.go` - InfraConfigBuilder.MySQL field
-  - `internal/model/mysql.go` - NewMySQLConfig() reads spec
 - ✍️ **Written by**:
-  - `internal/controller/translator/v2/mysql.go` - Creates WBMySQLSpec{} literals
+  - `internal/controller/translator/v2/mysql.go` - Creates WBMySQLSpec{} literals with defaults
 
 #### WBMySQLConfig
 - 📝 **Defined**: `api/v2/weightsandbiases_types.go:95`
 - 📖 **Read by**:
-  - `internal/model/mysql.go` - Reads config fields for validation and defaults
+  - `internal/controller/translator/v2/mysql.go` - Reads for merging with defaults
 - ✍️ **Written by**:
-  - `internal/controller/translator/v2/mysql.go` - Creates WBMySQLConfig{} literals
+  - `internal/controller/translator/v2/mysql.go` - Creates WBMySQLConfig{} literals with defaults
 
 #### WBMySQLStatus
 - 📝 **Defined**: `api/v2/weightsandbiases_types.go:279`
@@ -84,32 +82,29 @@ This document maps struct definitions and their usage (reads/writes) across the 
 - 📝 **Defined**: `api/v2/weightsandbiases_types.go:99`
 - 📖 **Read by**:
   - `internal/controller/translator/v2/redis.go` - BuildRedisSpec(), BuildRedisDefaults()
-  - `internal/model/config.go` - InfraConfigBuilder.Redis field
-  - `internal/model/redis.go` - NewRedisConfig() reads spec
 - ✍️ **Written by**:
-  - `internal/controller/translator/v2/redis.go` - Creates WBRedisSpec{} literals
+  - `internal/controller/translator/v2/redis.go` - Creates WBRedisSpec{} literals with defaults
 
 #### WBRedisConfig
 - 📝 **Defined**: `api/v2/weightsandbiases_types.go:109`
 - 📖 **Read by**:
-  - `internal/model/redis.go` - Reads config fields
+  - `internal/controller/translator/v2/redis.go` - Reads for merging with defaults
 - ✍️ **Written by**:
-  - `internal/controller/translator/v2/redis.go` - Creates WBRedisConfig{} literals
+  - `internal/controller/translator/v2/redis.go` - Creates WBRedisConfig{} literals with defaults
 
 #### WBRedisSentinelSpec
 - 📝 **Defined**: `api/v2/weightsandbiases_types.go:113`
 - 📖 **Read by**:
   - `internal/controller/translator/v2/redis.go` - BuildRedisSpec()
-  - `internal/model/redis.go` - Determines sentinel configuration
 - ✍️ **Written by**:
-  - `internal/controller/translator/v2/redis.go` - Creates WBRedisSentinelSpec{} literals
+  - `internal/controller/translator/v2/redis.go` - Creates WBRedisSentinelSpec{} literals with defaults
 
 #### WBRedisSentinelConfig
 - 📝 **Defined**: `api/v2/weightsandbiases_types.go:118`
 - 📖 **Read by**:
-  - `internal/model/redis.go` - Reads sentinel config
+  - `internal/controller/translator/v2/redis.go` - Reads for merging with defaults
 - ✍️ **Written by**:
-  - `internal/controller/translator/v2/redis.go` - Creates WBRedisSentinelConfig{} literals
+  - `internal/controller/translator/v2/redis.go` - Creates WBRedisSentinelConfig{} literals with defaults
 
 #### WBRedisStatus
 - 📝 **Defined**: `api/v2/weightsandbiases_types.go:305`
@@ -132,24 +127,22 @@ This document maps struct definitions and their usage (reads/writes) across the 
 - 📝 **Defined**: `api/v2/weightsandbiases_types.go:123`
 - 📖 **Read by**:
   - `internal/controller/translator/v2/kafka.go` - BuildKafkaSpec(), BuildKafkaDefaults()
-  - `internal/model/config.go` - InfraConfigBuilder.Kafka field
-  - `internal/model/kafka.go` - NewKafkaConfig() reads spec
 - ✍️ **Written by**:
-  - `internal/controller/translator/v2/kafka.go` - Creates WBKafkaSpec{} literals
+  - `internal/controller/translator/v2/kafka.go` - Creates WBKafkaSpec{} literals with defaults
 
 #### WBKafkaConfig
 - 📝 **Defined**: `api/v2/weightsandbiases_types.go:134`
 - 📖 **Read by**:
-  - `internal/model/kafka.go` - Reads config fields
+  - `internal/controller/translator/v2/kafka.go` - Reads for merging with defaults
 - ✍️ **Written by**:
-  - `internal/controller/translator/v2/kafka.go` - Creates WBKafkaConfig{} literals
+  - `internal/controller/translator/v2/kafka.go` - Creates WBKafkaConfig{} literals with defaults
 
 #### WBKafkaBackupSpec
 - 📝 **Defined**: `api/v2/weightsandbiases_types.go:138`
 - 📖 **Read by**:
-  - `internal/model/kafka.go` - Reads backup configuration
+  - `internal/controller/translator/v2/kafka.go` - Reads backup configuration
 - ✍️ **Written by**:
-  - `internal/controller/translator/v2/kafka.go` - Creates WBKafkaBackupSpec{} literals
+  - `internal/controller/translator/v2/kafka.go` - Creates WBKafkaBackupSpec{} literals with defaults
 
 #### WBKafkaStatus
 - 📝 **Defined**: `api/v2/weightsandbiases_types.go:326`
@@ -172,24 +165,22 @@ This document maps struct definitions and their usage (reads/writes) across the 
 - 📝 **Defined**: `api/v2/weightsandbiases_types.go:146`
 - 📖 **Read by**:
   - `internal/controller/translator/v2/minio.go` - BuildMinioSpec(), BuildMinioDefaults()
-  - `internal/model/config.go` - InfraConfigBuilder.Minio field
-  - `internal/model/minio.go` - NewMinioConfig() reads spec
 - ✍️ **Written by**:
-  - `internal/controller/translator/v2/minio.go` - Creates WBMinioSpec{} literals
+  - `internal/controller/translator/v2/minio.go` - Creates WBMinioSpec{} literals with defaults
 
 #### WBMinioConfig
 - 📝 **Defined**: `api/v2/weightsandbiases_types.go:158`
 - 📖 **Read by**:
-  - `internal/model/minio.go` - Reads config fields
+  - `internal/controller/translator/v2/minio.go` - Reads for merging with defaults
 - ✍️ **Written by**:
-  - `internal/controller/translator/v2/minio.go` - Creates WBMinioConfig{} literals
+  - `internal/controller/translator/v2/minio.go` - Creates WBMinioConfig{} literals with defaults
 
 #### WBMinioBackupSpec
 - 📝 **Defined**: `api/v2/weightsandbiases_types.go:162`
 - 📖 **Read by**:
-  - `internal/model/minio.go` - Reads backup configuration
+  - `internal/controller/translator/v2/minio.go` - Reads backup configuration
 - ✍️ **Written by**:
-  - `internal/controller/translator/v2/minio.go` - Creates WBMinioBackupSpec{} literals
+  - `internal/controller/translator/v2/minio.go` - Creates WBMinioBackupSpec{} literals with defaults
 
 #### WBMinioStatus
 - 📝 **Defined**: `api/v2/weightsandbiases_types.go:335`
@@ -212,24 +203,22 @@ This document maps struct definitions and their usage (reads/writes) across the 
 - 📝 **Defined**: `api/v2/weightsandbiases_types.go:170`
 - 📖 **Read by**:
   - `internal/controller/translator/v2/clickhouse.go` - BuildClickHouseSpec(), BuildClickHouseDefaults()
-  - `internal/model/config.go` - InfraConfigBuilder.ClickHouse field
-  - `internal/model/clickhouse.go` - NewClickHouseConfig() reads spec
 - ✍️ **Written by**:
-  - `internal/controller/translator/v2/clickhouse.go` - Creates WBClickHouseSpec{} literals
+  - `internal/controller/translator/v2/clickhouse.go` - Creates WBClickHouseSpec{} literals with defaults
 
 #### WBClickHouseConfig
 - 📝 **Defined**: `api/v2/weightsandbiases_types.go:183`
 - 📖 **Read by**:
-  - `internal/model/clickhouse.go` - Reads config fields
+  - `internal/controller/translator/v2/clickhouse.go` - Reads for merging with defaults
 - ✍️ **Written by**:
-  - `internal/controller/translator/v2/clickhouse.go` - Creates WBClickHouseConfig{} literals
+  - `internal/controller/translator/v2/clickhouse.go` - Creates WBClickHouseConfig{} literals with defaults
 
 #### WBClickHouseBackupSpec
 - 📝 **Defined**: `api/v2/weightsandbiases_types.go:187`
 - 📖 **Read by**:
-  - `internal/model/clickhouse.go` - Reads backup configuration
+  - `internal/controller/translator/v2/clickhouse.go` - Reads backup configuration
 - ✍️ **Written by**:
-  - `internal/controller/translator/v2/clickhouse.go` - Creates WBClickHouseBackupSpec{} literals
+  - `internal/controller/translator/v2/clickhouse.go` - Creates WBClickHouseBackupSpec{} literals with defaults
 
 #### WBClickHouseStatus
 - 📝 **Defined**: `api/v2/weightsandbiases_types.go:351`
@@ -319,8 +308,7 @@ This document maps struct definitions and their usage (reads/writes) across the 
   - `internal/controller/wandb_v2/weightsandbiases_v2_controller.go` - Reads built configuration
   - All infrastructure reconcilers read their respective config fields
 - ✍️ **Written by**:
-  - `internal/model/config.go` - NewInfraConfigBuilder() creates and populates
-  - `internal/controller/translator/v2/*.go` - Translators write to builder fields
+  - `internal/controller/translator/v2/*.go` - Translators populate builder with api/v2 specs that have defaults merged
 
 ### MySQL Model Structs
 
@@ -329,7 +317,7 @@ This document maps struct definitions and their usage (reads/writes) across the 
 - 📖 **Read by**:
   - `internal/controller/infra/mysql/percona/*.go` - Reads config to build Percona resources
 - ✍️ **Written by**:
-  - `internal/model/mysql.go` - NewMySQLConfig() creates from api/v2 spec
+  - `internal/model/mysql.go` - NewMySQLConfig() creates defaults based on Size, independent of api/v2 spec
 
 #### MySQLConnInfo
 - 📝 **Defined**: `internal/model/mysql.go:262`
@@ -357,7 +345,7 @@ This document maps struct definitions and their usage (reads/writes) across the 
 - 📖 **Read by**:
   - `internal/model/mysql.go` - Reads for resource sizing
 - ✍️ **Written by**:
-  - `internal/model/mysql.go` - Created based on WBSize enum
+  - `internal/model/mysql.go` - Created based on Size enum (Small, Medium, Large)
 
 #### MySQLInfraError
 - 📝 **Defined**: `internal/model/mysql.go:188`
@@ -373,7 +361,7 @@ This document maps struct definitions and their usage (reads/writes) across the 
 - 📖 **Read by**:
   - `internal/controller/infra/redis/opstree/*.go` - Reads config to build Redis resources
 - ✍️ **Written by**:
-  - `internal/model/redis.go` - NewRedisConfig() creates from api/v2 spec
+  - `internal/model/redis.go` - NewRedisConfig() creates defaults based on Size, independent of api/v2 spec
 
 #### sentinelConfig
 - 📝 **Defined**: `internal/model/redis.go:29`
@@ -431,7 +419,7 @@ This document maps struct definitions and their usage (reads/writes) across the 
 - 📖 **Read by**:
   - `internal/controller/infra/kafka/strimzi/*.go` - Reads config to build Kafka resources
 - ✍️ **Written by**:
-  - `internal/model/kafka.go` - NewKafkaConfig() creates from api/v2 spec
+  - `internal/model/kafka.go` - NewKafkaConfig() creates defaults based on Size, independent of api/v2 spec
 
 #### KafkaReplicationConfig
 - 📝 **Defined**: `internal/model/kafka.go:27`
@@ -475,14 +463,14 @@ This document maps struct definitions and their usage (reads/writes) across the 
 - 📖 **Read by**:
   - `internal/controller/infra/minio/tenant/*.go` - Reads config to build Minio Tenant resources
 - ✍️ **Written by**:
-  - `internal/model/minio.go` - NewMinioConfig() creates from api/v2 spec
+  - `internal/model/minio.go` - NewMinioConfig() creates defaults based on Size, independent of api/v2 spec
 
 #### MinioSizeConfig
 - 📝 **Defined**: `internal/model/minio.go:88`
 - 📖 **Read by**:
   - `internal/model/minio.go` - Reads for resource sizing
 - ✍️ **Written by**:
-  - `internal/model/minio.go` - Created based on WBSize enum
+  - `internal/model/minio.go` - Created based on Size enum (Small, Medium, Large)
 
 #### MinioConnInfo
 - 📝 **Defined**: `internal/model/minio.go:208`
@@ -519,7 +507,7 @@ This document maps struct definitions and their usage (reads/writes) across the 
 - 📖 **Read by**:
   - `internal/controller/infra/clickhouse/altinity/*.go` - Reads config to build ClickHouse resources
 - ✍️ **Written by**:
-  - `internal/model/clickhouse.go` - NewClickHouseConfig() creates from api/v2 spec
+  - `internal/model/clickhouse.go` - NewClickHouseConfig() creates defaults based on Size, independent of api/v2 spec
 
 #### ClickHouseConnInfo
 - 📝 **Defined**: `internal/model/clickhouse.go:163`
@@ -920,20 +908,23 @@ This document maps struct definitions and their usage (reads/writes) across the 
 **Primary Role**: Business logic layer for configuration and status
 
 **Reads from**:
-- `api/v2.WB*Spec` types - Reads all infrastructure specs
-- `api/v2.WB*Config` types - Reads all infrastructure configs
+- `internal/model.*Config` types - Reads its own config structs for transformations
+- `internal/model.*StatusDetail` types - Reads its own status structs for conversions
+- `internal/model.*ConnInfo` types - Reads its own connection info structs for conversions
 
 **Writes to**:
-- `internal/model.*Config` types - Creates internal config structs
-- `internal/model.*StatusDetail` types - Creates status detail structs
-- `internal/model.*ConnInfo` types - Creates connection info structs
-- `api/v2.WB*Status` types - Creates API status structs
-- `api/v2.WB*Connection` types - Creates API connection structs
+- `internal/model.*Config` types - Creates internal config structs based on Size defaults
+- `internal/model.*StatusDetail` types - Creates status detail structs from infra results
+- `internal/model.*ConnInfo` types - Creates connection info structs from configs
+- `api/v2.WB*Status` types - Converts StatusDetail to API status structs
+- `api/v2.WB*Connection` types - Converts ConnInfo to API connection structs
 
 **Files**:
-- `config.go` - InfraConfigBuilder
+- `config.go` - InfraConfigBuilder (holds api/v2 specs populated by translator)
 - `redis.go`, `kafka.go`, `mysql.go`, `minio.go`, `clickhouse.go` - Infrastructure-specific models
 - `interface.go` - Common interfaces
+
+**Key Note**: internal/model does NOT import or read from api/v2 types. It creates default configs based on Size enums and converts its own internal types to api/v2 status types.
 
 ### internal/controller/infra/*/
 **Primary Role**: Creates actual Kubernetes resources for infrastructure operators
@@ -1023,37 +1014,44 @@ This document maps struct definitions and their usage (reads/writes) across the 
 ## 5. Data Flow Diagram
 
 ```
-User Manifest (api/v2)
+User Manifest (api/v2.WeightsAndBiasesSpec)
         ↓
 internal/controller/wandb_v2/weightsandbiases_v2_controller.go
         ↓ (reads WeightsAndBiasesSpec)
         ↓
-internal/controller/translator/v2/*.go
-        ↓ (builds defaults, merges specs)
-        ↓ (writes WB*Spec with defaults)
+internal/controller/translator/v2/*.go (TRANSLATOR LAYER - THE BRIDGE)
+        ↓ (reads api/v2.WB*Spec from user)
+        ↓ (builds defaults for missing fields)
+        ↓ (merges user input with defaults)
+        ↓ (writes back to api/v2.WB*Spec with complete defaults)
+        ↓ (populates InfraConfigBuilder with merged specs)
         ↓
 internal/model/config.go (InfraConfigBuilder)
-        ↓ (converts api/v2 specs to internal model)
+        ↓ (holds api/v2 specs with defaults - NO direct api/v2 import in model)
+        ↓ (passed to model constructors as plain structs)
         ↓
-internal/model/*.go (RedisConfig, KafkaConfig, etc.)
-        ↓ (creates internal config structs)
+internal/model/*.go (RedisConfig, KafkaConfig, MySQLConfig, MinioConfig, ClickHouseConfig)
+        ↓ (creates internal config structs using Size-based defaults)
+        ↓ (NO direct reading of api/v2 types)
         ↓
 internal/controller/infra/*/desired.go
-        ↓ (reads internal config)
-        ↓ (writes vendored operator structs)
+        ↓ (reads internal/model.*Config)
+        ↓ (creates vendored operator structs)
         ↓
 Vendored Operator CRs (Redis, Kafka, MySQL, Minio, ClickHouse)
         ↓
 Kubernetes API
         ↓
 Operator Controllers (external)
-        ↓ (updates status)
+        ↓ (updates vendored operator status)
         ↓
 internal/controller/infra/*/actual.go
-        ↓ (reads actual resources)
+        ↓ (reads vendored operator status)
+        ↓ (creates internal/model.*StatusDetail)
         ↓
-internal/model/*.go (StatusDetail, ConnInfo)
-        ↓ (creates status structs)
+internal/model/*.go
+        ↓ (converts internal StatusDetail → api/v2.WB*Status)
+        ↓ (converts internal ConnInfo → api/v2.WB*Connection)
         ↓
 internal/controller/wandb_v2/*.go
         ↓ (writes status back to api/v2)
@@ -1061,31 +1059,49 @@ internal/controller/wandb_v2/*.go
 api/v2.WeightsAndBiasesStatus
 ```
 
+**Key Points**:
+- **Translator is the bridge** between api/v2 and model
+- **internal/model does NOT import api/v2** - it creates Size-based defaults
+- **Data flows**: api/v2 → translator → model → infra → vendored operators
+- **Status flows**: vendored operators → infra → model → translator → api/v2
+
 ---
 
 ## 6. Cross-Package Struct Dependencies
 
-### api/v2 → internal/model
-- All `WB*Spec` types are read by corresponding model types
-- All `WB*Config` types are read by corresponding model types
+### internal/controller/translator/v2 ↔ api/v2 (THE BRIDGE)
+- **Translator reads**: All `WB*Spec` and `WB*Config` types from user input
+- **Translator writes**: All `WB*Spec` and `WB*Config` types with defaults merged
+- **Role**: The ONLY layer that directly manipulates api/v2 infrastructure spec types
 
-### internal/model → api/v2
-- All `*StatusDetail` types write to corresponding `WB*Status` types
-- All `*ConnInfo` types write to corresponding `WB*Connection` types
+### internal/controller/translator/v2 → internal/model
+- **Translator writes**: Populates `InfraConfigBuilder` with api/v2 specs that have defaults
+- **Model reads**: Accesses specs from builder (NOT direct api/v2 import)
+
+### internal/model → internal/model (internal conversions)
+- `*Config` types → `*ConnInfo` types (via ToConnInfo() methods)
+- `*StatusDetail` types → `api/v2.WB*Status` types (via ToStatus() methods)
+- `*ConnInfo` types → `api/v2.WB*Connection` types (via conversion methods)
 
 ### internal/model → internal/controller/infra/*
-- All `*Config` types (RedisConfig, KafkaConfig, etc.) are read by infrastructure controllers
+- All `*Config` types (RedisConfig, KafkaConfig, MySQLConfig, MinioConfig, ClickHouseConfig) are read by infrastructure controllers
 
-### internal/controller/infra/* → vendored operators
-- Infrastructure controllers write to all vendored operator struct types
-- Infrastructure controllers read from actual vendored operator resources
+### internal/controller/infra/* ↔ vendored operators
+- **Infra writes**: Creates all vendored operator struct types (Redis, Kafka, MySQL, Minio, ClickHouse CRs)
+- **Infra reads**: Reads actual vendored operator resources and status
 
-### internal/controller/translator/v2 → api/v2
-- Translators read and write all `WB*Spec` and `WB*Config` types
+### internal/controller/infra/* → internal/model
+- **Infra writes**: Creates `*StatusDetail` types from vendored operator status
 
 ### internal/controller/wandb_v2 → api/v2
-- Main controller reads all spec types
-- Main controller writes all status types
+- **Main controller reads**: All spec types (WeightsAndBiasesSpec)
+- **Main controller writes**: All status types (WeightsAndBiasesStatus)
+
+### Key Architectural Principle
+**internal/model does NOT import api/v2**. The translator layer acts as the bridge:
+- User input (api/v2) → Translator → InfraConfigBuilder → Model
+- Model status → Translator (optional) → api/v2 status
+- This separation keeps the model layer decoupled from the API layer
 
 ---
 
@@ -1114,12 +1130,14 @@ Vendored operator types have their own generated DeepCopy methods and operator-s
 
 ## Notes
 
-1. **api/v2** defines the user-facing API
-2. **internal/controller/translator/v2** builds defaults and merges user input with defaults
-3. **internal/model** provides business logic and conversions between API and internal representations
-4. **internal/controller/infra** creates actual operator CRs from internal config
+1. **api/v2** defines the user-facing API (CRD types)
+2. **internal/controller/translator/v2** is THE BRIDGE - reads api/v2, builds defaults, merges, writes back to api/v2
+3. **internal/model** does NOT import api/v2 - creates Size-based defaults and converts internal types to api/v2 status
+4. **internal/controller/infra** creates actual operator CRs from internal/model configs
 5. **internal/controller/wandb_v2** orchestrates the entire flow and updates status
 
 All struct usage follows a clear pattern:
-- **Read**: User spec → Translator → Model → Infrastructure controller
-- **Write**: Infrastructure actual → Model → Status update → User status
+- **Config Flow**: User spec (api/v2) → Translator (bridge) → InfraConfigBuilder → Model (no api/v2 import) → Infrastructure controller → Vendored operators
+- **Status Flow**: Vendored operators → Infrastructure controller → Model StatusDetail → Model conversion → api/v2 Status
+
+**Critical Architectural Point**: internal/model is decoupled from api/v2. The translator acts as the adapter/bridge layer.
