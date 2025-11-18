@@ -4,8 +4,24 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/internal/model"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+)
+
+var (
+	defaultSmallMySQLCpuRequest    = resource.MustParse(model.SmallMySQLCpuRequest)
+	defaultSmallMySQLCpuLimit      = resource.MustParse(model.SmallMySQLCpuLimit)
+	defaultSmallMySQLMemoryRequest = resource.MustParse(model.SmallMySQLMemoryRequest)
+	defaultSmallMySQLMemoryLimit   = resource.MustParse(model.SmallMySQLMemoryLimit)
+
+	overrideMySQLStorageSize   = "25Gi"
+	overrideMySQLNamespace     = "custom-namespace"
+	overrideMySQLEnabled       = false
+	overrideMySQLCpuRequest    = resource.MustParse("750m")
+	overrideMySQLCpuLimit      = resource.MustParse("1500m")
+	overrideMySQLMemoryRequest = resource.MustParse("1.5Gi")
+	overrideMySQLMemoryLimit   = resource.MustParse("3Gi")
 )
 
 var _ = Describe("BuildMySQLSpec", func() {
@@ -34,12 +50,12 @@ var _ = Describe("BuildMySQLSpec", func() {
 					Config: &apiv2.WBMySQLConfig{
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
-								corev1.ResourceCPU:    resource.MustParse("500m"),
-								corev1.ResourceMemory: resource.MustParse("1Gi"),
+								corev1.ResourceCPU:    defaultSmallMySQLCpuRequest,
+								corev1.ResourceMemory: defaultSmallMySQLMemoryRequest,
 							},
 							Limits: corev1.ResourceList{
-								corev1.ResourceCPU:    resource.MustParse("1000m"),
-								corev1.ResourceMemory: resource.MustParse("2Gi"),
+								corev1.ResourceCPU:    defaultSmallMySQLCpuLimit,
+								corev1.ResourceMemory: defaultSmallMySQLMemoryLimit,
 							},
 						},
 					},
@@ -48,10 +64,10 @@ var _ = Describe("BuildMySQLSpec", func() {
 				result, err := BuildMySQLSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.Config).ToNot(BeNil())
-				Expect(result.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(resource.MustParse("500m")))
-				Expect(result.Config.Resources.Requests[corev1.ResourceMemory]).To(Equal(resource.MustParse("1Gi")))
-				Expect(result.Config.Resources.Limits[corev1.ResourceCPU]).To(Equal(resource.MustParse("1000m")))
-				Expect(result.Config.Resources.Limits[corev1.ResourceMemory]).To(Equal(resource.MustParse("2Gi")))
+				Expect(result.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(defaultSmallMySQLCpuRequest))
+				Expect(result.Config.Resources.Requests[corev1.ResourceMemory]).To(Equal(defaultSmallMySQLMemoryRequest))
+				Expect(result.Config.Resources.Limits[corev1.ResourceCPU]).To(Equal(defaultSmallMySQLCpuLimit))
+				Expect(result.Config.Resources.Limits[corev1.ResourceMemory]).To(Equal(defaultSmallMySQLMemoryLimit))
 			})
 		})
 
@@ -61,7 +77,7 @@ var _ = Describe("BuildMySQLSpec", func() {
 					Config: &apiv2.WBMySQLConfig{
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
-								corev1.ResourceCPU: resource.MustParse("250m"),
+								corev1.ResourceCPU: overrideMySQLCpuRequest,
 							},
 						},
 					},
@@ -73,7 +89,7 @@ var _ = Describe("BuildMySQLSpec", func() {
 				result, err := BuildMySQLSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.Config).ToNot(BeNil())
-				Expect(result.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(resource.MustParse("250m")))
+				Expect(result.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(overrideMySQLCpuRequest))
 			})
 		})
 
@@ -83,10 +99,10 @@ var _ = Describe("BuildMySQLSpec", func() {
 					Config: &apiv2.WBMySQLConfig{
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
-								corev1.ResourceCPU: resource.MustParse("750m"),
+								corev1.ResourceCPU: overrideMySQLCpuRequest,
 							},
 							Limits: corev1.ResourceList{
-								corev1.ResourceMemory: resource.MustParse("3Gi"),
+								corev1.ResourceMemory: overrideMySQLMemoryLimit,
 							},
 						},
 					},
@@ -95,12 +111,12 @@ var _ = Describe("BuildMySQLSpec", func() {
 					Config: &apiv2.WBMySQLConfig{
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
-								corev1.ResourceCPU:    resource.MustParse("500m"),
-								corev1.ResourceMemory: resource.MustParse("1Gi"),
+								corev1.ResourceCPU:    defaultSmallMySQLCpuRequest,
+								corev1.ResourceMemory: defaultSmallMySQLMemoryRequest,
 							},
 							Limits: corev1.ResourceList{
-								corev1.ResourceCPU:    resource.MustParse("1000m"),
-								corev1.ResourceMemory: resource.MustParse("2Gi"),
+								corev1.ResourceCPU:    defaultSmallMySQLCpuLimit,
+								corev1.ResourceMemory: defaultSmallMySQLMemoryLimit,
 							},
 						},
 					},
@@ -109,10 +125,10 @@ var _ = Describe("BuildMySQLSpec", func() {
 				result, err := BuildMySQLSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.Config).ToNot(BeNil())
-				Expect(result.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(resource.MustParse("750m")))
-				Expect(result.Config.Resources.Requests[corev1.ResourceMemory]).To(Equal(resource.MustParse("1Gi")))
-				Expect(result.Config.Resources.Limits[corev1.ResourceCPU]).To(Equal(resource.MustParse("1000m")))
-				Expect(result.Config.Resources.Limits[corev1.ResourceMemory]).To(Equal(resource.MustParse("3Gi")))
+				Expect(result.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(overrideMySQLCpuRequest))
+				Expect(result.Config.Resources.Requests[corev1.ResourceMemory]).To(Equal(defaultSmallMySQLMemoryRequest))
+				Expect(result.Config.Resources.Limits[corev1.ResourceCPU]).To(Equal(defaultSmallMySQLCpuLimit))
+				Expect(result.Config.Resources.Limits[corev1.ResourceMemory]).To(Equal(overrideMySQLMemoryLimit))
 			})
 		})
 	})
@@ -124,27 +140,27 @@ var _ = Describe("BuildMySQLSpec", func() {
 					StorageSize: "",
 				}
 				defaults := apiv2.WBMySQLSpec{
-					StorageSize: "10Gi",
+					StorageSize: model.SmallMySQLStorageSize,
 				}
 
 				result, err := BuildMySQLSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(result.StorageSize).To(Equal("10Gi"))
+				Expect(result.StorageSize).To(Equal(model.SmallMySQLStorageSize))
 			})
 		})
 
 		Context("when actual StorageSize is set", func() {
 			It("should use actual StorageSize", func() {
 				actual := apiv2.WBMySQLSpec{
-					StorageSize: "20Gi",
+					StorageSize: overrideMySQLStorageSize,
 				}
 				defaults := apiv2.WBMySQLSpec{
-					StorageSize: "10Gi",
+					StorageSize: model.SmallMySQLStorageSize,
 				}
 
 				result, err := BuildMySQLSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(result.StorageSize).To(Equal("20Gi"))
+				Expect(result.StorageSize).To(Equal(overrideMySQLStorageSize))
 			})
 		})
 
@@ -171,19 +187,19 @@ var _ = Describe("BuildMySQLSpec", func() {
 					Namespace: "",
 				}
 				defaults := apiv2.WBMySQLSpec{
-					Namespace: "default-namespace",
+					Namespace: overrideMySQLNamespace,
 				}
 
 				result, err := BuildMySQLSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(result.Namespace).To(Equal("default-namespace"))
+				Expect(result.Namespace).To(Equal(overrideMySQLNamespace))
 			})
 		})
 
 		Context("when actual Namespace is set", func() {
 			It("should use actual Namespace", func() {
 				actual := apiv2.WBMySQLSpec{
-					Namespace: "custom-namespace",
+					Namespace: overrideMySQLNamespace,
 				}
 				defaults := apiv2.WBMySQLSpec{
 					Namespace: "default-namespace",
@@ -191,7 +207,7 @@ var _ = Describe("BuildMySQLSpec", func() {
 
 				result, err := BuildMySQLSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(result.Namespace).To(Equal("custom-namespace"))
+				Expect(result.Namespace).To(Equal(overrideMySQLNamespace))
 			})
 		})
 
@@ -249,12 +265,12 @@ var _ = Describe("BuildMySQLSpec", func() {
 				actual := apiv2.WBMySQLSpec{}
 				defaults := apiv2.WBMySQLSpec{
 					Enabled:     true,
-					Namespace:   "default",
-					StorageSize: "10Gi",
+					Namespace:   overrideMySQLNamespace,
+					StorageSize: model.SmallMySQLStorageSize,
 					Config: &apiv2.WBMySQLConfig{
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
-								corev1.ResourceCPU: resource.MustParse("500m"),
+								corev1.ResourceCPU: defaultSmallMySQLCpuRequest,
 							},
 						},
 					},
@@ -263,24 +279,24 @@ var _ = Describe("BuildMySQLSpec", func() {
 				result, err := BuildMySQLSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.Enabled).To(BeFalse())
-				Expect(result.Namespace).To(Equal("default"))
-				Expect(result.StorageSize).To(Equal("10Gi"))
+				Expect(result.Namespace).To(Equal(overrideMySQLNamespace))
+				Expect(result.StorageSize).To(Equal(model.SmallMySQLStorageSize))
 				Expect(result.Config).ToNot(BeNil())
-				Expect(result.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(resource.MustParse("500m")))
+				Expect(result.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(defaultSmallMySQLCpuRequest))
 			})
 		})
 
 		Context("when actual has all values set", func() {
 			It("should use actual values for all fields", func() {
 				actual := apiv2.WBMySQLSpec{
-					Enabled:     false,
-					Namespace:   "actual-namespace",
-					StorageSize: "25Gi",
+					Enabled:     overrideMySQLEnabled,
+					Namespace:   overrideMySQLNamespace,
+					StorageSize: overrideMySQLStorageSize,
 					Config: &apiv2.WBMySQLConfig{
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
-								corev1.ResourceCPU:    resource.MustParse("2"),
-								corev1.ResourceMemory: resource.MustParse("4Gi"),
+								corev1.ResourceCPU:    overrideMySQLCpuRequest,
+								corev1.ResourceMemory: overrideMySQLMemoryRequest,
 							},
 						},
 					},
@@ -288,11 +304,11 @@ var _ = Describe("BuildMySQLSpec", func() {
 				defaults := apiv2.WBMySQLSpec{
 					Enabled:     true,
 					Namespace:   "default-namespace",
-					StorageSize: "10Gi",
+					StorageSize: model.SmallMySQLStorageSize,
 					Config: &apiv2.WBMySQLConfig{
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
-								corev1.ResourceCPU: resource.MustParse("500m"),
+								corev1.ResourceCPU: defaultSmallMySQLCpuRequest,
 							},
 						},
 					},
@@ -300,11 +316,11 @@ var _ = Describe("BuildMySQLSpec", func() {
 
 				result, err := BuildMySQLSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(result.Enabled).To(BeFalse())
-				Expect(result.Namespace).To(Equal("actual-namespace"))
-				Expect(result.StorageSize).To(Equal("25Gi"))
-				Expect(result.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(resource.MustParse("2")))
-				Expect(result.Config.Resources.Requests[corev1.ResourceMemory]).To(Equal(resource.MustParse("4Gi")))
+				Expect(result.Enabled).To(Equal(overrideMySQLEnabled))
+				Expect(result.Namespace).To(Equal(overrideMySQLNamespace))
+				Expect(result.StorageSize).To(Equal(overrideMySQLStorageSize))
+				Expect(result.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(overrideMySQLCpuRequest))
+				Expect(result.Config.Resources.Requests[corev1.ResourceMemory]).To(Equal(overrideMySQLMemoryRequest))
 			})
 		})
 	})
@@ -326,75 +342,191 @@ var _ = Describe("BuildMySQLSpec", func() {
 	})
 })
 
-var _ = Describe("BuildMySQLDefaults", func() {
+var _ = Describe("InfraConfigBuilder.AddMySQLSpec", func() {
 	const testOwnerNamespace = "test-namespace"
 
-	Describe("Dev profile", func() {
-		Context("when profile is Dev", func() {
-			It("should return a MySQL spec with storage only and no resources", func() {
-				spec, err := BuildMySQLDefaults(apiv2.WBSizeDev, testOwnerNamespace)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(spec.Enabled).To(BeTrue())
-				Expect(spec.Namespace).To(Equal(testOwnerNamespace))
-				Expect(spec.StorageSize).To(Equal(DevMySQLStorageSize))
-				Expect(spec.Config).To(BeNil())
-			})
-		})
-	})
-
-	Describe("Small profile", func() {
-		Context("when profile is Small", func() {
-			It("should return a MySQL spec with full resource requirements", func() {
-				spec, err := BuildMySQLDefaults(apiv2.WBSizeSmall, testOwnerNamespace)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(spec.Enabled).To(BeTrue())
-				Expect(spec.Namespace).To(Equal(testOwnerNamespace))
-				Expect(spec.StorageSize).To(Equal(SmallMySQLStorageSize))
-				Expect(spec.Config).ToNot(BeNil())
-
-				cpuRequest, err := resource.ParseQuantity(SmallMySQLCpuRequest)
-				Expect(err).ToNot(HaveOccurred())
-				cpuLimit, err := resource.ParseQuantity(SmallMySQLCpuLimit)
-				Expect(err).ToNot(HaveOccurred())
-				memoryRequest, err := resource.ParseQuantity(SmallMySQLMemoryRequest)
-				Expect(err).ToNot(HaveOccurred())
-				memoryLimit, err := resource.ParseQuantity(SmallMySQLMemoryLimit)
-				Expect(err).ToNot(HaveOccurred())
-
-				Expect(spec.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(cpuRequest))
-				Expect(spec.Config.Resources.Limits[corev1.ResourceCPU]).To(Equal(cpuLimit))
-				Expect(spec.Config.Resources.Requests[corev1.ResourceMemory]).To(Equal(memoryRequest))
-				Expect(spec.Config.Resources.Limits[corev1.ResourceMemory]).To(Equal(memoryLimit))
-			})
-		})
-	})
-
-	Describe("Invalid profile", func() {
-		Context("when profile is invalid", func() {
-			It("should return an error", func() {
-				_, err := BuildMySQLDefaults(apiv2.WBSize("invalid"), testOwnerNamespace)
-				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("unsupported size for MySQL"))
-				Expect(err.Error()).To(ContainSubstring("only 'dev' and 'small' are supported"))
-			})
-		})
-	})
-
-	Describe("Constants validation", func() {
-		It("should have valid resource quantity constants", func() {
-			quantities := map[string]string{
-				"DevMySQLStorageSize":     DevMySQLStorageSize,
-				"SmallMySQLStorageSize":   SmallMySQLStorageSize,
-				"SmallMySQLCpuRequest":    SmallMySQLCpuRequest,
-				"SmallMySQLCpuLimit":      SmallMySQLCpuLimit,
-				"SmallMySQLMemoryRequest": SmallMySQLMemoryRequest,
-				"SmallMySQLMemoryLimit":   SmallMySQLMemoryLimit,
+	Context("when adding dev size spec", func() {
+		It("should merge actual with dev defaults from model", func() {
+			actual := apiv2.WBMySQLSpec{
+				Enabled: true,
 			}
 
-			for name, value := range quantities {
-				_, err := resource.ParseQuantity(value)
-				Expect(err).ToNot(HaveOccurred(), "Failed to parse %s: %s", name, value)
+			builder := BuildInfraConfig(testOwnerNamespace, apiv2.WBSizeDev)
+			result := builder.AddMySQLSpec(actual)
+
+			Expect(result).To(Equal(builder))
+			Expect(builder.errors).To(BeEmpty())
+			Expect(builder.mergedMySQL).ToNot(BeNil())
+			Expect(builder.mergedMySQL.Enabled).To(BeTrue())
+			Expect(builder.mergedMySQL.Namespace).To(Equal(testOwnerNamespace))
+			Expect(builder.mergedMySQL.StorageSize).To(Equal(model.DevMySQLStorageSize))
+		})
+	})
+
+	Context("when adding small size spec with all overrides", func() {
+		It("should use all overrides and verify they differ from defaults", func() {
+			actual := apiv2.WBMySQLSpec{
+				Enabled:     overrideMySQLEnabled,
+				Namespace:   overrideMySQLNamespace,
+				StorageSize: overrideMySQLStorageSize,
+				Config: &apiv2.WBMySQLConfig{
+					Resources: corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceCPU:    overrideMySQLCpuRequest,
+							corev1.ResourceMemory: overrideMySQLMemoryRequest,
+						},
+						Limits: corev1.ResourceList{
+							corev1.ResourceCPU:    overrideMySQLCpuLimit,
+							corev1.ResourceMemory: overrideMySQLMemoryLimit,
+						},
+					},
+				},
 			}
+
+			builder := BuildInfraConfig(testOwnerNamespace, apiv2.WBSizeSmall)
+			result := builder.AddMySQLSpec(actual)
+
+			Expect(result).To(Equal(builder))
+			Expect(builder.errors).To(BeEmpty())
+			Expect(builder.mergedMySQL).ToNot(BeNil())
+
+			Expect(builder.mergedMySQL.Enabled).To(Equal(overrideMySQLEnabled))
+			Expect(builder.mergedMySQL.Enabled).ToNot(Equal(true))
+
+			Expect(builder.mergedMySQL.Namespace).To(Equal(overrideMySQLNamespace))
+			Expect(builder.mergedMySQL.Namespace).ToNot(Equal(testOwnerNamespace))
+
+			Expect(builder.mergedMySQL.StorageSize).To(Equal(overrideMySQLStorageSize))
+			Expect(builder.mergedMySQL.StorageSize).ToNot(Equal(model.SmallMySQLStorageSize))
+
+			Expect(builder.mergedMySQL.Config).ToNot(BeNil())
+			Expect(builder.mergedMySQL.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(overrideMySQLCpuRequest))
+			Expect(builder.mergedMySQL.Config.Resources.Requests[corev1.ResourceCPU]).ToNot(Equal(defaultSmallMySQLCpuRequest))
+
+			Expect(builder.mergedMySQL.Config.Resources.Requests[corev1.ResourceMemory]).To(Equal(overrideMySQLMemoryRequest))
+			Expect(builder.mergedMySQL.Config.Resources.Requests[corev1.ResourceMemory]).ToNot(Equal(defaultSmallMySQLMemoryRequest))
+
+			Expect(builder.mergedMySQL.Config.Resources.Limits[corev1.ResourceCPU]).To(Equal(overrideMySQLCpuLimit))
+			Expect(builder.mergedMySQL.Config.Resources.Limits[corev1.ResourceCPU]).ToNot(Equal(defaultSmallMySQLCpuLimit))
+
+			Expect(builder.mergedMySQL.Config.Resources.Limits[corev1.ResourceMemory]).To(Equal(overrideMySQLMemoryLimit))
+			Expect(builder.mergedMySQL.Config.Resources.Limits[corev1.ResourceMemory]).ToNot(Equal(defaultSmallMySQLMemoryLimit))
+		})
+	})
+
+	Context("when adding small size spec with storage override only", func() {
+		It("should use override storage and verify it differs from default", func() {
+			actual := apiv2.WBMySQLSpec{
+				Enabled:     true,
+				StorageSize: overrideMySQLStorageSize,
+			}
+
+			builder := BuildInfraConfig(testOwnerNamespace, apiv2.WBSizeSmall)
+			result := builder.AddMySQLSpec(actual)
+
+			Expect(result).To(Equal(builder))
+			Expect(builder.errors).To(BeEmpty())
+			Expect(builder.mergedMySQL.StorageSize).To(Equal(overrideMySQLStorageSize))
+			Expect(builder.mergedMySQL.StorageSize).ToNot(Equal(model.SmallMySQLStorageSize))
+			Expect(builder.mergedMySQL.Config).ToNot(BeNil())
+		})
+	})
+
+	Context("when adding small size spec with namespace override only", func() {
+		It("should use override namespace and verify it differs from default", func() {
+			actual := apiv2.WBMySQLSpec{
+				Enabled:   true,
+				Namespace: overrideMySQLNamespace,
+			}
+
+			builder := BuildInfraConfig(testOwnerNamespace, apiv2.WBSizeSmall)
+			result := builder.AddMySQLSpec(actual)
+
+			Expect(result).To(Equal(builder))
+			Expect(builder.errors).To(BeEmpty())
+			Expect(builder.mergedMySQL.Namespace).To(Equal(overrideMySQLNamespace))
+			Expect(builder.mergedMySQL.Namespace).ToNot(Equal(testOwnerNamespace))
+		})
+	})
+
+	Context("when adding small size spec with resource overrides only", func() {
+		It("should use override resources and verify they differ from defaults", func() {
+			actual := apiv2.WBMySQLSpec{
+				Enabled: true,
+				Config: &apiv2.WBMySQLConfig{
+					Resources: corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceCPU:    overrideMySQLCpuRequest,
+							corev1.ResourceMemory: overrideMySQLMemoryRequest,
+						},
+						Limits: corev1.ResourceList{
+							corev1.ResourceCPU:    overrideMySQLCpuLimit,
+							corev1.ResourceMemory: overrideMySQLMemoryLimit,
+						},
+					},
+				},
+			}
+
+			builder := BuildInfraConfig(testOwnerNamespace, apiv2.WBSizeSmall)
+			result := builder.AddMySQLSpec(actual)
+
+			Expect(result).To(Equal(builder))
+			Expect(builder.errors).To(BeEmpty())
+			Expect(builder.mergedMySQL.Config).ToNot(BeNil())
+
+			Expect(builder.mergedMySQL.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(overrideMySQLCpuRequest))
+			Expect(builder.mergedMySQL.Config.Resources.Requests[corev1.ResourceCPU]).ToNot(Equal(defaultSmallMySQLCpuRequest))
+
+			Expect(builder.mergedMySQL.Config.Resources.Requests[corev1.ResourceMemory]).To(Equal(overrideMySQLMemoryRequest))
+			Expect(builder.mergedMySQL.Config.Resources.Requests[corev1.ResourceMemory]).ToNot(Equal(defaultSmallMySQLMemoryRequest))
+
+			Expect(builder.mergedMySQL.Config.Resources.Limits[corev1.ResourceCPU]).To(Equal(overrideMySQLCpuLimit))
+			Expect(builder.mergedMySQL.Config.Resources.Limits[corev1.ResourceCPU]).ToNot(Equal(defaultSmallMySQLCpuLimit))
+
+			Expect(builder.mergedMySQL.Config.Resources.Limits[corev1.ResourceMemory]).To(Equal(overrideMySQLMemoryLimit))
+			Expect(builder.mergedMySQL.Config.Resources.Limits[corev1.ResourceMemory]).ToNot(Equal(defaultSmallMySQLMemoryLimit))
+		})
+	})
+
+	Context("when size is invalid", func() {
+		It("should append error to builder", func() {
+			actual := apiv2.WBMySQLSpec{Enabled: true}
+			builder := BuildInfraConfig(testOwnerNamespace, apiv2.WBSize("invalid"))
+			result := builder.AddMySQLSpec(actual)
+
+			Expect(result).To(Equal(builder))
+			Expect(builder.errors).ToNot(BeEmpty())
+		})
+	})
+})
+
+var _ = Describe("TranslateMySQLConfig", func() {
+	Context("when translating a complete MySQL config", func() {
+		It("should correctly map all fields to WBMySQLSpec", func() {
+			config := model.MySQLConfig{
+				Enabled:     true,
+				Namespace:   overrideMySQLNamespace,
+				StorageSize: overrideMySQLStorageSize,
+				Resources: corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceCPU:    overrideMySQLCpuRequest,
+						corev1.ResourceMemory: overrideMySQLMemoryRequest,
+					},
+					Limits: corev1.ResourceList{
+						corev1.ResourceCPU:    overrideMySQLCpuLimit,
+						corev1.ResourceMemory: overrideMySQLMemoryLimit,
+					},
+				},
+			}
+
+			spec := TranslateMySQLConfig(config)
+
+			Expect(spec.Enabled).To(Equal(config.Enabled))
+			Expect(spec.Namespace).To(Equal(config.Namespace))
+			Expect(spec.StorageSize).To(Equal(config.StorageSize))
+			Expect(spec.Config).ToNot(BeNil())
+			Expect(spec.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(overrideMySQLCpuRequest))
+			Expect(spec.Config.Resources.Limits[corev1.ResourceMemory]).To(Equal(overrideMySQLMemoryLimit))
 		})
 	})
 })

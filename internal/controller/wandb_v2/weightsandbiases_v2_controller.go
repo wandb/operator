@@ -21,6 +21,7 @@ import (
 	"time"
 
 	apiv2 "github.com/wandb/operator/api/v2"
+	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
 	"github.com/wandb/operator/internal/model"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -107,12 +108,12 @@ func (r *WeightsAndBiasesV2Reconciler) Reconcile(ctx context.Context, req ctrl.R
 		"Spec", wandb.Spec, "Name", wandb.Name, "UID", wandb.UID, "Generation", wandb.Generation,
 	)
 
-	infraConfig := model.BuildInfraConfig(wandb.Namespace).
-		AddRedisSpec(&(wandb.Spec.Redis), wandb.Spec.Size).
-		AddKafkaSpec(&(wandb.Spec.Kafka), wandb.Spec.Size).
-		AddMySQLSpec(&(wandb.Spec.MySQL), wandb.Spec.Size).
-		AddMinioSpec(&(wandb.Spec.Minio), wandb.Spec.Size).
-		AddClickHouseSpec(&(wandb.Spec.ClickHouse), wandb.Spec.Size)
+	infraConfig := translatorv2.BuildInfraConfig(wandb.Namespace, wandb.Spec.Size).
+		AddRedisSpec(wandb.Spec.Redis).
+		AddKafkaSpec(wandb.Spec.Kafka).
+		AddMySQLSpec(wandb.Spec.MySQL).
+		AddMinioSpec(wandb.Spec.Minio).
+		AddClickHouseSpec(wandb.Spec.ClickHouse)
 
 	/////////////////////////
 	// Redis

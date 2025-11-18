@@ -4,8 +4,24 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/internal/model"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+)
+
+var (
+	defaultSmallKafkaCpuRequest    = resource.MustParse(model.SmallKafkaCpuRequest)
+	defaultSmallKafkaCpuLimit      = resource.MustParse(model.SmallKafkaCpuLimit)
+	defaultSmallKafkaMemoryRequest = resource.MustParse(model.SmallKafkaMemoryRequest)
+	defaultSmallKafkaMemoryLimit   = resource.MustParse(model.SmallKafkaMemoryLimit)
+
+	overrideKafkaStorageSize   = "20Gi"
+	overrideKafkaNamespace     = "custom-namespace"
+	overrideKafkaEnabled       = false
+	overrideKafkaCpuRequest    = resource.MustParse("750m")
+	overrideKafkaCpuLimit      = resource.MustParse("1500m")
+	overrideKafkaMemoryRequest = resource.MustParse("2Gi")
+	overrideKafkaMemoryLimit   = resource.MustParse("4Gi")
 )
 
 var _ = Describe("BuildKafkaSpec", func() {
@@ -23,16 +39,13 @@ var _ = Describe("BuildKafkaSpec", func() {
 
 		Context("when actual Config is nil", func() {
 			It("should use default Config", func() {
-				defaultCpuRequest := resource.MustParse("500m")
-				defaultMemoryRequest := resource.MustParse("1Gi")
-
 				actual := apiv2.WBKafkaSpec{Config: nil}
 				defaults := apiv2.WBKafkaSpec{
 					Config: &apiv2.WBKafkaConfig{
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
-								corev1.ResourceCPU:    defaultCpuRequest,
-								corev1.ResourceMemory: defaultMemoryRequest,
+								corev1.ResourceCPU:    defaultSmallKafkaCpuRequest,
+								corev1.ResourceMemory: defaultSmallKafkaMemoryRequest,
 							},
 						},
 					},
@@ -41,20 +54,18 @@ var _ = Describe("BuildKafkaSpec", func() {
 				result, err := BuildKafkaSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.Config).ToNot(BeNil())
-				Expect(result.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(defaultCpuRequest))
-				Expect(result.Config.Resources.Requests[corev1.ResourceMemory]).To(Equal(defaultMemoryRequest))
+				Expect(result.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(defaultSmallKafkaCpuRequest))
+				Expect(result.Config.Resources.Requests[corev1.ResourceMemory]).To(Equal(defaultSmallKafkaMemoryRequest))
 			})
 		})
 
 		Context("when default Config is nil", func() {
 			It("should use actual Config", func() {
-				actualCpuRequest := resource.MustParse("250m")
-
 				actual := apiv2.WBKafkaSpec{
 					Config: &apiv2.WBKafkaConfig{
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
-								corev1.ResourceCPU: actualCpuRequest,
+								corev1.ResourceCPU: overrideKafkaCpuRequest,
 							},
 						},
 					},
@@ -64,21 +75,17 @@ var _ = Describe("BuildKafkaSpec", func() {
 				result, err := BuildKafkaSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.Config).ToNot(BeNil())
-				Expect(result.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(actualCpuRequest))
+				Expect(result.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(overrideKafkaCpuRequest))
 			})
 		})
 
 		Context("when both Config values exist", func() {
 			It("should merge resources with actual taking precedence", func() {
-				actualCpuRequest := resource.MustParse("750m")
-				defaultCpuRequest := resource.MustParse("500m")
-				defaultMemoryRequest := resource.MustParse("1Gi")
-
 				actual := apiv2.WBKafkaSpec{
 					Config: &apiv2.WBKafkaConfig{
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
-								corev1.ResourceCPU: actualCpuRequest,
+								corev1.ResourceCPU: overrideKafkaCpuRequest,
 							},
 						},
 					},
@@ -87,8 +94,8 @@ var _ = Describe("BuildKafkaSpec", func() {
 					Config: &apiv2.WBKafkaConfig{
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
-								corev1.ResourceCPU:    defaultCpuRequest,
-								corev1.ResourceMemory: defaultMemoryRequest,
+								corev1.ResourceCPU:    defaultSmallKafkaCpuRequest,
+								corev1.ResourceMemory: defaultSmallKafkaMemoryRequest,
 							},
 						},
 					},
@@ -96,8 +103,8 @@ var _ = Describe("BuildKafkaSpec", func() {
 
 				result, err := BuildKafkaSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(result.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(actualCpuRequest))
-				Expect(result.Config.Resources.Requests[corev1.ResourceMemory]).To(Equal(defaultMemoryRequest))
+				Expect(result.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(overrideKafkaCpuRequest))
+				Expect(result.Config.Resources.Requests[corev1.ResourceMemory]).To(Equal(defaultSmallKafkaMemoryRequest))
 			})
 		})
 	})
@@ -105,28 +112,23 @@ var _ = Describe("BuildKafkaSpec", func() {
 	Describe("StorageSize merging", func() {
 		Context("when actual StorageSize is empty", func() {
 			It("should use default StorageSize", func() {
-				defaultStorageSize := "10Gi"
-
 				actual := apiv2.WBKafkaSpec{StorageSize: ""}
-				defaults := apiv2.WBKafkaSpec{StorageSize: defaultStorageSize}
+				defaults := apiv2.WBKafkaSpec{StorageSize: model.SmallKafkaStorageSize}
 
 				result, err := BuildKafkaSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(result.StorageSize).To(Equal(defaultStorageSize))
+				Expect(result.StorageSize).To(Equal(model.SmallKafkaStorageSize))
 			})
 		})
 
 		Context("when actual StorageSize is set", func() {
 			It("should use actual StorageSize", func() {
-				actualStorageSize := "20Gi"
-				defaultStorageSize := "10Gi"
-
-				actual := apiv2.WBKafkaSpec{StorageSize: actualStorageSize}
-				defaults := apiv2.WBKafkaSpec{StorageSize: defaultStorageSize}
+				actual := apiv2.WBKafkaSpec{StorageSize: overrideKafkaStorageSize}
+				defaults := apiv2.WBKafkaSpec{StorageSize: model.SmallKafkaStorageSize}
 
 				result, err := BuildKafkaSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(result.StorageSize).To(Equal(actualStorageSize))
+				Expect(result.StorageSize).To(Equal(overrideKafkaStorageSize))
 			})
 		})
 
@@ -145,28 +147,23 @@ var _ = Describe("BuildKafkaSpec", func() {
 	Describe("Namespace merging", func() {
 		Context("when actual Namespace is empty", func() {
 			It("should use default Namespace", func() {
-				defaultNamespace := "default-namespace"
-
 				actual := apiv2.WBKafkaSpec{Namespace: ""}
-				defaults := apiv2.WBKafkaSpec{Namespace: defaultNamespace}
+				defaults := apiv2.WBKafkaSpec{Namespace: overrideKafkaNamespace}
 
 				result, err := BuildKafkaSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(result.Namespace).To(Equal(defaultNamespace))
+				Expect(result.Namespace).To(Equal(overrideKafkaNamespace))
 			})
 		})
 
 		Context("when actual Namespace is set", func() {
 			It("should use actual Namespace", func() {
-				actualNamespace := "custom-namespace"
-				defaultNamespace := "default-namespace"
-
-				actual := apiv2.WBKafkaSpec{Namespace: actualNamespace}
-				defaults := apiv2.WBKafkaSpec{Namespace: defaultNamespace}
+				actual := apiv2.WBKafkaSpec{Namespace: overrideKafkaNamespace}
+				defaults := apiv2.WBKafkaSpec{Namespace: "default-namespace"}
 
 				result, err := BuildKafkaSpec(actual, defaults)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(result.Namespace).To(Equal(actualNamespace))
+				Expect(result.Namespace).To(Equal(overrideKafkaNamespace))
 			})
 		})
 	})
@@ -196,48 +193,191 @@ var _ = Describe("BuildKafkaSpec", func() {
 	})
 })
 
-var _ = Describe("BuildKafkaDefaults", func() {
+var _ = Describe("InfraConfigBuilder.AddKafkaSpec", func() {
 	const testOwnerNamespace = "test-namespace"
 
-	Context("when profile is Dev", func() {
-		It("should return complete dev defaults", func() {
-			spec, err := BuildKafkaDefaults(apiv2.WBSizeDev, testOwnerNamespace)
-			Expect(err).ToNot(HaveOccurred())
+	Context("when adding dev size spec", func() {
+		It("should merge actual with dev defaults from model", func() {
+			actual := apiv2.WBKafkaSpec{
+				Enabled: true,
+			}
 
-			Expect(spec.Enabled).To(BeTrue())
-			Expect(spec.Namespace).To(Equal(testOwnerNamespace))
-			Expect(spec.StorageSize).To(Equal(DevKafkaStorageSize))
-			Expect(spec.Config).To(BeNil())
+			builder := BuildInfraConfig(testOwnerNamespace, apiv2.WBSizeDev)
+			result := builder.AddKafkaSpec(actual)
+
+			Expect(result).To(Equal(builder))
+			Expect(builder.errors).To(BeEmpty())
+			Expect(builder.mergedKafka).ToNot(BeNil())
+			Expect(builder.mergedKafka.Enabled).To(BeTrue())
+			Expect(builder.mergedKafka.Namespace).To(Equal(testOwnerNamespace))
+			Expect(builder.mergedKafka.StorageSize).To(Equal(model.DevKafkaStorageSize))
 		})
 	})
 
-	Context("when profile is Small", func() {
-		It("should return complete small defaults with all resource fields", func() {
-			spec, err := BuildKafkaDefaults(apiv2.WBSizeSmall, testOwnerNamespace)
-			Expect(err).ToNot(HaveOccurred())
+	Context("when adding small size spec with all overrides", func() {
+		It("should use all overrides and verify they differ from defaults", func() {
+			actual := apiv2.WBKafkaSpec{
+				Enabled:     overrideKafkaEnabled,
+				Namespace:   overrideKafkaNamespace,
+				StorageSize: overrideKafkaStorageSize,
+				Config: &apiv2.WBKafkaConfig{
+					Resources: corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceCPU:    overrideKafkaCpuRequest,
+							corev1.ResourceMemory: overrideKafkaMemoryRequest,
+						},
+						Limits: corev1.ResourceList{
+							corev1.ResourceCPU:    overrideKafkaCpuLimit,
+							corev1.ResourceMemory: overrideKafkaMemoryLimit,
+						},
+					},
+				},
+			}
 
-			Expect(spec.Enabled).To(BeTrue())
-			Expect(spec.Namespace).To(Equal(testOwnerNamespace))
-			Expect(spec.StorageSize).To(Equal(SmallKafkaStorageSize))
+			builder := BuildInfraConfig(testOwnerNamespace, apiv2.WBSizeSmall)
+			result := builder.AddKafkaSpec(actual)
+
+			Expect(result).To(Equal(builder))
+			Expect(builder.errors).To(BeEmpty())
+			Expect(builder.mergedKafka).ToNot(BeNil())
+
+			Expect(builder.mergedKafka.Enabled).To(Equal(overrideKafkaEnabled))
+			Expect(builder.mergedKafka.Enabled).ToNot(Equal(true))
+
+			Expect(builder.mergedKafka.Namespace).To(Equal(overrideKafkaNamespace))
+			Expect(builder.mergedKafka.Namespace).ToNot(Equal(testOwnerNamespace))
+
+			Expect(builder.mergedKafka.StorageSize).To(Equal(overrideKafkaStorageSize))
+			Expect(builder.mergedKafka.StorageSize).ToNot(Equal(model.SmallKafkaStorageSize))
+
+			Expect(builder.mergedKafka.Config).ToNot(BeNil())
+			Expect(builder.mergedKafka.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(overrideKafkaCpuRequest))
+			Expect(builder.mergedKafka.Config.Resources.Requests[corev1.ResourceCPU]).ToNot(Equal(defaultSmallKafkaCpuRequest))
+
+			Expect(builder.mergedKafka.Config.Resources.Requests[corev1.ResourceMemory]).To(Equal(overrideKafkaMemoryRequest))
+			Expect(builder.mergedKafka.Config.Resources.Requests[corev1.ResourceMemory]).ToNot(Equal(defaultSmallKafkaMemoryRequest))
+
+			Expect(builder.mergedKafka.Config.Resources.Limits[corev1.ResourceCPU]).To(Equal(overrideKafkaCpuLimit))
+			Expect(builder.mergedKafka.Config.Resources.Limits[corev1.ResourceCPU]).ToNot(Equal(defaultSmallKafkaCpuLimit))
+
+			Expect(builder.mergedKafka.Config.Resources.Limits[corev1.ResourceMemory]).To(Equal(overrideKafkaMemoryLimit))
+			Expect(builder.mergedKafka.Config.Resources.Limits[corev1.ResourceMemory]).ToNot(Equal(defaultSmallKafkaMemoryLimit))
+		})
+	})
+
+	Context("when adding small size spec with storage override only", func() {
+		It("should use override storage and verify it differs from default", func() {
+			actual := apiv2.WBKafkaSpec{
+				Enabled:     true,
+				StorageSize: overrideKafkaStorageSize,
+			}
+
+			builder := BuildInfraConfig(testOwnerNamespace, apiv2.WBSizeSmall)
+			result := builder.AddKafkaSpec(actual)
+
+			Expect(result).To(Equal(builder))
+			Expect(builder.errors).To(BeEmpty())
+			Expect(builder.mergedKafka.StorageSize).To(Equal(overrideKafkaStorageSize))
+			Expect(builder.mergedKafka.StorageSize).ToNot(Equal(model.SmallKafkaStorageSize))
+			Expect(builder.mergedKafka.Config).ToNot(BeNil())
+		})
+	})
+
+	Context("when adding small size spec with namespace override only", func() {
+		It("should use override namespace and verify it differs from default", func() {
+			actual := apiv2.WBKafkaSpec{
+				Enabled:   true,
+				Namespace: overrideKafkaNamespace,
+			}
+
+			builder := BuildInfraConfig(testOwnerNamespace, apiv2.WBSizeSmall)
+			result := builder.AddKafkaSpec(actual)
+
+			Expect(result).To(Equal(builder))
+			Expect(builder.errors).To(BeEmpty())
+			Expect(builder.mergedKafka.Namespace).To(Equal(overrideKafkaNamespace))
+			Expect(builder.mergedKafka.Namespace).ToNot(Equal(testOwnerNamespace))
+		})
+	})
+
+	Context("when adding small size spec with resource overrides only", func() {
+		It("should use override resources and verify they differ from defaults", func() {
+			actual := apiv2.WBKafkaSpec{
+				Enabled: true,
+				Config: &apiv2.WBKafkaConfig{
+					Resources: corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceCPU:    overrideKafkaCpuRequest,
+							corev1.ResourceMemory: overrideKafkaMemoryRequest,
+						},
+						Limits: corev1.ResourceList{
+							corev1.ResourceCPU:    overrideKafkaCpuLimit,
+							corev1.ResourceMemory: overrideKafkaMemoryLimit,
+						},
+					},
+				},
+			}
+
+			builder := BuildInfraConfig(testOwnerNamespace, apiv2.WBSizeSmall)
+			result := builder.AddKafkaSpec(actual)
+
+			Expect(result).To(Equal(builder))
+			Expect(builder.errors).To(BeEmpty())
+			Expect(builder.mergedKafka.Config).ToNot(BeNil())
+
+			Expect(builder.mergedKafka.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(overrideKafkaCpuRequest))
+			Expect(builder.mergedKafka.Config.Resources.Requests[corev1.ResourceCPU]).ToNot(Equal(defaultSmallKafkaCpuRequest))
+
+			Expect(builder.mergedKafka.Config.Resources.Requests[corev1.ResourceMemory]).To(Equal(overrideKafkaMemoryRequest))
+			Expect(builder.mergedKafka.Config.Resources.Requests[corev1.ResourceMemory]).ToNot(Equal(defaultSmallKafkaMemoryRequest))
+
+			Expect(builder.mergedKafka.Config.Resources.Limits[corev1.ResourceCPU]).To(Equal(overrideKafkaCpuLimit))
+			Expect(builder.mergedKafka.Config.Resources.Limits[corev1.ResourceCPU]).ToNot(Equal(defaultSmallKafkaCpuLimit))
+
+			Expect(builder.mergedKafka.Config.Resources.Limits[corev1.ResourceMemory]).To(Equal(overrideKafkaMemoryLimit))
+			Expect(builder.mergedKafka.Config.Resources.Limits[corev1.ResourceMemory]).ToNot(Equal(defaultSmallKafkaMemoryLimit))
+		})
+	})
+
+	Context("when size is invalid", func() {
+		It("should append error to builder", func() {
+			actual := apiv2.WBKafkaSpec{Enabled: true}
+			builder := BuildInfraConfig(testOwnerNamespace, apiv2.WBSize("invalid"))
+			result := builder.AddKafkaSpec(actual)
+
+			Expect(result).To(Equal(builder))
+			Expect(builder.errors).ToNot(BeEmpty())
+		})
+	})
+})
+
+var _ = Describe("TranslateKafkaConfig", func() {
+	Context("when translating a complete Kafka config", func() {
+		It("should correctly map all fields to WBKafkaSpec", func() {
+			config := model.KafkaConfig{
+				Enabled:     true,
+				Namespace:   overrideKafkaNamespace,
+				StorageSize: overrideKafkaStorageSize,
+				Resources: corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceCPU:    overrideKafkaCpuRequest,
+						corev1.ResourceMemory: overrideKafkaMemoryRequest,
+					},
+					Limits: corev1.ResourceList{
+						corev1.ResourceCPU:    overrideKafkaCpuLimit,
+						corev1.ResourceMemory: overrideKafkaMemoryLimit,
+					},
+				},
+			}
+
+			spec := TranslateKafkaConfig(config)
+
+			Expect(spec.Enabled).To(Equal(config.Enabled))
+			Expect(spec.Namespace).To(Equal(config.Namespace))
+			Expect(spec.StorageSize).To(Equal(config.StorageSize))
 			Expect(spec.Config).ToNot(BeNil())
-
-			expectedCpuRequest, _ := resource.ParseQuantity(SmallKafkaCpuRequest)
-			expectedCpuLimit, _ := resource.ParseQuantity(SmallKafkaCpuLimit)
-			expectedMemoryRequest, _ := resource.ParseQuantity(SmallKafkaMemoryRequest)
-			expectedMemoryLimit, _ := resource.ParseQuantity(SmallKafkaMemoryLimit)
-
-			Expect(spec.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(expectedCpuRequest))
-			Expect(spec.Config.Resources.Limits[corev1.ResourceCPU]).To(Equal(expectedCpuLimit))
-			Expect(spec.Config.Resources.Requests[corev1.ResourceMemory]).To(Equal(expectedMemoryRequest))
-			Expect(spec.Config.Resources.Limits[corev1.ResourceMemory]).To(Equal(expectedMemoryLimit))
-		})
-	})
-
-	Context("when profile is invalid", func() {
-		It("should return error", func() {
-			_, err := BuildKafkaDefaults(apiv2.WBSize("invalid"), testOwnerNamespace)
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("unsupported size for Kafka"))
+			Expect(spec.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(overrideKafkaCpuRequest))
+			Expect(spec.Config.Resources.Limits[corev1.ResourceCPU]).To(Equal(overrideKafkaCpuLimit))
 		})
 	})
 })

@@ -7,7 +7,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	apiv2 "github.com/wandb/operator/api/v2"
-	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
@@ -38,357 +37,72 @@ var _ = Describe("MySQL Model", func() {
 		})
 	})
 
-	Describe("InfraConfigBuilder", func() {
-		Describe("AddMySQLSpec and GetMySQLConfig", func() {
-			Context("with dev size and empty actual spec", func() {
-				It("should use all dev defaults except Enabled and Namespace", func() {
-					namespaceOverride := "custom-mysql-namespace"
-					actual := apiv2.WBMySQLSpec{
-						Enabled:   true,
-						Namespace: namespaceOverride,
-					}
-					builder := BuildInfraConfig(testingOwnerNamespace).AddMySQLSpec(&actual, apiv2.WBSizeDev)
-
-					Expect(builder.errors).To(BeEmpty())
-					config, err := builder.GetMySQLConfig()
-					Expect(err).ToNot(HaveOccurred())
-
-					Expect(config.Enabled).To(BeTrue())
-					Expect(config.Namespace).To(Equal(namespaceOverride))
-					Expect(config.StorageSize).To(Equal(translatorv2.DevMySQLStorageSize))
-					Expect(config.Replicas).To(Equal(int32(1)))
-					Expect(config.Resources.Requests).To(BeEmpty())
-					Expect(config.Resources.Limits).To(BeEmpty())
-					Expect(config.PXCImage).To(Equal(DevPXCImage))
-					Expect(config.ProxySQLEnabled).To(BeFalse())
-					Expect(config.ProxySQLReplicas).To(Equal(int32(0)))
-					Expect(config.ProxySQLImage).To(BeEmpty())
-					Expect(config.TLSEnabled).To(BeFalse())
-					Expect(config.LogCollectorEnabled).To(BeTrue())
-					Expect(config.LogCollectorImage).To(Equal(LogCollectorImage))
-					Expect(config.AllowUnsafePXCSize).To(BeTrue())
-					Expect(config.AllowUnsafeProxySize).To(BeTrue())
-				})
-			})
-
-			Context("with small size and empty actual spec", func() {
-				It("should use all small defaults including resources except Enabled and Namespace", func() {
-					namespaceOverride := "custom-mysql-namespace"
-					actual := apiv2.WBMySQLSpec{
-						Enabled:   true,
-						Namespace: namespaceOverride,
-					}
-					builder := BuildInfraConfig(testingOwnerNamespace).AddMySQLSpec(&actual, apiv2.WBSizeSmall)
-
-					Expect(builder.errors).To(BeEmpty())
-					config, err := builder.GetMySQLConfig()
-					Expect(err).ToNot(HaveOccurred())
-
-					Expect(config.Enabled).To(BeTrue())
-					Expect(config.Namespace).To(Equal(namespaceOverride))
-					Expect(config.StorageSize).To(Equal(translatorv2.SmallMySQLStorageSize))
-					Expect(config.Replicas).To(Equal(int32(3)))
-					Expect(config.Resources.Requests[v1.ResourceCPU]).To(Equal(resource.MustParse(translatorv2.SmallMySQLCpuRequest)))
-					Expect(config.Resources.Requests[v1.ResourceMemory]).To(Equal(resource.MustParse(translatorv2.SmallMySQLMemoryRequest)))
-					Expect(config.Resources.Limits[v1.ResourceCPU]).To(Equal(resource.MustParse(translatorv2.SmallMySQLCpuLimit)))
-					Expect(config.Resources.Limits[v1.ResourceMemory]).To(Equal(resource.MustParse(translatorv2.SmallMySQLMemoryLimit)))
-					Expect(config.PXCImage).To(Equal(SmallPXCImage))
-					Expect(config.ProxySQLEnabled).To(BeTrue())
-					Expect(config.ProxySQLReplicas).To(Equal(int32(3)))
-					Expect(config.ProxySQLImage).To(Equal(ProxySQLImage))
-					Expect(config.TLSEnabled).To(BeTrue())
-					Expect(config.LogCollectorEnabled).To(BeFalse())
-					Expect(config.LogCollectorImage).To(BeEmpty())
-					Expect(config.AllowUnsafePXCSize).To(BeFalse())
-					Expect(config.AllowUnsafeProxySize).To(BeFalse())
-				})
-			})
-
-			Context("with small size and storage override", func() {
-				It("should use override storage and default resources", func() {
-					storageSizeOverride := "50Gi"
-					namespaceOverride := "custom-mysql-namespace"
-					actual := apiv2.WBMySQLSpec{
-						Enabled:     true,
-						Namespace:   namespaceOverride,
-						StorageSize: storageSizeOverride,
-					}
-					builder := BuildInfraConfig(testingOwnerNamespace).AddMySQLSpec(&actual, apiv2.WBSizeSmall)
-
-					Expect(builder.errors).To(BeEmpty())
-					config, err := builder.GetMySQLConfig()
-					Expect(err).ToNot(HaveOccurred())
-
-					Expect(config.Enabled).To(BeTrue())
-					Expect(config.Namespace).To(Equal(namespaceOverride))
-					Expect(config.StorageSize).To(Equal(storageSizeOverride))
-					Expect(config.StorageSize).NotTo(Equal(translatorv2.SmallMySQLStorageSize))
-					Expect(config.Replicas).To(Equal(int32(3)))
-					Expect(config.Resources.Requests[v1.ResourceCPU]).To(Equal(resource.MustParse(translatorv2.SmallMySQLCpuRequest)))
-					Expect(config.Resources.Requests[v1.ResourceMemory]).To(Equal(resource.MustParse(translatorv2.SmallMySQLMemoryRequest)))
-					Expect(config.Resources.Limits[v1.ResourceCPU]).To(Equal(resource.MustParse(translatorv2.SmallMySQLCpuLimit)))
-					Expect(config.Resources.Limits[v1.ResourceMemory]).To(Equal(resource.MustParse(translatorv2.SmallMySQLMemoryLimit)))
-					Expect(config.PXCImage).To(Equal(SmallPXCImage))
-					Expect(config.ProxySQLEnabled).To(BeTrue())
-				})
-			})
-
-			Context("with small size and namespace using default", func() {
-				It("should use default namespace when not provided", func() {
-					actual := apiv2.WBMySQLSpec{
-						Enabled: true,
-					}
-					builder := BuildInfraConfig(testingOwnerNamespace).AddMySQLSpec(&actual, apiv2.WBSizeSmall)
-
-					Expect(builder.errors).To(BeEmpty())
-					config, err := builder.GetMySQLConfig()
-					Expect(err).ToNot(HaveOccurred())
-
-					Expect(config.Enabled).To(BeTrue())
-					Expect(config.Namespace).To(Equal(testingOwnerNamespace))
-					Expect(config.StorageSize).To(Equal(translatorv2.SmallMySQLStorageSize))
-					Expect(config.Replicas).To(Equal(int32(3)))
-				})
-			})
-
-			Context("with small size and resource overrides", func() {
-				It("should use override resources and default storage", func() {
-					cpuRequestOverride := "2"
-					cpuLimitOverride := "4"
-					memoryRequestOverride := "4Gi"
-					memoryLimitOverride := "8Gi"
-					namespaceOverride := "custom-mysql-namespace"
-					actual := apiv2.WBMySQLSpec{
-						Enabled:   true,
-						Namespace: namespaceOverride,
-						Config: &apiv2.WBMySQLConfig{
-							Resources: v1.ResourceRequirements{
-								Requests: v1.ResourceList{
-									v1.ResourceCPU:    resource.MustParse(cpuRequestOverride),
-									v1.ResourceMemory: resource.MustParse(memoryRequestOverride),
-								},
-								Limits: v1.ResourceList{
-									v1.ResourceCPU:    resource.MustParse(cpuLimitOverride),
-									v1.ResourceMemory: resource.MustParse(memoryLimitOverride),
-								},
-							},
-						},
-					}
-					builder := BuildInfraConfig(testingOwnerNamespace).AddMySQLSpec(&actual, apiv2.WBSizeSmall)
-
-					Expect(builder.errors).To(BeEmpty())
-					config, err := builder.GetMySQLConfig()
-					Expect(err).ToNot(HaveOccurred())
-
-					Expect(config.Enabled).To(BeTrue())
-					Expect(config.Namespace).To(Equal(namespaceOverride))
-					Expect(config.StorageSize).To(Equal(translatorv2.SmallMySQLStorageSize))
-					Expect(config.Replicas).To(Equal(int32(3)))
-					Expect(config.Resources.Requests[v1.ResourceCPU]).To(Equal(resource.MustParse(cpuRequestOverride)))
-					Expect(config.Resources.Requests[v1.ResourceCPU]).NotTo(Equal(resource.MustParse(translatorv2.SmallMySQLCpuRequest)))
-					Expect(config.Resources.Requests[v1.ResourceMemory]).To(Equal(resource.MustParse(memoryRequestOverride)))
-					Expect(config.Resources.Requests[v1.ResourceMemory]).NotTo(Equal(resource.MustParse(translatorv2.SmallMySQLMemoryRequest)))
-					Expect(config.Resources.Limits[v1.ResourceCPU]).To(Equal(resource.MustParse(cpuLimitOverride)))
-					Expect(config.Resources.Limits[v1.ResourceCPU]).NotTo(Equal(resource.MustParse(translatorv2.SmallMySQLCpuLimit)))
-					Expect(config.Resources.Limits[v1.ResourceMemory]).To(Equal(resource.MustParse(memoryLimitOverride)))
-					Expect(config.Resources.Limits[v1.ResourceMemory]).NotTo(Equal(resource.MustParse(translatorv2.SmallMySQLMemoryLimit)))
-					Expect(config.PXCImage).To(Equal(SmallPXCImage))
-					Expect(config.ProxySQLEnabled).To(BeTrue())
-					Expect(config.ProxySQLReplicas).To(Equal(int32(3)))
-					Expect(config.ProxySQLImage).To(Equal(ProxySQLImage))
-					Expect(config.TLSEnabled).To(BeTrue())
-					Expect(config.LogCollectorEnabled).To(BeFalse())
-					Expect(config.LogCollectorImage).To(BeEmpty())
-					Expect(config.AllowUnsafePXCSize).To(BeFalse())
-					Expect(config.AllowUnsafeProxySize).To(BeFalse())
-				})
-			})
-
-			Context("with small size and partial resource overrides", func() {
-				It("should merge override and default resources", func() {
-					cpuLimitOverride := "2"
-					namespaceOverride := "custom-mysql-namespace"
-					actual := apiv2.WBMySQLSpec{
-						Enabled:   true,
-						Namespace: namespaceOverride,
-						Config: &apiv2.WBMySQLConfig{
-							Resources: v1.ResourceRequirements{
-								Limits: v1.ResourceList{
-									v1.ResourceCPU: resource.MustParse(cpuLimitOverride),
-								},
-							},
-						},
-					}
-					builder := BuildInfraConfig(testingOwnerNamespace).AddMySQLSpec(&actual, apiv2.WBSizeSmall)
-
-					Expect(builder.errors).To(BeEmpty())
-					config, err := builder.GetMySQLConfig()
-					Expect(err).ToNot(HaveOccurred())
-
-					Expect(config.Enabled).To(BeTrue())
-					Expect(config.Namespace).To(Equal(namespaceOverride))
-					Expect(config.StorageSize).To(Equal(translatorv2.SmallMySQLStorageSize))
-					Expect(config.Replicas).To(Equal(int32(3)))
-					Expect(config.Resources.Requests[v1.ResourceCPU]).To(Equal(resource.MustParse(translatorv2.SmallMySQLCpuRequest)))
-					Expect(config.Resources.Requests[v1.ResourceMemory]).To(Equal(resource.MustParse(translatorv2.SmallMySQLMemoryRequest)))
-					Expect(config.Resources.Limits[v1.ResourceCPU]).To(Equal(resource.MustParse(cpuLimitOverride)))
-					Expect(config.Resources.Limits[v1.ResourceCPU]).NotTo(Equal(resource.MustParse(translatorv2.SmallMySQLCpuLimit)))
-					Expect(config.Resources.Limits[v1.ResourceMemory]).To(Equal(resource.MustParse(translatorv2.SmallMySQLMemoryLimit)))
-					Expect(config.PXCImage).To(Equal(SmallPXCImage))
-					Expect(config.ProxySQLEnabled).To(BeTrue())
-				})
-			})
-
-			Context("with small size and all overrides", func() {
-				It("should use all override values", func() {
-					storageSizeOverride := "100Gi"
-					namespaceOverride := "custom-mysql-namespace"
-					cpuRequestOverride := "3"
-					cpuLimitOverride := "6"
-					memoryRequestOverride := "8Gi"
-					memoryLimitOverride := "16Gi"
-					actual := apiv2.WBMySQLSpec{
-						Enabled:     true,
-						Namespace:   namespaceOverride,
-						StorageSize: storageSizeOverride,
-						Config: &apiv2.WBMySQLConfig{
-							Resources: v1.ResourceRequirements{
-								Requests: v1.ResourceList{
-									v1.ResourceCPU:    resource.MustParse(cpuRequestOverride),
-									v1.ResourceMemory: resource.MustParse(memoryRequestOverride),
-								},
-								Limits: v1.ResourceList{
-									v1.ResourceCPU:    resource.MustParse(cpuLimitOverride),
-									v1.ResourceMemory: resource.MustParse(memoryLimitOverride),
-								},
-							},
-						},
-					}
-					builder := BuildInfraConfig(testingOwnerNamespace).AddMySQLSpec(&actual, apiv2.WBSizeSmall)
-
-					Expect(builder.errors).To(BeEmpty())
-					config, err := builder.GetMySQLConfig()
-					Expect(err).ToNot(HaveOccurred())
-
-					Expect(config.Enabled).To(BeTrue())
-					Expect(config.Namespace).To(Equal(namespaceOverride))
-					Expect(config.StorageSize).To(Equal(storageSizeOverride))
-					Expect(config.StorageSize).NotTo(Equal(translatorv2.SmallMySQLStorageSize))
-					Expect(config.Replicas).To(Equal(int32(3)))
-					Expect(config.Resources.Requests[v1.ResourceCPU]).To(Equal(resource.MustParse(cpuRequestOverride)))
-					Expect(config.Resources.Requests[v1.ResourceCPU]).NotTo(Equal(resource.MustParse(translatorv2.SmallMySQLCpuRequest)))
-					Expect(config.Resources.Requests[v1.ResourceMemory]).To(Equal(resource.MustParse(memoryRequestOverride)))
-					Expect(config.Resources.Requests[v1.ResourceMemory]).NotTo(Equal(resource.MustParse(translatorv2.SmallMySQLMemoryRequest)))
-					Expect(config.Resources.Limits[v1.ResourceCPU]).To(Equal(resource.MustParse(cpuLimitOverride)))
-					Expect(config.Resources.Limits[v1.ResourceCPU]).NotTo(Equal(resource.MustParse(translatorv2.SmallMySQLCpuLimit)))
-					Expect(config.Resources.Limits[v1.ResourceMemory]).To(Equal(resource.MustParse(memoryLimitOverride)))
-					Expect(config.Resources.Limits[v1.ResourceMemory]).NotTo(Equal(resource.MustParse(translatorv2.SmallMySQLMemoryLimit)))
-					Expect(config.PXCImage).To(Equal(SmallPXCImage))
-					Expect(config.ProxySQLEnabled).To(BeTrue())
-					Expect(config.ProxySQLReplicas).To(Equal(int32(3)))
-					Expect(config.ProxySQLImage).To(Equal(ProxySQLImage))
-					Expect(config.TLSEnabled).To(BeTrue())
-					Expect(config.LogCollectorEnabled).To(BeFalse())
-					Expect(config.LogCollectorImage).To(BeEmpty())
-					Expect(config.AllowUnsafePXCSize).To(BeFalse())
-					Expect(config.AllowUnsafeProxySize).To(BeFalse())
-				})
-			})
-
-			Context("with disabled spec", func() {
-				It("should respect enabled false and use defaults for other fields", func() {
-					namespaceOverride := "custom-mysql-namespace"
-					actual := apiv2.WBMySQLSpec{
-						Enabled:   false,
-						Namespace: namespaceOverride,
-					}
-					builder := BuildInfraConfig(testingOwnerNamespace).AddMySQLSpec(&actual, apiv2.WBSizeSmall)
-
-					Expect(builder.errors).To(BeEmpty())
-					config, err := builder.GetMySQLConfig()
-					Expect(err).ToNot(HaveOccurred())
-
-					Expect(config.Enabled).To(BeFalse())
-					Expect(config.Namespace).To(Equal(namespaceOverride))
-					Expect(config.StorageSize).To(Equal(translatorv2.SmallMySQLStorageSize))
-					Expect(config.Replicas).To(Equal(int32(3)))
-					Expect(config.Resources.Requests[v1.ResourceCPU]).To(Equal(resource.MustParse(translatorv2.SmallMySQLCpuRequest)))
-					Expect(config.Resources.Requests[v1.ResourceMemory]).To(Equal(resource.MustParse(translatorv2.SmallMySQLMemoryRequest)))
-					Expect(config.Resources.Limits[v1.ResourceCPU]).To(Equal(resource.MustParse(translatorv2.SmallMySQLCpuLimit)))
-					Expect(config.Resources.Limits[v1.ResourceMemory]).To(Equal(resource.MustParse(translatorv2.SmallMySQLMemoryLimit)))
-					Expect(config.PXCImage).To(Equal(SmallPXCImage))
-					Expect(config.ProxySQLEnabled).To(BeTrue())
-				})
+	Describe("GetMySQLReplicaCountForSize", func() {
+		Context("when size is dev", func() {
+			It("should return 1 replica", func() {
+				count, err := GetMySQLReplicaCountForSize(apiv2.WBSizeDev)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(count).To(Equal(int32(1)))
 			})
 		})
 
-		Describe("GetMySQLReplicaCountForSize", func() {
-			Context("when size is dev", func() {
-				It("should return 1 replica", func() {
-					count, err := GetMySQLReplicaCountForSize(apiv2.WBSizeDev)
-					Expect(err).ToNot(HaveOccurred())
-					Expect(count).To(Equal(int32(1)))
-				})
-			})
-
-			Context("when size is small", func() {
-				It("should return 3 replicas", func() {
-					count, err := GetMySQLReplicaCountForSize(apiv2.WBSizeSmall)
-					Expect(err).ToNot(HaveOccurred())
-					Expect(count).To(Equal(int32(3)))
-				})
-			})
-
-			Context("when size is unsupported", func() {
-				It("should return error", func() {
-					count, err := GetMySQLReplicaCountForSize(apiv2.WBSize("large"))
-					Expect(err).To(HaveOccurred())
-					Expect(err.Error()).To(ContainSubstring("unsupported size for MySQL"))
-					Expect(count).To(Equal(int32(0)))
-				})
+		Context("when size is small", func() {
+			It("should return 3 replicas", func() {
+				count, err := GetMySQLReplicaCountForSize(apiv2.WBSizeSmall)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(count).To(Equal(int32(3)))
 			})
 		})
 
-		Describe("GetMySQLConfigForSize", func() {
-			Context("when size is dev", func() {
-				It("should return dev config", func() {
-					config, err := GetMySQLConfigForSize(apiv2.WBSizeDev)
-					Expect(err).ToNot(HaveOccurred())
-					Expect(config.PXCImage).To(Equal(DevPXCImage))
-					Expect(config.ProxySQLEnabled).To(BeFalse())
-					Expect(config.ProxySQLReplicas).To(Equal(int32(0)))
-					Expect(config.ProxySQLImage).To(BeEmpty())
-					Expect(config.TLSEnabled).To(BeFalse())
-					Expect(config.LogCollectorEnabled).To(BeTrue())
-					Expect(config.LogCollectorImage).To(Equal(LogCollectorImage))
-					Expect(config.AllowUnsafePXCSize).To(BeTrue())
-					Expect(config.AllowUnsafeProxySize).To(BeTrue())
-				})
+		Context("when size is unsupported", func() {
+			It("should return error", func() {
+				count, err := GetMySQLReplicaCountForSize(apiv2.WBSize("large"))
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("unsupported size for MySQL"))
+				Expect(count).To(Equal(int32(0)))
 			})
+		})
+	})
 
-			Context("when size is small", func() {
-				It("should return small config", func() {
-					config, err := GetMySQLConfigForSize(apiv2.WBSizeSmall)
-					Expect(err).ToNot(HaveOccurred())
-					Expect(config.PXCImage).To(Equal(SmallPXCImage))
-					Expect(config.ProxySQLEnabled).To(BeTrue())
-					Expect(config.ProxySQLReplicas).To(Equal(int32(3)))
-					Expect(config.ProxySQLImage).To(Equal(ProxySQLImage))
-					Expect(config.TLSEnabled).To(BeTrue())
-					Expect(config.LogCollectorEnabled).To(BeFalse())
-					Expect(config.LogCollectorImage).To(BeEmpty())
-					Expect(config.AllowUnsafePXCSize).To(BeFalse())
-					Expect(config.AllowUnsafeProxySize).To(BeFalse())
-				})
+	Describe("GetMySQLConfigForSize", func() {
+		Context("when size is dev", func() {
+			It("should return dev config", func() {
+				config, err := GetMySQLConfigForSize(apiv2.WBSizeDev)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(config.PXCImage).To(Equal(DevPXCImage))
+				Expect(config.ProxySQLEnabled).To(BeFalse())
+				Expect(config.ProxySQLReplicas).To(Equal(int32(0)))
+				Expect(config.ProxySQLImage).To(BeEmpty())
+				Expect(config.TLSEnabled).To(BeFalse())
+				Expect(config.LogCollectorEnabled).To(BeTrue())
+				Expect(config.LogCollectorImage).To(Equal(LogCollectorImage))
+				Expect(config.AllowUnsafePXCSize).To(BeTrue())
+				Expect(config.AllowUnsafeProxySize).To(BeTrue())
 			})
+		})
 
-			Context("when size is unsupported", func() {
-				It("should return error", func() {
-					config, err := GetMySQLConfigForSize(apiv2.WBSize("medium"))
-					Expect(err).To(HaveOccurred())
-					Expect(err.Error()).To(ContainSubstring("unsupported size for MySQL"))
-					Expect(config).To(Equal(MySQLSizeConfig{}))
-				})
+		Context("when size is small", func() {
+			It("should return small config", func() {
+				config, err := GetMySQLConfigForSize(apiv2.WBSizeSmall)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(config.PXCImage).To(Equal(SmallPXCImage))
+				Expect(config.ProxySQLEnabled).To(BeTrue())
+				Expect(config.ProxySQLReplicas).To(Equal(int32(3)))
+				Expect(config.ProxySQLImage).To(Equal(ProxySQLImage))
+				Expect(config.TLSEnabled).To(BeTrue())
+				Expect(config.LogCollectorEnabled).To(BeFalse())
+				Expect(config.LogCollectorImage).To(BeEmpty())
+				Expect(config.AllowUnsafePXCSize).To(BeFalse())
+				Expect(config.AllowUnsafeProxySize).To(BeFalse())
+			})
+		})
+
+		Context("when size is unsupported", func() {
+			It("should return error", func() {
+				config, err := GetMySQLConfigForSize(apiv2.WBSize("medium"))
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("unsupported size for MySQL"))
+				Expect(config).To(Equal(MySQLSizeConfig{}))
 			})
 		})
 	})
@@ -742,6 +456,55 @@ var _ = Describe("MySQL Model", func() {
 					Expect(codes[i]).NotTo(Equal(codes[j]))
 				}
 			}
+		})
+	})
+
+	Describe("BuildMySQLDefaults", func() {
+		const testOwnerNamespace = "test-namespace"
+
+		Context("when size is Dev", func() {
+			It("should return a MySQL config with storage only and no resources", func() {
+				config, err := BuildMySQLDefaults(SizeDev, testOwnerNamespace)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(config.Enabled).To(BeTrue())
+				Expect(config.Namespace).To(Equal(testOwnerNamespace))
+				Expect(config.StorageSize).To(Equal(DevMySQLStorageSize))
+				Expect(config.Replicas).To(Equal(int32(1)))
+				Expect(config.PXCImage).To(Equal(DevPXCImage))
+				Expect(config.ProxySQLEnabled).To(BeFalse())
+				Expect(config.TLSEnabled).To(BeFalse())
+				Expect(config.LogCollectorEnabled).To(BeTrue())
+				Expect(config.Resources.Requests).To(BeEmpty())
+				Expect(config.Resources.Limits).To(BeEmpty())
+			})
+		})
+
+		Context("when size is Small", func() {
+			It("should return a MySQL config with full resource requirements", func() {
+				config, err := BuildMySQLDefaults(SizeSmall, testOwnerNamespace)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(config.Enabled).To(BeTrue())
+				Expect(config.Namespace).To(Equal(testOwnerNamespace))
+				Expect(config.StorageSize).To(Equal(SmallMySQLStorageSize))
+				Expect(config.Replicas).To(Equal(int32(3)))
+				Expect(config.PXCImage).To(Equal(SmallPXCImage))
+				Expect(config.ProxySQLEnabled).To(BeTrue())
+				Expect(config.ProxySQLReplicas).To(Equal(int32(3)))
+				Expect(config.TLSEnabled).To(BeTrue())
+				Expect(config.LogCollectorEnabled).To(BeFalse())
+				Expect(config.Resources.Requests[v1.ResourceCPU]).To(Equal(resource.MustParse(SmallMySQLCpuRequest)))
+				Expect(config.Resources.Limits[v1.ResourceCPU]).To(Equal(resource.MustParse(SmallMySQLCpuLimit)))
+				Expect(config.Resources.Requests[v1.ResourceMemory]).To(Equal(resource.MustParse(SmallMySQLMemoryRequest)))
+				Expect(config.Resources.Limits[v1.ResourceMemory]).To(Equal(resource.MustParse(SmallMySQLMemoryLimit)))
+			})
+		})
+
+		Context("when size is invalid", func() {
+			It("should return an error", func() {
+				_, err := BuildMySQLDefaults(Size("invalid"), testOwnerNamespace)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("unsupported size for MySQL"))
+			})
 		})
 	})
 })

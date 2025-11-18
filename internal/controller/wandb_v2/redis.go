@@ -6,18 +6,19 @@ import (
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/infra/redis"
 	"github.com/wandb/operator/internal/controller/infra/redis/opstree"
+	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
 	"github.com/wandb/operator/internal/model"
 )
 
 func (r *WeightsAndBiasesV2Reconciler) reconcileRedis(
 	ctx context.Context,
-	infraDetails model.InfraConfig,
+	infraDetails translatorv2.InfraConfig,
 	wandb *apiv2.WeightsAndBiases,
 ) *model.Results {
 	var err error
 	var results = &model.Results{}
 	var nextResults *model.Results
-	var redisConfig model.RedisConfig
+	var redisConfig *apiv2.WBRedisSpec
 	var actual redis.ActualRedis
 
 	if redisConfig, err = infraDetails.GetRedisConfig(); err != nil {

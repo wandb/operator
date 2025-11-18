@@ -7,11 +7,31 @@ import (
 	"slices"
 
 	apiv2 "github.com/wandb/operator/api/v2"
-	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
 	"github.com/wandb/operator/internal/utils"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	ctrl "sigs.k8s.io/controller-runtime"
+)
+
+/////////////////////////////////////////////////
+// Redis Default Values
+
+const (
+	ReplicaSentinelCount = 3
+
+	DefaultSentinelGroup = "gorilla"
+
+	DevStorageRequest = "100Mi"
+
+	SmallStorageRequest        = "2Gi"
+	SmallReplicaCpuRequest     = "250m"
+	SmallReplicaCpuLimit       = "500m"
+	SmallReplicaMemoryRequest  = "256Mi"
+	SmallReplicaMemoryLimit    = "512Mi"
+	SmallSentinelCpuRequest    = "125m"
+	SmallSentinelCpuLimit      = "256m"
+	SmallSentinelMemoryRequest = "128Mi"
+	SmallSentinelMemoryLimit   = "256Mi"
 )
 
 /////////////////////////////////////////////////
@@ -23,10 +43,10 @@ type RedisConfig struct {
 	StorageSize resource.Quantity
 	Requests    corev1.ResourceList
 	Limits      corev1.ResourceList
-	Sentinel    sentinelConfig
+	Sentinel    SentinelConfig
 }
 
-type sentinelConfig struct {
+type SentinelConfig struct {
 	Enabled         bool
 	MasterGroupName string
 	ReplicaCount    int
@@ -51,7 +71,7 @@ func (i *InfraConfigBuilder) GetRedisConfig() (RedisConfig, error) {
 		}
 		if i.mergedRedis.Sentinel != nil {
 			details.Sentinel.Enabled = i.mergedRedis.Sentinel.Enabled
-			details.Sentinel.ReplicaCount = translatorv2.ReplicaSentinelCount
+			details.Sentinel.ReplicaCount = ReplicaSentinelCount
 			if i.mergedRedis.Sentinel.Config != nil {
 				details.Sentinel.MasterGroupName = i.mergedRedis.Sentinel.Config.MasterName
 				details.Sentinel.Requests = i.mergedRedis.Sentinel.Config.Resources.Requests
@@ -62,20 +82,77 @@ func (i *InfraConfigBuilder) GetRedisConfig() (RedisConfig, error) {
 	return details, nil
 }
 
-func (i *InfraConfigBuilder) AddRedisSpec(actual *apiv2.WBRedisSpec, size apiv2.WBSize) *InfraConfigBuilder {
+func BuildRedisDefaults(size Size, ownerNamespace string) (RedisConfig, error) {
 	var err error
-	var defaultSpec, merged apiv2.WBRedisSpec
-	if defaultSpec, err = translatorv2.BuildRedisDefaults(size, i.ownerNamespace); err != nil {
-		i.errors = append(i.errors, err)
-		return i
+	var storageRequest, cpuRequest, cpuLimit, memoryRequest, memoryLimit resource.Quantity
+	config := RedisConfig{
+		Enabled:   true,
+		Namespace: ownerNamespace,
+		Requests:  corev1.ResourceList{},
+		Limits:    corev1.ResourceList{},
 	}
-	if merged, err = translatorv2.BuildRedisSpec(*actual, defaultSpec); err != nil {
-		i.errors = append(i.errors, err)
-		return i
-	} else {
-		i.mergedRedis = &merged
+
+	switch size {
+	case SizeDev:
+		if storageRequest, err = resource.ParseQuantity(DevStorageRequest); err != nil {
+			return config, err
+		}
+		config.StorageSize = storageRequest
+	case SizeSmall:
+		if storageRequest, err = resource.ParseQuantity(SmallStorageRequest); err != nil {
+			return config, err
+		}
+		if cpuRequest, err = resource.ParseQuantity(SmallReplicaCpuRequest); err != nil {
+			return config, err
+		}
+		if cpuLimit, err = resource.ParseQuantity(SmallReplicaCpuLimit); err != nil {
+			return config, err
+		}
+		if memoryRequest, err = resource.ParseQuantity(SmallReplicaMemoryRequest); err != nil {
+			return config, err
+		}
+		if memoryLimit, err = resource.ParseQuantity(SmallReplicaMemoryLimit); err != nil {
+			return config, err
+		}
+
+		config.StorageSize = storageRequest
+		config.Requests[corev1.ResourceCPU] = cpuRequest
+		config.Limits[corev1.ResourceCPU] = cpuLimit
+		config.Requests[corev1.ResourceMemory] = memoryRequest
+		config.Limits[corev1.ResourceMemory] = memoryLimit
+
+		var sentinelCpuRequest, sentinelCpuLimit, sentinelMemoryRequest, sentinelMemoryLimit resource.Quantity
+		if sentinelCpuRequest, err = resource.ParseQuantity(SmallSentinelCpuRequest); err != nil {
+			return config, err
+		}
+		if sentinelCpuLimit, err = resource.ParseQuantity(SmallSentinelCpuLimit); err != nil {
+			return config, err
+		}
+		if sentinelMemoryRequest, err = resource.ParseQuantity(SmallSentinelMemoryRequest); err != nil {
+			return config, err
+		}
+		if sentinelMemoryLimit, err = resource.ParseQuantity(SmallSentinelMemoryLimit); err != nil {
+			return config, err
+		}
+
+		config.Sentinel = SentinelConfig{
+			Enabled:         true,
+			MasterGroupName: DefaultSentinelGroup,
+			ReplicaCount:    ReplicaSentinelCount,
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    sentinelCpuRequest,
+				corev1.ResourceMemory: sentinelMemoryRequest,
+			},
+			Limits: corev1.ResourceList{
+				corev1.ResourceCPU:    sentinelCpuLimit,
+				corev1.ResourceMemory: sentinelMemoryLimit,
+			},
+		}
+	default:
+		return config, fmt.Errorf("invalid profile: %v", size)
 	}
-	return i
+
+	return config, nil
 }
 
 /////////////////////////////////////////////////

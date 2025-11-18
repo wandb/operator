@@ -6,10 +6,25 @@ import (
 	"fmt"
 
 	apiv2 "github.com/wandb/operator/api/v2"
-	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
 	"github.com/wandb/operator/internal/utils"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	ctrl "sigs.k8s.io/controller-runtime"
+)
+
+/////////////////////////////////////////////////
+// ClickHouse Default Values
+
+const (
+	DevClickHouseStorageSize   = "10Gi"
+	SmallClickHouseStorageSize = "10Gi"
+
+	SmallClickHouseCpuRequest    = "500m"
+	SmallClickHouseCpuLimit      = "1000m"
+	SmallClickHouseMemoryRequest = "1Gi"
+	SmallClickHouseMemoryLimit   = "2Gi"
+
+	ClickHouseVersion = "23.8"
 )
 
 /////////////////////////////////////////////////
@@ -48,21 +63,54 @@ func (i *InfraConfigBuilder) GetClickHouseConfig() (ClickHouseConfig, error) {
 	return details, nil
 }
 
-func (i *InfraConfigBuilder) AddClickHouseSpec(actual *apiv2.WBClickHouseSpec, size apiv2.WBSize) *InfraConfigBuilder {
-	i.size = size
+func BuildClickHouseDefaults(size Size, ownerNamespace string) (ClickHouseConfig, error) {
 	var err error
-	var defaultSpec, merged apiv2.WBClickHouseSpec
-	if defaultSpec, err = translatorv2.BuildClickHouseDefaults(size, i.ownerNamespace); err != nil {
-		i.errors = append(i.errors, err)
-		return i
+	var storageSize string
+	config := ClickHouseConfig{
+		Enabled:   true,
+		Namespace: ownerNamespace,
+		Version:   ClickHouseVersion,
 	}
-	if merged, err = translatorv2.BuildClickHouseSpec(*actual, defaultSpec); err != nil {
-		i.errors = append(i.errors, err)
-		return i
-	} else {
-		i.mergedClickHouse = &merged
+
+	switch size {
+	case SizeDev:
+		storageSize = DevClickHouseStorageSize
+		config.StorageSize = storageSize
+		config.Replicas = 1
+	case SizeSmall:
+		storageSize = SmallClickHouseStorageSize
+		config.StorageSize = storageSize
+		config.Replicas = 3
+
+		var cpuRequest, cpuLimit, memoryRequest, memoryLimit resource.Quantity
+		if cpuRequest, err = resource.ParseQuantity(SmallClickHouseCpuRequest); err != nil {
+			return config, err
+		}
+		if cpuLimit, err = resource.ParseQuantity(SmallClickHouseCpuLimit); err != nil {
+			return config, err
+		}
+		if memoryRequest, err = resource.ParseQuantity(SmallClickHouseMemoryRequest); err != nil {
+			return config, err
+		}
+		if memoryLimit, err = resource.ParseQuantity(SmallClickHouseMemoryLimit); err != nil {
+			return config, err
+		}
+
+		config.Resources = corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    cpuRequest,
+				corev1.ResourceMemory: memoryRequest,
+			},
+			Limits: corev1.ResourceList{
+				corev1.ResourceCPU:    cpuLimit,
+				corev1.ResourceMemory: memoryLimit,
+			},
+		}
+	default:
+		return config, fmt.Errorf("unsupported size for ClickHouse: %s (only 'dev' and 'small' are supported)", size)
 	}
-	return i
+
+	return config, nil
 }
 
 /////////////////////////////////////////////////

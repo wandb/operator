@@ -1,22 +1,9 @@
 package v2
 
 import (
-	"fmt"
-
 	apiv2 "github.com/wandb/operator/api/v2"
 	merge2 "github.com/wandb/operator/internal/controller/translator/utils"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
-)
-
-const (
-	DevMySQLStorageSize   = "1Gi"
-	SmallMySQLStorageSize = "10Gi"
-
-	SmallMySQLCpuRequest    = "500m"
-	SmallMySQLCpuLimit      = "1000m"
-	SmallMySQLMemoryRequest = "1Gi"
-	SmallMySQLMemoryLimit   = "2Gi"
+	"github.com/wandb/operator/internal/model"
 )
 
 // BuildMySQLSpec will create a new WBMySQLSpec with defaultValues applied if not
@@ -45,51 +32,43 @@ func BuildMySQLSpec(actual apiv2.WBMySQLSpec, defaultValues apiv2.WBMySQLSpec) (
 	return mysqlSpec, nil
 }
 
-func BuildMySQLDefaults(profile apiv2.WBSize, ownerNamespace string) (apiv2.WBMySQLSpec, error) {
-	var err error
-	var storageSize string
+func TranslateMySQLConfig(config model.MySQLConfig) apiv2.WBMySQLSpec {
 	spec := apiv2.WBMySQLSpec{
-		Enabled:   true,
-		Namespace: ownerNamespace,
+		Enabled:     config.Enabled,
+		Namespace:   config.Namespace,
+		StorageSize: config.StorageSize,
+		Config: &apiv2.WBMySQLConfig{
+			Resources: config.Resources,
+		},
 	}
 
-	switch profile {
-	case apiv2.WBSizeDev:
-		storageSize = DevMySQLStorageSize
-		spec.StorageSize = storageSize
-	case apiv2.WBSizeSmall:
-		storageSize = SmallMySQLStorageSize
-		spec.StorageSize = storageSize
+	return spec
+}
 
-		var cpuRequest, cpuLimit, memoryRequest, memoryLimit resource.Quantity
-		if cpuRequest, err = resource.ParseQuantity(SmallMySQLCpuRequest); err != nil {
-			return spec, err
-		}
-		if cpuLimit, err = resource.ParseQuantity(SmallMySQLCpuLimit); err != nil {
-			return spec, err
-		}
-		if memoryRequest, err = resource.ParseQuantity(SmallMySQLMemoryRequest); err != nil {
-			return spec, err
-		}
-		if memoryLimit, err = resource.ParseQuantity(SmallMySQLMemoryLimit); err != nil {
-			return spec, err
-		}
+func (i *InfraConfigBuilder) AddMySQLSpec(actual apiv2.WBMySQLSpec) *InfraConfigBuilder {
+	var err error
+	var size model.Size
+	var defaultConfig model.MySQLConfig
+	var spec apiv2.WBMySQLSpec
 
-		spec.Config = &apiv2.WBMySQLConfig{
-			Resources: corev1.ResourceRequirements{
-				Requests: corev1.ResourceList{
-					corev1.ResourceCPU:    cpuRequest,
-					corev1.ResourceMemory: memoryRequest,
-				},
-				Limits: corev1.ResourceList{
-					corev1.ResourceCPU:    cpuLimit,
-					corev1.ResourceMemory: memoryLimit,
-				},
-			},
-		}
-	default:
-		return spec, fmt.Errorf("unsupported size for MySQL: %s (only 'dev' and 'small' are supported)", profile)
+	size, err = ToModelSize(i.size)
+	if err != nil {
+		i.errors = append(i.errors, err)
+		return i
+	}
+	defaultConfig, err = model.BuildMySQLDefaults(size, i.ownerNamespace)
+	if err != nil {
+		i.errors = append(i.errors, err)
+		return i
 	}
 
-	return spec, nil
+	defaultSpec := TranslateMySQLConfig(defaultConfig)
+
+	spec, err = BuildMySQLSpec(actual, defaultSpec)
+	if err != nil {
+		i.errors = append(i.errors, err)
+		return i
+	}
+	i.mergedMySQL = &spec
+	return i
 }

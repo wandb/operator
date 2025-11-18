@@ -1,24 +1,9 @@
 package v2
 
 import (
-	"fmt"
-
 	apiv2 "github.com/wandb/operator/api/v2"
-	merge2 "github.com/wandb/operator/internal/controller/translator/utils"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
-)
-
-const (
-	// Storage sizes
-	DevMinioStorageSize   = "10Gi"
-	SmallMinioStorageSize = "10Gi"
-
-	// Resource requests/limits for small size
-	SmallMinioCpuRequest    = "500m"
-	SmallMinioCpuLimit      = "1000m"
-	SmallMinioMemoryRequest = "1Gi"
-	SmallMinioMemoryLimit   = "2Gi"
+	"github.com/wandb/operator/internal/controller/translator/utils"
+	"github.com/wandb/operator/internal/model"
 )
 
 // BuildMinioSpec will create a new WBMinioSpec with defaultValues applied if not
@@ -32,15 +17,15 @@ func BuildMinioSpec(actual apiv2.WBMinioSpec, defaultValues apiv2.WBMinioSpec) (
 		minioSpec.Config = actual.Config.DeepCopy()
 	} else {
 		var minioConfig apiv2.WBMinioConfig
-		minioConfig.Resources = merge2.Resources(
+		minioConfig.Resources = utils.Resources(
 			actual.Config.Resources,
 			defaultValues.Config.Resources,
 		)
 		minioSpec.Config = &minioConfig
 	}
 
-	minioSpec.StorageSize = merge2.CoalesceQuantity(actual.StorageSize, defaultValues.StorageSize)
-	minioSpec.Namespace = merge2.Coalesce(actual.Namespace, defaultValues.Namespace)
+	minioSpec.StorageSize = utils.CoalesceQuantity(actual.StorageSize, defaultValues.StorageSize)
+	minioSpec.Namespace = utils.Coalesce(actual.Namespace, defaultValues.Namespace)
 
 	minioSpec.Enabled = actual.Enabled
 	minioSpec.Replicas = actual.Replicas
@@ -48,51 +33,43 @@ func BuildMinioSpec(actual apiv2.WBMinioSpec, defaultValues apiv2.WBMinioSpec) (
 	return minioSpec, nil
 }
 
-func BuildMinioDefaults(profile apiv2.WBSize, ownerNamespace string) (apiv2.WBMinioSpec, error) {
-	var err error
-	var storageSize string
+func TranslateMinioConfig(config model.MinioConfig) apiv2.WBMinioSpec {
 	spec := apiv2.WBMinioSpec{
-		Enabled:   true,
-		Namespace: ownerNamespace,
+		Enabled:     config.Enabled,
+		Namespace:   config.Namespace,
+		StorageSize: config.StorageSize,
+		Config: &apiv2.WBMinioConfig{
+			Resources: config.Resources,
+		},
 	}
 
-	switch profile {
-	case apiv2.WBSizeDev:
-		storageSize = DevMinioStorageSize
-		spec.StorageSize = storageSize
-	case apiv2.WBSizeSmall:
-		storageSize = SmallMinioStorageSize
-		spec.StorageSize = storageSize
+	return spec
+}
 
-		var cpuRequest, cpuLimit, memoryRequest, memoryLimit resource.Quantity
-		if cpuRequest, err = resource.ParseQuantity(SmallMinioCpuRequest); err != nil {
-			return spec, err
-		}
-		if cpuLimit, err = resource.ParseQuantity(SmallMinioCpuLimit); err != nil {
-			return spec, err
-		}
-		if memoryRequest, err = resource.ParseQuantity(SmallMinioMemoryRequest); err != nil {
-			return spec, err
-		}
-		if memoryLimit, err = resource.ParseQuantity(SmallMinioMemoryLimit); err != nil {
-			return spec, err
-		}
+func (i *InfraConfigBuilder) AddMinioSpec(actual apiv2.WBMinioSpec) *InfraConfigBuilder {
+	var err error
+	var size model.Size
+	var defaultConfig model.MinioConfig
+	var spec apiv2.WBMinioSpec
 
-		spec.Config = &apiv2.WBMinioConfig{
-			Resources: corev1.ResourceRequirements{
-				Requests: corev1.ResourceList{
-					corev1.ResourceCPU:    cpuRequest,
-					corev1.ResourceMemory: memoryRequest,
-				},
-				Limits: corev1.ResourceList{
-					corev1.ResourceCPU:    cpuLimit,
-					corev1.ResourceMemory: memoryLimit,
-				},
-			},
-		}
-	default:
-		return spec, fmt.Errorf("unsupported size for Minio: %s (only 'dev' and 'small' are supported)", profile)
+	size, err = ToModelSize(i.size)
+	if err != nil {
+		i.errors = append(i.errors, err)
+		return i
+	}
+	defaultConfig, err = model.BuildMinioDefaults(size, i.ownerNamespace)
+	if err != nil {
+		i.errors = append(i.errors, err)
+		return i
 	}
 
-	return spec, nil
+	defaultSpec := TranslateMinioConfig(defaultConfig)
+
+	spec, err = BuildMinioSpec(actual, defaultSpec)
+	if err != nil {
+		i.errors = append(i.errors, err)
+		return i
+	}
+	i.mergedMinio = &spec
+	return i
 }

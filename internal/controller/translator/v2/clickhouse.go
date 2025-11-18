@@ -1,27 +1,9 @@
 package v2
 
 import (
-	"fmt"
-
 	apiv2 "github.com/wandb/operator/api/v2"
-	merge2 "github.com/wandb/operator/internal/controller/translator/utils"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
-)
-
-const (
-	// Storage sizes
-	DevClickHouseStorageSize   = "10Gi"
-	SmallClickHouseStorageSize = "10Gi"
-
-	// Resource requests/limits for small size
-	SmallClickHouseCpuRequest    = "500m"
-	SmallClickHouseCpuLimit      = "1000m"
-	SmallClickHouseMemoryRequest = "1Gi"
-	SmallClickHouseMemoryLimit   = "2Gi"
-
-	// ClickHouse version
-	ClickHouseVersion = "23.8"
+	"github.com/wandb/operator/internal/controller/translator/utils"
+	"github.com/wandb/operator/internal/model"
 )
 
 // BuildClickHouseSpec will create a new WBClickHouseSpec with defaultValues applied if not
@@ -35,16 +17,16 @@ func BuildClickHouseSpec(actual apiv2.WBClickHouseSpec, defaultValues apiv2.WBCl
 		clickhouseSpec.Config = actual.Config.DeepCopy()
 	} else {
 		var clickhouseConfig apiv2.WBClickHouseConfig
-		clickhouseConfig.Resources = merge2.Resources(
+		clickhouseConfig.Resources = utils.Resources(
 			actual.Config.Resources,
 			defaultValues.Config.Resources,
 		)
 		clickhouseSpec.Config = &clickhouseConfig
 	}
 
-	clickhouseSpec.StorageSize = merge2.CoalesceQuantity(actual.StorageSize, defaultValues.StorageSize)
-	clickhouseSpec.Namespace = merge2.Coalesce(actual.Namespace, defaultValues.Namespace)
-	clickhouseSpec.Version = merge2.Coalesce(actual.Version, defaultValues.Version)
+	clickhouseSpec.StorageSize = utils.CoalesceQuantity(actual.StorageSize, defaultValues.StorageSize)
+	clickhouseSpec.Namespace = utils.Coalesce(actual.Namespace, defaultValues.Namespace)
+	clickhouseSpec.Version = utils.Coalesce(actual.Version, defaultValues.Version)
 
 	clickhouseSpec.Enabled = actual.Enabled
 	clickhouseSpec.Replicas = actual.Replicas
@@ -52,54 +34,45 @@ func BuildClickHouseSpec(actual apiv2.WBClickHouseSpec, defaultValues apiv2.WBCl
 	return clickhouseSpec, nil
 }
 
-func BuildClickHouseDefaults(profile apiv2.WBSize, ownerNamespace string) (apiv2.WBClickHouseSpec, error) {
-	var err error
-	var storageSize string
+func TranslateClickHouseConfig(config model.ClickHouseConfig) apiv2.WBClickHouseSpec {
 	spec := apiv2.WBClickHouseSpec{
-		Enabled:   true,
-		Namespace: ownerNamespace,
-		Version:   ClickHouseVersion,
+		Enabled:     config.Enabled,
+		Namespace:   config.Namespace,
+		StorageSize: config.StorageSize,
+		Replicas:    config.Replicas,
+		Version:     config.Version,
+		Config: &apiv2.WBClickHouseConfig{
+			Resources: config.Resources,
+		},
 	}
 
-	switch profile {
-	case apiv2.WBSizeDev:
-		storageSize = DevClickHouseStorageSize
-		spec.StorageSize = storageSize
-		spec.Replicas = 1
-	case apiv2.WBSizeSmall:
-		storageSize = SmallClickHouseStorageSize
-		spec.StorageSize = storageSize
-		spec.Replicas = 3
+	return spec
+}
 
-		var cpuRequest, cpuLimit, memoryRequest, memoryLimit resource.Quantity
-		if cpuRequest, err = resource.ParseQuantity(SmallClickHouseCpuRequest); err != nil {
-			return spec, err
-		}
-		if cpuLimit, err = resource.ParseQuantity(SmallClickHouseCpuLimit); err != nil {
-			return spec, err
-		}
-		if memoryRequest, err = resource.ParseQuantity(SmallClickHouseMemoryRequest); err != nil {
-			return spec, err
-		}
-		if memoryLimit, err = resource.ParseQuantity(SmallClickHouseMemoryLimit); err != nil {
-			return spec, err
-		}
+func (i *InfraConfigBuilder) AddClickHouseSpec(actual apiv2.WBClickHouseSpec) *InfraConfigBuilder {
+	var err error
+	var size model.Size
+	var defaultConfig model.ClickHouseConfig
+	var spec apiv2.WBClickHouseSpec
 
-		spec.Config = &apiv2.WBClickHouseConfig{
-			Resources: corev1.ResourceRequirements{
-				Requests: corev1.ResourceList{
-					corev1.ResourceCPU:    cpuRequest,
-					corev1.ResourceMemory: memoryRequest,
-				},
-				Limits: corev1.ResourceList{
-					corev1.ResourceCPU:    cpuLimit,
-					corev1.ResourceMemory: memoryLimit,
-				},
-			},
-		}
-	default:
-		return spec, fmt.Errorf("unsupported size for ClickHouse: %s (only 'dev' and 'small' are supported)", profile)
+	size, err = ToModelSize(i.size)
+	if err != nil {
+		i.errors = append(i.errors, err)
+		return i
+	}
+	defaultConfig, err = model.BuildClickHouseDefaults(size, i.ownerNamespace)
+	if err != nil {
+		i.errors = append(i.errors, err)
+		return i
 	}
 
-	return spec, nil
+	defaultSpec := TranslateClickHouseConfig(defaultConfig)
+
+	spec, err = BuildClickHouseSpec(actual, defaultSpec)
+	if err != nil {
+		i.errors = append(i.errors, err)
+		return i
+	}
+	i.mergedClickHouse = &spec
+	return i
 }

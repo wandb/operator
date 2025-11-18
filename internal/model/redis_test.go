@@ -7,7 +7,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	apiv2 "github.com/wandb/operator/api/v2"
-	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
@@ -18,7 +17,7 @@ var _ = Describe("Redis Model", func() {
 			Context("when Sentinel is enabled", func() {
 				It("should return true", func() {
 					config := RedisConfig{
-						Sentinel: sentinelConfig{
+						Sentinel: SentinelConfig{
 							Enabled: true,
 						},
 					}
@@ -29,301 +28,11 @@ var _ = Describe("Redis Model", func() {
 			Context("when Sentinel is not enabled", func() {
 				It("should return false", func() {
 					config := RedisConfig{
-						Sentinel: sentinelConfig{
+						Sentinel: SentinelConfig{
 							Enabled: false,
 						},
 					}
 					Expect(config.IsHighAvailability()).To(BeFalse())
-				})
-			})
-		})
-	})
-
-	Describe("InfraConfigBuilder", func() {
-		Describe("AddRedisSpec and GetRedisConfig", func() {
-			Context("with dev size and empty actual spec", func() {
-				It("should use all dev defaults except Enabled and Namespace", func() {
-					namespaceOverride := "custom-redis-namespace"
-					actual := apiv2.WBRedisSpec{
-						Enabled:   true,
-						Namespace: namespaceOverride,
-					}
-					builder := BuildInfraConfig(testingOwnerNamespace).AddRedisSpec(&actual, apiv2.WBSizeDev)
-
-					Expect(builder.errors).To(BeEmpty())
-					config, err := builder.GetRedisConfig()
-					Expect(err).ToNot(HaveOccurred())
-
-					Expect(config.Enabled).To(BeTrue())
-					Expect(config.Namespace).To(Equal(namespaceOverride))
-					Expect(config.StorageSize).To(Equal(resource.MustParse(translatorv2.DevStorageRequest)))
-					Expect(config.Requests).To(BeEmpty())
-					Expect(config.Limits).To(BeEmpty())
-					Expect(config.Sentinel.Enabled).To(BeFalse())
-					Expect(config.Sentinel.MasterGroupName).To(BeEmpty())
-					Expect(config.Sentinel.ReplicaCount).To(Equal(0))
-					Expect(config.Sentinel.Requests).To(BeEmpty())
-					Expect(config.Sentinel.Limits).To(BeEmpty())
-				})
-			})
-
-			Context("with small size and empty actual spec", func() {
-				It("should use all small defaults including resources except Enabled and Namespace", func() {
-					namespaceOverride := "custom-redis-namespace"
-					actual := apiv2.WBRedisSpec{
-						Enabled:   true,
-						Namespace: namespaceOverride,
-					}
-					builder := BuildInfraConfig(testingOwnerNamespace).AddRedisSpec(&actual, apiv2.WBSizeSmall)
-
-					Expect(builder.errors).To(BeEmpty())
-					config, err := builder.GetRedisConfig()
-					Expect(err).ToNot(HaveOccurred())
-
-					Expect(config.Enabled).To(BeTrue())
-					Expect(config.Namespace).To(Equal(namespaceOverride))
-					Expect(config.StorageSize).To(Equal(resource.MustParse(translatorv2.SmallStorageRequest)))
-					Expect(config.Requests[v1.ResourceCPU]).To(Equal(resource.MustParse(translatorv2.SmallReplicaCpuRequest)))
-					Expect(config.Requests[v1.ResourceMemory]).To(Equal(resource.MustParse(translatorv2.SmallReplicaMemoryRequest)))
-					Expect(config.Limits[v1.ResourceCPU]).To(Equal(resource.MustParse(translatorv2.SmallReplicaCpuLimit)))
-					Expect(config.Limits[v1.ResourceMemory]).To(Equal(resource.MustParse(translatorv2.SmallReplicaMemoryLimit)))
-					Expect(config.Sentinel.Enabled).To(BeTrue())
-					Expect(config.Sentinel.ReplicaCount).To(Equal(translatorv2.ReplicaSentinelCount))
-					Expect(config.Sentinel.Requests[v1.ResourceCPU]).To(Equal(resource.MustParse(translatorv2.SmallSentinelCpuRequest)))
-					Expect(config.Sentinel.Requests[v1.ResourceMemory]).To(Equal(resource.MustParse(translatorv2.SmallSentinelMemoryRequest)))
-					Expect(config.Sentinel.Limits[v1.ResourceCPU]).To(Equal(resource.MustParse(translatorv2.SmallSentinelCpuLimit)))
-					Expect(config.Sentinel.Limits[v1.ResourceMemory]).To(Equal(resource.MustParse(translatorv2.SmallSentinelMemoryLimit)))
-				})
-			})
-
-			Context("with small size and storage override", func() {
-				It("should use override storage and default resources", func() {
-					storageSizeOverride := "50Gi"
-					namespaceOverride := "custom-redis-namespace"
-					actual := apiv2.WBRedisSpec{
-						Enabled:     true,
-						Namespace:   namespaceOverride,
-						StorageSize: storageSizeOverride,
-					}
-					builder := BuildInfraConfig(testingOwnerNamespace).AddRedisSpec(&actual, apiv2.WBSizeSmall)
-
-					Expect(builder.errors).To(BeEmpty())
-					config, err := builder.GetRedisConfig()
-					Expect(err).ToNot(HaveOccurred())
-
-					Expect(config.Enabled).To(BeTrue())
-					Expect(config.Namespace).To(Equal(namespaceOverride))
-					Expect(config.StorageSize).To(Equal(resource.MustParse(storageSizeOverride)))
-					Expect(config.StorageSize).NotTo(Equal(resource.MustParse(translatorv2.SmallStorageRequest)))
-					Expect(config.Requests[v1.ResourceCPU]).To(Equal(resource.MustParse(translatorv2.SmallReplicaCpuRequest)))
-					Expect(config.Requests[v1.ResourceMemory]).To(Equal(resource.MustParse(translatorv2.SmallReplicaMemoryRequest)))
-					Expect(config.Limits[v1.ResourceCPU]).To(Equal(resource.MustParse(translatorv2.SmallReplicaCpuLimit)))
-					Expect(config.Limits[v1.ResourceMemory]).To(Equal(resource.MustParse(translatorv2.SmallReplicaMemoryLimit)))
-					Expect(config.Sentinel.Enabled).To(BeTrue())
-				})
-			})
-
-			Context("with small size and resource overrides", func() {
-				It("should use override resources and default storage", func() {
-					cpuRequestOverride := "2"
-					cpuLimitOverride := "4"
-					memoryRequestOverride := "4Gi"
-					memoryLimitOverride := "8Gi"
-					namespaceOverride := "custom-redis-namespace"
-					actual := apiv2.WBRedisSpec{
-						Enabled:   true,
-						Namespace: namespaceOverride,
-						Config: &apiv2.WBRedisConfig{
-							Resources: v1.ResourceRequirements{
-								Requests: v1.ResourceList{
-									v1.ResourceCPU:    resource.MustParse(cpuRequestOverride),
-									v1.ResourceMemory: resource.MustParse(memoryRequestOverride),
-								},
-								Limits: v1.ResourceList{
-									v1.ResourceCPU:    resource.MustParse(cpuLimitOverride),
-									v1.ResourceMemory: resource.MustParse(memoryLimitOverride),
-								},
-							},
-						},
-					}
-					builder := BuildInfraConfig(testingOwnerNamespace).AddRedisSpec(&actual, apiv2.WBSizeSmall)
-
-					Expect(builder.errors).To(BeEmpty())
-					config, err := builder.GetRedisConfig()
-					Expect(err).ToNot(HaveOccurred())
-
-					Expect(config.Enabled).To(BeTrue())
-					Expect(config.Namespace).To(Equal(namespaceOverride))
-					Expect(config.StorageSize).To(Equal(resource.MustParse(translatorv2.SmallStorageRequest)))
-					Expect(config.Requests[v1.ResourceCPU]).To(Equal(resource.MustParse(cpuRequestOverride)))
-					Expect(config.Requests[v1.ResourceCPU]).NotTo(Equal(resource.MustParse(translatorv2.SmallReplicaCpuRequest)))
-					Expect(config.Requests[v1.ResourceMemory]).To(Equal(resource.MustParse(memoryRequestOverride)))
-					Expect(config.Requests[v1.ResourceMemory]).NotTo(Equal(resource.MustParse(translatorv2.SmallReplicaMemoryRequest)))
-					Expect(config.Limits[v1.ResourceCPU]).To(Equal(resource.MustParse(cpuLimitOverride)))
-					Expect(config.Limits[v1.ResourceCPU]).NotTo(Equal(resource.MustParse(translatorv2.SmallReplicaCpuLimit)))
-					Expect(config.Limits[v1.ResourceMemory]).To(Equal(resource.MustParse(memoryLimitOverride)))
-					Expect(config.Limits[v1.ResourceMemory]).NotTo(Equal(resource.MustParse(translatorv2.SmallReplicaMemoryLimit)))
-				})
-			})
-
-			Context("with small size and partial resource overrides", func() {
-				It("should merge override and default resources", func() {
-					cpuLimitOverride := "2"
-					namespaceOverride := "custom-redis-namespace"
-					actual := apiv2.WBRedisSpec{
-						Enabled:   true,
-						Namespace: namespaceOverride,
-						Config: &apiv2.WBRedisConfig{
-							Resources: v1.ResourceRequirements{
-								Limits: v1.ResourceList{
-									v1.ResourceCPU: resource.MustParse(cpuLimitOverride),
-								},
-							},
-						},
-					}
-					builder := BuildInfraConfig(testingOwnerNamespace).AddRedisSpec(&actual, apiv2.WBSizeSmall)
-
-					Expect(builder.errors).To(BeEmpty())
-					config, err := builder.GetRedisConfig()
-					Expect(err).ToNot(HaveOccurred())
-
-					Expect(config.Enabled).To(BeTrue())
-					Expect(config.Namespace).To(Equal(namespaceOverride))
-					Expect(config.StorageSize).To(Equal(resource.MustParse(translatorv2.SmallStorageRequest)))
-					Expect(config.Requests[v1.ResourceCPU]).To(Equal(resource.MustParse(translatorv2.SmallReplicaCpuRequest)))
-					Expect(config.Requests[v1.ResourceMemory]).To(Equal(resource.MustParse(translatorv2.SmallReplicaMemoryRequest)))
-					Expect(config.Limits[v1.ResourceCPU]).To(Equal(resource.MustParse(cpuLimitOverride)))
-					Expect(config.Limits[v1.ResourceCPU]).NotTo(Equal(resource.MustParse(translatorv2.SmallReplicaCpuLimit)))
-					Expect(config.Limits[v1.ResourceMemory]).To(Equal(resource.MustParse(translatorv2.SmallReplicaMemoryLimit)))
-				})
-			})
-
-			Context("with small size and all overrides including sentinel", func() {
-				It("should use all override values", func() {
-					storageSizeOverride := "100Gi"
-					namespaceOverride := "custom-redis-namespace"
-					cpuRequestOverride := "3"
-					cpuLimitOverride := "6"
-					memoryRequestOverride := "8Gi"
-					memoryLimitOverride := "16Gi"
-					sentinelCpuRequestOverride := "1"
-					sentinelCpuLimitOverride := "2"
-					sentinelMemoryRequestOverride := "2Gi"
-					sentinelMemoryLimitOverride := "4Gi"
-					masterNameOverride := "custom-master"
-					actual := apiv2.WBRedisSpec{
-						Enabled:     true,
-						Namespace:   namespaceOverride,
-						StorageSize: storageSizeOverride,
-						Config: &apiv2.WBRedisConfig{
-							Resources: v1.ResourceRequirements{
-								Requests: v1.ResourceList{
-									v1.ResourceCPU:    resource.MustParse(cpuRequestOverride),
-									v1.ResourceMemory: resource.MustParse(memoryRequestOverride),
-								},
-								Limits: v1.ResourceList{
-									v1.ResourceCPU:    resource.MustParse(cpuLimitOverride),
-									v1.ResourceMemory: resource.MustParse(memoryLimitOverride),
-								},
-							},
-						},
-						Sentinel: &apiv2.WBRedisSentinelSpec{
-							Enabled: true,
-							Config: &apiv2.WBRedisSentinelConfig{
-								MasterName: masterNameOverride,
-								Resources: v1.ResourceRequirements{
-									Requests: v1.ResourceList{
-										v1.ResourceCPU:    resource.MustParse(sentinelCpuRequestOverride),
-										v1.ResourceMemory: resource.MustParse(sentinelMemoryRequestOverride),
-									},
-									Limits: v1.ResourceList{
-										v1.ResourceCPU:    resource.MustParse(sentinelCpuLimitOverride),
-										v1.ResourceMemory: resource.MustParse(sentinelMemoryLimitOverride),
-									},
-								},
-							},
-						},
-					}
-					builder := BuildInfraConfig(testingOwnerNamespace).AddRedisSpec(&actual, apiv2.WBSizeSmall)
-
-					Expect(builder.errors).To(BeEmpty())
-					config, err := builder.GetRedisConfig()
-					Expect(err).ToNot(HaveOccurred())
-
-					Expect(config.Enabled).To(BeTrue())
-					Expect(config.Namespace).To(Equal(namespaceOverride))
-					Expect(config.StorageSize).To(Equal(resource.MustParse(storageSizeOverride)))
-					Expect(config.StorageSize).NotTo(Equal(resource.MustParse(translatorv2.SmallStorageRequest)))
-					Expect(config.Requests[v1.ResourceCPU]).To(Equal(resource.MustParse(cpuRequestOverride)))
-					Expect(config.Requests[v1.ResourceCPU]).NotTo(Equal(resource.MustParse(translatorv2.SmallReplicaCpuRequest)))
-					Expect(config.Requests[v1.ResourceMemory]).To(Equal(resource.MustParse(memoryRequestOverride)))
-					Expect(config.Requests[v1.ResourceMemory]).NotTo(Equal(resource.MustParse(translatorv2.SmallReplicaMemoryRequest)))
-					Expect(config.Limits[v1.ResourceCPU]).To(Equal(resource.MustParse(cpuLimitOverride)))
-					Expect(config.Limits[v1.ResourceCPU]).NotTo(Equal(resource.MustParse(translatorv2.SmallReplicaCpuLimit)))
-					Expect(config.Limits[v1.ResourceMemory]).To(Equal(resource.MustParse(memoryLimitOverride)))
-					Expect(config.Limits[v1.ResourceMemory]).NotTo(Equal(resource.MustParse(translatorv2.SmallReplicaMemoryLimit)))
-					Expect(config.Sentinel.Enabled).To(BeTrue())
-					Expect(config.Sentinel.MasterGroupName).To(Equal(masterNameOverride))
-					Expect(config.Sentinel.ReplicaCount).To(Equal(translatorv2.ReplicaSentinelCount))
-					Expect(config.Sentinel.Requests[v1.ResourceCPU]).To(Equal(resource.MustParse(sentinelCpuRequestOverride)))
-					Expect(config.Sentinel.Requests[v1.ResourceCPU]).NotTo(Equal(resource.MustParse(translatorv2.SmallSentinelCpuRequest)))
-					Expect(config.Sentinel.Requests[v1.ResourceMemory]).To(Equal(resource.MustParse(sentinelMemoryRequestOverride)))
-					Expect(config.Sentinel.Requests[v1.ResourceMemory]).NotTo(Equal(resource.MustParse(translatorv2.SmallSentinelMemoryRequest)))
-					Expect(config.Sentinel.Limits[v1.ResourceCPU]).To(Equal(resource.MustParse(sentinelCpuLimitOverride)))
-					Expect(config.Sentinel.Limits[v1.ResourceCPU]).NotTo(Equal(resource.MustParse(translatorv2.SmallSentinelCpuLimit)))
-					Expect(config.Sentinel.Limits[v1.ResourceMemory]).To(Equal(resource.MustParse(sentinelMemoryLimitOverride)))
-					Expect(config.Sentinel.Limits[v1.ResourceMemory]).NotTo(Equal(resource.MustParse(translatorv2.SmallSentinelMemoryLimit)))
-				})
-			})
-
-			Context("with disabled spec", func() {
-				It("should respect enabled false and use defaults for other fields", func() {
-					namespaceOverride := "custom-redis-namespace"
-					actual := apiv2.WBRedisSpec{
-						Enabled:   false,
-						Namespace: namespaceOverride,
-					}
-					builder := BuildInfraConfig(testingOwnerNamespace).AddRedisSpec(&actual, apiv2.WBSizeSmall)
-
-					Expect(builder.errors).To(BeEmpty())
-					config, err := builder.GetRedisConfig()
-					Expect(err).ToNot(HaveOccurred())
-
-					Expect(config.Enabled).To(BeFalse())
-					Expect(config.Namespace).To(Equal(namespaceOverride))
-					Expect(config.StorageSize).To(Equal(resource.MustParse(translatorv2.SmallStorageRequest)))
-					Expect(config.Requests[v1.ResourceCPU]).To(Equal(resource.MustParse(translatorv2.SmallReplicaCpuRequest)))
-					Expect(config.Requests[v1.ResourceMemory]).To(Equal(resource.MustParse(translatorv2.SmallReplicaMemoryRequest)))
-					Expect(config.Limits[v1.ResourceCPU]).To(Equal(resource.MustParse(translatorv2.SmallReplicaCpuLimit)))
-					Expect(config.Limits[v1.ResourceMemory]).To(Equal(resource.MustParse(translatorv2.SmallReplicaMemoryLimit)))
-				})
-			})
-
-			Context("with small size and sentinel disabled explicitly", func() {
-				It("should disable sentinel but use other small defaults", func() {
-					namespaceOverride := "custom-redis-namespace"
-					actual := apiv2.WBRedisSpec{
-						Enabled:   true,
-						Namespace: namespaceOverride,
-						Sentinel: &apiv2.WBRedisSentinelSpec{
-							Enabled: false,
-						},
-					}
-					builder := BuildInfraConfig(testingOwnerNamespace).AddRedisSpec(&actual, apiv2.WBSizeSmall)
-
-					Expect(builder.errors).To(BeEmpty())
-					config, err := builder.GetRedisConfig()
-					Expect(err).ToNot(HaveOccurred())
-
-					Expect(config.Enabled).To(BeTrue())
-					Expect(config.Namespace).To(Equal(namespaceOverride))
-					Expect(config.StorageSize).To(Equal(resource.MustParse(translatorv2.SmallStorageRequest)))
-					Expect(config.Requests[v1.ResourceCPU]).To(Equal(resource.MustParse(translatorv2.SmallReplicaCpuRequest)))
-					Expect(config.Requests[v1.ResourceMemory]).To(Equal(resource.MustParse(translatorv2.SmallReplicaMemoryRequest)))
-					Expect(config.Limits[v1.ResourceCPU]).To(Equal(resource.MustParse(translatorv2.SmallReplicaCpuLimit)))
-					Expect(config.Limits[v1.ResourceMemory]).To(Equal(resource.MustParse(translatorv2.SmallReplicaMemoryLimit)))
-					Expect(config.Sentinel.Enabled).To(BeFalse())
-					Expect(config.Sentinel.ReplicaCount).To(Equal(translatorv2.ReplicaSentinelCount))
 				})
 			})
 		})
@@ -628,6 +337,52 @@ var _ = Describe("Redis Model", func() {
 
 				status := results.ExtractRedisStatus(ctx)
 				Expect(status.Details).To(HaveLen(2))
+			})
+		})
+	})
+
+	Describe("BuildRedisDefaults", func() {
+		const testOwnerNamespace = "test-namespace"
+
+		Context("when size is Dev", func() {
+			It("should return a redis config with storage only and no sentinel", func() {
+				config, err := BuildRedisDefaults(SizeDev, testOwnerNamespace)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(config.Enabled).To(BeTrue())
+				Expect(config.Namespace).To(Equal(testOwnerNamespace))
+				Expect(config.StorageSize).To(Equal(resource.MustParse(DevStorageRequest)))
+				Expect(config.Sentinel.Enabled).To(BeFalse())
+				Expect(config.Requests).To(BeEmpty())
+				Expect(config.Limits).To(BeEmpty())
+			})
+		})
+
+		Context("when size is Small", func() {
+			It("should return a redis config with full resource requirements and sentinel", func() {
+				config, err := BuildRedisDefaults(SizeSmall, testOwnerNamespace)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(config.Enabled).To(BeTrue())
+				Expect(config.Namespace).To(Equal(testOwnerNamespace))
+				Expect(config.StorageSize).To(Equal(resource.MustParse(SmallStorageRequest)))
+				Expect(config.Requests[v1.ResourceCPU]).To(Equal(resource.MustParse(SmallReplicaCpuRequest)))
+				Expect(config.Limits[v1.ResourceCPU]).To(Equal(resource.MustParse(SmallReplicaCpuLimit)))
+				Expect(config.Requests[v1.ResourceMemory]).To(Equal(resource.MustParse(SmallReplicaMemoryRequest)))
+				Expect(config.Limits[v1.ResourceMemory]).To(Equal(resource.MustParse(SmallReplicaMemoryLimit)))
+				Expect(config.Sentinel.Enabled).To(BeTrue())
+				Expect(config.Sentinel.MasterGroupName).To(Equal(DefaultSentinelGroup))
+				Expect(config.Sentinel.ReplicaCount).To(Equal(ReplicaSentinelCount))
+				Expect(config.Sentinel.Requests[v1.ResourceCPU]).To(Equal(resource.MustParse(SmallSentinelCpuRequest)))
+				Expect(config.Sentinel.Limits[v1.ResourceCPU]).To(Equal(resource.MustParse(SmallSentinelCpuLimit)))
+				Expect(config.Sentinel.Requests[v1.ResourceMemory]).To(Equal(resource.MustParse(SmallSentinelMemoryRequest)))
+				Expect(config.Sentinel.Limits[v1.ResourceMemory]).To(Equal(resource.MustParse(SmallSentinelMemoryLimit)))
+			})
+		})
+
+		Context("when size is invalid", func() {
+			It("should return an error", func() {
+				_, err := BuildRedisDefaults(Size("invalid"), testOwnerNamespace)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("invalid profile"))
 			})
 		})
 	})

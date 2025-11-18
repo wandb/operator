@@ -7,7 +7,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	apiv2 "github.com/wandb/operator/api/v2"
-	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
@@ -36,320 +35,6 @@ var _ = Describe("ClickHouse Model", func() {
 					replicasOverride := int32(0)
 					config := ClickHouseConfig{Replicas: replicasOverride}
 					Expect(config.IsHighAvailability()).To(BeFalse())
-				})
-			})
-		})
-	})
-
-	Describe("InfraConfigBuilder", func() {
-		Describe("AddClickHouseSpec and GetClickHouseConfig", func() {
-			Context("with dev size and empty actual spec", func() {
-				It("should use all dev defaults except Enabled and Replicas", func() {
-					actual := apiv2.WBClickHouseSpec{
-						Enabled:  true,
-						Replicas: int32(1),
-					}
-					builder := BuildInfraConfig(testingOwnerNamespace).AddClickHouseSpec(&actual, apiv2.WBSizeDev)
-
-					Expect(builder.errors).To(BeEmpty())
-					config, err := builder.GetClickHouseConfig()
-					Expect(err).ToNot(HaveOccurred())
-
-					Expect(config.Enabled).To(BeTrue())
-					Expect(config.Replicas).To(Equal(int32(1)))
-					Expect(config.Namespace).To(Equal(testingOwnerNamespace))
-					Expect(config.StorageSize).To(Equal(translatorv2.DevClickHouseStorageSize))
-					Expect(config.Version).To(Equal(translatorv2.ClickHouseVersion))
-					Expect(config.Resources.Requests).To(BeEmpty())
-					Expect(config.Resources.Limits).To(BeEmpty())
-				})
-			})
-
-			Context("with small size and empty actual spec", func() {
-				It("should use all small defaults including resources except Enabled and Replicas", func() {
-					actual := apiv2.WBClickHouseSpec{
-						Enabled:  true,
-						Replicas: int32(3),
-					}
-					builder := BuildInfraConfig(testingOwnerNamespace).AddClickHouseSpec(&actual, apiv2.WBSizeSmall)
-
-					Expect(builder.errors).To(BeEmpty())
-					config, err := builder.GetClickHouseConfig()
-					Expect(err).ToNot(HaveOccurred())
-
-					Expect(config.Enabled).To(BeTrue())
-					Expect(config.Replicas).To(Equal(int32(3)))
-					Expect(config.Namespace).To(Equal(testingOwnerNamespace))
-					Expect(config.StorageSize).To(Equal(translatorv2.SmallClickHouseStorageSize))
-					Expect(config.Version).To(Equal(translatorv2.ClickHouseVersion))
-					Expect(config.Resources.Requests[v1.ResourceCPU]).To(Equal(resource.MustParse(translatorv2.SmallClickHouseCpuRequest)))
-					Expect(config.Resources.Requests[v1.ResourceMemory]).To(Equal(resource.MustParse(translatorv2.SmallClickHouseMemoryRequest)))
-					Expect(config.Resources.Limits[v1.ResourceCPU]).To(Equal(resource.MustParse(translatorv2.SmallClickHouseCpuLimit)))
-					Expect(config.Resources.Limits[v1.ResourceMemory]).To(Equal(resource.MustParse(translatorv2.SmallClickHouseMemoryLimit)))
-				})
-			})
-
-			Context("with small size and storage override", func() {
-				It("should use override storage and default resources", func() {
-					storageSizeOverride := "50Gi"
-					replicasFromActual := int32(3)
-					actual := apiv2.WBClickHouseSpec{
-						Enabled:     true,
-						Replicas:    replicasFromActual,
-						StorageSize: storageSizeOverride,
-					}
-					builder := BuildInfraConfig(testingOwnerNamespace).AddClickHouseSpec(&actual, apiv2.WBSizeSmall)
-
-					Expect(builder.errors).To(BeEmpty())
-					config, err := builder.GetClickHouseConfig()
-					Expect(err).ToNot(HaveOccurred())
-
-					Expect(config.Enabled).To(BeTrue())
-					Expect(config.Replicas).To(Equal(replicasFromActual))
-					Expect(config.Namespace).To(Equal(testingOwnerNamespace))
-					Expect(config.StorageSize).To(Equal(storageSizeOverride))
-					Expect(config.StorageSize).NotTo(Equal(translatorv2.SmallClickHouseStorageSize))
-					Expect(config.Version).To(Equal(translatorv2.ClickHouseVersion))
-					Expect(config.Resources.Requests[v1.ResourceCPU]).To(Equal(resource.MustParse(translatorv2.SmallClickHouseCpuRequest)))
-					Expect(config.Resources.Requests[v1.ResourceMemory]).To(Equal(resource.MustParse(translatorv2.SmallClickHouseMemoryRequest)))
-					Expect(config.Resources.Limits[v1.ResourceCPU]).To(Equal(resource.MustParse(translatorv2.SmallClickHouseCpuLimit)))
-					Expect(config.Resources.Limits[v1.ResourceMemory]).To(Equal(resource.MustParse(translatorv2.SmallClickHouseMemoryLimit)))
-				})
-			})
-
-			Context("with small size and version override", func() {
-				It("should use override version and default resources", func() {
-					versionOverride := "24.8"
-					replicasFromActual := int32(3)
-					actual := apiv2.WBClickHouseSpec{
-						Enabled:  true,
-						Replicas: replicasFromActual,
-						Version:  versionOverride,
-					}
-					builder := BuildInfraConfig(testingOwnerNamespace).AddClickHouseSpec(&actual, apiv2.WBSizeSmall)
-
-					Expect(builder.errors).To(BeEmpty())
-					config, err := builder.GetClickHouseConfig()
-					Expect(err).ToNot(HaveOccurred())
-
-					Expect(config.Enabled).To(BeTrue())
-					Expect(config.Replicas).To(Equal(replicasFromActual))
-					Expect(config.Namespace).To(Equal(testingOwnerNamespace))
-					Expect(config.StorageSize).To(Equal(translatorv2.SmallClickHouseStorageSize))
-					Expect(config.Version).To(Equal(versionOverride))
-					Expect(config.Version).NotTo(Equal(translatorv2.ClickHouseVersion))
-					Expect(config.Resources.Requests[v1.ResourceCPU]).To(Equal(resource.MustParse(translatorv2.SmallClickHouseCpuRequest)))
-					Expect(config.Resources.Requests[v1.ResourceMemory]).To(Equal(resource.MustParse(translatorv2.SmallClickHouseMemoryRequest)))
-					Expect(config.Resources.Limits[v1.ResourceCPU]).To(Equal(resource.MustParse(translatorv2.SmallClickHouseCpuLimit)))
-					Expect(config.Resources.Limits[v1.ResourceMemory]).To(Equal(resource.MustParse(translatorv2.SmallClickHouseMemoryLimit)))
-				})
-			})
-
-			Context("with small size and replicas override", func() {
-				It("should use override replicas and default resources", func() {
-					replicasOverride := int32(5)
-					actual := apiv2.WBClickHouseSpec{
-						Enabled:  true,
-						Replicas: replicasOverride,
-					}
-					builder := BuildInfraConfig(testingOwnerNamespace).AddClickHouseSpec(&actual, apiv2.WBSizeSmall)
-
-					Expect(builder.errors).To(BeEmpty())
-					config, err := builder.GetClickHouseConfig()
-					Expect(err).ToNot(HaveOccurred())
-
-					Expect(config.Enabled).To(BeTrue())
-					Expect(config.Namespace).To(Equal(testingOwnerNamespace))
-					Expect(config.StorageSize).To(Equal(translatorv2.SmallClickHouseStorageSize))
-					Expect(config.Replicas).To(Equal(replicasOverride))
-					Expect(config.Replicas).NotTo(Equal(int32(3)))
-					Expect(config.Version).To(Equal(translatorv2.ClickHouseVersion))
-					Expect(config.Resources.Requests[v1.ResourceCPU]).To(Equal(resource.MustParse(translatorv2.SmallClickHouseCpuRequest)))
-					Expect(config.Resources.Requests[v1.ResourceMemory]).To(Equal(resource.MustParse(translatorv2.SmallClickHouseMemoryRequest)))
-					Expect(config.Resources.Limits[v1.ResourceCPU]).To(Equal(resource.MustParse(translatorv2.SmallClickHouseCpuLimit)))
-					Expect(config.Resources.Limits[v1.ResourceMemory]).To(Equal(resource.MustParse(translatorv2.SmallClickHouseMemoryLimit)))
-				})
-			})
-
-			Context("with small size and resource overrides", func() {
-				It("should use override resources and default storage/version", func() {
-					replicasFromActual := int32(3)
-					cpuRequestOverride := "2"
-					cpuLimitOverride := "4"
-					memoryRequestOverride := "4Gi"
-					memoryLimitOverride := "8Gi"
-					actual := apiv2.WBClickHouseSpec{
-						Enabled:  true,
-						Replicas: replicasFromActual,
-						Config: &apiv2.WBClickHouseConfig{
-							Resources: v1.ResourceRequirements{
-								Requests: v1.ResourceList{
-									v1.ResourceCPU:    resource.MustParse(cpuRequestOverride),
-									v1.ResourceMemory: resource.MustParse(memoryRequestOverride),
-								},
-								Limits: v1.ResourceList{
-									v1.ResourceCPU:    resource.MustParse(cpuLimitOverride),
-									v1.ResourceMemory: resource.MustParse(memoryLimitOverride),
-								},
-							},
-						},
-					}
-					builder := BuildInfraConfig(testingOwnerNamespace).AddClickHouseSpec(&actual, apiv2.WBSizeSmall)
-
-					Expect(builder.errors).To(BeEmpty())
-					config, err := builder.GetClickHouseConfig()
-					Expect(err).ToNot(HaveOccurred())
-
-					Expect(config.Enabled).To(BeTrue())
-					Expect(config.Replicas).To(Equal(replicasFromActual))
-					Expect(config.Namespace).To(Equal(testingOwnerNamespace))
-					Expect(config.StorageSize).To(Equal(translatorv2.SmallClickHouseStorageSize))
-					Expect(config.Version).To(Equal(translatorv2.ClickHouseVersion))
-					Expect(config.Resources.Requests[v1.ResourceCPU]).To(Equal(resource.MustParse(cpuRequestOverride)))
-					Expect(config.Resources.Requests[v1.ResourceCPU]).NotTo(Equal(resource.MustParse(translatorv2.SmallClickHouseCpuRequest)))
-					Expect(config.Resources.Requests[v1.ResourceMemory]).To(Equal(resource.MustParse(memoryRequestOverride)))
-					Expect(config.Resources.Requests[v1.ResourceMemory]).NotTo(Equal(resource.MustParse(translatorv2.SmallClickHouseMemoryRequest)))
-					Expect(config.Resources.Limits[v1.ResourceCPU]).To(Equal(resource.MustParse(cpuLimitOverride)))
-					Expect(config.Resources.Limits[v1.ResourceCPU]).NotTo(Equal(resource.MustParse(translatorv2.SmallClickHouseCpuLimit)))
-					Expect(config.Resources.Limits[v1.ResourceMemory]).To(Equal(resource.MustParse(memoryLimitOverride)))
-					Expect(config.Resources.Limits[v1.ResourceMemory]).NotTo(Equal(resource.MustParse(translatorv2.SmallClickHouseMemoryLimit)))
-				})
-			})
-
-			Context("with small size and all overrides", func() {
-				It("should use all override values", func() {
-					storageSizeOverride := "100Gi"
-					replicasOverride := int32(7)
-					versionOverride := "25.1"
-					cpuRequestOverride := "3"
-					cpuLimitOverride := "6"
-					memoryRequestOverride := "8Gi"
-					memoryLimitOverride := "16Gi"
-					actual := apiv2.WBClickHouseSpec{
-						Enabled:     true,
-						StorageSize: storageSizeOverride,
-						Replicas:    replicasOverride,
-						Version:     versionOverride,
-						Config: &apiv2.WBClickHouseConfig{
-							Resources: v1.ResourceRequirements{
-								Requests: v1.ResourceList{
-									v1.ResourceCPU:    resource.MustParse(cpuRequestOverride),
-									v1.ResourceMemory: resource.MustParse(memoryRequestOverride),
-								},
-								Limits: v1.ResourceList{
-									v1.ResourceCPU:    resource.MustParse(cpuLimitOverride),
-									v1.ResourceMemory: resource.MustParse(memoryLimitOverride),
-								},
-							},
-						},
-					}
-					builder := BuildInfraConfig(testingOwnerNamespace).AddClickHouseSpec(&actual, apiv2.WBSizeSmall)
-
-					Expect(builder.errors).To(BeEmpty())
-					config, err := builder.GetClickHouseConfig()
-					Expect(err).ToNot(HaveOccurred())
-
-					Expect(config.Enabled).To(BeTrue())
-					Expect(config.Namespace).To(Equal(testingOwnerNamespace))
-					Expect(config.StorageSize).To(Equal(storageSizeOverride))
-					Expect(config.StorageSize).NotTo(Equal(translatorv2.SmallClickHouseStorageSize))
-					Expect(config.Replicas).To(Equal(replicasOverride))
-					Expect(config.Replicas).NotTo(Equal(int32(3)))
-					Expect(config.Version).To(Equal(versionOverride))
-					Expect(config.Version).NotTo(Equal(translatorv2.ClickHouseVersion))
-					Expect(config.Resources.Requests[v1.ResourceCPU]).To(Equal(resource.MustParse(cpuRequestOverride)))
-					Expect(config.Resources.Requests[v1.ResourceCPU]).NotTo(Equal(resource.MustParse(translatorv2.SmallClickHouseCpuRequest)))
-					Expect(config.Resources.Requests[v1.ResourceMemory]).To(Equal(resource.MustParse(memoryRequestOverride)))
-					Expect(config.Resources.Requests[v1.ResourceMemory]).NotTo(Equal(resource.MustParse(translatorv2.SmallClickHouseMemoryRequest)))
-					Expect(config.Resources.Limits[v1.ResourceCPU]).To(Equal(resource.MustParse(cpuLimitOverride)))
-					Expect(config.Resources.Limits[v1.ResourceCPU]).NotTo(Equal(resource.MustParse(translatorv2.SmallClickHouseCpuLimit)))
-					Expect(config.Resources.Limits[v1.ResourceMemory]).To(Equal(resource.MustParse(memoryLimitOverride)))
-					Expect(config.Resources.Limits[v1.ResourceMemory]).NotTo(Equal(resource.MustParse(translatorv2.SmallClickHouseMemoryLimit)))
-				})
-			})
-
-			Context("with dev size and namespace override via spec", func() {
-				It("should use override namespace and dev defaults", func() {
-					namespaceOverride := "custom-clickhouse-namespace"
-					replicasFromActual := int32(1)
-					actual := apiv2.WBClickHouseSpec{
-						Enabled:   true,
-						Replicas:  replicasFromActual,
-						Namespace: namespaceOverride,
-					}
-					builder := BuildInfraConfig(testingOwnerNamespace).AddClickHouseSpec(&actual, apiv2.WBSizeDev)
-
-					Expect(builder.errors).To(BeEmpty())
-					config, err := builder.GetClickHouseConfig()
-					Expect(err).ToNot(HaveOccurred())
-
-					Expect(config.Enabled).To(BeTrue())
-					Expect(config.Replicas).To(Equal(replicasFromActual))
-					Expect(config.Namespace).To(Equal(namespaceOverride))
-					Expect(config.Namespace).NotTo(Equal(testingOwnerNamespace))
-					Expect(config.StorageSize).To(Equal(translatorv2.DevClickHouseStorageSize))
-					Expect(config.Version).To(Equal(translatorv2.ClickHouseVersion))
-					Expect(config.Resources.Requests).To(BeEmpty())
-					Expect(config.Resources.Limits).To(BeEmpty())
-				})
-			})
-
-			Context("with small size and partial resource overrides", func() {
-				It("should merge override and default resources", func() {
-					replicasFromActual := int32(3)
-					cpuLimitOverride := "2"
-					actual := apiv2.WBClickHouseSpec{
-						Enabled:  true,
-						Replicas: replicasFromActual,
-						Config: &apiv2.WBClickHouseConfig{
-							Resources: v1.ResourceRequirements{
-								Limits: v1.ResourceList{
-									v1.ResourceCPU: resource.MustParse(cpuLimitOverride),
-								},
-							},
-						},
-					}
-					builder := BuildInfraConfig(testingOwnerNamespace).AddClickHouseSpec(&actual, apiv2.WBSizeSmall)
-
-					Expect(builder.errors).To(BeEmpty())
-					config, err := builder.GetClickHouseConfig()
-					Expect(err).ToNot(HaveOccurred())
-
-					Expect(config.Enabled).To(BeTrue())
-					Expect(config.Replicas).To(Equal(replicasFromActual))
-					Expect(config.Namespace).To(Equal(testingOwnerNamespace))
-					Expect(config.StorageSize).To(Equal(translatorv2.SmallClickHouseStorageSize))
-					Expect(config.Version).To(Equal(translatorv2.ClickHouseVersion))
-					Expect(config.Resources.Requests[v1.ResourceCPU]).To(Equal(resource.MustParse(translatorv2.SmallClickHouseCpuRequest)))
-					Expect(config.Resources.Requests[v1.ResourceMemory]).To(Equal(resource.MustParse(translatorv2.SmallClickHouseMemoryRequest)))
-					Expect(config.Resources.Limits[v1.ResourceCPU]).To(Equal(resource.MustParse(cpuLimitOverride)))
-					Expect(config.Resources.Limits[v1.ResourceCPU]).NotTo(Equal(resource.MustParse(translatorv2.SmallClickHouseCpuLimit)))
-					Expect(config.Resources.Limits[v1.ResourceMemory]).To(Equal(resource.MustParse(translatorv2.SmallClickHouseMemoryLimit)))
-				})
-			})
-
-			Context("with disabled spec", func() {
-				It("should respect enabled false and use defaults for other fields", func() {
-					replicasFromActual := int32(0)
-					actual := apiv2.WBClickHouseSpec{
-						Enabled:  false,
-						Replicas: replicasFromActual,
-					}
-					builder := BuildInfraConfig(testingOwnerNamespace).AddClickHouseSpec(&actual, apiv2.WBSizeSmall)
-
-					Expect(builder.errors).To(BeEmpty())
-					config, err := builder.GetClickHouseConfig()
-					Expect(err).ToNot(HaveOccurred())
-
-					Expect(config.Enabled).To(BeFalse())
-					Expect(config.Replicas).To(Equal(replicasFromActual))
-					Expect(config.Namespace).To(Equal(testingOwnerNamespace))
-					Expect(config.StorageSize).To(Equal(translatorv2.SmallClickHouseStorageSize))
-					Expect(config.Version).To(Equal(translatorv2.ClickHouseVersion))
-					Expect(config.Resources.Requests[v1.ResourceCPU]).To(Equal(resource.MustParse(translatorv2.SmallClickHouseCpuRequest)))
-					Expect(config.Resources.Requests[v1.ResourceMemory]).To(Equal(resource.MustParse(translatorv2.SmallClickHouseMemoryRequest)))
-					Expect(config.Resources.Limits[v1.ResourceCPU]).To(Equal(resource.MustParse(translatorv2.SmallClickHouseCpuLimit)))
-					Expect(config.Resources.Limits[v1.ResourceMemory]).To(Equal(resource.MustParse(translatorv2.SmallClickHouseMemoryLimit)))
 				})
 			})
 		})
@@ -731,6 +416,48 @@ var _ = Describe("ClickHouse Model", func() {
 					Expect(codes[i]).NotTo(Equal(codes[j]))
 				}
 			}
+		})
+	})
+
+	Describe("BuildClickHouseDefaults", func() {
+		const testOwnerNamespace = "test-namespace"
+
+		Context("when size is Dev", func() {
+			It("should return dev defaults with 1 replica", func() {
+				config, err := BuildClickHouseDefaults(SizeDev, testOwnerNamespace)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(config.Enabled).To(BeTrue())
+				Expect(config.Version).To(Equal(ClickHouseVersion))
+				Expect(config.StorageSize).To(Equal(DevClickHouseStorageSize))
+				Expect(config.Replicas).To(Equal(int32(1)))
+				Expect(config.Namespace).To(Equal(testOwnerNamespace))
+				Expect(config.Resources.Requests).To(BeEmpty())
+				Expect(config.Resources.Limits).To(BeEmpty())
+			})
+		})
+
+		Context("when size is Small", func() {
+			It("should return small defaults with 3 replicas and resources", func() {
+				config, err := BuildClickHouseDefaults(SizeSmall, testOwnerNamespace)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(config.Enabled).To(BeTrue())
+				Expect(config.Version).To(Equal(ClickHouseVersion))
+				Expect(config.StorageSize).To(Equal(SmallClickHouseStorageSize))
+				Expect(config.Replicas).To(Equal(int32(3)))
+				Expect(config.Namespace).To(Equal(testOwnerNamespace))
+				Expect(config.Resources.Requests[v1.ResourceCPU]).To(Equal(resource.MustParse(SmallClickHouseCpuRequest)))
+				Expect(config.Resources.Limits[v1.ResourceCPU]).To(Equal(resource.MustParse(SmallClickHouseCpuLimit)))
+				Expect(config.Resources.Requests[v1.ResourceMemory]).To(Equal(resource.MustParse(SmallClickHouseMemoryRequest)))
+				Expect(config.Resources.Limits[v1.ResourceMemory]).To(Equal(resource.MustParse(SmallClickHouseMemoryLimit)))
+			})
+		})
+
+		Context("when size is invalid", func() {
+			It("should return error", func() {
+				_, err := BuildClickHouseDefaults(Size("invalid"), testOwnerNamespace)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("unsupported size for ClickHouse"))
+			})
 		})
 	})
 })

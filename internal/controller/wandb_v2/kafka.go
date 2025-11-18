@@ -6,12 +6,13 @@ import (
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/infra/kafka"
 	"github.com/wandb/operator/internal/controller/infra/kafka/strimzi"
+	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
 	"github.com/wandb/operator/internal/model"
 )
 
 func (r *WeightsAndBiasesV2Reconciler) reconcileKafka(
 	ctx context.Context,
-	infraDetails model.InfraConfig,
+	infraDetails translatorv2.InfraConfig,
 	wandb *apiv2.WeightsAndBiases,
 ) *model.Results {
 	var err error

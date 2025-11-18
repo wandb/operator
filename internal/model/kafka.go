@@ -6,10 +6,23 @@ import (
 	"slices"
 
 	apiv2 "github.com/wandb/operator/api/v2"
-	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
 	"github.com/wandb/operator/internal/utils"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	ctrl "sigs.k8s.io/controller-runtime"
+)
+
+/////////////////////////////////////////////////
+// Kafka Default Values
+
+const (
+	DevKafkaStorageSize   = "1Gi"
+	SmallKafkaStorageSize = "5Gi"
+
+	SmallKafkaCpuRequest    = "500m"
+	SmallKafkaCpuLimit      = "1000m"
+	SmallKafkaMemoryRequest = "1Gi"
+	SmallKafkaMemoryLimit   = "2Gi"
 )
 
 /////////////////////////////////////////////////
@@ -61,23 +74,6 @@ func (i *InfraConfigBuilder) GetKafkaConfig() (KafkaConfig, error) {
 	return details, nil
 }
 
-func (i *InfraConfigBuilder) AddKafkaSpec(actual *apiv2.WBKafkaSpec, size apiv2.WBSize) *InfraConfigBuilder {
-	i.size = size
-	var err error
-	var defaultSpec, merged apiv2.WBKafkaSpec
-	if defaultSpec, err = translatorv2.BuildKafkaDefaults(size, i.ownerNamespace); err != nil {
-		i.errors = append(i.errors, err)
-		return i
-	}
-	if merged, err = translatorv2.BuildKafkaSpec(*actual, defaultSpec); err != nil {
-		i.errors = append(i.errors, err)
-		return i
-	} else {
-		i.mergedKafka = &merged
-	}
-	return i
-}
-
 func GetReplicaCountForSize(size apiv2.WBSize) (int32, error) {
 	switch size {
 	case apiv2.WBSizeDev:
@@ -110,6 +106,69 @@ func GetReplicationConfigForSize(size apiv2.WBSize) (KafkaReplicationConfig, err
 	default:
 		return KafkaReplicationConfig{}, fmt.Errorf("unsupported size for Kafka: %s (only 'dev' and 'small' are supported)", size)
 	}
+}
+
+func BuildKafkaDefaults(size Size, ownerNamespace string) (KafkaConfig, error) {
+	var err error
+	var storageSize string
+	config := KafkaConfig{
+		Enabled:   true,
+		Namespace: ownerNamespace,
+	}
+
+	switch size {
+	case SizeDev:
+		storageSize = DevKafkaStorageSize
+		config.StorageSize = storageSize
+		config.Replicas = 1
+		config.ReplicationConfig = KafkaReplicationConfig{
+			DefaultReplicationFactor: 1,
+			MinInSyncReplicas:        1,
+			OffsetsTopicRF:           1,
+			TransactionStateRF:       1,
+			TransactionStateISR:      1,
+		}
+	case SizeSmall:
+		storageSize = SmallKafkaStorageSize
+		config.StorageSize = storageSize
+		config.Replicas = 3
+		config.ReplicationConfig = KafkaReplicationConfig{
+			DefaultReplicationFactor: 3,
+			MinInSyncReplicas:        2,
+			OffsetsTopicRF:           3,
+			TransactionStateRF:       3,
+			TransactionStateISR:      2,
+		}
+
+		var cpuRequest, cpuLimit, memoryRequest, memoryLimit resource.Quantity
+		if cpuRequest, err = resource.ParseQuantity(SmallKafkaCpuRequest); err != nil {
+			return config, err
+		}
+		if cpuLimit, err = resource.ParseQuantity(SmallKafkaCpuLimit); err != nil {
+			return config, err
+		}
+		if memoryRequest, err = resource.ParseQuantity(SmallKafkaMemoryRequest); err != nil {
+			return config, err
+		}
+		if memoryLimit, err = resource.ParseQuantity(SmallKafkaMemoryLimit); err != nil {
+			return config, err
+		}
+
+		config.Resources = corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    cpuRequest,
+				corev1.ResourceMemory: memoryRequest,
+			},
+			Limits: corev1.ResourceList{
+				corev1.ResourceCPU:    cpuLimit,
+				corev1.ResourceMemory: memoryLimit,
+			},
+		}
+	default:
+		return config, fmt.Errorf("unsupported size for Kafka: %s (only 'dev' and 'small' are supported)", size)
+	}
+
+	return config, nil
 }
 
 /////////////////////////////////////////////////

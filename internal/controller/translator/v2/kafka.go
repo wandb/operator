@@ -1,22 +1,9 @@
 package v2
 
 import (
-	"fmt"
-
 	apiv2 "github.com/wandb/operator/api/v2"
-	merge2 "github.com/wandb/operator/internal/controller/translator/utils"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
-)
-
-const (
-	DevKafkaStorageSize   = "1Gi"
-	SmallKafkaStorageSize = "5Gi"
-
-	SmallKafkaCpuRequest    = "500m"
-	SmallKafkaCpuLimit      = "1000m"
-	SmallKafkaMemoryRequest = "1Gi"
-	SmallKafkaMemoryLimit   = "2Gi"
+	"github.com/wandb/operator/internal/controller/translator/utils"
+	"github.com/wandb/operator/internal/model"
 )
 
 // BuildKafkaSpec will create a new WBKafkaSpec with defaultValues applied if not
@@ -30,68 +17,58 @@ func BuildKafkaSpec(actual apiv2.WBKafkaSpec, defaultValues apiv2.WBKafkaSpec) (
 		kafkaSpec.Config = actual.Config.DeepCopy()
 	} else {
 		var kafkaConfig apiv2.WBKafkaConfig
-		kafkaConfig.Resources = merge2.Resources(
+		kafkaConfig.Resources = utils.Resources(
 			actual.Config.Resources,
 			defaultValues.Config.Resources,
 		)
 		kafkaSpec.Config = &kafkaConfig
 	}
 
-	kafkaSpec.StorageSize = merge2.CoalesceQuantity(actual.StorageSize, defaultValues.StorageSize)
-	kafkaSpec.Namespace = merge2.Coalesce(actual.Namespace, defaultValues.Namespace)
+	kafkaSpec.StorageSize = utils.CoalesceQuantity(actual.StorageSize, defaultValues.StorageSize)
+	kafkaSpec.Namespace = utils.Coalesce(actual.Namespace, defaultValues.Namespace)
 
 	kafkaSpec.Enabled = actual.Enabled
 
 	return kafkaSpec, nil
 }
 
-func BuildKafkaDefaults(profile apiv2.WBSize, ownerNamespace string) (apiv2.WBKafkaSpec, error) {
+func TranslateKafkaConfig(config model.KafkaConfig) apiv2.WBKafkaSpec {
+	spec := apiv2.WBKafkaSpec{
+		Enabled:     config.Enabled,
+		Namespace:   config.Namespace,
+		StorageSize: config.StorageSize,
+		Config: &apiv2.WBKafkaConfig{
+			Resources: config.Resources,
+		},
+	}
+
+	return spec
+}
+
+func (i *InfraConfigBuilder) AddKafkaSpec(actual apiv2.WBKafkaSpec) *InfraConfigBuilder {
 	var err error
-	var storageSize string
+	var size model.Size
+	var defaultConfig model.KafkaConfig
 	var spec apiv2.WBKafkaSpec
 
-	spec = apiv2.WBKafkaSpec{
-		Enabled:   true,
-		Namespace: ownerNamespace,
+	size, err = ToModelSize(i.size)
+	if err != nil {
+		i.errors = append(i.errors, err)
+		return i
+	}
+	defaultConfig, err = model.BuildKafkaDefaults(size, i.ownerNamespace)
+	if err != nil {
+		i.errors = append(i.errors, err)
+		return i
 	}
 
-	switch profile {
-	case apiv2.WBSizeDev:
-		storageSize = DevKafkaStorageSize
-		spec.StorageSize = storageSize
-	case apiv2.WBSizeSmall:
-		storageSize = SmallKafkaStorageSize
-		spec.StorageSize = storageSize
+	defaultSpec := TranslateKafkaConfig(defaultConfig)
 
-		var cpuRequest, cpuLimit, memoryRequest, memoryLimit resource.Quantity
-		if cpuRequest, err = resource.ParseQuantity(SmallKafkaCpuRequest); err != nil {
-			return spec, err
-		}
-		if cpuLimit, err = resource.ParseQuantity(SmallKafkaCpuLimit); err != nil {
-			return spec, err
-		}
-		if memoryRequest, err = resource.ParseQuantity(SmallKafkaMemoryRequest); err != nil {
-			return spec, err
-		}
-		if memoryLimit, err = resource.ParseQuantity(SmallKafkaMemoryLimit); err != nil {
-			return spec, err
-		}
-
-		spec.Config = &apiv2.WBKafkaConfig{
-			Resources: corev1.ResourceRequirements{
-				Requests: corev1.ResourceList{
-					corev1.ResourceCPU:    cpuRequest,
-					corev1.ResourceMemory: memoryRequest,
-				},
-				Limits: corev1.ResourceList{
-					corev1.ResourceCPU:    cpuLimit,
-					corev1.ResourceMemory: memoryLimit,
-				},
-			},
-		}
-	default:
-		return spec, fmt.Errorf("unsupported size for Kafka: %s (only 'dev' and 'small' are supported)", profile)
+	spec, err = BuildKafkaSpec(actual, defaultSpec)
+	if err != nil {
+		i.errors = append(i.errors, err)
+		return i
 	}
-
-	return spec, nil
+	i.mergedKafka = &spec
+	return i
 }

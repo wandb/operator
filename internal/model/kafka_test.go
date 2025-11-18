@@ -7,7 +7,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	apiv2 "github.com/wandb/operator/api/v2"
-	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
@@ -33,261 +32,6 @@ var _ = Describe("Kafka Model", func() {
 				It("should return false", func() {
 					config := KafkaConfig{Replicas: 0}
 					Expect(config.IsHighAvailability()).To(BeFalse())
-				})
-			})
-		})
-	})
-
-	Describe("InfraConfigBuilder", func() {
-		Describe("AddKafkaSpec and GetKafkaConfig", func() {
-			Context("with dev size and empty actual spec", func() {
-				It("should use all dev defaults except Enabled and Namespace", func() {
-					namespaceOverride := "custom-kafka-namespace"
-					actual := apiv2.WBKafkaSpec{
-						Enabled:   true,
-						Namespace: namespaceOverride,
-					}
-					builder := BuildInfraConfig(testingOwnerNamespace).AddKafkaSpec(&actual, apiv2.WBSizeDev)
-
-					Expect(builder.errors).To(BeEmpty())
-					config, err := builder.GetKafkaConfig()
-					Expect(err).ToNot(HaveOccurred())
-
-					Expect(config.Enabled).To(BeTrue())
-					Expect(config.Namespace).To(Equal(namespaceOverride))
-					Expect(config.StorageSize).To(Equal(translatorv2.DevKafkaStorageSize))
-					Expect(config.Replicas).To(Equal(int32(1)))
-					Expect(config.Resources.Requests).To(BeEmpty())
-					Expect(config.Resources.Limits).To(BeEmpty())
-					Expect(config.ReplicationConfig.DefaultReplicationFactor).To(Equal(int32(1)))
-					Expect(config.ReplicationConfig.MinInSyncReplicas).To(Equal(int32(1)))
-					Expect(config.ReplicationConfig.OffsetsTopicRF).To(Equal(int32(1)))
-					Expect(config.ReplicationConfig.TransactionStateRF).To(Equal(int32(1)))
-					Expect(config.ReplicationConfig.TransactionStateISR).To(Equal(int32(1)))
-				})
-			})
-
-			Context("with small size and empty actual spec", func() {
-				It("should use all small defaults including resources except Enabled and Namespace", func() {
-					namespaceOverride := "custom-kafka-namespace"
-					actual := apiv2.WBKafkaSpec{
-						Enabled:   true,
-						Namespace: namespaceOverride,
-					}
-					builder := BuildInfraConfig(testingOwnerNamespace).AddKafkaSpec(&actual, apiv2.WBSizeSmall)
-
-					Expect(builder.errors).To(BeEmpty())
-					config, err := builder.GetKafkaConfig()
-					Expect(err).ToNot(HaveOccurred())
-
-					Expect(config.Enabled).To(BeTrue())
-					Expect(config.Namespace).To(Equal(namespaceOverride))
-					Expect(config.StorageSize).To(Equal(translatorv2.SmallKafkaStorageSize))
-					Expect(config.Replicas).To(Equal(int32(3)))
-					Expect(config.Resources.Requests[v1.ResourceCPU]).To(Equal(resource.MustParse(translatorv2.SmallKafkaCpuRequest)))
-					Expect(config.Resources.Requests[v1.ResourceMemory]).To(Equal(resource.MustParse(translatorv2.SmallKafkaMemoryRequest)))
-					Expect(config.Resources.Limits[v1.ResourceCPU]).To(Equal(resource.MustParse(translatorv2.SmallKafkaCpuLimit)))
-					Expect(config.Resources.Limits[v1.ResourceMemory]).To(Equal(resource.MustParse(translatorv2.SmallKafkaMemoryLimit)))
-					Expect(config.ReplicationConfig.DefaultReplicationFactor).To(Equal(int32(3)))
-					Expect(config.ReplicationConfig.MinInSyncReplicas).To(Equal(int32(2)))
-					Expect(config.ReplicationConfig.OffsetsTopicRF).To(Equal(int32(3)))
-					Expect(config.ReplicationConfig.TransactionStateRF).To(Equal(int32(3)))
-					Expect(config.ReplicationConfig.TransactionStateISR).To(Equal(int32(2)))
-				})
-			})
-
-			Context("with small size and storage override", func() {
-				It("should use override storage and default resources", func() {
-					storageSizeOverride := "50Gi"
-					namespaceOverride := "custom-kafka-namespace"
-					actual := apiv2.WBKafkaSpec{
-						Enabled:     true,
-						Namespace:   namespaceOverride,
-						StorageSize: storageSizeOverride,
-					}
-					builder := BuildInfraConfig(testingOwnerNamespace).AddKafkaSpec(&actual, apiv2.WBSizeSmall)
-
-					Expect(builder.errors).To(BeEmpty())
-					config, err := builder.GetKafkaConfig()
-					Expect(err).ToNot(HaveOccurred())
-
-					Expect(config.Enabled).To(BeTrue())
-					Expect(config.Namespace).To(Equal(namespaceOverride))
-					Expect(config.StorageSize).To(Equal(storageSizeOverride))
-					Expect(config.StorageSize).NotTo(Equal(translatorv2.SmallKafkaStorageSize))
-					Expect(config.Replicas).To(Equal(int32(3)))
-					Expect(config.Resources.Requests[v1.ResourceCPU]).To(Equal(resource.MustParse(translatorv2.SmallKafkaCpuRequest)))
-					Expect(config.Resources.Requests[v1.ResourceMemory]).To(Equal(resource.MustParse(translatorv2.SmallKafkaMemoryRequest)))
-					Expect(config.Resources.Limits[v1.ResourceCPU]).To(Equal(resource.MustParse(translatorv2.SmallKafkaCpuLimit)))
-					Expect(config.Resources.Limits[v1.ResourceMemory]).To(Equal(resource.MustParse(translatorv2.SmallKafkaMemoryLimit)))
-				})
-			})
-
-			Context("with small size and namespace using default", func() {
-				It("should use default namespace when not provided", func() {
-					actual := apiv2.WBKafkaSpec{
-						Enabled: true,
-					}
-					builder := BuildInfraConfig(testingOwnerNamespace).AddKafkaSpec(&actual, apiv2.WBSizeSmall)
-
-					Expect(builder.errors).To(BeEmpty())
-					config, err := builder.GetKafkaConfig()
-					Expect(err).ToNot(HaveOccurred())
-
-					Expect(config.Enabled).To(BeTrue())
-					Expect(config.Namespace).To(Equal(testingOwnerNamespace))
-					Expect(config.StorageSize).To(Equal(translatorv2.SmallKafkaStorageSize))
-					Expect(config.Replicas).To(Equal(int32(3)))
-				})
-			})
-
-			Context("with small size and resource overrides", func() {
-				It("should use override resources and default storage", func() {
-					cpuRequestOverride := "2"
-					cpuLimitOverride := "4"
-					memoryRequestOverride := "4Gi"
-					memoryLimitOverride := "8Gi"
-					namespaceOverride := "custom-kafka-namespace"
-					actual := apiv2.WBKafkaSpec{
-						Enabled:   true,
-						Namespace: namespaceOverride,
-						Config: &apiv2.WBKafkaConfig{
-							Resources: v1.ResourceRequirements{
-								Requests: v1.ResourceList{
-									v1.ResourceCPU:    resource.MustParse(cpuRequestOverride),
-									v1.ResourceMemory: resource.MustParse(memoryRequestOverride),
-								},
-								Limits: v1.ResourceList{
-									v1.ResourceCPU:    resource.MustParse(cpuLimitOverride),
-									v1.ResourceMemory: resource.MustParse(memoryLimitOverride),
-								},
-							},
-						},
-					}
-					builder := BuildInfraConfig(testingOwnerNamespace).AddKafkaSpec(&actual, apiv2.WBSizeSmall)
-
-					Expect(builder.errors).To(BeEmpty())
-					config, err := builder.GetKafkaConfig()
-					Expect(err).ToNot(HaveOccurred())
-
-					Expect(config.Enabled).To(BeTrue())
-					Expect(config.Namespace).To(Equal(namespaceOverride))
-					Expect(config.StorageSize).To(Equal(translatorv2.SmallKafkaStorageSize))
-					Expect(config.Replicas).To(Equal(int32(3)))
-					Expect(config.Resources.Requests[v1.ResourceCPU]).To(Equal(resource.MustParse(cpuRequestOverride)))
-					Expect(config.Resources.Requests[v1.ResourceCPU]).NotTo(Equal(resource.MustParse(translatorv2.SmallKafkaCpuRequest)))
-					Expect(config.Resources.Requests[v1.ResourceMemory]).To(Equal(resource.MustParse(memoryRequestOverride)))
-					Expect(config.Resources.Requests[v1.ResourceMemory]).NotTo(Equal(resource.MustParse(translatorv2.SmallKafkaMemoryRequest)))
-					Expect(config.Resources.Limits[v1.ResourceCPU]).To(Equal(resource.MustParse(cpuLimitOverride)))
-					Expect(config.Resources.Limits[v1.ResourceCPU]).NotTo(Equal(resource.MustParse(translatorv2.SmallKafkaCpuLimit)))
-					Expect(config.Resources.Limits[v1.ResourceMemory]).To(Equal(resource.MustParse(memoryLimitOverride)))
-					Expect(config.Resources.Limits[v1.ResourceMemory]).NotTo(Equal(resource.MustParse(translatorv2.SmallKafkaMemoryLimit)))
-				})
-			})
-
-			Context("with small size and partial resource overrides", func() {
-				It("should merge override and default resources", func() {
-					cpuLimitOverride := "2"
-					namespaceOverride := "custom-kafka-namespace"
-					actual := apiv2.WBKafkaSpec{
-						Enabled:   true,
-						Namespace: namespaceOverride,
-						Config: &apiv2.WBKafkaConfig{
-							Resources: v1.ResourceRequirements{
-								Limits: v1.ResourceList{
-									v1.ResourceCPU: resource.MustParse(cpuLimitOverride),
-								},
-							},
-						},
-					}
-					builder := BuildInfraConfig(testingOwnerNamespace).AddKafkaSpec(&actual, apiv2.WBSizeSmall)
-
-					Expect(builder.errors).To(BeEmpty())
-					config, err := builder.GetKafkaConfig()
-					Expect(err).ToNot(HaveOccurred())
-
-					Expect(config.Enabled).To(BeTrue())
-					Expect(config.Namespace).To(Equal(namespaceOverride))
-					Expect(config.StorageSize).To(Equal(translatorv2.SmallKafkaStorageSize))
-					Expect(config.Replicas).To(Equal(int32(3)))
-					Expect(config.Resources.Requests[v1.ResourceCPU]).To(Equal(resource.MustParse(translatorv2.SmallKafkaCpuRequest)))
-					Expect(config.Resources.Requests[v1.ResourceMemory]).To(Equal(resource.MustParse(translatorv2.SmallKafkaMemoryRequest)))
-					Expect(config.Resources.Limits[v1.ResourceCPU]).To(Equal(resource.MustParse(cpuLimitOverride)))
-					Expect(config.Resources.Limits[v1.ResourceCPU]).NotTo(Equal(resource.MustParse(translatorv2.SmallKafkaCpuLimit)))
-					Expect(config.Resources.Limits[v1.ResourceMemory]).To(Equal(resource.MustParse(translatorv2.SmallKafkaMemoryLimit)))
-				})
-			})
-
-			Context("with small size and all overrides", func() {
-				It("should use all override values", func() {
-					storageSizeOverride := "100Gi"
-					namespaceOverride := "custom-kafka-namespace"
-					cpuRequestOverride := "3"
-					cpuLimitOverride := "6"
-					memoryRequestOverride := "8Gi"
-					memoryLimitOverride := "16Gi"
-					actual := apiv2.WBKafkaSpec{
-						Enabled:     true,
-						Namespace:   namespaceOverride,
-						StorageSize: storageSizeOverride,
-						Config: &apiv2.WBKafkaConfig{
-							Resources: v1.ResourceRequirements{
-								Requests: v1.ResourceList{
-									v1.ResourceCPU:    resource.MustParse(cpuRequestOverride),
-									v1.ResourceMemory: resource.MustParse(memoryRequestOverride),
-								},
-								Limits: v1.ResourceList{
-									v1.ResourceCPU:    resource.MustParse(cpuLimitOverride),
-									v1.ResourceMemory: resource.MustParse(memoryLimitOverride),
-								},
-							},
-						},
-					}
-					builder := BuildInfraConfig(testingOwnerNamespace).AddKafkaSpec(&actual, apiv2.WBSizeSmall)
-
-					Expect(builder.errors).To(BeEmpty())
-					config, err := builder.GetKafkaConfig()
-					Expect(err).ToNot(HaveOccurred())
-
-					Expect(config.Enabled).To(BeTrue())
-					Expect(config.Namespace).To(Equal(namespaceOverride))
-					Expect(config.StorageSize).To(Equal(storageSizeOverride))
-					Expect(config.StorageSize).NotTo(Equal(translatorv2.SmallKafkaStorageSize))
-					Expect(config.Replicas).To(Equal(int32(3)))
-					Expect(config.Resources.Requests[v1.ResourceCPU]).To(Equal(resource.MustParse(cpuRequestOverride)))
-					Expect(config.Resources.Requests[v1.ResourceCPU]).NotTo(Equal(resource.MustParse(translatorv2.SmallKafkaCpuRequest)))
-					Expect(config.Resources.Requests[v1.ResourceMemory]).To(Equal(resource.MustParse(memoryRequestOverride)))
-					Expect(config.Resources.Requests[v1.ResourceMemory]).NotTo(Equal(resource.MustParse(translatorv2.SmallKafkaMemoryRequest)))
-					Expect(config.Resources.Limits[v1.ResourceCPU]).To(Equal(resource.MustParse(cpuLimitOverride)))
-					Expect(config.Resources.Limits[v1.ResourceCPU]).NotTo(Equal(resource.MustParse(translatorv2.SmallKafkaCpuLimit)))
-					Expect(config.Resources.Limits[v1.ResourceMemory]).To(Equal(resource.MustParse(memoryLimitOverride)))
-					Expect(config.Resources.Limits[v1.ResourceMemory]).NotTo(Equal(resource.MustParse(translatorv2.SmallKafkaMemoryLimit)))
-					Expect(config.ReplicationConfig.DefaultReplicationFactor).To(Equal(int32(3)))
-					Expect(config.ReplicationConfig.MinInSyncReplicas).To(Equal(int32(2)))
-				})
-			})
-
-			Context("with disabled spec", func() {
-				It("should respect enabled false and use defaults for other fields", func() {
-					namespaceOverride := "custom-kafka-namespace"
-					actual := apiv2.WBKafkaSpec{
-						Enabled:   false,
-						Namespace: namespaceOverride,
-					}
-					builder := BuildInfraConfig(testingOwnerNamespace).AddKafkaSpec(&actual, apiv2.WBSizeSmall)
-
-					Expect(builder.errors).To(BeEmpty())
-					config, err := builder.GetKafkaConfig()
-					Expect(err).ToNot(HaveOccurred())
-
-					Expect(config.Enabled).To(BeFalse())
-					Expect(config.Namespace).To(Equal(namespaceOverride))
-					Expect(config.StorageSize).To(Equal(translatorv2.SmallKafkaStorageSize))
-					Expect(config.Replicas).To(Equal(int32(3)))
-					Expect(config.Resources.Requests[v1.ResourceCPU]).To(Equal(resource.MustParse(translatorv2.SmallKafkaCpuRequest)))
-					Expect(config.Resources.Requests[v1.ResourceMemory]).To(Equal(resource.MustParse(translatorv2.SmallKafkaMemoryRequest)))
-					Expect(config.Resources.Limits[v1.ResourceCPU]).To(Equal(resource.MustParse(translatorv2.SmallKafkaCpuLimit)))
-					Expect(config.Resources.Limits[v1.ResourceMemory]).To(Equal(resource.MustParse(translatorv2.SmallKafkaMemoryLimit)))
 				})
 			})
 		})
@@ -672,6 +416,48 @@ var _ = Describe("Kafka Model", func() {
 					Expect(codes[i]).NotTo(Equal(codes[j]))
 				}
 			}
+		})
+	})
+
+	Describe("BuildKafkaDefaults", func() {
+		const testOwnerNamespace = "test-namespace"
+
+		Context("when size is Dev", func() {
+			It("should return complete dev defaults", func() {
+				config, err := BuildKafkaDefaults(SizeDev, testOwnerNamespace)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(config.Enabled).To(BeTrue())
+				Expect(config.Namespace).To(Equal(testOwnerNamespace))
+				Expect(config.StorageSize).To(Equal(DevKafkaStorageSize))
+				Expect(config.Replicas).To(Equal(int32(1)))
+				Expect(config.ReplicationConfig.DefaultReplicationFactor).To(Equal(int32(1)))
+				Expect(config.Resources.Requests).To(BeEmpty())
+				Expect(config.Resources.Limits).To(BeEmpty())
+			})
+		})
+
+		Context("when size is Small", func() {
+			It("should return complete small defaults with all resource fields", func() {
+				config, err := BuildKafkaDefaults(SizeSmall, testOwnerNamespace)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(config.Enabled).To(BeTrue())
+				Expect(config.Namespace).To(Equal(testOwnerNamespace))
+				Expect(config.StorageSize).To(Equal(SmallKafkaStorageSize))
+				Expect(config.Replicas).To(Equal(int32(3)))
+				Expect(config.ReplicationConfig.DefaultReplicationFactor).To(Equal(int32(3)))
+				Expect(config.Resources.Requests[v1.ResourceCPU]).To(Equal(resource.MustParse(SmallKafkaCpuRequest)))
+				Expect(config.Resources.Limits[v1.ResourceCPU]).To(Equal(resource.MustParse(SmallKafkaCpuLimit)))
+				Expect(config.Resources.Requests[v1.ResourceMemory]).To(Equal(resource.MustParse(SmallKafkaMemoryRequest)))
+				Expect(config.Resources.Limits[v1.ResourceMemory]).To(Equal(resource.MustParse(SmallKafkaMemoryLimit)))
+			})
+		})
+
+		Context("when size is invalid", func() {
+			It("should return error", func() {
+				_, err := BuildKafkaDefaults(Size("invalid"), testOwnerNamespace)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("unsupported size for Kafka"))
+			})
 		})
 	})
 })
