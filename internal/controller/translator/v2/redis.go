@@ -1,6 +1,8 @@
 package v2
 
 import (
+	"context"
+
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/translator/utils"
 	"github.com/wandb/operator/internal/model"
@@ -77,6 +79,19 @@ func TranslateRedisSpec(spec apiv2.WBRedisSpec) model.RedisConfig {
 	}
 
 	return config
+}
+
+func ExtractRedisStatus(ctx context.Context, results *model.Results) apiv2.WBRedisStatus {
+	return TranslateRedisStatus(
+		ctx,
+		model.ExtractRedisStatus(ctx, results),
+	)
+}
+
+func TranslateRedisStatus(ctx context.Context, model model.RedisStatus) apiv2.WBRedisStatus {
+	var result apiv2.WBRedisStatus
+
+	return result
 }
 
 func (i *InfraConfigBuilder) AddRedisConfig(actual apiv2.WBRedisSpec) *InfraConfigBuilder {

@@ -1,6 +1,8 @@
 package v2
 
 import (
+	"context"
+
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/translator/utils"
 	"github.com/wandb/operator/internal/model"
@@ -31,6 +33,19 @@ func TranslateMinioSpec(spec apiv2.WBMinioSpec) model.MinioConfig {
 	}
 
 	return config
+}
+
+func ExtractMinioStatus(ctx context.Context, results *model.Results) apiv2.WBMinioStatus {
+	return TranslateMinioStatus(
+		ctx,
+		model.ExtractMinioStatus(ctx, results),
+	)
+}
+
+func TranslateMinioStatus(ctx context.Context, model model.MinioStatus) apiv2.WBMinioStatus {
+	var result apiv2.WBMinioStatus
+
+	return result
 }
 
 func (i *InfraConfigBuilder) AddMinioConfig(actual apiv2.WBMinioSpec) *InfraConfigBuilder {

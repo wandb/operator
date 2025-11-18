@@ -6,7 +6,6 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	apiv2 "github.com/wandb/operator/api/v2"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
@@ -40,14 +39,14 @@ var _ = Describe("MySQL Model", func() {
 	Describe("MySQL Error", func() {
 		Describe("NewMySQLError", func() {
 			It("should create error with correct fields", func() {
-				err := NewMySQLError(MySQLErrFailedToCreate, "test reason")
-				Expect(err.InfraName).To(Equal(MySQL))
-				Expect(err.code).To(Equal(string(MySQLErrFailedToCreate)))
-				Expect(err.reason).To(Equal("test reason"))
+				err := NewMySQLError(MySQLErrFailedToCreateCode, "test reason")
+				Expect(err.InfraName()).To(Equal(MySQL))
+				Expect(err.Code()).To(Equal(string(MySQLErrFailedToCreateCode)))
+				Expect(err.Reason()).To(Equal("test reason"))
 			})
 
 			It("should implement error interface", func() {
-				err := NewMySQLError(MySQLErrFailedToUpdate, "update failed")
+				err := NewMySQLError(MySQLErrFailedToUpdateCode, "update failed")
 				errStr := err.Error()
 				Expect(errStr).To(ContainSubstring("FailedToUpdate"))
 				Expect(errStr).To(ContainSubstring("mysql"))
@@ -58,9 +57,9 @@ var _ = Describe("MySQL Model", func() {
 		Describe("MySQLInfraError", func() {
 			Describe("mysqlCode", func() {
 				It("should return the error code", func() {
-					infraErr := NewMySQLError(MySQLErrFailedToDelete, "delete failed")
+					infraErr := NewMySQLError(MySQLErrFailedToDeleteCode, "delete failed")
 					mysqlErr := MySQLInfraError{infraErr}
-					Expect(mysqlErr.mysqlCode()).To(Equal(MySQLErrFailedToDelete))
+					Expect(mysqlErr.mysqlCode()).To(Equal(MySQLErrFailedToDeleteCode))
 				})
 			})
 		})
@@ -68,10 +67,10 @@ var _ = Describe("MySQL Model", func() {
 		Describe("ToMySQLInfraError", func() {
 			Context("when error is a MySQL infra error", func() {
 				It("should convert successfully", func() {
-					err := NewMySQLError(MySQLErrFailedToGetConfig, "config error")
+					err := NewMySQLError(MySQLErrFailedToGetConfigCode, "config error")
 					mysqlErr, ok := ToMySQLInfraError(err)
 					Expect(ok).To(BeTrue())
-					Expect(mysqlErr.mysqlCode()).To(Equal(MySQLErrFailedToGetConfig))
+					Expect(mysqlErr.mysqlCode()).To(Equal(MySQLErrFailedToGetConfigCode))
 					Expect(mysqlErr.reason).To(Equal("config error"))
 				})
 			})
@@ -86,11 +85,7 @@ var _ = Describe("MySQL Model", func() {
 
 			Context("when error is an infra error but not MySQL", func() {
 				It("should return false", func() {
-					err := InfraError{
-						InfraName: Redis,
-						Code:      "SomeCode",
-						reason:    "some reason",
-					}
+					err := NewInfraError(Redis, "SomeCode", "some reason")
 					_, ok := ToMySQLInfraError(err)
 					Expect(ok).To(BeFalse())
 				})
@@ -102,9 +97,9 @@ var _ = Describe("MySQL Model", func() {
 		Describe("NewMySQLStatus", func() {
 			It("should create status with correct fields", func() {
 				status := NewMySQLStatusDetail(MySQLCreatedCode, "MySQL created")
-				Expect(status.InfraName).To(Equal(MySQL))
-				Expect(status.code).To(Equal(string(MySQLCreatedCode)))
-				Expect(status.message).To(Equal("MySQL created"))
+				Expect(status.InfraName()).To(Equal(MySQL))
+				Expect(status.Code()).To(Equal(string(MySQLCreatedCode)))
+				Expect(status.Message()).To(Equal("MySQL created"))
 			})
 		})
 
@@ -149,12 +144,7 @@ var _ = Describe("MySQL Model", func() {
 
 				Context("when status is connection type but missing connection info", func() {
 					It("should return empty connection info but ok true", func() {
-						status := InfraStatusDetail{
-							InfraName: MySQL,
-							Code:      string(MySQLConnectionCode),
-							Message:   "connection",
-							Hidden:    "not a MySQLConnInfo",
-						}
+						status := NewInfraStatusDetail(MySQL, string(MySQLConnectionCode), "connection", "not a MySQLConnInfo")
 						detail := MySQLStatusDetail{status}
 						connDetail, ok := detail.ToMySQLConnDetail()
 						Expect(ok).To(BeTrue())
@@ -177,38 +167,29 @@ var _ = Describe("MySQL Model", func() {
 					User: user,
 				}
 				status := NewMySQLConnDetail(connInfo)
-				Expect(status.InfraName).To(Equal(MySQL))
-				Expect(status.code).To(Equal(string(MySQLConnectionCode)))
-				Expect(status.message).To(Equal("MySQL connection info"))
-				Expect(status.hidden).To(Equal(connInfo))
+				Expect(status.InfraName()).To(Equal(MySQL))
+				Expect(status.Code()).To(Equal(string(MySQLConnectionCode)))
+				Expect(status.Message()).To(Equal("MySQL connection info"))
+				Expect(status.Hidden()).To(Equal(connInfo))
 			})
 		})
 
 		Describe("InfraStatusDetail.ToMySQLStatusDetail", func() {
 			Context("when infra status is for MySQL", func() {
 				It("should convert successfully", func() {
-					status := InfraStatusDetail{
-						InfraName: MySQL,
-						Code:      "TestCode",
-						Message:   "test message",
-						Hidden:    "hidden data",
-					}
+					status := NewInfraStatusDetail(MySQL, "TestCode", "test message", "hidden data")
 					detail, ok := status.ToMySQLStatusDetail()
 					Expect(ok).To(BeTrue())
-					Expect(detail.InfraName).To(Equal(MySQL))
-					Expect(detail.code).To(Equal("TestCode"))
-					Expect(detail.message).To(Equal("test message"))
-					Expect(detail.hidden).To(Equal("hidden data"))
+					Expect(detail.InfraName()).To(Equal(MySQL))
+					Expect(detail.Code()).To(Equal("TestCode"))
+					Expect(detail.Message()).To(Equal("test message"))
+					Expect(detail.Hidden()).To(Equal("hidden data"))
 				})
 			})
 
 			Context("when infra status is not for MySQL", func() {
 				It("should return false", func() {
-					status := InfraStatusDetail{
-						InfraName: Redis,
-						Code:      "TestCode",
-						Message:   "test message",
-					}
+					status := NewInfraStatusDetail(Redis, "TestCode", "test message", nil)
 					_, ok := status.ToMySQLStatusDetail()
 					Expect(ok).To(BeFalse())
 				})
@@ -224,62 +205,57 @@ var _ = Describe("MySQL Model", func() {
 		})
 
 		Context("when results have no errors or statuses", func() {
-			It("should return ready state", func() {
+			It("should return not ready state with no connection", func() {
 				results := InitResults()
 				status := ExtractMySQLStatus(ctx, results)
-				Expect(status.State).To(Equal(apiv2.WBStateReady))
+				Expect(status.Ready).To(BeFalse())
 				Expect(status.Details).To(BeEmpty())
+				Expect(status.Errors).To(BeEmpty())
 			})
 		})
 
 		Context("when results have MySQL errors", func() {
-			It("should include errors in status details with error state", func() {
+			It("should include errors and not be ready", func() {
 				results := InitResults()
-				err := NewMySQLError(MySQLErrFailedToCreate, "failed to create")
+				err := NewMySQLError(MySQLErrFailedToCreateCode, "failed to create")
 				results.AddErrors(err)
 
 				status := ExtractMySQLStatus(ctx, results)
-				Expect(status.State).To(Equal(apiv2.WBStateError))
-				Expect(status.Details).To(HaveLen(1))
-				Expect(status.Details[0].State).To(Equal(apiv2.WBStateError))
-				Expect(status.Details[0].Code).To(Equal(string(MySQLErrFailedToCreate)))
-				Expect(status.Details[0].Message).To(Equal("failed to create"))
+				Expect(status.Ready).To(BeFalse())
+				Expect(status.Errors).To(HaveLen(1))
+				Expect(status.Errors[0].Code()).To(Equal(string(MySQLErrFailedToCreateCode)))
+				Expect(status.Errors[0].Reason()).To(Equal("failed to create"))
 			})
 		})
 
 		Context("when results have non-MySQL errors", func() {
 			It("should not include them in status", func() {
 				results := InitResults()
-				err := InfraError{
-					InfraName: Redis,
-					Code:      "RedisError",
-					reason:    "redis failed",
-				}
+				err := NewInfraError(Redis, "RedisError", "redis failed")
 				results.AddErrors(err)
 
 				status := ExtractMySQLStatus(ctx, results)
-				Expect(status.State).To(Equal(apiv2.WBStateReady))
-				Expect(status.Details).To(BeEmpty())
+				Expect(status.Ready).To(BeFalse())
+				Expect(status.Errors).To(BeEmpty())
 			})
 		})
 
 		Context("when results have MySQL statuses", func() {
-			It("should include statuses in details with ready state", func() {
+			It("should include statuses in details", func() {
 				results := InitResults()
 				infraStatus := NewMySQLStatusDetail(MySQLCreatedCode, "MySQL created successfully")
 				results.AddStatuses(infraStatus)
 
 				status := ExtractMySQLStatus(ctx, results)
-				Expect(status.State).To(Equal(apiv2.WBStateReady))
+				Expect(status.Ready).To(BeFalse())
 				Expect(status.Details).To(HaveLen(1))
-				Expect(status.Details[0].State).To(Equal(apiv2.WBStateReady))
-				Expect(status.Details[0].Code).To(Equal(string(MySQLCreatedCode)))
-				Expect(status.Details[0].Message).To(Equal("MySQL created successfully"))
+				Expect(status.Details[0].Code()).To(Equal(string(MySQLCreatedCode)))
+				Expect(status.Details[0].Message()).To(Equal("MySQL created successfully"))
 			})
 		})
 
 		Context("when results have connection status", func() {
-			It("should populate connection info in status", func() {
+			It("should populate connection info in status and be ready", func() {
 				host := "mysql.example.com"
 				port := "3306"
 				user := "admin"
@@ -293,43 +269,44 @@ var _ = Describe("MySQL Model", func() {
 				results.AddStatuses(connStatus)
 
 				status := ExtractMySQLStatus(ctx, results)
-				Expect(status.State).To(Equal(apiv2.WBStateReady))
-				Expect(status.Connection.MySQLHost).To(Equal(host))
-				Expect(status.Connection.MySQLPort).To(Equal(port))
-				Expect(status.Connection.MySQLUser).To(Equal(user))
+				Expect(status.Ready).To(BeTrue())
+				Expect(status.Connection.Host).To(Equal(host))
+				Expect(status.Connection.Port).To(Equal(port))
+				Expect(status.Connection.User).To(Equal(user))
 				Expect(status.Details).To(BeEmpty())
 			})
 		})
 
 		Context("when results have both errors and statuses", func() {
-			It("should include both in details with error state", func() {
+			It("should include both errors and details, not be ready", func() {
 				results := InitResults()
-				err := NewMySQLError(MySQLErrFailedToUpdate, "update failed")
+				err := NewMySQLError(MySQLErrFailedToUpdateCode, "update failed")
 				infraStatus := NewMySQLStatusDetail(MySQLCreatedCode, "created")
 				results.AddErrors(err)
 				results.AddStatuses(infraStatus)
 
 				status := ExtractMySQLStatus(ctx, results)
-				Expect(status.State).To(Equal(apiv2.WBStateError))
-				Expect(status.Details).To(HaveLen(2))
+				Expect(status.Ready).To(BeFalse())
+				Expect(status.Errors).To(HaveLen(1))
+				Expect(status.Details).To(HaveLen(1))
 			})
 		})
 
 		Context("when results have multiple errors", func() {
 			It("should include all errors", func() {
 				results := InitResults()
-				err1 := NewMySQLError(MySQLErrFailedToCreate, "create failed")
-				err2 := NewMySQLError(MySQLErrFailedToUpdate, "update failed")
+				err1 := NewMySQLError(MySQLErrFailedToCreateCode, "create failed")
+				err2 := NewMySQLError(MySQLErrFailedToUpdateCode, "update failed")
 				results.AddErrors(err1, err2)
 
 				status := ExtractMySQLStatus(ctx, results)
-				Expect(status.State).To(Equal(apiv2.WBStateError))
-				Expect(status.Details).To(HaveLen(2))
+				Expect(status.Ready).To(BeFalse())
+				Expect(status.Errors).To(HaveLen(2))
 			})
 		})
 
 		Context("when results have multiple statuses including connection", func() {
-			It("should populate connection and other statuses", func() {
+			It("should populate connection and other statuses and be ready", func() {
 				host := "test-host"
 				port := "3306"
 				user := "test-user"
@@ -345,10 +322,10 @@ var _ = Describe("MySQL Model", func() {
 				results.AddStatuses(connStatus, createdStatus, updatedStatus)
 
 				status := ExtractMySQLStatus(ctx, results)
-				Expect(status.State).To(Equal(apiv2.WBStateReady))
-				Expect(status.Connection.MySQLHost).To(Equal(host))
-				Expect(status.Connection.MySQLPort).To(Equal(port))
-				Expect(status.Connection.MySQLUser).To(Equal(user))
+				Expect(status.Ready).To(BeTrue())
+				Expect(status.Connection.Host).To(Equal(host))
+				Expect(status.Connection.Port).To(Equal(port))
+				Expect(status.Connection.User).To(Equal(user))
 				Expect(status.Details).To(HaveLen(2))
 			})
 		})
@@ -357,11 +334,11 @@ var _ = Describe("MySQL Model", func() {
 	Describe("Error codes", func() {
 		It("should have distinct error codes", func() {
 			codes := []MySQLErrorCode{
-				MySQLErrFailedToGetConfig,
-				MySQLErrFailedToInitialize,
-				MySQLErrFailedToCreate,
-				MySQLErrFailedToUpdate,
-				MySQLErrFailedToDelete,
+				MySQLErrFailedToGetConfigCode,
+				MySQLErrFailedToInitializeCode,
+				MySQLErrFailedToCreateCode,
+				MySQLErrFailedToUpdateCode,
+				MySQLErrFailedToDeleteCode,
 			}
 
 			for i := 0; i < len(codes); i++ {

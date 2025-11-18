@@ -1,6 +1,8 @@
 package v2
 
 import (
+	"context"
+
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/translator/utils"
 	"github.com/wandb/operator/internal/model"
@@ -31,6 +33,19 @@ func TranslateKafkaSpec(spec apiv2.WBKafkaSpec) model.KafkaConfig {
 	}
 
 	return config
+}
+
+func ExtractKafkaStatus(ctx context.Context, results *model.Results) apiv2.WBKafkaStatus {
+	return TranslateKafkaStatus(
+		ctx,
+		model.ExtractKafkaStatus(ctx, results),
+	)
+}
+
+func TranslateKafkaStatus(ctx context.Context, model model.KafkaStatus) apiv2.WBKafkaStatus {
+	var result apiv2.WBKafkaStatus
+
+	return result
 }
 
 func (i *InfraConfigBuilder) AddKafkaConfig(actual apiv2.WBKafkaSpec) *InfraConfigBuilder {

@@ -29,8 +29,28 @@ type InfraError struct {
 	reason    string
 }
 
+func NewInfraError(name infraName, code, reason string) InfraError {
+	return InfraError{
+		infraName: name,
+		code:      code,
+		reason:    reason,
+	}
+}
+
 func (e InfraError) Error() string {
 	return fmt.Sprintf("%s(%s): %s", e.code, e.infraName, e.reason)
+}
+
+func (e InfraError) Code() string {
+	return e.code
+}
+
+func (e InfraError) Reason() string {
+	return e.reason
+}
+
+func (e InfraError) InfraName() infraName {
+	return e.infraName
 }
 
 func IsInfraError(err error, infraNames ...infraName) bool {
@@ -80,6 +100,31 @@ type InfraStatusDetail struct {
 	code      string
 	message   string
 	hidden    interface{}
+}
+
+func NewInfraStatusDetail(name infraName, code, message string, hidden interface{}) InfraStatusDetail {
+	return InfraStatusDetail{
+		infraName: name,
+		code:      code,
+		message:   message,
+		hidden:    hidden,
+	}
+}
+
+func (i InfraStatusDetail) Code() string {
+	return i.code
+}
+
+func (i InfraStatusDetail) Message() string {
+	return i.message
+}
+
+func (i InfraStatusDetail) InfraName() infraName {
+	return i.infraName
+}
+
+func (i InfraStatusDetail) Hidden() interface{} {
+	return i.hidden
 }
 
 func (i InfraStatusDetail) ToRedisStatusDetail() (RedisStatusDetail, bool) {

@@ -6,7 +6,6 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	apiv2 "github.com/wandb/operator/api/v2"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
@@ -46,14 +45,14 @@ var _ = Describe("Minio Model", func() {
 	Describe("Minio Error", func() {
 		Describe("NewMinioError", func() {
 			It("should create error with correct fields", func() {
-				err := NewMinioError(MinioErrFailedToCreate, "test reason")
-				Expect(err.InfraName).To(Equal(Minio))
-				Expect(err.code).To(Equal(string(MinioErrFailedToCreate)))
-				Expect(err.reason).To(Equal("test reason"))
+				err := NewMinioError(MinioErrFailedToCreateCode, "test reason")
+				Expect(err.InfraName()).To(Equal(Minio))
+				Expect(err.Code()).To(Equal(string(MinioErrFailedToCreateCode)))
+				Expect(err.Reason()).To(Equal("test reason"))
 			})
 
 			It("should implement error interface", func() {
-				err := NewMinioError(MinioErrFailedToUpdate, "update error")
+				err := NewMinioError(MinioErrFailedToUpdateCode, "update error")
 				errStr := err.Error()
 				Expect(errStr).To(ContainSubstring("FailedToUpdate"))
 				Expect(errStr).To(ContainSubstring("minio"))
@@ -64,9 +63,9 @@ var _ = Describe("Minio Model", func() {
 		Describe("MinioInfraError", func() {
 			Describe("minioCode", func() {
 				It("should return the error code", func() {
-					infraErr := NewMinioError(MinioErrFailedToDelete, "test error")
+					infraErr := NewMinioError(MinioErrFailedToDeleteCode, "test error")
 					minioErr := MinioInfraError{infraErr}
-					Expect(minioErr.minioCode()).To(Equal(MinioErrFailedToDelete))
+					Expect(minioErr.minioCode()).To(Equal(MinioErrFailedToDeleteCode))
 				})
 			})
 		})
@@ -74,10 +73,10 @@ var _ = Describe("Minio Model", func() {
 		Describe("ToMinioInfraError", func() {
 			Context("when error is a Minio infra error", func() {
 				It("should convert successfully", func() {
-					err := NewMinioError(MinioErrFailedToCreate, "create failed")
+					err := NewMinioError(MinioErrFailedToCreateCode, "create failed")
 					minioErr, ok := ToMinioInfraError(err)
 					Expect(ok).To(BeTrue())
-					Expect(minioErr.minioCode()).To(Equal(MinioErrFailedToCreate))
+					Expect(minioErr.minioCode()).To(Equal(MinioErrFailedToCreateCode))
 					Expect(minioErr.reason).To(Equal("create failed"))
 				})
 			})
@@ -92,11 +91,7 @@ var _ = Describe("Minio Model", func() {
 
 			Context("when error is an infra error but not Minio", func() {
 				It("should return false", func() {
-					err := InfraError{
-						InfraName: Redis,
-						Code:      "SomeCode",
-						reason:    "some reason",
-					}
+					err := NewInfraError(Redis, "SomeCode", "some reason")
 					_, ok := ToMinioInfraError(err)
 					Expect(ok).To(BeFalse())
 				})
@@ -108,9 +103,9 @@ var _ = Describe("Minio Model", func() {
 		Describe("NewMinioStatusDetail", func() {
 			It("should create status with correct fields", func() {
 				status := NewMinioStatusDetail(MinioCreatedCode, "Minio created")
-				Expect(status.InfraName).To(Equal(Minio))
-				Expect(status.code).To(Equal(string(MinioCreatedCode)))
-				Expect(status.message).To(Equal("Minio created"))
+				Expect(status.InfraName()).To(Equal(Minio))
+				Expect(status.Code()).To(Equal(string(MinioCreatedCode)))
+				Expect(status.Message()).To(Equal("Minio created"))
 			})
 		})
 
@@ -155,12 +150,7 @@ var _ = Describe("Minio Model", func() {
 
 				Context("when status is connection type but missing connection info", func() {
 					It("should return empty connection info but ok true", func() {
-						status := InfraStatusDetail{
-							InfraName: Minio,
-							Code:      string(MinioConnectionCode),
-							Message:   "connection",
-							Hidden:    "not a MinioConnInfo",
-						}
+						status := NewInfraStatusDetail(Minio, string(MinioConnectionCode), "connection", "not a MinioConnInfo")
 						detail := MinioStatusDetail{status}
 						connDetail, ok := detail.ToMinioConnDetail()
 						Expect(ok).To(BeTrue())
@@ -183,10 +173,10 @@ var _ = Describe("Minio Model", func() {
 					AccessKey: accessKey,
 				}
 				status := NewMinioConnDetail(connInfo)
-				Expect(status.InfraName).To(Equal(Minio))
-				Expect(status.code).To(Equal(string(MinioConnectionCode)))
-				Expect(status.message).To(Equal("Minio connection info"))
-				Expect(status.hidden).To(Equal(connInfo))
+				Expect(status.InfraName()).To(Equal(Minio))
+				Expect(status.Code()).To(Equal(string(MinioConnectionCode)))
+				Expect(status.Message()).To(Equal("Minio connection info"))
+				Expect(status.Hidden()).To(Equal(connInfo))
 			})
 		})
 	})
@@ -199,62 +189,57 @@ var _ = Describe("Minio Model", func() {
 		})
 
 		Context("when results have no errors or statuses", func() {
-			It("should return default state as ready", func() {
+			It("should return not ready state with no connection", func() {
 				results := InitResults()
 				status := ExtractMinioStatus(ctx, results)
+				Expect(status.Ready).To(BeFalse())
 				Expect(status.Details).To(BeEmpty())
-				Expect(status.State).To(Equal(apiv2.WBStateReady))
+				Expect(status.Errors).To(BeEmpty())
 			})
 		})
 
 		Context("when results have Minio errors", func() {
-			It("should include errors in status details with error state", func() {
+			It("should include errors and not be ready", func() {
 				results := InitResults()
-				err := NewMinioError(MinioErrFailedToCreate, "create failed")
+				err := NewMinioError(MinioErrFailedToCreateCode, "create failed")
 				results.AddErrors(err)
 
 				status := ExtractMinioStatus(ctx, results)
-				Expect(status.Details).To(HaveLen(1))
-				Expect(status.Details[0].State).To(Equal(apiv2.WBStateError))
-				Expect(status.Details[0].Code).To(Equal(string(MinioErrFailedToCreate)))
-				Expect(status.Details[0].Message).To(Equal("create failed"))
-				Expect(status.State).To(Equal(apiv2.WBStateError))
+				Expect(status.Ready).To(BeFalse())
+				Expect(status.Errors).To(HaveLen(1))
+				Expect(status.Errors[0].Code()).To(Equal(string(MinioErrFailedToCreateCode)))
+				Expect(status.Errors[0].Reason()).To(Equal("create failed"))
 			})
 		})
 
 		Context("when results have non-Minio errors", func() {
 			It("should not include them in status", func() {
 				results := InitResults()
-				err := InfraError{
-					InfraName: MySQL,
-					Code:      "MySQLError",
-					reason:    "mysql failed",
-				}
+				err := NewInfraError(MySQL, "MySQLError", "mysql failed")
 				results.AddErrors(err)
 
 				status := ExtractMinioStatus(ctx, results)
-				Expect(status.Details).To(BeEmpty())
-				Expect(status.State).To(Equal(apiv2.WBStateReady))
+				Expect(status.Ready).To(BeFalse())
+				Expect(status.Errors).To(BeEmpty())
 			})
 		})
 
 		Context("when results have Minio statuses", func() {
-			It("should include statuses in details with ready state", func() {
+			It("should include statuses in details", func() {
 				results := InitResults()
 				infraStatus := NewMinioStatusDetail(MinioCreatedCode, "Minio created successfully")
 				results.AddStatuses(infraStatus)
 
 				status := ExtractMinioStatus(ctx, results)
+				Expect(status.Ready).To(BeFalse())
 				Expect(status.Details).To(HaveLen(1))
-				Expect(status.Details[0].State).To(Equal(apiv2.WBStateReady))
-				Expect(status.Details[0].Code).To(Equal(string(MinioCreatedCode)))
-				Expect(status.Details[0].Message).To(Equal("Minio created successfully"))
-				Expect(status.State).To(Equal(apiv2.WBStateReady))
+				Expect(status.Details[0].Code()).To(Equal(string(MinioCreatedCode)))
+				Expect(status.Details[0].Message()).To(Equal("Minio created successfully"))
 			})
 		})
 
 		Context("when results have connection status", func() {
-			It("should populate connection info in status", func() {
+			It("should populate connection info in status and be ready", func() {
 				host := "minio.example.com"
 				port := "9000"
 				accessKey := "test-access-key"
@@ -268,36 +253,39 @@ var _ = Describe("Minio Model", func() {
 				results.AddStatuses(connStatus)
 
 				status := ExtractMinioStatus(ctx, results)
-				Expect(status.Connection.MinioHost).To(Equal(host))
-				Expect(status.Connection.MinioPort).To(Equal(port))
-				Expect(status.Connection.MinioAccessKey).To(Equal(accessKey))
+				Expect(status.Ready).To(BeTrue())
+				Expect(status.Connection.Host).To(Equal(host))
+				Expect(status.Connection.Port).To(Equal(port))
+				Expect(status.Connection.AccessKey).To(Equal(accessKey))
+				Expect(status.Details).To(BeEmpty())
 			})
 		})
 
 		Context("when results have both errors and statuses", func() {
-			It("should include both in details and set state to error", func() {
+			It("should include both errors and details, not be ready", func() {
 				results := InitResults()
-				err := NewMinioError(MinioErrFailedToUpdate, "update failed")
+				err := NewMinioError(MinioErrFailedToUpdateCode, "update failed")
 				infraStatus := NewMinioStatusDetail(MinioCreatedCode, "created")
 				results.AddErrors(err)
 				results.AddStatuses(infraStatus)
 
 				status := ExtractMinioStatus(ctx, results)
-				Expect(status.Details).To(HaveLen(2))
-				Expect(status.State).To(Equal(apiv2.WBStateError))
+				Expect(status.Ready).To(BeFalse())
+				Expect(status.Errors).To(HaveLen(1))
+				Expect(status.Details).To(HaveLen(1))
 			})
 		})
 
 		Context("when results have multiple errors", func() {
-			It("should include all errors and maintain error state", func() {
+			It("should include all errors", func() {
 				results := InitResults()
-				err1 := NewMinioError(MinioErrFailedToCreate, "create failed")
-				err2 := NewMinioError(MinioErrFailedToUpdate, "update failed")
+				err1 := NewMinioError(MinioErrFailedToCreateCode, "create failed")
+				err2 := NewMinioError(MinioErrFailedToUpdateCode, "update failed")
 				results.AddErrors(err1, err2)
 
 				status := ExtractMinioStatus(ctx, results)
-				Expect(status.Details).To(HaveLen(2))
-				Expect(status.State).To(Equal(apiv2.WBStateError))
+				Expect(status.Ready).To(BeFalse())
+				Expect(status.Errors).To(HaveLen(2))
 			})
 		})
 	})

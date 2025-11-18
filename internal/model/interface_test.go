@@ -11,22 +11,22 @@ var _ = Describe("Interface", func() {
 	Describe("IsInfraError", func() {
 		Context("when error is an InfraError", func() {
 			It("should return true with no specific infraNames", func() {
-				err := NewMySQLError(MySQLErrFailedToCreate, "test error")
+				err := NewMySQLError(MySQLErrFailedToCreateCode, "test error")
 				Expect(IsInfraError(err)).To(BeTrue())
 			})
 
 			It("should return true when infraName matches", func() {
-				err := NewMySQLError(MySQLErrFailedToCreate, "test error")
+				err := NewMySQLError(MySQLErrFailedToCreateCode, "test error")
 				Expect(IsInfraError(err, MySQL)).To(BeTrue())
 			})
 
 			It("should return true when one of multiple infraNames matches", func() {
-				err := NewRedisError(RedisDeploymentConflict, "test error")
+				err := NewRedisError(RedisDeploymentConflictCode, "test error")
 				Expect(IsInfraError(err, MySQL, Redis, Kafka)).To(BeTrue())
 			})
 
 			It("should return false when infraName does not match", func() {
-				err := NewMySQLError(MySQLErrFailedToCreate, "test error")
+				err := NewMySQLError(MySQLErrFailedToCreateCode, "test error")
 				Expect(IsInfraError(err, Redis)).To(BeFalse())
 			})
 		})
@@ -48,7 +48,7 @@ var _ = Describe("Interface", func() {
 		Context("when error list contains non-InfraErrors", func() {
 			It("should return true", func() {
 				errors := []error{
-					NewMySQLError(MySQLErrFailedToCreate, "infra error"),
+					NewMySQLError(MySQLErrFailedToCreateCode, "infra error"),
 					fmt.Errorf("critical error"),
 				}
 				Expect(HasCriticalError(errors)).To(BeTrue())
@@ -66,8 +66,8 @@ var _ = Describe("Interface", func() {
 		Context("when error list contains only InfraErrors", func() {
 			It("should return false", func() {
 				errors := []error{
-					NewMySQLError(MySQLErrFailedToCreate, "error 1"),
-					NewRedisError(RedisDeploymentConflict, "error 2"),
+					NewMySQLError(MySQLErrFailedToCreateCode, "error 1"),
+					NewRedisError(RedisDeploymentConflictCode, "error 2"),
 				}
 				Expect(HasCriticalError(errors)).To(BeFalse())
 			})
@@ -84,7 +84,7 @@ var _ = Describe("Interface", func() {
 	Describe("IsCriticalError", func() {
 		Context("when error is an InfraError", func() {
 			It("should return false", func() {
-				err := NewMySQLError(MySQLErrFailedToCreate, "test error")
+				err := NewMySQLError(MySQLErrFailedToCreateCode, "test error")
 				Expect(IsCriticalError(err)).To(BeFalse())
 			})
 		})
@@ -100,12 +100,12 @@ var _ = Describe("Interface", func() {
 	Describe("ToRedisStatusDetail", func() {
 		Context("when InfraStatusDetail is for Redis", func() {
 			It("should convert successfully", func() {
-				status := NewRedisStatusDetail(RedisSentinelCreated, "Redis created")
+				status := NewRedisStatusDetail(RedisSentinelCreatedCode, "Redis created")
 				detail, ok := status.ToRedisStatusDetail()
 				Expect(ok).To(BeTrue())
-				Expect(detail.InfraName).To(Equal(Redis))
-				Expect(detail.code).To(Equal(string(RedisSentinelCreated)))
-				Expect(detail.message).To(Equal("Redis created"))
+				Expect(detail.InfraName()).To(Equal(Redis))
+				Expect(detail.Code()).To(Equal(string(RedisSentinelCreatedCode)))
+				Expect(detail.Message()).To(Equal("Redis created"))
 			})
 		})
 
@@ -121,7 +121,7 @@ var _ = Describe("Interface", func() {
 	Describe("Status check functions", func() {
 		Describe("IsRedisStatus", func() {
 			It("should return true for Redis status", func() {
-				status := NewRedisStatusDetail(RedisSentinelCreated, "test")
+				status := NewRedisStatusDetail(RedisSentinelCreatedCode, "test")
 				Expect(IsRedisStatus(status)).To(BeTrue())
 			})
 
@@ -138,7 +138,7 @@ var _ = Describe("Interface", func() {
 			})
 
 			It("should return false for non-MySQL status", func() {
-				status := NewRedisStatusDetail(RedisSentinelCreated, "test")
+				status := NewRedisStatusDetail(RedisSentinelCreatedCode, "test")
 				Expect(IsMySQLStatus(status)).To(BeFalse())
 			})
 		})
@@ -190,7 +190,7 @@ var _ = Describe("Interface", func() {
 
 			It("should return false when error list has only InfraErrors", func() {
 				results := InitResults()
-				results.AddErrors(NewMySQLError(MySQLErrFailedToCreate, "test"))
+				results.AddErrors(NewMySQLError(MySQLErrFailedToCreateCode, "test"))
 				Expect(results.HasCriticalError()).To(BeFalse())
 			})
 		})
@@ -199,7 +199,7 @@ var _ = Describe("Interface", func() {
 			It("should return only critical errors", func() {
 				results := InitResults()
 				criticalErr := fmt.Errorf("critical error")
-				infraErr := NewMySQLError(MySQLErrFailedToCreate, "infra error")
+				infraErr := NewMySQLError(MySQLErrFailedToCreateCode, "infra error")
 				results.AddErrors(criticalErr, infraErr)
 
 				criticalErrors := results.GetCriticalErrors()
@@ -209,7 +209,7 @@ var _ = Describe("Interface", func() {
 
 			It("should return empty list when no critical errors", func() {
 				results := InitResults()
-				results.AddErrors(NewMySQLError(MySQLErrFailedToCreate, "test"))
+				results.AddErrors(NewMySQLError(MySQLErrFailedToCreateCode, "test"))
 				Expect(results.GetCriticalErrors()).To(BeEmpty())
 			})
 		})
@@ -222,7 +222,7 @@ var _ = Describe("Interface", func() {
 
 				results2 := InitResults()
 				results2.AddErrors(fmt.Errorf("error 2"))
-				results2.AddStatuses(NewRedisStatusDetail(RedisSentinelCreated, "status 2"))
+				results2.AddStatuses(NewRedisStatusDetail(RedisSentinelCreatedCode, "status 2"))
 
 				results1.Merge(results2)
 

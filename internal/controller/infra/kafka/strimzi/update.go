@@ -20,7 +20,7 @@ func (a *strimziKafka) updateKafka(
 	kafkaHost := fmt.Sprintf("%s.%s.svc.cluster.local", KafkaName, namespace)
 	kafkaPort := strconv.Itoa(PlainListenerPort)
 
-	connInfo := model.KafkaConnection{
+	connInfo := model.KafkaConnInfo{
 		Host: kafkaHost,
 		Port: kafkaPort,
 	}

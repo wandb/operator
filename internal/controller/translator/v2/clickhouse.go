@@ -1,6 +1,8 @@
 package v2
 
 import (
+	"context"
+
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/translator/utils"
 	"github.com/wandb/operator/internal/model"
@@ -35,6 +37,19 @@ func TranslateClickHouseSpec(spec apiv2.WBClickHouseSpec) model.ClickHouseConfig
 	}
 
 	return config
+}
+
+func ExtractClickHouseStatus(ctx context.Context, results *model.Results) apiv2.WBClickHouseStatus {
+	return TranslateClickHouseStatus(
+		ctx,
+		model.ExtractClickHouseStatus(ctx, results),
+	)
+}
+
+func TranslateClickHouseStatus(ctx context.Context, model model.ClickHouseStatus) apiv2.WBClickHouseStatus {
+	var result apiv2.WBClickHouseStatus
+
+	return result
 }
 
 func (i *InfraConfigBuilder) AddClickHouseConfig(actual apiv2.WBClickHouseSpec) *InfraConfigBuilder {

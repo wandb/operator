@@ -1,6 +1,8 @@
 package v2
 
 import (
+	"context"
+
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/translator/utils"
 	"github.com/wandb/operator/internal/model"
@@ -31,6 +33,19 @@ func TranslateMySQLSpec(spec apiv2.WBMySQLSpec) model.MySQLConfig {
 	}
 
 	return config
+}
+
+func ExtractMySQLStatus(ctx context.Context, results *model.Results) apiv2.WBMySQLStatus {
+	return TranslateMySQLStatus(
+		ctx,
+		model.ExtractMySQLStatus(ctx, results),
+	)
+}
+
+func TranslateMySQLStatus(ctx context.Context, model model.MySQLStatus) apiv2.WBMySQLStatus {
+	var result apiv2.WBMySQLStatus
+
+	return result
 }
 
 func (i *InfraConfigBuilder) AddMySQLConfig(actual apiv2.WBMySQLSpec) *InfraConfigBuilder {

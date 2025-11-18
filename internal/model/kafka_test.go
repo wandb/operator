@@ -6,7 +6,6 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	apiv2 "github.com/wandb/operator/api/v2"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
@@ -40,14 +39,14 @@ var _ = Describe("Kafka Model", func() {
 	Describe("Kafka Error", func() {
 		Describe("NewKafkaError", func() {
 			It("should create error with correct fields", func() {
-				err := NewKafkaError(KafkaErrFailedToCreate, "test reason")
-				Expect(err.InfraName).To(Equal(Kafka))
-				Expect(err.code).To(Equal(string(KafkaErrFailedToCreate)))
-				Expect(err.reason).To(Equal("test reason"))
+				err := NewKafkaError(KafkaErrFailedToCreateCode, "test reason")
+				Expect(err.InfraName()).To(Equal(Kafka))
+				Expect(err.Code()).To(Equal(string(KafkaErrFailedToCreateCode)))
+				Expect(err.Reason()).To(Equal("test reason"))
 			})
 
 			It("should implement error interface", func() {
-				err := NewKafkaError(KafkaErrFailedToUpdate, "update failed")
+				err := NewKafkaError(KafkaErrFailedToUpdateCode, "update failed")
 				errStr := err.Error()
 				Expect(errStr).To(ContainSubstring("FailedToUpdate"))
 				Expect(errStr).To(ContainSubstring("kafka"))
@@ -58,9 +57,9 @@ var _ = Describe("Kafka Model", func() {
 		Describe("KafkaInfraError", func() {
 			Describe("kafkaCode", func() {
 				It("should return the error code", func() {
-					infraErr := NewKafkaError(KafkaErrFailedToDelete, "delete failed")
+					infraErr := NewKafkaError(KafkaErrFailedToDeleteCode, "delete failed")
 					kafkaErr := KafkaInfraError{infraErr}
-					Expect(kafkaErr.kafkaCode()).To(Equal(KafkaErrFailedToDelete))
+					Expect(kafkaErr.kafkaCode()).To(Equal(KafkaErrFailedToDeleteCode))
 				})
 			})
 		})
@@ -68,10 +67,10 @@ var _ = Describe("Kafka Model", func() {
 		Describe("ToKafkaInfraError", func() {
 			Context("when error is a Kafka infra error", func() {
 				It("should convert successfully", func() {
-					err := NewKafkaError(KafkaErrFailedToGetConfig, "config error")
+					err := NewKafkaError(KafkaErrFailedToGetConfigCode, "config error")
 					kafkaErr, ok := ToKafkaInfraError(err)
 					Expect(ok).To(BeTrue())
-					Expect(kafkaErr.kafkaCode()).To(Equal(KafkaErrFailedToGetConfig))
+					Expect(kafkaErr.kafkaCode()).To(Equal(KafkaErrFailedToGetConfigCode))
 					Expect(kafkaErr.reason).To(Equal("config error"))
 				})
 			})
@@ -86,11 +85,7 @@ var _ = Describe("Kafka Model", func() {
 
 			Context("when error is an infra error but not Kafka", func() {
 				It("should return false", func() {
-					err := InfraError{
-						InfraName: Redis,
-						Code:      "SomeCode",
-						reason:    "some reason",
-					}
+					err := NewInfraError(Redis, "SomeCode", "some reason")
 					_, ok := ToKafkaInfraError(err)
 					Expect(ok).To(BeFalse())
 				})
@@ -102,9 +97,9 @@ var _ = Describe("Kafka Model", func() {
 		Describe("NewKafkaStatusDetail", func() {
 			It("should create status with correct fields", func() {
 				status := NewKafkaStatusDetail(KafkaCreatedCode, "Kafka created")
-				Expect(status.InfraName).To(Equal(Kafka))
-				Expect(status.code).To(Equal(string(KafkaCreatedCode)))
-				Expect(status.message).To(Equal("Kafka created"))
+				Expect(status.InfraName()).To(Equal(Kafka))
+				Expect(status.Code()).To(Equal(string(KafkaCreatedCode)))
+				Expect(status.Message()).To(Equal("Kafka created"))
 			})
 		})
 
@@ -122,7 +117,7 @@ var _ = Describe("Kafka Model", func() {
 					It("should convert successfully", func() {
 						host := "kafka.example.com"
 						port := "9092"
-						connInfo := KafkaConnection{
+						connInfo := KafkaConnInfo{
 							Host: host,
 							Port: port,
 						}
@@ -148,12 +143,7 @@ var _ = Describe("Kafka Model", func() {
 
 				Context("when status is connection type but missing connection info", func() {
 					It("should return true but with empty connection info", func() {
-						status := InfraStatusDetail{
-							InfraName: Kafka,
-							Code:      string(KafkaConnectionCode),
-							Message:   "kafka://host:port",
-							Hidden:    nil,
-						}
+						status := NewInfraStatusDetail(Kafka, string(KafkaConnectionCode), "kafka://host:port", nil)
 						detail := KafkaStatusDetail{status}
 
 						connDetail, ok := detail.ToKafkaConnDetail()
@@ -169,15 +159,15 @@ var _ = Describe("Kafka Model", func() {
 			It("should create connection status with correct fields", func() {
 				host := "kafka-broker.example.com"
 				port := "9092"
-				connInfo := KafkaConnection{
+				connInfo := KafkaConnInfo{
 					Host: host,
 					Port: port,
 				}
 				status := NewKafkaConnDetail(connInfo)
 
-				Expect(status.InfraName).To(Equal(Kafka))
-				Expect(status.code).To(Equal(string(KafkaConnectionCode)))
-				Expect(status.message).To(Equal("kafka://kafka-broker.example.com:9092"))
+				Expect(status.InfraName()).To(Equal(Kafka))
+				Expect(status.Code()).To(Equal(string(KafkaConnectionCode)))
+				Expect(status.Message()).To(Equal("kafka://kafka-broker.example.com:9092"))
 			})
 		})
 	})
@@ -190,69 +180,65 @@ var _ = Describe("Kafka Model", func() {
 		})
 
 		Context("when results have no errors or statuses", func() {
-			It("should return ready state", func() {
+			It("should return not ready state with no connection", func() {
 				results := InitResults()
 				status := ExtractKafkaStatus(ctx, results)
-				Expect(status.State).To(Equal(apiv2.WBStateType("")))
-				Expect(status.Ready).To(BeTrue())
+
+				Expect(status.Ready).To(BeFalse())
 				Expect(status.Details).To(BeEmpty())
+				Expect(status.Errors).To(BeEmpty())
 			})
 		})
 
 		Context("when results have Kafka errors", func() {
-			It("should include errors in status details with error state", func() {
+			It("should include errors and not be ready", func() {
 				results := InitResults()
-				err := NewKafkaError(KafkaErrFailedToCreate, "failed to create")
+				err := NewKafkaError(KafkaErrFailedToCreateCode, "failed to create")
 				results.AddErrors(err)
 
 				status := ExtractKafkaStatus(ctx, results)
-				Expect(status.State).To(Equal(apiv2.WBStateType("")))
+
 				Expect(status.Ready).To(BeFalse())
-				Expect(status.Details).To(HaveLen(1))
-				Expect(status.Details[0].State).To(Equal(apiv2.WBStateError))
-				Expect(status.Details[0].Code).To(Equal(string(KafkaErrFailedToCreate)))
-				Expect(status.Details[0].Message).To(Equal("failed to create"))
+				Expect(status.Errors).To(HaveLen(1))
+				Expect(status.Errors[0].Code()).To(Equal(string(KafkaErrFailedToCreateCode)))
+				Expect(status.Errors[0].Reason()).To(Equal("failed to create"))
 			})
 		})
 
 		Context("when results have non-Kafka errors", func() {
 			It("should not include them in status", func() {
 				results := InitResults()
-				err := InfraError{
-					InfraName: Redis,
-					Code:      "RedisError",
-					reason:    "redis failed",
-				}
+				err := NewInfraError(Redis, "RedisError", "redis failed")
 				results.AddErrors(err)
 
 				status := ExtractKafkaStatus(ctx, results)
-				Expect(status.Ready).To(BeTrue())
+				Expect(status.Ready).To(BeFalse())
 				Expect(status.Details).To(BeEmpty())
+				Expect(status.Errors).To(BeEmpty())
 			})
 		})
 
 		Context("when results have Kafka created status", func() {
-			It("should include status in details with updating state", func() {
+			It("should include status in details", func() {
 				results := InitResults()
 				infraStatus := NewKafkaStatusDetail(KafkaCreatedCode, "Kafka created successfully")
 				results.AddStatuses(infraStatus)
 
 				status := ExtractKafkaStatus(ctx, results)
-				Expect(status.State).To(Equal(apiv2.WBStateType("")))
-				Expect(status.Ready).To(BeTrue())
+
+				Expect(status.Ready).To(BeFalse())
 				Expect(status.Details).To(HaveLen(1))
-				Expect(status.Details[0].State).To(Equal(apiv2.WBStateUpdating))
-				Expect(status.Details[0].Code).To(Equal(string(KafkaCreatedCode)))
-				Expect(status.Details[0].Message).To(Equal("Kafka created successfully"))
+				Expect(status.Details[0].Code()).To(Equal(string(KafkaCreatedCode)))
+				Expect(status.Details[0].Message()).To(Equal("Kafka created successfully"))
 			})
 		})
 
 		Context("when results have connection status", func() {
-			It("should populate connection info in status", func() {
+			It("should populate connection info in status and be ready", func() {
 				host := "kafka.example.com"
 				port := "9092"
 				results := InitResults()
-				connInfo := KafkaConnection{
+				connInfo := KafkaConnInfo{
 					Host: host,
 					Port: port,
 				}
@@ -261,38 +247,39 @@ var _ = Describe("Kafka Model", func() {
 
 				status := ExtractKafkaStatus(ctx, results)
 				Expect(status.Ready).To(BeTrue())
-				Expect(status.Connection.KafkaHost).To(Equal(host))
-				Expect(status.Connection.KafkaPort).To(Equal(port))
+				Expect(status.Connection.Host).To(Equal(host))
+				Expect(status.Connection.Port).To(Equal(port))
 				Expect(status.Details).To(BeEmpty())
 			})
 		})
 
 		Context("when results have both errors and statuses", func() {
-			It("should include both in details with error state", func() {
+			It("should include both errors and details, not be ready", func() {
 				results := InitResults()
-				err := NewKafkaError(KafkaErrFailedToUpdate, "update failed")
+				err := NewKafkaError(KafkaErrFailedToUpdateCode, "update failed")
 				infraStatus := NewKafkaStatusDetail(KafkaCreatedCode, "created")
 				results.AddErrors(err)
 				results.AddStatuses(infraStatus)
 
 				status := ExtractKafkaStatus(ctx, results)
-				Expect(status.State).To(Equal(apiv2.WBStateType("")))
+
 				Expect(status.Ready).To(BeFalse())
-				Expect(status.Details).To(HaveLen(2))
+				Expect(status.Errors).To(HaveLen(1))
+				Expect(status.Details).To(HaveLen(1))
 			})
 		})
 
 		Context("when results have multiple errors", func() {
 			It("should include all errors", func() {
 				results := InitResults()
-				err1 := NewKafkaError(KafkaErrFailedToCreate, "create failed")
-				err2 := NewKafkaError(KafkaErrFailedToUpdate, "update failed")
+				err1 := NewKafkaError(KafkaErrFailedToCreateCode, "create failed")
+				err2 := NewKafkaError(KafkaErrFailedToUpdateCode, "update failed")
 				results.AddErrors(err1, err2)
 
 				status := ExtractKafkaStatus(ctx, results)
-				Expect(status.State).To(Equal(apiv2.WBStateType("")))
+
 				Expect(status.Ready).To(BeFalse())
-				Expect(status.Details).To(HaveLen(2))
+				Expect(status.Errors).To(HaveLen(2))
 			})
 		})
 
@@ -301,7 +288,7 @@ var _ = Describe("Kafka Model", func() {
 				host := "test-host"
 				port := "9092"
 				results := InitResults()
-				connInfo := KafkaConnection{
+				connInfo := KafkaConnInfo{
 					Host: host,
 					Port: port,
 				}
@@ -311,9 +298,9 @@ var _ = Describe("Kafka Model", func() {
 				results.AddStatuses(connStatus, createdStatus, updatedStatus)
 
 				status := ExtractKafkaStatus(ctx, results)
-				Expect(status.State).To(Equal(apiv2.WBStateType("")))
-				Expect(status.Connection.KafkaHost).To(Equal(host))
-				Expect(status.Connection.KafkaPort).To(Equal(port))
+
+				Expect(status.Connection.Host).To(Equal(host))
+				Expect(status.Connection.Port).To(Equal(port))
 				Expect(status.Details).To(HaveLen(2))
 			})
 		})
@@ -322,11 +309,11 @@ var _ = Describe("Kafka Model", func() {
 	Describe("Error codes", func() {
 		It("should have distinct error codes", func() {
 			codes := []KafkaErrorCode{
-				KafkaErrFailedToGetConfig,
-				KafkaErrFailedToInitialize,
-				KafkaErrFailedToCreate,
-				KafkaErrFailedToUpdate,
-				KafkaErrFailedToDelete,
+				KafkaErrFailedToGetConfigCode,
+				KafkaErrFailedToInitializeCode,
+				KafkaErrFailedToCreateCode,
+				KafkaErrFailedToUpdateCode,
+				KafkaErrFailedToDeleteCode,
 			}
 
 			for i := range len(codes) {
