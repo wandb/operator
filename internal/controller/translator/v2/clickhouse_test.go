@@ -26,41 +26,27 @@ var (
 	overrideCHMemoryLimit   = resource.MustParse("8Gi")
 )
 
-var _ = Describe("BuildClickHouseSpec", func() {
+var _ = Describe("BuildClickHouseConfig", func() {
 	Describe("Config merging", func() {
-		Context("when both Config values are nil", func() {
-			It("should result in nil Config", func() {
-				actual := apiv2.WBClickHouseSpec{Config: nil}
-				defaults := apiv2.WBClickHouseSpec{Config: nil}
-
-				result, err := BuildClickHouseSpec(actual, defaults)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(result.Config).To(BeNil())
-			})
-		})
-
 		Context("when actual Config is nil", func() {
-			It("should use default Config", func() {
+			It("should use default Config resources", func() {
 				actual := apiv2.WBClickHouseSpec{Config: nil}
-				defaults := apiv2.WBClickHouseSpec{
-					Config: &apiv2.WBClickHouseConfig{
-						Resources: corev1.ResourceRequirements{
-							Requests: corev1.ResourceList{
-								corev1.ResourceCPU: defaultSmallCHCpuRequest,
-							},
+				defaultConfig := model.ClickHouseConfig{
+					Resources: corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceCPU: defaultSmallCHCpuRequest,
 						},
 					},
 				}
 
-				result, err := BuildClickHouseSpec(actual, defaults)
+				result, err := BuildClickHouseConfig(actual, defaultConfig)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(result.Config).ToNot(BeNil())
-				Expect(result.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(defaultSmallCHCpuRequest))
+				Expect(result.Resources.Requests[corev1.ResourceCPU]).To(Equal(defaultSmallCHCpuRequest))
 			})
 		})
 
-		Context("when both Config values exist", func() {
-			It("should merge resources with actual taking precedence", func() {
+		Context("when actual Config exists", func() {
+			It("should use actual Config resources and merge with defaults", func() {
 				actual := apiv2.WBClickHouseSpec{
 					Config: &apiv2.WBClickHouseConfig{
 						Resources: corev1.ResourceRequirements{
@@ -68,73 +54,87 @@ var _ = Describe("BuildClickHouseSpec", func() {
 						},
 					},
 				}
-				defaults := apiv2.WBClickHouseSpec{
-					Config: &apiv2.WBClickHouseConfig{
-						Resources: corev1.ResourceRequirements{
-							Requests: corev1.ResourceList{
-								corev1.ResourceCPU:    defaultSmallCHCpuRequest,
-								corev1.ResourceMemory: defaultSmallCHMemoryRequest,
-							},
+				defaultConfig := model.ClickHouseConfig{
+					Resources: corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceCPU:    defaultSmallCHCpuRequest,
+							corev1.ResourceMemory: defaultSmallCHMemoryRequest,
 						},
 					},
 				}
 
-				result, err := BuildClickHouseSpec(actual, defaults)
+				result, err := BuildClickHouseConfig(actual, defaultConfig)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(result.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(overrideCHCpuRequest))
-				Expect(result.Config.Resources.Requests[corev1.ResourceMemory]).To(Equal(defaultSmallCHMemoryRequest))
+				Expect(result.Resources.Requests[corev1.ResourceCPU]).To(Equal(overrideCHCpuRequest))
+				Expect(result.Resources.Requests[corev1.ResourceMemory]).To(Equal(defaultSmallCHMemoryRequest))
 			})
 		})
 	})
 
-	Describe("Version merging", func() {
-		Context("when actual Version is empty", func() {
-			It("should use default Version", func() {
-				actual := apiv2.WBClickHouseSpec{Version: ""}
-				defaults := apiv2.WBClickHouseSpec{Version: model.ClickHouseVersion}
+	Describe("Field merging", func() {
+		Context("when actual fields are empty", func() {
+			It("should use default values", func() {
+				actual := apiv2.WBClickHouseSpec{
+					Version:     "",
+					StorageSize: "",
+					Namespace:   "",
+				}
+				defaultConfig := model.ClickHouseConfig{
+					Version:     model.ClickHouseVersion,
+					StorageSize: model.SmallClickHouseStorageSize,
+					Namespace:   "default-ns",
+				}
 
-				result, err := BuildClickHouseSpec(actual, defaults)
+				result, err := BuildClickHouseConfig(actual, defaultConfig)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.Version).To(Equal(model.ClickHouseVersion))
+				Expect(result.StorageSize).To(Equal(model.SmallClickHouseStorageSize))
+				Expect(result.Namespace).To(Equal("default-ns"))
 			})
 		})
 
-		Context("when actual Version is set", func() {
-			It("should use actual Version", func() {
-				actual := apiv2.WBClickHouseSpec{Version: overrideCHVersion}
-				defaults := apiv2.WBClickHouseSpec{Version: model.ClickHouseVersion}
+		Context("when actual fields are set", func() {
+			It("should use actual values", func() {
+				actual := apiv2.WBClickHouseSpec{
+					Version:     overrideCHVersion,
+					StorageSize: overrideCHStorageSize,
+					Namespace:   overrideCHNamespace,
+				}
+				defaultConfig := model.ClickHouseConfig{
+					Version:     model.ClickHouseVersion,
+					StorageSize: model.SmallClickHouseStorageSize,
+					Namespace:   "default-ns",
+				}
 
-				result, err := BuildClickHouseSpec(actual, defaults)
+				result, err := BuildClickHouseConfig(actual, defaultConfig)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.Version).To(Equal(overrideCHVersion))
+				Expect(result.StorageSize).To(Equal(overrideCHStorageSize))
+				Expect(result.Namespace).To(Equal(overrideCHNamespace))
 			})
 		})
 	})
 
-	Describe("Replicas field", func() {
-		It("should always use actual Replicas", func() {
-			actual := apiv2.WBClickHouseSpec{Replicas: overrideCHReplicas}
-			defaults := apiv2.WBClickHouseSpec{Replicas: 3}
+	Describe("Enabled and Replicas fields", func() {
+		It("should always use actual Enabled and Replicas", func() {
+			actual := apiv2.WBClickHouseSpec{
+				Enabled:  overrideCHEnabled,
+				Replicas: overrideCHReplicas,
+			}
+			defaultConfig := model.ClickHouseConfig{
+				Enabled:  true,
+				Replicas: 3,
+			}
 
-			result, err := BuildClickHouseSpec(actual, defaults)
+			result, err := BuildClickHouseConfig(actual, defaultConfig)
 			Expect(err).ToNot(HaveOccurred())
+			Expect(result.Enabled).To(Equal(overrideCHEnabled))
 			Expect(result.Replicas).To(Equal(overrideCHReplicas))
-		})
-	})
-
-	Describe("Enabled field", func() {
-		It("should always use actual Enabled", func() {
-			actual := apiv2.WBClickHouseSpec{Enabled: false}
-			defaults := apiv2.WBClickHouseSpec{Enabled: true}
-
-			result, err := BuildClickHouseSpec(actual, defaults)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(result.Enabled).To(BeFalse())
 		})
 	})
 })
 
-var _ = Describe("InfraConfigBuilder.AddClickHouseSpec", func() {
+var _ = Describe("InfraConfigBuilder.AddClickHouseConfig", func() {
 	const testOwnerNamespace = "test-namespace"
 
 	Context("when adding dev size spec", func() {
@@ -145,11 +145,10 @@ var _ = Describe("InfraConfigBuilder.AddClickHouseSpec", func() {
 			}
 
 			builder := BuildInfraConfig(testOwnerNamespace, apiv2.WBSizeDev)
-			result := builder.AddClickHouseSpec(actual)
+			result := builder.AddClickHouseConfig(actual)
 
 			Expect(result).To(Equal(builder))
 			Expect(builder.errors).To(BeEmpty())
-			Expect(builder.mergedClickHouse).ToNot(BeNil())
 			Expect(builder.mergedClickHouse.Enabled).To(BeTrue())
 			Expect(builder.mergedClickHouse.Namespace).To(Equal(testOwnerNamespace))
 			Expect(builder.mergedClickHouse.StorageSize).To(Equal(model.DevClickHouseStorageSize))
@@ -166,7 +165,7 @@ var _ = Describe("InfraConfigBuilder.AddClickHouseSpec", func() {
 			}
 
 			builder := BuildInfraConfig(testOwnerNamespace, apiv2.WBSizeSmall)
-			result := builder.AddClickHouseSpec(actual)
+			result := builder.AddClickHouseConfig(actual)
 
 			Expect(result).To(Equal(builder))
 			Expect(builder.errors).To(BeEmpty())
@@ -174,8 +173,7 @@ var _ = Describe("InfraConfigBuilder.AddClickHouseSpec", func() {
 			Expect(builder.mergedClickHouse.Replicas).To(Equal(int32(3)))
 			Expect(builder.mergedClickHouse.StorageSize).To(Equal(model.SmallClickHouseStorageSize))
 			Expect(builder.mergedClickHouse.Version).To(Equal(model.ClickHouseVersion))
-			Expect(builder.mergedClickHouse.Config).ToNot(BeNil())
-			Expect(builder.mergedClickHouse.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(resource.MustParse(model.SmallClickHouseCpuRequest)))
+			Expect(builder.mergedClickHouse.Resources.Requests[corev1.ResourceCPU]).To(Equal(defaultSmallCHCpuRequest))
 		})
 	})
 
@@ -202,11 +200,10 @@ var _ = Describe("InfraConfigBuilder.AddClickHouseSpec", func() {
 			}
 
 			builder := BuildInfraConfig(testOwnerNamespace, apiv2.WBSizeSmall)
-			result := builder.AddClickHouseSpec(actual)
+			result := builder.AddClickHouseConfig(actual)
 
 			Expect(result).To(Equal(builder))
 			Expect(builder.errors).To(BeEmpty())
-			Expect(builder.mergedClickHouse).ToNot(BeNil())
 
 			Expect(builder.mergedClickHouse.Enabled).To(Equal(overrideCHEnabled))
 			Expect(builder.mergedClickHouse.Enabled).ToNot(Equal(true))
@@ -223,18 +220,17 @@ var _ = Describe("InfraConfigBuilder.AddClickHouseSpec", func() {
 			Expect(builder.mergedClickHouse.Replicas).To(Equal(overrideCHReplicas))
 			Expect(builder.mergedClickHouse.Replicas).ToNot(Equal(int32(3)))
 
-			Expect(builder.mergedClickHouse.Config).ToNot(BeNil())
-			Expect(builder.mergedClickHouse.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(overrideCHCpuRequest))
-			Expect(builder.mergedClickHouse.Config.Resources.Requests[corev1.ResourceCPU]).ToNot(Equal(defaultSmallCHCpuRequest))
+			Expect(builder.mergedClickHouse.Resources.Requests[corev1.ResourceCPU]).To(Equal(overrideCHCpuRequest))
+			Expect(builder.mergedClickHouse.Resources.Requests[corev1.ResourceCPU]).ToNot(Equal(defaultSmallCHCpuRequest))
 
-			Expect(builder.mergedClickHouse.Config.Resources.Requests[corev1.ResourceMemory]).To(Equal(overrideCHMemoryRequest))
-			Expect(builder.mergedClickHouse.Config.Resources.Requests[corev1.ResourceMemory]).ToNot(Equal(defaultSmallCHMemoryRequest))
+			Expect(builder.mergedClickHouse.Resources.Requests[corev1.ResourceMemory]).To(Equal(overrideCHMemoryRequest))
+			Expect(builder.mergedClickHouse.Resources.Requests[corev1.ResourceMemory]).ToNot(Equal(defaultSmallCHMemoryRequest))
 
-			Expect(builder.mergedClickHouse.Config.Resources.Limits[corev1.ResourceCPU]).To(Equal(overrideCHCpuLimit))
-			Expect(builder.mergedClickHouse.Config.Resources.Limits[corev1.ResourceCPU]).ToNot(Equal(defaultSmallCHCpuLimit))
+			Expect(builder.mergedClickHouse.Resources.Limits[corev1.ResourceCPU]).To(Equal(overrideCHCpuLimit))
+			Expect(builder.mergedClickHouse.Resources.Limits[corev1.ResourceCPU]).ToNot(Equal(defaultSmallCHCpuLimit))
 
-			Expect(builder.mergedClickHouse.Config.Resources.Limits[corev1.ResourceMemory]).To(Equal(overrideCHMemoryLimit))
-			Expect(builder.mergedClickHouse.Config.Resources.Limits[corev1.ResourceMemory]).ToNot(Equal(defaultSmallCHMemoryLimit))
+			Expect(builder.mergedClickHouse.Resources.Limits[corev1.ResourceMemory]).To(Equal(overrideCHMemoryLimit))
+			Expect(builder.mergedClickHouse.Resources.Limits[corev1.ResourceMemory]).ToNot(Equal(defaultSmallCHMemoryLimit))
 		})
 	})
 
@@ -247,14 +243,13 @@ var _ = Describe("InfraConfigBuilder.AddClickHouseSpec", func() {
 			}
 
 			builder := BuildInfraConfig(testOwnerNamespace, apiv2.WBSizeSmall)
-			result := builder.AddClickHouseSpec(actual)
+			result := builder.AddClickHouseConfig(actual)
 
 			Expect(result).To(Equal(builder))
 			Expect(builder.errors).To(BeEmpty())
 			Expect(builder.mergedClickHouse.StorageSize).To(Equal(overrideCHStorageSize))
 			Expect(builder.mergedClickHouse.StorageSize).ToNot(Equal(model.SmallClickHouseStorageSize))
-			Expect(builder.mergedClickHouse.Config).ToNot(BeNil())
-			Expect(builder.mergedClickHouse.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(defaultSmallCHCpuRequest))
+			Expect(builder.mergedClickHouse.Resources.Requests[corev1.ResourceCPU]).To(Equal(defaultSmallCHCpuRequest))
 		})
 	})
 
@@ -267,13 +262,12 @@ var _ = Describe("InfraConfigBuilder.AddClickHouseSpec", func() {
 			}
 
 			builder := BuildInfraConfig(testOwnerNamespace, apiv2.WBSizeSmall)
-			result := builder.AddClickHouseSpec(actual)
+			result := builder.AddClickHouseConfig(actual)
 
 			Expect(result).To(Equal(builder))
 			Expect(builder.errors).To(BeEmpty())
 			Expect(builder.mergedClickHouse.Version).To(Equal(overrideCHVersion))
 			Expect(builder.mergedClickHouse.Version).ToNot(Equal(model.ClickHouseVersion))
-			Expect(builder.mergedClickHouse.Config).ToNot(BeNil())
 		})
 	})
 
@@ -286,7 +280,7 @@ var _ = Describe("InfraConfigBuilder.AddClickHouseSpec", func() {
 			}
 
 			builder := BuildInfraConfig(testOwnerNamespace, apiv2.WBSizeSmall)
-			result := builder.AddClickHouseSpec(actual)
+			result := builder.AddClickHouseConfig(actual)
 
 			Expect(result).To(Equal(builder))
 			Expect(builder.errors).To(BeEmpty())
@@ -315,23 +309,22 @@ var _ = Describe("InfraConfigBuilder.AddClickHouseSpec", func() {
 			}
 
 			builder := BuildInfraConfig(testOwnerNamespace, apiv2.WBSizeSmall)
-			result := builder.AddClickHouseSpec(actual)
+			result := builder.AddClickHouseConfig(actual)
 
 			Expect(result).To(Equal(builder))
 			Expect(builder.errors).To(BeEmpty())
-			Expect(builder.mergedClickHouse.Config).ToNot(BeNil())
 
-			Expect(builder.mergedClickHouse.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(overrideCHCpuRequest))
-			Expect(builder.mergedClickHouse.Config.Resources.Requests[corev1.ResourceCPU]).ToNot(Equal(defaultSmallCHCpuRequest))
+			Expect(builder.mergedClickHouse.Resources.Requests[corev1.ResourceCPU]).To(Equal(overrideCHCpuRequest))
+			Expect(builder.mergedClickHouse.Resources.Requests[corev1.ResourceCPU]).ToNot(Equal(defaultSmallCHCpuRequest))
 
-			Expect(builder.mergedClickHouse.Config.Resources.Requests[corev1.ResourceMemory]).To(Equal(overrideCHMemoryRequest))
-			Expect(builder.mergedClickHouse.Config.Resources.Requests[corev1.ResourceMemory]).ToNot(Equal(defaultSmallCHMemoryRequest))
+			Expect(builder.mergedClickHouse.Resources.Requests[corev1.ResourceMemory]).To(Equal(overrideCHMemoryRequest))
+			Expect(builder.mergedClickHouse.Resources.Requests[corev1.ResourceMemory]).ToNot(Equal(defaultSmallCHMemoryRequest))
 
-			Expect(builder.mergedClickHouse.Config.Resources.Limits[corev1.ResourceCPU]).To(Equal(overrideCHCpuLimit))
-			Expect(builder.mergedClickHouse.Config.Resources.Limits[corev1.ResourceCPU]).ToNot(Equal(defaultSmallCHCpuLimit))
+			Expect(builder.mergedClickHouse.Resources.Limits[corev1.ResourceCPU]).To(Equal(overrideCHCpuLimit))
+			Expect(builder.mergedClickHouse.Resources.Limits[corev1.ResourceCPU]).ToNot(Equal(defaultSmallCHCpuLimit))
 
-			Expect(builder.mergedClickHouse.Config.Resources.Limits[corev1.ResourceMemory]).To(Equal(overrideCHMemoryLimit))
-			Expect(builder.mergedClickHouse.Config.Resources.Limits[corev1.ResourceMemory]).ToNot(Equal(defaultSmallCHMemoryLimit))
+			Expect(builder.mergedClickHouse.Resources.Limits[corev1.ResourceMemory]).To(Equal(overrideCHMemoryLimit))
+			Expect(builder.mergedClickHouse.Resources.Limits[corev1.ResourceMemory]).ToNot(Equal(defaultSmallCHMemoryLimit))
 		})
 	})
 
@@ -339,7 +332,7 @@ var _ = Describe("InfraConfigBuilder.AddClickHouseSpec", func() {
 		It("should append error to builder", func() {
 			actual := apiv2.WBClickHouseSpec{Enabled: true}
 			builder := BuildInfraConfig(testOwnerNamespace, apiv2.WBSize("invalid"))
-			result := builder.AddClickHouseSpec(actual)
+			result := builder.AddClickHouseConfig(actual)
 
 			Expect(result).To(Equal(builder))
 			Expect(builder.errors).ToNot(BeEmpty())
@@ -347,61 +340,62 @@ var _ = Describe("InfraConfigBuilder.AddClickHouseSpec", func() {
 	})
 })
 
-var _ = Describe("TranslateClickHouseConfig", func() {
-	Context("when translating a complete ClickHouse config", func() {
-		It("should correctly map all fields to WBClickHouseSpec", func() {
-			config := model.ClickHouseConfig{
+var _ = Describe("TranslateClickHouseSpec", func() {
+	Context("when translating a complete ClickHouse spec", func() {
+		It("should correctly map all fields to model.ClickHouseConfig", func() {
+			spec := apiv2.WBClickHouseSpec{
 				Enabled:     true,
 				Namespace:   overrideCHNamespace,
 				StorageSize: overrideCHStorageSize,
 				Replicas:    overrideCHReplicas,
 				Version:     overrideCHVersion,
-				Resources: corev1.ResourceRequirements{
-					Requests: corev1.ResourceList{
-						corev1.ResourceCPU:    overrideCHCpuRequest,
-						corev1.ResourceMemory: overrideCHMemoryRequest,
-					},
-					Limits: corev1.ResourceList{
-						corev1.ResourceCPU:    overrideCHCpuLimit,
-						corev1.ResourceMemory: overrideCHMemoryLimit,
+				Config: &apiv2.WBClickHouseConfig{
+					Resources: corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceCPU:    overrideCHCpuRequest,
+							corev1.ResourceMemory: overrideCHMemoryRequest,
+						},
+						Limits: corev1.ResourceList{
+							corev1.ResourceCPU:    overrideCHCpuLimit,
+							corev1.ResourceMemory: overrideCHMemoryLimit,
+						},
 					},
 				},
 			}
 
-			spec := TranslateClickHouseConfig(config)
+			config := TranslateClickHouseSpec(spec)
 
-			Expect(spec.Enabled).To(Equal(config.Enabled))
-			Expect(spec.Namespace).To(Equal(config.Namespace))
-			Expect(spec.StorageSize).To(Equal(config.StorageSize))
-			Expect(spec.Replicas).To(Equal(config.Replicas))
-			Expect(spec.Version).To(Equal(config.Version))
-			Expect(spec.Config).ToNot(BeNil())
-			Expect(spec.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(overrideCHCpuRequest))
-			Expect(spec.Config.Resources.Limits[corev1.ResourceCPU]).To(Equal(overrideCHCpuLimit))
-			Expect(spec.Config.Resources.Requests[corev1.ResourceMemory]).To(Equal(overrideCHMemoryRequest))
-			Expect(spec.Config.Resources.Limits[corev1.ResourceMemory]).To(Equal(overrideCHMemoryLimit))
+			Expect(config.Enabled).To(Equal(spec.Enabled))
+			Expect(config.Namespace).To(Equal(spec.Namespace))
+			Expect(config.StorageSize).To(Equal(spec.StorageSize))
+			Expect(config.Replicas).To(Equal(spec.Replicas))
+			Expect(config.Version).To(Equal(spec.Version))
+			Expect(config.Resources.Requests[corev1.ResourceCPU]).To(Equal(overrideCHCpuRequest))
+			Expect(config.Resources.Limits[corev1.ResourceCPU]).To(Equal(overrideCHCpuLimit))
+			Expect(config.Resources.Requests[corev1.ResourceMemory]).To(Equal(overrideCHMemoryRequest))
+			Expect(config.Resources.Limits[corev1.ResourceMemory]).To(Equal(overrideCHMemoryLimit))
 		})
 	})
 
-	Context("when translating a minimal ClickHouse config", func() {
-		It("should handle empty resources", func() {
-			config := model.ClickHouseConfig{
+	Context("when translating a minimal ClickHouse spec", func() {
+		It("should handle nil Config", func() {
+			spec := apiv2.WBClickHouseSpec{
 				Enabled:     overrideCHEnabled,
 				Namespace:   overrideCHNamespace,
 				StorageSize: model.DevClickHouseStorageSize,
 				Replicas:    1,
 				Version:     model.ClickHouseVersion,
-				Resources:   corev1.ResourceRequirements{},
+				Config:      nil,
 			}
 
-			spec := TranslateClickHouseConfig(config)
+			config := TranslateClickHouseSpec(spec)
 
-			Expect(spec.Enabled).To(Equal(config.Enabled))
-			Expect(spec.Namespace).To(Equal(config.Namespace))
-			Expect(spec.StorageSize).To(Equal(config.StorageSize))
-			Expect(spec.Replicas).To(Equal(config.Replicas))
-			Expect(spec.Version).To(Equal(config.Version))
-			Expect(spec.Config).ToNot(BeNil())
+			Expect(config.Enabled).To(Equal(spec.Enabled))
+			Expect(config.Namespace).To(Equal(spec.Namespace))
+			Expect(config.StorageSize).To(Equal(spec.StorageSize))
+			Expect(config.Replicas).To(Equal(spec.Replicas))
+			Expect(config.Version).To(Equal(spec.Version))
+			Expect(config.Resources).To(Equal(corev1.ResourceRequirements{}))
 		})
 	})
 })

@@ -9,11 +9,11 @@ import (
 )
 
 type InfraConfig interface {
-	GetRedisConfig() (*apiv2.WBRedisSpec, error)
-	GetKafkaConfig() (*apiv2.WBKafkaSpec, error)
-	GetMySQLConfig() (*apiv2.WBMySQLSpec, error)
-	GetMinioConfig() (*apiv2.WBMinioSpec, error)
-	GetClickHouseConfig() (*apiv2.WBClickHouseSpec, error)
+	GetRedisConfig() (model.RedisConfig, error)
+	GetKafkaConfig() (model.KafkaConfig, error)
+	GetMySQLConfig() (model.MySQLConfig, error)
+	GetMinioConfig() (model.MinioConfig, error)
+	GetClickHouseConfig() (model.ClickHouseConfig, error)
 }
 
 func BuildInfraConfig(ownerNamespace string, size apiv2.WBSize) *InfraConfigBuilder {
@@ -43,4 +43,24 @@ func ToModelSize(wbSize apiv2.WBSize) (model.Size, error) {
 	default:
 		return "", errors.New(fmt.Sprintf("unsupported size: %s", string(wbSize)))
 	}
+}
+
+func (i *InfraConfigBuilder) GetClickHouseConfig() (model.ClickHouseConfig, error) {
+	return i.mergedClickHouse, nil
+}
+
+func (i *InfraConfigBuilder) GetRedisConfig() (model.RedisConfig, error) {
+	return i.mergedRedis, nil
+}
+
+func (i *InfraConfigBuilder) GetKafkaConfig() (model.KafkaConfig, error) {
+	return i.mergedKafka, nil
+}
+
+func (i *InfraConfigBuilder) GetMySQLConfig() (model.MySQLConfig, error) {
+	return i.mergedMySQL, nil
+}
+
+func (i *InfraConfigBuilder) GetMinioConfig() (model.MinioConfig, error) {
+	return i.mergedMinio, nil
 }

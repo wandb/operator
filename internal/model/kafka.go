@@ -49,31 +49,6 @@ func (k KafkaConfig) IsHighAvailability() bool {
 	return k.Replicas > 1
 }
 
-func (i *InfraConfigBuilder) GetKafkaConfig() (KafkaConfig, error) {
-	var details KafkaConfig
-
-	if i.mergedKafka != nil {
-		details.Enabled = i.mergedKafka.Enabled
-		details.Namespace = i.mergedKafka.Namespace
-		details.StorageSize = i.mergedKafka.StorageSize
-
-		if i.mergedKafka.Config != nil {
-			details.Resources.Requests = i.mergedKafka.Config.Resources.Requests
-			details.Resources.Limits = i.mergedKafka.Config.Resources.Limits
-		}
-
-		// Get replica count and replication config based on size
-		var err error
-		if details.Replicas, err = GetReplicaCountForSize(i.size); err != nil {
-			return details, err
-		}
-		if details.ReplicationConfig, err = GetReplicationConfigForSize(i.size); err != nil {
-			return details, err
-		}
-	}
-	return details, nil
-}
-
 func GetReplicaCountForSize(size apiv2.WBSize) (int32, error) {
 	switch size {
 	case apiv2.WBSizeDev:

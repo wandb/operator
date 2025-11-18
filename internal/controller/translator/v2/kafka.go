@@ -6,50 +6,38 @@ import (
 	"github.com/wandb/operator/internal/model"
 )
 
-// BuildKafkaSpec will create a new WBKafkaSpec with defaultValues applied if not
+// BuildKafkaConfig will create a new model.KafkaConfig with defaultConfig applied if not
 // present in actual. It should *never* be saved into the CR!
-func BuildKafkaSpec(actual apiv2.WBKafkaSpec, defaultValues apiv2.WBKafkaSpec) (apiv2.WBKafkaSpec, error) {
-	var kafkaSpec apiv2.WBKafkaSpec
+func BuildKafkaConfig(actual apiv2.WBKafkaSpec, defaultConfig model.KafkaConfig) (model.KafkaConfig, error) {
+	kafkaConfig := TranslateKafkaSpec(actual)
 
-	if actual.Config == nil {
-		kafkaSpec.Config = defaultValues.Config.DeepCopy()
-	} else if defaultValues.Config == nil {
-		kafkaSpec.Config = actual.Config.DeepCopy()
-	} else {
-		var kafkaConfig apiv2.WBKafkaConfig
-		kafkaConfig.Resources = utils.Resources(
-			actual.Config.Resources,
-			defaultValues.Config.Resources,
-		)
-		kafkaSpec.Config = &kafkaConfig
-	}
+	kafkaConfig.StorageSize = utils.CoalesceQuantity(kafkaConfig.StorageSize, defaultConfig.StorageSize)
+	kafkaConfig.Namespace = utils.Coalesce(kafkaConfig.Namespace, defaultConfig.Namespace)
+	kafkaConfig.Resources = utils.Resources(kafkaConfig.Resources, defaultConfig.Resources)
 
-	kafkaSpec.StorageSize = utils.CoalesceQuantity(actual.StorageSize, defaultValues.StorageSize)
-	kafkaSpec.Namespace = utils.Coalesce(actual.Namespace, defaultValues.Namespace)
+	kafkaConfig.Enabled = actual.Enabled
 
-	kafkaSpec.Enabled = actual.Enabled
-
-	return kafkaSpec, nil
+	return kafkaConfig, nil
 }
 
-func TranslateKafkaConfig(config model.KafkaConfig) apiv2.WBKafkaSpec {
-	spec := apiv2.WBKafkaSpec{
-		Enabled:     config.Enabled,
-		Namespace:   config.Namespace,
-		StorageSize: config.StorageSize,
-		Config: &apiv2.WBKafkaConfig{
-			Resources: config.Resources,
-		},
+func TranslateKafkaSpec(spec apiv2.WBKafkaSpec) model.KafkaConfig {
+	config := model.KafkaConfig{
+		Enabled:     spec.Enabled,
+		Namespace:   spec.Namespace,
+		StorageSize: spec.StorageSize,
+	}
+	if spec.Config != nil {
+		config.Resources = spec.Config.Resources
 	}
 
-	return spec
+	return config
 }
 
-func (i *InfraConfigBuilder) AddKafkaSpec(actual apiv2.WBKafkaSpec) *InfraConfigBuilder {
+func (i *InfraConfigBuilder) AddKafkaConfig(actual apiv2.WBKafkaSpec) *InfraConfigBuilder {
 	var err error
 	var size model.Size
 	var defaultConfig model.KafkaConfig
-	var spec apiv2.WBKafkaSpec
+	var mergedConfig model.KafkaConfig
 
 	size, err = ToModelSize(i.size)
 	if err != nil {
@@ -62,13 +50,11 @@ func (i *InfraConfigBuilder) AddKafkaSpec(actual apiv2.WBKafkaSpec) *InfraConfig
 		return i
 	}
 
-	defaultSpec := TranslateKafkaConfig(defaultConfig)
-
-	spec, err = BuildKafkaSpec(actual, defaultSpec)
+	mergedConfig, err = BuildKafkaConfig(actual, defaultConfig)
 	if err != nil {
 		i.errors = append(i.errors, err)
 		return i
 	}
-	i.mergedKafka = &spec
+	i.mergedKafka = mergedConfig
 	return i
 }

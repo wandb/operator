@@ -6,54 +6,42 @@ import (
 	"github.com/wandb/operator/internal/model"
 )
 
-// BuildClickHouseSpec will create a new WBClickHouseSpec with defaultValues applied if not
+// BuildClickHouseConfig will create a new WBClickHouseSpec with defaultValues applied if not
 // present in actual. It should *never* be saved into the CR!
-func BuildClickHouseSpec(actual apiv2.WBClickHouseSpec, defaultValues apiv2.WBClickHouseSpec) (apiv2.WBClickHouseSpec, error) {
-	var clickhouseSpec apiv2.WBClickHouseSpec
+func BuildClickHouseConfig(actual apiv2.WBClickHouseSpec, defaultConfig model.ClickHouseConfig) (model.ClickHouseConfig, error) {
+	clickhouseConfig := TranslateClickHouseSpec(actual)
 
-	if actual.Config == nil {
-		clickhouseSpec.Config = defaultValues.Config.DeepCopy()
-	} else if defaultValues.Config == nil {
-		clickhouseSpec.Config = actual.Config.DeepCopy()
-	} else {
-		var clickhouseConfig apiv2.WBClickHouseConfig
-		clickhouseConfig.Resources = utils.Resources(
-			actual.Config.Resources,
-			defaultValues.Config.Resources,
-		)
-		clickhouseSpec.Config = &clickhouseConfig
-	}
+	clickhouseConfig.StorageSize = utils.CoalesceQuantity(clickhouseConfig.StorageSize, defaultConfig.StorageSize)
+	clickhouseConfig.Namespace = utils.Coalesce(clickhouseConfig.Namespace, defaultConfig.Namespace)
+	clickhouseConfig.Version = utils.Coalesce(clickhouseConfig.Version, defaultConfig.Version)
+	clickhouseConfig.Resources = utils.Resources(clickhouseConfig.Resources, defaultConfig.Resources)
 
-	clickhouseSpec.StorageSize = utils.CoalesceQuantity(actual.StorageSize, defaultValues.StorageSize)
-	clickhouseSpec.Namespace = utils.Coalesce(actual.Namespace, defaultValues.Namespace)
-	clickhouseSpec.Version = utils.Coalesce(actual.Version, defaultValues.Version)
+	clickhouseConfig.Enabled = actual.Enabled
+	clickhouseConfig.Replicas = actual.Replicas
 
-	clickhouseSpec.Enabled = actual.Enabled
-	clickhouseSpec.Replicas = actual.Replicas
-
-	return clickhouseSpec, nil
+	return clickhouseConfig, nil
 }
 
-func TranslateClickHouseConfig(config model.ClickHouseConfig) apiv2.WBClickHouseSpec {
-	spec := apiv2.WBClickHouseSpec{
-		Enabled:     config.Enabled,
-		Namespace:   config.Namespace,
-		StorageSize: config.StorageSize,
-		Replicas:    config.Replicas,
-		Version:     config.Version,
-		Config: &apiv2.WBClickHouseConfig{
-			Resources: config.Resources,
-		},
+func TranslateClickHouseSpec(spec apiv2.WBClickHouseSpec) model.ClickHouseConfig {
+	config := model.ClickHouseConfig{
+		Enabled:     spec.Enabled,
+		Namespace:   spec.Namespace,
+		StorageSize: spec.StorageSize,
+		Replicas:    spec.Replicas,
+		Version:     spec.Version,
+	}
+	if spec.Config != nil {
+		config.Resources = spec.Config.Resources
 	}
 
-	return spec
+	return config
 }
 
-func (i *InfraConfigBuilder) AddClickHouseSpec(actual apiv2.WBClickHouseSpec) *InfraConfigBuilder {
+func (i *InfraConfigBuilder) AddClickHouseConfig(actual apiv2.WBClickHouseSpec) *InfraConfigBuilder {
 	var err error
 	var size model.Size
 	var defaultConfig model.ClickHouseConfig
-	var spec apiv2.WBClickHouseSpec
+	var mergedConfig model.ClickHouseConfig
 
 	size, err = ToModelSize(i.size)
 	if err != nil {
@@ -66,13 +54,11 @@ func (i *InfraConfigBuilder) AddClickHouseSpec(actual apiv2.WBClickHouseSpec) *I
 		return i
 	}
 
-	defaultSpec := TranslateClickHouseConfig(defaultConfig)
-
-	spec, err = BuildClickHouseSpec(actual, defaultSpec)
+	mergedConfig, err = BuildClickHouseConfig(actual, defaultConfig)
 	if err != nil {
 		i.errors = append(i.errors, err)
 		return i
 	}
-	i.mergedClickHouse = &spec
+	i.mergedClickHouse = mergedConfig
 	return i
 }

@@ -6,51 +6,38 @@ import (
 	"github.com/wandb/operator/internal/model"
 )
 
-// BuildMinioSpec will create a new WBMinioSpec with defaultValues applied if not
+// BuildMinioConfig will create a new model.MinioConfig with defaultConfig applied if not
 // present in actual. It should *never* be saved into the CR!
-func BuildMinioSpec(actual apiv2.WBMinioSpec, defaultValues apiv2.WBMinioSpec) (apiv2.WBMinioSpec, error) {
-	var minioSpec apiv2.WBMinioSpec
+func BuildMinioConfig(actual apiv2.WBMinioSpec, defaultConfig model.MinioConfig) (model.MinioConfig, error) {
+	minioConfig := TranslateMinioSpec(actual)
 
-	if actual.Config == nil {
-		minioSpec.Config = defaultValues.Config.DeepCopy()
-	} else if defaultValues.Config == nil {
-		minioSpec.Config = actual.Config.DeepCopy()
-	} else {
-		var minioConfig apiv2.WBMinioConfig
-		minioConfig.Resources = utils.Resources(
-			actual.Config.Resources,
-			defaultValues.Config.Resources,
-		)
-		minioSpec.Config = &minioConfig
-	}
+	minioConfig.StorageSize = utils.CoalesceQuantity(minioConfig.StorageSize, defaultConfig.StorageSize)
+	minioConfig.Namespace = utils.Coalesce(minioConfig.Namespace, defaultConfig.Namespace)
+	minioConfig.Resources = utils.Resources(minioConfig.Resources, defaultConfig.Resources)
 
-	minioSpec.StorageSize = utils.CoalesceQuantity(actual.StorageSize, defaultValues.StorageSize)
-	minioSpec.Namespace = utils.Coalesce(actual.Namespace, defaultValues.Namespace)
+	minioConfig.Enabled = actual.Enabled
 
-	minioSpec.Enabled = actual.Enabled
-	minioSpec.Replicas = actual.Replicas
-
-	return minioSpec, nil
+	return minioConfig, nil
 }
 
-func TranslateMinioConfig(config model.MinioConfig) apiv2.WBMinioSpec {
-	spec := apiv2.WBMinioSpec{
-		Enabled:     config.Enabled,
-		Namespace:   config.Namespace,
-		StorageSize: config.StorageSize,
-		Config: &apiv2.WBMinioConfig{
-			Resources: config.Resources,
-		},
+func TranslateMinioSpec(spec apiv2.WBMinioSpec) model.MinioConfig {
+	config := model.MinioConfig{
+		Enabled:     spec.Enabled,
+		Namespace:   spec.Namespace,
+		StorageSize: spec.StorageSize,
+	}
+	if spec.Config != nil {
+		config.Resources = spec.Config.Resources
 	}
 
-	return spec
+	return config
 }
 
-func (i *InfraConfigBuilder) AddMinioSpec(actual apiv2.WBMinioSpec) *InfraConfigBuilder {
+func (i *InfraConfigBuilder) AddMinioConfig(actual apiv2.WBMinioSpec) *InfraConfigBuilder {
 	var err error
 	var size model.Size
 	var defaultConfig model.MinioConfig
-	var spec apiv2.WBMinioSpec
+	var mergedConfig model.MinioConfig
 
 	size, err = ToModelSize(i.size)
 	if err != nil {
@@ -63,13 +50,11 @@ func (i *InfraConfigBuilder) AddMinioSpec(actual apiv2.WBMinioSpec) *InfraConfig
 		return i
 	}
 
-	defaultSpec := TranslateMinioConfig(defaultConfig)
-
-	spec, err = BuildMinioSpec(actual, defaultSpec)
+	mergedConfig, err = BuildMinioConfig(actual, defaultConfig)
 	if err != nil {
 		i.errors = append(i.errors, err)
 		return i
 	}
-	i.mergedMinio = &spec
+	i.mergedMinio = mergedConfig
 	return i
 }

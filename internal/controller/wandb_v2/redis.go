@@ -18,7 +18,7 @@ func (r *WeightsAndBiasesV2Reconciler) reconcileRedis(
 	var err error
 	var results = &model.Results{}
 	var nextResults *model.Results
-	var redisConfig *apiv2.WBRedisSpec
+	var redisConfig model.RedisConfig
 	var actual redis.ActualRedis
 
 	if redisConfig, err = infraDetails.GetRedisConfig(); err != nil {

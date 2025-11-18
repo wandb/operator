@@ -2,54 +2,42 @@ package v2
 
 import (
 	apiv2 "github.com/wandb/operator/api/v2"
-	merge2 "github.com/wandb/operator/internal/controller/translator/utils"
+	"github.com/wandb/operator/internal/controller/translator/utils"
 	"github.com/wandb/operator/internal/model"
 )
 
-// BuildMySQLSpec will create a new WBMySQLSpec with defaultValues applied if not
+// BuildMySQLConfig will create a new model.MySQLConfig with defaultConfig applied if not
 // present in actual. It should *never* be saved into the CR!
-func BuildMySQLSpec(actual apiv2.WBMySQLSpec, defaultValues apiv2.WBMySQLSpec) (apiv2.WBMySQLSpec, error) {
-	var mysqlSpec apiv2.WBMySQLSpec
+func BuildMySQLConfig(actual apiv2.WBMySQLSpec, defaultConfig model.MySQLConfig) (model.MySQLConfig, error) {
+	mysqlConfig := TranslateMySQLSpec(actual)
 
-	if actual.Config == nil {
-		mysqlSpec.Config = defaultValues.Config.DeepCopy()
-	} else if defaultValues.Config == nil {
-		mysqlSpec.Config = actual.Config.DeepCopy()
-	} else {
-		var mysqlConfig apiv2.WBMySQLConfig
-		mysqlConfig.Resources = merge2.Resources(
-			actual.Config.Resources,
-			defaultValues.Config.Resources,
-		)
-		mysqlSpec.Config = &mysqlConfig
-	}
+	mysqlConfig.StorageSize = utils.CoalesceQuantity(mysqlConfig.StorageSize, defaultConfig.StorageSize)
+	mysqlConfig.Namespace = utils.Coalesce(mysqlConfig.Namespace, defaultConfig.Namespace)
+	mysqlConfig.Resources = utils.Resources(mysqlConfig.Resources, defaultConfig.Resources)
 
-	mysqlSpec.StorageSize = merge2.CoalesceQuantity(actual.StorageSize, defaultValues.StorageSize)
-	mysqlSpec.Namespace = merge2.Coalesce(actual.Namespace, defaultValues.Namespace)
+	mysqlConfig.Enabled = actual.Enabled
 
-	mysqlSpec.Enabled = actual.Enabled
-
-	return mysqlSpec, nil
+	return mysqlConfig, nil
 }
 
-func TranslateMySQLConfig(config model.MySQLConfig) apiv2.WBMySQLSpec {
-	spec := apiv2.WBMySQLSpec{
-		Enabled:     config.Enabled,
-		Namespace:   config.Namespace,
-		StorageSize: config.StorageSize,
-		Config: &apiv2.WBMySQLConfig{
-			Resources: config.Resources,
-		},
+func TranslateMySQLSpec(spec apiv2.WBMySQLSpec) model.MySQLConfig {
+	config := model.MySQLConfig{
+		Enabled:     spec.Enabled,
+		Namespace:   spec.Namespace,
+		StorageSize: spec.StorageSize,
+	}
+	if spec.Config != nil {
+		config.Resources = spec.Config.Resources
 	}
 
-	return spec
+	return config
 }
 
-func (i *InfraConfigBuilder) AddMySQLSpec(actual apiv2.WBMySQLSpec) *InfraConfigBuilder {
+func (i *InfraConfigBuilder) AddMySQLConfig(actual apiv2.WBMySQLSpec) *InfraConfigBuilder {
 	var err error
 	var size model.Size
 	var defaultConfig model.MySQLConfig
-	var spec apiv2.WBMySQLSpec
+	var mergedConfig model.MySQLConfig
 
 	size, err = ToModelSize(i.size)
 	if err != nil {
@@ -62,13 +50,11 @@ func (i *InfraConfigBuilder) AddMySQLSpec(actual apiv2.WBMySQLSpec) *InfraConfig
 		return i
 	}
 
-	defaultSpec := TranslateMySQLConfig(defaultConfig)
-
-	spec, err = BuildMySQLSpec(actual, defaultSpec)
+	mergedConfig, err = BuildMySQLConfig(actual, defaultConfig)
 	if err != nil {
 		i.errors = append(i.errors, err)
 		return i
 	}
-	i.mergedMySQL = &spec
+	i.mergedMySQL = mergedConfig
 	return i
 }

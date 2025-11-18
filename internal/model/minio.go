@@ -48,33 +48,6 @@ func (m MinioConfig) IsHighAvailability() bool {
 	return m.Servers > 1
 }
 
-func (i *InfraConfigBuilder) GetMinioConfig() (MinioConfig, error) {
-	var details MinioConfig
-
-	if i.mergedMinio != nil {
-		details.Enabled = i.mergedMinio.Enabled
-		details.Namespace = i.mergedMinio.Namespace
-		details.StorageSize = i.mergedMinio.StorageSize
-
-		if i.mergedMinio.Config != nil {
-			details.Resources.Requests = i.mergedMinio.Config.Resources.Requests
-			details.Resources.Limits = i.mergedMinio.Config.Resources.Limits
-		}
-
-		// Get server count and volumes based on size
-		var err error
-		minioSizeConfig, err := GetMinioConfigForSize(i.size)
-		if err != nil {
-			return details, err
-		}
-
-		details.Servers = minioSizeConfig.Servers
-		details.VolumesPerServer = minioSizeConfig.VolumesPerServer
-		details.Image = minioSizeConfig.Image
-	}
-	return details, nil
-}
-
 type MinioSizeConfig struct {
 	Servers          int32
 	VolumesPerServer int32

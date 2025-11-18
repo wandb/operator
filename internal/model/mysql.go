@@ -62,43 +62,6 @@ func (m MySQLConfig) IsHighAvailability() bool {
 	return m.Replicas > 1
 }
 
-func (i *InfraConfigBuilder) GetMySQLConfig() (MySQLConfig, error) {
-	var details MySQLConfig
-
-	if i.mergedMySQL != nil {
-		details.Enabled = i.mergedMySQL.Enabled
-		details.Namespace = i.mergedMySQL.Namespace
-		details.StorageSize = i.mergedMySQL.StorageSize
-
-		if i.mergedMySQL.Config != nil {
-			details.Resources.Requests = i.mergedMySQL.Config.Resources.Requests
-			details.Resources.Limits = i.mergedMySQL.Config.Resources.Limits
-		}
-
-		// Get replica count and MySQL-specific config based on size
-		var err error
-		if details.Replicas, err = GetMySQLReplicaCountForSize(i.size); err != nil {
-			return details, err
-		}
-
-		mysqlSizeConfig, err := GetMySQLConfigForSize(i.size)
-		if err != nil {
-			return details, err
-		}
-
-		details.PXCImage = mysqlSizeConfig.PXCImage
-		details.ProxySQLEnabled = mysqlSizeConfig.ProxySQLEnabled
-		details.ProxySQLReplicas = mysqlSizeConfig.ProxySQLReplicas
-		details.ProxySQLImage = mysqlSizeConfig.ProxySQLImage
-		details.TLSEnabled = mysqlSizeConfig.TLSEnabled
-		details.LogCollectorEnabled = mysqlSizeConfig.LogCollectorEnabled
-		details.LogCollectorImage = mysqlSizeConfig.LogCollectorImage
-		details.AllowUnsafePXCSize = mysqlSizeConfig.AllowUnsafePXCSize
-		details.AllowUnsafeProxySize = mysqlSizeConfig.AllowUnsafeProxySize
-	}
-	return details, nil
-}
-
 func GetMySQLReplicaCountForSize(size apiv2.WBSize) (int32, error) {
 	switch size {
 	case apiv2.WBSizeDev:

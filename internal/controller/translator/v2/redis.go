@@ -5,101 +5,85 @@ import (
 	"github.com/wandb/operator/internal/controller/translator/utils"
 	"github.com/wandb/operator/internal/model"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 const (
 	DefaultSentinelGroup = model.DefaultSentinelGroup
 )
 
-// BuildRedisSpec will create a new WBRedisSpec with defaultValues applied if not
+// BuildRedisConfig will create a new model.RedisConfig with defaultConfig applied if not
 // present in actual. It should *never* be saved into the CR!
-func BuildRedisSpec(actual apiv2.WBRedisSpec, defaultValues apiv2.WBRedisSpec) (apiv2.WBRedisSpec, error) {
-	var redisSpec apiv2.WBRedisSpec
+func BuildRedisConfig(actual apiv2.WBRedisSpec, defaultConfig model.RedisConfig) (model.RedisConfig, error) {
+	redisConfig := TranslateRedisSpec(actual)
+
+	if redisConfig.StorageSize.IsZero() {
+		redisConfig.StorageSize = defaultConfig.StorageSize
+	}
+	redisConfig.Namespace = utils.Coalesce(redisConfig.Namespace, defaultConfig.Namespace)
+
+	mergedResources := utils.Resources(
+		corev1.ResourceRequirements{Requests: redisConfig.Requests, Limits: redisConfig.Limits},
+		corev1.ResourceRequirements{Requests: defaultConfig.Requests, Limits: defaultConfig.Limits},
+	)
+	redisConfig.Requests = mergedResources.Requests
+	redisConfig.Limits = mergedResources.Limits
 
 	if actual.Sentinel == nil {
-		redisSpec.Sentinel = defaultValues.Sentinel.DeepCopy()
-	} else if defaultValues.Sentinel == nil {
-		redisSpec.Sentinel = actual.Sentinel.DeepCopy()
+		redisConfig.Sentinel = defaultConfig.Sentinel
 	} else {
-		var redisSentinel apiv2.WBRedisSentinelSpec
-		redisSentinel.Enabled = actual.Sentinel.Enabled
-		if actual.Sentinel.Config == nil {
-			redisSentinel.Config = defaultValues.Sentinel.Config.DeepCopy()
-		} else if defaultValues.Sentinel.Config == nil {
-			redisSentinel.Config = actual.Sentinel.Config.DeepCopy()
-		} else {
-			var sentinelConfig apiv2.WBRedisSentinelConfig
-			sentinelConfig.Resources = utils.Resources(
-				actual.Sentinel.Config.Resources,
-				defaultValues.Sentinel.Config.Resources,
-			)
-			sentinelConfig.MasterName = utils.Coalesce(
-				actual.Sentinel.Config.MasterName,
-				defaultValues.Sentinel.Config.MasterName,
-			)
-			redisSentinel.Config = &sentinelConfig
-		}
-		redisSpec.Sentinel = &redisSentinel
-	}
-
-	if actual.Config == nil {
-		redisSpec.Config = defaultValues.Config.DeepCopy()
-	} else if defaultValues.Config == nil {
-		redisSpec.Config = actual.Config.DeepCopy()
-	} else {
-		var redisConfig apiv2.WBRedisConfig
-		redisConfig.Resources = utils.Resources(
-			actual.Config.Resources,
-			defaultValues.Config.Resources,
+		mergedSentinelResources := utils.Resources(
+			corev1.ResourceRequirements{Requests: redisConfig.Sentinel.Requests, Limits: redisConfig.Sentinel.Limits},
+			corev1.ResourceRequirements{Requests: defaultConfig.Sentinel.Requests, Limits: defaultConfig.Sentinel.Limits},
 		)
-		redisSpec.Config = &redisConfig
+		redisConfig.Sentinel.Requests = mergedSentinelResources.Requests
+		redisConfig.Sentinel.Limits = mergedSentinelResources.Limits
+		redisConfig.Sentinel.MasterGroupName = utils.Coalesce(redisConfig.Sentinel.MasterGroupName, defaultConfig.Sentinel.MasterGroupName)
+		redisConfig.Sentinel.Enabled = actual.Sentinel.Enabled
 	}
 
-	redisSpec.StorageSize = utils.CoalesceQuantity(actual.StorageSize, defaultValues.StorageSize)
-	redisSpec.Namespace = utils.Coalesce(actual.Namespace, defaultValues.Namespace)
-	redisSpec.Enabled = actual.Enabled
+	redisConfig.Enabled = actual.Enabled
 
-	return redisSpec, nil
+	return redisConfig, nil
 }
 
 func RedisSentinelEnabled(wbSpec apiv2.WBRedisSpec) bool {
 	return wbSpec.Sentinel != nil && wbSpec.Sentinel.Enabled
 }
 
-func TranslateRedisConfig(config model.RedisConfig) apiv2.WBRedisSpec {
-	spec := apiv2.WBRedisSpec{
-		Enabled:     config.Enabled,
-		Namespace:   config.Namespace,
-		StorageSize: config.StorageSize.String(),
-		Config: &apiv2.WBRedisConfig{
-			Resources: corev1.ResourceRequirements{
-				Requests: config.Requests,
-				Limits:   config.Limits,
-			},
-		},
+func TranslateRedisSpec(spec apiv2.WBRedisSpec) model.RedisConfig {
+	config := model.RedisConfig{
+		Enabled:   spec.Enabled,
+		Namespace: spec.Namespace,
 	}
 
-	if config.Sentinel.Enabled {
-		spec.Sentinel = &apiv2.WBRedisSentinelSpec{
-			Enabled: true,
-			Config: &apiv2.WBRedisSentinelConfig{
-				MasterName: config.Sentinel.MasterGroupName,
-				Resources: corev1.ResourceRequirements{
-					Requests: config.Sentinel.Requests,
-					Limits:   config.Sentinel.Limits,
-				},
-			},
+	if spec.StorageSize != "" {
+		config.StorageSize = resource.MustParse(spec.StorageSize)
+	}
+
+	if spec.Config != nil {
+		config.Requests = spec.Config.Resources.Requests
+		config.Limits = spec.Config.Resources.Limits
+	}
+
+	if spec.Sentinel != nil {
+		config.Sentinel.Enabled = spec.Sentinel.Enabled
+		config.Sentinel.ReplicaCount = model.ReplicaSentinelCount
+		if spec.Sentinel.Config != nil {
+			config.Sentinel.MasterGroupName = spec.Sentinel.Config.MasterName
+			config.Sentinel.Requests = spec.Sentinel.Config.Resources.Requests
+			config.Sentinel.Limits = spec.Sentinel.Config.Resources.Limits
 		}
 	}
 
-	return spec
+	return config
 }
 
-func (i *InfraConfigBuilder) AddRedisSpec(actual apiv2.WBRedisSpec) *InfraConfigBuilder {
+func (i *InfraConfigBuilder) AddRedisConfig(actual apiv2.WBRedisSpec) *InfraConfigBuilder {
 	var err error
 	var size model.Size
 	var defaultConfig model.RedisConfig
-	var spec apiv2.WBRedisSpec
+	var mergedConfig model.RedisConfig
 
 	size, err = ToModelSize(i.size)
 	if err != nil {
@@ -112,13 +96,11 @@ func (i *InfraConfigBuilder) AddRedisSpec(actual apiv2.WBRedisSpec) *InfraConfig
 		return i
 	}
 
-	defaultSpec := TranslateRedisConfig(defaultConfig)
-
-	spec, err = BuildRedisSpec(actual, defaultSpec)
+	mergedConfig, err = BuildRedisConfig(actual, defaultConfig)
 	if err != nil {
 		i.errors = append(i.errors, err)
 		return i
 	}
-	i.mergedRedis = &spec
+	i.mergedRedis = mergedConfig
 	return i
 }

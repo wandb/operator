@@ -58,30 +58,6 @@ func (r RedisConfig) IsHighAvailability() bool {
 	return r.Sentinel.Enabled
 }
 
-func (i *InfraConfigBuilder) GetRedisConfig() (RedisConfig, error) {
-	var details RedisConfig
-
-	if i.mergedRedis != nil {
-		details.Enabled = i.mergedRedis.Enabled
-		details.Namespace = i.mergedRedis.Namespace
-		details.StorageSize = resource.MustParse(i.mergedRedis.StorageSize)
-		if i.mergedRedis.Config != nil {
-			details.Requests = i.mergedRedis.Config.Resources.Requests
-			details.Limits = i.mergedRedis.Config.Resources.Limits
-		}
-		if i.mergedRedis.Sentinel != nil {
-			details.Sentinel.Enabled = i.mergedRedis.Sentinel.Enabled
-			details.Sentinel.ReplicaCount = ReplicaSentinelCount
-			if i.mergedRedis.Sentinel.Config != nil {
-				details.Sentinel.MasterGroupName = i.mergedRedis.Sentinel.Config.MasterName
-				details.Sentinel.Requests = i.mergedRedis.Sentinel.Config.Resources.Requests
-				details.Sentinel.Limits = i.mergedRedis.Sentinel.Config.Resources.Limits
-			}
-		}
-	}
-	return details, nil
-}
-
 func BuildRedisDefaults(size Size, ownerNamespace string) (RedisConfig, error) {
 	var err error
 	var storageRequest, cpuRequest, cpuLimit, memoryRequest, memoryLimit resource.Quantity

@@ -45,24 +45,6 @@ func (c ClickHouseConfig) IsHighAvailability() bool {
 	return c.Replicas > 1
 }
 
-func (i *InfraConfigBuilder) GetClickHouseConfig() (ClickHouseConfig, error) {
-	var details ClickHouseConfig
-
-	if i.mergedClickHouse != nil {
-		details.Enabled = i.mergedClickHouse.Enabled
-		details.Namespace = i.mergedClickHouse.Namespace
-		details.StorageSize = i.mergedClickHouse.StorageSize
-		details.Replicas = i.mergedClickHouse.Replicas
-		details.Version = i.mergedClickHouse.Version
-
-		if i.mergedClickHouse.Config != nil {
-			details.Resources.Requests = i.mergedClickHouse.Config.Resources.Requests
-			details.Resources.Limits = i.mergedClickHouse.Config.Resources.Limits
-		}
-	}
-	return details, nil
-}
-
 func BuildClickHouseDefaults(size Size, ownerNamespace string) (ClickHouseConfig, error) {
 	var err error
 	var storageSize string
