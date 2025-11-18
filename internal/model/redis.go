@@ -150,10 +150,6 @@ type RedisInfraError struct {
 	InfraError
 }
 
-func (r RedisInfraError) redisCode() RedisErrorCode {
-	return RedisErrorCode(r.code)
-}
-
 func ToRedisInfraError(err error) (RedisInfraError, bool) {
 	var infraError InfraError
 	var ok bool
@@ -220,12 +216,8 @@ type RedisStatusDetail struct {
 	InfraStatusDetail
 }
 
-func (r RedisStatusDetail) redisCode() RedisInfraCode {
-	return RedisInfraCode(r.code)
-}
-
 func (r RedisStatusDetail) ToRedisSentinelConnDetail() (RedisSentinelConnDetail, bool) {
-	if r.redisCode() != RedisSentinelConnectionCode {
+	if RedisInfraCode(r.Code()) != RedisSentinelConnectionCode {
 		return RedisSentinelConnDetail{}, false
 	}
 	result := RedisSentinelConnDetail{}
@@ -247,7 +239,7 @@ func (r RedisStatusDetail) ToRedisSentinelConnDetail() (RedisSentinelConnDetail,
 }
 
 func (r RedisStatusDetail) ToRedisStandaloneConnDetail() (RedisStandaloneConnDetail, bool) {
-	if r.redisCode() != RedisStandaloneConnectionCode {
+	if RedisInfraCode(r.Code()) != RedisStandaloneConnectionCode {
 		return RedisStandaloneConnDetail{}, false
 	}
 	result := RedisStandaloneConnDetail{}

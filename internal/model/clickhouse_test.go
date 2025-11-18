@@ -65,7 +65,7 @@ var _ = Describe("ClickHouse Model", func() {
 					reason := "delete failed"
 					infraErr := NewClickHouseError(ClickHouseErrFailedToDeleteCode, reason)
 					chErr := ClickHouseInfraError{infraErr}
-					Expect(chErr.clickhouseCode()).To(Equal(ClickHouseErrFailedToDeleteCode))
+					Expect(ClickHouseErrorCode(chErr.Code())).To(Equal(ClickHouseErrFailedToDeleteCode))
 				})
 			})
 		})
@@ -77,7 +77,7 @@ var _ = Describe("ClickHouse Model", func() {
 					err := NewClickHouseError(ClickHouseErrFailedToGetConfigCode, reason)
 					chErr, ok := ToClickHouseInfraError(err)
 					Expect(ok).To(BeTrue())
-					Expect(chErr.clickhouseCode()).To(Equal(ClickHouseErrFailedToGetConfigCode))
+					Expect(ClickHouseErrorCode(chErr.Code())).To(Equal(ClickHouseErrFailedToGetConfigCode))
 					Expect(chErr.reason).To(Equal(reason))
 				})
 			})
@@ -120,7 +120,7 @@ var _ = Describe("ClickHouse Model", func() {
 					message := "updated"
 					status := NewClickHouseStatusDetail(ClickHouseUpdatedCode, message)
 					detail := ClickHouseStatusDetail{status}
-					Expect(detail.clickhouseCode()).To(Equal(ClickHouseUpdatedCode))
+					Expect(ClickHouseInfraCode(detail.Code())).To(Equal(ClickHouseUpdatedCode))
 				})
 			})
 

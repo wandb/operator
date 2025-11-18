@@ -60,7 +60,7 @@ var _ = Describe("Redis Model", func() {
 				It("should return the error code", func() {
 					infraErr := NewRedisError(RedisDeploymentConflictCode, "test error")
 					redisErr := RedisInfraError{infraErr}
-					Expect(redisErr.redisCode()).To(Equal(RedisDeploymentConflictCode))
+					Expect(RedisErrorCode(redisErr.Code())).To(Equal(RedisDeploymentConflictCode))
 				})
 			})
 		})
@@ -71,7 +71,7 @@ var _ = Describe("Redis Model", func() {
 					err := NewRedisError(RedisDeploymentConflictCode, "deployment conflict")
 					redisErr, ok := ToRedisInfraError(err)
 					Expect(ok).To(BeTrue())
-					Expect(redisErr.redisCode()).To(Equal(RedisDeploymentConflictCode))
+					Expect(RedisErrorCode(redisErr.Code())).To(Equal(RedisDeploymentConflictCode))
 					Expect(redisErr.reason).To(Equal("deployment conflict"))
 				})
 			})
@@ -109,7 +109,7 @@ var _ = Describe("Redis Model", func() {
 				It("should return the status code", func() {
 					status := NewRedisStatusDetail(RedisSentinelCreatedCode, "created")
 					detail := RedisStatusDetail{status}
-					Expect(detail.redisCode()).To(Equal(RedisSentinelCreatedCode))
+					Expect(RedisInfraCode(detail.Code())).To(Equal(RedisSentinelCreatedCode))
 				})
 			})
 

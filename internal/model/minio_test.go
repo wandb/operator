@@ -65,7 +65,7 @@ var _ = Describe("Minio Model", func() {
 				It("should return the error code", func() {
 					infraErr := NewMinioError(MinioErrFailedToDeleteCode, "test error")
 					minioErr := MinioInfraError{infraErr}
-					Expect(minioErr.minioCode()).To(Equal(MinioErrFailedToDeleteCode))
+					Expect(MinioErrorCode(minioErr.Code())).To(Equal(MinioErrFailedToDeleteCode))
 				})
 			})
 		})
@@ -76,7 +76,7 @@ var _ = Describe("Minio Model", func() {
 					err := NewMinioError(MinioErrFailedToCreateCode, "create failed")
 					minioErr, ok := ToMinioInfraError(err)
 					Expect(ok).To(BeTrue())
-					Expect(minioErr.minioCode()).To(Equal(MinioErrFailedToCreateCode))
+					Expect(MinioErrorCode(minioErr.Code())).To(Equal(MinioErrFailedToCreateCode))
 					Expect(minioErr.reason).To(Equal("create failed"))
 				})
 			})
@@ -114,7 +114,7 @@ var _ = Describe("Minio Model", func() {
 				It("should return the status code", func() {
 					status := NewMinioStatusDetail(MinioCreatedCode, "created")
 					detail := MinioStatusDetail{status}
-					Expect(detail.minioCode()).To(Equal(MinioCreatedCode))
+					Expect(MinioInfraCode(detail.Code())).To(Equal(MinioCreatedCode))
 				})
 			})
 

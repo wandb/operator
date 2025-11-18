@@ -149,10 +149,6 @@ type MinioInfraError struct {
 	InfraError
 }
 
-func (m MinioInfraError) minioCode() MinioErrorCode {
-	return MinioErrorCode(m.code)
-}
-
 func ToMinioInfraError(err error) (MinioInfraError, bool) {
 	var infraErr InfraError
 	ok := errors.As(err, &infraErr)
@@ -206,12 +202,8 @@ type MinioStatusDetail struct {
 	InfraStatusDetail
 }
 
-func (m MinioStatusDetail) minioCode() MinioInfraCode {
-	return MinioInfraCode(m.code)
-}
-
 func (m MinioStatusDetail) ToMinioConnDetail() (MinioConnDetail, bool) {
-	if m.minioCode() != MinioConnectionCode {
+	if MinioInfraCode(m.Code()) != MinioConnectionCode {
 		return MinioConnDetail{}, false
 	}
 	result := MinioConnDetail{}

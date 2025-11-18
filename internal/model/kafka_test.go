@@ -59,7 +59,7 @@ var _ = Describe("Kafka Model", func() {
 				It("should return the error code", func() {
 					infraErr := NewKafkaError(KafkaErrFailedToDeleteCode, "delete failed")
 					kafkaErr := KafkaInfraError{infraErr}
-					Expect(kafkaErr.kafkaCode()).To(Equal(KafkaErrFailedToDeleteCode))
+					Expect(KafkaErrorCode(kafkaErr.Code())).To(Equal(KafkaErrFailedToDeleteCode))
 				})
 			})
 		})
@@ -70,7 +70,7 @@ var _ = Describe("Kafka Model", func() {
 					err := NewKafkaError(KafkaErrFailedToGetConfigCode, "config error")
 					kafkaErr, ok := ToKafkaInfraError(err)
 					Expect(ok).To(BeTrue())
-					Expect(kafkaErr.kafkaCode()).To(Equal(KafkaErrFailedToGetConfigCode))
+					Expect(KafkaErrorCode(kafkaErr.Code())).To(Equal(KafkaErrFailedToGetConfigCode))
 					Expect(kafkaErr.reason).To(Equal("config error"))
 				})
 			})
@@ -108,7 +108,7 @@ var _ = Describe("Kafka Model", func() {
 				It("should return the status code", func() {
 					status := NewKafkaStatusDetail(KafkaUpdatedCode, "updated")
 					detail := KafkaStatusDetail{status}
-					Expect(detail.kafkaCode()).To(Equal(KafkaUpdatedCode))
+					Expect(KafkaInfraCode(detail.Code())).To(Equal(KafkaUpdatedCode))
 				})
 			})
 

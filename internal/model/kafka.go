@@ -135,10 +135,6 @@ type KafkaInfraError struct {
 	InfraError
 }
 
-func (k KafkaInfraError) kafkaCode() KafkaErrorCode {
-	return KafkaErrorCode(k.code)
-}
-
 func ToKafkaInfraError(err error) (KafkaInfraError, bool) {
 	var infraError InfraError
 	var ok bool
@@ -199,10 +195,6 @@ type KafkaStatusDetail struct {
 	InfraStatusDetail
 }
 
-func (k KafkaStatusDetail) kafkaCode() KafkaInfraCode {
-	return KafkaInfraCode(k.code)
-}
-
 type KafkaConnInfo struct {
 	Host string
 	Port string
@@ -223,7 +215,7 @@ func NewKafkaConnDetail(connInfo KafkaConnInfo) InfraStatusDetail {
 }
 
 func (k KafkaStatusDetail) ToKafkaConnDetail() (KafkaConnDetail, bool) {
-	if k.kafkaCode() != KafkaConnectionCode {
+	if KafkaInfraCode(k.Code()) != KafkaConnectionCode {
 		return KafkaConnDetail{}, false
 	}
 	result := KafkaConnDetail{}

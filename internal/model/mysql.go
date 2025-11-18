@@ -165,10 +165,6 @@ type MySQLInfraError struct {
 	InfraError
 }
 
-func (m MySQLInfraError) mysqlCode() MySQLErrorCode {
-	return MySQLErrorCode(m.code)
-}
-
 func ToMySQLInfraError(err error) (MySQLInfraError, bool) {
 	var infraErr InfraError
 	ok := errors.As(err, &infraErr)
@@ -222,12 +218,8 @@ type MySQLStatusDetail struct {
 	InfraStatusDetail
 }
 
-func (m MySQLStatusDetail) mysqlCode() MySQLInfraCode {
-	return MySQLInfraCode(m.code)
-}
-
 func (m MySQLStatusDetail) ToMySQLConnDetail() (MySQLConnDetail, bool) {
-	if m.mysqlCode() != MySQLConnectionCode {
+	if MySQLInfraCode(m.Code()) != MySQLConnectionCode {
 		return MySQLConnDetail{}, false
 	}
 	result := MySQLConnDetail{}

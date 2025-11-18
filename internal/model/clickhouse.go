@@ -119,10 +119,6 @@ type ClickHouseInfraError struct {
 	InfraError
 }
 
-func (c ClickHouseInfraError) clickhouseCode() ClickHouseErrorCode {
-	return ClickHouseErrorCode(c.code)
-}
-
 func ToClickHouseInfraError(err error) (ClickHouseInfraError, bool) {
 	var infraErr InfraError
 	ok := errors.As(err, &infraErr)
@@ -176,12 +172,8 @@ type ClickHouseStatusDetail struct {
 	InfraStatusDetail
 }
 
-func (c ClickHouseStatusDetail) clickhouseCode() ClickHouseInfraCode {
-	return ClickHouseInfraCode(c.code)
-}
-
 func (c ClickHouseStatusDetail) ToClickHouseConnDetail() (ClickHouseConnDetail, bool) {
-	if c.clickhouseCode() != ClickHouseConnectionCode {
+	if ClickHouseInfraCode(c.Code()) != ClickHouseConnectionCode {
 		return ClickHouseConnDetail{}, false
 	}
 	result := ClickHouseConnDetail{}

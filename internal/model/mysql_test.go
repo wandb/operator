@@ -59,7 +59,7 @@ var _ = Describe("MySQL Model", func() {
 				It("should return the error code", func() {
 					infraErr := NewMySQLError(MySQLErrFailedToDeleteCode, "delete failed")
 					mysqlErr := MySQLInfraError{infraErr}
-					Expect(mysqlErr.mysqlCode()).To(Equal(MySQLErrFailedToDeleteCode))
+					Expect(MySQLErrorCode(mysqlErr.Code())).To(Equal(MySQLErrFailedToDeleteCode))
 				})
 			})
 		})
@@ -70,7 +70,7 @@ var _ = Describe("MySQL Model", func() {
 					err := NewMySQLError(MySQLErrFailedToGetConfigCode, "config error")
 					mysqlErr, ok := ToMySQLInfraError(err)
 					Expect(ok).To(BeTrue())
-					Expect(mysqlErr.mysqlCode()).To(Equal(MySQLErrFailedToGetConfigCode))
+					Expect(MySQLErrorCode(mysqlErr.Code())).To(Equal(MySQLErrFailedToGetConfigCode))
 					Expect(mysqlErr.reason).To(Equal("config error"))
 				})
 			})
@@ -108,7 +108,7 @@ var _ = Describe("MySQL Model", func() {
 				It("should return the status code", func() {
 					status := NewMySQLStatusDetail(MySQLUpdatedCode, "updated")
 					detail := MySQLStatusDetail{status}
-					Expect(detail.mysqlCode()).To(Equal(MySQLUpdatedCode))
+					Expect(MySQLInfraCode(detail.Code())).To(Equal(MySQLUpdatedCode))
 				})
 			})
 
