@@ -75,14 +75,14 @@ func ToInfraError(err error) (InfraError, bool) {
 /////////////////////////////////////////////////
 // Status
 
-type InfraStatus struct {
+type InfraStatusDetail struct {
 	infraName infraName
 	code      string
 	message   string
 	hidden    interface{}
 }
 
-func (i InfraStatus) ToRedisStatusDetail() (RedisStatusDetail, bool) {
+func (i InfraStatusDetail) ToRedisStatusDetail() (RedisStatusDetail, bool) {
 	result := RedisStatusDetail{}
 	if i.infraName != Redis {
 		return result, false
@@ -94,7 +94,7 @@ func (i InfraStatus) ToRedisStatusDetail() (RedisStatusDetail, bool) {
 	return result, true
 }
 
-func (i InfraStatus) ToKafkaStatusDetail() (KafkaStatusDetail, bool) {
+func (i InfraStatusDetail) ToKafkaStatusDetail() (KafkaStatusDetail, bool) {
 	result := KafkaStatusDetail{}
 	if i.infraName != Kafka {
 		return result, false
@@ -106,23 +106,23 @@ func (i InfraStatus) ToKafkaStatusDetail() (KafkaStatusDetail, bool) {
 	return result, true
 }
 
-func IsRedisStatus(i InfraStatus) bool {
+func IsRedisStatus(i InfraStatusDetail) bool {
 	return i.infraName == Redis
 }
 
-func IsMySQLStatus(i InfraStatus) bool {
+func IsMySQLStatus(i InfraStatusDetail) bool {
 	return i.infraName == MySQL
 }
 
-func IsKafkaStatus(i InfraStatus) bool {
+func IsKafkaStatus(i InfraStatusDetail) bool {
 	return i.infraName == Kafka
 }
 
-func IsClickhouseStatus(i InfraStatus) bool {
+func IsClickhouseStatus(i InfraStatusDetail) bool {
 	return i.infraName == Clickhouse
 }
 
-func IsMinioStatus(i InfraStatus) bool {
+func IsMinioStatus(i InfraStatusDetail) bool {
 	return i.infraName == Minio
 }
 
@@ -130,13 +130,13 @@ func IsMinioStatus(i InfraStatus) bool {
 // Results
 
 type Results struct {
-	StatusList []InfraStatus
+	StatusList []InfraStatusDetail
 	ErrorList  []error
 }
 
 func InitResults() *Results {
 	return &Results{
-		StatusList: []InfraStatus{},
+		StatusList: []InfraStatusDetail{},
 		ErrorList:  []error{},
 	}
 }
@@ -160,6 +160,6 @@ func (r *Results) AddErrors(errors ...error) {
 	r.ErrorList = append(r.ErrorList, errors...)
 }
 
-func (r *Results) AddStatuses(statuses ...InfraStatus) {
+func (r *Results) AddStatuses(statuses ...InfraStatusDetail) {
 	r.StatusList = append(r.StatusList, statuses...)
 }

@@ -29,7 +29,7 @@ func buildDesiredCHI(
 	storageQuantity, err := resource.ParseQuantity(clickhouseConfig.StorageSize)
 	if err != nil {
 		log.Error(err, "invalid storage size", "storageSize", clickhouseConfig.StorageSize)
-		results.AddErrors(model.NewClickHouseError(model.ClickHouseErrFailedToCreate, fmt.Sprintf("invalid storage size: %v", err)))
+		results.AddErrors(model.NewClickHouseError(model.ClickHouseErrFailedToCreateCode, fmt.Sprintf("invalid storage size: %v", err)))
 		return nil, results
 	}
 
@@ -116,7 +116,7 @@ func buildDesiredCHI(
 	// Set owner reference
 	if err := ctrl.SetControllerReference(owner, chi, scheme); err != nil {
 		log.Error(err, "failed to set owner reference on CHI CR")
-		results.AddErrors(model.NewClickHouseError(model.ClickHouseErrFailedToCreate, fmt.Sprintf("failed to set owner reference: %v", err)))
+		results.AddErrors(model.NewClickHouseError(model.ClickHouseErrFailedToCreateCode, fmt.Sprintf("failed to set owner reference: %v", err)))
 		return nil, results
 	}
 

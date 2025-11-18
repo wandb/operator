@@ -23,7 +23,7 @@ func (a *minioTenant) createSecret(
 	if err := a.client.Create(ctx, desiredSecret); err != nil {
 		log.Error(err, "Failed to create config secret")
 		results.AddErrors(model.NewMinioError(
-			model.MinioErrFailedToCreate,
+			model.MinioErrFailedToCreateCode,
 			fmt.Sprintf("failed to create config secret: %v", err),
 		))
 		return results
@@ -41,7 +41,7 @@ func (a *minioTenant) createTenant(
 
 	if a.tenant != nil {
 		msg := "cannot create Tenant CR when it already exists"
-		err := model.NewMinioError(model.MinioErrFailedToCreate, msg)
+		err := model.NewMinioError(model.MinioErrFailedToCreateCode, msg)
 		log.Error(err, msg)
 		results.AddErrors(err)
 		return results
@@ -50,14 +50,14 @@ func (a *minioTenant) createTenant(
 	if err := a.client.Create(ctx, desiredTenant); err != nil {
 		log.Error(err, "Failed to create Tenant CR")
 		results.AddErrors(model.NewMinioError(
-			model.MinioErrFailedToCreate,
+			model.MinioErrFailedToCreateCode,
 			fmt.Sprintf("failed to create Tenant CR: %v", err),
 		))
 		return results
 	}
 
 	results.AddStatuses(
-		model.NewMinioStatus(model.MinioCreated, fmt.Sprintf("Created Tenant CR: %s", TenantName)),
+		model.NewMinioStatusDetail(model.MinioCreatedCode, fmt.Sprintf("Created Tenant CR: %s", TenantName)),
 	)
 
 	return results

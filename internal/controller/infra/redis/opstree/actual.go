@@ -146,7 +146,7 @@ func (a *opstreeRedis) Delete(ctx context.Context) *model.Results {
 			results.AddErrors(err)
 			return results
 		}
-		results.AddStatuses(model.NewRedisStatus(model.RedisStandaloneDeleted, a.standalone.Name))
+		results.AddStatuses(model.NewRedisStatusDetail(model.RedisStandaloneDeletedCode, a.standalone.Name))
 	}
 	if a.sentinel != nil {
 		if err = a.client.Delete(ctx, a.sentinel); err != nil {
@@ -154,7 +154,7 @@ func (a *opstreeRedis) Delete(ctx context.Context) *model.Results {
 			results.AddErrors(err)
 			return results
 		}
-		results.AddStatuses(model.NewRedisStatus(model.RedisSentinelDeleted, a.sentinel.Name))
+		results.AddStatuses(model.NewRedisStatusDetail(model.RedisSentinelDeletedCode, a.sentinel.Name))
 	}
 	if a.replication != nil {
 		if err = a.client.Delete(ctx, a.replication); err != nil {
@@ -162,7 +162,7 @@ func (a *opstreeRedis) Delete(ctx context.Context) *model.Results {
 			results.AddErrors(err)
 			return results
 		}
-		results.AddStatuses(model.NewRedisStatus(model.RedisReplicationDeleted, a.replication.Name))
+		results.AddStatuses(model.NewRedisStatusDetail(model.RedisReplicationDeletedCode, a.replication.Name))
 	}
 	return nil
 }

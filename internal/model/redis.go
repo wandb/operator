@@ -4,9 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 
-	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/utils"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -137,7 +135,7 @@ func BuildRedisDefaults(size Size, ownerNamespace string) (RedisConfig, error) {
 type RedisErrorCode string
 
 const (
-	RedisDeploymentConflict RedisErrorCode = "DeploymentConflict"
+	RedisDeploymentConflictCode RedisErrorCode = "DeploymentConflict"
 )
 
 func NewRedisError(code RedisErrorCode, reason string) InfraError {
@@ -180,26 +178,38 @@ func (r *Results) getRedisErrors() []RedisInfraError {
 /////////////////////////////////////////////////
 // Redis Status
 
-/////////////////////////////////////////////////
-// Redis Status
+type RedisStatus struct {
+	Ready      bool
+	Connection RedisConnection
+	Details    []RedisStatusDetail
+	Errors     []RedisInfraError
+}
+
+type RedisConnection struct {
+	RedisHost      string
+	RedisPort      string
+	SentinelHost   string
+	SentinelPort   string
+	SentinelMaster string
+}
 
 type RedisInfraCode string
 
 const (
-	RedisSentinelCreated    RedisInfraCode = "SentinelCreated"
-	RedisReplicationCreated RedisInfraCode = "ReplicationCreated"
-	RedisStandaloneCreated  RedisInfraCode = "StandaloneCreated"
+	RedisSentinelCreatedCode    RedisInfraCode = "SentinelCreated"
+	RedisReplicationCreatedCode RedisInfraCode = "ReplicationCreated"
+	RedisStandaloneCreatedCode  RedisInfraCode = "StandaloneCreated"
 
-	RedisSentinelDeleted    RedisInfraCode = "SentinelDeleted"
-	RedisReplicationDeleted RedisInfraCode = "ReplicationDeleted"
-	RedisStandaloneDeleted  RedisInfraCode = "StandaloneDeleted"
+	RedisSentinelDeletedCode    RedisInfraCode = "SentinelDeleted"
+	RedisReplicationDeletedCode RedisInfraCode = "ReplicationDeleted"
+	RedisStandaloneDeletedCode  RedisInfraCode = "StandaloneDeleted"
 
-	RedisStandaloneConnection RedisInfraCode = "StandaloneConnection"
-	RedisSentinelConnection   RedisInfraCode = "SentinelConnection"
+	RedisStandaloneConnectionCode RedisInfraCode = "StandaloneConnection"
+	RedisSentinelConnectionCode   RedisInfraCode = "SentinelConnection"
 )
 
-func NewRedisStatus(code RedisInfraCode, message string) InfraStatus {
-	return InfraStatus{
+func NewRedisStatusDetail(code RedisInfraCode, message string) InfraStatusDetail {
+	return InfraStatusDetail{
 		infraName: Redis,
 		code:      string(code),
 		message:   message,
@@ -207,7 +217,7 @@ func NewRedisStatus(code RedisInfraCode, message string) InfraStatus {
 }
 
 type RedisStatusDetail struct {
-	InfraStatus
+	InfraStatusDetail
 }
 
 func (r RedisStatusDetail) redisCode() RedisInfraCode {
@@ -215,7 +225,7 @@ func (r RedisStatusDetail) redisCode() RedisInfraCode {
 }
 
 func (r RedisStatusDetail) ToRedisSentinelConnDetail() (RedisSentinelConnDetail, bool) {
-	if r.redisCode() != RedisSentinelConnection {
+	if r.redisCode() != RedisSentinelConnectionCode {
 		return RedisSentinelConnDetail{}, false
 	}
 	result := RedisSentinelConnDetail{}
@@ -237,7 +247,7 @@ func (r RedisStatusDetail) ToRedisSentinelConnDetail() (RedisSentinelConnDetail,
 }
 
 func (r RedisStatusDetail) ToRedisStandaloneConnDetail() (RedisStandaloneConnDetail, bool) {
-	if r.redisCode() != RedisStandaloneConnection {
+	if r.redisCode() != RedisStandaloneConnectionCode {
 		return RedisStandaloneConnDetail{}, false
 	}
 	result := RedisStandaloneConnDetail{}
@@ -264,10 +274,10 @@ type RedisSentinelConnInfo struct {
 	MasterName   string
 }
 
-func NewRedisSentinelConnDetail(connInfo RedisSentinelConnInfo) InfraStatus {
-	return InfraStatus{
+func NewRedisSentinelConnDetail(connInfo RedisSentinelConnInfo) InfraStatusDetail {
+	return InfraStatusDetail{
 		infraName: Redis,
-		code:      string(RedisSentinelConnection),
+		code:      string(RedisSentinelConnectionCode),
 		message:   fmt.Sprintf("redis://%s:%s?master=%s", connInfo.SentinelHost, connInfo.SentinelPort, connInfo.MasterName),
 		hidden:    connInfo,
 	}
@@ -288,10 +298,10 @@ type RedisStandaloneConnDetail struct {
 	connInfo RedisStandaloneConnInfo
 }
 
-func NewRedisStandaloneConnDetail(connInfo RedisStandaloneConnInfo) InfraStatus {
-	return InfraStatus{
+func NewRedisStandaloneConnDetail(connInfo RedisStandaloneConnInfo) InfraStatusDetail {
+	return InfraStatusDetail{
 		infraName: Redis,
-		code:      string(RedisStandaloneConnection),
+		code:      string(RedisStandaloneConnectionCode),
 		message:   fmt.Sprintf("redis://%s:%s", connInfo.Host, connInfo.Port),
 		hidden:    connInfo,
 	}
@@ -300,72 +310,37 @@ func NewRedisStandaloneConnDetail(connInfo RedisStandaloneConnInfo) InfraStatus 
 /////////////////////////////////////////////////
 // WBRedisStatus translation
 
-var redisNotReadyStates = []apiv2.WBStateType{
-	apiv2.WBStateError, apiv2.WBStateReady, apiv2.WBStateDeleting, apiv2.WBStateDegraded, apiv2.WBStateOffline,
-}
-
-func (r *Results) ExtractRedisStatus(ctx context.Context) apiv2.WBRedisStatus {
-	log := ctrl.LoggerFrom(ctx)
-
+func ExtractRedisStatus(ctx context.Context, r *Results) RedisStatus {
 	var ok bool
 	var sentinelConnDetail RedisSentinelConnDetail
 	var standaloneConnDetail RedisStandaloneConnDetail
-	var errors = r.getRedisErrors()
-	var statuses = r.getRedisStatusDetails()
-	var wbStatus = apiv2.WBRedisStatus{}
-
-	for _, err := range errors {
-		wbStatus.Details = append(wbStatus.Details, apiv2.WBStatusDetail{
-			State:   apiv2.WBStateError,
-			Code:    err.code,
-			Message: err.reason,
-		})
+	var result = RedisStatus{
+		Errors: r.getRedisErrors(),
 	}
 
-	for _, status := range statuses {
+	for _, detail := range r.getRedisStatusDetails() {
 
-		if sentinelConnDetail, ok = status.ToRedisSentinelConnDetail(); ok {
-			wbStatus.Connection.RedisSentinelHost = sentinelConnDetail.connInfo.SentinelHost
-			wbStatus.Connection.RedisSentinelPort = sentinelConnDetail.connInfo.SentinelPort
-			wbStatus.Connection.RedisMasterName = sentinelConnDetail.connInfo.MasterName
-		} else if standaloneConnDetail, ok = status.ToRedisStandaloneConnDetail(); ok {
-			wbStatus.Connection.RedisHost = standaloneConnDetail.connInfo.Host
-			wbStatus.Connection.RedisPort = standaloneConnDetail.connInfo.Port
+		if sentinelConnDetail, ok = detail.ToRedisSentinelConnDetail(); ok {
+			result.Connection.SentinelHost = sentinelConnDetail.connInfo.SentinelHost
+			result.Connection.SentinelPort = sentinelConnDetail.connInfo.SentinelPort
+			result.Connection.SentinelMaster = sentinelConnDetail.connInfo.MasterName
+		} else if standaloneConnDetail, ok = detail.ToRedisStandaloneConnDetail(); ok {
+			result.Connection.RedisHost = standaloneConnDetail.connInfo.Host
+			result.Connection.RedisPort = standaloneConnDetail.connInfo.Port
 		} else {
-			switch status.redisCode() {
-			case RedisSentinelCreated, RedisReplicationCreated, RedisStandaloneCreated:
-				wbStatus.Details = append(wbStatus.Details, apiv2.WBStatusDetail{
-					State:   apiv2.WBStateUpdating,
-					Code:    status.code,
-					Message: status.message,
-				})
-				break
-			case RedisStandaloneDeleted, RedisSentinelDeleted, RedisReplicationDeleted:
-				wbStatus.Details = append(wbStatus.Details, apiv2.WBStatusDetail{
-					State:   apiv2.WBStateDeleting,
-					Code:    status.code,
-					Message: status.message,
-				})
-				break
-			default:
-				log.Info("Unhandled Redis Infra Code", "code", status.code)
-			}
+			result.Details = append(result.Details, detail)
 		}
 	}
 
-	wbStatus.Ready = true
-	for _, detail := range wbStatus.Details {
-		if slices.Contains(redisNotReadyStates, detail.State) {
-			wbStatus.Ready = false
-		}
-		if detail.State.WorseThan(wbStatus.State) {
-			wbStatus.State = detail.State
-		}
+	if len(result.Errors) > 0 {
+		result.Ready = false
+	} else {
+		result.Ready = result.Connection.RedisHost != "" || result.Connection.SentinelHost != ""
 	}
 
-	return wbStatus
+	return result
 }
 
 func (r *Results) getRedisStatusDetails() []RedisStatusDetail {
-	return utils.FilterMapFunc(r.StatusList, func(s InfraStatus) (RedisStatusDetail, bool) { return s.ToRedisStatusDetail() })
+	return utils.FilterMapFunc(r.StatusList, func(s InfraStatusDetail) (RedisStatusDetail, bool) { return s.ToRedisStatusDetail() })
 }

@@ -61,7 +61,7 @@ func buildDesiredKafka(
 	// Set owner reference
 	if err := ctrl.SetControllerReference(owner, kafka, scheme); err != nil {
 		log.Error(err, "failed to set owner reference on Kafka CR")
-		results.AddErrors(model.NewKafkaError(model.KafkaErrFailedToCreate, fmt.Sprintf("failed to set owner reference: %v", err)))
+		results.AddErrors(model.NewKafkaError(model.KafkaErrFailedToCreateCode, fmt.Sprintf("failed to set owner reference: %v", err)))
 		return nil, results
 	}
 
@@ -123,7 +123,7 @@ func buildDesiredNodePool(
 	// Set owner reference
 	if err := ctrl.SetControllerReference(owner, nodePool, scheme); err != nil {
 		log.Error(err, "failed to set owner reference on KafkaNodePool CR")
-		results.AddErrors(model.NewKafkaError(model.KafkaErrFailedToCreate, fmt.Sprintf("failed to set owner reference: %v", err)))
+		results.AddErrors(model.NewKafkaError(model.KafkaErrFailedToCreateCode, fmt.Sprintf("failed to set owner reference: %v", err)))
 		return nil, results
 	}
 

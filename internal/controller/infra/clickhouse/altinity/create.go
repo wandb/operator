@@ -17,7 +17,7 @@ func (a *altinityClickHouse) createCHI(
 
 	if a.chi != nil {
 		msg := "cannot create CHI CR when it already exists"
-		err := model.NewClickHouseError(model.ClickHouseErrFailedToCreate, msg)
+		err := model.NewClickHouseError(model.ClickHouseErrFailedToCreateCode, msg)
 		log.Error(err, msg)
 		results.AddErrors(err)
 		return results
@@ -26,14 +26,14 @@ func (a *altinityClickHouse) createCHI(
 	if err := a.client.Create(ctx, desiredCHI); err != nil {
 		log.Error(err, "Failed to create CHI CR")
 		results.AddErrors(model.NewClickHouseError(
-			model.ClickHouseErrFailedToCreate,
+			model.ClickHouseErrFailedToCreateCode,
 			fmt.Sprintf("failed to create CHI CR: %v", err),
 		))
 		return results
 	}
 
 	results.AddStatuses(
-		model.NewClickHouseStatus(model.ClickHouseCreated, fmt.Sprintf("Created CHI CR: %s", CHIName)),
+		model.NewClickHouseStatusDetail(model.ClickHouseCreatedCode, fmt.Sprintf("Created CHI CR: %s", CHIName)),
 	)
 
 	return results

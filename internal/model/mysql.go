@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 
-	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/utils"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -62,17 +61,6 @@ func (m MySQLConfig) IsHighAvailability() bool {
 	return m.Replicas > 1
 }
 
-func GetMySQLReplicaCountForSize(size apiv2.WBSize) (int32, error) {
-	switch size {
-	case apiv2.WBSizeDev:
-		return 1, nil
-	case apiv2.WBSizeSmall:
-		return 3, nil
-	default:
-		return 0, fmt.Errorf("unsupported size for MySQL: %s (only 'dev' and 'small' are supported)", size)
-	}
-}
-
 type MySQLSizeConfig struct {
 	PXCImage             string
 	ProxySQLEnabled      bool
@@ -83,37 +71,6 @@ type MySQLSizeConfig struct {
 	LogCollectorImage    string
 	AllowUnsafePXCSize   bool
 	AllowUnsafeProxySize bool
-}
-
-func GetMySQLConfigForSize(size apiv2.WBSize) (MySQLSizeConfig, error) {
-	switch size {
-	case apiv2.WBSizeDev:
-		return MySQLSizeConfig{
-			PXCImage:             DevPXCImage,
-			ProxySQLEnabled:      false,
-			ProxySQLReplicas:     0,
-			ProxySQLImage:        "",
-			TLSEnabled:           false,
-			LogCollectorEnabled:  true,
-			LogCollectorImage:    LogCollectorImage,
-			AllowUnsafePXCSize:   true,
-			AllowUnsafeProxySize: true,
-		}, nil
-	case apiv2.WBSizeSmall:
-		return MySQLSizeConfig{
-			PXCImage:             SmallPXCImage,
-			ProxySQLEnabled:      true,
-			ProxySQLReplicas:     3,
-			ProxySQLImage:        ProxySQLImage,
-			TLSEnabled:           true,
-			LogCollectorEnabled:  false,
-			LogCollectorImage:    "",
-			AllowUnsafePXCSize:   false,
-			AllowUnsafeProxySize: false,
-		}, nil
-	default:
-		return MySQLSizeConfig{}, fmt.Errorf("unsupported size for MySQL: %s (only 'dev' and 'small' are supported)", size)
-	}
 }
 
 func BuildMySQLDefaults(size Size, ownerNamespace string) (MySQLConfig, error) {
@@ -189,11 +146,11 @@ func BuildMySQLDefaults(size Size, ownerNamespace string) (MySQLConfig, error) {
 type MySQLErrorCode string
 
 const (
-	MySQLErrFailedToGetConfig  MySQLErrorCode = "FailedToGetConfig"
-	MySQLErrFailedToInitialize MySQLErrorCode = "FailedToInitialize"
-	MySQLErrFailedToCreate     MySQLErrorCode = "FailedToCreate"
-	MySQLErrFailedToUpdate     MySQLErrorCode = "FailedToUpdate"
-	MySQLErrFailedToDelete     MySQLErrorCode = "FailedToDelete"
+	MySQLErrFailedToGetConfigCode  MySQLErrorCode = "FailedToGetConfig"
+	MySQLErrFailedToInitializeCode MySQLErrorCode = "FailedToInitialize"
+	MySQLErrFailedToCreateCode     MySQLErrorCode = "FailedToCreate"
+	MySQLErrFailedToUpdateCode     MySQLErrorCode = "FailedToUpdate"
+	MySQLErrFailedToDeleteCode     MySQLErrorCode = "FailedToDelete"
 )
 
 func NewMySQLError(code MySQLErrorCode, reason string) InfraError {
@@ -231,17 +188,30 @@ func (r *Results) getMySQLErrors() []MySQLInfraError {
 /////////////////////////////////////////////////
 // MySQL Status
 
+type MySQLStatus struct {
+	Ready      bool
+	Connection MySQLConnection
+	Details    []MySQLStatusDetail
+	Errors     []MySQLInfraError
+}
+
+type MySQLConnection struct {
+	Host string
+	Port string
+	User string
+}
+
 type MySQLInfraCode string
 
 const (
-	MySQLCreated    MySQLInfraCode = "MySQLCreated"
-	MySQLUpdated    MySQLInfraCode = "MySQLUpdated"
-	MySQLDeleted    MySQLInfraCode = "MySQLDeleted"
-	MySQLConnection MySQLInfraCode = "MySQLConnection"
+	MySQLCreatedCode    MySQLInfraCode = "MySQLCreated"
+	MySQLUpdatedCode    MySQLInfraCode = "MySQLUpdated"
+	MySQLDeletedCode    MySQLInfraCode = "MySQLDeleted"
+	MySQLConnectionCode MySQLInfraCode = "MySQLConnection"
 )
 
-func NewMySQLStatus(code MySQLInfraCode, message string) InfraStatus {
-	return InfraStatus{
+func NewMySQLStatusDetail(code MySQLInfraCode, message string) InfraStatusDetail {
+	return InfraStatusDetail{
 		infraName: MySQL,
 		code:      string(code),
 		message:   message,
@@ -249,7 +219,7 @@ func NewMySQLStatus(code MySQLInfraCode, message string) InfraStatus {
 }
 
 type MySQLStatusDetail struct {
-	InfraStatus
+	InfraStatusDetail
 }
 
 func (m MySQLStatusDetail) mysqlCode() MySQLInfraCode {
@@ -257,7 +227,7 @@ func (m MySQLStatusDetail) mysqlCode() MySQLInfraCode {
 }
 
 func (m MySQLStatusDetail) ToMySQLConnDetail() (MySQLConnDetail, bool) {
-	if m.mysqlCode() != MySQLConnection {
+	if m.mysqlCode() != MySQLConnectionCode {
 		return MySQLConnDetail{}, false
 	}
 	result := MySQLConnDetail{}
@@ -289,65 +259,43 @@ type MySQLConnDetail struct {
 	connInfo MySQLConnInfo
 }
 
-func NewMySQLConnDetail(connInfo MySQLConnInfo) InfraStatus {
-	return InfraStatus{
+func NewMySQLConnDetail(connInfo MySQLConnInfo) InfraStatusDetail {
+	return InfraStatusDetail{
 		infraName: MySQL,
-		code:      string(MySQLConnection),
+		code:      string(MySQLConnectionCode),
 		message:   "MySQL connection info",
 		hidden:    connInfo,
 	}
 }
 
-func (r *Results) ExtractMySQLStatus(ctx context.Context) apiv2.WBMySQLStatus {
-	log := ctrl.LoggerFrom(ctx)
-
+func ExtractMySQLStatus(ctx context.Context, r *Results) MySQLStatus {
 	var ok bool
 	var connDetail MySQLConnDetail
-	var errors = r.getMySQLErrors()
-	var statuses = r.getMySQLStatusDetails()
-	var wbStatus = apiv2.WBMySQLStatus{}
-
-	for _, err := range errors {
-		wbStatus.Details = append(wbStatus.Details, apiv2.WBStatusDetail{
-			State:   apiv2.WBStateError,
-			Code:    err.code,
-			Message: err.reason,
-		})
+	var result = MySQLStatus{
+		Errors: r.getMySQLErrors(),
 	}
 
-	for _, status := range statuses {
-		if connDetail, ok = status.ToMySQLConnDetail(); ok {
-			wbStatus.Connection.MySQLHost = connDetail.connInfo.Host
-			wbStatus.Connection.MySQLPort = connDetail.connInfo.Port
-			wbStatus.Connection.MySQLUser = connDetail.connInfo.User
+	for _, detail := range r.getMySQLStatusDetails() {
+		if connDetail, ok = detail.ToMySQLConnDetail(); ok {
+			result.Connection.Host = connDetail.connInfo.Host
+			result.Connection.Port = connDetail.connInfo.Port
+			result.Connection.User = connDetail.connInfo.User
 			continue
 		}
 
-		wbStatus.Details = append(wbStatus.Details, apiv2.WBStatusDetail{
-			State:   apiv2.WBStateReady,
-			Code:    status.code,
-			Message: status.message,
-		})
+		result.Details = append(result.Details, detail)
 	}
 
-	if len(errors) > 0 {
-		wbStatus.State = apiv2.WBStateError
+	if len(result.Errors) > 0 {
+		result.Ready = false
 	} else {
-		wbStatus.State = apiv2.WBStateReady
+		result.Ready = result.Connection.Host != ""
 	}
 
-	if len(errors) > 0 {
-		log.Error(
-			fmt.Errorf("MySQL has %d errors", len(errors)),
-			"MySQL is in error state",
-			"errors", errors,
-		)
-	}
-
-	return wbStatus
+	return result
 }
 
-func (i InfraStatus) ToMySQLStatusDetail() (MySQLStatusDetail, bool) {
+func (i InfraStatusDetail) ToMySQLStatusDetail() (MySQLStatusDetail, bool) {
 	result := MySQLStatusDetail{}
 	if i.infraName != MySQL {
 		return result, false
@@ -360,5 +308,5 @@ func (i InfraStatus) ToMySQLStatusDetail() (MySQLStatusDetail, bool) {
 }
 
 func (r *Results) getMySQLStatusDetails() []MySQLStatusDetail {
-	return utils.FilterMapFunc(r.StatusList, func(s InfraStatus) (MySQLStatusDetail, bool) { return s.ToMySQLStatusDetail() })
+	return utils.FilterMapFunc(r.StatusList, func(s InfraStatusDetail) (MySQLStatusDetail, bool) { return s.ToMySQLStatusDetail() })
 }

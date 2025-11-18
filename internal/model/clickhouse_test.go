@@ -44,15 +44,15 @@ var _ = Describe("ClickHouse Model", func() {
 		Describe("NewClickHouseError", func() {
 			It("should create error with correct fields", func() {
 				reason := "test reason"
-				err := NewClickHouseError(ClickHouseErrFailedToCreate, reason)
-				Expect(err.infraName).To(Equal(Clickhouse))
-				Expect(err.code).To(Equal(string(ClickHouseErrFailedToCreate)))
+				err := NewClickHouseError(ClickHouseErrFailedToCreateCode, reason)
+				Expect(err.InfraName).To(Equal(Clickhouse))
+				Expect(err.code).To(Equal(string(ClickHouseErrFailedToCreateCode)))
 				Expect(err.reason).To(Equal(reason))
 			})
 
 			It("should implement error interface", func() {
 				reason := "update failed"
-				err := NewClickHouseError(ClickHouseErrFailedToUpdate, reason)
+				err := NewClickHouseError(ClickHouseErrFailedToUpdateCode, reason)
 				errStr := err.Error()
 				Expect(errStr).To(ContainSubstring("FailedToUpdate"))
 				Expect(errStr).To(ContainSubstring("clickhouse"))
@@ -64,9 +64,9 @@ var _ = Describe("ClickHouse Model", func() {
 			Describe("clickhouseCode", func() {
 				It("should return the error code", func() {
 					reason := "delete failed"
-					infraErr := NewClickHouseError(ClickHouseErrFailedToDelete, reason)
+					infraErr := NewClickHouseError(ClickHouseErrFailedToDeleteCode, reason)
 					chErr := ClickHouseInfraError{infraErr}
-					Expect(chErr.clickhouseCode()).To(Equal(ClickHouseErrFailedToDelete))
+					Expect(chErr.clickhouseCode()).To(Equal(ClickHouseErrFailedToDeleteCode))
 				})
 			})
 		})
@@ -75,10 +75,10 @@ var _ = Describe("ClickHouse Model", func() {
 			Context("when error is a ClickHouse infra error", func() {
 				It("should convert successfully", func() {
 					reason := "config error"
-					err := NewClickHouseError(ClickHouseErrFailedToGetConfig, reason)
+					err := NewClickHouseError(ClickHouseErrFailedToGetConfigCode, reason)
 					chErr, ok := ToClickHouseInfraError(err)
 					Expect(ok).To(BeTrue())
-					Expect(chErr.clickhouseCode()).To(Equal(ClickHouseErrFailedToGetConfig))
+					Expect(chErr.clickhouseCode()).To(Equal(ClickHouseErrFailedToGetConfigCode))
 					Expect(chErr.reason).To(Equal(reason))
 				})
 			})
@@ -97,8 +97,8 @@ var _ = Describe("ClickHouse Model", func() {
 					code := "SomeCode"
 					reason := "some reason"
 					err := InfraError{
-						infraName: Redis,
-						code:      code,
+						InfraName: Redis,
+						Code:      code,
 						reason:    reason,
 					}
 					_, ok := ToClickHouseInfraError(err)
@@ -109,12 +109,12 @@ var _ = Describe("ClickHouse Model", func() {
 	})
 
 	Describe("ClickHouse Status", func() {
-		Describe("NewClickHouseStatus", func() {
+		Describe("NewClickHouseStatusDetail", func() {
 			It("should create status with correct fields", func() {
 				message := "ClickHouse created"
-				status := NewClickHouseStatus(ClickHouseCreated, message)
-				Expect(status.infraName).To(Equal(Clickhouse))
-				Expect(status.code).To(Equal(string(ClickHouseCreated)))
+				status := NewClickHouseStatusDetail(ClickHouseCreatedCode, message)
+				Expect(status.InfraName).To(Equal(Clickhouse))
+				Expect(status.code).To(Equal(string(ClickHouseCreatedCode)))
 				Expect(status.message).To(Equal(message))
 			})
 		})
@@ -123,9 +123,9 @@ var _ = Describe("ClickHouse Model", func() {
 			Describe("clickhouseCode", func() {
 				It("should return the status code", func() {
 					message := "updated"
-					status := NewClickHouseStatus(ClickHouseUpdated, message)
+					status := NewClickHouseStatusDetail(ClickHouseUpdatedCode, message)
 					detail := ClickHouseStatusDetail{status}
-					Expect(detail.clickhouseCode()).To(Equal(ClickHouseUpdated))
+					Expect(detail.clickhouseCode()).To(Equal(ClickHouseUpdatedCode))
 				})
 			})
 
@@ -153,7 +153,7 @@ var _ = Describe("ClickHouse Model", func() {
 				Context("when status is not connection type", func() {
 					It("should return false", func() {
 						message := "created"
-						status := NewClickHouseStatus(ClickHouseCreated, message)
+						status := NewClickHouseStatusDetail(ClickHouseCreatedCode, message)
 						detail := ClickHouseStatusDetail{status}
 						_, ok := detail.ToClickHouseConnDetail()
 						Expect(ok).To(BeFalse())
@@ -164,11 +164,11 @@ var _ = Describe("ClickHouse Model", func() {
 					It("should return empty connection info but ok true", func() {
 						message := "connection"
 						hidden := "not a ClickHouseConnInfo"
-						status := InfraStatus{
-							infraName: Clickhouse,
-							code:      string(ClickHouseConnection),
-							message:   message,
-							hidden:    hidden,
+						status := InfraStatusDetail{
+							InfraName: Clickhouse,
+							Code:      string(ClickHouseConnectionCode),
+							Message:   message,
+							Hidden:    hidden,
 						}
 						detail := ClickHouseStatusDetail{status}
 						connDetail, ok := detail.ToClickHouseConnDetail()
@@ -192,28 +192,28 @@ var _ = Describe("ClickHouse Model", func() {
 					User: user,
 				}
 				status := NewClickHouseConnDetail(connInfo)
-				Expect(status.infraName).To(Equal(Clickhouse))
-				Expect(status.code).To(Equal(string(ClickHouseConnection)))
+				Expect(status.InfraName).To(Equal(Clickhouse))
+				Expect(status.code).To(Equal(string(ClickHouseConnectionCode)))
 				Expect(status.message).To(Equal("ClickHouse connection info"))
 				Expect(status.hidden).To(Equal(connInfo))
 			})
 		})
 
-		Describe("InfraStatus.ToClickHouseStatusDetail", func() {
+		Describe("InfraStatusDetail.ToClickHouseStatusDetail", func() {
 			Context("when infra status is for ClickHouse", func() {
 				It("should convert successfully", func() {
 					code := "TestCode"
 					message := "test message"
 					hidden := "hidden data"
-					status := InfraStatus{
-						infraName: Clickhouse,
-						code:      code,
-						message:   message,
-						hidden:    hidden,
+					status := InfraStatusDetail{
+						InfraName: Clickhouse,
+						Code:      code,
+						Message:   message,
+						Hidden:    hidden,
 					}
 					detail, ok := status.ToClickHouseStatusDetail()
 					Expect(ok).To(BeTrue())
-					Expect(detail.infraName).To(Equal(Clickhouse))
+					Expect(detail.InfraName).To(Equal(Clickhouse))
 					Expect(detail.code).To(Equal(code))
 					Expect(detail.message).To(Equal(message))
 					Expect(detail.hidden).To(Equal(hidden))
@@ -224,10 +224,10 @@ var _ = Describe("ClickHouse Model", func() {
 				It("should return false", func() {
 					code := "TestCode"
 					message := "test message"
-					status := InfraStatus{
-						infraName: Redis,
-						code:      code,
-						message:   message,
+					status := InfraStatusDetail{
+						InfraName: Redis,
+						Code:      code,
+						Message:   message,
 					}
 					_, ok := status.ToClickHouseStatusDetail()
 					Expect(ok).To(BeFalse())
@@ -246,7 +246,7 @@ var _ = Describe("ClickHouse Model", func() {
 		Context("when results have no errors or statuses", func() {
 			It("should return ready state", func() {
 				results := InitResults()
-				status := results.ExtractClickHouseStatus(ctx)
+				status := ExtractClickHouseStatus(ctx, results)
 				Expect(status.State).To(Equal(apiv2.WBStateReady))
 				Expect(status.Details).To(BeEmpty())
 			})
@@ -256,14 +256,14 @@ var _ = Describe("ClickHouse Model", func() {
 			It("should include errors in status details with error state", func() {
 				reason := "failed to create"
 				results := InitResults()
-				err := NewClickHouseError(ClickHouseErrFailedToCreate, reason)
+				err := NewClickHouseError(ClickHouseErrFailedToCreateCode, reason)
 				results.AddErrors(err)
 
-				status := results.ExtractClickHouseStatus(ctx)
+				status := ExtractClickHouseStatus(ctx, results)
 				Expect(status.State).To(Equal(apiv2.WBStateError))
 				Expect(status.Details).To(HaveLen(1))
 				Expect(status.Details[0].State).To(Equal(apiv2.WBStateError))
-				Expect(status.Details[0].Code).To(Equal(string(ClickHouseErrFailedToCreate)))
+				Expect(status.Details[0].Code).To(Equal(string(ClickHouseErrFailedToCreateCode)))
 				Expect(status.Details[0].Message).To(Equal(reason))
 			})
 		})
@@ -274,13 +274,13 @@ var _ = Describe("ClickHouse Model", func() {
 				reason := "redis failed"
 				results := InitResults()
 				err := InfraError{
-					infraName: Redis,
-					code:      code,
+					InfraName: Redis,
+					Code:      code,
 					reason:    reason,
 				}
 				results.AddErrors(err)
 
-				status := results.ExtractClickHouseStatus(ctx)
+				status := ExtractClickHouseStatus(ctx, results)
 				Expect(status.State).To(Equal(apiv2.WBStateReady))
 				Expect(status.Details).To(BeEmpty())
 			})
@@ -290,14 +290,14 @@ var _ = Describe("ClickHouse Model", func() {
 			It("should include statuses in details with ready state", func() {
 				message := "ClickHouse created successfully"
 				results := InitResults()
-				infraStatus := NewClickHouseStatus(ClickHouseCreated, message)
+				infraStatus := NewClickHouseStatusDetail(ClickHouseCreatedCode, message)
 				results.AddStatuses(infraStatus)
 
-				status := results.ExtractClickHouseStatus(ctx)
+				status := ExtractClickHouseStatus(ctx, results)
 				Expect(status.State).To(Equal(apiv2.WBStateReady))
 				Expect(status.Details).To(HaveLen(1))
 				Expect(status.Details[0].State).To(Equal(apiv2.WBStateReady))
-				Expect(status.Details[0].Code).To(Equal(string(ClickHouseCreated)))
+				Expect(status.Details[0].Code).To(Equal(string(ClickHouseCreatedCode)))
 				Expect(status.Details[0].Message).To(Equal(message))
 			})
 		})
@@ -316,7 +316,7 @@ var _ = Describe("ClickHouse Model", func() {
 				connStatus := NewClickHouseConnDetail(connInfo)
 				results.AddStatuses(connStatus)
 
-				status := results.ExtractClickHouseStatus(ctx)
+				status := ExtractClickHouseStatus(ctx, results)
 				Expect(status.State).To(Equal(apiv2.WBStateReady))
 				Expect(status.Connection.ClickHouseHost).To(Equal(host))
 				Expect(status.Connection.ClickHousePort).To(Equal(port))
@@ -330,12 +330,12 @@ var _ = Describe("ClickHouse Model", func() {
 				errorReason := "update failed"
 				statusMessage := "created"
 				results := InitResults()
-				err := NewClickHouseError(ClickHouseErrFailedToUpdate, errorReason)
-				infraStatus := NewClickHouseStatus(ClickHouseCreated, statusMessage)
+				err := NewClickHouseError(ClickHouseErrFailedToUpdateCode, errorReason)
+				infraStatus := NewClickHouseStatusDetail(ClickHouseCreatedCode, statusMessage)
 				results.AddErrors(err)
 				results.AddStatuses(infraStatus)
 
-				status := results.ExtractClickHouseStatus(ctx)
+				status := ExtractClickHouseStatus(ctx, results)
 				Expect(status.State).To(Equal(apiv2.WBStateError))
 				Expect(status.Details).To(HaveLen(2))
 			})
@@ -346,11 +346,11 @@ var _ = Describe("ClickHouse Model", func() {
 				createReason := "create failed"
 				updateReason := "update failed"
 				results := InitResults()
-				err1 := NewClickHouseError(ClickHouseErrFailedToCreate, createReason)
-				err2 := NewClickHouseError(ClickHouseErrFailedToUpdate, updateReason)
+				err1 := NewClickHouseError(ClickHouseErrFailedToCreateCode, createReason)
+				err2 := NewClickHouseError(ClickHouseErrFailedToUpdateCode, updateReason)
 				results.AddErrors(err1, err2)
 
-				status := results.ExtractClickHouseStatus(ctx)
+				status := ExtractClickHouseStatus(ctx, results)
 				Expect(status.State).To(Equal(apiv2.WBStateError))
 				Expect(status.Details).To(HaveLen(2))
 			})
@@ -370,11 +370,11 @@ var _ = Describe("ClickHouse Model", func() {
 					User: user,
 				}
 				connStatus := NewClickHouseConnDetail(connInfo)
-				createdStatus := NewClickHouseStatus(ClickHouseCreated, createdMessage)
-				updatedStatus := NewClickHouseStatus(ClickHouseUpdated, updatedMessage)
+				createdStatus := NewClickHouseStatusDetail(ClickHouseCreatedCode, createdMessage)
+				updatedStatus := NewClickHouseStatusDetail(ClickHouseUpdatedCode, updatedMessage)
 				results.AddStatuses(connStatus, createdStatus, updatedStatus)
 
-				status := results.ExtractClickHouseStatus(ctx)
+				status := ExtractClickHouseStatus(ctx, results)
 				Expect(status.State).To(Equal(apiv2.WBStateReady))
 				Expect(status.Connection.ClickHouseHost).To(Equal(host))
 				Expect(status.Connection.ClickHousePort).To(Equal(port))
@@ -387,11 +387,11 @@ var _ = Describe("ClickHouse Model", func() {
 	Describe("Error codes", func() {
 		It("should have distinct error codes", func() {
 			codes := []ClickHouseErrorCode{
-				ClickHouseErrFailedToGetConfig,
-				ClickHouseErrFailedToInitialize,
-				ClickHouseErrFailedToCreate,
-				ClickHouseErrFailedToUpdate,
-				ClickHouseErrFailedToDelete,
+				ClickHouseErrFailedToGetConfigCode,
+				ClickHouseErrFailedToInitializeCode,
+				ClickHouseErrFailedToCreateCode,
+				ClickHouseErrFailedToUpdateCode,
+				ClickHouseErrFailedToDeleteCode,
 			}
 
 			for i := 0; i < len(codes); i++ {
@@ -405,10 +405,10 @@ var _ = Describe("ClickHouse Model", func() {
 	Describe("Status codes", func() {
 		It("should have distinct status codes", func() {
 			codes := []ClickHouseInfraCode{
-				ClickHouseCreated,
-				ClickHouseUpdated,
-				ClickHouseDeleted,
-				ClickHouseConnection,
+				ClickHouseCreatedCode,
+				ClickHouseUpdatedCode,
+				ClickHouseDeletedCode,
+				ClickHouseConnectionCode,
 			}
 
 			for i := 0; i < len(codes); i++ {

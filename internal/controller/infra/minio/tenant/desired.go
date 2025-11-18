@@ -28,7 +28,7 @@ func buildDesiredTenant(
 	storageQuantity, err := resource.ParseQuantity(minioConfig.StorageSize)
 	if err != nil {
 		log.Error(err, "invalid storage size", "storageSize", minioConfig.StorageSize)
-		results.AddErrors(model.NewMinioError(model.MinioErrFailedToCreate, fmt.Sprintf("invalid storage size: %v", err)))
+		results.AddErrors(model.NewMinioError(model.MinioErrFailedToCreateCode, fmt.Sprintf("invalid storage size: %v", err)))
 		return nil, results
 	}
 
@@ -79,7 +79,7 @@ func buildDesiredTenant(
 	// Set owner reference
 	if err := ctrl.SetControllerReference(owner, tenant, scheme); err != nil {
 		log.Error(err, "failed to set owner reference on Tenant CR")
-		results.AddErrors(model.NewMinioError(model.MinioErrFailedToCreate, fmt.Sprintf("failed to set owner reference: %v", err)))
+		results.AddErrors(model.NewMinioError(model.MinioErrFailedToCreateCode, fmt.Sprintf("failed to set owner reference: %v", err)))
 		return nil, results
 	}
 
@@ -115,7 +115,7 @@ export MINIO_BROWSER="on"`,
 	// Set owner reference
 	if err := ctrl.SetControllerReference(owner, secret, scheme); err != nil {
 		log.Error(err, "failed to set owner reference on config secret")
-		results.AddErrors(model.NewMinioError(model.MinioErrFailedToCreate, fmt.Sprintf("failed to set owner reference on secret: %v", err)))
+		results.AddErrors(model.NewMinioError(model.MinioErrFailedToCreateCode, fmt.Sprintf("failed to set owner reference on secret: %v", err)))
 		return nil, results
 	}
 

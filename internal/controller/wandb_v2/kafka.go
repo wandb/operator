@@ -41,7 +41,7 @@ func (r *WeightsAndBiasesV2Reconciler) reconcileKafka(
 		return results
 	}
 
-	wandb.Status.KafkaStatus = results.ExtractKafkaStatus(ctx)
+	wandb.Status.KafkaStatus = model.ExtractKafkaStatus(ctx, results)
 	if err = r.Status().Update(ctx, wandb); err != nil {
 		results.AddErrors(err)
 	}

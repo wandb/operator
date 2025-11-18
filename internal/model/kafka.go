@@ -3,9 +3,7 @@ package model
 import (
 	"context"
 	"fmt"
-	"slices"
 
-	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/utils"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -47,40 +45,6 @@ type KafkaReplicationConfig struct {
 
 func (k KafkaConfig) IsHighAvailability() bool {
 	return k.Replicas > 1
-}
-
-func GetReplicaCountForSize(size apiv2.WBSize) (int32, error) {
-	switch size {
-	case apiv2.WBSizeDev:
-		return 1, nil
-	case apiv2.WBSizeSmall:
-		return 3, nil
-	default:
-		return 0, fmt.Errorf("unsupported size for Kafka: %s (only 'dev' and 'small' are supported)", size)
-	}
-}
-
-func GetReplicationConfigForSize(size apiv2.WBSize) (KafkaReplicationConfig, error) {
-	switch size {
-	case apiv2.WBSizeDev:
-		return KafkaReplicationConfig{
-			DefaultReplicationFactor: 1,
-			MinInSyncReplicas:        1,
-			OffsetsTopicRF:           1,
-			TransactionStateRF:       1,
-			TransactionStateISR:      1,
-		}, nil
-	case apiv2.WBSizeSmall:
-		return KafkaReplicationConfig{
-			DefaultReplicationFactor: 3,
-			MinInSyncReplicas:        2,
-			OffsetsTopicRF:           3,
-			TransactionStateRF:       3,
-			TransactionStateISR:      2,
-		}, nil
-	default:
-		return KafkaReplicationConfig{}, fmt.Errorf("unsupported size for Kafka: %s (only 'dev' and 'small' are supported)", size)
-	}
 }
 
 func BuildKafkaDefaults(size Size, ownerNamespace string) (KafkaConfig, error) {
@@ -152,11 +116,11 @@ func BuildKafkaDefaults(size Size, ownerNamespace string) (KafkaConfig, error) {
 type KafkaErrorCode string
 
 const (
-	KafkaErrFailedToGetConfig  KafkaErrorCode = "FailedToGetConfig"
-	KafkaErrFailedToInitialize KafkaErrorCode = "FailedToInitialize"
-	KafkaErrFailedToCreate     KafkaErrorCode = "FailedToCreate"
-	KafkaErrFailedToUpdate     KafkaErrorCode = "FailedToUpdate"
-	KafkaErrFailedToDelete     KafkaErrorCode = "FailedToDelete"
+	KafkaErrFailedToGetConfigCode  KafkaErrorCode = "FailedToGetConfig"
+	KafkaErrFailedToInitializeCode KafkaErrorCode = "FailedToInitialize"
+	KafkaErrFailedToCreateCode     KafkaErrorCode = "FailedToCreate"
+	KafkaErrFailedToUpdateCode     KafkaErrorCode = "FailedToUpdate"
+	KafkaErrFailedToDeleteCode     KafkaErrorCode = "FailedToDelete"
 )
 
 func NewKafkaError(code KafkaErrorCode, reason string) InfraError {
@@ -199,20 +163,32 @@ func (r *Results) getKafkaErrors() []KafkaInfraError {
 /////////////////////////////////////////////////
 // Kafka Status
 
+type KafkaStatus struct {
+	Ready      bool
+	Connection KafkaConnection
+	Details    []KafkaStatusDetail
+	Errors     []KafkaInfraError
+}
+
+type KafkaConnection struct {
+	Host string
+	Port string
+}
+
 type KafkaInfraCode string
 
 const (
-	KafkaCreated         KafkaInfraCode = "KafkaCreated"
-	KafkaUpdated         KafkaInfraCode = "KafkaUpdated"
-	KafkaDeleted         KafkaInfraCode = "KafkaDeleted"
-	KafkaNodePoolCreated KafkaInfraCode = "NodePoolCreated"
-	KafkaNodePoolUpdated KafkaInfraCode = "NodePoolUpdated"
-	KafkaNodePoolDeleted KafkaInfraCode = "NodePoolDeleted"
-	KafkaConnection      KafkaInfraCode = "KafkaConnection"
+	KafkaCreatedCode         KafkaInfraCode = "KafkaCreated"
+	KafkaUpdatedCode         KafkaInfraCode = "KafkaUpdated"
+	KafkaDeletedCode         KafkaInfraCode = "KafkaDeleted"
+	KafkaNodePoolCreatedCode KafkaInfraCode = "NodePoolCreated"
+	KafkaNodePoolUpdatedCode KafkaInfraCode = "NodePoolUpdated"
+	KafkaNodePoolDeletedCode KafkaInfraCode = "NodePoolDeleted"
+	KafkaConnectionCode      KafkaInfraCode = "KafkaConnection"
 )
 
-func NewKafkaStatus(code KafkaInfraCode, message string) InfraStatus {
-	return InfraStatus{
+func NewKafkaStatusDetail(code KafkaInfraCode, message string) InfraStatusDetail {
+	return InfraStatusDetail{
 		infraName: Kafka,
 		code:      string(code),
 		message:   message,
@@ -220,7 +196,7 @@ func NewKafkaStatus(code KafkaInfraCode, message string) InfraStatus {
 }
 
 type KafkaStatusDetail struct {
-	InfraStatus
+	InfraStatusDetail
 }
 
 func (k KafkaStatusDetail) kafkaCode() KafkaInfraCode {
@@ -237,17 +213,17 @@ type KafkaConnDetail struct {
 	connInfo KafkaConnInfo
 }
 
-func NewKafkaConnDetail(connInfo KafkaConnInfo) InfraStatus {
-	return InfraStatus{
+func NewKafkaConnDetail(connInfo KafkaConnInfo) InfraStatusDetail {
+	return InfraStatusDetail{
 		infraName: Kafka,
-		code:      string(KafkaConnection),
+		code:      string(KafkaConnectionCode),
 		message:   fmt.Sprintf("kafka://%s:%s", connInfo.Host, connInfo.Port),
 		hidden:    connInfo,
 	}
 }
 
 func (k KafkaStatusDetail) ToKafkaConnDetail() (KafkaConnDetail, bool) {
-	if k.kafkaCode() != KafkaConnection {
+	if k.kafkaCode() != KafkaConnectionCode {
 		return KafkaConnDetail{}, false
 	}
 	result := KafkaConnDetail{}
@@ -271,64 +247,32 @@ func (k KafkaStatusDetail) ToKafkaConnDetail() (KafkaConnDetail, bool) {
 /////////////////////////////////////////////////
 // WBKafkaStatus translation
 
-var kafkaNotReadyStates = []apiv2.WBStateType{
-	apiv2.WBStateError, apiv2.WBStateReady, apiv2.WBStateDeleting, apiv2.WBStateDegraded, apiv2.WBStateOffline,
-}
-
-func (r *Results) ExtractKafkaStatus(ctx context.Context) apiv2.WBKafkaStatus {
-	log := ctrl.LoggerFrom(ctx)
-
+func ExtractKafkaStatus(ctx context.Context, r *Results) KafkaStatus {
 	var ok bool
 	var connDetail KafkaConnDetail
-	var errors = r.getKafkaErrors()
-	var statuses = r.getKafkaStatusDetails()
-	var wbStatus = apiv2.WBKafkaStatus{}
-
-	for _, err := range errors {
-		wbStatus.Details = append(wbStatus.Details, apiv2.WBStatusDetail{
-			State:   apiv2.WBStateError,
-			Code:    err.code,
-			Message: err.reason,
-		})
+	var result = KafkaStatus{
+		Errors: r.getKafkaErrors(),
 	}
 
-	for _, status := range statuses {
-		if connDetail, ok = status.ToKafkaConnDetail(); ok {
-			wbStatus.Connection.KafkaHost = connDetail.connInfo.Host
-			wbStatus.Connection.KafkaPort = connDetail.connInfo.Port
-		} else {
-			switch status.kafkaCode() {
-			case KafkaCreated, KafkaNodePoolCreated, KafkaUpdated, KafkaNodePoolUpdated:
-				wbStatus.Details = append(wbStatus.Details, apiv2.WBStatusDetail{
-					State:   apiv2.WBStateUpdating,
-					Code:    status.code,
-					Message: status.message,
-				})
-			case KafkaDeleted, KafkaNodePoolDeleted:
-				wbStatus.Details = append(wbStatus.Details, apiv2.WBStatusDetail{
-					State:   apiv2.WBStateDeleting,
-					Code:    status.code,
-					Message: status.message,
-				})
-			default:
-				log.Info("Unhandled Kafka Infra Code", "code", status.code)
-			}
+	for _, detail := range r.getKafkaStatusDetails() {
+		if connDetail, ok = detail.ToKafkaConnDetail(); ok {
+			result.Connection.Host = connDetail.connInfo.Host
+			result.Connection.Port = connDetail.connInfo.Port
+			continue
 		}
+
+		result.Details = append(result.Details, detail)
 	}
 
-	wbStatus.Ready = true
-	for _, detail := range wbStatus.Details {
-		if slices.Contains(kafkaNotReadyStates, detail.State) {
-			wbStatus.Ready = false
-		}
-		if detail.State.WorseThan(wbStatus.State) {
-			wbStatus.State = detail.State
-		}
+	if len(result.Errors) > 0 {
+		result.Ready = false
+	} else {
+		result.Ready = result.Connection.Host != ""
 	}
 
-	return wbStatus
+	return result
 }
 
 func (r *Results) getKafkaStatusDetails() []KafkaStatusDetail {
-	return utils.FilterMapFunc(r.StatusList, func(s InfraStatus) (KafkaStatusDetail, bool) { return s.ToKafkaStatusDetail() })
+	return utils.FilterMapFunc(r.StatusList, func(s InfraStatusDetail) (KafkaStatusDetail, bool) { return s.ToKafkaStatusDetail() })
 }

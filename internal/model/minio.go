@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 
-	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/utils"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -54,15 +53,15 @@ type MinioSizeConfig struct {
 	Image            string
 }
 
-func GetMinioConfigForSize(size apiv2.WBSize) (MinioSizeConfig, error) {
+func GetMinioConfigForSize(size Size) (MinioSizeConfig, error) {
 	switch size {
-	case apiv2.WBSizeDev:
+	case SizeDev:
 		return MinioSizeConfig{
 			Servers:          1,
 			VolumesPerServer: 1,
 			Image:            MinioImage,
 		}, nil
-	case apiv2.WBSizeSmall:
+	case SizeSmall:
 		return MinioSizeConfig{
 			Servers:          3,
 			VolumesPerServer: 4,
@@ -131,11 +130,11 @@ func BuildMinioDefaults(size Size, ownerNamespace string) (MinioConfig, error) {
 type MinioErrorCode string
 
 const (
-	MinioErrFailedToGetConfig  MinioErrorCode = "FailedToGetConfig"
-	MinioErrFailedToInitialize MinioErrorCode = "FailedToInitialize"
-	MinioErrFailedToCreate     MinioErrorCode = "FailedToCreate"
-	MinioErrFailedToUpdate     MinioErrorCode = "FailedToUpdate"
-	MinioErrFailedToDelete     MinioErrorCode = "FailedToDelete"
+	MinioErrFailedToGetConfigCode  MinioErrorCode = "FailedToGetConfig"
+	MinioErrFailedToInitializeCode MinioErrorCode = "FailedToInitialize"
+	MinioErrFailedToCreateCode     MinioErrorCode = "FailedToCreate"
+	MinioErrFailedToUpdateCode     MinioErrorCode = "FailedToUpdate"
+	MinioErrFailedToDeleteCode     MinioErrorCode = "FailedToDelete"
 )
 
 func NewMinioError(code MinioErrorCode, reason string) InfraError {
@@ -173,17 +172,30 @@ func (r *Results) getMinioErrors() []MinioInfraError {
 /////////////////////////////////////////////////
 // Minio Status
 
+type MinioStatus struct {
+	Ready      bool
+	Connection MinioConnection
+	Details    []MinioStatusDetail
+	Errors     []MinioInfraError
+}
+
+type MinioConnection struct {
+	Host      string
+	Port      string
+	AccessKey string
+}
+
 type MinioInfraCode string
 
 const (
-	MinioCreated    MinioInfraCode = "MinioCreated"
-	MinioUpdated    MinioInfraCode = "MinioUpdated"
-	MinioDeleted    MinioInfraCode = "MinioDeleted"
-	MinioConnection MinioInfraCode = "MinioConnection"
+	MinioCreatedCode    MinioInfraCode = "MinioCreated"
+	MinioUpdatedCode    MinioInfraCode = "MinioUpdated"
+	MinioDeletedCode    MinioInfraCode = "MinioDeleted"
+	MinioConnectionCode MinioInfraCode = "MinioConnection"
 )
 
-func NewMinioStatus(code MinioInfraCode, message string) InfraStatus {
-	return InfraStatus{
+func NewMinioStatusDetail(code MinioInfraCode, message string) InfraStatusDetail {
+	return InfraStatusDetail{
 		infraName: Minio,
 		code:      string(code),
 		message:   message,
@@ -191,7 +203,7 @@ func NewMinioStatus(code MinioInfraCode, message string) InfraStatus {
 }
 
 type MinioStatusDetail struct {
-	InfraStatus
+	InfraStatusDetail
 }
 
 func (m MinioStatusDetail) minioCode() MinioInfraCode {
@@ -199,7 +211,7 @@ func (m MinioStatusDetail) minioCode() MinioInfraCode {
 }
 
 func (m MinioStatusDetail) ToMinioConnDetail() (MinioConnDetail, bool) {
-	if m.minioCode() != MinioConnection {
+	if m.minioCode() != MinioConnectionCode {
 		return MinioConnDetail{}, false
 	}
 	result := MinioConnDetail{}
@@ -231,65 +243,43 @@ type MinioConnDetail struct {
 	connInfo MinioConnInfo
 }
 
-func NewMinioConnDetail(connInfo MinioConnInfo) InfraStatus {
-	return InfraStatus{
+func NewMinioConnDetail(connInfo MinioConnInfo) InfraStatusDetail {
+	return InfraStatusDetail{
 		infraName: Minio,
-		code:      string(MinioConnection),
+		code:      string(MinioConnectionCode),
 		message:   "Minio connection info",
 		hidden:    connInfo,
 	}
 }
 
-func (r *Results) ExtractMinioStatus(ctx context.Context) apiv2.WBMinioStatus {
-	log := ctrl.LoggerFrom(ctx)
-
+func ExtractMinioStatus(ctx context.Context, r *Results) MinioStatus {
 	var ok bool
 	var connDetail MinioConnDetail
-	var errors = r.getMinioErrors()
-	var statuses = r.getMinioStatusDetails()
-	var wbStatus = apiv2.WBMinioStatus{}
-
-	for _, err := range errors {
-		wbStatus.Details = append(wbStatus.Details, apiv2.WBStatusDetail{
-			State:   apiv2.WBStateError,
-			Code:    err.code,
-			Message: err.reason,
-		})
+	var result = MinioStatus{
+		Errors: r.getMinioErrors(),
 	}
 
-	for _, status := range statuses {
-		if connDetail, ok = status.ToMinioConnDetail(); ok {
-			wbStatus.Connection.MinioHost = connDetail.connInfo.Host
-			wbStatus.Connection.MinioPort = connDetail.connInfo.Port
-			wbStatus.Connection.MinioAccessKey = connDetail.connInfo.AccessKey
+	for _, detail := range r.getMinioStatusDetails() {
+		if connDetail, ok = detail.ToMinioConnDetail(); ok {
+			result.Connection.Host = connDetail.connInfo.Host
+			result.Connection.Port = connDetail.connInfo.Port
+			result.Connection.AccessKey = connDetail.connInfo.AccessKey
 			continue
 		}
 
-		wbStatus.Details = append(wbStatus.Details, apiv2.WBStatusDetail{
-			State:   apiv2.WBStateReady,
-			Code:    status.code,
-			Message: status.message,
-		})
+		result.Details = append(result.Details, detail)
 	}
 
-	if len(errors) > 0 {
-		wbStatus.State = apiv2.WBStateError
+	if len(result.Errors) > 0 {
+		result.Ready = false
 	} else {
-		wbStatus.State = apiv2.WBStateReady
+		result.Ready = result.Connection.Host != ""
 	}
 
-	if len(errors) > 0 {
-		log.Error(
-			fmt.Errorf("Minio has %d errors", len(errors)),
-			"Minio is in error state",
-			"errors", errors,
-		)
-	}
-
-	return wbStatus
+	return result
 }
 
-func (i InfraStatus) ToMinioStatusDetail() (MinioStatusDetail, bool) {
+func (i InfraStatusDetail) ToMinioStatusDetail() (MinioStatusDetail, bool) {
 	result := MinioStatusDetail{}
 	if i.infraName != Minio {
 		return result, false
@@ -302,5 +292,5 @@ func (i InfraStatus) ToMinioStatusDetail() (MinioStatusDetail, bool) {
 }
 
 func (r *Results) getMinioStatusDetails() []MinioStatusDetail {
-	return utils.FilterMapFunc(r.StatusList, func(s InfraStatus) (MinioStatusDetail, bool) { return s.ToMinioStatusDetail() })
+	return utils.FilterMapFunc(r.StatusList, func(s InfraStatusDetail) (MinioStatusDetail, bool) { return s.ToMinioStatusDetail() })
 }

@@ -41,7 +41,7 @@ func (r *WeightsAndBiasesV2Reconciler) reconcileClickHouse(
 		return results
 	}
 
-	wandb.Status.ClickHouseStatus = results.ExtractClickHouseStatus(ctx)
+	wandb.Status.ClickHouseStatus = model.ExtractClickHouseStatus(ctx, results)
 	if err = r.Status().Update(ctx, wandb); err != nil {
 		results.AddErrors(err)
 	}

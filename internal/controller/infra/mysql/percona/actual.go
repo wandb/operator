@@ -93,12 +93,12 @@ func (a *perconaPXC) Delete(ctx context.Context) *model.Results {
 		if err := a.client.Delete(ctx, a.pxc); err != nil {
 			log.Error(err, "Failed to delete PXC CR")
 			results.AddErrors(model.NewMySQLError(
-				model.MySQLErrFailedToDelete,
+				model.MySQLErrFailedToDeleteCode,
 				fmt.Sprintf("failed to delete PXC: %v", err),
 			))
 			return results
 		}
-		results.AddStatuses(model.NewMySQLStatus(model.MySQLDeleted, PXCName))
+		results.AddStatuses(model.NewMySQLStatusDetail(model.MySQLDeletedCode, PXCName))
 	}
 
 	return results

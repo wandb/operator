@@ -93,12 +93,12 @@ func (a *altinityClickHouse) Delete(ctx context.Context) *model.Results {
 		if err := a.client.Delete(ctx, a.chi); err != nil {
 			log.Error(err, "Failed to delete CHI CR")
 			results.AddErrors(model.NewClickHouseError(
-				model.ClickHouseErrFailedToDelete,
+				model.ClickHouseErrFailedToDeleteCode,
 				fmt.Sprintf("failed to delete CHI: %v", err),
 			))
 			return results
 		}
-		results.AddStatuses(model.NewClickHouseStatus(model.ClickHouseDeleted, CHIName))
+		results.AddStatuses(model.NewClickHouseStatusDetail(model.ClickHouseDeletedCode, CHIName))
 	}
 
 	return results

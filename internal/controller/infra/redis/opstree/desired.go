@@ -28,7 +28,7 @@ func buildDesiredStandalone(
 
 	if redisConfig.IsHighAvailability() {
 		msg = "cannot create redis standalone high availability configuration"
-		err = model.NewRedisError(model.RedisDeploymentConflict, msg)
+		err = model.NewRedisError(model.RedisDeploymentConflictCode, msg)
 		log.Error(err, msg, vendorKey, vendorName)
 		results.AddErrors(err)
 		return nil, results
@@ -79,7 +79,7 @@ func buildDesiredSentinel(
 
 	if !redisConfig.IsHighAvailability() {
 		msg = "cannot create redis sentinel without high availability configuration"
-		err = model.NewRedisError(model.RedisDeploymentConflict, msg)
+		err = model.NewRedisError(model.RedisDeploymentConflictCode, msg)
 		log.Error(err, msg, vendorKey, vendorName)
 		results.AddErrors(err)
 		return nil, results
@@ -125,7 +125,7 @@ func buildDesiredReplication(
 
 	if !redisDetails.IsHighAvailability() {
 		msg = "cannot create redis replication without high availability configuration"
-		err = model.NewRedisError(model.RedisDeploymentConflict, msg)
+		err = model.NewRedisError(model.RedisDeploymentConflictCode, msg)
 		log.Error(err, msg, vendorKey, vendorName)
 		results.AddErrors(err)
 		return nil, results

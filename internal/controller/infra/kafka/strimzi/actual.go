@@ -127,12 +127,12 @@ func (a *strimziKafka) Delete(ctx context.Context) *model.Results {
 		if err := a.client.Delete(ctx, a.nodePool); err != nil {
 			log.Error(err, "Failed to delete KafkaNodePool CR")
 			results.AddErrors(model.NewKafkaError(
-				model.KafkaErrFailedToDelete,
+				model.KafkaErrFailedToDeleteCode,
 				fmt.Sprintf("failed to delete KafkaNodePool: %v", err),
 			))
 			return results
 		}
-		results.AddStatuses(model.NewKafkaStatus(model.KafkaNodePoolDeleted, NodePoolName))
+		results.AddStatuses(model.NewKafkaStatusDetail(model.KafkaNodePoolDeletedCode, NodePoolName))
 	}
 
 	// Delete Kafka CR
@@ -140,12 +140,12 @@ func (a *strimziKafka) Delete(ctx context.Context) *model.Results {
 		if err := a.client.Delete(ctx, a.kafka); err != nil {
 			log.Error(err, "Failed to delete Kafka CR")
 			results.AddErrors(model.NewKafkaError(
-				model.KafkaErrFailedToDelete,
+				model.KafkaErrFailedToDeleteCode,
 				fmt.Sprintf("failed to delete Kafka: %v", err),
 			))
 			return results
 		}
-		results.AddStatuses(model.NewKafkaStatus(model.KafkaDeleted, KafkaName))
+		results.AddStatuses(model.NewKafkaStatusDetail(model.KafkaDeletedCode, KafkaName))
 	}
 
 	return results

@@ -98,20 +98,20 @@ var _ = Describe("Interface", func() {
 	})
 
 	Describe("ToRedisStatusDetail", func() {
-		Context("when InfraStatus is for Redis", func() {
+		Context("when InfraStatusDetail is for Redis", func() {
 			It("should convert successfully", func() {
-				status := NewRedisStatus(RedisSentinelCreated, "Redis created")
+				status := NewRedisStatusDetail(RedisSentinelCreated, "Redis created")
 				detail, ok := status.ToRedisStatusDetail()
 				Expect(ok).To(BeTrue())
-				Expect(detail.infraName).To(Equal(Redis))
+				Expect(detail.InfraName).To(Equal(Redis))
 				Expect(detail.code).To(Equal(string(RedisSentinelCreated)))
 				Expect(detail.message).To(Equal("Redis created"))
 			})
 		})
 
-		Context("when InfraStatus is not for Redis", func() {
+		Context("when InfraStatusDetail is not for Redis", func() {
 			It("should return false", func() {
-				status := NewMySQLStatus(MySQLCreated, "MySQL created")
+				status := NewMySQLStatusDetail(MySQLCreatedCode, "MySQL created")
 				_, ok := status.ToRedisStatusDetail()
 				Expect(ok).To(BeFalse())
 			})
@@ -121,60 +121,60 @@ var _ = Describe("Interface", func() {
 	Describe("Status check functions", func() {
 		Describe("IsRedisStatus", func() {
 			It("should return true for Redis status", func() {
-				status := NewRedisStatus(RedisSentinelCreated, "test")
+				status := NewRedisStatusDetail(RedisSentinelCreated, "test")
 				Expect(IsRedisStatus(status)).To(BeTrue())
 			})
 
 			It("should return false for non-Redis status", func() {
-				status := NewMySQLStatus(MySQLCreated, "test")
+				status := NewMySQLStatusDetail(MySQLCreatedCode, "test")
 				Expect(IsRedisStatus(status)).To(BeFalse())
 			})
 		})
 
 		Describe("IsMySQLStatus", func() {
 			It("should return true for MySQL status", func() {
-				status := NewMySQLStatus(MySQLCreated, "test")
+				status := NewMySQLStatusDetail(MySQLCreatedCode, "test")
 				Expect(IsMySQLStatus(status)).To(BeTrue())
 			})
 
 			It("should return false for non-MySQL status", func() {
-				status := NewRedisStatus(RedisSentinelCreated, "test")
+				status := NewRedisStatusDetail(RedisSentinelCreated, "test")
 				Expect(IsMySQLStatus(status)).To(BeFalse())
 			})
 		})
 
 		Describe("IsKafkaStatus", func() {
 			It("should return true for Kafka status", func() {
-				status := NewKafkaStatus(KafkaCreated, "test")
+				status := NewKafkaStatusDetail(KafkaCreatedCode, "test")
 				Expect(IsKafkaStatus(status)).To(BeTrue())
 			})
 
 			It("should return false for non-Kafka status", func() {
-				status := NewMySQLStatus(MySQLCreated, "test")
+				status := NewMySQLStatusDetail(MySQLCreatedCode, "test")
 				Expect(IsKafkaStatus(status)).To(BeFalse())
 			})
 		})
 
 		Describe("IsClickhouseStatus", func() {
 			It("should return true for ClickHouse status", func() {
-				status := NewClickHouseStatus(ClickHouseCreated, "test")
+				status := NewClickHouseStatusDetail(ClickHouseCreatedCode, "test")
 				Expect(IsClickhouseStatus(status)).To(BeTrue())
 			})
 
 			It("should return false for non-ClickHouse status", func() {
-				status := NewMySQLStatus(MySQLCreated, "test")
+				status := NewMySQLStatusDetail(MySQLCreatedCode, "test")
 				Expect(IsClickhouseStatus(status)).To(BeFalse())
 			})
 		})
 
 		Describe("IsMinioStatus", func() {
 			It("should return true for Minio status", func() {
-				status := NewMinioStatus(MinioCreated, "test")
+				status := NewMinioStatusDetail(MinioCreatedCode, "test")
 				Expect(IsMinioStatus(status)).To(BeTrue())
 			})
 
 			It("should return false for non-Minio status", func() {
-				status := NewMySQLStatus(MySQLCreated, "test")
+				status := NewMySQLStatusDetail(MySQLCreatedCode, "test")
 				Expect(IsMinioStatus(status)).To(BeFalse())
 			})
 		})
@@ -218,11 +218,11 @@ var _ = Describe("Interface", func() {
 			It("should merge results into other", func() {
 				results1 := InitResults()
 				results1.AddErrors(fmt.Errorf("error 1"))
-				results1.AddStatuses(NewMySQLStatus(MySQLCreated, "status 1"))
+				results1.AddStatuses(NewMySQLStatusDetail(MySQLCreatedCode, "status 1"))
 
 				results2 := InitResults()
 				results2.AddErrors(fmt.Errorf("error 2"))
-				results2.AddStatuses(NewRedisStatus(RedisSentinelCreated, "status 2"))
+				results2.AddStatuses(NewRedisStatusDetail(RedisSentinelCreated, "status 2"))
 
 				results1.Merge(results2)
 

@@ -22,7 +22,7 @@ func (a *opstreeRedis) createSentinel(
 
 	if a.standalone != nil {
 		msg = "cannot create desiredSentinel with standalone CR present"
-		err = model.NewRedisError(model.RedisDeploymentConflict, msg)
+		err = model.NewRedisError(model.RedisDeploymentConflictCode, msg)
 		log.Error(err, msg, vendorKey, vendorName)
 		results.AddErrors(err)
 		return results
@@ -30,7 +30,7 @@ func (a *opstreeRedis) createSentinel(
 
 	if a.sentinel != nil {
 		msg = "cannot create desiredSentinel when its CR is already present"
-		err = model.NewRedisError(model.RedisDeploymentConflict, msg)
+		err = model.NewRedisError(model.RedisDeploymentConflictCode, msg)
 		log.Error(err, msg, vendorKey, vendorName)
 		results.AddErrors(err)
 		return results
@@ -49,7 +49,7 @@ func (a *opstreeRedis) createSentinel(
 	}
 
 	results.AddStatuses(
-		model.NewRedisStatus(model.RedisSentinelCreated, sentinelName),
+		model.NewRedisStatusDetail(model.RedisSentinelCreatedCode, sentinelName),
 	)
 
 	return results
@@ -66,7 +66,7 @@ func (a *opstreeRedis) createReplication(
 
 	if a.standalone != nil {
 		msg = "cannot create desiredReplication with standalone CR present"
-		err = model.NewRedisError(model.RedisDeploymentConflict, msg)
+		err = model.NewRedisError(model.RedisDeploymentConflictCode, msg)
 		log.Error(err, msg, vendorKey, vendorName)
 		results.AddErrors(err)
 		return results
@@ -74,7 +74,7 @@ func (a *opstreeRedis) createReplication(
 
 	if a.replication != nil {
 		msg = "cannot create desiredReplication when its CR is already present"
-		err = model.NewRedisError(model.RedisDeploymentConflict, msg)
+		err = model.NewRedisError(model.RedisDeploymentConflictCode, msg)
 		log.Error(err, msg, vendorKey, vendorName)
 		results.AddErrors(err)
 		return results
@@ -93,7 +93,7 @@ func (a *opstreeRedis) createReplication(
 	}
 
 	results.AddStatuses(
-		model.NewRedisStatus(model.RedisReplicationCreated, replicationName),
+		model.NewRedisStatusDetail(model.RedisReplicationCreatedCode, replicationName),
 	)
 
 	return results
@@ -110,7 +110,7 @@ func (a *opstreeRedis) createStandalone(
 
 	if a.sentinel != nil {
 		msg = "cannot create desiredStandalone with sentinel CR present"
-		err = model.NewRedisError(model.RedisDeploymentConflict, msg)
+		err = model.NewRedisError(model.RedisDeploymentConflictCode, msg)
 		log.Error(err, msg, vendorKey, vendorName)
 		results.AddErrors(err)
 		return results
@@ -118,7 +118,7 @@ func (a *opstreeRedis) createStandalone(
 
 	if a.replication != nil {
 		msg = "cannot create desiredStandalone with replication CR present"
-		err = model.NewRedisError(model.RedisDeploymentConflict, msg)
+		err = model.NewRedisError(model.RedisDeploymentConflictCode, msg)
 		log.Error(err, msg, vendorKey, vendorName)
 		results.AddErrors(err)
 		return results
@@ -126,7 +126,7 @@ func (a *opstreeRedis) createStandalone(
 
 	if a.standalone != nil {
 		msg = "cannot create desiredStandalone when its CR is already present"
-		err = model.NewRedisError(model.RedisDeploymentConflict, msg)
+		err = model.NewRedisError(model.RedisDeploymentConflictCode, msg)
 		log.Error(err, msg, vendorKey, vendorName)
 		results.AddErrors(err)
 		return results
@@ -145,7 +145,7 @@ func (a *opstreeRedis) createStandalone(
 	}
 
 	results.AddStatuses(
-		model.NewRedisStatus(model.RedisStandaloneCreated, standaloneName),
+		model.NewRedisStatusDetail(model.RedisStandaloneCreatedCode, standaloneName),
 	)
 
 	return results

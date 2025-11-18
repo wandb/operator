@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 
-	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/utils"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -101,11 +100,11 @@ func BuildClickHouseDefaults(size Size, ownerNamespace string) (ClickHouseConfig
 type ClickHouseErrorCode string
 
 const (
-	ClickHouseErrFailedToGetConfig  ClickHouseErrorCode = "FailedToGetConfig"
-	ClickHouseErrFailedToInitialize ClickHouseErrorCode = "FailedToInitialize"
-	ClickHouseErrFailedToCreate     ClickHouseErrorCode = "FailedToCreate"
-	ClickHouseErrFailedToUpdate     ClickHouseErrorCode = "FailedToUpdate"
-	ClickHouseErrFailedToDelete     ClickHouseErrorCode = "FailedToDelete"
+	ClickHouseErrFailedToGetConfigCode  ClickHouseErrorCode = "FailedToGetConfig"
+	ClickHouseErrFailedToInitializeCode ClickHouseErrorCode = "FailedToInitialize"
+	ClickHouseErrFailedToCreateCode     ClickHouseErrorCode = "FailedToCreate"
+	ClickHouseErrFailedToUpdateCode     ClickHouseErrorCode = "FailedToUpdate"
+	ClickHouseErrFailedToDeleteCode     ClickHouseErrorCode = "FailedToDelete"
 )
 
 func NewClickHouseError(code ClickHouseErrorCode, reason string) InfraError {
@@ -143,17 +142,30 @@ func (r *Results) getClickHouseErrors() []ClickHouseInfraError {
 /////////////////////////////////////////////////
 // ClickHouse Status
 
+type ClickHouseStatus struct {
+	Ready      bool
+	Connection ClickHouseConnection
+	Details    []ClickHouseStatusDetail
+	Errors     []ClickHouseInfraError
+}
+
+type ClickHouseConnection struct {
+	Host string
+	Port string
+	User string
+}
+
 type ClickHouseInfraCode string
 
 const (
-	ClickHouseCreated    ClickHouseInfraCode = "ClickHouseCreated"
-	ClickHouseUpdated    ClickHouseInfraCode = "ClickHouseUpdated"
-	ClickHouseDeleted    ClickHouseInfraCode = "ClickHouseDeleted"
-	ClickHouseConnection ClickHouseInfraCode = "ClickHouseConnection"
+	ClickHouseCreatedCode    ClickHouseInfraCode = "ClickHouseCreated"
+	ClickHouseUpdatedCode    ClickHouseInfraCode = "ClickHouseUpdated"
+	ClickHouseDeletedCode    ClickHouseInfraCode = "ClickHouseDeleted"
+	ClickHouseConnectionCode ClickHouseInfraCode = "ClickHouseConnection"
 )
 
-func NewClickHouseStatus(code ClickHouseInfraCode, message string) InfraStatus {
-	return InfraStatus{
+func NewClickHouseStatusDetail(code ClickHouseInfraCode, message string) InfraStatusDetail {
+	return InfraStatusDetail{
 		infraName: Clickhouse,
 		code:      string(code),
 		message:   message,
@@ -161,7 +173,7 @@ func NewClickHouseStatus(code ClickHouseInfraCode, message string) InfraStatus {
 }
 
 type ClickHouseStatusDetail struct {
-	InfraStatus
+	InfraStatusDetail
 }
 
 func (c ClickHouseStatusDetail) clickhouseCode() ClickHouseInfraCode {
@@ -169,7 +181,7 @@ func (c ClickHouseStatusDetail) clickhouseCode() ClickHouseInfraCode {
 }
 
 func (c ClickHouseStatusDetail) ToClickHouseConnDetail() (ClickHouseConnDetail, bool) {
-	if c.clickhouseCode() != ClickHouseConnection {
+	if c.clickhouseCode() != ClickHouseConnectionCode {
 		return ClickHouseConnDetail{}, false
 	}
 	result := ClickHouseConnDetail{}
@@ -181,7 +193,7 @@ func (c ClickHouseStatusDetail) ToClickHouseConnDetail() (ClickHouseConnDetail, 
 	connInfo, ok := c.hidden.(ClickHouseConnInfo)
 	if !ok {
 		ctrl.Log.Error(
-			fmt.Errorf("ClickHouseConnection does not have connection info"),
+			fmt.Errorf("ClickHouseConnectionCode does not have connection info"),
 			"this may result in incorrect or missing connection info",
 		)
 		return result, true
@@ -201,65 +213,43 @@ type ClickHouseConnDetail struct {
 	connInfo ClickHouseConnInfo
 }
 
-func NewClickHouseConnDetail(connInfo ClickHouseConnInfo) InfraStatus {
-	return InfraStatus{
+func NewClickHouseConnDetail(connInfo ClickHouseConnInfo) InfraStatusDetail {
+	return InfraStatusDetail{
 		infraName: Clickhouse,
-		code:      string(ClickHouseConnection),
+		code:      string(ClickHouseConnectionCode),
 		message:   "ClickHouse connection info",
 		hidden:    connInfo,
 	}
 }
 
-func (r *Results) ExtractClickHouseStatus(ctx context.Context) apiv2.WBClickHouseStatus {
-	log := ctrl.LoggerFrom(ctx)
-
+func ExtractClickHouseStatus(ctx context.Context, r *Results) ClickHouseStatus {
 	var ok bool
 	var connDetail ClickHouseConnDetail
-	var errors = r.getClickHouseErrors()
-	var statuses = r.getClickHouseStatusDetails()
-	var wbStatus = apiv2.WBClickHouseStatus{}
-
-	for _, err := range errors {
-		wbStatus.Details = append(wbStatus.Details, apiv2.WBStatusDetail{
-			State:   apiv2.WBStateError,
-			Code:    err.code,
-			Message: err.reason,
-		})
+	var result = ClickHouseStatus{
+		Errors: r.getClickHouseErrors(),
 	}
 
-	for _, status := range statuses {
-		if connDetail, ok = status.ToClickHouseConnDetail(); ok {
-			wbStatus.Connection.ClickHouseHost = connDetail.connInfo.Host
-			wbStatus.Connection.ClickHousePort = connDetail.connInfo.Port
-			wbStatus.Connection.ClickHouseUser = connDetail.connInfo.User
+	for _, detail := range r.getClickHouseStatusDetails() {
+		if connDetail, ok = detail.ToClickHouseConnDetail(); ok {
+			result.Connection.Host = connDetail.connInfo.Host
+			result.Connection.Port = connDetail.connInfo.Port
+			result.Connection.User = connDetail.connInfo.User
 			continue
 		}
 
-		wbStatus.Details = append(wbStatus.Details, apiv2.WBStatusDetail{
-			State:   apiv2.WBStateReady,
-			Code:    status.code,
-			Message: status.message,
-		})
+		result.Details = append(result.Details, detail)
 	}
 
-	if len(errors) > 0 {
-		wbStatus.State = apiv2.WBStateError
+	if len(result.Errors) > 0 {
+		result.Ready = false
 	} else {
-		wbStatus.State = apiv2.WBStateReady
+		result.Ready = result.Connection.Host != ""
 	}
 
-	if len(errors) > 0 {
-		log.Error(
-			fmt.Errorf("ClickHouse has %d errors", len(errors)),
-			"ClickHouse is in error state",
-			"errors", errors,
-		)
-	}
-
-	return wbStatus
+	return result
 }
 
-func (i InfraStatus) ToClickHouseStatusDetail() (ClickHouseStatusDetail, bool) {
+func (i InfraStatusDetail) ToClickHouseStatusDetail() (ClickHouseStatusDetail, bool) {
 	result := ClickHouseStatusDetail{}
 	if i.infraName != Clickhouse {
 		return result, false
@@ -272,5 +262,5 @@ func (i InfraStatus) ToClickHouseStatusDetail() (ClickHouseStatusDetail, bool) {
 }
 
 func (r *Results) getClickHouseStatusDetails() []ClickHouseStatusDetail {
-	return utils.FilterMapFunc(r.StatusList, func(s InfraStatus) (ClickHouseStatusDetail, bool) { return s.ToClickHouseStatusDetail() })
+	return utils.FilterMapFunc(r.StatusList, func(s InfraStatusDetail) (ClickHouseStatusDetail, bool) { return s.ToClickHouseStatusDetail() })
 }

@@ -28,7 +28,7 @@ func buildDesiredPXC(
 	storageQuantity, err := resource.ParseQuantity(mysqlConfig.StorageSize)
 	if err != nil {
 		log.Error(err, "invalid storage size", "storageSize", mysqlConfig.StorageSize)
-		results.AddErrors(model.NewMySQLError(model.MySQLErrFailedToCreate, fmt.Sprintf("invalid storage size: %v", err)))
+		results.AddErrors(model.NewMySQLError(model.MySQLErrFailedToCreateCode, fmt.Sprintf("invalid storage size: %v", err)))
 		return nil, results
 	}
 
@@ -109,7 +109,7 @@ func buildDesiredPXC(
 	// Set owner reference
 	if err := ctrl.SetControllerReference(owner, pxc, scheme); err != nil {
 		log.Error(err, "failed to set owner reference on PXC CR")
-		results.AddErrors(model.NewMySQLError(model.MySQLErrFailedToCreate, fmt.Sprintf("failed to set owner reference: %v", err)))
+		results.AddErrors(model.NewMySQLError(model.MySQLErrFailedToCreateCode, fmt.Sprintf("failed to set owner reference: %v", err)))
 		return nil, results
 	}
 

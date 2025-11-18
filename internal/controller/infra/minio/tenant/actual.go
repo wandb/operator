@@ -128,12 +128,12 @@ func (a *minioTenant) Delete(ctx context.Context) *model.Results {
 		if err := a.client.Delete(ctx, a.tenant); err != nil {
 			log.Error(err, "Failed to delete Tenant CR")
 			results.AddErrors(model.NewMinioError(
-				model.MinioErrFailedToDelete,
+				model.MinioErrFailedToDeleteCode,
 				fmt.Sprintf("failed to delete Tenant: %v", err),
 			))
 			return results
 		}
-		results.AddStatuses(model.NewMinioStatus(model.MinioDeleted, TenantName))
+		results.AddStatuses(model.NewMinioStatusDetail(model.MinioDeletedCode, TenantName))
 	}
 
 	// Delete config secret
@@ -141,7 +141,7 @@ func (a *minioTenant) Delete(ctx context.Context) *model.Results {
 		if err := a.client.Delete(ctx, a.configSecret); err != nil {
 			log.Error(err, "Failed to delete config secret")
 			results.AddErrors(model.NewMinioError(
-				model.MinioErrFailedToDelete,
+				model.MinioErrFailedToDeleteCode,
 				fmt.Sprintf("failed to delete config secret: %v", err),
 			))
 			return results

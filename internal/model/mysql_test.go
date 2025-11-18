@@ -37,81 +37,11 @@ var _ = Describe("MySQL Model", func() {
 		})
 	})
 
-	Describe("GetMySQLReplicaCountForSize", func() {
-		Context("when size is dev", func() {
-			It("should return 1 replica", func() {
-				count, err := GetMySQLReplicaCountForSize(apiv2.WBSizeDev)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(count).To(Equal(int32(1)))
-			})
-		})
-
-		Context("when size is small", func() {
-			It("should return 3 replicas", func() {
-				count, err := GetMySQLReplicaCountForSize(apiv2.WBSizeSmall)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(count).To(Equal(int32(3)))
-			})
-		})
-
-		Context("when size is unsupported", func() {
-			It("should return error", func() {
-				count, err := GetMySQLReplicaCountForSize(apiv2.WBSize("large"))
-				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("unsupported size for MySQL"))
-				Expect(count).To(Equal(int32(0)))
-			})
-		})
-	})
-
-	Describe("GetMySQLConfigForSize", func() {
-		Context("when size is dev", func() {
-			It("should return dev config", func() {
-				config, err := GetMySQLConfigForSize(apiv2.WBSizeDev)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(config.PXCImage).To(Equal(DevPXCImage))
-				Expect(config.ProxySQLEnabled).To(BeFalse())
-				Expect(config.ProxySQLReplicas).To(Equal(int32(0)))
-				Expect(config.ProxySQLImage).To(BeEmpty())
-				Expect(config.TLSEnabled).To(BeFalse())
-				Expect(config.LogCollectorEnabled).To(BeTrue())
-				Expect(config.LogCollectorImage).To(Equal(LogCollectorImage))
-				Expect(config.AllowUnsafePXCSize).To(BeTrue())
-				Expect(config.AllowUnsafeProxySize).To(BeTrue())
-			})
-		})
-
-		Context("when size is small", func() {
-			It("should return small config", func() {
-				config, err := GetMySQLConfigForSize(apiv2.WBSizeSmall)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(config.PXCImage).To(Equal(SmallPXCImage))
-				Expect(config.ProxySQLEnabled).To(BeTrue())
-				Expect(config.ProxySQLReplicas).To(Equal(int32(3)))
-				Expect(config.ProxySQLImage).To(Equal(ProxySQLImage))
-				Expect(config.TLSEnabled).To(BeTrue())
-				Expect(config.LogCollectorEnabled).To(BeFalse())
-				Expect(config.LogCollectorImage).To(BeEmpty())
-				Expect(config.AllowUnsafePXCSize).To(BeFalse())
-				Expect(config.AllowUnsafeProxySize).To(BeFalse())
-			})
-		})
-
-		Context("when size is unsupported", func() {
-			It("should return error", func() {
-				config, err := GetMySQLConfigForSize(apiv2.WBSize("medium"))
-				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("unsupported size for MySQL"))
-				Expect(config).To(Equal(MySQLSizeConfig{}))
-			})
-		})
-	})
-
 	Describe("MySQL Error", func() {
 		Describe("NewMySQLError", func() {
 			It("should create error with correct fields", func() {
 				err := NewMySQLError(MySQLErrFailedToCreate, "test reason")
-				Expect(err.infraName).To(Equal(MySQL))
+				Expect(err.InfraName).To(Equal(MySQL))
 				Expect(err.code).To(Equal(string(MySQLErrFailedToCreate)))
 				Expect(err.reason).To(Equal("test reason"))
 			})
@@ -157,8 +87,8 @@ var _ = Describe("MySQL Model", func() {
 			Context("when error is an infra error but not MySQL", func() {
 				It("should return false", func() {
 					err := InfraError{
-						infraName: Redis,
-						code:      "SomeCode",
+						InfraName: Redis,
+						Code:      "SomeCode",
 						reason:    "some reason",
 					}
 					_, ok := ToMySQLInfraError(err)
@@ -171,9 +101,9 @@ var _ = Describe("MySQL Model", func() {
 	Describe("MySQL Status", func() {
 		Describe("NewMySQLStatus", func() {
 			It("should create status with correct fields", func() {
-				status := NewMySQLStatus(MySQLCreated, "MySQL created")
-				Expect(status.infraName).To(Equal(MySQL))
-				Expect(status.code).To(Equal(string(MySQLCreated)))
+				status := NewMySQLStatusDetail(MySQLCreatedCode, "MySQL created")
+				Expect(status.InfraName).To(Equal(MySQL))
+				Expect(status.code).To(Equal(string(MySQLCreatedCode)))
 				Expect(status.message).To(Equal("MySQL created"))
 			})
 		})
@@ -181,9 +111,9 @@ var _ = Describe("MySQL Model", func() {
 		Describe("MySQLStatusDetail", func() {
 			Describe("mysqlCode", func() {
 				It("should return the status code", func() {
-					status := NewMySQLStatus(MySQLUpdated, "updated")
+					status := NewMySQLStatusDetail(MySQLUpdatedCode, "updated")
 					detail := MySQLStatusDetail{status}
-					Expect(detail.mysqlCode()).To(Equal(MySQLUpdated))
+					Expect(detail.mysqlCode()).To(Equal(MySQLUpdatedCode))
 				})
 			})
 
@@ -210,7 +140,7 @@ var _ = Describe("MySQL Model", func() {
 
 				Context("when status is not connection type", func() {
 					It("should return false", func() {
-						status := NewMySQLStatus(MySQLCreated, "created")
+						status := NewMySQLStatusDetail(MySQLCreatedCode, "created")
 						detail := MySQLStatusDetail{status}
 						_, ok := detail.ToMySQLConnDetail()
 						Expect(ok).To(BeFalse())
@@ -219,11 +149,11 @@ var _ = Describe("MySQL Model", func() {
 
 				Context("when status is connection type but missing connection info", func() {
 					It("should return empty connection info but ok true", func() {
-						status := InfraStatus{
-							infraName: MySQL,
-							code:      string(MySQLConnection),
-							message:   "connection",
-							hidden:    "not a MySQLConnInfo",
+						status := InfraStatusDetail{
+							InfraName: MySQL,
+							Code:      string(MySQLConnectionCode),
+							Message:   "connection",
+							Hidden:    "not a MySQLConnInfo",
 						}
 						detail := MySQLStatusDetail{status}
 						connDetail, ok := detail.ToMySQLConnDetail()
@@ -247,25 +177,25 @@ var _ = Describe("MySQL Model", func() {
 					User: user,
 				}
 				status := NewMySQLConnDetail(connInfo)
-				Expect(status.infraName).To(Equal(MySQL))
-				Expect(status.code).To(Equal(string(MySQLConnection)))
+				Expect(status.InfraName).To(Equal(MySQL))
+				Expect(status.code).To(Equal(string(MySQLConnectionCode)))
 				Expect(status.message).To(Equal("MySQL connection info"))
 				Expect(status.hidden).To(Equal(connInfo))
 			})
 		})
 
-		Describe("InfraStatus.ToMySQLStatusDetail", func() {
+		Describe("InfraStatusDetail.ToMySQLStatusDetail", func() {
 			Context("when infra status is for MySQL", func() {
 				It("should convert successfully", func() {
-					status := InfraStatus{
-						infraName: MySQL,
-						code:      "TestCode",
-						message:   "test message",
-						hidden:    "hidden data",
+					status := InfraStatusDetail{
+						InfraName: MySQL,
+						Code:      "TestCode",
+						Message:   "test message",
+						Hidden:    "hidden data",
 					}
 					detail, ok := status.ToMySQLStatusDetail()
 					Expect(ok).To(BeTrue())
-					Expect(detail.infraName).To(Equal(MySQL))
+					Expect(detail.InfraName).To(Equal(MySQL))
 					Expect(detail.code).To(Equal("TestCode"))
 					Expect(detail.message).To(Equal("test message"))
 					Expect(detail.hidden).To(Equal("hidden data"))
@@ -274,10 +204,10 @@ var _ = Describe("MySQL Model", func() {
 
 			Context("when infra status is not for MySQL", func() {
 				It("should return false", func() {
-					status := InfraStatus{
-						infraName: Redis,
-						code:      "TestCode",
-						message:   "test message",
+					status := InfraStatusDetail{
+						InfraName: Redis,
+						Code:      "TestCode",
+						Message:   "test message",
 					}
 					_, ok := status.ToMySQLStatusDetail()
 					Expect(ok).To(BeFalse())
@@ -296,7 +226,7 @@ var _ = Describe("MySQL Model", func() {
 		Context("when results have no errors or statuses", func() {
 			It("should return ready state", func() {
 				results := InitResults()
-				status := results.ExtractMySQLStatus(ctx)
+				status := ExtractMySQLStatus(ctx, results)
 				Expect(status.State).To(Equal(apiv2.WBStateReady))
 				Expect(status.Details).To(BeEmpty())
 			})
@@ -308,7 +238,7 @@ var _ = Describe("MySQL Model", func() {
 				err := NewMySQLError(MySQLErrFailedToCreate, "failed to create")
 				results.AddErrors(err)
 
-				status := results.ExtractMySQLStatus(ctx)
+				status := ExtractMySQLStatus(ctx, results)
 				Expect(status.State).To(Equal(apiv2.WBStateError))
 				Expect(status.Details).To(HaveLen(1))
 				Expect(status.Details[0].State).To(Equal(apiv2.WBStateError))
@@ -321,13 +251,13 @@ var _ = Describe("MySQL Model", func() {
 			It("should not include them in status", func() {
 				results := InitResults()
 				err := InfraError{
-					infraName: Redis,
-					code:      "RedisError",
+					InfraName: Redis,
+					Code:      "RedisError",
 					reason:    "redis failed",
 				}
 				results.AddErrors(err)
 
-				status := results.ExtractMySQLStatus(ctx)
+				status := ExtractMySQLStatus(ctx, results)
 				Expect(status.State).To(Equal(apiv2.WBStateReady))
 				Expect(status.Details).To(BeEmpty())
 			})
@@ -336,14 +266,14 @@ var _ = Describe("MySQL Model", func() {
 		Context("when results have MySQL statuses", func() {
 			It("should include statuses in details with ready state", func() {
 				results := InitResults()
-				infraStatus := NewMySQLStatus(MySQLCreated, "MySQL created successfully")
+				infraStatus := NewMySQLStatusDetail(MySQLCreatedCode, "MySQL created successfully")
 				results.AddStatuses(infraStatus)
 
-				status := results.ExtractMySQLStatus(ctx)
+				status := ExtractMySQLStatus(ctx, results)
 				Expect(status.State).To(Equal(apiv2.WBStateReady))
 				Expect(status.Details).To(HaveLen(1))
 				Expect(status.Details[0].State).To(Equal(apiv2.WBStateReady))
-				Expect(status.Details[0].Code).To(Equal(string(MySQLCreated)))
+				Expect(status.Details[0].Code).To(Equal(string(MySQLCreatedCode)))
 				Expect(status.Details[0].Message).To(Equal("MySQL created successfully"))
 			})
 		})
@@ -362,7 +292,7 @@ var _ = Describe("MySQL Model", func() {
 				connStatus := NewMySQLConnDetail(connInfo)
 				results.AddStatuses(connStatus)
 
-				status := results.ExtractMySQLStatus(ctx)
+				status := ExtractMySQLStatus(ctx, results)
 				Expect(status.State).To(Equal(apiv2.WBStateReady))
 				Expect(status.Connection.MySQLHost).To(Equal(host))
 				Expect(status.Connection.MySQLPort).To(Equal(port))
@@ -375,11 +305,11 @@ var _ = Describe("MySQL Model", func() {
 			It("should include both in details with error state", func() {
 				results := InitResults()
 				err := NewMySQLError(MySQLErrFailedToUpdate, "update failed")
-				infraStatus := NewMySQLStatus(MySQLCreated, "created")
+				infraStatus := NewMySQLStatusDetail(MySQLCreatedCode, "created")
 				results.AddErrors(err)
 				results.AddStatuses(infraStatus)
 
-				status := results.ExtractMySQLStatus(ctx)
+				status := ExtractMySQLStatus(ctx, results)
 				Expect(status.State).To(Equal(apiv2.WBStateError))
 				Expect(status.Details).To(HaveLen(2))
 			})
@@ -392,7 +322,7 @@ var _ = Describe("MySQL Model", func() {
 				err2 := NewMySQLError(MySQLErrFailedToUpdate, "update failed")
 				results.AddErrors(err1, err2)
 
-				status := results.ExtractMySQLStatus(ctx)
+				status := ExtractMySQLStatus(ctx, results)
 				Expect(status.State).To(Equal(apiv2.WBStateError))
 				Expect(status.Details).To(HaveLen(2))
 			})
@@ -410,11 +340,11 @@ var _ = Describe("MySQL Model", func() {
 					User: user,
 				}
 				connStatus := NewMySQLConnDetail(connInfo)
-				createdStatus := NewMySQLStatus(MySQLCreated, "created")
-				updatedStatus := NewMySQLStatus(MySQLUpdated, "updated")
+				createdStatus := NewMySQLStatusDetail(MySQLCreatedCode, "created")
+				updatedStatus := NewMySQLStatusDetail(MySQLUpdatedCode, "updated")
 				results.AddStatuses(connStatus, createdStatus, updatedStatus)
 
-				status := results.ExtractMySQLStatus(ctx)
+				status := ExtractMySQLStatus(ctx, results)
 				Expect(status.State).To(Equal(apiv2.WBStateReady))
 				Expect(status.Connection.MySQLHost).To(Equal(host))
 				Expect(status.Connection.MySQLPort).To(Equal(port))
@@ -445,10 +375,10 @@ var _ = Describe("MySQL Model", func() {
 	Describe("Status codes", func() {
 		It("should have distinct status codes", func() {
 			codes := []MySQLInfraCode{
-				MySQLCreated,
-				MySQLUpdated,
-				MySQLDeleted,
-				MySQLConnection,
+				MySQLCreatedCode,
+				MySQLUpdatedCode,
+				MySQLDeletedCode,
+				MySQLConnectionCode,
 			}
 
 			for i := 0; i < len(codes); i++ {

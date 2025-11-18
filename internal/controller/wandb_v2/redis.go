@@ -41,7 +41,7 @@ func (r *WeightsAndBiasesV2Reconciler) reconcileRedis(
 		return results
 	}
 
-	wandb.Status.RedisStatus = results.ExtractRedisStatus(ctx)
+	wandb.Status.RedisStatus = model.ExtractRedisStatus(ctx, results)
 	if err = r.Status().Update(ctx, wandb); err != nil {
 		results.AddErrors(err)
 	}

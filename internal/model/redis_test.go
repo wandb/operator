@@ -42,7 +42,7 @@ var _ = Describe("Redis Model", func() {
 		Describe("NewRedisError", func() {
 			It("should create error with correct fields", func() {
 				err := NewRedisError(RedisDeploymentConflict, "test reason")
-				Expect(err.infraName).To(Equal(Redis))
+				Expect(err.InfraName).To(Equal(Redis))
 				Expect(err.code).To(Equal(string(RedisDeploymentConflict)))
 				Expect(err.reason).To(Equal("test reason"))
 			})
@@ -88,8 +88,8 @@ var _ = Describe("Redis Model", func() {
 			Context("when error is an infra error but not Redis", func() {
 				It("should return false", func() {
 					err := InfraError{
-						infraName: MySQL,
-						code:      "SomeCode",
+						InfraName: MySQL,
+						Code:      "SomeCode",
 						reason:    "some reason",
 					}
 					_, ok := ToRedisInfraError(err)
@@ -102,8 +102,8 @@ var _ = Describe("Redis Model", func() {
 	Describe("Redis Status", func() {
 		Describe("NewRedisStatus", func() {
 			It("should create status with correct fields", func() {
-				status := NewRedisStatus(RedisSentinelCreated, "Redis Sentinel created")
-				Expect(status.infraName).To(Equal(Redis))
+				status := NewRedisStatusDetail(RedisSentinelCreated, "Redis Sentinel created")
+				Expect(status.InfraName).To(Equal(Redis))
 				Expect(status.code).To(Equal(string(RedisSentinelCreated)))
 				Expect(status.message).To(Equal("Redis Sentinel created"))
 			})
@@ -112,7 +112,7 @@ var _ = Describe("Redis Model", func() {
 		Describe("RedisStatusDetail", func() {
 			Describe("redisCode", func() {
 				It("should return the status code", func() {
-					status := NewRedisStatus(RedisSentinelCreated, "created")
+					status := NewRedisStatusDetail(RedisSentinelCreated, "created")
 					detail := RedisStatusDetail{status}
 					Expect(detail.redisCode()).To(Equal(RedisSentinelCreated))
 				})
@@ -141,7 +141,7 @@ var _ = Describe("Redis Model", func() {
 
 				Context("when status is not Sentinel connection type", func() {
 					It("should return false", func() {
-						status := NewRedisStatus(RedisSentinelCreated, "created")
+						status := NewRedisStatusDetail(RedisSentinelCreated, "created")
 						detail := RedisStatusDetail{status}
 						_, ok := detail.ToRedisSentinelConnDetail()
 						Expect(ok).To(BeFalse())
@@ -150,11 +150,11 @@ var _ = Describe("Redis Model", func() {
 
 				Context("when status is connection type but missing connection info", func() {
 					It("should return empty connection info but ok true", func() {
-						status := InfraStatus{
-							infraName: Redis,
-							code:      string(RedisSentinelConnection),
-							message:   "connection",
-							hidden:    "not a RedisSentinelConnInfo",
+						status := InfraStatusDetail{
+							InfraName: Redis,
+							Code:      string(RedisSentinelConnection),
+							Message:   "connection",
+							Hidden:    "not a RedisSentinelConnInfo",
 						}
 						detail := RedisStatusDetail{status}
 						connDetail, ok := detail.ToRedisSentinelConnDetail()
@@ -186,7 +186,7 @@ var _ = Describe("Redis Model", func() {
 
 				Context("when status is not Standalone connection type", func() {
 					It("should return false", func() {
-						status := NewRedisStatus(RedisStandaloneCreated, "created")
+						status := NewRedisStatusDetail(RedisStandaloneCreated, "created")
 						detail := RedisStatusDetail{status}
 						_, ok := detail.ToRedisStandaloneConnDetail()
 						Expect(ok).To(BeFalse())
@@ -206,7 +206,7 @@ var _ = Describe("Redis Model", func() {
 					MasterName:   masterName,
 				}
 				status := NewRedisSentinelConnDetail(connInfo)
-				Expect(status.infraName).To(Equal(Redis))
+				Expect(status.InfraName).To(Equal(Redis))
 				Expect(status.code).To(Equal(string(RedisSentinelConnection)))
 				Expect(status.message).To(ContainSubstring("redis://"))
 				Expect(status.hidden).To(Equal(connInfo))
@@ -222,7 +222,7 @@ var _ = Describe("Redis Model", func() {
 					Port: port,
 				}
 				status := NewRedisStandaloneConnDetail(connInfo)
-				Expect(status.infraName).To(Equal(Redis))
+				Expect(status.InfraName).To(Equal(Redis))
 				Expect(status.code).To(Equal(string(RedisStandaloneConnection)))
 				Expect(status.message).To(Equal("redis://test-host:6379"))
 				Expect(status.hidden).To(Equal(connInfo))
@@ -240,7 +240,7 @@ var _ = Describe("Redis Model", func() {
 		Context("when results have no errors or statuses", func() {
 			It("should return default state", func() {
 				results := InitResults()
-				status := results.ExtractRedisStatus(ctx)
+				status := ExtractRedisStatus(ctx, results)
 				Expect(status.Details).To(BeEmpty())
 			})
 		})
@@ -251,7 +251,7 @@ var _ = Describe("Redis Model", func() {
 				err := NewRedisError(RedisDeploymentConflict, "deployment conflict")
 				results.AddErrors(err)
 
-				status := results.ExtractRedisStatus(ctx)
+				status := ExtractRedisStatus(ctx, results)
 				Expect(status.Details).To(HaveLen(1))
 				Expect(status.Details[0].State).To(Equal(apiv2.WBStateError))
 				Expect(status.Details[0].Code).To(Equal(string(RedisDeploymentConflict)))
@@ -263,13 +263,13 @@ var _ = Describe("Redis Model", func() {
 			It("should not include them in status", func() {
 				results := InitResults()
 				err := InfraError{
-					infraName: MySQL,
-					code:      "MySQLError",
+					InfraName: MySQL,
+					Code:      "MySQLError",
 					reason:    "mysql failed",
 				}
 				results.AddErrors(err)
 
-				status := results.ExtractRedisStatus(ctx)
+				status := ExtractRedisStatus(ctx, results)
 				Expect(status.Details).To(BeEmpty())
 			})
 		})
@@ -277,10 +277,10 @@ var _ = Describe("Redis Model", func() {
 		Context("when results have Redis statuses", func() {
 			It("should include statuses in details with updating state", func() {
 				results := InitResults()
-				infraStatus := NewRedisStatus(RedisSentinelCreated, "Redis Sentinel created successfully")
+				infraStatus := NewRedisStatusDetail(RedisSentinelCreated, "Redis Sentinel created successfully")
 				results.AddStatuses(infraStatus)
 
-				status := results.ExtractRedisStatus(ctx)
+				status := ExtractRedisStatus(ctx, results)
 				Expect(status.Details).To(HaveLen(1))
 				Expect(status.Details[0].State).To(Equal(apiv2.WBStateUpdating))
 				Expect(status.Details[0].Code).To(Equal(string(RedisSentinelCreated)))
@@ -302,7 +302,7 @@ var _ = Describe("Redis Model", func() {
 				connStatus := NewRedisSentinelConnDetail(connInfo)
 				results.AddStatuses(connStatus)
 
-				status := results.ExtractRedisStatus(ctx)
+				status := ExtractRedisStatus(ctx, results)
 				Expect(status.Connection.RedisSentinelHost).To(Equal(sentinelHost))
 				Expect(status.Connection.RedisSentinelPort).To(Equal(sentinelPort))
 				Expect(status.Connection.RedisMasterName).To(Equal(masterName))
@@ -321,7 +321,7 @@ var _ = Describe("Redis Model", func() {
 				connStatus := NewRedisStandaloneConnDetail(connInfo)
 				results.AddStatuses(connStatus)
 
-				status := results.ExtractRedisStatus(ctx)
+				status := ExtractRedisStatus(ctx, results)
 				Expect(status.Connection.RedisHost).To(Equal(host))
 				Expect(status.Connection.RedisPort).To(Equal(port))
 			})
@@ -331,11 +331,11 @@ var _ = Describe("Redis Model", func() {
 			It("should include both in details", func() {
 				results := InitResults()
 				err := NewRedisError(RedisDeploymentConflict, "conflict")
-				infraStatus := NewRedisStatus(RedisSentinelCreated, "created")
+				infraStatus := NewRedisStatusDetail(RedisSentinelCreated, "created")
 				results.AddErrors(err)
 				results.AddStatuses(infraStatus)
 
-				status := results.ExtractRedisStatus(ctx)
+				status := ExtractRedisStatus(ctx, results)
 				Expect(status.Details).To(HaveLen(2))
 			})
 		})

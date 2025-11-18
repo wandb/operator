@@ -17,7 +17,7 @@ func (a *perconaPXC) createPXC(
 
 	if a.pxc != nil {
 		msg := "cannot create PXC CR when it already exists"
-		err := model.NewMySQLError(model.MySQLErrFailedToCreate, msg)
+		err := model.NewMySQLError(model.MySQLErrFailedToCreateCode, msg)
 		log.Error(err, msg)
 		results.AddErrors(err)
 		return results
@@ -26,14 +26,14 @@ func (a *perconaPXC) createPXC(
 	if err := a.client.Create(ctx, desiredPXC); err != nil {
 		log.Error(err, "Failed to create PXC CR")
 		results.AddErrors(model.NewMySQLError(
-			model.MySQLErrFailedToCreate,
+			model.MySQLErrFailedToCreateCode,
 			fmt.Sprintf("failed to create PXC CR: %v", err),
 		))
 		return results
 	}
 
 	results.AddStatuses(
-		model.NewMySQLStatus(model.MySQLCreated, fmt.Sprintf("Created PXC CR: %s", PXCName)),
+		model.NewMySQLStatusDetail(model.MySQLCreatedCode, fmt.Sprintf("Created PXC CR: %s", PXCName)),
 	)
 
 	return results
