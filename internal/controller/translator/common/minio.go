@@ -11,6 +11,15 @@ import (
 )
 
 /////////////////////////////////////////////////
+// Minio Constants
+
+const (
+	MinioImage           = "quay.io/minio/minio:latest"
+	DevVolumesPerServer  = int32(1)
+	ProdVolumesPerServer = int32(4)
+)
+
+/////////////////////////////////////////////////
 // Minio Config
 
 type MinioConfig struct {

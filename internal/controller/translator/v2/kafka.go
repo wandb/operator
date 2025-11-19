@@ -2,12 +2,18 @@ package v2
 
 import (
 	"context"
+	"fmt"
+	"strconv"
 
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/internal/controller/infra/kafka/strimzi"
 	"github.com/wandb/operator/internal/controller/translator/common"
 	"github.com/wandb/operator/internal/controller/translator/utils"
 	"github.com/wandb/operator/internal/defaults"
+	kafkav1beta2 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1beta2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	ctrl "sigs.k8s.io/controller-runtime"
 )
 
 // BuildKafkaConfig will create a new common.KafkaConfig with defaultConfig applied if not
@@ -123,4 +129,119 @@ func (i *InfraConfigBuilder) AddKafkaConfig(actual apiv2.WBKafkaSpec) *InfraConf
 	}
 	i.mergedKafka = mergedConfig
 	return i
+}
+
+// ToKafkaVendorSpec converts a WBKafkaSpec to a Kafka CR.
+// This function translates the high-level Kafka spec into the vendor-specific
+// Kafka format used by the Strimzi operator.
+// Note: In KRaft mode with node pools, the Kafka.Spec.Kafka.Replicas MUST be 0.
+func ToKafkaVendorSpec(
+	ctx context.Context,
+	spec apiv2.WBKafkaSpec,
+	owner metav1.Object,
+	scheme *runtime.Scheme,
+) (*kafkav1beta2.Kafka, error) {
+	log := ctrl.LoggerFrom(ctx)
+
+	// Get replication config based on replica count
+	replicationConfig := common.GetKafkaReplicationConfig(spec.Replicas)
+
+	kafka := &kafkav1beta2.Kafka{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      strimzi.KafkaName,
+			Namespace: spec.Namespace,
+			Labels: map[string]string{
+				"app": strimzi.KafkaName,
+			},
+			Annotations: map[string]string{
+				"strimzi.io/node-pools": "enabled",
+			},
+		},
+		Spec: kafkav1beta2.KafkaSpec{
+			Kafka: kafkav1beta2.KafkaClusterSpec{
+				Version:         common.KafkaVersion,
+				MetadataVersion: common.KafkaMetadataVersion,
+				Replicas:        0, // CRITICAL: Must be 0 when using node pools in KRaft mode
+				Listeners: []kafkav1beta2.GenericKafkaListener{
+					{
+						Name: strimzi.PlainListenerName,
+						Port: strimzi.PlainListenerPort,
+						Type: strimzi.ListenerType,
+						Tls:  false,
+					},
+					{
+						Name: strimzi.TLSListenerName,
+						Port: strimzi.TLSListenerPort,
+						Type: strimzi.ListenerType,
+						Tls:  true,
+					},
+				},
+				Config: map[string]string{
+					"offsets.topic.replication.factor":         strconv.Itoa(int(replicationConfig.OffsetsTopicRF)),
+					"transaction.state.log.replication.factor": strconv.Itoa(int(replicationConfig.TransactionStateRF)),
+					"transaction.state.log.min.isr":            strconv.Itoa(int(replicationConfig.TransactionStateISR)),
+					"default.replication.factor":               strconv.Itoa(int(replicationConfig.DefaultReplicationFactor)),
+					"min.insync.replicas":                      strconv.Itoa(int(replicationConfig.MinInSyncReplicas)),
+				},
+			},
+		},
+	}
+
+	// Set owner reference
+	if err := ctrl.SetControllerReference(owner, kafka, scheme); err != nil {
+		log.Error(err, "failed to set owner reference on Kafka CR")
+		return nil, fmt.Errorf("failed to set owner reference: %w", err)
+	}
+
+	return kafka, nil
+}
+
+// ToKafkaNodePoolVendorSpec converts a WBKafkaSpec to a KafkaNodePool CR.
+// This function creates the node pool that contains the actual replica count
+// and runs in KRaft mode with broker and controller roles.
+func ToKafkaNodePoolVendorSpec(
+	ctx context.Context,
+	spec apiv2.WBKafkaSpec,
+	owner metav1.Object,
+	scheme *runtime.Scheme,
+) (*kafkav1beta2.KafkaNodePool, error) {
+	log := ctrl.LoggerFrom(ctx)
+
+	nodePool := &kafkav1beta2.KafkaNodePool{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      strimzi.NodePoolName,
+			Namespace: spec.Namespace,
+			Labels: map[string]string{
+				"strimzi.io/cluster": strimzi.KafkaName,
+			},
+		},
+		Spec: kafkav1beta2.KafkaNodePoolSpec{
+			Replicas: spec.Replicas,
+			Roles:    []string{strimzi.RoleBroker, strimzi.RoleController},
+			Storage: kafkav1beta2.KafkaStorage{
+				Type: "jbod",
+				Volumes: []kafkav1beta2.StorageVolume{
+					{
+						ID:          0,
+						Type:        strimzi.StorageType,
+						Size:        spec.StorageSize,
+						DeleteClaim: strimzi.StorageDeleteClaim,
+					},
+				},
+			},
+		},
+	}
+
+	// Add resources if specified
+	if spec.Config != nil && (len(spec.Config.Resources.Requests) > 0 || len(spec.Config.Resources.Limits) > 0) {
+		nodePool.Spec.Resources = &spec.Config.Resources
+	}
+
+	// Set owner reference
+	if err := ctrl.SetControllerReference(owner, nodePool, scheme); err != nil {
+		log.Error(err, "failed to set owner reference on KafkaNodePool CR")
+		return nil, fmt.Errorf("failed to set owner reference: %w", err)
+	}
+
+	return nodePool, nil
 }

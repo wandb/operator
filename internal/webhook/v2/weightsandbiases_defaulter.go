@@ -106,6 +106,10 @@ func (d *WeightsAndBiasesCustomDefaulter) applyMySQLDefaults(wandb *apiv2.Weight
 		wandb.Spec.MySQL.StorageSize = defaultConfig.StorageSize
 	}
 
+	if wandb.Spec.MySQL.Replicas == 0 {
+		wandb.Spec.MySQL.Replicas = defaultConfig.Replicas
+	}
+
 	if len(defaultConfig.Resources.Requests) > 0 || len(defaultConfig.Resources.Limits) > 0 {
 		if wandb.Spec.MySQL.Config == nil {
 			wandb.Spec.MySQL.Config = &apiv2.WBMySQLConfig{}

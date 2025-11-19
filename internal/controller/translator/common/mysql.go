@@ -11,6 +11,18 @@ import (
 )
 
 /////////////////////////////////////////////////
+// MySQL Constants
+
+const (
+	// PXC Images - using the same images as the defaults package for consistency
+	DevPXCImage     = "perconalab/percona-xtradb-cluster-operator:main-pxc8.0"
+	ProdPXCImage    = "percona/percona-xtradb-cluster:8.0"
+	ProxySQLImage   = "percona/proxysql2:2.7.3"
+	LogCollectorImg = "perconalab/percona-xtradb-cluster-operator:main-logcollector"
+	PXCCRVersion    = "1.18.0"
+)
+
+/////////////////////////////////////////////////
 // MySQL Config
 
 type MySQLConfig struct {

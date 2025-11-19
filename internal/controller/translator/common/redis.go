@@ -12,6 +12,16 @@ import (
 )
 
 /////////////////////////////////////////////////
+// Redis Constants
+
+const (
+	RedisStandaloneImage  = "quay.io/opstree/redis:v7.0.15"
+	RedisReplicationImage = "quay.io/opstree/redis:v7.0.15"
+	RedisSentinelImage    = "quay.io/opstree/redis-sentinel:v7.0.12"
+	RedisNamePrefix       = "wandb-redis"
+)
+
+/////////////////////////////////////////////////
 // Redis Config
 
 type RedisConfig struct {

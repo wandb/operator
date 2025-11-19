@@ -85,6 +85,7 @@ type WeightsAndBiasesSpec struct {
 type WBMySQLSpec struct {
 	Enabled     bool           `json:"enabled"`
 	StorageSize string         `json:"storageSize,omitempty"`
+	Replicas    int32          `json:"replicas,omitempty"`
 	Config      *WBMySQLConfig `json:"config,omitempty"`
 	// Deprecated: Backup is not implemented in the refactored MySQL code
 	Backup WBBackupSpec `json:"backup,omitempty"`
