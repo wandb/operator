@@ -285,8 +285,12 @@ func main() {
 	}
 
 	if v2Webhook {
+		if err = (&webhookv2.WeightsAndBiasesCustomDefaulter{}).SetupWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create webhook", "webhook", "WeightsAndBiases V2 Defaulter")
+			os.Exit(1)
+		}
 		if err = (&webhookv2.WeightsAndBiasesCustomValidator{}).SetupWebhookWithManager(mgr); err != nil {
-			setupLog.Error(err, "unable to create webhook", "webhook", "WeightsAndBiases V2")
+			setupLog.Error(err, "unable to create webhook", "webhook", "WeightsAndBiases V2 Validator")
 			os.Exit(1)
 		}
 	}
