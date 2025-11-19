@@ -4,14 +4,15 @@ import (
 	"context"
 
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/internal/controller/translator/common"
 	"github.com/wandb/operator/internal/controller/translator/utils"
-	"github.com/wandb/operator/internal/model"
+	"github.com/wandb/operator/internal/defaults"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// BuildMinioConfig will create a new model.MinioConfig with defaultConfig applied if not
+// BuildMinioConfig will create a new common.MinioConfig with defaultConfig applied if not
 // present in actual. It should *never* be saved into the CR!
-func BuildMinioConfig(actual apiv2.WBMinioSpec, defaultConfig model.MinioConfig) (model.MinioConfig, error) {
+func BuildMinioConfig(actual apiv2.WBMinioSpec, defaultConfig common.MinioConfig) (common.MinioConfig, error) {
 	minioConfig := TranslateMinioSpec(actual)
 
 	minioConfig.StorageSize = utils.CoalesceQuantity(minioConfig.StorageSize, defaultConfig.StorageSize)
@@ -23,8 +24,8 @@ func BuildMinioConfig(actual apiv2.WBMinioSpec, defaultConfig model.MinioConfig)
 	return minioConfig, nil
 }
 
-func TranslateMinioSpec(spec apiv2.WBMinioSpec) model.MinioConfig {
-	config := model.MinioConfig{
+func TranslateMinioSpec(spec apiv2.WBMinioSpec) common.MinioConfig {
+	config := common.MinioConfig{
 		Enabled:     spec.Enabled,
 		Namespace:   spec.Namespace,
 		StorageSize: spec.StorageSize,
@@ -36,14 +37,14 @@ func TranslateMinioSpec(spec apiv2.WBMinioSpec) model.MinioConfig {
 	return config
 }
 
-func ExtractMinioStatus(ctx context.Context, results *model.Results) apiv2.WBMinioStatus {
+func ExtractMinioStatus(ctx context.Context, results *common.Results) apiv2.WBMinioStatus {
 	return TranslateMinioStatus(
 		ctx,
-		model.ExtractMinioStatus(ctx, results),
+		common.ExtractMinioStatus(ctx, results),
 	)
 }
 
-func TranslateMinioStatus(ctx context.Context, m model.MinioStatus) apiv2.WBMinioStatus {
+func TranslateMinioStatus(ctx context.Context, m common.MinioStatus) apiv2.WBMinioStatus {
 	var result apiv2.WBMinioStatus
 	var details []apiv2.WBStatusDetail
 
@@ -80,13 +81,13 @@ func TranslateMinioStatus(ctx context.Context, m model.MinioStatus) apiv2.WBMini
 
 func translateMinioStatusCode(code string) apiv2.WBStateType {
 	switch code {
-	case string(model.MinioCreatedCode):
+	case string(common.MinioCreatedCode):
 		return apiv2.WBStateUpdating
-	case string(model.MinioUpdatedCode):
+	case string(common.MinioUpdatedCode):
 		return apiv2.WBStateUpdating
-	case string(model.MinioDeletedCode):
+	case string(common.MinioDeletedCode):
 		return apiv2.WBStateDeleting
-	case string(model.MinioConnectionCode):
+	case string(common.MinioConnectionCode):
 		return apiv2.WBStateReady
 	default:
 		return apiv2.WBStateUnknown
@@ -95,16 +96,16 @@ func translateMinioStatusCode(code string) apiv2.WBStateType {
 
 func (i *InfraConfigBuilder) AddMinioConfig(actual apiv2.WBMinioSpec) *InfraConfigBuilder {
 	var err error
-	var size model.Size
-	var defaultConfig model.MinioConfig
-	var mergedConfig model.MinioConfig
+	var size common.Size
+	var defaultConfig common.MinioConfig
+	var mergedConfig common.MinioConfig
 
 	size, err = ToModelSize(i.size)
 	if err != nil {
 		i.errors = append(i.errors, err)
 		return i
 	}
-	defaultConfig, err = model.BuildMinioDefaults(size, i.ownerNamespace)
+	defaultConfig, err = defaults.BuildMinioDefaults(size, i.ownerNamespace)
 	if err != nil {
 		i.errors = append(i.errors, err)
 		return i

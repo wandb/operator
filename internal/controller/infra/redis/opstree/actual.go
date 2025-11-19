@@ -3,7 +3,7 @@ package opstree
 import (
 	"context"
 
-	"github.com/wandb/operator/internal/model"
+	"github.com/wandb/operator/internal/controller/translator/common"
 	redisv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redis/v1beta2"
 	redisreplicationv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redisreplication/v1beta2"
 	redissentinelv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redissentinel/v1beta2"
@@ -18,7 +18,7 @@ type opstreeRedis struct {
 	standalone  *redisv1beta2.Redis
 	replication *redisreplicationv1beta2.RedisReplication
 	sentinel    *redissentinelv1beta2.RedisSentinel
-	config      model.RedisConfig
+	config      common.RedisConfig
 	client      client.Client
 	owner       metav1.Object
 	scheme      *runtime.Scheme
@@ -29,7 +29,7 @@ type opstreeRedis struct {
 func Initialize(
 	ctx context.Context,
 	client client.Client,
-	redisConfig model.RedisConfig,
+	redisConfig common.RedisConfig,
 	owner metav1.Object,
 	scheme *runtime.Scheme,
 ) (
@@ -84,12 +84,12 @@ func Initialize(
 	return &result, nil
 }
 
-func (a *opstreeRedis) Upsert(ctx context.Context, redisConfig model.RedisConfig) *model.Results {
-	var results = model.InitResults()
+func (a *opstreeRedis) Upsert(ctx context.Context, redisConfig common.RedisConfig) *common.Results {
+	var results = common.InitResults()
 
-	var nextResults *model.Results
+	var nextResults *common.Results
 
-	if redisConfig.IsHighAvailability() {
+	if redisConfig.Sentinel.Enabled {
 		var desiredSentinel *redissentinelv1beta2.RedisSentinel
 		var desiredReplication *redisreplicationv1beta2.RedisReplication
 
@@ -135,10 +135,10 @@ func (a *opstreeRedis) Upsert(ctx context.Context, redisConfig model.RedisConfig
 	return results
 }
 
-func (a *opstreeRedis) Delete(ctx context.Context) *model.Results {
+func (a *opstreeRedis) Delete(ctx context.Context) *common.Results {
 	log := ctrl.LoggerFrom(ctx)
 	var err error
-	var results = model.InitResults()
+	var results = common.InitResults()
 
 	if a.standalone != nil {
 		if err = a.client.Delete(ctx, a.standalone); err != nil {
@@ -146,7 +146,7 @@ func (a *opstreeRedis) Delete(ctx context.Context) *model.Results {
 			results.AddErrors(err)
 			return results
 		}
-		results.AddStatuses(model.NewRedisStatusDetail(model.RedisStandaloneDeletedCode, a.standalone.Name))
+		results.AddStatuses(common.NewRedisStatusDetail(common.RedisStandaloneDeletedCode, a.standalone.Name))
 	}
 	if a.sentinel != nil {
 		if err = a.client.Delete(ctx, a.sentinel); err != nil {
@@ -154,7 +154,7 @@ func (a *opstreeRedis) Delete(ctx context.Context) *model.Results {
 			results.AddErrors(err)
 			return results
 		}
-		results.AddStatuses(model.NewRedisStatusDetail(model.RedisSentinelDeletedCode, a.sentinel.Name))
+		results.AddStatuses(common.NewRedisStatusDetail(common.RedisSentinelDeletedCode, a.sentinel.Name))
 	}
 	if a.replication != nil {
 		if err = a.client.Delete(ctx, a.replication); err != nil {
@@ -162,7 +162,7 @@ func (a *opstreeRedis) Delete(ctx context.Context) *model.Results {
 			results.AddErrors(err)
 			return results
 		}
-		results.AddStatuses(model.NewRedisStatusDetail(model.RedisReplicationDeletedCode, a.replication.Name))
+		results.AddStatuses(common.NewRedisStatusDetail(common.RedisReplicationDeletedCode, a.replication.Name))
 	}
 	return nil
 }

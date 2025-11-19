@@ -4,7 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/wandb/operator/internal/model"
+	"github.com/wandb/operator/internal/controller/translator/common"
+	"github.com/wandb/operator/internal/defaults"
 	miniov2 "github.com/wandb/operator/internal/vendored/minio-operator/minio.min.io/v2"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -17,18 +18,18 @@ import (
 // Handles both dev (1 server, 1 volume) and small (3 servers, 4 volumes) configurations.
 func buildDesiredTenant(
 	ctx context.Context,
-	minioConfig model.MinioConfig,
+	minioConfig common.MinioConfig,
 	owner metav1.Object,
 	scheme *runtime.Scheme,
-) (*miniov2.Tenant, *model.Results) {
+) (*miniov2.Tenant, *common.Results) {
 	log := ctrl.LoggerFrom(ctx)
-	results := model.InitResults()
+	results := common.InitResults()
 
 	// Parse storage quantity
 	storageQuantity, err := resource.ParseQuantity(minioConfig.StorageSize)
 	if err != nil {
 		log.Error(err, "invalid storage size", "storageSize", minioConfig.StorageSize)
-		results.AddErrors(model.NewMinioError(model.MinioErrFailedToCreateCode, fmt.Sprintf("invalid storage size: %v", err)))
+		results.AddErrors(common.NewMinioError(common.MinioErrFailedToCreateCode, fmt.Sprintf("invalid storage size: %v", err)))
 		return nil, results
 	}
 
@@ -42,7 +43,7 @@ func buildDesiredTenant(
 			},
 		},
 		Spec: miniov2.TenantSpec{
-			Image: model.MinioImage,
+			Image: defaults.MinioImage,
 			Configuration: &corev1.LocalObjectReference{
 				Name: TenantName + "-config",
 			},
@@ -79,7 +80,7 @@ func buildDesiredTenant(
 	// Set owner reference
 	if err := ctrl.SetControllerReference(owner, tenant, scheme); err != nil {
 		log.Error(err, "failed to set owner reference on Tenant CR")
-		results.AddErrors(model.NewMinioError(model.MinioErrFailedToCreateCode, fmt.Sprintf("failed to set owner reference: %v", err)))
+		results.AddErrors(common.NewMinioError(common.MinioErrFailedToCreateCode, fmt.Sprintf("failed to set owner reference: %v", err)))
 		return nil, results
 	}
 
@@ -89,12 +90,12 @@ func buildDesiredTenant(
 // buildDesiredSecret creates the Minio configuration secret required by the Tenant CR
 func buildDesiredSecret(
 	ctx context.Context,
-	minioConfig model.MinioConfig,
+	minioConfig common.MinioConfig,
 	owner metav1.Object,
 	scheme *runtime.Scheme,
-) (*corev1.Secret, *model.Results) {
+) (*corev1.Secret, *common.Results) {
 	log := ctrl.LoggerFrom(ctx)
-	results := model.InitResults()
+	results := common.InitResults()
 
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -115,7 +116,7 @@ export MINIO_BROWSER="on"`,
 	// Set owner reference
 	if err := ctrl.SetControllerReference(owner, secret, scheme); err != nil {
 		log.Error(err, "failed to set owner reference on config secret")
-		results.AddErrors(model.NewMinioError(model.MinioErrFailedToCreateCode, fmt.Sprintf("failed to set owner reference on secret: %v", err)))
+		results.AddErrors(common.NewMinioError(common.MinioErrFailedToCreateCode, fmt.Sprintf("failed to set owner reference on secret: %v", err)))
 		return nil, results
 	}
 

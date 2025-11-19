@@ -380,7 +380,7 @@ func (host *Host) IsTroubleshoot() bool {
 }
 
 // IsInNewCluster checks whether host is in a new cluster
-// TODO unify with model HostIsNewOne
+// TODO unify with common HostIsNewOne
 func (host *Host) IsInNewCluster() bool {
 	return !host.HasAncestor() && (host.GetCR().IEnsureStatus().GetHostsCount() == host.GetCR().IEnsureStatus().GetHostsAddedCount())
 }

@@ -1,4 +1,4 @@
-package model
+package common
 
 import (
 	"context"
@@ -6,38 +6,9 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 var _ = Describe("ClickHouse Model", func() {
-	Describe("ClickHouseConfig", func() {
-		Describe("IsHighAvailability", func() {
-			Context("when replicas is greater than 1", func() {
-				It("should return true", func() {
-					replicasOverride := int32(3)
-					config := ClickHouseConfig{Replicas: replicasOverride}
-					Expect(config.IsHighAvailability()).To(BeTrue())
-				})
-			})
-
-			Context("when replicas is equal to 1", func() {
-				It("should return false", func() {
-					replicasOverride := int32(1)
-					config := ClickHouseConfig{Replicas: replicasOverride}
-					Expect(config.IsHighAvailability()).To(BeFalse())
-				})
-			})
-
-			Context("when replicas is 0", func() {
-				It("should return false", func() {
-					replicasOverride := int32(0)
-					config := ClickHouseConfig{Replicas: replicasOverride}
-					Expect(config.IsHighAvailability()).To(BeFalse())
-				})
-			})
-		})
-	})
 
 	Describe("ClickHouse Error", func() {
 		Describe("NewClickHouseError", func() {
@@ -396,45 +367,4 @@ var _ = Describe("ClickHouse Model", func() {
 		})
 	})
 
-	Describe("BuildClickHouseDefaults", func() {
-		const testOwnerNamespace = "test-namespace"
-
-		Context("when size is Dev", func() {
-			It("should return dev defaults with 1 replica", func() {
-				config, err := BuildClickHouseDefaults(SizeDev, testOwnerNamespace)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(config.Enabled).To(BeTrue())
-				Expect(config.Version).To(Equal(ClickHouseVersion))
-				Expect(config.StorageSize).To(Equal(DevClickHouseStorageSize))
-				Expect(config.Replicas).To(Equal(int32(1)))
-				Expect(config.Namespace).To(Equal(testOwnerNamespace))
-				Expect(config.Resources.Requests).To(BeEmpty())
-				Expect(config.Resources.Limits).To(BeEmpty())
-			})
-		})
-
-		Context("when size is Small", func() {
-			It("should return small defaults with 3 replicas and resources", func() {
-				config, err := BuildClickHouseDefaults(SizeSmall, testOwnerNamespace)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(config.Enabled).To(BeTrue())
-				Expect(config.Version).To(Equal(ClickHouseVersion))
-				Expect(config.StorageSize).To(Equal(SmallClickHouseStorageSize))
-				Expect(config.Replicas).To(Equal(int32(3)))
-				Expect(config.Namespace).To(Equal(testOwnerNamespace))
-				Expect(config.Resources.Requests[v1.ResourceCPU]).To(Equal(resource.MustParse(SmallClickHouseCpuRequest)))
-				Expect(config.Resources.Limits[v1.ResourceCPU]).To(Equal(resource.MustParse(SmallClickHouseCpuLimit)))
-				Expect(config.Resources.Requests[v1.ResourceMemory]).To(Equal(resource.MustParse(SmallClickHouseMemoryRequest)))
-				Expect(config.Resources.Limits[v1.ResourceMemory]).To(Equal(resource.MustParse(SmallClickHouseMemoryLimit)))
-			})
-		})
-
-		Context("when size is invalid", func() {
-			It("should return error", func() {
-				_, err := BuildClickHouseDefaults(Size("invalid"), testOwnerNamespace)
-				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("unsupported size for ClickHouse"))
-			})
-		})
-	})
 })

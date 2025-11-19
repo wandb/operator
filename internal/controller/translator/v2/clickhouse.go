@@ -4,14 +4,15 @@ import (
 	"context"
 
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/internal/controller/translator/common"
 	"github.com/wandb/operator/internal/controller/translator/utils"
-	"github.com/wandb/operator/internal/model"
+	"github.com/wandb/operator/internal/defaults"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // BuildClickHouseConfig will create a new WBClickHouseSpec with defaultValues applied if not
 // present in actual. It should *never* be saved into the CR!
-func BuildClickHouseConfig(actual apiv2.WBClickHouseSpec, defaultConfig model.ClickHouseConfig) (model.ClickHouseConfig, error) {
+func BuildClickHouseConfig(actual apiv2.WBClickHouseSpec, defaultConfig common.ClickHouseConfig) (common.ClickHouseConfig, error) {
 	clickhouseConfig := TranslateClickHouseSpec(actual)
 
 	clickhouseConfig.StorageSize = utils.CoalesceQuantity(clickhouseConfig.StorageSize, defaultConfig.StorageSize)
@@ -25,8 +26,8 @@ func BuildClickHouseConfig(actual apiv2.WBClickHouseSpec, defaultConfig model.Cl
 	return clickhouseConfig, nil
 }
 
-func TranslateClickHouseSpec(spec apiv2.WBClickHouseSpec) model.ClickHouseConfig {
-	config := model.ClickHouseConfig{
+func TranslateClickHouseSpec(spec apiv2.WBClickHouseSpec) common.ClickHouseConfig {
+	config := common.ClickHouseConfig{
 		Enabled:     spec.Enabled,
 		Namespace:   spec.Namespace,
 		StorageSize: spec.StorageSize,
@@ -40,14 +41,14 @@ func TranslateClickHouseSpec(spec apiv2.WBClickHouseSpec) model.ClickHouseConfig
 	return config
 }
 
-func ExtractClickHouseStatus(ctx context.Context, results *model.Results) apiv2.WBClickHouseStatus {
+func ExtractClickHouseStatus(ctx context.Context, results *common.Results) apiv2.WBClickHouseStatus {
 	return TranslateClickHouseStatus(
 		ctx,
-		model.ExtractClickHouseStatus(ctx, results),
+		common.ExtractClickHouseStatus(ctx, results),
 	)
 }
 
-func TranslateClickHouseStatus(ctx context.Context, m model.ClickHouseStatus) apiv2.WBClickHouseStatus {
+func TranslateClickHouseStatus(ctx context.Context, m common.ClickHouseStatus) apiv2.WBClickHouseStatus {
 	var result apiv2.WBClickHouseStatus
 	var details []apiv2.WBStatusDetail
 
@@ -84,13 +85,13 @@ func TranslateClickHouseStatus(ctx context.Context, m model.ClickHouseStatus) ap
 
 func translateClickHouseStatusCode(code string) apiv2.WBStateType {
 	switch code {
-	case string(model.ClickHouseCreatedCode):
+	case string(common.ClickHouseCreatedCode):
 		return apiv2.WBStateUpdating
-	case string(model.ClickHouseUpdatedCode):
+	case string(common.ClickHouseUpdatedCode):
 		return apiv2.WBStateUpdating
-	case string(model.ClickHouseDeletedCode):
+	case string(common.ClickHouseDeletedCode):
 		return apiv2.WBStateDeleting
-	case string(model.ClickHouseConnectionCode):
+	case string(common.ClickHouseConnectionCode):
 		return apiv2.WBStateReady
 	default:
 		return apiv2.WBStateUnknown
@@ -99,16 +100,16 @@ func translateClickHouseStatusCode(code string) apiv2.WBStateType {
 
 func (i *InfraConfigBuilder) AddClickHouseConfig(actual apiv2.WBClickHouseSpec) *InfraConfigBuilder {
 	var err error
-	var size model.Size
-	var defaultConfig model.ClickHouseConfig
-	var mergedConfig model.ClickHouseConfig
+	var size common.Size
+	var defaultConfig common.ClickHouseConfig
+	var mergedConfig common.ClickHouseConfig
 
 	size, err = ToModelSize(i.size)
 	if err != nil {
 		i.errors = append(i.errors, err)
 		return i
 	}
-	defaultConfig, err = model.BuildClickHouseDefaults(size, i.ownerNamespace)
+	defaultConfig, err = defaults.BuildClickHouseDefaults(size, i.ownerNamespace)
 	if err != nil {
 		i.errors = append(i.errors, err)
 		return i

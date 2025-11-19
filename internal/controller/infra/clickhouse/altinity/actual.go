@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/wandb/operator/internal/model"
+	"github.com/wandb/operator/internal/controller/translator/common"
 	chiv1 "github.com/wandb/operator/internal/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -16,7 +16,7 @@ import (
 
 type altinityClickHouse struct {
 	chi    *chiv1.ClickHouseInstallation
-	config model.ClickHouseConfig
+	config common.ClickHouseConfig
 	client client.Client
 	owner  metav1.Object
 	scheme *runtime.Scheme
@@ -26,7 +26,7 @@ type altinityClickHouse struct {
 func Initialize(
 	ctx context.Context,
 	client client.Client,
-	clickhouseConfig model.ClickHouseConfig,
+	clickhouseConfig common.ClickHouseConfig,
 	owner metav1.Object,
 	scheme *runtime.Scheme,
 ) (*altinityClickHouse, error) {
@@ -60,9 +60,9 @@ func Initialize(
 }
 
 // Upsert creates or updates ClickHouseInstallation CR based on whether it exists
-func (a *altinityClickHouse) Upsert(ctx context.Context, clickhouseConfig model.ClickHouseConfig) *model.Results {
-	results := model.InitResults()
-	var nextResults *model.Results
+func (a *altinityClickHouse) Upsert(ctx context.Context, clickhouseConfig common.ClickHouseConfig) *common.Results {
+	results := common.InitResults()
+	var nextResults *common.Results
 
 	// Build desired CHI CR
 	desiredCHI, nextResults := buildDesiredCHI(ctx, clickhouseConfig, a.owner, a.scheme)
@@ -84,21 +84,21 @@ func (a *altinityClickHouse) Upsert(ctx context.Context, clickhouseConfig model.
 }
 
 // Delete removes ClickHouseInstallation CR
-func (a *altinityClickHouse) Delete(ctx context.Context) *model.Results {
+func (a *altinityClickHouse) Delete(ctx context.Context) *common.Results {
 	log := ctrl.LoggerFrom(ctx)
-	results := model.InitResults()
+	results := common.InitResults()
 
 	// Delete CHI CR
 	if a.chi != nil {
 		if err := a.client.Delete(ctx, a.chi); err != nil {
 			log.Error(err, "Failed to delete CHI CR")
-			results.AddErrors(model.NewClickHouseError(
-				model.ClickHouseErrFailedToDeleteCode,
+			results.AddErrors(common.NewClickHouseError(
+				common.ClickHouseErrFailedToDeleteCode,
 				fmt.Sprintf("failed to delete CHI: %v", err),
 			))
 			return results
 		}
-		results.AddStatuses(model.NewClickHouseStatusDetail(model.ClickHouseDeletedCode, CHIName))
+		results.AddStatuses(common.NewClickHouseStatusDetail(common.ClickHouseDeletedCode, CHIName))
 	}
 
 	return results

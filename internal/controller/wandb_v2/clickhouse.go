@@ -6,19 +6,19 @@ import (
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/infra/clickhouse"
 	"github.com/wandb/operator/internal/controller/infra/clickhouse/altinity"
+	"github.com/wandb/operator/internal/controller/translator/common"
 	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
-	"github.com/wandb/operator/internal/model"
 )
 
 func (r *WeightsAndBiasesV2Reconciler) reconcileClickHouse(
 	ctx context.Context,
 	infraDetails translatorv2.InfraConfig,
 	wandb *apiv2.WeightsAndBiases,
-) *model.Results {
+) *common.Results {
 	var err error
-	var results = &model.Results{}
-	var nextResults *model.Results
-	var clickhouseConfig model.ClickHouseConfig
+	var results = &common.Results{}
+	var nextResults *common.Results
+	var clickhouseConfig common.ClickHouseConfig
 	var actual clickhouse.ActualClickHouse
 
 	if clickhouseConfig, err = infraDetails.GetClickHouseConfig(); err != nil {

@@ -6,16 +6,17 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	apiv2 "github.com/wandb/operator/api/v2"
-	"github.com/wandb/operator/internal/model"
+	"github.com/wandb/operator/internal/controller/translator/common"
+	"github.com/wandb/operator/internal/defaults"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 var (
-	defaultSmallKafkaCpuRequest    = resource.MustParse(model.SmallKafkaCpuRequest)
-	defaultSmallKafkaCpuLimit      = resource.MustParse(model.SmallKafkaCpuLimit)
-	defaultSmallKafkaMemoryRequest = resource.MustParse(model.SmallKafkaMemoryRequest)
-	defaultSmallKafkaMemoryLimit   = resource.MustParse(model.SmallKafkaMemoryLimit)
+	defaultSmallKafkaCpuRequest    = resource.MustParse(defaults.SmallKafkaCpuRequest)
+	defaultSmallKafkaCpuLimit      = resource.MustParse(defaults.SmallKafkaCpuLimit)
+	defaultSmallKafkaMemoryRequest = resource.MustParse(defaults.SmallKafkaMemoryRequest)
+	defaultSmallKafkaMemoryLimit   = resource.MustParse(defaults.SmallKafkaMemoryLimit)
 
 	overrideKafkaStorageSize   = "20Gi"
 	overrideKafkaNamespace     = "custom-namespace"
@@ -31,7 +32,7 @@ var _ = Describe("BuildKafkaConfig", func() {
 		Context("when actual Config is nil", func() {
 			It("should use default Config resources", func() {
 				actual := apiv2.WBKafkaSpec{Config: nil}
-				defaultConfig := model.KafkaConfig{
+				defaultConfig := common.KafkaConfig{
 					Resources: corev1.ResourceRequirements{
 						Requests: corev1.ResourceList{
 							corev1.ResourceCPU:    defaultSmallKafkaCpuRequest,
@@ -58,7 +59,7 @@ var _ = Describe("BuildKafkaConfig", func() {
 						},
 					},
 				}
-				defaultConfig := model.KafkaConfig{
+				defaultConfig := common.KafkaConfig{
 					Resources: corev1.ResourceRequirements{
 						Requests: corev1.ResourceList{
 							corev1.ResourceCPU:    defaultSmallKafkaCpuRequest,
@@ -79,18 +80,18 @@ var _ = Describe("BuildKafkaConfig", func() {
 		Context("when actual StorageSize is empty", func() {
 			It("should use default StorageSize", func() {
 				actual := apiv2.WBKafkaSpec{StorageSize: ""}
-				defaultConfig := model.KafkaConfig{StorageSize: model.SmallKafkaStorageSize}
+				defaultConfig := common.KafkaConfig{StorageSize: defaults.SmallKafkaStorageSize}
 
 				result, err := BuildKafkaConfig(actual, defaultConfig)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(result.StorageSize).To(Equal(model.SmallKafkaStorageSize))
+				Expect(result.StorageSize).To(Equal(defaults.SmallKafkaStorageSize))
 			})
 		})
 
 		Context("when actual StorageSize is set", func() {
 			It("should use actual StorageSize", func() {
 				actual := apiv2.WBKafkaSpec{StorageSize: overrideKafkaStorageSize}
-				defaultConfig := model.KafkaConfig{StorageSize: model.SmallKafkaStorageSize}
+				defaultConfig := common.KafkaConfig{StorageSize: defaults.SmallKafkaStorageSize}
 
 				result, err := BuildKafkaConfig(actual, defaultConfig)
 				Expect(err).ToNot(HaveOccurred())
@@ -101,7 +102,7 @@ var _ = Describe("BuildKafkaConfig", func() {
 		Context("when both StorageSize values are empty", func() {
 			It("should result in empty StorageSize", func() {
 				actual := apiv2.WBKafkaSpec{StorageSize: ""}
-				defaultConfig := model.KafkaConfig{StorageSize: ""}
+				defaultConfig := common.KafkaConfig{StorageSize: ""}
 
 				result, err := BuildKafkaConfig(actual, defaultConfig)
 				Expect(err).ToNot(HaveOccurred())
@@ -114,7 +115,7 @@ var _ = Describe("BuildKafkaConfig", func() {
 		Context("when actual Namespace is empty", func() {
 			It("should use default Namespace", func() {
 				actual := apiv2.WBKafkaSpec{Namespace: ""}
-				defaultConfig := model.KafkaConfig{Namespace: overrideKafkaNamespace}
+				defaultConfig := common.KafkaConfig{Namespace: overrideKafkaNamespace}
 
 				result, err := BuildKafkaConfig(actual, defaultConfig)
 				Expect(err).ToNot(HaveOccurred())
@@ -125,7 +126,7 @@ var _ = Describe("BuildKafkaConfig", func() {
 		Context("when actual Namespace is set", func() {
 			It("should use actual Namespace", func() {
 				actual := apiv2.WBKafkaSpec{Namespace: overrideKafkaNamespace}
-				defaultConfig := model.KafkaConfig{Namespace: "default-namespace"}
+				defaultConfig := common.KafkaConfig{Namespace: "default-namespace"}
 
 				result, err := BuildKafkaConfig(actual, defaultConfig)
 				Expect(err).ToNot(HaveOccurred())
@@ -138,7 +139,7 @@ var _ = Describe("BuildKafkaConfig", func() {
 		Context("when actual Enabled is true", func() {
 			It("should use actual value regardless of default", func() {
 				actual := apiv2.WBKafkaSpec{Enabled: true}
-				defaultConfig := model.KafkaConfig{Enabled: false}
+				defaultConfig := common.KafkaConfig{Enabled: false}
 
 				result, err := BuildKafkaConfig(actual, defaultConfig)
 				Expect(err).ToNot(HaveOccurred())
@@ -149,7 +150,7 @@ var _ = Describe("BuildKafkaConfig", func() {
 		Context("when actual Enabled is false", func() {
 			It("should use actual value regardless of default", func() {
 				actual := apiv2.WBKafkaSpec{Enabled: false}
-				defaultConfig := model.KafkaConfig{Enabled: true}
+				defaultConfig := common.KafkaConfig{Enabled: true}
 
 				result, err := BuildKafkaConfig(actual, defaultConfig)
 				Expect(err).ToNot(HaveOccurred())
@@ -163,7 +164,7 @@ var _ = Describe("InfraConfigBuilder.AddKafkaConfig", func() {
 	const testOwnerNamespace = "test-namespace"
 
 	Context("when adding dev size spec", func() {
-		It("should merge actual with dev defaults from model", func() {
+		It("should merge actual with dev defaults from common", func() {
 			actual := apiv2.WBKafkaSpec{
 				Enabled: true,
 			}
@@ -175,7 +176,7 @@ var _ = Describe("InfraConfigBuilder.AddKafkaConfig", func() {
 			Expect(builder.errors).To(BeEmpty())
 			Expect(builder.mergedKafka.Enabled).To(BeTrue())
 			Expect(builder.mergedKafka.Namespace).To(Equal(testOwnerNamespace))
-			Expect(builder.mergedKafka.StorageSize).To(Equal(model.DevKafkaStorageSize))
+			Expect(builder.mergedKafka.StorageSize).To(Equal(defaults.DevKafkaStorageSize))
 		})
 	})
 
@@ -212,7 +213,7 @@ var _ = Describe("InfraConfigBuilder.AddKafkaConfig", func() {
 			Expect(builder.mergedKafka.Namespace).ToNot(Equal(testOwnerNamespace))
 
 			Expect(builder.mergedKafka.StorageSize).To(Equal(overrideKafkaStorageSize))
-			Expect(builder.mergedKafka.StorageSize).ToNot(Equal(model.SmallKafkaStorageSize))
+			Expect(builder.mergedKafka.StorageSize).ToNot(Equal(defaults.SmallKafkaStorageSize))
 
 			Expect(builder.mergedKafka.Resources.Requests[corev1.ResourceCPU]).To(Equal(overrideKafkaCpuRequest))
 			Expect(builder.mergedKafka.Resources.Requests[corev1.ResourceCPU]).ToNot(Equal(defaultSmallKafkaCpuRequest))
@@ -241,7 +242,7 @@ var _ = Describe("InfraConfigBuilder.AddKafkaConfig", func() {
 			Expect(result).To(Equal(builder))
 			Expect(builder.errors).To(BeEmpty())
 			Expect(builder.mergedKafka.StorageSize).To(Equal(overrideKafkaStorageSize))
-			Expect(builder.mergedKafka.StorageSize).ToNot(Equal(model.SmallKafkaStorageSize))
+			Expect(builder.mergedKafka.StorageSize).ToNot(Equal(defaults.SmallKafkaStorageSize))
 		})
 	})
 
@@ -314,7 +315,7 @@ var _ = Describe("InfraConfigBuilder.AddKafkaConfig", func() {
 
 var _ = Describe("TranslateKafkaSpec", func() {
 	Context("when translating a complete Kafka spec", func() {
-		It("should correctly map all fields to model.KafkaConfig", func() {
+		It("should correctly map all fields to common.KafkaConfig", func() {
 			spec := apiv2.WBKafkaSpec{
 				Enabled:     true,
 				Namespace:   overrideKafkaNamespace,
@@ -351,11 +352,11 @@ var _ = Describe("TranslateKafkaStatus", func() {
 		ctx = context.Background()
 	})
 
-	Context("when model status has no errors or details", func() {
+	Context("when common status has no errors or details", func() {
 		It("should return ready status when Ready is true", func() {
-			modelStatus := model.KafkaStatus{
+			modelStatus := common.KafkaStatus{
 				Ready: true,
-				Connection: model.KafkaConnection{
+				Connection: common.KafkaConnection{
 					Host: "kafka.example.com",
 					Port: "9092",
 				},
@@ -372,7 +373,7 @@ var _ = Describe("TranslateKafkaStatus", func() {
 		})
 
 		It("should return unknown status when Ready is false", func() {
-			modelStatus := model.KafkaStatus{
+			modelStatus := common.KafkaStatus{
 				Ready: false,
 			}
 
@@ -384,13 +385,13 @@ var _ = Describe("TranslateKafkaStatus", func() {
 		})
 	})
 
-	Context("when model status has errors", func() {
+	Context("when common status has errors", func() {
 		It("should translate errors to status details with Error state", func() {
-			modelStatus := model.KafkaStatus{
+			modelStatus := common.KafkaStatus{
 				Ready: false,
-				Errors: []model.KafkaInfraError{
-					{InfraError: model.NewKafkaError(model.KafkaErrFailedToCreateCode, "creation failed")},
-					{InfraError: model.NewKafkaError(model.KafkaErrFailedToUpdateCode, "update failed")},
+				Errors: []common.KafkaInfraError{
+					{InfraError: common.NewKafkaError(common.KafkaErrFailedToCreateCode, "creation failed")},
+					{InfraError: common.NewKafkaError(common.KafkaErrFailedToUpdateCode, "update failed")},
 				},
 			}
 
@@ -400,20 +401,20 @@ var _ = Describe("TranslateKafkaStatus", func() {
 			Expect(result.State).To(Equal(apiv2.WBStateError))
 			Expect(result.Details).To(HaveLen(2))
 			Expect(result.Details[0].State).To(Equal(apiv2.WBStateError))
-			Expect(result.Details[0].Code).To(Equal(string(model.KafkaErrFailedToCreateCode)))
+			Expect(result.Details[0].Code).To(Equal(string(common.KafkaErrFailedToCreateCode)))
 			Expect(result.Details[0].Message).To(Equal("creation failed"))
 			Expect(result.Details[1].State).To(Equal(apiv2.WBStateError))
-			Expect(result.Details[1].Code).To(Equal(string(model.KafkaErrFailedToUpdateCode)))
+			Expect(result.Details[1].Code).To(Equal(string(common.KafkaErrFailedToUpdateCode)))
 			Expect(result.Details[1].Message).To(Equal("update failed"))
 		})
 	})
 
-	Context("when model status has status details", func() {
+	Context("when common status has status details", func() {
 		It("should translate KafkaCreated to Updating state", func() {
-			modelStatus := model.KafkaStatus{
+			modelStatus := common.KafkaStatus{
 				Ready: false,
-				Details: []model.KafkaStatusDetail{
-					{InfraStatusDetail: model.NewKafkaStatusDetail(model.KafkaCreatedCode, "Kafka created")},
+				Details: []common.KafkaStatusDetail{
+					{InfraStatusDetail: common.NewKafkaStatusDetail(common.KafkaCreatedCode, "Kafka created")},
 				},
 			}
 
@@ -421,15 +422,15 @@ var _ = Describe("TranslateKafkaStatus", func() {
 
 			Expect(result.Details).To(HaveLen(1))
 			Expect(result.Details[0].State).To(Equal(apiv2.WBStateUpdating))
-			Expect(result.Details[0].Code).To(Equal(string(model.KafkaCreatedCode)))
+			Expect(result.Details[0].Code).To(Equal(string(common.KafkaCreatedCode)))
 			Expect(result.State).To(Equal(apiv2.WBStateUpdating))
 		})
 
 		It("should translate KafkaUpdated to Updating state", func() {
-			modelStatus := model.KafkaStatus{
+			modelStatus := common.KafkaStatus{
 				Ready: false,
-				Details: []model.KafkaStatusDetail{
-					{InfraStatusDetail: model.NewKafkaStatusDetail(model.KafkaUpdatedCode, "Kafka updated")},
+				Details: []common.KafkaStatusDetail{
+					{InfraStatusDetail: common.NewKafkaStatusDetail(common.KafkaUpdatedCode, "Kafka updated")},
 				},
 			}
 
@@ -440,10 +441,10 @@ var _ = Describe("TranslateKafkaStatus", func() {
 		})
 
 		It("should translate KafkaDeleted to Deleting state", func() {
-			modelStatus := model.KafkaStatus{
+			modelStatus := common.KafkaStatus{
 				Ready: false,
-				Details: []model.KafkaStatusDetail{
-					{InfraStatusDetail: model.NewKafkaStatusDetail(model.KafkaDeletedCode, "Kafka deleted")},
+				Details: []common.KafkaStatusDetail{
+					{InfraStatusDetail: common.NewKafkaStatusDetail(common.KafkaDeletedCode, "Kafka deleted")},
 				},
 			}
 
@@ -454,10 +455,10 @@ var _ = Describe("TranslateKafkaStatus", func() {
 		})
 
 		It("should translate KafkaNodePoolCreated to Updating state", func() {
-			modelStatus := model.KafkaStatus{
+			modelStatus := common.KafkaStatus{
 				Ready: false,
-				Details: []model.KafkaStatusDetail{
-					{InfraStatusDetail: model.NewKafkaStatusDetail(model.KafkaNodePoolCreatedCode, "NodePool created")},
+				Details: []common.KafkaStatusDetail{
+					{InfraStatusDetail: common.NewKafkaStatusDetail(common.KafkaNodePoolCreatedCode, "NodePool created")},
 				},
 			}
 
@@ -468,10 +469,10 @@ var _ = Describe("TranslateKafkaStatus", func() {
 		})
 
 		It("should translate KafkaNodePoolUpdated to Updating state", func() {
-			modelStatus := model.KafkaStatus{
+			modelStatus := common.KafkaStatus{
 				Ready: false,
-				Details: []model.KafkaStatusDetail{
-					{InfraStatusDetail: model.NewKafkaStatusDetail(model.KafkaNodePoolUpdatedCode, "NodePool updated")},
+				Details: []common.KafkaStatusDetail{
+					{InfraStatusDetail: common.NewKafkaStatusDetail(common.KafkaNodePoolUpdatedCode, "NodePool updated")},
 				},
 			}
 
@@ -482,10 +483,10 @@ var _ = Describe("TranslateKafkaStatus", func() {
 		})
 
 		It("should translate KafkaNodePoolDeleted to Deleting state", func() {
-			modelStatus := model.KafkaStatus{
+			modelStatus := common.KafkaStatus{
 				Ready: false,
-				Details: []model.KafkaStatusDetail{
-					{InfraStatusDetail: model.NewKafkaStatusDetail(model.KafkaNodePoolDeletedCode, "NodePool deleted")},
+				Details: []common.KafkaStatusDetail{
+					{InfraStatusDetail: common.NewKafkaStatusDetail(common.KafkaNodePoolDeletedCode, "NodePool deleted")},
 				},
 			}
 
@@ -496,10 +497,10 @@ var _ = Describe("TranslateKafkaStatus", func() {
 		})
 
 		It("should translate KafkaConnection to Ready state", func() {
-			modelStatus := model.KafkaStatus{
+			modelStatus := common.KafkaStatus{
 				Ready: true,
-				Details: []model.KafkaStatusDetail{
-					{InfraStatusDetail: model.NewKafkaStatusDetail(model.KafkaConnectionCode, "connection established")},
+				Details: []common.KafkaStatusDetail{
+					{InfraStatusDetail: common.NewKafkaStatusDetail(common.KafkaConnectionCode, "connection established")},
 				},
 			}
 
@@ -510,15 +511,15 @@ var _ = Describe("TranslateKafkaStatus", func() {
 		})
 	})
 
-	Context("when model status has both errors and details", func() {
+	Context("when common status has both errors and details", func() {
 		It("should use worst state according to WorseThan", func() {
-			modelStatus := model.KafkaStatus{
+			modelStatus := common.KafkaStatus{
 				Ready: false,
-				Errors: []model.KafkaInfraError{
-					{InfraError: model.NewKafkaError(model.KafkaErrFailedToCreateCode, "creation failed")},
+				Errors: []common.KafkaInfraError{
+					{InfraError: common.NewKafkaError(common.KafkaErrFailedToCreateCode, "creation failed")},
 				},
-				Details: []model.KafkaStatusDetail{
-					{InfraStatusDetail: model.NewKafkaStatusDetail(model.KafkaCreatedCode, "Kafka created")},
+				Details: []common.KafkaStatusDetail{
+					{InfraStatusDetail: common.NewKafkaStatusDetail(common.KafkaCreatedCode, "Kafka created")},
 				},
 			}
 
@@ -529,13 +530,13 @@ var _ = Describe("TranslateKafkaStatus", func() {
 		})
 	})
 
-	Context("when model status has multiple details with different states", func() {
+	Context("when common status has multiple details with different states", func() {
 		It("should compute worst state correctly", func() {
-			modelStatus := model.KafkaStatus{
+			modelStatus := common.KafkaStatus{
 				Ready: false,
-				Details: []model.KafkaStatusDetail{
-					{InfraStatusDetail: model.NewKafkaStatusDetail(model.KafkaUpdatedCode, "updating")},
-					{InfraStatusDetail: model.NewKafkaStatusDetail(model.KafkaDeletedCode, "deleting")},
+				Details: []common.KafkaStatusDetail{
+					{InfraStatusDetail: common.NewKafkaStatusDetail(common.KafkaUpdatedCode, "updating")},
+					{InfraStatusDetail: common.NewKafkaStatusDetail(common.KafkaDeletedCode, "deleting")},
 				},
 			}
 

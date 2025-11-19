@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/wandb/operator/internal/model"
+	"github.com/wandb/operator/internal/controller/translator/common"
 	v1beta3 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1beta2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -16,12 +16,12 @@ import (
 // In KRaft mode with node pools, the Kafka.Spec.Kafka.Replicas MUST be 0.
 func buildDesiredKafka(
 	ctx context.Context,
-	kafkaConfig model.KafkaConfig,
+	kafkaConfig common.KafkaConfig,
 	owner metav1.Object,
 	scheme *runtime.Scheme,
-) (*v1beta3.Kafka, *model.Results) {
+) (*v1beta3.Kafka, *common.Results) {
 	log := ctrl.LoggerFrom(ctx)
-	results := model.InitResults()
+	results := common.InitResults()
 
 	kafka := &v1beta3.Kafka{
 		ObjectMeta: metav1.ObjectMeta{
@@ -61,7 +61,7 @@ func buildDesiredKafka(
 	// Set owner reference
 	if err := ctrl.SetControllerReference(owner, kafka, scheme); err != nil {
 		log.Error(err, "failed to set owner reference on Kafka CR")
-		results.AddErrors(model.NewKafkaError(model.KafkaErrFailedToCreateCode, fmt.Sprintf("failed to set owner reference: %v", err)))
+		results.AddErrors(common.NewKafkaError(common.KafkaErrFailedToCreateCode, fmt.Sprintf("failed to set owner reference: %v", err)))
 		return nil, results
 	}
 
@@ -69,7 +69,7 @@ func buildDesiredKafka(
 }
 
 // buildKafkaConfig generates the Kafka configuration map based on replication settings
-func buildKafkaConfig(kafkaConfig model.KafkaConfig) map[string]string {
+func buildKafkaConfig(kafkaConfig common.KafkaConfig) map[string]string {
 	return map[string]string{
 		"offsets.topic.replication.factor":         strconv.Itoa(int(kafkaConfig.ReplicationConfig.OffsetsTopicRF)),
 		"transaction.state.log.replication.factor": strconv.Itoa(int(kafkaConfig.ReplicationConfig.TransactionStateRF)),
@@ -83,12 +83,12 @@ func buildKafkaConfig(kafkaConfig model.KafkaConfig) map[string]string {
 // The node pool contains the actual replica count and runs in KRaft mode with broker and controller roles.
 func buildDesiredNodePool(
 	ctx context.Context,
-	kafkaConfig model.KafkaConfig,
+	kafkaConfig common.KafkaConfig,
 	owner metav1.Object,
 	scheme *runtime.Scheme,
-) (*v1beta3.KafkaNodePool, *model.Results) {
+) (*v1beta3.KafkaNodePool, *common.Results) {
 	log := ctrl.LoggerFrom(ctx)
-	results := model.InitResults()
+	results := common.InitResults()
 
 	nodePool := &v1beta3.KafkaNodePool{
 		ObjectMeta: metav1.ObjectMeta{
@@ -123,7 +123,7 @@ func buildDesiredNodePool(
 	// Set owner reference
 	if err := ctrl.SetControllerReference(owner, nodePool, scheme); err != nil {
 		log.Error(err, "failed to set owner reference on KafkaNodePool CR")
-		results.AddErrors(model.NewKafkaError(model.KafkaErrFailedToCreateCode, fmt.Sprintf("failed to set owner reference: %v", err)))
+		results.AddErrors(common.NewKafkaError(common.KafkaErrFailedToCreateCode, fmt.Sprintf("failed to set owner reference: %v", err)))
 		return nil, results
 	}
 

@@ -1,4 +1,4 @@
-package model
+package common
 
 import (
 	"context"
@@ -6,37 +6,9 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 var _ = Describe("Redis Model", func() {
-	Describe("RedisConfig", func() {
-		Describe("IsHighAvailability", func() {
-			Context("when Sentinel is enabled", func() {
-				It("should return true", func() {
-					config := RedisConfig{
-						Sentinel: SentinelConfig{
-							Enabled: true,
-						},
-					}
-					Expect(config.IsHighAvailability()).To(BeTrue())
-				})
-			})
-
-			Context("when Sentinel is not enabled", func() {
-				It("should return false", func() {
-					config := RedisConfig{
-						Sentinel: SentinelConfig{
-							Enabled: false,
-						},
-					}
-					Expect(config.IsHighAvailability()).To(BeFalse())
-				})
-			})
-		})
-	})
-
 	Describe("Redis Error", func() {
 		Describe("NewRedisError", func() {
 			It("should create error with correct fields", func() {
@@ -332,52 +304,6 @@ var _ = Describe("Redis Model", func() {
 				Expect(status.Ready).To(BeFalse())
 				Expect(status.Errors).To(HaveLen(1))
 				Expect(status.Details).To(HaveLen(1))
-			})
-		})
-	})
-
-	Describe("BuildRedisDefaults", func() {
-		const testOwnerNamespace = "test-namespace"
-
-		Context("when size is Dev", func() {
-			It("should return a redis config with storage only and no sentinel", func() {
-				config, err := BuildRedisDefaults(SizeDev, testOwnerNamespace)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(config.Enabled).To(BeTrue())
-				Expect(config.Namespace).To(Equal(testOwnerNamespace))
-				Expect(config.StorageSize).To(Equal(resource.MustParse(DevStorageRequest)))
-				Expect(config.Sentinel.Enabled).To(BeFalse())
-				Expect(config.Requests).To(BeEmpty())
-				Expect(config.Limits).To(BeEmpty())
-			})
-		})
-
-		Context("when size is Small", func() {
-			It("should return a redis config with full resource requirements and sentinel", func() {
-				config, err := BuildRedisDefaults(SizeSmall, testOwnerNamespace)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(config.Enabled).To(BeTrue())
-				Expect(config.Namespace).To(Equal(testOwnerNamespace))
-				Expect(config.StorageSize).To(Equal(resource.MustParse(SmallStorageRequest)))
-				Expect(config.Requests[v1.ResourceCPU]).To(Equal(resource.MustParse(SmallReplicaCpuRequest)))
-				Expect(config.Limits[v1.ResourceCPU]).To(Equal(resource.MustParse(SmallReplicaCpuLimit)))
-				Expect(config.Requests[v1.ResourceMemory]).To(Equal(resource.MustParse(SmallReplicaMemoryRequest)))
-				Expect(config.Limits[v1.ResourceMemory]).To(Equal(resource.MustParse(SmallReplicaMemoryLimit)))
-				Expect(config.Sentinel.Enabled).To(BeTrue())
-				Expect(config.Sentinel.MasterGroupName).To(Equal(DefaultSentinelGroup))
-				Expect(config.Sentinel.ReplicaCount).To(Equal(ReplicaSentinelCount))
-				Expect(config.Sentinel.Requests[v1.ResourceCPU]).To(Equal(resource.MustParse(SmallSentinelCpuRequest)))
-				Expect(config.Sentinel.Limits[v1.ResourceCPU]).To(Equal(resource.MustParse(SmallSentinelCpuLimit)))
-				Expect(config.Sentinel.Requests[v1.ResourceMemory]).To(Equal(resource.MustParse(SmallSentinelMemoryRequest)))
-				Expect(config.Sentinel.Limits[v1.ResourceMemory]).To(Equal(resource.MustParse(SmallSentinelMemoryLimit)))
-			})
-		})
-
-		Context("when size is invalid", func() {
-			It("should return an error", func() {
-				_, err := BuildRedisDefaults(Size("invalid"), testOwnerNamespace)
-				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("invalid profile"))
 			})
 		})
 	})

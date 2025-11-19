@@ -3,7 +3,7 @@ package kafka
 import (
 	"context"
 
-	"github.com/wandb/operator/internal/model"
+	"github.com/wandb/operator/internal/controller/translator/common"
 )
 
 type Kafka interface {
@@ -12,8 +12,8 @@ type Kafka interface {
 }
 
 type ActualKafka interface {
-	Upsert(ctx context.Context, kafkaConfig model.KafkaConfig) *model.Results
-	Delete(ctx context.Context) *model.Results
+	Upsert(ctx context.Context, kafkaConfig common.KafkaConfig) *common.Results
+	Delete(ctx context.Context) *common.Results
 }
 
 type DesiredKafka interface{}

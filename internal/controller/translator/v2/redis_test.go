@@ -6,20 +6,21 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	apiv2 "github.com/wandb/operator/api/v2"
-	"github.com/wandb/operator/internal/model"
+	"github.com/wandb/operator/internal/controller/translator/common"
+	"github.com/wandb/operator/internal/defaults"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 var (
-	defaultSmallRedisCpuRequest       = resource.MustParse(model.SmallReplicaCpuRequest)
-	defaultSmallRedisCpuLimit         = resource.MustParse(model.SmallReplicaCpuLimit)
-	defaultSmallRedisMemoryRequest    = resource.MustParse(model.SmallReplicaMemoryRequest)
-	defaultSmallRedisMemoryLimit      = resource.MustParse(model.SmallReplicaMemoryLimit)
-	defaultSmallSentinelCpuRequest    = resource.MustParse(model.SmallSentinelCpuRequest)
-	defaultSmallSentinelCpuLimit      = resource.MustParse(model.SmallSentinelCpuLimit)
-	defaultSmallSentinelMemoryRequest = resource.MustParse(model.SmallSentinelMemoryRequest)
-	defaultSmallSentinelMemoryLimit   = resource.MustParse(model.SmallSentinelMemoryLimit)
+	defaultSmallRedisCpuRequest       = resource.MustParse(defaults.SmallReplicaCpuRequest)
+	defaultSmallRedisCpuLimit         = resource.MustParse(defaults.SmallReplicaCpuLimit)
+	defaultSmallRedisMemoryRequest    = resource.MustParse(defaults.SmallReplicaMemoryRequest)
+	defaultSmallRedisMemoryLimit      = resource.MustParse(defaults.SmallReplicaMemoryLimit)
+	defaultSmallSentinelCpuRequest    = resource.MustParse(defaults.SmallSentinelCpuRequest)
+	defaultSmallSentinelCpuLimit      = resource.MustParse(defaults.SmallSentinelCpuLimit)
+	defaultSmallSentinelMemoryRequest = resource.MustParse(defaults.SmallSentinelMemoryRequest)
+	defaultSmallSentinelMemoryLimit   = resource.MustParse(defaults.SmallSentinelMemoryLimit)
 
 	overrideRedisStorageSize      = "10Gi"
 	overrideRedisNamespace        = "custom-namespace"
@@ -43,10 +44,10 @@ var _ = Describe("BuildRedisConfig", func() {
 				actual := apiv2.WBRedisSpec{
 					Sentinel: nil,
 				}
-				defaultConfig := model.RedisConfig{
-					Sentinel: model.SentinelConfig{
+				defaultConfig := common.RedisConfig{
+					Sentinel: common.SentinelConfig{
 						Enabled:         true,
-						MasterGroupName: model.DefaultSentinelGroup,
+						MasterGroupName: defaults.DefaultSentinelGroup,
 						Requests: corev1.ResourceList{
 							corev1.ResourceCPU: defaultSmallSentinelCpuRequest,
 						},
@@ -75,10 +76,10 @@ var _ = Describe("BuildRedisConfig", func() {
 						},
 					},
 				}
-				defaultConfig := model.RedisConfig{
-					Sentinel: model.SentinelConfig{
+				defaultConfig := common.RedisConfig{
+					Sentinel: common.SentinelConfig{
 						Enabled:         false,
-						MasterGroupName: model.DefaultSentinelGroup,
+						MasterGroupName: defaults.DefaultSentinelGroup,
 						Requests: corev1.ResourceList{
 							corev1.ResourceCPU:    defaultSmallSentinelCpuRequest,
 							corev1.ResourceMemory: defaultSmallSentinelMemoryRequest,
@@ -102,7 +103,7 @@ var _ = Describe("BuildRedisConfig", func() {
 				actual := apiv2.WBRedisSpec{
 					Config: nil,
 				}
-				defaultConfig := model.RedisConfig{
+				defaultConfig := common.RedisConfig{
 					Requests: corev1.ResourceList{
 						corev1.ResourceCPU:    defaultSmallRedisCpuRequest,
 						corev1.ResourceMemory: defaultSmallRedisMemoryRequest,
@@ -136,7 +137,7 @@ var _ = Describe("BuildRedisConfig", func() {
 						},
 					},
 				}
-				defaultConfig := model.RedisConfig{
+				defaultConfig := common.RedisConfig{
 					Requests: corev1.ResourceList{
 						corev1.ResourceCPU:    defaultSmallRedisCpuRequest,
 						corev1.ResourceMemory: defaultSmallRedisMemoryRequest,
@@ -163,7 +164,7 @@ var _ = Describe("BuildRedisConfig", func() {
 				actual := apiv2.WBRedisSpec{
 					StorageSize: "",
 				}
-				defaultConfig := model.RedisConfig{
+				defaultConfig := common.RedisConfig{
 					StorageSize: resource.MustParse(overrideRedisStorageSize),
 				}
 
@@ -178,8 +179,8 @@ var _ = Describe("BuildRedisConfig", func() {
 				actual := apiv2.WBRedisSpec{
 					StorageSize: overrideRedisStorageSize,
 				}
-				defaultConfig := model.RedisConfig{
-					StorageSize: resource.MustParse(model.SmallStorageRequest),
+				defaultConfig := common.RedisConfig{
+					StorageSize: resource.MustParse(defaults.SmallStorageRequest),
 				}
 
 				result, err := BuildRedisConfig(actual, defaultConfig)
@@ -193,7 +194,7 @@ var _ = Describe("BuildRedisConfig", func() {
 				actual := apiv2.WBRedisSpec{
 					StorageSize: "",
 				}
-				defaultConfig := model.RedisConfig{
+				defaultConfig := common.RedisConfig{
 					StorageSize: resource.Quantity{},
 				}
 
@@ -210,7 +211,7 @@ var _ = Describe("BuildRedisConfig", func() {
 				actual := apiv2.WBRedisSpec{
 					Enabled: true,
 				}
-				defaultConfig := model.RedisConfig{
+				defaultConfig := common.RedisConfig{
 					Enabled: false,
 				}
 
@@ -225,7 +226,7 @@ var _ = Describe("BuildRedisConfig", func() {
 				actual := apiv2.WBRedisSpec{
 					Enabled: false,
 				}
-				defaultConfig := model.RedisConfig{
+				defaultConfig := common.RedisConfig{
 					Enabled: true,
 				}
 
@@ -242,7 +243,7 @@ var _ = Describe("BuildRedisConfig", func() {
 				actual := apiv2.WBRedisSpec{
 					Namespace: overrideRedisNamespace,
 				}
-				defaultConfig := model.RedisConfig{
+				defaultConfig := common.RedisConfig{
 					Namespace: "default-namespace",
 				}
 
@@ -257,7 +258,7 @@ var _ = Describe("BuildRedisConfig", func() {
 				actual := apiv2.WBRedisSpec{
 					Namespace: "",
 				}
-				defaultConfig := model.RedisConfig{
+				defaultConfig := common.RedisConfig{
 					Namespace: overrideRedisNamespace,
 				}
 
@@ -272,16 +273,16 @@ var _ = Describe("BuildRedisConfig", func() {
 		Context("when actual is completely empty", func() {
 			It("should return all default values except Enabled", func() {
 				actual := apiv2.WBRedisSpec{}
-				defaultConfig := model.RedisConfig{
+				defaultConfig := common.RedisConfig{
 					Enabled:     true,
 					Namespace:   overrideRedisNamespace,
 					StorageSize: resource.MustParse(overrideRedisStorageSize),
 					Requests: corev1.ResourceList{
 						corev1.ResourceCPU: defaultSmallRedisCpuRequest,
 					},
-					Sentinel: model.SentinelConfig{
+					Sentinel: common.SentinelConfig{
 						Enabled:         true,
-						MasterGroupName: model.DefaultSentinelGroup,
+						MasterGroupName: defaults.DefaultSentinelGroup,
 						Requests: corev1.ResourceList{
 							corev1.ResourceCPU: defaultSmallSentinelCpuRequest,
 						},
@@ -324,16 +325,16 @@ var _ = Describe("BuildRedisConfig", func() {
 						},
 					},
 				}
-				defaultConfig := model.RedisConfig{
+				defaultConfig := common.RedisConfig{
 					Enabled:     true,
 					Namespace:   "default-namespace",
-					StorageSize: resource.MustParse(model.SmallStorageRequest),
+					StorageSize: resource.MustParse(defaults.SmallStorageRequest),
 					Requests: corev1.ResourceList{
 						corev1.ResourceCPU: defaultSmallRedisCpuRequest,
 					},
-					Sentinel: model.SentinelConfig{
+					Sentinel: common.SentinelConfig{
 						Enabled:         true,
-						MasterGroupName: model.DefaultSentinelGroup,
+						MasterGroupName: defaults.DefaultSentinelGroup,
 						Requests: corev1.ResourceList{
 							corev1.ResourceCPU: defaultSmallSentinelCpuRequest,
 						},
@@ -358,7 +359,7 @@ var _ = Describe("BuildRedisConfig", func() {
 		Context("when both specs are completely empty", func() {
 			It("should return an empty config without error", func() {
 				actual := apiv2.WBRedisSpec{}
-				defaultConfig := model.RedisConfig{}
+				defaultConfig := common.RedisConfig{}
 
 				result, err := BuildRedisConfig(actual, defaultConfig)
 				Expect(err).ToNot(HaveOccurred())
@@ -411,7 +412,7 @@ var _ = Describe("InfraConfigBuilder.AddRedisConfig", func() {
 	const testOwnerNamespace = "test-namespace"
 
 	Context("when adding dev size spec", func() {
-		It("should merge actual with dev defaults from model", func() {
+		It("should merge actual with dev defaults from common", func() {
 			actual := apiv2.WBRedisSpec{
 				Enabled: true,
 			}
@@ -423,7 +424,7 @@ var _ = Describe("InfraConfigBuilder.AddRedisConfig", func() {
 			Expect(builder.errors).To(BeEmpty())
 			Expect(builder.mergedRedis.Enabled).To(BeTrue())
 			Expect(builder.mergedRedis.Namespace).To(Equal(testOwnerNamespace))
-			Expect(builder.mergedRedis.StorageSize.String()).To(Equal(model.DevStorageRequest))
+			Expect(builder.mergedRedis.StorageSize.String()).To(Equal(defaults.DevStorageRequest))
 		})
 	})
 
@@ -476,7 +477,7 @@ var _ = Describe("InfraConfigBuilder.AddRedisConfig", func() {
 			Expect(builder.mergedRedis.Namespace).ToNot(Equal(testOwnerNamespace))
 
 			Expect(builder.mergedRedis.StorageSize.String()).To(Equal(overrideRedisStorageSize))
-			Expect(builder.mergedRedis.StorageSize.String()).ToNot(Equal(model.SmallStorageRequest))
+			Expect(builder.mergedRedis.StorageSize.String()).ToNot(Equal(defaults.SmallStorageRequest))
 
 			Expect(builder.mergedRedis.Requests[corev1.ResourceCPU]).To(Equal(overrideRedisCpuRequest))
 			Expect(builder.mergedRedis.Requests[corev1.ResourceCPU]).ToNot(Equal(defaultSmallRedisCpuRequest))
@@ -494,7 +495,7 @@ var _ = Describe("InfraConfigBuilder.AddRedisConfig", func() {
 			Expect(builder.mergedRedis.Sentinel.Enabled).ToNot(Equal(true))
 
 			Expect(builder.mergedRedis.Sentinel.MasterGroupName).To(Equal(overrideSentinelMasterName))
-			Expect(builder.mergedRedis.Sentinel.MasterGroupName).ToNot(Equal(model.DefaultSentinelGroup))
+			Expect(builder.mergedRedis.Sentinel.MasterGroupName).ToNot(Equal(defaults.DefaultSentinelGroup))
 
 			Expect(builder.mergedRedis.Sentinel.Requests[corev1.ResourceCPU]).To(Equal(overrideSentinelCpuRequest))
 			Expect(builder.mergedRedis.Sentinel.Requests[corev1.ResourceCPU]).ToNot(Equal(defaultSmallSentinelCpuRequest))
@@ -523,7 +524,7 @@ var _ = Describe("InfraConfigBuilder.AddRedisConfig", func() {
 			Expect(result).To(Equal(builder))
 			Expect(builder.errors).To(BeEmpty())
 			Expect(builder.mergedRedis.StorageSize.String()).To(Equal(overrideRedisStorageSize))
-			Expect(builder.mergedRedis.StorageSize.String()).ToNot(Equal(model.SmallStorageRequest))
+			Expect(builder.mergedRedis.StorageSize.String()).ToNot(Equal(defaults.SmallStorageRequest))
 		})
 	})
 
@@ -611,7 +612,7 @@ var _ = Describe("InfraConfigBuilder.AddRedisConfig", func() {
 			Expect(builder.errors).To(BeEmpty())
 
 			Expect(builder.mergedRedis.Sentinel.MasterGroupName).To(Equal(overrideSentinelMasterName))
-			Expect(builder.mergedRedis.Sentinel.MasterGroupName).ToNot(Equal(model.DefaultSentinelGroup))
+			Expect(builder.mergedRedis.Sentinel.MasterGroupName).ToNot(Equal(defaults.DefaultSentinelGroup))
 
 			Expect(builder.mergedRedis.Sentinel.Requests[corev1.ResourceCPU]).To(Equal(overrideSentinelCpuRequest))
 			Expect(builder.mergedRedis.Sentinel.Requests[corev1.ResourceCPU]).ToNot(Equal(defaultSmallSentinelCpuRequest))
@@ -694,7 +695,7 @@ var _ = Describe("TranslateRedisSpec", func() {
 			spec := apiv2.WBRedisSpec{
 				Enabled:     true,
 				Namespace:   overrideRedisNamespace,
-				StorageSize: model.SmallStorageRequest,
+				StorageSize: defaults.SmallStorageRequest,
 				Config:      nil,
 				Sentinel:    nil,
 			}
@@ -714,11 +715,11 @@ var _ = Describe("TranslateRedisStatus", func() {
 		ctx = context.Background()
 	})
 
-	Context("when model status has no errors or details", func() {
+	Context("when common status has no errors or details", func() {
 		It("should return ready status when Ready is true with Sentinel connection", func() {
-			modelStatus := model.RedisStatus{
+			modelStatus := common.RedisStatus{
 				Ready: true,
-				Connection: model.RedisConnection{
+				Connection: common.RedisConnection{
 					SentinelHost:   "redis-sentinel.example.com",
 					SentinelPort:   "26379",
 					SentinelMaster: "mymaster",
@@ -737,9 +738,9 @@ var _ = Describe("TranslateRedisStatus", func() {
 		})
 
 		It("should return ready status when Ready is true with Standalone connection", func() {
-			modelStatus := model.RedisStatus{
+			modelStatus := common.RedisStatus{
 				Ready: true,
-				Connection: model.RedisConnection{
+				Connection: common.RedisConnection{
 					RedisHost: "redis.example.com",
 					RedisPort: "6379",
 				},
@@ -756,7 +757,7 @@ var _ = Describe("TranslateRedisStatus", func() {
 		})
 
 		It("should return unknown status when Ready is false", func() {
-			modelStatus := model.RedisStatus{
+			modelStatus := common.RedisStatus{
 				Ready: false,
 			}
 
@@ -768,12 +769,12 @@ var _ = Describe("TranslateRedisStatus", func() {
 		})
 	})
 
-	Context("when model status has errors", func() {
+	Context("when common status has errors", func() {
 		It("should translate errors to status details with Error state", func() {
-			modelStatus := model.RedisStatus{
+			modelStatus := common.RedisStatus{
 				Ready: false,
-				Errors: []model.RedisInfraError{
-					{InfraError: model.NewRedisError(model.RedisDeploymentConflictCode, "deployment conflict")},
+				Errors: []common.RedisInfraError{
+					{InfraError: common.NewRedisError(common.RedisDeploymentConflictCode, "deployment conflict")},
 				},
 			}
 
@@ -783,17 +784,17 @@ var _ = Describe("TranslateRedisStatus", func() {
 			Expect(result.State).To(Equal(apiv2.WBStateError))
 			Expect(result.Details).To(HaveLen(1))
 			Expect(result.Details[0].State).To(Equal(apiv2.WBStateError))
-			Expect(result.Details[0].Code).To(Equal(string(model.RedisDeploymentConflictCode)))
+			Expect(result.Details[0].Code).To(Equal(string(common.RedisDeploymentConflictCode)))
 			Expect(result.Details[0].Message).To(Equal("deployment conflict"))
 		})
 	})
 
-	Context("when model status has status details", func() {
+	Context("when common status has status details", func() {
 		It("should translate RedisSentinelCreated to Updating state", func() {
-			modelStatus := model.RedisStatus{
+			modelStatus := common.RedisStatus{
 				Ready: false,
-				Details: []model.RedisStatusDetail{
-					{InfraStatusDetail: model.NewRedisStatusDetail(model.RedisSentinelCreatedCode, "Sentinel created")},
+				Details: []common.RedisStatusDetail{
+					{InfraStatusDetail: common.NewRedisStatusDetail(common.RedisSentinelCreatedCode, "Sentinel created")},
 				},
 			}
 
@@ -801,15 +802,15 @@ var _ = Describe("TranslateRedisStatus", func() {
 
 			Expect(result.Details).To(HaveLen(1))
 			Expect(result.Details[0].State).To(Equal(apiv2.WBStateUpdating))
-			Expect(result.Details[0].Code).To(Equal(string(model.RedisSentinelCreatedCode)))
+			Expect(result.Details[0].Code).To(Equal(string(common.RedisSentinelCreatedCode)))
 			Expect(result.State).To(Equal(apiv2.WBStateUpdating))
 		})
 
 		It("should translate RedisReplicationCreated to Updating state", func() {
-			modelStatus := model.RedisStatus{
+			modelStatus := common.RedisStatus{
 				Ready: false,
-				Details: []model.RedisStatusDetail{
-					{InfraStatusDetail: model.NewRedisStatusDetail(model.RedisReplicationCreatedCode, "Replication created")},
+				Details: []common.RedisStatusDetail{
+					{InfraStatusDetail: common.NewRedisStatusDetail(common.RedisReplicationCreatedCode, "Replication created")},
 				},
 			}
 
@@ -820,10 +821,10 @@ var _ = Describe("TranslateRedisStatus", func() {
 		})
 
 		It("should translate RedisStandaloneCreated to Updating state", func() {
-			modelStatus := model.RedisStatus{
+			modelStatus := common.RedisStatus{
 				Ready: false,
-				Details: []model.RedisStatusDetail{
-					{InfraStatusDetail: model.NewRedisStatusDetail(model.RedisStandaloneCreatedCode, "Standalone created")},
+				Details: []common.RedisStatusDetail{
+					{InfraStatusDetail: common.NewRedisStatusDetail(common.RedisStandaloneCreatedCode, "Standalone created")},
 				},
 			}
 
@@ -834,10 +835,10 @@ var _ = Describe("TranslateRedisStatus", func() {
 		})
 
 		It("should translate RedisSentinelDeleted to Deleting state", func() {
-			modelStatus := model.RedisStatus{
+			modelStatus := common.RedisStatus{
 				Ready: false,
-				Details: []model.RedisStatusDetail{
-					{InfraStatusDetail: model.NewRedisStatusDetail(model.RedisSentinelDeletedCode, "Sentinel deleted")},
+				Details: []common.RedisStatusDetail{
+					{InfraStatusDetail: common.NewRedisStatusDetail(common.RedisSentinelDeletedCode, "Sentinel deleted")},
 				},
 			}
 
@@ -848,10 +849,10 @@ var _ = Describe("TranslateRedisStatus", func() {
 		})
 
 		It("should translate RedisReplicationDeleted to Deleting state", func() {
-			modelStatus := model.RedisStatus{
+			modelStatus := common.RedisStatus{
 				Ready: false,
-				Details: []model.RedisStatusDetail{
-					{InfraStatusDetail: model.NewRedisStatusDetail(model.RedisReplicationDeletedCode, "Replication deleted")},
+				Details: []common.RedisStatusDetail{
+					{InfraStatusDetail: common.NewRedisStatusDetail(common.RedisReplicationDeletedCode, "Replication deleted")},
 				},
 			}
 
@@ -862,10 +863,10 @@ var _ = Describe("TranslateRedisStatus", func() {
 		})
 
 		It("should translate RedisStandaloneDeleted to Deleting state", func() {
-			modelStatus := model.RedisStatus{
+			modelStatus := common.RedisStatus{
 				Ready: false,
-				Details: []model.RedisStatusDetail{
-					{InfraStatusDetail: model.NewRedisStatusDetail(model.RedisStandaloneDeletedCode, "Standalone deleted")},
+				Details: []common.RedisStatusDetail{
+					{InfraStatusDetail: common.NewRedisStatusDetail(common.RedisStandaloneDeletedCode, "Standalone deleted")},
 				},
 			}
 
@@ -876,10 +877,10 @@ var _ = Describe("TranslateRedisStatus", func() {
 		})
 
 		It("should translate RedisSentinelConnection to Ready state", func() {
-			modelStatus := model.RedisStatus{
+			modelStatus := common.RedisStatus{
 				Ready: true,
-				Details: []model.RedisStatusDetail{
-					{InfraStatusDetail: model.NewRedisStatusDetail(model.RedisSentinelConnectionCode, "sentinel connection established")},
+				Details: []common.RedisStatusDetail{
+					{InfraStatusDetail: common.NewRedisStatusDetail(common.RedisSentinelConnectionCode, "sentinel connection established")},
 				},
 			}
 
@@ -890,10 +891,10 @@ var _ = Describe("TranslateRedisStatus", func() {
 		})
 
 		It("should translate RedisStandaloneConnection to Ready state", func() {
-			modelStatus := model.RedisStatus{
+			modelStatus := common.RedisStatus{
 				Ready: true,
-				Details: []model.RedisStatusDetail{
-					{InfraStatusDetail: model.NewRedisStatusDetail(model.RedisStandaloneConnectionCode, "standalone connection established")},
+				Details: []common.RedisStatusDetail{
+					{InfraStatusDetail: common.NewRedisStatusDetail(common.RedisStandaloneConnectionCode, "standalone connection established")},
 				},
 			}
 
@@ -904,15 +905,15 @@ var _ = Describe("TranslateRedisStatus", func() {
 		})
 	})
 
-	Context("when model status has both errors and details", func() {
+	Context("when common status has both errors and details", func() {
 		It("should use worst state according to WorseThan", func() {
-			modelStatus := model.RedisStatus{
+			modelStatus := common.RedisStatus{
 				Ready: false,
-				Errors: []model.RedisInfraError{
-					{InfraError: model.NewRedisError(model.RedisDeploymentConflictCode, "deployment conflict")},
+				Errors: []common.RedisInfraError{
+					{InfraError: common.NewRedisError(common.RedisDeploymentConflictCode, "deployment conflict")},
 				},
-				Details: []model.RedisStatusDetail{
-					{InfraStatusDetail: model.NewRedisStatusDetail(model.RedisSentinelCreatedCode, "Sentinel created")},
+				Details: []common.RedisStatusDetail{
+					{InfraStatusDetail: common.NewRedisStatusDetail(common.RedisSentinelCreatedCode, "Sentinel created")},
 				},
 			}
 
@@ -923,13 +924,13 @@ var _ = Describe("TranslateRedisStatus", func() {
 		})
 	})
 
-	Context("when model status has multiple details with different states", func() {
+	Context("when common status has multiple details with different states", func() {
 		It("should compute worst state correctly", func() {
-			modelStatus := model.RedisStatus{
+			modelStatus := common.RedisStatus{
 				Ready: false,
-				Details: []model.RedisStatusDetail{
-					{InfraStatusDetail: model.NewRedisStatusDetail(model.RedisReplicationCreatedCode, "replication creating")},
-					{InfraStatusDetail: model.NewRedisStatusDetail(model.RedisSentinelDeletedCode, "sentinel deleting")},
+				Details: []common.RedisStatusDetail{
+					{InfraStatusDetail: common.NewRedisStatusDetail(common.RedisReplicationCreatedCode, "replication creating")},
+					{InfraStatusDetail: common.NewRedisStatusDetail(common.RedisSentinelDeletedCode, "sentinel deleting")},
 				},
 			}
 

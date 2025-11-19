@@ -3,7 +3,7 @@ package opstree
 import (
 	"context"
 
-	"github.com/wandb/operator/internal/model"
+	"github.com/wandb/operator/internal/controller/translator/common"
 	redisv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redis/v1beta2"
 	redisreplicationv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redisreplication/v1beta2"
 	redissentinelv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redissentinel/v1beta2"
@@ -13,16 +13,16 @@ import (
 
 func (a *opstreeRedis) createSentinel(
 	ctx context.Context, desiredSentinel *redissentinelv1beta2.RedisSentinel,
-) *model.Results {
+) *common.Results {
 	log := ctrl.LoggerFrom(ctx)
 
-	var results = model.InitResults()
+	var results = common.InitResults()
 	var msg string
 	var err error
 
 	if a.standalone != nil {
 		msg = "cannot create desiredSentinel with standalone CR present"
-		err = model.NewRedisError(model.RedisDeploymentConflictCode, msg)
+		err = common.NewRedisError(common.RedisDeploymentConflictCode, msg)
 		log.Error(err, msg, vendorKey, vendorName)
 		results.AddErrors(err)
 		return results
@@ -30,7 +30,7 @@ func (a *opstreeRedis) createSentinel(
 
 	if a.sentinel != nil {
 		msg = "cannot create desiredSentinel when its CR is already present"
-		err = model.NewRedisError(model.RedisDeploymentConflictCode, msg)
+		err = common.NewRedisError(common.RedisDeploymentConflictCode, msg)
 		log.Error(err, msg, vendorKey, vendorName)
 		results.AddErrors(err)
 		return results
@@ -49,7 +49,7 @@ func (a *opstreeRedis) createSentinel(
 	}
 
 	results.AddStatuses(
-		model.NewRedisStatusDetail(model.RedisSentinelCreatedCode, sentinelName),
+		common.NewRedisStatusDetail(common.RedisSentinelCreatedCode, sentinelName),
 	)
 
 	return results
@@ -57,16 +57,16 @@ func (a *opstreeRedis) createSentinel(
 
 func (a *opstreeRedis) createReplication(
 	ctx context.Context, desiredReplication *redisreplicationv1beta2.RedisReplication,
-) *model.Results {
+) *common.Results {
 	log := ctrl.LoggerFrom(ctx)
 
-	var results = model.InitResults()
+	var results = common.InitResults()
 	var msg string
 	var err error
 
 	if a.standalone != nil {
 		msg = "cannot create desiredReplication with standalone CR present"
-		err = model.NewRedisError(model.RedisDeploymentConflictCode, msg)
+		err = common.NewRedisError(common.RedisDeploymentConflictCode, msg)
 		log.Error(err, msg, vendorKey, vendorName)
 		results.AddErrors(err)
 		return results
@@ -74,7 +74,7 @@ func (a *opstreeRedis) createReplication(
 
 	if a.replication != nil {
 		msg = "cannot create desiredReplication when its CR is already present"
-		err = model.NewRedisError(model.RedisDeploymentConflictCode, msg)
+		err = common.NewRedisError(common.RedisDeploymentConflictCode, msg)
 		log.Error(err, msg, vendorKey, vendorName)
 		results.AddErrors(err)
 		return results
@@ -93,7 +93,7 @@ func (a *opstreeRedis) createReplication(
 	}
 
 	results.AddStatuses(
-		model.NewRedisStatusDetail(model.RedisReplicationCreatedCode, replicationName),
+		common.NewRedisStatusDetail(common.RedisReplicationCreatedCode, replicationName),
 	)
 
 	return results
@@ -101,16 +101,16 @@ func (a *opstreeRedis) createReplication(
 
 func (a *opstreeRedis) createStandalone(
 	ctx context.Context, desiredStandalone *redisv1beta2.Redis,
-) *model.Results {
+) *common.Results {
 	log := ctrl.LoggerFrom(ctx)
 
-	var results = model.InitResults()
+	var results = common.InitResults()
 	var msg string
 	var err error
 
 	if a.sentinel != nil {
 		msg = "cannot create desiredStandalone with sentinel CR present"
-		err = model.NewRedisError(model.RedisDeploymentConflictCode, msg)
+		err = common.NewRedisError(common.RedisDeploymentConflictCode, msg)
 		log.Error(err, msg, vendorKey, vendorName)
 		results.AddErrors(err)
 		return results
@@ -118,7 +118,7 @@ func (a *opstreeRedis) createStandalone(
 
 	if a.replication != nil {
 		msg = "cannot create desiredStandalone with replication CR present"
-		err = model.NewRedisError(model.RedisDeploymentConflictCode, msg)
+		err = common.NewRedisError(common.RedisDeploymentConflictCode, msg)
 		log.Error(err, msg, vendorKey, vendorName)
 		results.AddErrors(err)
 		return results
@@ -126,7 +126,7 @@ func (a *opstreeRedis) createStandalone(
 
 	if a.standalone != nil {
 		msg = "cannot create desiredStandalone when its CR is already present"
-		err = model.NewRedisError(model.RedisDeploymentConflictCode, msg)
+		err = common.NewRedisError(common.RedisDeploymentConflictCode, msg)
 		log.Error(err, msg, vendorKey, vendorName)
 		results.AddErrors(err)
 		return results
@@ -145,7 +145,7 @@ func (a *opstreeRedis) createStandalone(
 	}
 
 	results.AddStatuses(
-		model.NewRedisStatusDetail(model.RedisStandaloneCreatedCode, standaloneName),
+		common.NewRedisStatusDetail(common.RedisStandaloneCreatedCode, standaloneName),
 	)
 
 	return results

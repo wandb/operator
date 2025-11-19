@@ -3,7 +3,7 @@ package minio
 import (
 	"context"
 
-	"github.com/wandb/operator/internal/model"
+	"github.com/wandb/operator/internal/controller/translator/common"
 )
 
 type Minio interface {
@@ -12,8 +12,8 @@ type Minio interface {
 }
 
 type ActualMinio interface {
-	Upsert(ctx context.Context, minioConfig model.MinioConfig) *model.Results
-	Delete(ctx context.Context) *model.Results
+	Upsert(ctx context.Context, minioConfig common.MinioConfig) *common.Results
+	Delete(ctx context.Context) *common.Results
 }
 
 type DesiredMinio interface{}

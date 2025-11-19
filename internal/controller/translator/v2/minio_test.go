@@ -6,16 +6,17 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	apiv2 "github.com/wandb/operator/api/v2"
-	"github.com/wandb/operator/internal/model"
+	"github.com/wandb/operator/internal/controller/translator/common"
+	"github.com/wandb/operator/internal/defaults"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 var (
-	defaultSmallMinioCpuRequest    = resource.MustParse(model.SmallMinioCpuRequest)
-	defaultSmallMinioCpuLimit      = resource.MustParse(model.SmallMinioCpuLimit)
-	defaultSmallMinioMemoryRequest = resource.MustParse(model.SmallMinioMemoryRequest)
-	defaultSmallMinioMemoryLimit   = resource.MustParse(model.SmallMinioMemoryLimit)
+	defaultSmallMinioCpuRequest    = resource.MustParse(defaults.SmallMinioCpuRequest)
+	defaultSmallMinioCpuLimit      = resource.MustParse(defaults.SmallMinioCpuLimit)
+	defaultSmallMinioMemoryRequest = resource.MustParse(defaults.SmallMinioMemoryRequest)
+	defaultSmallMinioMemoryLimit   = resource.MustParse(defaults.SmallMinioMemoryLimit)
 
 	overrideMinioStorageSize   = "50Gi"
 	overrideMinioNamespace     = "custom-namespace"
@@ -32,7 +33,7 @@ var _ = Describe("BuildMinioConfig", func() {
 		Context("when actual Config is nil", func() {
 			It("should use default Config resources", func() {
 				actual := apiv2.WBMinioSpec{Config: nil}
-				defaultConfig := model.MinioConfig{
+				defaultConfig := common.MinioConfig{
 					Resources: corev1.ResourceRequirements{
 						Requests: corev1.ResourceList{
 							corev1.ResourceCPU: defaultSmallMinioCpuRequest,
@@ -57,7 +58,7 @@ var _ = Describe("BuildMinioConfig", func() {
 						},
 					},
 				}
-				defaultConfig := model.MinioConfig{
+				defaultConfig := common.MinioConfig{
 					Resources: corev1.ResourceRequirements{
 						Requests: corev1.ResourceList{
 							corev1.ResourceCPU:    defaultSmallMinioCpuRequest,
@@ -78,18 +79,18 @@ var _ = Describe("BuildMinioConfig", func() {
 		Context("when actual StorageSize is empty", func() {
 			It("should use default StorageSize", func() {
 				actual := apiv2.WBMinioSpec{StorageSize: ""}
-				defaultConfig := model.MinioConfig{StorageSize: model.SmallMinioStorageSize}
+				defaultConfig := common.MinioConfig{StorageSize: defaults.SmallMinioStorageSize}
 
 				result, err := BuildMinioConfig(actual, defaultConfig)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(result.StorageSize).To(Equal(model.SmallMinioStorageSize))
+				Expect(result.StorageSize).To(Equal(defaults.SmallMinioStorageSize))
 			})
 		})
 
 		Context("when actual StorageSize is set", func() {
 			It("should use actual StorageSize", func() {
 				actual := apiv2.WBMinioSpec{StorageSize: overrideMinioStorageSize}
-				defaultConfig := model.MinioConfig{StorageSize: model.SmallMinioStorageSize}
+				defaultConfig := common.MinioConfig{StorageSize: defaults.SmallMinioStorageSize}
 
 				result, err := BuildMinioConfig(actual, defaultConfig)
 				Expect(err).ToNot(HaveOccurred())
@@ -102,7 +103,7 @@ var _ = Describe("BuildMinioConfig", func() {
 		Context("when actual Namespace is empty", func() {
 			It("should use default Namespace", func() {
 				actual := apiv2.WBMinioSpec{Namespace: ""}
-				defaultConfig := model.MinioConfig{Namespace: overrideMinioNamespace}
+				defaultConfig := common.MinioConfig{Namespace: overrideMinioNamespace}
 
 				result, err := BuildMinioConfig(actual, defaultConfig)
 				Expect(err).ToNot(HaveOccurred())
@@ -113,7 +114,7 @@ var _ = Describe("BuildMinioConfig", func() {
 		Context("when actual Namespace is set", func() {
 			It("should use actual Namespace", func() {
 				actual := apiv2.WBMinioSpec{Namespace: overrideMinioNamespace}
-				defaultConfig := model.MinioConfig{Namespace: "default-namespace"}
+				defaultConfig := common.MinioConfig{Namespace: "default-namespace"}
 
 				result, err := BuildMinioConfig(actual, defaultConfig)
 				Expect(err).ToNot(HaveOccurred())
@@ -126,7 +127,7 @@ var _ = Describe("BuildMinioConfig", func() {
 		Context("when actual Enabled is true", func() {
 			It("should use actual value regardless of default", func() {
 				actual := apiv2.WBMinioSpec{Enabled: true}
-				defaultConfig := model.MinioConfig{Enabled: false}
+				defaultConfig := common.MinioConfig{Enabled: false}
 
 				result, err := BuildMinioConfig(actual, defaultConfig)
 				Expect(err).ToNot(HaveOccurred())
@@ -137,7 +138,7 @@ var _ = Describe("BuildMinioConfig", func() {
 		Context("when actual Enabled is false", func() {
 			It("should use actual value regardless of default", func() {
 				actual := apiv2.WBMinioSpec{Enabled: false}
-				defaultConfig := model.MinioConfig{Enabled: true}
+				defaultConfig := common.MinioConfig{Enabled: true}
 
 				result, err := BuildMinioConfig(actual, defaultConfig)
 				Expect(err).ToNot(HaveOccurred())
@@ -151,7 +152,7 @@ var _ = Describe("InfraConfigBuilder.AddMinioConfig", func() {
 	const testOwnerNamespace = "test-namespace"
 
 	Context("when adding dev size spec", func() {
-		It("should merge actual with dev defaults from model", func() {
+		It("should merge actual with dev defaults from common", func() {
 			actual := apiv2.WBMinioSpec{
 				Enabled: true,
 			}
@@ -163,7 +164,7 @@ var _ = Describe("InfraConfigBuilder.AddMinioConfig", func() {
 			Expect(builder.errors).To(BeEmpty())
 			Expect(builder.mergedMinio.Enabled).To(BeTrue())
 			Expect(builder.mergedMinio.Namespace).To(Equal(testOwnerNamespace))
-			Expect(builder.mergedMinio.StorageSize).To(Equal(model.DevMinioStorageSize))
+			Expect(builder.mergedMinio.StorageSize).To(Equal(defaults.DevMinioStorageSize))
 		})
 	})
 
@@ -200,7 +201,7 @@ var _ = Describe("InfraConfigBuilder.AddMinioConfig", func() {
 			Expect(builder.mergedMinio.Namespace).ToNot(Equal(testOwnerNamespace))
 
 			Expect(builder.mergedMinio.StorageSize).To(Equal(overrideMinioStorageSize))
-			Expect(builder.mergedMinio.StorageSize).ToNot(Equal(model.SmallMinioStorageSize))
+			Expect(builder.mergedMinio.StorageSize).ToNot(Equal(defaults.SmallMinioStorageSize))
 
 			Expect(builder.mergedMinio.Resources.Requests[corev1.ResourceCPU]).To(Equal(overrideMinioCpuRequest))
 			Expect(builder.mergedMinio.Resources.Requests[corev1.ResourceCPU]).ToNot(Equal(defaultSmallMinioCpuRequest))
@@ -229,7 +230,7 @@ var _ = Describe("InfraConfigBuilder.AddMinioConfig", func() {
 			Expect(result).To(Equal(builder))
 			Expect(builder.errors).To(BeEmpty())
 			Expect(builder.mergedMinio.StorageSize).To(Equal(overrideMinioStorageSize))
-			Expect(builder.mergedMinio.StorageSize).ToNot(Equal(model.SmallMinioStorageSize))
+			Expect(builder.mergedMinio.StorageSize).ToNot(Equal(defaults.SmallMinioStorageSize))
 		})
 	})
 
@@ -302,7 +303,7 @@ var _ = Describe("InfraConfigBuilder.AddMinioConfig", func() {
 
 var _ = Describe("TranslateMinioSpec", func() {
 	Context("when translating a complete Minio spec", func() {
-		It("should correctly map all fields to model.MinioConfig", func() {
+		It("should correctly map all fields to common.MinioConfig", func() {
 			spec := apiv2.WBMinioSpec{
 				Enabled:     true,
 				Namespace:   overrideMinioNamespace,
@@ -339,11 +340,11 @@ var _ = Describe("TranslateMinioStatus", func() {
 		ctx = context.Background()
 	})
 
-	Context("when model status has no errors or details", func() {
+	Context("when common status has no errors or details", func() {
 		It("should return ready status when Ready is true", func() {
-			modelStatus := model.MinioStatus{
+			modelStatus := common.MinioStatus{
 				Ready: true,
-				Connection: model.MinioConnection{
+				Connection: common.MinioConnection{
 					Host:      "minio.example.com",
 					Port:      "9000",
 					AccessKey: "admin",
@@ -362,7 +363,7 @@ var _ = Describe("TranslateMinioStatus", func() {
 		})
 
 		It("should return unknown status when Ready is false", func() {
-			modelStatus := model.MinioStatus{
+			modelStatus := common.MinioStatus{
 				Ready: false,
 			}
 
@@ -374,13 +375,13 @@ var _ = Describe("TranslateMinioStatus", func() {
 		})
 	})
 
-	Context("when model status has errors", func() {
+	Context("when common status has errors", func() {
 		It("should translate errors to status details with Error state", func() {
-			modelStatus := model.MinioStatus{
+			modelStatus := common.MinioStatus{
 				Ready: false,
-				Errors: []model.MinioInfraError{
-					{InfraError: model.NewMinioError(model.MinioErrFailedToCreateCode, "creation failed")},
-					{InfraError: model.NewMinioError(model.MinioErrFailedToUpdateCode, "update failed")},
+				Errors: []common.MinioInfraError{
+					{InfraError: common.NewMinioError(common.MinioErrFailedToCreateCode, "creation failed")},
+					{InfraError: common.NewMinioError(common.MinioErrFailedToUpdateCode, "update failed")},
 				},
 			}
 
@@ -390,20 +391,20 @@ var _ = Describe("TranslateMinioStatus", func() {
 			Expect(result.State).To(Equal(apiv2.WBStateError))
 			Expect(result.Details).To(HaveLen(2))
 			Expect(result.Details[0].State).To(Equal(apiv2.WBStateError))
-			Expect(result.Details[0].Code).To(Equal(string(model.MinioErrFailedToCreateCode)))
+			Expect(result.Details[0].Code).To(Equal(string(common.MinioErrFailedToCreateCode)))
 			Expect(result.Details[0].Message).To(Equal("creation failed"))
 			Expect(result.Details[1].State).To(Equal(apiv2.WBStateError))
-			Expect(result.Details[1].Code).To(Equal(string(model.MinioErrFailedToUpdateCode)))
+			Expect(result.Details[1].Code).To(Equal(string(common.MinioErrFailedToUpdateCode)))
 			Expect(result.Details[1].Message).To(Equal("update failed"))
 		})
 	})
 
-	Context("when model status has status details", func() {
+	Context("when common status has status details", func() {
 		It("should translate MinioCreated to Updating state", func() {
-			modelStatus := model.MinioStatus{
+			modelStatus := common.MinioStatus{
 				Ready: false,
-				Details: []model.MinioStatusDetail{
-					{InfraStatusDetail: model.NewMinioStatusDetail(model.MinioCreatedCode, "Minio created")},
+				Details: []common.MinioStatusDetail{
+					{InfraStatusDetail: common.NewMinioStatusDetail(common.MinioCreatedCode, "Minio created")},
 				},
 			}
 
@@ -411,15 +412,15 @@ var _ = Describe("TranslateMinioStatus", func() {
 
 			Expect(result.Details).To(HaveLen(1))
 			Expect(result.Details[0].State).To(Equal(apiv2.WBStateUpdating))
-			Expect(result.Details[0].Code).To(Equal(string(model.MinioCreatedCode)))
+			Expect(result.Details[0].Code).To(Equal(string(common.MinioCreatedCode)))
 			Expect(result.State).To(Equal(apiv2.WBStateUpdating))
 		})
 
 		It("should translate MinioUpdated to Updating state", func() {
-			modelStatus := model.MinioStatus{
+			modelStatus := common.MinioStatus{
 				Ready: false,
-				Details: []model.MinioStatusDetail{
-					{InfraStatusDetail: model.NewMinioStatusDetail(model.MinioUpdatedCode, "Minio updated")},
+				Details: []common.MinioStatusDetail{
+					{InfraStatusDetail: common.NewMinioStatusDetail(common.MinioUpdatedCode, "Minio updated")},
 				},
 			}
 
@@ -430,10 +431,10 @@ var _ = Describe("TranslateMinioStatus", func() {
 		})
 
 		It("should translate MinioDeleted to Deleting state", func() {
-			modelStatus := model.MinioStatus{
+			modelStatus := common.MinioStatus{
 				Ready: false,
-				Details: []model.MinioStatusDetail{
-					{InfraStatusDetail: model.NewMinioStatusDetail(model.MinioDeletedCode, "Minio deleted")},
+				Details: []common.MinioStatusDetail{
+					{InfraStatusDetail: common.NewMinioStatusDetail(common.MinioDeletedCode, "Minio deleted")},
 				},
 			}
 
@@ -444,10 +445,10 @@ var _ = Describe("TranslateMinioStatus", func() {
 		})
 
 		It("should translate MinioConnection to Ready state", func() {
-			modelStatus := model.MinioStatus{
+			modelStatus := common.MinioStatus{
 				Ready: true,
-				Details: []model.MinioStatusDetail{
-					{InfraStatusDetail: model.NewMinioStatusDetail(model.MinioConnectionCode, "connection established")},
+				Details: []common.MinioStatusDetail{
+					{InfraStatusDetail: common.NewMinioStatusDetail(common.MinioConnectionCode, "connection established")},
 				},
 			}
 
@@ -458,15 +459,15 @@ var _ = Describe("TranslateMinioStatus", func() {
 		})
 	})
 
-	Context("when model status has both errors and details", func() {
+	Context("when common status has both errors and details", func() {
 		It("should use worst state according to WorseThan", func() {
-			modelStatus := model.MinioStatus{
+			modelStatus := common.MinioStatus{
 				Ready: false,
-				Errors: []model.MinioInfraError{
-					{InfraError: model.NewMinioError(model.MinioErrFailedToCreateCode, "creation failed")},
+				Errors: []common.MinioInfraError{
+					{InfraError: common.NewMinioError(common.MinioErrFailedToCreateCode, "creation failed")},
 				},
-				Details: []model.MinioStatusDetail{
-					{InfraStatusDetail: model.NewMinioStatusDetail(model.MinioCreatedCode, "Minio created")},
+				Details: []common.MinioStatusDetail{
+					{InfraStatusDetail: common.NewMinioStatusDetail(common.MinioCreatedCode, "Minio created")},
 				},
 			}
 
@@ -477,13 +478,13 @@ var _ = Describe("TranslateMinioStatus", func() {
 		})
 	})
 
-	Context("when model status has multiple details with different states", func() {
+	Context("when common status has multiple details with different states", func() {
 		It("should compute worst state correctly", func() {
-			modelStatus := model.MinioStatus{
+			modelStatus := common.MinioStatus{
 				Ready: false,
-				Details: []model.MinioStatusDetail{
-					{InfraStatusDetail: model.NewMinioStatusDetail(model.MinioUpdatedCode, "updating")},
-					{InfraStatusDetail: model.NewMinioStatusDetail(model.MinioDeletedCode, "deleting")},
+				Details: []common.MinioStatusDetail{
+					{InfraStatusDetail: common.NewMinioStatusDetail(common.MinioUpdatedCode, "updating")},
+					{InfraStatusDetail: common.NewMinioStatusDetail(common.MinioDeletedCode, "deleting")},
 				},
 			}
 

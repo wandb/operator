@@ -1,4 +1,4 @@
-package model
+package common
 
 import (
 	"context"
@@ -6,21 +6,7 @@ import (
 
 	"github.com/wandb/operator/internal/utils"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	ctrl "sigs.k8s.io/controller-runtime"
-)
-
-/////////////////////////////////////////////////
-// Kafka Default Values
-
-const (
-	DevKafkaStorageSize   = "1Gi"
-	SmallKafkaStorageSize = "5Gi"
-
-	SmallKafkaCpuRequest    = "500m"
-	SmallKafkaCpuLimit      = "1000m"
-	SmallKafkaMemoryRequest = "1Gi"
-	SmallKafkaMemoryLimit   = "2Gi"
 )
 
 /////////////////////////////////////////////////
@@ -41,73 +27,6 @@ type KafkaReplicationConfig struct {
 	OffsetsTopicRF           int32
 	TransactionStateRF       int32
 	TransactionStateISR      int32
-}
-
-func (k KafkaConfig) IsHighAvailability() bool {
-	return k.Replicas > 1
-}
-
-func BuildKafkaDefaults(size Size, ownerNamespace string) (KafkaConfig, error) {
-	var err error
-	var storageSize string
-	config := KafkaConfig{
-		Enabled:   true,
-		Namespace: ownerNamespace,
-	}
-
-	switch size {
-	case SizeDev:
-		storageSize = DevKafkaStorageSize
-		config.StorageSize = storageSize
-		config.Replicas = 1
-		config.ReplicationConfig = KafkaReplicationConfig{
-			DefaultReplicationFactor: 1,
-			MinInSyncReplicas:        1,
-			OffsetsTopicRF:           1,
-			TransactionStateRF:       1,
-			TransactionStateISR:      1,
-		}
-	case SizeSmall:
-		storageSize = SmallKafkaStorageSize
-		config.StorageSize = storageSize
-		config.Replicas = 3
-		config.ReplicationConfig = KafkaReplicationConfig{
-			DefaultReplicationFactor: 3,
-			MinInSyncReplicas:        2,
-			OffsetsTopicRF:           3,
-			TransactionStateRF:       3,
-			TransactionStateISR:      2,
-		}
-
-		var cpuRequest, cpuLimit, memoryRequest, memoryLimit resource.Quantity
-		if cpuRequest, err = resource.ParseQuantity(SmallKafkaCpuRequest); err != nil {
-			return config, err
-		}
-		if cpuLimit, err = resource.ParseQuantity(SmallKafkaCpuLimit); err != nil {
-			return config, err
-		}
-		if memoryRequest, err = resource.ParseQuantity(SmallKafkaMemoryRequest); err != nil {
-			return config, err
-		}
-		if memoryLimit, err = resource.ParseQuantity(SmallKafkaMemoryLimit); err != nil {
-			return config, err
-		}
-
-		config.Resources = corev1.ResourceRequirements{
-			Requests: corev1.ResourceList{
-				corev1.ResourceCPU:    cpuRequest,
-				corev1.ResourceMemory: memoryRequest,
-			},
-			Limits: corev1.ResourceList{
-				corev1.ResourceCPU:    cpuLimit,
-				corev1.ResourceMemory: memoryLimit,
-			},
-		}
-	default:
-		return config, fmt.Errorf("unsupported size for Kafka: %s (only 'dev' and 'small' are supported)", size)
-	}
-
-	return config, nil
 }
 
 /////////////////////////////////////////////////

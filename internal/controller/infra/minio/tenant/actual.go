@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/wandb/operator/internal/model"
+	"github.com/wandb/operator/internal/controller/translator/common"
 	miniov2 "github.com/wandb/operator/internal/vendored/minio-operator/minio.min.io/v2"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -18,7 +18,7 @@ import (
 type minioTenant struct {
 	tenant       *miniov2.Tenant
 	configSecret *corev1.Secret
-	config       model.MinioConfig
+	config       common.MinioConfig
 	client       client.Client
 	owner        metav1.Object
 	scheme       *runtime.Scheme
@@ -28,7 +28,7 @@ type minioTenant struct {
 func Initialize(
 	ctx context.Context,
 	client client.Client,
-	minioConfig model.MinioConfig,
+	minioConfig common.MinioConfig,
 	owner metav1.Object,
 	scheme *runtime.Scheme,
 ) (*minioTenant, error) {
@@ -79,9 +79,9 @@ func Initialize(
 }
 
 // Upsert creates or updates Minio Tenant CR and config secret based on whether they exist
-func (a *minioTenant) Upsert(ctx context.Context, minioConfig model.MinioConfig) *model.Results {
-	results := model.InitResults()
-	var nextResults *model.Results
+func (a *minioTenant) Upsert(ctx context.Context, minioConfig common.MinioConfig) *common.Results {
+	results := common.InitResults()
+	var nextResults *common.Results
 
 	// Build desired config secret (must be created before Tenant)
 	desiredSecret, nextResults := buildDesiredSecret(ctx, minioConfig, a.owner, a.scheme)
@@ -119,29 +119,29 @@ func (a *minioTenant) Upsert(ctx context.Context, minioConfig model.MinioConfig)
 }
 
 // Delete removes Minio Tenant CR and config secret
-func (a *minioTenant) Delete(ctx context.Context) *model.Results {
+func (a *minioTenant) Delete(ctx context.Context) *common.Results {
 	log := ctrl.LoggerFrom(ctx)
-	results := model.InitResults()
+	results := common.InitResults()
 
 	// Delete Tenant CR first
 	if a.tenant != nil {
 		if err := a.client.Delete(ctx, a.tenant); err != nil {
 			log.Error(err, "Failed to delete Tenant CR")
-			results.AddErrors(model.NewMinioError(
-				model.MinioErrFailedToDeleteCode,
+			results.AddErrors(common.NewMinioError(
+				common.MinioErrFailedToDeleteCode,
 				fmt.Sprintf("failed to delete Tenant: %v", err),
 			))
 			return results
 		}
-		results.AddStatuses(model.NewMinioStatusDetail(model.MinioDeletedCode, TenantName))
+		results.AddStatuses(common.NewMinioStatusDetail(common.MinioDeletedCode, TenantName))
 	}
 
 	// Delete config secret
 	if a.configSecret != nil {
 		if err := a.client.Delete(ctx, a.configSecret); err != nil {
 			log.Error(err, "Failed to delete config secret")
-			results.AddErrors(model.NewMinioError(
-				model.MinioErrFailedToDeleteCode,
+			results.AddErrors(common.NewMinioError(
+				common.MinioErrFailedToDeleteCode,
 				fmt.Sprintf("failed to delete config secret: %v", err),
 			))
 			return results

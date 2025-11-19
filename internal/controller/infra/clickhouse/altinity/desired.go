@@ -5,7 +5,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 
-	"github.com/wandb/operator/internal/model"
+	"github.com/wandb/operator/internal/controller/translator/common"
 	v2 "github.com/wandb/operator/internal/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -18,18 +18,18 @@ import (
 // Handles both dev (1 replica) and small (3 replicas) configurations.
 func buildDesiredCHI(
 	ctx context.Context,
-	clickhouseConfig model.ClickHouseConfig,
+	clickhouseConfig common.ClickHouseConfig,
 	owner metav1.Object,
 	scheme *runtime.Scheme,
-) (*v2.ClickHouseInstallation, *model.Results) {
+) (*v2.ClickHouseInstallation, *common.Results) {
 	log := ctrl.LoggerFrom(ctx)
-	results := model.InitResults()
+	results := common.InitResults()
 
 	// Parse storage quantity
 	storageQuantity, err := resource.ParseQuantity(clickhouseConfig.StorageSize)
 	if err != nil {
 		log.Error(err, "invalid storage size", "storageSize", clickhouseConfig.StorageSize)
-		results.AddErrors(model.NewClickHouseError(model.ClickHouseErrFailedToCreateCode, fmt.Sprintf("invalid storage size: %v", err)))
+		results.AddErrors(common.NewClickHouseError(common.ClickHouseErrFailedToCreateCode, fmt.Sprintf("invalid storage size: %v", err)))
 		return nil, results
 	}
 
@@ -116,7 +116,7 @@ func buildDesiredCHI(
 	// Set owner reference
 	if err := ctrl.SetControllerReference(owner, chi, scheme); err != nil {
 		log.Error(err, "failed to set owner reference on CHI CR")
-		results.AddErrors(model.NewClickHouseError(model.ClickHouseErrFailedToCreateCode, fmt.Sprintf("failed to set owner reference: %v", err)))
+		results.AddErrors(common.NewClickHouseError(common.ClickHouseErrFailedToCreateCode, fmt.Sprintf("failed to set owner reference: %v", err)))
 		return nil, results
 	}
 

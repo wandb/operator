@@ -4,7 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/wandb/operator/internal/model"
+	"github.com/wandb/operator/internal/controller/translator/common"
+	"github.com/wandb/operator/internal/defaults"
 	pxcv1 "github.com/wandb/operator/internal/vendored/percona-operator/pxc/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -17,18 +18,18 @@ import (
 // Handles both dev (standalone) and small (HA with ProxySQL) configurations.
 func buildDesiredPXC(
 	ctx context.Context,
-	mysqlConfig model.MySQLConfig,
+	mysqlConfig common.MySQLConfig,
 	owner metav1.Object,
 	scheme *runtime.Scheme,
-) (*pxcv1.PerconaXtraDBCluster, *model.Results) {
+) (*pxcv1.PerconaXtraDBCluster, *common.Results) {
 	log := ctrl.LoggerFrom(ctx)
-	results := model.InitResults()
+	results := common.InitResults()
 
 	// Parse storage quantity
 	storageQuantity, err := resource.ParseQuantity(mysqlConfig.StorageSize)
 	if err != nil {
 		log.Error(err, "invalid storage size", "storageSize", mysqlConfig.StorageSize)
-		results.AddErrors(model.NewMySQLError(model.MySQLErrFailedToCreateCode, fmt.Sprintf("invalid storage size: %v", err)))
+		results.AddErrors(common.NewMySQLError(common.MySQLErrFailedToCreateCode, fmt.Sprintf("invalid storage size: %v", err)))
 		return nil, results
 	}
 
@@ -42,7 +43,7 @@ func buildDesiredPXC(
 			},
 		},
 		Spec: pxcv1.PerconaXtraDBClusterSpec{
-			CRVersion: model.CRVersion,
+			CRVersion: defaults.CRVersion,
 			Unsafe: pxcv1.UnsafeFlags{
 				PXCSize:   mysqlConfig.AllowUnsafePXCSize,
 				TLS:       !mysqlConfig.TLSEnabled, // Unsafe TLS flag is inverse of TLS enabled
@@ -109,7 +110,7 @@ func buildDesiredPXC(
 	// Set owner reference
 	if err := ctrl.SetControllerReference(owner, pxc, scheme); err != nil {
 		log.Error(err, "failed to set owner reference on PXC CR")
-		results.AddErrors(model.NewMySQLError(model.MySQLErrFailedToCreateCode, fmt.Sprintf("failed to set owner reference: %v", err)))
+		results.AddErrors(common.NewMySQLError(common.MySQLErrFailedToCreateCode, fmt.Sprintf("failed to set owner reference: %v", err)))
 		return nil, results
 	}
 

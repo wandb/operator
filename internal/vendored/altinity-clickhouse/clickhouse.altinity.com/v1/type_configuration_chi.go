@@ -15,7 +15,7 @@
 package v1
 
 const (
-	// CommonConfigDirClickHouse specifies folder's name, where generated model XML files for ClickHouse would be placed
+	// CommonConfigDirClickHouse specifies folder's name, where generated common XML files for ClickHouse would be placed
 	CommonConfigDirClickHouse = "config.d"
 
 	// UsersConfigDirClickHouse specifies folder's name, where generated users XML files for ClickHouse would be placed
@@ -29,7 +29,7 @@ const (
 )
 
 const (
-	// CommonConfigDirKeeper specifies folder's name, where generated model XML files for ClickHouse would be placed
+	// CommonConfigDirKeeper specifies folder's name, where generated common XML files for ClickHouse would be placed
 	CommonConfigDirKeeper = "keeper_config.d"
 
 	// UsersConfigDirKeeper specifies folder's name, where generated users XML files for ClickHouse would be placed

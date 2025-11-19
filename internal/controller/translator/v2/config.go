@@ -4,15 +4,15 @@ import (
 	"fmt"
 
 	apiv2 "github.com/wandb/operator/api/v2"
-	"github.com/wandb/operator/internal/model"
+	"github.com/wandb/operator/internal/controller/translator/common"
 )
 
 type InfraConfig interface {
-	GetRedisConfig() (model.RedisConfig, error)
-	GetKafkaConfig() (model.KafkaConfig, error)
-	GetMySQLConfig() (model.MySQLConfig, error)
-	GetMinioConfig() (model.MinioConfig, error)
-	GetClickHouseConfig() (model.ClickHouseConfig, error)
+	GetRedisConfig() (common.RedisConfig, error)
+	GetKafkaConfig() (common.KafkaConfig, error)
+	GetMySQLConfig() (common.MySQLConfig, error)
+	GetMinioConfig() (common.MinioConfig, error)
+	GetClickHouseConfig() (common.ClickHouseConfig, error)
 }
 
 func BuildInfraConfig(ownerNamespace string, size apiv2.WBSize) *InfraConfigBuilder {
@@ -26,41 +26,41 @@ type InfraConfigBuilder struct {
 	errors           []error
 	ownerNamespace   string
 	size             apiv2.WBSize
-	mergedRedis      model.RedisConfig
-	mergedKafka      model.KafkaConfig
-	mergedMySQL      model.MySQLConfig
-	mergedMinio      model.MinioConfig
-	mergedClickHouse model.ClickHouseConfig
+	mergedRedis      common.RedisConfig
+	mergedKafka      common.KafkaConfig
+	mergedMySQL      common.MySQLConfig
+	mergedMinio      common.MinioConfig
+	mergedClickHouse common.ClickHouseConfig
 }
 
-func ToModelSize(wbSize apiv2.WBSize) (model.Size, error) {
+func ToModelSize(wbSize apiv2.WBSize) (common.Size, error) {
 	switch wbSize {
 	case apiv2.WBSizeDev:
-		return model.SizeDev, nil
+		return common.SizeDev, nil
 	case apiv2.WBSizeSmall:
-		return model.SizeSmall, nil
+		return common.SizeSmall, nil
 	default:
 		return "", fmt.Errorf("unsupported size: %s", string(wbSize))
 	}
 }
 
-func (i *InfraConfigBuilder) GetClickHouseConfig() (model.ClickHouseConfig, error) {
+func (i *InfraConfigBuilder) GetClickHouseConfig() (common.ClickHouseConfig, error) {
 	return i.mergedClickHouse, nil
 }
 
-func (i *InfraConfigBuilder) GetRedisConfig() (model.RedisConfig, error) {
+func (i *InfraConfigBuilder) GetRedisConfig() (common.RedisConfig, error) {
 	return i.mergedRedis, nil
 }
 
-func (i *InfraConfigBuilder) GetKafkaConfig() (model.KafkaConfig, error) {
+func (i *InfraConfigBuilder) GetKafkaConfig() (common.KafkaConfig, error) {
 	return i.mergedKafka, nil
 }
 
-func (i *InfraConfigBuilder) GetMySQLConfig() (model.MySQLConfig, error) {
+func (i *InfraConfigBuilder) GetMySQLConfig() (common.MySQLConfig, error) {
 	return i.mergedMySQL, nil
 }
 
-func (i *InfraConfigBuilder) GetMinioConfig() (model.MinioConfig, error) {
+func (i *InfraConfigBuilder) GetMinioConfig() (common.MinioConfig, error) {
 	return i.mergedMinio, nil
 }
 

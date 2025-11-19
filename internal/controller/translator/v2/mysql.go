@@ -4,14 +4,15 @@ import (
 	"context"
 
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/internal/controller/translator/common"
 	"github.com/wandb/operator/internal/controller/translator/utils"
-	"github.com/wandb/operator/internal/model"
+	"github.com/wandb/operator/internal/defaults"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// BuildMySQLConfig will create a new model.MySQLConfig with defaultConfig applied if not
+// BuildMySQLConfig will create a new common.MySQLConfig with defaultConfig applied if not
 // present in actual. It should *never* be saved into the CR!
-func BuildMySQLConfig(actual apiv2.WBMySQLSpec, defaultConfig model.MySQLConfig) (model.MySQLConfig, error) {
+func BuildMySQLConfig(actual apiv2.WBMySQLSpec, defaultConfig common.MySQLConfig) (common.MySQLConfig, error) {
 	mysqlConfig := TranslateMySQLSpec(actual)
 
 	mysqlConfig.StorageSize = utils.CoalesceQuantity(mysqlConfig.StorageSize, defaultConfig.StorageSize)
@@ -23,8 +24,8 @@ func BuildMySQLConfig(actual apiv2.WBMySQLSpec, defaultConfig model.MySQLConfig)
 	return mysqlConfig, nil
 }
 
-func TranslateMySQLSpec(spec apiv2.WBMySQLSpec) model.MySQLConfig {
-	config := model.MySQLConfig{
+func TranslateMySQLSpec(spec apiv2.WBMySQLSpec) common.MySQLConfig {
+	config := common.MySQLConfig{
 		Enabled:     spec.Enabled,
 		Namespace:   spec.Namespace,
 		StorageSize: spec.StorageSize,
@@ -36,14 +37,14 @@ func TranslateMySQLSpec(spec apiv2.WBMySQLSpec) model.MySQLConfig {
 	return config
 }
 
-func ExtractMySQLStatus(ctx context.Context, results *model.Results) apiv2.WBMySQLStatus {
+func ExtractMySQLStatus(ctx context.Context, results *common.Results) apiv2.WBMySQLStatus {
 	return TranslateMySQLStatus(
 		ctx,
-		model.ExtractMySQLStatus(ctx, results),
+		common.ExtractMySQLStatus(ctx, results),
 	)
 }
 
-func TranslateMySQLStatus(ctx context.Context, m model.MySQLStatus) apiv2.WBMySQLStatus {
+func TranslateMySQLStatus(ctx context.Context, m common.MySQLStatus) apiv2.WBMySQLStatus {
 	var result apiv2.WBMySQLStatus
 	var details []apiv2.WBStatusDetail
 
@@ -80,13 +81,13 @@ func TranslateMySQLStatus(ctx context.Context, m model.MySQLStatus) apiv2.WBMySQ
 
 func translateMySQLStatusCode(code string) apiv2.WBStateType {
 	switch code {
-	case string(model.MySQLCreatedCode):
+	case string(common.MySQLCreatedCode):
 		return apiv2.WBStateUpdating
-	case string(model.MySQLUpdatedCode):
+	case string(common.MySQLUpdatedCode):
 		return apiv2.WBStateUpdating
-	case string(model.MySQLDeletedCode):
+	case string(common.MySQLDeletedCode):
 		return apiv2.WBStateDeleting
-	case string(model.MySQLConnectionCode):
+	case string(common.MySQLConnectionCode):
 		return apiv2.WBStateReady
 	default:
 		return apiv2.WBStateUnknown
@@ -95,16 +96,16 @@ func translateMySQLStatusCode(code string) apiv2.WBStateType {
 
 func (i *InfraConfigBuilder) AddMySQLConfig(actual apiv2.WBMySQLSpec) *InfraConfigBuilder {
 	var err error
-	var size model.Size
-	var defaultConfig model.MySQLConfig
-	var mergedConfig model.MySQLConfig
+	var size common.Size
+	var defaultConfig common.MySQLConfig
+	var mergedConfig common.MySQLConfig
 
 	size, err = ToModelSize(i.size)
 	if err != nil {
 		i.errors = append(i.errors, err)
 		return i
 	}
-	defaultConfig, err = model.BuildMySQLDefaults(size, i.ownerNamespace)
+	defaultConfig, err = defaults.BuildMySQLDefaults(size, i.ownerNamespace)
 	if err != nil {
 		i.errors = append(i.errors, err)
 		return i

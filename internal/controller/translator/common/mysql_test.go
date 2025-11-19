@@ -1,4 +1,4 @@
-package model
+package common
 
 import (
 	"context"
@@ -6,35 +6,9 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 var _ = Describe("MySQL Model", func() {
-	Describe("MySQLConfig", func() {
-		Describe("IsHighAvailability", func() {
-			Context("when replicas is greater than 1", func() {
-				It("should return true", func() {
-					config := MySQLConfig{Replicas: 3}
-					Expect(config.IsHighAvailability()).To(BeTrue())
-				})
-			})
-
-			Context("when replicas is equal to 1", func() {
-				It("should return false", func() {
-					config := MySQLConfig{Replicas: 1}
-					Expect(config.IsHighAvailability()).To(BeFalse())
-				})
-			})
-
-			Context("when replicas is 0", func() {
-				It("should return false", func() {
-					config := MySQLConfig{Replicas: 0}
-					Expect(config.IsHighAvailability()).To(BeFalse())
-				})
-			})
-		})
-	})
 
 	Describe("MySQL Error", func() {
 		Describe("NewMySQLError", func() {
@@ -363,55 +337,6 @@ var _ = Describe("MySQL Model", func() {
 					Expect(codes[i]).NotTo(Equal(codes[j]))
 				}
 			}
-		})
-	})
-
-	Describe("BuildMySQLDefaults", func() {
-		const testOwnerNamespace = "test-namespace"
-
-		Context("when size is Dev", func() {
-			It("should return a MySQL config with storage only and no resources", func() {
-				config, err := BuildMySQLDefaults(SizeDev, testOwnerNamespace)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(config.Enabled).To(BeTrue())
-				Expect(config.Namespace).To(Equal(testOwnerNamespace))
-				Expect(config.StorageSize).To(Equal(DevMySQLStorageSize))
-				Expect(config.Replicas).To(Equal(int32(1)))
-				Expect(config.PXCImage).To(Equal(DevPXCImage))
-				Expect(config.ProxySQLEnabled).To(BeFalse())
-				Expect(config.TLSEnabled).To(BeFalse())
-				Expect(config.LogCollectorEnabled).To(BeTrue())
-				Expect(config.Resources.Requests).To(BeEmpty())
-				Expect(config.Resources.Limits).To(BeEmpty())
-			})
-		})
-
-		Context("when size is Small", func() {
-			It("should return a MySQL config with full resource requirements", func() {
-				config, err := BuildMySQLDefaults(SizeSmall, testOwnerNamespace)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(config.Enabled).To(BeTrue())
-				Expect(config.Namespace).To(Equal(testOwnerNamespace))
-				Expect(config.StorageSize).To(Equal(SmallMySQLStorageSize))
-				Expect(config.Replicas).To(Equal(int32(3)))
-				Expect(config.PXCImage).To(Equal(SmallPXCImage))
-				Expect(config.ProxySQLEnabled).To(BeTrue())
-				Expect(config.ProxySQLReplicas).To(Equal(int32(3)))
-				Expect(config.TLSEnabled).To(BeTrue())
-				Expect(config.LogCollectorEnabled).To(BeFalse())
-				Expect(config.Resources.Requests[v1.ResourceCPU]).To(Equal(resource.MustParse(SmallMySQLCpuRequest)))
-				Expect(config.Resources.Limits[v1.ResourceCPU]).To(Equal(resource.MustParse(SmallMySQLCpuLimit)))
-				Expect(config.Resources.Requests[v1.ResourceMemory]).To(Equal(resource.MustParse(SmallMySQLMemoryRequest)))
-				Expect(config.Resources.Limits[v1.ResourceMemory]).To(Equal(resource.MustParse(SmallMySQLMemoryLimit)))
-			})
-		})
-
-		Context("when size is invalid", func() {
-			It("should return an error", func() {
-				_, err := BuildMySQLDefaults(Size("invalid"), testOwnerNamespace)
-				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("unsupported size for MySQL"))
-			})
 		})
 	})
 })

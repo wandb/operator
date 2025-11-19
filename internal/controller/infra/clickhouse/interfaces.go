@@ -3,7 +3,7 @@ package clickhouse
 import (
 	"context"
 
-	"github.com/wandb/operator/internal/model"
+	"github.com/wandb/operator/internal/controller/translator/common"
 )
 
 type ClickHouse interface {
@@ -12,8 +12,8 @@ type ClickHouse interface {
 }
 
 type ActualClickHouse interface {
-	Upsert(ctx context.Context, clickhouseConfig model.ClickHouseConfig) *model.Results
-	Delete(ctx context.Context) *model.Results
+	Upsert(ctx context.Context, clickhouseConfig common.ClickHouseConfig) *common.Results
+	Delete(ctx context.Context) *common.Results
 }
 
 type DesiredClickHouse interface{}

@@ -5,14 +5,14 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/wandb/operator/internal/model"
+	"github.com/wandb/operator/internal/controller/translator/common"
 	miniov2 "github.com/wandb/operator/internal/vendored/minio-operator/minio.min.io/v2"
 )
 
 func (a *minioTenant) updateTenant(
-	ctx context.Context, desiredTenant *miniov2.Tenant, minioConfig model.MinioConfig,
-) *model.Results {
-	results := model.InitResults()
+	ctx context.Context, desiredTenant *miniov2.Tenant, minioConfig common.MinioConfig,
+) *common.Results {
+	results := common.InitResults()
 
 	// Extract connection info from Tenant CR
 	// Connection format: wandb-minio-hl.{namespace}.svc.cluster.local:443
@@ -20,12 +20,12 @@ func (a *minioTenant) updateTenant(
 	minioHost := fmt.Sprintf("%s.%s.svc.cluster.local", ServiceName, namespace)
 	minioPort := strconv.Itoa(MinioPort)
 
-	connInfo := model.MinioConnInfo{
+	connInfo := common.MinioConnInfo{
 		Host:      minioHost,
 		Port:      minioPort,
 		AccessKey: MinioAccessKey,
 	}
-	results.AddStatuses(model.NewMinioConnDetail(connInfo))
+	results.AddStatuses(common.NewMinioConnDetail(connInfo))
 
 	return results
 }

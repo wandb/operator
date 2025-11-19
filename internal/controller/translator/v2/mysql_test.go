@@ -6,16 +6,17 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	apiv2 "github.com/wandb/operator/api/v2"
-	"github.com/wandb/operator/internal/model"
+	"github.com/wandb/operator/internal/controller/translator/common"
+	"github.com/wandb/operator/internal/defaults"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 var (
-	defaultSmallMySQLCpuRequest    = resource.MustParse(model.SmallMySQLCpuRequest)
-	defaultSmallMySQLCpuLimit      = resource.MustParse(model.SmallMySQLCpuLimit)
-	defaultSmallMySQLMemoryRequest = resource.MustParse(model.SmallMySQLMemoryRequest)
-	defaultSmallMySQLMemoryLimit   = resource.MustParse(model.SmallMySQLMemoryLimit)
+	defaultSmallMySQLCpuRequest    = resource.MustParse(defaults.SmallMySQLCpuRequest)
+	defaultSmallMySQLCpuLimit      = resource.MustParse(defaults.SmallMySQLCpuLimit)
+	defaultSmallMySQLMemoryRequest = resource.MustParse(defaults.SmallMySQLMemoryRequest)
+	defaultSmallMySQLMemoryLimit   = resource.MustParse(defaults.SmallMySQLMemoryLimit)
 
 	overrideMySQLStorageSize   = "25Gi"
 	overrideMySQLNamespace     = "custom-namespace"
@@ -31,7 +32,7 @@ var _ = Describe("BuildMySQLConfig", func() {
 		Context("when actual Config is nil", func() {
 			It("should use default Config resources", func() {
 				actual := apiv2.WBMySQLSpec{Config: nil}
-				defaultConfig := model.MySQLConfig{
+				defaultConfig := common.MySQLConfig{
 					Resources: corev1.ResourceRequirements{
 						Requests: corev1.ResourceList{
 							corev1.ResourceCPU:    defaultSmallMySQLCpuRequest,
@@ -61,7 +62,7 @@ var _ = Describe("BuildMySQLConfig", func() {
 						},
 					},
 				}
-				defaultConfig := model.MySQLConfig{
+				defaultConfig := common.MySQLConfig{
 					Resources: corev1.ResourceRequirements{
 						Requests: corev1.ResourceList{
 							corev1.ResourceCPU:    defaultSmallMySQLCpuRequest,
@@ -89,13 +90,13 @@ var _ = Describe("BuildMySQLConfig", func() {
 				actual := apiv2.WBMySQLSpec{
 					StorageSize: "",
 				}
-				defaultConfig := model.MySQLConfig{
-					StorageSize: model.SmallMySQLStorageSize,
+				defaultConfig := common.MySQLConfig{
+					StorageSize: defaults.SmallMySQLStorageSize,
 				}
 
 				result, err := BuildMySQLConfig(actual, defaultConfig)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(result.StorageSize).To(Equal(model.SmallMySQLStorageSize))
+				Expect(result.StorageSize).To(Equal(defaults.SmallMySQLStorageSize))
 			})
 		})
 
@@ -104,8 +105,8 @@ var _ = Describe("BuildMySQLConfig", func() {
 				actual := apiv2.WBMySQLSpec{
 					StorageSize: overrideMySQLStorageSize,
 				}
-				defaultConfig := model.MySQLConfig{
-					StorageSize: model.SmallMySQLStorageSize,
+				defaultConfig := common.MySQLConfig{
+					StorageSize: defaults.SmallMySQLStorageSize,
 				}
 
 				result, err := BuildMySQLConfig(actual, defaultConfig)
@@ -119,7 +120,7 @@ var _ = Describe("BuildMySQLConfig", func() {
 				actual := apiv2.WBMySQLSpec{
 					StorageSize: "",
 				}
-				defaultConfig := model.MySQLConfig{
+				defaultConfig := common.MySQLConfig{
 					StorageSize: "",
 				}
 
@@ -136,7 +137,7 @@ var _ = Describe("BuildMySQLConfig", func() {
 				actual := apiv2.WBMySQLSpec{
 					Namespace: "",
 				}
-				defaultConfig := model.MySQLConfig{
+				defaultConfig := common.MySQLConfig{
 					Namespace: overrideMySQLNamespace,
 				}
 
@@ -151,7 +152,7 @@ var _ = Describe("BuildMySQLConfig", func() {
 				actual := apiv2.WBMySQLSpec{
 					Namespace: overrideMySQLNamespace,
 				}
-				defaultConfig := model.MySQLConfig{
+				defaultConfig := common.MySQLConfig{
 					Namespace: "default-namespace",
 				}
 
@@ -166,7 +167,7 @@ var _ = Describe("BuildMySQLConfig", func() {
 				actual := apiv2.WBMySQLSpec{
 					Namespace: "",
 				}
-				defaultConfig := model.MySQLConfig{
+				defaultConfig := common.MySQLConfig{
 					Namespace: "",
 				}
 
@@ -183,7 +184,7 @@ var _ = Describe("BuildMySQLConfig", func() {
 				actual := apiv2.WBMySQLSpec{
 					Enabled: true,
 				}
-				defaultConfig := model.MySQLConfig{
+				defaultConfig := common.MySQLConfig{
 					Enabled: false,
 				}
 
@@ -198,7 +199,7 @@ var _ = Describe("BuildMySQLConfig", func() {
 				actual := apiv2.WBMySQLSpec{
 					Enabled: false,
 				}
-				defaultConfig := model.MySQLConfig{
+				defaultConfig := common.MySQLConfig{
 					Enabled: true,
 				}
 
@@ -213,10 +214,10 @@ var _ = Describe("BuildMySQLConfig", func() {
 		Context("when actual is completely empty", func() {
 			It("should return all default values except Enabled", func() {
 				actual := apiv2.WBMySQLSpec{}
-				defaultConfig := model.MySQLConfig{
+				defaultConfig := common.MySQLConfig{
 					Enabled:     true,
 					Namespace:   overrideMySQLNamespace,
-					StorageSize: model.SmallMySQLStorageSize,
+					StorageSize: defaults.SmallMySQLStorageSize,
 					Resources: corev1.ResourceRequirements{
 						Requests: corev1.ResourceList{
 							corev1.ResourceCPU: defaultSmallMySQLCpuRequest,
@@ -228,7 +229,7 @@ var _ = Describe("BuildMySQLConfig", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.Enabled).To(BeFalse())
 				Expect(result.Namespace).To(Equal(overrideMySQLNamespace))
-				Expect(result.StorageSize).To(Equal(model.SmallMySQLStorageSize))
+				Expect(result.StorageSize).To(Equal(defaults.SmallMySQLStorageSize))
 				Expect(result.Resources.Requests[corev1.ResourceCPU]).To(Equal(defaultSmallMySQLCpuRequest))
 			})
 		})
@@ -248,10 +249,10 @@ var _ = Describe("BuildMySQLConfig", func() {
 						},
 					},
 				}
-				defaultConfig := model.MySQLConfig{
+				defaultConfig := common.MySQLConfig{
 					Enabled:     true,
 					Namespace:   "default-namespace",
-					StorageSize: model.SmallMySQLStorageSize,
+					StorageSize: defaults.SmallMySQLStorageSize,
 					Resources: corev1.ResourceRequirements{
 						Requests: corev1.ResourceList{
 							corev1.ResourceCPU: defaultSmallMySQLCpuRequest,
@@ -274,7 +275,7 @@ var _ = Describe("BuildMySQLConfig", func() {
 		Context("when both specs are completely empty", func() {
 			It("should return an empty config without error", func() {
 				actual := apiv2.WBMySQLSpec{}
-				defaultConfig := model.MySQLConfig{}
+				defaultConfig := common.MySQLConfig{}
 
 				result, err := BuildMySQLConfig(actual, defaultConfig)
 				Expect(err).ToNot(HaveOccurred())
@@ -290,7 +291,7 @@ var _ = Describe("InfraConfigBuilder.AddMySQLConfig", func() {
 	const testOwnerNamespace = "test-namespace"
 
 	Context("when adding dev size spec", func() {
-		It("should merge actual with dev defaults from model", func() {
+		It("should merge actual with dev defaults from common", func() {
 			actual := apiv2.WBMySQLSpec{
 				Enabled: true,
 			}
@@ -302,7 +303,7 @@ var _ = Describe("InfraConfigBuilder.AddMySQLConfig", func() {
 			Expect(builder.errors).To(BeEmpty())
 			Expect(builder.mergedMySQL.Enabled).To(BeTrue())
 			Expect(builder.mergedMySQL.Namespace).To(Equal(testOwnerNamespace))
-			Expect(builder.mergedMySQL.StorageSize).To(Equal(model.DevMySQLStorageSize))
+			Expect(builder.mergedMySQL.StorageSize).To(Equal(defaults.DevMySQLStorageSize))
 		})
 	})
 
@@ -339,7 +340,7 @@ var _ = Describe("InfraConfigBuilder.AddMySQLConfig", func() {
 			Expect(builder.mergedMySQL.Namespace).ToNot(Equal(testOwnerNamespace))
 
 			Expect(builder.mergedMySQL.StorageSize).To(Equal(overrideMySQLStorageSize))
-			Expect(builder.mergedMySQL.StorageSize).ToNot(Equal(model.SmallMySQLStorageSize))
+			Expect(builder.mergedMySQL.StorageSize).ToNot(Equal(defaults.SmallMySQLStorageSize))
 
 			Expect(builder.mergedMySQL.Resources.Requests[corev1.ResourceCPU]).To(Equal(overrideMySQLCpuRequest))
 			Expect(builder.mergedMySQL.Resources.Requests[corev1.ResourceCPU]).ToNot(Equal(defaultSmallMySQLCpuRequest))
@@ -368,7 +369,7 @@ var _ = Describe("InfraConfigBuilder.AddMySQLConfig", func() {
 			Expect(result).To(Equal(builder))
 			Expect(builder.errors).To(BeEmpty())
 			Expect(builder.mergedMySQL.StorageSize).To(Equal(overrideMySQLStorageSize))
-			Expect(builder.mergedMySQL.StorageSize).ToNot(Equal(model.SmallMySQLStorageSize))
+			Expect(builder.mergedMySQL.StorageSize).ToNot(Equal(defaults.SmallMySQLStorageSize))
 		})
 	})
 
@@ -441,7 +442,7 @@ var _ = Describe("InfraConfigBuilder.AddMySQLConfig", func() {
 
 var _ = Describe("TranslateMySQLSpec", func() {
 	Context("when translating a complete MySQL spec", func() {
-		It("should correctly map all fields to model.MySQLConfig", func() {
+		It("should correctly map all fields to common.MySQLConfig", func() {
 			spec := apiv2.WBMySQLSpec{
 				Enabled:     true,
 				Namespace:   overrideMySQLNamespace,
@@ -478,11 +479,11 @@ var _ = Describe("TranslateMySQLStatus", func() {
 		ctx = context.Background()
 	})
 
-	Context("when model status has no errors or details", func() {
+	Context("when common status has no errors or details", func() {
 		It("should return ready status when Ready is true", func() {
-			modelStatus := model.MySQLStatus{
+			modelStatus := common.MySQLStatus{
 				Ready: true,
-				Connection: model.MySQLConnection{
+				Connection: common.MySQLConnection{
 					Host: "mysql.example.com",
 					Port: "3306",
 					User: "admin",
@@ -501,7 +502,7 @@ var _ = Describe("TranslateMySQLStatus", func() {
 		})
 
 		It("should return unknown status when Ready is false", func() {
-			modelStatus := model.MySQLStatus{
+			modelStatus := common.MySQLStatus{
 				Ready: false,
 			}
 
@@ -513,13 +514,13 @@ var _ = Describe("TranslateMySQLStatus", func() {
 		})
 	})
 
-	Context("when model status has errors", func() {
+	Context("when common status has errors", func() {
 		It("should translate errors to status details with Error state", func() {
-			modelStatus := model.MySQLStatus{
+			modelStatus := common.MySQLStatus{
 				Ready: false,
-				Errors: []model.MySQLInfraError{
-					{InfraError: model.NewMySQLError(model.MySQLErrFailedToCreateCode, "creation failed")},
-					{InfraError: model.NewMySQLError(model.MySQLErrFailedToUpdateCode, "update failed")},
+				Errors: []common.MySQLInfraError{
+					{InfraError: common.NewMySQLError(common.MySQLErrFailedToCreateCode, "creation failed")},
+					{InfraError: common.NewMySQLError(common.MySQLErrFailedToUpdateCode, "update failed")},
 				},
 			}
 
@@ -529,20 +530,20 @@ var _ = Describe("TranslateMySQLStatus", func() {
 			Expect(result.State).To(Equal(apiv2.WBStateError))
 			Expect(result.Details).To(HaveLen(2))
 			Expect(result.Details[0].State).To(Equal(apiv2.WBStateError))
-			Expect(result.Details[0].Code).To(Equal(string(model.MySQLErrFailedToCreateCode)))
+			Expect(result.Details[0].Code).To(Equal(string(common.MySQLErrFailedToCreateCode)))
 			Expect(result.Details[0].Message).To(Equal("creation failed"))
 			Expect(result.Details[1].State).To(Equal(apiv2.WBStateError))
-			Expect(result.Details[1].Code).To(Equal(string(model.MySQLErrFailedToUpdateCode)))
+			Expect(result.Details[1].Code).To(Equal(string(common.MySQLErrFailedToUpdateCode)))
 			Expect(result.Details[1].Message).To(Equal("update failed"))
 		})
 	})
 
-	Context("when model status has status details", func() {
+	Context("when common status has status details", func() {
 		It("should translate MySQLCreated to Updating state", func() {
-			modelStatus := model.MySQLStatus{
+			modelStatus := common.MySQLStatus{
 				Ready: false,
-				Details: []model.MySQLStatusDetail{
-					{InfraStatusDetail: model.NewMySQLStatusDetail(model.MySQLCreatedCode, "MySQL created")},
+				Details: []common.MySQLStatusDetail{
+					{InfraStatusDetail: common.NewMySQLStatusDetail(common.MySQLCreatedCode, "MySQL created")},
 				},
 			}
 
@@ -550,15 +551,15 @@ var _ = Describe("TranslateMySQLStatus", func() {
 
 			Expect(result.Details).To(HaveLen(1))
 			Expect(result.Details[0].State).To(Equal(apiv2.WBStateUpdating))
-			Expect(result.Details[0].Code).To(Equal(string(model.MySQLCreatedCode)))
+			Expect(result.Details[0].Code).To(Equal(string(common.MySQLCreatedCode)))
 			Expect(result.State).To(Equal(apiv2.WBStateUpdating))
 		})
 
 		It("should translate MySQLUpdated to Updating state", func() {
-			modelStatus := model.MySQLStatus{
+			modelStatus := common.MySQLStatus{
 				Ready: false,
-				Details: []model.MySQLStatusDetail{
-					{InfraStatusDetail: model.NewMySQLStatusDetail(model.MySQLUpdatedCode, "MySQL updated")},
+				Details: []common.MySQLStatusDetail{
+					{InfraStatusDetail: common.NewMySQLStatusDetail(common.MySQLUpdatedCode, "MySQL updated")},
 				},
 			}
 
@@ -569,10 +570,10 @@ var _ = Describe("TranslateMySQLStatus", func() {
 		})
 
 		It("should translate MySQLDeleted to Deleting state", func() {
-			modelStatus := model.MySQLStatus{
+			modelStatus := common.MySQLStatus{
 				Ready: false,
-				Details: []model.MySQLStatusDetail{
-					{InfraStatusDetail: model.NewMySQLStatusDetail(model.MySQLDeletedCode, "MySQL deleted")},
+				Details: []common.MySQLStatusDetail{
+					{InfraStatusDetail: common.NewMySQLStatusDetail(common.MySQLDeletedCode, "MySQL deleted")},
 				},
 			}
 
@@ -583,10 +584,10 @@ var _ = Describe("TranslateMySQLStatus", func() {
 		})
 
 		It("should translate MySQLConnection to Ready state", func() {
-			modelStatus := model.MySQLStatus{
+			modelStatus := common.MySQLStatus{
 				Ready: true,
-				Details: []model.MySQLStatusDetail{
-					{InfraStatusDetail: model.NewMySQLStatusDetail(model.MySQLConnectionCode, "connection established")},
+				Details: []common.MySQLStatusDetail{
+					{InfraStatusDetail: common.NewMySQLStatusDetail(common.MySQLConnectionCode, "connection established")},
 				},
 			}
 
@@ -597,15 +598,15 @@ var _ = Describe("TranslateMySQLStatus", func() {
 		})
 	})
 
-	Context("when model status has both errors and details", func() {
+	Context("when common status has both errors and details", func() {
 		It("should use worst state according to WorseThan", func() {
-			modelStatus := model.MySQLStatus{
+			modelStatus := common.MySQLStatus{
 				Ready: false,
-				Errors: []model.MySQLInfraError{
-					{InfraError: model.NewMySQLError(model.MySQLErrFailedToCreateCode, "creation failed")},
+				Errors: []common.MySQLInfraError{
+					{InfraError: common.NewMySQLError(common.MySQLErrFailedToCreateCode, "creation failed")},
 				},
-				Details: []model.MySQLStatusDetail{
-					{InfraStatusDetail: model.NewMySQLStatusDetail(model.MySQLCreatedCode, "MySQL created")},
+				Details: []common.MySQLStatusDetail{
+					{InfraStatusDetail: common.NewMySQLStatusDetail(common.MySQLCreatedCode, "MySQL created")},
 				},
 			}
 
@@ -616,13 +617,13 @@ var _ = Describe("TranslateMySQLStatus", func() {
 		})
 	})
 
-	Context("when model status has multiple details with different states", func() {
+	Context("when common status has multiple details with different states", func() {
 		It("should compute worst state correctly", func() {
-			modelStatus := model.MySQLStatus{
+			modelStatus := common.MySQLStatus{
 				Ready: false,
-				Details: []model.MySQLStatusDetail{
-					{InfraStatusDetail: model.NewMySQLStatusDetail(model.MySQLUpdatedCode, "updating")},
-					{InfraStatusDetail: model.NewMySQLStatusDetail(model.MySQLDeletedCode, "deleting")},
+				Details: []common.MySQLStatusDetail{
+					{InfraStatusDetail: common.NewMySQLStatusDetail(common.MySQLUpdatedCode, "updating")},
+					{InfraStatusDetail: common.NewMySQLStatusDetail(common.MySQLDeletedCode, "deleting")},
 				},
 			}
 

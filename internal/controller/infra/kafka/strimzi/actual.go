@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/wandb/operator/internal/model"
+	"github.com/wandb/operator/internal/controller/translator/common"
 	v1beta3 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1beta2"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -17,7 +17,7 @@ import (
 type strimziKafka struct {
 	kafka    *v1beta3.Kafka
 	nodePool *v1beta3.KafkaNodePool
-	config   model.KafkaConfig
+	config   common.KafkaConfig
 	client   client.Client
 	owner    metav1.Object
 	scheme   *runtime.Scheme
@@ -27,7 +27,7 @@ type strimziKafka struct {
 func Initialize(
 	ctx context.Context,
 	client client.Client,
-	kafkaConfig model.KafkaConfig,
+	kafkaConfig common.KafkaConfig,
 	owner metav1.Object,
 	scheme *runtime.Scheme,
 ) (*strimziKafka, error) {
@@ -78,9 +78,9 @@ func Initialize(
 }
 
 // Upsert creates or updates Kafka and KafkaNodePool CRs based on whether they exist
-func (a *strimziKafka) Upsert(ctx context.Context, kafkaConfig model.KafkaConfig) *model.Results {
-	results := model.InitResults()
-	var nextResults *model.Results
+func (a *strimziKafka) Upsert(ctx context.Context, kafkaConfig common.KafkaConfig) *common.Results {
+	results := common.InitResults()
+	var nextResults *common.Results
 
 	// Build desired Kafka CR
 	desiredKafka, nextResults := buildDesiredKafka(ctx, kafkaConfig, a.owner, a.scheme)
@@ -118,34 +118,34 @@ func (a *strimziKafka) Upsert(ctx context.Context, kafkaConfig model.KafkaConfig
 }
 
 // Delete removes Kafka and KafkaNodePool CRs
-func (a *strimziKafka) Delete(ctx context.Context) *model.Results {
+func (a *strimziKafka) Delete(ctx context.Context) *common.Results {
 	log := ctrl.LoggerFrom(ctx)
-	results := model.InitResults()
+	results := common.InitResults()
 
 	// Delete NodePool first (should be deleted before Kafka for clean teardown)
 	if a.nodePool != nil {
 		if err := a.client.Delete(ctx, a.nodePool); err != nil {
 			log.Error(err, "Failed to delete KafkaNodePool CR")
-			results.AddErrors(model.NewKafkaError(
-				model.KafkaErrFailedToDeleteCode,
+			results.AddErrors(common.NewKafkaError(
+				common.KafkaErrFailedToDeleteCode,
 				fmt.Sprintf("failed to delete KafkaNodePool: %v", err),
 			))
 			return results
 		}
-		results.AddStatuses(model.NewKafkaStatusDetail(model.KafkaNodePoolDeletedCode, NodePoolName))
+		results.AddStatuses(common.NewKafkaStatusDetail(common.KafkaNodePoolDeletedCode, NodePoolName))
 	}
 
 	// Delete Kafka CR
 	if a.kafka != nil {
 		if err := a.client.Delete(ctx, a.kafka); err != nil {
 			log.Error(err, "Failed to delete Kafka CR")
-			results.AddErrors(model.NewKafkaError(
-				model.KafkaErrFailedToDeleteCode,
+			results.AddErrors(common.NewKafkaError(
+				common.KafkaErrFailedToDeleteCode,
 				fmt.Sprintf("failed to delete Kafka: %v", err),
 			))
 			return results
 		}
-		results.AddStatuses(model.NewKafkaStatusDetail(model.KafkaDeletedCode, KafkaName))
+		results.AddStatuses(common.NewKafkaStatusDetail(common.KafkaDeletedCode, KafkaName))
 	}
 
 	return results

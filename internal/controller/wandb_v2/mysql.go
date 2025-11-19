@@ -6,19 +6,19 @@ import (
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/infra/mysql"
 	"github.com/wandb/operator/internal/controller/infra/mysql/percona"
+	"github.com/wandb/operator/internal/controller/translator/common"
 	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
-	"github.com/wandb/operator/internal/model"
 )
 
 func (r *WeightsAndBiasesV2Reconciler) reconcileMySQL(
 	ctx context.Context,
 	infraDetails translatorv2.InfraConfig,
 	wandb *apiv2.WeightsAndBiases,
-) *model.Results {
+) *common.Results {
 	var err error
-	var results = &model.Results{}
-	var nextResults *model.Results
-	var mysqlConfig model.MySQLConfig
+	var results = &common.Results{}
+	var nextResults *common.Results
+	var mysqlConfig common.MySQLConfig
 	var actual mysql.ActualMySQL
 
 	if mysqlConfig, err = infraDetails.GetMySQLConfig(); err != nil {

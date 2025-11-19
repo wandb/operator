@@ -1,10 +1,19 @@
-package model
+package common
 
 import (
 	"errors"
 	"fmt"
 
 	"github.com/wandb/operator/internal/utils"
+)
+
+type Size string
+
+const (
+	SizeDev    Size = "dev"
+	SizeSmall  Size = "small"
+	SizeMedium Size = "medium"
+	SizeLarge  Size = "large"
 )
 
 /////////////////////////////////////////////////

@@ -6,16 +6,17 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	apiv2 "github.com/wandb/operator/api/v2"
-	"github.com/wandb/operator/internal/model"
+	"github.com/wandb/operator/internal/controller/translator/common"
+	"github.com/wandb/operator/internal/defaults"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 var (
-	defaultSmallCHCpuRequest    = resource.MustParse(model.SmallClickHouseCpuRequest)
-	defaultSmallCHCpuLimit      = resource.MustParse(model.SmallClickHouseCpuLimit)
-	defaultSmallCHMemoryRequest = resource.MustParse(model.SmallClickHouseMemoryRequest)
-	defaultSmallCHMemoryLimit   = resource.MustParse(model.SmallClickHouseMemoryLimit)
+	defaultSmallCHCpuRequest    = resource.MustParse(defaults.SmallClickHouseCpuRequest)
+	defaultSmallCHCpuLimit      = resource.MustParse(defaults.SmallClickHouseCpuLimit)
+	defaultSmallCHMemoryRequest = resource.MustParse(defaults.SmallClickHouseMemoryRequest)
+	defaultSmallCHMemoryLimit   = resource.MustParse(defaults.SmallClickHouseMemoryLimit)
 
 	overrideCHStorageSize   = "50Gi"
 	overrideCHVersion       = "24.8"
@@ -33,7 +34,7 @@ var _ = Describe("BuildClickHouseConfig", func() {
 		Context("when actual Config is nil", func() {
 			It("should use default Config resources", func() {
 				actual := apiv2.WBClickHouseSpec{Config: nil}
-				defaultConfig := model.ClickHouseConfig{
+				defaultConfig := common.ClickHouseConfig{
 					Resources: corev1.ResourceRequirements{
 						Requests: corev1.ResourceList{
 							corev1.ResourceCPU: defaultSmallCHCpuRequest,
@@ -56,7 +57,7 @@ var _ = Describe("BuildClickHouseConfig", func() {
 						},
 					},
 				}
-				defaultConfig := model.ClickHouseConfig{
+				defaultConfig := common.ClickHouseConfig{
 					Resources: corev1.ResourceRequirements{
 						Requests: corev1.ResourceList{
 							corev1.ResourceCPU:    defaultSmallCHCpuRequest,
@@ -81,16 +82,16 @@ var _ = Describe("BuildClickHouseConfig", func() {
 					StorageSize: "",
 					Namespace:   "",
 				}
-				defaultConfig := model.ClickHouseConfig{
-					Version:     model.ClickHouseVersion,
-					StorageSize: model.SmallClickHouseStorageSize,
+				defaultConfig := common.ClickHouseConfig{
+					Version:     defaults.ClickHouseVersion,
+					StorageSize: defaults.SmallClickHouseStorageSize,
 					Namespace:   "default-ns",
 				}
 
 				result, err := BuildClickHouseConfig(actual, defaultConfig)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(result.Version).To(Equal(model.ClickHouseVersion))
-				Expect(result.StorageSize).To(Equal(model.SmallClickHouseStorageSize))
+				Expect(result.Version).To(Equal(defaults.ClickHouseVersion))
+				Expect(result.StorageSize).To(Equal(defaults.SmallClickHouseStorageSize))
 				Expect(result.Namespace).To(Equal("default-ns"))
 			})
 		})
@@ -102,9 +103,9 @@ var _ = Describe("BuildClickHouseConfig", func() {
 					StorageSize: overrideCHStorageSize,
 					Namespace:   overrideCHNamespace,
 				}
-				defaultConfig := model.ClickHouseConfig{
-					Version:     model.ClickHouseVersion,
-					StorageSize: model.SmallClickHouseStorageSize,
+				defaultConfig := common.ClickHouseConfig{
+					Version:     defaults.ClickHouseVersion,
+					StorageSize: defaults.SmallClickHouseStorageSize,
 					Namespace:   "default-ns",
 				}
 
@@ -123,7 +124,7 @@ var _ = Describe("BuildClickHouseConfig", func() {
 				Enabled:  overrideCHEnabled,
 				Replicas: overrideCHReplicas,
 			}
-			defaultConfig := model.ClickHouseConfig{
+			defaultConfig := common.ClickHouseConfig{
 				Enabled:  true,
 				Replicas: 3,
 			}
@@ -140,7 +141,7 @@ var _ = Describe("InfraConfigBuilder.AddClickHouseConfig", func() {
 	const testOwnerNamespace = "test-namespace"
 
 	Context("when adding dev size spec", func() {
-		It("should merge actual with dev defaults from model", func() {
+		It("should merge actual with dev defaults from common", func() {
 			actual := apiv2.WBClickHouseSpec{
 				Enabled:  true,
 				Replicas: 1,
@@ -153,9 +154,9 @@ var _ = Describe("InfraConfigBuilder.AddClickHouseConfig", func() {
 			Expect(builder.errors).To(BeEmpty())
 			Expect(builder.mergedClickHouse.Enabled).To(BeTrue())
 			Expect(builder.mergedClickHouse.Namespace).To(Equal(testOwnerNamespace))
-			Expect(builder.mergedClickHouse.StorageSize).To(Equal(model.DevClickHouseStorageSize))
+			Expect(builder.mergedClickHouse.StorageSize).To(Equal(defaults.DevClickHouseStorageSize))
 			Expect(builder.mergedClickHouse.Replicas).To(Equal(int32(1)))
-			Expect(builder.mergedClickHouse.Version).To(Equal(model.ClickHouseVersion))
+			Expect(builder.mergedClickHouse.Version).To(Equal(defaults.ClickHouseVersion))
 		})
 	})
 
@@ -173,8 +174,8 @@ var _ = Describe("InfraConfigBuilder.AddClickHouseConfig", func() {
 			Expect(builder.errors).To(BeEmpty())
 			Expect(builder.mergedClickHouse.Enabled).To(BeTrue())
 			Expect(builder.mergedClickHouse.Replicas).To(Equal(int32(3)))
-			Expect(builder.mergedClickHouse.StorageSize).To(Equal(model.SmallClickHouseStorageSize))
-			Expect(builder.mergedClickHouse.Version).To(Equal(model.ClickHouseVersion))
+			Expect(builder.mergedClickHouse.StorageSize).To(Equal(defaults.SmallClickHouseStorageSize))
+			Expect(builder.mergedClickHouse.Version).To(Equal(defaults.ClickHouseVersion))
 			Expect(builder.mergedClickHouse.Resources.Requests[corev1.ResourceCPU]).To(Equal(defaultSmallCHCpuRequest))
 		})
 	})
@@ -214,10 +215,10 @@ var _ = Describe("InfraConfigBuilder.AddClickHouseConfig", func() {
 			Expect(builder.mergedClickHouse.Namespace).ToNot(Equal(testOwnerNamespace))
 
 			Expect(builder.mergedClickHouse.StorageSize).To(Equal(overrideCHStorageSize))
-			Expect(builder.mergedClickHouse.StorageSize).ToNot(Equal(model.SmallClickHouseStorageSize))
+			Expect(builder.mergedClickHouse.StorageSize).ToNot(Equal(defaults.SmallClickHouseStorageSize))
 
 			Expect(builder.mergedClickHouse.Version).To(Equal(overrideCHVersion))
-			Expect(builder.mergedClickHouse.Version).ToNot(Equal(model.ClickHouseVersion))
+			Expect(builder.mergedClickHouse.Version).ToNot(Equal(defaults.ClickHouseVersion))
 
 			Expect(builder.mergedClickHouse.Replicas).To(Equal(overrideCHReplicas))
 			Expect(builder.mergedClickHouse.Replicas).ToNot(Equal(int32(3)))
@@ -250,7 +251,7 @@ var _ = Describe("InfraConfigBuilder.AddClickHouseConfig", func() {
 			Expect(result).To(Equal(builder))
 			Expect(builder.errors).To(BeEmpty())
 			Expect(builder.mergedClickHouse.StorageSize).To(Equal(overrideCHStorageSize))
-			Expect(builder.mergedClickHouse.StorageSize).ToNot(Equal(model.SmallClickHouseStorageSize))
+			Expect(builder.mergedClickHouse.StorageSize).ToNot(Equal(defaults.SmallClickHouseStorageSize))
 			Expect(builder.mergedClickHouse.Resources.Requests[corev1.ResourceCPU]).To(Equal(defaultSmallCHCpuRequest))
 		})
 	})
@@ -269,7 +270,7 @@ var _ = Describe("InfraConfigBuilder.AddClickHouseConfig", func() {
 			Expect(result).To(Equal(builder))
 			Expect(builder.errors).To(BeEmpty())
 			Expect(builder.mergedClickHouse.Version).To(Equal(overrideCHVersion))
-			Expect(builder.mergedClickHouse.Version).ToNot(Equal(model.ClickHouseVersion))
+			Expect(builder.mergedClickHouse.Version).ToNot(Equal(defaults.ClickHouseVersion))
 		})
 	})
 
@@ -344,7 +345,7 @@ var _ = Describe("InfraConfigBuilder.AddClickHouseConfig", func() {
 
 var _ = Describe("TranslateClickHouseSpec", func() {
 	Context("when translating a complete ClickHouse spec", func() {
-		It("should correctly map all fields to model.ClickHouseConfig", func() {
+		It("should correctly map all fields to common.ClickHouseConfig", func() {
 			spec := apiv2.WBClickHouseSpec{
 				Enabled:     true,
 				Namespace:   overrideCHNamespace,
@@ -384,9 +385,9 @@ var _ = Describe("TranslateClickHouseSpec", func() {
 			spec := apiv2.WBClickHouseSpec{
 				Enabled:     overrideCHEnabled,
 				Namespace:   overrideCHNamespace,
-				StorageSize: model.DevClickHouseStorageSize,
+				StorageSize: defaults.DevClickHouseStorageSize,
 				Replicas:    1,
-				Version:     model.ClickHouseVersion,
+				Version:     defaults.ClickHouseVersion,
 				Config:      nil,
 			}
 
@@ -409,11 +410,11 @@ var _ = Describe("TranslateClickHouseStatus", func() {
 		ctx = context.Background()
 	})
 
-	Context("when model status has no errors or details", func() {
+	Context("when common status has no errors or details", func() {
 		It("should return ready status when Ready is true", func() {
-			modelStatus := model.ClickHouseStatus{
+			modelStatus := common.ClickHouseStatus{
 				Ready: true,
-				Connection: model.ClickHouseConnection{
+				Connection: common.ClickHouseConnection{
 					Host: "ch.example.com",
 					Port: "9000",
 					User: "admin",
@@ -432,7 +433,7 @@ var _ = Describe("TranslateClickHouseStatus", func() {
 		})
 
 		It("should return unknown status when Ready is false", func() {
-			modelStatus := model.ClickHouseStatus{
+			modelStatus := common.ClickHouseStatus{
 				Ready: false,
 			}
 
@@ -444,13 +445,13 @@ var _ = Describe("TranslateClickHouseStatus", func() {
 		})
 	})
 
-	Context("when model status has errors", func() {
+	Context("when common status has errors", func() {
 		It("should translate errors to status details with Error state", func() {
-			modelStatus := model.ClickHouseStatus{
+			modelStatus := common.ClickHouseStatus{
 				Ready: false,
-				Errors: []model.ClickHouseInfraError{
-					{InfraError: model.NewClickHouseError(model.ClickHouseErrFailedToCreateCode, "creation failed")},
-					{InfraError: model.NewClickHouseError(model.ClickHouseErrFailedToUpdateCode, "update failed")},
+				Errors: []common.ClickHouseInfraError{
+					{InfraError: common.NewClickHouseError(common.ClickHouseErrFailedToCreateCode, "creation failed")},
+					{InfraError: common.NewClickHouseError(common.ClickHouseErrFailedToUpdateCode, "update failed")},
 				},
 			}
 
@@ -460,20 +461,20 @@ var _ = Describe("TranslateClickHouseStatus", func() {
 			Expect(result.State).To(Equal(apiv2.WBStateError))
 			Expect(result.Details).To(HaveLen(2))
 			Expect(result.Details[0].State).To(Equal(apiv2.WBStateError))
-			Expect(result.Details[0].Code).To(Equal(string(model.ClickHouseErrFailedToCreateCode)))
+			Expect(result.Details[0].Code).To(Equal(string(common.ClickHouseErrFailedToCreateCode)))
 			Expect(result.Details[0].Message).To(Equal("creation failed"))
 			Expect(result.Details[1].State).To(Equal(apiv2.WBStateError))
-			Expect(result.Details[1].Code).To(Equal(string(model.ClickHouseErrFailedToUpdateCode)))
+			Expect(result.Details[1].Code).To(Equal(string(common.ClickHouseErrFailedToUpdateCode)))
 			Expect(result.Details[1].Message).To(Equal("update failed"))
 		})
 	})
 
-	Context("when model status has status details", func() {
+	Context("when common status has status details", func() {
 		It("should translate ClickHouseCreated to Updating state", func() {
-			modelStatus := model.ClickHouseStatus{
+			modelStatus := common.ClickHouseStatus{
 				Ready: false,
-				Details: []model.ClickHouseStatusDetail{
-					{InfraStatusDetail: model.NewClickHouseStatusDetail(model.ClickHouseCreatedCode, "ClickHouse created")},
+				Details: []common.ClickHouseStatusDetail{
+					{InfraStatusDetail: common.NewClickHouseStatusDetail(common.ClickHouseCreatedCode, "ClickHouse created")},
 				},
 			}
 
@@ -481,15 +482,15 @@ var _ = Describe("TranslateClickHouseStatus", func() {
 
 			Expect(result.Details).To(HaveLen(1))
 			Expect(result.Details[0].State).To(Equal(apiv2.WBStateUpdating))
-			Expect(result.Details[0].Code).To(Equal(string(model.ClickHouseCreatedCode)))
+			Expect(result.Details[0].Code).To(Equal(string(common.ClickHouseCreatedCode)))
 			Expect(result.State).To(Equal(apiv2.WBStateUpdating))
 		})
 
 		It("should translate ClickHouseUpdated to Updating state", func() {
-			modelStatus := model.ClickHouseStatus{
+			modelStatus := common.ClickHouseStatus{
 				Ready: false,
-				Details: []model.ClickHouseStatusDetail{
-					{InfraStatusDetail: model.NewClickHouseStatusDetail(model.ClickHouseUpdatedCode, "ClickHouse updated")},
+				Details: []common.ClickHouseStatusDetail{
+					{InfraStatusDetail: common.NewClickHouseStatusDetail(common.ClickHouseUpdatedCode, "ClickHouse updated")},
 				},
 			}
 
@@ -500,10 +501,10 @@ var _ = Describe("TranslateClickHouseStatus", func() {
 		})
 
 		It("should translate ClickHouseDeleted to Deleting state", func() {
-			modelStatus := model.ClickHouseStatus{
+			modelStatus := common.ClickHouseStatus{
 				Ready: false,
-				Details: []model.ClickHouseStatusDetail{
-					{InfraStatusDetail: model.NewClickHouseStatusDetail(model.ClickHouseDeletedCode, "ClickHouse deleted")},
+				Details: []common.ClickHouseStatusDetail{
+					{InfraStatusDetail: common.NewClickHouseStatusDetail(common.ClickHouseDeletedCode, "ClickHouse deleted")},
 				},
 			}
 
@@ -514,10 +515,10 @@ var _ = Describe("TranslateClickHouseStatus", func() {
 		})
 
 		It("should translate ClickHouseConnection to Ready state", func() {
-			modelStatus := model.ClickHouseStatus{
+			modelStatus := common.ClickHouseStatus{
 				Ready: true,
-				Details: []model.ClickHouseStatusDetail{
-					{InfraStatusDetail: model.NewClickHouseStatusDetail(model.ClickHouseConnectionCode, "connection established")},
+				Details: []common.ClickHouseStatusDetail{
+					{InfraStatusDetail: common.NewClickHouseStatusDetail(common.ClickHouseConnectionCode, "connection established")},
 				},
 			}
 
@@ -528,15 +529,15 @@ var _ = Describe("TranslateClickHouseStatus", func() {
 		})
 	})
 
-	Context("when model status has both errors and details", func() {
+	Context("when common status has both errors and details", func() {
 		It("should use worst state according to WorseThan", func() {
-			modelStatus := model.ClickHouseStatus{
+			modelStatus := common.ClickHouseStatus{
 				Ready: false,
-				Errors: []model.ClickHouseInfraError{
-					{InfraError: model.NewClickHouseError(model.ClickHouseErrFailedToCreateCode, "creation failed")},
+				Errors: []common.ClickHouseInfraError{
+					{InfraError: common.NewClickHouseError(common.ClickHouseErrFailedToCreateCode, "creation failed")},
 				},
-				Details: []model.ClickHouseStatusDetail{
-					{InfraStatusDetail: model.NewClickHouseStatusDetail(model.ClickHouseCreatedCode, "ClickHouse created")},
+				Details: []common.ClickHouseStatusDetail{
+					{InfraStatusDetail: common.NewClickHouseStatusDetail(common.ClickHouseCreatedCode, "ClickHouse created")},
 				},
 			}
 
@@ -547,13 +548,13 @@ var _ = Describe("TranslateClickHouseStatus", func() {
 		})
 	})
 
-	Context("when model status has multiple details with different states", func() {
+	Context("when common status has multiple details with different states", func() {
 		It("should compute worst state correctly", func() {
-			modelStatus := model.ClickHouseStatus{
+			modelStatus := common.ClickHouseStatus{
 				Ready: false,
-				Details: []model.ClickHouseStatusDetail{
-					{InfraStatusDetail: model.NewClickHouseStatusDetail(model.ClickHouseUpdatedCode, "updating")},
-					{InfraStatusDetail: model.NewClickHouseStatusDetail(model.ClickHouseDeletedCode, "deleting")},
+				Details: []common.ClickHouseStatusDetail{
+					{InfraStatusDetail: common.NewClickHouseStatusDetail(common.ClickHouseUpdatedCode, "updating")},
+					{InfraStatusDetail: common.NewClickHouseStatusDetail(common.ClickHouseDeletedCode, "deleting")},
 				},
 			}
 

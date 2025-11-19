@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/wandb/operator/internal/model"
+	"github.com/wandb/operator/internal/controller/translator/common"
 	pxcv1 "github.com/wandb/operator/internal/vendored/percona-operator/pxc/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -16,7 +16,7 @@ import (
 
 type perconaPXC struct {
 	pxc    *pxcv1.PerconaXtraDBCluster
-	config model.MySQLConfig
+	config common.MySQLConfig
 	client client.Client
 	owner  metav1.Object
 	scheme *runtime.Scheme
@@ -26,7 +26,7 @@ type perconaPXC struct {
 func Initialize(
 	ctx context.Context,
 	client client.Client,
-	mysqlConfig model.MySQLConfig,
+	mysqlConfig common.MySQLConfig,
 	owner metav1.Object,
 	scheme *runtime.Scheme,
 ) (*perconaPXC, error) {
@@ -60,9 +60,9 @@ func Initialize(
 }
 
 // Upsert creates or updates PerconaXtraDBCluster CR based on whether it exists
-func (a *perconaPXC) Upsert(ctx context.Context, mysqlConfig model.MySQLConfig) *model.Results {
-	results := model.InitResults()
-	var nextResults *model.Results
+func (a *perconaPXC) Upsert(ctx context.Context, mysqlConfig common.MySQLConfig) *common.Results {
+	results := common.InitResults()
+	var nextResults *common.Results
 
 	// Build desired PXC CR
 	desiredPXC, nextResults := buildDesiredPXC(ctx, mysqlConfig, a.owner, a.scheme)
@@ -84,21 +84,21 @@ func (a *perconaPXC) Upsert(ctx context.Context, mysqlConfig model.MySQLConfig) 
 }
 
 // Delete removes PerconaXtraDBCluster CR
-func (a *perconaPXC) Delete(ctx context.Context) *model.Results {
+func (a *perconaPXC) Delete(ctx context.Context) *common.Results {
 	log := ctrl.LoggerFrom(ctx)
-	results := model.InitResults()
+	results := common.InitResults()
 
 	// Delete PXC CR
 	if a.pxc != nil {
 		if err := a.client.Delete(ctx, a.pxc); err != nil {
 			log.Error(err, "Failed to delete PXC CR")
-			results.AddErrors(model.NewMySQLError(
-				model.MySQLErrFailedToDeleteCode,
+			results.AddErrors(common.NewMySQLError(
+				common.MySQLErrFailedToDeleteCode,
 				fmt.Sprintf("failed to delete PXC: %v", err),
 			))
 			return results
 		}
-		results.AddStatuses(model.NewMySQLStatusDetail(model.MySQLDeletedCode, PXCName))
+		results.AddStatuses(common.NewMySQLStatusDetail(common.MySQLDeletedCode, PXCName))
 	}
 
 	return results

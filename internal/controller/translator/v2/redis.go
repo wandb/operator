@@ -4,20 +4,21 @@ import (
 	"context"
 
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/internal/controller/translator/common"
 	"github.com/wandb/operator/internal/controller/translator/utils"
-	"github.com/wandb/operator/internal/model"
+	"github.com/wandb/operator/internal/defaults"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
-	DefaultSentinelGroup = model.DefaultSentinelGroup
+	DefaultSentinelGroup = defaults.DefaultSentinelGroup
 )
 
-// BuildRedisConfig will create a new model.RedisConfig with defaultConfig applied if not
+// BuildRedisConfig will create a new common.RedisConfig with defaultConfig applied if not
 // present in actual. It should *never* be saved into the CR!
-func BuildRedisConfig(actual apiv2.WBRedisSpec, defaultConfig model.RedisConfig) (model.RedisConfig, error) {
+func BuildRedisConfig(actual apiv2.WBRedisSpec, defaultConfig common.RedisConfig) (common.RedisConfig, error) {
 	redisConfig := TranslateRedisSpec(actual)
 
 	if redisConfig.StorageSize.IsZero() {
@@ -54,8 +55,8 @@ func RedisSentinelEnabled(wbSpec apiv2.WBRedisSpec) bool {
 	return wbSpec.Sentinel != nil && wbSpec.Sentinel.Enabled
 }
 
-func TranslateRedisSpec(spec apiv2.WBRedisSpec) model.RedisConfig {
-	config := model.RedisConfig{
+func TranslateRedisSpec(spec apiv2.WBRedisSpec) common.RedisConfig {
+	config := common.RedisConfig{
 		Enabled:   spec.Enabled,
 		Namespace: spec.Namespace,
 	}
@@ -71,7 +72,7 @@ func TranslateRedisSpec(spec apiv2.WBRedisSpec) model.RedisConfig {
 
 	if spec.Sentinel != nil {
 		config.Sentinel.Enabled = spec.Sentinel.Enabled
-		config.Sentinel.ReplicaCount = model.ReplicaSentinelCount
+		config.Sentinel.ReplicaCount = defaults.ReplicaSentinelCount
 		if spec.Sentinel.Config != nil {
 			config.Sentinel.MasterGroupName = spec.Sentinel.Config.MasterName
 			config.Sentinel.Requests = spec.Sentinel.Config.Resources.Requests
@@ -82,14 +83,14 @@ func TranslateRedisSpec(spec apiv2.WBRedisSpec) model.RedisConfig {
 	return config
 }
 
-func ExtractRedisStatus(ctx context.Context, results *model.Results) apiv2.WBRedisStatus {
+func ExtractRedisStatus(ctx context.Context, results *common.Results) apiv2.WBRedisStatus {
 	return TranslateRedisStatus(
 		ctx,
-		model.ExtractRedisStatus(ctx, results),
+		common.ExtractRedisStatus(ctx, results),
 	)
 }
 
-func TranslateRedisStatus(ctx context.Context, m model.RedisStatus) apiv2.WBRedisStatus {
+func TranslateRedisStatus(ctx context.Context, m common.RedisStatus) apiv2.WBRedisStatus {
 	var result apiv2.WBRedisStatus
 	var details []apiv2.WBStatusDetail
 
@@ -128,21 +129,21 @@ func TranslateRedisStatus(ctx context.Context, m model.RedisStatus) apiv2.WBRedi
 
 func translateRedisStatusCode(code string) apiv2.WBStateType {
 	switch code {
-	case string(model.RedisSentinelCreatedCode):
+	case string(common.RedisSentinelCreatedCode):
 		return apiv2.WBStateUpdating
-	case string(model.RedisReplicationCreatedCode):
+	case string(common.RedisReplicationCreatedCode):
 		return apiv2.WBStateUpdating
-	case string(model.RedisStandaloneCreatedCode):
+	case string(common.RedisStandaloneCreatedCode):
 		return apiv2.WBStateUpdating
-	case string(model.RedisSentinelDeletedCode):
+	case string(common.RedisSentinelDeletedCode):
 		return apiv2.WBStateDeleting
-	case string(model.RedisReplicationDeletedCode):
+	case string(common.RedisReplicationDeletedCode):
 		return apiv2.WBStateDeleting
-	case string(model.RedisStandaloneDeletedCode):
+	case string(common.RedisStandaloneDeletedCode):
 		return apiv2.WBStateDeleting
-	case string(model.RedisSentinelConnectionCode):
+	case string(common.RedisSentinelConnectionCode):
 		return apiv2.WBStateReady
-	case string(model.RedisStandaloneConnectionCode):
+	case string(common.RedisStandaloneConnectionCode):
 		return apiv2.WBStateReady
 	default:
 		return apiv2.WBStateUnknown
@@ -151,16 +152,16 @@ func translateRedisStatusCode(code string) apiv2.WBStateType {
 
 func (i *InfraConfigBuilder) AddRedisConfig(actual apiv2.WBRedisSpec) *InfraConfigBuilder {
 	var err error
-	var size model.Size
-	var defaultConfig model.RedisConfig
-	var mergedConfig model.RedisConfig
+	var size common.Size
+	var defaultConfig common.RedisConfig
+	var mergedConfig common.RedisConfig
 
 	size, err = ToModelSize(i.size)
 	if err != nil {
 		i.errors = append(i.errors, err)
 		return i
 	}
-	defaultConfig, err = model.BuildRedisDefaults(size, i.ownerNamespace)
+	defaultConfig, err = defaults.BuildRedisDefaults(size, i.ownerNamespace)
 	if err != nil {
 		i.errors = append(i.errors, err)
 		return i

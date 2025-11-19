@@ -3,7 +3,7 @@ package mysql
 import (
 	"context"
 
-	"github.com/wandb/operator/internal/model"
+	"github.com/wandb/operator/internal/controller/translator/common"
 )
 
 type MySQL interface {
@@ -12,8 +12,8 @@ type MySQL interface {
 }
 
 type ActualMySQL interface {
-	Upsert(ctx context.Context, mysqlConfig model.MySQLConfig) *model.Results
-	Delete(ctx context.Context) *model.Results
+	Upsert(ctx context.Context, mysqlConfig common.MySQLConfig) *common.Results
+	Delete(ctx context.Context) *common.Results
 }
 
 type DesiredMySQL interface{}

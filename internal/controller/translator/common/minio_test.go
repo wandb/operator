@@ -1,4 +1,4 @@
-package model
+package common
 
 import (
 	"context"
@@ -6,41 +6,9 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 var _ = Describe("Minio Model", func() {
-	Describe("MinioConfig", func() {
-		Describe("IsHighAvailability", func() {
-			Context("when servers is greater than 1", func() {
-				It("should return true", func() {
-					config := MinioConfig{
-						Servers: 3,
-					}
-					Expect(config.IsHighAvailability()).To(BeTrue())
-				})
-			})
-
-			Context("when servers is 1", func() {
-				It("should return false", func() {
-					config := MinioConfig{
-						Servers: 1,
-					}
-					Expect(config.IsHighAvailability()).To(BeFalse())
-				})
-			})
-
-			Context("when servers is 0", func() {
-				It("should return false", func() {
-					config := MinioConfig{
-						Servers: 0,
-					}
-					Expect(config.IsHighAvailability()).To(BeFalse())
-				})
-			})
-		})
-	})
 
 	Describe("Minio Error", func() {
 		Describe("NewMinioError", func() {
@@ -290,47 +258,4 @@ var _ = Describe("Minio Model", func() {
 		})
 	})
 
-	Describe("BuildMinioDefaults", func() {
-		const testOwnerNamespace = "test-namespace"
-
-		Context("when size is Dev", func() {
-			It("should return complete dev defaults", func() {
-				config, err := BuildMinioDefaults(SizeDev, testOwnerNamespace)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(config.Enabled).To(BeTrue())
-				Expect(config.Namespace).To(Equal(testOwnerNamespace))
-				Expect(config.StorageSize).To(Equal(DevMinioStorageSize))
-				Expect(config.Servers).To(Equal(int32(1)))
-				Expect(config.VolumesPerServer).To(Equal(int32(1)))
-				Expect(config.Image).To(Equal(MinioImage))
-				Expect(config.Resources.Requests).To(BeEmpty())
-				Expect(config.Resources.Limits).To(BeEmpty())
-			})
-		})
-
-		Context("when size is Small", func() {
-			It("should return complete small defaults with all resource fields", func() {
-				config, err := BuildMinioDefaults(SizeSmall, testOwnerNamespace)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(config.Enabled).To(BeTrue())
-				Expect(config.Namespace).To(Equal(testOwnerNamespace))
-				Expect(config.StorageSize).To(Equal(SmallMinioStorageSize))
-				Expect(config.Servers).To(Equal(int32(3)))
-				Expect(config.VolumesPerServer).To(Equal(int32(4)))
-				Expect(config.Image).To(Equal(MinioImage))
-				Expect(config.Resources.Requests[v1.ResourceCPU]).To(Equal(resource.MustParse(SmallMinioCpuRequest)))
-				Expect(config.Resources.Limits[v1.ResourceCPU]).To(Equal(resource.MustParse(SmallMinioCpuLimit)))
-				Expect(config.Resources.Requests[v1.ResourceMemory]).To(Equal(resource.MustParse(SmallMinioMemoryRequest)))
-				Expect(config.Resources.Limits[v1.ResourceMemory]).To(Equal(resource.MustParse(SmallMinioMemoryLimit)))
-			})
-		})
-
-		Context("when size is invalid", func() {
-			It("should return error", func() {
-				_, err := BuildMinioDefaults(Size("invalid"), testOwnerNamespace)
-				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("unsupported size for Minio"))
-			})
-		})
-	})
 })

@@ -184,11 +184,11 @@ Follow these steps to regenerate the diagram:
 
 ```bash
 # Verify internal/model does NOT import api/v2 (should return nothing)
-grep -n "github.com/wandb/operator/api/v2" internal/model/*.go
+grep -n "github.com/wandb/operator/api/v2" internal/common/*.go
 
 # Find all struct definitions in a package
 grep -rn "^type.*struct {" api/v2/
-grep -rn "^type.*struct {" internal/model/
+grep -rn "^type.*struct {" internal/common/
 
 # Find where a struct is instantiated (writes)
 grep -rn "MySQLConfig{" internal/

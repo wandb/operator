@@ -3,9 +3,9 @@ package opstree
 import (
 	"context"
 
+	"github.com/wandb/operator/internal/controller/translator/common"
 	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
-	"github.com/wandb/operator/internal/model"
-	common "github.com/wandb/operator/internal/vendored/redis-operator/common/v1beta2"
+	rediscommon "github.com/wandb/operator/internal/vendored/redis-operator/common/v1beta2"
 	redisv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redis/v1beta2"
 	redisreplicationv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redisreplication/v1beta2"
 	redissentinelv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redissentinel/v1beta2"
@@ -17,18 +17,18 @@ import (
 // buildDesiredStandalone will create an opstree Redis, unless `WbRedisSpec.Sentinel.Enabled` == true.
 func buildDesiredStandalone(
 	ctx context.Context,
-	redisConfig model.RedisConfig,
+	redisConfig common.RedisConfig,
 ) (
-	*redisv1beta2.Redis, *model.Results,
+	*redisv1beta2.Redis, *common.Results,
 ) {
 	log := ctrl.LoggerFrom(ctx)
-	var results = model.InitResults()
+	var results = common.InitResults()
 	var err error
 	var msg string
 
-	if redisConfig.IsHighAvailability() {
+	if redisConfig.Sentinel.Enabled {
 		msg = "cannot create redis standalone high availability configuration"
-		err = model.NewRedisError(model.RedisDeploymentConflictCode, msg)
+		err = common.NewRedisError(common.RedisDeploymentConflictCode, msg)
 		log.Error(err, msg, vendorKey, vendorName)
 		results.AddErrors(err)
 		return nil, results
@@ -40,7 +40,7 @@ func buildDesiredStandalone(
 			Namespace: redisConfig.Namespace,
 		},
 		Spec: redisv1beta2.RedisSpec{
-			KubernetesConfig: common.KubernetesConfig{
+			KubernetesConfig: rediscommon.KubernetesConfig{
 				Image:           standaloneImage,
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				Resources: &corev1.ResourceRequirements{
@@ -48,7 +48,7 @@ func buildDesiredStandalone(
 					Limits:   redisConfig.Limits,
 				},
 			},
-			Storage: &common.Storage{
+			Storage: &rediscommon.Storage{
 				VolumeClaimTemplate: corev1.PersistentVolumeClaim{
 					Spec: corev1.PersistentVolumeClaimSpec{
 						AccessModes: []corev1.PersistentVolumeAccessMode{
@@ -68,18 +68,18 @@ func buildDesiredStandalone(
 
 // buildDesiredSentinel will build an opstree RedisSentinel, unless `wbRedisSentinelEnabled()` is false
 func buildDesiredSentinel(
-	ctx context.Context, redisConfig model.RedisConfig,
+	ctx context.Context, redisConfig common.RedisConfig,
 ) (
-	*redissentinelv1beta2.RedisSentinel, *model.Results,
+	*redissentinelv1beta2.RedisSentinel, *common.Results,
 ) {
 	log := ctrl.LoggerFrom(ctx)
-	var results = model.InitResults()
+	var results = common.InitResults()
 	var err error
 	var msg string
 
-	if !redisConfig.IsHighAvailability() {
+	if !redisConfig.Sentinel.Enabled {
 		msg = "cannot create redis sentinel without high availability configuration"
-		err = model.NewRedisError(model.RedisDeploymentConflictCode, msg)
+		err = common.NewRedisError(common.RedisDeploymentConflictCode, msg)
 		log.Error(err, msg, vendorKey, vendorName)
 		results.AddErrors(err)
 		return nil, results
@@ -93,7 +93,7 @@ func buildDesiredSentinel(
 		},
 		Spec: redissentinelv1beta2.RedisSentinelSpec{
 			Size: &sentinelCount,
-			KubernetesConfig: common.KubernetesConfig{
+			KubernetesConfig: rediscommon.KubernetesConfig{
 				Image:           sentinelImage,
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				Resources: &corev1.ResourceRequirements{
@@ -102,7 +102,7 @@ func buildDesiredSentinel(
 				},
 			},
 			RedisSentinelConfig: &redissentinelv1beta2.RedisSentinelConfig{
-				RedisSentinelConfig: common.RedisSentinelConfig{
+				RedisSentinelConfig: rediscommon.RedisSentinelConfig{
 					RedisReplicationName: namePrefix,
 					MasterGroupName:      translatorv2.DefaultSentinelGroup,
 				},
@@ -114,18 +114,18 @@ func buildDesiredSentinel(
 
 // buildDesiredReplication will build an opstree RedisSentinel, unless `wbRedisSentinelEnabled()` is false
 func buildDesiredReplication(
-	ctx context.Context, redisDetails model.RedisConfig,
+	ctx context.Context, redisDetails common.RedisConfig,
 ) (
-	*redisreplicationv1beta2.RedisReplication, *model.Results,
+	*redisreplicationv1beta2.RedisReplication, *common.Results,
 ) {
 	log := ctrl.LoggerFrom(ctx)
-	var results = model.InitResults()
+	var results = common.InitResults()
 	var err error
 	var msg string
 
-	if !redisDetails.IsHighAvailability() {
+	if !redisDetails.Sentinel.Enabled {
 		msg = "cannot create redis replication without high availability configuration"
-		err = model.NewRedisError(model.RedisDeploymentConflictCode, msg)
+		err = common.NewRedisError(common.RedisDeploymentConflictCode, msg)
 		log.Error(err, msg, vendorKey, vendorName)
 		results.AddErrors(err)
 		return nil, results
@@ -139,7 +139,7 @@ func buildDesiredReplication(
 		},
 		Spec: redisreplicationv1beta2.RedisReplicationSpec{
 			Size: &replicaCount,
-			KubernetesConfig: common.KubernetesConfig{
+			KubernetesConfig: rediscommon.KubernetesConfig{
 				Image:           replicationImage,
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				Resources: &corev1.ResourceRequirements{
@@ -147,7 +147,7 @@ func buildDesiredReplication(
 					Limits:   redisDetails.Limits,
 				},
 			},
-			Storage: &common.Storage{
+			Storage: &rediscommon.Storage{
 				VolumeClaimTemplate: corev1.PersistentVolumeClaim{
 					Spec: corev1.PersistentVolumeClaimSpec{
 						AccessModes: []corev1.PersistentVolumeAccessMode{

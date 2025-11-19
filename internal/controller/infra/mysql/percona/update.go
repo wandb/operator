@@ -5,14 +5,14 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/wandb/operator/internal/model"
+	"github.com/wandb/operator/internal/controller/translator/common"
 	pxcv1 "github.com/wandb/operator/internal/vendored/percona-operator/pxc/v1"
 )
 
 func (a *perconaPXC) updatePXC(
-	ctx context.Context, desiredPXC *pxcv1.PerconaXtraDBCluster, mysqlConfig model.MySQLConfig,
-) *model.Results {
-	results := model.InitResults()
+	ctx context.Context, desiredPXC *pxcv1.PerconaXtraDBCluster, mysqlConfig common.MySQLConfig,
+) *common.Results {
+	results := common.InitResults()
 
 	// Extract connection info from PXC CR
 	// Connection endpoint depends on configuration:
@@ -31,12 +31,12 @@ func (a *perconaPXC) updatePXC(
 
 	mysqlPort := strconv.Itoa(MySQLPort)
 
-	connInfo := model.MySQLConnInfo{
+	connInfo := common.MySQLConnInfo{
 		Host: mysqlHost,
 		Port: mysqlPort,
 		User: MySQLUser,
 	}
-	results.AddStatuses(model.NewMySQLConnDetail(connInfo))
+	results.AddStatuses(common.NewMySQLConnDetail(connInfo))
 
 	return results
 }
