@@ -82,30 +82,30 @@ type WeightsAndBiasesSpec struct {
 	ClickHouse WBClickHouseSpec `json:"clickhouse,omitempty"`
 }
 
+// WBMySQLSpec fields have many default values that, if unspecified,
+// will be applied by a defaulting webook
 type WBMySQLSpec struct {
-	Enabled     bool           `json:"enabled"`
-	StorageSize string         `json:"storageSize,omitempty"`
-	Replicas    int32          `json:"replicas,omitempty"`
-	Config      *WBMySQLConfig `json:"config,omitempty"`
-	// Deprecated: Backup is not implemented in the refactored MySQL code
-	Backup WBBackupSpec `json:"backup,omitempty"`
-	// Namespace is the target namespace for MySQL resources.
-	// If not specified, defaults to the WeightsAndBiases resource's namespace.
-	Namespace string `json:"namespace,omitempty"`
+	Enabled     bool          `json:"enabled"`
+	StorageSize string        `json:"storageSize,omitempty"`
+	Replicas    int32         `json:"replicas,omitempty"`
+	Config      WBMySQLConfig `json:"config,omitempty"`
+	Namespace   string        `json:"namespace,omitempty"`
+	Name        string        `json:"name,omitempty"`
 }
 
 type WBMySQLConfig struct {
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 }
 
+// WBRedisSpec fields have many default values that, if unspecified,
+// will be applied by a defaulting webook
 type WBRedisSpec struct {
-	Enabled     bool                 `json:"enabled"`
-	StorageSize string               `json:"storageSize,omitempty"`
-	Config      *WBRedisConfig       `json:"config,omitempty"`
-	Sentinel    *WBRedisSentinelSpec `json:"sentinel,omitempty"`
-	// Namespace is the target namespace for Redis resources.
-	// If not specified, defaults to the WeightsAndBiases resource's namespace.
-	Namespace string `json:"namespace,omitempty"`
+	Enabled     bool                `json:"enabled"`
+	StorageSize string              `json:"storageSize,omitempty"`
+	Config      WBRedisConfig       `json:"config,omitempty"`
+	Sentinel    WBRedisSentinelSpec `json:"sentinel,omitempty"`
+	Namespace   string              `json:"namespace,omitempty"`
+	Name        string              `json:"name,omitempty"`
 }
 
 type WBRedisConfig struct {
@@ -113,8 +113,10 @@ type WBRedisConfig struct {
 }
 
 type WBRedisSentinelSpec struct {
-	Enabled bool                   `json:"enabled"`
-	Config  *WBRedisSentinelConfig `json:"config,omitempty"`
+	Enabled         bool                  `json:"enabled"`
+	SentinelName    string                `json:"sentinelName,omitempty"`
+	ReplicationName string                `json:"replicationName,omitempty"`
+	Config          WBRedisSentinelConfig `json:"config,omitempty"`
 }
 
 type WBRedisSentinelConfig struct {
@@ -122,15 +124,16 @@ type WBRedisSentinelConfig struct {
 	Resources  corev1.ResourceRequirements `json:"resources,omitempty"`
 }
 
+// WBKafkaSpec fields have many default values that, if unspecified,
+// will be applied by a defaulting webook
 type WBKafkaSpec struct {
 	Enabled     bool              `json:"enabled"`
 	StorageSize string            `json:"storageSize,omitempty"`
 	Replicas    int32             `json:"replicas,omitempty"`
-	Config      *WBKafkaConfig    `json:"config,omitempty"`
+	Config      WBKafkaConfig     `json:"config,omitempty"`
 	Backup      WBKafkaBackupSpec `json:"backup,omitempty"`
-	// Namespace is the target namespace for Kafka resources.
-	// If not specified, defaults to the WeightsAndBiases resource's namespace.
-	Namespace string `json:"namespace,omitempty"`
+	Namespace   string            `json:"namespace,omitempty"`
+	Name        string            `json:"name,omitempty"`
 }
 
 type WBKafkaConfig struct {
@@ -145,53 +148,35 @@ type WBKafkaBackupSpec struct {
 	TimeoutSeconds int                     `json:"timeoutSeconds,omitempty"`
 }
 
+// WBMinioSpec fields have many default values that, if unspecified,
+// will be applied by a defaulting webook
 type WBMinioSpec struct {
-	Enabled     bool           `json:"enabled"`
-	StorageSize string         `json:"storageSize,omitempty"`
-	Replicas    int32          `json:"replicas,omitempty"`
-	Config      *WBMinioConfig `json:"config,omitempty"`
-	// Deprecated: Backup is not implemented in the refactored Minio code
-	Backup WBMinioBackupSpec `json:"backup,omitempty"`
-	// Namespace is the target namespace for Minio resources.
-	// If not specified, defaults to the WeightsAndBiases resource's namespace.
-	Namespace string `json:"namespace,omitempty"`
+	Enabled     bool          `json:"enabled"`
+	StorageSize string        `json:"storageSize,omitempty"`
+	Replicas    int32         `json:"replicas,omitempty"`
+	Config      WBMinioConfig `json:"config,omitempty"`
+	Namespace   string        `json:"namespace,omitempty"`
+	Name        string        `json:"name,omitempty"`
 }
 
 type WBMinioConfig struct {
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-type WBMinioBackupSpec struct {
-	Enabled        bool                    `json:"enabled,omitempty"`
-	StorageName    string                  `json:"storageName,omitempty"`
-	StorageType    WBBackupStorageType     `json:"storageType,omitempty"`
-	Filesystem     *WBBackupFilesystemSpec `json:"filesystem,omitempty"`
-	TimeoutSeconds int                     `json:"timeoutSeconds,omitempty"`
-}
-
+// WBClickHouseSpec fields have many default values that, if unspecified,
+// will be applied by a defaulting webook
 type WBClickHouseSpec struct {
-	Enabled     bool                `json:"enabled"`
-	StorageSize string              `json:"storageSize,omitempty"`
-	Replicas    int32               `json:"replicas,omitempty"`
-	Version     string              `json:"version,omitempty"`
-	Config      *WBClickHouseConfig `json:"config,omitempty"`
-	// Deprecated: Backup is not implemented in the refactored ClickHouse code
-	Backup WBClickHouseBackupSpec `json:"backup,omitempty"`
-	// Namespace is the target namespace for ClickHouse resources.
-	// If not specified, defaults to the WeightsAndBiases resource's namespace.
-	Namespace string `json:"namespace,omitempty"`
+	Enabled     bool               `json:"enabled"`
+	StorageSize string             `json:"storageSize,omitempty"`
+	Replicas    int32              `json:"replicas,omitempty"`
+	Version     string             `json:"version,omitempty"`
+	Config      WBClickHouseConfig `json:"config,omitempty"`
+	Namespace   string             `json:"namespace,omitempty"`
+	Name        string             `json:"name,omitempty"`
 }
 
 type WBClickHouseConfig struct {
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
-}
-
-type WBClickHouseBackupSpec struct {
-	Enabled        bool                    `json:"enabled,omitempty"`
-	StorageName    string                  `json:"storageName,omitempty"`
-	StorageType    WBBackupStorageType     `json:"storageType,omitempty"`
-	Filesystem     *WBBackupFilesystemSpec `json:"filesystem,omitempty"`
-	TimeoutSeconds int                     `json:"timeoutSeconds,omitempty"`
 }
 
 type WBBackupSpec struct {
@@ -256,10 +241,10 @@ var statePrecedence = map[WBStateType]int{
 	WBStateUnknown:  99,
 }
 
-// WorseThan is used to determine the case where, given a series of
+// IsWorseThan is used to determine the case where, given a series of
 // states describing a system, select the state that is the worst and use that
 // to as the overall state of the system.
-func (left WBStateType) WorseThan(right WBStateType) bool {
+func (left WBStateType) IsWorseThan(right WBStateType) bool {
 	var leftValue = statePrecedence[WBStateUnknown]
 	var rightValue = statePrecedence[WBStateUnknown]
 	var ok bool
@@ -269,21 +254,21 @@ func (left WBStateType) WorseThan(right WBStateType) bool {
 	if _, ok = statePrecedence[right]; ok {
 		rightValue = statePrecedence[right]
 	}
-	return leftValue > rightValue
+	return leftValue < rightValue
 }
 
-type WBStatusDetail struct {
+type WBStatusCondition struct {
 	State   WBStateType `json:"state"`
 	Code    string      `json:"code"`
 	Message string      `json:"message"`
 }
 
 type WBMySQLStatus struct {
-	Ready          bool              `json:"ready"`
-	State          WBStateType       `json:"state,omitempty" default:"Unknown"`
-	Details        []WBStatusDetail  `json:"details,omitempty"`
-	LastReconciled metav1.Time       `json:"lastReconciled,omitempty"`
-	Connection     WBMySQLConnection `json:"connection,omitempty"`
+	Ready          bool                `json:"ready"`
+	State          WBStateType         `json:"state,omitempty" default:"Unknown"`
+	Conditions     []WBStatusCondition `json:"conditions,omitempty"`
+	LastReconciled metav1.Time         `json:"lastReconciled,omitempty"`
+	Connection     WBMySQLConnection   `json:"connection,omitempty"`
 	// Deprecated: BackupStatus is not implemented in the refactored MySQL code
 	BackupStatus WBBackupStatus `json:"backupStatus,omitempty"`
 }
@@ -305,11 +290,11 @@ type WBBackupStatus struct {
 }
 
 type WBRedisStatus struct {
-	Ready          bool              `json:"ready"`
-	State          WBStateType       `json:"state,omitempty" default:"Unknown"`
-	Details        []WBStatusDetail  `json:"details,omitempty"`
-	LastReconciled metav1.Time       `json:"lastReconciled,omitempty"`
-	Connection     WBRedisConnection `json:"connection,omitempty"`
+	Ready          bool                `json:"ready"`
+	State          WBStateType         `json:"state,omitempty" default:"Unknown"`
+	Conditions     []WBStatusCondition `json:"conditions,omitempty"`
+	LastReconciled metav1.Time         `json:"lastReconciled,omitempty"`
+	Connection     WBRedisConnection   `json:"connection,omitempty"`
 }
 
 type WBRedisConnection struct {
@@ -326,20 +311,20 @@ type WBKafkaConnection struct {
 }
 
 type WBKafkaStatus struct {
-	Ready          bool              `json:"ready"`
-	State          WBStateType       `json:"state,omitempty" default:"Unknown"`
-	Details        []WBStatusDetail  `json:"details,omitempty"`
-	LastReconciled metav1.Time       `json:"lastReconciled,omitempty"`
-	Connection     WBKafkaConnection `json:"connection,omitempty"`
-	BackupStatus   WBBackupStatus    `json:"backupStatus,omitempty"`
+	Ready          bool                `json:"ready"`
+	State          WBStateType         `json:"state,omitempty" default:"Unknown"`
+	Conditions     []WBStatusCondition `json:"conditions,omitempty"`
+	LastReconciled metav1.Time         `json:"lastReconciled,omitempty"`
+	Connection     WBKafkaConnection   `json:"connection,omitempty"`
+	BackupStatus   WBBackupStatus      `json:"backupStatus,omitempty"`
 }
 
 type WBMinioStatus struct {
-	Ready          bool              `json:"ready"`
-	State          WBStateType       `json:"state,omitempty" default:"Unknown"`
-	Details        []WBStatusDetail  `json:"details,omitempty"`
-	LastReconciled metav1.Time       `json:"lastReconciled,omitempty"`
-	Connection     WBMinioConnection `json:"connection,omitempty"`
+	Ready          bool                `json:"ready"`
+	State          WBStateType         `json:"state,omitempty" default:"Unknown"`
+	Conditions     []WBStatusCondition `json:"conditions,omitempty"`
+	LastReconciled metav1.Time         `json:"lastReconciled,omitempty"`
+	Connection     WBMinioConnection   `json:"connection,omitempty"`
 	// Deprecated: BackupStatus is not implemented in the refactored Minio code
 	BackupStatus WBBackupStatus `json:"backupStatus,omitempty"`
 }
@@ -353,7 +338,7 @@ type WBMinioConnection struct {
 type WBClickHouseStatus struct {
 	Ready          bool                   `json:"ready"`
 	State          WBStateType            `json:"state,omitempty" default:"Unknown"`
-	Details        []WBStatusDetail       `json:"details,omitempty"`
+	Conditions     []WBStatusCondition    `json:"conditions,omitempty"`
 	LastReconciled metav1.Time            `json:"lastReconciled,omitempty"`
 	Connection     WBClickHouseConnection `json:"connection,omitempty"`
 	// Deprecated: BackupStatus is not implemented in the refactored ClickHouse code

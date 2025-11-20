@@ -108,35 +108,10 @@ spec:
             description: WeightsAndBiasesSpec defines the desired state of WeightsAndBiases.
             properties:
               clickhouse:
+                description: |-
+                  WBClickHouseSpec fields have many default values that, if unspecified,
+                  will be applied by a defaulting webook
                 properties:
-                  backup:
-                    description: 'Deprecated: Backup is not implemented in the refactored
-                      ClickHouse code'
-                    properties:
-                      enabled:
-                        type: boolean
-                      filesystem:
-                        properties:
-                          accessModes:
-                            items:
-                              type: string
-                            type: array
-                          storageClassName:
-                            type: string
-                          storageSize:
-                            anyOf:
-                            - type: integer
-                            - type: string
-                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                            x-kubernetes-int-or-string: true
-                        type: object
-                      storageName:
-                        type: string
-                      storageType:
-                        type: string
-                      timeoutSeconds:
-                        type: integer
-                    type: object
                   config:
                     properties:
                       resources:
@@ -202,10 +177,9 @@ spec:
                     type: object
                   enabled:
                     type: boolean
+                  name:
+                    type: string
                   namespace:
-                    description: |-
-                      Namespace is the target namespace for ClickHouse resources.
-                      If not specified, defaults to the WeightsAndBiases resource's namespace.
                     type: string
                   replicas:
                     format: int32
@@ -218,6 +192,9 @@ spec:
                 - enabled
                 type: object
               kafka:
+                description: |-
+                  WBKafkaSpec fields have many default values that, if unspecified,
+                  will be applied by a defaulting webook
                 properties:
                   backup:
                     properties:
@@ -310,10 +287,9 @@ spec:
                     type: object
                   enabled:
                     type: boolean
+                  name:
+                    type: string
                   namespace:
-                    description: |-
-                      Namespace is the target namespace for Kafka resources.
-                      If not specified, defaults to the WeightsAndBiases resource's namespace.
                     type: string
                   replicas:
                     format: int32
@@ -324,35 +300,10 @@ spec:
                 - enabled
                 type: object
               minio:
+                description: |-
+                  WBMinioSpec fields have many default values that, if unspecified,
+                  will be applied by a defaulting webook
                 properties:
-                  backup:
-                    description: 'Deprecated: Backup is not implemented in the refactored
-                      Minio code'
-                    properties:
-                      enabled:
-                        type: boolean
-                      filesystem:
-                        properties:
-                          accessModes:
-                            items:
-                              type: string
-                            type: array
-                          storageClassName:
-                            type: string
-                          storageSize:
-                            anyOf:
-                            - type: integer
-                            - type: string
-                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                            x-kubernetes-int-or-string: true
-                        type: object
-                      storageName:
-                        type: string
-                      storageType:
-                        type: string
-                      timeoutSeconds:
-                        type: integer
-                    type: object
                   config:
                     properties:
                       resources:
@@ -418,10 +369,9 @@ spec:
                     type: object
                   enabled:
                     type: boolean
+                  name:
+                    type: string
                   namespace:
-                    description: |-
-                      Namespace is the target namespace for Minio resources.
-                      If not specified, defaults to the WeightsAndBiases resource's namespace.
                     type: string
                   replicas:
                     format: int32
@@ -432,48 +382,10 @@ spec:
                 - enabled
                 type: object
               mysql:
+                description: |-
+                  WBMySQLSpec fields have many default values that, if unspecified,
+                  will be applied by a defaulting webook
                 properties:
-                  backup:
-                    description: 'Deprecated: Backup is not implemented in the refactored
-                      MySQL code'
-                    properties:
-                      enabled:
-                        type: boolean
-                      filesystem:
-                        properties:
-                          accessModes:
-                            items:
-                              type: string
-                            type: array
-                          storageClassName:
-                            type: string
-                          storageSize:
-                            anyOf:
-                            - type: integer
-                            - type: string
-                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                            x-kubernetes-int-or-string: true
-                        type: object
-                      s3:
-                        properties:
-                          bucket:
-                            type: string
-                          credentialsSecret:
-                            type: string
-                          endpointUrl:
-                            type: string
-                          region:
-                            type: string
-                        required:
-                        - bucket
-                        type: object
-                      storageName:
-                        type: string
-                      storageType:
-                        type: string
-                      timeoutSeconds:
-                        type: integer
-                    type: object
                   config:
                     properties:
                       resources:
@@ -539,17 +451,22 @@ spec:
                     type: object
                   enabled:
                     type: boolean
-                  namespace:
-                    description: |-
-                      Namespace is the target namespace for MySQL resources.
-                      If not specified, defaults to the WeightsAndBiases resource's namespace.
+                  name:
                     type: string
+                  namespace:
+                    type: string
+                  replicas:
+                    format: int32
+                    type: integer
                   storageSize:
                     type: string
                 required:
                 - enabled
                 type: object
               redis:
+                description: |-
+                  WBRedisSpec fields have many default values that, if unspecified,
+                  will be applied by a defaulting webook
                 properties:
                   config:
                     properties:
@@ -616,10 +533,9 @@ spec:
                     type: object
                   enabled:
                     type: boolean
+                  name:
+                    type: string
                   namespace:
-                    description: |-
-                      Namespace is the target namespace for Redis resources.
-                      If not specified, defaults to the WeightsAndBiases resource's namespace.
                     type: string
                   sentinel:
                     properties:
@@ -691,6 +607,10 @@ spec:
                         type: object
                       enabled:
                         type: boolean
+                      replicationName:
+                        type: string
+                      sentinelName:
+                        type: string
                     required:
                     - enabled
                     type: object
@@ -731,16 +651,7 @@ spec:
                       state:
                         type: string
                     type: object
-                  connection:
-                    properties:
-                      CLICKHOUSE_HOST:
-                        type: string
-                      CLICKHOUSE_PORT:
-                        type: string
-                      CLICKHOUSE_USER:
-                        type: string
-                    type: object
-                  details:
+                  conditions:
                     items:
                       properties:
                         code:
@@ -755,6 +666,15 @@ spec:
                       - state
                       type: object
                     type: array
+                  connection:
+                    properties:
+                      CLICKHOUSE_HOST:
+                        type: string
+                      CLICKHOUSE_PORT:
+                        type: string
+                      CLICKHOUSE_USER:
+                        type: string
+                    type: object
                   lastReconciled:
                     format: date-time
                     type: string
@@ -788,14 +708,7 @@ spec:
                       state:
                         type: string
                     type: object
-                  connection:
-                    properties:
-                      KAFKA_HOST:
-                        type: string
-                      KAFKA_PORT:
-                        type: string
-                    type: object
-                  details:
+                  conditions:
                     items:
                       properties:
                         code:
@@ -810,6 +723,13 @@ spec:
                       - state
                       type: object
                     type: array
+                  connection:
+                    properties:
+                      KAFKA_HOST:
+                        type: string
+                      KAFKA_PORT:
+                        type: string
+                    type: object
                   lastReconciled:
                     format: date-time
                     type: string
@@ -845,16 +765,7 @@ spec:
                       state:
                         type: string
                     type: object
-                  connection:
-                    properties:
-                      MINIO_ACCESS_KEY:
-                        type: string
-                      MINIO_HOST:
-                        type: string
-                      MINIO_PORT:
-                        type: string
-                    type: object
-                  details:
+                  conditions:
                     items:
                       properties:
                         code:
@@ -869,6 +780,15 @@ spec:
                       - state
                       type: object
                     type: array
+                  connection:
+                    properties:
+                      MINIO_ACCESS_KEY:
+                        type: string
+                      MINIO_HOST:
+                        type: string
+                      MINIO_PORT:
+                        type: string
+                    type: object
                   lastReconciled:
                     format: date-time
                     type: string
@@ -904,16 +824,7 @@ spec:
                       state:
                         type: string
                     type: object
-                  connection:
-                    properties:
-                      MYSQL_HOST:
-                        type: string
-                      MYSQL_PORT:
-                        type: string
-                      MYSQL_USER:
-                        type: string
-                    type: object
-                  details:
+                  conditions:
                     items:
                       properties:
                         code:
@@ -928,6 +839,15 @@ spec:
                       - state
                       type: object
                     type: array
+                  connection:
+                    properties:
+                      MYSQL_HOST:
+                        type: string
+                      MYSQL_PORT:
+                        type: string
+                      MYSQL_USER:
+                        type: string
+                    type: object
                   lastReconciled:
                     format: date-time
                     type: string
@@ -943,20 +863,7 @@ spec:
                 type: integer
               redisStatus:
                 properties:
-                  connection:
-                    properties:
-                      REDIS_HOST:
-                        type: string
-                      REDIS_MASTER_NAME:
-                        type: string
-                      REDIS_PORT:
-                        type: string
-                      REDIS_SENTINEL_HOST:
-                        type: string
-                      REDIS_SENTINEL_PORT:
-                        type: string
-                    type: object
-                  details:
+                  conditions:
                     items:
                       properties:
                         code:
@@ -971,6 +878,19 @@ spec:
                       - state
                       type: object
                     type: array
+                  connection:
+                    properties:
+                      REDIS_HOST:
+                        type: string
+                      REDIS_MASTER_NAME:
+                        type: string
+                      REDIS_PORT:
+                        type: string
+                      REDIS_SENTINEL_HOST:
+                        type: string
+                      REDIS_SENTINEL_PORT:
+                        type: string
+                    type: object
                   lastReconciled:
                     format: date-time
                     type: string

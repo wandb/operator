@@ -218,7 +218,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 						Size: apiv2.WBSizeSmall,
 						ClickHouse: apiv2.WBClickHouseSpec{
 							Enabled: true,
-							Config: &apiv2.WBClickHouseConfig{
+							Config: apiv2.WBClickHouseConfig{
 								Resources: corev1.ResourceRequirements{
 									Requests: corev1.ResourceList{
 										corev1.ResourceCPU: customCPU,
@@ -338,7 +338,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 							StorageSize: customStorage,
 							Replicas:    customReplicas,
 							Version:     customVersion,
-							Config: &apiv2.WBClickHouseConfig{
+							Config: apiv2.WBClickHouseConfig{
 								Resources: corev1.ResourceRequirements{
 									Requests: corev1.ResourceList{
 										corev1.ResourceCPU:    customCPURequest,

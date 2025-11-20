@@ -21,7 +21,6 @@ import (
 	"time"
 
 	apiv2 "github.com/wandb/operator/api/v2"
-	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -107,67 +106,28 @@ func (r *WeightsAndBiasesV2Reconciler) Reconcile(ctx context.Context, req ctrl.R
 		"Spec", wandb.Spec, "Name", wandb.Name, "UID", wandb.UID, "Generation", wandb.Generation,
 	)
 
-	infraConfig := translatorv2.BuildInfraConfig(wandb.Namespace, wandb.Spec.Size).
-		AddRedisConfig(wandb.Spec.Redis).
-		AddKafkaConfig(wandb.Spec.Kafka).
-		AddMySQLConfig(wandb.Spec.MySQL).
-		AddMinioConfig(wandb.Spec.Minio).
-		AddClickHouseConfig(wandb.Spec.ClickHouse)
-
 	/////////////////////////
-	// Redis
-	result := r.reconcileRedis(ctx, infraConfig, wandb)
-	criticalErrors := result.GetCriticalErrors()
-	if len(criticalErrors) > 0 {
-		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, result.GetCriticalErrors()[0]
-	}
-	//if wandb.Spec.Size == apiv2.WBSizeDev {
-	//	ctrlState = r.handleRedis(ctx, wandb, req)
-	//} else {
-	//	ctrlState = r.handleRedisHA(ctx, wandb, req)
-	//}
-	//if ctrlState.ShouldExit(ctrlqueue.ReconcilerScope) {
-	//	return ctrlState.ReconcilerResult()
-	//}
+	// Resource CRUD
+	if err = r.redisResourceReconcile(ctx, wandb); err != nil {
+		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, err
 
-	/////////////////////////
-	// MySQL
-	result = r.reconcileMySQL(ctx, infraConfig, wandb)
-	criticalErrors = result.GetCriticalErrors()
-	if len(criticalErrors) > 0 {
-		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, criticalErrors[0]
 	}
 
-	/////////////////////////
-	// Kafka
-	result = r.reconcileKafka(ctx, infraConfig, wandb)
-	criticalErrors = result.GetCriticalErrors()
-	if len(criticalErrors) > 0 {
-		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, criticalErrors[0]
-	}
-	//if wandb.Spec.Size == apiv2.WBSizeDev {
-	//	ctrlState = r.handleKafka(ctx, wandb, req)
-	//} else {
-	//	ctrlState = r.handleKafkaHA(ctx, wandb, req)
-	//}
-	//if ctrlState.ShouldExit(ctrlqueue.ReconcilerScope) {
-	//	return ctrlState.ReconcilerResult()
-	//}
-
-	/////////////////////////
-	// Minio
-	result = r.reconcileMinio(ctx, infraConfig, wandb)
-	criticalErrors = result.GetCriticalErrors()
-	if len(criticalErrors) > 0 {
-		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, criticalErrors[0]
+	if err = r.mysqlResourceReconcile(ctx, wandb); err != nil {
+		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, err
 	}
 
-	/////////////////////////
-	// ClickHouse
-	result = r.reconcileClickHouse(ctx, infraConfig, wandb)
-	criticalErrors = result.GetCriticalErrors()
-	if len(criticalErrors) > 0 {
-		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, criticalErrors[0]
+	if err = r.kafkaResourceReconcile(ctx, wandb); err != nil {
+		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, err
+
+	}
+	if err = r.minioResourceReconcile(ctx, wandb); err != nil {
+		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, err
+
+	}
+
+	if err = r.clickHouseResourceReconcile(ctx, wandb); err != nil {
+		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, err
 	}
 
 	if err = r.inferState(ctx, wandb); err != nil {

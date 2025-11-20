@@ -25,3 +25,8 @@ const (
 	StorageType        = "persistent-claim"
 	StorageDeleteClaim = false
 )
+
+const (
+	KafkaResourceType    = "Kafka"
+	NodePoolResourceType = "KafkaNodePool"
+)

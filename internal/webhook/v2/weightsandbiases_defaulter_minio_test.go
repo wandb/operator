@@ -190,7 +190,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Minio", func() {
 						Size: apiv2.WBSizeSmall,
 						Minio: apiv2.WBMinioSpec{
 							Enabled: true,
-							Config: &apiv2.WBMinioConfig{
+							Config: apiv2.WBMinioConfig{
 								Resources: corev1.ResourceRequirements{
 									Limits: corev1.ResourceList{
 										corev1.ResourceMemory: customMemory,
@@ -284,7 +284,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Minio", func() {
 							Namespace:   customNamespace,
 							StorageSize: customStorage,
 							Replicas:    customReplicas,
-							Config: &apiv2.WBMinioConfig{
+							Config: apiv2.WBMinioConfig{
 								Resources: corev1.ResourceRequirements{
 									Requests: corev1.ResourceList{
 										corev1.ResourceCPU:    customCPURequest,

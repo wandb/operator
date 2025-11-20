@@ -6,7 +6,6 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/translator/common"
-	"github.com/wandb/operator/internal/controller/translator/utils"
 	"github.com/wandb/operator/internal/defaults"
 	rediscommon "github.com/wandb/operator/internal/vendored/redis-operator/common/v1beta2"
 	redisv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redis/v1beta2"
@@ -16,79 +15,13 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
 const (
 	DefaultSentinelGroup = defaults.DefaultSentinelGroup
 )
-
-// BuildRedisConfig will create a new common.RedisConfig with defaultConfig applied if not
-// present in actual. It should *never* be saved into the CR!
-func BuildRedisConfig(actual apiv2.WBRedisSpec, defaultConfig common.RedisConfig) (common.RedisConfig, error) {
-	redisConfig := TranslateRedisSpec(actual)
-
-	if redisConfig.StorageSize.IsZero() {
-		redisConfig.StorageSize = defaultConfig.StorageSize
-	}
-	redisConfig.Namespace = utils.Coalesce(redisConfig.Namespace, defaultConfig.Namespace)
-
-	mergedResources := utils.Resources(
-		corev1.ResourceRequirements{Requests: redisConfig.Requests, Limits: redisConfig.Limits},
-		corev1.ResourceRequirements{Requests: defaultConfig.Requests, Limits: defaultConfig.Limits},
-	)
-	redisConfig.Requests = mergedResources.Requests
-	redisConfig.Limits = mergedResources.Limits
-
-	if actual.Sentinel == nil {
-		redisConfig.Sentinel = defaultConfig.Sentinel
-	} else {
-		mergedSentinelResources := utils.Resources(
-			corev1.ResourceRequirements{Requests: redisConfig.Sentinel.Requests, Limits: redisConfig.Sentinel.Limits},
-			corev1.ResourceRequirements{Requests: defaultConfig.Sentinel.Requests, Limits: defaultConfig.Sentinel.Limits},
-		)
-		redisConfig.Sentinel.Requests = mergedSentinelResources.Requests
-		redisConfig.Sentinel.Limits = mergedSentinelResources.Limits
-		redisConfig.Sentinel.MasterGroupName = utils.Coalesce(redisConfig.Sentinel.MasterGroupName, defaultConfig.Sentinel.MasterGroupName)
-		redisConfig.Sentinel.Enabled = actual.Sentinel.Enabled
-	}
-
-	redisConfig.Enabled = actual.Enabled
-
-	return redisConfig, nil
-}
-
-func RedisSentinelEnabled(wbSpec apiv2.WBRedisSpec) bool {
-	return wbSpec.Sentinel != nil && wbSpec.Sentinel.Enabled
-}
-
-func TranslateRedisSpec(spec apiv2.WBRedisSpec) common.RedisConfig {
-	config := common.RedisConfig{
-		Enabled:   spec.Enabled,
-		Namespace: spec.Namespace,
-	}
-
-	if spec.StorageSize != "" {
-		config.StorageSize = resource.MustParse(spec.StorageSize)
-	}
-
-	if spec.Config != nil {
-		config.Requests = spec.Config.Resources.Requests
-		config.Limits = spec.Config.Resources.Limits
-	}
-
-	if spec.Sentinel != nil {
-		config.Sentinel.Enabled = spec.Sentinel.Enabled
-		config.Sentinel.ReplicaCount = defaults.ReplicaSentinelCount
-		if spec.Sentinel.Config != nil {
-			config.Sentinel.MasterGroupName = spec.Sentinel.Config.MasterName
-			config.Sentinel.Requests = spec.Sentinel.Config.Resources.Requests
-			config.Sentinel.Limits = spec.Sentinel.Config.Resources.Limits
-		}
-	}
-
-	return config
-}
 
 func ExtractRedisStatus(ctx context.Context, results *common.Results) apiv2.WBRedisStatus {
 	return TranslateRedisStatus(
@@ -99,10 +32,10 @@ func ExtractRedisStatus(ctx context.Context, results *common.Results) apiv2.WBRe
 
 func TranslateRedisStatus(ctx context.Context, m common.RedisStatus) apiv2.WBRedisStatus {
 	var result apiv2.WBRedisStatus
-	var details []apiv2.WBStatusDetail
+	var details []apiv2.WBStatusCondition
 
 	for _, err := range m.Errors {
-		details = append(details, apiv2.WBStatusDetail{
+		details = append(details, apiv2.WBStatusCondition{
 			State:   apiv2.WBStateError,
 			Code:    err.Code(),
 			Message: err.Reason(),
@@ -111,7 +44,7 @@ func TranslateRedisStatus(ctx context.Context, m common.RedisStatus) apiv2.WBRed
 
 	for _, detail := range m.Details {
 		state := translateRedisStatusCode(detail.Code())
-		details = append(details, apiv2.WBStatusDetail{
+		details = append(details, apiv2.WBStatusCondition{
 			State:   state,
 			Code:    detail.Code(),
 			Message: detail.Message(),
@@ -127,7 +60,7 @@ func TranslateRedisStatus(ctx context.Context, m common.RedisStatus) apiv2.WBRed
 	}
 
 	result.Ready = m.Ready
-	result.Details = details
+	result.Conditions = details
 	result.State = computeOverallState(details, m.Ready)
 	result.LastReconciled = metav1.Now()
 
@@ -157,32 +90,6 @@ func translateRedisStatusCode(code string) apiv2.WBStateType {
 	}
 }
 
-func (i *InfraConfigBuilder) AddRedisConfig(actual apiv2.WBRedisSpec) *InfraConfigBuilder {
-	var err error
-	var size common.Size
-	var defaultConfig common.RedisConfig
-	var mergedConfig common.RedisConfig
-
-	size, err = ToModelSize(i.size)
-	if err != nil {
-		i.errors = append(i.errors, err)
-		return i
-	}
-	defaultConfig, err = defaults.BuildRedisDefaults(size, i.ownerNamespace)
-	if err != nil {
-		i.errors = append(i.errors, err)
-		return i
-	}
-
-	mergedConfig, err = BuildRedisConfig(actual, defaultConfig)
-	if err != nil {
-		i.errors = append(i.errors, err)
-		return i
-	}
-	i.mergedRedis = mergedConfig
-	return i
-}
-
 // ToRedisStandaloneVendorSpec converts a WBRedisSpec to a Redis standalone CR.
 // This function creates a standalone Redis instance (no HA, no sentinel).
 // Returns an error if sentinel is enabled in the spec.
@@ -194,7 +101,15 @@ func ToRedisStandaloneVendorSpec(
 ) (*redisv1beta2.Redis, error) {
 	log := ctrl.LoggerFrom(ctx)
 
-	if spec.Sentinel != nil && spec.Sentinel.Enabled {
+	if !spec.Enabled {
+		return nil, nil
+	}
+
+	if spec.Sentinel.Enabled {
+		return nil, nil
+	}
+
+	if spec.Sentinel.Enabled {
 		return nil, fmt.Errorf("cannot create redis standalone with sentinel enabled")
 	}
 
@@ -233,7 +148,7 @@ func ToRedisStandaloneVendorSpec(
 	}
 
 	// Add resources if specified
-	if spec.Config != nil && (len(spec.Config.Resources.Requests) > 0 || len(spec.Config.Resources.Limits) > 0) {
+	if len(spec.Config.Resources.Requests) > 0 || len(spec.Config.Resources.Limits) > 0 {
 		redis.Spec.KubernetesConfig.Resources = &corev1.ResourceRequirements{
 			Requests: spec.Config.Resources.Requests,
 			Limits:   spec.Config.Resources.Limits,
@@ -260,8 +175,12 @@ func ToRedisSentinelVendorSpec(
 ) (*redissentinelv1beta2.RedisSentinel, error) {
 	log := ctrl.LoggerFrom(ctx)
 
-	if spec.Sentinel == nil || !spec.Sentinel.Enabled {
-		return nil, fmt.Errorf("cannot create redis sentinel without sentinel enabled in spec")
+	if !spec.Enabled {
+		return nil, nil
+	}
+
+	if !spec.Sentinel.Enabled {
+		return nil, nil
 	}
 
 	// Default sentinel count to 3 if not specified
@@ -269,7 +188,7 @@ func ToRedisSentinelVendorSpec(
 
 	// Get master name from config or use default
 	masterName := DefaultSentinelGroup
-	if spec.Sentinel.Config != nil && spec.Sentinel.Config.MasterName != "" {
+	if spec.Sentinel.Config.MasterName != "" {
 		masterName = spec.Sentinel.Config.MasterName
 	}
 
@@ -295,7 +214,7 @@ func ToRedisSentinelVendorSpec(
 	}
 
 	// Add resources if specified
-	if spec.Sentinel.Config != nil && (len(spec.Sentinel.Config.Resources.Requests) > 0 || len(spec.Sentinel.Config.Resources.Limits) > 0) {
+	if len(spec.Sentinel.Config.Resources.Requests) > 0 || len(spec.Sentinel.Config.Resources.Limits) > 0 {
 		sentinel.Spec.KubernetesConfig.Resources = &corev1.ResourceRequirements{
 			Requests: spec.Sentinel.Config.Resources.Requests,
 			Limits:   spec.Sentinel.Config.Resources.Limits,
@@ -322,8 +241,12 @@ func ToRedisReplicationVendorSpec(
 ) (*redisreplicationv1beta2.RedisReplication, error) {
 	log := ctrl.LoggerFrom(ctx)
 
-	if spec.Sentinel == nil || !spec.Sentinel.Enabled {
-		return nil, fmt.Errorf("cannot create redis replication without sentinel enabled in spec")
+	if !spec.Enabled {
+		return nil, nil
+	}
+
+	if !spec.Sentinel.Enabled {
+		return nil, nil
 	}
 
 	// Parse storage quantity
@@ -365,7 +288,7 @@ func ToRedisReplicationVendorSpec(
 	}
 
 	// Add resources if specified
-	if spec.Config != nil && (len(spec.Config.Resources.Requests) > 0 || len(spec.Config.Resources.Limits) > 0) {
+	if len(spec.Config.Resources.Requests) > 0 || len(spec.Config.Resources.Limits) > 0 {
 		replication.Spec.KubernetesConfig.Resources = &corev1.ResourceRequirements{
 			Requests: spec.Config.Resources.Requests,
 			Limits:   spec.Config.Resources.Limits,
@@ -379,4 +302,25 @@ func ToRedisReplicationVendorSpec(
 	}
 
 	return replication, nil
+}
+
+func RedisStandaloneNamespacedName(spec apiv2.WBRedisSpec) types.NamespacedName {
+	return types.NamespacedName{
+		Name:      spec.Name,
+		Namespace: spec.Namespace,
+	}
+}
+
+func RedisSentinelNamespacedName(spec apiv2.WBRedisSpec) types.NamespacedName {
+	return types.NamespacedName{
+		Name:      spec.Sentinel.SentinelName,
+		Namespace: spec.Namespace,
+	}
+}
+
+func RedisReplicationNamespacedName(spec apiv2.WBRedisSpec) types.NamespacedName {
+	return types.NamespacedName{
+		Name:      spec.Sentinel.ReplicationName,
+		Namespace: spec.Namespace,
+	}
 }

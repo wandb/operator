@@ -164,7 +164,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Redis", func() {
 						Size: apiv2.WBSizeSmall,
 						Redis: apiv2.WBRedisSpec{
 							Enabled: true,
-							Config: &apiv2.WBRedisConfig{
+							Config: apiv2.WBRedisConfig{
 								Resources: corev1.ResourceRequirements{
 									Requests: corev1.ResourceList{
 										corev1.ResourceCPU: customCPU,
@@ -230,9 +230,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Redis", func() {
 						Size: apiv2.WBSizeSmall,
 						Redis: apiv2.WBRedisSpec{
 							Enabled: true,
-							Sentinel: &apiv2.WBRedisSentinelSpec{
+							Sentinel: apiv2.WBRedisSentinelSpec{
 								Enabled: true,
-								Config: &apiv2.WBRedisSentinelConfig{
+								Config: apiv2.WBRedisSentinelConfig{
 									MasterName: customMasterName,
 									Resources: corev1.ResourceRequirements{
 										Requests: corev1.ResourceList{
@@ -266,7 +266,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Redis", func() {
 						Size: apiv2.WBSizeSmall,
 						Redis: apiv2.WBRedisSpec{
 							Enabled: true,
-							Sentinel: &apiv2.WBRedisSentinelSpec{
+							Sentinel: apiv2.WBRedisSentinelSpec{
 								Enabled: false,
 							},
 						},
@@ -332,7 +332,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Redis", func() {
 							Enabled:     true,
 							Namespace:   customNamespace,
 							StorageSize: customStorage,
-							Config: &apiv2.WBRedisConfig{
+							Config: apiv2.WBRedisConfig{
 								Resources: corev1.ResourceRequirements{
 									Requests: corev1.ResourceList{
 										corev1.ResourceCPU:    customCPU,
@@ -344,9 +344,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Redis", func() {
 									},
 								},
 							},
-							Sentinel: &apiv2.WBRedisSentinelSpec{
+							Sentinel: apiv2.WBRedisSentinelSpec{
 								Enabled: true,
-								Config: &apiv2.WBRedisSentinelConfig{
+								Config: apiv2.WBRedisSentinelConfig{
 									MasterName: customMasterName,
 									Resources: corev1.ResourceRequirements{
 										Requests: corev1.ResourceList{

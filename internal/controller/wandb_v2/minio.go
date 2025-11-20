@@ -4,47 +4,29 @@ import (
 	"context"
 
 	apiv2 "github.com/wandb/operator/api/v2"
-	"github.com/wandb/operator/internal/controller/infra/minio"
 	"github.com/wandb/operator/internal/controller/infra/minio/tenant"
-	"github.com/wandb/operator/internal/controller/translator/common"
 	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
+	miniov2 "github.com/wandb/operator/internal/vendored/minio-operator/minio.min.io/v2"
 )
 
-func (r *WeightsAndBiasesV2Reconciler) reconcileMinio(
+func (r *WeightsAndBiasesV2Reconciler) minioResourceReconcile(
 	ctx context.Context,
-	infraDetails translatorv2.InfraConfig,
 	wandb *apiv2.WeightsAndBiases,
-) *common.Results {
+) error {
 	var err error
-	var results = &common.Results{}
-	var nextResults *common.Results
-	var minioConfig common.MinioConfig
-	var actual minio.ActualMinio
+	var desired *miniov2.Tenant
 
-	if minioConfig, err = infraDetails.GetMinioConfig(); err != nil {
-		results.AddErrors(err)
-		return results
+	if desired, err = translatorv2.ToMinioVendorSpec(ctx, wandb.Spec.Minio, wandb, r.Scheme); err != nil {
+		return err
+	}
+	if err = tenant.CrudResource(ctx, r.Client, translatorv2.MinioNamespacedName(wandb.Spec.Minio), desired); err != nil {
+		return err
 	}
 
-	if actual, err = tenant.Initialize(ctx, r.Client, minioConfig, wandb, r.Scheme); err != nil {
-		results.AddErrors(err)
-		return results
-	}
+	//wandb.Status.MinioStatus = translatorv2.ExtractMinioStatus(ctx, results)
+	//if err = r.Status().Update(ctx, wandb); err != nil {
+	//	results.AddErrors(err)
+	//}
 
-	if minioConfig.Enabled {
-		nextResults = actual.Upsert(ctx, minioConfig)
-	} else {
-		nextResults = actual.Delete(ctx)
-	}
-	results.Merge(nextResults)
-	if results.HasCriticalError() {
-		return results
-	}
-
-	wandb.Status.MinioStatus = translatorv2.ExtractMinioStatus(ctx, results)
-	if err = r.Status().Update(ctx, wandb); err != nil {
-		results.AddErrors(err)
-	}
-
-	return results
+	return nil
 }

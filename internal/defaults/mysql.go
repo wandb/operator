@@ -23,6 +23,8 @@ const (
 	ProxySQLImage     = "percona/proxysql2:2.7.3"
 	LogCollectorImage = "perconalab/percona-xtradb-cluster-operator:main-logcollector"
 	CRVersion         = "1.18.0"
+
+	MysqlName = "wandb-mysql"
 )
 
 func BuildMySQLDefaults(size common.Size, ownerNamespace string) (common.MySQLConfig, error) {
@@ -31,6 +33,7 @@ func BuildMySQLDefaults(size common.Size, ownerNamespace string) (common.MySQLCo
 	config := common.MySQLConfig{
 		Enabled:   true,
 		Namespace: ownerNamespace,
+		Name:      MysqlName,
 	}
 
 	switch size {

@@ -57,6 +57,7 @@ func min32(a, b int32) int32 {
 type KafkaConfig struct {
 	Enabled           bool
 	Namespace         string
+	Name              string
 	StorageSize       string
 	Replicas          int32
 	Resources         corev1.ResourceRequirements

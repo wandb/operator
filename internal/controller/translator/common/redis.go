@@ -27,6 +27,7 @@ const (
 type RedisConfig struct {
 	Enabled     bool
 	Namespace   string
+	Name        string
 	StorageSize resource.Quantity
 	Requests    corev1.ResourceList
 	Limits      corev1.ResourceList
@@ -35,6 +36,8 @@ type RedisConfig struct {
 
 type SentinelConfig struct {
 	Enabled         bool
+	SentinelName    string
+	ReplicationName string
 	MasterGroupName string
 	ReplicaCount    int
 	Requests        corev1.ResourceList

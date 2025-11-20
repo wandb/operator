@@ -24,6 +24,10 @@ const (
 	SmallSentinelCpuLimit      = "256m"
 	SmallSentinelMemoryRequest = "128Mi"
 	SmallSentinelMemoryLimit   = "256Mi"
+
+	StandaloneName  = "wandb-redis"
+	SentinelName    = "wandb-redis-sentinel"
+	ReplicationName = "wandb-redis-replication"
 )
 
 func BuildRedisDefaults(size common.Size, ownerNamespace string) (common.RedisConfig, error) {
@@ -32,6 +36,7 @@ func BuildRedisDefaults(size common.Size, ownerNamespace string) (common.RedisCo
 	config := common.RedisConfig{
 		Enabled:   true,
 		Namespace: ownerNamespace,
+		Name:      StandaloneName,
 		Requests:  corev1.ResourceList{},
 		Limits:    corev1.ResourceList{},
 	}
@@ -81,6 +86,8 @@ func BuildRedisDefaults(size common.Size, ownerNamespace string) (common.RedisCo
 
 		config.Sentinel = common.SentinelConfig{
 			Enabled:         true,
+			SentinelName:    SentinelName,
+			ReplicationName: ReplicationName,
 			MasterGroupName: DefaultSentinelGroup,
 			ReplicaCount:    ReplicaSentinelCount,
 			Requests: corev1.ResourceList{

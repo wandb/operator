@@ -5,46 +5,15 @@ import (
 	"fmt"
 
 	apiv2 "github.com/wandb/operator/api/v2"
-	"github.com/wandb/operator/internal/controller/infra/mysql/percona"
 	"github.com/wandb/operator/internal/controller/translator/common"
-	"github.com/wandb/operator/internal/controller/translator/utils"
-	"github.com/wandb/operator/internal/defaults"
 	pxcv1 "github.com/wandb/operator/internal/vendored/percona-operator/pxc/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
-
-// BuildMySQLConfig will create a new common.MySQLConfig with defaultConfig applied if not
-// present in actual. It should *never* be saved into the CR!
-func BuildMySQLConfig(actual apiv2.WBMySQLSpec, defaultConfig common.MySQLConfig) (common.MySQLConfig, error) {
-	mysqlConfig := TranslateMySQLSpec(actual)
-
-	mysqlConfig.StorageSize = utils.CoalesceQuantity(mysqlConfig.StorageSize, defaultConfig.StorageSize)
-	mysqlConfig.Namespace = utils.Coalesce(mysqlConfig.Namespace, defaultConfig.Namespace)
-	mysqlConfig.Resources = utils.Resources(mysqlConfig.Resources, defaultConfig.Resources)
-
-	mysqlConfig.Enabled = actual.Enabled
-	mysqlConfig.Replicas = actual.Replicas
-
-	return mysqlConfig, nil
-}
-
-func TranslateMySQLSpec(spec apiv2.WBMySQLSpec) common.MySQLConfig {
-	config := common.MySQLConfig{
-		Enabled:     spec.Enabled,
-		Namespace:   spec.Namespace,
-		StorageSize: spec.StorageSize,
-		Replicas:    spec.Replicas,
-	}
-	if spec.Config != nil {
-		config.Resources = spec.Config.Resources
-	}
-
-	return config
-}
 
 func ExtractMySQLStatus(ctx context.Context, results *common.Results) apiv2.WBMySQLStatus {
 	return TranslateMySQLStatus(
@@ -55,10 +24,10 @@ func ExtractMySQLStatus(ctx context.Context, results *common.Results) apiv2.WBMy
 
 func TranslateMySQLStatus(ctx context.Context, m common.MySQLStatus) apiv2.WBMySQLStatus {
 	var result apiv2.WBMySQLStatus
-	var details []apiv2.WBStatusDetail
+	var details []apiv2.WBStatusCondition
 
 	for _, err := range m.Errors {
-		details = append(details, apiv2.WBStatusDetail{
+		details = append(details, apiv2.WBStatusCondition{
 			State:   apiv2.WBStateError,
 			Code:    err.Code(),
 			Message: err.Reason(),
@@ -67,7 +36,7 @@ func TranslateMySQLStatus(ctx context.Context, m common.MySQLStatus) apiv2.WBMyS
 
 	for _, detail := range m.Details {
 		state := translateMySQLStatusCode(detail.Code())
-		details = append(details, apiv2.WBStatusDetail{
+		details = append(details, apiv2.WBStatusCondition{
 			State:   state,
 			Code:    detail.Code(),
 			Message: detail.Message(),
@@ -81,7 +50,7 @@ func TranslateMySQLStatus(ctx context.Context, m common.MySQLStatus) apiv2.WBMyS
 	}
 
 	result.Ready = m.Ready
-	result.Details = details
+	result.Conditions = details
 	result.State = computeOverallState(details, m.Ready)
 	result.LastReconciled = metav1.Now()
 
@@ -103,32 +72,6 @@ func translateMySQLStatusCode(code string) apiv2.WBStateType {
 	}
 }
 
-func (i *InfraConfigBuilder) AddMySQLConfig(actual apiv2.WBMySQLSpec) *InfraConfigBuilder {
-	var err error
-	var size common.Size
-	var defaultConfig common.MySQLConfig
-	var mergedConfig common.MySQLConfig
-
-	size, err = ToModelSize(i.size)
-	if err != nil {
-		i.errors = append(i.errors, err)
-		return i
-	}
-	defaultConfig, err = defaults.BuildMySQLDefaults(size, i.ownerNamespace)
-	if err != nil {
-		i.errors = append(i.errors, err)
-		return i
-	}
-
-	mergedConfig, err = BuildMySQLConfig(actual, defaultConfig)
-	if err != nil {
-		i.errors = append(i.errors, err)
-		return i
-	}
-	i.mergedMySQL = mergedConfig
-	return i
-}
-
 // ToMySQLVendorSpec converts a WBMySQLSpec to a PerconaXtraDBCluster CR.
 // This function translates the high-level MySQL spec into the vendor-specific
 // PerconaXtraDBCluster format used by the Percona operator.
@@ -139,6 +82,10 @@ func ToMySQLVendorSpec(
 	scheme *runtime.Scheme,
 ) (*pxcv1.PerconaXtraDBCluster, error) {
 	log := ctrl.LoggerFrom(ctx)
+
+	if !spec.Enabled {
+		return nil, nil
+	}
 
 	// Parse storage quantity
 	storageQuantity, err := resource.ParseQuantity(spec.StorageSize)
@@ -161,10 +108,10 @@ func ToMySQLVendorSpec(
 	// Build PXC spec
 	pxc := &pxcv1.PerconaXtraDBCluster{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      percona.PXCName,
+			Name:      spec.Name,
 			Namespace: spec.Namespace,
 			Labels: map[string]string{
-				"app": percona.PXCName,
+				"app": spec.Name,
 			},
 		},
 		Spec: pxcv1.PerconaXtraDBClusterSpec{
@@ -196,7 +143,7 @@ func ToMySQLVendorSpec(
 	}
 
 	// Add resources if specified
-	if spec.Config != nil && (len(spec.Config.Resources.Requests) > 0 || len(spec.Config.Resources.Limits) > 0) {
+	if len(spec.Config.Resources.Requests) > 0 || len(spec.Config.Resources.Limits) > 0 {
 		pxc.Spec.PXC.PodSpec.Resources = corev1.ResourceRequirements{
 			Requests: spec.Config.Resources.Requests,
 			Limits:   spec.Config.Resources.Limits,
@@ -243,4 +190,11 @@ func ToMySQLVendorSpec(
 	}
 
 	return pxc, nil
+}
+
+func MysqlNamespacedName(spec apiv2.WBMySQLSpec) types.NamespacedName {
+	return types.NamespacedName{
+		Name:      spec.Name,
+		Namespace: spec.Namespace,
+	}
 }

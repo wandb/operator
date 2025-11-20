@@ -190,7 +190,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Kafka", func() {
 						Size: apiv2.WBSizeSmall,
 						Kafka: apiv2.WBKafkaSpec{
 							Enabled: true,
-							Config: &apiv2.WBKafkaConfig{
+							Config: apiv2.WBKafkaConfig{
 								Resources: corev1.ResourceRequirements{
 									Requests: corev1.ResourceList{
 										corev1.ResourceCPU: customCPU,
@@ -284,7 +284,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Kafka", func() {
 							Namespace:   customNamespace,
 							StorageSize: customStorage,
 							Replicas:    customReplicas,
-							Config: &apiv2.WBKafkaConfig{
+							Config: apiv2.WBKafkaConfig{
 								Resources: corev1.ResourceRequirements{
 									Requests: corev1.ResourceList{
 										corev1.ResourceCPU:    customCPURequest,

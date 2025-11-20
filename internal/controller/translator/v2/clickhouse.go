@@ -8,46 +8,14 @@ import (
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/infra/clickhouse/altinity"
 	"github.com/wandb/operator/internal/controller/translator/common"
-	"github.com/wandb/operator/internal/controller/translator/utils"
-	"github.com/wandb/operator/internal/defaults"
 	chiv2 "github.com/wandb/operator/internal/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
-
-// BuildClickHouseConfig will create a new WBClickHouseSpec with defaultValues applied if not
-// present in actual. It should *never* be saved into the CR!
-func BuildClickHouseConfig(actual apiv2.WBClickHouseSpec, defaultConfig common.ClickHouseConfig) (common.ClickHouseConfig, error) {
-	clickhouseConfig := TranslateClickHouseSpec(actual)
-
-	clickhouseConfig.StorageSize = utils.CoalesceQuantity(clickhouseConfig.StorageSize, defaultConfig.StorageSize)
-	clickhouseConfig.Namespace = utils.Coalesce(clickhouseConfig.Namespace, defaultConfig.Namespace)
-	clickhouseConfig.Version = utils.Coalesce(clickhouseConfig.Version, defaultConfig.Version)
-	clickhouseConfig.Resources = utils.Resources(clickhouseConfig.Resources, defaultConfig.Resources)
-
-	clickhouseConfig.Enabled = actual.Enabled
-	clickhouseConfig.Replicas = actual.Replicas
-
-	return clickhouseConfig, nil
-}
-
-func TranslateClickHouseSpec(spec apiv2.WBClickHouseSpec) common.ClickHouseConfig {
-	config := common.ClickHouseConfig{
-		Enabled:     spec.Enabled,
-		Namespace:   spec.Namespace,
-		StorageSize: spec.StorageSize,
-		Replicas:    spec.Replicas,
-		Version:     spec.Version,
-	}
-	if spec.Config != nil {
-		config.Resources = spec.Config.Resources
-	}
-
-	return config
-}
 
 func ExtractClickHouseStatus(ctx context.Context, results *common.Results) apiv2.WBClickHouseStatus {
 	return TranslateClickHouseStatus(
@@ -58,10 +26,10 @@ func ExtractClickHouseStatus(ctx context.Context, results *common.Results) apiv2
 
 func TranslateClickHouseStatus(ctx context.Context, m common.ClickHouseStatus) apiv2.WBClickHouseStatus {
 	var result apiv2.WBClickHouseStatus
-	var details []apiv2.WBStatusDetail
+	var details []apiv2.WBStatusCondition
 
 	for _, err := range m.Errors {
-		details = append(details, apiv2.WBStatusDetail{
+		details = append(details, apiv2.WBStatusCondition{
 			State:   apiv2.WBStateError,
 			Code:    err.Code(),
 			Message: err.Reason(),
@@ -70,7 +38,7 @@ func TranslateClickHouseStatus(ctx context.Context, m common.ClickHouseStatus) a
 
 	for _, detail := range m.Details {
 		state := translateClickHouseStatusCode(detail.Code())
-		details = append(details, apiv2.WBStatusDetail{
+		details = append(details, apiv2.WBStatusCondition{
 			State:   state,
 			Code:    detail.Code(),
 			Message: detail.Message(),
@@ -84,7 +52,7 @@ func TranslateClickHouseStatus(ctx context.Context, m common.ClickHouseStatus) a
 	}
 
 	result.Ready = m.Ready
-	result.Details = details
+	result.Conditions = details
 	result.State = computeOverallState(details, m.Ready)
 	result.LastReconciled = metav1.Now()
 
@@ -106,32 +74,6 @@ func translateClickHouseStatusCode(code string) apiv2.WBStateType {
 	}
 }
 
-func (i *InfraConfigBuilder) AddClickHouseConfig(actual apiv2.WBClickHouseSpec) *InfraConfigBuilder {
-	var err error
-	var size common.Size
-	var defaultConfig common.ClickHouseConfig
-	var mergedConfig common.ClickHouseConfig
-
-	size, err = ToModelSize(i.size)
-	if err != nil {
-		i.errors = append(i.errors, err)
-		return i
-	}
-	defaultConfig, err = defaults.BuildClickHouseDefaults(size, i.ownerNamespace)
-	if err != nil {
-		i.errors = append(i.errors, err)
-		return i
-	}
-
-	mergedConfig, err = BuildClickHouseConfig(actual, defaultConfig)
-	if err != nil {
-		i.errors = append(i.errors, err)
-		return i
-	}
-	i.mergedClickHouse = mergedConfig
-	return i
-}
-
 // ToClickHouseVendorSpec converts a WBClickHouseSpec to a ClickHouseInstallation CR.
 // This function translates the high-level ClickHouse spec into the vendor-specific
 // ClickHouseInstallation format used by the Altinity operator.
@@ -143,11 +85,12 @@ func ToClickHouseVendorSpec(
 ) (*chiv2.ClickHouseInstallation, error) {
 	log := ctrl.LoggerFrom(ctx)
 
-	// Parse storage quantity
-	storageQuantity, err := resource.ParseQuantity(spec.StorageSize)
-	if err != nil {
-		return nil, fmt.Errorf("invalid storage size %q: %w", spec.StorageSize, err)
+	if !spec.Enabled {
+		return nil, nil
 	}
+
+	// Parse storage quantity
+	storageQuantity := resource.MustParse(spec.StorageSize)
 
 	// Create user settings with password
 	passwordSha256 := fmt.Sprintf("%x", sha256.Sum256([]byte(altinity.ClickHousePassword)))
@@ -209,7 +152,7 @@ func ToClickHouseVendorSpec(
 	}
 
 	// Add pod template with resources if specified
-	if spec.Config != nil && (len(spec.Config.Resources.Requests) > 0 || len(spec.Config.Resources.Limits) > 0) {
+	if len(spec.Config.Resources.Requests) > 0 || len(spec.Config.Resources.Limits) > 0 {
 		chi.Spec.Templates.PodTemplates = []chiv2.PodTemplate{
 			{
 				Name: "default-pod",
@@ -236,4 +179,11 @@ func ToClickHouseVendorSpec(
 	}
 
 	return chi, nil
+}
+
+func ClickHouseNamespacedName(spec apiv2.WBClickHouseSpec) types.NamespacedName {
+	return types.NamespacedName{
+		Name:      spec.Name,
+		Namespace: spec.Namespace,
+	}
 }

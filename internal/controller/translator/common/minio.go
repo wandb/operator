@@ -25,6 +25,7 @@ const (
 type MinioConfig struct {
 	Enabled   bool
 	Namespace string
+	Name      string
 
 	// Storage and resources
 	StorageSize      string

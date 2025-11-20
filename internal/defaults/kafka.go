@@ -16,6 +16,8 @@ const (
 	SmallKafkaCpuLimit      = "1000m"
 	SmallKafkaMemoryRequest = "1Gi"
 	SmallKafkaMemoryLimit   = "2Gi"
+
+	KafkaName = "wandb-kafka"
 )
 
 func BuildKafkaDefaults(size common.Size, ownerNamespace string) (common.KafkaConfig, error) {
@@ -24,6 +26,7 @@ func BuildKafkaDefaults(size common.Size, ownerNamespace string) (common.KafkaCo
 	config := common.KafkaConfig{
 		Enabled:   true,
 		Namespace: ownerNamespace,
+		Name:      KafkaName,
 	}
 
 	switch size {

@@ -165,7 +165,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - MySQL", func() {
 						Size: apiv2.WBSizeSmall,
 						MySQL: apiv2.WBMySQLSpec{
 							Enabled: true,
-							Config: &apiv2.WBMySQLConfig{
+							Config: apiv2.WBMySQLConfig{
 								Resources: corev1.ResourceRequirements{
 									Requests: corev1.ResourceList{
 										corev1.ResourceCPU: customCPU,
@@ -202,7 +202,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - MySQL", func() {
 						Size: apiv2.WBSizeSmall,
 						MySQL: apiv2.WBMySQLSpec{
 							Enabled: true,
-							Config: &apiv2.WBMySQLConfig{
+							Config: apiv2.WBMySQLConfig{
 								Resources: corev1.ResourceRequirements{
 									Requests: corev1.ResourceList{
 										corev1.ResourceCPU:    customCPURequest,
@@ -278,7 +278,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - MySQL", func() {
 							Enabled:     true,
 							Namespace:   customNamespace,
 							StorageSize: customStorage,
-							Config: &apiv2.WBMySQLConfig{
+							Config: apiv2.WBMySQLConfig{
 								Resources: corev1.ResourceRequirements{
 									Requests: corev1.ResourceList{
 										corev1.ResourceCPU:    customCPURequest,

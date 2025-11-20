@@ -8,40 +8,12 @@ import (
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/infra/kafka/strimzi"
 	"github.com/wandb/operator/internal/controller/translator/common"
-	"github.com/wandb/operator/internal/controller/translator/utils"
-	"github.com/wandb/operator/internal/defaults"
 	kafkav1beta2 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1beta2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
-
-// BuildKafkaConfig will create a new common.KafkaConfig with defaultConfig applied if not
-// present in actual. It should *never* be saved into the CR!
-func BuildKafkaConfig(actual apiv2.WBKafkaSpec, defaultConfig common.KafkaConfig) (common.KafkaConfig, error) {
-	kafkaConfig := TranslateKafkaSpec(actual)
-
-	kafkaConfig.StorageSize = utils.CoalesceQuantity(kafkaConfig.StorageSize, defaultConfig.StorageSize)
-	kafkaConfig.Namespace = utils.Coalesce(kafkaConfig.Namespace, defaultConfig.Namespace)
-	kafkaConfig.Resources = utils.Resources(kafkaConfig.Resources, defaultConfig.Resources)
-
-	kafkaConfig.Enabled = actual.Enabled
-
-	return kafkaConfig, nil
-}
-
-func TranslateKafkaSpec(spec apiv2.WBKafkaSpec) common.KafkaConfig {
-	config := common.KafkaConfig{
-		Enabled:     spec.Enabled,
-		Namespace:   spec.Namespace,
-		StorageSize: spec.StorageSize,
-	}
-	if spec.Config != nil {
-		config.Resources = spec.Config.Resources
-	}
-
-	return config
-}
 
 func ExtractKafkaStatus(ctx context.Context, results *common.Results) apiv2.WBKafkaStatus {
 	return TranslateKafkaStatus(
@@ -52,10 +24,10 @@ func ExtractKafkaStatus(ctx context.Context, results *common.Results) apiv2.WBKa
 
 func TranslateKafkaStatus(ctx context.Context, m common.KafkaStatus) apiv2.WBKafkaStatus {
 	var result apiv2.WBKafkaStatus
-	var details []apiv2.WBStatusDetail
+	var details []apiv2.WBStatusCondition
 
 	for _, err := range m.Errors {
-		details = append(details, apiv2.WBStatusDetail{
+		details = append(details, apiv2.WBStatusCondition{
 			State:   apiv2.WBStateError,
 			Code:    err.Code(),
 			Message: err.Reason(),
@@ -64,7 +36,7 @@ func TranslateKafkaStatus(ctx context.Context, m common.KafkaStatus) apiv2.WBKaf
 
 	for _, detail := range m.Details {
 		state := translateKafkaStatusCode(detail.Code())
-		details = append(details, apiv2.WBStatusDetail{
+		details = append(details, apiv2.WBStatusCondition{
 			State:   state,
 			Code:    detail.Code(),
 			Message: detail.Message(),
@@ -77,7 +49,7 @@ func TranslateKafkaStatus(ctx context.Context, m common.KafkaStatus) apiv2.WBKaf
 	}
 
 	result.Ready = m.Ready
-	result.Details = details
+	result.Conditions = details
 	result.State = computeOverallState(details, m.Ready)
 	result.LastReconciled = metav1.Now()
 
@@ -105,32 +77,6 @@ func translateKafkaStatusCode(code string) apiv2.WBStateType {
 	}
 }
 
-func (i *InfraConfigBuilder) AddKafkaConfig(actual apiv2.WBKafkaSpec) *InfraConfigBuilder {
-	var err error
-	var size common.Size
-	var defaultConfig common.KafkaConfig
-	var mergedConfig common.KafkaConfig
-
-	size, err = ToModelSize(i.size)
-	if err != nil {
-		i.errors = append(i.errors, err)
-		return i
-	}
-	defaultConfig, err = defaults.BuildKafkaDefaults(size, i.ownerNamespace)
-	if err != nil {
-		i.errors = append(i.errors, err)
-		return i
-	}
-
-	mergedConfig, err = BuildKafkaConfig(actual, defaultConfig)
-	if err != nil {
-		i.errors = append(i.errors, err)
-		return i
-	}
-	i.mergedKafka = mergedConfig
-	return i
-}
-
 // ToKafkaVendorSpec converts a WBKafkaSpec to a Kafka CR.
 // This function translates the high-level Kafka spec into the vendor-specific
 // Kafka format used by the Strimzi operator.
@@ -142,6 +88,10 @@ func ToKafkaVendorSpec(
 	scheme *runtime.Scheme,
 ) (*kafkav1beta2.Kafka, error) {
 	log := ctrl.LoggerFrom(ctx)
+
+	if !spec.Enabled {
+		return nil, nil
+	}
 
 	// Get replication config based on replica count
 	replicationConfig := common.GetKafkaReplicationConfig(spec.Replicas)
@@ -233,7 +183,7 @@ func ToKafkaNodePoolVendorSpec(
 	}
 
 	// Add resources if specified
-	if spec.Config != nil && (len(spec.Config.Resources.Requests) > 0 || len(spec.Config.Resources.Limits) > 0) {
+	if len(spec.Config.Resources.Requests) > 0 || len(spec.Config.Resources.Limits) > 0 {
 		nodePool.Spec.Resources = &spec.Config.Resources
 	}
 
@@ -244,4 +194,18 @@ func ToKafkaNodePoolVendorSpec(
 	}
 
 	return nodePool, nil
+}
+
+func KafkaNamespacedName(spec apiv2.WBKafkaSpec) types.NamespacedName {
+	return types.NamespacedName{
+		Name:      spec.Name,
+		Namespace: spec.Namespace,
+	}
+}
+
+func KafkaNodePoolNamespacedName(spec apiv2.WBKafkaSpec) types.NamespacedName {
+	return types.NamespacedName{
+		Name:      spec.Name + "-node-pool",
+		Namespace: spec.Namespace,
+	}
 }

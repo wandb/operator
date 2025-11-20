@@ -101,6 +101,9 @@ func (d *WeightsAndBiasesCustomDefaulter) applyMySQLDefaults(wandb *apiv2.Weight
 	if wandb.Spec.MySQL.Namespace == "" {
 		wandb.Spec.MySQL.Namespace = defaultConfig.Namespace
 	}
+	if wandb.Spec.MySQL.Name == "" {
+		wandb.Spec.MySQL.Name = defaultConfig.Name
+	}
 
 	if wandb.Spec.MySQL.StorageSize == "" {
 		wandb.Spec.MySQL.StorageSize = defaultConfig.StorageSize
@@ -111,9 +114,6 @@ func (d *WeightsAndBiasesCustomDefaulter) applyMySQLDefaults(wandb *apiv2.Weight
 	}
 
 	if len(defaultConfig.Resources.Requests) > 0 || len(defaultConfig.Resources.Limits) > 0 {
-		if wandb.Spec.MySQL.Config == nil {
-			wandb.Spec.MySQL.Config = &apiv2.WBMySQLConfig{}
-		}
 		if wandb.Spec.MySQL.Config.Resources.Requests == nil {
 			wandb.Spec.MySQL.Config.Resources.Requests = corev1.ResourceList{}
 		}
@@ -145,15 +145,15 @@ func (d *WeightsAndBiasesCustomDefaulter) applyRedisDefaults(wandb *apiv2.Weight
 	if wandb.Spec.Redis.Namespace == "" {
 		wandb.Spec.Redis.Namespace = defaultConfig.Namespace
 	}
+	if wandb.Spec.Redis.Name == "" {
+		wandb.Spec.Redis.Name = defaultConfig.Name
+	}
 
 	if wandb.Spec.Redis.StorageSize == "" {
 		wandb.Spec.Redis.StorageSize = defaultConfig.StorageSize.String()
 	}
 
 	if len(defaultConfig.Requests) > 0 || len(defaultConfig.Limits) > 0 {
-		if wandb.Spec.Redis.Config == nil {
-			wandb.Spec.Redis.Config = &apiv2.WBRedisConfig{}
-		}
 		if wandb.Spec.Redis.Config.Resources.Requests == nil {
 			wandb.Spec.Redis.Config.Resources.Requests = corev1.ResourceList{}
 		}
@@ -174,19 +174,16 @@ func (d *WeightsAndBiasesCustomDefaulter) applyRedisDefaults(wandb *apiv2.Weight
 	}
 
 	if defaultConfig.Sentinel.Enabled {
-		if wandb.Spec.Redis.Sentinel == nil {
-			wandb.Spec.Redis.Sentinel = &apiv2.WBRedisSentinelSpec{
-				Enabled: true,
-			}
-		}
-
 		if wandb.Spec.Redis.Sentinel.Enabled {
-			if wandb.Spec.Redis.Sentinel.Config == nil {
-				wandb.Spec.Redis.Sentinel.Config = &apiv2.WBRedisSentinelConfig{}
-			}
-
 			if wandb.Spec.Redis.Sentinel.Config.MasterName == "" {
 				wandb.Spec.Redis.Sentinel.Config.MasterName = defaultConfig.Sentinel.MasterGroupName
+			}
+
+			if wandb.Spec.Redis.Sentinel.SentinelName == "" {
+				wandb.Spec.Redis.Sentinel.SentinelName = defaultConfig.Sentinel.SentinelName
+			}
+			if wandb.Spec.Redis.Sentinel.ReplicationName == "" {
+				wandb.Spec.Redis.Sentinel.ReplicationName = defaultConfig.Sentinel.ReplicationName
 			}
 
 			if len(defaultConfig.Sentinel.Requests) > 0 || len(defaultConfig.Sentinel.Limits) > 0 {
@@ -224,6 +221,10 @@ func (d *WeightsAndBiasesCustomDefaulter) applyKafkaDefaults(wandb *apiv2.Weight
 		wandb.Spec.Kafka.Namespace = defaultConfig.Namespace
 	}
 
+	if wandb.Spec.Kafka.Name == "" {
+		wandb.Spec.Kafka.Name = defaultConfig.Name
+	}
+
 	if wandb.Spec.Kafka.StorageSize == "" {
 		wandb.Spec.Kafka.StorageSize = defaultConfig.StorageSize
 	}
@@ -233,9 +234,6 @@ func (d *WeightsAndBiasesCustomDefaulter) applyKafkaDefaults(wandb *apiv2.Weight
 	}
 
 	if len(defaultConfig.Resources.Requests) > 0 || len(defaultConfig.Resources.Limits) > 0 {
-		if wandb.Spec.Kafka.Config == nil {
-			wandb.Spec.Kafka.Config = &apiv2.WBKafkaConfig{}
-		}
 		if wandb.Spec.Kafka.Config.Resources.Requests == nil {
 			wandb.Spec.Kafka.Config.Resources.Requests = corev1.ResourceList{}
 		}
@@ -268,6 +266,10 @@ func (d *WeightsAndBiasesCustomDefaulter) applyMinioDefaults(wandb *apiv2.Weight
 		wandb.Spec.Minio.Namespace = defaultConfig.Namespace
 	}
 
+	if wandb.Spec.Minio.Name == "" {
+		wandb.Spec.Minio.Name = defaultConfig.Name
+	}
+
 	if wandb.Spec.Minio.StorageSize == "" {
 		wandb.Spec.Minio.StorageSize = defaultConfig.StorageSize
 	}
@@ -277,9 +279,6 @@ func (d *WeightsAndBiasesCustomDefaulter) applyMinioDefaults(wandb *apiv2.Weight
 	}
 
 	if len(defaultConfig.Resources.Requests) > 0 || len(defaultConfig.Resources.Limits) > 0 {
-		if wandb.Spec.Minio.Config == nil {
-			wandb.Spec.Minio.Config = &apiv2.WBMinioConfig{}
-		}
 		if wandb.Spec.Minio.Config.Resources.Requests == nil {
 			wandb.Spec.Minio.Config.Resources.Requests = corev1.ResourceList{}
 		}
@@ -325,9 +324,6 @@ func (d *WeightsAndBiasesCustomDefaulter) applyClickHouseDefaults(wandb *apiv2.W
 	}
 
 	if len(defaultConfig.Resources.Requests) > 0 || len(defaultConfig.Resources.Limits) > 0 {
-		if wandb.Spec.ClickHouse.Config == nil {
-			wandb.Spec.ClickHouse.Config = &apiv2.WBClickHouseConfig{}
-		}
 		if wandb.Spec.ClickHouse.Config.Resources.Requests == nil {
 			wandb.Spec.ClickHouse.Config.Resources.Requests = corev1.ResourceList{}
 		}

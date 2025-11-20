@@ -18,6 +18,7 @@ const (
 	SmallClickHouseMemoryLimit   = "2Gi"
 
 	ClickHouseVersion = "23.8"
+	ClickHouseName    = "wandb-clickhouse"
 )
 
 func BuildClickHouseDefaults(size common.Size, ownerNamespace string) (common.ClickHouseConfig, error) {
@@ -26,6 +27,7 @@ func BuildClickHouseDefaults(size common.Size, ownerNamespace string) (common.Cl
 	config := common.ClickHouseConfig{
 		Enabled:   true,
 		Namespace: ownerNamespace,
+		Name:      ClickHouseName,
 		Version:   ClickHouseVersion,
 	}
 

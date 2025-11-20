@@ -4,47 +4,29 @@ import (
 	"context"
 
 	apiv2 "github.com/wandb/operator/api/v2"
-	"github.com/wandb/operator/internal/controller/infra/mysql"
 	"github.com/wandb/operator/internal/controller/infra/mysql/percona"
-	"github.com/wandb/operator/internal/controller/translator/common"
 	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
+	v1 "github.com/wandb/operator/internal/vendored/percona-operator/pxc/v1"
 )
 
-func (r *WeightsAndBiasesV2Reconciler) reconcileMySQL(
+func (r *WeightsAndBiasesV2Reconciler) mysqlResourceReconcile(
 	ctx context.Context,
-	infraDetails translatorv2.InfraConfig,
 	wandb *apiv2.WeightsAndBiases,
-) *common.Results {
+) error {
 	var err error
-	var results = &common.Results{}
-	var nextResults *common.Results
-	var mysqlConfig common.MySQLConfig
-	var actual mysql.ActualMySQL
+	var desired *v1.PerconaXtraDBCluster
 
-	if mysqlConfig, err = infraDetails.GetMySQLConfig(); err != nil {
-		results.AddErrors(err)
-		return results
+	if desired, err = translatorv2.ToMySQLVendorSpec(ctx, wandb.Spec.MySQL, wandb, r.Scheme); err != nil {
+		return err
+	}
+	if err = percona.CrudResource(ctx, r.Client, translatorv2.MysqlNamespacedName(wandb.Spec.MySQL), desired); err != nil {
+		return err
 	}
 
-	if actual, err = percona.Initialize(ctx, r.Client, mysqlConfig, wandb, r.Scheme); err != nil {
-		results.AddErrors(err)
-		return results
-	}
+	//wandb.Status.MySQLStatus = translatorv2.ExtractMySQLStatus(ctx, results)
+	//if err = r.Status().Update(ctx, wandb); err != nil {
+	//	results.AddErrors(err)
+	//}
 
-	if mysqlConfig.Enabled {
-		nextResults = actual.Upsert(ctx, mysqlConfig)
-	} else {
-		nextResults = actual.Delete(ctx)
-	}
-	results.Merge(nextResults)
-	if results.HasCriticalError() {
-		return results
-	}
-
-	wandb.Status.MySQLStatus = translatorv2.ExtractMySQLStatus(ctx, results)
-	if err = r.Status().Update(ctx, wandb); err != nil {
-		results.AddErrors(err)
-	}
-
-	return results
+	return nil
 }

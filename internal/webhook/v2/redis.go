@@ -25,7 +25,7 @@ func (v *WeightsAndBiasesCustomValidator) validateRedisSpec(wandb *apiv2.Weights
 		}
 	}
 
-	if spec.Sentinel != nil && spec.Sentinel.Enabled {
+	if spec.Sentinel.Enabled {
 		if !spec.Enabled {
 			errors = append(errors, field.Invalid(
 				redisPath.Child("sentinel").Child("enabled"),
@@ -66,9 +66,7 @@ func (v *WeightsAndBiasesCustomValidator) validateRedisChanges(newWandb, oldWand
 		))
 	}
 
-	oldSentinelEnabled := oldSpec.Sentinel != nil && oldSpec.Sentinel.Enabled
-	newSentinelEnabled := newSpec.Sentinel != nil && newSpec.Sentinel.Enabled
-	if oldSentinelEnabled != newSentinelEnabled {
+	if oldSpec.Sentinel.Enabled != newSpec.Sentinel.Enabled {
 		if !newSpec.Enabled {
 			errors = append(errors, field.Invalid(
 				redisPath.Child("sentinel").Child("enabled"),
