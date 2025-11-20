@@ -3,7 +3,6 @@ package defaults
 import (
 	"fmt"
 
-	"github.com/wandb/operator/internal/controller/translator/common"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
@@ -30,10 +29,30 @@ const (
 	ReplicationName = "wandb-redis-replication"
 )
 
-func BuildRedisDefaults(size common.Size, ownerNamespace string) (common.RedisConfig, error) {
+type RedisConfig struct {
+	Enabled     bool
+	Namespace   string
+	Name        string
+	StorageSize resource.Quantity
+	Requests    corev1.ResourceList
+	Limits      corev1.ResourceList
+	Sentinel    SentinelConfig
+}
+
+type SentinelConfig struct {
+	Enabled         bool
+	SentinelName    string
+	ReplicationName string
+	MasterGroupName string
+	ReplicaCount    int
+	Requests        corev1.ResourceList
+	Limits          corev1.ResourceList
+}
+
+func BuildRedisDefaults(size Size, ownerNamespace string) (RedisConfig, error) {
 	var err error
 	var storageRequest, cpuRequest, cpuLimit, memoryRequest, memoryLimit resource.Quantity
-	config := common.RedisConfig{
+	config := RedisConfig{
 		Enabled:   true,
 		Namespace: ownerNamespace,
 		Name:      StandaloneName,
@@ -42,12 +61,12 @@ func BuildRedisDefaults(size common.Size, ownerNamespace string) (common.RedisCo
 	}
 
 	switch size {
-	case common.SizeDev:
+	case SizeDev:
 		if storageRequest, err = resource.ParseQuantity(DevStorageRequest); err != nil {
 			return config, err
 		}
 		config.StorageSize = storageRequest
-	case common.SizeSmall:
+	case SizeSmall:
 		if storageRequest, err = resource.ParseQuantity(SmallStorageRequest); err != nil {
 			return config, err
 		}
@@ -84,7 +103,7 @@ func BuildRedisDefaults(size common.Size, ownerNamespace string) (common.RedisCo
 			return config, err
 		}
 
-		config.Sentinel = common.SentinelConfig{
+		config.Sentinel = SentinelConfig{
 			Enabled:         true,
 			SentinelName:    SentinelName,
 			ReplicationName: ReplicationName,

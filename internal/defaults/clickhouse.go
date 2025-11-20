@@ -3,7 +3,6 @@ package defaults
 import (
 	"fmt"
 
-	"github.com/wandb/operator/internal/controller/translator/common"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
@@ -21,10 +20,22 @@ const (
 	ClickHouseName    = "wandb-clickhouse"
 )
 
-func BuildClickHouseDefaults(size common.Size, ownerNamespace string) (common.ClickHouseConfig, error) {
+type ClickHouseConfig struct {
+	Enabled   bool
+	Namespace string
+	Name      string
+
+	// Storage and resources
+	StorageSize string
+	Replicas    int32
+	Version     string
+	Resources   corev1.ResourceRequirements
+}
+
+func BuildClickHouseDefaults(size Size, ownerNamespace string) (ClickHouseConfig, error) {
 	var err error
 	var storageSize string
-	config := common.ClickHouseConfig{
+	config := ClickHouseConfig{
 		Enabled:   true,
 		Namespace: ownerNamespace,
 		Name:      ClickHouseName,
@@ -32,11 +43,11 @@ func BuildClickHouseDefaults(size common.Size, ownerNamespace string) (common.Cl
 	}
 
 	switch size {
-	case common.SizeDev:
+	case SizeDev:
 		storageSize = DevClickHouseStorageSize
 		config.StorageSize = storageSize
 		config.Replicas = 1
-	case common.SizeSmall:
+	case SizeSmall:
 		storageSize = SmallClickHouseStorageSize
 		config.StorageSize = storageSize
 		config.Replicas = 3

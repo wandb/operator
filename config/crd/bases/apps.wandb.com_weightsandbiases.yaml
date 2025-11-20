@@ -224,6 +224,24 @@ spec:
                     type: object
                   config:
                     properties:
+                      replicationConfig:
+                        properties:
+                          defaultReplicationFactor:
+                            format: int32
+                            type: integer
+                          minInSyncReplicas:
+                            format: int32
+                            type: integer
+                          offsetsTopicRF:
+                            format: int32
+                            type: integer
+                          transactionStateISR:
+                            format: int32
+                            type: integer
+                          transactionStateRF:
+                            format: int32
+                            type: integer
+                        type: object
                       resources:
                         description: ResourceRequirements describes the compute resource
                           requirements.

@@ -2,69 +2,13 @@ package common
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
-	"github.com/wandb/operator/internal/utils"
-	corev1 "k8s.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
 /////////////////////////////////////////////////
 // ClickHouse Config
-
-type ClickHouseConfig struct {
-	Enabled   bool
-	Namespace string
-	Name      string
-
-	// Storage and resources
-	StorageSize string
-	Replicas    int32
-	Version     string
-	Resources   corev1.ResourceRequirements
-}
-
-/////////////////////////////////////////////////
-// ClickHouse Error
-
-type ClickHouseErrorCode string
-
-const (
-	ClickHouseErrFailedToGetConfigCode  ClickHouseErrorCode = "FailedToGetConfig"
-	ClickHouseErrFailedToInitializeCode ClickHouseErrorCode = "FailedToInitialize"
-	ClickHouseErrFailedToCreateCode     ClickHouseErrorCode = "FailedToCreate"
-	ClickHouseErrFailedToUpdateCode     ClickHouseErrorCode = "FailedToUpdate"
-	ClickHouseErrFailedToDeleteCode     ClickHouseErrorCode = "FailedToDelete"
-)
-
-func NewClickHouseError(code ClickHouseErrorCode, reason string) InfraError {
-	return InfraError{
-		infraName: Clickhouse,
-		code:      string(code),
-		reason:    reason,
-	}
-}
-
-type ClickHouseInfraError struct {
-	InfraError
-}
-
-func ToClickHouseInfraError(err error) (ClickHouseInfraError, bool) {
-	var infraErr InfraError
-	ok := errors.As(err, &infraErr)
-	if !ok {
-		return ClickHouseInfraError{}, false
-	}
-	if infraErr.infraName != Clickhouse {
-		return ClickHouseInfraError{}, false
-	}
-	return ClickHouseInfraError{infraErr}, true
-}
-
-func (r *Results) getClickHouseErrors() []ClickHouseInfraError {
-	return utils.FilterMapFunc(r.ErrorList, func(err error) (ClickHouseInfraError, bool) { return ToClickHouseInfraError(err) })
-}
 
 /////////////////////////////////////////////////
 // ClickHouse Status
@@ -72,8 +16,7 @@ func (r *Results) getClickHouseErrors() []ClickHouseInfraError {
 type ClickHouseStatus struct {
 	Ready      bool
 	Connection ClickHouseConnection
-	Details    []ClickHouseStatusDetail
-	Errors     []ClickHouseInfraError
+	Conditions []ClickHouseCondition
 }
 
 type ClickHouseConnection struct {
@@ -91,25 +34,33 @@ const (
 	ClickHouseConnectionCode ClickHouseInfraCode = "ClickHouseConnection"
 )
 
-func NewClickHouseStatusDetail(code ClickHouseInfraCode, message string) InfraStatusDetail {
-	return InfraStatusDetail{
-		infraName: Clickhouse,
-		code:      string(code),
-		message:   message,
+func NewClickHouseCondition(code ClickHouseInfraCode, message string) ClickHouseCondition {
+	return ClickHouseCondition{
+		code:    code,
+		message: message,
 	}
 }
 
-type ClickHouseStatusDetail struct {
-	InfraStatusDetail
+type ClickHouseCondition struct {
+	code    ClickHouseInfraCode
+	message string
+	hidden  interface{}
 }
 
-func (c ClickHouseStatusDetail) ToClickHouseConnDetail() (ClickHouseConnDetail, bool) {
-	if ClickHouseInfraCode(c.Code()) != ClickHouseConnectionCode {
-		return ClickHouseConnDetail{}, false
+func (c ClickHouseCondition) Code() string {
+	return string(c.code)
+}
+
+func (c ClickHouseCondition) Message() string {
+	return c.message
+}
+
+func (c ClickHouseCondition) ToClickHouseConnCondition() (ClickHouseConnCondition, bool) {
+	if c.code != ClickHouseConnectionCode {
+		return ClickHouseConnCondition{}, false
 	}
-	result := ClickHouseConnDetail{}
+	result := ClickHouseConnCondition{}
 	result.hidden = c.hidden
-	result.infraName = c.infraName
 	result.code = c.code
 	result.message = c.message
 
@@ -131,59 +82,34 @@ type ClickHouseConnInfo struct {
 	User string
 }
 
-type ClickHouseConnDetail struct {
-	ClickHouseStatusDetail
+type ClickHouseConnCondition struct {
+	ClickHouseCondition
 	connInfo ClickHouseConnInfo
 }
 
-func NewClickHouseConnDetail(connInfo ClickHouseConnInfo) InfraStatusDetail {
-	return InfraStatusDetail{
-		infraName: Clickhouse,
-		code:      string(ClickHouseConnectionCode),
-		message:   "ClickHouse connection info",
-		hidden:    connInfo,
+func NewClickHouseConnCondition(connInfo ClickHouseConnInfo) ClickHouseCondition {
+	return ClickHouseCondition{
+		code:    ClickHouseConnectionCode,
+		message: "ClickHouse connection info",
+		hidden:  connInfo,
 	}
 }
 
-func ExtractClickHouseStatus(ctx context.Context, r *Results) ClickHouseStatus {
+func ExtractClickHouseStatus(ctx context.Context, conditions []ClickHouseCondition) ClickHouseStatus {
 	var ok bool
-	var connDetail ClickHouseConnDetail
-	var result = ClickHouseStatus{
-		Errors: r.getClickHouseErrors(),
-	}
+	var connCond ClickHouseConnCondition
+	var result = ClickHouseStatus{}
 
-	for _, detail := range r.getClickHouseStatusDetails() {
-		if connDetail, ok = detail.ToClickHouseConnDetail(); ok {
-			result.Connection.Host = connDetail.connInfo.Host
-			result.Connection.Port = connDetail.connInfo.Port
-			result.Connection.User = connDetail.connInfo.User
+	for _, cond := range conditions {
+		if connCond, ok = cond.ToClickHouseConnCondition(); ok {
+			result.Connection.Host = connCond.connInfo.Host
+			result.Connection.Port = connCond.connInfo.Port
+			result.Connection.User = connCond.connInfo.User
 			continue
 		}
-
-		result.Details = append(result.Details, detail)
 	}
 
-	if len(result.Errors) > 0 {
-		result.Ready = false
-	} else {
-		result.Ready = result.Connection.Host != ""
-	}
+	result.Ready = result.Connection.Host != ""
 
 	return result
-}
-
-func (i InfraStatusDetail) ToClickHouseStatusDetail() (ClickHouseStatusDetail, bool) {
-	result := ClickHouseStatusDetail{}
-	if i.infraName != Clickhouse {
-		return result, false
-	}
-	result.infraName = i.infraName
-	result.code = i.code
-	result.message = i.message
-	result.hidden = i.hidden
-	return result, true
-}
-
-func (r *Results) getClickHouseStatusDetails() []ClickHouseStatusDetail {
-	return utils.FilterMapFunc(r.StatusList, func(s InfraStatusDetail) (ClickHouseStatusDetail, bool) { return s.ToClickHouseStatusDetail() })
 }

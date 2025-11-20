@@ -15,31 +15,23 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
-func ExtractKafkaStatus(ctx context.Context, results *common.Results) apiv2.WBKafkaStatus {
+func ExtractKafkaStatus(ctx context.Context, conditions []common.KafkaCondition) apiv2.WBKafkaStatus {
 	return TranslateKafkaStatus(
 		ctx,
-		common.ExtractKafkaStatus(ctx, results),
+		common.ExtractKafkaStatus(ctx, conditions),
 	)
 }
 
 func TranslateKafkaStatus(ctx context.Context, m common.KafkaStatus) apiv2.WBKafkaStatus {
 	var result apiv2.WBKafkaStatus
-	var details []apiv2.WBStatusCondition
+	var conditions []apiv2.WBStatusCondition
 
-	for _, err := range m.Errors {
-		details = append(details, apiv2.WBStatusCondition{
-			State:   apiv2.WBStateError,
-			Code:    err.Code(),
-			Message: err.Reason(),
-		})
-	}
-
-	for _, detail := range m.Details {
-		state := translateKafkaStatusCode(detail.Code())
-		details = append(details, apiv2.WBStatusCondition{
+	for _, condition := range m.Conditions {
+		state := translateKafkaStatusCode(condition.Code())
+		conditions = append(conditions, apiv2.WBStatusCondition{
 			State:   state,
-			Code:    detail.Code(),
-			Message: detail.Message(),
+			Code:    condition.Code(),
+			Message: condition.Message(),
 		})
 	}
 
@@ -49,8 +41,8 @@ func TranslateKafkaStatus(ctx context.Context, m common.KafkaStatus) apiv2.WBKaf
 	}
 
 	result.Ready = m.Ready
-	result.Conditions = details
-	result.State = computeOverallState(details, m.Ready)
+	result.Conditions = conditions
+	result.State = computeOverallState(conditions, m.Ready)
 	result.LastReconciled = metav1.Now()
 
 	return result
@@ -93,9 +85,6 @@ func ToKafkaVendorSpec(
 		return nil, nil
 	}
 
-	// Get replication config based on replica count
-	replicationConfig := common.GetKafkaReplicationConfig(spec.Replicas)
-
 	kafka := &kafkav1beta2.Kafka{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      strimzi.KafkaName,
@@ -127,11 +116,11 @@ func ToKafkaVendorSpec(
 					},
 				},
 				Config: map[string]string{
-					"offsets.topic.replication.factor":         strconv.Itoa(int(replicationConfig.OffsetsTopicRF)),
-					"transaction.state.log.replication.factor": strconv.Itoa(int(replicationConfig.TransactionStateRF)),
-					"transaction.state.log.min.isr":            strconv.Itoa(int(replicationConfig.TransactionStateISR)),
-					"default.replication.factor":               strconv.Itoa(int(replicationConfig.DefaultReplicationFactor)),
-					"min.insync.replicas":                      strconv.Itoa(int(replicationConfig.MinInSyncReplicas)),
+					"offsets.topic.replication.factor":         strconv.Itoa(int(spec.Config.ReplicationConfig.OffsetsTopicRF)),
+					"transaction.state.log.replication.factor": strconv.Itoa(int(spec.Config.ReplicationConfig.TransactionStateRF)),
+					"transaction.state.log.min.isr":            strconv.Itoa(int(spec.Config.ReplicationConfig.TransactionStateISR)),
+					"default.replication.factor":               strconv.Itoa(int(spec.Config.ReplicationConfig.DefaultReplicationFactor)),
+					"min.insync.replicas":                      strconv.Itoa(int(spec.Config.ReplicationConfig.MinInSyncReplicas)),
 				},
 			},
 		},

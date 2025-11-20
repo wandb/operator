@@ -15,7 +15,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
-func ExtractMySQLStatus(ctx context.Context, results *common.Results) apiv2.WBMySQLStatus {
+func ExtractMySQLStatus(ctx context.Context, results []common.MySQLCondition) apiv2.WBMySQLStatus {
 	return TranslateMySQLStatus(
 		ctx,
 		common.ExtractMySQLStatus(ctx, results),
@@ -24,22 +24,14 @@ func ExtractMySQLStatus(ctx context.Context, results *common.Results) apiv2.WBMy
 
 func TranslateMySQLStatus(ctx context.Context, m common.MySQLStatus) apiv2.WBMySQLStatus {
 	var result apiv2.WBMySQLStatus
-	var details []apiv2.WBStatusCondition
+	var conditions []apiv2.WBStatusCondition
 
-	for _, err := range m.Errors {
-		details = append(details, apiv2.WBStatusCondition{
-			State:   apiv2.WBStateError,
-			Code:    err.Code(),
-			Message: err.Reason(),
-		})
-	}
-
-	for _, detail := range m.Details {
-		state := translateMySQLStatusCode(detail.Code())
-		details = append(details, apiv2.WBStatusCondition{
+	for _, condition := range m.Conditions {
+		state := translateMySQLStatusCode(condition.Code())
+		conditions = append(conditions, apiv2.WBStatusCondition{
 			State:   state,
-			Code:    detail.Code(),
-			Message: detail.Message(),
+			Code:    condition.Code(),
+			Message: condition.Message(),
 		})
 	}
 
@@ -50,8 +42,8 @@ func TranslateMySQLStatus(ctx context.Context, m common.MySQLStatus) apiv2.WBMyS
 	}
 
 	result.Ready = m.Ready
-	result.Conditions = details
-	result.State = computeOverallState(details, m.Ready)
+	result.Conditions = conditions
+	result.State = computeOverallState(conditions, m.Ready)
 	result.LastReconciled = metav1.Now()
 
 	return result

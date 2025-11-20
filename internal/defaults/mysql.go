@@ -27,7 +27,7 @@ const (
 	MysqlName = "wandb-mysql"
 )
 
-func BuildMySQLDefaults(size common.Size, ownerNamespace string) (common.MySQLConfig, error) {
+func BuildMySQLDefaults(size Size, ownerNamespace string) (common.MySQLConfig, error) {
 	var err error
 	var storageSize string
 	config := common.MySQLConfig{
@@ -37,7 +37,7 @@ func BuildMySQLDefaults(size common.Size, ownerNamespace string) (common.MySQLCo
 	}
 
 	switch size {
-	case common.SizeDev:
+	case SizeDev:
 		storageSize = DevMySQLStorageSize
 		config.StorageSize = storageSize
 		config.Replicas = 1
@@ -50,7 +50,7 @@ func BuildMySQLDefaults(size common.Size, ownerNamespace string) (common.MySQLCo
 		config.LogCollectorImage = LogCollectorImage
 		config.AllowUnsafePXCSize = true
 		config.AllowUnsafeProxySize = true
-	case common.SizeSmall:
+	case SizeSmall:
 		storageSize = SmallMySQLStorageSize
 		config.StorageSize = storageSize
 		config.Replicas = 3

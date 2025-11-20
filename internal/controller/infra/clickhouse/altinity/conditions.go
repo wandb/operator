@@ -16,9 +16,9 @@ func GetConditions(
 	ctx context.Context,
 	client client.Client,
 	namespacedName types.NamespacedName,
-) ([]common.InfraStatusDetail, error) {
+) ([]common.ClickHouseCondition, error) {
 	var err error
-	var results []common.InfraStatusDetail
+	var results []common.ClickHouseCondition
 	var actual = &chiv1.ClickHouseInstallation{}
 
 	if err = ctrlcommon.GetResource(
@@ -42,7 +42,7 @@ func GetConditions(
 		Port: clickhousePort,
 		User: ClickHouseUser,
 	}
-	results = append(results, common.NewClickHouseConnDetail(connInfo))
+	results = append(results, common.NewClickHouseConnCondition(connInfo))
 	///////////
 
 	return results, nil

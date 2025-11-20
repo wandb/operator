@@ -5,6 +5,7 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/infra/redis/opstree"
+	"github.com/wandb/operator/internal/controller/translator/common"
 	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
 	redisv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redis/v1beta2"
 	redisreplicationv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redisreplication/v1beta2"
@@ -48,4 +49,28 @@ func (r *WeightsAndBiasesV2Reconciler) redisResourceReconcile(
 
 	return nil
 
+}
+
+func (r *WeightsAndBiasesV2Reconciler) redisStatusUpdate(
+	ctx context.Context,
+	wandb *apiv2.WeightsAndBiases,
+) error {
+	var err error
+	var conditions []common.RedisCondition
+
+	if conditions, err = opstree.GetConditions(
+		ctx,
+		r.Client,
+		translatorv2.RedisStandaloneNamespacedName(wandb.Spec.Redis),
+		translatorv2.RedisSentinelNamespacedName(wandb.Spec.Redis),
+		translatorv2.RedisReplicationNamespacedName(wandb.Spec.Redis),
+	); err != nil {
+		return err
+	}
+	wandb.Status.RedisStatus = translatorv2.ExtractRedisStatus(ctx, conditions)
+	if err = r.Status().Update(ctx, wandb); err != nil {
+		return err
+	}
+
+	return nil
 }

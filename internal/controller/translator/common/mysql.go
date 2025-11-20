@@ -2,10 +2,8 @@ package common
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
-	"github.com/wandb/operator/internal/utils"
 	corev1 "k8s.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
@@ -62,42 +60,13 @@ const (
 	MySQLErrFailedToDeleteCode     MySQLErrorCode = "FailedToDelete"
 )
 
-func NewMySQLError(code MySQLErrorCode, reason string) InfraError {
-	return InfraError{
-		infraName: MySQL,
-		code:      string(code),
-		reason:    reason,
-	}
-}
-
-type MySQLInfraError struct {
-	InfraError
-}
-
-func ToMySQLInfraError(err error) (MySQLInfraError, bool) {
-	var infraErr InfraError
-	ok := errors.As(err, &infraErr)
-	if !ok {
-		return MySQLInfraError{}, false
-	}
-	if infraErr.infraName != MySQL {
-		return MySQLInfraError{}, false
-	}
-	return MySQLInfraError{infraErr}, true
-}
-
-func (r *Results) getMySQLErrors() []MySQLInfraError {
-	return utils.FilterMapFunc(r.ErrorList, func(err error) (MySQLInfraError, bool) { return ToMySQLInfraError(err) })
-}
-
 /////////////////////////////////////////////////
 // MySQL Status
 
 type MySQLStatus struct {
 	Ready      bool
 	Connection MySQLConnection
-	Details    []MySQLStatusDetail
-	Errors     []MySQLInfraError
+	Conditions []MySQLCondition
 }
 
 type MySQLConnection struct {
@@ -115,25 +84,33 @@ const (
 	MySQLConnectionCode MySQLInfraCode = "MySQLConnection"
 )
 
-func NewMySQLStatusDetail(code MySQLInfraCode, message string) InfraStatusDetail {
-	return InfraStatusDetail{
-		infraName: MySQL,
-		code:      string(code),
-		message:   message,
+func NewMySQLCondition(code MySQLInfraCode, message string) MySQLCondition {
+	return MySQLCondition{
+		code:    code,
+		message: message,
 	}
 }
 
-type MySQLStatusDetail struct {
-	InfraStatusDetail
+type MySQLCondition struct {
+	code    MySQLInfraCode
+	message string
+	hidden  interface{}
 }
 
-func (m MySQLStatusDetail) ToMySQLConnDetail() (MySQLConnDetail, bool) {
-	if MySQLInfraCode(m.Code()) != MySQLConnectionCode {
-		return MySQLConnDetail{}, false
+func (m MySQLCondition) Code() string {
+	return string(m.code)
+}
+
+func (m MySQLCondition) Message() string {
+	return m.message
+}
+
+func (m MySQLCondition) ToMySQLConnCondition() (MySQLConnCondition, bool) {
+	if m.code != MySQLConnectionCode {
+		return MySQLConnCondition{}, false
 	}
-	result := MySQLConnDetail{}
+	result := MySQLConnCondition{}
 	result.hidden = m.hidden
-	result.infraName = m.infraName
 	result.code = m.code
 	result.message = m.message
 
@@ -155,59 +132,36 @@ type MySQLConnInfo struct {
 	User string
 }
 
-type MySQLConnDetail struct {
-	MySQLStatusDetail
+type MySQLConnCondition struct {
+	MySQLCondition
 	connInfo MySQLConnInfo
 }
 
-func NewMySQLConnDetail(connInfo MySQLConnInfo) InfraStatusDetail {
-	return InfraStatusDetail{
-		infraName: MySQL,
-		code:      string(MySQLConnectionCode),
-		message:   "MySQL connection info",
-		hidden:    connInfo,
+func NewMySQLConnCondition(connInfo MySQLConnInfo) MySQLCondition {
+	return MySQLCondition{
+		code:    MySQLConnectionCode,
+		message: "MySQL connection info",
+		hidden:  connInfo,
 	}
 }
 
-func ExtractMySQLStatus(ctx context.Context, r *Results) MySQLStatus {
+func ExtractMySQLStatus(ctx context.Context, conditions []MySQLCondition) MySQLStatus {
 	var ok bool
-	var connDetail MySQLConnDetail
-	var result = MySQLStatus{
-		Errors: r.getMySQLErrors(),
-	}
+	var connCond MySQLConnCondition
+	var result = MySQLStatus{}
 
-	for _, detail := range r.getMySQLStatusDetails() {
-		if connDetail, ok = detail.ToMySQLConnDetail(); ok {
-			result.Connection.Host = connDetail.connInfo.Host
-			result.Connection.Port = connDetail.connInfo.Port
-			result.Connection.User = connDetail.connInfo.User
+	for _, cond := range conditions {
+		if connCond, ok = cond.ToMySQLConnCondition(); ok {
+			result.Connection.Host = connCond.connInfo.Host
+			result.Connection.Port = connCond.connInfo.Port
+			result.Connection.User = connCond.connInfo.User
 			continue
 		}
 
-		result.Details = append(result.Details, detail)
+		result.Conditions = append(result.Conditions, cond)
 	}
 
-	if len(result.Errors) > 0 {
-		result.Ready = false
-	} else {
-		result.Ready = result.Connection.Host != ""
-	}
+	result.Ready = result.Connection.Host != ""
 
 	return result
-}
-
-func (i InfraStatusDetail) ToMySQLStatusDetail() (MySQLStatusDetail, bool) {
-	result := MySQLStatusDetail{}
-	if i.infraName != MySQL {
-		return result, false
-	}
-	result.infraName = i.infraName
-	result.code = i.code
-	result.message = i.message
-	result.hidden = i.hidden
-	return result, true
-}
-
-func (r *Results) getMySQLStatusDetails() []MySQLStatusDetail {
-	return utils.FilterMapFunc(r.StatusList, func(s InfraStatusDetail) (MySQLStatusDetail, bool) { return s.ToMySQLStatusDetail() })
 }

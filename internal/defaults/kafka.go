@@ -3,7 +3,6 @@ package defaults
 import (
 	"fmt"
 
-	"github.com/wandb/operator/internal/controller/translator/common"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
@@ -20,32 +19,84 @@ const (
 	KafkaName = "wandb-kafka"
 )
 
-func BuildKafkaDefaults(size common.Size, ownerNamespace string) (common.KafkaConfig, error) {
-	var err error
-	var storageSize string
-	config := common.KafkaConfig{
-		Enabled:   true,
-		Namespace: ownerNamespace,
-		Name:      KafkaName,
-	}
+type KafkaConfig struct {
+	Enabled           bool
+	Namespace         string
+	Name              string
+	StorageSize       string
+	Replicas          int32
+	Resources         corev1.ResourceRequirements
+	ReplicationConfig KafkaReplicationConfig
+}
 
-	switch size {
-	case common.SizeDev:
-		storageSize = DevKafkaStorageSize
-		config.StorageSize = storageSize
-		config.Replicas = 1
-		config.ReplicationConfig = common.KafkaReplicationConfig{
+type KafkaReplicationConfig struct {
+	DefaultReplicationFactor int32
+	MinInSyncReplicas        int32
+	OffsetsTopicRF           int32
+	TransactionStateRF       int32
+	TransactionStateISR      int32
+}
+
+// GetKafkaReplicationConfig returns replication settings based on replica count.
+// For single replica (dev mode), all factors are 1.
+// For multi-replica (HA mode), uses standard HA settings.
+func GetKafkaReplicationConfig(replicas int32) KafkaReplicationConfig {
+	if replicas == 1 {
+		return KafkaReplicationConfig{
 			DefaultReplicationFactor: 1,
 			MinInSyncReplicas:        1,
 			OffsetsTopicRF:           1,
 			TransactionStateRF:       1,
 			TransactionStateISR:      1,
 		}
-	case common.SizeSmall:
+	}
+	// Multi-replica HA configuration
+	minISR := int32(2)
+	if replicas < 3 {
+		minISR = 1
+	}
+	return KafkaReplicationConfig{
+		DefaultReplicationFactor: min32(replicas, 3),
+		MinInSyncReplicas:        minISR,
+		OffsetsTopicRF:           min32(replicas, 3),
+		TransactionStateRF:       min32(replicas, 3),
+		TransactionStateISR:      minISR,
+	}
+}
+
+func min32(a, b int32) int32 {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func BuildKafkaDefaults(size Size, ownerNamespace string) (KafkaConfig, error) {
+	var err error
+	var storageSize string
+	config := KafkaConfig{
+		Enabled:   true,
+		Namespace: ownerNamespace,
+		Name:      KafkaName,
+	}
+
+	switch size {
+	case SizeDev:
+		storageSize = DevKafkaStorageSize
+		config.StorageSize = storageSize
+		config.Replicas = 1
+		config.ReplicationConfig = KafkaReplicationConfig{
+			DefaultReplicationFactor: 1,
+			MinInSyncReplicas:        1,
+			OffsetsTopicRF:           1,
+			TransactionStateRF:       1,
+			TransactionStateISR:      1,
+		}
+	case SizeSmall:
 		storageSize = SmallKafkaStorageSize
 		config.StorageSize = storageSize
 		config.Replicas = 3
-		config.ReplicationConfig = common.KafkaReplicationConfig{
+		config.ReplicationConfig = KafkaReplicationConfig{
 			DefaultReplicationFactor: 3,
 			MinInSyncReplicas:        2,
 			OffsetsTopicRF:           3,

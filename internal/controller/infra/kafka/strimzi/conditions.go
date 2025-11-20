@@ -17,9 +17,9 @@ func GetConditions(
 	client client.Client,
 	kafkaNamespacedName types.NamespacedName,
 	nodePoolNamespacedName types.NamespacedName,
-) ([]common.InfraStatusDetail, error) {
+) ([]common.KafkaCondition, error) {
 	var err error
-	var results []common.InfraStatusDetail
+	var results []common.KafkaCondition
 	var actualKafka *v1beta3.Kafka
 	var actualNodePool *v1beta3.KafkaNodePool
 
@@ -49,7 +49,7 @@ func GetConditions(
 		Host: kafkaHost,
 		Port: kafkaPort,
 	}
-	results = append(results, common.NewKafkaConnDetail(connInfo))
+	results = append(results, common.NewKafkaConnCondition(connInfo))
 	///////////
 
 	return results, nil

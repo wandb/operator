@@ -21,7 +21,7 @@ const (
 	MinioName  = "wandb-minio"
 )
 
-func BuildMinioDefaults(size common.Size, ownerNamespace string) (common.MinioConfig, error) {
+func BuildMinioDefaults(size Size, ownerNamespace string) (common.MinioConfig, error) {
 	var err error
 	var storageSize string
 	config := common.MinioConfig{
@@ -32,12 +32,12 @@ func BuildMinioDefaults(size common.Size, ownerNamespace string) (common.MinioCo
 	}
 
 	switch size {
-	case common.SizeDev:
+	case SizeDev:
 		storageSize = DevMinioStorageSize
 		config.StorageSize = storageSize
 		config.Servers = 1
 		config.VolumesPerServer = 1
-	case common.SizeSmall:
+	case SizeSmall:
 		storageSize = SmallMinioStorageSize
 		config.StorageSize = storageSize
 		config.Servers = 3

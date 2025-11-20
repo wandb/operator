@@ -17,31 +17,23 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
-func ExtractClickHouseStatus(ctx context.Context, results *common.Results) apiv2.WBClickHouseStatus {
+func ExtractClickHouseStatus(ctx context.Context, conditions []common.ClickHouseCondition) apiv2.WBClickHouseStatus {
 	return TranslateClickHouseStatus(
 		ctx,
-		common.ExtractClickHouseStatus(ctx, results),
+		common.ExtractClickHouseStatus(ctx, conditions),
 	)
 }
 
 func TranslateClickHouseStatus(ctx context.Context, m common.ClickHouseStatus) apiv2.WBClickHouseStatus {
 	var result apiv2.WBClickHouseStatus
-	var details []apiv2.WBStatusCondition
+	var conditions []apiv2.WBStatusCondition
 
-	for _, err := range m.Errors {
-		details = append(details, apiv2.WBStatusCondition{
-			State:   apiv2.WBStateError,
-			Code:    err.Code(),
-			Message: err.Reason(),
-		})
-	}
-
-	for _, detail := range m.Details {
-		state := translateClickHouseStatusCode(detail.Code())
-		details = append(details, apiv2.WBStatusCondition{
+	for _, condition := range m.Conditions {
+		state := translateClickHouseStatusCode(condition.Code())
+		conditions = append(conditions, apiv2.WBStatusCondition{
 			State:   state,
-			Code:    detail.Code(),
-			Message: detail.Message(),
+			Code:    condition.Code(),
+			Message: condition.Message(),
 		})
 	}
 
@@ -52,8 +44,8 @@ func TranslateClickHouseStatus(ctx context.Context, m common.ClickHouseStatus) a
 	}
 
 	result.Ready = m.Ready
-	result.Conditions = details
-	result.State = computeOverallState(details, m.Ready)
+	result.Conditions = conditions
+	result.State = computeOverallState(conditions, m.Ready)
 	result.LastReconciled = metav1.Now()
 
 	return result

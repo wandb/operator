@@ -137,7 +137,16 @@ type WBKafkaSpec struct {
 }
 
 type WBKafkaConfig struct {
-	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+	Resources         corev1.ResourceRequirements `json:"resources,omitempty"`
+	ReplicationConfig WBKafkaReplicationConfig    `json:"replicationConfig,omitempty"`
+}
+
+type WBKafkaReplicationConfig struct {
+	DefaultReplicationFactor int32 `json:"defaultReplicationFactor,omitempty"`
+	MinInSyncReplicas        int32 `json:"minInSyncReplicas,omitempty"`
+	OffsetsTopicRF           int32 `json:"offsetsTopicRF,omitempty"`
+	TransactionStateRF       int32 `json:"transactionStateISR,omitempty"`
+	TransactionStateISR      int32 `json:"transactionStateRF,omitempty"`
 }
 
 type WBKafkaBackupSpec struct {

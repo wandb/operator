@@ -45,16 +45,20 @@ func (r *WeightsAndBiasesV2Reconciler) kafkaStatusUpdate(
 	wandb *apiv2.WeightsAndBiases,
 ) error {
 	var err error
-	var conditions []common.InfraStatusDetail
+	var conditions []common.KafkaCondition
 
 	if conditions, err = strimzi.GetConditions(
 		ctx,
-		r,
+		r.Client,
 		translatorv2.KafkaNamespacedName(wandb.Spec.Kafka),
 		translatorv2.KafkaNodePoolNamespacedName(wandb.Spec.Kafka),
 	); err != nil {
 		return err
 	}
 	wandb.Status.KafkaStatus = translatorv2.ExtractKafkaStatus(ctx, conditions)
+	if err = r.Status().Update(ctx, wandb); err != nil {
+		return err
+	}
 
+	return nil
 }

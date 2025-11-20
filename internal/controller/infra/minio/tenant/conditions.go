@@ -16,9 +16,9 @@ func GetConditions(
 	ctx context.Context,
 	client client.Client,
 	namespacedName types.NamespacedName,
-) ([]common.InfraStatusDetail, error) {
+) ([]common.MinioCondition, error) {
 	var err error
-	var results []common.InfraStatusDetail
+	var results []common.MinioCondition
 	var actual = &miniov2.Tenant{}
 
 	if err = ctrlcommon.GetResource(
@@ -41,7 +41,7 @@ func GetConditions(
 		Port:      minioPort,
 		AccessKey: MinioAccessKey,
 	}
-	results = append(results, common.NewMinioConnDetail(connInfo))
+	results = append(results, common.NewMinioConnCondition(connInfo))
 	///////////
 
 	return results, nil

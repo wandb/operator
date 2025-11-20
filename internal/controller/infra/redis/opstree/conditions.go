@@ -15,48 +15,45 @@ import (
 func GetConditions(
 	ctx context.Context,
 	client client.Client,
-	namespacedName types.NamespacedName,
-) ([]common.InfraStatusDetail, error) {
+	standaloneNamespacedName types.NamespacedName,
+	sentinelNamespacedName types.NamespacedName,
+	replicationNamespacedName types.NamespacedName,
+) ([]common.RedisCondition, error) {
 	var standaloneActual = &redisv1beta2.Redis{}
 	var sentinelActual = &redissentinelv1beta2.RedisSentinel{}
 	var replicationActual = &redisreplicationv1beta2.RedisReplication{}
-	var results []common.InfraStatusDetail
+	var results []common.RedisCondition
 	var err error
 
 	if err = ctrlcommon.GetResource(
-		ctx, client, namespacedName, StandaloneType, standaloneActual,
+		ctx, client, standaloneNamespacedName, StandaloneType, standaloneActual,
 	); err != nil {
 		return results, err
 	}
 	if err = ctrlcommon.GetResource(
-		ctx, client, namespacedName, SentinelType, sentinelActual,
+		ctx, client, sentinelNamespacedName, SentinelType, sentinelActual,
 	); err != nil {
 		return results, err
 	}
 	if err = ctrlcommon.GetResource(
-		ctx, client, namespacedName, ReplicationType, replicationActual,
+		ctx, client, replicationNamespacedName, ReplicationType, replicationActual,
 	); err != nil {
 		return results, err
 	}
 
 	///////////
-	// Extract connection info from PXC CR
-	// Connection endpoint depends on configuration:
-	// - Dev (no ProxySQL): connect directly to PXC service
-	// - HA (with ProxySQL): connect via ProxySQL service
-	namespace := namespacedName.Namespace
 	if standaloneActual != nil {
-		redisHost := "wandb-redis." + namespace + ".svc.cluster.local"
+		redisHost := "wandb-redis." + standaloneActual.Namespace + ".svc.cluster.local"
 		redisPort := "6379"
 		connInfo := common.RedisStandaloneConnInfo{
 			Host: redisHost,
 			Port: redisPort,
 		}
-		results = append(results, common.NewRedisStandaloneConnDetail(connInfo))
+		results = append(results, common.NewRedisStandaloneConnCondition(connInfo))
 	}
 
 	if sentinelActual != nil && replicationActual != nil {
-		sentinelHost := "wandb-redis-sentinel." + namespace + ".svc.cluster.local"
+		sentinelHost := "wandb-redis-sentinel." + sentinelActual.Namespace + ".svc.cluster.local"
 		sentinelPort := "26379"
 		masterName := "gorilla"
 		connInfo := common.RedisSentinelConnInfo{
@@ -64,7 +61,7 @@ func GetConditions(
 			SentinelPort: sentinelPort,
 			MasterName:   masterName,
 		}
-		results = append(results, common.NewRedisSentinelConnDetail(connInfo))
+		results = append(results, common.NewRedisSentinelConnCondition(connInfo))
 	}
 	///////////
 

@@ -26,7 +26,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	apiv2 "github.com/wandb/operator/api/v2"
-	"github.com/wandb/operator/internal/controller/translator/common"
 	"github.com/wandb/operator/internal/defaults"
 )
 
@@ -80,18 +79,18 @@ func (d *WeightsAndBiasesCustomDefaulter) Default(ctx context.Context, obj runti
 	return nil
 }
 
-func toCommonSize(size apiv2.WBSize) (common.Size, error) {
+func toCommonSize(size apiv2.WBSize) (defaults.Size, error) {
 	switch size {
 	case apiv2.WBSizeDev:
-		return common.SizeDev, nil
+		return defaults.SizeDev, nil
 	case apiv2.WBSizeSmall:
-		return common.SizeSmall, nil
+		return defaults.SizeSmall, nil
 	default:
 		return "", fmt.Errorf("unsupported size: %s", size)
 	}
 }
 
-func (d *WeightsAndBiasesCustomDefaulter) applyMySQLDefaults(wandb *apiv2.WeightsAndBiases, size common.Size) error {
+func (d *WeightsAndBiasesCustomDefaulter) applyMySQLDefaults(wandb *apiv2.WeightsAndBiases, size defaults.Size) error {
 
 	defaultConfig, err := defaults.BuildMySQLDefaults(size, wandb.Namespace)
 	if err != nil {
@@ -136,7 +135,7 @@ func (d *WeightsAndBiasesCustomDefaulter) applyMySQLDefaults(wandb *apiv2.Weight
 	return nil
 }
 
-func (d *WeightsAndBiasesCustomDefaulter) applyRedisDefaults(wandb *apiv2.WeightsAndBiases, size common.Size) error {
+func (d *WeightsAndBiasesCustomDefaulter) applyRedisDefaults(wandb *apiv2.WeightsAndBiases, size defaults.Size) error {
 	defaultConfig, err := defaults.BuildRedisDefaults(size, wandb.Namespace)
 	if err != nil {
 		return err
@@ -211,7 +210,7 @@ func (d *WeightsAndBiasesCustomDefaulter) applyRedisDefaults(wandb *apiv2.Weight
 	return nil
 }
 
-func (d *WeightsAndBiasesCustomDefaulter) applyKafkaDefaults(wandb *apiv2.WeightsAndBiases, size common.Size) error {
+func (d *WeightsAndBiasesCustomDefaulter) applyKafkaDefaults(wandb *apiv2.WeightsAndBiases, size defaults.Size) error {
 	defaultConfig, err := defaults.BuildKafkaDefaults(size, wandb.Namespace)
 	if err != nil {
 		return err
@@ -256,7 +255,7 @@ func (d *WeightsAndBiasesCustomDefaulter) applyKafkaDefaults(wandb *apiv2.Weight
 	return nil
 }
 
-func (d *WeightsAndBiasesCustomDefaulter) applyMinioDefaults(wandb *apiv2.WeightsAndBiases, size common.Size) error {
+func (d *WeightsAndBiasesCustomDefaulter) applyMinioDefaults(wandb *apiv2.WeightsAndBiases, size defaults.Size) error {
 	defaultConfig, err := defaults.BuildMinioDefaults(size, wandb.Namespace)
 	if err != nil {
 		return err
@@ -301,7 +300,7 @@ func (d *WeightsAndBiasesCustomDefaulter) applyMinioDefaults(wandb *apiv2.Weight
 	return nil
 }
 
-func (d *WeightsAndBiasesCustomDefaulter) applyClickHouseDefaults(wandb *apiv2.WeightsAndBiases, size common.Size) error {
+func (d *WeightsAndBiasesCustomDefaulter) applyClickHouseDefaults(wandb *apiv2.WeightsAndBiases, size defaults.Size) error {
 	defaultConfig, err := defaults.BuildClickHouseDefaults(size, wandb.Namespace)
 	if err != nil {
 		return err

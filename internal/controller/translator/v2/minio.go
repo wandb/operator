@@ -16,31 +16,23 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
-func ExtractMinioStatus(ctx context.Context, results *common.Results) apiv2.WBMinioStatus {
+func ExtractMinioStatus(ctx context.Context, conditions []common.MinioCondition) apiv2.WBMinioStatus {
 	return TranslateMinioStatus(
 		ctx,
-		common.ExtractMinioStatus(ctx, results),
+		common.ExtractMinioStatus(ctx, conditions),
 	)
 }
 
 func TranslateMinioStatus(ctx context.Context, m common.MinioStatus) apiv2.WBMinioStatus {
 	var result apiv2.WBMinioStatus
-	var details []apiv2.WBStatusCondition
+	var conditions []apiv2.WBStatusCondition
 
-	for _, err := range m.Errors {
-		details = append(details, apiv2.WBStatusCondition{
-			State:   apiv2.WBStateError,
-			Code:    err.Code(),
-			Message: err.Reason(),
-		})
-	}
-
-	for _, detail := range m.Details {
-		state := translateMinioStatusCode(detail.Code())
-		details = append(details, apiv2.WBStatusCondition{
+	for _, condition := range m.Conditions {
+		state := translateMinioStatusCode(condition.Code())
+		conditions = append(conditions, apiv2.WBStatusCondition{
 			State:   state,
-			Code:    detail.Code(),
-			Message: detail.Message(),
+			Code:    condition.Code(),
+			Message: condition.Message(),
 		})
 	}
 
@@ -51,8 +43,8 @@ func TranslateMinioStatus(ctx context.Context, m common.MinioStatus) apiv2.WBMin
 	}
 
 	result.Ready = m.Ready
-	result.Conditions = details
-	result.State = computeOverallState(details, m.Ready)
+	result.Conditions = conditions
+	result.State = computeOverallState(conditions, m.Ready)
 	result.LastReconciled = metav1.Now()
 
 	return result

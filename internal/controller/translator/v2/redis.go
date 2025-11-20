@@ -23,31 +23,23 @@ const (
 	DefaultSentinelGroup = defaults.DefaultSentinelGroup
 )
 
-func ExtractRedisStatus(ctx context.Context, results *common.Results) apiv2.WBRedisStatus {
+func ExtractRedisStatus(ctx context.Context, conditions []common.RedisCondition) apiv2.WBRedisStatus {
 	return TranslateRedisStatus(
 		ctx,
-		common.ExtractRedisStatus(ctx, results),
+		common.ExtractRedisStatus(ctx, conditions),
 	)
 }
 
 func TranslateRedisStatus(ctx context.Context, m common.RedisStatus) apiv2.WBRedisStatus {
 	var result apiv2.WBRedisStatus
-	var details []apiv2.WBStatusCondition
+	var conditions []apiv2.WBStatusCondition
 
-	for _, err := range m.Errors {
-		details = append(details, apiv2.WBStatusCondition{
-			State:   apiv2.WBStateError,
-			Code:    err.Code(),
-			Message: err.Reason(),
-		})
-	}
-
-	for _, detail := range m.Details {
-		state := translateRedisStatusCode(detail.Code())
-		details = append(details, apiv2.WBStatusCondition{
+	for _, condition := range m.Conditions {
+		state := translateRedisStatusCode(condition.Code())
+		conditions = append(conditions, apiv2.WBStatusCondition{
 			State:   state,
-			Code:    detail.Code(),
-			Message: detail.Message(),
+			Code:    condition.Code(),
+			Message: condition.Message(),
 		})
 	}
 
@@ -60,8 +52,8 @@ func TranslateRedisStatus(ctx context.Context, m common.RedisStatus) apiv2.WBRed
 	}
 
 	result.Ready = m.Ready
-	result.Conditions = details
-	result.State = computeOverallState(details, m.Ready)
+	result.Conditions = conditions
+	result.State = computeOverallState(conditions, m.Ready)
 	result.LastReconciled = metav1.Now()
 
 	return result

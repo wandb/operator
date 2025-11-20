@@ -16,9 +16,9 @@ func GetConditions(
 	ctx context.Context,
 	client client.Client,
 	namespacedName types.NamespacedName,
-) ([]common.InfraStatusDetail, error) {
+) ([]common.MySQLCondition, error) {
 	var err error
-	var results []common.InfraStatusDetail
+	var results []common.MySQLCondition
 	var actual = &pxcv1.PerconaXtraDBCluster{}
 
 	if err = ctrlcommon.GetResource(
@@ -54,7 +54,7 @@ func GetConditions(
 		Port: mysqlPort,
 		User: "root",
 	}
-	results = append(results, common.NewMySQLConnDetail(connInfo))
+	results = append(results, common.NewMySQLConnCondition(connInfo))
 	///////////
 
 	return results, nil
