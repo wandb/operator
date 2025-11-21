@@ -16,8 +16,8 @@ const (
 	SmallClickHouseMemoryRequest = "1Gi"
 	SmallClickHouseMemoryLimit   = "2Gi"
 
-	ClickHouseVersion = "23.8"
-	ClickHouseName    = "wandb-clickhouse"
+	ClickHouseVersion     = "23.8"
+	DefaultClickHouseName = "wandb-clickhouse"
 )
 
 type ClickHouseConfig struct {
@@ -38,7 +38,7 @@ func BuildClickHouseDefaults(size Size, ownerNamespace string) (ClickHouseConfig
 	config := ClickHouseConfig{
 		Enabled:   true,
 		Namespace: ownerNamespace,
-		Name:      ClickHouseName,
+		Name:      DefaultClickHouseName,
 		Version:   ClickHouseVersion,
 	}
 

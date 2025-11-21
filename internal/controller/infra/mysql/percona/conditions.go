@@ -15,14 +15,14 @@ import (
 func GetConditions(
 	ctx context.Context,
 	client client.Client,
-	namespacedName types.NamespacedName,
+	specNamespacedName types.NamespacedName,
 ) ([]common.MySQLCondition, error) {
 	var err error
 	var results []common.MySQLCondition
 	var actual = &pxcv1.PerconaXtraDBCluster{}
 
 	if err = ctrlcommon.GetResource(
-		ctx, client, namespacedName, ResourceTypeName, actual,
+		ctx, client, ClusterNamespacedName(specNamespacedName), ResourceTypeName, actual,
 	); err != nil {
 		return results, err
 	}
@@ -36,7 +36,7 @@ func GetConditions(
 	// Connection endpoint depends on configuration:
 	// - Dev (no ProxySQL): connect directly to PXC service
 	// - HA (with ProxySQL): connect via ProxySQL service
-	namespace := namespacedName.Namespace
+	namespace := specNamespacedName.Namespace
 	var mysqlHost string
 
 	if actual.Spec.ProxySQLEnabled() {

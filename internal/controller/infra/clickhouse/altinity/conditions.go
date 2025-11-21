@@ -15,14 +15,14 @@ import (
 func GetConditions(
 	ctx context.Context,
 	client client.Client,
-	namespacedName types.NamespacedName,
+	specNamespacedName types.NamespacedName,
 ) ([]common.ClickHouseCondition, error) {
 	var err error
 	var results []common.ClickHouseCondition
 	var actual = &chiv1.ClickHouseInstallation{}
 
 	if err = ctrlcommon.GetResource(
-		ctx, client, namespacedName, ResourceTypeName, actual,
+		ctx, client, InstallationNamespacedName(specNamespacedName), ResourceTypeName, actual,
 	); err != nil {
 		return results, err
 	}
@@ -34,7 +34,7 @@ func GetConditions(
 	///////////
 	// Extract connection info from CHI CR
 	// Connection format: clickhouse-wandb-clickhouse.{namespace}.svc.cluster.local:9000
-	clickhouseHost := fmt.Sprintf("%s.%s.svc.cluster.local", ServiceName, namespacedName.Namespace)
+	clickhouseHost := fmt.Sprintf("%s.%s.svc.cluster.local", ServiceName, specNamespacedName.Namespace)
 	clickhousePort := strconv.Itoa(ClickHouseNativePort)
 
 	connInfo := common.ClickHouseConnInfo{

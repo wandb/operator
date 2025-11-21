@@ -20,14 +20,14 @@ const (
 func CrudStandaloneResource(
 	ctx context.Context,
 	client client.Client,
-	namespacedName types.NamespacedName,
+	specNamespacedName types.NamespacedName,
 	standaloneDesired *redisv1beta2.Redis,
 ) error {
 	var standaloneActual = &redisv1beta2.Redis{}
 	var err error
 
 	if err = common.GetResource(
-		ctx, client, namespacedName, StandaloneType, standaloneActual,
+		ctx, client, StandaloneNamespacedName(specNamespacedName), StandaloneType, standaloneActual,
 	); err != nil {
 		return err
 	}
@@ -38,14 +38,14 @@ func CrudStandaloneResource(
 func CrudSentinelResource(
 	ctx context.Context,
 	client client.Client,
-	namespacedName types.NamespacedName,
+	specNamespacedName types.NamespacedName,
 	sentinelDesired *redissentinelv1beta2.RedisSentinel,
 ) error {
 	var sentinelActual = &redissentinelv1beta2.RedisSentinel{}
 	var err error
 
 	if err = common.GetResource(
-		ctx, client, namespacedName, SentinelType, sentinelActual,
+		ctx, client, SentinelNamespacedName(specNamespacedName), SentinelType, sentinelActual,
 	); err != nil {
 		return err
 	}
@@ -56,14 +56,14 @@ func CrudSentinelResource(
 func CrudReplicationResource(
 	ctx context.Context,
 	client client.Client,
-	namespacedName types.NamespacedName,
+	specNamespacedName types.NamespacedName,
 	replicationDesired *redisreplicationv1beta2.RedisReplication,
 ) error {
 	var replicationActual = &redisreplicationv1beta2.RedisReplication{}
 	var err error
 
 	if err = common.GetResource(
-		ctx, client, namespacedName, ReplicationType, replicationActual,
+		ctx, client, ReplicationNamespacedName(specNamespacedName), ReplicationType, replicationActual,
 	); err != nil {
 		return err
 	}

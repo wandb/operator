@@ -12,14 +12,14 @@ import (
 func CrudKafkaResource(
 	ctx context.Context,
 	client client.Client,
-	namespacedName types.NamespacedName,
+	specNamespacedName types.NamespacedName,
 	desired *kafkav1beta2.Kafka,
 ) error {
 	var err error
 	var actual = &kafkav1beta2.Kafka{}
 
 	if err = common.GetResource(
-		ctx, client, namespacedName, KafkaResourceType, actual,
+		ctx, client, KafkaNamespacedName(specNamespacedName), KafkaResourceType, actual,
 	); err != nil {
 		return err
 	}
@@ -33,14 +33,14 @@ func CrudKafkaResource(
 func CrudNodePoolResource(
 	ctx context.Context,
 	client client.Client,
-	namespacedName types.NamespacedName,
+	specNamespacedName types.NamespacedName,
 	desired *kafkav1beta2.KafkaNodePool,
 ) error {
 	var err error
 	var actual = &kafkav1beta2.KafkaNodePool{}
 
 	if err = common.GetResource(
-		ctx, client, namespacedName, NodePoolResourceType, actual,
+		ctx, client, NodePoolNamespacedName(specNamespacedName), NodePoolResourceType, actual,
 	); err != nil {
 		return err
 	}

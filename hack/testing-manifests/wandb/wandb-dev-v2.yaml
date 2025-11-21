@@ -6,21 +6,11 @@ spec:
   size: dev
   mysql:
     enabled: true
-    storageSize: 5Gi
   redis:
     enabled: true
-    storageSize: 1Gi
   kafka:
     enabled: true
-    storageSize: 10Gi
-    replicas: 1
-    backup:
-      enabled: false
   minio:
     enabled: true
-    storageSize: 10Gi
-    replicas: 1
   clickhouse:
     enabled: true
-    storageSize: 10Gi
-    replicas: 1

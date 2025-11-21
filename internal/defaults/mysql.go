@@ -24,7 +24,7 @@ const (
 	LogCollectorImage = "perconalab/percona-xtradb-cluster-operator:main-logcollector"
 	CRVersion         = "1.18.0"
 
-	MysqlName = "wandb-mysql"
+	DefaultMysqlName = "wandb-mysql"
 )
 
 func BuildMySQLDefaults(size Size, ownerNamespace string) (common.MySQLConfig, error) {
@@ -33,7 +33,7 @@ func BuildMySQLDefaults(size Size, ownerNamespace string) (common.MySQLConfig, e
 	config := common.MySQLConfig{
 		Enabled:   true,
 		Namespace: ownerNamespace,
-		Name:      MysqlName,
+		Name:      DefaultMysqlName,
 	}
 
 	switch size {

@@ -10,5 +10,3 @@ namePrefix: operator-
 
 patches:
 - path: webhook_local_patch.yaml
-  target:
-    kind: ValidatingWebhookConfiguration

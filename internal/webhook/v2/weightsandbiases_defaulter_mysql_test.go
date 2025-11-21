@@ -45,7 +45,6 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - MySQL", func() {
 				Expect(wandb.Spec.MySQL.Namespace).To(Equal("test-namespace"))
 				Expect(wandb.Spec.MySQL.StorageSize).To(Equal(defaults.DevMySQLStorageSize))
 				Expect(wandb.Spec.MySQL.Replicas).To(Equal(int32(1)))
-				Expect(wandb.Spec.MySQL.Config).To(BeNil())
 			})
 		})
 
@@ -143,7 +142,6 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - MySQL", func() {
 				Expect(wandb.Spec.MySQL.StorageSize).To(Equal(defaults.SmallMySQLStorageSize))
 				Expect(wandb.Spec.MySQL.Replicas).To(Equal(int32(3)))
 
-				Expect(wandb.Spec.MySQL.Config).ToNot(BeNil())
 				Expect(wandb.Spec.MySQL.Config.Resources.Requests).ToNot(BeNil())
 				Expect(wandb.Spec.MySQL.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(resource.MustParse(defaults.SmallMySQLCpuRequest)))
 				Expect(wandb.Spec.MySQL.Config.Resources.Requests[corev1.ResourceMemory]).To(Equal(resource.MustParse(defaults.SmallMySQLMemoryRequest)))

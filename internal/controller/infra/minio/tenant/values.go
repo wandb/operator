@@ -1,9 +1,13 @@
 package tenant
 
+import (
+	"fmt"
+
+	"k8s.io/apimachinery/pkg/types"
+)
+
 const (
 	// Resource names
-	TenantName     = "wandb-minio"
-	ServiceName    = "wandb-minio-hl"
 	ConnectionName = "wandb-minio-connection"
 	ConfigSecret   = "wandb-minio-config"
 
@@ -11,7 +15,27 @@ const (
 	MinioPort      = 443
 	MinioAccessKey = "minio"
 	MinioBucket    = "wandb"
-
-	// Pool configuration
-	PoolName = "pool-0"
 )
+
+func TenantName(specName string) string {
+	return specName
+}
+
+func ConfigName(specName string) string {
+	return fmt.Sprintf("%s-config", specName)
+}
+
+func ServiceName(specName string) string {
+	return fmt.Sprintf("%s-hl", specName)
+}
+
+func PoolName(specName string) string {
+	return fmt.Sprintf("%s-pool", specName)
+}
+
+func TenantNamespacedName(specNamespacedName types.NamespacedName) types.NamespacedName {
+	return types.NamespacedName{
+		Namespace: specNamespacedName.Namespace,
+		Name:      TenantName(specNamespacedName.Name),
+	}
+}

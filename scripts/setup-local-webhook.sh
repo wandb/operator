@@ -134,6 +134,17 @@ echo "Updating webhook configuration with CA bundle..."
 
 cat > "${CONFIG_DIR}/webhook_local_patch.yaml" <<EOF
 apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: mutating-webhook-configuration
+webhooks:
+- name: mweightsandbiases.wandb.com
+  clientConfig:
+    \$patch: replace
+    url: https://${WEBHOOK_HOST}:${WEBHOOK_PORT}/mutate-apps-wandb-com-v2-weightsandbiases
+    caBundle: ${CA_BUNDLE}
+---
+apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
   name: validating-webhook-configuration

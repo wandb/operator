@@ -11,7 +11,6 @@ import (
 	kafkav1beta2 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1beta2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
@@ -85,12 +84,14 @@ func ToKafkaVendorSpec(
 		return nil, nil
 	}
 
+	specName := spec.Name
+
 	kafka := &kafkav1beta2.Kafka{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      strimzi.KafkaName,
+			Name:      strimzi.KafkaName(specName),
 			Namespace: spec.Namespace,
 			Labels: map[string]string{
-				"app": strimzi.KafkaName,
+				"app": strimzi.KafkaName(specName),
 			},
 			Annotations: map[string]string{
 				"strimzi.io/node-pools": "enabled",
@@ -146,12 +147,14 @@ func ToKafkaNodePoolVendorSpec(
 ) (*kafkav1beta2.KafkaNodePool, error) {
 	log := ctrl.LoggerFrom(ctx)
 
+	specName := spec.Name
+
 	nodePool := &kafkav1beta2.KafkaNodePool{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      strimzi.NodePoolName,
+			Name:      strimzi.NodePoolName(specName),
 			Namespace: spec.Namespace,
 			Labels: map[string]string{
-				"strimzi.io/cluster": strimzi.KafkaName,
+				"strimzi.io/cluster": strimzi.KafkaName(specName),
 			},
 		},
 		Spec: kafkav1beta2.KafkaNodePoolSpec{
@@ -183,18 +186,4 @@ func ToKafkaNodePoolVendorSpec(
 	}
 
 	return nodePool, nil
-}
-
-func KafkaNamespacedName(spec apiv2.WBKafkaSpec) types.NamespacedName {
-	return types.NamespacedName{
-		Name:      spec.Name,
-		Namespace: spec.Namespace,
-	}
-}
-
-func KafkaNodePoolNamespacedName(spec apiv2.WBKafkaSpec) types.NamespacedName {
-	return types.NamespacedName{
-		Name:      spec.Name + "-node-pool",
-		Namespace: spec.Namespace,
-	}
 }

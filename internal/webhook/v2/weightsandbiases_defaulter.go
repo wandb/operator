@@ -112,23 +112,21 @@ func (d *WeightsAndBiasesCustomDefaulter) applyMySQLDefaults(wandb *apiv2.Weight
 		wandb.Spec.MySQL.Replicas = defaultConfig.Replicas
 	}
 
-	if len(defaultConfig.Resources.Requests) > 0 || len(defaultConfig.Resources.Limits) > 0 {
-		if wandb.Spec.MySQL.Config.Resources.Requests == nil {
-			wandb.Spec.MySQL.Config.Resources.Requests = corev1.ResourceList{}
-		}
-		if wandb.Spec.MySQL.Config.Resources.Limits == nil {
-			wandb.Spec.MySQL.Config.Resources.Limits = corev1.ResourceList{}
-		}
+	if wandb.Spec.MySQL.Config.Resources.Requests == nil {
+		wandb.Spec.MySQL.Config.Resources.Requests = corev1.ResourceList{}
+	}
+	if wandb.Spec.MySQL.Config.Resources.Limits == nil {
+		wandb.Spec.MySQL.Config.Resources.Limits = corev1.ResourceList{}
+	}
 
-		for k, v := range defaultConfig.Resources.Requests {
-			if _, exists := wandb.Spec.MySQL.Config.Resources.Requests[k]; !exists {
-				wandb.Spec.MySQL.Config.Resources.Requests[k] = v
-			}
+	for k, v := range defaultConfig.Resources.Requests {
+		if _, exists := wandb.Spec.MySQL.Config.Resources.Requests[k]; !exists {
+			wandb.Spec.MySQL.Config.Resources.Requests[k] = v
 		}
-		for k, v := range defaultConfig.Resources.Limits {
-			if _, exists := wandb.Spec.MySQL.Config.Resources.Limits[k]; !exists {
-				wandb.Spec.MySQL.Config.Resources.Limits[k] = v
-			}
+	}
+	for k, v := range defaultConfig.Resources.Limits {
+		if _, exists := wandb.Spec.MySQL.Config.Resources.Limits[k]; !exists {
+			wandb.Spec.MySQL.Config.Resources.Limits[k] = v
 		}
 	}
 
@@ -152,58 +150,45 @@ func (d *WeightsAndBiasesCustomDefaulter) applyRedisDefaults(wandb *apiv2.Weight
 		wandb.Spec.Redis.StorageSize = defaultConfig.StorageSize.String()
 	}
 
-	if len(defaultConfig.Requests) > 0 || len(defaultConfig.Limits) > 0 {
-		if wandb.Spec.Redis.Config.Resources.Requests == nil {
-			wandb.Spec.Redis.Config.Resources.Requests = corev1.ResourceList{}
-		}
-		if wandb.Spec.Redis.Config.Resources.Limits == nil {
-			wandb.Spec.Redis.Config.Resources.Limits = corev1.ResourceList{}
-		}
+	if wandb.Spec.Redis.Config.Resources.Requests == nil {
+		wandb.Spec.Redis.Config.Resources.Requests = corev1.ResourceList{}
+	}
+	if wandb.Spec.Redis.Config.Resources.Limits == nil {
+		wandb.Spec.Redis.Config.Resources.Limits = corev1.ResourceList{}
+	}
 
-		for k, v := range defaultConfig.Requests {
-			if _, exists := wandb.Spec.Redis.Config.Resources.Requests[k]; !exists {
-				wandb.Spec.Redis.Config.Resources.Requests[k] = v
-			}
+	for k, v := range defaultConfig.Requests {
+		if _, exists := wandb.Spec.Redis.Config.Resources.Requests[k]; !exists {
+			wandb.Spec.Redis.Config.Resources.Requests[k] = v
 		}
-		for k, v := range defaultConfig.Limits {
-			if _, exists := wandb.Spec.Redis.Config.Resources.Limits[k]; !exists {
-				wandb.Spec.Redis.Config.Resources.Limits[k] = v
-			}
+	}
+	for k, v := range defaultConfig.Limits {
+		if _, exists := wandb.Spec.Redis.Config.Resources.Limits[k]; !exists {
+			wandb.Spec.Redis.Config.Resources.Limits[k] = v
 		}
 	}
 
-	if defaultConfig.Sentinel.Enabled {
-		if wandb.Spec.Redis.Sentinel.Enabled {
-			if wandb.Spec.Redis.Sentinel.Config.MasterName == "" {
-				wandb.Spec.Redis.Sentinel.Config.MasterName = defaultConfig.Sentinel.MasterGroupName
-			}
+	// Always use the default Sentinel.Enabled, based on Size
+	wandb.Spec.Redis.Sentinel.Enabled = defaultConfig.Sentinel.Enabled
+	if wandb.Spec.Redis.Sentinel.Config.MasterName == "" {
+		wandb.Spec.Redis.Sentinel.Config.MasterName = defaultConfig.Sentinel.MasterGroupName
+	}
 
-			if wandb.Spec.Redis.Sentinel.SentinelName == "" {
-				wandb.Spec.Redis.Sentinel.SentinelName = defaultConfig.Sentinel.SentinelName
-			}
-			if wandb.Spec.Redis.Sentinel.ReplicationName == "" {
-				wandb.Spec.Redis.Sentinel.ReplicationName = defaultConfig.Sentinel.ReplicationName
-			}
+	if wandb.Spec.Redis.Sentinel.Config.Resources.Requests == nil {
+		wandb.Spec.Redis.Sentinel.Config.Resources.Requests = corev1.ResourceList{}
+	}
+	if wandb.Spec.Redis.Sentinel.Config.Resources.Limits == nil {
+		wandb.Spec.Redis.Sentinel.Config.Resources.Limits = corev1.ResourceList{}
+	}
 
-			if len(defaultConfig.Sentinel.Requests) > 0 || len(defaultConfig.Sentinel.Limits) > 0 {
-				if wandb.Spec.Redis.Sentinel.Config.Resources.Requests == nil {
-					wandb.Spec.Redis.Sentinel.Config.Resources.Requests = corev1.ResourceList{}
-				}
-				if wandb.Spec.Redis.Sentinel.Config.Resources.Limits == nil {
-					wandb.Spec.Redis.Sentinel.Config.Resources.Limits = corev1.ResourceList{}
-				}
-
-				for k, v := range defaultConfig.Sentinel.Requests {
-					if _, exists := wandb.Spec.Redis.Sentinel.Config.Resources.Requests[k]; !exists {
-						wandb.Spec.Redis.Sentinel.Config.Resources.Requests[k] = v
-					}
-				}
-				for k, v := range defaultConfig.Sentinel.Limits {
-					if _, exists := wandb.Spec.Redis.Sentinel.Config.Resources.Limits[k]; !exists {
-						wandb.Spec.Redis.Sentinel.Config.Resources.Limits[k] = v
-					}
-				}
-			}
+	for k, v := range defaultConfig.Sentinel.Requests {
+		if _, exists := wandb.Spec.Redis.Sentinel.Config.Resources.Requests[k]; !exists {
+			wandb.Spec.Redis.Sentinel.Config.Resources.Requests[k] = v
+		}
+	}
+	for k, v := range defaultConfig.Sentinel.Limits {
+		if _, exists := wandb.Spec.Redis.Sentinel.Config.Resources.Limits[k]; !exists {
+			wandb.Spec.Redis.Sentinel.Config.Resources.Limits[k] = v
 		}
 	}
 
@@ -232,23 +217,21 @@ func (d *WeightsAndBiasesCustomDefaulter) applyKafkaDefaults(wandb *apiv2.Weight
 		wandb.Spec.Kafka.Replicas = defaultConfig.Replicas
 	}
 
-	if len(defaultConfig.Resources.Requests) > 0 || len(defaultConfig.Resources.Limits) > 0 {
-		if wandb.Spec.Kafka.Config.Resources.Requests == nil {
-			wandb.Spec.Kafka.Config.Resources.Requests = corev1.ResourceList{}
-		}
-		if wandb.Spec.Kafka.Config.Resources.Limits == nil {
-			wandb.Spec.Kafka.Config.Resources.Limits = corev1.ResourceList{}
-		}
+	if wandb.Spec.Kafka.Config.Resources.Requests == nil {
+		wandb.Spec.Kafka.Config.Resources.Requests = corev1.ResourceList{}
+	}
+	if wandb.Spec.Kafka.Config.Resources.Limits == nil {
+		wandb.Spec.Kafka.Config.Resources.Limits = corev1.ResourceList{}
+	}
 
-		for k, v := range defaultConfig.Resources.Requests {
-			if _, exists := wandb.Spec.Kafka.Config.Resources.Requests[k]; !exists {
-				wandb.Spec.Kafka.Config.Resources.Requests[k] = v
-			}
+	for k, v := range defaultConfig.Resources.Requests {
+		if _, exists := wandb.Spec.Kafka.Config.Resources.Requests[k]; !exists {
+			wandb.Spec.Kafka.Config.Resources.Requests[k] = v
 		}
-		for k, v := range defaultConfig.Resources.Limits {
-			if _, exists := wandb.Spec.Kafka.Config.Resources.Limits[k]; !exists {
-				wandb.Spec.Kafka.Config.Resources.Limits[k] = v
-			}
+	}
+	for k, v := range defaultConfig.Resources.Limits {
+		if _, exists := wandb.Spec.Kafka.Config.Resources.Limits[k]; !exists {
+			wandb.Spec.Kafka.Config.Resources.Limits[k] = v
 		}
 	}
 
@@ -277,23 +260,21 @@ func (d *WeightsAndBiasesCustomDefaulter) applyMinioDefaults(wandb *apiv2.Weight
 		wandb.Spec.Minio.Replicas = defaultConfig.Servers
 	}
 
-	if len(defaultConfig.Resources.Requests) > 0 || len(defaultConfig.Resources.Limits) > 0 {
-		if wandb.Spec.Minio.Config.Resources.Requests == nil {
-			wandb.Spec.Minio.Config.Resources.Requests = corev1.ResourceList{}
-		}
-		if wandb.Spec.Minio.Config.Resources.Limits == nil {
-			wandb.Spec.Minio.Config.Resources.Limits = corev1.ResourceList{}
-		}
+	if wandb.Spec.Minio.Config.Resources.Requests == nil {
+		wandb.Spec.Minio.Config.Resources.Requests = corev1.ResourceList{}
+	}
+	if wandb.Spec.Minio.Config.Resources.Limits == nil {
+		wandb.Spec.Minio.Config.Resources.Limits = corev1.ResourceList{}
+	}
 
-		for k, v := range defaultConfig.Resources.Requests {
-			if _, exists := wandb.Spec.Minio.Config.Resources.Requests[k]; !exists {
-				wandb.Spec.Minio.Config.Resources.Requests[k] = v
-			}
+	for k, v := range defaultConfig.Resources.Requests {
+		if _, exists := wandb.Spec.Minio.Config.Resources.Requests[k]; !exists {
+			wandb.Spec.Minio.Config.Resources.Requests[k] = v
 		}
-		for k, v := range defaultConfig.Resources.Limits {
-			if _, exists := wandb.Spec.Minio.Config.Resources.Limits[k]; !exists {
-				wandb.Spec.Minio.Config.Resources.Limits[k] = v
-			}
+	}
+	for k, v := range defaultConfig.Resources.Limits {
+		if _, exists := wandb.Spec.Minio.Config.Resources.Limits[k]; !exists {
+			wandb.Spec.Minio.Config.Resources.Limits[k] = v
 		}
 	}
 
@@ -310,6 +291,10 @@ func (d *WeightsAndBiasesCustomDefaulter) applyClickHouseDefaults(wandb *apiv2.W
 		wandb.Spec.ClickHouse.Namespace = defaultConfig.Namespace
 	}
 
+	if wandb.Spec.ClickHouse.Name == "" {
+		wandb.Spec.ClickHouse.Name = defaultConfig.Name
+	}
+
 	if wandb.Spec.ClickHouse.StorageSize == "" {
 		wandb.Spec.ClickHouse.StorageSize = defaultConfig.StorageSize
 	}
@@ -322,23 +307,21 @@ func (d *WeightsAndBiasesCustomDefaulter) applyClickHouseDefaults(wandb *apiv2.W
 		wandb.Spec.ClickHouse.Version = defaultConfig.Version
 	}
 
-	if len(defaultConfig.Resources.Requests) > 0 || len(defaultConfig.Resources.Limits) > 0 {
-		if wandb.Spec.ClickHouse.Config.Resources.Requests == nil {
-			wandb.Spec.ClickHouse.Config.Resources.Requests = corev1.ResourceList{}
-		}
-		if wandb.Spec.ClickHouse.Config.Resources.Limits == nil {
-			wandb.Spec.ClickHouse.Config.Resources.Limits = corev1.ResourceList{}
-		}
+	if wandb.Spec.ClickHouse.Config.Resources.Requests == nil {
+		wandb.Spec.ClickHouse.Config.Resources.Requests = corev1.ResourceList{}
+	}
+	if wandb.Spec.ClickHouse.Config.Resources.Limits == nil {
+		wandb.Spec.ClickHouse.Config.Resources.Limits = corev1.ResourceList{}
+	}
 
-		for k, v := range defaultConfig.Resources.Requests {
-			if _, exists := wandb.Spec.ClickHouse.Config.Resources.Requests[k]; !exists {
-				wandb.Spec.ClickHouse.Config.Resources.Requests[k] = v
-			}
+	for k, v := range defaultConfig.Resources.Requests {
+		if _, exists := wandb.Spec.ClickHouse.Config.Resources.Requests[k]; !exists {
+			wandb.Spec.ClickHouse.Config.Resources.Requests[k] = v
 		}
-		for k, v := range defaultConfig.Resources.Limits {
-			if _, exists := wandb.Spec.ClickHouse.Config.Resources.Limits[k]; !exists {
-				wandb.Spec.ClickHouse.Config.Resources.Limits[k] = v
-			}
+	}
+	for k, v := range defaultConfig.Resources.Limits {
+		if _, exists := wandb.Spec.ClickHouse.Config.Resources.Limits[k]; !exists {
+			wandb.Spec.ClickHouse.Config.Resources.Limits[k] = v
 		}
 	}
 

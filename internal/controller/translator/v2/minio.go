@@ -12,7 +12,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
@@ -80,6 +79,8 @@ func ToMinioVendorSpec(
 		return nil, nil
 	}
 
+	specName := spec.Name
+
 	// Parse storage quantity
 	storageQuantity, err := resource.ParseQuantity(spec.StorageSize)
 	if err != nil {
@@ -95,20 +96,20 @@ func ToMinioVendorSpec(
 	// Build Tenant spec
 	minioTenant := &miniov2.Tenant{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      tenant.TenantName,
+			Name:      tenant.TenantName(specName),
 			Namespace: spec.Namespace,
 			Labels: map[string]string{
-				"app": tenant.TenantName,
+				"app": tenant.TenantName(specName),
 			},
 		},
 		Spec: miniov2.TenantSpec{
 			Image: common.MinioImage,
 			Configuration: &corev1.LocalObjectReference{
-				Name: tenant.TenantName + "-config",
+				Name: tenant.ConfigName(specName),
 			},
 			Pools: []miniov2.Pool{
 				{
-					Name:             tenant.PoolName,
+					Name:             tenant.PoolName(specName),
 					Servers:          spec.Replicas,
 					VolumesPerServer: volumesPerServer,
 					VolumeClaimTemplate: &corev1.PersistentVolumeClaim{
@@ -143,11 +144,4 @@ func ToMinioVendorSpec(
 	}
 
 	return minioTenant, nil
-}
-
-func MinioNamespacedName(spec apiv2.WBMinioSpec) types.NamespacedName {
-	return types.NamespacedName{
-		Name:      spec.Name,
-		Namespace: spec.Namespace,
-	}
 }

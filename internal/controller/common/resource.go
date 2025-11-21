@@ -22,6 +22,8 @@ func GetResource[T client.Object](
 ) error {
 	log := ctrl.LoggerFrom(ctx)
 
+	log.Info("getting resource", "name", namespacedName.Name, "namespace", namespacedName.Namespace)
+
 	err := c.Get(ctx, namespacedName, obj)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
@@ -41,18 +43,31 @@ func CrudResource[T client.Object](
 	desired T,
 	actual T,
 ) error {
+	log := ctrl.LoggerFrom(ctx)
+
 	var err error
+	var action string
 	desiredExists := !IsNil(desired) && desired.GetName() != ""
 	actualExists := !IsNil(actual) && actual.GetName() != ""
 
 	if actualExists && desiredExists {
+		action = "update"
+		log.Info("updating resource", "name", desired.GetName(), "namespace", desired.GetNamespace())
+		desired.SetResourceVersion(actual.GetResourceVersion())
 		err = c.Update(ctx, desired)
 	}
 	if !actualExists && desiredExists {
+		action = "create"
+		log.Info("creating resource", "name", desired.GetName(), "namespace", desired.GetNamespace())
 		err = c.Create(ctx, desired)
 	}
 	if actualExists && !desiredExists {
+		action = "delete"
+		log.Info("deleting resource", "name", actual.GetName(), "namespace", actual.GetNamespace())
 		err = c.Delete(ctx, actual)
+	}
+	if err != nil {
+		log.Error(err, "error on crud resource", "action", action)
 	}
 	return err
 }

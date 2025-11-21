@@ -13,7 +13,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
@@ -81,6 +80,8 @@ func ToClickHouseVendorSpec(
 		return nil, nil
 	}
 
+	specName := spec.Name
+
 	// Parse storage quantity
 	storageQuantity := resource.MustParse(spec.StorageSize)
 
@@ -99,7 +100,7 @@ func ToClickHouseVendorSpec(
 	// Build ClickHouseInstallation spec
 	chi := &chiv2.ClickHouseInstallation{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      altinity.CHIName,
+			Name:      altinity.InstallationName(specName),
 			Namespace: spec.Namespace,
 			Labels: map[string]string{
 				"app": altinity.CHIName,
@@ -109,7 +110,7 @@ func ToClickHouseVendorSpec(
 			Configuration: &chiv2.Configuration{
 				Clusters: []*chiv2.Cluster{
 					{
-						Name: altinity.ClusterName,
+						Name: altinity.ClusterName(specName),
 						Layout: &chiv2.ChiClusterLayout{
 							ShardsCount:   altinity.ShardsCount,
 							ReplicasCount: int(spec.Replicas),
@@ -120,13 +121,13 @@ func ToClickHouseVendorSpec(
 			},
 			Defaults: &chiv2.Defaults{
 				Templates: &chiv2.TemplatesList{
-					DataVolumeClaimTemplate: altinity.VolumeTemplateName,
+					DataVolumeClaimTemplate: altinity.VolumeTemplateName(specName),
 				},
 			},
 			Templates: &chiv2.Templates{
 				VolumeClaimTemplates: []chiv2.VolumeClaimTemplate{
 					{
-						Name: altinity.VolumeTemplateName,
+						Name: altinity.VolumeTemplateName(specName),
 						Spec: corev1.PersistentVolumeClaimSpec{
 							AccessModes: []corev1.PersistentVolumeAccessMode{
 								corev1.ReadWriteOnce,
@@ -147,7 +148,7 @@ func ToClickHouseVendorSpec(
 	if len(spec.Config.Resources.Requests) > 0 || len(spec.Config.Resources.Limits) > 0 {
 		chi.Spec.Templates.PodTemplates = []chiv2.PodTemplate{
 			{
-				Name: "default-pod",
+				//Name: "default-pod",
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
 						{
@@ -161,7 +162,7 @@ func ToClickHouseVendorSpec(
 				},
 			},
 		}
-		chi.Spec.Defaults.Templates.PodTemplate = "default-pod"
+		//chi.Spec.Defaults.Templates.PodTemplate = "default-pod"
 	}
 
 	// Set owner reference
@@ -171,11 +172,4 @@ func ToClickHouseVendorSpec(
 	}
 
 	return chi, nil
-}
-
-func ClickHouseNamespacedName(spec apiv2.WBClickHouseSpec) types.NamespacedName {
-	return types.NamespacedName{
-		Name:      spec.Name,
-		Namespace: spec.Namespace,
-	}
 }

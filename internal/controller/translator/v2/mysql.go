@@ -5,13 +5,13 @@ import (
 	"fmt"
 
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/internal/controller/infra/mysql/percona"
 	"github.com/wandb/operator/internal/controller/translator/common"
 	pxcv1 "github.com/wandb/operator/internal/vendored/percona-operator/pxc/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
@@ -79,6 +79,8 @@ func ToMySQLVendorSpec(
 		return nil, nil
 	}
 
+	specName := spec.Name
+
 	// Parse storage quantity
 	storageQuantity, err := resource.ParseQuantity(spec.StorageSize)
 	if err != nil {
@@ -100,10 +102,10 @@ func ToMySQLVendorSpec(
 	// Build PXC spec
 	pxc := &pxcv1.PerconaXtraDBCluster{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      spec.Name,
+			Name:      percona.ClusterName(specName),
 			Namespace: spec.Namespace,
 			Labels: map[string]string{
-				"app": spec.Name,
+				"app": percona.ClusterName(specName),
 			},
 		},
 		Spec: pxcv1.PerconaXtraDBClusterSpec{
@@ -182,11 +184,4 @@ func ToMySQLVendorSpec(
 	}
 
 	return pxc, nil
-}
-
-func MysqlNamespacedName(spec apiv2.WBMySQLSpec) types.NamespacedName {
-	return types.NamespacedName{
-		Name:      spec.Name,
-		Namespace: spec.Namespace,
-	}
 }

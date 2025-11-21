@@ -8,6 +8,8 @@ import (
 	"github.com/wandb/operator/internal/controller/translator/common"
 	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
 	kafkav1beta2 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1beta2"
+	"k8s.io/apimachinery/pkg/types"
+	ctrl "sigs.k8s.io/controller-runtime"
 )
 
 func (r *WeightsAndBiasesV2Reconciler) kafkaResourceReconcile(
@@ -17,18 +19,19 @@ func (r *WeightsAndBiasesV2Reconciler) kafkaResourceReconcile(
 	var err error
 	var desiredKafka *kafkav1beta2.Kafka
 	var desiredNodePool *kafkav1beta2.KafkaNodePool
+	var specNamespacedName = kafkaSpecNamespacedName(wandb.Spec.Kafka)
 
 	if desiredKafka, err = translatorv2.ToKafkaVendorSpec(ctx, wandb.Spec.Kafka, wandb, r.Scheme); err != nil {
 		return err
 	}
-	if err = strimzi.CrudKafkaResource(ctx, r.Client, translatorv2.KafkaNamespacedName(wandb.Spec.Kafka), desiredKafka); err != nil {
+	if err = strimzi.CrudKafkaResource(ctx, r.Client, specNamespacedName, desiredKafka); err != nil {
 		return err
 	}
 
 	if desiredNodePool, err = translatorv2.ToKafkaNodePoolVendorSpec(ctx, wandb.Spec.Kafka, wandb, r.Scheme); err != nil {
 		return err
 	}
-	if err = strimzi.CrudNodePoolResource(ctx, r.Client, translatorv2.KafkaNodePoolNamespacedName(wandb.Spec.Kafka), desiredNodePool); err != nil {
+	if err = strimzi.CrudNodePoolResource(ctx, r.Client, specNamespacedName, desiredNodePool); err != nil {
 		return err
 	}
 
@@ -44,21 +47,28 @@ func (r *WeightsAndBiasesV2Reconciler) kafkaStatusUpdate(
 	ctx context.Context,
 	wandb *apiv2.WeightsAndBiases,
 ) error {
+	log := ctrl.LoggerFrom(ctx)
+
 	var err error
 	var conditions []common.KafkaCondition
+	var specNamespacedName = kafkaSpecNamespacedName(wandb.Spec.Kafka)
 
-	if conditions, err = strimzi.GetConditions(
-		ctx,
-		r.Client,
-		translatorv2.KafkaNamespacedName(wandb.Spec.Kafka),
-		translatorv2.KafkaNodePoolNamespacedName(wandb.Spec.Kafka),
-	); err != nil {
+	if conditions, err = strimzi.GetConditions(ctx, r.Client, specNamespacedName); err != nil {
 		return err
 	}
 	wandb.Status.KafkaStatus = translatorv2.ExtractKafkaStatus(ctx, conditions)
 	if err = r.Status().Update(ctx, wandb); err != nil {
+		log.Error(err, "failed to update status")
 		return err
 	}
 
 	return nil
+}
+
+func kafkaSpecNamespacedName(kafka apiv2.WBKafkaSpec) types.NamespacedName {
+	return types.NamespacedName{
+		Namespace: kafka.Namespace,
+		Name:      kafka.Name,
+	}
+
 }

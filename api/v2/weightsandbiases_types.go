@@ -113,10 +113,8 @@ type WBRedisConfig struct {
 }
 
 type WBRedisSentinelSpec struct {
-	Enabled         bool                  `json:"enabled"`
-	SentinelName    string                `json:"sentinelName,omitempty"`
-	ReplicationName string                `json:"replicationName,omitempty"`
-	Config          WBRedisSentinelConfig `json:"config,omitempty"`
+	Enabled bool                  `json:"enabled"`
+	Config  WBRedisSentinelConfig `json:"config,omitempty"`
 }
 
 type WBRedisSentinelConfig struct {

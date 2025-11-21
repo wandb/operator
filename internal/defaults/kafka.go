@@ -16,7 +16,7 @@ const (
 	SmallKafkaMemoryRequest = "1Gi"
 	SmallKafkaMemoryLimit   = "2Gi"
 
-	KafkaName = "wandb-kafka"
+	DefaultKafkaName = "wandb-kafka"
 )
 
 type KafkaConfig struct {
@@ -77,7 +77,7 @@ func BuildKafkaDefaults(size Size, ownerNamespace string) (KafkaConfig, error) {
 	config := KafkaConfig{
 		Enabled:   true,
 		Namespace: ownerNamespace,
-		Name:      KafkaName,
+		Name:      DefaultKafkaName,
 	}
 
 	switch size {

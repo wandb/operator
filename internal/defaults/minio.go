@@ -17,8 +17,8 @@ const (
 	SmallMinioMemoryRequest = "1Gi"
 	SmallMinioMemoryLimit   = "2Gi"
 
-	MinioImage = "quay.io/minio/minio:latest"
-	MinioName  = "wandb-minio"
+	MinioImage       = "quay.io/minio/minio:latest"
+	DefaultMinioName = "wandb-minio"
 )
 
 func BuildMinioDefaults(size Size, ownerNamespace string) (common.MinioConfig, error) {
@@ -27,7 +27,7 @@ func BuildMinioDefaults(size Size, ownerNamespace string) (common.MinioConfig, e
 	config := common.MinioConfig{
 		Enabled:   true,
 		Namespace: ownerNamespace,
-		Name:      MinioName,
+		Name:      DefaultMinioName,
 		Image:     MinioImage,
 	}
 

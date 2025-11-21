@@ -98,7 +98,7 @@ func (r *WeightsAndBiasesV2Reconciler) Reconcile(ctx context.Context, req ctrl.R
 		if apierrors.IsNotFound(err) {
 			return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
 		}
-		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, err
+		return ctrl.Result{}, err
 	}
 
 	log.Info(
@@ -109,29 +109,29 @@ func (r *WeightsAndBiasesV2Reconciler) Reconcile(ctx context.Context, req ctrl.R
 	/////////////////////////
 	// Resource CRUD
 	if err = r.redisResourceReconcile(ctx, wandb); err != nil {
-		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, err
+		return ctrl.Result{}, err
 
 	}
 
 	if err = r.mysqlResourceReconcile(ctx, wandb); err != nil {
-		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, err
+		return ctrl.Result{}, err
 	}
 
 	if err = r.kafkaResourceReconcile(ctx, wandb); err != nil {
-		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, err
+		return ctrl.Result{}, err
 
 	}
 	if err = r.minioResourceReconcile(ctx, wandb); err != nil {
-		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, err
+		return ctrl.Result{}, err
 
 	}
 
 	if err = r.clickHouseResourceReconcile(ctx, wandb); err != nil {
-		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, err
+		return ctrl.Result{}, err
 	}
 
 	if err = r.inferState(ctx, wandb); err != nil {
-		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, err
+		return ctrl.Result{}, err
 	}
 
 	return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil

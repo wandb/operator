@@ -16,14 +16,14 @@ const (
 func CrudResource(
 	ctx context.Context,
 	client client.Client,
-	namespacedName types.NamespacedName,
+	specNamespacedName types.NamespacedName,
 	desired *chiv1.ClickHouseInstallation,
 ) error {
 	var err error
 	var actual = &chiv1.ClickHouseInstallation{}
 
 	if err = common.GetResource(
-		ctx, client, namespacedName, ResourceTypeName, actual,
+		ctx, client, InstallationNamespacedName(specNamespacedName), ResourceTypeName, actual,
 	); err != nil {
 		return err
 	}

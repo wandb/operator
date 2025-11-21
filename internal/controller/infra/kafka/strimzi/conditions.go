@@ -15,8 +15,7 @@ import (
 func GetConditions(
 	ctx context.Context,
 	client client.Client,
-	kafkaNamespacedName types.NamespacedName,
-	nodePoolNamespacedName types.NamespacedName,
+	specNamespacedName types.NamespacedName,
 ) ([]common.KafkaCondition, error) {
 	var err error
 	var results []common.KafkaCondition
@@ -24,13 +23,13 @@ func GetConditions(
 	var actualNodePool *v1beta3.KafkaNodePool
 
 	if err = ctrlcommon.GetResource(
-		ctx, client, kafkaNamespacedName, KafkaResourceType, actualKafka,
+		ctx, client, KafkaNamespacedName(specNamespacedName), KafkaResourceType, actualKafka,
 	); err != nil {
 		return results, err
 	}
 
 	if err = ctrlcommon.GetResource(
-		ctx, client, nodePoolNamespacedName, NodePoolResourceType, actualNodePool,
+		ctx, client, NodePoolNamespacedName(specNamespacedName), NodePoolResourceType, actualNodePool,
 	); err != nil {
 		return results, err
 	}
@@ -42,7 +41,7 @@ func GetConditions(
 	///////////
 	// Extract connection info from Kafka CR
 	// Connection format: wandb-kafka.{namespace}.svc.cluster.local:9092
-	kafkaHost := fmt.Sprintf("%s.%s.svc.cluster.local", KafkaName, kafkaNamespacedName.Namespace)
+	kafkaHost := fmt.Sprintf("%s.%s.svc.cluster.local", KafkaName(specNamespacedName.Name), specNamespacedName.Namespace)
 	kafkaPort := strconv.Itoa(PlainListenerPort)
 
 	connInfo := common.KafkaConnInfo{

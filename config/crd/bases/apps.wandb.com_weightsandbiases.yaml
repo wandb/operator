@@ -625,10 +625,6 @@ spec:
                         type: object
                       enabled:
                         type: boolean
-                      replicationName:
-                        type: string
-                      sentinelName:
-                        type: string
                     required:
                     - enabled
                     type: object

@@ -15,14 +15,14 @@ import (
 func GetConditions(
 	ctx context.Context,
 	client client.Client,
-	namespacedName types.NamespacedName,
+	specNamespacedName types.NamespacedName,
 ) ([]common.MinioCondition, error) {
 	var err error
 	var results []common.MinioCondition
 	var actual = &miniov2.Tenant{}
 
 	if err = ctrlcommon.GetResource(
-		ctx, client, namespacedName, ResourceTypeName, actual,
+		ctx, client, TenantNamespacedName(specNamespacedName), ResourceTypeName, actual,
 	); err != nil {
 		return results, err
 	}
@@ -33,7 +33,7 @@ func GetConditions(
 
 	// Extract connection info from Tenant CR
 	// Connection format: wandb-minio-hl.{namespace}.svc.cluster.local:443
-	minioHost := fmt.Sprintf("%s.%s.svc.cluster.local", ServiceName, namespacedName.Namespace)
+	minioHost := fmt.Sprintf("%s.%s.svc.cluster.local", ServiceName(specNamespacedName.Name), specNamespacedName.Namespace)
 	minioPort := strconv.Itoa(MinioPort)
 
 	connInfo := common.MinioConnInfo{

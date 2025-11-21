@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/internal/controller/infra/redis/opstree"
 	"github.com/wandb/operator/internal/controller/translator/common"
 	"github.com/wandb/operator/internal/defaults"
 	rediscommon "github.com/wandb/operator/internal/vendored/redis-operator/common/v1beta2"
@@ -15,7 +16,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
@@ -105,6 +105,8 @@ func ToRedisStandaloneVendorSpec(
 		return nil, fmt.Errorf("cannot create redis standalone with sentinel enabled")
 	}
 
+	specName := spec.Name
+
 	// Parse storage quantity
 	storageQuantity, err := resource.ParseQuantity(spec.StorageSize)
 	if err != nil {
@@ -113,7 +115,7 @@ func ToRedisStandaloneVendorSpec(
 
 	redis := &redisv1beta2.Redis{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      common.RedisNamePrefix,
+			Name:      opstree.StandaloneName(specName),
 			Namespace: spec.Namespace,
 		},
 		Spec: redisv1beta2.RedisSpec{
@@ -175,6 +177,8 @@ func ToRedisSentinelVendorSpec(
 		return nil, nil
 	}
 
+	specName := spec.Name
+
 	// Default sentinel count to 3 if not specified
 	sentinelCount := int32(defaults.ReplicaSentinelCount)
 
@@ -186,7 +190,7 @@ func ToRedisSentinelVendorSpec(
 
 	sentinel := &redissentinelv1beta2.RedisSentinel{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      common.RedisNamePrefix,
+			Name:      opstree.SentinelName(specName),
 			Namespace: spec.Namespace,
 		},
 		Spec: redissentinelv1beta2.RedisSentinelSpec{
@@ -198,7 +202,7 @@ func ToRedisSentinelVendorSpec(
 			},
 			RedisSentinelConfig: &redissentinelv1beta2.RedisSentinelConfig{
 				RedisSentinelConfig: rediscommon.RedisSentinelConfig{
-					RedisReplicationName: common.RedisNamePrefix,
+					RedisReplicationName: opstree.ReplicationName(specName),
 					MasterGroupName:      masterName,
 				},
 			},
@@ -241,6 +245,8 @@ func ToRedisReplicationVendorSpec(
 		return nil, nil
 	}
 
+	specName := spec.Name
+
 	// Parse storage quantity
 	storageQuantity, err := resource.ParseQuantity(spec.StorageSize)
 	if err != nil {
@@ -252,7 +258,7 @@ func ToRedisReplicationVendorSpec(
 
 	replication := &redisreplicationv1beta2.RedisReplication{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      common.RedisNamePrefix,
+			Name:      opstree.ReplicationName(specName),
 			Namespace: spec.Namespace,
 		},
 		Spec: redisreplicationv1beta2.RedisReplicationSpec{
@@ -294,25 +300,4 @@ func ToRedisReplicationVendorSpec(
 	}
 
 	return replication, nil
-}
-
-func RedisStandaloneNamespacedName(spec apiv2.WBRedisSpec) types.NamespacedName {
-	return types.NamespacedName{
-		Name:      spec.Name,
-		Namespace: spec.Namespace,
-	}
-}
-
-func RedisSentinelNamespacedName(spec apiv2.WBRedisSpec) types.NamespacedName {
-	return types.NamespacedName{
-		Name:      spec.Sentinel.SentinelName,
-		Namespace: spec.Namespace,
-	}
-}
-
-func RedisReplicationNamespacedName(spec apiv2.WBRedisSpec) types.NamespacedName {
-	return types.NamespacedName{
-		Name:      spec.Sentinel.ReplicationName,
-		Namespace: spec.Namespace,
-	}
 }

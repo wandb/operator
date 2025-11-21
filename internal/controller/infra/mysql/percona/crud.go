@@ -16,14 +16,14 @@ const (
 func CrudResource(
 	ctx context.Context,
 	client client.Client,
-	namespacedName types.NamespacedName,
+	specNamespacedName types.NamespacedName,
 	desired *pxcv1.PerconaXtraDBCluster,
 ) error {
 	var err error
 	var actual = &pxcv1.PerconaXtraDBCluster{}
 
 	if err = common.GetResource(
-		ctx, client, namespacedName, ResourceTypeName, actual,
+		ctx, client, ClusterNamespacedName(specNamespacedName), ResourceTypeName, actual,
 	); err != nil {
 		return err
 	}

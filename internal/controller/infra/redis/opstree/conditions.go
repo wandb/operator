@@ -15,9 +15,7 @@ import (
 func GetConditions(
 	ctx context.Context,
 	client client.Client,
-	standaloneNamespacedName types.NamespacedName,
-	sentinelNamespacedName types.NamespacedName,
-	replicationNamespacedName types.NamespacedName,
+	specNamespacedName types.NamespacedName,
 ) ([]common.RedisCondition, error) {
 	var standaloneActual = &redisv1beta2.Redis{}
 	var sentinelActual = &redissentinelv1beta2.RedisSentinel{}
@@ -26,17 +24,17 @@ func GetConditions(
 	var err error
 
 	if err = ctrlcommon.GetResource(
-		ctx, client, standaloneNamespacedName, StandaloneType, standaloneActual,
+		ctx, client, StandaloneNamespacedName(specNamespacedName), StandaloneType, standaloneActual,
 	); err != nil {
 		return results, err
 	}
 	if err = ctrlcommon.GetResource(
-		ctx, client, sentinelNamespacedName, SentinelType, sentinelActual,
+		ctx, client, SentinelNamespacedName(specNamespacedName), SentinelType, sentinelActual,
 	); err != nil {
 		return results, err
 	}
 	if err = ctrlcommon.GetResource(
-		ctx, client, replicationNamespacedName, ReplicationType, replicationActual,
+		ctx, client, ReplicationNamespacedName(specNamespacedName), ReplicationType, replicationActual,
 	); err != nil {
 		return results, err
 	}

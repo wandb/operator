@@ -1,5 +1,11 @@
 package altinity
 
+import (
+	"fmt"
+
+	"k8s.io/apimachinery/pkg/types"
+)
+
 const (
 	// Resource names
 	CHIName        = "wandb-clickhouse"
@@ -13,7 +19,24 @@ const (
 	ClickHousePassword   = "test_password"
 
 	// Cluster configuration
-	ClusterName        = "cluster"
-	ShardsCount        = 1
-	VolumeTemplateName = "default-volume"
+	ShardsCount = 1
 )
+
+func InstallationName(specName string) string {
+	return fmt.Sprintf("%s-altinity-install", specName)
+}
+
+func ClusterName(specName string) string {
+	return specName
+}
+
+func VolumeTemplateName(specName string) string {
+	return fmt.Sprintf("%s-volume-template", specName)
+}
+
+func InstallationNamespacedName(specNamespacedName types.NamespacedName) types.NamespacedName {
+	return types.NamespacedName{
+		Namespace: specNamespacedName.Namespace,
+		Name:      InstallationName(specNamespacedName.Name),
+	}
+}

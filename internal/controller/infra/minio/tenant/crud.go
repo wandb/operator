@@ -16,14 +16,14 @@ const (
 func CrudResource(
 	ctx context.Context,
 	client client.Client,
-	namespacedName types.NamespacedName,
+	specNamespacedName types.NamespacedName,
 	desired *miniov2.Tenant,
 ) error {
 	var err error
 	var actual = &miniov2.Tenant{}
 
 	if err = common.GetResource(
-		ctx, client, namespacedName, ResourceTypeName, actual,
+		ctx, client, TenantNamespacedName(specNamespacedName), ResourceTypeName, actual,
 	); err != nil {
 		return err
 	}

@@ -1,13 +1,16 @@
 package strimzi
 
+import (
+	"fmt"
+
+	"k8s.io/apimachinery/pkg/types"
+)
+
 const (
 	// Kafka version and metadata
 	KafkaVersion         = "4.1.0"
 	KafkaMetadataVersion = "4.1-IV0"
 
-	// Resource names
-	KafkaName      = "wandb-kafka"
-	NodePoolName   = "wandb-kafka-pool"
 	ConnectionName = "wandb-kafka-connection"
 
 	// Listener configuration
@@ -30,3 +33,25 @@ const (
 	KafkaResourceType    = "Kafka"
 	NodePoolResourceType = "KafkaNodePool"
 )
+
+func KafkaName(specName string) string {
+	return specName
+}
+
+func NodePoolName(specName string) string {
+	return fmt.Sprintf("%s-node-pool", specName)
+}
+
+func KafkaNamespacedName(specNamespacedName types.NamespacedName) types.NamespacedName {
+	return types.NamespacedName{
+		Namespace: specNamespacedName.Namespace,
+		Name:      KafkaName(specNamespacedName.Name),
+	}
+}
+
+func NodePoolNamespacedName(specNamespacedName types.NamespacedName) types.NamespacedName {
+	return types.NamespacedName{
+		Namespace: specNamespacedName.Namespace,
+		Name:      NodePoolName(specNamespacedName.Name),
+	}
+}
