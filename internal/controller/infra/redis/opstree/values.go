@@ -11,11 +11,11 @@ func StandaloneName(specName string) string {
 }
 
 func SentinelName(specName string) string {
-	return fmt.Sprintf("%s-sentinel", specName)
+	return fmt.Sprintf("%s", specName)
 }
 
 func ReplicationName(specName string) string {
-	return fmt.Sprintf("%s-replication", specName)
+	return fmt.Sprintf("%s-replica", specName)
 }
 
 func StandaloneNamespacedName(specNamespacedName types.NamespacedName) types.NamespacedName {

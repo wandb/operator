@@ -37,40 +37,6 @@ type KafkaReplicationConfig struct {
 	TransactionStateISR      int32
 }
 
-// GetKafkaReplicationConfig returns replication settings based on replica count.
-// For single replica (dev mode), all factors are 1.
-// For multi-replica (HA mode), uses standard HA settings.
-func GetKafkaReplicationConfig(replicas int32) KafkaReplicationConfig {
-	if replicas == 1 {
-		return KafkaReplicationConfig{
-			DefaultReplicationFactor: 1,
-			MinInSyncReplicas:        1,
-			OffsetsTopicRF:           1,
-			TransactionStateRF:       1,
-			TransactionStateISR:      1,
-		}
-	}
-	// Multi-replica HA configuration
-	minISR := int32(2)
-	if replicas < 3 {
-		minISR = 1
-	}
-	return KafkaReplicationConfig{
-		DefaultReplicationFactor: min32(replicas, 3),
-		MinInSyncReplicas:        minISR,
-		OffsetsTopicRF:           min32(replicas, 3),
-		TransactionStateRF:       min32(replicas, 3),
-		TransactionStateISR:      minISR,
-	}
-}
-
-func min32(a, b int32) int32 {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 func BuildKafkaDefaults(size Size, ownerNamespace string) (KafkaConfig, error) {
 	var err error
 	var storageSize string

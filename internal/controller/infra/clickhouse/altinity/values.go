@@ -23,7 +23,7 @@ const (
 )
 
 func InstallationName(specName string) string {
-	return fmt.Sprintf("%s-altinity-install", specName)
+	return fmt.Sprintf("%s-install", specName)
 }
 
 func ClusterName(specName string) string {
@@ -31,7 +31,7 @@ func ClusterName(specName string) string {
 }
 
 func VolumeTemplateName(specName string) string {
-	return fmt.Sprintf("%s-volume-template", specName)
+	return fmt.Sprintf("%s-voltempl", specName)
 }
 
 func InstallationNamespacedName(specNamespacedName types.NamespacedName) types.NamespacedName {

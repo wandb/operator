@@ -235,6 +235,22 @@ func (d *WeightsAndBiasesCustomDefaulter) applyKafkaDefaults(wandb *apiv2.Weight
 		}
 	}
 
+	if wandb.Spec.Kafka.Config.ReplicationConfig.DefaultReplicationFactor == 0 {
+		wandb.Spec.Kafka.Config.ReplicationConfig.DefaultReplicationFactor = defaultConfig.ReplicationConfig.DefaultReplicationFactor
+	}
+	if wandb.Spec.Kafka.Config.ReplicationConfig.MinInSyncReplicas == 0 {
+		wandb.Spec.Kafka.Config.ReplicationConfig.MinInSyncReplicas = defaultConfig.ReplicationConfig.MinInSyncReplicas
+	}
+	if wandb.Spec.Kafka.Config.ReplicationConfig.OffsetsTopicRF == 0 {
+		wandb.Spec.Kafka.Config.ReplicationConfig.OffsetsTopicRF = defaultConfig.ReplicationConfig.OffsetsTopicRF
+	}
+	if wandb.Spec.Kafka.Config.ReplicationConfig.TransactionStateRF == 0 {
+		wandb.Spec.Kafka.Config.ReplicationConfig.TransactionStateRF = defaultConfig.ReplicationConfig.TransactionStateRF
+	}
+	if wandb.Spec.Kafka.Config.ReplicationConfig.TransactionStateISR == 0 {
+		wandb.Spec.Kafka.Config.ReplicationConfig.TransactionStateISR = defaultConfig.ReplicationConfig.TransactionStateISR
+	}
+
 	return nil
 }
 

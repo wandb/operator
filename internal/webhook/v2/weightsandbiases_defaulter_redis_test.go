@@ -44,8 +44,11 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Redis", func() {
 
 				Expect(wandb.Spec.Redis.Namespace).To(Equal("test-namespace"))
 				Expect(wandb.Spec.Redis.StorageSize).To(Equal(defaults.DevStorageRequest))
-				Expect(wandb.Spec.Redis.Config).To(BeNil())
-				Expect(wandb.Spec.Redis.Sentinel).To(BeNil())
+				Expect(wandb.Spec.Redis.Config.Resources.Requests).To(BeEmpty())
+				Expect(wandb.Spec.Redis.Config.Resources.Limits).To(BeEmpty())
+				Expect(wandb.Spec.Redis.Sentinel.Enabled).To(BeFalse())
+				Expect(wandb.Spec.Redis.Sentinel.Config.Resources.Requests).To(BeEmpty())
+				Expect(wandb.Spec.Redis.Sentinel.Config.Resources.Limits).To(BeEmpty())
 			})
 		})
 

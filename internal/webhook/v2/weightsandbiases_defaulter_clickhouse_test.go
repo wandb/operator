@@ -46,7 +46,8 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 				Expect(wandb.Spec.ClickHouse.StorageSize).To(Equal(defaults.DevClickHouseStorageSize))
 				Expect(wandb.Spec.ClickHouse.Replicas).To(Equal(int32(1)))
 				Expect(wandb.Spec.ClickHouse.Version).To(Equal(defaults.ClickHouseVersion))
-				Expect(wandb.Spec.ClickHouse.Config).To(BeNil())
+				Expect(wandb.Spec.ClickHouse.Config.Resources.Requests).To(BeEmpty())
+				Expect(wandb.Spec.ClickHouse.Config.Resources.Limits).To(BeEmpty())
 			})
 		})
 

@@ -17,7 +17,7 @@ const (
 	SmallClickHouseMemoryLimit   = "2Gi"
 
 	ClickHouseVersion     = "23.8"
-	DefaultClickHouseName = "wandb-clickhouse"
+	DefaultClickHouseName = "wandb-ch"
 )
 
 type ClickHouseConfig struct {

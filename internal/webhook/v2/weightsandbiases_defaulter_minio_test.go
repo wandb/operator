@@ -45,7 +45,8 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Minio", func() {
 				Expect(wandb.Spec.Minio.Namespace).To(Equal("test-namespace"))
 				Expect(wandb.Spec.Minio.StorageSize).To(Equal(defaults.DevMinioStorageSize))
 				Expect(wandb.Spec.Minio.Replicas).To(Equal(int32(1)))
-				Expect(wandb.Spec.Minio.Config).To(BeNil())
+				Expect(wandb.Spec.Minio.Config.Resources.Requests).To(BeEmpty())
+				Expect(wandb.Spec.Minio.Config.Resources.Limits).To(BeEmpty())
 			})
 		})
 

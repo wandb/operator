@@ -7,7 +7,7 @@ import (
 	"github.com/wandb/operator/internal/controller/infra/clickhouse/altinity"
 	"github.com/wandb/operator/internal/controller/translator/common"
 	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
-	chiv2 "github.com/wandb/operator/internal/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
+	chiv1 "github.com/wandb/operator/internal/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
@@ -17,7 +17,7 @@ func (r *WeightsAndBiasesV2Reconciler) clickHouseResourceReconcile(
 	wandb *apiv2.WeightsAndBiases,
 ) error {
 	var err error
-	var desired *chiv2.ClickHouseInstallation
+	var desired *chiv1.ClickHouseInstallation
 	var specNamespacedName = clickHouseSpecNamespacedName(wandb.Spec.ClickHouse)
 
 	if desired, err = translatorv2.ToClickHouseVendorSpec(ctx, wandb.Spec.ClickHouse, wandb, r.Scheme); err != nil {

@@ -45,7 +45,13 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Kafka", func() {
 				Expect(wandb.Spec.Kafka.Namespace).To(Equal("test-namespace"))
 				Expect(wandb.Spec.Kafka.StorageSize).To(Equal(defaults.DevKafkaStorageSize))
 				Expect(wandb.Spec.Kafka.Replicas).To(Equal(int32(1)))
-				Expect(wandb.Spec.Kafka.Config).To(BeNil())
+				Expect(wandb.Spec.Kafka.Config.Resources.Requests).To(BeEmpty())
+				Expect(wandb.Spec.Kafka.Config.Resources.Limits).To(BeEmpty())
+				Expect(wandb.Spec.Kafka.Config.ReplicationConfig.DefaultReplicationFactor).To(Equal(int32(1)))
+				Expect(wandb.Spec.Kafka.Config.ReplicationConfig.MinInSyncReplicas).To(Equal(int32(1)))
+				Expect(wandb.Spec.Kafka.Config.ReplicationConfig.OffsetsTopicRF).To(Equal(int32(1)))
+				Expect(wandb.Spec.Kafka.Config.ReplicationConfig.TransactionStateRF).To(Equal(int32(1)))
+				Expect(wandb.Spec.Kafka.Config.ReplicationConfig.TransactionStateISR).To(Equal(int32(1)))
 			})
 		})
 
@@ -208,6 +214,46 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Kafka", func() {
 				Expect(wandb.Spec.Kafka.Config.Resources.Requests[corev1.ResourceMemory]).To(Equal(resource.MustParse(defaults.SmallKafkaMemoryRequest)))
 				Expect(wandb.Spec.Kafka.Config.Resources.Limits[corev1.ResourceCPU]).To(Equal(resource.MustParse(defaults.SmallKafkaCpuLimit)))
 				Expect(wandb.Spec.Kafka.Config.Resources.Limits[corev1.ResourceMemory]).To(Equal(resource.MustParse(defaults.SmallKafkaMemoryLimit)))
+
+				Expect(wandb.Spec.Kafka.Config.ReplicationConfig.DefaultReplicationFactor).To(Equal(int32(3)))
+				Expect(wandb.Spec.Kafka.Config.ReplicationConfig.MinInSyncReplicas).To(Equal(int32(2)))
+				Expect(wandb.Spec.Kafka.Config.ReplicationConfig.OffsetsTopicRF).To(Equal(int32(3)))
+				Expect(wandb.Spec.Kafka.Config.ReplicationConfig.TransactionStateRF).To(Equal(int32(3)))
+				Expect(wandb.Spec.Kafka.Config.ReplicationConfig.TransactionStateISR).To(Equal(int32(2)))
+			})
+		})
+
+		Context("when Kafka has custom ReplicationConfig", func() {
+			It("should keep custom values and merge with defaults", func() {
+				customDefaultRF := int32(5)
+				customMinISR := int32(3)
+				wandb := &apiv2.WeightsAndBiases{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-wandb",
+						Namespace: "test-namespace",
+					},
+					Spec: apiv2.WeightsAndBiasesSpec{
+						Size: apiv2.WBSizeSmall,
+						Kafka: apiv2.WBKafkaSpec{
+							Enabled: true,
+							Config: apiv2.WBKafkaConfig{
+								ReplicationConfig: apiv2.WBKafkaReplicationConfig{
+									DefaultReplicationFactor: customDefaultRF,
+									MinInSyncReplicas:        customMinISR,
+								},
+							},
+						},
+					},
+				}
+
+				err := defaulter.Default(ctx, wandb)
+				Expect(err).ToNot(HaveOccurred())
+
+				Expect(wandb.Spec.Kafka.Config.ReplicationConfig.DefaultReplicationFactor).To(Equal(customDefaultRF))
+				Expect(wandb.Spec.Kafka.Config.ReplicationConfig.MinInSyncReplicas).To(Equal(customMinISR))
+				Expect(wandb.Spec.Kafka.Config.ReplicationConfig.OffsetsTopicRF).To(Equal(int32(3)))
+				Expect(wandb.Spec.Kafka.Config.ReplicationConfig.TransactionStateRF).To(Equal(int32(3)))
+				Expect(wandb.Spec.Kafka.Config.ReplicationConfig.TransactionStateISR).To(Equal(int32(2)))
 			})
 		})
 
