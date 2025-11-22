@@ -39,3 +39,10 @@ func TenantNamespacedName(specNamespacedName types.NamespacedName) types.Namespa
 		Name:      TenantName(specNamespacedName.Name),
 	}
 }
+
+func ConfigNamespacedName(specNamespacedName types.NamespacedName) types.NamespacedName {
+	return types.NamespacedName{
+		Namespace: specNamespacedName.Namespace,
+		Name:      ConfigName(specNamespacedName.Name),
+	}
+}

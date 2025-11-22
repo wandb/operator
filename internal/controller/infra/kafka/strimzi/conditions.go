@@ -19,8 +19,8 @@ func GetConditions(
 ) ([]common.KafkaCondition, error) {
 	var err error
 	var results []common.KafkaCondition
-	var actualKafka *v1beta3.Kafka
-	var actualNodePool *v1beta3.KafkaNodePool
+	var actualKafka = &v1beta3.Kafka{}
+	var actualNodePool = &v1beta3.KafkaNodePool{}
 
 	if err = ctrlcommon.GetResource(
 		ctx, client, KafkaNamespacedName(specNamespacedName), KafkaResourceType, actualKafka,

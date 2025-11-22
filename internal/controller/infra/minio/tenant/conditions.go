@@ -8,6 +8,7 @@ import (
 	ctrlcommon "github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/translator/common"
 	miniov2 "github.com/wandb/operator/internal/vendored/minio-operator/minio.min.io/v2"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -19,15 +20,26 @@ func GetConditions(
 ) ([]common.MinioCondition, error) {
 	var err error
 	var results []common.MinioCondition
-	var actual = &miniov2.Tenant{}
+	var actualResource = &miniov2.Tenant{}
+	var actualConfig = &corev1.Secret{}
 
 	if err = ctrlcommon.GetResource(
-		ctx, client, TenantNamespacedName(specNamespacedName), ResourceTypeName, actual,
+		ctx, client, TenantNamespacedName(specNamespacedName), ResourceTypeName, actualResource,
 	); err != nil {
 		return results, err
 	}
 
-	if actual == nil {
+	if actualResource == nil {
+		return results, nil
+	}
+
+	if err = ctrlcommon.GetResource(
+		ctx, client, ConfigNamespacedName(specNamespacedName), ConfigTypeName, actualConfig,
+	); err != nil {
+		return results, err
+	}
+
+	if actualConfig == nil {
 		return results, nil
 	}
 
