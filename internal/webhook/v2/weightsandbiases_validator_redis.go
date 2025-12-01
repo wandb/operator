@@ -11,6 +11,14 @@ func (v *WeightsAndBiasesCustomValidator) validateRedisSpec(wandb *apiv2.Weights
 	redisPath := field.NewPath("spec").Child("redis")
 	spec := wandb.Spec.Redis
 
+	if spec.Sentinel.Enabled && !spec.Enabled {
+		errors = append(errors, field.Invalid(
+			redisPath.Child("sentinel").Child("enabled"),
+			spec.Sentinel.Enabled,
+			"Redis Sentinel cannot be enabled when Redis is disabled",
+		))
+	}
+
 	if !spec.Enabled {
 		return errors
 	}
@@ -21,16 +29,6 @@ func (v *WeightsAndBiasesCustomValidator) validateRedisSpec(wandb *apiv2.Weights
 				redisPath.Child("storageSize"),
 				spec.StorageSize,
 				"must be a valid resource quantity (e.g., '10Gi')",
-			))
-		}
-	}
-
-	if spec.Sentinel.Enabled {
-		if !spec.Enabled {
-			errors = append(errors, field.Invalid(
-				redisPath.Child("sentinel").Child("enabled"),
-				spec.Sentinel.Enabled,
-				"Redis Sentinel cannot be enabled when Redis is disabled",
 			))
 		}
 	}
@@ -67,13 +65,11 @@ func (v *WeightsAndBiasesCustomValidator) validateRedisChanges(newWandb, oldWand
 	}
 
 	if oldSpec.Sentinel.Enabled != newSpec.Sentinel.Enabled {
-		if !newSpec.Enabled {
-			errors = append(errors, field.Invalid(
-				redisPath.Child("sentinel").Child("enabled"),
-				newSpec.Sentinel.Enabled,
-				"Redis Sentinel cannot be toggled between enabled and disabled (yet)",
-			))
-		}
+		errors = append(errors, field.Invalid(
+			redisPath.Child("sentinel").Child("enabled"),
+			newSpec.Sentinel.Enabled,
+			"Redis Sentinel cannot be toggled between enabled and disabled (yet)",
+		))
 	}
 
 	return errors

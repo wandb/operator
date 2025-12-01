@@ -62,8 +62,10 @@ vet: ## Run go vet against code.
 
 .PHONY: test
 test: manifests generate fmt vet setup-envtest ## Run tests.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /e2e) -coverprofile cover.out
-	go tool cover -html=cover.out -o coverage.html
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /e2e) -coverprofile cover.out; \
+	TEST_EXIT_CODE=$$?; \
+	go tool cover -html=cover.out -o coverage.html; \
+	exit $$TEST_EXIT_CODE
 
 .PHONY: setup-local-webhook
 setup-local-webhook: ## Setup local webhook development environment with certificates.

@@ -71,7 +71,7 @@ func (v *WeightsAndBiasesCustomValidator) ValidateUpdate(ctx context.Context, ol
 	if specWarnings, err = v.validateSpec(ctx, newWandb); err != nil {
 		return specWarnings, err
 	}
-	changeWarnings, err = v.validateChanges(ctx, oldWandb, newWandb)
+	changeWarnings, err = v.validateChanges(ctx, newWandb, oldWandb)
 	return append(specWarnings, changeWarnings...), err
 }
 
