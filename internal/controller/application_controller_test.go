@@ -21,13 +21,13 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	appsv2 "github.com/wandb/operator/api/v2"
+	apiv2 "github.com/wandb/operator/api/v2"
 )
 
 var _ = Describe("Application Controller", func() {
@@ -40,13 +40,13 @@ var _ = Describe("Application Controller", func() {
 			Name:      resourceName,
 			Namespace: "default", // TODO(user):Modify as needed
 		}
-		application := &appsv2.Application{}
+		application := &apiv2.Application{}
 
 		BeforeEach(func() {
 			By("creating the custom resource for the Kind Application")
 			err := k8sClient.Get(ctx, typeNamespacedName, application)
-			if err != nil && errors.IsNotFound(err) {
-				resource := &appsv2.Application{
+			if err != nil && apierrors.IsNotFound(err) {
+				resource := &apiv2.Application{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      resourceName,
 						Namespace: "default",
@@ -59,7 +59,7 @@ var _ = Describe("Application Controller", func() {
 
 		AfterEach(func() {
 			// TODO(user): Cleanup logic after each test, like removing the resource instance.
-			resource := &appsv2.Application{}
+			resource := &apiv2.Application{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())
 

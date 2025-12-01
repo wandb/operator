@@ -2,23 +2,11 @@ apiVersion: apps.wandb.com/v2
 kind: WeightsAndBiases
 metadata:
   name: wandb-dev-v2
-  namespace: default
 spec:
-  profile: dev
-  database:
+  size: dev
+  mysql:
     enabled: true
-    type: percona
     storageSize: 5Gi
-    backup:
-      enabled: true
-      storageName: default-backup
-      storageType: filesystem
-      filesystem:
-        storageSize: 5Gi
-        storageClassName: standard
-        accessModes:
-          - ReadWriteOnce
-      timeoutSeconds: 600
   redis:
     enabled: true
     storageSize: 1Gi
@@ -36,31 +24,11 @@ spec:
         accessModes:
           - ReadWriteOnce
       timeoutSeconds: 600
-  objStorage:
+  minio:
     enabled: true
     storageSize: 10Gi
     replicas: 1
-    backup:
-      enabled: true
-      storageName: default-backup
-      storageType: filesystem
-      filesystem:
-        storageSize: 5Gi
-        storageClassName: standard
-        accessModes:
-          - ReadWriteOnce
-      timeoutSeconds: 600
   clickhouse:
     enabled: true
     storageSize: 10Gi
     replicas: 1
-    backup:
-      enabled: true
-      storageName: default-backup
-      storageType: filesystem
-      filesystem:
-        storageSize: 5Gi
-        storageClassName: standard
-        accessModes:
-          - ReadWriteOnce
-      timeoutSeconds: 600

@@ -1,0 +1,17 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="v2:ctrl" type="GoApplicationRunConfiguration" factoryName="Go Application">
+    <module name="operator" />
+    <working_directory value="$PROJECT_DIR$" />
+    <parameters value="--v2-controller=true --v2-webhook=false --v1-controller=false" />
+    <EXTENSION ID="software.aws.toolkits.jetbrains.core.execution.GoAwsConnectionRunConfigurationExtension">
+      <option name="credential" />
+      <option name="region" />
+      <option name="useCurrentConnection" value="false" />
+    </EXTENSION>
+    <kind value="PACKAGE" />
+    <package value="github.com/wandb/operator/cmd/controller" />
+    <directory value="$PROJECT_DIR$" />
+    <filePath value="$PROJECT_DIR$/cmd/controller/main.go" />
+    <method v="2" />
+  </configuration>
+</component>

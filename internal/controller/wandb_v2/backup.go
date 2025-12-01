@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	pxcv1 "github.com/wandb/operator/api/percona-operator-vendored/pxc/v1"
-	machErrors "k8s.io/apimachinery/pkg/api/errors"
+	pxcv1 "github.com/wandb/operator/internal/vendored/percona-operator/pxc/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -83,7 +83,7 @@ func (p *PerconaBackupExecutor) startNewBackup(ctx context.Context) (*BackupStat
 	log.Info("Creating Percona backup", "backupName", backupName, "cluster", p.ClusterName)
 
 	if err := p.Client.Create(ctx, backup); err != nil {
-		if machErrors.IsAlreadyExists(err) {
+		if apierrors.IsAlreadyExists(err) {
 			log.Info("Backup already exists, checking status", "backupName", backupName)
 			return p.checkBackupStatus(ctx, &BackupState{
 				BackupName: backupName,
@@ -117,7 +117,7 @@ func (p *PerconaBackupExecutor) checkBackupStatus(ctx context.Context, currentSt
 	}, backup)
 
 	if err != nil {
-		if machErrors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			return currentState, BackupResult{
 				Failed:  true,
 				Message: "Backup resource not found",

@@ -18,21 +18,16 @@ package wandb_v2
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	corev1 "k8s.io/api/core/v1"
-	machErrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/event"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
 const dbFinalizer = "db.app.wandb.com"
@@ -79,7 +74,7 @@ type WeightsAndBiasesV2Reconciler struct {
 // Deprecated/Erroneously required RBAC rules
 //+kubebuilder:rbac:groups=extensions,resources=daemonsets;deployments;replicasets;ingresses;ingresses/status,verbs=get;list;watch
 
-var defaultRequeueMinutes = 2
+var defaultRequeueMinutes = 1
 var defaultRequeueDuration = time.Duration(defaultRequeueMinutes) * time.Minute
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -96,14 +91,14 @@ func (r *WeightsAndBiasesV2Reconciler) Reconcile(ctx context.Context, req ctrl.R
 		"start", true,
 	)
 
-	var ctrlState CtrlState
+	var err error
 
 	wandb := &apiv2.WeightsAndBiases{}
 	if err := r.Client.Get(ctx, req.NamespacedName, wandb); err != nil {
-		if machErrors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
 		}
-		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, err
+		return ctrl.Result{}, err
 	}
 
 	log.Info(
@@ -111,129 +106,76 @@ func (r *WeightsAndBiasesV2Reconciler) Reconcile(ctx context.Context, req ctrl.R
 		"Spec", wandb.Spec, "Name", wandb.Name, "UID", wandb.UID, "Generation", wandb.Generation,
 	)
 
-	ctrlState = r.handleDatabase(ctx, wandb, req)
-	if ctrlState.shouldExit(ReconcilerScope) {
-		return ctrlState.reconcilerResult()
+	/////////////////////////
+	// Resource CRUD
+	if err = r.redisResourceReconcile(ctx, wandb); err != nil {
+		return ctrl.Result{}, err
+	}
+	if err = r.mysqlResourceReconcile(ctx, wandb); err != nil {
+		return ctrl.Result{}, err
+	}
+	if err = r.kafkaResourceReconcile(ctx, wandb); err != nil {
+		return ctrl.Result{}, err
+	}
+	if err = r.minioResourceReconcile(ctx, wandb); err != nil {
+		return ctrl.Result{}, err
+	}
+	if err = r.clickHouseResourceReconcile(ctx, wandb); err != nil {
+		return ctrl.Result{}, err
 	}
 
-	if wandb.Spec.Profile == apiv2.WBProfileDev {
-		ctrlState = r.handleRedis(ctx, wandb, req)
-	} else {
-		ctrlState = r.handleRedisHA(ctx, wandb, req)
+	/////////////////////////
+	// Status Update
+	if err = r.redisStatusUpdate(ctx, wandb); err != nil {
+		return ctrl.Result{}, err
 	}
-	if ctrlState.shouldExit(ReconcilerScope) {
-		return ctrlState.reconcilerResult()
+	if err = r.mysqlStatusUpdate(ctx, wandb); err != nil {
+		return ctrl.Result{}, err
 	}
-
-	if wandb.Spec.Profile == apiv2.WBProfileDev {
-		ctrlState = r.handleKafka(ctx, wandb, req)
-	} else {
-		ctrlState = r.handleKafkaHA(ctx, wandb, req)
+	if err = r.kafkaStatusUpdate(ctx, wandb); err != nil {
+		return ctrl.Result{}, err
 	}
-	if ctrlState.shouldExit(ReconcilerScope) {
-		return ctrlState.reconcilerResult()
+	if err = r.minioStatusUpdate(ctx, wandb); err != nil {
+		return ctrl.Result{}, err
 	}
-
-	if wandb.Spec.Profile == apiv2.WBProfileDev {
-		ctrlState = r.handleMinio(ctx, wandb, req)
-	} else {
-		ctrlState = r.handleMinioHA(ctx, wandb, req)
-	}
-	if ctrlState.shouldExit(ReconcilerScope) {
-		return ctrlState.reconcilerResult()
+	if err = r.clickHouseStatusUpdate(ctx, wandb); err != nil {
+		return ctrl.Result{}, err
 	}
 
-	if wandb.Spec.Profile == apiv2.WBProfileDev {
-		ctrlState = r.handleClickHouse(ctx, wandb, req)
-	} else {
-		ctrlState = r.handleClickHouseHA(ctx, wandb, req)
-	}
-	if ctrlState.shouldExit(ReconcilerScope) {
-		return ctrlState.reconcilerResult()
-	}
+	/////////////////////////
 
-	ctrlState = r.inferState(ctx, wandb)
-	if ctrlState.shouldExit(ReconcilerScope) {
-		return ctrlState.reconcilerResult()
+	if err = r.inferState(ctx, wandb); err != nil {
+		return ctrl.Result{}, err
 	}
-
 	return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
-}
-
-func (r *WeightsAndBiasesV2Reconciler) handleDatabase(
-	ctx context.Context, wandb *apiv2.WeightsAndBiases, req ctrl.Request,
-) CtrlState {
-	log := ctrllog.FromContext(ctx)
-
-	if !wandb.Spec.Database.Enabled {
-		log.Info("Database not enabled, skipping")
-		return CtrlContinue()
-	}
-
-	dbType := wandb.Spec.Database.Type
-	if dbType == "" {
-		dbType = apiv2.WBDatabaseTypePercona
-		log.Info("Database type not specified, defaulting to Percona")
-	}
-
-	switch dbType {
-	case apiv2.WBDatabaseTypePercona:
-		if wandb.Spec.Profile == apiv2.WBProfileDev {
-			log.Info("Handling Percona XtraDB Cluster database (dev)")
-			return r.handlePerconaMysql(ctx, wandb, req)
-		} else {
-			log.Info("Handling Percona XtraDB Cluster database (HA)")
-			return r.handlePerconaMysqlHA(ctx, wandb, req)
-		}
-
-	default:
-		log.Error(nil, "Unknown database type", "type", dbType)
-		return CtrlError(errors.New("unknown database type: " + string(dbType)))
-	}
 }
 
 func (r *WeightsAndBiasesV2Reconciler) inferState(
 	ctx context.Context, wandb *apiv2.WeightsAndBiases,
-) CtrlState {
-	newState := wandb.Status.State
-	curState := wandb.Status.State
+) error {
 	log := ctrl.LoggerFrom(ctx)
-	databaseStatus := wandb.Status.DatabaseStatus
+
 	redisStatus := wandb.Status.RedisStatus
-	kafkaStatus := wandb.Status.KafkaStatus
-	objStorageStatus := wandb.Status.ObjStorageStatus
-	clickhouseStatus := wandb.Status.ClickHouseStatus
 
-	databaseReady := !wandb.Spec.Database.Enabled || databaseStatus.State == "ready"
-	redisReady := !wandb.Spec.Redis.Enabled || redisStatus.State == "ready"
-	kafkaReady := !wandb.Spec.Kafka.Enabled || kafkaStatus.State == "ready"
-	objStorageReady := !wandb.Spec.ObjStorage.Enabled || objStorageStatus.State == "ready"
-	clickhouseReady := !wandb.Spec.ClickHouse.Enabled || clickhouseStatus.State == "ready"
+	wandb.Status.State = redisStatus.State
 
-	if databaseReady && redisReady && kafkaReady && objStorageReady && clickhouseReady {
-		newState = apiv2.WBStateReady
+	if err := r.Status().Update(ctx, wandb); err != nil {
+		log.Error(err, "Failed to update status")
+		return err
 	}
-
-	if curState != newState {
-		wandb.Status.State = newState
-		if err := r.Status().Update(ctx, wandb); err != nil {
-			log.Error(err, "Failed to update Weights & Biases state", "from", curState, "to", newState)
-			return CtrlError(err)
-		}
-		return CtrlDone(HandlerScope)
-	}
-	return CtrlContinue()
+	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *WeightsAndBiasesV2Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 	builder := ctrl.NewControllerManagedBy(mgr).
 		For(&apiv2.WeightsAndBiases{} /*, builder.WithPredicates(filterWBEvents{})*/).
-		Owns(&corev1.Secret{}, builder.WithPredicates(filterSecretEvents{})).
+		Owns(&corev1.Secret{} /*builder.WithPredicates(filterSecretEvents{})*/).
 		Owns(&corev1.ConfigMap{})
 	return builder.Complete(r)
 }
 
+/*
 func (r *WeightsAndBiasesV2Reconciler) updateDbBackupStatus(ctx context.Context, wandb *apiv2.WeightsAndBiases, state, message string) {
 	log := ctrl.LoggerFrom(ctx)
 	now := metav1.Now()
@@ -291,3 +233,4 @@ func (filterSecretEvents) Delete(e event.DeleteEvent) bool {
 func (filterSecretEvents) Generic(e event.GenericEvent) bool {
 	return false
 }
+*/

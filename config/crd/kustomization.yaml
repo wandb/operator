@@ -6,11 +6,16 @@ resources:
 - bases/apps.wandb.com_applications.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
-patches:
-- path: patches/use_v2.yaml
-  target:
-    kind: CustomResourceDefinition
-    name: weightsandbiases.apps.wandb.com
+# By default, both v1 and v2 are served. Uncomment one of the patches below to serve only one version:
+#patches:
+#- path: patches/use_v1_only.yaml
+#  target:
+#    kind: CustomResourceDefinition
+#    name: weightsandbiases.apps.wandb.com
+#- path: patches/use_v2_only.yaml
+#  target:
+#    kind: CustomResourceDefinition
+#    name: weightsandbiases.apps.wandb.com
 
 # [WEBHOOK] To enable webhook, uncomment all the sections with [WEBHOOK] prefix.
 # patches here are for enabling the conversion webhook for each CRD

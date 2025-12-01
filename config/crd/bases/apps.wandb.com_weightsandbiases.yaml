@@ -60,15 +60,15 @@ spec:
             type: object
         type: object
     served: true
-    storage: true
+    storage: false
     subresources:
       status: {}
   - additionalPrinterColumns:
     - jsonPath: .status.state
       name: State
       type: string
-    - jsonPath: .status.databaseStatus.state
-      name: Database
+    - jsonPath: .status.mysqlStatus.state
+      name: MySQL
       type: string
     - jsonPath: .status.redisStatus.state
       name: Redis
@@ -76,8 +76,8 @@ spec:
     - jsonPath: .status.kafkaStatus.state
       name: Kafka
       type: string
-    - jsonPath: .status.objStorageStatus.state
-      name: ObjStorage
+    - jsonPath: .status.minioStatus.state
+      name: Minio
       type: string
     - jsonPath: .status.clickhouseStatus.state
       name: ClickHouse
@@ -108,35 +108,79 @@ spec:
             description: WeightsAndBiasesSpec defines the desired state of WeightsAndBiases.
             properties:
               clickhouse:
+                description: |-
+                  WBClickHouseSpec fields have many default values that, if unspecified,
+                  will be applied by a defaulting webook
                 properties:
-                  backup:
+                  config:
                     properties:
-                      enabled:
-                        type: boolean
-                      filesystem:
+                      resources:
+                        description: ResourceRequirements describes the compute resource
+                          requirements.
                         properties:
-                          accessModes:
+                          claims:
+                            description: |-
+                              Claims lists the names of resources, defined in spec.resourceClaims,
+                              that are used by this container.
+
+                              This is an alpha field and requires enabling the
+                              DynamicResourceAllocation feature gate.
+
+                              This field is immutable. It can only be set for containers.
                             items:
-                              type: string
+                              description: ResourceClaim references one entry in PodSpec.ResourceClaims.
+                              properties:
+                                name:
+                                  description: |-
+                                    Name must match the name of one entry in pod.spec.resourceClaims of
+                                    the Pod where this field is used. It makes that resource available
+                                    inside a container.
+                                  type: string
+                                request:
+                                  description: |-
+                                    Request is the name chosen for a request in the referenced claim.
+                                    If empty, everything from the claim is made available, otherwise
+                                    only the result of this request.
+                                  type: string
+                              required:
+                              - name
+                              type: object
                             type: array
-                          storageClassName:
-                            type: string
-                          storageSize:
-                            anyOf:
-                            - type: integer
-                            - type: string
-                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                            x-kubernetes-int-or-string: true
+                            x-kubernetes-list-map-keys:
+                            - name
+                            x-kubernetes-list-type: map
+                          limits:
+                            additionalProperties:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                            description: |-
+                              Limits describes the maximum amount of compute resources allowed.
+                              More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                            type: object
+                          requests:
+                            additionalProperties:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                            description: |-
+                              Requests describes the minimum amount of compute resources required.
+                              If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                              otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                              More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                            type: object
                         type: object
-                      storageName:
-                        type: string
-                      storageType:
-                        type: string
-                      timeoutSeconds:
-                        type: integer
                     type: object
                   enabled:
                     type: boolean
+                  name:
+                    type: string
+                  namespace:
+                    type: string
                   replicas:
                     format: int32
                     type: integer
@@ -147,57 +191,10 @@ spec:
                 required:
                 - enabled
                 type: object
-              database:
-                properties:
-                  backup:
-                    properties:
-                      enabled:
-                        type: boolean
-                      filesystem:
-                        properties:
-                          accessModes:
-                            items:
-                              type: string
-                            type: array
-                          storageClassName:
-                            type: string
-                          storageSize:
-                            anyOf:
-                            - type: integer
-                            - type: string
-                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                            x-kubernetes-int-or-string: true
-                        type: object
-                      s3:
-                        properties:
-                          bucket:
-                            type: string
-                          credentialsSecret:
-                            type: string
-                          endpointUrl:
-                            type: string
-                          region:
-                            type: string
-                        required:
-                        - bucket
-                        type: object
-                      storageName:
-                        type: string
-                      storageType:
-                        type: string
-                      timeoutSeconds:
-                        type: integer
-                    type: object
-                  enabled:
-                    type: boolean
-                  storageSize:
-                    type: string
-                  type:
-                    type: string
-                required:
-                - enabled
-                type: object
               kafka:
+                description: |-
+                  WBKafkaSpec fields have many default values that, if unspecified,
+                  will be applied by a defaulting webook
                 properties:
                   backup:
                     properties:
@@ -225,46 +222,93 @@ spec:
                       timeoutSeconds:
                         type: integer
                     type: object
-                  enabled:
-                    type: boolean
-                  replicas:
-                    format: int32
-                    type: integer
-                  storageSize:
-                    type: string
-                required:
-                - enabled
-                type: object
-              objStorage:
-                properties:
-                  backup:
+                  config:
                     properties:
-                      enabled:
-                        type: boolean
-                      filesystem:
+                      replicationConfig:
                         properties:
-                          accessModes:
-                            items:
-                              type: string
-                            type: array
-                          storageClassName:
-                            type: string
-                          storageSize:
-                            anyOf:
-                            - type: integer
-                            - type: string
-                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                            x-kubernetes-int-or-string: true
+                          defaultReplicationFactor:
+                            format: int32
+                            type: integer
+                          minInSyncReplicas:
+                            format: int32
+                            type: integer
+                          offsetsTopicRF:
+                            format: int32
+                            type: integer
+                          transactionStateISR:
+                            format: int32
+                            type: integer
+                          transactionStateRF:
+                            format: int32
+                            type: integer
                         type: object
-                      storageName:
-                        type: string
-                      storageType:
-                        type: string
-                      timeoutSeconds:
-                        type: integer
+                      resources:
+                        description: ResourceRequirements describes the compute resource
+                          requirements.
+                        properties:
+                          claims:
+                            description: |-
+                              Claims lists the names of resources, defined in spec.resourceClaims,
+                              that are used by this container.
+
+                              This is an alpha field and requires enabling the
+                              DynamicResourceAllocation feature gate.
+
+                              This field is immutable. It can only be set for containers.
+                            items:
+                              description: ResourceClaim references one entry in PodSpec.ResourceClaims.
+                              properties:
+                                name:
+                                  description: |-
+                                    Name must match the name of one entry in pod.spec.resourceClaims of
+                                    the Pod where this field is used. It makes that resource available
+                                    inside a container.
+                                  type: string
+                                request:
+                                  description: |-
+                                    Request is the name chosen for a request in the referenced claim.
+                                    If empty, everything from the claim is made available, otherwise
+                                    only the result of this request.
+                                  type: string
+                              required:
+                              - name
+                              type: object
+                            type: array
+                            x-kubernetes-list-map-keys:
+                            - name
+                            x-kubernetes-list-type: map
+                          limits:
+                            additionalProperties:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                            description: |-
+                              Limits describes the maximum amount of compute resources allowed.
+                              More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                            type: object
+                          requests:
+                            additionalProperties:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                            description: |-
+                              Requests describes the minimum amount of compute resources required.
+                              If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                              otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                              More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                            type: object
+                        type: object
                     type: object
                   enabled:
                     type: boolean
+                  name:
+                    type: string
+                  namespace:
+                    type: string
                   replicas:
                     format: int32
                     type: integer
@@ -273,18 +317,325 @@ spec:
                 required:
                 - enabled
                 type: object
-              profile:
-                description: Profile is akin to high-level environment info
-                type: string
+              minio:
+                description: |-
+                  WBMinioSpec fields have many default values that, if unspecified,
+                  will be applied by a defaulting webook
+                properties:
+                  config:
+                    properties:
+                      resources:
+                        description: ResourceRequirements describes the compute resource
+                          requirements.
+                        properties:
+                          claims:
+                            description: |-
+                              Claims lists the names of resources, defined in spec.resourceClaims,
+                              that are used by this container.
+
+                              This is an alpha field and requires enabling the
+                              DynamicResourceAllocation feature gate.
+
+                              This field is immutable. It can only be set for containers.
+                            items:
+                              description: ResourceClaim references one entry in PodSpec.ResourceClaims.
+                              properties:
+                                name:
+                                  description: |-
+                                    Name must match the name of one entry in pod.spec.resourceClaims of
+                                    the Pod where this field is used. It makes that resource available
+                                    inside a container.
+                                  type: string
+                                request:
+                                  description: |-
+                                    Request is the name chosen for a request in the referenced claim.
+                                    If empty, everything from the claim is made available, otherwise
+                                    only the result of this request.
+                                  type: string
+                              required:
+                              - name
+                              type: object
+                            type: array
+                            x-kubernetes-list-map-keys:
+                            - name
+                            x-kubernetes-list-type: map
+                          limits:
+                            additionalProperties:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                            description: |-
+                              Limits describes the maximum amount of compute resources allowed.
+                              More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                            type: object
+                          requests:
+                            additionalProperties:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                            description: |-
+                              Requests describes the minimum amount of compute resources required.
+                              If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                              otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                              More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                            type: object
+                        type: object
+                    type: object
+                  enabled:
+                    type: boolean
+                  name:
+                    type: string
+                  namespace:
+                    type: string
+                  replicas:
+                    format: int32
+                    type: integer
+                  storageSize:
+                    type: string
+                required:
+                - enabled
+                type: object
+              mysql:
+                description: |-
+                  WBMySQLSpec fields have many default values that, if unspecified,
+                  will be applied by a defaulting webook
+                properties:
+                  config:
+                    properties:
+                      resources:
+                        description: ResourceRequirements describes the compute resource
+                          requirements.
+                        properties:
+                          claims:
+                            description: |-
+                              Claims lists the names of resources, defined in spec.resourceClaims,
+                              that are used by this container.
+
+                              This is an alpha field and requires enabling the
+                              DynamicResourceAllocation feature gate.
+
+                              This field is immutable. It can only be set for containers.
+                            items:
+                              description: ResourceClaim references one entry in PodSpec.ResourceClaims.
+                              properties:
+                                name:
+                                  description: |-
+                                    Name must match the name of one entry in pod.spec.resourceClaims of
+                                    the Pod where this field is used. It makes that resource available
+                                    inside a container.
+                                  type: string
+                                request:
+                                  description: |-
+                                    Request is the name chosen for a request in the referenced claim.
+                                    If empty, everything from the claim is made available, otherwise
+                                    only the result of this request.
+                                  type: string
+                              required:
+                              - name
+                              type: object
+                            type: array
+                            x-kubernetes-list-map-keys:
+                            - name
+                            x-kubernetes-list-type: map
+                          limits:
+                            additionalProperties:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                            description: |-
+                              Limits describes the maximum amount of compute resources allowed.
+                              More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                            type: object
+                          requests:
+                            additionalProperties:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                            description: |-
+                              Requests describes the minimum amount of compute resources required.
+                              If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                              otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                              More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                            type: object
+                        type: object
+                    type: object
+                  enabled:
+                    type: boolean
+                  name:
+                    type: string
+                  namespace:
+                    type: string
+                  replicas:
+                    format: int32
+                    type: integer
+                  storageSize:
+                    type: string
+                required:
+                - enabled
+                type: object
               redis:
+                description: |-
+                  WBRedisSpec fields have many default values that, if unspecified,
+                  will be applied by a defaulting webook
                 properties:
+                  config:
+                    properties:
+                      resources:
+                        description: ResourceRequirements describes the compute resource
+                          requirements.
+                        properties:
+                          claims:
+                            description: |-
+                              Claims lists the names of resources, defined in spec.resourceClaims,
+                              that are used by this container.
+
+                              This is an alpha field and requires enabling the
+                              DynamicResourceAllocation feature gate.
+
+                              This field is immutable. It can only be set for containers.
+                            items:
+                              description: ResourceClaim references one entry in PodSpec.ResourceClaims.
+                              properties:
+                                name:
+                                  description: |-
+                                    Name must match the name of one entry in pod.spec.resourceClaims of
+                                    the Pod where this field is used. It makes that resource available
+                                    inside a container.
+                                  type: string
+                                request:
+                                  description: |-
+                                    Request is the name chosen for a request in the referenced claim.
+                                    If empty, everything from the claim is made available, otherwise
+                                    only the result of this request.
+                                  type: string
+                              required:
+                              - name
+                              type: object
+                            type: array
+                            x-kubernetes-list-map-keys:
+                            - name
+                            x-kubernetes-list-type: map
+                          limits:
+                            additionalProperties:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                            description: |-
+                              Limits describes the maximum amount of compute resources allowed.
+                              More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                            type: object
+                          requests:
+                            additionalProperties:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                            description: |-
+                              Requests describes the minimum amount of compute resources required.
+                              If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                              otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                              More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                            type: object
+                        type: object
+                    type: object
                   enabled:
                     type: boolean
+                  name:
+                    type: string
+                  namespace:
+                    type: string
+                  sentinel:
+                    properties:
+                      config:
+                        properties:
+                          masterName:
+                            type: string
+                          resources:
+                            description: ResourceRequirements describes the compute
+                              resource requirements.
+                            properties:
+                              claims:
+                                description: |-
+                                  Claims lists the names of resources, defined in spec.resourceClaims,
+                                  that are used by this container.
+
+                                  This is an alpha field and requires enabling the
+                                  DynamicResourceAllocation feature gate.
+
+                                  This field is immutable. It can only be set for containers.
+                                items:
+                                  description: ResourceClaim references one entry
+                                    in PodSpec.ResourceClaims.
+                                  properties:
+                                    name:
+                                      description: |-
+                                        Name must match the name of one entry in pod.spec.resourceClaims of
+                                        the Pod where this field is used. It makes that resource available
+                                        inside a container.
+                                      type: string
+                                    request:
+                                      description: |-
+                                        Request is the name chosen for a request in the referenced claim.
+                                        If empty, everything from the claim is made available, otherwise
+                                        only the result of this request.
+                                      type: string
+                                  required:
+                                  - name
+                                  type: object
+                                type: array
+                                x-kubernetes-list-map-keys:
+                                - name
+                                x-kubernetes-list-type: map
+                              limits:
+                                additionalProperties:
+                                  anyOf:
+                                  - type: integer
+                                  - type: string
+                                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                  x-kubernetes-int-or-string: true
+                                description: |-
+                                  Limits describes the maximum amount of compute resources allowed.
+                                  More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                                type: object
+                              requests:
+                                additionalProperties:
+                                  anyOf:
+                                  - type: integer
+                                  - type: string
+                                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                  x-kubernetes-int-or-string: true
+                                description: |-
+                                  Requests describes the minimum amount of compute resources required.
+                                  If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                                  otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                                  More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                                type: object
+                            type: object
+                        type: object
+                      enabled:
+                        type: boolean
+                    required:
+                    - enabled
+                    type: object
                   storageSize:
                     type: string
                 required:
                 - enabled
                 type: object
+              size:
+                description: Size is akin to high-level environment info
+                type: string
             type: object
           status:
             description: WeightsAndBiasesStatus defines the observed state of WeightsAndBiases.
@@ -292,6 +643,8 @@ spec:
               clickhouseStatus:
                 properties:
                   backupStatus:
+                    description: 'Deprecated: BackupStatus is not implemented in the
+                      refactored ClickHouse code'
                     properties:
                       backupName:
                         type: string
@@ -312,37 +665,28 @@ spec:
                       state:
                         type: string
                     type: object
-                  lastReconciled:
-                    format: date-time
-                    type: string
-                  ready:
-                    type: boolean
-                  state:
-                    type: string
-                required:
-                - ready
-                type: object
-              databaseStatus:
-                properties:
-                  backupStatus:
+                  conditions:
+                    items:
+                      properties:
+                        code:
+                          type: string
+                        message:
+                          type: string
+                        state:
+                          type: string
+                      required:
+                      - code
+                      - message
+                      - state
+                      type: object
+                    type: array
+                  connection:
                     properties:
-                      backupName:
+                      CLICKHOUSE_HOST:
                         type: string
-                      completedAt:
-                        format: date-time
+                      CLICKHOUSE_PORT:
                         type: string
-                      lastBackupTime:
-                        format: date-time
-                        type: string
-                      message:
-                        type: string
-                      requeueAfter:
-                        format: int64
-                        type: integer
-                      startedAt:
-                        format: date-time
-                        type: string
-                      state:
+                      CLICKHOUSE_USER:
                         type: string
                     type: object
                   lastReconciled:
@@ -378,6 +722,28 @@ spec:
                       state:
                         type: string
                     type: object
+                  conditions:
+                    items:
+                      properties:
+                        code:
+                          type: string
+                        message:
+                          type: string
+                        state:
+                          type: string
+                      required:
+                      - code
+                      - message
+                      - state
+                      type: object
+                    type: array
+                  connection:
+                    properties:
+                      KAFKA_HOST:
+                        type: string
+                      KAFKA_PORT:
+                        type: string
+                    type: object
                   lastReconciled:
                     format: date-time
                     type: string
@@ -388,11 +754,11 @@ spec:
                 required:
                 - ready
                 type: object
-              message:
-                type: string
-              objStorageStatus:
+              minioStatus:
                 properties:
                   backupStatus:
+                    description: 'Deprecated: BackupStatus is not implemented in the
+                      refactored Minio code'
                     properties:
                       backupName:
                         type: string
@@ -413,6 +779,89 @@ spec:
                       state:
                         type: string
                     type: object
+                  conditions:
+                    items:
+                      properties:
+                        code:
+                          type: string
+                        message:
+                          type: string
+                        state:
+                          type: string
+                      required:
+                      - code
+                      - message
+                      - state
+                      type: object
+                    type: array
+                  connection:
+                    properties:
+                      MINIO_ACCESS_KEY:
+                        type: string
+                      MINIO_HOST:
+                        type: string
+                      MINIO_PORT:
+                        type: string
+                    type: object
+                  lastReconciled:
+                    format: date-time
+                    type: string
+                  ready:
+                    type: boolean
+                  state:
+                    type: string
+                required:
+                - ready
+                type: object
+              mysqlStatus:
+                properties:
+                  backupStatus:
+                    description: 'Deprecated: BackupStatus is not implemented in the
+                      refactored MySQL code'
+                    properties:
+                      backupName:
+                        type: string
+                      completedAt:
+                        format: date-time
+                        type: string
+                      lastBackupTime:
+                        format: date-time
+                        type: string
+                      message:
+                        type: string
+                      requeueAfter:
+                        format: int64
+                        type: integer
+                      startedAt:
+                        format: date-time
+                        type: string
+                      state:
+                        type: string
+                    type: object
+                  conditions:
+                    items:
+                      properties:
+                        code:
+                          type: string
+                        message:
+                          type: string
+                        state:
+                          type: string
+                      required:
+                      - code
+                      - message
+                      - state
+                      type: object
+                    type: array
+                  connection:
+                    properties:
+                      MYSQL_HOST:
+                        type: string
+                      MYSQL_PORT:
+                        type: string
+                      MYSQL_USER:
+                        type: string
+                    type: object
                   lastReconciled:
                     format: date-time
                     type: string
@@ -428,6 +877,34 @@ spec:
                 type: integer
               redisStatus:
                 properties:
+                  conditions:
+                    items:
+                      properties:
+                        code:
+                          type: string
+                        message:
+                          type: string
+                        state:
+                          type: string
+                      required:
+                      - code
+                      - message
+                      - state
+                      type: object
+                    type: array
+                  connection:
+                    properties:
+                      REDIS_HOST:
+                        type: string
+                      REDIS_MASTER_NAME:
+                        type: string
+                      REDIS_PORT:
+                        type: string
+                      REDIS_SENTINEL_HOST:
+                        type: string
+                      REDIS_SENTINEL_PORT:
+                        type: string
+                    type: object
                   lastReconciled:
                     format: date-time
                     type: string
@@ -445,6 +922,6 @@ spec:
             type: object
         type: object
     served: true
-    storage: false
+    storage: true
     subresources:
       status: {}
