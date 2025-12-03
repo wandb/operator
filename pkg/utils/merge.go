@@ -84,3 +84,22 @@ func MergeMapString(a, b map[string]interface{}) (map[string]interface{}, error)
 
 	return nil, fmt.Errorf("failed to merge map[string]interface{}: %v", mr)
 }
+
+func MergeMapsStringString(maps ...map[string]string) map[string]string {
+	dst := map[string]string{}
+	for _, m := range maps {
+		dst = MergeMapStringString(dst, m)
+	}
+	return dst
+}
+
+func MergeMapStringString(a, b map[string]string) map[string]string {
+	dst := map[string]string{}
+	for k, v := range a {
+		dst[k] = v
+	}
+	for k, v := range b {
+		dst[k] = v
+	}
+	return dst
+}

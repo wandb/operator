@@ -168,11 +168,11 @@ endif
 
 .PHONY: install
 install: manifests kustomize ## Install CRDs into the K8s cluster specified in ~/.kube/config.
-	$(KUSTOMIZE) build config/crd | $(KUBECTL) apply -f -
+	$(KUSTOMIZE) build config/crd | $(KUBECTL) apply -f - --server-side
 
 .PHONY: apply-local-dev
 apply-local-dev: manifests kustomize ## Apply local webhook development configuration (CRDs, RBAC, webhook).
-	$(KUSTOMIZE) build config/local-dev | $(KUBECTL) apply -f -
+	$(KUSTOMIZE) build config/local-dev | $(KUBECTL) apply -f - --server-side
 
 .PHONY: uninstall
 uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
