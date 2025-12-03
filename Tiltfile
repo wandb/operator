@@ -17,7 +17,6 @@ settings = {
     "displayClickHouseOperator": False,
     "autoDeployOperator": True,
     "wandbCrName": "wandb-default-v1",
-    "displayCanary": False,
     "olmEnabled": False,
     "localWebhookDev": False,
 }
@@ -64,12 +63,6 @@ ENV HELM_CONFIG_HOME=/helm/.config/helm
 ENV HELM_DATA_HOME=/helm/.local/share/helm
 '''
 
-CANARY_DOCKERFILE = '''
-FROM registry.access.redhat.com/ubi9/ubi-minimal
-
-ADD tilt_bin/canary /canary
-
-USER 65532:65532
 '''
 
 DOMAIN = "wandb.com"
@@ -77,7 +70,6 @@ GROUP = "apps"
 VERSION = "v1"
 KIND = "wandb"
 IMG = 'controller:latest'
-CANARY_IMG = 'wandb-canary:latest'
 CONTROLLERGEN = 'rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases;'
 DISABLE_SECURITY_CONTEXT = True
 DIST_DIR = 'dist'
@@ -106,9 +98,6 @@ def vetfmt():
 
 def binary():
     return 'CGO_ENABLED=0 GOOS=linux GO111MODULE=on go build -o tilt_bin/manager cmd/controller/main.go'
-
-def canary_binary():
-    return 'CGO_ENABLED=0 GOOS=linux GO111MODULE=on go build -o tilt_bin/canary cmd/canary/main.go'
 
 ################################################################################
 # PREREQUISITES CHECK
@@ -365,38 +354,6 @@ local_resource(
     auto_init=False,
     trigger_mode=TRIGGER_MODE_MANUAL
 )
-
-################################################################################
-# CANARY: BUILD AND DEPLOY CONNECTIVITY TESTER
-# Build and deploy canary application for testing infrastructure connectivity
-################################################################################
-
-if settings.get("displayCanary"):
-    local('cp ./hack/testing-manifests/canary/canary.yaml ' + DIST_DIR + '/canary.yaml')
-
-    local_resource('build canary',
-                   cmd='make docker-buildx-canary',
-                   labels="canary",
-                   auto_init=False,
-                   trigger_mode=TRIGGER_MODE_MANUAL)
-
-    local_resource('load canary into kind',
-                   cmd='make kind-load-canary',
-                   labels="canary",
-                   auto_init=False,
-                   trigger_mode=TRIGGER_MODE_MANUAL)
-
-    local_resource('install wandb-canary',
-                   cmd='kubectl apply -f ' + DIST_DIR + '/canary.yaml',
-                   labels="canary",
-                   auto_init=False,
-                   trigger_mode=TRIGGER_MODE_MANUAL)
-
-    local_resource('uninstall wandb-canary',
-                   cmd='kubectl delete -f ' + DIST_DIR + '/canary.yaml',
-                   labels="canary",
-                   auto_init=False,
-                   trigger_mode=TRIGGER_MODE_MANUAL)
 
 ################################################################################
 # LOCAL WEBHOOK DEVELOPMENT

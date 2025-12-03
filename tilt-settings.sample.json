@@ -7,7 +7,6 @@
   "displayKafkaOperator": true,
   "displayMinioOperator": true,
   "displayClickHouseOperator": true,
-  "displayCanary": false,
   "autoDeployOperator": true,
   "localWebhookDev": false,
   "wandbCrName": "wandb-dev-v2",

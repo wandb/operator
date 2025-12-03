@@ -142,7 +142,7 @@ var _ = Describe("WeightsandbiasesController", func() {
 			})
 			It("Should create an empty User Spec", func() {
 				ctx := context.Background()
-				wandb := wandbcomv1.WeightsAndBiases{}
+				wandb := apiv1.WeightsAndBiases{}
 				err := k8sClient.Get(ctx, types.NamespacedName{Name: "test", Namespace: "default"}, &wandb)
 				Expect(err).ToNot(HaveOccurred())
 				specManager := state.New(ctx, k8sClient, &wandb, scheme.Scheme, secrets.New(ctx, k8sClient, &wandb, scheme.Scheme))
