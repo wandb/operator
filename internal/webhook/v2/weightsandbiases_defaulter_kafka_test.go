@@ -4,7 +4,7 @@ import (
 	"context"
 
 	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	g "github.com/onsi/gomega"
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/defaults"
 	corev1 "k8s.io/api/core/v1"
@@ -14,12 +14,10 @@ import (
 
 var _ = Describe("WeightsAndBiasesCustomDefaulter - Kafka", func() {
 	var (
-		defaulter *WeightsAndBiasesCustomDefaulter
-		ctx       context.Context
+		ctx context.Context
 	)
 
 	BeforeEach(func() {
-		defaulter = &WeightsAndBiasesCustomDefaulter{}
 		ctx = context.Background()
 	})
 
@@ -39,19 +37,19 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Kafka", func() {
 					},
 				}
 
-				err := defaulter.Default(ctx, wandb)
-				Expect(err).ToNot(HaveOccurred())
+				err := Default(ctx, wandb)
+				g.Expect(err).ToNot(g.HaveOccurred())
 
-				Expect(wandb.Spec.Kafka.Namespace).To(Equal("test-namespace"))
-				Expect(wandb.Spec.Kafka.StorageSize).To(Equal(defaults.DevKafkaStorageSize))
-				Expect(wandb.Spec.Kafka.Replicas).To(Equal(int32(1)))
-				Expect(wandb.Spec.Kafka.Config.Resources.Requests).To(BeEmpty())
-				Expect(wandb.Spec.Kafka.Config.Resources.Limits).To(BeEmpty())
-				Expect(wandb.Spec.Kafka.Config.ReplicationConfig.DefaultReplicationFactor).To(Equal(int32(1)))
-				Expect(wandb.Spec.Kafka.Config.ReplicationConfig.MinInSyncReplicas).To(Equal(int32(1)))
-				Expect(wandb.Spec.Kafka.Config.ReplicationConfig.OffsetsTopicRF).To(Equal(int32(1)))
-				Expect(wandb.Spec.Kafka.Config.ReplicationConfig.TransactionStateRF).To(Equal(int32(1)))
-				Expect(wandb.Spec.Kafka.Config.ReplicationConfig.TransactionStateISR).To(Equal(int32(1)))
+				g.Expect(wandb.Spec.Kafka.Namespace).To(g.Equal("test-namespace"))
+				g.Expect(wandb.Spec.Kafka.StorageSize).To(g.Equal(defaults.DevKafkaStorageSize))
+				g.Expect(wandb.Spec.Kafka.Replicas).To(g.Equal(int32(1)))
+				g.Expect(wandb.Spec.Kafka.Config.Resources.Requests).To(g.BeEmpty())
+				g.Expect(wandb.Spec.Kafka.Config.Resources.Limits).To(g.BeEmpty())
+				g.Expect(wandb.Spec.Kafka.Config.ReplicationConfig.DefaultReplicationFactor).To(g.Equal(int32(1)))
+				g.Expect(wandb.Spec.Kafka.Config.ReplicationConfig.MinInSyncReplicas).To(g.Equal(int32(1)))
+				g.Expect(wandb.Spec.Kafka.Config.ReplicationConfig.OffsetsTopicRF).To(g.Equal(int32(1)))
+				g.Expect(wandb.Spec.Kafka.Config.ReplicationConfig.TransactionStateRF).To(g.Equal(int32(1)))
+				g.Expect(wandb.Spec.Kafka.Config.ReplicationConfig.TransactionStateISR).To(g.Equal(int32(1)))
 			})
 		})
 
@@ -71,10 +69,10 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Kafka", func() {
 					},
 				}
 
-				err := defaulter.Default(ctx, wandb)
-				Expect(err).ToNot(HaveOccurred())
+				err := Default(ctx, wandb)
+				g.Expect(err).ToNot(g.HaveOccurred())
 
-				Expect(wandb.Spec.Kafka.Namespace).To(Equal("custom-kafka-namespace"))
+				g.Expect(wandb.Spec.Kafka.Namespace).To(g.Equal("custom-kafka-namespace"))
 			})
 		})
 
@@ -94,11 +92,11 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Kafka", func() {
 					},
 				}
 
-				err := defaulter.Default(ctx, wandb)
-				Expect(err).ToNot(HaveOccurred())
+				err := Default(ctx, wandb)
+				g.Expect(err).ToNot(g.HaveOccurred())
 
-				Expect(wandb.Spec.Kafka.StorageSize).To(Equal("20Gi"))
-				Expect(wandb.Spec.Kafka.StorageSize).ToNot(Equal(defaults.DevKafkaStorageSize))
+				g.Expect(wandb.Spec.Kafka.StorageSize).To(g.Equal("20Gi"))
+				g.Expect(wandb.Spec.Kafka.StorageSize).ToNot(g.Equal(defaults.DevKafkaStorageSize))
 			})
 		})
 
@@ -118,11 +116,11 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Kafka", func() {
 					},
 				}
 
-				err := defaulter.Default(ctx, wandb)
-				Expect(err).ToNot(HaveOccurred())
+				err := Default(ctx, wandb)
+				g.Expect(err).ToNot(g.HaveOccurred())
 
-				Expect(wandb.Spec.Kafka.Replicas).To(Equal(int32(5)))
-				Expect(wandb.Spec.Kafka.Replicas).ToNot(Equal(int32(1)))
+				g.Expect(wandb.Spec.Kafka.Replicas).To(g.Equal(int32(5)))
+				g.Expect(wandb.Spec.Kafka.Replicas).ToNot(g.Equal(int32(1)))
 			})
 		})
 
@@ -141,12 +139,12 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Kafka", func() {
 					},
 				}
 
-				err := defaulter.Default(ctx, wandb)
-				Expect(err).ToNot(HaveOccurred())
+				err := Default(ctx, wandb)
+				g.Expect(err).ToNot(g.HaveOccurred())
 
-				Expect(wandb.Spec.Kafka.Namespace).To(Equal("test-namespace"))
-				Expect(wandb.Spec.Kafka.StorageSize).To(Equal(defaults.DevKafkaStorageSize))
-				Expect(wandb.Spec.Kafka.Replicas).To(Equal(int32(1)))
+				g.Expect(wandb.Spec.Kafka.Namespace).To(g.Equal("test-namespace"))
+				g.Expect(wandb.Spec.Kafka.StorageSize).To(g.Equal(defaults.DevKafkaStorageSize))
+				g.Expect(wandb.Spec.Kafka.Replicas).To(g.Equal(int32(1)))
 			})
 		})
 	})
@@ -167,20 +165,20 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Kafka", func() {
 					},
 				}
 
-				err := defaulter.Default(ctx, wandb)
-				Expect(err).ToNot(HaveOccurred())
+				err := Default(ctx, wandb)
+				g.Expect(err).ToNot(g.HaveOccurred())
 
-				Expect(wandb.Spec.Kafka.Namespace).To(Equal("test-namespace"))
-				Expect(wandb.Spec.Kafka.StorageSize).To(Equal(defaults.SmallKafkaStorageSize))
-				Expect(wandb.Spec.Kafka.Replicas).To(Equal(int32(3)))
+				g.Expect(wandb.Spec.Kafka.Namespace).To(g.Equal("test-namespace"))
+				g.Expect(wandb.Spec.Kafka.StorageSize).To(g.Equal(defaults.SmallKafkaStorageSize))
+				g.Expect(wandb.Spec.Kafka.Replicas).To(g.Equal(int32(3)))
 
-				Expect(wandb.Spec.Kafka.Config).ToNot(BeNil())
-				Expect(wandb.Spec.Kafka.Config.Resources.Requests).ToNot(BeNil())
-				Expect(wandb.Spec.Kafka.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(resource.MustParse(defaults.SmallKafkaCpuRequest)))
-				Expect(wandb.Spec.Kafka.Config.Resources.Requests[corev1.ResourceMemory]).To(Equal(resource.MustParse(defaults.SmallKafkaMemoryRequest)))
-				Expect(wandb.Spec.Kafka.Config.Resources.Limits).ToNot(BeNil())
-				Expect(wandb.Spec.Kafka.Config.Resources.Limits[corev1.ResourceCPU]).To(Equal(resource.MustParse(defaults.SmallKafkaCpuLimit)))
-				Expect(wandb.Spec.Kafka.Config.Resources.Limits[corev1.ResourceMemory]).To(Equal(resource.MustParse(defaults.SmallKafkaMemoryLimit)))
+				g.Expect(wandb.Spec.Kafka.Config).ToNot(g.BeNil())
+				g.Expect(wandb.Spec.Kafka.Config.Resources.Requests).ToNot(g.BeNil())
+				g.Expect(wandb.Spec.Kafka.Config.Resources.Requests[corev1.ResourceCPU]).To(g.Equal(resource.MustParse(defaults.SmallKafkaCpuRequest)))
+				g.Expect(wandb.Spec.Kafka.Config.Resources.Requests[corev1.ResourceMemory]).To(g.Equal(resource.MustParse(defaults.SmallKafkaMemoryRequest)))
+				g.Expect(wandb.Spec.Kafka.Config.Resources.Limits).ToNot(g.BeNil())
+				g.Expect(wandb.Spec.Kafka.Config.Resources.Limits[corev1.ResourceCPU]).To(g.Equal(resource.MustParse(defaults.SmallKafkaCpuLimit)))
+				g.Expect(wandb.Spec.Kafka.Config.Resources.Limits[corev1.ResourceMemory]).To(g.Equal(resource.MustParse(defaults.SmallKafkaMemoryLimit)))
 			})
 		})
 
@@ -207,19 +205,19 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Kafka", func() {
 					},
 				}
 
-				err := defaulter.Default(ctx, wandb)
-				Expect(err).ToNot(HaveOccurred())
+				err := Default(ctx, wandb)
+				g.Expect(err).ToNot(g.HaveOccurred())
 
-				Expect(wandb.Spec.Kafka.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(customCPU))
-				Expect(wandb.Spec.Kafka.Config.Resources.Requests[corev1.ResourceMemory]).To(Equal(resource.MustParse(defaults.SmallKafkaMemoryRequest)))
-				Expect(wandb.Spec.Kafka.Config.Resources.Limits[corev1.ResourceCPU]).To(Equal(resource.MustParse(defaults.SmallKafkaCpuLimit)))
-				Expect(wandb.Spec.Kafka.Config.Resources.Limits[corev1.ResourceMemory]).To(Equal(resource.MustParse(defaults.SmallKafkaMemoryLimit)))
+				g.Expect(wandb.Spec.Kafka.Config.Resources.Requests[corev1.ResourceCPU]).To(g.Equal(customCPU))
+				g.Expect(wandb.Spec.Kafka.Config.Resources.Requests[corev1.ResourceMemory]).To(g.Equal(resource.MustParse(defaults.SmallKafkaMemoryRequest)))
+				g.Expect(wandb.Spec.Kafka.Config.Resources.Limits[corev1.ResourceCPU]).To(g.Equal(resource.MustParse(defaults.SmallKafkaCpuLimit)))
+				g.Expect(wandb.Spec.Kafka.Config.Resources.Limits[corev1.ResourceMemory]).To(g.Equal(resource.MustParse(defaults.SmallKafkaMemoryLimit)))
 
-				Expect(wandb.Spec.Kafka.Config.ReplicationConfig.DefaultReplicationFactor).To(Equal(int32(3)))
-				Expect(wandb.Spec.Kafka.Config.ReplicationConfig.MinInSyncReplicas).To(Equal(int32(2)))
-				Expect(wandb.Spec.Kafka.Config.ReplicationConfig.OffsetsTopicRF).To(Equal(int32(3)))
-				Expect(wandb.Spec.Kafka.Config.ReplicationConfig.TransactionStateRF).To(Equal(int32(3)))
-				Expect(wandb.Spec.Kafka.Config.ReplicationConfig.TransactionStateISR).To(Equal(int32(2)))
+				g.Expect(wandb.Spec.Kafka.Config.ReplicationConfig.DefaultReplicationFactor).To(g.Equal(int32(3)))
+				g.Expect(wandb.Spec.Kafka.Config.ReplicationConfig.MinInSyncReplicas).To(g.Equal(int32(2)))
+				g.Expect(wandb.Spec.Kafka.Config.ReplicationConfig.OffsetsTopicRF).To(g.Equal(int32(3)))
+				g.Expect(wandb.Spec.Kafka.Config.ReplicationConfig.TransactionStateRF).To(g.Equal(int32(3)))
+				g.Expect(wandb.Spec.Kafka.Config.ReplicationConfig.TransactionStateISR).To(g.Equal(int32(2)))
 			})
 		})
 
@@ -246,14 +244,14 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Kafka", func() {
 					},
 				}
 
-				err := defaulter.Default(ctx, wandb)
-				Expect(err).ToNot(HaveOccurred())
+				err := Default(ctx, wandb)
+				g.Expect(err).ToNot(g.HaveOccurred())
 
-				Expect(wandb.Spec.Kafka.Config.ReplicationConfig.DefaultReplicationFactor).To(Equal(customDefaultRF))
-				Expect(wandb.Spec.Kafka.Config.ReplicationConfig.MinInSyncReplicas).To(Equal(customMinISR))
-				Expect(wandb.Spec.Kafka.Config.ReplicationConfig.OffsetsTopicRF).To(Equal(int32(3)))
-				Expect(wandb.Spec.Kafka.Config.ReplicationConfig.TransactionStateRF).To(Equal(int32(3)))
-				Expect(wandb.Spec.Kafka.Config.ReplicationConfig.TransactionStateISR).To(Equal(int32(2)))
+				g.Expect(wandb.Spec.Kafka.Config.ReplicationConfig.DefaultReplicationFactor).To(g.Equal(customDefaultRF))
+				g.Expect(wandb.Spec.Kafka.Config.ReplicationConfig.MinInSyncReplicas).To(g.Equal(customMinISR))
+				g.Expect(wandb.Spec.Kafka.Config.ReplicationConfig.OffsetsTopicRF).To(g.Equal(int32(3)))
+				g.Expect(wandb.Spec.Kafka.Config.ReplicationConfig.TransactionStateRF).To(g.Equal(int32(3)))
+				g.Expect(wandb.Spec.Kafka.Config.ReplicationConfig.TransactionStateISR).To(g.Equal(int32(2)))
 			})
 		})
 
@@ -273,10 +271,10 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Kafka", func() {
 					},
 				}
 
-				err := defaulter.Default(ctx, wandb)
-				Expect(err).ToNot(HaveOccurred())
+				err := Default(ctx, wandb)
+				g.Expect(err).ToNot(g.HaveOccurred())
 
-				Expect(wandb.Spec.Kafka.Replicas).To(Equal(int32(3)))
+				g.Expect(wandb.Spec.Kafka.Replicas).To(g.Equal(int32(3)))
 			})
 		})
 	})
@@ -296,13 +294,13 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Kafka", func() {
 					},
 				}
 
-				err := defaulter.Default(ctx, wandb)
-				Expect(err).ToNot(HaveOccurred())
+				err := Default(ctx, wandb)
+				g.Expect(err).ToNot(g.HaveOccurred())
 
-				Expect(wandb.Spec.Size).To(Equal(apiv2.WBSizeDev))
-				Expect(wandb.Spec.Kafka.Namespace).To(Equal("test-namespace"))
-				Expect(wandb.Spec.Kafka.StorageSize).To(Equal(defaults.DevKafkaStorageSize))
-				Expect(wandb.Spec.Kafka.Replicas).To(Equal(int32(1)))
+				g.Expect(wandb.Spec.Size).To(g.Equal(apiv2.WBSizeDev))
+				g.Expect(wandb.Spec.Kafka.Namespace).To(g.Equal("test-namespace"))
+				g.Expect(wandb.Spec.Kafka.StorageSize).To(g.Equal(defaults.DevKafkaStorageSize))
+				g.Expect(wandb.Spec.Kafka.Replicas).To(g.Equal(int32(1)))
 			})
 		})
 	})
@@ -346,20 +344,20 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Kafka", func() {
 					},
 				}
 
-				err := defaulter.Default(ctx, wandb)
-				Expect(err).ToNot(HaveOccurred())
+				err := Default(ctx, wandb)
+				g.Expect(err).ToNot(g.HaveOccurred())
 
-				Expect(wandb.Spec.Kafka.Namespace).To(Equal(customNamespace))
-				Expect(wandb.Spec.Kafka.StorageSize).To(Equal(customStorage))
-				Expect(wandb.Spec.Kafka.Replicas).To(Equal(customReplicas))
-				Expect(wandb.Spec.Kafka.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(customCPURequest))
-				Expect(wandb.Spec.Kafka.Config.Resources.Requests[corev1.ResourceMemory]).To(Equal(customMemoryRequest))
-				Expect(wandb.Spec.Kafka.Config.Resources.Limits[corev1.ResourceCPU]).To(Equal(customCPULimit))
-				Expect(wandb.Spec.Kafka.Config.Resources.Limits[corev1.ResourceMemory]).To(Equal(customMemoryLimit))
+				g.Expect(wandb.Spec.Kafka.Namespace).To(g.Equal(customNamespace))
+				g.Expect(wandb.Spec.Kafka.StorageSize).To(g.Equal(customStorage))
+				g.Expect(wandb.Spec.Kafka.Replicas).To(g.Equal(customReplicas))
+				g.Expect(wandb.Spec.Kafka.Config.Resources.Requests[corev1.ResourceCPU]).To(g.Equal(customCPURequest))
+				g.Expect(wandb.Spec.Kafka.Config.Resources.Requests[corev1.ResourceMemory]).To(g.Equal(customMemoryRequest))
+				g.Expect(wandb.Spec.Kafka.Config.Resources.Limits[corev1.ResourceCPU]).To(g.Equal(customCPULimit))
+				g.Expect(wandb.Spec.Kafka.Config.Resources.Limits[corev1.ResourceMemory]).To(g.Equal(customMemoryLimit))
 
-				Expect(wandb.Spec.Kafka.StorageSize).ToNot(Equal(defaults.SmallKafkaStorageSize))
-				Expect(wandb.Spec.Kafka.Replicas).ToNot(Equal(int32(3)))
-				Expect(wandb.Spec.Kafka.Config.Resources.Requests[corev1.ResourceCPU]).ToNot(Equal(resource.MustParse(defaults.SmallKafkaCpuRequest)))
+				g.Expect(wandb.Spec.Kafka.StorageSize).ToNot(g.Equal(defaults.SmallKafkaStorageSize))
+				g.Expect(wandb.Spec.Kafka.Replicas).ToNot(g.Equal(int32(3)))
+				g.Expect(wandb.Spec.Kafka.Config.Resources.Requests[corev1.ResourceCPU]).ToNot(g.Equal(resource.MustParse(defaults.SmallKafkaCpuRequest)))
 			})
 		})
 	})

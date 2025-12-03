@@ -1,4 +1,4 @@
-package controller
+package v1
 
 import (
 	"context"
@@ -64,7 +64,7 @@ var deployerSpec = spec.Spec{
 }
 
 var recorder *record.FakeRecorder
-var reconciler *WeightsAndBiasesReconciler
+var config *WandbV1ReconcileConfig
 
 var _ = Describe("WeightsandbiasesController", func() {
 	Describe("DryRun Reconcile", func() {
@@ -73,11 +73,9 @@ var _ = Describe("WeightsandbiasesController", func() {
 			recorder = record.NewFakeRecorder(10)
 			deployerClient := &deployerfakes.FakeDeployerInterface{}
 			deployerClient.GetSpecReturns(&deployerSpec, nil)
-			reconciler = &WeightsAndBiasesReconciler{
-				Client:         k8sClient,
+			config = &WandbV1ReconcileConfig{
 				IsAirgapped:    false,
 				DeployerClient: deployerClient,
-				Scheme:         scheme.Scheme,
 				Recorder:       recorder,
 				DryRun:         true,
 			}
@@ -105,7 +103,7 @@ var _ = Describe("WeightsandbiasesController", func() {
 			}
 			err := k8sClient.Create(ctx, &wandb)
 			Expect(err).ToNot(HaveOccurred())
-			res, err := reconciler.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: wandb.Name, Namespace: wandb.Namespace}})
+			res, err := Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: wandb.Name, Namespace: wandb.Namespace}}, k8sClient, config)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(res).To(Equal(ctrl.Result{RequeueAfter: time.Duration(1 * time.Hour)}))
 		})
@@ -118,7 +116,7 @@ var _ = Describe("WeightsandbiasesController", func() {
 			Expect(err).ToNot(HaveOccurred())
 			err = k8sClient.Delete(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "test-spec-active", Namespace: "default"}})
 			Expect(err).ToNot(HaveOccurred())
-			_, err = reconciler.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: wandb.Name, Namespace: wandb.Namespace}})
+			_, err = Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: wandb.Name, Namespace: wandb.Namespace}}, k8sClient, config)
 			Expect(err).ToNot(HaveOccurred())
 			err = k8sClient.Get(ctx, types.NamespacedName{Name: "test", Namespace: "default"}, &wandb)
 			Expect(err).To(HaveOccurred())
@@ -160,11 +158,9 @@ var _ = Describe("WeightsandbiasesController", func() {
 			recorder = record.NewFakeRecorder(10)
 			deployerClient := &deployerfakes.FakeDeployerInterface{}
 			deployerClient.GetSpecReturns(&deployerSpec, nil)
-			reconciler = &WeightsAndBiasesReconciler{
-				Client:         k8sClient,
+			config = &WandbV1ReconcileConfig{
 				IsAirgapped:    false,
 				DeployerClient: deployerClient,
-				Scheme:         scheme.Scheme,
 				Recorder:       recorder,
 				DryRun:         true,
 			}
@@ -194,7 +190,7 @@ var _ = Describe("WeightsandbiasesController", func() {
 			err = state.New(ctx, k8sClient, &wandb, scheme.Scheme, secrets.New(ctx, k8sClient, &wandb, scheme.Scheme)).SetUserInput(userSpec)
 			Expect(err).ToNot(HaveOccurred())
 
-			res, err := reconciler.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: wandb.Name, Namespace: wandb.Namespace}})
+			res, err := Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: wandb.Name, Namespace: wandb.Namespace}}, k8sClient, config)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(res).To(Equal(ctrl.Result{RequeueAfter: time.Duration(1 * time.Hour)}))
 		})
@@ -208,7 +204,7 @@ var _ = Describe("WeightsandbiasesController", func() {
 			Expect(err).ToNot(HaveOccurred())
 			err = k8sClient.Delete(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "test-release-id-spec-active", Namespace: "default"}})
 			Expect(err).ToNot(HaveOccurred())
-			_, err = reconciler.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: wandb.Name, Namespace: wandb.Namespace}})
+			_, err = Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: wandb.Name, Namespace: wandb.Namespace}}, k8sClient, config)
 			Expect(err).ToNot(HaveOccurred())
 			err = k8sClient.Get(ctx, types.NamespacedName{Name: "test-release-id", Namespace: "default"}, &wandb)
 			Expect(err).To(HaveOccurred())

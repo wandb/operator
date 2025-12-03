@@ -18,15 +18,11 @@ package v2
 
 import (
 	"context"
-	"fmt"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/validation/field"
-	ctrl "sigs.k8s.io/controller-runtime"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	apiv2 "github.com/wandb/operator/api/v2"
@@ -34,62 +30,36 @@ import (
 
 var whLog = ctrllog.Log.WithName("wandb-v2-webhook")
 
-type WeightsAndBiasesCustomValidator struct{}
+func ValidateCreate(ctx context.Context, wandb *apiv2.WeightsAndBiases) (admission.Warnings, error) {
+	whLog.Info("validate V2 create", "name", wandb.Name)
 
-func (v *WeightsAndBiasesCustomValidator) SetupWebhookWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewWebhookManagedBy(mgr).
-		For(&apiv2.WeightsAndBiases{}).
-		WithValidator(v).
-		Complete()
+	return validateSpec(ctx, wandb)
 }
 
-func (v *WeightsAndBiasesCustomValidator) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
-	wandb, ok := obj.(*apiv2.WeightsAndBiases)
-	if !ok {
-		return nil, fmt.Errorf("expected a WeightsAndBiases object but got %T", obj)
-	}
-	whLog.Info("validate create", "name", wandb.Name)
-
-	return v.validateSpec(ctx, wandb)
-}
-
-func (v *WeightsAndBiasesCustomValidator) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
+func ValidateUpdate(ctx context.Context, oldWandb, newWandb *apiv2.WeightsAndBiases) (admission.Warnings, error) {
 	var specWarnings, changeWarnings admission.Warnings
 	var err error
 
-	newWandb, ok := newObj.(*apiv2.WeightsAndBiases)
-	if !ok {
-		return nil, fmt.Errorf("expected a WeightsAndBiases object for the newObj but got %T", newObj)
-	}
-	whLog.Info("validate update", "name", newWandb.Name)
+	whLog.Info("validate V2 update", "name", newWandb.Name)
 
-	oldWandb, ok := oldObj.(*apiv2.WeightsAndBiases)
-	if !ok {
-		return nil, fmt.Errorf("expected a WeightsAndBiases object for the oldObj but got %T", oldObj)
-	}
-
-	if specWarnings, err = v.validateSpec(ctx, newWandb); err != nil {
+	if specWarnings, err = validateSpec(ctx, newWandb); err != nil {
 		return specWarnings, err
 	}
-	changeWarnings, err = v.validateChanges(ctx, oldWandb, newWandb)
+	changeWarnings, err = validateChanges(ctx, oldWandb, newWandb)
 	return append(specWarnings, changeWarnings...), err
 }
 
-func (v *WeightsAndBiasesCustomValidator) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
-	wandb, ok := obj.(*apiv2.WeightsAndBiases)
-	if !ok {
-		return nil, fmt.Errorf("expected a WeightsAndBiases object but got %T", obj)
-	}
-	whLog.Info("validate delete", "name", wandb.Name)
+func ValidateDelete(ctx context.Context, wandb *apiv2.WeightsAndBiases) (admission.Warnings, error) {
+	whLog.Info("validate V2 delete", "name", wandb.Name)
 
 	return nil, nil
 }
 
-func (v *WeightsAndBiasesCustomValidator) validateSpec(ctx context.Context, newWandb *apiv2.WeightsAndBiases) (admission.Warnings, error) {
+func validateSpec(ctx context.Context, newWandb *apiv2.WeightsAndBiases) (admission.Warnings, error) {
 	var allErrors field.ErrorList
 	var warnings admission.Warnings
 
-	allErrors = append(allErrors, v.validateRedisSpec(newWandb)...)
+	allErrors = append(allErrors, validateRedisSpec(newWandb)...)
 
 	if len(allErrors) == 0 {
 		return warnings, nil
@@ -102,11 +72,11 @@ func (v *WeightsAndBiasesCustomValidator) validateSpec(ctx context.Context, newW
 	)
 }
 
-func (v *WeightsAndBiasesCustomValidator) validateChanges(ctx context.Context, newWandb *apiv2.WeightsAndBiases, oldWandb *apiv2.WeightsAndBiases) (admission.Warnings, error) {
+func validateChanges(ctx context.Context, newWandb *apiv2.WeightsAndBiases, oldWandb *apiv2.WeightsAndBiases) (admission.Warnings, error) {
 	var allErrors field.ErrorList
 	var warnings admission.Warnings
 
-	allErrors = append(allErrors, v.validateRedisChanges(newWandb, oldWandb)...)
+	allErrors = append(allErrors, validateRedisChanges(newWandb, oldWandb)...)
 
 	if len(allErrors) == 0 {
 		return warnings, nil
@@ -118,5 +88,3 @@ func (v *WeightsAndBiasesCustomValidator) validateChanges(ctx context.Context, n
 		allErrors,
 	)
 }
-
-var _ webhook.CustomValidator = &WeightsAndBiasesCustomValidator{}

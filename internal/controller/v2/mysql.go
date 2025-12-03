@@ -1,4 +1,4 @@
-package wandb_v2
+package v2
 
 import (
 	"context"
@@ -10,20 +10,22 @@ import (
 	v1 "github.com/wandb/operator/internal/vendored/percona-operator/pxc/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func (r *WeightsAndBiasesV2Reconciler) mysqlResourceReconcile(
+func mysqlResourceReconcile(
 	ctx context.Context,
+	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
 ) error {
 	var err error
 	var desired *v1.PerconaXtraDBCluster
 	var specNamespacedName = mysqlSpecNamespacedName(wandb.Spec.MySQL)
 
-	if desired, err = translatorv2.ToMySQLVendorSpec(ctx, wandb.Spec.MySQL, wandb, r.Scheme); err != nil {
+	if desired, err = translatorv2.ToMySQLVendorSpec(ctx, wandb.Spec.MySQL, wandb, client.Scheme()); err != nil {
 		return err
 	}
-	if err = percona.CrudResource(ctx, r.Client, specNamespacedName, desired); err != nil {
+	if err = percona.CrudResource(ctx, client, specNamespacedName, desired); err != nil {
 		return err
 	}
 
@@ -35,8 +37,9 @@ func (r *WeightsAndBiasesV2Reconciler) mysqlResourceReconcile(
 	return nil
 }
 
-func (r *WeightsAndBiasesV2Reconciler) mysqlStatusUpdate(
+func mysqlStatusUpdate(
 	ctx context.Context,
+	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
 ) error {
 	log := ctrl.LoggerFrom(ctx)
@@ -45,11 +48,11 @@ func (r *WeightsAndBiasesV2Reconciler) mysqlStatusUpdate(
 	var conditions []common.MySQLCondition
 	var specNamespacedName = mysqlSpecNamespacedName(wandb.Spec.MySQL)
 
-	if conditions, err = percona.GetConditions(ctx, r.Client, specNamespacedName); err != nil {
+	if conditions, err = percona.GetConditions(ctx, client, specNamespacedName); err != nil {
 		return err
 	}
 	wandb.Status.MySQLStatus = translatorv2.ExtractMySQLStatus(ctx, conditions)
-	if err = r.Status().Update(ctx, wandb); err != nil {
+	if err = client.Status().Update(ctx, wandb); err != nil {
 		log.Error(err, "failed to update status")
 		return err
 	}
