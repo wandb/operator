@@ -63,8 +63,6 @@ ENV HELM_CONFIG_HOME=/helm/.config/helm
 ENV HELM_DATA_HOME=/helm/.local/share/helm
 '''
 
-'''
-
 DOMAIN = "wandb.com"
 GROUP = "apps"
 VERSION = "v1"
@@ -97,7 +95,7 @@ def vetfmt():
 
 
 def binary():
-    return 'CGO_ENABLED=0 GOOS=linux GO111MODULE=on go build -o tilt_bin/manager cmd/controller/main.go'
+    return 'CGO_ENABLED=0 GOOS=linux GO111MODULE=on go build -o tilt_bin/manager cmd/main.go'
 
 ################################################################################
 # PREREQUISITES CHECK
@@ -307,7 +305,7 @@ local_resource('Regenerate-RBAC',
 # Automatically recompile controller binary when source code changes
 ################################################################################
 
-deps = ['controllers', 'pkg', 'cmd/controller/main.go', 'api', 'internal']
+deps = ['controllers', 'pkg', 'cmd/main.go', 'api', 'internal']
 
 local_resource('Watch&Rebuild', rebuild() + "; " + binary(),
                deps=deps,
@@ -347,7 +345,7 @@ local_resource('Regenerate-CRDs',
 ################################################################################
 
 local_resource(
-    'Install dev CR',
+    'Install ' + settings.get("wandbCrName") + ' CR',
     cmd='cp ./hack/testing-manifests/wandb/' + settings.get('wandbCrName') + '.yaml ' + DIST_DIR + '/test-wandb-cr.yaml && ' +
         'kubectl apply -f ' + DIST_DIR + '/test-wandb-cr.yaml',
     labels="wandb",

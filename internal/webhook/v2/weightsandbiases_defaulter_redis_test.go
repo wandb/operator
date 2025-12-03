@@ -4,7 +4,7 @@ import (
 	"context"
 
 	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	g "github.com/onsi/gomega"
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/defaults"
 	corev1 "k8s.io/api/core/v1"
@@ -14,12 +14,10 @@ import (
 
 var _ = Describe("WeightsAndBiasesCustomDefaulter - Redis", func() {
 	var (
-		defaulter *WeightsAndBiasesCustomDefaulter
-		ctx       context.Context
+		ctx context.Context
 	)
 
 	BeforeEach(func() {
-		defaulter = &WeightsAndBiasesCustomDefaulter{}
 		ctx = context.Background()
 	})
 
@@ -39,16 +37,16 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Redis", func() {
 					},
 				}
 
-				err := defaulter.Default(ctx, wandb)
-				Expect(err).ToNot(HaveOccurred())
+				err := Default(ctx, wandb)
+				g.Expect(err).ToNot(g.HaveOccurred())
 
-				Expect(wandb.Spec.Redis.Namespace).To(Equal("test-namespace"))
-				Expect(wandb.Spec.Redis.StorageSize).To(Equal(defaults.DevStorageRequest))
-				Expect(wandb.Spec.Redis.Config.Resources.Requests).To(BeEmpty())
-				Expect(wandb.Spec.Redis.Config.Resources.Limits).To(BeEmpty())
-				Expect(wandb.Spec.Redis.Sentinel.Enabled).To(BeFalse())
-				Expect(wandb.Spec.Redis.Sentinel.Config.Resources.Requests).To(BeEmpty())
-				Expect(wandb.Spec.Redis.Sentinel.Config.Resources.Limits).To(BeEmpty())
+				g.Expect(wandb.Spec.Redis.Namespace).To(g.Equal("test-namespace"))
+				g.Expect(wandb.Spec.Redis.StorageSize).To(g.Equal(defaults.DevStorageRequest))
+				g.Expect(wandb.Spec.Redis.Config.Resources.Requests).To(g.BeEmpty())
+				g.Expect(wandb.Spec.Redis.Config.Resources.Limits).To(g.BeEmpty())
+				g.Expect(wandb.Spec.Redis.Sentinel.Enabled).To(g.BeFalse())
+				g.Expect(wandb.Spec.Redis.Sentinel.Config.Resources.Requests).To(g.BeEmpty())
+				g.Expect(wandb.Spec.Redis.Sentinel.Config.Resources.Limits).To(g.BeEmpty())
 			})
 		})
 
@@ -68,10 +66,10 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Redis", func() {
 					},
 				}
 
-				err := defaulter.Default(ctx, wandb)
-				Expect(err).ToNot(HaveOccurred())
+				err := Default(ctx, wandb)
+				g.Expect(err).ToNot(g.HaveOccurred())
 
-				Expect(wandb.Spec.Redis.Namespace).To(Equal("custom-redis-namespace"))
+				g.Expect(wandb.Spec.Redis.Namespace).To(g.Equal("custom-redis-namespace"))
 			})
 		})
 
@@ -91,11 +89,11 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Redis", func() {
 					},
 				}
 
-				err := defaulter.Default(ctx, wandb)
-				Expect(err).ToNot(HaveOccurred())
+				err := Default(ctx, wandb)
+				g.Expect(err).ToNot(g.HaveOccurred())
 
-				Expect(wandb.Spec.Redis.StorageSize).To(Equal("20Gi"))
-				Expect(wandb.Spec.Redis.StorageSize).ToNot(Equal(defaults.DevStorageRequest))
+				g.Expect(wandb.Spec.Redis.StorageSize).To(g.Equal("20Gi"))
+				g.Expect(wandb.Spec.Redis.StorageSize).ToNot(g.Equal(defaults.DevStorageRequest))
 			})
 		})
 
@@ -114,11 +112,11 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Redis", func() {
 					},
 				}
 
-				err := defaulter.Default(ctx, wandb)
-				Expect(err).ToNot(HaveOccurred())
+				err := Default(ctx, wandb)
+				g.Expect(err).ToNot(g.HaveOccurred())
 
-				Expect(wandb.Spec.Redis.Namespace).To(Equal("test-namespace"))
-				Expect(wandb.Spec.Redis.StorageSize).To(Equal(defaults.DevStorageRequest))
+				g.Expect(wandb.Spec.Redis.Namespace).To(g.Equal("test-namespace"))
+				g.Expect(wandb.Spec.Redis.StorageSize).To(g.Equal(defaults.DevStorageRequest))
 			})
 		})
 	})
@@ -139,19 +137,19 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Redis", func() {
 					},
 				}
 
-				err := defaulter.Default(ctx, wandb)
-				Expect(err).ToNot(HaveOccurred())
+				err := Default(ctx, wandb)
+				g.Expect(err).ToNot(g.HaveOccurred())
 
-				Expect(wandb.Spec.Redis.Namespace).To(Equal("test-namespace"))
-				Expect(wandb.Spec.Redis.StorageSize).To(Equal(defaults.SmallStorageRequest))
+				g.Expect(wandb.Spec.Redis.Namespace).To(g.Equal("test-namespace"))
+				g.Expect(wandb.Spec.Redis.StorageSize).To(g.Equal(defaults.SmallStorageRequest))
 
-				Expect(wandb.Spec.Redis.Config).ToNot(BeNil())
-				Expect(wandb.Spec.Redis.Config.Resources.Requests).ToNot(BeNil())
-				Expect(wandb.Spec.Redis.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(resource.MustParse(defaults.SmallReplicaCpuRequest)))
-				Expect(wandb.Spec.Redis.Config.Resources.Requests[corev1.ResourceMemory]).To(Equal(resource.MustParse(defaults.SmallReplicaMemoryRequest)))
-				Expect(wandb.Spec.Redis.Config.Resources.Limits).ToNot(BeNil())
-				Expect(wandb.Spec.Redis.Config.Resources.Limits[corev1.ResourceCPU]).To(Equal(resource.MustParse(defaults.SmallReplicaCpuLimit)))
-				Expect(wandb.Spec.Redis.Config.Resources.Limits[corev1.ResourceMemory]).To(Equal(resource.MustParse(defaults.SmallReplicaMemoryLimit)))
+				g.Expect(wandb.Spec.Redis.Config).ToNot(g.BeNil())
+				g.Expect(wandb.Spec.Redis.Config.Resources.Requests).ToNot(g.BeNil())
+				g.Expect(wandb.Spec.Redis.Config.Resources.Requests[corev1.ResourceCPU]).To(g.Equal(resource.MustParse(defaults.SmallReplicaCpuRequest)))
+				g.Expect(wandb.Spec.Redis.Config.Resources.Requests[corev1.ResourceMemory]).To(g.Equal(resource.MustParse(defaults.SmallReplicaMemoryRequest)))
+				g.Expect(wandb.Spec.Redis.Config.Resources.Limits).ToNot(g.BeNil())
+				g.Expect(wandb.Spec.Redis.Config.Resources.Limits[corev1.ResourceCPU]).To(g.Equal(resource.MustParse(defaults.SmallReplicaCpuLimit)))
+				g.Expect(wandb.Spec.Redis.Config.Resources.Limits[corev1.ResourceMemory]).To(g.Equal(resource.MustParse(defaults.SmallReplicaMemoryLimit)))
 			})
 		})
 
@@ -178,13 +176,13 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Redis", func() {
 					},
 				}
 
-				err := defaulter.Default(ctx, wandb)
-				Expect(err).ToNot(HaveOccurred())
+				err := Default(ctx, wandb)
+				g.Expect(err).ToNot(g.HaveOccurred())
 
-				Expect(wandb.Spec.Redis.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(customCPU))
-				Expect(wandb.Spec.Redis.Config.Resources.Requests[corev1.ResourceMemory]).To(Equal(resource.MustParse(defaults.SmallReplicaMemoryRequest)))
-				Expect(wandb.Spec.Redis.Config.Resources.Limits[corev1.ResourceCPU]).To(Equal(resource.MustParse(defaults.SmallReplicaCpuLimit)))
-				Expect(wandb.Spec.Redis.Config.Resources.Limits[corev1.ResourceMemory]).To(Equal(resource.MustParse(defaults.SmallReplicaMemoryLimit)))
+				g.Expect(wandb.Spec.Redis.Config.Resources.Requests[corev1.ResourceCPU]).To(g.Equal(customCPU))
+				g.Expect(wandb.Spec.Redis.Config.Resources.Requests[corev1.ResourceMemory]).To(g.Equal(resource.MustParse(defaults.SmallReplicaMemoryRequest)))
+				g.Expect(wandb.Spec.Redis.Config.Resources.Limits[corev1.ResourceCPU]).To(g.Equal(resource.MustParse(defaults.SmallReplicaCpuLimit)))
+				g.Expect(wandb.Spec.Redis.Config.Resources.Limits[corev1.ResourceMemory]).To(g.Equal(resource.MustParse(defaults.SmallReplicaMemoryLimit)))
 			})
 		})
 
@@ -203,20 +201,20 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Redis", func() {
 					},
 				}
 
-				err := defaulter.Default(ctx, wandb)
-				Expect(err).ToNot(HaveOccurred())
+				err := Default(ctx, wandb)
+				g.Expect(err).ToNot(g.HaveOccurred())
 
-				Expect(wandb.Spec.Redis.Sentinel).ToNot(BeNil())
-				Expect(wandb.Spec.Redis.Sentinel.Enabled).To(BeTrue())
-				Expect(wandb.Spec.Redis.Sentinel.Config).ToNot(BeNil())
-				Expect(wandb.Spec.Redis.Sentinel.Config.MasterName).To(Equal(defaults.DefaultSentinelGroup))
+				g.Expect(wandb.Spec.Redis.Sentinel).ToNot(g.BeNil())
+				g.Expect(wandb.Spec.Redis.Sentinel.Enabled).To(g.BeTrue())
+				g.Expect(wandb.Spec.Redis.Sentinel.Config).ToNot(g.BeNil())
+				g.Expect(wandb.Spec.Redis.Sentinel.Config.MasterName).To(g.Equal(defaults.DefaultSentinelGroup))
 
-				Expect(wandb.Spec.Redis.Sentinel.Config.Resources.Requests).ToNot(BeNil())
-				Expect(wandb.Spec.Redis.Sentinel.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(resource.MustParse(defaults.SmallSentinelCpuRequest)))
-				Expect(wandb.Spec.Redis.Sentinel.Config.Resources.Requests[corev1.ResourceMemory]).To(Equal(resource.MustParse(defaults.SmallSentinelMemoryRequest)))
-				Expect(wandb.Spec.Redis.Sentinel.Config.Resources.Limits).ToNot(BeNil())
-				Expect(wandb.Spec.Redis.Sentinel.Config.Resources.Limits[corev1.ResourceCPU]).To(Equal(resource.MustParse(defaults.SmallSentinelCpuLimit)))
-				Expect(wandb.Spec.Redis.Sentinel.Config.Resources.Limits[corev1.ResourceMemory]).To(Equal(resource.MustParse(defaults.SmallSentinelMemoryLimit)))
+				g.Expect(wandb.Spec.Redis.Sentinel.Config.Resources.Requests).ToNot(g.BeNil())
+				g.Expect(wandb.Spec.Redis.Sentinel.Config.Resources.Requests[corev1.ResourceCPU]).To(g.Equal(resource.MustParse(defaults.SmallSentinelCpuRequest)))
+				g.Expect(wandb.Spec.Redis.Sentinel.Config.Resources.Requests[corev1.ResourceMemory]).To(g.Equal(resource.MustParse(defaults.SmallSentinelMemoryRequest)))
+				g.Expect(wandb.Spec.Redis.Sentinel.Config.Resources.Limits).ToNot(g.BeNil())
+				g.Expect(wandb.Spec.Redis.Sentinel.Config.Resources.Limits[corev1.ResourceCPU]).To(g.Equal(resource.MustParse(defaults.SmallSentinelCpuLimit)))
+				g.Expect(wandb.Spec.Redis.Sentinel.Config.Resources.Limits[corev1.ResourceMemory]).To(g.Equal(resource.MustParse(defaults.SmallSentinelMemoryLimit)))
 			})
 		})
 
@@ -248,18 +246,18 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Redis", func() {
 					},
 				}
 
-				err := defaulter.Default(ctx, wandb)
-				Expect(err).ToNot(HaveOccurred())
+				err := Default(ctx, wandb)
+				g.Expect(err).ToNot(g.HaveOccurred())
 
-				Expect(wandb.Spec.Redis.Sentinel.Config.MasterName).To(Equal(customMasterName))
-				Expect(wandb.Spec.Redis.Sentinel.Config.MasterName).ToNot(Equal(defaults.DefaultSentinelGroup))
-				Expect(wandb.Spec.Redis.Sentinel.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(customCPU))
-				Expect(wandb.Spec.Redis.Sentinel.Config.Resources.Requests[corev1.ResourceMemory]).To(Equal(resource.MustParse(defaults.SmallSentinelMemoryRequest)))
+				g.Expect(wandb.Spec.Redis.Sentinel.Config.MasterName).To(g.Equal(customMasterName))
+				g.Expect(wandb.Spec.Redis.Sentinel.Config.MasterName).ToNot(g.Equal(defaults.DefaultSentinelGroup))
+				g.Expect(wandb.Spec.Redis.Sentinel.Config.Resources.Requests[corev1.ResourceCPU]).To(g.Equal(customCPU))
+				g.Expect(wandb.Spec.Redis.Sentinel.Config.Resources.Requests[corev1.ResourceMemory]).To(g.Equal(resource.MustParse(defaults.SmallSentinelMemoryRequest)))
 			})
 		})
 
-		Context("when Sentinel is disabled by user", func() {
-			It("should not enable Sentinel", func() {
+		Context("when Sentinel is disabled by user, overriding the default of True", func() {
+			It("should CONTINUE to enable Sentinel", func() {
 				wandb := &apiv2.WeightsAndBiases{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test-wandb",
@@ -276,10 +274,10 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Redis", func() {
 					},
 				}
 
-				err := defaulter.Default(ctx, wandb)
-				Expect(err).ToNot(HaveOccurred())
+				err := Default(ctx, wandb)
+				g.Expect(err).ToNot(g.HaveOccurred())
 
-				Expect(wandb.Spec.Redis.Sentinel.Enabled).To(BeFalse())
+				g.Expect(wandb.Spec.Redis.Sentinel.Enabled).To(g.BeTrue())
 			})
 		})
 	})
@@ -299,12 +297,12 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Redis", func() {
 					},
 				}
 
-				err := defaulter.Default(ctx, wandb)
-				Expect(err).ToNot(HaveOccurred())
+				err := Default(ctx, wandb)
+				g.Expect(err).ToNot(g.HaveOccurred())
 
-				Expect(wandb.Spec.Size).To(Equal(apiv2.WBSizeDev))
-				Expect(wandb.Spec.Redis.Namespace).To(Equal("test-namespace"))
-				Expect(wandb.Spec.Redis.StorageSize).To(Equal(defaults.DevStorageRequest))
+				g.Expect(wandb.Spec.Size).To(g.Equal(apiv2.WBSizeDev))
+				g.Expect(wandb.Spec.Redis.Namespace).To(g.Equal("test-namespace"))
+				g.Expect(wandb.Spec.Redis.StorageSize).To(g.Equal(defaults.DevStorageRequest))
 			})
 		})
 	})
@@ -367,23 +365,23 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Redis", func() {
 					},
 				}
 
-				err := defaulter.Default(ctx, wandb)
-				Expect(err).ToNot(HaveOccurred())
+				err := Default(ctx, wandb)
+				g.Expect(err).ToNot(g.HaveOccurred())
 
-				Expect(wandb.Spec.Redis.Namespace).To(Equal(customNamespace))
-				Expect(wandb.Spec.Redis.StorageSize).To(Equal(customStorage))
-				Expect(wandb.Spec.Redis.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(customCPU))
-				Expect(wandb.Spec.Redis.Config.Resources.Requests[corev1.ResourceMemory]).To(Equal(customMemory))
-				Expect(wandb.Spec.Redis.Config.Resources.Limits[corev1.ResourceCPU]).To(Equal(customCPULimit))
-				Expect(wandb.Spec.Redis.Config.Resources.Limits[corev1.ResourceMemory]).To(Equal(customMemoryLimit))
-				Expect(wandb.Spec.Redis.Sentinel.Config.MasterName).To(Equal(customMasterName))
-				Expect(wandb.Spec.Redis.Sentinel.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(customSentinelCPU))
-				Expect(wandb.Spec.Redis.Sentinel.Config.Resources.Requests[corev1.ResourceMemory]).To(Equal(customSentinelMemory))
-				Expect(wandb.Spec.Redis.Sentinel.Config.Resources.Limits[corev1.ResourceCPU]).To(Equal(customSentinelCPULimit))
-				Expect(wandb.Spec.Redis.Sentinel.Config.Resources.Limits[corev1.ResourceMemory]).To(Equal(customSentinelMemoryLimit))
+				g.Expect(wandb.Spec.Redis.Namespace).To(g.Equal(customNamespace))
+				g.Expect(wandb.Spec.Redis.StorageSize).To(g.Equal(customStorage))
+				g.Expect(wandb.Spec.Redis.Config.Resources.Requests[corev1.ResourceCPU]).To(g.Equal(customCPU))
+				g.Expect(wandb.Spec.Redis.Config.Resources.Requests[corev1.ResourceMemory]).To(g.Equal(customMemory))
+				g.Expect(wandb.Spec.Redis.Config.Resources.Limits[corev1.ResourceCPU]).To(g.Equal(customCPULimit))
+				g.Expect(wandb.Spec.Redis.Config.Resources.Limits[corev1.ResourceMemory]).To(g.Equal(customMemoryLimit))
+				g.Expect(wandb.Spec.Redis.Sentinel.Config.MasterName).To(g.Equal(customMasterName))
+				g.Expect(wandb.Spec.Redis.Sentinel.Config.Resources.Requests[corev1.ResourceCPU]).To(g.Equal(customSentinelCPU))
+				g.Expect(wandb.Spec.Redis.Sentinel.Config.Resources.Requests[corev1.ResourceMemory]).To(g.Equal(customSentinelMemory))
+				g.Expect(wandb.Spec.Redis.Sentinel.Config.Resources.Limits[corev1.ResourceCPU]).To(g.Equal(customSentinelCPULimit))
+				g.Expect(wandb.Spec.Redis.Sentinel.Config.Resources.Limits[corev1.ResourceMemory]).To(g.Equal(customSentinelMemoryLimit))
 
-				Expect(wandb.Spec.Redis.StorageSize).ToNot(Equal(defaults.SmallStorageRequest))
-				Expect(wandb.Spec.Redis.Config.Resources.Requests[corev1.ResourceCPU]).ToNot(Equal(resource.MustParse(defaults.SmallReplicaCpuRequest)))
+				g.Expect(wandb.Spec.Redis.StorageSize).ToNot(g.Equal(defaults.SmallStorageRequest))
+				g.Expect(wandb.Spec.Redis.Config.Resources.Requests[corev1.ResourceCPU]).ToNot(g.Equal(resource.MustParse(defaults.SmallReplicaCpuRequest)))
 			})
 		})
 	})

@@ -21,9 +21,7 @@ import (
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/defaults"
@@ -31,20 +29,7 @@ import (
 
 var defLog = ctrl.Log.WithName("wandb-v2-defaulter")
 
-type WeightsAndBiasesCustomDefaulter struct{}
-
-func (d *WeightsAndBiasesCustomDefaulter) SetupWebhookWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewWebhookManagedBy(mgr).
-		For(&apiv2.WeightsAndBiases{}).
-		WithDefaulter(d).
-		Complete()
-}
-
-func (d *WeightsAndBiasesCustomDefaulter) Default(ctx context.Context, obj runtime.Object) error {
-	wandb, ok := obj.(*apiv2.WeightsAndBiases)
-	if !ok {
-		return fmt.Errorf("expected a WeightsAndBiases object but got %T", obj)
-	}
+func Default(ctx context.Context, wandb *apiv2.WeightsAndBiases) error {
 	defLog.Info("applying defaults", "name", wandb.Name)
 
 	if wandb.Spec.Size == "" {
@@ -56,23 +41,23 @@ func (d *WeightsAndBiasesCustomDefaulter) Default(ctx context.Context, obj runti
 		return err
 	}
 
-	if err := d.applyMySQLDefaults(wandb, size); err != nil {
+	if err := applyMySQLDefaults(wandb, size); err != nil {
 		return fmt.Errorf("failed to apply MySQL defaults: %w", err)
 	}
 
-	if err := d.applyRedisDefaults(wandb, size); err != nil {
+	if err := applyRedisDefaults(wandb, size); err != nil {
 		return fmt.Errorf("failed to apply Redis defaults: %w", err)
 	}
 
-	if err := d.applyKafkaDefaults(wandb, size); err != nil {
+	if err := applyKafkaDefaults(wandb, size); err != nil {
 		return fmt.Errorf("failed to apply Kafka defaults: %w", err)
 	}
 
-	if err := d.applyMinioDefaults(wandb, size); err != nil {
+	if err := applyMinioDefaults(wandb, size); err != nil {
 		return fmt.Errorf("failed to apply Minio defaults: %w", err)
 	}
 
-	if err := d.applyClickHouseDefaults(wandb, size); err != nil {
+	if err := applyClickHouseDefaults(wandb, size); err != nil {
 		return fmt.Errorf("failed to apply ClickHouse defaults: %w", err)
 	}
 
@@ -90,7 +75,7 @@ func toCommonSize(size apiv2.WBSize) (defaults.Size, error) {
 	}
 }
 
-func (d *WeightsAndBiasesCustomDefaulter) applyMySQLDefaults(wandb *apiv2.WeightsAndBiases, size defaults.Size) error {
+func applyMySQLDefaults(wandb *apiv2.WeightsAndBiases, size defaults.Size) error {
 
 	defaultConfig, err := defaults.BuildMySQLDefaults(size, wandb.Namespace)
 	if err != nil {
@@ -133,7 +118,7 @@ func (d *WeightsAndBiasesCustomDefaulter) applyMySQLDefaults(wandb *apiv2.Weight
 	return nil
 }
 
-func (d *WeightsAndBiasesCustomDefaulter) applyRedisDefaults(wandb *apiv2.WeightsAndBiases, size defaults.Size) error {
+func applyRedisDefaults(wandb *apiv2.WeightsAndBiases, size defaults.Size) error {
 	defaultConfig, err := defaults.BuildRedisDefaults(size, wandb.Namespace)
 	if err != nil {
 		return err
@@ -195,7 +180,7 @@ func (d *WeightsAndBiasesCustomDefaulter) applyRedisDefaults(wandb *apiv2.Weight
 	return nil
 }
 
-func (d *WeightsAndBiasesCustomDefaulter) applyKafkaDefaults(wandb *apiv2.WeightsAndBiases, size defaults.Size) error {
+func applyKafkaDefaults(wandb *apiv2.WeightsAndBiases, size defaults.Size) error {
 	defaultConfig, err := defaults.BuildKafkaDefaults(size, wandb.Namespace)
 	if err != nil {
 		return err
@@ -254,7 +239,7 @@ func (d *WeightsAndBiasesCustomDefaulter) applyKafkaDefaults(wandb *apiv2.Weight
 	return nil
 }
 
-func (d *WeightsAndBiasesCustomDefaulter) applyMinioDefaults(wandb *apiv2.WeightsAndBiases, size defaults.Size) error {
+func applyMinioDefaults(wandb *apiv2.WeightsAndBiases, size defaults.Size) error {
 	defaultConfig, err := defaults.BuildMinioDefaults(size, wandb.Namespace)
 	if err != nil {
 		return err
@@ -297,7 +282,7 @@ func (d *WeightsAndBiasesCustomDefaulter) applyMinioDefaults(wandb *apiv2.Weight
 	return nil
 }
 
-func (d *WeightsAndBiasesCustomDefaulter) applyClickHouseDefaults(wandb *apiv2.WeightsAndBiases, size defaults.Size) error {
+func applyClickHouseDefaults(wandb *apiv2.WeightsAndBiases, size defaults.Size) error {
 	defaultConfig, err := defaults.BuildClickHouseDefaults(size, wandb.Namespace)
 	if err != nil {
 		return err
@@ -343,5 +328,3 @@ func (d *WeightsAndBiasesCustomDefaulter) applyClickHouseDefaults(wandb *apiv2.W
 
 	return nil
 }
-
-var _ webhook.CustomDefaulter = &WeightsAndBiasesCustomDefaulter{}

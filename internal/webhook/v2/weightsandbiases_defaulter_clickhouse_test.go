@@ -4,7 +4,7 @@ import (
 	"context"
 
 	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	g "github.com/onsi/gomega"
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/defaults"
 	corev1 "k8s.io/api/core/v1"
@@ -14,12 +14,10 @@ import (
 
 var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 	var (
-		defaulter *WeightsAndBiasesCustomDefaulter
-		ctx       context.Context
+		ctx context.Context
 	)
 
 	BeforeEach(func() {
-		defaulter = &WeightsAndBiasesCustomDefaulter{}
 		ctx = context.Background()
 	})
 
@@ -39,15 +37,15 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 					},
 				}
 
-				err := defaulter.Default(ctx, wandb)
-				Expect(err).ToNot(HaveOccurred())
+				err := Default(ctx, wandb)
+				g.Expect(err).ToNot(g.HaveOccurred())
 
-				Expect(wandb.Spec.ClickHouse.Namespace).To(Equal("test-namespace"))
-				Expect(wandb.Spec.ClickHouse.StorageSize).To(Equal(defaults.DevClickHouseStorageSize))
-				Expect(wandb.Spec.ClickHouse.Replicas).To(Equal(int32(1)))
-				Expect(wandb.Spec.ClickHouse.Version).To(Equal(defaults.ClickHouseVersion))
-				Expect(wandb.Spec.ClickHouse.Config.Resources.Requests).To(BeEmpty())
-				Expect(wandb.Spec.ClickHouse.Config.Resources.Limits).To(BeEmpty())
+				g.Expect(wandb.Spec.ClickHouse.Namespace).To(g.Equal("test-namespace"))
+				g.Expect(wandb.Spec.ClickHouse.StorageSize).To(g.Equal(defaults.DevClickHouseStorageSize))
+				g.Expect(wandb.Spec.ClickHouse.Replicas).To(g.Equal(int32(1)))
+				g.Expect(wandb.Spec.ClickHouse.Version).To(g.Equal(defaults.ClickHouseVersion))
+				g.Expect(wandb.Spec.ClickHouse.Config.Resources.Requests).To(g.BeEmpty())
+				g.Expect(wandb.Spec.ClickHouse.Config.Resources.Limits).To(g.BeEmpty())
 			})
 		})
 
@@ -67,10 +65,10 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 					},
 				}
 
-				err := defaulter.Default(ctx, wandb)
-				Expect(err).ToNot(HaveOccurred())
+				err := Default(ctx, wandb)
+				g.Expect(err).ToNot(g.HaveOccurred())
 
-				Expect(wandb.Spec.ClickHouse.Namespace).To(Equal("custom-clickhouse-namespace"))
+				g.Expect(wandb.Spec.ClickHouse.Namespace).To(g.Equal("custom-clickhouse-namespace"))
 			})
 		})
 
@@ -90,11 +88,11 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 					},
 				}
 
-				err := defaulter.Default(ctx, wandb)
-				Expect(err).ToNot(HaveOccurred())
+				err := Default(ctx, wandb)
+				g.Expect(err).ToNot(g.HaveOccurred())
 
-				Expect(wandb.Spec.ClickHouse.StorageSize).To(Equal("100Gi"))
-				Expect(wandb.Spec.ClickHouse.StorageSize).ToNot(Equal(defaults.DevClickHouseStorageSize))
+				g.Expect(wandb.Spec.ClickHouse.StorageSize).To(g.Equal("100Gi"))
+				g.Expect(wandb.Spec.ClickHouse.StorageSize).ToNot(g.Equal(defaults.DevClickHouseStorageSize))
 			})
 		})
 
@@ -114,11 +112,11 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 					},
 				}
 
-				err := defaulter.Default(ctx, wandb)
-				Expect(err).ToNot(HaveOccurred())
+				err := Default(ctx, wandb)
+				g.Expect(err).ToNot(g.HaveOccurred())
 
-				Expect(wandb.Spec.ClickHouse.Replicas).To(Equal(int32(2)))
-				Expect(wandb.Spec.ClickHouse.Replicas).ToNot(Equal(int32(1)))
+				g.Expect(wandb.Spec.ClickHouse.Replicas).To(g.Equal(int32(2)))
+				g.Expect(wandb.Spec.ClickHouse.Replicas).ToNot(g.Equal(int32(1)))
 			})
 		})
 
@@ -139,11 +137,11 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 					},
 				}
 
-				err := defaulter.Default(ctx, wandb)
-				Expect(err).ToNot(HaveOccurred())
+				err := Default(ctx, wandb)
+				g.Expect(err).ToNot(g.HaveOccurred())
 
-				Expect(wandb.Spec.ClickHouse.Version).To(Equal(customVersion))
-				Expect(wandb.Spec.ClickHouse.Version).ToNot(Equal(defaults.ClickHouseVersion))
+				g.Expect(wandb.Spec.ClickHouse.Version).To(g.Equal(customVersion))
+				g.Expect(wandb.Spec.ClickHouse.Version).ToNot(g.Equal(defaults.ClickHouseVersion))
 			})
 		})
 
@@ -162,13 +160,13 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 					},
 				}
 
-				err := defaulter.Default(ctx, wandb)
-				Expect(err).ToNot(HaveOccurred())
+				err := Default(ctx, wandb)
+				g.Expect(err).ToNot(g.HaveOccurred())
 
-				Expect(wandb.Spec.ClickHouse.Namespace).To(Equal("test-namespace"))
-				Expect(wandb.Spec.ClickHouse.StorageSize).To(Equal(defaults.DevClickHouseStorageSize))
-				Expect(wandb.Spec.ClickHouse.Replicas).To(Equal(int32(1)))
-				Expect(wandb.Spec.ClickHouse.Version).To(Equal(defaults.ClickHouseVersion))
+				g.Expect(wandb.Spec.ClickHouse.Namespace).To(g.Equal("test-namespace"))
+				g.Expect(wandb.Spec.ClickHouse.StorageSize).To(g.Equal(defaults.DevClickHouseStorageSize))
+				g.Expect(wandb.Spec.ClickHouse.Replicas).To(g.Equal(int32(1)))
+				g.Expect(wandb.Spec.ClickHouse.Version).To(g.Equal(defaults.ClickHouseVersion))
 			})
 		})
 	})
@@ -189,21 +187,21 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 					},
 				}
 
-				err := defaulter.Default(ctx, wandb)
-				Expect(err).ToNot(HaveOccurred())
+				err := Default(ctx, wandb)
+				g.Expect(err).ToNot(g.HaveOccurred())
 
-				Expect(wandb.Spec.ClickHouse.Namespace).To(Equal("test-namespace"))
-				Expect(wandb.Spec.ClickHouse.StorageSize).To(Equal(defaults.SmallClickHouseStorageSize))
-				Expect(wandb.Spec.ClickHouse.Replicas).To(Equal(int32(3)))
-				Expect(wandb.Spec.ClickHouse.Version).To(Equal(defaults.ClickHouseVersion))
+				g.Expect(wandb.Spec.ClickHouse.Namespace).To(g.Equal("test-namespace"))
+				g.Expect(wandb.Spec.ClickHouse.StorageSize).To(g.Equal(defaults.SmallClickHouseStorageSize))
+				g.Expect(wandb.Spec.ClickHouse.Replicas).To(g.Equal(int32(3)))
+				g.Expect(wandb.Spec.ClickHouse.Version).To(g.Equal(defaults.ClickHouseVersion))
 
-				Expect(wandb.Spec.ClickHouse.Config).ToNot(BeNil())
-				Expect(wandb.Spec.ClickHouse.Config.Resources.Requests).ToNot(BeNil())
-				Expect(wandb.Spec.ClickHouse.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(resource.MustParse(defaults.SmallClickHouseCpuRequest)))
-				Expect(wandb.Spec.ClickHouse.Config.Resources.Requests[corev1.ResourceMemory]).To(Equal(resource.MustParse(defaults.SmallClickHouseMemoryRequest)))
-				Expect(wandb.Spec.ClickHouse.Config.Resources.Limits).ToNot(BeNil())
-				Expect(wandb.Spec.ClickHouse.Config.Resources.Limits[corev1.ResourceCPU]).To(Equal(resource.MustParse(defaults.SmallClickHouseCpuLimit)))
-				Expect(wandb.Spec.ClickHouse.Config.Resources.Limits[corev1.ResourceMemory]).To(Equal(resource.MustParse(defaults.SmallClickHouseMemoryLimit)))
+				g.Expect(wandb.Spec.ClickHouse.Config).ToNot(g.BeNil())
+				g.Expect(wandb.Spec.ClickHouse.Config.Resources.Requests).ToNot(g.BeNil())
+				g.Expect(wandb.Spec.ClickHouse.Config.Resources.Requests[corev1.ResourceCPU]).To(g.Equal(resource.MustParse(defaults.SmallClickHouseCpuRequest)))
+				g.Expect(wandb.Spec.ClickHouse.Config.Resources.Requests[corev1.ResourceMemory]).To(g.Equal(resource.MustParse(defaults.SmallClickHouseMemoryRequest)))
+				g.Expect(wandb.Spec.ClickHouse.Config.Resources.Limits).ToNot(g.BeNil())
+				g.Expect(wandb.Spec.ClickHouse.Config.Resources.Limits[corev1.ResourceCPU]).To(g.Equal(resource.MustParse(defaults.SmallClickHouseCpuLimit)))
+				g.Expect(wandb.Spec.ClickHouse.Config.Resources.Limits[corev1.ResourceMemory]).To(g.Equal(resource.MustParse(defaults.SmallClickHouseMemoryLimit)))
 			})
 		})
 
@@ -230,13 +228,13 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 					},
 				}
 
-				err := defaulter.Default(ctx, wandb)
-				Expect(err).ToNot(HaveOccurred())
+				err := Default(ctx, wandb)
+				g.Expect(err).ToNot(g.HaveOccurred())
 
-				Expect(wandb.Spec.ClickHouse.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(customCPU))
-				Expect(wandb.Spec.ClickHouse.Config.Resources.Requests[corev1.ResourceMemory]).To(Equal(resource.MustParse(defaults.SmallClickHouseMemoryRequest)))
-				Expect(wandb.Spec.ClickHouse.Config.Resources.Limits[corev1.ResourceCPU]).To(Equal(resource.MustParse(defaults.SmallClickHouseCpuLimit)))
-				Expect(wandb.Spec.ClickHouse.Config.Resources.Limits[corev1.ResourceMemory]).To(Equal(resource.MustParse(defaults.SmallClickHouseMemoryLimit)))
+				g.Expect(wandb.Spec.ClickHouse.Config.Resources.Requests[corev1.ResourceCPU]).To(g.Equal(customCPU))
+				g.Expect(wandb.Spec.ClickHouse.Config.Resources.Requests[corev1.ResourceMemory]).To(g.Equal(resource.MustParse(defaults.SmallClickHouseMemoryRequest)))
+				g.Expect(wandb.Spec.ClickHouse.Config.Resources.Limits[corev1.ResourceCPU]).To(g.Equal(resource.MustParse(defaults.SmallClickHouseCpuLimit)))
+				g.Expect(wandb.Spec.ClickHouse.Config.Resources.Limits[corev1.ResourceMemory]).To(g.Equal(resource.MustParse(defaults.SmallClickHouseMemoryLimit)))
 			})
 		})
 
@@ -256,10 +254,10 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 					},
 				}
 
-				err := defaulter.Default(ctx, wandb)
-				Expect(err).ToNot(HaveOccurred())
+				err := Default(ctx, wandb)
+				g.Expect(err).ToNot(g.HaveOccurred())
 
-				Expect(wandb.Spec.ClickHouse.Replicas).To(Equal(int32(3)))
+				g.Expect(wandb.Spec.ClickHouse.Replicas).To(g.Equal(int32(3)))
 			})
 		})
 
@@ -279,10 +277,10 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 					},
 				}
 
-				err := defaulter.Default(ctx, wandb)
-				Expect(err).ToNot(HaveOccurred())
+				err := Default(ctx, wandb)
+				g.Expect(err).ToNot(g.HaveOccurred())
 
-				Expect(wandb.Spec.ClickHouse.Version).To(Equal(defaults.ClickHouseVersion))
+				g.Expect(wandb.Spec.ClickHouse.Version).To(g.Equal(defaults.ClickHouseVersion))
 			})
 		})
 	})
@@ -302,14 +300,14 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 					},
 				}
 
-				err := defaulter.Default(ctx, wandb)
-				Expect(err).ToNot(HaveOccurred())
+				err := Default(ctx, wandb)
+				g.Expect(err).ToNot(g.HaveOccurred())
 
-				Expect(wandb.Spec.Size).To(Equal(apiv2.WBSizeDev))
-				Expect(wandb.Spec.ClickHouse.Namespace).To(Equal("test-namespace"))
-				Expect(wandb.Spec.ClickHouse.StorageSize).To(Equal(defaults.DevClickHouseStorageSize))
-				Expect(wandb.Spec.ClickHouse.Replicas).To(Equal(int32(1)))
-				Expect(wandb.Spec.ClickHouse.Version).To(Equal(defaults.ClickHouseVersion))
+				g.Expect(wandb.Spec.Size).To(g.Equal(apiv2.WBSizeDev))
+				g.Expect(wandb.Spec.ClickHouse.Namespace).To(g.Equal("test-namespace"))
+				g.Expect(wandb.Spec.ClickHouse.StorageSize).To(g.Equal(defaults.DevClickHouseStorageSize))
+				g.Expect(wandb.Spec.ClickHouse.Replicas).To(g.Equal(int32(1)))
+				g.Expect(wandb.Spec.ClickHouse.Version).To(g.Equal(defaults.ClickHouseVersion))
 			})
 		})
 	})
@@ -355,22 +353,22 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 					},
 				}
 
-				err := defaulter.Default(ctx, wandb)
-				Expect(err).ToNot(HaveOccurred())
+				err := Default(ctx, wandb)
+				g.Expect(err).ToNot(g.HaveOccurred())
 
-				Expect(wandb.Spec.ClickHouse.Namespace).To(Equal(customNamespace))
-				Expect(wandb.Spec.ClickHouse.StorageSize).To(Equal(customStorage))
-				Expect(wandb.Spec.ClickHouse.Replicas).To(Equal(customReplicas))
-				Expect(wandb.Spec.ClickHouse.Version).To(Equal(customVersion))
-				Expect(wandb.Spec.ClickHouse.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(customCPURequest))
-				Expect(wandb.Spec.ClickHouse.Config.Resources.Requests[corev1.ResourceMemory]).To(Equal(customMemoryRequest))
-				Expect(wandb.Spec.ClickHouse.Config.Resources.Limits[corev1.ResourceCPU]).To(Equal(customCPULimit))
-				Expect(wandb.Spec.ClickHouse.Config.Resources.Limits[corev1.ResourceMemory]).To(Equal(customMemoryLimit))
+				g.Expect(wandb.Spec.ClickHouse.Namespace).To(g.Equal(customNamespace))
+				g.Expect(wandb.Spec.ClickHouse.StorageSize).To(g.Equal(customStorage))
+				g.Expect(wandb.Spec.ClickHouse.Replicas).To(g.Equal(customReplicas))
+				g.Expect(wandb.Spec.ClickHouse.Version).To(g.Equal(customVersion))
+				g.Expect(wandb.Spec.ClickHouse.Config.Resources.Requests[corev1.ResourceCPU]).To(g.Equal(customCPURequest))
+				g.Expect(wandb.Spec.ClickHouse.Config.Resources.Requests[corev1.ResourceMemory]).To(g.Equal(customMemoryRequest))
+				g.Expect(wandb.Spec.ClickHouse.Config.Resources.Limits[corev1.ResourceCPU]).To(g.Equal(customCPULimit))
+				g.Expect(wandb.Spec.ClickHouse.Config.Resources.Limits[corev1.ResourceMemory]).To(g.Equal(customMemoryLimit))
 
-				Expect(wandb.Spec.ClickHouse.StorageSize).ToNot(Equal(defaults.SmallClickHouseStorageSize))
-				Expect(wandb.Spec.ClickHouse.Replicas).ToNot(Equal(int32(3)))
-				Expect(wandb.Spec.ClickHouse.Version).ToNot(Equal(defaults.ClickHouseVersion))
-				Expect(wandb.Spec.ClickHouse.Config.Resources.Requests[corev1.ResourceCPU]).ToNot(Equal(resource.MustParse(defaults.SmallClickHouseCpuRequest)))
+				g.Expect(wandb.Spec.ClickHouse.StorageSize).ToNot(g.Equal(defaults.SmallClickHouseStorageSize))
+				g.Expect(wandb.Spec.ClickHouse.Replicas).ToNot(g.Equal(int32(3)))
+				g.Expect(wandb.Spec.ClickHouse.Version).ToNot(g.Equal(defaults.ClickHouseVersion))
+				g.Expect(wandb.Spec.ClickHouse.Config.Resources.Requests[corev1.ResourceCPU]).ToNot(g.Equal(resource.MustParse(defaults.SmallClickHouseCpuRequest)))
 			})
 		})
 	})

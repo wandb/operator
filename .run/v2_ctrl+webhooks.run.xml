@@ -1,8 +1,8 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="v2:ctrl" type="GoApplicationRunConfiguration" factoryName="Go Application">
+  <configuration default="false" name="v2:ctrl+webhooks" type="GoApplicationRunConfiguration" factoryName="Go Application">
     <module name="operator" />
     <working_directory value="$PROJECT_DIR$" />
-    <parameters value="--assume-v2-cr=true --enable-webhooks=false" />
+    <parameters value="--assume-v2-cr=true --enable-webhooks=true --webhook-cert-path=.local-webhook-certs --webhook-cert-name=tls.crt --webhook-cert-key=tls.key" />
     <EXTENSION ID="software.aws.toolkits.jetbrains.core.execution.GoAwsConnectionRunConfigurationExtension">
       <option name="credential" />
       <option name="region" />

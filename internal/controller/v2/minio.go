@@ -1,4 +1,4 @@
-package wandb_v2
+package v2
 
 import (
 	"context"
@@ -11,10 +11,12 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func (r *WeightsAndBiasesV2Reconciler) minioResourceReconcile(
+func minioResourceReconcile(
 	ctx context.Context,
+	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
 ) error {
 	var err error
@@ -22,17 +24,17 @@ func (r *WeightsAndBiasesV2Reconciler) minioResourceReconcile(
 	var desiredConfig *corev1.Secret
 	var specNamespacedName = minioSpecNamespacedName(wandb.Spec.Minio)
 
-	if desiredCr, err = translatorv2.ToMinioVendorSpec(ctx, wandb.Spec.Minio, wandb, r.Scheme); err != nil {
+	if desiredCr, err = translatorv2.ToMinioVendorSpec(ctx, wandb.Spec.Minio, wandb, client.Scheme()); err != nil {
 		return err
 	}
-	if err = tenant.CrudResource(ctx, r.Client, specNamespacedName, desiredCr); err != nil {
+	if err = tenant.CrudResource(ctx, client, specNamespacedName, desiredCr); err != nil {
 		return err
 	}
 
-	if desiredConfig, err = translatorv2.ToMinioConfigSecret(ctx, wandb.Spec.Minio, wandb, r.Scheme); err != nil {
+	if desiredConfig, err = translatorv2.ToMinioConfigSecret(ctx, wandb.Spec.Minio, wandb, client.Scheme()); err != nil {
 		return err
 	}
-	if err = tenant.CrudConfig(ctx, r.Client, specNamespacedName, desiredConfig); err != nil {
+	if err = tenant.CrudConfig(ctx, client, specNamespacedName, desiredConfig); err != nil {
 		return err
 	}
 
@@ -44,8 +46,9 @@ func (r *WeightsAndBiasesV2Reconciler) minioResourceReconcile(
 	return nil
 }
 
-func (r *WeightsAndBiasesV2Reconciler) minioStatusUpdate(
+func minioStatusUpdate(
 	ctx context.Context,
+	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
 ) error {
 	log := ctrl.LoggerFrom(ctx)
@@ -54,11 +57,11 @@ func (r *WeightsAndBiasesV2Reconciler) minioStatusUpdate(
 	var conditions []common.MinioCondition
 	var specNamespacedName = minioSpecNamespacedName(wandb.Spec.Minio)
 
-	if conditions, err = tenant.GetConditions(ctx, r.Client, specNamespacedName); err != nil {
+	if conditions, err = tenant.GetConditions(ctx, client, specNamespacedName); err != nil {
 		return err
 	}
 	wandb.Status.MinioStatus = translatorv2.ExtractMinioStatus(ctx, conditions)
-	if err = r.Status().Update(ctx, wandb); err != nil {
+	if err = client.Status().Update(ctx, wandb); err != nil {
 		log.Error(err, "failed to update status")
 		return err
 	}

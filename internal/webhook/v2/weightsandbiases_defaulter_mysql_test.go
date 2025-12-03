@@ -4,7 +4,7 @@ import (
 	"context"
 
 	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	g "github.com/onsi/gomega"
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/defaults"
 	corev1 "k8s.io/api/core/v1"
@@ -14,12 +14,10 @@ import (
 
 var _ = Describe("WeightsAndBiasesCustomDefaulter - MySQL", func() {
 	var (
-		defaulter *WeightsAndBiasesCustomDefaulter
-		ctx       context.Context
+		ctx context.Context
 	)
 
 	BeforeEach(func() {
-		defaulter = &WeightsAndBiasesCustomDefaulter{}
 		ctx = context.Background()
 	})
 
@@ -39,12 +37,12 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - MySQL", func() {
 					},
 				}
 
-				err := defaulter.Default(ctx, wandb)
-				Expect(err).ToNot(HaveOccurred())
+				err := Default(ctx, wandb)
+				g.Expect(err).ToNot(g.HaveOccurred())
 
-				Expect(wandb.Spec.MySQL.Namespace).To(Equal("test-namespace"))
-				Expect(wandb.Spec.MySQL.StorageSize).To(Equal(defaults.DevMySQLStorageSize))
-				Expect(wandb.Spec.MySQL.Replicas).To(Equal(int32(1)))
+				g.Expect(wandb.Spec.MySQL.Namespace).To(g.Equal("test-namespace"))
+				g.Expect(wandb.Spec.MySQL.StorageSize).To(g.Equal(defaults.DevMySQLStorageSize))
+				g.Expect(wandb.Spec.MySQL.Replicas).To(g.Equal(int32(1)))
 			})
 		})
 
@@ -64,10 +62,10 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - MySQL", func() {
 					},
 				}
 
-				err := defaulter.Default(ctx, wandb)
-				Expect(err).ToNot(HaveOccurred())
+				err := Default(ctx, wandb)
+				g.Expect(err).ToNot(g.HaveOccurred())
 
-				Expect(wandb.Spec.MySQL.Namespace).To(Equal("custom-mysql-namespace"))
+				g.Expect(wandb.Spec.MySQL.Namespace).To(g.Equal("custom-mysql-namespace"))
 			})
 		})
 
@@ -87,11 +85,11 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - MySQL", func() {
 					},
 				}
 
-				err := defaulter.Default(ctx, wandb)
-				Expect(err).ToNot(HaveOccurred())
+				err := Default(ctx, wandb)
+				g.Expect(err).ToNot(g.HaveOccurred())
 
-				Expect(wandb.Spec.MySQL.StorageSize).To(Equal("50Gi"))
-				Expect(wandb.Spec.MySQL.StorageSize).ToNot(Equal(defaults.DevMySQLStorageSize))
+				g.Expect(wandb.Spec.MySQL.StorageSize).To(g.Equal("50Gi"))
+				g.Expect(wandb.Spec.MySQL.StorageSize).ToNot(g.Equal(defaults.DevMySQLStorageSize))
 			})
 		})
 
@@ -110,11 +108,11 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - MySQL", func() {
 					},
 				}
 
-				err := defaulter.Default(ctx, wandb)
-				Expect(err).ToNot(HaveOccurred())
+				err := Default(ctx, wandb)
+				g.Expect(err).ToNot(g.HaveOccurred())
 
-				Expect(wandb.Spec.MySQL.Namespace).To(Equal("test-namespace"))
-				Expect(wandb.Spec.MySQL.StorageSize).To(Equal(defaults.DevMySQLStorageSize))
+				g.Expect(wandb.Spec.MySQL.Namespace).To(g.Equal("test-namespace"))
+				g.Expect(wandb.Spec.MySQL.StorageSize).To(g.Equal(defaults.DevMySQLStorageSize))
 			})
 		})
 	})
@@ -135,19 +133,19 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - MySQL", func() {
 					},
 				}
 
-				err := defaulter.Default(ctx, wandb)
-				Expect(err).ToNot(HaveOccurred())
+				err := Default(ctx, wandb)
+				g.Expect(err).ToNot(g.HaveOccurred())
 
-				Expect(wandb.Spec.MySQL.Namespace).To(Equal("test-namespace"))
-				Expect(wandb.Spec.MySQL.StorageSize).To(Equal(defaults.SmallMySQLStorageSize))
-				Expect(wandb.Spec.MySQL.Replicas).To(Equal(int32(3)))
+				g.Expect(wandb.Spec.MySQL.Namespace).To(g.Equal("test-namespace"))
+				g.Expect(wandb.Spec.MySQL.StorageSize).To(g.Equal(defaults.SmallMySQLStorageSize))
+				g.Expect(wandb.Spec.MySQL.Replicas).To(g.Equal(int32(3)))
 
-				Expect(wandb.Spec.MySQL.Config.Resources.Requests).ToNot(BeNil())
-				Expect(wandb.Spec.MySQL.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(resource.MustParse(defaults.SmallMySQLCpuRequest)))
-				Expect(wandb.Spec.MySQL.Config.Resources.Requests[corev1.ResourceMemory]).To(Equal(resource.MustParse(defaults.SmallMySQLMemoryRequest)))
-				Expect(wandb.Spec.MySQL.Config.Resources.Limits).ToNot(BeNil())
-				Expect(wandb.Spec.MySQL.Config.Resources.Limits[corev1.ResourceCPU]).To(Equal(resource.MustParse(defaults.SmallMySQLCpuLimit)))
-				Expect(wandb.Spec.MySQL.Config.Resources.Limits[corev1.ResourceMemory]).To(Equal(resource.MustParse(defaults.SmallMySQLMemoryLimit)))
+				g.Expect(wandb.Spec.MySQL.Config.Resources.Requests).ToNot(g.BeNil())
+				g.Expect(wandb.Spec.MySQL.Config.Resources.Requests[corev1.ResourceCPU]).To(g.Equal(resource.MustParse(defaults.SmallMySQLCpuRequest)))
+				g.Expect(wandb.Spec.MySQL.Config.Resources.Requests[corev1.ResourceMemory]).To(g.Equal(resource.MustParse(defaults.SmallMySQLMemoryRequest)))
+				g.Expect(wandb.Spec.MySQL.Config.Resources.Limits).ToNot(g.BeNil())
+				g.Expect(wandb.Spec.MySQL.Config.Resources.Limits[corev1.ResourceCPU]).To(g.Equal(resource.MustParse(defaults.SmallMySQLCpuLimit)))
+				g.Expect(wandb.Spec.MySQL.Config.Resources.Limits[corev1.ResourceMemory]).To(g.Equal(resource.MustParse(defaults.SmallMySQLMemoryLimit)))
 			})
 		})
 
@@ -174,13 +172,13 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - MySQL", func() {
 					},
 				}
 
-				err := defaulter.Default(ctx, wandb)
-				Expect(err).ToNot(HaveOccurred())
+				err := Default(ctx, wandb)
+				g.Expect(err).ToNot(g.HaveOccurred())
 
-				Expect(wandb.Spec.MySQL.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(customCPU))
-				Expect(wandb.Spec.MySQL.Config.Resources.Requests[corev1.ResourceMemory]).To(Equal(resource.MustParse(defaults.SmallMySQLMemoryRequest)))
-				Expect(wandb.Spec.MySQL.Config.Resources.Limits[corev1.ResourceCPU]).To(Equal(resource.MustParse(defaults.SmallMySQLCpuLimit)))
-				Expect(wandb.Spec.MySQL.Config.Resources.Limits[corev1.ResourceMemory]).To(Equal(resource.MustParse(defaults.SmallMySQLMemoryLimit)))
+				g.Expect(wandb.Spec.MySQL.Config.Resources.Requests[corev1.ResourceCPU]).To(g.Equal(customCPU))
+				g.Expect(wandb.Spec.MySQL.Config.Resources.Requests[corev1.ResourceMemory]).To(g.Equal(resource.MustParse(defaults.SmallMySQLMemoryRequest)))
+				g.Expect(wandb.Spec.MySQL.Config.Resources.Limits[corev1.ResourceCPU]).To(g.Equal(resource.MustParse(defaults.SmallMySQLCpuLimit)))
+				g.Expect(wandb.Spec.MySQL.Config.Resources.Limits[corev1.ResourceMemory]).To(g.Equal(resource.MustParse(defaults.SmallMySQLMemoryLimit)))
 			})
 		})
 
@@ -216,16 +214,16 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - MySQL", func() {
 					},
 				}
 
-				err := defaulter.Default(ctx, wandb)
-				Expect(err).ToNot(HaveOccurred())
+				err := Default(ctx, wandb)
+				g.Expect(err).ToNot(g.HaveOccurred())
 
-				Expect(wandb.Spec.MySQL.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(customCPURequest))
-				Expect(wandb.Spec.MySQL.Config.Resources.Requests[corev1.ResourceMemory]).To(Equal(customMemoryRequest))
-				Expect(wandb.Spec.MySQL.Config.Resources.Limits[corev1.ResourceCPU]).To(Equal(customCPULimit))
-				Expect(wandb.Spec.MySQL.Config.Resources.Limits[corev1.ResourceMemory]).To(Equal(customMemoryLimit))
+				g.Expect(wandb.Spec.MySQL.Config.Resources.Requests[corev1.ResourceCPU]).To(g.Equal(customCPURequest))
+				g.Expect(wandb.Spec.MySQL.Config.Resources.Requests[corev1.ResourceMemory]).To(g.Equal(customMemoryRequest))
+				g.Expect(wandb.Spec.MySQL.Config.Resources.Limits[corev1.ResourceCPU]).To(g.Equal(customCPULimit))
+				g.Expect(wandb.Spec.MySQL.Config.Resources.Limits[corev1.ResourceMemory]).To(g.Equal(customMemoryLimit))
 
-				Expect(wandb.Spec.MySQL.Config.Resources.Requests[corev1.ResourceCPU]).ToNot(Equal(resource.MustParse(defaults.SmallMySQLCpuRequest)))
-				Expect(wandb.Spec.MySQL.Config.Resources.Requests[corev1.ResourceMemory]).ToNot(Equal(resource.MustParse(defaults.SmallMySQLMemoryRequest)))
+				g.Expect(wandb.Spec.MySQL.Config.Resources.Requests[corev1.ResourceCPU]).ToNot(g.Equal(resource.MustParse(defaults.SmallMySQLCpuRequest)))
+				g.Expect(wandb.Spec.MySQL.Config.Resources.Requests[corev1.ResourceMemory]).ToNot(g.Equal(resource.MustParse(defaults.SmallMySQLMemoryRequest)))
 			})
 		})
 	})
@@ -245,12 +243,12 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - MySQL", func() {
 					},
 				}
 
-				err := defaulter.Default(ctx, wandb)
-				Expect(err).ToNot(HaveOccurred())
+				err := Default(ctx, wandb)
+				g.Expect(err).ToNot(g.HaveOccurred())
 
-				Expect(wandb.Spec.Size).To(Equal(apiv2.WBSizeDev))
-				Expect(wandb.Spec.MySQL.Namespace).To(Equal("test-namespace"))
-				Expect(wandb.Spec.MySQL.StorageSize).To(Equal(defaults.DevMySQLStorageSize))
+				g.Expect(wandb.Spec.Size).To(g.Equal(apiv2.WBSizeDev))
+				g.Expect(wandb.Spec.MySQL.Namespace).To(g.Equal("test-namespace"))
+				g.Expect(wandb.Spec.MySQL.StorageSize).To(g.Equal(defaults.DevMySQLStorageSize))
 			})
 		})
 	})
@@ -292,18 +290,18 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - MySQL", func() {
 					},
 				}
 
-				err := defaulter.Default(ctx, wandb)
-				Expect(err).ToNot(HaveOccurred())
+				err := Default(ctx, wandb)
+				g.Expect(err).ToNot(g.HaveOccurred())
 
-				Expect(wandb.Spec.MySQL.Namespace).To(Equal(customNamespace))
-				Expect(wandb.Spec.MySQL.StorageSize).To(Equal(customStorage))
-				Expect(wandb.Spec.MySQL.Config.Resources.Requests[corev1.ResourceCPU]).To(Equal(customCPURequest))
-				Expect(wandb.Spec.MySQL.Config.Resources.Requests[corev1.ResourceMemory]).To(Equal(customMemoryRequest))
-				Expect(wandb.Spec.MySQL.Config.Resources.Limits[corev1.ResourceCPU]).To(Equal(customCPULimit))
-				Expect(wandb.Spec.MySQL.Config.Resources.Limits[corev1.ResourceMemory]).To(Equal(customMemoryLimit))
+				g.Expect(wandb.Spec.MySQL.Namespace).To(g.Equal(customNamespace))
+				g.Expect(wandb.Spec.MySQL.StorageSize).To(g.Equal(customStorage))
+				g.Expect(wandb.Spec.MySQL.Config.Resources.Requests[corev1.ResourceCPU]).To(g.Equal(customCPURequest))
+				g.Expect(wandb.Spec.MySQL.Config.Resources.Requests[corev1.ResourceMemory]).To(g.Equal(customMemoryRequest))
+				g.Expect(wandb.Spec.MySQL.Config.Resources.Limits[corev1.ResourceCPU]).To(g.Equal(customCPULimit))
+				g.Expect(wandb.Spec.MySQL.Config.Resources.Limits[corev1.ResourceMemory]).To(g.Equal(customMemoryLimit))
 
-				Expect(wandb.Spec.MySQL.StorageSize).ToNot(Equal(defaults.SmallMySQLStorageSize))
-				Expect(wandb.Spec.MySQL.Config.Resources.Requests[corev1.ResourceCPU]).ToNot(Equal(resource.MustParse(defaults.SmallMySQLCpuRequest)))
+				g.Expect(wandb.Spec.MySQL.StorageSize).ToNot(g.Equal(defaults.SmallMySQLStorageSize))
+				g.Expect(wandb.Spec.MySQL.Config.Resources.Requests[corev1.ResourceCPU]).ToNot(g.Equal(resource.MustParse(defaults.SmallMySQLCpuRequest)))
 			})
 		})
 	})
