@@ -146,34 +146,12 @@ func ToMinioVendorSpec(
 	return minioTenant, nil
 }
 
-func ToMinioConfigSecret(
+func ToMinioEnvConfig(
 	ctx context.Context,
 	spec apiv2.WBMinioSpec,
-	owner metav1.Object,
-	scheme *runtime.Scheme,
-) (*corev1.Secret, error) {
-	log := ctrl.LoggerFrom(ctx)
-
-	specName := spec.Name
-
-	configSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      tenant.ConfigName(specName),
-			Namespace: spec.Namespace,
-		},
-		Type: corev1.SecretTypeOpaque,
-		StringData: map[string]string{
-			"config.env": `export MINIO_ROOT_USER="admin"
-export MINIO_ROOT_PASSWORD="admin123456"
-export MINIO_BROWSER="on"`,
-		},
-	}
-
-	// Set owner reference
-	if err := ctrl.SetControllerReference(owner, configSecret, scheme); err != nil {
-		log.Error(err, "failed to set owner reference on Minio config secret")
-		return nil, fmt.Errorf("failed to set owner reference: %w", err)
-	}
-
-	return configSecret, nil
+) (tenant.MinioEnvConfig, error) {
+	return tenant.MinioEnvConfig{
+		RootUser:            spec.Config.RootUser,
+		MinioBrowserSetting: spec.Config.MinioBrowserSetting,
+	}, nil
 }

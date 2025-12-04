@@ -25,6 +25,10 @@ type MinioConfig struct {
 	Namespace string
 	Name      string
 
+	// Custom Config
+	RootUser            string
+	MinioBrowserSetting string
+
 	// Storage and resources
 	StorageSize      string
 	Servers          int32

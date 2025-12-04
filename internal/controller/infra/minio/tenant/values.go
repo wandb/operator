@@ -7,15 +7,18 @@ import (
 )
 
 const (
-	// Resource names
-	ConnectionName = "wandb-minio-connection"
-	ConfigSecret   = "wandb-minio-config"
-
-	// Minio configuration
-	MinioPort      = 443
-	MinioAccessKey = "minio"
-	MinioBucket    = "wandb"
+	MinioPort                  = 443
+	MinioAccessKey             = "minio"
+	MinioBucket                = "wandb"
+	TenantMinioRootUserKey     = "rootUser"
+	TenantMinioRootPasswordKey = "rootPassword"
+	TenantMinioBrowserKey      = "browser"
 )
+
+type MinioEnvConfig struct {
+	RootUser            string
+	MinioBrowserSetting string
+}
 
 func TenantName(specName string) string {
 	return specName

@@ -167,7 +167,9 @@ type WBMinioSpec struct {
 }
 
 type WBMinioConfig struct {
-	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+	Resources           corev1.ResourceRequirements `json:"resources,omitempty"`
+	RootUser            string                      `json:"rootUser,omitempty"`
+	MinioBrowserSetting string                      `json:"minioBrowserSetting,omitempty"`
 }
 
 // WBClickHouseSpec fields have many default values that, if unspecified,

@@ -19,16 +19,21 @@ const (
 
 	MinioImage       = "quay.io/minio/minio:latest"
 	DefaultMinioName = "wandb-minio"
+
+	DefaultMinioRootUser       = "admin"
+	DefaultMinioBrowserSetting = "on"
 )
 
 func BuildMinioDefaults(size Size, ownerNamespace string) (common.MinioConfig, error) {
 	var err error
 	var storageSize string
 	config := common.MinioConfig{
-		Enabled:   true,
-		Namespace: ownerNamespace,
-		Name:      DefaultMinioName,
-		Image:     MinioImage,
+		Enabled:             true,
+		Namespace:           ownerNamespace,
+		Name:                DefaultMinioName,
+		RootUser:            DefaultMinioRootUser,
+		MinioBrowserSetting: DefaultMinioBrowserSetting,
+		Image:               MinioImage,
 	}
 
 	switch size {

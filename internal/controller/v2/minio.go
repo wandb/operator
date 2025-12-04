@@ -8,7 +8,6 @@ import (
 	"github.com/wandb/operator/internal/controller/translator/common"
 	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
 	miniov2 "github.com/wandb/operator/internal/vendored/minio-operator/minio.min.io/v2"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -21,20 +20,16 @@ func minioResourceReconcile(
 ) error {
 	var err error
 	var desiredCr *miniov2.Tenant
-	var desiredConfig *corev1.Secret
+	var desiredConfig tenant.MinioEnvConfig
 	var specNamespacedName = minioSpecNamespacedName(wandb.Spec.Minio)
 
 	if desiredCr, err = translatorv2.ToMinioVendorSpec(ctx, wandb.Spec.Minio, wandb, client.Scheme()); err != nil {
 		return err
 	}
-	if err = tenant.CrudResource(ctx, client, specNamespacedName, desiredCr); err != nil {
+	if desiredConfig, err = translatorv2.ToMinioEnvConfig(ctx, wandb.Spec.Minio); err != nil {
 		return err
 	}
-
-	if desiredConfig, err = translatorv2.ToMinioConfigSecret(ctx, wandb.Spec.Minio, wandb, client.Scheme()); err != nil {
-		return err
-	}
-	if err = tenant.CrudConfig(ctx, client, specNamespacedName, desiredConfig); err != nil {
+	if err = tenant.CrudResourceAndConfig(ctx, client, specNamespacedName, desiredCr, desiredConfig); err != nil {
 		return err
 	}
 
