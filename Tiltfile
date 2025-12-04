@@ -68,7 +68,7 @@ GROUP = "apps"
 VERSION = "v1"
 KIND = "wandb"
 IMG = 'controller:latest'
-CONTROLLERGEN = 'rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases;'
+CONTROLLERGEN = 'rbac:roleName=manager-role crd webhook paths={./api/v1,./api/v2,./internal/controller/...} output:crd:artifacts:config=config/crd/bases;'
 DISABLE_SECURITY_CONTEXT = True
 DIST_DIR = 'dist'
 
