@@ -13,7 +13,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func clickHouseResourceReconcile(
+func clickHouseWriteState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
@@ -25,19 +25,14 @@ func clickHouseResourceReconcile(
 	if desired, err = translatorv2.ToClickHouseVendorSpec(ctx, wandb.Spec.ClickHouse, wandb, client.Scheme()); err != nil {
 		return err
 	}
-	if err = altinity.CrudResource(ctx, client, specNamespacedName, desired); err != nil {
+	if err = altinity.WriteState(ctx, client, specNamespacedName, desired); err != nil {
 		return err
 	}
-
-	//wandb.Status.ClickHouseStatus = translatorv2.ExtractClickHouseStatus(ctx, results)
-	//if err = client.Status().Update(ctx, wandb); err != nil {
-	//	results.AddErrors(err)
-	//}
 
 	return nil
 }
 
-func clickHouseStatusUpdate(
+func clickHouseReadState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
@@ -48,7 +43,7 @@ func clickHouseStatusUpdate(
 	var conditions []common.ClickHouseCondition
 	var specNamespacedName = clickHouseSpecNamespacedName(wandb.Spec.ClickHouse)
 
-	if conditions, err = altinity.GetConditions(ctx, client, specNamespacedName); err != nil {
+	if conditions, err = altinity.ReadState(ctx, client, specNamespacedName); err != nil {
 		return err
 	}
 	wandb.Status.ClickHouseStatus = translatorv2.ExtractClickHouseStatus(ctx, conditions)

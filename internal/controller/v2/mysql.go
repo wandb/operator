@@ -13,7 +13,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func mysqlResourceReconcile(
+func mysqlWriteState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
@@ -25,7 +25,7 @@ func mysqlResourceReconcile(
 	if desired, err = translatorv2.ToMySQLVendorSpec(ctx, wandb.Spec.MySQL, wandb, client.Scheme()); err != nil {
 		return err
 	}
-	if err = percona.CrudResource(ctx, client, specNamespacedName, desired); err != nil {
+	if err = percona.WriteState(ctx, client, specNamespacedName, desired); err != nil {
 		return err
 	}
 
@@ -37,7 +37,7 @@ func mysqlResourceReconcile(
 	return nil
 }
 
-func mysqlStatusUpdate(
+func mysqlReadState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
@@ -48,7 +48,7 @@ func mysqlStatusUpdate(
 	var conditions []common.MySQLCondition
 	var specNamespacedName = mysqlSpecNamespacedName(wandb.Spec.MySQL)
 
-	if conditions, err = percona.GetConditions(ctx, client, specNamespacedName); err != nil {
+	if conditions, err = percona.ReadState(ctx, client, specNamespacedName); err != nil {
 		return err
 	}
 	wandb.Status.MySQLStatus = translatorv2.ExtractMySQLStatus(ctx, conditions)

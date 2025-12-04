@@ -15,7 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func redisResourceReconcile(
+func redisWriteState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
@@ -29,21 +29,14 @@ func redisResourceReconcile(
 	if standaloneDesired, err = translatorv2.ToRedisStandaloneVendorSpec(ctx, wandb.Spec.Redis, wandb, client.Scheme()); err != nil {
 		return err
 	}
-	if err = opstree.CrudStandaloneResource(ctx, client, specNamespacedName, standaloneDesired); err != nil {
-		return err
-	}
-
 	if sentinelDesired, err = translatorv2.ToRedisSentinelVendorSpec(ctx, wandb.Spec.Redis, wandb, client.Scheme()); err != nil {
 		return err
 	}
-	if err = opstree.CrudSentinelResource(ctx, client, specNamespacedName, sentinelDesired); err != nil {
-		return err
-	}
-
 	if replicationDesired, err = translatorv2.ToRedisReplicationVendorSpec(ctx, wandb.Spec.Redis, wandb, client.Scheme()); err != nil {
 		return err
 	}
-	if err = opstree.CrudReplicationResource(ctx, client, specNamespacedName, replicationDesired); err != nil {
+
+	if err = opstree.WriteState(ctx, client, specNamespacedName, standaloneDesired, sentinelDesired, replicationDesired); err != nil {
 		return err
 	}
 
@@ -56,7 +49,7 @@ func redisResourceReconcile(
 
 }
 
-func redisStatusUpdate(
+func redisReadState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
@@ -67,7 +60,7 @@ func redisStatusUpdate(
 	var conditions []common.RedisCondition
 	var specNamespacedName = redisSpecNamespacedName(wandb.Spec.Redis)
 
-	if conditions, err = opstree.GetConditions(ctx, client, specNamespacedName); err != nil {
+	if conditions, err = opstree.ReadState(ctx, client, specNamespacedName); err != nil {
 		return err
 	}
 	wandb.Status.RedisStatus = translatorv2.ExtractRedisStatus(ctx, conditions)

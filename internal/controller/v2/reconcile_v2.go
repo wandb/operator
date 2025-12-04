@@ -57,37 +57,37 @@ func Reconcile(ctx context.Context, client client.Client, req ctrl.Request) (ctr
 
 	/////////////////////////
 	// Resource CRUD
-	if err = redisResourceReconcile(ctx, client, wandb); err != nil {
+	if err = redisWriteState(ctx, client, wandb); err != nil {
 		return ctrl.Result{}, err
 	}
-	if err = mysqlResourceReconcile(ctx, client, wandb); err != nil {
+	if err = mysqlWriteState(ctx, client, wandb); err != nil {
 		return ctrl.Result{}, err
 	}
-	if err = kafkaResourceReconcile(ctx, client, wandb); err != nil {
+	if err = kafkaWriteState(ctx, client, wandb); err != nil {
 		return ctrl.Result{}, err
 	}
-	if err = minioResourceReconcile(ctx, client, wandb); err != nil {
+	if err = minioWriteState(ctx, client, wandb); err != nil {
 		return ctrl.Result{}, err
 	}
-	if err = clickHouseResourceReconcile(ctx, client, wandb); err != nil {
+	if err = clickHouseWriteState(ctx, client, wandb); err != nil {
 		return ctrl.Result{}, err
 	}
 
 	/////////////////////////
 	// Status Update
-	if err = redisStatusUpdate(ctx, client, wandb); err != nil {
+	if err = redisReadState(ctx, client, wandb); err != nil {
 		return ctrl.Result{}, err
 	}
-	if err = mysqlStatusUpdate(ctx, client, wandb); err != nil {
+	if err = mysqlReadState(ctx, client, wandb); err != nil {
 		return ctrl.Result{}, err
 	}
-	if err = kafkaStatusUpdate(ctx, client, wandb); err != nil {
+	if err = kafkaReadState(ctx, client, wandb); err != nil {
 		return ctrl.Result{}, err
 	}
-	if err = minioStatusUpdate(ctx, client, wandb); err != nil {
+	if err = minioReadState(ctx, client, wandb); err != nil {
 		return ctrl.Result{}, err
 	}
-	if err = clickHouseStatusUpdate(ctx, client, wandb); err != nil {
+	if err = clickHouseReadState(ctx, client, wandb); err != nil {
 		return ctrl.Result{}, err
 	}
 

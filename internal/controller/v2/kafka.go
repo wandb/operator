@@ -13,7 +13,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func kafkaResourceReconcile(
+func kafkaWriteState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
@@ -26,26 +26,17 @@ func kafkaResourceReconcile(
 	if desiredKafka, err = translatorv2.ToKafkaVendorSpec(ctx, wandb.Spec.Kafka, wandb, client.Scheme()); err != nil {
 		return err
 	}
-	if err = strimzi.CrudKafkaResource(ctx, client, specNamespacedName, desiredKafka); err != nil {
-		return err
-	}
-
 	if desiredNodePool, err = translatorv2.ToKafkaNodePoolVendorSpec(ctx, wandb.Spec.Kafka, wandb, client.Scheme()); err != nil {
 		return err
 	}
-	if err = strimzi.CrudNodePoolResource(ctx, client, specNamespacedName, desiredNodePool); err != nil {
+	if err = strimzi.WriteState(ctx, client, specNamespacedName, desiredKafka, desiredNodePool); err != nil {
 		return err
 	}
-
-	//wandb.Status.KafkaStatus = translatorv2.ExtractKafkaStatus(ctx, results)
-	//if err = client.Status().Update(ctx, wandb); err != nil {
-	//	results.AddErrors(err)
-	//}
 
 	return err
 }
 
-func kafkaStatusUpdate(
+func kafkaReadState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
@@ -56,7 +47,7 @@ func kafkaStatusUpdate(
 	var conditions []common.KafkaCondition
 	var specNamespacedName = kafkaSpecNamespacedName(wandb.Spec.Kafka)
 
-	if conditions, err = strimzi.GetConditions(ctx, client, specNamespacedName); err != nil {
+	if conditions, err = strimzi.ReadState(ctx, client, specNamespacedName); err != nil {
 		return err
 	}
 	wandb.Status.KafkaStatus = translatorv2.ExtractKafkaStatus(ctx, conditions)

@@ -19,6 +19,7 @@ To have full control over the CRD API types and avoid unexpected breaking change
 All code generation annotations have been removed from vendored code:
 - `+kubebuilder:*` annotations (e.g., `+kubebuilder:validation:*`, `+kubebuilder:default:*`)
 - `+k8s:*` annotations (e.g., `+k8s:deepcopy-gen:*`, `+k8s:openapi-gen=true`)
+- `+optional`
 
 These annotations are only needed when running code generators like controller-gen or deepcopy-gen, which we explicitly do not do for vendored APIs. The Makefile's `generate` target only processes our own `./api/v1` and `./api/v2` types.
 

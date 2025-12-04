@@ -12,7 +12,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func GetConditions(
+func ReadState(
 	ctx context.Context,
 	client client.Client,
 	specNamespacedName types.NamespacedName,

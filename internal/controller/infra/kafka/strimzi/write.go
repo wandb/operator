@@ -9,7 +9,26 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func CrudKafkaResource(
+func WriteState(
+	ctx context.Context,
+	client client.Client,
+	specNamespacedName types.NamespacedName,
+	desiredKafka *kafkav1beta2.Kafka,
+	desiredNodePool *kafkav1beta2.KafkaNodePool,
+) error {
+	var err error
+
+	if err = writeKafkaState(ctx, client, specNamespacedName, desiredKafka); err != nil {
+		return err
+	}
+	if err = writeNodePoolState(ctx, client, specNamespacedName, desiredNodePool); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func writeKafkaState(
 	ctx context.Context,
 	client client.Client,
 	specNamespacedName types.NamespacedName,
@@ -30,7 +49,7 @@ func CrudKafkaResource(
 	return nil
 }
 
-func CrudNodePoolResource(
+func writeNodePoolState(
 	ctx context.Context,
 	client client.Client,
 	specNamespacedName types.NamespacedName,

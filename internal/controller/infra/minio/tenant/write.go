@@ -20,7 +20,7 @@ const (
 	ConfigTypeName   = "MinioConfig"
 )
 
-func CrudResourceAndConfig(
+func WriteState(
 	ctx context.Context,
 	client client.Client,
 	specNamespacedName types.NamespacedName,

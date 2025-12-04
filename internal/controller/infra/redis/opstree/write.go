@@ -17,7 +17,32 @@ const (
 	ReplicationType = "RedisReplication"
 )
 
-func CrudStandaloneResource(
+func WriteState(
+	ctx context.Context,
+	client client.Client,
+	specNamespacedName types.NamespacedName,
+	standaloneDesired *redisv1beta2.Redis,
+	sentinelDesired *redissentinelv1beta2.RedisSentinel,
+	replicationDesired *redisreplicationv1beta2.RedisReplication,
+) error {
+	var err error
+
+	if err = writeStandaloneState(ctx, client, specNamespacedName, standaloneDesired); err != nil {
+		return err
+	}
+
+	if err = writeSentinelState(ctx, client, specNamespacedName, sentinelDesired); err != nil {
+		return err
+	}
+
+	if err = writeReplicationState(ctx, client, specNamespacedName, replicationDesired); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func writeStandaloneState(
 	ctx context.Context,
 	client client.Client,
 	specNamespacedName types.NamespacedName,
@@ -35,7 +60,7 @@ func CrudStandaloneResource(
 	return common.CrudResource(ctx, client, standaloneDesired, standaloneActual)
 }
 
-func CrudSentinelResource(
+func writeSentinelState(
 	ctx context.Context,
 	client client.Client,
 	specNamespacedName types.NamespacedName,
@@ -53,7 +78,7 @@ func CrudSentinelResource(
 	return common.CrudResource(ctx, client, sentinelDesired, sentinelActual)
 }
 
-func CrudReplicationResource(
+func writeReplicationState(
 	ctx context.Context,
 	client client.Client,
 	specNamespacedName types.NamespacedName,

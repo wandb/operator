@@ -1,29 +1,29 @@
-package percona
+package altinity
 
 import (
 	"context"
 
 	"github.com/wandb/operator/internal/controller/common"
-	pxcv1 "github.com/wandb/operator/internal/vendored/percona-operator/pxc/v1"
+	chiv1 "github.com/wandb/operator/internal/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
-	ResourceTypeName = "PerconaXtraDBCluster"
+	ResourceTypeName = "ClickHouseInstallation"
 )
 
-func CrudResource(
+func WriteState(
 	ctx context.Context,
 	client client.Client,
 	specNamespacedName types.NamespacedName,
-	desired *pxcv1.PerconaXtraDBCluster,
+	desired *chiv1.ClickHouseInstallation,
 ) error {
 	var err error
-	var actual = &pxcv1.PerconaXtraDBCluster{}
+	var actual = &chiv1.ClickHouseInstallation{}
 
 	if err = common.GetResource(
-		ctx, client, ClusterNamespacedName(specNamespacedName), ResourceTypeName, actual,
+		ctx, client, InstallationNamespacedName(specNamespacedName), ResourceTypeName, actual,
 	); err != nil {
 		return err
 	}

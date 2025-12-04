@@ -16,6 +16,4 @@ limitations under the License.
 
 // Package v1beta2 contains common types used by Redis Operator APIs.
 // These types are shared across different Redis resource types.
-//
-// +groupName=redis.redis.opstreelabs.in
 package v1beta2

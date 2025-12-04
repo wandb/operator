@@ -23,7 +23,7 @@ Additionally, the upstream operator has several code generation issues that prev
 
 **Important**: Unlike our own API types (api/v1, api/v2), we do NOT run controller-gen on ANY vendored code. The vendored types and their DeepCopy methods are used as-is from upstream. This means:
 
-- No code generation annotations needed (e.g., `+kubebuilder:*`, `+k8s:*`)
+- No code generation annotations needed (`+kubebuilder:*`, `+k8s:*`, `+genclient`)
 - DeepCopy methods already exist in `zz_generated.deepcopy.go` from upstream
 - We only fix compilation errors, not regenerate code
 

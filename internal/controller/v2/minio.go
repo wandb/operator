@@ -13,7 +13,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func minioResourceReconcile(
+func minioWriteState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
@@ -29,7 +29,7 @@ func minioResourceReconcile(
 	if desiredConfig, err = translatorv2.ToMinioEnvConfig(ctx, wandb.Spec.Minio); err != nil {
 		return err
 	}
-	if err = tenant.CrudResourceAndConfig(ctx, client, specNamespacedName, desiredCr, desiredConfig); err != nil {
+	if err = tenant.WriteState(ctx, client, specNamespacedName, desiredCr, desiredConfig); err != nil {
 		return err
 	}
 
@@ -41,7 +41,7 @@ func minioResourceReconcile(
 	return nil
 }
 
-func minioStatusUpdate(
+func minioReadState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
@@ -52,7 +52,7 @@ func minioStatusUpdate(
 	var conditions []common.MinioCondition
 	var specNamespacedName = minioSpecNamespacedName(wandb.Spec.Minio)
 
-	if conditions, err = tenant.GetConditions(ctx, client, specNamespacedName); err != nil {
+	if conditions, err = tenant.ReadState(ctx, client, specNamespacedName); err != nil {
 		return err
 	}
 	wandb.Status.MinioStatus = translatorv2.ExtractMinioStatus(ctx, conditions)

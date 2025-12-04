@@ -30,8 +30,6 @@ const (
 	MergeTypeOverrideByNonEmptyValues MergeType = "override"
 )
 
-// +genclient
-
 // ClickHouseInstallation defines the Installation of a ClickHouse Database Cluster
 type ClickHouseInstallation struct {
 	meta.TypeMeta   `json:",inline"            yaml:",inline"`
@@ -85,14 +83,8 @@ func (runtime *ClickHouseInstallationRuntime) GetReferenceSoftwareVersion() *swv
 	return nil
 }
 
-// +genclient
-// +genclient:noStatus
-
 // ClickHouseInstallationTemplate defines ClickHouseInstallation template
 type ClickHouseInstallationTemplate ClickHouseInstallation
-
-// +genclient
-// +genclient:noStatus
 
 // ClickHouseOperatorConfiguration defines CHOp config
 type ClickHouseOperatorConfiguration struct {
