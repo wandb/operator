@@ -7,7 +7,7 @@ resources:
 # +kubebuilder:scaffold:crdkustomizeresource
 
 # By default, both v1 and v2 are served. Uncomment one of the patches below to serve only one version:
-#patches:
+patches:
 #- path: patches/use_v1_only.yaml
 #  target:
 #    kind: CustomResourceDefinition
@@ -19,9 +19,10 @@ resources:
 
 # [WEBHOOK] To enable webhook, uncomment all the sections with [WEBHOOK] prefix.
 # patches here are for enabling the conversion webhook for each CRD
+- path: patches/webhook_in_weightsandbiases.yaml
 # +kubebuilder:scaffold:crdkustomizewebhookpatch
 
 # [WEBHOOK] To enable webhook, uncomment the following section
 # the following config is for teaching kustomize how to do kustomization for CRDs.
-#configurations:
-#- kustomizeconfig.yaml
+configurations:
+- kustomizeconfig.yaml

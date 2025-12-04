@@ -31,14 +31,13 @@ import (
 	redisreplicationv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redisreplication/v1beta2"
 	redissentinelv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redissentinel/v1beta2"
 	strimziv1beta2 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1beta2"
-	webhook "github.com/wandb/operator/internal/webhook"
+	webhook "github.com/wandb/operator/internal/webhook.bak"
 	"github.com/wandb/operator/pkg/wandb/spec/channel/deployer"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
-	"github.com/wandb/operator/internal/controller"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -52,8 +51,11 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	ctrlwh "sigs.k8s.io/controller-runtime/pkg/webhook"
 
+	"github.com/wandb/operator/internal/controller"
+
 	appsv1 "github.com/wandb/operator/api/v1"
 	appsv2 "github.com/wandb/operator/api/v2"
+	webhookv2 "github.com/wandb/operator/internal/webhook/v2"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -286,17 +288,16 @@ func main() {
 		os.Exit(1)
 	}
 
-	if enableWebhooks {
-		if err = (&webhook.WeightsAndBiasesCustomDefaulter{
-			AssumeV2Cr: assumeV2Cr,
-		}).SetupWebhookWithManager(mgr); err != nil {
-			setupLog.Error(err, "unable to create webhook", "webhook", "WeightsAndBiases Defaulter")
+	if enableWebhooks && assumeV2Cr {
+		if err := webhookv2.SetupApplicationWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create webhook", "webhook", "Application")
 			os.Exit(1)
 		}
-		if err = (&webhook.WeightsAndBiasesCustomValidator{
-			AssumeV2Cr: assumeV2Cr,
-		}).SetupWebhookWithManager(mgr); err != nil {
-			setupLog.Error(err, "unable to create webhook", "webhook", "WeightsAndBiases Validator")
+	}
+
+	if enableWebhooks && assumeV2Cr {
+		if err := webhookv2.SetupWeightsAndBiasesWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create webhook", "webhook", "WeightsAndBiases")
 			os.Exit(1)
 		}
 	}

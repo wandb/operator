@@ -20,20 +20,59 @@ import (
 	"context"
 	"fmt"
 
-	corev1 "k8s.io/api/core/v1"
-	ctrl "sigs.k8s.io/controller-runtime"
-
-	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/defaults"
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/validation/field"
+	ctrl "sigs.k8s.io/controller-runtime"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+
+	appsv2 "github.com/wandb/operator/api/v2"
 )
 
-var defLog = ctrl.Log.WithName("wandb-v2-defaulter")
+// nolint:unused
+// log is for logging in this package.
+var weightsandbiaseslog = logf.Log.WithName("weightsandbiases-resource")
 
-func Default(ctx context.Context, wandb *apiv2.WeightsAndBiases) error {
-	defLog.Info("applying defaults", "name", wandb.Name)
+// SetupWeightsAndBiasesWebhookWithManager registers the webhook for WeightsAndBiases in the manager.
+func SetupWeightsAndBiasesWebhookWithManager(mgr ctrl.Manager) error {
+	return ctrl.NewWebhookManagedBy(mgr).For(&appsv2.WeightsAndBiases{}).
+		WithValidator(&WeightsAndBiasesCustomValidator{}).
+		WithDefaulter(&WeightsAndBiasesCustomDefaulter{}).
+		Complete()
+}
+
+// TODO(user): EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
+
+// +kubebuilder:webhook:path=/mutate-apps-wandb-com-v2-weightsandbiases,mutating=true,failurePolicy=fail,sideEffects=None,groups=apps.wandb.com,resources=weightsandbiases,verbs=create;update,versions=v2,name=mweightsandbiases-v2.kb.io,admissionReviewVersions=v1
+
+// WeightsAndBiasesCustomDefaulter struct is responsible for setting default values on the custom resource of the
+// Kind WeightsAndBiases when those are created or updated.
+//
+// NOTE: The +kubebuilder:object:generate=false marker prevents controller-gen from generating DeepCopy methods,
+// as it is used only for temporary operations and does not need to be deeply copied.
+type WeightsAndBiasesCustomDefaulter struct {
+	// TODO(user): Add more fields as needed for defaulting
+}
+
+var _ webhook.CustomDefaulter = &WeightsAndBiasesCustomDefaulter{}
+
+// Default implements webhook.CustomDefaulter so a webhook will be registered for the Kind WeightsAndBiases.
+func (d *WeightsAndBiasesCustomDefaulter) Default(_ context.Context, obj runtime.Object) error {
+	wandb, ok := obj.(*appsv2.WeightsAndBiases)
+
+	if !ok {
+		return fmt.Errorf("expected an WeightsAndBiases object but got %T", obj)
+	}
+	weightsandbiaseslog.Info("Defaulting for WeightsAndBiases", "name", wandb.GetName())
 
 	if wandb.Spec.Size == "" {
-		wandb.Spec.Size = apiv2.WBSizeDev
+		wandb.Spec.Size = appsv2.WBSizeDev
 	}
 
 	size, err := toCommonSize(wandb.Spec.Size)
@@ -64,18 +103,81 @@ func Default(ctx context.Context, wandb *apiv2.WeightsAndBiases) error {
 	return nil
 }
 
-func toCommonSize(size apiv2.WBSize) (defaults.Size, error) {
+// TODO(user): change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
+// NOTE: If you want to customise the 'path', use the flags '--defaulting-path' or '--validation-path'.
+// +kubebuilder:webhook:path=/validate-apps-wandb-com-v2-weightsandbiases,mutating=false,failurePolicy=fail,sideEffects=None,groups=apps.wandb.com,resources=weightsandbiases,verbs=create;update,versions=v2,name=vweightsandbiases-v2.kb.io,admissionReviewVersions=v1
+
+// WeightsAndBiasesCustomValidator struct is responsible for validating the WeightsAndBiases resource
+// when it is created, updated, or deleted.
+//
+// NOTE: The +kubebuilder:object:generate=false marker prevents controller-gen from generating DeepCopy methods,
+// as this struct is used only for temporary operations and does not need to be deeply copied.
+type WeightsAndBiasesCustomValidator struct {
+	// TODO(user): Add more fields as needed for validation
+}
+
+var _ webhook.CustomValidator = &WeightsAndBiasesCustomValidator{}
+
+// ValidateCreate implements webhook.CustomValidator so a webhook will be registered for the type WeightsAndBiases.
+func (v *WeightsAndBiasesCustomValidator) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+	wandb, ok := obj.(*appsv2.WeightsAndBiases)
+	if !ok {
+		return nil, fmt.Errorf("expected a WeightsAndBiases object but got %T", obj)
+	}
+	weightsandbiaseslog.Info("Validation for WeightsAndBiases upon creation", "name", wandb.GetName())
+
+	return validateSpec(ctx, wandb)
+}
+
+// ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type WeightsAndBiases.
+func (v *WeightsAndBiasesCustomValidator) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
+	newWandb, ok := newObj.(*appsv2.WeightsAndBiases)
+	if !ok {
+		return nil, fmt.Errorf("expected a WeightsAndBiases object for the newObj but got %T", newObj)
+	}
+	oldWandb, ok := oldObj.(*appsv2.WeightsAndBiases)
+	if !ok {
+		return nil, fmt.Errorf("expected a WeightsAndBiases object for the oldObj but got %T", newObj)
+	}
+	weightsandbiaseslog.Info("Validation for WeightsAndBiases upon update", "name", newWandb.GetName())
+
+	var specWarnings, changeWarnings admission.Warnings
+	var err error
+
+	weightsandbiaseslog.Info("validate V2 update", "name", newWandb.Name)
+
+	if specWarnings, err = validateSpec(ctx, newWandb); err != nil {
+		return specWarnings, err
+	}
+	changeWarnings, err = validateChanges(ctx, oldWandb, newWandb)
+	return append(specWarnings, changeWarnings...), err
+}
+
+// ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type WeightsAndBiases.
+func (v *WeightsAndBiasesCustomValidator) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+	weightsandbiases, ok := obj.(*appsv2.WeightsAndBiases)
+	if !ok {
+		return nil, fmt.Errorf("expected a WeightsAndBiases object but got %T", obj)
+	}
+	weightsandbiaseslog.Info("Validation for WeightsAndBiases upon deletion", "name", weightsandbiases.GetName())
+
+	// TODO(user): fill in your validation logic upon object deletion.
+
+	return nil, nil
+}
+
+func toCommonSize(size appsv2.WBSize) (defaults.Size, error) {
 	switch size {
-	case apiv2.WBSizeDev:
+	case appsv2.WBSizeDev:
 		return defaults.SizeDev, nil
-	case apiv2.WBSizeSmall:
+	case appsv2.WBSizeSmall:
 		return defaults.SizeSmall, nil
 	default:
 		return "", fmt.Errorf("unsupported size: %s", size)
 	}
 }
 
-func applyMySQLDefaults(wandb *apiv2.WeightsAndBiases, size defaults.Size) error {
+func applyMySQLDefaults(wandb *appsv2.WeightsAndBiases, size defaults.Size) error {
 
 	defaultConfig, err := defaults.BuildMySQLDefaults(size, wandb.Namespace)
 	if err != nil {
@@ -118,7 +220,7 @@ func applyMySQLDefaults(wandb *apiv2.WeightsAndBiases, size defaults.Size) error
 	return nil
 }
 
-func applyRedisDefaults(wandb *apiv2.WeightsAndBiases, size defaults.Size) error {
+func applyRedisDefaults(wandb *appsv2.WeightsAndBiases, size defaults.Size) error {
 	defaultConfig, err := defaults.BuildRedisDefaults(size, wandb.Namespace)
 	if err != nil {
 		return err
@@ -180,7 +282,7 @@ func applyRedisDefaults(wandb *apiv2.WeightsAndBiases, size defaults.Size) error
 	return nil
 }
 
-func applyKafkaDefaults(wandb *apiv2.WeightsAndBiases, size defaults.Size) error {
+func applyKafkaDefaults(wandb *appsv2.WeightsAndBiases, size defaults.Size) error {
 	defaultConfig, err := defaults.BuildKafkaDefaults(size, wandb.Namespace)
 	if err != nil {
 		return err
@@ -239,7 +341,7 @@ func applyKafkaDefaults(wandb *apiv2.WeightsAndBiases, size defaults.Size) error
 	return nil
 }
 
-func applyMinioDefaults(wandb *apiv2.WeightsAndBiases, size defaults.Size) error {
+func applyMinioDefaults(wandb *appsv2.WeightsAndBiases, size defaults.Size) error {
 	defaultConfig, err := defaults.BuildMinioDefaults(size, wandb.Namespace)
 	if err != nil {
 		return err
@@ -282,7 +384,7 @@ func applyMinioDefaults(wandb *apiv2.WeightsAndBiases, size defaults.Size) error
 	return nil
 }
 
-func applyClickHouseDefaults(wandb *apiv2.WeightsAndBiases, size defaults.Size) error {
+func applyClickHouseDefaults(wandb *appsv2.WeightsAndBiases, size defaults.Size) error {
 	defaultConfig, err := defaults.BuildClickHouseDefaults(size, wandb.Namespace)
 	if err != nil {
 		return err
@@ -327,4 +429,111 @@ func applyClickHouseDefaults(wandb *apiv2.WeightsAndBiases, size defaults.Size) 
 	}
 
 	return nil
+}
+
+func validateSpec(ctx context.Context, newWandb *appsv2.WeightsAndBiases) (admission.Warnings, error) {
+	var allErrors field.ErrorList
+	var warnings admission.Warnings
+
+	allErrors = append(allErrors, validateRedisSpec(newWandb)...)
+
+	if len(allErrors) == 0 {
+		return warnings, nil
+	}
+
+	return warnings, apierrors.NewInvalid(
+		schema.GroupKind{Group: "apps.wandb.com", Kind: "WeightsAndBiases"},
+		newWandb.Name,
+		allErrors,
+	)
+}
+
+func validateChanges(ctx context.Context, newWandb *appsv2.WeightsAndBiases, oldWandb *appsv2.WeightsAndBiases) (admission.Warnings, error) {
+	var allErrors field.ErrorList
+	var warnings admission.Warnings
+
+	allErrors = append(allErrors, validateRedisChanges(newWandb, oldWandb)...)
+
+	if len(allErrors) == 0 {
+		return warnings, nil
+	}
+
+	return warnings, apierrors.NewInvalid(
+		schema.GroupKind{Group: "apps.wandb.com", Kind: "WeightsAndBiases"},
+		newWandb.Name,
+		allErrors,
+	)
+}
+
+func validateRedisSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
+	var errors field.ErrorList
+	redisPath := field.NewPath("spec").Child("redis")
+	spec := wandb.Spec.Redis
+
+	if !spec.Enabled {
+		return errors
+	}
+
+	if spec.StorageSize != "" {
+		if _, err := resource.ParseQuantity(spec.StorageSize); err != nil {
+			errors = append(errors, field.Invalid(
+				redisPath.Child("storageSize"),
+				spec.StorageSize,
+				"must be a valid resource quantity (e.g., '10Gi')",
+			))
+		}
+	}
+
+	if spec.Sentinel.Enabled {
+		if !spec.Enabled {
+			errors = append(errors, field.Invalid(
+				redisPath.Child("sentinel").Child("enabled"),
+				spec.Sentinel.Enabled,
+				"Redis Sentinel cannot be enabled when Redis is disabled",
+			))
+		}
+	}
+
+	return errors
+}
+
+func validateRedisChanges(newWandb, oldWandb *appsv2.WeightsAndBiases) field.ErrorList {
+	var errors field.ErrorList
+	redisPath := field.NewPath("spec").Child("redis")
+	newSpec := newWandb.Spec.Redis
+	oldSpec := oldWandb.Spec.Redis
+
+	if !newSpec.Enabled {
+		return errors
+	}
+
+	// storageSize may be initially set as part of an update but cannot be changed afterwards
+	if oldSpec.StorageSize != "" &&
+		oldSpec.StorageSize != newSpec.StorageSize {
+		errors = append(errors, field.Invalid(
+			redisPath.Child("storageSize"),
+			newSpec.StorageSize,
+			"storageSize may not be changed",
+		))
+	}
+
+	if oldSpec.Namespace != newSpec.Namespace {
+		errors = append(errors, field.Invalid(
+			redisPath.Child("namespace"),
+			newSpec.Namespace,
+			"namespace may not be changed",
+		))
+	}
+
+	if oldSpec.Sentinel.Enabled != newSpec.Sentinel.Enabled {
+		if !newSpec.Enabled {
+			errors = append(errors, field.Invalid(
+				redisPath.Child("sentinel").Child("enabled"),
+				newSpec.Sentinel.Enabled,
+				"Redis Sentinel cannot be toggled between enabled and disabled (yet)",
+			))
+		}
+	}
+
+	return errors
 }
