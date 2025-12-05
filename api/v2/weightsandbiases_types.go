@@ -339,9 +339,7 @@ type WBMinioStatus struct {
 }
 
 type WBMinioConnection struct {
-	MinioHost      string `json:"MINIO_HOST,omitempty"`
-	MinioPort      string `json:"MINIO_PORT,omitempty"`
-	MinioAccessKey string `json:"MINIO_ACCESS_KEY,omitempty"`
+	URL corev1.SecretKeySelector `json:"url,omitempty"`
 }
 
 type WBClickHouseStatus struct {

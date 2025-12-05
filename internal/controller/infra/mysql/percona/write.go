@@ -22,11 +22,14 @@ func WriteState(
 	var err error
 	var actual = &pxcv1.PerconaXtraDBCluster{}
 
+	nsNameBldr := createNsNameBuilder(specNamespacedName)
+
 	if err = common.GetResource(
-		ctx, client, ClusterNamespacedName(specNamespacedName), ResourceTypeName, actual,
+		ctx, client, nsNameBldr.ClusterNsName(), ResourceTypeName, actual,
 	); err != nil {
 		return err
 	}
+
 	if err = common.CrudResource(ctx, client, desired, actual); err != nil {
 		return err
 	}

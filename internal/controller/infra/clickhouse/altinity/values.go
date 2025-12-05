@@ -1,8 +1,6 @@
 package altinity
 
 import (
-	"fmt"
-
 	"k8s.io/apimachinery/pkg/types"
 )
 
@@ -23,20 +21,13 @@ const (
 )
 
 func InstallationName(specName string) string {
-	return fmt.Sprintf("%s-install", specName)
+	return createNsNameBuilder(types.NamespacedName{Name: specName}).InstallationName()
 }
 
 func ClusterName(specName string) string {
-	return specName
+	return createNsNameBuilder(types.NamespacedName{Name: specName}).ClusterName()
 }
 
 func VolumeTemplateName(specName string) string {
-	return fmt.Sprintf("%s-voltempl", specName)
-}
-
-func InstallationNamespacedName(specNamespacedName types.NamespacedName) types.NamespacedName {
-	return types.NamespacedName{
-		Namespace: specNamespacedName.Namespace,
-		Name:      InstallationName(specNamespacedName.Name),
-	}
+	return createNsNameBuilder(types.NamespacedName{Name: specName}).VolumeTemplateName()
 }

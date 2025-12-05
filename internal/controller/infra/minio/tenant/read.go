@@ -2,13 +2,10 @@ package tenant
 
 import (
 	"context"
-	"fmt"
-	"strconv"
 
 	ctrlcommon "github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/translator/common"
 	miniov2 "github.com/wandb/operator/internal/vendored/minio-operator/minio.min.io/v2"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -21,10 +18,11 @@ func ReadState(
 	var err error
 	var results []common.MinioCondition
 	var actualResource = &miniov2.Tenant{}
-	var actualConfig = &corev1.Secret{}
+
+	nsNameBldr := createNsNameBuilder(specNamespacedName)
 
 	if err = ctrlcommon.GetResource(
-		ctx, client, TenantNamespacedName(specNamespacedName), ResourceTypeName, actualResource,
+		ctx, client, nsNameBldr.SpecNsName(), ResourceTypeName, actualResource,
 	); err != nil {
 		return results, err
 	}
@@ -32,29 +30,6 @@ func ReadState(
 	if actualResource == nil {
 		return results, nil
 	}
-
-	if err = ctrlcommon.GetResource(
-		ctx, client, ConfigNamespacedName(specNamespacedName), ConfigTypeName, actualConfig,
-	); err != nil {
-		return results, err
-	}
-
-	if actualConfig == nil {
-		return results, nil
-	}
-
-	// Extract connection info from Tenant CR
-	// Connection format: wandb-minio-hl.{namespace}.svc.cluster.local:443
-	minioHost := fmt.Sprintf("%s.%s.svc.cluster.local", ServiceName(specNamespacedName.Name), specNamespacedName.Namespace)
-	minioPort := strconv.Itoa(MinioPort)
-
-	connInfo := common.MinioConnInfo{
-		Host:      minioHost,
-		Port:      minioPort,
-		AccessKey: MinioAccessKey,
-	}
-	results = append(results, common.NewMinioConnCondition(connInfo))
-	///////////
 
 	return results, nil
 }

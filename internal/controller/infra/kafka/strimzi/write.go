@@ -18,10 +18,12 @@ func WriteState(
 ) error {
 	var err error
 
-	if err = writeKafkaState(ctx, client, specNamespacedName, desiredKafka); err != nil {
+	nsNameBldr := createNsNameBuilder(specNamespacedName)
+
+	if err = writeKafkaState(ctx, client, nsNameBldr, desiredKafka); err != nil {
 		return err
 	}
-	if err = writeNodePoolState(ctx, client, specNamespacedName, desiredNodePool); err != nil {
+	if err = writeNodePoolState(ctx, client, nsNameBldr, desiredNodePool); err != nil {
 		return err
 	}
 
@@ -31,17 +33,18 @@ func WriteState(
 func writeKafkaState(
 	ctx context.Context,
 	client client.Client,
-	specNamespacedName types.NamespacedName,
+	nsNameBldr *NsNameBuilder,
 	desired *kafkav1beta2.Kafka,
 ) error {
 	var err error
 	var actual = &kafkav1beta2.Kafka{}
 
 	if err = common.GetResource(
-		ctx, client, KafkaNamespacedName(specNamespacedName), KafkaResourceType, actual,
+		ctx, client, nsNameBldr.KafkaNsName(), KafkaResourceType, actual,
 	); err != nil {
 		return err
 	}
+
 	if err = common.CrudResource(ctx, client, desired, actual); err != nil {
 		return err
 	}
@@ -52,17 +55,18 @@ func writeKafkaState(
 func writeNodePoolState(
 	ctx context.Context,
 	client client.Client,
-	specNamespacedName types.NamespacedName,
+	nsNameBldr *NsNameBuilder,
 	desired *kafkav1beta2.KafkaNodePool,
 ) error {
 	var err error
 	var actual = &kafkav1beta2.KafkaNodePool{}
 
 	if err = common.GetResource(
-		ctx, client, NodePoolNamespacedName(specNamespacedName), NodePoolResourceType, actual,
+		ctx, client, nsNameBldr.NodePoolNsName(), NodePoolResourceType, actual,
 	); err != nil {
 		return err
 	}
+
 	if err = common.CrudResource(ctx, client, desired, actual); err != nil {
 		return err
 	}

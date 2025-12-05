@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
@@ -80,6 +81,10 @@ func ToMySQLVendorSpec(
 	}
 
 	specName := spec.Name
+	nsNameBldr := percona.CreateNsNameBuilder(types.NamespacedName{
+		Name:      specName,
+		Namespace: spec.Namespace,
+	})
 
 	// Parse storage quantity
 	storageQuantity, err := resource.ParseQuantity(spec.StorageSize)
@@ -102,10 +107,10 @@ func ToMySQLVendorSpec(
 	// Build PXC spec
 	pxc := &pxcv1.PerconaXtraDBCluster{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      percona.ClusterName(specName),
+			Name:      nsNameBldr.ClusterName(),
 			Namespace: spec.Namespace,
 			Labels: map[string]string{
-				"app": percona.ClusterName(specName),
+				"app": nsNameBldr.ClusterName(),
 			},
 		},
 		Spec: pxcv1.PerconaXtraDBClusterSpec{

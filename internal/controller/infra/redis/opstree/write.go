@@ -27,15 +27,17 @@ func WriteState(
 ) error {
 	var err error
 
-	if err = writeStandaloneState(ctx, client, specNamespacedName, standaloneDesired); err != nil {
+	nsNameBldr := createNsNameBuilder(specNamespacedName)
+
+	if err = writeStandaloneState(ctx, client, nsNameBldr, standaloneDesired); err != nil {
 		return err
 	}
 
-	if err = writeSentinelState(ctx, client, specNamespacedName, sentinelDesired); err != nil {
+	if err = writeSentinelState(ctx, client, nsNameBldr, sentinelDesired); err != nil {
 		return err
 	}
 
-	if err = writeReplicationState(ctx, client, specNamespacedName, replicationDesired); err != nil {
+	if err = writeReplicationState(ctx, client, nsNameBldr, replicationDesired); err != nil {
 		return err
 	}
 
@@ -45,14 +47,14 @@ func WriteState(
 func writeStandaloneState(
 	ctx context.Context,
 	client client.Client,
-	specNamespacedName types.NamespacedName,
+	nsNameBldr *NsNameBuilder,
 	standaloneDesired *redisv1beta2.Redis,
 ) error {
 	var standaloneActual = &redisv1beta2.Redis{}
 	var err error
 
 	if err = common.GetResource(
-		ctx, client, StandaloneNamespacedName(specNamespacedName), StandaloneType, standaloneActual,
+		ctx, client, nsNameBldr.StandaloneNsName(), StandaloneType, standaloneActual,
 	); err != nil {
 		return err
 	}
@@ -63,14 +65,14 @@ func writeStandaloneState(
 func writeSentinelState(
 	ctx context.Context,
 	client client.Client,
-	specNamespacedName types.NamespacedName,
+	nsNameBldr *NsNameBuilder,
 	sentinelDesired *redissentinelv1beta2.RedisSentinel,
 ) error {
 	var sentinelActual = &redissentinelv1beta2.RedisSentinel{}
 	var err error
 
 	if err = common.GetResource(
-		ctx, client, SentinelNamespacedName(specNamespacedName), SentinelType, sentinelActual,
+		ctx, client, nsNameBldr.SentinelNsName(), SentinelType, sentinelActual,
 	); err != nil {
 		return err
 	}
@@ -81,14 +83,14 @@ func writeSentinelState(
 func writeReplicationState(
 	ctx context.Context,
 	client client.Client,
-	specNamespacedName types.NamespacedName,
+	nsNameBldr *NsNameBuilder,
 	replicationDesired *redisreplicationv1beta2.RedisReplication,
 ) error {
 	var replicationActual = &redisreplicationv1beta2.RedisReplication{}
 	var err error
 
 	if err = common.GetResource(
-		ctx, client, ReplicationNamespacedName(specNamespacedName), ReplicationType, replicationActual,
+		ctx, client, nsNameBldr.ReplicationNsName(), ReplicationType, replicationActual,
 	); err != nil {
 		return err
 	}

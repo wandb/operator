@@ -22,14 +22,16 @@ func ReadState(
 	var actualKafka = &v1beta3.Kafka{}
 	var actualNodePool = &v1beta3.KafkaNodePool{}
 
+	nsNameBldr := createNsNameBuilder(specNamespacedName)
+
 	if err = ctrlcommon.GetResource(
-		ctx, client, KafkaNamespacedName(specNamespacedName), KafkaResourceType, actualKafka,
+		ctx, client, nsNameBldr.KafkaNsName(), KafkaResourceType, actualKafka,
 	); err != nil {
 		return results, err
 	}
 
 	if err = ctrlcommon.GetResource(
-		ctx, client, NodePoolNamespacedName(specNamespacedName), NodePoolResourceType, actualNodePool,
+		ctx, client, nsNameBldr.NodePoolNsName(), NodePoolResourceType, actualNodePool,
 	); err != nil {
 		return results, err
 	}
@@ -41,7 +43,7 @@ func ReadState(
 	///////////
 	// Extract connection info from Kafka CR
 	// Connection format: wandb-kafka.{namespace}.svc.cluster.local:9092
-	kafkaHost := fmt.Sprintf("%s.%s.svc.cluster.local", KafkaName(specNamespacedName.Name), specNamespacedName.Namespace)
+	kafkaHost := fmt.Sprintf("%s.%s.svc.cluster.local", nsNameBldr.KafkaName(), nsNameBldr.Namespace())
 	kafkaPort := strconv.Itoa(PlainListenerPort)
 
 	connInfo := common.KafkaConnInfo{

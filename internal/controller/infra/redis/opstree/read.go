@@ -23,18 +23,20 @@ func ReadState(
 	var results []common.RedisCondition
 	var err error
 
+	nsNameBldr := createNsNameBuilder(specNamespacedName)
+
 	if err = ctrlcommon.GetResource(
-		ctx, client, StandaloneNamespacedName(specNamespacedName), StandaloneType, standaloneActual,
+		ctx, client, nsNameBldr.StandaloneNsName(), StandaloneType, standaloneActual,
 	); err != nil {
 		return results, err
 	}
 	if err = ctrlcommon.GetResource(
-		ctx, client, SentinelNamespacedName(specNamespacedName), SentinelType, sentinelActual,
+		ctx, client, nsNameBldr.SentinelNsName(), SentinelType, sentinelActual,
 	); err != nil {
 		return results, err
 	}
 	if err = ctrlcommon.GetResource(
-		ctx, client, ReplicationNamespacedName(specNamespacedName), ReplicationType, replicationActual,
+		ctx, client, nsNameBldr.ReplicationNsName(), ReplicationType, replicationActual,
 	); err != nil {
 		return results, err
 	}

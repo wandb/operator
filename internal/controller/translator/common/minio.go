@@ -62,9 +62,7 @@ type MinioStatus struct {
 }
 
 type MinioConnection struct {
-	Host      string
-	Port      string
-	AccessKey string
+	URL corev1.SecretKeySelector
 }
 
 type MinioInfraCode string
@@ -106,7 +104,7 @@ func (m MinioCondition) ToMinioConnCondition() (MinioConnCondition, bool) {
 	result.code = m.code
 	result.message = m.message
 
-	connInfo, ok := m.hidden.(MinioConnInfo)
+	connInfo, ok := m.hidden.(MinioConnection)
 	if !ok {
 		ctrl.Log.Error(
 			fmt.Errorf("MinioConnection does not have connection info"),
@@ -114,26 +112,20 @@ func (m MinioCondition) ToMinioConnCondition() (MinioConnCondition, bool) {
 		)
 		return result, true
 	}
-	result.connInfo = connInfo
+	result.connection = connInfo
 	return result, true
-}
-
-type MinioConnInfo struct {
-	Host      string
-	Port      string
-	AccessKey string
 }
 
 type MinioConnCondition struct {
 	MinioCondition
-	connInfo MinioConnInfo
+	connection MinioConnection
 }
 
-func NewMinioConnCondition(connInfo MinioConnInfo) MinioCondition {
+func NewMinioConnCondition(connection MinioConnection) MinioCondition {
 	return MinioCondition{
 		code:    MinioConnectionCode,
 		message: "Minio connection info",
-		hidden:  connInfo,
+		hidden:  connection,
 	}
 }
 
@@ -144,16 +136,14 @@ func ExtractMinioStatus(ctx context.Context, conditions []MinioCondition) MinioS
 
 	for _, cond := range conditions {
 		if connCond, ok = cond.ToMinioConnCondition(); ok {
-			result.Connection.Host = connCond.connInfo.Host
-			result.Connection.Port = connCond.connInfo.Port
-			result.Connection.AccessKey = connCond.connInfo.AccessKey
+			result.Connection.URL = connCond.connection.URL
 			continue
 		}
 
 		result.Conditions = append(result.Conditions, cond)
 	}
 
-	result.Ready = result.Connection.Host != ""
+	result.Ready = true
 
 	return result
 }

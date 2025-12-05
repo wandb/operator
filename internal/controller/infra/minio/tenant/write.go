@@ -6,18 +6,20 @@ import (
 
 	"github.com/Masterminds/goutils"
 	"github.com/wandb/operator/internal/controller/common"
+	transcommon "github.com/wandb/operator/internal/controller/translator/common"
 	miniov2 "github.com/wandb/operator/internal/vendored/minio-operator/minio.min.io/v2"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-	ctrl "sigs.k8s.io/controller-runtime"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
 	ResourceTypeName = "Tenant"
 	ConfigTypeName   = "MinioConfig"
+	AppConnTypeName  = "MinioAppConn"
 )
 
 func WriteState(
@@ -26,85 +28,171 @@ func WriteState(
 	specNamespacedName types.NamespacedName,
 	desiredCr *miniov2.Tenant,
 	envConfig MinioEnvConfig,
-) error {
+	wandbOwner client.Object,
+) (*transcommon.MinioConnection, error) {
 	var err error
 	var actual = &miniov2.Tenant{}
 
+	nsNameBldr := createNsNameBuilder(specNamespacedName)
+
 	if err = common.GetResource(
-		ctx, client, TenantNamespacedName(specNamespacedName), ResourceTypeName, actual,
+		ctx, client, nsNameBldr.SpecNsName(), ResourceTypeName, actual,
 	); err != nil {
-		return err
+		return nil, err
 	}
+
 	if err = common.CrudResource(ctx, client, desiredCr, actual); err != nil {
-		return err
+		return nil, err
 	}
 
-	configNamespacedName := ConfigNamespacedName(specNamespacedName)
-	if err = crudMinioConfig(ctx, client, desiredCr, client.Scheme(), configNamespacedName, envConfig); err != nil {
-		return err
+	var connInfo *minioConnInfo
+	if connInfo, err = writeMinioConfig(
+		ctx, client, desiredCr, nsNameBldr, envConfig,
+	); err != nil {
+		return nil, err
 	}
 
-	return nil
+	if connInfo != nil {
+		var connection *transcommon.MinioConnection
+		if connection, err = writeWandbConnInfo(
+			ctx, client, wandbOwner, nsNameBldr, connInfo,
+		); err != nil {
+			return nil, err
+		}
+		return connection, nil
+	}
+
+	return nil, nil
 }
 
-// CrudMinioConfig builds the Minio config, that includes the root password. To keep the
-// password generated only if not present, we have to read the actual config
-func crudMinioConfig(
+// writeMinioConfig builds the Minio Config with credentials.
+// This generates a password if one does not exist.
+// Note: the owner of the minio-config is the Minio CR
+func writeMinioConfig(
 	ctx context.Context,
 	client client.Client,
 	owner *miniov2.Tenant,
-	scheme *runtime.Scheme,
-	configNamespacedName types.NamespacedName,
+	nsNameBldr *NsNameBuilder,
 	envConfig MinioEnvConfig,
-) error {
+) (*minioConnInfo, error) {
 	var err error
+	var gvk schema.GroupVersionKind
+	var configFile minioConfigFile
 	var rootPassword string
 	var actual = &corev1.Secret{}
 
-	log := ctrl.LoggerFrom(ctx)
+	configFileName := "config.env"
+
+	//log := ctrl.LoggerFrom(ctx)
 
 	if err = common.GetResource(
-		ctx, client, configNamespacedName, ConfigTypeName, actual,
+		ctx, client, nsNameBldr.ConfigNsName(), ConfigTypeName, actual,
 	); err != nil {
-		return err
+		return nil, err
 	}
 
 	if actual != nil {
-		rootPassword = actual.StringData[TenantMinioRootPasswordKey]
+		rootPassword = parseMinioConfigFile(actual.StringData[configFileName]).rootPassword
 	}
 	if rootPassword == "" {
 		if rootPassword, err = goutils.RandomAlphabetic(20); err != nil {
-			return err
+			return nil, err
 		}
 	}
-	rootUser := envConfig.RootUser
-	minioBrowser := envConfig.MinioBrowserSetting
+	configFile = buildMinioConfigFile(envConfig.RootUser, rootPassword, envConfig.MinioBrowserSetting)
+
+	// Compute owner reference
+	if gvk, err = client.GroupVersionKindFor(owner); err != nil {
+		return nil, fmt.Errorf("could not get GVK for owner: %w", err)
+	}
+	ref := metav1.OwnerReference{
+		APIVersion:         gvk.GroupVersion().String(),
+		Kind:               gvk.Kind,
+		Name:               owner.GetName(),
+		UID:                owner.GetUID(),
+		Controller:         ptr.To(false),
+		BlockOwnerDeletion: ptr.To(false),
+	}
 
 	desired := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      configNamespacedName.Name,
-			Namespace: configNamespacedName.Namespace,
+			Name:            nsNameBldr.ConfigName(),
+			Namespace:       nsNameBldr.Namespace(),
+			OwnerReferences: []metav1.OwnerReference{ref},
 		},
 		Type: corev1.SecretTypeOpaque,
 		StringData: map[string]string{
-			"config.env": fmt.Sprintf(`export MINIO_ROOT_USER="%s"
-export MINIO_ROOT_PASSWORD="%s"
-export MINIO_BROWSER="%s"`, rootUser, rootPassword, minioBrowser),
-			TenantMinioRootUserKey:     rootUser,
-			TenantMinioRootPasswordKey: rootPassword,
-			TenantMinioBrowserKey:      minioBrowser,
+			configFileName: configFile.toFileContents(),
 		},
 	}
 
-	// Set owner reference
-	if err := ctrl.SetControllerReference(owner, desired, scheme); err != nil {
-		log.Error(err, "failed to set owner reference on Minio config secret")
-		return fmt.Errorf("failed to set owner reference: %w", err)
+	if err = common.CrudResource(ctx, client, desired, actual); err != nil {
+		return nil, err
+	}
+
+	return buildMinioConnInfo(configFile.rootUser, configFile.rootPassword, nsNameBldr), nil
+}
+
+func writeWandbConnInfo(
+	ctx context.Context,
+	client client.Client,
+	owner client.Object,
+	nsNameBldr *NsNameBuilder,
+	connInfo *minioConnInfo,
+) (
+	*transcommon.MinioConnection, error,
+) {
+	var err error
+	var gvk schema.GroupVersionKind
+	var actual = &corev1.Secret{}
+
+	//log := ctrl.LoggerFrom(ctx)
+
+	nsName := nsNameBldr.ConnectionNsName()
+	urlKey := "url"
+
+	if err = common.GetResource(
+		ctx, client, nsName, AppConnTypeName, actual,
+	); err != nil {
+		return nil, err
+	}
+
+	// Compute owner reference
+	if gvk, err = client.GroupVersionKindFor(owner); err != nil {
+		return nil, fmt.Errorf("could not get GVK for owner: %w", err)
+	}
+	ref := metav1.OwnerReference{
+		APIVersion:         gvk.GroupVersion().String(),
+		Kind:               gvk.Kind,
+		Name:               owner.GetName(),
+		UID:                owner.GetUID(),
+		Controller:         ptr.To(false),
+		BlockOwnerDeletion: ptr.To(false),
+	}
+
+	desired := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            nsName.Name,
+			Namespace:       nsName.Namespace,
+			OwnerReferences: []metav1.OwnerReference{ref},
+		},
+		Type: corev1.SecretTypeOpaque,
+		StringData: map[string]string{
+			urlKey: connInfo.toUrl().String(),
+		},
 	}
 
 	if err = common.CrudResource(ctx, client, desired, actual); err != nil {
-		return err
+		return nil, err
 	}
 
-	return nil
+	return &transcommon.MinioConnection{
+		URL: corev1.SecretKeySelector{
+			LocalObjectReference: corev1.LocalObjectReference{
+				Name: nsName.Name,
+			},
+			Key:      urlKey,
+			Optional: ptr.To(false),
+		},
+	}, nil
 }

@@ -21,8 +21,10 @@ func ReadState(
 	var results []common.MySQLCondition
 	var actual = &pxcv1.PerconaXtraDBCluster{}
 
+	nsNameBldr := createNsNameBuilder(specNamespacedName)
+
 	if err = ctrlcommon.GetResource(
-		ctx, client, ClusterNamespacedName(specNamespacedName), ResourceTypeName, actual,
+		ctx, client, nsNameBldr.ClusterNsName(), ResourceTypeName, actual,
 	); err != nil {
 		return results, err
 	}

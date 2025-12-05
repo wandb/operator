@@ -17,34 +17,31 @@ func minioWriteState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
-) error {
+) (*common.MinioConnection, error) {
 	var err error
 	var desiredCr *miniov2.Tenant
 	var desiredConfig tenant.MinioEnvConfig
 	var specNamespacedName = minioSpecNamespacedName(wandb.Spec.Minio)
+	var connection *common.MinioConnection
 
 	if desiredCr, err = translatorv2.ToMinioVendorSpec(ctx, wandb.Spec.Minio, wandb, client.Scheme()); err != nil {
-		return err
+		return nil, err
 	}
 	if desiredConfig, err = translatorv2.ToMinioEnvConfig(ctx, wandb.Spec.Minio); err != nil {
-		return err
+		return nil, err
 	}
-	if err = tenant.WriteState(ctx, client, specNamespacedName, desiredCr, desiredConfig); err != nil {
-		return err
+	if connection, err = tenant.WriteState(ctx, client, specNamespacedName, desiredCr, desiredConfig, wandb); err != nil {
+		return nil, err
 	}
 
-	//wandb.Status.MinioStatus = translatorv2.ExtractMinioStatus(ctx, results)
-	//if err = r.Status().Update(ctx, wandb); err != nil {
-	//	results.AddErrors(err)
-	//}
-
-	return nil
+	return connection, nil
 }
 
 func minioReadState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
+	connection *common.MinioConnection,
 ) error {
 	log := ctrl.LoggerFrom(ctx)
 
@@ -54,6 +51,9 @@ func minioReadState(
 
 	if conditions, err = tenant.ReadState(ctx, client, specNamespacedName); err != nil {
 		return err
+	}
+	if connection != nil {
+		conditions = append(conditions, common.NewMinioConnCondition(*connection))
 	}
 	wandb.Status.MinioStatus = translatorv2.ExtractMinioStatus(ctx, conditions)
 	if err = client.Status().Update(ctx, wandb); err != nil {

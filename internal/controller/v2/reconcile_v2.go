@@ -21,6 +21,7 @@ import (
 	"time"
 
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/internal/controller/translator/common"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -40,6 +41,7 @@ func Reconcile(ctx context.Context, client client.Client, req ctrl.Request) (ctr
 		"start", true,
 	)
 
+	var minioConnection *common.MinioConnection
 	var err error
 
 	wandb := &apiv2.WeightsAndBiases{}
@@ -56,7 +58,7 @@ func Reconcile(ctx context.Context, client client.Client, req ctrl.Request) (ctr
 	)
 
 	/////////////////////////
-	// Resource CRUD
+	// Write State
 	if err = redisWriteState(ctx, client, wandb); err != nil {
 		return ctrl.Result{}, err
 	}
@@ -66,7 +68,7 @@ func Reconcile(ctx context.Context, client client.Client, req ctrl.Request) (ctr
 	if err = kafkaWriteState(ctx, client, wandb); err != nil {
 		return ctrl.Result{}, err
 	}
-	if err = minioWriteState(ctx, client, wandb); err != nil {
+	if minioConnection, err = minioWriteState(ctx, client, wandb); err != nil {
 		return ctrl.Result{}, err
 	}
 	if err = clickHouseWriteState(ctx, client, wandb); err != nil {
@@ -84,7 +86,7 @@ func Reconcile(ctx context.Context, client client.Client, req ctrl.Request) (ctr
 	if err = kafkaReadState(ctx, client, wandb); err != nil {
 		return ctrl.Result{}, err
 	}
-	if err = minioReadState(ctx, client, wandb); err != nil {
+	if err = minioReadState(ctx, client, wandb, minioConnection); err != nil {
 		return ctrl.Result{}, err
 	}
 	if err = clickHouseReadState(ctx, client, wandb); err != nil {

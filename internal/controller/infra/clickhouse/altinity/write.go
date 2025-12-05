@@ -22,11 +22,14 @@ func WriteState(
 	var err error
 	var actual = &chiv1.ClickHouseInstallation{}
 
+	nsNameBldr := createNsNameBuilder(specNamespacedName)
+
 	if err = common.GetResource(
-		ctx, client, InstallationNamespacedName(specNamespacedName), ResourceTypeName, actual,
+		ctx, client, nsNameBldr.InstallationNsName(), ResourceTypeName, actual,
 	); err != nil {
 		return err
 	}
+
 	if err = common.CrudResource(ctx, client, desired, actual); err != nil {
 		return err
 	}

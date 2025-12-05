@@ -21,8 +21,10 @@ func ReadState(
 	var results []common.ClickHouseCondition
 	var actual = &chiv1.ClickHouseInstallation{}
 
+	nsNameBldr := createNsNameBuilder(specNamespacedName)
+
 	if err = ctrlcommon.GetResource(
-		ctx, client, InstallationNamespacedName(specNamespacedName), ResourceTypeName, actual,
+		ctx, client, nsNameBldr.InstallationNsName(), ResourceTypeName, actual,
 	); err != nil {
 		return results, err
 	}

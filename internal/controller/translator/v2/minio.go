@@ -36,9 +36,7 @@ func TranslateMinioStatus(ctx context.Context, m common.MinioStatus) apiv2.WBMin
 	}
 
 	result.Connection = apiv2.WBMinioConnection{
-		MinioHost:      m.Connection.Host,
-		MinioPort:      m.Connection.Port,
-		MinioAccessKey: m.Connection.AccessKey,
+		URL: m.Connection.URL,
 	}
 
 	result.Ready = m.Ready

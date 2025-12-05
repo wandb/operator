@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
@@ -80,7 +81,9 @@ func ToClickHouseVendorSpec(
 		return nil, nil
 	}
 
-	specName := spec.Name
+	nsNameBldr := altinity.CreateNsNameBuilder(types.NamespacedName{
+		Namespace: spec.Namespace, Name: spec.Name,
+	})
 
 	// Parse storage quantity
 	storageQuantity := resource.MustParse(spec.StorageSize)
@@ -100,8 +103,8 @@ func ToClickHouseVendorSpec(
 	// Build ClickHouseInstallation spec
 	chi := &chiv2.ClickHouseInstallation{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      altinity.InstallationName(specName),
-			Namespace: spec.Namespace,
+			Name:      nsNameBldr.InstallationName(),
+			Namespace: nsNameBldr.Namespace(),
 			Labels: map[string]string{
 				"app": altinity.CHIName,
 			},
@@ -110,7 +113,7 @@ func ToClickHouseVendorSpec(
 			Configuration: &chiv2.Configuration{
 				Clusters: []*chiv2.Cluster{
 					{
-						Name: altinity.ClusterName(specName),
+						Name: nsNameBldr.ClusterName(),
 						Layout: &chiv2.ChiClusterLayout{
 							ShardsCount:   altinity.ShardsCount,
 							ReplicasCount: int(spec.Replicas),
@@ -121,13 +124,13 @@ func ToClickHouseVendorSpec(
 			},
 			Defaults: &chiv2.Defaults{
 				Templates: &chiv2.TemplatesList{
-					DataVolumeClaimTemplate: altinity.VolumeTemplateName(specName),
+					DataVolumeClaimTemplate: nsNameBldr.VolumeTemplateName(),
 				},
 			},
 			Templates: &chiv2.Templates{
 				VolumeClaimTemplates: []chiv2.VolumeClaimTemplate{
 					{
-						Name: altinity.VolumeTemplateName(specName),
+						Name: nsNameBldr.VolumeTemplateName(),
 						Spec: corev1.PersistentVolumeClaimSpec{
 							AccessModes: []corev1.PersistentVolumeAccessMode{
 								corev1.ReadWriteOnce,
