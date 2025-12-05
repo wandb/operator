@@ -17,6 +17,8 @@ limitations under the License.
 package v1
 
 import (
+	"encoding/json"
+	"errors"
 	"log"
 
 	"sigs.k8s.io/controller-runtime/pkg/conversion"
@@ -30,9 +32,19 @@ func (src *WeightsAndBiases) ConvertTo(dstRaw conversion.Hub) error {
 	log.Printf("ConvertTo: Converting WeightsAndBiases from Spoke version v1 to Hub version v2;"+
 		"source: %s/%s, target: %s/%s", src.Namespace, src.Name, dst.Namespace, dst.Name)
 
-	// TODO(user): Implement conversion logic from v1 to v2
-	// Example: Copying Spec fields
-	// dst.Spec.Size = src.Spec.Replicas
+	chart, err := json.Marshal(src.Spec.Chart)
+	if err != nil {
+		return err
+	}
+	values, err := json.Marshal(src.Spec.Values)
+	if err != nil {
+		return err
+	}
+
+	dst.Annotations = make(map[string]string)
+	dst.Annotations["legacy.operator.wandb.com/version"] = "v1"
+	dst.Annotations["legacy.operator.wandb.com/chart"] = string(chart)
+	dst.Annotations["legacy.operator.wandb.com/values"] = string(values)
 
 	// Copy ObjectMeta to preserve name, namespace, labels, etc.
 	dst.ObjectMeta = src.ObjectMeta
@@ -46,9 +58,18 @@ func (dst *WeightsAndBiases) ConvertFrom(srcRaw conversion.Hub) error {
 	log.Printf("ConvertFrom: Converting WeightsAndBiases from Hub version v2 to Spoke version v1;"+
 		"source: %s/%s, target: %s/%s", src.Namespace, src.Name, dst.Namespace, dst.Name)
 
-	// TODO(user): Implement conversion logic from v2 to v1
-	// Example: Copying Spec fields
-	// dst.Spec.Replicas = src.Spec.Size
+	if src.Annotations["legacy.operator.wandb.com/version"] != "v1" {
+		return errors.New("cannot convert from non-v1 version")
+	}
+
+	err := json.Unmarshal([]byte(src.Annotations["legacy.operator.wandb.com/chart"]), &dst.Spec.Chart)
+	if err != nil {
+		return err
+	}
+	err = json.Unmarshal([]byte(src.Annotations["legacy.operator.wandb.com/values"]), &dst.Spec.Values)
+	if err != nil {
+		return err
+	}
 
 	// Copy ObjectMeta to preserve name, namespace, labels, etc.
 	dst.ObjectMeta = src.ObjectMeta

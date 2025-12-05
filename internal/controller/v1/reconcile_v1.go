@@ -45,7 +45,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
-const resFinalizer = "finalizer.app.wandb.com"
+const ResFinalizer = "finalizer.app.wandb.com"
 
 type WandbV1ReconcileConfig struct {
 	DeployerClient deployer.DeployerInterface
@@ -57,30 +57,11 @@ type WandbV1ReconcileConfig struct {
 
 func Reconcile(
 	ctx context.Context,
-	req ctrl.Request,
+	wandb *apiv1.WeightsAndBiases,
 	client client.Client,
 	config *WandbV1ReconcileConfig,
 ) (ctrl.Result, error) {
 	log := ctrllog.FromContext(ctx)
-	log.Info(
-		"=== Reconciling Weights & Biases instance...",
-		"NamespacedName", req.NamespacedName,
-		"Name", req.Name,
-		"start", true,
-	)
-
-	wandb := &apiv1.WeightsAndBiases{}
-	if err := client.Get(ctx, req.NamespacedName, wandb); err != nil {
-		if apierrors.IsNotFound(err) {
-			return ctrlqueue.DoNotRequeue()
-		}
-		return ctrlqueue.RequeueWithError(err)
-	}
-
-	log.Info(
-		"Found Weights & Biases instance, processing the spec...",
-		"Spec", wandb.Spec,
-	)
 
 	config.Recorder.Event(wandb, corev1.EventTypeNormal, "Reconciling", "Reconciling")
 
@@ -225,8 +206,8 @@ func Reconcile(
 
 		statusManager.Set(status.Loading)
 
-		if !ctrlqueue.ContainsString(wandb.GetFinalizers(), resFinalizer) {
-			wandb.ObjectMeta.Finalizers = append(wandb.ObjectMeta.Finalizers, resFinalizer)
+		if !ctrlqueue.ContainsString(wandb.GetFinalizers(), ResFinalizer) {
+			wandb.ObjectMeta.Finalizers = append(wandb.ObjectMeta.Finalizers, ResFinalizer)
 			if err := client.Update(ctx, wandb); err != nil {
 				return ctrlqueue.Requeue(desiredSpec)
 			}
@@ -263,7 +244,7 @@ func Reconcile(
 		return ctrlqueue.Requeue(desiredSpec)
 	}
 
-	if ctrlqueue.ContainsString(wandb.ObjectMeta.Finalizers, resFinalizer) {
+	if ctrlqueue.ContainsString(wandb.ObjectMeta.Finalizers, ResFinalizer) {
 		if desiredSpec.Chart != nil {
 			log.Info("Deprovisioning", "release", reflect.TypeOf(desiredSpec.Chart))
 			if !config.DryRun {
@@ -276,7 +257,7 @@ func Reconcile(
 			}
 		}
 
-		controllerutil.RemoveFinalizer(wandb, resFinalizer)
+		controllerutil.RemoveFinalizer(wandb, ResFinalizer)
 		client.Update(ctx, wandb)
 	}
 

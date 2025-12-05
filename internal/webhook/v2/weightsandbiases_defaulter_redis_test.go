@@ -14,11 +14,13 @@ import (
 
 var _ = Describe("WeightsAndBiasesCustomDefaulter - Redis", func() {
 	var (
-		ctx context.Context
+		ctx       context.Context
+		defaulter WeightsAndBiasesCustomDefaulter
 	)
 
 	BeforeEach(func() {
 		ctx = context.Background()
+		defaulter = WeightsAndBiasesCustomDefaulter{}
 	})
 
 	Describe("Size dev - Redis defaults", func() {
@@ -37,7 +39,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Redis", func() {
 					},
 				}
 
-				err := Default(ctx, wandb)
+				err := defaulter.Default(ctx, wandb)
 				g.Expect(err).ToNot(g.HaveOccurred())
 
 				g.Expect(wandb.Spec.Redis.Namespace).To(g.Equal("test-namespace"))
@@ -66,7 +68,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Redis", func() {
 					},
 				}
 
-				err := Default(ctx, wandb)
+				err := defaulter.Default(ctx, wandb)
 				g.Expect(err).ToNot(g.HaveOccurred())
 
 				g.Expect(wandb.Spec.Redis.Namespace).To(g.Equal("custom-redis-namespace"))
@@ -89,7 +91,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Redis", func() {
 					},
 				}
 
-				err := Default(ctx, wandb)
+				err := defaulter.Default(ctx, wandb)
 				g.Expect(err).ToNot(g.HaveOccurred())
 
 				g.Expect(wandb.Spec.Redis.StorageSize).To(g.Equal("20Gi"))
@@ -112,7 +114,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Redis", func() {
 					},
 				}
 
-				err := Default(ctx, wandb)
+				err := defaulter.Default(ctx, wandb)
 				g.Expect(err).ToNot(g.HaveOccurred())
 
 				g.Expect(wandb.Spec.Redis.Namespace).To(g.Equal("test-namespace"))
@@ -137,7 +139,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Redis", func() {
 					},
 				}
 
-				err := Default(ctx, wandb)
+				err := defaulter.Default(ctx, wandb)
 				g.Expect(err).ToNot(g.HaveOccurred())
 
 				g.Expect(wandb.Spec.Redis.Namespace).To(g.Equal("test-namespace"))
@@ -176,7 +178,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Redis", func() {
 					},
 				}
 
-				err := Default(ctx, wandb)
+				err := defaulter.Default(ctx, wandb)
 				g.Expect(err).ToNot(g.HaveOccurred())
 
 				g.Expect(wandb.Spec.Redis.Config.Resources.Requests[corev1.ResourceCPU]).To(g.Equal(customCPU))
@@ -201,7 +203,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Redis", func() {
 					},
 				}
 
-				err := Default(ctx, wandb)
+				err := defaulter.Default(ctx, wandb)
 				g.Expect(err).ToNot(g.HaveOccurred())
 
 				g.Expect(wandb.Spec.Redis.Sentinel).ToNot(g.BeNil())
@@ -246,7 +248,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Redis", func() {
 					},
 				}
 
-				err := Default(ctx, wandb)
+				err := defaulter.Default(ctx, wandb)
 				g.Expect(err).ToNot(g.HaveOccurred())
 
 				g.Expect(wandb.Spec.Redis.Sentinel.Config.MasterName).To(g.Equal(customMasterName))
@@ -274,7 +276,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Redis", func() {
 					},
 				}
 
-				err := Default(ctx, wandb)
+				err := defaulter.Default(ctx, wandb)
 				g.Expect(err).ToNot(g.HaveOccurred())
 
 				g.Expect(wandb.Spec.Redis.Sentinel.Enabled).To(g.BeTrue())
@@ -297,7 +299,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Redis", func() {
 					},
 				}
 
-				err := Default(ctx, wandb)
+				err := defaulter.Default(ctx, wandb)
 				g.Expect(err).ToNot(g.HaveOccurred())
 
 				g.Expect(wandb.Spec.Size).To(g.Equal(apiv2.WBSizeDev))
@@ -365,7 +367,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Redis", func() {
 					},
 				}
 
-				err := Default(ctx, wandb)
+				err := defaulter.Default(ctx, wandb)
 				g.Expect(err).ToNot(g.HaveOccurred())
 
 				g.Expect(wandb.Spec.Redis.Namespace).To(g.Equal(customNamespace))

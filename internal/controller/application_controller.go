@@ -18,9 +18,12 @@ package controller
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/wandb/operator/pkg/utils"
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -63,23 +66,42 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	logger.Info("Handling Application", "Application", app.Name)
 
+	var result ctrl.Result
+	var err error
+
 	switch app.Spec.Kind {
 	case "Deployment":
-		return r.reconcileDeployment(ctx, &app)
+		result, err = r.reconcileDeployment(ctx, &app)
 	case "Rollout":
-		return r.reconcileRollout(ctx, &app)
+		result, err = r.reconcileRollout(ctx, &app)
 	case "StatefulSet":
-		return r.reconcileStatefulSet(ctx, &app)
+		result, err = r.reconcileStatefulSet(ctx, &app)
 	case "DaemonSet":
-		return r.reconcileDaemonSet(ctx, &app)
+		result, err = r.reconcileDaemonSet(ctx, &app)
 	case "Job":
-		return r.reconcileJob(ctx, &app)
 	case "CronJob":
-		return r.reconcileCronJob(ctx, &app)
+		break
 	default:
 		logger.Info("Unsupported application kind", "Kind", app.Spec.Kind)
-		return ctrl.Result{}, nil
 	}
+
+	if err != nil {
+		return result, err
+	}
+
+	// Always reconcile Jobs regardless of the main application type
+	if err := r.reconcileJobs(ctx, &app); err != nil {
+		logger.Error(err, "Failed to reconcile Jobs")
+		return ctrl.Result{}, err
+	}
+
+	// Always reconcile CronJobs regardless of the main application type
+	if err := r.reconcileCronJobs(ctx, &app); err != nil {
+		logger.Error(err, "Failed to reconcile CronJobs")
+		return ctrl.Result{}, err
+	}
+
+	return result, nil
 }
 
 // reconcileDeployment handles Deployment type applications
@@ -97,6 +119,11 @@ func (r *ApplicationReconciler) reconcileDeployment(ctx context.Context, app *wa
 		logger.Info("Deployment not found", "Deployment", app.Name)
 	}
 
+	selectorLabels := map[string]string{
+		"app.kubernetes.io/name":     app.Name,
+		"app.kubernetes.io/instance": app.Name,
+	}
+
 	deployment.Name = app.Name
 	deployment.Namespace = app.Namespace
 
@@ -106,6 +133,7 @@ func (r *ApplicationReconciler) reconcileDeployment(ctx context.Context, app *wa
 			deployment.Spec.Template.ObjectMeta.Labels,
 			app.Spec.MetaTemplate.Labels,
 			app.Spec.PodTemplate.ObjectMeta.Labels,
+			selectorLabels,
 		)
 
 	deployment.Spec.Template.ObjectMeta.Annotations =
@@ -114,6 +142,12 @@ func (r *ApplicationReconciler) reconcileDeployment(ctx context.Context, app *wa
 			app.Spec.MetaTemplate.Annotations,
 			app.Spec.PodTemplate.ObjectMeta.Annotations,
 		)
+
+	deployment.Spec.Selector = &v1.LabelSelector{
+		MatchLabels: selectorLabels,
+	}
+
+	logger.Info("Deployment spec", "Deployment", deployment.Name, "Spec", deployment.Spec)
 
 	if deployment.CreationTimestamp.IsZero() {
 		if err := r.Create(ctx, deployment); err != nil {
@@ -152,18 +186,112 @@ func (r *ApplicationReconciler) reconcileDaemonSet(ctx context.Context, app *wan
 	return ctrl.Result{}, nil
 }
 
-// reconcileJob handles Job type applications
-func (r *ApplicationReconciler) reconcileJob(ctx context.Context, app *wandbv2.Application) (ctrl.Result, error) {
+// reconcileJobs handles multiple Job resources defined in the Application spec
+func (r *ApplicationReconciler) reconcileJobs(ctx context.Context, app *wandbv2.Application) error {
 	logger := log.FromContext(ctx)
-	logger.Info("Reconciling Job", "Application", app.Name)
-	return ctrl.Result{}, nil
+
+	for i, job := range app.Spec.Jobs {
+		jobName := job.Name
+		if jobName == "" {
+			jobName = fmt.Sprintf("%s-job-%d", app.Name, i)
+		}
+
+		logger.Info("Reconciling Job", "Application", app.Name, "Job", jobName)
+
+		currentJob := &batchv1.Job{}
+		err := r.Get(ctx, client.ObjectKey{Namespace: app.Namespace, Name: jobName}, currentJob)
+
+		// Create or update the job
+		if err != nil && client.IgnoreNotFound(err) != nil {
+			logger.Error(err, "Failed to get Job", "Job", jobName)
+			return err
+		}
+
+		// Set up the job with the provided spec
+		jobToReconcile := job.DeepCopy()
+		jobToReconcile.Name = jobName
+		jobToReconcile.Namespace = app.Namespace
+
+		// Ensure the job has proper labels
+		if jobToReconcile.Labels == nil {
+			jobToReconcile.Labels = make(map[string]string)
+		}
+		jobToReconcile.Labels["app.kubernetes.io/name"] = app.Name
+		jobToReconcile.Labels["app.kubernetes.io/instance"] = app.Name
+		jobToReconcile.Labels["app.kubernetes.io/managed-by"] = "application-controller"
+
+		if currentJob.CreationTimestamp.IsZero() {
+			if err := r.Create(ctx, jobToReconcile); err != nil {
+				logger.Error(err, "Failed to create Job", "Job", jobName)
+				return err
+			}
+			logger.Info("Successfully created Job", "Job", jobName)
+		} else {
+			// Update existing job
+			jobToReconcile.ResourceVersion = currentJob.ResourceVersion
+			if err := r.Update(ctx, jobToReconcile); err != nil {
+				logger.Error(err, "Failed to update Job", "Job", jobName)
+				return err
+			}
+			logger.Info("Successfully updated Job", "Job", jobName)
+		}
+	}
+
+	return nil
 }
 
-// reconcileCronJob handles CronJob type applications
-func (r *ApplicationReconciler) reconcileCronJob(ctx context.Context, app *wandbv2.Application) (ctrl.Result, error) {
+// reconcileCronJobs handles multiple CronJob resources defined in the Application spec
+func (r *ApplicationReconciler) reconcileCronJobs(ctx context.Context, app *wandbv2.Application) error {
 	logger := log.FromContext(ctx)
-	logger.Info("Reconciling CronJob", "Application", app.Name)
-	return ctrl.Result{}, nil
+
+	for i, cronJob := range app.Spec.CronJobs {
+		cronJobName := cronJob.Name
+		if cronJobName == "" {
+			cronJobName = fmt.Sprintf("%s-cronjob-%d", app.Name, i)
+		}
+
+		logger.Info("Reconciling CronJob", "Application", app.Name, "CronJob", cronJobName)
+
+		currentCronJob := &batchv1.CronJob{}
+		err := r.Get(ctx, client.ObjectKey{Namespace: app.Namespace, Name: cronJobName}, currentCronJob)
+
+		// Check if we got an error that's not a NotFound
+		if err != nil && client.IgnoreNotFound(err) != nil {
+			logger.Error(err, "Failed to get CronJob", "CronJob", cronJobName)
+			return err
+		}
+
+		// Set up the cronjob with the provided spec
+		cronJobToReconcile := cronJob.DeepCopy()
+		cronJobToReconcile.Name = cronJobName
+		cronJobToReconcile.Namespace = app.Namespace
+
+		// Ensure the cronjob has proper labels
+		if cronJobToReconcile.Labels == nil {
+			cronJobToReconcile.Labels = make(map[string]string)
+		}
+		cronJobToReconcile.Labels["app.kubernetes.io/name"] = app.Name
+		cronJobToReconcile.Labels["app.kubernetes.io/instance"] = app.Name
+		cronJobToReconcile.Labels["app.kubernetes.io/managed-by"] = "application-controller"
+
+		if currentCronJob.CreationTimestamp.IsZero() {
+			if err := r.Create(ctx, cronJobToReconcile); err != nil {
+				logger.Error(err, "Failed to create CronJob", "CronJob", cronJobName)
+				return err
+			}
+			logger.Info("Successfully created CronJob", "CronJob", cronJobName)
+		} else {
+			// Update existing cronjob
+			cronJobToReconcile.ResourceVersion = currentCronJob.ResourceVersion
+			if err := r.Update(ctx, cronJobToReconcile); err != nil {
+				logger.Error(err, "Failed to update CronJob", "CronJob", cronJobName)
+				return err
+			}
+			logger.Info("Successfully updated CronJob", "CronJob", cronJobName)
+		}
+	}
+
+	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

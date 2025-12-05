@@ -36,15 +36,15 @@ type ApplicationSpec struct {
 
 	Kind string `json:"kind,omitempty"`
 
-	MetaTemplate         *metav1.ObjectMeta                         `json:"metaTemplate,omitempty"`
-	PodTemplate          *corev1.PodTemplateSpec                    `json:"podTemplate,omitempty"`
-	ServiceTemplate      *corev1.ServiceSpec                        `json:"serviceTemplate,omitempty"`
-	IngressTemplate      *networkingv1.IngressSpec                  `json:"ingressTemplate,omitempty"`
-	HpaTemplate          *autoscalingv1.HorizontalPodAutoscalerSpec `json:"hpaTemplate,omitempty"`
-	PdbTemplate          *policyv1.PodDisruptionBudgetSpec          `json:"pdbTemplate,omitempty"`
-	ScaledObjectTemplate *kedav1alpha1.ScaledObjectSpec             `json:"scaledObjectTemplate,omitempty"`
-	Jobs                 []batchv1.Job                              `json:"jobs,omitempty"`
-	CronJobs             []batchv1.CronJob                          `json:"cronJobs,omitempty"`
+	MetaTemplate         metav1.ObjectMeta                         `json:"metaTemplate,omitempty"`
+	PodTemplate          corev1.PodTemplateSpec                    `json:"podTemplate,omitempty"`
+	ServiceTemplate      corev1.ServiceSpec                        `json:"serviceTemplate,omitempty"`
+	IngressTemplate      networkingv1.IngressSpec                  `json:"ingressTemplate,omitempty"`
+	HpaTemplate          autoscalingv1.HorizontalPodAutoscalerSpec `json:"hpaTemplate,omitempty"`
+	PdbTemplate          policyv1.PodDisruptionBudgetSpec          `json:"pdbTemplate,omitempty"`
+	ScaledObjectTemplate kedav1alpha1.ScaledObjectSpec             `json:"scaledObjectTemplate,omitempty"`
+	Jobs                 []batchv1.Job                             `json:"jobs,omitempty"`
+	CronJobs             []batchv1.CronJob                         `json:"cronJobs,omitempty"`
 }
 
 // ApplicationStatus defines the observed state of Application.

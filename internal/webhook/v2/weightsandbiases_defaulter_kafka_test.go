@@ -14,11 +14,13 @@ import (
 
 var _ = Describe("WeightsAndBiasesCustomDefaulter - Kafka", func() {
 	var (
-		ctx context.Context
+		ctx       context.Context
+		defaulter WeightsAndBiasesCustomDefaulter
 	)
 
 	BeforeEach(func() {
 		ctx = context.Background()
+		defaulter = WeightsAndBiasesCustomDefaulter{}
 	})
 
 	Describe("Size dev - Kafka defaults", func() {
@@ -37,7 +39,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Kafka", func() {
 					},
 				}
 
-				err := Default(ctx, wandb)
+				err := defaulter.Default(ctx, wandb)
 				g.Expect(err).ToNot(g.HaveOccurred())
 
 				g.Expect(wandb.Spec.Kafka.Namespace).To(g.Equal("test-namespace"))
@@ -69,7 +71,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Kafka", func() {
 					},
 				}
 
-				err := Default(ctx, wandb)
+				err := defaulter.Default(ctx, wandb)
 				g.Expect(err).ToNot(g.HaveOccurred())
 
 				g.Expect(wandb.Spec.Kafka.Namespace).To(g.Equal("custom-kafka-namespace"))
@@ -92,7 +94,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Kafka", func() {
 					},
 				}
 
-				err := Default(ctx, wandb)
+				err := defaulter.Default(ctx, wandb)
 				g.Expect(err).ToNot(g.HaveOccurred())
 
 				g.Expect(wandb.Spec.Kafka.StorageSize).To(g.Equal("20Gi"))
@@ -116,7 +118,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Kafka", func() {
 					},
 				}
 
-				err := Default(ctx, wandb)
+				err := defaulter.Default(ctx, wandb)
 				g.Expect(err).ToNot(g.HaveOccurred())
 
 				g.Expect(wandb.Spec.Kafka.Replicas).To(g.Equal(int32(5)))
@@ -139,7 +141,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Kafka", func() {
 					},
 				}
 
-				err := Default(ctx, wandb)
+				err := defaulter.Default(ctx, wandb)
 				g.Expect(err).ToNot(g.HaveOccurred())
 
 				g.Expect(wandb.Spec.Kafka.Namespace).To(g.Equal("test-namespace"))
@@ -165,7 +167,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Kafka", func() {
 					},
 				}
 
-				err := Default(ctx, wandb)
+				err := defaulter.Default(ctx, wandb)
 				g.Expect(err).ToNot(g.HaveOccurred())
 
 				g.Expect(wandb.Spec.Kafka.Namespace).To(g.Equal("test-namespace"))
@@ -205,7 +207,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Kafka", func() {
 					},
 				}
 
-				err := Default(ctx, wandb)
+				err := defaulter.Default(ctx, wandb)
 				g.Expect(err).ToNot(g.HaveOccurred())
 
 				g.Expect(wandb.Spec.Kafka.Config.Resources.Requests[corev1.ResourceCPU]).To(g.Equal(customCPU))
@@ -244,7 +246,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Kafka", func() {
 					},
 				}
 
-				err := Default(ctx, wandb)
+				err := defaulter.Default(ctx, wandb)
 				g.Expect(err).ToNot(g.HaveOccurred())
 
 				g.Expect(wandb.Spec.Kafka.Config.ReplicationConfig.DefaultReplicationFactor).To(g.Equal(customDefaultRF))
@@ -271,7 +273,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Kafka", func() {
 					},
 				}
 
-				err := Default(ctx, wandb)
+				err := defaulter.Default(ctx, wandb)
 				g.Expect(err).ToNot(g.HaveOccurred())
 
 				g.Expect(wandb.Spec.Kafka.Replicas).To(g.Equal(int32(3)))
@@ -294,7 +296,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Kafka", func() {
 					},
 				}
 
-				err := Default(ctx, wandb)
+				err := defaulter.Default(ctx, wandb)
 				g.Expect(err).ToNot(g.HaveOccurred())
 
 				g.Expect(wandb.Spec.Size).To(g.Equal(apiv2.WBSizeDev))
@@ -344,7 +346,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Kafka", func() {
 					},
 				}
 
-				err := Default(ctx, wandb)
+				err := defaulter.Default(ctx, wandb)
 				g.Expect(err).ToNot(g.HaveOccurred())
 
 				g.Expect(wandb.Spec.Kafka.Namespace).To(g.Equal(customNamespace))

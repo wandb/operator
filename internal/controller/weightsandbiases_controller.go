@@ -26,12 +26,14 @@ import (
 	v2 "github.com/wandb/operator/internal/controller/v2"
 	"github.com/wandb/operator/pkg/wandb/spec/channel/deployer"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
+	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
@@ -44,7 +46,7 @@ type WeightsAndBiasesReconciler struct {
 	Recorder       record.EventRecorder
 	DryRun         bool
 	Debug          bool
-	AssumeV2Cr     bool
+	EnableV2       bool
 }
 
 //+kubebuilder:rbac:groups="",resources=configmaps;events;persistentvolumeclaims;secrets;serviceaccounts;services,verbs=update;delete;get;list;create;patch;watch
@@ -89,17 +91,61 @@ var defaultRequeueDuration = time.Duration(defaultRequeueMinutes) * time.Minute
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.14.1/pkg/reconcile
 func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	if r.AssumeV2Cr {
-		return v2.Reconcile(ctx, r.Client, req)
+	log := ctrllog.FromContext(ctx)
+	log.Info(
+		"=== Reconciling Weights & Biases V2 instance...",
+		"NamespacedName", req.NamespacedName,
+		"Name", req.Name,
+		"start", true,
+	)
+
+	if r.EnableV2 {
+		wandbv1 := &apiv1.WeightsAndBiases{}
+		wandbv2 := &apiv2.WeightsAndBiases{}
+
+		if err := r.Get(ctx, req.NamespacedName, wandbv2); err != nil {
+			if apierrors.IsNotFound(err) {
+				return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
+			}
+			return ctrl.Result{}, err
+		}
+
+		// TODO: Once proper conversion is done, remove this logic
+		if version, ok := wandbv2.Annotations["legacy.operator.wandb.com/version"]; ok && version == "v1" {
+			log.Info("Detected legacy Weights & Biases instance, reconciling as V1...")
+
+			err := wandbv1.ConvertFrom(wandbv2)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+			v1Cfg := v1.WandbV1ReconcileConfig{
+				DeployerClient: r.DeployerClient,
+				Recorder:       r.Recorder,
+				DryRun:         r.DryRun,
+				Debug:          r.Debug,
+				IsAirgapped:    r.IsAirgapped,
+			}
+			return v1.Reconcile(ctx, wandbv1, r.Client, &v1Cfg)
+		} else {
+			return v2.Reconcile(ctx, r.Client, wandbv2)
+		}
+	} else {
+		wandb := &apiv1.WeightsAndBiases{}
+		if err := r.Get(ctx, req.NamespacedName, wandb); err != nil {
+			if apierrors.IsNotFound(err) {
+				return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
+			}
+			return ctrl.Result{}, err
+		}
+		v1Cfg := v1.WandbV1ReconcileConfig{
+			DeployerClient: r.DeployerClient,
+			Recorder:       r.Recorder,
+			DryRun:         r.DryRun,
+			Debug:          r.Debug,
+			IsAirgapped:    r.IsAirgapped,
+		}
+		return v1.Reconcile(ctx, wandb, r.Client, &v1Cfg)
 	}
-	v1Cfg := v1.WandbV1ReconcileConfig{
-		DeployerClient: r.DeployerClient,
-		Recorder:       r.Recorder,
-		DryRun:         r.DryRun,
-		Debug:          r.Debug,
-		IsAirgapped:    r.IsAirgapped,
-	}
-	return v1.Reconcile(ctx, req, r.Client, &v1Cfg)
 }
 
 // Delete was taken from original v1 reconciler
@@ -110,7 +156,7 @@ func (r *WeightsAndBiasesReconciler) Delete(e event.DeleteEvent) bool {
 // SetupWithManager sets up the controller with the Manager.
 func (r *WeightsAndBiasesReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	var b *ctrl.Builder
-	if r.AssumeV2Cr {
+	if r.EnableV2 {
 		b = ctrl.NewControllerManagedBy(mgr).
 			For(&apiv2.WeightsAndBiases{}).
 			Owns(&corev1.Secret{}).

@@ -31,7 +31,6 @@ import (
 	redisreplicationv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redisreplication/v1beta2"
 	redissentinelv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redissentinel/v1beta2"
 	strimziv1beta2 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1beta2"
-	webhook "github.com/wandb/operator/internal/webhook.bak"
 	"github.com/wandb/operator/pkg/wandb/spec/channel/deployer"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
@@ -91,7 +90,7 @@ func main() {
 	var enableHTTP2 bool
 	var tlsOpts []func(*tls.Config)
 	var deployerAPI, isolationNamespaces string
-	var debug, airgapped, assumeV2Cr, enableWebhooks bool
+	var debug, airgapped, enableV2, enableWebhooks bool
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
@@ -117,7 +116,7 @@ func main() {
 
 	flag.BoolVar(&debug, "debug", false, "Enable debug mode")
 
-	flag.BoolVar(&assumeV2Cr, "assume-v2-cr", false, "Use V2 of WandB CRD (development only)")
+	flag.BoolVar(&enableV2, "enable-v2", false, "Use V2 of WandB CRD (development only)")
 	flag.BoolVar(&enableWebhooks, "enable-webhooks", false, "Enable webhooks; default `false` since V1 has no webhooks")
 
 	opts := zap.Options{
@@ -253,14 +252,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	if assumeV2Cr {
+	if enableV2 {
 		if err = (&controller.WeightsAndBiasesReconciler{
 			IsAirgapped: airgapped,
 			Recorder:    mgr.GetEventRecorderFor("weightsandbiases"),
 			Client:      mgr.GetClient(),
 			Scheme:      mgr.GetScheme(),
 			Debug:       debug,
-			AssumeV2Cr:  assumeV2Cr,
+			EnableV2:    enableV2,
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "WeightsAndBiases")
 			os.Exit(1)
@@ -273,7 +272,7 @@ func main() {
 			Scheme:         mgr.GetScheme(),
 			DeployerClient: &deployer.DeployerClient{DeployerAPI: deployerAPI},
 			Debug:          debug,
-			AssumeV2Cr:     assumeV2Cr,
+			EnableV2:       enableV2,
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "WeightsAndBiases")
 			os.Exit(1)
@@ -288,14 +287,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	if enableWebhooks && assumeV2Cr {
+	if enableWebhooks && enableV2 {
 		if err := webhookv2.SetupApplicationWebhookWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create webhook", "webhook", "Application")
 			os.Exit(1)
 		}
 	}
 
-	if enableWebhooks && assumeV2Cr {
+	if enableWebhooks && enableV2 {
 		if err := webhookv2.SetupWeightsAndBiasesWebhookWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create webhook", "webhook", "WeightsAndBiases")
 			os.Exit(1)
