@@ -252,31 +252,17 @@ func main() {
 		os.Exit(1)
 	}
 
-	if enableV2 {
-		if err = (&controller.WeightsAndBiasesReconciler{
-			IsAirgapped: airgapped,
-			Recorder:    mgr.GetEventRecorderFor("weightsandbiases"),
-			Client:      mgr.GetClient(),
-			Scheme:      mgr.GetScheme(),
-			Debug:       debug,
-			EnableV2:    enableV2,
-		}).SetupWithManager(mgr); err != nil {
-			setupLog.Error(err, "unable to create controller", "controller", "WeightsAndBiases")
-			os.Exit(1)
-		}
-	} else {
-		if err = (&controller.WeightsAndBiasesReconciler{
-			IsAirgapped:    airgapped,
-			Recorder:       mgr.GetEventRecorderFor("weightsandbiases"),
-			Client:         mgr.GetClient(),
-			Scheme:         mgr.GetScheme(),
-			DeployerClient: &deployer.DeployerClient{DeployerAPI: deployerAPI},
-			Debug:          debug,
-			EnableV2:       enableV2,
-		}).SetupWithManager(mgr); err != nil {
-			setupLog.Error(err, "unable to create controller", "controller", "WeightsAndBiases")
-			os.Exit(1)
-		}
+	if err = (&controller.WeightsAndBiasesReconciler{
+		IsAirgapped:    airgapped,
+		Recorder:       mgr.GetEventRecorderFor("weightsandbiases"),
+		Client:         mgr.GetClient(),
+		Scheme:         mgr.GetScheme(),
+		DeployerClient: &deployer.DeployerClient{DeployerAPI: deployerAPI},
+		Debug:          debug,
+		EnableV2:       enableV2,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "WeightsAndBiases")
+		os.Exit(1)
 	}
 
 	if err = (&controller.ApplicationReconciler{

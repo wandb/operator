@@ -41,13 +41,15 @@ func (src *WeightsAndBiases) ConvertTo(dstRaw conversion.Hub) error {
 		return err
 	}
 
-	dst.Annotations = make(map[string]string)
+	// Copy ObjectMeta to preserve name, namespace, labels, etc.
+	dst.ObjectMeta = src.ObjectMeta
+
+	if dst.Annotations == nil {
+		dst.Annotations = make(map[string]string)
+	}
 	dst.Annotations["legacy.operator.wandb.com/version"] = "v1"
 	dst.Annotations["legacy.operator.wandb.com/chart"] = string(chart)
 	dst.Annotations["legacy.operator.wandb.com/values"] = string(values)
-
-	// Copy ObjectMeta to preserve name, namespace, labels, etc.
-	dst.ObjectMeta = src.ObjectMeta
 
 	return nil
 }
