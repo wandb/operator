@@ -283,9 +283,7 @@ type WBMySQLStatus struct {
 }
 
 type WBMySQLConnection struct {
-	MySQLHost string `json:"MYSQL_HOST,omitempty"`
-	MySQLPort string `json:"MYSQL_PORT,omitempty"`
-	MySQLUser string `json:"MYSQL_USER,omitempty"`
+	URL corev1.SecretKeySelector `json:"url,omitempty"`
 }
 
 type WBBackupStatus struct {
@@ -307,16 +305,11 @@ type WBRedisStatus struct {
 }
 
 type WBRedisConnection struct {
-	RedisHost         string `json:"REDIS_HOST,omitempty"`
-	RedisPort         string `json:"REDIS_PORT,omitempty"`
-	RedisSentinelHost string `json:"REDIS_SENTINEL_HOST,omitempty"`
-	RedisSentinelPort string `json:"REDIS_SENTINEL_PORT,omitempty"`
-	RedisMasterName   string `json:"REDIS_MASTER_NAME,omitempty"`
+	URL corev1.SecretKeySelector `json:"url,omitempty"`
 }
 
 type WBKafkaConnection struct {
-	KafkaHost string `json:"KAFKA_HOST,omitempty"`
-	KafkaPort string `json:"KAFKA_PORT,omitempty"`
+	URL corev1.SecretKeySelector `json:"url,omitempty"`
 }
 
 type WBKafkaStatus struct {
@@ -353,7 +346,5 @@ type WBClickHouseStatus struct {
 }
 
 type WBClickHouseConnection struct {
-	ClickHouseHost string `json:"CLICKHOUSE_HOST,omitempty"`
-	ClickHousePort string `json:"CLICKHOUSE_PORT,omitempty"`
-	ClickHouseUser string `json:"CLICKHOUSE_USER,omitempty"`
+	URL corev1.SecretKeySelector `json:"url,omitempty"`
 }

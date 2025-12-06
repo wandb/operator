@@ -48,7 +48,7 @@ func mysqlReadState(
 	var conditions []common.MySQLCondition
 	var specNamespacedName = mysqlSpecNamespacedName(wandb.Spec.MySQL)
 
-	if conditions, err = percona.ReadState(ctx, client, specNamespacedName); err != nil {
+	if conditions, err = percona.ReadState(ctx, client, specNamespacedName, wandb); err != nil {
 		return err
 	}
 	wandb.Status.MySQLStatus = translatorv2.ExtractMySQLStatus(ctx, conditions)

@@ -47,7 +47,7 @@ func kafkaReadState(
 	var conditions []common.KafkaCondition
 	var specNamespacedName = kafkaSpecNamespacedName(wandb.Spec.Kafka)
 
-	if conditions, err = strimzi.ReadState(ctx, client, specNamespacedName); err != nil {
+	if conditions, err = strimzi.ReadState(ctx, client, specNamespacedName, wandb); err != nil {
 		return err
 	}
 	wandb.Status.KafkaStatus = translatorv2.ExtractKafkaStatus(ctx, conditions)

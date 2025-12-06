@@ -45,11 +45,7 @@ func TranslateRedisStatus(ctx context.Context, m common.RedisStatus) apiv2.WBRed
 	}
 
 	result.Connection = apiv2.WBRedisConnection{
-		RedisHost:         m.Connection.RedisHost,
-		RedisPort:         m.Connection.RedisPort,
-		RedisSentinelHost: m.Connection.SentinelHost,
-		RedisSentinelPort: m.Connection.SentinelPort,
-		RedisMasterName:   m.Connection.SentinelMaster,
+		URL: m.Connection.URL,
 	}
 
 	result.Ready = m.Ready

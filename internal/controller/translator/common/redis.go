@@ -3,8 +3,8 @@ package common
 import (
 	"context"
 	"errors"
-	"fmt"
 
+	corev1 "k8s.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
@@ -31,11 +31,7 @@ type RedisStatus struct {
 }
 
 type RedisConnection struct {
-	RedisHost      string
-	RedisPort      string
-	SentinelHost   string
-	SentinelPort   string
-	SentinelMaster string
+	URL corev1.SecretKeySelector
 }
 
 type RedisInfraCode string
@@ -83,7 +79,7 @@ func (r RedisCondition) ToRedisSentinelConnCondition() (RedisSentinelConnConditi
 	result.code = r.code
 	result.message = r.message
 
-	connInfo, ok := r.hidden.(RedisSentinelConnInfo)
+	connInfo, ok := r.hidden.(RedisConnection)
 	if !ok {
 		ctrl.Log.Error(
 			errors.New("RedisSentinelConnection does not have connection info"),
@@ -104,7 +100,7 @@ func (r RedisCondition) ToRedisStandaloneConnCondition() (RedisStandaloneConnCon
 	result.code = r.code
 	result.message = r.message
 
-	connInfo, ok := r.hidden.(RedisStandaloneConnInfo)
+	connInfo, ok := r.hidden.(RedisConnection)
 	if !ok {
 		ctrl.Log.Error(
 			errors.New("RedisStandaloneConnection does not have connection info"),
@@ -116,39 +112,28 @@ func (r RedisCondition) ToRedisStandaloneConnCondition() (RedisStandaloneConnCon
 	return result, true
 }
 
-type RedisSentinelConnInfo struct {
-	SentinelHost string
-	SentinelPort string
-	MasterName   string
-}
-
-func NewRedisSentinelConnCondition(connInfo RedisSentinelConnInfo) RedisCondition {
+func NewRedisSentinelConnCondition(connInfo RedisConnection) RedisCondition {
 	return RedisCondition{
 		code:    RedisSentinelConnectionCode,
-		message: fmt.Sprintf("redis://%s:%s?master=%s", connInfo.SentinelHost, connInfo.SentinelPort, connInfo.MasterName),
+		message: "Redis Sentinel connection info",
 		hidden:  connInfo,
 	}
 }
 
 type RedisSentinelConnCondition struct {
 	RedisCondition
-	connInfo RedisSentinelConnInfo
-}
-
-type RedisStandaloneConnInfo struct {
-	Host string
-	Port string
+	connInfo RedisConnection
 }
 
 type RedisStandaloneConnCondition struct {
 	RedisCondition
-	connInfo RedisStandaloneConnInfo
+	connInfo RedisConnection
 }
 
-func NewRedisStandaloneConnCondition(connInfo RedisStandaloneConnInfo) RedisCondition {
+func NewRedisStandaloneConnCondition(connInfo RedisConnection) RedisCondition {
 	return RedisCondition{
 		code:    RedisStandaloneConnectionCode,
-		message: fmt.Sprintf("redis://%s:%s", connInfo.Host, connInfo.Port),
+		message: "Redis Standalone connection info",
 		hidden:  connInfo,
 	}
 }
@@ -165,18 +150,15 @@ func ExtractRedisStatus(ctx context.Context, conditions []RedisCondition) RedisS
 	for _, cond := range conditions {
 
 		if sentinelConnCond, ok = cond.ToRedisSentinelConnCondition(); ok {
-			result.Connection.SentinelHost = sentinelConnCond.connInfo.SentinelHost
-			result.Connection.SentinelPort = sentinelConnCond.connInfo.SentinelPort
-			result.Connection.SentinelMaster = sentinelConnCond.connInfo.MasterName
+			result.Connection = sentinelConnCond.connInfo
 		} else if standaloneConnCond, ok = cond.ToRedisStandaloneConnCondition(); ok {
-			result.Connection.RedisHost = standaloneConnCond.connInfo.Host
-			result.Connection.RedisPort = standaloneConnCond.connInfo.Port
+			result.Connection = standaloneConnCond.connInfo
 		} else {
 			result.Conditions = append(result.Conditions, cond)
 		}
 	}
 
-	result.Ready = result.Connection.RedisHost != "" || result.Connection.SentinelHost != ""
+	result.Ready = result.Connection.URL.Name != ""
 
 	return result
 }

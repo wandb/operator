@@ -38,9 +38,7 @@ func TranslateClickHouseStatus(ctx context.Context, m common.ClickHouseStatus) a
 	}
 
 	result.Connection = apiv2.WBClickHouseConnection{
-		ClickHouseHost: m.Connection.Host,
-		ClickHousePort: m.Connection.Port,
-		ClickHouseUser: m.Connection.User,
+		URL: m.Connection.URL,
 	}
 
 	result.Ready = m.Ready

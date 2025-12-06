@@ -26,4 +26,5 @@ const (
 const (
 	KafkaResourceType    = "Kafka"
 	NodePoolResourceType = "KafkaNodePool"
+	AppConnTypeName      = "KafkaAppConn"
 )

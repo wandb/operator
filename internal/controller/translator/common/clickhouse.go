@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	corev1 "k8s.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
@@ -20,9 +21,7 @@ type ClickHouseStatus struct {
 }
 
 type ClickHouseConnection struct {
-	Host string
-	Port string
-	User string
+	URL corev1.SecretKeySelector
 }
 
 type ClickHouseInfraCode string
@@ -64,7 +63,7 @@ func (c ClickHouseCondition) ToClickHouseConnCondition() (ClickHouseConnConditio
 	result.code = c.code
 	result.message = c.message
 
-	connInfo, ok := c.hidden.(ClickHouseConnInfo)
+	connInfo, ok := c.hidden.(ClickHouseConnection)
 	if !ok {
 		ctrl.Log.Error(
 			fmt.Errorf("ClickHouseConnectionCode does not have connection info"),
@@ -76,18 +75,12 @@ func (c ClickHouseCondition) ToClickHouseConnCondition() (ClickHouseConnConditio
 	return result, true
 }
 
-type ClickHouseConnInfo struct {
-	Host string
-	Port string
-	User string
-}
-
 type ClickHouseConnCondition struct {
 	ClickHouseCondition
-	connInfo ClickHouseConnInfo
+	connInfo ClickHouseConnection
 }
 
-func NewClickHouseConnCondition(connInfo ClickHouseConnInfo) ClickHouseCondition {
+func NewClickHouseConnCondition(connInfo ClickHouseConnection) ClickHouseCondition {
 	return ClickHouseCondition{
 		code:    ClickHouseConnectionCode,
 		message: "ClickHouse connection info",
@@ -102,14 +95,12 @@ func ExtractClickHouseStatus(ctx context.Context, conditions []ClickHouseConditi
 
 	for _, cond := range conditions {
 		if connCond, ok = cond.ToClickHouseConnCondition(); ok {
-			result.Connection.Host = connCond.connInfo.Host
-			result.Connection.Port = connCond.connInfo.Port
-			result.Connection.User = connCond.connInfo.User
+			result.Connection = connCond.connInfo
 			continue
 		}
 	}
 
-	result.Ready = result.Connection.Host != ""
+	result.Ready = result.Connection.URL.Name != ""
 
 	return result
 }

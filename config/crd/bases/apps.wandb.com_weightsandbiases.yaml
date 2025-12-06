@@ -686,12 +686,30 @@ spec:
                     type: array
                   connection:
                     properties:
-                      CLICKHOUSE_HOST:
-                        type: string
-                      CLICKHOUSE_PORT:
-                        type: string
-                      CLICKHOUSE_USER:
-                        type: string
+                      url:
+                        description: SecretKeySelector selects a key of a Secret.
+                        properties:
+                          key:
+                            description: The key of the secret to select from.  Must
+                              be a valid secret key.
+                            type: string
+                          name:
+                            default: ""
+                            description: |-
+                              Name of the referent.
+                              This field is effectively required, but due to backwards compatibility is
+                              allowed to be empty. Instances of this type with an empty value here are
+                              almost certainly wrong.
+                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                            type: string
+                          optional:
+                            description: Specify whether the Secret or its key must
+                              be defined
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
                     type: object
                   lastReconciled:
                     format: date-time
@@ -743,10 +761,30 @@ spec:
                     type: array
                   connection:
                     properties:
-                      KAFKA_HOST:
-                        type: string
-                      KAFKA_PORT:
-                        type: string
+                      url:
+                        description: SecretKeySelector selects a key of a Secret.
+                        properties:
+                          key:
+                            description: The key of the secret to select from.  Must
+                              be a valid secret key.
+                            type: string
+                          name:
+                            default: ""
+                            description: |-
+                              Name of the referent.
+                              This field is effectively required, but due to backwards compatibility is
+                              allowed to be empty. Instances of this type with an empty value here are
+                              almost certainly wrong.
+                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                            type: string
+                          optional:
+                            description: Specify whether the Secret or its key must
+                              be defined
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
                     type: object
                   lastReconciled:
                     format: date-time
@@ -877,12 +915,30 @@ spec:
                     type: array
                   connection:
                     properties:
-                      MYSQL_HOST:
-                        type: string
-                      MYSQL_PORT:
-                        type: string
-                      MYSQL_USER:
-                        type: string
+                      url:
+                        description: SecretKeySelector selects a key of a Secret.
+                        properties:
+                          key:
+                            description: The key of the secret to select from.  Must
+                              be a valid secret key.
+                            type: string
+                          name:
+                            default: ""
+                            description: |-
+                              Name of the referent.
+                              This field is effectively required, but due to backwards compatibility is
+                              allowed to be empty. Instances of this type with an empty value here are
+                              almost certainly wrong.
+                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                            type: string
+                          optional:
+                            description: Specify whether the Secret or its key must
+                              be defined
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
                     type: object
                   lastReconciled:
                     format: date-time
@@ -916,16 +972,30 @@ spec:
                     type: array
                   connection:
                     properties:
-                      REDIS_HOST:
-                        type: string
-                      REDIS_MASTER_NAME:
-                        type: string
-                      REDIS_PORT:
-                        type: string
-                      REDIS_SENTINEL_HOST:
-                        type: string
-                      REDIS_SENTINEL_PORT:
-                        type: string
+                      url:
+                        description: SecretKeySelector selects a key of a Secret.
+                        properties:
+                          key:
+                            description: The key of the secret to select from.  Must
+                              be a valid secret key.
+                            type: string
+                          name:
+                            default: ""
+                            description: |-
+                              Name of the referent.
+                              This field is effectively required, but due to backwards compatibility is
+                              allowed to be empty. Instances of this type with an empty value here are
+                              almost certainly wrong.
+                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                            type: string
+                          optional:
+                            description: Specify whether the Secret or its key must
+                              be defined
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
                     type: object
                   lastReconciled:
                     format: date-time

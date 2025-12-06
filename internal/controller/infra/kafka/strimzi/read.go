@@ -6,19 +6,30 @@ import (
 	"strconv"
 
 	ctrlcommon "github.com/wandb/operator/internal/controller/common"
-	"github.com/wandb/operator/internal/controller/translator/common"
+	transcommon "github.com/wandb/operator/internal/controller/translator/common"
 	v1beta3 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1beta2"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+func readConnectionDetails(nsNameBldr *NsNameBuilder) *kafkaConnInfo {
+	kafkaHost := fmt.Sprintf("%s.%s.svc.cluster.local", nsNameBldr.KafkaName(), nsNameBldr.Namespace())
+	kafkaPort := strconv.Itoa(PlainListenerPort)
+
+	return &kafkaConnInfo{
+		Host: kafkaHost,
+		Port: kafkaPort,
+	}
+}
+
 func ReadState(
 	ctx context.Context,
 	client client.Client,
 	specNamespacedName types.NamespacedName,
-) ([]common.KafkaCondition, error) {
+	wandbOwner client.Object,
+) ([]transcommon.KafkaCondition, error) {
 	var err error
-	var results []common.KafkaCondition
+	var results []transcommon.KafkaCondition
 	var actualKafka = &v1beta3.Kafka{}
 	var actualNodePool = &v1beta3.KafkaNodePool{}
 
@@ -40,18 +51,16 @@ func ReadState(
 		return results, nil
 	}
 
-	///////////
-	// Extract connection info from Kafka CR
-	// Connection format: wandb-kafka.{namespace}.svc.cluster.local:9092
-	kafkaHost := fmt.Sprintf("%s.%s.svc.cluster.local", nsNameBldr.KafkaName(), nsNameBldr.Namespace())
-	kafkaPort := strconv.Itoa(PlainListenerPort)
+	connInfo := readConnectionDetails(nsNameBldr)
 
-	connInfo := common.KafkaConnInfo{
-		Host: kafkaHost,
-		Port: kafkaPort,
+	var connection *transcommon.KafkaConnection
+	if connection, err = writeKafkaConnInfo(
+		ctx, client, wandbOwner, nsNameBldr, connInfo,
+	); err != nil {
+		return results, err
 	}
-	results = append(results, common.NewKafkaConnCondition(connInfo))
-	///////////
+
+	results = append(results, transcommon.NewKafkaConnCondition(*connection))
 
 	return results, nil
 }

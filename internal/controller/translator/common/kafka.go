@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	corev1 "k8s.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
@@ -35,8 +36,7 @@ type KafkaStatus struct {
 }
 
 type KafkaConnection struct {
-	Host string
-	Port string
+	URL corev1.SecretKeySelector
 }
 
 type KafkaInfraCode string
@@ -72,20 +72,15 @@ func (k KafkaCondition) Message() string {
 	return k.message
 }
 
-type KafkaConnInfo struct {
-	Host string
-	Port string
-}
-
 type KafkaConnCondition struct {
 	KafkaCondition
-	connInfo KafkaConnInfo
+	connInfo KafkaConnection
 }
 
-func NewKafkaConnCondition(connInfo KafkaConnInfo) KafkaCondition {
+func NewKafkaConnCondition(connInfo KafkaConnection) KafkaCondition {
 	return KafkaCondition{
 		code:    KafkaConnectionCode,
-		message: fmt.Sprintf("kafka://%s:%s", connInfo.Host, connInfo.Port),
+		message: "Kafka connection info",
 		hidden:  connInfo,
 	}
 }
@@ -99,7 +94,7 @@ func (k KafkaCondition) ToKafkaConnCondition() (KafkaConnCondition, bool) {
 	result.code = k.code
 	result.message = k.message
 
-	connInfo, ok := k.hidden.(KafkaConnInfo)
+	connInfo, ok := k.hidden.(KafkaConnection)
 	if !ok {
 		ctrl.Log.Error(
 			fmt.Errorf("KafkaConnection does not have connection info"),
@@ -118,15 +113,14 @@ func ExtractKafkaStatus(ctx context.Context, conditions []KafkaCondition) KafkaS
 
 	for _, cond := range conditions {
 		if connCond, ok = cond.ToKafkaConnCondition(); ok {
-			result.Connection.Host = connCond.connInfo.Host
-			result.Connection.Port = connCond.connInfo.Port
+			result.Connection = connCond.connInfo
 			continue
 		}
 
 		result.Conditions = append(result.Conditions, cond)
 	}
 
-	result.Ready = result.Connection.Host != ""
+	result.Ready = result.Connection.URL.Name != ""
 
 	return result
 }

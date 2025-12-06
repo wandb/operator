@@ -4,7 +4,7 @@ import (
 	"context"
 
 	ctrlcommon "github.com/wandb/operator/internal/controller/common"
-	"github.com/wandb/operator/internal/controller/translator/common"
+	transcommon "github.com/wandb/operator/internal/controller/translator/common"
 	redisv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redis/v1beta2"
 	redisreplicationv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redisreplication/v1beta2"
 	redissentinelv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redissentinel/v1beta2"
@@ -12,15 +12,38 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+func readStandaloneConnectionDetails(standaloneActual *redisv1beta2.Redis) *redisConnInfo {
+	redisHost := "wandb-redis." + standaloneActual.Namespace + ".svc.cluster.local"
+	redisPort := "6379"
+
+	return &redisConnInfo{
+		Host: redisHost,
+		Port: redisPort,
+	}
+}
+
+func readSentinelConnectionDetails(sentinelActual *redissentinelv1beta2.RedisSentinel) *redisConnInfo {
+	sentinelHost := "wandb-redis-sentinel." + sentinelActual.Namespace + ".svc.cluster.local"
+	sentinelPort := "26379"
+	masterName := "gorilla"
+
+	return &redisConnInfo{
+		SentinelHost:   sentinelHost,
+		SentinelPort:   sentinelPort,
+		SentinelMaster: masterName,
+	}
+}
+
 func ReadState(
 	ctx context.Context,
 	client client.Client,
 	specNamespacedName types.NamespacedName,
-) ([]common.RedisCondition, error) {
+	wandbOwner client.Object,
+) ([]transcommon.RedisCondition, error) {
 	var standaloneActual = &redisv1beta2.Redis{}
 	var sentinelActual = &redissentinelv1beta2.RedisSentinel{}
 	var replicationActual = &redisreplicationv1beta2.RedisReplication{}
-	var results []common.RedisCondition
+	var results []transcommon.RedisCondition
 	var err error
 
 	nsNameBldr := createNsNameBuilder(specNamespacedName)
@@ -41,29 +64,31 @@ func ReadState(
 		return results, err
 	}
 
-	///////////
 	if standaloneActual != nil {
-		redisHost := "wandb-redis." + standaloneActual.Namespace + ".svc.cluster.local"
-		redisPort := "6379"
-		connInfo := common.RedisStandaloneConnInfo{
-			Host: redisHost,
-			Port: redisPort,
+		connInfo := readStandaloneConnectionDetails(standaloneActual)
+
+		var connection *transcommon.RedisConnection
+		if connection, err = writeRedisConnInfo(
+			ctx, client, wandbOwner, nsNameBldr, connInfo,
+		); err != nil {
+			return results, err
 		}
-		results = append(results, common.NewRedisStandaloneConnCondition(connInfo))
+
+		results = append(results, transcommon.NewRedisStandaloneConnCondition(*connection))
 	}
 
 	if sentinelActual != nil && replicationActual != nil {
-		sentinelHost := "wandb-redis-sentinel." + sentinelActual.Namespace + ".svc.cluster.local"
-		sentinelPort := "26379"
-		masterName := "gorilla"
-		connInfo := common.RedisSentinelConnInfo{
-			SentinelHost: sentinelHost,
-			SentinelPort: sentinelPort,
-			MasterName:   masterName,
+		connInfo := readSentinelConnectionDetails(sentinelActual)
+
+		var connection *transcommon.RedisConnection
+		if connection, err = writeRedisConnInfo(
+			ctx, client, wandbOwner, nsNameBldr, connInfo,
+		); err != nil {
+			return results, err
 		}
-		results = append(results, common.NewRedisSentinelConnCondition(connInfo))
+
+		results = append(results, transcommon.NewRedisSentinelConnCondition(*connection))
 	}
-	///////////
 
 	return results, nil
 }

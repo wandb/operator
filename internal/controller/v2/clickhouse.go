@@ -43,7 +43,7 @@ func clickHouseReadState(
 	var conditions []common.ClickHouseCondition
 	var specNamespacedName = clickHouseSpecNamespacedName(wandb.Spec.ClickHouse)
 
-	if conditions, err = altinity.ReadState(ctx, client, specNamespacedName); err != nil {
+	if conditions, err = altinity.ReadState(ctx, client, specNamespacedName, wandb); err != nil {
 		return err
 	}
 	wandb.Status.ClickHouseStatus = translatorv2.ExtractClickHouseStatus(ctx, conditions)

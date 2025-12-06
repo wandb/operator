@@ -37,9 +37,7 @@ func TranslateMySQLStatus(ctx context.Context, m common.MySQLStatus) apiv2.WBMyS
 	}
 
 	result.Connection = apiv2.WBMySQLConnection{
-		MySQLHost: m.Connection.Host,
-		MySQLPort: m.Connection.Port,
-		MySQLUser: m.Connection.User,
+		URL: m.Connection.URL,
 	}
 
 	result.Ready = m.Ready

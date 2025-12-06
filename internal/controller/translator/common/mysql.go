@@ -70,9 +70,7 @@ type MySQLStatus struct {
 }
 
 type MySQLConnection struct {
-	Host string
-	Port string
-	User string
+	URL corev1.SecretKeySelector
 }
 
 type MySQLInfraCode string
@@ -114,7 +112,7 @@ func (m MySQLCondition) ToMySQLConnCondition() (MySQLConnCondition, bool) {
 	result.code = m.code
 	result.message = m.message
 
-	connInfo, ok := m.hidden.(MySQLConnInfo)
+	connInfo, ok := m.hidden.(MySQLConnection)
 	if !ok {
 		ctrl.Log.Error(
 			fmt.Errorf("MySQLConnection does not have connection info"),
@@ -126,18 +124,12 @@ func (m MySQLCondition) ToMySQLConnCondition() (MySQLConnCondition, bool) {
 	return result, true
 }
 
-type MySQLConnInfo struct {
-	Host string
-	Port string
-	User string
-}
-
 type MySQLConnCondition struct {
 	MySQLCondition
-	connInfo MySQLConnInfo
+	connInfo MySQLConnection
 }
 
-func NewMySQLConnCondition(connInfo MySQLConnInfo) MySQLCondition {
+func NewMySQLConnCondition(connInfo MySQLConnection) MySQLCondition {
 	return MySQLCondition{
 		code:    MySQLConnectionCode,
 		message: "MySQL connection info",
@@ -152,16 +144,14 @@ func ExtractMySQLStatus(ctx context.Context, conditions []MySQLCondition) MySQLS
 
 	for _, cond := range conditions {
 		if connCond, ok = cond.ToMySQLConnCondition(); ok {
-			result.Connection.Host = connCond.connInfo.Host
-			result.Connection.Port = connCond.connInfo.Port
-			result.Connection.User = connCond.connInfo.User
+			result.Connection = connCond.connInfo
 			continue
 		}
 
 		result.Conditions = append(result.Conditions, cond)
 	}
 
-	result.Ready = result.Connection.Host != ""
+	result.Ready = result.Connection.URL.Name != ""
 
 	return result
 }

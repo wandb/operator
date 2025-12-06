@@ -36,8 +36,7 @@ func TranslateKafkaStatus(ctx context.Context, m common.KafkaStatus) apiv2.WBKaf
 	}
 
 	result.Connection = apiv2.WBKafkaConnection{
-		KafkaHost: m.Connection.Host,
-		KafkaPort: m.Connection.Port,
+		URL: m.Connection.URL,
 	}
 
 	result.Ready = m.Ready

@@ -6,19 +6,39 @@ import (
 	"strconv"
 
 	ctrlcommon "github.com/wandb/operator/internal/controller/common"
-	"github.com/wandb/operator/internal/controller/translator/common"
+	transcommon "github.com/wandb/operator/internal/controller/translator/common"
 	pxcv1 "github.com/wandb/operator/internal/vendored/percona-operator/pxc/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+func readConnectionDetails(actual *pxcv1.PerconaXtraDBCluster, specNamespacedName types.NamespacedName) *mysqlConnInfo {
+	namespace := specNamespacedName.Namespace
+	var mysqlHost string
+
+	if actual.Spec.ProxySQLEnabled() {
+		mysqlHost = fmt.Sprintf("%s.%s.svc.cluster.local", actual.Name, namespace)
+	} else {
+		mysqlHost = fmt.Sprintf("%s.%s.svc.cluster.local", actual.Name, namespace)
+	}
+
+	mysqlPort := strconv.Itoa(3306)
+
+	return &mysqlConnInfo{
+		Host: mysqlHost,
+		Port: mysqlPort,
+		User: "root",
+	}
+}
+
 func ReadState(
 	ctx context.Context,
 	client client.Client,
 	specNamespacedName types.NamespacedName,
-) ([]common.MySQLCondition, error) {
+	wandbOwner client.Object,
+) ([]transcommon.MySQLCondition, error) {
 	var err error
-	var results []common.MySQLCondition
+	var results []transcommon.MySQLCondition
 	var actual = &pxcv1.PerconaXtraDBCluster{}
 
 	nsNameBldr := createNsNameBuilder(specNamespacedName)
@@ -33,31 +53,16 @@ func ReadState(
 		return results, nil
 	}
 
-	///////////
-	// Extract connection info from PXC CR
-	// Connection endpoint depends on configuration:
-	// - Dev (no ProxySQL): connect directly to PXC service
-	// - HA (with ProxySQL): connect via ProxySQL service
-	namespace := specNamespacedName.Namespace
-	var mysqlHost string
+	connInfo := readConnectionDetails(actual, specNamespacedName)
 
-	if actual.Spec.ProxySQLEnabled() {
-		// HA mode: connect via ProxySQL
-		mysqlHost = fmt.Sprintf("%s.%s.svc.cluster.local", actual.Name, namespace)
-	} else {
-		// Dev mode: connect directly to PXC
-		mysqlHost = fmt.Sprintf("%s.%s.svc.cluster.local", actual.Name, namespace)
+	var connection *transcommon.MySQLConnection
+	if connection, err = writeMySQLConnInfo(
+		ctx, client, wandbOwner, nsNameBldr, connInfo,
+	); err != nil {
+		return results, err
 	}
 
-	mysqlPort := strconv.Itoa(3306)
-
-	connInfo := common.MySQLConnInfo{
-		Host: mysqlHost,
-		Port: mysqlPort,
-		User: "root",
-	}
-	results = append(results, common.NewMySQLConnCondition(connInfo))
-	///////////
+	results = append(results, transcommon.NewMySQLConnCondition(*connection))
 
 	return results, nil
 }

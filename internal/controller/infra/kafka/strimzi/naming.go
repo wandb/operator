@@ -46,6 +46,17 @@ func (n *NsNameBuilder) NodePoolNsName() types.NamespacedName {
 	}
 }
 
+func (n *NsNameBuilder) ConnectionName() string {
+	return fmt.Sprintf("%s-connection", n.SpecName())
+}
+
+func (n *NsNameBuilder) ConnectionNsName() types.NamespacedName {
+	return types.NamespacedName{
+		Namespace: n.Namespace(),
+		Name:      n.ConnectionName(),
+	}
+}
+
 // Internal function for backward compatibility within the package
 func createNsNameBuilder(baseNsName types.NamespacedName) *NsNameBuilder {
 	return CreateNsNameBuilder(baseNsName)

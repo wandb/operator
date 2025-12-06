@@ -60,7 +60,7 @@ func redisReadState(
 	var conditions []common.RedisCondition
 	var specNamespacedName = redisSpecNamespacedName(wandb.Spec.Redis)
 
-	if conditions, err = opstree.ReadState(ctx, client, specNamespacedName); err != nil {
+	if conditions, err = opstree.ReadState(ctx, client, specNamespacedName, wandb); err != nil {
 		return err
 	}
 	wandb.Status.RedisStatus = translatorv2.ExtractRedisStatus(ctx, conditions)
