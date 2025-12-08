@@ -1,27 +1,24 @@
-package common
+package translator
 
 import (
 	"context"
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
 /////////////////////////////////////////////////
-// ClickHouse Config
-
-/////////////////////////////////////////////////
 // ClickHouse Status
 
+// ClickHouseStatus is a representation of Status that must support round-trip translation
+// between any version of WBClickHouseStatus and itself
 type ClickHouseStatus struct {
 	Ready      bool
-	Connection ClickHouseConnection
-	Conditions []ClickHouseCondition
-}
-
-type ClickHouseConnection struct {
-	URL corev1.SecretKeySelector
+	State      string
+	Conditions []metav1.Condition
+	Connection InfraConnection
 }
 
 type ClickHouseInfraCode string

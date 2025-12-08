@@ -3,7 +3,7 @@ package defaults
 import (
 	"fmt"
 
-	"github.com/wandb/operator/internal/controller/translator/common"
+	"github.com/wandb/operator/internal/controller/translator"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
@@ -27,10 +27,10 @@ const (
 	DefaultMysqlName = "wandb-mysql"
 )
 
-func BuildMySQLDefaults(size Size, ownerNamespace string) (common.MySQLConfig, error) {
+func BuildMySQLDefaults(size Size, ownerNamespace string) (translator.MySQLConfig, error) {
 	var err error
 	var storageSize string
-	config := common.MySQLConfig{
+	config := translator.MySQLConfig{
 		Enabled:   true,
 		Namespace: ownerNamespace,
 		Name:      DefaultMysqlName,

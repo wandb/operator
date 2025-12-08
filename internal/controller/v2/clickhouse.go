@@ -5,7 +5,7 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/infra/clickhouse/altinity"
-	"github.com/wandb/operator/internal/controller/translator/common"
+	"github.com/wandb/operator/internal/controller/translator"
 	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
 	chiv1 "github.com/wandb/operator/internal/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -40,7 +40,7 @@ func clickHouseReadState(
 	log := ctrl.LoggerFrom(ctx)
 
 	var err error
-	var conditions []common.ClickHouseCondition
+	var conditions []translator.ClickHouseCondition
 	var specNamespacedName = clickHouseSpecNamespacedName(wandb.Spec.ClickHouse)
 
 	if conditions, err = altinity.ReadState(ctx, client, specNamespacedName, wandb); err != nil {

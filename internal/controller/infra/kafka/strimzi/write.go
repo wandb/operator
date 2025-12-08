@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/wandb/operator/internal/controller/common"
-	transcommon "github.com/wandb/operator/internal/controller/translator/common"
+	transcommon "github.com/wandb/operator/internal/controller/translator"
 	kafkav1beta2 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1beta2"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

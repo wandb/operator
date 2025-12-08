@@ -1,67 +1,36 @@
-package altinity
+package percona
 
 import (
 	"context"
 	"fmt"
 
 	"github.com/wandb/operator/internal/controller/common"
-	transcommon "github.com/wandb/operator/internal/controller/translator"
-	chiv1 "github.com/wandb/operator/internal/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
+	"github.com/wandb/operator/internal/controller/translator"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-const (
-	ResourceTypeName = "ClickHouseInstallation"
-	AppConnTypeName  = "ClickHouseAppConn"
-)
-
-func WriteState(
-	ctx context.Context,
-	client client.Client,
-	specNamespacedName types.NamespacedName,
-	desired *chiv1.ClickHouseInstallation,
-) error {
-	var err error
-	var actual = &chiv1.ClickHouseInstallation{}
-
-	nsNameBldr := createNsNameBuilder(specNamespacedName)
-
-	if err = common.GetResource(
-		ctx, client, nsNameBldr.InstallationNsName(), ResourceTypeName, actual,
-	); err != nil {
-		return err
-	}
-
-	if err = common.CrudResource(ctx, client, desired, actual); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-type clickhouseConnInfo struct {
+type mysqlConnInfo struct {
 	Host string
 	Port string
 	User string
 }
 
-func (c *clickhouseConnInfo) toURL() string {
-	return fmt.Sprintf("clickhouse://%s@%s:%s", c.User, c.Host, c.Port)
+func (c *mysqlConnInfo) toURL() string {
+	return fmt.Sprintf("mysql://%s@%s:%s", c.User, c.Host, c.Port)
 }
 
-func writeClickHouseConnInfo(
+func writeMySQLConnInfo(
 	ctx context.Context,
 	client client.Client,
 	owner client.Object,
 	nsNameBldr *NsNameBuilder,
-	connInfo *clickhouseConnInfo,
+	connInfo *mysqlConnInfo,
 ) (
-	*transcommon.ClickHouseConnection, error,
+	*translator.InfraConnection, error,
 ) {
 	var err error
 	var gvk schema.GroupVersionKind
@@ -104,7 +73,7 @@ func writeClickHouseConnInfo(
 		return nil, err
 	}
 
-	return &transcommon.ClickHouseConnection{
+	return &translator.InfraConnection{
 		URL: corev1.SecretKeySelector{
 			LocalObjectReference: corev1.LocalObjectReference{
 				Name: nsName.Name,

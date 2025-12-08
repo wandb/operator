@@ -21,7 +21,7 @@ import (
 	"time"
 
 	apiv2 "github.com/wandb/operator/api/v2"
-	"github.com/wandb/operator/internal/controller/translator/common"
+	"github.com/wandb/operator/internal/controller/translator"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -41,7 +41,7 @@ func Reconcile(ctx context.Context, client client.Client, req ctrl.Request) (ctr
 		"start", true,
 	)
 
-	var minioConnection *common.MinioConnection
+	var minioConnection *translator.MinioConnection
 	var err error
 
 	wandb := &apiv2.WeightsAndBiases{}

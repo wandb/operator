@@ -1,10 +1,11 @@
-package common
+package translator
 
 import (
 	"context"
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
@@ -29,14 +30,13 @@ const (
 /////////////////////////////////////////////////
 // Kafka Status
 
+// KafkaStatus is a representation of Status that must support round-trip translation
+// between any version of WBKafkaStatus and itself
 type KafkaStatus struct {
 	Ready      bool
-	Connection KafkaConnection
-	Conditions []KafkaCondition
-}
-
-type KafkaConnection struct {
-	URL corev1.SecretKeySelector
+	State      string
+	Conditions []metav1.Condition
+	Connection InfraConnection
 }
 
 type KafkaInfraCode string

@@ -6,7 +6,7 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/infra/redis/opstree"
-	"github.com/wandb/operator/internal/controller/translator/common"
+	"github.com/wandb/operator/internal/controller/translator"
 	"github.com/wandb/operator/internal/defaults"
 	rediscommon "github.com/wandb/operator/internal/vendored/redis-operator/common/v1beta2"
 	redisv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redis/v1beta2"
@@ -24,14 +24,14 @@ const (
 	DefaultSentinelGroup = defaults.DefaultSentinelGroup
 )
 
-func ExtractRedisStatus(ctx context.Context, conditions []common.RedisCondition) apiv2.WBRedisStatus {
+func ExtractRedisStatus(ctx context.Context, conditions []translator.RedisCondition) apiv2.WBRedisStatus {
 	return TranslateRedisStatus(
 		ctx,
-		common.ExtractRedisStatus(ctx, conditions),
+		translator.ExtractRedisStatus(ctx, conditions),
 	)
 }
 
-func TranslateRedisStatus(ctx context.Context, m common.RedisStatus) apiv2.WBRedisStatus {
+func TranslateRedisStatus(ctx context.Context, m translator.RedisStatus) apiv2.WBRedisStatus {
 	var result apiv2.WBRedisStatus
 	var conditions []apiv2.WBStatusCondition
 
@@ -58,21 +58,21 @@ func TranslateRedisStatus(ctx context.Context, m common.RedisStatus) apiv2.WBRed
 
 func translateRedisStatusCode(code string) apiv2.WBStateType {
 	switch code {
-	case string(common.RedisSentinelCreatedCode):
+	case string(translator.RedisSentinelCreatedCode):
 		return apiv2.WBStateUpdating
-	case string(common.RedisReplicationCreatedCode):
+	case string(translator.RedisReplicationCreatedCode):
 		return apiv2.WBStateUpdating
-	case string(common.RedisStandaloneCreatedCode):
+	case string(translator.RedisStandaloneCreatedCode):
 		return apiv2.WBStateUpdating
-	case string(common.RedisSentinelDeletedCode):
+	case string(translator.RedisSentinelDeletedCode):
 		return apiv2.WBStateDeleting
-	case string(common.RedisReplicationDeletedCode):
+	case string(translator.RedisReplicationDeletedCode):
 		return apiv2.WBStateDeleting
-	case string(common.RedisStandaloneDeletedCode):
+	case string(translator.RedisStandaloneDeletedCode):
 		return apiv2.WBStateDeleting
-	case string(common.RedisSentinelConnectionCode):
+	case string(translator.RedisSentinelConnectionCode):
 		return apiv2.WBStateReady
-	case string(common.RedisStandaloneConnectionCode):
+	case string(translator.RedisStandaloneConnectionCode):
 		return apiv2.WBStateReady
 	default:
 		return apiv2.WBStateUnknown
@@ -119,7 +119,7 @@ func ToRedisStandaloneVendorSpec(
 		},
 		Spec: redisv1beta2.RedisSpec{
 			KubernetesConfig: rediscommon.KubernetesConfig{
-				Image:           common.RedisStandaloneImage,
+				Image:           translator.RedisStandaloneImage,
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				Resources:       &corev1.ResourceRequirements{},
 			},
@@ -197,7 +197,7 @@ func ToRedisSentinelVendorSpec(
 		Spec: redissentinelv1beta2.RedisSentinelSpec{
 			Size: &sentinelCount,
 			KubernetesConfig: rediscommon.KubernetesConfig{
-				Image:           common.RedisSentinelImage,
+				Image:           translator.RedisSentinelImage,
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				Resources:       &corev1.ResourceRequirements{},
 			},
@@ -267,7 +267,7 @@ func ToRedisReplicationVendorSpec(
 		Spec: redisreplicationv1beta2.RedisReplicationSpec{
 			Size: &replicaCount,
 			KubernetesConfig: rediscommon.KubernetesConfig{
-				Image:           common.RedisReplicationImage,
+				Image:           translator.RedisReplicationImage,
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				Resources:       &corev1.ResourceRequirements{},
 			},

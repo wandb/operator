@@ -6,7 +6,7 @@ import (
 	"strconv"
 
 	ctrlcommon "github.com/wandb/operator/internal/controller/common"
-	transcommon "github.com/wandb/operator/internal/controller/translator/common"
+	transcommon "github.com/wandb/operator/internal/controller/translator"
 	v1beta3 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1beta2"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"

@@ -7,7 +7,7 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/infra/kafka/strimzi"
-	"github.com/wandb/operator/internal/controller/translator/common"
+	"github.com/wandb/operator/internal/controller/translator"
 	kafkav1beta2 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1beta2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -15,14 +15,14 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
-func ExtractKafkaStatus(ctx context.Context, conditions []common.KafkaCondition) apiv2.WBKafkaStatus {
+func ExtractKafkaStatus(ctx context.Context, conditions []translator.KafkaCondition) apiv2.WBKafkaStatus {
 	return TranslateKafkaStatus(
 		ctx,
-		common.ExtractKafkaStatus(ctx, conditions),
+		translator.ExtractKafkaStatus(ctx, conditions),
 	)
 }
 
-func TranslateKafkaStatus(ctx context.Context, m common.KafkaStatus) apiv2.WBKafkaStatus {
+func TranslateKafkaStatus(ctx context.Context, m translator.KafkaStatus) apiv2.WBKafkaStatus {
 	var result apiv2.WBKafkaStatus
 	var conditions []apiv2.WBStatusCondition
 
@@ -49,19 +49,19 @@ func TranslateKafkaStatus(ctx context.Context, m common.KafkaStatus) apiv2.WBKaf
 
 func translateKafkaStatusCode(code string) apiv2.WBStateType {
 	switch code {
-	case string(common.KafkaCreatedCode):
+	case string(translator.KafkaCreatedCode):
 		return apiv2.WBStateUpdating
-	case string(common.KafkaUpdatedCode):
+	case string(translator.KafkaUpdatedCode):
 		return apiv2.WBStateUpdating
-	case string(common.KafkaDeletedCode):
+	case string(translator.KafkaDeletedCode):
 		return apiv2.WBStateDeleting
-	case string(common.KafkaNodePoolCreatedCode):
+	case string(translator.KafkaNodePoolCreatedCode):
 		return apiv2.WBStateUpdating
-	case string(common.KafkaNodePoolUpdatedCode):
+	case string(translator.KafkaNodePoolUpdatedCode):
 		return apiv2.WBStateUpdating
-	case string(common.KafkaNodePoolDeletedCode):
+	case string(translator.KafkaNodePoolDeletedCode):
 		return apiv2.WBStateDeleting
-	case string(common.KafkaConnectionCode):
+	case string(translator.KafkaConnectionCode):
 		return apiv2.WBStateReady
 	default:
 		return apiv2.WBStateUnknown
@@ -101,8 +101,8 @@ func ToKafkaVendorSpec(
 		},
 		Spec: kafkav1beta2.KafkaSpec{
 			Kafka: kafkav1beta2.KafkaClusterSpec{
-				Version:         common.KafkaVersion,
-				MetadataVersion: common.KafkaMetadataVersion,
+				Version:         translator.KafkaVersion,
+				MetadataVersion: translator.KafkaMetadataVersion,
 				Replicas:        0, // CRITICAL: Must be 0 when using node pools in KRaft mode
 				Listeners: []kafkav1beta2.GenericKafkaListener{
 					{

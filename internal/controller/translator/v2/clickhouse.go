@@ -7,7 +7,7 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/infra/clickhouse/altinity"
-	"github.com/wandb/operator/internal/controller/translator/common"
+	"github.com/wandb/operator/internal/controller/translator"
 	chiv2 "github.com/wandb/operator/internal/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -17,14 +17,14 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
-func ExtractClickHouseStatus(ctx context.Context, conditions []common.ClickHouseCondition) apiv2.WBClickHouseStatus {
+func ExtractClickHouseStatus(ctx context.Context, conditions []translator.ClickHouseCondition) apiv2.WBClickHouseStatus {
 	return TranslateClickHouseStatus(
 		ctx,
-		common.ExtractClickHouseStatus(ctx, conditions),
+		translator.ExtractClickHouseStatus(ctx, conditions),
 	)
 }
 
-func TranslateClickHouseStatus(ctx context.Context, m common.ClickHouseStatus) apiv2.WBClickHouseStatus {
+func TranslateClickHouseStatus(ctx context.Context, m translator.ClickHouseStatus) apiv2.WBClickHouseStatus {
 	var result apiv2.WBClickHouseStatus
 	var conditions []apiv2.WBStatusCondition
 
@@ -51,13 +51,13 @@ func TranslateClickHouseStatus(ctx context.Context, m common.ClickHouseStatus) a
 
 func translateClickHouseStatusCode(code string) apiv2.WBStateType {
 	switch code {
-	case string(common.ClickHouseCreatedCode):
+	case string(translator.ClickHouseCreatedCode):
 		return apiv2.WBStateUpdating
-	case string(common.ClickHouseUpdatedCode):
+	case string(translator.ClickHouseUpdatedCode):
 		return apiv2.WBStateUpdating
-	case string(common.ClickHouseDeletedCode):
+	case string(translator.ClickHouseDeletedCode):
 		return apiv2.WBStateDeleting
-	case string(common.ClickHouseConnectionCode):
+	case string(translator.ClickHouseConnectionCode):
 		return apiv2.WBStateReady
 	default:
 		return apiv2.WBStateUnknown

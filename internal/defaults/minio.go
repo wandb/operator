@@ -3,7 +3,7 @@ package defaults
 import (
 	"fmt"
 
-	"github.com/wandb/operator/internal/controller/translator/common"
+	"github.com/wandb/operator/internal/controller/translator"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
@@ -24,10 +24,10 @@ const (
 	DefaultMinioBrowserSetting = "on"
 )
 
-func BuildMinioDefaults(size Size, ownerNamespace string) (common.MinioConfig, error) {
+func BuildMinioDefaults(size Size, ownerNamespace string) (translator.MinioConfig, error) {
 	var err error
 	var storageSize string
-	config := common.MinioConfig{
+	config := translator.MinioConfig{
 		Enabled:             true,
 		Namespace:           ownerNamespace,
 		Name:                DefaultMinioName,

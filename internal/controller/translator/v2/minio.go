@@ -6,7 +6,7 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/infra/minio/tenant"
-	"github.com/wandb/operator/internal/controller/translator/common"
+	"github.com/wandb/operator/internal/controller/translator"
 	miniov2 "github.com/wandb/operator/internal/vendored/minio-operator/minio.min.io/v2"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -15,14 +15,14 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
-func ExtractMinioStatus(ctx context.Context, conditions []common.MinioCondition) apiv2.WBMinioStatus {
+func ExtractMinioStatus(ctx context.Context, conditions []translator.MinioCondition) apiv2.WBMinioStatus {
 	return TranslateMinioStatus(
 		ctx,
-		common.ExtractMinioStatus(ctx, conditions),
+		translator.ExtractMinioStatus(ctx, conditions),
 	)
 }
 
-func TranslateMinioStatus(ctx context.Context, m common.MinioStatus) apiv2.WBMinioStatus {
+func TranslateMinioStatus(ctx context.Context, m translator.MinioStatus) apiv2.WBMinioStatus {
 	var result apiv2.WBMinioStatus
 	var conditions []apiv2.WBStatusCondition
 
@@ -49,13 +49,13 @@ func TranslateMinioStatus(ctx context.Context, m common.MinioStatus) apiv2.WBMin
 
 func translateMinioStatusCode(code string) apiv2.WBStateType {
 	switch code {
-	case string(common.MinioCreatedCode):
+	case string(translator.MinioCreatedCode):
 		return apiv2.WBStateUpdating
-	case string(common.MinioUpdatedCode):
+	case string(translator.MinioUpdatedCode):
 		return apiv2.WBStateUpdating
-	case string(common.MinioDeletedCode):
+	case string(translator.MinioDeletedCode):
 		return apiv2.WBStateDeleting
-	case string(common.MinioConnectionCode):
+	case string(translator.MinioConnectionCode):
 		return apiv2.WBStateReady
 	default:
 		return apiv2.WBStateUnknown
@@ -86,9 +86,9 @@ func ToMinioVendorSpec(
 	}
 
 	// Determine volumes per server based on replica count
-	volumesPerServer := common.DevVolumesPerServer
+	volumesPerServer := translator.DevVolumesPerServer
 	if spec.Replicas > 1 {
-		volumesPerServer = common.ProdVolumesPerServer
+		volumesPerServer = translator.ProdVolumesPerServer
 	}
 
 	// Build Tenant spec
@@ -101,7 +101,7 @@ func ToMinioVendorSpec(
 			},
 		},
 		Spec: miniov2.TenantSpec{
-			Image: common.MinioImage,
+			Image: translator.MinioImage,
 			Configuration: &corev1.LocalObjectReference{
 				Name: tenant.ConfigName(specName),
 			},

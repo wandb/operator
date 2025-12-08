@@ -6,7 +6,7 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/infra/mysql/percona"
-	"github.com/wandb/operator/internal/controller/translator/common"
+	"github.com/wandb/operator/internal/controller/translator"
 	pxcv1 "github.com/wandb/operator/internal/vendored/percona-operator/pxc/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -16,50 +16,15 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
-func ExtractMySQLStatus(ctx context.Context, results []common.MySQLCondition) apiv2.WBMySQLStatus {
-	return TranslateMySQLStatus(
-		ctx,
-		common.ExtractMySQLStatus(ctx, results),
-	)
-}
-
-func TranslateMySQLStatus(ctx context.Context, m common.MySQLStatus) apiv2.WBMySQLStatus {
-	var result apiv2.WBMySQLStatus
-	var conditions []apiv2.WBStatusCondition
-
-	for _, condition := range m.Conditions {
-		state := translateMySQLStatusCode(condition.Code())
-		conditions = append(conditions, apiv2.WBStatusCondition{
-			State:   state,
-			Code:    condition.Code(),
-			Message: condition.Message(),
-		})
-	}
-
-	result.Connection = apiv2.WBMySQLConnection{
-		URL: m.Connection.URL,
-	}
-
-	result.Ready = m.Ready
-	result.Conditions = conditions
-	result.State = computeOverallState(conditions, m.Ready)
-	result.LastReconciled = metav1.Now()
-
-	return result
-}
-
-func translateMySQLStatusCode(code string) apiv2.WBStateType {
-	switch code {
-	case string(common.MySQLCreatedCode):
-		return apiv2.WBStateUpdating
-	case string(common.MySQLUpdatedCode):
-		return apiv2.WBStateUpdating
-	case string(common.MySQLDeletedCode):
-		return apiv2.WBStateDeleting
-	case string(common.MySQLConnectionCode):
-		return apiv2.WBStateReady
-	default:
-		return apiv2.WBStateUnknown
+func ToMySQLStatus(ctx context.Context, status translator.MysqlStatus) apiv2.WBMySQLStatus {
+	return apiv2.WBMySQLStatus{
+		Ready:          status.Ready,
+		State:          status.State,
+		Conditions:     status.Conditions,
+		LastReconciled: metav1.Now(),
+		Connection: apiv2.WBInfraConnection{
+			URL: status.Connection.URL,
+		},
 	}
 }
 
@@ -97,9 +62,9 @@ func ToMySQLVendorSpec(
 	allowUnsafeProxySize := spec.Replicas == 1
 
 	// Select PXC image based on mode (dev vs prod)
-	pxcImage := common.DevPXCImage
+	pxcImage := translator.DevPXCImage
 	if spec.Replicas > 1 {
-		pxcImage = common.ProdPXCImage
+		pxcImage = translator.ProdPXCImage
 	}
 
 	// Build PXC spec
@@ -112,7 +77,7 @@ func ToMySQLVendorSpec(
 			},
 		},
 		Spec: pxcv1.PerconaXtraDBClusterSpec{
-			CRVersion: common.PXCCRVersion,
+			CRVersion: translator.PXCCRVersion,
 			Unsafe: pxcv1.UnsafeFlags{
 				PXCSize:   allowUnsafePXCSize,
 				TLS:       !tlsEnabled,
@@ -157,7 +122,7 @@ func ToMySQLVendorSpec(
 			PodSpec: pxcv1.PodSpec{
 				Enabled: true,
 				Size:    proxySQLReplicas,
-				Image:   common.ProxySQLImage,
+				Image:   translator.ProxySQLImage,
 				VolumeSpec: &pxcv1.VolumeSpec{
 					EmptyDir: &corev1.EmptyDirVolumeSource{},
 				},
@@ -176,7 +141,7 @@ func ToMySQLVendorSpec(
 	if spec.Replicas == 1 {
 		pxc.Spec.LogCollector = &pxcv1.LogCollectorSpec{
 			Enabled: true,
-			Image:   common.LogCollectorImg,
+			Image:   translator.LogCollectorImg,
 		}
 	}
 

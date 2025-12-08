@@ -29,11 +29,6 @@ func mysqlWriteState(
 		return err
 	}
 
-	//wandb.Status.MySQLStatus = translatorv2.ExtractMySQLStatus(ctx, results)
-	//if err = r.Status().Update(ctx, wandb); err != nil {
-	//	results.AddErrors(err)
-	//}
-
 	return nil
 }
 
@@ -51,7 +46,7 @@ func mysqlReadState(
 	if conditions, err = percona.ReadState(ctx, client, specNamespacedName, wandb); err != nil {
 		return err
 	}
-	wandb.Status.MySQLStatus = translatorv2.ExtractMySQLStatus(ctx, conditions)
+	wandb.Status.MySQLStatus = translatorv2.ToMySQLStatus(ctx, conditions)
 	if err = client.Status().Update(ctx, wandb); err != nil {
 		log.Error(err, "failed to update status")
 		return err

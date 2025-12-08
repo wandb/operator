@@ -1,10 +1,11 @@
-package common
+package translator
 
 import (
 	"context"
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
@@ -55,10 +56,13 @@ const (
 /////////////////////////////////////////////////
 // Minio Status
 
+// MinioStatus is a representation of Status that must support round-trip translation
+// between any version of WBMinioStatus and itself
 type MinioStatus struct {
 	Ready      bool
-	Connection MinioConnection
-	Conditions []MinioCondition
+	State      string
+	Conditions []metav1.Condition
+	Connection InfraConnection
 }
 
 type MinioConnection struct {

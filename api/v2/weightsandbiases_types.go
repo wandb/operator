@@ -18,7 +18,6 @@ package v2
 
 import (
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -125,13 +124,12 @@ type WBRedisSentinelConfig struct {
 // WBKafkaSpec fields have many default values that, if unspecified,
 // will be applied by a defaulting webook
 type WBKafkaSpec struct {
-	Enabled     bool              `json:"enabled"`
-	StorageSize string            `json:"storageSize,omitempty"`
-	Replicas    int32             `json:"replicas,omitempty"`
-	Config      WBKafkaConfig     `json:"config,omitempty"`
-	Backup      WBKafkaBackupSpec `json:"backup,omitempty"`
-	Namespace   string            `json:"namespace,omitempty"`
-	Name        string            `json:"name,omitempty"`
+	Enabled     bool          `json:"enabled"`
+	StorageSize string        `json:"storageSize,omitempty"`
+	Replicas    int32         `json:"replicas,omitempty"`
+	Config      WBKafkaConfig `json:"config,omitempty"`
+	Namespace   string        `json:"namespace,omitempty"`
+	Name        string        `json:"name,omitempty"`
 }
 
 type WBKafkaConfig struct {
@@ -145,14 +143,6 @@ type WBKafkaReplicationConfig struct {
 	OffsetsTopicRF           int32 `json:"offsetsTopicRF,omitempty"`
 	TransactionStateRF       int32 `json:"transactionStateISR,omitempty"`
 	TransactionStateISR      int32 `json:"transactionStateRF,omitempty"`
-}
-
-type WBKafkaBackupSpec struct {
-	Enabled        bool                    `json:"enabled,omitempty"`
-	StorageName    string                  `json:"storageName,omitempty"`
-	StorageType    WBBackupStorageType     `json:"storageType,omitempty"`
-	Filesystem     *WBBackupFilesystemSpec `json:"filesystem,omitempty"`
-	TimeoutSeconds int                     `json:"timeoutSeconds,omitempty"`
 }
 
 // WBMinioSpec fields have many default values that, if unspecified,
@@ -188,38 +178,9 @@ type WBClickHouseConfig struct {
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-type WBBackupSpec struct {
-	Enabled        bool                    `json:"enabled,omitempty"`
-	StorageName    string                  `json:"storageName,omitempty"`
-	StorageType    WBBackupStorageType     `json:"storageType,omitempty"`
-	S3             *WBBackupS3Spec         `json:"s3,omitempty"`
-	Filesystem     *WBBackupFilesystemSpec `json:"filesystem,omitempty"`
-	TimeoutSeconds int                     `json:"timeoutSeconds,omitempty"`
-}
-
-type WBBackupStorageType string
-
-const (
-	WBBackupStorageTypeS3         WBBackupStorageType = "s3"
-	WBBackupStorageTypeFilesystem WBBackupStorageType = "filesystem"
-)
-
-type WBBackupS3Spec struct {
-	Bucket            string `json:"bucket"`
-	Region            string `json:"region,omitempty"`
-	CredentialsSecret string `json:"credentialsSecret,omitempty"`
-	EndpointURL       string `json:"endpointUrl,omitempty"`
-}
-
-type WBBackupFilesystemSpec struct {
-	StorageSize      resource.Quantity                   `json:"storageSize,omitempty"`
-	StorageClassName string                              `json:"storageClassName,omitempty"`
-	AccessModes      []corev1.PersistentVolumeAccessMode `json:"accessModes,omitempty"`
-}
-
 // WeightsAndBiasesStatus defines the observed state of WeightsAndBiases.
 type WeightsAndBiasesStatus struct {
-	State              WBStateType        `json:"state,omitempty"`
+	State              string             `json:"state,omitempty"`
 	MySQLStatus        WBMySQLStatus      `json:"mysqlStatus,omitempty"`
 	RedisStatus        WBRedisStatus      `json:"redisStatus,omitempty"`
 	KafkaStatus        WBKafkaStatus      `json:"kafkaStatus,omitempty"`
@@ -228,123 +189,47 @@ type WeightsAndBiasesStatus struct {
 	ObservedGeneration int64              `json:"observedGeneration"`
 }
 
-type WBStateType string
-
-const (
-	WBStateError    WBStateType = "Error"
-	WBStateDegraded WBStateType = "Degraded"
-	WBStateUpdating WBStateType = "Updating"
-	WBStateDeleting WBStateType = "Deleting"
-	WBStateOffline  WBStateType = "Offline"
-	WBStateReady    WBStateType = "Ready"
-	WBStateUnknown  WBStateType = "Unknown"
-)
-
-var statePrecedence = map[WBStateType]int{
-	WBStateError:    1,
-	WBStateDegraded: 2,
-	WBStateUpdating: 3,
-	WBStateDeleting: 4,
-	WBStateOffline:  5,
-	WBStateReady:    50,
-	WBStateUnknown:  99,
-}
-
-// IsWorseThan is used to determine the case where, given a series of
-// states describing a system, select the state that is the worst and use that
-// to as the overall state of the system.
-func (left WBStateType) IsWorseThan(right WBStateType) bool {
-	var leftValue = statePrecedence[WBStateUnknown]
-	var rightValue = statePrecedence[WBStateUnknown]
-	var ok bool
-	if _, ok = statePrecedence[left]; ok {
-		leftValue = statePrecedence[left]
-	}
-	if _, ok = statePrecedence[right]; ok {
-		rightValue = statePrecedence[right]
-	}
-	return leftValue < rightValue
-}
-
-type WBStatusCondition struct {
-	State   WBStateType `json:"state"`
-	Code    string      `json:"code"`
-	Message string      `json:"message"`
-}
-
 type WBMySQLStatus struct {
-	Ready          bool                `json:"ready"`
-	State          WBStateType         `json:"state,omitempty" default:"Unknown"`
-	Conditions     []WBStatusCondition `json:"conditions,omitempty"`
-	LastReconciled metav1.Time         `json:"lastReconciled,omitempty"`
-	Connection     WBMySQLConnection   `json:"connection,omitempty"`
-	// Deprecated: BackupStatus is not implemented in the refactored MySQL code
-	BackupStatus WBBackupStatus `json:"backupStatus,omitempty"`
-}
-
-type WBMySQLConnection struct {
-	URL corev1.SecretKeySelector `json:"url,omitempty"`
-}
-
-type WBBackupStatus struct {
-	BackupName     string       `json:"backupName,omitempty"`
-	StartedAt      *metav1.Time `json:"startedAt,omitempty"`
-	CompletedAt    *metav1.Time `json:"completedAt,omitempty"`
-	LastBackupTime *metav1.Time `json:"lastBackupTime,omitempty"`
-	State          string       `json:"state,omitempty"`
-	Message        string       `json:"message,omitempty"`
-	RequeueAfter   int64        `json:"requeueAfter,omitempty"`
+	Ready          bool               `json:"ready"`
+	State          string             `json:"state,omitempty" default:"Unknown"`
+	Conditions     []metav1.Condition `json:"conditions,omitempty"`
+	LastReconciled metav1.Time        `json:"lastReconciled,omitempty"`
+	Connection     WBInfraConnection  `json:"connection,omitempty"`
 }
 
 type WBRedisStatus struct {
-	Ready          bool                `json:"ready"`
-	State          WBStateType         `json:"state,omitempty" default:"Unknown"`
-	Conditions     []WBStatusCondition `json:"conditions,omitempty"`
-	LastReconciled metav1.Time         `json:"lastReconciled,omitempty"`
-	Connection     WBRedisConnection   `json:"connection,omitempty"`
-}
-
-type WBRedisConnection struct {
-	URL corev1.SecretKeySelector `json:"url,omitempty"`
-}
-
-type WBKafkaConnection struct {
-	URL corev1.SecretKeySelector `json:"url,omitempty"`
+	Ready          bool               `json:"ready"`
+	State          string             `json:"state,omitempty" default:"Unknown"`
+	Conditions     []metav1.Condition `json:"conditions,omitempty"`
+	LastReconciled metav1.Time        `json:"lastReconciled,omitempty"`
+	Connection     WBInfraConnection  `json:"connection,omitempty"`
 }
 
 type WBKafkaStatus struct {
-	Ready          bool                `json:"ready"`
-	State          WBStateType         `json:"state,omitempty" default:"Unknown"`
-	Conditions     []WBStatusCondition `json:"conditions,omitempty"`
-	LastReconciled metav1.Time         `json:"lastReconciled,omitempty"`
-	Connection     WBKafkaConnection   `json:"connection,omitempty"`
-	BackupStatus   WBBackupStatus      `json:"backupStatus,omitempty"`
+	Ready          bool               `json:"ready"`
+	State          string             `json:"state,omitempty" default:"Unknown"`
+	Conditions     []metav1.Condition `json:"conditions,omitempty"`
+	LastReconciled metav1.Time        `json:"lastReconciled,omitempty"`
+	Connection     WBInfraConnection  `json:"connection,omitempty"`
 }
 
 type WBMinioStatus struct {
-	Ready          bool                `json:"ready"`
-	State          WBStateType         `json:"state,omitempty" default:"Unknown"`
-	Conditions     []WBStatusCondition `json:"conditions,omitempty"`
-	LastReconciled metav1.Time         `json:"lastReconciled,omitempty"`
-	Connection     WBMinioConnection   `json:"connection,omitempty"`
-	// Deprecated: BackupStatus is not implemented in the refactored Minio code
-	BackupStatus WBBackupStatus `json:"backupStatus,omitempty"`
-}
-
-type WBMinioConnection struct {
-	URL corev1.SecretKeySelector `json:"url,omitempty"`
+	Ready          bool               `json:"ready"`
+	State          string             `json:"state,omitempty" default:"Unknown"`
+	Conditions     []metav1.Condition `json:"conditions,omitempty"`
+	LastReconciled metav1.Time        `json:"lastReconciled,omitempty"`
+	Connection     WBInfraConnection  `json:"connection,omitempty"`
 }
 
 type WBClickHouseStatus struct {
-	Ready          bool                   `json:"ready"`
-	State          WBStateType            `json:"state,omitempty" default:"Unknown"`
-	Conditions     []WBStatusCondition    `json:"conditions,omitempty"`
-	LastReconciled metav1.Time            `json:"lastReconciled,omitempty"`
-	Connection     WBClickHouseConnection `json:"connection,omitempty"`
-	// Deprecated: BackupStatus is not implemented in the refactored ClickHouse code
-	BackupStatus WBBackupStatus `json:"backupStatus,omitempty"`
+	Ready          bool               `json:"ready"`
+	State          string             `json:"state,omitempty" default:"Unknown"`
+	Conditions     []metav1.Condition `json:"conditions,omitempty"`
+	LastReconciled metav1.Time        `json:"lastReconciled,omitempty"`
+	LastObserved   metav1.Time        `json:"lastObserved,omitempty"`
+	Connection     WBInfraConnection  `json:"connection,omitempty"`
 }
 
-type WBClickHouseConnection struct {
+type WBInfraConnection struct {
 	URL corev1.SecretKeySelector `json:"url,omitempty"`
 }

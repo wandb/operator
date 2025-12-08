@@ -6,7 +6,7 @@ import (
 	"strconv"
 
 	ctrlcommon "github.com/wandb/operator/internal/controller/common"
-	transcommon "github.com/wandb/operator/internal/controller/translator/common"
+	"github.com/wandb/operator/internal/controller/translator"
 	pxcv1 "github.com/wandb/operator/internal/vendored/percona-operator/pxc/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -36,33 +36,42 @@ func ReadState(
 	client client.Client,
 	specNamespacedName types.NamespacedName,
 	wandbOwner client.Object,
-) ([]transcommon.MySQLCondition, error) {
+) (*translator.MysqlStatus, error) {
 	var err error
-	var results []transcommon.MySQLCondition
 	var actual = &pxcv1.PerconaXtraDBCluster{}
+	var status = &translator.MysqlStatus{}
 
 	nsNameBldr := createNsNameBuilder(specNamespacedName)
 
 	if err = ctrlcommon.GetResource(
 		ctx, client, nsNameBldr.ClusterNsName(), ResourceTypeName, actual,
 	); err != nil {
-		return results, err
+		return nil, err
 	}
 
 	if actual == nil {
-		return results, nil
+		return nil, nil
 	}
+
+	///////////////////////////////////
+	// set connection details
 
 	connInfo := readConnectionDetails(actual, specNamespacedName)
 
-	var connection *transcommon.MySQLConnection
+	var connection *translator.InfraConnection
 	if connection, err = writeMySQLConnInfo(
 		ctx, client, wandbOwner, nsNameBldr, connInfo,
 	); err != nil {
-		return results, err
+		return nil, err
 	}
 
-	results = append(results, transcommon.NewMySQLConnCondition(*connection))
+	status.Connection = *connection
 
-	return results, nil
+	///////////////////////////////////
+	// add conditions
+
+	///////////////////////////////////
+	// set top-level summary
+
+	return status, nil
 }

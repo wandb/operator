@@ -5,7 +5,7 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/infra/kafka/strimzi"
-	"github.com/wandb/operator/internal/controller/translator/common"
+	"github.com/wandb/operator/internal/controller/translator"
 	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
 	kafkav1beta2 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1beta2"
 	"k8s.io/apimachinery/pkg/types"
@@ -44,7 +44,7 @@ func kafkaReadState(
 	log := ctrl.LoggerFrom(ctx)
 
 	var err error
-	var conditions []common.KafkaCondition
+	var conditions []translator.KafkaCondition
 	var specNamespacedName = kafkaSpecNamespacedName(wandb.Spec.Kafka)
 
 	if conditions, err = strimzi.ReadState(ctx, client, specNamespacedName, wandb); err != nil {
