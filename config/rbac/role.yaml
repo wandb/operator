@@ -123,6 +123,8 @@ rules:
   - delete
   - get
   - list
+  - patch
+  - update
   - watch
 - apiGroups:
   - clickhouse.altinity.com

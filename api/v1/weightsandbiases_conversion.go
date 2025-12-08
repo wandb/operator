@@ -17,7 +17,6 @@ limitations under the License.
 package v1
 
 import (
-	"encoding/json"
 	"errors"
 	"log"
 
@@ -32,11 +31,11 @@ func (src *WeightsAndBiases) ConvertTo(dstRaw conversion.Hub) error {
 	log.Printf("ConvertTo: Converting WeightsAndBiases from Spoke version v1 to Hub version v2;"+
 		"source: %s/%s, target: %s/%s", src.Namespace, src.Name, dst.Namespace, dst.Name)
 
-	chart, err := json.Marshal(src.Spec.Chart)
+	chart, err := src.Spec.Chart.MarshalJSON()
 	if err != nil {
 		return err
 	}
-	values, err := json.Marshal(src.Spec.Values)
+	values, err := src.Spec.Values.MarshalJSON()
 	if err != nil {
 		return err
 	}
@@ -64,17 +63,20 @@ func (dst *WeightsAndBiases) ConvertFrom(srcRaw conversion.Hub) error {
 		return errors.New("cannot convert from non-v1 version")
 	}
 
-	err := json.Unmarshal([]byte(src.Annotations["legacy.operator.wandb.com/chart"]), &dst.Spec.Chart)
+	err := dst.Spec.Chart.UnmarshalJSON([]byte(src.Annotations["legacy.operator.wandb.com/chart"]))
 	if err != nil {
 		return err
 	}
-	err = json.Unmarshal([]byte(src.Annotations["legacy.operator.wandb.com/values"]), &dst.Spec.Values)
+
+	err = dst.Spec.Values.UnmarshalJSON([]byte(src.Annotations["legacy.operator.wandb.com/values"]))
 	if err != nil {
 		return err
 	}
 
 	// Copy ObjectMeta to preserve name, namespace, labels, etc.
 	dst.ObjectMeta = src.ObjectMeta
+	delete(dst.Annotations, "legacy.operator.wandb.com/chart")
+	delete(dst.Annotations, "legacy.operator.wandb.com/values")
 
 	return nil
 }
