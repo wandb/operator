@@ -25,7 +25,7 @@ spec:
             restartPolicy: Never
             containers:
             - name: my-job
-              image: nginx:1.14.2
+              image: nginx:1.14.1
               command: ["sleep", "10"]
 
   cronJobs:

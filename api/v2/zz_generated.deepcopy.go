@@ -21,7 +21,12 @@ limitations under the License.
 package v2
 
 import (
-	"k8s.io/api/batch/v1"
+	"github.com/kedacore/keda/v2/apis/keda/v1alpha1"
+	autoscalingv1 "k8s.io/api/autoscaling/v1"
+	batchv1 "k8s.io/api/batch/v1"
+	"k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
@@ -90,21 +95,41 @@ func (in *ApplicationSpec) DeepCopyInto(out *ApplicationSpec) {
 	*out = *in
 	in.MetaTemplate.DeepCopyInto(&out.MetaTemplate)
 	in.PodTemplate.DeepCopyInto(&out.PodTemplate)
-	in.ServiceTemplate.DeepCopyInto(&out.ServiceTemplate)
-	in.IngressTemplate.DeepCopyInto(&out.IngressTemplate)
-	in.HpaTemplate.DeepCopyInto(&out.HpaTemplate)
-	in.PdbTemplate.DeepCopyInto(&out.PdbTemplate)
-	in.ScaledObjectTemplate.DeepCopyInto(&out.ScaledObjectTemplate)
+	if in.ServiceTemplate != nil {
+		in, out := &in.ServiceTemplate, &out.ServiceTemplate
+		*out = new(v1.ServiceSpec)
+		(*in).DeepCopyInto(*out)
+	}
+	if in.IngressTemplate != nil {
+		in, out := &in.IngressTemplate, &out.IngressTemplate
+		*out = new(networkingv1.IngressSpec)
+		(*in).DeepCopyInto(*out)
+	}
+	if in.HpaTemplate != nil {
+		in, out := &in.HpaTemplate, &out.HpaTemplate
+		*out = new(autoscalingv1.HorizontalPodAutoscalerSpec)
+		(*in).DeepCopyInto(*out)
+	}
+	if in.PdbTemplate != nil {
+		in, out := &in.PdbTemplate, &out.PdbTemplate
+		*out = new(policyv1.PodDisruptionBudgetSpec)
+		(*in).DeepCopyInto(*out)
+	}
+	if in.ScaledObjectTemplate != nil {
+		in, out := &in.ScaledObjectTemplate, &out.ScaledObjectTemplate
+		*out = new(v1alpha1.ScaledObjectSpec)
+		(*in).DeepCopyInto(*out)
+	}
 	if in.Jobs != nil {
 		in, out := &in.Jobs, &out.Jobs
-		*out = make([]v1.Job, len(*in))
+		*out = make([]batchv1.Job, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
 	if in.CronJobs != nil {
 		in, out := &in.CronJobs, &out.CronJobs
-		*out = make([]v1.CronJob, len(*in))
+		*out = make([]batchv1.CronJob, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}

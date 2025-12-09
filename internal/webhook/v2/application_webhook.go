@@ -106,7 +106,14 @@ func (v *ApplicationCustomValidator) ValidateUpdate(_ context.Context, oldObj, n
 	}
 	applicationlog.Info("Validation for Application upon update", "name", application.GetName())
 
-	// TODO(user): fill in your validation logic upon object update.
+	applicationOld, ok := oldObj.(*appsv2.Application)
+	if !ok {
+		return nil, fmt.Errorf("expected a Application object for the oldObj but got %T", newObj)
+	}
+
+	if applicationOld.Spec.Kind != application.Spec.Kind {
+		return nil, fmt.Errorf("cannot change kind of an Application")
+	}
 
 	return nil, nil
 }

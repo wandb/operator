@@ -19,10 +19,12 @@ package controller
 import (
 	"context"
 	"fmt"
+	"reflect"
 
 	"github.com/wandb/operator/pkg/utils"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -31,6 +33,8 @@ import (
 
 	wandbv2 "github.com/wandb/operator/api/v2"
 )
+
+const applicationFinalizer = "apps.wandb.com/finalizer"
 
 // ApplicationReconciler reconciles a Application object
 type ApplicationReconciler struct {
@@ -65,6 +69,62 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	logger.Info("Handling Application", "Application", app.Name)
+
+	// Add finalizer if it doesn't exist
+	if app.DeletionTimestamp == nil {
+		if !utils.ContainsString(app.ObjectMeta.Finalizers, applicationFinalizer) {
+			app.ObjectMeta.Finalizers = append(app.ObjectMeta.Finalizers, applicationFinalizer)
+			if err := r.Update(ctx, &app); err != nil {
+				logger.Error(err, "Failed to add finalizer")
+				return ctrl.Result{}, err
+			}
+			logger.Info("Added finalizer to Application")
+			return ctrl.Result{}, nil
+		}
+	}
+
+	if app.DeletionTimestamp != nil {
+		logger.Info("Application is being deleted")
+
+		// Check if finalizer is present
+		if utils.ContainsString(app.ObjectMeta.Finalizers, applicationFinalizer) {
+			// Perform cleanup based on application kind
+			switch app.Spec.Kind {
+			case "Deployment":
+				if err := r.deleteDeployment(ctx, &app); err != nil {
+					logger.Error(err, "Failed to delete Deployment during finalization")
+					return ctrl.Result{}, err
+				}
+			case "StatefulSet":
+				if err := r.deleteStatefulSet(ctx, &app); err != nil {
+					logger.Error(err, "Failed to delete StatefulSet during finalization")
+					return ctrl.Result{}, err
+				}
+			}
+
+			// Delete Jobs
+			if err := r.deleteJobs(ctx, &app); err != nil {
+				logger.Error(err, "Failed to delete Jobs during finalization")
+				return ctrl.Result{}, err
+			}
+
+			// Delete CronJobs
+			if err := r.deleteCronJobs(ctx, &app); err != nil {
+				logger.Error(err, "Failed to delete CronJobs during finalization")
+				return ctrl.Result{}, err
+			}
+
+			// Remove finalizer
+			app.ObjectMeta.Finalizers = utils.RemoveString(app.ObjectMeta.Finalizers, applicationFinalizer)
+			if err := r.Update(ctx, &app); err != nil {
+				logger.Error(err, "Failed to remove finalizer")
+				return ctrl.Result{}, err
+			}
+			logger.Info("Removed finalizer from Application")
+		}
+
+		return ctrl.Result{}, nil
+	}
 
 	var result ctrl.Result
 	var err error
@@ -165,6 +225,32 @@ func (r *ApplicationReconciler) reconcileDeployment(ctx context.Context, app *wa
 	return ctrl.Result{}, nil
 }
 
+// deleteDeployment deletes the Deployment associated with the Application
+func (r *ApplicationReconciler) deleteDeployment(ctx context.Context, app *wandbv2.Application) error {
+	logger := log.FromContext(ctx)
+	logger.Info("Deleting Deployment", "Application", app.Name)
+
+	deployment := &appsv1.Deployment{}
+	err := r.Get(ctx, client.ObjectKey{Namespace: app.Namespace, Name: app.Name}, deployment)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			logger.Info("Deployment not found, nothing to delete", "Deployment", app.Name)
+			return nil
+		}
+		logger.Error(err, "Failed to get Deployment")
+		return err
+	}
+
+	deletePolicy := client.PropagationPolicy(v1.DeletePropagationBackground)
+	if err := r.Delete(ctx, deployment, deletePolicy); err != nil {
+		logger.Error(err, "Failed to delete Deployment", "Deployment", app.Name)
+		return err
+	}
+	logger.Info("Successfully deleted Deployment", "Deployment", app.Name)
+
+	return nil
+}
+
 // reconcileRollout handles Rollout type applications
 func (r *ApplicationReconciler) reconcileRollout(ctx context.Context, app *wandbv2.Application) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
@@ -176,7 +262,87 @@ func (r *ApplicationReconciler) reconcileRollout(ctx context.Context, app *wandb
 func (r *ApplicationReconciler) reconcileStatefulSet(ctx context.Context, app *wandbv2.Application) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 	logger.Info("Reconciling StatefulSet", "Application", app.Name)
+
+	statefulSet := &appsv1.StatefulSet{}
+	err := r.Get(ctx, client.ObjectKey{Namespace: app.Namespace, Name: app.Name}, statefulSet)
+	if err != nil {
+		if client.IgnoreNotFound(err) != nil {
+			logger.Error(err, "Failed to get StatefulSet")
+			return ctrl.Result{}, err
+		}
+		logger.Info("StatefulSet not found", "StatefulSet", app.Name)
+	}
+
+	selectorLabels := map[string]string{
+		"app.kubernetes.io/name":     app.Name,
+		"app.kubernetes.io/instance": app.Name,
+	}
+
+	statefulSet.Name = app.Name
+	statefulSet.Namespace = app.Namespace
+
+	statefulSet.Spec.Template.Spec = *app.Spec.PodTemplate.Spec.DeepCopy()
+	statefulSet.Spec.Template.ObjectMeta.Labels =
+		utils.MergeMapsStringString(
+			statefulSet.Spec.Template.ObjectMeta.Labels,
+			app.Spec.MetaTemplate.Labels,
+			app.Spec.PodTemplate.ObjectMeta.Labels,
+			selectorLabels,
+		)
+
+	statefulSet.Spec.Template.ObjectMeta.Annotations =
+		utils.MergeMapsStringString(
+			statefulSet.Spec.Template.ObjectMeta.Annotations,
+			app.Spec.MetaTemplate.Annotations,
+			app.Spec.PodTemplate.ObjectMeta.Annotations,
+		)
+
+	statefulSet.Spec.Selector = &v1.LabelSelector{
+		MatchLabels: selectorLabels,
+	}
+
+	logger.Info("StatefulSet spec", "StatefulSet", statefulSet.Name, "Spec", statefulSet.Spec)
+
+	if statefulSet.CreationTimestamp.IsZero() {
+		if err := r.Create(ctx, statefulSet); err != nil {
+			logger.Error(err, "Failed to create StatefulSet")
+			return ctrl.Result{}, err
+		}
+	} else {
+		if err := r.Update(ctx, statefulSet); err != nil {
+			logger.Error(err, "Failed to update StatefulSet")
+			return ctrl.Result{}, err
+		}
+	}
+
+	logger.Info("Successfully reconciled StatefulSet", "StatefulSet", statefulSet.Name)
 	return ctrl.Result{}, nil
+}
+
+// deleteStatefulSet deletes the StatefulSet associated with the Application
+func (r *ApplicationReconciler) deleteStatefulSet(ctx context.Context, app *wandbv2.Application) error {
+	logger := log.FromContext(ctx)
+	logger.Info("Deleting StatefulSet", "Application", app.Name)
+
+	statefulSet := &appsv1.StatefulSet{}
+	err := r.Get(ctx, client.ObjectKey{Namespace: app.Namespace, Name: app.Name}, statefulSet)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			logger.Info("StatefulSet not found, nothing to delete", "StatefulSet", app.Name)
+			return nil
+		}
+		logger.Error(err, "Failed to get StatefulSet")
+		return err
+	}
+
+	deletePolicy := client.PropagationPolicy(v1.DeletePropagationBackground)
+	if err := r.Delete(ctx, statefulSet, deletePolicy); err != nil {
+		logger.Error(err, "Failed to delete StatefulSet", "StatefulSet", app.Name)
+		return err
+	}
+	logger.Info("Successfully deleted StatefulSet", "StatefulSet", app.Name)
+
+	return nil
 }
 
 // reconcileDaemonSet handles DaemonSet type applications
@@ -202,7 +368,7 @@ func (r *ApplicationReconciler) reconcileJobs(ctx context.Context, app *wandbv2.
 		err := r.Get(ctx, client.ObjectKey{Namespace: app.Namespace, Name: jobName}, currentJob)
 
 		// Create or update the job
-		if err != nil && client.IgnoreNotFound(err) != nil {
+		if err != nil && !errors.IsNotFound(err) {
 			logger.Error(err, "Failed to get Job", "Job", jobName)
 			return err
 		}
@@ -220,21 +386,69 @@ func (r *ApplicationReconciler) reconcileJobs(ctx context.Context, app *wandbv2.
 		jobToReconcile.Labels["app.kubernetes.io/instance"] = app.Name
 		jobToReconcile.Labels["app.kubernetes.io/managed-by"] = "application-controller"
 
-		if currentJob.CreationTimestamp.IsZero() {
+		if errors.IsNotFound(err) {
 			if err := r.Create(ctx, jobToReconcile); err != nil {
 				logger.Error(err, "Failed to create Job", "Job", jobName)
 				return err
 			}
 			logger.Info("Successfully created Job", "Job", jobName)
 		} else {
-			// Update existing job
-			jobToReconcile.ResourceVersion = currentJob.ResourceVersion
-			if err := r.Update(ctx, jobToReconcile); err != nil {
-				logger.Error(err, "Failed to update Job", "Job", jobName)
-				return err
+			// Jobs cannot be updated, so we need to check if the spec has changed
+			// and delete + recreate if necessary
+			if !reflect.DeepEqual(currentJob.Spec, jobToReconcile.Spec) {
+				logger.Info("Job spec has changed, deleting and recreating", "Job", jobName)
+
+				// Delete the existing job
+				deletePolicy := client.PropagationPolicy(v1.DeletePropagationBackground)
+				if err := r.Delete(ctx, currentJob, deletePolicy); err != nil {
+					logger.Error(err, "Failed to delete Job", "Job", jobName)
+					return err
+				}
+				logger.Info("Successfully deleted Job", "Job", jobName)
+
+				// Recreate the job with new spec
+				if err := r.Create(ctx, jobToReconcile); err != nil {
+					logger.Error(err, "Failed to recreate Job", "Job", jobName)
+					return err
+				}
+				logger.Info("Successfully recreated Job", "Job", jobName)
+			} else {
+				logger.Info("Job spec unchanged, no action needed", "Job", jobName)
 			}
-			logger.Info("Successfully updated Job", "Job", jobName)
 		}
+	}
+
+	return nil
+}
+
+// deleteJobs deletes all Jobs associated with the Application
+func (r *ApplicationReconciler) deleteJobs(ctx context.Context, app *wandbv2.Application) error {
+	logger := log.FromContext(ctx)
+	logger.Info("Deleting Jobs", "Application", app.Name)
+
+	jobList := &batchv1.JobList{}
+	listOpts := []client.ListOption{
+		client.InNamespace(app.Namespace),
+		client.MatchingLabels{
+			"app.kubernetes.io/name":       app.Name,
+			"app.kubernetes.io/instance":   app.Name,
+			"app.kubernetes.io/managed-by": "application-controller",
+		},
+	}
+
+	if err := r.List(ctx, jobList, listOpts...); err != nil {
+		logger.Error(err, "Failed to list Jobs")
+		return err
+	}
+
+	deletePolicy := client.PropagationPolicy(v1.DeletePropagationBackground)
+	for _, job := range jobList.Items {
+		logger.Info("Deleting Job", "Job", job.Name)
+		if err := r.Delete(ctx, &job, deletePolicy); err != nil {
+			logger.Error(err, "Failed to delete Job", "Job", job.Name)
+			return err
+		}
+		logger.Info("Successfully deleted Job", "Job", job.Name)
 	}
 
 	return nil
@@ -289,6 +503,39 @@ func (r *ApplicationReconciler) reconcileCronJobs(ctx context.Context, app *wand
 			}
 			logger.Info("Successfully updated CronJob", "CronJob", cronJobName)
 		}
+	}
+
+	return nil
+}
+
+// deleteCronJobs deletes all CronJobs associated with the Application
+func (r *ApplicationReconciler) deleteCronJobs(ctx context.Context, app *wandbv2.Application) error {
+	logger := log.FromContext(ctx)
+	logger.Info("Deleting CronJobs", "Application", app.Name)
+
+	cronJobList := &batchv1.CronJobList{}
+	listOpts := []client.ListOption{
+		client.InNamespace(app.Namespace),
+		client.MatchingLabels{
+			"app.kubernetes.io/name":       app.Name,
+			"app.kubernetes.io/instance":   app.Name,
+			"app.kubernetes.io/managed-by": "application-controller",
+		},
+	}
+
+	if err := r.List(ctx, cronJobList, listOpts...); err != nil {
+		logger.Error(err, "Failed to list CronJobs")
+		return err
+	}
+
+	deletePolicy := client.PropagationPolicy(v1.DeletePropagationBackground)
+	for _, cronJob := range cronJobList.Items {
+		logger.Info("Deleting CronJob", "CronJob", cronJob.Name)
+		if err := r.Delete(ctx, &cronJob, deletePolicy); err != nil {
+			logger.Error(err, "Failed to delete CronJob", "CronJob", cronJob.Name)
+			return err
+		}
+		logger.Info("Successfully deleted CronJob", "CronJob", cronJob.Name)
 	}
 
 	return nil
