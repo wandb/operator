@@ -51,6 +51,9 @@ func ReadState(
 		return nil, nil
 	}
 
+	///////////////////////////////////
+	// set connection details
+
 	connInfo := readConnectionDetails(nsNameBldr)
 
 	var connection *translator.InfraConnection
@@ -63,6 +66,12 @@ func ReadState(
 	if connection != nil {
 		status.Connection = *connection
 	}
+
+	///////////////////////////////////
+	// add conditions
+
+	///////////////////////////////////
+	// set top-level summary
 
 	return status, nil
 }

@@ -42,8 +42,13 @@ func ReadState(
 	}
 
 	if actual == nil {
-		return nil, nil
+		status.State = "Not Installed"
+		status.Ready = false
+		return status, nil
 	}
+
+	///////////////////////////////////
+	// set connection details
 
 	connInfo := readConnectionDetails(specNamespacedName)
 
@@ -57,6 +62,12 @@ func ReadState(
 	if connection != nil {
 		status.Connection = *connection
 	}
+
+	///////////////////////////////////
+	// add conditions
+
+	///////////////////////////////////
+	// set top-level summary
 
 	return status, nil
 }

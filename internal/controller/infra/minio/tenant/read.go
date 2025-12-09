@@ -17,7 +17,7 @@ func ReadState(
 	connection *translator.InfraConnection,
 ) (*translator.MinioStatus, error) {
 	var err error
-	var status translator.MinioStatus
+	var status = &translator.MinioStatus{}
 	var actualResource = &miniov2.Tenant{}
 
 	nsNameBldr := createNsNameBuilder(specNamespacedName)
@@ -29,12 +29,23 @@ func ReadState(
 	}
 
 	if actualResource == nil {
-		return nil, nil
+		status.State = "Not Installed"
+		status.Ready = false
+		return status, nil
 	}
+
+	///////////////////////////////////
+	// set connection details
 
 	if connection != nil {
 		status.Connection = *connection
 	}
 
-	return &status, nil
+	///////////////////////////////////
+	// add conditions
+
+	///////////////////////////////////
+	// set top-level summary
+
+	return status, nil
 }
