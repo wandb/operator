@@ -6,7 +6,7 @@ import (
 	"strconv"
 
 	ctrlcommon "github.com/wandb/operator/internal/controller/common"
-	transcommon "github.com/wandb/operator/internal/controller/translator"
+	"github.com/wandb/operator/internal/controller/translator"
 	chiv1 "github.com/wandb/operator/internal/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -28,9 +28,9 @@ func ReadState(
 	client client.Client,
 	specNamespacedName types.NamespacedName,
 	wandbOwner client.Object,
-) ([]transcommon.ClickHouseCondition, error) {
+) (*translator.ClickHouseStatus, error) {
 	var err error
-	var results []transcommon.ClickHouseCondition
+	var status = &translator.ClickHouseStatus{}
 	var actual = &chiv1.ClickHouseInstallation{}
 
 	nsNameBldr := createNsNameBuilder(specNamespacedName)
@@ -38,23 +38,25 @@ func ReadState(
 	if err = ctrlcommon.GetResource(
 		ctx, client, nsNameBldr.InstallationNsName(), ResourceTypeName, actual,
 	); err != nil {
-		return results, err
+		return nil, err
 	}
 
 	if actual == nil {
-		return results, nil
+		return nil, nil
 	}
 
 	connInfo := readConnectionDetails(specNamespacedName)
 
-	var connection *transcommon.ClickHouseConnection
+	var connection *translator.InfraConnection
 	if connection, err = writeClickHouseConnInfo(
 		ctx, client, wandbOwner, nsNameBldr, connInfo,
 	); err != nil {
-		return results, err
+		return nil, err
 	}
 
-	results = append(results, transcommon.NewClickHouseConnCondition(*connection))
+	if connection != nil {
+		status.Connection = *connection
+	}
 
-	return results, nil
+	return status, nil
 }

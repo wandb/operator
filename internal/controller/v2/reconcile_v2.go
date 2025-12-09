@@ -41,7 +41,7 @@ func Reconcile(ctx context.Context, client client.Client, req ctrl.Request) (ctr
 		"start", true,
 	)
 
-	var minioConnection *translator.MinioConnection
+	var minioConnection *translator.InfraConnection
 	var err error
 
 	wandb := &apiv2.WeightsAndBiases{}

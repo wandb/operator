@@ -40,16 +40,18 @@ func clickHouseReadState(
 	log := ctrl.LoggerFrom(ctx)
 
 	var err error
-	var conditions []translator.ClickHouseCondition
+	var status *translator.ClickHouseStatus
 	var specNamespacedName = clickHouseSpecNamespacedName(wandb.Spec.ClickHouse)
 
-	if conditions, err = altinity.ReadState(ctx, client, specNamespacedName, wandb); err != nil {
+	if status, err = altinity.ReadState(ctx, client, specNamespacedName, wandb); err != nil {
 		return err
 	}
-	wandb.Status.ClickHouseStatus = translatorv2.ExtractClickHouseStatus(ctx, conditions)
-	if err = client.Status().Update(ctx, wandb); err != nil {
-		log.Error(err, "failed to update status")
-		return err
+	if status != nil {
+		wandb.Status.ClickHouseStatus = translatorv2.ToWBClickHouseStatus(ctx, *status)
+		if err = client.Status().Update(ctx, wandb); err != nil {
+			log.Error(err, "failed to update status")
+			return err
+		}
 	}
 
 	return nil

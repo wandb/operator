@@ -16,7 +16,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
-func ToMySQLStatus(ctx context.Context, status translator.MysqlStatus) apiv2.WBMySQLStatus {
+func ToWBMysqlStatus(ctx context.Context, status translator.MysqlStatus) apiv2.WBMySQLStatus {
 	return apiv2.WBMySQLStatus{
 		Ready:          status.Ready,
 		State:          status.State,

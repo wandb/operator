@@ -14,9 +14,10 @@ func ReadState(
 	ctx context.Context,
 	client client.Client,
 	specNamespacedName types.NamespacedName,
-) ([]translator.MinioCondition, error) {
+	connection *translator.InfraConnection,
+) (*translator.MinioStatus, error) {
 	var err error
-	var results []translator.MinioCondition
+	var status translator.MinioStatus
 	var actualResource = &miniov2.Tenant{}
 
 	nsNameBldr := createNsNameBuilder(specNamespacedName)
@@ -24,12 +25,16 @@ func ReadState(
 	if err = ctrlcommon.GetResource(
 		ctx, client, nsNameBldr.SpecNsName(), ResourceTypeName, actualResource,
 	); err != nil {
-		return results, err
+		return nil, err
 	}
 
 	if actualResource == nil {
-		return results, nil
+		return nil, nil
 	}
 
-	return results, nil
+	if connection != nil {
+		status.Connection = *connection
+	}
+
+	return &status, nil
 }

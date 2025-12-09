@@ -65,7 +65,9 @@ func ReadState(
 		return nil, err
 	}
 
-	status.Connection = *connection
+	if connection != nil {
+		status.Connection = *connection
+	}
 
 	///////////////////////////////////
 	// add conditions

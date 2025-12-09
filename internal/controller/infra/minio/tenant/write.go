@@ -6,7 +6,7 @@ import (
 
 	"github.com/Masterminds/goutils"
 	"github.com/wandb/operator/internal/controller/common"
-	transcommon "github.com/wandb/operator/internal/controller/translator"
+	"github.com/wandb/operator/internal/controller/translator"
 	miniov2 "github.com/wandb/operator/internal/vendored/minio-operator/minio.min.io/v2"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -29,7 +29,7 @@ func WriteState(
 	desiredCr *miniov2.Tenant,
 	envConfig MinioEnvConfig,
 	wandbOwner client.Object,
-) (*transcommon.MinioConnection, error) {
+) (*translator.InfraConnection, error) {
 	var err error
 	var actual = &miniov2.Tenant{}
 
@@ -53,7 +53,7 @@ func WriteState(
 	}
 
 	if connInfo != nil {
-		var connection *transcommon.MinioConnection
+		var connection *translator.InfraConnection
 		if connection, err = writeWandbConnInfo(
 			ctx, client, wandbOwner, nsNameBldr, connInfo,
 		); err != nil {
@@ -131,68 +131,4 @@ func writeMinioConfig(
 	}
 
 	return buildMinioConnInfo(configFile.rootUser, configFile.rootPassword, nsNameBldr), nil
-}
-
-func writeWandbConnInfo(
-	ctx context.Context,
-	client client.Client,
-	owner client.Object,
-	nsNameBldr *NsNameBuilder,
-	connInfo *minioConnInfo,
-) (
-	*transcommon.MinioConnection, error,
-) {
-	var err error
-	var gvk schema.GroupVersionKind
-	var actual = &corev1.Secret{}
-
-	//log := ctrl.LoggerFrom(ctx)
-
-	nsName := nsNameBldr.ConnectionNsName()
-	urlKey := "url"
-
-	if err = common.GetResource(
-		ctx, client, nsName, AppConnTypeName, actual,
-	); err != nil {
-		return nil, err
-	}
-
-	// Compute owner reference
-	if gvk, err = client.GroupVersionKindFor(owner); err != nil {
-		return nil, fmt.Errorf("could not get GVK for owner: %w", err)
-	}
-	ref := metav1.OwnerReference{
-		APIVersion:         gvk.GroupVersion().String(),
-		Kind:               gvk.Kind,
-		Name:               owner.GetName(),
-		UID:                owner.GetUID(),
-		Controller:         ptr.To(false),
-		BlockOwnerDeletion: ptr.To(false),
-	}
-
-	desired := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            nsName.Name,
-			Namespace:       nsName.Namespace,
-			OwnerReferences: []metav1.OwnerReference{ref},
-		},
-		Type: corev1.SecretTypeOpaque,
-		StringData: map[string]string{
-			urlKey: connInfo.toUrl().String(),
-		},
-	}
-
-	if err = common.CrudResource(ctx, client, desired, actual); err != nil {
-		return nil, err
-	}
-
-	return &transcommon.MinioConnection{
-		URL: corev1.SecretKeySelector{
-			LocalObjectReference: corev1.LocalObjectReference{
-				Name: nsName.Name,
-			},
-			Key:      urlKey,
-			Optional: ptr.To(false),
-		},
-	}, nil
 }

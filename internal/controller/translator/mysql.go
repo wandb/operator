@@ -45,19 +45,6 @@ type MySQLConfig struct {
 }
 
 /////////////////////////////////////////////////
-// MySQL Error
-
-type MySQLErrorCode string
-
-const (
-	MySQLErrFailedToGetConfigCode  MySQLErrorCode = "FailedToGetConfig"
-	MySQLErrFailedToInitializeCode MySQLErrorCode = "FailedToInitialize"
-	MySQLErrFailedToCreateCode     MySQLErrorCode = "FailedToCreate"
-	MySQLErrFailedToUpdateCode     MySQLErrorCode = "FailedToUpdate"
-	MySQLErrFailedToDeleteCode     MySQLErrorCode = "FailedToDelete"
-)
-
-/////////////////////////////////////////////////
 // MySQL Status
 
 // MysqlStatus is a representation of Status that must support round-trip translation

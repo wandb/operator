@@ -44,16 +44,18 @@ func kafkaReadState(
 	log := ctrl.LoggerFrom(ctx)
 
 	var err error
-	var conditions []translator.KafkaCondition
+	var status *translator.KafkaStatus
 	var specNamespacedName = kafkaSpecNamespacedName(wandb.Spec.Kafka)
 
-	if conditions, err = strimzi.ReadState(ctx, client, specNamespacedName, wandb); err != nil {
+	if status, err = strimzi.ReadState(ctx, client, specNamespacedName, wandb); err != nil {
 		return err
 	}
-	wandb.Status.KafkaStatus = translatorv2.ExtractKafkaStatus(ctx, conditions)
-	if err = client.Status().Update(ctx, wandb); err != nil {
-		log.Error(err, "failed to update status")
-		return err
+	if status != nil {
+		wandb.Status.KafkaStatus = translatorv2.ToWBKafkaStatus(ctx, *status)
+		if err = client.Status().Update(ctx, wandb); err != nil {
+			log.Error(err, "failed to update status")
+			return err
+		}
 	}
 
 	return nil

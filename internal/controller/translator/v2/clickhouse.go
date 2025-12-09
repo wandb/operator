@@ -17,50 +17,15 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
-func ExtractClickHouseStatus(ctx context.Context, conditions []translator.ClickHouseCondition) apiv2.WBClickHouseStatus {
-	return TranslateClickHouseStatus(
-		ctx,
-		translator.ExtractClickHouseStatus(ctx, conditions),
-	)
-}
-
-func TranslateClickHouseStatus(ctx context.Context, m translator.ClickHouseStatus) apiv2.WBClickHouseStatus {
-	var result apiv2.WBClickHouseStatus
-	var conditions []apiv2.WBStatusCondition
-
-	for _, condition := range m.Conditions {
-		state := translateClickHouseStatusCode(condition.Code())
-		conditions = append(conditions, apiv2.WBStatusCondition{
-			State:   state,
-			Code:    condition.Code(),
-			Message: condition.Message(),
-		})
-	}
-
-	result.Connection = apiv2.WBClickHouseConnection{
-		URL: m.Connection.URL,
-	}
-
-	result.Ready = m.Ready
-	result.Conditions = conditions
-	result.State = computeOverallState(conditions, m.Ready)
-	result.LastReconciled = metav1.Now()
-
-	return result
-}
-
-func translateClickHouseStatusCode(code string) apiv2.WBStateType {
-	switch code {
-	case string(translator.ClickHouseCreatedCode):
-		return apiv2.WBStateUpdating
-	case string(translator.ClickHouseUpdatedCode):
-		return apiv2.WBStateUpdating
-	case string(translator.ClickHouseDeletedCode):
-		return apiv2.WBStateDeleting
-	case string(translator.ClickHouseConnectionCode):
-		return apiv2.WBStateReady
-	default:
-		return apiv2.WBStateUnknown
+func ToWBClickHouseStatus(ctx context.Context, status translator.ClickHouseStatus) apiv2.WBClickHouseStatus {
+	return apiv2.WBClickHouseStatus{
+		Ready:          status.Ready,
+		State:          status.State,
+		Conditions:     status.Conditions,
+		LastReconciled: metav1.Now(),
+		Connection: apiv2.WBInfraConnection{
+			URL: status.Connection.URL,
+		},
 	}
 }
 

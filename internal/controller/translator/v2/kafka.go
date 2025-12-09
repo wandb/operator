@@ -15,56 +15,15 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
-func ExtractKafkaStatus(ctx context.Context, conditions []translator.KafkaCondition) apiv2.WBKafkaStatus {
-	return TranslateKafkaStatus(
-		ctx,
-		translator.ExtractKafkaStatus(ctx, conditions),
-	)
-}
-
-func TranslateKafkaStatus(ctx context.Context, m translator.KafkaStatus) apiv2.WBKafkaStatus {
-	var result apiv2.WBKafkaStatus
-	var conditions []apiv2.WBStatusCondition
-
-	for _, condition := range m.Conditions {
-		state := translateKafkaStatusCode(condition.Code())
-		conditions = append(conditions, apiv2.WBStatusCondition{
-			State:   state,
-			Code:    condition.Code(),
-			Message: condition.Message(),
-		})
-	}
-
-	result.Connection = apiv2.WBKafkaConnection{
-		URL: m.Connection.URL,
-	}
-
-	result.Ready = m.Ready
-	result.Conditions = conditions
-	result.State = computeOverallState(conditions, m.Ready)
-	result.LastReconciled = metav1.Now()
-
-	return result
-}
-
-func translateKafkaStatusCode(code string) apiv2.WBStateType {
-	switch code {
-	case string(translator.KafkaCreatedCode):
-		return apiv2.WBStateUpdating
-	case string(translator.KafkaUpdatedCode):
-		return apiv2.WBStateUpdating
-	case string(translator.KafkaDeletedCode):
-		return apiv2.WBStateDeleting
-	case string(translator.KafkaNodePoolCreatedCode):
-		return apiv2.WBStateUpdating
-	case string(translator.KafkaNodePoolUpdatedCode):
-		return apiv2.WBStateUpdating
-	case string(translator.KafkaNodePoolDeletedCode):
-		return apiv2.WBStateDeleting
-	case string(translator.KafkaConnectionCode):
-		return apiv2.WBStateReady
-	default:
-		return apiv2.WBStateUnknown
+func ToWBKafkaStatus(ctx context.Context, status translator.KafkaStatus) apiv2.WBKafkaStatus {
+	return apiv2.WBKafkaStatus{
+		Ready:          status.Ready,
+		State:          status.State,
+		Conditions:     status.Conditions,
+		LastReconciled: metav1.Now(),
+		Connection: apiv2.WBInfraConnection{
+			URL: status.Connection.URL,
+		},
 	}
 }
 

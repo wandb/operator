@@ -24,58 +24,14 @@ const (
 	DefaultSentinelGroup = defaults.DefaultSentinelGroup
 )
 
-func ExtractRedisStatus(ctx context.Context, conditions []translator.RedisCondition) apiv2.WBRedisStatus {
-	return TranslateRedisStatus(
-		ctx,
-		translator.ExtractRedisStatus(ctx, conditions),
-	)
-}
-
-func TranslateRedisStatus(ctx context.Context, m translator.RedisStatus) apiv2.WBRedisStatus {
-	var result apiv2.WBRedisStatus
-	var conditions []apiv2.WBStatusCondition
-
-	for _, condition := range m.Conditions {
-		state := translateRedisStatusCode(condition.Code())
-		conditions = append(conditions, apiv2.WBStatusCondition{
-			State:   state,
-			Code:    condition.Code(),
-			Message: condition.Message(),
-		})
-	}
-
-	result.Connection = apiv2.WBRedisConnection{
-		URL: m.Connection.URL,
-	}
-
-	result.Ready = m.Ready
-	result.Conditions = conditions
-	result.State = computeOverallState(conditions, m.Ready)
-	result.LastReconciled = metav1.Now()
-
-	return result
-}
-
-func translateRedisStatusCode(code string) apiv2.WBStateType {
-	switch code {
-	case string(translator.RedisSentinelCreatedCode):
-		return apiv2.WBStateUpdating
-	case string(translator.RedisReplicationCreatedCode):
-		return apiv2.WBStateUpdating
-	case string(translator.RedisStandaloneCreatedCode):
-		return apiv2.WBStateUpdating
-	case string(translator.RedisSentinelDeletedCode):
-		return apiv2.WBStateDeleting
-	case string(translator.RedisReplicationDeletedCode):
-		return apiv2.WBStateDeleting
-	case string(translator.RedisStandaloneDeletedCode):
-		return apiv2.WBStateDeleting
-	case string(translator.RedisSentinelConnectionCode):
-		return apiv2.WBStateReady
-	case string(translator.RedisStandaloneConnectionCode):
-		return apiv2.WBStateReady
-	default:
-		return apiv2.WBStateUnknown
+func ToRedisStatus(ctx context.Context, status translator.RedisStatus) apiv2.WBRedisStatus {
+	return apiv2.WBRedisStatus{
+		Ready:          status.Ready,
+		Conditions:     status.Conditions,
+		LastReconciled: metav1.Now(),
+		Connection: apiv2.WBInfraConnection{
+			URL: status.Connection.URL,
+		},
 	}
 }
 

@@ -1,9 +1,8 @@
-package tenant
+package strimzi
 
 import (
 	"context"
 	"fmt"
-	"net/url"
 
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/translator"
@@ -14,53 +13,27 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-const (
-	MinioUrlScheme = "minio"
-	MinioPort      = "443"
-)
-
-type minioConnInfo struct {
-	RootUser     string
-	RootPassword string
-	Host         string
-	Port         string
+type kafkaConnInfo struct {
+	Host string
+	Port string
 }
 
-func buildMinioConnInfo(
-	rootUser, rootPassword string, nsNameBldr *NsNameBuilder,
-) *minioConnInfo {
-	namespace := nsNameBldr.Namespace()
-	serviceName := nsNameBldr.ServiceName()
-	return &minioConnInfo{
-		RootUser:     rootUser,
-		RootPassword: rootPassword,
-		Host:         fmt.Sprintf("%s.%s.svc.cluster.local", serviceName, namespace),
-		Port:         MinioPort,
-	}
+func (c *kafkaConnInfo) toURL() string {
+	return fmt.Sprintf("kafka://%s:%s", c.Host, c.Port)
 }
 
-func (m *minioConnInfo) toUrl() *url.URL {
-	return &url.URL{
-		Scheme: MinioUrlScheme,
-		Host:   fmt.Sprintf("%s:%s", m.Host, m.Port),
-		User:   url.UserPassword(m.RootUser, m.RootPassword),
-	}
-}
-
-func writeWandbConnInfo(
+func writeKafkaConnInfo(
 	ctx context.Context,
 	client client.Client,
 	owner client.Object,
 	nsNameBldr *NsNameBuilder,
-	connInfo *minioConnInfo,
+	connInfo *kafkaConnInfo,
 ) (
 	*translator.InfraConnection, error,
 ) {
 	var err error
 	var gvk schema.GroupVersionKind
 	var actual = &corev1.Secret{}
-
-	//log := ctrl.LoggerFrom(ctx)
 
 	nsName := nsNameBldr.ConnectionNsName()
 	urlKey := "url"
@@ -71,7 +44,6 @@ func writeWandbConnInfo(
 		return nil, err
 	}
 
-	// Compute owner reference
 	if gvk, err = client.GroupVersionKindFor(owner); err != nil {
 		return nil, fmt.Errorf("could not get GVK for owner: %w", err)
 	}
@@ -92,7 +64,7 @@ func writeWandbConnInfo(
 		},
 		Type: corev1.SecretTypeOpaque,
 		StringData: map[string]string{
-			urlKey: connInfo.toUrl().String(),
+			urlKey: connInfo.toURL(),
 		},
 	}
 

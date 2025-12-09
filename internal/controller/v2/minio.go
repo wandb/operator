@@ -17,12 +17,12 @@ func minioWriteState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
-) (*translator.MinioConnection, error) {
+) (*translator.InfraConnection, error) {
 	var err error
 	var desiredCr *miniov2.Tenant
 	var desiredConfig tenant.MinioEnvConfig
 	var specNamespacedName = minioSpecNamespacedName(wandb.Spec.Minio)
-	var connection *translator.MinioConnection
+	var connection *translator.InfraConnection
 
 	if desiredCr, err = translatorv2.ToMinioVendorSpec(ctx, wandb.Spec.Minio, wandb, client.Scheme()); err != nil {
 		return nil, err
@@ -41,24 +41,23 @@ func minioReadState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
-	connection *translator.MinioConnection,
+	connection *translator.InfraConnection,
 ) error {
 	log := ctrl.LoggerFrom(ctx)
 
 	var err error
-	var conditions []translator.MinioCondition
+	var status *translator.MinioStatus
 	var specNamespacedName = minioSpecNamespacedName(wandb.Spec.Minio)
 
-	if conditions, err = tenant.ReadState(ctx, client, specNamespacedName); err != nil {
+	if status, err = tenant.ReadState(ctx, client, specNamespacedName, connection); err != nil {
 		return err
 	}
-	if connection != nil {
-		conditions = append(conditions, translator.NewMinioConnCondition(*connection))
-	}
-	wandb.Status.MinioStatus = translatorv2.ExtractMinioStatus(ctx, conditions)
-	if err = client.Status().Update(ctx, wandb); err != nil {
-		log.Error(err, "failed to update status")
-		return err
+	if status != nil {
+		wandb.Status.MinioStatus = translatorv2.ToWBMinioStatus(ctx, *status)
+		if err = client.Status().Update(ctx, wandb); err != nil {
+			log.Error(err, "failed to update status")
+			return err
+		}
 	}
 
 	return nil

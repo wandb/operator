@@ -1,12 +1,13 @@
-package tenant
+package opstree
 
 import (
 	"context"
 	"fmt"
-	"net/url"
 
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/translator"
+	redisv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redis/v1beta2"
+	redissentinelv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redissentinel/v1beta2"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -14,53 +15,40 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-const (
-	MinioUrlScheme = "minio"
-	MinioPort      = "443"
-)
+func readStandaloneConnectionDetails(standaloneActual *redisv1beta2.Redis) *redisConnInfo {
+	redisHost := "wandb-redis." + standaloneActual.Namespace + ".svc.cluster.local"
+	redisPort := "6379"
 
-type minioConnInfo struct {
-	RootUser     string
-	RootPassword string
-	Host         string
-	Port         string
-}
-
-func buildMinioConnInfo(
-	rootUser, rootPassword string, nsNameBldr *NsNameBuilder,
-) *minioConnInfo {
-	namespace := nsNameBldr.Namespace()
-	serviceName := nsNameBldr.ServiceName()
-	return &minioConnInfo{
-		RootUser:     rootUser,
-		RootPassword: rootPassword,
-		Host:         fmt.Sprintf("%s.%s.svc.cluster.local", serviceName, namespace),
-		Port:         MinioPort,
+	return &redisConnInfo{
+		Host: redisHost,
+		Port: redisPort,
 	}
 }
 
-func (m *minioConnInfo) toUrl() *url.URL {
-	return &url.URL{
-		Scheme: MinioUrlScheme,
-		Host:   fmt.Sprintf("%s:%s", m.Host, m.Port),
-		User:   url.UserPassword(m.RootUser, m.RootPassword),
+func readSentinelConnectionDetails(sentinelActual *redissentinelv1beta2.RedisSentinel) *redisConnInfo {
+	sentinelHost := "wandb-redis-sentinel." + sentinelActual.Namespace + ".svc.cluster.local"
+	sentinelPort := "26379"
+	masterName := "gorilla"
+
+	return &redisConnInfo{
+		SentinelHost:   sentinelHost,
+		SentinelPort:   sentinelPort,
+		SentinelMaster: masterName,
 	}
 }
 
-func writeWandbConnInfo(
+func writeRedisConnInfo(
 	ctx context.Context,
 	client client.Client,
 	owner client.Object,
 	nsNameBldr *NsNameBuilder,
-	connInfo *minioConnInfo,
+	connInfo *redisConnInfo,
 ) (
 	*translator.InfraConnection, error,
 ) {
 	var err error
 	var gvk schema.GroupVersionKind
 	var actual = &corev1.Secret{}
-
-	//log := ctrl.LoggerFrom(ctx)
 
 	nsName := nsNameBldr.ConnectionNsName()
 	urlKey := "url"
@@ -71,7 +59,6 @@ func writeWandbConnInfo(
 		return nil, err
 	}
 
-	// Compute owner reference
 	if gvk, err = client.GroupVersionKindFor(owner); err != nil {
 		return nil, fmt.Errorf("could not get GVK for owner: %w", err)
 	}
@@ -92,7 +79,7 @@ func writeWandbConnInfo(
 		},
 		Type: corev1.SecretTypeOpaque,
 		StringData: map[string]string{
-			urlKey: connInfo.toUrl().String(),
+			urlKey: connInfo.toURL(),
 		},
 	}
 

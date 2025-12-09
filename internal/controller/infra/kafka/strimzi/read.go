@@ -6,7 +6,7 @@ import (
 	"strconv"
 
 	ctrlcommon "github.com/wandb/operator/internal/controller/common"
-	transcommon "github.com/wandb/operator/internal/controller/translator"
+	"github.com/wandb/operator/internal/controller/translator"
 	v1beta3 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1beta2"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -27,9 +27,9 @@ func ReadState(
 	client client.Client,
 	specNamespacedName types.NamespacedName,
 	wandbOwner client.Object,
-) ([]transcommon.KafkaCondition, error) {
+) (*translator.KafkaStatus, error) {
 	var err error
-	var results []transcommon.KafkaCondition
+	var status = &translator.KafkaStatus{}
 	var actualKafka = &v1beta3.Kafka{}
 	var actualNodePool = &v1beta3.KafkaNodePool{}
 
@@ -38,29 +38,31 @@ func ReadState(
 	if err = ctrlcommon.GetResource(
 		ctx, client, nsNameBldr.KafkaNsName(), KafkaResourceType, actualKafka,
 	); err != nil {
-		return results, err
+		return nil, err
 	}
 
 	if err = ctrlcommon.GetResource(
 		ctx, client, nsNameBldr.NodePoolNsName(), NodePoolResourceType, actualNodePool,
 	); err != nil {
-		return results, err
+		return nil, err
 	}
 
 	if actualKafka == nil || actualNodePool == nil {
-		return results, nil
+		return nil, nil
 	}
 
 	connInfo := readConnectionDetails(nsNameBldr)
 
-	var connection *transcommon.KafkaConnection
+	var connection *translator.InfraConnection
 	if connection, err = writeKafkaConnInfo(
 		ctx, client, wandbOwner, nsNameBldr, connInfo,
 	); err != nil {
-		return results, err
+		return nil, err
 	}
 
-	results = append(results, transcommon.NewKafkaConnCondition(*connection))
+	if connection != nil {
+		status.Connection = *connection
+	}
 
-	return results, nil
+	return status, nil
 }

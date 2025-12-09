@@ -15,50 +15,15 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
-func ExtractMinioStatus(ctx context.Context, conditions []translator.MinioCondition) apiv2.WBMinioStatus {
-	return TranslateMinioStatus(
-		ctx,
-		translator.ExtractMinioStatus(ctx, conditions),
-	)
-}
-
-func TranslateMinioStatus(ctx context.Context, m translator.MinioStatus) apiv2.WBMinioStatus {
-	var result apiv2.WBMinioStatus
-	var conditions []apiv2.WBStatusCondition
-
-	for _, condition := range m.Conditions {
-		state := translateMinioStatusCode(condition.Code())
-		conditions = append(conditions, apiv2.WBStatusCondition{
-			State:   state,
-			Code:    condition.Code(),
-			Message: condition.Message(),
-		})
-	}
-
-	result.Connection = apiv2.WBMinioConnection{
-		URL: m.Connection.URL,
-	}
-
-	result.Ready = m.Ready
-	result.Conditions = conditions
-	result.State = computeOverallState(conditions, m.Ready)
-	result.LastReconciled = metav1.Now()
-
-	return result
-}
-
-func translateMinioStatusCode(code string) apiv2.WBStateType {
-	switch code {
-	case string(translator.MinioCreatedCode):
-		return apiv2.WBStateUpdating
-	case string(translator.MinioUpdatedCode):
-		return apiv2.WBStateUpdating
-	case string(translator.MinioDeletedCode):
-		return apiv2.WBStateDeleting
-	case string(translator.MinioConnectionCode):
-		return apiv2.WBStateReady
-	default:
-		return apiv2.WBStateUnknown
+func ToWBMinioStatus(ctx context.Context, status translator.MinioStatus) apiv2.WBMinioStatus {
+	return apiv2.WBMinioStatus{
+		Ready:          status.Ready,
+		State:          status.State,
+		Conditions:     status.Conditions,
+		LastReconciled: metav1.Now(),
+		Connection: apiv2.WBInfraConnection{
+			URL: status.Connection.URL,
+		},
 	}
 }
 
