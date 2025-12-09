@@ -6,7 +6,7 @@ settings = {
         "kind-kind",
         "orbstack",
     ],
-    "installMinio": True,
+    "installMinio": False,
     "installWandb": True,
     "wandbCRD": "wandb-default-v1",
 }
@@ -30,6 +30,7 @@ allow_k8s_contexts(settings.get("allowed_k8s_contexts"))
 os.putenv('PATH', './bin:' + os.getenv('PATH'))
 
 load('ext://restart_process', 'docker_build_with_restart')
+load('ext://helm_resource', 'helm_resource', 'helm_repo')
 
 DOCKERFILE = '''
 FROM registry.access.redhat.com/ubi9/ubi
@@ -74,8 +75,8 @@ print("kubebuilder is present:", installed)
 
 DIRNAME = os.path.basename(os. getcwd())
 
-local_resource("manifests", manifests())
-local_resource("generate", generate())
+local_resource("manifests", manifests(), labels=["Operator-Resources"])
+local_resource("generate", generate(), labels=["Operator-Resources"])
 
 if settings.get("installMinio"):
     k8s_yaml('./hack/testing-manifests/minio/minio.yaml')
@@ -88,25 +89,110 @@ if settings.get("installMinio"):
         ]
     )
 
+helm_repo(
+    'percona-repo',
+    'https://percona.github.io/percona-helm-charts/',
+    labels=["Helm-Repos"],
+)
+helm_resource(
+    'mysql-operator',
+    chart='percona-repo/pxc-operator',
+    labels=["Third-Party-Operators"],
+)
+
+helm_repo(
+    'redis-operator-repo',
+    'https://ot-container-kit.github.io/helm-charts/',
+    labels=["Helm-Repos"],
+)
+helm_resource(
+    'redis-operator',
+    chart='redis-operator-repo/redis-operator',
+    labels=["Third-Party-Operators"],
+)
+
+helm_repo(
+    'strimzi-repo',
+    'https://strimzi.io/charts/',
+    labels=["Helm-Repos"],
+)
+helm_resource(
+    'kafka-operator',
+    chart='strimzi-repo/strimzi-kafka-operator',
+    labels=["Third-Party-Operators"],
+)
+
+helm_repo(
+    'minio-repo',
+    'https://operator.min.io',
+    labels=["Helm-Repos"],
+)
+helm_resource(
+    'minio-operator',
+    chart='minio-repo/operator',
+    labels=["Third-Party-Operators"],
+)
+
+helm_repo(
+    'clickhouse-repo',
+    'https://helm.altinity.com',
+    labels=["Helm-Repos"],
+)
+helm_resource(
+    'clickhouse-operator',
+    chart='clickhouse-repo/altinity-clickhouse-operator',
+    labels=["Third-Party-Operators"],
+)
+
 k8s_yaml(local('kustomize build config/default'))
 
 k8s_resource(
     new_name='CRD',
-    objects=['weightsandbiases.apps.wandb.com:customresourcedefinition', 'applications.apps.wandb.com:customresourcedefinition'])
+    objects=['weightsandbiases.apps.wandb.com:customresourcedefinition', 'applications.apps.wandb.com:customresourcedefinition'],
+    labels=["Operator-Resources"],
+)
 k8s_resource(
     new_name='RBAC',
     objects=[
         'operator-manager-role:clusterrole',
         'operator-manager-rolebinding:clusterrolebinding',
         'operator-leader-election-role:role',
-        'operator-leader-election-rolebinding:rolebinding'
-    ]
+        'operator-leader-election-rolebinding:rolebinding',
+        'operator-application-admin-role:clusterrole',
+        'operator-application-editor-role:clusterrole',
+        'operator-application-viewer-role:clusterrole',
+        'operator-metrics-auth-role:clusterrole',
+        'operator-metrics-reader:clusterrole',
+        'operator-weightsandbiases-admin-role:clusterrole',
+        'operator-weightsandbiases-editor-role:clusterrole',
+        'operator-weightsandbiases-viewer-role:clusterrole',
+        'operator-metrics-auth-rolebinding:clusterrolebinding',
+    ],
+    labels=["Operator-Resources"],
+)
+
+k8s_resource(
+    'operator-controller-manager',
+    'operator-controller-manager',
+    objects=[
+        'operator-mutating-webhook-configuration:mutatingwebhookconfiguration',
+        'operator-validating-webhook-configuration:validatingwebhookconfiguration',
+        'operator-controller-manager:serviceaccount',
+    ],
+    resource_deps=["manifests", "generate", "redis-operator", "kafka-operator", "minio-operator", "clickhouse-operator"],
+    labels=["Operator-Resources"],
 )
 
 deps = ['internal', 'pkg', 'api', 'cmd']
 
-local_resource('Watch&Compile', binary(),
-               deps=deps, resource_deps=["manifests", "generate"], ignore=['*/*/zz_generated.deepcopy.go'])
+local_resource(
+    'Watch&Compile',
+    binary(),
+    deps=deps,
+    resource_deps=["manifests", "generate"],
+    ignore=['*/*/zz_generated.deepcopy.go'],
+    labels=["Operator-Resources"],
+)
 
 if settings.get("installWandb"):
     k8s_yaml('./hack/testing-manifests/wandb/' + settings.get('wandbCRD') + '.yaml')
@@ -115,7 +201,8 @@ if settings.get("installWandb"):
         objects=[
             'wandb-default:weightsandbiases'
         ],
-        resource_deps=["operator-controller-manager"]
+        resource_deps=["operator-controller-manager"],
+        labels=["Operator-Resources"],
     )
 
 docker_build_with_restart(IMG, '.',
@@ -124,5 +211,5 @@ docker_build_with_restart(IMG, '.',
                           only=['./tilt_bin/manager'],
                           live_update=[
                               sync('./tilt_bin/manager', '/manager'),
-                          ]
+                          ],
                           )
