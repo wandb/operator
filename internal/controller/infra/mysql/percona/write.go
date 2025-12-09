@@ -11,9 +11,10 @@ import (
 
 const (
 	ResourceTypeName = "PerconaXtraDBCluster"
+	AppConnTypeName  = "MySQLAppConn"
 )
 
-func CrudResource(
+func WriteState(
 	ctx context.Context,
 	client client.Client,
 	specNamespacedName types.NamespacedName,
@@ -22,11 +23,14 @@ func CrudResource(
 	var err error
 	var actual = &pxcv1.PerconaXtraDBCluster{}
 
+	nsNameBldr := createNsNameBuilder(specNamespacedName)
+
 	if err = common.GetResource(
-		ctx, client, ClusterNamespacedName(specNamespacedName), ResourceTypeName, actual,
+		ctx, client, nsNameBldr.ClusterNsName(), ResourceTypeName, actual,
 	); err != nil {
 		return err
 	}
+
 	if err = common.CrudResource(ctx, client, desired, actual); err != nil {
 		return err
 	}

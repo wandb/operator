@@ -5,7 +5,7 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/infra/redis/opstree"
-	"github.com/wandb/operator/internal/controller/translator/common"
+	"github.com/wandb/operator/internal/controller/translator"
 	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
 	redisv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redis/v1beta2"
 	redisreplicationv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redisreplication/v1beta2"
@@ -15,7 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func redisResourceReconcile(
+func redisWriteState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
@@ -29,34 +29,22 @@ func redisResourceReconcile(
 	if standaloneDesired, err = translatorv2.ToRedisStandaloneVendorSpec(ctx, wandb.Spec.Redis, wandb, client.Scheme()); err != nil {
 		return err
 	}
-	if err = opstree.CrudStandaloneResource(ctx, client, specNamespacedName, standaloneDesired); err != nil {
-		return err
-	}
-
 	if sentinelDesired, err = translatorv2.ToRedisSentinelVendorSpec(ctx, wandb.Spec.Redis, wandb, client.Scheme()); err != nil {
 		return err
 	}
-	if err = opstree.CrudSentinelResource(ctx, client, specNamespacedName, sentinelDesired); err != nil {
-		return err
-	}
-
 	if replicationDesired, err = translatorv2.ToRedisReplicationVendorSpec(ctx, wandb.Spec.Redis, wandb, client.Scheme()); err != nil {
 		return err
 	}
-	if err = opstree.CrudReplicationResource(ctx, client, specNamespacedName, replicationDesired); err != nil {
+
+	if err = opstree.WriteState(ctx, client, specNamespacedName, standaloneDesired, sentinelDesired, replicationDesired); err != nil {
 		return err
 	}
-
-	//wandb.Status.RedisStatus = translatorv2.ExtractRedisStatus(ctx, results)
-	//if err = r.Status().Update(ctx, wandb); err != nil {
-	//	results.AddErrors(err)
-	//}
 
 	return nil
 
 }
 
-func redisStatusUpdate(
+func redisReadState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
@@ -64,16 +52,18 @@ func redisStatusUpdate(
 	log := ctrl.LoggerFrom(ctx)
 
 	var err error
-	var conditions []common.RedisCondition
+	var status *translator.RedisStatus
 	var specNamespacedName = redisSpecNamespacedName(wandb.Spec.Redis)
 
-	if conditions, err = opstree.GetConditions(ctx, client, specNamespacedName); err != nil {
+	if status, err = opstree.ReadState(ctx, client, specNamespacedName, wandb); err != nil {
 		return err
 	}
-	wandb.Status.RedisStatus = translatorv2.ExtractRedisStatus(ctx, conditions)
-	if err = client.Status().Update(ctx, wandb); err != nil {
-		log.Error(err, "failed to update status")
-		return err
+	if status != nil {
+		wandb.Status.RedisStatus = translatorv2.ToRedisStatus(ctx, *status)
+		if err = client.Status().Update(ctx, wandb); err != nil {
+			log.Error(err, "failed to update status")
+			return err
+		}
 	}
 
 	return nil

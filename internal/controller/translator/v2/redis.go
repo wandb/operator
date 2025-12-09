@@ -6,7 +6,7 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/infra/redis/opstree"
-	"github.com/wandb/operator/internal/controller/translator/common"
+	"github.com/wandb/operator/internal/controller/translator"
 	"github.com/wandb/operator/internal/defaults"
 	rediscommon "github.com/wandb/operator/internal/vendored/redis-operator/common/v1beta2"
 	redisv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redis/v1beta2"
@@ -16,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
@@ -23,62 +24,14 @@ const (
 	DefaultSentinelGroup = defaults.DefaultSentinelGroup
 )
 
-func ExtractRedisStatus(ctx context.Context, conditions []common.RedisCondition) apiv2.WBRedisStatus {
-	return TranslateRedisStatus(
-		ctx,
-		common.ExtractRedisStatus(ctx, conditions),
-	)
-}
-
-func TranslateRedisStatus(ctx context.Context, m common.RedisStatus) apiv2.WBRedisStatus {
-	var result apiv2.WBRedisStatus
-	var conditions []apiv2.WBStatusCondition
-
-	for _, condition := range m.Conditions {
-		state := translateRedisStatusCode(condition.Code())
-		conditions = append(conditions, apiv2.WBStatusCondition{
-			State:   state,
-			Code:    condition.Code(),
-			Message: condition.Message(),
-		})
-	}
-
-	result.Connection = apiv2.WBRedisConnection{
-		RedisHost:         m.Connection.RedisHost,
-		RedisPort:         m.Connection.RedisPort,
-		RedisSentinelHost: m.Connection.SentinelHost,
-		RedisSentinelPort: m.Connection.SentinelPort,
-		RedisMasterName:   m.Connection.SentinelMaster,
-	}
-
-	result.Ready = m.Ready
-	result.Conditions = conditions
-	result.State = computeOverallState(conditions, m.Ready)
-	result.LastReconciled = metav1.Now()
-
-	return result
-}
-
-func translateRedisStatusCode(code string) apiv2.WBStateType {
-	switch code {
-	case string(common.RedisSentinelCreatedCode):
-		return apiv2.WBStateUpdating
-	case string(common.RedisReplicationCreatedCode):
-		return apiv2.WBStateUpdating
-	case string(common.RedisStandaloneCreatedCode):
-		return apiv2.WBStateUpdating
-	case string(common.RedisSentinelDeletedCode):
-		return apiv2.WBStateDeleting
-	case string(common.RedisReplicationDeletedCode):
-		return apiv2.WBStateDeleting
-	case string(common.RedisStandaloneDeletedCode):
-		return apiv2.WBStateDeleting
-	case string(common.RedisSentinelConnectionCode):
-		return apiv2.WBStateReady
-	case string(common.RedisStandaloneConnectionCode):
-		return apiv2.WBStateReady
-	default:
-		return apiv2.WBStateUnknown
+func ToRedisStatus(ctx context.Context, status translator.RedisStatus) apiv2.WBRedisStatus {
+	return apiv2.WBRedisStatus{
+		Ready:          status.Ready,
+		Conditions:     status.Conditions,
+		LastReconciled: metav1.Now(),
+		Connection: apiv2.WBInfraConnection{
+			URL: status.Connection.URL,
+		},
 	}
 }
 
@@ -105,7 +58,9 @@ func ToRedisStandaloneVendorSpec(
 		return nil, fmt.Errorf("cannot create redis standalone with sentinel enabled")
 	}
 
-	specName := spec.Name
+	nsNameBldr := opstree.CreateNsNameBuilder(types.NamespacedName{
+		Namespace: spec.Namespace, Name: spec.Name,
+	})
 
 	// Parse storage quantity
 	storageQuantity, err := resource.ParseQuantity(spec.StorageSize)
@@ -115,12 +70,12 @@ func ToRedisStandaloneVendorSpec(
 
 	redis := &redisv1beta2.Redis{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      opstree.StandaloneName(specName),
-			Namespace: spec.Namespace,
+			Name:      nsNameBldr.StandaloneName(),
+			Namespace: nsNameBldr.StandaloneNamespace(),
 		},
 		Spec: redisv1beta2.RedisSpec{
 			KubernetesConfig: rediscommon.KubernetesConfig{
-				Image:           common.RedisStandaloneImage,
+				Image:           translator.RedisStandaloneImage,
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				Resources:       &corev1.ResourceRequirements{},
 			},
@@ -177,7 +132,9 @@ func ToRedisSentinelVendorSpec(
 		return nil, nil
 	}
 
-	specName := spec.Name
+	nsNameBldr := opstree.CreateNsNameBuilder(types.NamespacedName{
+		Namespace: spec.Namespace, Name: spec.Name,
+	})
 
 	// Default sentinel count to 3 if not specified
 	sentinelCount := int32(defaults.ReplicaSentinelCount)
@@ -190,19 +147,19 @@ func ToRedisSentinelVendorSpec(
 
 	sentinel := &redissentinelv1beta2.RedisSentinel{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      opstree.SentinelName(specName),
-			Namespace: spec.Namespace,
+			Name:      nsNameBldr.SentinelName(),
+			Namespace: nsNameBldr.Namespace(),
 		},
 		Spec: redissentinelv1beta2.RedisSentinelSpec{
 			Size: &sentinelCount,
 			KubernetesConfig: rediscommon.KubernetesConfig{
-				Image:           common.RedisSentinelImage,
+				Image:           translator.RedisSentinelImage,
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				Resources:       &corev1.ResourceRequirements{},
 			},
 			RedisSentinelConfig: &redissentinelv1beta2.RedisSentinelConfig{
 				RedisSentinelConfig: rediscommon.RedisSentinelConfig{
-					RedisReplicationName: opstree.ReplicationName(specName),
+					RedisReplicationName: nsNameBldr.ReplicationName(),
 					MasterGroupName:      masterName,
 				},
 			},
@@ -245,7 +202,9 @@ func ToRedisReplicationVendorSpec(
 		return nil, nil
 	}
 
-	specName := spec.Name
+	nsNameBldr := opstree.CreateNsNameBuilder(types.NamespacedName{
+		Namespace: spec.Namespace, Name: spec.Name,
+	})
 
 	// Parse storage quantity
 	storageQuantity, err := resource.ParseQuantity(spec.StorageSize)
@@ -258,13 +217,13 @@ func ToRedisReplicationVendorSpec(
 
 	replication := &redisreplicationv1beta2.RedisReplication{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      opstree.ReplicationName(specName),
-			Namespace: spec.Namespace,
+			Name:      nsNameBldr.ReplicationName(),
+			Namespace: nsNameBldr.Namespace(),
 		},
 		Spec: redisreplicationv1beta2.RedisReplicationSpec{
 			Size: &replicaCount,
 			KubernetesConfig: rediscommon.KubernetesConfig{
-				Image:           common.RedisReplicationImage,
+				Image:           translator.RedisReplicationImage,
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				Resources:       &corev1.ResourceRequirements{},
 			},

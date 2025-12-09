@@ -1,4 +1,4 @@
-package common
+package translator
 
 import (
 	"testing"

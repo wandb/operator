@@ -17,7 +17,4 @@
 // Package v2 - This page provides a quick automatically generated reference for the MinIO Operator `minio.min.io/v2` CRD. For more complete documentation on the MinIO Operator CRD, see https://min.io/docs/minio/kubernetes/upstream/index.html[MinIO Kubernetes Documentation]. +
 //
 // The `minio.min.io/v2` API was released with the v4.0.0 MinIO Operator. The MinIO Operator automatically converts existing tenants using the `/v1` API to `/v2`. +
-//
-// +groupName=minio.min.io
-// +versionName=v2
 package v2

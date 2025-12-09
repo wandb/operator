@@ -15,7 +15,6 @@ limitations under the License.
 */
 
 // Package v1beta2 contains API Schema definitions for the redis v1beta2 API group
-// +groupName=redis.redis.opstreelabs.in
 package v1beta2
 
 import (

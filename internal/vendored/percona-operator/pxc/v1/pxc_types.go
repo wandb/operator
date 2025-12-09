@@ -212,8 +212,7 @@ type PXCScheduledBackupSchedule struct {
 	Name     string `json:"name,omitempty"`
 	Schedule string `json:"schedule,omitempty"`
 	// Deprecated: Use Retention instead. This field will be removed after version 1.21.
-	Keep int `json:"keep,omitempty"`
-	// +optional
+	Keep        int                          `json:"keep,omitempty"`
 	Retention   *PXCScheduledBackupRetention `json:"retention,omitempty"`
 	StorageName string                       `json:"storageName,omitempty"`
 }
@@ -788,19 +787,16 @@ func (b *BackupStorageAzureSpec) ContainerAndPrefix() (string, string) {
 type VolumeSpec struct {
 	// EmptyDir to use as data volume for mysql. EmptyDir represents a temporary
 	// directory that shares a pod's lifetime.
-	// +optional
 	EmptyDir *corev1.EmptyDirVolumeSource `json:"emptyDir,omitempty"`
 
 	// HostPath to use as data volume for mysql. HostPath represents a
 	// pre-existing file or directory on the host machine that is directly
 	// exposed to the container.
-	// +optional
 	HostPath *corev1.HostPathVolumeSource `json:"hostPath,omitempty"`
 
 	// PersistentVolumeClaim to specify PVC spec for the volume for mysql data.
 	// It has the highest level of precedence, followed by HostPath and
 	// EmptyDir. And represents the PVC specification.
-	// +optional
 	PersistentVolumeClaim *corev1.PersistentVolumeClaimSpec `json:"persistentVolumeClaim,omitempty"`
 }
 

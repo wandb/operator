@@ -5,7 +5,7 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/infra/mysql/percona"
-	"github.com/wandb/operator/internal/controller/translator/common"
+	"github.com/wandb/operator/internal/controller/translator"
 	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
 	v1 "github.com/wandb/operator/internal/vendored/percona-operator/pxc/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -13,7 +13,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func mysqlResourceReconcile(
+func mysqlWriteState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
@@ -25,19 +25,14 @@ func mysqlResourceReconcile(
 	if desired, err = translatorv2.ToMySQLVendorSpec(ctx, wandb.Spec.MySQL, wandb, client.Scheme()); err != nil {
 		return err
 	}
-	if err = percona.CrudResource(ctx, client, specNamespacedName, desired); err != nil {
+	if err = percona.WriteState(ctx, client, specNamespacedName, desired); err != nil {
 		return err
 	}
-
-	//wandb.Status.MySQLStatus = translatorv2.ExtractMySQLStatus(ctx, results)
-	//if err = r.Status().Update(ctx, wandb); err != nil {
-	//	results.AddErrors(err)
-	//}
 
 	return nil
 }
 
-func mysqlStatusUpdate(
+func mysqlReadState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
@@ -45,16 +40,18 @@ func mysqlStatusUpdate(
 	log := ctrl.LoggerFrom(ctx)
 
 	var err error
-	var conditions []common.MySQLCondition
+	var status *translator.MysqlStatus
 	var specNamespacedName = mysqlSpecNamespacedName(wandb.Spec.MySQL)
 
-	if conditions, err = percona.GetConditions(ctx, client, specNamespacedName); err != nil {
+	if status, err = percona.ReadState(ctx, client, specNamespacedName, wandb); err != nil {
 		return err
 	}
-	wandb.Status.MySQLStatus = translatorv2.ExtractMySQLStatus(ctx, conditions)
-	if err = client.Status().Update(ctx, wandb); err != nil {
-		log.Error(err, "failed to update status")
-		return err
+	if status != nil {
+		wandb.Status.MySQLStatus = translatorv2.ToWBMysqlStatus(ctx, *status)
+		if err = client.Status().Update(ctx, wandb); err != nil {
+			log.Error(err, "failed to update status")
+			return err
+		}
 	}
 
 	return nil

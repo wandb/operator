@@ -47,6 +47,8 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Minio", func() {
 				g.Expect(wandb.Spec.Minio.Replicas).To(g.Equal(int32(1)))
 				g.Expect(wandb.Spec.Minio.Config.Resources.Requests).To(g.BeEmpty())
 				g.Expect(wandb.Spec.Minio.Config.Resources.Limits).To(g.BeEmpty())
+				g.Expect(wandb.Spec.Minio.Config.MinioBrowserSetting).To(g.Equal(defaults.DefaultMinioBrowserSetting))
+				g.Expect(wandb.Spec.Minio.Config.RootUser).To(g.Equal(defaults.DefaultMinioRootUser))
 			})
 		})
 
@@ -121,6 +123,60 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Minio", func() {
 			})
 		})
 
+		Context("when Minio has custom MinioBrowserSetting", func() {
+			It("should keep custom MinioBrowserSetting", func() {
+				customBrowserSetting := "off"
+				wandb := &apiv2.WeightsAndBiases{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-wandb",
+						Namespace: "test-namespace",
+					},
+					Spec: apiv2.WeightsAndBiasesSpec{
+						Size: apiv2.WBSizeDev,
+						Minio: apiv2.WBMinioSpec{
+							Enabled: true,
+							Config: apiv2.WBMinioConfig{
+								MinioBrowserSetting: customBrowserSetting,
+							},
+						},
+					},
+				}
+
+				err := Default(ctx, wandb)
+				g.Expect(err).ToNot(g.HaveOccurred())
+
+				g.Expect(wandb.Spec.Minio.Config.MinioBrowserSetting).To(g.Equal(customBrowserSetting))
+				g.Expect(wandb.Spec.Minio.Config.MinioBrowserSetting).ToNot(g.Equal(defaults.DefaultMinioBrowserSetting))
+			})
+		})
+
+		Context("when Minio has custom RootUser", func() {
+			It("should keep custom RootUser", func() {
+				customRootUser := "custom-admin"
+				wandb := &apiv2.WeightsAndBiases{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-wandb",
+						Namespace: "test-namespace",
+					},
+					Spec: apiv2.WeightsAndBiasesSpec{
+						Size: apiv2.WBSizeDev,
+						Minio: apiv2.WBMinioSpec{
+							Enabled: true,
+							Config: apiv2.WBMinioConfig{
+								RootUser: customRootUser,
+							},
+						},
+					},
+				}
+
+				err := Default(ctx, wandb)
+				g.Expect(err).ToNot(g.HaveOccurred())
+
+				g.Expect(wandb.Spec.Minio.Config.RootUser).To(g.Equal(customRootUser))
+				g.Expect(wandb.Spec.Minio.Config.RootUser).ToNot(g.Equal(defaults.DefaultMinioRootUser))
+			})
+		})
+
 		Context("when Minio is disabled", func() {
 			It("should still apply defaults", func() {
 				wandb := &apiv2.WeightsAndBiases{
@@ -176,6 +232,8 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Minio", func() {
 				g.Expect(wandb.Spec.Minio.Config.Resources.Limits).ToNot(g.BeNil())
 				g.Expect(wandb.Spec.Minio.Config.Resources.Limits[corev1.ResourceCPU]).To(g.Equal(resource.MustParse(defaults.SmallMinioCpuLimit)))
 				g.Expect(wandb.Spec.Minio.Config.Resources.Limits[corev1.ResourceMemory]).To(g.Equal(resource.MustParse(defaults.SmallMinioMemoryLimit)))
+				g.Expect(wandb.Spec.Minio.Config.MinioBrowserSetting).To(g.Equal(defaults.DefaultMinioBrowserSetting))
+				g.Expect(wandb.Spec.Minio.Config.RootUser).To(g.Equal(defaults.DefaultMinioRootUser))
 			})
 		})
 
@@ -209,6 +267,8 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Minio", func() {
 				g.Expect(wandb.Spec.Minio.Config.Resources.Requests[corev1.ResourceMemory]).To(g.Equal(resource.MustParse(defaults.SmallMinioMemoryRequest)))
 				g.Expect(wandb.Spec.Minio.Config.Resources.Limits[corev1.ResourceCPU]).To(g.Equal(resource.MustParse(defaults.SmallMinioCpuLimit)))
 				g.Expect(wandb.Spec.Minio.Config.Resources.Limits[corev1.ResourceMemory]).To(g.Equal(customMemory))
+				g.Expect(wandb.Spec.Minio.Config.MinioBrowserSetting).To(g.Equal(defaults.DefaultMinioBrowserSetting))
+				g.Expect(wandb.Spec.Minio.Config.RootUser).To(g.Equal(defaults.DefaultMinioRootUser))
 			})
 		})
 
@@ -272,6 +332,8 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Minio", func() {
 				customMemoryRequest := resource.MustParse("4Gi")
 				customCPULimit := resource.MustParse("3000m")
 				customMemoryLimit := resource.MustParse("6Gi")
+				customBrowserSetting := "off"
+				customRootUser := "superadmin"
 
 				wandb := &apiv2.WeightsAndBiases{
 					ObjectMeta: metav1.ObjectMeta{
@@ -286,6 +348,8 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Minio", func() {
 							StorageSize: customStorage,
 							Replicas:    customReplicas,
 							Config: apiv2.WBMinioConfig{
+								MinioBrowserSetting: customBrowserSetting,
+								RootUser:            customRootUser,
 								Resources: corev1.ResourceRequirements{
 									Requests: corev1.ResourceList{
 										corev1.ResourceCPU:    customCPURequest,
@@ -311,10 +375,14 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Minio", func() {
 				g.Expect(wandb.Spec.Minio.Config.Resources.Requests[corev1.ResourceMemory]).To(g.Equal(customMemoryRequest))
 				g.Expect(wandb.Spec.Minio.Config.Resources.Limits[corev1.ResourceCPU]).To(g.Equal(customCPULimit))
 				g.Expect(wandb.Spec.Minio.Config.Resources.Limits[corev1.ResourceMemory]).To(g.Equal(customMemoryLimit))
+				g.Expect(wandb.Spec.Minio.Config.MinioBrowserSetting).To(g.Equal(customBrowserSetting))
+				g.Expect(wandb.Spec.Minio.Config.RootUser).To(g.Equal(customRootUser))
 
 				g.Expect(wandb.Spec.Minio.StorageSize).ToNot(g.Equal(defaults.SmallMinioStorageSize))
 				g.Expect(wandb.Spec.Minio.Replicas).ToNot(g.Equal(int32(3)))
 				g.Expect(wandb.Spec.Minio.Config.Resources.Requests[corev1.ResourceCPU]).ToNot(g.Equal(resource.MustParse(defaults.SmallMinioCpuRequest)))
+				g.Expect(wandb.Spec.Minio.Config.MinioBrowserSetting).ToNot(g.Equal(defaults.DefaultMinioBrowserSetting))
+				g.Expect(wandb.Spec.Minio.Config.RootUser).ToNot(g.Equal(defaults.DefaultMinioRootUser))
 			})
 		})
 	})

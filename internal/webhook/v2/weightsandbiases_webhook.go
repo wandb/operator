@@ -363,6 +363,12 @@ func applyMinioDefaults(wandb *appsv2.WeightsAndBiases, size defaults.Size) erro
 		wandb.Spec.Minio.Replicas = defaultConfig.Servers
 	}
 
+	if wandb.Spec.Minio.Config.MinioBrowserSetting == "" {
+		wandb.Spec.Minio.Config.MinioBrowserSetting = defaultConfig.MinioBrowserSetting
+	}
+	if wandb.Spec.Minio.Config.RootUser == "" {
+		wandb.Spec.Minio.Config.RootUser = defaultConfig.RootUser
+	}
 	if wandb.Spec.Minio.Config.Resources.Requests == nil {
 		wandb.Spec.Minio.Config.Resources.Requests = corev1.ResourceList{}
 	}

@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// +groupName=clickhouse.altinity.com
-
 // Package v1 defines version 1 of the API used with ClickHouse Installation Custom Resources.
 package v1
 

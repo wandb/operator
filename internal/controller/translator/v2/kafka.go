@@ -7,64 +7,23 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/infra/kafka/strimzi"
-	"github.com/wandb/operator/internal/controller/translator/common"
+	"github.com/wandb/operator/internal/controller/translator"
 	kafkav1beta2 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1beta2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
-func ExtractKafkaStatus(ctx context.Context, conditions []common.KafkaCondition) apiv2.WBKafkaStatus {
-	return TranslateKafkaStatus(
-		ctx,
-		common.ExtractKafkaStatus(ctx, conditions),
-	)
-}
-
-func TranslateKafkaStatus(ctx context.Context, m common.KafkaStatus) apiv2.WBKafkaStatus {
-	var result apiv2.WBKafkaStatus
-	var conditions []apiv2.WBStatusCondition
-
-	for _, condition := range m.Conditions {
-		state := translateKafkaStatusCode(condition.Code())
-		conditions = append(conditions, apiv2.WBStatusCondition{
-			State:   state,
-			Code:    condition.Code(),
-			Message: condition.Message(),
-		})
-	}
-
-	result.Connection = apiv2.WBKafkaConnection{
-		KafkaHost: m.Connection.Host,
-		KafkaPort: m.Connection.Port,
-	}
-
-	result.Ready = m.Ready
-	result.Conditions = conditions
-	result.State = computeOverallState(conditions, m.Ready)
-	result.LastReconciled = metav1.Now()
-
-	return result
-}
-
-func translateKafkaStatusCode(code string) apiv2.WBStateType {
-	switch code {
-	case string(common.KafkaCreatedCode):
-		return apiv2.WBStateUpdating
-	case string(common.KafkaUpdatedCode):
-		return apiv2.WBStateUpdating
-	case string(common.KafkaDeletedCode):
-		return apiv2.WBStateDeleting
-	case string(common.KafkaNodePoolCreatedCode):
-		return apiv2.WBStateUpdating
-	case string(common.KafkaNodePoolUpdatedCode):
-		return apiv2.WBStateUpdating
-	case string(common.KafkaNodePoolDeletedCode):
-		return apiv2.WBStateDeleting
-	case string(common.KafkaConnectionCode):
-		return apiv2.WBStateReady
-	default:
-		return apiv2.WBStateUnknown
+func ToWBKafkaStatus(ctx context.Context, status translator.KafkaStatus) apiv2.WBKafkaStatus {
+	return apiv2.WBKafkaStatus{
+		Ready:          status.Ready,
+		State:          status.State,
+		Conditions:     status.Conditions,
+		LastReconciled: metav1.Now(),
+		Connection: apiv2.WBInfraConnection{
+			URL: status.Connection.URL,
+		},
 	}
 }
 
@@ -84,14 +43,16 @@ func ToKafkaVendorSpec(
 		return nil, nil
 	}
 
-	specName := spec.Name
+	nsNameBldr := strimzi.CreateNsNameBuilder(types.NamespacedName{
+		Namespace: spec.Namespace, Name: spec.Name,
+	})
 
 	kafka := &kafkav1beta2.Kafka{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      strimzi.KafkaName(specName),
-			Namespace: spec.Namespace,
+			Name:      nsNameBldr.KafkaName(),
+			Namespace: nsNameBldr.Namespace(),
 			Labels: map[string]string{
-				"app": strimzi.KafkaName(specName),
+				"app": nsNameBldr.KafkaName(),
 			},
 			Annotations: map[string]string{
 				"strimzi.io/node-pools": "enabled",
@@ -99,8 +60,8 @@ func ToKafkaVendorSpec(
 		},
 		Spec: kafkav1beta2.KafkaSpec{
 			Kafka: kafkav1beta2.KafkaClusterSpec{
-				Version:         common.KafkaVersion,
-				MetadataVersion: common.KafkaMetadataVersion,
+				Version:         translator.KafkaVersion,
+				MetadataVersion: translator.KafkaMetadataVersion,
 				Replicas:        0, // CRITICAL: Must be 0 when using node pools in KRaft mode
 				Listeners: []kafkav1beta2.GenericKafkaListener{
 					{
@@ -147,14 +108,16 @@ func ToKafkaNodePoolVendorSpec(
 ) (*kafkav1beta2.KafkaNodePool, error) {
 	log := ctrl.LoggerFrom(ctx)
 
-	specName := spec.Name
+	nsNameBldr := strimzi.CreateNsNameBuilder(types.NamespacedName{
+		Namespace: spec.Namespace, Name: spec.Name,
+	})
 
 	nodePool := &kafkav1beta2.KafkaNodePool{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      strimzi.NodePoolName(specName),
-			Namespace: spec.Namespace,
+			Name:      nsNameBldr.NodePoolName(),
+			Namespace: nsNameBldr.Namespace(),
 			Labels: map[string]string{
-				"strimzi.io/cluster": strimzi.KafkaName(specName),
+				"strimzi.io/cluster": nsNameBldr.KafkaName(),
 			},
 		},
 		Spec: kafkav1beta2.KafkaNodePoolSpec{

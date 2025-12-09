@@ -5,7 +5,7 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/infra/clickhouse/altinity"
-	"github.com/wandb/operator/internal/controller/translator/common"
+	"github.com/wandb/operator/internal/controller/translator"
 	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
 	chiv1 "github.com/wandb/operator/internal/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -13,7 +13,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func clickHouseResourceReconcile(
+func clickHouseWriteState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
@@ -25,19 +25,14 @@ func clickHouseResourceReconcile(
 	if desired, err = translatorv2.ToClickHouseVendorSpec(ctx, wandb.Spec.ClickHouse, wandb, client.Scheme()); err != nil {
 		return err
 	}
-	if err = altinity.CrudResource(ctx, client, specNamespacedName, desired); err != nil {
+	if err = altinity.WriteState(ctx, client, specNamespacedName, desired); err != nil {
 		return err
 	}
-
-	//wandb.Status.ClickHouseStatus = translatorv2.ExtractClickHouseStatus(ctx, results)
-	//if err = client.Status().Update(ctx, wandb); err != nil {
-	//	results.AddErrors(err)
-	//}
 
 	return nil
 }
 
-func clickHouseStatusUpdate(
+func clickHouseReadState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
@@ -45,16 +40,18 @@ func clickHouseStatusUpdate(
 	log := ctrl.LoggerFrom(ctx)
 
 	var err error
-	var conditions []common.ClickHouseCondition
+	var status *translator.ClickHouseStatus
 	var specNamespacedName = clickHouseSpecNamespacedName(wandb.Spec.ClickHouse)
 
-	if conditions, err = altinity.GetConditions(ctx, client, specNamespacedName); err != nil {
+	if status, err = altinity.ReadState(ctx, client, specNamespacedName, wandb); err != nil {
 		return err
 	}
-	wandb.Status.ClickHouseStatus = translatorv2.ExtractClickHouseStatus(ctx, conditions)
-	if err = client.Status().Update(ctx, wandb); err != nil {
-		log.Error(err, "failed to update status")
-		return err
+	if status != nil {
+		wandb.Status.ClickHouseStatus = translatorv2.ToWBClickHouseStatus(ctx, *status)
+		if err = client.Status().Update(ctx, wandb); err != nil {
+			log.Error(err, "failed to update status")
+			return err
+		}
 	}
 
 	return nil

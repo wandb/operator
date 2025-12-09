@@ -6,7 +6,7 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/infra/minio/tenant"
-	"github.com/wandb/operator/internal/controller/translator/common"
+	"github.com/wandb/operator/internal/controller/translator"
 	miniov2 "github.com/wandb/operator/internal/vendored/minio-operator/minio.min.io/v2"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -15,52 +15,15 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
-func ExtractMinioStatus(ctx context.Context, conditions []common.MinioCondition) apiv2.WBMinioStatus {
-	return TranslateMinioStatus(
-		ctx,
-		common.ExtractMinioStatus(ctx, conditions),
-	)
-}
-
-func TranslateMinioStatus(ctx context.Context, m common.MinioStatus) apiv2.WBMinioStatus {
-	var result apiv2.WBMinioStatus
-	var conditions []apiv2.WBStatusCondition
-
-	for _, condition := range m.Conditions {
-		state := translateMinioStatusCode(condition.Code())
-		conditions = append(conditions, apiv2.WBStatusCondition{
-			State:   state,
-			Code:    condition.Code(),
-			Message: condition.Message(),
-		})
-	}
-
-	result.Connection = apiv2.WBMinioConnection{
-		MinioHost:      m.Connection.Host,
-		MinioPort:      m.Connection.Port,
-		MinioAccessKey: m.Connection.AccessKey,
-	}
-
-	result.Ready = m.Ready
-	result.Conditions = conditions
-	result.State = computeOverallState(conditions, m.Ready)
-	result.LastReconciled = metav1.Now()
-
-	return result
-}
-
-func translateMinioStatusCode(code string) apiv2.WBStateType {
-	switch code {
-	case string(common.MinioCreatedCode):
-		return apiv2.WBStateUpdating
-	case string(common.MinioUpdatedCode):
-		return apiv2.WBStateUpdating
-	case string(common.MinioDeletedCode):
-		return apiv2.WBStateDeleting
-	case string(common.MinioConnectionCode):
-		return apiv2.WBStateReady
-	default:
-		return apiv2.WBStateUnknown
+func ToWBMinioStatus(ctx context.Context, status translator.MinioStatus) apiv2.WBMinioStatus {
+	return apiv2.WBMinioStatus{
+		Ready:          status.Ready,
+		State:          status.State,
+		Conditions:     status.Conditions,
+		LastReconciled: metav1.Now(),
+		Connection: apiv2.WBInfraConnection{
+			URL: status.Connection.URL,
+		},
 	}
 }
 
@@ -88,9 +51,9 @@ func ToMinioVendorSpec(
 	}
 
 	// Determine volumes per server based on replica count
-	volumesPerServer := common.DevVolumesPerServer
+	volumesPerServer := translator.DevVolumesPerServer
 	if spec.Replicas > 1 {
-		volumesPerServer = common.ProdVolumesPerServer
+		volumesPerServer = translator.ProdVolumesPerServer
 	}
 
 	// Build Tenant spec
@@ -103,7 +66,7 @@ func ToMinioVendorSpec(
 			},
 		},
 		Spec: miniov2.TenantSpec{
-			Image: common.MinioImage,
+			Image: translator.MinioImage,
 			Configuration: &corev1.LocalObjectReference{
 				Name: tenant.ConfigName(specName),
 			},
@@ -146,34 +109,12 @@ func ToMinioVendorSpec(
 	return minioTenant, nil
 }
 
-func ToMinioConfigSecret(
+func ToMinioEnvConfig(
 	ctx context.Context,
 	spec apiv2.WBMinioSpec,
-	owner metav1.Object,
-	scheme *runtime.Scheme,
-) (*corev1.Secret, error) {
-	log := ctrl.LoggerFrom(ctx)
-
-	specName := spec.Name
-
-	configSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      tenant.ConfigName(specName),
-			Namespace: spec.Namespace,
-		},
-		Type: corev1.SecretTypeOpaque,
-		StringData: map[string]string{
-			"config.env": `export MINIO_ROOT_USER="admin"
-export MINIO_ROOT_PASSWORD="admin123456"
-export MINIO_BROWSER="on"`,
-		},
-	}
-
-	// Set owner reference
-	if err := ctrl.SetControllerReference(owner, configSecret, scheme); err != nil {
-		log.Error(err, "failed to set owner reference on Minio config secret")
-		return nil, fmt.Errorf("failed to set owner reference: %w", err)
-	}
-
-	return configSecret, nil
+) (tenant.MinioEnvConfig, error) {
+	return tenant.MinioEnvConfig{
+		RootUser:            spec.Config.RootUser,
+		MinioBrowserSetting: spec.Config.MinioBrowserSetting,
+	}, nil
 }

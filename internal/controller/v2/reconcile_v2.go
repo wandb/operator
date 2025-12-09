@@ -21,6 +21,8 @@ import (
 	"time"
 
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/internal/controller/translator"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -30,41 +32,42 @@ var defaultRequeueDuration = time.Duration(defaultRequeueMinutes) * time.Minute
 
 // Reconcile for V2 of WandB as the assumed object
 func Reconcile(ctx context.Context, client client.Client, wandb *apiv2.WeightsAndBiases) (ctrl.Result, error) {
+	var minioConnection *translator.InfraConnection
 	var err error
 
 	/////////////////////////
-	// Resource CRUD
-	if err = redisResourceReconcile(ctx, client, wandb); err != nil {
+	// Write State
+	if err = redisWriteState(ctx, client, wandb); err != nil {
 		return ctrl.Result{}, err
 	}
-	if err = mysqlResourceReconcile(ctx, client, wandb); err != nil {
+	if err = mysqlWriteState(ctx, client, wandb); err != nil {
 		return ctrl.Result{}, err
 	}
-	if err = kafkaResourceReconcile(ctx, client, wandb); err != nil {
+	if err = kafkaWriteState(ctx, client, wandb); err != nil {
 		return ctrl.Result{}, err
 	}
-	if err = minioResourceReconcile(ctx, client, wandb); err != nil {
+	if minioConnection, err = minioWriteState(ctx, client, wandb); err != nil {
 		return ctrl.Result{}, err
 	}
-	if err = clickHouseResourceReconcile(ctx, client, wandb); err != nil {
+	if err = clickHouseWriteState(ctx, client, wandb); err != nil {
 		return ctrl.Result{}, err
 	}
 
 	/////////////////////////
 	// Status Update
-	if err = redisStatusUpdate(ctx, client, wandb); err != nil {
+	if err = redisReadState(ctx, client, wandb); err != nil {
 		return ctrl.Result{}, err
 	}
-	if err = mysqlStatusUpdate(ctx, client, wandb); err != nil {
+	if err = mysqlReadState(ctx, client, wandb); err != nil {
 		return ctrl.Result{}, err
 	}
-	if err = kafkaStatusUpdate(ctx, client, wandb); err != nil {
+	if err = kafkaReadState(ctx, client, wandb); err != nil {
 		return ctrl.Result{}, err
 	}
-	if err = minioStatusUpdate(ctx, client, wandb); err != nil {
+	if err = minioReadState(ctx, client, wandb, minioConnection); err != nil {
 		return ctrl.Result{}, err
 	}
-	if err = clickHouseStatusUpdate(ctx, client, wandb); err != nil {
+	if err = clickHouseReadState(ctx, client, wandb); err != nil {
 		return ctrl.Result{}, err
 	}
 
