@@ -51,7 +51,7 @@ jobs:
 
       - uses: actions/setup-go@v4
         with:
-          go-version: 1.24
+          go-version: 1.25
 
       - name: Install Ginkgo
         run: go install github.com/onsi/ginkgo/v2/ginkgo@latest

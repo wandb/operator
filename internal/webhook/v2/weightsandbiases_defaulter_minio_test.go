@@ -14,11 +14,13 @@ import (
 
 var _ = Describe("WeightsAndBiasesCustomDefaulter - Minio", func() {
 	var (
-		ctx context.Context
+		ctx       context.Context
+		defaulter WeightsAndBiasesCustomDefaulter
 	)
 
 	BeforeEach(func() {
 		ctx = context.Background()
+		defaulter = WeightsAndBiasesCustomDefaulter{}
 	})
 
 	Describe("Size dev - Minio defaults", func() {
@@ -37,7 +39,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Minio", func() {
 					},
 				}
 
-				err := Default(ctx, wandb)
+				err := defaulter.Default(ctx, wandb)
 				g.Expect(err).ToNot(g.HaveOccurred())
 
 				g.Expect(wandb.Spec.Minio.Namespace).To(g.Equal("test-namespace"))
@@ -66,7 +68,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Minio", func() {
 					},
 				}
 
-				err := Default(ctx, wandb)
+				err := defaulter.Default(ctx, wandb)
 				g.Expect(err).ToNot(g.HaveOccurred())
 
 				g.Expect(wandb.Spec.Minio.Namespace).To(g.Equal("custom-minio-namespace"))
@@ -89,7 +91,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Minio", func() {
 					},
 				}
 
-				err := Default(ctx, wandb)
+				err := defaulter.Default(ctx, wandb)
 				g.Expect(err).ToNot(g.HaveOccurred())
 
 				g.Expect(wandb.Spec.Minio.StorageSize).To(g.Equal("50Gi"))
@@ -113,7 +115,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Minio", func() {
 					},
 				}
 
-				err := Default(ctx, wandb)
+				err := defaulter.Default(ctx, wandb)
 				g.Expect(err).ToNot(g.HaveOccurred())
 
 				g.Expect(wandb.Spec.Minio.Replicas).To(g.Equal(int32(4)))
@@ -140,7 +142,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Minio", func() {
 					},
 				}
 
-				err := Default(ctx, wandb)
+				err := defaulter.Default(ctx, wandb)
 				g.Expect(err).ToNot(g.HaveOccurred())
 
 				g.Expect(wandb.Spec.Minio.Config.MinioBrowserSetting).To(g.Equal(customBrowserSetting))
@@ -167,7 +169,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Minio", func() {
 					},
 				}
 
-				err := Default(ctx, wandb)
+				err := defaulter.Default(ctx, wandb)
 				g.Expect(err).ToNot(g.HaveOccurred())
 
 				g.Expect(wandb.Spec.Minio.Config.RootUser).To(g.Equal(customRootUser))
@@ -190,7 +192,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Minio", func() {
 					},
 				}
 
-				err := Default(ctx, wandb)
+				err := defaulter.Default(ctx, wandb)
 				g.Expect(err).ToNot(g.HaveOccurred())
 
 				g.Expect(wandb.Spec.Minio.Namespace).To(g.Equal("test-namespace"))
@@ -216,7 +218,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Minio", func() {
 					},
 				}
 
-				err := Default(ctx, wandb)
+				err := defaulter.Default(ctx, wandb)
 				g.Expect(err).ToNot(g.HaveOccurred())
 
 				g.Expect(wandb.Spec.Minio.Namespace).To(g.Equal("test-namespace"))
@@ -258,7 +260,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Minio", func() {
 					},
 				}
 
-				err := Default(ctx, wandb)
+				err := defaulter.Default(ctx, wandb)
 				g.Expect(err).ToNot(g.HaveOccurred())
 
 				g.Expect(wandb.Spec.Minio.Config.Resources.Requests[corev1.ResourceCPU]).To(g.Equal(resource.MustParse(defaults.SmallMinioCpuRequest)))
@@ -286,7 +288,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Minio", func() {
 					},
 				}
 
-				err := Default(ctx, wandb)
+				err := defaulter.Default(ctx, wandb)
 				g.Expect(err).ToNot(g.HaveOccurred())
 
 				g.Expect(wandb.Spec.Minio.Replicas).To(g.Equal(int32(3)))
@@ -309,7 +311,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Minio", func() {
 					},
 				}
 
-				err := Default(ctx, wandb)
+				err := defaulter.Default(ctx, wandb)
 				g.Expect(err).ToNot(g.HaveOccurred())
 
 				g.Expect(wandb.Spec.Size).To(g.Equal(apiv2.WBSizeDev))
@@ -363,7 +365,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Minio", func() {
 					},
 				}
 
-				err := Default(ctx, wandb)
+				err := defaulter.Default(ctx, wandb)
 				g.Expect(err).ToNot(g.HaveOccurred())
 
 				g.Expect(wandb.Spec.Minio.Namespace).To(g.Equal(customNamespace))

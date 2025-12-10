@@ -22,40 +22,17 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/translator"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 var defaultRequeueMinutes = 1
 var defaultRequeueDuration = time.Duration(defaultRequeueMinutes) * time.Minute
 
 // Reconcile for V2 of WandB as the assumed object
-func Reconcile(ctx context.Context, client client.Client, req ctrl.Request) (ctrl.Result, error) {
-	log := ctrllog.FromContext(ctx)
-	log.Info(
-		"=== Reconciling Weights & Biases V2 instance...",
-		"NamespacedName", req.NamespacedName,
-		"Name", req.Name,
-		"start", true,
-	)
-
+func Reconcile(ctx context.Context, client client.Client, wandb *apiv2.WeightsAndBiases) (ctrl.Result, error) {
 	var minioConnection *translator.InfraConnection
 	var err error
-
-	wandb := &apiv2.WeightsAndBiases{}
-	if err := client.Get(ctx, req.NamespacedName, wandb); err != nil {
-		if apierrors.IsNotFound(err) {
-			return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
-		}
-		return ctrl.Result{}, err
-	}
-
-	log.Info(
-		"Found Weights & Biases V2 instance, processing the spec...",
-		"Spec", wandb.Spec, "Name", wandb.Name, "UID", wandb.UID, "Generation", wandb.Generation,
-	)
 
 	/////////////////////////
 	// Write State

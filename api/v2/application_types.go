@@ -17,6 +17,12 @@ limitations under the License.
 package v2
 
 import (
+	kedav1alpha1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
+	autoscalingv1 "k8s.io/api/autoscaling/v1"
+	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -28,8 +34,17 @@ type ApplicationSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// Foo is an example field of Application. Edit application_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	Kind string `json:"kind,omitempty"`
+
+	MetaTemplate         metav1.ObjectMeta                          `json:"metaTemplate,omitempty"`
+	PodTemplate          corev1.PodTemplateSpec                     `json:"podTemplate,omitempty"`
+	ServiceTemplate      *corev1.ServiceSpec                        `json:"serviceTemplate,omitempty"`
+	IngressTemplate      *networkingv1.IngressSpec                  `json:"ingressTemplate,omitempty"`
+	HpaTemplate          *autoscalingv1.HorizontalPodAutoscalerSpec `json:"hpaTemplate,omitempty"`
+	PdbTemplate          *policyv1.PodDisruptionBudgetSpec          `json:"pdbTemplate,omitempty"`
+	ScaledObjectTemplate *kedav1alpha1.ScaledObjectSpec             `json:"scaledObjectTemplate,omitempty"`
+	Jobs                 []batchv1.Job                              `json:"jobs,omitempty"`
+	CronJobs             []batchv1.CronJob                          `json:"cronJobs,omitempty"`
 }
 
 // ApplicationStatus defines the observed state of Application.

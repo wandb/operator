@@ -29,6 +29,13 @@ resources:
   kind: WeightsAndBiases
   path: github.com/wandb/operator/api/v2
   version: v2
+  webhooks:
+    conversion: true
+    defaulting: true
+    spoke:
+    - v1
+    validation: true
+    webhookVersion: v1
 - api:
     crdVersion: v1
     namespaced: true
@@ -38,4 +45,8 @@ resources:
   kind: Application
   path: github.com/wandb/operator/api/v2
   version: v2
+  webhooks:
+    defaulting: true
+    validation: true
+    webhookVersion: v1
 version: "3"

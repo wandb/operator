@@ -14,11 +14,13 @@ import (
 
 var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 	var (
-		ctx context.Context
+		ctx       context.Context
+		defaulter WeightsAndBiasesCustomDefaulter
 	)
 
 	BeforeEach(func() {
 		ctx = context.Background()
+		defaulter = WeightsAndBiasesCustomDefaulter{}
 	})
 
 	Describe("Size dev - ClickHouse defaults", func() {
@@ -37,7 +39,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 					},
 				}
 
-				err := Default(ctx, wandb)
+				err := defaulter.Default(ctx, wandb)
 				g.Expect(err).ToNot(g.HaveOccurred())
 
 				g.Expect(wandb.Spec.ClickHouse.Namespace).To(g.Equal("test-namespace"))
@@ -65,7 +67,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 					},
 				}
 
-				err := Default(ctx, wandb)
+				err := defaulter.Default(ctx, wandb)
 				g.Expect(err).ToNot(g.HaveOccurred())
 
 				g.Expect(wandb.Spec.ClickHouse.Namespace).To(g.Equal("custom-clickhouse-namespace"))
@@ -88,7 +90,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 					},
 				}
 
-				err := Default(ctx, wandb)
+				err := defaulter.Default(ctx, wandb)
 				g.Expect(err).ToNot(g.HaveOccurred())
 
 				g.Expect(wandb.Spec.ClickHouse.StorageSize).To(g.Equal("100Gi"))
@@ -112,7 +114,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 					},
 				}
 
-				err := Default(ctx, wandb)
+				err := defaulter.Default(ctx, wandb)
 				g.Expect(err).ToNot(g.HaveOccurred())
 
 				g.Expect(wandb.Spec.ClickHouse.Replicas).To(g.Equal(int32(2)))
@@ -137,7 +139,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 					},
 				}
 
-				err := Default(ctx, wandb)
+				err := defaulter.Default(ctx, wandb)
 				g.Expect(err).ToNot(g.HaveOccurred())
 
 				g.Expect(wandb.Spec.ClickHouse.Version).To(g.Equal(customVersion))
@@ -160,7 +162,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 					},
 				}
 
-				err := Default(ctx, wandb)
+				err := defaulter.Default(ctx, wandb)
 				g.Expect(err).ToNot(g.HaveOccurred())
 
 				g.Expect(wandb.Spec.ClickHouse.Namespace).To(g.Equal("test-namespace"))
@@ -187,7 +189,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 					},
 				}
 
-				err := Default(ctx, wandb)
+				err := defaulter.Default(ctx, wandb)
 				g.Expect(err).ToNot(g.HaveOccurred())
 
 				g.Expect(wandb.Spec.ClickHouse.Namespace).To(g.Equal("test-namespace"))
@@ -228,7 +230,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 					},
 				}
 
-				err := Default(ctx, wandb)
+				err := defaulter.Default(ctx, wandb)
 				g.Expect(err).ToNot(g.HaveOccurred())
 
 				g.Expect(wandb.Spec.ClickHouse.Config.Resources.Requests[corev1.ResourceCPU]).To(g.Equal(customCPU))
@@ -254,7 +256,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 					},
 				}
 
-				err := Default(ctx, wandb)
+				err := defaulter.Default(ctx, wandb)
 				g.Expect(err).ToNot(g.HaveOccurred())
 
 				g.Expect(wandb.Spec.ClickHouse.Replicas).To(g.Equal(int32(3)))
@@ -277,7 +279,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 					},
 				}
 
-				err := Default(ctx, wandb)
+				err := defaulter.Default(ctx, wandb)
 				g.Expect(err).ToNot(g.HaveOccurred())
 
 				g.Expect(wandb.Spec.ClickHouse.Version).To(g.Equal(defaults.ClickHouseVersion))
@@ -300,7 +302,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 					},
 				}
 
-				err := Default(ctx, wandb)
+				err := defaulter.Default(ctx, wandb)
 				g.Expect(err).ToNot(g.HaveOccurred())
 
 				g.Expect(wandb.Spec.Size).To(g.Equal(apiv2.WBSizeDev))
@@ -353,7 +355,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 					},
 				}
 
-				err := Default(ctx, wandb)
+				err := defaulter.Default(ctx, wandb)
 				g.Expect(err).ToNot(g.HaveOccurred())
 
 				g.Expect(wandb.Spec.ClickHouse.Namespace).To(g.Equal(customNamespace))

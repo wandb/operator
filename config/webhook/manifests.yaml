@@ -10,9 +10,29 @@ webhooks:
     service:
       name: webhook-service
       namespace: system
+      path: /mutate-apps-wandb-com-v2-application
+  failurePolicy: Fail
+  name: mapplication-v2.kb.io
+  rules:
+  - apiGroups:
+    - apps.wandb.com
+    apiVersions:
+    - v2
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - applications
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
       path: /mutate-apps-wandb-com-v2-weightsandbiases
   failurePolicy: Fail
-  name: mweightsandbiases.wandb.com
+  name: mweightsandbiases-v2.kb.io
   rules:
   - apiGroups:
     - apps.wandb.com
@@ -36,9 +56,9 @@ webhooks:
     service:
       name: webhook-service
       namespace: system
-      path: /validate-apps-wandb-com-v2-weightsandbiases
+      path: /validate-apps-wandb-com-v2-application
   failurePolicy: Fail
-  name: vweightsandbiases.wandb.com
+  name: vapplication-v2.kb.io
   rules:
   - apiGroups:
     - apps.wandb.com
@@ -47,7 +67,26 @@ webhooks:
     operations:
     - CREATE
     - UPDATE
-    - DELETE
+    resources:
+    - applications
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-apps-wandb-com-v2-weightsandbiases
+  failurePolicy: Fail
+  name: vweightsandbiases-v2.kb.io
+  rules:
+  - apiGroups:
+    - apps.wandb.com
+    apiVersions:
+    - v2
+    operations:
+    - CREATE
+    - UPDATE
     resources:
     - weightsandbiases
   sideEffects: None

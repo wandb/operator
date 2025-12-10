@@ -6,4 +6,40 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: application-sample
 spec:
-  # TODO(user): Add fields here
+  kind: Deployment
+  podTemplate:
+    metadata:
+      annotations:
+        foo: bar
+    spec:
+      containers:
+      - name: my-app
+        image: nginx:1.14.2
+
+  jobs:
+    - metadata:
+        name: my-job
+      spec:
+        template:
+          spec:
+            restartPolicy: Never
+            containers:
+            - name: my-job
+              image: nginx:1.14.1
+              command: ["sleep", "10"]
+
+  cronJobs:
+    - metadata:
+        name: my-cronjob
+      spec:
+        schedule: "*/1 * * * *"
+        jobTemplate:
+          spec:
+            template:
+              spec:
+                restartPolicy: Never
+                containers:
+                - name: my-cronjob
+                  image: nginx:1.14.2
+                  command: ["sleep", "10"]
+

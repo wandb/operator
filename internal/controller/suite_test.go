@@ -18,22 +18,24 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-
+	apiv1 "github.com/wandb/operator/api/v1"
+	apiv2 "github.com/wandb/operator/api/v2"
+	webhookv2 "github.com/wandb/operator/internal/webhook/v2"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-
-	apiv1 "github.com/wandb/operator/api/v1"
-	apiv2 "github.com/wandb/operator/api/v2"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -46,6 +48,8 @@ var (
 	testEnv   *envtest.Environment
 	cfg       *rest.Config
 	k8sClient client.Client
+	mgr       manager.Manager
+	mgrErrCh  chan error
 )
 
 func TestControllers(t *testing.T) {
@@ -60,6 +64,7 @@ var _ = BeforeSuite(func() {
 	ctx, cancel = context.WithCancel(context.TODO())
 
 	var err error
+
 	err = apiv1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
@@ -70,8 +75,11 @@ var _ = BeforeSuite(func() {
 
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
-		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "config", "crd", "bases")},
+		CRDInstallOptions: envtest.CRDInstallOptions{
+			Paths: []string{filepath.Join("..", "..", "config", "crd", "bases")},
+		},
 		ErrorIfCRDPathMissing: true,
+		Scheme:                scheme.Scheme,
 	}
 
 	// Retrieve the first found binary directory to allow running tests from IDEs
@@ -81,12 +89,39 @@ var _ = BeforeSuite(func() {
 
 	// cfg is defined in this file globally.
 	cfg, err = testEnv.Start()
+
 	Expect(err).NotTo(HaveOccurred())
 	Expect(cfg).NotTo(BeNil())
 
 	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient).NotTo(BeNil())
+
+	mgr, err = manager.New(cfg, manager.Options{
+		Scheme: scheme.Scheme,
+		WebhookServer: webhook.NewServer(webhook.Options{
+			Host:    testEnv.WebhookInstallOptions.LocalServingHost,
+			Port:    testEnv.WebhookInstallOptions.LocalServingPort,
+			CertDir: testEnv.WebhookInstallOptions.LocalServingCertDir,
+		}),
+	})
+	Expect(err).NotTo(HaveOccurred())
+
+	err = webhookv2.SetupWeightsAndBiasesWebhookWithManager(mgr)
+	Expect(err).NotTo(HaveOccurred())
+
+	go func() {
+		err = mgr.Start(ctx)
+		if err != nil && ctx.Err() == nil {
+			// Only fail if not cancelled
+			Fail(fmt.Sprintf("manager failed to start: %v", err))
+		}
+	}()
+
+	// Wait for webhook server to be ready
+	Eventually(func() error {
+		return mgr.GetWebhookServer().StartedChecker()(nil)
+	}).Should(Succeed())
 })
 
 var _ = AfterSuite(func() {
