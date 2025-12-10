@@ -50,7 +50,9 @@ func ReadState(
 	}
 
 	if actual == nil {
-		return nil, nil
+		status.State = "Not Installed"
+		status.Ready = false
+		return status, nil
 	}
 
 	///////////////////////////////////

@@ -42,6 +42,9 @@ func ReadState(
 		return nil, err
 	}
 
+	///////////////////////////////////
+	// set connection details
+
 	if standaloneActual != nil {
 		connInfo := readStandaloneConnectionDetails(standaloneActual)
 
@@ -71,6 +74,12 @@ func ReadState(
 			status.Connection = *connection
 		}
 	}
+
+	///////////////////////////////////
+	// add conditions
+
+	///////////////////////////////////
+	// set top-level summary
 
 	return status, nil
 }
