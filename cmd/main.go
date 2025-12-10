@@ -52,7 +52,6 @@ import (
 
 	"github.com/wandb/operator/internal/controller"
 
-	appsv1 "github.com/wandb/operator/api/v1"
 	appsv2 "github.com/wandb/operator/api/v2"
 	webhookv2 "github.com/wandb/operator/internal/webhook/v2"
 	// +kubebuilder:scaffold:imports
@@ -66,7 +65,6 @@ var (
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
-	utilruntime.Must(appsv1.AddToScheme(scheme))
 	utilruntime.Must(appsv2.AddToScheme(scheme))
 	utilruntime.Must(apiextensionsv1.AddToScheme(scheme))
 	utilruntime.Must(pxcv1.SchemeBuilder.AddToScheme(scheme))
