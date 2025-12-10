@@ -278,6 +278,8 @@ rules:
   - redis.redis.opstreelabs.in
   resources:
   - redis
+  - redisreplications
+  - redissentinels
   verbs:
   - create
   - delete
