@@ -142,7 +142,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Minio", func() {
 					},
 				}
 
-				err := Default(ctx, wandb)
+				err := defaulter.Default(ctx, wandb)
 				g.Expect(err).ToNot(g.HaveOccurred())
 
 				g.Expect(wandb.Spec.Minio.Config.MinioBrowserSetting).To(g.Equal(customBrowserSetting))
@@ -169,7 +169,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Minio", func() {
 					},
 				}
 
-				err := Default(ctx, wandb)
+				err := defaulter.Default(ctx, wandb)
 				g.Expect(err).ToNot(g.HaveOccurred())
 
 				g.Expect(wandb.Spec.Minio.Config.RootUser).To(g.Equal(customRootUser))
