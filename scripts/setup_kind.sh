@@ -36,6 +36,12 @@ EOF
 
 echo "Kind cluster '$CLUSTER_NAME' created successfully with 3 worker nodes"
 
+echo "Installing cert-manager..."
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/latest/download/cert-manager.yaml
+kubectl wait --for=condition=available --timeout=300s -n cert-manager deployment/cert-manager
+kubectl wait --for=condition=available --timeout=300s -n cert-manager deployment/cert-manager-webhook
+kubectl wait --for=condition=available --timeout=300s -n cert-manager deployment/cert-manager-cainjector
+
 echo "Installing Kubernetes Metrics Server..."
 kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
 kubectl patch -n kube-system deployment metrics-server --type=json \

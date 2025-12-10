@@ -2,7 +2,7 @@
   <configuration default="false" name="v2:ctrl" type="GoApplicationRunConfiguration" factoryName="Go Application">
     <module name="operator" />
     <working_directory value="$PROJECT_DIR$" />
-    <parameters value="--assume-v2-cr=true --enable-webhooks=false" />
+    <parameters value="--enable-v2=true --enable-webhooks=false" />
     <EXTENSION ID="software.aws.toolkits.jetbrains.core.execution.GoAwsConnectionRunConfigurationExtension">
       <option name="credential" />
       <option name="region" />

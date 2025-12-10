@@ -199,7 +199,7 @@ if settings.get("installWandb"):
     k8s_resource(
         new_name='Wandb',
         objects=[
-            'wandb-default:weightsandbiases'
+            ('%s:weightsandbiases') % settings.get('wandbCRD')
         ],
         resource_deps=["operator-controller-manager"],
         labels=["Operator-Resources"],

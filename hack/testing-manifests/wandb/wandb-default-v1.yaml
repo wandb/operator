@@ -8,7 +8,7 @@ metadata:
     app.kubernetes.io/part-of: operator
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/created-by: operator
-  name: wandb-default
+  name: wandb-default-v1
 spec:
   chart:
     url: https://charts.wandb.ai
