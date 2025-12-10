@@ -137,7 +137,7 @@ func (v *WeightsAndBiasesCustomValidator) ValidateUpdate(ctx context.Context, ol
 	}
 	oldWandb, ok := oldObj.(*appsv2.WeightsAndBiases)
 	if !ok {
-		return nil, fmt.Errorf("expected a WeightsAndBiases object for the oldObj but got %T", newObj)
+		return nil, fmt.Errorf("expected a WeightsAndBiases object for the oldObj but got %T", oldObj)
 	}
 	weightsandbiaseslog.Info("Validation for WeightsAndBiases upon update", "name", newWandb.GetName())
 
@@ -149,7 +149,7 @@ func (v *WeightsAndBiasesCustomValidator) ValidateUpdate(ctx context.Context, ol
 	if specWarnings, err = validateSpec(ctx, newWandb); err != nil {
 		return specWarnings, err
 	}
-	changeWarnings, err = validateChanges(ctx, oldWandb, newWandb)
+	changeWarnings, err = validateChanges(ctx, newWandb, oldWandb)
 	return append(specWarnings, changeWarnings...), err
 }
 

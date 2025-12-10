@@ -116,8 +116,8 @@ func main() {
 
 	flag.BoolVar(&debug, "debug", false, "Enable debug mode")
 
-	flag.BoolVar(&enableV2, "enable-v2", true, "Use V2 of WandB CRD (development only)")
-	flag.BoolVar(&enableWebhooks, "enable-webhooks", true, "Enable webhooks; default `false` since V1 has no webhooks")
+	flag.BoolVar(&enableV2, "enable-v2", true, "Use V2 of WandB CRD")
+	flag.BoolVar(&enableWebhooks, "enable-webhooks", true, "Enable webhooks")
 
 	opts := zap.Options{
 		Development: true,

@@ -45,7 +45,6 @@ type WeightsAndBiases struct {
 }
 
 // +kubebuilder:object:root=true
-// +kubebuilder:storageversion
 
 // WeightsAndBiasesList contains a list of WeightsAndBiases.
 type WeightsAndBiasesList struct {

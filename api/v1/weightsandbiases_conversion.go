@@ -63,11 +63,17 @@ func (dst *WeightsAndBiases) ConvertFrom(srcRaw conversion.Hub) error {
 		return errors.New("cannot convert from non-v1 version")
 	}
 
+	if chart, ok := src.Annotations["legacy.operator.wandb.com/chart"]; !ok || chart == "" {
+		return errors.New("missing chart annotation")
+	}
 	err := dst.Spec.Chart.UnmarshalJSON([]byte(src.Annotations["legacy.operator.wandb.com/chart"]))
 	if err != nil {
 		return err
 	}
 
+	if values, ok := src.Annotations["legacy.operator.wandb.com/values"]; !ok || values == "" {
+		return errors.New("missing values annotation")
+	}
 	err = dst.Spec.Values.UnmarshalJSON([]byte(src.Annotations["legacy.operator.wandb.com/values"]))
 	if err != nil {
 		return err

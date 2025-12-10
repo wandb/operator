@@ -108,7 +108,7 @@ func (v *ApplicationCustomValidator) ValidateUpdate(_ context.Context, oldObj, n
 
 	applicationOld, ok := oldObj.(*appsv2.Application)
 	if !ok {
-		return nil, fmt.Errorf("expected a Application object for the oldObj but got %T", newObj)
+		return nil, fmt.Errorf("expected a Application object for the oldObj but got %T", oldObj)
 	}
 
 	if applicationOld.Spec.Kind != application.Spec.Kind {

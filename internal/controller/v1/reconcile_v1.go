@@ -258,7 +258,10 @@ func Reconcile(
 		}
 
 		controllerutil.RemoveFinalizer(wandb, ResFinalizer)
-		client.Update(ctx, wandb)
+		if err := client.Update(ctx, wandb); err != nil {
+			log.Error(err, "Failed to remove finalizer")
+			return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
+		}
 	}
 
 	return ctrlqueue.DoNotRequeue()

@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -48,6 +49,7 @@ var (
 	cfg       *rest.Config
 	k8sClient client.Client
 	mgr       manager.Manager
+	mgrErrCh  chan error
 )
 
 func TestControllers(t *testing.T) {
@@ -110,8 +112,16 @@ var _ = BeforeSuite(func() {
 
 	go func() {
 		err = mgr.Start(ctx)
-		Expect(err).NotTo(HaveOccurred())
+		if err != nil && ctx.Err() == nil {
+			// Only fail if not cancelled
+			Fail(fmt.Sprintf("manager failed to start: %v", err))
+		}
 	}()
+
+	// Wait for webhook server to be ready
+	Eventually(func() error {
+		return mgr.GetWebhookServer().StartedChecker()(nil)
+	}).Should(Succeed())
 })
 
 var _ = AfterSuite(func() {
