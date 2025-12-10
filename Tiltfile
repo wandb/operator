@@ -31,6 +31,7 @@ os.putenv('PATH', './bin:' + os.getenv('PATH'))
 
 load('ext://restart_process', 'docker_build_with_restart')
 load('ext://helm_resource', 'helm_resource', 'helm_repo')
+load('ext://cert_manager', 'deploy_cert_manager')
 
 DOCKERFILE = '''
 FROM registry.access.redhat.com/ubi9/ubi
@@ -77,6 +78,8 @@ DIRNAME = os.path.basename(os. getcwd())
 
 local_resource("manifests", manifests(), labels=["Operator-Resources"])
 local_resource("generate", generate(), labels=["Operator-Resources"])
+
+deploy_cert_manager()
 
 if settings.get("installMinio"):
     k8s_yaml('./hack/testing-manifests/minio/minio.yaml')
