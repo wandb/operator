@@ -1,8 +1,8 @@
 module github.com/wandb/operator
 
-go 1.25.1
+go 1.25.3
 
-godebug default=go1.23
+godebug default=go1.25
 
 require (
 	github.com/Masterminds/semver/v3 v3.4.0
@@ -30,7 +30,7 @@ require (
 	golang.org/x/exp v0.0.0-20250408133849-7e4ce0ab07d0
 	gopkg.in/d4l3k/messagediff.v1 v1.2.1
 	gopkg.in/yaml.v3 v3.0.1
-	helm.sh/helm/v3 v3.17.2
+	helm.sh/helm/v3 v3.19.2
 	k8s.io/api v0.34.1
 	k8s.io/apiextensions-apiserver v0.34.1
 	k8s.io/apimachinery v0.34.1
