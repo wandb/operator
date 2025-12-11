@@ -32,12 +32,6 @@ func ReadState(
 		actualResource = nil
 	}
 
-	if actualResource == nil {
-		status.State = "Not Installed"
-		status.Ready = false
-		return status, nil
-	}
-
 	///////////////////////////////////
 	// set connection details
 
@@ -50,6 +44,29 @@ func ReadState(
 
 	///////////////////////////////////
 	// set top-level summary
+
+	if actualResource != nil {
+		switch actualResource.Status.HealthStatus {
+		case miniov2.HealthStatusGreen:
+			status.State = "Ready"
+			status.Ready = true
+			break
+		case miniov2.HealthStatusRed:
+			status.State = "Error"
+			status.Ready = false
+			break
+		case miniov2.HealthStatusYellow:
+			status.State = "Degraded"
+			status.Ready = true
+			break
+		default:
+			status.State = "NotReady"
+			status.Ready = false
+		}
+	} else {
+		status.State = "Not Installed"
+		status.Ready = false
+	}
 
 	return status, nil
 }
