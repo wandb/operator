@@ -83,9 +83,18 @@ func inferState(
 ) error {
 	log := ctrl.LoggerFrom(ctx)
 
-	redisStatus := wandb.Status.RedisStatus
+	// Infra is "ok" if either it is not enabled or if it is (enabled and) ready
+	redisOk := !wandb.Spec.Redis.Enabled || wandb.Status.RedisStatus.Ready
+	minioOk := !wandb.Spec.Minio.Enabled || wandb.Status.MinioStatus.Ready
+	mysqlOk := !wandb.Spec.MySQL.Enabled || wandb.Status.MySQLStatus.Ready
+	clickHouseOk := !wandb.Spec.ClickHouse.Enabled || wandb.Status.ClickHouseStatus.Ready
+	kafkaOk := !wandb.Spec.Kafka.Enabled || wandb.Status.KafkaStatus.Ready
 
-	wandb.Status.State = redisStatus.State
+	if redisOk && minioOk && mysqlOk && clickHouseOk && kafkaOk {
+		wandb.Status.State = "Ready"
+	} else {
+		wandb.Status.State = "NotReady"
+	}
 
 	if err := client.Status().Update(ctx, wandb); err != nil {
 		log.Error(err, "Failed to update status")

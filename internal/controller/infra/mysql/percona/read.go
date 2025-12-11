@@ -54,12 +54,6 @@ func ReadState(
 		actual = nil
 	}
 
-	if actual == nil {
-		status.State = "Not Installed"
-		status.Ready = false
-		return status, nil
-	}
-
 	if actual != nil {
 		///////////////////////////////////
 		// set connection details
