@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"strconv"
 
-	log "github.com/altinity/clickhouse-operator/pkg/announcer"
 	ctrlcommon "github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/translator"
 	chiv1 "github.com/wandb/operator/internal/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -112,6 +112,7 @@ func chPodsRunningStatus(
 func computeStatusSummary(
 	ctx context.Context, chiCR *chiv1.ClickHouseInstallation, podsRunning map[string]bool, status *translator.ClickHouseStatus,
 ) {
+	log := ctrl.LoggerFrom(ctx)
 	var runningCount, podCount int
 	for _, isRunning := range podsRunning {
 		podCount++

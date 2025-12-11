@@ -27,6 +27,7 @@ const (
 func ToRedisStatus(ctx context.Context, status translator.RedisStatus) apiv2.WBRedisStatus {
 	return apiv2.WBRedisStatus{
 		Ready:          status.Ready,
+		State:          status.State,
 		Conditions:     status.Conditions,
 		LastReconciled: metav1.Now(),
 		Connection: apiv2.WBInfraConnection{
