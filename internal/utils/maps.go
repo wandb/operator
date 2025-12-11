@@ -1,6 +1,6 @@
 package utils
 
-func mergeMap[K comparable, V any](actual, defaultValues map[K]V) map[K]V {
+func MapMerge[K comparable, V any](actual, defaultValues map[K]V) map[K]V {
 	result := make(map[K]V)
 
 	for k, v := range defaultValues {

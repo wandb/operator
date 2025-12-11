@@ -57,6 +57,7 @@ func writeWandbConnInfo(
 	*translator.InfraConnection, error,
 ) {
 	var err error
+	var found bool
 	var gvk schema.GroupVersionKind
 	var actual = &corev1.Secret{}
 
@@ -65,10 +66,13 @@ func writeWandbConnInfo(
 	nsName := nsNameBldr.ConnectionNsName()
 	urlKey := "url"
 
-	if err = common.GetResource(
+	if found, err = common.GetResource(
 		ctx, client, nsName, AppConnTypeName, actual,
 	); err != nil {
 		return nil, err
+	}
+	if !found {
+		actual = nil
 	}
 
 	// Compute owner reference

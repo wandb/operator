@@ -37,12 +37,16 @@ func writeKafkaState(
 	desired *kafkav1beta2.Kafka,
 ) error {
 	var err error
+	var found bool
 	var actual = &kafkav1beta2.Kafka{}
 
-	if err = common.GetResource(
+	if found, err = common.GetResource(
 		ctx, client, nsNameBldr.KafkaNsName(), KafkaResourceType, actual,
 	); err != nil {
 		return err
+	}
+	if !found {
+		actual = nil
 	}
 
 	if err = common.CrudResource(ctx, client, desired, actual); err != nil {
@@ -59,12 +63,16 @@ func writeNodePoolState(
 	desired *kafkav1beta2.KafkaNodePool,
 ) error {
 	var err error
+	var found bool
 	var actual = &kafkav1beta2.KafkaNodePool{}
 
-	if err = common.GetResource(
+	if found, err = common.GetResource(
 		ctx, client, nsNameBldr.NodePoolNsName(), NodePoolResourceType, actual,
 	); err != nil {
 		return err
+	}
+	if !found {
+		actual = nil
 	}
 
 	if err = common.CrudResource(ctx, client, desired, actual); err != nil {

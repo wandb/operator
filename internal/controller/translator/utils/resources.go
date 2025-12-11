@@ -1,11 +1,14 @@
 package utils
 
-import corev1 "k8s.io/api/core/v1"
+import (
+	utils2 "github.com/wandb/operator/internal/utils"
+	corev1 "k8s.io/api/core/v1"
+)
 
 func Resources(actual, defaultValues corev1.ResourceRequirements) corev1.ResourceRequirements {
 	var results corev1.ResourceRequirements
-	results.Limits = mergeMap(actual.Limits, defaultValues.Limits)
-	results.Requests = mergeMap(actual.Requests, defaultValues.Requests)
+	results.Limits = utils2.MapMerge(actual.Limits, defaultValues.Limits)
+	results.Requests = utils2.MapMerge(actual.Requests, defaultValues.Requests)
 	results.Claims = mergeResourceClaims(actual.Claims, defaultValues.Claims)
 
 	return results

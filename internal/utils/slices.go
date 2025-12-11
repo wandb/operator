@@ -10,6 +10,15 @@ func FilterFunc[T any](s []T, predicate func(T) bool) []T {
 	return result
 }
 
+func ContainsFunc[T any](s []T, predicate func(T) bool) bool {
+	for _, v := range s {
+		if predicate(v) {
+			return true
+		}
+	}
+	return false
+}
+
 func MapFunc[T any, U any](s []T, f func(T) U) []U {
 	var result []U
 	for _, v := range s {

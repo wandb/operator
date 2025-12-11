@@ -38,15 +38,19 @@ func ReadState(
 	wandbOwner client.Object,
 ) (*translator.MysqlStatus, error) {
 	var err error
+	var found bool
 	var actual = &pxcv1.PerconaXtraDBCluster{}
 	var status = &translator.MysqlStatus{}
 
 	nsNameBldr := createNsNameBuilder(specNamespacedName)
 
-	if err = ctrlcommon.GetResource(
+	if found, err = ctrlcommon.GetResource(
 		ctx, client, nsNameBldr.ClusterNsName(), ResourceTypeName, actual,
 	); err != nil {
 		return nil, err
+	}
+	if !found {
+		actual = nil
 	}
 
 	if actual == nil {

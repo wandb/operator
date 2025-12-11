@@ -21,14 +21,18 @@ func WriteState(
 	desired *pxcv1.PerconaXtraDBCluster,
 ) error {
 	var err error
+	var found bool
 	var actual = &pxcv1.PerconaXtraDBCluster{}
 
 	nsNameBldr := createNsNameBuilder(specNamespacedName)
 
-	if err = common.GetResource(
+	if found, err = common.GetResource(
 		ctx, client, nsNameBldr.ClusterNsName(), ResourceTypeName, actual,
 	); err != nil {
 		return err
+	}
+	if !found {
+		actual = nil
 	}
 
 	if err = common.CrudResource(ctx, client, desired, actual); err != nil {

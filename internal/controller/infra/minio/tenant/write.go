@@ -31,14 +31,18 @@ func WriteState(
 	wandbOwner client.Object,
 ) (*translator.InfraConnection, error) {
 	var err error
+	var found bool
 	var actual = &miniov2.Tenant{}
 
 	nsNameBldr := createNsNameBuilder(specNamespacedName)
 
-	if err = common.GetResource(
+	if found, err = common.GetResource(
 		ctx, client, nsNameBldr.SpecNsName(), ResourceTypeName, actual,
 	); err != nil {
 		return nil, err
+	}
+	if !found {
+		actual = nil
 	}
 
 	if err = common.CrudResource(ctx, client, desiredCr, actual); err != nil {
@@ -76,6 +80,7 @@ func writeMinioConfig(
 	envConfig MinioEnvConfig,
 ) (*minioConnInfo, error) {
 	var err error
+	var found bool
 	var gvk schema.GroupVersionKind
 	var configFile minioConfigFile
 	var rootPassword string
@@ -85,10 +90,13 @@ func writeMinioConfig(
 
 	//log := ctrl.LoggerFrom(ctx)
 
-	if err = common.GetResource(
+	if found, err = common.GetResource(
 		ctx, client, nsNameBldr.ConfigNsName(), ConfigTypeName, actual,
 	); err != nil {
 		return nil, err
+	}
+	if !found {
+		actual = nil
 	}
 
 	if actual != nil {

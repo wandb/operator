@@ -54,11 +54,15 @@ func writeStandaloneState(
 ) error {
 	var standaloneActual = &redisv1beta2.Redis{}
 	var err error
+	var found bool
 
-	if err = common.GetResource(
+	if found, err = common.GetResource(
 		ctx, client, nsNameBldr.StandaloneNsName(), StandaloneType, standaloneActual,
 	); err != nil {
 		return err
+	}
+	if !found {
+		standaloneActual = nil
 	}
 
 	return common.CrudResource(ctx, client, standaloneDesired, standaloneActual)
@@ -72,11 +76,15 @@ func writeSentinelState(
 ) error {
 	var sentinelActual = &redissentinelv1beta2.RedisSentinel{}
 	var err error
+	var found bool
 
-	if err = common.GetResource(
+	if found, err = common.GetResource(
 		ctx, client, nsNameBldr.SentinelNsName(), SentinelType, sentinelActual,
 	); err != nil {
 		return err
+	}
+	if !found {
+		sentinelActual = nil
 	}
 
 	return common.CrudResource(ctx, client, sentinelDesired, sentinelActual)
@@ -90,11 +98,15 @@ func writeReplicationState(
 ) error {
 	var replicationActual = &redisreplicationv1beta2.RedisReplication{}
 	var err error
+	var found bool
 
-	if err = common.GetResource(
+	if found, err = common.GetResource(
 		ctx, client, nsNameBldr.ReplicationNsName(), ReplicationType, replicationActual,
 	); err != nil {
 		return err
+	}
+	if !found {
+		replicationActual = nil
 	}
 
 	return common.CrudResource(ctx, client, replicationDesired, replicationActual)

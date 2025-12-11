@@ -10,6 +10,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/utils/ptr"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -24,27 +25,34 @@ func (c *kafkaConnInfo) toURL() string {
 
 func writeKafkaConnInfo(
 	ctx context.Context,
-	client client.Client,
+	cl client.Client,
 	owner client.Object,
 	nsNameBldr *NsNameBuilder,
 	connInfo *kafkaConnInfo,
 ) (
 	*translator.InfraConnection, error,
 ) {
+	log := ctrl.LoggerFrom(ctx)
+
 	var err error
+	var found bool
 	var gvk schema.GroupVersionKind
 	var actual = &corev1.Secret{}
 
 	nsName := nsNameBldr.ConnectionNsName()
 	urlKey := "url"
 
-	if err = common.GetResource(
-		ctx, client, nsName, AppConnTypeName, actual,
+	if found, err = common.GetResource(
+		ctx, cl, nsName, AppConnTypeName, actual,
 	); err != nil {
 		return nil, err
 	}
+	if !found {
+		actual = nil
+	}
 
-	if gvk, err = client.GroupVersionKindFor(owner); err != nil {
+	if gvk, err = cl.GroupVersionKindFor(owner); err != nil {
+		log.Error(err, fmt.Sprintf("Error getting GVK for %s", owner.GetName()))
 		return nil, fmt.Errorf("could not get GVK for owner: %w", err)
 	}
 	ref := metav1.OwnerReference{
@@ -68,7 +76,7 @@ func writeKafkaConnInfo(
 		},
 	}
 
-	if err = common.CrudResource(ctx, client, desired, actual); err != nil {
+	if err = common.CrudResource(ctx, cl, desired, actual); err != nil {
 		return nil, err
 	}
 

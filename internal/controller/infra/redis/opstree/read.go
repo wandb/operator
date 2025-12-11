@@ -23,23 +23,33 @@ func ReadState(
 	var replicationActual = &redisreplicationv1beta2.RedisReplication{}
 	var status = &translator.RedisStatus{}
 	var err error
+	var found bool
 
 	nsNameBldr := createNsNameBuilder(specNamespacedName)
 
-	if err = ctrlcommon.GetResource(
+	if found, err = ctrlcommon.GetResource(
 		ctx, client, nsNameBldr.StandaloneNsName(), StandaloneType, standaloneActual,
 	); err != nil {
 		return nil, err
 	}
-	if err = ctrlcommon.GetResource(
+	if !found {
+		standaloneActual = nil
+	}
+	if found, err = ctrlcommon.GetResource(
 		ctx, client, nsNameBldr.SentinelNsName(), SentinelType, sentinelActual,
 	); err != nil {
 		return nil, err
 	}
-	if err = ctrlcommon.GetResource(
+	if !found {
+		sentinelActual = nil
+	}
+	if found, err = ctrlcommon.GetResource(
 		ctx, client, nsNameBldr.ReplicationNsName(), ReplicationType, replicationActual,
 	); err != nil {
 		return nil, err
+	}
+	if !found {
+		replicationActual = nil
 	}
 
 	///////////////////////////////////

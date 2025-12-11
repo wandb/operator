@@ -17,15 +17,19 @@ func ReadState(
 	connection *translator.InfraConnection,
 ) (*translator.MinioStatus, error) {
 	var err error
+	var found bool
 	var status = &translator.MinioStatus{}
 	var actualResource = &miniov2.Tenant{}
 
 	nsNameBldr := createNsNameBuilder(specNamespacedName)
 
-	if err = ctrlcommon.GetResource(
+	if found, err = ctrlcommon.GetResource(
 		ctx, client, nsNameBldr.SpecNsName(), ResourceTypeName, actualResource,
 	); err != nil {
 		return nil, err
+	}
+	if !found {
+		actualResource = nil
 	}
 
 	if actualResource == nil {

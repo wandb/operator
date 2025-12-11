@@ -2,6 +2,7 @@ package common
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -11,28 +12,31 @@ import (
 )
 
 // GetResource is a generic function that retrieves a Kubernetes resource.
-// Returns (nil, nil) if the resource is not found, or (resource, nil) if found.
-// Returns (nil, error) for any other error.
+// Returns (false, nil) if the resource is not found, or (true, nil) if found.
+// Returns (false, error) for any other error.
 func GetResource[T client.Object](
 	ctx context.Context,
 	c client.Client,
 	namespacedName types.NamespacedName,
 	resourceTypeName string,
 	obj T,
-) error {
+) (bool, error) {
 	log := ctrl.LoggerFrom(ctx)
 
-	log.Info("getting resource", "name", namespacedName.Name, "namespace", namespacedName.Namespace)
+	log.Info("get resource", "name", namespacedName.Name, "namespace", namespacedName.Namespace)
 
 	err := c.Get(ctx, namespacedName, obj)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			return nil
+			log.Info(fmt.Sprintf("not found %s.%s.%s",
+				resourceTypeName, namespacedName.Namespace, namespacedName.Name),
+			)
+			return false, nil
 		}
 		log.Error(err, "error getting resource", "type", resourceTypeName)
-		return err
+		return false, err
 	}
-	return nil
+	return true, nil
 }
 
 // CrudResource is a generic function that gets a resource, and creates it if not found, or updates it if it exists.
@@ -52,18 +56,18 @@ func CrudResource[T client.Object](
 
 	if actualExists && desiredExists {
 		action = "update"
-		log.Info("updating resource", "name", desired.GetName(), "namespace", desired.GetNamespace())
+		log.Info("update resource", "name", desired.GetName(), "namespace", desired.GetNamespace())
 		desired.SetResourceVersion(actual.GetResourceVersion())
 		err = c.Update(ctx, desired)
 	}
 	if !actualExists && desiredExists {
 		action = "create"
-		log.Info("creating resource", "name", desired.GetName(), "namespace", desired.GetNamespace())
+		log.Info("create resource", "name", desired.GetName(), "namespace", desired.GetNamespace())
 		err = c.Create(ctx, desired)
 	}
 	if actualExists && !desiredExists {
 		action = "delete"
-		log.Info("deleting resource", "name", actual.GetName(), "namespace", actual.GetNamespace())
+		log.Info("delete resource", "name", actual.GetName(), "namespace", actual.GetNamespace())
 		err = c.Delete(ctx, actual)
 	}
 	if err != nil {

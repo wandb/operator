@@ -18,7 +18,7 @@ func TestMergeMap(t *testing.T) {
 			"key4": "actual4",
 		}
 
-		result := mergeMap(actual, defaults)
+		result := MapMerge(actual, defaults)
 
 		expected := map[string]string{
 			"key1": "default1",
@@ -36,7 +36,7 @@ func TestMergeMap(t *testing.T) {
 		}
 		actual := map[string]int{}
 
-		result := mergeMap(actual, defaults)
+		result := MapMerge(actual, defaults)
 
 		assert.Equal(t, defaults, result)
 	})
@@ -48,7 +48,7 @@ func TestMergeMap(t *testing.T) {
 			"y": 20,
 		}
 
-		result := mergeMap(actual, defaults)
+		result := MapMerge(actual, defaults)
 
 		assert.Equal(t, actual, result)
 	})
@@ -57,7 +57,7 @@ func TestMergeMap(t *testing.T) {
 		defaults := map[string]string{}
 		actual := map[string]string{}
 
-		result := mergeMap(actual, defaults)
+		result := MapMerge(actual, defaults)
 
 		assert.Empty(t, result)
 	})
@@ -66,7 +66,7 @@ func TestMergeMap(t *testing.T) {
 		var defaults map[string]string
 		var actual map[string]string
 
-		result := mergeMap(actual, defaults)
+		result := MapMerge(actual, defaults)
 
 		assert.Empty(t, result)
 	})
@@ -77,7 +77,7 @@ func TestMergeMap(t *testing.T) {
 		}
 		var actual map[string]string
 
-		result := mergeMap(actual, defaults)
+		result := MapMerge(actual, defaults)
 
 		assert.Equal(t, defaults, result)
 	})
@@ -88,7 +88,7 @@ func TestMergeMap(t *testing.T) {
 			"key1": "value1",
 		}
 
-		result := mergeMap(actual, defaults)
+		result := MapMerge(actual, defaults)
 
 		assert.Equal(t, actual, result)
 	})
@@ -103,7 +103,7 @@ func TestMergeMap(t *testing.T) {
 			3: "three",
 		}
 
-		result := mergeMap(actual, defaults)
+		result := MapMerge(actual, defaults)
 
 		expected := map[int]string{
 			1: "one",
@@ -128,7 +128,7 @@ func TestMergeMap(t *testing.T) {
 			"charlie": {Name: "Charlie", Age: 35},
 		}
 
-		result := mergeMap(actual, defaults)
+		result := MapMerge(actual, defaults)
 
 		expected := map[string]Value{
 			"alice":   {Name: "Alice", Age: 30},
@@ -153,7 +153,7 @@ func TestMergeMap(t *testing.T) {
 			"key2": "actual2",
 		}
 
-		_ = mergeMap(actual, defaults)
+		_ = MapMerge(actual, defaults)
 
 		assert.Equal(t, defaultsCopy, defaults)
 		assert.Equal(t, actualCopy, actual)
