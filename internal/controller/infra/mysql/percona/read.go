@@ -9,26 +9,38 @@ import (
 	"github.com/wandb/operator/internal/controller/translator"
 	"github.com/wandb/operator/internal/utils"
 	pxcv1 "github.com/wandb/operator/internal/vendored/percona-operator/pxc/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-func readConnectionDetails(actual *pxcv1.PerconaXtraDBCluster, specNamespacedName types.NamespacedName) *mysqlConnInfo {
-	namespace := specNamespacedName.Namespace
-	var mysqlHost string
+func readConnectionDetails(ctx context.Context, client client.Client, actual *pxcv1.PerconaXtraDBCluster, specNamespacedName types.NamespacedName) *mysqlConnInfo {
+	log := ctrllog.FromContext(ctx)
+	//namespace := specNamespacedName.Namespace
+	//var mysqlHost string
 
-	if actual.Spec.ProxySQLEnabled() {
-		mysqlHost = fmt.Sprintf("%s.%s.svc.cluster.local", actual.Name, namespace)
-	} else {
-		mysqlHost = fmt.Sprintf("%s.%s.svc.cluster.local", actual.Name, namespace)
-	}
+	//if actual.Spec.ProxySQLEnabled() {
+	//	mysqlHost = fmt.Sprintf("%s.%s.svc.cluster.local", actual.Name, namespace)
+	//} else {
+	//	mysqlHost = fmt.Sprintf("%s.%s.svc.cluster.local", actual.Name, namespace)
+	//}
 
 	mysqlPort := strconv.Itoa(3306)
 
+	dbPasswordSecret := &corev1.Secret{}
+	err := client.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("%s-%s", "internal", actual.Name), Namespace: specNamespacedName.Namespace}, dbPasswordSecret)
+	if err != nil {
+		log.Error(err, "Failed to get Secret", "Secret", fmt.Sprintf("%s-%s", specNamespacedName.Name, "user-db-password"))
+		return nil
+	}
+
 	return &mysqlConnInfo{
-		Host: mysqlHost,
-		Port: mysqlPort,
-		User: "root",
+		Host:     actual.Status.Host,
+		Port:     mysqlPort,
+		User:     "root",
+		Database: "wandb_local",
+		Password: string(dbPasswordSecret.Data["root"]),
 	}
 }
 
@@ -58,7 +70,7 @@ func ReadState(
 		///////////////////////////////////
 		// set connection details
 
-		connInfo := readConnectionDetails(actual, specNamespacedName)
+	connInfo := readConnectionDetails(ctx, client, actual, specNamespacedName)
 
 		var connection *translator.InfraConnection
 		if connection, err = writeMySQLConnInfo(

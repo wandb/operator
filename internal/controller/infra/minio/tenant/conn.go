@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	MinioUrlScheme = "minio"
+	MinioUrlScheme = "s3"
 	MinioPort      = "443"
 )
 

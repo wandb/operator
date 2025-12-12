@@ -3,6 +3,7 @@ package percona
 import (
 	"context"
 	"fmt"
+	"net/url"
 
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/translator"
@@ -14,13 +15,18 @@ import (
 )
 
 type mysqlConnInfo struct {
-	Host string
-	Port string
-	User string
+	Host     string
+	Port     string
+	User     string
+	Password string
+	Database string
 }
 
 func (c *mysqlConnInfo) toURL() string {
-	return fmt.Sprintf("mysql://%s@%s:%s", c.User, c.Host, c.Port)
+	fmt.Println(c.Password)
+	password := url.QueryEscape(c.Password)
+	fmt.Println(password)
+	return fmt.Sprintf("mysql://%s:%s@%s:%s/%s", c.User, password, c.Host, c.Port, c.Database)
 }
 
 func writeMySQLConnInfo(

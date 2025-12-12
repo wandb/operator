@@ -1,0 +1,159 @@
+package manifest
+
+import v1 "k8s.io/api/core/v1"
+
+// Manifest defines the structure of the server manifest YAML (e.g. 0.76.1.yaml).
+// It is intended to be a direct mapping of the YAML document for decoding via
+// gopkg.in/yaml.v3 or sigs.k8s.io/yaml.
+type Manifest struct {
+	RequiredOperatorVersion string    `yaml:"requiredOperatorVersion"`
+	Features                *Features `yaml:"features,omitempty"`
+	// CommonEnvvars defines reusable groups of env vars that can be referenced
+	// by applications via the per-application `commonEnvs` list. This maps a
+	// group name (e.g., "gorillaMysql") to a slice of EnvVar definitions.
+	CommonEnvvars map[string][]EnvVar `yaml:"commonEnvvars,omitempty"`
+	Bucket        SectionRef          `yaml:"bucket"`
+	Clickhouse    SectionRef          `yaml:"clickhouse"`
+	// Kafka is a list of topic declarations with optional feature gates in YAML.
+	Kafka        []KafkaTopic  `yaml:"kafka"`
+	Mysql        SectionRef    `yaml:"mysql"`
+	Redis        SectionRef    `yaml:"redis"`
+	Applications []Application `yaml:"applications"`
+	// Migrations captures per-database migration jobs (e.g., default, runsdb, usagedb)
+	// as found in 0.76.1.yaml under the top-level "migrations" key.
+	Migrations map[string]MigrationJob `yaml:"migrations,omitempty"`
+}
+
+// SectionRef represents simple sections that commonly contain a single
+// "default" key with an empty object (or future options).
+type SectionRef struct {
+	Default map[string]any `yaml:"default,omitempty"`
+	// Extra captures any additional keys under the section (e.g., mysql.runsdb, redis.limiter)
+	Extra map[string]any `yaml:",inline"`
+}
+
+// KafkaTopicDef models a topic configuration used both at the top-level
+// kafka section and inside per-application kafka sections.
+type KafkaTopicDef struct {
+	Topic          string `yaml:"topic"`
+	PartitionCount int    `yaml:"partitionCount,omitempty"`
+	ConsumerGroup  string `yaml:"consumerGroup,omitempty"`
+}
+
+// KafkaTopic models one entry in the top-level kafka list in the YAML.
+// Example:
+//   - name: filestream
+//     features: [filestreamQueue]
+//     topic: filestream
+//     partitionCount: 48
+type KafkaTopic struct {
+	Name           string   `yaml:"name"`
+	Features       []string `yaml:"features,omitempty"`
+	Topic          string   `yaml:"topic"`
+	PartitionCount int      `yaml:"partitionCount,omitempty"`
+}
+
+// Features represents optional feature flags in the manifest.
+type Features struct {
+	RunsV2            bool `yaml:"runsV2"`
+	FilestreamQueue   bool `yaml:"filestreamQueue"`
+	MetricObserver    bool `yaml:"metricObserver"`
+	WeaveTrace        bool `yaml:"weaveTrace"`
+	WeaveTraceWorkers bool `yaml:"weaveTraceWorkers"`
+	Proxy             bool `yaml:"proxy"`
+}
+
+// ImageRef represents an application container image reference.
+type ImageRef struct {
+	Repository string `yaml:"repository"`
+	Tag        string `yaml:"tag,omitempty"`
+	Digest     string `yaml:"digest,omitempty"`
+}
+
+func (img ImageRef) GetImage() string {
+	if img.Digest != "" {
+		return img.Repository + "@" + img.Digest
+	}
+	if img.Tag != "" {
+		return img.Repository + ":" + img.Tag
+	}
+	return img.Repository
+}
+
+// AppKafkaSection is the per-application kafka section; fields are optional
+// and mirror the top-level topics.
+type AppKafkaSection struct {
+	Filestream               *KafkaTopicDef `yaml:"filestream,omitempty"`
+	FlatRunFieldsUpdater     *KafkaTopicDef `yaml:"flatRunFieldsUpdater,omitempty"`
+	WeaveWorker              *KafkaTopicDef `yaml:"weaveWorker,omitempty"`
+	WeaveEvaluateModelWorker *KafkaTopicDef `yaml:"weaveEvaluateModelWorker,omitempty"`
+}
+
+// Application describes one entry in the applications list.
+type Application struct {
+	Name  string   `yaml:"name"`
+	Image ImageRef `yaml:"image"`
+	Args  []string `yaml:"args,omitempty"`
+	// CommonEnvs is a list of keys referencing top-level commonEnvvars groups
+	// to be included for this application (e.g., ["gorillaMysql", "gorillaBucket"]).
+	CommonEnvs []string `yaml:"commonEnvs,omitempty"`
+	// InitContainers allows specifying per-application init containers
+	// (e.g., the api app defines a "migrate" init container in 0.76.1.yaml).
+	InitContainers []ContainerSpec `yaml:"initContainers,omitempty"`
+	// Features enables this application only when specific feature flags are set in the
+	// top-level manifest features. In the YAML this appears as a list of strings.
+	Features   []string         `yaml:"features,omitempty"`
+	Env        []EnvVar         `yaml:"env,omitempty"`
+	Mysql      *SectionRef      `yaml:"mysql,omitempty"`
+	Redis      *SectionRef      `yaml:"redis,omitempty"`
+	Bucket     *SectionRef      `yaml:"bucket,omitempty"`
+	Clickhouse *SectionRef      `yaml:"clickhouse,omitempty"`
+	Kafka      *AppKafkaSection `yaml:"kafka,omitempty"`
+	Service    *ServiceSpec     `yaml:"service,omitempty"`
+}
+
+// ContainerSpec represents a minimal container definition used by
+// application-level initContainers entries in the manifest.
+type ContainerSpec struct {
+	Name    string   `yaml:"name"`
+	Image   ImageRef `yaml:"image"`
+	Args    []string `yaml:"args,omitempty"`
+	Command []string `yaml:"command,omitempty"`
+}
+
+// EnvVar models an application environment variable sourced from manifest-defined services.
+type EnvVar struct {
+	Name    string      `yaml:"name"`
+	Value   string      `yaml:"value,omitempty"`
+	Sources []EnvSource `yaml:"sources,omitempty"`
+}
+
+// EnvSource references a named source and its type (e.g., mysql, redis, bucket).
+type EnvSource struct {
+	Name  string `yaml:"name"`
+	Type  string `yaml:"type"`
+	Field string `yaml:"field,omitempty"`
+	Proto string `yaml:"proto,omitempty"`
+	Path  string `yaml:"path,omitempty"`
+}
+
+// ServiceSpec represents an optional Service definition for an application
+// (currently only ports are modeled as per 0.76.1.yaml needs).
+type ServiceSpec struct {
+	Ports []ServicePort `yaml:"ports,omitempty"`
+}
+
+// ServicePort models a single port entry in an application's service section.
+type ServicePort struct {
+	Port     int32       `yaml:"port"`
+	Protocol v1.Protocol `yaml:"protocol,omitempty"`
+	Name     string      `yaml:"name,omitempty"`
+}
+
+// MigrationJob represents a migration invocation with an image and args, used
+// by the top-level "migrations" section (e.g., default, runsdb, usagedb).
+type MigrationJob struct {
+	Image   ImageRef `yaml:"image"`
+	Args    []string `yaml:"args,omitempty"`
+	Command []string `yaml:"command,omitempty"`
+}

@@ -16,7 +16,7 @@ import (
 )
 
 func readStandaloneConnectionDetails(standaloneActual *redisv1beta2.Redis) *redisConnInfo {
-	redisHost := "wandb-redis." + standaloneActual.Namespace + ".svc.cluster.local"
+	redisHost := "wandb-redis." + standaloneActual.GetNamespace() + ".svc.cluster.local"
 	redisPort := "6379"
 
 	return &redisConnInfo{
@@ -26,7 +26,7 @@ func readStandaloneConnectionDetails(standaloneActual *redisv1beta2.Redis) *redi
 }
 
 func readSentinelConnectionDetails(sentinelActual *redissentinelv1beta2.RedisSentinel) *redisConnInfo {
-	sentinelHost := "wandb-redis-sentinel." + sentinelActual.Namespace + ".svc.cluster.local"
+	sentinelHost := "wandb-redis-sentinel." + sentinelActual.GetNamespace() + ".svc.cluster.local"
 	sentinelPort := "26379"
 	masterName := "gorilla"
 

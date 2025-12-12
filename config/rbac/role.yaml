@@ -180,6 +180,7 @@ rules:
   resources:
   - kafkanodepools
   - kafkas
+  - kafkatopics
   verbs:
   - create
   - delete
@@ -193,6 +194,7 @@ rules:
   resources:
   - kafkanodepools/status
   - kafkas/status
+  - kafkatopics/status
   verbs:
   - get
 - apiGroups:
