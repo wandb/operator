@@ -110,6 +110,12 @@ type Application struct {
 	Clickhouse *SectionRef      `yaml:"clickhouse,omitempty"`
 	Kafka      *AppKafkaSection `yaml:"kafka,omitempty"`
 	Service    *ServiceSpec     `yaml:"service,omitempty"`
+	Ports      []ContainerPort  `yaml:"ports,omitempty"`
+	// Files allows injecting files into the application's container by mounting
+	// data from ConfigMaps. Each entry may either inline file contents (stored
+	// into an operator-managed ConfigMap) or reference an existing ConfigMap.
+	// The file will be mounted at the provided mountPath/FileName using subPath.
+	Files []FileSpec `yaml:"files,omitempty"`
 }
 
 // ContainerSpec represents a minimal container definition used by
@@ -135,6 +141,7 @@ type EnvSource struct {
 	Field string `yaml:"field,omitempty"`
 	Proto string `yaml:"proto,omitempty"`
 	Path  string `yaml:"path,omitempty"`
+	Port  string `yaml:"port,omitempty"`
 }
 
 // ServiceSpec represents an optional Service definition for an application
@@ -150,10 +157,38 @@ type ServicePort struct {
 	Name     string      `yaml:"name,omitempty"`
 }
 
+// ContainerPort models a single port entry in an application's ports section.
+type ContainerPort struct {
+	ContainerPort int32       `yaml:"containerPort"`
+	Protocol      v1.Protocol `yaml:"protocol,omitempty"`
+	Name          string      `yaml:"name,omitempty"`
+}
+
 // MigrationJob represents a migration invocation with an image and args, used
 // by the top-level "migrations" section (e.g., default, runsdb, usagedb).
 type MigrationJob struct {
 	Image   ImageRef `yaml:"image"`
 	Args    []string `yaml:"args,omitempty"`
 	Command []string `yaml:"command,omitempty"`
+}
+
+// FileSpec defines a single file to project into the application's container.
+// Exactly one of Inline or ConfigMapRef should be provided. The file is mounted
+// as a single file using subPath. MountPath should be a directory that already
+// exists in the container image (e.g., /etc/nginx/conf.d). If FileName is not
+// provided, Name will be used as the target filename. Name is also the key name
+// stored inside the ConfigMap data.
+type FileSpec struct {
+	// Name is the key used in the ConfigMap data and defaults to the filename
+	// if FileName is not provided.
+	Name string `yaml:"name"`
+	// MountPath is the directory inside the container where the file should be placed.
+	MountPath string `yaml:"mountPath"`
+	// FileName is the filename to write within MountPath. Optional; defaults to Name.
+	FileName string `yaml:"fileName,omitempty"`
+	// Inline is the file contents to embed directly into an operator-managed ConfigMap.
+	Inline string `yaml:"inline,omitempty"`
+	// ConfigMapRef references an existing ConfigMap (in the same namespace) to source the file from.
+	// When set, Inline should be empty.
+	ConfigMapRef string `yaml:"configMapRef,omitempty"`
 }

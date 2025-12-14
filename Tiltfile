@@ -41,9 +41,7 @@ FROM registry.access.redhat.com/ubi9/ubi
 ADD tilt_bin/manager /manager
 ADD hack/testing-manifests/server-manifest/0.76.1.yaml /0.76.1.yaml
 
-RUN mkdir -p /helm/.cache/helm /helm/.config/helm /helm/.local/share/helm && chown -R 65532:65532 /helm
-
-USER 65532:65532
+RUN mkdir -p /helm/.cache/helm /helm/.config/helm /helm/.local/share/helm
 
 ENV HELM_CACHE_HOME=/helm/.cache/helm
 ENV HELM_CONFIG_HOME=/helm/.config/helm
@@ -150,15 +148,17 @@ helm_resource(
     labels=["Third-Party-Operators"],
 )
 
-k8s_yaml(local('kustomize build config/default'))
-# applyCmd = 'kustomize build config/default | tee >(kubectl --context %s apply --server-side -f -)' % currentContext
-# deleteCmd = 'kustomize build config/default | tee >(kubectl --context %s delete -f -)' % currentContext
-#
-# k8s_custom_deploy('operator-controller-manager', apply_cmd=applyCmd, delete_cmd=deleteCmd, deps=['.config'], image_selector='controller')
+k8s_yaml(local('kustomize build config/tilt-dev'))
 
 k8s_resource(
-    new_name='CRD',
-    objects=['weightsandbiases.apps.wandb.com:customresourcedefinition', 'applications.apps.wandb.com:customresourcedefinition'],
+    new_name='Application CRD',
+    objects=['applications.apps.wandb.com:customresourcedefinition'],
+    labels=["Operator-Resources"],
+)
+
+k8s_resource(
+    new_name='Wandb CRD',
+    objects=['weightsandbiases.apps.wandb.com:customresourcedefinition'],
     labels=["Operator-Resources"],
 )
 k8s_resource(

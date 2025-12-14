@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	apiv2 "github.com/wandb/operator/api/v2"
@@ -91,6 +92,17 @@ func Reconcile(ctx context.Context, client ctrlClient.Client, wandb *apiv2.Weigh
 
 func reconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases) (ctrl.Result, error) {
 	// Reconcile Wandb Manifest
+
+	redisReady := wandb.Status.RedisStatus.Ready
+	mysqlReady := wandb.Status.MySQLStatus.Ready
+	kafkaReady := wandb.Status.KafkaStatus.Ready
+	minioReady := wandb.Status.MinioStatus.Ready
+	clickHouseReady := wandb.Status.ClickHouseStatus.Ready
+
+	if !redisReady || !mysqlReady || !kafkaReady || !minioReady || !clickHouseReady {
+		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
+	}
+
 	manifest := serverManifest.Manifest{}
 	manifestData, err := os.ReadFile("0.76.1.yaml")
 	if err != nil {
@@ -263,40 +275,87 @@ func reconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 
 		var envVars []corev1.EnvVar
 		for _, env := range combinedEnvs {
-			var secretKeySelector corev1.SecretKeySelector
-			var envValue string
-
+			// If a literal value is provided, it's a simple case.
 			if env.Value != "" {
-				envValue = env.Value
-			} else {
-				switch env.Sources[0].Type {
+				envVars = append(envVars, corev1.EnvVar{Name: env.Name, Value: env.Value})
+				continue
+			}
+
+			// Multi-source composition: build a comma-separated value from all resolvable sources.
+			// Secret-backed sources are exposed via intermediate env vars and referenced with $(VAR) expansion.
+			// If there is exactly one secret-backed source and no literals, keep direct SecretKeyRef for back-compat.
+
+			// Temporary slices to build the final env value and intermediates
+			components := []string{}
+			intermediateVars := []corev1.EnvVar{}
+
+			// Helper to add a secret-backed component via an intermediate env var
+			addSecretComponent := func(selector corev1.SecretKeySelector, idx int) {
+				// Deterministic name based on target env and source index
+				ivName := fmt.Sprintf("%s_%d", env.Name, idx)
+				// K8s env var names must be alphanumeric + _ and not start with a number
+				// The env.Name in manifest follows standard patterns; idx ensures uniqueness.
+				intermediateVars = append(intermediateVars, corev1.EnvVar{
+					Name: ivName,
+					ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: selector.LocalObjectReference,
+						Key:                  selector.Key,
+						Optional:             selector.Optional,
+					}},
+				})
+				components = append(components, fmt.Sprintf("$(%s)", ivName))
+			}
+
+			// Track if we only have a single secret-backed component
+			singleSecretSelector := corev1.SecretKeySelector{}
+			secretOnlyCount := 0
+
+			for idx, src := range env.Sources {
+				switch src.Type {
 				case "mysql":
-					secretKeySelector = wandb.Status.MySQLStatus.Connection.URL
+					// mysql connection URL as a secret ref
+					selector := wandb.Status.MySQLStatus.Connection.URL
+					// Record for potential direct assignment case
+					singleSecretSelector = selector
+					secretOnlyCount++
+					addSecretComponent(selector, idx)
 				case "redis":
-					secretKeySelector = wandb.Status.RedisStatus.Connection.URL
+					selector := wandb.Status.RedisStatus.Connection.URL
+					singleSecretSelector = selector
+					secretOnlyCount++
+					addSecretComponent(selector, idx)
 				case "bucket":
-					secretKeySelector = wandb.Status.MinioStatus.Connection.URL
+					selector := wandb.Status.MinioStatus.Connection.URL
+					singleSecretSelector = selector
+					secretOnlyCount++
+					addSecretComponent(selector, idx)
 				case "clickhouse":
-					switch env.Sources[0].Field {
-					case "host":
-						secretKeySelector.LocalObjectReference = wandb.Status.ClickHouseStatus.Connection.URL.LocalObjectReference
-						secretKeySelector.Key = "Host"
-					case "port":
-						secretKeySelector.LocalObjectReference = wandb.Status.ClickHouseStatus.Connection.URL.LocalObjectReference
-						secretKeySelector.Key = "Port"
-					case "user":
-						secretKeySelector.LocalObjectReference = wandb.Status.ClickHouseStatus.Connection.URL.LocalObjectReference
-						secretKeySelector.Key = "User"
-					case "password":
-						secretKeySelector.LocalObjectReference = wandb.Status.ClickHouseStatus.Connection.URL.LocalObjectReference
-						secretKeySelector.Key = "Password"
-					case "database":
-						secretKeySelector.LocalObjectReference = wandb.Status.ClickHouseStatus.Connection.URL.LocalObjectReference
-						secretKeySelector.Key = "Database"
+					// clickhouse fields are provided as separate keys in the same secret
+					selector := corev1.SecretKeySelector{
+						LocalObjectReference: wandb.Status.ClickHouseStatus.Connection.URL.LocalObjectReference,
 					}
+					switch src.Field {
+					case "host":
+						selector.Key = "Host"
+					case "port":
+						selector.Key = "Port"
+					case "user":
+						selector.Key = "User"
+					case "password":
+						selector.Key = "Password"
+					case "database":
+						selector.Key = "Database"
+					default:
+						// Unrecognized field; skip
+						continue
+					}
+					singleSecretSelector = selector
+					secretOnlyCount++
+					addSecretComponent(selector, idx)
 				case "service":
+					// Resolve to a literal URL (proto://serviceName:port/path)
 					serviceList := &corev1.ServiceList{}
-					targetApplicationName := fmt.Sprintf("%s-%s", wandb.Name, env.Sources[0].Name)
+					targetApplicationName := fmt.Sprintf("%s-%s", wandb.Name, src.Name)
 					err := client.List(
 						ctx,
 						serviceList,
@@ -306,28 +365,63 @@ func reconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 					if err != nil {
 						return ctrl.Result{}, err
 					}
-					if len(serviceList.Items) > 0 {
-						proto := ""
-						if env.Sources[0].Proto != "" {
-							proto = fmt.Sprintf("%s://", env.Sources[0].Proto)
+					if len(serviceList.Items) == 0 || len(serviceList.Items[0].Spec.Ports) == 0 {
+						// Can't resolve; skip this component
+						continue
+					}
+					proto := ""
+					if src.Proto != "" {
+						proto = fmt.Sprintf("%s://", src.Proto)
+					}
+					// Choose a port: prefer named match if provided; else pick the first port
+					selectedPort := serviceList.Items[0].Spec.Ports[0].Port
+					if src.Port != "" {
+						for _, servicePort := range serviceList.Items[0].Spec.Ports {
+							if servicePort.Name == src.Port {
+								selectedPort = servicePort.Port
+								break
+							}
 						}
-						envValue = fmt.Sprintf("%s%s:%d%s", proto, serviceList.Items[0].Name, serviceList.Items[0].Spec.Ports[0].Port, env.Sources[0].Path)
 					}
+					components = append(components, fmt.Sprintf("%s%s:%d%s", proto, serviceList.Items[0].Name, selectedPort, src.Path))
+				default:
+					// Unknown source type; skip
+					continue
 				}
 			}
-			if envValue != "" || secretKeySelector.Key != "" {
-				envVar := corev1.EnvVar{}
-				envVar.Name = env.Name
-				if envValue != "" {
-					envVar.Value = envValue
-				} else if secretKeySelector.Key != "" {
-					envVar.ValueFrom = &corev1.EnvVarSource{
-						SecretKeyRef: &secretKeySelector,
-					}
-				}
 
-				envVars = append(envVars, envVar)
+			// If we built no components, skip emitting this env var
+			if len(components) == 0 {
+				continue
 			}
+
+			// Optimization/back-compat: if there's exactly one component and it is secret-backed, emit ValueFrom directly
+			if len(components) == 1 && secretOnlyCount == 1 && components[0] != "" && intermediateVars != nil {
+				// Emit the single env var directly from the secret without intermediate
+				envVars = append(envVars, corev1.EnvVar{
+					Name:      env.Name,
+					ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &singleSecretSelector},
+				})
+				continue
+			}
+
+			// Otherwise, add all intermediate vars first to ensure $(VAR) expansion works
+			envVars = append(envVars, intermediateVars...)
+			// Then add the final composed env var
+			envVars = append(envVars, corev1.EnvVar{
+				Name:  env.Name,
+				Value: strings.Join(components, ","),
+			})
+		}
+
+		var Ports []corev1.ContainerPort
+		for _, port := range app.Ports {
+			containerPort := corev1.ContainerPort{
+				Name:          port.Name,
+				ContainerPort: port.ContainerPort,
+				Protocol:      port.Protocol,
+			}
+			Ports = append(Ports, containerPort)
 		}
 
 		container := corev1.Container{
@@ -335,6 +429,111 @@ func reconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 			Image: app.Image.GetImage(),
 			Env:   envVars,
 			Args:  app.Args,
+			Ports: Ports,
+		}
+
+		// Handle file injection via ConfigMaps according to manifest Application.Files
+		volumes := []corev1.Volume{}
+		volumeMounts := []corev1.VolumeMount{}
+		if len(app.Files) > 0 {
+			// Collect inline files into a single operator-managed ConfigMap
+			inlineData := map[string]string{}
+			inlineCMName := fmt.Sprintf("%s-%s-files", wandb.Name, app.Name)
+			// Track external ConfigMap refs and create one Volume per unique ref
+			cmRefVolumeNames := map[string]string{}
+
+			for _, f := range app.Files {
+				key := f.Name
+				fileName := f.FileName
+				if fileName == "" {
+					fileName = key
+				}
+
+				var volName string
+				if f.Inline != "" {
+					// Accumulate into inline CM data
+					inlineData[key] = f.Inline
+					volName = "files-inline"
+				} else if f.ConfigMapRef != "" {
+					// external ConfigMap reference
+					if existing, ok := cmRefVolumeNames[f.ConfigMapRef]; ok {
+						volName = existing
+					} else {
+						volName = fmt.Sprintf("cm-%s", f.ConfigMapRef)
+						cmRefVolumeNames[f.ConfigMapRef] = volName
+					}
+				} else {
+					// neither inline nor ref provided; skip
+					continue
+				}
+
+				// Mount each file as a single file using subPath into the specified directory
+				mountPath := f.MountPath
+				if mountPath == "" {
+					// require a mountPath; skip if not provided
+					continue
+				}
+				volumeMounts = append(volumeMounts, corev1.VolumeMount{
+					Name:      volName,
+					MountPath: fmt.Sprintf("%s/%s", mountPath, fileName),
+					SubPath:   key,
+					ReadOnly:  true,
+				})
+			}
+
+			// Create/update inline ConfigMap if we have any inline data
+			if len(inlineData) > 0 {
+				cm := &corev1.ConfigMap{}
+				cm.Namespace = wandb.Namespace
+				cm.Name = inlineCMName
+				// Try to get existing
+				getErr := client.Get(ctx, types.NamespacedName{Name: cm.Name, Namespace: cm.Namespace}, cm)
+				if getErr != nil {
+					if apiErrors.IsNotFound(getErr) {
+						cm.Data = inlineData
+						if err := controllerutil.SetOwnerReference(wandb, cm, client.Scheme()); err != nil {
+							return ctrl.Result{}, err
+						}
+						if err := client.Create(ctx, cm); err != nil {
+							return ctrl.Result{}, err
+						}
+					} else {
+						return ctrl.Result{}, getErr
+					}
+				} else {
+					// Update data if changed
+					if cm.Data == nil {
+						cm.Data = map[string]string{}
+					}
+					cm.Data = inlineData
+					if err := client.Update(ctx, cm); err != nil {
+						return ctrl.Result{}, err
+					}
+				}
+
+				// Add a volume for the inline CM
+				volumes = append(volumes, corev1.Volume{
+					Name: "files-inline",
+					VolumeSource: corev1.VolumeSource{
+						ConfigMap: &corev1.ConfigMapVolumeSource{LocalObjectReference: corev1.LocalObjectReference{Name: inlineCMName}},
+					},
+				})
+			}
+
+			// Add volumes for each external ConfigMap ref
+			for ref, volName := range cmRefVolumeNames {
+				volumes = append(volumes, corev1.Volume{
+					Name: volName,
+					VolumeSource: corev1.VolumeSource{
+						ConfigMap: &corev1.ConfigMapVolumeSource{LocalObjectReference: corev1.LocalObjectReference{Name: ref}},
+					},
+				})
+			}
+
+			// Attach mounts to the container if any
+			if len(volumeMounts) > 0 {
+				container.VolumeMounts = append(container.VolumeMounts, volumeMounts...)
+			}
 		}
 
 		initContainers := []corev1.Container{}
@@ -354,16 +553,32 @@ func reconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 
 		application.Spec.Kind = "Deployment"
 		application.Spec.PodTemplate.Spec.Containers = []corev1.Container{container}
+		// Replace volumes entirely on each reconcile to avoid accumulating duplicates
+		// across updates (e.g., duplicate "files-inline" volume names).
+		application.Spec.PodTemplate.Spec.Volumes = volumes
 		application.Spec.PodTemplate.Spec.InitContainers = initContainers
 
+		// Reconcile Service ports: fully replace the ServiceTemplate ports with
+		// the ports declared in the manifest for this app. This ensures that any
+		// change to port numbers, names, or protocols is propagated on each
+		// reconcile. If no service ports are declared, clear the ServiceTemplate.
 		if app.Service != nil && len(app.Service.Ports) > 0 {
-			application.Spec.ServiceTemplate = &corev1.ServiceSpec{
-				Ports: []corev1.ServicePort{{
-					Name:     app.Service.Ports[0].Name,
-					Port:     app.Service.Ports[0].Port,
-					Protocol: app.Service.Ports[0].Protocol,
-				}},
+			ports := make([]corev1.ServicePort, 0, len(app.Service.Ports))
+			for _, p := range app.Service.Ports {
+				ports = append(ports, corev1.ServicePort{
+					Name:     p.Name,
+					Port:     p.Port,
+					Protocol: p.Protocol,
+				})
 			}
+			if application.Spec.ServiceTemplate == nil {
+				application.Spec.ServiceTemplate = &corev1.ServiceSpec{}
+			}
+			// Replace ports entirely to avoid stale or duplicate entries
+			application.Spec.ServiceTemplate.Ports = ports
+		} else {
+			// No service declared in manifest; ensure we clear any previous template
+			application.Spec.ServiceTemplate = nil
 		}
 
 		err = controllerutil.SetOwnerReference(wandb, application, client.Scheme())

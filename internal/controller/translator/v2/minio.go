@@ -89,6 +89,11 @@ func ToMinioVendorSpec(
 					},
 				},
 			},
+			Buckets: []miniov2.Bucket{
+				{
+					Name: "bucket",
+				},
+			},
 		},
 	}
 

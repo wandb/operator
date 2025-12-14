@@ -1,0 +1,9 @@
+- op: replace
+  path: /spec/template/spec/securityContext/runAsNonRoot
+  value: false
+- op: replace
+  path: /spec/template/spec/containers/0/securityContext/allowPrivilegeEscalation
+  value: true
+- op: replace
+  path: /spec/template/spec/containers/0/securityContext/capabilities/drop
+  value: []

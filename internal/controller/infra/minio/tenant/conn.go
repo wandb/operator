@@ -16,7 +16,7 @@ import (
 
 const (
 	MinioUrlScheme = "s3"
-	MinioPort      = "443"
+	MinioPort      = "9000"
 )
 
 type minioConnInfo struct {
@@ -24,6 +24,7 @@ type minioConnInfo struct {
 	RootPassword string
 	Host         string
 	Port         string
+	Bucket       string
 }
 
 func buildMinioConnInfo(
@@ -36,6 +37,7 @@ func buildMinioConnInfo(
 		RootPassword: rootPassword,
 		Host:         fmt.Sprintf("%s.%s.svc.cluster.local", serviceName, namespace),
 		Port:         MinioPort,
+		Bucket:       "bucket",
 	}
 }
 
@@ -44,6 +46,7 @@ func (m *minioConnInfo) toUrl() *url.URL {
 		Scheme: MinioUrlScheme,
 		Host:   fmt.Sprintf("%s:%s", m.Host, m.Port),
 		User:   url.UserPassword(m.RootUser, m.RootPassword),
+		Path:   m.Bucket,
 	}
 }
 
@@ -96,7 +99,7 @@ func writeWandbConnInfo(
 		},
 		Type: corev1.SecretTypeOpaque,
 		StringData: map[string]string{
-			urlKey: connInfo.toUrl().String(),
+			urlKey: connInfo.toUrl().String() + "?tls=true",
 		},
 	}
 

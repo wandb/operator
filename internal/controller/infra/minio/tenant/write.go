@@ -100,7 +100,7 @@ func writeMinioConfig(
 	}
 
 	if actual != nil {
-		rootPassword = parseMinioConfigFile(actual.StringData[configFileName]).rootPassword
+		rootPassword = parseMinioConfigFile(string(actual.Data[configFileName])).rootPassword
 	}
 	if rootPassword == "" {
 		if rootPassword, err = goutils.RandomAlphabetic(20); err != nil {

@@ -12,7 +12,7 @@ import (
 
 var _ = Describe("Server manifest YAML decode", func() {
 	It("decodes 0.76.1.yaml into Manifest struct", func() {
-		data, err := os.ReadFile("hack/testing-manifests/server-manifest/0.76.1.yaml")
+		data, err := os.ReadFile("../../../hack/testing-manifests/server-manifest/0.76.1.yaml")
 		Expect(err).NotTo(HaveOccurred())
 
 		var m manifest.Manifest
@@ -23,7 +23,7 @@ var _ = Describe("Server manifest YAML decode", func() {
 		Expect(m.Features.RunsV2).To(BeFalse())
 		Expect(m.Features.FilestreamQueue).To(BeFalse())
 		Expect(m.Features.MetricObserver).To(BeFalse())
-		Expect(m.Features.WeaveTrace).To(BeFalse())
+		Expect(m.Features.WeaveTrace).To(BeTrue())
 
 		// Kafka topics at top-level
 		Expect(m.Kafka).To(HaveLen(4))
