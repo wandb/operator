@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/wandb/operator/internal/controller/common"
-	kafkav1beta2 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1beta2"
+	strimziv1 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -13,8 +13,8 @@ func WriteState(
 	ctx context.Context,
 	client client.Client,
 	specNamespacedName types.NamespacedName,
-	desiredKafka *kafkav1beta2.Kafka,
-	desiredNodePool *kafkav1beta2.KafkaNodePool,
+	desiredKafka *strimziv1.Kafka,
+	desiredNodePool *strimziv1.KafkaNodePool,
 ) error {
 	var err error
 
@@ -34,11 +34,11 @@ func writeKafkaState(
 	ctx context.Context,
 	client client.Client,
 	nsNameBldr *NsNameBuilder,
-	desired *kafkav1beta2.Kafka,
+	desired *strimziv1.Kafka,
 ) error {
 	var err error
 	var found bool
-	var actual = &kafkav1beta2.Kafka{}
+	var actual = &strimziv1.Kafka{}
 
 	if found, err = common.GetResource(
 		ctx, client, nsNameBldr.KafkaNsName(), KafkaResourceType, actual,
@@ -60,11 +60,11 @@ func writeNodePoolState(
 	ctx context.Context,
 	client client.Client,
 	nsNameBldr *NsNameBuilder,
-	desired *kafkav1beta2.KafkaNodePool,
+	desired *strimziv1.KafkaNodePool,
 ) error {
 	var err error
 	var found bool
-	var actual = &kafkav1beta2.KafkaNodePool{}
+	var actual = &strimziv1.KafkaNodePool{}
 
 	if found, err = common.GetResource(
 		ctx, client, nsNameBldr.NodePoolNsName(), NodePoolResourceType, actual,
