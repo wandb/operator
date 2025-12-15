@@ -62,6 +62,10 @@ func ToClickHouseVendorSpec(
 		fmt.Sprintf("%s/networks/ip", altinity.ClickHouseUser),
 		chiv2.NewSettingScalar("::/0"),
 	)
+	settings.Set(
+		fmt.Sprintf("%s/allow_databases/database", altinity.ClickHouseUser),
+		chiv2.NewSettingVector([]string{altinity.ClickHouseDatabase, "db_management"}),
+	)
 
 	// Build ClickHouseInstallation spec
 	chi := &chiv2.ClickHouseInstallation{

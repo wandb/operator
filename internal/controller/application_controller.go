@@ -24,6 +24,7 @@ import (
 	"github.com/wandb/operator/pkg/utils"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -45,6 +46,7 @@ type ApplicationReconciler struct {
 // +kubebuilder:rbac:groups=apps.wandb.com,resources=applications,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apps.wandb.com,resources=applications/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=apps.wandb.com,resources=applications/finalizers,verbs=update
+// +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -100,6 +102,12 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 					logger.Error(err, "Failed to delete StatefulSet during finalization")
 					return ctrl.Result{}, err
 				}
+			}
+
+			// Delete Service if present
+			if err := r.deleteService(ctx, &app); err != nil {
+				logger.Error(err, "Failed to delete Service during finalization")
+				return ctrl.Result{}, err
 			}
 
 			// Delete Jobs
@@ -158,6 +166,12 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// Always reconcile CronJobs regardless of the main application type
 	if err := r.reconcileCronJobs(ctx, &app); err != nil {
 		logger.Error(err, "Failed to reconcile CronJobs")
+		return ctrl.Result{}, err
+	}
+
+	// Reconcile Service if specified
+	if err := r.reconcileService(ctx, &app); err != nil {
+		logger.Error(err, "Failed to reconcile Service")
 		return ctrl.Result{}, err
 	}
 
@@ -538,6 +552,111 @@ func (r *ApplicationReconciler) deleteCronJobs(ctx context.Context, app *wandbv2
 		logger.Info("Successfully deleted CronJob", "CronJob", cronJob.Name)
 	}
 
+	return nil
+}
+
+// reconcileService ensures a Service exists/updated when specified in the Application spec
+func (r *ApplicationReconciler) reconcileService(ctx context.Context, app *wandbv2.Application) error {
+	logger := log.FromContext(ctx)
+
+	if app.Spec.ServiceTemplate == nil {
+		// Nothing to reconcile
+		return nil
+	}
+
+	desired := &corev1.Service{}
+	desired.Name = app.Name
+	desired.Namespace = app.Namespace
+
+	// Merge labels/annotations from meta template
+	desired.Labels = utils.MergeMapsStringString(
+		desired.Labels,
+		app.Spec.MetaTemplate.Labels,
+	)
+	desired.Annotations = utils.MergeMapsStringString(
+		desired.Annotations,
+		app.Spec.MetaTemplate.Annotations,
+	)
+
+	// Copy spec from template
+	desired.Spec = *app.Spec.ServiceTemplate.DeepCopy()
+
+	// Ensure selector targets the application's pods
+	selectorLabels := map[string]string{
+		"app.kubernetes.io/name":     app.Name,
+		"app.kubernetes.io/instance": app.Name,
+	}
+	// Merge provided selector with our standard labels
+	desired.Spec.Selector = utils.MergeMapsStringString(desired.Spec.Selector, selectorLabels)
+	// Also add selector labels to the Service's metadata labels so they are queryable on the Service itself
+	desired.Labels = utils.MergeMapsStringString(desired.Labels, selectorLabels)
+
+	current := &corev1.Service{}
+	err := r.Get(ctx, client.ObjectKey{Namespace: app.Namespace, Name: app.Name}, current)
+	if err != nil {
+		if !errors.IsNotFound(err) {
+			logger.Error(err, "Failed to get Service")
+			return err
+		}
+		// Create path
+		logger.Info("Creating Service", "Service", desired.Name)
+		if err := r.Create(ctx, desired); err != nil {
+			logger.Error(err, "Failed to create Service")
+			return err
+		}
+		logger.Info("Successfully created Service", "Service", desired.Name)
+		return nil
+	}
+
+	// Update path: preserve immutable fields
+	desired.ResourceVersion = current.ResourceVersion
+	desired.Spec.ClusterIP = current.Spec.ClusterIP
+	desired.Spec.ClusterIPs = current.Spec.ClusterIPs
+	desired.Spec.IPFamilies = current.Spec.IPFamilies
+	desired.Spec.IPFamilyPolicy = current.Spec.IPFamilyPolicy
+	desired.Spec.HealthCheckNodePort = current.Spec.HealthCheckNodePort
+
+	// Only update if there are changes
+	// Apply desired into current to minimize overwrite
+	current.Labels = desired.Labels
+	current.Annotations = desired.Annotations
+	current.Spec.Ports = desired.Spec.Ports
+	current.Spec.Type = desired.Spec.Type
+	current.Spec.Selector = desired.Spec.Selector
+	current.Spec.SessionAffinity = desired.Spec.SessionAffinity
+	current.Spec.ExternalTrafficPolicy = desired.Spec.ExternalTrafficPolicy
+	current.Spec.InternalTrafficPolicy = desired.Spec.InternalTrafficPolicy
+	current.Spec.LoadBalancerClass = desired.Spec.LoadBalancerClass
+	current.Spec.AllocateLoadBalancerNodePorts = desired.Spec.AllocateLoadBalancerNodePorts
+	current.Spec.ExternalIPs = desired.Spec.ExternalIPs
+	current.Spec.LoadBalancerIP = desired.Spec.LoadBalancerIP
+	current.Spec.LoadBalancerSourceRanges = desired.Spec.LoadBalancerSourceRanges
+
+	logger.Info("Updating Service", "Service", current.Name)
+	if err := r.Update(ctx, current); err != nil {
+		logger.Error(err, "Failed to update Service")
+		return err
+	}
+	logger.Info("Successfully updated Service", "Service", current.Name)
+	return nil
+}
+
+// deleteService deletes the Service associated with the Application
+func (r *ApplicationReconciler) deleteService(ctx context.Context, app *wandbv2.Application) error {
+	logger := log.FromContext(ctx)
+	svc := &corev1.Service{}
+	if err := r.Get(ctx, client.ObjectKey{Namespace: app.Namespace, Name: app.Name}, svc); err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+	deletePolicy := client.PropagationPolicy(v1.DeletePropagationBackground)
+	if err := r.Delete(ctx, svc, deletePolicy); err != nil {
+		logger.Error(err, "Failed to delete Service", "Service", app.Name)
+		return err
+	}
+	logger.Info("Successfully deleted Service", "Service", app.Name)
 	return nil
 }
 

@@ -20,7 +20,9 @@ settings.update(read_json(
 # Configure global watch settings with a 2-second debounce
 watch_settings(ignore=["**/.git", "**/*.out"])
 
-if k8s_context() in settings.get("allowedContexts"):
+currentContext = k8s_context()
+
+if currentContext in settings.get("allowedContexts"):
     print("Context is allowed")
 else:
     fail("Selected context is not in allow list")
@@ -37,10 +39,9 @@ DOCKERFILE = '''
 FROM registry.access.redhat.com/ubi9/ubi
 
 ADD tilt_bin/manager /manager
+ADD hack/testing-manifests/server-manifest/0.76.1.yaml /0.76.1.yaml
 
-RUN mkdir -p /helm/.cache/helm /helm/.config/helm /helm/.local/share/helm && chown -R 65532:65532 /helm
-
-USER 65532:65532
+RUN mkdir -p /helm/.cache/helm /helm/.config/helm /helm/.local/share/helm
 
 ENV HELM_CACHE_HOME=/helm/.cache/helm
 ENV HELM_CONFIG_HOME=/helm/.config/helm
@@ -147,11 +148,17 @@ helm_resource(
     labels=["Third-Party-Operators"],
 )
 
-k8s_yaml(local('kustomize build config/default'))
+k8s_yaml(local('kustomize build config/tilt-dev'))
 
 k8s_resource(
-    new_name='CRD',
-    objects=['weightsandbiases.apps.wandb.com:customresourcedefinition', 'applications.apps.wandb.com:customresourcedefinition'],
+    new_name='Application CRD',
+    objects=['applications.apps.wandb.com:customresourcedefinition'],
+    labels=["Operator-Resources"],
+)
+
+k8s_resource(
+    new_name='Wandb CRD',
+    objects=['weightsandbiases.apps.wandb.com:customresourcedefinition'],
     labels=["Operator-Resources"],
 )
 k8s_resource(
@@ -202,7 +209,7 @@ if settings.get("installWandb"):
     k8s_resource(
         new_name='Wandb',
         objects=[
-            ('%s:weightsandbiases') % settings.get('wandbCRD')
+            '%s:weightsandbiases' % settings.get('wandbCRD')
         ],
         resource_deps=["operator-controller-manager"],
         labels=["Operator-Resources"],
@@ -211,7 +218,7 @@ if settings.get("installWandb"):
 docker_build_with_restart(IMG, '.',
                           dockerfile_contents=DOCKERFILE,
                           entrypoint='/manager',
-                          only=['./tilt_bin/manager'],
+                          only=['./tilt_bin/manager', './hack/testing-manifests/server-manifest/0.76.1.yaml'],
                           live_update=[
                               sync('./tilt_bin/manager', '/manager'),
                           ],

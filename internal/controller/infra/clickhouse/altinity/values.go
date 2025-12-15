@@ -15,6 +15,7 @@ const (
 	ClickHouseHTTPPort   = 8123
 	ClickHouseUser       = "test_user"
 	ClickHousePassword   = "test_password"
+	ClickHouseDatabase   = "default"
 
 	// Cluster configuration
 	ShardsCount = 1

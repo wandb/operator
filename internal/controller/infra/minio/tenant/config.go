@@ -50,6 +50,6 @@ func parseMinioConfigFile(fileContents string) minioConfigFile {
 
 func (m minioConfigFile) toFileContents() string {
 	return fmt.Sprintf(`export MINIO_ROOT_USER="%s"
-export MINIO_ROOT_PASSWORD="%s"
+	export MINIO_ROOT_PASSWORD="%s"
 export MINIO_BROWSER="%s"`, m.rootUser, m.rootPassword, m.minioBrowserSetting)
 }

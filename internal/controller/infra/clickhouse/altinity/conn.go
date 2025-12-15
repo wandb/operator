@@ -14,13 +14,15 @@ import (
 )
 
 type clickhouseConnInfo struct {
-	Host string
-	Port string
-	User string
+	Host     string
+	Port     string
+	User     string
+	Password string
+	Database string
 }
 
 func (c *clickhouseConnInfo) toURL() string {
-	return fmt.Sprintf("clickhouse://%s@%s:%s", c.User, c.Host, c.Port)
+	return fmt.Sprintf("clickhouse://%s:%s@%s:%s/%s", c.User, c.Password, c.Host, c.Port, c.Database)
 }
 
 func writeClickHouseConnInfo(
@@ -69,7 +71,12 @@ func writeClickHouseConnInfo(
 		},
 		Type: corev1.SecretTypeOpaque,
 		StringData: map[string]string{
-			urlKey: connInfo.toURL(),
+			urlKey:     connInfo.toURL(),
+			"Host":     connInfo.Host,
+			"Port":     connInfo.Port,
+			"User":     connInfo.User,
+			"Password": connInfo.Password,
+			"Database": connInfo.Database,
 		},
 	}
 

@@ -1,0 +1,703 @@
+requiredOperatorVersion: ^2.0.0
+
+features:
+  runsV2: false
+  filestreamQueue: false
+  metricObserver: false
+  weaveTrace: true
+  weaveTraceWorkers: false
+  proxy: true
+
+bucket:
+  default: {}
+
+clickhouse:
+  default: {}
+
+kafka:
+  - name: filestream
+    features:
+      - filestreamQueue
+    topic: filestream
+    partitionCount: 48
+  - name: flatRunFieldsUpdater
+    features:
+      - runsV2
+    topic: flat-run-fields-updater
+    partitionCount: 48
+  - name: weaveWorker
+    features:
+      - weaveTraceWorkers
+    topic: weave-worker
+    partitionCount: 48
+  - name: weaveEvaluateModelWorker
+    features:
+      - weaveTraceWorkers
+    topic: weave-evaluate-model-worker
+    partitionCount: 48
+
+mysql:
+  default: {}
+  metadata: {}
+  runsdb: {}
+  usagedb: {}
+
+redis:
+  default: {}
+
+commonEnvvars:
+  gorillaMysql:
+    - name: MYSQL
+      sources:
+        - name: default
+          type: mysql
+    - name: GORILLA_ANALYTICS_SINK
+      sources:
+        - name: default
+          type: mysql
+    - name: GORILLA_FILE_STREAM_STORE_ADDRESS
+      sources:
+        - name: default
+          type: mysql
+    - name: GORILLA_METADATA_STORE
+      sources:
+        - name: metadata
+          type: mysql
+    - name: GORILLA_RUN_STORE
+      sources:
+        - name: default
+          type: mysql
+    - name: GORILLA_USAGE_STORE
+      sources:
+        - name: default
+          type: mysql
+  gorillaBucket:
+    - name: AWS_REGION
+      value: "us-east-1"
+    - name: BUCKET
+      sources:
+        - name: default
+          type: bucket
+    - name: GORILLA_FILE_STORE
+      sources:
+        - name: default
+          type: bucket
+    - name: GORILLA_RUN_UPDATE_SHADOW_QUEUE_OVERFLOW_BUCKET_STORE
+      sources:
+        - name: default
+          type: bucket
+    - name: GORILLA_STORAGE_BUCKET
+      sources:
+        - name: default
+          type: bucket
+  gorillaRedis:
+    - name: REDIS
+      sources:
+        - name: default
+          type: redis
+    - name: GORILLA_ACTIVITY_STORE_CACHE_ADDRESS
+      sources:
+        - name: default
+          type: redis
+    - name: GORILLA_AUDITOR_CACHE
+      sources:
+        - name: default
+          type: redis
+    - name: GORILLA_CACHE
+      sources:
+        - name: default
+          type: redis
+    - name: GORILLA_FILE_METADATA_SOURCE
+      sources:
+        - name: default
+          type: redis
+    - name: GORILLA_LOCKER
+      sources:
+        - name: default
+          type: redis
+    - name: GORILLA_METADATA_CACHE
+      sources:
+        - name: default
+          type: redis
+    - name: GORILLA_SETTINGS_CACHE
+      sources:
+        - name: default
+          type: redis
+    - name: GORILLA_USAGE_METRICS_CACHE
+      sources:
+        - name: default
+          type: redis
+  gorillaService:
+    - name: GORILLA_SWEEP_PROVIDER
+      sources:
+        - name: anaconda2
+          type: service
+          proto: "http"
+          path: ""
+  gorillaTaskQueueConsumer:
+    - name: GORILLA_TASK_QUEUE
+      sources:
+        - name: taskQueue
+          type: redis
+          params:
+            concurrency: 10
+    - name: GORILLA_TASK_QUEUE_WORKER_ENABLED
+      value: "true"
+  gorillaTaskQueueProducer:
+    - name: GORILLA_TASK_QUEUE
+      sources:
+        - name: taskQueue
+          type: redis
+    - name: GORILLA_TASK_QUEUE_WORKER_ENABLED
+      value: "false"
+  gorillaHistoryStore:
+    - name: GORILLA_HISTORY_STORE
+      sources:
+        - name: parquet
+          type: service
+          port: parquet
+          proto: "http"
+          path: "/_goRPC_"
+        - name: default
+          type: mysql
+    - name: GORILLA_PARQUET_LIVE_HISTORY_STORE
+      sources:
+        - name: default
+          type: mysql
+  gorillaOnprem:
+    - name: GORILLA_AUTH_JWK_URL
+      sources:
+        - name: app
+          type: service
+          proto: "http"
+          path: "/api/jwks.json"
+          port: local
+    - name: GORILLA_DEFAULT_REGION
+      value: "minio-local"
+    - name: GORILLA_EMAIL_SINK
+      value: "https://api.wandb.ai/email/dispatch"
+    - name: GORILLA_FILE_METADATA_SOURCE_IS_INTERNAL
+      value: "true"
+    - name: GORILLA_ONPREM
+      value: "true"
+    - name: GORILLA_STATSD_PORT
+      value: "0"
+    - name: GORILLA_SESSION_KEY
+      value: "abcdefghijxlmnopqrstuvwxyz123456"
+    - name: BUCKET_PROXY
+      value: "true"
+    - name: GORILLA_GLUE_FILE_STORE_IS_PROXIED
+      value: "true"
+    - name: GORILLA_FILE_STORE_IS_PROXIED
+      value: "true"
+    - name: GORILLA_FILE_HOST
+      value: "http://localhost:8080"
+    - name: GORILLA_FRONTEND_HOST
+      value: "http://localhost:8080"
+  clickhouse:
+    - name: WF_CLICKHOUSE_HOST
+      sources:
+        - name: default
+          type: clickhouse
+          field: host
+    - name: WF_CLICKHOUSE_PORT
+      sources:
+        - name: default
+          type: clickhouse
+          field: port
+    - name: WF_CLICKHOUSE_USER
+      sources:
+        - name: default
+          type: clickhouse
+          field: user
+    - name: WF_CLICKHOUSE_PASS
+      sources:
+        - name: default
+          type: clickhouse
+          field: password
+    - name: WF_CLICKHOUSE_DATABASE
+      sources:
+        - name: default
+          type: clickhouse
+          field: database
+applications:
+  - name: anaconda2
+    image:
+      repository: wandb/anaconda2
+      tag: 0.76.1
+    ports:
+      - containerPort: 8080
+        name: anaconda2
+        protocol: TCP
+    service:
+      ports:
+        - port: 8080
+          protocol: TCP
+          name: anaconda2
+  - name: api
+    commonEnvs:
+      - gorillaMysql
+      - gorillaBucket
+      - gorillaRedis
+      - gorillaHistoryStore
+      - gorillaTaskQueueProducer
+      - gorillaService
+      - gorillaOnprem
+    env:
+      - name: GORILLA_LICENSE_CERT_PATH
+        value: "/jwks.json"
+      - name: GORILLA_VIEW_SPEC_UPDATER_EXECUTABLE
+        value: "/view-spec-updater-linux"
+    image:
+      repository: wandb/megabinary
+      tag: 0.76.1
+    initContainers:
+      - name: migrate
+        image:
+          repository: wandb/megabinary
+          tag: 0.76.1
+        command:
+          - bash
+          - -c
+          - "./megabinary migrate --db $GORILLA_METADATA_STORE --squash true --runs-db $GORILLA_RUN_STORE --usage-db $GORILLA_USAGE_STORE"
+    args:
+      - gorilla
+    ports:
+      - containerPort: 8080
+        name: api
+        protocol: TCP
+    mysql:
+      default: { }
+      runsdb: {}
+    redis:
+      default: {}
+    bucket:
+      default: { }
+    kafka:
+      filestream:
+        topic: filestream
+      flatRunFieldsUpdater:
+        topic: flat-run-fields-updater
+    service:
+      ports:
+        - port: 8080
+          protocol: TCP
+          name: api
+  - name: app
+    commonEnvs:
+      - gorillaMysql
+      - gorillaBucket
+      - gorillaRedis
+      - gorillaHistoryStore
+      - gorillaTaskQueueProducer
+      - gorillaService
+      - gorillaOnprem
+    env:
+      - name: WEAVE_ENABLED
+        value: "true"
+      - name: PARQUET_ENABLED
+        value: "true"
+      - name: OPERATOR_ENABLED
+        value: "true"
+      - name: LOGGING_ENABLED
+        value: "true"
+      - name: ANACONDA_ENABLED
+        value: "false"
+      - name: GORILLA_FILEMETA_ENABLED
+        value: "false"
+    ports:
+      - containerPort: 8080
+        name: app
+        protocol: TCP
+      - containerPort: 8081
+        name: prometheus
+        protocol: TCP
+      - containerPort: 8082
+        name: anaconda
+        protocol: TCP
+      - containerPort: 8083
+        name: local
+        protocol: TCP
+    image:
+      repository: wandb/local
+      tag: 0.76.1
+    mysql:
+      default: { }
+    redis:
+      default: { }
+    bucket:
+      default: { }
+    kafka:
+      filestream:
+        topic: filestream
+      flatRunFieldsUpdater:
+        topic: flat-run-fields-updater
+    service:
+      ports:
+        - port: 8080
+          protocol: TCP
+          name: app
+        - port: 8081
+          protocol: TCP
+          name: prometheus
+        - port: 8082
+          protocol: TCP
+          name: anaconda
+        - port: 8083
+          protocol: TCP
+          name: local
+  - name: executor
+    args:
+      - executor
+    commonEnvs:
+      - gorillaMysql
+      - gorillaBucket
+      - gorillaRedis
+      - gorillaHistoryStore
+      - gorillaTaskQueueConsumer
+      - gorillaService
+      - gorillaOnprem
+    image:
+      repository: wandb/megabinary
+      tag: 0.76.1
+    mysql:
+      default: { }
+    redis:
+      default: { }
+    bucket:
+      default: { }
+  - name: filemeta
+    args:
+      - filemeta
+    commonEnvs:
+      - gorillaMysql
+      - gorillaBucket
+      - gorillaRedis
+      - gorillaService
+      - gorillaOnprem
+    image:
+      repository: wandb/megabinary
+      tag: 0.76.1
+    mysql:
+      default: { }
+    redis:
+      default: { }
+    bucket:
+      default: { }
+  - name: filestream
+    features:
+      - filestreamQueue
+    args:
+      - filestream
+    commonEnvs:
+      - gorillaMysql
+      - gorillaBucket
+      - gorillaRedis
+      - gorillaService
+      - gorillaOnprem
+    image:
+      repository: wandb/megabinary
+      tag: 0.76.1
+    mysql:
+      default: { }
+    redis:
+      default: { }
+    bucket:
+      default: { }
+    kafka:
+      filestream:
+        topic: filestream
+        consumerGroup: filestream
+  - name: flat-run-fields-updater
+    features:
+      - runsV2
+    args:
+      - flat-run-fields-updater
+    commonEnvs:
+      - gorillaMysql
+      - gorillaBucket
+      - gorillaRedis
+      - gorillaService
+      - gorillaOnprem
+    image:
+      repository: wandb/megabinary
+      tag: 0.76.1
+    mysql:
+      default: { }
+    redis:
+      default: { }
+    bucket:
+      default: { }
+    kafka:
+      flatRunFieldsUpdater:
+        topic: flat-run-fields-updater
+        consumerGroup: flat-run-fields-updater
+  - name: frontend
+    image:
+      repository: wandb/frontend-nginx
+      tag: 0.76.1
+    env:
+      - name: FRONTEND_APP_BACKEND
+        sources:
+          - name: app
+            type: service
+            proto: ""
+            path: ""
+      - name: FRONTEND_AUTH_BACKEND
+        sources:
+          - name: app
+            type: service
+            proto: ""
+            path: ""
+      - name: FRONTEND_LOCAL_BACKEND
+        sources:
+          - name: app
+            type: service
+            proto: ""
+            path: ""
+      - name: FRONTEND_WEAVE_BACKEND
+        sources:
+          - name: weave
+            type: service
+            proto: ""
+            path: ""
+  - name: glue
+    args:
+      - glue
+    commonEnvs:
+      - gorillaMysql
+      - gorillaBucket
+      - gorillaRedis
+      - gorillaHistoryStore
+      - gorillaService
+      - gorillaOnprem
+    env:
+      - name: GORILLA_LICENSE_CERT_PATH
+        value: "/jwks.json"
+      - name: GORILLA_VIEW_SPEC_UPDATER_EXECUTABLE
+        value: "/view-spec-updater-linux"
+      - name: GORILLA_GLUE_TASK_PROVIDER
+        value: "memory://"
+      - name: GORILLA_GLUE_TASK_CONFIG_PATH
+        value: "/gorilla_glue_tasks_local.yaml"
+      - name: GORILLA_GLUE_TASK_STORE
+        value: "memory://"
+    image:
+      repository: wandb/megabinary
+      tag: 0.76.1
+    mysql:
+      default: { }
+    redis:
+      default: { }
+    bucket:
+      default: { }
+  - name: metric-observer
+    args:
+      - metric-observer
+    commonEnvs:
+      - gorillaMysql
+      - gorillaBucket
+      - gorillaRedis
+      - gorillaService
+      - gorillaOnprem
+    features:
+      - runsV2
+      - metricObserver
+    image:
+      repository: wandb/megabinary
+      tag: 0.76.1
+    mysql:
+      default: { }
+    redis:
+      default: { }
+    bucket:
+      default: { }
+    kafka:
+      flatRunFieldsUpdater:
+        topic: flat-run-fields-updater
+        consumerGroup: metric-observer
+  - name: parquet
+    args:
+      - parquet
+    commonEnvs:
+      - gorillaMysql
+      - gorillaBucket
+      - gorillaRedis
+      - gorillaHistoryStore
+      - gorillaTaskQueueProducer
+      - gorillaService
+      - gorillaOnprem
+    image:
+      repository: wandb/megabinary
+      tag: 0.76.1
+    ports:
+      - containerPort: 8080
+        name: parquet
+        protocol: TCP
+    mysql:
+      default: { }
+    redis:
+      default: { }
+    bucket:
+      default: { }
+    service:
+      ports:
+        - port: 8080
+          protocol: TCP
+          name: parquet
+  - name: weave
+    image:
+      repository: wandb/weave-python
+      tag: 0.76.1
+    env:
+      - name: DATADOG_TRACE_ENABLED
+        value: "false"
+    service:
+      ports:
+        - port: 9994
+          protocol: TCP
+          name: weave
+  - name: weave-trace
+    features:
+      - weaveTrace
+    image:
+      repository: wandb/weave-trace
+      tag: 0.76.1
+    initContainers:
+      - name: migrate
+        image:
+          repository: wandb/weave-trace
+          tag: 0.76.1
+        args:
+          - python
+          - migrator.py
+    env:
+      - name: DATADOG_TRACE_ENABLED
+        value: "false"
+    commonEnvs:
+      - clickhouse
+    kafka:
+      weaveWorker:
+        topic: weave-worker
+      weaveEvaluateModelWorker:
+        topic: weave-evaluate-model-worker
+    service:
+      ports:
+        - port: 8722
+          protocol: TCP
+          name: weave-trace
+  - name: weave-trace-worker
+    features:
+      - weaveTraceWorkers
+    image:
+      repository: wandb/weave-trace
+      tag: 0.76.1
+    commonEnvs:
+      - clickhouse
+    kafka:
+      weaveWorker:
+        topic: weave-worker
+        consumerGroup: weave-worker
+  - name: weave-trace-evaluate-model-worker
+    features:
+      - weaveTraceWorkers
+    image:
+      repository: wandb/weave-trace
+      tag: 0.76.1
+    commonEnvs:
+      - clickhouse
+    kafka:
+      weaveEvaluateModelWorker:
+        topic: weave-evaluate-model-worker
+        consumerGroup: weave-evaluate-model-worker
+  - name: nginx-proxy
+    features:
+      - proxy
+    image:
+      repository: nginxinc/nginx-unprivileged
+      tag: latest
+    files:
+      # Example 1: inline file content mounted into /etc/nginx/conf.d/custom.conf
+      - name: nginx.conf
+        mountPath: /etc/nginx
+        fileName: nginx.conf
+        inline: |
+          worker_processes  auto;
+
+          error_log  /var/log/nginx/error.log notice;
+          pid        /tmp/nginx.pid;
+      
+      
+          events {
+            worker_connections  1024;
+          }
+      
+          http {
+            server {
+              listen 8080;
+              proxy_set_header Host $host:8080;
+              client_max_body_size 0;
+              location / {
+                proxy_pass http://wandb-dev-v2-app:8080;
+              }
+    
+              location /api {
+                proxy_pass http://wandb-dev-v2-api:8080;
+              }
+              location /artifacts {
+                proxy_pass http://wandb-dev-v2-api:8080;
+              }
+              location /artifactsV2 {
+                proxy_pass http://wandb-dev-v2-api:8080;
+              }
+
+              location /files {
+                proxy_pass http://wandb-dev-v2-api:8080;
+              }
+    
+              location /graphql {
+                proxy_pass http://wandb-dev-v2-api:8080;
+              }
+    
+              location /graphql2 {
+                proxy_pass http://wandb-dev-v2-api:8080;
+              }
+    
+              location /traces {
+                proxy_pass http://wandb-dev-v2-weave-trace:8722;
+              }
+    
+              location /bucket {
+                proxy_ssl_verify off;
+                proxy_set_header Host "wandb-minio-hl.operator-system.svc.cluster.local:9000";
+                proxy_pass https://wandb-minio-hl.operator-system.svc.cluster.local:9000;
+              }
+            }
+          }
+    service:
+      ports:
+        - name: http
+          port: 8080
+          protocol: TCP
+migrations:
+  default:
+    image:
+      repository: wandb/megabinary
+      tag: 0.76.1
+    args:
+      - migrate
+      - --db=$DATABASE_URL
+  runsdb:
+    image:
+      repository: wandb/megabinary
+      tag: 0.76.1
+    args:
+      - migrate
+      - --runs-db=$DATABASE_URL
+  usagedb:
+    image:
+      repository: wandb/megabinary
+      tag: 0.76.1
+    args:
+      - migrate
+      - --usage-db=$DATABASE_URL

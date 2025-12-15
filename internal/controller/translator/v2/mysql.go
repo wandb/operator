@@ -67,6 +67,10 @@ func ToMySQLVendorSpec(
 		pxcImage = translator.ProdPXCImage
 	}
 
+	configuration := `[mysqld]
+pxc_strict_mode=PERMISSIVE
+`
+
 	// Build PXC spec
 	pxc := &pxcv1.PerconaXtraDBCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -96,11 +100,23 @@ func ToMySQLVendorSpec(
 							},
 						},
 					},
+					Configuration: configuration,
 				},
 			},
 			TLS: &pxcv1.TLSSpec{
 				Enabled: &tlsEnabled,
 			},
+			Users: []pxcv1.User{{
+				Name:            "wandb_local",
+				DBs:             []string{"wandb_local"},
+				Hosts:           []string{"%"},
+				Grants:          []string{"ALL"},
+				WithGrantOption: true,
+				PasswordSecretRef: &pxcv1.SecretKeySelector{
+					Name: fmt.Sprintf("%s-%s", specName, "user-db-password"),
+					Key:  "password",
+				},
+			}},
 		},
 	}
 

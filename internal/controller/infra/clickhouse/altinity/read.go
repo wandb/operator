@@ -14,14 +14,16 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func readConnectionDetails(specNamespacedName types.NamespacedName) *clickhouseConnInfo {
-	clickhouseHost := fmt.Sprintf("%s.%s.svc.cluster.local", ServiceName, specNamespacedName.Namespace)
-	clickhousePort := strconv.Itoa(ClickHouseNativePort)
+func readConnectionDetails(specNamespacedName types.NamespacedName, actual *chiv1.ClickHouseInstallation) *clickhouseConnInfo {
+	clickhouseHost := actual.Status.Endpoint
+	clickhousePort := strconv.Itoa(ClickHouseHTTPPort)
 
 	return &clickhouseConnInfo{
-		Host: clickhouseHost,
-		Port: clickhousePort,
-		User: ClickHouseUser,
+		Host:     clickhouseHost,
+		Port:     clickhousePort,
+		User:     ClickHouseUser,
+		Password: ClickHousePassword,
+		Database: ClickHouseDatabase,
 	}
 }
 
@@ -55,7 +57,7 @@ func ReadState(
 		///////////////////////////////////
 		// set connection details
 
-		connInfo := readConnectionDetails(specNamespacedName)
+		connInfo := readConnectionDetails(specNamespacedName, actual)
 
 		var connection *translator.InfraConnection
 		if connection, err = writeClickHouseConnInfo(
