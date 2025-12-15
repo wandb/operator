@@ -8,7 +8,7 @@ import (
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/infra/kafka/strimzi"
 	"github.com/wandb/operator/internal/controller/translator"
-	kafkav1beta2 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1beta2"
+	strimziv1 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -36,7 +36,7 @@ func ToKafkaVendorSpec(
 	spec apiv2.WBKafkaSpec,
 	owner metav1.Object,
 	scheme *runtime.Scheme,
-) (*kafkav1beta2.Kafka, error) {
+) (*strimziv1.Kafka, error) {
 	log := ctrl.LoggerFrom(ctx)
 
 	if !spec.Enabled {
@@ -47,7 +47,7 @@ func ToKafkaVendorSpec(
 		Namespace: spec.Namespace, Name: spec.Name,
 	})
 
-	kafka := &kafkav1beta2.Kafka{
+	kafka := &strimziv1.Kafka{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      nsNameBldr.KafkaName(),
 			Namespace: nsNameBldr.Namespace(),
@@ -58,12 +58,12 @@ func ToKafkaVendorSpec(
 				"strimzi.io/node-pools": "enabled",
 			},
 		},
-		Spec: kafkav1beta2.KafkaSpec{
-			Kafka: kafkav1beta2.KafkaClusterSpec{
+		Spec: strimziv1.KafkaSpec{
+			Kafka: strimziv1.KafkaClusterSpec{
 				Version:         translator.KafkaVersion,
 				MetadataVersion: translator.KafkaMetadataVersion,
 				Replicas:        0, // CRITICAL: Must be 0 when using node pools in KRaft mode
-				Listeners: []kafkav1beta2.GenericKafkaListener{
+				Listeners: []strimziv1.GenericKafkaListener{
 					{
 						Name: strimzi.PlainListenerName,
 						Port: strimzi.PlainListenerPort,
@@ -105,14 +105,14 @@ func ToKafkaNodePoolVendorSpec(
 	spec apiv2.WBKafkaSpec,
 	owner metav1.Object,
 	scheme *runtime.Scheme,
-) (*kafkav1beta2.KafkaNodePool, error) {
+) (*strimziv1.KafkaNodePool, error) {
 	log := ctrl.LoggerFrom(ctx)
 
 	nsNameBldr := strimzi.CreateNsNameBuilder(types.NamespacedName{
 		Namespace: spec.Namespace, Name: spec.Name,
 	})
 
-	nodePool := &kafkav1beta2.KafkaNodePool{
+	nodePool := &strimziv1.KafkaNodePool{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      nsNameBldr.NodePoolName(),
 			Namespace: nsNameBldr.Namespace(),
@@ -120,12 +120,12 @@ func ToKafkaNodePoolVendorSpec(
 				"strimzi.io/cluster": nsNameBldr.KafkaName(),
 			},
 		},
-		Spec: kafkav1beta2.KafkaNodePoolSpec{
+		Spec: strimziv1.KafkaNodePoolSpec{
 			Replicas: spec.Replicas,
 			Roles:    []string{strimzi.RoleBroker, strimzi.RoleController},
-			Storage: kafkav1beta2.KafkaStorage{
+			Storage: strimziv1.KafkaStorage{
 				Type: "jbod",
-				Volumes: []kafkav1beta2.StorageVolume{
+				Volumes: []strimziv1.StorageVolume{
 					{
 						ID:          0,
 						Type:        strimzi.StorageType,

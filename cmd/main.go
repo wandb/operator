@@ -30,7 +30,7 @@ import (
 	redisv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redis/v1beta2"
 	redisreplicationv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redisreplication/v1beta2"
 	redissentinelv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redissentinel/v1beta2"
-	strimziv1beta2 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1beta2"
+	strimziv1 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1"
 	"github.com/wandb/operator/pkg/wandb/spec/channel/deployer"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
@@ -71,7 +71,7 @@ func init() {
 	utilruntime.Must(redisv1beta2.AddToScheme(scheme))
 	utilruntime.Must(redisreplicationv1beta2.AddToScheme(scheme))
 	utilruntime.Must(redissentinelv1beta2.AddToScheme(scheme))
-	utilruntime.Must(strimziv1beta2.AddToScheme(scheme))
+	utilruntime.Must(strimziv1.AddToScheme(scheme))
 	utilruntime.Must(miniov2.AddToScheme(scheme))
 	utilruntime.Must(chiv1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme

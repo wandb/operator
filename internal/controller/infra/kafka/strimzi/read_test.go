@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/wandb/operator/internal/controller/translator"
-	v1beta3 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1beta2"
+	strimziv1 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -14,7 +14,7 @@ import (
 func TestComputeStatusSummary(t *testing.T) {
 	tests := []struct {
 		name          string
-		kafkaCR       *v1beta3.Kafka
+		kafkaCR       *strimziv1.Kafka
 		initialStatus *translator.KafkaStatus
 		expectedReady bool
 		expectedState string
@@ -28,8 +28,8 @@ func TestComputeStatusSummary(t *testing.T) {
 		},
 		{
 			name: "kafkaCR has KafkaMetadataState set with ready condition true",
-			kafkaCR: &v1beta3.Kafka{
-				Status: v1beta3.KafkaStatus{
+			kafkaCR: &strimziv1.Kafka{
+				Status: strimziv1.KafkaStatus{
 					KafkaMetadataState: "KRaft",
 					Conditions: []metav1.Condition{
 						{
@@ -45,8 +45,8 @@ func TestComputeStatusSummary(t *testing.T) {
 		},
 		{
 			name: "kafkaCR has KafkaMetadataState set with ready condition false",
-			kafkaCR: &v1beta3.Kafka{
-				Status: v1beta3.KafkaStatus{
+			kafkaCR: &strimziv1.Kafka{
+				Status: strimziv1.KafkaStatus{
 					KafkaMetadataState: "ZooKeeper",
 					Conditions: []metav1.Condition{
 						{
@@ -62,8 +62,8 @@ func TestComputeStatusSummary(t *testing.T) {
 		},
 		{
 			name: "ready condition exists and is true",
-			kafkaCR: &v1beta3.Kafka{
-				Status: v1beta3.KafkaStatus{
+			kafkaCR: &strimziv1.Kafka{
+				Status: strimziv1.KafkaStatus{
 					Conditions: []metav1.Condition{
 						{
 							Type:   "Ready",
@@ -78,8 +78,8 @@ func TestComputeStatusSummary(t *testing.T) {
 		},
 		{
 			name: "ready condition exists and is false",
-			kafkaCR: &v1beta3.Kafka{
-				Status: v1beta3.KafkaStatus{
+			kafkaCR: &strimziv1.Kafka{
+				Status: strimziv1.KafkaStatus{
 					Conditions: []metav1.Condition{
 						{
 							Type:   "Ready",
@@ -94,8 +94,8 @@ func TestComputeStatusSummary(t *testing.T) {
 		},
 		{
 			name: "ready condition is missing",
-			kafkaCR: &v1beta3.Kafka{
-				Status: v1beta3.KafkaStatus{
+			kafkaCR: &strimziv1.Kafka{
+				Status: strimziv1.KafkaStatus{
 					Conditions: []metav1.Condition{},
 				},
 			},
@@ -105,8 +105,8 @@ func TestComputeStatusSummary(t *testing.T) {
 		},
 		{
 			name: "state is empty string and ready is true",
-			kafkaCR: &v1beta3.Kafka{
-				Status: v1beta3.KafkaStatus{
+			kafkaCR: &strimziv1.Kafka{
+				Status: strimziv1.KafkaStatus{
 					KafkaMetadataState: "",
 					Conditions: []metav1.Condition{
 						{
@@ -122,8 +122,8 @@ func TestComputeStatusSummary(t *testing.T) {
 		},
 		{
 			name: "state is empty string and ready is false",
-			kafkaCR: &v1beta3.Kafka{
-				Status: v1beta3.KafkaStatus{
+			kafkaCR: &strimziv1.Kafka{
+				Status: strimziv1.KafkaStatus{
 					KafkaMetadataState: "",
 					Conditions: []metav1.Condition{
 						{
@@ -139,8 +139,8 @@ func TestComputeStatusSummary(t *testing.T) {
 		},
 		{
 			name: "state is non-empty and ready is true",
-			kafkaCR: &v1beta3.Kafka{
-				Status: v1beta3.KafkaStatus{
+			kafkaCR: &strimziv1.Kafka{
+				Status: strimziv1.KafkaStatus{
 					KafkaMetadataState: "Migrating",
 					Conditions: []metav1.Condition{
 						{
@@ -156,8 +156,8 @@ func TestComputeStatusSummary(t *testing.T) {
 		},
 		{
 			name: "state is non-empty and ready is false",
-			kafkaCR: &v1beta3.Kafka{
-				Status: v1beta3.KafkaStatus{
+			kafkaCR: &strimziv1.Kafka{
+				Status: strimziv1.KafkaStatus{
 					KafkaMetadataState: "Error",
 					Conditions: []metav1.Condition{
 						{
@@ -173,8 +173,8 @@ func TestComputeStatusSummary(t *testing.T) {
 		},
 		{
 			name: "different condition types (non-ready conditions) should not affect ready status",
-			kafkaCR: &v1beta3.Kafka{
-				Status: v1beta3.KafkaStatus{
+			kafkaCR: &strimziv1.Kafka{
+				Status: strimziv1.KafkaStatus{
 					Conditions: []metav1.Condition{
 						{
 							Type:   "Available",
@@ -193,8 +193,8 @@ func TestComputeStatusSummary(t *testing.T) {
 		},
 		{
 			name: "ready condition with case insensitive type match (lowercase)",
-			kafkaCR: &v1beta3.Kafka{
-				Status: v1beta3.KafkaStatus{
+			kafkaCR: &strimziv1.Kafka{
+				Status: strimziv1.KafkaStatus{
 					Conditions: []metav1.Condition{
 						{
 							Type:   "ready",
@@ -209,8 +209,8 @@ func TestComputeStatusSummary(t *testing.T) {
 		},
 		{
 			name: "ready condition with case insensitive type match (uppercase)",
-			kafkaCR: &v1beta3.Kafka{
-				Status: v1beta3.KafkaStatus{
+			kafkaCR: &strimziv1.Kafka{
+				Status: strimziv1.KafkaStatus{
 					Conditions: []metav1.Condition{
 						{
 							Type:   "READY",
@@ -225,8 +225,8 @@ func TestComputeStatusSummary(t *testing.T) {
 		},
 		{
 			name: "ready condition with case insensitive type match (mixed case)",
-			kafkaCR: &v1beta3.Kafka{
-				Status: v1beta3.KafkaStatus{
+			kafkaCR: &strimziv1.Kafka{
+				Status: strimziv1.KafkaStatus{
 					Conditions: []metav1.Condition{
 						{
 							Type:   "ReAdY",
@@ -241,8 +241,8 @@ func TestComputeStatusSummary(t *testing.T) {
 		},
 		{
 			name: "multiple conditions with ready condition true",
-			kafkaCR: &v1beta3.Kafka{
-				Status: v1beta3.KafkaStatus{
+			kafkaCR: &strimziv1.Kafka{
+				Status: strimziv1.KafkaStatus{
 					Conditions: []metav1.Condition{
 						{
 							Type:   "Available",
@@ -265,8 +265,8 @@ func TestComputeStatusSummary(t *testing.T) {
 		},
 		{
 			name: "multiple conditions with ready condition false",
-			kafkaCR: &v1beta3.Kafka{
-				Status: v1beta3.KafkaStatus{
+			kafkaCR: &strimziv1.Kafka{
+				Status: strimziv1.KafkaStatus{
 					Conditions: []metav1.Condition{
 						{
 							Type:   "Available",
@@ -289,8 +289,8 @@ func TestComputeStatusSummary(t *testing.T) {
 		},
 		{
 			name: "ready condition with unknown status (should be false)",
-			kafkaCR: &v1beta3.Kafka{
-				Status: v1beta3.KafkaStatus{
+			kafkaCR: &strimziv1.Kafka{
+				Status: strimziv1.KafkaStatus{
 					Conditions: []metav1.Condition{
 						{
 							Type:   "Ready",
@@ -305,8 +305,8 @@ func TestComputeStatusSummary(t *testing.T) {
 		},
 		{
 			name: "kafkaCR with empty conditions array",
-			kafkaCR: &v1beta3.Kafka{
-				Status: v1beta3.KafkaStatus{
+			kafkaCR: &strimziv1.Kafka{
+				Status: strimziv1.KafkaStatus{
 					KafkaMetadataState: "Initializing",
 					Conditions:         []metav1.Condition{},
 				},
@@ -317,8 +317,8 @@ func TestComputeStatusSummary(t *testing.T) {
 		},
 		{
 			name: "kafkaCR with nil conditions array",
-			kafkaCR: &v1beta3.Kafka{
-				Status: v1beta3.KafkaStatus{
+			kafkaCR: &strimziv1.Kafka{
+				Status: strimziv1.KafkaStatus{
 					KafkaMetadataState: "Pending",
 					Conditions:         nil,
 				},
@@ -329,8 +329,8 @@ func TestComputeStatusSummary(t *testing.T) {
 		},
 		{
 			name: "kafka metadata state with empty string and no conditions",
-			kafkaCR: &v1beta3.Kafka{
-				Status: v1beta3.KafkaStatus{
+			kafkaCR: &strimziv1.Kafka{
+				Status: strimziv1.KafkaStatus{
 					KafkaMetadataState: "",
 					Conditions:         nil,
 				},
@@ -341,8 +341,8 @@ func TestComputeStatusSummary(t *testing.T) {
 		},
 		{
 			name: "kafka metadata state with special characters",
-			kafkaCR: &v1beta3.Kafka{
-				Status: v1beta3.KafkaStatus{
+			kafkaCR: &strimziv1.Kafka{
+				Status: strimziv1.KafkaStatus{
 					KafkaMetadataState: "State-With-Dashes",
 					Conditions: []metav1.Condition{
 						{
@@ -358,8 +358,8 @@ func TestComputeStatusSummary(t *testing.T) {
 		},
 		{
 			name: "status with existing connection should preserve it",
-			kafkaCR: &v1beta3.Kafka{
-				Status: v1beta3.KafkaStatus{
+			kafkaCR: &strimziv1.Kafka{
+				Status: strimziv1.KafkaStatus{
 					Conditions: []metav1.Condition{
 						{
 							Type:   "Ready",
@@ -383,8 +383,8 @@ func TestComputeStatusSummary(t *testing.T) {
 		},
 		{
 			name: "status with existing conditions should preserve them",
-			kafkaCR: &v1beta3.Kafka{
-				Status: v1beta3.KafkaStatus{
+			kafkaCR: &strimziv1.Kafka{
+				Status: strimziv1.KafkaStatus{
 					Conditions: []metav1.Condition{
 						{
 							Type:   "Ready",
@@ -406,8 +406,8 @@ func TestComputeStatusSummary(t *testing.T) {
 		},
 		{
 			name: "multiple ready conditions (first one wins)",
-			kafkaCR: &v1beta3.Kafka{
-				Status: v1beta3.KafkaStatus{
+			kafkaCR: &strimziv1.Kafka{
+				Status: strimziv1.KafkaStatus{
 					Conditions: []metav1.Condition{
 						{
 							Type:   "Ready",
@@ -426,8 +426,8 @@ func TestComputeStatusSummary(t *testing.T) {
 		},
 		{
 			name: "long kafka metadata state value",
-			kafkaCR: &v1beta3.Kafka{
-				Status: v1beta3.KafkaStatus{
+			kafkaCR: &strimziv1.Kafka{
+				Status: strimziv1.KafkaStatus{
 					KafkaMetadataState: "VeryLongStateNameThatRepresentsComplexInternalKafkaMetadataStateTransition",
 					Conditions: []metav1.Condition{
 						{

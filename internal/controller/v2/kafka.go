@@ -7,7 +7,7 @@ import (
 	"github.com/wandb/operator/internal/controller/infra/kafka/strimzi"
 	"github.com/wandb/operator/internal/controller/translator"
 	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
-	kafkav1beta2 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1beta2"
+	strimziv1 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -19,8 +19,8 @@ func kafkaWriteState(
 	wandb *apiv2.WeightsAndBiases,
 ) error {
 	var err error
-	var desiredKafka *kafkav1beta2.Kafka
-	var desiredNodePool *kafkav1beta2.KafkaNodePool
+	var desiredKafka *strimziv1.Kafka
+	var desiredNodePool *strimziv1.KafkaNodePool
 	var specNamespacedName = kafkaSpecNamespacedName(wandb.Spec.Kafka)
 
 	if desiredKafka, err = translatorv2.ToKafkaVendorSpec(ctx, wandb.Spec.Kafka, wandb, client.Scheme()); err != nil {
