@@ -41,8 +41,8 @@ var _ = BeforeSuite(func() {
 	By("bootstrapping test environment")
 	integrationTestEnv = &envtest.Environment{
 		CRDInstallOptions: envtest.CRDInstallOptions{
-			Paths:              []string{},
-			ErrorIfPathMissing: false,
+			Paths:              []string{filepath.Join("..", "..", "..", "..", "vendored", "minio-operator", "crds", "minio.min.io_tenants.yaml")},
+			ErrorIfPathMissing: true,
 		},
 		Scheme: scheme.Scheme,
 	}
@@ -114,17 +114,21 @@ var _ = Describe("Minio Config and Connection Integration", func() {
 
 		nsNameBldr = CreateNsNameBuilder(specNsName)
 
-		tenantOwner = createMinimalTenant(specNsName)
-		tenantOwner.ObjectMeta = createProxyObjectMeta(ctx, integrationTestClient, testNamespace, "test-tenant-owner")
-
 		envConfig = MinioEnvConfig{
 			RootUser:            "admin",
 			MinioBrowserSetting: "on",
 		}
 
 		wandbOwner = &corev1.ConfigMap{
-			ObjectMeta: createProxyObjectMeta(ctx, integrationTestClient, testNamespace, "test-wandb-owner"),
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-wandb-owner",
+				Namespace: testNamespace,
+			},
 		}
+		err = integrationTestClient.Create(ctx, wandbOwner)
+		Expect(err).NotTo(HaveOccurred())
+
+		tenantOwner = createMinimalTenant(specNsName)
 	})
 
 	AfterEach(func() {
@@ -138,17 +142,17 @@ var _ = Describe("Minio Config and Connection Integration", func() {
 
 	Context("password generation and preservation", func() {
 		It("should generate a password on first call and preserve it on subsequent calls", func() {
-			By("calling writeMinioConfig when no secret exists")
-			firstConnInfo, err := writeMinioConfig(
+			By("calling WriteState when no secret exists")
+			firstConnection, err := WriteState(
 				ctx,
 				integrationTestClient,
+				specNsName,
 				tenantOwner,
-				nsNameBldr,
 				envConfig,
+				wandbOwner,
 			)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(firstConnInfo).NotTo(BeNil())
-			Expect(firstConnInfo.RootPassword).NotTo(BeEmpty())
+			Expect(firstConnection).NotTo(BeNil())
 
 			By("verifying the generated password is correct format")
 			configSecret := &corev1.Secret{}
@@ -167,20 +171,20 @@ var _ = Describe("Minio Config and Connection Integration", func() {
 			Expect(firstParsedConfig.rootPassword).To(MatchRegexp("^[a-zA-Z]+$"))
 			Expect(firstParsedConfig.rootUser).To(Equal("admin"))
 			Expect(firstParsedConfig.minioBrowserSetting).To(Equal("on"))
-			Expect(firstConnInfo.RootPassword).To(Equal(firstParsedConfig.rootPassword))
 
 			generatedPassword := firstParsedConfig.rootPassword
 
-			By("calling writeMinioConfig again with the secret present")
-			secondConnInfo, err := writeMinioConfig(
+			By("calling WriteState again with the secret present")
+			secondConnection, err := WriteState(
 				ctx,
 				integrationTestClient,
+				specNsName,
 				tenantOwner,
-				nsNameBldr,
 				envConfig,
+				wandbOwner,
 			)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(secondConnInfo).NotTo(BeNil())
+			Expect(secondConnection).NotTo(BeNil())
 
 			By("verifying the password was preserved (not regenerated)")
 			updatedSecret := &corev1.Secret{}
@@ -195,24 +199,31 @@ var _ = Describe("Minio Config and Connection Integration", func() {
 			secondParsedConfig := parseMinioConfigFile(updatedContents)
 
 			Expect(secondParsedConfig.rootPassword).To(Equal(generatedPassword))
-			Expect(secondConnInfo.RootPassword).To(Equal(generatedPassword))
 			Expect(secondParsedConfig.rootUser).To(Equal("admin"))
 			Expect(secondParsedConfig.minioBrowserSetting).To(Equal("on"))
+
+			By("verifying the Tenant CR was created")
+			tenant := &miniov2.Tenant{}
+			err = integrationTestClient.Get(ctx, specNsName, tenant)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(tenant.Name).To(Equal(specNsName.Name))
+			Expect(tenant.Namespace).To(Equal(specNsName.Namespace))
 		})
 	})
 
 	Context("full resource creation", func() {
 		It("should create all expected secrets and return valid connection info", func() {
-			By("creating minio config secret")
-			connInfo, err := writeMinioConfig(
+			By("calling WriteState to create all resources")
+			connection, err := WriteState(
 				ctx,
 				integrationTestClient,
+				specNsName,
 				tenantOwner,
-				nsNameBldr,
 				envConfig,
+				wandbOwner,
 			)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(connInfo).NotTo(BeNil())
+			Expect(connection).NotTo(BeNil())
 
 			By("verifying config secret exists with correct content")
 			configSecret := &corev1.Secret{}
@@ -234,19 +245,8 @@ var _ = Describe("Minio Config and Connection Integration", func() {
 			By("verifying config secret has correct owner reference")
 			Expect(configSecret.OwnerReferences).To(HaveLen(1))
 			ownerRef := configSecret.OwnerReferences[0]
-			Expect(ownerRef.UID).To(Equal(tenantOwner.UID))
+			Expect(ownerRef.Kind).To(Equal("Tenant"))
 			Expect(ownerRef.Name).To(Equal(tenantOwner.Name))
-
-			By("creating wandb connection secret")
-			connection, err := writeWandbConnInfo(
-				ctx,
-				integrationTestClient,
-				wandbOwner,
-				nsNameBldr,
-				connInfo,
-			)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(connection).NotTo(BeNil())
 
 			By("verifying connection secret exists with correct URL")
 			connSecret := &corev1.Secret{}
@@ -279,32 +279,17 @@ var _ = Describe("Minio Config and Connection Integration", func() {
 			Expect(connection.URL.Key).To(Equal("url"))
 			Expect(connection.URL.Optional).NotTo(BeNil())
 			Expect(*connection.URL.Optional).To(BeFalse())
+
+			By("verifying the Tenant CR was created")
+			tenant := &miniov2.Tenant{}
+			err = integrationTestClient.Get(ctx, specNsName, tenant)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(tenant.Name).To(Equal(specNsName.Name))
+			Expect(tenant.Namespace).To(Equal(specNsName.Namespace))
+			Expect(tenant.Spec.Pools).To(HaveLen(1))
 		})
 	})
 })
-
-func createProxyObjectMeta(ctx context.Context, client client.Client, namespace, name string) metav1.ObjectMeta {
-	proxy := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-		},
-	}
-	err := client.Create(ctx, proxy)
-	if err != nil {
-		panic(fmt.Sprintf("failed to create proxy object: %v", err))
-	}
-
-	err = client.Get(ctx, types.NamespacedName{
-		Namespace: namespace,
-		Name:      name,
-	}, proxy)
-	if err != nil {
-		panic(fmt.Sprintf("failed to get proxy object: %v", err))
-	}
-
-	return proxy.ObjectMeta
-}
 
 func createMinimalTenant(nsName types.NamespacedName) *miniov2.Tenant {
 	return &miniov2.Tenant{

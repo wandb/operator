@@ -46,7 +46,18 @@ Files affected:
 
 ## What Was Vendored
 
-We vendored the API type definitions needed for our operator:
+We vendored the API type definitions and CRDs needed for our operator:
+
+### CRDs
+
+Full official CRD definitions from upstream:
+
+- `crds/minio.min.io_tenants.yaml`
+  - **Source**: https://github.com/minio/operator/blob/34dc39801903/resources/base/crds/minio.min.io_tenants.yaml
+  - **Purpose**: Integration testing with real Kubernetes API
+  - **Note**: Must be updated when vendoring new versions
+
+### API Types
 
 - `minio.min.io/v2/` - MinIO Tenant CRD types and helpers
   - `register.go` - API group registration and scheme builder
