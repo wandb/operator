@@ -368,6 +368,8 @@ func reconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 						selector.Key = "Host"
 					case "port":
 						selector.Key = "Port"
+					case "url":
+						selector.Key = "url"
 					default:
 						// Unrecognized field; skip
 						continue
@@ -458,11 +460,12 @@ func reconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 		}
 
 		container := corev1.Container{
-			Name:  app.Name,
-			Image: app.Image.GetImage(),
-			Env:   envVars,
-			Args:  app.Args,
-			Ports: Ports,
+			Name:    app.Name,
+			Image:   app.Image.GetImage(),
+			Env:     envVars,
+			Args:    app.Args,
+			Command: app.Command,
+			Ports:   Ports,
 		}
 
 		// Handle file injection via ConfigMaps according to manifest Application.Files

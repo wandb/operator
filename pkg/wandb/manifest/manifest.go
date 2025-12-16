@@ -91,9 +91,10 @@ type AppKafkaSection struct {
 
 // Application describes one entry in the applications list.
 type Application struct {
-	Name  string   `yaml:"name"`
-	Image ImageRef `yaml:"image"`
-	Args  []string `yaml:"args,omitempty"`
+	Name    string   `yaml:"name"`
+	Image   ImageRef `yaml:"image"`
+	Args    []string `yaml:"args,omitempty"`
+	Command []string `yaml:"command,omitempty"`
 	// CommonEnvs is a list of keys referencing top-level commonEnvvars groups
 	// to be included for this application (e.g., ["gorillaMysql", "gorillaBucket"]).
 	CommonEnvs []string `yaml:"commonEnvs,omitempty"`

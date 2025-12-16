@@ -1,9 +1,9 @@
 requiredOperatorVersion: ^2.0.0
 
 features:
-  runsV2: false
+  runsV2: true
   filestreamQueue: false
-  metricObserver: false
+  metricObserver: true
   weaveTrace: true
   weaveTraceWorkers: true
   proxy: true
@@ -20,7 +20,7 @@ kafka:
       - filestreamQueue
     topic: filestream
     partitionCount: 48
-  - name: flatRunFieldsUpdater
+  - name: flat-run-fields-updater
     features:
       - runsV2
       - metricObserver
@@ -248,6 +248,11 @@ commonEnvvars:
         - name: default
           type: kafka
           field: port
+    - name: KAFKA_URL
+      sources:
+        - name: default
+          type: kafka
+          field: url
   weaveTrace:
     - name: WANDB_PUBLIC_BASE_URL
       sources:
@@ -284,6 +289,24 @@ commonEnvvars:
       value: "true"
     - name: SERVER_FLAG_WEAVE_1_PERCENTAGE
       value: "100"
+  flatRunsV2Producer:
+    - name: KAFKA_RUNS_V2_TOPIC_NAME
+      value: "flat-run-fields-updater"
+    - name: GORILLA_RUN_UPDATE_SHADOW_QUEUE_ADDR
+      value: "$(KAFKA_URL)/$(KAFKA_RUNS_V2_TOPIC_NAME)"
+    - name: GORILLA_RUN_STORE_ONPREM_MIGRATE_CREATE_RUN_TABLES
+      value: "true"
+    - name: GORILLA_RUN_STORE_ONPREM_MIGRATE_CREATE_RUN_STORE
+      value: "true"
+    - name: GORILLA_RUN_STORE_ONPREM_MIGRATE_SHADOW_RUN_UPDATES
+      value: "true"
+    - name: GORILLA_RUN_STORE_ONPREM_MIGRATE_DISABLE_READS
+      value: "false"
+    - name: GORILLA_RUN_STORE_ONPREM_MIGRATE_FLAT_RUNS_MIGRATOR
+      value: "true"
+  flatRunsV2Consumer:
+    - name: KAFKA_RUNS_V2_TOPIC_NAME
+      value: "flat-run-fields-updater"
 applications:
   - name: anaconda2
     image:
@@ -307,6 +330,8 @@ applications:
       - gorillaTaskQueueProducer
       - gorillaService
       - gorillaOnprem
+      - kafka
+      - flatRunsV2Producer
     env:
       - name: GORILLA_LICENSE_CERT_PATH
         value: "/jwks.json"
@@ -330,18 +355,6 @@ applications:
       - containerPort: 8080
         name: api
         protocol: TCP
-    mysql:
-      default: { }
-      runsdb: {}
-    redis:
-      default: {}
-    bucket:
-      default: { }
-    kafka:
-      filestream:
-        topic: filestream
-      flatRunFieldsUpdater:
-        topic: flat-run-fields-updater
     service:
       ports:
         - port: 8080
@@ -357,6 +370,8 @@ applications:
       - gorillaService
       - gorillaOnprem
       - frontend
+      - kafka
+      - flatRunsV2Producer
     env:
       - name: WEAVE_ENABLED
         value: "true"
@@ -386,17 +401,6 @@ applications:
     image:
       repository: wandb/local
       tag: 0.76.1
-    mysql:
-      default: { }
-    redis:
-      default: { }
-    bucket:
-      default: { }
-    kafka:
-      filestream:
-        topic: filestream
-      flatRunFieldsUpdater:
-        topic: flat-run-fields-updater
     service:
       ports:
         - port: 8080
@@ -425,12 +429,6 @@ applications:
     image:
       repository: wandb/megabinary
       tag: 0.76.1
-    mysql:
-      default: { }
-    redis:
-      default: { }
-    bucket:
-      default: { }
   - name: filemeta
     args:
       - filemeta
@@ -443,12 +441,6 @@ applications:
     image:
       repository: wandb/megabinary
       tag: 0.76.1
-    mysql:
-      default: { }
-    redis:
-      default: { }
-    bucket:
-      default: { }
   - name: filestream
     features:
       - filestreamQueue
@@ -463,40 +455,29 @@ applications:
     image:
       repository: wandb/megabinary
       tag: 0.76.1
-    mysql:
-      default: { }
-    redis:
-      default: { }
-    bucket:
-      default: { }
-    kafka:
-      filestream:
-        topic: filestream
-        consumerGroup: filestream
   - name: flat-run-fields-updater
     features:
       - runsV2
     args:
       - flat-run-fields-updater
+#    command:
+#      - /bin/sh
+#      - -c
+#      - "sleep infinity"
     commonEnvs:
       - gorillaMysql
       - gorillaBucket
       - gorillaRedis
       - gorillaService
       - gorillaOnprem
+      - kafka
+      - flatRunsV2Consumer
+    env:
+      - name: GORILLA_RUN_UPDATE_SHADOW_QUEUE_SUBSCRIPTIONS_FLAT_RUN_FIELDS_UPDATER
+        value: "$(KAFKA_URL)/$(KAFKA_RUNS_V2_TOPIC_NAME)?consumer_group_id=flat-run-fields-updater"
     image:
       repository: wandb/megabinary
       tag: 0.76.1
-    mysql:
-      default: { }
-    redis:
-      default: { }
-    bucket:
-      default: { }
-    kafka:
-      flatRunFieldsUpdater:
-        topic: flat-run-fields-updater
-        consumerGroup: flat-run-fields-updater
   - name: frontend
     image:
       repository: wandb/frontend-nginx
@@ -552,12 +533,6 @@ applications:
     image:
       repository: wandb/megabinary
       tag: 0.76.1
-    mysql:
-      default: { }
-    redis:
-      default: { }
-    bucket:
-      default: { }
   - name: metric-observer
     args:
       - metric-observer
@@ -567,21 +542,16 @@ applications:
       - gorillaRedis
       - gorillaService
       - gorillaOnprem
+      - kafka
+      - flatRunsV2Consumer
+    env:
+      - name: GORILLA_RUN_UPDATE_SHADOW_QUEUE_SUBSCRIPTIONS_METRIC_OBSERVER
+        value: "$(KAFKA_URL)/$(KAFKA_RUNS_V2_TOPIC_NAME)?consumer_group_id=metric-observer"
     features:
       - metricObserver
     image:
       repository: wandb/megabinary
       tag: 0.76.1
-    mysql:
-      default: { }
-    redis:
-      default: { }
-    bucket:
-      default: { }
-    kafka:
-      flatRunFieldsUpdater:
-        topic: flat-run-fields-updater
-        consumerGroup: metric-observer
   - name: parquet
     args:
       - parquet
@@ -600,12 +570,6 @@ applications:
       - containerPort: 8080
         name: parquet
         protocol: TCP
-    mysql:
-      default: { }
-    redis:
-      default: { }
-    bucket:
-      default: { }
     service:
       ports:
         - port: 8080
