@@ -18,6 +18,7 @@ package v2
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -25,12 +26,12 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/translator"
+	strimziv1 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
 	"gopkg.in/yaml.v3"
 	corev1 "k8s.io/api/core/v1"
 	apiErrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	ctrlClient "sigs.k8s.io/controller-runtime/pkg/client"
@@ -115,7 +116,7 @@ func reconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 	// Create Strimzi KafkaTopic resources for enabled topics
 	if wandb.Spec.Kafka.Enabled {
 		for _, topic := range manifest.Kafka {
-			if !manifestTopicEnabled(topic.Features, manifest.Features) {
+			if !manifestFeaturesEnabled(topic.Features, manifest.Features) {
 				continue
 			}
 
@@ -130,69 +131,67 @@ func reconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 				clusterName = wandb.Name
 			}
 
-			// Build KafkaTopic unstructured object
-			u := &unstructured.Unstructured{}
-			u.SetGroupVersionKind(schema.GroupVersionKind{
-				Group:   "kafka.strimzi.io",
-				Version: "v1beta2",
-				Kind:    "KafkaTopic",
-			})
 			// Use the logical topic name as the resource name
-			resName := topic.Topic
+			resName := topic.Name
 			if resName == "" {
 				// If not set, fallback to topic entry name
-				resName = topic.Name
+				resName = topic.Topic
 			}
 			if resName == "" {
 				// Nothing actionable without a name
 				continue
 			}
-			u.SetName(resName)
-			u.SetNamespace(kafkaNS)
 			labels := map[string]string{
 				"strimzi.io/cluster":           clusterName,
 				"app.kubernetes.io/managed-by": "wandb-operator",
 				"app.kubernetes.io/part-of":    "wandb",
 				"app.kubernetes.io/instance":   wandb.Name,
 			}
-			u.SetLabels(labels)
 
 			// Prepare spec
-			partitions := int64(1)
+			partitions := int32(1)
 			if topic.PartitionCount > 0 {
-				partitions = int64(topic.PartitionCount)
+				partitions = int32(topic.PartitionCount)
 			}
-			replicas := int64(1)
+			replicas := int32(1)
 			if wandb.Spec.Kafka.Config.ReplicationConfig.DefaultReplicationFactor > 0 {
-				replicas = int64(wandb.Spec.Kafka.Config.ReplicationConfig.DefaultReplicationFactor)
+				replicas = int32(wandb.Spec.Kafka.Config.ReplicationConfig.DefaultReplicationFactor)
 			}
 
-			_ = unstructured.SetNestedField(u.Object, topic.Topic, "spec", "topicName")
-			_ = unstructured.SetNestedField(u.Object, partitions, "spec", "partitions")
-			_ = unstructured.SetNestedField(u.Object, replicas, "spec", "replicas")
+			// Build typed KafkaTopic object
+			kt := &strimziv1.KafkaTopic{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      resName,
+					Namespace: kafkaNS,
+					Labels:    labels,
+				},
+				Spec: strimziv1.KafkaTopicSpec{
+					TopicName:  topic.Topic,
+					Partitions: partitions,
+					Replicas:   replicas,
+				},
+			}
 
 			// Create or Update
-			existing := &unstructured.Unstructured{}
-			existing.SetGroupVersionKind(u.GroupVersionKind())
-			getErr := client.Get(ctx, types.NamespacedName{Name: u.GetName(), Namespace: kafkaNS}, existing)
+			existing := &strimziv1.KafkaTopic{}
+			getErr := client.Get(ctx, types.NamespacedName{Name: kt.Name, Namespace: kafkaNS}, existing)
 			if getErr != nil {
 				if apiErrors.IsNotFound(getErr) {
 					// Set ownerRef only if same namespace
 					if kafkaNS == wandb.Namespace {
-						_ = controllerutil.SetOwnerReference(wandb, u, client.Scheme())
+						_ = controllerutil.SetOwnerReference(wandb, kt, client.Scheme())
 					}
-					if err := client.Create(ctx, u); err != nil {
+					if err := client.Create(ctx, kt); err != nil {
 						return ctrl.Result{}, err
 					}
 				} else {
 					return ctrl.Result{}, getErr
 				}
 			} else {
-				// Update spec fields if they differ
-				// We replace the spec fields we manage; keep other fields intact
-				_ = unstructured.SetNestedField(existing.Object, topic.Topic, "spec", "topicName")
-				_ = unstructured.SetNestedField(existing.Object, partitions, "spec", "partitions")
-				_ = unstructured.SetNestedField(existing.Object, replicas, "spec", "replicas")
+				// Update managed spec fields and preserve other fields
+				existing.Spec.TopicName = topic.Topic
+				existing.Spec.Partitions = partitions
+				existing.Spec.Replicas = replicas
 				// Preserve/ensure labels
 				exLabels := existing.GetLabels()
 				if exLabels == nil {
@@ -245,7 +244,7 @@ func reconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 	for _, app := range manifest.Applications {
 		// If the application is gated behind features, only install it when
 		// at least one of those features is enabled in the manifest.
-		if len(app.Features) > 0 && !manifestTopicEnabled(app.Features, manifest.Features) {
+		if len(app.Features) > 0 && !manifestFeaturesEnabled(app.Features, manifest.Features) {
 			continue
 		}
 		application := &apiv2.Application{}
@@ -352,6 +351,30 @@ func reconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 					singleSecretSelector = selector
 					secretOnlyCount++
 					addSecretComponent(selector, idx)
+				case "kafka":
+					// kafka can be referenced as a full URL (no field) or by specific fields (host/port)
+					if src.Field == "" {
+						selector := wandb.Status.KafkaStatus.Connection.URL
+						singleSecretSelector = selector
+						secretOnlyCount++
+						addSecretComponent(selector, idx)
+						break
+					}
+					selector := corev1.SecretKeySelector{
+						LocalObjectReference: wandb.Status.KafkaStatus.Connection.URL.LocalObjectReference,
+					}
+					switch src.Field {
+					case "host":
+						selector.Key = "Host"
+					case "port":
+						selector.Key = "Port"
+					default:
+						// Unrecognized field; skip
+						continue
+					}
+					singleSecretSelector = selector
+					secretOnlyCount++
+					addSecretComponent(selector, idx)
 				case "service":
 					// Resolve to a literal URL (proto://serviceName:port/path)
 					serviceList := &corev1.ServiceList{}
@@ -384,6 +407,16 @@ func reconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 						}
 					}
 					components = append(components, fmt.Sprintf("%s%s:%d%s", proto, serviceList.Items[0].Name, selectedPort, src.Path))
+				case "custom-resource":
+					// Read a value from the current WandB custom resource via dotted field path
+					if src.Field == "" {
+						// No field specified; nothing to resolve
+						continue
+					}
+					if val, ok := resolveCRFieldString(wandb, src.Field); ok {
+						// Treat as a literal component (not secret-backed)
+						components = append(components, val)
+					}
 				default:
 					// Unknown source type; skip
 					continue
@@ -600,9 +633,9 @@ func reconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 	return ctrl.Result{}, nil
 }
 
-// manifestTopicEnabled returns true if any of the topic's feature flags are enabled
+// manifestFeaturesEnabled returns true if any of the topic's feature flags are enabled
 // in the manifest's top-level Features section.
-func manifestTopicEnabled(topicFeatures []string, mf *serverManifest.Features) bool {
+func manifestFeaturesEnabled(topicFeatures []string, mf *serverManifest.Features) bool {
 	if len(topicFeatures) == 0 || mf == nil {
 		return false
 	}
@@ -635,6 +668,40 @@ func manifestTopicEnabled(topicFeatures []string, mf *serverManifest.Features) b
 		}
 	}
 	return false
+}
+
+// resolveCRFieldString resolves a dotted field path (e.g., "spec.wandb.license")
+// from the provided custom resource object, returning the string value if present.
+// Non-string terminal values are treated as not found.
+func resolveCRFieldString(obj any, path string) (string, bool) {
+	if obj == nil || path == "" {
+		return "", false
+	}
+	// Marshal to JSON then unmarshal into a generic map for easy traversal.
+	b, err := json.Marshal(obj)
+	if err != nil {
+		return "", false
+	}
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		return "", false
+	}
+	cur := any(m)
+	for _, seg := range strings.Split(path, ".") {
+		mm, ok := cur.(map[string]any)
+		if !ok {
+			return "", false
+		}
+		next, ok := mm[seg]
+		if !ok {
+			return "", false
+		}
+		cur = next
+	}
+	if s, ok := cur.(string); ok {
+		return s, true
+	}
+	return "", false
 }
 
 func inferState(

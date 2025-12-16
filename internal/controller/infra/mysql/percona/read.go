@@ -70,7 +70,7 @@ func ReadState(
 		///////////////////////////////////
 		// set connection details
 
-	connInfo := readConnectionDetails(ctx, client, actual, specNamespacedName)
+		connInfo := readConnectionDetails(ctx, client, actual, specNamespacedName)
 
 		var connection *translator.InfraConnection
 		if connection, err = writeMySQLConnInfo(

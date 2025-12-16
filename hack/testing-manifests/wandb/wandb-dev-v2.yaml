@@ -3,6 +3,8 @@ kind: WeightsAndBiases
 metadata:
   name: wandb-dev-v2
 spec:
+  wandb:
+    hostname: http://localhost:8080
   size: dev
   mysql:
     enabled: true

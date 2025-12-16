@@ -5,7 +5,7 @@ features:
   filestreamQueue: false
   metricObserver: false
   weaveTrace: true
-  weaveTraceWorkers: false
+  weaveTraceWorkers: true
   proxy: true
 
 bucket:
@@ -23,17 +23,18 @@ kafka:
   - name: flatRunFieldsUpdater
     features:
       - runsV2
+      - metricObserver
     topic: flat-run-fields-updater
     partitionCount: 48
-  - name: weaveWorker
+  - name: weave-worker
     features:
       - weaveTraceWorkers
-    topic: weave-worker
+    topic: weave.call_ended
     partitionCount: 48
-  - name: weaveEvaluateModelWorker
+  - name: weave-evaluate-model-worker
     features:
       - weaveTraceWorkers
-    topic: weave-evaluate-model-worker
+    topic: weave.evaluate_model
     partitionCount: 48
 
 mysql:
@@ -191,9 +192,25 @@ commonEnvvars:
     - name: GORILLA_FILE_STORE_IS_PROXIED
       value: "true"
     - name: GORILLA_FILE_HOST
-      value: "http://localhost:8080"
+      sources:
+        - name: hostname
+          type: custom-resource
+          field: spec.wandb.hostname
     - name: GORILLA_FRONTEND_HOST
-      value: "http://localhost:8080"
+      sources:
+        - name: hostname
+          type: custom-resource
+          field: spec.wandb.hostname
+    - name: LICENSE
+      sources:
+        - name: license
+          type: custom-resource
+          field: spec.wandb.license
+    - name: GORILLA_LICENSE
+      sources:
+        - name: license
+          type: custom-resource
+          field: spec.wandb.license
   clickhouse:
     - name: WF_CLICKHOUSE_HOST
       sources:
@@ -220,6 +237,53 @@ commonEnvvars:
         - name: default
           type: clickhouse
           field: database
+  kafka:
+    - name: KAFKA_BROKER_HOST
+      sources:
+        - name: default
+          type: kafka
+          field: host
+    - name: KAFKA_BROKER_PORT
+      sources:
+        - name: default
+          type: kafka
+          field: port
+  weaveTrace:
+    - name: WANDB_PUBLIC_BASE_URL
+      sources:
+        - name: hostname
+          type: custom-resource
+          field: spec.wandb.hostname
+    - name: WANDB_BASE_URL
+      sources:
+        - name: api
+          type: service
+          proto: "http"
+          path: "/"
+    - name: WF_TRACE_SERVER_URL
+      value: "$(WANDB_PUBLIC_BASE_URL)/traces"
+    - name: API_PATH_PREFIX
+      value: "/traces"
+    - name: WEAVE_ENABLE_ONLINE_EVAL
+      value: "true"
+    - name: WEAVE_ENABLE_EVALUATE_MODEL_WORKER
+      value: "true"
+  frontend:
+    - name: REACT_APP_HOST
+      source:
+        - name: hostname
+          type: custom-resource
+          field: spec.wandb.hostname
+    - name: REACT_APP_ENVIRONMENT_NAME
+      value: "local"
+    - name: REACT_APP_ENVIRONMENT_IS_PRIVATE
+      value: "true"
+    - name: REACT_APP_ANALYTICS_DISABLED
+      value: "true"
+    - name: WEAVE_TRACES_ENABLED
+      value: "true"
+    - name: SERVER_FLAG_WEAVE_1_PERCENTAGE
+      value: "100"
 applications:
   - name: anaconda2
     image:
@@ -292,6 +356,7 @@ applications:
       - gorillaTaskQueueProducer
       - gorillaService
       - gorillaOnprem
+      - frontend
     env:
       - name: WEAVE_ENABLED
         value: "true"
@@ -436,6 +501,8 @@ applications:
     image:
       repository: wandb/frontend-nginx
       tag: 0.76.1
+    commonEnvs:
+      - frontend
     env:
       - name: FRONTEND_APP_BACKEND
         sources:
@@ -501,7 +568,6 @@ applications:
       - gorillaService
       - gorillaOnprem
     features:
-      - runsV2
       - metricObserver
     image:
       repository: wandb/megabinary
@@ -563,6 +629,13 @@ applications:
     image:
       repository: wandb/weave-trace
       tag: 0.76.1
+    args:
+      - "uvicorn"
+      - "src.trace_server:app"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8080"
     initContainers:
       - name: migrate
         image:
@@ -571,19 +644,17 @@ applications:
         args:
           - python
           - migrator.py
-    env:
-      - name: DATADOG_TRACE_ENABLED
-        value: "false"
     commonEnvs:
       - clickhouse
-    kafka:
-      weaveWorker:
-        topic: weave-worker
-      weaveEvaluateModelWorker:
-        topic: weave-evaluate-model-worker
+      - kafka
+      - weaveTrace
+    ports:
+      - containerPort: 8080
+        name: weave-trace
+        protocol: TCP
     service:
       ports:
-        - port: 8722
+        - port: 8080
           protocol: TCP
           name: weave-trace
   - name: weave-trace-worker
@@ -592,24 +663,28 @@ applications:
     image:
       repository: wandb/weave-trace
       tag: 0.76.1
+    args:
+      - "python"
+      - "-m"
+      - "src.workers.scoring_worker"
     commonEnvs:
       - clickhouse
-    kafka:
-      weaveWorker:
-        topic: weave-worker
-        consumerGroup: weave-worker
+      - kafka
+      - weaveTrace
   - name: weave-trace-evaluate-model-worker
     features:
       - weaveTraceWorkers
     image:
       repository: wandb/weave-trace
       tag: 0.76.1
+    args:
+      - "python"
+      - "-m"
+      - "src.workers.evaluate_model_worker.evaluate_model_worker"
     commonEnvs:
       - clickhouse
-    kafka:
-      weaveEvaluateModelWorker:
-        topic: weave-evaluate-model-worker
-        consumerGroup: weave-evaluate-model-worker
+      - kafka
+      - weaveTrace
   - name: nginx-proxy
     features:
       - proxy
@@ -664,7 +739,7 @@ applications:
               }
     
               location /traces {
-                proxy_pass http://wandb-dev-v2-weave-trace:8722;
+                proxy_pass http://wandb-dev-v2-weave-trace:8080;
               }
     
               location /bucket {

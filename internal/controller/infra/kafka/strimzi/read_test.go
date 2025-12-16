@@ -24,7 +24,7 @@ func TestComputeStatusSummary(t *testing.T) {
 			kafkaCR:       nil,
 			initialStatus: &translator.KafkaStatus{},
 			expectedReady: false,
-			expectedState: "NotInstalled",
+			expectedState: "Not Installed",
 		},
 		{
 			name: "kafkaCR has KafkaMetadataState set with ready condition true",
@@ -41,7 +41,7 @@ func TestComputeStatusSummary(t *testing.T) {
 			},
 			initialStatus: &translator.KafkaStatus{},
 			expectedReady: true,
-			expectedState: "Ready",
+			expectedState: "KRaft",
 		},
 		{
 			name: "kafkaCR has KafkaMetadataState set with ready condition false",
@@ -58,7 +58,7 @@ func TestComputeStatusSummary(t *testing.T) {
 			},
 			initialStatus: &translator.KafkaStatus{},
 			expectedReady: false,
-			expectedState: "NotReady",
+			expectedState: "ZooKeeper",
 		},
 		{
 			name: "ready condition exists and is true",
@@ -90,7 +90,7 @@ func TestComputeStatusSummary(t *testing.T) {
 			},
 			initialStatus: &translator.KafkaStatus{},
 			expectedReady: false,
-			expectedState: "NotReady",
+			expectedState: "Not Ready",
 		},
 		{
 			name: "ready condition is missing",
@@ -101,7 +101,7 @@ func TestComputeStatusSummary(t *testing.T) {
 			},
 			initialStatus: &translator.KafkaStatus{},
 			expectedReady: false,
-			expectedState: "NotReady",
+			expectedState: "Not Ready",
 		},
 		{
 			name: "state is empty string and ready is true",
@@ -135,7 +135,7 @@ func TestComputeStatusSummary(t *testing.T) {
 			},
 			initialStatus: &translator.KafkaStatus{},
 			expectedReady: false,
-			expectedState: "NotReady",
+			expectedState: "Not Ready",
 		},
 		{
 			name: "state is non-empty and ready is true",
@@ -152,7 +152,7 @@ func TestComputeStatusSummary(t *testing.T) {
 			},
 			initialStatus: &translator.KafkaStatus{},
 			expectedReady: true,
-			expectedState: "Ready",
+			expectedState: "Migrating",
 		},
 		{
 			name: "state is non-empty and ready is false",
@@ -169,7 +169,7 @@ func TestComputeStatusSummary(t *testing.T) {
 			},
 			initialStatus: &translator.KafkaStatus{},
 			expectedReady: false,
-			expectedState: "NotReady",
+			expectedState: "Error",
 		},
 		{
 			name: "different condition types (non-ready conditions) should not affect ready status",
@@ -189,7 +189,7 @@ func TestComputeStatusSummary(t *testing.T) {
 			},
 			initialStatus: &translator.KafkaStatus{},
 			expectedReady: false,
-			expectedState: "NotReady",
+			expectedState: "Not Ready",
 		},
 		{
 			name: "ready condition with case insensitive type match (lowercase)",
@@ -285,7 +285,7 @@ func TestComputeStatusSummary(t *testing.T) {
 			},
 			initialStatus: &translator.KafkaStatus{},
 			expectedReady: false,
-			expectedState: "NotReady",
+			expectedState: "Not Ready",
 		},
 		{
 			name: "ready condition with unknown status (should be false)",
@@ -301,7 +301,7 @@ func TestComputeStatusSummary(t *testing.T) {
 			},
 			initialStatus: &translator.KafkaStatus{},
 			expectedReady: false,
-			expectedState: "NotReady",
+			expectedState: "Not Ready",
 		},
 		{
 			name: "kafkaCR with empty conditions array",
@@ -313,7 +313,7 @@ func TestComputeStatusSummary(t *testing.T) {
 			},
 			initialStatus: &translator.KafkaStatus{},
 			expectedReady: false,
-			expectedState: "NotReady",
+			expectedState: "Initializing",
 		},
 		{
 			name: "kafkaCR with nil conditions array",
@@ -325,7 +325,7 @@ func TestComputeStatusSummary(t *testing.T) {
 			},
 			initialStatus: &translator.KafkaStatus{},
 			expectedReady: false,
-			expectedState: "NotReady",
+			expectedState: "Pending",
 		},
 		{
 			name: "kafka metadata state with empty string and no conditions",
@@ -337,7 +337,7 @@ func TestComputeStatusSummary(t *testing.T) {
 			},
 			initialStatus: &translator.KafkaStatus{},
 			expectedReady: false,
-			expectedState: "NotReady",
+			expectedState: "Not Ready",
 		},
 		{
 			name: "kafka metadata state with special characters",
@@ -354,7 +354,7 @@ func TestComputeStatusSummary(t *testing.T) {
 			},
 			initialStatus: &translator.KafkaStatus{},
 			expectedReady: true,
-			expectedState: "Ready",
+			expectedState: "State-With-Dashes",
 		},
 		{
 			name: "status with existing connection should preserve it",
@@ -439,7 +439,7 @@ func TestComputeStatusSummary(t *testing.T) {
 			},
 			initialStatus: &translator.KafkaStatus{},
 			expectedReady: false,
-			expectedState: "NotReady",
+			expectedState: "VeryLongStateNameThatRepresentsComplexInternalKafkaMetadataStateTransition",
 		},
 	}
 
