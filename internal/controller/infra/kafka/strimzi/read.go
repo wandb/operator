@@ -15,7 +15,7 @@ import (
 )
 
 func readConnectionDetails(nsNameBldr *NsNameBuilder) *kafkaConnInfo {
-	kafkaHost := fmt.Sprintf("%s.%s.svc.cluster.local", nsNameBldr.KafkaName(), nsNameBldr.Namespace())
+	kafkaHost := fmt.Sprintf("%s-%s.%s.svc.cluster.local", nsNameBldr.KafkaName(), "kafka-bootstrap", nsNameBldr.Namespace())
 	kafkaPort := strconv.Itoa(PlainListenerPort)
 
 	return &kafkaConnInfo{

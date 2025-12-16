@@ -85,6 +85,10 @@ func ToKafkaVendorSpec(
 					"min.insync.replicas":                      strconv.Itoa(int(spec.Config.ReplicationConfig.MinInSyncReplicas)),
 				},
 			},
+			EntityOperator: &strimziv1.EntityOperatorSpec{
+				TopicOperator: &strimziv1.EntityTopicOperatorSpec{WatchedNamespace: nsNameBldr.Namespace()},
+				UserOperator:  &strimziv1.EntityUserOperatorSpec{WatchedNamespace: nsNameBldr.Namespace()},
+			},
 		},
 	}
 

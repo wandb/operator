@@ -614,6 +614,39 @@ spec:
               size:
                 description: Size is akin to high-level environment info
                 type: string
+              wandb:
+                description: WandbAppSpec defines the configuration for the Wandb
+                  application deployment.
+                properties:
+                  additionalHostnames:
+                    items:
+                      type: string
+                    type: array
+                  hostname:
+                    type: string
+                  license:
+                    type: string
+                  oidc:
+                    description: WandbOIDCSpec defines the structure for OpenID Connect
+                      (OIDC) configuration used in Wandb application deployments.
+                    properties:
+                      authMethod:
+                        type: string
+                      clientId:
+                        type: string
+                      clientSecret:
+                        type: string
+                      issuerUrl:
+                        type: string
+                    required:
+                    - authMethod
+                    - clientId
+                    - clientSecret
+                    - issuerUrl
+                    type: object
+                required:
+                - hostname
+                type: object
             type: object
           status:
             description: WeightsAndBiasesStatus defines the observed state of WeightsAndBiases.

@@ -15,8 +15,10 @@ import (
 )
 
 type kafkaConnInfo struct {
-	Host string
-	Port string
+	Host     string
+	Port     string
+	Username string
+	Password string
 }
 
 func (c *kafkaConnInfo) toURL() string {
@@ -73,6 +75,8 @@ func writeKafkaConnInfo(
 		Type: corev1.SecretTypeOpaque,
 		StringData: map[string]string{
 			urlKey: connInfo.toURL(),
+			"Host": connInfo.Host,
+			"Port": connInfo.Port,
 		},
 	}
 

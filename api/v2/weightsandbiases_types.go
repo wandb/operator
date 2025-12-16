@@ -72,11 +72,33 @@ type WeightsAndBiasesSpec struct {
 	// Size is akin to high-level environment info
 	Size WBSize `json:"size,omitempty"`
 
+	Wandb WandbAppSpec `json:"wandb,omitempty"`
+
 	MySQL      WBMySQLSpec      `json:"mysql,omitempty"`
 	Redis      WBRedisSpec      `json:"redis,omitempty"`
 	Kafka      WBKafkaSpec      `json:"kafka,omitempty"`
 	Minio      WBMinioSpec      `json:"minio,omitempty"`
 	ClickHouse WBClickHouseSpec `json:"clickhouse,omitempty"`
+}
+
+// WandbAppSpec defines the configuration for the Wandb application deployment.
+type WandbAppSpec struct {
+	Hostname string `json:"hostname"`
+	License  string `json:"license,omitempty"`
+
+	// +optional
+	AdditionalHostnames []string `json:"additionalHostnames,omitempty"`
+
+	// +optional
+	OIDC WandbOIDCSpec `json:"oidc,omitempty"`
+}
+
+// WandbOIDCSpec defines the structure for OpenID Connect (OIDC) configuration used in Wandb application deployments.
+type WandbOIDCSpec struct {
+	ClientId     string `json:"clientId"`
+	ClientSecret string `json:"clientSecret"`
+	IssuerUrl    string `json:"issuerUrl"`
+	AuthMethod   string `json:"authMethod"`
 }
 
 // WBMySQLSpec fields have many default values that, if unspecified,
