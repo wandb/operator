@@ -32,6 +32,38 @@ Files affected:
 
 We vendored the API type definitions needed for our operator:
 
+### CRDs
+
+**NOTE: CRD files must be downloaded separately and are not currently vendored.**
+
+To download the CRDs for integration testing:
+
+1. Create the `crds/` directory:
+   ```bash
+   mkdir -p internal/vendored/strimzi-kafka/crds
+   ```
+
+2. Download the Strimzi Kafka Operator CRDs from the upstream repository at 0.49.1:
+   ```bash
+   # Kafka
+   curl -L https://raw.githubusercontent.com/strimzi/strimzi-kafka-operator/0.49.1/packaging/install/cluster-operator/040-Crd-kafka.yaml \
+     -o internal/vendored/strimzi-kafka/crds/kafka.strimzi.io_kafkas.yaml
+
+   # KafkaNodePool
+   curl -L https://raw.githubusercontent.com/strimzi/strimzi-kafka-operator/0.49.1/packaging/install/cluster-operator/045-Crd-kafkanodepool.yaml \
+     -o internal/vendored/strimzi-kafka/crds/kafka.strimzi.io_kafkanodepools.yaml
+
+   # KafkaTopic
+   curl -L https://raw.githubusercontent.com/strimzi/strimzi-kafka-operator/0.49.1/packaging/install/cluster-operator/043-Crd-kafkatopic.yaml \
+     -o internal/vendored/strimzi-kafka/crds/kafka.strimzi.io_kafkatopics.yaml
+   ```
+
+3. **When updating to a new version**: Update the version tag (0.49.1) in the URLs above to match the new vendored version.
+
+**Purpose**: Integration testing with real Kubernetes API server (envtest)
+
+### API Types
+
 - `v1/` - Kafka, KafkaNodePool, and KafkaTopic CRD types (v1 API)
   - `groupversion_info.go` - API group registration and scheme builder
   - `kafka_types.go` - Kafka CRD type definitions

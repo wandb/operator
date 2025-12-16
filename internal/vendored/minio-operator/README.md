@@ -50,12 +50,21 @@ We vendored the API type definitions and CRDs needed for our operator:
 
 ### CRDs
 
-Full official CRD definitions from upstream:
+Full official CRD definitions from upstream (already vendored):
 
 - `crds/minio.min.io_tenants.yaml`
   - **Source**: https://github.com/minio/operator/blob/34dc39801903/resources/base/crds/minio.min.io_tenants.yaml
-  - **Purpose**: Integration testing with real Kubernetes API
-  - **Note**: Must be updated when vendoring new versions
+  - **Purpose**: Integration testing with real Kubernetes API server (envtest)
+
+To update the CRDs when vendoring a new version:
+
+1. Download the updated CRD from the upstream repository at the new version:
+   ```bash
+   curl -L https://raw.githubusercontent.com/minio/operator/34dc39801903/resources/base/crds/minio.min.io_tenants.yaml \
+     -o internal/vendored/minio-operator/crds/minio.min.io_tenants.yaml
+   ```
+
+2. **When updating to a new version**: Update the commit hash (34dc39801903) in the URL above to match the new vendored version.
 
 ### API Types
 
