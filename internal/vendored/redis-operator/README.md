@@ -55,6 +55,38 @@ All vendored files have been updated to reference the vendored `common/v1beta2` 
 
 We vendored the API type definitions needed for our operator:
 
+### CRDs
+
+**NOTE: CRD files must be downloaded separately and are not currently vendored.**
+
+To download the CRDs for integration testing:
+
+1. Create the `crds/` directory:
+   ```bash
+   mkdir -p internal/vendored/redis-operator/crds
+   ```
+
+2. Download the Redis Operator CRDs from the upstream repository at v0.22.1:
+   ```bash
+   # Redis (standalone)
+   curl -L https://raw.githubusercontent.com/OT-CONTAINER-KIT/redis-operator/v0.22.1/config/crd/bases/redis.redis.opstreelabs.in_redis.yaml \
+     -o internal/vendored/redis-operator/crds/redis.redis.opstreelabs.in_redis.yaml
+
+   # RedisReplication
+   curl -L https://raw.githubusercontent.com/OT-CONTAINER-KIT/redis-operator/v0.22.1/config/crd/bases/redis.redis.opstreelabs.in_redisreplications.yaml \
+     -o internal/vendored/redis-operator/crds/redis.redis.opstreelabs.in_redisreplications.yaml
+
+   # RedisSentinel
+   curl -L https://raw.githubusercontent.com/OT-CONTAINER-KIT/redis-operator/v0.22.1/config/crd/bases/redis.redis.opstreelabs.in_redissentinels.yaml \
+     -o internal/vendored/redis-operator/crds/redis.redis.opstreelabs.in_redissentinels.yaml
+   ```
+
+3. **When updating to a new version**: Update the version tag (v0.22.1) in the URLs above to match the new vendored version.
+
+**Purpose**: Integration testing with real Kubernetes API server (envtest)
+
+### API Types
+
 - `common/v1beta2/` - Common types and configurations
 - `redis/v1beta2/` - Redis CRD types (standalone Redis)
 - `redisreplication/v1beta2/` - RedisReplication CRD types (HA replication)

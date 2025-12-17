@@ -92,6 +92,33 @@ All import paths have been updated from `github.com/altinity/clickhouse-operator
 
 We vendored the API type definitions and utility packages needed for our operator:
 
+### CRDs
+
+**NOTE: CRD files must be downloaded separately and are not currently vendored.**
+
+To download the CRDs for integration testing:
+
+1. Create the `crds/` directory:
+   ```bash
+   mkdir -p internal/vendored/altinity-clickhouse/crds
+   ```
+
+2. Download the ClickHouseInstallation CRD from the upstream repository at the vendored version (v0.0.0-20251007061817-0cf33cf23815):
+   ```bash
+   curl -L https://raw.githubusercontent.com/Altinity/clickhouse-operator/0cf33cf23815/deploy/operator/clickhouse-operator-install-bundle.yaml \
+     -o internal/vendored/altinity-clickhouse/crds/clickhouse-operator-install-bundle.yaml
+   ```
+
+   Or download individual CRDs:
+   ```bash
+   curl -L https://raw.githubusercontent.com/Altinity/clickhouse-operator/0cf33cf23815/deploy/operator/parts/crd.yaml \
+     -o internal/vendored/altinity-clickhouse/crds/clickhouse.altinity.com_clickhouseinstallations.yaml
+   ```
+
+3. **When updating to a new version**: Update the commit hash in the URLs above to match the new vendored version.
+
+**Purpose**: Integration testing with real Kubernetes API server (envtest)
+
 ### API Types
 - `clickhouse.altinity.com/v1/` - Main ClickHouseInstallation CRD types
   - All type definition files (`type_*.go`)

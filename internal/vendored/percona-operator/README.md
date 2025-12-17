@@ -55,6 +55,34 @@ Files affected:
 
 We vendored the API type definitions needed for our operator:
 
+### CRDs
+
+**NOTE: CRD files must be downloaded separately and are not currently vendored.**
+
+To download the CRDs for integration testing:
+
+1. Create the `crds/` directory:
+   ```bash
+   mkdir -p internal/vendored/percona-operator/crds
+   ```
+
+2. Download the Percona XtraDB Cluster CRDs from the upstream repository at v1.18.0:
+   ```bash
+   curl -L https://raw.githubusercontent.com/percona/percona-xtradb-cluster-operator/v1.18.0/deploy/crd.yaml \
+     -o internal/vendored/percona-operator/crds/pxc.percona.com_perconaxtradbclusters.yaml
+   ```
+
+   **Note**: This single file contains all three CRDs:
+   - `perconaxtradbclusters.pxc.percona.com` (main cluster CRD)
+   - `perconaxtradbclusterbackups.pxc.percona.com` (backup CRD)
+   - `perconaxtradbclusterrestores.pxc.percona.com` (restore CRD)
+
+3. **When updating to a new version**: Update the version tag (v1.18.0) in the URLs above to match the new vendored version.
+
+**Purpose**: Integration testing with real Kubernetes API server (envtest)
+
+### API Types
+
 - `pxc/v1/` - PerconaXtraDBCluster CRD types, backup types, and restore types
   - `register.go` - API group registration and scheme builder
   - `doc.go` - Package documentation
