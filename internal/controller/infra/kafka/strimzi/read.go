@@ -14,13 +14,18 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func readConnectionDetails(nsNameBldr *NsNameBuilder) *kafkaConnInfo {
+func readConnectionDetails(nsNameBldr *NsNameBuilder, actualKafka *strimziv1.Kafka) *kafkaConnInfo {
 	kafkaHost := fmt.Sprintf("%s-%s.%s.svc.cluster.local", nsNameBldr.KafkaName(), "kafka-bootstrap", nsNameBldr.Namespace())
 	kafkaPort := strconv.Itoa(PlainListenerPort)
+	kafkaClusterId := ""
+	if actualKafka != nil {
+		kafkaClusterId = actualKafka.Status.ClusterId
+	}
 
 	return &kafkaConnInfo{
-		Host: kafkaHost,
-		Port: kafkaPort,
+		Host:      kafkaHost,
+		Port:      kafkaPort,
+		ClusterId: kafkaClusterId,
 	}
 }
 
@@ -61,7 +66,7 @@ func ReadState(
 		///////////////////////////////////
 		// set connection details
 
-		connInfo := readConnectionDetails(nsNameBldr)
+		connInfo := readConnectionDetails(nsNameBldr, actualKafka)
 
 		var connection *translator.InfraConnection
 		if connection, err = writeKafkaConnInfo(

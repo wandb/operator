@@ -53,6 +53,10 @@ func writeKafkaState(
 		return err
 	}
 
+	if err = restoreKafkaConnInfo(ctx, client, nsNameBldr, desired, actual); err != nil {
+		return err
+	}
+
 	return nil
 }
 
