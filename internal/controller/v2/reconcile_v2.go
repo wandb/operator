@@ -25,6 +25,7 @@ import (
 	"time"
 
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/internal/controller/ctrlqueue"
 	"github.com/wandb/operator/internal/controller/translator"
 	strimziv1 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
@@ -36,15 +37,49 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	ctrlClient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+const CleanupFinalizer = "cleanup.app.wandb.com"
 
 var defaultRequeueMinutes = 1
 var defaultRequeueDuration = time.Duration(defaultRequeueMinutes) * time.Minute
 
 // Reconcile for V2 of WandB as the assumed object
 func Reconcile(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases) (ctrl.Result, error) {
+	log := ctrllog.FromContext(ctx)
+
 	var minioConnection *translator.InfraConnection
 	var err error
+
+	/////////////////////////
+	// Cleanup Finalizer
+
+	// add if not present
+	if !ctrlqueue.ContainsString(wandb.GetFinalizers(), CleanupFinalizer) {
+		wandb.ObjectMeta.Finalizers = append(wandb.ObjectMeta.Finalizers, CleanupFinalizer)
+		if err := client.Update(ctx, wandb); err != nil {
+			log.Error(err, fmt.Sprintf("Failed to add finalizer '%s'", CleanupFinalizer))
+			return ctrl.Result{}, err
+		}
+	}
+
+	// handle cleanup or preservation of config and data
+	if ctrlqueue.ContainsString(wandb.ObjectMeta.Finalizers, CleanupFinalizer) {
+
+		// try to keep stuff around that will allow recreation of WandB CR (and Infra) with
+		// same data and credentials
+		if !wandb.Spec.AutoCleanupEnabled {
+			if err = kafkaPreserveFinalizer(ctx, client, wandb); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+		controllerutil.RemoveFinalizer(wandb, CleanupFinalizer)
+		if err := client.Update(ctx, wandb); err != nil {
+			log.Error(err, "Failed to remove finalizer '%s'")
+			return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
+		}
+	}
 
 	/////////////////////////
 	// Write State

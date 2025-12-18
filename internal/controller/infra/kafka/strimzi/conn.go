@@ -82,6 +82,28 @@ func writeKafkaConnInfo(
 		actual = nil
 	}
 
+	// prefer existing strimzi CR clusterId to wandb Secret clusterId
+	// but take a non-blank value of a blank one
+	nextClusterId := ""
+	wandbSecretClusterId := ""
+	if actual != nil {
+		wandbSecretClusterId = string(actual.Data["ClusterID"])
+	}
+	strimziCrClusterId := connInfo.ClusterId
+	if wandbSecretClusterId == strimziCrClusterId {
+		nextClusterId = strimziCrClusterId // no change
+	} else if wandbSecretClusterId != "" && strimziCrClusterId != "" {
+		log.Info("Kafka clusterId replace wandb secret with strimzi CR status",
+			"wandbSecretClusterId", wandbSecretClusterId, "strimziCrClusterId", strimziCrClusterId)
+		nextClusterId = strimziCrClusterId
+	} else if wandbSecretClusterId != "" {
+		log.Info("Kafka clusterId use existing wandb secret", "wandbSecretClusterId", wandbSecretClusterId)
+		nextClusterId = wandbSecretClusterId
+	} else if strimziCrClusterId != "" {
+		log.Info("Kafka clusterId use existing strimzi CR status", "strimziCrClusterId", strimziCrClusterId)
+		nextClusterId = strimziCrClusterId
+	}
+
 	if gvk, err = cl.GroupVersionKindFor(owner); err != nil {
 		log.Error(err, fmt.Sprintf("Error getting GVK for %s", owner.GetName()))
 		return nil, fmt.Errorf("could not get GVK for owner: %w", err)
@@ -106,7 +128,7 @@ func writeKafkaConnInfo(
 			urlKey:      connInfo.toURL(),
 			"Host":      connInfo.Host,
 			"Port":      connInfo.Port,
-			"ClusterID": connInfo.ClusterId,
+			"ClusterID": nextClusterId,
 		},
 	}
 
@@ -172,7 +194,7 @@ func restoreKafkaConnInfo(
 		return nil
 	}
 
-	log.Info("restoring Kafka connection info")
+	log.Info("restoring Kafka connection info", "clusterId", connInfo.ClusterId)
 	desired.Status.ClusterId = connInfo.ClusterId
 	if err = cl.Status().Update(ctx, desired); err != nil {
 		return err
