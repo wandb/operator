@@ -25,9 +25,9 @@ func PreserveFinalizer(
 	var err error
 	var actual = &corev1.Secret{}
 
-	nsNameBldr := createNsNameBuilder(specNamespacedName)
+	nsnBuilder := createNsNameBuilder(specNamespacedName)
 
-	nsName := nsNameBldr.ConnectionNsName()
+	nsName := nsnBuilder.ConnectionNsName()
 
 	if found, err = common.GetResource(
 		ctx, cl, nsName, AppConnTypeName, actual,

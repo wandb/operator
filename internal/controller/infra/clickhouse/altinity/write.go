@@ -24,10 +24,10 @@ func WriteState(
 	var found bool
 	var actual = &chiv1.ClickHouseInstallation{}
 
-	nsNameBldr := createNsNameBuilder(specNamespacedName)
+	nsnBuilder := createNsNameBuilder(specNamespacedName)
 
 	if found, err = common.GetResource(
-		ctx, client, nsNameBldr.InstallationNsName(), ResourceTypeName, actual,
+		ctx, client, nsnBuilder.InstallationNsName(), ResourceTypeName, actual,
 	); err != nil {
 		return err
 	}

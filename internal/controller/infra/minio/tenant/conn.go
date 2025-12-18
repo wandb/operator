@@ -28,10 +28,10 @@ type minioConnInfo struct {
 }
 
 func buildMinioConnInfo(
-	rootUser, rootPassword string, nsNameBldr *NsNameBuilder,
+	rootUser, rootPassword string, nsnBuilder *NsNameBuilder,
 ) *minioConnInfo {
-	namespace := nsNameBldr.Namespace()
-	serviceName := nsNameBldr.ServiceName()
+	namespace := nsnBuilder.Namespace()
+	serviceName := nsnBuilder.ServiceName()
 	return &minioConnInfo{
 		RootUser:     rootUser,
 		RootPassword: rootPassword,
@@ -54,7 +54,7 @@ func writeWandbConnInfo(
 	ctx context.Context,
 	client client.Client,
 	owner client.Object,
-	nsNameBldr *NsNameBuilder,
+	nsnBuilder *NsNameBuilder,
 	connInfo *minioConnInfo,
 ) (
 	*translator.InfraConnection, error,
@@ -66,7 +66,7 @@ func writeWandbConnInfo(
 
 	//log := ctrl.LoggerFrom(ctx)
 
-	nsName := nsNameBldr.ConnectionNsName()
+	nsName := nsnBuilder.ConnectionNsName()
 	urlKey := "url"
 
 	if found, err = common.GetResource(

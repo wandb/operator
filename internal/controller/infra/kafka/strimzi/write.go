@@ -18,12 +18,12 @@ func WriteState(
 ) error {
 	var err error
 
-	nsNameBldr := createNsNameBuilder(specNamespacedName)
+	nsnBuilder := createNsNameBuilder(specNamespacedName)
 
-	if err = writeKafkaState(ctx, client, nsNameBldr, desiredKafka); err != nil {
+	if err = writeKafkaState(ctx, client, nsnBuilder, desiredKafka); err != nil {
 		return err
 	}
-	if err = writeNodePoolState(ctx, client, nsNameBldr, desiredNodePool); err != nil {
+	if err = writeNodePoolState(ctx, client, nsnBuilder, desiredNodePool); err != nil {
 		return err
 	}
 
@@ -33,7 +33,7 @@ func WriteState(
 func writeKafkaState(
 	ctx context.Context,
 	client client.Client,
-	nsNameBldr *NsNameBuilder,
+	nsnBuilder *NsNameBuilder,
 	desired *strimziv1.Kafka,
 ) error {
 	var err error
@@ -41,7 +41,7 @@ func writeKafkaState(
 	var actual = &strimziv1.Kafka{}
 
 	if found, err = common.GetResource(
-		ctx, client, nsNameBldr.KafkaNsName(), KafkaResourceType, actual,
+		ctx, client, nsnBuilder.KafkaNsName(), KafkaResourceType, actual,
 	); err != nil {
 		return err
 	}
@@ -53,7 +53,7 @@ func writeKafkaState(
 		return err
 	}
 
-	if err = restoreKafkaConnInfo(ctx, client, nsNameBldr, desired, actual); err != nil {
+	if err = restoreKafkaConnInfo(ctx, client, nsnBuilder, desired, actual); err != nil {
 		return err
 	}
 
@@ -63,7 +63,7 @@ func writeKafkaState(
 func writeNodePoolState(
 	ctx context.Context,
 	client client.Client,
-	nsNameBldr *NsNameBuilder,
+	nsnBuilder *NsNameBuilder,
 	desired *strimziv1.KafkaNodePool,
 ) error {
 	var err error
@@ -71,7 +71,7 @@ func writeNodePoolState(
 	var actual = &strimziv1.KafkaNodePool{}
 
 	if found, err = common.GetResource(
-		ctx, client, nsNameBldr.NodePoolNsName(), NodePoolResourceType, actual,
+		ctx, client, nsnBuilder.NodePoolNsName(), NodePoolResourceType, actual,
 	); err != nil {
 		return err
 	}

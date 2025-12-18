@@ -30,13 +30,13 @@ func (c *kafkaConnInfo) toURL() string {
 func readKafkaConnInfo(
 	ctx context.Context,
 	cl client.Client,
-	nsNameBldr *NsNameBuilder,
+	nsnBuilder *NsNameBuilder,
 ) (*kafkaConnInfo, error) {
 	var err error
 	var found bool
 	var actual = &corev1.Secret{}
 
-	nsName := nsNameBldr.ConnectionNsName()
+	nsName := nsnBuilder.ConnectionNsName()
 
 	if found, err = common.GetResource(
 		ctx, cl, nsName, AppConnTypeName, actual,
@@ -58,7 +58,7 @@ func writeKafkaConnInfo(
 	ctx context.Context,
 	cl client.Client,
 	owner client.Object,
-	nsNameBldr *NsNameBuilder,
+	nsnBuilder *NsNameBuilder,
 	connInfo *kafkaConnInfo,
 ) (
 	*translator.InfraConnection, error,
@@ -70,7 +70,7 @@ func writeKafkaConnInfo(
 	var gvk schema.GroupVersionKind
 	var actual = &corev1.Secret{}
 
-	nsName := nsNameBldr.ConnectionNsName()
+	nsName := nsnBuilder.ConnectionNsName()
 	urlKey := "url"
 
 	if found, err = common.GetResource(
@@ -154,7 +154,7 @@ func writeKafkaConnInfo(
 func restoreKafkaConnInfo(
 	ctx context.Context,
 	cl client.Client,
-	nsNameBldr *NsNameBuilder,
+	nsnBuilder *NsNameBuilder,
 	desired *strimziv1.Kafka,
 	actual *strimziv1.Kafka,
 ) error {
@@ -170,7 +170,7 @@ func restoreKafkaConnInfo(
 	}
 
 	// if there is existing connection info from the previous cluster
-	connInfo, err = readKafkaConnInfo(ctx, cl, nsNameBldr)
+	connInfo, err = readKafkaConnInfo(ctx, cl, nsnBuilder)
 	if err != nil {
 		return err
 	}
@@ -186,7 +186,7 @@ func restoreKafkaConnInfo(
 	// if there is a PVC from the previous cluster
 	var pvc = &corev1.PersistentVolumeClaim{}
 	if found, err = common.GetResource(
-		ctx, cl, nsNameBldr.PvcNsName(0, 0), "PersistentVolumeClaim", pvc,
+		ctx, cl, nsnBuilder.PvcNsName(0, 0), "PersistentVolumeClaim", pvc,
 	); err != nil {
 		return err
 	}

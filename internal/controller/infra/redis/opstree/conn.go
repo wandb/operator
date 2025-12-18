@@ -41,7 +41,7 @@ func writeRedisConnInfo(
 	ctx context.Context,
 	client client.Client,
 	owner client.Object,
-	nsNameBldr *NsNameBuilder,
+	nsnBuilder *NsNameBuilder,
 	connInfo *redisConnInfo,
 ) (
 	*translator.InfraConnection, error,
@@ -51,7 +51,7 @@ func writeRedisConnInfo(
 	var gvk schema.GroupVersionKind
 	var actual = &corev1.Secret{}
 
-	nsName := nsNameBldr.ConnectionNsName()
+	nsName := nsnBuilder.ConnectionNsName()
 	urlKey := "url"
 
 	if found, err = common.GetResource(

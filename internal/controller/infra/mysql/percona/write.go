@@ -24,10 +24,10 @@ func WriteState(
 	var found bool
 	var actual = &pxcv1.PerconaXtraDBCluster{}
 
-	nsNameBldr := createNsNameBuilder(specNamespacedName)
+	nsnBuilder := createNsNameBuilder(specNamespacedName)
 
 	if found, err = common.GetResource(
-		ctx, client, nsNameBldr.ClusterNsName(), ResourceTypeName, actual,
+		ctx, client, nsnBuilder.ClusterNsName(), ResourceTypeName, actual,
 	); err != nil {
 		return err
 	}

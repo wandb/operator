@@ -33,7 +33,7 @@ func writeMySQLConnInfo(
 	ctx context.Context,
 	client client.Client,
 	owner client.Object,
-	nsNameBldr *NsNameBuilder,
+	nsnBuilder *NsNameBuilder,
 	connInfo *mysqlConnInfo,
 ) (
 	*translator.InfraConnection, error,
@@ -43,7 +43,7 @@ func writeMySQLConnInfo(
 	var gvk schema.GroupVersionKind
 	var actual = &corev1.Secret{}
 
-	nsName := nsNameBldr.ConnectionNsName()
+	nsName := nsnBuilder.ConnectionNsName()
 	urlKey := "url"
 
 	if found, err = common.GetResource(

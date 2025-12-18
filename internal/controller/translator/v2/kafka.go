@@ -43,16 +43,16 @@ func ToKafkaVendorSpec(
 		return nil, nil
 	}
 
-	nsNameBldr := strimzi.CreateNsNameBuilder(types.NamespacedName{
+	nsnBuilder := strimzi.CreateNsNameBuilder(types.NamespacedName{
 		Namespace: spec.Namespace, Name: spec.Name,
 	})
 
 	kafka := &strimziv1.Kafka{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      nsNameBldr.KafkaName(),
-			Namespace: nsNameBldr.Namespace(),
+			Name:      nsnBuilder.KafkaName(),
+			Namespace: nsnBuilder.Namespace(),
 			Labels: map[string]string{
-				"app": nsNameBldr.KafkaName(),
+				"app": nsnBuilder.KafkaName(),
 			},
 			Annotations: map[string]string{
 				"strimzi.io/node-pools": "enabled",
@@ -86,8 +86,8 @@ func ToKafkaVendorSpec(
 				},
 			},
 			EntityOperator: &strimziv1.EntityOperatorSpec{
-				TopicOperator: &strimziv1.EntityTopicOperatorSpec{WatchedNamespace: nsNameBldr.Namespace()},
-				UserOperator:  &strimziv1.EntityUserOperatorSpec{WatchedNamespace: nsNameBldr.Namespace()},
+				TopicOperator: &strimziv1.EntityTopicOperatorSpec{WatchedNamespace: nsnBuilder.Namespace()},
+				UserOperator:  &strimziv1.EntityUserOperatorSpec{WatchedNamespace: nsnBuilder.Namespace()},
 			},
 		},
 	}
@@ -112,16 +112,16 @@ func ToKafkaNodePoolVendorSpec(
 ) (*strimziv1.KafkaNodePool, error) {
 	log := ctrl.LoggerFrom(ctx)
 
-	nsNameBldr := strimzi.CreateNsNameBuilder(types.NamespacedName{
+	nsnBuilder := strimzi.CreateNsNameBuilder(types.NamespacedName{
 		Namespace: spec.Namespace, Name: spec.Name,
 	})
 
 	nodePool := &strimziv1.KafkaNodePool{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      nsNameBldr.NodePoolName(),
-			Namespace: nsNameBldr.Namespace(),
+			Name:      nsnBuilder.NodePoolName(),
+			Namespace: nsnBuilder.Namespace(),
 			Labels: map[string]string{
-				"strimzi.io/cluster": nsNameBldr.KafkaName(),
+				"strimzi.io/cluster": nsnBuilder.KafkaName(),
 			},
 		},
 		Spec: strimziv1.KafkaNodePoolSpec{

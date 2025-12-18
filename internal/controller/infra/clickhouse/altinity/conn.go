@@ -29,7 +29,7 @@ func writeClickHouseConnInfo(
 	ctx context.Context,
 	client client.Client,
 	owner client.Object,
-	nsNameBldr *NsNameBuilder,
+	nsnBuilder *NsNameBuilder,
 	connInfo *clickhouseConnInfo,
 ) (
 	*translator.InfraConnection, error,
@@ -39,7 +39,7 @@ func writeClickHouseConnInfo(
 	var gvk schema.GroupVersionKind
 	var actual = &corev1.Secret{}
 
-	nsName := nsNameBldr.ConnectionNsName()
+	nsName := nsnBuilder.ConnectionNsName()
 	urlKey := "url"
 
 	if found, err = common.GetResource(

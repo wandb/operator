@@ -89,7 +89,7 @@ var _ = Describe("Minio Config and Connection Integration", func() {
 		testNamespace string
 		specNsName    types.NamespacedName
 		tenantOwner   *miniov2.Tenant
-		nsNameBldr    *NsNameBuilder
+		nsnBuilder    *NsNameBuilder
 		envConfig     MinioEnvConfig
 		wandbOwner    *corev1.ConfigMap
 	)
@@ -112,7 +112,7 @@ var _ = Describe("Minio Config and Connection Integration", func() {
 			Name:      "test-tenant",
 		}
 
-		nsNameBldr = CreateNsNameBuilder(specNsName)
+		nsnBuilder = CreateNsNameBuilder(specNsName)
 
 		envConfig = MinioEnvConfig{
 			RootUser:            "admin",
@@ -158,7 +158,7 @@ var _ = Describe("Minio Config and Connection Integration", func() {
 			configSecret := &corev1.Secret{}
 			err = integrationTestClient.Get(
 				ctx,
-				nsNameBldr.ConfigNsName(),
+				nsnBuilder.ConfigNsName(),
 				configSecret,
 			)
 			Expect(err).NotTo(HaveOccurred())
@@ -190,7 +190,7 @@ var _ = Describe("Minio Config and Connection Integration", func() {
 			updatedSecret := &corev1.Secret{}
 			err = integrationTestClient.Get(
 				ctx,
-				nsNameBldr.ConfigNsName(),
+				nsnBuilder.ConfigNsName(),
 				updatedSecret,
 			)
 			Expect(err).NotTo(HaveOccurred())
@@ -229,7 +229,7 @@ var _ = Describe("Minio Config and Connection Integration", func() {
 			configSecret := &corev1.Secret{}
 			err = integrationTestClient.Get(
 				ctx,
-				nsNameBldr.ConfigNsName(),
+				nsnBuilder.ConfigNsName(),
 				configSecret,
 			)
 			Expect(err).NotTo(HaveOccurred())
@@ -252,7 +252,7 @@ var _ = Describe("Minio Config and Connection Integration", func() {
 			connSecret := &corev1.Secret{}
 			err = integrationTestClient.Get(
 				ctx,
-				nsNameBldr.ConnectionNsName(),
+				nsnBuilder.ConnectionNsName(),
 				connSecret,
 			)
 			Expect(err).NotTo(HaveOccurred())
@@ -263,7 +263,7 @@ var _ = Describe("Minio Config and Connection Integration", func() {
 			Expect(urlString).To(ContainSubstring("s3://"))
 			Expect(urlString).To(ContainSubstring("admin:"))
 			Expect(urlString).To(ContainSubstring(parsedConfig.rootPassword))
-			Expect(urlString).To(ContainSubstring(nsNameBldr.ServiceName()))
+			Expect(urlString).To(ContainSubstring(nsnBuilder.ServiceName()))
 			Expect(urlString).To(ContainSubstring(testNamespace))
 			Expect(urlString).To(ContainSubstring("?tls=true"))
 
@@ -275,7 +275,7 @@ var _ = Describe("Minio Config and Connection Integration", func() {
 			Expect(connOwnerRef.UID).To(Equal(wandbOwner.UID))
 
 			By("verifying returned InfraConnection has correct structure")
-			Expect(connection.URL.Name).To(Equal(nsNameBldr.ConnectionName()))
+			Expect(connection.URL.Name).To(Equal(nsnBuilder.ConnectionName()))
 			Expect(connection.URL.Key).To(Equal("url"))
 			Expect(connection.URL.Optional).NotTo(BeNil())
 			Expect(*connection.URL.Optional).To(BeFalse())

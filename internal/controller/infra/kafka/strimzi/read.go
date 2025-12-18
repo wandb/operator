@@ -14,8 +14,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func readConnectionDetails(nsNameBldr *NsNameBuilder, actualKafka *strimziv1.Kafka) *kafkaConnInfo {
-	kafkaHost := fmt.Sprintf("%s-%s.%s.svc.cluster.local", nsNameBldr.KafkaName(), "kafka-bootstrap", nsNameBldr.Namespace())
+func readConnectionDetails(nsnBuilder *NsNameBuilder, actualKafka *strimziv1.Kafka) *kafkaConnInfo {
+	kafkaHost := fmt.Sprintf("%s-%s.%s.svc.cluster.local", nsnBuilder.KafkaName(), "kafka-bootstrap", nsnBuilder.Namespace())
 	kafkaPort := strconv.Itoa(PlainListenerPort)
 	kafkaClusterId := ""
 	if actualKafka != nil {
@@ -41,10 +41,10 @@ func ReadState(
 	var actualKafka = &strimziv1.Kafka{}
 	var actualNodePool = &strimziv1.KafkaNodePool{}
 
-	nsNameBldr := createNsNameBuilder(specNamespacedName)
+	nsnBuilder := createNsNameBuilder(specNamespacedName)
 
 	if found, err = ctrlcommon.GetResource(
-		ctx, cl, nsNameBldr.KafkaNsName(), KafkaResourceType, actualKafka,
+		ctx, cl, nsnBuilder.KafkaNsName(), KafkaResourceType, actualKafka,
 	); err != nil {
 		return nil, err
 	}
@@ -53,7 +53,7 @@ func ReadState(
 	}
 
 	if found, err = ctrlcommon.GetResource(
-		ctx, cl, nsNameBldr.NodePoolNsName(), NodePoolResourceType, actualNodePool,
+		ctx, cl, nsnBuilder.NodePoolNsName(), NodePoolResourceType, actualNodePool,
 	); err != nil {
 		return nil, err
 	}
@@ -66,11 +66,11 @@ func ReadState(
 		///////////////////////////////////
 		// set connection details
 
-		connInfo := readConnectionDetails(nsNameBldr, actualKafka)
+		connInfo := readConnectionDetails(nsnBuilder, actualKafka)
 
 		var connection *translator.InfraConnection
 		if connection, err = writeKafkaConnInfo(
-			ctx, cl, wandbOwner, nsNameBldr, connInfo,
+			ctx, cl, wandbOwner, nsnBuilder, connInfo,
 		); err != nil {
 			return nil, err
 		}
