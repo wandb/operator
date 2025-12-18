@@ -197,6 +197,8 @@ commonEnvvars:
       value: "true"
     - name: GORILLA_ONPREM
       value: "true"
+    - name: GORILLA_ONPREM_API_KEY_PREFIX
+      value: "local"
     - name: GORILLA_STATSD_PORT
       value: "0"
     - name: GORILLA_SESSION_KEY
