@@ -99,7 +99,10 @@ func writeWandbConnInfo(
 		},
 		Type: corev1.SecretTypeOpaque,
 		StringData: map[string]string{
-			urlKey: connInfo.toUrl().String() + "?tls=true",
+			urlKey:   connInfo.toUrl().String() + "?tls=true",
+			"Host":   connInfo.Host,
+			"Port":   connInfo.Port,
+			"Region": "us-east-1",
 		},
 	}
 
