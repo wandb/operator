@@ -112,6 +112,10 @@ func ToKafkaNodePoolVendorSpec(
 ) (*strimziv1.KafkaNodePool, error) {
 	log := ctrl.LoggerFrom(ctx)
 
+	if !spec.Enabled {
+		return nil, nil
+	}
+
 	nsnBuilder := strimzi.CreateNsNameBuilder(types.NamespacedName{
 		Namespace: spec.Namespace, Name: spec.Name,
 	})

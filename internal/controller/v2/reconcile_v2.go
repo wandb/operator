@@ -55,8 +55,10 @@ func Reconcile(ctx context.Context, client ctrlClient.Client, wandb *apiv2.Weigh
 	/////////////////////////
 	// Cleanup Finalizer
 
-	// add if not present
-	if !ctrlqueue.ContainsString(wandb.GetFinalizers(), CleanupFinalizer) {
+	isFlaggedForDeletion := !wandb.ObjectMeta.DeletionTimestamp.IsZero()
+
+	// ensure finalizer if not present
+	if !isFlaggedForDeletion && !ctrlqueue.ContainsString(wandb.GetFinalizers(), CleanupFinalizer) {
 		wandb.ObjectMeta.Finalizers = append(wandb.ObjectMeta.Finalizers, CleanupFinalizer)
 		if err := client.Update(ctx, wandb); err != nil {
 			log.Error(err, fmt.Sprintf("Failed to add finalizer '%s'", CleanupFinalizer))
@@ -64,20 +66,22 @@ func Reconcile(ctx context.Context, client ctrlClient.Client, wandb *apiv2.Weigh
 		}
 	}
 
-	// handle cleanup or preservation of config and data
-	if ctrlqueue.ContainsString(wandb.ObjectMeta.Finalizers, CleanupFinalizer) {
+	// if deleting and handle cleanup or preservation of config and data
+	if isFlaggedForDeletion && !wandb.ObjectMeta.DeletionTimestamp.IsZero() {
+		if ctrlqueue.ContainsString(wandb.GetFinalizers(), CleanupFinalizer) {
 
-		// try to keep stuff around that will allow recreation of WandB CR (and Infra) with
-		// same data and credentials
-		if !wandb.Spec.AutoCleanupEnabled {
-			if err = kafkaPreserveFinalizer(ctx, client, wandb); err != nil {
-				return ctrl.Result{}, err
+			// try to keep stuff around that will allow recreation of WandB CR (and Infra) with
+			// same data and credentials
+			if !wandb.Spec.AutoCleanupEnabled {
+				if err = kafkaPreserveFinalizer(ctx, client, wandb); err != nil {
+					return ctrl.Result{}, err
+				}
 			}
-		}
-		controllerutil.RemoveFinalizer(wandb, CleanupFinalizer)
-		if err := client.Update(ctx, wandb); err != nil {
-			log.Error(err, "Failed to remove finalizer '%s'")
-			return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
+			controllerutil.RemoveFinalizer(wandb, CleanupFinalizer)
+			if err := client.Update(ctx, wandb); err != nil {
+				log.Error(err, "Failed to remove finalizer '%s'")
+				return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
+			}
 		}
 	}
 

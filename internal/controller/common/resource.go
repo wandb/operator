@@ -23,7 +23,7 @@ func GetResource[T client.Object](
 ) (bool, error) {
 	log := ctrl.LoggerFrom(ctx)
 
-	log.Info("get resource", "name", namespacedName.Name, "namespace", namespacedName.Namespace)
+	log.Info(fmt.Sprintf("get %s.%s", namespacedName.Namespace, namespacedName.Name))
 
 	err := c.Get(ctx, namespacedName, obj)
 	if err != nil {
@@ -56,18 +56,18 @@ func CrudResource[T client.Object](
 
 	if actualExists && desiredExists {
 		action = "update"
-		log.Info("update resource", "name", desired.GetName(), "namespace", desired.GetNamespace())
+		log.Info(fmt.Sprintf("update %s.%s", desired.GetNamespace(), desired.GetName()))
 		desired.SetResourceVersion(actual.GetResourceVersion())
 		err = c.Update(ctx, desired)
 	}
 	if !actualExists && desiredExists {
 		action = "create"
-		log.Info("create resource", "name", desired.GetName(), "namespace", desired.GetNamespace())
+		log.Info(fmt.Sprintf("create %s.%s", desired.GetNamespace(), desired.GetName()))
 		err = c.Create(ctx, desired)
 	}
 	if actualExists && !desiredExists {
 		action = "delete"
-		log.Info("delete resource", "name", actual.GetName(), "namespace", actual.GetNamespace())
+		log.Info(fmt.Sprintf("delete %s.%s", actual.GetNamespace(), actual.GetName()))
 		err = c.Delete(ctx, actual)
 	}
 	if err != nil {

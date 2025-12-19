@@ -6,7 +6,6 @@ import (
 
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/translator"
-	strimziv1 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -145,60 +144,4 @@ func writeKafkaConnInfo(
 			Optional: ptr.To(false),
 		},
 	}, nil
-}
-
-// restoreKafkaConnInfo will setup the Kafka status will some configuration details when:
-// * it is a newly created Kafka cluster
-// * a connection info secret is present from the previous cluster
-// * a PVC still exists from the previous cluster
-func restoreKafkaConnInfo(
-	ctx context.Context,
-	cl client.Client,
-	nsnBuilder *NsNameBuilder,
-	desired *strimziv1.Kafka,
-	actual *strimziv1.Kafka,
-) error {
-	log := ctrl.LoggerFrom(ctx)
-
-	var connInfo *kafkaConnInfo
-	var err error
-	var found bool
-
-	// if is a newly created cluster
-	if actual != nil || desired == nil {
-		return nil
-	}
-
-	// if there is existing connection info from the previous cluster
-	connInfo, err = readKafkaConnInfo(ctx, cl, nsnBuilder)
-	if err != nil {
-		return err
-	}
-	if connInfo == nil {
-		return nil
-	}
-
-	// if it has a clusterID
-	if connInfo.ClusterId == "" {
-		return nil
-	}
-
-	// if there is a PVC from the previous cluster
-	var pvc = &corev1.PersistentVolumeClaim{}
-	if found, err = common.GetResource(
-		ctx, cl, nsnBuilder.PvcNsName(0, 0), "PersistentVolumeClaim", pvc,
-	); err != nil {
-		return err
-	}
-	if !found {
-		return nil
-	}
-
-	log.Info("restoring Kafka connection info", "clusterId", connInfo.ClusterId)
-	desired.Status.ClusterId = connInfo.ClusterId
-	if err = cl.Status().Update(ctx, desired); err != nil {
-		return err
-	}
-
-	return nil
 }

@@ -53,10 +53,6 @@ func writeKafkaState(
 		return err
 	}
 
-	if err = restoreKafkaConnInfo(ctx, client, nsnBuilder, desired, actual); err != nil {
-		return err
-	}
-
 	return nil
 }
 
@@ -79,8 +75,16 @@ func writeNodePoolState(
 		actual = nil
 	}
 
+	shouldRestore := desired != nil && actual == nil
+
 	if err = common.CrudResource(ctx, client, desired, actual); err != nil {
 		return err
+	}
+
+	if shouldRestore {
+		if err = restoreKafkaConnInfo(ctx, client, nsnBuilder, desired, actual); err != nil {
+			return err
+		}
 	}
 
 	return nil

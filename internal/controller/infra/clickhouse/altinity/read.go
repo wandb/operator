@@ -94,18 +94,20 @@ func chPodsRunningStatus(
 	if chi == nil {
 		return result, nil
 	}
-	for _, podName := range chi.Status.Pods {
-		var pod = &corev1.Pod{}
-		nsName := types.NamespacedName{Namespace: namespace, Name: podName}
-		if found, err = ctrlcommon.GetResource(
-			ctx, client, nsName, "ClickhousePod", pod,
-		); err != nil {
-			return result, err
-		}
-		if found {
-			result[podName] = pod.Status.Phase == corev1.PodRunning
-		} else {
-			result[podName] = false
+	if chi.Status != nil && chi.Status.Pods != nil {
+		for _, podName := range chi.Status.Pods {
+			var pod = &corev1.Pod{}
+			nsName := types.NamespacedName{Namespace: namespace, Name: podName}
+			if found, err = ctrlcommon.GetResource(
+				ctx, client, nsName, "ClickhousePod", pod,
+			); err != nil {
+				return result, err
+			}
+			if found {
+				result[podName] = pod.Status.Phase == corev1.PodRunning
+			} else {
+				result[podName] = false
+			}
 		}
 	}
 	return result, nil
