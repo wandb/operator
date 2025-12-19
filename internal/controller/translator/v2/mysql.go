@@ -44,7 +44,7 @@ func ToMySQLVendorSpec(
 	}
 
 	specName := spec.Name
-	nsNameBldr := percona.CreateNsNameBuilder(types.NamespacedName{
+	nsnBuilder := percona.CreateNsNameBuilder(types.NamespacedName{
 		Name:      specName,
 		Namespace: spec.Namespace,
 	})
@@ -74,10 +74,10 @@ pxc_strict_mode=PERMISSIVE
 	// Build PXC spec
 	pxc := &pxcv1.PerconaXtraDBCluster{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      nsNameBldr.ClusterName(),
+			Name:      nsnBuilder.ClusterName(),
 			Namespace: spec.Namespace,
 			Labels: map[string]string{
-				"app": nsNameBldr.ClusterName(),
+				"app": nsnBuilder.ClusterName(),
 			},
 		},
 		Spec: pxcv1.PerconaXtraDBClusterSpec{

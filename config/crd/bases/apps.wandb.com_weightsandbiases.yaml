@@ -107,6 +107,12 @@ spec:
           spec:
             description: WeightsAndBiasesSpec defines the desired state of WeightsAndBiases.
             properties:
+              autoCleanupEnabled:
+                description: |-
+                  AutoCleanupEnabled will:
+                    * if `true`, will purge all configs and data
+                    * if `false`, will maintain configs and data required to recreate WandB with pervious infra
+                type: boolean
               clickhouse:
                 description: |-
                   WBClickHouseSpec fields have many default values that, if unspecified,
@@ -647,6 +653,8 @@ spec:
                 required:
                 - hostname
                 type: object
+            required:
+            - autoCleanupEnabled
             type: object
           status:
             description: WeightsAndBiasesStatus defines the observed state of WeightsAndBiases.

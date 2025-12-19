@@ -72,6 +72,11 @@ type WeightsAndBiasesSpec struct {
 	// Size is akin to high-level environment info
 	Size WBSize `json:"size,omitempty"`
 
+	// AutoCleanupEnabled will:
+	//   * if `true`, will purge all configs and data
+	//   * if `false`, will maintain configs and data required to recreate WandB with pervious infra
+	AutoCleanupEnabled bool `json:"autoCleanupEnabled"`
+
 	Wandb WandbAppSpec `json:"wandb,omitempty"`
 
 	MySQL      WBMySQLSpec      `json:"mysql,omitempty"`

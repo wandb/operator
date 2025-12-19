@@ -39,10 +39,10 @@ func ReadState(
 	var actual = &chiv1.ClickHouseInstallation{}
 	var podsRunning map[string]bool
 
-	nsNameBldr := createNsNameBuilder(specNamespacedName)
+	nsnBuilder := createNsNameBuilder(specNamespacedName)
 
 	if found, err = ctrlcommon.GetResource(
-		ctx, client, nsNameBldr.InstallationNsName(), ResourceTypeName, actual,
+		ctx, client, nsnBuilder.InstallationNsName(), ResourceTypeName, actual,
 	); err != nil {
 		return nil, err
 	}
@@ -51,7 +51,7 @@ func ReadState(
 	}
 
 	if actual != nil {
-		if podsRunning, err = chPodsRunningStatus(ctx, client, nsNameBldr.Namespace(), actual); err != nil {
+		if podsRunning, err = chPodsRunningStatus(ctx, client, nsnBuilder.Namespace(), actual); err != nil {
 			return nil, err
 		}
 		///////////////////////////////////
@@ -61,7 +61,7 @@ func ReadState(
 
 		var connection *translator.InfraConnection
 		if connection, err = writeClickHouseConnInfo(
-			ctx, client, wandbOwner, nsNameBldr, connInfo,
+			ctx, client, wandbOwner, nsnBuilder, connInfo,
 		); err != nil {
 			return nil, err
 		}
@@ -94,18 +94,20 @@ func chPodsRunningStatus(
 	if chi == nil {
 		return result, nil
 	}
-	for _, podName := range chi.Status.Pods {
-		var pod = &corev1.Pod{}
-		nsName := types.NamespacedName{Namespace: namespace, Name: podName}
-		if found, err = ctrlcommon.GetResource(
-			ctx, client, nsName, "ClickhousePod", pod,
-		); err != nil {
-			return result, err
-		}
-		if found {
-			result[podName] = pod.Status.Phase == corev1.PodRunning
-		} else {
-			result[podName] = false
+	if chi.Status != nil && chi.Status.Pods != nil {
+		for _, podName := range chi.Status.Pods {
+			var pod = &corev1.Pod{}
+			nsName := types.NamespacedName{Namespace: namespace, Name: podName}
+			if found, err = ctrlcommon.GetResource(
+				ctx, client, nsName, "ClickhousePod", pod,
+			); err != nil {
+				return result, err
+			}
+			if found {
+				result[podName] = pod.Status.Phase == corev1.PodRunning
+			} else {
+				result[podName] = false
+			}
 		}
 	}
 	return result, nil

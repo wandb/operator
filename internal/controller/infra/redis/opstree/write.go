@@ -29,17 +29,17 @@ func WriteState(
 ) error {
 	var err error
 
-	nsNameBldr := createNsNameBuilder(specNamespacedName)
+	nsnBuilder := createNsNameBuilder(specNamespacedName)
 
-	if err = writeStandaloneState(ctx, client, nsNameBldr, standaloneDesired); err != nil {
+	if err = writeStandaloneState(ctx, client, nsnBuilder, standaloneDesired); err != nil {
 		return err
 	}
 
-	if err = writeSentinelState(ctx, client, nsNameBldr, sentinelDesired); err != nil {
+	if err = writeSentinelState(ctx, client, nsnBuilder, sentinelDesired); err != nil {
 		return err
 	}
 
-	if err = writeReplicationState(ctx, client, nsNameBldr, replicationDesired); err != nil {
+	if err = writeReplicationState(ctx, client, nsnBuilder, replicationDesired); err != nil {
 		return err
 	}
 
@@ -49,7 +49,7 @@ func WriteState(
 func writeStandaloneState(
 	ctx context.Context,
 	client client.Client,
-	nsNameBldr *NsNameBuilder,
+	nsnBuilder *NsNameBuilder,
 	standaloneDesired *redisv1beta2.Redis,
 ) error {
 	var standaloneActual = &redisv1beta2.Redis{}
@@ -57,7 +57,7 @@ func writeStandaloneState(
 	var found bool
 
 	if found, err = common.GetResource(
-		ctx, client, nsNameBldr.StandaloneNsName(), StandaloneType, standaloneActual,
+		ctx, client, nsnBuilder.StandaloneNsName(), StandaloneType, standaloneActual,
 	); err != nil {
 		return err
 	}
@@ -71,7 +71,7 @@ func writeStandaloneState(
 func writeSentinelState(
 	ctx context.Context,
 	client client.Client,
-	nsNameBldr *NsNameBuilder,
+	nsnBuilder *NsNameBuilder,
 	sentinelDesired *redissentinelv1beta2.RedisSentinel,
 ) error {
 	var sentinelActual = &redissentinelv1beta2.RedisSentinel{}
@@ -79,7 +79,7 @@ func writeSentinelState(
 	var found bool
 
 	if found, err = common.GetResource(
-		ctx, client, nsNameBldr.SentinelNsName(), SentinelType, sentinelActual,
+		ctx, client, nsnBuilder.SentinelNsName(), SentinelType, sentinelActual,
 	); err != nil {
 		return err
 	}
@@ -93,7 +93,7 @@ func writeSentinelState(
 func writeReplicationState(
 	ctx context.Context,
 	client client.Client,
-	nsNameBldr *NsNameBuilder,
+	nsnBuilder *NsNameBuilder,
 	replicationDesired *redisreplicationv1beta2.RedisReplication,
 ) error {
 	var replicationActual = &redisreplicationv1beta2.RedisReplication{}
@@ -101,7 +101,7 @@ func writeReplicationState(
 	var found bool
 
 	if found, err = common.GetResource(
-		ctx, client, nsNameBldr.ReplicationNsName(), ReplicationType, replicationActual,
+		ctx, client, nsnBuilder.ReplicationNsName(), ReplicationType, replicationActual,
 	); err != nil {
 		return err
 	}

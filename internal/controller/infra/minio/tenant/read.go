@@ -21,10 +21,10 @@ func ReadState(
 	var status = &translator.MinioStatus{}
 	var actualResource = &miniov2.Tenant{}
 
-	nsNameBldr := createNsNameBuilder(specNamespacedName)
+	nsnBuilder := createNsNameBuilder(specNamespacedName)
 
 	if found, err = ctrlcommon.GetResource(
-		ctx, client, nsNameBldr.SpecNsName(), ResourceTypeName, actualResource,
+		ctx, client, nsnBuilder.SpecNsName(), ResourceTypeName, actualResource,
 	); err != nil {
 		return nil, err
 	}

@@ -55,10 +55,10 @@ func ReadState(
 	var actual = &pxcv1.PerconaXtraDBCluster{}
 	var status = &translator.MysqlStatus{}
 
-	nsNameBldr := createNsNameBuilder(specNamespacedName)
+	nsnBuilder := createNsNameBuilder(specNamespacedName)
 
 	if found, err = ctrlcommon.GetResource(
-		ctx, client, nsNameBldr.ClusterNsName(), ResourceTypeName, actual,
+		ctx, client, nsnBuilder.ClusterNsName(), ResourceTypeName, actual,
 	); err != nil {
 		return nil, err
 	}
@@ -74,7 +74,7 @@ func ReadState(
 
 		var connection *translator.InfraConnection
 		if connection, err = writeMySQLConnInfo(
-			ctx, client, wandbOwner, nsNameBldr, connInfo,
+			ctx, client, wandbOwner, nsnBuilder, connInfo,
 		); err != nil {
 			return nil, err
 		}

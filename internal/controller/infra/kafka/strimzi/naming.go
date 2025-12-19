@@ -46,6 +46,18 @@ func (n *NsNameBuilder) NodePoolNsName() types.NamespacedName {
 	}
 }
 
+// PvcName is computed from the base name and the volume and node numeric id's
+func (n *NsNameBuilder) PvcName(volId, nodeId int) string {
+	return fmt.Sprintf("data-%d-%s-%s-node-pool-%d", volId, n.SpecName(), n.SpecName(), nodeId)
+}
+
+func (n *NsNameBuilder) PvcNsName(volId, nodeId int) types.NamespacedName {
+	return types.NamespacedName{
+		Namespace: n.Namespace(),
+		Name:      n.PvcName(volId, nodeId),
+	}
+}
+
 func (n *NsNameBuilder) ConnectionName() string {
 	return fmt.Sprintf("%s-connection", n.SpecName())
 }

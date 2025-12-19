@@ -28,10 +28,10 @@ func ReadState(
 	var err error
 	var found bool
 
-	nsNameBldr := createNsNameBuilder(specNamespacedName)
+	nsnBuilder := createNsNameBuilder(specNamespacedName)
 
 	if found, err = ctrlcommon.GetResource(
-		ctx, client, nsNameBldr.StandaloneNsName(), StandaloneType, standaloneActual,
+		ctx, client, nsnBuilder.StandaloneNsName(), StandaloneType, standaloneActual,
 	); err != nil {
 		return nil, err
 	}
@@ -39,7 +39,7 @@ func ReadState(
 		standaloneActual = nil
 	}
 	if found, err = ctrlcommon.GetResource(
-		ctx, client, nsNameBldr.SentinelNsName(), SentinelType, sentinelActual,
+		ctx, client, nsnBuilder.SentinelNsName(), SentinelType, sentinelActual,
 	); err != nil {
 		return nil, err
 	}
@@ -47,7 +47,7 @@ func ReadState(
 		sentinelActual = nil
 	}
 	if found, err = ctrlcommon.GetResource(
-		ctx, client, nsNameBldr.ReplicationNsName(), ReplicationType, replicationActual,
+		ctx, client, nsnBuilder.ReplicationNsName(), ReplicationType, replicationActual,
 	); err != nil {
 		return nil, err
 	}
@@ -62,7 +62,7 @@ func ReadState(
 
 		var connection *translator.InfraConnection
 		if connection, err = writeRedisConnInfo(
-			ctx, client, wandbOwner, nsNameBldr, connInfo,
+			ctx, client, wandbOwner, nsnBuilder, connInfo,
 		); err != nil {
 			return nil, err
 		}
@@ -87,7 +87,7 @@ func ReadState(
 
 		var connection *translator.InfraConnection
 		if connection, err = writeRedisConnInfo(
-			ctx, client, wandbOwner, nsNameBldr, connInfo,
+			ctx, client, wandbOwner, nsnBuilder, connInfo,
 		); err != nil {
 			return nil, err
 		}

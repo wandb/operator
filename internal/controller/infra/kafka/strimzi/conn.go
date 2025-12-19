@@ -15,21 +15,49 @@ import (
 )
 
 type kafkaConnInfo struct {
-	Host     string
-	Port     string
-	Username string
-	Password string
+	Host      string
+	Port      string
+	Username  string
+	Password  string
+	ClusterId string
 }
 
 func (c *kafkaConnInfo) toURL() string {
 	return fmt.Sprintf("kafka://%s:%s", c.Host, c.Port)
 }
 
+func readKafkaConnInfo(
+	ctx context.Context,
+	cl client.Client,
+	nsnBuilder *NsNameBuilder,
+) (*kafkaConnInfo, error) {
+	var err error
+	var found bool
+	var actual = &corev1.Secret{}
+
+	nsName := nsnBuilder.ConnectionNsName()
+
+	if found, err = common.GetResource(
+		ctx, cl, nsName, AppConnTypeName, actual,
+	); err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, fmt.Errorf("kafka connection secret %s not found", nsName)
+	}
+
+	return &kafkaConnInfo{
+		Host:      string(actual.Data["Host"]),
+		Port:      string(actual.Data["Port"]),
+		ClusterId: string(actual.Data["ClusterID"]),
+	}, nil
+}
+
 func writeKafkaConnInfo(
 	ctx context.Context,
 	cl client.Client,
 	owner client.Object,
-	nsNameBldr *NsNameBuilder,
+	nsnBuilder *NsNameBuilder,
 	connInfo *kafkaConnInfo,
 ) (
 	*translator.InfraConnection, error,
@@ -41,7 +69,7 @@ func writeKafkaConnInfo(
 	var gvk schema.GroupVersionKind
 	var actual = &corev1.Secret{}
 
-	nsName := nsNameBldr.ConnectionNsName()
+	nsName := nsnBuilder.ConnectionNsName()
 	urlKey := "url"
 
 	if found, err = common.GetResource(
@@ -51,6 +79,28 @@ func writeKafkaConnInfo(
 	}
 	if !found {
 		actual = nil
+	}
+
+	// prefer existing strimzi CR clusterId to wandb Secret clusterId
+	// but take a non-blank value of a blank one
+	nextClusterId := ""
+	wandbSecretClusterId := ""
+	if actual != nil {
+		wandbSecretClusterId = string(actual.Data["ClusterID"])
+	}
+	strimziCrClusterId := connInfo.ClusterId
+	if wandbSecretClusterId == strimziCrClusterId {
+		nextClusterId = strimziCrClusterId // no change
+	} else if wandbSecretClusterId != "" && strimziCrClusterId != "" {
+		log.Info("Kafka clusterId replace wandb secret with strimzi CR status",
+			"wandbSecretClusterId", wandbSecretClusterId, "strimziCrClusterId", strimziCrClusterId)
+		nextClusterId = strimziCrClusterId
+	} else if wandbSecretClusterId != "" {
+		log.Info("Kafka clusterId use existing wandb secret", "wandbSecretClusterId", wandbSecretClusterId)
+		nextClusterId = wandbSecretClusterId
+	} else if strimziCrClusterId != "" {
+		log.Info("Kafka clusterId use existing strimzi CR status", "strimziCrClusterId", strimziCrClusterId)
+		nextClusterId = strimziCrClusterId
 	}
 
 	if gvk, err = cl.GroupVersionKindFor(owner); err != nil {
@@ -74,9 +124,10 @@ func writeKafkaConnInfo(
 		},
 		Type: corev1.SecretTypeOpaque,
 		StringData: map[string]string{
-			urlKey: connInfo.toURL(),
-			"Host": connInfo.Host,
-			"Port": connInfo.Port,
+			urlKey:      connInfo.toURL(),
+			"Host":      connInfo.Host,
+			"Port":      connInfo.Port,
+			"ClusterID": nextClusterId,
 		},
 	}
 

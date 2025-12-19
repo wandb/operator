@@ -61,6 +61,19 @@ func kafkaReadState(
 	return nil
 }
 
+func kafkaPreserveFinalizer(
+	ctx context.Context,
+	client client.Client,
+	wandb *apiv2.WeightsAndBiases,
+) error {
+	var specNamespacedName = kafkaSpecNamespacedName(wandb.Spec.Kafka)
+
+	if err := strimzi.PreserveFinalizer(ctx, client, specNamespacedName, wandb); err != nil {
+		return err
+	}
+	return nil
+}
+
 func kafkaSpecNamespacedName(kafka apiv2.WBKafkaSpec) types.NamespacedName {
 	return types.NamespacedName{
 		Namespace: kafka.Namespace,

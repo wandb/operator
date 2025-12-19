@@ -34,10 +34,10 @@ func WriteState(
 	var found bool
 	var actual = &miniov2.Tenant{}
 
-	nsNameBldr := createNsNameBuilder(specNamespacedName)
+	nsnBuilder := createNsNameBuilder(specNamespacedName)
 
 	if found, err = common.GetResource(
-		ctx, client, nsNameBldr.SpecNsName(), ResourceTypeName, actual,
+		ctx, client, nsnBuilder.SpecNsName(), ResourceTypeName, actual,
 	); err != nil {
 		return nil, err
 	}
@@ -51,7 +51,7 @@ func WriteState(
 
 	var connInfo *minioConnInfo
 	if connInfo, err = writeMinioConfig(
-		ctx, client, desiredCr, nsNameBldr, envConfig,
+		ctx, client, desiredCr, nsnBuilder, envConfig,
 	); err != nil {
 		return nil, err
 	}
@@ -59,7 +59,7 @@ func WriteState(
 	if connInfo != nil {
 		var connection *translator.InfraConnection
 		if connection, err = writeWandbConnInfo(
-			ctx, client, wandbOwner, nsNameBldr, connInfo,
+			ctx, client, wandbOwner, nsnBuilder, connInfo,
 		); err != nil {
 			return nil, err
 		}
@@ -76,7 +76,7 @@ func writeMinioConfig(
 	ctx context.Context,
 	client client.Client,
 	owner *miniov2.Tenant,
-	nsNameBldr *NsNameBuilder,
+	nsnBuilder *NsNameBuilder,
 	envConfig MinioEnvConfig,
 ) (*minioConnInfo, error) {
 	var err error
@@ -91,7 +91,7 @@ func writeMinioConfig(
 	//log := ctrl.LoggerFrom(ctx)
 
 	if found, err = common.GetResource(
-		ctx, client, nsNameBldr.ConfigNsName(), ConfigTypeName, actual,
+		ctx, client, nsnBuilder.ConfigNsName(), ConfigTypeName, actual,
 	); err != nil {
 		return nil, err
 	}
@@ -124,8 +124,8 @@ func writeMinioConfig(
 
 	desired := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            nsNameBldr.ConfigName(),
-			Namespace:       nsNameBldr.Namespace(),
+			Name:            nsnBuilder.ConfigName(),
+			Namespace:       nsnBuilder.Namespace(),
 			OwnerReferences: []metav1.OwnerReference{ref},
 		},
 		Type: corev1.SecretTypeOpaque,
@@ -138,5 +138,5 @@ func writeMinioConfig(
 		return nil, err
 	}
 
-	return buildMinioConnInfo(configFile.rootUser, configFile.rootPassword, nsNameBldr), nil
+	return buildMinioConnInfo(configFile.rootUser, configFile.rootPassword, nsnBuilder), nil
 }

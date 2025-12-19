@@ -197,6 +197,7 @@ rules:
   - kafkatopics/status
   verbs:
   - get
+  - update
 - apiGroups:
   - minio.min.io
   resources:

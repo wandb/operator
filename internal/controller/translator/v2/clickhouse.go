@@ -44,7 +44,7 @@ func ToClickHouseVendorSpec(
 		return nil, nil
 	}
 
-	nsNameBldr := altinity.CreateNsNameBuilder(types.NamespacedName{
+	nsnBuilder := altinity.CreateNsNameBuilder(types.NamespacedName{
 		Namespace: spec.Namespace, Name: spec.Name,
 	})
 
@@ -70,8 +70,8 @@ func ToClickHouseVendorSpec(
 	// Build ClickHouseInstallation spec
 	chi := &chiv2.ClickHouseInstallation{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      nsNameBldr.InstallationName(),
-			Namespace: nsNameBldr.Namespace(),
+			Name:      nsnBuilder.InstallationName(),
+			Namespace: nsnBuilder.Namespace(),
 			Labels: map[string]string{
 				"app": altinity.CHIName,
 			},
@@ -80,7 +80,7 @@ func ToClickHouseVendorSpec(
 			Configuration: &chiv2.Configuration{
 				Clusters: []*chiv2.Cluster{
 					{
-						Name: nsNameBldr.ClusterName(),
+						Name: nsnBuilder.ClusterName(),
 						Layout: &chiv2.ChiClusterLayout{
 							ShardsCount:   altinity.ShardsCount,
 							ReplicasCount: int(spec.Replicas),
@@ -91,13 +91,13 @@ func ToClickHouseVendorSpec(
 			},
 			Defaults: &chiv2.Defaults{
 				Templates: &chiv2.TemplatesList{
-					DataVolumeClaimTemplate: nsNameBldr.VolumeTemplateName(),
+					DataVolumeClaimTemplate: nsnBuilder.VolumeTemplateName(),
 				},
 			},
 			Templates: &chiv2.Templates{
 				VolumeClaimTemplates: []chiv2.VolumeClaimTemplate{
 					{
-						Name: nsNameBldr.VolumeTemplateName(),
+						Name: nsnBuilder.VolumeTemplateName(),
 						Spec: corev1.PersistentVolumeClaimSpec{
 							AccessModes: []corev1.PersistentVolumeAccessMode{
 								corev1.ReadWriteOnce,

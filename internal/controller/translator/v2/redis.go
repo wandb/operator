@@ -59,7 +59,7 @@ func ToRedisStandaloneVendorSpec(
 		return nil, fmt.Errorf("cannot create redis standalone with sentinel enabled")
 	}
 
-	nsNameBldr := opstree.CreateNsNameBuilder(types.NamespacedName{
+	nsnBuilder := opstree.CreateNsNameBuilder(types.NamespacedName{
 		Namespace: spec.Namespace, Name: spec.Name,
 	})
 
@@ -71,8 +71,8 @@ func ToRedisStandaloneVendorSpec(
 
 	redis := &redisv1beta2.Redis{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      nsNameBldr.StandaloneName(),
-			Namespace: nsNameBldr.StandaloneNamespace(),
+			Name:      nsnBuilder.StandaloneName(),
+			Namespace: nsnBuilder.StandaloneNamespace(),
 		},
 		Spec: redisv1beta2.RedisSpec{
 			KubernetesConfig: rediscommon.KubernetesConfig{
@@ -133,7 +133,7 @@ func ToRedisSentinelVendorSpec(
 		return nil, nil
 	}
 
-	nsNameBldr := opstree.CreateNsNameBuilder(types.NamespacedName{
+	nsnBuilder := opstree.CreateNsNameBuilder(types.NamespacedName{
 		Namespace: spec.Namespace, Name: spec.Name,
 	})
 
@@ -148,8 +148,8 @@ func ToRedisSentinelVendorSpec(
 
 	sentinel := &redissentinelv1beta2.RedisSentinel{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      nsNameBldr.SentinelName(),
-			Namespace: nsNameBldr.Namespace(),
+			Name:      nsnBuilder.SentinelName(),
+			Namespace: nsnBuilder.Namespace(),
 		},
 		Spec: redissentinelv1beta2.RedisSentinelSpec{
 			Size: &sentinelCount,
@@ -160,7 +160,7 @@ func ToRedisSentinelVendorSpec(
 			},
 			RedisSentinelConfig: &redissentinelv1beta2.RedisSentinelConfig{
 				RedisSentinelConfig: rediscommon.RedisSentinelConfig{
-					RedisReplicationName: nsNameBldr.ReplicationName(),
+					RedisReplicationName: nsnBuilder.ReplicationName(),
 					MasterGroupName:      masterName,
 				},
 			},
@@ -203,7 +203,7 @@ func ToRedisReplicationVendorSpec(
 		return nil, nil
 	}
 
-	nsNameBldr := opstree.CreateNsNameBuilder(types.NamespacedName{
+	nsnBuilder := opstree.CreateNsNameBuilder(types.NamespacedName{
 		Namespace: spec.Namespace, Name: spec.Name,
 	})
 
@@ -218,8 +218,8 @@ func ToRedisReplicationVendorSpec(
 
 	replication := &redisreplicationv1beta2.RedisReplication{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      nsNameBldr.ReplicationName(),
-			Namespace: nsNameBldr.Namespace(),
+			Name:      nsnBuilder.ReplicationName(),
+			Namespace: nsnBuilder.Namespace(),
 		},
 		Spec: redisreplicationv1beta2.RedisReplicationSpec{
 			Size: &replicaCount,
