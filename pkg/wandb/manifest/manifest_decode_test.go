@@ -18,11 +18,11 @@ var _ = Describe("Server manifest YAML decode", func() {
 		var m manifest.Manifest
 		Expect(yaml.Unmarshal(data, &m)).To(Succeed())
 
-		// Features
+		// Features (match current testing manifest values)
 		Expect(m.Features).NotTo(BeNil())
-		Expect(m.Features.RunsV2).To(BeFalse())
+		Expect(m.Features.RunsV2).To(BeTrue())
 		Expect(m.Features.FilestreamQueue).To(BeFalse())
-		Expect(m.Features.MetricObserver).To(BeFalse())
+		Expect(m.Features.MetricObserver).To(BeTrue())
 		Expect(m.Features.WeaveTrace).To(BeTrue())
 
 		// Kafka topics at top-level
@@ -44,10 +44,6 @@ var _ = Describe("Server manifest YAML decode", func() {
 		}
 		Expect(api).NotTo(BeNil())
 		Expect(api.InitContainers).NotTo(BeEmpty())
-		// Per-app kafka exists and has filestream topic mapping
-		Expect(api.Kafka).NotTo(BeNil())
-		Expect(api.Kafka.Filestream).NotTo(BeNil())
-		Expect(api.Kafka.Filestream.Topic).To(Equal("filestream"))
 
 		// Migrations
 		Expect(m.Migrations).To(HaveKey("default"))

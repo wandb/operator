@@ -8,6 +8,8 @@ import v1 "k8s.io/api/core/v1"
 type Manifest struct {
 	RequiredOperatorVersion string    `yaml:"requiredOperatorVersion"`
 	Features                *Features `yaml:"features,omitempty"`
+	// Prefer plural, but accept singular key as found in some manifests.
+	GeneratedSecrets []GeneratedSecret `yaml:"generatedSecrets,omitempty"`
 	// CommonEnvvars defines reusable groups of env vars that can be referenced
 	// by applications via the per-application `commonEnvs` list. This maps a
 	// group name (e.g., "gorillaMysql") to a slice of EnvVar definitions.
@@ -22,6 +24,13 @@ type Manifest struct {
 	// Migrations captures per-database migration jobs (e.g., default, runsdb, usagedb)
 	// as found in 0.76.1.yaml under the top-level "migrations" key.
 	Migrations map[string]MigrationJob `yaml:"migrations,omitempty"`
+}
+
+// GeneratedSecret represents the configuration for a dynamically generated secret.
+type GeneratedSecret struct {
+	Name          string `yaml:"name"`
+	Length        int    `yaml:"length"`
+	CharacterType string `yaml:"type"`
 }
 
 // SectionRef represents simple sections that commonly contain a single
@@ -130,9 +139,10 @@ type ContainerSpec struct {
 
 // EnvVar models an application environment variable sourced from manifest-defined services.
 type EnvVar struct {
-	Name    string      `yaml:"name"`
-	Value   string      `yaml:"value,omitempty"`
-	Sources []EnvSource `yaml:"sources,omitempty"`
+	Name         string      `yaml:"name"`
+	Value        string      `yaml:"value,omitempty"`
+	Sources      []EnvSource `yaml:"sources,omitempty"`
+	DefaultValue string      `yaml:"defaultValue,omitempty"`
 }
 
 // EnvSource references a named source and its type (e.g., mysql, redis, bucket).

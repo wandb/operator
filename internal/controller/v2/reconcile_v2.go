@@ -28,6 +28,7 @@ import (
 	"github.com/wandb/operator/internal/controller/ctrlqueue"
 	"github.com/wandb/operator/internal/controller/translator"
 	strimziv1 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1"
+	oputils "github.com/wandb/operator/pkg/utils"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
 	"gopkg.in/yaml.v3"
 	corev1 "k8s.io/api/core/v1"
@@ -149,6 +150,81 @@ func reconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 		return ctrl.Result{}, err
 	}
 	if err = yaml.Unmarshal(manifestData, &manifest); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	// Ensure any manifest-declared generated secrets exist and capture their selectors in status
+	if wandb.Status.GeneratedSecrets == nil {
+		wandb.Status.GeneratedSecrets = map[string]corev1.SecretKeySelector{}
+	}
+	for _, gs := range manifest.GeneratedSecrets {
+		// Deterministic secret name scoped to the CR instance
+		secretName := fmt.Sprintf("%s-%s", wandb.Name, gs.Name)
+		keyName := "value"
+		sec := &corev1.Secret{}
+		err := client.Get(ctx, types.NamespacedName{Name: secretName, Namespace: wandb.Namespace}, sec)
+		if err != nil {
+			if apiErrors.IsNotFound(err) {
+				// Create new secret with generated value
+				valueLen := gs.Length
+				if valueLen <= 0 {
+					valueLen = 32
+				}
+				pw, pwErr := oputils.GenerateRandomPassword(valueLen)
+				if pwErr != nil {
+					return ctrl.Result{}, pwErr
+				}
+				sec = &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      secretName,
+						Namespace: wandb.Namespace,
+						Labels: map[string]string{
+							"app.kubernetes.io/managed-by": "wandb-operator",
+							"app.kubernetes.io/instance":   wandb.Name,
+							"app.kubernetes.io/part-of":    "wandb",
+						},
+					},
+					StringData: map[string]string{keyName: pw},
+					Type:       corev1.SecretTypeOpaque,
+				}
+				if err := controllerutil.SetOwnerReference(wandb, sec, client.Scheme()); err != nil {
+					return ctrl.Result{}, err
+				}
+				if err := client.Create(ctx, sec); err != nil {
+					return ctrl.Result{}, err
+				}
+			} else {
+				return ctrl.Result{}, err
+			}
+		} else {
+			// Secret exists. Ensure it has the expected key; do not overwrite existing value.
+			if sec.Data == nil || (sec.Data != nil && sec.Data[keyName] == nil && sec.StringData == nil) {
+				if sec.StringData == nil {
+					sec.StringData = map[string]string{}
+				}
+				// Generate a value only if missing
+				valueLen := gs.Length
+				if valueLen <= 0 {
+					valueLen = 32
+				}
+				pw, pwErr := oputils.GenerateRandomPassword(valueLen)
+				if pwErr != nil {
+					return ctrl.Result{}, pwErr
+				}
+				sec.StringData[keyName] = pw
+				if err := client.Update(ctx, sec); err != nil {
+					return ctrl.Result{}, err
+				}
+			}
+		}
+		// Record selector in status
+		wandb.Status.GeneratedSecrets[gs.Name] = corev1.SecretKeySelector{
+			LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
+			Key:                  keyName,
+		}
+	}
+	// Persist status after updating generated secret selectors
+	if err := client.Status().Update(ctx, wandb); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -350,6 +426,12 @@ func reconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 
 			for idx, src := range env.Sources {
 				switch src.Type {
+				case "generatedSecret":
+					if sel, ok := wandb.Status.GeneratedSecrets[src.Name]; ok {
+						singleSecretSelector = sel
+						secretOnlyCount++
+						addSecretComponent(sel, idx)
+					}
 				case "mysql":
 					// mysql connection URL as a secret ref
 					selector := wandb.Status.MySQLStatus.Connection.URL
@@ -363,7 +445,19 @@ func reconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 					secretOnlyCount++
 					addSecretComponent(selector, idx)
 				case "bucket":
-					selector := wandb.Status.MinioStatus.Connection.URL
+					selector := corev1.SecretKeySelector{
+						LocalObjectReference: wandb.Status.MinioStatus.Connection.URL.LocalObjectReference,
+					}
+					switch src.Field {
+					case "host":
+						selector.Key = "Host"
+					case "port":
+						selector.Key = "Port"
+					case "region":
+						selector.Key = "Region"
+					default:
+						selector.Key = "url"
+					}
 					singleSecretSelector = selector
 					secretOnlyCount++
 					addSecretComponent(selector, idx)
@@ -407,11 +501,8 @@ func reconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 						selector.Key = "Host"
 					case "port":
 						selector.Key = "Port"
-					case "url":
-						selector.Key = "url"
 					default:
-						// Unrecognized field; skip
-						continue
+						selector.Key = "url"
 					}
 					singleSecretSelector = selector
 					secretOnlyCount++
@@ -466,6 +557,9 @@ func reconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 
 			// If we built no components, skip emitting this env var
 			if len(components) == 0 {
+				if env.DefaultValue != "" {
+					envVars = append(envVars, corev1.EnvVar{Name: env.Name, Value: env.DefaultValue})
+				}
 				continue
 			}
 
