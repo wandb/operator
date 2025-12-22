@@ -9,6 +9,7 @@ settings = {
     "installMinio": False,
     "installWandb": True,
     "wandbCRD": "wandb-default-v1",
+    "installTelemetry": False,
 }
 
 # global settings
@@ -148,6 +149,28 @@ helm_resource(
     labels=["Third-Party-Operators"],
 )
 
+helm_repo(
+    'victoria-metrics-repo',
+    'https://victoriametrics.github.io/helm-charts/',
+    labels=["Helm-Repos"],
+)
+helm_resource(
+    'victoria-metrics-operator',
+    chart='victoria-metrics-repo/victoria-metrics-operator',
+    labels=["Third-Party-Operators"],
+)
+
+helm_repo(
+    'grafana-repo',
+    'https://grafana.github.io/helm-charts',
+    labels=["Helm-Repos"],
+)
+helm_resource(
+    'grafana-operator',
+    chart='grafana-repo/grafana-operator',
+    labels=["Third-Party-Operators"],
+)
+
 k8s_yaml(local('kustomize build config/tilt-dev'))
 
 k8s_resource(
@@ -213,6 +236,62 @@ if settings.get("installWandb"):
         ],
         resource_deps=["operator-controller-manager"],
         labels=["Operator-Resources"],
+    )
+
+if settings.get("installTelemetry"):
+    k8s_yaml('./hack/testing-manifests/telemetry/victoria-dev.yaml')
+    k8s_resource(
+        new_name='Victoria-Metrics',
+        objects=[
+            'victoria-instance:vmsingle',
+            'victoria-agent:vmagent',
+        ],
+        resource_deps=["victoria-metrics-operator"],
+        labels=["Telemetry"],
+    )
+    k8s_resource(
+        new_name='Victoria-Logs',
+        objects=[
+            'victoria-logs:vlsingle',
+        ],
+        resource_deps=["victoria-metrics-operator"],
+        labels=["Telemetry"],
+    )
+    k8s_resource(
+        new_name='Victoria-Traces',
+        objects=[
+            'victoria-traces:vtsingle',
+        ],
+        resource_deps=["victoria-metrics-operator"],
+        labels=["Telemetry"],
+    )
+    k8s_yaml('./hack/testing-manifests/telemetry/wandb-otel-connection-dev.yaml')
+    k8s_resource(
+        new_name='OTEL-Connection-Secret',
+        objects=[
+            'wandb-otel-connection:secret',
+        ],
+        resource_deps=["Victoria-Metrics", "Victoria-Logs", "Victoria-Traces"],
+        labels=["Telemetry"],
+    )
+    k8s_yaml('./hack/testing-manifests/telemetry/grafana-dev.yaml')
+    k8s_resource(
+        new_name='Grafana',
+        objects=[
+            'grafana:grafana',
+        ],
+        resource_deps=["grafana-operator"],
+        labels=["Telemetry"],
+    )
+    k8s_resource(
+        new_name='Grafana-Datasources',
+        objects=[
+            'victoria-metrics:grafanadatasource',
+            'victoria-logs:grafanadatasource',
+            'victoria-traces:grafanadatasource',
+        ],
+        resource_deps=["Grafana", "Victoria-Metrics", "Victoria-Logs", "Victoria-Traces"],
+        labels=["Telemetry"],
     )
 
 docker_build_with_restart(IMG, '.',

@@ -2,5 +2,6 @@
   "allowedContexts": ["docker-desktop", "minikube", "kind-kind", "kind-wandb-operator"],
   "kindClusterName": "wandb-operator",
   "installMinio": false,
-  "wandbCRD": "wandb-dev-v2"
+  "wandbCRD": "wandb-dev-v2",
+  "installTelemetry": true
 }
