@@ -281,6 +281,7 @@ if settings.get("installTelemetry"):
             'grafana:grafana',
         ],
         resource_deps=["grafana-operator"],
+        port_forwards="3000:3000",
         labels=["Telemetry"],
     )
     k8s_resource(
