@@ -274,6 +274,41 @@ if settings.get("installTelemetry"):
         resource_deps=["Victoria-Metrics", "Victoria-Logs", "Victoria-Traces"],
         labels=["Telemetry"],
     )
+    k8s_yaml('./hack/testing-manifests/telemetry/kube-metrics-dev.yaml')
+    k8s_resource(
+        new_name='Kubernetes-Metrics',
+        objects=[
+            'kubelet-cadvisor:vmnodescrape',
+        ],
+        resource_deps=["Victoria-Metrics"],
+        labels=["Telemetry"],
+    )
+    k8s_yaml('./hack/testing-manifests/telemetry/operator-metrics-dev.yaml')
+    k8s_resource(
+        new_name='Operator-Metrics',
+        objects=[
+            'wandb-operator:vmservicescrape',
+            'clickhouse-operator:vmservicescrape',
+            'grafana-operator:vmservicescrape',
+            'victoria-metrics-operator:vmservicescrape',
+        ],
+        resource_deps=["Victoria-Metrics"],
+        labels=["Telemetry"],
+    )
+    k8s_yaml('./hack/testing-manifests/telemetry/infra-metrics-dev.yaml')
+    k8s_resource(
+        new_name='Infrastructure-Metrics',
+        objects=[
+            'mysql-pxc:vmpodscrape',
+            'mysql-proxysql:vmpodscrape',
+            'kafka-brokers:vmpodscrape',
+            'minio-tenant:vmservicescrape',
+            'clickhouse:vmpodscrape',
+            'redis:vmpodscrape',
+        ],
+        resource_deps=["Victoria-Metrics"],
+        labels=["Telemetry"],
+    )
     k8s_yaml('./hack/testing-manifests/telemetry/grafana-dev.yaml')
     k8s_resource(
         new_name='Grafana',

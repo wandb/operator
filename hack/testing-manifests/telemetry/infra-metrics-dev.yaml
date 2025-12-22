@@ -1,0 +1,93 @@
+---
+# MySQL - Percona XtraDB Cluster
+# Scrapes PXC nodes via admin port
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMPodScrape
+metadata:
+  name: mysql-pxc
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: pxc
+  podMetricsEndpoints:
+    - port: mysql-admin
+      path: /metrics
+---
+# MySQL - ProxySQL
+# Scrapes ProxySQL stats port
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMPodScrape
+metadata:
+  name: mysql-proxysql
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: proxysql
+  podMetricsEndpoints:
+    - port: stats
+      path: /metrics
+---
+# Kafka - Strimzi
+# Scrapes Kafka broker metrics
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMPodScrape
+metadata:
+  name: kafka-brokers
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      strimzi.io/kind: Kafka
+  podMetricsEndpoints:
+    - port: tcp-ctrlplane
+      path: /metrics
+---
+# MinIO Tenant
+# Scrapes MinIO metrics endpoint
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMServiceScrape
+metadata:
+  name: minio-tenant
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      v1.min.io/tenant: wandb-minio
+  endpoints:
+    - port: minio-port
+      path: /minio/metrics/v3
+      scheme: https
+      tlsConfig:
+        insecureSkipVerify: true
+---
+# ClickHouse
+# Scrapes ClickHouse metrics
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMPodScrape
+metadata:
+  name: clickhouse
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      clickhouse.altinity.com/app: chop
+  podMetricsEndpoints:
+    - port: http
+      path: /metrics
+---
+# Redis
+# Scrapes Redis metrics (if redis-exporter sidecar exists)
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMPodScrape
+metadata:
+  name: redis
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      redis.redis.opstreelabs.in/kind: RedisReplication
+  podMetricsEndpoints:
+    - port: redis-exporter
+      path: /metrics
