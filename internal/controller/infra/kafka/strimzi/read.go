@@ -91,7 +91,7 @@ func ReadState(
 	return status, nil
 }
 
-func computeStatusSummary(ctx context.Context, kafkaCR *strimziv1.Kafka, status *translator.KafkaStatus) {
+func computeStatusSummary(_ context.Context, kafkaCR *strimziv1.Kafka, status *translator.KafkaStatus) {
 	if kafkaCR == nil {
 		status.State = "Not Installed"
 		status.Ready = false

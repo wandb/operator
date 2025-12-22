@@ -44,21 +44,23 @@ func ReadState(
 
 	///////////////////////////////////
 	// set top-level summary
+	computeStatusSummary(ctx, actualResource, status)
 
-	if actualResource != nil {
-		switch actualResource.Status.HealthStatus {
+	return status, nil
+}
+
+func computeStatusSummary(_ context.Context, tenantCR *miniov2.Tenant, status *translator.MinioStatus) {
+	if tenantCR != nil {
+		switch tenantCR.Status.HealthStatus {
 		case miniov2.HealthStatusGreen:
 			status.State = "Ready"
 			status.Ready = true
-			break
 		case miniov2.HealthStatusRed:
 			status.State = "Error"
 			status.Ready = false
-			break
 		case miniov2.HealthStatusYellow:
 			status.State = "Degraded"
 			status.Ready = true
-			break
 		default:
 			status.State = "NotReady"
 			status.Ready = false
@@ -67,6 +69,4 @@ func ReadState(
 		status.State = "Not Installed"
 		status.Ready = false
 	}
-
-	return status, nil
 }

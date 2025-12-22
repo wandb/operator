@@ -28,6 +28,8 @@ func ReadState(
 	var err error
 	var found bool
 
+	installation := InstallTypeNone
+
 	nsnBuilder := createNsNameBuilder(specNamespacedName)
 
 	if found, err = ctrlcommon.GetResource(
@@ -56,6 +58,8 @@ func ReadState(
 	}
 
 	if standaloneActual != nil {
+		installation = InstallTypeStandalone
+
 		///////////////////////////////////
 		// set connection details
 		connInfo := readStandaloneConnectionDetails(standaloneActual)
@@ -74,15 +78,9 @@ func ReadState(
 		///////////////////////////////////
 		// add conditions
 
-		///////////////////////////////////
-		// set top-level summary
-
-		var runningPods map[string]bool
-		if runningPods, err = standalonePodsRunningStatus(ctx, client, standaloneActual); err != nil {
-			return nil, err
-		}
-		computeStandaloneStatusSummary(ctx, runningPods, status)
 	} else if sentinelActual != nil && replicationActual != nil {
+		installation = InstallTypeSentinel
+
 		connInfo := readSentinelConnectionDetails(sentinelActual)
 
 		var connection *translator.InfraConnection
@@ -99,22 +97,54 @@ func ReadState(
 		///////////////////////////////////
 		// add conditions
 
-		///////////////////////////////////
-		// set top-level summary
-		var sentinelRunningPods, replicationRunningPods map[string]bool
-		if sentinelRunningPods, err = sentinelPodsRunningStatus(ctx, client, sentinelActual); err != nil {
-			return nil, err
-		}
-		if replicationRunningPods, err = replicationPodsRunningStatus(ctx, client, replicationActual); err != nil {
-			return nil, err
-		}
-		computeSentinelStatusSummary(ctx, sentinelRunningPods, replicationRunningPods, status)
-	} else {
-		status.State = "NotInstalled"
-		status.Ready = false
+	}
+
+	///////////////////////////////////
+	// set top-level summary
+
+	if err = computeStatusSummary(
+		ctx, client, status, installation, standaloneActual, sentinelActual, replicationActual,
+	); err != nil {
+		return nil, err
 	}
 
 	return status, nil
+}
+
+func computeStatusSummary(
+	ctx context.Context,
+	client client.Client,
+	status *translator.RedisStatus,
+	installation installType,
+	standalone *redisv1beta2.Redis,
+	sentinel *redissentinelv1beta2.RedisSentinel,
+	replication *redisreplicationv1beta2.RedisReplication,
+) error {
+	var err error
+
+	switch installation {
+	case InstallTypeSentinel:
+		var sentinelRunningPods, replicationRunningPods map[string]bool
+		if sentinelRunningPods, err = sentinelPodsRunningStatus(ctx, client, sentinel); err != nil {
+			return err
+		}
+		if replicationRunningPods, err = replicationPodsRunningStatus(ctx, client, replication); err != nil {
+			return err
+		}
+		computeSentinelStatusSummary(ctx, sentinelRunningPods, replicationRunningPods, status)
+		break
+	case InstallTypeStandalone:
+		var runningPods map[string]bool
+		if runningPods, err = standalonePodsRunningStatus(ctx, client, standalone); err != nil {
+			return err
+		}
+		computeStandaloneStatusSummary(ctx, runningPods, status)
+		break
+	default:
+		status.State = "NotInstalled"
+		status.Ready = false
+	}
+	return nil
 }
 
 func sentinelPodsRunningStatus(

@@ -89,19 +89,22 @@ func ReadState(
 	}
 	///////////////////////////////////
 	// set top-level summary
+	computeStatusSummary(ctx, actual, status)
 
-	if actual != nil {
-		if actual.Status.Status == pxcv1.AppStateReady {
+	return status, nil
+}
+
+func computeStatusSummary(_ context.Context, clusterCR *pxcv1.PerconaXtraDBCluster, status *translator.MysqlStatus) {
+	if clusterCR != nil {
+		if clusterCR.Status.Status == pxcv1.AppStateReady {
 			status.State = "Ready"
 			status.Ready = true
 		} else {
-			status.State = utils.Capitalize(string(actual.Status.Status))
+			status.State = utils.Capitalize(string(clusterCR.Status.Status))
 			status.Ready = false
 		}
 	} else {
 		status.State = "Not Installed"
 		status.Ready = false
 	}
-
-	return status, nil
 }
