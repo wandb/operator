@@ -74,3 +74,20 @@ spec:
   podMetricsEndpoints:
     - port: "9121"
       path: /metrics
+---
+# ClickHouse
+# TODO: Implement clickhouse-exporter sidecar
+# The Altinity ClickHouse operator doesn't support adding sidecar containers
+# through the pod template. Requires alternative approach (mutating webhook, etc.)
+# apiVersion: operator.victoriametrics.com/v1beta1
+# kind: VMPodScrape
+# metadata:
+#   name: clickhouse
+#   namespace: default
+# spec:
+#   selector:
+#     matchLabels:
+#       clickhouse.altinity.com/chi: wandb-ch-install
+#   podMetricsEndpoints:
+#     - port: "9363"
+#       path: /metrics

@@ -14,7 +14,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
+)
+
+const (
+	DefaultClickHouseExporterImage = "clickhouse/clickhouse-exporter:latest"
+	DefaultClickHouseExporterPort  = 9363
 )
 
 func ToWBClickHouseStatus(ctx context.Context, status translator.ClickHouseStatus) apiv2.WBClickHouseStatus {
@@ -25,6 +31,42 @@ func ToWBClickHouseStatus(ctx context.Context, status translator.ClickHouseStatu
 		LastReconciled: metav1.Now(),
 		Connection: apiv2.WBInfraConnection{
 			URL: status.Connection.URL,
+		},
+	}
+}
+
+// createClickHouseExporterSidecar creates a clickhouse-exporter sidecar container if telemetry is enabled.
+// Returns nil if telemetry is disabled.
+func createClickHouseExporterSidecar(telemetry apiv2.Telemetry) []corev1.Container {
+	if !telemetry.Enabled {
+		return nil
+	}
+
+	return []corev1.Container{
+		{
+			Name:            "clickhouse-exporter",
+			Image:           DefaultClickHouseExporterImage,
+			ImagePullPolicy: corev1.PullIfNotPresent,
+			Args: []string{
+				"-scrape_uri=http://localhost:8123/",
+			},
+			Ports: []corev1.ContainerPort{
+				{
+					Name:          "metrics",
+					ContainerPort: int32(DefaultClickHouseExporterPort),
+					Protocol:      corev1.ProtocolTCP,
+				},
+			},
+			LivenessProbe: &corev1.Probe{
+				ProbeHandler: corev1.ProbeHandler{
+					HTTPGet: &corev1.HTTPGetAction{
+						Path: "/metrics",
+						Port: intstr.FromInt(DefaultClickHouseExporterPort),
+					},
+				},
+				InitialDelaySeconds: 60,
+				PeriodSeconds:       10,
+			},
 		},
 	}
 }
@@ -115,6 +157,12 @@ func ToClickHouseVendorSpec(
 	}
 
 	// Add pod template with resources if specified
+	// TODO: Add clickhouse-exporter sidecar when telemetry is enabled
+	// The Altinity ClickHouse operator doesn't support adding sidecar containers
+	// through the pod template. This will require a different approach such as:
+	// - Mutating webhook to inject the sidecar
+	// - Post-processing the StatefulSet after creation
+	// - Using a custom ClickHouse operator fork that supports sidecars
 	if len(spec.Config.Resources.Requests) > 0 || len(spec.Config.Resources.Limits) > 0 {
 		chi.Spec.Templates.PodTemplates = []chiv2.PodTemplate{
 			{

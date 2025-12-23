@@ -48,6 +48,17 @@ func createMySQLExporterSidecar(telemetry apiv2.Telemetry, clusterName string) [
 			Name:            "mysqld-exporter",
 			Image:           DefaultMySQLExporterImage,
 			ImagePullPolicy: corev1.PullIfNotPresent,
+			Command:         []string{"/bin/sh", "-c"},
+			Args: []string{`
+cat > /tmp/.my.cnf <<EOF
+[client]
+user=monitor
+password=${MYSQLD_EXPORTER_PASSWORD}
+host=localhost
+port=3306
+EOF
+exec /bin/mysqld_exporter --config.my-cnf=/tmp/.my.cnf
+`},
 			Ports: []corev1.ContainerPort{
 				{
 					Name:          "metrics",
@@ -66,10 +77,6 @@ func createMySQLExporterSidecar(telemetry apiv2.Telemetry, clusterName string) [
 							Key: "monitor",
 						},
 					},
-				},
-				{
-					Name:  "DATA_SOURCE_NAME",
-					Value: "monitor:$(MYSQLD_EXPORTER_PASSWORD)@(localhost:3306)/",
 				},
 			},
 			LivenessProbe: &corev1.Probe{
