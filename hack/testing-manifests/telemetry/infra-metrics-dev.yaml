@@ -11,7 +11,7 @@ spec:
     matchLabels:
       app.kubernetes.io/component: pxc
   podMetricsEndpoints:
-    - port: "9104"
+    - port: "metrics"
       path: /metrics
 ---
 # MySQL - ProxySQL
@@ -26,7 +26,7 @@ spec:
     matchLabels:
       app.kubernetes.io/component: proxysql
   podMetricsEndpoints:
-    - port: "6070"
+    - port: "stats"
       path: /metrics
 ---
 # Kafka - Strimzi
@@ -41,7 +41,7 @@ spec:
     matchLabels:
       strimzi.io/kind: Kafka
   podMetricsEndpoints:
-    - port: "9404"
+    - port: "tcp-prometheus"
       path: /metrics
 ---
 # MinIO Tenant
@@ -56,9 +56,11 @@ spec:
     matchLabels:
       v1.min.io/tenant: wandb-minio
   podMetricsEndpoints:
-    - port: "9000"
+    - port: "minio-port"
       path: /minio/metrics/v3
-      scheme: http
+      scheme: https
+      tlsConfig:
+        insecureSkipVerify: true
 ---
 # Redis
 # Scrapes Redis exporter sidecar metrics
@@ -70,9 +72,9 @@ metadata:
 spec:
   selector:
     matchLabels:
-      redis.redis.opstreelabs.in/kind: RedisReplication
+      role: replication
   podMetricsEndpoints:
-    - port: "9121"
+    - port: "redis-exporter"
       path: /metrics
 ---
 # ClickHouse
