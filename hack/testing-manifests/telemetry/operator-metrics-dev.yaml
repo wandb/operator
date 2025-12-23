@@ -13,10 +13,7 @@ spec:
       - operator-system
   endpoints:
     - port: https
-      scheme: https
-      tlsConfig:
-        insecureSkipVerify: true
-      bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+      scheme: http
 ---
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMServiceScrape

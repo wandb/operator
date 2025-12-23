@@ -65,7 +65,15 @@ spec:
           - --health-probe-bind-address=:8081
         image: controller:latest
         name: manager
-        ports: []
+        ports:
+        - containerPort: 8443
+          name: metrics
+          protocol: TCP
+        env:
+        - name: METRICS_BIND_ADDRESS
+          value: ":8443"
+        - name: METRICS_SECURE
+          value: "false"
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
