@@ -27,6 +27,22 @@ func ToWBMinioStatus(ctx context.Context, status translator.MinioStatus) apiv2.W
 	}
 }
 
+// createMinioTelemetryEnv creates environment variables for MinIO telemetry if enabled.
+// Disables authentication for Prometheus metrics endpoint in dev environments.
+// Returns nil if telemetry is disabled.
+func createMinioTelemetryEnv(telemetry apiv2.Telemetry) []corev1.EnvVar {
+	if !telemetry.Enabled {
+		return nil
+	}
+
+	return []corev1.EnvVar{
+		{
+			Name:  "MINIO_PROMETHEUS_AUTH_TYPE",
+			Value: "public",
+		},
+	}
+}
+
 // ToMinioVendorSpec converts a WBMinioSpec to a Minio Tenant CR.
 // This function translates the high-level Minio spec into the vendor-specific
 // Tenant format used by the Minio operator.
@@ -104,6 +120,9 @@ func ToMinioVendorSpec(
 			Limits:   spec.Config.Resources.Limits,
 		}
 	}
+
+	// Add telemetry environment variables if enabled
+	minioTenant.Spec.Env = createMinioTelemetryEnv(spec.Telemetry)
 
 	// Set owner reference
 	if err := ctrl.SetControllerReference(owner, minioTenant, scheme); err != nil {

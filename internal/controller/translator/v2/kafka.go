@@ -15,6 +15,10 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
+const (
+	MetricsReporterType = "strimziMetricsReporter"
+)
+
 func ToWBKafkaStatus(ctx context.Context, status translator.KafkaStatus) apiv2.WBKafkaStatus {
 	return apiv2.WBKafkaStatus{
 		Ready:          status.Ready,
@@ -23,6 +27,22 @@ func ToWBKafkaStatus(ctx context.Context, status translator.KafkaStatus) apiv2.W
 		LastReconciled: metav1.Now(),
 		Connection: apiv2.WBInfraConnection{
 			URL: status.Connection.URL,
+		},
+	}
+}
+
+// createKafkaMetricsConfig creates a MetricsConfig for Kafka if telemetry is enabled.
+// Uses the Strimzi Metrics Reporter which exposes metrics in Prometheus format.
+// Returns nil if telemetry is disabled.
+func createKafkaMetricsConfig(telemetry apiv2.Telemetry) *strimziv1.MetricsConfig {
+	if !telemetry.Enabled {
+		return nil
+	}
+
+	return &strimziv1.MetricsConfig{
+		Type: MetricsReporterType,
+		Values: &strimziv1.MetricsReporterValues{
+			AllowList: []string{".*"},
 		},
 	}
 }
@@ -91,6 +111,9 @@ func ToKafkaVendorSpec(
 			},
 		},
 	}
+
+	// Add metrics configuration if telemetry is enabled
+	kafka.Spec.Kafka.MetricsConfig = createKafkaMetricsConfig(spec.Telemetry)
 
 	// Set owner reference
 	if err := ctrl.SetControllerReference(owner, kafka, scheme); err != nil {

@@ -115,10 +115,17 @@ type WBMySQLSpec struct {
 	Config      WBMySQLConfig `json:"config,omitempty"`
 	Namespace   string        `json:"namespace,omitempty"`
 	Name        string        `json:"name,omitempty"`
+	Telemetry   Telemetry     `json:"telemetry,omitempty"`
 }
 
 type WBMySQLConfig struct {
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+}
+
+// Telemetry defines telemetry configuration for infrastructure components
+type Telemetry struct {
+	// +kubebuilder:default=true
+	Enabled bool `json:"enabled" default:"true"`
 }
 
 // WBRedisSpec fields have many default values that, if unspecified,
@@ -130,6 +137,7 @@ type WBRedisSpec struct {
 	Sentinel    WBRedisSentinelSpec `json:"sentinel,omitempty"`
 	Namespace   string              `json:"namespace,omitempty"`
 	Name        string              `json:"name,omitempty"`
+	Telemetry   Telemetry           `json:"telemetry,omitempty"`
 }
 
 type WBRedisConfig struct {
@@ -155,6 +163,7 @@ type WBKafkaSpec struct {
 	Config      WBKafkaConfig `json:"config,omitempty"`
 	Namespace   string        `json:"namespace,omitempty"`
 	Name        string        `json:"name,omitempty"`
+	Telemetry   Telemetry     `json:"telemetry,omitempty"`
 }
 
 type WBKafkaConfig struct {
@@ -179,6 +188,7 @@ type WBMinioSpec struct {
 	Config      WBMinioConfig `json:"config,omitempty"`
 	Namespace   string        `json:"namespace,omitempty"`
 	Name        string        `json:"name,omitempty"`
+	Telemetry   Telemetry     `json:"telemetry,omitempty"`
 }
 
 type WBMinioConfig struct {
@@ -197,6 +207,7 @@ type WBClickHouseSpec struct {
 	Config      WBClickHouseConfig `json:"config,omitempty"`
 	Namespace   string             `json:"namespace,omitempty"`
 	Name        string             `json:"name,omitempty"`
+	Telemetry   Telemetry          `json:"telemetry,omitempty"`
 }
 
 type WBClickHouseConfig struct {

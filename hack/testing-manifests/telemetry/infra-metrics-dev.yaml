@@ -1,6 +1,6 @@
 ---
 # MySQL - Percona XtraDB Cluster
-# Scrapes PXC nodes via admin port
+# Scrapes mysqld-exporter sidecar from PXC nodes
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMPodScrape
 metadata:
@@ -11,11 +11,11 @@ spec:
     matchLabels:
       app.kubernetes.io/component: pxc
   podMetricsEndpoints:
-    - port: mysql-admin
+    - port: "9104"
       path: /metrics
 ---
 # MySQL - ProxySQL
-# Scrapes ProxySQL stats port
+# Scrapes ProxySQL built-in Prometheus metrics
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMPodScrape
 metadata:
@@ -26,11 +26,11 @@ spec:
     matchLabels:
       app.kubernetes.io/component: proxysql
   podMetricsEndpoints:
-    - port: stats
+    - port: "6070"
       path: /metrics
 ---
 # Kafka - Strimzi
-# Scrapes Kafka broker metrics
+# Scrapes Kafka broker metrics via Strimzi Metrics Reporter
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMPodScrape
 metadata:
@@ -41,13 +41,13 @@ spec:
     matchLabels:
       strimzi.io/kind: Kafka
   podMetricsEndpoints:
-    - port: tcp-ctrlplane
+    - port: "9404"
       path: /metrics
 ---
 # MinIO Tenant
-# Scrapes MinIO metrics endpoint
+# Scrapes MinIO metrics endpoint (auth disabled when telemetry enabled)
 apiVersion: operator.victoriametrics.com/v1beta1
-kind: VMServiceScrape
+kind: VMPodScrape
 metadata:
   name: minio-tenant
   namespace: default
@@ -55,30 +55,13 @@ spec:
   selector:
     matchLabels:
       v1.min.io/tenant: wandb-minio
-  endpoints:
-    - port: minio-port
-      path: /minio/metrics/v3
-      scheme: https
-      tlsConfig:
-        insecureSkipVerify: true
----
-# ClickHouse
-# Scrapes ClickHouse metrics
-apiVersion: operator.victoriametrics.com/v1beta1
-kind: VMPodScrape
-metadata:
-  name: clickhouse
-  namespace: default
-spec:
-  selector:
-    matchLabels:
-      clickhouse.altinity.com/app: chop
   podMetricsEndpoints:
-    - port: http
-      path: /metrics
+    - port: "9000"
+      path: /minio/metrics/v3
+      scheme: http
 ---
 # Redis
-# Scrapes Redis metrics (if redis-exporter sidecar exists)
+# Scrapes Redis exporter sidecar metrics
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMPodScrape
 metadata:
@@ -89,5 +72,5 @@ spec:
     matchLabels:
       redis.redis.opstreelabs.in/kind: RedisReplication
   podMetricsEndpoints:
-    - port: redis-exporter
+    - port: "9121"
       path: /metrics

@@ -39,6 +39,7 @@ type KafkaClusterSpec struct {
 	Resources       *corev1.ResourceRequirements `json:"resources,omitempty"`
 	Rack            *Rack                        `json:"rack,omitempty"`
 	Template        *KafkaClusterTemplate        `json:"template,omitempty"`
+	MetricsConfig   *MetricsConfig               `json:"metricsConfig,omitempty"`
 }
 
 // GenericKafkaListener represents a Kafka listener configuration
@@ -119,6 +120,24 @@ type KRaftMetadataStorage struct {
 // Rack defines rack awareness configuration
 type Rack struct {
 	TopologyKey string `json:"topologyKey"`
+}
+
+// MetricsConfig defines the metrics configuration for Kafka
+type MetricsConfig struct {
+	Type      string                 `json:"type"`
+	ValueFrom *ConfigMapKeyRef       `json:"valueFrom,omitempty"`
+	Values    *MetricsReporterValues `json:"values,omitempty"`
+}
+
+// MetricsReporterValues defines the values for Strimzi Metrics Reporter
+type MetricsReporterValues struct {
+	AllowList []string `json:"allowList,omitempty"`
+}
+
+// ConfigMapKeyRef references a key in a ConfigMap
+type ConfigMapKeyRef struct {
+	Name string `json:"name"`
+	Key  string `json:"key"`
 }
 
 // KafkaClusterTemplate defines template configuration
