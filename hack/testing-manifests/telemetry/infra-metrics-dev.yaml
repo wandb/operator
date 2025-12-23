@@ -77,19 +77,36 @@ spec:
     - port: "redis-exporter"
       path: /metrics
 ---
+# ClickHouse Metrics Service
+# Service to expose ClickHouse Prometheus metrics on port 9363
+apiVersion: v1
+kind: Service
+metadata:
+  name: clickhouse-metrics
+  namespace: default
+  labels:
+    app: clickhouse-metrics
+spec:
+  selector:
+    clickhouse.altinity.com/chi: wandb-ch-install
+  ports:
+    - name: metrics
+      port: 9363
+      targetPort: 9363
+      protocol: TCP
+  clusterIP: None
+---
 # ClickHouse
-# TODO: Implement clickhouse-exporter sidecar
-# The Altinity ClickHouse operator doesn't support adding sidecar containers
-# through the pod template. Requires alternative approach (mutating webhook, etc.)
-# apiVersion: operator.victoriametrics.com/v1beta1
-# kind: VMPodScrape
-# metadata:
-#   name: clickhouse
-#   namespace: default
-# spec:
-#   selector:
-#     matchLabels:
-#       clickhouse.altinity.com/chi: wandb-ch-install
-#   podMetricsEndpoints:
-#     - port: "9363"
-#       path: /metrics
+# Scrapes ClickHouse built-in Prometheus endpoint via Service
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMServiceScrape
+metadata:
+  name: clickhouse
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: clickhouse-metrics
+  endpoints:
+    - port: metrics
+      path: /metrics

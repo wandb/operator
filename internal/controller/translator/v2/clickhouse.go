@@ -14,13 +14,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
-)
-
-const (
-	DefaultClickHouseExporterImage = "clickhouse/clickhouse-exporter:latest"
-	DefaultClickHouseExporterPort  = 9363
 )
 
 func ToWBClickHouseStatus(ctx context.Context, status translator.ClickHouseStatus) apiv2.WBClickHouseStatus {
@@ -31,42 +25,6 @@ func ToWBClickHouseStatus(ctx context.Context, status translator.ClickHouseStatu
 		LastReconciled: metav1.Now(),
 		Connection: apiv2.WBInfraConnection{
 			URL: status.Connection.URL,
-		},
-	}
-}
-
-// createClickHouseExporterSidecar creates a clickhouse-exporter sidecar container if telemetry is enabled.
-// Returns nil if telemetry is disabled.
-func createClickHouseExporterSidecar(telemetry apiv2.Telemetry) []corev1.Container {
-	if !telemetry.Enabled {
-		return nil
-	}
-
-	return []corev1.Container{
-		{
-			Name:            "clickhouse-exporter",
-			Image:           DefaultClickHouseExporterImage,
-			ImagePullPolicy: corev1.PullIfNotPresent,
-			Args: []string{
-				"-scrape_uri=http://localhost:8123/",
-			},
-			Ports: []corev1.ContainerPort{
-				{
-					Name:          "metrics",
-					ContainerPort: int32(DefaultClickHouseExporterPort),
-					Protocol:      corev1.ProtocolTCP,
-				},
-			},
-			LivenessProbe: &corev1.Probe{
-				ProbeHandler: corev1.ProbeHandler{
-					HTTPGet: &corev1.HTTPGetAction{
-						Path: "/metrics",
-						Port: intstr.FromInt(DefaultClickHouseExporterPort),
-					},
-				},
-				InitialDelaySeconds: 60,
-				PeriodSeconds:       10,
-			},
 		},
 	}
 }
@@ -95,19 +53,32 @@ func ToClickHouseVendorSpec(
 
 	// Create user settings with password
 	passwordSha256 := fmt.Sprintf("%x", sha256.Sum256([]byte(altinity.ClickHousePassword)))
-	settings := chiv2.NewSettings()
-	settings.Set(
+	userSettings := chiv2.NewSettings()
+	userSettings.Set(
 		fmt.Sprintf("%s/password_sha256_hex", altinity.ClickHouseUser),
 		chiv2.NewSettingScalar(passwordSha256),
 	)
-	settings.Set(
+	userSettings.Set(
 		fmt.Sprintf("%s/networks/ip", altinity.ClickHouseUser),
 		chiv2.NewSettingScalar("::/0"),
 	)
-	settings.Set(
+	userSettings.Set(
 		fmt.Sprintf("%s/allow_databases/database", altinity.ClickHouseUser),
 		chiv2.NewSettingVector([]string{altinity.ClickHouseDatabase, "db_management"}),
 	)
+
+	// Create server settings
+	serverSettings := chiv2.NewSettings()
+
+	// Enable built-in Prometheus metrics endpoint if telemetry is enabled
+	if spec.Telemetry.Enabled {
+		serverSettings.Set("prometheus/endpoint", chiv2.NewSettingScalar("/metrics"))
+		serverSettings.Set("prometheus/port", chiv2.NewSettingScalar("9363"))
+		serverSettings.Set("prometheus/metrics", chiv2.NewSettingScalar("true"))
+		serverSettings.Set("prometheus/events", chiv2.NewSettingScalar("true"))
+		serverSettings.Set("prometheus/asynchronous_metrics", chiv2.NewSettingScalar("true"))
+		serverSettings.Set("prometheus/status_info", chiv2.NewSettingScalar("true"))
+	}
 
 	// Build ClickHouseInstallation spec
 	chi := &chiv2.ClickHouseInstallation{
@@ -129,7 +100,8 @@ func ToClickHouseVendorSpec(
 						},
 					},
 				},
-				Users: settings,
+				Users:    userSettings,
+				Settings: serverSettings,
 			},
 			Defaults: &chiv2.Defaults{
 				Templates: &chiv2.TemplatesList{
@@ -157,12 +129,7 @@ func ToClickHouseVendorSpec(
 	}
 
 	// Add pod template with resources if specified
-	// TODO: Add clickhouse-exporter sidecar when telemetry is enabled
-	// The Altinity ClickHouse operator doesn't support adding sidecar containers
-	// through the pod template. This will require a different approach such as:
-	// - Mutating webhook to inject the sidecar
-	// - Post-processing the StatefulSet after creation
-	// - Using a custom ClickHouse operator fork that supports sidecars
+	// accessible even though not listed in the pod spec
 	if len(spec.Config.Resources.Requests) > 0 || len(spec.Config.Resources.Limits) > 0 {
 		chi.Spec.Templates.PodTemplates = []chiv2.PodTemplate{
 			{
@@ -180,7 +147,6 @@ func ToClickHouseVendorSpec(
 				},
 			},
 		}
-		//chi.Spec.Defaults.Templates.PodTemplate = "default-pod"
 	}
 
 	// Set owner reference
