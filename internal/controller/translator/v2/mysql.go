@@ -13,7 +13,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
+)
+
+const (
+	DefaultMySQLExporterImage = "prom/mysqld-exporter:v0.15.1"
+	DefaultMySQLExporterPort  = 9104
 )
 
 func ToWBMysqlStatus(ctx context.Context, status translator.MysqlStatus) apiv2.WBMySQLStatus {
@@ -24,6 +30,65 @@ func ToWBMysqlStatus(ctx context.Context, status translator.MysqlStatus) apiv2.W
 		LastReconciled: metav1.Now(),
 		Connection: apiv2.WBInfraConnection{
 			URL: status.Connection.URL,
+		},
+	}
+}
+
+// createMySQLExporterSidecar creates a mysqld-exporter sidecar container if telemetry is enabled.
+// Returns nil if telemetry is disabled.
+func createMySQLExporterSidecar(telemetry apiv2.Telemetry, clusterName string) []corev1.Container {
+	if !telemetry.Enabled {
+		return nil
+	}
+
+	internalSecretName := fmt.Sprintf("internal-%s", clusterName)
+
+	return []corev1.Container{
+		{
+			Name:            "mysqld-exporter",
+			Image:           DefaultMySQLExporterImage,
+			ImagePullPolicy: corev1.PullIfNotPresent,
+			Command:         []string{"/bin/sh", "-c"},
+			Args: []string{`
+cat > /tmp/.my.cnf <<EOF
+[client]
+user=monitor
+password=${MYSQLD_EXPORTER_PASSWORD}
+host=localhost
+port=3306
+EOF
+exec /bin/mysqld_exporter --config.my-cnf=/tmp/.my.cnf
+`},
+			Ports: []corev1.ContainerPort{
+				{
+					Name:          "metrics",
+					ContainerPort: int32(DefaultMySQLExporterPort),
+					Protocol:      corev1.ProtocolTCP,
+				},
+			},
+			Env: []corev1.EnvVar{
+				{
+					Name: "MYSQLD_EXPORTER_PASSWORD",
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: internalSecretName,
+							},
+							Key: "monitor",
+						},
+					},
+				},
+			},
+			LivenessProbe: &corev1.Probe{
+				ProbeHandler: corev1.ProbeHandler{
+					HTTPGet: &corev1.HTTPGetAction{
+						Path: "/metrics",
+						Port: intstr.FromInt(DefaultMySQLExporterPort),
+					},
+				},
+				InitialDelaySeconds: 60,
+				PeriodSeconds:       10,
+			},
 		},
 	}
 }
@@ -160,6 +225,9 @@ pxc_strict_mode=PERMISSIVE
 			Image:   translator.LogCollectorImg,
 		}
 	}
+
+	// Add mysqld-exporter sidecar if telemetry is enabled
+	pxc.Spec.PXC.Sidecars = createMySQLExporterSidecar(spec.Telemetry, nsnBuilder.ClusterName())
 
 	// Set owner reference
 	if err := ctrl.SetControllerReference(owner, pxc, scheme); err != nil {

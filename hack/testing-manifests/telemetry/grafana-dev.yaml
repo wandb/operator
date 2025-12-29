@@ -1,0 +1,76 @@
+---
+apiVersion: grafana.integreatly.org/v1beta1
+kind: Grafana
+metadata:
+  name: grafana
+  namespace: default
+  labels:
+    dashboards: "grafana"
+spec:
+  config:
+    log:
+      mode: "console"
+    auth:
+      disable_login_form: "true"
+    auth.anonymous:
+      enabled: "true"
+      org_role: "Admin"
+  deployment:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: grafana
+              env:
+                - name: GF_INSTALL_PLUGINS
+                  value: "victoriametrics-metrics-datasource,victoriametrics-logs-datasource"
+---
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDatasource
+metadata:
+  name: victoria-metrics
+  namespace: default
+spec:
+  instanceSelector:
+    matchLabels:
+      dashboards: "grafana"
+  datasource:
+    name: VictoriaMetrics
+    type: victoriametrics-metrics-datasource
+    access: proxy
+    url: http://vmsingle-victoria-instance:8428
+    isDefault: true
+    jsonData:
+      timeInterval: "30s"
+---
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDatasource
+metadata:
+  name: victoria-logs
+  namespace: default
+spec:
+  instanceSelector:
+    matchLabels:
+      dashboards: "grafana"
+  datasource:
+    name: VictoriaLogs
+    type: victoriametrics-logs-datasource
+    access: proxy
+    url: http://vlsingle-victoria-logs:9428
+    jsonData:
+      maxLines: 1000
+---
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDatasource
+metadata:
+  name: victoria-traces
+  namespace: default
+spec:
+  instanceSelector:
+    matchLabels:
+      dashboards: "grafana"
+  datasource:
+    name: VictoriaTraces
+    type: jaeger
+    access: proxy
+    url: http://vtsingle-victoria-traces:10428

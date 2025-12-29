@@ -53,19 +53,32 @@ func ToClickHouseVendorSpec(
 
 	// Create user settings with password
 	passwordSha256 := fmt.Sprintf("%x", sha256.Sum256([]byte(altinity.ClickHousePassword)))
-	settings := chiv2.NewSettings()
-	settings.Set(
+	userSettings := chiv2.NewSettings()
+	userSettings.Set(
 		fmt.Sprintf("%s/password_sha256_hex", altinity.ClickHouseUser),
 		chiv2.NewSettingScalar(passwordSha256),
 	)
-	settings.Set(
+	userSettings.Set(
 		fmt.Sprintf("%s/networks/ip", altinity.ClickHouseUser),
 		chiv2.NewSettingScalar("::/0"),
 	)
-	settings.Set(
+	userSettings.Set(
 		fmt.Sprintf("%s/allow_databases/database", altinity.ClickHouseUser),
 		chiv2.NewSettingVector([]string{altinity.ClickHouseDatabase, "db_management"}),
 	)
+
+	// Create server settings
+	serverSettings := chiv2.NewSettings()
+
+	// Enable built-in Prometheus metrics endpoint if telemetry is enabled
+	if spec.Telemetry.Enabled {
+		serverSettings.Set("prometheus/endpoint", chiv2.NewSettingScalar("/metrics"))
+		serverSettings.Set("prometheus/port", chiv2.NewSettingScalar("9363"))
+		serverSettings.Set("prometheus/metrics", chiv2.NewSettingScalar("true"))
+		serverSettings.Set("prometheus/events", chiv2.NewSettingScalar("true"))
+		serverSettings.Set("prometheus/asynchronous_metrics", chiv2.NewSettingScalar("true"))
+		serverSettings.Set("prometheus/status_info", chiv2.NewSettingScalar("true"))
+	}
 
 	// Build ClickHouseInstallation spec
 	chi := &chiv2.ClickHouseInstallation{
@@ -87,7 +100,8 @@ func ToClickHouseVendorSpec(
 						},
 					},
 				},
-				Users: settings,
+				Users:    userSettings,
+				Settings: serverSettings,
 			},
 			Defaults: &chiv2.Defaults{
 				Templates: &chiv2.TemplatesList{
@@ -115,6 +129,7 @@ func ToClickHouseVendorSpec(
 	}
 
 	// Add pod template with resources if specified
+	// accessible even though not listed in the pod spec
 	if len(spec.Config.Resources.Requests) > 0 || len(spec.Config.Resources.Limits) > 0 {
 		chi.Spec.Templates.PodTemplates = []chiv2.PodTemplate{
 			{
@@ -132,7 +147,6 @@ func ToClickHouseVendorSpec(
 				},
 			},
 		}
-		//chi.Spec.Defaults.Templates.PodTemplate = "default-pod"
 	}
 
 	// Set owner reference

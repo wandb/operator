@@ -21,7 +21,9 @@ import (
 )
 
 const (
-	DefaultSentinelGroup = defaults.DefaultSentinelGroup
+	DefaultSentinelGroup      = defaults.DefaultSentinelGroup
+	DefaultRedisExporterImage = "quay.io/opstree/redis-exporter:v1.44.0"
+	DefaultRedisExporterPort  = 9121
 )
 
 func ToRedisStatus(ctx context.Context, status translator.RedisStatus) apiv2.WBRedisStatus {
@@ -33,6 +35,22 @@ func ToRedisStatus(ctx context.Context, status translator.RedisStatus) apiv2.WBR
 		Connection: apiv2.WBInfraConnection{
 			URL: status.Connection.URL,
 		},
+	}
+}
+
+// createRedisExporterConfig creates a RedisExporter configuration if telemetry is enabled.
+// Returns nil if telemetry is disabled.
+func createRedisExporterConfig(telemetry apiv2.Telemetry) *rediscommon.RedisExporter {
+	if !telemetry.Enabled {
+		return nil
+	}
+
+	port := DefaultRedisExporterPort
+	return &rediscommon.RedisExporter{
+		Enabled:         true,
+		Port:            &port,
+		Image:           DefaultRedisExporterImage,
+		ImagePullPolicy: corev1.PullIfNotPresent,
 	}
 }
 
@@ -111,6 +129,9 @@ func ToRedisStandaloneVendorSpec(
 		return nil, fmt.Errorf("failed to set owner reference: %w", err)
 	}
 
+	// Add RedisExporter if telemetry is enabled
+	redis.Spec.RedisExporter = createRedisExporterConfig(spec.Telemetry)
+
 	return redis, nil
 }
 
@@ -180,6 +201,9 @@ func ToRedisSentinelVendorSpec(
 		log.Error(err, "failed to set owner reference on RedisSentinel CR")
 		return nil, fmt.Errorf("failed to set owner reference: %w", err)
 	}
+
+	// Add RedisExporter if telemetry is enabled
+	sentinel.Spec.RedisExporter = createRedisExporterConfig(spec.Telemetry)
 
 	return sentinel, nil
 }
@@ -258,6 +282,9 @@ func ToRedisReplicationVendorSpec(
 		log.Error(err, "failed to set owner reference on RedisReplication CR")
 		return nil, fmt.Errorf("failed to set owner reference: %w", err)
 	}
+
+	// Add RedisExporter if telemetry is enabled
+	replication.Spec.RedisExporter = createRedisExporterConfig(spec.Telemetry)
 
 	return replication, nil
 }

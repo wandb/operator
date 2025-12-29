@@ -1,0 +1,36 @@
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMSingle
+metadata:
+  name: victoria-instance
+  namespace: default
+spec:
+  retentionPeriod: "1d"
+  extraArgs:
+    opentelemetry.usePrometheusNaming: "true"
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMAgent
+metadata:
+  name: victoria-agent
+  namespace: default
+spec:
+  selectAllByDefault: true
+  remoteWrite:
+    - url: "http://vmsingle-victoria-instance:8428/api/v1/write"
+---
+apiVersion: operator.victoriametrics.com/v1
+kind: VLSingle
+metadata:
+  name: victoria-logs
+  namespace: default
+spec:
+  retentionPeriod: "1d"
+---
+apiVersion: operator.victoriametrics.com/v1
+kind: VTSingle
+metadata:
+  name: victoria-traces
+  namespace: default
+spec:
+  retentionPeriod: "1d"

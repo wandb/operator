@@ -1,0 +1,112 @@
+---
+# MySQL - Percona XtraDB Cluster
+# Scrapes mysqld-exporter sidecar from PXC nodes
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMPodScrape
+metadata:
+  name: mysql-pxc
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: pxc
+  podMetricsEndpoints:
+    - port: "metrics"
+      path: /metrics
+---
+# MySQL - ProxySQL
+# Scrapes ProxySQL built-in Prometheus metrics
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMPodScrape
+metadata:
+  name: mysql-proxysql
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: proxysql
+  podMetricsEndpoints:
+    - port: "stats"
+      path: /metrics
+---
+# Kafka - Strimzi
+# Scrapes Kafka broker metrics via Strimzi Metrics Reporter
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMPodScrape
+metadata:
+  name: kafka-brokers
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      strimzi.io/kind: Kafka
+  podMetricsEndpoints:
+    - port: "tcp-prometheus"
+      path: /metrics
+---
+# MinIO Tenant
+# Scrapes MinIO metrics endpoint (auth disabled when telemetry enabled)
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMPodScrape
+metadata:
+  name: minio-tenant
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      v1.min.io/tenant: wandb-minio
+  podMetricsEndpoints:
+    - port: "minio-port"
+      path: /minio/metrics/v3
+      scheme: https
+      tlsConfig:
+        insecureSkipVerify: true
+---
+# Redis
+# Scrapes Redis exporter sidecar metrics
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMPodScrape
+metadata:
+  name: redis
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      role: replication
+  podMetricsEndpoints:
+    - port: "redis-exporter"
+      path: /metrics
+---
+# ClickHouse Metrics Service
+# Service to expose ClickHouse Prometheus metrics on port 9363
+apiVersion: v1
+kind: Service
+metadata:
+  name: clickhouse-metrics
+  namespace: default
+  labels:
+    app: clickhouse-metrics
+spec:
+  selector:
+    clickhouse.altinity.com/chi: wandb-ch-install
+  ports:
+    - name: metrics
+      port: 9363
+      targetPort: 9363
+      protocol: TCP
+  clusterIP: None
+---
+# ClickHouse
+# Scrapes ClickHouse built-in Prometheus endpoint via Service
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMServiceScrape
+metadata:
+  name: clickhouse
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: clickhouse-metrics
+  endpoints:
+    - port: metrics
+      path: /metrics

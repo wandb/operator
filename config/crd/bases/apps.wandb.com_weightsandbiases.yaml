@@ -192,6 +192,16 @@ spec:
                     type: integer
                   storageSize:
                     type: string
+                  telemetry:
+                    description: Telemetry defines telemetry configuration for infrastructure
+                      components
+                    properties:
+                      enabled:
+                        default: true
+                        type: boolean
+                    required:
+                    - enabled
+                    type: object
                   version:
                     type: string
                 required:
@@ -294,6 +304,16 @@ spec:
                     type: integer
                   storageSize:
                     type: string
+                  telemetry:
+                    description: Telemetry defines telemetry configuration for infrastructure
+                      components
+                    properties:
+                      enabled:
+                        default: true
+                        type: boolean
+                    required:
+                    - enabled
+                    type: object
                 required:
                 - enabled
                 type: object
@@ -380,6 +400,16 @@ spec:
                     type: integer
                   storageSize:
                     type: string
+                  telemetry:
+                    description: Telemetry defines telemetry configuration for infrastructure
+                      components
+                    properties:
+                      enabled:
+                        default: true
+                        type: boolean
+                    required:
+                    - enabled
+                    type: object
                 required:
                 - enabled
                 type: object
@@ -462,6 +492,16 @@ spec:
                     type: integer
                   storageSize:
                     type: string
+                  telemetry:
+                    description: Telemetry defines telemetry configuration for infrastructure
+                      components
+                    properties:
+                      enabled:
+                        default: true
+                        type: boolean
+                    required:
+                    - enabled
+                    type: object
                 required:
                 - enabled
                 type: object
@@ -614,6 +654,16 @@ spec:
                     type: object
                   storageSize:
                     type: string
+                  telemetry:
+                    description: Telemetry defines telemetry configuration for infrastructure
+                      components
+                    properties:
+                      enabled:
+                        default: true
+                        type: boolean
+                    required:
+                    - enabled
+                    type: object
                 required:
                 - enabled
                 type: object

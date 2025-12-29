@@ -6,11 +6,21 @@ spec:
   size: small
   mysql:
     enabled: true
+    telemetry:
+      enabled: true
   redis:
     enabled: true
+    telemetry:
+      enabled: true
   kafka:
     enabled: true
+    telemetry:
+      enabled: true
   minio:
     enabled: true
+    telemetry:
+      enabled: true
   clickhouse:
     enabled: true
+    telemetry:
+      enabled: true
