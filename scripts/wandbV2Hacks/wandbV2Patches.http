@@ -1,0 +1,164 @@
+# Use `kubectl proxy --port=8001` to open proxy port
+
+###
+# @ name AutoCleanupEnabled TRUE
+PATCH {{k8s-api-server}}/apis/apps.wandb.com/v2/namespaces/{{namespace}}/weightsandbiases/{{wandb-name}}
+Content-Type: application/merge-patch+json
+
+{
+  "spec": {
+    "autoCleanupEnabled": true
+  }
+}
+
+###
+# @name AutoCleanupEnabled FALSE
+PATCH {{k8s-api-server}}/apis/apps.wandb.com/v2/namespaces/{{namespace}}/weightsandbiases/{{wandb-name}}
+Content-Type: application/merge-patch+json
+
+{
+  "spec": {
+    "autoCleanupEnabled": false
+  }
+}
+
+
+##################### CLICKHOUSE #####################
+
+###
+# @name Clickhouse Enable
+PATCH {{k8s-api-server}}/apis/apps.wandb.com/v2/namespaces/{{namespace}}/weightsandbiases/{{wandb-name}}
+Content-Type: application/merge-patch+json
+
+{
+  "spec": {
+    "clickhouse": {
+      "enabled": true
+    }
+  }
+}
+
+###
+# @name Clickhouse Disable
+PATCH {{k8s-api-server}}/apis/apps.wandb.com/v2/namespaces/{{namespace}}/weightsandbiases/{{wandb-name}}
+Content-Type: application/merge-patch+json
+
+{
+  "spec": {
+    "clickhouse": {
+      "enabled": false
+    }
+  }
+}
+
+##################### KAFKA #####################
+
+###
+# @name Kafka Enable
+PATCH {{k8s-api-server}}/apis/apps.wandb.com/v2/namespaces/{{namespace}}/weightsandbiases/{{wandb-name}}
+Content-Type: application/merge-patch+json
+
+{
+  "spec": {
+    "kafka": {
+      "enabled": true
+    }
+  }
+}
+
+###
+# @name Kafka Disable
+PATCH {{k8s-api-server}}/apis/apps.wandb.com/v2/namespaces/{{namespace}}/weightsandbiases/{{wandb-name}}
+Content-Type: application/merge-patch+json
+
+{
+  "spec": {
+    "kafka": {
+      "enabled": false
+    }
+  }
+}
+
+##################### MINIO #####################
+
+###
+# @name Minio Enable
+PATCH {{k8s-api-server}}/apis/apps.wandb.com/v2/namespaces/{{namespace}}/weightsandbiases/{{wandb-name}}
+Content-Type: application/merge-patch+json
+
+{
+  "spec": {
+    "minio": {
+      "enabled": true
+    }
+  }
+}
+
+###
+# @name Minio Disable
+PATCH {{k8s-api-server}}/apis/apps.wandb.com/v2/namespaces/{{namespace}}/weightsandbiases/{{wandb-name}}
+Content-Type: application/merge-patch+json
+
+{
+  "spec": {
+    "minio": {
+      "enabled": false
+    }
+  }
+}
+
+##################### MYSQL #####################
+
+###
+# @name Mysql Enable
+PATCH {{k8s-api-server}}/apis/apps.wandb.com/v2/namespaces/{{namespace}}/weightsandbiases/{{wandb-name}}
+Content-Type: application/merge-patch+json
+
+{
+  "spec": {
+    "mysql": {
+      "enabled": true
+    }
+  }
+}
+
+###
+# @name Mysql Disable
+PATCH {{k8s-api-server}}/apis/apps.wandb.com/v2/namespaces/{{namespace}}/weightsandbiases/{{wandb-name}}
+Content-Type: application/merge-patch+json
+
+{
+  "spec": {
+    "mysql": {
+      "enabled": false
+    }
+  }
+}
+
+##################### REDIS #####################
+
+###
+# @name Redis Enable
+PATCH {{k8s-api-server}}/apis/apps.wandb.com/v2/namespaces/{{namespace}}/weightsandbiases/{{wandb-name}}
+Content-Type: application/merge-patch+json
+
+{
+  "spec": {
+    "redis": {
+      "enabled": true
+    }
+  }
+}
+
+###
+# @name Redis Disable
+PATCH {{k8s-api-server}}/apis/apps.wandb.com/v2/namespaces/{{namespace}}/weightsandbiases/{{wandb-name}}
+Content-Type: application/merge-patch+json
+
+{
+  "spec": {
+    "redis": {
+      "enabled": false
+    }
+  }
+}

@@ -13,7 +13,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func PreserveFinalizer(
+func RetainFinalizer(
 	ctx context.Context,
 	cl client.Client,
 	specNamespacedName types.NamespacedName,
@@ -26,9 +26,9 @@ func PreserveFinalizer(
 	var actual = &corev1.Secret{}
 
 	nsnBuilder := createNsNameBuilder(specNamespacedName)
-
 	nsName := nsnBuilder.ConnectionNsName()
 
+	// Get Kafka connection secret used by WandB app
 	if found, err = common.GetResource(
 		ctx, cl, nsName, AppConnTypeName, actual,
 	); err != nil {
@@ -38,11 +38,10 @@ func PreserveFinalizer(
 		return nil
 	}
 
-	// remove wandbOwner as an OwnerReference to stop cascading deletion
+	// Remove wandbOwner as an OwnerReference to WandB app connection (to stop cascading deletion of it)
 	newOwnerRefs := utils.FilterFunc(actual.OwnerReferences, func(ref metav1.OwnerReference) bool {
 		return ref.UID != wandbOwner.GetUID()
 	})
-
 	actual.SetOwnerReferences(newOwnerRefs)
 
 	if err = cl.Update(ctx, actual); err != nil {

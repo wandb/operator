@@ -45,7 +45,7 @@ func WriteState(
 		actual = nil
 	}
 
-	if err = common.CrudResource(ctx, client, desiredCr, actual); err != nil {
+	if _, err = common.CrudResource(ctx, client, desiredCr, actual); err != nil {
 		return nil, err
 	}
 
@@ -134,7 +134,7 @@ func writeMinioConfig(
 		},
 	}
 
-	if err = common.CrudResource(ctx, client, desired, actual); err != nil {
+	if _, err = common.CrudResource(ctx, client, desired, actual); err != nil {
 		return nil, err
 	}
 

@@ -25,6 +25,7 @@ import (
 	"time"
 
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/ctrlqueue"
 	"github.com/wandb/operator/internal/controller/translator"
 	strimziv1 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1"
@@ -53,6 +54,8 @@ func Reconcile(ctx context.Context, client ctrlClient.Client, wandb *apiv2.Weigh
 	var minioConnection *translator.InfraConnection
 	var err error
 
+	retention := retentionPolicy(wandb)
+
 	/////////////////////////
 	// Cleanup Finalizer
 
@@ -71,12 +74,8 @@ func Reconcile(ctx context.Context, client ctrlClient.Client, wandb *apiv2.Weigh
 	if isFlaggedForDeletion && !wandb.ObjectMeta.DeletionTimestamp.IsZero() {
 		if ctrlqueue.ContainsString(wandb.GetFinalizers(), CleanupFinalizer) {
 
-			// try to keep stuff around that will allow recreation of WandB CR (and Infra) with
-			// same data and credentials
-			if !wandb.Spec.AutoCleanupEnabled {
-				if err = kafkaPreserveFinalizer(ctx, client, wandb); err != nil {
-					return ctrl.Result{}, err
-				}
+			if err = kafkaFinalizer(ctx, client, wandb, retention); err != nil {
+				return ctrl.Result{}, err
 			}
 			controllerutil.RemoveFinalizer(wandb, CleanupFinalizer)
 			if err := client.Update(ctx, wandb); err != nil {
@@ -94,7 +93,7 @@ func Reconcile(ctx context.Context, client ctrlClient.Client, wandb *apiv2.Weigh
 	if err = mysqlWriteState(ctx, client, wandb); err != nil {
 		return ctrl.Result{}, err
 	}
-	if err = kafkaWriteState(ctx, client, wandb); err != nil {
+	if err = kafkaWriteState(ctx, client, wandb, retention); err != nil {
 		return ctrl.Result{}, err
 	}
 	if minioConnection, err = minioWriteState(ctx, client, wandb); err != nil {
@@ -863,4 +862,11 @@ func inferState(
 		return err
 	}
 	return nil
+}
+
+func retentionPolicy(wandb *apiv2.WeightsAndBiases) common.RetentionPolicy {
+	if wandb.Spec.AutoCleanupEnabled {
+		return common.PurgePolicy
+	}
+	return common.RetainPolicy
 }

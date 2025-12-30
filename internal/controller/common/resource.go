@@ -46,34 +46,51 @@ func CrudResource[T client.Object](
 	c client.Client,
 	desired T,
 	actual T,
-) error {
+) (CrudAction, error) {
 	log := ctrl.LoggerFrom(ctx)
 
 	var err error
-	var action string
+	action := ExpectedCrudAction(desired, actual)
+
+	switch action {
+	case UpdateAction:
+		log.Info(fmt.Sprintf("update %s.%s", desired.GetNamespace(), desired.GetName()))
+		desired.SetResourceVersion(actual.GetResourceVersion())
+		err = c.Update(ctx, desired)
+		break
+	case CreateAction:
+		log.Info(fmt.Sprintf("create %s.%s", desired.GetNamespace(), desired.GetName()))
+		err = c.Create(ctx, desired)
+		break
+	case DeleteAction:
+		log.Info(fmt.Sprintf("delete %s.%s", actual.GetNamespace(), actual.GetName()))
+		err = c.Delete(ctx, actual)
+		break
+	}
+
+	if err != nil {
+		log.Error(err, "error on crud resource", "action", action)
+	}
+	return action, err
+}
+
+func ExpectedCrudAction[T client.Object](
+	desired T,
+	actual T,
+) CrudAction {
 	desiredExists := !IsNil(desired) && desired.GetName() != ""
 	actualExists := !IsNil(actual) && actual.GetName() != ""
 
 	if actualExists && desiredExists {
-		action = "update"
-		log.Info(fmt.Sprintf("update %s.%s", desired.GetNamespace(), desired.GetName()))
-		desired.SetResourceVersion(actual.GetResourceVersion())
-		err = c.Update(ctx, desired)
+		return UpdateAction
 	}
 	if !actualExists && desiredExists {
-		action = "create"
-		log.Info(fmt.Sprintf("create %s.%s", desired.GetNamespace(), desired.GetName()))
-		err = c.Create(ctx, desired)
+		return CreateAction
 	}
 	if actualExists && !desiredExists {
-		action = "delete"
-		log.Info(fmt.Sprintf("delete %s.%s", actual.GetNamespace(), actual.GetName()))
-		err = c.Delete(ctx, actual)
+		return DeleteAction
 	}
-	if err != nil {
-		log.Error(err, "error on crud resource", "action", action)
-	}
-	return err
+	return NoAction
 }
 
 // IsNil checks if the generic value v is a pointer and if that pointer is nil.

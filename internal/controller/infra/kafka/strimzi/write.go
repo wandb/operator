@@ -15,15 +15,16 @@ func WriteState(
 	specNamespacedName types.NamespacedName,
 	desiredKafka *strimziv1.Kafka,
 	desiredNodePool *strimziv1.KafkaNodePool,
+	retentionPolicy common.RetentionPolicy,
 ) error {
 	var err error
 
 	nsnBuilder := createNsNameBuilder(specNamespacedName)
 
-	if err = writeKafkaState(ctx, client, nsnBuilder, desiredKafka); err != nil {
+	if err = writeKafkaState(ctx, client, nsnBuilder, desiredKafka, retentionPolicy); err != nil {
 		return err
 	}
-	if err = writeNodePoolState(ctx, client, nsnBuilder, desiredNodePool); err != nil {
+	if err = writeNodePoolState(ctx, client, nsnBuilder, desiredNodePool, retentionPolicy); err != nil {
 		return err
 	}
 
@@ -35,6 +36,7 @@ func writeKafkaState(
 	client client.Client,
 	nsnBuilder *NsNameBuilder,
 	desired *strimziv1.Kafka,
+	retentionPolicy common.RetentionPolicy,
 ) error {
 	var err error
 	var found bool
@@ -49,7 +51,7 @@ func writeKafkaState(
 		actual = nil
 	}
 
-	if err = common.CrudResource(ctx, client, desired, actual); err != nil {
+	if _, err = common.CrudResource(ctx, client, desired, actual); err != nil {
 		return err
 	}
 
@@ -61,6 +63,7 @@ func writeNodePoolState(
 	client client.Client,
 	nsnBuilder *NsNameBuilder,
 	desired *strimziv1.KafkaNodePool,
+	retentionPolicy common.RetentionPolicy,
 ) error {
 	var err error
 	var found bool
@@ -77,7 +80,7 @@ func writeNodePoolState(
 
 	shouldRestore := desired != nil && actual == nil
 
-	if err = common.CrudResource(ctx, client, desired, actual); err != nil {
+	if _, err = common.CrudResource(ctx, client, desired, actual); err != nil {
 		return err
 	}
 

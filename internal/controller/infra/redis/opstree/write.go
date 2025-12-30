@@ -65,7 +65,8 @@ func writeStandaloneState(
 		standaloneActual = nil
 	}
 
-	return common.CrudResource(ctx, client, standaloneDesired, standaloneActual)
+	_, err = common.CrudResource(ctx, client, standaloneDesired, standaloneActual)
+	return err
 }
 
 func writeSentinelState(
@@ -87,7 +88,8 @@ func writeSentinelState(
 		sentinelActual = nil
 	}
 
-	return common.CrudResource(ctx, client, sentinelDesired, sentinelActual)
+	_, err = common.CrudResource(ctx, client, sentinelDesired, sentinelActual)
+	return err
 }
 
 func writeReplicationState(
@@ -109,7 +111,8 @@ func writeReplicationState(
 		replicationActual = nil
 	}
 
-	return common.CrudResource(ctx, client, replicationDesired, replicationActual)
+	_, err = common.CrudResource(ctx, client, replicationDesired, replicationActual)
+	return err
 }
 
 type redisConnInfo struct {

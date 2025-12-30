@@ -4,6 +4,7 @@ import (
 	"context"
 
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/infra/kafka/strimzi"
 	"github.com/wandb/operator/internal/controller/translator"
 	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
@@ -17,6 +18,7 @@ func kafkaWriteState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
+	retention common.RetentionPolicy,
 ) error {
 	var err error
 	var desiredKafka *strimziv1.Kafka
@@ -29,7 +31,8 @@ func kafkaWriteState(
 	if desiredNodePool, err = translatorv2.ToKafkaNodePoolVendorSpec(ctx, wandb.Spec.Kafka, wandb, client.Scheme()); err != nil {
 		return err
 	}
-	if err = strimzi.WriteState(ctx, client, specNamespacedName, desiredKafka, desiredNodePool); err != nil {
+
+	if err = strimzi.WriteState(ctx, client, specNamespacedName, desiredKafka, desiredNodePool, retention); err != nil {
 		return err
 	}
 
@@ -61,17 +64,20 @@ func kafkaReadState(
 	return nil
 }
 
-func kafkaPreserveFinalizer(
+func kafkaFinalizer(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
+	retention common.RetentionPolicy,
 ) error {
+	var err error = nil
 	var specNamespacedName = kafkaSpecNamespacedName(wandb.Spec.Kafka)
 
-	if err := strimzi.PreserveFinalizer(ctx, client, specNamespacedName, wandb); err != nil {
-		return err
+	switch retention {
+	case common.RetainPolicy:
+		err = strimzi.RetainFinalizer(ctx, client, specNamespacedName, wandb)
 	}
-	return nil
+	return err
 }
 
 func kafkaSpecNamespacedName(kafka apiv2.WBKafkaSpec) types.NamespacedName {
