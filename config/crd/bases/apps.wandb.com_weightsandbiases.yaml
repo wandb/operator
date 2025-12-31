@@ -111,7 +111,7 @@ spec:
                 description: |-
                   AutoCleanupEnabled will:
                     * if `true`, will purge all configs and data
-                    * if `false`, will maintain configs and data required to recreate WandB with pervious infra
+                    * if `false`, will maintain configs and data required to recreate WandB with previous infra
                 type: boolean
               clickhouse:
                 description: |-
@@ -703,8 +703,6 @@ spec:
                 required:
                 - hostname
                 type: object
-            required:
-            - autoCleanupEnabled
             type: object
           status:
             description: WeightsAndBiasesStatus defines the observed state of WeightsAndBiases.

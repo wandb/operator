@@ -1,11 +1,8 @@
+---
 requiredOperatorVersion: ^2.0.0
 
 features:
-  runsV2: true
   filestreamQueue: false
-  metricObserver: true
-  weaveTrace: true
-  weaveTraceWorkers: true
   proxy: true
 
 bucket:
@@ -29,19 +26,12 @@ kafka:
     topic: filestream
     partitionCount: 48
   - name: flat-run-fields-updater
-    features:
-      - runsV2
-      - metricObserver
     topic: flat-run-fields-updater
     partitionCount: 48
   - name: weave-worker
-    features:
-      - weaveTraceWorkers
     topic: weave.call_ended
     partitionCount: 48
   - name: weave-evaluate-model-worker
-    features:
-      - weaveTraceWorkers
     topic: weave.evaluate_model
     partitionCount: 48
 
@@ -341,6 +331,12 @@ applications:
       - containerPort: 8080
         name: anaconda2
         protocol: TCP
+    livenessProbe:
+      httpGet:
+        path: /ping
+    readinessProbe:
+      httpGet:
+        path: /ping
     service:
       ports:
         - port: 8080
@@ -380,6 +376,12 @@ applications:
       - containerPort: 8080
         name: api
         protocol: TCP
+    livenessProbe:
+      httpGet:
+        path: /healthz
+    readinessProbe:
+      httpGet:
+        path: /ready
     service:
       ports:
         - port: 8080
@@ -423,6 +425,12 @@ applications:
       - containerPort: 8083
         name: local
         protocol: TCP
+    livenessProbe:
+      httpGet:
+        path: /healthz
+    readinessProbe:
+      httpGet:
+        path: /ready
     image:
       repository: wandb/local
       tag: 0.76.1
@@ -481,14 +489,8 @@ applications:
       repository: wandb/megabinary
       tag: 0.76.1
   - name: flat-run-fields-updater
-    features:
-      - runsV2
     args:
       - flat-run-fields-updater
-#    command:
-#      - /bin/sh
-#      - -c
-#      - "sleep infinity"
     commonEnvs:
       - gorillaMysql
       - gorillaBucket
@@ -538,6 +540,12 @@ applications:
       - containerPort: 8080
         name: frontend
         protocol: TCP
+    livenessProbe:
+      httpGet:
+        path: /healthz
+    readinessProbe:
+      httpGet:
+        path: /ready
     service:
       ports:
         - port: 8080
@@ -581,8 +589,6 @@ applications:
     env:
       - name: GORILLA_RUN_UPDATE_SHADOW_QUEUE_SUBSCRIPTIONS_METRIC_OBSERVER
         value: "$(KAFKA_URL)/$(KAFKA_RUNS_V2_TOPIC_NAME)?consumer_group_id=metric-observer"
-    features:
-      - metricObserver
     image:
       repository: wandb/megabinary
       tag: 0.76.1
@@ -604,6 +610,12 @@ applications:
       - containerPort: 8080
         name: parquet
         protocol: TCP
+    livenessProbe:
+      httpGet:
+        path: /healthz
+    readinessProbe:
+      httpGet:
+        path: /ready
     service:
       ports:
         - port: 8080
@@ -616,14 +628,22 @@ applications:
     env:
       - name: DATADOG_TRACE_ENABLED
         value: "false"
+    ports:
+      - containerPort: 9239
+        name: weave
+        protocol: TCP
     service:
       ports:
-        - port: 9994
+        - port: 9239
           protocol: TCP
           name: weave
+    livenessProbe:
+      httpGet:
+        path: /__weave/hello
+    readinessProbe:
+      httpGet:
+        path: /__weave/hello
   - name: weave-trace
-    features:
-      - weaveTrace
     image:
       repository: wandb/weave-trace
       tag: 0.76.1
@@ -650,14 +670,18 @@ applications:
       - containerPort: 8080
         name: weave-trace
         protocol: TCP
+    livenessProbe:
+      httpGet:
+        path: /traces/health
+    readinessProbe:
+      httpGet:
+        path: /traces/health
     service:
       ports:
         - port: 8080
           protocol: TCP
           name: weave-trace
   - name: weave-trace-worker
-    features:
-      - weaveTraceWorkers
     image:
       repository: wandb/weave-trace
       tag: 0.76.1
@@ -670,8 +694,6 @@ applications:
       - kafka
       - weaveTrace
   - name: weave-trace-evaluate-model-worker
-    features:
-      - weaveTraceWorkers
     image:
       repository: wandb/weave-trace
       tag: 0.76.1
@@ -734,23 +756,23 @@ applications:
           upstream frontend {
             server $UPSTREAM_FRONTEND;
           }
-          
+
           upstream app {
             server $UPSTREAM_APP;
           }
-          
+
           upstream api {
             server $UPSTREAM_API;
           }
-          
+
           upstream weave_trace {
             server $UPSTREAM_WEAVE_TRACE;
           }
-          
+
           upstream bucket {
             server $UPSTREAM_BUCKET;
           }
-          
+
           map $host $bucket{
             default $UPSTREAM_BUCKET;
           }
@@ -762,24 +784,23 @@ applications:
 
           error_log  /var/log/nginx/error.log notice;
           pid        /tmp/nginx.pid;
-      
-      
+
           events {
             worker_connections  1024;
           }
-              
+
           http {
-          
+
             include /etc/nginx/conf.d/envvar.conf;
-          
+
             server {
               listen 8080;
-              proxy_set_header Host $host:8080;
+              proxy_set_header Host $http_host;
               client_max_body_size 0;
               location / {
-                proxy_pass http://app;
+                proxy_pass http://frontend;
               }
-    
+
               location /api {
                 proxy_pass http://api;
               }
@@ -793,19 +814,19 @@ applications:
               location /files {
                 proxy_pass http://api;
               }
-    
+
               location /graphql {
                 proxy_pass http://api;
               }
-    
+
               location /graphql2 {
                 proxy_pass http://api;
               }
-    
+
               location /traces {
                 proxy_pass http://weave_trace;
               }
-    
+
               location /bucket {
                 proxy_ssl_verify off;
                 proxy_set_header Host $bucket;
@@ -814,10 +835,12 @@ applications:
             }
           }
     service:
+      type: NodePort
       ports:
         - name: http
           port: 8080
           protocol: TCP
+          nodePort: 30080
 
 migrations:
   default:

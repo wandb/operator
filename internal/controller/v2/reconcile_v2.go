@@ -31,16 +31,17 @@ import (
 	strimziv1 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1"
 	oputils "github.com/wandb/operator/pkg/utils"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
-	"gopkg.in/yaml.v3"
 	corev1 "k8s.io/api/core/v1"
 	apiErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	ctrlClient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/yaml"
 )
 
 const CleanupFinalizer = "cleanup.app.wandb.com"
@@ -641,6 +642,48 @@ func reconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 			Ports:   Ports,
 		}
 
+		if app.StartupProbe != nil && app.StartupProbe.HTTPGet != nil {
+			if app.StartupProbe.HTTPGet.Port.StrVal == "" && app.StartupProbe.HTTPGet.Port.IntVal == 0 {
+				if len(app.Ports) > 0 {
+					if app.StartupProbe.HTTPGet.Path != "" {
+						app.StartupProbe.HTTPGet = &corev1.HTTPGetAction{
+							Path: app.StartupProbe.HTTPGet.Path,
+							Port: intstr.FromString(app.Ports[0].Name),
+						}
+					}
+				}
+			}
+			container.StartupProbe = app.StartupProbe
+		}
+
+		if app.LivenessProbe != nil && app.LivenessProbe.HTTPGet != nil {
+			if app.LivenessProbe.HTTPGet.Port.StrVal == "" && app.LivenessProbe.HTTPGet.Port.IntVal == 0 {
+				if len(app.Ports) > 0 {
+					if app.LivenessProbe.HTTPGet.Path != "" {
+						app.LivenessProbe.HTTPGet = &corev1.HTTPGetAction{
+							Path: app.LivenessProbe.HTTPGet.Path,
+							Port: intstr.FromString(app.Ports[0].Name),
+						}
+					}
+				}
+			}
+			container.LivenessProbe = app.LivenessProbe
+		}
+
+		if app.ReadinessProbe != nil && app.ReadinessProbe.HTTPGet != nil {
+			if app.ReadinessProbe.HTTPGet.Port.StrVal == "" && app.ReadinessProbe.HTTPGet.Port.IntVal == 0 {
+				if len(app.Ports) > 0 {
+					if app.ReadinessProbe.HTTPGet.Path != "" {
+						app.ReadinessProbe.HTTPGet = &corev1.HTTPGetAction{
+							Path: app.ReadinessProbe.HTTPGet.Path,
+							Port: intstr.FromString(app.Ports[0].Name),
+						}
+					}
+				}
+			}
+			container.ReadinessProbe = app.ReadinessProbe
+		}
+
 		// Handle file injection via ConfigMaps according to manifest Application.Files
 		volumes := []corev1.Volume{}
 		volumeMounts := []corev1.VolumeMount{}
@@ -767,24 +810,11 @@ func reconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 		application.Spec.PodTemplate.Spec.Volumes = volumes
 		application.Spec.PodTemplate.Spec.InitContainers = initContainers
 
-		// Reconcile Service ports: fully replace the ServiceTemplate ports with
-		// the ports declared in the manifest for this app. This ensures that any
-		// change to port numbers, names, or protocols is propagated on each
-		// reconcile. If no service ports are declared, clear the ServiceTemplate.
 		if app.Service != nil && len(app.Service.Ports) > 0 {
-			ports := make([]corev1.ServicePort, 0, len(app.Service.Ports))
-			for _, p := range app.Service.Ports {
-				ports = append(ports, corev1.ServicePort{
-					Name:     p.Name,
-					Port:     p.Port,
-					Protocol: p.Protocol,
-				})
+			application.Spec.ServiceTemplate = &corev1.ServiceSpec{
+				Type: app.Service.Type,
 			}
-			if application.Spec.ServiceTemplate == nil {
-				application.Spec.ServiceTemplate = &corev1.ServiceSpec{}
-			}
-			// Replace ports entirely to avoid stale or duplicate entries
-			application.Spec.ServiceTemplate.Ports = ports
+			application.Spec.ServiceTemplate.Ports = app.Service.Ports
 		} else {
 			// No service declared in manifest; ensure we clear any previous template
 			application.Spec.ServiceTemplate = nil

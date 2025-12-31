@@ -74,8 +74,9 @@ type WeightsAndBiasesSpec struct {
 
 	// AutoCleanupEnabled will:
 	//   * if `true`, will purge all configs and data
-	//   * if `false`, will maintain configs and data required to recreate WandB with pervious infra
-	AutoCleanupEnabled bool `json:"autoCleanupEnabled"`
+	//   * if `false`, will maintain configs and data required to recreate WandB with previous infra
+	// +optional
+	AutoCleanupEnabled bool `json:"autoCleanupEnabled,omitempty"`
 
 	Wandb WandbAppSpec `json:"wandb,omitempty"`
 

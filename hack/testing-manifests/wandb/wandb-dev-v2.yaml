@@ -4,7 +4,7 @@ metadata:
   name: wandb-dev-v2
 spec:
   wandb:
-    hostname: http://localhost:8080
+    hostname: http://localhost:30080
   size: dev
   mysql:
     enabled: true
