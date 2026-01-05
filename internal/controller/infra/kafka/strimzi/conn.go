@@ -6,9 +6,11 @@ import (
 
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/translator"
+	"github.com/wandb/operator/internal/utils"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -22,8 +24,44 @@ type kafkaConnInfo struct {
 	ClusterId string
 }
 
+const (
+	connInfoUrl       = "url"
+	connInfoHost      = "Host"
+	connInfoPort      = "Port"
+	connInfoClusterId = "ClusterId"
+)
+
 func (c *kafkaConnInfo) toURL() string {
 	return fmt.Sprintf("kafka://%s:%s", c.Host, c.Port)
+}
+
+// toKafkaConnInfo will translate a K8S secret and into a kafkaConnInfo, if
+// the expected fields are present.
+func toKafkaConnInfo(
+	ctx context.Context, secret *corev1.Secret,
+) *kafkaConnInfo {
+	if secret == nil {
+		return nil
+	}
+	result := &kafkaConnInfo{}
+	var ok bool
+	var value []byte
+	if value, ok = secret.Data[connInfoHost]; !ok {
+		return nil
+	}
+	result.Host = string(value)
+
+	if value, ok = secret.Data[connInfoPort]; !ok {
+		return nil
+	}
+	result.Port = string(value)
+
+	if value, ok = secret.Data[connInfoClusterId]; !ok {
+		return nil
+	}
+	result.ClusterId = string(value)
+
+	return result
 }
 
 func readKafkaConnInfo(
@@ -47,9 +85,9 @@ func readKafkaConnInfo(
 	}
 
 	return &kafkaConnInfo{
-		Host:      string(actual.Data["Host"]),
-		Port:      string(actual.Data["Port"]),
-		ClusterId: string(actual.Data["ClusterID"]),
+		Host:      string(actual.Data[connInfoHost]),
+		Port:      string(actual.Data[connInfoPort]),
+		ClusterId: string(actual.Data[connInfoClusterId]),
 	}, nil
 }
 
@@ -70,7 +108,6 @@ func writeKafkaConnInfo(
 	var actual = &corev1.Secret{}
 
 	nsName := nsnBuilder.ConnectionNsName()
-	urlKey := "url"
 
 	if found, err = common.GetResource(
 		ctx, cl, nsName, AppConnTypeName, actual,
@@ -81,26 +118,17 @@ func writeKafkaConnInfo(
 		actual = nil
 	}
 
-	// prefer existing strimzi CR clusterId to wandb Secret clusterId
-	// but take a non-blank value of a blank one
-	nextClusterId := ""
+	// prefer connInfo ClusterId but fall back to AppConn Secret's value
 	wandbSecretClusterId := ""
 	if actual != nil {
-		wandbSecretClusterId = string(actual.Data["ClusterID"])
+		wandbSecretClusterId = string(actual.Data[connInfoClusterId])
 	}
-	strimziCrClusterId := connInfo.ClusterId
-	if wandbSecretClusterId == strimziCrClusterId {
-		nextClusterId = strimziCrClusterId // no change
-	} else if wandbSecretClusterId != "" && strimziCrClusterId != "" {
-		log.Info("Kafka clusterId replace wandb secret with strimzi CR status",
-			"wandbSecretClusterId", wandbSecretClusterId, "strimziCrClusterId", strimziCrClusterId)
-		nextClusterId = strimziCrClusterId
-	} else if wandbSecretClusterId != "" {
-		log.Info("Kafka clusterId use existing wandb secret", "wandbSecretClusterId", wandbSecretClusterId)
-		nextClusterId = wandbSecretClusterId
-	} else if strimziCrClusterId != "" {
-		log.Info("Kafka clusterId use existing strimzi CR status", "strimziCrClusterId", strimziCrClusterId)
-		nextClusterId = strimziCrClusterId
+	nextClusterId := utils.Coalesce(connInfo.ClusterId, wandbSecretClusterId)
+
+	newConnInfo := &kafkaConnInfo{
+		Host:      connInfo.Host,
+		Port:      connInfo.Port,
+		ClusterId: nextClusterId,
 	}
 
 	if gvk, err = cl.GroupVersionKindFor(owner); err != nil {
@@ -116,20 +144,7 @@ func writeKafkaConnInfo(
 		BlockOwnerDeletion: ptr.To(false),
 	}
 
-	desired := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            nsName.Name,
-			Namespace:       nsName.Namespace,
-			OwnerReferences: []metav1.OwnerReference{ref},
-		},
-		Type: corev1.SecretTypeOpaque,
-		StringData: map[string]string{
-			urlKey:      connInfo.toURL(),
-			"Host":      connInfo.Host,
-			"Port":      connInfo.Port,
-			"ClusterID": nextClusterId,
-		},
-	}
+	desired := buildConnInfoSecret(nsName, newConnInfo, &ref)
 
 	if _, err = common.CrudResource(ctx, cl, desired, actual); err != nil {
 		return nil, err
@@ -140,8 +155,54 @@ func writeKafkaConnInfo(
 			LocalObjectReference: corev1.LocalObjectReference{
 				Name: nsName.Name,
 			},
-			Key:      urlKey,
+			Key:      connInfoUrl,
 			Optional: ptr.To(false),
 		},
 	}, nil
+}
+
+func deleteKafkaConnInfo(
+	ctx context.Context,
+	cl client.Client,
+	nsnBuilder *NsNameBuilder,
+) error {
+	var secret = &corev1.Secret{}
+
+	nsName := nsnBuilder.ConnectionNsName()
+
+	found, err := common.GetResource(
+		ctx, cl, nsName, AppConnTypeName, secret,
+	)
+	if err != nil {
+		return err
+	}
+
+	if found {
+		err = cl.Delete(ctx, secret)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func buildConnInfoSecret(nsName types.NamespacedName, connInfo *kafkaConnInfo, ref *metav1.OwnerReference) *corev1.Secret {
+	objMeta := metav1.ObjectMeta{
+		Name:      nsName.Name,
+		Namespace: nsName.Namespace,
+	}
+	if ref != nil {
+		objMeta.OwnerReferences = []metav1.OwnerReference{*ref}
+	}
+	return &corev1.Secret{
+		ObjectMeta: objMeta,
+		Type:       corev1.SecretTypeOpaque,
+		StringData: map[string]string{
+			connInfoUrl:       connInfo.toURL(),
+			connInfoHost:      connInfo.Host,
+			connInfoPort:      connInfo.Port,
+			connInfoClusterId: connInfo.ClusterId,
+		},
+	}
 }

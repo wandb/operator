@@ -1,7 +1,5 @@
-# Use `kubectl proxy --port=8001` to open proxy port
-
 ###
-# @ name AutoCleanupEnabled TRUE
+# @name AutoCleanupEnabled TRUE
 PATCH {{k8s-api-server}}/apis/apps.wandb.com/v2/namespaces/{{namespace}}/weightsandbiases/{{wandb-name}}
 Content-Type: application/merge-patch+json
 

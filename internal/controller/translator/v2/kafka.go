@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/infra/kafka/strimzi"
 	"github.com/wandb/operator/internal/controller/translator"
 	strimziv1 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1"
@@ -130,6 +131,7 @@ func ToKafkaVendorSpec(
 func ToKafkaNodePoolVendorSpec(
 	ctx context.Context,
 	spec apiv2.WBKafkaSpec,
+	retention common.RetentionPolicy,
 	owner metav1.Object,
 	scheme *runtime.Scheme,
 ) (*strimziv1.KafkaNodePool, error) {
@@ -161,7 +163,7 @@ func ToKafkaNodePoolVendorSpec(
 						ID:          0,
 						Type:        strimzi.StorageType,
 						Size:        spec.StorageSize,
-						DeleteClaim: strimzi.StorageDeleteClaim,
+						DeleteClaim: retention == common.PurgePolicy,
 					},
 				},
 			},

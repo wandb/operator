@@ -12,6 +12,7 @@ import (
 func WriteState(
 	ctx context.Context,
 	client client.Client,
+	wandbOwner client.Object,
 	specNamespacedName types.NamespacedName,
 	desiredKafka *strimziv1.Kafka,
 	desiredNodePool *strimziv1.KafkaNodePool,
@@ -24,7 +25,7 @@ func WriteState(
 	if err = writeKafkaState(ctx, client, nsnBuilder, desiredKafka, retentionPolicy); err != nil {
 		return err
 	}
-	if err = writeNodePoolState(ctx, client, nsnBuilder, desiredNodePool, retentionPolicy); err != nil {
+	if err = writeNodePoolState(ctx, client, nsnBuilder, wandbOwner, desiredNodePool, retentionPolicy); err != nil {
 		return err
 	}
 
@@ -62,6 +63,7 @@ func writeNodePoolState(
 	ctx context.Context,
 	client client.Client,
 	nsnBuilder *NsNameBuilder,
+	wandbOwner client.Object,
 	desired *strimziv1.KafkaNodePool,
 	retentionPolicy common.RetentionPolicy,
 ) error {
@@ -78,15 +80,30 @@ func writeNodePoolState(
 		actual = nil
 	}
 
-	shouldRestore := desired != nil && actual == nil
-
-	if _, err = common.CrudResource(ctx, client, desired, actual); err != nil {
+	action, err := common.CrudResource(ctx, client, desired, actual)
+	if err != nil {
 		return err
 	}
 
-	if shouldRestore {
-		if err = restoreKafkaConnInfo(ctx, client, nsnBuilder, desired, actual); err != nil {
+	switch action {
+	case common.CreateAction:
+		if err = restoreKafkaBackupConnInfo(ctx, client, wandbOwner, nsnBuilder, desired, actual); err != nil {
 			return err
+		}
+		if err = restoreKafkaNodePoolClusterId(ctx, client, nsnBuilder, desired); err != nil {
+			return err
+		}
+		break
+	case common.DeleteAction:
+		switch retentionPolicy {
+		case common.PurgePolicy:
+			if err = deleteKafkaConnInfo(ctx, client, nsnBuilder); err != nil {
+				return err
+			}
+		case common.RetainPolicy:
+			if err = backupKafkaConnInfo(ctx, client, nsnBuilder.SpecNsName()); err != nil {
+				return err
+			}
 		}
 	}
 

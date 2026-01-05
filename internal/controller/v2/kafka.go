@@ -28,11 +28,11 @@ func kafkaWriteState(
 	if desiredKafka, err = translatorv2.ToKafkaVendorSpec(ctx, wandb.Spec.Kafka, wandb, client.Scheme()); err != nil {
 		return err
 	}
-	if desiredNodePool, err = translatorv2.ToKafkaNodePoolVendorSpec(ctx, wandb.Spec.Kafka, wandb, client.Scheme()); err != nil {
+	if desiredNodePool, err = translatorv2.ToKafkaNodePoolVendorSpec(ctx, wandb.Spec.Kafka, retention, wandb, client.Scheme()); err != nil {
 		return err
 	}
 
-	if err = strimzi.WriteState(ctx, client, specNamespacedName, desiredKafka, desiredNodePool, retention); err != nil {
+	if err = strimzi.WriteState(ctx, client, wandb, specNamespacedName, desiredKafka, desiredNodePool, retention); err != nil {
 		return err
 	}
 
@@ -75,7 +75,7 @@ func kafkaFinalizer(
 
 	switch retention {
 	case common.RetainPolicy:
-		err = strimzi.RetainFinalizer(ctx, client, specNamespacedName, wandb)
+		err = strimzi.RetainKafkaFinalizer(ctx, client, specNamespacedName, wandb)
 	}
 	return err
 }

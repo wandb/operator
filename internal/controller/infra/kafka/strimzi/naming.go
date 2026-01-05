@@ -24,6 +24,13 @@ func (n *NsNameBuilder) SpecName() string {
 	return n.baseNsName.Name
 }
 
+func (n *NsNameBuilder) SpecNsName() types.NamespacedName {
+	return types.NamespacedName{
+		Namespace: n.Namespace(),
+		Name:      n.SpecName(),
+	}
+}
+
 func (n *NsNameBuilder) KafkaName() string {
 	return n.SpecName()
 }
@@ -66,6 +73,17 @@ func (n *NsNameBuilder) ConnectionNsName() types.NamespacedName {
 	return types.NamespacedName{
 		Namespace: n.Namespace(),
 		Name:      n.ConnectionName(),
+	}
+}
+
+func (n *NsNameBuilder) ConnectionBackupName() string {
+	return fmt.Sprintf("%s-connection-backup", n.SpecName())
+}
+
+func (n *NsNameBuilder) ConnectionBackupNsName() types.NamespacedName {
+	return types.NamespacedName{
+		Namespace: n.Namespace(),
+		Name:      n.ConnectionBackupName(),
 	}
 }
 
