@@ -23,9 +23,7 @@ type mysqlConnInfo struct {
 }
 
 func (c *mysqlConnInfo) toURL() string {
-	fmt.Println(c.Password)
 	password := url.QueryEscape(c.Password)
-	fmt.Println(password)
 	return fmt.Sprintf("mysql://%s:%s@%s:%s/%s", c.User, password, c.Host, c.Port, c.Database)
 }
 

@@ -6,8 +6,8 @@ import corev1 "k8s.io/api/core/v1"
 // It is intended to be a direct mapping of the YAML document for decoding via
 // gopkg.in/yaml.v3 or sigs.k8s.io/yaml.
 type Manifest struct {
-	RequiredOperatorVersion string    `yaml:"requiredOperatorVersion"`
-	Features                *Features `yaml:"features,omitempty"`
+	RequiredOperatorVersion string          `yaml:"requiredOperatorVersion"`
+	Features                map[string]bool `yaml:"features,omitempty"`
 	// Prefer plural, but accept singular key as found in some manifests.
 	GeneratedSecrets []GeneratedSecret `yaml:"generatedSecrets,omitempty"`
 	// CommonEnvvars defines reusable groups of env vars that can be referenced
@@ -60,16 +60,6 @@ type KafkaTopic struct {
 	Features       []string `yaml:"features,omitempty"`
 	Topic          string   `yaml:"topic"`
 	PartitionCount int      `yaml:"partitionCount,omitempty"`
-}
-
-// Features represents optional feature flags in the manifest.
-type Features struct {
-	RunsV2            bool `yaml:"runsV2"`
-	FilestreamQueue   bool `yaml:"filestreamQueue"`
-	MetricObserver    bool `yaml:"metricObserver"`
-	WeaveTrace        bool `yaml:"weaveTrace"`
-	WeaveTraceWorkers bool `yaml:"weaveTraceWorkers"`
-	Proxy             bool `yaml:"proxy"`
 }
 
 // ImageRef represents an application container image reference.

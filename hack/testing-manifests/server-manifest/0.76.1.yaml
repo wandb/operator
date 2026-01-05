@@ -3,7 +3,7 @@ requiredOperatorVersion: ^2.0.0
 
 features:
   filestreamQueue: false
-  proxy: true
+  proxy: false
 
 bucket:
   default: {}
@@ -205,12 +205,12 @@ commonEnvvars:
       sources:
         - name: hostname
           type: custom-resource
-          field: spec.wandb.hostname
+          field: status.wandb.hostname
     - name: GORILLA_FRONTEND_HOST
       sources:
         - name: hostname
           type: custom-resource
-          field: spec.wandb.hostname
+          field: status.wandb.hostname
     - name: LICENSE
       sources:
         - name: license
@@ -268,7 +268,7 @@ commonEnvvars:
       sources:
         - name: hostname
           type: custom-resource
-          field: spec.wandb.hostname
+          field: status.wandb.hostname
     - name: WANDB_BASE_URL
       sources:
         - name: api
@@ -292,7 +292,7 @@ commonEnvvars:
       source:
         - name: hostname
           type: custom-resource
-          field: spec.wandb.hostname
+          field: status.wandb.hostname
     - name: REACT_APP_ENVIRONMENT_NAME
       value: "local"
     - name: REACT_APP_ENVIRONMENT_IS_PRIVATE
@@ -409,6 +409,8 @@ applications:
       - name: LOGGING_ENABLED
         value: "true"
       - name: ANACONDA_ENABLED
+        value: "false"
+      - name: GLUE_ENABLED
         value: "false"
       - name: GORILLA_FILEMETA_ENABLED
         value: "false"
@@ -840,7 +842,6 @@ applications:
         - name: http
           port: 8080
           protocol: TCP
-          nodePort: 30080
 
 migrations:
   default:

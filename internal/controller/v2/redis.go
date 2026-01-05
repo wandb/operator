@@ -23,6 +23,14 @@ func redisWriteState(
 ) []metav1.Condition {
 	var specNamespacedName = redisSpecNamespacedName(wandb.Spec.Redis)
 
+	if wandb.Spec.Redis.Affinity == nil {
+		wandb.Spec.Redis.Affinity = wandb.Spec.Affinity
+	}
+
+	if wandb.Spec.Redis.Tolerations == nil {
+		wandb.Spec.Redis.Tolerations = wandb.Spec.Tolerations
+	}
+
 	standaloneDesired, err := translatorv2.ToRedisStandaloneVendorSpec(ctx, wandb.Spec.Redis, wandb, client.Scheme())
 	if err != nil {
 		return []metav1.Condition{

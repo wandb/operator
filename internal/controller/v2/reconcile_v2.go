@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -174,6 +175,7 @@ func consolidateResults(results []ctrl.Result) ctrl.Result {
 }
 func reconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases) (ctrl.Result, error) {
 	// Reconcile Wandb Manifest
+	logger := ctrl.LoggerFrom(ctx).WithName("reconcileWandbManifest")
 
 	redisReady := wandb.Status.RedisStatus.Ready
 	mysqlReady := wandb.Status.MySQLStatus.Ready
@@ -193,6 +195,13 @@ func reconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 	if err = yaml.Unmarshal(manifestData, &manifest); err != nil {
 		return ctrl.Result{}, err
 	}
+
+	// Override features from CR spec if present
+	for key, enabled := range wandb.Spec.Wandb.Features {
+		manifest.Features[key] = enabled
+	}
+
+	logger.Info("Manifest Features", "features", manifest.Features)
 
 	// Ensure any manifest-declared generated secrets exist and capture their selectors in status
 	if wandb.Status.GeneratedSecrets == nil {
@@ -272,7 +281,7 @@ func reconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 	// Create Strimzi KafkaTopic resources for enabled topics
 	if wandb.Spec.Kafka.Enabled {
 		for _, topic := range manifest.Kafka {
-			if !manifestFeaturesEnabled(topic.Features, manifest.Features) {
+			if len(topic.Features) > 0 && !manifestFeaturesEnabled(topic.Features, manifest.Features) {
 				continue
 			}
 
@@ -405,7 +414,7 @@ func reconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 		}
 		application := &apiv2.Application{}
 		applicationName := fmt.Sprintf("%s-%s", wandb.Name, app.Name)
-		err := client.Get(ctx, types.NamespacedName{Name: applicationName, Namespace: wandb.Namespace}, application)
+		err = client.Get(ctx, types.NamespacedName{Name: applicationName, Namespace: wandb.Namespace}, application)
 		if err != nil {
 			if apiErrors.IsNotFound(err) {
 				application.ObjectMeta.Name = applicationName
@@ -809,6 +818,8 @@ func reconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 		// across updates (e.g., duplicate "files-inline" volume names).
 		application.Spec.PodTemplate.Spec.Volumes = volumes
 		application.Spec.PodTemplate.Spec.InitContainers = initContainers
+		application.Spec.PodTemplate.Spec.Affinity = wandb.Spec.Affinity
+		application.Spec.PodTemplate.Spec.Tolerations = *wandb.Spec.Tolerations
 
 		if app.Service != nil && len(app.Service.Ports) > 0 {
 			application.Spec.ServiceTemplate = &corev1.ServiceSpec{
@@ -835,42 +846,43 @@ func reconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 			}
 		}
 
+		var hostname *url.URL
+		hostname, err = url.Parse(wandb.Spec.Wandb.Hostname)
+		if err != nil {
+			logger.Error(err, "Failed to parse provided hostname", "hostname", wandb.Spec.Wandb.Hostname)
+		} else {
+			if manifestFeaturesEnabled([]string{"proxy"}, manifest.Features) {
+				proxyService := &corev1.Service{}
+				proxyServiceName := fmt.Sprintf("%s-%s", wandb.Name, "nginx-proxy")
+				err := client.Get(ctx, types.NamespacedName{Name: proxyServiceName, Namespace: wandb.Namespace}, proxyService)
+				if err != nil {
+					logger.Error(err, "Failed to get proxy service", "service", proxyServiceName)
+				} else {
+					nodePort := proxyService.Spec.Ports[0].NodePort
+					hostname.Host = fmt.Sprintf("%s:%d", hostname.Hostname(), nodePort)
+				}
+
+			}
+			if wandb.Status.Wandb.Hostname != hostname.String() {
+				wandb.Status.Wandb.Hostname = hostname.String()
+				if err := client.Status().Update(ctx, wandb); err != nil {
+					return ctrl.Result{}, err
+				}
+			}
+		}
 	}
 	return ctrl.Result{}, nil
 }
 
 // manifestFeaturesEnabled returns true if any of the topic's feature flags are enabled
 // in the manifest's top-level Features section.
-func manifestFeaturesEnabled(topicFeatures []string, mf *serverManifest.Features) bool {
+func manifestFeaturesEnabled(topicFeatures []string, mf map[string]bool) bool {
 	if len(topicFeatures) == 0 || mf == nil {
 		return false
 	}
 	for _, f := range topicFeatures {
-		switch f {
-		case "runsV2":
-			if mf.RunsV2 {
-				return true
-			}
-		case "filestreamQueue":
-			if mf.FilestreamQueue {
-				return true
-			}
-		case "metricObserver":
-			if mf.MetricObserver {
-				return true
-			}
-		case "weaveTrace":
-			if mf.WeaveTrace {
-				return true
-			}
-		case "proxy":
-			if mf.Proxy {
-				return true
-			}
-		case "weaveTraceWorkers":
-			if mf.WeaveTraceWorkers {
-				return true
-			}
+		if enabled, ok := mf[f]; ok && enabled {
+			return true
 		}
 	}
 	return false

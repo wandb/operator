@@ -20,10 +20,8 @@ var _ = Describe("Server manifest YAML decode", func() {
 
 		// Features (match current testing manifest values)
 		Expect(m.Features).NotTo(BeNil())
-		Expect(m.Features.RunsV2).To(BeTrue())
-		Expect(m.Features.FilestreamQueue).To(BeFalse())
-		Expect(m.Features.MetricObserver).To(BeTrue())
-		Expect(m.Features.WeaveTrace).To(BeTrue())
+		Expect(m.Features["filestreamQueue"]).To(BeFalse())
+		Expect(m.Features["proxy"]).To(BeTrue())
 
 		// Kafka topics at top-level
 		Expect(m.Kafka).To(HaveLen(4))

@@ -153,6 +153,10 @@ pxc_strict_mode=PERMISSIVE
 							},
 						},
 					},
+					Affinity: &pxcv1.PodAffinity{
+						Advanced: spec.Affinity,
+					},
+					Tolerations:   *spec.Tolerations,
 					Configuration: configuration,
 				},
 			},
