@@ -3090,6 +3090,8 @@ spec:
                   replicas:
                     format: int32
                     type: integer
+                  skipDataRecovery:
+                    type: boolean
                   storageSize:
                     type: string
                   telemetry:

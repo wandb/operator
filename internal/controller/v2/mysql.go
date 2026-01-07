@@ -46,7 +46,7 @@ func mysqlWriteState(
 					},
 				}
 			}
-			fmt.Printf("Password write: %s\n", password)
+
 			dbPasswordSecret.Data = map[string][]byte{
 				"password": []byte(password),
 			}

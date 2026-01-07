@@ -16,6 +16,10 @@ import (
 )
 
 func readConnectionDetails(actual *chiv1.ClickHouseInstallation) *clickhouseConnInfo {
+	if actual == nil || actual.Status == nil || actual.Status.Endpoint == "" {
+		return nil
+	}
+
 	clickhouseHost := actual.Status.Endpoint
 	clickhousePort := strconv.Itoa(ClickHouseHTTPPort)
 

@@ -35,7 +35,7 @@ import (
 	wandbv2 "github.com/wandb/operator/api/v2"
 )
 
-const applicationFinalizer = "apps.wandb.com/finalizer"
+const applicationFinalizer = "applications.apps.wandb.com/finalizer"
 
 // ApplicationReconciler reconciles a Application object
 type ApplicationReconciler struct {

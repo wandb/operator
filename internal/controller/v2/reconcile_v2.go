@@ -45,7 +45,7 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-const CleanupFinalizer = "cleanup.app.wandb.com"
+const CleanupFinalizer = "wandb.apps.wandb.com/cleanup"
 
 var defaultRequeueMinutes = 1
 var defaultRequeueDuration = time.Duration(defaultRequeueMinutes) * time.Minute
@@ -157,26 +157,6 @@ func Reconcile(
 	}
 	ctrlResults = append(ctrlResults, res)
 
-	return consolidateResults(ctrlResults), nil
-}
-
-func consolidateResults(results []ctrl.Result) ctrl.Result {
-	durations := lo.Filter(
-		lo.Map(results, func(r ctrl.Result, _ int) time.Duration { return r.RequeueAfter }),
-		func(d time.Duration, _ int) bool { return d > 0 },
-	)
-	// if there are no non-zero durations
-	if len(durations) == 0 {
-		return ctrl.Result{}
-	}
-	return ctrl.Result{
-		RequeueAfter: lo.Min(durations),
-	}
-}
-func reconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases) (ctrl.Result, error) {
-	// Reconcile Wandb Manifest
-	logger := ctrl.LoggerFrom(ctx).WithName("reconcileWandbManifest")
-
 	redisReady := wandb.Status.RedisStatus.Ready
 	mysqlReady := wandb.Status.MySQLStatus.Ready
 	kafkaReady := wandb.Status.KafkaStatus.Ready
@@ -200,6 +180,33 @@ func reconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 	for key, enabled := range wandb.Spec.Wandb.Features {
 		manifest.Features[key] = enabled
 	}
+	res, err = reconcileWandbManifest(ctx, client, wandb, manifest)
+	// send up the manifest error for now
+	if err != nil {
+		return res, err
+	}
+	ctrlResults = append(ctrlResults, res)
+
+	return consolidateResults(ctrlResults), nil
+}
+
+func consolidateResults(results []ctrl.Result) ctrl.Result {
+	durations := lo.Filter(
+		lo.Map(results, func(r ctrl.Result, _ int) time.Duration { return r.RequeueAfter }),
+		func(d time.Duration, _ int) bool { return d > 0 },
+	)
+	// if there are no non-zero durations
+	if len(durations) == 0 {
+		return ctrl.Result{}
+	}
+	return ctrl.Result{
+		RequeueAfter: lo.Min(durations),
+	}
+}
+
+func reconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest) (ctrl.Result, error) {
+	// Reconcile Wandb Manifest
+	logger := ctrl.LoggerFrom(ctx).WithName("reconcileWandbManifest")
 
 	logger.Info("Manifest Features", "features", manifest.Features)
 
@@ -414,7 +421,7 @@ func reconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 		}
 		application := &apiv2.Application{}
 		applicationName := fmt.Sprintf("%s-%s", wandb.Name, app.Name)
-		err = client.Get(ctx, types.NamespacedName{Name: applicationName, Namespace: wandb.Namespace}, application)
+		err := client.Get(ctx, types.NamespacedName{Name: applicationName, Namespace: wandb.Namespace}, application)
 		if err != nil {
 			if apiErrors.IsNotFound(err) {
 				application.ObjectMeta.Name = applicationName

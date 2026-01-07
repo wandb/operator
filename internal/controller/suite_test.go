@@ -27,6 +27,13 @@ import (
 	. "github.com/onsi/gomega"
 	apiv1 "github.com/wandb/operator/api/v1"
 	apiv2 "github.com/wandb/operator/api/v2"
+	clickhousev1 "github.com/wandb/operator/internal/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
+	miniov2 "github.com/wandb/operator/internal/vendored/minio-operator/minio.min.io/v2"
+	pxcv1 "github.com/wandb/operator/internal/vendored/percona-operator/pxc/v1"
+	redisv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redis/v1beta2"
+	redisreplicationv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redisreplication/v1beta2"
+	redissentinelv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redissentinel/v1beta2"
+	kafkav1 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1"
 	webhookv2 "github.com/wandb/operator/internal/webhook/v2"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -71,12 +78,43 @@ var _ = BeforeSuite(func() {
 	err = apiv2.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
+	err = clickhousev1.AddToScheme(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
+
+	err = miniov2.AddToScheme(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
+
+	err = pxcv1.SchemeBuilder.AddToScheme(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
+
+	err = redisv1beta2.AddToScheme(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
+
+	err = redisreplicationv1beta2.AddToScheme(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
+
+	err = redissentinelv1beta2.AddToScheme(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
+
+	err = kafkav1.AddToScheme(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
+
 	// +kubebuilder:scaffold:scheme
 
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
 		CRDInstallOptions: envtest.CRDInstallOptions{
-			Paths: []string{filepath.Join("..", "..", "config", "crd", "bases")},
+			Paths: []string{
+				filepath.Join("..", "..", "config", "crd", "bases"),
+				filepath.Join("..", "..", "internal", "vendored", "altinity-clickhouse", "crds"),
+				filepath.Join("..", "..", "internal", "vendored", "minio-operator", "crds"),
+				filepath.Join("..", "..", "internal", "vendored", "percona-operator", "crds"),
+				filepath.Join("..", "..", "internal", "vendored", "redis-operator", "crds"),
+				filepath.Join("..", "..", "internal", "vendored", "strimzi-kafka", "crds"),
+			},
+		},
+		WebhookInstallOptions: envtest.WebhookInstallOptions{
+			Paths: []string{filepath.Join("..", "..", "config", "webhook")},
 		},
 		ErrorIfCRDPathMissing: true,
 		Scheme:                scheme.Scheme,

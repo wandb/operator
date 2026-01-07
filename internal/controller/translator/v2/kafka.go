@@ -168,6 +168,10 @@ func ToKafkaNodePoolVendorSpec(
 		},
 	}
 
+	if spec.SkipDataRecovery {
+		nodePool.Annotations["wandb.apps.wandb.com/skipDataRecovery"] = "true"
+	}
+
 	// Add resources if specified
 	if len(spec.Config.Resources.Requests) > 0 || len(spec.Config.Resources.Limits) > 0 {
 		nodePool.Spec.Resources = &spec.Config.Resources
