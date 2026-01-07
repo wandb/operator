@@ -87,7 +87,7 @@ func writeRedisConnInfo(
 		},
 	}
 
-	if err = common.CrudResource(ctx, client, desired, actual); err != nil {
+	if _, err = common.CrudResource(ctx, client, desired, actual); err != nil {
 		return nil, err
 	}
 

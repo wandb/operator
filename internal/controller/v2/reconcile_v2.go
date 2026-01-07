@@ -853,9 +853,9 @@ func inferState(
 	kafkaOk := !wandb.Spec.Kafka.Enabled || wandb.Status.KafkaStatus.Ready
 
 	if redisOk && minioOk && mysqlOk && clickHouseOk && kafkaOk {
-		wandb.Status.State = "Ready"
+		wandb.Status.Ready = true
 	} else {
-		wandb.Status.State = "NotReady"
+		wandb.Status.Ready = false
 	}
 
 	if err := client.Status().Update(ctx, wandb); err != nil {

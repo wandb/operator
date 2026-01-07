@@ -1129,6 +1129,8 @@ spec:
               observedGeneration:
                 format: int64
                 type: integer
+              ready:
+                type: boolean
               redisStatus:
                 properties:
                   conditions:
@@ -1225,8 +1227,6 @@ spec:
                 required:
                 - ready
                 type: object
-              state:
-                type: string
             required:
             - observedGeneration
             type: object

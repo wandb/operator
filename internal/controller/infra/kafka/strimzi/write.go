@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/wandb/operator/internal/controller/common"
+	"github.com/wandb/operator/internal/controller/translator"
 	strimziv1 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -15,19 +16,20 @@ func WriteState(
 	specNamespacedName types.NamespacedName,
 	desiredKafka *strimziv1.Kafka,
 	desiredNodePool *strimziv1.KafkaNodePool,
-) error {
-	var err error
+) []translator.ProtoCondition {
+	results := make([]translator.ProtoCondition, 0)
 
 	nsnBuilder := createNsNameBuilder(specNamespacedName)
 
-	if err = writeKafkaState(ctx, client, nsnBuilder, desiredKafka); err != nil {
-		return err
-	}
-	if err = writeNodePoolState(ctx, client, nsnBuilder, desiredNodePool); err != nil {
-		return err
+	results = append(results, writeKafkaState(ctx, client, nsnBuilder, desiredKafka))
+	results = append(results, writeNodePoolState(ctx, client, nsnBuilder, desiredNodePool))
+
+	// unless not ready, consider it installed
+	if !translator.IsNotReady(results) {
+		results = append(results, translator.InstalledProtoBuilder(KafkaDeploymentReason).Build())
 	}
 
-	return nil
+	return results
 }
 
 func writeKafkaState(
@@ -35,7 +37,7 @@ func writeKafkaState(
 	client client.Client,
 	nsnBuilder *NsNameBuilder,
 	desired *strimziv1.Kafka,
-) error {
+) translator.ProtoCondition {
 	var err error
 	var found bool
 	var actual = &strimziv1.Kafka{}
@@ -43,17 +45,31 @@ func writeKafkaState(
 	if found, err = common.GetResource(
 		ctx, client, nsnBuilder.KafkaNsName(), KafkaResourceType, actual,
 	); err != nil {
-		return err
+		return translator.ErrorProtoBuilder(
+			translator.MachineryErrorType, KafkaInstanceReason,
+		).Message(err.Error()).Build()
 	}
 	if !found {
 		actual = nil
 	}
 
-	if err = common.CrudResource(ctx, client, desired, actual); err != nil {
-		return err
+	action, err := common.CrudResource(ctx, client, desired, actual)
+	if err != nil {
+		return translator.ErrorProtoBuilder(
+			translator.MachineryErrorType, KafkaInstanceReason,
+		).Message(err.Error()).Build()
 	}
 
-	return nil
+	switch action {
+	case common.CreateAction:
+		return translator.PendingProtoBuilder(translator.ResourceCreatePending, KafkaInstanceReason).Build()
+	case common.DeleteAction:
+		return translator.PendingProtoBuilder(translator.ResourceCreatePending, KafkaInstanceReason).Build()
+	case common.NoAction:
+		return translator.NotInstalledProtoBuilder(KafkaInstanceReason).Build()
+	}
+
+	return translator.InstalledProtoBuilder(KafkaInstanceReason).Build()
 }
 
 func writeNodePoolState(
@@ -61,7 +77,7 @@ func writeNodePoolState(
 	client client.Client,
 	nsnBuilder *NsNameBuilder,
 	desired *strimziv1.KafkaNodePool,
-) error {
+) translator.ProtoCondition {
 	var err error
 	var found bool
 	var actual = &strimziv1.KafkaNodePool{}
@@ -69,23 +85,37 @@ func writeNodePoolState(
 	if found, err = common.GetResource(
 		ctx, client, nsnBuilder.NodePoolNsName(), NodePoolResourceType, actual,
 	); err != nil {
-		return err
+		return translator.ErrorProtoBuilder(
+			translator.MachineryErrorType, KafkaNodePoolReason,
+		).Message(err.Error()).Build()
 	}
 	if !found {
 		actual = nil
 	}
 
-	shouldRestore := desired != nil && actual == nil
-
-	if err = common.CrudResource(ctx, client, desired, actual); err != nil {
-		return err
+	action, err := common.CrudResource(ctx, client, desired, actual)
+	if err != nil {
+		return translator.ErrorProtoBuilder(
+			translator.MachineryErrorType, KafkaNodePoolReason,
+		).Message(err.Error()).Build()
 	}
 
-	if shouldRestore {
+	if action == common.CreateAction {
 		if err = restoreKafkaConnInfo(ctx, client, nsnBuilder, desired, actual); err != nil {
-			return err
+			return translator.ErrorProtoBuilder(
+				translator.MachineryErrorType, KafkaConnectionSecretReason,
+			).Message(err.Error()).Build()
 		}
 	}
 
-	return nil
+	switch action {
+	case common.CreateAction:
+		return translator.PendingProtoBuilder(translator.ResourceCreatePending, KafkaNodePoolReason).Build()
+	case common.DeleteAction:
+		return translator.PendingProtoBuilder(translator.ResourceCreatePending, KafkaNodePoolReason).Build()
+	case common.NoAction:
+		return translator.NotInstalledProtoBuilder(KafkaNodePoolReason).Build()
+	}
+
+	return translator.InstalledProtoBuilder(KafkaNodePoolReason).Build()
 }

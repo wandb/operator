@@ -29,9 +29,8 @@ func kafkaWriteState(
 	if desiredNodePool, err = translatorv2.ToKafkaNodePoolVendorSpec(ctx, wandb.Spec.Kafka, wandb, client.Scheme()); err != nil {
 		return err
 	}
-	if err = strimzi.WriteState(ctx, client, specNamespacedName, desiredKafka, desiredNodePool); err != nil {
-		return err
-	}
+	protoConditions := strimzi.WriteState(ctx, client, specNamespacedName, desiredKafka, desiredNodePool)
+	err = translator.FirstError(protoConditions)
 
 	return err
 }

@@ -335,6 +335,8 @@ github.com/russross/blackfriday/v2 v2.1.0 h1:JIOH55/0cWyOuilr9/qlrm0BSXldqnqwMsf
 github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=
 github.com/safchain/ethtool v0.5.10 h1:Im294gZtuf4pSGJRAOGKaASNi3wMeFaGaWuSaomedpc=
 github.com/safchain/ethtool v0.5.10/go.mod h1:w9jh2Lx7YBR4UwzLkzCmWl85UY0W2uZdd7/DckVE5+c=
+github.com/samber/lo v1.52.0 h1:Rvi+3BFHES3A8meP33VPAxiBZX/Aws5RxrschYGjomw=
+github.com/samber/lo v1.52.0/go.mod h1:4+MXEGsJzbKGaUEQFKBq2xtfuznW9oz/WrgyzMzRoM0=
 github.com/sanity-io/litter v1.3.0 h1:5ZO+weUsqdSWMUng5JnpkW/Oz8iTXiIdeumhQr1sSjs=
 github.com/sanity-io/litter v1.3.0/go.mod h1:5Z71SvaYy5kcGtyglXOC9rrUi3c1E8CamFWjQsazTh0=
 github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 h1:KRzFb2m7YtdldCEkzs6KqmJw4nqEVZGK7IN2kJkjTuQ=

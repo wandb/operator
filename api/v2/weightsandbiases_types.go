@@ -216,7 +216,7 @@ type WBClickHouseConfig struct {
 
 // WeightsAndBiasesStatus defines the observed state of WeightsAndBiases.
 type WeightsAndBiasesStatus struct {
-	State            string             `json:"state,omitempty"`
+	Ready            bool               `json:"ready,omitempty"`
 	MySQLStatus      WBMySQLStatus      `json:"mysqlStatus,omitempty"`
 	RedisStatus      WBRedisStatus      `json:"redisStatus,omitempty"`
 	KafkaStatus      WBKafkaStatus      `json:"kafkaStatus,omitempty"`
