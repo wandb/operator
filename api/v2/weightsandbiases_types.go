@@ -28,7 +28,7 @@ import (
 //+kubebuilder:storageversion
 //+kubebuilder:subresource:status
 //+kubebuilder:resource:shortName=wandb
-//+kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.ready`
+//+kubebuilder:printcolumn:name="Ready",type=boolean,JSONPath=`.status.ready`
 //+kubebuilder:printcolumn:name="MySQL",type=string,JSONPath=`.status.mysqlStatus.state`
 //+kubebuilder:printcolumn:name="Redis",type=string,JSONPath=`.status.redisStatus.state`
 //+kubebuilder:printcolumn:name="Kafka",type=string,JSONPath=`.status.kafkaStatus.state`
@@ -216,7 +216,7 @@ type WBClickHouseConfig struct {
 
 // WeightsAndBiasesStatus defines the observed state of WeightsAndBiases.
 type WeightsAndBiasesStatus struct {
-	Ready            bool          `json:"ready,omitempty"`
+	Ready            bool          `json:"ready"`
 	MySQLStatus      WBInfraStatus `json:"mysqlStatus,omitempty"`
 	RedisStatus      WBInfraStatus `json:"redisStatus,omitempty"`
 	KafkaStatus      WBInfraStatus `json:"kafkaStatus,omitempty"`

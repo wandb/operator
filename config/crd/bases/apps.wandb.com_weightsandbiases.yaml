@@ -66,7 +66,7 @@ spec:
   - additionalPrinterColumns:
     - jsonPath: .status.ready
       name: Ready
-      type: string
+      type: boolean
     - jsonPath: .status.mysqlStatus.state
       name: MySQL
       type: string
@@ -1211,6 +1211,7 @@ spec:
                 type: object
             required:
             - observedGeneration
+            - ready
             type: object
         type: object
     served: true
