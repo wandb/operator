@@ -65,7 +65,7 @@ func ComputeStatus(
 }
 
 func applyDefaultConditions(conditions []metav1.Condition) []metav1.Condition {
-	if common.ContainsType(conditions, KafkaConnectionInfoType) {
+	if !common.ContainsType(conditions, KafkaConnectionInfoType) {
 		conditions = append(conditions, metav1.Condition{
 			Type:   KafkaConnectionInfoType,
 			Status: metav1.ConditionFalse,

@@ -11,6 +11,7 @@ import (
 	strimziv1 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -35,6 +36,7 @@ func ReadState(
 	specNamespacedName types.NamespacedName,
 	wandbOwner client.Object,
 ) ([]metav1.Condition, *translator.InfraConnection) {
+	log := ctrl.LoggerFrom(ctx)
 	nsnBuilder := createNsNameBuilder(specNamespacedName)
 
 	var actualKafka = &strimziv1.Kafka{}
@@ -51,6 +53,7 @@ func ReadState(
 		}, nil
 	}
 	if !found {
+		log.Info("Kafka CR not found")
 		actualKafka = nil
 	}
 
@@ -67,6 +70,7 @@ func ReadState(
 		}, nil
 	}
 	if !found {
+		log.Info("Kafka NodePool CR not found")
 		actualNodePool = nil
 	}
 
