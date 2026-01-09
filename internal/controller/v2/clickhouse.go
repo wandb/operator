@@ -11,6 +11,7 @@ import (
 	"github.com/wandb/operator/internal/utils"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -54,11 +55,11 @@ func clickHouseInferStatus(
 	wandb *apiv2.WeightsAndBiases,
 	newConditions []metav1.Condition,
 	newInfraConn *translator.InfraConnection,
-) error {
+) (ctrl.Result, error) {
 	oldConditions := wandb.Status.ClickHouseStatus.Conditions
 	oldInfraConn := translatorv2.ToTranslatorInfraConnection(wandb.Status.ClickHouseStatus.Connection)
 
-	updatedStatus := altinity.ComputeStatus(
+	updatedStatus, ctrlResult := altinity.ComputeStatus(
 		oldConditions,
 		newConditions,
 		utils.Coalesce(newInfraConn, &oldInfraConn),
@@ -67,7 +68,7 @@ func clickHouseInferStatus(
 	wandb.Status.ClickHouseStatus = translatorv2.ToWbInfraStatus(updatedStatus)
 	err := client.Status().Update(ctx, wandb)
 
-	return err
+	return ctrlResult, err
 }
 
 func clickHouseSpecNamespacedName(clickHouse apiv2.WBClickHouseSpec) types.NamespacedName {

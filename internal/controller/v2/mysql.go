@@ -103,11 +103,11 @@ func mysqlInferStatus(
 	wandb *apiv2.WeightsAndBiases,
 	newConditions []metav1.Condition,
 	newInfraConn *translator.InfraConnection,
-) error {
+) (ctrl.Result, error) {
 	oldConditions := wandb.Status.MySQLStatus.Conditions
 	oldInfraConn := translatorv2.ToTranslatorInfraConnection(wandb.Status.MySQLStatus.Connection)
 
-	updatedStatus := percona.ComputeStatus(
+	updatedStatus, ctrlResult := percona.ComputeStatus(
 		oldConditions,
 		newConditions,
 		utils.Coalesce(newInfraConn, &oldInfraConn),
@@ -116,7 +116,7 @@ func mysqlInferStatus(
 	wandb.Status.MySQLStatus = translatorv2.ToWbInfraStatus(updatedStatus)
 	err := client.Status().Update(ctx, wandb)
 
-	return err
+	return ctrlResult, err
 }
 
 func mysqlSpecNamespacedName(mysql apiv2.WBMySQLSpec) types.NamespacedName {

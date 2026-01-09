@@ -1,10 +1,13 @@
 package tenant
 
 import (
+	"time"
+
 	"github.com/samber/lo"
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/translator"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	ctrl "sigs.k8s.io/controller-runtime"
 )
 
 const (
@@ -17,7 +20,7 @@ func ComputeStatus(
 	oldConditions, currentConditions []metav1.Condition,
 	connection *translator.InfraConnection,
 	currentGeneration int64,
-) translator.InfraStatus {
+) (translator.InfraStatus, ctrl.Result) {
 	result := translator.InfraStatus{}
 
 	if connection != nil {
@@ -37,7 +40,19 @@ func ComputeStatus(
 
 	result.Ready = !lo.Contains(common.NotReadyStates, result.State)
 
-	return result
+	requeueAfter := 3 * time.Minute
+	switch result.State {
+	case common.ErrorState:
+		requeueAfter = 15 * time.Second
+	case common.DegradedState:
+		requeueAfter = 5 * time.Minute
+	case common.PendingState:
+		requeueAfter = 2 * time.Minute
+	case common.HealthyState:
+		requeueAfter = 10 * time.Minute
+	}
+
+	return result, ctrl.Result{RequeueAfter: requeueAfter}
 }
 
 func applyDefaultConditions(conditions []metav1.Condition) []metav1.Condition {

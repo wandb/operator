@@ -25,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/samber/lo"
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/ctrlqueue"
 	strimziv1 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1"
@@ -105,22 +106,33 @@ func Reconcile(ctx context.Context, client ctrlClient.Client, wandb *apiv2.Weigh
 
 	/////////////////////////
 	// WandB Status Inference
+	var res ctrl.Result
+	var ctrlResults []ctrl.Result
 
-	if err = redisInferStatus(ctx, client, wandb, redisConditions, redisInfraConn); err != nil {
+	if res, err = redisInferStatus(ctx, client, wandb, redisConditions, redisInfraConn); err != nil {
 		errorCount++
 	}
-	if err = mysqlInferStatus(ctx, client, wandb, mysqlConditions, mysqlInfraConn); err != nil {
+	ctrlResults = append(ctrlResults, res)
+
+	if res, err = mysqlInferStatus(ctx, client, wandb, mysqlConditions, mysqlInfraConn); err != nil {
 		errorCount++
 	}
-	if err = kafkaInferStatus(ctx, client, wandb, kafkaConditions, kafkaInfraConn); err != nil {
+	ctrlResults = append(ctrlResults, res)
+
+	if res, err = kafkaInferStatus(ctx, client, wandb, kafkaConditions, kafkaInfraConn); err != nil {
 		errorCount++
 	}
-	if err = minioInferStatus(ctx, client, wandb, minioConditions, minioConnection); err != nil {
+	ctrlResults = append(ctrlResults, res)
+
+	if res, err = minioInferStatus(ctx, client, wandb, minioConditions, minioConnection); err != nil {
 		errorCount++
 	}
-	if err = clickHouseInferStatus(ctx, client, wandb, clickHouseConditions, clickHouseInfraConn); err != nil {
+	ctrlResults = append(ctrlResults, res)
+
+	if res, err = clickHouseInferStatus(ctx, client, wandb, clickHouseConditions, clickHouseInfraConn); err != nil {
 		errorCount++
 	}
+	ctrlResults = append(ctrlResults, res)
 
 	if err = inferState(ctx, client, wandb); err != nil {
 		errorCount++
@@ -130,9 +142,29 @@ func Reconcile(ctx context.Context, client ctrlClient.Client, wandb *apiv2.Weigh
 		return ctrl.Result{}, errors.New("infra state update errors")
 	}
 
-	return reconcileWandbManifest(ctx, client, wandb)
+	res, err = reconcileWandbManifest(ctx, client, wandb)
+	// send up the manifest error for now
+	if err != nil {
+		return res, err
+	}
+	ctrlResults = append(ctrlResults, res)
+
+	return consolidateResults(ctrlResults), nil
 }
 
+func consolidateResults(results []ctrl.Result) ctrl.Result {
+	durations := lo.Filter(
+		lo.Map(results, func(r ctrl.Result, _ int) time.Duration { return r.RequeueAfter }),
+		func(d time.Duration, _ int) bool { return d > 0 },
+	)
+	// if there are no non-zero durations
+	if len(durations) == 0 {
+		return ctrl.Result{}
+	}
+	return ctrl.Result{
+		RequeueAfter: lo.Min(durations),
+	}
+}
 func reconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases) (ctrl.Result, error) {
 	// Reconcile Wandb Manifest
 

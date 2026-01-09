@@ -12,6 +12,7 @@ import (
 	strimziv1 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -70,11 +71,11 @@ func kafkaInferStatus(
 	wandb *apiv2.WeightsAndBiases,
 	newConditions []metav1.Condition,
 	newInfraConn *translator.InfraConnection,
-) error {
+) (ctrl.Result, error) {
 	oldConditions := wandb.Status.KafkaStatus.Conditions
 	oldInfraConn := translatorv2.ToTranslatorInfraConnection(wandb.Status.KafkaStatus.Connection)
 
-	updatedStatus := strimzi.ComputeStatus(
+	updatedStatus, ctrlResult := strimzi.ComputeStatus(
 		oldConditions,
 		newConditions,
 		utils.Coalesce(newInfraConn, &oldInfraConn),
@@ -83,7 +84,7 @@ func kafkaInferStatus(
 	wandb.Status.KafkaStatus = translatorv2.ToWbInfraStatus(updatedStatus)
 	err := client.Status().Update(ctx, wandb)
 
-	return err
+	return ctrlResult, err
 }
 
 func kafkaPreserveFinalizer(

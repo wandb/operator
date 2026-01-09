@@ -11,6 +11,7 @@ import (
 	"github.com/wandb/operator/internal/utils"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -65,11 +66,11 @@ func minioInferStatus(
 	wandb *apiv2.WeightsAndBiases,
 	newConditions []metav1.Condition,
 	newInfraConn *translator.InfraConnection,
-) error {
+) (ctrl.Result, error) {
 	oldConditions := wandb.Status.MinioStatus.Conditions
 	oldInfraConn := translatorv2.ToTranslatorInfraConnection(wandb.Status.MinioStatus.Connection)
 
-	updatedStatus := tenant.ComputeStatus(
+	updatedStatus, ctrlResult := tenant.ComputeStatus(
 		oldConditions,
 		newConditions,
 		utils.Coalesce(newInfraConn, &oldInfraConn),
@@ -78,7 +79,7 @@ func minioInferStatus(
 	wandb.Status.MinioStatus = translatorv2.ToWbInfraStatus(updatedStatus)
 	err := client.Status().Update(ctx, wandb)
 
-	return err
+	return ctrlResult, err
 }
 
 func minioSpecNamespacedName(minio apiv2.WBMinioSpec) types.NamespacedName {

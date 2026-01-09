@@ -11,6 +11,7 @@ import (
 	"github.com/wandb/operator/internal/utils"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -76,11 +77,11 @@ func redisInferStatus(
 	wandb *apiv2.WeightsAndBiases,
 	newConditions []metav1.Condition,
 	newInfraConn *translator.InfraConnection,
-) error {
+) (ctrl.Result, error) {
 	oldConditions := wandb.Status.RedisStatus.Conditions
 	oldInfraConn := translatorv2.ToTranslatorInfraConnection(wandb.Status.RedisStatus.Connection)
 
-	updatedStatus := opstree.ComputeStatus(
+	updatedStatus, ctrlResult := opstree.ComputeStatus(
 		oldConditions,
 		newConditions,
 		utils.Coalesce(newInfraConn, &oldInfraConn),
@@ -89,7 +90,7 @@ func redisInferStatus(
 	wandb.Status.RedisStatus = translatorv2.ToWbInfraStatus(updatedStatus)
 	err := client.Status().Update(ctx, wandb)
 
-	return err
+	return ctrlResult, err
 }
 
 func redisSpecNamespacedName(redis apiv2.WBRedisSpec) types.NamespacedName {
