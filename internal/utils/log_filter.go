@@ -1,7 +1,10 @@
 package utils
 
 import (
+	"github.com/go-logr/logr"
+	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	ctrlzap "sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
 type NameFilteredCore struct {
@@ -30,6 +33,18 @@ const (
 var overrides = map[string]zapcore.Level{
 	Webhook: zapcore.ErrorLevel,
 	Worker:  zapcore.DebugLevel,
+}
+
+func BuildNameFilterLogger(root zapcore.Level) logr.Logger {
+	opts := ctrlzap.Options{
+		Level: root,
+		ZapOpts: []zap.Option{
+			zap.WrapCore(func(core zapcore.Core) zapcore.Core {
+				return &NameFilteredCore{Core: core, overrides: overrides}
+			}),
+		},
+	}
+	return ctrlzap.New(ctrlzap.UseFlagOptions(&opts))
 }
 
 /*
