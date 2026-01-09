@@ -60,6 +60,7 @@ func clickHouseInferStatus(
 	oldInfraConn := translatorv2.ToTranslatorInfraConnection(wandb.Status.ClickHouseStatus.Connection)
 
 	updatedStatus, ctrlResult := altinity.ComputeStatus(
+		ctx,
 		oldConditions,
 		newConditions,
 		utils.Coalesce(newInfraConn, &oldInfraConn),

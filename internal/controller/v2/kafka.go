@@ -76,6 +76,7 @@ func kafkaInferStatus(
 	oldInfraConn := translatorv2.ToTranslatorInfraConnection(wandb.Status.KafkaStatus.Connection)
 
 	updatedStatus, ctrlResult := strimzi.ComputeStatus(
+		ctx,
 		oldConditions,
 		newConditions,
 		utils.Coalesce(newInfraConn, &oldInfraConn),

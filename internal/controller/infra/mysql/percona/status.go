@@ -1,6 +1,7 @@
 package percona
 
 import (
+	"context"
 	"time"
 
 	"github.com/samber/lo"
@@ -17,6 +18,7 @@ const (
 )
 
 func ComputeStatus(
+	ctx context.Context,
 	oldConditions, currentConditions []metav1.Condition,
 	connection *translator.InfraConnection,
 	currentGeneration int64,
@@ -36,7 +38,7 @@ func ComputeStatus(
 		translator.DefaultConditionExpiry,
 	)
 
-	result.State = inferInfraState(result.Conditions)
+	result.State = inferInfraState(ctx, result.Conditions)
 
 	result.Ready = !lo.Contains(common.NotReadyStates, result.State)
 
@@ -67,12 +69,12 @@ func applyDefaultConditions(conditions []metav1.Condition) []metav1.Condition {
 	return conditions
 }
 
-func inferInfraState(conditions []metav1.Condition) string {
+func inferInfraState(ctx context.Context, conditions []metav1.Condition) string {
 	impliedStates := make(map[string]string, len(conditions))
 
-	impliedStates = inferStateFromCondition(MySQLCustomResourceType, impliedStates, conditions)
-	impliedStates = inferStateFromCondition(MySQLConnectionInfoType, impliedStates, conditions)
-	impliedStates = inferStateFromCondition(MySQLReportedReadyType, impliedStates, conditions)
+	impliedStates = inferStateFromCondition(ctx, MySQLCustomResourceType, impliedStates, conditions)
+	impliedStates = inferStateFromCondition(ctx, MySQLConnectionInfoType, impliedStates, conditions)
+	impliedStates = inferStateFromCondition(ctx, MySQLReportedReadyType, impliedStates, conditions)
 
 	hasImpliedState := func(target string) bool {
 		return len(lo.FilterValues(
@@ -105,18 +107,18 @@ func inferInfraState(conditions []metav1.Condition) string {
 	return common.UnknownState
 }
 
-func inferStateFromCondition(conditionType string, impliedStates map[string]string, conditions []metav1.Condition) map[string]string {
+func inferStateFromCondition(ctx context.Context, conditionType string, impliedStates map[string]string, conditions []metav1.Condition) map[string]string {
 	cond, found := lo.Find(conditions, func(c metav1.Condition) bool { return c.Type == conditionType })
 	if !found {
 		impliedStates[conditionType] = common.UnknownState
 	} else {
 		switch conditionType {
 		case MySQLCustomResourceType:
-			impliedStates[conditionType] = inferState_MySQLCustomResourceType(cond)
+			impliedStates[conditionType] = inferState_MySQLCustomResourceType(ctx, cond)
 		case MySQLConnectionInfoType:
-			impliedStates[conditionType] = inferState_MySQLConnectionInfoType(cond)
+			impliedStates[conditionType] = inferState_MySQLConnectionInfoType(ctx, cond)
 		case MySQLReportedReadyType:
-			impliedStates[conditionType] = inferState_MySQLReportedReadyType(cond)
+			impliedStates[conditionType] = inferState_MySQLReportedReadyType(ctx, cond)
 		default:
 			impliedStates[conditionType] = common.UnknownState
 		}
@@ -124,46 +126,55 @@ func inferStateFromCondition(conditionType string, impliedStates map[string]stri
 	return impliedStates
 }
 
-func inferState_MySQLCustomResourceType(condition metav1.Condition) string {
+func inferState_MySQLCustomResourceType(ctx context.Context, condition metav1.Condition) string {
+	log := ctrl.LoggerFrom(ctx)
+	result := common.UnknownState
 	if condition.Status == metav1.ConditionTrue {
-		return common.HealthyState
+		result = common.HealthyState
 	}
 	if condition.Status == metav1.ConditionFalse {
 		if condition.Reason == common.PendingCreateReason {
-			return common.PendingState
+			result = common.PendingState
 		}
 		if condition.Reason == common.PendingDeleteReason {
-			return common.UnavailableState
+			result = common.UnavailableState
 		}
 	}
-	return common.UnknownState
+	log.Info("For condition '%s', infer state '%s'", "MySQLCustomResource", result)
+	return result
 }
 
-func inferState_MySQLConnectionInfoType(condition metav1.Condition) string {
+func inferState_MySQLConnectionInfoType(ctx context.Context, condition metav1.Condition) string {
+	log := ctrl.LoggerFrom(ctx)
+	result := common.UnknownState
 	if condition.Status == metav1.ConditionTrue {
-		return common.HealthyState
+		result = common.HealthyState
 	}
 	if condition.Status == metav1.ConditionFalse {
-		return common.DegradedState
+		result = common.DegradedState
 	}
-	return common.UnknownState
+	log.Info("For condition '%s', infer state '%s'", "MySQLConnectionInfo", result)
+	return result
 }
 
-func inferState_MySQLReportedReadyType(condition metav1.Condition) string {
+func inferState_MySQLReportedReadyType(ctx context.Context, condition metav1.Condition) string {
+	log := ctrl.LoggerFrom(ctx)
+	result := common.UnknownState
 	if condition.Status == metav1.ConditionTrue {
-		return common.HealthyState
+		result = common.HealthyState
 	}
 	if condition.Status == metav1.ConditionFalse {
 		switch condition.Reason {
 		case "initializing":
-			return common.PendingState
+			result = common.PendingState
 		case "paused", "stopping":
-			return common.UnavailableState
+			result = common.UnavailableState
 		case "error":
-			return common.ErrorState
+			result = common.ErrorState
 		default:
-			return common.UnavailableState
+			result = common.UnavailableState
 		}
 	}
-	return common.UnknownState
+	log.Info("For condition '%s', infer state '%s'", "MySQLReportedReady", result)
+	return result
 }

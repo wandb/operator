@@ -8,7 +8,6 @@ import (
 
 	ctrlcommon "github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/translator"
-	"github.com/wandb/operator/internal/utils"
 	strimziv1 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -127,7 +126,7 @@ func computeKafkaReportedReadyCondition(_ context.Context, kafkaCR *strimziv1.Ka
 	for _, cond := range kafkaCR.Status.Conditions {
 		if strings.EqualFold(cond.Type, "ready") {
 			status = cond.Status
-			reason = utils.Coalesce(cond.Reason, reason)
+			reason = ctrlcommon.ReportedStatusReason
 			break
 		}
 	}

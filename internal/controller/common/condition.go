@@ -12,6 +12,7 @@ const (
 	PendingCreateReason   = "PendingCreate"
 	ResourceExistsReason  = "ResourceExists"
 	NoResourceReason      = "NoResource"
+	ReportedStatusReason  = "ReportedStatus"
 	ApiErrorReason        = "ApiError"
 	ControllerErrorReason = "ControllerError"
 	ResourceErrorReason   = "ResourceError"

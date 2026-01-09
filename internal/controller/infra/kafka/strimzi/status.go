@@ -1,6 +1,7 @@
 package strimzi
 
 import (
+	"context"
 	"time"
 
 	"github.com/samber/lo"
@@ -18,6 +19,7 @@ const (
 )
 
 func ComputeStatus(
+	ctx context.Context,
 	oldConditions, currentConditions []metav1.Condition,
 	connection *translator.InfraConnection,
 	currentGeneration int64,
@@ -40,7 +42,7 @@ func ComputeStatus(
 	)
 
 	// use various heuristics to determine the overall Infra State of
-	result.State = inferInfraState(result.Conditions)
+	result.State = inferInfraState(ctx, result.Conditions)
 
 	result.Ready = lo.Contains(common.NotReadyStates, result.State)
 
@@ -71,13 +73,13 @@ func applyDefaultConditions(conditions []metav1.Condition) []metav1.Condition {
 	return conditions
 }
 
-func inferInfraState(conditions []metav1.Condition) string {
+func inferInfraState(ctx context.Context, conditions []metav1.Condition) string {
 	impliedStates := make(map[string]string, len(conditions))
 
-	impliedStates = inferStateFromCondition(KafkaCustomResourceType, impliedStates, conditions)
-	impliedStates = inferStateFromCondition(NodePoolCustomResourceType, impliedStates, conditions)
-	impliedStates = inferStateFromCondition(KafkaReportedReadyType, impliedStates, conditions)
-	impliedStates = inferStateFromCondition(KafkaConnectionInfoType, impliedStates, conditions)
+	impliedStates = inferStateFromCondition(ctx, KafkaCustomResourceType, impliedStates, conditions)
+	impliedStates = inferStateFromCondition(ctx, NodePoolCustomResourceType, impliedStates, conditions)
+	impliedStates = inferStateFromCondition(ctx, KafkaReportedReadyType, impliedStates, conditions)
+	impliedStates = inferStateFromCondition(ctx, KafkaConnectionInfoType, impliedStates, conditions)
 
 	hasImpliedState := func(target string) bool {
 		return len(lo.FilterValues(
@@ -103,19 +105,21 @@ func inferInfraState(conditions []metav1.Condition) string {
 		return common.DegradedState
 	}
 
-	if hasImpliedState(common.HealthyState) { return common.HealthyState }
+	if hasImpliedState(common.HealthyState) {
+		return common.HealthyState
+	}
 
 	return common.UnknownState
 }
 
-func inferStateFromCondition(conditionType string, impliedStates map[string]string, conditions []metav1.Condition) map[string]string {
+func inferStateFromCondition(ctx context.Context, conditionType string, impliedStates map[string]string, conditions []metav1.Condition) map[string]string {
 	cond, found := lo.Find(conditions, func(c metav1.Condition) bool { return c.Type == conditionType })
 	if !found {
 		impliedStates[conditionType] = common.UnknownState
 	} else {
 		switch conditionType {
 		case KafkaCustomResourceType:
-			impliedStates[conditionType] = inferState_KafkaCustomResourceType(cond)
+			impliedStates[conditionType] = inferState_KafkaCustomResourceType(ctx, cond)
 		case NodePoolCustomResourceType:
 			impliedStates[conditionType] = inferState_NodePoolCustomResourceType(cond)
 		case KafkaConnectionInfoType:
@@ -129,19 +133,22 @@ func inferStateFromCondition(conditionType string, impliedStates map[string]stri
 	return impliedStates
 }
 
-func inferState_KafkaCustomResourceType(condition metav1.Condition) string {
+func inferState_KafkaCustomResourceType(ctx context.Context, condition metav1.Condition) string {
+	log := ctrl.LoggerFrom(ctx)
+	result := common.UnknownState
 	if condition.Status == metav1.ConditionTrue {
-		return common.HealthyState
+		result = common.HealthyState
 	}
 	if condition.Status == metav1.ConditionFalse {
 		if condition.Reason == common.PendingCreateReason {
-			return common.PendingState
+			result = common.PendingState
 		}
 		if condition.Reason == common.PendingDeleteReason {
-			return common.UnavailableState
+			result = common.UnavailableState
 		}
 	}
-	return common.UnknownState
+	log.Info("For condition '%s', infer state '%s", "KafkaCustomResource", result)
+	return result
 }
 
 func inferState_NodePoolCustomResourceType(condition metav1.Condition) string {

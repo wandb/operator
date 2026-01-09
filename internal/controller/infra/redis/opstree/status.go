@@ -1,6 +1,7 @@
 package opstree
 
 import (
+	"context"
 	"time"
 
 	"github.com/samber/lo"
@@ -19,6 +20,7 @@ const (
 )
 
 func ComputeStatus(
+	ctx context.Context,
 	oldConditions, currentConditions []metav1.Condition,
 	connection *translator.InfraConnection,
 	currentGeneration int64,
@@ -38,7 +40,7 @@ func ComputeStatus(
 		translator.DefaultConditionExpiry,
 	)
 
-	result.State = inferInfraState(result.Conditions)
+	result.State = inferInfraState(ctx, result.Conditions)
 
 	result.Ready = !lo.Contains(common.NotReadyStates, result.State)
 
@@ -69,14 +71,14 @@ func applyDefaultConditions(conditions []metav1.Condition) []metav1.Condition {
 	return conditions
 }
 
-func inferInfraState(conditions []metav1.Condition) string {
+func inferInfraState(ctx context.Context, conditions []metav1.Condition) string {
 	impliedStates := make(map[string]string, len(conditions))
 
-	impliedStates = inferStateFromCondition(RedisStandaloneCustomResourceType, impliedStates, conditions)
-	impliedStates = inferStateFromCondition(RedisSentinelCustomResourceType, impliedStates, conditions)
-	impliedStates = inferStateFromCondition(RedisReplicationCustomResourceType, impliedStates, conditions)
-	impliedStates = inferStateFromCondition(RedisConnectionInfoType, impliedStates, conditions)
-	impliedStates = inferStateFromCondition(RedisReportedReadyType, impliedStates, conditions)
+	impliedStates = inferStateFromCondition(ctx, RedisStandaloneCustomResourceType, impliedStates, conditions)
+	impliedStates = inferStateFromCondition(ctx, RedisSentinelCustomResourceType, impliedStates, conditions)
+	impliedStates = inferStateFromCondition(ctx, RedisReplicationCustomResourceType, impliedStates, conditions)
+	impliedStates = inferStateFromCondition(ctx, RedisConnectionInfoType, impliedStates, conditions)
+	impliedStates = inferStateFromCondition(ctx, RedisReportedReadyType, impliedStates, conditions)
 
 	hasImpliedState := func(target string) bool {
 		return len(lo.FilterValues(
@@ -109,22 +111,22 @@ func inferInfraState(conditions []metav1.Condition) string {
 	return common.UnknownState
 }
 
-func inferStateFromCondition(conditionType string, impliedStates map[string]string, conditions []metav1.Condition) map[string]string {
+func inferStateFromCondition(ctx context.Context, conditionType string, impliedStates map[string]string, conditions []metav1.Condition) map[string]string {
 	cond, found := lo.Find(conditions, func(c metav1.Condition) bool { return c.Type == conditionType })
 	if !found {
 		impliedStates[conditionType] = common.UnknownState
 	} else {
 		switch conditionType {
 		case RedisStandaloneCustomResourceType:
-			impliedStates[conditionType] = inferState_RedisStandaloneCustomResourceType(cond)
+			impliedStates[conditionType] = inferState_RedisStandaloneCustomResourceType(ctx, cond)
 		case RedisSentinelCustomResourceType:
-			impliedStates[conditionType] = inferState_RedisSentinelCustomResourceType(cond)
+			impliedStates[conditionType] = inferState_RedisSentinelCustomResourceType(ctx, cond)
 		case RedisReplicationCustomResourceType:
-			impliedStates[conditionType] = inferState_RedisReplicationCustomResourceType(cond)
+			impliedStates[conditionType] = inferState_RedisReplicationCustomResourceType(ctx, cond)
 		case RedisConnectionInfoType:
-			impliedStates[conditionType] = inferState_RedisConnectionInfoType(cond)
+			impliedStates[conditionType] = inferState_RedisConnectionInfoType(ctx, cond)
 		case RedisReportedReadyType:
-			impliedStates[conditionType] = inferState_RedisReportedReadyType(cond)
+			impliedStates[conditionType] = inferState_RedisReportedReadyType(ctx, cond)
 		default:
 			impliedStates[conditionType] = common.UnknownState
 		}
@@ -132,70 +134,86 @@ func inferStateFromCondition(conditionType string, impliedStates map[string]stri
 	return impliedStates
 }
 
-func inferState_RedisStandaloneCustomResourceType(condition metav1.Condition) string {
+func inferState_RedisStandaloneCustomResourceType(ctx context.Context, condition metav1.Condition) string {
+	log := ctrl.LoggerFrom(ctx)
+	result := common.UnknownState
 	if condition.Status == metav1.ConditionTrue {
-		return common.HealthyState
+		result = common.HealthyState
 	}
 	if condition.Status == metav1.ConditionFalse {
 		if condition.Reason == common.PendingCreateReason {
-			return common.PendingState
+			result = common.PendingState
 		}
 		if condition.Reason == common.PendingDeleteReason {
-			return common.UnavailableState
+			result = common.UnavailableState
 		}
 	}
-	return common.UnknownState
+	log.Info("For condition '%s', infer state '%s'", "RedisStandaloneCustomResource", result)
+	return result
 }
 
-func inferState_RedisSentinelCustomResourceType(condition metav1.Condition) string {
+func inferState_RedisSentinelCustomResourceType(ctx context.Context, condition metav1.Condition) string {
+	log := ctrl.LoggerFrom(ctx)
+	result := common.UnknownState
 	if condition.Status == metav1.ConditionTrue {
-		return common.HealthyState
+		result = common.HealthyState
 	}
 	if condition.Status == metav1.ConditionFalse {
 		if condition.Reason == common.PendingCreateReason {
-			return common.PendingState
+			result = common.PendingState
 		}
 		if condition.Reason == common.PendingDeleteReason {
-			return common.UnavailableState
+			result = common.UnavailableState
 		}
 	}
-	return common.UnknownState
+	log.Info("For condition '%s', infer state '%s'", "RedisSentinelCustomResource", result)
+	return result
 }
 
-func inferState_RedisReplicationCustomResourceType(condition metav1.Condition) string {
+func inferState_RedisReplicationCustomResourceType(ctx context.Context, condition metav1.Condition) string {
+	log := ctrl.LoggerFrom(ctx)
+	result := common.UnknownState
 	if condition.Status == metav1.ConditionTrue {
-		return common.HealthyState
+		result = common.HealthyState
 	}
 	if condition.Status == metav1.ConditionFalse {
 		if condition.Reason == common.PendingCreateReason {
-			return common.PendingState
+			result = common.PendingState
 		}
 		if condition.Reason == common.PendingDeleteReason {
-			return common.UnavailableState
+			result = common.UnavailableState
 		}
 	}
-	return common.UnknownState
+	log.Info("For condition '%s', infer state '%s'", "RedisReplicationCustomResource", result)
+	return result
 }
 
-func inferState_RedisConnectionInfoType(condition metav1.Condition) string {
+func inferState_RedisConnectionInfoType(ctx context.Context, condition metav1.Condition) string {
+	log := ctrl.LoggerFrom(ctx)
+	result := common.UnknownState
 	if condition.Status == metav1.ConditionTrue {
-		return common.HealthyState
+		result = common.HealthyState
 	}
 	if condition.Status == metav1.ConditionFalse {
-		return common.DegradedState
+		result = common.DegradedState
 	}
-	return common.UnknownState
+	log.Info("For condition '%s', infer state '%s'", "RedisConnectionInfo", result)
+	return result
 }
 
-func inferState_RedisReportedReadyType(condition metav1.Condition) string {
+func inferState_RedisReportedReadyType(ctx context.Context, condition metav1.Condition) string {
+	log := ctrl.LoggerFrom(ctx)
+	result := common.UnknownState
 	if condition.Status == metav1.ConditionTrue {
-		return common.HealthyState
+		result = common.HealthyState
 	}
 	if condition.Status == metav1.ConditionFalse {
 		if condition.Reason == "degraded" {
-			return common.DegradedState
+			result = common.DegradedState
+		} else {
+			result = common.UnavailableState
 		}
-		return common.UnavailableState
 	}
-	return common.UnknownState
+	log.Info("For condition '%s', infer state '%s'", "RedisReportedReady", result)
+	return result
 }

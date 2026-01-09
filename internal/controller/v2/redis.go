@@ -82,6 +82,7 @@ func redisInferStatus(
 	oldInfraConn := translatorv2.ToTranslatorInfraConnection(wandb.Status.RedisStatus.Connection)
 
 	updatedStatus, ctrlResult := opstree.ComputeStatus(
+		ctx,
 		oldConditions,
 		newConditions,
 		utils.Coalesce(newInfraConn, &oldInfraConn),

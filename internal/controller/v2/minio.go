@@ -71,6 +71,7 @@ func minioInferStatus(
 	oldInfraConn := translatorv2.ToTranslatorInfraConnection(wandb.Status.MinioStatus.Connection)
 
 	updatedStatus, ctrlResult := tenant.ComputeStatus(
+		ctx,
 		oldConditions,
 		newConditions,
 		utils.Coalesce(newInfraConn, &oldInfraConn),

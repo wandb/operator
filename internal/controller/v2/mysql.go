@@ -108,6 +108,7 @@ func mysqlInferStatus(
 	oldInfraConn := translatorv2.ToTranslatorInfraConnection(wandb.Status.MySQLStatus.Connection)
 
 	updatedStatus, ctrlResult := percona.ComputeStatus(
+		ctx,
 		oldConditions,
 		newConditions,
 		utils.Coalesce(newInfraConn, &oldInfraConn),
