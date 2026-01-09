@@ -102,11 +102,11 @@ func inferInfraState(conditions []metav1.Condition) string {
 		return common.DegradedState
 	}
 
-	if hasImpliedState(common.UnknownState) {
-		return common.UnknownState
+	if hasImpliedState(common.HealthyState) {
+		return common.HealthyState
 	}
 
-	return common.HealthyState
+	return common.UnknownState
 }
 
 func inferStateFromCondition(conditionType string, impliedStates map[string]string, conditions []metav1.Condition) map[string]string {

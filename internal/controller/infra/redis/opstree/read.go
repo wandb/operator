@@ -380,4 +380,3 @@ func standalonePodsRunningStatus(
 	}
 	return result, nil
 }
-

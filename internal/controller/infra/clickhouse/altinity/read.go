@@ -156,20 +156,12 @@ func computeClickHouseReportedReadyCondition(
 	reason := ctrlcommon.UnknownReason
 	message := ""
 
-	if chi.Status.Error != "" || len(chi.Status.Errors) > 0 {
-		status = metav1.ConditionFalse
-		reason = ctrlcommon.ResourceErrorReason
-		if chi.Status.Error != "" {
-			message = chi.Status.Error
-		} else if len(chi.Status.Errors) > 0 {
-			message = chi.Status.Errors[0]
-		}
-	} else if podCount > 0 && podCount == runningCount {
+	if podCount > 0 && podCount == runningCount {
 		status = metav1.ConditionTrue
 		reason = ctrlcommon.ResourceExistsReason
 	} else if podCount > 0 {
 		status = metav1.ConditionFalse
-		reason = ctrlcommon.ResourceExistsReason
+		reason = ctrlcommon.NoResourceReason
 		message = fmt.Sprintf("%d of %d pods running", runningCount, podCount)
 	}
 
