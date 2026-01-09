@@ -11,6 +11,7 @@ import (
 	"github.com/wandb/operator/internal/utils"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -52,6 +53,7 @@ func clickHouseReadState(
 func clickHouseInferStatus(
 	ctx context.Context,
 	client client.Client,
+	recorder record.EventRecorder,
 	wandb *apiv2.WeightsAndBiases,
 	newConditions []metav1.Condition,
 	newInfraConn *translator.InfraConnection,
@@ -59,13 +61,16 @@ func clickHouseInferStatus(
 	oldConditions := wandb.Status.ClickHouseStatus.Conditions
 	oldInfraConn := translatorv2.ToTranslatorInfraConnection(wandb.Status.ClickHouseStatus.Connection)
 
-	updatedStatus, ctrlResult := altinity.ComputeStatus(
+	updatedStatus, events, ctrlResult := altinity.ComputeStatus(
 		ctx,
 		oldConditions,
 		newConditions,
 		utils.Coalesce(newInfraConn, &oldInfraConn),
 		wandb.Generation,
 	)
+	for _, e := range events {
+		recorder.Event(wandb, e.Type, e.Reason, e.Message)
+	}
 	wandb.Status.ClickHouseStatus = translatorv2.ToWbInfraStatus(updatedStatus)
 	err := client.Status().Update(ctx, wandb)
 

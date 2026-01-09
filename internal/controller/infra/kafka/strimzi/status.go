@@ -8,6 +8,7 @@ import (
 	"github.com/samber/lo"
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/translator"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
@@ -24,7 +25,7 @@ func ComputeStatus(
 	oldConditions, currentConditions []metav1.Condition,
 	connection *translator.InfraConnection,
 	currentGeneration int64,
-) (translator.InfraStatus, ctrl.Result) {
+) (translator.InfraStatus, []corev1.Event, ctrl.Result) {
 	result := translator.InfraStatus{}
 
 	if connection != nil {
@@ -43,7 +44,8 @@ func ComputeStatus(
 	)
 
 	// use various heuristics to determine the overall Infra State of
-	result.State = inferInfraState(ctx, result.Conditions)
+	state, events := inferInfraState(ctx, result.Conditions)
+	result.State = state
 
 	result.Ready = lo.Contains(common.NotReadyStates, result.State)
 
@@ -59,7 +61,7 @@ func ComputeStatus(
 		requeueAfter = 10 * time.Minute
 	}
 
-	return result, ctrl.Result{RequeueAfter: requeueAfter}
+	return result, events, ctrl.Result{RequeueAfter: requeueAfter}
 }
 
 func applyDefaultConditions(conditions []metav1.Condition) []metav1.Condition {
@@ -74,7 +76,11 @@ func applyDefaultConditions(conditions []metav1.Condition) []metav1.Condition {
 	return conditions
 }
 
-func inferInfraState(ctx context.Context, conditions []metav1.Condition) string {
+func inferInfraState(
+	ctx context.Context,
+	conditions []metav1.Condition,
+) (string, []corev1.Event) {
+	var events []corev1.Event
 	impliedStates := make(map[string]string, len(conditions))
 
 	impliedStates = inferStateFromCondition(ctx, KafkaCustomResourceType, impliedStates, conditions)
@@ -90,27 +96,36 @@ func inferInfraState(ctx context.Context, conditions []metav1.Condition) string 
 			})) > 0
 	}
 
+	if impliedStates[KafkaConnectionInfoType] == common.DegradedState &&
+		impliedStates[KafkaReportedReadyType] == common.HealthyState {
+		events = append(events, corev1.Event{
+			Type:    corev1.EventTypeWarning,
+			Reason:  "KafkaConnectionInfoUnavailable",
+			Message: fmt.Sprintf("Kafka connection info is unavailable, but Kafka is reported as ready."),
+		})
+	}
+
 	if hasImpliedState(common.ErrorState) {
-		return common.ErrorState
+		return common.ErrorState, events
 	}
 
 	if hasImpliedState(common.UnavailableState) {
-		return common.UnavailableState
+		return common.UnavailableState, events
 	}
 
 	if hasImpliedState(common.PendingState) {
-		return common.PendingState
+		return common.PendingState, events
 	}
 
 	if hasImpliedState(common.DegradedState) {
-		return common.DegradedState
+		return common.DegradedState, events
 	}
 
 	if hasImpliedState(common.HealthyState) {
-		return common.HealthyState
+		return common.HealthyState, events
 	}
 
-	return common.UnknownState
+	return common.UnknownState, events
 }
 
 func inferStateFromCondition(ctx context.Context, conditionType string, impliedStates map[string]string, conditions []metav1.Condition) map[string]string {

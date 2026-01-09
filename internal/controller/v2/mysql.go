@@ -16,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -100,6 +101,7 @@ func mysqlReadState(
 func mysqlInferStatus(
 	ctx context.Context,
 	client client.Client,
+	recorder record.EventRecorder,
 	wandb *apiv2.WeightsAndBiases,
 	newConditions []metav1.Condition,
 	newInfraConn *translator.InfraConnection,
@@ -107,13 +109,16 @@ func mysqlInferStatus(
 	oldConditions := wandb.Status.MySQLStatus.Conditions
 	oldInfraConn := translatorv2.ToTranslatorInfraConnection(wandb.Status.MySQLStatus.Connection)
 
-	updatedStatus, ctrlResult := percona.ComputeStatus(
+	updatedStatus, events, ctrlResult := percona.ComputeStatus(
 		ctx,
 		oldConditions,
 		newConditions,
 		utils.Coalesce(newInfraConn, &oldInfraConn),
 		wandb.Generation,
 	)
+	for _, e := range events {
+		recorder.Event(wandb, e.Type, e.Reason, e.Message)
+	}
 	wandb.Status.MySQLStatus = translatorv2.ToWbInfraStatus(updatedStatus)
 	err := client.Status().Update(ctx, wandb)
 

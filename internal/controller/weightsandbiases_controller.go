@@ -125,7 +125,7 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			}
 			return v1.Reconcile(ctx, wandbv1, r.Client, &v1Cfg)
 		} else {
-			return v2.Reconcile(ctx, r.Client, wandbv2)
+			return v2.Reconcile(ctx, r.Client, r.Recorder, wandbv2)
 		}
 	} else {
 		wandb := &apiv1.WeightsAndBiases{}

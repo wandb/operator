@@ -36,6 +36,7 @@ import (
 	apiErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	ctrlClient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -48,7 +49,12 @@ var defaultRequeueMinutes = 1
 var defaultRequeueDuration = time.Duration(defaultRequeueMinutes) * time.Minute
 
 // Reconcile for V2 of WandB as the assumed object
-func Reconcile(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases) (ctrl.Result, error) {
+func Reconcile(
+	ctx context.Context,
+	client ctrlClient.Client,
+	recorder record.EventRecorder,
+	wandb *apiv2.WeightsAndBiases,
+) (ctrl.Result, error) {
 	log := ctrllog.FromContext(ctx)
 
 	var err error
@@ -109,27 +115,27 @@ func Reconcile(ctx context.Context, client ctrlClient.Client, wandb *apiv2.Weigh
 	var res ctrl.Result
 	var ctrlResults []ctrl.Result
 
-	if res, err = redisInferStatus(ctx, client, wandb, redisConditions, redisInfraConn); err != nil {
+	if res, err = redisInferStatus(ctx, client, recorder, wandb, redisConditions, redisInfraConn); err != nil {
 		errorCount++
 	}
 	ctrlResults = append(ctrlResults, res)
 
-	if res, err = mysqlInferStatus(ctx, client, wandb, mysqlConditions, mysqlInfraConn); err != nil {
+	if res, err = mysqlInferStatus(ctx, client, recorder, wandb, mysqlConditions, mysqlInfraConn); err != nil {
 		errorCount++
 	}
 	ctrlResults = append(ctrlResults, res)
 
-	if res, err = kafkaInferStatus(ctx, client, wandb, kafkaConditions, kafkaInfraConn); err != nil {
+	if res, err = kafkaInferStatus(ctx, client, recorder, wandb, kafkaConditions, kafkaInfraConn); err != nil {
 		errorCount++
 	}
 	ctrlResults = append(ctrlResults, res)
 
-	if res, err = minioInferStatus(ctx, client, wandb, minioConditions, minioConnection); err != nil {
+	if res, err = minioInferStatus(ctx, client, recorder, wandb, minioConditions, minioConnection); err != nil {
 		errorCount++
 	}
 	ctrlResults = append(ctrlResults, res)
 
-	if res, err = clickHouseInferStatus(ctx, client, wandb, clickHouseConditions, clickHouseInfraConn); err != nil {
+	if res, err = clickHouseInferStatus(ctx, client, recorder, wandb, clickHouseConditions, clickHouseInfraConn); err != nil {
 		errorCount++
 	}
 	ctrlResults = append(ctrlResults, res)

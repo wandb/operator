@@ -11,6 +11,7 @@ import (
 	"github.com/wandb/operator/internal/utils"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -63,6 +64,7 @@ func minioReadState(
 func minioInferStatus(
 	ctx context.Context,
 	client client.Client,
+	recorder record.EventRecorder,
 	wandb *apiv2.WeightsAndBiases,
 	newConditions []metav1.Condition,
 	newInfraConn *translator.InfraConnection,
@@ -70,13 +72,16 @@ func minioInferStatus(
 	oldConditions := wandb.Status.MinioStatus.Conditions
 	oldInfraConn := translatorv2.ToTranslatorInfraConnection(wandb.Status.MinioStatus.Connection)
 
-	updatedStatus, ctrlResult := tenant.ComputeStatus(
+	updatedStatus, events, ctrlResult := tenant.ComputeStatus(
 		ctx,
 		oldConditions,
 		newConditions,
 		utils.Coalesce(newInfraConn, &oldInfraConn),
 		wandb.Generation,
 	)
+	for _, e := range events {
+		recorder.Event(wandb, e.Type, e.Reason, e.Message)
+	}
 	wandb.Status.MinioStatus = translatorv2.ToWbInfraStatus(updatedStatus)
 	err := client.Status().Update(ctx, wandb)
 
