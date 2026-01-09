@@ -19,18 +19,6 @@ const (
 	MetricsReporterType = "strimziMetricsReporter"
 )
 
-func ToWBKafkaStatus(ctx context.Context, status translator.KafkaStatus) apiv2.WBKafkaStatus {
-	return apiv2.WBKafkaStatus{
-		Ready:          status.Ready,
-		State:          status.State,
-		Conditions:     status.Conditions,
-		LastReconciled: metav1.Now(),
-		Connection: apiv2.WBInfraConnection{
-			URL: status.Connection.URL,
-		},
-	}
-}
-
 // createKafkaMetricsConfig creates a MetricsConfig for Kafka if telemetry is enabled.
 // Uses the Strimzi Metrics Reporter which exposes metrics in Prometheus format.
 // Returns nil if telemetry is disabled.

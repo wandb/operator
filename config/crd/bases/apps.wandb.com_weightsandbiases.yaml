@@ -64,8 +64,8 @@ spec:
     subresources:
       status: {}
   - additionalPrinterColumns:
-    - jsonPath: .status.state
-      name: State
+    - jsonPath: .status.ready
+      name: Ready
       type: string
     - jsonPath: .status.mysqlStatus.state
       name: MySQL
@@ -795,12 +795,6 @@ spec:
                         type: object
                         x-kubernetes-map-type: atomic
                     type: object
-                  lastObserved:
-                    format: date-time
-                    type: string
-                  lastReconciled:
-                    format: date-time
-                    type: string
                   ready:
                     type: boolean
                   state:
@@ -924,9 +918,6 @@ spec:
                         type: object
                         x-kubernetes-map-type: atomic
                     type: object
-                  lastReconciled:
-                    format: date-time
-                    type: string
                   ready:
                     type: boolean
                   state:
@@ -1020,9 +1011,6 @@ spec:
                         type: object
                         x-kubernetes-map-type: atomic
                     type: object
-                  lastReconciled:
-                    format: date-time
-                    type: string
                   ready:
                     type: boolean
                   state:
@@ -1116,9 +1104,6 @@ spec:
                         type: object
                         x-kubernetes-map-type: atomic
                     type: object
-                  lastReconciled:
-                    format: date-time
-                    type: string
                   ready:
                     type: boolean
                   state:
@@ -1217,9 +1202,6 @@ spec:
                         type: object
                         x-kubernetes-map-type: atomic
                     type: object
-                  lastReconciled:
-                    format: date-time
-                    type: string
                   ready:
                     type: boolean
                   state:

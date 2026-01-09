@@ -4,8 +4,8 @@ import (
 	"context"
 
 	"github.com/wandb/operator/internal/controller/common"
-	"github.com/wandb/operator/internal/controller/translator"
 	strimziv1 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -16,18 +16,13 @@ func WriteState(
 	specNamespacedName types.NamespacedName,
 	desiredKafka *strimziv1.Kafka,
 	desiredNodePool *strimziv1.KafkaNodePool,
-) []translator.ProtoCondition {
-	results := make([]translator.ProtoCondition, 0)
+) []metav1.Condition {
+	results := make([]metav1.Condition, 0)
 
 	nsnBuilder := createNsNameBuilder(specNamespacedName)
 
-	results = append(results, writeKafkaState(ctx, client, nsnBuilder, desiredKafka))
-	results = append(results, writeNodePoolState(ctx, client, nsnBuilder, desiredNodePool))
-
-	// unless not ready, consider it installed
-	if !translator.IsNotReady(results) {
-		results = append(results, translator.InstalledProtoBuilder(KafkaDeploymentReason).Build())
-	}
+	results = append(results, writeKafkaState(ctx, client, nsnBuilder, desiredKafka)...)
+	results = append(results, writeNodePoolState(ctx, client, nsnBuilder, desiredNodePool)...)
 
 	return results
 }
@@ -37,39 +32,73 @@ func writeKafkaState(
 	client client.Client,
 	nsnBuilder *NsNameBuilder,
 	desired *strimziv1.Kafka,
-) translator.ProtoCondition {
-	var err error
-	var found bool
+) []metav1.Condition {
 	var actual = &strimziv1.Kafka{}
 
-	if found, err = common.GetResource(
+	found, err := common.GetResource(
 		ctx, client, nsnBuilder.KafkaNsName(), KafkaResourceType, actual,
-	); err != nil {
-		return translator.ErrorProtoBuilder(
-			translator.MachineryErrorType, KafkaInstanceReason,
-		).Message(err.Error()).Build()
+	)
+	// if we error on getting the Kafka resource:
+	// * Reconciling failed
+	// * we don't know if it is installed
+	if err != nil {
+		return []metav1.Condition{
+			{
+				Type:   common.ReconciledType,
+				Status: metav1.ConditionFalse,
+				Reason: common.ApiErrorReason,
+			},
+			{
+				Type:   KafkaCustomResourceType,
+				Status: metav1.ConditionUnknown,
+				Reason: common.ApiErrorReason,
+			},
+		}
 	}
 	if !found {
 		actual = nil
 	}
 
+	result := make([]metav1.Condition, 0)
+
 	action, err := common.CrudResource(ctx, client, desired, actual)
 	if err != nil {
-		return translator.ErrorProtoBuilder(
-			translator.MachineryErrorType, KafkaInstanceReason,
-		).Message(err.Error()).Build()
+		result = append(result, metav1.Condition{
+			Type:   common.ReconciledType,
+			Status: metav1.ConditionFalse,
+			Reason: common.ApiErrorReason,
+		})
 	}
 
+	// regardless whether the Kafka CRUD was successful or not, we can infer the Kafka installation status
 	switch action {
 	case common.CreateAction:
-		return translator.PendingProtoBuilder(translator.ResourceCreatePending, KafkaInstanceReason).Build()
+		result = append(result, metav1.Condition{
+			Type:   KafkaCustomResourceType,
+			Status: metav1.ConditionFalse,
+			Reason: common.PendingCreateReason,
+		})
 	case common.DeleteAction:
-		return translator.PendingProtoBuilder(translator.ResourceCreatePending, KafkaInstanceReason).Build()
+		result = append(result, metav1.Condition{
+			Type:   KafkaCustomResourceType,
+			Status: metav1.ConditionFalse,
+			Reason: common.PendingDeleteReason,
+		})
+	case common.UpdateAction:
+		result = append(result, metav1.Condition{
+			Type:   KafkaCustomResourceType,
+			Status: metav1.ConditionTrue,
+			Reason: common.ResourceExistsReason,
+		})
 	case common.NoAction:
-		return translator.NotInstalledProtoBuilder(KafkaInstanceReason).Build()
+		result = append(result, metav1.Condition{
+			Type:   KafkaCustomResourceType,
+			Status: metav1.ConditionFalse,
+			Reason: common.NoResourceReason,
+		})
 	}
 
-	return translator.InstalledProtoBuilder(KafkaInstanceReason).Build()
+	return result
 }
 
 func writeNodePoolState(
@@ -77,45 +106,82 @@ func writeNodePoolState(
 	client client.Client,
 	nsnBuilder *NsNameBuilder,
 	desired *strimziv1.KafkaNodePool,
-) translator.ProtoCondition {
-	var err error
-	var found bool
+) []metav1.Condition {
 	var actual = &strimziv1.KafkaNodePool{}
 
-	if found, err = common.GetResource(
+	found, err := common.GetResource(
 		ctx, client, nsnBuilder.NodePoolNsName(), NodePoolResourceType, actual,
-	); err != nil {
-		return translator.ErrorProtoBuilder(
-			translator.MachineryErrorType, KafkaNodePoolReason,
-		).Message(err.Error()).Build()
+	)
+	// if we error on getting the NodePool resource:
+	// * Reconciling failed
+	// * we don't know if it is installed
+	if err != nil {
+		return []metav1.Condition{
+			{
+				Type:   common.ReconciledType,
+				Status: metav1.ConditionFalse,
+				Reason: common.ApiErrorReason,
+			},
+			{
+				Type:   NodePoolCustomResourceType,
+				Status: metav1.ConditionUnknown,
+				Reason: common.ApiErrorReason,
+			},
+		}
 	}
 	if !found {
 		actual = nil
 	}
 
+	result := make([]metav1.Condition, 0)
+
 	action, err := common.CrudResource(ctx, client, desired, actual)
 	if err != nil {
-		return translator.ErrorProtoBuilder(
-			translator.MachineryErrorType, KafkaNodePoolReason,
-		).Message(err.Error()).Build()
-	}
-
-	if action == common.CreateAction {
-		if err = restoreKafkaConnInfo(ctx, client, nsnBuilder, desired, actual); err != nil {
-			return translator.ErrorProtoBuilder(
-				translator.MachineryErrorType, KafkaConnectionSecretReason,
-			).Message(err.Error()).Build()
+		result = append(result, metav1.Condition{
+			Type:   common.ReconciledType,
+			Status: metav1.ConditionFalse,
+			Reason: common.ApiErrorReason,
+		})
+	} else {
+		// if we successfully created the resource, try to restore existing connection info from a previous installation
+		if action == common.CreateAction {
+			if err = restoreKafkaConnInfo(ctx, client, nsnBuilder, desired, actual); err != nil {
+				result = append(result, metav1.Condition{
+					Type:   common.ReconciledType,
+					Status: metav1.ConditionFalse,
+					Reason: common.ApiErrorReason,
+				})
+			}
 		}
 	}
 
+	// regardless whether the NodePool CRUD was successful or not, we can infer the NodePool installation status
 	switch action {
 	case common.CreateAction:
-		return translator.PendingProtoBuilder(translator.ResourceCreatePending, KafkaNodePoolReason).Build()
+		result = append(result, metav1.Condition{
+			Type:   NodePoolCustomResourceType,
+			Status: metav1.ConditionFalse,
+			Reason: common.PendingCreateReason,
+		})
 	case common.DeleteAction:
-		return translator.PendingProtoBuilder(translator.ResourceCreatePending, KafkaNodePoolReason).Build()
+		result = append(result, metav1.Condition{
+			Type:   NodePoolCustomResourceType,
+			Status: metav1.ConditionFalse,
+			Reason: common.PendingDeleteReason,
+		})
+	case common.UpdateAction:
+		result = append(result, metav1.Condition{
+			Type:   NodePoolCustomResourceType,
+			Status: metav1.ConditionTrue,
+			Reason: common.ResourceExistsReason,
+		})
 	case common.NoAction:
-		return translator.NotInstalledProtoBuilder(KafkaNodePoolReason).Build()
+		result = append(result, metav1.Condition{
+			Type:   NodePoolCustomResourceType,
+			Status: metav1.ConditionFalse,
+			Reason: common.NoResourceReason,
+		})
 	}
 
-	return translator.InstalledProtoBuilder(KafkaNodePoolReason).Build()
+	return result
 }

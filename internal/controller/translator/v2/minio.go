@@ -15,18 +15,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
-func ToWBMinioStatus(ctx context.Context, status translator.MinioStatus) apiv2.WBMinioStatus {
-	return apiv2.WBMinioStatus{
-		Ready:          status.Ready,
-		State:          status.State,
-		Conditions:     status.Conditions,
-		LastReconciled: metav1.Now(),
-		Connection: apiv2.WBInfraConnection{
-			URL: status.Connection.URL,
-		},
-	}
-}
-
 // createMinioTelemetryEnv creates environment variables for MinIO telemetry if enabled.
 // Disables authentication for Prometheus metrics endpoint in dev environments.
 // Returns nil if telemetry is disabled.

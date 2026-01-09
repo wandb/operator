@@ -26,18 +26,6 @@ const (
 	DefaultRedisExporterPort  = 9121
 )
 
-func ToRedisStatus(ctx context.Context, status translator.RedisStatus) apiv2.WBRedisStatus {
-	return apiv2.WBRedisStatus{
-		Ready:          status.Ready,
-		State:          status.State,
-		Conditions:     status.Conditions,
-		LastReconciled: metav1.Now(),
-		Connection: apiv2.WBInfraConnection{
-			URL: status.Connection.URL,
-		},
-	}
-}
-
 // createRedisExporterConfig creates a RedisExporter configuration if telemetry is enabled.
 // Returns nil if telemetry is disabled.
 func createRedisExporterConfig(telemetry apiv2.Telemetry) *rediscommon.RedisExporter {

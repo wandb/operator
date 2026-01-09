@@ -29,44 +29,110 @@ func WriteState(
 	desiredCr *miniov2.Tenant,
 	envConfig MinioEnvConfig,
 	wandbOwner client.Object,
-) (*translator.InfraConnection, error) {
-	var err error
-	var found bool
+) ([]metav1.Condition, *translator.InfraConnection) {
 	var actual = &miniov2.Tenant{}
 
 	nsnBuilder := createNsNameBuilder(specNamespacedName)
 
-	if found, err = common.GetResource(
+	found, err := common.GetResource(
 		ctx, client, nsnBuilder.SpecNsName(), ResourceTypeName, actual,
-	); err != nil {
-		return nil, err
+	)
+	if err != nil {
+		return []metav1.Condition{
+			{
+				Type:   common.ReconciledType,
+				Status: metav1.ConditionFalse,
+				Reason: common.ApiErrorReason,
+			},
+			{
+				Type:   MinioCustomResourceType,
+				Status: metav1.ConditionUnknown,
+				Reason: common.ApiErrorReason,
+			},
+		}, nil
 	}
 	if !found {
 		actual = nil
 	}
 
-	if _, err = common.CrudResource(ctx, client, desiredCr, actual); err != nil {
-		return nil, err
+	result := make([]metav1.Condition, 0)
+
+	action, err := common.CrudResource(ctx, client, desiredCr, actual)
+	if err != nil {
+		result = append(result, metav1.Condition{
+			Type:   common.ReconciledType,
+			Status: metav1.ConditionFalse,
+			Reason: common.ApiErrorReason,
+		})
 	}
 
-	var connInfo *minioConnInfo
-	if connInfo, err = writeMinioConfig(
+	switch action {
+	case common.CreateAction:
+		result = append(result, metav1.Condition{
+			Type:   MinioCustomResourceType,
+			Status: metav1.ConditionFalse,
+			Reason: common.PendingCreateReason,
+		})
+	case common.DeleteAction:
+		result = append(result, metav1.Condition{
+			Type:   MinioCustomResourceType,
+			Status: metav1.ConditionFalse,
+			Reason: common.PendingDeleteReason,
+		})
+	case common.UpdateAction:
+		result = append(result, metav1.Condition{
+			Type:   MinioCustomResourceType,
+			Status: metav1.ConditionTrue,
+			Reason: common.ResourceExistsReason,
+		})
+	case common.NoAction:
+		result = append(result, metav1.Condition{
+			Type:   MinioCustomResourceType,
+			Status: metav1.ConditionFalse,
+			Reason: common.NoResourceReason,
+		})
+	}
+
+	connInfo, err := writeMinioConfig(
 		ctx, client, desiredCr, nsnBuilder, envConfig,
-	); err != nil {
-		return nil, err
+	)
+	if err != nil {
+		result = append(result, metav1.Condition{
+			Type:   MinioConnectionInfoType,
+			Status: metav1.ConditionFalse,
+			Reason: common.ApiErrorReason,
+		})
+		return result, nil
 	}
 
 	if connInfo != nil {
-		var connection *translator.InfraConnection
-		if connection, err = writeWandbConnInfo(
+		connection, err := writeWandbConnInfo(
 			ctx, client, wandbOwner, nsnBuilder, connInfo,
-		); err != nil {
-			return nil, err
+		)
+		if err != nil {
+			result = append(result, metav1.Condition{
+				Type:   MinioConnectionInfoType,
+				Status: metav1.ConditionFalse,
+				Reason: common.ApiErrorReason,
+			})
+			return result, nil
 		}
-		return connection, nil
+		if connection != nil {
+			result = append(result, metav1.Condition{
+				Type:   MinioConnectionInfoType,
+				Status: metav1.ConditionTrue,
+				Reason: common.ResourceExistsReason,
+			})
+			return result, connection
+		}
 	}
 
-	return nil, nil
+	result = append(result, metav1.Condition{
+		Type:   MinioConnectionInfoType,
+		Status: metav1.ConditionFalse,
+		Reason: common.NoResourceReason,
+	})
+	return result, nil
 }
 
 // writeMinioConfig builds the Minio Config with credentials.

@@ -19,6 +19,7 @@ package v2
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -26,7 +27,6 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/ctrlqueue"
-	"github.com/wandb/operator/internal/controller/translator"
 	strimziv1 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1"
 	oputils "github.com/wandb/operator/pkg/utils"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
@@ -50,8 +50,9 @@ var defaultRequeueDuration = time.Duration(defaultRequeueMinutes) * time.Minute
 func Reconcile(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases) (ctrl.Result, error) {
 	log := ctrllog.FromContext(ctx)
 
-	var minioConnection *translator.InfraConnection
 	var err error
+
+	var errorCount int
 
 	/////////////////////////
 	// Cleanup Finalizer
@@ -87,45 +88,46 @@ func Reconcile(ctx context.Context, client ctrlClient.Client, wandb *apiv2.Weigh
 	}
 
 	/////////////////////////
-	// Write State
-	if err = redisWriteState(ctx, client, wandb); err != nil {
-		return ctrl.Result{}, err
-	}
-	if err = mysqlWriteState(ctx, client, wandb); err != nil {
-		return ctrl.Result{}, err
-	}
-	if err = kafkaWriteState(ctx, client, wandb); err != nil {
-		return ctrl.Result{}, err
-	}
-	if minioConnection, err = minioWriteState(ctx, client, wandb); err != nil {
-		return ctrl.Result{}, err
-	}
-	if err = clickHouseWriteState(ctx, client, wandb); err != nil {
-		return ctrl.Result{}, err
-	}
+	// Write Infra State
+	redisConditions := redisWriteState(ctx, client, wandb)
+	mysqlConditions := mysqlWriteState(ctx, client, wandb)
+	kafkaConditions := kafkaWriteState(ctx, client, wandb)
+	minioConditions, minioConnection := minioWriteState(ctx, client, wandb)
+	clickHouseConditions := clickHouseWriteState(ctx, client, wandb)
 
 	/////////////////////////
-	// Status Update
-	if err = redisReadState(ctx, client, wandb); err != nil {
-		return ctrl.Result{}, err
-	}
-	if err = mysqlReadState(ctx, client, wandb); err != nil {
-		return ctrl.Result{}, err
-	}
-	if err = kafkaReadState(ctx, client, wandb); err != nil {
-		return ctrl.Result{}, err
-	}
-	if err = minioReadState(ctx, client, wandb, minioConnection); err != nil {
-		return ctrl.Result{}, err
-	}
-	if err = clickHouseReadState(ctx, client, wandb); err != nil {
-		return ctrl.Result{}, err
-	}
+	// Read Infra State
+	redisConditions, redisInfraConn := redisReadState(ctx, client, wandb, redisConditions)
+	mysqlConditions, mysqlInfraConn := mysqlReadState(ctx, client, wandb, mysqlConditions)
+	kafkaConditions, kafkaInfraConn := kafkaReadState(ctx, client, wandb, kafkaConditions)
+	minioConditions = minioReadState(ctx, client, wandb, minioConditions)
+	clickHouseConditions, clickHouseInfraConn := clickHouseReadState(ctx, client, wandb, clickHouseConditions)
 
 	/////////////////////////
+	// WandB Status Inference
+
+	if err = redisInferStatus(ctx, client, wandb, redisConditions, redisInfraConn); err != nil {
+		errorCount++
+	}
+	if err = mysqlInferStatus(ctx, client, wandb, mysqlConditions, mysqlInfraConn); err != nil {
+		errorCount++
+	}
+	if err = kafkaInferStatus(ctx, client, wandb, kafkaConditions, kafkaInfraConn); err != nil {
+		errorCount++
+	}
+	if err = minioInferStatus(ctx, client, wandb, minioConditions, minioConnection); err != nil {
+		errorCount++
+	}
+	if err = clickHouseInferStatus(ctx, client, wandb, clickHouseConditions, clickHouseInfraConn); err != nil {
+		errorCount++
+	}
 
 	if err = inferState(ctx, client, wandb); err != nil {
-		return ctrl.Result{}, err
+		errorCount++
+	}
+
+	if errorCount > 0 {
+		return ctrl.Result{}, errors.New("infra state update errors")
 	}
 
 	return reconcileWandbManifest(ctx, client, wandb)
