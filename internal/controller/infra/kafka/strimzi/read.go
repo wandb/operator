@@ -126,12 +126,23 @@ func computeKafkaReportedReadyCondition(_ context.Context, kafkaCR *strimziv1.Ka
 	status := metav1.ConditionUnknown
 	reason := ctrlcommon.UnknownReason
 
-	// Check for ready condition (first one wins)
+	// Check for Ready and NotReady conditions (first one wins)
 	for _, cond := range kafkaCR.Status.Conditions {
-		if strings.EqualFold(cond.Type, "ready") {
-			status = cond.Status
-			reason = ctrlcommon.ReportedStatusReason
-			break
+		if cond.Status != metav1.ConditionUnknown {
+			if strings.EqualFold(cond.Type, "Ready") {
+				status = cond.Status
+				reason = ctrlcommon.ReportedStatusReason
+				break
+			}
+			if strings.EqualFold(cond.Type, "NotReady") {
+				if cond.Status == metav1.ConditionTrue {
+					status = metav1.ConditionFalse
+				} else {
+					status = metav1.ConditionTrue
+				}
+				reason = ctrlcommon.ReportedStatusReason
+				break
+			}
 		}
 	}
 
