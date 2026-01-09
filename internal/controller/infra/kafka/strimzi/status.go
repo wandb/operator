@@ -122,11 +122,11 @@ func inferStateFromCondition(ctx context.Context, conditionType string, impliedS
 		case KafkaCustomResourceType:
 			impliedStates[conditionType] = inferState_KafkaCustomResourceType(ctx, cond)
 		case NodePoolCustomResourceType:
-			impliedStates[conditionType] = inferState_NodePoolCustomResourceType(cond)
+			impliedStates[conditionType] = inferState_NodePoolCustomResourceType(ctx, cond)
 		case KafkaConnectionInfoType:
-			impliedStates[conditionType] = inferState_KafkaConnectionInfoType(cond)
+			impliedStates[conditionType] = inferState_KafkaConnectionInfoType(ctx, cond)
 		case KafkaReportedReadyType:
-			impliedStates[conditionType] = inferState_KafkaReportedReadyType(cond)
+			impliedStates[conditionType] = inferState_KafkaReportedReadyType(ctx, cond)
 		default:
 			impliedStates[conditionType] = common.UnknownState
 		}
@@ -152,37 +152,46 @@ func inferState_KafkaCustomResourceType(ctx context.Context, condition metav1.Co
 	return result
 }
 
-func inferState_NodePoolCustomResourceType(condition metav1.Condition) string {
+func inferState_NodePoolCustomResourceType(ctx context.Context, condition metav1.Condition) string {
+	log := ctrl.LoggerFrom(ctx)
+	result := common.UnknownState
 	if condition.Status == metav1.ConditionTrue {
-		return common.HealthyState
+		result = common.HealthyState
 	}
 	if condition.Status == metav1.ConditionFalse {
 		if condition.Reason == common.PendingCreateReason {
-			return common.PendingState
+			result = common.PendingState
 		}
 		if condition.Reason == common.PendingDeleteReason {
-			return common.UnavailableState
+			result = common.UnavailableState
 		}
 	}
-	return common.UnknownState
+	log.Info(fmt.Sprintf("For condition '%s', infer state '%s'", "NodePoolCustomResource", result))
+	return result
 }
 
-func inferState_KafkaConnectionInfoType(condition metav1.Condition) string {
+func inferState_KafkaConnectionInfoType(ctx context.Context, condition metav1.Condition) string {
+	log := ctrl.LoggerFrom(ctx)
+	result := common.UnknownState
 	if condition.Status == metav1.ConditionTrue {
-		return common.HealthyState
+		result = common.HealthyState
 	}
 	if condition.Status == metav1.ConditionFalse {
-		return common.DegradedState
+		result = common.DegradedState
 	}
-	return common.UnknownState
+	log.Info(fmt.Sprintf("For condition '%s', infer state '%s'", "KafkaConnectionInfo", result))
+	return result
 }
 
-func inferState_KafkaReportedReadyType(condition metav1.Condition) string {
+func inferState_KafkaReportedReadyType(ctx context.Context, condition metav1.Condition) string {
+	log := ctrl.LoggerFrom(ctx)
+	result := common.UnknownState
 	if condition.Status == metav1.ConditionTrue {
-		return common.HealthyState
+		result = common.HealthyState
 	}
 	if condition.Status == metav1.ConditionFalse {
-		return common.UnavailableState
+		result = common.UnavailableState
 	}
-	return common.UnknownState
+	log.Info(fmt.Sprintf("For condition '%s', infer state '%s'", "KafkaReportedReady", result))
+	return result
 }
