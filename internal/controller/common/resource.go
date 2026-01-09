@@ -39,41 +39,45 @@ func GetResource[T client.Object](
 	return true, nil
 }
 
+type CrudAction string
+
+const (
+	NoAction     = ""
+	CreateAction = "Create"
+	UpdateAction = "Update"
+	DeleteAction = "Delete"
+)
+
 // CrudResource is a generic function that gets a resource, and creates it if not found, or updates it if it exists.
 // The getter function should return (nil, nil) if the resource is not found.
-func CrudResource[T client.Object](
-	ctx context.Context,
-	c client.Client,
-	desired T,
-	actual T,
-) error {
+func CrudResource[T client.Object](ctx context.Context, c client.Client, desired T, actual T) (CrudAction, error) {
 	log := ctrl.LoggerFrom(ctx)
 
 	var err error
-	var action string
+	var action CrudAction
 	desiredExists := !IsNil(desired) && desired.GetName() != ""
 	actualExists := !IsNil(actual) && actual.GetName() != ""
 
 	if actualExists && desiredExists {
-		action = "update"
+		action = UpdateAction
 		log.Info(fmt.Sprintf("update %s.%s", desired.GetNamespace(), desired.GetName()))
 		desired.SetResourceVersion(actual.GetResourceVersion())
 		err = c.Update(ctx, desired)
 	}
 	if !actualExists && desiredExists {
-		action = "create"
+		action = CreateAction
 		log.Info(fmt.Sprintf("create %s.%s", desired.GetNamespace(), desired.GetName()))
 		err = c.Create(ctx, desired)
 	}
 	if actualExists && !desiredExists {
-		action = "delete"
+		action = DeleteAction
 		log.Info(fmt.Sprintf("delete %s.%s", actual.GetNamespace(), actual.GetName()))
 		err = c.Delete(ctx, actual)
 	}
 	if err != nil {
 		log.Error(err, "error on crud resource", "action", action)
 	}
-	return err
+	return action, err
 }
 
 // IsNil checks if the generic value v is a pointer and if that pointer is nil.

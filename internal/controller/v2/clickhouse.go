@@ -4,11 +4,14 @@ import (
 	"context"
 
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/infra/clickhouse/altinity"
 	"github.com/wandb/operator/internal/controller/translator"
 	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
-	chiv1 "github.com/wandb/operator/internal/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
+	"github.com/wandb/operator/internal/utils"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -17,44 +20,61 @@ func clickHouseWriteState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
-) error {
-	var err error
-	var desired *chiv1.ClickHouseInstallation
+) []metav1.Condition {
 	var specNamespacedName = clickHouseSpecNamespacedName(wandb.Spec.ClickHouse)
 
-	if desired, err = translatorv2.ToClickHouseVendorSpec(ctx, wandb.Spec.ClickHouse, wandb, client.Scheme()); err != nil {
-		return err
-	}
-	if err = altinity.WriteState(ctx, client, specNamespacedName, desired); err != nil {
-		return err
+	desired, err := translatorv2.ToClickHouseVendorSpec(ctx, wandb.Spec.ClickHouse, wandb, client.Scheme())
+	if err != nil {
+		return []metav1.Condition{
+			{
+				Type:   common.ReconciledType,
+				Status: metav1.ConditionFalse,
+				Reason: common.ControllerErrorReason,
+			},
+		}
 	}
 
-	return nil
+	results := altinity.WriteState(ctx, client, specNamespacedName, desired)
+	return results
 }
 
 func clickHouseReadState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
-) error {
-	log := ctrl.LoggerFrom(ctx)
+	newConditions []metav1.Condition,
+) ([]metav1.Condition, *translator.InfraConnection) {
+	specNamespacedName := clickHouseSpecNamespacedName(wandb.Spec.ClickHouse)
+	readConditions, newInfraConn := altinity.ReadState(ctx, client, specNamespacedName, wandb)
+	newConditions = append(newConditions, readConditions...)
+	return newConditions, newInfraConn
+}
 
-	var err error
-	var status *translator.ClickHouseStatus
-	var specNamespacedName = clickHouseSpecNamespacedName(wandb.Spec.ClickHouse)
+func clickHouseInferStatus(
+	ctx context.Context,
+	client client.Client,
+	recorder record.EventRecorder,
+	wandb *apiv2.WeightsAndBiases,
+	newConditions []metav1.Condition,
+	newInfraConn *translator.InfraConnection,
+) (ctrl.Result, error) {
+	oldConditions := wandb.Status.ClickHouseStatus.Conditions
+	oldInfraConn := translatorv2.ToTranslatorInfraConnection(wandb.Status.ClickHouseStatus.Connection)
 
-	if status, err = altinity.ReadState(ctx, client, specNamespacedName, wandb); err != nil {
-		return err
+	updatedStatus, events, ctrlResult := altinity.ComputeStatus(
+		ctx,
+		oldConditions,
+		newConditions,
+		utils.Coalesce(newInfraConn, &oldInfraConn),
+		wandb.Generation,
+	)
+	for _, e := range events {
+		recorder.Event(wandb, e.Type, e.Reason, e.Message)
 	}
-	if status != nil {
-		wandb.Status.ClickHouseStatus = translatorv2.ToWBClickHouseStatus(ctx, *status)
-		if err = client.Status().Update(ctx, wandb); err != nil {
-			log.Error(err, "failed to update status")
-			return err
-		}
-	}
+	wandb.Status.ClickHouseStatus = translatorv2.ToWbInfraStatus(updatedStatus)
+	err := client.Status().Update(ctx, wandb)
 
-	return nil
+	return ctrlResult, err
 }
 
 func clickHouseSpecNamespacedName(clickHouse apiv2.WBClickHouseSpec) types.NamespacedName {

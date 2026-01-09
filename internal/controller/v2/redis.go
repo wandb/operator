@@ -4,13 +4,14 @@ import (
 	"context"
 
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/infra/redis/opstree"
 	"github.com/wandb/operator/internal/controller/translator"
 	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
-	redisv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redis/v1beta2"
-	redisreplicationv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redisreplication/v1beta2"
-	redissentinelv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redissentinel/v1beta2"
+	"github.com/wandb/operator/internal/utils"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -19,54 +20,83 @@ func redisWriteState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
-) error {
-	var err error
-	var standaloneDesired *redisv1beta2.Redis
-	var sentinelDesired *redissentinelv1beta2.RedisSentinel
-	var replicationDesired *redisreplicationv1beta2.RedisReplication
+) []metav1.Condition {
 	var specNamespacedName = redisSpecNamespacedName(wandb.Spec.Redis)
 
-	if standaloneDesired, err = translatorv2.ToRedisStandaloneVendorSpec(ctx, wandb.Spec.Redis, wandb, client.Scheme()); err != nil {
-		return err
-	}
-	if sentinelDesired, err = translatorv2.ToRedisSentinelVendorSpec(ctx, wandb.Spec.Redis, wandb, client.Scheme()); err != nil {
-		return err
-	}
-	if replicationDesired, err = translatorv2.ToRedisReplicationVendorSpec(ctx, wandb.Spec.Redis, wandb, client.Scheme()); err != nil {
-		return err
-	}
-
-	if err = opstree.WriteState(ctx, client, specNamespacedName, standaloneDesired, sentinelDesired, replicationDesired); err != nil {
-		return err
+	standaloneDesired, err := translatorv2.ToRedisStandaloneVendorSpec(ctx, wandb.Spec.Redis, wandb, client.Scheme())
+	if err != nil {
+		return []metav1.Condition{
+			{
+				Type:   common.ReconciledType,
+				Status: metav1.ConditionFalse,
+				Reason: common.ControllerErrorReason,
+			},
+		}
 	}
 
-	return nil
+	sentinelDesired, err := translatorv2.ToRedisSentinelVendorSpec(ctx, wandb.Spec.Redis, wandb, client.Scheme())
+	if err != nil {
+		return []metav1.Condition{
+			{
+				Type:   common.ReconciledType,
+				Status: metav1.ConditionFalse,
+				Reason: common.ControllerErrorReason,
+			},
+		}
+	}
 
+	replicationDesired, err := translatorv2.ToRedisReplicationVendorSpec(ctx, wandb.Spec.Redis, wandb, client.Scheme())
+	if err != nil {
+		return []metav1.Condition{
+			{
+				Type:   common.ReconciledType,
+				Status: metav1.ConditionFalse,
+				Reason: common.ControllerErrorReason,
+			},
+		}
+	}
+
+	results := opstree.WriteState(ctx, client, specNamespacedName, standaloneDesired, sentinelDesired, replicationDesired)
+	return results
 }
 
 func redisReadState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
-) error {
-	log := ctrl.LoggerFrom(ctx)
+	newConditions []metav1.Condition,
+) ([]metav1.Condition, *translator.InfraConnection) {
+	specNamespacedName := redisSpecNamespacedName(wandb.Spec.Redis)
+	readConditions, newInfraConn := opstree.ReadState(ctx, client, specNamespacedName, wandb)
+	newConditions = append(newConditions, readConditions...)
+	return newConditions, newInfraConn
+}
 
-	var err error
-	var status *translator.RedisStatus
-	var specNamespacedName = redisSpecNamespacedName(wandb.Spec.Redis)
+func redisInferStatus(
+	ctx context.Context,
+	client client.Client,
+	recorder record.EventRecorder,
+	wandb *apiv2.WeightsAndBiases,
+	newConditions []metav1.Condition,
+	newInfraConn *translator.InfraConnection,
+) (ctrl.Result, error) {
+	oldConditions := wandb.Status.RedisStatus.Conditions
+	oldInfraConn := translatorv2.ToTranslatorInfraConnection(wandb.Status.RedisStatus.Connection)
 
-	if status, err = opstree.ReadState(ctx, client, specNamespacedName, wandb); err != nil {
-		return err
+	updatedStatus, events, ctrlResult := opstree.ComputeStatus(
+		ctx,
+		oldConditions,
+		newConditions,
+		utils.Coalesce(newInfraConn, &oldInfraConn),
+		wandb.Generation,
+	)
+	for _, e := range events {
+		recorder.Event(wandb, e.Type, e.Reason, e.Message)
 	}
-	if status != nil {
-		wandb.Status.RedisStatus = translatorv2.ToRedisStatus(ctx, *status)
-		if err = client.Status().Update(ctx, wandb); err != nil {
-			log.Error(err, "failed to update status")
-			return err
-		}
-	}
+	wandb.Status.RedisStatus = translatorv2.ToWbInfraStatus(updatedStatus)
+	err := client.Status().Update(ctx, wandb)
 
-	return nil
+	return ctrlResult, err
 }
 
 func redisSpecNamespacedName(redis apiv2.WBRedisSpec) types.NamespacedName {
@@ -74,5 +104,4 @@ func redisSpecNamespacedName(redis apiv2.WBRedisSpec) types.NamespacedName {
 		Namespace: redis.Namespace,
 		Name:      redis.Name,
 	}
-
 }

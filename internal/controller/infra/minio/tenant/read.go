@@ -4,8 +4,8 @@ import (
 	"context"
 
 	ctrlcommon "github.com/wandb/operator/internal/controller/common"
-	"github.com/wandb/operator/internal/controller/translator"
 	miniov2 "github.com/wandb/operator/internal/vendored/minio-operator/minio.min.io/v2"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -14,59 +14,63 @@ func ReadState(
 	ctx context.Context,
 	client client.Client,
 	specNamespacedName types.NamespacedName,
-	connection *translator.InfraConnection,
-) (*translator.MinioStatus, error) {
-	var err error
-	var found bool
-	var status = &translator.MinioStatus{}
+) []metav1.Condition {
 	var actualResource = &miniov2.Tenant{}
 
 	nsnBuilder := createNsNameBuilder(specNamespacedName)
 
-	if found, err = ctrlcommon.GetResource(
+	found, err := ctrlcommon.GetResource(
 		ctx, client, nsnBuilder.SpecNsName(), ResourceTypeName, actualResource,
-	); err != nil {
-		return nil, err
+	)
+	if err != nil {
+		return []metav1.Condition{
+			{
+				Type:   MinioCustomResourceType,
+				Status: metav1.ConditionUnknown,
+				Reason: ctrlcommon.ApiErrorReason,
+			},
+		}
 	}
 	if !found {
 		actualResource = nil
 	}
 
-	///////////////////////////////////
-	// set connection details
+	conditions := make([]metav1.Condition, 0)
 
-	if connection != nil {
-		status.Connection = *connection
+	if actualResource != nil {
+		conditions = append(conditions, computeMinioReportedReadyCondition(ctx, actualResource)...)
 	}
 
-	///////////////////////////////////
-	// add conditions
-
-	///////////////////////////////////
-	// set top-level summary
-	computeStatusSummary(ctx, actualResource, status)
-
-	return status, nil
+	return conditions
 }
 
-func computeStatusSummary(_ context.Context, tenantCR *miniov2.Tenant, status *translator.MinioStatus) {
-	if tenantCR != nil {
-		switch tenantCR.Status.HealthStatus {
-		case miniov2.HealthStatusGreen:
-			status.State = "Ready"
-			status.Ready = true
-		case miniov2.HealthStatusRed:
-			status.State = "Error"
-			status.Ready = false
-		case miniov2.HealthStatusYellow:
-			status.State = "Degraded"
-			status.Ready = true
-		default:
-			status.State = "NotReady"
-			status.Ready = false
-		}
-	} else {
-		status.State = "Not Installed"
-		status.Ready = false
+func computeMinioReportedReadyCondition(_ context.Context, tenantCR *miniov2.Tenant) []metav1.Condition {
+	if tenantCR == nil {
+		return []metav1.Condition{}
+	}
+
+	status := metav1.ConditionUnknown
+	reason := string(tenantCR.Status.HealthStatus)
+
+	switch tenantCR.Status.HealthStatus {
+	case miniov2.HealthStatusGreen:
+		status = metav1.ConditionTrue
+	case miniov2.HealthStatusYellow:
+		status = metav1.ConditionFalse
+		reason = "yellow"
+	case miniov2.HealthStatusRed:
+		status = metav1.ConditionFalse
+		reason = "red"
+	default:
+		status = metav1.ConditionUnknown
+		reason = ctrlcommon.UnknownReason
+	}
+
+	return []metav1.Condition{
+		{
+			Type:   MinioReportedReadyType,
+			Status: status,
+			Reason: reason,
+		},
 	}
 }

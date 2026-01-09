@@ -10,6 +10,7 @@ import (
 	redisreplicationv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redisreplication/v1beta2"
 	redissentinelv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redissentinel/v1beta2"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -20,131 +21,250 @@ func ReadState(
 	client client.Client,
 	specNamespacedName types.NamespacedName,
 	wandbOwner client.Object,
-) (*translator.RedisStatus, error) {
+) ([]metav1.Condition, *translator.InfraConnection) {
 	var standaloneActual = &redisv1beta2.Redis{}
 	var sentinelActual = &redissentinelv1beta2.RedisSentinel{}
 	var replicationActual = &redisreplicationv1beta2.RedisReplication{}
-	var status = &translator.RedisStatus{}
-	var err error
-	var found bool
-
-	installation := InstallTypeNone
 
 	nsnBuilder := createNsNameBuilder(specNamespacedName)
 
-	if found, err = ctrlcommon.GetResource(
+	found, err := ctrlcommon.GetResource(
 		ctx, client, nsnBuilder.StandaloneNsName(), StandaloneType, standaloneActual,
-	); err != nil {
-		return nil, err
+	)
+	if err != nil {
+		return []metav1.Condition{
+			{
+				Type:   RedisStandaloneCustomResourceType,
+				Status: metav1.ConditionUnknown,
+				Reason: ctrlcommon.ApiErrorReason,
+			},
+		}, nil
 	}
 	if !found {
 		standaloneActual = nil
 	}
-	if found, err = ctrlcommon.GetResource(
+
+	found, err = ctrlcommon.GetResource(
 		ctx, client, nsnBuilder.SentinelNsName(), SentinelType, sentinelActual,
-	); err != nil {
-		return nil, err
+	)
+	if err != nil {
+		return []metav1.Condition{
+			{
+				Type:   RedisSentinelCustomResourceType,
+				Status: metav1.ConditionUnknown,
+				Reason: ctrlcommon.ApiErrorReason,
+			},
+		}, nil
 	}
 	if !found {
 		sentinelActual = nil
 	}
-	if found, err = ctrlcommon.GetResource(
+
+	found, err = ctrlcommon.GetResource(
 		ctx, client, nsnBuilder.ReplicationNsName(), ReplicationType, replicationActual,
-	); err != nil {
-		return nil, err
+	)
+	if err != nil {
+		return []metav1.Condition{
+			{
+				Type:   RedisReplicationCustomResourceType,
+				Status: metav1.ConditionUnknown,
+				Reason: ctrlcommon.ApiErrorReason,
+			},
+		}, nil
 	}
 	if !found {
 		replicationActual = nil
 	}
 
-	if standaloneActual != nil {
-		installation = InstallTypeStandalone
+	conditions := make([]metav1.Condition, 0)
+	var connection *translator.InfraConnection
 
-		///////////////////////////////////
-		// set connection details
+	if standaloneActual != nil {
 		connInfo := readStandaloneConnectionDetails(standaloneActual)
 
-		var connection *translator.InfraConnection
-		if connection, err = writeRedisConnInfo(
+		connection, err = writeRedisConnInfo(
 			ctx, client, wandbOwner, nsnBuilder, connInfo,
-		); err != nil {
-			return nil, err
+		)
+		if err != nil {
+			return []metav1.Condition{
+				{
+					Type:   RedisConnectionInfoType,
+					Status: metav1.ConditionUnknown,
+					Reason: ctrlcommon.ApiErrorReason,
+				},
+			}, nil
+		}
+		if connection == nil {
+			conditions = append(conditions, metav1.Condition{
+				Type:   RedisConnectionInfoType,
+				Status: metav1.ConditionFalse,
+				Reason: ctrlcommon.NoResourceReason,
+			})
+		} else {
+			conditions = append(conditions, metav1.Condition{
+				Type:   RedisConnectionInfoType,
+				Status: metav1.ConditionTrue,
+				Reason: ctrlcommon.ResourceExistsReason,
+			})
 		}
 
-		if connection != nil {
-			status.Connection = *connection
+		standalonePodsRunning, err := standalonePodsRunningStatus(ctx, client, standaloneActual)
+		if err != nil {
+			return []metav1.Condition{
+				{
+					Type:   RedisReportedReadyType,
+					Status: metav1.ConditionUnknown,
+					Reason: ctrlcommon.ApiErrorReason,
+				},
+			}, nil
 		}
-
-		///////////////////////////////////
-		// add conditions
+		conditions = append(conditions, computeStandaloneReportedReadyCondition(ctx, standalonePodsRunning)...)
 
 	} else if sentinelActual != nil && replicationActual != nil {
-		installation = InstallTypeSentinel
-
 		connInfo := readSentinelConnectionDetails(sentinelActual)
 
-		var connection *translator.InfraConnection
-		if connection, err = writeRedisConnInfo(
+		connection, err = writeRedisConnInfo(
 			ctx, client, wandbOwner, nsnBuilder, connInfo,
-		); err != nil {
-			return nil, err
+		)
+		if err != nil {
+			return []metav1.Condition{
+				{
+					Type:   RedisConnectionInfoType,
+					Status: metav1.ConditionUnknown,
+					Reason: ctrlcommon.ApiErrorReason,
+				},
+			}, nil
+		}
+		if connection == nil {
+			conditions = append(conditions, metav1.Condition{
+				Type:   RedisConnectionInfoType,
+				Status: metav1.ConditionFalse,
+				Reason: ctrlcommon.NoResourceReason,
+			})
+		} else {
+			conditions = append(conditions, metav1.Condition{
+				Type:   RedisConnectionInfoType,
+				Status: metav1.ConditionTrue,
+				Reason: ctrlcommon.ResourceExistsReason,
+			})
 		}
 
-		if connection != nil {
-			status.Connection = *connection
+		sentinelPodsRunning, err := sentinelPodsRunningStatus(ctx, client, sentinelActual)
+		if err != nil {
+			return []metav1.Condition{
+				{
+					Type:   RedisReportedReadyType,
+					Status: metav1.ConditionUnknown,
+					Reason: ctrlcommon.ApiErrorReason,
+				},
+			}, nil
 		}
-
-		///////////////////////////////////
-		// add conditions
-
+		replicationPodsRunning, err := replicationPodsRunningStatus(ctx, client, replicationActual)
+		if err != nil {
+			return []metav1.Condition{
+				{
+					Type:   RedisReportedReadyType,
+					Status: metav1.ConditionUnknown,
+					Reason: ctrlcommon.ApiErrorReason,
+				},
+			}, nil
+		}
+		conditions = append(conditions, computeSentinelReportedReadyCondition(ctx, sentinelPodsRunning, replicationPodsRunning)...)
 	}
 
-	///////////////////////////////////
-	// set top-level summary
-
-	if err = computeStatusSummary(
-		ctx, client, status, installation, standaloneActual, sentinelActual, replicationActual,
-	); err != nil {
-		return nil, err
-	}
-
-	return status, nil
+	return conditions, connection
 }
 
-func computeStatusSummary(
-	ctx context.Context,
-	client client.Client,
-	status *translator.RedisStatus,
-	installation installType,
-	standalone *redisv1beta2.Redis,
-	sentinel *redissentinelv1beta2.RedisSentinel,
-	replication *redisreplicationv1beta2.RedisReplication,
-) error {
-	var err error
+func computeStandaloneReportedReadyCondition(
+	ctx context.Context, podsRunning map[string]bool,
+) []metav1.Condition {
+	log := ctrl.LoggerFrom(ctx)
+	var runningCount, podCount int
 
-	switch installation {
-	case InstallTypeSentinel:
-		var sentinelRunningPods, replicationRunningPods map[string]bool
-		if sentinelRunningPods, err = sentinelPodsRunningStatus(ctx, client, sentinel); err != nil {
-			return err
+	for _, isRunning := range podsRunning {
+		podCount++
+		if isRunning {
+			runningCount++
 		}
-		if replicationRunningPods, err = replicationPodsRunningStatus(ctx, client, replication); err != nil {
-			return err
-		}
-		computeSentinelStatusSummary(ctx, sentinelRunningPods, replicationRunningPods, status)
-		break
-	case InstallTypeStandalone:
-		var runningPods map[string]bool
-		if runningPods, err = standalonePodsRunningStatus(ctx, client, standalone); err != nil {
-			return err
-		}
-		computeStandaloneStatusSummary(ctx, runningPods, status)
-		break
-	default:
-		status.State = "NotInstalled"
-		status.Ready = false
 	}
-	return nil
+	log.Info(fmt.Sprintf("%d of %d Redis Standalone Pods are running", runningCount, podCount))
+
+	status := metav1.ConditionUnknown
+	reason := ctrlcommon.UnknownReason
+	message := ""
+
+	if podCount > 0 && podCount == runningCount {
+		status = metav1.ConditionTrue
+		reason = ctrlcommon.ResourceExistsReason
+	} else if podCount > 0 {
+		status = metav1.ConditionFalse
+		reason = ctrlcommon.ResourceExistsReason
+		message = fmt.Sprintf("%d of %d pods running", runningCount, podCount)
+	}
+
+	return []metav1.Condition{
+		{
+			Type:    RedisReportedReadyType,
+			Status:  status,
+			Reason:  reason,
+			Message: message,
+		},
+	}
+}
+
+func computeSentinelReportedReadyCondition(
+	ctx context.Context, sentinelPodsRunning, replicationPodsRunning map[string]bool,
+) []metav1.Condition {
+	log := ctrl.LoggerFrom(ctx)
+
+	var sentinelRunningCount, sentinelPodCount int
+	for _, isRunning := range sentinelPodsRunning {
+		sentinelPodCount++
+		if isRunning {
+			sentinelRunningCount++
+		}
+	}
+	log.Info(fmt.Sprintf("%d of %d Redis Sentinel Pods are running", sentinelRunningCount, sentinelPodCount))
+
+	var replicationRunningCount, replicationPodCount int
+	for _, isRunning := range replicationPodsRunning {
+		replicationPodCount++
+		if isRunning {
+			replicationRunningCount++
+		}
+	}
+	log.Info(fmt.Sprintf("%d of %d Redis Replication Pods are running", replicationRunningCount, replicationPodCount))
+
+	status := metav1.ConditionUnknown
+	reason := ctrlcommon.UnknownReason
+	message := ""
+
+	allPodsRunning := sentinelPodCount > 0 && sentinelPodCount == sentinelRunningCount &&
+		replicationPodCount > 0 && replicationPodCount == replicationRunningCount
+	atLeastOneEach := sentinelRunningCount > 0 && replicationRunningCount > 0
+	eitherZero := sentinelRunningCount == 0 || replicationRunningCount == 0
+
+	if allPodsRunning {
+		status = metav1.ConditionTrue
+		reason = ctrlcommon.ResourceExistsReason
+	} else if eitherZero {
+		status = metav1.ConditionFalse
+		reason = ctrlcommon.ResourceExistsReason
+		message = fmt.Sprintf("sentinel: %d/%d running, replication: %d/%d running", sentinelRunningCount, sentinelPodCount, replicationRunningCount, replicationPodCount)
+	} else if atLeastOneEach {
+		status = metav1.ConditionFalse
+		reason = "degraded"
+		message = fmt.Sprintf("sentinel: %d/%d running, replication: %d/%d running", sentinelRunningCount, sentinelPodCount, replicationRunningCount, replicationPodCount)
+	}
+
+	return []metav1.Condition{
+		{
+			Type:    RedisReportedReadyType,
+			Status:  status,
+			Reason:  reason,
+			Message: message,
+		},
+	}
 }
 
 func sentinelPodsRunningStatus(
@@ -259,72 +379,4 @@ func standalonePodsRunningStatus(
 		}
 	}
 	return result, nil
-}
-
-func computeSentinelStatusSummary(
-	ctx context.Context, sentinelPodsRunning, replicationPodsRunning map[string]bool, status *translator.RedisStatus,
-) {
-	log := ctrl.LoggerFrom(ctx)
-	var runningCount, podCount int
-
-	// Sentinel calculation
-	podCount = 0
-	runningCount = 0
-	for _, isRunning := range sentinelPodsRunning {
-		podCount++
-		if isRunning {
-			runningCount++
-		}
-	}
-	log.Info(fmt.Sprintf("%d or %d Redis Sentinel Pods are running", runningCount, podCount))
-
-	if podCount == 0 || podCount != runningCount {
-		status.State = "NotReady"
-		status.Ready = false
-		return
-	}
-
-	// Replica calculation
-	podCount = 0
-	runningCount = 0
-	for _, isRunning := range replicationPodsRunning {
-		podCount++
-		if isRunning {
-			runningCount++
-		}
-	}
-	log.Info(fmt.Sprintf("%d or %d Redis Replica Pods are running", runningCount, podCount))
-
-	if podCount == 0 || podCount != runningCount {
-		status.State = "NotReady"
-		status.Ready = false
-		return
-	}
-
-	status.State = "Ready"
-	status.Ready = true
-}
-
-func computeStandaloneStatusSummary(
-	ctx context.Context, podsRunning map[string]bool, status *translator.RedisStatus,
-) {
-	log := ctrl.LoggerFrom(ctx)
-	var runningCount, podCount int
-
-	for _, isRunning := range podsRunning {
-		podCount++
-		if isRunning {
-			runningCount++
-		}
-	}
-	log.Info(fmt.Sprintf("%d or %d Redis Standalone Pods are running", runningCount, podCount))
-
-	if podCount == 0 || podCount != runningCount {
-		status.State = "NotReady"
-		status.Ready = false
-		return
-	}
-
-	status.State = "Ready"
-	status.Ready = true
 }

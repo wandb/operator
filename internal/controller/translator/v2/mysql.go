@@ -22,18 +22,6 @@ const (
 	DefaultMySQLExporterPort  = 9104
 )
 
-func ToWBMysqlStatus(ctx context.Context, status translator.MysqlStatus) apiv2.WBMySQLStatus {
-	return apiv2.WBMySQLStatus{
-		Ready:          status.Ready,
-		State:          status.State,
-		Conditions:     status.Conditions,
-		LastReconciled: metav1.Now(),
-		Connection: apiv2.WBInfraConnection{
-			URL: status.Connection.URL,
-		},
-	}
-}
-
 // createMySQLExporterSidecar creates a mysqld-exporter sidecar container if telemetry is enabled.
 // Returns nil if telemetry is disabled.
 func createMySQLExporterSidecar(telemetry apiv2.Telemetry, clusterName string) []corev1.Container {

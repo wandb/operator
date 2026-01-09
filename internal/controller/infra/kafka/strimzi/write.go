@@ -5,6 +5,7 @@ import (
 
 	"github.com/wandb/operator/internal/controller/common"
 	strimziv1 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -15,19 +16,15 @@ func WriteState(
 	specNamespacedName types.NamespacedName,
 	desiredKafka *strimziv1.Kafka,
 	desiredNodePool *strimziv1.KafkaNodePool,
-) error {
-	var err error
+) []metav1.Condition {
+	results := make([]metav1.Condition, 0)
 
 	nsnBuilder := createNsNameBuilder(specNamespacedName)
 
-	if err = writeKafkaState(ctx, client, nsnBuilder, desiredKafka); err != nil {
-		return err
-	}
-	if err = writeNodePoolState(ctx, client, nsnBuilder, desiredNodePool); err != nil {
-		return err
-	}
+	results = append(results, writeKafkaState(ctx, client, nsnBuilder, desiredKafka)...)
+	results = append(results, writeNodePoolState(ctx, client, nsnBuilder, desiredNodePool)...)
 
-	return nil
+	return results
 }
 
 func writeKafkaState(
@@ -35,25 +32,73 @@ func writeKafkaState(
 	client client.Client,
 	nsnBuilder *NsNameBuilder,
 	desired *strimziv1.Kafka,
-) error {
-	var err error
-	var found bool
+) []metav1.Condition {
 	var actual = &strimziv1.Kafka{}
 
-	if found, err = common.GetResource(
+	found, err := common.GetResource(
 		ctx, client, nsnBuilder.KafkaNsName(), KafkaResourceType, actual,
-	); err != nil {
-		return err
+	)
+	// if we error on getting the Kafka resource:
+	// * Reconciling failed
+	// * we don't know if it is installed
+	if err != nil {
+		return []metav1.Condition{
+			{
+				Type:   common.ReconciledType,
+				Status: metav1.ConditionFalse,
+				Reason: common.ApiErrorReason,
+			},
+			{
+				Type:   KafkaCustomResourceType,
+				Status: metav1.ConditionUnknown,
+				Reason: common.ApiErrorReason,
+			},
+		}
 	}
 	if !found {
 		actual = nil
 	}
 
-	if err = common.CrudResource(ctx, client, desired, actual); err != nil {
-		return err
+	result := make([]metav1.Condition, 0)
+
+	action, err := common.CrudResource(ctx, client, desired, actual)
+	if err != nil {
+		result = append(result, metav1.Condition{
+			Type:   common.ReconciledType,
+			Status: metav1.ConditionFalse,
+			Reason: common.ApiErrorReason,
+		})
 	}
 
-	return nil
+	// regardless whether the Kafka CRUD was successful or not, we can infer the Kafka installation status
+	switch action {
+	case common.CreateAction:
+		result = append(result, metav1.Condition{
+			Type:   KafkaCustomResourceType,
+			Status: metav1.ConditionFalse,
+			Reason: common.PendingCreateReason,
+		})
+	case common.DeleteAction:
+		result = append(result, metav1.Condition{
+			Type:   KafkaCustomResourceType,
+			Status: metav1.ConditionFalse,
+			Reason: common.PendingDeleteReason,
+		})
+	case common.UpdateAction:
+		result = append(result, metav1.Condition{
+			Type:   KafkaCustomResourceType,
+			Status: metav1.ConditionTrue,
+			Reason: common.ResourceExistsReason,
+		})
+	case common.NoAction:
+		result = append(result, metav1.Condition{
+			Type:   KafkaCustomResourceType,
+			Status: metav1.ConditionFalse,
+			Reason: common.NoResourceReason,
+		})
+	}
+
+	return result
 }
 
 func writeNodePoolState(
@@ -61,31 +106,82 @@ func writeNodePoolState(
 	client client.Client,
 	nsnBuilder *NsNameBuilder,
 	desired *strimziv1.KafkaNodePool,
-) error {
-	var err error
-	var found bool
+) []metav1.Condition {
 	var actual = &strimziv1.KafkaNodePool{}
 
-	if found, err = common.GetResource(
+	found, err := common.GetResource(
 		ctx, client, nsnBuilder.NodePoolNsName(), NodePoolResourceType, actual,
-	); err != nil {
-		return err
+	)
+	// if we error on getting the NodePool resource:
+	// * Reconciling failed
+	// * we don't know if it is installed
+	if err != nil {
+		return []metav1.Condition{
+			{
+				Type:   common.ReconciledType,
+				Status: metav1.ConditionFalse,
+				Reason: common.ApiErrorReason,
+			},
+			{
+				Type:   NodePoolCustomResourceType,
+				Status: metav1.ConditionUnknown,
+				Reason: common.ApiErrorReason,
+			},
+		}
 	}
 	if !found {
 		actual = nil
 	}
 
-	shouldRestore := desired != nil && actual == nil
+	result := make([]metav1.Condition, 0)
 
-	if err = common.CrudResource(ctx, client, desired, actual); err != nil {
-		return err
-	}
-
-	if shouldRestore {
-		if err = restoreKafkaConnInfo(ctx, client, nsnBuilder, desired, actual); err != nil {
-			return err
+	action, err := common.CrudResource(ctx, client, desired, actual)
+	if err != nil {
+		result = append(result, metav1.Condition{
+			Type:   common.ReconciledType,
+			Status: metav1.ConditionFalse,
+			Reason: common.ApiErrorReason,
+		})
+	} else {
+		// if we successfully created the resource, try to restore existing connection info from a previous installation
+		if action == common.CreateAction {
+			if err = restoreKafkaConnInfo(ctx, client, nsnBuilder, desired, actual); err != nil {
+				result = append(result, metav1.Condition{
+					Type:   common.ReconciledType,
+					Status: metav1.ConditionFalse,
+					Reason: common.ApiErrorReason,
+				})
+			}
 		}
 	}
 
-	return nil
+	// regardless whether the NodePool CRUD was successful or not, we can infer the NodePool installation status
+	switch action {
+	case common.CreateAction:
+		result = append(result, metav1.Condition{
+			Type:   NodePoolCustomResourceType,
+			Status: metav1.ConditionFalse,
+			Reason: common.PendingCreateReason,
+		})
+	case common.DeleteAction:
+		result = append(result, metav1.Condition{
+			Type:   NodePoolCustomResourceType,
+			Status: metav1.ConditionFalse,
+			Reason: common.PendingDeleteReason,
+		})
+	case common.UpdateAction:
+		result = append(result, metav1.Condition{
+			Type:   NodePoolCustomResourceType,
+			Status: metav1.ConditionTrue,
+			Reason: common.ResourceExistsReason,
+		})
+	case common.NoAction:
+		result = append(result, metav1.Condition{
+			Type:   NodePoolCustomResourceType,
+			Status: metav1.ConditionFalse,
+			Reason: common.NoResourceReason,
+		})
+	}
+
+	return result
 }

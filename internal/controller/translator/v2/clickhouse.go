@@ -7,7 +7,6 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/infra/clickhouse/altinity"
-	"github.com/wandb/operator/internal/controller/translator"
 	chiv2 "github.com/wandb/operator/internal/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -16,18 +15,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
-
-func ToWBClickHouseStatus(ctx context.Context, status translator.ClickHouseStatus) apiv2.WBClickHouseStatus {
-	return apiv2.WBClickHouseStatus{
-		Ready:          status.Ready,
-		State:          status.State,
-		Conditions:     status.Conditions,
-		LastReconciled: metav1.Now(),
-		Connection: apiv2.WBInfraConnection{
-			URL: status.Connection.URL,
-		},
-	}
-}
 
 // ToClickHouseVendorSpec converts a WBClickHouseSpec to a ClickHouseInstallation CR.
 // This function translates the high-level ClickHouse spec into the vendor-specific

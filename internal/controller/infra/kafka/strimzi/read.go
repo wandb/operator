@@ -11,6 +11,7 @@ import (
 	strimziv1 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -34,33 +35,47 @@ func ReadState(
 	cl client.Client,
 	specNamespacedName types.NamespacedName,
 	wandbOwner client.Object,
-) (*translator.KafkaStatus, error) {
-	var err error
-	var found bool
-	var status = &translator.KafkaStatus{}
-	var actualKafka = &strimziv1.Kafka{}
-	var actualNodePool = &strimziv1.KafkaNodePool{}
-
+) ([]metav1.Condition, *translator.InfraConnection) {
+	log := ctrl.LoggerFrom(ctx)
 	nsnBuilder := createNsNameBuilder(specNamespacedName)
 
-	if found, err = ctrlcommon.GetResource(
+	var actualKafka = &strimziv1.Kafka{}
+	found, err := ctrlcommon.GetResource(
 		ctx, cl, nsnBuilder.KafkaNsName(), KafkaResourceType, actualKafka,
-	); err != nil {
-		return nil, err
+	)
+	if err != nil {
+		return []metav1.Condition{
+			{
+				Type:   KafkaCustomResourceType,
+				Status: metav1.ConditionUnknown,
+				Reason: ctrlcommon.ApiErrorReason,
+			},
+		}, nil
 	}
 	if !found {
+		log.Info("Kafka CR not found")
 		actualKafka = nil
 	}
 
+	var actualNodePool = &strimziv1.KafkaNodePool{}
 	if found, err = ctrlcommon.GetResource(
 		ctx, cl, nsnBuilder.NodePoolNsName(), NodePoolResourceType, actualNodePool,
 	); err != nil {
-		return nil, err
+		return []metav1.Condition{
+			{
+				Type:   NodePoolCustomResourceType,
+				Status: metav1.ConditionUnknown,
+				Reason: ctrlcommon.ApiErrorReason,
+			},
+		}, nil
 	}
 	if !found {
+		log.Info("Kafka NodePool CR not found")
 		actualNodePool = nil
 	}
 
+	conditions := make([]metav1.Condition, 0)
+	var connection *translator.InfraConnection
 	if actualKafka != nil {
 
 		///////////////////////////////////
@@ -68,57 +83,74 @@ func ReadState(
 
 		connInfo := readConnectionDetails(nsnBuilder, actualKafka)
 
-		var connection *translator.InfraConnection
-		if connection, err = writeKafkaConnInfo(
+		connection, err = writeKafkaConnInfo(
 			ctx, cl, wandbOwner, nsnBuilder, connInfo,
-		); err != nil {
-			return nil, err
+		)
+		if err != nil {
+			return []metav1.Condition{
+				{
+					Type:   KafkaConnectionInfoType,
+					Status: metav1.ConditionUnknown,
+					Reason: ctrlcommon.ApiErrorReason,
+				},
+			}, nil
 		}
-
-		if connection != nil {
-			status.Connection = *connection
+		if connection == nil {
+			conditions = append(conditions, metav1.Condition{
+				Type:   KafkaConnectionInfoType,
+				Status: metav1.ConditionFalse,
+				Reason: ctrlcommon.NoResourceReason,
+			})
+		} else {
+			conditions = append(conditions, metav1.Condition{
+				Type:   KafkaConnectionInfoType,
+				Status: metav1.ConditionTrue,
+				Reason: ctrlcommon.ResourceExistsReason,
+			})
 		}
 
 		///////////////////////////////////
 		// add conditions
 
+		conditions = append(conditions, computeKafkaReportedReadyCondition(ctx, actualKafka)...)
+
 	}
 
-	///////////////////////////////////
-	// set top-level summary
-	computeStatusSummary(ctx, actualKafka, status)
-
-	return status, nil
+	return conditions, connection
 }
 
-func computeStatusSummary(_ context.Context, kafkaCR *strimziv1.Kafka, status *translator.KafkaStatus) {
+func computeKafkaReportedReadyCondition(_ context.Context, kafkaCR *strimziv1.Kafka) []metav1.Condition {
 	if kafkaCR == nil {
-		status.State = "Not Installed"
-		status.Ready = false
-	} else {
-		// Check for ready condition (first one wins)
-		for _, cond := range kafkaCR.Status.Conditions {
-			if strings.EqualFold(cond.Type, "ready") {
-				status.Ready = cond.Status == metav1.ConditionTrue
-				if cond.Status == metav1.ConditionTrue && cond.Reason != "" {
-					status.State = cond.Reason
+		return []metav1.Condition{}
+	}
+	status := metav1.ConditionUnknown
+	reason := ctrlcommon.UnknownReason
+
+	// Check for Ready and NotReady conditions (first one wins)
+	for _, cond := range kafkaCR.Status.Conditions {
+		if cond.Status != metav1.ConditionUnknown {
+			if strings.EqualFold(cond.Type, "Ready") {
+				status = cond.Status
+				reason = ctrlcommon.ReportedStatusReason
+				break
+			}
+			if strings.EqualFold(cond.Type, "NotReady") {
+				if cond.Status == metav1.ConditionTrue {
+					status = metav1.ConditionFalse
+				} else {
+					status = metav1.ConditionTrue
 				}
+				reason = ctrlcommon.ReportedStatusReason
 				break
 			}
 		}
+	}
 
-		// Use KafkaMetadataState if available and state not set from condition
-		if status.State == "" && kafkaCR.Status.KafkaMetadataState != "" {
-			status.State = kafkaCR.Status.KafkaMetadataState
-		}
-
-		// Set default state if still empty
-		if status.State == "" {
-			if status.Ready {
-				status.State = "Ready"
-			} else {
-				status.State = "Not Ready"
-			}
-		}
+	return []metav1.Condition{
+		{
+			Type:   KafkaReportedReadyType,
+			Status: status,
+			Reason: reason,
+		},
 	}
 }

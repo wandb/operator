@@ -5,14 +5,18 @@ import (
 	"fmt"
 
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/infra/mysql/percona"
 	"github.com/wandb/operator/internal/controller/translator"
 	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
+	"github.com/wandb/operator/internal/utils"
 	v1 "github.com/wandb/operator/internal/vendored/percona-operator/pxc/v1"
-	"github.com/wandb/operator/pkg/utils"
+	pkgutils "github.com/wandb/operator/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -21,68 +25,104 @@ func mysqlWriteState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
-) error {
-	var err error
-	var desired *v1.PerconaXtraDBCluster
+) []metav1.Condition {
 	var specNamespacedName = mysqlSpecNamespacedName(wandb.Spec.MySQL)
 	logger := ctrl.LoggerFrom(ctx)
-	// TODO Move this secret creation to the correct spot
+
 	dbPasswordSecret := &corev1.Secret{}
-	err = client.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("%s-%s", specNamespacedName.Name, "user-db-password"), Namespace: specNamespacedName.Namespace}, dbPasswordSecret)
+	err := client.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("%s-%s", specNamespacedName.Name, "user-db-password"), Namespace: specNamespacedName.Namespace}, dbPasswordSecret)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			dbPasswordSecret.Name = fmt.Sprintf("%s-%s", specNamespacedName.Name, "user-db-password")
 			dbPasswordSecret.Namespace = specNamespacedName.Namespace
-			password, err := utils.GenerateRandomPassword(32)
+			password, err := pkgutils.GenerateRandomPassword(32)
 			if err != nil {
 				logger.Error(err, "failed to generate random password")
-				return err
+				return []metav1.Condition{
+					{
+						Type:   common.ReconciledType,
+						Status: metav1.ConditionFalse,
+						Reason: common.ControllerErrorReason,
+					},
+				}
 			}
 			fmt.Printf("Password write: %s\n", password)
 			dbPasswordSecret.Data = map[string][]byte{
 				"password": []byte(password),
 			}
 			if err = client.Create(ctx, dbPasswordSecret); err != nil {
-				return err
+				return []metav1.Condition{
+					{
+						Type:   common.ReconciledType,
+						Status: metav1.ConditionFalse,
+						Reason: common.ApiErrorReason,
+					},
+				}
 			}
 		} else {
-			return fmt.Errorf("failed to get secret: %w", err)
+			return []metav1.Condition{
+				{
+					Type:   common.ReconciledType,
+					Status: metav1.ConditionFalse,
+					Reason: common.ApiErrorReason,
+				},
+			}
 		}
 	}
 
-	if desired, err = translatorv2.ToMySQLVendorSpec(ctx, wandb.Spec.MySQL, wandb, client.Scheme()); err != nil {
-		return err
-	}
-	if err = percona.WriteState(ctx, client, specNamespacedName, desired); err != nil {
-		return err
+	var desired *v1.PerconaXtraDBCluster
+	desired, err = translatorv2.ToMySQLVendorSpec(ctx, wandb.Spec.MySQL, wandb, client.Scheme())
+	if err != nil {
+		return []metav1.Condition{
+			{
+				Type:   common.ReconciledType,
+				Status: metav1.ConditionFalse,
+				Reason: common.ControllerErrorReason,
+			},
+		}
 	}
 
-	return nil
+	results := percona.WriteState(ctx, client, specNamespacedName, desired)
+	return results
 }
 
 func mysqlReadState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
-) error {
-	log := ctrl.LoggerFrom(ctx)
+	newConditions []metav1.Condition,
+) ([]metav1.Condition, *translator.InfraConnection) {
+	specNamespacedName := mysqlSpecNamespacedName(wandb.Spec.MySQL)
+	readConditions, newInfraConn := percona.ReadState(ctx, client, specNamespacedName, wandb)
+	newConditions = append(newConditions, readConditions...)
+	return newConditions, newInfraConn
+}
 
-	var err error
-	var status *translator.MysqlStatus
-	var specNamespacedName = mysqlSpecNamespacedName(wandb.Spec.MySQL)
+func mysqlInferStatus(
+	ctx context.Context,
+	client client.Client,
+	recorder record.EventRecorder,
+	wandb *apiv2.WeightsAndBiases,
+	newConditions []metav1.Condition,
+	newInfraConn *translator.InfraConnection,
+) (ctrl.Result, error) {
+	oldConditions := wandb.Status.MySQLStatus.Conditions
+	oldInfraConn := translatorv2.ToTranslatorInfraConnection(wandb.Status.MySQLStatus.Connection)
 
-	if status, err = percona.ReadState(ctx, client, specNamespacedName, wandb); err != nil {
-		return err
+	updatedStatus, events, ctrlResult := percona.ComputeStatus(
+		ctx,
+		oldConditions,
+		newConditions,
+		utils.Coalesce(newInfraConn, &oldInfraConn),
+		wandb.Generation,
+	)
+	for _, e := range events {
+		recorder.Event(wandb, e.Type, e.Reason, e.Message)
 	}
-	if status != nil {
-		wandb.Status.MySQLStatus = translatorv2.ToWBMysqlStatus(ctx, *status)
-		if err = client.Status().Update(ctx, wandb); err != nil {
-			log.Error(err, "failed to update status")
-			return err
-		}
-	}
+	wandb.Status.MySQLStatus = translatorv2.ToWbInfraStatus(updatedStatus)
+	err := client.Status().Update(ctx, wandb)
 
-	return nil
+	return ctrlResult, err
 }
 
 func mysqlSpecNamespacedName(mysql apiv2.WBMySQLSpec) types.NamespacedName {

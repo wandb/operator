@@ -8,6 +8,7 @@ import (
 	redisv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redis/v1beta2"
 	redisreplicationv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redisreplication/v1beta2"
 	redissentinelv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redissentinel/v1beta2"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -26,24 +27,16 @@ func WriteState(
 	standaloneDesired *redisv1beta2.Redis,
 	sentinelDesired *redissentinelv1beta2.RedisSentinel,
 	replicationDesired *redisreplicationv1beta2.RedisReplication,
-) error {
-	var err error
+) []metav1.Condition {
+	results := make([]metav1.Condition, 0)
 
 	nsnBuilder := createNsNameBuilder(specNamespacedName)
 
-	if err = writeStandaloneState(ctx, client, nsnBuilder, standaloneDesired); err != nil {
-		return err
-	}
+	results = append(results, writeStandaloneState(ctx, client, nsnBuilder, standaloneDesired)...)
+	results = append(results, writeSentinelState(ctx, client, nsnBuilder, sentinelDesired)...)
+	results = append(results, writeReplicationState(ctx, client, nsnBuilder, replicationDesired)...)
 
-	if err = writeSentinelState(ctx, client, nsnBuilder, sentinelDesired); err != nil {
-		return err
-	}
-
-	if err = writeReplicationState(ctx, client, nsnBuilder, replicationDesired); err != nil {
-		return err
-	}
-
-	return nil
+	return results
 }
 
 func writeStandaloneState(
@@ -51,21 +44,69 @@ func writeStandaloneState(
 	client client.Client,
 	nsnBuilder *NsNameBuilder,
 	standaloneDesired *redisv1beta2.Redis,
-) error {
+) []metav1.Condition {
 	var standaloneActual = &redisv1beta2.Redis{}
-	var err error
-	var found bool
 
-	if found, err = common.GetResource(
+	found, err := common.GetResource(
 		ctx, client, nsnBuilder.StandaloneNsName(), StandaloneType, standaloneActual,
-	); err != nil {
-		return err
+	)
+	if err != nil {
+		return []metav1.Condition{
+			{
+				Type:   common.ReconciledType,
+				Status: metav1.ConditionFalse,
+				Reason: common.ApiErrorReason,
+			},
+			{
+				Type:   RedisStandaloneCustomResourceType,
+				Status: metav1.ConditionUnknown,
+				Reason: common.ApiErrorReason,
+			},
+		}
 	}
 	if !found {
 		standaloneActual = nil
 	}
 
-	return common.CrudResource(ctx, client, standaloneDesired, standaloneActual)
+	result := make([]metav1.Condition, 0)
+
+	action, err := common.CrudResource(ctx, client, standaloneDesired, standaloneActual)
+	if err != nil {
+		result = append(result, metav1.Condition{
+			Type:   common.ReconciledType,
+			Status: metav1.ConditionFalse,
+			Reason: common.ApiErrorReason,
+		})
+	}
+
+	switch action {
+	case common.CreateAction:
+		result = append(result, metav1.Condition{
+			Type:   RedisStandaloneCustomResourceType,
+			Status: metav1.ConditionFalse,
+			Reason: common.PendingCreateReason,
+		})
+	case common.DeleteAction:
+		result = append(result, metav1.Condition{
+			Type:   RedisStandaloneCustomResourceType,
+			Status: metav1.ConditionFalse,
+			Reason: common.PendingDeleteReason,
+		})
+	case common.UpdateAction:
+		result = append(result, metav1.Condition{
+			Type:   RedisStandaloneCustomResourceType,
+			Status: metav1.ConditionTrue,
+			Reason: common.ResourceExistsReason,
+		})
+	case common.NoAction:
+		result = append(result, metav1.Condition{
+			Type:   RedisStandaloneCustomResourceType,
+			Status: metav1.ConditionFalse,
+			Reason: common.NoResourceReason,
+		})
+	}
+
+	return result
 }
 
 func writeSentinelState(
@@ -73,21 +114,69 @@ func writeSentinelState(
 	client client.Client,
 	nsnBuilder *NsNameBuilder,
 	sentinelDesired *redissentinelv1beta2.RedisSentinel,
-) error {
+) []metav1.Condition {
 	var sentinelActual = &redissentinelv1beta2.RedisSentinel{}
-	var err error
-	var found bool
 
-	if found, err = common.GetResource(
+	found, err := common.GetResource(
 		ctx, client, nsnBuilder.SentinelNsName(), SentinelType, sentinelActual,
-	); err != nil {
-		return err
+	)
+	if err != nil {
+		return []metav1.Condition{
+			{
+				Type:   common.ReconciledType,
+				Status: metav1.ConditionFalse,
+				Reason: common.ApiErrorReason,
+			},
+			{
+				Type:   RedisSentinelCustomResourceType,
+				Status: metav1.ConditionUnknown,
+				Reason: common.ApiErrorReason,
+			},
+		}
 	}
 	if !found {
 		sentinelActual = nil
 	}
 
-	return common.CrudResource(ctx, client, sentinelDesired, sentinelActual)
+	result := make([]metav1.Condition, 0)
+
+	action, err := common.CrudResource(ctx, client, sentinelDesired, sentinelActual)
+	if err != nil {
+		result = append(result, metav1.Condition{
+			Type:   common.ReconciledType,
+			Status: metav1.ConditionFalse,
+			Reason: common.ApiErrorReason,
+		})
+	}
+
+	switch action {
+	case common.CreateAction:
+		result = append(result, metav1.Condition{
+			Type:   RedisSentinelCustomResourceType,
+			Status: metav1.ConditionFalse,
+			Reason: common.PendingCreateReason,
+		})
+	case common.DeleteAction:
+		result = append(result, metav1.Condition{
+			Type:   RedisSentinelCustomResourceType,
+			Status: metav1.ConditionFalse,
+			Reason: common.PendingDeleteReason,
+		})
+	case common.UpdateAction:
+		result = append(result, metav1.Condition{
+			Type:   RedisSentinelCustomResourceType,
+			Status: metav1.ConditionTrue,
+			Reason: common.ResourceExistsReason,
+		})
+	case common.NoAction:
+		result = append(result, metav1.Condition{
+			Type:   RedisSentinelCustomResourceType,
+			Status: metav1.ConditionFalse,
+			Reason: common.NoResourceReason,
+		})
+	}
+
+	return result
 }
 
 func writeReplicationState(
@@ -95,21 +184,69 @@ func writeReplicationState(
 	client client.Client,
 	nsnBuilder *NsNameBuilder,
 	replicationDesired *redisreplicationv1beta2.RedisReplication,
-) error {
+) []metav1.Condition {
 	var replicationActual = &redisreplicationv1beta2.RedisReplication{}
-	var err error
-	var found bool
 
-	if found, err = common.GetResource(
+	found, err := common.GetResource(
 		ctx, client, nsnBuilder.ReplicationNsName(), ReplicationType, replicationActual,
-	); err != nil {
-		return err
+	)
+	if err != nil {
+		return []metav1.Condition{
+			{
+				Type:   common.ReconciledType,
+				Status: metav1.ConditionFalse,
+				Reason: common.ApiErrorReason,
+			},
+			{
+				Type:   RedisReplicationCustomResourceType,
+				Status: metav1.ConditionUnknown,
+				Reason: common.ApiErrorReason,
+			},
+		}
 	}
 	if !found {
 		replicationActual = nil
 	}
 
-	return common.CrudResource(ctx, client, replicationDesired, replicationActual)
+	result := make([]metav1.Condition, 0)
+
+	action, err := common.CrudResource(ctx, client, replicationDesired, replicationActual)
+	if err != nil {
+		result = append(result, metav1.Condition{
+			Type:   common.ReconciledType,
+			Status: metav1.ConditionFalse,
+			Reason: common.ApiErrorReason,
+		})
+	}
+
+	switch action {
+	case common.CreateAction:
+		result = append(result, metav1.Condition{
+			Type:   RedisReplicationCustomResourceType,
+			Status: metav1.ConditionFalse,
+			Reason: common.PendingCreateReason,
+		})
+	case common.DeleteAction:
+		result = append(result, metav1.Condition{
+			Type:   RedisReplicationCustomResourceType,
+			Status: metav1.ConditionFalse,
+			Reason: common.PendingDeleteReason,
+		})
+	case common.UpdateAction:
+		result = append(result, metav1.Condition{
+			Type:   RedisReplicationCustomResourceType,
+			Status: metav1.ConditionTrue,
+			Reason: common.ResourceExistsReason,
+		})
+	case common.NoAction:
+		result = append(result, metav1.Condition{
+			Type:   RedisReplicationCustomResourceType,
+			Status: metav1.ConditionFalse,
+			Reason: common.NoResourceReason,
+		})
+	}
+
+	return result
 }
 
 type redisConnInfo struct {

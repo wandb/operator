@@ -5,6 +5,7 @@ import (
 
 	"github.com/wandb/operator/internal/controller/common"
 	pxcv1 "github.com/wandb/operator/internal/vendored/percona-operator/pxc/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -19,25 +20,69 @@ func WriteState(
 	client client.Client,
 	specNamespacedName types.NamespacedName,
 	desired *pxcv1.PerconaXtraDBCluster,
-) error {
-	var err error
-	var found bool
+) []metav1.Condition {
 	var actual = &pxcv1.PerconaXtraDBCluster{}
 
 	nsnBuilder := createNsNameBuilder(specNamespacedName)
 
-	if found, err = common.GetResource(
+	found, err := common.GetResource(
 		ctx, client, nsnBuilder.ClusterNsName(), ResourceTypeName, actual,
-	); err != nil {
-		return err
+	)
+	if err != nil {
+		return []metav1.Condition{
+			{
+				Type:   common.ReconciledType,
+				Status: metav1.ConditionFalse,
+				Reason: common.ApiErrorReason,
+			},
+			{
+				Type:   MySQLCustomResourceType,
+				Status: metav1.ConditionUnknown,
+				Reason: common.ApiErrorReason,
+			},
+		}
 	}
 	if !found {
 		actual = nil
 	}
 
-	if err = common.CrudResource(ctx, client, desired, actual); err != nil {
-		return err
+	result := make([]metav1.Condition, 0)
+
+	action, err := common.CrudResource(ctx, client, desired, actual)
+	if err != nil {
+		result = append(result, metav1.Condition{
+			Type:   common.ReconciledType,
+			Status: metav1.ConditionFalse,
+			Reason: common.ApiErrorReason,
+		})
 	}
 
-	return nil
+	switch action {
+	case common.CreateAction:
+		result = append(result, metav1.Condition{
+			Type:   MySQLCustomResourceType,
+			Status: metav1.ConditionFalse,
+			Reason: common.PendingCreateReason,
+		})
+	case common.DeleteAction:
+		result = append(result, metav1.Condition{
+			Type:   MySQLCustomResourceType,
+			Status: metav1.ConditionFalse,
+			Reason: common.PendingDeleteReason,
+		})
+	case common.UpdateAction:
+		result = append(result, metav1.Condition{
+			Type:   MySQLCustomResourceType,
+			Status: metav1.ConditionTrue,
+			Reason: common.ResourceExistsReason,
+		})
+	case common.NoAction:
+		result = append(result, metav1.Condition{
+			Type:   MySQLCustomResourceType,
+			Status: metav1.ConditionFalse,
+			Reason: common.NoResourceReason,
+		})
+	}
+
+	return result
 }

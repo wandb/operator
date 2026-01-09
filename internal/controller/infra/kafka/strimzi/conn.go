@@ -131,7 +131,8 @@ func writeKafkaConnInfo(
 		},
 	}
 
-	if err = common.CrudResource(ctx, cl, desired, actual); err != nil {
+	_, err = common.CrudResource(ctx, cl, desired, actual)
+	if err != nil {
 		return nil, err
 	}
 

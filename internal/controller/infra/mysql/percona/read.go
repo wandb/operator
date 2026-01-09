@@ -7,9 +7,9 @@ import (
 
 	ctrlcommon "github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/translator"
-	"github.com/wandb/operator/internal/utils"
 	pxcv1 "github.com/wandb/operator/internal/vendored/percona-operator/pxc/v1"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
@@ -17,14 +17,6 @@ import (
 
 func readConnectionDetails(ctx context.Context, client client.Client, actual *pxcv1.PerconaXtraDBCluster, specNamespacedName types.NamespacedName) *mysqlConnInfo {
 	log := ctrllog.FromContext(ctx)
-	//namespace := specNamespacedName.Namespace
-	//var mysqlHost string
-
-	//if actual.Spec.ProxySQLEnabled() {
-	//	mysqlHost = fmt.Sprintf("%s.%s.svc.cluster.local", actual.Name, namespace)
-	//} else {
-	//	mysqlHost = fmt.Sprintf("%s.%s.svc.cluster.local", actual.Name, namespace)
-	//}
 
 	mysqlPort := strconv.Itoa(3306)
 
@@ -49,62 +41,85 @@ func ReadState(
 	client client.Client,
 	specNamespacedName types.NamespacedName,
 	wandbOwner client.Object,
-) (*translator.MysqlStatus, error) {
-	var err error
-	var found bool
+) ([]metav1.Condition, *translator.InfraConnection) {
 	var actual = &pxcv1.PerconaXtraDBCluster{}
-	var status = &translator.MysqlStatus{}
 
 	nsnBuilder := createNsNameBuilder(specNamespacedName)
 
-	if found, err = ctrlcommon.GetResource(
+	found, err := ctrlcommon.GetResource(
 		ctx, client, nsnBuilder.ClusterNsName(), ResourceTypeName, actual,
-	); err != nil {
-		return nil, err
+	)
+	if err != nil {
+		return []metav1.Condition{
+			{
+				Type:   MySQLCustomResourceType,
+				Status: metav1.ConditionUnknown,
+				Reason: ctrlcommon.ApiErrorReason,
+			},
+		}, nil
 	}
 	if !found {
 		actual = nil
 	}
 
-	if actual != nil {
-		///////////////////////////////////
-		// set connection details
+	conditions := make([]metav1.Condition, 0)
+	var connection *translator.InfraConnection
 
+	if actual != nil {
 		connInfo := readConnectionDetails(ctx, client, actual, specNamespacedName)
 
-		var connection *translator.InfraConnection
-		if connection, err = writeMySQLConnInfo(
+		connection, err = writeMySQLConnInfo(
 			ctx, client, wandbOwner, nsnBuilder, connInfo,
-		); err != nil {
-			return nil, err
+		)
+		if err != nil {
+			return []metav1.Condition{
+				{
+					Type:   MySQLConnectionInfoType,
+					Status: metav1.ConditionUnknown,
+					Reason: ctrlcommon.ApiErrorReason,
+				},
+			}, nil
+		}
+		if connection == nil {
+			conditions = append(conditions, metav1.Condition{
+				Type:   MySQLConnectionInfoType,
+				Status: metav1.ConditionFalse,
+				Reason: ctrlcommon.NoResourceReason,
+			})
+		} else {
+			conditions = append(conditions, metav1.Condition{
+				Type:   MySQLConnectionInfoType,
+				Status: metav1.ConditionTrue,
+				Reason: ctrlcommon.ResourceExistsReason,
+			})
 		}
 
-		if connection != nil {
-			status.Connection = *connection
-		}
-
-		///////////////////////////////////
-		// add conditions
-
+		conditions = append(conditions, computeMySQLReportedReadyCondition(ctx, actual)...)
 	}
-	///////////////////////////////////
-	// set top-level summary
-	computeStatusSummary(ctx, actual, status)
 
-	return status, nil
+	return conditions, connection
 }
 
-func computeStatusSummary(_ context.Context, clusterCR *pxcv1.PerconaXtraDBCluster, status *translator.MysqlStatus) {
-	if clusterCR != nil {
-		if clusterCR.Status.Status == pxcv1.AppStateReady {
-			status.State = "Ready"
-			status.Ready = true
-		} else {
-			status.State = utils.Capitalize(string(clusterCR.Status.Status))
-			status.Ready = false
-		}
-	} else {
-		status.State = "Not Installed"
-		status.Ready = false
+func computeMySQLReportedReadyCondition(_ context.Context, clusterCR *pxcv1.PerconaXtraDBCluster) []metav1.Condition {
+	if clusterCR == nil {
+		return []metav1.Condition{}
+	}
+
+	status := metav1.ConditionUnknown
+	reason := string(clusterCR.Status.Status)
+
+	switch clusterCR.Status.Status {
+	case pxcv1.AppStateReady:
+		status = metav1.ConditionTrue
+	case pxcv1.AppStateInit, pxcv1.AppStatePaused, pxcv1.AppStateStopping, pxcv1.AppStateError:
+		status = metav1.ConditionFalse
+	}
+
+	return []metav1.Condition{
+		{
+			Type:   MySQLReportedReadyType,
+			Status: status,
+			Reason: reason,
+		},
 	}
 }
