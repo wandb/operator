@@ -2,6 +2,7 @@ package strimzi
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/samber/lo"
@@ -147,7 +148,7 @@ func inferState_KafkaCustomResourceType(ctx context.Context, condition metav1.Co
 			result = common.UnavailableState
 		}
 	}
-	log.Info("For condition '%s', infer state '%s", "KafkaCustomResource", result)
+	log.Info(fmt.Sprintf("For condition '%s', infer state '%s'", "KafkaCustomResource", result))
 	return result
 }
 

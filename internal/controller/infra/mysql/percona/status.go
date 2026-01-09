@@ -2,6 +2,7 @@ package percona
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/samber/lo"
@@ -140,7 +141,7 @@ func inferState_MySQLCustomResourceType(ctx context.Context, condition metav1.Co
 			result = common.UnavailableState
 		}
 	}
-	log.Info("For condition '%s', infer state '%s'", "MySQLCustomResource", result)
+	log.Info(fmt.Sprintf("For condition '%s', infer state '%s'", "MySQLCustomResource", result))
 	return result
 }
 
@@ -153,7 +154,7 @@ func inferState_MySQLConnectionInfoType(ctx context.Context, condition metav1.Co
 	if condition.Status == metav1.ConditionFalse {
 		result = common.DegradedState
 	}
-	log.Info("For condition '%s', infer state '%s'", "MySQLConnectionInfo", result)
+	log.Info(fmt.Sprintf("For condition '%s', infer state '%s'", "MySQLConnectionInfo", result))
 	return result
 }
 
@@ -175,6 +176,6 @@ func inferState_MySQLReportedReadyType(ctx context.Context, condition metav1.Con
 			result = common.UnavailableState
 		}
 	}
-	log.Info("For condition '%s', infer state '%s'", "MySQLReportedReady", result)
+	log.Info(fmt.Sprintf("For condition '%s', infer state '%s'", "MySQLReportedReady", result))
 	return result
 }

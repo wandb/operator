@@ -2,6 +2,7 @@ package opstree
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/samber/lo"
@@ -148,7 +149,7 @@ func inferState_RedisStandaloneCustomResourceType(ctx context.Context, condition
 			result = common.UnavailableState
 		}
 	}
-	log.Info("For condition '%s', infer state '%s'", "RedisStandaloneCustomResource", result)
+	log.Info(fmt.Sprintf("For condition '%s', infer state '%s'", "RedisStandaloneCustomResource", result))
 	return result
 }
 
@@ -166,7 +167,7 @@ func inferState_RedisSentinelCustomResourceType(ctx context.Context, condition m
 			result = common.UnavailableState
 		}
 	}
-	log.Info("For condition '%s', infer state '%s'", "RedisSentinelCustomResource", result)
+	log.Info(fmt.Sprintf("For condition '%s', infer state '%s'", "RedisSentinelCustomResource", result))
 	return result
 }
 
@@ -184,7 +185,7 @@ func inferState_RedisReplicationCustomResourceType(ctx context.Context, conditio
 			result = common.UnavailableState
 		}
 	}
-	log.Info("For condition '%s', infer state '%s'", "RedisReplicationCustomResource", result)
+	log.Info(fmt.Sprintf("For condition '%s', infer state '%s'", "RedisReplicationCustomResource", result))
 	return result
 }
 
@@ -197,7 +198,7 @@ func inferState_RedisConnectionInfoType(ctx context.Context, condition metav1.Co
 	if condition.Status == metav1.ConditionFalse {
 		result = common.DegradedState
 	}
-	log.Info("For condition '%s', infer state '%s'", "RedisConnectionInfo", result)
+	log.Info(fmt.Sprintf("For condition '%s', infer state '%s'", "RedisConnectionInfo", result))
 	return result
 }
 
@@ -214,6 +215,6 @@ func inferState_RedisReportedReadyType(ctx context.Context, condition metav1.Con
 			result = common.UnavailableState
 		}
 	}
-	log.Info("For condition '%s', infer state '%s'", "RedisReportedReady", result)
+	log.Info(fmt.Sprintf("For condition '%s', infer state '%s'", "RedisReportedReady", result))
 	return result
 }

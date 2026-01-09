@@ -2,6 +2,7 @@ package tenant
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/samber/lo"
@@ -140,7 +141,7 @@ func inferState_MinioCustomResourceType(ctx context.Context, condition metav1.Co
 			result = common.UnavailableState
 		}
 	}
-	log.Info("For condition '%s', infer state '%s'", "MinioCustomResource", result)
+	log.Info(fmt.Sprintf("For condition '%s', infer state '%s'", "MinioCustomResource", result))
 	return result
 }
 
@@ -153,7 +154,7 @@ func inferState_MinioConnectionInfoType(ctx context.Context, condition metav1.Co
 	if condition.Status == metav1.ConditionFalse {
 		result = common.DegradedState
 	}
-	log.Info("For condition '%s', infer state '%s'", "MinioConnectionInfo", result)
+	log.Info(fmt.Sprintf("For condition '%s', infer state '%s'", "MinioConnectionInfo", result))
 	return result
 }
 
@@ -173,6 +174,6 @@ func inferState_MinioReportedReadyType(ctx context.Context, condition metav1.Con
 			result = common.DegradedState
 		}
 	}
-	log.Info("For condition '%s', infer state '%s'", "MinioReportedReady", result)
+	log.Info(fmt.Sprintf("For condition '%s', infer state '%s'", "MinioReportedReady", result))
 	return result
 }

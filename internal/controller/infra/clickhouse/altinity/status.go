@@ -2,6 +2,7 @@ package altinity
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/samber/lo"
@@ -140,7 +141,7 @@ func inferState_ClickHouseCustomResourceType(ctx context.Context, condition meta
 			result = common.UnavailableState
 		}
 	}
-	log.Info("For condition '%s', infer state '%s'", "ClickHouseCustomResource", result)
+	log.Info(fmt.Sprintf("For condition '%s', infer state '%s'", "ClickHouseCustomResource", result))
 	return result
 }
 
@@ -153,7 +154,7 @@ func inferState_ClickHouseConnectionInfoType(ctx context.Context, condition meta
 	if condition.Status == metav1.ConditionFalse {
 		result = common.DegradedState
 	}
-	log.Info("For condition '%s', infer state '%s'", "ClickHouseConnectionInfo", result)
+	log.Info(fmt.Sprintf("For condition '%s', infer state '%s'", "ClickHouseConnectionInfo", result))
 	return result
 }
 
@@ -170,6 +171,6 @@ func inferState_ClickHouseReportedReadyType(ctx context.Context, condition metav
 			result = common.DegradedState
 		}
 	}
-	log.Info("For condition '%s', infer state '%s'", "ClickHouseReportedReady", result)
+	log.Info(fmt.Sprintf("For condition '%s', infer state '%s'", "ClickHouseReportedReady", result))
 	return result
 }
