@@ -86,7 +86,7 @@ func inferInfraState(ctx context.Context, conditions []metav1.Condition) string 
 		return len(lo.FilterValues(
 			impliedStates,
 			func(_ string, value string) bool {
-				return value == common.UnavailableState
+				return value == target
 			})) > 0
 	}
 
