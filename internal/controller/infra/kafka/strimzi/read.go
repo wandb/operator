@@ -86,7 +86,7 @@ func ReadState(
 			return []metav1.Condition{
 				{
 					Type:   KafkaConnectionInfoType,
-					Status: metav1.ConditionFalse,
+					Status: metav1.ConditionUnknown,
 					Reason: ctrlcommon.ApiErrorReason,
 				},
 			}, nil

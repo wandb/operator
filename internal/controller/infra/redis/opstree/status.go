@@ -95,33 +95,37 @@ func inferInfraState(
 			})) > 0
 	}
 
-	if impliedStates[RedisConnectionInfoType] == common.DegradedState &&
+	summaryState := common.UnknownState
+
+	// if the service is reporting as healthy but the connection info is unavailable
+	// log the missing connection as an event and mark the infraStatus as 'error'
+	if impliedStates[RedisConnectionInfoType] == common.UnavailableState &&
 		impliedStates[RedisReportedReadyType] == common.HealthyState {
 		events = append(events, corev1.Event{
 			Type:    corev1.EventTypeWarning,
 			Reason:  "RedisConnectionInfoUnavailable",
 			Message: fmt.Sprintf("Redis connection info is unavailable, but Redis is reported as ready."),
 		})
+		summaryState = common.ErrorState
 	}
 
-	if hasImpliedState(common.ErrorState) {
-		return common.ErrorState, events
+	// if there is a specific state identified, use that
+	if summaryState != common.UnknownState {
+		return summaryState, events
 	}
 
-	if hasImpliedState(common.UnavailableState) {
-		return common.UnavailableState, events
+	// otherwise, return the most significant state mapped for any condition
+	stateSignificanceOrder := []string{
+		common.ErrorState,
+		common.UnavailableState,
+		common.PendingState,
+		common.DegradedState,
+		common.HealthyState,
 	}
-
-	if hasImpliedState(common.PendingState) {
-		return common.PendingState, events
-	}
-
-	if hasImpliedState(common.DegradedState) {
-		return common.DegradedState, events
-	}
-
-	if hasImpliedState(common.HealthyState) {
-		return common.HealthyState, events
+	for _, s := range stateSignificanceOrder {
+		if hasImpliedState(s) {
+			return s, events
+		}
 	}
 
 	return common.UnknownState, events
@@ -211,7 +215,7 @@ func inferState_RedisConnectionInfoType(ctx context.Context, condition metav1.Co
 		result = common.HealthyState
 	}
 	if condition.Status == metav1.ConditionFalse {
-		result = common.DegradedState
+		result = common.UnavailableState
 	}
 	log.Info(fmt.Sprintf("For condition '%s', infer state '%s'", "RedisConnectionInfo", result))
 	return result

@@ -89,7 +89,7 @@ func ReadState(
 			return []metav1.Condition{
 				{
 					Type:   RedisConnectionInfoType,
-					Status: metav1.ConditionFalse,
+					Status: metav1.ConditionUnknown,
 					Reason: ctrlcommon.ApiErrorReason,
 				},
 			}, nil
@@ -130,7 +130,7 @@ func ReadState(
 			return []metav1.Condition{
 				{
 					Type:   RedisConnectionInfoType,
-					Status: metav1.ConditionFalse,
+					Status: metav1.ConditionUnknown,
 					Reason: ctrlcommon.ApiErrorReason,
 				},
 			}, nil

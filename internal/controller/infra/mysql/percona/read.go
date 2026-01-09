@@ -75,7 +75,7 @@ func ReadState(
 			return []metav1.Condition{
 				{
 					Type:   MySQLConnectionInfoType,
-					Status: metav1.ConditionFalse,
+					Status: metav1.ConditionUnknown,
 					Reason: ctrlcommon.ApiErrorReason,
 				},
 			}, nil
