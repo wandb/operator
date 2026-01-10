@@ -8,6 +8,7 @@ import (
 	"github.com/samber/lo"
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/translator"
+	"github.com/wandb/operator/internal/logx"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -160,7 +161,9 @@ func inferState_ClickHouseCustomResourceType(ctx context.Context, condition meta
 			result = common.UnavailableState
 		}
 	}
-	log.Info(fmt.Sprintf("For condition '%s', infer state '%s'", "ClickHouseCustomResource", result))
+	log.WithName(logx.ClickHouse).Info(
+		fmt.Sprintf("For condition '%s', infer state '%s'", "ClickHouseCustomResource", result),
+	)
 	return result
 }
 
@@ -173,7 +176,9 @@ func inferState_ClickHouseConnectionInfoType(ctx context.Context, condition meta
 	if condition.Status == metav1.ConditionFalse {
 		result = common.UnavailableState
 	}
-	log.Info(fmt.Sprintf("For condition '%s', infer state '%s'", "ClickHouseConnectionInfo", result))
+	log.WithName(logx.ClickHouse).Info(
+		fmt.Sprintf("For condition '%s', infer state '%s'", "ClickHouseConnectionInfo", result),
+	)
 	return result
 }
 
@@ -190,6 +195,8 @@ func inferState_ClickHouseReportedReadyType(ctx context.Context, condition metav
 			result = common.DegradedState
 		}
 	}
-	log.Info(fmt.Sprintf("For condition '%s', infer state '%s'", "ClickHouseReportedReady", result))
+	log.WithName(logx.ClickHouse).Info(
+		fmt.Sprintf("For condition '%s', infer state '%s'", "ClickHouseReportedReady", result),
+	)
 	return result
 }

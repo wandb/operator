@@ -7,6 +7,7 @@ import (
 
 	ctrlcommon "github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/translator"
+	"github.com/wandb/operator/internal/logx"
 	chiv1 "github.com/wandb/operator/internal/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -150,7 +151,9 @@ func computeClickHouseReportedReadyCondition(
 		}
 	}
 
-	log.Info(fmt.Sprintf("%d of %d ClickHouse Pods are running", runningCount, podCount))
+	log.WithName(logx.ClickHouse).Info(
+		"Clickhouse pods status", "running", runningCount, "total", podCount,
+	)
 
 	status := metav1.ConditionUnknown
 	reason := ctrlcommon.UnknownReason
