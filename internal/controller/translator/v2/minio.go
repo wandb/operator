@@ -7,6 +7,7 @@ import (
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/infra/minio/tenant"
 	"github.com/wandb/operator/internal/controller/translator"
+	"github.com/wandb/operator/internal/logx"
 	miniov2 "github.com/wandb/operator/internal/vendored/minio-operator/minio.min.io/v2"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -40,7 +41,7 @@ func ToMinioVendorSpec(
 	owner metav1.Object,
 	scheme *runtime.Scheme,
 ) (*miniov2.Tenant, error) {
-	log := ctrl.LoggerFrom(ctx)
+	ctx, log := logx.IntoContext(ctx, logx.Minio)
 
 	if !spec.Enabled {
 		return nil, nil

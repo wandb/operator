@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/wandb/operator/internal/logx"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -21,7 +21,7 @@ func GetResource[T client.Object](
 	resourceTypeName string,
 	obj T,
 ) (bool, error) {
-	log := ctrl.LoggerFrom(ctx)
+	log := logx.FromContext(ctx)
 
 	log.Info(fmt.Sprintf("get %s.%s", namespacedName.Namespace, namespacedName.Name))
 
@@ -51,7 +51,7 @@ const (
 // CrudResource is a generic function that gets a resource, and creates it if not found, or updates it if it exists.
 // The getter function should return (nil, nil) if the resource is not found.
 func CrudResource[T client.Object](ctx context.Context, c client.Client, desired T, actual T) (CrudAction, error) {
-	log := ctrl.LoggerFrom(ctx)
+	log := logx.FromContext(ctx)
 
 	var err error
 	var action CrudAction

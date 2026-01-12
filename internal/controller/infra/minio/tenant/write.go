@@ -7,6 +7,7 @@ import (
 	"github.com/Masterminds/goutils"
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/translator"
+	"github.com/wandb/operator/internal/logx"
 	miniov2 "github.com/wandb/operator/internal/vendored/minio-operator/minio.min.io/v2"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -30,6 +31,7 @@ func WriteState(
 	envConfig MinioEnvConfig,
 	wandbOwner client.Object,
 ) ([]metav1.Condition, *translator.InfraConnection) {
+	ctx, _ = logx.IntoContext(ctx, logx.Minio)
 	var actual = &miniov2.Tenant{}
 
 	nsnBuilder := createNsNameBuilder(specNamespacedName)

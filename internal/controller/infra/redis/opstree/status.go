@@ -8,6 +8,7 @@ import (
 	"github.com/samber/lo"
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/translator"
+	"github.com/wandb/operator/internal/logx"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -27,6 +28,7 @@ func ComputeStatus(
 	connection *translator.InfraConnection,
 	currentGeneration int64,
 ) (translator.InfraStatus, []corev1.Event, ctrl.Result) {
+	ctx, _ = logx.IntoContext(ctx, logx.Redis)
 	result := translator.InfraStatus{}
 
 	if connection != nil {
@@ -155,7 +157,7 @@ func inferStateFromCondition(ctx context.Context, conditionType string, impliedS
 }
 
 func inferState_RedisStandaloneCustomResourceType(ctx context.Context, condition metav1.Condition) string {
-	log := ctrl.LoggerFrom(ctx)
+	log := logx.FromContext(ctx)
 	result := common.UnknownState
 	if condition.Status == metav1.ConditionTrue {
 		result = common.HealthyState
@@ -168,12 +170,12 @@ func inferState_RedisStandaloneCustomResourceType(ctx context.Context, condition
 			result = common.UnavailableState
 		}
 	}
-	log.Info(fmt.Sprintf("For condition '%s', infer state '%s'", "RedisStandaloneCustomResource", result))
+	log.Debug("implied state from condition", "condition", "RedisStandaloneCustomResource", "state", result)
 	return result
 }
 
 func inferState_RedisSentinelCustomResourceType(ctx context.Context, condition metav1.Condition) string {
-	log := ctrl.LoggerFrom(ctx)
+	log := logx.FromContext(ctx)
 	result := common.UnknownState
 	if condition.Status == metav1.ConditionTrue {
 		result = common.HealthyState
@@ -186,12 +188,12 @@ func inferState_RedisSentinelCustomResourceType(ctx context.Context, condition m
 			result = common.UnavailableState
 		}
 	}
-	log.Info(fmt.Sprintf("For condition '%s', infer state '%s'", "RedisSentinelCustomResource", result))
+	log.Debug("implied state from condition", "condition", "RedisSentinelCustomResource", "state", result)
 	return result
 }
 
 func inferState_RedisReplicationCustomResourceType(ctx context.Context, condition metav1.Condition) string {
-	log := ctrl.LoggerFrom(ctx)
+	log := logx.FromContext(ctx)
 	result := common.UnknownState
 	if condition.Status == metav1.ConditionTrue {
 		result = common.HealthyState
@@ -204,12 +206,12 @@ func inferState_RedisReplicationCustomResourceType(ctx context.Context, conditio
 			result = common.UnavailableState
 		}
 	}
-	log.Info(fmt.Sprintf("For condition '%s', infer state '%s'", "RedisReplicationCustomResource", result))
+	log.Debug("implied state from condition", "condition", "RedisReplicationCustomResource", "state", result)
 	return result
 }
 
 func inferState_RedisConnectionInfoType(ctx context.Context, condition metav1.Condition) string {
-	log := ctrl.LoggerFrom(ctx)
+	log := logx.FromContext(ctx)
 	result := common.UnknownState
 	if condition.Status == metav1.ConditionTrue {
 		result = common.HealthyState
@@ -217,12 +219,12 @@ func inferState_RedisConnectionInfoType(ctx context.Context, condition metav1.Co
 	if condition.Status == metav1.ConditionFalse {
 		result = common.UnavailableState
 	}
-	log.Info(fmt.Sprintf("For condition '%s', infer state '%s'", "RedisConnectionInfo", result))
+	log.Debug("implied state from condition", "condition", "RedisConnectionInfo", "state", result)
 	return result
 }
 
 func inferState_RedisReportedReadyType(ctx context.Context, condition metav1.Condition) string {
-	log := ctrl.LoggerFrom(ctx)
+	log := logx.FromContext(ctx)
 	result := common.UnknownState
 	if condition.Status == metav1.ConditionTrue {
 		result = common.HealthyState
@@ -234,6 +236,6 @@ func inferState_RedisReportedReadyType(ctx context.Context, condition metav1.Con
 			result = common.UnavailableState
 		}
 	}
-	log.Info(fmt.Sprintf("For condition '%s', infer state '%s'", "RedisReportedReady", result))
+	log.Debug("implied state from condition", "condition", "RedisReportedReady", "state", result)
 	return result
 }

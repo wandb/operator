@@ -8,6 +8,7 @@ import (
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/infra/kafka/strimzi"
 	"github.com/wandb/operator/internal/controller/translator"
+	"github.com/wandb/operator/internal/logx"
 	strimziv1 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -45,7 +46,7 @@ func ToKafkaVendorSpec(
 	owner metav1.Object,
 	scheme *runtime.Scheme,
 ) (*strimziv1.Kafka, error) {
-	log := ctrl.LoggerFrom(ctx)
+	ctx, log := logx.IntoContext(ctx, logx.Kafka)
 
 	if !spec.Enabled {
 		return nil, nil
@@ -121,7 +122,7 @@ func ToKafkaNodePoolVendorSpec(
 	owner metav1.Object,
 	scheme *runtime.Scheme,
 ) (*strimziv1.KafkaNodePool, error) {
-	log := ctrl.LoggerFrom(ctx)
+	ctx, log := logx.IntoContext(ctx, logx.Kafka)
 
 	if !spec.Enabled {
 		return nil, nil
