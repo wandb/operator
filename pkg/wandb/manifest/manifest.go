@@ -1,6 +1,11 @@
 package manifest
 
-import corev1 "k8s.io/api/core/v1"
+import (
+	"os"
+
+	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/yaml"
+)
 
 // Manifest defines the structure of the server manifest YAML (e.g. 0.76.1.yaml).
 // It is intended to be a direct mapping of the YAML document for decoding via
@@ -189,4 +194,16 @@ type FileSpec struct {
 	// ConfigMapRef references an existing ConfigMap (in the same namespace) to source the file from.
 	// When set, Inline should be empty.
 	ConfigMapRef string `yaml:"configMapRef,omitempty"`
+}
+
+func GetServerManifest(version string) (Manifest, error) {
+	manifest := Manifest{}
+	manifestData, err := os.ReadFile("hack/testing-manifests/server-manifest/0.76.1.yaml")
+	if err != nil {
+		return Manifest{}, err
+	}
+	if err = yaml.Unmarshal(manifestData, &manifest); err != nil {
+		return Manifest{}, err
+	}
+	return manifest, nil
 }

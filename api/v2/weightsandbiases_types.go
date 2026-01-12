@@ -95,6 +95,8 @@ type WandbAppSpec struct {
 	Hostname string `json:"hostname"`
 	License  string `json:"license,omitempty"`
 
+	Version string `json:"version"`
+
 	Features map[string]bool `json:"features"`
 
 	// +optional

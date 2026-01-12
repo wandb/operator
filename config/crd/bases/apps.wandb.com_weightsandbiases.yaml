@@ -6441,9 +6441,12 @@ spec:
                     - clientSecret
                     - issuerUrl
                     type: object
+                  version:
+                    type: string
                 required:
                 - features
                 - hostname
+                - version
                 type: object
             type: object
           status:

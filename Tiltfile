@@ -40,7 +40,7 @@ DOCKERFILE = '''
 FROM registry.access.redhat.com/ubi9/ubi
 
 ADD tilt_bin/manager /manager
-ADD hack/testing-manifests/server-manifest/0.76.1.yaml /0.76.1.yaml
+ADD hack/testing-manifests/server-manifest/0.76.1.yaml hack/testing-manifests/server-manifest/0.76.1.yaml
 
 RUN mkdir -p /helm/.cache/helm /helm/.config/helm /helm/.local/share/helm
 

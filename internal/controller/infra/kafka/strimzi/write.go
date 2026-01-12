@@ -7,7 +7,6 @@ import (
 	strimziv1 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -109,8 +108,6 @@ func writeNodePoolState(
 	desired *strimziv1.KafkaNodePool,
 ) []metav1.Condition {
 	var actual = &strimziv1.KafkaNodePool{}
-	logger := controllerruntime.LoggerFrom(ctx)
-
 	found, err := common.GetResource(
 		ctx, client, nsnBuilder.NodePoolNsName(), NodePoolResourceType, actual,
 	)

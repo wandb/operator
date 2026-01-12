@@ -8,7 +8,7 @@ import (
 	"github.com/wandb/operator/internal/controller/infra/redis/opstree"
 	"github.com/wandb/operator/internal/controller/translator"
 	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
-	"github.com/wandb/operator/internal/utils"
+	"github.com/wandb/operator/pkg/utils"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"

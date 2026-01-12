@@ -2,6 +2,7 @@ package altinity
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/wandb/operator/internal/controller/common"
@@ -38,6 +39,10 @@ func writeClickHouseConnInfo(
 	var found bool
 	var gvk schema.GroupVersionKind
 	var actual = &corev1.Secret{}
+
+	if connInfo == nil {
+		return nil, errors.New("missing connection info")
+	}
 
 	nsName := nsnBuilder.ConnectionNsName()
 	urlKey := "url"

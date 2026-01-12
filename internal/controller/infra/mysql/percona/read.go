@@ -8,7 +8,6 @@ import (
 	ctrlcommon "github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/translator"
 	pxcv1 "github.com/wandb/operator/internal/vendored/percona-operator/pxc/v1"
-	"github.com/wandb/operator/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -73,6 +72,15 @@ func ReadState(
 			ctx, client, wandbOwner, nsnBuilder, connInfo,
 		)
 		if err != nil {
+			if err.Error() == "missing connection info" {
+				return []metav1.Condition{
+					{
+						Type:   MySQLConnectionInfoType,
+						Status: metav1.ConditionFalse,
+						Reason: ctrlcommon.NoResourceReason,
+					},
+				}, nil
+			}
 			return []metav1.Condition{
 				{
 					Type:   MySQLConnectionInfoType,

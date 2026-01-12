@@ -22,7 +22,6 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 
@@ -42,7 +41,6 @@ import (
 	ctrlClient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/yaml"
 )
 
 const CleanupFinalizer = "wandb.apps.wandb.com/cleanup"
@@ -150,13 +148,6 @@ func Reconcile(
 		return ctrl.Result{}, errors.New("infra state update errors")
 	}
 
-	res, err = reconcileWandbManifest(ctx, client, wandb)
-	// send up the manifest error for now
-	if err != nil {
-		return res, err
-	}
-	ctrlResults = append(ctrlResults, res)
-
 	redisReady := wandb.Status.RedisStatus.Ready
 	mysqlReady := wandb.Status.MySQLStatus.Ready
 	kafkaReady := wandb.Status.KafkaStatus.Ready
@@ -167,12 +158,8 @@ func Reconcile(
 		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
 	}
 
-	manifest := serverManifest.Manifest{}
-	manifestData, err := os.ReadFile("0.76.1.yaml")
+	manifest, err := serverManifest.GetServerManifest(wandb.Spec.Wandb.Version)
 	if err != nil {
-		return ctrl.Result{}, err
-	}
-	if err = yaml.Unmarshal(manifestData, &manifest); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -180,6 +167,7 @@ func Reconcile(
 	for key, enabled := range wandb.Spec.Wandb.Features {
 		manifest.Features[key] = enabled
 	}
+
 	res, err = reconcileWandbManifest(ctx, client, wandb, manifest)
 	// send up the manifest error for now
 	if err != nil {
