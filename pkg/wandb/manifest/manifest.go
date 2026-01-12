@@ -196,9 +196,12 @@ type FileSpec struct {
 	ConfigMapRef string `yaml:"configMapRef,omitempty"`
 }
 
+// This will eventually be loaded externally outside of testing
+var Path = "0.76.1.yaml"
+
 func GetServerManifest(version string) (Manifest, error) {
 	manifest := Manifest{}
-	manifestData, err := os.ReadFile("hack/testing-manifests/server-manifest/0.76.1.yaml")
+	manifestData, err := os.ReadFile(Path)
 	if err != nil {
 		return Manifest{}, err
 	}

@@ -147,6 +147,8 @@ var _ = BeforeSuite(func() {
 
 	err = webhookv2.SetupWeightsAndBiasesWebhookWithManager(mgr)
 	Expect(err).NotTo(HaveOccurred())
+	err = webhookv2.SetupApplicationWebhookWithManager(mgr)
+	Expect(err).NotTo(HaveOccurred())
 
 	go func() {
 		err = mgr.Start(ctx)

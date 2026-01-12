@@ -168,7 +168,7 @@ func Reconcile(
 		manifest.Features[key] = enabled
 	}
 
-	res, err = reconcileWandbManifest(ctx, client, wandb, manifest)
+	res, err = ReconcileWandbManifest(ctx, client, wandb, manifest)
 	// send up the manifest error for now
 	if err != nil {
 		return res, err
@@ -192,9 +192,20 @@ func consolidateResults(results []ctrl.Result) ctrl.Result {
 	}
 }
 
-func reconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest) (ctrl.Result, error) {
+func ReconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest) (ctrl.Result, error) {
 	// Reconcile Wandb Manifest
 	logger := ctrl.LoggerFrom(ctx).WithName("reconcileWandbManifest")
+
+	redisReady := wandb.Status.RedisStatus.Ready
+	mysqlReady := wandb.Status.MySQLStatus.Ready
+	kafkaReady := wandb.Status.KafkaStatus.Ready
+	minioReady := wandb.Status.MinioStatus.Ready
+	clickHouseReady := wandb.Status.ClickHouseStatus.Ready
+
+	if !redisReady || !mysqlReady || !kafkaReady || !minioReady || !clickHouseReady {
+		logger.Info("Infra components not ready yet, requeuing for reconciliation")
+		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
+	}
 
 	logger.Info("Manifest Features", "features", manifest.Features)
 
