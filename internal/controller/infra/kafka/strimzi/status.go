@@ -8,6 +8,7 @@ import (
 	"github.com/samber/lo"
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/translator"
+	"github.com/wandb/operator/internal/logx"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -26,6 +27,7 @@ func ComputeStatus(
 	connection *translator.InfraConnection,
 	currentGeneration int64,
 ) (translator.InfraStatus, []corev1.Event, ctrl.Result) {
+	ctx, _ = logx.IntoContext(ctx, logx.Kafka)
 	result := translator.InfraStatus{}
 
 	if connection != nil {
@@ -154,7 +156,7 @@ func inferStateFromCondition(ctx context.Context, conditionType string, impliedS
 }
 
 func inferState_KafkaCustomResourceType(ctx context.Context, condition metav1.Condition) string {
-	log := ctrl.LoggerFrom(ctx)
+	log := logx.FromContext(ctx)
 	result := common.UnknownState
 	if condition.Status == metav1.ConditionTrue {
 		result = common.HealthyState
@@ -167,12 +169,15 @@ func inferState_KafkaCustomResourceType(ctx context.Context, condition metav1.Co
 			result = common.UnavailableState
 		}
 	}
-	log.Info(fmt.Sprintf("For condition '%s', infer state '%s'", "KafkaCustomResource", result))
+	log.Debug(
+		"implied state", "state", result, "condition", condition.Type,
+		"reason", condition.Reason, "status", condition.Status,
+	)
 	return result
 }
 
 func inferState_NodePoolCustomResourceType(ctx context.Context, condition metav1.Condition) string {
-	log := ctrl.LoggerFrom(ctx)
+	log := logx.FromContext(ctx)
 	result := common.UnknownState
 	if condition.Status == metav1.ConditionTrue {
 		result = common.HealthyState
@@ -185,12 +190,15 @@ func inferState_NodePoolCustomResourceType(ctx context.Context, condition metav1
 			result = common.UnavailableState
 		}
 	}
-	log.Info(fmt.Sprintf("For condition '%s', infer state '%s'", "NodePoolCustomResource", result))
+	log.Debug(
+		"implied state", "state", result, "condition", condition.Type,
+		"reason", condition.Reason, "status", condition.Status,
+	)
 	return result
 }
 
 func inferState_KafkaConnectionInfoType(ctx context.Context, condition metav1.Condition) string {
-	log := ctrl.LoggerFrom(ctx)
+	log := logx.FromContext(ctx)
 	result := common.UnknownState
 	if condition.Status == metav1.ConditionTrue {
 		result = common.HealthyState
@@ -198,12 +206,15 @@ func inferState_KafkaConnectionInfoType(ctx context.Context, condition metav1.Co
 	if condition.Status == metav1.ConditionFalse {
 		result = common.UnavailableState
 	}
-	log.Info(fmt.Sprintf("For condition '%s', infer state '%s'", "KafkaConnectionInfo", result))
+	log.Debug(
+		"implied state", "state", result, "condition", condition.Type,
+		"reason", condition.Reason, "status", condition.Status,
+	)
 	return result
 }
 
 func inferState_KafkaReportedReadyType(ctx context.Context, condition metav1.Condition) string {
-	log := ctrl.LoggerFrom(ctx)
+	log := logx.FromContext(ctx)
 	result := common.UnknownState
 	if condition.Status == metav1.ConditionTrue {
 		result = common.HealthyState
@@ -211,6 +222,9 @@ func inferState_KafkaReportedReadyType(ctx context.Context, condition metav1.Con
 	if condition.Status == metav1.ConditionFalse {
 		result = common.UnavailableState
 	}
-	log.Info(fmt.Sprintf("For condition '%s', infer state '%s'", "KafkaReportedReady", result))
+	log.Debug(
+		"implied state", "state", result, "condition", condition.Type,
+		"reason", condition.Reason, "status", condition.Status,
+	)
 	return result
 }

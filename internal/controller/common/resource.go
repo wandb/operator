@@ -2,12 +2,11 @@ package common
 
 import (
 	"context"
-	"fmt"
 	"reflect"
 
+	"github.com/wandb/operator/internal/logx"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -21,21 +20,27 @@ func GetResource[T client.Object](
 	resourceTypeName string,
 	obj T,
 ) (bool, error) {
-	log := ctrl.LoggerFrom(ctx)
-
-	log.Info(fmt.Sprintf("get %s.%s", namespacedName.Namespace, namespacedName.Name))
+	log := logx.FromContext(ctx)
 
 	err := c.Get(ctx, namespacedName, obj)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			log.Info(fmt.Sprintf("not found %s.%s.%s",
-				resourceTypeName, namespacedName.Namespace, namespacedName.Name),
+			log.Debug(
+				"NotFound", "type", resourceTypeName,
+				"namespace", namespacedName.Namespace, "name", namespacedName.Name,
 			)
 			return false, nil
 		}
-		log.Error(err, "error getting resource", "type", resourceTypeName)
+		log.Error(
+			err, "GetResourceError", "type", resourceTypeName,
+			"namespace", namespacedName.Namespace, "name", namespacedName.Name,
+		)
 		return false, err
 	}
+	log.Debug(
+		"Found", "type", resourceTypeName,
+		"namespace", namespacedName.Namespace, "name", namespacedName.Name,
+	)
 	return true, nil
 }
 
@@ -51,7 +56,7 @@ const (
 // CrudResource is a generic function that gets a resource, and creates it if not found, or updates it if it exists.
 // The getter function should return (nil, nil) if the resource is not found.
 func CrudResource[T client.Object](ctx context.Context, c client.Client, desired T, actual T) (CrudAction, error) {
-	log := ctrl.LoggerFrom(ctx)
+	log := logx.FromContext(ctx)
 
 	var err error
 	var action CrudAction
@@ -60,19 +65,20 @@ func CrudResource[T client.Object](ctx context.Context, c client.Client, desired
 
 	if actualExists && desiredExists {
 		action = UpdateAction
-		log.Info(fmt.Sprintf("update %s.%s", desired.GetNamespace(), desired.GetName()))
+
 		desired.SetResourceVersion(actual.GetResourceVersion())
 		err = c.Update(ctx, desired)
 	}
 	if !actualExists && desiredExists {
 		action = CreateAction
-		log.Info(fmt.Sprintf("create %s.%s", desired.GetNamespace(), desired.GetName()))
 		err = c.Create(ctx, desired)
 	}
 	if actualExists && !desiredExists {
 		action = DeleteAction
-		log.Info(fmt.Sprintf("delete %s.%s", actual.GetNamespace(), actual.GetName()))
 		err = c.Delete(ctx, actual)
+	}
+	if action != NoAction {
+		log.Info(string(action), "namespace", desired.GetNamespace(), "name", desired.GetName())
 	}
 	if err != nil {
 		log.Error(err, "error on crud resource", "action", action)
