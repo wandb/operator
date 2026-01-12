@@ -7,6 +7,7 @@ import (
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/infra/mysql/percona"
 	"github.com/wandb/operator/internal/controller/translator"
+	"github.com/wandb/operator/internal/logx"
 	pxcv1 "github.com/wandb/operator/internal/vendored/percona-operator/pxc/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -90,7 +91,7 @@ func ToMySQLVendorSpec(
 	owner metav1.Object,
 	scheme *runtime.Scheme,
 ) (*pxcv1.PerconaXtraDBCluster, error) {
-	log := ctrl.LoggerFrom(ctx)
+	ctx, log := logx.IntoContext(ctx, logx.Mysql)
 
 	if !spec.Enabled {
 		return nil, nil

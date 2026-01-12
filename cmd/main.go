@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/wandb/operator/internal/logx"
 	chiv1 "github.com/wandb/operator/internal/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
 	miniov2 "github.com/wandb/operator/internal/vendored/minio-operator/minio.min.io/v2"
 	pxcv1 "github.com/wandb/operator/internal/vendored/percona-operator/pxc/v1"
@@ -32,7 +33,6 @@ import (
 	redissentinelv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redissentinel/v1beta2"
 	strimziv1 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1"
 	"github.com/wandb/operator/pkg/wandb/spec/channel/deployer"
-
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
@@ -124,7 +124,7 @@ func main() {
 	setFlagsFromEnvironment()
 	flag.Parse()
 
-	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+	ctrl.SetLogger(logx.WithFilter(opts))
 
 	// if the enable-http2 flag is false (the default), http/2 should be disabled
 	// due to its vulnerabilities. More specifically, disabling http/2 will

@@ -7,6 +7,7 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/infra/clickhouse/altinity"
+	"github.com/wandb/operator/internal/logx"
 	chiv2 "github.com/wandb/operator/internal/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -25,7 +26,7 @@ func ToClickHouseVendorSpec(
 	owner metav1.Object,
 	scheme *runtime.Scheme,
 ) (*chiv2.ClickHouseInstallation, error) {
-	log := ctrl.LoggerFrom(ctx)
+	ctx, log := logx.IntoContext(ctx, logx.ClickHouse)
 
 	if !spec.Enabled {
 		return nil, nil

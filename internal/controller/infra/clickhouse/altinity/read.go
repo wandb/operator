@@ -7,11 +7,11 @@ import (
 
 	ctrlcommon "github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/translator"
+	"github.com/wandb/operator/internal/logx"
 	chiv1 "github.com/wandb/operator/internal/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -38,6 +38,7 @@ func ReadState(
 	specNamespacedName types.NamespacedName,
 	wandbOwner client.Object,
 ) ([]metav1.Condition, *translator.InfraConnection) {
+	ctx, _ = logx.IntoContext(ctx, logx.ClickHouse)
 	var actual = &chiv1.ClickHouseInstallation{}
 
 	nsnBuilder := createNsNameBuilder(specNamespacedName)
@@ -149,7 +150,7 @@ func chPodsRunningStatus(
 func computeClickHouseReportedReadyCondition(
 	ctx context.Context, chi *chiv1.ClickHouseInstallation, podsRunning map[string]bool,
 ) []metav1.Condition {
-	log := ctrl.LoggerFrom(ctx)
+	log := logx.FromContext(ctx)
 
 	if chi == nil {
 		return []metav1.Condition{}
@@ -163,7 +164,9 @@ func computeClickHouseReportedReadyCondition(
 		}
 	}
 
-	log.Info(fmt.Sprintf("%d of %d ClickHouse Pods are running", runningCount, podCount))
+	log.Info(
+		"Clickhouse pods status", "running", runningCount, "total", podCount,
+	)
 
 	status := metav1.ConditionUnknown
 	reason := ctrlcommon.UnknownReason

@@ -8,6 +8,7 @@ import (
 	"github.com/wandb/operator/internal/controller/infra/redis/opstree"
 	"github.com/wandb/operator/internal/controller/translator"
 	"github.com/wandb/operator/internal/defaults"
+	"github.com/wandb/operator/internal/logx"
 	rediscommon "github.com/wandb/operator/internal/vendored/redis-operator/common/v1beta2"
 	redisv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redis/v1beta2"
 	redisreplicationv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redisreplication/v1beta2"
@@ -51,7 +52,7 @@ func ToRedisStandaloneVendorSpec(
 	owner metav1.Object,
 	scheme *runtime.Scheme,
 ) (*redisv1beta2.Redis, error) {
-	log := ctrl.LoggerFrom(ctx)
+	ctx, log := logx.IntoContext(ctx, logx.Redis)
 
 	if !spec.Enabled {
 		return nil, nil
@@ -134,7 +135,7 @@ func ToRedisSentinelVendorSpec(
 	owner metav1.Object,
 	scheme *runtime.Scheme,
 ) (*redissentinelv1beta2.RedisSentinel, error) {
-	log := ctrl.LoggerFrom(ctx)
+	ctx, log := logx.IntoContext(ctx, logx.Redis)
 
 	if !spec.Enabled {
 		return nil, nil
@@ -209,7 +210,7 @@ func ToRedisReplicationVendorSpec(
 	owner metav1.Object,
 	scheme *runtime.Scheme,
 ) (*redisreplicationv1beta2.RedisReplication, error) {
-	log := ctrl.LoggerFrom(ctx)
+	ctx, log := logx.IntoContext(ctx, logx.Redis)
 
 	if !spec.Enabled {
 		return nil, nil

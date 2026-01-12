@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/wandb/operator/internal/controller/common"
+	"github.com/wandb/operator/internal/logx"
 	strimziv1 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -17,6 +18,7 @@ func WriteState(
 	desiredKafka *strimziv1.Kafka,
 	desiredNodePool *strimziv1.KafkaNodePool,
 ) []metav1.Condition {
+	ctx, _ = logx.IntoContext(ctx, logx.Kafka)
 	results := make([]metav1.Condition, 0)
 
 	nsnBuilder := createNsNameBuilder(specNamespacedName)

@@ -6,13 +6,13 @@ import (
 
 	ctrlcommon "github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/translator"
+	"github.com/wandb/operator/internal/logx"
 	redisv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redis/v1beta2"
 	redisreplicationv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redisreplication/v1beta2"
 	redissentinelv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redissentinel/v1beta2"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -22,6 +22,7 @@ func ReadState(
 	specNamespacedName types.NamespacedName,
 	wandbOwner client.Object,
 ) ([]metav1.Condition, *translator.InfraConnection) {
+	ctx, _ = logx.IntoContext(ctx, logx.Redis)
 	var standaloneActual = &redisv1beta2.Redis{}
 	var sentinelActual = &redissentinelv1beta2.RedisSentinel{}
 	var replicationActual = &redisreplicationv1beta2.RedisReplication{}
@@ -178,7 +179,7 @@ func ReadState(
 func computeStandaloneReportedReadyCondition(
 	ctx context.Context, podsRunning map[string]bool,
 ) []metav1.Condition {
-	log := ctrl.LoggerFrom(ctx)
+	log := logx.FromContext(ctx)
 	var runningCount, podCount int
 
 	for _, isRunning := range podsRunning {
@@ -187,7 +188,7 @@ func computeStandaloneReportedReadyCondition(
 			runningCount++
 		}
 	}
-	log.Info(fmt.Sprintf("%d of %d Redis Standalone Pods are running", runningCount, podCount))
+	log.Info("Redis Standalone pods status", "running", runningCount, "total", podCount)
 
 	status := metav1.ConditionUnknown
 	reason := ctrlcommon.UnknownReason
@@ -199,7 +200,7 @@ func computeStandaloneReportedReadyCondition(
 	} else if podCount > 0 {
 		status = metav1.ConditionFalse
 		reason = ctrlcommon.ResourceExistsReason
-		message = fmt.Sprintf("%d of %d pods running", runningCount, podCount)
+		log.Info("Redis Standalone pods not all running", "running", runningCount, "total", podCount)
 	}
 
 	return []metav1.Condition{
@@ -215,7 +216,7 @@ func computeStandaloneReportedReadyCondition(
 func computeSentinelReportedReadyCondition(
 	ctx context.Context, sentinelPodsRunning, replicationPodsRunning map[string]bool,
 ) []metav1.Condition {
-	log := ctrl.LoggerFrom(ctx)
+	log := logx.FromContext(ctx)
 
 	var sentinelRunningCount, sentinelPodCount int
 	for _, isRunning := range sentinelPodsRunning {
@@ -224,7 +225,7 @@ func computeSentinelReportedReadyCondition(
 			sentinelRunningCount++
 		}
 	}
-	log.Info(fmt.Sprintf("%d of %d Redis Sentinel Pods are running", sentinelRunningCount, sentinelPodCount))
+	log.Info("Redis Sentinel pods status", "running", sentinelRunningCount, "total", sentinelPodCount)
 
 	var replicationRunningCount, replicationPodCount int
 	for _, isRunning := range replicationPodsRunning {
@@ -233,7 +234,7 @@ func computeSentinelReportedReadyCondition(
 			replicationRunningCount++
 		}
 	}
-	log.Info(fmt.Sprintf("%d of %d Redis Replication Pods are running", replicationRunningCount, replicationPodCount))
+	log.Info("Redis Replication pods status", "running", replicationRunningCount, "total", replicationPodCount)
 
 	status := metav1.ConditionUnknown
 	reason := ctrlcommon.UnknownReason

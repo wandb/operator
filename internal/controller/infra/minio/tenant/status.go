@@ -8,6 +8,7 @@ import (
 	"github.com/samber/lo"
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/translator"
+	"github.com/wandb/operator/internal/logx"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -25,6 +26,7 @@ func ComputeStatus(
 	connection *translator.InfraConnection,
 	currentGeneration int64,
 ) (translator.InfraStatus, []corev1.Event, ctrl.Result) {
+	ctx, _ = logx.IntoContext(ctx, logx.Minio)
 	result := translator.InfraStatus{}
 
 	if connection != nil {
@@ -147,7 +149,7 @@ func inferStateFromCondition(ctx context.Context, conditionType string, impliedS
 }
 
 func inferState_MinioCustomResourceType(ctx context.Context, condition metav1.Condition) string {
-	log := ctrl.LoggerFrom(ctx)
+	log := logx.FromContext(ctx)
 	result := common.UnknownState
 	if condition.Status == metav1.ConditionTrue {
 		result = common.HealthyState
@@ -160,12 +162,15 @@ func inferState_MinioCustomResourceType(ctx context.Context, condition metav1.Co
 			result = common.UnavailableState
 		}
 	}
-	log.Info(fmt.Sprintf("For condition '%s', infer state '%s'", "MinioCustomResource", result))
+	log.Debug(
+		"implied state", "state", result, "condition", condition.Type,
+		"reason", condition.Reason, "status", condition.Status,
+	)
 	return result
 }
 
 func inferState_MinioConnectionInfoType(ctx context.Context, condition metav1.Condition) string {
-	log := ctrl.LoggerFrom(ctx)
+	log := logx.FromContext(ctx)
 	result := common.UnknownState
 	if condition.Status == metav1.ConditionTrue {
 		result = common.HealthyState
@@ -173,12 +178,15 @@ func inferState_MinioConnectionInfoType(ctx context.Context, condition metav1.Co
 	if condition.Status == metav1.ConditionFalse {
 		result = common.UnavailableState
 	}
-	log.Info(fmt.Sprintf("For condition '%s', infer state '%s'", "MinioConnectionInfo", result))
+	log.Debug(
+		"implied state", "state", result, "condition", condition.Type,
+		"reason", condition.Reason, "status", condition.Status,
+	)
 	return result
 }
 
 func inferState_MinioReportedReadyType(ctx context.Context, condition metav1.Condition) string {
-	log := ctrl.LoggerFrom(ctx)
+	log := logx.FromContext(ctx)
 	result := common.UnknownState
 	if condition.Status == metav1.ConditionTrue {
 		result = common.HealthyState
@@ -193,6 +201,9 @@ func inferState_MinioReportedReadyType(ctx context.Context, condition metav1.Con
 			result = common.DegradedState
 		}
 	}
-	log.Info(fmt.Sprintf("For condition '%s', infer state '%s'", "MinioReportedReady", result))
+	log.Debug(
+		"implied state", "state", result, "condition", condition.Type,
+		"reason", condition.Reason, "status", condition.Status,
+	)
 	return result
 }

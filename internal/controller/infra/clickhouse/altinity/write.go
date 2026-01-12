@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/wandb/operator/internal/controller/common"
+	"github.com/wandb/operator/internal/logx"
 	chiv1 "github.com/wandb/operator/internal/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -21,6 +22,7 @@ func WriteState(
 	specNamespacedName types.NamespacedName,
 	desired *chiv1.ClickHouseInstallation,
 ) []metav1.Condition {
+	ctx, _ = logx.IntoContext(ctx, logx.ClickHouse)
 	var actual = &chiv1.ClickHouseInstallation{}
 
 	nsnBuilder := createNsNameBuilder(specNamespacedName)

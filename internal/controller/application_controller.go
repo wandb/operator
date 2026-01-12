@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"reflect"
 
+	wandbv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/internal/logx"
 	"github.com/wandb/operator/pkg/utils"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -30,9 +32,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
-
-	wandbv2 "github.com/wandb/operator/api/v2"
 )
 
 const applicationFinalizer = "applications.apps.wandb.com/finalizer"
@@ -58,7 +57,7 @@ type ApplicationReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.20.0/pkg/reconcile
 func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
+	ctx, logger := logx.IntoContext(ctx, logx.ReconcileAppV2)
 
 	var app wandbv2.Application
 	if err := r.Get(ctx, req.NamespacedName, &app); err != nil {
@@ -180,7 +179,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 // reconcileDeployment handles Deployment type applications
 func (r *ApplicationReconciler) reconcileDeployment(ctx context.Context, app *wandbv2.Application) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
+	logger := logx.FromContext(ctx)
 	logger.Info("Reconciling Deployment", "Application", app.Name)
 
 	deployment := &appsv1.Deployment{}
@@ -241,7 +240,7 @@ func (r *ApplicationReconciler) reconcileDeployment(ctx context.Context, app *wa
 
 // deleteDeployment deletes the Deployment associated with the Application
 func (r *ApplicationReconciler) deleteDeployment(ctx context.Context, app *wandbv2.Application) error {
-	logger := log.FromContext(ctx)
+	logger := logx.FromContext(ctx)
 	logger.Info("Deleting Deployment", "Application", app.Name)
 
 	deployment := &appsv1.Deployment{}
@@ -267,14 +266,14 @@ func (r *ApplicationReconciler) deleteDeployment(ctx context.Context, app *wandb
 
 // reconcileRollout handles Rollout type applications
 func (r *ApplicationReconciler) reconcileRollout(ctx context.Context, app *wandbv2.Application) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
+	logger := logx.FromContext(ctx)
 	logger.Info("Reconciling Rollout", "Application", app.Name)
 	return ctrl.Result{}, nil
 }
 
 // reconcileStatefulSet handles StatefulSet type applications
 func (r *ApplicationReconciler) reconcileStatefulSet(ctx context.Context, app *wandbv2.Application) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
+	logger := logx.FromContext(ctx)
 	logger.Info("Reconciling StatefulSet", "Application", app.Name)
 
 	statefulSet := &appsv1.StatefulSet{}
@@ -335,7 +334,7 @@ func (r *ApplicationReconciler) reconcileStatefulSet(ctx context.Context, app *w
 
 // deleteStatefulSet deletes the StatefulSet associated with the Application
 func (r *ApplicationReconciler) deleteStatefulSet(ctx context.Context, app *wandbv2.Application) error {
-	logger := log.FromContext(ctx)
+	logger := logx.FromContext(ctx)
 	logger.Info("Deleting StatefulSet", "Application", app.Name)
 
 	statefulSet := &appsv1.StatefulSet{}
@@ -361,14 +360,14 @@ func (r *ApplicationReconciler) deleteStatefulSet(ctx context.Context, app *wand
 
 // reconcileDaemonSet handles DaemonSet type applications
 func (r *ApplicationReconciler) reconcileDaemonSet(ctx context.Context, app *wandbv2.Application) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
+	logger := logx.FromContext(ctx)
 	logger.Info("Reconciling DaemonSet", "Application", app.Name)
 	return ctrl.Result{}, nil
 }
 
 // reconcileJobs handles multiple Job resources defined in the Application spec
 func (r *ApplicationReconciler) reconcileJobs(ctx context.Context, app *wandbv2.Application) error {
-	logger := log.FromContext(ctx)
+	logger := logx.FromContext(ctx)
 
 	for i, job := range app.Spec.Jobs {
 		jobName := job.Name
@@ -437,7 +436,7 @@ func (r *ApplicationReconciler) reconcileJobs(ctx context.Context, app *wandbv2.
 
 // deleteJobs deletes all Jobs associated with the Application
 func (r *ApplicationReconciler) deleteJobs(ctx context.Context, app *wandbv2.Application) error {
-	logger := log.FromContext(ctx)
+	logger := logx.FromContext(ctx)
 	logger.Info("Deleting Jobs", "Application", app.Name)
 
 	jobList := &batchv1.JobList{}
@@ -470,7 +469,7 @@ func (r *ApplicationReconciler) deleteJobs(ctx context.Context, app *wandbv2.App
 
 // reconcileCronJobs handles multiple CronJob resources defined in the Application spec
 func (r *ApplicationReconciler) reconcileCronJobs(ctx context.Context, app *wandbv2.Application) error {
-	logger := log.FromContext(ctx)
+	logger := logx.FromContext(ctx)
 
 	for i, cronJob := range app.Spec.CronJobs {
 		cronJobName := cronJob.Name
@@ -524,7 +523,7 @@ func (r *ApplicationReconciler) reconcileCronJobs(ctx context.Context, app *wand
 
 // deleteCronJobs deletes all CronJobs associated with the Application
 func (r *ApplicationReconciler) deleteCronJobs(ctx context.Context, app *wandbv2.Application) error {
-	logger := log.FromContext(ctx)
+	logger := logx.FromContext(ctx)
 	logger.Info("Deleting CronJobs", "Application", app.Name)
 
 	cronJobList := &batchv1.CronJobList{}
@@ -557,7 +556,7 @@ func (r *ApplicationReconciler) deleteCronJobs(ctx context.Context, app *wandbv2
 
 // reconcileService ensures a Service exists/updated when specified in the Application spec
 func (r *ApplicationReconciler) reconcileService(ctx context.Context, app *wandbv2.Application) error {
-	logger := log.FromContext(ctx)
+	logger := logx.FromContext(ctx)
 
 	if app.Spec.ServiceTemplate == nil {
 		// Nothing to reconcile
@@ -643,7 +642,7 @@ func (r *ApplicationReconciler) reconcileService(ctx context.Context, app *wandb
 
 // deleteService deletes the Service associated with the Application
 func (r *ApplicationReconciler) deleteService(ctx context.Context, app *wandbv2.Application) error {
-	logger := log.FromContext(ctx)
+	logger := logx.FromContext(ctx)
 	svc := &corev1.Service{}
 	if err := r.Get(ctx, client.ObjectKey{Namespace: app.Namespace, Name: app.Name}, svc); err != nil {
 		if errors.IsNotFound(err) {
