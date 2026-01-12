@@ -79,9 +79,11 @@ func Reconcile(
 	if isFlaggedForDeletion && !wandb.ObjectMeta.DeletionTimestamp.IsZero() {
 		if ctrlqueue.ContainsString(wandb.GetFinalizers(), CleanupFinalizer) {
 
-			// try to keep stuff around that will allow recreation of WandB CR (and Infra) with
-			// same data and credentials
-			if !wandb.Spec.AutoCleanupEnabled {
+			switch kafkaRetentionPolicy(ctx, wandb).OnDelete {
+			case apiv2.WBPurgeOnDelete:
+				log.Info("TODO - Purging Kafka data on deletion")
+				break
+			case apiv2.WBPreserveOnDelete:
 				if err = kafkaPreserveFinalizer(ctx, client, wandb); err != nil {
 					return ctrl.Result{}, err
 				}

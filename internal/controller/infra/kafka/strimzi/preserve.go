@@ -47,7 +47,7 @@ func PreserveFinalizer(
 
 	if err = cl.Update(ctx, actual); err != nil {
 		if !errors.IsNotFound(err) {
-			log.Info("error removing WandB obj ref from kafka connection info secret")
+			log.Error(err, "error removing WandB obj ref from kafka connection info secret")
 			return err
 		}
 	}
