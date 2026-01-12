@@ -169,7 +169,10 @@ func inferState_KafkaCustomResourceType(ctx context.Context, condition metav1.Co
 			result = common.UnavailableState
 		}
 	}
-	log.Debug("implied state from condition", "condition", "KafkaCustomResource", "state", result)
+	log.Debug(
+		"implied state", "state", result, "condition", condition.Type,
+		"reason", condition.Reason, "status", condition.Status,
+	)
 	return result
 }
 
@@ -187,7 +190,10 @@ func inferState_NodePoolCustomResourceType(ctx context.Context, condition metav1
 			result = common.UnavailableState
 		}
 	}
-	log.Debug("implied state from condition", "condition", "NodePoolCustomResource", "state", result)
+	log.Debug(
+		"implied state", "state", result, "condition", condition.Type,
+		"reason", condition.Reason, "status", condition.Status,
+	)
 	return result
 }
 
@@ -200,7 +206,10 @@ func inferState_KafkaConnectionInfoType(ctx context.Context, condition metav1.Co
 	if condition.Status == metav1.ConditionFalse {
 		result = common.UnavailableState
 	}
-	log.Debug("implied state from condition", "condition", "KafkaConnectionInfo", "state", result)
+	log.Debug(
+		"implied state", "state", result, "condition", condition.Type,
+		"reason", condition.Reason, "status", condition.Status,
+	)
 	return result
 }
 
@@ -213,6 +222,9 @@ func inferState_KafkaReportedReadyType(ctx context.Context, condition metav1.Con
 	if condition.Status == metav1.ConditionFalse {
 		result = common.UnavailableState
 	}
-	log.Debug("implied state from condition", "condition", "KafkaReportedReady", "state", result)
+	log.Debug(
+		"implied state", "state", result, "condition", condition.Type,
+		"reason", condition.Reason, "status", condition.Status,
+	)
 	return result
 }

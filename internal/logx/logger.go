@@ -23,7 +23,7 @@ func NewLogger(l logr.Logger) Logger {
 
 // Debug logs a debug message (V(-1) level).
 func (l Logger) Debug(msg string, keysAndValues ...any) {
-	l.V(DebugLevel).Logger.WithValues("level", "debug").Info(msg, keysAndValues...)
+	l.V(DebugLevel).Logger.Info(msg, keysAndValues...)
 }
 
 // Info logs an informational message (V(0) level).
@@ -33,7 +33,7 @@ func (l Logger) Info(msg string, keysAndValues ...any) {
 
 // Warn logs a warning message (Info level, logr doesn't distinguish warn).
 func (l Logger) Warn(msg string, keysAndValues ...any) {
-	l.V(WarnLevel).Logger.WithValues("level", "warn").Info(msg, keysAndValues...)
+	l.V(WarnLevel).Logger.Info(msg, keysAndValues...)
 }
 
 // Error logs an error message.

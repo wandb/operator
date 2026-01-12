@@ -162,7 +162,10 @@ func inferState_ClickHouseCustomResourceType(ctx context.Context, condition meta
 			result = common.UnavailableState
 		}
 	}
-	log.Debug("implied state from condition", "condition", "ClickHouseCustomResource", "state", result)
+	log.Debug(
+		"implied state", "state", result, "condition", condition.Type,
+		"reason", condition.Reason, "status", condition.Status,
+	)
 	return result
 }
 
@@ -175,7 +178,10 @@ func inferState_ClickHouseConnectionInfoType(ctx context.Context, condition meta
 	if condition.Status == metav1.ConditionFalse {
 		result = common.UnavailableState
 	}
-	log.Debug("implied state from condition", "condition", "ClickHouseConnectionInfo", "state", result)
+	log.Debug(
+		"implied state", "state", result, "condition", condition.Type,
+		"reason", condition.Reason, "status", condition.Status,
+	)
 	return result
 }
 
@@ -192,6 +198,9 @@ func inferState_ClickHouseReportedReadyType(ctx context.Context, condition metav
 			result = common.DegradedState
 		}
 	}
-	log.Debug("implied state from condition", "condition", "ClickHouseReportedReady", "state", result)
+	log.Debug(
+		"implied state", "state", result, "condition", condition.Type,
+		"reason", condition.Reason, "status", condition.Status,
+	)
 	return result
 }

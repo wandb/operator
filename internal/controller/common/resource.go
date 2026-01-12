@@ -2,7 +2,6 @@ package common
 
 import (
 	"context"
-	"fmt"
 	"reflect"
 
 	"github.com/wandb/operator/internal/logx"
@@ -23,19 +22,25 @@ func GetResource[T client.Object](
 ) (bool, error) {
 	log := logx.FromContext(ctx)
 
-	log.Info(fmt.Sprintf("get %s.%s", namespacedName.Namespace, namespacedName.Name))
-
 	err := c.Get(ctx, namespacedName, obj)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			log.Info(fmt.Sprintf("not found %s.%s.%s",
-				resourceTypeName, namespacedName.Namespace, namespacedName.Name),
+			log.Debug(
+				"NotFound", "type", resourceTypeName,
+				"namespace", namespacedName.Namespace, "name", namespacedName.Name,
 			)
 			return false, nil
 		}
-		log.Error(err, "error getting resource", "type", resourceTypeName)
+		log.Error(
+			err, "GetResourceError", "type", resourceTypeName,
+			"namespace", namespacedName.Namespace, "name", namespacedName.Name,
+		)
 		return false, err
 	}
+	log.Debug(
+		"Found", "type", resourceTypeName,
+		"namespace", namespacedName.Namespace, "name", namespacedName.Name,
+	)
 	return true, nil
 }
 
@@ -60,19 +65,20 @@ func CrudResource[T client.Object](ctx context.Context, c client.Client, desired
 
 	if actualExists && desiredExists {
 		action = UpdateAction
-		log.Info(fmt.Sprintf("update %s.%s", desired.GetNamespace(), desired.GetName()))
+
 		desired.SetResourceVersion(actual.GetResourceVersion())
 		err = c.Update(ctx, desired)
 	}
 	if !actualExists && desiredExists {
 		action = CreateAction
-		log.Info(fmt.Sprintf("create %s.%s", desired.GetNamespace(), desired.GetName()))
 		err = c.Create(ctx, desired)
 	}
 	if actualExists && !desiredExists {
 		action = DeleteAction
-		log.Info(fmt.Sprintf("delete %s.%s", actual.GetNamespace(), actual.GetName()))
 		err = c.Delete(ctx, actual)
+	}
+	if action != NoAction {
+		log.Info(string(action), "namespace", desired.GetNamespace(), "name", desired.GetName())
 	}
 	if err != nil {
 		log.Error(err, "error on crud resource", "action", action)

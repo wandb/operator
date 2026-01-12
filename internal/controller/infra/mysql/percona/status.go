@@ -162,7 +162,10 @@ func inferState_MySQLCustomResourceType(ctx context.Context, condition metav1.Co
 			result = common.UnavailableState
 		}
 	}
-	log.Debug("implied state from condition", "condition", "MySQLCustomResource", "state", result)
+	log.Debug(
+		"implied state", "state", result, "condition", condition.Type,
+		"reason", condition.Reason, "status", condition.Status,
+	)
 	return result
 }
 
@@ -175,7 +178,10 @@ func inferState_MySQLConnectionInfoType(ctx context.Context, condition metav1.Co
 	if condition.Status == metav1.ConditionFalse {
 		result = common.UnavailableState
 	}
-	log.Debug("implied state from condition", "condition", "MySQLConnectionInfo", "state", result)
+	log.Debug(
+		"implied state", "state", result, "condition", condition.Type,
+		"reason", condition.Reason, "status", condition.Status,
+	)
 	return result
 }
 
@@ -197,6 +203,9 @@ func inferState_MySQLReportedReadyType(ctx context.Context, condition metav1.Con
 			result = common.UnavailableState
 		}
 	}
-	log.Debug("implied state from condition", "condition", "MySQLReportedReady", "state", result)
+	log.Debug(
+		"implied state", "state", result, "condition", condition.Type,
+		"reason", condition.Reason, "status", condition.Status,
+	)
 	return result
 }

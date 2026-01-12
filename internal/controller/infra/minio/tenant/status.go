@@ -162,7 +162,10 @@ func inferState_MinioCustomResourceType(ctx context.Context, condition metav1.Co
 			result = common.UnavailableState
 		}
 	}
-	log.Debug("implied state from condition", "condition", "MinioCustomResource", "state", result)
+	log.Debug(
+		"implied state", "state", result, "condition", condition.Type,
+		"reason", condition.Reason, "status", condition.Status,
+	)
 	return result
 }
 
@@ -175,7 +178,10 @@ func inferState_MinioConnectionInfoType(ctx context.Context, condition metav1.Co
 	if condition.Status == metav1.ConditionFalse {
 		result = common.UnavailableState
 	}
-	log.Debug("implied state from condition", "condition", "MinioConnectionInfo", "state", result)
+	log.Debug(
+		"implied state", "state", result, "condition", condition.Type,
+		"reason", condition.Reason, "status", condition.Status,
+	)
 	return result
 }
 
@@ -195,6 +201,9 @@ func inferState_MinioReportedReadyType(ctx context.Context, condition metav1.Con
 			result = common.DegradedState
 		}
 	}
-	log.Debug("implied state from condition", "condition", "MinioReportedReady", "state", result)
+	log.Debug(
+		"implied state", "state", result, "condition", condition.Type,
+		"reason", condition.Reason, "status", condition.Status,
+	)
 	return result
 }
