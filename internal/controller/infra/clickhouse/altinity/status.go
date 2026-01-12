@@ -8,6 +8,7 @@ import (
 	"github.com/samber/lo"
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/translator"
+	"github.com/wandb/operator/internal/logx"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -25,6 +26,7 @@ func ComputeStatus(
 	connection *translator.InfraConnection,
 	currentGeneration int64,
 ) (translator.InfraStatus, []corev1.Event, ctrl.Result) {
+	ctx, _ = logx.IntoContext(ctx, logx.ClickHouse)
 	result := translator.InfraStatus{}
 
 	if connection != nil {
@@ -147,7 +149,7 @@ func inferStateFromCondition(ctx context.Context, conditionType string, impliedS
 }
 
 func inferState_ClickHouseCustomResourceType(ctx context.Context, condition metav1.Condition) string {
-	log := ctrl.LoggerFrom(ctx)
+	log := logx.FromContext(ctx)
 	result := common.UnknownState
 	if condition.Status == metav1.ConditionTrue {
 		result = common.HealthyState
@@ -160,12 +162,15 @@ func inferState_ClickHouseCustomResourceType(ctx context.Context, condition meta
 			result = common.UnavailableState
 		}
 	}
-	log.Info(fmt.Sprintf("For condition '%s', infer state '%s'", "ClickHouseCustomResource", result))
+	log.Debug(
+		"implied state", "state", result, "condition", condition.Type,
+		"reason", condition.Reason, "status", condition.Status,
+	)
 	return result
 }
 
 func inferState_ClickHouseConnectionInfoType(ctx context.Context, condition metav1.Condition) string {
-	log := ctrl.LoggerFrom(ctx)
+	log := logx.FromContext(ctx)
 	result := common.UnknownState
 	if condition.Status == metav1.ConditionTrue {
 		result = common.HealthyState
@@ -173,12 +178,15 @@ func inferState_ClickHouseConnectionInfoType(ctx context.Context, condition meta
 	if condition.Status == metav1.ConditionFalse {
 		result = common.UnavailableState
 	}
-	log.Info(fmt.Sprintf("For condition '%s', infer state '%s'", "ClickHouseConnectionInfo", result))
+	log.Debug(
+		"implied state", "state", result, "condition", condition.Type,
+		"reason", condition.Reason, "status", condition.Status,
+	)
 	return result
 }
 
 func inferState_ClickHouseReportedReadyType(ctx context.Context, condition metav1.Condition) string {
-	log := ctrl.LoggerFrom(ctx)
+	log := logx.FromContext(ctx)
 	result := common.UnknownState
 	if condition.Status == metav1.ConditionTrue {
 		result = common.HealthyState
@@ -190,6 +198,9 @@ func inferState_ClickHouseReportedReadyType(ctx context.Context, condition metav
 			result = common.DegradedState
 		}
 	}
-	log.Info(fmt.Sprintf("For condition '%s', infer state '%s'", "ClickHouseReportedReady", result))
+	log.Debug(
+		"implied state", "state", result, "condition", condition.Type,
+		"reason", condition.Reason, "status", condition.Status,
+	)
 	return result
 }

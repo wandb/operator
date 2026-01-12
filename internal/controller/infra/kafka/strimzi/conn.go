@@ -6,11 +6,11 @@ import (
 
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/translator"
+	"github.com/wandb/operator/internal/logx"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/utils/ptr"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -62,7 +62,7 @@ func writeKafkaConnInfo(
 ) (
 	*translator.InfraConnection, error,
 ) {
-	log := ctrl.LoggerFrom(ctx)
+	log := logx.FromContext(ctx)
 
 	var err error
 	var found bool

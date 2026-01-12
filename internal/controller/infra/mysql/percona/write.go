@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/wandb/operator/internal/controller/common"
+	"github.com/wandb/operator/internal/logx"
 	pxcv1 "github.com/wandb/operator/internal/vendored/percona-operator/pxc/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -21,6 +22,7 @@ func WriteState(
 	specNamespacedName types.NamespacedName,
 	desired *pxcv1.PerconaXtraDBCluster,
 ) []metav1.Condition {
+	ctx, _ = logx.IntoContext(ctx, logx.Mysql)
 	var actual = &pxcv1.PerconaXtraDBCluster{}
 
 	nsnBuilder := createNsNameBuilder(specNamespacedName)

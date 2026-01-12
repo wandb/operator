@@ -28,6 +28,7 @@ import (
 	"github.com/samber/lo"
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/ctrlqueue"
+	"github.com/wandb/operator/internal/logx"
 	strimziv1 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1"
 	oputils "github.com/wandb/operator/pkg/utils"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
@@ -40,7 +41,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	ctrlClient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 const CleanupFinalizer = "cleanup.app.wandb.com"
@@ -55,7 +55,7 @@ func Reconcile(
 	recorder record.EventRecorder,
 	wandb *apiv2.WeightsAndBiases,
 ) (ctrl.Result, error) {
-	log := ctrllog.FromContext(ctx)
+	ctx, log := logx.IntoContext(ctx, logx.ReconcileInfraV2)
 
 	var err error
 
