@@ -358,6 +358,14 @@ applications:
         value: "/jwks.json"
       - name: GORILLA_VIEW_SPEC_UPDATER_EXECUTABLE
         value: "/view-spec-updater-linux"
+      - name: MIGRATE_RUNS_DB
+        sources:
+          - name: default
+            type: mysql
+      - name: MIGRATE_USAGE_DB
+        sources:
+          - name: default
+            type: mysql
     image:
       repository: wandb/megabinary
       tag: 0.76.1
@@ -369,7 +377,7 @@ applications:
         command:
           - bash
           - -c
-          - "./megabinary migrate --db $GORILLA_METADATA_STORE --squash true --runs-db $GORILLA_RUN_STORE --usage-db $GORILLA_USAGE_STORE"
+          - "./megabinary migrate --db $GORILLA_METADATA_STORE --squash true"
     args:
       - gorilla
     ports:
@@ -399,21 +407,37 @@ applications:
       - frontend
       - kafka
       - flatRunsV2Producer
+    command:
+      - sleep
+      - infinity
     env:
+      - name: GOMEMLIMIT
+        value: "3500MiB"
+      - name: GOMAXPROCS
+        value: "1"
+      - name: ENABLE_SERVICES
+        value: "gorilla,nginx,local"
       - name: WEAVE_ENABLED
-        value: "true"
+        value: "false"
       - name: PARQUET_ENABLED
-        value: "true"
+        value: "false"
+      - name: GLUE_ENABLED
+        value: "false"
       - name: OPERATOR_ENABLED
         value: "true"
       - name: LOGGING_ENABLED
         value: "true"
       - name: ANACONDA_ENABLED
         value: "false"
-      - name: GLUE_ENABLED
-        value: "false"
       - name: GORILLA_FILEMETA_ENABLED
         value: "false"
+    resources:
+      limits:
+        cpu: "1"
+        memory: 4Gi
+      requests:
+        cpu: 250m
+        memory: 512Mi
     ports:
       - containerPort: 8080
         name: app
@@ -738,6 +762,12 @@ applications:
             type: service
             proto: ""
             path: ""
+      - name: UPSTREAM_WEAVE
+        sources:
+          - name: weave
+            type: service
+            proto: ""
+            path: ""
       - name: BUCKET_HOST
         sources:
           - name: default
@@ -769,6 +799,10 @@ applications:
 
           upstream weave_trace {
             server $UPSTREAM_WEAVE_TRACE;
+          }
+
+          upstream weave {
+            server $UPSTREAM_WEAVE;
           }
 
           upstream bucket {
@@ -825,8 +859,20 @@ applications:
                 proxy_pass http://api;
               }
 
+              location /oidc {
+                proxy_pass http://api;
+              }
+
               location /traces {
                 proxy_pass http://weave_trace;
+              }
+
+              location /weave {
+                return 301 /weave/;
+              }
+
+              location /weave/ {
+                proxy_pass http://weave/;
               }
 
               location /bucket {

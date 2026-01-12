@@ -983,9 +983,11 @@ func inferState(
 		wandb.Status.Ready = false
 	}
 
+	log.Info("About to update status", "apiVersion", wandb.APIVersion, "kind", wandb.Kind)
 	if err := client.Status().Update(ctx, wandb); err != nil {
 		log.Error(err, "Failed to update status")
 		return err
 	}
+	log.Info("Status update successful")
 	return nil
 }

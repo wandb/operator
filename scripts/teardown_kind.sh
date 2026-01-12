@@ -27,6 +27,11 @@ kind delete cluster --name "$CLUSTER_NAME"
 
 echo "Kind cluster '$CLUSTER_NAME' deleted successfully"
 
+echo "Cleaning up Docker volumes..."
+docker volume rm -f clickhouse-data minio-data mysql-data redis-data secrets-data 2>/dev/null || true
+docker volume prune -f
+echo "Docker volumes cleaned up"
+
 if [[ -d "dist" ]]; then
     echo "Cleaning dist/ directory..."
     rm -rf dist
