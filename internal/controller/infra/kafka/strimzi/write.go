@@ -5,7 +5,7 @@ import (
 
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/logx"
-	strimziv1 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1"
+	"github.com/wandb/operator/pkg/vendored/strimzi-kafka/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -15,8 +15,8 @@ func WriteState(
 	ctx context.Context,
 	client client.Client,
 	specNamespacedName types.NamespacedName,
-	desiredKafka *strimziv1.Kafka,
-	desiredNodePool *strimziv1.KafkaNodePool,
+	desiredKafka *v1.Kafka,
+	desiredNodePool *v1.KafkaNodePool,
 ) []metav1.Condition {
 	ctx, _ = logx.IntoContext(ctx, logx.Kafka)
 	results := make([]metav1.Condition, 0)
@@ -33,9 +33,9 @@ func writeKafkaState(
 	ctx context.Context,
 	client client.Client,
 	nsnBuilder *NsNameBuilder,
-	desired *strimziv1.Kafka,
+	desired *v1.Kafka,
 ) []metav1.Condition {
-	var actual = &strimziv1.Kafka{}
+	var actual = &v1.Kafka{}
 
 	found, err := common.GetResource(
 		ctx, client, nsnBuilder.KafkaNsName(), KafkaResourceType, actual,
@@ -107,9 +107,9 @@ func writeNodePoolState(
 	ctx context.Context,
 	client client.Client,
 	nsnBuilder *NsNameBuilder,
-	desired *strimziv1.KafkaNodePool,
+	desired *v1.KafkaNodePool,
 ) []metav1.Condition {
-	var actual = &strimziv1.KafkaNodePool{}
+	var actual = &v1.KafkaNodePool{}
 	found, err := common.GetResource(
 		ctx, client, nsnBuilder.NodePoolNsName(), NodePoolResourceType, actual,
 	)

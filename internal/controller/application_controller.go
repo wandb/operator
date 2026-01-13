@@ -24,6 +24,7 @@ import (
 	wandbv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/logx"
 	"github.com/wandb/operator/pkg/utils"
+	v1alpha1 "github.com/wandb/operator/pkg/vendored/argo-rollouts/argoproj.io.rollouts/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -39,7 +40,8 @@ const applicationFinalizer = "applications.apps.wandb.com/finalizer"
 // ApplicationReconciler reconciles a Application object
 type ApplicationReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme         *runtime.Scheme
+	EnableRollouts bool
 }
 
 // +kubebuilder:rbac:groups=apps.wandb.com,resources=applications,verbs=get;list;watch;create;update;patch;delete
@@ -99,6 +101,11 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			case "StatefulSet":
 				if err := r.deleteStatefulSet(ctx, &app); err != nil {
 					logger.Error(err, "Failed to delete StatefulSet during finalization")
+					return ctrl.Result{}, err
+				}
+			case "Rollout":
+				if err := r.deleteRollout(ctx, &app); err != nil {
+					logger.Error(err, "Failed to delete Rollout during finalization")
 					return ctrl.Result{}, err
 				}
 			}
@@ -174,6 +181,29 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, err
 	}
 
+	app.Status.Ready = false
+	if app.Status.DeploymentStatus != nil {
+		if app.Status.DeploymentStatus.ReadyReplicas == app.Status.DeploymentStatus.Replicas &&
+			app.Status.DeploymentStatus.Replicas > 0 {
+			app.Status.Ready = true
+		}
+	} else if app.Status.StatefulSetStatus != nil {
+		if app.Status.StatefulSetStatus.ReadyReplicas == app.Status.StatefulSetStatus.Replicas &&
+			app.Status.StatefulSetStatus.Replicas > 0 {
+			app.Status.Ready = true
+		}
+	} else if app.Status.RolloutStatus != nil {
+		if app.Status.RolloutStatus.ReadyReplicas == app.Status.RolloutStatus.Replicas &&
+			app.Status.RolloutStatus.Replicas > 0 {
+			app.Status.Ready = true
+		}
+	}
+
+	if err := r.Status().Update(ctx, &app); err != nil {
+		logger.Error(err, "Failed to update Application status")
+		return ctrl.Result{}, err
+	}
+
 	return result, nil
 }
 
@@ -234,6 +264,8 @@ func (r *ApplicationReconciler) reconcileDeployment(ctx context.Context, app *wa
 		}
 	}
 
+	app.Status.DeploymentStatus = &deployment.Status
+
 	logger.Info("Successfully reconciled Deployment", "Deployment", deployment.Name)
 	return ctrl.Result{}, nil
 }
@@ -268,7 +300,89 @@ func (r *ApplicationReconciler) deleteDeployment(ctx context.Context, app *wandb
 func (r *ApplicationReconciler) reconcileRollout(ctx context.Context, app *wandbv2.Application) (ctrl.Result, error) {
 	logger := logx.FromContext(ctx)
 	logger.Info("Reconciling Rollout", "Application", app.Name)
+
+	rollout := &v1alpha1.Rollout{}
+	err := r.Get(ctx, client.ObjectKey{Namespace: app.Namespace, Name: app.Name}, rollout)
+	if err != nil {
+		if client.IgnoreNotFound(err) != nil {
+			logger.Error(err, "Failed to get Rollout")
+			return ctrl.Result{}, err
+		}
+		logger.Info("Rollout not found", "Rollout", app.Name)
+	}
+
+	selectorLabels := map[string]string{
+		"app.kubernetes.io/name":     app.Name,
+		"app.kubernetes.io/instance": app.Name,
+	}
+
+	rollout.Name = app.Name
+	rollout.Namespace = app.Namespace
+
+	rollout.Spec.Template.Spec = *app.Spec.PodTemplate.Spec.DeepCopy()
+	rollout.Spec.Template.ObjectMeta.Labels =
+		utils.MergeMapsStringString(
+			rollout.Spec.Template.ObjectMeta.Labels,
+			app.Spec.MetaTemplate.Labels,
+			app.Spec.PodTemplate.ObjectMeta.Labels,
+			selectorLabels,
+		)
+
+	rollout.Spec.Template.ObjectMeta.Annotations =
+		utils.MergeMapsStringString(
+			rollout.Spec.Template.ObjectMeta.Annotations,
+			app.Spec.MetaTemplate.Annotations,
+			app.Spec.PodTemplate.ObjectMeta.Annotations,
+		)
+
+	rollout.Spec.Selector = &v1.LabelSelector{
+		MatchLabels: selectorLabels,
+	}
+
+	logger.Info("Rollout spec", "Rollout", rollout.Name, "Spec", rollout.Spec)
+
+	if rollout.CreationTimestamp.IsZero() {
+		if err := r.Create(ctx, rollout); err != nil {
+			logger.Error(err, "Failed to create Rollout")
+			return ctrl.Result{}, err
+		}
+	} else {
+		if err := r.Update(ctx, rollout); err != nil {
+			logger.Error(err, "Failed to update Rollout")
+			return ctrl.Result{}, err
+		}
+	}
+
+	app.Status.RolloutStatus = &rollout.Status
+
+	logger.Info("Successfully reconciled Rollout", "Rollout", rollout.Name)
 	return ctrl.Result{}, nil
+}
+
+// deleteRollout deletes the Rollout associated with the Application
+func (r *ApplicationReconciler) deleteRollout(ctx context.Context, app *wandbv2.Application) error {
+	logger := logx.FromContext(ctx)
+	logger.Info("Deleting Rollout", "Application", app.Name)
+
+	rollout := &v1alpha1.Rollout{}
+	err := r.Get(ctx, client.ObjectKey{Namespace: app.Namespace, Name: app.Name}, rollout)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			logger.Info("Rollout not found, nothing to delete", "Rollout", app.Name)
+			return nil
+		}
+		logger.Error(err, "Failed to get Rollout")
+		return err
+	}
+
+	deletePolicy := client.PropagationPolicy(v1.DeletePropagationBackground)
+	if err := r.Delete(ctx, rollout, deletePolicy); err != nil {
+		logger.Error(err, "Failed to delete Rollout", "Rollout", app.Name)
+		return err
+	}
+	logger.Info("Successfully deleted Rollout", "Rollout", app.Name)
+
+	return nil
 }
 
 // reconcileStatefulSet handles StatefulSet type applications
@@ -327,6 +441,8 @@ func (r *ApplicationReconciler) reconcileStatefulSet(ctx context.Context, app *w
 			return ctrl.Result{}, err
 		}
 	}
+
+	app.Status.StatefulSetStatus = &statefulSet.Status
 
 	logger.Info("Successfully reconciled StatefulSet", "StatefulSet", statefulSet.Name)
 	return ctrl.Result{}, nil
@@ -603,6 +719,9 @@ func (r *ApplicationReconciler) reconcileService(ctx context.Context, app *wandb
 			logger.Error(err, "Failed to create Service")
 			return err
 		}
+
+		app.Status.ServiceStatus = &desired.Status
+
 		logger.Info("Successfully created Service", "Service", desired.Name)
 		return nil
 	}
@@ -636,6 +755,9 @@ func (r *ApplicationReconciler) reconcileService(ctx context.Context, app *wandb
 		logger.Error(err, "Failed to update Service")
 		return err
 	}
+
+	app.Status.ServiceStatus = &current.Status
+
 	logger.Info("Successfully updated Service", "Service", current.Name)
 	return nil
 }
@@ -661,8 +783,16 @@ func (r *ApplicationReconciler) deleteService(ctx context.Context, app *wandbv2.
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *ApplicationReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
+	controller := ctrl.NewControllerManagedBy(mgr).
 		For(&wandbv2.Application{}).
-		Named("application").
-		Complete(r)
+		Owns(&appsv1.Deployment{}).
+		Owns(&appsv1.StatefulSet{}).
+		Owns(&corev1.Service{}).
+		Named("application")
+
+	if r.EnableRollouts {
+		controller = controller.Owns(&v1alpha1.Rollout{})
+	}
+
+	return controller.Complete(r)
 }
