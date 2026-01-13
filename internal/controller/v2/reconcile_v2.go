@@ -25,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-logr/logr"
 	"github.com/samber/lo"
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/ctrlqueue"
@@ -195,6 +196,8 @@ func consolidateResults(results []ctrl.Result) ctrl.Result {
 func ReconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest) (ctrl.Result, error) {
 	// Reconcile Wandb Manifest
 	logger := ctrl.LoggerFrom(ctx).WithName("reconcileWandbManifest")
+	var result ctrl.Result
+	var err error
 
 	redisReady := wandb.Status.RedisStatus.Ready
 	mysqlReady := wandb.Status.MySQLStatus.Ready
@@ -209,209 +212,26 @@ func ReconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 
 	logger.Info("Manifest Features", "features", manifest.Features)
 
-	// Ensure any manifest-declared generated secrets exist and capture their selectors in status
-	if wandb.Status.GeneratedSecrets == nil {
-		wandb.Status.GeneratedSecrets = map[string]corev1.SecretKeySelector{}
-	}
-	for _, gs := range manifest.GeneratedSecrets {
-		// Deterministic secret name scoped to the CR instance
-		secretName := fmt.Sprintf("%s-%s", wandb.Name, gs.Name)
-		keyName := "value"
-		sec := &corev1.Secret{}
-		err := client.Get(ctx, types.NamespacedName{Name: secretName, Namespace: wandb.Namespace}, sec)
-		if err != nil {
-			if apiErrors.IsNotFound(err) {
-				// Create new secret with generated value
-				valueLen := gs.Length
-				if valueLen <= 0 {
-					valueLen = 32
-				}
-				pw, pwErr := oputils.GenerateRandomPassword(valueLen)
-				if pwErr != nil {
-					return ctrl.Result{}, pwErr
-				}
-				sec = &corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      secretName,
-						Namespace: wandb.Namespace,
-						Labels: map[string]string{
-							"app.kubernetes.io/managed-by": "wandb-operator",
-							"app.kubernetes.io/instance":   wandb.Name,
-							"app.kubernetes.io/part-of":    "wandb",
-						},
-					},
-					StringData: map[string]string{keyName: pw},
-					Type:       corev1.SecretTypeOpaque,
-				}
-				if err := controllerutil.SetOwnerReference(wandb, sec, client.Scheme()); err != nil {
-					return ctrl.Result{}, err
-				}
-				if err := client.Create(ctx, sec); err != nil {
-					return ctrl.Result{}, err
-				}
-			} else {
-				return ctrl.Result{}, err
-			}
-		} else {
-			// Secret exists. Ensure it has the expected key; do not overwrite existing value.
-			if sec.Data == nil || (sec.Data != nil && sec.Data[keyName] == nil && sec.StringData == nil) {
-				if sec.StringData == nil {
-					sec.StringData = map[string]string{}
-				}
-				// Generate a value only if missing
-				valueLen := gs.Length
-				if valueLen <= 0 {
-					valueLen = 32
-				}
-				pw, pwErr := oputils.GenerateRandomPassword(valueLen)
-				if pwErr != nil {
-					return ctrl.Result{}, pwErr
-				}
-				sec.StringData[keyName] = pw
-				if err := client.Update(ctx, sec); err != nil {
-					return ctrl.Result{}, err
-				}
-			}
-		}
-		// Record selector in status
-		wandb.Status.GeneratedSecrets[gs.Name] = corev1.SecretKeySelector{
-			LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
-			Key:                  keyName,
-		}
-	}
-	// Persist status after updating generated secret selectors
-	if err := client.Status().Update(ctx, wandb); err != nil {
-		return ctrl.Result{}, err
+	result, err = generateSecrets(ctx, client, wandb, manifest)
+	if err != nil {
+		return result, err
 	}
 
-	// Create Strimzi KafkaTopic resources for enabled topics
-	if wandb.Spec.Kafka.Enabled {
-		for _, topic := range manifest.Kafka {
-			if len(topic.Features) > 0 && !manifestFeaturesEnabled(topic.Features, manifest.Features) {
-				continue
-			}
-
-			// Determine namespace and cluster name for Strimzi resources
-			kafkaNS := wandb.Spec.Kafka.Namespace
-			if kafkaNS == "" {
-				kafkaNS = wandb.Namespace
-			}
-			clusterName := wandb.Spec.Kafka.Name
-			if clusterName == "" {
-				// Fallback to instance name if not explicitly configured
-				clusterName = wandb.Name
-			}
-
-			// Use the logical topic name as the resource name
-			resName := topic.Name
-			if resName == "" {
-				// If not set, fallback to topic entry name
-				resName = topic.Topic
-			}
-			if resName == "" {
-				// Nothing actionable without a name
-				continue
-			}
-			labels := map[string]string{
-				"strimzi.io/cluster":           clusterName,
-				"app.kubernetes.io/managed-by": "wandb-operator",
-				"app.kubernetes.io/part-of":    "wandb",
-				"app.kubernetes.io/instance":   wandb.Name,
-			}
-
-			// Prepare spec
-			partitions := int32(1)
-			if topic.PartitionCount > 0 {
-				partitions = int32(topic.PartitionCount)
-			}
-			replicas := int32(1)
-			if wandb.Spec.Kafka.Config.ReplicationConfig.DefaultReplicationFactor > 0 {
-				replicas = int32(wandb.Spec.Kafka.Config.ReplicationConfig.DefaultReplicationFactor)
-			}
-
-			// Build typed KafkaTopic object
-			kt := &strimziv1.KafkaTopic{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      resName,
-					Namespace: kafkaNS,
-					Labels:    labels,
-				},
-				Spec: strimziv1.KafkaTopicSpec{
-					TopicName:  topic.Topic,
-					Partitions: partitions,
-					Replicas:   replicas,
-				},
-			}
-
-			// Create or Update
-			existing := &strimziv1.KafkaTopic{}
-			getErr := client.Get(ctx, types.NamespacedName{Name: kt.Name, Namespace: kafkaNS}, existing)
-			if getErr != nil {
-				if apiErrors.IsNotFound(getErr) {
-					// Set ownerRef only if same namespace
-					if kafkaNS == wandb.Namespace {
-						_ = controllerutil.SetOwnerReference(wandb, kt, client.Scheme())
-					}
-					if err := client.Create(ctx, kt); err != nil {
-						return ctrl.Result{}, err
-					}
-				} else {
-					return ctrl.Result{}, getErr
-				}
-			} else {
-				// Update managed spec fields and preserve other fields
-				existing.Spec.TopicName = topic.Topic
-				existing.Spec.Partitions = partitions
-				existing.Spec.Replicas = replicas
-				// Preserve/ensure labels
-				exLabels := existing.GetLabels()
-				if exLabels == nil {
-					exLabels = map[string]string{}
-				}
-				for k, v := range labels {
-					exLabels[k] = v
-				}
-				existing.SetLabels(exLabels)
-				if err := client.Update(ctx, existing); err != nil {
-					return ctrl.Result{}, err
-				}
-			}
-		}
+	result, err = createKafkaTopics(ctx, client, wandb, manifest)
+	if err != nil {
+		return result, err
 	}
 
-	// TODO lets run migrations here, need to add some logic for ensuring they run only once.
-	//for name, migrationTask := range manifest.Migrations {
-	//	// check for a currently running job
-	//	jobName := fmt.Sprintf("%s-%s", wandb.Name, name)
-	//	job := &batchv1.Job{}
-	//	err := client.Get(
-	//		ctx,
-	//		types.NamespacedName{
-	//			Namespace: wandb.Namespace,
-	//			Name:      jobName,
-	//		},
-	//		job,
-	//	)
-	//	if err != nil && !apiErrors.IsNotFound(err) {
-	//		return ctrl.Result{}, err
-	//	}
-	//	if apiErrors.IsNotFound(err) {
-	//		job.ObjectMeta.Name = jobName
-	//		job.ObjectMeta.Namespace = wandb.Namespace
-	//		containerSpec := corev1.Container{
-	//			Name:  name,
-	//			Image: migrationTask.Image.GetImage(),
-	//			Args:  migrationTask.Args,
-	//		}
-	//		job.Spec.Template.Spec.Containers = []corev1.Container{containerSpec}
-	//		err = client.Create(ctx, job)
-	//	} else {
-	//		if job.Status.Succeeded == 0 {
-	//			client.Delete(ctx, job)
-	//		}
-	//	}
-	//}
+	runMigrations()
 
+	result, err = reconcileApplications(ctx, client, wandb, manifest, logger)
+	if err != nil {
+		return result, err
+	}
+	return ctrl.Result{}, nil
+}
+
+func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest, logger logr.Logger) (ctrl.Result, error) {
 	for _, app := range manifest.Applications {
 		// If the application is gated behind features, only install it when
 		// at least one of those features is enabled in the manifest.
@@ -876,6 +696,217 @@ func ReconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 				}
 			}
 		}
+	}
+	return ctrl.Result{}, nil
+}
+
+func runMigrations() {
+	// TODO lets run migrations here, need to add some logic for ensuring they run only once.
+	//for name, migrationTask := range manifest.Migrations {
+	//	// check for a currently running job
+	//	jobName := fmt.Sprintf("%s-%s", wandb.Name, name)
+	//	job := &batchv1.Job{}
+	//	err := client.Get(
+	//		ctx,
+	//		types.NamespacedName{
+	//			Namespace: wandb.Namespace,
+	//			Name:      jobName,
+	//		},
+	//		job,
+	//	)
+	//	if err != nil && !apiErrors.IsNotFound(err) {
+	//		return ctrl.Result{}, err
+	//	}
+	//	if apiErrors.IsNotFound(err) {
+	//		job.ObjectMeta.Name = jobName
+	//		job.ObjectMeta.Namespace = wandb.Namespace
+	//		containerSpec := corev1.Container{
+	//			Name:  name,
+	//			Image: migrationTask.Image.GetImage(),
+	//			Args:  migrationTask.Args,
+	//		}
+	//		job.Spec.Template.Spec.Containers = []corev1.Container{containerSpec}
+	//		err = client.Create(ctx, job)
+	//	} else {
+	//		if job.Status.Succeeded == 0 {
+	//			client.Delete(ctx, job)
+	//		}
+	//	}
+	//}
+}
+
+func createKafkaTopics(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest) (ctrl.Result, error) {
+	// Create Strimzi KafkaTopic resources for enabled topics
+	if wandb.Spec.Kafka.Enabled {
+		for _, topic := range manifest.Kafka {
+			if len(topic.Features) > 0 && !manifestFeaturesEnabled(topic.Features, manifest.Features) {
+				continue
+			}
+
+			// Determine namespace and cluster name for Strimzi resources
+			kafkaNS := wandb.Spec.Kafka.Namespace
+			if kafkaNS == "" {
+				kafkaNS = wandb.Namespace
+			}
+			clusterName := wandb.Spec.Kafka.Name
+			if clusterName == "" {
+				// Fallback to instance name if not explicitly configured
+				clusterName = wandb.Name
+			}
+
+			// Use the logical topic name as the resource name
+			resName := topic.Name
+			if resName == "" {
+				// If not set, fallback to topic entry name
+				resName = topic.Topic
+			}
+			if resName == "" {
+				// Nothing actionable without a name
+				continue
+			}
+			labels := map[string]string{
+				"strimzi.io/cluster":           clusterName,
+				"app.kubernetes.io/managed-by": "wandb-operator",
+				"app.kubernetes.io/part-of":    "wandb",
+				"app.kubernetes.io/instance":   wandb.Name,
+			}
+
+			// Prepare spec
+			partitions := int32(1)
+			if topic.PartitionCount > 0 {
+				partitions = int32(topic.PartitionCount)
+			}
+			replicas := int32(1)
+			if wandb.Spec.Kafka.Config.ReplicationConfig.DefaultReplicationFactor > 0 {
+				replicas = int32(wandb.Spec.Kafka.Config.ReplicationConfig.DefaultReplicationFactor)
+			}
+
+			// Build typed KafkaTopic object
+			kt := &strimziv1.KafkaTopic{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      resName,
+					Namespace: kafkaNS,
+					Labels:    labels,
+				},
+				Spec: strimziv1.KafkaTopicSpec{
+					TopicName:  topic.Topic,
+					Partitions: partitions,
+					Replicas:   replicas,
+				},
+			}
+
+			// Create or Update
+			existing := &strimziv1.KafkaTopic{}
+			getErr := client.Get(ctx, types.NamespacedName{Name: kt.Name, Namespace: kafkaNS}, existing)
+			if getErr != nil {
+				if apiErrors.IsNotFound(getErr) {
+					// Set ownerRef only if same namespace
+					if kafkaNS == wandb.Namespace {
+						_ = controllerutil.SetOwnerReference(wandb, kt, client.Scheme())
+					}
+					if err := client.Create(ctx, kt); err != nil {
+						return ctrl.Result{}, err
+					}
+				} else {
+					return ctrl.Result{}, getErr
+				}
+			} else {
+				// Update managed spec fields and preserve other fields
+				existing.Spec.TopicName = topic.Topic
+				existing.Spec.Partitions = partitions
+				existing.Spec.Replicas = replicas
+				// Preserve/ensure labels
+				exLabels := existing.GetLabels()
+				if exLabels == nil {
+					exLabels = map[string]string{}
+				}
+				for k, v := range labels {
+					exLabels[k] = v
+				}
+				existing.SetLabels(exLabels)
+				if err := client.Update(ctx, existing); err != nil {
+					return ctrl.Result{}, err
+				}
+			}
+		}
+	}
+	return ctrl.Result{}, nil
+}
+
+func generateSecrets(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest) (ctrl.Result, error) {
+	// Ensure any manifest-declared generated secrets exist and capture their selectors in status
+	if wandb.Status.GeneratedSecrets == nil {
+		wandb.Status.GeneratedSecrets = map[string]corev1.SecretKeySelector{}
+	}
+	for _, gs := range manifest.GeneratedSecrets {
+		// Deterministic secret name scoped to the CR instance
+		secretName := fmt.Sprintf("%s-%s", wandb.Name, gs.Name)
+		keyName := "value"
+		sec := &corev1.Secret{}
+		err := client.Get(ctx, types.NamespacedName{Name: secretName, Namespace: wandb.Namespace}, sec)
+		if err != nil {
+			if apiErrors.IsNotFound(err) {
+				// Create new secret with generated value
+				valueLen := gs.Length
+				if valueLen <= 0 {
+					valueLen = 32
+				}
+				pw, err := oputils.GenerateRandomPassword(valueLen)
+				if err != nil {
+					return ctrl.Result{}, err
+				}
+				sec = &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      secretName,
+						Namespace: wandb.Namespace,
+						Labels: map[string]string{
+							"app.kubernetes.io/managed-by": "wandb-operator",
+							"app.kubernetes.io/instance":   wandb.Name,
+							"app.kubernetes.io/part-of":    "wandb",
+						},
+					},
+					StringData: map[string]string{keyName: pw},
+					Type:       corev1.SecretTypeOpaque,
+				}
+				if err := controllerutil.SetOwnerReference(wandb, sec, client.Scheme()); err != nil {
+					return ctrl.Result{}, err
+				}
+				if err := client.Create(ctx, sec); err != nil {
+					return ctrl.Result{}, err
+				}
+			} else {
+				return ctrl.Result{}, err
+			}
+		} else {
+			// Secret exists. Ensure it has the expected key; do not overwrite existing value.
+			if sec.Data == nil || (sec.Data != nil && sec.Data[keyName] == nil && sec.StringData == nil) {
+				if sec.StringData == nil {
+					sec.StringData = map[string]string{}
+				}
+				// Generate a value only if missing
+				valueLen := gs.Length
+				if valueLen <= 0 {
+					valueLen = 32
+				}
+				pw, err := oputils.GenerateRandomPassword(valueLen)
+				if err != nil {
+					return ctrl.Result{}, err
+				}
+				sec.StringData[keyName] = pw
+				if err := client.Update(ctx, sec); err != nil {
+					return ctrl.Result{}, err
+				}
+			}
+		}
+		// Record selector in status
+		wandb.Status.GeneratedSecrets[gs.Name] = corev1.SecretKeySelector{
+			LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
+			Key:                  keyName,
+		}
+	}
+	// Persist status after updating generated secret selectors
+	if err := client.Status().Update(ctx, wandb); err != nil {
+		return ctrl.Result{}, err
 	}
 	return ctrl.Result{}, nil
 }
