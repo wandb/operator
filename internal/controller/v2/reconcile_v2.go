@@ -234,6 +234,34 @@ func ReconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 }
 
 func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest, logger logr.Logger) (ctrl.Result, error) {
+	// Create shared service account for all W&B applications
+	serviceAccountName := manifest.ServiceAccountName
+	sa := &corev1.ServiceAccount{}
+	err := client.Get(ctx, types.NamespacedName{Name: serviceAccountName, Namespace: wandb.Namespace}, sa)
+	if err != nil {
+		if apiErrors.IsNotFound(err) {
+			sa = &corev1.ServiceAccount{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      serviceAccountName,
+					Namespace: wandb.Namespace,
+					Labels: map[string]string{
+						"app.kubernetes.io/managed-by": "wandb-operator",
+						"app.kubernetes.io/instance":   wandb.Name,
+						"app.kubernetes.io/part-of":    "wandb",
+					},
+				},
+			}
+			if err := controllerutil.SetOwnerReference(wandb, sa, client.Scheme()); err != nil {
+				return ctrl.Result{}, err
+			}
+			if err := client.Create(ctx, sa); err != nil {
+				return ctrl.Result{}, err
+			}
+		} else {
+			return ctrl.Result{}, err
+		}
+	}
+
 	for _, app := range manifest.Applications {
 		// If the application is gated behind features, only install it when
 		// at least one of those features is enabled in the manifest.
@@ -625,6 +653,85 @@ func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb 
 			}
 		}
 
+		// Handle JWT token mounting according to manifest Application.JWTTokens
+		if len(app.JWTTokens) > 0 {
+			for _, jwtToken := range app.JWTTokens {
+				var volume corev1.Volume
+				volumeName := fmt.Sprintf("%s-%s", app.Name, jwtToken.Name)
+
+				// Create volume based on source type
+				switch {
+				case jwtToken.Source.KubernetesServiceAccount != nil:
+					// Projected volume with service account token
+					expirationSeconds := jwtToken.Source.KubernetesServiceAccount.ExpirationSeconds
+					if expirationSeconds == 0 {
+						expirationSeconds = 3607 // Default 1 hour + 7 seconds
+					}
+					volume = corev1.Volume{
+						Name: volumeName,
+						VolumeSource: corev1.VolumeSource{
+							Projected: &corev1.ProjectedVolumeSource{
+								Sources: []corev1.VolumeProjection{
+									{
+										ServiceAccountToken: &corev1.ServiceAccountTokenProjection{
+											Audience:          jwtToken.Source.KubernetesServiceAccount.Audience,
+											Path:              "token",
+											ExpirationSeconds: &expirationSeconds,
+										},
+									},
+								},
+							},
+						},
+					}
+
+				case jwtToken.Source.SecretRef != nil:
+					// Secret volume
+					key := jwtToken.Source.SecretRef.Key
+					if key == "" {
+						key = "token" // Default key name
+					}
+					volume = corev1.Volume{
+						Name: volumeName,
+						VolumeSource: corev1.VolumeSource{
+							Secret: &corev1.SecretVolumeSource{
+								SecretName: jwtToken.Source.SecretRef.Name,
+								Items: []corev1.KeyToPath{
+									{
+										Key:  key,
+										Path: "token",
+									},
+								},
+							},
+						},
+					}
+
+				case jwtToken.Source.CSIProvider != nil:
+					// CSI volume
+					volume = corev1.Volume{
+						Name: volumeName,
+						VolumeSource: corev1.VolumeSource{
+							CSI: &corev1.CSIVolumeSource{
+								Driver:           jwtToken.Source.CSIProvider.Driver,
+								VolumeAttributes: jwtToken.Source.CSIProvider.Parameters,
+								ReadOnly:         func() *bool { b := true; return &b }(),
+							},
+						},
+					}
+
+				default:
+					// No valid source specified, skip this token
+					continue
+				}
+
+				volumes = append(volumes, volume)
+				container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
+					Name:      volumeName,
+					MountPath: jwtToken.MountPath,
+					ReadOnly:  true,
+				})
+			}
+		}
+
 		initContainers := []corev1.Container{}
 
 		if app.InitContainers != nil {
@@ -649,6 +756,13 @@ func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb 
 		application.Spec.PodTemplate.Spec.Affinity = wandb.Spec.Affinity
 		application.Spec.PodTemplate.Spec.Tolerations = *wandb.Spec.Tolerations
 
+		// Set shared service account for all W&B applications
+		application.Spec.PodTemplate.Spec.ServiceAccountName = serviceAccountName
+
+		// Reconcile Service ports: fully replace the ServiceTemplate ports with
+		// the ports declared in the manifest for this app. This ensures that any
+		// change to port numbers, names, or protocols is propagated on each
+		// reconcile. If no service ports are declared, clear the ServiceTemplate.
 		if app.Service != nil && len(app.Service.Ports) > 0 {
 			application.Spec.ServiceTemplate = &corev1.ServiceSpec{
 				Type: app.Service.Type,
