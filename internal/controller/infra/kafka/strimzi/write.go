@@ -110,7 +110,6 @@ func writeNodePoolState(
 	desired *strimziv1.KafkaNodePool,
 ) []metav1.Condition {
 	var actual = &strimziv1.KafkaNodePool{}
-
 	found, err := common.GetResource(
 		ctx, client, nsnBuilder.NodePoolNsName(), NodePoolResourceType, actual,
 	)

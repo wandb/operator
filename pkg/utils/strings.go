@@ -3,6 +3,9 @@ package utils
 import (
 	"crypto/rand"
 	"math/big"
+
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 func ContainsString(strings []string, target string) bool {
@@ -38,4 +41,14 @@ func GenerateRandomPassword(length int) (string, error) {
 		result[i] = byte(asciiPrintableStart + num.Int64())
 	}
 	return string(result), nil
+}
+
+func Capitalize(value string) string {
+	if len(value) == 0 {
+		return ""
+	}
+	capitalizer := cases.Title(language.English)
+	first := ([]rune)(value)[:1]
+	tail := ([]rune)(value)[1:]
+	return capitalizer.String(string(first)) + string(tail)
 }

@@ -18,6 +18,7 @@ package v2
 
 import (
 	kedav1alpha1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
+	v1 "k8s.io/api/apps/v1"
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -49,8 +50,10 @@ type ApplicationSpec struct {
 
 // ApplicationStatus defines the observed state of Application.
 type ApplicationStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	Ready            bool                                        `json:"ready"`
+	DeploymentStatus v1.DeploymentStatus                         `json:"deploymentStatus,omitempty"`
+	ServiceStatus    corev1.ServiceStatus                        `json:"serviceStatus,omitempty"`
+	HPAStatus        autoscalingv1.HorizontalPodAutoscalerStatus `json:"hpaStatus,omitempty"`
 }
 
 // +kubebuilder:object:root=true

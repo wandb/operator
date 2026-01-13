@@ -72,6 +72,14 @@ func (d *WeightsAndBiasesCustomDefaulter) Default(ctx context.Context, obj runti
 		wandb.Spec.Size = appsv2.WBSizeDev
 	}
 
+	if wandb.Spec.Affinity == nil {
+		wandb.Spec.Affinity = &corev1.Affinity{}
+	}
+
+	if wandb.Spec.Tolerations == nil {
+		wandb.Spec.Tolerations = &[]corev1.Toleration{}
+	}
+
 	size, err := toCommonSize(wandb.Spec.Size)
 	if err != nil {
 		return err

@@ -8,7 +8,7 @@ import (
 	"github.com/wandb/operator/internal/controller/infra/redis/opstree"
 	"github.com/wandb/operator/internal/controller/translator"
 	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
-	"github.com/wandb/operator/internal/utils"
+	"github.com/wandb/operator/pkg/utils"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -22,6 +22,14 @@ func redisWriteState(
 	wandb *apiv2.WeightsAndBiases,
 ) []metav1.Condition {
 	var specNamespacedName = redisSpecNamespacedName(wandb.Spec.Redis)
+
+	if wandb.Spec.Redis.Affinity == nil {
+		wandb.Spec.Redis.Affinity = wandb.Spec.Affinity
+	}
+
+	if wandb.Spec.Redis.Tolerations == nil {
+		wandb.Spec.Redis.Tolerations = wandb.Spec.Tolerations
+	}
 
 	standaloneDesired, err := translatorv2.ToRedisStandaloneVendorSpec(ctx, wandb.Spec.Redis, wandb, client.Scheme())
 	if err != nil {

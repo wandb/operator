@@ -74,10 +74,14 @@ type WeightsAndBiasesSpec struct {
 
 	// AutoCleanupEnabled will:
 	//   * if `true`, will purge all configs and data
-	//   * if `false`, will maintain configs and data required to recreate WandB with pervious infra
-	AutoCleanupEnabled bool `json:"autoCleanupEnabled"`
+	//   * if `false`, will maintain configs and data required to recreate WandB with previous infra
+	// +optional
+	AutoCleanupEnabled bool `json:"autoCleanupEnabled,omitempty"`
 
 	Wandb WandbAppSpec `json:"wandb,omitempty"`
+
+	Affinity    *corev1.Affinity     `json:"affinity,omitempty"`
+	Tolerations *[]corev1.Toleration `json:"tolerations,omitempty"`
 
 	MySQL      WBMySQLSpec      `json:"mysql,omitempty"`
 	Redis      WBRedisSpec      `json:"redis,omitempty"`
@@ -90,6 +94,10 @@ type WeightsAndBiasesSpec struct {
 type WandbAppSpec struct {
 	Hostname string `json:"hostname"`
 	License  string `json:"license,omitempty"`
+
+	Version string `json:"version"`
+
+	Features map[string]bool `json:"features"`
 
 	// +optional
 	AdditionalHostnames []string `json:"additionalHostnames,omitempty"`
@@ -116,6 +124,9 @@ type WBMySQLSpec struct {
 	Namespace   string        `json:"namespace,omitempty"`
 	Name        string        `json:"name,omitempty"`
 	Telemetry   Telemetry     `json:"telemetry,omitempty"`
+
+	Affinity    *corev1.Affinity     `json:"affinity,omitempty"`
+	Tolerations *[]corev1.Toleration `json:"tolerations,omitempty"`
 }
 
 type WBMySQLConfig struct {
@@ -138,6 +149,9 @@ type WBRedisSpec struct {
 	Namespace   string              `json:"namespace,omitempty"`
 	Name        string              `json:"name,omitempty"`
 	Telemetry   Telemetry           `json:"telemetry,omitempty"`
+
+	Affinity    *corev1.Affinity     `json:"affinity,omitempty"`
+	Tolerations *[]corev1.Toleration `json:"tolerations,omitempty"`
 }
 
 type WBRedisConfig struct {
@@ -164,6 +178,11 @@ type WBKafkaSpec struct {
 	Namespace   string        `json:"namespace,omitempty"`
 	Name        string        `json:"name,omitempty"`
 	Telemetry   Telemetry     `json:"telemetry,omitempty"`
+
+	SkipDataRecovery bool `json:"skipDataRecovery,omitempty"`
+
+	Affinity    *corev1.Affinity     `json:"affinity,omitempty"`
+	Tolerations *[]corev1.Toleration `json:"tolerations,omitempty"`
 }
 
 type WBKafkaConfig struct {
@@ -189,6 +208,9 @@ type WBMinioSpec struct {
 	Namespace   string        `json:"namespace,omitempty"`
 	Name        string        `json:"name,omitempty"`
 	Telemetry   Telemetry     `json:"telemetry,omitempty"`
+
+	Affinity    *corev1.Affinity     `json:"affinity,omitempty"`
+	Tolerations *[]corev1.Toleration `json:"tolerations,omitempty"`
 }
 
 type WBMinioConfig struct {
@@ -208,6 +230,9 @@ type WBClickHouseSpec struct {
 	Namespace   string             `json:"namespace,omitempty"`
 	Name        string             `json:"name,omitempty"`
 	Telemetry   Telemetry          `json:"telemetry,omitempty"`
+
+	Affinity    *corev1.Affinity     `json:"affinity,omitempty"`
+	Tolerations *[]corev1.Toleration `json:"tolerations,omitempty"`
 }
 
 type WBClickHouseConfig struct {
@@ -217,6 +242,7 @@ type WBClickHouseConfig struct {
 // WeightsAndBiasesStatus defines the observed state of WeightsAndBiases.
 type WeightsAndBiasesStatus struct {
 	Ready            bool          `json:"ready"`
+	Wandb            WandbStatus   `json:"wandb,omitempty"`
 	MySQLStatus      WBInfraStatus `json:"mysqlStatus,omitempty"`
 	RedisStatus      WBInfraStatus `json:"redisStatus,omitempty"`
 	KafkaStatus      WBInfraStatus `json:"kafkaStatus,omitempty"`
@@ -228,6 +254,10 @@ type WeightsAndBiasesStatus struct {
 	// referencing the concrete Secret and key that holds the generated value.
 	GeneratedSecrets   map[string]corev1.SecretKeySelector `json:"generatedSecrets,omitempty"`
 	ObservedGeneration int64                               `json:"observedGeneration"`
+}
+
+type WandbStatus struct {
+	Hostname string `json:"hostname"`
 }
 
 type WBInfraStatus struct {

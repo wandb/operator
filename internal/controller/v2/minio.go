@@ -8,7 +8,7 @@ import (
 	"github.com/wandb/operator/internal/controller/infra/minio/tenant"
 	"github.com/wandb/operator/internal/controller/translator"
 	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
-	"github.com/wandb/operator/internal/utils"
+	"github.com/wandb/operator/pkg/utils"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -22,6 +22,13 @@ func minioWriteState(
 	wandb *apiv2.WeightsAndBiases,
 ) ([]metav1.Condition, *translator.InfraConnection) {
 	var specNamespacedName = minioSpecNamespacedName(wandb.Spec.Minio)
+
+	if wandb.Spec.Minio.Affinity == nil {
+		wandb.Spec.Minio.Affinity = wandb.Spec.Affinity
+	}
+	if wandb.Spec.Minio.Tolerations == nil {
+		wandb.Spec.Minio.Tolerations = wandb.Spec.Tolerations
+	}
 
 	desiredCr, err := translatorv2.ToMinioVendorSpec(ctx, wandb.Spec.Minio, wandb, client.Scheme())
 	if err != nil {

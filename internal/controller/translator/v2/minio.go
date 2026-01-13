@@ -78,6 +78,8 @@ func ToMinioVendorSpec(
 			Pools: []miniov2.Pool{
 				{
 					Name:             tenant.PoolName(specName),
+					Affinity:         spec.Affinity,
+					Tolerations:      *spec.Tolerations,
 					Servers:          spec.Replicas,
 					VolumesPerServer: volumesPerServer,
 					VolumeClaimTemplate: &corev1.PersistentVolumeClaim{

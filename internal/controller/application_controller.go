@@ -34,7 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-const applicationFinalizer = "apps.wandb.com/finalizer"
+const applicationFinalizer = "applications.apps.wandb.com/finalizer"
 
 // ApplicationReconciler reconciles a Application object
 type ApplicationReconciler struct {

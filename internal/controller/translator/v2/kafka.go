@@ -93,10 +93,22 @@ func ToKafkaVendorSpec(
 					"default.replication.factor":               strconv.Itoa(int(spec.Config.ReplicationConfig.DefaultReplicationFactor)),
 					"min.insync.replicas":                      strconv.Itoa(int(spec.Config.ReplicationConfig.MinInSyncReplicas)),
 				},
+				Template: &strimziv1.KafkaClusterTemplate{
+					Pod: &strimziv1.PodTemplate{
+						Affinity:    spec.Affinity,
+						Tolerations: *spec.Tolerations,
+					},
+				},
 			},
 			EntityOperator: &strimziv1.EntityOperatorSpec{
 				TopicOperator: &strimziv1.EntityTopicOperatorSpec{WatchedNamespace: nsnBuilder.Namespace()},
 				UserOperator:  &strimziv1.EntityUserOperatorSpec{WatchedNamespace: nsnBuilder.Namespace()},
+				Template: &strimziv1.EntityOperatorTemplate{
+					Pod: &strimziv1.PodTemplate{
+						Affinity:    spec.Affinity,
+						Tolerations: *spec.Tolerations,
+					},
+				},
 			},
 		},
 	}
@@ -155,6 +167,10 @@ func ToKafkaNodePoolVendorSpec(
 				},
 			},
 		},
+	}
+
+	if spec.SkipDataRecovery {
+		nodePool.Annotations["wandb.apps.wandb.com/skipDataRecovery"] = "true"
 	}
 
 	// Add resources if specified

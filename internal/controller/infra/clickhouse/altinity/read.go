@@ -16,6 +16,10 @@ import (
 )
 
 func readConnectionDetails(actual *chiv1.ClickHouseInstallation) *clickhouseConnInfo {
+	if actual == nil || actual.Status == nil || actual.Status.Endpoint == "" {
+		return nil
+	}
+
 	clickhouseHost := actual.Status.Endpoint
 	clickhousePort := strconv.Itoa(ClickHouseHTTPPort)
 
@@ -76,6 +80,15 @@ func ReadState(
 			ctx, client, wandbOwner, nsnBuilder, connInfo,
 		)
 		if err != nil {
+			if err.Error() == "missing connection info" {
+				return []metav1.Condition{
+					{
+						Type:   ClickHouseConnectionInfoType,
+						Status: metav1.ConditionFalse,
+						Reason: ctrlcommon.NoResourceReason,
+					},
+				}, nil
+			}
 			return []metav1.Condition{
 				{
 					Type:   ClickHouseConnectionInfoType,

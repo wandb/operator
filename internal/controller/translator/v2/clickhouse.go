@@ -97,6 +97,14 @@ func ToClickHouseVendorSpec(
 				},
 			},
 			Templates: &chiv2.Templates{
+				PodTemplates: []chiv2.PodTemplate{
+					{
+						Spec: corev1.PodSpec{
+							Affinity:    spec.Affinity,
+							Tolerations: *spec.Tolerations,
+						},
+					},
+				},
 				VolumeClaimTemplates: []chiv2.VolumeClaimTemplate{
 					{
 						Name: nsnBuilder.VolumeTemplateName(),

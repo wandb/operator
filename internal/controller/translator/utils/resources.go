@@ -1,7 +1,7 @@
 package utils
 
 import (
-	utils2 "github.com/wandb/operator/internal/utils"
+	utils2 "github.com/wandb/operator/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
 )
 

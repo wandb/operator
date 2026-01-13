@@ -21,7 +21,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
+	"net/url"
 	"strings"
 	"time"
 
@@ -32,18 +32,18 @@ import (
 	strimziv1 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1"
 	oputils "github.com/wandb/operator/pkg/utils"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
-	"gopkg.in/yaml.v3"
 	corev1 "k8s.io/api/core/v1"
 	apiErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	ctrlClient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
-const CleanupFinalizer = "cleanup.app.wandb.com"
+const CleanupFinalizer = "wandb.apps.wandb.com/cleanup"
 
 var defaultRequeueMinutes = 1
 var defaultRequeueDuration = time.Duration(defaultRequeueMinutes) * time.Minute
@@ -148,7 +148,27 @@ func Reconcile(
 		return ctrl.Result{}, errors.New("infra state update errors")
 	}
 
-	res, err = reconcileWandbManifest(ctx, client, wandb)
+	redisReady := wandb.Status.RedisStatus.Ready
+	mysqlReady := wandb.Status.MySQLStatus.Ready
+	kafkaReady := wandb.Status.KafkaStatus.Ready
+	minioReady := wandb.Status.MinioStatus.Ready
+	clickHouseReady := wandb.Status.ClickHouseStatus.Ready
+
+	if !redisReady || !mysqlReady || !kafkaReady || !minioReady || !clickHouseReady {
+		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
+	}
+
+	manifest, err := serverManifest.GetServerManifest(wandb.Spec.Wandb.Version)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	// Override features from CR spec if present
+	for key, enabled := range wandb.Spec.Wandb.Features {
+		manifest.Features[key] = enabled
+	}
+
+	res, err = ReconcileWandbManifest(ctx, client, wandb, manifest)
 	// send up the manifest error for now
 	if err != nil {
 		return res, err
@@ -171,8 +191,10 @@ func consolidateResults(results []ctrl.Result) ctrl.Result {
 		RequeueAfter: lo.Min(durations),
 	}
 }
-func reconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases) (ctrl.Result, error) {
+
+func ReconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest) (ctrl.Result, error) {
 	// Reconcile Wandb Manifest
+	logger := ctrl.LoggerFrom(ctx).WithName("reconcileWandbManifest")
 
 	redisReady := wandb.Status.RedisStatus.Ready
 	mysqlReady := wandb.Status.MySQLStatus.Ready
@@ -181,17 +203,11 @@ func reconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 	clickHouseReady := wandb.Status.ClickHouseStatus.Ready
 
 	if !redisReady || !mysqlReady || !kafkaReady || !minioReady || !clickHouseReady {
+		logger.Info("Infra components not ready yet, requeuing for reconciliation")
 		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
 	}
 
-	manifest := serverManifest.Manifest{}
-	manifestData, err := os.ReadFile("0.76.1.yaml")
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-	if err = yaml.Unmarshal(manifestData, &manifest); err != nil {
-		return ctrl.Result{}, err
-	}
+	logger.Info("Manifest Features", "features", manifest.Features)
 
 	// Ensure any manifest-declared generated secrets exist and capture their selectors in status
 	if wandb.Status.GeneratedSecrets == nil {
@@ -271,7 +287,7 @@ func reconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 	// Create Strimzi KafkaTopic resources for enabled topics
 	if wandb.Spec.Kafka.Enabled {
 		for _, topic := range manifest.Kafka {
-			if !manifestFeaturesEnabled(topic.Features, manifest.Features) {
+			if len(topic.Features) > 0 && !manifestFeaturesEnabled(topic.Features, manifest.Features) {
 				continue
 			}
 
@@ -641,6 +657,48 @@ func reconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 			Ports:   Ports,
 		}
 
+		if app.StartupProbe != nil && app.StartupProbe.HTTPGet != nil {
+			if app.StartupProbe.HTTPGet.Port.StrVal == "" && app.StartupProbe.HTTPGet.Port.IntVal == 0 {
+				if len(app.Ports) > 0 {
+					if app.StartupProbe.HTTPGet.Path != "" {
+						app.StartupProbe.HTTPGet = &corev1.HTTPGetAction{
+							Path: app.StartupProbe.HTTPGet.Path,
+							Port: intstr.FromString(app.Ports[0].Name),
+						}
+					}
+				}
+			}
+			container.StartupProbe = app.StartupProbe
+		}
+
+		if app.LivenessProbe != nil && app.LivenessProbe.HTTPGet != nil {
+			if app.LivenessProbe.HTTPGet.Port.StrVal == "" && app.LivenessProbe.HTTPGet.Port.IntVal == 0 {
+				if len(app.Ports) > 0 {
+					if app.LivenessProbe.HTTPGet.Path != "" {
+						app.LivenessProbe.HTTPGet = &corev1.HTTPGetAction{
+							Path: app.LivenessProbe.HTTPGet.Path,
+							Port: intstr.FromString(app.Ports[0].Name),
+						}
+					}
+				}
+			}
+			container.LivenessProbe = app.LivenessProbe
+		}
+
+		if app.ReadinessProbe != nil && app.ReadinessProbe.HTTPGet != nil {
+			if app.ReadinessProbe.HTTPGet.Port.StrVal == "" && app.ReadinessProbe.HTTPGet.Port.IntVal == 0 {
+				if len(app.Ports) > 0 {
+					if app.ReadinessProbe.HTTPGet.Path != "" {
+						app.ReadinessProbe.HTTPGet = &corev1.HTTPGetAction{
+							Path: app.ReadinessProbe.HTTPGet.Path,
+							Port: intstr.FromString(app.Ports[0].Name),
+						}
+					}
+				}
+			}
+			container.ReadinessProbe = app.ReadinessProbe
+		}
+
 		// Handle file injection via ConfigMaps according to manifest Application.Files
 		volumes := []corev1.Volume{}
 		volumeMounts := []corev1.VolumeMount{}
@@ -766,25 +824,14 @@ func reconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 		// across updates (e.g., duplicate "files-inline" volume names).
 		application.Spec.PodTemplate.Spec.Volumes = volumes
 		application.Spec.PodTemplate.Spec.InitContainers = initContainers
+		application.Spec.PodTemplate.Spec.Affinity = wandb.Spec.Affinity
+		application.Spec.PodTemplate.Spec.Tolerations = *wandb.Spec.Tolerations
 
-		// Reconcile Service ports: fully replace the ServiceTemplate ports with
-		// the ports declared in the manifest for this app. This ensures that any
-		// change to port numbers, names, or protocols is propagated on each
-		// reconcile. If no service ports are declared, clear the ServiceTemplate.
 		if app.Service != nil && len(app.Service.Ports) > 0 {
-			ports := make([]corev1.ServicePort, 0, len(app.Service.Ports))
-			for _, p := range app.Service.Ports {
-				ports = append(ports, corev1.ServicePort{
-					Name:     p.Name,
-					Port:     p.Port,
-					Protocol: p.Protocol,
-				})
+			application.Spec.ServiceTemplate = &corev1.ServiceSpec{
+				Type: app.Service.Type,
 			}
-			if application.Spec.ServiceTemplate == nil {
-				application.Spec.ServiceTemplate = &corev1.ServiceSpec{}
-			}
-			// Replace ports entirely to avoid stale or duplicate entries
-			application.Spec.ServiceTemplate.Ports = ports
+			application.Spec.ServiceTemplate.Ports = app.Service.Ports
 		} else {
 			// No service declared in manifest; ensure we clear any previous template
 			application.Spec.ServiceTemplate = nil
@@ -805,42 +852,43 @@ func reconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 			}
 		}
 
+		var hostname *url.URL
+		hostname, err = url.Parse(wandb.Spec.Wandb.Hostname)
+		if err != nil {
+			logger.Error(err, "Failed to parse provided hostname", "hostname", wandb.Spec.Wandb.Hostname)
+		} else {
+			if manifestFeaturesEnabled([]string{"proxy"}, manifest.Features) {
+				proxyService := &corev1.Service{}
+				proxyServiceName := fmt.Sprintf("%s-%s", wandb.Name, "nginx-proxy")
+				err := client.Get(ctx, types.NamespacedName{Name: proxyServiceName, Namespace: wandb.Namespace}, proxyService)
+				if err != nil {
+					logger.Error(err, "Failed to get proxy service", "service", proxyServiceName)
+				} else {
+					nodePort := proxyService.Spec.Ports[0].NodePort
+					hostname.Host = fmt.Sprintf("%s:%d", hostname.Hostname(), nodePort)
+				}
+
+			}
+			if wandb.Status.Wandb.Hostname != hostname.String() {
+				wandb.Status.Wandb.Hostname = hostname.String()
+				if err := client.Status().Update(ctx, wandb); err != nil {
+					return ctrl.Result{}, err
+				}
+			}
+		}
 	}
 	return ctrl.Result{}, nil
 }
 
 // manifestFeaturesEnabled returns true if any of the topic's feature flags are enabled
 // in the manifest's top-level Features section.
-func manifestFeaturesEnabled(topicFeatures []string, mf *serverManifest.Features) bool {
+func manifestFeaturesEnabled(topicFeatures []string, mf map[string]bool) bool {
 	if len(topicFeatures) == 0 || mf == nil {
 		return false
 	}
 	for _, f := range topicFeatures {
-		switch f {
-		case "runsV2":
-			if mf.RunsV2 {
-				return true
-			}
-		case "filestreamQueue":
-			if mf.FilestreamQueue {
-				return true
-			}
-		case "metricObserver":
-			if mf.MetricObserver {
-				return true
-			}
-		case "weaveTrace":
-			if mf.WeaveTrace {
-				return true
-			}
-		case "proxy":
-			if mf.Proxy {
-				return true
-			}
-		case "weaveTraceWorkers":
-			if mf.WeaveTraceWorkers {
-				return true
-			}
+		if enabled, ok := mf[f]; ok && enabled {
+			return true
 		}
 	}
 	return false

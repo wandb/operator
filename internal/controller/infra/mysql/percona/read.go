@@ -73,6 +73,15 @@ func ReadState(
 			ctx, client, wandbOwner, nsnBuilder, connInfo,
 		)
 		if err != nil {
+			if err.Error() == "missing connection info" {
+				return []metav1.Condition{
+					{
+						Type:   MySQLConnectionInfoType,
+						Status: metav1.ConditionFalse,
+						Reason: ctrlcommon.NoResourceReason,
+					},
+				}, nil
+			}
 			return []metav1.Condition{
 				{
 					Type:   MySQLConnectionInfoType,

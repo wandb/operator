@@ -1,13 +1,18 @@
 package manifest
 
-import v1 "k8s.io/api/core/v1"
+import (
+	"os"
+
+	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/yaml"
+)
 
 // Manifest defines the structure of the server manifest YAML (e.g. 0.76.1.yaml).
 // It is intended to be a direct mapping of the YAML document for decoding via
 // gopkg.in/yaml.v3 or sigs.k8s.io/yaml.
 type Manifest struct {
-	RequiredOperatorVersion string    `yaml:"requiredOperatorVersion"`
-	Features                *Features `yaml:"features,omitempty"`
+	RequiredOperatorVersion string          `yaml:"requiredOperatorVersion"`
+	Features                map[string]bool `yaml:"features,omitempty"`
 	// Prefer plural, but accept singular key as found in some manifests.
 	GeneratedSecrets []GeneratedSecret `yaml:"generatedSecrets,omitempty"`
 	// CommonEnvvars defines reusable groups of env vars that can be referenced
@@ -62,16 +67,6 @@ type KafkaTopic struct {
 	PartitionCount int      `yaml:"partitionCount,omitempty"`
 }
 
-// Features represents optional feature flags in the manifest.
-type Features struct {
-	RunsV2            bool `yaml:"runsV2"`
-	FilestreamQueue   bool `yaml:"filestreamQueue"`
-	MetricObserver    bool `yaml:"metricObserver"`
-	WeaveTrace        bool `yaml:"weaveTrace"`
-	WeaveTraceWorkers bool `yaml:"weaveTraceWorkers"`
-	Proxy             bool `yaml:"proxy"`
-}
-
 // ImageRef represents an application container image reference.
 type ImageRef struct {
 	Repository string `yaml:"repository"`
@@ -112,15 +107,18 @@ type Application struct {
 	InitContainers []ContainerSpec `yaml:"initContainers,omitempty"`
 	// Features enables this application only when specific feature flags are set in the
 	// top-level manifest features. In the YAML this appears as a list of strings.
-	Features   []string         `yaml:"features,omitempty"`
-	Env        []EnvVar         `yaml:"env,omitempty"`
-	Mysql      *SectionRef      `yaml:"mysql,omitempty"`
-	Redis      *SectionRef      `yaml:"redis,omitempty"`
-	Bucket     *SectionRef      `yaml:"bucket,omitempty"`
-	Clickhouse *SectionRef      `yaml:"clickhouse,omitempty"`
-	Kafka      *AppKafkaSection `yaml:"kafka,omitempty"`
-	Service    *ServiceSpec     `yaml:"service,omitempty"`
-	Ports      []ContainerPort  `yaml:"ports,omitempty"`
+	Features       []string         `yaml:"features,omitempty"`
+	Env            []EnvVar         `yaml:"env,omitempty"`
+	Mysql          *SectionRef      `yaml:"mysql,omitempty"`
+	Redis          *SectionRef      `yaml:"redis,omitempty"`
+	Bucket         *SectionRef      `yaml:"bucket,omitempty"`
+	Clickhouse     *SectionRef      `yaml:"clickhouse,omitempty"`
+	Kafka          *AppKafkaSection `yaml:"kafka,omitempty"`
+	Service        *ServiceSpec     `yaml:"service,omitempty"`
+	Ports          []ContainerPort  `yaml:"ports,omitempty"`
+	LivenessProbe  *corev1.Probe    `yaml:"livenessProbe,omitempty"`
+	ReadinessProbe *corev1.Probe    `yaml:"readinessProbe,omitempty"`
+	StartupProbe   *corev1.Probe    `yaml:"startupProbe,omitempty"`
 	// Files allows injecting files into the application's container by mounting
 	// data from ConfigMaps. Each entry may either inline file contents (stored
 	// into an operator-managed ConfigMap) or reference an existing ConfigMap.
@@ -158,21 +156,15 @@ type EnvSource struct {
 // ServiceSpec represents an optional Service definition for an application
 // (currently only ports are modeled as per 0.76.1.yaml needs).
 type ServiceSpec struct {
-	Ports []ServicePort `yaml:"ports,omitempty"`
-}
-
-// ServicePort models a single port entry in an application's service section.
-type ServicePort struct {
-	Port     int32       `yaml:"port"`
-	Protocol v1.Protocol `yaml:"protocol,omitempty"`
-	Name     string      `yaml:"name,omitempty"`
+	Type  corev1.ServiceType   `yaml:"type,omitempty"`
+	Ports []corev1.ServicePort `yaml:"ports,omitempty"`
 }
 
 // ContainerPort models a single port entry in an application's ports section.
 type ContainerPort struct {
-	ContainerPort int32       `yaml:"containerPort"`
-	Protocol      v1.Protocol `yaml:"protocol,omitempty"`
-	Name          string      `yaml:"name,omitempty"`
+	ContainerPort int32           `yaml:"containerPort"`
+	Protocol      corev1.Protocol `yaml:"protocol,omitempty"`
+	Name          string          `yaml:"name,omitempty"`
 }
 
 // MigrationJob represents a migration invocation with an image and args, used
@@ -202,4 +194,19 @@ type FileSpec struct {
 	// ConfigMapRef references an existing ConfigMap (in the same namespace) to source the file from.
 	// When set, Inline should be empty.
 	ConfigMapRef string `yaml:"configMapRef,omitempty"`
+}
+
+// This will eventually be loaded externally outside of testing
+var Path = "0.76.1.yaml"
+
+func GetServerManifest(version string) (Manifest, error) {
+	manifest := Manifest{}
+	manifestData, err := os.ReadFile(Path)
+	if err != nil {
+		return Manifest{}, err
+	}
+	if err = yaml.Unmarshal(manifestData, &manifest); err != nil {
+		return Manifest{}, err
+	}
+	return manifest, nil
 }
