@@ -8,3 +8,5 @@ const (
 	SizeMedium Size = "medium"
 	SizeLarge  Size = "large"
 )
+
+const DefaultOnDeleteRetentionPolicy = "preserve"

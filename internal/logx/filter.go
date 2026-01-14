@@ -1,6 +1,8 @@
 package logx
 
 import (
+	"fmt"
+
 	"github.com/go-logr/logr"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -13,6 +15,7 @@ type NameFilteredCore struct {
 }
 
 func (c *NameFilteredCore) Check(ent zapcore.Entry, ce *zapcore.CheckedEntry) *zapcore.CheckedEntry {
+	fmt.Println(ent)
 	if minLevel, ok := c.overrides[ent.LoggerName]; ok {
 		if ent.Level >= minLevel {
 			return c.Core.Check(ent, ce)

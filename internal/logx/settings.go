@@ -18,13 +18,13 @@ const (
 )
 
 var overrides = map[string]zapcore.Level{
-	ReconcileInfraV2:  zapcore.DebugLevel,
-	ReconcileAppV2:    zapcore.DebugLevel,
-	Kafka:             zapcore.DebugLevel,
-	Mysql:             zapcore.DebugLevel,
-	Redis:             zapcore.DebugLevel,
-	Minio:             zapcore.DebugLevel,
-	ClickHouse:        zapcore.DebugLevel,
-	DefaultingWebhook: zapcore.DebugLevel,
-	ValidatingWebhook: zapcore.DebugLevel,
+	//ReconcileInfraV2:  zapcore.DebugLevel,
+	//ReconcileAppV2:    zapcore.DebugLevel,
+	Kafka: zapcore.DebugLevel,
+	//Mysql:             zapcore.DebugLevel,
+	//Redis:             zapcore.DebugLevel,
+	//Minio:             zapcore.DebugLevel,
+	//ClickHouse:        zapcore.DebugLevel,
+	//DefaultingWebhook: zapcore.DebugLevel,
+	//ValidatingWebhook: zapcore.DebugLevel,
 }

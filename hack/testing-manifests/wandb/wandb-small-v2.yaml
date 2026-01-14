@@ -4,6 +4,8 @@ metadata:
   name: wandb-small-v2
 spec:
   size: small
+  retentionPolicy:
+    onDelete: preserve
   mysql:
     enabled: true
     telemetry:

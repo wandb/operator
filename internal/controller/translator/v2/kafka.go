@@ -49,6 +49,7 @@ func ToKafkaVendorSpec(
 	ctx, log := logx.IntoContext(ctx, logx.Kafka)
 
 	if !spec.Enabled {
+		log.Debug("Kafka is disabled, no vendor spec")
 		return nil, nil
 	}
 
@@ -110,6 +111,7 @@ func ToKafkaVendorSpec(
 		return nil, fmt.Errorf("failed to set owner reference: %w", err)
 	}
 
+	log.Debug("Kafka is enabled, providing vendor spec")
 	return kafka, nil
 }
 

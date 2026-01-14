@@ -43,7 +43,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
-const CleanupFinalizer = "cleanup.app.wandb.com"
+const RetentionFinalizer = "retention.app.wandb.com"
 
 var defaultRequeueMinutes = 1
 var defaultRequeueDuration = time.Duration(defaultRequeueMinutes) * time.Minute
@@ -62,22 +62,22 @@ func Reconcile(
 	var errorCount int
 
 	/////////////////////////
-	// Cleanup Finalizer
+	// Retention Finalizer
 
 	isFlaggedForDeletion := !wandb.ObjectMeta.DeletionTimestamp.IsZero()
 
 	// ensure finalizer if not present
-	if !isFlaggedForDeletion && !ctrlqueue.ContainsString(wandb.GetFinalizers(), CleanupFinalizer) {
-		wandb.ObjectMeta.Finalizers = append(wandb.ObjectMeta.Finalizers, CleanupFinalizer)
+	if !isFlaggedForDeletion && !ctrlqueue.ContainsString(wandb.GetFinalizers(), RetentionFinalizer) {
+		wandb.ObjectMeta.Finalizers = append(wandb.ObjectMeta.Finalizers, RetentionFinalizer)
 		if err := client.Update(ctx, wandb); err != nil {
-			log.Error(err, fmt.Sprintf("Failed to add finalizer '%s'", CleanupFinalizer))
+			log.Error(err, fmt.Sprintf("Failed to add finalizer '%s'", RetentionFinalizer))
 			return ctrl.Result{}, err
 		}
 	}
 
 	// if deleting and handle cleanup or preservation of config and data
 	if isFlaggedForDeletion && !wandb.ObjectMeta.DeletionTimestamp.IsZero() {
-		if ctrlqueue.ContainsString(wandb.GetFinalizers(), CleanupFinalizer) {
+		if ctrlqueue.ContainsString(wandb.GetFinalizers(), RetentionFinalizer) {
 
 			switch kafkaRetentionPolicy(ctx, wandb).OnDelete {
 			case apiv2.WBPurgeOnDelete:
@@ -88,7 +88,7 @@ func Reconcile(
 					return ctrl.Result{}, err
 				}
 			}
-			controllerutil.RemoveFinalizer(wandb, CleanupFinalizer)
+			controllerutil.RemoveFinalizer(wandb, RetentionFinalizer)
 			if err := client.Update(ctx, wandb); err != nil {
 				log.Error(err, "Failed to remove finalizer '%s'")
 				return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil

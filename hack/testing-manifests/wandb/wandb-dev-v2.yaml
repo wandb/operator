@@ -6,6 +6,8 @@ spec:
   wandb:
     hostname: http://localhost:8080
   size: dev
+  retentionPolicy:
+    onDelete: preserve
   mysql:
     enabled: true
     telemetry:
