@@ -127,13 +127,13 @@ type WandbOIDCSpec struct {
 // WBMySQLSpec fields have many default values that, if unspecified,
 // will be applied by a defaulting webook
 type WBMySQLSpec struct {
-	Enabled     	bool          `json:"enabled"`
-	StorageSize 	string        `json:"storageSize,omitempty"`
-	Replicas    	int32         `json:"replicas,omitempty"`
-	Config      	WBMySQLConfig `json:"config,omitempty"`
-	Namespace   	string        `json:"namespace,omitempty"`
-	Name        	string        `json:"name,omitempty"`
-	Telemetry   	Telemetry     `json:"telemetry,omitempty"`
+	Enabled         bool               `json:"enabled"`
+	StorageSize     string             `json:"storageSize,omitempty"`
+	Replicas        int32              `json:"replicas,omitempty"`
+	Config          WBMySQLConfig      `json:"config,omitempty"`
+	Namespace       string             `json:"namespace,omitempty"`
+	Name            string             `json:"name,omitempty"`
+	Telemetry       Telemetry          `json:"telemetry,omitempty"`
 	RetentionPolicy *WBRetentionPolicy `json:"retentionPolicy,omitempty"`
 
 	Affinity    *corev1.Affinity     `json:"affinity,omitempty"`
@@ -153,14 +153,14 @@ type Telemetry struct {
 // WBRedisSpec fields have many default values that, if unspecified,
 // will be applied by a defaulting webook
 type WBRedisSpec struct {
-	Enabled     	bool                `json:"enabled"`
-	StorageSize 	string              `json:"storageSize,omitempty"`
-	Config      	WBRedisConfig       `json:"config,omitempty"`
-	Sentinel    	WBRedisSentinelSpec `json:"sentinel,omitempty"`
-	Namespace   	string              `json:"namespace,omitempty"`
-	Name        	string              `json:"name,omitempty"`
-	Telemetry   	Telemetry           `json:"telemetry,omitempty"`
-	RetentionPolicy *WBRetentionPolicy `json:"retentionPolicy,omitempty"`
+	Enabled         bool                `json:"enabled"`
+	StorageSize     string              `json:"storageSize,omitempty"`
+	Config          WBRedisConfig       `json:"config,omitempty"`
+	Sentinel        WBRedisSentinelSpec `json:"sentinel,omitempty"`
+	Namespace       string              `json:"namespace,omitempty"`
+	Name            string              `json:"name,omitempty"`
+	Telemetry       Telemetry           `json:"telemetry,omitempty"`
+	RetentionPolicy *WBRetentionPolicy  `json:"retentionPolicy,omitempty"`
 
 	Affinity    *corev1.Affinity     `json:"affinity,omitempty"`
 	Tolerations *[]corev1.Toleration `json:"tolerations,omitempty"`
@@ -183,13 +183,13 @@ type WBRedisSentinelConfig struct {
 // WBKafkaSpec fields have many default values that, if unspecified,
 // will be applied by a defaulting webook
 type WBKafkaSpec struct {
-	Enabled     	bool          `json:"enabled"`
-	StorageSize 	string        `json:"storageSize,omitempty"`
-	Replicas    	int32         `json:"replicas,omitempty"`
-	Config      	WBKafkaConfig `json:"config,omitempty"`
-	Namespace   	string        `json:"namespace,omitempty"`
-	Name        	string        `json:"name,omitempty"`
-	Telemetry   	Telemetry     `json:"telemetry,omitempty"`
+	Enabled         bool               `json:"enabled"`
+	StorageSize     string             `json:"storageSize,omitempty"`
+	Replicas        int32              `json:"replicas,omitempty"`
+	Config          WBKafkaConfig      `json:"config,omitempty"`
+	Namespace       string             `json:"namespace,omitempty"`
+	Name            string             `json:"name,omitempty"`
+	Telemetry       Telemetry          `json:"telemetry,omitempty"`
 	RetentionPolicy *WBRetentionPolicy `json:"retentionPolicy,omitempty"`
 
 	SkipDataRecovery bool `json:"skipDataRecovery,omitempty"`
@@ -214,13 +214,13 @@ type WBKafkaReplicationConfig struct {
 // WBMinioSpec fields have many default values that, if unspecified,
 // will be applied by a defaulting webook
 type WBMinioSpec struct {
-	Enabled     	bool          `json:"enabled"`
-	StorageSize 	string        `json:"storageSize,omitempty"`
-	Replicas    	int32         `json:"replicas,omitempty"`
-	Config      	WBMinioConfig `json:"config,omitempty"`
-	Namespace   	string        `json:"namespace,omitempty"`
-	Name        	string        `json:"name,omitempty"`
-	Telemetry   	Telemetry     `json:"telemetry,omitempty"`
+	Enabled         bool               `json:"enabled"`
+	StorageSize     string             `json:"storageSize,omitempty"`
+	Replicas        int32              `json:"replicas,omitempty"`
+	Config          WBMinioConfig      `json:"config,omitempty"`
+	Namespace       string             `json:"namespace,omitempty"`
+	Name            string             `json:"name,omitempty"`
+	Telemetry       Telemetry          `json:"telemetry,omitempty"`
 	RetentionPolicy *WBRetentionPolicy `json:"retentionPolicy,omitempty"`
 
 	Affinity    *corev1.Affinity     `json:"affinity,omitempty"`
@@ -236,14 +236,14 @@ type WBMinioConfig struct {
 // WBClickHouseSpec fields have many default values that, if unspecified,
 // will be applied by a defaulting webook
 type WBClickHouseSpec struct {
-	Enabled     	bool               `json:"enabled"`
-	StorageSize 	string             `json:"storageSize,omitempty"`
-	Replicas    	int32              `json:"replicas,omitempty"`
-	Version     	string             `json:"version,omitempty"`
-	Config      	WBClickHouseConfig `json:"config,omitempty"`
-	Namespace   	string             `json:"namespace,omitempty"`
-	Name        	string             `json:"name,omitempty"`
-	Telemetry   	Telemetry          `json:"telemetry,omitempty"`
+	Enabled         bool               `json:"enabled"`
+	StorageSize     string             `json:"storageSize,omitempty"`
+	Replicas        int32              `json:"replicas,omitempty"`
+	Version         string             `json:"version,omitempty"`
+	Config          WBClickHouseConfig `json:"config,omitempty"`
+	Namespace       string             `json:"namespace,omitempty"`
+	Name            string             `json:"name,omitempty"`
+	Telemetry       Telemetry          `json:"telemetry,omitempty"`
 	RetentionPolicy *WBRetentionPolicy `json:"retentionPolicy,omitempty"`
 
 	Affinity    *corev1.Affinity     `json:"affinity,omitempty"`

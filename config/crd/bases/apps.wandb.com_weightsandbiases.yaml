@@ -1019,12 +1019,6 @@ spec:
                         x-kubernetes-list-type: atomic
                     type: object
                 type: object
-              autoCleanupEnabled:
-                description: |-
-                  AutoCleanupEnabled will:
-                    * if `true`, will purge all configs and data
-                    * if `false`, will maintain configs and data required to recreate WandB with previous infra
-                type: boolean
               clickhouse:
                 description: |-
                   WBClickHouseSpec fields have many default values that, if unspecified,
@@ -3098,8 +3092,6 @@ spec:
                   replicas:
                     format: int32
                     type: integer
-                  skipDataRecovery:
-                    type: boolean
                   retentionPolicy:
                     properties:
                       onDelete:
@@ -3108,6 +3100,8 @@ spec:
                     required:
                     - onDelete
                     type: object
+                  skipDataRecovery:
+                    type: boolean
                   storageSize:
                     type: string
                   telemetry:
