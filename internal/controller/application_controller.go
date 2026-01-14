@@ -26,6 +26,7 @@ import (
 	"github.com/wandb/operator/pkg/utils"
 	v1alpha1 "github.com/wandb/operator/pkg/vendored/argo-rollouts/argoproj.io.rollouts/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
+	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -47,6 +48,7 @@ type ApplicationReconciler struct {
 // +kubebuilder:rbac:groups=apps.wandb.com,resources=applications,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apps.wandb.com,resources=applications/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=apps.wandb.com,resources=applications/finalizers,verbs=update
+// +kubebuilder:rbac:groups=autoscaling,resources=horizontalpodautoscalers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -116,6 +118,12 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 				return ctrl.Result{}, err
 			}
 
+			// Delete HPA if present
+			if err := r.deleteHPA(ctx, &app); err != nil {
+				logger.Error(err, "Failed to delete HPA during finalization")
+				return ctrl.Result{}, err
+			}
+
 			// Delete Jobs
 			if err := r.deleteJobs(ctx, &app); err != nil {
 				logger.Error(err, "Failed to delete Jobs during finalization")
@@ -178,6 +186,12 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// Reconcile Service if specified
 	if err := r.reconcileService(ctx, &app); err != nil {
 		logger.Error(err, "Failed to reconcile Service")
+		return ctrl.Result{}, err
+	}
+
+	// Reconcile HPA if specified
+	if err := r.reconcileHPA(ctx, &app); err != nil {
+		logger.Error(err, "Failed to reconcile HPA")
 		return ctrl.Result{}, err
 	}
 
@@ -248,6 +262,15 @@ func (r *ApplicationReconciler) reconcileDeployment(ctx context.Context, app *wa
 
 	deployment.Spec.Selector = &v1.LabelSelector{
 		MatchLabels: selectorLabels,
+	}
+
+	if app.Spec.HpaTemplate != nil {
+		if deployment.CreationTimestamp.IsZero() {
+			deployment.Spec.Replicas = app.Spec.HpaTemplate.MinReplicas
+		}
+		// Do not update replicas if HPA is managing them
+	} else {
+		deployment.Spec.Replicas = app.Spec.Replicas
 	}
 
 	logger.Info("Deployment spec", "Deployment", deployment.Name, "Spec", deployment.Spec)
@@ -339,6 +362,15 @@ func (r *ApplicationReconciler) reconcileRollout(ctx context.Context, app *wandb
 		MatchLabels: selectorLabels,
 	}
 
+	if app.Spec.HpaTemplate != nil {
+		if rollout.CreationTimestamp.IsZero() {
+			rollout.Spec.Replicas = app.Spec.HpaTemplate.MinReplicas
+		}
+		// Do not update replicas if HPA is managing them
+	} else {
+		rollout.Spec.Replicas = app.Spec.Replicas
+	}
+
 	logger.Info("Rollout spec", "Rollout", rollout.Name, "Spec", rollout.Spec)
 
 	if rollout.CreationTimestamp.IsZero() {
@@ -426,6 +458,15 @@ func (r *ApplicationReconciler) reconcileStatefulSet(ctx context.Context, app *w
 
 	statefulSet.Spec.Selector = &v1.LabelSelector{
 		MatchLabels: selectorLabels,
+	}
+
+	if app.Spec.HpaTemplate != nil {
+		if statefulSet.CreationTimestamp.IsZero() {
+			statefulSet.Spec.Replicas = app.Spec.HpaTemplate.MinReplicas
+		}
+		// Do not update replicas if HPA is managing them
+	} else {
+		statefulSet.Spec.Replicas = app.Spec.Replicas
 	}
 
 	logger.Info("StatefulSet spec", "StatefulSet", statefulSet.Name, "Spec", statefulSet.Spec)
@@ -781,6 +822,111 @@ func (r *ApplicationReconciler) deleteService(ctx context.Context, app *wandbv2.
 	return nil
 }
 
+// reconcileHPA handles HorizontalPodAutoscaler resources defined in the Application spec
+func (r *ApplicationReconciler) reconcileHPA(ctx context.Context, app *wandbv2.Application) error {
+	logger := logx.FromContext(ctx)
+
+	if app.Spec.HpaTemplate == nil {
+		// If HPA template is not specified, ensure any existing HPA owned by the Application is deleted
+		return r.deleteHPA(ctx, app)
+	}
+
+	desired := &autoscalingv1.HorizontalPodAutoscaler{}
+	desired.Name = app.Name
+	desired.Namespace = app.Namespace
+
+	// Set owner reference
+	if err := ctrl.SetControllerReference(app, desired, r.Scheme); err != nil {
+		return err
+	}
+
+	// Merge labels/annotations from meta template
+	desired.Labels = utils.MergeMapsStringString(
+		desired.Labels,
+		app.Spec.MetaTemplate.Labels,
+	)
+	desired.Annotations = utils.MergeMapsStringString(
+		desired.Annotations,
+		app.Spec.MetaTemplate.Annotations,
+	)
+
+	// Copy spec from template
+	desired.Spec = *app.Spec.HpaTemplate.DeepCopy()
+
+	// Ensure scaleTargetRef points to our application workload
+	var groupVersion string
+	var kind string
+	switch app.Spec.Kind {
+	case "Deployment":
+		groupVersion = appsv1.SchemeGroupVersion.String()
+		kind = "Deployment"
+	case "StatefulSet":
+		groupVersion = appsv1.SchemeGroupVersion.String()
+		kind = "StatefulSet"
+	case "Rollout":
+		groupVersion = v1alpha1.SchemeGroupVersion.String()
+		kind = "Rollout"
+	default:
+		return fmt.Errorf("unsupported application kind for HPA: %s", app.Spec.Kind)
+	}
+
+	desired.Spec.ScaleTargetRef = autoscalingv1.CrossVersionObjectReference{
+		APIVersion: groupVersion,
+		Kind:       kind,
+		Name:       app.Name,
+	}
+
+	current := &autoscalingv1.HorizontalPodAutoscaler{}
+	err := r.Get(ctx, client.ObjectKey{Namespace: app.Namespace, Name: app.Name}, current)
+	if err != nil {
+		if !errors.IsNotFound(err) {
+			logger.Error(err, "Failed to get HPA")
+			return err
+		}
+		// Create path
+		logger.Info("Creating HPA", "HPA", desired.Name)
+		if err := r.Create(ctx, desired); err != nil {
+			logger.Error(err, "Failed to create HPA")
+			return err
+		}
+
+		app.Status.HPAStatus = &desired.Status
+		logger.Info("Successfully created HPA", "HPA", desired.Name)
+		return nil
+	}
+
+	// Update path
+	desired.ResourceVersion = current.ResourceVersion
+	logger.Info("Updating HPA", "HPA", desired.Name)
+	if err := r.Update(ctx, desired); err != nil {
+		logger.Error(err, "Failed to update HPA")
+		return err
+	}
+
+	app.Status.HPAStatus = &current.Status
+	logger.Info("Successfully updated HPA", "HPA", desired.Name)
+	return nil
+}
+
+// deleteHPA deletes the HPA associated with the Application
+func (r *ApplicationReconciler) deleteHPA(ctx context.Context, app *wandbv2.Application) error {
+	logger := logx.FromContext(ctx)
+	hpa := &autoscalingv1.HorizontalPodAutoscaler{}
+	if err := r.Get(ctx, client.ObjectKey{Namespace: app.Namespace, Name: app.Name}, hpa); err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+	deletePolicy := client.PropagationPolicy(v1.DeletePropagationBackground)
+	if err := r.Delete(ctx, hpa, deletePolicy); err != nil {
+		logger.Error(err, "Failed to delete HPA", "HPA", app.Name)
+		return err
+	}
+	logger.Info("Successfully deleted HPA", "HPA", app.Name)
+	return nil
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *ApplicationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	controller := ctrl.NewControllerManagedBy(mgr).
@@ -788,6 +934,7 @@ func (r *ApplicationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&appsv1.Deployment{}).
 		Owns(&appsv1.StatefulSet{}).
 		Owns(&corev1.Service{}).
+		Owns(&autoscalingv1.HorizontalPodAutoscaler{}).
 		Named("application")
 
 	if r.EnableRollouts {

@@ -24,6 +24,7 @@ import (
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/pkg/vendored/argo-rollouts/argoproj.io.rollouts/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
+	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -107,6 +108,147 @@ var _ = Describe("Application Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(foundDeployment.Name).To(Equal(resourceName))
 			Expect(foundDeployment.Spec.Template.Spec.Containers[0].Image).To(Equal("nginx"))
+		})
+
+		It("should successfully scale a Deployment using Replicas field", func() {
+			resourceName := "test-replicas"
+			typeNamespacedName := types.NamespacedName{
+				Name:      resourceName,
+				Namespace: "default",
+			}
+			var replicas int32 = 3
+
+			resource := &apiv2.Application{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      resourceName,
+					Namespace: "default",
+				},
+				Spec: apiv2.ApplicationSpec{
+					Kind:     "Deployment",
+					Replicas: &replicas,
+					PodTemplate: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{
+									Name:  "test-container",
+									Image: "nginx",
+								},
+							},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+
+			controllerReconciler := &ApplicationReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+
+			// Reconcile to add finalizer
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Reconcile to create Deployment
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+
+			foundDeployment := &appsv1.Deployment{}
+			Expect(k8sClient.Get(ctx, typeNamespacedName, foundDeployment)).To(Succeed())
+			Expect(*foundDeployment.Spec.Replicas).To(Equal(replicas))
+
+			// Update replicas
+			var newReplicas int32 = 5
+			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).To(Succeed())
+			resource.Spec.Replicas = &newReplicas
+			Expect(k8sClient.Update(ctx, resource)).To(Succeed())
+
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(k8sClient.Get(ctx, typeNamespacedName, foundDeployment)).To(Succeed())
+			Expect(*foundDeployment.Spec.Replicas).To(Equal(newReplicas))
+		})
+
+		It("should successfully create and manage an HPA", func() {
+			resourceName := "test-hpa"
+			typeNamespacedName := types.NamespacedName{
+				Name:      resourceName,
+				Namespace: "default",
+			}
+			var minReplicas int32 = 2
+			var maxReplicas int32 = 10
+
+			resource := &apiv2.Application{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      resourceName,
+					Namespace: "default",
+				},
+				Spec: apiv2.ApplicationSpec{
+					Kind: "Deployment",
+					HpaTemplate: &autoscalingv1.HorizontalPodAutoscalerSpec{
+						MinReplicas:                    &minReplicas,
+						MaxReplicas:                    maxReplicas,
+						TargetCPUUtilizationPercentage: func(i int32) *int32 { return &i }(50),
+					},
+					PodTemplate: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{
+									Name:  "test-container",
+									Image: "nginx",
+								},
+							},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+
+			controllerReconciler := &ApplicationReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+
+			// Reconcile to add finalizer
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Reconcile to create Deployment and HPA
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Check Deployment replicas (should be set to MinReplicas on creation)
+			foundDeployment := &appsv1.Deployment{}
+			Expect(k8sClient.Get(ctx, typeNamespacedName, foundDeployment)).To(Succeed())
+			Expect(*foundDeployment.Spec.Replicas).To(Equal(minReplicas))
+
+			// Check HPA
+			foundHPA := &autoscalingv1.HorizontalPodAutoscaler{}
+			Expect(k8sClient.Get(ctx, typeNamespacedName, foundHPA)).To(Succeed())
+			Expect(*foundHPA.Spec.MinReplicas).To(Equal(minReplicas))
+			Expect(foundHPA.Spec.MaxReplicas).To(Equal(maxReplicas))
+			Expect(foundHPA.Spec.ScaleTargetRef.Kind).To(Equal("Deployment"))
+			Expect(foundHPA.Spec.ScaleTargetRef.Name).To(Equal(resourceName))
+
+			// Remove HPA template and set manual replicas
+			var replicas int32 = 4
+			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).To(Succeed())
+			resource.Spec.HpaTemplate = nil
+			resource.Spec.Replicas = &replicas
+			Expect(k8sClient.Update(ctx, resource)).To(Succeed())
+
+			// Reconcile again
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+
+			// HPA should be deleted
+			err = k8sClient.Get(ctx, typeNamespacedName, foundHPA)
+			Expect(apierrors.IsNotFound(err)).To(BeTrue())
+
+			// Deployment replicas should be updated
+			Expect(k8sClient.Get(ctx, typeNamespacedName, foundDeployment)).To(Succeed())
+			Expect(*foundDeployment.Spec.Replicas).To(Equal(replicas))
 		})
 
 		It("should successfully reconcile a StatefulSet", func() {

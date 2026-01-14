@@ -38,6 +38,10 @@ type ApplicationSpec struct {
 
 	Kind string `json:"kind,omitempty"`
 
+	// Replicas is the number of desired instances of the application.
+	// This field is ignored if HpaTemplate is provided.
+	Replicas *int32 `json:"replicas,omitempty"`
+
 	MetaTemplate         metav1.ObjectMeta                          `json:"metaTemplate,omitempty"`
 	PodTemplate          corev1.PodTemplateSpec                     `json:"podTemplate,omitempty"`
 	ServiceTemplate      *corev1.ServiceSpec                        `json:"serviceTemplate,omitempty"`

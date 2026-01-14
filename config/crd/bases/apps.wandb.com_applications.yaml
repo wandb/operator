@@ -27612,6 +27612,12 @@ spec:
                     - containers
                     type: object
                 type: object
+              replicas:
+                description: |-
+                  Replicas is the number of desired instances of the application.
+                  This field is ignored if HpaTemplate is provided.
+                format: int32
+                type: integer
               scaledObjectTemplate:
                 description: ScaledObjectSpec is the spec for a ScaledObject resource
                 properties:
