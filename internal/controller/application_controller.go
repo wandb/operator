@@ -107,7 +107,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 				}
 			case "Rollout":
 				if err := r.deleteRollout(ctx, &app); err != nil {
-					logger.Error(err, "Failed to delete Rollout during finalization")
+					logger.Error("Failed to delete Rollout during finalization", logx.ErrAttr(err))
 					return ctrl.Result{}, err
 				}
 			}
@@ -120,7 +120,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 			// Delete HPA if present
 			if err := r.deleteHPA(ctx, &app); err != nil {
-				logger.Error(err, "Failed to delete HPA during finalization")
+				logger.Error("Failed to delete HPA during finalization", logx.ErrAttr(err))
 				return ctrl.Result{}, err
 			}
 
@@ -191,7 +191,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	// Reconcile HPA if specified
 	if err := r.reconcileHPA(ctx, &app); err != nil {
-		logger.Error(err, "Failed to reconcile HPA")
+		logger.Error("Failed to reconcile HPA", logx.ErrAttr(err))
 		return ctrl.Result{}, err
 	}
 
@@ -214,7 +214,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	if err := r.Status().Update(ctx, &app); err != nil {
-		logger.Error(err, "Failed to update Application status")
+		logger.Error("Failed to update Application status", logx.ErrAttr(err))
 		return ctrl.Result{}, err
 	}
 
@@ -328,7 +328,7 @@ func (r *ApplicationReconciler) reconcileRollout(ctx context.Context, app *wandb
 	err := r.Get(ctx, client.ObjectKey{Namespace: app.Namespace, Name: app.Name}, rollout)
 	if err != nil {
 		if client.IgnoreNotFound(err) != nil {
-			logger.Error(err, "Failed to get Rollout")
+			logger.Error("Failed to get Rollout", logx.ErrAttr(err))
 			return ctrl.Result{}, err
 		}
 		logger.Info("Rollout not found", "Rollout", app.Name)
@@ -375,12 +375,12 @@ func (r *ApplicationReconciler) reconcileRollout(ctx context.Context, app *wandb
 
 	if rollout.CreationTimestamp.IsZero() {
 		if err := r.Create(ctx, rollout); err != nil {
-			logger.Error(err, "Failed to create Rollout")
+			logger.Error("Failed to create Rollout", logx.ErrAttr(err))
 			return ctrl.Result{}, err
 		}
 	} else {
 		if err := r.Update(ctx, rollout); err != nil {
-			logger.Error(err, "Failed to update Rollout")
+			logger.Error("Failed to update Rollout", logx.ErrAttr(err))
 			return ctrl.Result{}, err
 		}
 	}
@@ -393,7 +393,7 @@ func (r *ApplicationReconciler) reconcileRollout(ctx context.Context, app *wandb
 
 // deleteRollout deletes the Rollout associated with the Application
 func (r *ApplicationReconciler) deleteRollout(ctx context.Context, app *wandbv2.Application) error {
-	logger := logx.FromContext(ctx)
+	logger := logx.GetSlog(ctx)
 	logger.Info("Deleting Rollout", "Application", app.Name)
 
 	rollout := &v1alpha1.Rollout{}
@@ -403,13 +403,13 @@ func (r *ApplicationReconciler) deleteRollout(ctx context.Context, app *wandbv2.
 			logger.Info("Rollout not found, nothing to delete", "Rollout", app.Name)
 			return nil
 		}
-		logger.Error(err, "Failed to get Rollout")
+		logger.Error("Failed to get Rollout", logx.ErrAttr(err))
 		return err
 	}
 
 	deletePolicy := client.PropagationPolicy(v1.DeletePropagationBackground)
 	if err := r.Delete(ctx, rollout, deletePolicy); err != nil {
-		logger.Error(err, "Failed to delete Rollout", "Rollout", app.Name)
+		logger.Error("Failed to delete Rollout", logx.ErrAttr(err), "Rollout", app.Name)
 		return err
 	}
 	logger.Info("Successfully deleted Rollout", "Rollout", app.Name)
@@ -824,7 +824,7 @@ func (r *ApplicationReconciler) deleteService(ctx context.Context, app *wandbv2.
 
 // reconcileHPA handles HorizontalPodAutoscaler resources defined in the Application spec
 func (r *ApplicationReconciler) reconcileHPA(ctx context.Context, app *wandbv2.Application) error {
-	logger := logx.FromContext(ctx)
+	logger := logx.GetSlog(ctx)
 
 	if app.Spec.HpaTemplate == nil {
 		// If HPA template is not specified, ensure any existing HPA owned by the Application is deleted
@@ -880,13 +880,13 @@ func (r *ApplicationReconciler) reconcileHPA(ctx context.Context, app *wandbv2.A
 	err := r.Get(ctx, client.ObjectKey{Namespace: app.Namespace, Name: app.Name}, current)
 	if err != nil {
 		if !errors.IsNotFound(err) {
-			logger.Error(err, "Failed to get HPA")
+			logger.Error("Failed to get HPA", logx.ErrAttr(err))
 			return err
 		}
 		// Create path
 		logger.Info("Creating HPA", "HPA", desired.Name)
 		if err := r.Create(ctx, desired); err != nil {
-			logger.Error(err, "Failed to create HPA")
+			logger.Error("Failed to create HPA", logx.ErrAttr(err))
 			return err
 		}
 
@@ -899,7 +899,7 @@ func (r *ApplicationReconciler) reconcileHPA(ctx context.Context, app *wandbv2.A
 	desired.ResourceVersion = current.ResourceVersion
 	logger.Info("Updating HPA", "HPA", desired.Name)
 	if err := r.Update(ctx, desired); err != nil {
-		logger.Error(err, "Failed to update HPA")
+		logger.Error("Failed to update HPA", logx.ErrAttr(err))
 		return err
 	}
 
@@ -910,7 +910,7 @@ func (r *ApplicationReconciler) reconcileHPA(ctx context.Context, app *wandbv2.A
 
 // deleteHPA deletes the HPA associated with the Application
 func (r *ApplicationReconciler) deleteHPA(ctx context.Context, app *wandbv2.Application) error {
-	logger := logx.FromContext(ctx)
+	logger := logx.GetSlog(ctx)
 	hpa := &autoscalingv1.HorizontalPodAutoscaler{}
 	if err := r.Get(ctx, client.ObjectKey{Namespace: app.Namespace, Name: app.Name}, hpa); err != nil {
 		if errors.IsNotFound(err) {
@@ -920,7 +920,7 @@ func (r *ApplicationReconciler) deleteHPA(ctx context.Context, app *wandbv2.Appl
 	}
 	deletePolicy := client.PropagationPolicy(v1.DeletePropagationBackground)
 	if err := r.Delete(ctx, hpa, deletePolicy); err != nil {
-		logger.Error(err, "Failed to delete HPA", "HPA", app.Name)
+		logger.Error("Failed to delete HPA", logx.ErrAttr(err), "HPA", app.Name)
 		return err
 	}
 	logger.Info("Successfully deleted HPA", "HPA", app.Name)
