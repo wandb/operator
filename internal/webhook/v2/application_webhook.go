@@ -93,7 +93,9 @@ func (v *ApplicationCustomValidator) ValidateCreate(_ context.Context, obj runti
 	}
 	applicationlog.Info("Validation for Application upon creation", "name", application.GetName())
 
-	// TODO(user): fill in your validation logic upon object creation.
+	if err := v.validateHPAAndReplicas(application); err != nil {
+		return nil, err
+	}
 
 	return nil, nil
 }
@@ -106,6 +108,10 @@ func (v *ApplicationCustomValidator) ValidateUpdate(_ context.Context, oldObj, n
 	}
 	applicationlog.Info("Validation for Application upon update", "name", application.GetName())
 
+	if err := v.validateHPAAndReplicas(application); err != nil {
+		return nil, err
+	}
+
 	applicationOld, ok := oldObj.(*appsv2.Application)
 	if !ok {
 		return nil, fmt.Errorf("expected a Application object for the oldObj but got %T", oldObj)
@@ -116,6 +122,13 @@ func (v *ApplicationCustomValidator) ValidateUpdate(_ context.Context, oldObj, n
 	}
 
 	return nil, nil
+}
+
+func (v *ApplicationCustomValidator) validateHPAAndReplicas(app *appsv2.Application) error {
+	if app.Spec.Replicas != nil && app.Spec.HpaTemplate != nil {
+		return fmt.Errorf("cannot specify both replicas and hpaTemplate")
+	}
+	return nil
 }
 
 // ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type Application.

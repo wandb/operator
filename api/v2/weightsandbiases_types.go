@@ -258,6 +258,9 @@ type WeightsAndBiasesStatus struct {
 
 type WandbStatus struct {
 	Hostname string `json:"hostname"`
+
+	// +kubebuilder:default:={}
+	Applications map[string]ApplicationStatus `json:"applications,omitempty"`
 }
 
 type WBInfraStatus struct {

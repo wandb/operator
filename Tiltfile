@@ -228,11 +228,12 @@ local_resource(
 )
 
 if settings.get("installWandb"):
+    crdName = read_yaml('./hack/testing-manifests/wandb/' + settings.get('wandbCRD') + '.yaml')['metadata']['name']
     k8s_yaml('./hack/testing-manifests/wandb/' + settings.get('wandbCRD') + '.yaml')
     k8s_resource(
         new_name='Wandb',
         objects=[
-            '%s:weightsandbiases' % settings.get('wandbCRD')
+            '%s:weightsandbiases' % crdName
         ],
         resource_deps=["operator-controller-manager"],
         labels=["Operator-Resources"],

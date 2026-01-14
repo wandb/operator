@@ -8,7 +8,7 @@ import (
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/infra/clickhouse/altinity"
 	"github.com/wandb/operator/internal/logx"
-	chiv2 "github.com/wandb/operator/internal/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
+	"github.com/wandb/operator/pkg/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -25,7 +25,7 @@ func ToClickHouseVendorSpec(
 	spec apiv2.WBClickHouseSpec,
 	owner metav1.Object,
 	scheme *runtime.Scheme,
-) (*chiv2.ClickHouseInstallation, error) {
+) (*v1.ClickHouseInstallation, error) {
 	ctx, log := logx.IntoContext(ctx, logx.ClickHouse)
 
 	if !spec.Enabled {
@@ -41,35 +41,35 @@ func ToClickHouseVendorSpec(
 
 	// Create user settings with password
 	passwordSha256 := fmt.Sprintf("%x", sha256.Sum256([]byte(altinity.ClickHousePassword)))
-	userSettings := chiv2.NewSettings()
+	userSettings := v1.NewSettings()
 	userSettings.Set(
 		fmt.Sprintf("%s/password_sha256_hex", altinity.ClickHouseUser),
-		chiv2.NewSettingScalar(passwordSha256),
+		v1.NewSettingScalar(passwordSha256),
 	)
 	userSettings.Set(
 		fmt.Sprintf("%s/networks/ip", altinity.ClickHouseUser),
-		chiv2.NewSettingScalar("::/0"),
+		v1.NewSettingScalar("::/0"),
 	)
 	userSettings.Set(
 		fmt.Sprintf("%s/allow_databases/database", altinity.ClickHouseUser),
-		chiv2.NewSettingVector([]string{altinity.ClickHouseDatabase, "db_management"}),
+		v1.NewSettingVector([]string{altinity.ClickHouseDatabase, "db_management"}),
 	)
 
 	// Create server settings
-	serverSettings := chiv2.NewSettings()
+	serverSettings := v1.NewSettings()
 
 	// Enable built-in Prometheus metrics endpoint if telemetry is enabled
 	if spec.Telemetry.Enabled {
-		serverSettings.Set("prometheus/endpoint", chiv2.NewSettingScalar("/metrics"))
-		serverSettings.Set("prometheus/port", chiv2.NewSettingScalar("9363"))
-		serverSettings.Set("prometheus/metrics", chiv2.NewSettingScalar("true"))
-		serverSettings.Set("prometheus/events", chiv2.NewSettingScalar("true"))
-		serverSettings.Set("prometheus/asynchronous_metrics", chiv2.NewSettingScalar("true"))
-		serverSettings.Set("prometheus/status_info", chiv2.NewSettingScalar("true"))
+		serverSettings.Set("prometheus/endpoint", v1.NewSettingScalar("/metrics"))
+		serverSettings.Set("prometheus/port", v1.NewSettingScalar("9363"))
+		serverSettings.Set("prometheus/metrics", v1.NewSettingScalar("true"))
+		serverSettings.Set("prometheus/events", v1.NewSettingScalar("true"))
+		serverSettings.Set("prometheus/asynchronous_metrics", v1.NewSettingScalar("true"))
+		serverSettings.Set("prometheus/status_info", v1.NewSettingScalar("true"))
 	}
 
 	// Build ClickHouseInstallation spec
-	chi := &chiv2.ClickHouseInstallation{
+	chi := &v1.ClickHouseInstallation{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      nsnBuilder.InstallationName(),
 			Namespace: nsnBuilder.Namespace(),
@@ -77,12 +77,12 @@ func ToClickHouseVendorSpec(
 				"app": altinity.CHIName,
 			},
 		},
-		Spec: chiv2.ChiSpec{
-			Configuration: &chiv2.Configuration{
-				Clusters: []*chiv2.Cluster{
+		Spec: v1.ChiSpec{
+			Configuration: &v1.Configuration{
+				Clusters: []*v1.Cluster{
 					{
 						Name: nsnBuilder.ClusterName(),
-						Layout: &chiv2.ChiClusterLayout{
+						Layout: &v1.ChiClusterLayout{
 							ShardsCount:   altinity.ShardsCount,
 							ReplicasCount: int(spec.Replicas),
 						},
@@ -91,13 +91,13 @@ func ToClickHouseVendorSpec(
 				Users:    userSettings,
 				Settings: serverSettings,
 			},
-			Defaults: &chiv2.Defaults{
-				Templates: &chiv2.TemplatesList{
+			Defaults: &v1.Defaults{
+				Templates: &v1.TemplatesList{
 					DataVolumeClaimTemplate: nsnBuilder.VolumeTemplateName(),
 				},
 			},
-			Templates: &chiv2.Templates{
-				PodTemplates: []chiv2.PodTemplate{
+			Templates: &v1.Templates{
+				PodTemplates: []v1.PodTemplate{
 					{
 						Spec: corev1.PodSpec{
 							Affinity:    spec.Affinity,
@@ -105,7 +105,7 @@ func ToClickHouseVendorSpec(
 						},
 					},
 				},
-				VolumeClaimTemplates: []chiv2.VolumeClaimTemplate{
+				VolumeClaimTemplates: []v1.VolumeClaimTemplate{
 					{
 						Name: nsnBuilder.VolumeTemplateName(),
 						Spec: corev1.PersistentVolumeClaimSpec{
@@ -127,7 +127,7 @@ func ToClickHouseVendorSpec(
 	// Add pod template with resources if specified
 	// accessible even though not listed in the pod spec
 	if len(spec.Config.Resources.Requests) > 0 || len(spec.Config.Resources.Limits) > 0 {
-		chi.Spec.Templates.PodTemplates = []chiv2.PodTemplate{
+		chi.Spec.Templates.PodTemplates = []v1.PodTemplate{
 			{
 				//Name: "default-pod",
 				Spec: corev1.PodSpec{

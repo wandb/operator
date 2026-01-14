@@ -17,11 +17,13 @@ limitations under the License.
 package v2
 
 import (
+	"context"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	appsv2 "github.com/wandb/operator/api/v2"
-	// TODO (user): Add any additional imports if needed
+	autoscalingv1 "k8s.io/api/autoscaling/v1"
 )
 
 var _ = Describe("Application Webhook", func() {
@@ -62,26 +64,48 @@ var _ = Describe("Application Webhook", func() {
 	})
 
 	Context("When creating or updating Application under Validating Webhook", func() {
-		// TODO (user): Add logic for validating webhooks
-		// Example:
-		// It("Should deny creation if a required field is missing", func() {
-		//     By("simulating an invalid creation scenario")
-		//     obj.SomeRequiredField = ""
-		//     Expect(validator.ValidateCreate(ctx, obj)).Error().To(HaveOccurred())
-		// })
-		//
-		// It("Should admit creation if all required fields are present", func() {
-		//     By("simulating an invalid creation scenario")
-		//     obj.SomeRequiredField = "valid_value"
-		//     Expect(validator.ValidateCreate(ctx, obj)).To(BeNil())
-		// })
-		//
-		// It("Should validate updates correctly", func() {
-		//     By("simulating a valid update scenario")
-		//     oldObj.SomeRequiredField = "updated_value"
-		//     obj.SomeRequiredField = "updated_value"
-		//     Expect(validator.ValidateUpdate(ctx, oldObj, obj)).To(BeNil())
-		// })
+		ctx := context.Background()
+
+		It("Should deny if both replicas and hpaTemplate are provided", func() {
+			var replicas int32 = 3
+			obj.Spec.Replicas = &replicas
+			obj.Spec.HpaTemplate = &autoscalingv1.HorizontalPodAutoscalerSpec{
+				MaxReplicas: 10,
+			}
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("cannot specify both replicas and hpaTemplate"))
+
+			_, err = validator.ValidateUpdate(ctx, oldObj, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("cannot specify both replicas and hpaTemplate"))
+		})
+
+		It("Should admit if only replicas is provided", func() {
+			var replicas int32 = 3
+			obj.Spec.Replicas = &replicas
+			obj.Spec.HpaTemplate = nil
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = validator.ValidateUpdate(ctx, oldObj, obj)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("Should admit if only hpaTemplate is provided", func() {
+			obj.Spec.Replicas = nil
+			obj.Spec.HpaTemplate = &autoscalingv1.HorizontalPodAutoscalerSpec{
+				MaxReplicas: 10,
+			}
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = validator.ValidateUpdate(ctx, oldObj, obj)
+			Expect(err).NotTo(HaveOccurred())
+		})
 	})
 
 })
