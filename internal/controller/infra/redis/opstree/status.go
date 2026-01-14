@@ -28,7 +28,7 @@ func ComputeStatus(
 	connection *translator.InfraConnection,
 	currentGeneration int64,
 ) (translator.InfraStatus, []corev1.Event, ctrl.Result) {
-	ctx, _ = logx.IntoContext(ctx, logx.Redis)
+	ctx, _ = logx.WithSlog(ctx, logx.Redis)
 	result := translator.InfraStatus{}
 
 	if connection != nil {
@@ -157,7 +157,7 @@ func inferStateFromCondition(ctx context.Context, conditionType string, impliedS
 }
 
 func inferState_RedisStandaloneCustomResourceType(ctx context.Context, condition metav1.Condition) string {
-	log := logx.FromContext(ctx)
+	log := logx.GetSlog(ctx)
 	result := common.UnknownState
 	if condition.Status == metav1.ConditionTrue {
 		result = common.HealthyState
@@ -178,7 +178,7 @@ func inferState_RedisStandaloneCustomResourceType(ctx context.Context, condition
 }
 
 func inferState_RedisSentinelCustomResourceType(ctx context.Context, condition metav1.Condition) string {
-	log := logx.FromContext(ctx)
+	log := logx.GetSlog(ctx)
 	result := common.UnknownState
 	if condition.Status == metav1.ConditionTrue {
 		result = common.HealthyState
@@ -199,7 +199,7 @@ func inferState_RedisSentinelCustomResourceType(ctx context.Context, condition m
 }
 
 func inferState_RedisReplicationCustomResourceType(ctx context.Context, condition metav1.Condition) string {
-	log := logx.FromContext(ctx)
+	log := logx.GetSlog(ctx)
 	result := common.UnknownState
 	if condition.Status == metav1.ConditionTrue {
 		result = common.HealthyState
@@ -220,7 +220,7 @@ func inferState_RedisReplicationCustomResourceType(ctx context.Context, conditio
 }
 
 func inferState_RedisConnectionInfoType(ctx context.Context, condition metav1.Condition) string {
-	log := logx.FromContext(ctx)
+	log := logx.GetSlog(ctx)
 	result := common.UnknownState
 	if condition.Status == metav1.ConditionTrue {
 		result = common.HealthyState
@@ -236,7 +236,7 @@ func inferState_RedisConnectionInfoType(ctx context.Context, condition metav1.Co
 }
 
 func inferState_RedisReportedReadyType(ctx context.Context, condition metav1.Condition) string {
-	log := logx.FromContext(ctx)
+	log := logx.GetSlog(ctx)
 	result := common.UnknownState
 	if condition.Status == metav1.ConditionTrue {
 		result = common.HealthyState

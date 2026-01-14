@@ -16,14 +16,14 @@ import (
 )
 
 func readConnectionDetails(ctx context.Context, client client.Client, actual *pxcv1.PerconaXtraDBCluster, specNamespacedName types.NamespacedName) *mysqlConnInfo {
-	log := logx.FromContext(ctx)
+	log := logx.GetSlog(ctx)
 
 	mysqlPort := strconv.Itoa(3306)
 
 	dbPasswordSecret := &corev1.Secret{}
 	err := client.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("%s-%s", "internal", actual.Name), Namespace: specNamespacedName.Namespace}, dbPasswordSecret)
 	if err != nil {
-		log.Error(err, "Failed to get Secret", "Secret", fmt.Sprintf("%s-%s", specNamespacedName.Name, "user-db-password"))
+		log.Error("Failed to get Secret", logx.ErrAttr(err), "Secret", fmt.Sprintf("%s-%s", specNamespacedName.Name, "user-db-password"))
 		return nil
 	}
 
@@ -42,7 +42,7 @@ func ReadState(
 	specNamespacedName types.NamespacedName,
 	wandbOwner client.Object,
 ) ([]metav1.Condition, *translator.InfraConnection) {
-	ctx, _ = logx.IntoContext(ctx, logx.Mysql)
+	ctx, _ = logx.WithSlog(ctx, logx.Mysql)
 	var actual = &pxcv1.PerconaXtraDBCluster{}
 
 	nsnBuilder := createNsNameBuilder(specNamespacedName)

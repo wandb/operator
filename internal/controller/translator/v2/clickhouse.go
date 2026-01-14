@@ -26,7 +26,7 @@ func ToClickHouseVendorSpec(
 	owner metav1.Object,
 	scheme *runtime.Scheme,
 ) (*v1.ClickHouseInstallation, error) {
-	ctx, log := logx.IntoContext(ctx, logx.ClickHouse)
+	ctx, log := logx.WithSlog(ctx, logx.ClickHouse)
 
 	if !spec.Enabled {
 		return nil, nil
@@ -147,7 +147,7 @@ func ToClickHouseVendorSpec(
 
 	// Set owner reference
 	if err := ctrl.SetControllerReference(owner, chi, scheme); err != nil {
-		log.Error(err, "failed to set owner reference on CHI CR")
+		log.Error("failed to set owner reference on CHI CR", logx.ErrAttr(err))
 		return nil, fmt.Errorf("failed to set owner reference: %w", err)
 	}
 

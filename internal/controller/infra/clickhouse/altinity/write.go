@@ -22,7 +22,7 @@ func WriteState(
 	specNamespacedName types.NamespacedName,
 	desired *chiv1.ClickHouseInstallation,
 ) []metav1.Condition {
-	ctx, _ = logx.IntoContext(ctx, logx.ClickHouse)
+	ctx, _ = logx.WithSlog(ctx, logx.ClickHouse)
 	var actual = &chiv1.ClickHouseInstallation{}
 
 	nsnBuilder := createNsNameBuilder(specNamespacedName)

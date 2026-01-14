@@ -10,6 +10,7 @@ settings = {
     "installWandb": True,
     "wandbCRD": "wandb-default-v1",
     "installTelemetry": False,
+    "logFormat": "pretty",  # pretty, text, json
 }
 
 # global settings
@@ -330,11 +331,12 @@ if settings.get("installTelemetry"):
         labels=["Telemetry"],
     )
 
-docker_build_with_restart(IMG, '.',
-                          dockerfile_contents=DOCKERFILE,
-                          entrypoint='/manager',
-                          only=['./tilt_bin/manager', './hack/testing-manifests/server-manifest/0.76.1.yaml'],
-                          live_update=[
-                              sync('./tilt_bin/manager', '/manager'),
-                          ],
-                          )
+docker_build_with_restart(
+    IMG, '.',
+    dockerfile_contents=DOCKERFILE,
+    entrypoint=['/manager', '--log-format=' + settings['logFormat']],
+    only=['./tilt_bin/manager', './hack/testing-manifests/server-manifest/0.76.1.yaml'],
+    live_update=[
+        sync('./tilt_bin/manager', '/manager'),
+    ],
+)

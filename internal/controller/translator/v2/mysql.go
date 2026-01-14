@@ -91,7 +91,7 @@ func ToMySQLVendorSpec(
 	owner metav1.Object,
 	scheme *runtime.Scheme,
 ) (*pxcv1.PerconaXtraDBCluster, error) {
-	ctx, log := logx.IntoContext(ctx, logx.Mysql)
+	ctx, log := logx.WithSlog(ctx, logx.Mysql)
 
 	if !spec.Enabled {
 		return nil, nil
@@ -224,7 +224,7 @@ pxc_strict_mode=PERMISSIVE
 
 	// Set owner reference
 	if err := ctrl.SetControllerReference(owner, pxc, scheme); err != nil {
-		log.Error(err, "failed to set owner reference on PXC CR")
+		log.Error("failed to set owner reference on PXC CR", logx.ErrAttr(err))
 		return nil, fmt.Errorf("failed to set owner reference: %w", err)
 	}
 

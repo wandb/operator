@@ -22,7 +22,7 @@ func ReadState(
 	specNamespacedName types.NamespacedName,
 	wandbOwner client.Object,
 ) ([]metav1.Condition, *translator.InfraConnection) {
-	ctx, _ = logx.IntoContext(ctx, logx.Redis)
+	ctx, _ = logx.WithSlog(ctx, logx.Redis)
 	var standaloneActual = &redisv1beta2.Redis{}
 	var sentinelActual = &redissentinelv1beta2.RedisSentinel{}
 	var replicationActual = &redisreplicationv1beta2.RedisReplication{}
@@ -179,7 +179,7 @@ func ReadState(
 func computeStandaloneReportedReadyCondition(
 	ctx context.Context, podsRunning map[string]bool,
 ) []metav1.Condition {
-	log := logx.FromContext(ctx)
+	log := logx.GetSlog(ctx)
 	var runningCount, podCount int
 
 	for _, isRunning := range podsRunning {
@@ -216,7 +216,7 @@ func computeStandaloneReportedReadyCondition(
 func computeSentinelReportedReadyCondition(
 	ctx context.Context, sentinelPodsRunning, replicationPodsRunning map[string]bool,
 ) []metav1.Condition {
-	log := logx.FromContext(ctx)
+	log := logx.GetSlog(ctx)
 
 	var sentinelRunningCount, sentinelPodCount int
 	for _, isRunning := range sentinelPodsRunning {

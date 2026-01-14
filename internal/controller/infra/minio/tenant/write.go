@@ -31,7 +31,7 @@ func WriteState(
 	envConfig MinioEnvConfig,
 	wandbOwner client.Object,
 ) ([]metav1.Condition, *translator.InfraConnection) {
-	ctx, _ = logx.IntoContext(ctx, logx.Minio)
+	ctx, _ = logx.WithSlog(ctx, logx.Minio)
 	var actual = &miniov2.Tenant{}
 
 	nsnBuilder := createNsNameBuilder(specNamespacedName)

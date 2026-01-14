@@ -41,7 +41,7 @@ func ToMinioVendorSpec(
 	owner metav1.Object,
 	scheme *runtime.Scheme,
 ) (*miniov2.Tenant, error) {
-	ctx, log := logx.IntoContext(ctx, logx.Minio)
+	ctx, log := logx.WithSlog(ctx, logx.Minio)
 
 	if !spec.Enabled {
 		return nil, nil
@@ -117,7 +117,7 @@ func ToMinioVendorSpec(
 
 	// Set owner reference
 	if err := ctrl.SetControllerReference(owner, minioTenant, scheme); err != nil {
-		log.Error(err, "failed to set owner reference on Tenant CR")
+		log.Error("failed to set owner reference on Tenant CR", logx.ErrAttr(err))
 		return nil, fmt.Errorf("failed to set owner reference: %w", err)
 	}
 

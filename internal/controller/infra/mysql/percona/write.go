@@ -22,7 +22,7 @@ func WriteState(
 	specNamespacedName types.NamespacedName,
 	desired *pxcv1.PerconaXtraDBCluster,
 ) []metav1.Condition {
-	ctx, _ = logx.IntoContext(ctx, logx.Mysql)
+	ctx, _ = logx.WithSlog(ctx, logx.Mysql)
 	var actual = &pxcv1.PerconaXtraDBCluster{}
 
 	nsnBuilder := createNsNameBuilder(specNamespacedName)

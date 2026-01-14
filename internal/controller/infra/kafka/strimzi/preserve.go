@@ -19,7 +19,7 @@ func PreserveFinalizer(
 	specNamespacedName types.NamespacedName,
 	wandbOwner client.Object,
 ) error {
-	ctx, log := logx.IntoContext(ctx, logx.Kafka)
+	ctx, log := logx.WithSlog(ctx, logx.Kafka)
 
 	var found bool
 	var err error

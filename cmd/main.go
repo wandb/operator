@@ -20,6 +20,7 @@ import (
 	"crypto/tls"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -46,7 +47,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	ctrlwh "sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -119,14 +119,40 @@ func main() {
 	flag.BoolVar(&enableWebhooks, "enable-webhooks", true, "Enable webhooks")
 	flag.BoolVar(&enableRollouts, "enable-rollouts", false, "Enable Argo Rollout Support")
 
-	opts := zap.Options{
-		Development: true,
-	}
-	opts.BindFlags(flag.CommandLine)
+	var logLevel = flag.String("log-level", "info", "Log level: debug, info, warn, error")
+	var logFormat = flag.String("log-format", "text", "Log format: text or json")
+	var logSource = flag.Bool("log-source", false, "Include source file/line in logs")
+
 	setFlagsFromEnvironment()
 	flag.Parse()
 
-	ctrl.SetLogger(logx.WithFilter(opts))
+	var slogLevel slog.Level
+	switch strings.ToLower(*logLevel) {
+	case "debug":
+		slogLevel = slog.LevelDebug
+	case "info":
+		slogLevel = slog.LevelInfo
+	case "warn":
+		slogLevel = slog.LevelWarn
+	case "error":
+		slogLevel = slog.LevelError
+	default:
+		slogLevel = slog.LevelInfo
+	}
+
+	handlerOpts := &slog.HandlerOptions{
+		Level:     slogLevel,
+		AddSource: *logSource,
+	}
+
+	logx.SetOptions(&logx.Options{
+		HandlerOptions: handlerOpts,
+		Overrides:      nil,
+		Output:         os.Stderr,
+		Format:         logx.LogFormat(*logFormat),
+	})
+
+	ctrl.SetLogger(logx.NewLogrLogger())
 
 	if enableRollouts {
 		utilruntime.Must(argov1alpha1.AddToScheme(scheme))
