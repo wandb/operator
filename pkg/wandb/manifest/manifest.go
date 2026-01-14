@@ -38,6 +38,9 @@ type GeneratedSecret struct {
 	Name          string `yaml:"name"`
 	Length        int    `yaml:"length"`
 	CharacterType string `yaml:"type"`
+	// UseExactName when true, creates the secret with the exact name specified without prefixing it with the CR name.
+	// This is useful for secrets that need to be referenced by external systems with a fixed name.
+	UseExactName  bool   `yaml:"useExactName,omitempty"`
 }
 
 // SectionRef represents simple sections that commonly contain a single

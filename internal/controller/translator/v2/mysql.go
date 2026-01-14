@@ -123,6 +123,7 @@ func ToMySQLVendorSpec(
 
 	configuration := `[mysqld]
 pxc_strict_mode=PERMISSIVE
+max_connections=500
 `
 
 	// Build PXC spec

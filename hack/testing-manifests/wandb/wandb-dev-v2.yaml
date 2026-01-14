@@ -2,6 +2,7 @@ apiVersion: apps.wandb.com/v2
 kind: WeightsAndBiases
 metadata:
   name: wandb-dev-v2
+  namespace: default
 spec:
   wandb:
     hostname: http://localhost

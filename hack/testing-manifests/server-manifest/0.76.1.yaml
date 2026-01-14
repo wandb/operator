@@ -16,9 +16,10 @@ generatedSecrets:
   - name: session-key
     length: 32
     type: password
-  - name: weave-auth-token
+  - name: weave-worker-auth
     length: 32
     type: password
+    useExactName: true
 
 kafka:
   - name: filestream
@@ -285,6 +286,12 @@ commonEnvvars:
           path: "/"
     - name: WF_TRACE_SERVER_URL
       value: "$(WANDB_PUBLIC_BASE_URL)/traces"
+    - name: WEAVE_TRACE_SERVER_BASE_URL
+      sources:
+        - name: weave-trace
+          type: service
+          proto: "http"
+          path: "/traces"
     - name: API_PATH_PREFIX
       value: "/traces"
     - name: WEAVE_ENABLE_ONLINE_EVAL
@@ -293,8 +300,10 @@ commonEnvvars:
       value: "true"
     - name: WANDB_INTERNAL_SERVICE_TOKEN
       sources:
-        - name: weave-auth-token
+        - name: weave-worker-auth
           type: generatedSecret
+    - name: WANDB_INTERNAL_SERVICE_TOKEN_SECRET_NAME
+      value: "weave-worker-auth"
   frontend:
     - name: REACT_APP_HOST
       source:
@@ -717,7 +726,6 @@ applications:
         - port: 8080
           protocol: TCP
           name: weave-trace
-    serviceAccountName: weave-trace-controller
     jwtTokens:
       - name: internal-jwt
         mountPath: /tmp/weave-trace/internal-jwt
@@ -733,6 +741,9 @@ applications:
       - "python"
       - "-m"
       - "src.workers.scoring_worker"
+    env:
+      - name: DD_TRACE_ENABLED
+        value: "false"
     commonEnvs:
       - clickhouse
       - kafka
@@ -745,6 +756,9 @@ applications:
       - "python"
       - "-m"
       - "src.workers.evaluate_model_worker.evaluate_model_worker"
+    env:
+      - name: DD_TRACE_ENABLED
+        value: "false"
     commonEnvs:
       - clickhouse
       - kafka

@@ -190,6 +190,7 @@ func consolidateResults(results []ctrl.Result) ctrl.Result {
 	if len(durations) == 0 {
 		return ctrl.Result{}
 	}
+
 	return ctrl.Result{
 		RequeueAfter: lo.Min(durations),
 	}
