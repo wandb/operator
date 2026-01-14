@@ -29,7 +29,7 @@ func WriteState(
 	sentinelDesired *redissentinelv1beta2.RedisSentinel,
 	replicationDesired *redisreplicationv1beta2.RedisReplication,
 ) []metav1.Condition {
-	ctx, _ = logx.IntoContext(ctx, logx.Redis)
+	ctx, _ = logx.WithSlog(ctx, logx.Redis)
 	results := make([]metav1.Condition, 0)
 
 	nsnBuilder := createNsNameBuilder(specNamespacedName)

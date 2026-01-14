@@ -57,12 +57,12 @@ type ApplicationReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.20.0/pkg/reconcile
 func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	ctx, logger := logx.IntoContext(ctx, logx.ReconcileAppV2)
+	ctx, logger := logx.WithSlog(ctx, logx.ReconcileAppV2)
 
 	var app wandbv2.Application
 	if err := r.Get(ctx, req.NamespacedName, &app); err != nil {
 		if client.IgnoreNotFound(err) != nil {
-			logger.Error(err, "unable to fetch Application")
+			logger.Error("unable to fetch Application", logx.ErrAttr(err))
 			return ctrl.Result{}, err
 		}
 		logger.Info("Application not found. Ignoring since object must be deleted.")
@@ -76,7 +76,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		if !utils.ContainsString(app.ObjectMeta.Finalizers, applicationFinalizer) {
 			app.ObjectMeta.Finalizers = append(app.ObjectMeta.Finalizers, applicationFinalizer)
 			if err := r.Update(ctx, &app); err != nil {
-				logger.Error(err, "Failed to add finalizer")
+				logger.Error("Failed to add finalizer", logx.ErrAttr(err))
 				return ctrl.Result{}, err
 			}
 			logger.Info("Added finalizer to Application")
@@ -93,38 +93,38 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			switch app.Spec.Kind {
 			case "Deployment":
 				if err := r.deleteDeployment(ctx, &app); err != nil {
-					logger.Error(err, "Failed to delete Deployment during finalization")
+					logger.Error("Failed to delete Deployment during finalization", logx.ErrAttr(err))
 					return ctrl.Result{}, err
 				}
 			case "StatefulSet":
 				if err := r.deleteStatefulSet(ctx, &app); err != nil {
-					logger.Error(err, "Failed to delete StatefulSet during finalization")
+					logger.Error("Failed to delete StatefulSet during finalization", logx.ErrAttr(err))
 					return ctrl.Result{}, err
 				}
 			}
 
 			// Delete Service if present
 			if err := r.deleteService(ctx, &app); err != nil {
-				logger.Error(err, "Failed to delete Service during finalization")
+				logger.Error("Failed to delete Service during finalization", logx.ErrAttr(err))
 				return ctrl.Result{}, err
 			}
 
 			// Delete Jobs
 			if err := r.deleteJobs(ctx, &app); err != nil {
-				logger.Error(err, "Failed to delete Jobs during finalization")
+				logger.Error("Failed to delete Jobs during finalization", logx.ErrAttr(err))
 				return ctrl.Result{}, err
 			}
 
 			// Delete CronJobs
 			if err := r.deleteCronJobs(ctx, &app); err != nil {
-				logger.Error(err, "Failed to delete CronJobs during finalization")
+				logger.Error("Failed to delete CronJobs during finalization", logx.ErrAttr(err))
 				return ctrl.Result{}, err
 			}
 
 			// Remove finalizer
 			app.ObjectMeta.Finalizers = utils.RemoveString(app.ObjectMeta.Finalizers, applicationFinalizer)
 			if err := r.Update(ctx, &app); err != nil {
-				logger.Error(err, "Failed to remove finalizer")
+				logger.Error("Failed to remove finalizer", logx.ErrAttr(err))
 				return ctrl.Result{}, err
 			}
 			logger.Info("Removed finalizer from Application")
@@ -158,19 +158,19 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	// Always reconcile Jobs regardless of the main application type
 	if err := r.reconcileJobs(ctx, &app); err != nil {
-		logger.Error(err, "Failed to reconcile Jobs")
+		logger.Error("Failed to reconcile Jobs", logx.ErrAttr(err))
 		return ctrl.Result{}, err
 	}
 
 	// Always reconcile CronJobs regardless of the main application type
 	if err := r.reconcileCronJobs(ctx, &app); err != nil {
-		logger.Error(err, "Failed to reconcile CronJobs")
+		logger.Error("Failed to reconcile CronJobs", logx.ErrAttr(err))
 		return ctrl.Result{}, err
 	}
 
 	// Reconcile Service if specified
 	if err := r.reconcileService(ctx, &app); err != nil {
-		logger.Error(err, "Failed to reconcile Service")
+		logger.Error("Failed to reconcile Service", logx.ErrAttr(err))
 		return ctrl.Result{}, err
 	}
 
@@ -179,14 +179,14 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 // reconcileDeployment handles Deployment type applications
 func (r *ApplicationReconciler) reconcileDeployment(ctx context.Context, app *wandbv2.Application) (ctrl.Result, error) {
-	logger := logx.FromContext(ctx)
+	logger := logx.GetSlog(ctx)
 	logger.Info("Reconciling Deployment", "Application", app.Name)
 
 	deployment := &appsv1.Deployment{}
 	err := r.Get(ctx, client.ObjectKey{Namespace: app.Namespace, Name: app.Name}, deployment)
 	if err != nil {
 		if client.IgnoreNotFound(err) != nil {
-			logger.Error(err, "Failed to get Deployment")
+			logger.Error("Failed to get Deployment", logx.ErrAttr(err))
 			return ctrl.Result{}, err
 		}
 		logger.Info("Deployment not found", "Deployment", app.Name)
@@ -224,12 +224,12 @@ func (r *ApplicationReconciler) reconcileDeployment(ctx context.Context, app *wa
 
 	if deployment.CreationTimestamp.IsZero() {
 		if err := r.Create(ctx, deployment); err != nil {
-			logger.Error(err, "Failed to create Deployment")
+			logger.Error("Failed to create Deployment", logx.ErrAttr(err))
 			return ctrl.Result{}, err
 		}
 	} else {
 		if err := r.Update(ctx, deployment); err != nil {
-			logger.Error(err, "Failed to update Deployment")
+			logger.Error("Failed to update Deployment", logx.ErrAttr(err))
 			return ctrl.Result{}, err
 		}
 	}
@@ -240,7 +240,7 @@ func (r *ApplicationReconciler) reconcileDeployment(ctx context.Context, app *wa
 
 // deleteDeployment deletes the Deployment associated with the Application
 func (r *ApplicationReconciler) deleteDeployment(ctx context.Context, app *wandbv2.Application) error {
-	logger := logx.FromContext(ctx)
+	logger := logx.GetSlog(ctx)
 	logger.Info("Deleting Deployment", "Application", app.Name)
 
 	deployment := &appsv1.Deployment{}
@@ -250,13 +250,13 @@ func (r *ApplicationReconciler) deleteDeployment(ctx context.Context, app *wandb
 			logger.Info("Deployment not found, nothing to delete", "Deployment", app.Name)
 			return nil
 		}
-		logger.Error(err, "Failed to get Deployment")
+		logger.Error("Failed to get Deployment", logx.ErrAttr(err))
 		return err
 	}
 
 	deletePolicy := client.PropagationPolicy(v1.DeletePropagationBackground)
 	if err := r.Delete(ctx, deployment, deletePolicy); err != nil {
-		logger.Error(err, "Failed to delete Deployment", "Deployment", app.Name)
+		logger.Error("Failed to delete Deployment", logx.ErrAttr(err), "Deployment", app.Name)
 		return err
 	}
 	logger.Info("Successfully deleted Deployment", "Deployment", app.Name)
@@ -266,21 +266,21 @@ func (r *ApplicationReconciler) deleteDeployment(ctx context.Context, app *wandb
 
 // reconcileRollout handles Rollout type applications
 func (r *ApplicationReconciler) reconcileRollout(ctx context.Context, app *wandbv2.Application) (ctrl.Result, error) {
-	logger := logx.FromContext(ctx)
+	logger := logx.GetSlog(ctx)
 	logger.Info("Reconciling Rollout", "Application", app.Name)
 	return ctrl.Result{}, nil
 }
 
 // reconcileStatefulSet handles StatefulSet type applications
 func (r *ApplicationReconciler) reconcileStatefulSet(ctx context.Context, app *wandbv2.Application) (ctrl.Result, error) {
-	logger := logx.FromContext(ctx)
+	logger := logx.GetSlog(ctx)
 	logger.Info("Reconciling StatefulSet", "Application", app.Name)
 
 	statefulSet := &appsv1.StatefulSet{}
 	err := r.Get(ctx, client.ObjectKey{Namespace: app.Namespace, Name: app.Name}, statefulSet)
 	if err != nil {
 		if client.IgnoreNotFound(err) != nil {
-			logger.Error(err, "Failed to get StatefulSet")
+			logger.Error("Failed to get StatefulSet", logx.ErrAttr(err))
 			return ctrl.Result{}, err
 		}
 		logger.Info("StatefulSet not found", "StatefulSet", app.Name)
@@ -318,12 +318,12 @@ func (r *ApplicationReconciler) reconcileStatefulSet(ctx context.Context, app *w
 
 	if statefulSet.CreationTimestamp.IsZero() {
 		if err := r.Create(ctx, statefulSet); err != nil {
-			logger.Error(err, "Failed to create StatefulSet")
+			logger.Error("Failed to create StatefulSet", logx.ErrAttr(err))
 			return ctrl.Result{}, err
 		}
 	} else {
 		if err := r.Update(ctx, statefulSet); err != nil {
-			logger.Error(err, "Failed to update StatefulSet")
+			logger.Error("Failed to update StatefulSet", logx.ErrAttr(err))
 			return ctrl.Result{}, err
 		}
 	}
@@ -334,7 +334,7 @@ func (r *ApplicationReconciler) reconcileStatefulSet(ctx context.Context, app *w
 
 // deleteStatefulSet deletes the StatefulSet associated with the Application
 func (r *ApplicationReconciler) deleteStatefulSet(ctx context.Context, app *wandbv2.Application) error {
-	logger := logx.FromContext(ctx)
+	logger := logx.GetSlog(ctx)
 	logger.Info("Deleting StatefulSet", "Application", app.Name)
 
 	statefulSet := &appsv1.StatefulSet{}
@@ -344,13 +344,13 @@ func (r *ApplicationReconciler) deleteStatefulSet(ctx context.Context, app *wand
 			logger.Info("StatefulSet not found, nothing to delete", "StatefulSet", app.Name)
 			return nil
 		}
-		logger.Error(err, "Failed to get StatefulSet")
+		logger.Error("Failed to get StatefulSet", logx.ErrAttr(err))
 		return err
 	}
 
 	deletePolicy := client.PropagationPolicy(v1.DeletePropagationBackground)
 	if err := r.Delete(ctx, statefulSet, deletePolicy); err != nil {
-		logger.Error(err, "Failed to delete StatefulSet", "StatefulSet", app.Name)
+		logger.Error("Failed to delete StatefulSet", logx.ErrAttr(err), "StatefulSet", app.Name)
 		return err
 	}
 	logger.Info("Successfully deleted StatefulSet", "StatefulSet", app.Name)
@@ -360,14 +360,14 @@ func (r *ApplicationReconciler) deleteStatefulSet(ctx context.Context, app *wand
 
 // reconcileDaemonSet handles DaemonSet type applications
 func (r *ApplicationReconciler) reconcileDaemonSet(ctx context.Context, app *wandbv2.Application) (ctrl.Result, error) {
-	logger := logx.FromContext(ctx)
+	logger := logx.GetSlog(ctx)
 	logger.Info("Reconciling DaemonSet", "Application", app.Name)
 	return ctrl.Result{}, nil
 }
 
 // reconcileJobs handles multiple Job resources defined in the Application spec
 func (r *ApplicationReconciler) reconcileJobs(ctx context.Context, app *wandbv2.Application) error {
-	logger := logx.FromContext(ctx)
+	logger := logx.GetSlog(ctx)
 
 	for i, job := range app.Spec.Jobs {
 		jobName := job.Name
@@ -382,7 +382,7 @@ func (r *ApplicationReconciler) reconcileJobs(ctx context.Context, app *wandbv2.
 
 		// Create or update the job
 		if err != nil && !errors.IsNotFound(err) {
-			logger.Error(err, "Failed to get Job", "Job", jobName)
+			logger.Error("Failed to get Job", logx.ErrAttr(err), "Job", jobName)
 			return err
 		}
 
@@ -401,7 +401,7 @@ func (r *ApplicationReconciler) reconcileJobs(ctx context.Context, app *wandbv2.
 
 		if errors.IsNotFound(err) {
 			if err := r.Create(ctx, jobToReconcile); err != nil {
-				logger.Error(err, "Failed to create Job", "Job", jobName)
+				logger.Error("Failed to create Job", logx.ErrAttr(err), "Job", jobName)
 				return err
 			}
 			logger.Info("Successfully created Job", "Job", jobName)
@@ -414,14 +414,14 @@ func (r *ApplicationReconciler) reconcileJobs(ctx context.Context, app *wandbv2.
 				// Delete the existing job
 				deletePolicy := client.PropagationPolicy(v1.DeletePropagationBackground)
 				if err := r.Delete(ctx, currentJob, deletePolicy); err != nil {
-					logger.Error(err, "Failed to delete Job", "Job", jobName)
+					logger.Error("Failed to delete Job", logx.ErrAttr(err), "Job", jobName)
 					return err
 				}
 				logger.Info("Successfully deleted Job", "Job", jobName)
 
 				// Recreate the job with new spec
 				if err := r.Create(ctx, jobToReconcile); err != nil {
-					logger.Error(err, "Failed to recreate Job", "Job", jobName)
+					logger.Error("Failed to recreate Job", logx.ErrAttr(err), "Job", jobName)
 					return err
 				}
 				logger.Info("Successfully recreated Job", "Job", jobName)
@@ -436,7 +436,7 @@ func (r *ApplicationReconciler) reconcileJobs(ctx context.Context, app *wandbv2.
 
 // deleteJobs deletes all Jobs associated with the Application
 func (r *ApplicationReconciler) deleteJobs(ctx context.Context, app *wandbv2.Application) error {
-	logger := logx.FromContext(ctx)
+	logger := logx.GetSlog(ctx)
 	logger.Info("Deleting Jobs", "Application", app.Name)
 
 	jobList := &batchv1.JobList{}
@@ -450,7 +450,7 @@ func (r *ApplicationReconciler) deleteJobs(ctx context.Context, app *wandbv2.App
 	}
 
 	if err := r.List(ctx, jobList, listOpts...); err != nil {
-		logger.Error(err, "Failed to list Jobs")
+		logger.Error("Failed to list Jobs", logx.ErrAttr(err))
 		return err
 	}
 
@@ -458,7 +458,7 @@ func (r *ApplicationReconciler) deleteJobs(ctx context.Context, app *wandbv2.App
 	for _, job := range jobList.Items {
 		logger.Info("Deleting Job", "Job", job.Name)
 		if err := r.Delete(ctx, &job, deletePolicy); err != nil {
-			logger.Error(err, "Failed to delete Job", "Job", job.Name)
+			logger.Error("Failed to delete Job", logx.ErrAttr(err), "Job", job.Name)
 			return err
 		}
 		logger.Info("Successfully deleted Job", "Job", job.Name)
@@ -469,7 +469,7 @@ func (r *ApplicationReconciler) deleteJobs(ctx context.Context, app *wandbv2.App
 
 // reconcileCronJobs handles multiple CronJob resources defined in the Application spec
 func (r *ApplicationReconciler) reconcileCronJobs(ctx context.Context, app *wandbv2.Application) error {
-	logger := logx.FromContext(ctx)
+	logger := logx.GetSlog(ctx)
 
 	for i, cronJob := range app.Spec.CronJobs {
 		cronJobName := cronJob.Name
@@ -484,7 +484,7 @@ func (r *ApplicationReconciler) reconcileCronJobs(ctx context.Context, app *wand
 
 		// Check if we got an error that's not a NotFound
 		if err != nil && client.IgnoreNotFound(err) != nil {
-			logger.Error(err, "Failed to get CronJob", "CronJob", cronJobName)
+			logger.Error("Failed to get CronJob", logx.ErrAttr(err), "CronJob", cronJobName)
 			return err
 		}
 
@@ -503,7 +503,7 @@ func (r *ApplicationReconciler) reconcileCronJobs(ctx context.Context, app *wand
 
 		if currentCronJob.CreationTimestamp.IsZero() {
 			if err := r.Create(ctx, cronJobToReconcile); err != nil {
-				logger.Error(err, "Failed to create CronJob", "CronJob", cronJobName)
+				logger.Error("Failed to create CronJob", logx.ErrAttr(err), "CronJob", cronJobName)
 				return err
 			}
 			logger.Info("Successfully created CronJob", "CronJob", cronJobName)
@@ -511,7 +511,7 @@ func (r *ApplicationReconciler) reconcileCronJobs(ctx context.Context, app *wand
 			// Update existing cronjob
 			cronJobToReconcile.ResourceVersion = currentCronJob.ResourceVersion
 			if err := r.Update(ctx, cronJobToReconcile); err != nil {
-				logger.Error(err, "Failed to update CronJob", "CronJob", cronJobName)
+				logger.Error("Failed to update CronJob", logx.ErrAttr(err), "CronJob", cronJobName)
 				return err
 			}
 			logger.Info("Successfully updated CronJob", "CronJob", cronJobName)
@@ -523,7 +523,7 @@ func (r *ApplicationReconciler) reconcileCronJobs(ctx context.Context, app *wand
 
 // deleteCronJobs deletes all CronJobs associated with the Application
 func (r *ApplicationReconciler) deleteCronJobs(ctx context.Context, app *wandbv2.Application) error {
-	logger := logx.FromContext(ctx)
+	logger := logx.GetSlog(ctx)
 	logger.Info("Deleting CronJobs", "Application", app.Name)
 
 	cronJobList := &batchv1.CronJobList{}
@@ -537,7 +537,7 @@ func (r *ApplicationReconciler) deleteCronJobs(ctx context.Context, app *wandbv2
 	}
 
 	if err := r.List(ctx, cronJobList, listOpts...); err != nil {
-		logger.Error(err, "Failed to list CronJobs")
+		logger.Error("Failed to list CronJobs", logx.ErrAttr(err))
 		return err
 	}
 
@@ -545,7 +545,7 @@ func (r *ApplicationReconciler) deleteCronJobs(ctx context.Context, app *wandbv2
 	for _, cronJob := range cronJobList.Items {
 		logger.Info("Deleting CronJob", "CronJob", cronJob.Name)
 		if err := r.Delete(ctx, &cronJob, deletePolicy); err != nil {
-			logger.Error(err, "Failed to delete CronJob", "CronJob", cronJob.Name)
+			logger.Error("Failed to delete CronJob", logx.ErrAttr(err), "CronJob", cronJob.Name)
 			return err
 		}
 		logger.Info("Successfully deleted CronJob", "CronJob", cronJob.Name)
@@ -556,7 +556,7 @@ func (r *ApplicationReconciler) deleteCronJobs(ctx context.Context, app *wandbv2
 
 // reconcileService ensures a Service exists/updated when specified in the Application spec
 func (r *ApplicationReconciler) reconcileService(ctx context.Context, app *wandbv2.Application) error {
-	logger := logx.FromContext(ctx)
+	logger := logx.GetSlog(ctx)
 
 	if app.Spec.ServiceTemplate == nil {
 		// Nothing to reconcile
@@ -594,13 +594,13 @@ func (r *ApplicationReconciler) reconcileService(ctx context.Context, app *wandb
 	err := r.Get(ctx, client.ObjectKey{Namespace: app.Namespace, Name: app.Name}, current)
 	if err != nil {
 		if !errors.IsNotFound(err) {
-			logger.Error(err, "Failed to get Service")
+			logger.Error("Failed to get Service", logx.ErrAttr(err))
 			return err
 		}
 		// Create path
 		logger.Info("Creating Service", "Service", desired.Name)
 		if err := r.Create(ctx, desired); err != nil {
-			logger.Error(err, "Failed to create Service")
+			logger.Error("Failed to create Service", logx.ErrAttr(err))
 			return err
 		}
 		logger.Info("Successfully created Service", "Service", desired.Name)
@@ -633,7 +633,7 @@ func (r *ApplicationReconciler) reconcileService(ctx context.Context, app *wandb
 
 	logger.Info("Updating Service", "Service", current.Name)
 	if err := r.Update(ctx, current); err != nil {
-		logger.Error(err, "Failed to update Service")
+		logger.Error("Failed to update Service", logx.ErrAttr(err))
 		return err
 	}
 	logger.Info("Successfully updated Service", "Service", current.Name)
@@ -642,7 +642,7 @@ func (r *ApplicationReconciler) reconcileService(ctx context.Context, app *wandb
 
 // deleteService deletes the Service associated with the Application
 func (r *ApplicationReconciler) deleteService(ctx context.Context, app *wandbv2.Application) error {
-	logger := logx.FromContext(ctx)
+	logger := logx.GetSlog(ctx)
 	svc := &corev1.Service{}
 	if err := r.Get(ctx, client.ObjectKey{Namespace: app.Namespace, Name: app.Name}, svc); err != nil {
 		if errors.IsNotFound(err) {
@@ -652,7 +652,7 @@ func (r *ApplicationReconciler) deleteService(ctx context.Context, app *wandbv2.
 	}
 	deletePolicy := client.PropagationPolicy(v1.DeletePropagationBackground)
 	if err := r.Delete(ctx, svc, deletePolicy); err != nil {
-		logger.Error(err, "Failed to delete Service", "Service", app.Name)
+		logger.Error("Failed to delete Service", logx.ErrAttr(err), "Service", app.Name)
 		return err
 	}
 	logger.Info("Successfully deleted Service", "Service", app.Name)

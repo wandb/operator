@@ -18,7 +18,7 @@ func WriteState(
 	desiredKafka *strimziv1.Kafka,
 	desiredNodePool *strimziv1.KafkaNodePool,
 ) []metav1.Condition {
-	ctx, _ = logx.IntoContext(ctx, logx.Kafka)
+	ctx, _ = logx.WithSlog(ctx, logx.Kafka)
 	results := make([]metav1.Condition, 0)
 
 	nsnBuilder := createNsNameBuilder(specNamespacedName)

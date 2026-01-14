@@ -2,20 +2,24 @@ package logx
 
 import (
 	"context"
-
-	ctrl "sigs.k8s.io/controller-runtime"
+	"log/slog"
 )
 
 type logKey struct{}
 
-func IntoContext(ctx context.Context, logName string) (context.Context, Logger) {
-	log := NewLogger(ctrl.Log.WithName(logName))
+func WithSlog(ctx context.Context, logName string) (context.Context, *slog.Logger) {
+	if log, ok := ctx.Value(logKey{}).(*slog.Logger); ok {
+		if log.Handler().(*Handler).loggerName == logName {
+			return ctx, log
+		}
+	}
+	log := NewSlogLogger(logName)
 	return context.WithValue(ctx, logKey{}, log), log
 }
 
-func FromContext(ctx context.Context) Logger {
-	if log, ok := ctx.Value(logKey{}).(Logger); ok {
+func GetSlog(ctx context.Context) *slog.Logger {
+	if log, ok := ctx.Value(logKey{}).(*slog.Logger); ok {
 		return log
 	}
-	return NewLogger(ctrl.LoggerFrom(ctx))
+	return NewSlogLogger("unknown")
 }

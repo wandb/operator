@@ -46,7 +46,7 @@ func ToKafkaVendorSpec(
 	owner metav1.Object,
 	scheme *runtime.Scheme,
 ) (*strimziv1.Kafka, error) {
-	ctx, log := logx.IntoContext(ctx, logx.Kafka)
+	ctx, log := logx.WithSlog(ctx, logx.Kafka)
 
 	if !spec.Enabled {
 		return nil, nil
@@ -118,7 +118,7 @@ func ToKafkaVendorSpec(
 
 	// Set owner reference
 	if err := ctrl.SetControllerReference(owner, kafka, scheme); err != nil {
-		log.Error(err, "failed to set owner reference on Kafka CR")
+		log.Error("failed to set owner reference on Kafka CR", logx.ErrAttr(err))
 		return nil, fmt.Errorf("failed to set owner reference: %w", err)
 	}
 
@@ -134,7 +134,7 @@ func ToKafkaNodePoolVendorSpec(
 	owner metav1.Object,
 	scheme *runtime.Scheme,
 ) (*strimziv1.KafkaNodePool, error) {
-	ctx, log := logx.IntoContext(ctx, logx.Kafka)
+	ctx, log := logx.WithSlog(ctx, logx.Kafka)
 
 	if !spec.Enabled {
 		return nil, nil
@@ -180,7 +180,7 @@ func ToKafkaNodePoolVendorSpec(
 
 	// Set owner reference
 	if err := ctrl.SetControllerReference(owner, nodePool, scheme); err != nil {
-		log.Error(err, "failed to set owner reference on KafkaNodePool CR")
+		log.Error("failed to set owner reference on KafkaNodePool CR", logx.ErrAttr(err))
 		return nil, fmt.Errorf("failed to set owner reference: %w", err)
 	}
 

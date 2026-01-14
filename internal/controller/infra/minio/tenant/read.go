@@ -16,7 +16,7 @@ func ReadState(
 	client client.Client,
 	specNamespacedName types.NamespacedName,
 ) []metav1.Condition {
-	ctx, _ = logx.IntoContext(ctx, logx.Minio)
+	ctx, _ = logx.WithSlog(ctx, logx.Minio)
 	var actualResource = &miniov2.Tenant{}
 
 	nsnBuilder := createNsNameBuilder(specNamespacedName)

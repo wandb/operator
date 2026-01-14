@@ -20,7 +20,7 @@ func restoreKafkaConnInfo(
 	desired *strimziv1.KafkaNodePool,
 	actual *strimziv1.KafkaNodePool,
 ) error {
-	log := logx.FromContext(ctx)
+	log := logx.GetSlog(ctx)
 
 	var connInfo *kafkaConnInfo
 	var err error

@@ -5,7 +5,7 @@ import (
 
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/logx"
-  "github.com/wandb/operator/pkg/utils"
+	"github.com/wandb/operator/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -19,7 +19,7 @@ func PreserveFinalizer(
 	specNamespacedName types.NamespacedName,
 	wandbOwner client.Object,
 ) error {
-	ctx, log := logx.IntoContext(ctx, logx.Kafka)
+	ctx, log := logx.WithSlog(ctx, logx.Kafka)
 
 	var found bool
 	var err error

@@ -55,7 +55,7 @@ func Reconcile(
 	recorder record.EventRecorder,
 	wandb *apiv2.WeightsAndBiases,
 ) (ctrl.Result, error) {
-	ctx, log := logx.IntoContext(ctx, logx.ReconcileInfraV2)
+	ctx, log := logx.WithSlog(ctx, logx.ReconcileInfraV2)
 
 	var err error
 
@@ -70,7 +70,7 @@ func Reconcile(
 	if !isFlaggedForDeletion && !ctrlqueue.ContainsString(wandb.GetFinalizers(), CleanupFinalizer) {
 		wandb.ObjectMeta.Finalizers = append(wandb.ObjectMeta.Finalizers, CleanupFinalizer)
 		if err := client.Update(ctx, wandb); err != nil {
-			log.Error(err, fmt.Sprintf("Failed to add finalizer '%s'", CleanupFinalizer))
+			log.Error(fmt.Sprintf("Failed to add finalizer '%s'", CleanupFinalizer), logx.ErrAttr(err))
 			return ctrl.Result{}, err
 		}
 	}
@@ -88,7 +88,7 @@ func Reconcile(
 			}
 			controllerutil.RemoveFinalizer(wandb, CleanupFinalizer)
 			if err := client.Update(ctx, wandb); err != nil {
-				log.Error(err, "Failed to remove finalizer '%s'")
+				log.Error("Failed to remove finalizer '%s'", logx.ErrAttr(err))
 				return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
 			}
 		}

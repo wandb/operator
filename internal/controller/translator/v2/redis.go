@@ -52,7 +52,7 @@ func ToRedisStandaloneVendorSpec(
 	owner metav1.Object,
 	scheme *runtime.Scheme,
 ) (*redisv1beta2.Redis, error) {
-	ctx, log := logx.IntoContext(ctx, logx.Redis)
+	ctx, log := logx.WithSlog(ctx, logx.Redis)
 
 	if !spec.Enabled {
 		return nil, nil
@@ -116,7 +116,7 @@ func ToRedisStandaloneVendorSpec(
 
 	// Set owner reference
 	if err := ctrl.SetControllerReference(owner, redis, scheme); err != nil {
-		log.Error(err, "failed to set owner reference on Redis CR")
+		log.Error("failed to set owner reference on Redis CR", logx.ErrAttr(err))
 		return nil, fmt.Errorf("failed to set owner reference: %w", err)
 	}
 
@@ -135,7 +135,7 @@ func ToRedisSentinelVendorSpec(
 	owner metav1.Object,
 	scheme *runtime.Scheme,
 ) (*redissentinelv1beta2.RedisSentinel, error) {
-	ctx, log := logx.IntoContext(ctx, logx.Redis)
+	ctx, log := logx.WithSlog(ctx, logx.Redis)
 
 	if !spec.Enabled {
 		return nil, nil
@@ -191,7 +191,7 @@ func ToRedisSentinelVendorSpec(
 
 	// Set owner reference
 	if err := ctrl.SetControllerReference(owner, sentinel, scheme); err != nil {
-		log.Error(err, "failed to set owner reference on RedisSentinel CR")
+		log.Error("failed to set owner reference on RedisSentinel CR", logx.ErrAttr(err))
 		return nil, fmt.Errorf("failed to set owner reference: %w", err)
 	}
 
@@ -210,7 +210,7 @@ func ToRedisReplicationVendorSpec(
 	owner metav1.Object,
 	scheme *runtime.Scheme,
 ) (*redisreplicationv1beta2.RedisReplication, error) {
-	ctx, log := logx.IntoContext(ctx, logx.Redis)
+	ctx, log := logx.WithSlog(ctx, logx.Redis)
 
 	if !spec.Enabled {
 		return nil, nil
@@ -274,7 +274,7 @@ func ToRedisReplicationVendorSpec(
 
 	// Set owner reference
 	if err := ctrl.SetControllerReference(owner, replication, scheme); err != nil {
-		log.Error(err, "failed to set owner reference on RedisReplication CR")
+		log.Error("failed to set owner reference on RedisReplication CR", logx.ErrAttr(err))
 		return nil, fmt.Errorf("failed to set owner reference: %w", err)
 	}
 

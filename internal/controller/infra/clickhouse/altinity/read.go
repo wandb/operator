@@ -38,7 +38,7 @@ func ReadState(
 	specNamespacedName types.NamespacedName,
 	wandbOwner client.Object,
 ) ([]metav1.Condition, *translator.InfraConnection) {
-	ctx, _ = logx.IntoContext(ctx, logx.ClickHouse)
+	ctx, _ = logx.WithSlog(ctx, logx.ClickHouse)
 	var actual = &chiv1.ClickHouseInstallation{}
 
 	nsnBuilder := createNsNameBuilder(specNamespacedName)
@@ -150,7 +150,7 @@ func chPodsRunningStatus(
 func computeClickHouseReportedReadyCondition(
 	ctx context.Context, chi *chiv1.ClickHouseInstallation, podsRunning map[string]bool,
 ) []metav1.Condition {
-	log := logx.FromContext(ctx)
+	log := logx.GetSlog(ctx)
 
 	if chi == nil {
 		return []metav1.Condition{}

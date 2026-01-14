@@ -1,6 +1,6 @@
 package logx
 
-import "go.uber.org/zap/zapcore"
+import "log/slog"
 
 /////////////////////////////////////
 // Names, Defaults
@@ -17,14 +17,14 @@ const (
 	ValidatingWebhook = "validating-webhook"
 )
 
-var overrides = map[string]zapcore.Level{
-	ReconcileInfraV2:  zapcore.DebugLevel,
-	ReconcileAppV2:    zapcore.DebugLevel,
-	Kafka:             zapcore.DebugLevel,
-	Mysql:             zapcore.DebugLevel,
-	Redis:             zapcore.DebugLevel,
-	Minio:             zapcore.DebugLevel,
-	ClickHouse:        zapcore.DebugLevel,
-	DefaultingWebhook: zapcore.DebugLevel,
-	ValidatingWebhook: zapcore.DebugLevel,
+var overrides = map[string]slog.Level{
+	//ReconcileInfraV2:  slog.LevelDebug,
+	//ReconcileAppV2:    slog.LevelDebug,
+	Kafka: slog.LevelDebug,
+	//Mysql:             slog.LevelDebug,
+	//Redis:             slog.LevelDebug,
+	//Minio:             slog.LevelDebug,
+	//ClickHouse:        slog.LevelDebug,
+	//DefaultingWebhook: slog.LevelDebug,
+	//ValidatingWebhook: slog.LevelDebug,
 }

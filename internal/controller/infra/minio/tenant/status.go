@@ -26,7 +26,7 @@ func ComputeStatus(
 	connection *translator.InfraConnection,
 	currentGeneration int64,
 ) (translator.InfraStatus, []corev1.Event, ctrl.Result) {
-	ctx, _ = logx.IntoContext(ctx, logx.Minio)
+	ctx, _ = logx.WithSlog(ctx, logx.Minio)
 	result := translator.InfraStatus{}
 
 	if connection != nil {
@@ -149,7 +149,7 @@ func inferStateFromCondition(ctx context.Context, conditionType string, impliedS
 }
 
 func inferState_MinioCustomResourceType(ctx context.Context, condition metav1.Condition) string {
-	log := logx.FromContext(ctx)
+	log := logx.GetSlog(ctx)
 	result := common.UnknownState
 	if condition.Status == metav1.ConditionTrue {
 		result = common.HealthyState
@@ -170,7 +170,7 @@ func inferState_MinioCustomResourceType(ctx context.Context, condition metav1.Co
 }
 
 func inferState_MinioConnectionInfoType(ctx context.Context, condition metav1.Condition) string {
-	log := logx.FromContext(ctx)
+	log := logx.GetSlog(ctx)
 	result := common.UnknownState
 	if condition.Status == metav1.ConditionTrue {
 		result = common.HealthyState
@@ -186,7 +186,7 @@ func inferState_MinioConnectionInfoType(ctx context.Context, condition metav1.Co
 }
 
 func inferState_MinioReportedReadyType(ctx context.Context, condition metav1.Condition) string {
-	log := logx.FromContext(ctx)
+	log := logx.GetSlog(ctx)
 	result := common.UnknownState
 	if condition.Status == metav1.ConditionTrue {
 		result = common.HealthyState
