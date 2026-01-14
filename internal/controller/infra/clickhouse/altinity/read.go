@@ -8,7 +8,7 @@ import (
 	ctrlcommon "github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/translator"
 	"github.com/wandb/operator/internal/logx"
-	chiv1 "github.com/wandb/operator/internal/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
+	chiv1 "github.com/wandb/operator/pkg/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -16,6 +16,10 @@ import (
 )
 
 func readConnectionDetails(actual *chiv1.ClickHouseInstallation) *clickhouseConnInfo {
+	if actual == nil || actual.Status == nil || actual.Status.Endpoint == "" {
+		return nil
+	}
+
 	clickhouseHost := actual.Status.Endpoint
 	clickhousePort := strconv.Itoa(ClickHouseHTTPPort)
 
@@ -34,7 +38,7 @@ func ReadState(
 	specNamespacedName types.NamespacedName,
 	wandbOwner client.Object,
 ) ([]metav1.Condition, *translator.InfraConnection) {
-	ctx, _ = logx.IntoContext(ctx, logx.ClickHouse)
+	ctx, _ = logx.WithSlog(ctx, logx.ClickHouse)
 	var actual = &chiv1.ClickHouseInstallation{}
 
 	nsnBuilder := createNsNameBuilder(specNamespacedName)
@@ -76,6 +80,15 @@ func ReadState(
 			ctx, client, wandbOwner, nsnBuilder, connInfo,
 		)
 		if err != nil {
+			if err.Error() == "missing connection info" {
+				return []metav1.Condition{
+					{
+						Type:   ClickHouseConnectionInfoType,
+						Status: metav1.ConditionFalse,
+						Reason: ctrlcommon.NoResourceReason,
+					},
+				}, nil
+			}
 			return []metav1.Condition{
 				{
 					Type:   ClickHouseConnectionInfoType,
@@ -137,7 +150,7 @@ func chPodsRunningStatus(
 func computeClickHouseReportedReadyCondition(
 	ctx context.Context, chi *chiv1.ClickHouseInstallation, podsRunning map[string]bool,
 ) []metav1.Condition {
-	log := logx.FromContext(ctx)
+	log := logx.GetSlog(ctx)
 
 	if chi == nil {
 		return []metav1.Condition{}

@@ -62,7 +62,7 @@ func writeKafkaConnInfo(
 ) (
 	*translator.InfraConnection, error,
 ) {
-	log := logx.FromContext(ctx)
+	log := logx.GetSlog(ctx)
 
 	var err error
 	var found bool
@@ -104,7 +104,7 @@ func writeKafkaConnInfo(
 	}
 
 	if gvk, err = cl.GroupVersionKindFor(owner); err != nil {
-		log.Error(err, fmt.Sprintf("Error getting GVK for %s", owner.GetName()))
+		log.Error(fmt.Sprintf("Error getting GVK for %s", owner.GetName()), logx.ErrAttr(err))
 		return nil, fmt.Errorf("could not get GVK for owner: %w", err)
 	}
 	ref := metav1.OwnerReference{

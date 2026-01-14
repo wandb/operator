@@ -20,7 +20,7 @@ func GetResource[T client.Object](
 	resourceTypeName string,
 	obj T,
 ) (bool, error) {
-	log := logx.FromContext(ctx)
+	log := logx.GetSlog(ctx)
 
 	err := c.Get(ctx, namespacedName, obj)
 	if err != nil {
@@ -32,7 +32,7 @@ func GetResource[T client.Object](
 			return false, nil
 		}
 		log.Error(
-			err, "GetResourceError", "type", resourceTypeName,
+			"GetResourceError", logx.ErrAttr(err), "type", resourceTypeName,
 			"namespace", namespacedName.Namespace, "name", namespacedName.Name,
 		)
 		return false, err
@@ -56,7 +56,7 @@ const (
 // CrudResource is a generic function that gets a resource, and creates it if not found, or updates it if it exists.
 // The getter function should return (nil, nil) if the resource is not found.
 func CrudResource[T client.Object](ctx context.Context, c client.Client, desired T, actual T) (CrudAction, error) {
-	log := logx.FromContext(ctx)
+	log := logx.GetSlog(ctx)
 
 	var err error
 	var action CrudAction
@@ -81,7 +81,7 @@ func CrudResource[T client.Object](ctx context.Context, c client.Client, desired
 		log.Info(string(action), "namespace", desired.GetNamespace(), "name", desired.GetName())
 	}
 	if err != nil {
-		log.Error(err, "error on crud resource", "action", action)
+		log.Error("error on crud resource", logx.ErrAttr(err), "action", action)
 	}
 	return action, err
 }

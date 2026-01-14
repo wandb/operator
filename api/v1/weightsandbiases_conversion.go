@@ -60,7 +60,8 @@ func (dst *WeightsAndBiases) ConvertFrom(srcRaw conversion.Hub) error {
 		"source: %s/%s, target: %s/%s", src.Namespace, src.Name, dst.Namespace, dst.Name)
 
 	if src.Annotations["legacy.operator.wandb.com/version"] != "v1" {
-		return errors.New("cannot convert from non-v1 version")
+		log.Println("ConvertFrom: Skipping conversion from non-v1 version")
+		return nil
 	}
 
 	if chart, ok := src.Annotations["legacy.operator.wandb.com/chart"]; !ok || chart == "" {

@@ -60,7 +60,7 @@ var _ webhook.CustomDefaulter = &WeightsAndBiasesCustomDefaulter{}
 
 // Default implements webhook.CustomDefaulter so a webhook will be registered for the Kind WeightsAndBiases.
 func (d *WeightsAndBiasesCustomDefaulter) Default(ctx context.Context, obj runtime.Object) error {
-	_, log := logx.IntoContext(ctx, logx.DefaultingWebhook)
+	_, log := logx.WithSlog(ctx, logx.DefaultingWebhook)
 	wandb, ok := obj.(*appsv2.WeightsAndBiases)
 
 	if !ok {
@@ -74,6 +74,18 @@ func (d *WeightsAndBiasesCustomDefaulter) Default(ctx context.Context, obj runti
 
 	if wandb.Spec.RetentionPolicy.OnDelete == "" {
 		wandb.Spec.RetentionPolicy.OnDelete = defaults.DefaultOnDeleteRetentionPolicy
+	}
+
+	if wandb.Spec.Affinity == nil {
+		wandb.Spec.Affinity = &corev1.Affinity{}
+	}
+
+	if wandb.Spec.Tolerations == nil {
+		wandb.Spec.Tolerations = &[]corev1.Toleration{}
+	}
+
+	if wandb.Status.Wandb.Applications == nil {
+		wandb.Status.Wandb.Applications = make(map[string]appsv2.ApplicationStatus)
 	}
 
 	size, err := toCommonSize(wandb.Spec.Size)
@@ -121,7 +133,7 @@ var _ webhook.CustomValidator = &WeightsAndBiasesCustomValidator{}
 
 // ValidateCreate implements webhook.CustomValidator so a webhook will be registered for the type WeightsAndBiases.
 func (v *WeightsAndBiasesCustomValidator) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
-	ctx, log := logx.IntoContext(ctx, logx.ValidatingWebhook)
+	ctx, log := logx.WithSlog(ctx, logx.ValidatingWebhook)
 	wandb, ok := obj.(*appsv2.WeightsAndBiases)
 	if !ok {
 		return nil, fmt.Errorf("expected a WeightsAndBiases object but got %T", obj)
@@ -133,7 +145,7 @@ func (v *WeightsAndBiasesCustomValidator) ValidateCreate(ctx context.Context, ob
 
 // ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type WeightsAndBiases.
 func (v *WeightsAndBiasesCustomValidator) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
-	ctx, log := logx.IntoContext(ctx, logx.ValidatingWebhook)
+	ctx, log := logx.WithSlog(ctx, logx.ValidatingWebhook)
 	newWandb, ok := newObj.(*appsv2.WeightsAndBiases)
 	if !ok {
 		return nil, fmt.Errorf("expected a WeightsAndBiases object for the newObj but got %T", newObj)
@@ -158,7 +170,7 @@ func (v *WeightsAndBiasesCustomValidator) ValidateUpdate(ctx context.Context, ol
 
 // ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type WeightsAndBiases.
 func (v *WeightsAndBiasesCustomValidator) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
-	ctx, log := logx.IntoContext(ctx, logx.ValidatingWebhook)
+	ctx, log := logx.WithSlog(ctx, logx.ValidatingWebhook)
 	weightsandbiases, ok := obj.(*appsv2.WeightsAndBiases)
 	if !ok {
 		return nil, fmt.Errorf("expected a WeightsAndBiases object but got %T", obj)

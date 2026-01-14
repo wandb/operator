@@ -4,7 +4,9 @@ metadata:
   name: wandb-dev-v2
 spec:
   wandb:
-    hostname: http://localhost:8080
+    hostname: http://localhost
+    features:
+      proxy: true
   size: dev
   retentionPolicy:
     onDelete: preserve

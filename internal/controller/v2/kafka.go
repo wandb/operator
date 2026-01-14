@@ -8,8 +8,8 @@ import (
 	"github.com/wandb/operator/internal/controller/infra/kafka/strimzi"
 	"github.com/wandb/operator/internal/controller/translator"
 	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
-	"github.com/wandb/operator/internal/utils"
-	strimziv1 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1"
+	"github.com/wandb/operator/pkg/utils"
+	"github.com/wandb/operator/pkg/vendored/strimzi-kafka/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -22,7 +22,14 @@ func kafkaWriteState(
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
 ) []metav1.Condition {
-	var desiredKafka *strimziv1.Kafka
+	if wandb.Spec.Kafka.Affinity == nil {
+		wandb.Spec.Kafka.Affinity = wandb.Spec.Affinity
+	}
+	if wandb.Spec.Kafka.Tolerations == nil {
+		wandb.Spec.Kafka.Tolerations = wandb.Spec.Tolerations
+	}
+
+	var desiredKafka *v1.Kafka
 	desiredKafka, err := translatorv2.ToKafkaVendorSpec(ctx, wandb.Spec.Kafka, wandb, client.Scheme())
 	if err != nil {
 		return []metav1.Condition{
@@ -34,7 +41,7 @@ func kafkaWriteState(
 		}
 	}
 
-	var desiredNodePool *strimziv1.KafkaNodePool
+	var desiredNodePool *v1.KafkaNodePool
 	desiredNodePool, err = translatorv2.ToKafkaNodePoolVendorSpec(ctx, wandb.Spec.Kafka, wandb, client.Scheme())
 	if err != nil {
 		return []metav1.Condition{

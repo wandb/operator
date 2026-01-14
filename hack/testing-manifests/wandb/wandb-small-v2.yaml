@@ -4,6 +4,10 @@ metadata:
   name: wandb-small-v2
 spec:
   size: small
+  wandb:
+    hostname: http://localhost
+    features:
+      proxy: true
   retentionPolicy:
     onDelete: preserve
   mysql:

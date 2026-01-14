@@ -3,5 +3,6 @@
   "kindClusterName": "wandb-operator",
   "installMinio": false,
   "wandbCRD": "wandb-dev-v2",
-  "installTelemetry": true
+  "installTelemetry": true,
+  "logFormat": "pretty"
 }

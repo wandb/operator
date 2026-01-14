@@ -8,7 +8,7 @@ import (
 	ctrlcommon "github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/translator"
 	"github.com/wandb/operator/internal/logx"
-	pxcv1 "github.com/wandb/operator/internal/vendored/percona-operator/pxc/v1"
+	pxcv1 "github.com/wandb/operator/pkg/vendored/percona-operator/pxc/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -16,14 +16,14 @@ import (
 )
 
 func readConnectionDetails(ctx context.Context, client client.Client, actual *pxcv1.PerconaXtraDBCluster, specNamespacedName types.NamespacedName) *mysqlConnInfo {
-	log := logx.FromContext(ctx)
+	log := logx.GetSlog(ctx)
 
 	mysqlPort := strconv.Itoa(3306)
 
 	dbPasswordSecret := &corev1.Secret{}
 	err := client.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("%s-%s", "internal", actual.Name), Namespace: specNamespacedName.Namespace}, dbPasswordSecret)
 	if err != nil {
-		log.Error(err, "Failed to get Secret", "Secret", fmt.Sprintf("%s-%s", specNamespacedName.Name, "user-db-password"))
+		log.Error("Failed to get Secret", logx.ErrAttr(err), "Secret", fmt.Sprintf("%s-%s", specNamespacedName.Name, "user-db-password"))
 		return nil
 	}
 
@@ -42,7 +42,7 @@ func ReadState(
 	specNamespacedName types.NamespacedName,
 	wandbOwner client.Object,
 ) ([]metav1.Condition, *translator.InfraConnection) {
-	ctx, _ = logx.IntoContext(ctx, logx.Mysql)
+	ctx, _ = logx.WithSlog(ctx, logx.Mysql)
 	var actual = &pxcv1.PerconaXtraDBCluster{}
 
 	nsnBuilder := createNsNameBuilder(specNamespacedName)
@@ -73,6 +73,15 @@ func ReadState(
 			ctx, client, wandbOwner, nsnBuilder, connInfo,
 		)
 		if err != nil {
+			if err.Error() == "missing connection info" {
+				return []metav1.Condition{
+					{
+						Type:   MySQLConnectionInfoType,
+						Status: metav1.ConditionFalse,
+						Reason: ctrlcommon.NoResourceReason,
+					},
+				}, nil
+			}
 			return []metav1.Condition{
 				{
 					Type:   MySQLConnectionInfoType,

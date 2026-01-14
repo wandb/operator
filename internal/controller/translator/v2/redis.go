@@ -9,10 +9,10 @@ import (
 	"github.com/wandb/operator/internal/controller/translator"
 	"github.com/wandb/operator/internal/defaults"
 	"github.com/wandb/operator/internal/logx"
-	rediscommon "github.com/wandb/operator/internal/vendored/redis-operator/common/v1beta2"
-	redisv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redis/v1beta2"
-	redisreplicationv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redisreplication/v1beta2"
-	redissentinelv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redissentinel/v1beta2"
+	rediscommon "github.com/wandb/operator/pkg/vendored/redis-operator/common/v1beta2"
+	redisv1beta2 "github.com/wandb/operator/pkg/vendored/redis-operator/redis/v1beta2"
+	redisreplicationv1beta2 "github.com/wandb/operator/pkg/vendored/redis-operator/redisreplication/v1beta2"
+	redissentinelv1beta2 "github.com/wandb/operator/pkg/vendored/redis-operator/redissentinel/v1beta2"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -52,7 +52,7 @@ func ToRedisStandaloneVendorSpec(
 	owner metav1.Object,
 	scheme *runtime.Scheme,
 ) (*redisv1beta2.Redis, error) {
-	ctx, log := logx.IntoContext(ctx, logx.Redis)
+	ctx, log := logx.WithSlog(ctx, logx.Redis)
 
 	if !spec.Enabled {
 		return nil, nil
@@ -87,6 +87,8 @@ func ToRedisStandaloneVendorSpec(
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				Resources:       &corev1.ResourceRequirements{},
 			},
+			Affinity:    spec.Affinity,
+			Tolerations: spec.Tolerations,
 			Storage: &rediscommon.Storage{
 				VolumeClaimTemplate: corev1.PersistentVolumeClaim{
 					Spec: corev1.PersistentVolumeClaimSpec{
@@ -114,7 +116,7 @@ func ToRedisStandaloneVendorSpec(
 
 	// Set owner reference
 	if err := ctrl.SetControllerReference(owner, redis, scheme); err != nil {
-		log.Error(err, "failed to set owner reference on Redis CR")
+		log.Error("failed to set owner reference on Redis CR", logx.ErrAttr(err))
 		return nil, fmt.Errorf("failed to set owner reference: %w", err)
 	}
 
@@ -133,7 +135,7 @@ func ToRedisSentinelVendorSpec(
 	owner metav1.Object,
 	scheme *runtime.Scheme,
 ) (*redissentinelv1beta2.RedisSentinel, error) {
-	ctx, log := logx.IntoContext(ctx, logx.Redis)
+	ctx, log := logx.WithSlog(ctx, logx.Redis)
 
 	if !spec.Enabled {
 		return nil, nil
@@ -168,6 +170,8 @@ func ToRedisSentinelVendorSpec(
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				Resources:       &corev1.ResourceRequirements{},
 			},
+			Affinity:    spec.Affinity,
+			Tolerations: spec.Tolerations,
 			RedisSentinelConfig: &redissentinelv1beta2.RedisSentinelConfig{
 				RedisSentinelConfig: rediscommon.RedisSentinelConfig{
 					RedisReplicationName: nsnBuilder.ReplicationName(),
@@ -187,7 +191,7 @@ func ToRedisSentinelVendorSpec(
 
 	// Set owner reference
 	if err := ctrl.SetControllerReference(owner, sentinel, scheme); err != nil {
-		log.Error(err, "failed to set owner reference on RedisSentinel CR")
+		log.Error("failed to set owner reference on RedisSentinel CR", logx.ErrAttr(err))
 		return nil, fmt.Errorf("failed to set owner reference: %w", err)
 	}
 
@@ -206,7 +210,7 @@ func ToRedisReplicationVendorSpec(
 	owner metav1.Object,
 	scheme *runtime.Scheme,
 ) (*redisreplicationv1beta2.RedisReplication, error) {
-	ctx, log := logx.IntoContext(ctx, logx.Redis)
+	ctx, log := logx.WithSlog(ctx, logx.Redis)
 
 	if !spec.Enabled {
 		return nil, nil
@@ -241,6 +245,8 @@ func ToRedisReplicationVendorSpec(
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				Resources:       &corev1.ResourceRequirements{},
 			},
+			Affinity:    spec.Affinity,
+			Tolerations: spec.Tolerations,
 			Storage: &rediscommon.Storage{
 				VolumeClaimTemplate: corev1.PersistentVolumeClaim{
 					Spec: corev1.PersistentVolumeClaimSpec{
@@ -268,7 +274,7 @@ func ToRedisReplicationVendorSpec(
 
 	// Set owner reference
 	if err := ctrl.SetControllerReference(owner, replication, scheme); err != nil {
-		log.Error(err, "failed to set owner reference on RedisReplication CR")
+		log.Error("failed to set owner reference on RedisReplication CR", logx.ErrAttr(err))
 		return nil, fmt.Errorf("failed to set owner reference: %w", err)
 	}
 

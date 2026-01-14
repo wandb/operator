@@ -8,7 +8,7 @@ import (
 	"github.com/wandb/operator/internal/controller/infra/clickhouse/altinity"
 	"github.com/wandb/operator/internal/controller/translator"
 	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
-	"github.com/wandb/operator/internal/utils"
+	"github.com/wandb/operator/pkg/utils"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -22,6 +22,13 @@ func clickHouseWriteState(
 	wandb *apiv2.WeightsAndBiases,
 ) []metav1.Condition {
 	var specNamespacedName = clickHouseSpecNamespacedName(wandb.Spec.ClickHouse)
+
+	if wandb.Spec.ClickHouse.Affinity == nil {
+		wandb.Spec.ClickHouse.Affinity = wandb.Spec.Affinity
+	}
+	if wandb.Spec.ClickHouse.Tolerations == nil {
+		wandb.Spec.ClickHouse.Tolerations = wandb.Spec.Tolerations
+	}
 
 	desired, err := translatorv2.ToClickHouseVendorSpec(ctx, wandb.Spec.ClickHouse, wandb, client.Scheme())
 	if err != nil {

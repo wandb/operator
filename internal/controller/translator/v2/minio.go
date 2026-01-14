@@ -8,7 +8,7 @@ import (
 	"github.com/wandb/operator/internal/controller/infra/minio/tenant"
 	"github.com/wandb/operator/internal/controller/translator"
 	"github.com/wandb/operator/internal/logx"
-	miniov2 "github.com/wandb/operator/internal/vendored/minio-operator/minio.min.io/v2"
+	miniov2 "github.com/wandb/operator/pkg/vendored/minio-operator/minio.min.io/v2"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -41,7 +41,7 @@ func ToMinioVendorSpec(
 	owner metav1.Object,
 	scheme *runtime.Scheme,
 ) (*miniov2.Tenant, error) {
-	ctx, log := logx.IntoContext(ctx, logx.Minio)
+	ctx, log := logx.WithSlog(ctx, logx.Minio)
 
 	if !spec.Enabled {
 		return nil, nil
@@ -78,6 +78,8 @@ func ToMinioVendorSpec(
 			Pools: []miniov2.Pool{
 				{
 					Name:             tenant.PoolName(specName),
+					Affinity:         spec.Affinity,
+					Tolerations:      *spec.Tolerations,
 					Servers:          spec.Replicas,
 					VolumesPerServer: volumesPerServer,
 					VolumeClaimTemplate: &corev1.PersistentVolumeClaim{
@@ -115,7 +117,7 @@ func ToMinioVendorSpec(
 
 	// Set owner reference
 	if err := ctrl.SetControllerReference(owner, minioTenant, scheme); err != nil {
-		log.Error(err, "failed to set owner reference on Tenant CR")
+		log.Error("failed to set owner reference on Tenant CR", logx.ErrAttr(err))
 		return nil, fmt.Errorf("failed to set owner reference: %w", err)
 	}
 

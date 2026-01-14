@@ -20,18 +20,20 @@ import (
 	"crypto/tls"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/wandb/operator/internal/logx"
-	chiv1 "github.com/wandb/operator/internal/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
-	miniov2 "github.com/wandb/operator/internal/vendored/minio-operator/minio.min.io/v2"
-	pxcv1 "github.com/wandb/operator/internal/vendored/percona-operator/pxc/v1"
-	redisv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redis/v1beta2"
-	redisreplicationv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redisreplication/v1beta2"
-	redissentinelv1beta2 "github.com/wandb/operator/internal/vendored/redis-operator/redissentinel/v1beta2"
-	strimziv1 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1"
+	chiv1 "github.com/wandb/operator/pkg/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
+	argov1alpha1 "github.com/wandb/operator/pkg/vendored/argo-rollouts/argoproj.io.rollouts/v1alpha1"
+	miniov2 "github.com/wandb/operator/pkg/vendored/minio-operator/minio.min.io/v2"
+	pxcv1 "github.com/wandb/operator/pkg/vendored/percona-operator/pxc/v1"
+	redisv1beta2 "github.com/wandb/operator/pkg/vendored/redis-operator/redis/v1beta2"
+	redisreplicationv1beta2 "github.com/wandb/operator/pkg/vendored/redis-operator/redisreplication/v1beta2"
+	redissentinelv1beta2 "github.com/wandb/operator/pkg/vendored/redis-operator/redissentinel/v1beta2"
+	strimziv1 "github.com/wandb/operator/pkg/vendored/strimzi-kafka/v1"
 	"github.com/wandb/operator/pkg/wandb/spec/channel/deployer"
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -45,7 +47,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	ctrlwh "sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -88,7 +89,7 @@ func main() {
 	var enableHTTP2 bool
 	var tlsOpts []func(*tls.Config)
 	var deployerAPI, isolationNamespaces string
-	var debug, airgapped, enableV2, enableWebhooks bool
+	var debug, airgapped, enableV2, enableWebhooks, enableRollouts bool
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
@@ -116,15 +117,46 @@ func main() {
 
 	flag.BoolVar(&enableV2, "enable-v2", true, "Use V2 of WandB CRD")
 	flag.BoolVar(&enableWebhooks, "enable-webhooks", true, "Enable webhooks")
+	flag.BoolVar(&enableRollouts, "enable-rollouts", false, "Enable Argo Rollout Support")
 
-	opts := zap.Options{
-		Development: true,
-	}
-	opts.BindFlags(flag.CommandLine)
+	var logLevel = flag.String("log-level", "info", "Log level: debug, info, warn, error")
+	var logFormat = flag.String("log-format", "text", "Log format: text or json")
+	var logSource = flag.Bool("log-source", false, "Include source file/line in logs")
+
 	setFlagsFromEnvironment()
 	flag.Parse()
 
-	ctrl.SetLogger(logx.WithFilter(opts))
+	var slogLevel slog.Level
+	switch strings.ToLower(*logLevel) {
+	case "debug":
+		slogLevel = slog.LevelDebug
+	case "info":
+		slogLevel = slog.LevelInfo
+	case "warn":
+		slogLevel = slog.LevelWarn
+	case "error":
+		slogLevel = slog.LevelError
+	default:
+		slogLevel = slog.LevelInfo
+	}
+
+	handlerOpts := &slog.HandlerOptions{
+		Level:     slogLevel,
+		AddSource: *logSource,
+	}
+
+	logx.SetOptions(&logx.Options{
+		HandlerOptions: handlerOpts,
+		Overrides:      nil,
+		Output:         os.Stderr,
+		Format:         logx.LogFormat(*logFormat),
+	})
+
+	ctrl.SetLogger(logx.NewLogrLogger())
+
+	if enableRollouts {
+		utilruntime.Must(argov1alpha1.AddToScheme(scheme))
+	}
 
 	// if the enable-http2 flag is false (the default), http/2 should be disabled
 	// due to its vulnerabilities. More specifically, disabling http/2 will
@@ -264,8 +296,9 @@ func main() {
 	}
 
 	if err = (&controller.ApplicationReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:         mgr.GetClient(),
+		Scheme:         mgr.GetScheme(),
+		EnableRollouts: enableRollouts,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Application")
 		os.Exit(1)

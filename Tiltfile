@@ -10,6 +10,7 @@ settings = {
     "installWandb": True,
     "wandbCRD": "wandb-default-v1",
     "installTelemetry": False,
+    "logFormat": "pretty",  # pretty, text, json
 }
 
 # global settings
@@ -228,11 +229,12 @@ local_resource(
 )
 
 if settings.get("installWandb"):
+    crdName = read_yaml('./hack/testing-manifests/wandb/' + settings.get('wandbCRD') + '.yaml')['metadata']['name']
     k8s_yaml('./hack/testing-manifests/wandb/' + settings.get('wandbCRD') + '.yaml')
     k8s_resource(
         new_name='Wandb',
         objects=[
-            '%s:weightsandbiases' % settings.get('wandbCRD')
+            '%s:weightsandbiases' % crdName
         ],
         resource_deps=["operator-controller-manager"],
         labels=["Operator-Resources"],
@@ -329,11 +331,12 @@ if settings.get("installTelemetry"):
         labels=["Telemetry"],
     )
 
-docker_build_with_restart(IMG, '.',
-                          dockerfile_contents=DOCKERFILE,
-                          entrypoint='/manager',
-                          only=['./tilt_bin/manager', './hack/testing-manifests/server-manifest/0.76.1.yaml'],
-                          live_update=[
-                              sync('./tilt_bin/manager', '/manager'),
-                          ],
-                          )
+docker_build_with_restart(
+    IMG, '.',
+    dockerfile_contents=DOCKERFILE,
+    entrypoint=['/manager', '--log-format=' + settings['logFormat']],
+    only=['./tilt_bin/manager', './hack/testing-manifests/server-manifest/0.76.1.yaml'],
+    live_update=[
+        sync('./tilt_bin/manager', '/manager'),
+    ],
+)

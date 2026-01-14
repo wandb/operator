@@ -9,9 +9,9 @@ import (
 	"github.com/wandb/operator/internal/controller/infra/mysql/percona"
 	"github.com/wandb/operator/internal/controller/translator"
 	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
-	"github.com/wandb/operator/internal/utils"
-	v1 "github.com/wandb/operator/internal/vendored/percona-operator/pxc/v1"
+	"github.com/wandb/operator/pkg/utils"
 	pkgutils "github.com/wandb/operator/pkg/utils"
+	"github.com/wandb/operator/pkg/vendored/percona-operator/pxc/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -46,7 +46,7 @@ func mysqlWriteState(
 					},
 				}
 			}
-			fmt.Printf("Password write: %s\n", password)
+
 			dbPasswordSecret.Data = map[string][]byte{
 				"password": []byte(password),
 			}
@@ -68,6 +68,13 @@ func mysqlWriteState(
 				},
 			}
 		}
+	}
+
+	if wandb.Spec.MySQL.Affinity == nil {
+		wandb.Spec.MySQL.Affinity = wandb.Spec.Affinity
+	}
+	if wandb.Spec.MySQL.Tolerations == nil {
+		wandb.Spec.MySQL.Tolerations = wandb.Spec.Tolerations
 	}
 
 	var desired *v1.PerconaXtraDBCluster

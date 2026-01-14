@@ -5,7 +5,7 @@ import (
 
 	ctrlcommon "github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/logx"
-	miniov2 "github.com/wandb/operator/internal/vendored/minio-operator/minio.min.io/v2"
+	miniov2 "github.com/wandb/operator/pkg/vendored/minio-operator/minio.min.io/v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -16,7 +16,7 @@ func ReadState(
 	client client.Client,
 	specNamespacedName types.NamespacedName,
 ) []metav1.Condition {
-	ctx, _ = logx.IntoContext(ctx, logx.Minio)
+	ctx, _ = logx.WithSlog(ctx, logx.Minio)
 	var actualResource = &miniov2.Tenant{}
 
 	nsnBuilder := createNsNameBuilder(specNamespacedName)

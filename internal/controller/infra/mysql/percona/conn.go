@@ -2,6 +2,7 @@ package percona
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 
@@ -23,9 +24,7 @@ type mysqlConnInfo struct {
 }
 
 func (c *mysqlConnInfo) toURL() string {
-	fmt.Println(c.Password)
 	password := url.QueryEscape(c.Password)
-	fmt.Println(password)
 	return fmt.Sprintf("mysql://%s:%s@%s:%s/%s", c.User, password, c.Host, c.Port, c.Database)
 }
 
@@ -42,6 +41,10 @@ func writeMySQLConnInfo(
 	var found bool
 	var gvk schema.GroupVersionKind
 	var actual = &corev1.Secret{}
+
+	if connInfo == nil {
+		return nil, errors.New("missing connection info")
+	}
 
 	nsName := nsnBuilder.ConnectionNsName()
 	urlKey := "url"

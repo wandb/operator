@@ -21,29 +21,30 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
+	"net/url"
 	"strings"
 	"time"
 
+	"github.com/go-logr/logr"
 	"github.com/samber/lo"
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/ctrlqueue"
 	"github.com/wandb/operator/internal/logx"
-	strimziv1 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1"
 	oputils "github.com/wandb/operator/pkg/utils"
+	strimziv1 "github.com/wandb/operator/pkg/vendored/strimzi-kafka/v1"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
-	"gopkg.in/yaml.v3"
 	corev1 "k8s.io/api/core/v1"
 	apiErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	ctrlClient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
-const RetentionFinalizer = "retention.app.wandb.com"
+const CleanupFinalizer = "wandb.apps.wandb.com/cleanup"
 
 var defaultRequeueMinutes = 1
 var defaultRequeueDuration = time.Duration(defaultRequeueMinutes) * time.Minute
@@ -55,7 +56,7 @@ func Reconcile(
 	recorder record.EventRecorder,
 	wandb *apiv2.WeightsAndBiases,
 ) (ctrl.Result, error) {
-	ctx, log := logx.IntoContext(ctx, logx.ReconcileInfraV2)
+	ctx, log := logx.WithSlog(ctx, logx.ReconcileInfraV2)
 
 	var err error
 
@@ -70,7 +71,7 @@ func Reconcile(
 	if !isFlaggedForDeletion && !ctrlqueue.ContainsString(wandb.GetFinalizers(), RetentionFinalizer) {
 		wandb.ObjectMeta.Finalizers = append(wandb.ObjectMeta.Finalizers, RetentionFinalizer)
 		if err := client.Update(ctx, wandb); err != nil {
-			log.Error(err, fmt.Sprintf("Failed to add finalizer '%s'", RetentionFinalizer))
+			log.Error(fmt.Sprintf("Failed to add finalizer '%s'", CleanupFinalizer), logx.ErrAttr(err))
 			return ctrl.Result{}, err
 		}
 	}
@@ -90,7 +91,7 @@ func Reconcile(
 			}
 			controllerutil.RemoveFinalizer(wandb, RetentionFinalizer)
 			if err := client.Update(ctx, wandb); err != nil {
-				log.Error(err, "Failed to remove finalizer '%s'")
+				log.Error("Failed to remove finalizer '%s'", logx.ErrAttr(err))
 				return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
 			}
 		}
@@ -150,7 +151,27 @@ func Reconcile(
 		return ctrl.Result{}, errors.New("infra state update errors")
 	}
 
-	res, err = reconcileWandbManifest(ctx, client, wandb)
+	redisReady := wandb.Status.RedisStatus.Ready
+	mysqlReady := wandb.Status.MySQLStatus.Ready
+	kafkaReady := wandb.Status.KafkaStatus.Ready
+	minioReady := wandb.Status.MinioStatus.Ready
+	clickHouseReady := wandb.Status.ClickHouseStatus.Ready
+
+	if !redisReady || !mysqlReady || !kafkaReady || !minioReady || !clickHouseReady {
+		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
+	}
+
+	manifest, err := serverManifest.GetServerManifest(wandb.Spec.Wandb.Version)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	// Override features from CR spec if present
+	for key, enabled := range wandb.Spec.Wandb.Features {
+		manifest.Features[key] = enabled
+	}
+
+	res, err = ReconcileWandbManifest(ctx, client, wandb, manifest)
 	// send up the manifest error for now
 	if err != nil {
 		return res, err
@@ -173,8 +194,12 @@ func consolidateResults(results []ctrl.Result) ctrl.Result {
 		RequeueAfter: lo.Min(durations),
 	}
 }
-func reconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases) (ctrl.Result, error) {
+
+func ReconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest) (ctrl.Result, error) {
 	// Reconcile Wandb Manifest
+	logger := ctrl.LoggerFrom(ctx).WithName("reconcileWandbManifest")
+	var result ctrl.Result
+	var err error
 
 	redisReady := wandb.Status.RedisStatus.Ready
 	mysqlReady := wandb.Status.MySQLStatus.Ready
@@ -183,221 +208,32 @@ func reconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 	clickHouseReady := wandb.Status.ClickHouseStatus.Ready
 
 	if !redisReady || !mysqlReady || !kafkaReady || !minioReady || !clickHouseReady {
+		logger.Info("Infra components not ready yet, requeuing for reconciliation")
 		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
 	}
 
-	manifest := serverManifest.Manifest{}
-	manifestData, err := os.ReadFile("0.76.1.yaml")
+	logger.Info("Manifest Features", "features", manifest.Features)
+
+	result, err = generateSecrets(ctx, client, wandb, manifest)
 	if err != nil {
-		return ctrl.Result{}, err
-	}
-	if err = yaml.Unmarshal(manifestData, &manifest); err != nil {
-		return ctrl.Result{}, err
+		return result, err
 	}
 
-	// Ensure any manifest-declared generated secrets exist and capture their selectors in status
-	if wandb.Status.GeneratedSecrets == nil {
-		wandb.Status.GeneratedSecrets = map[string]corev1.SecretKeySelector{}
-	}
-	for _, gs := range manifest.GeneratedSecrets {
-		// Deterministic secret name scoped to the CR instance
-		secretName := fmt.Sprintf("%s-%s", wandb.Name, gs.Name)
-		keyName := "value"
-		sec := &corev1.Secret{}
-		err := client.Get(ctx, types.NamespacedName{Name: secretName, Namespace: wandb.Namespace}, sec)
-		if err != nil {
-			if apiErrors.IsNotFound(err) {
-				// Create new secret with generated value
-				valueLen := gs.Length
-				if valueLen <= 0 {
-					valueLen = 32
-				}
-				pw, pwErr := oputils.GenerateRandomPassword(valueLen)
-				if pwErr != nil {
-					return ctrl.Result{}, pwErr
-				}
-				sec = &corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      secretName,
-						Namespace: wandb.Namespace,
-						Labels: map[string]string{
-							"app.kubernetes.io/managed-by": "wandb-operator",
-							"app.kubernetes.io/instance":   wandb.Name,
-							"app.kubernetes.io/part-of":    "wandb",
-						},
-					},
-					StringData: map[string]string{keyName: pw},
-					Type:       corev1.SecretTypeOpaque,
-				}
-				if err := controllerutil.SetOwnerReference(wandb, sec, client.Scheme()); err != nil {
-					return ctrl.Result{}, err
-				}
-				if err := client.Create(ctx, sec); err != nil {
-					return ctrl.Result{}, err
-				}
-			} else {
-				return ctrl.Result{}, err
-			}
-		} else {
-			// Secret exists. Ensure it has the expected key; do not overwrite existing value.
-			if sec.Data == nil || (sec.Data != nil && sec.Data[keyName] == nil && sec.StringData == nil) {
-				if sec.StringData == nil {
-					sec.StringData = map[string]string{}
-				}
-				// Generate a value only if missing
-				valueLen := gs.Length
-				if valueLen <= 0 {
-					valueLen = 32
-				}
-				pw, pwErr := oputils.GenerateRandomPassword(valueLen)
-				if pwErr != nil {
-					return ctrl.Result{}, pwErr
-				}
-				sec.StringData[keyName] = pw
-				if err := client.Update(ctx, sec); err != nil {
-					return ctrl.Result{}, err
-				}
-			}
-		}
-		// Record selector in status
-		wandb.Status.GeneratedSecrets[gs.Name] = corev1.SecretKeySelector{
-			LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
-			Key:                  keyName,
-		}
-	}
-	// Persist status after updating generated secret selectors
-	if err := client.Status().Update(ctx, wandb); err != nil {
-		return ctrl.Result{}, err
+	result, err = createKafkaTopics(ctx, client, wandb, manifest)
+	if err != nil {
+		return result, err
 	}
 
-	// Create Strimzi KafkaTopic resources for enabled topics
-	if wandb.Spec.Kafka.Enabled {
-		for _, topic := range manifest.Kafka {
-			if !manifestFeaturesEnabled(topic.Features, manifest.Features) {
-				continue
-			}
+	runMigrations()
 
-			// Determine namespace and cluster name for Strimzi resources
-			kafkaNS := wandb.Spec.Kafka.Namespace
-			if kafkaNS == "" {
-				kafkaNS = wandb.Namespace
-			}
-			clusterName := wandb.Spec.Kafka.Name
-			if clusterName == "" {
-				// Fallback to instance name if not explicitly configured
-				clusterName = wandb.Name
-			}
-
-			// Use the logical topic name as the resource name
-			resName := topic.Name
-			if resName == "" {
-				// If not set, fallback to topic entry name
-				resName = topic.Topic
-			}
-			if resName == "" {
-				// Nothing actionable without a name
-				continue
-			}
-			labels := map[string]string{
-				"strimzi.io/cluster":           clusterName,
-				"app.kubernetes.io/managed-by": "wandb-operator",
-				"app.kubernetes.io/part-of":    "wandb",
-				"app.kubernetes.io/instance":   wandb.Name,
-			}
-
-			// Prepare spec
-			partitions := int32(1)
-			if topic.PartitionCount > 0 {
-				partitions = int32(topic.PartitionCount)
-			}
-			replicas := int32(1)
-			if wandb.Spec.Kafka.Config.ReplicationConfig.DefaultReplicationFactor > 0 {
-				replicas = int32(wandb.Spec.Kafka.Config.ReplicationConfig.DefaultReplicationFactor)
-			}
-
-			// Build typed KafkaTopic object
-			kt := &strimziv1.KafkaTopic{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      resName,
-					Namespace: kafkaNS,
-					Labels:    labels,
-				},
-				Spec: strimziv1.KafkaTopicSpec{
-					TopicName:  topic.Topic,
-					Partitions: partitions,
-					Replicas:   replicas,
-				},
-			}
-
-			// Create or Update
-			existing := &strimziv1.KafkaTopic{}
-			getErr := client.Get(ctx, types.NamespacedName{Name: kt.Name, Namespace: kafkaNS}, existing)
-			if getErr != nil {
-				if apiErrors.IsNotFound(getErr) {
-					// Set ownerRef only if same namespace
-					if kafkaNS == wandb.Namespace {
-						_ = controllerutil.SetOwnerReference(wandb, kt, client.Scheme())
-					}
-					if err := client.Create(ctx, kt); err != nil {
-						return ctrl.Result{}, err
-					}
-				} else {
-					return ctrl.Result{}, getErr
-				}
-			} else {
-				// Update managed spec fields and preserve other fields
-				existing.Spec.TopicName = topic.Topic
-				existing.Spec.Partitions = partitions
-				existing.Spec.Replicas = replicas
-				// Preserve/ensure labels
-				exLabels := existing.GetLabels()
-				if exLabels == nil {
-					exLabels = map[string]string{}
-				}
-				for k, v := range labels {
-					exLabels[k] = v
-				}
-				existing.SetLabels(exLabels)
-				if err := client.Update(ctx, existing); err != nil {
-					return ctrl.Result{}, err
-				}
-			}
-		}
+	result, err = reconcileApplications(ctx, client, wandb, manifest, logger)
+	if err != nil {
+		return result, err
 	}
+	return ctrl.Result{}, nil
+}
 
-	// TODO lets run migrations here, need to add some logic for ensuring they run only once.
-	//for name, migrationTask := range manifest.Migrations {
-	//	// check for a currently running job
-	//	jobName := fmt.Sprintf("%s-%s", wandb.Name, name)
-	//	job := &batchv1.Job{}
-	//	err := client.Get(
-	//		ctx,
-	//		types.NamespacedName{
-	//			Namespace: wandb.Namespace,
-	//			Name:      jobName,
-	//		},
-	//		job,
-	//	)
-	//	if err != nil && !apiErrors.IsNotFound(err) {
-	//		return ctrl.Result{}, err
-	//	}
-	//	if apiErrors.IsNotFound(err) {
-	//		job.ObjectMeta.Name = jobName
-	//		job.ObjectMeta.Namespace = wandb.Namespace
-	//		containerSpec := corev1.Container{
-	//			Name:  name,
-	//			Image: migrationTask.Image.GetImage(),
-	//			Args:  migrationTask.Args,
-	//		}
-	//		job.Spec.Template.Spec.Containers = []corev1.Container{containerSpec}
-	//		err = client.Create(ctx, job)
-	//	} else {
-	//		if job.Status.Succeeded == 0 {
-	//			client.Delete(ctx, job)
-	//		}
-	//	}
-	//}
-
+func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest, logger logr.Logger) (ctrl.Result, error) {
 	for _, app := range manifest.Applications {
 		// If the application is gated behind features, only install it when
 		// at least one of those features is enabled in the manifest.
@@ -643,6 +479,48 @@ func reconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 			Ports:   Ports,
 		}
 
+		if app.StartupProbe != nil && app.StartupProbe.HTTPGet != nil {
+			if app.StartupProbe.HTTPGet.Port.StrVal == "" && app.StartupProbe.HTTPGet.Port.IntVal == 0 {
+				if len(app.Ports) > 0 {
+					if app.StartupProbe.HTTPGet.Path != "" {
+						app.StartupProbe.HTTPGet = &corev1.HTTPGetAction{
+							Path: app.StartupProbe.HTTPGet.Path,
+							Port: intstr.FromString(app.Ports[0].Name),
+						}
+					}
+				}
+			}
+			container.StartupProbe = app.StartupProbe
+		}
+
+		if app.LivenessProbe != nil && app.LivenessProbe.HTTPGet != nil {
+			if app.LivenessProbe.HTTPGet.Port.StrVal == "" && app.LivenessProbe.HTTPGet.Port.IntVal == 0 {
+				if len(app.Ports) > 0 {
+					if app.LivenessProbe.HTTPGet.Path != "" {
+						app.LivenessProbe.HTTPGet = &corev1.HTTPGetAction{
+							Path: app.LivenessProbe.HTTPGet.Path,
+							Port: intstr.FromString(app.Ports[0].Name),
+						}
+					}
+				}
+			}
+			container.LivenessProbe = app.LivenessProbe
+		}
+
+		if app.ReadinessProbe != nil && app.ReadinessProbe.HTTPGet != nil {
+			if app.ReadinessProbe.HTTPGet.Port.StrVal == "" && app.ReadinessProbe.HTTPGet.Port.IntVal == 0 {
+				if len(app.Ports) > 0 {
+					if app.ReadinessProbe.HTTPGet.Path != "" {
+						app.ReadinessProbe.HTTPGet = &corev1.HTTPGetAction{
+							Path: app.ReadinessProbe.HTTPGet.Path,
+							Port: intstr.FromString(app.Ports[0].Name),
+						}
+					}
+				}
+			}
+			container.ReadinessProbe = app.ReadinessProbe
+		}
+
 		// Handle file injection via ConfigMaps according to manifest Application.Files
 		volumes := []corev1.Volume{}
 		volumeMounts := []corev1.VolumeMount{}
@@ -768,25 +646,14 @@ func reconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 		// across updates (e.g., duplicate "files-inline" volume names).
 		application.Spec.PodTemplate.Spec.Volumes = volumes
 		application.Spec.PodTemplate.Spec.InitContainers = initContainers
+		application.Spec.PodTemplate.Spec.Affinity = wandb.Spec.Affinity
+		application.Spec.PodTemplate.Spec.Tolerations = *wandb.Spec.Tolerations
 
-		// Reconcile Service ports: fully replace the ServiceTemplate ports with
-		// the ports declared in the manifest for this app. This ensures that any
-		// change to port numbers, names, or protocols is propagated on each
-		// reconcile. If no service ports are declared, clear the ServiceTemplate.
 		if app.Service != nil && len(app.Service.Ports) > 0 {
-			ports := make([]corev1.ServicePort, 0, len(app.Service.Ports))
-			for _, p := range app.Service.Ports {
-				ports = append(ports, corev1.ServicePort{
-					Name:     p.Name,
-					Port:     p.Port,
-					Protocol: p.Protocol,
-				})
+			application.Spec.ServiceTemplate = &corev1.ServiceSpec{
+				Type: app.Service.Type,
 			}
-			if application.Spec.ServiceTemplate == nil {
-				application.Spec.ServiceTemplate = &corev1.ServiceSpec{}
-			}
-			// Replace ports entirely to avoid stale or duplicate entries
-			application.Spec.ServiceTemplate.Ports = ports
+			application.Spec.ServiceTemplate.Ports = app.Service.Ports
 		} else {
 			// No service declared in manifest; ensure we clear any previous template
 			application.Spec.ServiceTemplate = nil
@@ -807,42 +674,258 @@ func reconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 			}
 		}
 
+		wandb.Status.Wandb.Applications[app.Name] = application.Status
+	}
+
+	hostname, err := url.Parse(wandb.Spec.Wandb.Hostname)
+	if err != nil {
+		logger.Error(err, "Failed to parse provided hostname", "hostname", wandb.Spec.Wandb.Hostname)
+	} else {
+		if manifestFeaturesEnabled([]string{"proxy"}, manifest.Features) {
+			proxyService := &corev1.Service{}
+			proxyServiceName := fmt.Sprintf("%s-%s", wandb.Name, "nginx-proxy")
+			err := client.Get(ctx, types.NamespacedName{Name: proxyServiceName, Namespace: wandb.Namespace}, proxyService)
+			if err != nil {
+				logger.Error(err, "Failed to get proxy service", "service", proxyServiceName)
+			} else {
+				nodePort := proxyService.Spec.Ports[0].NodePort
+				hostname.Host = fmt.Sprintf("%s:%d", hostname.Hostname(), nodePort)
+			}
+
+		}
+
+		if wandb.Status.Wandb.Hostname != hostname.String() {
+			wandb.Status.Wandb.Hostname = hostname.String()
+		}
+	}
+
+	if err := client.Status().Update(ctx, wandb); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	return ctrl.Result{}, nil
+}
+
+func runMigrations() {
+	// TODO lets run migrations here, need to add some logic for ensuring they run only once.
+	//for name, migrationTask := range manifest.Migrations {
+	//	// check for a currently running job
+	//	jobName := fmt.Sprintf("%s-%s", wandb.Name, name)
+	//	job := &batchv1.Job{}
+	//	err := client.Get(
+	//		ctx,
+	//		types.NamespacedName{
+	//			Namespace: wandb.Namespace,
+	//			Name:      jobName,
+	//		},
+	//		job,
+	//	)
+	//	if err != nil && !apiErrors.IsNotFound(err) {
+	//		return ctrl.Result{}, err
+	//	}
+	//	if apiErrors.IsNotFound(err) {
+	//		job.ObjectMeta.Name = jobName
+	//		job.ObjectMeta.Namespace = wandb.Namespace
+	//		containerSpec := corev1.Container{
+	//			Name:  name,
+	//			Image: migrationTask.Image.GetImage(),
+	//			Args:  migrationTask.Args,
+	//		}
+	//		job.Spec.Template.Spec.Containers = []corev1.Container{containerSpec}
+	//		err = client.Create(ctx, job)
+	//	} else {
+	//		if job.Status.Succeeded == 0 {
+	//			client.Delete(ctx, job)
+	//		}
+	//	}
+	//}
+}
+
+func createKafkaTopics(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest) (ctrl.Result, error) {
+	// Create Strimzi KafkaTopic resources for enabled topics
+	if wandb.Spec.Kafka.Enabled {
+		for _, topic := range manifest.Kafka {
+			if len(topic.Features) > 0 && !manifestFeaturesEnabled(topic.Features, manifest.Features) {
+				continue
+			}
+
+			// Determine namespace and cluster name for Strimzi resources
+			kafkaNS := wandb.Spec.Kafka.Namespace
+			if kafkaNS == "" {
+				kafkaNS = wandb.Namespace
+			}
+			clusterName := wandb.Spec.Kafka.Name
+			if clusterName == "" {
+				// Fallback to instance name if not explicitly configured
+				clusterName = wandb.Name
+			}
+
+			// Use the logical topic name as the resource name
+			resName := topic.Name
+			if resName == "" {
+				// If not set, fallback to topic entry name
+				resName = topic.Topic
+			}
+			if resName == "" {
+				// Nothing actionable without a name
+				continue
+			}
+			labels := map[string]string{
+				"strimzi.io/cluster":           clusterName,
+				"app.kubernetes.io/managed-by": "wandb-operator",
+				"app.kubernetes.io/part-of":    "wandb",
+				"app.kubernetes.io/instance":   wandb.Name,
+			}
+
+			// Prepare spec
+			partitions := int32(1)
+			if topic.PartitionCount > 0 {
+				partitions = int32(topic.PartitionCount)
+			}
+			replicas := int32(1)
+			if wandb.Spec.Kafka.Config.ReplicationConfig.DefaultReplicationFactor > 0 {
+				replicas = int32(wandb.Spec.Kafka.Config.ReplicationConfig.DefaultReplicationFactor)
+			}
+
+			// Build typed KafkaTopic object
+			kt := &strimziv1.KafkaTopic{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      resName,
+					Namespace: kafkaNS,
+					Labels:    labels,
+				},
+				Spec: strimziv1.KafkaTopicSpec{
+					TopicName:  topic.Topic,
+					Partitions: partitions,
+					Replicas:   replicas,
+				},
+			}
+
+			// Create or Update
+			existing := &strimziv1.KafkaTopic{}
+			getErr := client.Get(ctx, types.NamespacedName{Name: kt.Name, Namespace: kafkaNS}, existing)
+			if getErr != nil {
+				if apiErrors.IsNotFound(getErr) {
+					// Set ownerRef only if same namespace
+					if kafkaNS == wandb.Namespace {
+						_ = controllerutil.SetOwnerReference(wandb, kt, client.Scheme())
+					}
+					if err := client.Create(ctx, kt); err != nil {
+						return ctrl.Result{}, err
+					}
+				} else {
+					return ctrl.Result{}, getErr
+				}
+			} else {
+				// Update managed spec fields and preserve other fields
+				existing.Spec.TopicName = topic.Topic
+				existing.Spec.Partitions = partitions
+				existing.Spec.Replicas = replicas
+				// Preserve/ensure labels
+				exLabels := existing.GetLabels()
+				if exLabels == nil {
+					exLabels = map[string]string{}
+				}
+				for k, v := range labels {
+					exLabels[k] = v
+				}
+				existing.SetLabels(exLabels)
+				if err := client.Update(ctx, existing); err != nil {
+					return ctrl.Result{}, err
+				}
+			}
+		}
+	}
+	return ctrl.Result{}, nil
+}
+
+func generateSecrets(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest) (ctrl.Result, error) {
+	// Ensure any manifest-declared generated secrets exist and capture their selectors in status
+	if wandb.Status.GeneratedSecrets == nil {
+		wandb.Status.GeneratedSecrets = map[string]corev1.SecretKeySelector{}
+	}
+	for _, gs := range manifest.GeneratedSecrets {
+		// Deterministic secret name scoped to the CR instance
+		secretName := fmt.Sprintf("%s-%s", wandb.Name, gs.Name)
+		keyName := "value"
+		sec := &corev1.Secret{}
+		err := client.Get(ctx, types.NamespacedName{Name: secretName, Namespace: wandb.Namespace}, sec)
+		if err != nil {
+			if apiErrors.IsNotFound(err) {
+				// Create new secret with generated value
+				valueLen := gs.Length
+				if valueLen <= 0 {
+					valueLen = 32
+				}
+				pw, err := oputils.GenerateRandomPassword(valueLen)
+				if err != nil {
+					return ctrl.Result{}, err
+				}
+				sec = &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      secretName,
+						Namespace: wandb.Namespace,
+						Labels: map[string]string{
+							"app.kubernetes.io/managed-by": "wandb-operator",
+							"app.kubernetes.io/instance":   wandb.Name,
+							"app.kubernetes.io/part-of":    "wandb",
+						},
+					},
+					StringData: map[string]string{keyName: pw},
+					Type:       corev1.SecretTypeOpaque,
+				}
+				if err := controllerutil.SetOwnerReference(wandb, sec, client.Scheme()); err != nil {
+					return ctrl.Result{}, err
+				}
+				if err := client.Create(ctx, sec); err != nil {
+					return ctrl.Result{}, err
+				}
+			} else {
+				return ctrl.Result{}, err
+			}
+		} else {
+			// Secret exists. Ensure it has the expected key; do not overwrite existing value.
+			if sec.Data == nil || (sec.Data != nil && sec.Data[keyName] == nil && sec.StringData == nil) {
+				if sec.StringData == nil {
+					sec.StringData = map[string]string{}
+				}
+				// Generate a value only if missing
+				valueLen := gs.Length
+				if valueLen <= 0 {
+					valueLen = 32
+				}
+				pw, err := oputils.GenerateRandomPassword(valueLen)
+				if err != nil {
+					return ctrl.Result{}, err
+				}
+				sec.StringData[keyName] = pw
+				if err := client.Update(ctx, sec); err != nil {
+					return ctrl.Result{}, err
+				}
+			}
+		}
+		// Record selector in status
+		wandb.Status.GeneratedSecrets[gs.Name] = corev1.SecretKeySelector{
+			LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
+			Key:                  keyName,
+		}
+	}
+	// Persist status after updating generated secret selectors
+	if err := client.Status().Update(ctx, wandb); err != nil {
+		return ctrl.Result{}, err
 	}
 	return ctrl.Result{}, nil
 }
 
 // manifestFeaturesEnabled returns true if any of the topic's feature flags are enabled
 // in the manifest's top-level Features section.
-func manifestFeaturesEnabled(topicFeatures []string, mf *serverManifest.Features) bool {
+func manifestFeaturesEnabled(topicFeatures []string, mf map[string]bool) bool {
 	if len(topicFeatures) == 0 || mf == nil {
 		return false
 	}
 	for _, f := range topicFeatures {
-		switch f {
-		case "runsV2":
-			if mf.RunsV2 {
-				return true
-			}
-		case "filestreamQueue":
-			if mf.FilestreamQueue {
-				return true
-			}
-		case "metricObserver":
-			if mf.MetricObserver {
-				return true
-			}
-		case "weaveTrace":
-			if mf.WeaveTrace {
-				return true
-			}
-		case "proxy":
-			if mf.Proxy {
-				return true
-			}
-		case "weaveTraceWorkers":
-			if mf.WeaveTraceWorkers {
-				return true
-			}
+		if enabled, ok := mf[f]; ok && enabled {
+			return true
 		}
 	}
 	return false
