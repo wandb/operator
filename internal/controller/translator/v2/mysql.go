@@ -8,7 +8,7 @@ import (
 	"github.com/wandb/operator/internal/controller/infra/mysql/percona"
 	"github.com/wandb/operator/internal/controller/translator"
 	"github.com/wandb/operator/internal/logx"
-	pxcv1 "github.com/wandb/operator/internal/vendored/percona-operator/pxc/v1"
+	pxcv1 "github.com/wandb/operator/pkg/vendored/percona-operator/pxc/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

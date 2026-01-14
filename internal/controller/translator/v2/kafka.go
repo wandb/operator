@@ -9,7 +9,7 @@ import (
 	"github.com/wandb/operator/internal/controller/infra/kafka/strimzi"
 	"github.com/wandb/operator/internal/controller/translator"
 	"github.com/wandb/operator/internal/logx"
-	strimziv1 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1"
+	"github.com/wandb/operator/pkg/vendored/strimzi-kafka/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -23,14 +23,14 @@ const (
 // createKafkaMetricsConfig creates a MetricsConfig for Kafka if telemetry is enabled.
 // Uses the Strimzi Metrics Reporter which exposes metrics in Prometheus format.
 // Returns nil if telemetry is disabled.
-func createKafkaMetricsConfig(telemetry apiv2.Telemetry) *strimziv1.MetricsConfig {
+func createKafkaMetricsConfig(telemetry apiv2.Telemetry) *v1.MetricsConfig {
 	if !telemetry.Enabled {
 		return nil
 	}
 
-	return &strimziv1.MetricsConfig{
+	return &v1.MetricsConfig{
 		Type: MetricsReporterType,
-		Values: &strimziv1.MetricsReporterValues{
+		Values: &v1.MetricsReporterValues{
 			AllowList: []string{".*"},
 		},
 	}
@@ -45,7 +45,7 @@ func ToKafkaVendorSpec(
 	spec apiv2.WBKafkaSpec,
 	owner metav1.Object,
 	scheme *runtime.Scheme,
-) (*strimziv1.Kafka, error) {
+) (*v1.Kafka, error) {
 	ctx, log := logx.WithSlog(ctx, logx.Kafka)
 
 	if !spec.Enabled {
@@ -56,7 +56,7 @@ func ToKafkaVendorSpec(
 		Namespace: spec.Namespace, Name: spec.Name,
 	})
 
-	kafka := &strimziv1.Kafka{
+	kafka := &v1.Kafka{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      nsnBuilder.KafkaName(),
 			Namespace: nsnBuilder.Namespace(),
@@ -67,12 +67,12 @@ func ToKafkaVendorSpec(
 				"strimzi.io/node-pools": "enabled",
 			},
 		},
-		Spec: strimziv1.KafkaSpec{
-			Kafka: strimziv1.KafkaClusterSpec{
+		Spec: v1.KafkaSpec{
+			Kafka: v1.KafkaClusterSpec{
 				Version:         translator.KafkaVersion,
 				MetadataVersion: translator.KafkaMetadataVersion,
 				Replicas:        0, // CRITICAL: Must be 0 when using node pools in KRaft mode
-				Listeners: []strimziv1.GenericKafkaListener{
+				Listeners: []v1.GenericKafkaListener{
 					{
 						Name: strimzi.PlainListenerName,
 						Port: strimzi.PlainListenerPort,
@@ -93,18 +93,18 @@ func ToKafkaVendorSpec(
 					"default.replication.factor":               strconv.Itoa(int(spec.Config.ReplicationConfig.DefaultReplicationFactor)),
 					"min.insync.replicas":                      strconv.Itoa(int(spec.Config.ReplicationConfig.MinInSyncReplicas)),
 				},
-				Template: &strimziv1.KafkaClusterTemplate{
-					Pod: &strimziv1.PodTemplate{
+				Template: &v1.KafkaClusterTemplate{
+					Pod: &v1.PodTemplate{
 						Affinity:    spec.Affinity,
 						Tolerations: *spec.Tolerations,
 					},
 				},
 			},
-			EntityOperator: &strimziv1.EntityOperatorSpec{
-				TopicOperator: &strimziv1.EntityTopicOperatorSpec{WatchedNamespace: nsnBuilder.Namespace()},
-				UserOperator:  &strimziv1.EntityUserOperatorSpec{WatchedNamespace: nsnBuilder.Namespace()},
-				Template: &strimziv1.EntityOperatorTemplate{
-					Pod: &strimziv1.PodTemplate{
+			EntityOperator: &v1.EntityOperatorSpec{
+				TopicOperator: &v1.EntityTopicOperatorSpec{WatchedNamespace: nsnBuilder.Namespace()},
+				UserOperator:  &v1.EntityUserOperatorSpec{WatchedNamespace: nsnBuilder.Namespace()},
+				Template: &v1.EntityOperatorTemplate{
+					Pod: &v1.PodTemplate{
 						Affinity:    spec.Affinity,
 						Tolerations: *spec.Tolerations,
 					},
@@ -133,7 +133,7 @@ func ToKafkaNodePoolVendorSpec(
 	spec apiv2.WBKafkaSpec,
 	owner metav1.Object,
 	scheme *runtime.Scheme,
-) (*strimziv1.KafkaNodePool, error) {
+) (*v1.KafkaNodePool, error) {
 	ctx, log := logx.WithSlog(ctx, logx.Kafka)
 
 	if !spec.Enabled {
@@ -144,7 +144,7 @@ func ToKafkaNodePoolVendorSpec(
 		Namespace: spec.Namespace, Name: spec.Name,
 	})
 
-	nodePool := &strimziv1.KafkaNodePool{
+	nodePool := &v1.KafkaNodePool{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      nsnBuilder.NodePoolName(),
 			Namespace: nsnBuilder.Namespace(),
@@ -152,12 +152,12 @@ func ToKafkaNodePoolVendorSpec(
 				"strimzi.io/cluster": nsnBuilder.KafkaName(),
 			},
 		},
-		Spec: strimziv1.KafkaNodePoolSpec{
+		Spec: v1.KafkaNodePoolSpec{
 			Replicas: spec.Replicas,
 			Roles:    []string{strimzi.RoleBroker, strimzi.RoleController},
-			Storage: strimziv1.KafkaStorage{
+			Storage: v1.KafkaStorage{
 				Type: "jbod",
-				Volumes: []strimziv1.StorageVolume{
+				Volumes: []v1.StorageVolume{
 					{
 						ID:          0,
 						Type:        strimzi.StorageType,

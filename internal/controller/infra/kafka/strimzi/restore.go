@@ -5,7 +5,7 @@ import (
 
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/logx"
-	strimziv1 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1"
+	strimziv1 "github.com/wandb/operator/pkg/vendored/strimzi-kafka/v1"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )

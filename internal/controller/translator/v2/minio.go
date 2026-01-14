@@ -8,7 +8,7 @@ import (
 	"github.com/wandb/operator/internal/controller/infra/minio/tenant"
 	"github.com/wandb/operator/internal/controller/translator"
 	"github.com/wandb/operator/internal/logx"
-	miniov2 "github.com/wandb/operator/internal/vendored/minio-operator/minio.min.io/v2"
+	miniov2 "github.com/wandb/operator/pkg/vendored/minio-operator/minio.min.io/v2"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

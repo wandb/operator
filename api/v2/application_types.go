@@ -18,6 +18,7 @@ package v2
 
 import (
 	kedav1alpha1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
+	"github.com/wandb/operator/pkg/vendored/argo-rollouts/argoproj.io.rollouts/v1alpha1"
 	v1 "k8s.io/api/apps/v1"
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -37,6 +38,10 @@ type ApplicationSpec struct {
 
 	Kind string `json:"kind,omitempty"`
 
+	// Replicas is the number of desired instances of the application.
+	// This field is ignored if HpaTemplate is provided.
+	Replicas *int32 `json:"replicas,omitempty"`
+
 	MetaTemplate         metav1.ObjectMeta                          `json:"metaTemplate,omitempty"`
 	PodTemplate          corev1.PodTemplateSpec                     `json:"podTemplate,omitempty"`
 	ServiceTemplate      *corev1.ServiceSpec                        `json:"serviceTemplate,omitempty"`
@@ -50,10 +55,15 @@ type ApplicationSpec struct {
 
 // ApplicationStatus defines the observed state of Application.
 type ApplicationStatus struct {
-	Ready            bool                                        `json:"ready"`
-	DeploymentStatus v1.DeploymentStatus                         `json:"deploymentStatus,omitempty"`
-	ServiceStatus    corev1.ServiceStatus                        `json:"serviceStatus,omitempty"`
-	HPAStatus        autoscalingv1.HorizontalPodAutoscalerStatus `json:"hpaStatus,omitempty"`
+	Ready             bool                                         `json:"ready"`
+	CronJobStatuses   map[string]batchv1.CronJobStatus             `json:"cronJobStatuses,omitempty"`
+	DeploymentStatus  *v1.DeploymentStatus                         `json:"deploymentStatus,omitempty"`
+	IngressStatus     *networkingv1.IngressStatus                  `json:"ingressStatus,omitempty"`
+	JobStatuses       map[string]batchv1.JobStatus                 `json:"jobStatuses,omitempty"`
+	RolloutStatus     *v1alpha1.RolloutStatus                      `json:"rolloutStatus,omitempty"`
+	StatefulSetStatus *v1.StatefulSetStatus                        `json:"statefulSetStatus,omitempty"`
+	ServiceStatus     *corev1.ServiceStatus                        `json:"serviceStatus,omitempty"`
+	HPAStatus         *autoscalingv1.HorizontalPodAutoscalerStatus `json:"hpaStatus,omitempty"`
 }
 
 // +kubebuilder:object:root=true

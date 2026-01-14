@@ -80,6 +80,10 @@ func (d *WeightsAndBiasesCustomDefaulter) Default(ctx context.Context, obj runti
 		wandb.Spec.Tolerations = &[]corev1.Toleration{}
 	}
 
+	if wandb.Status.Wandb.Applications == nil {
+		wandb.Status.Wandb.Applications = make(map[string]appsv2.ApplicationStatus)
+	}
+
 	size, err := toCommonSize(wandb.Spec.Size)
 	if err != nil {
 		return err

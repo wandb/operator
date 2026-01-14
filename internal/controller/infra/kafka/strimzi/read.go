@@ -9,13 +9,13 @@ import (
 	ctrlcommon "github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/translator"
 	"github.com/wandb/operator/internal/logx"
-	strimziv1 "github.com/wandb/operator/internal/vendored/strimzi-kafka/v1"
+	"github.com/wandb/operator/pkg/vendored/strimzi-kafka/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func readConnectionDetails(nsnBuilder *NsNameBuilder, actualKafka *strimziv1.Kafka) *kafkaConnInfo {
+func readConnectionDetails(nsnBuilder *NsNameBuilder, actualKafka *v1.Kafka) *kafkaConnInfo {
 	kafkaHost := fmt.Sprintf("%s-%s.%s.svc.cluster.local", nsnBuilder.KafkaName(), "kafka-bootstrap", nsnBuilder.Namespace())
 	kafkaPort := strconv.Itoa(PlainListenerPort)
 	kafkaClusterId := ""
@@ -39,7 +39,7 @@ func ReadState(
 	ctx, log := logx.WithSlog(ctx, logx.Kafka)
 	nsnBuilder := createNsNameBuilder(specNamespacedName)
 
-	var actualKafka = &strimziv1.Kafka{}
+	var actualKafka = &v1.Kafka{}
 	found, err := ctrlcommon.GetResource(
 		ctx, cl, nsnBuilder.KafkaNsName(), KafkaResourceType, actualKafka,
 	)
@@ -57,7 +57,7 @@ func ReadState(
 		actualKafka = nil
 	}
 
-	var actualNodePool = &strimziv1.KafkaNodePool{}
+	var actualNodePool = &v1.KafkaNodePool{}
 	if found, err = ctrlcommon.GetResource(
 		ctx, cl, nsnBuilder.NodePoolNsName(), NodePoolResourceType, actualNodePool,
 	); err != nil {
@@ -119,7 +119,7 @@ func ReadState(
 	return conditions, connection
 }
 
-func computeKafkaReportedReadyCondition(_ context.Context, kafkaCR *strimziv1.Kafka) []metav1.Condition {
+func computeKafkaReportedReadyCondition(_ context.Context, kafkaCR *v1.Kafka) []metav1.Condition {
 	if kafkaCR == nil {
 		return []metav1.Condition{}
 	}
