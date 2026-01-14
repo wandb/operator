@@ -672,31 +672,35 @@ func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb 
 			}
 		}
 
-		var hostname *url.URL
-		hostname, err = url.Parse(wandb.Spec.Wandb.Hostname)
-		if err != nil {
-			logger.Error(err, "Failed to parse provided hostname", "hostname", wandb.Spec.Wandb.Hostname)
-		} else {
-			if manifestFeaturesEnabled([]string{"proxy"}, manifest.Features) {
-				proxyService := &corev1.Service{}
-				proxyServiceName := fmt.Sprintf("%s-%s", wandb.Name, "nginx-proxy")
-				err := client.Get(ctx, types.NamespacedName{Name: proxyServiceName, Namespace: wandb.Namespace}, proxyService)
-				if err != nil {
-					logger.Error(err, "Failed to get proxy service", "service", proxyServiceName)
-				} else {
-					nodePort := proxyService.Spec.Ports[0].NodePort
-					hostname.Host = fmt.Sprintf("%s:%d", hostname.Hostname(), nodePort)
-				}
+		wandb.Status.Wandb.Applications[app.Name] = application.Status
+	}
 
+	hostname, err := url.Parse(wandb.Spec.Wandb.Hostname)
+	if err != nil {
+		logger.Error(err, "Failed to parse provided hostname", "hostname", wandb.Spec.Wandb.Hostname)
+	} else {
+		if manifestFeaturesEnabled([]string{"proxy"}, manifest.Features) {
+			proxyService := &corev1.Service{}
+			proxyServiceName := fmt.Sprintf("%s-%s", wandb.Name, "nginx-proxy")
+			err := client.Get(ctx, types.NamespacedName{Name: proxyServiceName, Namespace: wandb.Namespace}, proxyService)
+			if err != nil {
+				logger.Error(err, "Failed to get proxy service", "service", proxyServiceName)
+			} else {
+				nodePort := proxyService.Spec.Ports[0].NodePort
+				hostname.Host = fmt.Sprintf("%s:%d", hostname.Hostname(), nodePort)
 			}
-			if wandb.Status.Wandb.Hostname != hostname.String() {
-				wandb.Status.Wandb.Hostname = hostname.String()
-				if err := client.Status().Update(ctx, wandb); err != nil {
-					return ctrl.Result{}, err
-				}
-			}
+
+		}
+
+		if wandb.Status.Wandb.Hostname != hostname.String() {
+			wandb.Status.Wandb.Hostname = hostname.String()
 		}
 	}
+
+	if err := client.Status().Update(ctx, wandb); err != nil {
+		return ctrl.Result{}, err
+	}
+
 	return ctrl.Result{}, nil
 }
 

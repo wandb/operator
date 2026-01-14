@@ -157,6 +157,7 @@ func (r *WeightsAndBiasesReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if r.EnableV2 {
 		b = ctrl.NewControllerManagedBy(mgr).
 			For(&apiv2.WeightsAndBiases{}).
+			Owns(&apiv2.Application{}).
 			Owns(&corev1.Secret{}).
 			Owns(&corev1.ConfigMap{})
 	} else {
