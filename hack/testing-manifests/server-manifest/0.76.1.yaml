@@ -437,9 +437,21 @@ applications:
       - name: ENABLE_SERVICES
         value: "gorilla,nginx,local"
       - name: WEAVE_ENABLED
-        value: "false"
+        value: "true"
+      - name: WEAVE_SERVICE
+        sources:
+          - name: weave
+            type: service
+            proto: ""
+            path: ""
       - name: PARQUET_ENABLED
-        value: "false"
+        value: "true"
+      - name: PARQUET_HOST
+        sources:
+          - name: parquet
+            type: service
+            proto: "http"
+            path: ""
       - name: GLUE_ENABLED
         value: "false"
       - name: OPERATOR_ENABLED
@@ -581,6 +593,14 @@ applications:
             type: service
             proto: ""
             path: ""
+      - name: WEAVE_TRACES_ENABLED
+        value: "true"
+      - name: SERVER_FLAG_WEAVE_1_PERCENTAGE
+        value: "100"
+      - name: WEAVE_ENABLED
+        value: "true"
+      - name: OPERATOR_ENABLED
+        value: "true"
     ports:
       - containerPort: 8080
         name: frontend
