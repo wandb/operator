@@ -593,10 +593,6 @@ applications:
             type: service
             proto: ""
             path: ""
-      - name: WEAVE_TRACES_ENABLED
-        value: "true"
-      - name: SERVER_FLAG_WEAVE_1_PERCENTAGE
-        value: "100"
       - name: WEAVE_ENABLED
         value: "true"
       - name: OPERATOR_ENABLED
