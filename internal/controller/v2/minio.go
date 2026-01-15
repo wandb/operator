@@ -23,14 +23,7 @@ func minioWriteState(
 ) ([]metav1.Condition, *translator.InfraConnection) {
 	var specNamespacedName = minioSpecNamespacedName(wandb.Spec.Minio)
 
-	if wandb.Spec.Minio.Affinity == nil {
-		wandb.Spec.Minio.Affinity = wandb.Spec.Affinity
-	}
-	if wandb.Spec.Minio.Tolerations == nil {
-		wandb.Spec.Minio.Tolerations = wandb.Spec.Tolerations
-	}
-
-	desiredCr, err := translatorv2.ToMinioVendorSpec(ctx, wandb.Spec.Minio, wandb, client.Scheme())
+	desiredCr, err := translatorv2.ToMinioVendorSpec(ctx, wandb, client.Scheme())
 	if err != nil {
 		return []metav1.Condition{
 			{
@@ -81,6 +74,7 @@ func minioInferStatus(
 
 	updatedStatus, events, ctrlResult := tenant.ComputeStatus(
 		ctx,
+		wandb.Spec.Minio.Enabled,
 		oldConditions,
 		newConditions,
 		utils.Coalesce(newInfraConn, &oldInfraConn),

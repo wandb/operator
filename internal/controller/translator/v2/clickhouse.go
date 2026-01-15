@@ -22,11 +22,11 @@ import (
 // ClickHouseInstallation format used by the Altinity operator.
 func ToClickHouseVendorSpec(
 	ctx context.Context,
-	spec apiv2.WBClickHouseSpec,
-	owner metav1.Object,
+	wandb *apiv2.WeightsAndBiases,
 	scheme *runtime.Scheme,
 ) (*v1.ClickHouseInstallation, error) {
 	ctx, log := logx.WithSlog(ctx, logx.ClickHouse)
+	spec := wandb.Spec.ClickHouse
 
 	if !spec.Enabled {
 		return nil, nil
@@ -100,8 +100,8 @@ func ToClickHouseVendorSpec(
 				PodTemplates: []v1.PodTemplate{
 					{
 						Spec: corev1.PodSpec{
-							Affinity:    spec.Affinity,
-							Tolerations: *spec.Tolerations,
+							Affinity:    wandb.GetAffinity(spec.WBInfraSpec),
+							Tolerations: *wandb.GetTolerations(spec.WBInfraSpec),
 						},
 					},
 				},
@@ -146,7 +146,7 @@ func ToClickHouseVendorSpec(
 	}
 
 	// Set owner reference
-	if err := ctrl.SetControllerReference(owner, chi, scheme); err != nil {
+	if err := ctrl.SetControllerReference(wandb, chi, scheme); err != nil {
 		log.Error("failed to set owner reference on CHI CR", logx.ErrAttr(err))
 		return nil, fmt.Errorf("failed to set owner reference: %w", err)
 	}

@@ -8,6 +8,8 @@ spec:
     features:
       proxy: true
   size: dev
+  retentionPolicy:
+    onDelete: preserve
   mysql:
     enabled: true
     telemetry:

@@ -72,6 +72,10 @@ func (d *WeightsAndBiasesCustomDefaulter) Default(ctx context.Context, obj runti
 		wandb.Spec.Size = appsv2.WBSizeDev
 	}
 
+	if wandb.Spec.RetentionPolicy.OnDelete == "" {
+		wandb.Spec.RetentionPolicy.OnDelete = defaults.DefaultOnDeleteRetentionPolicy
+	}
+
 	if wandb.Spec.Affinity == nil {
 		wandb.Spec.Affinity = &corev1.Affinity{}
 	}

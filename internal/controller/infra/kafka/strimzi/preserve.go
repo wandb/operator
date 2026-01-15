@@ -35,6 +35,7 @@ func PreserveFinalizer(
 		return err
 	}
 	if !found {
+		log.Info("abort preserve finalizer: no connection info found")
 		return nil
 	}
 
@@ -47,10 +48,11 @@ func PreserveFinalizer(
 
 	if err = cl.Update(ctx, actual); err != nil {
 		if !errors.IsNotFound(err) {
-			log.Info("error removing WandB obj ref from kafka connection info secret")
+			log.Error("error removing wandb owner reference during preserve", logx.ErrAttr(err))
 			return err
 		}
 	}
+	log.Debug("removed wandb owner reference during preserve", "uid", wandbOwner.GetUID())
 
 	return nil
 }

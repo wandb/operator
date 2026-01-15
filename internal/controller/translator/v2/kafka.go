@@ -42,18 +42,19 @@ func createKafkaMetricsConfig(telemetry apiv2.Telemetry) *v1.MetricsConfig {
 // Note: In KRaft mode with node pools, the Kafka.Spec.Kafka.Replicas MUST be 0.
 func ToKafkaVendorSpec(
 	ctx context.Context,
-	spec apiv2.WBKafkaSpec,
-	owner metav1.Object,
+	wandb *apiv2.WeightsAndBiases,
 	scheme *runtime.Scheme,
 ) (*v1.Kafka, error) {
 	ctx, log := logx.WithSlog(ctx, logx.Kafka)
 
-	if !spec.Enabled {
+	infraSpec := wandb.Spec.Kafka
+	if !infraSpec.Enabled {
+		log.Debug("Kafka is disabled, no vendor spec")
 		return nil, nil
 	}
 
 	nsnBuilder := strimzi.CreateNsNameBuilder(types.NamespacedName{
-		Namespace: spec.Namespace, Name: spec.Name,
+		Namespace: infraSpec.Namespace, Name: infraSpec.Name,
 	})
 
 	kafka := &v1.Kafka{
@@ -87,16 +88,16 @@ func ToKafkaVendorSpec(
 					},
 				},
 				Config: map[string]string{
-					"offsets.topic.replication.factor":         strconv.Itoa(int(spec.Config.ReplicationConfig.OffsetsTopicRF)),
-					"transaction.state.log.replication.factor": strconv.Itoa(int(spec.Config.ReplicationConfig.TransactionStateRF)),
-					"transaction.state.log.min.isr":            strconv.Itoa(int(spec.Config.ReplicationConfig.TransactionStateISR)),
-					"default.replication.factor":               strconv.Itoa(int(spec.Config.ReplicationConfig.DefaultReplicationFactor)),
-					"min.insync.replicas":                      strconv.Itoa(int(spec.Config.ReplicationConfig.MinInSyncReplicas)),
+					"offsets.topic.replication.factor":         strconv.Itoa(int(infraSpec.Config.ReplicationConfig.OffsetsTopicRF)),
+					"transaction.state.log.replication.factor": strconv.Itoa(int(infraSpec.Config.ReplicationConfig.TransactionStateRF)),
+					"transaction.state.log.min.isr":            strconv.Itoa(int(infraSpec.Config.ReplicationConfig.TransactionStateISR)),
+					"default.replication.factor":               strconv.Itoa(int(infraSpec.Config.ReplicationConfig.DefaultReplicationFactor)),
+					"min.insync.replicas":                      strconv.Itoa(int(infraSpec.Config.ReplicationConfig.MinInSyncReplicas)),
 				},
 				Template: &v1.KafkaClusterTemplate{
 					Pod: &v1.PodTemplate{
-						Affinity:    spec.Affinity,
-						Tolerations: *spec.Tolerations,
+						Affinity:    wandb.GetAffinity(infraSpec.WBInfraSpec),
+						Tolerations: *wandb.GetTolerations(infraSpec.WBInfraSpec),
 					},
 				},
 			},
@@ -105,8 +106,8 @@ func ToKafkaVendorSpec(
 				UserOperator:  &v1.EntityUserOperatorSpec{WatchedNamespace: nsnBuilder.Namespace()},
 				Template: &v1.EntityOperatorTemplate{
 					Pod: &v1.PodTemplate{
-						Affinity:    spec.Affinity,
-						Tolerations: *spec.Tolerations,
+						Affinity:    wandb.GetAffinity(infraSpec.WBInfraSpec),
+						Tolerations: *wandb.GetTolerations(infraSpec.WBInfraSpec),
 					},
 				},
 			},
@@ -114,14 +115,15 @@ func ToKafkaVendorSpec(
 	}
 
 	// Add metrics configuration if telemetry is enabled
-	kafka.Spec.Kafka.MetricsConfig = createKafkaMetricsConfig(spec.Telemetry)
+	kafka.Spec.Kafka.MetricsConfig = createKafkaMetricsConfig(infraSpec.Telemetry)
 
 	// Set owner reference
-	if err := ctrl.SetControllerReference(owner, kafka, scheme); err != nil {
+	if err := ctrl.SetControllerReference(wandb, kafka, scheme); err != nil {
 		log.Error("failed to set owner reference on Kafka CR", logx.ErrAttr(err))
 		return nil, fmt.Errorf("failed to set owner reference: %w", err)
 	}
 
+	log.Debug("Kafka is enabled, providing vendor spec")
 	return kafka, nil
 }
 
@@ -130,19 +132,25 @@ func ToKafkaVendorSpec(
 // and runs in KRaft mode with broker and controller roles.
 func ToKafkaNodePoolVendorSpec(
 	ctx context.Context,
-	spec apiv2.WBKafkaSpec,
-	owner metav1.Object,
+	wandb *apiv2.WeightsAndBiases,
 	scheme *runtime.Scheme,
 ) (*v1.KafkaNodePool, error) {
 	ctx, log := logx.WithSlog(ctx, logx.Kafka)
 
-	if !spec.Enabled {
+	infraSpec := wandb.Spec.Kafka
+	if !infraSpec.Enabled {
 		return nil, nil
 	}
 
+	retentionPolicy := wandb.GetRetentionPolicy(wandb.Spec.Kafka.WBInfraSpec)
 	nsnBuilder := strimzi.CreateNsNameBuilder(types.NamespacedName{
-		Namespace: spec.Namespace, Name: spec.Name,
+		Namespace: infraSpec.Namespace, Name: infraSpec.Name,
 	})
+
+	onDeletePurge := false
+	if retentionPolicy.OnDelete == apiv2.WBPurgeOnDelete {
+		onDeletePurge = true
+	}
 
 	nodePool := &v1.KafkaNodePool{
 		ObjectMeta: metav1.ObjectMeta{
@@ -153,7 +161,7 @@ func ToKafkaNodePoolVendorSpec(
 			},
 		},
 		Spec: v1.KafkaNodePoolSpec{
-			Replicas: spec.Replicas,
+			Replicas: infraSpec.Replicas,
 			Roles:    []string{strimzi.RoleBroker, strimzi.RoleController},
 			Storage: v1.KafkaStorage{
 				Type: "jbod",
@@ -161,25 +169,25 @@ func ToKafkaNodePoolVendorSpec(
 					{
 						ID:          0,
 						Type:        strimzi.StorageType,
-						Size:        spec.StorageSize,
-						DeleteClaim: strimzi.StorageDeleteClaim,
+						Size:        infraSpec.StorageSize,
+						DeleteClaim: onDeletePurge,
 					},
 				},
 			},
 		},
 	}
 
-	if spec.SkipDataRecovery {
+	if infraSpec.SkipDataRecovery {
 		nodePool.Annotations["wandb.apps.wandb.com/skipDataRecovery"] = "true"
 	}
 
 	// Add resources if specified
-	if len(spec.Config.Resources.Requests) > 0 || len(spec.Config.Resources.Limits) > 0 {
-		nodePool.Spec.Resources = &spec.Config.Resources
+	if len(infraSpec.Config.Resources.Requests) > 0 || len(infraSpec.Config.Resources.Limits) > 0 {
+		nodePool.Spec.Resources = &infraSpec.Config.Resources
 	}
 
 	// Set owner reference
-	if err := ctrl.SetControllerReference(owner, nodePool, scheme); err != nil {
+	if err := ctrl.SetControllerReference(wandb, nodePool, scheme); err != nil {
 		log.Error("failed to set owner reference on KafkaNodePool CR", logx.ErrAttr(err))
 		return nil, fmt.Errorf("failed to set owner reference: %w", err)
 	}

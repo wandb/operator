@@ -34,7 +34,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - MySQL", func() {
 					Spec: apiv2.WeightsAndBiasesSpec{
 						Size: apiv2.WBSizeDev,
 						MySQL: apiv2.WBMySQLSpec{
-							Enabled: true,
+							WBInfraSpec: apiv2.WBInfraSpec{
+								Enabled: true,
+							},
 						},
 					},
 				}
@@ -58,7 +60,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - MySQL", func() {
 					Spec: apiv2.WeightsAndBiasesSpec{
 						Size: apiv2.WBSizeDev,
 						MySQL: apiv2.WBMySQLSpec{
-							Enabled:   true,
+							WBInfraSpec: apiv2.WBInfraSpec{
+								Enabled: true,
+							},
 							Namespace: "custom-mysql-namespace",
 						},
 					},
@@ -81,7 +85,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - MySQL", func() {
 					Spec: apiv2.WeightsAndBiasesSpec{
 						Size: apiv2.WBSizeDev,
 						MySQL: apiv2.WBMySQLSpec{
-							Enabled:     true,
+							WBInfraSpec: apiv2.WBInfraSpec{
+								Enabled: true,
+							},
 							StorageSize: "50Gi",
 						},
 					},
@@ -105,7 +111,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - MySQL", func() {
 					Spec: apiv2.WeightsAndBiasesSpec{
 						Size: apiv2.WBSizeDev,
 						MySQL: apiv2.WBMySQLSpec{
-							Enabled: false,
+							WBInfraSpec: apiv2.WBInfraSpec{
+								Enabled: false,
+							},
 						},
 					},
 				}
@@ -130,7 +138,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - MySQL", func() {
 					Spec: apiv2.WeightsAndBiasesSpec{
 						Size: apiv2.WBSizeSmall,
 						MySQL: apiv2.WBMySQLSpec{
-							Enabled: true,
+							WBInfraSpec: apiv2.WBInfraSpec{
+								Enabled: true,
+							},
 						},
 					},
 				}
@@ -162,7 +172,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - MySQL", func() {
 					Spec: apiv2.WeightsAndBiasesSpec{
 						Size: apiv2.WBSizeSmall,
 						MySQL: apiv2.WBMySQLSpec{
-							Enabled: true,
+							WBInfraSpec: apiv2.WBInfraSpec{
+								Enabled: true,
+							},
 							Config: apiv2.WBMySQLConfig{
 								Resources: corev1.ResourceRequirements{
 									Requests: corev1.ResourceList{
@@ -199,7 +211,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - MySQL", func() {
 					Spec: apiv2.WeightsAndBiasesSpec{
 						Size: apiv2.WBSizeSmall,
 						MySQL: apiv2.WBMySQLSpec{
-							Enabled: true,
+							WBInfraSpec: apiv2.WBInfraSpec{
+								Enabled: true,
+							},
 							Config: apiv2.WBMySQLConfig{
 								Resources: corev1.ResourceRequirements{
 									Requests: corev1.ResourceList{
@@ -240,7 +254,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - MySQL", func() {
 					},
 					Spec: apiv2.WeightsAndBiasesSpec{
 						MySQL: apiv2.WBMySQLSpec{
-							Enabled: true,
+							WBInfraSpec: apiv2.WBInfraSpec{
+								Enabled: true,
+							},
 						},
 					},
 				}
@@ -273,7 +289,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - MySQL", func() {
 					Spec: apiv2.WeightsAndBiasesSpec{
 						Size: apiv2.WBSizeSmall,
 						MySQL: apiv2.WBMySQLSpec{
-							Enabled:     true,
+							WBInfraSpec: apiv2.WBInfraSpec{
+								Enabled: true,
+							},
 							Namespace:   customNamespace,
 							StorageSize: customStorage,
 							Config: apiv2.WBMySQLConfig{

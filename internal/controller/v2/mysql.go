@@ -70,15 +70,8 @@ func mysqlWriteState(
 		}
 	}
 
-	if wandb.Spec.MySQL.Affinity == nil {
-		wandb.Spec.MySQL.Affinity = wandb.Spec.Affinity
-	}
-	if wandb.Spec.MySQL.Tolerations == nil {
-		wandb.Spec.MySQL.Tolerations = wandb.Spec.Tolerations
-	}
-
 	var desired *v1.PerconaXtraDBCluster
-	desired, err = translatorv2.ToMySQLVendorSpec(ctx, wandb.Spec.MySQL, wandb, client.Scheme())
+	desired, err = translatorv2.ToMySQLVendorSpec(ctx, wandb, client.Scheme())
 	if err != nil {
 		return []metav1.Condition{
 			{
@@ -118,6 +111,7 @@ func mysqlInferStatus(
 
 	updatedStatus, events, ctrlResult := percona.ComputeStatus(
 		ctx,
+		wandb.Spec.MySQL.Enabled,
 		oldConditions,
 		newConditions,
 		utils.Coalesce(newInfraConn, &oldInfraConn),

@@ -48,11 +48,11 @@ func createRedisExporterConfig(telemetry apiv2.Telemetry) *rediscommon.RedisExpo
 // Returns an error if sentinel is enabled in the spec.
 func ToRedisStandaloneVendorSpec(
 	ctx context.Context,
-	spec apiv2.WBRedisSpec,
-	owner metav1.Object,
+	wandb *apiv2.WeightsAndBiases,
 	scheme *runtime.Scheme,
 ) (*redisv1beta2.Redis, error) {
 	ctx, log := logx.WithSlog(ctx, logx.Redis)
+	spec := wandb.Spec.Redis
 
 	if !spec.Enabled {
 		return nil, nil
@@ -87,8 +87,8 @@ func ToRedisStandaloneVendorSpec(
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				Resources:       &corev1.ResourceRequirements{},
 			},
-			Affinity:    spec.Affinity,
-			Tolerations: spec.Tolerations,
+			Affinity:    wandb.GetAffinity(spec.WBInfraSpec),
+			Tolerations: wandb.GetTolerations(spec.WBInfraSpec),
 			Storage: &rediscommon.Storage{
 				VolumeClaimTemplate: corev1.PersistentVolumeClaim{
 					Spec: corev1.PersistentVolumeClaimSpec{
@@ -115,7 +115,7 @@ func ToRedisStandaloneVendorSpec(
 	}
 
 	// Set owner reference
-	if err := ctrl.SetControllerReference(owner, redis, scheme); err != nil {
+	if err := ctrl.SetControllerReference(wandb, redis, scheme); err != nil {
 		log.Error("failed to set owner reference on Redis CR", logx.ErrAttr(err))
 		return nil, fmt.Errorf("failed to set owner reference: %w", err)
 	}
@@ -131,11 +131,11 @@ func ToRedisStandaloneVendorSpec(
 // Returns an error if sentinel is not enabled in the spec.
 func ToRedisSentinelVendorSpec(
 	ctx context.Context,
-	spec apiv2.WBRedisSpec,
-	owner metav1.Object,
+	wandb *apiv2.WeightsAndBiases,
 	scheme *runtime.Scheme,
 ) (*redissentinelv1beta2.RedisSentinel, error) {
 	ctx, log := logx.WithSlog(ctx, logx.Redis)
+	spec := wandb.Spec.Redis
 
 	if !spec.Enabled {
 		return nil, nil
@@ -170,8 +170,8 @@ func ToRedisSentinelVendorSpec(
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				Resources:       &corev1.ResourceRequirements{},
 			},
-			Affinity:    spec.Affinity,
-			Tolerations: spec.Tolerations,
+			Affinity:    wandb.GetAffinity(spec.WBInfraSpec),
+			Tolerations: wandb.GetTolerations(spec.WBInfraSpec),
 			RedisSentinelConfig: &redissentinelv1beta2.RedisSentinelConfig{
 				RedisSentinelConfig: rediscommon.RedisSentinelConfig{
 					RedisReplicationName: nsnBuilder.ReplicationName(),
@@ -190,7 +190,7 @@ func ToRedisSentinelVendorSpec(
 	}
 
 	// Set owner reference
-	if err := ctrl.SetControllerReference(owner, sentinel, scheme); err != nil {
+	if err := ctrl.SetControllerReference(wandb, sentinel, scheme); err != nil {
 		log.Error("failed to set owner reference on RedisSentinel CR", logx.ErrAttr(err))
 		return nil, fmt.Errorf("failed to set owner reference: %w", err)
 	}
@@ -206,11 +206,11 @@ func ToRedisSentinelVendorSpec(
 // Returns an error if sentinel is not enabled in the spec.
 func ToRedisReplicationVendorSpec(
 	ctx context.Context,
-	spec apiv2.WBRedisSpec,
-	owner metav1.Object,
+	wandb *apiv2.WeightsAndBiases,
 	scheme *runtime.Scheme,
 ) (*redisreplicationv1beta2.RedisReplication, error) {
 	ctx, log := logx.WithSlog(ctx, logx.Redis)
+	spec := wandb.Spec.Redis
 
 	if !spec.Enabled {
 		return nil, nil
@@ -245,8 +245,8 @@ func ToRedisReplicationVendorSpec(
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				Resources:       &corev1.ResourceRequirements{},
 			},
-			Affinity:    spec.Affinity,
-			Tolerations: spec.Tolerations,
+			Affinity:    wandb.GetAffinity(spec.WBInfraSpec),
+			Tolerations: wandb.GetTolerations(spec.WBInfraSpec),
 			Storage: &rediscommon.Storage{
 				VolumeClaimTemplate: corev1.PersistentVolumeClaim{
 					Spec: corev1.PersistentVolumeClaimSpec{
@@ -273,7 +273,7 @@ func ToRedisReplicationVendorSpec(
 	}
 
 	// Set owner reference
-	if err := ctrl.SetControllerReference(owner, replication, scheme); err != nil {
+	if err := ctrl.SetControllerReference(wandb, replication, scheme); err != nil {
 		log.Error("failed to set owner reference on RedisReplication CR", logx.ErrAttr(err))
 		return nil, fmt.Errorf("failed to set owner reference: %w", err)
 	}

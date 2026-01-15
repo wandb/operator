@@ -1019,12 +1019,6 @@ spec:
                         x-kubernetes-list-type: atomic
                     type: object
                 type: object
-              autoCleanupEnabled:
-                description: |-
-                  AutoCleanupEnabled will:
-                    * if `true`, will purge all configs and data
-                    * if `false`, will maintain configs and data required to recreate WandB with previous infra
-                type: boolean
               clickhouse:
                 description: |-
                   WBClickHouseSpec fields have many default values that, if unspecified,
@@ -2021,6 +2015,14 @@ spec:
                   replicas:
                     format: int32
                     type: integer
+                  retentionPolicy:
+                    properties:
+                      onDelete:
+                        default: preserve
+                        type: string
+                    required:
+                    - onDelete
+                    type: object
                   storageSize:
                     type: string
                   telemetry:
@@ -3090,6 +3092,14 @@ spec:
                   replicas:
                     format: int32
                     type: integer
+                  retentionPolicy:
+                    properties:
+                      onDelete:
+                        default: preserve
+                        type: string
+                    required:
+                    - onDelete
+                    type: object
                   skipDataRecovery:
                     type: boolean
                   storageSize:
@@ -4145,6 +4155,14 @@ spec:
                   replicas:
                     format: int32
                     type: integer
+                  retentionPolicy:
+                    properties:
+                      onDelete:
+                        default: preserve
+                        type: string
+                    required:
+                    - onDelete
+                    type: object
                   storageSize:
                     type: string
                   telemetry:
@@ -5194,6 +5212,14 @@ spec:
                   replicas:
                     format: int32
                     type: integer
+                  retentionPolicy:
+                    properties:
+                      onDelete:
+                        default: preserve
+                        type: string
+                    required:
+                    - onDelete
+                    type: object
                   storageSize:
                     type: string
                   telemetry:
@@ -6240,6 +6266,14 @@ spec:
                     type: string
                   namespace:
                     type: string
+                  retentionPolicy:
+                    properties:
+                      onDelete:
+                        default: preserve
+                        type: string
+                    required:
+                    - onDelete
+                    type: object
                   sentinel:
                     properties:
                       config:
@@ -6366,6 +6400,14 @@ spec:
                 required:
                 - enabled
                 type: object
+              retentionPolicy:
+                properties:
+                  onDelete:
+                    default: preserve
+                    type: string
+                required:
+                - onDelete
+                type: object
               size:
                 description: Size is akin to high-level environment info
                 type: string
@@ -6448,6 +6490,8 @@ spec:
                 - hostname
                 - version
                 type: object
+            required:
+            - retentionPolicy
             type: object
           status:
             description: WeightsAndBiasesStatus defines the observed state of WeightsAndBiases.

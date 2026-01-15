@@ -37,27 +37,27 @@ func createMinioTelemetryEnv(telemetry apiv2.Telemetry) []corev1.EnvVar {
 // Tenant format used by the Minio operator.
 func ToMinioVendorSpec(
 	ctx context.Context,
-	spec apiv2.WBMinioSpec,
-	owner metav1.Object,
+	wandb *apiv2.WeightsAndBiases,
 	scheme *runtime.Scheme,
 ) (*miniov2.Tenant, error) {
 	ctx, log := logx.WithSlog(ctx, logx.Minio)
+	infraSpec := wandb.Spec.Minio
 
-	if !spec.Enabled {
+	if !infraSpec.Enabled {
 		return nil, nil
 	}
 
-	specName := spec.Name
+	specName := infraSpec.Name
 
 	// Parse storage quantity
-	storageQuantity, err := resource.ParseQuantity(spec.StorageSize)
+	storageQuantity, err := resource.ParseQuantity(infraSpec.StorageSize)
 	if err != nil {
-		return nil, fmt.Errorf("invalid storage size %q: %w", spec.StorageSize, err)
+		return nil, fmt.Errorf("invalid storage size %q: %w", infraSpec.StorageSize, err)
 	}
 
 	// Determine volumes per server based on replica count
 	volumesPerServer := translator.DevVolumesPerServer
-	if spec.Replicas > 1 {
+	if infraSpec.Replicas > 1 {
 		volumesPerServer = translator.ProdVolumesPerServer
 	}
 
@@ -65,7 +65,7 @@ func ToMinioVendorSpec(
 	minioTenant := &miniov2.Tenant{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      tenant.TenantName(specName),
-			Namespace: spec.Namespace,
+			Namespace: infraSpec.Namespace,
 			Labels: map[string]string{
 				"app": tenant.TenantName(specName),
 			},
@@ -78,9 +78,9 @@ func ToMinioVendorSpec(
 			Pools: []miniov2.Pool{
 				{
 					Name:             tenant.PoolName(specName),
-					Affinity:         spec.Affinity,
-					Tolerations:      *spec.Tolerations,
-					Servers:          spec.Replicas,
+					Affinity:         wandb.GetAffinity(infraSpec.WBInfraSpec),
+					Tolerations:      *wandb.GetTolerations(infraSpec.WBInfraSpec),
+					Servers:          infraSpec.Replicas,
 					VolumesPerServer: volumesPerServer,
 					VolumeClaimTemplate: &corev1.PersistentVolumeClaim{
 						Spec: corev1.PersistentVolumeClaimSpec{
@@ -105,18 +105,18 @@ func ToMinioVendorSpec(
 	}
 
 	// Add resources if specified
-	if len(spec.Config.Resources.Requests) > 0 || len(spec.Config.Resources.Limits) > 0 {
+	if len(infraSpec.Config.Resources.Requests) > 0 || len(infraSpec.Config.Resources.Limits) > 0 {
 		minioTenant.Spec.Pools[0].Resources = corev1.ResourceRequirements{
-			Requests: spec.Config.Resources.Requests,
-			Limits:   spec.Config.Resources.Limits,
+			Requests: infraSpec.Config.Resources.Requests,
+			Limits:   infraSpec.Config.Resources.Limits,
 		}
 	}
 
 	// Add telemetry environment variables if enabled
-	minioTenant.Spec.Env = createMinioTelemetryEnv(spec.Telemetry)
+	minioTenant.Spec.Env = createMinioTelemetryEnv(infraSpec.Telemetry)
 
 	// Set owner reference
-	if err := ctrl.SetControllerReference(owner, minioTenant, scheme); err != nil {
+	if err := ctrl.SetControllerReference(wandb, minioTenant, scheme); err != nil {
 		log.Error("failed to set owner reference on Tenant CR", logx.ErrAttr(err))
 		return nil, fmt.Errorf("failed to set owner reference: %w", err)
 	}

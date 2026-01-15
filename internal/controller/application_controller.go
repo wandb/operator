@@ -273,7 +273,7 @@ func (r *ApplicationReconciler) reconcileDeployment(ctx context.Context, app *wa
 		deployment.Spec.Replicas = app.Spec.Replicas
 	}
 
-	logger.Info("Deployment spec", "Deployment", deployment.Name, "Spec", deployment.Spec)
+	logger.Debug("Deployment spec", "Deployment", deployment.Name, "Spec", deployment.Spec)
 
 	if deployment.CreationTimestamp.IsZero() {
 		if err := r.Create(ctx, deployment); err != nil {

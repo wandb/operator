@@ -22,15 +22,12 @@ func kafkaWriteState(
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
 ) []metav1.Condition {
-	if wandb.Spec.Kafka.Affinity == nil {
-		wandb.Spec.Kafka.Affinity = wandb.Spec.Affinity
-	}
-	if wandb.Spec.Kafka.Tolerations == nil {
-		wandb.Spec.Kafka.Tolerations = wandb.Spec.Tolerations
-	}
-
 	var desiredKafka *v1.Kafka
-	desiredKafka, err := translatorv2.ToKafkaVendorSpec(ctx, wandb.Spec.Kafka, wandb, client.Scheme())
+	desiredKafka, err := translatorv2.ToKafkaVendorSpec(
+		ctx,
+		wandb,
+		client.Scheme(),
+	)
 	if err != nil {
 		return []metav1.Condition{
 			{
@@ -42,7 +39,11 @@ func kafkaWriteState(
 	}
 
 	var desiredNodePool *v1.KafkaNodePool
-	desiredNodePool, err = translatorv2.ToKafkaNodePoolVendorSpec(ctx, wandb.Spec.Kafka, wandb, client.Scheme())
+	desiredNodePool, err = translatorv2.ToKafkaNodePoolVendorSpec(
+		ctx,
+		wandb,
+		client.Scheme(),
+	)
 	if err != nil {
 		return []metav1.Condition{
 			{
@@ -86,6 +87,7 @@ func kafkaInferStatus(
 
 	updatedStatus, events, ctrlResult := strimzi.ComputeStatus(
 		ctx,
+		wandb.Spec.Kafka.Enabled,
 		oldConditions,
 		newConditions,
 		utils.Coalesce(newInfraConn, &oldInfraConn),

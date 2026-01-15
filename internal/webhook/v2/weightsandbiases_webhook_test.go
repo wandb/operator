@@ -49,16 +49,17 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 	})
 
 	Context("When creating WeightsAndBiases under Defaulting Webhook", func() {
-		// TODO (user): Add logic for defaulting webhooks
-		// Example:
-		// It("Should apply defaults when a required field is empty", func() {
-		//     By("simulating a scenario where defaults should be applied")
-		//     obj.SomeFieldWithDefault = ""
-		//     By("calling the Default method to apply defaults")
-		//     defaulter.Default(ctx, obj)
-		//     By("checking that the default values are set")
-		//     Expect(obj.SomeFieldWithDefault).To(Equal("default_value"))
-		// })
+		It("Should apply default retention policy when OnDelete is empty", func() {
+			obj.Spec.RetentionPolicy.OnDelete = ""
+			Expect(defaulter.Default(ctx, obj)).To(Succeed())
+			Expect(obj.Spec.RetentionPolicy.OnDelete).To(Equal(appsv2.WBOnDeletePolicy("preserve")))
+		})
+
+		It("Should not override retention policy when OnDelete is already set", func() {
+			obj.Spec.RetentionPolicy.OnDelete = appsv2.WBPurgeOnDelete
+			Expect(defaulter.Default(ctx, obj)).To(Succeed())
+			Expect(obj.Spec.RetentionPolicy.OnDelete).To(Equal(appsv2.WBPurgeOnDelete))
+		})
 	})
 
 	Context("When creating or updating WeightsAndBiases under Validating Webhook", func() {

@@ -23,14 +23,7 @@ func clickHouseWriteState(
 ) []metav1.Condition {
 	var specNamespacedName = clickHouseSpecNamespacedName(wandb.Spec.ClickHouse)
 
-	if wandb.Spec.ClickHouse.Affinity == nil {
-		wandb.Spec.ClickHouse.Affinity = wandb.Spec.Affinity
-	}
-	if wandb.Spec.ClickHouse.Tolerations == nil {
-		wandb.Spec.ClickHouse.Tolerations = wandb.Spec.Tolerations
-	}
-
-	desired, err := translatorv2.ToClickHouseVendorSpec(ctx, wandb.Spec.ClickHouse, wandb, client.Scheme())
+	desired, err := translatorv2.ToClickHouseVendorSpec(ctx, wandb, client.Scheme())
 	if err != nil {
 		return []metav1.Condition{
 			{
@@ -70,6 +63,7 @@ func clickHouseInferStatus(
 
 	updatedStatus, events, ctrlResult := altinity.ComputeStatus(
 		ctx,
+		wandb.Spec.ClickHouse.Enabled,
 		oldConditions,
 		newConditions,
 		utils.Coalesce(newInfraConn, &oldInfraConn),

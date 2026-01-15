@@ -8,6 +8,8 @@ spec:
     hostname: http://localhost
     features:
       proxy: true
+  retentionPolicy:
+    onDelete: preserve
   mysql:
     enabled: true
     telemetry:
