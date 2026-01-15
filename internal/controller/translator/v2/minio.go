@@ -78,8 +78,8 @@ func ToMinioVendorSpec(
 			Pools: []miniov2.Pool{
 				{
 					Name:             tenant.PoolName(specName),
-					Affinity:         infraSpec.Affinity,
-					Tolerations:      *infraSpec.Tolerations,
+					Affinity:         wandb.GetAffinity(infraSpec.WBInfraSpec),
+					Tolerations:      *wandb.GetTolerations(infraSpec.WBInfraSpec),
 					Servers:          infraSpec.Replicas,
 					VolumesPerServer: volumesPerServer,
 					VolumeClaimTemplate: &corev1.PersistentVolumeClaim{

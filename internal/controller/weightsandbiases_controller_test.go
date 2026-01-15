@@ -46,23 +46,33 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 						},
 					},
 					MySQL: apiv2.WBMySQLSpec{
-						Enabled:     true,
+						WBInfraSpec: apiv2.WBInfraSpec{
+							Enabled: true,
+						},
 						StorageSize: "10Gi",
 					},
 					Redis: apiv2.WBRedisSpec{
-						Enabled:     true,
+						WBInfraSpec: apiv2.WBInfraSpec{
+							Enabled: true,
+						},
 						StorageSize: "10Gi",
 					},
 					Kafka: apiv2.WBKafkaSpec{
-						Enabled:     true,
+						WBInfraSpec: apiv2.WBInfraSpec{
+							Enabled: true,
+						},
 						StorageSize: "10Gi",
 					},
 					Minio: apiv2.WBMinioSpec{
-						Enabled:     true,
+						WBInfraSpec: apiv2.WBInfraSpec{
+							Enabled: true,
+						},
 						StorageSize: "10Gi",
 					},
 					ClickHouse: apiv2.WBClickHouseSpec{
-						Enabled: true,
+						WBInfraSpec: apiv2.WBInfraSpec{
+							Enabled: true,
+						},
 					},
 				},
 				Status: apiv2.WeightsAndBiasesStatus{},
@@ -115,19 +125,29 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 						Features: map[string]bool{},
 					},
 					MySQL: apiv2.WBMySQLSpec{
-						Enabled: true,
+						WBInfraSpec: apiv2.WBInfraSpec{
+							Enabled: true,
+						},
 					},
 					Redis: apiv2.WBRedisSpec{
-						Enabled: true,
+						WBInfraSpec: apiv2.WBInfraSpec{
+							Enabled: true,
+						},
 					},
 					Kafka: apiv2.WBKafkaSpec{
-						Enabled: true,
+						WBInfraSpec: apiv2.WBInfraSpec{
+							Enabled: true,
+						},
 					},
 					Minio: apiv2.WBMinioSpec{
-						Enabled: true,
+						WBInfraSpec: apiv2.WBInfraSpec{
+							Enabled: true,
+						},
 					},
 					ClickHouse: apiv2.WBClickHouseSpec{
-						Enabled: true,
+						WBInfraSpec: apiv2.WBInfraSpec{
+							Enabled: true,
+						},
 					},
 				},
 			}

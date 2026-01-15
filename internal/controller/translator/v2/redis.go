@@ -87,8 +87,8 @@ func ToRedisStandaloneVendorSpec(
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				Resources:       &corev1.ResourceRequirements{},
 			},
-			Affinity:    spec.Affinity,
-			Tolerations: spec.Tolerations,
+			Affinity:    wandb.GetAffinity(spec.WBInfraSpec),
+			Tolerations: wandb.GetTolerations(spec.WBInfraSpec),
 			Storage: &rediscommon.Storage{
 				VolumeClaimTemplate: corev1.PersistentVolumeClaim{
 					Spec: corev1.PersistentVolumeClaimSpec{
@@ -170,8 +170,8 @@ func ToRedisSentinelVendorSpec(
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				Resources:       &corev1.ResourceRequirements{},
 			},
-			Affinity:    spec.Affinity,
-			Tolerations: spec.Tolerations,
+			Affinity:    wandb.GetAffinity(spec.WBInfraSpec),
+			Tolerations: wandb.GetTolerations(spec.WBInfraSpec),
 			RedisSentinelConfig: &redissentinelv1beta2.RedisSentinelConfig{
 				RedisSentinelConfig: rediscommon.RedisSentinelConfig{
 					RedisReplicationName: nsnBuilder.ReplicationName(),
@@ -245,8 +245,8 @@ func ToRedisReplicationVendorSpec(
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				Resources:       &corev1.ResourceRequirements{},
 			},
-			Affinity:    spec.Affinity,
-			Tolerations: spec.Tolerations,
+			Affinity:    wandb.GetAffinity(spec.WBInfraSpec),
+			Tolerations: wandb.GetTolerations(spec.WBInfraSpec),
 			Storage: &rediscommon.Storage{
 				VolumeClaimTemplate: corev1.PersistentVolumeClaim{
 					Spec: corev1.PersistentVolumeClaimSpec{

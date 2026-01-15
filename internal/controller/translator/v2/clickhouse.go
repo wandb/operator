@@ -100,8 +100,8 @@ func ToClickHouseVendorSpec(
 				PodTemplates: []v1.PodTemplate{
 					{
 						Spec: corev1.PodSpec{
-							Affinity:    spec.Affinity,
-							Tolerations: *spec.Tolerations,
+							Affinity:    wandb.GetAffinity(spec.WBInfraSpec),
+							Tolerations: *wandb.GetTolerations(spec.WBInfraSpec),
 						},
 					},
 				},

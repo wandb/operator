@@ -34,7 +34,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Redis", func() {
 					Spec: apiv2.WeightsAndBiasesSpec{
 						Size: apiv2.WBSizeDev,
 						Redis: apiv2.WBRedisSpec{
-							Enabled: true,
+							WBInfraSpec: apiv2.WBInfraSpec{
+								Enabled: true,
+							},
 						},
 					},
 				}
@@ -62,7 +64,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Redis", func() {
 					Spec: apiv2.WeightsAndBiasesSpec{
 						Size: apiv2.WBSizeDev,
 						Redis: apiv2.WBRedisSpec{
-							Enabled:   true,
+							WBInfraSpec: apiv2.WBInfraSpec{
+								Enabled: true,
+							},
 							Namespace: "custom-redis-namespace",
 						},
 					},
@@ -85,7 +89,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Redis", func() {
 					Spec: apiv2.WeightsAndBiasesSpec{
 						Size: apiv2.WBSizeDev,
 						Redis: apiv2.WBRedisSpec{
-							Enabled:     true,
+							WBInfraSpec: apiv2.WBInfraSpec{
+								Enabled: true,
+							},
 							StorageSize: "20Gi",
 						},
 					},
@@ -109,7 +115,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Redis", func() {
 					Spec: apiv2.WeightsAndBiasesSpec{
 						Size: apiv2.WBSizeDev,
 						Redis: apiv2.WBRedisSpec{
-							Enabled: false,
+							WBInfraSpec: apiv2.WBInfraSpec{
+								Enabled: false,
+							},
 						},
 					},
 				}
@@ -134,7 +142,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Redis", func() {
 					Spec: apiv2.WeightsAndBiasesSpec{
 						Size: apiv2.WBSizeSmall,
 						Redis: apiv2.WBRedisSpec{
-							Enabled: true,
+							WBInfraSpec: apiv2.WBInfraSpec{
+								Enabled: true,
+							},
 						},
 					},
 				}
@@ -166,7 +176,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Redis", func() {
 					Spec: apiv2.WeightsAndBiasesSpec{
 						Size: apiv2.WBSizeSmall,
 						Redis: apiv2.WBRedisSpec{
-							Enabled: true,
+							WBInfraSpec: apiv2.WBInfraSpec{
+								Enabled: true,
+							},
 							Config: apiv2.WBRedisConfig{
 								Resources: corev1.ResourceRequirements{
 									Requests: corev1.ResourceList{
@@ -198,7 +210,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Redis", func() {
 					Spec: apiv2.WeightsAndBiasesSpec{
 						Size: apiv2.WBSizeSmall,
 						Redis: apiv2.WBRedisSpec{
-							Enabled: true,
+							WBInfraSpec: apiv2.WBInfraSpec{
+								Enabled: true,
+							},
 						},
 					},
 				}
@@ -232,7 +246,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Redis", func() {
 					Spec: apiv2.WeightsAndBiasesSpec{
 						Size: apiv2.WBSizeSmall,
 						Redis: apiv2.WBRedisSpec{
-							Enabled: true,
+							WBInfraSpec: apiv2.WBInfraSpec{
+								Enabled: true,
+							},
 							Sentinel: apiv2.WBRedisSentinelSpec{
 								Enabled: true,
 								Config: apiv2.WBRedisSentinelConfig{
@@ -268,7 +284,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Redis", func() {
 					Spec: apiv2.WeightsAndBiasesSpec{
 						Size: apiv2.WBSizeSmall,
 						Redis: apiv2.WBRedisSpec{
-							Enabled: true,
+							WBInfraSpec: apiv2.WBInfraSpec{
+								Enabled: true,
+							},
 							Sentinel: apiv2.WBRedisSentinelSpec{
 								Enabled: false,
 							},
@@ -294,7 +312,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Redis", func() {
 					},
 					Spec: apiv2.WeightsAndBiasesSpec{
 						Redis: apiv2.WBRedisSpec{
-							Enabled: true,
+							WBInfraSpec: apiv2.WBInfraSpec{
+								Enabled: true,
+							},
 						},
 					},
 				}
@@ -332,7 +352,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Redis", func() {
 					Spec: apiv2.WeightsAndBiasesSpec{
 						Size: apiv2.WBSizeSmall,
 						Redis: apiv2.WBRedisSpec{
-							Enabled:     true,
+							WBInfraSpec: apiv2.WBInfraSpec{
+								Enabled: true,
+							},
 							Namespace:   customNamespace,
 							StorageSize: customStorage,
 							Config: apiv2.WBRedisConfig{

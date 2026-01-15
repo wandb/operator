@@ -34,7 +34,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Kafka", func() {
 					Spec: apiv2.WeightsAndBiasesSpec{
 						Size: apiv2.WBSizeDev,
 						Kafka: apiv2.WBKafkaSpec{
-							Enabled: true,
+							WBInfraSpec: apiv2.WBInfraSpec{
+								Enabled: true,
+							},
 						},
 					},
 				}
@@ -65,7 +67,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Kafka", func() {
 					Spec: apiv2.WeightsAndBiasesSpec{
 						Size: apiv2.WBSizeDev,
 						Kafka: apiv2.WBKafkaSpec{
-							Enabled:   true,
+							WBInfraSpec: apiv2.WBInfraSpec{
+								Enabled: true,
+							},
 							Namespace: "custom-kafka-namespace",
 						},
 					},
@@ -88,7 +92,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Kafka", func() {
 					Spec: apiv2.WeightsAndBiasesSpec{
 						Size: apiv2.WBSizeDev,
 						Kafka: apiv2.WBKafkaSpec{
-							Enabled:     true,
+							WBInfraSpec: apiv2.WBInfraSpec{
+								Enabled: true,
+							},
 							StorageSize: "20Gi",
 						},
 					},
@@ -112,7 +118,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Kafka", func() {
 					Spec: apiv2.WeightsAndBiasesSpec{
 						Size: apiv2.WBSizeDev,
 						Kafka: apiv2.WBKafkaSpec{
-							Enabled:  true,
+							WBInfraSpec: apiv2.WBInfraSpec{
+								Enabled: true,
+							},
 							Replicas: 5,
 						},
 					},
@@ -136,7 +144,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Kafka", func() {
 					Spec: apiv2.WeightsAndBiasesSpec{
 						Size: apiv2.WBSizeDev,
 						Kafka: apiv2.WBKafkaSpec{
-							Enabled: false,
+							WBInfraSpec: apiv2.WBInfraSpec{
+								Enabled: false,
+							},
 						},
 					},
 				}
@@ -162,7 +172,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Kafka", func() {
 					Spec: apiv2.WeightsAndBiasesSpec{
 						Size: apiv2.WBSizeSmall,
 						Kafka: apiv2.WBKafkaSpec{
-							Enabled: true,
+							WBInfraSpec: apiv2.WBInfraSpec{
+								Enabled: true,
+							},
 						},
 					},
 				}
@@ -195,7 +207,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Kafka", func() {
 					Spec: apiv2.WeightsAndBiasesSpec{
 						Size: apiv2.WBSizeSmall,
 						Kafka: apiv2.WBKafkaSpec{
-							Enabled: true,
+							WBInfraSpec: apiv2.WBInfraSpec{
+								Enabled: true,
+							},
 							Config: apiv2.WBKafkaConfig{
 								Resources: corev1.ResourceRequirements{
 									Requests: corev1.ResourceList{
@@ -235,7 +249,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Kafka", func() {
 					Spec: apiv2.WeightsAndBiasesSpec{
 						Size: apiv2.WBSizeSmall,
 						Kafka: apiv2.WBKafkaSpec{
-							Enabled: true,
+							WBInfraSpec: apiv2.WBInfraSpec{
+								Enabled: true,
+							},
 							Config: apiv2.WBKafkaConfig{
 								ReplicationConfig: apiv2.WBKafkaReplicationConfig{
 									DefaultReplicationFactor: customDefaultRF,
@@ -267,7 +283,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Kafka", func() {
 					Spec: apiv2.WeightsAndBiasesSpec{
 						Size: apiv2.WBSizeSmall,
 						Kafka: apiv2.WBKafkaSpec{
-							Enabled:  true,
+							WBInfraSpec: apiv2.WBInfraSpec{
+								Enabled: true,
+							},
 							Replicas: 0,
 						},
 					},
@@ -291,7 +309,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Kafka", func() {
 					},
 					Spec: apiv2.WeightsAndBiasesSpec{
 						Kafka: apiv2.WBKafkaSpec{
-							Enabled: true,
+							WBInfraSpec: apiv2.WBInfraSpec{
+								Enabled: true,
+							},
 						},
 					},
 				}
@@ -326,7 +346,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Kafka", func() {
 					Spec: apiv2.WeightsAndBiasesSpec{
 						Size: apiv2.WBSizeSmall,
 						Kafka: apiv2.WBKafkaSpec{
-							Enabled:     true,
+							WBInfraSpec: apiv2.WBInfraSpec{
+								Enabled: true,
+							},
 							Namespace:   customNamespace,
 							StorageSize: customStorage,
 							Replicas:    customReplicas,

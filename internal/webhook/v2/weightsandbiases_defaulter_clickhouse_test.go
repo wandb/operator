@@ -34,7 +34,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 					Spec: apiv2.WeightsAndBiasesSpec{
 						Size: apiv2.WBSizeDev,
 						ClickHouse: apiv2.WBClickHouseSpec{
-							Enabled: true,
+							WBInfraSpec: apiv2.WBInfraSpec{
+								Enabled: true,
+							},
 						},
 					},
 				}
@@ -61,7 +63,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 					Spec: apiv2.WeightsAndBiasesSpec{
 						Size: apiv2.WBSizeDev,
 						ClickHouse: apiv2.WBClickHouseSpec{
-							Enabled:   true,
+							WBInfraSpec: apiv2.WBInfraSpec{
+								Enabled: true,
+							},
 							Namespace: "custom-clickhouse-namespace",
 						},
 					},
@@ -84,7 +88,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 					Spec: apiv2.WeightsAndBiasesSpec{
 						Size: apiv2.WBSizeDev,
 						ClickHouse: apiv2.WBClickHouseSpec{
-							Enabled:     true,
+							WBInfraSpec: apiv2.WBInfraSpec{
+								Enabled: true,
+							},
 							StorageSize: "100Gi",
 						},
 					},
@@ -108,7 +114,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 					Spec: apiv2.WeightsAndBiasesSpec{
 						Size: apiv2.WBSizeDev,
 						ClickHouse: apiv2.WBClickHouseSpec{
-							Enabled:  true,
+							WBInfraSpec: apiv2.WBInfraSpec{
+								Enabled: true,
+							},
 							Replicas: 2,
 						},
 					},
@@ -133,7 +141,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 					Spec: apiv2.WeightsAndBiasesSpec{
 						Size: apiv2.WBSizeDev,
 						ClickHouse: apiv2.WBClickHouseSpec{
-							Enabled: true,
+							WBInfraSpec: apiv2.WBInfraSpec{
+								Enabled: true,
+							},
 							Version: customVersion,
 						},
 					},
@@ -157,7 +167,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 					Spec: apiv2.WeightsAndBiasesSpec{
 						Size: apiv2.WBSizeDev,
 						ClickHouse: apiv2.WBClickHouseSpec{
-							Enabled: false,
+							WBInfraSpec: apiv2.WBInfraSpec{
+								Enabled: false,
+							},
 						},
 					},
 				}
@@ -184,7 +196,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 					Spec: apiv2.WeightsAndBiasesSpec{
 						Size: apiv2.WBSizeSmall,
 						ClickHouse: apiv2.WBClickHouseSpec{
-							Enabled: true,
+							WBInfraSpec: apiv2.WBInfraSpec{
+								Enabled: true,
+							},
 						},
 					},
 				}
@@ -218,7 +232,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 					Spec: apiv2.WeightsAndBiasesSpec{
 						Size: apiv2.WBSizeSmall,
 						ClickHouse: apiv2.WBClickHouseSpec{
-							Enabled: true,
+							WBInfraSpec: apiv2.WBInfraSpec{
+								Enabled: true,
+							},
 							Config: apiv2.WBClickHouseConfig{
 								Resources: corev1.ResourceRequirements{
 									Requests: corev1.ResourceList{
@@ -250,7 +266,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 					Spec: apiv2.WeightsAndBiasesSpec{
 						Size: apiv2.WBSizeSmall,
 						ClickHouse: apiv2.WBClickHouseSpec{
-							Enabled:  true,
+							WBInfraSpec: apiv2.WBInfraSpec{
+								Enabled: true,
+							},
 							Replicas: 0,
 						},
 					},
@@ -273,7 +291,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 					Spec: apiv2.WeightsAndBiasesSpec{
 						Size: apiv2.WBSizeSmall,
 						ClickHouse: apiv2.WBClickHouseSpec{
-							Enabled: true,
+							WBInfraSpec: apiv2.WBInfraSpec{
+								Enabled: true,
+							},
 							Version: "",
 						},
 					},
@@ -297,7 +317,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 					},
 					Spec: apiv2.WeightsAndBiasesSpec{
 						ClickHouse: apiv2.WBClickHouseSpec{
-							Enabled: true,
+							WBInfraSpec: apiv2.WBInfraSpec{
+								Enabled: true,
+							},
 						},
 					},
 				}
@@ -334,7 +356,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 					Spec: apiv2.WeightsAndBiasesSpec{
 						Size: apiv2.WBSizeSmall,
 						ClickHouse: apiv2.WBClickHouseSpec{
-							Enabled:     true,
+							WBInfraSpec: apiv2.WBInfraSpec{
+								Enabled: true,
+							},
 							Namespace:   customNamespace,
 							StorageSize: customStorage,
 							Replicas:    customReplicas,

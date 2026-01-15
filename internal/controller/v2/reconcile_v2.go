@@ -80,7 +80,7 @@ func Reconcile(
 	if isFlaggedForDeletion && !wandb.ObjectMeta.DeletionTimestamp.IsZero() {
 		if ctrlqueue.ContainsString(wandb.GetFinalizers(), CleanupFinalizer) {
 
-			switch wandb.Spec.KafkaRetentionPolicy().OnDelete {
+			switch wandb.GetRetentionPolicy(wandb.Spec.Kafka.WBInfraSpec).OnDelete {
 			case apiv2.WBPurgeOnDelete:
 				log.Info("TODO - Purging Kafka data on deletion")
 				break

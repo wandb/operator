@@ -96,8 +96,8 @@ func ToKafkaVendorSpec(
 				},
 				Template: &v1.KafkaClusterTemplate{
 					Pod: &v1.PodTemplate{
-						Affinity:    infraSpec.Affinity,
-						Tolerations: *infraSpec.Tolerations,
+						Affinity:    wandb.GetAffinity(infraSpec.WBInfraSpec),
+						Tolerations: *wandb.GetTolerations(infraSpec.WBInfraSpec),
 					},
 				},
 			},
@@ -106,8 +106,8 @@ func ToKafkaVendorSpec(
 				UserOperator:  &v1.EntityUserOperatorSpec{WatchedNamespace: nsnBuilder.Namespace()},
 				Template: &v1.EntityOperatorTemplate{
 					Pod: &v1.PodTemplate{
-						Affinity:    infraSpec.Affinity,
-						Tolerations: *infraSpec.Tolerations,
+						Affinity:    wandb.GetAffinity(infraSpec.WBInfraSpec),
+						Tolerations: *wandb.GetTolerations(infraSpec.WBInfraSpec),
 					},
 				},
 			},
@@ -142,7 +142,7 @@ func ToKafkaNodePoolVendorSpec(
 		return nil, nil
 	}
 
-	retentionPolicy := wandb.Spec.KafkaRetentionPolicy()
+	retentionPolicy := wandb.GetRetentionPolicy(wandb.Spec.Kafka.WBInfraSpec)
 	nsnBuilder := strimzi.CreateNsNameBuilder(types.NamespacedName{
 		Namespace: infraSpec.Namespace, Name: infraSpec.Name,
 	})

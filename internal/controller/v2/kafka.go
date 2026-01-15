@@ -22,13 +22,6 @@ func kafkaWriteState(
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
 ) []metav1.Condition {
-	if wandb.Spec.Kafka.Affinity == nil {
-		wandb.Spec.Kafka.Affinity = wandb.Spec.Affinity
-	}
-	if wandb.Spec.Kafka.Tolerations == nil {
-		wandb.Spec.Kafka.Tolerations = wandb.Spec.Tolerations
-	}
-
 	var desiredKafka *v1.Kafka
 	desiredKafka, err := translatorv2.ToKafkaVendorSpec(
 		ctx,

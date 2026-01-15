@@ -34,7 +34,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Minio", func() {
 					Spec: apiv2.WeightsAndBiasesSpec{
 						Size: apiv2.WBSizeDev,
 						Minio: apiv2.WBMinioSpec{
-							Enabled: true,
+							WBInfraSpec: apiv2.WBInfraSpec{
+								Enabled: true,
+							},
 						},
 					},
 				}
@@ -62,7 +64,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Minio", func() {
 					Spec: apiv2.WeightsAndBiasesSpec{
 						Size: apiv2.WBSizeDev,
 						Minio: apiv2.WBMinioSpec{
-							Enabled:   true,
+							WBInfraSpec: apiv2.WBInfraSpec{
+								Enabled: true,
+							},
 							Namespace: "custom-minio-namespace",
 						},
 					},
@@ -85,7 +89,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Minio", func() {
 					Spec: apiv2.WeightsAndBiasesSpec{
 						Size: apiv2.WBSizeDev,
 						Minio: apiv2.WBMinioSpec{
-							Enabled:     true,
+							WBInfraSpec: apiv2.WBInfraSpec{
+								Enabled: true,
+							},
 							StorageSize: "50Gi",
 						},
 					},
@@ -109,7 +115,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Minio", func() {
 					Spec: apiv2.WeightsAndBiasesSpec{
 						Size: apiv2.WBSizeDev,
 						Minio: apiv2.WBMinioSpec{
-							Enabled:  true,
+							WBInfraSpec: apiv2.WBInfraSpec{
+								Enabled: true,
+							},
 							Replicas: 4,
 						},
 					},
@@ -134,7 +142,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Minio", func() {
 					Spec: apiv2.WeightsAndBiasesSpec{
 						Size: apiv2.WBSizeDev,
 						Minio: apiv2.WBMinioSpec{
-							Enabled: true,
+							WBInfraSpec: apiv2.WBInfraSpec{
+								Enabled: true,
+							},
 							Config: apiv2.WBMinioConfig{
 								MinioBrowserSetting: customBrowserSetting,
 							},
@@ -161,7 +171,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Minio", func() {
 					Spec: apiv2.WeightsAndBiasesSpec{
 						Size: apiv2.WBSizeDev,
 						Minio: apiv2.WBMinioSpec{
-							Enabled: true,
+							WBInfraSpec: apiv2.WBInfraSpec{
+								Enabled: true,
+							},
 							Config: apiv2.WBMinioConfig{
 								RootUser: customRootUser,
 							},
@@ -187,7 +199,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Minio", func() {
 					Spec: apiv2.WeightsAndBiasesSpec{
 						Size: apiv2.WBSizeDev,
 						Minio: apiv2.WBMinioSpec{
-							Enabled: false,
+							WBInfraSpec: apiv2.WBInfraSpec{
+								Enabled: false,
+							},
 						},
 					},
 				}
@@ -213,7 +227,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Minio", func() {
 					Spec: apiv2.WeightsAndBiasesSpec{
 						Size: apiv2.WBSizeSmall,
 						Minio: apiv2.WBMinioSpec{
-							Enabled: true,
+							WBInfraSpec: apiv2.WBInfraSpec{
+								Enabled: true,
+							},
 						},
 					},
 				}
@@ -248,7 +264,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Minio", func() {
 					Spec: apiv2.WeightsAndBiasesSpec{
 						Size: apiv2.WBSizeSmall,
 						Minio: apiv2.WBMinioSpec{
-							Enabled: true,
+							WBInfraSpec: apiv2.WBInfraSpec{
+								Enabled: true,
+							},
 							Config: apiv2.WBMinioConfig{
 								Resources: corev1.ResourceRequirements{
 									Limits: corev1.ResourceList{
@@ -282,7 +300,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Minio", func() {
 					Spec: apiv2.WeightsAndBiasesSpec{
 						Size: apiv2.WBSizeSmall,
 						Minio: apiv2.WBMinioSpec{
-							Enabled:  true,
+							WBInfraSpec: apiv2.WBInfraSpec{
+								Enabled: true,
+							},
 							Replicas: 0,
 						},
 					},
@@ -306,7 +326,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Minio", func() {
 					},
 					Spec: apiv2.WeightsAndBiasesSpec{
 						Minio: apiv2.WBMinioSpec{
-							Enabled: true,
+							WBInfraSpec: apiv2.WBInfraSpec{
+								Enabled: true,
+							},
 						},
 					},
 				}
@@ -343,7 +365,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Minio", func() {
 					Spec: apiv2.WeightsAndBiasesSpec{
 						Size: apiv2.WBSizeSmall,
 						Minio: apiv2.WBMinioSpec{
-							Enabled:     true,
+							WBInfraSpec: apiv2.WBInfraSpec{
+								Enabled: true,
+							},
 							Namespace:   customNamespace,
 							StorageSize: customStorage,
 							Replicas:    customReplicas,

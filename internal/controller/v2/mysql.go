@@ -70,13 +70,6 @@ func mysqlWriteState(
 		}
 	}
 
-	if wandb.Spec.MySQL.Affinity == nil {
-		wandb.Spec.MySQL.Affinity = wandb.Spec.Affinity
-	}
-	if wandb.Spec.MySQL.Tolerations == nil {
-		wandb.Spec.MySQL.Tolerations = wandb.Spec.Tolerations
-	}
-
 	var desired *v1.PerconaXtraDBCluster
 	desired, err = translatorv2.ToMySQLVendorSpec(ctx, wandb, client.Scheme())
 	if err != nil {

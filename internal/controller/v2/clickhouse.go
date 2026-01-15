@@ -23,13 +23,6 @@ func clickHouseWriteState(
 ) []metav1.Condition {
 	var specNamespacedName = clickHouseSpecNamespacedName(wandb.Spec.ClickHouse)
 
-	if wandb.Spec.ClickHouse.Affinity == nil {
-		wandb.Spec.ClickHouse.Affinity = wandb.Spec.Affinity
-	}
-	if wandb.Spec.ClickHouse.Tolerations == nil {
-		wandb.Spec.ClickHouse.Tolerations = wandb.Spec.Tolerations
-	}
-
 	desired, err := translatorv2.ToClickHouseVendorSpec(ctx, wandb, client.Scheme())
 	if err != nil {
 		return []metav1.Condition{
