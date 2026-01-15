@@ -118,6 +118,7 @@ func mysqlInferStatus(
 
 	updatedStatus, events, ctrlResult := percona.ComputeStatus(
 		ctx,
+		wandb.Spec.MySQL.Enabled,
 		oldConditions,
 		newConditions,
 		utils.Coalesce(newInfraConn, &oldInfraConn),

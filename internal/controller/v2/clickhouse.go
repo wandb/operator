@@ -70,6 +70,7 @@ func clickHouseInferStatus(
 
 	updatedStatus, events, ctrlResult := altinity.ComputeStatus(
 		ctx,
+		wandb.Spec.ClickHouse.Enabled,
 		oldConditions,
 		newConditions,
 		utils.Coalesce(newInfraConn, &oldInfraConn),

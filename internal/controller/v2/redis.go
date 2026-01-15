@@ -93,6 +93,7 @@ func redisInferStatus(
 
 	updatedStatus, events, ctrlResult := opstree.ComputeStatus(
 		ctx,
+		wandb.Spec.Redis.Enabled,
 		oldConditions,
 		newConditions,
 		utils.Coalesce(newInfraConn, &oldInfraConn),

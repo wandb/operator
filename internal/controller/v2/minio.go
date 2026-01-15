@@ -81,6 +81,7 @@ func minioInferStatus(
 
 	updatedStatus, events, ctrlResult := tenant.ComputeStatus(
 		ctx,
+		wandb.Spec.Minio.Enabled,
 		oldConditions,
 		newConditions,
 		utils.Coalesce(newInfraConn, &oldInfraConn),

@@ -86,6 +86,7 @@ func kafkaInferStatus(
 
 	updatedStatus, events, ctrlResult := strimzi.ComputeStatus(
 		ctx,
+		wandb.Spec.Kafka.Enabled,
 		oldConditions,
 		newConditions,
 		utils.Coalesce(newInfraConn, &oldInfraConn),

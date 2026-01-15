@@ -35,6 +35,7 @@ func PreserveFinalizer(
 		return err
 	}
 	if !found {
+		log.Info("abort preserve finalizer: no connection info found")
 		return nil
 	}
 
@@ -51,6 +52,7 @@ func PreserveFinalizer(
 			return err
 		}
 	}
+	log.Debug("removed wandb owner reference", "uid", wandbOwner.GetUID())
 
 	return nil
 }
