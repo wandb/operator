@@ -87,11 +87,11 @@ exec /bin/mysqld_exporter --config.my-cnf=/tmp/.my.cnf
 // PerconaXtraDBCluster format used by the Percona operator.
 func ToMySQLVendorSpec(
 	ctx context.Context,
-	spec apiv2.WBMySQLSpec,
-	owner metav1.Object,
+	wandb *apiv2.WeightsAndBiases,
 	scheme *runtime.Scheme,
 ) (*pxcv1.PerconaXtraDBCluster, error) {
 	ctx, log := logx.WithSlog(ctx, logx.Mysql)
+	spec := wandb.Spec.MySQL
 
 	if !spec.Enabled {
 		return nil, nil
@@ -223,7 +223,7 @@ pxc_strict_mode=PERMISSIVE
 	pxc.Spec.PXC.Sidecars = createMySQLExporterSidecar(spec.Telemetry, nsnBuilder.ClusterName())
 
 	// Set owner reference
-	if err := ctrl.SetControllerReference(owner, pxc, scheme); err != nil {
+	if err := ctrl.SetControllerReference(wandb, pxc, scheme); err != nil {
 		log.Error("failed to set owner reference on PXC CR", logx.ErrAttr(err))
 		return nil, fmt.Errorf("failed to set owner reference: %w", err)
 	}

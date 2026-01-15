@@ -48,11 +48,11 @@ func PreserveFinalizer(
 
 	if err = cl.Update(ctx, actual); err != nil {
 		if !errors.IsNotFound(err) {
-			log.Error("error removing WandB obj ref from kafka connection info secret", logx.ErrAttr(err))
+			log.Error("error removing wandb owner reference during preserve", logx.ErrAttr(err))
 			return err
 		}
 	}
-	log.Debug("removed wandb owner reference", "uid", wandbOwner.GetUID())
+	log.Debug("removed wandb owner reference during preserve", "uid", wandbOwner.GetUID())
 
 	return nil
 }

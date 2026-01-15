@@ -26,23 +26,22 @@ func restoreKafkaConnInfo(
 	var err error
 	var found bool
 
-	log.Info("Kafka restore connection info...")
-
 	// if there is existing connection info from the previous cluster
 	connInfo, err = readKafkaConnInfo(ctx, cl, nsnBuilder)
 	if err != nil {
 		return err
 	}
 	if connInfo == nil {
-		log.Info("Kafka restore failed (no connInfo)")
+		log.Info("restore: abort with no connInfo")
 		return nil
 	}
 
 	// if it has a clusterID
 	if connInfo.ClusterId == "" {
-		log.Info("Kafka restore failed (blank ClusterId)")
+		log.Info("restore: abort with blank ClusterId")
 		return nil
 	}
+	log.Debug("restore: valid connection info found")
 
 	// if there is a PVC from the previous cluster
 	var pvc = &corev1.PersistentVolumeClaim{}
@@ -52,11 +51,12 @@ func restoreKafkaConnInfo(
 		return err
 	}
 	if !found {
-		log.Info("Kafka restore failed (no PVC)", "name", nsnBuilder.PvcName(0, 0))
+		log.Info("restore: abort with no PVC", "name", nsnBuilder.PvcName(0, 0))
 		return nil
 	}
+	log.Debug("restore: PVC found")
 
-	log.Info("restoring Kafka connection info", "clusterId", connInfo.ClusterId)
+	log.Info("restore: set clusterId", "clusterId", connInfo.ClusterId)
 	desired.Status.ClusterId = connInfo.ClusterId
 	if err = cl.Status().Update(ctx, desired); err != nil {
 		return err

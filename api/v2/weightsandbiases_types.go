@@ -100,6 +100,41 @@ type WeightsAndBiasesSpec struct {
 	ClickHouse WBClickHouseSpec `json:"clickhouse,omitempty"`
 }
 
+func (s WeightsAndBiasesSpec) KafkaRetentionPolicy() WBRetentionPolicy {
+	if s.Kafka.RetentionPolicy != nil {
+		return *s.Kafka.RetentionPolicy
+	}
+	return s.RetentionPolicy
+}
+
+func (s WeightsAndBiasesSpec) MinioRetentionPolicy() WBRetentionPolicy {
+	if s.Minio.RetentionPolicy != nil {
+		return *s.Minio.RetentionPolicy
+	}
+	return s.RetentionPolicy
+}
+
+func (s WeightsAndBiasesSpec) MySQLRetentionPolicy() WBRetentionPolicy {
+	if s.MySQL.RetentionPolicy != nil {
+		return *s.MySQL.RetentionPolicy
+	}
+	return s.RetentionPolicy
+}
+
+func (s WeightsAndBiasesSpec) RedisRetentionPolicy() WBRetentionPolicy {
+	if s.Redis.RetentionPolicy != nil {
+		return *s.Redis.RetentionPolicy
+	}
+	return s.RetentionPolicy
+}
+
+func (s WeightsAndBiasesSpec) ClickHouseRetentionPolicy() WBRetentionPolicy {
+	if s.ClickHouse.RetentionPolicy != nil {
+		return *s.ClickHouse.RetentionPolicy
+	}
+	return s.RetentionPolicy
+}
+
 // WandbAppSpec defines the configuration for the Wandb application deployment.
 type WandbAppSpec struct {
 	Hostname string `json:"hostname"`

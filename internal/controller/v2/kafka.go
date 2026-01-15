@@ -30,7 +30,11 @@ func kafkaWriteState(
 	}
 
 	var desiredKafka *v1.Kafka
-	desiredKafka, err := translatorv2.ToKafkaVendorSpec(ctx, wandb.Spec.Kafka, wandb, client.Scheme())
+	desiredKafka, err := translatorv2.ToKafkaVendorSpec(
+		ctx,
+		wandb,
+		client.Scheme(),
+	)
 	if err != nil {
 		return []metav1.Condition{
 			{
@@ -42,7 +46,11 @@ func kafkaWriteState(
 	}
 
 	var desiredNodePool *v1.KafkaNodePool
-	desiredNodePool, err = translatorv2.ToKafkaNodePoolVendorSpec(ctx, wandb.Spec.Kafka, wandb, client.Scheme())
+	desiredNodePool, err = translatorv2.ToKafkaNodePoolVendorSpec(
+		ctx,
+		wandb,
+		client.Scheme(),
+	)
 	if err != nil {
 		return []metav1.Condition{
 			{
@@ -99,13 +107,6 @@ func kafkaInferStatus(
 	err := client.Status().Update(ctx, wandb)
 
 	return ctrlResult, err
-}
-
-func kafkaRetentionPolicy(ctx context.Context, wandb *apiv2.WeightsAndBiases) apiv2.WBRetentionPolicy {
-	if wandb.Spec.Kafka.RetentionPolicy == nil {
-		return wandb.Spec.RetentionPolicy
-	}
-	return *wandb.Spec.Kafka.RetentionPolicy
 }
 
 func kafkaPreserveFinalizer(

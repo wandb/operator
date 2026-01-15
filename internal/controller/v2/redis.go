@@ -31,7 +31,7 @@ func redisWriteState(
 		wandb.Spec.Redis.Tolerations = wandb.Spec.Tolerations
 	}
 
-	standaloneDesired, err := translatorv2.ToRedisStandaloneVendorSpec(ctx, wandb.Spec.Redis, wandb, client.Scheme())
+	standaloneDesired, err := translatorv2.ToRedisStandaloneVendorSpec(ctx, wandb, client.Scheme())
 	if err != nil {
 		return []metav1.Condition{
 			{
@@ -42,7 +42,7 @@ func redisWriteState(
 		}
 	}
 
-	sentinelDesired, err := translatorv2.ToRedisSentinelVendorSpec(ctx, wandb.Spec.Redis, wandb, client.Scheme())
+	sentinelDesired, err := translatorv2.ToRedisSentinelVendorSpec(ctx, wandb, client.Scheme())
 	if err != nil {
 		return []metav1.Condition{
 			{
@@ -53,7 +53,7 @@ func redisWriteState(
 		}
 	}
 
-	replicationDesired, err := translatorv2.ToRedisReplicationVendorSpec(ctx, wandb.Spec.Redis, wandb, client.Scheme())
+	replicationDesired, err := translatorv2.ToRedisReplicationVendorSpec(ctx, wandb, client.Scheme())
 	if err != nil {
 		return []metav1.Condition{
 			{

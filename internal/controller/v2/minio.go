@@ -30,7 +30,7 @@ func minioWriteState(
 		wandb.Spec.Minio.Tolerations = wandb.Spec.Tolerations
 	}
 
-	desiredCr, err := translatorv2.ToMinioVendorSpec(ctx, wandb.Spec.Minio, wandb, client.Scheme())
+	desiredCr, err := translatorv2.ToMinioVendorSpec(ctx, wandb, client.Scheme())
 	if err != nil {
 		return []metav1.Condition{
 			{

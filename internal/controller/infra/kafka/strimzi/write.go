@@ -35,6 +35,7 @@ func writeKafkaState(
 	nsnBuilder *NsNameBuilder,
 	desired *v1.Kafka,
 ) []metav1.Condition {
+	log := logx.GetSlog(ctx)
 	var actual = &v1.Kafka{}
 
 	found, err := common.GetResource(
@@ -64,6 +65,7 @@ func writeKafkaState(
 	result := make([]metav1.Condition, 0)
 
 	action, err := common.CrudResource(ctx, client, desired, actual)
+	log.Debug("write: Kafka CRUD", "action", action)
 	if err != nil {
 		result = append(result, metav1.Condition{
 			Type:   common.ReconciledType,
@@ -109,6 +111,7 @@ func writeNodePoolState(
 	nsnBuilder *NsNameBuilder,
 	desired *v1.KafkaNodePool,
 ) []metav1.Condition {
+	log := logx.GetSlog(ctx)
 	var actual = &v1.KafkaNodePool{}
 	found, err := common.GetResource(
 		ctx, client, nsnBuilder.NodePoolNsName(), NodePoolResourceType, actual,
@@ -137,6 +140,7 @@ func writeNodePoolState(
 	result := make([]metav1.Condition, 0)
 
 	action, err := common.CrudResource(ctx, client, desired, actual)
+	log.Debug("write: NodePool CRUD", "action", action)
 	if err != nil {
 		result = append(result, metav1.Condition{
 			Type:   common.ReconciledType,

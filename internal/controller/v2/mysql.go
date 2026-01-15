@@ -78,7 +78,7 @@ func mysqlWriteState(
 	}
 
 	var desired *v1.PerconaXtraDBCluster
-	desired, err = translatorv2.ToMySQLVendorSpec(ctx, wandb.Spec.MySQL, wandb, client.Scheme())
+	desired, err = translatorv2.ToMySQLVendorSpec(ctx, wandb, client.Scheme())
 	if err != nil {
 		return []metav1.Condition{
 			{

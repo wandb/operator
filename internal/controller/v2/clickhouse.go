@@ -30,7 +30,7 @@ func clickHouseWriteState(
 		wandb.Spec.ClickHouse.Tolerations = wandb.Spec.Tolerations
 	}
 
-	desired, err := translatorv2.ToClickHouseVendorSpec(ctx, wandb.Spec.ClickHouse, wandb, client.Scheme())
+	desired, err := translatorv2.ToClickHouseVendorSpec(ctx, wandb, client.Scheme())
 	if err != nil {
 		return []metav1.Condition{
 			{
