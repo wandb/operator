@@ -122,7 +122,6 @@ func ToKafkaVendorSpec(
 		log.Error("failed to set owner reference on Kafka CR", logx.ErrAttr(err))
 		return nil, fmt.Errorf("failed to set owner reference: %w", err)
 	}
-	log.Info("Successfully set owner reference on Kafka CR")
 
 	log.Debug("Kafka is enabled, providing vendor spec")
 	return kafka, nil
