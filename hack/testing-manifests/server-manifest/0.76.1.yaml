@@ -470,6 +470,10 @@ applications:
       - containerPort: 8083
         name: local
         protocol: TCP
+    command:
+      - /bin/sh
+      - -c
+      - "sleep infinity"
     livenessProbe:
       httpGet:
         path: /healthz
