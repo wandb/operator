@@ -2,12 +2,15 @@ package v2
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/internal/controller/infra/mysql/mariadb"
 	"github.com/wandb/operator/internal/controller/infra/mysql/percona"
 	"github.com/wandb/operator/internal/controller/translator"
 	"github.com/wandb/operator/internal/logx"
+	"github.com/wandb/operator/pkg/vendored/mariadb-operator/k8s.mariadb.com/v1alpha1"
 	pxcv1 "github.com/wandb/operator/pkg/vendored/percona-operator/pxc/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -15,6 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
@@ -82,10 +86,52 @@ exec /bin/mysqld_exporter --config.my-cnf=/tmp/.my.cnf
 	}
 }
 
-// ToMySQLVendorSpec converts a WBMySQLSpec to a PerconaXtraDBCluster CR.
+// createMySQLExporterMariaDBContainers creates a mysqld-exporter sidecar container if telemetry is enabled
+// adapted for MariaDB operator's Container type.
+func createMySQLExporterMariaDBContainers(telemetry apiv2.Telemetry, clusterName string) []v1alpha1.Container {
+	if !telemetry.Enabled {
+		return nil
+	}
+
+	internalSecretName := fmt.Sprintf("internal-%s", clusterName)
+
+	return []v1alpha1.Container{
+		{
+			Name:            "mysqld-exporter",
+			Image:           DefaultMySQLExporterImage,
+			ImagePullPolicy: corev1.PullIfNotPresent,
+			Command:         []string{"/bin/sh", "-c"},
+			Args: []string{`
+cat > /tmp/.my.cnf <<EOF
+[client]
+user=monitor
+password=${MYSQLD_EXPORTER_PASSWORD}
+host=localhost
+port=3306
+EOF
+exec /bin/mysqld_exporter --config.my-cnf=/tmp/.my.cnf
+`},
+			Env: []v1alpha1.EnvVar{
+				{
+					Name: "MYSQLD_EXPORTER_PASSWORD",
+					ValueFrom: &v1alpha1.EnvVarSource{
+						SecretKeyRef: &v1alpha1.SecretKeySelector{
+							LocalObjectReference: v1alpha1.LocalObjectReference{
+								Name: internalSecretName,
+							},
+							Key: "monitor",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+// ToPerconaMySQLVendorSpec converts a WBMySQLSpec to a PerconaXtraDBCluster CR.
 // This function translates the high-level MySQL spec into the vendor-specific
 // PerconaXtraDBCluster format used by the Percona operator.
-func ToMySQLVendorSpec(
+func ToPerconaMySQLVendorSpec(
 	ctx context.Context,
 	wandb *apiv2.WeightsAndBiases,
 	scheme *runtime.Scheme,
@@ -116,7 +162,7 @@ func ToMySQLVendorSpec(
 	allowUnsafeProxySize := spec.Replicas == 1
 
 	// Select PXC image based on mode (dev vs prod)
-	pxcImage := translator.DevPXCImage
+	pxcImage := translator.ProdPXCImage
 	if spec.Replicas > 1 {
 		pxcImage = translator.ProdPXCImage
 	}
@@ -229,4 +275,104 @@ pxc_strict_mode=PERMISSIVE
 	}
 
 	return pxc, nil
+}
+
+func ToMariaDBMySQLVendorSpec(
+	ctx context.Context,
+	spec apiv2.WBMySQLSpec,
+	owner metav1.Object,
+	scheme *runtime.Scheme,
+) (*v1alpha1.MariaDB, error) {
+	ctx, log := logx.IntoContext(ctx, logx.Mysql)
+
+	if !spec.Enabled {
+		return nil, nil
+	}
+
+	specName := spec.Name
+	nsnBuilder := mariadb.CreateNsNameBuilder(types.NamespacedName{
+		Name:      specName,
+		Namespace: spec.Namespace,
+	})
+
+	storageQuantity, err := resource.ParseQuantity(spec.StorageSize)
+	if err != nil {
+		return nil, fmt.Errorf("invalid storage size %q: %w", spec.StorageSize, err)
+	}
+
+	mariaDB := &v1alpha1.MariaDB{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      nsnBuilder.ClusterName(),
+			Namespace: spec.Namespace,
+		},
+		Spec: v1alpha1.MariaDBSpec{
+			Replicas:        spec.Replicas,
+			ImagePullPolicy: corev1.PullIfNotPresent,
+			Storage: v1alpha1.Storage{
+				Size: &storageQuantity,
+			},
+			Database: ptr.To("wandb_local"),
+			Username: ptr.To("wandb_local"),
+			PasswordSecretKeyRef: &v1alpha1.GeneratedSecretKeyRef{
+				SecretKeySelector: v1alpha1.SecretKeySelector{
+					LocalObjectReference: v1alpha1.LocalObjectReference{
+						Name: fmt.Sprintf("%s-%s", spec.Name, "user-db-password"),
+					},
+					Key: "password",
+				},
+			},
+		},
+	}
+
+	// HA configuration
+	if spec.Replicas > 1 {
+		mariaDB.Spec.Galera = &v1alpha1.Galera{
+			Enabled: true,
+		}
+	}
+
+	// Resources
+	if len(spec.Config.Resources.Requests) > 0 || len(spec.Config.Resources.Limits) > 0 {
+		mariaDB.Spec.Resources = &v1alpha1.ResourceRequirements{
+			Requests: spec.Config.Resources.Requests,
+			Limits:   spec.Config.Resources.Limits,
+		}
+	}
+
+	// Affinity
+	if spec.Affinity != nil {
+		mariaDB.Spec.Affinity = &v1alpha1.AffinityConfig{}
+		if spec.Affinity.NodeAffinity != nil {
+			b, _ := json.Marshal(spec.Affinity.NodeAffinity)
+			var nodeAffinity v1alpha1.NodeAffinity
+			if err := json.Unmarshal(b, &nodeAffinity); err == nil {
+				mariaDB.Spec.Affinity.NodeAffinity = &nodeAffinity
+			}
+		}
+		if spec.Affinity.PodAntiAffinity != nil {
+			b, _ := json.Marshal(spec.Affinity.PodAntiAffinity)
+			var podAntiAffinity v1alpha1.PodAntiAffinity
+			if err := json.Unmarshal(b, &podAntiAffinity); err == nil {
+				mariaDB.Spec.Affinity.PodAntiAffinity = &podAntiAffinity
+			}
+		}
+	}
+
+	// Metrics/Exporter
+	if spec.Telemetry.Enabled {
+		mariaDB.Spec.Metrics = &v1alpha1.MariadbMetrics{
+			Exporter: v1alpha1.Exporter{
+				Image: DefaultMySQLExporterImage,
+			},
+		}
+		mariaDB.Spec.SidecarContainers = createMySQLExporterMariaDBContainers(spec.Telemetry, nsnBuilder.ClusterName())
+	}
+
+	// Set owner reference
+	if err := ctrl.SetControllerReference(owner, mariaDB, scheme); err != nil {
+		log.Error(err, "failed to set owner reference on MariaDB CR")
+		return nil, fmt.Errorf("failed to set owner reference: %w", err)
+	}
+
+	return mariaDB, nil
 }

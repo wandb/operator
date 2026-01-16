@@ -1,6 +1,7 @@
 package translator
 
 import (
+	apiv2 "github.com/wandb/operator/api/v2"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -24,6 +25,8 @@ type MySQLConfig struct {
 	Enabled   bool
 	Namespace string
 	Name      string
+
+	DeploymentType apiv2.MYSQLType
 
 	// Storage and resources
 	StorageSize string

@@ -38,8 +38,8 @@ kafka:
 mysql:
   default: {}
   metadata: {}
-  runsdb: {}
-  usagedb: {}
+  runs: {}
+  usage: {}
 
 redis:
   default: {}
@@ -64,11 +64,11 @@ commonEnvvars:
           type: mysql
     - name: GORILLA_RUN_STORE
       sources:
-        - name: default
+        - name: runs
           type: mysql
     - name: GORILLA_USAGE_STORE
       sources:
-        - name: default
+        - name: usage
           type: mysql
   gorillaBucket:
     - name: AWS_REGION
@@ -361,15 +361,6 @@ applications:
     image:
       repository: wandb/megabinary
       tag: 0.76.1
-    initContainers:
-      - name: migrate
-        image:
-          repository: wandb/megabinary
-          tag: 0.76.1
-        command:
-          - bash
-          - -c
-          - "./megabinary migrate --db $GORILLA_METADATA_STORE --squash true --runs-db $GORILLA_RUN_STORE --usage-db $GORILLA_USAGE_STORE"
     args:
       - gorilla
     ports:
@@ -656,14 +647,6 @@ applications:
       - "0.0.0.0"
       - "--port"
       - "8080"
-    initContainers:
-      - name: migrate
-        image:
-          repository: wandb/weave-trace
-          tag: 0.76.1
-        args:
-          - python
-          - migrator.py
     commonEnvs:
       - clickhouse
       - kafka
@@ -844,24 +827,25 @@ applications:
           protocol: TCP
 
 migrations:
-  default:
+  gorilla:
     image:
       repository: wandb/megabinary
       tag: 0.76.1
     args:
-      - migrate
-      - --db=$DATABASE_URL
-  runsdb:
+      - "migrate"
+      - "--db=$(GORILLA_METADATA_STORE)"
+      - "--runs-db=$(GORILLA_RUN_STORE)"
+      - "--usage-db=$(GORILLA_USAGE_STORE)"
+      - "--squash"
+      - "true"
+    commonEnvs:
+      - gorillaMysql
+  weave-trace:
     image:
-      repository: wandb/megabinary
+      repository: wandb/weave-trace
       tag: 0.76.1
     args:
-      - migrate
-      - --runs-db=$DATABASE_URL
-  usagedb:
-    image:
-      repository: wandb/megabinary
-      tag: 0.76.1
-    args:
-      - migrate
-      - --usage-db=$DATABASE_URL
+      - python
+      - migrator.py
+    commonEnvs:
+      - clickhouse

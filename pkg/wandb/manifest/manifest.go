@@ -170,9 +170,11 @@ type ContainerPort struct {
 // MigrationJob represents a migration invocation with an image and args, used
 // by the top-level "migrations" section (e.g., default, runsdb, usagedb).
 type MigrationJob struct {
-	Image   ImageRef `yaml:"image"`
-	Args    []string `yaml:"args,omitempty"`
-	Command []string `yaml:"command,omitempty"`
+	Image      ImageRef `yaml:"image"`
+	Args       []string `yaml:"args,omitempty"`
+	Command    []string `yaml:"command,omitempty"`
+	CommonEnvs []string `yaml:"commonEnvs,omitempty"`
+	Env        []EnvVar `yaml:"env,omitempty"`
 }
 
 // FileSpec defines a single file to project into the application's container.

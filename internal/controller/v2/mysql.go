@@ -6,11 +6,13 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
+	"github.com/wandb/operator/internal/controller/infra/mysql/mariadb"
 	"github.com/wandb/operator/internal/controller/infra/mysql/percona"
 	"github.com/wandb/operator/internal/controller/translator"
 	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
 	"github.com/wandb/operator/pkg/utils"
 	pkgutils "github.com/wandb/operator/pkg/utils"
+	"github.com/wandb/operator/pkg/vendored/mariadb-operator/k8s.mariadb.com/v1alpha1"
 	"github.com/wandb/operator/pkg/vendored/percona-operator/pxc/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -70,20 +72,37 @@ func mysqlWriteState(
 		}
 	}
 
-	var desired *v1.PerconaXtraDBCluster
-	desired, err = translatorv2.ToMySQLVendorSpec(ctx, wandb, client.Scheme())
-	if err != nil {
-		return []metav1.Condition{
-			{
-				Type:   common.ReconciledType,
-				Status: metav1.ConditionFalse,
-				Reason: common.ControllerErrorReason,
-			},
+	switch wandb.Spec.MySQL.DeploymentType {
+	case apiv2.MySQLTypePercona:
+		var desired *v1.PerconaXtraDBCluster
+		desired, err = translatorv2.ToPerconaMySQLVendorSpec(ctx, wandb.Spec.MySQL, wandb, client.Scheme())
+		if err != nil {
+			return []metav1.Condition{
+				{
+					Type:   common.ReconciledType,
+					Status: metav1.ConditionFalse,
+					Reason: common.ControllerErrorReason,
+				},
+			}
 		}
-	}
 
-	results := percona.WriteState(ctx, client, specNamespacedName, desired)
-	return results
+		results := percona.WriteState(ctx, client, specNamespacedName, desired)
+		return results
+	case apiv2.MySQLTypeMariadb:
+		var desired *v1alpha1.MariaDB
+		desired, err = translatorv2.ToMariaDBMySQLVendorSpec(ctx, wandb.Spec.MySQL, wandb, client.Scheme())
+		if err != nil {
+			return []metav1.Condition{
+				{
+					Type:   common.ReconciledType,
+					Status: metav1.ConditionFalse,
+					Reason: common.ControllerErrorReason,
+				},
+			}
+		}
+		return mariadb.WriteState(ctx, client, specNamespacedName, desired)
+	}
+	return nil
 }
 
 func mysqlReadState(
@@ -93,7 +112,17 @@ func mysqlReadState(
 	newConditions []metav1.Condition,
 ) ([]metav1.Condition, *translator.InfraConnection) {
 	specNamespacedName := mysqlSpecNamespacedName(wandb.Spec.MySQL)
-	readConditions, newInfraConn := percona.ReadState(ctx, client, specNamespacedName, wandb)
+
+	var readConditions []metav1.Condition
+	var newInfraConn *translator.InfraConnection
+
+	switch wandb.Spec.MySQL.DeploymentType {
+	case apiv2.MySQLTypeMariadb:
+		readConditions, newInfraConn = mariadb.ReadState(ctx, client, specNamespacedName, wandb)
+	default:
+		readConditions, newInfraConn = percona.ReadState(ctx, client, specNamespacedName, wandb)
+	}
+
 	newConditions = append(newConditions, readConditions...)
 	return newConditions, newInfraConn
 }
@@ -109,14 +138,32 @@ func mysqlInferStatus(
 	oldConditions := wandb.Status.MySQLStatus.Conditions
 	oldInfraConn := translatorv2.ToTranslatorInfraConnection(wandb.Status.MySQLStatus.Connection)
 
-	updatedStatus, events, ctrlResult := percona.ComputeStatus(
-		ctx,
-		wandb.Spec.MySQL.Enabled,
-		oldConditions,
-		newConditions,
-		utils.Coalesce(newInfraConn, &oldInfraConn),
-		wandb.Generation,
-	)
+	var updatedStatus translator.InfraStatus
+	var events []corev1.Event
+	var ctrlResult ctrl.Result
+
+	fmt.Println(wandb.Spec.MySQL.DeploymentType)
+	switch wandb.Spec.MySQL.DeploymentType {
+	case apiv2.MySQLTypeMariadb:
+		updatedStatus, events, ctrlResult = mariadb.ComputeStatus(
+			ctx,
+			wandb.Spec.MySQL.Enabled,
+			oldConditions,
+			newConditions,
+			utils.Coalesce(newInfraConn, &oldInfraConn),
+			wandb.Generation,
+		)
+	default:
+		updatedStatus, events, ctrlResult = percona.ComputeStatus(
+			ctx,
+			wandb.Spec.MySQL.Enabled,
+			oldConditions,
+			newConditions,
+			utils.Coalesce(newInfraConn, &oldInfraConn),
+			wandb.Generation,
+		)
+	}
+
 	for _, e := range events {
 		recorder.Event(wandb, e.Type, e.Reason, e.Message)
 	}

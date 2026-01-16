@@ -28,8 +28,8 @@ import (
 	"github.com/wandb/operator/internal/logx"
 	chiv1 "github.com/wandb/operator/pkg/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
 	argov1alpha1 "github.com/wandb/operator/pkg/vendored/argo-rollouts/argoproj.io.rollouts/v1alpha1"
+	"github.com/wandb/operator/pkg/vendored/mariadb-operator/k8s.mariadb.com/v1alpha1"
 	miniov2 "github.com/wandb/operator/pkg/vendored/minio-operator/minio.min.io/v2"
-	pxcv1 "github.com/wandb/operator/pkg/vendored/percona-operator/pxc/v1"
 	redisv1beta2 "github.com/wandb/operator/pkg/vendored/redis-operator/redis/v1beta2"
 	redisreplicationv1beta2 "github.com/wandb/operator/pkg/vendored/redis-operator/redisreplication/v1beta2"
 	redissentinelv1beta2 "github.com/wandb/operator/pkg/vendored/redis-operator/redissentinel/v1beta2"
@@ -68,7 +68,7 @@ func init() {
 
 	utilruntime.Must(appsv2.AddToScheme(scheme))
 	utilruntime.Must(apiextensionsv1.AddToScheme(scheme))
-	utilruntime.Must(pxcv1.SchemeBuilder.AddToScheme(scheme))
+	utilruntime.Must(v1alpha1.SchemeBuilder.AddToScheme(scheme))
 	utilruntime.Must(redisv1beta2.AddToScheme(scheme))
 	utilruntime.Must(redisreplicationv1beta2.AddToScheme(scheme))
 	utilruntime.Must(redissentinelv1beta2.AddToScheme(scheme))

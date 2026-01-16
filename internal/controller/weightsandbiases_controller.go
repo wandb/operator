@@ -25,6 +25,7 @@ import (
 	v1 "github.com/wandb/operator/internal/controller/v1"
 	v2 "github.com/wandb/operator/internal/controller/v2"
 	"github.com/wandb/operator/pkg/wandb/spec/channel/deployer"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -64,6 +65,8 @@ type WeightsAndBiasesReconciler struct {
 //+kubebuilder:rbac:groups=events.k8s.io,resources=events,verbs=list;watch
 //+kubebuilder:rbac:groups=kafka.strimzi.io,resources=kafkanodepools;kafkas;kafkatopics,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=kafka.strimzi.io,resources=kafkanodepools/status;kafkas/status;kafkatopics/status,verbs=get;update
+//+kubebuilder:rbac:groups=k8s.mariadb.com,resources=mariadbs,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=k8s.mariadb.com,resources=mariadbs/status,verbs=get;update
 //+kubebuilder:rbac:groups=minio.min.io,resources=tenants,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=minio.min.io,resources=tenants/status,verbs=get
 //+kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses;ingresses/status;networkpolicies,verbs=update;delete;get;list;create;patch;watch
@@ -158,6 +161,7 @@ func (r *WeightsAndBiasesReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		b = ctrl.NewControllerManagedBy(mgr).
 			For(&apiv2.WeightsAndBiases{}).
 			Owns(&apiv2.Application{}).
+			Owns(&batchv1.Job{}).
 			Owns(&corev1.Secret{}).
 			Owns(&corev1.ConfigMap{})
 	} else {

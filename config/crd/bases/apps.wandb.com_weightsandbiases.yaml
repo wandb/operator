@@ -2054,9 +2054,10 @@ spec:
                         operator:
                           description: |-
                             Operator represents a key's relationship to the value.
-                            Valid operators are Exists and Equal. Defaults to Equal.
+                            Valid operators are Exists, Equal, Lt, and Gt. Defaults to Equal.
                             Exists is equivalent to wildcard for value, so that a pod can
                             tolerate all taints of a particular category.
+                            Lt and Gt perform numeric comparisons (requires feature gate TaintTolerationComparisonOperators).
                           type: string
                         tolerationSeconds:
                           description: |-
@@ -3133,9 +3134,10 @@ spec:
                         operator:
                           description: |-
                             Operator represents a key's relationship to the value.
-                            Valid operators are Exists and Equal. Defaults to Equal.
+                            Valid operators are Exists, Equal, Lt, and Gt. Defaults to Equal.
                             Exists is equivalent to wildcard for value, so that a pod can
                             tolerate all taints of a particular category.
+                            Lt and Gt perform numeric comparisons (requires feature gate TaintTolerationComparisonOperators).
                           type: string
                         tolerationSeconds:
                           description: |-
@@ -4194,9 +4196,10 @@ spec:
                         operator:
                           description: |-
                             Operator represents a key's relationship to the value.
-                            Valid operators are Exists and Equal. Defaults to Equal.
+                            Valid operators are Exists, Equal, Lt, and Gt. Defaults to Equal.
                             Exists is equivalent to wildcard for value, so that a pod can
                             tolerate all taints of a particular category.
+                            Lt and Gt perform numeric comparisons (requires feature gate TaintTolerationComparisonOperators).
                           type: string
                         tolerationSeconds:
                           description: |-
@@ -5203,6 +5206,8 @@ spec:
                             type: object
                         type: object
                     type: object
+                  deploymentType:
+                    type: string
                   enabled:
                     type: boolean
                   name:
@@ -5251,9 +5256,10 @@ spec:
                         operator:
                           description: |-
                             Operator represents a key's relationship to the value.
-                            Valid operators are Exists and Equal. Defaults to Equal.
+                            Valid operators are Exists, Equal, Lt, and Gt. Defaults to Equal.
                             Exists is equivalent to wildcard for value, so that a pod can
                             tolerate all taints of a particular category.
+                            Lt and Gt perform numeric comparisons (requires feature gate TaintTolerationComparisonOperators).
                           type: string
                         tolerationSeconds:
                           description: |-
@@ -5271,6 +5277,7 @@ spec:
                       type: object
                     type: array
                 required:
+                - deploymentType
                 - enabled
                 type: object
               redis:
@@ -6378,9 +6385,10 @@ spec:
                         operator:
                           description: |-
                             Operator represents a key's relationship to the value.
-                            Valid operators are Exists and Equal. Defaults to Equal.
+                            Valid operators are Exists, Equal, Lt, and Gt. Defaults to Equal.
                             Exists is equivalent to wildcard for value, so that a pod can
                             tolerate all taints of a particular category.
+                            Lt and Gt perform numeric comparisons (requires feature gate TaintTolerationComparisonOperators).
                           type: string
                         tolerationSeconds:
                           description: |-
@@ -6430,9 +6438,10 @@ spec:
                     operator:
                       description: |-
                         Operator represents a key's relationship to the value.
-                        Valid operators are Exists and Equal. Defaults to Equal.
+                        Valid operators are Exists, Equal, Lt, and Gt. Defaults to Equal.
                         Exists is equivalent to wildcard for value, so that a pod can
                         tolerate all taints of a particular category.
+                        Lt and Gt perform numeric comparisons (requires feature gate TaintTolerationComparisonOperators).
                       type: string
                     tolerationSeconds:
                       description: |-
@@ -7146,7 +7155,7 @@ spec:
                                 Total number of terminating pods targeted by this deployment. Terminating pods have a non-null
                                 .metadata.deletionTimestamp and have not yet reached the Failed or Succeeded .status.phase.
 
-                                This is an alpha field. Enable DeploymentReplicaSetTerminatingReplicas to be able to use this field.
+                                This is a beta field and requires enabling DeploymentReplicaSetTerminatingReplicas feature (enabled by default).
                               format: int32
                               type: integer
                             unavailableReplicas:
@@ -8187,6 +8196,30 @@ spec:
                     type: object
                   hostname:
                     type: string
+                  migration:
+                    properties:
+                      jobs:
+                        additionalProperties:
+                          properties:
+                            failed:
+                              type: boolean
+                            message:
+                              type: string
+                            name:
+                              type: string
+                            succeeded:
+                              type: boolean
+                          type: object
+                        type: object
+                      lastSuccessVersion:
+                        type: string
+                      ready:
+                        type: boolean
+                      reason:
+                        type: string
+                      version:
+                        type: string
+                    type: object
                 required:
                 - hostname
                 type: object

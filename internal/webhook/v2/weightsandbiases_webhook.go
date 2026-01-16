@@ -206,6 +206,9 @@ func applyMySQLDefaults(wandb *appsv2.WeightsAndBiases, size defaults.Size) erro
 	if wandb.Spec.MySQL.Name == "" {
 		wandb.Spec.MySQL.Name = defaultConfig.Name
 	}
+	if wandb.Spec.MySQL.DeploymentType == "" {
+		wandb.Spec.MySQL.DeploymentType = defaultConfig.DeploymentType
+	}
 
 	if wandb.Spec.MySQL.StorageSize == "" {
 		wandb.Spec.MySQL.StorageSize = defaultConfig.StorageSize

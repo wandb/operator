@@ -145,6 +145,13 @@ type WandbOIDCSpec struct {
 	AuthMethod   string `json:"authMethod"`
 }
 
+type MYSQLType string
+
+const (
+	MySQLTypeMariadb MYSQLType = "mariadb"
+	MySQLTypePercona MYSQLType = "percona"
+)
+
 type WBInfraSpec struct {
 	Enabled         bool               `json:"enabled"`
 	RetentionPolicy *WBRetentionPolicy `json:"retentionPolicy,omitempty"`
@@ -158,12 +165,13 @@ type WBInfraSpec struct {
 type WBMySQLSpec struct {
 	WBInfraSpec `json:",inline"`
 
-	StorageSize string        `json:"storageSize,omitempty"`
-	Replicas    int32         `json:"replicas,omitempty"`
-	Config      WBMySQLConfig `json:"config,omitempty"`
-	Namespace   string        `json:"namespace,omitempty"`
-	Name        string        `json:"name,omitempty"`
-	Telemetry   Telemetry     `json:"telemetry,omitempty"`
+	DeploymentType MYSQLType     `json:"deploymentType"`
+	StorageSize    string        `json:"storageSize,omitempty"`
+	Replicas       int32         `json:"replicas,omitempty"`
+	Config         WBMySQLConfig `json:"config,omitempty"`
+	Namespace      string        `json:"namespace,omitempty"`
+	Name           string        `json:"name,omitempty"`
+	Telemetry      Telemetry     `json:"telemetry,omitempty"`
 }
 
 type WBMySQLConfig struct {
@@ -289,6 +297,23 @@ type WandbStatus struct {
 
 	// +kubebuilder:default:={}
 	Applications map[string]ApplicationStatus `json:"applications,omitempty"`
+
+	Migration WandbMigrationStatus `json:"migration,omitempty"`
+}
+
+type WandbMigrationStatus struct {
+	Version            string                        `json:"version,omitempty"`
+	LastSuccessVersion string                        `json:"lastSuccessVersion,omitempty"`
+	Ready              bool                          `json:"ready,omitempty"`
+	Reason             string                        `json:"reason,omitempty"`
+	Jobs               map[string]MigrationJobStatus `json:"jobs,omitempty"`
+}
+
+type MigrationJobStatus struct {
+	Name      string `json:"name,omitempty"`
+	Succeeded bool   `json:"succeeded,omitempty"`
+	Failed    bool   `json:"failed,omitempty"`
+	Message   string `json:"message,omitempty"`
 }
 
 type WBInfraStatus struct {
