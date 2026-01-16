@@ -523,12 +523,13 @@ func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb 
 		}
 
 		container := corev1.Container{
-			Name:    app.Name,
-			Image:   app.Image.GetImage(),
-			Env:     envVars,
-			Args:    app.Args,
-			Command: app.Command,
-			Ports:   Ports,
+			Name:      app.Name,
+			Image:     app.Image.GetImage(),
+			Env:       envVars,
+			Args:      app.Args,
+			Command:   app.Command,
+			Ports:     Ports,
+			Resources: app.Resources,
 		}
 
 		if app.StartupProbe != nil && app.StartupProbe.HTTPGet != nil {
@@ -819,7 +820,8 @@ func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb 
 	if err != nil {
 		logger.Error(err, "Failed to parse provided hostname", "hostname", wandb.Spec.Wandb.Hostname)
 	} else {
-		if manifestFeaturesEnabled([]string{"proxy"}, manifest.Features) {
+		// Only override with NodePort if user didn't specify a port in the hostname
+		if manifestFeaturesEnabled([]string{"proxy"}, manifest.Features) && hostname.Port() == "" {
 			proxyService := &corev1.Service{}
 			proxyServiceName := fmt.Sprintf("%s-%s", wandb.Name, "nginx-proxy")
 			err := client.Get(ctx, types.NamespacedName{Name: proxyServiceName, Namespace: wandb.Namespace}, proxyService)

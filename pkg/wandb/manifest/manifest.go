@@ -121,9 +121,10 @@ type Application struct {
 	Kafka          *AppKafkaSection `yaml:"kafka,omitempty"`
 	Service        *ServiceSpec     `yaml:"service,omitempty"`
 	Ports          []ContainerPort  `yaml:"ports,omitempty"`
-	LivenessProbe  *corev1.Probe    `yaml:"livenessProbe,omitempty"`
-	ReadinessProbe *corev1.Probe    `yaml:"readinessProbe,omitempty"`
-	StartupProbe   *corev1.Probe    `yaml:"startupProbe,omitempty"`
+	LivenessProbe  *corev1.Probe               `yaml:"livenessProbe,omitempty"`
+	ReadinessProbe *corev1.Probe               `yaml:"readinessProbe,omitempty"`
+	StartupProbe   *corev1.Probe               `yaml:"startupProbe,omitempty"`
+	Resources      corev1.ResourceRequirements `yaml:"resources,omitempty"`
 	// Files allows injecting files into the application's container by mounting
 	// data from ConfigMaps. Each entry may either inline file contents (stored
 	// into an operator-managed ConfigMap) or reference an existing ConfigMap.
