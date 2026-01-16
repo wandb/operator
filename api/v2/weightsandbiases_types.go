@@ -88,6 +88,15 @@ type WeightsAndBiasesSpec struct {
 
 	RetentionPolicy WBRetentionPolicy `json:"retentionPolicy"`
 
+	// EnableOIDCDiscovery controls whether to create a ClusterRoleBinding for OIDC discovery.
+	// This is required when W&B applications use JWT tokens for internal service-to-service authentication.
+	// Setting this to true creates a cluster-scoped ClusterRoleBinding that grants system:unauthenticated
+	// access to OIDC discovery endpoints. If the operator lacks permissions to create ClusterRoleBindings,
+	// the administrator must create it manually.
+	// +optional
+	// +kubebuilder:default=false
+	EnableOIDCDiscovery bool `json:"enableOIDCDiscovery,omitempty"`
+
 	Wandb WandbAppSpec `json:"wandb,omitempty"`
 
 	Affinity    *corev1.Affinity     `json:"affinity,omitempty"`

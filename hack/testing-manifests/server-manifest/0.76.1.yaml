@@ -285,7 +285,11 @@ commonEnvvars:
           proto: "http"
           path: "/"
     - name: WF_TRACE_SERVER_URL
-      value: "$(WANDB_PUBLIC_BASE_URL)/traces"
+      sources:
+        - name: weave-trace
+          type: service
+          proto: "http"
+          path: "/traces"
     - name: WEAVE_TRACE_SERVER_BASE_URL
       sources:
         - name: weave-trace
@@ -426,16 +430,7 @@ applications:
       - frontend
       - kafka
       - flatRunsV2Producer
-    command:
-      - sleep
-      - infinity
     env:
-      - name: GOMEMLIMIT
-        value: "3500MiB"
-      - name: GOMAXPROCS
-        value: "1"
-      - name: ENABLE_SERVICES
-        value: "gorilla,nginx,local"
       - name: WEAVE_ENABLED
         value: "true"
       - name: WEAVE_SERVICE
@@ -462,13 +457,6 @@ applications:
         value: "false"
       - name: GORILLA_FILEMETA_ENABLED
         value: "false"
-    resources:
-      limits:
-        cpu: "1"
-        memory: 4Gi
-      requests:
-        cpu: 250m
-        memory: 512Mi
     ports:
       - containerPort: 8080
         name: app
@@ -913,10 +901,6 @@ applications:
 
               location /traces {
                 proxy_pass http://weave_trace;
-              }
-
-              location /weave {
-                return 301 /weave/;
               }
 
               location /weave/ {

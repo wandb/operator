@@ -10,6 +10,7 @@ metadata:
     app.kubernetes.io/created-by: operator
   name: wandb-default-v2
 spec:
+  enableOIDCDiscovery: true
   size: small
   streaming:
     enabled: true

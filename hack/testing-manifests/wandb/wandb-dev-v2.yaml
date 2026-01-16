@@ -4,6 +4,7 @@ metadata:
   name: wandb-dev-v2
   namespace: default
 spec:
+  enableOIDCDiscovery: true
   wandb:
     hostname: http://localhost
     features:

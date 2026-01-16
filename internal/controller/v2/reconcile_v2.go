@@ -34,6 +34,7 @@ import (
 	strimziv1 "github.com/wandb/operator/pkg/vendored/strimzi-kafka/v1"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	apiErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -260,6 +261,28 @@ func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb 
 			}
 		} else {
 			return ctrl.Result{}, err
+		}
+	}
+
+	// Create Role and RoleBinding for the service account
+	if err := createOrUpdateRole(ctx, client, wandb, serviceAccountName); err != nil {
+		logger.Error(err, "Failed to create/update Role for service account")
+		return ctrl.Result{}, err
+	}
+
+	if err := createOrUpdateRoleBinding(ctx, client, wandb, serviceAccountName); err != nil {
+		logger.Error(err, "Failed to create/update RoleBinding for service account")
+		return ctrl.Result{}, err
+	}
+
+	// Create ClusterRoleBinding for OIDC discovery if enabled in spec
+	if wandb.Spec.EnableOIDCDiscovery {
+		if err := createOrUpdateOIDCDiscoveryClusterRoleBinding(ctx, client, wandb); err != nil {
+			logger.Error(err, "Failed to create ClusterRoleBinding for OIDC discovery. "+
+				"This is required for JWT token validation between W&B services. "+
+				"Either grant the operator ClusterRoleBinding permissions, or manually create the ClusterRoleBinding. "+
+				"W&B will continue starting, but JWT authentication will fail until this is resolved.")
+			// Non-fatal: continue reconciliation even if ClusterRoleBinding creation fails
 		}
 	}
 
@@ -1104,5 +1127,199 @@ func inferState(
 		return err
 	}
 	log.Info("Status update successful")
+	return nil
+}
+
+// createOrUpdateRole creates or updates the Role for the W&B service account
+func createOrUpdateRole(
+	ctx context.Context,
+	client ctrlClient.Client,
+	wandb *apiv2.WeightsAndBiases,
+	serviceAccountName string,
+) error {
+	log := ctrl.LoggerFrom(ctx)
+
+	role := &rbacv1.Role{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      serviceAccountName,
+			Namespace: wandb.Namespace,
+			Labels: map[string]string{
+				"app.kubernetes.io/managed-by": "wandb-operator",
+				"app.kubernetes.io/instance":   wandb.Name,
+				"app.kubernetes.io/part-of":    "wandb",
+			},
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{""},
+				Resources: []string{"secrets"},
+				Verbs:     []string{"get", "create", "update", "delete"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{
+					"namespaces",
+					"pods",
+					"pods/log",
+					"configmaps",
+					"services",
+					"serviceaccounts",
+					"events",
+				},
+				Verbs: []string{"get", "list"},
+			},
+		},
+	}
+
+	if err := controllerutil.SetOwnerReference(wandb, role, client.Scheme()); err != nil {
+		return fmt.Errorf("failed to set owner reference on Role: %w", err)
+	}
+
+	existingRole := &rbacv1.Role{}
+	err := client.Get(ctx, types.NamespacedName{Name: serviceAccountName, Namespace: wandb.Namespace}, existingRole)
+	if err != nil {
+		if apiErrors.IsNotFound(err) {
+			log.Info("Creating Role", "name", serviceAccountName, "namespace", wandb.Namespace)
+			if err := client.Create(ctx, role); err != nil {
+				return fmt.Errorf("failed to create Role: %w", err)
+			}
+			return nil
+		}
+		return fmt.Errorf("failed to get Role: %w", err)
+	}
+
+	// Update existing role
+	existingRole.Rules = role.Rules
+	existingRole.Labels = role.Labels
+	log.Info("Updating Role", "name", serviceAccountName, "namespace", wandb.Namespace)
+	if err := client.Update(ctx, existingRole); err != nil {
+		return fmt.Errorf("failed to update Role: %w", err)
+	}
+
+	return nil
+}
+
+// createOrUpdateRoleBinding creates or updates the RoleBinding for the W&B service account
+func createOrUpdateRoleBinding(
+	ctx context.Context,
+	client ctrlClient.Client,
+	wandb *apiv2.WeightsAndBiases,
+	serviceAccountName string,
+) error {
+	log := ctrl.LoggerFrom(ctx)
+
+	roleBinding := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      serviceAccountName,
+			Namespace: wandb.Namespace,
+			Labels: map[string]string{
+				"app.kubernetes.io/managed-by": "wandb-operator",
+				"app.kubernetes.io/instance":   wandb.Name,
+				"app.kubernetes.io/part-of":    "wandb",
+			},
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "Role",
+			Name:     serviceAccountName,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      serviceAccountName,
+				Namespace: wandb.Namespace,
+			},
+		},
+	}
+
+	if err := controllerutil.SetOwnerReference(wandb, roleBinding, client.Scheme()); err != nil {
+		return fmt.Errorf("failed to set owner reference on RoleBinding: %w", err)
+	}
+
+	existingRoleBinding := &rbacv1.RoleBinding{}
+	err := client.Get(ctx, types.NamespacedName{Name: serviceAccountName, Namespace: wandb.Namespace}, existingRoleBinding)
+	if err != nil {
+		if apiErrors.IsNotFound(err) {
+			log.Info("Creating RoleBinding", "name", serviceAccountName, "namespace", wandb.Namespace)
+			if err := client.Create(ctx, roleBinding); err != nil {
+				return fmt.Errorf("failed to create RoleBinding: %w", err)
+			}
+			return nil
+		}
+		return fmt.Errorf("failed to get RoleBinding: %w", err)
+	}
+
+	// Update existing rolebinding
+	existingRoleBinding.RoleRef = roleBinding.RoleRef
+	existingRoleBinding.Subjects = roleBinding.Subjects
+	existingRoleBinding.Labels = roleBinding.Labels
+	log.Info("Updating RoleBinding", "name", serviceAccountName, "namespace", wandb.Namespace)
+	if err := client.Update(ctx, existingRoleBinding); err != nil {
+		return fmt.Errorf("failed to update RoleBinding: %w", err)
+	}
+
+	return nil
+}
+
+// createOrUpdateOIDCDiscoveryClusterRoleBinding creates or updates the ClusterRoleBinding
+// for OIDC discovery. This is required for JWT token validation between W&B services.
+// Returns error if creation fails, but this is non-fatal for reconciliation.
+func createOrUpdateOIDCDiscoveryClusterRoleBinding(
+	ctx context.Context,
+	client ctrlClient.Client,
+	wandb *apiv2.WeightsAndBiases,
+) error {
+	log := ctrl.LoggerFrom(ctx)
+
+	clusterRoleBindingName := fmt.Sprintf("%s-oidc-discovery", wandb.Name)
+
+	clusterRoleBinding := &rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: clusterRoleBindingName,
+			Labels: map[string]string{
+				"app.kubernetes.io/managed-by": "wandb-operator",
+				"app.kubernetes.io/instance":   wandb.Name,
+				"app.kubernetes.io/part-of":    "wandb",
+			},
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     "system:service-account-issuer-discovery",
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				APIGroup: "rbac.authorization.k8s.io",
+				Kind:     "Group",
+				Name:     "system:unauthenticated",
+			},
+		},
+	}
+
+	// Note: ClusterRoleBinding cannot have ownerReferences to namespaced resources
+	// It will be cleaned up manually or left as cluster-scoped resource
+
+	existingClusterRoleBinding := &rbacv1.ClusterRoleBinding{}
+	err := client.Get(ctx, types.NamespacedName{Name: clusterRoleBindingName}, existingClusterRoleBinding)
+	if err != nil {
+		if apiErrors.IsNotFound(err) {
+			log.Info("Creating ClusterRoleBinding for OIDC discovery", "name", clusterRoleBindingName)
+			if err := client.Create(ctx, clusterRoleBinding); err != nil {
+				return fmt.Errorf("failed to create ClusterRoleBinding: %w", err)
+			}
+			return nil
+		}
+		return fmt.Errorf("failed to get ClusterRoleBinding: %w", err)
+	}
+
+	// Update existing clusterrolebinding
+	existingClusterRoleBinding.RoleRef = clusterRoleBinding.RoleRef
+	existingClusterRoleBinding.Subjects = clusterRoleBinding.Subjects
+	existingClusterRoleBinding.Labels = clusterRoleBinding.Labels
+	log.Info("Updating ClusterRoleBinding for OIDC discovery", "name", clusterRoleBindingName)
+	if err := client.Update(ctx, existingClusterRoleBinding); err != nil {
+		return fmt.Errorf("failed to update ClusterRoleBinding: %w", err)
+	}
+
 	return nil
 }
