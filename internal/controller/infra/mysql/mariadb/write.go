@@ -22,7 +22,7 @@ func WriteState(
 	specNamespacedName types.NamespacedName,
 	desired *v1alpha1.MariaDB,
 ) []metav1.Condition {
-	ctx, _ = logx.IntoContext(ctx, logx.Mysql)
+	ctx, _ = logx.WithSlog(ctx, logx.Mysql)
 	var actual = &v1alpha1.MariaDB{}
 
 	nsnBuilder := createNsNameBuilder(specNamespacedName)

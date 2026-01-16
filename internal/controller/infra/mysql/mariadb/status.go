@@ -22,11 +22,12 @@ const (
 
 func ComputeStatus(
 	ctx context.Context,
+	enabled bool,
 	oldConditions, currentConditions []metav1.Condition,
 	connection *translator.InfraConnection,
 	currentGeneration int64,
 ) (translator.InfraStatus, []corev1.Event, ctrl.Result) {
-	ctx, _ = logx.IntoContext(ctx, logx.Mysql)
+	ctx, _ = logx.WithSlog(ctx, logx.Mysql)
 	result := translator.InfraStatus{}
 
 	if connection != nil {
@@ -42,7 +43,7 @@ func ComputeStatus(
 		translator.DefaultConditionExpiry,
 	)
 
-	state, events := inferInfraState(ctx, result.Conditions)
+	state, events := inferInfraState(ctx, enabled, result.Conditions)
 	result.State = state
 
 	result.Ready = !lo.Contains(common.NotReadyStates, result.State)
@@ -76,8 +77,12 @@ func applyDefaultConditions(conditions []metav1.Condition) []metav1.Condition {
 
 func inferInfraState(
 	ctx context.Context,
+	enabled bool,
 	conditions []metav1.Condition,
 ) (string, []corev1.Event) {
+	if !enabled {
+		return common.UnavailableState, nil
+	}
 	var events []corev1.Event
 	impliedStates := make(map[string]string, len(conditions))
 
@@ -149,7 +154,7 @@ func inferStateFromCondition(ctx context.Context, conditionType string, impliedS
 }
 
 func inferState_MySQLCustomResourceType(ctx context.Context, condition metav1.Condition) string {
-	log := logx.FromContext(ctx)
+	log := logx.GetSlog(ctx)
 	result := common.UnknownState
 	if condition.Status == metav1.ConditionTrue {
 		result = common.HealthyState
@@ -170,7 +175,7 @@ func inferState_MySQLCustomResourceType(ctx context.Context, condition metav1.Co
 }
 
 func inferState_MySQLConnectionInfoType(ctx context.Context, condition metav1.Condition) string {
-	log := logx.FromContext(ctx)
+	log := logx.GetSlog(ctx)
 	result := common.UnknownState
 	if condition.Status == metav1.ConditionTrue {
 		result = common.HealthyState
@@ -186,7 +191,7 @@ func inferState_MySQLConnectionInfoType(ctx context.Context, condition metav1.Co
 }
 
 func inferState_MySQLReportedReadyType(ctx context.Context, condition metav1.Condition) string {
-	log := logx.FromContext(ctx)
+	log := logx.GetSlog(ctx)
 	result := common.UnknownState
 	if condition.Status == metav1.ConditionTrue {
 		result = common.HealthyState

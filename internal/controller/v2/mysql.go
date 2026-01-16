@@ -75,7 +75,7 @@ func mysqlWriteState(
 	switch wandb.Spec.MySQL.DeploymentType {
 	case apiv2.MySQLTypePercona:
 		var desired *v1.PerconaXtraDBCluster
-		desired, err = translatorv2.ToPerconaMySQLVendorSpec(ctx, wandb.Spec.MySQL, wandb, client.Scheme())
+		desired, err = translatorv2.ToPerconaMySQLVendorSpec(ctx, wandb, client.Scheme())
 		if err != nil {
 			return []metav1.Condition{
 				{

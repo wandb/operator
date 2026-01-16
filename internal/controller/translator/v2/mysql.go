@@ -283,7 +283,7 @@ func ToMariaDBMySQLVendorSpec(
 	owner metav1.Object,
 	scheme *runtime.Scheme,
 ) (*v1alpha1.MariaDB, error) {
-	ctx, log := logx.IntoContext(ctx, logx.Mysql)
+	ctx, log := logx.WithSlog(ctx, logx.Mysql)
 
 	if !spec.Enabled {
 		return nil, nil
@@ -370,7 +370,7 @@ func ToMariaDBMySQLVendorSpec(
 
 	// Set owner reference
 	if err := ctrl.SetControllerReference(owner, mariaDB, scheme); err != nil {
-		log.Error(err, "failed to set owner reference on MariaDB CR")
+		log.Error(err.Error(), "failed to set owner reference on MariaDB CR")
 		return nil, fmt.Errorf("failed to set owner reference: %w", err)
 	}
 
