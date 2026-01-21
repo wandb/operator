@@ -236,7 +236,7 @@ func ReconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 		return result, err
 	}
 
-	if !wandb.Status.Wandb.MySQLInit.Succeeded {
+	if wandb.Spec.MySQL.DeploymentType == apiv2.MySQLTypeMysql && !wandb.Status.Wandb.MySQLInit.Succeeded {
 		logger.Info("Mysql init not yet successful", "Message", wandb.Status.Wandb.MySQLInit.Message)
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
