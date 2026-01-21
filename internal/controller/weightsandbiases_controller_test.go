@@ -10,6 +10,7 @@ import (
 	v2 "github.com/wandb/operator/internal/controller/v2"
 	"github.com/wandb/operator/pkg/utils"
 	"github.com/wandb/operator/pkg/wandb/manifest"
+	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -108,6 +109,107 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			Expect(k8sClient.Delete(ctx, createdWandb)).Should(Succeed())
 		})
 
+		It("Should create a MySQL init job when deployment type is mysql", func() {
+			By("Creating a new WeightsAndBiases v2 object with MySQL deployment type 'mysql'")
+			ctx := context.Background()
+			manifest.Path = "../../hack/testing-manifests/server-manifest/0.76.1.yaml"
+			wandbVersion := "0.76.1"
+			wandbName := "test-mysql-init"
+			wandb := &apiv2.WeightsAndBiases{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      wandbName,
+					Namespace: WandbNamespace,
+				},
+				Spec: apiv2.WeightsAndBiasesSpec{
+					Wandb: apiv2.WandbAppSpec{
+						Hostname: "http://localhost",
+						Features: map[string]bool{},
+					},
+					MySQL: apiv2.WBMySQLSpec{
+						WBInfraSpec: apiv2.WBInfraSpec{
+							Enabled: true,
+						},
+						DeploymentType: apiv2.MySQLTypeMysql,
+					},
+					Redis:      apiv2.WBRedisSpec{WBInfraSpec: apiv2.WBInfraSpec{Enabled: true}},
+					Kafka:      apiv2.WBKafkaSpec{WBInfraSpec: apiv2.WBInfraSpec{Enabled: true}},
+					Minio:      apiv2.WBMinioSpec{WBInfraSpec: apiv2.WBInfraSpec{Enabled: true}},
+					ClickHouse: apiv2.WBClickHouseSpec{WBInfraSpec: apiv2.WBInfraSpec{Enabled: true}},
+				},
+			}
+			Expect(k8sClient.Create(ctx, wandb)).Should(Succeed())
+
+			By("Setting infra to ready")
+			wandb.Status.MySQLStatus.Ready = true
+			wandb.Status.RedisStatus.Ready = true
+			wandb.Status.KafkaStatus.Ready = true
+			wandb.Status.MinioStatus.Ready = true
+			wandb.Status.ClickHouseStatus.Ready = true
+			Expect(k8sClient.Status().Update(ctx, wandb)).Should(Succeed())
+
+			By("Creating the db-password secret")
+			secret := &v1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      wandbName + "-db-password",
+					Namespace: WandbNamespace,
+				},
+				Data: map[string][]byte{
+					"rootPassword": []byte("root-pass"),
+					"password":     []byte("user-pass"),
+				},
+			}
+			Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
+
+			wandbLookupKey := types.NamespacedName{Name: wandb.Name, Namespace: wandb.Namespace}
+			createdWandb := &apiv2.WeightsAndBiases{}
+			Expect(k8sClient.Get(ctx, wandbLookupKey, createdWandb)).Should(Succeed())
+
+			By("Running the reconciler")
+			reconciler := &WeightsAndBiasesReconciler{
+				Client:   k8sClient,
+				Scheme:   scheme.Scheme,
+				Recorder: record.NewFakeRecorder(10),
+				EnableV2: true,
+			}
+
+			_, err := reconciler.Reconcile(ctx, ctrl.Request{
+				NamespacedName: wandbLookupKey,
+			})
+			Expect(err).Should(Succeed())
+
+			By("Setting infrastructure status to ready")
+			Expect(k8sClient.Get(ctx, wandbLookupKey, createdWandb)).Should(Succeed())
+
+			createdWandb.Status.MySQLStatus.Ready = true
+			createdWandb.Status.RedisStatus.Ready = true
+			createdWandb.Status.KafkaStatus.Ready = true
+			createdWandb.Status.MinioStatus.Ready = true
+			createdWandb.Status.ClickHouseStatus.Ready = true
+			createdWandb.Status.MySQLStatus.Connection.URL = v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: WandbName}, Key: "test"}
+			createdWandb.Status.ClickHouseStatus.Connection.URL = v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: WandbName}, Key: "test"}
+
+			Expect(k8sClient.Status().Update(ctx, createdWandb)).Should(Succeed())
+
+			By("Checking if Applications were NOT created yet (migrations not complete)")
+			wandbManifest, err := manifest.GetServerManifest(wandbVersion)
+			Expect(err).Should(Succeed())
+			_, err = v2.ReconcileWandbManifest(ctx, k8sClient, createdWandb, wandbManifest)
+			Expect(err).Should(Succeed())
+
+			By("Checking if the MySQL init job was created")
+			job := &batchv1.Job{}
+			Eventually(func() error {
+				return k8sClient.Get(ctx, types.NamespacedName{Name: wandbName + "-mysql-init", Namespace: WandbNamespace}, job)
+			}, timeout, interval).Should(Succeed())
+
+			Expect(job.Spec.Template.Spec.Containers[0].Name).To(Equal("mysql-init"))
+
+			// Cleanup
+			Expect(k8sClient.Delete(ctx, job, client.PropagationPolicy(metav1.DeletePropagationBackground))).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, wandb)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, secret)).Should(Succeed())
+		})
+
 		It("Should create application components when infrastructure is ready", func() {
 			By("Creating a new WeightsAndBiases v2 object with ready infrastructure")
 			ctx := context.Background()
@@ -201,6 +303,7 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			createdWandb.Status.Wandb.Migration.LastSuccessVersion = wandbVersion
 			createdWandb.Status.Wandb.Migration.Ready = true
 			createdWandb.Status.Wandb.Migration.Reason = "Complete"
+			createdWandb.Status.Wandb.MySQLInit.Succeeded = true
 			Expect(k8sClient.Status().Update(ctx, createdWandb)).Should(Succeed())
 
 			// For now test by calling ReconcileWandbManifest directly, but this will get refactored into the reconciler later
@@ -237,11 +340,11 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 						Version:  wandbVersion,
 						Features: map[string]bool{},
 					},
-					MySQL:      apiv2.WBMySQLSpec{Enabled: true},
-					Redis:      apiv2.WBRedisSpec{Enabled: true},
-					Kafka:      apiv2.WBKafkaSpec{Enabled: true},
-					Minio:      apiv2.WBMinioSpec{Enabled: true},
-					ClickHouse: apiv2.WBClickHouseSpec{Enabled: true},
+					MySQL:      apiv2.WBMySQLSpec{WBInfraSpec: apiv2.WBInfraSpec{Enabled: true}},
+					Redis:      apiv2.WBRedisSpec{WBInfraSpec: apiv2.WBInfraSpec{Enabled: true}},
+					Kafka:      apiv2.WBKafkaSpec{WBInfraSpec: apiv2.WBInfraSpec{Enabled: true}},
+					Minio:      apiv2.WBMinioSpec{WBInfraSpec: apiv2.WBInfraSpec{Enabled: true}},
+					ClickHouse: apiv2.WBClickHouseSpec{WBInfraSpec: apiv2.WBInfraSpec{Enabled: true}},
 				},
 			}
 			Expect(k8sClient.Create(ctx, wandb)).Should(Succeed())
@@ -289,6 +392,7 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			createdWandb.Status.Wandb.Migration.Ready = true
 			createdWandb.Status.Wandb.Migration.Reason = "Complete"
 			createdWandb.Status.Wandb.Migration.LastSuccessVersion = wandbVersion
+			createdWandb.Status.Wandb.MySQLInit.Succeeded = true
 			Expect(k8sClient.Status().Update(ctx, createdWandb)).Should(Succeed())
 
 			ctrlResult, err = v2.ReconcileWandbManifest(ctx, k8sClient, createdWandb, wandbManifest)
@@ -317,11 +421,11 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 						Version:  oldVersion,
 						Features: map[string]bool{},
 					},
-					MySQL:      apiv2.WBMySQLSpec{Enabled: true},
-					Redis:      apiv2.WBRedisSpec{Enabled: true},
-					Kafka:      apiv2.WBKafkaSpec{Enabled: true},
-					Minio:      apiv2.WBMinioSpec{Enabled: true},
-					ClickHouse: apiv2.WBClickHouseSpec{Enabled: true},
+					MySQL:      apiv2.WBMySQLSpec{WBInfraSpec: apiv2.WBInfraSpec{Enabled: true}},
+					Redis:      apiv2.WBRedisSpec{WBInfraSpec: apiv2.WBInfraSpec{Enabled: true}},
+					Kafka:      apiv2.WBKafkaSpec{WBInfraSpec: apiv2.WBInfraSpec{Enabled: true}},
+					Minio:      apiv2.WBMinioSpec{WBInfraSpec: apiv2.WBInfraSpec{Enabled: true}},
+					ClickHouse: apiv2.WBClickHouseSpec{WBInfraSpec: apiv2.WBInfraSpec{Enabled: true}},
 				},
 			}
 			Expect(k8sClient.Create(ctx, wandb)).Should(Succeed())
@@ -342,6 +446,7 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			createdWandb.Status.Wandb.Migration.LastSuccessVersion = oldVersion
 			createdWandb.Status.Wandb.Migration.Ready = true
 			createdWandb.Status.Wandb.Migration.Reason = "Complete"
+			createdWandb.Status.Wandb.MySQLInit.Succeeded = true
 			Expect(k8sClient.Status().Update(ctx, createdWandb)).Should(Succeed())
 
 			By("Upgrading the version in the spec")

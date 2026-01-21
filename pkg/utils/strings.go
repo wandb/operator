@@ -28,17 +28,16 @@ func RemoveString(strings []string, target string) []string {
 }
 
 func GenerateRandomPassword(length int) (string, error) {
-	const asciiPrintableStart = 33
-	const asciiPrintableEnd = 126
-	const asciiPrintableRange = asciiPrintableEnd - asciiPrintableStart + 1
+	allowedCharacters := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!#%^*()-_=+{}|,.<>?"
+	characterSetLength := len(allowedCharacters)
 
 	result := make([]byte, length)
 	for i := 0; i < length; i++ {
-		num, err := rand.Int(rand.Reader, big.NewInt(asciiPrintableRange))
+		num, err := rand.Int(rand.Reader, big.NewInt(int64(characterSetLength-1)))
 		if err != nil {
 			return "", err
 		}
-		result[i] = byte(asciiPrintableStart + num.Int64())
+		result[i] = allowedCharacters[num.Int64()]
 	}
 	return string(result), nil
 }

@@ -96,25 +96,25 @@ if settings.get("installMinio"):
     )
 
 helm_repo(
-    'mariadb-operator-repo',
-    'https://helm.mariadb.com/mariadb-operator',
+    'mysql-operator-repo',
+    'https://mysql.github.io/mysql-operator',
     labels=["Helm-Repos"],
 )
 
-helm_resource(
-    'mariadb-operator-crds',
-    chart='mariadb-operator-repo/mariadb-operator-crds',
-    resource_deps=['mariadb-operator-repo'],
-    pod_readiness='ignore',
-    labels=["Third-Party-Operators"],
-)
+# helm_resource(
+#     'mariadb-operator-crds',
+#     chart='mariadb-operator-repo/mariadb-operator-crds',
+#     resource_deps=['mariadb-operator-repo'],
+#     pod_readiness='ignore',
+#     labels=["Third-Party-Operators"],
+# )
 
 helm_resource(
-    'mariadb-operator',
-    chart='mariadb-operator-repo/mariadb-operator',
-    resource_deps=['mariadb-operator-repo'],
+    'mysql-operator',
+    chart='mysql-operator-repo/mysql-operator',
+    resource_deps=['mysql-operator-repo'],
     labels=["Third-Party-Operators"],
-    flags=['--set=cert.certManager.enabled=true']
+    flags=['--set-string=image.tag=8.4.7-2.1.9']
 )
 
 helm_repo(

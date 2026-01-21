@@ -150,6 +150,7 @@ type MYSQLType string
 const (
 	MySQLTypeMariadb MYSQLType = "mariadb"
 	MySQLTypePercona MYSQLType = "percona"
+	MySQLTypeMysql   MYSQLType = "mysql"
 )
 
 type WBInfraSpec struct {
@@ -299,6 +300,9 @@ type WandbStatus struct {
 	Applications map[string]ApplicationStatus `json:"applications,omitempty"`
 
 	Migration WandbMigrationStatus `json:"migration,omitempty"`
+
+	// +kubebuilder:default:={}
+	MySQLInit MigrationJobStatus `json:"mysqlInit,omitempty"`
 }
 
 type WandbMigrationStatus struct {

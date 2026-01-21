@@ -7,12 +7,14 @@ import (
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/infra/mysql/mariadb"
+	"github.com/wandb/operator/internal/controller/infra/mysql/mysql"
 	"github.com/wandb/operator/internal/controller/infra/mysql/percona"
 	"github.com/wandb/operator/internal/controller/translator"
 	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
 	"github.com/wandb/operator/pkg/utils"
 	pkgutils "github.com/wandb/operator/pkg/utils"
 	"github.com/wandb/operator/pkg/vendored/mariadb-operator/k8s.mariadb.com/v1alpha1"
+	mysqlv2 "github.com/wandb/operator/pkg/vendored/mysql-operator/v2"
 	"github.com/wandb/operator/pkg/vendored/percona-operator/pxc/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -32,12 +34,23 @@ func mysqlWriteState(
 	logger := ctrl.LoggerFrom(ctx)
 
 	dbPasswordSecret := &corev1.Secret{}
-	err := client.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("%s-%s", specNamespacedName.Name, "user-db-password"), Namespace: specNamespacedName.Namespace}, dbPasswordSecret)
+	err := client.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("%s-%s", specNamespacedName.Name, "db-password"), Namespace: specNamespacedName.Namespace}, dbPasswordSecret)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			dbPasswordSecret.Name = fmt.Sprintf("%s-%s", specNamespacedName.Name, "user-db-password")
+			dbPasswordSecret.Name = fmt.Sprintf("%s-%s", specNamespacedName.Name, "db-password")
 			dbPasswordSecret.Namespace = specNamespacedName.Namespace
-			password, err := pkgutils.GenerateRandomPassword(32)
+			userPassword, err := pkgutils.GenerateRandomPassword(32)
+			if err != nil {
+				logger.Error(err, "failed to generate random password")
+				return []metav1.Condition{
+					{
+						Type:   common.ReconciledType,
+						Status: metav1.ConditionFalse,
+						Reason: common.ControllerErrorReason,
+					},
+				}
+			}
+			rootPassword, err := pkgutils.GenerateRandomPassword(32)
 			if err != nil {
 				logger.Error(err, "failed to generate random password")
 				return []metav1.Condition{
@@ -50,7 +63,10 @@ func mysqlWriteState(
 			}
 
 			dbPasswordSecret.Data = map[string][]byte{
-				"password": []byte(password),
+				"rootUser":     []byte("root"),
+				"rootPassword": []byte(rootPassword),
+				"rootHost":     []byte("%"),
+				"password":     []byte(userPassword),
 			}
 			if err = client.Create(ctx, dbPasswordSecret); err != nil {
 				return []metav1.Condition{
@@ -101,6 +117,19 @@ func mysqlWriteState(
 			}
 		}
 		return mariadb.WriteState(ctx, client, specNamespacedName, desired)
+	case apiv2.MySQLTypeMysql:
+		var desired *mysqlv2.InnoDBCluster
+		desired, err = translatorv2.ToMysqlMySQLVendorSpec(ctx, wandb.Spec.MySQL, wandb, client.Scheme())
+		if err != nil {
+			return []metav1.Condition{
+				{
+					Type:   common.ReconciledType,
+					Status: metav1.ConditionFalse,
+					Reason: common.ControllerErrorReason,
+				},
+			}
+		}
+		return mysql.WriteState(ctx, client, specNamespacedName, desired)
 	}
 	return nil
 }
@@ -119,6 +148,8 @@ func mysqlReadState(
 	switch wandb.Spec.MySQL.DeploymentType {
 	case apiv2.MySQLTypeMariadb:
 		readConditions, newInfraConn = mariadb.ReadState(ctx, client, specNamespacedName, wandb)
+	case apiv2.MySQLTypeMysql:
+		readConditions, newInfraConn = mysql.ReadState(ctx, client, specNamespacedName, wandb)
 	default:
 		readConditions, newInfraConn = percona.ReadState(ctx, client, specNamespacedName, wandb)
 	}
@@ -146,6 +177,15 @@ func mysqlInferStatus(
 	switch wandb.Spec.MySQL.DeploymentType {
 	case apiv2.MySQLTypeMariadb:
 		updatedStatus, events, ctrlResult = mariadb.ComputeStatus(
+			ctx,
+			wandb.Spec.MySQL.Enabled,
+			oldConditions,
+			newConditions,
+			utils.Coalesce(newInfraConn, &oldInfraConn),
+			wandb.Generation,
+		)
+	case apiv2.MySQLTypeMysql:
+		updatedStatus, events, ctrlResult = mysql.ComputeStatus(
 			ctx,
 			wandb.Spec.MySQL.Enabled,
 			oldConditions,

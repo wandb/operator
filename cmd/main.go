@@ -30,6 +30,7 @@ import (
 	argov1alpha1 "github.com/wandb/operator/pkg/vendored/argo-rollouts/argoproj.io.rollouts/v1alpha1"
 	"github.com/wandb/operator/pkg/vendored/mariadb-operator/k8s.mariadb.com/v1alpha1"
 	miniov2 "github.com/wandb/operator/pkg/vendored/minio-operator/minio.min.io/v2"
+	mysqlv2 "github.com/wandb/operator/pkg/vendored/mysql-operator/v2"
 	redisv1beta2 "github.com/wandb/operator/pkg/vendored/redis-operator/redis/v1beta2"
 	redisreplicationv1beta2 "github.com/wandb/operator/pkg/vendored/redis-operator/redisreplication/v1beta2"
 	redissentinelv1beta2 "github.com/wandb/operator/pkg/vendored/redis-operator/redissentinel/v1beta2"
@@ -75,6 +76,7 @@ func init() {
 	utilruntime.Must(strimziv1.AddToScheme(scheme))
 	utilruntime.Must(miniov2.AddToScheme(scheme))
 	utilruntime.Must(chiv1.AddToScheme(scheme))
+	utilruntime.Must(mysqlv2.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 

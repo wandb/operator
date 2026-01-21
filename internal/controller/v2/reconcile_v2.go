@@ -29,6 +29,7 @@ import (
 	"github.com/samber/lo"
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/ctrlqueue"
+	"github.com/wandb/operator/internal/controller/infra/mysql/mysql"
 	"github.com/wandb/operator/internal/logx"
 	oputils "github.com/wandb/operator/pkg/utils"
 	strimziv1 "github.com/wandb/operator/pkg/vendored/strimzi-kafka/v1"
@@ -159,6 +160,9 @@ func Reconcile(
 	clickHouseReady := wandb.Status.ClickHouseStatus.Ready
 
 	if !redisReady || !mysqlReady || !kafkaReady || !minioReady || !clickHouseReady {
+		log := ctrl.LoggerFrom(ctx)
+		log.Info("Infra not ready in V2.Reconcile",
+			"redis", redisReady, "mysql", mysqlReady, "kafka", kafkaReady, "minio", minioReady, "clickhouse", clickHouseReady)
 		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
 	}
 
@@ -199,6 +203,7 @@ func consolidateResults(results []ctrl.Result) ctrl.Result {
 func ReconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest) (ctrl.Result, error) {
 	// Reconcile Wandb Manifest
 	logger := ctrl.LoggerFrom(ctx).WithName("reconcileWandbManifest")
+	logger.Info("Reconciling Wandb Manifest", "name", wandb.Name)
 	var result ctrl.Result
 	var err error
 
@@ -209,7 +214,8 @@ func ReconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 	clickHouseReady := wandb.Status.ClickHouseStatus.Ready
 
 	if !redisReady || !mysqlReady || !kafkaReady || !minioReady || !clickHouseReady {
-		logger.Info("Infra components not ready yet, requeuing for reconciliation")
+		logger.Info("Infra components not ready yet, requeuing for reconciliation",
+			"redis", redisReady, "mysql", mysqlReady, "kafka", kafkaReady, "minio", minioReady, "clickhouse", clickHouseReady)
 		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
 	}
 
@@ -223,6 +229,16 @@ func ReconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 	result, err = createKafkaTopics(ctx, client, wandb, manifest)
 	if err != nil {
 		return result, err
+	}
+
+	result, err = runMysqlInitJob(ctx, client, wandb, manifest)
+	if err != nil {
+		return result, err
+	}
+
+	if !wandb.Status.Wandb.MySQLInit.Succeeded {
+		logger.Info("Mysql init not yet successful", "Message", wandb.Status.Wandb.MySQLInit.Message)
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
 	result, err = runMigrations(ctx, client, wandb, manifest)
@@ -724,6 +740,140 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *apiv2.
 		})
 	}
 	return envVars, nil
+}
+
+func runMysqlInitJob(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest) (ctrl.Result, error) {
+	if wandb.Spec.MySQL.DeploymentType != apiv2.MySQLTypeMysql {
+		return ctrl.Result{}, nil
+	}
+
+	if wandb.Status.Wandb.MySQLInit.Succeeded {
+		return ctrl.Result{}, nil
+	}
+
+	logger := ctrl.LoggerFrom(ctx).WithName("mysqlInit")
+
+	jobName := fmt.Sprintf("%s-mysql-init", wandb.Name)
+	logger.Info("Checking for MySQL init job", "job", jobName)
+	job := &batchv1.Job{}
+	err := client.Get(ctx, types.NamespacedName{Name: jobName, Namespace: wandb.Namespace}, job)
+
+	if err != nil && !apiErrors.IsNotFound(err) {
+		return ctrl.Result{}, err
+	}
+
+	if apiErrors.IsNotFound(err) {
+		logger.Info("Creating MySQL init job")
+
+		specNamespacedName := mysqlSpecNamespacedName(wandb.Spec.MySQL)
+		nsnBuilder := mysql.CreateNsNameBuilder(types.NamespacedName{
+			Name:      specNamespacedName.Name,
+			Namespace: specNamespacedName.Namespace,
+		})
+		secretName := fmt.Sprintf("%s-db-password", specNamespacedName.Name)
+
+		// The job will:
+		// 1. Wait for MySQL to be reachable (optional, but we assume mysqlReady is true here)
+		// 2. Create the database wandb_local
+		// 3. Create the user wandb_local with the provided password
+		// 4. Grant privileges
+		// We use the root user and rootPassword from the secret.
+		mysqlCmd := "mysql -h $MYSQL_HOST -u root -p\"${MYSQL_ROOT_PASSWORD}\" -e " +
+			"\"CREATE DATABASE IF NOT EXISTS wandb_local; " +
+			"CREATE USER IF NOT EXISTS 'wandb_local'@'%%' IDENTIFIED BY '${MYSQL_PASSWORD}'; " +
+			"GRANT ALL PRIVILEGES ON wandb_local.* TO 'wandb_local'@'%%'; FLUSH PRIVILEGES;\""
+
+		// For InnoDBCluster, the service host is {name}.{namespace}.svc.cluster.local
+		mysqlHost := fmt.Sprintf("%s-mysql.%s.svc.cluster.local", nsnBuilder.ClusterName(), specNamespacedName.Namespace)
+
+		job = &batchv1.Job{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      jobName,
+				Namespace: wandb.Namespace,
+				Labels: map[string]string{
+					"app.kubernetes.io/managed-by": "wandb-operator",
+					"app.kubernetes.io/instance":   wandb.Name,
+					"app.kubernetes.io/component":  "mysql-init",
+				},
+			},
+			Spec: batchv1.JobSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						RestartPolicy: corev1.RestartPolicyOnFailure,
+						Containers: []corev1.Container{
+							{
+								Name:    "mysql-init",
+								Image:   "mysql:8.0", // Use a standard mysql image
+								Command: []string{"/bin/sh", "-c", mysqlCmd},
+								Env: []corev1.EnvVar{
+									{
+										Name:  "MYSQL_HOST",
+										Value: mysqlHost,
+									},
+									{
+										Name: "MYSQL_ROOT_PASSWORD",
+										ValueFrom: &corev1.EnvVarSource{
+											SecretKeyRef: &corev1.SecretKeySelector{
+												LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
+												Key:                  "rootPassword",
+											},
+										},
+									},
+									{
+										Name: "MYSQL_PASSWORD",
+										ValueFrom: &corev1.EnvVarSource{
+											SecretKeyRef: &corev1.SecretKeySelector{
+												LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
+												Key:                  "password",
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		if err := controllerutil.SetOwnerReference(wandb, job, client.Scheme()); err != nil {
+			return ctrl.Result{}, err
+		}
+
+		if err := client.Create(ctx, job); err != nil {
+			return ctrl.Result{}, err
+		}
+
+		wandb.Status.Wandb.MySQLInit.Name = jobName
+		wandb.Status.Wandb.MySQLInit.Succeeded = false
+		if err := client.Status().Update(ctx, wandb); err != nil {
+			return ctrl.Result{}, err
+		}
+
+		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
+	}
+
+	if job.Status.Succeeded > 0 {
+		logger.Info("MySQL init job succeeded")
+		wandb.Status.Wandb.MySQLInit.Succeeded = true
+		if err := client.Status().Update(ctx, wandb); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, nil
+	}
+
+	if job.Status.Failed > 0 {
+		logger.Info("MySQL init job failed")
+		wandb.Status.Wandb.MySQLInit.Failed = true
+		if err := client.Status().Update(ctx, wandb); err != nil {
+			return ctrl.Result{}, err
+		}
+		// We might want to return an error or just requeue
+		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
+	}
+
+	logger.Info("MySQL init job still running")
+	return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
 }
 
 func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest) (ctrl.Result, error) {

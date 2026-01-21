@@ -8220,6 +8220,18 @@ spec:
                       version:
                         type: string
                     type: object
+                  mysqlInit:
+                    default: {}
+                    properties:
+                      failed:
+                        type: boolean
+                      message:
+                        type: string
+                      name:
+                        type: string
+                      succeeded:
+                        type: boolean
+                    type: object
                 required:
                 - hostname
                 type: object

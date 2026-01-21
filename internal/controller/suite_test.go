@@ -31,6 +31,7 @@ import (
 	clickhousev1 "github.com/wandb/operator/pkg/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
 	argov1alpha1 "github.com/wandb/operator/pkg/vendored/argo-rollouts/argoproj.io.rollouts/v1alpha1"
 	miniov2 "github.com/wandb/operator/pkg/vendored/minio-operator/minio.min.io/v2"
+	mysqlv2 "github.com/wandb/operator/pkg/vendored/mysql-operator/v2"
 	pxcv1 "github.com/wandb/operator/pkg/vendored/percona-operator/pxc/v1"
 	redisv1beta2 "github.com/wandb/operator/pkg/vendored/redis-operator/redis/v1beta2"
 	redisreplicationv1beta2 "github.com/wandb/operator/pkg/vendored/redis-operator/redisreplication/v1beta2"
@@ -101,6 +102,9 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 
 	err = argov1alpha1.AddToScheme(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
+
+	err = mysqlv2.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
 	// +kubebuilder:scaffold:scheme
