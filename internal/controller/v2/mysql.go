@@ -12,7 +12,6 @@ import (
 	"github.com/wandb/operator/internal/controller/translator"
 	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
 	"github.com/wandb/operator/pkg/utils"
-	pkgutils "github.com/wandb/operator/pkg/utils"
 	"github.com/wandb/operator/pkg/vendored/mariadb-operator/k8s.mariadb.com/v1alpha1"
 	mysqlv2 "github.com/wandb/operator/pkg/vendored/mysql-operator/v2"
 	"github.com/wandb/operator/pkg/vendored/percona-operator/pxc/v1"
@@ -39,7 +38,7 @@ func mysqlWriteState(
 		if errors.IsNotFound(err) {
 			dbPasswordSecret.Name = fmt.Sprintf("%s-%s", specNamespacedName.Name, "db-password")
 			dbPasswordSecret.Namespace = specNamespacedName.Namespace
-			userPassword, err := pkgutils.GenerateRandomPassword(32)
+			userPassword, err := utils.GenerateRandomPassword(32)
 			if err != nil {
 				logger.Error(err, "failed to generate random password")
 				return []metav1.Condition{
@@ -50,7 +49,7 @@ func mysqlWriteState(
 					},
 				}
 			}
-			rootPassword, err := pkgutils.GenerateRandomPassword(32)
+			rootPassword, err := utils.GenerateRandomPassword(32)
 			if err != nil {
 				logger.Error(err, "failed to generate random password")
 				return []metav1.Condition{
