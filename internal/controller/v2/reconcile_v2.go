@@ -236,33 +236,16 @@ func ReconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 }
 
 func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest, logger logr.Logger) (ctrl.Result, error) {
-	// Create shared service account for all W&B applications
-	serviceAccountName := manifest.ServiceAccountName
-	sa := &corev1.ServiceAccount{}
-	err := client.Get(ctx, types.NamespacedName{Name: serviceAccountName, Namespace: wandb.Namespace}, sa)
-	if err != nil {
-		if apiErrors.IsNotFound(err) {
-			sa = &corev1.ServiceAccount{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      serviceAccountName,
-					Namespace: wandb.Namespace,
-					Labels: map[string]string{
-						"app.kubernetes.io/managed-by": "wandb-operator",
-						"app.kubernetes.io/instance":   wandb.Name,
-						"app.kubernetes.io/part-of":    "wandb",
-					},
-				},
-			}
-			if err := controllerutil.SetOwnerReference(wandb, sa, client.Scheme()); err != nil {
-				return ctrl.Result{}, err
-			}
-			if err := client.Create(ctx, sa); err != nil {
-				return ctrl.Result{}, err
-			}
-		} else {
-			return ctrl.Result{}, err
-		}
+	// Get the service account name for W&B applications.
+	// Defaults to "default" if not specified.
+	serviceAccountName := wandb.Spec.ServiceAccountName
+	if serviceAccountName == "" {
+		serviceAccountName = "default"
 	}
+
+	// Note: We do NOT create the ServiceAccount - it must already exist.
+	// Either it's the "default" ServiceAccount provided by Kubernetes,
+	// or it's a custom ServiceAccount created by the administrator.
 
 	// Create Role and RoleBinding for the service account
 	if err := createOrUpdateRole(ctx, client, wandb, serviceAccountName); err != nil {
@@ -523,13 +506,12 @@ func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb 
 		}
 
 		container := corev1.Container{
-			Name:      app.Name,
-			Image:     app.Image.GetImage(),
-			Env:       envVars,
-			Args:      app.Args,
-			Command:   app.Command,
-			Ports:     Ports,
-			Resources: app.Resources,
+			Name:    app.Name,
+			Image:   app.Image.GetImage(),
+			Env:     envVars,
+			Args:    app.Args,
+			Command: app.Command,
+			Ports:   Ports,
 		}
 
 		if app.StartupProbe != nil && app.StartupProbe.HTTPGet != nil {
@@ -986,8 +968,12 @@ func generateSecrets(ctx context.Context, client ctrlClient.Client, wandb *apiv2
 	}
 	for _, gs := range manifest.GeneratedSecrets {
 		// Deterministic secret name scoped to the CR instance
-		secretName := fmt.Sprintf("%s-%s", wandb.Name, gs.Name)
-		keyName := "value"
+		// If UseExactName is true, use the exact name without prefixing
+		secretName := gs.Name
+		if !gs.UseExactName {
+			secretName = fmt.Sprintf("%s-%s", wandb.Name, gs.Name)
+		}
+		keyName := "key"
 		sec := &corev1.Secret{}
 		err := client.Get(ctx, types.NamespacedName{Name: secretName, Namespace: wandb.Namespace}, sec)
 		if err != nil {
@@ -1159,16 +1145,8 @@ func createOrUpdateRole(
 			},
 			{
 				APIGroups: []string{""},
-				Resources: []string{
-					"namespaces",
-					"pods",
-					"pods/log",
-					"configmaps",
-					"services",
-					"serviceaccounts",
-					"events",
-				},
-				Verbs: []string{"get", "list"},
+				Resources: []string{"namespaces"},
+				Verbs:     []string{"get", "list"},
 			},
 		},
 	}

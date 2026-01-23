@@ -9,7 +9,7 @@ settings = {
     "installMinio": False,
     "installWandb": True,
     "wandbCRD": "wandb-default-v1",
-    installTelemetry": False,
+    "installTelemetry": False,
     "logFormat": "pretty",  # pretty, text, json
 }
 

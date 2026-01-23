@@ -11,10 +11,8 @@ import (
 // It is intended to be a direct mapping of the YAML document for decoding via
 // gopkg.in/yaml.v3 or sigs.k8s.io/yaml.
 type Manifest struct {
-	RequiredOperatorVersion string `yaml:"requiredOperatorVersion"`
+	RequiredOperatorVersion string          `yaml:"requiredOperatorVersion"`
 	Features                map[string]bool `yaml:"features,omitempty"`
-	// ServiceAccountName is the Kubernetes ServiceAccount used by all W&B application pods.
-	ServiceAccountName string    `yaml:"serviceAccountName"`
 	// Prefer plural, but accept singular key as found in some manifests.
 	GeneratedSecrets []GeneratedSecret `yaml:"generatedSecrets,omitempty"`
 	// CommonEnvvars defines reusable groups of env vars that can be referenced
@@ -40,7 +38,7 @@ type GeneratedSecret struct {
 	CharacterType string `yaml:"type"`
 	// UseExactName when true, creates the secret with the exact name specified without prefixing it with the CR name.
 	// This is useful for secrets that need to be referenced by external systems with a fixed name.
-	UseExactName  bool   `yaml:"useExactName,omitempty"`
+	UseExactName bool `yaml:"useExactName,omitempty"`
 }
 
 // SectionRef represents simple sections that commonly contain a single
@@ -121,10 +119,9 @@ type Application struct {
 	Kafka          *AppKafkaSection `yaml:"kafka,omitempty"`
 	Service        *ServiceSpec     `yaml:"service,omitempty"`
 	Ports          []ContainerPort  `yaml:"ports,omitempty"`
-	LivenessProbe  *corev1.Probe               `yaml:"livenessProbe,omitempty"`
-	ReadinessProbe *corev1.Probe               `yaml:"readinessProbe,omitempty"`
-	StartupProbe   *corev1.Probe               `yaml:"startupProbe,omitempty"`
-	Resources      corev1.ResourceRequirements `yaml:"resources,omitempty"`
+	LivenessProbe  *corev1.Probe    `yaml:"livenessProbe,omitempty"`
+	ReadinessProbe *corev1.Probe    `yaml:"readinessProbe,omitempty"`
+	StartupProbe   *corev1.Probe    `yaml:"startupProbe,omitempty"`
 	// Files allows injecting files into the application's container by mounting
 	// data from ConfigMaps. Each entry may either inline file contents (stored
 	// into an operator-managed ConfigMap) or reference an existing ConfigMap.
@@ -217,6 +214,7 @@ func GetServerManifest(version string) (Manifest, error) {
 	}
 	return manifest, nil
 }
+
 // JWTToken defines a JWT token to be mounted into the application's container.
 // This abstraction supports multiple token sources: Kubernetes service account tokens,
 // pre-created secrets, or cloud provider token stores (CSI).

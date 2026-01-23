@@ -97,6 +97,14 @@ type WeightsAndBiasesSpec struct {
 	// +kubebuilder:default=false
 	EnableOIDCDiscovery bool `json:"enableOIDCDiscovery,omitempty"`
 
+	// ServiceAccountName specifies the name of the Kubernetes ServiceAccount to use for W&B application pods.
+	// If not specified, defaults to "default". The operator will create the necessary Role and RoleBinding
+	// for this ServiceAccount to access secrets. The ServiceAccount itself must already exist (either the
+	// default one provided by Kubernetes, or one created by the administrator).
+	// +optional
+	// +kubebuilder:default="default"
+	ServiceAccountName string `json:"serviceAccountName,omitempty"`
+
 	Wandb WandbAppSpec `json:"wandb,omitempty"`
 
 	Affinity    *corev1.Affinity     `json:"affinity,omitempty"`

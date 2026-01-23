@@ -1,6 +1,5 @@
 ---
 requiredOperatorVersion: ^2.0.0
-serviceAccountName: weights-and-biases
 
 features:
   filestreamQueue: false
@@ -229,7 +228,7 @@ commonEnvvars:
     - name: GORILLA_CUSTOMER_SECRET_STORE_K8S_CONFIG_NAMESPACE
       value: "default"
     - name: GORILLA_INTERNAL_JWT_SUBJECTS_TO_ISSUERS
-      value: '{"system:serviceaccount:default:weights-and-biases": "https://kubernetes.default.svc.cluster.local"}'
+      value: '{"system:serviceaccount:default:default": "https://kubernetes.default.svc.cluster.local"}'
   clickhouse:
     - name: WF_CLICKHOUSE_HOST
       sources:
