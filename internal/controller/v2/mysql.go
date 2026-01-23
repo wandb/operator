@@ -149,7 +149,7 @@ func mysqlReadState(
 		readConditions, newInfraConn = mariadb.ReadState(ctx, client, specNamespacedName, wandb)
 	case apiv2.MySQLTypeMysql:
 		readConditions, newInfraConn = mysql.ReadState(ctx, client, specNamespacedName, wandb)
-	default:
+	case apiv2.MySQLTypePercona:
 		readConditions, newInfraConn = percona.ReadState(ctx, client, specNamespacedName, wandb)
 	}
 
@@ -192,7 +192,7 @@ func mysqlInferStatus(
 			utils.Coalesce(newInfraConn, &oldInfraConn),
 			wandb.Generation,
 		)
-	default:
+	case apiv2.MySQLTypePercona:
 		updatedStatus, events, ctrlResult = percona.ComputeStatus(
 			ctx,
 			wandb.Spec.MySQL.Enabled,
