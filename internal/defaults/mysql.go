@@ -35,7 +35,7 @@ func BuildMySQLDefaults(size Size, ownerNamespace string) (translator.MySQLConfi
 		Enabled:        true,
 		Namespace:      ownerNamespace,
 		Name:           DefaultMysqlName,
-		DeploymentType: apiv2.MySQLTypeMariadb,
+		DeploymentType: apiv2.MySQLTypeMysql,
 	}
 
 	switch size {
