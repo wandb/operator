@@ -15,7 +15,7 @@ These types were generated to enable the W&B operator to manage MySQL InnoDB clu
 
 ### Source CRDs
 
-- **MySQL Operator CRDs**: `https://github.com/mysql/mysql-operator/blob/8.0.44-2.0.20/deploy/charts/mysql-operator/templates/deploy-crds.yaml`
+- **MySQL Operator CRDs**: `https://github.com/mysql/mysql-operator/blob/8.0.44-2.0.20/deploy/deploy-crds.yaml`
 
 ### Generation Steps
 
