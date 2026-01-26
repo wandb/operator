@@ -1,20 +1,9 @@
 package v1alpha1
 
 import (
-	"fmt"
-	"reflect"
-	"time"
-
-	"github.com/mariadb-operator/mariadb-operator/v25/pkg/docker"
-	"github.com/mariadb-operator/mariadb-operator/v25/pkg/environment"
-	"github.com/mariadb-operator/mariadb-operator/v25/pkg/galera/recovery"
-	"github.com/mariadb-operator/mariadb-operator/v25/pkg/statefulset"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/meta"
-	"k8s.io/apimachinery/pkg/api/resource"
+	k8s_mariadb_com "github.com/wandb/operator/pkg/vendored/mariadb-operator/k8s.mariadb.com"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/utils/ptr"
 )
 
 // SST is the Snapshot State Transfer used when new Pods join the cluster.
@@ -31,28 +20,8 @@ const (
 )
 
 // Validate returns an error if the SST is not valid.
-func (s SST) Validate() error {
-	switch s {
-	case SSTMariaBackup, SSTRsync, SSTMysqldump:
-		return nil
-	default:
-		return fmt.Errorf("invalid SST: %v", s)
-	}
-}
 
 // MariaDBFormat formats the SST so it can be used in Galera config files.
-func (s SST) MariaDBFormat() (string, error) {
-	switch s {
-	case SSTRsync:
-		return "rsync", nil
-	case SSTMariaBackup:
-		return "mariabackup", nil
-	case SSTMysqldump:
-		return "mysqldump", nil
-	default:
-		return "", fmt.Errorf("invalid SST: %v", s)
-	}
-}
 
 // PrimaryGalera is the Galera configuration for the primary node.
 type PrimaryGalera struct {
@@ -67,14 +36,6 @@ type PrimaryGalera struct {
 }
 
 // SetDefaults sets reasonable defaults.
-func (r *PrimaryGalera) SetDefaults() {
-	if r.PodIndex == nil {
-		r.PodIndex = ptr.To(0)
-	}
-	if r.AutoFailover == nil {
-		r.AutoFailover = ptr.To(true)
-	}
-}
 
 // GaleraInitJob defines a Job used to be used to initialize the Galera cluster.
 type GaleraInitJob struct {
@@ -161,67 +122,10 @@ type GaleraRecovery struct {
 }
 
 // Validate determines whether a GaleraRecovery is valid.
-func (g *GaleraRecovery) Validate(mdb *MariaDB) error {
-	if !g.Enabled {
-		return nil
-	}
-	if g.MinClusterSize != nil {
-		_, err := intstr.GetScaledValueFromIntOrPercent(g.MinClusterSize, 0, false)
-		if err != nil {
-			return err
-		}
-		if g.MinClusterSize.Type == intstr.Int {
-			minClusterSize := g.MinClusterSize.IntValue()
-			if minClusterSize < 0 || minClusterSize > int(mdb.Spec.Replicas) {
-				return fmt.Errorf("'spec.galera.recovery.minClusterSize' out of 'spec.replicas' bounds: %d", minClusterSize)
-			}
-		}
-	}
-	if g.ForceClusterBootstrapInPod != nil {
-		if err := statefulset.ValidPodName(mdb.ObjectMeta, int(mdb.Spec.Replicas), *g.ForceClusterBootstrapInPod); err != nil {
-			return fmt.Errorf("'spec.galera.recovery.forceClusterBootstrapInPod' invalid: %v", err)
-		}
-	}
-	return nil
-}
 
 // SetDefaults sets reasonable defaults.
-func (g *GaleraRecovery) SetDefaults(mdb *MariaDB) {
-	if g.MinClusterSize == nil {
-		g.MinClusterSize = ptr.To(intstr.FromInt(1))
-	}
-	if g.ClusterMonitorInterval == nil {
-		g.ClusterMonitorInterval = ptr.To(metav1.Duration{Duration: 10 * time.Second})
-	}
-	if g.ClusterHealthyTimeout == nil {
-		g.ClusterHealthyTimeout = ptr.To(metav1.Duration{Duration: 30 * time.Second})
-	}
-	if g.ClusterBootstrapTimeout == nil {
-		g.ClusterBootstrapTimeout = ptr.To(metav1.Duration{Duration: 10 * time.Minute})
-	}
-	if g.ClusterUpscaleTimeout == nil {
-		g.ClusterUpscaleTimeout = ptr.To(metav1.Duration{Duration: 5 * time.Minute})
-	}
-	if g.ClusterDownscaleTimeout == nil {
-		g.ClusterDownscaleTimeout = ptr.To(metav1.Duration{Duration: 5 * time.Minute})
-	}
-	if g.PodRecoveryTimeout == nil {
-		g.PodRecoveryTimeout = ptr.To(metav1.Duration{Duration: 5 * time.Minute})
-	}
-	if g.PodSyncTimeout == nil {
-		g.PodSyncTimeout = ptr.To(metav1.Duration{Duration: 5 * time.Minute})
-	}
-}
 
 // HasMinClusterSize returns whether the current cluster has the minimum number of replicas. If not, a cluster recovery will be performed.
-func (g *GaleraRecovery) HasMinClusterSize(currentSize int, mdb *MariaDB) (bool, error) {
-	minClusterSize := ptr.Deref(g.MinClusterSize, intstr.FromInt(1))
-	scaled, err := intstr.GetScaledValueFromIntOrPercent(&minClusterSize, int(mdb.Spec.Replicas), true)
-	if err != nil {
-		return false, err
-	}
-	return currentSize >= scaled, nil
-}
 
 // GaleraConfig defines storage options for the Galera configuration files.
 type GaleraConfig struct {
@@ -237,25 +141,6 @@ type GaleraConfig struct {
 }
 
 // SetDefaults sets reasonable defaults.
-func (g *GaleraConfig) SetDefaults() {
-	if g.ReuseStorageVolume == nil {
-		g.ReuseStorageVolume = ptr.To(false)
-	}
-	if !ptr.Deref(g.ReuseStorageVolume, false) && g.VolumeClaimTemplate == nil {
-		g.VolumeClaimTemplate = &VolumeClaimTemplate{
-			PersistentVolumeClaimSpec: PersistentVolumeClaimSpec{
-				Resources: corev1.VolumeResourceRequirements{
-					Requests: corev1.ResourceList{
-						"storage": resource.MustParse("100Mi"),
-					},
-				},
-				AccessModes: []corev1.PersistentVolumeAccessMode{
-					corev1.ReadWriteOnce,
-				},
-			},
-		}
-	}
-}
 
 // Galera allows you to enable multi-master HA via Galera in your MariaDB cluster.
 type Galera struct {
@@ -269,57 +154,6 @@ type Galera struct {
 }
 
 // SetDefaults sets reasonable defaults.
-func (g *Galera) SetDefaults(mdb *MariaDB, env *environment.OperatorEnv) error {
-	if g.SST == "" {
-		g.SST = SSTMariaBackup
-	}
-	if g.AvailableWhenDonor == nil {
-		g.AvailableWhenDonor = ptr.To(false)
-	}
-	if g.GaleraLibPath == "" {
-		g.GaleraLibPath = env.MariadbGaleraLibPath
-	}
-	if g.ReplicaThreads == 0 {
-		g.ReplicaThreads = 1
-	}
-
-	if reflect.ValueOf(g.InitContainer).IsZero() {
-		g.InitContainer = InitContainer{
-			Image: env.MariadbOperatorImage,
-		}
-	}
-	g.Primary.SetDefaults()
-	if err := g.Agent.SetDefaults(mdb, env); err != nil {
-		return fmt.Errorf("error setting agent defaults: %v", err)
-	}
-	g.Config.SetDefaults()
-
-	if g.Recovery == nil {
-		g.Recovery = &GaleraRecovery{
-			Enabled: true,
-		}
-	}
-	if ptr.Deref(g.Recovery, GaleraRecovery{}).Enabled {
-		g.Recovery.SetDefaults(mdb)
-	}
-
-	autoUpdateDataPlane := ptr.Deref(mdb.Spec.UpdateStrategy.AutoUpdateDataPlane, false)
-	if autoUpdateDataPlane {
-		initBumped, err := docker.SetTagOrDigest(env.MariadbOperatorImage, g.InitContainer.Image)
-		if err != nil {
-			return fmt.Errorf("error bumping Galera init image: %v", err)
-		}
-		g.InitContainer.Image = initBumped
-
-		agentBumped, err := docker.SetTagOrDigest(env.MariadbOperatorImage, g.Agent.Image)
-		if err != nil {
-			return fmt.Errorf("error bumping Galera agent image: %v", err)
-		}
-		g.Agent.Image = agentBumped
-	}
-
-	return nil
-}
 
 // GaleraSpec is the Galera desired state specification.
 type GaleraSpec struct {
@@ -384,9 +218,9 @@ type GaleraBootstrapStatus struct {
 // GaleraRecoveryStatus is the current state of the Galera recovery process.
 type GaleraRecoveryStatus struct {
 	// State is a per Pod representation of the Galera state file (grastate.dat).
-	State map[string]*recovery.GaleraState `json:"state,omitempty"`
+	State map[string]*k8s_mariadb_com.GaleraState `json:"state,omitempty"`
 	// State is a per Pod representation of the sequence recovery process.
-	Recovered map[string]*recovery.Bootstrap `json:"recovered,omitempty"`
+	Recovered map[string]*k8s_mariadb_com.Bootstrap `json:"recovered,omitempty"`
 	// Bootstrap indicates when and in which Pod the cluster bootstrap process has been performed.
 	Bootstrap *GaleraBootstrapStatus `json:"bootstrap,omitempty"`
 	// PodsRestarted that the Pods have been restarted after the cluster bootstrap.
@@ -395,28 +229,13 @@ type GaleraRecoveryStatus struct {
 
 // HasGaleraReadyCondition indicates whether the MariaDB object has a GaleraReady status condition.
 // This means that the Galera cluster is healthy.
-func (m *MariaDB) HasGaleraReadyCondition() bool {
-	return meta.IsStatusConditionTrue(m.Status.Conditions, ConditionTypeGaleraReady)
-}
 
 // HasGaleraNotReadyCondition indicates whether the MariaDB object has a non GaleraReady status condition.
 // This means that the Galera cluster is not healthy.
-func (m *MariaDB) HasGaleraNotReadyCondition() bool {
-	return meta.IsStatusConditionFalse(m.Status.Conditions, ConditionTypeGaleraReady)
-}
 
 // HasGaleraConfiguredCondition indicates whether the MariaDB object has a GaleraConfigured status condition.
 // This means that the cluster has been successfully configured the first time.
-func (m *MariaDB) HasGaleraConfiguredCondition() bool {
-	return meta.IsStatusConditionTrue(m.Status.Conditions, ConditionTypeGaleraConfigured)
-}
 
 // IsGaleraInitialized indicates that the Galera init Job has successfully completed.
-func (m *MariaDB) IsGaleraInitialized() bool {
-	return meta.IsStatusConditionTrue(m.Status.Conditions, ConditionTypeGaleraInitialized)
-}
 
 // IsGaleraInitializing indicates that the Galera init Job is running.
-func (m *MariaDB) IsGaleraInitializing() bool {
-	return meta.IsStatusConditionFalse(m.Status.Conditions, ConditionTypeGaleraInitialized)
-}

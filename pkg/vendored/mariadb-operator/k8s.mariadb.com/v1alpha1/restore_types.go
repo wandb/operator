@@ -1,14 +1,8 @@
 package v1alpha1
 
 import (
-	"errors"
-	"fmt"
-	"time"
-
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 )
 
 // RestoreSource defines a source for restoring a logical backup.
@@ -35,44 +29,6 @@ type RestoreSource struct {
 	// +optional
 	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:booleanSwitch","urn:alm:descriptor:com.tectonic.ui:advanced"}
 	StagingStorage *BackupStagingStorage `json:"stagingStorage,omitempty" webhook:"inmutable"`
-}
-
-func (r *RestoreSource) Validate() error {
-	if r.BackupRef == nil && r.S3 == nil && r.Volume == nil {
-		return errors.New("unable to determine restore source")
-	}
-	if r.S3 == nil && r.StagingStorage != nil {
-		return errors.New("'spec.stagingStorage' may only be specified when 'spec.s3' is set")
-	}
-	return nil
-}
-
-func (r *RestoreSource) IsDefaulted() bool {
-	return r.Volume != nil
-}
-
-func (r *RestoreSource) SetDefaults(restore *Restore) {
-	if r.S3 != nil {
-		stagingStorage := ptr.Deref(r.StagingStorage, BackupStagingStorage{})
-		r.Volume = ptr.To(stagingStorage.VolumeOrEmptyDir(restore.StagingPVCKey()))
-	}
-}
-
-func (r *RestoreSource) SetDefaultsWithBackup(backup *Backup) error {
-	volume, err := backup.Volume()
-	if err != nil {
-		return fmt.Errorf("error getting Backup volume: %v", err)
-	}
-	r.Volume = &volume
-	r.S3 = backup.Spec.Storage.S3
-	return nil
-}
-
-func (r *RestoreSource) TargetRecoveryTimeOrDefault() time.Time {
-	if r.TargetRecoveryTime != nil {
-		return r.TargetRecoveryTime.Time
-	}
-	return time.Now()
 }
 
 // RestoreSpec defines the desired state of restore
@@ -126,13 +82,6 @@ type RestoreStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
-func (r *RestoreStatus) SetCondition(condition metav1.Condition) {
-	if r.Conditions == nil {
-		r.Conditions = make([]metav1.Condition, 0)
-	}
-	meta.SetStatusCondition(&r.Conditions, condition)
-}
-
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:shortName=rmdb
 // +kubebuilder:subresource:status
@@ -151,17 +100,6 @@ type Restore struct {
 	Status RestoreStatus `json:"status,omitempty"`
 }
 
-func (r *Restore) IsComplete() bool {
-	return meta.IsStatusConditionTrue(r.Status.Conditions, ConditionTypeComplete)
-}
-
-func (r *Restore) SetDefaults(mariadb *MariaDB) {
-	if r.Spec.BackoffLimit == 0 {
-		r.Spec.BackoffLimit = 5
-	}
-	r.Spec.JobPodTemplate.SetDefaults(r.ObjectMeta, mariadb.ObjectMeta)
-}
-
 // +kubebuilder:object:root=true
 
 // RestoreList contains a list of restore
@@ -169,8 +107,4 @@ type RestoreList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []Restore `json:"items"`
-}
-
-func init() {
-	SchemeBuilder.Register(&Restore{}, &RestoreList{})
 }

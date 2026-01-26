@@ -1,13 +1,7 @@
 package v1alpha1
 
 import (
-	"errors"
-
-	"github.com/mariadb-operator/mariadb-operator/v25/pkg/statefulset"
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 var (
@@ -22,61 +16,8 @@ type ConnectionRefs struct {
 }
 
 // Host returns the host address to connect to.
-func (r *ConnectionRefs) Host(c *Connection) (*string, error) {
-	if r.ExternalMariaDB != nil {
-		return &r.ExternalMariaDB.Spec.Host, nil
-	}
-	objMeta, err := r.objectMeta()
-	if err != nil {
-		return nil, err
-	}
-	if c.Spec.ServiceName != nil {
-		svcMeta := metav1.ObjectMeta{
-			Name:      *c.Spec.ServiceName,
-			Namespace: objMeta.Namespace,
-		}
-		return ptr.To(statefulset.ServiceFQDN(svcMeta)), nil
-	}
-
-	// Use the primary Service when HA is enabled to ensure writes go to the primary node
-	// Only apply this for direct MariaDB connections, not for MaxScale connections.
-	if r.MaxScale == nil && r.MariaDB != nil && r.MariaDB.IsHAEnabled() {
-		primarySvcMeta := metav1.ObjectMeta{
-			Name:      r.MariaDB.PrimaryServiceKey().Name,
-			Namespace: objMeta.Namespace,
-		}
-		return ptr.To(statefulset.ServiceFQDN(primarySvcMeta)), nil
-	}
-
-	return ptr.To(statefulset.ServiceFQDN(*objMeta)), nil
-}
 
 // Port returns the port to connect to.
-func (r *ConnectionRefs) Port() (*int32, error) {
-	if r.ExternalMariaDB != nil {
-		return &r.ExternalMariaDB.Spec.Port, nil
-	}
-	if r.MaxScale != nil {
-		return r.MaxScale.DefaultPort()
-	}
-	if r.MariaDB != nil {
-		return &r.MariaDB.Spec.Port, nil
-	}
-	return nil, errors.New("port not found")
-}
-
-func (r *ConnectionRefs) objectMeta() (*metav1.ObjectMeta, error) {
-	if r.ExternalMariaDB != nil {
-		return &r.ExternalMariaDB.ObjectMeta, nil
-	}
-	if r.MaxScale != nil {
-		return &r.MaxScale.ObjectMeta, nil
-	}
-	if r.MariaDB != nil {
-		return &r.MariaDB.ObjectMeta, nil
-	}
-	return nil, errors.New("references not found")
-}
 
 // ConnectionSpec defines the desired state of Connection
 type ConnectionSpec struct {
@@ -126,13 +67,6 @@ type ConnectionStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
-func (c *ConnectionStatus) SetCondition(condition metav1.Condition) {
-	if c.Conditions == nil {
-		c.Conditions = make([]metav1.Condition, 0)
-	}
-	meta.SetStatusCondition(&c.Conditions, condition)
-}
-
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:shortName=cmdb
 // +kubebuilder:subresource:status
@@ -151,50 +85,6 @@ type Connection struct {
 	Status ConnectionStatus `json:"status,omitempty"`
 }
 
-func (c *Connection) IsReady() bool {
-	return meta.IsStatusConditionTrue(c.Status.Conditions, ConditionTypeReady)
-}
-
-func (c *Connection) SetDefaults(refs *ConnectionRefs) error {
-	if c.Spec.Host == "" {
-		host, err := refs.Host(c)
-		if err != nil {
-			return err
-		}
-		c.Spec.Host = *host
-	}
-	if c.Spec.Port == 0 {
-		port, err := refs.Port()
-		if err != nil {
-			return err
-		}
-		c.Spec.Port = *port
-	}
-	if c.Spec.SecretName == nil {
-		c.Spec.SecretName = &c.Name
-	}
-	if c.Spec.SecretTemplate == nil {
-		c.Spec.SecretTemplate = &SecretTemplate{
-			Key: &defaultConnSecretKey,
-		}
-	}
-	return nil
-}
-
-func (c *Connection) SecretName() string {
-	if c.Spec.SecretName != nil {
-		return *c.Spec.SecretName
-	}
-	return c.Name
-}
-
-func (c *Connection) SecretKey() string {
-	if c.Spec.SecretTemplate.Key != nil {
-		return *c.Spec.SecretTemplate.Key
-	}
-	return defaultConnSecretKey
-}
-
 //+kubebuilder:object:root=true
 
 // ConnectionList contains a list of Connection
@@ -205,14 +95,3 @@ type ConnectionList struct {
 }
 
 // ListItems gets a copy of the Items slice.
-func (m *ConnectionList) ListItems() []client.Object {
-	items := make([]client.Object, len(m.Items))
-	for i, item := range m.Items {
-		items[i] = item.DeepCopy()
-	}
-	return items
-}
-
-func init() {
-	SchemeBuilder.Register(&Connection{}, &ConnectionList{})
-}

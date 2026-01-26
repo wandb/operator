@@ -1,15 +1,8 @@
 package v1alpha1
 
 import (
-	"fmt"
-
-	"github.com/mariadb-operator/mariadb-operator/v25/pkg/docker"
-	"github.com/mariadb-operator/mariadb-operator/v25/pkg/environment"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // ExternalTLS defines the TLS configuration for external MariaDB instances.
@@ -88,17 +81,8 @@ type ExternalMariaDBStatus struct {
 }
 
 // SetCondition sets a status condition to ExternalMariaDB
-func (s *ExternalMariaDBStatus) SetCondition(condition metav1.Condition) {
-	if s.Conditions == nil {
-		s.Conditions = make([]metav1.Condition, 0)
-	}
-	meta.SetStatusCondition(&s.Conditions, condition)
-}
 
 // IsHAEnabled indicates whether the MariaDB instance has Galera enabled
-func (m *ExternalMariaDB) IsGaleraEnabled() bool {
-	return m.Status.IsGaleraEnabled
-}
 
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:shortName=emdb
@@ -119,87 +103,30 @@ type ExternalMariaDB struct {
 
 // nolint:gocyclo
 // SetDefaults sets reasonable defaults.
-func (m *ExternalMariaDB) SetDefaults(env *environment.OperatorEnv) error {
-	if m.Spec.Port == 0 {
-		m.Spec.Port = 3306
-	}
-
-	return nil
-}
 
 // IsReady indicates whether the External MariaDB instance is ready
-func (m *ExternalMariaDB) IsReady() bool {
-	return meta.IsStatusConditionTrue(m.Status.Conditions, ConditionTypeReady)
-}
 
 // Get image pull policy
-func (m *ExternalMariaDB) GetImagePullPolicy() corev1.PullPolicy {
-	return m.Spec.ImagePullPolicy
-}
 
 // Get image pull secrets
-func (m *ExternalMariaDB) GetImagePullSecrets() []LocalObjectReference {
-	return m.Spec.ImagePullSecrets
-}
 
 // Get image
-func (m *ExternalMariaDB) GetImage(env *environment.OperatorEnv) string {
-	if m.Spec.Image != "" {
-		return m.Spec.Image
-	}
-	if docker.HasTagOrDigest(env.RelatedMariadbImageName) {
-		return env.RelatedMariadbImageName
-	}
-	version := m.Status.Version
-	if version == "" {
-		version = "latest"
-	}
-	return fmt.Sprintf("%s:%s", env.RelatedMariadbImageName, version)
-}
 
 // IsTLSRequired indicates whether TLS is enabled and must be enforced for all connections.
-func (m *ExternalMariaDB) IsTLSRequired() bool {
-	return false // ExternalMariaDB does not make use of this, as it is a internal server setting
-}
 
 // IsTLSEnabled indicates whether TLS is enabled
-func (m *ExternalMariaDB) IsTLSEnabled() bool {
-	return ptr.Deref(m.Spec.TLS, ExternalTLS{}).Enabled
-}
 
 // IsTLSMutual specifies whether TLS must be mutual between server and client.
-func (m *ExternalMariaDB) IsTLSMutual() bool {
-	if !m.IsTLSEnabled() {
-		return false
-	}
-	tls := ptr.Deref(m.Spec.TLS, ExternalTLS{})
-	return ptr.Deref(tls.Mutual, true)
-}
 
 // Get MariaDB hostname
-func (m *ExternalMariaDB) GetHost() string {
-	return m.Spec.Host
-}
 
 // Get MariaDB port
-func (m *ExternalMariaDB) GetPort() int32 {
-	return m.Spec.Port
-}
 
 // Get MariaDB replicas
-func (m *ExternalMariaDB) GetReplicas() int32 {
-	return 0 // ExternalMariaDB does not make use of this
-}
 
 // Get MariaDB Superuser name
-func (m *ExternalMariaDB) GetSUName() string {
-	return ptr.Deref(m.Spec.Username, "root")
-}
 
 // Get MariaDB Superuser credentials
-func (m *ExternalMariaDB) GetSUCredential() *SecretKeySelector {
-	return m.Spec.PasswordSecretKeyRef
-}
 
 // +kubebuilder:object:root=true
 
@@ -211,14 +138,3 @@ type ExternalMariaDBList struct {
 }
 
 // ListItems gets a copy of the Items slice.
-func (m *ExternalMariaDBList) ListItems() []client.Object {
-	items := make([]client.Object, len(m.Items))
-	for i, item := range m.Items {
-		items[i] = item.DeepCopy()
-	}
-	return items
-}
-
-func init() {
-	SchemeBuilder.Register(&ExternalMariaDB{}, &ExternalMariaDBList{})
-}

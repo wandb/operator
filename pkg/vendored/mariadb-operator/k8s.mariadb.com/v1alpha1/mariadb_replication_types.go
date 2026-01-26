@@ -1,16 +1,7 @@
 package v1alpha1
 
 import (
-	"errors"
-	"fmt"
-	"reflect"
-	"time"
-
-	"github.com/mariadb-operator/mariadb-operator/v25/pkg/docker"
-	"github.com/mariadb-operator/mariadb-operator/v25/pkg/environment"
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 )
 
 // WaitPoint defines whether the transaction should wait for ACK before committing to the storage engine.
@@ -27,26 +18,8 @@ const (
 )
 
 // Validate returns an error if the WaitPoint is not valid.
-func (w WaitPoint) Validate() error {
-	switch w {
-	case WaitPointAfterSync, WaitPointAfterCommit:
-		return nil
-	default:
-		return fmt.Errorf("invalid WaitPoint: %v", w)
-	}
-}
 
 // MariaDBFormat formats the WaitPoint so it can be used in MariaDB config files.
-func (w WaitPoint) MariaDBFormat() (string, error) {
-	switch w {
-	case WaitPointAfterSync:
-		return "AFTER_SYNC", nil
-	case WaitPointAfterCommit:
-		return "AFTER_COMMIT", nil
-	default:
-		return "", fmt.Errorf("invalid WaitPoint: %v", w)
-	}
-}
 
 // Gtid indicates which Global Transaction ID (GTID) position mode should be used when connecting a replica to the master.
 // See: https://mariadb.com/kb/en/gtid/#using-current_pos-vs-slave_pos.
@@ -60,26 +33,8 @@ const (
 )
 
 // Validate returns an error if the Gtid is not valid.
-func (g Gtid) Validate() error {
-	switch g {
-	case GtidCurrentPos, GtidSlavePos:
-		return nil
-	default:
-		return fmt.Errorf("invalid Gtid: %v", g)
-	}
-}
 
 // MariaDBFormat formats the Gtid so it can be used in MariaDB config files.
-func (g Gtid) MariaDBFormat() (string, error) {
-	switch g {
-	case GtidCurrentPos:
-		return "current_pos", nil
-	case GtidSlavePos:
-		return "slave_pos", nil
-	default:
-		return "", fmt.Errorf("invalid Gtid: %v", g)
-	}
-}
 
 // PrimaryReplication is the replication configuration and operation parameters for the primary.
 type PrimaryReplication struct {
@@ -101,17 +56,6 @@ type PrimaryReplication struct {
 
 // SetDefaults fills the current PrimaryReplication object with DefaultReplicationSpec.
 // This enables having minimal PrimaryReplication objects and provides sensible defaults.
-func (r *PrimaryReplication) SetDefaults() {
-	if r.PodIndex == nil {
-		r.PodIndex = ptr.To(0)
-	}
-	if r.AutoFailover == nil {
-		r.AutoFailover = ptr.To(true)
-	}
-	if r.AutoFailoverDelay == nil {
-		r.AutoFailoverDelay = ptr.To(metav1.Duration{})
-	}
-}
 
 // ReplicaBootstrapFrom defines the sources for bootstrapping new relicas.
 type ReplicaBootstrapFrom struct {
@@ -196,31 +140,8 @@ type ReplicaReplication struct {
 
 // SetDefaults fills the current ReplicaReplication object with DefaultReplicationSpec.
 // This enables having minimal ReplicaReplication objects and provides sensible defaults.
-func (r *ReplicaReplication) SetDefaults(mdb *MariaDB) {
-	if r.ReplPasswordSecretKeyRef == nil {
-		r.ReplPasswordSecretKeyRef = ptr.To(mdb.ReplPasswordSecretKeyRef())
-	}
-	if r.Gtid == nil {
-		r.Gtid = ptr.To(GtidCurrentPos)
-	}
-	if r.SyncTimeout == nil {
-		r.SyncTimeout = ptr.To(metav1.Duration{Duration: 10 * time.Second})
-	}
-}
 
 // Validate returns an error if the ReplicaReplication is not valid.
-func (r *ReplicaReplication) Validate() error {
-	if r.Gtid != nil {
-		if err := r.Gtid.Validate(); err != nil {
-			return fmt.Errorf("invalid GTID: %v", err)
-		}
-	}
-	recoveryEnabled := ptr.Deref(r.ReplicaRecovery, ReplicaRecovery{}).Enabled
-	if recoveryEnabled && r.ReplicaBootstrapFrom == nil {
-		return errors.New("'bootstrapFrom' must be set when 'recovery` is enabled")
-	}
-	return nil
-}
 
 // Replication defines replication configuration for a MariaDB cluster.
 type Replication struct {
@@ -292,168 +213,35 @@ type ReplicationSpec struct {
 }
 
 // IsGtidStrictModeEnabled determines whether GTID strict mode is enabled.
-func (r *Replication) IsGtidStrictModeEnabled() bool {
-	return ptr.Deref(r.GtidStrictMode, true)
-}
 
 // IsSemiSyncEnabled determines whether semi-synchronous replication is enabled.
-func (r *Replication) IsSemiSyncEnabled() bool {
-	return ptr.Deref(r.SemiSyncEnabled, true)
-}
 
 // Validate determines whether replication config is valid.
-func (r *Replication) Validate() error {
-	if r.IsSemiSyncEnabled() {
-		if r.SemiSyncWaitPoint != nil {
-			if err := r.SemiSyncWaitPoint.Validate(); err != nil {
-				return fmt.Errorf("invalid WaitPoint: %v", err)
-			}
-		}
-	}
-	return nil
-}
 
 // SetDefaults sets reasonable defaults for replication.
-func (r *Replication) SetDefaults(mdb *MariaDB, env *environment.OperatorEnv) error {
-	r.Primary.SetDefaults()
-	r.Replica.SetDefaults(mdb)
-
-	if r.GtidStrictMode == nil {
-		r.GtidStrictMode = ptr.To(true)
-	}
-	if r.SemiSyncEnabled == nil {
-		r.SemiSyncEnabled = ptr.To(true)
-	}
-	if r.StandaloneProbes == nil {
-		r.StandaloneProbes = ptr.To(false)
-	}
-
-	if reflect.ValueOf(r.InitContainer).IsZero() {
-		r.InitContainer = InitContainer{
-			Image: env.MariadbOperatorImage,
-		}
-	}
-	if err := r.Agent.SetDefaults(mdb, env); err != nil {
-		return fmt.Errorf("error setting agent defaults: %v", err)
-	}
-
-	autoUpdateDataPlane := ptr.Deref(mdb.Spec.UpdateStrategy.AutoUpdateDataPlane, false)
-	if autoUpdateDataPlane {
-		initBumped, err := docker.SetTagOrDigest(env.MariadbOperatorImage, r.InitContainer.Image)
-		if err != nil {
-			return fmt.Errorf("error bumping replication init image: %v", err)
-		}
-		r.InitContainer.Image = initBumped
-
-		agentBumped, err := docker.SetTagOrDigest(env.MariadbOperatorImage, r.Agent.Image)
-		if err != nil {
-			return fmt.Errorf("error bumping replication agent image: %v", err)
-		}
-		r.Agent.Image = agentBumped
-	}
-
-	return nil
-}
 
 // HasConfiguredReplication indicates whether the MariaDB object has a ConditionTypeReplicationConfigured status condition.
 // This means that replication has been successfully configured for the first time.
-func (m *MariaDB) HasConfiguredReplication() bool {
-	return meta.IsStatusConditionTrue(m.Status.Conditions, ConditionTypeReplicationConfigured)
-}
 
 // HasConfiguredReplica indicates whether the cluster has a configured replica.
-func (m *MariaDB) HasConfiguredReplica() bool {
-	if m.Status.Replication == nil {
-		return false
-	}
-	for _, role := range m.Status.Replication.Roles {
-		if role == ReplicationRoleReplica {
-			return true
-		}
-	}
-	return false
-}
 
 // IsConfiguredReplica determines whether a specific replica has been configured.
-func (m *MariaDB) IsConfiguredReplica(podName string) bool {
-	if m.Status.Replication == nil {
-		return false
-	}
-	for pod, role := range m.Status.Replication.Roles {
-		if pod == podName && role == ReplicationRoleReplica {
-			return true
-		}
-	}
-	return false
-}
 
 // IsReplicaRecoveryEnabled indicates if the replica recovery is enabled
-func (m *MariaDB) IsReplicaRecoveryEnabled() bool {
-	if !m.IsReplicationEnabled() {
-		return false
-	}
-	replication := ptr.Deref(m.Spec.Replication, Replication{})
-	recovery := ptr.Deref(replication.Replica.ReplicaRecovery, ReplicaRecovery{})
-	return recovery.Enabled
-}
 
 // IsRecoveringReplicas indicates that a replica is being recovered.
-func (m *MariaDB) IsRecoveringReplicas() bool {
-	return meta.IsStatusConditionFalse(m.Status.Conditions, ConditionTypeReplicaRecovered)
-}
 
 // ReplicaRecoveryError indicates that the MariaDB instance has a replica recovery error.
-func (m *MariaDB) ReplicaRecoveryError() error {
-	c := meta.FindStatusCondition(m.Status.Conditions, ConditionTypeReplicaRecovered)
-	if c == nil {
-		return nil
-	}
-	if c.Status == metav1.ConditionFalse && c.Reason == ConditionReasonReplicaRecoverError {
-		return errors.New(c.Message)
-	}
-	return nil
-}
 
 // SetReplicaToRecover sets the replica to be recovered
-func (m *MariaDB) SetReplicaToRecover(replica *string) {
-	if m.Status.Replication == nil {
-		m.Status.Replication = &ReplicationStatus{}
-	}
-	m.Status.Replication.ReplicaToRecover = replica
-}
 
 // IsReplicaBeingRecovered indicates whether a replica is being recovered
-func (m *MariaDB) IsReplicaBeingRecovered(replica string) bool {
-	if !m.IsRecoveringReplicas() {
-		return false
-	}
-	replication := ptr.Deref(m.Status.Replication, ReplicationStatus{})
-	return replication.ReplicaToRecover != nil && *replication.ReplicaToRecover == replica
-}
 
 // GetAutomaticFailoverDelay returns the duration of the automatic failover delay.
-func (m *MariaDB) GetAutomaticFailoverDelay() time.Duration {
-	primary := ptr.Deref(m.Spec.Replication, Replication{}).Primary
-	autoFailoverDelay := ptr.Deref(primary.AutoFailoverDelay, metav1.Duration{})
-
-	return autoFailoverDelay.Duration
-}
 
 // IsSwitchingPrimary indicates whether a primary swichover operation is in progress.
-func (m *MariaDB) IsSwitchingPrimary() bool {
-	return meta.IsStatusConditionFalse(m.Status.Conditions, ConditionTypePrimarySwitched)
-}
 
 // IsReplicationSwitchoverRequired indicates that a primary switchover operation is required.
-func (m *MariaDB) IsReplicationSwitchoverRequired() bool {
-	if m.IsMaxScaleEnabled() || !m.IsReplicationEnabled() {
-		return false
-	}
-	if m.Status.CurrentPrimaryPodIndex == nil || m.Spec.Replication == nil || m.Spec.Replication.Primary.PodIndex == nil {
-		return false
-	}
-	return *m.Status.CurrentPrimaryPodIndex != *m.Spec.Replication.Primary.PodIndex
-}
 
 // ReplicationRole represents the observed replication roles.
 type ReplicationRole string
@@ -505,16 +293,6 @@ type ReplicaStatusVars struct {
 }
 
 // EqualErrors determines equality of error codes.
-func (r *ReplicaStatusVars) EqualErrors(o *ReplicaStatusVars) bool {
-	if r == nil && o == nil {
-		return true
-	}
-	if r == nil || o == nil {
-		return false
-	}
-	return ptr.Equal(r.LastIOErrno, o.LastIOErrno) &&
-		ptr.Equal(r.LastSQLErrno, o.LastSQLErrno)
-}
 
 // ReplicaStatus is the observed replica status.
 type ReplicaStatus struct {
@@ -544,9 +322,3 @@ type ReplicationStatus struct {
 }
 
 // UseStandaloneProbes indicates whether to use the default non-HA startup and liveness probes.
-func (m *MariaDB) UseStandaloneProbes() bool {
-	replication := ptr.Deref(m.Spec.Replication, Replication{})
-	standaloneProbes := ptr.Deref(replication.StandaloneProbes, false)
-
-	return standaloneProbes
-}

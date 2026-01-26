@@ -2,10 +2,8 @@
 package v1alpha1
 
 import (
-	kadapter "github.com/mariadb-operator/mariadb-operator/v25/pkg/kubernetes/adapter"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 )
 
 // Refer to the Kubernetes docs: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#labelselectorrequirement-v1-meta
@@ -17,14 +15,6 @@ type LabelSelectorRequirement struct {
 	Values []string `json:"values,omitempty"`
 }
 
-func (s LabelSelectorRequirement) ToKubernetesType() metav1.LabelSelectorRequirement {
-	return metav1.LabelSelectorRequirement{
-		Key:      s.Key,
-		Operator: s.Operator,
-		Values:   s.Values,
-	}
-}
-
 // Refer to the Kubernetes docs: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#labelselector-v1-meta
 type LabelSelector struct {
 	// +optional
@@ -34,13 +24,6 @@ type LabelSelector struct {
 	MatchExpressions []LabelSelectorRequirement `json:"matchExpressions,omitempty"`
 }
 
-func (s LabelSelector) ToKubernetesType() metav1.LabelSelector {
-	return metav1.LabelSelector{
-		MatchLabels:      s.MatchLabels,
-		MatchExpressions: kadapter.ToKubernetesSlice(s.MatchExpressions),
-	}
-}
-
 // Refer to the Kubernetes docs: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#podaffinityterm-v1-core.
 type PodAffinityTerm struct {
 	// +optional
@@ -48,27 +31,10 @@ type PodAffinityTerm struct {
 	TopologyKey   string         `json:"topologyKey"`
 }
 
-func (p PodAffinityTerm) ToKubernetesType() corev1.PodAffinityTerm {
-	affinityTerm := corev1.PodAffinityTerm{
-		TopologyKey: p.TopologyKey,
-	}
-	if p.LabelSelector != nil {
-		affinityTerm.LabelSelector = ptr.To(p.LabelSelector.ToKubernetesType())
-	}
-	return affinityTerm
-}
-
 // Refer to the Kubernetes docs: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#weightedpodaffinityterm-v1-core.
 type WeightedPodAffinityTerm struct {
 	Weight          int32           `json:"weight"`
 	PodAffinityTerm PodAffinityTerm `json:"podAffinityTerm"`
-}
-
-func (p WeightedPodAffinityTerm) ToKubernetesType() corev1.WeightedPodAffinityTerm {
-	return corev1.WeightedPodAffinityTerm{
-		Weight:          p.Weight,
-		PodAffinityTerm: p.PodAffinityTerm.ToKubernetesType(),
-	}
 }
 
 // Refer to the Kubernetes docs: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#podantiaffinity-v1-core.
@@ -81,13 +47,6 @@ type PodAntiAffinity struct {
 	PreferredDuringSchedulingIgnoredDuringExecution []WeightedPodAffinityTerm `json:"preferredDuringSchedulingIgnoredDuringExecution,omitempty"`
 }
 
-func (p PodAntiAffinity) ToKubernetesType() corev1.PodAntiAffinity {
-	return corev1.PodAntiAffinity{
-		RequiredDuringSchedulingIgnoredDuringExecution:  kadapter.ToKubernetesSlice(p.RequiredDuringSchedulingIgnoredDuringExecution),
-		PreferredDuringSchedulingIgnoredDuringExecution: kadapter.ToKubernetesSlice(p.PreferredDuringSchedulingIgnoredDuringExecution),
-	}
-}
-
 // Refer to the Kubernetes docs: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#nodeselectorrequirement-v1-core
 type NodeSelectorRequirement struct {
 	Key      string                      `json:"key"`
@@ -95,14 +54,6 @@ type NodeSelectorRequirement struct {
 	// +optional
 	// +listType=atomic
 	Values []string `json:"values,omitempty"`
-}
-
-func (s NodeSelectorRequirement) ToKubernetesType() corev1.NodeSelectorRequirement {
-	return corev1.NodeSelectorRequirement{
-		Key:      s.Key,
-		Operator: s.Operator,
-		Values:   s.Values,
-	}
 }
 
 // Refer to the Kubernetes docs: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#nodeselectorterm-v1-core
@@ -115,36 +66,16 @@ type NodeSelectorTerm struct {
 	MatchFields []NodeSelectorRequirement `json:"matchFields,omitempty"`
 }
 
-func (s NodeSelectorTerm) ToKubernetesType() corev1.NodeSelectorTerm {
-	return corev1.NodeSelectorTerm{
-		MatchExpressions: kadapter.ToKubernetesSlice(s.MatchExpressions),
-		MatchFields:      kadapter.ToKubernetesSlice(s.MatchFields),
-	}
-}
-
 // Refer to the Kubernetes docs: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#nodeselector-v1-core
 type NodeSelector struct {
 	// +listType=atomic
 	NodeSelectorTerms []NodeSelectorTerm `json:"nodeSelectorTerms"`
 }
 
-func (p NodeSelector) ToKubernetesType() corev1.NodeSelector {
-	return corev1.NodeSelector{
-		NodeSelectorTerms: kadapter.ToKubernetesSlice(p.NodeSelectorTerms),
-	}
-}
-
 // Refer to the Kubernetes docs: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#preferredschedulingterm-v1-core
 type PreferredSchedulingTerm struct {
 	Weight     int32            `json:"weight"`
 	Preference NodeSelectorTerm `json:"preference"`
-}
-
-func (p PreferredSchedulingTerm) ToKubernetesType() corev1.PreferredSchedulingTerm {
-	return corev1.PreferredSchedulingTerm{
-		Weight:     p.Weight,
-		Preference: p.Preference.ToKubernetesType(),
-	}
 }
 
 // Refer to the Kubernetes docs: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#nodeaffinity-v1-core
@@ -156,33 +87,12 @@ type NodeAffinity struct {
 	PreferredDuringSchedulingIgnoredDuringExecution []PreferredSchedulingTerm `json:"preferredDuringSchedulingIgnoredDuringExecution,omitempty"`
 }
 
-func (p NodeAffinity) ToKubernetesType() corev1.NodeAffinity {
-	nodeAffinity := corev1.NodeAffinity{
-		PreferredDuringSchedulingIgnoredDuringExecution: kadapter.ToKubernetesSlice(p.PreferredDuringSchedulingIgnoredDuringExecution),
-	}
-	if p.RequiredDuringSchedulingIgnoredDuringExecution != nil {
-		nodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution = ptr.To(p.RequiredDuringSchedulingIgnoredDuringExecution.ToKubernetesType())
-	}
-	return nodeAffinity
-}
-
 // Refer to the Kubernetes docs: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#affinity-v1-core.
 type Affinity struct {
 	// +optional
 	PodAntiAffinity *PodAntiAffinity `json:"podAntiAffinity,omitempty"`
 	// +optional
 	NodeAffinity *NodeAffinity `json:"nodeAffinity,omitempty"`
-}
-
-func (a Affinity) ToKubernetesType() corev1.Affinity {
-	var affinity corev1.Affinity
-	if a.PodAntiAffinity != nil {
-		affinity.PodAntiAffinity = ptr.To(a.PodAntiAffinity.ToKubernetesType())
-	}
-	if a.NodeAffinity != nil {
-		affinity.NodeAffinity = ptr.To(a.NodeAffinity.ToKubernetesType())
-	}
-	return affinity
 }
 
 // Refer to the Kubernetes docs: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#topologyspreadconstraint-v1-core.
@@ -200,17 +110,4 @@ type TopologySpreadConstraint struct {
 	NodeTaintsPolicy *corev1.NodeInclusionPolicy `json:"nodeTaintsPolicy,omitempty"`
 	// +optional
 	MatchLabelKeys []string `json:"matchLabelKeys,omitempty"`
-}
-
-func (t TopologySpreadConstraint) ToKubernetesType() corev1.TopologySpreadConstraint {
-	return corev1.TopologySpreadConstraint{
-		MaxSkew:            t.MaxSkew,
-		TopologyKey:        t.TopologyKey,
-		WhenUnsatisfiable:  t.WhenUnsatisfiable,
-		LabelSelector:      t.LabelSelector,
-		MinDomains:         t.MinDomains,
-		NodeAffinityPolicy: t.NodeAffinityPolicy,
-		NodeTaintsPolicy:   t.NodeTaintsPolicy,
-		MatchLabelKeys:     t.MatchLabelKeys,
-	}
 }

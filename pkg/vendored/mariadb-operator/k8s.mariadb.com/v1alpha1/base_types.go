@@ -1,21 +1,11 @@
 package v1alpha1
 
 import (
-	"errors"
-	"fmt"
-	"reflect"
-	"strings"
-	"time"
-
 	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
-	"github.com/mariadb-operator/mariadb-operator/v25/pkg/environment"
 	cron "github.com/robfig/cron/v3"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/apimachinery/pkg/util/validation/field"
-	"k8s.io/utils/ptr"
 )
 
 var CronParser = cron.NewParser(
@@ -50,11 +40,6 @@ type TypedLocalObjectReference struct {
 }
 
 // LocalReference returns a Kubernetes LocalObjectReference.
-func (r *TypedLocalObjectReference) LocalReference() *LocalObjectReference {
-	return &LocalObjectReference{
-		Name: r.Name,
-	}
-}
 
 // SecretTemplate defines a template to customize Secret objects.
 type SecretTemplate struct {
@@ -153,17 +138,6 @@ type JobContainerTemplate struct {
 }
 
 // FromContainerTemplate sets the ContainerTemplate fields in the current JobContainerTemplate.
-func (j *JobContainerTemplate) FromContainerTemplate(ctpl *ContainerTemplate) {
-	if j.Args == nil {
-		j.Args = ctpl.Args
-	}
-	if j.Resources == nil {
-		j.Resources = ctpl.Resources
-	}
-	if j.SecurityContext == nil {
-		j.SecurityContext = ctpl.SecurityContext
-	}
-}
 
 // Container object definition.
 type Container struct {
@@ -234,17 +208,6 @@ type KubernetesAuth struct {
 
 // AuthDelegatorRoleNameOrDefault defines the ClusterRoleBinding name bound to system:auth-delegator.
 // It falls back to the MariaDB name if AuthDelegatorRoleName is not set.
-func (k *KubernetesAuth) AuthDelegatorRoleNameOrDefault(mariadb *MariaDB) string {
-	if k.AuthDelegatorRoleName != "" {
-		return k.AuthDelegatorRoleName
-	}
-	name := fmt.Sprintf("%s-%s", mariadb.Name, mariadb.Namespace)
-	parts := strings.Split(string(mariadb.UID), "-")
-	if len(parts) > 0 {
-		name += fmt.Sprintf("-%s", parts[0])
-	}
-	return name
-}
 
 // BasicAuth refers to the basic authentication mechanism utilized for establishing a connection from the operator to the agent.
 type BasicAuth struct {
@@ -263,17 +226,6 @@ type BasicAuth struct {
 }
 
 // SetDefaults set reasonable defaults
-func (b *BasicAuth) SetDefaults(mariadb *MariaDB) {
-	if !b.Enabled {
-		return
-	}
-	if b.Username == "" {
-		b.Username = "mariadb-operator"
-	}
-	if reflect.ValueOf(b.PasswordSecretKeyRef).IsZero() {
-		b.PasswordSecretKeyRef = mariadb.AgentAuthSecretKeyRef()
-	}
-}
 
 // Agent is a sidecar agent that co-operates with mariadb-operator.
 type Agent struct {
@@ -312,57 +264,8 @@ type Agent struct {
 }
 
 // SetDefaults sets reasonable defaults.
-func (r *Agent) SetDefaults(mariadb *MariaDB, env *environment.OperatorEnv) error {
-	if r.Image == "" {
-		r.Image = env.MariadbOperatorImage
-	}
-	if r.Port == 0 {
-		r.Port = 5555
-	}
-	if r.ProbePort == 0 {
-		r.ProbePort = 5566
-	}
-
-	currentNamespaceOnly, err := env.CurrentNamespaceOnly()
-	if err != nil {
-		return fmt.Errorf("error checking operator watch scope: %v", err)
-	}
-	if currentNamespaceOnly {
-		if r.BasicAuth == nil {
-			r.BasicAuth = &BasicAuth{
-				Enabled: true,
-			}
-		}
-	} else if r.KubernetesAuth == nil && r.BasicAuth == nil {
-		if r.KubernetesAuth == nil {
-			r.KubernetesAuth = &KubernetesAuth{
-				Enabled: true,
-			}
-		} else if r.BasicAuth == nil {
-			r.BasicAuth = &BasicAuth{
-				Enabled: true,
-			}
-		}
-	}
-	if r.BasicAuth != nil {
-		r.BasicAuth.SetDefaults(mariadb)
-	}
-
-	if r.GracefulShutdownTimeout == nil {
-		r.GracefulShutdownTimeout = ptr.To(metav1.Duration{Duration: 1 * time.Second})
-	}
-	return nil
-}
 
 // Validate determines if a Galera Agent object is valid.
-func (r *Agent) Validate() error {
-	kubernetesAuth := ptr.Deref(r.KubernetesAuth, KubernetesAuth{})
-	basicAuth := ptr.Deref(r.BasicAuth, BasicAuth{})
-	if kubernetesAuth.Enabled && basicAuth.Enabled {
-		return errors.New("only one authentication method must be enabled: kubernetes or basic auth")
-	}
-	return nil
-}
 
 // Job defines a Job used to be used with MariaDB.
 type Job struct {
@@ -393,11 +296,6 @@ type Job struct {
 }
 
 // SetDefaults sets reasonable defaults.
-func (j *Job) SetDefaults(mariadbObjMeta metav1.ObjectMeta) {
-	if j.Affinity != nil {
-		j.Affinity.SetDefaults(mariadbObjMeta.Name)
-	}
-}
 
 // AffinityConfig defines policies to schedule Pods in Nodes.
 type AffinityConfig struct {
@@ -412,28 +310,6 @@ type AffinityConfig struct {
 }
 
 // SetDefaults sets reasonable defaults.
-func (a *AffinityConfig) SetDefaults(antiAffinityInstances ...string) {
-	antiAffinityEnabled := ptr.Deref(a.AntiAffinityEnabled, false)
-
-	if antiAffinityEnabled && len(antiAffinityInstances) > 0 && a.PodAntiAffinity == nil {
-		a.PodAntiAffinity = &PodAntiAffinity{
-			RequiredDuringSchedulingIgnoredDuringExecution: []PodAffinityTerm{
-				{
-					LabelSelector: &LabelSelector{
-						MatchExpressions: []LabelSelectorRequirement{
-							{
-								Key:      "app.kubernetes.io/instance",
-								Operator: metav1.LabelSelectorOpIn,
-								Values:   antiAffinityInstances,
-							},
-						},
-					},
-					TopologyKey: "kubernetes.io/hostname",
-				},
-			},
-		}
-	}
-}
 
 // PodTemplate defines a template to configure Container objects.
 type PodTemplate struct {
@@ -488,22 +364,8 @@ type PodTemplate struct {
 }
 
 // SetDefaults sets reasonable defaults.
-func (p *PodTemplate) SetDefaults(objMeta metav1.ObjectMeta) {
-	if p.ServiceAccountName == nil {
-		p.ServiceAccountName = ptr.To(p.ServiceAccountKey(objMeta).Name)
-	}
-	if p.Affinity != nil {
-		p.Affinity.SetDefaults(objMeta.Name)
-	}
-}
 
 // ServiceAccountKey defines the key for the ServiceAccount object.
-func (p *PodTemplate) ServiceAccountKey(objMeta metav1.ObjectMeta) types.NamespacedName {
-	return types.NamespacedName{
-		Name:      ptr.Deref(p.ServiceAccountName, objMeta.Name),
-		Namespace: objMeta.Namespace,
-	}
-}
 
 // JobPodTemplate defines a template to configure Container objects that run in a Job.
 type JobPodTemplate struct {
@@ -542,57 +404,12 @@ type JobPodTemplate struct {
 }
 
 // FromPodTemplate sets the PodTemplate fields in the current JobPodTemplate.
-func (j *JobPodTemplate) FromPodTemplate(ptpl *PodTemplate) {
-	if j.PodMetadata == nil {
-		j.PodMetadata = ptpl.PodMetadata
-	}
-	if j.ImagePullSecrets == nil {
-		j.ImagePullSecrets = ptpl.ImagePullSecrets
-	}
-	if j.PodSecurityContext == nil {
-		j.PodSecurityContext = ptpl.PodSecurityContext
-	}
-	if j.ServiceAccountName == nil {
-		j.ServiceAccountName = ptpl.ServiceAccountName
-	}
-	if j.Affinity == nil {
-		j.Affinity = ptpl.Affinity
-	}
-	if j.NodeSelector == nil {
-		j.NodeSelector = ptpl.NodeSelector
-	}
-	if j.Tolerations == nil {
-		j.Tolerations = ptpl.Tolerations
-	}
-	if j.PriorityClassName == nil {
-		j.PriorityClassName = ptpl.PriorityClassName
-	}
-}
 
 // SetDefaults sets reasonable defaults.
-func (j *JobPodTemplate) SetDefaults(objMeta, mariadbObjMeta metav1.ObjectMeta) {
-	if j.ServiceAccountName == nil {
-		j.ServiceAccountName = ptr.To(j.ServiceAccountKey(objMeta).Name)
-	}
-	if j.Affinity != nil {
-		j.Affinity.SetDefaults(mariadbObjMeta.Name)
-	}
-}
 
 // SetExternalDefaults sets reasonable defaults.
-func (j *JobPodTemplate) SetExternalDefaults(objMeta metav1.ObjectMeta) {
-	if j.ServiceAccountName == nil {
-		j.ServiceAccountName = ptr.To(j.ServiceAccountKey(objMeta).Name)
-	}
-}
 
 // ServiceAccountKey defines the key for the ServiceAccount object.
-func (j *JobPodTemplate) ServiceAccountKey(objMeta metav1.ObjectMeta) types.NamespacedName {
-	return types.NamespacedName{
-		Name:      ptr.Deref(j.ServiceAccountName, objMeta.Name),
-		Namespace: objMeta.Namespace,
-	}
-}
 
 // VolumeClaimTemplate defines a template to customize PVC objects.
 type VolumeClaimTemplate struct {
@@ -649,16 +466,6 @@ type PodDisruptionBudget struct {
 	// +optional
 	// +operator-sdk:csv:customresourcedefinitions:type=spec
 	MaxUnavailable *intstr.IntOrString `json:"maxUnavailable,omitempty"`
-}
-
-func (p *PodDisruptionBudget) Validate() error {
-	if p.MinAvailable != nil && p.MaxUnavailable == nil {
-		return nil
-	}
-	if p.MinAvailable == nil && p.MaxUnavailable != nil {
-		return nil
-	}
-	return errors.New("either minAvailable or maxUnavailable must be specified")
 }
 
 // HealthCheck defines intervals for performing health checks.
@@ -793,24 +600,6 @@ type Metadata struct {
 }
 
 // MergeMetadata merges multiple Metadata instances into one
-func MergeMetadata(metas ...*Metadata) *Metadata {
-	meta := Metadata{
-		Labels:      map[string]string{},
-		Annotations: map[string]string{},
-	}
-	for _, m := range metas {
-		if m == nil {
-			continue
-		}
-		for k, v := range m.Labels {
-			meta.Labels[k] = v
-		}
-		for k, v := range m.Annotations {
-			meta.Annotations[k] = v
-		}
-	}
-	return &meta
-}
 
 // BackupContentType defines the backup content type.
 type BackupContentType string
@@ -821,15 +610,6 @@ const (
 	// BackupContentTypePhysical represents a physical backup created using mariadb-backup.
 	BackupContentTypePhysical BackupContentType = "Physical"
 )
-
-func (b BackupContentType) Validate() error {
-	switch b {
-	case BackupContentTypeLogical, BackupContentTypePhysical:
-		return nil
-	default:
-		return fmt.Errorf("invalid backup content type: %v, supported types: [%v|%v]", b, BackupContentTypeLogical, BackupContentTypePhysical)
-	}
-}
 
 // CompressAlgorithm defines the compression algorithm for a Backup resource.
 type CompressAlgorithm string
@@ -842,41 +622,6 @@ const (
 	// Gzip compression. Good compression/decompression speed, but worse compression ratio compared to bzip2.
 	CompressGzip CompressAlgorithm = "gzip"
 )
-
-func (c CompressAlgorithm) Validate() error {
-	switch c {
-	case CompressAlgorithm(""), CompressNone, CompressBzip2, CompressGzip:
-		return nil
-	default:
-		return fmt.Errorf("invalid compression: %v, supported algorithms: [%v|%v|%v]", c, CompressNone, CompressBzip2, CompressGzip)
-	}
-}
-
-func (c CompressAlgorithm) Extension() (string, error) {
-	switch c {
-	case CompressAlgorithm(""), CompressNone:
-		return "", nil
-	case CompressBzip2:
-		return "bz2", nil
-	case CompressGzip:
-		return "gz", nil
-	default:
-		return "", fmt.Errorf("invalid compression: %v, supported algorithms: [%v|%v|%v]", c, CompressNone, CompressBzip2, CompressGzip)
-	}
-}
-
-func CompressionFromExtension(ext string) (CompressAlgorithm, error) {
-	switch ext {
-	case "":
-		return CompressNone, nil
-	case "bz2":
-		return CompressBzip2, nil
-	case "gz":
-		return CompressGzip, nil
-	default:
-		return "", fmt.Errorf("unknown compression extension: %q, supported extensions: [bz2|gz]", ext)
-	}
-}
 
 // BackupStorage defines the final storage for backups.
 type BackupStorage struct {
@@ -894,21 +639,6 @@ type BackupStorage struct {
 	Volume *StorageVolumeSource `json:"volume,omitempty"`
 }
 
-func (b *BackupStorage) Validate() error {
-	storageTypes := 0
-	fields := reflect.ValueOf(b).Elem()
-	for i := 0; i < fields.NumField(); i++ {
-		field := fields.Field(i)
-		if !field.IsNil() {
-			storageTypes++
-		}
-	}
-	if storageTypes != 1 {
-		return errors.New("exactly one storage type should be provided")
-	}
-	return nil
-}
-
 // BackupStagingStorage defines the temporary storage used to keep external backups (i.e. S3) while they are being processed.
 type BackupStagingStorage struct {
 	// PersistentVolumeClaim is a Kubernetes PVC specification.
@@ -919,22 +649,6 @@ type BackupStagingStorage struct {
 	// +optional
 	// +operator-sdk:csv:customresourcedefinitions:type=spec
 	Volume *StorageVolumeSource `json:"volume,omitempty"`
-}
-
-func (s *BackupStagingStorage) VolumeOrEmptyDir(pvcKey types.NamespacedName) StorageVolumeSource {
-	if s.PersistentVolumeClaim != nil {
-		return StorageVolumeSource{
-			PersistentVolumeClaim: &PersistentVolumeClaimVolumeSource{
-				ClaimName: pvcKey.Name,
-			},
-		}
-	}
-	if s.Volume != nil {
-		return *s.Volume
-	}
-	return StorageVolumeSource{
-		EmptyDir: &EmptyDirVolumeSource{},
-	}
 }
 
 // Schedule contains parameters to define a schedule
@@ -948,11 +662,6 @@ type Schedule struct {
 	// +kubebuilder:default=false
 	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:booleanSwitch","urn:alm:descriptor:com.tectonic.ui:advanced"}
 	Suspend bool `json:"suspend"`
-}
-
-func (s *Schedule) Validate() error {
-	_, err := CronParser.Parse(s.Cron)
-	return err
 }
 
 // CronJobTemplate defines parameters for configuring CronJob objects.
@@ -1020,14 +729,6 @@ const (
 )
 
 // Validate returns an error if the CleanupPolicy is not valid.
-func (c CleanupPolicy) Validate() error {
-	switch c {
-	case CleanupPolicySkip, CleanupPolicyDelete:
-		return nil
-	default:
-		return fmt.Errorf("invalid cleanupPolicy: %v", c)
-	}
-}
 
 // Exporter defines a metrics exporter container.
 type Exporter struct {
@@ -1111,26 +812,4 @@ type tlsValidationItem struct {
 	certFieldPath       string
 	certIssuerRef       *cmmeta.ObjectReference
 	certIssuerFieldPath string
-}
-
-func validateTLSCert(item *tlsValidationItem) error {
-	if item.certSecretRef != nil && item.certIssuerRef != nil {
-		return field.Invalid(
-			field.NewPath("spec").Child("tls"),
-			item.tlsValue,
-			fmt.Sprintf(
-				"'%s' and '%s' are mutually exclusive. Only one of them must be set at a time.",
-				item.certFieldPath,
-				item.certIssuerFieldPath,
-			),
-		)
-	}
-	if item.caSecretRef == nil && item.certSecretRef != nil {
-		return field.Invalid(
-			field.NewPath("spec").Child("tls"),
-			item.tlsValue,
-			fmt.Sprintf("'%s' must be set when '%s' is set", item.caFieldPath, item.certFieldPath),
-		)
-	}
-	return nil
 }

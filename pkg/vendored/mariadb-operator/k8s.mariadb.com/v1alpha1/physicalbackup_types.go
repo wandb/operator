@@ -1,19 +1,10 @@
 package v1alpha1
 
 import (
-	"errors"
-	"fmt"
-	"reflect"
-	"strings"
 	"time"
 
-	mdbtime "github.com/mariadb-operator/mariadb-operator/v25/pkg/time"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 var (
@@ -52,19 +43,8 @@ type PhysicalBackupPodTemplate struct {
 }
 
 // SetDefaults sets reasonable defaults.
-func (p *PhysicalBackupPodTemplate) SetDefaults(objMeta, mariadbObjMeta metav1.ObjectMeta) {
-	if p.ServiceAccountName == nil {
-		p.ServiceAccountName = ptr.To(p.ServiceAccountKey(objMeta).Name)
-	}
-}
 
 // ServiceAccountKey defines the key for the ServiceAccount object.
-func (p *PhysicalBackupPodTemplate) ServiceAccountKey(objMeta metav1.ObjectMeta) types.NamespacedName {
-	return types.NamespacedName{
-		Name:      ptr.Deref(p.ServiceAccountName, objMeta.Name),
-		Namespace: objMeta.Namespace,
-	}
-}
 
 // PhysicalBackupTarget defines in which Pod the physical backups will be taken.
 type PhysicalBackupTarget string
@@ -76,20 +56,6 @@ const (
 	// If no ready replicas are available, physical backups will be taken in the primary.
 	PhysicalBackupTargetPreferReplica PhysicalBackupTarget = "PreferReplica"
 )
-
-func (c PhysicalBackupTarget) Validate() error {
-	switch c {
-	case PhysicalBackupTargetReplica, PhysicalBackupTargetPreferReplica:
-		return nil
-	default:
-		return fmt.Errorf(
-			"invalid physical backup target: %v, supported: [%v|%v]",
-			c,
-			PhysicalBackupTargetReplica,
-			PhysicalBackupTargetPreferReplica,
-		)
-	}
-}
 
 // PhysicalBackupSchedule defines when the PhysicalBackup will be taken.
 type PhysicalBackupSchedule struct {
@@ -109,13 +75,6 @@ type PhysicalBackupSchedule struct {
 }
 
 // Validate determines whether a PhysicalBackupSchedule is valid.
-func (s *PhysicalBackupSchedule) Validate() error {
-	if s.Cron != "" {
-		_, err := CronParser.Parse(s.Cron)
-		return err
-	}
-	return nil
-}
 
 // PhysicalBackupVolumeSnapshot defines parameters for the VolumeSnapshots used as physical backups.
 type PhysicalBackupVolumeSnapshot struct {
@@ -147,21 +106,6 @@ type PhysicalBackupStorage struct {
 	// +optional
 	// +operator-sdk:csv:customresourcedefinitions:type=spec
 	VolumeSnapshot *PhysicalBackupVolumeSnapshot `json:"volumeSnapshot,omitempty"`
-}
-
-func (b *PhysicalBackupStorage) Validate() error {
-	storageTypes := 0
-	fields := reflect.ValueOf(b).Elem()
-	for i := 0; i < fields.NumField(); i++ {
-		field := fields.Field(i)
-		if !field.IsNil() {
-			storageTypes++
-		}
-	}
-	if storageTypes != 1 {
-		return errors.New("exactly one storage type should be provided")
-	}
-	return nil
 }
 
 // PhysicalBackupSpec defines the desired state of PhysicalBackup.
@@ -264,13 +208,6 @@ type PhysicalBackupStatus struct {
 	NextScheduleTime *metav1.Time `json:"nextScheduleTime,omitempty"`
 }
 
-func (b *PhysicalBackupStatus) SetCondition(condition metav1.Condition) {
-	if b.Conditions == nil {
-		b.Conditions = make([]metav1.Condition, 0)
-	}
-	meta.SetStatusCondition(&b.Conditions, condition)
-}
-
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:shortName=pbmdb
 // +kubebuilder:subresource:status
@@ -290,98 +227,9 @@ type PhysicalBackup struct {
 	Status PhysicalBackupStatus `json:"status,omitempty"`
 }
 
-func (b *PhysicalBackup) IsComplete() bool {
-	return meta.IsStatusConditionTrue(b.Status.Conditions, ConditionTypeComplete)
-}
-
-func (b *PhysicalBackup) Validate() error {
-	if b.Spec.Target != nil {
-		if err := b.Spec.Target.Validate(); err != nil {
-			return fmt.Errorf("invalid Target: %v", err)
-		}
-	}
-	if b.Spec.Schedule != nil {
-		if err := b.Spec.Schedule.Validate(); err != nil {
-			return fmt.Errorf("invalid Schedule: %v", err)
-		}
-	}
-	if err := b.Spec.Storage.Validate(); err != nil {
-		return fmt.Errorf("invalid Storage: %v", err)
-	}
-	if err := b.Spec.Compression.Validate(); err != nil {
-		return fmt.Errorf("invalid Compression: %v", err)
-	}
-
-	storage := b.Spec.Storage
-	if storage.VolumeSnapshot != nil && (storage.S3 != nil || storage.Volume != nil) {
-		return errors.New("'s3' and 'volume' storage types may not be set when 'volumeSnapshotRef' is set")
-	}
-	if storage.S3 == nil && b.Spec.StagingStorage != nil {
-		return errors.New("'spec.stagingStorage' may only be specified when 'spec.storage.s3' is set")
-	}
-	return nil
-}
-
-func (b *PhysicalBackup) SetDefaults(mariadb *MariaDB) {
-	if b.Spec.Target == nil {
-		b.Spec.Target = ptr.To(PhysicalBackupTargetReplica)
-	}
-	if b.Spec.MaxRetention == (metav1.Duration{}) {
-		b.Spec.MaxRetention = DefaultPhysicalBackupMaxRetention
-	}
-	if b.Spec.Timeout == nil {
-		b.Spec.Timeout = &DefaultPhysicalBackupTimeout
-	}
-	if b.Spec.Storage.VolumeSnapshot != nil {
-		return // VolumeSnapshot does not use the rest of the fields, defaulting can be skipped
-	}
-	if b.Spec.Compression == CompressAlgorithm("") {
-		b.Spec.Compression = CompressNone
-	}
-	if b.Spec.BackoffLimit == 0 {
-		b.Spec.BackoffLimit = 5
-	}
-	if b.Spec.SuccessfulJobsHistoryLimit == nil {
-		b.Spec.SuccessfulJobsHistoryLimit = ptr.To(int32(5))
-	}
-	b.Spec.SetDefaults(b.ObjectMeta, mariadb.ObjectMeta)
-}
-
-func (b *PhysicalBackup) Volume() (StorageVolumeSource, error) {
-	if b.Spec.Storage.VolumeSnapshot != nil {
-		return StorageVolumeSource{}, errors.New("VolumeSnapshot does not require a volume")
-	}
-	if b.Spec.Storage.S3 != nil {
-		stagingStorage := ptr.Deref(b.Spec.StagingStorage, BackupStagingStorage{})
-		return stagingStorage.VolumeOrEmptyDir(b.StagingPVCKey()), nil
-	}
-	if b.Spec.Storage.PersistentVolumeClaim != nil {
-		return StorageVolumeSource{
-			PersistentVolumeClaim: &PersistentVolumeClaimVolumeSource{
-				ClaimName: b.StoragePVCKey().Name,
-			},
-		}, nil
-	}
-	if b.Spec.Storage.Volume != nil {
-		return *b.Spec.Storage.Volume, nil
-	}
-	return StorageVolumeSource{}, errors.New("unable to get volume for PhysicalBackup")
-}
-
 // IsValidPhysicalBackup determines whether a PhysicalBackup name is valid
-func IsValidPhysicalBackup(name string) bool {
-	_, err := ParsePhysicalBackupTime(name)
-	return err == nil
-}
 
 // ParsePhysicalBackupTime parses the time from a PhysicalBackup name
-func ParsePhysicalBackupTime(name string) (time.Time, error) {
-	parts := strings.Split(name, "-")
-	if len(parts) < 2 {
-		return time.Time{}, fmt.Errorf("invalid object name \"%s\"", name)
-	}
-	return mdbtime.Parse(parts[len(parts)-1])
-}
 
 // +kubebuilder:object:root=true
 
@@ -393,14 +241,3 @@ type PhysicalBackupList struct {
 }
 
 // ListItems gets a copy of the Items slice.
-func (m *PhysicalBackupList) ListItems() []client.Object {
-	items := make([]client.Object, len(m.Items))
-	for i, item := range m.Items {
-		items[i] = item.DeepCopy()
-	}
-	return items
-}
-
-func init() {
-	SchemeBuilder.Register(&PhysicalBackup{}, &PhysicalBackupList{})
-}

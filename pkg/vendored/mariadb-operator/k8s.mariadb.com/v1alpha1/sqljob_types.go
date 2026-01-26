@@ -2,7 +2,6 @@ package v1alpha1
 
 import (
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -85,13 +84,6 @@ type SqlJobStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
-func (s *SqlJobStatus) SetCondition(condition metav1.Condition) {
-	if s.Conditions == nil {
-		s.Conditions = make([]metav1.Condition, 0)
-	}
-	meta.SetStatusCondition(&s.Conditions, condition)
-}
-
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:shortName=smdb
 // +kubebuilder:subresource:status
@@ -110,24 +102,6 @@ type SqlJob struct {
 	Status SqlJobStatus `json:"status,omitempty"`
 }
 
-func (s *SqlJob) IsComplete() bool {
-	return meta.IsStatusConditionTrue(s.Status.Conditions, ConditionTypeComplete)
-}
-
-func (s *SqlJob) SetDefaults(mariadb *MariaDB) {
-	if s.Spec.BackoffLimit == 0 {
-		s.Spec.BackoffLimit = 5
-	}
-	s.Spec.SetDefaults(s.ObjectMeta, mariadb.ObjectMeta)
-}
-
-func (s *SqlJob) SetExternalDefaults() {
-	if s.Spec.BackoffLimit == 0 {
-		s.Spec.BackoffLimit = 5
-	}
-	s.Spec.SetExternalDefaults(s.ObjectMeta)
-}
-
 //+kubebuilder:object:root=true
 
 // SqlJobList contains a list of SqlJob
@@ -135,8 +109,4 @@ type SqlJobList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []SqlJob `json:"items"`
-}
-
-func init() {
-	SchemeBuilder.Register(&SqlJob{}, &SqlJobList{})
 }

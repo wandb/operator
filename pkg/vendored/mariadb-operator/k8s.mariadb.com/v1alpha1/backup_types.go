@@ -1,14 +1,8 @@
 package v1alpha1
 
 import (
-	"errors"
-	"fmt"
-	"time"
-
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 )
 
 // BackupSpec defines the desired state of Backup
@@ -90,13 +84,6 @@ type BackupStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
-func (b *BackupStatus) SetCondition(condition metav1.Condition) {
-	if b.Conditions == nil {
-		b.Conditions = make([]metav1.Condition, 0)
-	}
-	meta.SetStatusCondition(&b.Conditions, condition)
-}
-
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:shortName=bmdb
 // +kubebuilder:subresource:status
@@ -115,76 +102,6 @@ type Backup struct {
 	Status BackupStatus `json:"status,omitempty"`
 }
 
-func (b *Backup) IsComplete() bool {
-	return meta.IsStatusConditionTrue(b.Status.Conditions, ConditionTypeComplete)
-}
-
-func (b *Backup) Validate() error {
-	if b.Spec.Schedule != nil {
-		if err := b.Spec.Schedule.Validate(); err != nil {
-			return fmt.Errorf("invalid Schedule: %v", err)
-		}
-	}
-	if err := b.Spec.Storage.Validate(); err != nil {
-		return fmt.Errorf("invalid Storage: %v", err)
-	}
-	if err := b.Spec.Compression.Validate(); err != nil {
-		return fmt.Errorf("invalid Compression: %v", err)
-	}
-	if b.Spec.Storage.S3 == nil && b.Spec.StagingStorage != nil {
-		return errors.New("'spec.stagingStorage' may only be specified when 'spec.storage.s3' is set")
-	}
-	return nil
-}
-
-func (b *Backup) SetDefaults(mariadb *MariaDB) {
-	if b.Spec.Compression == CompressAlgorithm("") {
-		b.Spec.Compression = CompressNone
-	}
-	if b.Spec.MaxRetention == (metav1.Duration{}) {
-		b.Spec.MaxRetention = metav1.Duration{Duration: 30 * 24 * time.Hour}
-	}
-	if b.Spec.BackoffLimit == 0 {
-		b.Spec.BackoffLimit = 5
-	}
-	if b.Spec.IgnoreGlobalPriv == nil {
-		b.Spec.IgnoreGlobalPriv = ptr.To(ptr.Deref(mariadb.Spec.Galera, Galera{}).Enabled)
-	}
-	b.Spec.SetDefaults(b.ObjectMeta, mariadb.ObjectMeta)
-}
-
-func (b *Backup) SetExternalDefaults(mariadb *ExternalMariaDB) {
-	if b.Spec.Compression == CompressAlgorithm("") {
-		b.Spec.Compression = CompressNone
-	}
-	if b.Spec.MaxRetention == (metav1.Duration{}) {
-		b.Spec.MaxRetention = metav1.Duration{Duration: 30 * 24 * time.Hour}
-	}
-	if b.Spec.BackoffLimit == 0 {
-		b.Spec.BackoffLimit = 5
-	}
-
-	b.Spec.SetExternalDefaults(b.ObjectMeta)
-}
-
-func (b *Backup) Volume() (StorageVolumeSource, error) {
-	if b.Spec.Storage.S3 != nil {
-		stagingStorage := ptr.Deref(b.Spec.StagingStorage, BackupStagingStorage{})
-		return stagingStorage.VolumeOrEmptyDir(b.StagingPVCKey()), nil
-	}
-	if b.Spec.Storage.PersistentVolumeClaim != nil {
-		return StorageVolumeSource{
-			PersistentVolumeClaim: &PersistentVolumeClaimVolumeSource{
-				ClaimName: b.StoragePVCKey().Name,
-			},
-		}, nil
-	}
-	if b.Spec.Storage.Volume != nil {
-		return *b.Spec.Storage.Volume, nil
-	}
-	return StorageVolumeSource{}, errors.New("unable to get volume for Backup")
-}
-
 // +kubebuilder:object:root=true
 
 // BackupList contains a list of Backup
@@ -192,8 +109,4 @@ type BackupList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []Backup `json:"items"`
-}
-
-func init() {
-	SchemeBuilder.Register(&Backup{}, &BackupList{})
 }

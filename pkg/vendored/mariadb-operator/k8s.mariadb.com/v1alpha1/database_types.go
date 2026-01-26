@@ -1,7 +1,6 @@
 package v1alpha1
 
 import (
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -39,13 +38,6 @@ type DatabaseStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
-func (d *DatabaseStatus) SetCondition(condition metav1.Condition) {
-	if d.Conditions == nil {
-		d.Conditions = make([]metav1.Condition, 0)
-	}
-	meta.SetStatusCondition(&d.Conditions, condition)
-}
-
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=dmdb
@@ -68,37 +60,6 @@ type Database struct {
 	Status DatabaseStatus `json:"status,omitempty"`
 }
 
-func (d *Database) DatabaseNameOrDefault() string {
-	if d.Spec.Name != "" {
-		return d.Spec.Name
-	}
-	return d.Name
-}
-
-func (d *Database) IsBeingDeleted() bool {
-	return !d.DeletionTimestamp.IsZero()
-}
-
-func (d *Database) IsReady() bool {
-	return meta.IsStatusConditionTrue(d.Status.Conditions, ConditionTypeReady)
-}
-
-func (d *Database) MariaDBRef() *MariaDBRef {
-	return &d.Spec.MariaDBRef
-}
-
-func (d *Database) RequeueInterval() *metav1.Duration {
-	return d.Spec.RequeueInterval
-}
-
-func (d *Database) RetryInterval() *metav1.Duration {
-	return d.Spec.RetryInterval
-}
-
-func (d *Database) CleanupPolicy() *CleanupPolicy {
-	return d.Spec.CleanupPolicy
-}
-
 // +kubebuilder:object:root=true
 
 // DatabaseList contains a list of Database
@@ -106,8 +67,4 @@ type DatabaseList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []Database `json:"items"`
-}
-
-func init() {
-	SchemeBuilder.Register(&Database{}, &DatabaseList{})
 }

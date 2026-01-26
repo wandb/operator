@@ -1,20 +1,11 @@
 package v1alpha1
 
 import (
-	"errors"
-	"fmt"
-	"time"
-
 	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
-	"github.com/mariadb-operator/mariadb-operator/v25/pkg/environment"
-	"github.com/mariadb-operator/mariadb-operator/v25/pkg/statefulset"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // ServiceMonitor defines a prometheus ServiceMonitor object.
@@ -101,97 +92,10 @@ type Storage struct {
 }
 
 // Storage determines whether a Storage object is valid.
-func (s *Storage) Validate(mdb *MariaDB) error {
-	if s.Ephemeral != nil {
-		if *s.Ephemeral && mdb.IsHAEnabled() {
-			return errors.New("ephemeral storage is only compatible with non HA MariaDBs")
-		}
-		if *s.Ephemeral && (s.Size != nil || s.VolumeClaimTemplate != nil) {
-			return errors.New("either ephemeral or regular storage must be provided")
-		}
-		if *s.Ephemeral {
-			return nil
-		}
-	}
-	if s.Size != nil && s.Size.IsZero() {
-		return errors.New("greater than zero storage size must be provided")
-	}
-	if s.Size == nil && s.VolumeClaimTemplate == nil {
-		return errors.New("either storage size or volumeClaimTemplate must be provided")
-	}
-	if s.Size != nil && s.VolumeClaimTemplate != nil {
-		vctplSize, ok := s.VolumeClaimTemplate.Resources.Requests[corev1.ResourceStorage]
-		if !ok {
-			return nil
-		}
-		if s.Size.Cmp(vctplSize) < 0 {
-			return errors.New("storage size cannot be decreased")
-		}
-	}
-	return nil
-}
 
 // SetDefaults sets reasonable defaults.
-func (s *Storage) SetDefaults() {
-	if s.Ephemeral == nil {
-		s.Ephemeral = ptr.To(false)
-	}
-	if s.ResizeInUseVolumes == nil && !ptr.Deref(s.Ephemeral, false) {
-		s.ResizeInUseVolumes = ptr.To(true)
-	}
-	if s.WaitForVolumeResize == nil && !ptr.Deref(s.Ephemeral, false) {
-		s.WaitForVolumeResize = ptr.To(true)
-	}
-
-	if s.shouldUpdateVolumeClaimTemplate() {
-		vctpl := VolumeClaimTemplate{
-			PersistentVolumeClaimSpec: PersistentVolumeClaimSpec{
-				Resources: corev1.VolumeResourceRequirements{
-					Requests: corev1.ResourceList{
-						corev1.ResourceStorage: *s.Size,
-					},
-				},
-				AccessModes: []corev1.PersistentVolumeAccessMode{
-					corev1.ReadWriteOnce,
-				},
-			},
-		}
-		if s.StorageClassName != "" {
-			vctpl.StorageClassName = &s.StorageClassName
-		}
-		s.VolumeClaimTemplate = &vctpl
-	}
-}
 
 // GetSize obtains the size of the PVC.
-func (s *Storage) GetSize() *resource.Quantity {
-	vctpl := ptr.Deref(s.VolumeClaimTemplate, VolumeClaimTemplate{})
-	if storage, ok := vctpl.Resources.Requests[corev1.ResourceStorage]; ok {
-		return &storage
-	}
-	if s.Size != nil {
-		return s.Size
-	}
-	return nil
-}
-
-func (s *Storage) shouldUpdateVolumeClaimTemplate() bool {
-	if s.Size == nil {
-		return false
-	}
-	if s.VolumeClaimTemplate == nil {
-		return true
-	}
-
-	vctplSize, ok := s.VolumeClaimTemplate.Resources.Requests[corev1.ResourceStorage]
-	if !ok {
-		return true
-	}
-	if s.Size.Cmp(vctplSize) != 0 {
-		return true
-	}
-	return s.StorageClassName != "" && s.StorageClassName != ptr.Deref(s.VolumeClaimTemplate.StorageClassName, "")
-}
 
 // BootstrapFrom defines a source to bootstrap MariaDB from.
 type BootstrapFrom struct {
@@ -237,118 +141,6 @@ type BootstrapFrom struct {
 	RestoreJob *Job `json:"restoreJob,omitempty"`
 }
 
-func (b *BootstrapFrom) Validate() error {
-	if b.BackupRef == nil && b.VolumeSnapshotRef == nil && b.S3 == nil && b.Volume == nil {
-		return errors.New("unable to determine bootstrap source")
-	}
-
-	if b.BackupContentType != "" {
-		if err := b.BackupContentType.Validate(); err != nil {
-			return fmt.Errorf("invalid 'backupContentType': %v", err)
-		}
-	}
-
-	if b.BackupRef != nil {
-		kind := b.BackupRef.Kind
-
-		switch kind {
-		case "", BackupKind:
-			if b.BackupContentType != "" && b.BackupContentType != BackupContentTypeLogical {
-				return fmt.Errorf(
-					"inconsistent 'backupRef.kind'='%s' and 'backupContentType'='%s' fields. Logical type must be set in this case",
-					kind,
-					b.BackupContentType,
-				)
-			}
-		case PhysicalBackupKind:
-			if b.BackupContentType != "" && b.BackupContentType != BackupContentTypePhysical {
-				return fmt.Errorf(
-					"inconsistent 'backupRef.kind'='%s' and 'backupContentType'='%s' fields. Physical type must be set in this case",
-					kind,
-					b.BackupContentType,
-				)
-			}
-		default:
-			return fmt.Errorf("unsupported backup kind: '%v', supported kinds: [%v|%v]", kind, BackupKind, PhysicalBackupKind)
-		}
-	}
-
-	if b.VolumeSnapshotRef != nil {
-		if b.BackupContentType != "" && b.BackupContentType != BackupContentTypePhysical {
-			return errors.New("inconsistent 'volumeSnapshotRef' and 'backupContentType' fields. Physical type must be set in this case")
-		}
-		if b.S3 != nil || b.Volume != nil || b.RestoreJob != nil {
-			return errors.New("'s3', 'volume' and 'restoreJob' may not be set when 'volumeSnapshotRef' is set")
-		}
-	}
-	return nil
-}
-
-func (b *BootstrapFrom) IsDefaulted() bool {
-	return b.Volume != nil || b.VolumeSnapshotRef != nil
-}
-
-func (b *BootstrapFrom) SetDefaults(mariadb *MariaDB) {
-	if b.BackupRef != nil && b.BackupContentType == "" {
-		switch b.BackupRef.Kind {
-		case BackupKind:
-			b.BackupContentType = BackupContentTypeLogical
-		case PhysicalBackupKind:
-			b.BackupContentType = BackupContentTypePhysical
-		}
-	}
-	if b.VolumeSnapshotRef != nil && b.BackupContentType == "" {
-		b.BackupContentType = BackupContentTypePhysical
-	}
-	if b.BackupContentType == "" {
-		b.BackupContentType = BackupContentTypeLogical
-	}
-	if b.BackupContentType == BackupContentTypePhysical && b.S3 != nil {
-		stagingStorage := ptr.Deref(b.StagingStorage, BackupStagingStorage{})
-		b.Volume = ptr.To(stagingStorage.VolumeOrEmptyDir(mariadb.PhysicalBackupStagingPVCKey()))
-	}
-}
-
-func (b *BootstrapFrom) SetDefaultsWithPhysicalBackup(physicalBackup *PhysicalBackup) error {
-	volume, err := physicalBackup.Volume()
-	if err != nil {
-		return fmt.Errorf("error getting BackupSource volume: %v", err)
-	}
-	b.Volume = &volume
-	b.S3 = physicalBackup.Spec.Storage.S3
-	return nil
-}
-
-func (b *BootstrapFrom) SetDefaultsWithVolumeSnapshotRef(ref *LocalObjectReference) {
-	b.VolumeSnapshotRef = ref
-}
-
-func (b *BootstrapFrom) TargetRecoveryTimeOrDefault() time.Time {
-	if b.TargetRecoveryTime != nil {
-		return b.TargetRecoveryTime.Time
-	}
-	return time.Now()
-}
-
-func (b *BootstrapFrom) RestoreSource() (*RestoreSource, error) {
-	var backupRef *LocalObjectReference
-	if b.BackupRef != nil {
-		if b.BackupRef.Kind == PhysicalBackupKind {
-			return nil, errors.New("restoration from physical backups via RestoreSource is not supported")
-		}
-		backupRef = &LocalObjectReference{
-			Name: b.BackupRef.Name,
-		}
-	}
-	return &RestoreSource{
-		BackupRef:          backupRef,
-		S3:                 b.S3,
-		Volume:             b.Volume,
-		TargetRecoveryTime: b.TargetRecoveryTime,
-		StagingStorage:     b.StagingStorage,
-	}, nil
-}
-
 // UpdateType defines the type of update for a MariaDB resource.
 type UpdateType string
 
@@ -389,14 +181,6 @@ type UpdateStrategy struct {
 }
 
 // SetDefaults sets reasonable defaults.
-func (u *UpdateStrategy) SetDefaults() {
-	if u.Type == "" {
-		u.Type = ReplicasFirstPrimaryLastUpdateType
-	}
-	if u.AutoUpdateDataPlane == nil {
-		u.AutoUpdateDataPlane = ptr.To(false)
-	}
-}
 
 // TLS defines the PKI to be used with MariaDB.
 type TLS struct {
@@ -683,24 +467,10 @@ type MariaDBStatus struct {
 }
 
 // SetCondition sets a status condition to MariaDB
-func (s *MariaDBStatus) SetCondition(condition metav1.Condition) {
-	if s.Conditions == nil {
-		s.Conditions = make([]metav1.Condition, 0)
-	}
-	meta.SetStatusCondition(&s.Conditions, condition)
-}
 
 // RemoveCondition removes a status condition to MariaDB, returning true when removed
-func (s *MariaDBStatus) RemoveCondition(conditionType string) bool {
-	return meta.RemoveStatusCondition(&s.Conditions, conditionType)
-}
 
 // UpdateCurrentPrimary updates the current primary status.
-func (s *MariaDBStatus) UpdateCurrentPrimary(mariadb *MariaDB, index int) {
-	s.CurrentPrimaryPodIndex = &index
-	currentPrimary := statefulset.PodName(mariadb.ObjectMeta, index)
-	s.CurrentPrimary = &currentPrimary
-}
 
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:shortName=mdb
@@ -725,305 +495,78 @@ type MariaDB struct {
 
 // nolint:gocyclo
 // SetDefaults sets reasonable defaults.
-func (m *MariaDB) SetDefaults(env *environment.OperatorEnv) error {
-	if m.Spec.Image == "" {
-		m.Spec.Image = env.RelatedMariadbImage
-	}
-
-	if m.Spec.RootEmptyPassword == nil {
-		m.Spec.RootEmptyPassword = ptr.To(false)
-	}
-	if m.Spec.RootPasswordSecretKeyRef == (GeneratedSecretKeyRef{}) && !m.IsRootPasswordEmpty() {
-		m.Spec.RootPasswordSecretKeyRef = m.RootPasswordSecretKeyRef()
-	}
-
-	if m.Spec.Port == 0 {
-		m.Spec.Port = 3306
-	}
-	if m.Spec.MyCnf != nil && m.Spec.MyCnfConfigMapKeyRef == nil {
-		m.Spec.MyCnfConfigMapKeyRef = ptr.To(m.MyCnfConfigMapKeyRef())
-	}
-	if m.Spec.Username != nil &&
-		m.Spec.PasswordSecretKeyRef == nil && m.Spec.PasswordHashSecretKeyRef == nil && m.Spec.PasswordPlugin == nil {
-		secretKeyRef := m.PasswordSecretKeyRef()
-		m.Spec.PasswordSecretKeyRef = &secretKeyRef
-	}
-	if m.AreMetricsEnabled() {
-		if m.Spec.Metrics.Exporter.Image == "" {
-			m.Spec.Metrics.Exporter.Image = env.RelatedExporterImage
-		}
-		if m.Spec.Metrics.Exporter.Port == 0 {
-			m.Spec.Metrics.Exporter.Port = 9104
-		}
-		if m.Spec.Metrics.Exporter.Affinity != nil {
-			m.Spec.Metrics.Exporter.Affinity.SetDefaults(m.Name)
-		}
-		if m.Spec.Metrics.Username == "" {
-			m.Spec.Metrics.Username = m.MetricsKey().Name
-		}
-		if m.Spec.Metrics.PasswordSecretKeyRef == (GeneratedSecretKeyRef{}) {
-			m.Spec.Metrics.PasswordSecretKeyRef = m.MetricsPasswordSecretKeyRef()
-		}
-	}
-	if m.Spec.TLS == nil {
-		m.Spec.TLS = &TLS{
-			Enabled: true,
-		}
-	}
-
-	if m.IsGaleraEnabled() {
-		if err := m.Spec.Galera.SetDefaults(m, env); err != nil {
-			return fmt.Errorf("error setting Galera defaults: %v", err)
-		}
-	}
-	if m.IsReplicationEnabled() {
-		if err := m.Spec.Replication.SetDefaults(m, env); err != nil {
-			return fmt.Errorf("error setting replication defaults: %v", err)
-		}
-	}
-	if m.Spec.BootstrapFrom != nil {
-		m.Spec.BootstrapFrom.SetDefaults(m)
-	}
-
-	if m.Spec.UpdateStrategy == (UpdateStrategy{}) {
-		m.Spec.UpdateStrategy.SetDefaults()
-	}
-
-	m.Spec.Storage.SetDefaults()
-	m.Spec.SetDefaults(m.ObjectMeta)
-
-	return nil
-}
 
 // IsGaleraEnabled indicates whether the MariaDB instance has Galera enabled
-func (m *MariaDB) IsGaleraEnabled() bool {
-	return ptr.Deref(m.Spec.Galera, Galera{}).Enabled
-}
 
 // IsReplicationEnabled indicates whether the MariaDB instance has replication enabled
-func (m *MariaDB) IsReplicationEnabled() bool {
-	return ptr.Deref(m.Spec.Replication, Replication{}).Enabled
-}
 
 // IsHAEnabled indicates whether the MariaDB instance has HA enabled
-func (m *MariaDB) IsHAEnabled() bool {
-	return m.IsReplicationEnabled() || m.IsGaleraEnabled()
-}
 
 // IsMaxScaleEnabled indicates that a MaxScale instance is forwarding traffic to this MariaDB instance
-func (m *MariaDB) IsMaxScaleEnabled() bool {
-	return m.Spec.MaxScaleRef != nil
-}
 
 // AreMetricsEnabled indicates whether the MariaDB instance has metrics enabled
-func (m *MariaDB) AreMetricsEnabled() bool {
-	return ptr.Deref(m.Spec.Metrics, MariadbMetrics{}).Enabled
-}
 
 // IsInitialUserEnabled indicates whether the initial User is enabled
-func (m *MariaDB) IsInitialUserEnabled() bool {
-	return m.Spec.Username != nil && m.Spec.Database != nil &&
-		(m.Spec.PasswordSecretKeyRef != nil || m.Spec.PasswordHashSecretKeyRef != nil || m.Spec.PasswordPlugin != nil)
-}
 
 // IsRootPasswordEmpty indicates whether the MariaDB instance has an empty root password
-func (m *MariaDB) IsRootPasswordEmpty() bool {
-	return m.Spec.RootEmptyPassword != nil && *m.Spec.RootEmptyPassword
-}
 
 // IsRootPasswordDefined indicates whether the MariaDB instance has a root password defined
-func (m *MariaDB) IsRootPasswordDefined() bool {
-	return m.Spec.RootPasswordSecretKeyRef != (GeneratedSecretKeyRef{})
-}
 
 // IsEphemeralStorageEnabled indicates whether the MariaDB instance has ephemeral storage enabled
-func (m *MariaDB) IsEphemeralStorageEnabled() bool {
-	return ptr.Deref(m.Spec.Storage.Ephemeral, false)
-}
 
 // IsTLSEnabled indicates whether TLS is enabled
-func (m *MariaDB) IsTLSEnabled() bool {
-	return ptr.Deref(m.Spec.TLS, TLS{}).Enabled
-}
 
 // IsTLSRequired indicates whether TLS is enabled and must be enforced for all connections.
-func (m *MariaDB) IsTLSRequired() bool {
-	if !m.IsTLSEnabled() {
-		return false
-	}
-	tls := ptr.Deref(m.Spec.TLS, TLS{})
-	return ptr.Deref(tls.Required, false)
-}
 
 // IsTLSMutual specifies whether TLS must be mutual between server and client.
-func (m *MariaDB) IsTLSMutual() bool {
-	return true
-}
 
 // IsTLSForGaleraSSTEnabled indicates whether TLS for Galera SSTs is enabled.
-func (m *MariaDB) IsTLSForGaleraSSTEnabled() bool {
-	if !m.IsGaleraEnabled() || !m.IsTLSEnabled() {
-		return false
-	}
-	tls := ptr.Deref(m.Spec.TLS, TLS{})
-	return ptr.Deref(tls.GaleraSSTEnabled, false)
-}
 
 // IsReady indicates whether the MariaDB instance is ready
-func (m *MariaDB) IsReady() bool {
-	return meta.IsStatusConditionTrue(m.Status.Conditions, ConditionTypeReady)
-}
 
 // IsRestoringBackup indicates whether the MariaDB instance is restoring backup
-func (m *MariaDB) IsRestoringBackup() bool {
-	return meta.IsStatusConditionFalse(m.Status.Conditions, ConditionTypeBackupRestored)
-}
 
 // HasRestoredBackup indicates whether the MariaDB instance has restored a Backup
-func (m *MariaDB) HasRestoredBackup() bool {
-	return meta.IsStatusConditionTrue(m.Status.Conditions, ConditionTypeBackupRestored)
-}
 
 // IsResizingStorage indicates whether the MariaDB instance is resizing storage
-func (m *MariaDB) IsResizingStorage() bool {
-	return meta.IsStatusConditionFalse(m.Status.Conditions, ConditionTypeStorageResized)
-}
 
 // IsWaitingForStorageResize indicates whether the MariaDB instance is waiting for storage resize
-func (m *MariaDB) IsWaitingForStorageResize() bool {
-	condition := meta.FindStatusCondition(m.Status.Conditions, ConditionTypeStorageResized)
-	if condition == nil {
-		return false
-	}
-	return condition.Status == metav1.ConditionFalse && condition.Reason == ConditionReasonWaitStorageResize
-}
 
 // HasPendingUpdate indicates that MariaDB has a pending update.
-func (m *MariaDB) HasPendingUpdate() bool {
-	condition := meta.FindStatusCondition(m.Status.Conditions, ConditionTypeUpdated)
-	if condition == nil {
-		return false
-	}
-	return condition.Status == metav1.ConditionFalse && condition.Reason == ConditionReasonPendingUpdate
-}
 
 // IsUpdating indicates that a MariaDB update is in progress.
-func (m *MariaDB) IsUpdating() bool {
-	condition := meta.FindStatusCondition(m.Status.Conditions, ConditionTypeUpdated)
-	if condition == nil {
-		return false
-	}
-	return condition.Status == metav1.ConditionFalse && condition.Reason == ConditionReasonUpdating
-}
 
 // IsSuspended whether a MariaDB is suspended.
-func (m *MariaDB) IsSuspended() bool {
-	return m.Spec.Suspend
-}
 
 // IsInitialized indicates that the MariaDB instance has been successfully initialized.
-func (m *MariaDB) IsInitialized() bool {
-	return meta.IsStatusConditionTrue(m.Status.Conditions, ConditionTypeInitialized)
-}
 
 // IsInitializing indicates that the MariaDB instance is being initialized.
-func (m *MariaDB) IsInitializing() bool {
-	return meta.IsStatusConditionFalse(m.Status.Conditions, ConditionTypeInitialized)
-}
 
 // InitError indicates that the MariaDB instance has an initialization error.
-func (m *MariaDB) InitError() error {
-	c := meta.FindStatusCondition(m.Status.Conditions, ConditionTypeInitialized)
-	if c == nil {
-		return nil
-	}
-	if c.Status == metav1.ConditionFalse && c.Reason == ConditionReasonInitError {
-		return errors.New(c.Message)
-	}
-	return nil
-}
 
 // IsScalingOut indicates that the MariaDB instance is being initialized.
-func (m *MariaDB) IsScalingOut() bool {
-	return meta.IsStatusConditionFalse(m.Status.Conditions, ConditionTypeScaledOut)
-}
 
 // ScalingOutError indicates that the MariaDB instance has a scaling out error.
-func (m *MariaDB) ScalingOutError() error {
-	c := meta.FindStatusCondition(m.Status.Conditions, ConditionTypeScaledOut)
-	if c == nil {
-		return nil
-	}
-	if c.Status == metav1.ConditionFalse && c.Reason == ConditionReasonScaleOutError {
-		return errors.New(c.Message)
-	}
-	return nil
-}
 
 // ServerDNSNames are the Service DNS names used by server TLS certificates.
-func (m *MariaDB) TLSServerDNSNames() []string {
-	var names []string
-	names = append(names, statefulset.ServiceNameVariants(m.ObjectMeta, m.Name)...)
-	names = append(names, statefulset.HeadlessServiceNameVariants(m.ObjectMeta, "*", m.InternalServiceKey().Name)...)
-	names = append(names, statefulset.ServiceNameVariants(m.ObjectMeta, m.PrimaryServiceKey().Name)...)
-	names = append(names, statefulset.ServiceNameVariants(m.ObjectMeta, m.SecondaryServiceKey().Name)...)
-	names = append(names, "localhost")
-	return names
-}
 
 // TLSClientNames are the names used by client TLS certificates.
-func (m *MariaDB) TLSClientNames() []string {
-	return []string{fmt.Sprintf("%s-client", m.Name)}
-}
 
 // Get image pull policy
-func (m *MariaDB) GetImagePullPolicy() corev1.PullPolicy {
-	return m.Spec.ImagePullPolicy
-}
 
 // Get image pull secrets
-func (m *MariaDB) GetImagePullSecrets() []LocalObjectReference {
-	return m.Spec.ImagePullSecrets
-}
 
 // Get image
-func (m *MariaDB) GetImage(env *environment.OperatorEnv) string {
-	if m.Spec.Image != "" {
-		return m.Spec.Image
-	}
-	return env.RelatedMariadbImage
-}
 
 // Get MariaDB hostname
-func (m *MariaDB) GetHost() string {
-	if m.IsHAEnabled() {
-		return statefulset.ServiceFQDNWithService(
-			m.ObjectMeta,
-			m.PrimaryServiceKey().Name,
-		)
-	}
-	return statefulset.ServiceFQDN(m.ObjectMeta)
-}
 
 // Get MariaDB port
-func (m *MariaDB) GetPort() int32 {
-	return m.Spec.Port
-}
 
 // Get MariaDB replicas
-func (m *MariaDB) GetReplicas() int32 {
-	return m.Spec.Replicas
-}
 
 // Get MariaDB Superuser name
-func (m *MariaDB) GetSUName() string {
-	return "root"
-}
 
 // Get MariaDB Superuser credentials
-func (m *MariaDB) GetSUCredential() *SecretKeySelector {
-	return &m.Spec.RootPasswordSecretKeyRef.SecretKeySelector
-}
 
 // Topology refers to the MariaDB topology
 type Topology string
@@ -1034,36 +577,8 @@ var (
 )
 
 // Get MariaDB data-plane init container
-func (m *MariaDB) GetDataPlaneInitContainer() (*Topology, *InitContainer, error) {
-	if !m.IsHAEnabled() {
-		return nil, nil, errors.New("high availability must be enabled")
-	}
-	galera := ptr.Deref(m.Spec.Galera, Galera{})
-	if galera.Enabled {
-		return &TopologyGalera, &galera.InitContainer, nil
-	}
-	replication := ptr.Deref(m.Spec.Replication, Replication{})
-	if replication.Enabled {
-		return &TopologyReplication, &replication.InitContainer, nil
-	}
-	return nil, nil, errors.New("init container could not be found")
-}
 
 // Get MariaDB data-plane agent
-func (m *MariaDB) GetDataPlaneAgent() (*Topology, *Agent, error) {
-	if !m.IsHAEnabled() {
-		return nil, nil, errors.New("high availability must be enabled")
-	}
-	galera := ptr.Deref(m.Spec.Galera, Galera{})
-	if galera.Enabled {
-		return &TopologyGalera, &galera.Agent, nil
-	}
-	replication := ptr.Deref(m.Spec.Replication, Replication{})
-	if replication.Enabled {
-		return &TopologyReplication, &replication.Agent, nil
-	}
-	return nil, nil, errors.New("agent could not be found")
-}
 
 // +kubebuilder:object:root=true
 
@@ -1075,14 +590,3 @@ type MariaDBList struct {
 }
 
 // ListItems gets a copy of the Items slice.
-func (m *MariaDBList) ListItems() []client.Object {
-	items := make([]client.Object, len(m.Items))
-	for i, item := range m.Items {
-		items[i] = item.DeepCopy()
-	}
-	return items
-}
-
-func init() {
-	SchemeBuilder.Register(&MariaDB{}, &MariaDBList{})
-}

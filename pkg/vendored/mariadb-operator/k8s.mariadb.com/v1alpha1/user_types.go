@@ -1,12 +1,7 @@
 package v1alpha1
 
 import (
-	"errors"
-	"fmt"
-
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // TLSRequirements specifies TLS requirements for the user to connect. See: https://mariadb.com/kb/en/securing-connections-for-client-and-server/#requiring-tls.
@@ -30,26 +25,6 @@ type TLSRequirements struct {
 }
 
 // Validate ensures that TLSRequirements provides legit options.
-func (u *TLSRequirements) Validate() error {
-	// see: https://mariadb.com/kb/en/securing-connections-for-client-and-server/#requiring-tls
-	count := 0
-	if u.SSL != nil && *u.SSL {
-		count++
-	}
-	if u.X509 != nil && *u.X509 {
-		count++
-	}
-	if (u.Issuer != nil && *u.Issuer != "") || (u.Subject != nil && *u.Subject != "") {
-		count++
-	}
-	if count > 1 {
-		return errors.New("only one of [SSL, X509, (Issuer, Subject)] can be set at a time")
-	}
-	if count == 0 {
-		return errors.New("at least one field [SSL, X509, (Issuer, Subject)] must be set")
-	}
-	return nil
-}
 
 // UserSpec defines the desired state of User
 type UserSpec struct {
@@ -104,13 +79,6 @@ type UserStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
-func (u *UserStatus) SetCondition(condition metav1.Condition) {
-	if u.Conditions == nil {
-		u.Conditions = make([]metav1.Condition, 0)
-	}
-	meta.SetStatusCondition(&u.Conditions, condition)
-}
-
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:shortName=umdb
 // +kubebuilder:subresource:status
@@ -130,48 +98,6 @@ type User struct {
 	Status UserStatus `json:"status,omitempty"`
 }
 
-func (u *User) AccountName() string {
-	return fmt.Sprintf("'%s'@'%s'", u.UsernameOrDefault(), u.HostnameOrDefault())
-}
-
-func (u *User) UsernameOrDefault() string {
-	if u.Spec.Name != "" {
-		return u.Spec.Name
-	}
-	return u.Name
-}
-
-func (u *User) HostnameOrDefault() string {
-	if u.Spec.Host != "" {
-		return u.Spec.Host
-	}
-	return "%"
-}
-
-func (u *User) IsBeingDeleted() bool {
-	return !u.DeletionTimestamp.IsZero()
-}
-
-func (u *User) IsReady() bool {
-	return meta.IsStatusConditionTrue(u.Status.Conditions, ConditionTypeReady)
-}
-
-func (u *User) MariaDBRef() *MariaDBRef {
-	return &u.Spec.MariaDBRef
-}
-
-func (u *User) RequeueInterval() *metav1.Duration {
-	return u.Spec.RequeueInterval
-}
-
-func (u *User) RetryInterval() *metav1.Duration {
-	return u.Spec.RetryInterval
-}
-
-func (u *User) CleanupPolicy() *CleanupPolicy {
-	return u.Spec.CleanupPolicy
-}
-
 // +kubebuilder:object:root=true
 
 // UserList contains a list of User
@@ -182,14 +108,3 @@ type UserList struct {
 }
 
 // ListItems gets a copy of the Items slice.
-func (m *UserList) ListItems() []client.Object {
-	items := make([]client.Object, len(m.Items))
-	for i, item := range m.Items {
-		items[i] = item.DeepCopy()
-	}
-	return items
-}
-
-func init() {
-	SchemeBuilder.Register(&User{}, &UserList{})
-}

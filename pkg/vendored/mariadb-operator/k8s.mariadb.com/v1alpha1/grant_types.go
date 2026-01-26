@@ -1,11 +1,7 @@
 package v1alpha1
 
 import (
-	"fmt"
-
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // GrantSpec defines the desired state of Grant
@@ -61,13 +57,6 @@ type GrantStatus struct {
 	CurrentPrivileges []string `json:"currentPrivileges"`
 }
 
-func (g *GrantStatus) SetCondition(condition metav1.Condition) {
-	if g.Conditions == nil {
-		g.Conditions = make([]metav1.Condition, 0)
-	}
-	meta.SetStatusCondition(&g.Conditions, condition)
-}
-
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:shortName=gmdb
 // +kubebuilder:subresource:status
@@ -90,41 +79,6 @@ type Grant struct {
 	Status GrantStatus `json:"status,omitempty"`
 }
 
-func (g *Grant) IsBeingDeleted() bool {
-	return !g.DeletionTimestamp.IsZero()
-}
-
-func (g *Grant) IsReady() bool {
-	return meta.IsStatusConditionTrue(g.Status.Conditions, ConditionTypeReady)
-}
-
-func (g *Grant) MariaDBRef() *MariaDBRef {
-	return &g.Spec.MariaDBRef
-}
-
-func (g *Grant) RequeueInterval() *metav1.Duration {
-	return g.Spec.RequeueInterval
-}
-
-func (g *Grant) RetryInterval() *metav1.Duration {
-	return g.Spec.RetryInterval
-}
-
-func (g *Grant) CleanupPolicy() *CleanupPolicy {
-	return g.Spec.CleanupPolicy
-}
-
-func (g *Grant) AccountName() string {
-	return fmt.Sprintf("'%s'@'%s'", g.Spec.Username, g.HostnameOrDefault())
-}
-
-func (g *Grant) HostnameOrDefault() string {
-	if g.Spec.Host != nil && *g.Spec.Host != "" {
-		return *g.Spec.Host
-	}
-	return "%"
-}
-
 //+kubebuilder:object:root=true
 
 // GrantList contains a list of Grant
@@ -135,14 +89,3 @@ type GrantList struct {
 }
 
 // ListItems gets a copy of the Items slice.
-func (m *GrantList) ListItems() []ctrlclient.Object {
-	items := make([]ctrlclient.Object, len(m.Items))
-	for i, item := range m.Items {
-		items[i] = item.DeepCopy()
-	}
-	return items
-}
-
-func init() {
-	SchemeBuilder.Register(&Grant{}, &GrantList{})
-}

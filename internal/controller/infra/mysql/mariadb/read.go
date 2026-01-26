@@ -10,6 +10,7 @@ import (
 	"github.com/wandb/operator/internal/logx"
 	"github.com/wandb/operator/pkg/vendored/mariadb-operator/k8s.mariadb.com/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -21,7 +22,7 @@ func readConnectionDetails(ctx context.Context, client client.Client, actual *v1
 	// MariaDB operator uses a service for connection.
 	// The host is available in actual.Status.Host (or can be inferred from service name)
 	// Default port is 3306.
-	mysqlPort := strconv.Itoa(int(actual.GetPort()))
+	mysqlPort := strconv.Itoa(int(actual.Spec.Port))
 	if mysqlPort == "0" {
 		mysqlPort = "3306"
 	}
@@ -41,7 +42,7 @@ func readConnectionDetails(ctx context.Context, client client.Client, actual *v1
 	}
 
 	return &mysqlConnInfo{
-		Host:     actual.GetHost(),
+		Host:     "", // TODO generate the hostname correctly for mariaDB
 		Port:     mysqlPort,
 		User:     "wandb_local",
 		Database: "wandb_local",
@@ -128,21 +129,18 @@ func computeMySQLReportedReadyCondition(_ context.Context, clusterCR *v1alpha1.M
 		return []metav1.Condition{}
 	}
 
-	status := metav1.ConditionUnknown
+	var status metav1.ConditionStatus
 	reason := "Unknown"
 
 	// Map MariaDB status to conditions
-	if clusterCR.IsReady() {
+	if meta.IsStatusConditionTrue(clusterCR.Status.Conditions, v1alpha1.ConditionTypeReady) {
 		status = metav1.ConditionTrue
 		reason = "Ready"
 	} else {
 		status = metav1.ConditionFalse
-		// Try to find a meaningful reason from conditions
-		for _, cond := range clusterCR.Status.Conditions {
-			if cond.Type == v1alpha1.ConditionTypeReady && cond.Reason != "" {
-				reason = cond.Reason
-				break
-			}
+		condition := meta.FindStatusCondition(clusterCR.Status.Conditions, v1alpha1.ConditionTypeReady)
+		if condition != nil && condition.Reason != "" {
+			reason = condition.Reason
 		}
 	}
 
