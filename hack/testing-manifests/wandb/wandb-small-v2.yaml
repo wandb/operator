@@ -3,6 +3,7 @@ kind: WeightsAndBiases
 metadata:
   name: wandb-small-v2
 spec:
+  enableOIDCDiscovery: true
   size: small
   wandb:
     hostname: http://localhost

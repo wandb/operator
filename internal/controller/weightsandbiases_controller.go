@@ -113,6 +113,18 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			return ctrl.Result{}, err
 		}
 
+		// Ensure GVK is set for owner references (client.Get doesn't always populate TypeMeta)
+		gvks, _, err := r.Scheme.ObjectKinds(wandbv2)
+		if err != nil {
+			log.Error(err, "Failed to get GVKs from scheme")
+			return ctrl.Result{}, err
+		}
+		log.Info("Retrieved GVKs from scheme", "gvks", gvks, "count", len(gvks))
+		if len(gvks) > 0 {
+			wandbv2.SetGroupVersionKind(gvks[0])
+			log.Info("Set GVK on wandbv2", "gvk", gvks[0], "apiVersion", wandbv2.APIVersion, "kind", wandbv2.Kind)
+		}
+
 		// TODO: Once proper conversion is done, remove this logic
 		if version, ok := wandbv2.Annotations["legacy.operator.wandb.com/version"]; ok && version == "v1" {
 			log.Info("Detected legacy Weights & Biases instance, reconciling as V1...")

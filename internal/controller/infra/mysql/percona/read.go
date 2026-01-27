@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 
 	ctrlcommon "github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/translator"
@@ -27,8 +28,15 @@ func readConnectionDetails(ctx context.Context, client client.Client, actual *px
 		return nil
 	}
 
+	// Strip namespace suffix if present (e.g., "service.namespace" -> "service")
+	// This handles Percona operator versions that include namespace in status.host
+	host := actual.Status.Host
+	if idx := strings.Index(host, "."); idx > 0 {
+		host = host[:idx]
+	}
+
 	return &mysqlConnInfo{
-		Host:     actual.Status.Host,
+		Host:     host,
 		Port:     mysqlPort,
 		User:     "root",
 		Database: "wandb_local",

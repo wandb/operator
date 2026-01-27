@@ -10,7 +10,8 @@ metadata:
     app.kubernetes.io/created-by: operator
   name: wandb-default-v2
 spec:
-  size: testing
+  enableOIDCDiscovery: true
+  size: small
   streaming:
     enabled: true
     type: kafka

@@ -156,6 +156,11 @@ func writeMinioConfig(
 
 	configFileName := "config.env"
 
+	// If owner is nil (MinIO disabled), return early
+	if owner == nil {
+		return nil, nil
+	}
+
 	//log := ctrl.LoggerFrom(ctx)
 
 	if found, err = common.GetResource(
