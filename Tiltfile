@@ -22,6 +22,9 @@ settings.update(read_json(
 # Configure global watch settings with a 2-second debounce
 watch_settings(ignore=["**/.git", "**/*.out"])
 
+# Increase timeout for helm installations and apply operations
+update_settings(k8s_upsert_timeout_secs=300)
+
 currentContext = k8s_context()
 
 if currentContext in settings.get("allowedContexts"):
@@ -228,6 +231,13 @@ local_resource(
     labels=["Operator-Resources"],
 )
 
+local_resource(
+    'webhook-ready',
+    cmd='until kubectl get mutatingwebhookconfiguration operator-mutating-webhook-configuration -o jsonpath=\'{.webhooks[0].clientConfig.caBundle}\' | grep -q .; do echo "Waiting for webhook CA bundle to be injected..."; sleep 2; done && echo "Webhook is ready!"',
+    resource_deps=["operator-controller-manager"],
+    labels=["Operator-Resources"],
+)
+
 if settings.get("installWandb"):
     crdName = read_yaml('./hack/testing-manifests/wandb/' + settings.get('wandbCRD') + '.yaml')['metadata']['name']
     k8s_yaml('./hack/testing-manifests/wandb/' + settings.get('wandbCRD') + '.yaml')
@@ -236,7 +246,7 @@ if settings.get("installWandb"):
         objects=[
             '%s:weightsandbiases' % crdName
         ],
-        resource_deps=["operator-controller-manager"],
+        resource_deps=["webhook-ready"],
         labels=["Operator-Resources"],
     )
 

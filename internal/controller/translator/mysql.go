@@ -10,7 +10,7 @@ import (
 
 const (
 	// PXC Images - using the same images as the defaults package for consistency
-	DevPXCImage     = "perconalab/percona-xtradb-cluster-operator:main-pxc8.0"
+	DevPXCImage     = "percona/percona-xtradb-cluster:8.0"
 	ProdPXCImage    = "percona/percona-xtradb-cluster:8.0"
 	ProxySQLImage   = "percona/proxysql2:2.7.3"
 	LogCollectorImg = "perconalab/percona-xtradb-cluster-operator:main-logcollector"

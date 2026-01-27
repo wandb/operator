@@ -36,6 +36,9 @@ type GeneratedSecret struct {
 	Name          string `yaml:"name"`
 	Length        int    `yaml:"length"`
 	CharacterType string `yaml:"type"`
+	// UseExactName when true, creates the secret with the exact name specified without prefixing it with the CR name.
+	// This is useful for secrets that need to be referenced by external systems with a fixed name.
+	UseExactName bool `yaml:"useExactName,omitempty"`
 }
 
 // SectionRef represents simple sections that commonly contain a single
@@ -123,7 +126,8 @@ type Application struct {
 	// data from ConfigMaps. Each entry may either inline file contents (stored
 	// into an operator-managed ConfigMap) or reference an existing ConfigMap.
 	// The file will be mounted at the provided mountPath/FileName using subPath.
-	Files []FileSpec `yaml:"files,omitempty"`
+	Files     []FileSpec `yaml:"files,omitempty"`
+	JWTTokens []JWTToken `yaml:"jwtTokens,omitempty"`
 }
 
 // ContainerSpec represents a minimal container definition used by
@@ -209,4 +213,56 @@ func GetServerManifest(version string) (Manifest, error) {
 		return Manifest{}, err
 	}
 	return manifest, nil
+}
+
+// JWTToken defines a JWT token to be mounted into the application's container.
+// This abstraction supports multiple token sources: Kubernetes service account tokens,
+// pre-created secrets, or cloud provider token stores (CSI).
+type JWTToken struct {
+	// Name is a unique identifier for this JWT token mount.
+	Name string `yaml:"name"`
+	// MountPath is the directory path where the token file will be mounted.
+	MountPath string `yaml:"mountPath"`
+	// Source specifies where the JWT token comes from. Exactly one source type should be set.
+	Source JWTTokenSource `yaml:"source"`
+}
+
+// JWTTokenSource is a union type representing the different ways to source a JWT token.
+// Exactly one field should be set.
+type JWTTokenSource struct {
+	// KubernetesServiceAccount requests a token from the Kubernetes API server
+	// for the pod's service account with custom audience and expiration.
+	KubernetesServiceAccount *K8sServiceAccountToken `yaml:"kubernetesServiceAccount,omitempty"`
+	// SecretRef references an existing Kubernetes Secret containing the JWT token.
+	SecretRef *SecretReference `yaml:"secretRef,omitempty"`
+	// CSIProvider configures a CSI driver to fetch the token (e.g., AWS Secrets Manager,
+	// Azure Key Vault, GCP Secret Manager).
+	CSIProvider *CSIProviderConfig `yaml:"csiProvider,omitempty"`
+}
+
+// K8sServiceAccountToken configures a Kubernetes service account token projection.
+type K8sServiceAccountToken struct {
+	// Audience is the intended audience of the token (e.g., "internal-service").
+	Audience string `yaml:"audience"`
+	// ExpirationSeconds is the token's lifetime. Kubernetes will auto-rotate before expiration.
+	// Optional; defaults to 3607 seconds (1 hour).
+	ExpirationSeconds int64 `yaml:"expirationSeconds,omitempty"`
+}
+
+// SecretReference points to a Kubernetes Secret containing a JWT token.
+type SecretReference struct {
+	// Name is the name of the Secret in the same namespace.
+	Name string `yaml:"name"`
+	// Key is the data key within the Secret that contains the token.
+	// Optional; defaults to "token" if not specified.
+	Key string `yaml:"key,omitempty"`
+}
+
+// CSIProviderConfig configures a Container Storage Interface (CSI) driver
+// for fetching JWT tokens from cloud provider secret stores.
+type CSIProviderConfig struct {
+	// Driver is the CSI driver name (e.g., "secrets-store.csi.k8s.io").
+	Driver string `yaml:"driver"`
+	// Parameters are driver-specific configuration key-value pairs.
+	Parameters map[string]string `yaml:"parameters,omitempty"`
 }

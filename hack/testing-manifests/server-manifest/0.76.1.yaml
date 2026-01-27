@@ -15,9 +15,10 @@ generatedSecrets:
   - name: session-key
     length: 32
     type: password
-  - name: weave-auth-token
+  - name: weave-worker-auth
     length: 32
     type: password
+    useExactName: true
 
 kafka:
   - name: filestream
@@ -221,6 +222,13 @@ commonEnvvars:
         - name: license
           type: custom-resource
           field: spec.wandb.license
+  gorillaCustomerSecrets:
+    - name: GORILLA_CUSTOMER_SECRET_STORE_SOURCE
+      value: "k8s-secretmanager://"
+    - name: GORILLA_CUSTOMER_SECRET_STORE_K8S_CONFIG_NAMESPACE
+      value: "default"
+    - name: GORILLA_INTERNAL_JWT_SUBJECTS_TO_ISSUERS
+      value: '{"system:serviceaccount:default:default": "https://kubernetes.default.svc.cluster.local"}'
   clickhouse:
     - name: WF_CLICKHOUSE_HOST
       sources:
@@ -276,7 +284,17 @@ commonEnvvars:
           proto: "http"
           path: "/"
     - name: WF_TRACE_SERVER_URL
-      value: "$(WANDB_PUBLIC_BASE_URL)/traces"
+      sources:
+        - name: weave-trace
+          type: service
+          proto: "http"
+          path: "/traces"
+    - name: WEAVE_TRACE_SERVER_BASE_URL
+      sources:
+        - name: weave-trace
+          type: service
+          proto: "http"
+          path: "/traces"
     - name: API_PATH_PREFIX
       value: "/traces"
     - name: WEAVE_ENABLE_ONLINE_EVAL
@@ -285,8 +303,10 @@ commonEnvvars:
       value: "true"
     - name: WANDB_INTERNAL_SERVICE_TOKEN
       sources:
-        - name: weave-auth-token
+        - name: weave-worker-auth
           type: generatedSecret
+    - name: WANDB_INTERNAL_SERVICE_TOKEN_SECRET_NAME
+      value: "weave-worker-auth"
   frontend:
     - name: REACT_APP_HOST
       source:
@@ -351,6 +371,7 @@ applications:
       - gorillaTaskQueueProducer
       - gorillaService
       - gorillaOnprem
+      - gorillaCustomerSecrets
       - kafka
       - flatRunsV2Producer
     env:
@@ -358,6 +379,14 @@ applications:
         value: "/jwks.json"
       - name: GORILLA_VIEW_SPEC_UPDATER_EXECUTABLE
         value: "/view-spec-updater-linux"
+      - name: MIGRATE_RUNS_DB
+        sources:
+          - name: default
+            type: mysql
+      - name: MIGRATE_USAGE_DB
+        sources:
+          - name: default
+            type: mysql
     image:
       repository: wandb/megabinary
       tag: 0.76.1
@@ -369,7 +398,7 @@ applications:
         command:
           - bash
           - -c
-          - "./megabinary migrate --db $GORILLA_METADATA_STORE --squash true --runs-db $GORILLA_RUN_STORE --usage-db $GORILLA_USAGE_STORE"
+          - "./megabinary migrate --db $GORILLA_METADATA_STORE --squash true"
     args:
       - gorilla
     ports:
@@ -396,21 +425,34 @@ applications:
       - gorillaTaskQueueProducer
       - gorillaService
       - gorillaOnprem
+      - gorillaCustomerSecrets
       - frontend
       - kafka
       - flatRunsV2Producer
     env:
       - name: WEAVE_ENABLED
         value: "true"
+      - name: WEAVE_SERVICE
+        sources:
+          - name: weave
+            type: service
+            proto: ""
+            path: ""
       - name: PARQUET_ENABLED
         value: "true"
+      - name: PARQUET_HOST
+        sources:
+          - name: parquet
+            type: service
+            proto: "http"
+            path: ""
+      - name: GLUE_ENABLED
+        value: "false"
       - name: OPERATOR_ENABLED
         value: "true"
       - name: LOGGING_ENABLED
         value: "true"
       - name: ANACONDA_ENABLED
-        value: "false"
-      - name: GLUE_ENABLED
         value: "false"
       - name: GORILLA_FILEMETA_ENABLED
         value: "false"
@@ -538,6 +580,10 @@ applications:
             type: service
             proto: ""
             path: ""
+      - name: WEAVE_ENABLED
+        value: "true"
+      - name: OPERATOR_ENABLED
+        value: "true"
     ports:
       - containerPort: 8080
         name: frontend
@@ -683,6 +729,13 @@ applications:
         - port: 8080
           protocol: TCP
           name: weave-trace
+    jwtTokens:
+      - name: internal-jwt
+        mountPath: /tmp/weave-trace/internal-jwt
+        source:
+          kubernetesServiceAccount:
+            audience: internal-service
+            expirationSeconds: 600
   - name: weave-trace-worker
     image:
       repository: wandb/weave-trace
@@ -691,6 +744,9 @@ applications:
       - "python"
       - "-m"
       - "src.workers.scoring_worker"
+    env:
+      - name: DD_TRACE_ENABLED
+        value: "false"
     commonEnvs:
       - clickhouse
       - kafka
@@ -703,6 +759,9 @@ applications:
       - "python"
       - "-m"
       - "src.workers.evaluate_model_worker.evaluate_model_worker"
+    env:
+      - name: DD_TRACE_ENABLED
+        value: "false"
     commonEnvs:
       - clickhouse
       - kafka
@@ -738,6 +797,12 @@ applications:
             type: service
             proto: ""
             path: ""
+      - name: UPSTREAM_WEAVE
+        sources:
+          - name: weave
+            type: service
+            proto: ""
+            path: ""
       - name: BUCKET_HOST
         sources:
           - name: default
@@ -769,6 +834,10 @@ applications:
 
           upstream weave_trace {
             server $UPSTREAM_WEAVE_TRACE;
+          }
+
+          upstream weave {
+            server $UPSTREAM_WEAVE;
           }
 
           upstream bucket {
@@ -825,8 +894,16 @@ applications:
                 proxy_pass http://api;
               }
 
+              location /oidc {
+                proxy_pass http://api;
+              }
+
               location /traces {
                 proxy_pass http://weave_trace;
+              }
+
+              location /weave/ {
+                proxy_pass http://weave/;
               }
 
               location /bucket {
