@@ -34,6 +34,7 @@ import (
 	strimziv1 "github.com/wandb/operator/pkg/vendored/strimzi-kafka/v1"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	apiErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -190,6 +191,7 @@ func consolidateResults(results []ctrl.Result) ctrl.Result {
 	if len(durations) == 0 {
 		return ctrl.Result{}
 	}
+
 	return ctrl.Result{
 		RequeueAfter: lo.Min(durations),
 	}
@@ -234,6 +236,39 @@ func ReconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 }
 
 func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest, logger logr.Logger) (ctrl.Result, error) {
+	// Get the service account name for W&B applications.
+	// Defaults to "default" if not specified.
+	serviceAccountName := wandb.Spec.ServiceAccountName
+	if serviceAccountName == "" {
+		serviceAccountName = "default"
+	}
+
+	// Note: We do NOT create the ServiceAccount - it must already exist.
+	// Either it's the "default" ServiceAccount provided by Kubernetes,
+	// or it's a custom ServiceAccount created by the administrator.
+
+	// Create Role and RoleBinding for the service account
+	if err := createOrUpdateRole(ctx, client, wandb, serviceAccountName); err != nil {
+		logger.Error(err, "Failed to create/update Role for service account")
+		return ctrl.Result{}, err
+	}
+
+	if err := createOrUpdateRoleBinding(ctx, client, wandb, serviceAccountName); err != nil {
+		logger.Error(err, "Failed to create/update RoleBinding for service account")
+		return ctrl.Result{}, err
+	}
+
+	// Create ClusterRoleBinding for OIDC discovery if enabled in spec
+	if wandb.Spec.EnableOIDCDiscovery {
+		if err := createOrUpdateOIDCDiscoveryClusterRoleBinding(ctx, client, wandb); err != nil {
+			logger.Error(err, "Failed to create ClusterRoleBinding for OIDC discovery. "+
+				"This is required for JWT token validation between W&B services. "+
+				"Either grant the operator ClusterRoleBinding permissions, or manually create the ClusterRoleBinding. "+
+				"W&B will continue starting, but JWT authentication will fail until this is resolved.")
+			// Non-fatal: continue reconciliation even if ClusterRoleBinding creation fails
+		}
+	}
+
 	for _, app := range manifest.Applications {
 		// If the application is gated behind features, only install it when
 		// at least one of those features is enabled in the manifest.
@@ -625,6 +660,85 @@ func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb 
 			}
 		}
 
+		// Handle JWT token mounting according to manifest Application.JWTTokens
+		if len(app.JWTTokens) > 0 {
+			for _, jwtToken := range app.JWTTokens {
+				var volume corev1.Volume
+				volumeName := fmt.Sprintf("%s-%s", app.Name, jwtToken.Name)
+
+				// Create volume based on source type
+				switch {
+				case jwtToken.Source.KubernetesServiceAccount != nil:
+					// Projected volume with service account token
+					expirationSeconds := jwtToken.Source.KubernetesServiceAccount.ExpirationSeconds
+					if expirationSeconds == 0 {
+						expirationSeconds = 3607 // Default 1 hour + 7 seconds
+					}
+					volume = corev1.Volume{
+						Name: volumeName,
+						VolumeSource: corev1.VolumeSource{
+							Projected: &corev1.ProjectedVolumeSource{
+								Sources: []corev1.VolumeProjection{
+									{
+										ServiceAccountToken: &corev1.ServiceAccountTokenProjection{
+											Audience:          jwtToken.Source.KubernetesServiceAccount.Audience,
+											Path:              "token",
+											ExpirationSeconds: &expirationSeconds,
+										},
+									},
+								},
+							},
+						},
+					}
+
+				case jwtToken.Source.SecretRef != nil:
+					// Secret volume
+					key := jwtToken.Source.SecretRef.Key
+					if key == "" {
+						key = "token" // Default key name
+					}
+					volume = corev1.Volume{
+						Name: volumeName,
+						VolumeSource: corev1.VolumeSource{
+							Secret: &corev1.SecretVolumeSource{
+								SecretName: jwtToken.Source.SecretRef.Name,
+								Items: []corev1.KeyToPath{
+									{
+										Key:  key,
+										Path: "token",
+									},
+								},
+							},
+						},
+					}
+
+				case jwtToken.Source.CSIProvider != nil:
+					// CSI volume
+					volume = corev1.Volume{
+						Name: volumeName,
+						VolumeSource: corev1.VolumeSource{
+							CSI: &corev1.CSIVolumeSource{
+								Driver:           jwtToken.Source.CSIProvider.Driver,
+								VolumeAttributes: jwtToken.Source.CSIProvider.Parameters,
+								ReadOnly:         func() *bool { b := true; return &b }(),
+							},
+						},
+					}
+
+				default:
+					// No valid source specified, skip this token
+					continue
+				}
+
+				volumes = append(volumes, volume)
+				container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
+					Name:      volumeName,
+					MountPath: jwtToken.MountPath,
+					ReadOnly:  true,
+				})
+			}
+		}
+
 		initContainers := []corev1.Container{}
 
 		if app.InitContainers != nil {
@@ -649,6 +763,13 @@ func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb 
 		application.Spec.PodTemplate.Spec.Affinity = wandb.Spec.Affinity
 		application.Spec.PodTemplate.Spec.Tolerations = *wandb.Spec.Tolerations
 
+		// Set shared service account for all W&B applications
+		application.Spec.PodTemplate.Spec.ServiceAccountName = serviceAccountName
+
+		// Reconcile Service ports: fully replace the ServiceTemplate ports with
+		// the ports declared in the manifest for this app. This ensures that any
+		// change to port numbers, names, or protocols is propagated on each
+		// reconcile. If no service ports are declared, clear the ServiceTemplate.
 		if app.Service != nil && len(app.Service.Ports) > 0 {
 			application.Spec.ServiceTemplate = &corev1.ServiceSpec{
 				Type: app.Service.Type,
@@ -681,7 +802,8 @@ func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb 
 	if err != nil {
 		logger.Error(err, "Failed to parse provided hostname", "hostname", wandb.Spec.Wandb.Hostname)
 	} else {
-		if manifestFeaturesEnabled([]string{"proxy"}, manifest.Features) {
+		// Only override with NodePort if user didn't specify a port in the hostname
+		if manifestFeaturesEnabled([]string{"proxy"}, manifest.Features) && hostname.Port() == "" {
 			proxyService := &corev1.Service{}
 			proxyServiceName := fmt.Sprintf("%s-%s", wandb.Name, "nginx-proxy")
 			err := client.Get(ctx, types.NamespacedName{Name: proxyServiceName, Namespace: wandb.Namespace}, proxyService)
@@ -846,8 +968,12 @@ func generateSecrets(ctx context.Context, client ctrlClient.Client, wandb *apiv2
 	}
 	for _, gs := range manifest.GeneratedSecrets {
 		// Deterministic secret name scoped to the CR instance
-		secretName := fmt.Sprintf("%s-%s", wandb.Name, gs.Name)
-		keyName := "value"
+		// If UseExactName is true, use the exact name without prefixing
+		secretName := gs.Name
+		if !gs.UseExactName {
+			secretName = fmt.Sprintf("%s-%s", wandb.Name, gs.Name)
+		}
+		keyName := "key"
 		sec := &corev1.Secret{}
 		err := client.Get(ctx, types.NamespacedName{Name: secretName, Namespace: wandb.Namespace}, sec)
 		if err != nil {
@@ -983,9 +1109,197 @@ func inferState(
 		wandb.Status.Ready = false
 	}
 
+	log.Info("About to update status", "apiVersion", wandb.APIVersion, "kind", wandb.Kind)
 	if err := client.Status().Update(ctx, wandb); err != nil {
 		log.Error(err, "Failed to update status")
 		return err
 	}
+	log.Info("Status update successful")
+	return nil
+}
+
+// createOrUpdateRole creates or updates the Role for the W&B service account
+func createOrUpdateRole(
+	ctx context.Context,
+	client ctrlClient.Client,
+	wandb *apiv2.WeightsAndBiases,
+	serviceAccountName string,
+) error {
+	log := ctrl.LoggerFrom(ctx)
+
+	role := &rbacv1.Role{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      serviceAccountName,
+			Namespace: wandb.Namespace,
+			Labels: map[string]string{
+				"app.kubernetes.io/managed-by": "wandb-operator",
+				"app.kubernetes.io/instance":   wandb.Name,
+				"app.kubernetes.io/part-of":    "wandb",
+			},
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{""},
+				Resources: []string{"secrets"},
+				Verbs:     []string{"get", "create", "update", "delete"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"namespaces"},
+				Verbs:     []string{"get", "list"},
+			},
+		},
+	}
+
+	if err := controllerutil.SetOwnerReference(wandb, role, client.Scheme()); err != nil {
+		return fmt.Errorf("failed to set owner reference on Role: %w", err)
+	}
+
+	existingRole := &rbacv1.Role{}
+	err := client.Get(ctx, types.NamespacedName{Name: serviceAccountName, Namespace: wandb.Namespace}, existingRole)
+	if err != nil {
+		if apiErrors.IsNotFound(err) {
+			log.Info("Creating Role", "name", serviceAccountName, "namespace", wandb.Namespace)
+			if err := client.Create(ctx, role); err != nil {
+				return fmt.Errorf("failed to create Role: %w", err)
+			}
+			return nil
+		}
+		return fmt.Errorf("failed to get Role: %w", err)
+	}
+
+	// Update existing role
+	existingRole.Rules = role.Rules
+	existingRole.Labels = role.Labels
+	log.Info("Updating Role", "name", serviceAccountName, "namespace", wandb.Namespace)
+	if err := client.Update(ctx, existingRole); err != nil {
+		return fmt.Errorf("failed to update Role: %w", err)
+	}
+
+	return nil
+}
+
+// createOrUpdateRoleBinding creates or updates the RoleBinding for the W&B service account
+func createOrUpdateRoleBinding(
+	ctx context.Context,
+	client ctrlClient.Client,
+	wandb *apiv2.WeightsAndBiases,
+	serviceAccountName string,
+) error {
+	log := ctrl.LoggerFrom(ctx)
+
+	roleBinding := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      serviceAccountName,
+			Namespace: wandb.Namespace,
+			Labels: map[string]string{
+				"app.kubernetes.io/managed-by": "wandb-operator",
+				"app.kubernetes.io/instance":   wandb.Name,
+				"app.kubernetes.io/part-of":    "wandb",
+			},
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "Role",
+			Name:     serviceAccountName,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      serviceAccountName,
+				Namespace: wandb.Namespace,
+			},
+		},
+	}
+
+	if err := controllerutil.SetOwnerReference(wandb, roleBinding, client.Scheme()); err != nil {
+		return fmt.Errorf("failed to set owner reference on RoleBinding: %w", err)
+	}
+
+	existingRoleBinding := &rbacv1.RoleBinding{}
+	err := client.Get(ctx, types.NamespacedName{Name: serviceAccountName, Namespace: wandb.Namespace}, existingRoleBinding)
+	if err != nil {
+		if apiErrors.IsNotFound(err) {
+			log.Info("Creating RoleBinding", "name", serviceAccountName, "namespace", wandb.Namespace)
+			if err := client.Create(ctx, roleBinding); err != nil {
+				return fmt.Errorf("failed to create RoleBinding: %w", err)
+			}
+			return nil
+		}
+		return fmt.Errorf("failed to get RoleBinding: %w", err)
+	}
+
+	// Update existing rolebinding
+	existingRoleBinding.RoleRef = roleBinding.RoleRef
+	existingRoleBinding.Subjects = roleBinding.Subjects
+	existingRoleBinding.Labels = roleBinding.Labels
+	log.Info("Updating RoleBinding", "name", serviceAccountName, "namespace", wandb.Namespace)
+	if err := client.Update(ctx, existingRoleBinding); err != nil {
+		return fmt.Errorf("failed to update RoleBinding: %w", err)
+	}
+
+	return nil
+}
+
+// createOrUpdateOIDCDiscoveryClusterRoleBinding creates or updates the ClusterRoleBinding
+// for OIDC discovery. This is required for JWT token validation between W&B services.
+// Returns error if creation fails, but this is non-fatal for reconciliation.
+func createOrUpdateOIDCDiscoveryClusterRoleBinding(
+	ctx context.Context,
+	client ctrlClient.Client,
+	wandb *apiv2.WeightsAndBiases,
+) error {
+	log := ctrl.LoggerFrom(ctx)
+
+	clusterRoleBindingName := fmt.Sprintf("%s-oidc-discovery", wandb.Name)
+
+	clusterRoleBinding := &rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: clusterRoleBindingName,
+			Labels: map[string]string{
+				"app.kubernetes.io/managed-by": "wandb-operator",
+				"app.kubernetes.io/instance":   wandb.Name,
+				"app.kubernetes.io/part-of":    "wandb",
+			},
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     "system:service-account-issuer-discovery",
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				APIGroup: "rbac.authorization.k8s.io",
+				Kind:     "Group",
+				Name:     "system:unauthenticated",
+			},
+		},
+	}
+
+	// Note: ClusterRoleBinding cannot have ownerReferences to namespaced resources
+	// It will be cleaned up manually or left as cluster-scoped resource
+
+	existingClusterRoleBinding := &rbacv1.ClusterRoleBinding{}
+	err := client.Get(ctx, types.NamespacedName{Name: clusterRoleBindingName}, existingClusterRoleBinding)
+	if err != nil {
+		if apiErrors.IsNotFound(err) {
+			log.Info("Creating ClusterRoleBinding for OIDC discovery", "name", clusterRoleBindingName)
+			if err := client.Create(ctx, clusterRoleBinding); err != nil {
+				return fmt.Errorf("failed to create ClusterRoleBinding: %w", err)
+			}
+			return nil
+		}
+		return fmt.Errorf("failed to get ClusterRoleBinding: %w", err)
+	}
+
+	// Update existing clusterrolebinding
+	existingClusterRoleBinding.RoleRef = clusterRoleBinding.RoleRef
+	existingClusterRoleBinding.Subjects = clusterRoleBinding.Subjects
+	existingClusterRoleBinding.Labels = clusterRoleBinding.Labels
+	log.Info("Updating ClusterRoleBinding for OIDC discovery", "name", clusterRoleBindingName)
+	if err := client.Update(ctx, existingClusterRoleBinding); err != nil {
+		return fmt.Errorf("failed to update ClusterRoleBinding: %w", err)
+	}
+
 	return nil
 }

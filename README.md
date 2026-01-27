@@ -10,6 +10,8 @@
 
 - A Kubernetes cluster (e.g. [kind](https://kind.sigs.k8s.io/))
 - [Tilt](https://tilt.dev/)
+- [Kubebuilder](https://book.kubebuilder.io/quick-start.html)
+- [Kustomize](https://kustomize.io/)
 - [jq](https://stedolan.github.io/jq/) for some helper scripts
 
 #### Install Kind
@@ -53,6 +55,14 @@ brew install tilt
 
 ```bash
 brew install kubebuilder
+```
+
+#### Install Kustomize
+
+[kustomize](https://kustomize.io/) is used to build Kubernetes manifests. Install `kustomize`:
+
+```bash
+brew install kustomize
 ```
 
 ### Configuring and Running Tilt
