@@ -33,7 +33,7 @@ func GenerateRandomPassword(length int) (string, error) {
 
 	result := make([]byte, length)
 	for i := 0; i < length; i++ {
-		num, err := rand.Int(rand.Reader, big.NewInt(int64(characterSetLength-1)))
+		num, err := rand.Int(rand.Reader, big.NewInt(int64(characterSetLength)))
 		if err != nil {
 			return "", err
 		}

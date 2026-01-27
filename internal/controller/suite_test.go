@@ -116,6 +116,8 @@ var _ = BeforeSuite(func() {
 				filepath.Join("..", "..", "config", "crd", "bases"),
 				filepath.Join("..", "..", "pkg", "vendored", "altinity-clickhouse", "crds"),
 				filepath.Join("..", "..", "pkg", "vendored", "minio-operator", "crds"),
+				filepath.Join("..", "..", "pkg", "vendored", "mariadb-operator", "crds"),
+				filepath.Join("..", "..", "pkg", "vendored", "mysql-operator", "crds"),
 				filepath.Join("..", "..", "pkg", "vendored", "percona-operator", "crds"),
 				filepath.Join("..", "..", "pkg", "vendored", "redis-operator", "crds"),
 				filepath.Join("..", "..", "pkg", "vendored", "strimzi-kafka", "crds"),

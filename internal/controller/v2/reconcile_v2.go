@@ -1116,15 +1116,16 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 			jobStatus.Succeeded = true
 		} else {
 			allSucceeded = false
-			anyRunning = true
 			for _, cond := range job.Status.Conditions {
 				if cond.Type == batchv1.JobFailed && cond.Status == corev1.ConditionTrue {
 					jobStatus.Failed = true
 					jobStatus.Message = cond.Message
 					anyFailed = true
-					anyRunning = false
 					break
 				}
+			}
+			if !jobStatus.Failed {
+				anyRunning = true
 			}
 		}
 
