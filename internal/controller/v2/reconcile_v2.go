@@ -29,10 +29,12 @@ import (
 	"github.com/samber/lo"
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/ctrlqueue"
+	"github.com/wandb/operator/internal/controller/infra/mysql/mysql"
 	"github.com/wandb/operator/internal/logx"
 	oputils "github.com/wandb/operator/pkg/utils"
 	strimziv1 "github.com/wandb/operator/pkg/vendored/strimzi-kafka/v1"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apiErrors "k8s.io/apimachinery/pkg/api/errors"
@@ -40,6 +42,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/utils/pointer"
 	ctrl "sigs.k8s.io/controller-runtime"
 	ctrlClient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -159,6 +162,9 @@ func Reconcile(
 	clickHouseReady := wandb.Status.ClickHouseStatus.Ready
 
 	if !redisReady || !mysqlReady || !kafkaReady || !minioReady || !clickHouseReady {
+		log := ctrl.LoggerFrom(ctx)
+		log.Info("Infra not ready in V2.Reconcile",
+			"redis", redisReady, "mysql", mysqlReady, "kafka", kafkaReady, "minio", minioReady, "clickhouse", clickHouseReady)
 		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
 	}
 
@@ -200,6 +206,7 @@ func consolidateResults(results []ctrl.Result) ctrl.Result {
 func ReconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest) (ctrl.Result, error) {
 	// Reconcile Wandb Manifest
 	logger := ctrl.LoggerFrom(ctx).WithName("reconcileWandbManifest")
+	logger.Info("Reconciling Wandb Manifest", "name", wandb.Name)
 	var result ctrl.Result
 	var err error
 
@@ -210,7 +217,8 @@ func ReconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 	clickHouseReady := wandb.Status.ClickHouseStatus.Ready
 
 	if !redisReady || !mysqlReady || !kafkaReady || !minioReady || !clickHouseReady {
-		logger.Info("Infra components not ready yet, requeuing for reconciliation")
+		logger.Info("Infra components not ready yet, requeuing for reconciliation",
+			"redis", redisReady, "mysql", mysqlReady, "kafka", kafkaReady, "minio", minioReady, "clickhouse", clickHouseReady)
 		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
 	}
 
@@ -226,7 +234,25 @@ func ReconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 		return result, err
 	}
 
-	runMigrations()
+	result, err = runMysqlInitJob(ctx, client, wandb, manifest)
+	if err != nil {
+		return result, err
+	}
+
+	if wandb.Spec.MySQL.DeploymentType == apiv2.MySQLTypeMysql && !wandb.Status.Wandb.MySQLInit.Succeeded {
+		logger.Info("Mysql init not yet successful", "Message", wandb.Status.Wandb.MySQLInit.Message)
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+	}
+
+	result, err = runMigrations(ctx, client, wandb, manifest)
+	if err != nil {
+		return result, err
+	}
+
+	if !wandb.Status.Wandb.Migration.Ready {
+		logger.Info("Migration not yet successful for version", "version", wandb.Spec.Wandb.Version, "reason", wandb.Status.Wandb.Migration.Reason)
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+	}
 
 	result, err = reconcileApplications(ctx, client, wandb, manifest, logger)
 	if err != nil {
@@ -236,18 +262,15 @@ func ReconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 }
 
 func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest, logger logr.Logger) (ctrl.Result, error) {
-	// Get the service account name for W&B applications.
-	// Defaults to "default" if not specified.
-	serviceAccountName := wandb.Spec.ServiceAccountName
-	if serviceAccountName == "" {
-		serviceAccountName = "default"
+	serviceAccountName := wandb.Spec.Wandb.ServiceAccount.ServiceAccountName
+
+	if *wandb.Spec.Wandb.ServiceAccount.Create {
+		if err := createOrUpdateServiceAccount(ctx, client, wandb, serviceAccountName); err != nil {
+			logger.Error(err, "Failed to create/update ServiceAccount")
+			return ctrl.Result{}, err
+		}
 	}
 
-	// Note: We do NOT create the ServiceAccount - it must already exist.
-	// Either it's the "default" ServiceAccount provided by Kubernetes,
-	// or it's a custom ServiceAccount created by the administrator.
-
-	// Create Role and RoleBinding for the service account
 	if err := createOrUpdateRole(ctx, client, wandb, serviceAccountName); err != nil {
 		logger.Error(err, "Failed to create/update Role for service account")
 		return ctrl.Result{}, err
@@ -258,8 +281,7 @@ func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb 
 		return ctrl.Result{}, err
 	}
 
-	// Create ClusterRoleBinding for OIDC discovery if enabled in spec
-	if wandb.Spec.EnableOIDCDiscovery {
+	if wandb.Spec.Wandb.InternalServiceAuth.Enabled != nil && *wandb.Spec.Wandb.InternalServiceAuth.Enabled {
 		if err := createOrUpdateOIDCDiscoveryClusterRoleBinding(ctx, client, wandb); err != nil {
 			logger.Error(err, "Failed to create ClusterRoleBinding for OIDC discovery. "+
 				"This is required for JWT token validation between W&B services. "+
@@ -300,199 +322,9 @@ func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb 
 			combinedEnvs = append(combinedEnvs, env)
 		}
 
-		var envVars []corev1.EnvVar
-		for _, env := range combinedEnvs {
-			// If a literal value is provided, it's a simple case.
-			if env.Value != "" {
-				envVars = append(envVars, corev1.EnvVar{Name: env.Name, Value: env.Value})
-				continue
-			}
-
-			// Multi-source composition: build a comma-separated value from all resolvable sources.
-			// Secret-backed sources are exposed via intermediate env vars and referenced with $(VAR) expansion.
-			// If there is exactly one secret-backed source and no literals, keep direct SecretKeyRef for back-compat.
-
-			// Temporary slices to build the final env value and intermediates
-			components := []string{}
-			intermediateVars := []corev1.EnvVar{}
-
-			// Helper to add a secret-backed component via an intermediate env var
-			addSecretComponent := func(selector corev1.SecretKeySelector, idx int) {
-				// Deterministic name based on target env and source index
-				ivName := fmt.Sprintf("%s_%d", env.Name, idx)
-				// K8s env var names must be alphanumeric + _ and not start with a number
-				// The env.Name in manifest follows standard patterns; idx ensures uniqueness.
-				intermediateVars = append(intermediateVars, corev1.EnvVar{
-					Name: ivName,
-					ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{
-						LocalObjectReference: selector.LocalObjectReference,
-						Key:                  selector.Key,
-						Optional:             selector.Optional,
-					}},
-				})
-				components = append(components, fmt.Sprintf("$(%s)", ivName))
-			}
-
-			// Track if we only have a single secret-backed component
-			singleSecretSelector := corev1.SecretKeySelector{}
-			secretOnlyCount := 0
-
-			for idx, src := range env.Sources {
-				switch src.Type {
-				case "generatedSecret":
-					if sel, ok := wandb.Status.GeneratedSecrets[src.Name]; ok {
-						singleSecretSelector = sel
-						secretOnlyCount++
-						addSecretComponent(sel, idx)
-					}
-				case "mysql":
-					// mysql connection URL as a secret ref
-					selector := wandb.Status.MySQLStatus.Connection.URL
-					// Record for potential direct assignment case
-					singleSecretSelector = selector
-					secretOnlyCount++
-					addSecretComponent(selector, idx)
-				case "redis":
-					selector := wandb.Status.RedisStatus.Connection.URL
-					singleSecretSelector = selector
-					secretOnlyCount++
-					addSecretComponent(selector, idx)
-				case "bucket":
-					selector := corev1.SecretKeySelector{
-						LocalObjectReference: wandb.Status.MinioStatus.Connection.URL.LocalObjectReference,
-					}
-					switch src.Field {
-					case "host":
-						selector.Key = "Host"
-					case "port":
-						selector.Key = "Port"
-					case "region":
-						selector.Key = "Region"
-					default:
-						selector.Key = "url"
-					}
-					singleSecretSelector = selector
-					secretOnlyCount++
-					addSecretComponent(selector, idx)
-				case "clickhouse":
-					// clickhouse fields are provided as separate keys in the same secret
-					selector := corev1.SecretKeySelector{
-						LocalObjectReference: wandb.Status.ClickHouseStatus.Connection.URL.LocalObjectReference,
-					}
-					switch src.Field {
-					case "host":
-						selector.Key = "Host"
-					case "port":
-						selector.Key = "Port"
-					case "user":
-						selector.Key = "User"
-					case "password":
-						selector.Key = "Password"
-					case "database":
-						selector.Key = "Database"
-					default:
-						// Unrecognized field; skip
-						continue
-					}
-					singleSecretSelector = selector
-					secretOnlyCount++
-					addSecretComponent(selector, idx)
-				case "kafka":
-					// kafka can be referenced as a full URL (no field) or by specific fields (host/port)
-					if src.Field == "" {
-						selector := wandb.Status.KafkaStatus.Connection.URL
-						singleSecretSelector = selector
-						secretOnlyCount++
-						addSecretComponent(selector, idx)
-						break
-					}
-					selector := corev1.SecretKeySelector{
-						LocalObjectReference: wandb.Status.KafkaStatus.Connection.URL.LocalObjectReference,
-					}
-					switch src.Field {
-					case "host":
-						selector.Key = "Host"
-					case "port":
-						selector.Key = "Port"
-					default:
-						selector.Key = "url"
-					}
-					singleSecretSelector = selector
-					secretOnlyCount++
-					addSecretComponent(selector, idx)
-				case "service":
-					// Resolve to a literal URL (proto://serviceName:port/path)
-					serviceList := &corev1.ServiceList{}
-					targetApplicationName := fmt.Sprintf("%s-%s", wandb.Name, src.Name)
-					err := client.List(
-						ctx,
-						serviceList,
-						ctrlClient.InNamespace(wandb.Namespace),
-						ctrlClient.MatchingLabels{"app.kubernetes.io/name": targetApplicationName},
-					)
-					if err != nil {
-						return ctrl.Result{}, err
-					}
-					if len(serviceList.Items) == 0 || len(serviceList.Items[0].Spec.Ports) == 0 {
-						// Can't resolve; skip this component
-						continue
-					}
-					proto := ""
-					if src.Proto != "" {
-						proto = fmt.Sprintf("%s://", src.Proto)
-					}
-					// Choose a port: prefer named match if provided; else pick the first port
-					selectedPort := serviceList.Items[0].Spec.Ports[0].Port
-					if src.Port != "" {
-						for _, servicePort := range serviceList.Items[0].Spec.Ports {
-							if servicePort.Name == src.Port {
-								selectedPort = servicePort.Port
-								break
-							}
-						}
-					}
-					components = append(components, fmt.Sprintf("%s%s:%d%s", proto, serviceList.Items[0].Name, selectedPort, src.Path))
-				case "custom-resource":
-					// Read a value from the current WandB custom resource via dotted field path
-					if src.Field == "" {
-						// No field specified; nothing to resolve
-						continue
-					}
-					if val, ok := resolveCRFieldString(wandb, src.Field); ok {
-						// Treat as a literal component (not secret-backed)
-						components = append(components, val)
-					}
-				default:
-					// Unknown source type; skip
-					continue
-				}
-			}
-
-			// If we built no components, skip emitting this env var
-			if len(components) == 0 {
-				if env.DefaultValue != "" {
-					envVars = append(envVars, corev1.EnvVar{Name: env.Name, Value: env.DefaultValue})
-				}
-				continue
-			}
-
-			// Optimization/back-compat: if there's exactly one component and it is secret-backed, emit ValueFrom directly
-			if len(components) == 1 && secretOnlyCount == 1 && components[0] != "" && intermediateVars != nil {
-				// Emit the single env var directly from the secret without intermediate
-				envVars = append(envVars, corev1.EnvVar{
-					Name:      env.Name,
-					ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &singleSecretSelector},
-				})
-				continue
-			}
-
-			// Otherwise, add all intermediate vars first to ensure $(VAR) expansion works
-			envVars = append(envVars, intermediateVars...)
-			// Then add the final composed env var
-			envVars = append(envVars, corev1.EnvVar{
-				Name:  env.Name,
-				Value: strings.Join(components, ","),
-			})
+		envVars, err := resolveEnvvars(ctx, client, wandb, combinedEnvs)
+		if err != nil {
+			return ctrl.Result{}, err
 		}
 
 		var Ports []corev1.ContainerPort
@@ -743,6 +575,9 @@ func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb 
 
 		if app.InitContainers != nil {
 			for _, initContainerSpec := range app.InitContainers {
+				if initContainerSpec.Name == "migrate" {
+					continue
+				}
 				initContainer := corev1.Container{
 					Name:    initContainerSpec.Name,
 					Image:   initContainerSpec.Image.GetImage(),
@@ -828,39 +663,522 @@ func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb 
 	return ctrl.Result{}, nil
 }
 
-func runMigrations() {
-	// TODO lets run migrations here, need to add some logic for ensuring they run only once.
-	//for name, migrationTask := range manifest.Migrations {
-	//	// check for a currently running job
-	//	jobName := fmt.Sprintf("%s-%s", wandb.Name, name)
-	//	job := &batchv1.Job{}
-	//	err := client.Get(
-	//		ctx,
-	//		types.NamespacedName{
-	//			Namespace: wandb.Namespace,
-	//			Name:      jobName,
-	//		},
-	//		job,
-	//	)
-	//	if err != nil && !apiErrors.IsNotFound(err) {
-	//		return ctrl.Result{}, err
-	//	}
-	//	if apiErrors.IsNotFound(err) {
-	//		job.ObjectMeta.Name = jobName
-	//		job.ObjectMeta.Namespace = wandb.Namespace
-	//		containerSpec := corev1.Container{
-	//			Name:  name,
-	//			Image: migrationTask.Image.GetImage(),
-	//			Args:  migrationTask.Args,
-	//		}
-	//		job.Spec.Template.Spec.Containers = []corev1.Container{containerSpec}
-	//		err = client.Create(ctx, job)
-	//	} else {
-	//		if job.Status.Succeeded == 0 {
-	//			client.Delete(ctx, job)
-	//		}
-	//	}
-	//}
+func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, combinedEnvs []serverManifest.EnvVar) ([]corev1.EnvVar, error) {
+	var envVars []corev1.EnvVar
+	for _, env := range combinedEnvs {
+		// If a literal value is provided, it's a simple case.
+		if env.Value != "" {
+			envVars = append(envVars, corev1.EnvVar{Name: env.Name, Value: env.Value})
+			continue
+		}
+		if env.ValueFrom != nil {
+			envVars = append(envVars, corev1.EnvVar{Name: env.Name, ValueFrom: env.ValueFrom})
+		}
+
+		// Multi-source composition: build a comma-separated value from all resolvable sources.
+		// Secret-backed sources are exposed via intermediate env vars and referenced with $(VAR) expansion.
+		// If there is exactly one secret-backed source and no literals, keep direct SecretKeyRef for back-compat.
+
+		// Temporary slices to build the final env value and intermediates
+		var components []string
+		var intermediateVars []corev1.EnvVar
+
+		// Helper to add a secret-backed component via an intermediate env var
+		addSecretComponent := func(selector corev1.SecretKeySelector, idx int) {
+			// Deterministic name based on target env and source index
+			ivName := fmt.Sprintf("%s_%d", env.Name, idx)
+			// K8s env var names must be alphanumeric + _ and not start with a number
+			// The env.Name in manifest follows standard patterns; idx ensures uniqueness.
+			intermediateVars = append(intermediateVars, corev1.EnvVar{
+				Name: ivName,
+				ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: selector.LocalObjectReference,
+					Key:                  selector.Key,
+					Optional:             selector.Optional,
+				}},
+			})
+			components = append(components, fmt.Sprintf("$(%s)", ivName))
+		}
+
+		// Track if we only have a single secret-backed component
+		singleSecretSelector := corev1.SecretKeySelector{}
+		secretOnlyCount := 0
+
+		for idx, src := range env.Sources {
+			switch src.Type {
+			case "generatedSecret":
+				if sel, ok := wandb.Status.GeneratedSecrets[src.Name]; ok {
+					singleSecretSelector = sel
+					secretOnlyCount++
+					addSecretComponent(sel, idx)
+				}
+			case "mysql":
+				// mysql connection URL as a secret ref
+				selector := wandb.Status.MySQLStatus.Connection.URL
+				// Record for potential direct assignment case
+				singleSecretSelector = selector
+				secretOnlyCount++
+				addSecretComponent(selector, idx)
+			case "redis":
+				selector := wandb.Status.RedisStatus.Connection.URL
+				singleSecretSelector = selector
+				secretOnlyCount++
+				addSecretComponent(selector, idx)
+			case "bucket":
+				selector := corev1.SecretKeySelector{
+					LocalObjectReference: wandb.Status.MinioStatus.Connection.URL.LocalObjectReference,
+				}
+				switch src.Field {
+				case "host":
+					selector.Key = "Host"
+				case "port":
+					selector.Key = "Port"
+				case "region":
+					selector.Key = "Region"
+				default:
+					selector.Key = "url"
+				}
+				singleSecretSelector = selector
+				secretOnlyCount++
+				addSecretComponent(selector, idx)
+			case "clickhouse":
+				// clickhouse fields are provided as separate keys in the same secret
+				selector := corev1.SecretKeySelector{
+					LocalObjectReference: wandb.Status.ClickHouseStatus.Connection.URL.LocalObjectReference,
+				}
+				switch src.Field {
+				case "host":
+					selector.Key = "Host"
+				case "port":
+					selector.Key = "Port"
+				case "user":
+					selector.Key = "User"
+				case "password":
+					selector.Key = "Password"
+				case "database":
+					selector.Key = "Database"
+				default:
+					// Unrecognized field; skip
+					continue
+				}
+				singleSecretSelector = selector
+				secretOnlyCount++
+				addSecretComponent(selector, idx)
+			case "kafka":
+				// kafka can be referenced as a full URL (no field) or by specific fields (host/port)
+				if src.Field == "" {
+					selector := wandb.Status.KafkaStatus.Connection.URL
+					singleSecretSelector = selector
+					secretOnlyCount++
+					addSecretComponent(selector, idx)
+					break
+				}
+				selector := corev1.SecretKeySelector{
+					LocalObjectReference: wandb.Status.KafkaStatus.Connection.URL.LocalObjectReference,
+				}
+				switch src.Field {
+				case "host":
+					selector.Key = "Host"
+				case "port":
+					selector.Key = "Port"
+				default:
+					selector.Key = "url"
+				}
+				singleSecretSelector = selector
+				secretOnlyCount++
+				addSecretComponent(selector, idx)
+			case "service":
+				// Resolve to a literal URL (proto://serviceName:port/path)
+				serviceList := &corev1.ServiceList{}
+				targetApplicationName := fmt.Sprintf("%s-%s", wandb.Name, src.Name)
+				err := client.List(
+					ctx,
+					serviceList,
+					ctrlClient.InNamespace(wandb.Namespace),
+					ctrlClient.MatchingLabels{"app.kubernetes.io/name": targetApplicationName},
+				)
+				if err != nil {
+					return nil, err
+				}
+				if len(serviceList.Items) == 0 || len(serviceList.Items[0].Spec.Ports) == 0 {
+					// Can't resolve; skip this component
+					continue
+				}
+				proto := ""
+				if src.Proto != "" {
+					proto = fmt.Sprintf("%s://", src.Proto)
+				}
+				// Choose a port: prefer named match if provided; else pick the first port
+				selectedPort := serviceList.Items[0].Spec.Ports[0].Port
+				if src.Port != "" {
+					for _, servicePort := range serviceList.Items[0].Spec.Ports {
+						if servicePort.Name == src.Port {
+							selectedPort = servicePort.Port
+							break
+						}
+					}
+				}
+				components = append(components, fmt.Sprintf("%s%s:%d%s", proto, serviceList.Items[0].Name, selectedPort, src.Path))
+			case "jwt-issuer-map":
+				if *wandb.Spec.Wandb.InternalServiceAuth.Enabled {
+					// TODO Get real OIDC Issuer
+					issuer := "https://kubernetes.default.svc.cluster.local"
+					if wandb.Spec.Wandb.InternalServiceAuth.OIDCIssuer != "" {
+						issuer = wandb.Spec.Wandb.InternalServiceAuth.OIDCIssuer
+					}
+					components = append(
+						components,
+						fmt.Sprintf(
+							"{\"system:serviceaccount:%s:%s\": \"%s\" }",
+							wandb.Namespace,
+							wandb.Spec.Wandb.ServiceAccount.ServiceAccountName,
+							issuer,
+						),
+					)
+				}
+			case "custom-resource":
+				// Read a value from the current WandB custom resource via dotted field path
+				if src.Field == "" {
+					// No field specified; nothing to resolve
+					continue
+				}
+				if val, ok := resolveCRFieldString(wandb, src.Field); ok {
+					// Treat as a literal component (not secret-backed)
+					components = append(components, val)
+				}
+			default:
+				// Unknown source type; skip
+				continue
+			}
+		}
+
+		// If we built no components, skip emitting this env var
+		if len(components) == 0 {
+			if env.DefaultValue != "" {
+				envVars = append(envVars, corev1.EnvVar{Name: env.Name, Value: env.DefaultValue})
+			}
+			continue
+		}
+
+		// Optimization/back-compat: if there's exactly one component and it is secret-backed, emit ValueFrom directly
+		if len(components) == 1 && secretOnlyCount == 1 && components[0] != "" && intermediateVars != nil {
+			// Emit the single env var directly from the secret without intermediate
+			envVars = append(envVars, corev1.EnvVar{
+				Name:      env.Name,
+				ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &singleSecretSelector},
+			})
+			continue
+		}
+
+		// Otherwise, add all intermediate vars first to ensure $(VAR) expansion works
+		envVars = append(envVars, intermediateVars...)
+		// Then add the final composed env var
+		envVars = append(envVars, corev1.EnvVar{
+			Name:  env.Name,
+			Value: strings.Join(components, ","),
+		})
+	}
+	return envVars, nil
+}
+
+func runMysqlInitJob(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest) (ctrl.Result, error) {
+	if wandb.Spec.MySQL.DeploymentType != apiv2.MySQLTypeMysql {
+		return ctrl.Result{}, nil
+	}
+
+	if wandb.Status.Wandb.MySQLInit.Succeeded {
+		return ctrl.Result{}, nil
+	}
+
+	logger := ctrl.LoggerFrom(ctx).WithName("mysqlInit")
+
+	jobName := fmt.Sprintf("%s-mysql-init", wandb.Name)
+	logger.Info("Checking for MySQL init job", "job", jobName)
+	job := &batchv1.Job{}
+	err := client.Get(ctx, types.NamespacedName{Name: jobName, Namespace: wandb.Namespace}, job)
+
+	if err != nil && !apiErrors.IsNotFound(err) {
+		return ctrl.Result{}, err
+	}
+
+	if apiErrors.IsNotFound(err) {
+		logger.Info("Creating MySQL init job")
+
+		specNamespacedName := mysqlSpecNamespacedName(wandb.Spec.MySQL)
+		nsnBuilder := mysql.CreateNsNameBuilder(types.NamespacedName{
+			Name:      specNamespacedName.Name,
+			Namespace: specNamespacedName.Namespace,
+		})
+		secretName := fmt.Sprintf("%s-db-password", specNamespacedName.Name)
+
+		// The job will:
+		// 1. Wait for MySQL to be reachable (optional, but we assume mysqlReady is true here)
+		// 2. Create the database wandb_local
+		// 3. Create the user wandb_local with the provided password
+		// 4. Grant privileges
+		// We use the root user and rootPassword from the secret.
+		mysqlCmd := "mysql -h $MYSQL_HOST -u root -p\"${MYSQL_ROOT_PASSWORD}\" -e " +
+			"\"CREATE DATABASE IF NOT EXISTS wandb_local; " +
+			"CREATE USER IF NOT EXISTS 'wandb_local'@'%%' IDENTIFIED BY '${MYSQL_PASSWORD}'; " +
+			"GRANT ALL PRIVILEGES ON wandb_local.* TO 'wandb_local'@'%%'; FLUSH PRIVILEGES;\""
+
+		// For InnoDBCluster, the service host is {name}.{namespace}.svc.cluster.local
+		mysqlHost := fmt.Sprintf("%s.%s.svc.cluster.local", nsnBuilder.ClusterName(), specNamespacedName.Namespace)
+
+		job = &batchv1.Job{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      jobName,
+				Namespace: wandb.Namespace,
+				Labels: map[string]string{
+					"app.kubernetes.io/managed-by": "wandb-operator",
+					"app.kubernetes.io/instance":   wandb.Name,
+					"app.kubernetes.io/component":  "mysql-init",
+				},
+			},
+			Spec: batchv1.JobSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						RestartPolicy: corev1.RestartPolicyOnFailure,
+						Containers: []corev1.Container{
+							{
+								Name:    "mysql-init",
+								Image:   "mysql:8.0", // Use a standard mysql image
+								Command: []string{"/bin/sh", "-c", mysqlCmd},
+								Env: []corev1.EnvVar{
+									{
+										Name:  "MYSQL_HOST",
+										Value: mysqlHost,
+									},
+									{
+										Name: "MYSQL_ROOT_PASSWORD",
+										ValueFrom: &corev1.EnvVarSource{
+											SecretKeyRef: &corev1.SecretKeySelector{
+												LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
+												Key:                  "rootPassword",
+											},
+										},
+									},
+									{
+										Name: "MYSQL_PASSWORD",
+										ValueFrom: &corev1.EnvVarSource{
+											SecretKeyRef: &corev1.SecretKeySelector{
+												LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
+												Key:                  "password",
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		if err := controllerutil.SetOwnerReference(wandb, job, client.Scheme()); err != nil {
+			return ctrl.Result{}, err
+		}
+
+		if err := client.Create(ctx, job); err != nil {
+			return ctrl.Result{}, err
+		}
+
+		wandb.Status.Wandb.MySQLInit.Name = jobName
+		wandb.Status.Wandb.MySQLInit.Succeeded = false
+		if err := client.Status().Update(ctx, wandb); err != nil {
+			return ctrl.Result{}, err
+		}
+
+		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
+	}
+
+	if job.Status.Succeeded > 0 {
+		logger.Info("MySQL init job succeeded")
+		wandb.Status.Wandb.MySQLInit.Succeeded = true
+		if err := client.Status().Update(ctx, wandb); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, nil
+	}
+
+	if job.Status.Failed > 0 {
+		logger.Info("MySQL init job failed")
+		wandb.Status.Wandb.MySQLInit.Failed = true
+		if err := client.Status().Update(ctx, wandb); err != nil {
+			return ctrl.Result{}, err
+		}
+		// We might want to return an error or just requeue
+		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
+	}
+
+	logger.Info("MySQL init job still running")
+	return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
+}
+
+func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest) (ctrl.Result, error) {
+	version := wandb.Spec.Wandb.Version
+
+	if wandb.Status.Wandb.Migration.Ready && wandb.Status.Wandb.Migration.Version == version {
+		return ctrl.Result{}, nil
+	}
+
+	if wandb.Status.Wandb.Migration.Version != version {
+		wandb.Status.Wandb.Migration.Version = version
+		wandb.Status.Wandb.Migration.Ready = false
+		wandb.Status.Wandb.Migration.Reason = "Running"
+		wandb.Status.Wandb.Migration.Jobs = make(map[string]apiv2.MigrationJobStatus)
+		if err := client.Status().Update(ctx, wandb); err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+
+	if len(manifest.Migrations) == 0 {
+		wandb.Status.Wandb.Migration.Ready = true
+		wandb.Status.Wandb.Migration.Reason = "Complete"
+		wandb.Status.Wandb.Migration.LastSuccessVersion = version
+		if err := client.Status().Update(ctx, wandb); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, nil
+	}
+
+	if wandb.Status.Wandb.Migration.Jobs == nil {
+		wandb.Status.Wandb.Migration.Jobs = make(map[string]apiv2.MigrationJobStatus)
+	}
+
+	allSucceeded := true
+	anyFailed := false
+	anyRunning := false
+
+	for name, migrationTask := range manifest.Migrations {
+		jobName := fmt.Sprintf("%s-%s", wandb.Name, name)
+		job := &batchv1.Job{}
+		err := client.Get(ctx, types.NamespacedName{Name: jobName, Namespace: wandb.Namespace}, job)
+
+		jobStatus := apiv2.MigrationJobStatus{
+			Name: jobName,
+		}
+
+		if err != nil && !apiErrors.IsNotFound(err) {
+			return ctrl.Result{}, err
+		}
+
+		if apiErrors.IsNotFound(err) {
+
+			var combinedEnvs []serverManifest.EnvVar
+			for _, commonVars := range migrationTask.CommonEnvs {
+				if envvars, ok := manifest.CommonEnvvars[commonVars]; ok {
+					for _, env := range envvars {
+						combinedEnvs = append(combinedEnvs, env)
+					}
+				}
+			}
+
+			for _, env := range migrationTask.Env {
+				combinedEnvs = append(combinedEnvs, env)
+			}
+			envVars, err := resolveEnvvars(ctx, client, wandb, combinedEnvs)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+
+			job = &batchv1.Job{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      jobName,
+					Namespace: wandb.Namespace,
+					Labels: map[string]string{
+						"app.kubernetes.io/managed-by": "wandb-operator",
+						"app.kubernetes.io/instance":   wandb.Name,
+						"app.kubernetes.io/component":  "migration",
+					},
+				},
+				Spec: batchv1.JobSpec{
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							RestartPolicy: corev1.RestartPolicyOnFailure,
+							Containers: []corev1.Container{
+								{
+									Name:    "migrate",
+									Image:   migrationTask.Image.GetImage(),
+									Args:    migrationTask.Args,
+									Command: migrationTask.Command,
+									Env:     envVars,
+								},
+							},
+						},
+					},
+				},
+			}
+
+			if err := controllerutil.SetOwnerReference(wandb, job, client.Scheme()); err != nil {
+				return ctrl.Result{}, err
+			}
+
+			if err := client.Create(ctx, job); err != nil {
+				return ctrl.Result{}, err
+			}
+
+			jobStatus.Succeeded = false
+			wandb.Status.Wandb.Migration.Jobs[name] = jobStatus
+			wandb.Status.Wandb.Migration.Reason = "Running"
+			wandb.Status.Wandb.Migration.Ready = false
+			if err := client.Status().Update(ctx, wandb); err != nil {
+				return ctrl.Result{}, err
+			}
+
+			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		}
+
+		if job.Status.Succeeded > 0 {
+			jobStatus.Succeeded = true
+		} else {
+			allSucceeded = false
+			for _, cond := range job.Status.Conditions {
+				if cond.Type == batchv1.JobFailed && cond.Status == corev1.ConditionTrue {
+					jobStatus.Failed = true
+					jobStatus.Message = cond.Message
+					anyFailed = true
+					break
+				}
+			}
+			if !jobStatus.Failed {
+				anyRunning = true
+			}
+		}
+
+		wandb.Status.Wandb.Migration.Jobs[name] = jobStatus
+	}
+
+	if anyFailed {
+		wandb.Status.Wandb.Migration.Reason = "Failed"
+		wandb.Status.Wandb.Migration.Ready = false
+	} else if anyRunning || !allSucceeded {
+		wandb.Status.Wandb.Migration.Reason = "Running"
+		wandb.Status.Wandb.Migration.Ready = false
+	} else if allSucceeded {
+		wandb.Status.Wandb.Migration.Reason = "Complete"
+		wandb.Status.Wandb.Migration.Ready = true
+		if wandb.Status.Wandb.Migration.LastSuccessVersion != version {
+			wandb.Status.Wandb.Migration.LastSuccessVersion = version
+		}
+	} else {
+		wandb.Status.Wandb.Migration.Reason = "Unknown"
+		wandb.Status.Wandb.Migration.Ready = false
+	}
+
+	if err := client.Status().Update(ctx, wandb); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	if anyFailed {
+		return ctrl.Result{}, fmt.Errorf("one or more migration jobs failed")
+	}
+
+	if allSucceeded {
+		return ctrl.Result{}, nil
+	}
+
+	return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 }
 
 func createKafkaTopics(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest) (ctrl.Result, error) {
@@ -1115,6 +1433,57 @@ func inferState(
 		return err
 	}
 	log.Info("Status update successful")
+	return nil
+}
+
+// createOrUpdateServiceAccount creates or updates the ServiceAccount for the W&B applications
+func createOrUpdateServiceAccount(
+	ctx context.Context,
+	client ctrlClient.Client,
+	wandb *apiv2.WeightsAndBiases,
+	serviceAccountName string,
+) error {
+	log := ctrl.LoggerFrom(ctx)
+
+	serviceAccount := &corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      serviceAccountName,
+			Namespace: wandb.Namespace,
+			Labels: map[string]string{
+				"app.kubernetes.io/managed-by": "wandb-operator",
+				"app.kubernetes.io/instance":   wandb.Name,
+				"app.kubernetes.io/part-of":    "wandb",
+			},
+			Annotations: wandb.Spec.Wandb.ServiceAccount.Annotations,
+		},
+		AutomountServiceAccountToken: pointer.Bool(true),
+	}
+
+	if err := controllerutil.SetControllerReference(wandb, serviceAccount, client.Scheme()); err != nil {
+		return fmt.Errorf("failed to set owner reference on ServiceAccount: %w", err)
+	}
+
+	existingServiceAccount := &corev1.ServiceAccount{}
+	if err := client.Get(ctx, types.NamespacedName{Name: serviceAccountName, Namespace: wandb.Namespace}, existingServiceAccount); err != nil {
+		if apiErrors.IsNotFound(err) {
+			log.Info("Creating a new ServiceAccount", "Namespace", wandb.Namespace, "Name", serviceAccountName)
+			if err := client.Create(ctx, serviceAccount); err != nil {
+				return fmt.Errorf("failed to create ServiceAccount: %w", err)
+			}
+			return nil
+		}
+		return fmt.Errorf("failed to get existing ServiceAccount: %w", err)
+	}
+
+	existingServiceAccount.Annotations = serviceAccount.Annotations
+	existingServiceAccount.Labels = serviceAccount.Labels
+	existingServiceAccount.OwnerReferences = serviceAccount.OwnerReferences
+	existingServiceAccount.AutomountServiceAccountToken = serviceAccount.AutomountServiceAccountToken
+	log.Info("Updating existing ServiceAccount", "Namespace", wandb.Namespace, "Name", serviceAccountName)
+	if err := client.Update(ctx, existingServiceAccount); err != nil {
+		return fmt.Errorf("failed to update ServiceAccount: %w", err)
+	}
+
 	return nil
 }
 

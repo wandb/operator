@@ -49,7 +49,7 @@ manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and Cust
 
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
-	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="{./api/v1,./api/v2}"
+	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="{./api/v1,./api/v2,./pkg/vendored/mariadb-operator/k8s.mariadb.com/v1alpha1}"
 
 .PHONY: fmt
 fmt: ## Run go fmt against code.
@@ -61,7 +61,7 @@ vet: ## Run go vet against code.
 
 .PHONY: test
 test: manifests generate fmt vet setup-envtest ## Run tests.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test -v $$(go list ./... | grep -v /e2e) -coverprofile cover.out
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test -v $$(go list ./... | grep -v /e2e | grep -v /vendored) -coverprofile cover.out
 
 .PHONY: setup-local-webhook
 setup-local-webhook: ## Setup local webhook development environment with certificates.

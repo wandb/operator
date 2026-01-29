@@ -3,6 +3,7 @@ package defaults
 import (
 	"fmt"
 
+	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/translator"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -31,9 +32,10 @@ func BuildMySQLDefaults(size Size, ownerNamespace string) (translator.MySQLConfi
 	var err error
 	var storageSize string
 	config := translator.MySQLConfig{
-		Enabled:   true,
-		Namespace: ownerNamespace,
-		Name:      DefaultMysqlName,
+		Enabled:        true,
+		Namespace:      ownerNamespace,
+		Name:           DefaultMysqlName,
+		DeploymentType: apiv2.MySQLTypeMysql,
 	}
 
 	switch size {

@@ -41,13 +41,12 @@ var _ = Describe("Server manifest YAML decode", func() {
 			}
 		}
 		Expect(api).NotTo(BeNil())
-		Expect(api.InitContainers).NotTo(BeEmpty())
+		Expect(api.InitContainers).To(BeEmpty())
 
 		// Migrations
-		Expect(m.Migrations).To(HaveKey("default"))
-		Expect(m.Migrations).To(HaveKey("runsdb"))
-		Expect(m.Migrations).To(HaveKey("usagedb"))
-		Expect(m.Migrations["default"].Image.Repository).To(Equal("wandb/megabinary"))
-		Expect(m.Migrations["default"].Args).To(ContainElement("migrate"))
+		Expect(m.Migrations).To(HaveKey("gorilla"))
+		Expect(m.Migrations).To(HaveKey("weave-trace"))
+		Expect(m.Migrations["gorilla"].Image.Repository).To(Equal("wandb/megabinary"))
+		Expect(m.Migrations["gorilla"].Args).To(ContainElement("migrate"))
 	})
 })

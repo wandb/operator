@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/validation/field"
+	"k8s.io/utils/pointer"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -82,6 +83,22 @@ func (d *WeightsAndBiasesCustomDefaulter) Default(ctx context.Context, obj runti
 
 	if wandb.Spec.Tolerations == nil {
 		wandb.Spec.Tolerations = &[]corev1.Toleration{}
+	}
+
+	if wandb.Spec.Wandb.InternalServiceAuth.Enabled == nil {
+		wandb.Spec.Wandb.InternalServiceAuth.Enabled = pointer.Bool(true)
+	}
+
+	if wandb.Spec.Wandb.InternalServiceAuth.OIDCIssuer == "" {
+		wandb.Spec.Wandb.InternalServiceAuth.OIDCIssuer = "https://kubernetes.default.svc.cluster.local"
+	}
+
+	if wandb.Spec.Wandb.ServiceAccount.Create == nil {
+		wandb.Spec.Wandb.ServiceAccount.Create = pointer.Bool(true)
+	}
+
+	if wandb.Spec.Wandb.ServiceAccount.ServiceAccountName == "" {
+		wandb.Spec.Wandb.ServiceAccount.ServiceAccountName = "wandb"
 	}
 
 	if wandb.Status.Wandb.Applications == nil {
@@ -205,6 +222,9 @@ func applyMySQLDefaults(wandb *appsv2.WeightsAndBiases, size defaults.Size) erro
 	}
 	if wandb.Spec.MySQL.Name == "" {
 		wandb.Spec.MySQL.Name = defaultConfig.Name
+	}
+	if wandb.Spec.MySQL.DeploymentType == "" {
+		wandb.Spec.MySQL.DeploymentType = defaultConfig.DeploymentType
 	}
 
 	if wandb.Spec.MySQL.StorageSize == "" {

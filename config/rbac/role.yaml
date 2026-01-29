@@ -176,6 +176,25 @@ rules:
   - list
   - watch
 - apiGroups:
+  - k8s.mariadb.com
+  resources:
+  - mariadbs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - k8s.mariadb.com
+  resources:
+  - mariadbs/status
+  verbs:
+  - get
+  - update
+- apiGroups:
   - kafka.strimzi.io
   resources:
   - kafkanodepools
@@ -216,6 +235,26 @@ rules:
   - tenants/status
   verbs:
   - get
+- apiGroups:
+  - mysql.oracle.com
+  resources:
+  - innodbclusters
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - mysql.oracle.com
+  resources:
+  - innodbclusters/status
+  verbs:
+  - get
+  - patch
+  - update
 - apiGroups:
   - networking.k8s.io
   resources:
