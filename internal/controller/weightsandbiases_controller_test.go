@@ -105,6 +105,14 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 
 			Expect(utils.ContainsString(createdWandb.GetFinalizers(), "wandb.apps.wandb.com/cleanup")).Should(BeTrue())
 
+			By("Checking if ServiceAccount was created")
+			saLookupKey := types.NamespacedName{Name: createdWandb.Spec.Wandb.ServiceAccount.ServiceAccountName, Namespace: WandbNamespace}
+			createdSa := &v1.ServiceAccount{}
+			Eventually(func() error {
+				return k8sClient.Get(ctx, saLookupKey, createdSa)
+			}, timeout, interval).Should(Succeed())
+			Expect(createdSa.Labels["app.kubernetes.io/instance"]).To(Equal(WandbName))
+
 			// Cleanup
 			Expect(k8sClient.Delete(ctx, createdWandb)).Should(Succeed())
 		})

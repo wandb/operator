@@ -141,10 +141,11 @@ type ContainerSpec struct {
 
 // EnvVar models an application environment variable sourced from manifest-defined services.
 type EnvVar struct {
-	Name         string      `yaml:"name"`
-	Value        string      `yaml:"value,omitempty"`
-	Sources      []EnvSource `yaml:"sources,omitempty"`
-	DefaultValue string      `yaml:"defaultValue,omitempty"`
+	Name         string               `yaml:"name"`
+	Value        string               `yaml:"value,omitempty"`
+	ValueFrom    *corev1.EnvVarSource `yaml:"valueFrom,omitempty"`
+	Sources      []EnvSource          `yaml:"sources,omitempty"`
+	DefaultValue string               `yaml:"defaultValue,omitempty"`
 }
 
 // EnvSource references a named source and its type (e.g., mysql, redis, bucket).

@@ -2079,15 +2079,6 @@ spec:
                 required:
                 - enabled
                 type: object
-              enableOIDCDiscovery:
-                default: false
-                description: |-
-                  EnableOIDCDiscovery controls whether to create a ClusterRoleBinding for OIDC discovery.
-                  This is required when W&B applications use JWT tokens for internal service-to-service authentication.
-                  Setting this to true creates a cluster-scoped ClusterRoleBinding that grants system:unauthenticated
-                  access to OIDC discovery endpoints. If the operator lacks permissions to create ClusterRoleBindings,
-                  the administrator must create it manually.
-                type: boolean
               kafka:
                 description: |-
                   WBKafkaSpec fields have many default values that, if unspecified,
@@ -6425,16 +6416,11 @@ spec:
                 required:
                 - onDelete
                 type: object
-              serviceAccountName:
-                default: default
-                description: |-
-                  ServiceAccountName specifies the name of the Kubernetes ServiceAccount to use for W&B application pods.
-                  If not specified, defaults to "default". The operator will create the necessary Role and RoleBinding
-                  for this ServiceAccount to access secrets. The ServiceAccount itself must already exist (either the
-                  default one provided by Kubernetes, or one created by the administrator).
-                type: string
               size:
                 description: Size is akin to high-level environment info
+                enum:
+                - dev
+                - small
                 type: string
               tolerations:
                 items:
@@ -6489,6 +6475,13 @@ spec:
                     type: object
                   hostname:
                     type: string
+                  internalServiceAuth:
+                    properties:
+                      enabled:
+                        type: boolean
+                      oidcIssuer:
+                        type: string
+                    type: object
                   license:
                     type: string
                   oidc:
@@ -6508,6 +6501,21 @@ spec:
                     - clientId
                     - clientSecret
                     - issuerUrl
+                    type: object
+                  serviceAccount:
+                    properties:
+                      annotations:
+                        additionalProperties:
+                          type: string
+                        type: object
+                      create:
+                        default: true
+                        type: boolean
+                      serviceAccountName:
+                        default: wandb
+                        type: string
+                    required:
+                    - create
                     type: object
                   version:
                     type: string

@@ -42,6 +42,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/utils/pointer"
 	ctrl "sigs.k8s.io/controller-runtime"
 	ctrlClient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -261,18 +262,15 @@ func ReconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 }
 
 func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest, logger logr.Logger) (ctrl.Result, error) {
-	// Get the service account name for W&B applications.
-	// Defaults to "default" if not specified.
-	serviceAccountName := wandb.Spec.ServiceAccountName
-	if serviceAccountName == "" {
-		serviceAccountName = "default"
+	serviceAccountName := wandb.Spec.Wandb.ServiceAccount.ServiceAccountName
+
+	if *wandb.Spec.Wandb.ServiceAccount.Create {
+		if err := createOrUpdateServiceAccount(ctx, client, wandb, serviceAccountName); err != nil {
+			logger.Error(err, "Failed to create/update ServiceAccount")
+			return ctrl.Result{}, err
+		}
 	}
 
-	// Note: We do NOT create the ServiceAccount - it must already exist.
-	// Either it's the "default" ServiceAccount provided by Kubernetes,
-	// or it's a custom ServiceAccount created by the administrator.
-
-	// Create Role and RoleBinding for the service account
 	if err := createOrUpdateRole(ctx, client, wandb, serviceAccountName); err != nil {
 		logger.Error(err, "Failed to create/update Role for service account")
 		return ctrl.Result{}, err
@@ -283,8 +281,7 @@ func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb 
 		return ctrl.Result{}, err
 	}
 
-	// Create ClusterRoleBinding for OIDC discovery if enabled in spec
-	if wandb.Spec.EnableOIDCDiscovery {
+	if wandb.Spec.Wandb.InternalServiceAuth.Enabled != nil && *wandb.Spec.Wandb.InternalServiceAuth.Enabled {
 		if err := createOrUpdateOIDCDiscoveryClusterRoleBinding(ctx, client, wandb); err != nil {
 			logger.Error(err, "Failed to create ClusterRoleBinding for OIDC discovery. "+
 				"This is required for JWT token validation between W&B services. "+
@@ -674,6 +671,9 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *apiv2.
 			envVars = append(envVars, corev1.EnvVar{Name: env.Name, Value: env.Value})
 			continue
 		}
+		if env.ValueFrom != nil {
+			envVars = append(envVars, corev1.EnvVar{Name: env.Name, ValueFrom: env.ValueFrom})
+		}
 
 		// Multi-source composition: build a comma-separated value from all resolvable sources.
 		// Secret-backed sources are exposed via intermediate env vars and referenced with $(VAR) expansion.
@@ -819,6 +819,23 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *apiv2.
 					}
 				}
 				components = append(components, fmt.Sprintf("%s%s:%d%s", proto, serviceList.Items[0].Name, selectedPort, src.Path))
+			case "jwt-issuer-map":
+				if *wandb.Spec.Wandb.InternalServiceAuth.Enabled {
+					// TODO Get real OIDC Issuer
+					issuer := "https://kubernetes.default.svc.cluster.local"
+					if wandb.Spec.Wandb.InternalServiceAuth.OIDCIssuer != "" {
+						issuer = wandb.Spec.Wandb.InternalServiceAuth.OIDCIssuer
+					}
+					components = append(
+						components,
+						fmt.Sprintf(
+							"{\"system:serviceaccount:%s:%s\": \"%s\" }",
+							wandb.Namespace,
+							wandb.Spec.Wandb.ServiceAccount.ServiceAccountName,
+							issuer,
+						),
+					)
+				}
 			case "custom-resource":
 				// Read a value from the current WandB custom resource via dotted field path
 				if src.Field == "" {
@@ -906,7 +923,7 @@ func runMysqlInitJob(ctx context.Context, client ctrlClient.Client, wandb *apiv2
 			"GRANT ALL PRIVILEGES ON wandb_local.* TO 'wandb_local'@'%%'; FLUSH PRIVILEGES;\""
 
 		// For InnoDBCluster, the service host is {name}.{namespace}.svc.cluster.local
-		mysqlHost := fmt.Sprintf("%s-mysql.%s.svc.cluster.local", nsnBuilder.ClusterName(), specNamespacedName.Namespace)
+		mysqlHost := fmt.Sprintf("%s.%s.svc.cluster.local", nsnBuilder.ClusterName(), specNamespacedName.Namespace)
 
 		job = &batchv1.Job{
 			ObjectMeta: metav1.ObjectMeta{
@@ -1416,6 +1433,57 @@ func inferState(
 		return err
 	}
 	log.Info("Status update successful")
+	return nil
+}
+
+// createOrUpdateServiceAccount creates or updates the ServiceAccount for the W&B applications
+func createOrUpdateServiceAccount(
+	ctx context.Context,
+	client ctrlClient.Client,
+	wandb *apiv2.WeightsAndBiases,
+	serviceAccountName string,
+) error {
+	log := ctrl.LoggerFrom(ctx)
+
+	serviceAccount := &corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      serviceAccountName,
+			Namespace: wandb.Namespace,
+			Labels: map[string]string{
+				"app.kubernetes.io/managed-by": "wandb-operator",
+				"app.kubernetes.io/instance":   wandb.Name,
+				"app.kubernetes.io/part-of":    "wandb",
+			},
+			Annotations: wandb.Spec.Wandb.ServiceAccount.Annotations,
+		},
+		AutomountServiceAccountToken: pointer.Bool(true),
+	}
+
+	if err := controllerutil.SetControllerReference(wandb, serviceAccount, client.Scheme()); err != nil {
+		return fmt.Errorf("failed to set owner reference on ServiceAccount: %w", err)
+	}
+
+	existingServiceAccount := &corev1.ServiceAccount{}
+	if err := client.Get(ctx, types.NamespacedName{Name: serviceAccountName, Namespace: wandb.Namespace}, existingServiceAccount); err != nil {
+		if apiErrors.IsNotFound(err) {
+			log.Info("Creating a new ServiceAccount", "Namespace", wandb.Namespace, "Name", serviceAccountName)
+			if err := client.Create(ctx, serviceAccount); err != nil {
+				return fmt.Errorf("failed to create ServiceAccount: %w", err)
+			}
+			return nil
+		}
+		return fmt.Errorf("failed to get existing ServiceAccount: %w", err)
+	}
+
+	existingServiceAccount.Annotations = serviceAccount.Annotations
+	existingServiceAccount.Labels = serviceAccount.Labels
+	existingServiceAccount.OwnerReferences = serviceAccount.OwnerReferences
+	existingServiceAccount.AutomountServiceAccountToken = serviceAccount.AutomountServiceAccountToken
+	log.Info("Updating existing ServiceAccount", "Namespace", wandb.Namespace, "Name", serviceAccountName)
+	if err := client.Update(ctx, existingServiceAccount); err != nil {
+		return fmt.Errorf("failed to update ServiceAccount: %w", err)
+	}
+
 	return nil
 }
 

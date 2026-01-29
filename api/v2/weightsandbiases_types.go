@@ -80,30 +80,11 @@ type WBRetentionPolicy struct {
 
 // WeightsAndBiasesSpec defines the desired state of WeightsAndBiases.
 type WeightsAndBiasesSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
 	// Size is akin to high-level environment info
+	// +kubebuilder:validation:Enum=dev;small
 	Size WBSize `json:"size,omitempty"`
 
 	RetentionPolicy WBRetentionPolicy `json:"retentionPolicy"`
-
-	// EnableOIDCDiscovery controls whether to create a ClusterRoleBinding for OIDC discovery.
-	// This is required when W&B applications use JWT tokens for internal service-to-service authentication.
-	// Setting this to true creates a cluster-scoped ClusterRoleBinding that grants system:unauthenticated
-	// access to OIDC discovery endpoints. If the operator lacks permissions to create ClusterRoleBindings,
-	// the administrator must create it manually.
-	// +optional
-	// +kubebuilder:default=false
-	EnableOIDCDiscovery bool `json:"enableOIDCDiscovery,omitempty"`
-
-	// ServiceAccountName specifies the name of the Kubernetes ServiceAccount to use for W&B application pods.
-	// If not specified, defaults to "default". The operator will create the necessary Role and RoleBinding
-	// for this ServiceAccount to access secrets. The ServiceAccount itself must already exist (either the
-	// default one provided by Kubernetes, or one created by the administrator).
-	// +optional
-	// +kubebuilder:default="default"
-	ServiceAccountName string `json:"serviceAccountName,omitempty"`
 
 	Wandb WandbAppSpec `json:"wandb,omitempty"`
 
@@ -140,18 +121,32 @@ func (w *WeightsAndBiases) GetTolerations(spec WBInfraSpec) *[]corev1.Toleration
 
 // WandbAppSpec defines the configuration for the Wandb application deployment.
 type WandbAppSpec struct {
-	Hostname string `json:"hostname"`
-	License  string `json:"license,omitempty"`
+	Hostname            string              `json:"hostname"`
+	License             string              `json:"license,omitempty"`
+	Version             string              `json:"version"`
+	Features            map[string]bool     `json:"features"`
+	InternalServiceAuth InternalServiceAuth `json:"internalServiceAuth,omitempty"`
 
-	Version string `json:"version"`
-
-	Features map[string]bool `json:"features"`
+	ServiceAccount WandbServiceAccountSpec `json:"serviceAccount,omitempty"`
 
 	// +optional
 	AdditionalHostnames []string `json:"additionalHostnames,omitempty"`
 
 	// +optional
 	OIDC WandbOIDCSpec `json:"oidc,omitempty"`
+}
+
+type WandbServiceAccountSpec struct {
+	// +kubebuilder:default=true
+	Create *bool `json:"create"`
+	// +kubebuilder:default="wandb"
+	ServiceAccountName string            `json:"serviceAccountName,omitempty"`
+	Annotations        map[string]string `json:"annotations,omitempty"`
+}
+
+type InternalServiceAuth struct {
+	Enabled    *bool  `json:"enabled,omitempty"`
+	OIDCIssuer string `json:"oidcIssuer,omitempty"`
 }
 
 // WandbOIDCSpec defines the structure for OpenID Connect (OIDC) configuration used in Wandb application deployments.
