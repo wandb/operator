@@ -24,7 +24,7 @@ func readConnectionDetails(ctx context.Context, client client.Client, actual *px
 	dbPasswordSecret := &corev1.Secret{}
 	err := client.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("%s-%s", "internal", actual.Name), Namespace: specNamespacedName.Namespace}, dbPasswordSecret)
 	if err != nil {
-		log.Error("Failed to get Secret", logx.ErrAttr(err), "Secret", fmt.Sprintf("%s-%s", specNamespacedName.Name, "user-db-password"))
+		log.Error("Failed to get Secret", logx.ErrAttr(err), "Secret", fmt.Sprintf("%s-%s", specNamespacedName.Name, "db-password"))
 		return nil
 	}
 

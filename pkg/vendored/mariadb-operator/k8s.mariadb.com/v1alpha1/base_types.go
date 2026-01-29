@@ -1,0 +1,815 @@
+package v1alpha1
+
+import (
+	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
+	cron "github.com/robfig/cron/v3"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
+)
+
+var CronParser = cron.NewParser(
+	cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow,
+)
+
+// MariaDBRef is a reference to a MariaDB object.
+type MariaDBRef struct {
+	// ObjectReference is a reference to a object.
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	ObjectReference `json:",inline"`
+	// Kind of the referent.
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	Kind string `json:"kind,omitempty"`
+	// WaitForIt indicates whether the controller using this reference should wait for MariaDB to be ready.
+	// +optional
+	// +kubebuilder:default=true
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:booleanSwitch","urn:alm:descriptor:com.tectonic.ui:advanced"}
+	WaitForIt bool `json:"waitForIt"`
+}
+
+// TypedLocalObjectReference is a reference to a specific object type.
+type TypedLocalObjectReference struct {
+	// Name of the referent.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	Name string `json:"name,omitempty"`
+	// Kind of the referent.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	Kind string `json:"kind,omitempty"`
+}
+
+// LocalReference returns a Kubernetes LocalObjectReference.
+
+// SecretTemplate defines a template to customize Secret objects.
+type SecretTemplate struct {
+	// Metadata to be added to the Secret object.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	Metadata *Metadata `json:"metadata,omitempty"`
+	// Key to be used in the Secret.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	Key *string `json:"key,omitempty"`
+	// Format to be used in the Secret.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	Format *string `json:"format,omitempty"`
+	// UsernameKey to be used in the Secret.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	UsernameKey *string `json:"usernameKey,omitempty"`
+	// PasswordKey to be used in the Secret.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	PasswordKey *string `json:"passwordKey,omitempty"`
+	// HostKey to be used in the Secret.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	HostKey *string `json:"hostKey,omitempty"`
+	// PortKey to be used in the Secret.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	PortKey *string `json:"portKey,omitempty"`
+	// DatabaseKey to be used in the Secret.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	DatabaseKey *string `json:"databaseKey,omitempty"`
+}
+
+// ContainerTemplate defines a template to configure Container objects.
+type ContainerTemplate struct {
+	// Command to be used in the Container.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	Command []string `json:"command,omitempty"`
+	// Args to be used in the Container.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	Args []string `json:"args,omitempty"`
+	// Env represents the environment variables to be injected in a container.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	Env []EnvVar `json:"env,omitempty"`
+	// EnvFrom represents the references (via ConfigMap and Secrets) to environment variables to be injected in the container.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	EnvFrom []EnvFromSource `json:"envFrom,omitempty"`
+	// VolumeMounts to be used in the Container.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	VolumeMounts []VolumeMount `json:"volumeMounts,omitempty" webhook:"inmutable"`
+	// LivenessProbe to be used in the Container.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	LivenessProbe *Probe `json:"livenessProbe,omitempty"`
+	// ReadinessProbe to be used in the Container.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	ReadinessProbe *Probe `json:"readinessProbe,omitempty"`
+	// StartupProbe to be used in the Container.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:resourceRequirements"}
+	StartupProbe *Probe `json:"startupProbe,omitempty"`
+	// Resources describes the compute resource requirements.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:resourceRequirements"}
+	Resources *ResourceRequirements `json:"resources,omitempty"`
+	// SecurityContext holds security configuration that will be applied to a container.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	SecurityContext *SecurityContext `json:"securityContext,omitempty"`
+}
+
+// JobContainerTemplate defines a template to configure Container objects that run in a Job.
+type JobContainerTemplate struct {
+	// Args to be used in the Container.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	Args []string `json:"args,omitempty"`
+	// Resources describes the compute resource requirements.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:resourceRequirements"}
+	Resources *ResourceRequirements `json:"resources,omitempty"`
+	// SecurityContext holds security configuration that will be applied to a container.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	SecurityContext *SecurityContext `json:"securityContext,omitempty"`
+}
+
+// FromContainerTemplate sets the ContainerTemplate fields in the current JobContainerTemplate.
+
+// Container object definition.
+type Container struct {
+	// Name to be given to the container.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	Name string `json:"name,omitempty"`
+	// Image name to be used by the container. The supported format is `<image>:<tag>`.
+	// +kubebuilder:validation:Required
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	Image string `json:"image"`
+	// ImagePullPolicy is the image pull policy. One of `Always`, `Never` or `IfNotPresent`. If not defined, it defaults to `IfNotPresent`.
+	// +optional
+	// +kubebuilder:validation:Enum=Always;Never;IfNotPresent
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:imagePullPolicy","urn:alm:descriptor:com.tectonic.ui:advanced"}
+	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
+	// Command to be used in the Container.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	Command []string `json:"command,omitempty"`
+	// Args to be used in the Container.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	Args []string `json:"args,omitempty"`
+	// Env represents the environment variables to be injected in a container.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	Env []EnvVar `json:"env,omitempty"`
+	// VolumeMounts to be used in the Container.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	VolumeMounts []VolumeMount `json:"volumeMounts,omitempty" webhook:"inmutable"`
+	// Resources describes the compute resource requirements.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:resourceRequirements"}
+	Resources *ResourceRequirements `json:"resources,omitempty"`
+}
+
+// InitContainer is an init container that runs in the MariaDB Pod and co-operates with mariadb-operator.
+type InitContainer struct {
+	// ContainerTemplate defines a template to configure Container objects.
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	ContainerTemplate `json:",inline"`
+	// Image name to be used by the MariaDB instances. The supported format is `<image>:<tag>`.
+	// +kubebuilder:validation:Required
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	Image string `json:"image"`
+	// ImagePullPolicy is the image pull policy. One of `Always`, `Never` or `IfNotPresent`. If not defined, it defaults to `IfNotPresent`.
+	// +optional
+	// +kubebuilder:validation:Enum=Always;Never;IfNotPresent
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:imagePullPolicy","urn:alm:descriptor:com.tectonic.ui:advanced"}
+	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
+}
+
+// KubernetesAuth refers to the Kubernetes authentication mechanism utilized for establishing a connection from the operator to the agent.
+// The agent validates the legitimacy of the service account token provided as an Authorization header by creating a TokenReview resource.
+type KubernetesAuth struct {
+	// Enabled is a flag to enable KubernetesAuth
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:booleanSwitch"}
+	Enabled bool `json:"enabled,omitempty"`
+	// AuthDelegatorRoleName is the name of the ClusterRoleBinding that is associated with the "system:auth-delegator" ClusterRole.
+	// It is necessary for creating TokenReview objects in order for the agent to validate the service account token.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	AuthDelegatorRoleName string `json:"authDelegatorRoleName,omitempty"`
+}
+
+// AuthDelegatorRoleNameOrDefault defines the ClusterRoleBinding name bound to system:auth-delegator.
+// It falls back to the MariaDB name if AuthDelegatorRoleName is not set.
+
+// BasicAuth refers to the basic authentication mechanism utilized for establishing a connection from the operator to the agent.
+type BasicAuth struct {
+	// Enabled is a flag to enable BasicAuth
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:booleanSwitch"}
+	Enabled bool `json:"enabled,omitempty"`
+	// Username to be used for basic authentication
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	Username string `json:"username,omitempty"`
+	// PasswordSecretKeyRef to be used for basic authentication
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	PasswordSecretKeyRef GeneratedSecretKeyRef `json:"passwordSecretKeyRef,omitempty"`
+}
+
+// SetDefaults set reasonable defaults
+
+// Agent is a sidecar agent that co-operates with mariadb-operator.
+type Agent struct {
+	// ContainerTemplate defines a template to configure Container objects.
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	ContainerTemplate `json:",inline"`
+	// Image name to be used by the MariaDB instances. The supported format is `<image>:<tag>`.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	Image string `json:"image,omitempty"`
+	// ImagePullPolicy is the image pull policy. One of `Always`, `Never` or `IfNotPresent`. If not defined, it defaults to `IfNotPresent`.
+	// +optional
+	// +kubebuilder:validation:Enum=Always;Never;IfNotPresent
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:imagePullPolicy"}
+	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
+	// Port where the agent will be listening for API connections.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	Port int32 `json:"port,omitempty"`
+	// Port where the agent will be listening for probe connections.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	ProbePort int32 `json:"probePort,omitempty"`
+	// KubernetesAuth to be used by the agent container
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	KubernetesAuth *KubernetesAuth `json:"kubernetesAuth,omitempty"`
+	// BasicAuth to be used by the agent container
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	BasicAuth *BasicAuth `json:"basicAuth,omitempty"`
+	// GracefulShutdownTimeout is the time we give to the agent container in order to gracefully terminate in-flight requests.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	GracefulShutdownTimeout *metav1.Duration `json:"gracefulShutdownTimeout,omitempty"`
+}
+
+// SetDefaults sets reasonable defaults.
+
+// Validate determines if a Galera Agent object is valid.
+
+// Job defines a Job used to be used with MariaDB.
+type Job struct {
+	// Metadata defines additional metadata for the bootstrap Jobs.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	Metadata *Metadata `json:"metadata,omitempty"`
+	// Affinity to be used in the Pod.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	Affinity *AffinityConfig `json:"affinity,omitempty"`
+	// NodeSelector to be used in the Pod.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+	// Tolerations to be used in the Pod.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
+	// Resources describes the compute resource requirements.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:resourceRequirements"}
+	Resources *ResourceRequirements `json:"resources,omitempty"`
+	// Args to be used in the Container.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	Args []string `json:"args,omitempty"`
+}
+
+// SetDefaults sets reasonable defaults.
+
+// AffinityConfig defines policies to schedule Pods in Nodes.
+type AffinityConfig struct {
+	// Affinity to be used in the Pod.
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	Affinity `json:",inline"`
+	// AntiAffinityEnabled configures PodAntiAffinity so each Pod is scheduled in a different Node, enabling HA.
+	// Make sure you have at least as many Nodes available as the replicas to not end up with unscheduled Pods.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:booleanSwitch"}
+	AntiAffinityEnabled *bool `json:"antiAffinityEnabled,omitempty" webhook:"inmutable"`
+}
+
+// SetDefaults sets reasonable defaults.
+
+// PodTemplate defines a template to configure Container objects.
+type PodTemplate struct {
+	// PodMetadata defines extra metadata for the Pod.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	PodMetadata *Metadata `json:"podMetadata,omitempty"`
+	// ImagePullSecrets is the list of pull Secrets to be used to pull the image.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	ImagePullSecrets []LocalObjectReference `json:"imagePullSecrets,omitempty" webhook:"inmutable"`
+	// InitContainers to be used in the Pod.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	InitContainers []Container `json:"initContainers,omitempty"`
+	// SidecarContainers to be used in the Pod.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	SidecarContainers []Container `json:"sidecarContainers,omitempty"`
+	// SecurityContext holds pod-level security attributes and common container settings.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	PodSecurityContext *PodSecurityContext `json:"podSecurityContext,omitempty"`
+	// ServiceAccountName is the name of the ServiceAccount to be used by the Pods.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	ServiceAccountName *string `json:"serviceAccountName,omitempty" webhook:"inmutableinit"`
+	// Affinity to be used in the Pod.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	Affinity *AffinityConfig `json:"affinity,omitempty"`
+	// NodeSelector to be used in the Pod.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+	// Tolerations to be used in the Pod.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
+	// Volumes to be used in the Pod.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	Volumes []Volume `json:"volumes,omitempty" webhook:"inmutable"`
+	// PriorityClassName to be used in the Pod.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	PriorityClassName *string `json:"priorityClassName,omitempty"`
+	// TopologySpreadConstraints to be used in the Pod.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	TopologySpreadConstraints []TopologySpreadConstraint `json:"topologySpreadConstraints,omitempty"`
+}
+
+// SetDefaults sets reasonable defaults.
+
+// ServiceAccountKey defines the key for the ServiceAccount object.
+
+// JobPodTemplate defines a template to configure Container objects that run in a Job.
+type JobPodTemplate struct {
+	// PodMetadata defines extra metadata for the Pod.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	PodMetadata *Metadata `json:"podMetadata,omitempty"`
+	// ImagePullSecrets is the list of pull Secrets to be used to pull the image.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	ImagePullSecrets []LocalObjectReference `json:"imagePullSecrets,omitempty" webhook:"inmutable"`
+	// SecurityContext holds pod-level security attributes and common container settings.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	PodSecurityContext *PodSecurityContext `json:"podSecurityContext,omitempty"`
+	// ServiceAccountName is the name of the ServiceAccount to be used by the Pods.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	ServiceAccountName *string `json:"serviceAccountName,omitempty" webhook:"inmutableinit"`
+	// Affinity to be used in the Pod.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	Affinity *AffinityConfig `json:"affinity,omitempty"`
+	// NodeSelector to be used in the Pod.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+	// Tolerations to be used in the Pod.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
+	// PriorityClassName to be used in the Pod.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	PriorityClassName *string `json:"priorityClassName,omitempty" webhook:"inmutable"`
+}
+
+// FromPodTemplate sets the PodTemplate fields in the current JobPodTemplate.
+
+// SetDefaults sets reasonable defaults.
+
+// SetExternalDefaults sets reasonable defaults.
+
+// ServiceAccountKey defines the key for the ServiceAccount object.
+
+// VolumeClaimTemplate defines a template to customize PVC objects.
+type VolumeClaimTemplate struct {
+	// PersistentVolumeClaimSpec is the specification of a PVC.
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	PersistentVolumeClaimSpec `json:",inline"`
+	// Metadata to be added to the PVC metadata.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	Metadata *Metadata `json:"metadata,omitempty"`
+}
+
+// ServiceTemplate defines a template to customize Service objects.
+type ServiceTemplate struct {
+	// Type is the Service type. One of `ClusterIP`, `NodePort` or `LoadBalancer`. If not defined, it defaults to `ClusterIP`.
+	// +optional
+	// +kubebuilder:default=ClusterIP
+	// +kubebuilder:validation:Enum=ClusterIP;NodePort;LoadBalancer
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	Type corev1.ServiceType `json:"type,omitempty"`
+	// Metadata to be added to the Service metadata.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	Metadata *Metadata `json:"metadata,omitempty"`
+	// LoadBalancerIP Service field.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	LoadBalancerIP *string `json:"loadBalancerIP,omitempty"`
+	// LoadBalancerSourceRanges Service field.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	LoadBalancerSourceRanges []string `json:"loadBalancerSourceRanges,omitempty"`
+	// ExternalTrafficPolicy Service field.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	ExternalTrafficPolicy *corev1.ServiceExternalTrafficPolicy `json:"externalTrafficPolicy,omitempty"`
+	// SessionAffinity Service field.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	SessionAffinity *corev1.ServiceAffinity `json:"sessionAffinity,omitempty"`
+	// AllocateLoadBalancerNodePorts Service field.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:booleanSwitch","urn:alm:descriptor:com.tectonic.ui:advanced"}
+	AllocateLoadBalancerNodePorts *bool `json:"allocateLoadBalancerNodePorts,omitempty"`
+}
+
+// PodDisruptionBudget is the Pod availability bundget for a MariaDB
+type PodDisruptionBudget struct {
+	// MinAvailable defines the number of minimum available Pods.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	MinAvailable *intstr.IntOrString `json:"minAvailable,omitempty"`
+	// MaxUnavailable defines the number of maximum unavailable Pods.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	MaxUnavailable *intstr.IntOrString `json:"maxUnavailable,omitempty"`
+}
+
+// HealthCheck defines intervals for performing health checks.
+type HealthCheck struct {
+	// Interval used to perform health checks.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	Interval *metav1.Duration `json:"interval,omitempty"`
+	// RetryInterval is the interval used to perform health check retries.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	RetryInterval *metav1.Duration `json:"retryInterval,omitempty"`
+}
+
+// ConnectionTemplate defines a template to customize Connection objects.
+type ConnectionTemplate struct {
+	// SecretName to be used in the Connection.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	SecretName *string `json:"secretName,omitempty" webhook:"inmutableinit"`
+	// SecretTemplate to be used in the Connection.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	SecretTemplate *SecretTemplate `json:"secretTemplate,omitempty"`
+	// HealthCheck to be used in the Connection.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	HealthCheck *HealthCheck `json:"healthCheck,omitempty"`
+	// Params to be used in the Connection.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	Params map[string]string `json:"params,omitempty"`
+	// ServiceName to be used in the Connection.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	ServiceName *string `json:"serviceName,omitempty"`
+	// Port to connect to. If not provided, it defaults to the MariaDB port or to the first MaxScale listener.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:number","urn:alm:descriptor:com.tectonic.ui:advanced"}
+	Port int32 `json:"port,omitempty"`
+}
+
+// SQLTemplate defines a template to customize SQL objects.
+type SQLTemplate struct {
+	// RequeueInterval is used to perform requeue reconciliations.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	RequeueInterval *metav1.Duration `json:"requeueInterval,omitempty"`
+	// RetryInterval is the interval used to perform retries.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	RetryInterval *metav1.Duration `json:"retryInterval,omitempty"`
+	// CleanupPolicy defines the behavior for cleaning up a SQL resource.
+	// +optional
+	// +kubebuilder:validation:Enum=Skip;Delete
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	CleanupPolicy *CleanupPolicy `json:"cleanupPolicy,omitempty"`
+}
+
+type TLSS3 struct {
+	// Enabled is a flag to enable TLS.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:booleanSwitch"}
+	Enabled bool `json:"enabled"`
+	// CASecretKeyRef is a reference to a Secret key containing a CA bundle in PEM format used to establish TLS connections with S3.
+	// By default, the system trust chain will be used, but you can use this field to add more CAs to the bundle.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	CASecretKeyRef *SecretKeySelector `json:"caSecretKeyRef,omitempty"`
+}
+
+type S3 struct {
+	// Bucket is the name Name of the bucket to store backups.
+	// +kubebuilder:validation:Required
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	Bucket string `json:"bucket" webhook:"inmutable"`
+	// Endpoint is the S3 API endpoint without scheme.
+	// +kubebuilder:validation:Required
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	Endpoint string `json:"endpoint" webhook:"inmutable"`
+	// Region is the S3 region name to use.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	Region string `json:"region" webhook:"inmutable"`
+	// Prefix indicates a folder/subfolder in the bucket. For example: mariadb/ or mariadb/backups. A trailing slash '/' is added if not provided.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	Prefix string `json:"prefix" webhook:"inmutable"`
+	// AccessKeyIdSecretKeyRef is a reference to a Secret key containing the S3 access key id.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	AccessKeyIdSecretKeyRef *SecretKeySelector `json:"accessKeyIdSecretKeyRef,omitempty"`
+	// AccessKeyIdSecretKeyRef is a reference to a Secret key containing the S3 secret key.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	SecretAccessKeySecretKeyRef *SecretKeySelector `json:"secretAccessKeySecretKeyRef,omitempty"`
+	// SessionTokenSecretKeyRef is a reference to a Secret key containing the S3 session token.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	SessionTokenSecretKeyRef *SecretKeySelector `json:"sessionTokenSecretKeyRef,omitempty"`
+	// TLS provides the configuration required to establish TLS connections with S3.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	TLS *TLSS3 `json:"tls,omitempty"`
+	// SSEC is a reference to a Secret containing the SSE-C (Server-Side Encryption with Customer-Provided Keys) key.
+	// The secret must contain a 32-byte key (256 bits) in the specified key.
+	// This enables server-side encryption where you provide and manage the encryption key.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	SSEC *SSECConfig `json:"ssec,omitempty"`
+}
+
+// SSECConfig defines the configuration for SSE-C (Server-Side Encryption with Customer-Provided Keys).
+type SSECConfig struct {
+	// CustomerKeySecretKeyRef is a reference to a Secret key containing the SSE-C customer-provided encryption key.
+	// The key must be a 32-byte (256-bit) key encoded in base64.
+	// +kubebuilder:validation:Required
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	CustomerKeySecretKeyRef SecretKeySelector `json:"customerKeySecretKeyRef"`
+}
+
+// Metadata defines the metadata to added to resources.
+type Metadata struct {
+	// Labels to be added to children resources.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	Labels map[string]string `json:"labels,omitempty"`
+	// Annotations to be added to children resources.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	Annotations map[string]string `json:"annotations,omitempty"`
+}
+
+// MergeMetadata merges multiple Metadata instances into one
+
+// BackupContentType defines the backup content type.
+type BackupContentType string
+
+const (
+	// BackupContentTypeLogical represents a logical backup created using mariadb-dump.
+	BackupContentTypeLogical BackupContentType = "Logical"
+	// BackupContentTypePhysical represents a physical backup created using mariadb-backup.
+	BackupContentTypePhysical BackupContentType = "Physical"
+)
+
+// CompressAlgorithm defines the compression algorithm for a Backup resource.
+type CompressAlgorithm string
+
+const (
+	// No compression
+	CompressNone CompressAlgorithm = "none"
+	// Bzip2 compression. Good compression ratio, but slower compression/decompression speed compared to gzip.
+	CompressBzip2 CompressAlgorithm = "bzip2"
+	// Gzip compression. Good compression/decompression speed, but worse compression ratio compared to bzip2.
+	CompressGzip CompressAlgorithm = "gzip"
+)
+
+// BackupStorage defines the final storage for backups.
+type BackupStorage struct {
+	// S3 defines the configuration to store backups in a S3 compatible storage.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	S3 *S3 `json:"s3,omitempty"`
+	// PersistentVolumeClaim is a Kubernetes PVC specification.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	PersistentVolumeClaim *PersistentVolumeClaimSpec `json:"persistentVolumeClaim,omitempty"`
+	// Volume is a Kubernetes volume specification.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	Volume *StorageVolumeSource `json:"volume,omitempty"`
+}
+
+// BackupStagingStorage defines the temporary storage used to keep external backups (i.e. S3) while they are being processed.
+type BackupStagingStorage struct {
+	// PersistentVolumeClaim is a Kubernetes PVC specification.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	PersistentVolumeClaim *PersistentVolumeClaimSpec `json:"persistentVolumeClaim,omitempty"`
+	// Volume is a Kubernetes volume specification.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	Volume *StorageVolumeSource `json:"volume,omitempty"`
+}
+
+// Schedule contains parameters to define a schedule
+type Schedule struct {
+	// Cron is a cron expression that defines the schedule.
+	// +kubebuilder:validation:Required
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	Cron string `json:"cron"`
+	// Suspend defines whether the schedule is active or not.
+	// +optional
+	// +kubebuilder:default=false
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:booleanSwitch","urn:alm:descriptor:com.tectonic.ui:advanced"}
+	Suspend bool `json:"suspend"`
+}
+
+// CronJobTemplate defines parameters for configuring CronJob objects.
+type CronJobTemplate struct {
+	// SuccessfulJobsHistoryLimit defines the maximum number of successful Jobs to be displayed.
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	SuccessfulJobsHistoryLimit *int32 `json:"successfulJobsHistoryLimit,omitempty"`
+	// FailedJobsHistoryLimit defines the maximum number of failed Jobs to be displayed.
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	FailedJobsHistoryLimit *int32 `json:"failedJobsHistoryLimit,omitempty"`
+	// TimeZone defines the timezone associated with the cron expression.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	TimeZone *string `json:"timeZone,omitempty"`
+}
+
+// GeneratedSecretKeyRef defines a reference to a Secret that can be automatically generated by mariadb-operator if needed.
+type GeneratedSecretKeyRef struct {
+	// SecretKeySelector is a reference to a Secret key.
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	SecretKeySelector `json:",inline"`
+	// Generate indicates whether the Secret should be generated if the Secret referenced is not present.
+	// +optional
+	// +kubebuilder:default=false
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:booleanSwitch"}
+	Generate bool `json:"generate,omitempty"`
+}
+
+// SuspendTemplate indicates whether the current resource should be suspended or not.
+type SuspendTemplate struct {
+	// Suspend indicates whether the current resource should be suspended or not.
+	// This can be useful for maintenance, as disabling the reconciliation prevents the operator from interfering with user operations during maintenance activities.
+	// +optional
+	// +kubebuilder:default=false
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:booleanSwitch","urn:alm:descriptor:com.tectonic.ui:advanced"}
+	Suspend bool `json:"suspend,omitempty"`
+}
+
+// PasswordPlugin defines the password plugin and its arguments.
+type PasswordPlugin struct {
+	// PluginNameSecretKeyRef is a reference to the authentication plugin to be used by the User.
+	// If the referred Secret is labeled with "k8s.mariadb.com/watch", updates may be performed to the Secret in order to update the authentication plugin.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	PluginNameSecretKeyRef *SecretKeySelector `json:"pluginNameSecretKeyRef,omitempty"`
+	// PluginArgSecretKeyRef is a reference to the arguments to be provided to the authentication plugin for the User.
+	// If the referred Secret is labeled with "k8s.mariadb.com/watch", updates may be performed to the Secret in order to update the authentication plugin arguments.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	PluginArgSecretKeyRef *SecretKeySelector `json:"pluginArgSecretKeyRef,omitempty"`
+}
+
+// CleanupPolicy defines the behavior for cleaning up a resource.
+type CleanupPolicy string
+
+const (
+	// CleanupPolicySkip indicates that the resource will NOT be deleted from the database after the CR is deleted.
+	CleanupPolicySkip CleanupPolicy = "Skip"
+	// CleanupPolicyDelete indicates that the resource will be deleted from the database after the CR is deleted.
+	CleanupPolicyDelete CleanupPolicy = "Delete"
+)
+
+// Validate returns an error if the CleanupPolicy is not valid.
+
+// Exporter defines a metrics exporter container.
+type Exporter struct {
+	// Image name to be used as metrics exporter. The supported format is `<image>:<tag>`.
+	// Only mysqld-exporter >= v0.15.0 is supported: https://github.com/prometheus/mysqld_exporter
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	Image string `json:"image,omitempty"`
+	// ImagePullPolicy is the image pull policy. One of `Always`, `Never` or `IfNotPresent`. If not defined, it defaults to `IfNotPresent`.
+	// +optional
+	// +kubebuilder:validation:Enum=Always;Never;IfNotPresent
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:imagePullPolicy"}
+	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
+	// ImagePullSecrets is the list of pull Secrets to be used to pull the image.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	ImagePullSecrets []LocalObjectReference `json:"imagePullSecrets,omitempty" webhook:"inmutable"`
+	// Args to be used in the Container.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	Args []string `json:"args,omitempty"`
+	// Port where the exporter will be listening for connections.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:number"}
+	Port int32 `json:"port,omitempty"`
+	// Resources describes the compute resource requirements.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:resourceRequirements"}
+	Resources *ResourceRequirements `json:"resources,omitempty"`
+	// PodMetadata defines extra metadata for the Pod.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	PodMetadata *Metadata `json:"podMetadata,omitempty"`
+	// SecurityContext holds container-level security attributes.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	SecurityContext *SecurityContext `json:"securityContext,omitempty"`
+	// SecurityContext holds pod-level security attributes and common container settings.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	PodSecurityContext *PodSecurityContext `json:"podSecurityContext,omitempty"`
+	// Affinity to be used in the Pod.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	Affinity *AffinityConfig `json:"affinity,omitempty"`
+	// NodeSelector to be used in the Pod.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+	// Tolerations to be used in the Pod.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
+	// PriorityClassName to be used in the Pod.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	PriorityClassName *string `json:"priorityClassName,omitempty" webhook:"inmutable"`
+}
+
+// CertificateStatus represents the current status of a TLS certificate.
+type CertificateStatus struct {
+	// NotAfter indicates that the certificate is not valid after the given date.
+	// +operator-sdk:csv:customresourcedefinitions:type=status
+	NotAfter metav1.Time `json:"notAfter,omitempty"`
+	// NotBefore indicates that the certificate is not valid before the given date.
+	// +operator-sdk:csv:customresourcedefinitions:type=status
+	NotBefore metav1.Time `json:"notBefore,omitempty"`
+	// Subject is the subject of the current certificate.
+	// +operator-sdk:csv:customresourcedefinitions:type=status
+	Subject string `json:"subject"`
+	// Issuer is the issuer of the current certificate.
+	// +operator-sdk:csv:customresourcedefinitions:type=status
+	Issuer string `json:"issuer"`
+}
+
+type tlsValidationItem struct {
+	tlsValue            interface{}
+	caSecretRef         *LocalObjectReference
+	caFieldPath         string
+	certSecretRef       *LocalObjectReference
+	certFieldPath       string
+	certIssuerRef       *cmmeta.ObjectReference
+	certIssuerFieldPath string
+}

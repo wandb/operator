@@ -1,0 +1,97 @@
+package v1alpha1
+
+import (
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+var (
+	defaultConnSecretKey = "dsn"
+)
+
+// ConnectionRefs contains the resolved references of a Connection.
+type ConnectionRefs struct {
+	MariaDB         *MariaDB
+	MaxScale        *MaxScale
+	ExternalMariaDB *ExternalMariaDB
+}
+
+// Host returns the host address to connect to.
+
+// Port returns the port to connect to.
+
+// ConnectionSpec defines the desired state of Connection
+type ConnectionSpec struct {
+	// ContainerTemplate defines templates to configure Container objects.
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	ConnectionTemplate `json:",inline"`
+	// MariaDBRef is a reference to the MariaDB to connect to. Either MariaDBRef or MaxScaleRef must be provided.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	MariaDBRef *MariaDBRef `json:"mariaDbRef,omitempty"`
+	// MaxScaleRef is a reference to the MaxScale to connect to. Either MariaDBRef or MaxScaleRef must be provided.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	MaxScaleRef *ObjectReference `json:"maxScaleRef,omitempty"`
+	// Username to use for configuring the Connection.
+	// +kubebuilder:validation:Required
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	Username string `json:"username"`
+	// PasswordSecretKeyRef is a reference to the password to use for configuring the Connection.
+	// Either passwordSecretKeyRef or tlsClientCertSecretRef must be provided as client credentials.
+	// If the referred Secret is labeled with "k8s.mariadb.com/watch", updates may be performed to the Secret in order to update the password.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	PasswordSecretKeyRef *SecretKeySelector `json:"passwordSecretKeyRef,omitempty"`
+	// TLSClientCertSecretRef is a reference to a Kubernetes TLS Secret used as authentication when checking the connection health.
+	// Either passwordSecretKeyRef or tlsClientCertSecretRef must be provided as client credentials.
+	// If not provided, the client certificate provided by the referred MariaDB is used if TLS is enabled.
+	// If the referred Secret is labeled with "k8s.mariadb.com/watch", updates may be performed to the Secret in order to update the client certificate.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	TLSClientCertSecretRef *LocalObjectReference `json:"tlsClientCertSecretRef,omitempty"`
+	// Host to connect to. If not provided, it defaults to the MariaDB host or to the MaxScale host.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:number","urn:alm:descriptor:com.tectonic.ui:advanced"}
+	Host string `json:"host,omitempty"`
+	// Database to use when configuring the Connection.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	Database *string `json:"database,omitempty"`
+}
+
+// ConnectionStatus defines the observed state of Connection
+type ConnectionStatus struct {
+	// Conditions for the Connection object.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=status,xDescriptors={"urn:alm:descriptor:io.kubernetes.conditions"}
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+}
+
+// +kubebuilder:object:root=true
+// +kubebuilder:resource:shortName=cmdb
+// +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].status"
+// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].message"
+// +kubebuilder:printcolumn:name="Secret",type="string",JSONPath=".spec.secretName"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
+// +operator-sdk:csv:customresourcedefinitions:resources={{Connection,v1alpha1},{Secret,v1}}
+
+// Connection is the Schema for the connections API. It is used to configure connection strings for the applications connecting to MariaDB.
+type Connection struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	Spec   ConnectionSpec   `json:"spec,omitempty"`
+	Status ConnectionStatus `json:"status,omitempty"`
+}
+
+//+kubebuilder:object:root=true
+
+// ConnectionList contains a list of Connection
+type ConnectionList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
+	Items           []Connection `json:"items"`
+}
+
+// ListItems gets a copy of the Items slice.

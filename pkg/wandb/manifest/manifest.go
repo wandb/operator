@@ -141,10 +141,11 @@ type ContainerSpec struct {
 
 // EnvVar models an application environment variable sourced from manifest-defined services.
 type EnvVar struct {
-	Name         string      `yaml:"name"`
-	Value        string      `yaml:"value,omitempty"`
-	Sources      []EnvSource `yaml:"sources,omitempty"`
-	DefaultValue string      `yaml:"defaultValue,omitempty"`
+	Name         string               `yaml:"name"`
+	Value        string               `yaml:"value,omitempty"`
+	ValueFrom    *corev1.EnvVarSource `yaml:"valueFrom,omitempty"`
+	Sources      []EnvSource          `yaml:"sources,omitempty"`
+	DefaultValue string               `yaml:"defaultValue,omitempty"`
 }
 
 // EnvSource references a named source and its type (e.g., mysql, redis, bucket).
@@ -174,9 +175,11 @@ type ContainerPort struct {
 // MigrationJob represents a migration invocation with an image and args, used
 // by the top-level "migrations" section (e.g., default, runsdb, usagedb).
 type MigrationJob struct {
-	Image   ImageRef `yaml:"image"`
-	Args    []string `yaml:"args,omitempty"`
-	Command []string `yaml:"command,omitempty"`
+	Image      ImageRef `yaml:"image"`
+	Args       []string `yaml:"args,omitempty"`
+	Command    []string `yaml:"command,omitempty"`
+	CommonEnvs []string `yaml:"commonEnvs,omitempty"`
+	Env        []EnvVar `yaml:"env,omitempty"`
 }
 
 // FileSpec defines a single file to project into the application's container.

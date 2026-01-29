@@ -99,14 +99,25 @@ if settings.get("installMinio"):
     )
 
 helm_repo(
-    'percona-repo',
-    'https://percona.github.io/percona-helm-charts/',
+    'mysql-operator-repo',
+    'https://mysql.github.io/mysql-operator',
     labels=["Helm-Repos"],
 )
+
+# helm_resource(
+#     'mariadb-operator-crds',
+#     chart='mariadb-operator-repo/mariadb-operator-crds',
+#     resource_deps=['mariadb-operator-repo'],
+#     pod_readiness='ignore',
+#     labels=["Third-Party-Operators"],
+# )
+
 helm_resource(
     'mysql-operator',
-    chart='percona-repo/pxc-operator',
+    chart='mysql-operator-repo/mysql-operator',
+    resource_deps=['mysql-operator-repo'],
     labels=["Third-Party-Operators"],
+    flags=['--set-string=image.tag=8.4.7-2.1.9']
 )
 
 helm_repo(
@@ -117,6 +128,7 @@ helm_repo(
 helm_resource(
     'redis-operator',
     chart='redis-operator-repo/redis-operator',
+    resource_deps=['redis-operator-repo'],
     labels=["Third-Party-Operators"],
 )
 
@@ -128,6 +140,7 @@ helm_repo(
 helm_resource(
     'kafka-operator',
     chart='strimzi-repo/strimzi-kafka-operator',
+    resource_deps=['strimzi-repo'],
     labels=["Third-Party-Operators"],
 )
 
@@ -139,6 +152,7 @@ helm_repo(
 helm_resource(
     'minio-operator',
     chart='minio-repo/operator',
+    resource_deps=['minio-repo'],
     labels=["Third-Party-Operators"],
 )
 
@@ -150,6 +164,7 @@ helm_repo(
 helm_resource(
     'clickhouse-operator',
     chart='clickhouse-repo/altinity-clickhouse-operator',
+    resource_deps=['clickhouse-repo'],
     labels=["Third-Party-Operators"],
 )
 
@@ -161,6 +176,7 @@ helm_repo(
 helm_resource(
     'victoria-metrics-operator',
     chart='victoria-metrics-repo/victoria-metrics-operator',
+    resource_deps=['victoria-metrics-repo'],
     labels=["Third-Party-Operators"],
 )
 
@@ -172,6 +188,7 @@ helm_repo(
 helm_resource(
     'grafana-operator',
     chart='grafana-repo/grafana-operator',
+    resource_deps=['grafana-repo'],
     labels=["Third-Party-Operators"],
 )
 

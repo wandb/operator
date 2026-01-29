@@ -39,8 +39,8 @@ kafka:
 mysql:
   default: {}
   metadata: {}
-  runsdb: {}
-  usagedb: {}
+  runs: {}
+  usage: {}
 
 redis:
   default: {}
@@ -65,11 +65,11 @@ commonEnvvars:
           type: mysql
     - name: GORILLA_RUN_STORE
       sources:
-        - name: default
+        - name: runs
           type: mysql
     - name: GORILLA_USAGE_STORE
       sources:
-        - name: default
+        - name: usage
           type: mysql
   gorillaBucket:
     - name: AWS_REGION
@@ -226,9 +226,13 @@ commonEnvvars:
     - name: GORILLA_CUSTOMER_SECRET_STORE_SOURCE
       value: "k8s-secretmanager://"
     - name: GORILLA_CUSTOMER_SECRET_STORE_K8S_CONFIG_NAMESPACE
-      value: "default"
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.namespace
     - name: GORILLA_INTERNAL_JWT_SUBJECTS_TO_ISSUERS
-      value: '{"system:serviceaccount:default:default": "https://kubernetes.default.svc.cluster.local"}'
+      sources:
+        - name: internal
+          type: jwt-issuer-map
   clickhouse:
     - name: WF_CLICKHOUSE_HOST
       sources:
@@ -390,15 +394,6 @@ applications:
     image:
       repository: wandb/megabinary
       tag: 0.76.1
-    initContainers:
-      - name: migrate
-        image:
-          repository: wandb/megabinary
-          tag: 0.76.1
-        command:
-          - bash
-          - -c
-          - "./megabinary migrate --db $GORILLA_METADATA_STORE --squash true"
     args:
       - gorilla
     ports:
@@ -702,14 +697,6 @@ applications:
       - "0.0.0.0"
       - "--port"
       - "8080"
-    initContainers:
-      - name: migrate
-        image:
-          repository: wandb/weave-trace
-          tag: 0.76.1
-        args:
-          - python
-          - migrator.py
     commonEnvs:
       - clickhouse
       - kafka
@@ -921,24 +908,25 @@ applications:
           protocol: TCP
 
 migrations:
-  default:
+  gorilla:
     image:
       repository: wandb/megabinary
       tag: 0.76.1
     args:
-      - migrate
-      - --db=$DATABASE_URL
-  runsdb:
+      - "migrate"
+      - "--db=$(GORILLA_METADATA_STORE)"
+      - "--runs-db=$(GORILLA_RUN_STORE)"
+      - "--usage-db=$(GORILLA_USAGE_STORE)"
+      - "--squash"
+      - "true"
+    commonEnvs:
+      - gorillaMysql
+  weave-trace:
     image:
-      repository: wandb/megabinary
+      repository: wandb/weave-trace
       tag: 0.76.1
     args:
-      - migrate
-      - --runs-db=$DATABASE_URL
-  usagedb:
-    image:
-      repository: wandb/megabinary
-      tag: 0.76.1
-    args:
-      - migrate
-      - --usage-db=$DATABASE_URL
+      - python
+      - migrator.py
+    commonEnvs:
+      - clickhouse
