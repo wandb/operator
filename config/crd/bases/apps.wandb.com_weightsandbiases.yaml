@@ -6484,6 +6484,8 @@ spec:
                     type: object
                   license:
                     type: string
+                  manifest-repository:
+                    type: string
                   oidc:
                     description: WandbOIDCSpec defines the structure for OpenID Connect
                       (OIDC) configuration used in Wandb application deployments.

@@ -19,6 +19,7 @@ package v2
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/wandb/operator/internal/defaults"
 	"github.com/wandb/operator/internal/logx"
@@ -83,6 +84,15 @@ func (d *WeightsAndBiasesCustomDefaulter) Default(ctx context.Context, obj runti
 
 	if wandb.Spec.Tolerations == nil {
 		wandb.Spec.Tolerations = &[]corev1.Toleration{}
+	}
+
+	if wandb.Spec.Wandb.ManifestRepository == "" {
+		wandb.Spec.Wandb.ManifestRepository = "oci://us-docker.pkg.dev/wandb-production/public/wandb/server-manifest"
+	}
+
+	if !strings.Contains(wandb.Spec.Wandb.ManifestRepository, "://") {
+		// Prepend a default scheme (e.g., oci://) to ensure proper parsing of the host.
+		wandb.Spec.Wandb.ManifestRepository = "oci://" + wandb.Spec.Wandb.ManifestRepository
 	}
 
 	if wandb.Spec.Wandb.InternalServiceAuth.Enabled == nil {

@@ -168,7 +168,7 @@ func Reconcile(
 		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
 	}
 
-	manifest, err := serverManifest.GetServerManifest(wandb.Spec.Wandb.Version)
+	manifest, err := serverManifest.GetServerManifest(ctx, wandb.Spec.Wandb.ManifestRepository, wandb.Spec.Wandb.Version)
 	if err != nil {
 		return ctrl.Result{}, err
 	}

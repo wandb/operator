@@ -1,0 +1,932 @@
+---
+requiredOperatorVersion: ^2.0.0
+
+features:
+  filestreamQueue: false
+  proxy: false
+
+bucket:
+  default: {}
+
+clickhouse:
+  default: {}
+
+generatedSecrets:
+  - name: session-key
+    length: 32
+    type: password
+  - name: weave-worker-auth
+    length: 32
+    type: password
+    useExactName: true
+
+kafka:
+  - name: filestream
+    features:
+      - filestreamQueue
+    topic: filestream
+    partitionCount: 48
+  - name: flat-run-fields-updater
+    topic: flat-run-fields-updater
+    partitionCount: 48
+  - name: weave-worker
+    topic: weave.call_ended
+    partitionCount: 48
+  - name: weave-evaluate-model-worker
+    topic: weave.evaluate_model
+    partitionCount: 48
+
+mysql:
+  default: {}
+  metadata: {}
+  runs: {}
+  usage: {}
+
+redis:
+  default: {}
+
+commonEnvvars:
+  gorillaMysql:
+    - name: MYSQL
+      sources:
+        - name: default
+          type: mysql
+    - name: GORILLA_ANALYTICS_SINK
+      sources:
+        - name: default
+          type: mysql
+    - name: GORILLA_FILE_STREAM_STORE_ADDRESS
+      sources:
+        - name: default
+          type: mysql
+    - name: GORILLA_METADATA_STORE
+      sources:
+        - name: metadata
+          type: mysql
+    - name: GORILLA_RUN_STORE
+      sources:
+        - name: runs
+          type: mysql
+    - name: GORILLA_USAGE_STORE
+      sources:
+        - name: usage
+          type: mysql
+  gorillaBucket:
+    - name: AWS_REGION
+      sources:
+        - name: default
+          type: bucket
+          field: region
+      defaultValue: "us-east-1"
+    - name: BUCKET
+      sources:
+        - name: default
+          type: bucket
+    - name: GORILLA_FILE_STORE
+      sources:
+        - name: default
+          type: bucket
+    - name: GORILLA_RUN_UPDATE_SHADOW_QUEUE_OVERFLOW_BUCKET_STORE
+      sources:
+        - name: default
+          type: bucket
+    - name: GORILLA_STORAGE_BUCKET
+      sources:
+        - name: default
+          type: bucket
+  gorillaRedis:
+    - name: REDIS
+      sources:
+        - name: default
+          type: redis
+    - name: GORILLA_ACTIVITY_STORE_CACHE_ADDRESS
+      sources:
+        - name: default
+          type: redis
+    - name: GORILLA_AUDITOR_CACHE
+      sources:
+        - name: default
+          type: redis
+    - name: GORILLA_CACHE
+      sources:
+        - name: default
+          type: redis
+    - name: GORILLA_FILE_METADATA_SOURCE
+      sources:
+        - name: default
+          type: redis
+    - name: GORILLA_LOCKER
+      sources:
+        - name: default
+          type: redis
+    - name: GORILLA_METADATA_CACHE
+      sources:
+        - name: default
+          type: redis
+    - name: GORILLA_SETTINGS_CACHE
+      sources:
+        - name: default
+          type: redis
+    - name: GORILLA_USAGE_METRICS_CACHE
+      sources:
+        - name: default
+          type: redis
+  gorillaService:
+    - name: GORILLA_SWEEP_PROVIDER
+      sources:
+        - name: anaconda2
+          type: service
+          proto: "http"
+          path: ""
+  gorillaTaskQueueConsumer:
+    - name: GORILLA_TASK_QUEUE
+      sources:
+        - name: taskQueue
+          type: redis
+          params:
+            concurrency: 10
+    - name: GORILLA_TASK_QUEUE_WORKER_ENABLED
+      value: "true"
+  gorillaTaskQueueProducer:
+    - name: GORILLA_TASK_QUEUE
+      sources:
+        - name: taskQueue
+          type: redis
+    - name: GORILLA_TASK_QUEUE_WORKER_ENABLED
+      value: "false"
+  gorillaHistoryStore:
+    - name: GORILLA_HISTORY_STORE
+      sources:
+        - name: parquet
+          type: service
+          port: parquet
+          proto: "http"
+          path: "/_goRPC_"
+        - name: default
+          type: mysql
+    - name: GORILLA_PARQUET_LIVE_HISTORY_STORE
+      sources:
+        - name: default
+          type: mysql
+  gorillaOnprem:
+    - name: GORILLA_AUTH_JWK_URL
+      sources:
+        - name: app
+          type: service
+          proto: "http"
+          path: "/api/jwks.json"
+          port: local
+    - name: GORILLA_DEFAULT_REGION
+      value: "minio-local"
+    - name: GORILLA_EMAIL_SINK
+      sources:
+        - name: email
+          type: custom-resource
+          field: status.emailSink
+      defaultValue: "https://api.wandb.ai/email/dispatch"
+    - name: GORILLA_FILE_METADATA_SOURCE_IS_INTERNAL
+      value: "true"
+    - name: GORILLA_ONPREM
+      value: "true"
+    - name: GORILLA_ONPREM_API_KEY_PREFIX
+      value: "local"
+    - name: GORILLA_STATSD_PORT
+      value: "0"
+    - name: GORILLA_SESSION_KEY
+      sources:
+        - name: session-key
+          type: generatedSecret
+    - name: BUCKET_PROXY
+      value: "true"
+    - name: GORILLA_GLUE_FILE_STORE_IS_PROXIED
+      value: "true"
+    - name: GORILLA_FILE_STORE_IS_PROXIED
+      value: "true"
+    - name: GORILLA_FILE_HOST
+      sources:
+        - name: hostname
+          type: custom-resource
+          field: status.wandb.hostname
+    - name: GORILLA_FRONTEND_HOST
+      sources:
+        - name: hostname
+          type: custom-resource
+          field: status.wandb.hostname
+    - name: LICENSE
+      sources:
+        - name: license
+          type: custom-resource
+          field: spec.wandb.license
+    - name: GORILLA_LICENSE
+      sources:
+        - name: license
+          type: custom-resource
+          field: spec.wandb.license
+  gorillaCustomerSecrets:
+    - name: GORILLA_CUSTOMER_SECRET_STORE_SOURCE
+      value: "k8s-secretmanager://"
+    - name: GORILLA_CUSTOMER_SECRET_STORE_K8S_CONFIG_NAMESPACE
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.namespace
+    - name: GORILLA_INTERNAL_JWT_SUBJECTS_TO_ISSUERS
+      sources:
+        - name: internal
+          type: jwt-issuer-map
+  clickhouse:
+    - name: WF_CLICKHOUSE_HOST
+      sources:
+        - name: default
+          type: clickhouse
+          field: host
+    - name: WF_CLICKHOUSE_PORT
+      sources:
+        - name: default
+          type: clickhouse
+          field: port
+    - name: WF_CLICKHOUSE_USER
+      sources:
+        - name: default
+          type: clickhouse
+          field: user
+    - name: WF_CLICKHOUSE_PASS
+      sources:
+        - name: default
+          type: clickhouse
+          field: password
+    - name: WF_CLICKHOUSE_DATABASE
+      sources:
+        - name: default
+          type: clickhouse
+          field: database
+  kafka:
+    - name: KAFKA_BROKER_HOST
+      sources:
+        - name: default
+          type: kafka
+          field: host
+    - name: KAFKA_BROKER_PORT
+      sources:
+        - name: default
+          type: kafka
+          field: port
+    - name: KAFKA_URL
+      sources:
+        - name: default
+          type: kafka
+          field: url
+  weaveTrace:
+    - name: WANDB_PUBLIC_BASE_URL
+      sources:
+        - name: hostname
+          type: custom-resource
+          field: status.wandb.hostname
+    - name: WANDB_BASE_URL
+      sources:
+        - name: api
+          type: service
+          proto: "http"
+          path: "/"
+    - name: WF_TRACE_SERVER_URL
+      sources:
+        - name: weave-trace
+          type: service
+          proto: "http"
+          path: "/traces"
+    - name: WEAVE_TRACE_SERVER_BASE_URL
+      sources:
+        - name: weave-trace
+          type: service
+          proto: "http"
+          path: "/traces"
+    - name: API_PATH_PREFIX
+      value: "/traces"
+    - name: WEAVE_ENABLE_ONLINE_EVAL
+      value: "true"
+    - name: WEAVE_ENABLE_EVALUATE_MODEL_WORKER
+      value: "true"
+    - name: WANDB_INTERNAL_SERVICE_TOKEN
+      sources:
+        - name: weave-worker-auth
+          type: generatedSecret
+    - name: WANDB_INTERNAL_SERVICE_TOKEN_SECRET_NAME
+      value: "weave-worker-auth"
+  frontend:
+    - name: REACT_APP_HOST
+      source:
+        - name: hostname
+          type: custom-resource
+          field: status.wandb.hostname
+    - name: REACT_APP_ENVIRONMENT_NAME
+      value: "local"
+    - name: REACT_APP_ENVIRONMENT_IS_PRIVATE
+      value: "true"
+    - name: REACT_APP_ANALYTICS_DISABLED
+      value: "true"
+    - name: WEAVE_TRACES_ENABLED
+      value: "true"
+    - name: SERVER_FLAG_WEAVE_1_PERCENTAGE
+      value: "100"
+  flatRunsV2Producer:
+    - name: KAFKA_RUNS_V2_TOPIC_NAME
+      value: "flat-run-fields-updater"
+    - name: GORILLA_RUN_UPDATE_SHADOW_QUEUE_ADDR
+      value: "$(KAFKA_URL)/$(KAFKA_RUNS_V2_TOPIC_NAME)"
+    - name: GORILLA_RUN_STORE_ONPREM_MIGRATE_CREATE_RUN_TABLES
+      value: "true"
+    - name: GORILLA_RUN_STORE_ONPREM_MIGRATE_CREATE_RUN_STORE
+      value: "true"
+    - name: GORILLA_RUN_STORE_ONPREM_MIGRATE_SHADOW_RUN_UPDATES
+      value: "true"
+    - name: GORILLA_RUN_STORE_ONPREM_MIGRATE_DISABLE_READS
+      value: "false"
+    - name: GORILLA_RUN_STORE_ONPREM_MIGRATE_FLAT_RUNS_MIGRATOR
+      value: "true"
+  flatRunsV2Consumer:
+    - name: KAFKA_RUNS_V2_TOPIC_NAME
+      value: "flat-run-fields-updater"
+
+applications:
+  - name: anaconda2
+    image:
+      repository: us-docker.pkg.dev/wandb-production/public/wandb/anaconda2
+      tag: 0.78.0-pre-manifest-testing.9
+    ports:
+      - containerPort: 8080
+        name: anaconda2
+        protocol: TCP
+    livenessProbe:
+      httpGet:
+        path: /ping
+    readinessProbe:
+      httpGet:
+        path: /ping
+    service:
+      ports:
+        - port: 8080
+          protocol: TCP
+          name: anaconda2
+  - name: api
+    commonEnvs:
+      - gorillaMysql
+      - gorillaBucket
+      - gorillaRedis
+      - gorillaHistoryStore
+      - gorillaTaskQueueProducer
+      - gorillaService
+      - gorillaOnprem
+      - gorillaCustomerSecrets
+      - kafka
+      - flatRunsV2Producer
+    env:
+      - name: GORILLA_LICENSE_CERT_PATH
+        value: "/jwks.json"
+      - name: GORILLA_VIEW_SPEC_UPDATER_EXECUTABLE
+        value: "/view-spec-updater-linux"
+      - name: MIGRATE_RUNS_DB
+        sources:
+          - name: default
+            type: mysql
+      - name: MIGRATE_USAGE_DB
+        sources:
+          - name: default
+            type: mysql
+    image:
+      repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
+      tag: 0.78.0-pre-manifest-testing.9
+    args:
+      - gorilla
+    ports:
+      - containerPort: 8080
+        name: api
+        protocol: TCP
+    livenessProbe:
+      httpGet:
+        path: /healthz
+    readinessProbe:
+      httpGet:
+        path: /ready
+    service:
+      ports:
+        - port: 8080
+          protocol: TCP
+          name: api
+  - name: app
+    commonEnvs:
+      - gorillaMysql
+      - gorillaBucket
+      - gorillaRedis
+      - gorillaHistoryStore
+      - gorillaTaskQueueProducer
+      - gorillaService
+      - gorillaOnprem
+      - gorillaCustomerSecrets
+      - frontend
+      - kafka
+      - flatRunsV2Producer
+    env:
+      - name: WEAVE_ENABLED
+        value: "true"
+      - name: WEAVE_SERVICE
+        sources:
+          - name: weave
+            type: service
+            proto: ""
+            path: ""
+      - name: PARQUET_ENABLED
+        value: "true"
+      - name: PARQUET_HOST
+        sources:
+          - name: parquet
+            type: service
+            proto: "http"
+            path: ""
+      - name: GLUE_ENABLED
+        value: "false"
+      - name: OPERATOR_ENABLED
+        value: "true"
+      - name: LOGGING_ENABLED
+        value: "true"
+      - name: ANACONDA_ENABLED
+        value: "false"
+      - name: GORILLA_FILEMETA_ENABLED
+        value: "false"
+    ports:
+      - containerPort: 8080
+        name: app
+        protocol: TCP
+      - containerPort: 8081
+        name: prometheus
+        protocol: TCP
+      - containerPort: 8082
+        name: anaconda
+        protocol: TCP
+      - containerPort: 8083
+        name: local
+        protocol: TCP
+    livenessProbe:
+      httpGet:
+        path: /healthz
+    readinessProbe:
+      httpGet:
+        path: /ready
+    image:
+      repository: us-docker.pkg.dev/wandb-production/public/wandb/local
+      tag: 0.78.0-pre-manifest-testing.9
+    service:
+      ports:
+        - port: 8080
+          protocol: TCP
+          name: app
+        - port: 8081
+          protocol: TCP
+          name: prometheus
+        - port: 8082
+          protocol: TCP
+          name: anaconda
+        - port: 8083
+          protocol: TCP
+          name: local
+  - name: executor
+    args:
+      - executor
+    commonEnvs:
+      - gorillaMysql
+      - gorillaBucket
+      - gorillaRedis
+      - gorillaHistoryStore
+      - gorillaTaskQueueConsumer
+      - gorillaService
+      - gorillaOnprem
+    image:
+      repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
+      tag: 0.78.0-pre-manifest-testing.9
+  - name: filemeta
+    args:
+      - filemeta
+    commonEnvs:
+      - gorillaMysql
+      - gorillaBucket
+      - gorillaRedis
+      - gorillaService
+      - gorillaOnprem
+    image:
+      repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
+      tag: 0.78.0-pre-manifest-testing.9
+  - name: filestream
+    features:
+      - filestreamQueue
+    args:
+      - filestream
+    commonEnvs:
+      - gorillaMysql
+      - gorillaBucket
+      - gorillaRedis
+      - gorillaService
+      - gorillaOnprem
+    image:
+      repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
+      tag: 0.78.0-pre-manifest-testing.9
+  - name: flat-run-fields-updater
+    args:
+      - flat-run-fields-updater
+    commonEnvs:
+      - gorillaMysql
+      - gorillaBucket
+      - gorillaRedis
+      - gorillaService
+      - gorillaOnprem
+      - kafka
+      - flatRunsV2Consumer
+    env:
+      - name: GORILLA_RUN_UPDATE_SHADOW_QUEUE_SUBSCRIPTIONS_FLAT_RUN_FIELDS_UPDATER
+        value: "$(KAFKA_URL)/$(KAFKA_RUNS_V2_TOPIC_NAME)?consumer_group_id=flat-run-fields-updater"
+    image:
+      repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
+      tag: 0.78.0-pre-manifest-testing.9
+  - name: frontend
+    image:
+      repository: us-docker.pkg.dev/wandb-production/public/wandb/frontend-nginx
+      tag: 0.78.0-pre-manifest-testing.9
+    commonEnvs:
+      - frontend
+    env:
+      - name: FRONTEND_APP_BACKEND
+        sources:
+          - name: app
+            type: service
+            proto: ""
+            path: ""
+      - name: FRONTEND_AUTH_BACKEND
+        sources:
+          - name: app
+            type: service
+            proto: ""
+            path: ""
+      - name: FRONTEND_LOCAL_BACKEND
+        sources:
+          - name: app
+            type: service
+            proto: ""
+            path: ""
+      - name: FRONTEND_WEAVE_BACKEND
+        sources:
+          - name: weave
+            type: service
+            proto: ""
+            path: ""
+      - name: WEAVE_ENABLED
+        value: "true"
+      - name: OPERATOR_ENABLED
+        value: "true"
+    ports:
+      - containerPort: 8080
+        name: frontend
+        protocol: TCP
+    livenessProbe:
+      httpGet:
+        path: /healthz
+    readinessProbe:
+      httpGet:
+        path: /ready
+    service:
+      ports:
+        - port: 8080
+          protocol: TCP
+          name: frontend
+  - name: glue
+    args:
+      - glue
+    commonEnvs:
+      - gorillaMysql
+      - gorillaBucket
+      - gorillaRedis
+      - gorillaHistoryStore
+      - gorillaService
+      - gorillaOnprem
+    env:
+      - name: GORILLA_LICENSE_CERT_PATH
+        value: "/jwks.json"
+      - name: GORILLA_VIEW_SPEC_UPDATER_EXECUTABLE
+        value: "/view-spec-updater-linux"
+      - name: GORILLA_GLUE_TASK_PROVIDER
+        value: "memory://"
+      - name: GORILLA_GLUE_TASK_CONFIG_PATH
+        value: "/gorilla_glue_tasks_local.yaml"
+      - name: GORILLA_GLUE_TASK_STORE
+        value: "memory://"
+    image:
+      repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
+      tag: 0.78.0-pre-manifest-testing.9
+  - name: metric-observer
+    args:
+      - metric-observer
+    commonEnvs:
+      - gorillaMysql
+      - gorillaBucket
+      - gorillaRedis
+      - gorillaService
+      - gorillaOnprem
+      - kafka
+      - flatRunsV2Consumer
+    env:
+      - name: GORILLA_RUN_UPDATE_SHADOW_QUEUE_SUBSCRIPTIONS_METRIC_OBSERVER
+        value: "$(KAFKA_URL)/$(KAFKA_RUNS_V2_TOPIC_NAME)?consumer_group_id=metric-observer"
+    image:
+      repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
+      tag: 0.78.0-pre-manifest-testing.9
+  - name: parquet
+    args:
+      - parquet
+    commonEnvs:
+      - gorillaMysql
+      - gorillaBucket
+      - gorillaRedis
+      - gorillaHistoryStore
+      - gorillaTaskQueueProducer
+      - gorillaService
+      - gorillaOnprem
+    image:
+      repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
+      tag: 0.78.0-pre-manifest-testing.9
+    ports:
+      - containerPort: 8080
+        name: parquet
+        protocol: TCP
+    livenessProbe:
+      httpGet:
+        path: /healthz
+    readinessProbe:
+      httpGet:
+        path: /ready
+    service:
+      ports:
+        - port: 8080
+          protocol: TCP
+          name: parquet
+  - name: weave
+    image:
+      repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-python
+      tag: 0.78.0-pre-manifest-testing.9
+    env:
+      - name: DATADOG_TRACE_ENABLED
+        value: "false"
+    ports:
+      - containerPort: 9239
+        name: weave
+        protocol: TCP
+    service:
+      ports:
+        - port: 9239
+          protocol: TCP
+          name: weave
+    livenessProbe:
+      httpGet:
+        path: /__weave/hello
+    readinessProbe:
+      httpGet:
+        path: /__weave/hello
+  - name: weave-trace
+    image:
+      repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
+      tag: 0.78.0-pre-manifest-testing.9
+    args:
+      - "uvicorn"
+      - "src.trace_server:app"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8080"
+    commonEnvs:
+      - clickhouse
+      - kafka
+      - weaveTrace
+    ports:
+      - containerPort: 8080
+        name: weave-trace
+        protocol: TCP
+    livenessProbe:
+      httpGet:
+        path: /traces/health
+    readinessProbe:
+      httpGet:
+        path: /traces/health
+    service:
+      ports:
+        - port: 8080
+          protocol: TCP
+          name: weave-trace
+    jwtTokens:
+      - name: internal-jwt
+        mountPath: /tmp/weave-trace/internal-jwt
+        source:
+          kubernetesServiceAccount:
+            audience: internal-service
+            expirationSeconds: 600
+  - name: weave-trace-worker
+    image:
+      repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
+      tag: 0.78.0-pre-manifest-testing.9
+    args:
+      - "python"
+      - "-m"
+      - "src.workers.scoring_worker"
+    env:
+      - name: DD_TRACE_ENABLED
+        value: "false"
+    commonEnvs:
+      - clickhouse
+      - kafka
+      - weaveTrace
+  - name: weave-trace-evaluate-model-worker
+    image:
+      repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
+      tag: 0.78.0-pre-manifest-testing.9
+    args:
+      - "python"
+      - "-m"
+      - "src.workers.evaluate_model_worker.evaluate_model_worker"
+    env:
+      - name: DD_TRACE_ENABLED
+        value: "false"
+    commonEnvs:
+      - clickhouse
+      - kafka
+      - weaveTrace
+  - name: nginx-proxy
+    features:
+      - proxy
+    image:
+      repository: nginxinc/nginx-unprivileged
+      tag: latest
+    env:
+      - name: UPSTREAM_FRONTEND
+        sources:
+          - name: frontend
+            type: service
+            proto: ""
+            path: ""
+      - name: UPSTREAM_APP
+        sources:
+          - name: app
+            type: service
+            proto: ""
+            path: ""
+      - name: UPSTREAM_API
+        sources:
+          - name: api
+            type: service
+            proto: ""
+            path: ""
+      - name: UPSTREAM_WEAVE_TRACE
+        sources:
+          - name: weave-trace
+            type: service
+            proto: ""
+            path: ""
+      - name: UPSTREAM_WEAVE
+        sources:
+          - name: weave
+            type: service
+            proto: ""
+            path: ""
+      - name: BUCKET_HOST
+        sources:
+          - name: default
+            type: bucket
+            field: host
+      - name: BUCKET_PORT
+        sources:
+          - name: default
+            type: bucket
+            field: port
+      - name: UPSTREAM_BUCKET
+        value: "$(BUCKET_HOST):$(BUCKET_PORT)"
+    files:
+      - name: envvar.conf.template
+        mountPath: /etc/nginx/templates
+        fileName: envvar.conf.template
+        inline: |
+          upstream frontend {
+            server $UPSTREAM_FRONTEND;
+          }
+
+          upstream app {
+            server $UPSTREAM_APP;
+          }
+
+          upstream api {
+            server $UPSTREAM_API;
+          }
+
+          upstream weave_trace {
+            server $UPSTREAM_WEAVE_TRACE;
+          }
+
+          upstream weave {
+            server $UPSTREAM_WEAVE;
+          }
+
+          upstream bucket {
+            server $UPSTREAM_BUCKET;
+          }
+
+          map $host $bucket{
+            default $UPSTREAM_BUCKET;
+          }
+      - name: nginx.conf
+        mountPath: /etc/nginx
+        fileName: nginx.conf
+        inline: |
+          worker_processes  auto;
+
+          error_log  /var/log/nginx/error.log notice;
+          pid        /tmp/nginx.pid;
+
+          events {
+            worker_connections  1024;
+          }
+
+          http {
+
+            include /etc/nginx/conf.d/envvar.conf;
+
+            server {
+              listen 8080;
+              proxy_set_header Host $http_host;
+              client_max_body_size 0;
+              location / {
+                proxy_pass http://frontend;
+              }
+
+              location /api {
+                proxy_pass http://api;
+              }
+              location /artifacts {
+                proxy_pass http://api;
+              }
+              location /artifactsV2 {
+                proxy_pass http://api;
+              }
+
+              location /files {
+                proxy_pass http://api;
+              }
+
+              location /graphql {
+                proxy_pass http://api;
+              }
+
+              location /graphql2 {
+                proxy_pass http://api;
+              }
+
+              location /oidc {
+                proxy_pass http://api;
+              }
+
+              location /traces {
+                proxy_pass http://weave_trace;
+              }
+
+              location /weave/ {
+                proxy_pass http://weave/;
+              }
+
+              location /bucket {
+                proxy_ssl_verify off;
+                proxy_set_header Host $bucket;
+                proxy_pass https://bucket;
+              }
+            }
+          }
+    service:
+      type: NodePort
+      ports:
+        - name: http
+          port: 8080
+          protocol: TCP
+
+migrations:
+  gorilla:
+    image:
+      repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
+      tag: 0.78.0-pre-manifest-testing.9
+    args:
+      - "migrate"
+      - "--db=$(GORILLA_METADATA_STORE)"
+      - "--runs-db=$(GORILLA_RUN_STORE)"
+      - "--usage-db=$(GORILLA_USAGE_STORE)"
+      - "--squash"
+      - "true"
+    commonEnvs:
+      - gorillaMysql
+  weave-trace:
+    image:
+      repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
+      tag: 0.78.0-pre-manifest-testing.9
+    args:
+      - python
+      - migrator.py
+    commonEnvs:
+      - clickhouse
