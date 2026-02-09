@@ -1,0 +1,82 @@
+name: Release
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - v2
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    # Skip running release workflow on forks
+    if: github.repository_owner == 'wandb'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v3
+
+      - id: auth
+        name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GCP_SA_CREDS }}
+          create_credentials_file: true
+          export_environment_variables: true
+
+      - name: Authorize Docker to use Google Container Registry
+        run: |
+          gcloud auth configure-docker us-docker.pkg.dev
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Versioning
+        id: release
+        uses: cycjimmy/semantic-release-action@v3
+        with:
+          semantic_version: 19.0.2
+          extra_plugins: |
+            @semantic-release/changelog@6.0.1
+            @semantic-release/git@10.0.1
+            conventional-changelog-conventionalcommits@4.6.3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_SECRET }}
+
+      - uses: actions/setup-go@v4
+        with:
+          go-version: 1.25
+
+      - name: Install Ginkgo
+        run: go install github.com/onsi/ginkgo/v2/ginkgo@latest
+
+      - name: Build Latest
+        if: steps.release.outputs.new_release_version
+        run: |
+          export IMG=$IMAGE_TAG_BASE:$VERSION
+          make docker-build
+        env:
+          IMAGE_TAG_BASE: us-docker.pkg.dev/wandb-production/public/wandb/operator
+          VERSION: latest
+
+      - name: Tag and Push to GAR
+        if: steps.release.outputs.new_release_version
+        run: |
+          docker tag ${IMAGE_TAG_BASE}:latest ${IMAGE_TAG_BASE}:${{ steps.release.outputs.new_release_version }}
+          docker push ${IMAGE_TAG_BASE}:${{ steps.release.outputs.new_release_version }}
+
+          docker tag ${IMAGE_TAG_BASE}:latest ${IMAGE_TAG_BASE}:${{ steps.release.outputs.new_release_major_version }}.${{ steps.release.outputs.new_release_minor_version }}
+          docker push ${IMAGE_TAG_BASE}:${{ steps.release.outputs.new_release_major_version }}.${{ steps.release.outputs.new_release_minor_version }}
+
+          docker tag ${IMAGE_TAG_BASE}:latest ${IMAGE_TAG_BASE}:${{ steps.release.outputs.new_release_major_version }}
+          docker push ${IMAGE_TAG_BASE}:${{ steps.release.outputs.new_release_major_version }}
+        env:
+          IMAGE_TAG_BASE: us-docker.pkg.dev/wandb-production/public/wandb/operator
