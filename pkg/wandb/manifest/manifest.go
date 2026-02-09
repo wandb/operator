@@ -12,13 +12,13 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/wandb/operator/internal/logx"
 
 	"oras.land/oras-go/v2"
 	"oras.land/oras-go/v2/content/oci"
-	"oras.land/oras-go/v2/registry"
 	"oras.land/oras-go/v2/registry/remote"
 	//"oras.land/oras-go/v2/registry/remote/retry"
 
@@ -232,13 +232,13 @@ func GetServerManifest(ctx context.Context, repository string, version string) (
 	case "http", "https":
 		return Manifest{}, errors.New("http manifest not implemented")
 	case "file":
-		return LoadManifestFromFile(ctx, repository, version)
+		return LoadManifestFromFile(repository, version)
 	default:
 		return DownloadServerManifest(ctx, repository, version)
 	}
 }
 
-func LoadManifestFromFile(ctx context.Context, repository string, version string) (Manifest, error) {
+func LoadManifestFromFile(repository string, version string) (Manifest, error) {
 	manifest := Manifest{}
 
 	repositoryURL, err := url.Parse(repository)
@@ -262,12 +262,7 @@ func DownloadServerManifest(ctx context.Context, repository string, version stri
 	logger := logx.GetSlog(ctx)
 	var manifest Manifest
 
-	ref, err := registry.ParseReference(repository)
-	if err != nil {
-		logger.Error("failed to parse image reference", "repository", repository, "version", version, "error", err)
-		return manifest, err
-	}
-	ref.Reference = version
+	repository = strings.TrimPrefix(repository, "oci://")
 
 	ociDir := "/tmp/server-manifest"
 	localRepo, err := oci.New(ociDir)
@@ -276,7 +271,7 @@ func DownloadServerManifest(ctx context.Context, repository string, version stri
 	}
 
 	var descriptor ocispec.Descriptor
-	descriptor, err = localRepo.Resolve(ctx, ref.Reference)
+	descriptor, err = localRepo.Resolve(ctx, version)
 	if err != nil {
 		logger.Info("image not found in local", "repository", repository, "version", version, "error", err)
 		remoteRepo, err := remote.NewRepository(repository)
@@ -284,7 +279,7 @@ func DownloadServerManifest(ctx context.Context, repository string, version stri
 			logger.Error("failed to create repository", "repository", repository, "version", version, "error", err)
 			return manifest, err
 		}
-		descriptor, err = oras.Copy(ctx, remoteRepo, ref.Reference, localRepo, ref.Reference, oras.DefaultCopyOptions)
+		descriptor, err = oras.Copy(ctx, remoteRepo, version, localRepo, version, oras.DefaultCopyOptions)
 		if err != nil {
 			logger.Error("failed to fetch image from remote", "repository", repository, "version", version, "error", err)
 			return manifest, err
