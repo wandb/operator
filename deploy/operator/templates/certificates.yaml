@@ -1,0 +1,36 @@
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ .Release.Name }}-metrics-certs
+  namespace: {{ .Release.Namespace }}
+spec:
+  dnsNames:
+    - wandb-operator.{{ .Release.Namespace }}.svc
+    - wandb-operator.{{ .Release.Namespace }}.svc.cluster.local
+  issuerRef:
+    kind: Issuer
+    name: {{ .Release.Name }}-selfsigned-issuer
+  secretName: {{ .Release.Name }}-metrics-server-cert
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ .Release.Name }}-serving-cert
+  namespace: {{ .Release.Namespace }}
+spec:
+  dnsNames:
+    - {{ .Release.Name }}-webhook-service.{{ .Release.Namespace }}.svc
+    - {{ .Release.Name }}-webhook-service.{{ .Release.Namespace }}.svc.cluster.local
+  issuerRef:
+    kind: Issuer
+    name: {{ .Release.Name }}-selfsigned-issuer
+  secretName: {{ .Release.Name }}-webhook-server-cert
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ .Release.Name }}-selfsigned-issuer
+  namespace: {{ .Release.Namespace }}
+spec:
+  selfSigned: {}

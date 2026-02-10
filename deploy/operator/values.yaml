@@ -1,0 +1,93 @@
+wandb-operator:
+  image:
+    repository: us-docker.pkg.dev/wandb-production/public/operator
+    tag: internal-test.0
+  containers:
+    operator:
+      command:
+        - /manager
+      args:
+        - --metrics-bind-address=:8443
+        - --leader-elect
+        - --health-probe-bind-address=:8081
+        - --webhook-cert-path=/tmp/k8s-webhook-server/serving-certs
+      ports:
+        - containerPort: 8443
+          name: metrics
+          protocol: TCP
+      env:
+        METRICS_BIND_ADDRESS:
+          value: ":8443"
+        METRICS_SECURE:
+          value: "false"
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+            - "ALL"
+      livenessProbe:
+        httpGet:
+          path: /healthz
+          port: 8081
+        initialDelaySeconds: 15
+        periodSeconds: 20
+      readinessProbe:
+        httpGet:
+          path: /readyz
+          port: 8081
+        initialDelaySeconds: 5
+        periodSeconds: 10
+      # TODO(user): Configure the resources accordingly based on the project requirements.
+      # More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+      resources:
+        limits:
+          cpu: 500m
+          memory: 512Mi
+        requests:
+          cpu: 10m
+          memory: 64Mi
+      volumeMounts:
+        - mountPath: /tmp/k8s-webhook-server/serving-certs
+          name: webhook-certs
+          readOnly: true
+
+  replicaCount: 1
+  securityContext:
+    runAsNonRoot: false
+    seccompProfile:
+      type: RuntimeDefault
+  volumes:
+    - name: webhook-certs
+      secret:
+        secretName: '{{ .Release.Name }}-webhook-server-cert'
+
+  operators:
+    application: true
+    clickhouse: true
+    grafana: true
+    kafka: true
+    minio: true
+    mysql: true
+    redis: true
+    vm: true
+
+mysql-operator:
+  install: true
+
+redis-operator:
+  install: true
+
+strimzi-kafka-operator:
+  install: true
+
+minio-operator:
+  install: true
+
+altinity-clickhouse-operator:
+  install: true
+
+victoria-metrics-operator:
+  install: true
+
+grafana-operator:
+  install: true

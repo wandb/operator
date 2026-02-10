@@ -1,0 +1,45 @@
+apiVersion: v2
+name: operator
+description: A Helm chart for Weights & Biases operator
+type: application
+version: 1.5.0
+appVersion: "2.0.0"
+maintainers:
+  - name: wandb
+    email: support@wandb.com
+    url: https://wandb.com
+
+dependencies:
+  - name: wandb-base
+    version: 0.11.8
+    alias: wandb-operator
+    repository: https://charts.wandb.ai/
+  - name: mysql-operator
+    version: 2.2.7
+    repository: https://mysql.github.io/mysql-operator/
+    condition: mysql-operator.enabled
+  - name: redis-operator
+    version: 0.22.2
+    repository: https://ot-container-kit.github.io/helm-charts
+    condition: redis-operator.enabled
+  - name: strimzi-kafka-operator
+    version: 0.50.0
+    repository: https://strimzi.io/charts
+    condition: strimzi-kafka-operator.enabled
+  - name: operator
+    alias: minio-operator
+    version: 7.1.1
+    repository: https://operator.min.io
+    condition: minio-operator.enabled
+  - name: altinity-clickhouse-operator
+    version: 0.25.6
+    repository: https://helm.altinity.com
+    condition: altinity-clickhouse-operator.enabled
+  - name: victoria-metrics-operator
+    version: 0.58.1
+    repository: https://victoriametrics.github.io/helm-charts/
+    condition: victoria-metrics-operator.enabled
+  - name: grafana-operator
+    version: 5.21.4
+    repository: https://grafana.github.io/helm-charts
+    condition: grafana-operator.enabled
