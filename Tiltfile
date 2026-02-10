@@ -44,7 +44,7 @@ DOCKERFILE = '''
 FROM registry.access.redhat.com/ubi9/ubi
 
 ADD tilt_bin/manager /manager
-ADD hack/testing-manifests/server-manifest/0.76.1.yaml /0.76.1.yaml
+ADD hack/testing-manifests/server-manifest /server-manifest
 
 RUN mkdir -p /helm/.cache/helm /helm/.config/helm /helm/.local/share/helm
 
@@ -362,7 +362,7 @@ docker_build_with_restart(
     IMG, '.',
     dockerfile_contents=DOCKERFILE,
     entrypoint=['/manager', '--log-format=' + settings['logFormat']],
-    only=['./tilt_bin/manager', './hack/testing-manifests/server-manifest/0.76.1.yaml'],
+    only=['./tilt_bin/manager', './hack/testing-manifests/server-manifest'],
     live_update=[
         sync('./tilt_bin/manager', '/manager'),
     ],
