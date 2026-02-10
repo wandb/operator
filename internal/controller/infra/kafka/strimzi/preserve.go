@@ -38,21 +38,32 @@ func PreserveFinalizer(
 		log.Info("abort preserve finalizer: no connection info found")
 		return nil
 	}
+	patch := client.MergeFrom(actual.DeepCopy())
 
+	beforeOwnerCount := len(actual.OwnerReferences)
 	// remove wandbOwner as an OwnerReference to stop cascading deletion
 	newOwnerRefs := utils.FilterFunc(actual.OwnerReferences, func(ref metav1.OwnerReference) bool {
 		return ref.UID != wandbOwner.GetUID()
 	})
+	afterOwnerCount := len(newOwnerRefs)
 
 	actual.SetOwnerReferences(newOwnerRefs)
 
-	if err = cl.Update(ctx, actual); err != nil {
+	if err = cl.Patch(ctx, actual, patch); err != nil {
 		if !errors.IsNotFound(err) {
 			log.Error("error removing wandb owner reference during preserve", logx.ErrAttr(err))
 			return err
 		}
 	}
-	log.Debug("removed wandb owner reference during preserve", "uid", wandbOwner.GetUID())
+	//if err = cl.Update(ctx, actual); err != nil {
+	//	if !errors.IsNotFound(err) {
+	//		log.Error("error removing wandb owner reference during preserve", logx.ErrAttr(err))
+	//		return err
+	//	}
+	//}
+	log.Debug("removed wandb owner reference during preserve",
+		"uid", wandbOwner.GetUID(), "removalCount", beforeOwnerCount-afterOwnerCount,
+	)
 
 	return nil
 }
