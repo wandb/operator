@@ -1,0 +1,20 @@
+name: Internal Image Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        type: string
+        description: 'Tags for Images in GAR'
+        required: true
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          persist-credentials: false
+          fetch-depth: 0
