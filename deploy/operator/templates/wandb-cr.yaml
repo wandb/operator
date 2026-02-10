@@ -12,6 +12,8 @@ metadata:
   namespace: {{ .Values.wandb.namespace }}
 spec:
   wandb:
+    internalServiceAuth:
+      enabled: {{ .Values.wandb.internalServiceAuth }}
     hostname: http://localhost
     features:
       proxy: true

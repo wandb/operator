@@ -2,7 +2,8 @@ wandb:
   install: true
   size: small
   namespace: wandb
-  version: 0.78.0-pre-testing-manifests.11
+  version: 0.78.0-pre-manifest-testing.11
+  internalServiceAuth: false
 
 wandb-operator:
   image:
@@ -43,8 +44,6 @@ wandb-operator:
           port: 8081
         initialDelaySeconds: 5
         periodSeconds: 10
-      # TODO(user): Configure the resources accordingly based on the project requirements.
-      # More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
       resources:
         limits:
           cpu: 500m
@@ -96,12 +95,18 @@ redis-operator:
 
 strimzi-kafka-operator:
   install: true
+  watchAnyNamespace: true
 
 minio-operator:
   install: true
 
 altinity-clickhouse-operator:
   install: true
+  configs:
+    files:
+      config.yaml:
+        watch:
+          namespaces: [".*"]
 
 victoria-metrics-operator:
   install: true
