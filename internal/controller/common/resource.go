@@ -78,7 +78,11 @@ func CrudResource[T client.Object](ctx context.Context, c client.Client, desired
 		err = c.Delete(ctx, actual)
 	}
 	if action != NoAction {
-		log.Info(string(action), "namespace", desired.GetNamespace(), "name", desired.GetName())
+		if desiredExists {
+			log.Info(string(action), "namespace", desired.GetNamespace(), "name", desired.GetName())
+		} else if actualExists {
+			log.Info(string(action), "namespace", actual.GetNamespace(), "name", actual.GetName())
+		}
 	}
 	if err != nil {
 		log.Error("error on crud resource", logx.ErrAttr(err), "action", action)

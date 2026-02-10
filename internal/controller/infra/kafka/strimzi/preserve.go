@@ -39,11 +39,12 @@ func PreserveFinalizer(
 		return nil
 	}
 
+	beforeOwnerCount := len(actual.OwnerReferences)
 	// remove wandbOwner as an OwnerReference to stop cascading deletion
 	newOwnerRefs := utils.FilterFunc(actual.OwnerReferences, func(ref metav1.OwnerReference) bool {
 		return ref.UID != wandbOwner.GetUID()
 	})
-
+	afterOwnerCount := len(newOwnerRefs)
 	actual.SetOwnerReferences(newOwnerRefs)
 
 	if err = cl.Update(ctx, actual); err != nil {
@@ -52,7 +53,9 @@ func PreserveFinalizer(
 			return err
 		}
 	}
-	log.Debug("removed wandb owner reference during preserve", "uid", wandbOwner.GetUID())
+	log.Debug("removed wandb owner reference during preserve",
+		"uid", wandbOwner.GetUID(), "removalCount", beforeOwnerCount-afterOwnerCount,
+	)
 
 	return nil
 }

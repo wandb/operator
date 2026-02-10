@@ -99,6 +99,8 @@ func Reconcile(
 				return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
 			}
 		}
+		// continue post-finalizer logic in a future pass of the reconciliation loop
+		return ctrl.Result{}, nil
 	}
 
 	/////////////////////////
