@@ -1,3 +1,9 @@
+wandb:
+  install: true
+  size: small
+  namespace: wandb
+  version: 0.78.0-pre-testing-manifests.11
+
 wandb-operator:
   image:
     repository: us-docker.pkg.dev/wandb-production/public/operator
@@ -10,7 +16,7 @@ wandb-operator:
         - --metrics-bind-address=:8443
         - --leader-elect
         - --health-probe-bind-address=:8081
-        - --webhook-cert-path=/tmp/k8s-webhook-server/serving-certs
+        - --webhook-cert-path=/tmp/wandb-operator/serving-certs
       ports:
         - containerPort: 8443
           name: metrics
@@ -47,19 +53,30 @@ wandb-operator:
           cpu: 10m
           memory: 64Mi
       volumeMounts:
-        - mountPath: /tmp/k8s-webhook-server/serving-certs
-          name: webhook-certs
+        - mountPath: /tmp/wandb-operator/serving-certs
+          name: serving-certs
           readOnly: true
 
+  service:
+    enabled: true
+    ports:
+      - name: webhook
+        port: 443
+        protocol: TCP
+        targetPort: 9443
+      - name: metrics
+        port: 8443
+        protocol: TCP
+        targetPort: 8443
   replicaCount: 1
   securityContext:
     runAsNonRoot: false
     seccompProfile:
       type: RuntimeDefault
   volumes:
-    - name: webhook-certs
+    - name: serving-certs
       secret:
-        secretName: '{{ .Release.Name }}-webhook-server-cert'
+        secretName: '{{ .Release.Name }}-serving-cert'
 
   operators:
     application: true
