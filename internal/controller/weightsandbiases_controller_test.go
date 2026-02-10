@@ -2,6 +2,9 @@ package controller
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"path/filepath"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -12,6 +15,7 @@ import (
 	"github.com/wandb/operator/pkg/wandb/manifest"
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
+	apiErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -19,6 +23,9 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+var manifestsDir, _ = filepath.Abs("../../hack/testing-manifests/server-manifest")
+var manifestsRepository = fmt.Sprintf("file://%s", manifestsDir)
 
 var _ = Describe("WeightsAndBiases Controller V2", func() {
 	const (
@@ -33,7 +40,6 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 		It("Should successfully reconcile and update status", func() {
 			By("Creating a new WeightsAndBiases v2 object")
 			ctx := context.Background()
-			manifest.Path = "../../hack/testing-manifests/server-manifest/0.76.1.yaml"
 			wandb := &apiv2.WeightsAndBiases{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      WandbName,
@@ -46,6 +52,8 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 						Features: map[string]bool{
 							"proxy": true,
 						},
+						ManifestRepository: manifestsRepository,
+						Version:            "0.78.0-pre",
 					},
 					MySQL: apiv2.WBMySQLSpec{
 						WBInfraSpec: apiv2.WBInfraSpec{
@@ -82,7 +90,6 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			Expect(k8sClient.Create(ctx, wandb)).Should(Succeed())
 
 			wandbLookupKey := types.NamespacedName{Name: WandbName, Namespace: WandbNamespace}
-			createdWandb := &apiv2.WeightsAndBiases{}
 
 			By("Running the reconciler")
 			reconciler := &WeightsAndBiasesReconciler{
@@ -92,7 +99,7 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 				EnableV2: true,
 			}
 
-			Expect(k8sClient.Get(ctx, wandbLookupKey, createdWandb)).Should(Succeed())
+			Expect(k8sClient.Get(ctx, wandbLookupKey, wandb)).Should(Succeed())
 
 			_, err := reconciler.Reconcile(ctx, ctrl.Request{
 				NamespacedName: wandbLookupKey,
@@ -101,27 +108,17 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			Expect(err).Should(Succeed())
 
 			By("Checking if finalizers were added")
-			Expect(k8sClient.Get(ctx, wandbLookupKey, createdWandb)).Should(Succeed())
+			Expect(k8sClient.Get(ctx, wandbLookupKey, wandb)).Should(Succeed())
 
-			Expect(utils.ContainsString(createdWandb.GetFinalizers(), "wandb.apps.wandb.com/cleanup")).Should(BeTrue())
-
-			By("Checking if ServiceAccount was created")
-			saLookupKey := types.NamespacedName{Name: createdWandb.Spec.Wandb.ServiceAccount.ServiceAccountName, Namespace: WandbNamespace}
-			createdSa := &v1.ServiceAccount{}
-			Eventually(func() error {
-				return k8sClient.Get(ctx, saLookupKey, createdSa)
-			}, timeout, interval).Should(Succeed())
-			Expect(createdSa.Labels["app.kubernetes.io/instance"]).To(Equal(WandbName))
+			Expect(utils.ContainsString(wandb.GetFinalizers(), "wandb.apps.wandb.com/cleanup")).Should(BeTrue())
 
 			// Cleanup
-			Expect(k8sClient.Delete(ctx, createdWandb)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, wandb)).Should(Succeed())
 		})
 
 		It("Should create a MySQL init job when deployment type is mysql", func() {
 			By("Creating a new WeightsAndBiases v2 object with MySQL deployment type 'mysql'")
 			ctx := context.Background()
-			manifest.Path = "../../hack/testing-manifests/server-manifest/0.76.1.yaml"
-			wandbVersion := "0.76.1"
 			wandbName := "test-mysql-init"
 			wandb := &apiv2.WeightsAndBiases{
 				ObjectMeta: metav1.ObjectMeta{
@@ -130,8 +127,10 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 				},
 				Spec: apiv2.WeightsAndBiasesSpec{
 					Wandb: apiv2.WandbAppSpec{
-						Hostname: "http://localhost",
-						Features: map[string]bool{},
+						Hostname:           "http://localhost",
+						Features:           map[string]bool{},
+						ManifestRepository: manifestsRepository,
+						Version:            "0.78.0-pre",
 					},
 					MySQL: apiv2.WBMySQLSpec{
 						WBInfraSpec: apiv2.WBInfraSpec{
@@ -169,8 +168,7 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
 
 			wandbLookupKey := types.NamespacedName{Name: wandb.Name, Namespace: wandb.Namespace}
-			createdWandb := &apiv2.WeightsAndBiases{}
-			Expect(k8sClient.Get(ctx, wandbLookupKey, createdWandb)).Should(Succeed())
+			Expect(k8sClient.Get(ctx, wandbLookupKey, wandb)).Should(Succeed())
 
 			By("Running the reconciler")
 			reconciler := &WeightsAndBiasesReconciler{
@@ -186,22 +184,22 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			Expect(err).Should(Succeed())
 
 			By("Setting infrastructure status to ready")
-			Expect(k8sClient.Get(ctx, wandbLookupKey, createdWandb)).Should(Succeed())
+			Expect(k8sClient.Get(ctx, wandbLookupKey, wandb)).Should(Succeed())
 
-			createdWandb.Status.MySQLStatus.Ready = true
-			createdWandb.Status.RedisStatus.Ready = true
-			createdWandb.Status.KafkaStatus.Ready = true
-			createdWandb.Status.MinioStatus.Ready = true
-			createdWandb.Status.ClickHouseStatus.Ready = true
-			createdWandb.Status.MySQLStatus.Connection.URL = v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: WandbName}, Key: "test"}
-			createdWandb.Status.ClickHouseStatus.Connection.URL = v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: WandbName}, Key: "test"}
+			wandb.Status.MySQLStatus.Ready = true
+			wandb.Status.RedisStatus.Ready = true
+			wandb.Status.KafkaStatus.Ready = true
+			wandb.Status.MinioStatus.Ready = true
+			wandb.Status.ClickHouseStatus.Ready = true
+			wandb.Status.MySQLStatus.Connection.URL = v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: WandbName}, Key: "test"}
+			wandb.Status.ClickHouseStatus.Connection.URL = v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: WandbName}, Key: "test"}
 
-			Expect(k8sClient.Status().Update(ctx, createdWandb)).Should(Succeed())
+			Expect(k8sClient.Status().Update(ctx, wandb)).Should(Succeed())
 
 			By("Checking if Applications were NOT created yet (migrations not complete)")
-			wandbManifest, err := manifest.GetServerManifest(wandbVersion)
+			wandbManifest, err := manifest.GetServerManifest(ctx, wandb.Spec.Wandb.ManifestRepository, wandb.Spec.Wandb.Version)
 			Expect(err).Should(Succeed())
-			_, err = v2.ReconcileWandbManifest(ctx, k8sClient, createdWandb, wandbManifest)
+			_, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest)
 			Expect(err).Should(Succeed())
 
 			By("Checking if the MySQL init job was created")
@@ -215,25 +213,27 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			// Cleanup
 			Expect(k8sClient.Delete(ctx, job, client.PropagationPolicy(metav1.DeletePropagationBackground))).Should(Succeed())
 			Expect(k8sClient.Delete(ctx, wandb)).Should(Succeed())
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: WandbName, Namespace: WandbNamespace}, wandb)).Should(Succeed())
+			wandb.SetFinalizers([]string{})
+			Expect(k8sClient.Update(ctx, wandb)).Should(Succeed())
 			Expect(k8sClient.Delete(ctx, secret)).Should(Succeed())
 		})
 
 		It("Should create application components when infrastructure is ready", func() {
 			By("Creating a new WeightsAndBiases v2 object with ready infrastructure")
 			ctx := context.Background()
-			manifest.Path = "../../hack/testing-manifests/server-manifest/0.76.1.yaml"
-			wandbVersion := "0.76.1"
 			wandb := &apiv2.WeightsAndBiases{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      WandbName + "-ready",
+					Name:      WandbName,
 					Namespace: WandbNamespace,
 				},
 				Spec: apiv2.WeightsAndBiasesSpec{
 					Size: apiv2.WBSizeDev,
 					Wandb: apiv2.WandbAppSpec{
-						Hostname: "http://localhost",
-						Version:  wandbVersion,
-						Features: map[string]bool{},
+						Hostname:           "http://localhost",
+						Features:           map[string]bool{},
+						ManifestRepository: manifestsRepository,
+						Version:            "0.78.0-pre",
 					},
 					MySQL: apiv2.WBMySQLSpec{
 						WBInfraSpec: apiv2.WBInfraSpec{
@@ -265,8 +265,7 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			Expect(k8sClient.Create(ctx, wandb)).Should(Succeed())
 
 			wandbLookupKey := types.NamespacedName{Name: wandb.Name, Namespace: wandb.Namespace}
-			createdWandb := &apiv2.WeightsAndBiases{}
-			Expect(k8sClient.Get(ctx, wandbLookupKey, createdWandb)).Should(Succeed())
+			Expect(k8sClient.Get(ctx, wandbLookupKey, wandb)).Should(Succeed())
 
 			By("Running the reconciler")
 			reconciler := &WeightsAndBiasesReconciler{
@@ -282,22 +281,22 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			Expect(err).Should(Succeed())
 
 			By("Setting infrastructure status to ready")
-			Expect(k8sClient.Get(ctx, wandbLookupKey, createdWandb)).Should(Succeed())
+			Expect(k8sClient.Get(ctx, wandbLookupKey, wandb)).Should(Succeed())
 
-			createdWandb.Status.MySQLStatus.Ready = true
-			createdWandb.Status.RedisStatus.Ready = true
-			createdWandb.Status.KafkaStatus.Ready = true
-			createdWandb.Status.MinioStatus.Ready = true
-			createdWandb.Status.ClickHouseStatus.Ready = true
-			createdWandb.Status.MySQLStatus.Connection.URL = v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: WandbName}, Key: "test"}
-			createdWandb.Status.ClickHouseStatus.Connection.URL = v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: WandbName}, Key: "test"}
+			wandb.Status.MySQLStatus.Ready = true
+			wandb.Status.RedisStatus.Ready = true
+			wandb.Status.KafkaStatus.Ready = true
+			wandb.Status.MinioStatus.Ready = true
+			wandb.Status.ClickHouseStatus.Ready = true
+			wandb.Status.MySQLStatus.Connection.URL = v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: WandbName}, Key: "test"}
+			wandb.Status.ClickHouseStatus.Connection.URL = v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: WandbName}, Key: "test"}
 
-			Expect(k8sClient.Status().Update(ctx, createdWandb)).Should(Succeed())
+			Expect(k8sClient.Status().Update(ctx, wandb)).Should(Succeed())
 
 			By("Checking if Applications were NOT created yet (migrations not complete)")
-			wandbManifest, err := manifest.GetServerManifest(wandbVersion)
+			wandbManifest, err := manifest.GetServerManifest(ctx, wandb.Spec.Wandb.ManifestRepository, wandb.Spec.Wandb.Version)
 			Expect(err).Should(Succeed())
-			ctrlResult, err := v2.ReconcileWandbManifest(ctx, k8sClient, createdWandb, wandbManifest)
+			ctrlResult, err := v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest)
 			Expect(err).Should(Succeed())
 			Expect(ctrlResult.RequeueAfter).Should(BeNumerically(">", 0))
 
@@ -306,18 +305,24 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			Expect(len(appList.Items)).Should(Equal(0))
 
 			By("Setting migration status to successful")
-			Expect(k8sClient.Get(ctx, wandbLookupKey, createdWandb)).Should(Succeed())
-			createdWandb.Status.Wandb.Migration.Version = wandbVersion
-			createdWandb.Status.Wandb.Migration.LastSuccessVersion = wandbVersion
-			createdWandb.Status.Wandb.Migration.Ready = true
-			createdWandb.Status.Wandb.Migration.Reason = "Complete"
-			createdWandb.Status.Wandb.MySQLInit.Succeeded = true
-			Expect(k8sClient.Status().Update(ctx, createdWandb)).Should(Succeed())
+			Expect(k8sClient.Get(ctx, wandbLookupKey, wandb)).Should(Succeed())
+			wandb.Status.Wandb.Migration.Version = wandb.Spec.Wandb.Version
+			wandb.Status.Wandb.Migration.LastSuccessVersion = wandb.Spec.Wandb.Version
+			wandb.Status.Wandb.Migration.Ready = true
+			wandb.Status.Wandb.Migration.Reason = "Complete"
+			wandb.Status.Wandb.MySQLInit.Succeeded = true
+			Expect(k8sClient.Status().Update(ctx, wandb)).Should(Succeed())
 
 			// For now test by calling ReconcileWandbManifest directly, but this will get refactored into the reconciler later
-			ctrlResult, err = v2.ReconcileWandbManifest(ctx, k8sClient, createdWandb, wandbManifest)
+			ctrlResult, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest)
 			Expect(err).Should(Succeed())
 			Expect(ctrlResult.RequeueAfter).Should(BeZero())
+
+			By("Checking if ServiceAccount was created")
+			saLookupKey := types.NamespacedName{Name: wandb.Spec.Wandb.ServiceAccount.ServiceAccountName, Namespace: WandbNamespace}
+			createdSa := &v1.ServiceAccount{}
+			Expect(k8sClient.Get(ctx, saLookupKey, createdSa)).Should(Succeed())
+			Expect(createdSa.Labels["app.kubernetes.io/instance"]).To(Equal(WandbName))
 
 			By("Checking if Applications were created")
 			appList = &apiv2.ApplicationList{}
@@ -328,25 +333,34 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			Expect(len(appList.Items)).Should(BeNumerically("==", len(wandbManifest.Applications)-2), "Expected all non-feature flagged applications to be created")
 
 			// Cleanup
-			Expect(k8sClient.Delete(ctx, createdWandb)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, wandb)).Should(Succeed())
+			Expect(k8sClient.Get(ctx, wandbLookupKey, wandb)).Should(Succeed())
+			wandb.SetFinalizers([]string{})
+			Expect(k8sClient.Update(ctx, wandb)).Should(Succeed())
+			Eventually(func() error {
+				err := k8sClient.Get(ctx, types.NamespacedName{Name: WandbName, Namespace: WandbNamespace}, wandb)
+				if apiErrors.IsNotFound(err) {
+					return nil
+				}
+				return errors.New("wandb is not deleted")
+			}, timeout, interval).Should(Succeed())
 		})
 
 		It("Should handle various migration states correctly", func() {
 			By("Creating a new WeightsAndBiases v2 object")
 			ctx := context.Background()
-			manifest.Path = "../../hack/testing-manifests/server-manifest/0.76.1.yaml"
-			wandbVersion := "0.76.1"
 			wandb := &apiv2.WeightsAndBiases{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      WandbName + "-states",
+					Name:      WandbName,
 					Namespace: WandbNamespace,
 				},
 				Spec: apiv2.WeightsAndBiasesSpec{
 					Size: apiv2.WBSizeDev,
 					Wandb: apiv2.WandbAppSpec{
-						Hostname: "http://localhost",
-						Version:  wandbVersion,
-						Features: map[string]bool{},
+						Hostname:           "http://localhost",
+						Features:           map[string]bool{},
+						ManifestRepository: manifestsRepository,
+						Version:            "0.78.0-pre",
 					},
 					MySQL:      apiv2.WBMySQLSpec{WBInfraSpec: apiv2.WBInfraSpec{Enabled: true}},
 					Redis:      apiv2.WBRedisSpec{WBInfraSpec: apiv2.WBInfraSpec{Enabled: true}},
@@ -358,76 +372,75 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			Expect(k8sClient.Create(ctx, wandb)).Should(Succeed())
 
 			wandbLookupKey := types.NamespacedName{Name: wandb.Name, Namespace: wandb.Namespace}
-			createdWandb := &apiv2.WeightsAndBiases{}
-			Expect(k8sClient.Get(ctx, wandbLookupKey, createdWandb)).Should(Succeed())
+			Expect(k8sClient.Get(ctx, wandbLookupKey, wandb)).Should(Succeed())
 
 			// Mark infra as ready
-			createdWandb.Status.MySQLStatus.Ready = true
-			createdWandb.Status.RedisStatus.Ready = true
-			createdWandb.Status.KafkaStatus.Ready = true
-			createdWandb.Status.MinioStatus.Ready = true
-			createdWandb.Status.ClickHouseStatus.Ready = true
-			Expect(k8sClient.Status().Update(ctx, createdWandb)).Should(Succeed())
+			wandb.Status.MySQLStatus.Ready = true
+			wandb.Status.RedisStatus.Ready = true
+			wandb.Status.KafkaStatus.Ready = true
+			wandb.Status.MinioStatus.Ready = true
+			wandb.Status.ClickHouseStatus.Ready = true
+			Expect(k8sClient.Status().Update(ctx, wandb)).Should(Succeed())
 
-			wandbManifest, err := manifest.GetServerManifest(wandbVersion)
+			wandbManifest, err := manifest.GetServerManifest(ctx, wandb.Spec.Wandb.ManifestRepository, wandb.Spec.Wandb.Version)
 			Expect(err).Should(Succeed())
 
 			By("Simulating migration in Running state")
-			Expect(k8sClient.Get(ctx, wandbLookupKey, createdWandb)).Should(Succeed())
-			createdWandb.Status.Wandb.Migration.Version = wandbVersion
-			createdWandb.Status.Wandb.Migration.Ready = false
-			createdWandb.Status.Wandb.Migration.Reason = "Running"
-			createdWandb.Status.MySQLStatus.Connection.URL = v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: WandbName}, Key: "test"}
-			createdWandb.Status.ClickHouseStatus.Connection.URL = v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: WandbName}, Key: "test"}
-			Expect(k8sClient.Status().Update(ctx, createdWandb)).Should(Succeed())
+			Expect(k8sClient.Get(ctx, wandbLookupKey, wandb)).Should(Succeed())
+			wandb.Status.Wandb.Migration.Version = wandb.Spec.Wandb.Version
+			wandb.Status.Wandb.Migration.Ready = false
+			wandb.Status.Wandb.Migration.Reason = "Running"
+			wandb.Status.MySQLStatus.Connection.URL = v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: WandbName}, Key: "test"}
+			wandb.Status.ClickHouseStatus.Connection.URL = v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: WandbName}, Key: "test"}
+			Expect(k8sClient.Status().Update(ctx, wandb)).Should(Succeed())
 
-			ctrlResult, err := v2.ReconcileWandbManifest(ctx, k8sClient, createdWandb, wandbManifest)
+			ctrlResult, err := v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest)
 			Expect(err).Should(Succeed())
 			Expect(ctrlResult.RequeueAfter).Should(BeNumerically(">", 0), "Expected requeue when migration is running")
 
 			By("Simulating migration in Failed state")
-			Expect(k8sClient.Get(ctx, wandbLookupKey, createdWandb)).Should(Succeed())
-			createdWandb.Status.Wandb.Migration.Ready = false
-			createdWandb.Status.Wandb.Migration.Reason = "Failed"
-			Expect(k8sClient.Status().Update(ctx, createdWandb)).Should(Succeed())
+			Expect(k8sClient.Get(ctx, wandbLookupKey, wandb)).Should(Succeed())
+			wandb.Status.Wandb.Migration.Ready = false
+			wandb.Status.Wandb.Migration.Reason = "Failed"
+			Expect(k8sClient.Status().Update(ctx, wandb)).Should(Succeed())
 
-			ctrlResult, err = v2.ReconcileWandbManifest(ctx, k8sClient, createdWandb, wandbManifest)
+			ctrlResult, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest)
 			Expect(err).Should(Succeed())
 			Expect(ctrlResult.RequeueAfter).Should(BeNumerically(">", 0), "Expected requeue when migration failed")
 
 			By("Simulating migration Complete")
-			Expect(k8sClient.Get(ctx, wandbLookupKey, createdWandb)).Should(Succeed())
-			createdWandb.Status.Wandb.Migration.Ready = true
-			createdWandb.Status.Wandb.Migration.Reason = "Complete"
-			createdWandb.Status.Wandb.Migration.LastSuccessVersion = wandbVersion
-			createdWandb.Status.Wandb.MySQLInit.Succeeded = true
-			Expect(k8sClient.Status().Update(ctx, createdWandb)).Should(Succeed())
+			Expect(k8sClient.Get(ctx, wandbLookupKey, wandb)).Should(Succeed())
+			wandb.Status.Wandb.Migration.Ready = true
+			wandb.Status.Wandb.Migration.Reason = "Complete"
+			wandb.Status.Wandb.Migration.LastSuccessVersion = wandb.Spec.Wandb.Version
+			wandb.Status.Wandb.MySQLInit.Succeeded = true
+			Expect(k8sClient.Status().Update(ctx, wandb)).Should(Succeed())
 
-			ctrlResult, err = v2.ReconcileWandbManifest(ctx, k8sClient, createdWandb, wandbManifest)
+			ctrlResult, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest)
 			Expect(err).Should(Succeed())
 			Expect(ctrlResult.RequeueAfter).Should(BeZero(), "Expected no requeue when migration is complete")
 
 			// Cleanup
-			Expect(k8sClient.Delete(ctx, createdWandb)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, wandb)).Should(Succeed())
 		})
 
 		It("Should trigger new migrations on version upgrade", func() {
 			By("Creating a new WeightsAndBiases v2 object with an old version")
 			ctx := context.Background()
-			manifest.Path = "../../hack/testing-manifests/server-manifest/0.76.1.yaml"
 			oldVersion := "0.76.0"
 			newVersion := "0.76.1"
 			wandb := &apiv2.WeightsAndBiases{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      WandbName + "-upgrade",
+					Name:      WandbName,
 					Namespace: WandbNamespace,
 				},
 				Spec: apiv2.WeightsAndBiasesSpec{
 					Size: apiv2.WBSizeDev,
 					Wandb: apiv2.WandbAppSpec{
-						Hostname: "http://localhost",
-						Version:  oldVersion,
-						Features: map[string]bool{},
+						Hostname:           "http://localhost",
+						Features:           map[string]bool{},
+						ManifestRepository: manifestsRepository,
+						Version:            oldVersion,
 					},
 					MySQL:      apiv2.WBMySQLSpec{WBInfraSpec: apiv2.WBInfraSpec{Enabled: true}},
 					Redis:      apiv2.WBRedisSpec{WBInfraSpec: apiv2.WBInfraSpec{Enabled: true}},
@@ -439,49 +452,48 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			Expect(k8sClient.Create(ctx, wandb)).Should(Succeed())
 
 			wandbLookupKey := types.NamespacedName{Name: wandb.Name, Namespace: wandb.Namespace}
-			createdWandb := &apiv2.WeightsAndBiases{}
-			Expect(k8sClient.Get(ctx, wandbLookupKey, createdWandb)).Should(Succeed())
+			Expect(k8sClient.Get(ctx, wandbLookupKey, wandb)).Should(Succeed())
 
 			// Mark infra as ready and migration as complete for old version
-			createdWandb.Status.MySQLStatus.Ready = true
-			createdWandb.Status.RedisStatus.Ready = true
-			createdWandb.Status.KafkaStatus.Ready = true
-			createdWandb.Status.MinioStatus.Ready = true
-			createdWandb.Status.ClickHouseStatus.Ready = true
-			createdWandb.Status.MySQLStatus.Connection.URL = v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: WandbName}, Key: "test"}
-			createdWandb.Status.ClickHouseStatus.Connection.URL = v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: WandbName}, Key: "test"}
-			createdWandb.Status.Wandb.Migration.Version = oldVersion
-			createdWandb.Status.Wandb.Migration.LastSuccessVersion = oldVersion
-			createdWandb.Status.Wandb.Migration.Ready = true
-			createdWandb.Status.Wandb.Migration.Reason = "Complete"
-			createdWandb.Status.Wandb.MySQLInit.Succeeded = true
-			Expect(k8sClient.Status().Update(ctx, createdWandb)).Should(Succeed())
+			wandb.Status.MySQLStatus.Ready = true
+			wandb.Status.RedisStatus.Ready = true
+			wandb.Status.KafkaStatus.Ready = true
+			wandb.Status.MinioStatus.Ready = true
+			wandb.Status.ClickHouseStatus.Ready = true
+			wandb.Status.MySQLStatus.Connection.URL = v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: WandbName}, Key: "test"}
+			wandb.Status.ClickHouseStatus.Connection.URL = v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: WandbName}, Key: "test"}
+			wandb.Status.Wandb.Migration.Version = oldVersion
+			wandb.Status.Wandb.Migration.LastSuccessVersion = oldVersion
+			wandb.Status.Wandb.Migration.Ready = true
+			wandb.Status.Wandb.Migration.Reason = "Complete"
+			wandb.Status.Wandb.MySQLInit.Succeeded = true
+			Expect(k8sClient.Status().Update(ctx, wandb)).Should(Succeed())
 
 			By("Upgrading the version in the spec")
-			Expect(k8sClient.Get(ctx, wandbLookupKey, createdWandb)).Should(Succeed())
-			createdWandb.Spec.Wandb.Version = newVersion
-			Expect(k8sClient.Update(ctx, createdWandb)).Should(Succeed())
+			Expect(k8sClient.Get(ctx, wandbLookupKey, wandb)).Should(Succeed())
+			wandb.Spec.Wandb.Version = newVersion
+			Expect(k8sClient.Update(ctx, wandb)).Should(Succeed())
 
 			By("Running ReconcileWandbManifest and verifying it triggers migrations")
-			wandbManifest, err := manifest.GetServerManifest(newVersion)
+			wandbManifest, err := manifest.GetServerManifest(ctx, wandb.Spec.Wandb.ManifestRepository, newVersion)
 			Expect(err).Should(Succeed())
 
 			// Re-fetch to get updated Spec and Status
-			Expect(k8sClient.Get(ctx, wandbLookupKey, createdWandb)).Should(Succeed())
+			Expect(k8sClient.Get(ctx, wandbLookupKey, wandb)).Should(Succeed())
 
 			// This call to ReconcileWandbManifest should trigger runMigrations,
 			// which sees version mismatch and starts migrations.
-			_, err = v2.ReconcileWandbManifest(ctx, k8sClient, createdWandb, wandbManifest)
+			_, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest)
 			Expect(err).Should(Succeed())
 
 			By("Verifying migration status was reset for the new version")
-			Expect(k8sClient.Get(ctx, wandbLookupKey, createdWandb)).Should(Succeed())
-			Expect(createdWandb.Status.Wandb.Migration.Version).Should(Equal(newVersion))
-			Expect(createdWandb.Status.Wandb.Migration.Ready).Should(BeFalse())
-			Expect(createdWandb.Status.Wandb.Migration.Reason).Should(Equal("Running"))
+			Expect(k8sClient.Get(ctx, wandbLookupKey, wandb)).Should(Succeed())
+			Expect(wandb.Status.Wandb.Migration.Version).Should(Equal(newVersion))
+			Expect(wandb.Status.Wandb.Migration.Ready).Should(BeFalse())
+			Expect(wandb.Status.Wandb.Migration.Reason).Should(Equal("Running"))
 
 			// Cleanup
-			Expect(k8sClient.Delete(ctx, createdWandb)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, wandb)).Should(Succeed())
 		})
 	})
 })

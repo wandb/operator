@@ -3,16 +3,18 @@ kind: WeightsAndBiases
 metadata:
   name: wandb-dev-v2
 spec:
-  enableOIDCDiscovery: true
   wandb:
     hostname: http://localhost
     features:
       proxy: true
+    manifest-repository: "file:///server-manifest"
+    version: "0.78.0-pre"
   size: dev
   retentionPolicy:
     onDelete: preserve
   mysql:
     enabled: true
+    deploymentType: "mysql"
     telemetry:
       enabled: true
   redis:

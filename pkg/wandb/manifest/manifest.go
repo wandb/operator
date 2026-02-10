@@ -1,7 +1,26 @@
 package manifest
 
 import (
+	"archive/tar"
+	"compress/gzip"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/url"
 	"os"
+	"path"
+	"path/filepath"
+	"strings"
+
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/wandb/operator/internal/logx"
+
+	"oras.land/oras-go/v2"
+	"oras.land/oras-go/v2/content/oci"
+	"oras.land/oras-go/v2/registry/remote"
+	//"oras.land/oras-go/v2/registry/remote/retry"
 
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/yaml"
@@ -203,19 +222,141 @@ type FileSpec struct {
 	ConfigMapRef string `yaml:"configMapRef,omitempty"`
 }
 
-// This will eventually be loaded externally outside of testing
-var Path = "0.76.1.yaml"
+func GetServerManifest(ctx context.Context, repository string, version string) (Manifest, error) {
+	versionURL, err := url.Parse(repository)
+	if err != nil {
+		return Manifest{}, err
+	}
 
-func GetServerManifest(version string) (Manifest, error) {
+	switch versionURL.Scheme {
+	case "http", "https":
+		return Manifest{}, errors.New("http manifest not implemented")
+	case "file":
+		return LoadManifestFromFile(repository, version)
+	default:
+		return DownloadServerManifest(ctx, repository, version)
+	}
+}
+
+func LoadManifestFromFile(repository string, version string) (Manifest, error) {
 	manifest := Manifest{}
-	manifestData, err := os.ReadFile(Path)
+
+	repositoryURL, err := url.Parse(repository)
+	if err != nil {
+		return manifest, err
+	}
+
+	manifestFile := path.Join(repositoryURL.Path, fmt.Sprintf("%s.yaml", version))
+	manifestData, err := os.ReadFile(manifestFile)
 	if err != nil {
 		return Manifest{}, err
 	}
 	if err = yaml.Unmarshal(manifestData, &manifest); err != nil {
 		return Manifest{}, err
 	}
+
 	return manifest, nil
+}
+
+func DownloadServerManifest(ctx context.Context, repository string, version string) (Manifest, error) {
+	logger := logx.GetSlog(ctx)
+	var manifest Manifest
+
+	repository = strings.TrimPrefix(repository, "oci://")
+
+	ociDir := "/tmp/server-manifest"
+	localRepo, err := oci.New(ociDir)
+	if err != nil {
+		return manifest, err
+	}
+
+	var descriptor ocispec.Descriptor
+	descriptor, err = localRepo.Resolve(ctx, version)
+	if err != nil {
+		logger.Info("image not found in local", "repository", repository, "version", version, "error", err)
+		remoteRepo, err := remote.NewRepository(repository)
+		if err != nil {
+			logger.Error("failed to create repository", "repository", repository, "version", version, "error", err)
+			return manifest, err
+		}
+		descriptor, err = oras.Copy(ctx, remoteRepo, version, localRepo, version, oras.DefaultCopyOptions)
+		if err != nil {
+			logger.Error("failed to fetch image from remote", "repository", repository, "version", version, "error", err)
+			return manifest, err
+		}
+		logger.Info("successfully fetched image from remote", "repository", repository, "version", version, "desc", descriptor)
+	} else {
+		logger.Debug("successfully fetched image from local", "repository", repository, "version", version)
+	}
+
+	manifestData, err := localRepo.Fetch(ctx, descriptor)
+	if err != nil {
+		logger.Error("failed to fetch manifest", "err", err)
+		return manifest, err
+	}
+
+	defer manifestData.Close()
+
+	var ociManifest ocispec.Manifest
+	if err := json.NewDecoder(manifestData).Decode(&ociManifest); err != nil {
+		logger.Error("failed to unmarshal manifest", "err", err)
+		return manifest, err
+	}
+
+	for _, layer := range ociManifest.Layers {
+		// Fetch each layer and list files if it's a tar/tar+gzip
+		layerReader, err := localRepo.Fetch(ctx, layer)
+		if err != nil {
+			logger.Error("failed to fetch layer", "digest", layer.Digest, "err", err)
+			continue
+		}
+
+		var tr *tar.Reader
+		if layer.MediaType == ocispec.MediaTypeImageLayerGzip || layer.MediaType == "application/vnd.docker.image.rootfs.diff.tar.gzip" {
+			gzr, err := gzip.NewReader(layerReader)
+			if err != nil {
+				layerReader.Close()
+				logger.Error("failed to create gzip reader for layer", "digest", layer.Digest, "err", err)
+				continue
+			}
+			tr = tar.NewReader(gzr)
+			defer gzr.Close()
+		} else {
+			tr = tar.NewReader(layerReader)
+		}
+		defer layerReader.Close()
+
+		for {
+			header, err := tr.Next()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				logger.Error("failed to read tar header", "err", err)
+				break
+			}
+			fmt.Printf("- %s\n", header.Name)
+
+			if filepath.Base(header.Name) == "manifest.yaml" {
+				logger.Debug("found manifest")
+				manifestBytes, err := io.ReadAll(tr)
+				if err != nil {
+					logger.Error("failed to read manifest.yaml", "err", err)
+					continue
+				}
+
+				err = yaml.Unmarshal(manifestBytes, &manifest)
+				if err != nil {
+					logger.Error("failed to unmarshal manifest.yaml", "err", err)
+				}
+				logger.Debug("successfully unmarshaled manifest", "manifest", manifest)
+				return manifest, err
+			}
+		}
+	}
+
+	logger.Error("no valid manifest found")
+	return manifest, errors.New("no valid manifest found")
 }
 
 // JWTToken defines a JWT token to be mounted into the application's container.

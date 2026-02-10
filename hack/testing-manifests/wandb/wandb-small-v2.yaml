@@ -7,12 +7,15 @@ spec:
   size: small
   wandb:
     hostname: http://localhost
+    manifest-repository: "file:///server-manifest"
+    version: "0.78.0-pre"
     features:
       proxy: true
   retentionPolicy:
     onDelete: preserve
   mysql:
     enabled: true
+    deploymentType: "mysql"
     telemetry:
       enabled: true
   redis:

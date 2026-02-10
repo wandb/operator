@@ -1,0 +1,56 @@
+name: Internal Image Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        type: string
+        description: 'Tags for Images in GAR'
+        required: true
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v3
+
+      - id: auth
+        name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GCP_SA_CREDS }}
+          create_credentials_file: true
+          export_environment_variables: true
+
+      - name: Authorize Docker to use Google Container Registry
+        run: |
+          gcloud auth configure-docker us-docker.pkg.dev
+
+      - uses: actions/setup-go@v4
+        with:
+          go-version: 1.25
+
+      - name: Install Ginkgo
+        run: go install github.com/onsi/ginkgo/v2/ginkgo@latest
+
+      - name: Build and Push to GAR
+        run: |
+          export IMG=$IMAGE_TAG_BASE:$VERSION
+          make docker-build docker-push
+        env:
+          IMAGE_TAG_BASE: us-docker.pkg.dev/wandb-production/public/wandb/operator
+          VERSION: ${{ github.event.inputs.image_tag }}
