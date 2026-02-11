@@ -11,4 +11,5 @@ chart-repos:
   - redis=https://ot-container-kit.github.io/helm-charts/
   - strimzy=https://strimzi.io/charts/
   - victoria-metrics=https://victoriametrics.github.io/helm-charts/
+  - wandb=https://charts.wandb.ai
 yamllint-config: .yamllint.yaml
