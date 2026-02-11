@@ -1,0 +1,15 @@
+# See https://github.com/helm/chart-testing#configuration
+remote: origin
+target-branch: main
+chart-dirs:
+  - deploy
+chart-repos:
+  - altinity=https://helm.altinity.com
+  - grafana=https://grafana.github.io/helm-charts/
+  - minio=https://operator.min.io/
+  - mysql=https://mysql.github.io/mysql-operator
+  - redis=https://ot-container-kit.github.io/helm-charts/
+  - strimzy=https://strimzi.io/charts/
+  - victoria-metrics=https://victoriametrics.github.io/helm-charts/
+  - wandb=https://charts.wandb.ai
+yamllint-config: .yamllint.yaml

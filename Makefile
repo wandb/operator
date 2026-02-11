@@ -121,7 +121,7 @@ run: manifests generate fmt vet ## Run a controller from your host.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 .PHONY: docker-build
 docker-build: ## Build controller docker image.
-	$(CONTAINER_TOOL) build -t ${IMG} -f Dockerfile.controller .
+	$(CONTAINER_TOOL) build -t ${IMG} -f Dockerfile .
 
 .PHONY: docker-push
 docker-push:

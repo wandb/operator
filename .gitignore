@@ -30,6 +30,8 @@ junit.xml
 *.swo
 *~
 
+*.tgz
+
 /charts
 /cdk8s
 /git

@@ -6,7 +6,6 @@ settings = {
         "kind-kind",
         "orbstack",
     ],
-    "installMinio": False,
     "installWandb": True,
     "wandbCRD": "wandb-default-v1",
     "installTelemetry": False,
@@ -87,30 +86,11 @@ local_resource("generate", generate(), labels=["Operator-Resources"])
 
 deploy_cert_manager()
 
-if settings.get("installMinio"):
-    k8s_yaml('./hack/testing-manifests/minio/minio.yaml')
-    k8s_resource(
-        'minio',
-        'Minio',
-        objects=[
-            'minio:service',
-            'minio:namespace'
-        ]
-    )
-
 helm_repo(
     'mysql-operator-repo',
     'https://mysql.github.io/mysql-operator',
     labels=["Helm-Repos"],
 )
-
-# helm_resource(
-#     'mariadb-operator-crds',
-#     chart='mariadb-operator-repo/mariadb-operator-crds',
-#     resource_deps=['mariadb-operator-repo'],
-#     pod_readiness='ignore',
-#     labels=["Third-Party-Operators"],
-# )
 
 helm_resource(
     'mysql-operator',

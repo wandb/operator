@@ -1,0 +1,115 @@
+wandb:
+  install: true
+  size: small
+  namespace: wandb
+  version: 0.78.0-pre-manifest-testing.11
+  internalServiceAuth: false
+
+wandb-operator:
+  image:
+    repository: us-docker.pkg.dev/wandb-production/public/wandb/operator
+    tag: internal-testing.1
+  containers:
+    operator:
+      command:
+        - /manager
+      args:
+        - --metrics-bind-address=:8443
+        - --leader-elect
+        - --health-probe-bind-address=:8081
+        - --webhook-cert-path=/tmp/wandb-operator/serving-certs
+      ports:
+        - containerPort: 8443
+          name: metrics
+          protocol: TCP
+      env:
+        METRICS_BIND_ADDRESS:
+          value: ":8443"
+        METRICS_SECURE:
+          value: "false"
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+            - "ALL"
+      livenessProbe:
+        httpGet:
+          path: /healthz
+          port: 8081
+        initialDelaySeconds: 15
+        periodSeconds: 20
+      readinessProbe:
+        httpGet:
+          path: /readyz
+          port: 8081
+        initialDelaySeconds: 5
+        periodSeconds: 10
+      resources:
+        limits:
+          cpu: 500m
+          memory: 512Mi
+        requests:
+          cpu: 10m
+          memory: 64Mi
+      volumeMounts:
+        - mountPath: /tmp/wandb-operator/serving-certs
+          name: serving-certs
+          readOnly: true
+
+  service:
+    enabled: true
+    ports:
+      - name: webhook
+        port: 443
+        protocol: TCP
+        targetPort: 9443
+      - name: metrics
+        port: 8443
+        protocol: TCP
+        targetPort: 8443
+  replicaCount: 1
+  securityContext:
+    runAsNonRoot: false
+    seccompProfile:
+      type: RuntimeDefault
+  volumes:
+    - name: serving-certs
+      secret:
+        secretName: '{{ .Release.Name }}-serving-cert'
+
+  operators:
+    application: true
+    clickhouse: true
+    grafana: true
+    kafka: true
+    minio: true
+    mysql: true
+    redis: true
+    vm: true
+
+mysql-operator:
+  install: true
+
+redis-operator:
+  install: true
+
+strimzi-kafka-operator:
+  install: true
+  watchAnyNamespace: true
+
+minio-operator:
+  install: true
+
+altinity-clickhouse-operator:
+  install: true
+  configs:
+    files:
+      config.yaml:
+        watch:
+          namespaces: [".*"]
+
+victoria-metrics-operator:
+  install: true
+
+grafana-operator:
+  install: true

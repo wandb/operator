@@ -1,0 +1,39 @@
+load('ext://namespace', 'namespace_create')
+load('ext://cert_manager', 'deploy_cert_manager')
+
+deploy_cert_manager()
+# default values
+settings = {
+    "allowedContexts": [
+        "docker-desktop",
+        "minikube",
+        "kind-kind",
+        "orbstack",
+    ],
+}
+
+# global settings
+settings.update(read_json(
+    "tilt-settings.json",
+    default={},
+))
+
+# Configure global watch settings with a 2-second debounce
+watch_settings(ignore=["**/.git", "**/*.out"])
+
+# Increase timeout for helm installations and apply operations
+update_settings(k8s_upsert_timeout_secs=300)
+
+currentContext = k8s_context()
+
+if currentContext in settings.get("allowedContexts"):
+    print("Context is allowed")
+else:
+    fail("Selected context is not in allow list")
+
+allow_k8s_contexts(settings.get("allowed_k8s_contexts"))
+
+current_namespace = k8s_namespace()
+namespace_create(current_namespace)
+
+k8s_yaml(helm('./deploy/operator', 'wandb-operator', namespace=current_namespace, values=['./deploy/operator/values.yaml']))

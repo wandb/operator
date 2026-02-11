@@ -1,12 +1,7 @@
-name: Internal Image Publish
+name: Internal Chart Publish
 
 on:
   workflow_dispatch:
-    inputs:
-      image_tag:
-        type: string
-        description: 'Tags for Images in GAR'
-        required: true
 
 jobs:
   release:
@@ -49,13 +44,36 @@ jobs:
         with:
           go-version: 1.25
 
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.19.0
+
+      - name: Set up chart-testing
+        uses: helm/chart-testing-action@v2.6.1
+        with:
+          version: v3.14.0
+
+      - name: Run chart-testing (list-changed)
+        id: list-changed
+        run: |
+          changed=$(ct list-changed --config deploy/ct.yaml || true)
+          if [[ -n "$changed" ]]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run chart-testing  (lint)
+        run: ct lint --config deploy/ct.yaml
+
       - name: Install Ginkgo
         run: go install github.com/onsi/ginkgo/v2/ginkgo@latest
 
       - name: Build and Push to GAR
+        if: steps.list-changed.outputs.changed == 'true'
         run: |
-          export IMG=$IMAGE_TAG_BASE:$VERSION
-          make docker-build docker-push
+          VERSION=$(grep "^version:" deploy/operator/Chart.yaml | awk '{print $2}')
+          helm dependency build deploy/operator
+          helm package deploy/operator
+          helm push operator-${VERSION}.tgz oci://$REPOSITORY
         env:
-          IMAGE_TAG_BASE: us-docker.pkg.dev/wandb-production/public/wandb/operator
-          VERSION: ${{ github.event.inputs.image_tag }}
+          REPOSITORY: us-docker.pkg.dev/wandb-production/public/wandb/charts

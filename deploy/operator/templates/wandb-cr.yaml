@@ -1,0 +1,45 @@
+{{ if .Values.wandb.install }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.wandb.namespace }}
+
+---
+apiVersion: apps.wandb.com/v2
+kind: WeightsAndBiases
+metadata:
+  name: wandb
+  namespace: {{ .Values.wandb.namespace }}
+spec:
+  wandb:
+    internalServiceAuth:
+      enabled: {{ .Values.wandb.internalServiceAuth }}
+    hostname: http://localhost
+    features:
+      proxy: true
+    version: {{ .Values.wandb.version }}
+  size: {{ .Values.wandb.size }}
+  retentionPolicy:
+    onDelete: preserve
+  mysql:
+    enabled: true
+    deploymentType: "mysql"
+    telemetry:
+      enabled: false
+  redis:
+    enabled: true
+    telemetry:
+      enabled: false
+  kafka:
+    enabled: true
+    telemetry:
+      enabled: false
+  minio:
+    enabled: true
+    telemetry:
+      enabled: false
+  clickhouse:
+    enabled: true
+    telemetry:
+      enabled: false
+{{ end }}
