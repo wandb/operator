@@ -7,8 +7,8 @@ wandb:
 
 wandb-operator:
   image:
-    repository: us-docker.pkg.dev/wandb-production/public/operator
-    tag: internal-test.0
+    repository: us-docker.pkg.dev/wandb-production/public/wandb/operator
+    tag: internal-testing.1
   containers:
     operator:
       command:
