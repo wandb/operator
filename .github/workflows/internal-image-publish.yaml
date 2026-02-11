@@ -32,15 +32,13 @@ jobs:
         uses: google-github-actions/setup-gcloud@v3.0.1
 
       - id: auth
-        env:
-          ACTIONS_STEP_DEBUG: true
         name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v3
         with:
           token_format: access_token
           project_id: wandb-production
-          workload_identity_provider: ${{ secrets.CI_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.CI_WORKLOAD_IDENTITY_SERVICE_ACCOUNT }}
+          workload_identity_provider: projects/959666683579/locations/global/workloadIdentityPools/operator-id-pool-github/providers/operator-provider-github
+          service_account: tf-github-operator@wandb-production.iam.gserviceaccount.com
 
       - name: Authorize Docker to use Google Container Registry
         run: |
