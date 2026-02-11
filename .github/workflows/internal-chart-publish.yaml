@@ -71,9 +71,9 @@ jobs:
       - name: Build and Push to GAR
         if: steps.list-changed.outputs.changed == 'true'
         run: |
+          VERSION=$(grep "^version:" deploy/operator/Chart.yaml | awk '{print $2}')
           helm dependency build deploy/operator
           helm package deploy/operator
           helm push operator-${VERSION}.tgz oci://$REPOSITORY
         env:
           REPOSITORY: us-docker.pkg.dev/wandb-production/public/wandb/charts
-          VERSION: ${{ github.event.inputs.image_tag }}
