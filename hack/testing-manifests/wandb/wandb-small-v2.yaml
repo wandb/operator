@@ -3,11 +3,12 @@ kind: WeightsAndBiases
 metadata:
   name: wandb-small-v2
 spec:
-  enableOIDCDiscovery: true
   size: small
   wandb:
     hostname: http://localhost
-    manifest-repository: "file:///server-manifest"
+    internalServiceAuth:
+      enabled: true
+    manifestRepository: "file:///server-manifest"
     version: "0.78.0-pre"
     features:
       proxy: true

@@ -1,0 +1,27 @@
+dependencies:
+- name: wandb-base
+  repository: https://charts.wandb.ai/
+  version: 0.11.8
+- name: mysql-operator
+  repository: https://mysql.github.io/mysql-operator/
+  version: 2.2.7
+- name: redis-operator
+  repository: https://ot-container-kit.github.io/helm-charts
+  version: 0.22.2
+- name: strimzi-kafka-operator
+  repository: https://strimzi.io/charts
+  version: 0.50.0
+- name: operator
+  repository: https://operator.min.io
+  version: 7.1.1
+- name: altinity-clickhouse-operator
+  repository: https://helm.altinity.com
+  version: 0.25.6
+- name: victoria-metrics-operator
+  repository: https://victoriametrics.github.io/helm-charts/
+  version: 0.58.1
+- name: grafana-operator
+  repository: https://grafana.github.io/helm-charts
+  version: 5.21.4
+digest: sha256:49b17dbf78551c3e5d5357737af85eb0825e6ff26afd37a78197e47ba03afdb5
+generated: "2026-02-09T20:30:50.180745-08:00"
