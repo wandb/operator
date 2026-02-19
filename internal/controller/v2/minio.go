@@ -56,7 +56,8 @@ func minioReadState(
 	newConditions []metav1.Condition,
 ) []metav1.Condition {
 	specNamespacedName := minioSpecNamespacedName(wandb.Spec.Minio)
-	readConditions := tenant.ReadState(ctx, client, specNamespacedName)
+	retentionPolicy := wandb.GetRetentionPolicy(wandb.Spec.Minio.WBInfraSpec)
+	readConditions := tenant.ReadState(ctx, client, specNamespacedName, translatorv2.ToOnDeletePolicy(retentionPolicy))
 	newConditions = append(newConditions, readConditions...)
 	return newConditions
 }
