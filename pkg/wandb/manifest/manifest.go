@@ -14,10 +14,13 @@ import (
 	"path/filepath"
 	"strings"
 
+	"log/slog"
+
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/wandb/operator/internal/logx"
 
 	"oras.land/oras-go/v2"
+	"oras.land/oras-go/v2/content"
 	"oras.land/oras-go/v2/content/oci"
 	"oras.land/oras-go/v2/registry/remote"
 	//"oras.land/oras-go/v2/registry/remote/retry"
@@ -300,70 +303,92 @@ func DownloadServerManifest(ctx context.Context, repository string, version stri
 		logger.Debug("successfully fetched image from local", "repository", repository, "version", version)
 	}
 
-	manifestData, err := localRepo.Fetch(ctx, descriptor)
-	if err != nil {
-		logger.Error("failed to fetch manifest", "err", err)
-		return manifest, err
-	}
+	return processManifest(ctx, localRepo, descriptor, logger)
+}
 
-	defer manifestData.Close()
+func processManifest(ctx context.Context, repo oras.ReadOnlyTarget, descriptor ocispec.Descriptor, logger *slog.Logger) (Manifest, error) {
+	var manifest Manifest
 
-	var ociManifest ocispec.Manifest
-	if err := json.NewDecoder(manifestData).Decode(&ociManifest); err != nil {
-		logger.Error("failed to unmarshal manifest", "err", err)
-		return manifest, err
-	}
-
-	for _, layer := range ociManifest.Layers {
-		// Fetch each layer and list files if it's a tar/tar+gzip
-		layerReader, err := localRepo.Fetch(ctx, layer)
+	switch descriptor.MediaType {
+	case ocispec.MediaTypeImageIndex, "application/vnd.docker.distribution.manifest.list.v2+json":
+		indexData, err := content.FetchAll(ctx, repo, descriptor)
 		if err != nil {
-			logger.Error("failed to fetch layer", "digest", layer.Digest, "err", err)
-			continue
+			return manifest, fmt.Errorf("failed to fetch index: %w", err)
+		}
+		var index ocispec.Index
+		if err := json.Unmarshal(indexData, &index); err != nil {
+			return manifest, fmt.Errorf("failed to unmarshal index: %w", err)
+		}
+		if len(index.Manifests) == 0 {
+			return manifest, errors.New("index has no manifests")
+		}
+		// For now, we just pick the first manifest. In the future we might want to match platform.
+		return processManifest(ctx, repo, index.Manifests[0], logger)
+
+	case ocispec.MediaTypeImageManifest, "application/vnd.docker.distribution.manifest.v2+json":
+		manifestData, err := content.FetchAll(ctx, repo, descriptor)
+		if err != nil {
+			return manifest, fmt.Errorf("failed to fetch manifest: %w", err)
 		}
 
-		var tr *tar.Reader
-		if layer.MediaType == ocispec.MediaTypeImageLayerGzip || layer.MediaType == "application/vnd.docker.image.rootfs.diff.tar.gzip" {
-			gzr, err := gzip.NewReader(layerReader)
+		var ociManifest ocispec.Manifest
+		if err := json.Unmarshal(manifestData, &ociManifest); err != nil {
+			return manifest, fmt.Errorf("failed to unmarshal manifest: %w", err)
+		}
+
+		for _, layer := range ociManifest.Layers {
+			// Fetch each layer and list files if it's a tar/tar+gzip
+			layerReader, err := repo.Fetch(ctx, layer)
 			if err != nil {
-				layerReader.Close()
-				logger.Error("failed to create gzip reader for layer", "digest", layer.Digest, "err", err)
+				logger.Error("failed to fetch layer", "digest", layer.Digest, "err", err)
 				continue
 			}
-			tr = tar.NewReader(gzr)
-			defer gzr.Close()
-		} else {
-			tr = tar.NewReader(layerReader)
-		}
-		defer layerReader.Close()
 
-		for {
-			header, err := tr.Next()
-			if err == io.EOF {
-				break
-			}
-			if err != nil {
-				logger.Error("failed to read tar header", "err", err)
-				break
-			}
-			fmt.Printf("- %s\n", header.Name)
-
-			if filepath.Base(header.Name) == "manifest.yaml" {
-				logger.Debug("found manifest")
-				manifestBytes, err := io.ReadAll(tr)
+			var tr *tar.Reader
+			if layer.MediaType == ocispec.MediaTypeImageLayerGzip || layer.MediaType == "application/vnd.docker.image.rootfs.diff.tar.gzip" {
+				gzr, err := gzip.NewReader(layerReader)
 				if err != nil {
-					logger.Error("failed to read manifest.yaml", "err", err)
+					layerReader.Close()
+					logger.Error("failed to create gzip reader for layer", "digest", layer.Digest, "err", err)
 					continue
 				}
+				tr = tar.NewReader(gzr)
+				defer gzr.Close()
+			} else {
+				tr = tar.NewReader(layerReader)
+			}
+			defer layerReader.Close()
 
-				err = yaml.Unmarshal(manifestBytes, &manifest)
-				if err != nil {
-					logger.Error("failed to unmarshal manifest.yaml", "err", err)
+			for {
+				header, err := tr.Next()
+				if err == io.EOF {
+					break
 				}
-				logger.Debug("successfully unmarshaled manifest", "manifest", manifest)
-				return manifest, err
+				if err != nil {
+					logger.Error("failed to read tar header", "err", err)
+					break
+				}
+				fmt.Printf("- %s\n", header.Name)
+
+				if filepath.Base(header.Name) == "manifest.yaml" {
+					logger.Debug("found manifest")
+					manifestBytes, err := io.ReadAll(tr)
+					if err != nil {
+						logger.Error("failed to read manifest.yaml", "err", err)
+						continue
+					}
+
+					err = yaml.Unmarshal(manifestBytes, &manifest)
+					if err != nil {
+						logger.Error("failed to unmarshal manifest.yaml", "err", err)
+					}
+					logger.Debug("successfully unmarshaled manifest", "manifest", manifest)
+					return manifest, err
+				}
 			}
 		}
+	default:
+		return manifest, fmt.Errorf("unsupported media type: %s", descriptor.MediaType)
 	}
 
 	logger.Error("no valid manifest found")

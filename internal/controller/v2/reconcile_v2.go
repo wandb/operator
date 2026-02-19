@@ -928,7 +928,7 @@ func resolveVolumeMounts(ctx context.Context, client ctrlClient.Client, wandb *a
 				},
 			}
 		default:
-			log.Error("unsupported volume source type: %s", manifestVM.Source.Type)
+			log.Error("unsupported volume source type", "type", manifestVM.Source.Type)
 			return nil, nil, fmt.Errorf("unsupported volume source type: %s", manifestVM.Source.Type)
 		}
 		volumeMount := corev1.VolumeMount{
