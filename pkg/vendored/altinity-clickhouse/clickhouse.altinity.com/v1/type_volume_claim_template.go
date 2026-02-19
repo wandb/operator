@@ -76,7 +76,7 @@ type PVCReclaimPolicy string
 const (
 	PVCReclaimPolicyUnspecified PVCReclaimPolicy = ""
 	PVCReclaimPolicyRetain      PVCReclaimPolicy = "Retain"
-	PVCReclaimPolicyDelete      PVCReclaimPolicy = "DeleteAll"
+	PVCReclaimPolicyDelete      PVCReclaimPolicy = "Delete"
 )
 
 // NewPVCReclaimPolicyFromString creates new PVCReclaimPolicy from string
