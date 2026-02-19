@@ -2,7 +2,7 @@ wandb:
   install: true
   size: small
   namespace: wandb
-  version: 0.78.0-pre-operator-v2-no-app.0
+  version: 0.78.0-pre-operator-v2-no-app.1
   internalServiceAuth: false
 
 wandb-operator:
