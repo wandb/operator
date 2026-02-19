@@ -2,13 +2,13 @@ wandb:
   install: true
   size: small
   namespace: wandb
-  version: 0.78.0-pre-manifest-testing.11
+  version: 0.78.0-pre-operator-v2-no-app.0
   internalServiceAuth: false
 
 wandb-operator:
   image:
     repository: us-docker.pkg.dev/wandb-production/public/wandb/operator
-    tag: internal-testing.1
+    tag: internal-testing.2
   containers:
     operator:
       command:
