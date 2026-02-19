@@ -37,9 +37,10 @@ type Manifest struct {
 	// CommonEnvvars defines reusable groups of env vars that can be referenced
 	// by applications via the per-application `commonEnvs` list. This maps a
 	// group name (e.g., "gorillaMysql") to a slice of EnvVar definitions.
-	CommonEnvvars map[string][]EnvVar `yaml:"commonEnvvars,omitempty"`
-	Bucket        SectionRef          `yaml:"bucket"`
-	Clickhouse    SectionRef          `yaml:"clickhouse"`
+	CommonEnvvars      map[string][]EnvVar      `yaml:"commonEnvvars,omitempty"`
+	CommonVolumeMounts map[string][]VolumeMount `yaml:"commonVolumeMounts,omitempty"`
+	Bucket             SectionRef               `yaml:"bucket"`
+	Clickhouse         SectionRef               `yaml:"clickhouse"`
 	// Kafka is a list of topic declarations with optional feature gates in YAML.
 	Kafka        []KafkaTopic  `yaml:"kafka"`
 	Mysql        SectionRef    `yaml:"mysql"`
@@ -123,7 +124,8 @@ type Application struct {
 	Command []string `yaml:"command,omitempty"`
 	// CommonEnvs is a list of keys referencing top-level commonEnvvars groups
 	// to be included for this application (e.g., ["gorillaMysql", "gorillaBucket"]).
-	CommonEnvs []string `yaml:"commonEnvs,omitempty"`
+	CommonEnvs         []string `yaml:"commonEnvs,omitempty"`
+	CommonVolumeMounts []string `yaml:"commonVolumeMounts,omitempty"`
 	// InitContainers allows specifying per-application init containers
 	// (e.g., the api app defines a "migrate" init container in 0.76.1.yaml).
 	InitContainers []ContainerSpec `yaml:"initContainers,omitempty"`
@@ -145,8 +147,9 @@ type Application struct {
 	// data from ConfigMaps. Each entry may either inline file contents (stored
 	// into an operator-managed ConfigMap) or reference an existing ConfigMap.
 	// The file will be mounted at the provided mountPath/FileName using subPath.
-	Files     []FileSpec `yaml:"files,omitempty"`
-	JWTTokens []JWTToken `yaml:"jwtTokens,omitempty"`
+	Files        []FileSpec    `yaml:"files,omitempty"`
+	JWTTokens    []JWTToken    `yaml:"jwtTokens,omitempty"`
+	VolumeMounts []VolumeMount `yaml:"volumeMounts,omitempty"`
 }
 
 // ContainerSpec represents a minimal container definition used by
@@ -165,6 +168,12 @@ type EnvVar struct {
 	ValueFrom    *corev1.EnvVarSource `yaml:"valueFrom,omitempty"`
 	Sources      []EnvSource          `yaml:"sources,omitempty"`
 	DefaultValue string               `yaml:"defaultValue,omitempty"`
+}
+
+type VolumeMount struct {
+	MountPath string    `yaml:"mountPath"`
+	Name      string    `yaml:"name"`
+	Source    EnvSource `yaml:"source"`
 }
 
 // EnvSource references a named source and its type (e.g., mysql, redis, bucket).
@@ -194,11 +203,13 @@ type ContainerPort struct {
 // MigrationJob represents a migration invocation with an image and args, used
 // by the top-level "migrations" section (e.g., default, runsdb, usagedb).
 type MigrationJob struct {
-	Image      ImageRef `yaml:"image"`
-	Args       []string `yaml:"args,omitempty"`
-	Command    []string `yaml:"command,omitempty"`
-	CommonEnvs []string `yaml:"commonEnvs,omitempty"`
-	Env        []EnvVar `yaml:"env,omitempty"`
+	Image              ImageRef      `yaml:"image"`
+	Args               []string      `yaml:"args,omitempty"`
+	Command            []string      `yaml:"command,omitempty"`
+	CommonEnvs         []string      `yaml:"commonEnvs,omitempty"`
+	CommonVolumeMounts []string      `yaml:"commonVolumeMounts,omitempty"`
+	Env                []EnvVar      `yaml:"env,omitempty"`
+	VolumeMounts       []VolumeMount `yaml:"volumeMounts,omitempty"`
 }
 
 // FileSpec defines a single file to project into the application's container.

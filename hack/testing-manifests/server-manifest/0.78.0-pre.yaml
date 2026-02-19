@@ -176,6 +176,8 @@ commonEnvvars:
           proto: "http"
           path: "/api/jwks.json"
           port: local
+    - name: GORILLA_LOCAL_SERVICE_BYPASS
+      value: "true"
     - name: GORILLA_DEFAULT_REGION
       value: "minio-local"
     - name: GORILLA_EMAIL_SINK
@@ -346,11 +348,19 @@ commonEnvvars:
     - name: KAFKA_RUNS_V2_TOPIC_NAME
       value: "flat-run-fields-updater"
 
+commonVolumeMounts:
+  internalSigner:
+    - mountPath: /vol/env
+      name: wandb-internal-signer-root
+      source:
+        name: wandb-internal-signer
+        type: secret
+
 applications:
   - name: anaconda2
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/anaconda2
-      tag: 0.78.0-pre-manifest-testing.9
+      tag: 0.78.0-pre-jwks-no-local.0
     ports:
       - containerPort: 8080
         name: anaconda2
@@ -378,11 +388,15 @@ applications:
       - gorillaCustomerSecrets
       - kafka
       - flatRunsV2Producer
+    commonVolumeMounts:
+      - internalSigner
     env:
       - name: GORILLA_LICENSE_CERT_PATH
         value: "/jwks.json"
       - name: GORILLA_VIEW_SPEC_UPDATER_EXECUTABLE
         value: "/view-spec-updater-linux"
+      - name: INTERNAL_SIGNER_KEY_PATH
+        value: "/vol/env"
       - name: MIGRATE_RUNS_DB
         sources:
           - name: default
@@ -393,7 +407,7 @@ applications:
             type: mysql
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.0-pre-manifest-testing.9
+      tag: 0.78.0-pre-jwks-no-local.0
     args:
       - gorilla
     ports:
@@ -411,82 +425,6 @@ applications:
         - port: 8080
           protocol: TCP
           name: api
-  - name: app
-    commonEnvs:
-      - gorillaMysql
-      - gorillaBucket
-      - gorillaRedis
-      - gorillaHistoryStore
-      - gorillaTaskQueueProducer
-      - gorillaService
-      - gorillaOnprem
-      - gorillaCustomerSecrets
-      - frontend
-      - kafka
-      - flatRunsV2Producer
-    env:
-      - name: WEAVE_ENABLED
-        value: "true"
-      - name: WEAVE_SERVICE
-        sources:
-          - name: weave
-            type: service
-            proto: ""
-            path: ""
-      - name: PARQUET_ENABLED
-        value: "true"
-      - name: PARQUET_HOST
-        sources:
-          - name: parquet
-            type: service
-            proto: "http"
-            path: ""
-      - name: GLUE_ENABLED
-        value: "false"
-      - name: OPERATOR_ENABLED
-        value: "true"
-      - name: LOGGING_ENABLED
-        value: "true"
-      - name: ANACONDA_ENABLED
-        value: "false"
-      - name: GORILLA_FILEMETA_ENABLED
-        value: "false"
-    ports:
-      - containerPort: 8080
-        name: app
-        protocol: TCP
-      - containerPort: 8081
-        name: prometheus
-        protocol: TCP
-      - containerPort: 8082
-        name: anaconda
-        protocol: TCP
-      - containerPort: 8083
-        name: local
-        protocol: TCP
-    livenessProbe:
-      httpGet:
-        path: /healthz
-    readinessProbe:
-      httpGet:
-        path: /ready
-    image:
-      repository: us-docker.pkg.dev/wandb-production/public/wandb/local
-      tag: 0.78.0-pre-manifest-testing.9
-    service:
-      ports:
-        - port: 8080
-          protocol: TCP
-          name: app
-        - port: 8081
-          protocol: TCP
-          name: prometheus
-        - port: 8082
-          protocol: TCP
-          name: anaconda
-        - port: 8083
-          protocol: TCP
-          name: local
   - name: executor
     args:
       - executor
@@ -500,7 +438,7 @@ applications:
       - gorillaOnprem
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.0-pre-manifest-testing.9
+      tag: 0.78.0-pre-jwks-no-local.0
   - name: filemeta
     args:
       - filemeta
@@ -512,7 +450,7 @@ applications:
       - gorillaOnprem
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.0-pre-manifest-testing.9
+      tag: 0.78.0-pre-jwks-no-local.0
   - name: filestream
     features:
       - filestreamQueue
@@ -526,7 +464,7 @@ applications:
       - gorillaOnprem
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.0-pre-manifest-testing.9
+      tag: 0.78.0-pre-jwks-no-local.0
   - name: flat-run-fields-updater
     args:
       - flat-run-fields-updater
@@ -543,29 +481,29 @@ applications:
         value: "$(KAFKA_URL)/$(KAFKA_RUNS_V2_TOPIC_NAME)?consumer_group_id=flat-run-fields-updater"
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.0-pre-manifest-testing.9
+      tag: 0.78.0-pre-jwks-no-local.0
   - name: frontend
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/frontend-nginx
-      tag: 0.78.0-pre-manifest-testing.9
+      tag: 0.78.0-pre-jwks-no-local.0
     commonEnvs:
       - frontend
     env:
       - name: FRONTEND_APP_BACKEND
         sources:
-          - name: app
+          - name: api
             type: service
             proto: ""
             path: ""
       - name: FRONTEND_AUTH_BACKEND
         sources:
-          - name: app
+          - name: api
             type: service
             proto: ""
             path: ""
       - name: FRONTEND_LOCAL_BACKEND
         sources:
-          - name: app
+          - name: api
             type: service
             proto: ""
             path: ""
@@ -604,6 +542,8 @@ applications:
       - gorillaHistoryStore
       - gorillaService
       - gorillaOnprem
+    commonVolumeMounts:
+      - internalSigner
     env:
       - name: GORILLA_LICENSE_CERT_PATH
         value: "/jwks.json"
@@ -617,7 +557,7 @@ applications:
         value: "memory://"
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.0-pre-manifest-testing.9
+      tag: 0.78.0-pre-jwks-no-local.0
   - name: metric-observer
     args:
       - metric-observer
@@ -634,7 +574,7 @@ applications:
         value: "$(KAFKA_URL)/$(KAFKA_RUNS_V2_TOPIC_NAME)?consumer_group_id=metric-observer"
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.0-pre-manifest-testing.9
+      tag: 0.78.0-pre-jwks-no-local.0
   - name: parquet
     args:
       - parquet
@@ -648,7 +588,7 @@ applications:
       - gorillaOnprem
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.0-pre-manifest-testing.9
+      tag: 0.78.0-pre-jwks-no-local.0
     ports:
       - containerPort: 8080
         name: parquet
@@ -667,7 +607,7 @@ applications:
   - name: weave
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-python
-      tag: 0.78.0-pre-manifest-testing.9
+      tag: 0.78.0-pre-jwks-no-local.0
     env:
       - name: DATADOG_TRACE_ENABLED
         value: "false"
@@ -689,7 +629,7 @@ applications:
   - name: weave-trace
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
-      tag: 0.78.0-pre-manifest-testing.9
+      tag: 0.78.0-pre-jwks-no-local.0
     args:
       - "uvicorn"
       - "src.trace_server:app"
@@ -726,7 +666,7 @@ applications:
   - name: weave-trace-worker
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
-      tag: 0.78.0-pre-manifest-testing.9
+      tag: 0.78.0-pre-jwks-no-local.0
     args:
       - "python"
       - "-m"
@@ -741,7 +681,7 @@ applications:
   - name: weave-trace-evaluate-model-worker
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
-      tag: 0.78.0-pre-manifest-testing.9
+      tag: 0.78.0-pre-jwks-no-local.0
     args:
       - "python"
       - "-m"
@@ -809,10 +749,6 @@ applications:
         inline: |
           upstream frontend {
             server $UPSTREAM_FRONTEND;
-          }
-
-          upstream app {
-            server $UPSTREAM_APP;
           }
 
           upstream api {
@@ -911,7 +847,7 @@ migrations:
   gorilla:
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.0-pre-manifest-testing.9
+      tag: 0.78.0-pre-jwks-no-local.0
     args:
       - "migrate"
       - "--db=$(GORILLA_METADATA_STORE)"
@@ -921,10 +857,23 @@ migrations:
       - "true"
     commonEnvs:
       - gorillaMysql
+  internal-signer:
+    image:
+      repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
+      tag: 0.78.0-pre-jwks-no-local.0
+    args:
+      - "secret-generation-job"
+    env:
+      - name: INTERNAL_SIGNER_K8S_SECRET_NAME
+        value: "wandb-internal-signer"
+      - name: INTERNAL_SIGNER_K8S_NAMESPACE
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.namespace
   weave-trace:
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
-      tag: 0.78.0-pre-manifest-testing.9
+      tag: 0.78.0-pre-jwks-no-local.0
     args:
       - python
       - migrator.py

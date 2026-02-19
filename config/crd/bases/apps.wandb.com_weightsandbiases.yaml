@@ -6484,7 +6484,7 @@ spec:
                     type: object
                   license:
                     type: string
-                  manifest-repository:
+                  manifestRepository:
                     type: string
                   oidc:
                     description: WandbOIDCSpec defines the structure for OpenID Connect

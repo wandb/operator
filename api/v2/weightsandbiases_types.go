@@ -123,7 +123,7 @@ func (w *WeightsAndBiases) GetTolerations(spec WBInfraSpec) *[]corev1.Toleration
 type WandbAppSpec struct {
 	Hostname            string              `json:"hostname"`
 	License             string              `json:"license,omitempty"`
-	ManifestRepository  string              `json:"manifest-repository,omitempty"`
+	ManifestRepository  string              `json:"manifestRepository,omitempty"`
 	Version             string              `json:"version"`
 	Features            map[string]bool     `json:"features"`
 	InternalServiceAuth InternalServiceAuth `json:"internalServiceAuth,omitempty"`
