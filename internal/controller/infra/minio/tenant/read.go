@@ -4,6 +4,7 @@ import (
 	"context"
 
 	ctrlcommon "github.com/wandb/operator/internal/controller/common"
+	"github.com/wandb/operator/internal/controller/translator"
 	"github.com/wandb/operator/internal/logx"
 	miniov2 "github.com/wandb/operator/pkg/vendored/minio-operator/minio.min.io/v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -15,8 +16,11 @@ func ReadState(
 	ctx context.Context,
 	client client.Client,
 	specNamespacedName types.NamespacedName,
+	policy translator.OnDeletePolicy,
 ) []metav1.Condition {
 	ctx, _ = logx.WithSlog(ctx, logx.Minio)
+	log := logx.GetSlog(ctx)
+
 	var actualResource = &miniov2.Tenant{}
 
 	nsnBuilder := createNsNameBuilder(specNamespacedName)
@@ -41,6 +45,31 @@ func ReadState(
 
 	if actualResource != nil {
 		conditions = append(conditions, computeMinioReportedReadyCondition(ctx, actualResource)...)
+	}
+
+	if actualResource == nil && policy == translator.Purge {
+		log.Debug(
+			"Attempting to purge associated minio resources after deletion",
+			"tenantName", TenantName(specNamespacedName.Name),
+		)
+		err = purgeAssociatedResources(ctx, client, specNamespacedName)
+		if err != nil {
+			conditions = append(
+				conditions,
+				metav1.Condition{
+					Type:   MinioCustomResourceType,
+					Status: metav1.ConditionUnknown,
+					Reason: ctrlcommon.ApiErrorReason,
+				},
+			)
+		} else {
+			conditions = append(conditions, metav1.Condition{
+				Type:   MinioReportedReadyType,
+				Status: metav1.ConditionFalse,
+				Reason: ctrlcommon.PendingDeleteReason,
+			},
+			)
+		}
 	}
 
 	return conditions
