@@ -5,6 +5,13 @@ import (
 	"github.com/wandb/operator/internal/controller/translator"
 )
 
+func wandbLabels(wandb *v2.WeightsAndBiases) map[string]string {
+	return map[string]string{
+		translator.WandbNameLabel:      wandb.Name,
+		translator.WandbNamespaceLabel: wandb.Namespace,
+	}
+}
+
 func ToTranslatorInfraConnection(c v2.WBInfraConnection) translator.InfraConnection {
 	return translator.InfraConnection{
 		URL: c.URL,

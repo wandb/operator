@@ -16,7 +16,7 @@ func ReadState(
 	ctx context.Context,
 	client client.Client,
 	specNamespacedName types.NamespacedName,
-	policy translator.OnDeletePolicy,
+	onDeleteRule translator.OnDeleteRule,
 ) []metav1.Condition {
 	ctx, _ = logx.WithSlog(ctx, logx.Minio)
 	log := logx.GetSlog(ctx)
@@ -47,12 +47,12 @@ func ReadState(
 		conditions = append(conditions, computeMinioReportedReadyCondition(ctx, actualResource)...)
 	}
 
-	if actualResource == nil && policy == translator.Purge {
+	if actualResource == nil && onDeleteRule.Policy == translator.Purge {
 		log.Debug(
 			"Attempting to purge associated minio resources after deletion",
 			"tenantName", TenantName(specNamespacedName.Name),
 		)
-		err = purgeAssociatedResources(ctx, client, specNamespacedName)
+		err = purgeAssociatedResources(ctx, client, onDeleteRule.Selector)
 		if err != nil {
 			conditions = append(
 				conditions,

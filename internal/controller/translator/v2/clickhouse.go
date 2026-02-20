@@ -68,6 +68,11 @@ func ToClickHouseVendorSpec(
 		serverSettings.Set("prometheus/status_info", v1.NewSettingScalar("true"))
 	}
 
+	reclaimPolicy := v1.PVCReclaimPolicyUnspecified
+	if wandb.GetRetentionPolicy(wandb.Spec.ClickHouse.WBInfraSpec).OnDelete == apiv2.WBPurgeOnDelete {
+		reclaimPolicy = v1.PVCReclaimPolicyDelete
+	}
+
 	// Build ClickHouseInstallation spec
 	chi := &v1.ClickHouseInstallation{
 		ObjectMeta: metav1.ObjectMeta{
@@ -108,6 +113,12 @@ func ToClickHouseVendorSpec(
 				VolumeClaimTemplates: []v1.VolumeClaimTemplate{
 					{
 						Name: nsnBuilder.VolumeTemplateName(),
+						ObjectMeta: metav1.ObjectMeta{
+							Labels: wandbLabels(wandb),
+						},
+						StorageManagement: v1.StorageManagement{
+							PVCReclaimPolicy: reclaimPolicy,
+						},
 						Spec: corev1.PersistentVolumeClaimSpec{
 							AccessModes: []corev1.PersistentVolumeAccessMode{
 								corev1.ReadWriteOnce,

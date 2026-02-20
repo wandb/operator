@@ -83,6 +83,12 @@ func ToMinioVendorSpec(
 					Servers:          infraSpec.Replicas,
 					VolumesPerServer: volumesPerServer,
 					VolumeClaimTemplate: &corev1.PersistentVolumeClaim{
+						ObjectMeta: metav1.ObjectMeta{
+							Labels: map[string]string{
+								translator.WandbNameLabel:      wandb.Name,
+								translator.WandbNamespaceLabel: wandb.Namespace,
+							},
+						},
 						Spec: corev1.PersistentVolumeClaimSpec{
 							AccessModes: []corev1.PersistentVolumeAccessMode{
 								corev1.ReadWriteOnce,

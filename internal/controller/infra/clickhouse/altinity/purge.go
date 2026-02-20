@@ -1,4 +1,4 @@
-package tenant
+package altinity
 
 import (
 	"context"
@@ -7,19 +7,27 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+// purgeAssociatedResource will remove PVCs by associated label *only* if the
+// associated resource (i.e. ClickHouse installation) is not present.
 func purgeAssociatedResources(
 	ctx context.Context,
 	cl client.Client,
-	onDeleteSelector labels.Selector,
+	specNamespacedName types.NamespacedName,
 ) error {
 	log := logx.GetSlog(ctx)
+	installationName := InstallationName(specNamespacedName.Name)
+	labelKey := "clickhouse.altinity.com/chi"
+	tenantLabels := labels.Set{labelKey: installationName}
+
 	// Delete PVCs with the specified label
 	pvcList := &corev1.PersistentVolumeClaimList{}
 	listOptions := &client.ListOptions{
-		LabelSelector: onDeleteSelector,
+		LabelSelector: labels.SelectorFromSet(tenantLabels),
+		Namespace:     specNamespacedName.Namespace,
 	}
 
 	if err := cl.List(ctx, pvcList, listOptions); err != nil {
@@ -30,40 +38,16 @@ func purgeAssociatedResources(
 	if len(pvcList.Items) > 0 {
 		log.Info(
 			"Purging associated PVCs",
-			"count", len(pvcList.Items), "selector", onDeleteSelector.String(),
+			"count", len(pvcList.Items), "labelKey", labelKey, "labelValue", installationName,
 		)
 	} else {
 		log.Debug(
 			"No associated PVCs found to purge",
-			"selector", onDeleteSelector.String(),
+			"labelKey", labelKey, "labelValue", installationName,
 		)
 	}
 	for _, pvc := range pvcList.Items {
 		if err := cl.Delete(ctx, &pvc); err != nil && !errors.IsNotFound(err) {
-			return err
-		}
-	}
-
-	// Delete Secrets with the specified label
-	secretList := &corev1.SecretList{}
-	if err := cl.List(ctx, secretList, listOptions); err != nil {
-		return err
-	}
-
-	// Delete each Secret
-	if len(secretList.Items) > 0 {
-		log.Info(
-			"Purging associated Secrets",
-			"count", len(secretList.Items), "selector", onDeleteSelector.String(),
-		)
-	} else {
-		log.Debug(
-			"No associated Secrets found to purge",
-			"selector", onDeleteSelector.String(),
-		)
-	}
-	for _, secret := range secretList.Items {
-		if err := cl.Delete(ctx, &secret); err != nil && !errors.IsNotFound(err) {
 			return err
 		}
 	}
