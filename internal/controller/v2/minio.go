@@ -5,6 +5,7 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
+	"github.com/wandb/operator/internal/controller/infra/kafka/strimzi"
 	"github.com/wandb/operator/internal/controller/infra/minio/tenant"
 	"github.com/wandb/operator/internal/controller/translator"
 	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
@@ -93,6 +94,20 @@ func minioInferStatus(
 	err := client.Status().Update(ctx, wandb)
 
 	return ctrlResult, err
+}
+
+func minioPurgeFinalizer(
+	ctx context.Context,
+	client client.Client,
+	wandb *apiv2.WeightsAndBiases,
+) error {
+	var specNamespacedName = kafkaSpecNamespacedName(wandb.Spec.Kafka)
+
+	onDeletePolicy := translatorv2.ToOnDeleteRule(wandb, wandb.GetRetentionPolicy(wandb.Spec.Minio.WBInfraSpec))
+	if err := tenant.PurgeFinalizer(ctx, client, specNamespacedName, onDeletePolicy); err != nil {
+		return err
+	}
+	return nil
 }
 
 func minioSpecNamespacedName(minio apiv2.WBMinioSpec) types.NamespacedName {

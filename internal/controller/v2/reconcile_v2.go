@@ -86,7 +86,9 @@ func Reconcile(
 
 			switch wandb.GetRetentionPolicy(wandb.Spec.Kafka.WBInfraSpec).OnDelete {
 			case apiv2.WBPurgeOnDelete:
-				log.Info("TODO - Purging Kafka data on deletion")
+				if err = minioPurgeFinalizer(ctx, client, wandb); err != nil {
+
+				}
 				break
 			case apiv2.WBPreserveOnDelete:
 				if err = kafkaPreserveFinalizer(ctx, client, wandb); err != nil {

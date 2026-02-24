@@ -7,8 +7,19 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+func PurgeFinalizer(ctx context.Context, client client.Client, specNamespacedName types.NamespacedName) error {
+	onDeleteSelector := labels.SelectorFromSet(map[string]string{
+		"app.kubernetes.io/managed-by": "wandb-operator",
+		"app.kubernetes.io/component":  "minio",
+		"app.kubernetes.io/instance":   "minio",
+	})
+
+	return purgeAssociatedResources(ctx, client, onDeleteSelector)
+}
 
 func purgeAssociatedResources(
 	ctx context.Context,
