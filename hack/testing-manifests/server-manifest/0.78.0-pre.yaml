@@ -353,7 +353,7 @@ applications:
   - name: anaconda2
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/anaconda2
-      tag: 0.78.0-pre-operator-v2-no-app.1
+      tag: 0.78.0-pre.1772047260
     ports:
       - containerPort: 8080
         name: anaconda2
@@ -400,7 +400,7 @@ applications:
             type: mysql
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.0-pre-operator-v2-no-app.1
+      tag: 0.78.0-pre.1772047260
     args:
       - gorilla
     ports:
@@ -431,7 +431,7 @@ applications:
       - gorillaOnprem
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.0-pre-operator-v2-no-app.1
+      tag: 0.78.0-pre.1772047260
   - name: filemeta
     args:
       - filemeta
@@ -443,7 +443,7 @@ applications:
       - gorillaOnprem
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.0-pre-operator-v2-no-app.1
+      tag: 0.78.0-pre.1772047260
   - name: filestream
     features:
       - filestreamQueue
@@ -457,7 +457,7 @@ applications:
       - gorillaOnprem
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.0-pre-operator-v2-no-app.1
+      tag: 0.78.0-pre.1772047260
   - name: flat-run-fields-updater
     args:
       - flat-run-fields-updater
@@ -474,11 +474,11 @@ applications:
         value: "$(KAFKA_URL)/$(KAFKA_RUNS_V2_TOPIC_NAME)?consumer_group_id=flat-run-fields-updater"
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.0-pre-operator-v2-no-app.1
+      tag: 0.78.0-pre.1772047260
   - name: frontend
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/frontend-nginx
-      tag: 0.78.0-pre-operator-v2-no-app.1
+      tag: 0.78.0-pre.1772047260
     commonEnvs:
       - frontend
     env:
@@ -550,7 +550,7 @@ applications:
         value: "memory://"
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.0-pre-operator-v2-no-app.1
+      tag: 0.78.0-pre.1772047260
   - name: metric-observer
     args:
       - metric-observer
@@ -567,7 +567,7 @@ applications:
         value: "$(KAFKA_URL)/$(KAFKA_RUNS_V2_TOPIC_NAME)?consumer_group_id=metric-observer"
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.0-pre-operator-v2-no-app.1
+      tag: 0.78.0-pre.1772047260
   - name: parquet
     args:
       - parquet
@@ -581,7 +581,7 @@ applications:
       - gorillaOnprem
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.0-pre-operator-v2-no-app.1
+      tag: 0.78.0-pre.1772047260
     ports:
       - containerPort: 8080
         name: parquet
@@ -600,7 +600,7 @@ applications:
   - name: weave
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-python
-      tag: 0.78.0-pre-operator-v2-no-app.1
+      tag: 0.78.0-pre.1772047260
     env:
       - name: DATADOG_TRACE_ENABLED
         value: "false"
@@ -622,7 +622,7 @@ applications:
   - name: weave-trace
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
-      tag: 0.78.0-pre-operator-v2-no-app.1
+      tag: 0.78.0-pre.1772047260
     args:
       - "uvicorn"
       - "src.trace_server:app"
@@ -659,7 +659,7 @@ applications:
   - name: weave-trace-worker
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
-      tag: 0.78.0-pre-operator-v2-no-app.1
+      tag: 0.78.0-pre.1772047260
     args:
       - "python"
       - "-m"
@@ -674,7 +674,7 @@ applications:
   - name: weave-trace-evaluate-model-worker
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
-      tag: 0.78.0-pre-operator-v2-no-app.1
+      tag: 0.78.0-pre.1772047260
     args:
       - "python"
       - "-m"
@@ -834,7 +834,7 @@ migrations:
   gorilla:
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.0-pre-operator-v2-no-app.1
+      tag: 0.78.0-pre.1772047260
     args:
       - "migrate"
       - "--db=$(GORILLA_METADATA_STORE)"
@@ -844,10 +844,11 @@ migrations:
       - "true"
     commonEnvs:
       - gorillaMysql
+      - gorillaOnprem
   internal-signer:
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.0-pre-operator-v2-no-app.1
+      tag: 0.78.0-pre.1772047260
     args:
       - "secret-generation-job"
     env:
@@ -860,7 +861,7 @@ migrations:
   weave-trace:
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
-      tag: 0.78.0-pre-operator-v2-no-app.1
+      tag: 0.78.0-pre.1772047260
     args:
       - python
       - migrator.py

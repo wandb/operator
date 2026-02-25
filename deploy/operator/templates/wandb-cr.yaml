@@ -1,4 +1,4 @@
-{{ if .Values.wandb.install }}
+{{ if and .Values.wandb.install (not (eq (index .Values "wandb-operator" "enabled") false)) }}
 apiVersion: v1
 kind: Namespace
 metadata:
