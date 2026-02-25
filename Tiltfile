@@ -180,6 +180,27 @@ if settings.get("installWandb"):
     )
 
 if settings.get("installTelemetry"):
+    local_resource(
+        'vm-crds-ready',
+        'kubectl wait --for=condition=established --timeout=120s ' +
+        'crd/vmsingles.operator.victoriametrics.com ' +
+        'crd/vmagents.operator.victoriametrics.com ' +
+        'crd/vlsingles.operator.victoriametrics.com ' +
+        'crd/vtsingles.operator.victoriametrics.com ' +
+        'crd/vmservicescrapes.operator.victoriametrics.com ' +
+        'crd/vmpodscrapes.operator.victoriametrics.com ' +
+        'crd/vmnodescrapes.operator.victoriametrics.com',
+        resource_deps=["third-party-operators"],
+        labels=["Telemetry"],
+    )
+    local_resource(
+        'grafana-crds-ready',
+        'kubectl wait --for=condition=established --timeout=120s ' +
+        'crd/grafanas.grafana.integreatly.org ' +
+        'crd/grafanadatasources.grafana.integreatly.org',
+        resource_deps=["third-party-operators"],
+        labels=["Telemetry"],
+    )
     k8s_yaml('./hack/testing-manifests/telemetry/victoria-dev.yaml')
     k8s_resource(
         new_name='Victoria-Metrics',
@@ -187,7 +208,7 @@ if settings.get("installTelemetry"):
             'victoria-instance:vmsingle',
             'victoria-agent:vmagent',
         ],
-        resource_deps=["third-party-operators"],
+        resource_deps=["vm-crds-ready"],
         labels=["Telemetry"],
     )
     k8s_resource(
@@ -195,7 +216,7 @@ if settings.get("installTelemetry"):
         objects=[
             'victoria-logs:vlsingle',
         ],
-        resource_deps=["third-party-operators"],
+        resource_deps=["vm-crds-ready"],
         labels=["Telemetry"],
     )
     k8s_resource(
@@ -203,7 +224,7 @@ if settings.get("installTelemetry"):
         objects=[
             'victoria-traces:vtsingle',
         ],
-        resource_deps=["third-party-operators"],
+        resource_deps=["vm-crds-ready"],
         labels=["Telemetry"],
     )
     k8s_yaml('./hack/testing-manifests/telemetry/wandb-otel-connection-dev.yaml')
@@ -221,7 +242,7 @@ if settings.get("installTelemetry"):
         objects=[
             'kubelet-cadvisor:vmnodescrape',
         ],
-        resource_deps=["Victoria-Metrics"],
+        resource_deps=["vm-crds-ready", "Victoria-Metrics"],
         labels=["Telemetry"],
     )
     k8s_yaml('./hack/testing-manifests/telemetry/operator-metrics-dev.yaml')
@@ -233,7 +254,7 @@ if settings.get("installTelemetry"):
             'grafana-operator:vmservicescrape',
             'victoria-metrics-operator:vmservicescrape',
         ],
-        resource_deps=["Victoria-Metrics"],
+        resource_deps=["vm-crds-ready", "Victoria-Metrics"],
         labels=["Telemetry"],
     )
     k8s_yaml('./hack/testing-manifests/telemetry/infra-metrics-dev.yaml')
@@ -246,7 +267,7 @@ if settings.get("installTelemetry"):
             'minio-tenant:vmpodscrape',
             'redis:vmpodscrape',
         ],
-        resource_deps=["Victoria-Metrics"],
+        resource_deps=["vm-crds-ready", "Victoria-Metrics"],
         labels=["Telemetry"],
     )
     k8s_yaml('./hack/testing-manifests/telemetry/grafana-dev.yaml')
@@ -255,7 +276,7 @@ if settings.get("installTelemetry"):
         objects=[
             'grafana:grafana',
         ],
-        resource_deps=["third-party-operators"],
+        resource_deps=["grafana-crds-ready"],
         port_forwards="3000:3000",
         labels=["Telemetry"],
     )
@@ -266,7 +287,7 @@ if settings.get("installTelemetry"):
             'victoria-logs:grafanadatasource',
             'victoria-traces:grafanadatasource',
         ],
-        resource_deps=["Grafana", "Victoria-Metrics", "Victoria-Logs", "Victoria-Traces"],
+        resource_deps=["grafana-crds-ready", "Grafana", "Victoria-Metrics", "Victoria-Logs", "Victoria-Traces"],
         labels=["Telemetry"],
     )
 
