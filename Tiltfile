@@ -137,6 +137,15 @@ k8s_resource(
     labels=["Operator-Resources"],
 )
 
+local_resource(
+    'operator-crds-ready',
+    'kubectl wait --for=condition=established --timeout=120s ' +
+    'crd/applications.apps.wandb.com ' +
+    'crd/weightsandbiases.apps.wandb.com',
+    resource_deps=["Application CRD", "Wandb CRD"],
+    labels=["Operator-Resources"],
+)
+
 k8s_resource(
     'operator-controller-manager',
     'operator-controller-manager',
@@ -145,7 +154,7 @@ k8s_resource(
         'operator-validating-webhook-configuration:validatingwebhookconfiguration',
         'operator-controller-manager:serviceaccount',
     ],
-    resource_deps=["manifests", "generate", "third-party-operators"],
+    resource_deps=["manifests", "generate", "operator-crds-ready", "third-party-operators"],
     labels=["Operator-Resources"],
 )
 
