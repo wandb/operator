@@ -275,6 +275,8 @@ if settings.get("installTelemetry"):
             'kafka-brokers:vmpodscrape',
             'minio-tenant:vmpodscrape',
             'redis:vmpodscrape',
+            'clickhouse-metrics:service',
+            'clickhouse:vmservicescrape',
         ],
         resource_deps=["vm-crds-ready", "Victoria-Metrics"],
         labels=["Telemetry"],
