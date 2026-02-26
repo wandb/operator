@@ -109,12 +109,14 @@ k8s_yaml(local('kustomize build config/tilt-dev'))
 k8s_resource(
     new_name='Application CRD',
     objects=['applications.apps.wandb.com:customresourcedefinition'],
+    resource_deps=["manifests", "generate"],
     labels=["Operator-Resources"],
 )
 
 k8s_resource(
     new_name='Wandb CRD',
     objects=['weightsandbiases.apps.wandb.com:customresourcedefinition'],
+    resource_deps=["manifests", "generate"],
     labels=["Operator-Resources", "third-party-operators"],
 )
 k8s_resource(
