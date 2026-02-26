@@ -212,6 +212,15 @@ if settings.get("installTelemetry"):
         resource_deps=["third-party-operators"],
         labels=["Telemetry"],
     )
+    local_resource(
+        'vm-operator-ready',
+        'kubectl rollout status deployment ' +
+        '-n wandb-operator ' +
+        '-l app.kubernetes.io/name=victoria-metrics-operator ' +
+        '--timeout=120s',
+        resource_deps=["vm-crds-ready"],
+        labels=["Telemetry"],
+    )
     k8s_yaml('./hack/testing-manifests/telemetry/victoria-dev.yaml')
     k8s_resource(
         new_name='Victoria-Metrics',
@@ -219,7 +228,7 @@ if settings.get("installTelemetry"):
             'victoria-instance:vmsingle',
             'victoria-agent:vmagent',
         ],
-        resource_deps=["vm-crds-ready"],
+        resource_deps=["vm-operator-ready"],
         labels=["Telemetry"],
     )
     k8s_resource(
@@ -227,7 +236,7 @@ if settings.get("installTelemetry"):
         objects=[
             'victoria-logs:vlsingle',
         ],
-        resource_deps=["vm-crds-ready"],
+        resource_deps=["vm-operator-ready"],
         labels=["Telemetry"],
     )
     k8s_resource(
@@ -235,7 +244,7 @@ if settings.get("installTelemetry"):
         objects=[
             'victoria-traces:vtsingle',
         ],
-        resource_deps=["vm-crds-ready"],
+        resource_deps=["vm-operator-ready"],
         labels=["Telemetry"],
     )
     k8s_yaml('./hack/testing-manifests/telemetry/wandb-otel-connection-dev.yaml')
