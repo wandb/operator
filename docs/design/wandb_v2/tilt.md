@@ -4,6 +4,66 @@ Resources shown with their labels in parentheses. Telemetry resources are only
 active when `installTelemetry: true` and Wandb is only active when
 `installWandb: true` in `tilt-settings.json`.
 
+## Agent Instructions
+
+To regenerate this graph, read `Tiltfile` at the repo root and apply the rules below.
+
+### Deriving Nodes and Edges
+
+Each `local_resource(name, ...)`, `k8s_resource(new_name=name, ...)`, and
+`helm_resource(name, ...)` call defines a node. Draw one directed edge per entry
+in its `resource_deps=[...]` list. `deploy_cert_manager()` produces a node named
+`cert-manager`.
+
+### Node Label Format
+
+```
+nodeId["resource-name\n(Label-Group)"]
+```
+
+Use the Tilt resource name as display text and the first value of `labels=[...]`
+as the group. Node IDs are snake_case versions of the resource name.
+
+### Subgraphs
+
+Group nodes into a `subgraph` when they share identical incoming and outgoing
+edges — i.e., every parent points to all members and all members point to the
+same children. Replace the redundant per-node edges with single edges to/from
+the subgraph.
+
+Current subgraphs:
+- `codegen["Code Generation"]` — `manifests`, `generate`
+- `victoria_stack["Victoria Stack"]` — `Victoria-Metrics`, `Victoria-Logs`, `Victoria-Traces`
+
+### Arrow Styles
+
+- `-->` for edges between individual nodes
+- `==>` (thick) for any edge where either endpoint is a subgraph
+
+### Conditional Resources
+
+Include all resources in the graph unconditionally. The intro text above the
+diagram already describes the `installTelemetry` / `installWandb` conditions.
+Use `%% comments` to mark conditional sections in the Mermaid source.
+
+### Class Assignments
+
+| Class        | Color  | Assigned to |
+|--------------|--------|-------------|
+| `bootstrap`  | grey   | `cert-manager`, `helm-dep-update`, `manifests`, `generate` |
+| `operator`   | blue   | CRDs, RBAC, certs, controller, webhook, `Watch&Compile` |
+| `thirdparty` | green  | `third-party-operators` |
+| `gate`       | yellow | readiness-gate resources (`*-ready`, `*-crds-ready`) |
+| `telemetry`  | pink   | all telemetry stack resources |
+| `wandb`      | purple | `Wandb` CR |
+
+### Transitive Dependencies
+
+Do not draw edges that are transitively implied by another declared dep.
+When a dep is omitted from `resource_deps` for this reason, the Tiltfile
+contains a comment of the form `# X transitively satisfied via A → B → C`.
+Do not add those edges to the graph.
+
 ```mermaid
 graph TD
     %% ── Bootstrapping ──────────────────────────────────────────────
