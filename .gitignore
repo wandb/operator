@@ -44,3 +44,6 @@ tilt-settings.json
 
 # Local webhook development certificates
 .local-webhook-certs/
+
+# various util artifacts
+.k8s-images

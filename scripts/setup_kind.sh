@@ -3,6 +3,7 @@
 set -e
 
 CLUSTER_NAME="kind"
+DEV_PROFILE=1
 
 if ! command -v jq >/dev/null 2>&1; then
     echo "Error: jq is required but not installed. Please install jq."
@@ -16,6 +17,13 @@ if [[ -f "tilt-settings.json" ]]; then
     fi
 fi
 
+if [[ -f "tilt-settings.json" ]]; then
+    CRD_NAME=$(jq -r '.wandbCRD // empty' tilt-settings.json)
+    if [[ -n "$CRD_NAME" && "$CRD_NAME" != *dev* ]]; then
+        DEV_PROFILE=0
+    fi
+fi
+
 echo "Creating kind cluster: $CLUSTER_NAME"
 
 if kind get clusters | grep -q "^$CLUSTER_NAME$"; then
@@ -24,7 +32,13 @@ if kind get clusters | grep -q "^$CLUSTER_NAME$"; then
     exit 0
 fi
 
-cat <<EOF | kind create cluster --name "$CLUSTER_NAME" --config=-
+if [[ "$DEV_PROFILE" -eq 1 ]]; then
+    cat <<EOF | kind create cluster --name "$CLUSTER_NAME" --config=-
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+EOF
+else
+    cat <<EOF | kind create cluster --name "$CLUSTER_NAME" --config=-
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 nodes:
@@ -33,6 +47,7 @@ nodes:
 - role: worker
 - role: worker
 EOF
+fi
 
 echo "Kind cluster '$CLUSTER_NAME' created successfully with 3 worker nodes"
 

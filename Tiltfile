@@ -36,7 +36,7 @@ allow_k8s_contexts(settings.get("allowed_k8s_contexts"))
 os.putenv('PATH', './bin:' + os.getenv('PATH'))
 
 load('ext://restart_process', 'docker_build_with_restart')
-load('ext://helm_resource', 'helm_resource', 'helm_repo')
+load('ext://helm_resource', 'helm_resource')
 load('ext://cert_manager', 'deploy_cert_manager')
 
 DOCKERFILE = '''
@@ -86,104 +86,52 @@ local_resource("generate", generate(), labels=["Operator-Resources"])
 
 deploy_cert_manager()
 
-helm_repo(
-    'mysql-operator-repo',
-    'https://mysql.github.io/mysql-operator',
+local_resource(
+    'helm-dep-update',
+    'helm dependency update ./deploy/operator',
     labels=["Helm-Repos"],
 )
 
 helm_resource(
-    'mysql-operator',
-    chart='mysql-operator-repo/mysql-operator',
-    resource_deps=['mysql-operator-repo'],
-    labels=["Third-Party-Operators"],
-    flags=['--set-string=image.tag=8.4.7-2.1.9']
-)
-
-helm_repo(
-    'redis-operator-repo',
-    'https://ot-container-kit.github.io/helm-charts/',
-    labels=["Helm-Repos"],
-)
-helm_resource(
-    'redis-operator',
-    chart='redis-operator-repo/redis-operator',
-    resource_deps=['redis-operator-repo'],
-    labels=["Third-Party-Operators"],
-)
-
-helm_repo(
-    'strimzi-repo',
-    'https://strimzi.io/charts/',
-    labels=["Helm-Repos"],
-)
-helm_resource(
-    'kafka-operator',
-    chart='strimzi-repo/strimzi-kafka-operator',
-    resource_deps=['strimzi-repo'],
-    labels=["Third-Party-Operators"],
-)
-
-helm_repo(
-    'minio-repo',
-    'https://operator.min.io',
-    labels=["Helm-Repos"],
-)
-helm_resource(
-    'minio-operator',
-    chart='minio-repo/operator',
-    resource_deps=['minio-repo'],
-    labels=["Third-Party-Operators"],
-)
-
-helm_repo(
-    'clickhouse-repo',
-    'https://helm.altinity.com',
-    labels=["Helm-Repos"],
-)
-helm_resource(
-    'clickhouse-operator',
-    chart='clickhouse-repo/altinity-clickhouse-operator',
-    resource_deps=['clickhouse-repo'],
-    labels=["Third-Party-Operators"],
-)
-
-helm_repo(
-    'victoria-metrics-repo',
-    'https://victoriametrics.github.io/helm-charts/',
-    labels=["Helm-Repos"],
-)
-helm_resource(
-    'victoria-metrics-operator',
-    chart='victoria-metrics-repo/victoria-metrics-operator',
-    resource_deps=['victoria-metrics-repo'],
-    labels=["Third-Party-Operators"],
-)
-
-helm_repo(
-    'grafana-repo',
-    'https://grafana.github.io/helm-charts',
-    labels=["Helm-Repos"],
-)
-helm_resource(
-    'grafana-operator',
-    chart='grafana-repo/grafana-operator',
-    resource_deps=['grafana-repo'],
+    'third-party-operators',
+    chart='./deploy/operator',
+    resource_deps=['helm-dep-update'],
+    namespace='wandb-operator',
+    flags=[
+        '--set=wandb-operator.enabled=false',
+        '--create-namespace',
+    ],
     labels=["Third-Party-Operators"],
 )
 
 k8s_yaml(local('kustomize build config/tilt-dev'))
 
 k8s_resource(
+    new_name='Operator-Certs',
+    objects=[
+        'operator-system:namespace',
+        'operator-metrics-certs:certificate',
+        'operator-serving-cert:certificate',
+        'operator-selfsigned-issuer:issuer',
+    ],
+    # deploy_cert_manager() runs local() commands and registers no Tilt resource,
+    # so a resource_dep cannot be declared here. Tilt retries on failure.
+    labels=["Operator-Resources"],
+)
+
+k8s_resource(
     new_name='Application CRD',
     objects=['applications.apps.wandb.com:customresourcedefinition'],
+    resource_deps=["manifests", "generate"],
     labels=["Operator-Resources"],
 )
 
 k8s_resource(
     new_name='Wandb CRD',
     objects=['weightsandbiases.apps.wandb.com:customresourcedefinition'],
-    labels=["Operator-Resources"],
+    resource_deps=["manifests", "generate"],
+    # wandb-operator is disabled in this Tilt setup; label is for 3rd party operator CRD grouping only
+    labels=["Operator-Resources", "third-party-operators"],
 )
 k8s_resource(
     new_name='RBAC',
@@ -202,6 +150,16 @@ k8s_resource(
         'operator-weightsandbiases-viewer-role:clusterrole',
         'operator-metrics-auth-rolebinding:clusterrolebinding',
     ],
+    resource_deps=["manifests", "generate"],
+    labels=["Operator-Resources"],
+)
+
+local_resource(
+    'operator-crds-ready',
+    'kubectl wait --for=condition=established --timeout=120s ' +
+    'crd/applications.apps.wandb.com ' +
+    'crd/weightsandbiases.apps.wandb.com',
+    resource_deps=["Application CRD", "Wandb CRD"],
     labels=["Operator-Resources"],
 )
 
@@ -213,7 +171,8 @@ k8s_resource(
         'operator-validating-webhook-configuration:validatingwebhookconfiguration',
         'operator-controller-manager:serviceaccount',
     ],
-    resource_deps=["manifests", "generate", "redis-operator", "kafka-operator", "minio-operator", "clickhouse-operator"],
+    # manifests/generate transitively satisfied via operator-crds-ready → Application CRD / Wandb CRD
+    resource_deps=["operator-crds-ready", "third-party-operators"],
     labels=["Operator-Resources"],
 )
 
@@ -248,6 +207,36 @@ if settings.get("installWandb"):
     )
 
 if settings.get("installTelemetry"):
+    local_resource(
+        'vm-crds-ready',
+        'kubectl wait --for=condition=established --timeout=120s ' +
+        'crd/vmsingles.operator.victoriametrics.com ' +
+        'crd/vmagents.operator.victoriametrics.com ' +
+        'crd/vlsingles.operator.victoriametrics.com ' +
+        'crd/vtsingles.operator.victoriametrics.com ' +
+        'crd/vmservicescrapes.operator.victoriametrics.com ' +
+        'crd/vmpodscrapes.operator.victoriametrics.com ' +
+        'crd/vmnodescrapes.operator.victoriametrics.com',
+        resource_deps=["third-party-operators"],
+        labels=["Telemetry"],
+    )
+    local_resource(
+        'grafana-crds-ready',
+        'kubectl wait --for=condition=established --timeout=120s ' +
+        'crd/grafanas.grafana.integreatly.org ' +
+        'crd/grafanadatasources.grafana.integreatly.org',
+        resource_deps=["third-party-operators"],
+        labels=["Telemetry"],
+    )
+    local_resource(
+        'vm-operator-ready',
+        'kubectl rollout status deployment ' +
+        '-n wandb-operator ' +
+        '-l app.kubernetes.io/name=victoria-metrics-operator ' +
+        '--timeout=120s',
+        resource_deps=["vm-crds-ready"],
+        labels=["Telemetry"],
+    )
     k8s_yaml('./hack/testing-manifests/telemetry/victoria-dev.yaml')
     k8s_resource(
         new_name='Victoria-Metrics',
@@ -255,7 +244,7 @@ if settings.get("installTelemetry"):
             'victoria-instance:vmsingle',
             'victoria-agent:vmagent',
         ],
-        resource_deps=["victoria-metrics-operator"],
+        resource_deps=["vm-operator-ready"],
         labels=["Telemetry"],
     )
     k8s_resource(
@@ -263,7 +252,7 @@ if settings.get("installTelemetry"):
         objects=[
             'victoria-logs:vlsingle',
         ],
-        resource_deps=["victoria-metrics-operator"],
+        resource_deps=["vm-operator-ready"],
         labels=["Telemetry"],
     )
     k8s_resource(
@@ -271,7 +260,7 @@ if settings.get("installTelemetry"):
         objects=[
             'victoria-traces:vtsingle',
         ],
-        resource_deps=["victoria-metrics-operator"],
+        resource_deps=["vm-operator-ready"],
         labels=["Telemetry"],
     )
     k8s_yaml('./hack/testing-manifests/telemetry/wandb-otel-connection-dev.yaml')
@@ -289,6 +278,7 @@ if settings.get("installTelemetry"):
         objects=[
             'kubelet-cadvisor:vmnodescrape',
         ],
+        # vm-crds-ready transitively satisfied via Victoria-Metrics → vm-operator-ready → vm-crds-ready
         resource_deps=["Victoria-Metrics"],
         labels=["Telemetry"],
     )
@@ -301,6 +291,7 @@ if settings.get("installTelemetry"):
             'grafana-operator:vmservicescrape',
             'victoria-metrics-operator:vmservicescrape',
         ],
+        # vm-crds-ready transitively satisfied via Victoria-Metrics → vm-operator-ready → vm-crds-ready
         resource_deps=["Victoria-Metrics"],
         labels=["Telemetry"],
     )
@@ -313,7 +304,10 @@ if settings.get("installTelemetry"):
             'kafka-brokers:vmpodscrape',
             'minio-tenant:vmpodscrape',
             'redis:vmpodscrape',
+            'clickhouse-metrics:service',
+            'clickhouse:vmservicescrape',
         ],
+        # vm-crds-ready transitively satisfied via Victoria-Metrics → vm-operator-ready → vm-crds-ready
         resource_deps=["Victoria-Metrics"],
         labels=["Telemetry"],
     )
@@ -323,7 +317,7 @@ if settings.get("installTelemetry"):
         objects=[
             'grafana:grafana',
         ],
-        resource_deps=["grafana-operator"],
+        resource_deps=["grafana-crds-ready"],
         port_forwards="3000:3000",
         labels=["Telemetry"],
     )
@@ -334,7 +328,7 @@ if settings.get("installTelemetry"):
             'victoria-logs:grafanadatasource',
             'victoria-traces:grafanadatasource',
         ],
-        resource_deps=["Grafana", "Victoria-Metrics", "Victoria-Logs", "Victoria-Traces"],
+        resource_deps=["grafana-crds-ready", "Grafana", "Victoria-Metrics", "Victoria-Logs", "Victoria-Traces"],
         labels=["Telemetry"],
     )
 

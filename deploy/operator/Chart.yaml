@@ -14,6 +14,7 @@ dependencies:
     version: 0.11.8
     alias: wandb-operator
     repository: https://charts.wandb.ai/
+    condition: wandb-operator.enabled
   - name: mysql-operator
     version: 2.2.7
     repository: https://mysql.github.io/mysql-operator/
