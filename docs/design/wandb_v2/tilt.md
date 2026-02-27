@@ -24,8 +24,8 @@ graph TD
     wandb_crd["Wandb CRD\n(Operator-Resources)"]
     rbac["RBAC\n(Operator-Resources)"]
     operator_certs["Operator-Certs\n(Operator-Resources)"]
-    codegen --> app_crd
-    codegen --> wandb_crd
+    codegen ==> app_crd
+    codegen ==> wandb_crd
 
     %% ── CRD Readiness Gate ─────────────────────────────────────────
     crds_ready["operator-crds-ready\n(Operator-Resources)"]
@@ -35,8 +35,8 @@ graph TD
     %% ── Operator Controller ────────────────────────────────────────
     watch_compile["Watch&Compile\n(Operator-Resources)"]
     controller["operator-controller-manager\n(Operator-Resources)"]
-    codegen     --> watch_compile
-    codegen     --> controller
+    codegen     ==> watch_compile
+    codegen     ==> controller
     crds_ready  --> controller
     third_party --> controller
 
@@ -57,19 +57,19 @@ graph TD
     vm_crds     --> vm_operator
 
     %% ── Victoria Metrics Stack ─────────────────────────────────────
-    subgraph victoria_stack["Victoria-* Stack"]
+    subgraph victoria_stack["Victoria Stack"]
         victoria_metrics["Victoria-Metrics\n(Telemetry)"]
         victoria_logs["Victoria-Logs\n(Telemetry)"]
         victoria_traces["Victoria-Traces\n(Telemetry)"]
     end
-    vm_operator --> victoria_stack
+    vm_operator ==> victoria_stack
 
     %% ── Telemetry Dependents ───────────────────────────────────────
     otel["OTEL-Connection-Secret\n(Telemetry)"]
     kube_metrics["Kubernetes-Metrics\n(Telemetry)"]
     op_metrics["Operator-Metrics\n(Telemetry)"]
     infra_metrics["Infrastructure-Metrics\n(Telemetry)"]
-    victoria_stack   --> otel
+    victoria_stack   ==> otel
     vm_crds          --> kube_metrics
     victoria_metrics --> kube_metrics
     vm_crds          --> op_metrics
@@ -83,7 +83,7 @@ graph TD
     grafana_crds   --> grafana
     grafana_crds   --> grafana_ds
     grafana        --> grafana_ds
-    victoria_stack --> grafana_ds
+    victoria_stack ==> grafana_ds
 
     %% ── Styles ─────────────────────────────────────────────────────
     classDef bootstrap  fill:#f5f5f5,stroke:#999
