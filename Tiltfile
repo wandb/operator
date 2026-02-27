@@ -107,6 +107,17 @@ helm_resource(
 k8s_yaml(local('kustomize build config/tilt-dev'))
 
 k8s_resource(
+    new_name='Operator-Certs',
+    objects=[
+        'operator-system:namespace',
+        'operator-metrics-certs:certificate',
+        'operator-serving-cert:certificate',
+        'operator-selfsigned-issuer:issuer',
+    ],
+    labels=["Operator-Resources"],
+)
+
+k8s_resource(
     new_name='Application CRD',
     objects=['applications.apps.wandb.com:customresourcedefinition'],
     resource_deps=["manifests", "generate"],
