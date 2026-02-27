@@ -114,6 +114,7 @@ k8s_resource(
         'operator-serving-cert:certificate',
         'operator-selfsigned-issuer:issuer',
     ],
+    resource_deps=["cert-manager"],
     labels=["Operator-Resources"],
 )
 
@@ -128,6 +129,7 @@ k8s_resource(
     new_name='Wandb CRD',
     objects=['weightsandbiases.apps.wandb.com:customresourcedefinition'],
     resource_deps=["manifests", "generate"],
+    # wandb-operator is disabled in this Tilt setup; label is for 3rd party operator CRD grouping only
     labels=["Operator-Resources", "third-party-operators"],
 )
 k8s_resource(
@@ -147,6 +149,7 @@ k8s_resource(
         'operator-weightsandbiases-viewer-role:clusterrole',
         'operator-metrics-auth-rolebinding:clusterrolebinding',
     ],
+    resource_deps=["manifests", "generate"],
     labels=["Operator-Resources"],
 )
 
@@ -167,7 +170,8 @@ k8s_resource(
         'operator-validating-webhook-configuration:validatingwebhookconfiguration',
         'operator-controller-manager:serviceaccount',
     ],
-    resource_deps=["manifests", "generate", "operator-crds-ready", "third-party-operators"],
+    # manifests/generate transitively satisfied via operator-crds-ready → Application CRD / Wandb CRD
+    resource_deps=["operator-crds-ready", "third-party-operators"],
     labels=["Operator-Resources"],
 )
 
@@ -273,7 +277,8 @@ if settings.get("installTelemetry"):
         objects=[
             'kubelet-cadvisor:vmnodescrape',
         ],
-        resource_deps=["vm-crds-ready", "Victoria-Metrics"],
+        # vm-crds-ready transitively satisfied via Victoria-Metrics → vm-operator-ready → vm-crds-ready
+        resource_deps=["Victoria-Metrics"],
         labels=["Telemetry"],
     )
     k8s_yaml('./hack/testing-manifests/telemetry/operator-metrics-dev.yaml')
@@ -285,7 +290,8 @@ if settings.get("installTelemetry"):
             'grafana-operator:vmservicescrape',
             'victoria-metrics-operator:vmservicescrape',
         ],
-        resource_deps=["vm-crds-ready", "Victoria-Metrics"],
+        # vm-crds-ready transitively satisfied via Victoria-Metrics → vm-operator-ready → vm-crds-ready
+        resource_deps=["Victoria-Metrics"],
         labels=["Telemetry"],
     )
     k8s_yaml('./hack/testing-manifests/telemetry/infra-metrics-dev.yaml')
@@ -300,7 +306,8 @@ if settings.get("installTelemetry"):
             'clickhouse-metrics:service',
             'clickhouse:vmservicescrape',
         ],
-        resource_deps=["vm-crds-ready", "Victoria-Metrics"],
+        # vm-crds-ready transitively satisfied via Victoria-Metrics → vm-operator-ready → vm-crds-ready
+        resource_deps=["Victoria-Metrics"],
         labels=["Telemetry"],
     )
     k8s_yaml('./hack/testing-manifests/telemetry/grafana-dev.yaml')
