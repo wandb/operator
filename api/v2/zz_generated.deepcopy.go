@@ -24,7 +24,7 @@ import (
 	"github.com/kedacore/keda/v2/apis/keda/v1alpha1"
 	argoproj_io_rolloutsv1alpha1 "github.com/wandb/operator/pkg/vendored/argo-rollouts/argoproj.io.rollouts/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
-	autoscalingv1 "k8s.io/api/autoscaling/v1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	batchv1 "k8s.io/api/batch/v1"
 	"k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
@@ -114,7 +114,7 @@ func (in *ApplicationSpec) DeepCopyInto(out *ApplicationSpec) {
 	}
 	if in.HpaTemplate != nil {
 		in, out := &in.HpaTemplate, &out.HpaTemplate
-		*out = new(autoscalingv1.HorizontalPodAutoscalerSpec)
+		*out = new(autoscalingv2.HorizontalPodAutoscalerSpec)
 		(*in).DeepCopyInto(*out)
 	}
 	if in.PdbTemplate != nil {
@@ -197,7 +197,7 @@ func (in *ApplicationStatus) DeepCopyInto(out *ApplicationStatus) {
 	}
 	if in.HPAStatus != nil {
 		in, out := &in.HPAStatus, &out.HPAStatus
-		*out = new(autoscalingv1.HorizontalPodAutoscalerStatus)
+		*out = new(autoscalingv2.HorizontalPodAutoscalerStatus)
 		(*in).DeepCopyInto(*out)
 	}
 }

@@ -312,9 +312,38 @@ func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb 
 		if len(app.Features) > 0 && !manifestFeaturesEnabled(app.Features, manifest.Features) {
 			continue
 		}
+
+		envVars, err := resolveEnvvars(ctx, client, wandb, manifest, app.CommonEnvs, app.Env)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+
+		volumes, volumeMounts, err := resolveVolumeMounts(ctx, manifest, app.CommonVolumeMounts, app.VolumeMounts)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+
+		// First, resolve any inline files and JWT token volumes at the Application level
+		// so that volumeMounts/volumes are ready before constructing containers.
+		if len(app.Files) > 0 {
+			volumes, volumeMounts, err = resolveInlineFiles(ctx, client, wandb, app, volumes, volumeMounts)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+		if len(app.JWTTokens) > 0 {
+			// resolveJWTTokens appends mounts to the given container, but also returns volumes.
+			// We only use the returned volumes here, consistent with previous behavior.
+			volumes, volumeMounts = resolveJWTTokens(app, volumes, volumeMounts)
+		}
+
+		containers := resolveContainers(app, wandb, envVars, volumeMounts)
+
+		initContainers := resolveInitContainers(app, envVars, volumeMounts)
+
 		application := &apiv2.Application{}
 		applicationName := fmt.Sprintf("%s-%s", wandb.Name, app.Name)
-		err := client.Get(ctx, types.NamespacedName{Name: applicationName, Namespace: wandb.Namespace}, application)
+		err = client.Get(ctx, types.NamespacedName{Name: applicationName, Namespace: wandb.Namespace}, application)
 		if err != nil {
 			if apiErrors.IsNotFound(err) {
 				application.ObjectMeta.Name = applicationName
@@ -324,284 +353,8 @@ func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb 
 			}
 		}
 
-		envVars, err := resolveEnvvars(ctx, client, wandb, manifest, app.CommonEnvs, app.Env)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-
-		logger.Info("", "app", app.Name, "volumes", app.CommonVolumeMounts)
-		logger.Info("", "app", app.Name, "volumeMounts", app.VolumeMounts)
-		volumes, volumeMounts, err := resolveVolumeMounts(ctx, client, wandb, manifest, app.CommonVolumeMounts, app.VolumeMounts)
-		logger.Info("", "app", app.Name, "volumes", volumes)
-		logger.Info("", "app", app.Name, "volumeMounts", volumeMounts)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-
-		var Ports []corev1.ContainerPort
-		for _, port := range app.Ports {
-			containerPort := corev1.ContainerPort{
-				Name:          port.Name,
-				ContainerPort: port.ContainerPort,
-				Protocol:      port.Protocol,
-			}
-			Ports = append(Ports, containerPort)
-		}
-
-		container := corev1.Container{
-			Name:         app.Name,
-			Image:        app.Image.GetImage(),
-			Env:          envVars,
-			Args:         app.Args,
-			Command:      app.Command,
-			Ports:        Ports,
-			VolumeMounts: volumeMounts,
-		}
-
-		if app.StartupProbe != nil && app.StartupProbe.HTTPGet != nil {
-			if app.StartupProbe.HTTPGet.Port.StrVal == "" && app.StartupProbe.HTTPGet.Port.IntVal == 0 {
-				if len(app.Ports) > 0 {
-					if app.StartupProbe.HTTPGet.Path != "" {
-						app.StartupProbe.HTTPGet = &corev1.HTTPGetAction{
-							Path: app.StartupProbe.HTTPGet.Path,
-							Port: intstr.FromString(app.Ports[0].Name),
-						}
-					}
-				}
-			}
-			container.StartupProbe = app.StartupProbe
-		}
-
-		if app.LivenessProbe != nil && app.LivenessProbe.HTTPGet != nil {
-			if app.LivenessProbe.HTTPGet.Port.StrVal == "" && app.LivenessProbe.HTTPGet.Port.IntVal == 0 {
-				if len(app.Ports) > 0 {
-					if app.LivenessProbe.HTTPGet.Path != "" {
-						app.LivenessProbe.HTTPGet = &corev1.HTTPGetAction{
-							Path: app.LivenessProbe.HTTPGet.Path,
-							Port: intstr.FromString(app.Ports[0].Name),
-						}
-					}
-				}
-			}
-			container.LivenessProbe = app.LivenessProbe
-		}
-
-		if app.ReadinessProbe != nil && app.ReadinessProbe.HTTPGet != nil {
-			if app.ReadinessProbe.HTTPGet.Port.StrVal == "" && app.ReadinessProbe.HTTPGet.Port.IntVal == 0 {
-				if len(app.Ports) > 0 {
-					if app.ReadinessProbe.HTTPGet.Path != "" {
-						app.ReadinessProbe.HTTPGet = &corev1.HTTPGetAction{
-							Path: app.ReadinessProbe.HTTPGet.Path,
-							Port: intstr.FromString(app.Ports[0].Name),
-						}
-					}
-				}
-			}
-			container.ReadinessProbe = app.ReadinessProbe
-		}
-
-		// Handle file injection via ConfigMaps according to manifest Application.Files
-		if len(app.Files) > 0 {
-			// Collect inline files into a single operator-managed ConfigMap
-			inlineData := map[string]string{}
-			inlineCMName := fmt.Sprintf("%s-%s-files", wandb.Name, app.Name)
-			// Track external ConfigMap refs and create one Volume per unique ref
-			cmRefVolumeNames := map[string]string{}
-
-			for _, f := range app.Files {
-				key := f.Name
-				fileName := f.FileName
-				if fileName == "" {
-					fileName = key
-				}
-
-				var volName string
-				if f.Inline != "" {
-					// Accumulate into inline CM data
-					inlineData[key] = f.Inline
-					volName = "files-inline"
-				} else if f.ConfigMapRef != "" {
-					// external ConfigMap reference
-					if existing, ok := cmRefVolumeNames[f.ConfigMapRef]; ok {
-						volName = existing
-					} else {
-						volName = fmt.Sprintf("cm-%s", f.ConfigMapRef)
-						cmRefVolumeNames[f.ConfigMapRef] = volName
-					}
-				} else {
-					// neither inline nor ref provided; skip
-					continue
-				}
-
-				// Mount each file as a single file using subPath into the specified directory
-				mountPath := f.MountPath
-				if mountPath == "" {
-					// require a mountPath; skip if not provided
-					continue
-				}
-				volumeMounts = append(volumeMounts, corev1.VolumeMount{
-					Name:      volName,
-					MountPath: fmt.Sprintf("%s/%s", mountPath, fileName),
-					SubPath:   key,
-					ReadOnly:  true,
-				})
-			}
-
-			// Create/update inline ConfigMap if we have any inline data
-			if len(inlineData) > 0 {
-				cm := &corev1.ConfigMap{}
-				cm.Namespace = wandb.Namespace
-				cm.Name = inlineCMName
-				// Try to get existing
-				getErr := client.Get(ctx, types.NamespacedName{Name: cm.Name, Namespace: cm.Namespace}, cm)
-				if getErr != nil {
-					if apiErrors.IsNotFound(getErr) {
-						cm.Data = inlineData
-						if err := controllerutil.SetOwnerReference(wandb, cm, client.Scheme()); err != nil {
-							return ctrl.Result{}, err
-						}
-						if err := client.Create(ctx, cm); err != nil {
-							return ctrl.Result{}, err
-						}
-					} else {
-						return ctrl.Result{}, getErr
-					}
-				} else {
-					// Update data if changed
-					if cm.Data == nil {
-						cm.Data = map[string]string{}
-					}
-					cm.Data = inlineData
-					if err := client.Update(ctx, cm); err != nil {
-						return ctrl.Result{}, err
-					}
-				}
-
-				// Add a volume for the inline CM
-				volumes = append(volumes, corev1.Volume{
-					Name: "files-inline",
-					VolumeSource: corev1.VolumeSource{
-						ConfigMap: &corev1.ConfigMapVolumeSource{LocalObjectReference: corev1.LocalObjectReference{Name: inlineCMName}},
-					},
-				})
-			}
-
-			// Add volumes for each external ConfigMap ref
-			for ref, volName := range cmRefVolumeNames {
-				volumes = append(volumes, corev1.Volume{
-					Name: volName,
-					VolumeSource: corev1.VolumeSource{
-						ConfigMap: &corev1.ConfigMapVolumeSource{LocalObjectReference: corev1.LocalObjectReference{Name: ref}},
-					},
-				})
-			}
-
-			// Attach mounts to the container if any
-			if len(volumeMounts) > 0 {
-				container.VolumeMounts = append(container.VolumeMounts, volumeMounts...)
-			}
-		}
-
-		// Handle JWT token mounting according to manifest Application.JWTTokens
-		if len(app.JWTTokens) > 0 {
-			for _, jwtToken := range app.JWTTokens {
-				var volume corev1.Volume
-				volumeName := fmt.Sprintf("%s-%s", app.Name, jwtToken.Name)
-
-				// Create volume based on source type
-				switch {
-				case jwtToken.Source.KubernetesServiceAccount != nil:
-					// Projected volume with service account token
-					expirationSeconds := jwtToken.Source.KubernetesServiceAccount.ExpirationSeconds
-					if expirationSeconds == 0 {
-						expirationSeconds = 3607 // Default 1 hour + 7 seconds
-					}
-					volume = corev1.Volume{
-						Name: volumeName,
-						VolumeSource: corev1.VolumeSource{
-							Projected: &corev1.ProjectedVolumeSource{
-								Sources: []corev1.VolumeProjection{
-									{
-										ServiceAccountToken: &corev1.ServiceAccountTokenProjection{
-											Audience:          jwtToken.Source.KubernetesServiceAccount.Audience,
-											Path:              "token",
-											ExpirationSeconds: &expirationSeconds,
-										},
-									},
-								},
-							},
-						},
-					}
-
-				case jwtToken.Source.SecretRef != nil:
-					// Secret volume
-					key := jwtToken.Source.SecretRef.Key
-					if key == "" {
-						key = "token" // Default key name
-					}
-					volume = corev1.Volume{
-						Name: volumeName,
-						VolumeSource: corev1.VolumeSource{
-							Secret: &corev1.SecretVolumeSource{
-								SecretName: jwtToken.Source.SecretRef.Name,
-								Items: []corev1.KeyToPath{
-									{
-										Key:  key,
-										Path: "token",
-									},
-								},
-							},
-						},
-					}
-
-				case jwtToken.Source.CSIProvider != nil:
-					// CSI volume
-					volume = corev1.Volume{
-						Name: volumeName,
-						VolumeSource: corev1.VolumeSource{
-							CSI: &corev1.CSIVolumeSource{
-								Driver:           jwtToken.Source.CSIProvider.Driver,
-								VolumeAttributes: jwtToken.Source.CSIProvider.Parameters,
-								ReadOnly:         func() *bool { b := true; return &b }(),
-							},
-						},
-					}
-
-				default:
-					// No valid source specified, skip this token
-					continue
-				}
-
-				volumes = append(volumes, volume)
-				container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
-					Name:      volumeName,
-					MountPath: jwtToken.MountPath,
-					ReadOnly:  true,
-				})
-			}
-		}
-
-		initContainers := []corev1.Container{}
-
-		if app.InitContainers != nil {
-			for _, initContainerSpec := range app.InitContainers {
-				if initContainerSpec.Name == "migrate" {
-					continue
-				}
-				initContainer := corev1.Container{
-					Name:         initContainerSpec.Name,
-					Image:        initContainerSpec.Image.GetImage(),
-					Env:          envVars,
-					Args:         initContainerSpec.Args,
-					Command:      initContainerSpec.Command,
-					VolumeMounts: volumeMounts,
-				}
-				initContainers = append(initContainers, initContainer)
-			}
-		}
-
 		application.Spec.Kind = "Deployment"
-		application.Spec.PodTemplate.Spec.Containers = []corev1.Container{container}
+		application.Spec.PodTemplate.Spec.Containers = containers
 		// Replace volumes entirely on each reconcile to avoid accumulating duplicates
 		// across updates (e.g., duplicate "files-inline" volume names).
 		application.Spec.PodTemplate.Spec.Volumes = volumes
@@ -672,6 +425,356 @@ func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb 
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func resolveInitContainers(app serverManifest.Application, envVars []corev1.EnvVar, volumeMounts []corev1.VolumeMount) []corev1.Container {
+	initContainers := []corev1.Container{}
+
+	if app.InitContainers != nil {
+		for _, initContainerSpec := range app.InitContainers {
+			if initContainerSpec.Name == "migrate" {
+				continue
+			}
+			initContainer := corev1.Container{
+				Name:         initContainerSpec.Name,
+				Image:        initContainerSpec.Image.GetImage(),
+				Env:          envVars,
+				Args:         initContainerSpec.Args,
+				Command:      initContainerSpec.Command,
+				VolumeMounts: volumeMounts,
+			}
+			initContainers = append(initContainers, initContainer)
+		}
+	}
+	return initContainers
+}
+
+func resolveResources(app serverManifest.Application, wandb *apiv2.WeightsAndBiases, containerResources *corev1.ResourceRequirements) *corev1.ResourceRequirements {
+	resources := &corev1.ResourceRequirements{}
+
+	// check if there is "default" in the sizing map and apply those values
+	if defaultConfig, ok := app.Sizing["default"]; ok && defaultConfig.Resources != nil {
+		resources.Limits = defaultConfig.Resources.Limits
+		resources.Requests = defaultConfig.Resources.Requests
+	}
+
+	// check if there is a sizing config in the map that corresponds to the size in the wandb spec and apply that
+	if sizeConfig, ok := app.Sizing[wandb.Spec.Size]; ok && sizeConfig.Resources != nil {
+		if sizeConfig.Resources.Limits != nil {
+			if resources.Limits == nil {
+				resources.Limits = make(corev1.ResourceList)
+			}
+			for k, v := range sizeConfig.Resources.Limits {
+				resources.Limits[k] = v
+			}
+		}
+		if sizeConfig.Resources.Requests != nil {
+			if resources.Requests == nil {
+				resources.Requests = make(corev1.ResourceList)
+			}
+			for k, v := range sizeConfig.Resources.Requests {
+				resources.Requests[k] = v
+			}
+		}
+	}
+
+	// check if the container has a resource and if so apply those settings
+	if containerResources != nil {
+		if containerResources.Limits != nil {
+			if resources.Limits == nil {
+				resources.Limits = make(corev1.ResourceList)
+			}
+			for k, v := range containerResources.Limits {
+				resources.Limits[k] = v
+			}
+		}
+		if containerResources.Requests != nil {
+			if resources.Requests == nil {
+				resources.Requests = make(corev1.ResourceList)
+			}
+			for k, v := range containerResources.Requests {
+				resources.Requests[k] = v
+			}
+		}
+	}
+
+	if !wandb.Spec.RequireLimits {
+		resources.Limits = nil
+	}
+
+	if len(resources.Limits) == 0 && len(resources.Requests) == 0 {
+		return nil
+	}
+
+	return resources
+}
+
+func resolveContainers(app serverManifest.Application, wandb *apiv2.WeightsAndBiases, envVars []corev1.EnvVar, volumeMounts []corev1.VolumeMount) []corev1.Container {
+	// Build containers: support multi-container apps via app.Containers; fall back to a single
+	// default container when no explicit containers are provided.
+	containers := []corev1.Container{}
+	if len(app.Containers) > 0 {
+		for _, container := range app.Containers {
+			// Convert ports
+			var containerPorts []corev1.ContainerPort
+			for _, p := range container.Ports {
+				containerPorts = append(containerPorts, corev1.ContainerPort{
+					Name:          p.Name,
+					ContainerPort: p.ContainerPort,
+					Protocol:      p.Protocol,
+				})
+			}
+
+			// Choose image/args/command with sensible fallbacks to app-level values
+			img := app.Image.GetImage()
+			if container.Image.Repository != "" {
+				img = container.Image.GetImage()
+			}
+			args := app.Args
+			if len(container.Args) > 0 {
+				args = container.Args
+			}
+			cmd := app.Command
+			if len(container.Command) > 0 {
+				cmd = container.Command
+			}
+
+			c := corev1.Container{
+				Name:         container.Name,
+				Image:        img,
+				Env:          envVars,
+				Args:         args,
+				Command:      cmd,
+				Ports:        containerPorts,
+				VolumeMounts: volumeMounts,
+			}
+
+			if resources := resolveResources(app, wandb, container.Resources); resources != nil {
+				c.Resources = *resources
+			}
+
+			// Default HTTPGet probe ports to the first declared port name when missing
+			if container.StartupProbe != nil && container.StartupProbe.HTTPGet != nil {
+				if container.StartupProbe.HTTPGet.Port.StrVal == "" && container.StartupProbe.HTTPGet.Port.IntVal == 0 {
+					if len(container.Ports) > 0 && container.StartupProbe.HTTPGet.Path != "" {
+						container.StartupProbe.HTTPGet = &corev1.HTTPGetAction{Path: container.StartupProbe.HTTPGet.Path, Port: intstr.FromString(container.Ports[0].Name)}
+					}
+				}
+				c.StartupProbe = container.StartupProbe
+			}
+			if container.LivenessProbe != nil && container.LivenessProbe.HTTPGet != nil {
+				if container.LivenessProbe.HTTPGet.Port.StrVal == "" && container.LivenessProbe.HTTPGet.Port.IntVal == 0 {
+					if len(container.Ports) > 0 && container.LivenessProbe.HTTPGet.Path != "" {
+						container.LivenessProbe.HTTPGet = &corev1.HTTPGetAction{Path: container.LivenessProbe.HTTPGet.Path, Port: intstr.FromString(container.Ports[0].Name)}
+					}
+				}
+				c.LivenessProbe = container.LivenessProbe
+			}
+			if container.ReadinessProbe != nil && container.ReadinessProbe.HTTPGet != nil {
+				if container.ReadinessProbe.HTTPGet.Port.StrVal == "" && container.ReadinessProbe.HTTPGet.Port.IntVal == 0 {
+					if len(container.Ports) > 0 && container.ReadinessProbe.HTTPGet.Path != "" {
+						container.ReadinessProbe.HTTPGet = &corev1.HTTPGetAction{Path: container.ReadinessProbe.HTTPGet.Path, Port: intstr.FromString(container.Ports[0].Name)}
+					}
+				}
+				c.ReadinessProbe = container.ReadinessProbe
+			}
+
+			containers = append(containers, c)
+		}
+	} else {
+		// Backward-compatible single-container behavior
+		c := corev1.Container{
+			Name:         app.Name,
+			Image:        app.Image.GetImage(),
+			Env:          envVars,
+			Args:         app.Args,
+			Command:      app.Command,
+			VolumeMounts: volumeMounts,
+		}
+
+		if resources := resolveResources(app, wandb, nil); resources != nil {
+			c.Resources = *resources
+		}
+		containers = append(containers, c)
+	}
+	return containers
+}
+
+func resolveJWTTokens(app serverManifest.Application, volumes []corev1.Volume, volumeMounts []corev1.VolumeMount) ([]corev1.Volume, []corev1.VolumeMount) {
+	for _, jwtToken := range app.JWTTokens {
+		var volume corev1.Volume
+		volumeName := fmt.Sprintf("%s-%s", app.Name, jwtToken.Name)
+
+		// Create volume based on source type
+		switch {
+		case jwtToken.Source.KubernetesServiceAccount != nil:
+			// Projected volume with service account token
+			expirationSeconds := jwtToken.Source.KubernetesServiceAccount.ExpirationSeconds
+			if expirationSeconds == 0 {
+				expirationSeconds = 3607 // Default 1 hour + 7 seconds
+			}
+			volume = corev1.Volume{
+				Name: volumeName,
+				VolumeSource: corev1.VolumeSource{
+					Projected: &corev1.ProjectedVolumeSource{
+						Sources: []corev1.VolumeProjection{
+							{
+								ServiceAccountToken: &corev1.ServiceAccountTokenProjection{
+									Audience:          jwtToken.Source.KubernetesServiceAccount.Audience,
+									Path:              "token",
+									ExpirationSeconds: &expirationSeconds,
+								},
+							},
+						},
+					},
+				},
+			}
+
+		case jwtToken.Source.SecretRef != nil:
+			// Secret volume
+			key := jwtToken.Source.SecretRef.Key
+			if key == "" {
+				key = "token" // Default key name
+			}
+			volume = corev1.Volume{
+				Name: volumeName,
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName: jwtToken.Source.SecretRef.Name,
+						Items: []corev1.KeyToPath{
+							{
+								Key:  key,
+								Path: "token",
+							},
+						},
+					},
+				},
+			}
+
+		case jwtToken.Source.CSIProvider != nil:
+			// CSI volume
+			volume = corev1.Volume{
+				Name: volumeName,
+				VolumeSource: corev1.VolumeSource{
+					CSI: &corev1.CSIVolumeSource{
+						Driver:           jwtToken.Source.CSIProvider.Driver,
+						VolumeAttributes: jwtToken.Source.CSIProvider.Parameters,
+						ReadOnly:         func() *bool { b := true; return &b }(),
+					},
+				},
+			}
+
+		default:
+			// No valid source specified, skip this token
+			continue
+		}
+
+		volumes = append(volumes, volume)
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name:      volumeName,
+			MountPath: jwtToken.MountPath,
+			ReadOnly:  true,
+		})
+	}
+	return volumes, volumeMounts
+}
+
+func resolveInlineFiles(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, app serverManifest.Application, volumes []corev1.Volume, volumeMounts []corev1.VolumeMount) ([]corev1.Volume, []corev1.VolumeMount, error) {
+	// Collect inline files into a single operator-managed ConfigMap
+	inlineData := map[string]string{}
+	inlineCMName := fmt.Sprintf("%s-%s-files", wandb.Name, app.Name)
+	// Track external ConfigMap refs and create one Volume per unique ref
+	cmRefVolumeNames := map[string]string{}
+
+	for _, f := range app.Files {
+		key := f.Name
+		fileName := f.FileName
+		if fileName == "" {
+			fileName = key
+		}
+
+		var volName string
+		if f.Inline != "" {
+			// Accumulate into inline CM data
+			inlineData[key] = f.Inline
+			volName = "files-inline"
+		} else if f.ConfigMapRef != "" {
+			// external ConfigMap reference
+			if existing, ok := cmRefVolumeNames[f.ConfigMapRef]; ok {
+				volName = existing
+			} else {
+				volName = fmt.Sprintf("cm-%s", f.ConfigMapRef)
+				cmRefVolumeNames[f.ConfigMapRef] = volName
+			}
+		} else {
+			// neither inline nor ref provided; skip
+			continue
+		}
+
+		// Mount each file as a single file using subPath into the specified directory
+		mountPath := f.MountPath
+		if mountPath == "" {
+			// require a mountPath; skip if not provided
+			continue
+		}
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name:      volName,
+			MountPath: fmt.Sprintf("%s/%s", mountPath, fileName),
+			SubPath:   key,
+			ReadOnly:  true,
+		})
+	}
+
+	// Create/update inline ConfigMap if we have any inline data
+	if len(inlineData) > 0 {
+		cm := &corev1.ConfigMap{}
+		cm.Namespace = wandb.Namespace
+		cm.Name = inlineCMName
+		// Try to get existing
+		err := client.Get(ctx, types.NamespacedName{Name: cm.Name, Namespace: cm.Namespace}, cm)
+		if err != nil {
+			if apiErrors.IsNotFound(err) {
+				cm.Data = inlineData
+				if err := controllerutil.SetOwnerReference(wandb, cm, client.Scheme()); err != nil {
+					return volumes, volumeMounts, err
+				}
+				if err := client.Create(ctx, cm); err != nil {
+					return volumes, volumeMounts, err
+				}
+			} else {
+				return volumes, volumeMounts, err
+			}
+		} else {
+			// Update data if changed
+			if cm.Data == nil {
+				cm.Data = map[string]string{}
+			}
+			cm.Data = inlineData
+			if err := client.Update(ctx, cm); err != nil {
+				return volumes, volumeMounts, err
+			}
+		}
+
+		// Add a volume for the inline CM
+		volumes = append(volumes, corev1.Volume{
+			Name: "files-inline",
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{LocalObjectReference: corev1.LocalObjectReference{Name: inlineCMName}},
+			},
+		})
+	}
+
+	// Add volumes for each external ConfigMap ref
+	for ref, volName := range cmRefVolumeNames {
+		volumes = append(volumes, corev1.Volume{
+			Name: volName,
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{LocalObjectReference: corev1.LocalObjectReference{Name: ref}},
+			},
+		})
+	}
+
+	return volumes, volumeMounts, nil
 }
 
 func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest, commonEnvs []string, envs []serverManifest.EnvVar) ([]corev1.EnvVar, error) {
@@ -905,7 +1008,7 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *apiv2.
 	return envVars, nil
 }
 
-func resolveVolumeMounts(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest, commonvms []string, vms []serverManifest.VolumeMount) ([]corev1.Volume, []corev1.VolumeMount, error) {
+func resolveVolumeMounts(ctx context.Context, manifest serverManifest.Manifest, commonvms []string, vms []serverManifest.VolumeMount) ([]corev1.Volume, []corev1.VolumeMount, error) {
 	log := logx.GetSlog(ctx)
 
 	var combinedVolumeMounts []serverManifest.VolumeMount
@@ -938,6 +1041,8 @@ func resolveVolumeMounts(ctx context.Context, client ctrlClient.Client, wandb *a
 					Name: manifestVM.Source.Name,
 				},
 			}
+		case "emptyDir":
+			volume.EmptyDir = &corev1.EmptyDirVolumeSource{}
 		default:
 			log.Error("unsupported volume source type", "type", manifestVM.Source.Type)
 			return nil, nil, fmt.Errorf("unsupported volume source type: %s", manifestVM.Source.Type)
@@ -982,12 +1087,6 @@ func runMysqlInitJob(ctx context.Context, client ctrlClient.Client, wandb *apiv2
 		})
 		secretName := fmt.Sprintf("%s-db-password", specNamespacedName.Name)
 
-		// The job will:
-		// 1. Wait for MySQL to be reachable (optional, but we assume mysqlReady is true here)
-		// 2. Create the database wandb_local
-		// 3. Create the user wandb_local with the provided password
-		// 4. Grant privileges
-		// We use the root user and rootPassword from the secret.
 		mysqlCmd := "mysql -h $MYSQL_HOST -u root -p\"${MYSQL_ROOT_PASSWORD}\" -e " +
 			"\"CREATE DATABASE IF NOT EXISTS wandb_local; " +
 			"CREATE USER IF NOT EXISTS 'wandb_local'@'%%' IDENTIFIED BY '${MYSQL_PASSWORD}'; " +
@@ -1141,7 +1240,7 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 				return ctrl.Result{}, err
 			}
 
-			volumes, volumeMounts, err := resolveVolumeMounts(ctx, client, wandb, manifest, migrationTask.CommonVolumeMounts, migrationTask.VolumeMounts)
+			volumes, volumeMounts, err := resolveVolumeMounts(ctx, manifest, migrationTask.CommonVolumeMounts, migrationTask.VolumeMounts)
 			if err != nil {
 				return ctrl.Result{}, err
 			}

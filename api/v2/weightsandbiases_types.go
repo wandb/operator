@@ -83,6 +83,8 @@ type WeightsAndBiasesSpec struct {
 	// Size is akin to high-level environment info
 	// +kubebuilder:validation:Enum=dev;small
 	Size WBSize `json:"size,omitempty"`
+	// RequireLimits By default, only resource requests are set for deployments, set to true to also set resource limits
+	RequireLimits bool `json:"requireLimits,omitempty"`
 
 	RetentionPolicy WBRetentionPolicy `json:"retentionPolicy"`
 

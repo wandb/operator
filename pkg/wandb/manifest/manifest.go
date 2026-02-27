@@ -17,7 +17,9 @@ import (
 	"log/slog"
 
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	v2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/logx"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 
 	"oras.land/oras-go/v2"
 	"oras.land/oras-go/v2/content"
@@ -130,38 +132,50 @@ type Application struct {
 	CommonEnvs         []string `yaml:"commonEnvs,omitempty"`
 	CommonVolumeMounts []string `yaml:"commonVolumeMounts,omitempty"`
 	// InitContainers allows specifying per-application init containers
-	// (e.g., the api app defines a "migrate" init container in 0.76.1.yaml).
 	InitContainers []ContainerSpec `yaml:"initContainers,omitempty"`
+	// Containers allows specifying per-application containers for multi-container apps
+	Containers []ContainerSpec `yaml:"containers,omitempty"`
 	// Features enables this application only when specific feature flags are set in the
 	// top-level manifest features. In the YAML this appears as a list of strings.
-	Features       []string         `yaml:"features,omitempty"`
-	Env            []EnvVar         `yaml:"env,omitempty"`
-	Mysql          *SectionRef      `yaml:"mysql,omitempty"`
-	Redis          *SectionRef      `yaml:"redis,omitempty"`
-	Bucket         *SectionRef      `yaml:"bucket,omitempty"`
-	Clickhouse     *SectionRef      `yaml:"clickhouse,omitempty"`
-	Kafka          *AppKafkaSection `yaml:"kafka,omitempty"`
-	Service        *ServiceSpec     `yaml:"service,omitempty"`
-	Ports          []ContainerPort  `yaml:"ports,omitempty"`
-	LivenessProbe  *corev1.Probe    `yaml:"livenessProbe,omitempty"`
-	ReadinessProbe *corev1.Probe    `yaml:"readinessProbe,omitempty"`
-	StartupProbe   *corev1.Probe    `yaml:"startupProbe,omitempty"`
+	Features   []string         `yaml:"features,omitempty"`
+	Env        []EnvVar         `yaml:"env,omitempty"`
+	Mysql      *SectionRef      `yaml:"mysql,omitempty"`
+	Redis      *SectionRef      `yaml:"redis,omitempty"`
+	Bucket     *SectionRef      `yaml:"bucket,omitempty"`
+	Clickhouse *SectionRef      `yaml:"clickhouse,omitempty"`
+	Kafka      *AppKafkaSection `yaml:"kafka,omitempty"`
+	Service    *ServiceSpec     `yaml:"service,omitempty"`
 	// Files allows injecting files into the application's container by mounting
 	// data from ConfigMaps. Each entry may either inline file contents (stored
 	// into an operator-managed ConfigMap) or reference an existing ConfigMap.
 	// The file will be mounted at the provided mountPath/FileName using subPath.
-	Files        []FileSpec    `yaml:"files,omitempty"`
-	JWTTokens    []JWTToken    `yaml:"jwtTokens,omitempty"`
-	VolumeMounts []VolumeMount `yaml:"volumeMounts,omitempty"`
+	Files        []FileSpec                 `yaml:"files,omitempty"`
+	JWTTokens    []JWTToken                 `yaml:"jwtTokens,omitempty"`
+	VolumeMounts []VolumeMount              `yaml:"volumeMounts,omitempty"`
+	Sizing       map[v2.WBSize]SizingConfig `yaml:"sizing,omitempty"`
+}
+
+type SizingConfig struct {
+	Resources   *corev1.ResourceRequirements `yaml:"resources,omitempty"`
+	Autoscaling *AutoscalingConfig           `yaml:"autoscaling,omitempty"`
+}
+
+type AutoscalingConfig struct {
+	Horizontal autoscalingv2.HorizontalPodAutoscalerSpec
 }
 
 // ContainerSpec represents a minimal container definition used by
 // application-level initContainers entries in the manifest.
 type ContainerSpec struct {
-	Name    string   `yaml:"name"`
-	Image   ImageRef `yaml:"image"`
-	Args    []string `yaml:"args,omitempty"`
-	Command []string `yaml:"command,omitempty"`
+	Name           string          `yaml:"name"`
+	Image          ImageRef        `yaml:"image"`
+	Args           []string        `yaml:"args,omitempty"`
+	Command        []string        `yaml:"command,omitempty"`
+	Ports          []ContainerPort `yaml:"ports,omitempty"`
+	LivenessProbe  *corev1.Probe   `yaml:"livenessProbe,omitempty"`
+	ReadinessProbe *corev1.Probe   `yaml:"readinessProbe,omitempty"`
+	StartupProbe   *corev1.Probe   `yaml:"startupProbe,omitempty"`
+	Resources      *corev1.ResourceRequirements
 }
 
 // EnvVar models an application environment variable sourced from manifest-defined services.

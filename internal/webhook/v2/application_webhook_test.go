@@ -23,7 +23,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	appsv2 "github.com/wandb/operator/api/v2"
-	autoscalingv1 "k8s.io/api/autoscaling/v1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 )
 
 var _ = Describe("Application Webhook", func() {
@@ -69,7 +69,7 @@ var _ = Describe("Application Webhook", func() {
 		It("Should deny if both replicas and hpaTemplate are provided", func() {
 			var replicas int32 = 3
 			obj.Spec.Replicas = &replicas
-			obj.Spec.HpaTemplate = &autoscalingv1.HorizontalPodAutoscalerSpec{
+			obj.Spec.HpaTemplate = &autoscalingv2.HorizontalPodAutoscalerSpec{
 				MaxReplicas: 10,
 			}
 
@@ -96,7 +96,7 @@ var _ = Describe("Application Webhook", func() {
 
 		It("Should admit if only hpaTemplate is provided", func() {
 			obj.Spec.Replicas = nil
-			obj.Spec.HpaTemplate = &autoscalingv1.HorizontalPodAutoscalerSpec{
+			obj.Spec.HpaTemplate = &autoscalingv2.HorizontalPodAutoscalerSpec{
 				MaxReplicas: 10,
 			}
 
