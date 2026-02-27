@@ -7,10 +7,13 @@ active when `installTelemetry: true` and Wandb is only active when
 ```mermaid
 graph TD
     %% ── Bootstrapping ──────────────────────────────────────────────
-    manifests["manifests\n(Operator-Resources)"]
-    generate["generate\n(Operator-Resources)"]
     cert_manager["cert-manager\n(ext)"]
     helm_dep_update["helm-dep-update\n(Helm-Repos)"]
+
+    subgraph codegen["Code Generation"]
+        manifests["manifests"]
+        generate["generate"]
+    end
 
     %% ── Third-Party Operators ──────────────────────────────────────
     third_party["third-party-operators\n(Third-Party-Operators)"]
@@ -21,25 +24,21 @@ graph TD
     wandb_crd["Wandb CRD\n(Operator-Resources)"]
     rbac["RBAC\n(Operator-Resources)"]
     operator_certs["Operator-Certs\n(Operator-Resources)"]
-    manifests --> app_crd
-    generate  --> app_crd
-    manifests --> wandb_crd
-    generate  --> wandb_crd
+    codegen --> app_crd
+    codegen --> wandb_crd
 
     %% ── CRD Readiness Gate ─────────────────────────────────────────
     crds_ready["operator-crds-ready\n(Operator-Resources)"]
-    app_crd  --> crds_ready
+    app_crd   --> crds_ready
     wandb_crd --> crds_ready
 
     %% ── Operator Controller ────────────────────────────────────────
     watch_compile["Watch&Compile\n(Operator-Resources)"]
     controller["operator-controller-manager\n(Operator-Resources)"]
-    manifests       --> watch_compile
-    generate        --> watch_compile
-    manifests       --> controller
-    generate        --> controller
-    crds_ready      --> controller
-    third_party     --> controller
+    codegen     --> watch_compile
+    codegen     --> controller
+    crds_ready  --> controller
+    third_party --> controller
 
     %% ── Webhook Readiness ──────────────────────────────────────────
     webhook_ready["webhook-ready\n(Operator-Resources)"]
