@@ -57,21 +57,19 @@ graph TD
     vm_crds     --> vm_operator
 
     %% ── Victoria Metrics Stack ─────────────────────────────────────
-    victoria_metrics["Victoria-Metrics\n(Telemetry)"]
-    victoria_logs["Victoria-Logs\n(Telemetry)"]
-    victoria_traces["Victoria-Traces\n(Telemetry)"]
-    vm_operator --> victoria_metrics
-    vm_operator --> victoria_logs
-    vm_operator --> victoria_traces
+    subgraph victoria_stack["Victoria-* Stack"]
+        victoria_metrics["Victoria-Metrics\n(Telemetry)"]
+        victoria_logs["Victoria-Logs\n(Telemetry)"]
+        victoria_traces["Victoria-Traces\n(Telemetry)"]
+    end
+    vm_operator --> victoria_stack
 
     %% ── Telemetry Dependents ───────────────────────────────────────
     otel["OTEL-Connection-Secret\n(Telemetry)"]
     kube_metrics["Kubernetes-Metrics\n(Telemetry)"]
     op_metrics["Operator-Metrics\n(Telemetry)"]
     infra_metrics["Infrastructure-Metrics\n(Telemetry)"]
-    victoria_metrics --> otel
-    victoria_logs    --> otel
-    victoria_traces  --> otel
+    victoria_stack   --> otel
     vm_crds          --> kube_metrics
     victoria_metrics --> kube_metrics
     vm_crds          --> op_metrics
@@ -82,12 +80,10 @@ graph TD
     %% ── Grafana Stack ──────────────────────────────────────────────
     grafana["Grafana\n(Telemetry)"]
     grafana_ds["Grafana-Datasources\n(Telemetry)"]
-    grafana_crds     --> grafana
-    grafana_crds     --> grafana_ds
-    grafana          --> grafana_ds
-    victoria_metrics --> grafana_ds
-    victoria_logs    --> grafana_ds
-    victoria_traces  --> grafana_ds
+    grafana_crds   --> grafana
+    grafana_crds   --> grafana_ds
+    grafana        --> grafana_ds
+    victoria_stack --> grafana_ds
 
     %% ── Styles ─────────────────────────────────────────────────────
     classDef bootstrap  fill:#f5f5f5,stroke:#999
