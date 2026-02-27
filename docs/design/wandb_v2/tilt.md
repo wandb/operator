@@ -86,6 +86,7 @@ graph TD
     operator_certs["Operator-Certs\n(Operator-Resources)"]
     codegen ==> app_crd
     codegen ==> wandb_crd
+    codegen ==> rbac
 
     %% ── CRD Readiness Gate ─────────────────────────────────────────
     crds_ready["operator-crds-ready\n(Operator-Resources)"]
@@ -96,7 +97,6 @@ graph TD
     watch_compile["Watch&Compile\n(Operator-Resources)"]
     controller["operator-controller-manager\n(Operator-Resources)"]
     codegen     ==> watch_compile
-    codegen     ==> controller
     crds_ready  --> controller
     third_party --> controller
 
@@ -116,7 +116,7 @@ graph TD
     third_party --> grafana_crds
     vm_crds     --> vm_operator
 
-    %% ── Victoria Metrics Stack ─────────────────────────────────────
+    %% ── Victoria Stack ─────────────────────────────────────────────
     subgraph victoria_stack["Victoria Stack"]
         victoria_metrics["Victoria-Metrics\n(Telemetry)"]
         victoria_logs["Victoria-Logs\n(Telemetry)"]
@@ -130,11 +130,8 @@ graph TD
     op_metrics["Operator-Metrics\n(Telemetry)"]
     infra_metrics["Infrastructure-Metrics\n(Telemetry)"]
     victoria_stack   ==> otel
-    vm_crds          --> kube_metrics
     victoria_metrics --> kube_metrics
-    vm_crds          --> op_metrics
     victoria_metrics --> op_metrics
-    vm_crds          --> infra_metrics
     victoria_metrics --> infra_metrics
 
     %% ── Grafana Stack ──────────────────────────────────────────────
