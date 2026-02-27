@@ -114,7 +114,8 @@ k8s_resource(
         'operator-serving-cert:certificate',
         'operator-selfsigned-issuer:issuer',
     ],
-    resource_deps=["cert-manager"],
+    # deploy_cert_manager() runs local() commands and registers no Tilt resource,
+    # so a resource_dep cannot be declared here. Tilt retries on failure.
     labels=["Operator-Resources"],
 )
 
