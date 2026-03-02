@@ -30,6 +30,8 @@ junit.xml
 *.swo
 *~
 
+*.tgz
+
 /charts
 /cdk8s
 /git
@@ -42,3 +44,6 @@ tilt-settings.json
 
 # Local webhook development certificates
 .local-webhook-certs/
+
+# various util artifacts
+.k8s-images

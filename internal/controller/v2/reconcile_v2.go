@@ -248,6 +248,25 @@ func ReconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
+	serviceAccountName := wandb.Spec.Wandb.ServiceAccount.ServiceAccountName
+
+	if *wandb.Spec.Wandb.ServiceAccount.Create {
+		if err := createOrUpdateServiceAccount(ctx, client, wandb, serviceAccountName); err != nil {
+			logger.Error(err, "Failed to create/update ServiceAccount")
+			return ctrl.Result{}, err
+		}
+	}
+
+	if err := createOrUpdateRole(ctx, client, wandb, serviceAccountName); err != nil {
+		logger.Error(err, "Failed to create/update Role for service account")
+		return ctrl.Result{}, err
+	}
+
+	if err := createOrUpdateRoleBinding(ctx, client, wandb, serviceAccountName); err != nil {
+		logger.Error(err, "Failed to create/update RoleBinding for service account")
+		return ctrl.Result{}, err
+	}
+
 	result, err = runMigrations(ctx, client, wandb, manifest)
 	if err != nil {
 		return result, err
@@ -267,23 +286,6 @@ func ReconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 
 func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest, logger logr.Logger) (ctrl.Result, error) {
 	serviceAccountName := wandb.Spec.Wandb.ServiceAccount.ServiceAccountName
-
-	if *wandb.Spec.Wandb.ServiceAccount.Create {
-		if err := createOrUpdateServiceAccount(ctx, client, wandb, serviceAccountName); err != nil {
-			logger.Error(err, "Failed to create/update ServiceAccount")
-			return ctrl.Result{}, err
-		}
-	}
-
-	if err := createOrUpdateRole(ctx, client, wandb, serviceAccountName); err != nil {
-		logger.Error(err, "Failed to create/update Role for service account")
-		return ctrl.Result{}, err
-	}
-
-	if err := createOrUpdateRoleBinding(ctx, client, wandb, serviceAccountName); err != nil {
-		logger.Error(err, "Failed to create/update RoleBinding for service account")
-		return ctrl.Result{}, err
-	}
 
 	if wandb.Spec.Wandb.InternalServiceAuth.Enabled != nil && *wandb.Spec.Wandb.InternalServiceAuth.Enabled {
 		if err := createOrUpdateOIDCDiscoveryClusterRoleBinding(ctx, client, wandb); err != nil {
@@ -313,20 +315,16 @@ func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb 
 			}
 		}
 
-		var combinedEnvs []serverManifest.EnvVar
-		for _, commonVars := range app.CommonEnvs {
-			if envvars, ok := manifest.CommonEnvvars[commonVars]; ok {
-				for _, env := range envvars {
-					combinedEnvs = append(combinedEnvs, env)
-				}
-			}
+		envVars, err := resolveEnvvars(ctx, client, wandb, manifest, app.CommonEnvs, app.Env)
+		if err != nil {
+			return ctrl.Result{}, err
 		}
 
-		for _, env := range app.Env {
-			combinedEnvs = append(combinedEnvs, env)
-		}
-
-		envVars, err := resolveEnvvars(ctx, client, wandb, combinedEnvs)
+		logger.Info("", "app", app.Name, "volumes", app.CommonVolumeMounts)
+		logger.Info("", "app", app.Name, "volumeMounts", app.VolumeMounts)
+		volumes, volumeMounts, err := resolveVolumeMounts(ctx, client, wandb, manifest, app.CommonVolumeMounts, app.VolumeMounts)
+		logger.Info("", "app", app.Name, "volumes", volumes)
+		logger.Info("", "app", app.Name, "volumeMounts", volumeMounts)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
@@ -342,12 +340,13 @@ func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb 
 		}
 
 		container := corev1.Container{
-			Name:    app.Name,
-			Image:   app.Image.GetImage(),
-			Env:     envVars,
-			Args:    app.Args,
-			Command: app.Command,
-			Ports:   Ports,
+			Name:         app.Name,
+			Image:        app.Image.GetImage(),
+			Env:          envVars,
+			Args:         app.Args,
+			Command:      app.Command,
+			Ports:        Ports,
+			VolumeMounts: volumeMounts,
 		}
 
 		if app.StartupProbe != nil && app.StartupProbe.HTTPGet != nil {
@@ -393,8 +392,6 @@ func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb 
 		}
 
 		// Handle file injection via ConfigMaps according to manifest Application.Files
-		volumes := []corev1.Volume{}
-		volumeMounts := []corev1.VolumeMount{}
 		if len(app.Files) > 0 {
 			// Collect inline files into a single operator-managed ConfigMap
 			inlineData := map[string]string{}
@@ -583,11 +580,12 @@ func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb 
 					continue
 				}
 				initContainer := corev1.Container{
-					Name:    initContainerSpec.Name,
-					Image:   initContainerSpec.Image.GetImage(),
-					Env:     envVars,
-					Args:    initContainerSpec.Args,
-					Command: initContainerSpec.Command,
+					Name:         initContainerSpec.Name,
+					Image:        initContainerSpec.Image.GetImage(),
+					Env:          envVars,
+					Args:         initContainerSpec.Args,
+					Command:      initContainerSpec.Command,
+					VolumeMounts: volumeMounts,
 				}
 				initContainers = append(initContainers, initContainer)
 			}
@@ -667,7 +665,20 @@ func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb 
 	return ctrl.Result{}, nil
 }
 
-func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, combinedEnvs []serverManifest.EnvVar) ([]corev1.EnvVar, error) {
+func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest, commonEnvs []string, envs []serverManifest.EnvVar) ([]corev1.EnvVar, error) {
+	var combinedEnvs []serverManifest.EnvVar
+	for _, commonVars := range commonEnvs {
+		if envvars, ok := manifest.CommonEnvvars[commonVars]; ok {
+			for _, env := range envvars {
+				combinedEnvs = append(combinedEnvs, env)
+			}
+		}
+	}
+
+	for _, env := range envs {
+		combinedEnvs = append(combinedEnvs, env)
+	}
+
 	var envVars []corev1.EnvVar
 	for _, env := range combinedEnvs {
 		// If a literal value is provided, it's a simple case.
@@ -885,6 +896,53 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *apiv2.
 	return envVars, nil
 }
 
+func resolveVolumeMounts(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest, commonvms []string, vms []serverManifest.VolumeMount) ([]corev1.Volume, []corev1.VolumeMount, error) {
+	log := logx.GetSlog(ctx)
+
+	var combinedVolumeMounts []serverManifest.VolumeMount
+	for _, commonVolumeMounts := range commonvms {
+		if volumeMounts, ok := manifest.CommonVolumeMounts[commonVolumeMounts]; ok {
+			for _, volumeMount := range volumeMounts {
+				combinedVolumeMounts = append(combinedVolumeMounts, volumeMount)
+			}
+		}
+	}
+
+	for _, volumeMount := range vms {
+		combinedVolumeMounts = append(combinedVolumeMounts, volumeMount)
+	}
+
+	var volumes []corev1.Volume
+	var volumeMounts []corev1.VolumeMount
+	for _, manifestVM := range combinedVolumeMounts {
+		volume := corev1.Volume{
+			Name: manifestVM.Name,
+		}
+		switch manifestVM.Source.Type {
+		case "secret":
+			volume.Secret = &corev1.SecretVolumeSource{
+				SecretName: manifestVM.Source.Name,
+			}
+		case "configMap":
+			volume.ConfigMap = &corev1.ConfigMapVolumeSource{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: manifestVM.Source.Name,
+				},
+			}
+		default:
+			log.Error("unsupported volume source type", "type", manifestVM.Source.Type)
+			return nil, nil, fmt.Errorf("unsupported volume source type: %s", manifestVM.Source.Type)
+		}
+		volumeMount := corev1.VolumeMount{
+			MountPath: manifestVM.MountPath,
+			Name:      manifestVM.Name,
+		}
+		volumes = append(volumes, volume)
+		volumeMounts = append(volumeMounts, volumeMount)
+	}
+	return volumes, volumeMounts, nil
+}
+
 func runMysqlInitJob(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest) (ctrl.Result, error) {
 	if wandb.Spec.MySQL.DeploymentType != apiv2.MySQLTypeMysql {
 		return ctrl.Result{}, nil
@@ -1069,19 +1127,12 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 
 		if apiErrors.IsNotFound(err) {
 
-			var combinedEnvs []serverManifest.EnvVar
-			for _, commonVars := range migrationTask.CommonEnvs {
-				if envvars, ok := manifest.CommonEnvvars[commonVars]; ok {
-					for _, env := range envvars {
-						combinedEnvs = append(combinedEnvs, env)
-					}
-				}
+			envVars, err := resolveEnvvars(ctx, client, wandb, manifest, migrationTask.CommonEnvs, migrationTask.Env)
+			if err != nil {
+				return ctrl.Result{}, err
 			}
 
-			for _, env := range migrationTask.Env {
-				combinedEnvs = append(combinedEnvs, env)
-			}
-			envVars, err := resolveEnvvars(ctx, client, wandb, combinedEnvs)
+			volumes, volumeMounts, err := resolveVolumeMounts(ctx, client, wandb, manifest, migrationTask.CommonVolumeMounts, migrationTask.VolumeMounts)
 			if err != nil {
 				return ctrl.Result{}, err
 			}
@@ -1102,13 +1153,16 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 							RestartPolicy: corev1.RestartPolicyOnFailure,
 							Containers: []corev1.Container{
 								{
-									Name:    "migrate",
-									Image:   migrationTask.Image.GetImage(),
-									Args:    migrationTask.Args,
-									Command: migrationTask.Command,
-									Env:     envVars,
+									Name:         "migrate",
+									Image:        migrationTask.Image.GetImage(),
+									Args:         migrationTask.Args,
+									Command:      migrationTask.Command,
+									Env:          envVars,
+									VolumeMounts: volumeMounts,
 								},
 							},
+							Volumes:            volumes,
+							ServiceAccountName: wandb.Spec.Wandb.ServiceAccount.ServiceAccountName,
 						},
 					},
 				},

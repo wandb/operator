@@ -121,11 +121,11 @@ run: manifests generate fmt vet ## Run a controller from your host.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 .PHONY: docker-build
 docker-build: ## Build controller docker image.
-	$(CONTAINER_TOOL) build -t ${IMG} -f Dockerfile.controller .
+	$(CONTAINER_TOOL) build --platform linux/amd64 -t ${IMG} -f Dockerfile .
 
 .PHONY: docker-push
 docker-push:
-	$(CONTAINER_TOOL) push ${IMG}
+	$(CONTAINER_TOOL) push --platform linux/amd64 ${IMG}
 
 # PLATFORMS defines the target platforms for the manager image be built to provide support to multiple
 # architectures. (i.e. make docker-buildx IMG=myregistry/mypoperator:0.0.1). To use this option you need to:
