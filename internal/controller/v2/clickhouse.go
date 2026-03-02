@@ -78,6 +78,16 @@ func clickHouseInferStatus(
 	return ctrlResult, err
 }
 
+func clickHousePurgeFinalizer(
+	ctx context.Context,
+	client client.Client,
+	wandb *apiv2.WeightsAndBiases,
+) error {
+	specNamespacedName := clickHouseSpecNamespacedName(wandb.Spec.ClickHouse)
+	onDeleteRule := translatorv2.ToClickHouseOnDeleteRule(wandb, wandb.GetRetentionPolicy(wandb.Spec.ClickHouse.WBInfraSpec))
+	return altinity.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule)
+}
+
 func clickHouseSpecNamespacedName(clickHouse apiv2.WBClickHouseSpec) types.NamespacedName {
 	return types.NamespacedName{
 		Namespace: clickHouse.Namespace,

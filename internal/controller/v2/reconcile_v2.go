@@ -84,13 +84,22 @@ func Reconcile(
 	if isFlaggedForDeletion && !wandb.ObjectMeta.DeletionTimestamp.IsZero() {
 		if ctrlqueue.ContainsString(wandb.GetFinalizers(), CleanupFinalizer) {
 
-			switch wandb.GetRetentionPolicy(wandb.Spec.Kafka.WBInfraSpec).OnDelete {
-			case apiv2.WBPurgeOnDelete:
-				if err = minioPurgeFinalizer(ctx, client, wandb); err != nil {
-
-				}
-				break
-			case apiv2.WBPreserveOnDelete:
+			if err = minioPurgeFinalizer(ctx, client, wandb); err != nil {
+				return ctrl.Result{}, err
+			}
+			if err = mysqlPurgeFinalizer(ctx, client, wandb); err != nil {
+				return ctrl.Result{}, err
+			}
+			if err = redisPurgeFinalizer(ctx, client, wandb); err != nil {
+				return ctrl.Result{}, err
+			}
+			if err = kafkaPurgeFinalizer(ctx, client, wandb); err != nil {
+				return ctrl.Result{}, err
+			}
+			if err = clickHousePurgeFinalizer(ctx, client, wandb); err != nil {
+				return ctrl.Result{}, err
+			}
+			if wandb.GetRetentionPolicy(wandb.Spec.Kafka.WBInfraSpec).OnDelete == apiv2.WBPreserveOnDelete {
 				if err = kafkaPreserveFinalizer(ctx, client, wandb); err != nil {
 					return ctrl.Result{}, err
 				}

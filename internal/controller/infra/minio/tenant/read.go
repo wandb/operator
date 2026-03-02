@@ -22,7 +22,7 @@ func ReadState(
 	log := logx.GetSlog(ctx)
 
 	var actualResource = &miniov2.Tenant{}
-
+	conditions := make([]metav1.Condition, 0)
 	nsnBuilder := createNsNameBuilder(specNamespacedName)
 
 	found, err := ctrlcommon.GetResource(
@@ -39,39 +39,36 @@ func ReadState(
 	}
 	if !found {
 		actualResource = nil
+		if onDeleteRule.Policy == translator.Purge {
+			log.Debug(
+				"Attempting to purge associated minio resources after deletion",
+				"tenantName", TenantName(specNamespacedName.Name),
+			)
+			err = purgeAssociatedResources(ctx, client, specNamespacedName.Namespace, onDeleteRule.Selector)
+			if err != nil {
+				conditions = append(
+					conditions,
+					metav1.Condition{
+						Type:   MinioCustomResourceType,
+						Status: metav1.ConditionUnknown,
+						Reason: ctrlcommon.ApiErrorReason,
+					},
+				)
+			} else {
+				conditions = append(conditions, metav1.Condition{
+					Type:   MinioReportedReadyType,
+					Status: metav1.ConditionFalse,
+					Reason: ctrlcommon.PendingDeleteReason,
+				},
+				)
+			}
+		}
 	}
-
-	conditions := make([]metav1.Condition, 0)
 
 	if actualResource != nil {
 		conditions = append(conditions, computeMinioReportedReadyCondition(ctx, actualResource)...)
 	}
-
-	if actualResource == nil && onDeleteRule.Policy == translator.Purge {
-		log.Debug(
-			"Attempting to purge associated minio resources after deletion",
-			"tenantName", TenantName(specNamespacedName.Name),
-		)
-		err = purgeAssociatedResources(ctx, client, onDeleteRule.Selector)
-		if err != nil {
-			conditions = append(
-				conditions,
-				metav1.Condition{
-					Type:   MinioCustomResourceType,
-					Status: metav1.ConditionUnknown,
-					Reason: ctrlcommon.ApiErrorReason,
-				},
-			)
-		} else {
-			conditions = append(conditions, metav1.Condition{
-				Type:   MinioReportedReadyType,
-				Status: metav1.ConditionFalse,
-				Reason: ctrlcommon.PendingDeleteReason,
-			},
-			)
-		}
-	}
-
+	log.Debug("read", "actualResource", actualResource, "rule", onDeleteRule.Policy)
 	return conditions
 }
 

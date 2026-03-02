@@ -5,7 +5,6 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
-	"github.com/wandb/operator/internal/controller/infra/kafka/strimzi"
 	"github.com/wandb/operator/internal/controller/infra/minio/tenant"
 	"github.com/wandb/operator/internal/controller/translator"
 	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
@@ -62,7 +61,7 @@ func minioReadState(
 		ctx,
 		client,
 		specNamespacedName,
-		translatorv2.ToOnDeleteRule(wandb, retentionPolicy),
+		translatorv2.ToMinioOnDeleteRule(wandb, retentionPolicy),
 	)
 	newConditions = append(newConditions, readConditions...)
 	return newConditions
@@ -101,10 +100,10 @@ func minioPurgeFinalizer(
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
 ) error {
-	var specNamespacedName = kafkaSpecNamespacedName(wandb.Spec.Kafka)
+	var specNamespacedName = minioSpecNamespacedName(wandb.Spec.Minio)
 
-	onDeletePolicy := translatorv2.ToOnDeleteRule(wandb, wandb.GetRetentionPolicy(wandb.Spec.Minio.WBInfraSpec))
-	if err := tenant.PurgeFinalizer(ctx, client, specNamespacedName, onDeletePolicy); err != nil {
+	onDeleteRule := translatorv2.ToMinioOnDeleteRule(wandb, wandb.GetRetentionPolicy(wandb.Spec.Minio.WBInfraSpec))
+	if err := tenant.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule); err != nil {
 		return err
 	}
 	return nil

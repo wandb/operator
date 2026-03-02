@@ -14,6 +14,7 @@ const (
 const (
 	WandbNameLabel      = "apps.wandb.com/name"
 	WandbNamespaceLabel = "apps.wandb.com/namespace"
+	WandbModuleLabel    = "apps.wandb.com/module"
 )
 
 type OnDeleteRule struct {

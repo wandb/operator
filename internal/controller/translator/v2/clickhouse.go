@@ -7,6 +7,7 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/infra/clickhouse/altinity"
+	"github.com/wandb/operator/internal/controller/translator"
 	"github.com/wandb/operator/internal/logx"
 	"github.com/wandb/operator/pkg/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -114,7 +115,7 @@ func ToClickHouseVendorSpec(
 					{
 						Name: nsnBuilder.VolumeTemplateName(),
 						ObjectMeta: metav1.ObjectMeta{
-							Labels: wandbLabels(wandb),
+							Labels: BuildWandbClickhouseLabels(wandb),
 						},
 						StorageManagement: v1.StorageManagement{
 							PVCReclaimPolicy: reclaimPolicy,
@@ -163,4 +164,12 @@ func ToClickHouseVendorSpec(
 	}
 
 	return chi, nil
+}
+
+func BuildWandbClickhouseLabels(wandb *apiv2.WeightsAndBiases) map[string]string {
+	return BuildWandbLabels(wandb, translator.ClickhouseModuleName)
+}
+
+func ToClickHouseOnDeleteRule(wandb *apiv2.WeightsAndBiases, retentionPolicy apiv2.WBRetentionPolicy) translator.OnDeleteRule {
+	return ToOnDeleteRule(wandb, retentionPolicy, translator.ClickhouseModuleName)
 }

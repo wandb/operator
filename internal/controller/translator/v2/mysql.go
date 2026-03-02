@@ -6,6 +6,7 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/infra/mysql/mysql"
+	"github.com/wandb/operator/internal/controller/translator"
 	"github.com/wandb/operator/internal/logx"
 	v2 "github.com/wandb/operator/pkg/vendored/mysql-operator/v2"
 	corev1 "k8s.io/api/core/v1"
@@ -19,7 +20,7 @@ import (
 func ToMysqlMySQLVendorSpec(
 	ctx context.Context,
 	spec apiv2.WBMySQLSpec,
-	owner metav1.Object,
+	wandb *apiv2.WeightsAndBiases,
 	scheme *runtime.Scheme,
 ) (*v2.InnoDBCluster, error) {
 	ctx, log := logx.WithSlog(ctx, logx.Mysql)
@@ -82,10 +83,18 @@ func ToMysqlMySQLVendorSpec(
 		}
 	}
 
-	if err := ctrl.SetControllerReference(owner, innodb, scheme); err != nil {
+	if err := ctrl.SetControllerReference(wandb, innodb, scheme); err != nil {
 		log.Error("failed to set owner reference on InnoDBCluster CR", logx.ErrAttr(err))
 		return nil, fmt.Errorf("failed to set owner reference: %w", err)
 	}
 
 	return innodb, nil
+}
+
+func BuildWandbMysqlLabels(wandb *apiv2.WeightsAndBiases) map[string]string {
+	return BuildWandbLabels(wandb, translator.MysqlModuleName)
+}
+
+func ToMysqlOnDeleteRule(wandb *apiv2.WeightsAndBiases, retentionPolicy apiv2.WBRetentionPolicy) translator.OnDeleteRule {
+	return ToOnDeleteRule(wandb, retentionPolicy, translator.MysqlModuleName)
 }

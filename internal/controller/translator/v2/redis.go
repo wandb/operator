@@ -91,6 +91,9 @@ func ToRedisStandaloneVendorSpec(
 			Tolerations: wandb.GetTolerations(spec.WBInfraSpec),
 			Storage: &rediscommon.Storage{
 				VolumeClaimTemplate: corev1.PersistentVolumeClaim{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels: BuildWandbRedisLabels(wandb),
+					},
 					Spec: corev1.PersistentVolumeClaimSpec{
 						AccessModes: []corev1.PersistentVolumeAccessMode{
 							corev1.ReadWriteOnce,
@@ -249,6 +252,9 @@ func ToRedisReplicationVendorSpec(
 			Tolerations: wandb.GetTolerations(spec.WBInfraSpec),
 			Storage: &rediscommon.Storage{
 				VolumeClaimTemplate: corev1.PersistentVolumeClaim{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels: BuildWandbRedisLabels(wandb),
+					},
 					Spec: corev1.PersistentVolumeClaimSpec{
 						AccessModes: []corev1.PersistentVolumeAccessMode{
 							corev1.ReadWriteOnce,
@@ -282,4 +288,12 @@ func ToRedisReplicationVendorSpec(
 	replication.Spec.RedisExporter = createRedisExporterConfig(spec.Telemetry)
 
 	return replication, nil
+}
+
+func BuildWandbRedisLabels(wandb *apiv2.WeightsAndBiases) map[string]string {
+	return BuildWandbLabels(wandb, translator.RedisModuleName)
+}
+
+func ToRedisOnDeleteRule(wandb *apiv2.WeightsAndBiases, retentionPolicy apiv2.WBRetentionPolicy) translator.OnDeleteRule {
+	return ToOnDeleteRule(wandb, retentionPolicy, translator.RedisModuleName)
 }

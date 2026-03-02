@@ -56,7 +56,7 @@ func ToKafkaVendorSpec(
 	nsnBuilder := strimzi.CreateNsNameBuilder(types.NamespacedName{
 		Namespace: infraSpec.Namespace, Name: infraSpec.Name,
 	})
-	kafkaLabels := wandbLabels(wandb)
+	kafkaLabels := BuildWandbKafkaLabels(wandb)
 	kafkaLabels["app"] = nsnBuilder.KafkaName()
 
 	kafka := &v1.Kafka{
@@ -97,7 +97,7 @@ func ToKafkaVendorSpec(
 				Template: &v1.KafkaClusterTemplate{
 					Pod: &v1.PodTemplate{
 						Metadata: &v1.MetadataTemplate{
-							Labels: wandbLabels(wandb),
+							Labels: BuildWandbKafkaLabels(wandb),
 						},
 						Affinity:    wandb.GetAffinity(infraSpec.WBInfraSpec),
 						Tolerations: *wandb.GetTolerations(infraSpec.WBInfraSpec),
@@ -110,7 +110,7 @@ func ToKafkaVendorSpec(
 				Template: &v1.EntityOperatorTemplate{
 					Pod: &v1.PodTemplate{
 						Metadata: &v1.MetadataTemplate{
-							Labels: wandbLabels(wandb),
+							Labels: BuildWandbKafkaLabels(wandb),
 						},
 						Affinity:    wandb.GetAffinity(infraSpec.WBInfraSpec),
 						Tolerations: *wandb.GetTolerations(infraSpec.WBInfraSpec),
@@ -158,7 +158,7 @@ func ToKafkaNodePoolVendorSpec(
 		onDeletePurge = true
 	}
 
-	nodePoolLabels := wandbLabels(wandb)
+	nodePoolLabels := BuildWandbKafkaLabels(wandb)
 	nodePoolLabels["strimzi.io/cluster"] = nsnBuilder.KafkaName()
 	nodePool := &v1.KafkaNodePool{
 		ObjectMeta: metav1.ObjectMeta{
@@ -183,12 +183,12 @@ func ToKafkaNodePoolVendorSpec(
 			Template: &v1.KafkaNodePoolTemplate{
 				Pod: &v1.PodTemplate{
 					Metadata: &v1.MetadataTemplate{
-						Labels: wandbLabels(wandb),
+						Labels: BuildWandbKafkaLabels(wandb),
 					},
 				},
 				PersistentVolumeClaim: &v1.ResourceTemplate{
 					Metadata: &v1.MetadataTemplate{
-						Labels: wandbLabels(wandb),
+						Labels: BuildWandbKafkaLabels(wandb),
 					},
 				},
 			},
@@ -211,4 +211,12 @@ func ToKafkaNodePoolVendorSpec(
 	}
 
 	return nodePool, nil
+}
+
+func BuildWandbKafkaLabels(wandb *apiv2.WeightsAndBiases) map[string]string {
+	return BuildWandbLabels(wandb, translator.KafkaModuleName)
+}
+
+func ToKafkaOnDeleteRule(wandb *apiv2.WeightsAndBiases, retentionPolicy apiv2.WBRetentionPolicy) translator.OnDeleteRule {
+	return ToOnDeleteRule(wandb, retentionPolicy, translator.KafkaModuleName)
 }

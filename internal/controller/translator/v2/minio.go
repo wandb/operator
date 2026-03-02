@@ -84,10 +84,7 @@ func ToMinioVendorSpec(
 					VolumesPerServer: volumesPerServer,
 					VolumeClaimTemplate: &corev1.PersistentVolumeClaim{
 						ObjectMeta: metav1.ObjectMeta{
-							Labels: map[string]string{
-								translator.WandbNameLabel:      wandb.Name,
-								translator.WandbNamespaceLabel: wandb.Namespace,
-							},
+							Labels: BuildWandbMinioLabels(wandb),
 						},
 						Spec: corev1.PersistentVolumeClaimSpec{
 							AccessModes: []corev1.PersistentVolumeAccessMode{
@@ -138,4 +135,12 @@ func ToMinioEnvConfig(
 		RootUser:            spec.Config.RootUser,
 		MinioBrowserSetting: spec.Config.MinioBrowserSetting,
 	}, nil
+}
+
+func BuildWandbMinioLabels(wandb *apiv2.WeightsAndBiases) map[string]string {
+	return BuildWandbLabels(wandb, translator.MinioModuleName)
+}
+
+func ToMinioOnDeleteRule(wandb *apiv2.WeightsAndBiases, retentionPolicy apiv2.WBRetentionPolicy) translator.OnDeleteRule {
+	return ToOnDeleteRule(wandb, retentionPolicy, translator.MinioModuleName)
 }

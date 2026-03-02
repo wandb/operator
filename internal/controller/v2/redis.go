@@ -100,6 +100,16 @@ func redisInferStatus(
 	return ctrlResult, err
 }
 
+func redisPurgeFinalizer(
+	ctx context.Context,
+	client client.Client,
+	wandb *apiv2.WeightsAndBiases,
+) error {
+	specNamespacedName := redisSpecNamespacedName(wandb.Spec.Redis)
+	onDeleteRule := translatorv2.ToRedisOnDeleteRule(wandb, wandb.GetRetentionPolicy(wandb.Spec.Redis.WBInfraSpec))
+	return opstree.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule)
+}
+
 func redisSpecNamespacedName(redis apiv2.WBRedisSpec) types.NamespacedName {
 	return types.NamespacedName{
 		Namespace: redis.Namespace,

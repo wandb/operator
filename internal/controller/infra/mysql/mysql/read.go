@@ -52,10 +52,13 @@ func ReadState(
 	client client.Client,
 	specNamespacedName types.NamespacedName,
 	wandbOwner client.Object,
+	onDeleteRule translator.OnDeleteRule,
 ) ([]metav1.Condition, *translator.InfraConnection) {
 	ctx, _ = logx.WithSlog(ctx, logx.Mysql)
-	var actual = &v2.InnoDBCluster{}
+	log := logx.GetSlog(ctx)
 
+	var actual = &v2.InnoDBCluster{}
+	conditions := make([]metav1.Condition, 0)
 	nsnBuilder := createNsNameBuilder(specNamespacedName)
 
 	found, err := ctrlcommon.GetResource(
@@ -72,9 +75,32 @@ func ReadState(
 	}
 	if !found {
 		actual = nil
+		if onDeleteRule.Policy == translator.Purge {
+			log.Debug(
+				"Attempting to purge associated mysql resources after deletion",
+				"tenantName", nsnBuilder.ClusterName(),
+			)
+			err = purgeAssociatedResources(ctx, client, specNamespacedName.Namespace, nsnBuilder.ClusterName(), onDeleteRule.Selector)
+			if err != nil {
+				conditions = append(
+					conditions,
+					metav1.Condition{
+						Type:   MySQLCustomResourceType,
+						Status: metav1.ConditionUnknown,
+						Reason: ctrlcommon.ApiErrorReason,
+					},
+				)
+			} else {
+				conditions = append(conditions, metav1.Condition{
+					Type:   MySQLCustomResourceType,
+					Status: metav1.ConditionFalse,
+					Reason: ctrlcommon.PendingDeleteReason,
+				},
+				)
+			}
+		}
 	}
 
-	conditions := make([]metav1.Condition, 0)
 	var connection *translator.InfraConnection
 
 	if actual != nil {
