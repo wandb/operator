@@ -7,10 +7,33 @@ features:
   proxy: false
 
 bucket:
-  default: {}
+  default:
+    sizing:
+      default:
+        replicas: 1
+        volumeSize: 10Gi
+      small:
+        replicas: 3
+        volumeSize: 100Gi
 
 clickhouse:
-  default: {}
+  default:
+    sizing:
+      default:
+        shards: 1
+        replicas: 1
+        volumeSize: 10Gi
+      small:
+        shards: 1
+        replicas: 3
+        volumeSize: 100Gi
+        resources:
+          requests:
+            cpu: 2
+            memory: 8Gi
+          limits:
+            cpu: 2
+            memory: 8Gi
 
 generatedSecrets:
   - name: session-key
@@ -22,29 +45,70 @@ generatedSecrets:
     useExactName: true
 
 kafka:
-  - name: filestream
-    features:
-      - filestreamQueue
-    topic: filestream
-    partitionCount: 48
-  - name: flat-run-fields-updater
-    topic: flat-run-fields-updater
-    partitionCount: 48
-  - name: weave-worker
-    topic: weave.call_ended
-    partitionCount: 48
-  - name: weave-evaluate-model-worker
-    topic: weave.evaluate_model
-    partitionCount: 48
+  sizing:
+    default:
+      replicas: 1
+      volumeSize: 10Gi
+    small:
+      replicas: 3
+      volumeSize: 100Gi
+      resources:
+        requests:
+          cpu: 2
+          memory: 8Gi
+        limits:
+          cpu: 2
+          memory: 8Gi
+  topics:
+    - name: filestream
+      features:
+        - filestreamQueue
+      topic: filestream
+      partitionCount: 48
+    - name: flat-run-fields-updater
+      topic: flat-run-fields-updater
+      partitionCount: 48
+    - name: weave-worker
+      topic: weave.call_ended
+      partitionCount: 48
+    - name: weave-evaluate-model-worker
+      topic: weave.evaluate_model
+      partitionCount: 48
 
 mysql:
-  default: {}
+  default:
+    sizing:
+      default:
+        replicas: 1
+      small:
+        replicas: 3
+        resources:
+          requests:
+            cpu: 2
+            memory: 8Gi
+          limits:
+            cpu: 2
+            memory: 8Gi
   metadata: {}
   runs: {}
   usage: {}
 
 redis:
-  default: {}
+  default:
+    sizing:
+      default:
+        shards: 1
+        replicas: 1
+      small:
+        shards: 1
+        replicas: 3
+        resources:
+          requests:
+            cpu: 2
+            memory: 8Gi
+          limits:
+            cpu: 2
+            memory: 8Gi
 
 commonEnvvars:
   gorillaMysql:

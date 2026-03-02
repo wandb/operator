@@ -44,13 +44,13 @@ type Manifest struct {
 	// group name (e.g., "gorillaMysql") to a slice of EnvVar definitions.
 	CommonEnvvars      map[string][]EnvVar      `yaml:"commonEnvvars,omitempty"`
 	CommonVolumeMounts map[string][]VolumeMount `yaml:"commonVolumeMounts,omitempty"`
-	Bucket             SectionRef               `yaml:"bucket"`
-	Clickhouse         SectionRef               `yaml:"clickhouse"`
+	Bucket             map[string]InfraConfig   `yaml:"bucket"`
+	Clickhouse         map[string]InfraConfig   `yaml:"clickhouse"`
 	// Kafka is a list of topic declarations with optional feature gates in YAML.
-	Kafka        []KafkaTopic  `yaml:"kafka"`
-	Mysql        SectionRef    `yaml:"mysql"`
-	Redis        SectionRef    `yaml:"redis"`
-	Applications []Application `yaml:"applications"`
+	Kafka        []KafkaTopic           `yaml:"kafka"`
+	Mysql        map[string]InfraConfig `yaml:"mysql"`
+	Redis        map[string]InfraConfig `yaml:"redis"`
+	Applications []Application          `yaml:"applications"`
 	// Migrations captures per-database migration jobs (e.g., default, runsdb, usagedb)
 	// as found in 0.76.1.yaml under the top-level "migrations" key.
 	Migrations map[string]MigrationJob `yaml:"migrations,omitempty"`
@@ -66,12 +66,10 @@ type GeneratedSecret struct {
 	UseExactName bool `yaml:"useExactName,omitempty"`
 }
 
-// SectionRef represents simple sections that commonly contain a single
+// InfraConfig represents simple sections that commonly contain a single
 // "default" key with an empty object (or future options).
-type SectionRef struct {
-	Default map[string]any `yaml:"default,omitempty"`
-	// Extra captures any additional keys under the section (e.g., mysql.runsdb, redis.limiter)
-	Extra map[string]any `yaml:",inline"`
+type InfraConfig struct {
+	Sizing SizingConfig `yaml:"sizing"`
 }
 
 // KafkaTopicDef models a topic configuration used both at the top-level
@@ -115,10 +113,8 @@ func (img ImageRef) GetImage() string {
 // AppKafkaSection is the per-application kafka section; fields are optional
 // and mirror the top-level topics.
 type AppKafkaSection struct {
-	Filestream               *KafkaTopicDef `yaml:"filestream,omitempty"`
-	FlatRunFieldsUpdater     *KafkaTopicDef `yaml:"flatRunFieldsUpdater,omitempty"`
-	WeaveWorker              *KafkaTopicDef `yaml:"weaveWorker,omitempty"`
-	WeaveEvaluateModelWorker *KafkaTopicDef `yaml:"weaveEvaluateModelWorker,omitempty"`
+	Sizing SizingConfig             `yaml:"sizing"`
+	Topics map[string]KafkaTopicDef `yaml:"topics"`
 }
 
 // Application describes one entry in the applications list.
@@ -137,14 +133,9 @@ type Application struct {
 	Containers []ContainerSpec `yaml:"containers,omitempty"`
 	// Features enables this application only when specific feature flags are set in the
 	// top-level manifest features. In the YAML this appears as a list of strings.
-	Features   []string         `yaml:"features,omitempty"`
-	Env        []EnvVar         `yaml:"env,omitempty"`
-	Mysql      *SectionRef      `yaml:"mysql,omitempty"`
-	Redis      *SectionRef      `yaml:"redis,omitempty"`
-	Bucket     *SectionRef      `yaml:"bucket,omitempty"`
-	Clickhouse *SectionRef      `yaml:"clickhouse,omitempty"`
-	Kafka      *AppKafkaSection `yaml:"kafka,omitempty"`
-	Service    *ServiceSpec     `yaml:"service,omitempty"`
+	Features []string     `yaml:"features,omitempty"`
+	Env      []EnvVar     `yaml:"env,omitempty"`
+	Service  *ServiceSpec `yaml:"service,omitempty"`
 	// Files allows injecting files into the application's container by mounting
 	// data from ConfigMaps. Each entry may either inline file contents (stored
 	// into an operator-managed ConfigMap) or reference an existing ConfigMap.
@@ -156,6 +147,9 @@ type Application struct {
 }
 
 type SizingConfig struct {
+	Replicas    int32                        `yaml:"replicas,omitempty"`
+	Shards      int32                        `yaml:"shards,omitempty"`
+	VolumeSize  string                       `yaml:"volumeSize,omitempty"`
 	Resources   *corev1.ResourceRequirements `yaml:"resources,omitempty"`
 	Autoscaling *AutoscalingConfig           `yaml:"autoscaling,omitempty"`
 }
