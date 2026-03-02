@@ -31,14 +31,15 @@ kind create cluster
 
 This will create a new kind cluster with the name `kind`. The kubernetes context will be called `kind-kind`.
 
-Alternatively, you can use the provided scripts to manage the kind cluster:
+Alternatively, you can use the provided scripts to manage the kind cluster, uses kindClusterName from
+`tilt-settings.json`, if present.
 
 ```bash
-# Create cluster (uses kindClusterName from tilt-settings.json if present)
-./scripts/setup_kind.sh
+# Create cluster
+./hack/scripts/setup_kind.sh
 
 # Delete cluster
-./scripts/teardown_kind.sh
+./hack/scripts/teardown_kind.sh
 ```
 
 #### Install Tilt
