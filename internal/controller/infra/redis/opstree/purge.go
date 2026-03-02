@@ -18,7 +18,7 @@ func PurgeFinalizer(
 	specNamespacedName types.NamespacedName,
 	onDeleteRule translator.OnDeleteRule,
 ) error {
-	logx.WithSlog(ctx, RedisReplicationCustomResourceType)
+	ctx, _ = logx.WithSlog(ctx, logx.Redis)
 	if onDeleteRule.Policy != translator.Purge {
 		return nil
 	}

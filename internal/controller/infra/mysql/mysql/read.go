@@ -80,7 +80,7 @@ func ReadState(
 				"Attempting to purge associated mysql resources after deletion",
 				"tenantName", nsnBuilder.ClusterName(),
 			)
-			err = purgeAssociatedResources(ctx, client, specNamespacedName.Namespace, nsnBuilder.ClusterName(), onDeleteRule.Selector)
+			err = purgeAssociatedResources(ctx, client, specNamespacedName.Namespace, onDeleteRule.Selector)
 			if err != nil {
 				conditions = append(
 					conditions,

@@ -3,12 +3,15 @@ package opstree
 import (
 	"context"
 	"fmt"
+	"maps"
+	"strings"
 
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/logx"
 	redisv1beta2 "github.com/wandb/operator/pkg/vendored/redis-operator/redis/v1beta2"
 	redisreplicationv1beta2 "github.com/wandb/operator/pkg/vendored/redis-operator/redisreplication/v1beta2"
 	redissentinelv1beta2 "github.com/wandb/operator/pkg/vendored/redis-operator/redissentinel/v1beta2"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -19,38 +22,109 @@ const (
 	SentinelType    = "RedisSentinel"
 	ReplicationType = "RedisReplication"
 	AppConnTypeName = "RedisAppConn"
+
+	// pvcTemplatePrefix is the volumeClaimTemplate name the opstree operator
+	// uses when creating StatefulSets, resulting in PVCs named
+	// "redis-data-{crName}-{ordinal}".
+	pvcTemplatePrefix = "redis-data"
 )
 
 func WriteState(
 	ctx context.Context,
-	client client.Client,
+	cl client.Client,
 	specNamespacedName types.NamespacedName,
 	standaloneDesired *redisv1beta2.Redis,
 	sentinelDesired *redissentinelv1beta2.RedisSentinel,
 	replicationDesired *redisreplicationv1beta2.RedisReplication,
+	wandbLabels map[string]string,
 ) []metav1.Condition {
 	ctx, _ = logx.WithSlog(ctx, logx.Redis)
 	results := make([]metav1.Condition, 0)
 
 	nsnBuilder := createNsNameBuilder(specNamespacedName)
 
-	results = append(results, writeStandaloneState(ctx, client, nsnBuilder, standaloneDesired)...)
-	results = append(results, writeSentinelState(ctx, client, nsnBuilder, sentinelDesired)...)
-	results = append(results, writeReplicationState(ctx, client, nsnBuilder, replicationDesired)...)
+	results = append(results, writeStandaloneState(ctx, cl, nsnBuilder, standaloneDesired)...)
+	results = append(results, writeSentinelState(ctx, cl, nsnBuilder, sentinelDesired)...)
+	results = append(results, writeReplicationState(ctx, cl, nsnBuilder, replicationDesired)...)
+
+	if len(wandbLabels) > 0 {
+		var prefixes []string
+		if standaloneDesired != nil {
+			prefixes = append(prefixes, fmt.Sprintf("%s-%s-", pvcTemplatePrefix, nsnBuilder.StandaloneName()))
+		}
+		if replicationDesired != nil {
+			prefixes = append(prefixes, fmt.Sprintf("%s-%s-", pvcTemplatePrefix, nsnBuilder.ReplicationName()))
+		}
+		if err := ensurePVCLabels(ctx, cl, specNamespacedName.Namespace, prefixes, wandbLabels); err != nil {
+			results = append(results, metav1.Condition{
+				Type:   common.ReconciledType,
+				Status: metav1.ConditionFalse,
+				Reason: common.ApiErrorReason,
+			})
+		}
+	}
 
 	return results
 }
 
+// ensurePVCLabels patches PVCs whose names match any of the given prefixes
+// that are missing the wandb labels. The opstree operator creates PVCs via
+// StatefulSet volumeClaimTemplates named "redis-data", so PVCs are named
+// "redis-data-{crName}-{ordinal}".
+func ensurePVCLabels(
+	ctx context.Context,
+	cl client.Client,
+	namespace string,
+	namePrefixes []string,
+	labels map[string]string,
+) error {
+	log := logx.GetSlog(ctx)
+
+	pvcList := &corev1.PersistentVolumeClaimList{}
+	if err := cl.List(ctx, pvcList, &client.ListOptions{Namespace: namespace}); err != nil {
+		return err
+	}
+
+	for _, pvc := range pvcList.Items {
+		if !matchesAnyPrefix(pvc.Name, namePrefixes) {
+			continue
+		}
+		if common.HasAllLabelKeys(pvc.Labels, labels) {
+			continue
+		}
+		patch := client.MergeFrom(pvc.DeepCopy())
+		if pvc.Labels == nil {
+			pvc.Labels = make(map[string]string)
+		}
+		maps.Copy(pvc.Labels, labels)
+		if err := cl.Patch(ctx, &pvc, patch); err != nil {
+			log.Error("failed to patch PVC labels", logx.ErrAttr(err), "pvc", pvc.Name)
+			return err
+		}
+		log.Debug("patched wandb labels onto PVC", "pvc", pvc.Name)
+	}
+	return nil
+}
+
+func matchesAnyPrefix(name string, prefixes []string) bool {
+	for _, p := range prefixes {
+		if strings.HasPrefix(name, p) {
+			return true
+		}
+	}
+	return false
+}
+
 func writeStandaloneState(
 	ctx context.Context,
-	client client.Client,
+	cl client.Client,
 	nsnBuilder *NsNameBuilder,
 	standaloneDesired *redisv1beta2.Redis,
 ) []metav1.Condition {
 	var standaloneActual = &redisv1beta2.Redis{}
 
 	found, err := common.GetResource(
-		ctx, client, nsnBuilder.StandaloneNsName(), StandaloneType, standaloneActual,
+		ctx, cl, nsnBuilder.StandaloneNsName(), StandaloneType, standaloneActual,
 	)
 	if err != nil {
 		return []metav1.Condition{
@@ -72,7 +146,7 @@ func writeStandaloneState(
 
 	result := make([]metav1.Condition, 0)
 
-	action, err := common.CrudResource(ctx, client, standaloneDesired, standaloneActual)
+	action, err := common.CrudResource(ctx, cl, standaloneDesired, standaloneActual)
 	if err != nil {
 		result = append(result, metav1.Condition{
 			Type:   common.ReconciledType,
@@ -113,14 +187,14 @@ func writeStandaloneState(
 
 func writeSentinelState(
 	ctx context.Context,
-	client client.Client,
+	cl client.Client,
 	nsnBuilder *NsNameBuilder,
 	sentinelDesired *redissentinelv1beta2.RedisSentinel,
 ) []metav1.Condition {
 	var sentinelActual = &redissentinelv1beta2.RedisSentinel{}
 
 	found, err := common.GetResource(
-		ctx, client, nsnBuilder.SentinelNsName(), SentinelType, sentinelActual,
+		ctx, cl, nsnBuilder.SentinelNsName(), SentinelType, sentinelActual,
 	)
 	if err != nil {
 		return []metav1.Condition{
@@ -142,7 +216,7 @@ func writeSentinelState(
 
 	result := make([]metav1.Condition, 0)
 
-	action, err := common.CrudResource(ctx, client, sentinelDesired, sentinelActual)
+	action, err := common.CrudResource(ctx, cl, sentinelDesired, sentinelActual)
 	if err != nil {
 		result = append(result, metav1.Condition{
 			Type:   common.ReconciledType,
@@ -183,14 +257,14 @@ func writeSentinelState(
 
 func writeReplicationState(
 	ctx context.Context,
-	client client.Client,
+	cl client.Client,
 	nsnBuilder *NsNameBuilder,
 	replicationDesired *redisreplicationv1beta2.RedisReplication,
 ) []metav1.Condition {
 	var replicationActual = &redisreplicationv1beta2.RedisReplication{}
 
 	found, err := common.GetResource(
-		ctx, client, nsnBuilder.ReplicationNsName(), ReplicationType, replicationActual,
+		ctx, cl, nsnBuilder.ReplicationNsName(), ReplicationType, replicationActual,
 	)
 	if err != nil {
 		return []metav1.Condition{
@@ -212,7 +286,7 @@ func writeReplicationState(
 
 	result := make([]metav1.Condition, 0)
 
-	action, err := common.CrudResource(ctx, client, replicationDesired, replicationActual)
+	action, err := common.CrudResource(ctx, cl, replicationDesired, replicationActual)
 	if err != nil {
 		result = append(result, metav1.Condition{
 			Type:   common.ReconciledType,

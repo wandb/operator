@@ -2,8 +2,6 @@ package mysql
 
 import (
 	"context"
-	"fmt"
-	"strings"
 
 	"github.com/wandb/operator/internal/controller/translator"
 	"github.com/wandb/operator/internal/logx"
@@ -20,63 +18,49 @@ func PurgeFinalizer(
 	specNamespacedName types.NamespacedName,
 	onDeleteRule translator.OnDeleteRule,
 ) error {
-	logx.WithSlog(ctx, MySQLCustomResourceType)
+	ctx, _ = logx.WithSlog(ctx, logx.Mysql)
 	if onDeleteRule.Policy != translator.Purge {
 		return nil
 	}
-	nsnBuilder := createNsNameBuilder(specNamespacedName)
-	return purgeAssociatedResources(ctx, cl, specNamespacedName.Namespace, nsnBuilder.ClusterName(), onDeleteRule.Selector)
+	return purgeAssociatedResources(ctx, cl, specNamespacedName.Namespace, onDeleteRule.Selector)
 }
 
-// purgeAssociatedResources deletes PVCs and Secrets associated with the MySQL cluster.
-//
-// PVCs are identified by name prefix (datadir-<clusterName>-) because the mysql-operator
-// (oracle/mysql-operator) creates PVCs via StatefulSet volumeClaimTemplates and may not
-// propagate custom labels from DatadirVolumeClaimTemplate.ObjectMeta to the actual PVCs.
-//
-// Secrets are identified by the wandb label selector since we create the db-password
-// Secret directly with those labels.
 func purgeAssociatedResources(
 	ctx context.Context,
 	cl client.Client,
 	namespace string,
-	clusterName string,
 	onDeleteSelector labels.Selector,
 ) error {
 	log := logx.GetSlog(ctx)
+	listOptions := &client.ListOptions{
+		Namespace:     namespace,
+		LabelSelector: onDeleteSelector,
+	}
 
-	pvcPrefix := fmt.Sprintf("datadir-%s-", clusterName)
 	pvcList := &corev1.PersistentVolumeClaimList{}
-	if err := cl.List(ctx, pvcList, &client.ListOptions{Namespace: namespace}); err != nil {
+	if err := cl.List(ctx, pvcList, listOptions); err != nil {
 		return err
 	}
 
-	var matchedPVCs []corev1.PersistentVolumeClaim
-	for _, pvc := range pvcList.Items {
-		if strings.HasPrefix(pvc.Name, pvcPrefix) {
-			matchedPVCs = append(matchedPVCs, pvc)
-		}
-	}
-
-	if len(matchedPVCs) > 0 {
+	if len(pvcList.Items) > 0 {
 		log.Info(
 			"Purging associated PVCs",
-			"count", len(matchedPVCs), "prefix", pvcPrefix,
+			"count", len(pvcList.Items), "selector", onDeleteSelector.String(),
 		)
 	} else {
 		log.Debug(
 			"No associated PVCs found to purge",
-			"prefix", pvcPrefix,
+			"selector", onDeleteSelector.String(),
 		)
 	}
-	for _, pvc := range matchedPVCs {
+	for _, pvc := range pvcList.Items {
 		if err := cl.Delete(ctx, &pvc); err != nil && !errors.IsNotFound(err) {
 			return err
 		}
 	}
 
 	secretList := &corev1.SecretList{}
-	if err := cl.List(ctx, secretList, &client.ListOptions{Namespace: namespace, LabelSelector: onDeleteSelector}); err != nil {
+	if err := cl.List(ctx, secretList, listOptions); err != nil {
 		return err
 	}
 

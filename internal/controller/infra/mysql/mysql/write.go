@@ -127,7 +127,7 @@ func ensurePVCLabels(
 		if !strings.HasPrefix(pvc.Name, prefix) {
 			continue
 		}
-		if hasAllLabels(pvc.Labels, labels) {
+		if common.HasAllLabelKeys(pvc.Labels, labels) {
 			continue
 		}
 		patch := client.MergeFrom(pvc.DeepCopy())
@@ -142,13 +142,4 @@ func ensurePVCLabels(
 		log.Debug("patched wandb labels onto PVC", "pvc", pvc.Name)
 	}
 	return nil
-}
-
-func hasAllLabels(existing, desired map[string]string) bool {
-	for k, v := range desired {
-		if existing[k] != v {
-			return false
-		}
-	}
-	return true
 }
