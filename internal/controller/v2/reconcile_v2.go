@@ -34,6 +34,7 @@ import (
 	oputils "github.com/wandb/operator/pkg/utils"
 	strimziv1 "github.com/wandb/operator/pkg/vendored/strimzi-kafka/v1"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -362,6 +363,8 @@ func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb 
 		application.Spec.PodTemplate.Spec.Affinity = wandb.Spec.Affinity
 		application.Spec.PodTemplate.Spec.Tolerations = *wandb.Spec.Tolerations
 
+		application.Spec.HpaTemplate = ResolveAutoscaling(app, wandb)
+
 		// Set shared service account for all W&B applications
 		application.Spec.PodTemplate.Spec.ServiceAccountName = serviceAccountName
 
@@ -449,7 +452,7 @@ func resolveInitContainers(app serverManifest.Application, envVars []corev1.EnvV
 	return initContainers
 }
 
-func resolveResources(app serverManifest.Application, wandb *apiv2.WeightsAndBiases, containerResources *corev1.ResourceRequirements) *corev1.ResourceRequirements {
+func ResolveResources(app serverManifest.Application, wandb *apiv2.WeightsAndBiases, containerResources *corev1.ResourceRequirements) *corev1.ResourceRequirements {
 	resources := &corev1.ResourceRequirements{}
 
 	// check if there is "default" in the sizing map and apply those values
@@ -509,6 +512,44 @@ func resolveResources(app serverManifest.Application, wandb *apiv2.WeightsAndBia
 	return resources
 }
 
+func ResolveAutoscaling(app serverManifest.Application, wandb *apiv2.WeightsAndBiases) *autoscalingv2.HorizontalPodAutoscalerSpec {
+	hpa := &autoscalingv2.HorizontalPodAutoscalerSpec{}
+
+	// check if there is "default" in the sizing map and apply those values
+	if defaultConfig, ok := app.Sizing["default"]; ok && defaultConfig.Autoscaling != nil {
+		hpa.MinReplicas = defaultConfig.Autoscaling.Horizontal.MinReplicas
+		hpa.MaxReplicas = defaultConfig.Autoscaling.Horizontal.MaxReplicas
+		hpa.Metrics = defaultConfig.Autoscaling.Horizontal.Metrics
+		hpa.Behavior = defaultConfig.Autoscaling.Horizontal.Behavior
+		hpa.ScaleTargetRef = defaultConfig.Autoscaling.Horizontal.ScaleTargetRef
+	}
+
+	// check if there is a sizing config in the map that corresponds to the size in the wandb spec and apply that
+	if sizeConfig, ok := app.Sizing[wandb.Spec.Size]; ok && sizeConfig.Autoscaling != nil {
+		if sizeConfig.Autoscaling.Horizontal.MinReplicas != nil {
+			hpa.MinReplicas = sizeConfig.Autoscaling.Horizontal.MinReplicas
+		}
+		if sizeConfig.Autoscaling.Horizontal.MaxReplicas != 0 {
+			hpa.MaxReplicas = sizeConfig.Autoscaling.Horizontal.MaxReplicas
+		}
+		if len(sizeConfig.Autoscaling.Horizontal.Metrics) > 0 {
+			hpa.Metrics = sizeConfig.Autoscaling.Horizontal.Metrics
+		}
+		if sizeConfig.Autoscaling.Horizontal.Behavior != nil {
+			hpa.Behavior = sizeConfig.Autoscaling.Horizontal.Behavior
+		}
+		if sizeConfig.Autoscaling.Horizontal.ScaleTargetRef.Name != "" {
+			hpa.ScaleTargetRef = sizeConfig.Autoscaling.Horizontal.ScaleTargetRef
+		}
+	}
+
+	if hpa.MaxReplicas == 0 {
+		return nil
+	}
+
+	return hpa
+}
+
 func resolveContainers(app serverManifest.Application, wandb *apiv2.WeightsAndBiases, envVars []corev1.EnvVar, volumeMounts []corev1.VolumeMount) []corev1.Container {
 	// Build containers: support multi-container apps via app.Containers; fall back to a single
 	// default container when no explicit containers are provided.
@@ -549,7 +590,7 @@ func resolveContainers(app serverManifest.Application, wandb *apiv2.WeightsAndBi
 				VolumeMounts: volumeMounts,
 			}
 
-			if resources := resolveResources(app, wandb, container.Resources); resources != nil {
+			if resources := ResolveResources(app, wandb, container.Resources); resources != nil {
 				c.Resources = *resources
 			}
 
@@ -592,7 +633,7 @@ func resolveContainers(app serverManifest.Application, wandb *apiv2.WeightsAndBi
 			VolumeMounts: volumeMounts,
 		}
 
-		if resources := resolveResources(app, wandb, nil); resources != nil {
+		if resources := ResolveResources(app, wandb, nil); resources != nil {
 			c.Resources = *resources
 		}
 		containers = append(containers, c)
