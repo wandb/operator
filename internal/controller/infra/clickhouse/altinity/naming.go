@@ -43,6 +43,10 @@ func (n *NsNameBuilder) VolumeTemplateName() string {
 	return fmt.Sprintf("%s-voltempl", n.SpecName())
 }
 
+func (n *NsNameBuilder) PodTemplateName() string {
+	return fmt.Sprintf("%s-podtempl", n.SpecName())
+}
+
 func (n *NsNameBuilder) ConnectionName() string {
 	return fmt.Sprintf("%s-connection", n.SpecName())
 }

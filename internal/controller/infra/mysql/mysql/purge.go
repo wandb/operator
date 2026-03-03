@@ -37,11 +37,11 @@ func purgeAssociatedResources(
 		LabelSelector: onDeleteSelector,
 	}
 
+	// PVCs
 	pvcList := &corev1.PersistentVolumeClaimList{}
 	if err := cl.List(ctx, pvcList, listOptions); err != nil {
 		return err
 	}
-
 	if len(pvcList.Items) > 0 {
 		log.Info(
 			"Purging associated PVCs",
@@ -59,11 +59,11 @@ func purgeAssociatedResources(
 		}
 	}
 
+	// Secrets
 	secretList := &corev1.SecretList{}
 	if err := cl.List(ctx, secretList, listOptions); err != nil {
 		return err
 	}
-
 	if len(secretList.Items) > 0 {
 		log.Info(
 			"Purging associated Secrets",

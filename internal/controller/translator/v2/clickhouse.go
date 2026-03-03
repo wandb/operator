@@ -99,12 +99,17 @@ func ToClickHouseVendorSpec(
 			},
 			Defaults: &v1.Defaults{
 				Templates: &v1.TemplatesList{
+					PodTemplate:             nsnBuilder.PodTemplateName(),
 					DataVolumeClaimTemplate: nsnBuilder.VolumeTemplateName(),
 				},
 			},
 			Templates: &v1.Templates{
 				PodTemplates: []v1.PodTemplate{
 					{
+						Name: nsnBuilder.PodTemplateName(),
+						ObjectMeta: metav1.ObjectMeta{
+							Labels: BuildWandbClickhouseLabels(wandb),
+						},
 						Spec: corev1.PodSpec{
 							Affinity:    wandb.GetAffinity(spec.WBInfraSpec),
 							Tolerations: *wandb.GetTolerations(spec.WBInfraSpec),
@@ -141,7 +146,10 @@ func ToClickHouseVendorSpec(
 	if len(spec.Config.Resources.Requests) > 0 || len(spec.Config.Resources.Limits) > 0 {
 		chi.Spec.Templates.PodTemplates = []v1.PodTemplate{
 			{
-				//Name: "default-pod",
+				Name: nsnBuilder.PodTemplateName(),
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: BuildWandbClickhouseLabels(wandb),
+				},
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
 						{

@@ -21,8 +21,10 @@ func ReadState(
 	client client.Client,
 	specNamespacedName types.NamespacedName,
 	wandbOwner client.Object,
+	onDeleteRule translator.OnDeleteRule,
 ) ([]metav1.Condition, *translator.InfraConnection) {
 	ctx, _ = logx.WithSlog(ctx, logx.Redis)
+	log := logx.GetSlog(ctx)
 	var standaloneActual = &redisv1beta2.Redis{}
 	var sentinelActual = &redissentinelv1beta2.RedisSentinel{}
 	var replicationActual = &redisreplicationv1beta2.RedisReplication{}
@@ -79,6 +81,26 @@ func ReadState(
 
 	conditions := make([]metav1.Condition, 0)
 	var connection *translator.InfraConnection
+
+	if standaloneActual == nil && replicationActual == nil && onDeleteRule.Policy == translator.Purge {
+		log.Debug(
+			"Attempting to purge associated redis resources after deletion",
+			"specName", specNamespacedName.Name,
+		)
+		if err := purgeAssociatedResources(ctx, client, specNamespacedName.Namespace, onDeleteRule.Selector); err != nil {
+			conditions = append(conditions, metav1.Condition{
+				Type:   RedisStandaloneCustomResourceType,
+				Status: metav1.ConditionUnknown,
+				Reason: ctrlcommon.ApiErrorReason,
+			})
+		} else {
+			conditions = append(conditions, metav1.Condition{
+				Type:   RedisStandaloneCustomResourceType,
+				Status: metav1.ConditionFalse,
+				Reason: ctrlcommon.PendingDeleteReason,
+			})
+		}
+	}
 
 	if standaloneActual != nil {
 		connInfo := readStandaloneConnectionDetails(standaloneActual)

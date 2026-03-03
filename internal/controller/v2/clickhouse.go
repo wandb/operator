@@ -45,7 +45,8 @@ func clickHouseReadState(
 	newConditions []metav1.Condition,
 ) ([]metav1.Condition, *translator.InfraConnection) {
 	specNamespacedName := clickHouseSpecNamespacedName(wandb.Spec.ClickHouse)
-	readConditions, newInfraConn := altinity.ReadState(ctx, client, specNamespacedName, wandb)
+	onDeleteRule := translatorv2.ToClickHouseOnDeleteRule(wandb, wandb.GetRetentionPolicy(wandb.Spec.ClickHouse.WBInfraSpec))
+	readConditions, newInfraConn := altinity.ReadState(ctx, client, specNamespacedName, wandb, onDeleteRule)
 	newConditions = append(newConditions, readConditions...)
 	return newConditions, newInfraConn
 }

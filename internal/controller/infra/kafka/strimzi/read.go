@@ -35,6 +35,7 @@ func ReadState(
 	cl client.Client,
 	specNamespacedName types.NamespacedName,
 	wandbOwner client.Object,
+	onDeleteRule translator.OnDeleteRule,
 ) ([]metav1.Condition, *translator.InfraConnection) {
 	ctx, log := logx.WithSlog(ctx, logx.Kafka)
 	nsnBuilder := createNsNameBuilder(specNamespacedName)
@@ -52,9 +53,31 @@ func ReadState(
 			},
 		}, nil
 	}
+
+	conditions := make([]metav1.Condition, 0)
+
 	if !found {
 		log.Info("Kafka CR not found")
 		actualKafka = nil
+		if onDeleteRule.Policy == translator.Purge {
+			log.Debug(
+				"Attempting to purge associated kafka resources after deletion",
+				"kafkaName", nsnBuilder.KafkaName(),
+			)
+			if err := purgeAssociatedResources(ctx, cl, specNamespacedName.Namespace, onDeleteRule.Selector); err != nil {
+				conditions = append(conditions, metav1.Condition{
+					Type:   KafkaCustomResourceType,
+					Status: metav1.ConditionUnknown,
+					Reason: ctrlcommon.ApiErrorReason,
+				})
+			} else {
+				conditions = append(conditions, metav1.Condition{
+					Type:   KafkaCustomResourceType,
+					Status: metav1.ConditionFalse,
+					Reason: ctrlcommon.PendingDeleteReason,
+				})
+			}
+		}
 	}
 
 	var actualNodePool = &v1.KafkaNodePool{}
@@ -74,7 +97,6 @@ func ReadState(
 		actualNodePool = nil
 	}
 
-	conditions := make([]metav1.Condition, 0)
 	var connection *translator.InfraConnection
 	if actualKafka != nil {
 

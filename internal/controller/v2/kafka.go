@@ -69,7 +69,8 @@ func kafkaReadState(
 	newConditions []metav1.Condition,
 ) ([]metav1.Condition, *translator.InfraConnection) {
 	specNamespacedName := kafkaSpecNamespacedName(wandb.Spec.Kafka)
-	readConditions, newInfraConn := strimzi.ReadState(ctx, client, specNamespacedName, wandb)
+	onDeleteRule := translatorv2.ToKafkaOnDeleteRule(wandb, wandb.GetRetentionPolicy(wandb.Spec.Kafka.WBInfraSpec))
+	readConditions, newInfraConn := strimzi.ReadState(ctx, client, specNamespacedName, wandb, onDeleteRule)
 	newConditions = append(newConditions, readConditions...)
 	return newConditions, newInfraConn
 }

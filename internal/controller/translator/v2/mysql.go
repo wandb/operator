@@ -50,6 +50,7 @@ func ToMysqlMySQLVendorSpec(
 			Instances:        spec.Replicas,
 			TLSUseSelfSigned: true,
 			ImagePullPolicy:  corev1.PullIfNotPresent,
+			PodLabels:        BuildWandbMysqlLabels(wandb),
 			DatadirVolumeClaimTemplate: &corev1.PersistentVolumeClaim{
 				Spec: corev1.PersistentVolumeClaimSpec{
 					Resources: corev1.VolumeResourceRequirements{

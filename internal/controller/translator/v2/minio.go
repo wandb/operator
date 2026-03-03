@@ -75,6 +75,12 @@ func ToMinioVendorSpec(
 			Configuration: &corev1.LocalObjectReference{
 				Name: tenant.ConfigName(specName),
 			},
+			ServiceMetadata: &miniov2.ServiceMetadata{
+				MinIOServiceLabels: BuildWandbMinioLabels(wandb),
+			},
+			PoolsMetadata: &miniov2.PoolsMetadata{
+				Labels: BuildWandbMinioLabels(wandb),
+			},
 			Pools: []miniov2.Pool{
 				{
 					Name:             tenant.PoolName(specName),
