@@ -82,6 +82,15 @@ run-local-webhook: manifests generate fmt vet ## Run controller locally with web
 # Prometheus and CertManager are installed by default; skip with:
 # - PROMETHEUS_INSTALL_SKIP=true
 # - CERT_MANAGER_INSTALL_SKIP=true
+.PHONY: test-e2e-retention
+test-e2e-retention: manifests generate fmt vet ## Run retention policy integration tests against a real cluster.
+	@command -v kubectl >/dev/null 2>&1 || { \
+		echo "kubectl is not installed."; \
+		exit 1; \
+	}
+	PROMETHEUS_INSTALL_SKIP=true CERT_MANAGER_INSTALL_SKIP=true \
+	go test ./test/e2e/ -v -ginkgo.v -ginkgo.focus="Retention Policy" -timeout 90m
+
 .PHONY: test-e2e
 test-e2e: manifests generate fmt vet ## Run the e2e tests. Expected an isolated environment using Kind.
 	@command -v kind >/dev/null 2>&1 || { \
