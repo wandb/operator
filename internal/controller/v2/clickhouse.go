@@ -34,7 +34,8 @@ func clickHouseWriteState(
 		}
 	}
 
-	results := altinity.WriteState(ctx, client, specNamespacedName, desired)
+	onDeleteRule := translatorv2.ToClickHouseOnDeleteRule(wandb, wandb.GetRetentionPolicy(wandb.Spec.ClickHouse.WBInfraSpec))
+	results := altinity.WriteState(ctx, client, specNamespacedName, desired, wandb, onDeleteRule)
 	return results
 }
 

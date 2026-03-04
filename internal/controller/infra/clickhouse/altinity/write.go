@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/wandb/operator/internal/controller/common"
+	"github.com/wandb/operator/internal/controller/translator"
 	"github.com/wandb/operator/internal/logx"
 	chiv1 "github.com/wandb/operator/pkg/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -21,6 +22,8 @@ func WriteState(
 	client client.Client,
 	specNamespacedName types.NamespacedName,
 	desired *chiv1.ClickHouseInstallation,
+	wandbOwner client.Object,
+	onDeleteRule translator.OnDeleteRule,
 ) []metav1.Condition {
 	ctx, _ = logx.WithSlog(ctx, logx.ClickHouse)
 	var actual = &chiv1.ClickHouseInstallation{}
@@ -49,6 +52,20 @@ func WriteState(
 	}
 
 	result := make([]metav1.Condition, 0)
+
+	// retention policy support
+	shouldRemove := found && desired == nil
+	if shouldRemove {
+		if onDeleteRule.Policy == translator.Detach {
+			if err := DetachFinalizer(ctx, client, specNamespacedName, wandbOwner); err != nil {
+				result = append(result, metav1.Condition{
+					Type:   ClickHouseCustomResourceType,
+					Status: metav1.ConditionFalse,
+					Reason: common.PendingDeleteReason,
+				})
+			}
+		}
+	}
 
 	action, err := common.CrudResource(ctx, client, desired, actual)
 	if err != nil {
