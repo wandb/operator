@@ -66,28 +66,29 @@ func ReadState(
 				"Attempting to purge associated clickhouse resources after deletion",
 				"installationName", nsnBuilder.InstallationName(),
 			)
-			if err := purgeAssociatedResources(ctx, cl, specNamespacedName.Namespace, onDeleteRule.Selector); err != nil {
+			if err = purgeAssociatedResources(ctx, cl, specNamespacedName.Namespace, onDeleteRule.Selector); err != nil {
 				conditions = append(conditions, metav1.Condition{
 					Type:   ClickHouseCustomResourceType,
 					Status: metav1.ConditionUnknown,
 					Reason: ctrlcommon.ApiErrorReason,
-				})
-			} else {
-				conditions = append(conditions, metav1.Condition{
-					Type:   ClickHouseCustomResourceType,
-					Status: metav1.ConditionFalse,
-					Reason: ctrlcommon.PendingDeleteReason,
 				})
 			}
 		}
 		if onDeleteRule.Policy == translator.Detach {
-			if err := DetachFinalizer(ctx, cl, specNamespacedName, wandbOwner); err != nil {
+			if err = DetachFinalizer(ctx, cl, specNamespacedName, wandbOwner); err != nil {
 				conditions = append(conditions, metav1.Condition{
 					Type:   ClickHouseCustomResourceType,
 					Status: metav1.ConditionUnknown,
 					Reason: ctrlcommon.ApiErrorReason,
 				})
 			}
+		}
+		if err != nil {
+			conditions = append(conditions, metav1.Condition{
+				Type:   ClickHouseCustomResourceType,
+				Status: metav1.ConditionFalse,
+				Reason: ctrlcommon.PendingDeleteReason,
+			})
 		}
 	}
 

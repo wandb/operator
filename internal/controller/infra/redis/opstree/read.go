@@ -82,31 +82,35 @@ func ReadState(
 	conditions := make([]metav1.Condition, 0)
 	var connection *translator.InfraConnection
 
-	if standaloneActual == nil && replicationActual == nil && onDeleteRule.Policy == translator.Purge {
-		log.Debug(
-			"Attempting to purge associated redis resources after deletion",
-			"specName", specNamespacedName.Name,
-		)
-		if err := purgeAssociatedResources(ctx, client, specNamespacedName.Namespace, onDeleteRule.Selector); err != nil {
-			conditions = append(conditions, metav1.Condition{
-				Type:   RedisStandaloneCustomResourceType,
-				Status: metav1.ConditionUnknown,
-				Reason: ctrlcommon.ApiErrorReason,
-			})
-		} else {
+	if standaloneActual == nil && replicationActual == nil {
+		var onDeleteErr error
+		if onDeleteRule.Policy == translator.Purge {
+			log.Debug(
+				"Attempting to purge associated redis resources after deletion",
+				"specName", specNamespacedName.Name,
+			)
+			if onDeleteErr = purgeAssociatedResources(ctx, client, specNamespacedName.Namespace, onDeleteRule.Selector); onDeleteErr != nil {
+				conditions = append(conditions, metav1.Condition{
+					Type:   RedisStandaloneCustomResourceType,
+					Status: metav1.ConditionUnknown,
+					Reason: ctrlcommon.ApiErrorReason,
+				})
+			}
+		}
+		if onDeleteRule.Policy == translator.Detach {
+			if onDeleteErr = DetachFinalizer(ctx, client, specNamespacedName, wandbOwner); onDeleteErr != nil {
+				conditions = append(conditions, metav1.Condition{
+					Type:   RedisStandaloneCustomResourceType,
+					Status: metav1.ConditionUnknown,
+					Reason: ctrlcommon.ApiErrorReason,
+				})
+			}
+		}
+		if onDeleteErr != nil {
 			conditions = append(conditions, metav1.Condition{
 				Type:   RedisStandaloneCustomResourceType,
 				Status: metav1.ConditionFalse,
 				Reason: ctrlcommon.PendingDeleteReason,
-			})
-		}
-	}
-	if standaloneActual == nil && replicationActual == nil && onDeleteRule.Policy == translator.Detach {
-		if err := DetachFinalizer(ctx, client, specNamespacedName, wandbOwner); err != nil {
-			conditions = append(conditions, metav1.Condition{
-				Type:   RedisStandaloneCustomResourceType,
-				Status: metav1.ConditionUnknown,
-				Reason: ctrlcommon.ApiErrorReason,
 			})
 		}
 	}
