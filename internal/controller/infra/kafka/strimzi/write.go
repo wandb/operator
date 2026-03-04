@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/wandb/operator/internal/controller/common"
+	"github.com/wandb/operator/internal/controller/translator"
 	"github.com/wandb/operator/internal/logx"
 	"github.com/wandb/operator/pkg/vendored/strimzi-kafka/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -17,13 +18,15 @@ func WriteState(
 	specNamespacedName types.NamespacedName,
 	desiredKafka *v1.Kafka,
 	desiredNodePool *v1.KafkaNodePool,
+	wandbOwner client.Object,
+	onDeleteRule translator.OnDeleteRule,
 ) []metav1.Condition {
 	ctx, _ = logx.WithSlog(ctx, logx.Kafka)
 	results := make([]metav1.Condition, 0)
 
 	nsnBuilder := createNsNameBuilder(specNamespacedName)
 
-	results = append(results, writeKafkaState(ctx, client, nsnBuilder, desiredKafka)...)
+	results = append(results, writeKafkaState(ctx, client, specNamespacedName, nsnBuilder, desiredKafka, wandbOwner, onDeleteRule)...)
 	results = append(results, writeNodePoolState(ctx, client, nsnBuilder, desiredNodePool)...)
 
 	return results
@@ -32,8 +35,11 @@ func WriteState(
 func writeKafkaState(
 	ctx context.Context,
 	client client.Client,
+	specNamespacedName types.NamespacedName,
 	nsnBuilder *NsNameBuilder,
 	desired *v1.Kafka,
+	wandbOwner client.Object,
+	onDeleteRule translator.OnDeleteRule,
 ) []metav1.Condition {
 	log := logx.GetSlog(ctx)
 	var actual = &v1.Kafka{}
@@ -63,6 +69,19 @@ func writeKafkaState(
 	}
 
 	result := make([]metav1.Condition, 0)
+
+	shouldRemove := found && desired == nil
+	if shouldRemove {
+		if onDeleteRule.Policy == translator.Detach {
+			if err := DetachFinalizer(ctx, client, specNamespacedName, wandbOwner); err != nil {
+				result = append(result, metav1.Condition{
+					Type:   KafkaCustomResourceType,
+					Status: metav1.ConditionFalse,
+					Reason: common.PendingDeleteReason,
+				})
+			}
+		}
+	}
 
 	action, err := common.CrudResource(ctx, client, desired, actual)
 	log.Debug("write: Kafka CRUD", "action", action)

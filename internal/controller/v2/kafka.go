@@ -57,7 +57,8 @@ func kafkaWriteState(
 	results := make([]metav1.Condition, 0)
 
 	specNamespacedName := kafkaSpecNamespacedName(wandb.Spec.Kafka)
-	results = append(results, strimzi.WriteState(ctx, client, specNamespacedName, desiredKafka, desiredNodePool)...)
+	onDeleteRule := translatorv2.ToKafkaOnDeleteRule(wandb, wandb.GetRetentionPolicy(wandb.Spec.Kafka.WBInfraSpec))
+	results = append(results, strimzi.WriteState(ctx, client, specNamespacedName, desiredKafka, desiredNodePool, wandb, onDeleteRule)...)
 
 	return results
 }

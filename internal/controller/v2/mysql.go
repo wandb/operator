@@ -129,7 +129,8 @@ func mysqlWriteState(
 				},
 			}
 		}
-		return mysql.WriteState(ctx, client, specNamespacedName, desired, translatorv2.BuildWandbMysqlLabels(wandb))
+		onDeleteRule := translatorv2.ToMysqlOnDeleteRule(wandb, wandb.GetRetentionPolicy(wandb.Spec.MySQL.WBInfraSpec))
+		return mysql.WriteState(ctx, client, specNamespacedName, desired, wandb, onDeleteRule, translatorv2.BuildWandbMysqlLabels(wandb))
 	}
 	return nil
 }

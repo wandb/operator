@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/wandb/operator/internal/controller/common"
+	"github.com/wandb/operator/internal/controller/translator"
 	"github.com/wandb/operator/internal/logx"
 	redisv1beta2 "github.com/wandb/operator/pkg/vendored/redis-operator/redis/v1beta2"
 	redisreplicationv1beta2 "github.com/wandb/operator/pkg/vendored/redis-operator/redisreplication/v1beta2"
@@ -36,6 +37,8 @@ func WriteState(
 	standaloneDesired *redisv1beta2.Redis,
 	sentinelDesired *redissentinelv1beta2.RedisSentinel,
 	replicationDesired *redisreplicationv1beta2.RedisReplication,
+	wandbOwner client.Object,
+	onDeleteRule translator.OnDeleteRule,
 	wandbLabels map[string]string,
 ) []metav1.Condition {
 	ctx, _ = logx.WithSlog(ctx, logx.Redis)
@@ -43,8 +46,8 @@ func WriteState(
 
 	nsnBuilder := createNsNameBuilder(specNamespacedName)
 
-	results = append(results, writeStandaloneState(ctx, cl, nsnBuilder, standaloneDesired)...)
-	results = append(results, writeSentinelState(ctx, cl, nsnBuilder, sentinelDesired)...)
+	results = append(results, writeStandaloneState(ctx, cl, specNamespacedName, nsnBuilder, standaloneDesired, wandbOwner, onDeleteRule)...)
+	results = append(results, writeSentinelState(ctx, cl, specNamespacedName, nsnBuilder, sentinelDesired, wandbOwner, onDeleteRule)...)
 	results = append(results, writeReplicationState(ctx, cl, nsnBuilder, replicationDesired)...)
 
 	if len(wandbLabels) > 0 {
@@ -163,8 +166,11 @@ func matchesAnyPrefix(name string, prefixes []string) bool {
 func writeStandaloneState(
 	ctx context.Context,
 	cl client.Client,
+	specNamespacedName types.NamespacedName,
 	nsnBuilder *NsNameBuilder,
 	standaloneDesired *redisv1beta2.Redis,
+	wandbOwner client.Object,
+	onDeleteRule translator.OnDeleteRule,
 ) []metav1.Condition {
 	var standaloneActual = &redisv1beta2.Redis{}
 
@@ -190,6 +196,19 @@ func writeStandaloneState(
 	}
 
 	result := make([]metav1.Condition, 0)
+
+	shouldRemove := found && standaloneDesired == nil
+	if shouldRemove {
+		if onDeleteRule.Policy == translator.Detach {
+			if err := DetachFinalizer(ctx, cl, specNamespacedName, wandbOwner); err != nil {
+				result = append(result, metav1.Condition{
+					Type:   RedisStandaloneCustomResourceType,
+					Status: metav1.ConditionFalse,
+					Reason: common.PendingDeleteReason,
+				})
+			}
+		}
+	}
 
 	action, err := common.CrudResource(ctx, cl, standaloneDesired, standaloneActual)
 	if err != nil {
@@ -233,8 +252,11 @@ func writeStandaloneState(
 func writeSentinelState(
 	ctx context.Context,
 	cl client.Client,
+	specNamespacedName types.NamespacedName,
 	nsnBuilder *NsNameBuilder,
 	sentinelDesired *redissentinelv1beta2.RedisSentinel,
+	wandbOwner client.Object,
+	onDeleteRule translator.OnDeleteRule,
 ) []metav1.Condition {
 	var sentinelActual = &redissentinelv1beta2.RedisSentinel{}
 
@@ -260,6 +282,19 @@ func writeSentinelState(
 	}
 
 	result := make([]metav1.Condition, 0)
+
+	shouldRemove := found && sentinelDesired == nil
+	if shouldRemove {
+		if onDeleteRule.Policy == translator.Detach {
+			if err := DetachFinalizer(ctx, cl, specNamespacedName, wandbOwner); err != nil {
+				result = append(result, metav1.Condition{
+					Type:   RedisSentinelCustomResourceType,
+					Status: metav1.ConditionFalse,
+					Reason: common.PendingDeleteReason,
+				})
+			}
+		}
+	}
 
 	action, err := common.CrudResource(ctx, cl, sentinelDesired, sentinelActual)
 	if err != nil {

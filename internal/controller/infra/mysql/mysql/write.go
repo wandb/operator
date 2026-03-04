@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/wandb/operator/internal/controller/common"
+	"github.com/wandb/operator/internal/controller/translator"
 	"github.com/wandb/operator/internal/logx"
 	"github.com/wandb/operator/pkg/vendored/mysql-operator/v2"
 	corev1 "k8s.io/api/core/v1"
@@ -25,6 +26,8 @@ func WriteState(
 	cl client.Client,
 	specNamespacedName types.NamespacedName,
 	desired *v2.InnoDBCluster,
+	wandbOwner client.Object,
+	onDeleteRule translator.OnDeleteRule,
 	wandbLabels map[string]string,
 ) []metav1.Condition {
 	ctx, _ = logx.WithSlog(ctx, logx.Mysql)
@@ -54,6 +57,19 @@ func WriteState(
 	}
 
 	result := make([]metav1.Condition, 0)
+
+	shouldRemove := found && desired == nil
+	if shouldRemove {
+		if onDeleteRule.Policy == translator.Detach {
+			if err := DetachFinalizer(ctx, cl, specNamespacedName, wandbOwner); err != nil {
+				result = append(result, metav1.Condition{
+					Type:   MySQLCustomResourceType,
+					Status: metav1.ConditionFalse,
+					Reason: common.PendingDeleteReason,
+				})
+			}
+		}
+	}
 
 	action, err := common.CrudResource(ctx, cl, desired, actual)
 	if err != nil {

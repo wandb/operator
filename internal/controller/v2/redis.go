@@ -56,7 +56,8 @@ func redisWriteState(
 		}
 	}
 
-	results := opstree.WriteState(ctx, client, specNamespacedName, standaloneDesired, sentinelDesired, replicationDesired, translatorv2.BuildWandbRedisLabels(wandb))
+	onDeleteRule := translatorv2.ToRedisOnDeleteRule(wandb, wandb.GetRetentionPolicy(wandb.Spec.Redis.WBInfraSpec))
+	results := opstree.WriteState(ctx, client, specNamespacedName, standaloneDesired, sentinelDesired, replicationDesired, wandb, onDeleteRule, translatorv2.BuildWandbRedisLabels(wandb))
 	return results
 }
 

@@ -30,6 +30,7 @@ func WriteState(
 	desiredCr *miniov2.Tenant,
 	envConfig MinioEnvConfig,
 	wandbOwner client.Object,
+	onDeleteRule translator.OnDeleteRule,
 ) ([]metav1.Condition, *translator.InfraConnection) {
 	ctx, _ = logx.WithSlog(ctx, logx.Minio)
 	var actual = &miniov2.Tenant{}
@@ -58,6 +59,19 @@ func WriteState(
 	}
 
 	result := make([]metav1.Condition, 0)
+
+	shouldRemove := found && desiredCr == nil
+	if shouldRemove {
+		if onDeleteRule.Policy == translator.Detach {
+			if err := DetachFinalizer(ctx, client, specNamespacedName, wandbOwner); err != nil {
+				result = append(result, metav1.Condition{
+					Type:   MinioCustomResourceType,
+					Status: metav1.ConditionFalse,
+					Reason: common.PendingDeleteReason,
+				})
+			}
+		}
+	}
 
 	action, err := common.CrudResource(ctx, client, desiredCr, actual)
 	if err != nil {
