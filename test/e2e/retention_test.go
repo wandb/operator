@@ -62,6 +62,17 @@ func generateUniqueName(prefix string) string {
 	return fmt.Sprintf("%s-%d-%s", prefix, time.Now().Unix(), string(suffix))
 }
 
+func createNamespace(ns string) error {
+	cmd := exec.Command("kubectl", "create", "namespace", ns)
+	_, err := utils.Run(cmd)
+	return err
+}
+
+func deleteNamespace(ns string) {
+	cmd := exec.Command("kubectl", "delete", "namespace", ns, "--ignore-not-found", "--wait=false")
+	_, _ = utils.Run(cmd)
+}
+
 func buildLabelSelector(wandbName, wandbNs, module string) string {
 	return fmt.Sprintf("%s=%s,%s=%s,%s=%s",
 		wandbNameLabel, wandbName,
@@ -148,7 +159,7 @@ func waitForWandbReady(name, ns string) {
 		for _, key := range statusKeys {
 			cs, ok := status[key].(map[string]any)
 			g.Expect(ok).To(BeTrue(), "component status %s missing", key)
-			g.Expect(cs["state"]).To(Equal("Ready"), "component %s not Ready", key)
+			g.Expect(cs["state"]).To(Equal("Healthy"), "component %s not Healthy", key)
 		}
 	}
 	Eventually(verifyReady, retentionReadyTimeout, retentionPollingInterval).Should(Succeed())
@@ -169,13 +180,27 @@ func resourceItemCount(resourceType, labelSelector, ns string) int {
 	return len(items)
 }
 
+// resourceItemCountInNs counts all resources of the given type in a namespace without label filtering.
+// Used for infra CRs that are not labeled with WandB metadata labels.
+func resourceItemCountInNs(resourceType, ns string) int {
+	cmd := exec.Command("kubectl", "get", resourceType, "-n", ns, "-o", "json")
+	output, err := utils.Run(cmd)
+	if err != nil {
+		return -1
+	}
+	var result map[string]any
+	if err := json.Unmarshal([]byte(output), &result); err != nil {
+		return -1
+	}
+	items, _ := result["items"].([]any)
+	return len(items)
+}
+
 func verifyComponentResourcesExist(wandbName, ns, module string, g Gomega) {
 	sel := buildLabelSelector(wandbName, ns, module)
 	g.Expect(resourceItemCount("pvc", sel, ns)).To(BeNumerically(">", 0),
 		"expected PVCs for module %s", module)
-	g.Expect(resourceItemCount("pods", sel, ns)).To(BeNumerically(">", 0),
-		"expected Pods for module %s", module)
-	g.Expect(resourceItemCount(infraCRType[module], sel, ns)).To(BeNumerically(">", 0),
+	g.Expect(resourceItemCountInNs(infraCRType[module], ns)).To(BeNumerically(">", 0),
 		"expected infra CR %s for module %s", infraCRType[module], module)
 }
 
@@ -184,9 +209,7 @@ func verifyComponentResourcesDeleted(wandbName, ns, module string, timeout time.
 	verifyGone := func(g Gomega) {
 		g.Expect(resourceItemCount("pvc", sel, ns)).To(Equal(0),
 			"PVCs still exist for module %s", module)
-		g.Expect(resourceItemCount("pods", sel, ns)).To(Equal(0),
-			"Pods still exist for module %s", module)
-		g.Expect(resourceItemCount(infraCRType[module], sel, ns)).To(Equal(0),
+		g.Expect(resourceItemCountInNs(infraCRType[module], ns)).To(Equal(0),
 			"infra CR %s still exists for module %s", infraCRType[module], module)
 	}
 	Eventually(verifyGone, timeout, retentionPollingInterval).Should(Succeed())
@@ -243,17 +266,17 @@ var _ = Describe("Retention Policy Integration Tests", func() {
 
 		BeforeEach(func() {
 			wandbName = generateUniqueName(fmt.Sprintf("wandb-%s-purge", size))
-			wandbNs = "default"
+			wandbNs = generateUniqueName("wandb-test")
+
+			By(fmt.Sprintf("creating namespace %s", wandbNs))
+			Expect(createNamespace(wandbNs)).To(Succeed())
 
 			By(fmt.Sprintf("creating WandB CR %s (size=%s, purge)", wandbName, size))
 			Expect(applyManifest(createWandbManifest(wandbName, wandbNs, size))).To(Succeed())
 		})
 
 		AfterEach(func() {
-			// Best-effort cleanup in case the test failed before deletion.
-			cmd := exec.Command("kubectl", "delete", "weightsandbiases", wandbName,
-				"-n", wandbNs, "--ignore-not-found")
-			_, _ = utils.Run(cmd)
+			deleteNamespace(wandbNs)
 		})
 
 		It("should purge all resources when the CR is deleted", func() {
@@ -286,16 +309,17 @@ var _ = Describe("Retention Policy Integration Tests", func() {
 
 		BeforeEach(func() {
 			wandbName = generateUniqueName(fmt.Sprintf("wandb-%s-%s-dis", size, module))
-			wandbNs = "default"
+			wandbNs = generateUniqueName("wandb-test")
+
+			By(fmt.Sprintf("creating namespace %s", wandbNs))
+			Expect(createNamespace(wandbNs)).To(Succeed())
 
 			By(fmt.Sprintf("creating WandB CR %s (size=%s, purge)", wandbName, size))
 			Expect(applyManifest(createWandbManifest(wandbName, wandbNs, size))).To(Succeed())
 		})
 
 		AfterEach(func() {
-			cmd := exec.Command("kubectl", "delete", "weightsandbiases", wandbName,
-				"-n", wandbNs, "--ignore-not-found")
-			_, _ = utils.Run(cmd)
+			deleteNamespace(wandbNs)
 		})
 
 		It(fmt.Sprintf("should purge %s resources when the component is disabled", module), func() {

@@ -22,11 +22,6 @@ const (
 	SentinelType    = "RedisSentinel"
 	ReplicationType = "RedisReplication"
 	AppConnTypeName = "RedisAppConn"
-
-	// pvcTemplatePrefix is the volumeClaimTemplate name the opstree operator
-	// uses when creating StatefulSets, resulting in PVCs named
-	// "redis-data-{crName}-{ordinal}".
-	pvcTemplatePrefix = "redis-data"
 )
 
 func WriteState(
@@ -49,23 +44,15 @@ func WriteState(
 
 	if len(wandbLabels) > 0 {
 		var pvcPrefixes []string
-		var podPrefixes []string
 		if standaloneDesired != nil {
-			pvcPrefixes = append(pvcPrefixes, fmt.Sprintf("%s-%s-", pvcTemplatePrefix, nsnBuilder.StandaloneName()))
-			podPrefixes = append(podPrefixes, fmt.Sprintf("%s-", nsnBuilder.StandaloneName()))
+			// opstree uses the CR name as the volumeClaimTemplate name, so PVCs are
+			// named "{crName}-{crName}-{ordinal}" (e.g. "wandb-redis-wandb-redis-0").
+			pvcPrefixes = append(pvcPrefixes, fmt.Sprintf("%s-%s-", nsnBuilder.StandaloneName(), nsnBuilder.StandaloneName()))
 		}
 		if replicationDesired != nil {
-			pvcPrefixes = append(pvcPrefixes, fmt.Sprintf("%s-%s-", pvcTemplatePrefix, nsnBuilder.ReplicationName()))
-			podPrefixes = append(podPrefixes, fmt.Sprintf("%s-", nsnBuilder.ReplicationName()))
+			pvcPrefixes = append(pvcPrefixes, fmt.Sprintf("%s-%s-", nsnBuilder.ReplicationName(), nsnBuilder.ReplicationName()))
 		}
 		if err := ensurePVCLabels(ctx, cl, specNamespacedName.Namespace, pvcPrefixes, wandbLabels); err != nil {
-			results = append(results, metav1.Condition{
-				Type:   common.ReconciledType,
-				Status: metav1.ConditionFalse,
-				Reason: common.ApiErrorReason,
-			})
-		}
-		if err := ensurePodLabels(ctx, cl, specNamespacedName.Namespace, podPrefixes, wandbLabels); err != nil {
 			results = append(results, metav1.Condition{
 				Type:   common.ReconciledType,
 				Status: metav1.ConditionFalse,
@@ -78,9 +65,7 @@ func WriteState(
 }
 
 // ensurePVCLabels patches PVCs whose names match any of the given prefixes
-// that are missing the wandb labels. The opstree operator creates PVCs via
-// StatefulSet volumeClaimTemplates named "redis-data", so PVCs are named
-// "redis-data-{crName}-{ordinal}".
+// that are missing the wandb labels.
 func ensurePVCLabels(
 	ctx context.Context,
 	cl client.Client,
@@ -112,41 +97,6 @@ func ensurePVCLabels(
 			return err
 		}
 		log.Debug("patched wandb labels onto PVC", "pvc", pvc.Name)
-	}
-	return nil
-}
-
-func ensurePodLabels(
-	ctx context.Context,
-	cl client.Client,
-	namespace string,
-	namePrefixes []string,
-	labels map[string]string,
-) error {
-	log := logx.GetSlog(ctx)
-
-	podList := &corev1.PodList{}
-	if err := cl.List(ctx, podList, &client.ListOptions{Namespace: namespace}); err != nil {
-		return err
-	}
-
-	for _, pod := range podList.Items {
-		if !matchesAnyPrefix(pod.Name, namePrefixes) {
-			continue
-		}
-		if common.HasAllLabelKeys(pod.Labels, labels) {
-			continue
-		}
-		patch := client.MergeFrom(pod.DeepCopy())
-		if pod.Labels == nil {
-			pod.Labels = make(map[string]string)
-		}
-		maps.Copy(pod.Labels, labels)
-		if err := cl.Patch(ctx, &pod, patch); err != nil {
-			log.Error("failed to patch Pod labels", logx.ErrAttr(err), "pod", pod.Name)
-			return err
-		}
-		log.Debug("patched wandb labels onto Pod", "pod", pod.Name)
 	}
 	return nil
 }

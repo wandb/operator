@@ -88,7 +88,7 @@ test-e2e-retention: manifests generate fmt vet ## Run retention policy integrati
 		echo "kubectl is not installed."; \
 		exit 1; \
 	}
-	PROMETHEUS_INSTALL_SKIP=true CERT_MANAGER_INSTALL_SKIP=true \
+	PROMETHEUS_INSTALL_SKIP=true CERT_MANAGER_INSTALL_SKIP=true USE_EXISTING_CLUSTER=true \
 	go test ./test/e2e/ -v -ginkgo.v -ginkgo.focus="Retention Policy" -timeout 90m
 
 .PHONY: test-e2e
