@@ -97,15 +97,6 @@ func ReadState(
 				})
 			}
 		}
-		if onDeleteRule.Policy == translator.Detach {
-			if onDeleteErr = DetachFinalizer(ctx, client, specNamespacedName, wandbOwner); onDeleteErr != nil {
-				conditions = append(conditions, metav1.Condition{
-					Type:   RedisStandaloneCustomResourceType,
-					Status: metav1.ConditionUnknown,
-					Reason: ctrlcommon.ApiErrorReason,
-				})
-			}
-		}
 		if onDeleteErr != nil {
 			conditions = append(conditions, metav1.Condition{
 				Type:   RedisStandaloneCustomResourceType,

@@ -16,7 +16,6 @@ func ReadState(
 	ctx context.Context,
 	client client.Client,
 	specNamespacedName types.NamespacedName,
-	wandbOwner client.Object,
 	onDeleteRule translator.OnDeleteRule,
 ) []metav1.Condition {
 	ctx, _ = logx.WithSlog(ctx, logx.Minio)
@@ -54,15 +53,6 @@ func ReadState(
 						Reason: ctrlcommon.ApiErrorReason,
 					},
 				)
-			}
-		}
-		if onDeleteRule.Policy == translator.Detach {
-			if err = DetachFinalizer(ctx, client, specNamespacedName, wandbOwner); err != nil {
-				conditions = append(conditions, metav1.Condition{
-					Type:   MinioCustomResourceType,
-					Status: metav1.ConditionUnknown,
-					Reason: ctrlcommon.ApiErrorReason,
-				})
 			}
 		}
 		if err != nil {

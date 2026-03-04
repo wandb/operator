@@ -62,7 +62,6 @@ func minioReadState(
 		ctx,
 		client,
 		specNamespacedName,
-		wandb,
 		translatorv2.ToMinioOnDeleteRule(wandb, retentionPolicy),
 	)
 	newConditions = append(newConditions, readConditions...)
