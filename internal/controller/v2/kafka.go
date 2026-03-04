@@ -113,14 +113,14 @@ func kafkaPurgeFinalizer(
 	return strimzi.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule)
 }
 
-func kafkaPreserveFinalizer(
+func kafkaDetachFinalizer(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
 ) error {
 	var specNamespacedName = kafkaSpecNamespacedName(wandb.Spec.Kafka)
 
-	if err := strimzi.PreserveFinalizer(ctx, client, specNamespacedName, wandb); err != nil {
+	if err := strimzi.DetachFinalizer(ctx, client, specNamespacedName, wandb); err != nil {
 		return err
 	}
 	return nil

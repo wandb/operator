@@ -7,8 +7,8 @@ import (
 type OnDeletePolicy string
 
 const (
-	Purge    OnDeletePolicy = "purge"
-	Preserve OnDeletePolicy = "preserve"
+	Purge  OnDeletePolicy = "purge"
+	Detach OnDeletePolicy = "detach"
 )
 
 const (

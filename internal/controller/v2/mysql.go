@@ -223,6 +223,23 @@ func mysqlPurgeFinalizer(
 	return mysql.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule)
 }
 
+func mysqlDetachFinalizer(
+	ctx context.Context,
+	cl client.Client,
+	wandb *apiv2.WeightsAndBiases,
+) error {
+	specNamespacedName := mysqlSpecNamespacedName(wandb.Spec.MySQL)
+	switch wandb.Spec.MySQL.DeploymentType {
+	case apiv2.MySQLTypePercona:
+		return percona.DetachFinalizer(ctx, cl, specNamespacedName, wandb)
+	case apiv2.MySQLTypeMariadb:
+		return mariadb.DetachFinalizer(ctx, cl, specNamespacedName, wandb)
+	case apiv2.MySQLTypeMysql:
+		return mysql.DetachFinalizer(ctx, cl, specNamespacedName, wandb)
+	}
+	return nil
+}
+
 func mysqlSpecNamespacedName(mysql apiv2.WBMySQLSpec) types.NamespacedName {
 	return types.NamespacedName{
 		Namespace: mysql.Namespace,

@@ -9,4 +9,4 @@ const (
 	SizeLarge  Size = "large"
 )
 
-const DefaultOnDeleteRetentionPolicy = "preserve"
+const DefaultOnDeleteRetentionPolicy = "detach"

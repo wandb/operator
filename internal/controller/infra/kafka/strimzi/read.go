@@ -78,6 +78,15 @@ func ReadState(
 				})
 			}
 		}
+		if onDeleteRule.Policy == translator.Detach {
+			if err := DetachFinalizer(ctx, cl, specNamespacedName, wandbOwner); err != nil {
+				conditions = append(conditions, metav1.Condition{
+					Type:   KafkaCustomResourceType,
+					Status: metav1.ConditionUnknown,
+					Reason: ctrlcommon.ApiErrorReason,
+				})
+			}
+		}
 	}
 
 	var actualNodePool = &v1.KafkaNodePool{}

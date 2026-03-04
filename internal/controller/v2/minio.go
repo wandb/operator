@@ -61,6 +61,7 @@ func minioReadState(
 		ctx,
 		client,
 		specNamespacedName,
+		wandb,
 		translatorv2.ToMinioOnDeleteRule(wandb, retentionPolicy),
 	)
 	newConditions = append(newConditions, readConditions...)
@@ -107,6 +108,14 @@ func minioPurgeFinalizer(
 		return err
 	}
 	return nil
+}
+
+func minioDetachFinalizer(
+	ctx context.Context,
+	client client.Client,
+	wandb *apiv2.WeightsAndBiases,
+) error {
+	return tenant.DetachFinalizer(ctx, client, minioSpecNamespacedName(wandb.Spec.Minio), wandb)
 }
 
 func minioSpecNamespacedName(minio apiv2.WBMinioSpec) types.NamespacedName {

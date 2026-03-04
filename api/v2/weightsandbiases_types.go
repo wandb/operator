@@ -67,15 +67,15 @@ const (
 type WBOnDeletePolicy string
 
 const (
-	// WBPreserveOnDelete will keep the resources necessary recreate with the same connection and data
-	WBPreserveOnDelete WBOnDeletePolicy = "preserve"
+	// WBDetachOnDelete will keep the resources necessary recreate with the same connection and data
+	WBDetachOnDelete WBOnDeletePolicy = "detach"
 	// WBPurgeOnDelete will delete all associated resources upon deletion
 	WBPurgeOnDelete WBOnDeletePolicy = "purge"
 )
 
 type WBRetentionPolicy struct {
-	// +kubebuilder:default="preserve"
-	OnDelete WBOnDeletePolicy `json:"onDelete" default:"preserve"`
+	// +kubebuilder:default="detach"
+	OnDelete WBOnDeletePolicy `json:"onDelete" default:"detach"`
 }
 
 // WeightsAndBiasesSpec defines the desired state of WeightsAndBiases.

@@ -101,6 +101,15 @@ func ReadState(
 			})
 		}
 	}
+	if standaloneActual == nil && replicationActual == nil && onDeleteRule.Policy == translator.Detach {
+		if err := DetachFinalizer(ctx, client, specNamespacedName, wandbOwner); err != nil {
+			conditions = append(conditions, metav1.Condition{
+				Type:   RedisStandaloneCustomResourceType,
+				Status: metav1.ConditionUnknown,
+				Reason: ctrlcommon.ApiErrorReason,
+			})
+		}
+	}
 
 	if standaloneActual != nil {
 		connInfo := readStandaloneConnectionDetails(standaloneActual)

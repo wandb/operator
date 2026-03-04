@@ -52,7 +52,7 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 		It("Should apply default retention policy when OnDelete is empty", func() {
 			obj.Spec.RetentionPolicy.OnDelete = ""
 			Expect(defaulter.Default(ctx, obj)).To(Succeed())
-			Expect(obj.Spec.RetentionPolicy.OnDelete).To(Equal(appsv2.WBOnDeletePolicy("preserve")))
+			Expect(obj.Spec.RetentionPolicy.OnDelete).To(Equal(appsv2.WBOnDeletePolicy("detach")))
 		})
 
 		It("Should not override retention policy when OnDelete is already set", func() {

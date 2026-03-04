@@ -111,6 +111,14 @@ func redisPurgeFinalizer(
 	return opstree.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule)
 }
 
+func redisDetachFinalizer(
+	ctx context.Context,
+	client client.Client,
+	wandb *apiv2.WeightsAndBiases,
+) error {
+	return opstree.DetachFinalizer(ctx, client, redisSpecNamespacedName(wandb.Spec.Redis), wandb)
+}
+
 func redisSpecNamespacedName(redis apiv2.WBRedisSpec) types.NamespacedName {
 	return types.NamespacedName{
 		Namespace: redis.Namespace,

@@ -90,6 +90,45 @@ func CrudResource[T client.Object](ctx context.Context, c client.Client, desired
 	return action, err
 }
 
+// DetachOwnerReference gets the named object, removes any owner reference whose UID
+// matches ownerUID, and updates the object if any were removed. Returns nil if the
+// object is not found.
+func DetachOwnerReference[T client.Object](
+	ctx context.Context,
+	cl client.Client,
+	nsName types.NamespacedName,
+	resourceTypeName string,
+	obj T,
+	ownerUID types.UID,
+) error {
+	log := logx.GetSlog(ctx)
+	found, err := GetResource(ctx, cl, nsName, resourceTypeName, obj)
+	if err != nil || !found {
+		return err
+	}
+	refs := obj.GetOwnerReferences()
+	n := 0
+	for _, r := range refs {
+		if r.UID != ownerUID {
+			refs[n] = r
+			n++
+		}
+	}
+	if n == len(refs) {
+		return nil
+	}
+	obj.SetOwnerReferences(refs[:n])
+	if err := cl.Update(ctx, obj); err != nil {
+		if !apierrors.IsNotFound(err) {
+			log.Error("DetachOwnerReference update failed", logx.ErrAttr(err),
+				"type", resourceTypeName, "namespace", nsName.Namespace, "name", nsName.Name,
+			)
+			return err
+		}
+	}
+	return nil
+}
+
 // IsNil checks if the generic value v is a pointer and if that pointer is nil.
 // It returns false if true is a non-pointer type, or if it's a non-nil pointer.
 func IsNil[T any](v T) bool {

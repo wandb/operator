@@ -99,6 +99,15 @@ func ReadState(
 				)
 			}
 		}
+		if onDeleteRule.Policy == translator.Detach {
+			if err := DetachFinalizer(ctx, client, specNamespacedName, wandbOwner); err != nil {
+				conditions = append(conditions, metav1.Condition{
+					Type:   MySQLCustomResourceType,
+					Status: metav1.ConditionUnknown,
+					Reason: ctrlcommon.ApiErrorReason,
+				})
+			}
+		}
 	}
 
 	var connection *translator.InfraConnection

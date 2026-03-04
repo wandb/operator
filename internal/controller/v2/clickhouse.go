@@ -89,6 +89,14 @@ func clickHousePurgeFinalizer(
 	return altinity.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule)
 }
 
+func clickHouseDetachFinalizer(
+	ctx context.Context,
+	client client.Client,
+	wandb *apiv2.WeightsAndBiases,
+) error {
+	return altinity.DetachFinalizer(ctx, client, clickHouseSpecNamespacedName(wandb.Spec.ClickHouse), wandb)
+}
+
 func clickHouseSpecNamespacedName(clickHouse apiv2.WBClickHouseSpec) types.NamespacedName {
 	return types.NamespacedName{
 		Namespace: clickHouse.Namespace,

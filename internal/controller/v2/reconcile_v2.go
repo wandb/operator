@@ -84,23 +84,53 @@ func Reconcile(
 	if isFlaggedForDeletion && !wandb.ObjectMeta.DeletionTimestamp.IsZero() {
 		if ctrlqueue.ContainsString(wandb.GetFinalizers(), CleanupFinalizer) {
 
-			if err = minioPurgeFinalizer(ctx, client, wandb); err != nil {
-				return ctrl.Result{}, err
+			if wandb.GetRetentionPolicy(wandb.Spec.Minio.WBInfraSpec).OnDelete == apiv2.WBPurgeOnDelete {
+				if err = minioPurgeFinalizer(ctx, client, wandb); err != nil {
+					return ctrl.Result{}, err
+				}
 			}
-			if err = mysqlPurgeFinalizer(ctx, client, wandb); err != nil {
-				return ctrl.Result{}, err
+			if wandb.GetRetentionPolicy(wandb.Spec.MySQL.WBInfraSpec).OnDelete == apiv2.WBPurgeOnDelete {
+				if err = mysqlPurgeFinalizer(ctx, client, wandb); err != nil {
+					return ctrl.Result{}, err
+				}
 			}
-			if err = redisPurgeFinalizer(ctx, client, wandb); err != nil {
-				return ctrl.Result{}, err
+			if wandb.GetRetentionPolicy(wandb.Spec.Redis.WBInfraSpec).OnDelete == apiv2.WBPurgeOnDelete {
+				if err = redisPurgeFinalizer(ctx, client, wandb); err != nil {
+					return ctrl.Result{}, err
+				}
 			}
-			if err = kafkaPurgeFinalizer(ctx, client, wandb); err != nil {
-				return ctrl.Result{}, err
+			if wandb.GetRetentionPolicy(wandb.Spec.Kafka.WBInfraSpec).OnDelete == apiv2.WBPurgeOnDelete {
+				if err = kafkaPurgeFinalizer(ctx, client, wandb); err != nil {
+					return ctrl.Result{}, err
+				}
 			}
-			if err = clickHousePurgeFinalizer(ctx, client, wandb); err != nil {
-				return ctrl.Result{}, err
+			if wandb.GetRetentionPolicy(wandb.Spec.ClickHouse.WBInfraSpec).OnDelete == apiv2.WBPurgeOnDelete {
+				if err = clickHousePurgeFinalizer(ctx, client, wandb); err != nil {
+					return ctrl.Result{}, err
+				}
 			}
-			if wandb.GetRetentionPolicy(wandb.Spec.Kafka.WBInfraSpec).OnDelete == apiv2.WBPreserveOnDelete {
-				if err = kafkaPreserveFinalizer(ctx, client, wandb); err != nil {
+			if wandb.GetRetentionPolicy(wandb.Spec.Minio.WBInfraSpec).OnDelete == apiv2.WBDetachOnDelete {
+				if err = minioDetachFinalizer(ctx, client, wandb); err != nil {
+					return ctrl.Result{}, err
+				}
+			}
+			if wandb.GetRetentionPolicy(wandb.Spec.MySQL.WBInfraSpec).OnDelete == apiv2.WBDetachOnDelete {
+				if err = mysqlDetachFinalizer(ctx, client, wandb); err != nil {
+					return ctrl.Result{}, err
+				}
+			}
+			if wandb.GetRetentionPolicy(wandb.Spec.Redis.WBInfraSpec).OnDelete == apiv2.WBDetachOnDelete {
+				if err = redisDetachFinalizer(ctx, client, wandb); err != nil {
+					return ctrl.Result{}, err
+				}
+			}
+			if wandb.GetRetentionPolicy(wandb.Spec.Kafka.WBInfraSpec).OnDelete == apiv2.WBDetachOnDelete {
+				if err = kafkaDetachFinalizer(ctx, client, wandb); err != nil {
+					return ctrl.Result{}, err
+				}
+			}
+			if wandb.GetRetentionPolicy(wandb.Spec.ClickHouse.WBInfraSpec).OnDelete == apiv2.WBDetachOnDelete {
+				if err = clickHouseDetachFinalizer(ctx, client, wandb); err != nil {
 					return ctrl.Result{}, err
 				}
 			}

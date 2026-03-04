@@ -2018,7 +2018,7 @@ spec:
                   retentionPolicy:
                     properties:
                       onDelete:
-                        default: preserve
+                        default: detach
                         type: string
                     required:
                     - onDelete
@@ -3096,7 +3096,7 @@ spec:
                   retentionPolicy:
                     properties:
                       onDelete:
-                        default: preserve
+                        default: detach
                         type: string
                     required:
                     - onDelete
@@ -4160,7 +4160,7 @@ spec:
                   retentionPolicy:
                     properties:
                       onDelete:
-                        default: preserve
+                        default: detach
                         type: string
                     required:
                     - onDelete
@@ -5220,7 +5220,7 @@ spec:
                   retentionPolicy:
                     properties:
                       onDelete:
-                        default: preserve
+                        default: detach
                         type: string
                     required:
                     - onDelete
@@ -6276,7 +6276,7 @@ spec:
                   retentionPolicy:
                     properties:
                       onDelete:
-                        default: preserve
+                        default: detach
                         type: string
                     required:
                     - onDelete
@@ -6411,7 +6411,7 @@ spec:
               retentionPolicy:
                 properties:
                   onDelete:
-                    default: preserve
+                    default: detach
                     type: string
                 required:
                 - onDelete
