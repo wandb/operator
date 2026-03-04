@@ -80,7 +80,7 @@ func ReadState(
 				"Attempting to purge associated mysql resources after deletion",
 				"tenantName", nsnBuilder.ClusterName(),
 			)
-			if err = purgeAssociatedResources(ctx, client, specNamespacedName.Namespace, onDeleteRule.Selector); err != nil {
+			if err := purgeAssociatedResources(ctx, client, specNamespacedName.Namespace, onDeleteRule.Selector); err != nil {
 				conditions = append(
 					conditions,
 					metav1.Condition{
@@ -89,14 +89,13 @@ func ReadState(
 						Reason: ctrlcommon.ApiErrorReason,
 					},
 				)
+			} else {
+				conditions = append(conditions, metav1.Condition{
+					Type:   MySQLCustomResourceType,
+					Status: metav1.ConditionFalse,
+					Reason: ctrlcommon.PendingDeleteReason,
+				})
 			}
-		}
-		if err != nil {
-			conditions = append(conditions, metav1.Condition{
-				Type:   MySQLCustomResourceType,
-				Status: metav1.ConditionFalse,
-				Reason: ctrlcommon.PendingDeleteReason,
-			})
 		}
 	}
 

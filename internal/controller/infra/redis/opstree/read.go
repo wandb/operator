@@ -83,26 +83,24 @@ func ReadState(
 	var connection *translator.InfraConnection
 
 	if standaloneActual == nil && replicationActual == nil {
-		var onDeleteErr error
 		if onDeleteRule.Policy == translator.Purge {
 			log.Debug(
 				"Attempting to purge associated redis resources after deletion",
 				"specName", specNamespacedName.Name,
 			)
-			if onDeleteErr = purgeAssociatedResources(ctx, client, specNamespacedName.Namespace, onDeleteRule.Selector); onDeleteErr != nil {
+			if err := purgeAssociatedResources(ctx, client, specNamespacedName.Namespace, onDeleteRule.Selector); err != nil {
 				conditions = append(conditions, metav1.Condition{
 					Type:   RedisStandaloneCustomResourceType,
 					Status: metav1.ConditionUnknown,
 					Reason: ctrlcommon.ApiErrorReason,
 				})
+			} else {
+				conditions = append(conditions, metav1.Condition{
+					Type:   RedisStandaloneCustomResourceType,
+					Status: metav1.ConditionFalse,
+					Reason: ctrlcommon.PendingDeleteReason,
+				})
 			}
-		}
-		if onDeleteErr != nil {
-			conditions = append(conditions, metav1.Condition{
-				Type:   RedisStandaloneCustomResourceType,
-				Status: metav1.ConditionFalse,
-				Reason: ctrlcommon.PendingDeleteReason,
-			})
 		}
 	}
 

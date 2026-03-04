@@ -44,7 +44,7 @@ func ReadState(
 				"Attempting to purge associated minio resources after deletion",
 				"tenantName", TenantName(specNamespacedName.Name),
 			)
-			if err = purgeAssociatedResources(ctx, client, specNamespacedName.Namespace, onDeleteRule.Selector); err != nil {
+			if err := purgeAssociatedResources(ctx, client, specNamespacedName.Namespace, onDeleteRule.Selector); err != nil {
 				conditions = append(
 					conditions,
 					metav1.Condition{
@@ -53,14 +53,13 @@ func ReadState(
 						Reason: ctrlcommon.ApiErrorReason,
 					},
 				)
+			} else {
+				conditions = append(conditions, metav1.Condition{
+					Type:   MinioCustomResourceType,
+					Status: metav1.ConditionFalse,
+					Reason: ctrlcommon.PendingDeleteReason,
+				})
 			}
-		}
-		if err != nil {
-			conditions = append(conditions, metav1.Condition{
-				Type:   MinioCustomResourceType,
-				Status: metav1.ConditionFalse,
-				Reason: ctrlcommon.PendingDeleteReason,
-			})
 		}
 	}
 

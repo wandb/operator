@@ -72,14 +72,13 @@ func ReadState(
 					Status: metav1.ConditionUnknown,
 					Reason: ctrlcommon.ApiErrorReason,
 				})
+			} else {
+				conditions = append(conditions, metav1.Condition{
+					Type:   ClickHouseCustomResourceType,
+					Status: metav1.ConditionFalse,
+					Reason: ctrlcommon.PendingDeleteReason,
+				})
 			}
-		}
-		if err != nil {
-			conditions = append(conditions, metav1.Condition{
-				Type:   ClickHouseCustomResourceType,
-				Status: metav1.ConditionFalse,
-				Reason: ctrlcommon.PendingDeleteReason,
-			})
 		}
 	}
 

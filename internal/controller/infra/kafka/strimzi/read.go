@@ -59,26 +59,24 @@ func ReadState(
 	if !found {
 		log.Info("Kafka CR not found")
 		actualKafka = nil
-		var err error
 		if onDeleteRule.Policy == translator.Purge {
 			log.Debug(
 				"Attempting to purge associated kafka resources after deletion",
 				"kafkaName", nsnBuilder.KafkaName(),
 			)
-			if err = purgeAssociatedResources(ctx, cl, specNamespacedName.Namespace, onDeleteRule.Selector); err != nil {
+			if err := purgeAssociatedResources(ctx, cl, specNamespacedName.Namespace, onDeleteRule.Selector); err != nil {
 				conditions = append(conditions, metav1.Condition{
 					Type:   KafkaCustomResourceType,
 					Status: metav1.ConditionUnknown,
 					Reason: ctrlcommon.ApiErrorReason,
 				})
+			} else {
+				conditions = append(conditions, metav1.Condition{
+					Type:   KafkaCustomResourceType,
+					Status: metav1.ConditionFalse,
+					Reason: ctrlcommon.PendingDeleteReason,
+				})
 			}
-		}
-		if err != nil {
-			conditions = append(conditions, metav1.Condition{
-				Type:   KafkaCustomResourceType,
-				Status: metav1.ConditionFalse,
-				Reason: ctrlcommon.PendingDeleteReason,
-			})
 		}
 	}
 
