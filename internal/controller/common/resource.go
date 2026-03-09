@@ -5,6 +5,7 @@ import (
 	"reflect"
 
 	"github.com/wandb/operator/internal/logx"
+	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -64,8 +65,13 @@ func CrudResource[T client.Object](ctx context.Context, c client.Client, desired
 	actualExists := !IsNil(actual) && actual.GetName() != ""
 
 	if actualExists && desiredExists {
-		action = UpdateAction
+		// Avoid no-op updates. DeepDerivative treats desired as a semantic subset of actual,
+		// so controller-added/defaulted fields on actual do not trigger unnecessary updates.
+		if equality.Semantic.DeepDerivative(desired, actual) {
+			return NoAction, nil
+		}
 
+		action = UpdateAction
 		desired.SetResourceVersion(actual.GetResourceVersion())
 		err = c.Update(ctx, desired)
 	}
