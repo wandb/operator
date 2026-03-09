@@ -7,6 +7,7 @@ import (
 	"github.com/wandb/operator/internal/logx"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -65,9 +66,9 @@ func CrudResource[T client.Object](ctx context.Context, c client.Client, desired
 	actualExists := !IsNil(actual) && actual.GetName() != ""
 
 	if actualExists && desiredExists {
-		// Avoid no-op updates. DeepDerivative treats desired as a semantic subset of actual,
-		// so controller-added/defaulted fields on actual do not trigger unnecessary updates.
-		if equality.Semantic.DeepDerivative(desired, actual) {
+		// Avoid no-op updates while ignoring runtime-managed fields such as status and
+		// resource metadata that differ between desired and actual.
+		if desiredMatchesActual(desired, actual) {
 			return NoAction, nil
 		}
 
@@ -94,6 +95,37 @@ func CrudResource[T client.Object](ctx context.Context, c client.Client, desired
 		log.Error("error on crud resource", logx.ErrAttr(err), "action", action)
 	}
 	return action, err
+}
+
+func desiredMatchesActual(desired client.Object, actual client.Object) bool {
+	desiredMap, desiredErr := toComparableUnstructured(desired)
+	actualMap, actualErr := toComparableUnstructured(actual)
+	if desiredErr == nil && actualErr == nil {
+		return equality.Semantic.DeepDerivative(desiredMap, actualMap)
+	}
+
+	// Fallback for unexpected conversion failures.
+	return equality.Semantic.DeepDerivative(desired, actual)
+}
+
+func toComparableUnstructured(obj client.Object) (map[string]any, error) {
+	m, err := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
+	if err != nil {
+		return nil, err
+	}
+	delete(m, "status")
+
+	metadata, ok := m["metadata"].(map[string]any)
+	if ok {
+		delete(metadata, "creationTimestamp")
+		delete(metadata, "resourceVersion")
+		delete(metadata, "generation")
+		delete(metadata, "uid")
+		delete(metadata, "managedFields")
+		delete(metadata, "selfLink")
+	}
+
+	return m, nil
 }
 
 // IsNil checks if the generic value v is a pointer and if that pointer is nil.
