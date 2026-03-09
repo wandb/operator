@@ -2,8 +2,10 @@ package mysql
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 
 	ctrlcommon "github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/translator"
@@ -126,21 +128,21 @@ func computeMySQLReportedReadyCondition(_ context.Context, clusterCR *v2.InnoDBC
 		return []metav1.Condition{}
 	}
 
-	status := metav1.ConditionUnknown
-	reason := "Unknown"
+	status := metav1.ConditionFalse
+	reason := ctrlcommon.NoResourceReason
 
-	// Map InnoDBCluster status to conditions.
-	// InnoDBClusterStatus.Status is a RawExtension, but we can check if it's ready
-	// based on the documented behavior or by looking at the actual status if we had more info.
-	// For now, we'll assume it's ready if we can find it, or try to infer from common patterns.
-	// Actually, looking at innodbcluster_types.go, Status is runtime.RawExtension.
-	// We might need to unmarshal it or find another way to check readiness.
-
-	// If we don't have a clear way to check readiness from the Go types yet,
-	// we might just mark it as True if found for now, or look for standard conditions.
-
-	status = metav1.ConditionTrue
-	reason = "Online"
+	clusterStatus := extractInnoDBClusterStatus(clusterCR)
+	switch {
+	case strings.EqualFold(clusterStatus, "ONLINE"):
+		status = metav1.ConditionTrue
+		reason = "Online"
+	case clusterStatus != "":
+		status = metav1.ConditionFalse
+		reason = clusterStatus
+	default:
+		status = metav1.ConditionFalse
+		reason = ctrlcommon.NoResourceReason
+	}
 
 	return []metav1.Condition{
 		{
@@ -149,4 +151,25 @@ func computeMySQLReportedReadyCondition(_ context.Context, clusterCR *v2.InnoDBC
 			Reason: reason,
 		},
 	}
+}
+
+func extractInnoDBClusterStatus(clusterCR *v2.InnoDBCluster) string {
+	if clusterCR == nil || len(clusterCR.Status.Raw) == 0 {
+		return ""
+	}
+
+	var raw map[string]any
+	if err := json.Unmarshal(clusterCR.Status.Raw, &raw); err != nil {
+		return ""
+	}
+
+	cluster, ok := raw["cluster"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	value, ok := cluster["status"].(string)
+	if !ok {
+		return ""
+	}
+	return value
 }
