@@ -14,19 +14,19 @@ import (
 
 func ReadState(
 	ctx context.Context,
-	client client.Client,
+	k8sClient client.Client,
 	specNamespacedName types.NamespacedName,
-	policy translator.OnDeletePolicy,
+	onDeleteRule translator.OnDeleteRule,
 ) []metav1.Condition {
 	ctx, _ = logx.WithSlog(ctx, logx.Minio)
 	log := logx.GetSlog(ctx)
 
 	var actualResource = &miniov2.Tenant{}
-
+	conditions := make([]metav1.Condition, 0)
 	nsnBuilder := createNsNameBuilder(specNamespacedName)
 
 	found, err := ctrlcommon.GetResource(
-		ctx, client, nsnBuilder.SpecNsName(), ResourceTypeName, actualResource,
+		ctx, k8sClient, nsnBuilder.SpecNsName(), ResourceTypeName, actualResource,
 	)
 	if err != nil {
 		return []metav1.Condition{
@@ -39,39 +39,36 @@ func ReadState(
 	}
 	if !found {
 		actualResource = nil
+		if onDeleteRule.Policy == translator.Purge {
+			log.Debug(
+				"Attempting to purge associated minio resources after deletion",
+				"tenantName", TenantName(specNamespacedName.Name),
+			)
+			err = purgeAssociatedResources(ctx, k8sClient, specNamespacedName.Namespace, onDeleteRule.Selector)
+			if err != nil {
+				conditions = append(
+					conditions,
+					metav1.Condition{
+						Type:   MinioCustomResourceType,
+						Status: metav1.ConditionUnknown,
+						Reason: ctrlcommon.ApiErrorReason,
+					},
+				)
+			} else {
+				conditions = append(conditions, metav1.Condition{
+					Type:   MinioReportedReadyType,
+					Status: metav1.ConditionFalse,
+					Reason: ctrlcommon.PendingDeleteReason,
+				},
+				)
+			}
+		}
 	}
-
-	conditions := make([]metav1.Condition, 0)
 
 	if actualResource != nil {
 		conditions = append(conditions, computeMinioReportedReadyCondition(ctx, actualResource)...)
 	}
-
-	if actualResource == nil && policy == translator.Purge {
-		log.Debug(
-			"Attempting to purge associated minio resources after deletion",
-			"tenantName", TenantName(specNamespacedName.Name),
-		)
-		err = purgeAssociatedResources(ctx, client, specNamespacedName)
-		if err != nil {
-			conditions = append(
-				conditions,
-				metav1.Condition{
-					Type:   MinioCustomResourceType,
-					Status: metav1.ConditionUnknown,
-					Reason: ctrlcommon.ApiErrorReason,
-				},
-			)
-		} else {
-			conditions = append(conditions, metav1.Condition{
-				Type:   MinioReportedReadyType,
-				Status: metav1.ConditionFalse,
-				Reason: ctrlcommon.PendingDeleteReason,
-			},
-			)
-		}
-	}
-
+	log.Debug("read", "actualResource", actualResource, "rule", onDeleteRule.Policy)
 	return conditions
 }
 

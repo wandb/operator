@@ -56,7 +56,7 @@ func redisWriteState(
 		}
 	}
 
-	results := opstree.WriteState(ctx, client, specNamespacedName, standaloneDesired, sentinelDesired, replicationDesired)
+	results := opstree.WriteState(ctx, client, specNamespacedName, standaloneDesired, sentinelDesired, replicationDesired, translatorv2.BuildWandbRedisLabels(wandb))
 	return results
 }
 
@@ -67,7 +67,8 @@ func redisReadState(
 	newConditions []metav1.Condition,
 ) ([]metav1.Condition, *translator.InfraConnection) {
 	specNamespacedName := redisSpecNamespacedName(wandb.Spec.Redis)
-	readConditions, newInfraConn := opstree.ReadState(ctx, client, specNamespacedName, wandb)
+	onDeleteRule := translatorv2.ToRedisOnDeleteRule(wandb, wandb.GetRetentionPolicy(wandb.Spec.Redis.WBInfraSpec))
+	readConditions, newInfraConn := opstree.ReadState(ctx, client, specNamespacedName, wandb, onDeleteRule)
 	newConditions = append(newConditions, readConditions...)
 	return newConditions, newInfraConn
 }
@@ -98,6 +99,16 @@ func redisInferStatus(
 	err := client.Status().Update(ctx, wandb)
 
 	return ctrlResult, err
+}
+
+func redisPurgeFinalizer(
+	ctx context.Context,
+	client client.Client,
+	wandb *apiv2.WeightsAndBiases,
+) error {
+	specNamespacedName := redisSpecNamespacedName(wandb.Spec.Redis)
+	onDeleteRule := translatorv2.ToRedisOnDeleteRule(wandb, wandb.GetRetentionPolicy(wandb.Spec.Redis.WBInfraSpec))
+	return opstree.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule)
 }
 
 func redisSpecNamespacedName(redis apiv2.WBRedisSpec) types.NamespacedName {

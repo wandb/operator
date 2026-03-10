@@ -1,0 +1,35 @@
+apiVersion: apps.wandb.com/v2
+kind: WeightsAndBiases
+metadata:
+  name: wandb-dev-v2
+spec:
+  wandb:
+    hostname: http://localhost
+    features:
+      proxy: true
+    manifest-repository: "file:///server-manifest"
+    version: "0.78.0-pre"
+  size: dev
+  retentionPolicy:
+    onDelete: purge
+  mysql:
+    enabled: true
+    deploymentType: "mysql"
+    telemetry:
+      enabled: true
+  redis:
+    enabled: true
+    telemetry:
+      enabled: true
+  kafka:
+    enabled: true
+    telemetry:
+      enabled: true
+  minio:
+    enabled: true
+    telemetry:
+      enabled: true
+  clickhouse:
+    enabled: true
+    telemetry:
+      enabled: true

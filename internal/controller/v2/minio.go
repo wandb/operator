@@ -57,7 +57,12 @@ func minioReadState(
 ) []metav1.Condition {
 	specNamespacedName := minioSpecNamespacedName(wandb.Spec.Minio)
 	retentionPolicy := wandb.GetRetentionPolicy(wandb.Spec.Minio.WBInfraSpec)
-	readConditions := tenant.ReadState(ctx, client, specNamespacedName, translatorv2.ToOnDeletePolicy(retentionPolicy))
+	readConditions := tenant.ReadState(
+		ctx,
+		client,
+		specNamespacedName,
+		translatorv2.ToMinioOnDeleteRule(wandb, retentionPolicy),
+	)
 	newConditions = append(newConditions, readConditions...)
 	return newConditions
 }
@@ -88,6 +93,20 @@ func minioInferStatus(
 	err := client.Status().Update(ctx, wandb)
 
 	return ctrlResult, err
+}
+
+func minioPurgeFinalizer(
+	ctx context.Context,
+	client client.Client,
+	wandb *apiv2.WeightsAndBiases,
+) error {
+	var specNamespacedName = minioSpecNamespacedName(wandb.Spec.Minio)
+
+	onDeleteRule := translatorv2.ToMinioOnDeleteRule(wandb, wandb.GetRetentionPolicy(wandb.Spec.Minio.WBInfraSpec))
+	if err := tenant.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule); err != nil {
+		return err
+	}
+	return nil
 }
 
 func minioSpecNamespacedName(minio apiv2.WBMinioSpec) types.NamespacedName {

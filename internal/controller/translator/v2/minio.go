@@ -75,6 +75,12 @@ func ToMinioVendorSpec(
 			Configuration: &corev1.LocalObjectReference{
 				Name: tenant.ConfigName(specName),
 			},
+			ServiceMetadata: &miniov2.ServiceMetadata{
+				MinIOServiceLabels: BuildWandbMinioLabels(wandb),
+			},
+			PoolsMetadata: &miniov2.PoolsMetadata{
+				Labels: BuildWandbMinioLabels(wandb),
+			},
 			Pools: []miniov2.Pool{
 				{
 					Name:             tenant.PoolName(specName),
@@ -83,6 +89,9 @@ func ToMinioVendorSpec(
 					Servers:          infraSpec.Replicas,
 					VolumesPerServer: volumesPerServer,
 					VolumeClaimTemplate: &corev1.PersistentVolumeClaim{
+						ObjectMeta: metav1.ObjectMeta{
+							Labels: BuildWandbMinioLabels(wandb),
+						},
 						Spec: corev1.PersistentVolumeClaimSpec{
 							AccessModes: []corev1.PersistentVolumeAccessMode{
 								corev1.ReadWriteOnce,
@@ -132,4 +141,12 @@ func ToMinioEnvConfig(
 		RootUser:            spec.Config.RootUser,
 		MinioBrowserSetting: spec.Config.MinioBrowserSetting,
 	}, nil
+}
+
+func BuildWandbMinioLabels(wandb *apiv2.WeightsAndBiases) map[string]string {
+	return BuildWandbLabels(wandb, translator.MinioModuleName)
+}
+
+func ToMinioOnDeleteRule(wandb *apiv2.WeightsAndBiases, retentionPolicy apiv2.WBRetentionPolicy) translator.OnDeleteRule {
+	return ToOnDeleteRule(wandb, retentionPolicy, translator.MinioModuleName)
 }

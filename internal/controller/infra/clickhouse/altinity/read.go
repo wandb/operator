@@ -34,17 +34,18 @@ func readConnectionDetails(actual *chiv1.ClickHouseInstallation) *clickhouseConn
 
 func ReadState(
 	ctx context.Context,
-	client client.Client,
+	k8sClient client.Client,
 	specNamespacedName types.NamespacedName,
 	wandbOwner client.Object,
+	onDeleteRule translator.OnDeleteRule,
 ) ([]metav1.Condition, *translator.InfraConnection) {
-	ctx, _ = logx.WithSlog(ctx, logx.ClickHouse)
+	ctx, log := logx.WithSlog(ctx, logx.ClickHouse)
 	var actual = &chiv1.ClickHouseInstallation{}
 
 	nsnBuilder := createNsNameBuilder(specNamespacedName)
 
 	found, err := ctrlcommon.GetResource(
-		ctx, client, nsnBuilder.InstallationNsName(), ResourceTypeName, actual,
+		ctx, k8sClient, nsnBuilder.InstallationNsName(), ResourceTypeName, actual,
 	)
 	if err != nil {
 		return []metav1.Condition{
@@ -55,15 +56,36 @@ func ReadState(
 			},
 		}, nil
 	}
-	if !found {
-		actual = nil
-	}
 
 	conditions := make([]metav1.Condition, 0)
+
+	if !found {
+		actual = nil
+		if onDeleteRule.Policy == translator.Purge {
+			log.Debug(
+				"Attempting to purge associated clickhouse resources after deletion",
+				"installationName", nsnBuilder.InstallationName(),
+			)
+			if err := purgeAssociatedResources(ctx, k8sClient, specNamespacedName.Namespace, onDeleteRule.Selector); err != nil {
+				conditions = append(conditions, metav1.Condition{
+					Type:   ClickHouseCustomResourceType,
+					Status: metav1.ConditionUnknown,
+					Reason: ctrlcommon.ApiErrorReason,
+				})
+			} else {
+				conditions = append(conditions, metav1.Condition{
+					Type:   ClickHouseCustomResourceType,
+					Status: metav1.ConditionFalse,
+					Reason: ctrlcommon.PendingDeleteReason,
+				})
+			}
+		}
+	}
+
 	var connection *translator.InfraConnection
 
 	if actual != nil {
-		podsRunning, err := chPodsRunningStatus(ctx, client, nsnBuilder.Namespace(), actual)
+		podsRunning, err := chPodsRunningStatus(ctx, k8sClient, nsnBuilder.Namespace(), actual)
 		if err != nil {
 			return []metav1.Condition{
 				{
@@ -77,7 +99,7 @@ func ReadState(
 		connInfo := readConnectionDetails(actual)
 
 		connection, err = writeClickHouseConnInfo(
-			ctx, client, wandbOwner, nsnBuilder, connInfo,
+			ctx, k8sClient, wandbOwner, nsnBuilder, connInfo,
 		)
 		if err != nil {
 			if err.Error() == "missing connection info" {

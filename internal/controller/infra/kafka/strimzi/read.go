@@ -32,16 +32,17 @@ func readConnectionDetails(nsnBuilder *NsNameBuilder, actualKafka *v1.Kafka) *ka
 
 func ReadState(
 	ctx context.Context,
-	cl client.Client,
+	k8sClient client.Client,
 	specNamespacedName types.NamespacedName,
 	wandbOwner client.Object,
+	onDeleteRule translator.OnDeleteRule,
 ) ([]metav1.Condition, *translator.InfraConnection) {
 	ctx, log := logx.WithSlog(ctx, logx.Kafka)
 	nsnBuilder := createNsNameBuilder(specNamespacedName)
 
 	var actualKafka = &v1.Kafka{}
 	found, err := ctrlcommon.GetResource(
-		ctx, cl, nsnBuilder.KafkaNsName(), KafkaResourceType, actualKafka,
+		ctx, k8sClient, nsnBuilder.KafkaNsName(), KafkaResourceType, actualKafka,
 	)
 	if err != nil {
 		return []metav1.Condition{
@@ -52,14 +53,36 @@ func ReadState(
 			},
 		}, nil
 	}
+
+	conditions := make([]metav1.Condition, 0)
+
 	if !found {
 		log.Info("Kafka CR not found")
 		actualKafka = nil
+		if onDeleteRule.Policy == translator.Purge {
+			log.Debug(
+				"Attempting to purge associated kafka resources after deletion",
+				"kafkaName", nsnBuilder.KafkaName(),
+			)
+			if err := purgeAssociatedResources(ctx, k8sClient, specNamespacedName.Namespace, onDeleteRule.Selector); err != nil {
+				conditions = append(conditions, metav1.Condition{
+					Type:   KafkaCustomResourceType,
+					Status: metav1.ConditionUnknown,
+					Reason: ctrlcommon.ApiErrorReason,
+				})
+			} else {
+				conditions = append(conditions, metav1.Condition{
+					Type:   KafkaCustomResourceType,
+					Status: metav1.ConditionFalse,
+					Reason: ctrlcommon.PendingDeleteReason,
+				})
+			}
+		}
 	}
 
 	var actualNodePool = &v1.KafkaNodePool{}
 	if found, err = ctrlcommon.GetResource(
-		ctx, cl, nsnBuilder.NodePoolNsName(), NodePoolResourceType, actualNodePool,
+		ctx, k8sClient, nsnBuilder.NodePoolNsName(), NodePoolResourceType, actualNodePool,
 	); err != nil {
 		return []metav1.Condition{
 			{
@@ -74,7 +97,6 @@ func ReadState(
 		actualNodePool = nil
 	}
 
-	conditions := make([]metav1.Condition, 0)
 	var connection *translator.InfraConnection
 	if actualKafka != nil {
 
@@ -84,7 +106,7 @@ func ReadState(
 		connInfo := readConnectionDetails(nsnBuilder, actualKafka)
 
 		connection, err = writeKafkaConnInfo(
-			ctx, cl, wandbOwner, nsnBuilder, connInfo,
+			ctx, k8sClient, wandbOwner, nsnBuilder, connInfo,
 		)
 		if err != nil {
 			return []metav1.Condition{

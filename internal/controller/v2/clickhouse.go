@@ -45,7 +45,8 @@ func clickHouseReadState(
 	newConditions []metav1.Condition,
 ) ([]metav1.Condition, *translator.InfraConnection) {
 	specNamespacedName := clickHouseSpecNamespacedName(wandb.Spec.ClickHouse)
-	readConditions, newInfraConn := altinity.ReadState(ctx, client, specNamespacedName, wandb)
+	onDeleteRule := translatorv2.ToClickHouseOnDeleteRule(wandb, wandb.GetRetentionPolicy(wandb.Spec.ClickHouse.WBInfraSpec))
+	readConditions, newInfraConn := altinity.ReadState(ctx, client, specNamespacedName, wandb, onDeleteRule)
 	newConditions = append(newConditions, readConditions...)
 	return newConditions, newInfraConn
 }
@@ -76,6 +77,16 @@ func clickHouseInferStatus(
 	err := client.Status().Update(ctx, wandb)
 
 	return ctrlResult, err
+}
+
+func clickHousePurgeFinalizer(
+	ctx context.Context,
+	client client.Client,
+	wandb *apiv2.WeightsAndBiases,
+) error {
+	specNamespacedName := clickHouseSpecNamespacedName(wandb.Spec.ClickHouse)
+	onDeleteRule := translatorv2.ToClickHouseOnDeleteRule(wandb, wandb.GetRetentionPolicy(wandb.Spec.ClickHouse.WBInfraSpec))
+	return altinity.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule)
 }
 
 func clickHouseSpecNamespacedName(clickHouse apiv2.WBClickHouseSpec) types.NamespacedName {

@@ -1,4 +1,4 @@
-package tenant
+package opstree
 
 import (
 	"context"
@@ -14,15 +14,15 @@ import (
 
 func PurgeFinalizer(
 	ctx context.Context,
-	client client.Client,
+	cl client.Client,
 	specNamespacedName types.NamespacedName,
 	onDeleteRule translator.OnDeleteRule,
 ) error {
-	ctx, _ = logx.WithSlog(ctx, logx.Minio)
+	ctx, _ = logx.WithSlog(ctx, logx.Redis)
 	if onDeleteRule.Policy != translator.Purge {
 		return nil
 	}
-	return purgeAssociatedResources(ctx, client, specNamespacedName.Namespace, onDeleteRule.Selector)
+	return purgeAssociatedResources(ctx, cl, specNamespacedName.Namespace, onDeleteRule.Selector)
 }
 
 func purgeAssociatedResources(
@@ -55,28 +55,6 @@ func purgeAssociatedResources(
 	}
 	for _, pvc := range pvcList.Items {
 		if err := cl.Delete(ctx, &pvc); err != nil && !errors.IsNotFound(err) {
-			return err
-		}
-	}
-
-	// Secrets
-	secretList := &corev1.SecretList{}
-	if err := cl.List(ctx, secretList, listOptions); err != nil {
-		return err
-	}
-	if len(secretList.Items) > 0 {
-		log.Info(
-			"Purging associated Secrets",
-			"count", len(secretList.Items), "selector", onDeleteSelector.String(),
-		)
-	} else {
-		log.Debug(
-			"No associated Secrets found to purge",
-			"selector", onDeleteSelector.String(),
-		)
-	}
-	for _, secret := range secretList.Items {
-		if err := cl.Delete(ctx, &secret); err != nil && !errors.IsNotFound(err) {
 			return err
 		}
 	}

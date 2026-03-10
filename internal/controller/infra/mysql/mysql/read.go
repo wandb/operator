@@ -49,17 +49,20 @@ func readConnectionDetails(ctx context.Context, client client.Client, actual *v2
 
 func ReadState(
 	ctx context.Context,
-	client client.Client,
+	k8sClient client.Client,
 	specNamespacedName types.NamespacedName,
 	wandbOwner client.Object,
+	onDeleteRule translator.OnDeleteRule,
 ) ([]metav1.Condition, *translator.InfraConnection) {
 	ctx, _ = logx.WithSlog(ctx, logx.Mysql)
-	var actual = &v2.InnoDBCluster{}
+	log := logx.GetSlog(ctx)
 
+	var actual = &v2.InnoDBCluster{}
+	conditions := make([]metav1.Condition, 0)
 	nsnBuilder := createNsNameBuilder(specNamespacedName)
 
 	found, err := ctrlcommon.GetResource(
-		ctx, client, nsnBuilder.ClusterNsName(), ResourceTypeName, actual,
+		ctx, k8sClient, nsnBuilder.ClusterNsName(), ResourceTypeName, actual,
 	)
 	if err != nil {
 		return []metav1.Condition{
@@ -72,16 +75,39 @@ func ReadState(
 	}
 	if !found {
 		actual = nil
+		if onDeleteRule.Policy == translator.Purge {
+			log.Debug(
+				"Attempting to purge associated mysql resources after deletion",
+				"tenantName", nsnBuilder.ClusterName(),
+			)
+			err = purgeAssociatedResources(ctx, k8sClient, specNamespacedName.Namespace, onDeleteRule.Selector)
+			if err != nil {
+				conditions = append(
+					conditions,
+					metav1.Condition{
+						Type:   MySQLCustomResourceType,
+						Status: metav1.ConditionUnknown,
+						Reason: ctrlcommon.ApiErrorReason,
+					},
+				)
+			} else {
+				conditions = append(conditions, metav1.Condition{
+					Type:   MySQLCustomResourceType,
+					Status: metav1.ConditionFalse,
+					Reason: ctrlcommon.PendingDeleteReason,
+				},
+				)
+			}
+		}
 	}
 
-	conditions := make([]metav1.Condition, 0)
 	var connection *translator.InfraConnection
 
 	if actual != nil {
-		connInfo := readConnectionDetails(ctx, client, actual, specNamespacedName)
+		connInfo := readConnectionDetails(ctx, k8sClient, actual, specNamespacedName)
 
 		connection, err = writeMySQLConnInfo(
-			ctx, client, wandbOwner, nsnBuilder, connInfo,
+			ctx, k8sClient, wandbOwner, nsnBuilder, connInfo,
 		)
 		if err != nil {
 			if err.Error() == "missing connection info" {

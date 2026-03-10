@@ -1,4 +1,4 @@
-package tenant
+package mysql
 
 import (
 	"context"
@@ -14,15 +14,15 @@ import (
 
 func PurgeFinalizer(
 	ctx context.Context,
-	client client.Client,
+	cl client.Client,
 	specNamespacedName types.NamespacedName,
 	onDeleteRule translator.OnDeleteRule,
 ) error {
-	ctx, _ = logx.WithSlog(ctx, logx.Minio)
+	ctx, _ = logx.WithSlog(ctx, logx.Mysql)
 	if onDeleteRule.Policy != translator.Purge {
 		return nil
 	}
-	return purgeAssociatedResources(ctx, client, specNamespacedName.Namespace, onDeleteRule.Selector)
+	return purgeAssociatedResources(ctx, cl, specNamespacedName.Namespace, onDeleteRule.Selector)
 }
 
 func purgeAssociatedResources(

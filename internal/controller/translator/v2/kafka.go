@@ -56,14 +56,14 @@ func ToKafkaVendorSpec(
 	nsnBuilder := strimzi.CreateNsNameBuilder(types.NamespacedName{
 		Namespace: infraSpec.Namespace, Name: infraSpec.Name,
 	})
+	kafkaLabels := BuildWandbKafkaLabels(wandb)
+	kafkaLabels["app"] = nsnBuilder.KafkaName()
 
 	kafka := &v1.Kafka{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      nsnBuilder.KafkaName(),
 			Namespace: nsnBuilder.Namespace(),
-			Labels: map[string]string{
-				"app": nsnBuilder.KafkaName(),
-			},
+			Labels:    kafkaLabels,
 			Annotations: map[string]string{
 				"strimzi.io/node-pools": "enabled",
 			},
@@ -96,6 +96,9 @@ func ToKafkaVendorSpec(
 				},
 				Template: &v1.KafkaClusterTemplate{
 					Pod: &v1.PodTemplate{
+						Metadata: &v1.MetadataTemplate{
+							Labels: BuildWandbKafkaLabels(wandb),
+						},
 						Affinity:    wandb.GetAffinity(infraSpec.WBInfraSpec),
 						Tolerations: *wandb.GetTolerations(infraSpec.WBInfraSpec),
 					},
@@ -106,6 +109,9 @@ func ToKafkaVendorSpec(
 				UserOperator:  &v1.EntityUserOperatorSpec{WatchedNamespace: nsnBuilder.Namespace()},
 				Template: &v1.EntityOperatorTemplate{
 					Pod: &v1.PodTemplate{
+						Metadata: &v1.MetadataTemplate{
+							Labels: BuildWandbKafkaLabels(wandb),
+						},
 						Affinity:    wandb.GetAffinity(infraSpec.WBInfraSpec),
 						Tolerations: *wandb.GetTolerations(infraSpec.WBInfraSpec),
 					},
@@ -152,13 +158,13 @@ func ToKafkaNodePoolVendorSpec(
 		onDeletePurge = true
 	}
 
+	nodePoolLabels := BuildWandbKafkaLabels(wandb)
+	nodePoolLabels["strimzi.io/cluster"] = nsnBuilder.KafkaName()
 	nodePool := &v1.KafkaNodePool{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      nsnBuilder.NodePoolName(),
 			Namespace: nsnBuilder.Namespace(),
-			Labels: map[string]string{
-				"strimzi.io/cluster": nsnBuilder.KafkaName(),
-			},
+			Labels:    nodePoolLabels,
 		},
 		Spec: v1.KafkaNodePoolSpec{
 			Replicas: infraSpec.Replicas,
@@ -171,6 +177,18 @@ func ToKafkaNodePoolVendorSpec(
 						Type:        strimzi.StorageType,
 						Size:        infraSpec.StorageSize,
 						DeleteClaim: onDeletePurge,
+					},
+				},
+			},
+			Template: &v1.KafkaNodePoolTemplate{
+				Pod: &v1.PodTemplate{
+					Metadata: &v1.MetadataTemplate{
+						Labels: BuildWandbKafkaLabels(wandb),
+					},
+				},
+				PersistentVolumeClaim: &v1.ResourceTemplate{
+					Metadata: &v1.MetadataTemplate{
+						Labels: BuildWandbKafkaLabels(wandb),
 					},
 				},
 			},
@@ -193,4 +211,12 @@ func ToKafkaNodePoolVendorSpec(
 	}
 
 	return nodePool, nil
+}
+
+func BuildWandbKafkaLabels(wandb *apiv2.WeightsAndBiases) map[string]string {
+	return BuildWandbLabels(wandb, translator.KafkaModuleName)
+}
+
+func ToKafkaOnDeleteRule(wandb *apiv2.WeightsAndBiases, retentionPolicy apiv2.WBRetentionPolicy) translator.OnDeleteRule {
+	return ToOnDeleteRule(wandb, retentionPolicy, translator.KafkaModuleName)
 }

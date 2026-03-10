@@ -7,6 +7,7 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/infra/clickhouse/altinity"
+	"github.com/wandb/operator/internal/controller/translator"
 	"github.com/wandb/operator/internal/logx"
 	"github.com/wandb/operator/pkg/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -68,6 +69,11 @@ func ToClickHouseVendorSpec(
 		serverSettings.Set("prometheus/status_info", v1.NewSettingScalar("true"))
 	}
 
+	reclaimPolicy := v1.PVCReclaimPolicyUnspecified
+	if wandb.GetRetentionPolicy(wandb.Spec.ClickHouse.WBInfraSpec).OnDelete == apiv2.WBPurgeOnDelete {
+		reclaimPolicy = v1.PVCReclaimPolicyDelete
+	}
+
 	// Build ClickHouseInstallation spec
 	chi := &v1.ClickHouseInstallation{
 		ObjectMeta: metav1.ObjectMeta{
@@ -93,12 +99,17 @@ func ToClickHouseVendorSpec(
 			},
 			Defaults: &v1.Defaults{
 				Templates: &v1.TemplatesList{
+					PodTemplate:             nsnBuilder.PodTemplateName(),
 					DataVolumeClaimTemplate: nsnBuilder.VolumeTemplateName(),
 				},
 			},
 			Templates: &v1.Templates{
 				PodTemplates: []v1.PodTemplate{
 					{
+						Name: nsnBuilder.PodTemplateName(),
+						ObjectMeta: metav1.ObjectMeta{
+							Labels: BuildWandbClickhouseLabels(wandb),
+						},
 						Spec: corev1.PodSpec{
 							Affinity:    wandb.GetAffinity(spec.WBInfraSpec),
 							Tolerations: *wandb.GetTolerations(spec.WBInfraSpec),
@@ -108,6 +119,12 @@ func ToClickHouseVendorSpec(
 				VolumeClaimTemplates: []v1.VolumeClaimTemplate{
 					{
 						Name: nsnBuilder.VolumeTemplateName(),
+						ObjectMeta: metav1.ObjectMeta{
+							Labels: BuildWandbClickhouseLabels(wandb),
+						},
+						StorageManagement: v1.StorageManagement{
+							PVCReclaimPolicy: reclaimPolicy,
+						},
 						Spec: corev1.PersistentVolumeClaimSpec{
 							AccessModes: []corev1.PersistentVolumeAccessMode{
 								corev1.ReadWriteOnce,
@@ -129,7 +146,10 @@ func ToClickHouseVendorSpec(
 	if len(spec.Config.Resources.Requests) > 0 || len(spec.Config.Resources.Limits) > 0 {
 		chi.Spec.Templates.PodTemplates = []v1.PodTemplate{
 			{
-				//Name: "default-pod",
+				Name: nsnBuilder.PodTemplateName(),
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: BuildWandbClickhouseLabels(wandb),
+				},
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
 						{
@@ -152,4 +172,12 @@ func ToClickHouseVendorSpec(
 	}
 
 	return chi, nil
+}
+
+func BuildWandbClickhouseLabels(wandb *apiv2.WeightsAndBiases) map[string]string {
+	return BuildWandbLabels(wandb, translator.ClickhouseModuleName)
+}
+
+func ToClickHouseOnDeleteRule(wandb *apiv2.WeightsAndBiases, retentionPolicy apiv2.WBRetentionPolicy) translator.OnDeleteRule {
+	return ToOnDeleteRule(wandb, retentionPolicy, translator.ClickhouseModuleName)
 }

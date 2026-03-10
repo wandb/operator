@@ -61,6 +61,7 @@ func mysqlWriteState(
 				}
 			}
 
+			dbPasswordSecret.Labels = translatorv2.BuildWandbMysqlLabels(wandb)
 			dbPasswordSecret.Data = map[string][]byte{
 				"rootUser":     []byte("root"),
 				"rootPassword": []byte(rootPassword),
@@ -128,7 +129,7 @@ func mysqlWriteState(
 				},
 			}
 		}
-		return mysql.WriteState(ctx, client, specNamespacedName, desired)
+		return mysql.WriteState(ctx, client, specNamespacedName, desired, translatorv2.BuildWandbMysqlLabels(wandb))
 	}
 	return nil
 }
@@ -148,7 +149,7 @@ func mysqlReadState(
 	case apiv2.MySQLTypeMariadb:
 		readConditions, newInfraConn = mariadb.ReadState(ctx, client, specNamespacedName, wandb)
 	case apiv2.MySQLTypeMysql:
-		readConditions, newInfraConn = mysql.ReadState(ctx, client, specNamespacedName, wandb)
+		readConditions, newInfraConn = mysql.ReadState(ctx, client, specNamespacedName, wandb, translatorv2.ToMysqlOnDeleteRule(wandb, wandb.GetRetentionPolicy(wandb.Spec.MySQL.WBInfraSpec)))
 	case apiv2.MySQLTypePercona:
 		readConditions, newInfraConn = percona.ReadState(ctx, client, specNamespacedName, wandb)
 	}
@@ -210,6 +211,16 @@ func mysqlInferStatus(
 	err := client.Status().Update(ctx, wandb)
 
 	return ctrlResult, err
+}
+
+func mysqlPurgeFinalizer(
+	ctx context.Context,
+	client client.Client,
+	wandb *apiv2.WeightsAndBiases,
+) error {
+	specNamespacedName := mysqlSpecNamespacedName(wandb.Spec.MySQL)
+	onDeleteRule := translatorv2.ToMysqlOnDeleteRule(wandb, wandb.GetRetentionPolicy(wandb.Spec.MySQL.WBInfraSpec))
+	return mysql.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule)
 }
 
 func mysqlSpecNamespacedName(mysql apiv2.WBMySQLSpec) types.NamespacedName {

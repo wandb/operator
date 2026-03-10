@@ -4,6 +4,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const RedisModuleName = "redis"
+
 const (
 	RedisStandaloneImage  = "quay.io/opstree/redis:v7.0.15"
 	RedisReplicationImage = "quay.io/opstree/redis:v7.0.15"
