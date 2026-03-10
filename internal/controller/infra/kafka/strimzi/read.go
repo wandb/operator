@@ -32,7 +32,7 @@ func readConnectionDetails(nsnBuilder *NsNameBuilder, actualKafka *v1.Kafka) *ka
 
 func ReadState(
 	ctx context.Context,
-	cl client.Client,
+	k8sClient client.Client,
 	specNamespacedName types.NamespacedName,
 	wandbOwner client.Object,
 	onDeleteRule translator.OnDeleteRule,
@@ -42,7 +42,7 @@ func ReadState(
 
 	var actualKafka = &v1.Kafka{}
 	found, err := ctrlcommon.GetResource(
-		ctx, cl, nsnBuilder.KafkaNsName(), KafkaResourceType, actualKafka,
+		ctx, k8sClient, nsnBuilder.KafkaNsName(), KafkaResourceType, actualKafka,
 	)
 	if err != nil {
 		return []metav1.Condition{
@@ -64,7 +64,7 @@ func ReadState(
 				"Attempting to purge associated kafka resources after deletion",
 				"kafkaName", nsnBuilder.KafkaName(),
 			)
-			if err := purgeAssociatedResources(ctx, cl, specNamespacedName.Namespace, onDeleteRule.Selector); err != nil {
+			if err := purgeAssociatedResources(ctx, k8sClient, specNamespacedName.Namespace, onDeleteRule.Selector); err != nil {
 				conditions = append(conditions, metav1.Condition{
 					Type:   KafkaCustomResourceType,
 					Status: metav1.ConditionUnknown,
@@ -82,7 +82,7 @@ func ReadState(
 
 	var actualNodePool = &v1.KafkaNodePool{}
 	if found, err = ctrlcommon.GetResource(
-		ctx, cl, nsnBuilder.NodePoolNsName(), NodePoolResourceType, actualNodePool,
+		ctx, k8sClient, nsnBuilder.NodePoolNsName(), NodePoolResourceType, actualNodePool,
 	); err != nil {
 		return []metav1.Condition{
 			{
@@ -106,7 +106,7 @@ func ReadState(
 		connInfo := readConnectionDetails(nsnBuilder, actualKafka)
 
 		connection, err = writeKafkaConnInfo(
-			ctx, cl, wandbOwner, nsnBuilder, connInfo,
+			ctx, k8sClient, wandbOwner, nsnBuilder, connInfo,
 		)
 		if err != nil {
 			return []metav1.Condition{

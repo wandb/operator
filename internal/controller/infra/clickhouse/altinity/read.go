@@ -34,7 +34,7 @@ func readConnectionDetails(actual *chiv1.ClickHouseInstallation) *clickhouseConn
 
 func ReadState(
 	ctx context.Context,
-	cl client.Client,
+	k8sClient client.Client,
 	specNamespacedName types.NamespacedName,
 	wandbOwner client.Object,
 	onDeleteRule translator.OnDeleteRule,
@@ -45,7 +45,7 @@ func ReadState(
 	nsnBuilder := createNsNameBuilder(specNamespacedName)
 
 	found, err := ctrlcommon.GetResource(
-		ctx, cl, nsnBuilder.InstallationNsName(), ResourceTypeName, actual,
+		ctx, k8sClient, nsnBuilder.InstallationNsName(), ResourceTypeName, actual,
 	)
 	if err != nil {
 		return []metav1.Condition{
@@ -66,7 +66,7 @@ func ReadState(
 				"Attempting to purge associated clickhouse resources after deletion",
 				"installationName", nsnBuilder.InstallationName(),
 			)
-			if err := purgeAssociatedResources(ctx, cl, specNamespacedName.Namespace, onDeleteRule.Selector); err != nil {
+			if err := purgeAssociatedResources(ctx, k8sClient, specNamespacedName.Namespace, onDeleteRule.Selector); err != nil {
 				conditions = append(conditions, metav1.Condition{
 					Type:   ClickHouseCustomResourceType,
 					Status: metav1.ConditionUnknown,
@@ -85,7 +85,7 @@ func ReadState(
 	var connection *translator.InfraConnection
 
 	if actual != nil {
-		podsRunning, err := chPodsRunningStatus(ctx, cl, nsnBuilder.Namespace(), actual)
+		podsRunning, err := chPodsRunningStatus(ctx, k8sClient, nsnBuilder.Namespace(), actual)
 		if err != nil {
 			return []metav1.Condition{
 				{
@@ -99,7 +99,7 @@ func ReadState(
 		connInfo := readConnectionDetails(actual)
 
 		connection, err = writeClickHouseConnInfo(
-			ctx, cl, wandbOwner, nsnBuilder, connInfo,
+			ctx, k8sClient, wandbOwner, nsnBuilder, connInfo,
 		)
 		if err != nil {
 			if err.Error() == "missing connection info" {
