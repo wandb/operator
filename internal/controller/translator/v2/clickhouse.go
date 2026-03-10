@@ -18,7 +18,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
-// ToClickHouseVendorSpec converts a WBClickHouseSpec to a ClickHouseInstallation CR.
+// ToClickHouseVendorSpec converts a ClickHouseSpec to a ClickHouseInstallation CR.
 // This function translates the high-level ClickHouse spec into the vendor-specific
 // ClickHouseInstallation format used by the Altinity operator.
 func ToClickHouseVendorSpec(
@@ -87,7 +87,7 @@ func ToClickHouseVendorSpec(
 			Configuration: &v1.Configuration{
 				Clusters: []*v1.Cluster{
 					{
-						Name: nsnBuilder.ClusterName(),
+						Name: "default",
 						Layout: &v1.ChiClusterLayout{
 							ShardsCount:   altinity.ShardsCount,
 							ReplicasCount: int(spec.Replicas),
@@ -111,8 +111,8 @@ func ToClickHouseVendorSpec(
 							Labels: BuildWandbClickhouseLabels(wandb),
 						},
 						Spec: corev1.PodSpec{
-							Affinity:    wandb.GetAffinity(spec.WBInfraSpec),
-							Tolerations: *wandb.GetTolerations(spec.WBInfraSpec),
+							Affinity:    wandb.GetAffinity(spec.InfraSpec),
+							Tolerations: *wandb.GetTolerations(spec.InfraSpec),
 						},
 					},
 				},

@@ -8,11 +8,11 @@ import "github.com/wandb/operator/internal/controller/translator"
 
 func ToOnDeleteRule(
 	wandb *wandbv2.WeightsAndBiases,
-	retentionPolicy wandbv2.WBRetentionPolicy,
+	retentionPolicy wandbv2.RetentionPolicy,
 	componentName string,
 ) translator.OnDeleteRule {
 	policy := translator.Preserve
-	if retentionPolicy.OnDelete == wandbv2.WBPurgeOnDelete {
+	if retentionPolicy.OnDelete == wandbv2.PurgeOnDelete {
 		policy = translator.Purge
 	}
 	selector := labels.SelectorFromSet(BuildWandbLabels(wandb, componentName))

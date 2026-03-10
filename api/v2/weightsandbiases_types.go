@@ -57,64 +57,69 @@ func init() {
 	SchemeBuilder.Register(&WeightsAndBiases{}, &WeightsAndBiasesList{})
 }
 
-type WBSize string
+type Size string
 
 const (
-	WBSizeDev   WBSize = "dev"
-	WBSizeSmall WBSize = "small"
+	SizeDev     Size = "dev"
+	SizeMicro   Size = "micro"
+	SizeSmall   Size = "small"
+	SizeMedium  Size = "medium"
+	SizeLarge   Size = "large"
+	SizeXLarge  Size = "xlarge"
+	SizeXXLarge Size = "xxlarge"
 )
 
-type WBOnDeletePolicy string
+type OnDeletePolicy string
 
 const (
-	// WBPreserveOnDelete will keep the resources necessary recreate with the same connection and data
-	WBPreserveOnDelete WBOnDeletePolicy = "preserve"
-	// WBPurgeOnDelete will delete all associated resources upon deletion
-	WBPurgeOnDelete WBOnDeletePolicy = "purge"
+	// PreserveOnDelete will keep the resources necessary recreate with the same connection and data
+	PreserveOnDelete OnDeletePolicy = "preserve"
+	// PurgeOnDelete will delete all associated resources upon deletion
+	PurgeOnDelete OnDeletePolicy = "purge"
 )
 
-type WBRetentionPolicy struct {
+type RetentionPolicy struct {
 	// +kubebuilder:default="preserve"
-	OnDelete WBOnDeletePolicy `json:"onDelete" default:"preserve"`
+	OnDelete OnDeletePolicy `json:"onDelete" default:"preserve"`
 }
 
 // WeightsAndBiasesSpec defines the desired state of WeightsAndBiases.
 type WeightsAndBiasesSpec struct {
 	// Size is akin to high-level environment info
-	// +kubebuilder:validation:Enum=dev;small
-	Size WBSize `json:"size,omitempty"`
+	// +kubebuilder:validation:Enum=dev;micro;small;medium;large;xlarge;xxlarge
+	Size Size `json:"size,omitempty"`
 	// RequireLimits By default, only resource requests are set for deployments, set to true to also set resource limits
 	RequireLimits bool `json:"requireLimits,omitempty"`
 
-	RetentionPolicy WBRetentionPolicy `json:"retentionPolicy"`
+	RetentionPolicy RetentionPolicy `json:"retentionPolicy"`
 
 	Wandb WandbAppSpec `json:"wandb,omitempty"`
 
 	Affinity    *corev1.Affinity     `json:"affinity,omitempty"`
 	Tolerations *[]corev1.Toleration `json:"tolerations,omitempty"`
 
-	MySQL      WBMySQLSpec      `json:"mysql,omitempty"`
-	Redis      WBRedisSpec      `json:"redis,omitempty"`
-	Kafka      WBKafkaSpec      `json:"kafka,omitempty"`
-	Minio      WBMinioSpec      `json:"minio,omitempty"`
-	ClickHouse WBClickHouseSpec `json:"clickhouse,omitempty"`
+	MySQL      MySQLSpec      `json:"mysql,omitempty"`
+	Redis      RedisSpec      `json:"redis,omitempty"`
+	Kafka      KafkaSpec      `json:"kafka,omitempty"`
+	Minio      MinioSpec      `json:"minio,omitempty"`
+	ClickHouse ClickHouseSpec `json:"clickhouse,omitempty"`
 }
 
-func (w *WeightsAndBiases) GetRetentionPolicy(spec WBInfraSpec) WBRetentionPolicy {
+func (w *WeightsAndBiases) GetRetentionPolicy(spec InfraSpec) RetentionPolicy {
 	if spec.RetentionPolicy != nil {
 		return *spec.RetentionPolicy
 	}
 	return w.Spec.RetentionPolicy
 }
 
-func (w *WeightsAndBiases) GetAffinity(spec WBInfraSpec) *corev1.Affinity {
+func (w *WeightsAndBiases) GetAffinity(spec InfraSpec) *corev1.Affinity {
 	if spec.Affinity != nil {
 		return spec.Affinity
 	}
 	return w.Spec.Affinity
 }
 
-func (w *WeightsAndBiases) GetTolerations(spec WBInfraSpec) *[]corev1.Toleration {
+func (w *WeightsAndBiases) GetTolerations(spec InfraSpec) *[]corev1.Toleration {
 	if spec.Tolerations != nil {
 		return spec.Tolerations
 	}
@@ -130,16 +135,16 @@ type WandbAppSpec struct {
 	Features            map[string]bool     `json:"features"`
 	InternalServiceAuth InternalServiceAuth `json:"internalServiceAuth,omitempty"`
 
-	ServiceAccount WandbServiceAccountSpec `json:"serviceAccount,omitempty"`
+	ServiceAccount ServiceAccountSpec `json:"serviceAccount,omitempty"`
 
 	// +optional
 	AdditionalHostnames []string `json:"additionalHostnames,omitempty"`
 
 	// +optional
-	OIDC WandbOIDCSpec `json:"oidc,omitempty"`
+	OIDC OidcSpec `json:"oidc,omitempty"`
 }
 
-type WandbServiceAccountSpec struct {
+type ServiceAccountSpec struct {
 	// +kubebuilder:default=true
 	Create *bool `json:"create"`
 	// +kubebuilder:default="wandb"
@@ -152,8 +157,8 @@ type InternalServiceAuth struct {
 	OIDCIssuer string `json:"oidcIssuer,omitempty"`
 }
 
-// WandbOIDCSpec defines the structure for OpenID Connect (OIDC) configuration used in Wandb application deployments.
-type WandbOIDCSpec struct {
+// OidcSpec defines the structure for OpenID Connect (OIDC) configuration used in Wandb application deployments.
+type OidcSpec struct {
 	ClientId     string `json:"clientId"`
 	ClientSecret string `json:"clientSecret"`
 	IssuerUrl    string `json:"issuerUrl"`
@@ -168,29 +173,29 @@ const (
 	MySQLTypeMysql   MYSQLType = "mysql"
 )
 
-type WBInfraSpec struct {
-	Enabled         bool               `json:"enabled"`
-	RetentionPolicy *WBRetentionPolicy `json:"retentionPolicy,omitempty"`
+type InfraSpec struct {
+	Enabled         bool             `json:"enabled"`
+	RetentionPolicy *RetentionPolicy `json:"retentionPolicy,omitempty"`
 
 	Affinity    *corev1.Affinity     `json:"affinity,omitempty"`
 	Tolerations *[]corev1.Toleration `json:"tolerations,omitempty"`
 }
 
-// WBMySQLSpec fields have many default values that, if unspecified,
+// MySQLSpec fields have many default values that, if unspecified,
 // will be applied by a defaulting webook
-type WBMySQLSpec struct {
-	WBInfraSpec `json:",inline"`
+type MySQLSpec struct {
+	InfraSpec `json:",inline"`
 
-	DeploymentType MYSQLType     `json:"deploymentType"`
-	StorageSize    string        `json:"storageSize,omitempty"`
-	Replicas       int32         `json:"replicas,omitempty"`
-	Config         WBMySQLConfig `json:"config,omitempty"`
-	Namespace      string        `json:"namespace,omitempty"`
-	Name           string        `json:"name,omitempty"`
-	Telemetry      Telemetry     `json:"telemetry,omitempty"`
+	DeploymentType MYSQLType   `json:"deploymentType"`
+	StorageSize    string      `json:"storageSize,omitempty"`
+	Replicas       int32       `json:"replicas,omitempty"`
+	Config         MySQLConfig `json:"config,omitempty"`
+	Namespace      string      `json:"namespace,omitempty"`
+	Name           string      `json:"name,omitempty"`
+	Telemetry      Telemetry   `json:"telemetry,omitempty"`
 }
 
-type WBMySQLConfig struct {
+type MySQLConfig struct {
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 }
 
@@ -200,53 +205,53 @@ type Telemetry struct {
 	Enabled bool `json:"enabled" default:"true"`
 }
 
-// WBRedisSpec fields have many default values that, if unspecified,
+// RedisSpec fields have many default values that, if unspecified,
 // will be applied by a defaulting webook
-type WBRedisSpec struct {
-	WBInfraSpec `json:",inline"`
+type RedisSpec struct {
+	InfraSpec `json:",inline"`
 
-	StorageSize string              `json:"storageSize,omitempty"`
-	Config      WBRedisConfig       `json:"config,omitempty"`
-	Sentinel    WBRedisSentinelSpec `json:"sentinel,omitempty"`
-	Namespace   string              `json:"namespace,omitempty"`
-	Name        string              `json:"name,omitempty"`
-	Telemetry   Telemetry           `json:"telemetry,omitempty"`
+	StorageSize string            `json:"storageSize,omitempty"`
+	Config      RedisConfig       `json:"config,omitempty"`
+	Sentinel    RedisSentinelSpec `json:"sentinel,omitempty"`
+	Namespace   string            `json:"namespace,omitempty"`
+	Name        string            `json:"name,omitempty"`
+	Telemetry   Telemetry         `json:"telemetry,omitempty"`
 }
 
-type WBRedisConfig struct {
+type RedisConfig struct {
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-type WBRedisSentinelSpec struct {
-	Enabled bool                  `json:"enabled"`
-	Config  WBRedisSentinelConfig `json:"config,omitempty"`
+type RedisSentinelSpec struct {
+	Enabled bool                `json:"enabled"`
+	Config  RedisSentinelConfig `json:"config,omitempty"`
 }
 
-type WBRedisSentinelConfig struct {
+type RedisSentinelConfig struct {
 	MasterName string                      `json:"masterName,omitempty"`
 	Resources  corev1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-// WBKafkaSpec fields have many default values that, if unspecified,
+// KafkaSpec fields have many default values that, if unspecified,
 // will be applied by a defaulting webook
-type WBKafkaSpec struct {
-	WBInfraSpec `json:",inline"`
+type KafkaSpec struct {
+	InfraSpec `json:",inline"`
 
-	StorageSize      string        `json:"storageSize,omitempty"`
-	Replicas         int32         `json:"replicas,omitempty"`
-	Config           WBKafkaConfig `json:"config,omitempty"`
-	Namespace        string        `json:"namespace,omitempty"`
-	Name             string        `json:"name,omitempty"`
-	Telemetry        Telemetry     `json:"telemetry,omitempty"`
-	SkipDataRecovery bool          `json:"skipDataRecovery,omitempty"`
+	StorageSize      string      `json:"storageSize,omitempty"`
+	Replicas         int32       `json:"replicas,omitempty"`
+	Config           KafkaConfig `json:"config,omitempty"`
+	Namespace        string      `json:"namespace,omitempty"`
+	Name             string      `json:"name,omitempty"`
+	Telemetry        Telemetry   `json:"telemetry,omitempty"`
+	SkipDataRecovery bool        `json:"skipDataRecovery,omitempty"`
 }
 
-type WBKafkaConfig struct {
+type KafkaConfig struct {
 	Resources         corev1.ResourceRequirements `json:"resources,omitempty"`
-	ReplicationConfig WBKafkaReplicationConfig    `json:"replicationConfig,omitempty"`
+	ReplicationConfig KafkaReplicationConfig      `json:"replicationConfig,omitempty"`
 }
 
-type WBKafkaReplicationConfig struct {
+type KafkaReplicationConfig struct {
 	DefaultReplicationFactor int32 `json:"defaultReplicationFactor,omitempty"`
 	MinInSyncReplicas        int32 `json:"minInSyncReplicas,omitempty"`
 	OffsetsTopicRF           int32 `json:"offsetsTopicRF,omitempty"`
@@ -254,40 +259,40 @@ type WBKafkaReplicationConfig struct {
 	TransactionStateISR      int32 `json:"transactionStateRF,omitempty"`
 }
 
-// WBMinioSpec fields have many default values that, if unspecified,
+// MinioSpec fields have many default values that, if unspecified,
 // will be applied by a defaulting webook
-type WBMinioSpec struct {
-	WBInfraSpec `json:",inline"`
+type MinioSpec struct {
+	InfraSpec `json:",inline"`
 
-	StorageSize string        `json:"storageSize,omitempty"`
-	Replicas    int32         `json:"replicas,omitempty"`
-	Config      WBMinioConfig `json:"config,omitempty"`
-	Namespace   string        `json:"namespace,omitempty"`
-	Name        string        `json:"name,omitempty"`
-	Telemetry   Telemetry     `json:"telemetry,omitempty"`
+	StorageSize string      `json:"storageSize,omitempty"`
+	Replicas    int32       `json:"replicas,omitempty"`
+	Config      MinioConfig `json:"config,omitempty"`
+	Namespace   string      `json:"namespace,omitempty"`
+	Name        string      `json:"name,omitempty"`
+	Telemetry   Telemetry   `json:"telemetry,omitempty"`
 }
 
-type WBMinioConfig struct {
+type MinioConfig struct {
 	Resources           corev1.ResourceRequirements `json:"resources,omitempty"`
 	RootUser            string                      `json:"rootUser,omitempty"`
 	MinioBrowserSetting string                      `json:"minioBrowserSetting,omitempty"`
 }
 
-// WBClickHouseSpec fields have many default values that, if unspecified,
+// ClickHouseSpec fields have many default values that, if unspecified,
 // will be applied by a defaulting webook
-type WBClickHouseSpec struct {
-	WBInfraSpec `json:",inline"`
+type ClickHouseSpec struct {
+	InfraSpec `json:",inline"`
 
-	StorageSize string             `json:"storageSize,omitempty"`
-	Replicas    int32              `json:"replicas,omitempty"`
-	Version     string             `json:"version,omitempty"`
-	Config      WBClickHouseConfig `json:"config,omitempty"`
-	Namespace   string             `json:"namespace,omitempty"`
-	Name        string             `json:"name,omitempty"`
-	Telemetry   Telemetry          `json:"telemetry,omitempty"`
+	StorageSize string           `json:"storageSize,omitempty"`
+	Replicas    int32            `json:"replicas,omitempty"`
+	Version     string           `json:"version,omitempty"`
+	Config      ClickHouseConfig `json:"config,omitempty"`
+	Namespace   string           `json:"namespace,omitempty"`
+	Name        string           `json:"name,omitempty"`
+	Telemetry   Telemetry        `json:"telemetry,omitempty"`
 }
 
-type WBClickHouseConfig struct {
+type ClickHouseConfig struct {
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 }
 

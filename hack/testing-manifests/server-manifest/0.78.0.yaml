@@ -19,10 +19,10 @@ bucket:
         volumeSize: 10Gi
         resources:
           requests:
-            cpu: 500m
+            cpu: 1
             memory: 4Gi
           limits:
-            cpu: 500m
+            cpu: 1
             memory: 4Gi
       small:
         replicas: 3
@@ -47,10 +47,10 @@ clickhouse:
         volumeSize: 10Gi
         resources:
           requests:
-            cpu: 500m
+            cpu: 1
             memory: 4Gi
           limits:
-            cpu: 500m
+            cpu: 1
             memory: 4Gi
       small:
         shards: 1
@@ -93,11 +93,11 @@ kafka:
       transactionStateISR: 3
       resources:
         requests:
-          cpu: 500m
-          memory: 1Gi
+          cpu: 1
+          memory: 4Gi
         limits:
-          cpu: 500m
-          memory: 1Gi
+          cpu: 1
+          memory: 4Gi
     small:
       replicas: 3
       volumeSize: 100Gi
@@ -140,11 +140,11 @@ mysql:
         volumeSize: 10Gi
         resources:
           requests:
-            cpu: 500m
-            memory: 2Gi
+            cpu: 1
+            memory: 4Gi
           limits:
-            cpu: 500m
-            memory: 2Gi
+            cpu: 1
+            memory: 4Gi
       small:
         replicas: 3
         volumeSize: 100Gi
@@ -161,21 +161,20 @@ mysql:
 
 redis:
   default:
-    sentinelGroup: gorilla
     sizing:
       default:
         shards: 1
         replicas: 1
         volumeSize: 10Gi
       micro:
-        replicas: 3
+        replicas: 2
         volumeSize: 10Gi
         resources:
           requests:
-            cpu: 500m
+            cpu: 1
             memory: 4Gi
           limits:
-            cpu: 500m
+            cpu: 1
             memory: 4Gi
       small:
         shards: 1
@@ -497,7 +496,7 @@ applications:
   - name: anaconda2
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/anaconda2
-      tag: 0.78.0-pre-operator-v2-no-app.1
+      tag: 0.78.0
     containers:
       - name: anaconda2
         ports:
@@ -519,11 +518,11 @@ applications:
       micro:
         resources:
           limits:
-            cpu: 500m
-            memory: 1Gi
+            cpu: "1"
+            memory: 2Gi
           requests:
-            cpu: 500m
-            memory: 1Gi
+            cpu: "1"
+            memory: 2Gi
         autoscaling:
           horizontal:
             enabled: true
@@ -573,7 +572,7 @@ applications:
             type: mysql
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.0-pre-operator-v2-no-app.1
+      tag: 0.78.0
     containers:
       - name: api
         args:
@@ -597,10 +596,10 @@ applications:
       micro:
         resources:
           limits:
-            cpu: 500m
+            cpu: "1"
             memory: 2Gi
           requests:
-            cpu: 500m
+            cpu: "1"
             memory: 2Gi
         autoscaling:
           horizontal:
@@ -633,23 +632,10 @@ applications:
       - gorillaOnprem
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.0-pre-operator-v2-no-app.1
+      tag: 0.78.0
     containers:
       - name: executor
     sizing:
-      micro:
-        resources:
-          limits:
-            cpu: "1"
-            memory: 4Gi
-          requests:
-            cpu: "1"
-            memory: 4Gi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 2
-            minReplicas: 1
       small:
         resources:
           limits:
@@ -674,16 +660,16 @@ applications:
       - gorillaOnprem
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.0-pre-operator-v2-no-app.1
+      tag: 0.78.0
     sizing:
       micro:
         resources:
           limits:
-            cpu: 500m
-            memory: 1Gi
+            cpu: "1"
+            memory: 2Gi
           requests:
-            cpu: 500m
-            memory: 1Gi
+            cpu: "1"
+            memory: 2Gi
         autoscaling:
           horizontal:
             enabled: true
@@ -715,18 +701,18 @@ applications:
       - gorillaOnprem
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.0-pre-operator-v2-no-app.1
+      tag: 0.78.0
     containers:
       - name: filestream
     sizing:
       micro:
         resources:
           limits:
-            cpu: 500m
-            memory: 1Gi
+            cpu: "1"
+            memory: 2Gi
           requests:
-            cpu: 500m
-            memory: 1Gi
+            cpu: "1"
+            memory: 2Gi
         autoscaling:
           horizontal:
             enabled: true
@@ -761,18 +747,18 @@ applications:
         value: "$(KAFKA_URL)/$(KAFKA_RUNS_V2_TOPIC_NAME)?consumer_group_id=flat-run-fields-updater"
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.0-pre-operator-v2-no-app.1
+      tag: 0.78.0
     containers:
       - name: flat-run-fields-updater
     sizing:
       micro:
         resources:
           limits:
-            cpu: 500m
-            memory: 1Gi
+            cpu: "1"
+            memory: 2Gi
           requests:
-            cpu: 500m
-            memory: 1Gi
+            cpu: "1"
+            memory: 2Gi
         autoscaling:
           horizontal:
             enabled: true
@@ -794,7 +780,7 @@ applications:
   - name: frontend
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/frontend-nginx
-      tag: 0.78.0-pre-operator-v2-no-app.1
+      tag: 0.78.0
     commonEnvs:
       - frontend
     env:
@@ -847,11 +833,11 @@ applications:
       micro:
         resources:
           limits:
-            cpu: 500m
-            memory: 512Mi
+            cpu: "1"
+            memory: 2Gi
           requests:
-            cpu: 500m
-            memory: 512Mi
+            cpu: "1"
+            memory: 2Gi
         autoscaling:
           horizontal:
             enabled: true
@@ -895,18 +881,18 @@ applications:
         value: "memory://"
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.0-pre-operator-v2-no-app.1
+      tag: 0.78.0
     containers:
       - name: glue
     sizing:
       micro:
         resources:
           limits:
-            cpu: 500m
-            memory: 1Gi
+            cpu: "1"
+            memory: 3Gi
           requests:
-            cpu: 500m
-            memory: 1Gi
+            cpu: "1"
+            memory: 3Gi
       small:
         resources:
           limits:
@@ -931,18 +917,18 @@ applications:
         value: "$(KAFKA_URL)/$(KAFKA_RUNS_V2_TOPIC_NAME)?consumer_group_id=metric-observer"
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.0-pre-operator-v2-no-app.1
+      tag: 0.78.0
     containers:
       - name: metric-observer
     sizing:
       micro:
         resources:
           limits:
-            cpu: 500m
-            memory: 1Gi
+            cpu: "1"
+            memory: 2Gi
           requests:
-            cpu: 500m
-            memory: 1Gi
+            cpu: "1"
+            memory: 2Gi
         autoscaling:
           horizontal:
             enabled: true
@@ -974,7 +960,7 @@ applications:
       - gorillaOnprem
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.0-pre-operator-v2-no-app.1
+      tag: 0.78.0
     containers:
       - name: parquet
         ports:
@@ -997,10 +983,10 @@ applications:
         resources:
           limits:
             cpu: "1"
-            memory: 4Gi
+            memory: 8Gi
           requests:
             cpu: "1"
-            memory: 4Gi
+            memory: 8Gi
         autoscaling:
           horizontal:
             enabled: true
@@ -1022,7 +1008,7 @@ applications:
   - name: weave
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-python
-      tag: 0.78.0-pre-operator-v2-no-app.1
+      tag: 0.78.0
     containers:
       - name: weave
         ports:
@@ -1099,7 +1085,7 @@ applications:
       - weaveTrace
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
-      tag: 0.78.0-pre-operator-v2-no-app.1
+      tag: 0.78.0
     containers:
       - name: weave-trace
         args:
@@ -1135,10 +1121,10 @@ applications:
       micro:
         resources:
           limits:
-            cpu: 500m
+            cpu: "1"
             memory: 2Gi
           requests:
-            cpu: 500m
+            cpu: "1"
             memory: 2Gi
         autoscaling:
           horizontal:
@@ -1161,7 +1147,7 @@ applications:
   - name: weave-trace-worker
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
-      tag: 0.78.0-pre-operator-v2-no-app.1
+      tag: 0.78.0
     env:
       - name: DD_TRACE_ENABLED
         value: "false"
@@ -1179,10 +1165,10 @@ applications:
       micro:
         resources:
           limits:
-            cpu: 500m
+            cpu: "1"
             memory: 2Gi
           requests:
-            cpu: 500m
+            cpu: "1"
             memory: 2Gi
         autoscaling:
           horizontal:
@@ -1205,7 +1191,7 @@ applications:
   - name: weave-trace-evaluate-model-worker
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
-      tag: 0.78.0-pre-operator-v2-no-app.1
+      tag: 0.78.0
     env:
       - name: DD_TRACE_ENABLED
         value: "false"
@@ -1223,10 +1209,10 @@ applications:
       micro:
         resources:
           limits:
-            cpu: 500m
+            cpu: "1"
             memory: 2Gi
           requests:
-            cpu: 500m
+            cpu: "1"
             memory: 2Gi
         autoscaling:
           horizontal:
@@ -1407,11 +1393,11 @@ applications:
       micro:
         resources:
           limits:
-            cpu: 500m
-            memory: 512Mi
+            cpu: "1"
+            memory: 2Gi
           requests:
-            cpu: 500m
-            memory: 512Mi
+            cpu: "1"
+            memory: 2Gi
         autoscaling:
           horizontal:
             enabled: true
@@ -1421,7 +1407,7 @@ migrations:
   gorilla:
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.0-pre-operator-v2-no-app.1
+      tag: 0.78.0
     args:
       - "migrate"
       - "--db=$(GORILLA_METADATA_STORE)"
@@ -1434,7 +1420,7 @@ migrations:
   internal-signer:
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.0-pre-operator-v2-no-app.1
+      tag: 0.78.0
     args:
       - "secret-generation-job"
     env:
@@ -1447,7 +1433,7 @@ migrations:
   weave-trace:
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
-      tag: 0.78.0-pre-operator-v2-no-app.1
+      tag: 0.78.0
     args:
       - python
       - migrator.py

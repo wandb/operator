@@ -25,7 +25,7 @@ func (n *NsNameBuilder) SpecName() string {
 }
 
 func (n *NsNameBuilder) InstallationName() string {
-	return fmt.Sprintf("%s-install", n.SpecName())
+	return n.SpecName()
 }
 
 func (n *NsNameBuilder) InstallationNsName() types.NamespacedName {
@@ -36,7 +36,15 @@ func (n *NsNameBuilder) InstallationNsName() types.NamespacedName {
 }
 
 func (n *NsNameBuilder) ClusterName() string {
-	return n.SpecName()
+	name := n.SpecName()
+	if len(name) > 15 {
+		name = name[:15]
+	}
+	// Trim trailing hyphens
+	for len(name) > 0 && name[len(name)-1] == '-' {
+		name = name[:len(name)-1]
+	}
+	return name
 }
 
 func (n *NsNameBuilder) VolumeTemplateName() string {

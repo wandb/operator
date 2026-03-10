@@ -69,6 +69,7 @@ func mysqlWriteState(
 				"password":     []byte(userPassword),
 			}
 			if err = client.Create(ctx, dbPasswordSecret); err != nil {
+				logger.Error(err, "failed to create db password secret")
 				return []metav1.Condition{
 					{
 						Type:   common.ReconciledType,
@@ -78,6 +79,7 @@ func mysqlWriteState(
 				}
 			}
 		} else {
+			logger.Error(err, "failed to retrieve db password secret")
 			return []metav1.Condition{
 				{
 					Type:   common.ReconciledType,
@@ -93,6 +95,7 @@ func mysqlWriteState(
 		var desired *v1.PerconaXtraDBCluster
 		desired, err = translatorv2.ToPerconaMySQLVendorSpec(ctx, wandb, client.Scheme())
 		if err != nil {
+			logger.Error(err, "failed to translate mysql spec")
 			return []metav1.Condition{
 				{
 					Type:   common.ReconciledType,
@@ -108,6 +111,7 @@ func mysqlWriteState(
 		var desired *v1alpha1.MariaDB
 		desired, err = translatorv2.ToMariaDBMySQLVendorSpec(ctx, wandb.Spec.MySQL, wandb, client.Scheme())
 		if err != nil {
+			logger.Error(err, "failed to translate mysql spec")
 			return []metav1.Condition{
 				{
 					Type:   common.ReconciledType,
@@ -121,6 +125,7 @@ func mysqlWriteState(
 		var desired *mysqlv2.InnoDBCluster
 		desired, err = translatorv2.ToMysqlMySQLVendorSpec(ctx, wandb.Spec.MySQL, wandb, client.Scheme())
 		if err != nil {
+			logger.Error(err, "failed to translate mysql spec")
 			return []metav1.Condition{
 				{
 					Type:   common.ReconciledType,
@@ -223,7 +228,7 @@ func mysqlPurgeFinalizer(
 	return mysql.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule)
 }
 
-func mysqlSpecNamespacedName(mysql apiv2.WBMySQLSpec) types.NamespacedName {
+func mysqlSpecNamespacedName(mysql apiv2.MySQLSpec) types.NamespacedName {
 	return types.NamespacedName{
 		Namespace: mysql.Namespace,
 		Name:      mysql.Name,

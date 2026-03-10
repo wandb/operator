@@ -36,7 +36,7 @@ func createKafkaMetricsConfig(telemetry apiv2.Telemetry) *v1.MetricsConfig {
 	}
 }
 
-// ToKafkaVendorSpec converts a WBKafkaSpec to a Kafka CR.
+// ToKafkaVendorSpec converts a KafkaSpec to a Kafka CR.
 // This function translates the high-level Kafka spec into the vendor-specific
 // Kafka format used by the Strimzi operator.
 // Note: In KRaft mode with node pools, the Kafka.Spec.Kafka.Replicas MUST be 0.
@@ -99,8 +99,8 @@ func ToKafkaVendorSpec(
 						Metadata: &v1.MetadataTemplate{
 							Labels: BuildWandbKafkaLabels(wandb),
 						},
-						Affinity:    wandb.GetAffinity(infraSpec.WBInfraSpec),
-						Tolerations: *wandb.GetTolerations(infraSpec.WBInfraSpec),
+						Affinity:    wandb.GetAffinity(infraSpec.InfraSpec),
+						Tolerations: *wandb.GetTolerations(infraSpec.InfraSpec),
 					},
 				},
 			},
@@ -112,8 +112,8 @@ func ToKafkaVendorSpec(
 						Metadata: &v1.MetadataTemplate{
 							Labels: BuildWandbKafkaLabels(wandb),
 						},
-						Affinity:    wandb.GetAffinity(infraSpec.WBInfraSpec),
-						Tolerations: *wandb.GetTolerations(infraSpec.WBInfraSpec),
+						Affinity:    wandb.GetAffinity(infraSpec.InfraSpec),
+						Tolerations: *wandb.GetTolerations(infraSpec.InfraSpec),
 					},
 				},
 			},
@@ -133,7 +133,7 @@ func ToKafkaVendorSpec(
 	return kafka, nil
 }
 
-// ToKafkaNodePoolVendorSpec converts a WBKafkaSpec to a KafkaNodePool CR.
+// ToKafkaNodePoolVendorSpec converts a KafkaSpec to a KafkaNodePool CR.
 // This function creates the node pool that contains the actual replica count
 // and runs in KRaft mode with broker and controller roles.
 func ToKafkaNodePoolVendorSpec(
@@ -148,13 +148,13 @@ func ToKafkaNodePoolVendorSpec(
 		return nil, nil
 	}
 
-	retentionPolicy := wandb.GetRetentionPolicy(wandb.Spec.Kafka.WBInfraSpec)
+	retentionPolicy := wandb.GetRetentionPolicy(wandb.Spec.Kafka.InfraSpec)
 	nsnBuilder := strimzi.CreateNsNameBuilder(types.NamespacedName{
 		Namespace: infraSpec.Namespace, Name: infraSpec.Name,
 	})
 
 	onDeletePurge := false
-	if retentionPolicy.OnDelete == apiv2.WBPurgeOnDelete {
+	if retentionPolicy.OnDelete == apiv2.PurgeOnDelete {
 		onDeletePurge = true
 	}
 

@@ -7,7 +7,6 @@ import (
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/infra/redis/opstree"
 	"github.com/wandb/operator/internal/controller/translator"
-	"github.com/wandb/operator/internal/defaults"
 	"github.com/wandb/operator/internal/logx"
 	rediscommon "github.com/wandb/operator/pkg/vendored/redis-operator/common/v1beta2"
 	redisv1beta2 "github.com/wandb/operator/pkg/vendored/redis-operator/redis/v1beta2"
@@ -22,7 +21,7 @@ import (
 )
 
 const (
-	DefaultSentinelGroup      = defaults.DefaultSentinelGroup
+	DefaultSentinelGroup      = "gorilla"
 	DefaultRedisExporterImage = "quay.io/opstree/redis-exporter:v1.44.0"
 	DefaultRedisExporterPort  = 9121
 )
@@ -43,7 +42,7 @@ func createRedisExporterConfig(telemetry apiv2.Telemetry) *rediscommon.RedisExpo
 	}
 }
 
-// ToRedisStandaloneVendorSpec converts a WBRedisSpec to a Redis standalone CR.
+// ToRedisStandaloneVendorSpec converts a RedisSpec to a Redis standalone CR.
 // This function creates a standalone Redis instance (no HA, no sentinel).
 // Returns an error if sentinel is enabled in the spec.
 func ToRedisStandaloneVendorSpec(
@@ -87,8 +86,8 @@ func ToRedisStandaloneVendorSpec(
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				Resources:       &corev1.ResourceRequirements{},
 			},
-			Affinity:    wandb.GetAffinity(spec.WBInfraSpec),
-			Tolerations: wandb.GetTolerations(spec.WBInfraSpec),
+			Affinity:    wandb.GetAffinity(spec.InfraSpec),
+			Tolerations: wandb.GetTolerations(spec.InfraSpec),
 			Storage: &rediscommon.Storage{
 				VolumeClaimTemplate: corev1.PersistentVolumeClaim{
 					ObjectMeta: metav1.ObjectMeta{
@@ -129,7 +128,7 @@ func ToRedisStandaloneVendorSpec(
 	return redis, nil
 }
 
-// ToRedisSentinelVendorSpec converts a WBRedisSpec to a RedisSentinel CR.
+// ToRedisSentinelVendorSpec converts a RedisSpec to a RedisSentinel CR.
 // This function creates a Redis Sentinel for HA configuration.
 // Returns an error if sentinel is not enabled in the spec.
 func ToRedisSentinelVendorSpec(
@@ -152,8 +151,8 @@ func ToRedisSentinelVendorSpec(
 		Namespace: spec.Namespace, Name: spec.Name,
 	})
 
-	// Default sentinel count to 3 if not specified
-	sentinelCount := int32(defaults.ReplicaSentinelCount)
+	// TODO I dont think we want to default this at all?
+	sentinelCount := int32(3)
 
 	// Get master name from config or use default
 	masterName := DefaultSentinelGroup
@@ -173,8 +172,8 @@ func ToRedisSentinelVendorSpec(
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				Resources:       &corev1.ResourceRequirements{},
 			},
-			Affinity:    wandb.GetAffinity(spec.WBInfraSpec),
-			Tolerations: wandb.GetTolerations(spec.WBInfraSpec),
+			Affinity:    wandb.GetAffinity(spec.InfraSpec),
+			Tolerations: wandb.GetTolerations(spec.InfraSpec),
 			RedisSentinelConfig: &redissentinelv1beta2.RedisSentinelConfig{
 				RedisSentinelConfig: rediscommon.RedisSentinelConfig{
 					RedisReplicationName: nsnBuilder.ReplicationName(),
@@ -204,7 +203,7 @@ func ToRedisSentinelVendorSpec(
 	return sentinel, nil
 }
 
-// ToRedisReplicationVendorSpec converts a WBRedisSpec to a RedisReplication CR.
+// ToRedisReplicationVendorSpec converts a RedisSpec to a RedisReplication CR.
 // This function creates a Redis replication setup for HA configuration.
 // Returns an error if sentinel is not enabled in the spec.
 func ToRedisReplicationVendorSpec(
@@ -230,11 +229,12 @@ func ToRedisReplicationVendorSpec(
 	// Parse storage quantity
 	storageQuantity, err := resource.ParseQuantity(spec.StorageSize)
 	if err != nil {
+		log.Error("Failed to parse storage size", "storageSize", spec.StorageSize, "error", err)
 		return nil, fmt.Errorf("invalid storage size %q: %w", spec.StorageSize, err)
 	}
 
-	// Default replication count to 3 if not specified
-	replicaCount := int32(defaults.ReplicaSentinelCount)
+	// TODO I dont think we want to default this at all?
+	replicaCount := int32(3)
 
 	replication := &redisreplicationv1beta2.RedisReplication{
 		ObjectMeta: metav1.ObjectMeta{
@@ -248,8 +248,8 @@ func ToRedisReplicationVendorSpec(
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				Resources:       &corev1.ResourceRequirements{},
 			},
-			Affinity:    wandb.GetAffinity(spec.WBInfraSpec),
-			Tolerations: wandb.GetTolerations(spec.WBInfraSpec),
+			Affinity:    wandb.GetAffinity(spec.InfraSpec),
+			Tolerations: wandb.GetTolerations(spec.InfraSpec),
 			Storage: &rediscommon.Storage{
 				VolumeClaimTemplate: corev1.PersistentVolumeClaim{
 					ObjectMeta: metav1.ObjectMeta{

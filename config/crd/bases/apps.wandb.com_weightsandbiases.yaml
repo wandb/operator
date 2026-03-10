@@ -1021,7 +1021,7 @@ spec:
                 type: object
               clickhouse:
                 description: |-
-                  WBClickHouseSpec fields have many default values that, if unspecified,
+                  ClickHouseSpec fields have many default values that, if unspecified,
                   will be applied by a defaulting webook
                 properties:
                   affinity:
@@ -2081,7 +2081,7 @@ spec:
                 type: object
               kafka:
                 description: |-
-                  WBKafkaSpec fields have many default values that, if unspecified,
+                  KafkaSpec fields have many default values that, if unspecified,
                   will be applied by a defaulting webook
                 properties:
                   affinity:
@@ -3159,7 +3159,7 @@ spec:
                 type: object
               minio:
                 description: |-
-                  WBMinioSpec fields have many default values that, if unspecified,
+                  MinioSpec fields have many default values that, if unspecified,
                   will be applied by a defaulting webook
                 properties:
                   affinity:
@@ -4221,7 +4221,7 @@ spec:
                 type: object
               mysql:
                 description: |-
-                  WBMySQLSpec fields have many default values that, if unspecified,
+                  MySQLSpec fields have many default values that, if unspecified,
                   will be applied by a defaulting webook
                 properties:
                   affinity:
@@ -5282,7 +5282,7 @@ spec:
                 type: object
               redis:
                 description: |-
-                  WBRedisSpec fields have many default values that, if unspecified,
+                  RedisSpec fields have many default values that, if unspecified,
                   will be applied by a defaulting webook
                 properties:
                   affinity:
@@ -6424,7 +6424,12 @@ spec:
                 description: Size is akin to high-level environment info
                 enum:
                 - dev
+                - micro
                 - small
+                - medium
+                - large
+                - xlarge
+                - xxlarge
                 type: string
               tolerations:
                 items:
@@ -6491,7 +6496,7 @@ spec:
                   manifestRepository:
                     type: string
                   oidc:
-                    description: WandbOIDCSpec defines the structure for OpenID Connect
+                    description: OidcSpec defines the structure for OpenID Connect
                       (OIDC) configuration used in Wandb application deployments.
                     properties:
                       authMethod:

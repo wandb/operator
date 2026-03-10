@@ -22,9 +22,10 @@ func clickHouseWriteState(
 	wandb *apiv2.WeightsAndBiases,
 ) []metav1.Condition {
 	var specNamespacedName = clickHouseSpecNamespacedName(wandb.Spec.ClickHouse)
-
+	log := ctrl.LoggerFrom(ctx)
 	desired, err := translatorv2.ToClickHouseVendorSpec(ctx, wandb, client.Scheme())
 	if err != nil {
+		log.Error(err, "failed to translate ClickHouse spec to vendor spec")
 		return []metav1.Condition{
 			{
 				Type:   common.ReconciledType,
@@ -89,7 +90,7 @@ func clickHousePurgeFinalizer(
 	return altinity.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule)
 }
 
-func clickHouseSpecNamespacedName(clickHouse apiv2.WBClickHouseSpec) types.NamespacedName {
+func clickHouseSpecNamespacedName(clickHouse apiv2.ClickHouseSpec) types.NamespacedName {
 	return types.NamespacedName{
 		Namespace: clickHouse.Namespace,
 		Name:      clickHouse.Name,

@@ -100,7 +100,7 @@ func Reconcile(
 			if err = clickHousePurgeFinalizer(ctx, client, wandb); err != nil {
 				return ctrl.Result{}, err
 			}
-			if wandb.GetRetentionPolicy(wandb.Spec.Kafka.WBInfraSpec).OnDelete == apiv2.WBPreserveOnDelete {
+			if wandb.GetRetentionPolicy(wandb.Spec.Kafka.InfraSpec).OnDelete == apiv2.WBPreserveOnDelete {
 				if err = kafkaPreserveFinalizer(ctx, client, wandb); err != nil {
 					return ctrl.Result{}, err
 				}
@@ -114,6 +114,21 @@ func Reconcile(
 		// continue post-finalizer logic in a future pass of the reconciliation loop
 		return ctrl.Result{}, nil
 	}
+
+	/////////////////////////
+	// Fetch manifest early so infra sizing can be applied before provisioning
+	manifest, err := serverManifest.GetServerManifest(ctx, wandb.Spec.Wandb.ManifestRepository, wandb.Spec.Wandb.Version)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	// Override features from CR spec if present
+	for key, enabled := range wandb.Spec.Wandb.Features {
+		manifest.Features[key] = enabled
+	}
+
+	// Apply manifest-derived infra sizing before provisioning
+	ApplyInfraSizing(wandb, manifest)
 
 	/////////////////////////
 	// Write Infra State
@@ -180,16 +195,6 @@ func Reconcile(
 		log.Info("Infra not ready in V2.Reconcile",
 			"redis", redisReady, "mysql", mysqlReady, "kafka", kafkaReady, "minio", minioReady, "clickhouse", clickHouseReady)
 		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
-	}
-
-	manifest, err := serverManifest.GetServerManifest(ctx, wandb.Spec.Wandb.ManifestRepository, wandb.Spec.Wandb.Version)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-
-	// Override features from CR spec if present
-	for key, enabled := range wandb.Spec.Wandb.Features {
-		manifest.Features[key] = enabled
 	}
 
 	res, err = ReconcileWandbManifest(ctx, client, wandb, manifest)
@@ -453,56 +458,23 @@ func resolveInitContainers(app serverManifest.Application, envVars []corev1.EnvV
 }
 
 func ResolveResources(app serverManifest.Application, wandb *apiv2.WeightsAndBiases, containerResources *corev1.ResourceRequirements) *corev1.ResourceRequirements {
-	resources := &corev1.ResourceRequirements{}
+	var resources *corev1.ResourceRequirements
 
 	// check if there is "default" in the sizing map and apply those values
 	if defaultConfig, ok := app.Sizing["default"]; ok && defaultConfig.Resources != nil {
-		resources.Limits = defaultConfig.Resources.Limits
-		resources.Requests = defaultConfig.Resources.Requests
+		resources = mergeResources(resources, defaultConfig.Resources, wandb.Spec.RequireLimits)
 	}
 
 	// check if there is a sizing config in the map that corresponds to the size in the wandb spec and apply that
 	if sizeConfig, ok := app.Sizing[wandb.Spec.Size]; ok && sizeConfig.Resources != nil {
-		if sizeConfig.Resources.Limits != nil {
-			if resources.Limits == nil {
-				resources.Limits = make(corev1.ResourceList)
-			}
-			for k, v := range sizeConfig.Resources.Limits {
-				resources.Limits[k] = v
-			}
-		}
-		if sizeConfig.Resources.Requests != nil {
-			if resources.Requests == nil {
-				resources.Requests = make(corev1.ResourceList)
-			}
-			for k, v := range sizeConfig.Resources.Requests {
-				resources.Requests[k] = v
-			}
-		}
+		resources = mergeResources(resources, sizeConfig.Resources, wandb.Spec.RequireLimits)
 	}
 
 	// check if the container has a resource and if so apply those settings
-	if containerResources != nil {
-		if containerResources.Limits != nil {
-			if resources.Limits == nil {
-				resources.Limits = make(corev1.ResourceList)
-			}
-			for k, v := range containerResources.Limits {
-				resources.Limits[k] = v
-			}
-		}
-		if containerResources.Requests != nil {
-			if resources.Requests == nil {
-				resources.Requests = make(corev1.ResourceList)
-			}
-			for k, v := range containerResources.Requests {
-				resources.Requests[k] = v
-			}
-		}
-	}
+	resources = mergeResources(resources, containerResources, wandb.Spec.RequireLimits)
 
-	if !wandb.Spec.RequireLimits {
-		resources.Limits = nil
+	if resources == nil {
+		return nil
 	}
 
 	if len(resources.Limits) == 0 && len(resources.Requests) == 0 {
@@ -548,6 +520,218 @@ func ResolveAutoscaling(app serverManifest.Application, wandb *apiv2.WeightsAndB
 	}
 
 	return hpa
+}
+
+// mergeResources merges an overlay ResourceRequirements into a base, with
+// overlay values taking precedence on a per-resource-name basis.
+func mergeResources(base, overlay *corev1.ResourceRequirements, requireLimits bool) *corev1.ResourceRequirements {
+	if base == nil && overlay == nil {
+		return nil
+	}
+	result := &corev1.ResourceRequirements{}
+	if base != nil {
+		if base.Limits != nil {
+			result.Limits = make(corev1.ResourceList)
+			for k, v := range base.Limits {
+				result.Limits[k] = v
+			}
+		}
+		if base.Requests != nil {
+			result.Requests = make(corev1.ResourceList)
+			for k, v := range base.Requests {
+				result.Requests[k] = v
+			}
+		}
+	}
+	if overlay != nil {
+		if overlay.Limits != nil {
+			if result.Limits == nil {
+				result.Limits = make(corev1.ResourceList)
+			}
+			for k, v := range overlay.Limits {
+				result.Limits[k] = v
+			}
+		}
+		if overlay.Requests != nil {
+			if result.Requests == nil {
+				result.Requests = make(corev1.ResourceList)
+			}
+			for k, v := range overlay.Requests {
+				result.Requests[k] = v
+			}
+		}
+	}
+
+	if !requireLimits {
+		result.Limits = nil
+	}
+	return result
+}
+
+// ResolveInfraSizing resolves a SizingConfig from an InfraConfig map for the
+// given Size. It merges the "default" sizing with the size-specific sizing,
+// where size-specific values override defaults.
+func ResolveInfraSizing(sizing map[apiv2.Size]serverManifest.SizingConfig, size apiv2.Size, requireLimits bool) *serverManifest.SizingConfig {
+	result := &serverManifest.SizingConfig{}
+
+	// Apply "default" sizing baseline
+	if defaultSizing, ok := sizing["default"]; ok {
+		result.Replicas = defaultSizing.Replicas
+		result.Shards = defaultSizing.Shards
+		result.VolumeSize = defaultSizing.VolumeSize
+		if defaultSizing.Resources != nil {
+			result.Resources = defaultSizing.Resources.DeepCopy()
+		}
+	}
+
+	// Override with size-specific sizing, merging resources
+	if sizeSizing, ok := sizing[size]; ok {
+		if sizeSizing.Replicas != 0 {
+			result.Replicas = sizeSizing.Replicas
+		}
+		if sizeSizing.Shards != 0 {
+			result.Shards = sizeSizing.Shards
+		}
+		if sizeSizing.VolumeSize != "" {
+			result.VolumeSize = sizeSizing.VolumeSize
+		}
+		result.Resources = mergeResources(result.Resources, sizeSizing.Resources, requireLimits)
+	}
+
+	return result
+}
+
+// ResolveKafkaSizing resolves a SizingConfig from the KafkaConfig for the given Size.
+func ResolveKafkaSizing(sizing map[apiv2.Size]serverManifest.KafkaSizingConfig, size apiv2.Size, requireLimits bool) *serverManifest.KafkaSizingConfig {
+	result := &serverManifest.KafkaSizingConfig{}
+
+	if defaultSizing, ok := sizing["default"]; ok {
+		result.Replicas = defaultSizing.Replicas
+		result.VolumeSize = defaultSizing.VolumeSize
+		result.ReplicationFactor = defaultSizing.ReplicationFactor
+		result.MinInSyncReplicas = defaultSizing.MinInSyncReplicas
+		result.OffsetsTopicRF = defaultSizing.OffsetsTopicRF
+		result.TransactionStateRF = defaultSizing.TransactionStateRF
+		result.TransactionStateISR = defaultSizing.TransactionStateISR
+		if defaultSizing.Resources != nil {
+			result.Resources = defaultSizing.Resources.DeepCopy()
+		}
+	}
+
+	if sizeSizing, ok := sizing[size]; ok {
+		if sizeSizing.Replicas != 0 {
+			result.Replicas = sizeSizing.Replicas
+		}
+		if sizeSizing.VolumeSize != "" {
+			result.VolumeSize = sizeSizing.VolumeSize
+		}
+		if sizeSizing.ReplicationFactor != 0 {
+			result.ReplicationFactor = sizeSizing.ReplicationFactor
+		}
+		if sizeSizing.MinInSyncReplicas != 0 {
+			result.MinInSyncReplicas = sizeSizing.MinInSyncReplicas
+		}
+		if sizeSizing.OffsetsTopicRF != 0 {
+			result.OffsetsTopicRF = sizeSizing.OffsetsTopicRF
+		}
+		if sizeSizing.TransactionStateRF != 0 {
+			result.TransactionStateRF = sizeSizing.TransactionStateRF
+		}
+		if sizeSizing.TransactionStateISR != 0 {
+			result.TransactionStateISR = sizeSizing.TransactionStateISR
+		}
+		result.Resources = mergeResources(result.Resources, sizeSizing.Resources, requireLimits)
+	}
+
+	return result
+}
+
+// ApplyInfraSizing applies manifest-derived sizing to the wandb spec's infra
+// components. Values from the manifest are only applied when the corresponding
+// spec field has not been explicitly set by the user (i.e., is zero-valued).
+func ApplyInfraSizing(wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest) {
+	size := wandb.Spec.Size
+
+	// Default MySQL
+	if mysqlConfig, ok := manifest.Mysql["default"]; ok {
+		sizing := ResolveInfraSizing(mysqlConfig.Sizing, size, wandb.Spec.RequireLimits)
+		if wandb.Spec.MySQL.Replicas == 0 && sizing.Replicas != 0 {
+			wandb.Spec.MySQL.Replicas = sizing.Replicas
+		}
+		if wandb.Spec.MySQL.StorageSize == "" && sizing.VolumeSize != "" {
+			wandb.Spec.MySQL.StorageSize = sizing.VolumeSize
+		}
+		if sizing.Resources != nil && len(wandb.Spec.MySQL.Config.Resources.Requests) == 0 && len(wandb.Spec.MySQL.Config.Resources.Limits) == 0 {
+			wandb.Spec.MySQL.Config.Resources = *sizing.Resources
+		}
+	}
+
+	// Default Redis
+	if redisConfig, ok := manifest.Redis["default"]; ok {
+		sizing := ResolveInfraSizing(redisConfig.Sizing, size, wandb.Spec.RequireLimits)
+		if wandb.Spec.Redis.StorageSize == "" && sizing.VolumeSize != "" {
+			wandb.Spec.Redis.StorageSize = sizing.VolumeSize
+		}
+		if sizing.Resources != nil && len(wandb.Spec.Redis.Config.Resources.Requests) == 0 && len(wandb.Spec.Redis.Config.Resources.Limits) == 0 {
+			wandb.Spec.Redis.Config.Resources = *sizing.Resources
+		}
+	}
+
+	// Default ClickHouse
+	if clickhouseConfig, ok := manifest.Redis["default"]; ok {
+		sizing := ResolveInfraSizing(clickhouseConfig.Sizing, size, wandb.Spec.RequireLimits)
+		if wandb.Spec.ClickHouse.Replicas == 0 && sizing.Replicas != 0 {
+			wandb.Spec.ClickHouse.Replicas = sizing.Replicas
+		}
+		if wandb.Spec.ClickHouse.StorageSize == "" && sizing.VolumeSize != "" {
+			wandb.Spec.ClickHouse.StorageSize = sizing.VolumeSize
+		}
+		if sizing.Resources != nil && len(wandb.Spec.ClickHouse.Config.Resources.Requests) == 0 && len(wandb.Spec.ClickHouse.Config.Resources.Limits) == 0 {
+			wandb.Spec.ClickHouse.Config.Resources = *sizing.Resources
+		}
+	}
+
+	// Default Minio (bucket)
+	if minioConfig, ok := manifest.Redis["default"]; ok {
+		sizing := ResolveInfraSizing(minioConfig.Sizing, size, wandb.Spec.RequireLimits)
+		if wandb.Spec.Minio.Replicas == 0 && sizing.Replicas != 0 {
+			wandb.Spec.Minio.Replicas = sizing.Replicas
+		}
+		if wandb.Spec.Minio.StorageSize == "" && sizing.VolumeSize != "" {
+			wandb.Spec.Minio.StorageSize = sizing.VolumeSize
+		}
+		if sizing.Resources != nil && len(wandb.Spec.Minio.Config.Resources.Requests) == 0 && len(wandb.Spec.Minio.Config.Resources.Limits) == 0 {
+			wandb.Spec.Minio.Config.Resources = *sizing.Resources
+		}
+	}
+
+	// Kafka
+	if sizing := ResolveKafkaSizing(manifest.Kafka.Sizing, size, wandb.Spec.RequireLimits); sizing != nil {
+		if wandb.Spec.Kafka.Replicas == 0 && sizing.Replicas != 0 {
+			wandb.Spec.Kafka.Replicas = sizing.Replicas
+		}
+		if wandb.Spec.Kafka.StorageSize == "" && sizing.VolumeSize != "" {
+			wandb.Spec.Kafka.StorageSize = sizing.VolumeSize
+		}
+		if sizing.Resources != nil && len(wandb.Spec.Kafka.Config.Resources.Requests) == 0 && len(wandb.Spec.Kafka.Config.Resources.Limits) == 0 {
+			wandb.Spec.Kafka.Config.Resources = *sizing.Resources
+		}
+		if wandb.Spec.Kafka.Config.ReplicationConfig.DefaultReplicationFactor == 0 && sizing.ReplicationFactor != 0 {
+			wandb.Spec.Kafka.Config.ReplicationConfig.DefaultReplicationFactor = sizing.ReplicationFactor
+		}
+		if wandb.Spec.Kafka.Config.ReplicationConfig.MinInSyncReplicas == 0 && sizing.MinInSyncReplicas != 0 {
+			wandb.Spec.Kafka.Config.ReplicationConfig.MinInSyncReplicas = sizing.MinInSyncReplicas
+		}
+		if wandb.Spec.Kafka.Config.ReplicationConfig.OffsetsTopicRF == 0 && sizing.OffsetsTopicRF != 0 {
+			wandb.Spec.Kafka.Config.ReplicationConfig.OffsetsTopicRF = sizing.OffsetsTopicRF
+		}
+		if wandb.Spec.Kafka.Config.ReplicationConfig.TransactionStateRF == 0 && sizing.TransactionStateRF != 0 {
+			wandb.Spec.Kafka.Config.ReplicationConfig.TransactionStateRF = sizing.TransactionStateRF
+		}
+		if wandb.Spec.Kafka.Config.ReplicationConfig.TransactionStateISR == 0 && sizing.TransactionStateISR != 0 {
+			wandb.Spec.Kafka.Config.ReplicationConfig.TransactionStateISR = sizing.TransactionStateISR
+		}
+	}
 }
 
 func resolveContainers(app serverManifest.Application, wandb *apiv2.WeightsAndBiases, envVars []corev1.EnvVar, volumeMounts []corev1.VolumeMount) []corev1.Container {
@@ -1391,7 +1575,7 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 func createKafkaTopics(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest) (ctrl.Result, error) {
 	// Create Strimzi KafkaTopic resources for enabled topics
 	if wandb.Spec.Kafka.Enabled {
-		for _, topic := range manifest.Kafka {
+		for _, topic := range manifest.Kafka.Topics {
 			if len(topic.Features) > 0 && !manifestFeaturesEnabled(topic.Features, manifest.Features) {
 				continue
 			}

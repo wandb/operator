@@ -46,11 +46,10 @@ type Manifest struct {
 	CommonVolumeMounts map[string][]VolumeMount `yaml:"commonVolumeMounts,omitempty"`
 	Bucket             map[string]InfraConfig   `yaml:"bucket"`
 	Clickhouse         map[string]InfraConfig   `yaml:"clickhouse"`
-	// Kafka is a list of topic declarations with optional feature gates in YAML.
-	Kafka        []KafkaTopic           `yaml:"kafka"`
-	Mysql        map[string]InfraConfig `yaml:"mysql"`
-	Redis        map[string]InfraConfig `yaml:"redis"`
-	Applications []Application          `yaml:"applications"`
+	Kafka              KafkaConfig              `yaml:"kafka"`
+	Mysql              map[string]InfraConfig   `yaml:"mysql"`
+	Redis              map[string]InfraConfig   `yaml:"redis"`
+	Applications       []Application            `yaml:"applications"`
 	// Migrations captures per-database migration jobs (e.g., default, runsdb, usagedb)
 	// as found in 0.76.1.yaml under the top-level "migrations" key.
 	Migrations map[string]MigrationJob `yaml:"migrations,omitempty"`
@@ -66,10 +65,8 @@ type GeneratedSecret struct {
 	UseExactName bool `yaml:"useExactName,omitempty"`
 }
 
-// InfraConfig represents simple sections that commonly contain a single
-// "default" key with an empty object (or future options).
 type InfraConfig struct {
-	Sizing SizingConfig `yaml:"sizing"`
+	Sizing map[v2.Size]SizingConfig `yaml:"sizing"`
 }
 
 // KafkaTopicDef models a topic configuration used both at the top-level
@@ -80,12 +77,13 @@ type KafkaTopicDef struct {
 	ConsumerGroup  string `yaml:"consumerGroup,omitempty"`
 }
 
-// KafkaTopic models one entry in the top-level kafka list in the YAML.
-// Example:
-//   - name: filestream
-//     features: [filestreamQueue]
-//     topic: filestream
-//     partitionCount: 48
+// KafkaConfig represents the top-level kafka section with sizing and topics.
+type KafkaConfig struct {
+	Sizing map[v2.Size]KafkaSizingConfig `yaml:"sizing"`
+	Topics []KafkaTopic                  `yaml:"topics"`
+}
+
+// KafkaTopic models one entry in the kafka topics list in the YAML.
 type KafkaTopic struct {
 	Name           string   `yaml:"name"`
 	Features       []string `yaml:"features,omitempty"`
@@ -113,7 +111,7 @@ func (img ImageRef) GetImage() string {
 // AppKafkaSection is the per-application kafka section; fields are optional
 // and mirror the top-level topics.
 type AppKafkaSection struct {
-	Sizing SizingConfig             `yaml:"sizing"`
+	Sizing map[v2.Size]SizingConfig `yaml:"sizing"`
 	Topics map[string]KafkaTopicDef `yaml:"topics"`
 }
 
@@ -140,10 +138,10 @@ type Application struct {
 	// data from ConfigMaps. Each entry may either inline file contents (stored
 	// into an operator-managed ConfigMap) or reference an existing ConfigMap.
 	// The file will be mounted at the provided mountPath/FileName using subPath.
-	Files        []FileSpec                 `yaml:"files,omitempty"`
-	JWTTokens    []JWTToken                 `yaml:"jwtTokens,omitempty"`
-	VolumeMounts []VolumeMount              `yaml:"volumeMounts,omitempty"`
-	Sizing       map[v2.WBSize]SizingConfig `yaml:"sizing,omitempty"`
+	Files        []FileSpec               `yaml:"files,omitempty"`
+	JWTTokens    []JWTToken               `yaml:"jwtTokens,omitempty"`
+	VolumeMounts []VolumeMount            `yaml:"volumeMounts,omitempty"`
+	Sizing       map[v2.Size]SizingConfig `yaml:"sizing,omitempty"`
 }
 
 type SizingConfig struct {
@@ -152,6 +150,15 @@ type SizingConfig struct {
 	VolumeSize  string                       `yaml:"volumeSize,omitempty"`
 	Resources   *corev1.ResourceRequirements `yaml:"resources,omitempty"`
 	Autoscaling *AutoscalingConfig           `yaml:"autoscaling,omitempty"`
+}
+
+type KafkaSizingConfig struct {
+	SizingConfig        `yaml:",inline"`
+	ReplicationFactor   int32 `yaml:"replicationFactor,omitempty"`
+	MinInSyncReplicas   int32 `yaml:"minInSyncReplicas,omitempty"`
+	OffsetsTopicRF      int32 `yaml:"offsetsTopicRF,omitempty"`
+	TransactionStateRF  int32 `yaml:"transactionStateRF,omitempty"`
+	TransactionStateISR int32 `yaml:"transactionStateISR,omitempty"`
 }
 
 type AutoscalingConfig struct {
