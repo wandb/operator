@@ -8,10 +8,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/url"
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"log/slog"
@@ -261,29 +263,66 @@ func GetServerManifest(ctx context.Context, repository string, version string) (
 	case "http", "https":
 		return Manifest{}, errors.New("http manifest not implemented")
 	case "file":
-		return LoadManifestFromFile(repository, version)
+		return LoadManifestFromFile(ctx, repository, version)
 	default:
 		return DownloadServerManifest(ctx, repository, version)
 	}
 }
 
-func LoadManifestFromFile(repository string, version string) (Manifest, error) {
-	manifest := Manifest{}
-
+func LoadManifestFromFile(ctx context.Context, repository string, version string) (Manifest, error) {
 	repositoryURL, err := url.Parse(repository)
 	if err != nil {
-		return manifest, err
+		return Manifest{}, err
+	}
+	basePath := repositoryURL.Path
+
+	rootManifestFile := path.Join(basePath, fmt.Sprintf("%s.yaml", version))
+	if rootManifestFileInfo, err := os.Stat(rootManifestFile); err == nil && !rootManifestFileInfo.IsDir() {
+		return loadManifestFromFiles(ctx, []string{rootManifestFile})
 	}
 
-	manifestFile := path.Join(repositoryURL.Path, fmt.Sprintf("%s.yaml", version))
-	manifestData, err := os.ReadFile(manifestFile)
+	versionDir := filepath.Join(basePath, version)
+	versionDirInfo, err := os.Stat(versionDir)
+	if err != nil || !versionDirInfo.IsDir() {
+		if err == nil {
+			return Manifest{}, fmt.Errorf("manifest path %q is not a directory", versionDir)
+		}
+		return Manifest{}, fmt.Errorf(
+			"failed to locate manifest for version %q in %q: %w",
+			version,
+			basePath,
+			err,
+		)
+	}
+
+	manifestFiles, err := filepath.Glob(filepath.Join(versionDir, "*.yaml"))
 	if err != nil {
 		return Manifest{}, err
 	}
-	if err = yaml.Unmarshal(manifestData, &manifest); err != nil {
-		return Manifest{}, err
+	if len(manifestFiles) == 0 {
+		return Manifest{}, fmt.Errorf("no manifest files found in %q", versionDir)
+	}
+	slices.Sort(manifestFiles)
+
+	return loadManifestFromFiles(ctx, manifestFiles)
+}
+
+func loadManifestFromFiles(ctx context.Context, manifestFiles []string) (Manifest, error) {
+	logger := logx.GetSlog(ctx)
+	manifest := Manifest{}
+	for _, manifestFile := range manifestFiles {
+		manifestData, err := os.ReadFile(manifestFile)
+		if err != nil {
+			logger.Error("failed to read manifest file", "file", manifestFile, "error", err)
+			return Manifest{}, err
+		}
+		if err = yaml.Unmarshal(manifestData, &manifest); err != nil {
+			logger.Error("failed to unmarshal manifest file", "file", manifestFile, "error", err)
+			return Manifest{}, fmt.Errorf("failed to unmarshal %q: %w", manifestFile, err)
+		}
 	}
 
+	logger.Debug("loaded manifest files", "count", len(manifestFiles), "files", manifestFiles, "manifest", manifest)
 	return manifest, nil
 }
 
@@ -351,8 +390,9 @@ func processManifest(ctx context.Context, repo oras.ReadOnlyTarget, descriptor o
 			return manifest, fmt.Errorf("failed to unmarshal manifest: %w", err)
 		}
 
+		manifestFileContents := map[string][]byte{}
+
 		for _, layer := range ociManifest.Layers {
-			// Fetch each layer and list files if it's a tar/tar+gzip
 			layerReader, err := repo.Fetch(ctx, layer)
 			if err != nil {
 				logger.Error("failed to fetch layer", "digest", layer.Digest, "err", err)
@@ -383,31 +423,38 @@ func processManifest(ctx context.Context, repo oras.ReadOnlyTarget, descriptor o
 					logger.Error("failed to read tar header", "err", err)
 					break
 				}
-				fmt.Printf("- %s\n", header.Name)
 
-				if filepath.Base(header.Name) == "manifest.yaml" {
-					logger.Debug("found manifest")
-					manifestBytes, err := io.ReadAll(tr)
-					if err != nil {
-						logger.Error("failed to read manifest.yaml", "err", err)
-						continue
-					}
-
-					err = yaml.Unmarshal(manifestBytes, &manifest)
-					if err != nil {
-						logger.Error("failed to unmarshal manifest.yaml", "err", err)
-					}
-					logger.Debug("successfully unmarshaled manifest", "manifest", manifest)
-					return manifest, err
+				if filepath.Ext(header.Name) != ".yaml" {
+					continue
 				}
+
+				manifestBytes, err := io.ReadAll(tr)
+				if err != nil {
+					logger.Error("failed to read manifest file", "file", header.Name, "err", err)
+					continue
+				}
+
+				manifestFileContents[header.Name] = manifestBytes
 			}
 		}
+
+		if len(manifestFileContents) == 0 {
+			return manifest, errors.New("no manifest yaml files found in image layers")
+		}
+
+		manifestFiles := slices.Sorted(maps.Keys(manifestFileContents))
+		for _, manifestFile := range manifestFiles {
+			if err := yaml.Unmarshal(manifestFileContents[manifestFile], &manifest); err != nil {
+				logger.Error("failed to unmarshal manifest file", "file", manifestFile, "err", err)
+				return Manifest{}, fmt.Errorf("failed to unmarshal %q: %w", manifestFile, err)
+			}
+		}
+
+		logger.Debug("successfully unmarshaled manifest files", "files", manifestFiles, "manifest", manifest)
+		return manifest, nil
 	default:
 		return manifest, fmt.Errorf("unsupported media type: %s", descriptor.MediaType)
 	}
-
-	logger.Error("no valid manifest found")
-	return manifest, errors.New("no valid manifest found")
 }
 
 // JWTToken defines a JWT token to be mounted into the application's container.

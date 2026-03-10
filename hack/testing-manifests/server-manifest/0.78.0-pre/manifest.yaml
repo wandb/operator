@@ -7,62 +7,10 @@ features:
   proxy: false
 
 bucket:
-  default:
-    sizing:
-      default:
-        replicas: 1
-        pools: 1 # Not implemented yet, but will be needed if we commit to minio
-        volumeSize: 10Gi
-      micro:
-        replicas: 3
-        pools: 1
-        volumeSize: 10Gi
-        resources:
-          requests:
-            cpu: 500m
-            memory: 4Gi
-          limits:
-            cpu: 500m
-            memory: 4Gi
-      small:
-        replicas: 3
-        volumeSize: 100Gi
-        resources:
-          requests:
-            cpu: 2
-            memory: 8Gi
-          limits:
-            cpu: 2
-            memory: 8Gi
+  default: {}
 
 clickhouse:
-  default:
-    sizing:
-      default:
-        shards: 1
-        replicas: 1
-        volumeSize: 10Gi
-      micro:
-        replicas: 3
-        volumeSize: 10Gi
-        resources:
-          requests:
-            cpu: 500m
-            memory: 4Gi
-          limits:
-            cpu: 500m
-            memory: 4Gi
-      small:
-        shards: 1
-        replicas: 3
-        volumeSize: 100Gi
-        resources:
-          requests:
-            cpu: 2
-            memory: 8Gi
-          limits:
-            cpu: 2
-            memory: 8Gi
+  default: {}
 
 generatedSecrets:
   - name: session-key
@@ -74,45 +22,6 @@ generatedSecrets:
     useExactName: true
 
 kafka:
-  sizing:
-    default:
-      replicas: 1
-      volumeSize: 10Gi
-      replicationFactor: 1
-      minInSyncReplicas: 1
-      offsetsTopicRF: 1
-      transactionStateRF: 1
-      transactionStateISR: 1
-    micro:
-      replicas: 3
-      volumeSize: 10Gi
-      replicationFactor: 3
-      minInSyncReplicas: 2
-      offsetsTopicRF: 3
-      transactionStateRF: 3
-      transactionStateISR: 3
-      resources:
-        requests:
-          cpu: 500m
-          memory: 1Gi
-        limits:
-          cpu: 500m
-          memory: 1Gi
-    small:
-      replicas: 3
-      volumeSize: 100Gi
-      replicationFactor: 3
-      minInSyncReplicas: 2
-      offsetsTopicRF: 3
-      transactionStateRF: 3
-      transactionStateISR: 3
-      resources:
-        requests:
-          cpu: 2
-          memory: 8Gi
-        limits:
-          cpu: 2
-          memory: 8Gi
   topics:
     - name: filestream
       features:
@@ -130,31 +39,7 @@ kafka:
       partitionCount: 48
 
 mysql:
-  default:
-    sizing:
-      default:
-        replicas: 1
-        volumeSize: 10Gi
-      micro:
-        replicas: 2
-        volumeSize: 10Gi
-        resources:
-          requests:
-            cpu: 500m
-            memory: 2Gi
-          limits:
-            cpu: 500m
-            memory: 2Gi
-      small:
-        replicas: 3
-        volumeSize: 100Gi
-        resources:
-          requests:
-            cpu: 2
-            memory: 8Gi
-          limits:
-            cpu: 2
-            memory: 8Gi
+  default: {}
   metadata: {}
   runs: {}
   usage: {}
@@ -162,32 +47,6 @@ mysql:
 redis:
   default:
     sentinelGroup: gorilla
-    sizing:
-      default:
-        shards: 1
-        replicas: 1
-        volumeSize: 10Gi
-      micro:
-        replicas: 3
-        volumeSize: 10Gi
-        resources:
-          requests:
-            cpu: 500m
-            memory: 4Gi
-          limits:
-            cpu: 500m
-            memory: 4Gi
-      small:
-        shards: 1
-        replicas: 3
-        volumeSize: 10Gi
-        resources:
-          requests:
-            cpu: 2
-            memory: 8Gi
-          limits:
-            cpu: 2
-            memory: 8Gi
 
 commonEnvvars:
   gorillaMysql:
@@ -515,33 +374,6 @@ applications:
         - port: 8080
           protocol: TCP
           name: anaconda2
-    sizing:
-      micro:
-        resources:
-          limits:
-            cpu: 500m
-            memory: 1Gi
-          requests:
-            cpu: 500m
-            memory: 1Gi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 2
-            minReplicas: 1
-      small:
-        resources:
-          limits:
-            cpu: "2"
-            memory: 4Gi
-          requests:
-            cpu: "2"
-            memory: 4Gi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 3
-            minReplicas: 2
   - name: api
     commonEnvs:
       - gorillaMysql
@@ -593,33 +425,6 @@ applications:
         - port: 8080
           protocol: TCP
           name: api
-    sizing:
-      micro:
-        resources:
-          limits:
-            cpu: 500m
-            memory: 2Gi
-          requests:
-            cpu: 500m
-            memory: 2Gi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 2
-            minReplicas: 1
-      small:
-        resources:
-          limits:
-            cpu: "4"
-            memory: 8Gi
-          requests:
-            cpu: "4"
-            memory: 8Gi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 3
-            minReplicas: 2
   - name: executor
     args:
       - executor
@@ -636,33 +441,6 @@ applications:
       tag: 0.78.0-pre-operator-v2-no-app.1
     containers:
       - name: executor
-    sizing:
-      micro:
-        resources:
-          limits:
-            cpu: "1"
-            memory: 4Gi
-          requests:
-            cpu: "1"
-            memory: 4Gi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 2
-            minReplicas: 1
-      small:
-        resources:
-          limits:
-            cpu: "4"
-            memory: 16Gi
-          requests:
-            cpu: "4"
-            memory: 16Gi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 2
-            minReplicas: 1
   - name: filemeta
     args:
       - filemeta
@@ -675,33 +453,6 @@ applications:
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
       tag: 0.78.0-pre-operator-v2-no-app.1
-    sizing:
-      micro:
-        resources:
-          limits:
-            cpu: 500m
-            memory: 1Gi
-          requests:
-            cpu: 500m
-            memory: 1Gi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 2
-            minReplicas: 1
-      small:
-        resources:
-          limits:
-            cpu: "2"
-            memory: 2Gi
-          requests:
-            cpu: "2"
-            memory: 2Gi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 2
-            minReplicas: 1
   - name: filestream
     features:
       - filestreamQueue
@@ -718,33 +469,6 @@ applications:
       tag: 0.78.0-pre-operator-v2-no-app.1
     containers:
       - name: filestream
-    sizing:
-      micro:
-        resources:
-          limits:
-            cpu: 500m
-            memory: 1Gi
-          requests:
-            cpu: 500m
-            memory: 1Gi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 2
-            minReplicas: 1
-      small:
-        resources:
-          limits:
-            cpu: "2"
-            memory: 4Gi
-          requests:
-            cpu: "2"
-            memory: 4Gi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 2
-            minReplicas: 1
   - name: flat-run-fields-updater
     args:
       - flat-run-fields-updater
@@ -764,33 +488,6 @@ applications:
       tag: 0.78.0-pre-operator-v2-no-app.1
     containers:
       - name: flat-run-fields-updater
-    sizing:
-      micro:
-        resources:
-          limits:
-            cpu: 500m
-            memory: 1Gi
-          requests:
-            cpu: 500m
-            memory: 1Gi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 2
-            minReplicas: 1
-      small:
-        resources:
-          limits:
-            cpu: "2"
-            memory: 4Gi
-          requests:
-            cpu: "2"
-            memory: 4Gi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 5
-            minReplicas: 1
   - name: frontend
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/frontend-nginx
@@ -843,33 +540,6 @@ applications:
         - port: 8080
           protocol: TCP
           name: frontend
-    sizing:
-      micro:
-        resources:
-          limits:
-            cpu: 500m
-            memory: 512Mi
-          requests:
-            cpu: 500m
-            memory: 512Mi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 2
-            minReplicas: 1
-      small:
-        resources:
-          limits:
-            cpu: "2"
-            memory: 2Gi
-          requests:
-            cpu: "2"
-            memory: 2Gi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 3
-            minReplicas: 2
   - name: glue
     args:
       - glue
@@ -898,23 +568,6 @@ applications:
       tag: 0.78.0-pre-operator-v2-no-app.1
     containers:
       - name: glue
-    sizing:
-      micro:
-        resources:
-          limits:
-            cpu: 500m
-            memory: 1Gi
-          requests:
-            cpu: 500m
-            memory: 1Gi
-      small:
-        resources:
-          limits:
-            cpu: "2"
-            memory: 6Gi
-          requests:
-            cpu: "2"
-            memory: 6Gi
   - name: metric-observer
     args:
       - metric-observer
@@ -934,33 +587,6 @@ applications:
       tag: 0.78.0-pre-operator-v2-no-app.1
     containers:
       - name: metric-observer
-    sizing:
-      micro:
-        resources:
-          limits:
-            cpu: 500m
-            memory: 1Gi
-          requests:
-            cpu: 500m
-            memory: 1Gi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 2
-            minReplicas: 1
-      small:
-        resources:
-          limits:
-            cpu: "2"
-            memory: 4Gi
-          requests:
-            cpu: "2"
-            memory: 4Gi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 4
-            minReplicas: 1
   - name: parquet
     args:
       - parquet
@@ -992,33 +618,6 @@ applications:
         - port: 8080
           protocol: TCP
           name: parquet
-    sizing:
-      micro:
-        resources:
-          limits:
-            cpu: "1"
-            memory: 4Gi
-          requests:
-            cpu: "1"
-            memory: 4Gi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 2
-            minReplicas: 1
-      small:
-        resources:
-          limits:
-            cpu: "4"
-            memory: 16Gi
-          requests:
-            cpu: "4"
-            memory: 16Gi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 2
-            minReplicas: 2
   - name: weave
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-python
@@ -1065,33 +664,6 @@ applications:
         source:
           type: emptyDir
           name: cache
-    sizing:
-      micro:
-        resources:
-          limits:
-            cpu: "1"
-            memory: 4Gi
-          requests:
-            cpu: "1"
-            memory: 4Gi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 2
-            minReplicas: 1
-      small:
-        resources:
-          limits:
-            cpu: "4"
-            memory: 16Gi
-          requests:
-            cpu: "4"
-            memory: 16Gi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 2
-            minReplicas: 2
   - name: weave-trace
     commonEnvs:
       - clickhouse
@@ -1131,33 +703,6 @@ applications:
           kubernetesServiceAccount:
             audience: internal-service
             expirationSeconds: 600
-    sizing:
-      micro:
-        resources:
-          limits:
-            cpu: 500m
-            memory: 2Gi
-          requests:
-            cpu: 500m
-            memory: 2Gi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 2
-            minReplicas: 1
-      small:
-        resources:
-          limits:
-            cpu: "1"
-            memory: 8Gi
-          requests:
-            cpu: "1"
-            memory: 8Gi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 3
-            minReplicas: 2
   - name: weave-trace-worker
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
@@ -1175,33 +720,6 @@ applications:
           - "python"
           - "-m"
           - "src.workers.scoring_worker"
-    sizing:
-      micro:
-        resources:
-          limits:
-            cpu: 500m
-            memory: 2Gi
-          requests:
-            cpu: 500m
-            memory: 2Gi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 2
-            minReplicas: 1
-      small:
-        resources:
-          limits:
-            cpu: "1"
-            memory: 8Gi
-          requests:
-            cpu: "1"
-            memory: 8Gi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 4
-            minReplicas: 1
   - name: weave-trace-evaluate-model-worker
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
@@ -1219,33 +737,6 @@ applications:
           - "python"
           - "-m"
           - "src.workers.evaluate_model_worker.evaluate_model_worker"
-    sizing:
-      micro:
-        resources:
-          limits:
-            cpu: 500m
-            memory: 2Gi
-          requests:
-            cpu: 500m
-            memory: 2Gi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 2
-            minReplicas: 1
-      small:
-        resources:
-          limits:
-            cpu: "1"
-            memory: 8Gi
-          requests:
-            cpu: "1"
-            memory: 8Gi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 2
-            minReplicas: 1
   - name: nginx-proxy
     features:
       - proxy
@@ -1391,32 +882,7 @@ applications:
         - name: http
           port: 8080
           protocol: TCP
-    sizing:
-      default:
-        autoscaling:
-          enabled: true
-          minReplicas: 2
-          maxReplicas: 4
-        resources:
-          limits:
-            cpu: "2"
-            memory: 2Gi
-          requests:
-            cpu: "2"
-            memory: 2Gi
-      micro:
-        resources:
-          limits:
-            cpu: 500m
-            memory: 512Mi
-          requests:
-            cpu: 500m
-            memory: 512Mi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 2
-            minReplicas: 1
+
 migrations:
   gorilla:
     image:
