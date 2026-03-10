@@ -154,7 +154,7 @@ func mysqlReadState(
 	case apiv2.MySQLTypeMariadb:
 		readConditions, newInfraConn = mariadb.ReadState(ctx, client, specNamespacedName, wandb)
 	case apiv2.MySQLTypeMysql:
-		readConditions, newInfraConn = mysql.ReadState(ctx, client, specNamespacedName, wandb, translatorv2.ToMysqlOnDeleteRule(wandb, wandb.GetRetentionPolicy(wandb.Spec.MySQL.WBInfraSpec)))
+		readConditions, newInfraConn = mysql.ReadState(ctx, client, specNamespacedName, wandb, translatorv2.ToMysqlOnDeleteRule(wandb, wandb.GetRetentionPolicy(wandb.Spec.MySQL.InfraSpec)))
 	case apiv2.MySQLTypePercona:
 		readConditions, newInfraConn = percona.ReadState(ctx, client, specNamespacedName, wandb)
 	}
@@ -224,7 +224,7 @@ func mysqlPurgeFinalizer(
 	wandb *apiv2.WeightsAndBiases,
 ) error {
 	specNamespacedName := mysqlSpecNamespacedName(wandb.Spec.MySQL)
-	onDeleteRule := translatorv2.ToMysqlOnDeleteRule(wandb, wandb.GetRetentionPolicy(wandb.Spec.MySQL.WBInfraSpec))
+	onDeleteRule := translatorv2.ToMysqlOnDeleteRule(wandb, wandb.GetRetentionPolicy(wandb.Spec.MySQL.InfraSpec))
 	return mysql.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule)
 }
 

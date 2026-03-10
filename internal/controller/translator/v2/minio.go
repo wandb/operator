@@ -147,6 +147,6 @@ func BuildWandbMinioLabels(wandb *apiv2.WeightsAndBiases) map[string]string {
 	return BuildWandbLabels(wandb, translator.MinioModuleName)
 }
 
-func ToMinioOnDeleteRule(wandb *apiv2.WeightsAndBiases, retentionPolicy apiv2.WBRetentionPolicy) translator.OnDeleteRule {
+func ToMinioOnDeleteRule(wandb *apiv2.WeightsAndBiases, retentionPolicy apiv2.RetentionPolicy) translator.OnDeleteRule {
 	return ToOnDeleteRule(wandb, retentionPolicy, translator.MinioModuleName)
 }

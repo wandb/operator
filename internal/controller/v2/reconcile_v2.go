@@ -100,7 +100,7 @@ func Reconcile(
 			if err = clickHousePurgeFinalizer(ctx, client, wandb); err != nil {
 				return ctrl.Result{}, err
 			}
-			if wandb.GetRetentionPolicy(wandb.Spec.Kafka.InfraSpec).OnDelete == apiv2.WBPreserveOnDelete {
+			if wandb.GetRetentionPolicy(wandb.Spec.Kafka.InfraSpec).OnDelete == apiv2.PreserveOnDelete {
 				if err = kafkaPreserveFinalizer(ctx, client, wandb); err != nil {
 					return ctrl.Result{}, err
 				}

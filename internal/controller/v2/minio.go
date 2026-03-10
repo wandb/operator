@@ -105,7 +105,7 @@ func minioPurgeFinalizer(
 ) error {
 	var specNamespacedName = minioSpecNamespacedName(wandb.Spec.Minio)
 
-	onDeleteRule := translatorv2.ToMinioOnDeleteRule(wandb, wandb.GetRetentionPolicy(wandb.Spec.Minio.WBInfraSpec))
+	onDeleteRule := translatorv2.ToMinioOnDeleteRule(wandb, wandb.GetRetentionPolicy(wandb.Spec.Minio.InfraSpec))
 	if err := tenant.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule); err != nil {
 		return err
 	}

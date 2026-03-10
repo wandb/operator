@@ -83,7 +83,7 @@ var _ = Describe("Infra Sizing", func() {
 				},
 			}
 			defaultInfraConfig := infraConfigs["default"]
-			result := v2.ResolveInfraSizing(defaultInfraConfig.Sizing, "small", false)
+			result := v2.ResolveInfraSizing(defaultInfraConfig.Sizing, "small", true)
 			Expect(result).NotTo(BeNil())
 			// CPU request overridden by size-specific
 			Expect(result.Resources.Requests.Cpu().String()).To(Equal("4"))
@@ -169,7 +169,7 @@ var _ = Describe("Infra Sizing", func() {
 					},
 				},
 			}
-			result := v2.ResolveKafkaSizing(kafkaConfig.Sizing, "small")
+			result := v2.ResolveKafkaSizing(kafkaConfig.Sizing, "small", false)
 			Expect(result).NotTo(BeNil())
 			Expect(result.Replicas).To(Equal(int32(3)))
 			Expect(result.VolumeSize).To(Equal("100Gi"))

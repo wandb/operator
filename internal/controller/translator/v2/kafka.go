@@ -217,6 +217,6 @@ func BuildWandbKafkaLabels(wandb *apiv2.WeightsAndBiases) map[string]string {
 	return BuildWandbLabels(wandb, translator.KafkaModuleName)
 }
 
-func ToKafkaOnDeleteRule(wandb *apiv2.WeightsAndBiases, retentionPolicy apiv2.WBRetentionPolicy) translator.OnDeleteRule {
+func ToKafkaOnDeleteRule(wandb *apiv2.WeightsAndBiases, retentionPolicy apiv2.RetentionPolicy) translator.OnDeleteRule {
 	return ToOnDeleteRule(wandb, retentionPolicy, translator.KafkaModuleName)
 }

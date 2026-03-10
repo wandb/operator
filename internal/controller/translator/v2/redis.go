@@ -294,6 +294,6 @@ func BuildWandbRedisLabels(wandb *apiv2.WeightsAndBiases) map[string]string {
 	return BuildWandbLabels(wandb, translator.RedisModuleName)
 }
 
-func ToRedisOnDeleteRule(wandb *apiv2.WeightsAndBiases, retentionPolicy apiv2.WBRetentionPolicy) translator.OnDeleteRule {
+func ToRedisOnDeleteRule(wandb *apiv2.WeightsAndBiases, retentionPolicy apiv2.RetentionPolicy) translator.OnDeleteRule {
 	return ToOnDeleteRule(wandb, retentionPolicy, translator.RedisModuleName)
 }

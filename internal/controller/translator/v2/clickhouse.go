@@ -70,7 +70,7 @@ func ToClickHouseVendorSpec(
 	}
 
 	reclaimPolicy := v1.PVCReclaimPolicyUnspecified
-	if wandb.GetRetentionPolicy(wandb.Spec.ClickHouse.WBInfraSpec).OnDelete == apiv2.WBPurgeOnDelete {
+	if wandb.GetRetentionPolicy(wandb.Spec.ClickHouse.InfraSpec).OnDelete == apiv2.PurgeOnDelete {
 		reclaimPolicy = v1.PVCReclaimPolicyDelete
 	}
 
@@ -178,6 +178,6 @@ func BuildWandbClickhouseLabels(wandb *apiv2.WeightsAndBiases) map[string]string
 	return BuildWandbLabels(wandb, translator.ClickhouseModuleName)
 }
 
-func ToClickHouseOnDeleteRule(wandb *apiv2.WeightsAndBiases, retentionPolicy apiv2.WBRetentionPolicy) translator.OnDeleteRule {
+func ToClickHouseOnDeleteRule(wandb *apiv2.WeightsAndBiases, retentionPolicy apiv2.RetentionPolicy) translator.OnDeleteRule {
 	return ToOnDeleteRule(wandb, retentionPolicy, translator.ClickhouseModuleName)
 }
