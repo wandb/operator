@@ -8,3 +8,15 @@ patches:
       kind: Deployment
       name: controller-manager
     path: security.yaml
+  - target:
+      group: apiextensions.k8s.io
+      version: v1
+      kind: CustomResourceDefinition
+      name: applications.apps.wandb.com
+    path: delete-applications-crd.yaml
+  - target:
+      group: apiextensions.k8s.io
+      version: v1
+      kind: CustomResourceDefinition
+      name: weightsandbiases.apps.wandb.com
+    path: delete-weightsandbiases-crd.yaml
