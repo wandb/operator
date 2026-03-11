@@ -41,13 +41,14 @@ import (
 // WeightsAndBiasesReconciler reconciles a WeightsAndBiases object
 type WeightsAndBiasesReconciler struct {
 	client.Client
-	IsAirgapped    bool
-	DeployerClient deployer.DeployerInterface
-	Scheme         *runtime.Scheme
-	Recorder       record.EventRecorder
-	DryRun         bool
-	Debug          bool
-	EnableV2       bool
+	IsAirgapped     bool
+	DeployerClient  deployer.DeployerInterface
+	Scheme          *runtime.Scheme
+	Recorder        record.EventRecorder
+	DryRun          bool
+	Debug           bool
+	EnableV2        bool
+	TelemetryConfig v2.TelemetryRuntimeConfig
 }
 
 //+kubebuilder:rbac:groups="",resources=configmaps;events;persistentvolumeclaims;secrets;serviceaccounts;services,verbs=update;delete;get;list;create;patch;watch
@@ -142,7 +143,7 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			}
 			return v1.Reconcile(ctx, wandbv1, r.Client, &v1Cfg)
 		} else {
-			return v2.Reconcile(ctx, r.Client, r.Recorder, wandbv2)
+			return v2.Reconcile(ctx, r.Client, r.Recorder, wandbv2, r.TelemetryConfig)
 		}
 	} else {
 		wandb := &apiv1.WeightsAndBiases{}

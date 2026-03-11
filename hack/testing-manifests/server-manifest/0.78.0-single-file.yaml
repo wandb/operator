@@ -483,6 +483,47 @@ commonEnvvars:
   flatRunsV2Consumer:
     - name: KAFKA_RUNS_V2_TOPIC_NAME
       value: "flat-run-fields-updater"
+  telemetryOtel:
+    - name: OTEL_EXPORTER_OTLP_PROTOCOL
+      sources:
+        - type: telemetry
+          field: protocol
+    - name: OTEL_TRACES_EXPORTER
+      sources:
+        - type: telemetry
+          field: tracesExporter
+    - name: OTEL_METRICS_EXPORTER
+      sources:
+        - type: telemetry
+          field: metricsExporter
+    - name: OTEL_LOGS_EXPORTER
+      sources:
+        - type: telemetry
+          field: logsExporter
+    - name: OTEL_EXPORTER_OTLP_METRICS_ENDPOINT
+      sources:
+        - type: telemetry
+          field: metricsEndpoint
+    - name: OTEL_EXPORTER_OTLP_LOGS_ENDPOINT
+      sources:
+        - type: telemetry
+          field: logsEndpoint
+    - name: OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+      sources:
+        - type: telemetry
+          field: tracesEndpoint
+    - name: OTEL_SERVICE_NAME
+      sources:
+        - type: telemetry
+          field: serviceName
+    - name: OTEL_RESOURCE_ATTRIBUTES
+      sources:
+        - type: telemetry
+          field: resourceAttributes
+    - name: GORILLA_TRACER
+      sources:
+        - type: telemetry
+          field: gorillaTracer
 
 commonVolumeMounts:
   internalSigner:
@@ -553,8 +594,7 @@ applications:
       - gorillaCustomerSecrets
       - kafka
       - flatRunsV2Producer
-    commonVolumeMounts:
-      - internalSigner
+      - telemetryOtel
     env:
       - name: GORILLA_LICENSE_CERT_PATH
         value: "/jwks.json"
@@ -630,6 +670,7 @@ applications:
       - gorillaTaskQueueConsumer
       - gorillaService
       - gorillaOnprem
+      - telemetryOtel
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
       tag: 0.78.0
@@ -658,6 +699,7 @@ applications:
       - gorillaRedis
       - gorillaService
       - gorillaOnprem
+      - telemetryOtel
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
       tag: 0.78.0
@@ -699,6 +741,7 @@ applications:
       - gorillaRedis
       - gorillaService
       - gorillaOnprem
+      - telemetryOtel
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
       tag: 0.78.0
@@ -742,6 +785,7 @@ applications:
       - gorillaOnprem
       - kafka
       - flatRunsV2Consumer
+      - telemetryOtel
     env:
       - name: GORILLA_RUN_UPDATE_SHADOW_QUEUE_SUBSCRIPTIONS_FLAT_RUN_FIELDS_UPDATER
         value: "$(KAFKA_URL)/$(KAFKA_RUNS_V2_TOPIC_NAME)?consumer_group_id=flat-run-fields-updater"
@@ -866,8 +910,7 @@ applications:
       - gorillaHistoryStore
       - gorillaService
       - gorillaOnprem
-    commonVolumeMounts:
-      - internalSigner
+      - telemetryOtel
     env:
       - name: GORILLA_LICENSE_CERT_PATH
         value: "/jwks.json"
@@ -912,6 +955,7 @@ applications:
       - gorillaOnprem
       - kafka
       - flatRunsV2Consumer
+      - telemetryOtel
     env:
       - name: GORILLA_RUN_UPDATE_SHADOW_QUEUE_SUBSCRIPTIONS_METRIC_OBSERVER
         value: "$(KAFKA_URL)/$(KAFKA_RUNS_V2_TOPIC_NAME)?consumer_group_id=metric-observer"
@@ -958,6 +1002,7 @@ applications:
       - gorillaTaskQueueProducer
       - gorillaService
       - gorillaOnprem
+      - telemetryOtel
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
       tag: 0.78.0
@@ -1007,31 +1052,10 @@ applications:
             minReplicas: 2
   - name: weave
     image:
-      repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-python
-      tag: 0.78.0
-    containers:
-      - name: weave
-        ports:
-          - containerPort: 9239
-            name: weave
-            protocol: TCP
-        livenessProbe:
-          httpGet:
-            path: /__weave/hello
-        readinessProbe:
-          httpGet:
-            path: /__weave/hello
-      - name: weave-cache-clear
-        command:
-          - python
-          - weave-public/weave_query/scripts/clear_cache.py
-        resources:
-          limits:
-            cpu: 2
-            memory: 2Gi
-          requests:
-            cpu: 100m
-            memory: 128Mi
+      repository: wandb/weave-python
+      tag: 0.76.1
+    commonEnvs:
+      - telemetryOtel
     env:
       - name: DATADOG_TRACE_ENABLED
         value: "false"
@@ -1083,28 +1107,17 @@ applications:
       - clickhouse
       - kafka
       - weaveTrace
-    image:
-      repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
-      tag: 0.78.0
-    containers:
-      - name: weave-trace
-        args:
-          - "uvicorn"
-          - "src.trace_server:app"
-          - "--host"
-          - "0.0.0.0"
-          - "--port"
-          - "8080"
-        ports:
-          - containerPort: 8080
-            name: weave-trace
-            protocol: TCP
-        livenessProbe:
-          httpGet:
-            path: /traces/health
-        readinessProbe:
-          httpGet:
-            path: /traces/health
+      - telemetryOtel
+    ports:
+      - containerPort: 8080
+        name: weave-trace
+        protocol: TCP
+    livenessProbe:
+      httpGet:
+        path: /traces/health
+    readinessProbe:
+      httpGet:
+        path: /traces/health
     service:
       ports:
         - port: 8080
@@ -1155,39 +1168,7 @@ applications:
       - clickhouse
       - kafka
       - weaveTrace
-    containers:
-      - name: weave-trace-worker
-        args:
-          - "python"
-          - "-m"
-          - "src.workers.scoring_worker"
-    sizing:
-      micro:
-        resources:
-          limits:
-            cpu: "1"
-            memory: 2Gi
-          requests:
-            cpu: "1"
-            memory: 2Gi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 2
-            minReplicas: 1
-      small:
-        resources:
-          limits:
-            cpu: "1"
-            memory: 8Gi
-          requests:
-            cpu: "1"
-            memory: 8Gi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 4
-            minReplicas: 1
+      - telemetryOtel
   - name: weave-trace-evaluate-model-worker
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
@@ -1199,47 +1180,15 @@ applications:
       - clickhouse
       - kafka
       - weaveTrace
-    containers:
-      - name: weave-trace-evaluate-model-worker
-        args:
-          - "python"
-          - "-m"
-          - "src.workers.evaluate_model_worker.evaluate_model_worker"
-    sizing:
-      micro:
-        resources:
-          limits:
-            cpu: "1"
-            memory: 2Gi
-          requests:
-            cpu: "1"
-            memory: 2Gi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 2
-            minReplicas: 1
-      small:
-        resources:
-          limits:
-            cpu: "1"
-            memory: 8Gi
-          requests:
-            cpu: "1"
-            memory: 8Gi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 2
-            minReplicas: 1
+      - telemetryOtel
   - name: nginx-proxy
     features:
       - proxy
     image:
       repository: nginxinc/nginx-unprivileged
       tag: latest
-    containers:
-      - name: nginx-proxy
+    commonEnvs:
+      - telemetryOtel
     env:
       - name: UPSTREAM_FRONTEND
         sources:
