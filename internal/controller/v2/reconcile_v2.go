@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -59,6 +60,7 @@ func Reconcile(
 	client ctrlClient.Client,
 	recorder record.EventRecorder,
 	wandb *apiv2.WeightsAndBiases,
+	telemetryConfig TelemetryRuntimeConfig,
 ) (ctrl.Result, error) {
 	ctx, log := logx.WithSlog(ctx, logx.ReconcileInfraV2)
 
@@ -155,6 +157,11 @@ func Reconcile(
 
 	if errorCount > 0 {
 		return ctrl.Result{}, errors.New("infra state update errors")
+	}
+
+	if err := reconcileTelemetryConnectionSecret(ctx, client, wandb, telemetryConfig); err != nil {
+		log.Error("failed to reconcile telemetry connection secret", logx.ErrAttr(err))
+		return ctrl.Result{}, err
 	}
 
 	redisReady := wandb.Status.RedisStatus.Ready
@@ -800,8 +807,58 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *apiv2.
 				singleSecretSelector = selector
 				secretOnlyCount++
 				addSecretComponent(selector, idx)
+			case "telemetry":
+				secretName := src.Name
+				if secretName == "" {
+					secretName = "wandb-otel-connection"
+				}
+
+				selector := corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: secretName,
+					},
+				}
+				switch src.Field {
+				case "", "metrics", "metricsEndpoint":
+					selector.Key = "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT"
+				case "logs", "logsEndpoint":
+					selector.Key = "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"
+				case "traces", "tracesEndpoint":
+					selector.Key = "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"
+				case "metricsExporter":
+					selector.Key = "OTEL_METRICS_EXPORTER"
+				case "logsExporter":
+					selector.Key = "OTEL_LOGS_EXPORTER"
+				case "tracesExporter":
+					selector.Key = "OTEL_TRACES_EXPORTER"
+				case "protocol":
+					selector.Key = "OTEL_EXPORTER_OTLP_PROTOCOL"
+				case "serviceName":
+					selector.Key = "OTEL_SERVICE_NAME"
+				case "resourceAttributes":
+					selector.Key = "OTEL_RESOURCE_ATTRIBUTES"
+				case "gorillaTracer", "tracer":
+					selector.Key = "GORILLA_TRACER"
+				default:
+					if strings.HasPrefix(src.Field, "OTEL_") {
+						selector.Key = src.Field
+					} else {
+						continue
+					}
+				}
+
+				singleSecretSelector = selector
+				secretOnlyCount++
+				addSecretComponent(selector, idx)
 			case "service":
-				// Resolve to a literal URL (proto://serviceName:port/path)
+				// Prefer deterministic manifest-derived service resolution to avoid startup races
+				// where the Service object has not been created yet.
+				if resolved, ok := resolveServiceURLFromManifest(wandb.Name, manifest, src); ok {
+					components = append(components, resolved)
+					continue
+				}
+
+				// Fallback: resolve from live Service object (back-compat).
 				serviceList := &corev1.ServiceList{}
 				targetApplicationName := fmt.Sprintf("%s-%s", wandb.Name, src.Name)
 				err := client.List(
@@ -1429,6 +1486,65 @@ func manifestFeaturesEnabled(topicFeatures []string, mf map[string]bool) bool {
 		}
 	}
 	return false
+}
+
+func resolveServiceURLFromManifest(wandbName string, manifest serverManifest.Manifest, src serverManifest.EnvSource) (string, bool) {
+	if src.Name == "" {
+		return "", false
+	}
+
+	var app *serverManifest.Application
+	for i := range manifest.Applications {
+		if manifest.Applications[i].Name == src.Name {
+			app = &manifest.Applications[i]
+			break
+		}
+	}
+	if app == nil {
+		return "", false
+	}
+
+	port, ok := resolveServicePortFromManifest(*app, src.Port)
+	if !ok {
+		return "", false
+	}
+
+	protoPrefix := ""
+	if src.Proto != "" {
+		protoPrefix = fmt.Sprintf("%s://", src.Proto)
+	}
+	serviceName := fmt.Sprintf("%s-%s", wandbName, src.Name)
+	return fmt.Sprintf("%s%s:%d%s", protoPrefix, serviceName, port, src.Path), true
+}
+
+func resolveServicePortFromManifest(app serverManifest.Application, requestedPort string) (int32, bool) {
+	if requestedPort != "" {
+		if n, err := strconv.ParseInt(requestedPort, 10, 32); err == nil {
+			return int32(n), true
+		}
+	}
+
+	if app.Service != nil {
+		if requestedPort == "" && len(app.Service.Ports) > 0 {
+			return app.Service.Ports[0].Port, true
+		}
+		for _, p := range app.Service.Ports {
+			if p.Name == requestedPort {
+				return p.Port, true
+			}
+		}
+	}
+
+	if requestedPort == "" && len(app.Ports) > 0 {
+		return app.Ports[0].ContainerPort, true
+	}
+	for _, p := range app.Ports {
+		if p.Name == requestedPort {
+			return p.ContainerPort, true
+		}
+	}
+
+	return 0, false
 }
 
 // resolveCRFieldString resolves a dotted field path (e.g., "spec.wandb.license")

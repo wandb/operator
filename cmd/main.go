@@ -53,6 +53,7 @@ import (
 	ctrlwh "sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	"github.com/wandb/operator/internal/controller"
+	controllerv2 "github.com/wandb/operator/internal/controller/v2"
 
 	appsv2 "github.com/wandb/operator/api/v2"
 	webhookv2 "github.com/wandb/operator/internal/webhook/v2"
@@ -92,6 +93,15 @@ func main() {
 	var tlsOpts []func(*tls.Config)
 	var deployerAPI, isolationNamespaces string
 	var debug, airgapped, enableV2, enableWebhooks, enableRollouts bool
+	var telemetryEnabled bool
+	var telemetryMode string
+	var telemetryMetricsEndpoint, telemetryLogsEndpoint, telemetryTracesEndpoint string
+	var telemetryManagedNamespace string
+	var telemetryManagedVMSingleName, telemetryManagedVLSingleName, telemetryManagedVTSingleName string
+	var telemetryManagedOTLPGatewayEnabled bool
+	var telemetryManagedOTLPGatewayName string
+	var telemetryManagedOTLPGatewayHTTPPort int
+	var telemetryOTelSecretName, telemetryOTelProtocol, telemetryOTelServiceName, telemetryOTelResourceAttributes string
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
@@ -120,6 +130,22 @@ func main() {
 	flag.BoolVar(&enableV2, "enable-v2", true, "Use V2 of WandB CRD")
 	flag.BoolVar(&enableWebhooks, "enable-webhooks", true, "Enable webhooks")
 	flag.BoolVar(&enableRollouts, "enable-rollouts", false, "Enable Argo Rollout Support")
+	flag.BoolVar(&telemetryEnabled, "telemetry-enabled", false, "Enable telemetry endpoint reconciliation for W&B applications")
+	flag.StringVar(&telemetryMode, "telemetry-mode", "managed", "Telemetry mode: managed or external")
+	flag.StringVar(&telemetryMetricsEndpoint, "telemetry-metrics-endpoint", "", "OTEL metrics endpoint when using telemetry mode external")
+	flag.StringVar(&telemetryLogsEndpoint, "telemetry-logs-endpoint", "", "OTEL logs endpoint when using telemetry mode external")
+	flag.StringVar(&telemetryTracesEndpoint, "telemetry-traces-endpoint", "", "OTEL traces endpoint when using telemetry mode external")
+	flag.StringVar(&telemetryManagedNamespace, "telemetry-managed-namespace", "", "Namespace where managed telemetry services run")
+	flag.StringVar(&telemetryManagedVMSingleName, "telemetry-managed-vmsingle-name", "victoria-instance", "Name of the managed VMSingle resource")
+	flag.StringVar(&telemetryManagedVLSingleName, "telemetry-managed-vlsingle-name", "victoria-logs", "Name of the managed VLSingle resource")
+	flag.StringVar(&telemetryManagedVTSingleName, "telemetry-managed-vtsingle-name", "victoria-traces", "Name of the managed VTSingle resource")
+	flag.BoolVar(&telemetryManagedOTLPGatewayEnabled, "telemetry-managed-otlp-gateway-enabled", true, "Enable a managed OTLP gateway service for telemetry ingest")
+	flag.StringVar(&telemetryManagedOTLPGatewayName, "telemetry-managed-otlp-gateway-name", "victoria-otlp-gateway", "Name of the managed OTLP gateway Service")
+	flag.IntVar(&telemetryManagedOTLPGatewayHTTPPort, "telemetry-managed-otlp-gateway-http-port", 4318, "HTTP OTLP port exposed by the managed OTLP gateway Service")
+	flag.StringVar(&telemetryOTelSecretName, "telemetry-otel-secret-name", "wandb-otel-connection", "Name of the OTEL connection secret managed by the operator")
+	flag.StringVar(&telemetryOTelProtocol, "telemetry-otel-protocol", "http/protobuf", "OTEL exporter protocol written to the OTEL connection secret")
+	flag.StringVar(&telemetryOTelServiceName, "telemetry-otel-service-name", "wandb-service", "OTEL service name written to the OTEL connection secret")
+	flag.StringVar(&telemetryOTelResourceAttributes, "telemetry-otel-resource-attributes", "", "OTEL resource attributes written to the OTEL connection secret")
 
 	var logLevel = flag.String("log-level", "info", "Log level: debug, info, warn, error")
 	var logFormat = flag.String("log-format", "text", "Log format: text or json")
@@ -158,6 +184,29 @@ func main() {
 
 	if enableRollouts {
 		utilruntime.Must(argov1alpha1.AddToScheme(scheme))
+	}
+
+	telemetryConfig := controllerv2.DefaultTelemetryRuntimeConfig()
+	telemetryConfig.Enabled = telemetryEnabled
+	telemetryConfig.Mode = controllerv2.TelemetryMode(strings.ToLower(telemetryMode))
+	telemetryConfig.External.MetricsEndpoint = telemetryMetricsEndpoint
+	telemetryConfig.External.LogsEndpoint = telemetryLogsEndpoint
+	telemetryConfig.External.TracesEndpoint = telemetryTracesEndpoint
+	telemetryConfig.Managed.Namespace = telemetryManagedNamespace
+	telemetryConfig.Managed.VMSingleName = telemetryManagedVMSingleName
+	telemetryConfig.Managed.VLSingleName = telemetryManagedVLSingleName
+	telemetryConfig.Managed.VTSingleName = telemetryManagedVTSingleName
+	telemetryConfig.Managed.OTLPGateway.Enabled = telemetryManagedOTLPGatewayEnabled
+	telemetryConfig.Managed.OTLPGateway.Name = telemetryManagedOTLPGatewayName
+	telemetryConfig.Managed.OTLPGateway.HTTPPort = telemetryManagedOTLPGatewayHTTPPort
+	telemetryConfig.OTel.SecretName = telemetryOTelSecretName
+	telemetryConfig.OTel.Protocol = telemetryOTelProtocol
+	telemetryConfig.OTel.ServiceName = telemetryOTelServiceName
+	telemetryConfig.OTel.ResourceAttributes = telemetryOTelResourceAttributes
+	telemetryConfig.Normalize()
+	if err := telemetryConfig.Validate(); err != nil {
+		setupLog.Error(err, "invalid telemetry configuration")
+		os.Exit(1)
 	}
 
 	// if the enable-http2 flag is false (the default), http/2 should be disabled
@@ -285,13 +334,14 @@ func main() {
 	}
 
 	if err = (&controller.WeightsAndBiasesReconciler{
-		IsAirgapped:    airgapped,
-		Recorder:       mgr.GetEventRecorderFor("weightsandbiases"),
-		Client:         mgr.GetClient(),
-		Scheme:         mgr.GetScheme(),
-		DeployerClient: &deployer.DeployerClient{DeployerAPI: deployerAPI},
-		Debug:          debug,
-		EnableV2:       enableV2,
+		IsAirgapped:     airgapped,
+		Recorder:        mgr.GetEventRecorderFor("weightsandbiases"),
+		Client:          mgr.GetClient(),
+		Scheme:          mgr.GetScheme(),
+		DeployerClient:  &deployer.DeployerClient{DeployerAPI: deployerAPI},
+		Debug:           debug,
+		EnableV2:        enableV2,
+		TelemetryConfig: telemetryConfig,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "WeightsAndBiases")
 		os.Exit(1)
