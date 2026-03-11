@@ -56,7 +56,7 @@ GROUP = "apps"
 VERSION = "v1"
 KIND = "wandb"
 IMG = 'controller:latest'
-CONTROLLERGEN = 'rbac:roleName=manager-role crd:allowDangerousTypes=true,generateEmbeddedObjectMeta=true webhook paths="{./api/v1,./api/v2,./internal/controller/...}" output:crd:artifacts:config=config/crd/bases'
+CONTROLLERGEN = 'rbac:roleName=manager-role crd:allowDangerousTypes=true,generateEmbeddedObjectMeta=true,maxDescLen=0 webhook paths="{./api/v1,./api/v2,./internal/controller/...}" output:crd:artifacts:config=config/crd/bases'
 DISABLE_SECURITY_CONTEXT = True
 
 def manifests():
@@ -92,15 +92,18 @@ local_resource(
     labels=["Helm-Repos"],
 )
 
+third_party_operator_flags = [
+    '--set=wandb-operator.enabled=false',
+    '--set=telemetry.enabled=false',
+    '--create-namespace',
+]
+
 helm_resource(
     'third-party-operators',
     chart='./deploy/operator',
     resource_deps=['helm-dep-update'],
     namespace='wandb-operator',
-    flags=[
-        '--set=wandb-operator.enabled=false',
-        '--create-namespace',
-    ],
+    flags=third_party_operator_flags,
     labels=["Third-Party-Operators"],
 )
 
@@ -119,17 +122,17 @@ k8s_resource(
     labels=["Operator-Resources"],
 )
 
-k8s_resource(
-    new_name='Application CRD',
-    objects=['applications.apps.wandb.com:customresourcedefinition'],
+local_resource(
+    'Application CRD',
+    'kustomize build config/crd | kubectl apply --server-side=true --force-conflicts -f -',
     resource_deps=["manifests", "generate"],
     labels=["Operator-Resources"],
 )
 
-k8s_resource(
-    new_name='Wandb CRD',
-    objects=['weightsandbiases.apps.wandb.com:customresourcedefinition'],
-    resource_deps=["manifests", "generate"],
+local_resource(
+    'Wandb CRD',
+    'echo "Wandb CRD is applied by Application CRD server-side apply step."',
+    resource_deps=["Application CRD"],
     # wandb-operator is disabled in this Tilt setup; label is for 3rd party operator CRD grouping only
     labels=["Operator-Resources", "third-party-operators"],
 )
@@ -195,14 +198,36 @@ local_resource(
 )
 
 if settings.get("installWandb"):
-    crdName = read_yaml('./hack/testing-manifests/wandb/' + settings.get('wandbCRD') + '.yaml')['metadata']['name']
-    k8s_yaml('./hack/testing-manifests/wandb/' + settings.get('wandbCRD') + '.yaml')
+    wandbManifestPath = './hack/testing-manifests/wandb/' + settings.get('wandbCRD') + '.yaml'
+    wandbManifest = read_yaml(wandbManifestPath)
+
+    # FIXME: This hack shouldn't be needed
+    internalServiceAuthEnabled = settings.get("internalServiceAuth")
+    if internalServiceAuthEnabled != None:
+        if not wandbManifest.get('spec'):
+            wandbManifest['spec'] = {}
+        if not wandbManifest['spec'].get('wandb'):
+            wandbManifest['spec']['wandb'] = {}
+        wandbManifest['spec']['wandb']['internalServiceAuth'] = {
+            'enabled': internalServiceAuthEnabled,
+        }
+
+    crdName = wandbManifest['metadata']['name']
+    k8s_yaml(encode_yaml(wandbManifest))
     k8s_resource(
         new_name='Wandb',
         objects=[
             '%s:weightsandbiases' % crdName
         ],
         resource_deps=["webhook-ready"],
+        labels=["Operator-Resources"],
+    )
+    local_resource(
+        'Wandb-PortForward-Nginx',
+        cmd='echo "Ensuring W&B nginx endpoint is running"',
+        serve_cmd='sh -c "until kubectl get svc -n default ' + crdName + '-nginx-proxy >/dev/null 2>&1; do sleep 2; done; exec kubectl port-forward -n default svc/' + crdName + '-nginx-proxy 8080:8080"',
+        resource_deps=["Wandb"],
+        links=[link('http://localhost:8080', 'W&B nginx')],
         labels=["Operator-Resources"],
     )
 
@@ -229,113 +254,62 @@ if settings.get("installTelemetry"):
         labels=["Telemetry"],
     )
     local_resource(
-        'vm-operator-ready',
-        'kubectl rollout status deployment ' +
-        '-n wandb-operator ' +
-        '-l app.kubernetes.io/name=victoria-metrics-operator ' +
-        '--timeout=120s',
-        resource_deps=["vm-crds-ready"],
+        'Telemetry-Stack',
+        cmd='helm upgrade --install third-party-operators ./deploy/operator ' +
+        '--namespace wandb-operator --create-namespace ' +
+        '--set=wandb-operator.enabled=false ' +
+        '--set=telemetry.enabled=true ' +
+        '--set=telemetry.mode=managed ' +
+        '--set=telemetry.namespace=default ' +
+        '--set=telemetry.ui.grafana.enabled=true',
+        resource_deps=["vm-crds-ready", "grafana-crds-ready"],
         labels=["Telemetry"],
     )
-    k8s_yaml('./hack/testing-manifests/telemetry/victoria-dev.yaml')
-    k8s_resource(
-        new_name='Victoria-Metrics',
-        objects=[
-            'victoria-instance:vmsingle',
-            'victoria-agent:vmagent',
-        ],
-        resource_deps=["vm-operator-ready"],
+
+    local_resource(
+        'Telemetry-PortForward-Grafana',
+        cmd='echo "Ensuring Grafana port-forward is running"',
+        serve_cmd='sh -c "until kubectl get svc -n default grafana-service >/dev/null 2>&1; do sleep 2; done; exec kubectl port-forward -n default svc/grafana-service 3000:3000"',
+        resource_deps=["Telemetry-Stack"],
+        links=[link('http://localhost:3000', 'Grafana')],
         labels=["Telemetry"],
     )
-    k8s_resource(
-        new_name='Victoria-Logs',
-        objects=[
-            'victoria-logs:vlsingle',
-        ],
-        resource_deps=["vm-operator-ready"],
+    local_resource(
+        'Telemetry-PortForward-VictoriaMetrics',
+        cmd='echo "Ensuring VictoriaMetrics port-forward is running"',
+        serve_cmd='sh -c "until kubectl get svc -n default vmsingle-victoria-instance >/dev/null 2>&1; do sleep 2; done; exec kubectl port-forward -n default svc/vmsingle-victoria-instance 8428:8428"',
+        resource_deps=["Telemetry-Stack"],
+        links=[link('http://localhost:8428/vmui/', 'VictoriaMetrics UI')],
         labels=["Telemetry"],
     )
-    k8s_resource(
-        new_name='Victoria-Traces',
-        objects=[
-            'victoria-traces:vtsingle',
-        ],
-        resource_deps=["vm-operator-ready"],
+    local_resource(
+        'Telemetry-PortForward-VictoriaLogs',
+        cmd='echo "Ensuring VictoriaLogs port-forward is running"',
+        serve_cmd='sh -c "until kubectl get svc -n default vlsingle-victoria-logs >/dev/null 2>&1; do sleep 2; done; exec kubectl port-forward -n default svc/vlsingle-victoria-logs 9428:9428"',
+        resource_deps=["Telemetry-Stack"],
+        links=[link('http://localhost:9428', 'VictoriaLogs')],
         labels=["Telemetry"],
     )
-    k8s_yaml('./hack/testing-manifests/telemetry/wandb-otel-connection-dev.yaml')
-    k8s_resource(
-        new_name='OTEL-Connection-Secret',
-        objects=[
-            'wandb-otel-connection:secret',
-        ],
-        resource_deps=["Victoria-Metrics", "Victoria-Logs", "Victoria-Traces"],
+    local_resource(
+        'Telemetry-PortForward-VictoriaTraces',
+        cmd='echo "Ensuring VictoriaTraces port-forward is running"',
+        serve_cmd='sh -c "until kubectl get svc -n default vtsingle-victoria-traces >/dev/null 2>&1; do sleep 2; done; exec kubectl port-forward -n default svc/vtsingle-victoria-traces 10428:10428"',
+        resource_deps=["Telemetry-Stack"],
+        links=[link('http://localhost:10428', 'VictoriaTraces')],
         labels=["Telemetry"],
     )
-    k8s_yaml('./hack/testing-manifests/telemetry/kube-metrics-dev.yaml')
-    k8s_resource(
-        new_name='Kubernetes-Metrics',
-        objects=[
-            'kubelet-cadvisor:vmnodescrape',
-        ],
-        # vm-crds-ready transitively satisfied via Victoria-Metrics → vm-operator-ready → vm-crds-ready
-        resource_deps=["Victoria-Metrics"],
-        labels=["Telemetry"],
-    )
-    k8s_yaml('./hack/testing-manifests/telemetry/operator-metrics-dev.yaml')
-    k8s_resource(
-        new_name='Operator-Metrics',
-        objects=[
-            'wandb-operator:vmservicescrape',
-            'clickhouse-operator:vmservicescrape',
-            'grafana-operator:vmservicescrape',
-            'victoria-metrics-operator:vmservicescrape',
-        ],
-        # vm-crds-ready transitively satisfied via Victoria-Metrics → vm-operator-ready → vm-crds-ready
-        resource_deps=["Victoria-Metrics"],
-        labels=["Telemetry"],
-    )
-    k8s_yaml('./hack/testing-manifests/telemetry/infra-metrics-dev.yaml')
-    k8s_resource(
-        new_name='Infrastructure-Metrics',
-        objects=[
-            'mysql-pxc:vmpodscrape',
-            'mysql-proxysql:vmpodscrape',
-            'kafka-brokers:vmpodscrape',
-            'minio-tenant:vmpodscrape',
-            'redis:vmpodscrape',
-            'clickhouse-metrics:service',
-            'clickhouse:vmservicescrape',
-        ],
-        # vm-crds-ready transitively satisfied via Victoria-Metrics → vm-operator-ready → vm-crds-ready
-        resource_deps=["Victoria-Metrics"],
-        labels=["Telemetry"],
-    )
-    k8s_yaml('./hack/testing-manifests/telemetry/grafana-dev.yaml')
-    k8s_resource(
-        new_name='Grafana',
-        objects=[
-            'grafana:grafana',
-        ],
-        resource_deps=["grafana-crds-ready"],
-        port_forwards="3000:3000",
-        labels=["Telemetry"],
-    )
-    k8s_resource(
-        new_name='Grafana-Datasources',
-        objects=[
-            'victoria-metrics:grafanadatasource',
-            'victoria-logs:grafanadatasource',
-            'victoria-traces:grafanadatasource',
-        ],
-        resource_deps=["grafana-crds-ready", "Grafana", "Victoria-Metrics", "Victoria-Logs", "Victoria-Traces"],
-        labels=["Telemetry"],
-    )
+
+manager_entrypoint = ['/manager', '--log-format=' + settings['logFormat']]
+if settings.get("installTelemetry"):
+    manager_entrypoint += [
+        '--telemetry-enabled=true',
+        '--telemetry-mode=managed',
+    ]
 
 docker_build_with_restart(
     IMG, '.',
     dockerfile_contents=DOCKERFILE,
-    entrypoint=['/manager', '--log-format=' + settings['logFormat']],
+    entrypoint=manager_entrypoint,
     only=['./tilt_bin/manager', './hack/testing-manifests/server-manifest'],
     live_update=[
         sync('./tilt_bin/manager', '/manager'),
