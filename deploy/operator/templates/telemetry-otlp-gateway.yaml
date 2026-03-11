@@ -1,0 +1,131 @@
+{{- if and .Values.telemetry.enabled (eq .Values.telemetry.mode "managed") .Values.telemetry.managed.otlpGateway.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "operator.telemetry.otlpGatewayName" . }}-config
+  namespace: {{ include "operator.telemetry.namespace" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "operator.telemetry.otlpGatewayName" . }}
+    app.kubernetes.io/component: telemetry
+    app.kubernetes.io/part-of: wandb
+data:
+  collector.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:{{ .Values.telemetry.managed.otlpGateway.service.grpcPort }}
+          http:
+            endpoint: 0.0.0.0:{{ .Values.telemetry.managed.otlpGateway.service.httpPort }}
+
+    processors:
+      batch: {}
+
+    exporters:
+      otlphttp/vm:
+        endpoint: http://vmsingle-{{ include "operator.telemetry.vmsingleName" . }}:8428
+        metrics_endpoint: http://vmsingle-{{ include "operator.telemetry.vmsingleName" . }}:8428/opentelemetry/v1/metrics
+      otlphttp/vl:
+        endpoint: http://vlsingle-{{ include "operator.telemetry.vlsingleName" . }}:9428
+        logs_endpoint: http://vlsingle-{{ include "operator.telemetry.vlsingleName" . }}:9428/insert/opentelemetry/v1/logs
+      otlphttp/vt:
+        endpoint: http://vtsingle-{{ include "operator.telemetry.vtsingleName" . }}:10428
+        traces_endpoint: http://vtsingle-{{ include "operator.telemetry.vtsingleName" . }}:10428/insert/opentelemetry/v1/traces
+
+    service:
+      telemetry:
+        metrics:
+          address: 0.0.0.0:{{ .Values.telemetry.managed.otlpGateway.service.metricsPort }}
+      pipelines:
+        metrics:
+          receivers: [otlp]
+          processors: [batch]
+          exporters: [otlphttp/vm]
+        logs:
+          receivers: [otlp]
+          processors: [batch]
+          exporters: [otlphttp/vl]
+        traces:
+          receivers: [otlp]
+          processors: [batch]
+          exporters: [otlphttp/vt]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "operator.telemetry.otlpGatewayName" . }}
+  namespace: {{ include "operator.telemetry.namespace" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "operator.telemetry.otlpGatewayName" . }}
+    app.kubernetes.io/component: telemetry
+    app.kubernetes.io/part-of: wandb
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "operator.telemetry.otlpGatewayName" . }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "operator.telemetry.otlpGatewayName" . }}
+        app.kubernetes.io/component: telemetry
+        app.kubernetes.io/part-of: wandb
+    spec:
+      containers:
+        - name: otel-collector
+          image: {{ printf "%s:%s" .Values.telemetry.managed.otlpGateway.image.repository .Values.telemetry.managed.otlpGateway.image.tag | quote }}
+          imagePullPolicy: {{ .Values.telemetry.managed.otlpGateway.image.pullPolicy }}
+          args:
+            - --config=/etc/otelcol/collector.yaml
+          ports:
+            - name: otlp-grpc
+              containerPort: {{ .Values.telemetry.managed.otlpGateway.service.grpcPort }}
+              protocol: TCP
+            - name: otlp-http
+              containerPort: {{ .Values.telemetry.managed.otlpGateway.service.httpPort }}
+              protocol: TCP
+            - name: metrics
+              containerPort: {{ .Values.telemetry.managed.otlpGateway.service.metricsPort }}
+              protocol: TCP
+          volumeMounts:
+            - name: config
+              mountPath: /etc/otelcol
+          {{- with .Values.telemetry.managed.otlpGateway.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "operator.telemetry.otlpGatewayName" . }}-config
+            items:
+              - key: collector.yaml
+                path: collector.yaml
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "operator.telemetry.otlpGatewayName" . }}
+  namespace: {{ include "operator.telemetry.namespace" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "operator.telemetry.otlpGatewayName" . }}
+    app.kubernetes.io/component: telemetry
+    app.kubernetes.io/part-of: wandb
+spec:
+  selector:
+    app.kubernetes.io/name: {{ include "operator.telemetry.otlpGatewayName" . }}
+  ports:
+    - name: otlp-grpc
+      port: {{ .Values.telemetry.managed.otlpGateway.service.grpcPort }}
+      targetPort: otlp-grpc
+      protocol: TCP
+    - name: otlp-http
+      port: {{ .Values.telemetry.managed.otlpGateway.service.httpPort }}
+      targetPort: otlp-http
+      protocol: TCP
+    - name: metrics
+      port: {{ .Values.telemetry.managed.otlpGateway.service.metricsPort }}
+      targetPort: metrics
+      protocol: TCP
+{{- end }}

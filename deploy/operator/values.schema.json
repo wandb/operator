@@ -1,0 +1,324 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "telemetry": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["managed", "external"]
+        },
+        "namespace": {
+          "type": "string"
+        },
+        "otel": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "secretName": {
+              "type": "string",
+              "minLength": 1
+            },
+            "protocol": {
+              "type": "string",
+              "minLength": 1
+            },
+            "serviceName": {
+              "type": "string",
+              "minLength": 1
+            },
+            "resourceAttributes": {
+              "type": "string"
+            }
+          }
+        },
+        "external": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "metricsEndpoint": {
+              "type": "string"
+            },
+            "logsEndpoint": {
+              "type": "string"
+            },
+            "tracesEndpoint": {
+              "type": "string"
+            }
+          }
+        },
+        "managed": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "retentionPeriod": {
+              "type": "string",
+              "minLength": 1
+            },
+            "vmsingle": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "extraArgs": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "vmagent": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "selectAllByDefault": {
+                  "type": "boolean"
+                }
+              }
+            },
+            "vlsingle": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
+            "vtsingle": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
+            "otlpGateway": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "name": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "image": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "repository": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "tag": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "pullPolicy": {
+                      "type": "string",
+                      "enum": ["Always", "IfNotPresent", "Never"]
+                    }
+                  }
+                },
+                "service": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "grpcPort": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 65535
+                    },
+                    "httpPort": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 65535
+                    },
+                    "metricsPort": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 65535
+                    }
+                  }
+                },
+                "resources": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "scrape": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "kubeletCadvisor": {
+              "type": "boolean"
+            },
+            "operators": {
+              "type": "boolean"
+            },
+            "wandbApi": {
+              "type": "boolean"
+            },
+            "infrastructure": {
+              "type": "boolean"
+            }
+          }
+        },
+        "alerting": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "evaluationInterval": {
+              "type": "string",
+              "minLength": 1
+            },
+            "notifier": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "name": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "type": {
+                  "type": "string",
+                  "enum": ["webhook", "email", "slack"]
+                },
+                "target": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          }
+        },
+        "perses": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "image": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "repository": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "tag": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "pullPolicy": {
+                  "type": "string",
+                  "enum": ["Always", "IfNotPresent", "Never"]
+                }
+              }
+            },
+            "service": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "port": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 65535
+                }
+              }
+            }
+          }
+        },
+        "ui": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "grafana": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                }
+              }
+            },
+            "vmui": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "enabled": {
+                "const": true
+              },
+              "mode": {
+                "const": "external"
+              }
+            },
+            "required": ["enabled", "mode"]
+          },
+          "then": {
+            "required": ["external"],
+            "properties": {
+              "external": {
+                "required": ["metricsEndpoint", "logsEndpoint", "tracesEndpoint"],
+                "properties": {
+                  "metricsEndpoint": {
+                    "minLength": 1
+                  },
+                  "logsEndpoint": {
+                    "minLength": 1
+                  },
+                  "tracesEndpoint": {
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "additionalProperties": true
+}
