@@ -4,6 +4,10 @@
 ## Description
 // TODO(user): An in-depth paragraph about your project and overview of use
 
+## Documentation
+
+- [Monitoring and Telemetry Guide](docs/monitoring.md)
+
 ## Development
 
 ### Prerequisites
