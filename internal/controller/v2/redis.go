@@ -21,10 +21,12 @@ func redisWriteState(
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
 ) []metav1.Condition {
+	log := ctrl.LoggerFrom(ctx)
 	var specNamespacedName = redisSpecNamespacedName(wandb.Spec.Redis)
 
 	standaloneDesired, err := translatorv2.ToRedisStandaloneVendorSpec(ctx, wandb, client.Scheme())
 	if err != nil {
+		log.Error(err, "failed to translate redis standalone spec")
 		return []metav1.Condition{
 			{
 				Type:   common.ReconciledType,
@@ -36,6 +38,7 @@ func redisWriteState(
 
 	sentinelDesired, err := translatorv2.ToRedisSentinelVendorSpec(ctx, wandb, client.Scheme())
 	if err != nil {
+		log.Error(err, "failed to translate redis sentinel spec")
 		return []metav1.Condition{
 			{
 				Type:   common.ReconciledType,
@@ -47,6 +50,7 @@ func redisWriteState(
 
 	replicationDesired, err := translatorv2.ToRedisReplicationVendorSpec(ctx, wandb, client.Scheme())
 	if err != nil {
+		log.Error(err, "failed to translate redis replication spec")
 		return []metav1.Condition{
 			{
 				Type:   common.ReconciledType,
@@ -67,7 +71,7 @@ func redisReadState(
 	newConditions []metav1.Condition,
 ) ([]metav1.Condition, *translator.InfraConnection) {
 	specNamespacedName := redisSpecNamespacedName(wandb.Spec.Redis)
-	onDeleteRule := translatorv2.ToRedisOnDeleteRule(wandb, wandb.GetRetentionPolicy(wandb.Spec.Redis.WBInfraSpec))
+	onDeleteRule := translatorv2.ToRedisOnDeleteRule(wandb, wandb.GetRetentionPolicy(wandb.Spec.Redis.InfraSpec))
 	readConditions, newInfraConn := opstree.ReadState(ctx, client, specNamespacedName, wandb, onDeleteRule)
 	newConditions = append(newConditions, readConditions...)
 	return newConditions, newInfraConn
@@ -107,11 +111,11 @@ func redisPurgeFinalizer(
 	wandb *apiv2.WeightsAndBiases,
 ) error {
 	specNamespacedName := redisSpecNamespacedName(wandb.Spec.Redis)
-	onDeleteRule := translatorv2.ToRedisOnDeleteRule(wandb, wandb.GetRetentionPolicy(wandb.Spec.Redis.WBInfraSpec))
+	onDeleteRule := translatorv2.ToRedisOnDeleteRule(wandb, wandb.GetRetentionPolicy(wandb.Spec.Redis.InfraSpec))
 	return opstree.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule)
 }
 
-func redisSpecNamespacedName(redis apiv2.WBRedisSpec) types.NamespacedName {
+func redisSpecNamespacedName(redis apiv2.RedisSpec) types.NamespacedName {
 	return types.NamespacedName{
 		Namespace: redis.Namespace,
 		Name:      redis.Name,

@@ -8,16 +8,20 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/url"
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"log/slog"
 
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	v2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/logx"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 
 	"oras.land/oras-go/v2"
 	"oras.land/oras-go/v2/content"
@@ -42,13 +46,12 @@ type Manifest struct {
 	// group name (e.g., "gorillaMysql") to a slice of EnvVar definitions.
 	CommonEnvvars      map[string][]EnvVar      `yaml:"commonEnvvars,omitempty"`
 	CommonVolumeMounts map[string][]VolumeMount `yaml:"commonVolumeMounts,omitempty"`
-	Bucket             SectionRef               `yaml:"bucket"`
-	Clickhouse         SectionRef               `yaml:"clickhouse"`
-	// Kafka is a list of topic declarations with optional feature gates in YAML.
-	Kafka        []KafkaTopic  `yaml:"kafka"`
-	Mysql        SectionRef    `yaml:"mysql"`
-	Redis        SectionRef    `yaml:"redis"`
-	Applications []Application `yaml:"applications"`
+	Bucket             map[string]InfraConfig   `yaml:"bucket"`
+	Clickhouse         map[string]InfraConfig   `yaml:"clickhouse"`
+	Kafka              KafkaConfig              `yaml:"kafka"`
+	Mysql              map[string]InfraConfig   `yaml:"mysql"`
+	Redis              map[string]InfraConfig   `yaml:"redis"`
+	Applications       []Application            `yaml:"applications"`
 	// Migrations captures per-database migration jobs (e.g., default, runsdb, usagedb)
 	// as found in 0.76.1.yaml under the top-level "migrations" key.
 	Migrations map[string]MigrationJob `yaml:"migrations,omitempty"`
@@ -64,12 +67,8 @@ type GeneratedSecret struct {
 	UseExactName bool `yaml:"useExactName,omitempty"`
 }
 
-// SectionRef represents simple sections that commonly contain a single
-// "default" key with an empty object (or future options).
-type SectionRef struct {
-	Default map[string]any `yaml:"default,omitempty"`
-	// Extra captures any additional keys under the section (e.g., mysql.runsdb, redis.limiter)
-	Extra map[string]any `yaml:",inline"`
+type InfraConfig struct {
+	Sizing map[v2.Size]SizingConfig `yaml:"sizing"`
 }
 
 // KafkaTopicDef models a topic configuration used both at the top-level
@@ -80,12 +79,13 @@ type KafkaTopicDef struct {
 	ConsumerGroup  string `yaml:"consumerGroup,omitempty"`
 }
 
-// KafkaTopic models one entry in the top-level kafka list in the YAML.
-// Example:
-//   - name: filestream
-//     features: [filestreamQueue]
-//     topic: filestream
-//     partitionCount: 48
+// KafkaConfig represents the top-level kafka section with sizing and topics.
+type KafkaConfig struct {
+	Sizing map[v2.Size]KafkaSizingConfig `yaml:"sizing"`
+	Topics []KafkaTopic                  `yaml:"topics"`
+}
+
+// KafkaTopic models one entry in the kafka topics list in the YAML.
 type KafkaTopic struct {
 	Name           string   `yaml:"name"`
 	Features       []string `yaml:"features,omitempty"`
@@ -113,10 +113,8 @@ func (img ImageRef) GetImage() string {
 // AppKafkaSection is the per-application kafka section; fields are optional
 // and mirror the top-level topics.
 type AppKafkaSection struct {
-	Filestream               *KafkaTopicDef `yaml:"filestream,omitempty"`
-	FlatRunFieldsUpdater     *KafkaTopicDef `yaml:"flatRunFieldsUpdater,omitempty"`
-	WeaveWorker              *KafkaTopicDef `yaml:"weaveWorker,omitempty"`
-	WeaveEvaluateModelWorker *KafkaTopicDef `yaml:"weaveEvaluateModelWorker,omitempty"`
+	Sizing map[v2.Size]SizingConfig `yaml:"sizing"`
+	Topics map[string]KafkaTopicDef `yaml:"topics"`
 }
 
 // Application describes one entry in the applications list.
@@ -130,38 +128,57 @@ type Application struct {
 	CommonEnvs         []string `yaml:"commonEnvs,omitempty"`
 	CommonVolumeMounts []string `yaml:"commonVolumeMounts,omitempty"`
 	// InitContainers allows specifying per-application init containers
-	// (e.g., the api app defines a "migrate" init container in 0.76.1.yaml).
 	InitContainers []ContainerSpec `yaml:"initContainers,omitempty"`
+	// Containers allows specifying per-application containers for multi-container apps
+	Containers []ContainerSpec `yaml:"containers,omitempty"`
 	// Features enables this application only when specific feature flags are set in the
 	// top-level manifest features. In the YAML this appears as a list of strings.
-	Features       []string         `yaml:"features,omitempty"`
-	Env            []EnvVar         `yaml:"env,omitempty"`
-	Mysql          *SectionRef      `yaml:"mysql,omitempty"`
-	Redis          *SectionRef      `yaml:"redis,omitempty"`
-	Bucket         *SectionRef      `yaml:"bucket,omitempty"`
-	Clickhouse     *SectionRef      `yaml:"clickhouse,omitempty"`
-	Kafka          *AppKafkaSection `yaml:"kafka,omitempty"`
-	Service        *ServiceSpec     `yaml:"service,omitempty"`
-	Ports          []ContainerPort  `yaml:"ports,omitempty"`
-	LivenessProbe  *corev1.Probe    `yaml:"livenessProbe,omitempty"`
-	ReadinessProbe *corev1.Probe    `yaml:"readinessProbe,omitempty"`
-	StartupProbe   *corev1.Probe    `yaml:"startupProbe,omitempty"`
+	Features []string     `yaml:"features,omitempty"`
+	Env      []EnvVar     `yaml:"env,omitempty"`
+	Service  *ServiceSpec `yaml:"service,omitempty"`
 	// Files allows injecting files into the application's container by mounting
 	// data from ConfigMaps. Each entry may either inline file contents (stored
 	// into an operator-managed ConfigMap) or reference an existing ConfigMap.
 	// The file will be mounted at the provided mountPath/FileName using subPath.
-	Files        []FileSpec    `yaml:"files,omitempty"`
-	JWTTokens    []JWTToken    `yaml:"jwtTokens,omitempty"`
-	VolumeMounts []VolumeMount `yaml:"volumeMounts,omitempty"`
+	Files        []FileSpec               `yaml:"files,omitempty"`
+	JWTTokens    []JWTToken               `yaml:"jwtTokens,omitempty"`
+	VolumeMounts []VolumeMount            `yaml:"volumeMounts,omitempty"`
+	Sizing       map[v2.Size]SizingConfig `yaml:"sizing,omitempty"`
+}
+
+type SizingConfig struct {
+	Replicas    int32                        `yaml:"replicas,omitempty"`
+	Shards      int32                        `yaml:"shards,omitempty"`
+	VolumeSize  string                       `yaml:"volumeSize,omitempty"`
+	Resources   *corev1.ResourceRequirements `yaml:"resources,omitempty"`
+	Autoscaling *AutoscalingConfig           `yaml:"autoscaling,omitempty"`
+}
+
+type KafkaSizingConfig struct {
+	SizingConfig        `yaml:",inline"`
+	ReplicationFactor   int32 `yaml:"replicationFactor,omitempty"`
+	MinInSyncReplicas   int32 `yaml:"minInSyncReplicas,omitempty"`
+	OffsetsTopicRF      int32 `yaml:"offsetsTopicRF,omitempty"`
+	TransactionStateRF  int32 `yaml:"transactionStateRF,omitempty"`
+	TransactionStateISR int32 `yaml:"transactionStateISR,omitempty"`
+}
+
+type AutoscalingConfig struct {
+	Horizontal autoscalingv2.HorizontalPodAutoscalerSpec
 }
 
 // ContainerSpec represents a minimal container definition used by
 // application-level initContainers entries in the manifest.
 type ContainerSpec struct {
-	Name    string   `yaml:"name"`
-	Image   ImageRef `yaml:"image"`
-	Args    []string `yaml:"args,omitempty"`
-	Command []string `yaml:"command,omitempty"`
+	Name           string          `yaml:"name"`
+	Image          ImageRef        `yaml:"image"`
+	Args           []string        `yaml:"args,omitempty"`
+	Command        []string        `yaml:"command,omitempty"`
+	Ports          []ContainerPort `yaml:"ports,omitempty"`
+	LivenessProbe  *corev1.Probe   `yaml:"livenessProbe,omitempty"`
+	ReadinessProbe *corev1.Probe   `yaml:"readinessProbe,omitempty"`
+	StartupProbe   *corev1.Probe   `yaml:"startupProbe,omitempty"`
+	Resources      *corev1.ResourceRequirements
 }
 
 // EnvVar models an application environment variable sourced from manifest-defined services.
@@ -246,29 +263,66 @@ func GetServerManifest(ctx context.Context, repository string, version string) (
 	case "http", "https":
 		return Manifest{}, errors.New("http manifest not implemented")
 	case "file":
-		return LoadManifestFromFile(repository, version)
+		return LoadManifestFromFile(ctx, repository, version)
 	default:
 		return DownloadServerManifest(ctx, repository, version)
 	}
 }
 
-func LoadManifestFromFile(repository string, version string) (Manifest, error) {
-	manifest := Manifest{}
-
+func LoadManifestFromFile(ctx context.Context, repository string, version string) (Manifest, error) {
 	repositoryURL, err := url.Parse(repository)
 	if err != nil {
-		return manifest, err
+		return Manifest{}, err
+	}
+	basePath := repositoryURL.Path
+
+	rootManifestFile := path.Join(basePath, fmt.Sprintf("%s.yaml", version))
+	if rootManifestFileInfo, err := os.Stat(rootManifestFile); err == nil && !rootManifestFileInfo.IsDir() {
+		return loadManifestFromFiles(ctx, []string{rootManifestFile})
 	}
 
-	manifestFile := path.Join(repositoryURL.Path, fmt.Sprintf("%s.yaml", version))
-	manifestData, err := os.ReadFile(manifestFile)
+	versionDir := filepath.Join(basePath, version)
+	versionDirInfo, err := os.Stat(versionDir)
+	if err != nil || !versionDirInfo.IsDir() {
+		if err == nil {
+			return Manifest{}, fmt.Errorf("manifest path %q is not a directory", versionDir)
+		}
+		return Manifest{}, fmt.Errorf(
+			"failed to locate manifest for version %q in %q: %w",
+			version,
+			basePath,
+			err,
+		)
+	}
+
+	manifestFiles, err := filepath.Glob(filepath.Join(versionDir, "*.yaml"))
 	if err != nil {
 		return Manifest{}, err
 	}
-	if err = yaml.Unmarshal(manifestData, &manifest); err != nil {
-		return Manifest{}, err
+	if len(manifestFiles) == 0 {
+		return Manifest{}, fmt.Errorf("no manifest files found in %q", versionDir)
+	}
+	slices.Sort(manifestFiles)
+
+	return loadManifestFromFiles(ctx, manifestFiles)
+}
+
+func loadManifestFromFiles(ctx context.Context, manifestFiles []string) (Manifest, error) {
+	logger := logx.GetSlog(ctx)
+	manifest := Manifest{}
+	for _, manifestFile := range manifestFiles {
+		manifestData, err := os.ReadFile(manifestFile)
+		if err != nil {
+			logger.Error("failed to read manifest file", "file", manifestFile, "error", err)
+			return Manifest{}, err
+		}
+		if err = yaml.Unmarshal(manifestData, &manifest); err != nil {
+			logger.Error("failed to unmarshal manifest file", "file", manifestFile, "error", err)
+			return Manifest{}, fmt.Errorf("failed to unmarshal %q: %w", manifestFile, err)
+		}
 	}
 
+	logger.Debug("loaded manifest files", "count", len(manifestFiles), "files", manifestFiles, "manifest", manifest)
 	return manifest, nil
 }
 
@@ -336,8 +390,9 @@ func processManifest(ctx context.Context, repo oras.ReadOnlyTarget, descriptor o
 			return manifest, fmt.Errorf("failed to unmarshal manifest: %w", err)
 		}
 
+		manifestFileContents := map[string][]byte{}
+
 		for _, layer := range ociManifest.Layers {
-			// Fetch each layer and list files if it's a tar/tar+gzip
 			layerReader, err := repo.Fetch(ctx, layer)
 			if err != nil {
 				logger.Error("failed to fetch layer", "digest", layer.Digest, "err", err)
@@ -368,31 +423,38 @@ func processManifest(ctx context.Context, repo oras.ReadOnlyTarget, descriptor o
 					logger.Error("failed to read tar header", "err", err)
 					break
 				}
-				fmt.Printf("- %s\n", header.Name)
 
-				if filepath.Base(header.Name) == "manifest.yaml" {
-					logger.Debug("found manifest")
-					manifestBytes, err := io.ReadAll(tr)
-					if err != nil {
-						logger.Error("failed to read manifest.yaml", "err", err)
-						continue
-					}
-
-					err = yaml.Unmarshal(manifestBytes, &manifest)
-					if err != nil {
-						logger.Error("failed to unmarshal manifest.yaml", "err", err)
-					}
-					logger.Debug("successfully unmarshaled manifest", "manifest", manifest)
-					return manifest, err
+				if filepath.Ext(header.Name) != ".yaml" {
+					continue
 				}
+
+				manifestBytes, err := io.ReadAll(tr)
+				if err != nil {
+					logger.Error("failed to read manifest file", "file", header.Name, "err", err)
+					continue
+				}
+
+				manifestFileContents[header.Name] = manifestBytes
 			}
 		}
+
+		if len(manifestFileContents) == 0 {
+			return manifest, errors.New("no manifest yaml files found in image layers")
+		}
+
+		manifestFiles := slices.Sorted(maps.Keys(manifestFileContents))
+		for _, manifestFile := range manifestFiles {
+			if err := yaml.Unmarshal(manifestFileContents[manifestFile], &manifest); err != nil {
+				logger.Error("failed to unmarshal manifest file", "file", manifestFile, "err", err)
+				return Manifest{}, fmt.Errorf("failed to unmarshal %q: %w", manifestFile, err)
+			}
+		}
+
+		logger.Debug("successfully unmarshaled manifest files", "files", manifestFiles, "manifest", manifest)
+		return manifest, nil
 	default:
 		return manifest, fmt.Errorf("unsupported media type: %s", descriptor.MediaType)
 	}
-
-	logger.Error("no valid manifest found")
-	return manifest, errors.New("no valid manifest found")
 }
 
 // JWTToken defines a JWT token to be mounted into the application's container.

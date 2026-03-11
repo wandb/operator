@@ -24,7 +24,7 @@ import (
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/pkg/vendored/argo-rollouts/argoproj.io.rollouts/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
-	autoscalingv1 "k8s.io/api/autoscaling/v1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -186,10 +186,9 @@ var _ = Describe("Application Controller", func() {
 				},
 				Spec: apiv2.ApplicationSpec{
 					Kind: "Deployment",
-					HpaTemplate: &autoscalingv1.HorizontalPodAutoscalerSpec{
-						MinReplicas:                    &minReplicas,
-						MaxReplicas:                    maxReplicas,
-						TargetCPUUtilizationPercentage: func(i int32) *int32 { return &i }(50),
+					HpaTemplate: &autoscalingv2.HorizontalPodAutoscalerSpec{
+						MinReplicas: &minReplicas,
+						MaxReplicas: maxReplicas,
 					},
 					PodTemplate: corev1.PodTemplateSpec{
 						Spec: corev1.PodSpec{
@@ -224,7 +223,7 @@ var _ = Describe("Application Controller", func() {
 			Expect(*foundDeployment.Spec.Replicas).To(Equal(minReplicas))
 
 			// Check HPA
-			foundHPA := &autoscalingv1.HorizontalPodAutoscaler{}
+			foundHPA := &autoscalingv2.HorizontalPodAutoscaler{}
 			Expect(k8sClient.Get(ctx, typeNamespacedName, foundHPA)).To(Succeed())
 			Expect(*foundHPA.Spec.MinReplicas).To(Equal(minReplicas))
 			Expect(foundHPA.Spec.MaxReplicas).To(Equal(maxReplicas))

@@ -20,7 +20,7 @@ import (
 	kedav1alpha1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
 	"github.com/wandb/operator/pkg/vendored/argo-rollouts/argoproj.io.rollouts/v1alpha1"
 	v1 "k8s.io/api/apps/v1"
-	autoscalingv1 "k8s.io/api/autoscaling/v1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
@@ -46,7 +46,7 @@ type ApplicationSpec struct {
 	PodTemplate          corev1.PodTemplateSpec                     `json:"podTemplate,omitempty"`
 	ServiceTemplate      *corev1.ServiceSpec                        `json:"serviceTemplate,omitempty"`
 	IngressTemplate      *networkingv1.IngressSpec                  `json:"ingressTemplate,omitempty"`
-	HpaTemplate          *autoscalingv1.HorizontalPodAutoscalerSpec `json:"hpaTemplate,omitempty"`
+	HpaTemplate          *autoscalingv2.HorizontalPodAutoscalerSpec `json:"hpaTemplate,omitempty"`
 	PdbTemplate          *policyv1.PodDisruptionBudgetSpec          `json:"pdbTemplate,omitempty"`
 	ScaledObjectTemplate *kedav1alpha1.ScaledObjectSpec             `json:"scaledObjectTemplate,omitempty"`
 	Jobs                 []batchv1.Job                              `json:"jobs,omitempty"`
@@ -63,7 +63,7 @@ type ApplicationStatus struct {
 	RolloutStatus     *v1alpha1.RolloutStatus                      `json:"rolloutStatus,omitempty"`
 	StatefulSetStatus *v1.StatefulSetStatus                        `json:"statefulSetStatus,omitempty"`
 	ServiceStatus     *corev1.ServiceStatus                        `json:"serviceStatus,omitempty"`
-	HPAStatus         *autoscalingv1.HorizontalPodAutoscalerStatus `json:"hpaStatus,omitempty"`
+	HPAStatus         *autoscalingv2.HorizontalPodAutoscalerStatus `json:"hpaStatus,omitempty"`
 }
 
 // +kubebuilder:object:root=true

@@ -22,9 +22,10 @@ func clickHouseWriteState(
 	wandb *apiv2.WeightsAndBiases,
 ) []metav1.Condition {
 	var specNamespacedName = clickHouseSpecNamespacedName(wandb.Spec.ClickHouse)
-
+	log := ctrl.LoggerFrom(ctx)
 	desired, err := translatorv2.ToClickHouseVendorSpec(ctx, wandb, client.Scheme())
 	if err != nil {
+		log.Error(err, "failed to translate ClickHouse spec to vendor spec")
 		return []metav1.Condition{
 			{
 				Type:   common.ReconciledType,
@@ -45,7 +46,7 @@ func clickHouseReadState(
 	newConditions []metav1.Condition,
 ) ([]metav1.Condition, *translator.InfraConnection) {
 	specNamespacedName := clickHouseSpecNamespacedName(wandb.Spec.ClickHouse)
-	onDeleteRule := translatorv2.ToClickHouseOnDeleteRule(wandb, wandb.GetRetentionPolicy(wandb.Spec.ClickHouse.WBInfraSpec))
+	onDeleteRule := translatorv2.ToClickHouseOnDeleteRule(wandb, wandb.GetRetentionPolicy(wandb.Spec.ClickHouse.InfraSpec))
 	readConditions, newInfraConn := altinity.ReadState(ctx, client, specNamespacedName, wandb, onDeleteRule)
 	newConditions = append(newConditions, readConditions...)
 	return newConditions, newInfraConn
@@ -85,11 +86,11 @@ func clickHousePurgeFinalizer(
 	wandb *apiv2.WeightsAndBiases,
 ) error {
 	specNamespacedName := clickHouseSpecNamespacedName(wandb.Spec.ClickHouse)
-	onDeleteRule := translatorv2.ToClickHouseOnDeleteRule(wandb, wandb.GetRetentionPolicy(wandb.Spec.ClickHouse.WBInfraSpec))
+	onDeleteRule := translatorv2.ToClickHouseOnDeleteRule(wandb, wandb.GetRetentionPolicy(wandb.Spec.ClickHouse.InfraSpec))
 	return altinity.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule)
 }
 
-func clickHouseSpecNamespacedName(clickHouse apiv2.WBClickHouseSpec) types.NamespacedName {
+func clickHouseSpecNamespacedName(clickHouse apiv2.ClickHouseSpec) types.NamespacedName {
 	return types.NamespacedName{
 		Namespace: clickHouse.Namespace,
 		Name:      clickHouse.Name,

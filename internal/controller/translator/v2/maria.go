@@ -60,7 +60,7 @@ exec /bin/mysqld_exporter --config.my-cnf=/tmp/.my.cnf
 
 func ToMariaDBMySQLVendorSpec(
 	ctx context.Context,
-	spec apiv2.WBMySQLSpec,
+	spec apiv2.MySQLSpec,
 	owner metav1.Object,
 	scheme *runtime.Scheme,
 ) (*v1alpha1.MariaDB, error) {

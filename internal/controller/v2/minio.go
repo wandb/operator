@@ -21,10 +21,12 @@ func minioWriteState(
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
 ) ([]metav1.Condition, *translator.InfraConnection) {
+	log := ctrl.LoggerFrom(ctx)
 	var specNamespacedName = minioSpecNamespacedName(wandb.Spec.Minio)
 
 	desiredCr, err := translatorv2.ToMinioVendorSpec(ctx, wandb, client.Scheme())
 	if err != nil {
+		log.Error(err, "failed to translate MinIO spec to vendor spec")
 		return []metav1.Condition{
 			{
 				Type:   common.ReconciledType,
@@ -36,6 +38,7 @@ func minioWriteState(
 
 	desiredConfig, err := translatorv2.ToMinioEnvConfig(ctx, wandb.Spec.Minio)
 	if err != nil {
+		log.Error(err, "failed to translate MinIO envConfig to vendor spec")
 		return []metav1.Condition{
 			{
 				Type:   common.ReconciledType,
@@ -56,7 +59,7 @@ func minioReadState(
 	newConditions []metav1.Condition,
 ) []metav1.Condition {
 	specNamespacedName := minioSpecNamespacedName(wandb.Spec.Minio)
-	retentionPolicy := wandb.GetRetentionPolicy(wandb.Spec.Minio.WBInfraSpec)
+	retentionPolicy := wandb.GetRetentionPolicy(wandb.Spec.Minio.InfraSpec)
 	readConditions := tenant.ReadState(
 		ctx,
 		client,
@@ -102,14 +105,14 @@ func minioPurgeFinalizer(
 ) error {
 	var specNamespacedName = minioSpecNamespacedName(wandb.Spec.Minio)
 
-	onDeleteRule := translatorv2.ToMinioOnDeleteRule(wandb, wandb.GetRetentionPolicy(wandb.Spec.Minio.WBInfraSpec))
+	onDeleteRule := translatorv2.ToMinioOnDeleteRule(wandb, wandb.GetRetentionPolicy(wandb.Spec.Minio.InfraSpec))
 	if err := tenant.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule); err != nil {
 		return err
 	}
 	return nil
 }
 
-func minioSpecNamespacedName(minio apiv2.WBMinioSpec) types.NamespacedName {
+func minioSpecNamespacedName(minio apiv2.MinioSpec) types.NamespacedName {
 	return types.NamespacedName{
 		Namespace: minio.Namespace,
 		Name:      minio.Name,

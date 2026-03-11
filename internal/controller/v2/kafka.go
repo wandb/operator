@@ -22,6 +22,7 @@ func kafkaWriteState(
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
 ) []metav1.Condition {
+	log := ctrl.LoggerFrom(ctx)
 	var desiredKafka *v1.Kafka
 	desiredKafka, err := translatorv2.ToKafkaVendorSpec(
 		ctx,
@@ -29,6 +30,7 @@ func kafkaWriteState(
 		client.Scheme(),
 	)
 	if err != nil {
+		log.Error(err, "failed to translate kafka spec")
 		return []metav1.Condition{
 			{
 				Type:   common.ReconciledType,
@@ -45,6 +47,7 @@ func kafkaWriteState(
 		client.Scheme(),
 	)
 	if err != nil {
+		log.Error(err, "failed to translate kafka node pool spec")
 		return []metav1.Condition{
 			{
 				Type:   common.ReconciledType,
@@ -69,7 +72,7 @@ func kafkaReadState(
 	newConditions []metav1.Condition,
 ) ([]metav1.Condition, *translator.InfraConnection) {
 	specNamespacedName := kafkaSpecNamespacedName(wandb.Spec.Kafka)
-	onDeleteRule := translatorv2.ToKafkaOnDeleteRule(wandb, wandb.GetRetentionPolicy(wandb.Spec.Kafka.WBInfraSpec))
+	onDeleteRule := translatorv2.ToKafkaOnDeleteRule(wandb, wandb.GetRetentionPolicy(wandb.Spec.Kafka.InfraSpec))
 	readConditions, newInfraConn := strimzi.ReadState(ctx, client, specNamespacedName, wandb, onDeleteRule)
 	newConditions = append(newConditions, readConditions...)
 	return newConditions, newInfraConn
@@ -109,7 +112,7 @@ func kafkaPurgeFinalizer(
 	wandb *apiv2.WeightsAndBiases,
 ) error {
 	specNamespacedName := kafkaSpecNamespacedName(wandb.Spec.Kafka)
-	onDeleteRule := translatorv2.ToKafkaOnDeleteRule(wandb, wandb.GetRetentionPolicy(wandb.Spec.Kafka.WBInfraSpec))
+	onDeleteRule := translatorv2.ToKafkaOnDeleteRule(wandb, wandb.GetRetentionPolicy(wandb.Spec.Kafka.InfraSpec))
 	return strimzi.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule)
 }
 
@@ -126,7 +129,7 @@ func kafkaPreserveFinalizer(
 	return nil
 }
 
-func kafkaSpecNamespacedName(kafka apiv2.WBKafkaSpec) types.NamespacedName {
+func kafkaSpecNamespacedName(kafka apiv2.KafkaSpec) types.NamespacedName {
 	return types.NamespacedName{
 		Namespace: kafka.Namespace,
 		Name:      kafka.Name,

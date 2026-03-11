@@ -32,7 +32,7 @@ func createMinioTelemetryEnv(telemetry apiv2.Telemetry) []corev1.EnvVar {
 	}
 }
 
-// ToMinioVendorSpec converts a WBMinioSpec to a Minio Tenant CR.
+// ToMinioVendorSpec converts a MinioSpec to a Minio Tenant CR.
 // This function translates the high-level Minio spec into the vendor-specific
 // Tenant format used by the Minio operator.
 func ToMinioVendorSpec(
@@ -83,9 +83,9 @@ func ToMinioVendorSpec(
 			},
 			Pools: []miniov2.Pool{
 				{
-					Name:             tenant.PoolName(specName),
-					Affinity:         wandb.GetAffinity(infraSpec.WBInfraSpec),
-					Tolerations:      *wandb.GetTolerations(infraSpec.WBInfraSpec),
+					Name:             "default",
+					Affinity:         wandb.GetAffinity(infraSpec.InfraSpec),
+					Tolerations:      *wandb.GetTolerations(infraSpec.InfraSpec),
 					Servers:          infraSpec.Replicas,
 					VolumesPerServer: volumesPerServer,
 					VolumeClaimTemplate: &corev1.PersistentVolumeClaim{
@@ -135,7 +135,7 @@ func ToMinioVendorSpec(
 
 func ToMinioEnvConfig(
 	ctx context.Context,
-	spec apiv2.WBMinioSpec,
+	spec apiv2.MinioSpec,
 ) (tenant.MinioEnvConfig, error) {
 	return tenant.MinioEnvConfig{
 		RootUser:            spec.Config.RootUser,
@@ -147,6 +147,6 @@ func BuildWandbMinioLabels(wandb *apiv2.WeightsAndBiases) map[string]string {
 	return BuildWandbLabels(wandb, translator.MinioModuleName)
 }
 
-func ToMinioOnDeleteRule(wandb *apiv2.WeightsAndBiases, retentionPolicy apiv2.WBRetentionPolicy) translator.OnDeleteRule {
+func ToMinioOnDeleteRule(wandb *apiv2.WeightsAndBiases, retentionPolicy apiv2.RetentionPolicy) translator.OnDeleteRule {
 	return ToOnDeleteRule(wandb, retentionPolicy, translator.MinioModuleName)
 }

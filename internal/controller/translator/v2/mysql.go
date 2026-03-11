@@ -19,7 +19,7 @@ import (
 
 func ToMysqlMySQLVendorSpec(
 	ctx context.Context,
-	spec apiv2.WBMySQLSpec,
+	spec apiv2.MySQLSpec,
 	wandb *apiv2.WeightsAndBiases,
 	scheme *runtime.Scheme,
 ) (*v2.InnoDBCluster, error) {
@@ -96,6 +96,6 @@ func BuildWandbMysqlLabels(wandb *apiv2.WeightsAndBiases) map[string]string {
 	return BuildWandbLabels(wandb, translator.MysqlModuleName)
 }
 
-func ToMysqlOnDeleteRule(wandb *apiv2.WeightsAndBiases, retentionPolicy apiv2.WBRetentionPolicy) translator.OnDeleteRule {
+func ToMysqlOnDeleteRule(wandb *apiv2.WeightsAndBiases, retentionPolicy apiv2.RetentionPolicy) translator.OnDeleteRule {
 	return ToOnDeleteRule(wandb, retentionPolicy, translator.MysqlModuleName)
 }

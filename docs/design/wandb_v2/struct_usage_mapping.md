@@ -47,12 +47,12 @@ This document maps struct definitions and their usage (reads/writes) across the 
 
 ### MySQL Structs
 
-#### WBMySQLSpec
+#### MySQLSpec
 - 📝 **Defined**: `api/v2/weightsandbiases_types.go:84`
 - 📖 **Read by**:
   - `internal/controller/translator/v2/mysql.go` - BuildMySQLSpec(), BuildMySQLDefaults()
 - ✍️ **Written by**:
-  - `internal/controller/translator/v2/mysql.go` - Creates WBMySQLSpec{} literals with defaults
+  - `internal/controller/translator/v2/mysql.go` - Creates MySQLSpec{} literals with defaults
 
 #### WBMySQLConfig
 - 📝 **Defined**: `api/v2/weightsandbiases_types.go:95`
