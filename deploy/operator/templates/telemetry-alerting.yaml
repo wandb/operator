@@ -1,0 +1,58 @@
+{{- if and .Values.telemetry.enabled (eq .Values.telemetry.mode "managed") .Values.telemetry.alerting.enabled }}
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: wandb-telemetry-default-rules
+  namespace: {{ include "operator.telemetry.namespace" . }}
+  labels:
+    app.kubernetes.io/component: telemetry
+    app.kubernetes.io/part-of: wandb
+    telemetry.wandb.com/rule-group: default
+spec:
+  groups:
+    - name: wandb-telemetry
+      interval: {{ .Values.telemetry.alerting.evaluationInterval | quote }}
+      rules:
+        - alert: WandbOperatorDown
+          expr: up{job=~".*wandb-operator.*"} == 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: W&B operator metrics target is down
+            description: VictoriaMetrics cannot scrape the W&B operator metrics endpoint.
+        - alert: WandbNoKafkaMetrics
+          expr: absent(up{job=~".*kafka.*"})
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: Kafka metrics are missing
+            description: No Kafka metrics targets were discovered for at least 10 minutes.
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMAlert
+metadata:
+  name: wandb-vmalert
+  namespace: {{ include "operator.telemetry.namespace" . }}
+  labels:
+    app.kubernetes.io/component: telemetry
+    app.kubernetes.io/part-of: wandb
+spec:
+  datasource:
+    url: {{ printf "http://vmsingle-%s:8428" (include "operator.telemetry.vmsingleName" .) | quote }}
+  remoteRead:
+    url: {{ printf "http://vmsingle-%s:8428" (include "operator.telemetry.vmsingleName" .) | quote }}
+  remoteWrite:
+    url: {{ printf "http://vmsingle-%s:8428/api/v1/write" (include "operator.telemetry.vmsingleName" .) | quote }}
+  evaluationInterval: {{ .Values.telemetry.alerting.evaluationInterval | quote }}
+  selectAllByDefault: false
+  ruleSelector:
+    matchLabels:
+      telemetry.wandb.com/rule-group: default
+  {{- if .Values.telemetry.alerting.notifier.enabled }}
+  notifiers:
+    - url: {{ .Values.telemetry.alerting.notifier.target | quote }}
+  {{- end }}
+{{- end }}
