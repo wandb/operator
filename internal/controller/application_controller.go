@@ -34,6 +34,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 const applicationFinalizer = "applications.apps.wandb.com/finalizer"
@@ -50,6 +51,8 @@ type ApplicationReconciler struct {
 // +kubebuilder:rbac:groups=apps.wandb.com,resources=applications/finalizers,verbs=update
 // +kubebuilder:rbac:groups=autoscaling,resources=horizontalpodautoscalers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes/status,verbs=get
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -136,6 +139,11 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 				return ctrl.Result{}, err
 			}
 
+			if err := r.deleteHTTPRoute(ctx, &app); err != nil {
+				logger.Error("Failed to delete HTTPRoute during finalization", logx.ErrAttr(err))
+				return ctrl.Result{}, err
+			}
+
 			// Remove finalizer
 			app.ObjectMeta.Finalizers = utils.RemoveString(app.ObjectMeta.Finalizers, applicationFinalizer)
 			if err := r.Update(ctx, &app); err != nil {
@@ -192,6 +200,11 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// Reconcile HPA if specified
 	if err := r.reconcileHPA(ctx, &app); err != nil {
 		logger.Error("Failed to reconcile HPA", logx.ErrAttr(err))
+		return ctrl.Result{}, err
+	}
+
+	if err := r.reconcileHTTPRoute(ctx, &app); err != nil {
+		logger.Error("Failed to reconcile HTTPRoute", logx.ErrAttr(err))
 		return ctrl.Result{}, err
 	}
 
@@ -927,6 +940,54 @@ func (r *ApplicationReconciler) deleteHPA(ctx context.Context, app *wandbv2.Appl
 	return nil
 }
 
+func (r *ApplicationReconciler) reconcileHTTPRoute(ctx context.Context, app *wandbv2.Application) error {
+	if app.Spec.HTTPRouteTemplate == nil {
+		return r.deleteHTTPRoute(ctx, app)
+	}
+
+	logger := logx.GetSlog(ctx)
+
+	desired := &gatewayv1.HTTPRoute{}
+	desired.Name = app.Name
+	desired.Namespace = app.Namespace
+
+	desired.Labels = utils.MergeMapsStringString(desired.Labels, app.Spec.MetaTemplate.Labels)
+	desired.Annotations = utils.MergeMapsStringString(desired.Annotations, app.Spec.MetaTemplate.Annotations)
+
+	desired.Spec.ParentRefs = app.Spec.HTTPRouteTemplate.ParentRefs
+	desired.Spec.Hostnames = app.Spec.HTTPRouteTemplate.Hostnames
+	desired.Spec.Rules = app.Spec.HTTPRouteTemplate.Rules
+
+	if err := ctrl.SetControllerReference(app, desired, r.Scheme); err != nil {
+		return err
+	}
+
+	current := &gatewayv1.HTTPRoute{}
+	err := r.Get(ctx, client.ObjectKey{Namespace: app.Namespace, Name: app.Name}, current)
+	if err != nil {
+		if !errors.IsNotFound(err) {
+			return err
+		}
+		logger.Info("Creating HTTPRoute", "HTTPRoute", desired.Name)
+		return r.Create(ctx, desired)
+	}
+
+	desired.ResourceVersion = current.ResourceVersion
+	logger.Info("Updating HTTPRoute", "HTTPRoute", desired.Name)
+	return r.Update(ctx, desired)
+}
+
+func (r *ApplicationReconciler) deleteHTTPRoute(ctx context.Context, app *wandbv2.Application) error {
+	route := &gatewayv1.HTTPRoute{}
+	if err := r.Get(ctx, client.ObjectKey{Namespace: app.Namespace, Name: app.Name}, route); err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+	return r.Delete(ctx, route, client.PropagationPolicy(v1.DeletePropagationBackground))
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *ApplicationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	controller := ctrl.NewControllerManagedBy(mgr).
@@ -935,6 +996,7 @@ func (r *ApplicationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&appsv1.StatefulSet{}).
 		Owns(&corev1.Service{}).
 		Owns(&autoscalingv2.HorizontalPodAutoscaler{}).
+		Owns(&gatewayv1.HTTPRoute{}).
 		Named("application")
 
 	if r.EnableRollouts {

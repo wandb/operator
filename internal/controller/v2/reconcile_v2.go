@@ -48,6 +48,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	ctrlClient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 const CleanupFinalizer = "wandb.apps.wandb.com/cleanup"
@@ -199,6 +200,23 @@ func Reconcile(
 			}
 			if err = runRetentionFinalizer(ctx, client, wandb, wandb.Spec.ClickHouse.InfraSpec, clickHousePurgeFinalizer, clickHouseDetachFinalizer); err != nil {
 				return ctrl.Result{}, err
+			}
+			if wandb.Spec.Networking.Mode == apiv2.NetworkingModeIngress {
+				if err = deleteConsolidatedIngress(ctx, client, wandb); err != nil {
+					return ctrl.Result{}, err
+				}
+			}
+			if wandb.Spec.Networking.Mode == apiv2.NetworkingModeGatewayAPI &&
+				wandb.Spec.Networking.GatewayAPI != nil &&
+				wandb.Spec.Networking.GatewayAPI.Gateway.Managed {
+				if err = deleteGateway(ctx, client, wandb); err != nil {
+					return ctrl.Result{}, err
+				}
+			}
+			if wandb.GetRetentionPolicy(wandb.Spec.Kafka.InfraSpec).OnDelete == apiv2.PreserveOnDelete {
+				if err = kafkaPreserveFinalizer(ctx, client, wandb); err != nil {
+					return ctrl.Result{}, err
+				}
 			}
 			controllerutil.RemoveFinalizer(wandb, CleanupFinalizer)
 			if err := client.Update(ctx, wandb); err != nil {
@@ -382,6 +400,13 @@ func ReconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 		return ctrl.Result{}, err
 	}
 
+	if wandb.Spec.Networking.Mode == apiv2.NetworkingModeGatewayAPI {
+		if err := reconcileGateway(ctx, client, wandb); err != nil {
+			logger.Error(err, "Failed to reconcile Gateway")
+			return ctrl.Result{}, err
+		}
+	}
+
 	result, err = runMigrations(ctx, client, wandb, manifest)
 	if err != nil {
 		return result, err
@@ -413,6 +438,7 @@ func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb 
 	}
 
 	for _, app := range manifest.Applications {
+		logger.Info("container envs", "name", app.Name, "envs", app.Env)
 		// If the application is gated behind features, only install it when
 		// at least one of those features is enabled in the manifest.
 		if len(app.Features) > 0 && !manifestFeaturesEnabled(app.Features, manifest.Features) {
@@ -492,6 +518,12 @@ func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb 
 			application.Spec.ServiceTemplate = nil
 		}
 
+		if wandb.Spec.Networking.Mode == apiv2.NetworkingModeGatewayAPI && app.Ingress != nil {
+			application.Spec.HTTPRouteTemplate = buildHTTPRouteTemplate(wandb, app)
+		} else {
+			application.Spec.HTTPRouteTemplate = nil
+		}
+
 		err = controllerutil.SetOwnerReference(wandb, application, client.Scheme())
 		if err != nil {
 			return ctrl.Result{}, err
@@ -510,22 +542,30 @@ func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb 
 		wandb.Status.Wandb.Applications[app.Name] = application.Status
 	}
 
+	if wandb.Spec.Networking.Mode == apiv2.NetworkingModeIngress {
+		if err := reconcileConsolidatedIngress(ctx, client, wandb, manifest); err != nil {
+			logger.Error(err, "Failed to reconcile consolidated Ingress")
+			return ctrl.Result{}, err
+		}
+	}
+
 	hostname, err := url.Parse(wandb.Spec.Wandb.Hostname)
 	if err != nil {
 		logger.Error(err, "Failed to parse provided hostname", "hostname", wandb.Spec.Wandb.Hostname)
 	} else {
-		// Only override with NodePort if user didn't specify a port in the hostname
-		if manifestFeaturesEnabled([]string{"proxy"}, manifest.Features) && hostname.Port() == "" {
-			proxyService := &corev1.Service{}
-			proxyServiceName := fmt.Sprintf("%s-%s", wandb.Name, "nginx-proxy")
-			err := client.Get(ctx, types.NamespacedName{Name: proxyServiceName, Namespace: wandb.Namespace}, proxyService)
-			if err != nil {
-				logger.Error(err, "Failed to get proxy service", "service", proxyServiceName)
-			} else {
-				nodePort := proxyService.Spec.Ports[0].NodePort
-				hostname.Host = fmt.Sprintf("%s:%d", hostname.Hostname(), nodePort)
+		if wandb.Spec.Networking.Mode == apiv2.NetworkingModeNone {
+			// Only override with NodePort if user didn't specify a port in the hostname
+			if manifestFeaturesEnabled([]string{"proxy"}, manifest.Features) && hostname.Port() == "" {
+				proxyService := &corev1.Service{}
+				proxyServiceName := fmt.Sprintf("%s-%s", wandb.Name, "nginx-proxy")
+				err := client.Get(ctx, types.NamespacedName{Name: proxyServiceName, Namespace: wandb.Namespace}, proxyService)
+				if err != nil {
+					logger.Error(err, "Failed to get proxy service", "service", proxyServiceName)
+				} else {
+					nodePort := proxyService.Spec.Ports[0].NodePort
+					hostname.Host = fmt.Sprintf("%s:%d", hostname.Hostname(), nodePort)
+				}
 			}
-
 		}
 
 		if wandb.Status.Wandb.Hostname != hostname.String() {
@@ -538,6 +578,91 @@ func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb 
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func buildHTTPRouteTemplate(wandb *apiv2.WeightsAndBiases, app serverManifest.Application) *apiv2.HTTPRouteTemplateSpec {
+	gwConfig := wandb.Spec.Networking.GatewayAPI
+
+	var parentRef gatewayv1.ParentReference
+	if gwConfig.Gateway.Managed {
+		gatewayName := gatewayv1.ObjectName(fmt.Sprintf("%s-gateway", wandb.Name))
+		parentRef = gatewayv1.ParentReference{Name: gatewayName}
+	} else {
+		parentRef = gatewayv1.ParentReference{
+			Name: gatewayv1.ObjectName(gwConfig.Gateway.GatewayRef.Name),
+		}
+		if gwConfig.Gateway.GatewayRef.Namespace != "" {
+			ns := gatewayv1.Namespace(gwConfig.Gateway.GatewayRef.Namespace)
+			parentRef.Namespace = &ns
+		}
+	}
+	if gwConfig.ListenerName != nil {
+		sectionName := gatewayv1.SectionName(*gwConfig.ListenerName)
+		parentRef.SectionName = &sectionName
+	}
+
+	hostname := parseHostname(wandb.Spec.Wandb.Hostname)
+	hostnames := []gatewayv1.Hostname{gatewayv1.Hostname(hostname)}
+	for _, h := range wandb.Spec.Wandb.AdditionalHostnames {
+		hostnames = append(hostnames, gatewayv1.Hostname(h))
+	}
+
+	appPaths := []string{"/"}
+	if app.Ingress != nil && len(app.Ingress.Paths) > 0 {
+		appPaths = app.Ingress.Paths
+	}
+
+	serviceName := fmt.Sprintf("%s-%s", wandb.Name, app.Name)
+	servicePort := resolveHTTPRouteServicePort(app)
+
+	var matches []gatewayv1.HTTPRouteMatch
+	for _, p := range appPaths {
+		p := p
+		matchType := gatewayv1.PathMatchPathPrefix
+		if app.Ingress != nil && app.Ingress.PathType == "Exact" {
+			matchType = gatewayv1.PathMatchExact
+		}
+		matches = append(matches, gatewayv1.HTTPRouteMatch{
+			Path: &gatewayv1.HTTPPathMatch{
+				Type:  &matchType,
+				Value: &p,
+			},
+		})
+	}
+
+	backendRef := gatewayv1.HTTPBackendRef{
+		BackendRef: gatewayv1.BackendRef{
+			BackendObjectReference: gatewayv1.BackendObjectReference{
+				Name: gatewayv1.ObjectName(serviceName),
+				Port: servicePort,
+			},
+		},
+	}
+
+	return &apiv2.HTTPRouteTemplateSpec{
+		ParentRefs: []gatewayv1.ParentReference{parentRef},
+		Hostnames:  hostnames,
+		Rules: []gatewayv1.HTTPRouteRule{{
+			Matches:     matches,
+			BackendRefs: []gatewayv1.HTTPBackendRef{backendRef},
+		}},
+	}
+}
+
+func resolveHTTPRouteServicePort(app serverManifest.Application) *gatewayv1.PortNumber {
+	if app.Ingress != nil && app.Ingress.ServicePort != "" {
+		port := intstr.Parse(app.Ingress.ServicePort)
+		if port.Type == intstr.Int {
+			p := gatewayv1.PortNumber(port.IntVal)
+			return &p
+		}
+	}
+	if app.Service != nil && len(app.Service.Ports) > 0 {
+		p := gatewayv1.PortNumber(app.Service.Ports[0].Port)
+		return &p
+	}
+	p := gatewayv1.PortNumber(8080)
+	return &p
 }
 
 func resolveInitContainers(app serverManifest.Application, envVars []corev1.EnvVar, volumeMounts []corev1.VolumeMount) []corev1.Container {
@@ -1197,6 +1322,7 @@ func resolveInlineFiles(ctx context.Context, client ctrlClient.Client, wandb *ap
 }
 
 func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest, commonEnvs []string, envs []serverManifest.EnvVar) ([]corev1.EnvVar, error) {
+	logger := logx.GetSlog(ctx)
 	var combinedEnvs []serverManifest.EnvVar
 	for _, commonVars := range commonEnvs {
 		if envvars, ok := manifest.CommonEnvvars[commonVars]; ok {
@@ -1440,7 +1566,10 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *apiv2.
 				}
 				if val, ok := resolveCRFieldString(wandb, src.Field); ok {
 					// Treat as a literal component (not secret-backed)
+					logger.Debug("field found in CR", "cr", wandb.Name, "field", src.Field, "value", val)
 					components = append(components, val)
+				} else {
+					logger.Debug("field not found in CR", "cr", wandb.Name, "field", src.Field)
 				}
 			default:
 				// Unknown source type; skip

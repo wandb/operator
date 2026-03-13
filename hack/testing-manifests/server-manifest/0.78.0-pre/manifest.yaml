@@ -210,6 +210,8 @@ commonEnvvars:
         - name: hostname
           type: custom-resource
           field: status.wandb.hostname
+    - name: GORILLA_DISABLE_DYNAMIC_HOST
+      value: "true"
     - name: LICENSE
       sources:
         - name: license
@@ -309,22 +311,6 @@ commonEnvvars:
           type: generatedSecret
     - name: WANDB_INTERNAL_SERVICE_TOKEN_SECRET_NAME
       value: "weave-worker-auth"
-  frontend:
-    - name: REACT_APP_HOST
-      source:
-        - name: hostname
-          type: custom-resource
-          field: status.wandb.hostname
-    - name: REACT_APP_ENVIRONMENT_NAME
-      value: "local"
-    - name: REACT_APP_ENVIRONMENT_IS_PRIVATE
-      value: "true"
-    - name: REACT_APP_ANALYTICS_DISABLED
-      value: "true"
-    - name: WEAVE_TRACES_ENABLED
-      value: "true"
-    - name: SERVER_FLAG_WEAVE_1_PERCENTAGE
-      value: "100"
   flatRunsV2Producer:
     - name: KAFKA_RUNS_V2_TOPIC_NAME
       value: "flat-run-fields-updater"
@@ -397,7 +383,7 @@ applications:
   - name: anaconda2
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/anaconda2
-      tag: 0.78.0-pre-operator-v2-no-app.1
+      tag: 0.78.2-rc.1773119635
     containers:
       - name: anaconda2
         ports:
@@ -447,7 +433,7 @@ applications:
             type: mysql
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.0-pre-operator-v2-no-app.1
+      tag: 0.78.2-rc.1773119635
     containers:
       - name: api
         args:
@@ -467,6 +453,17 @@ applications:
         - port: 8080
           protocol: TCP
           name: api
+    ingress:
+      paths:
+        - /api
+        - /artifacts
+        - /artifactsV2
+        - /files
+        - /graphql
+        - /graphql2
+        - /oidc
+      servicePort: "8080"
+      pathType: Prefix
   - name: executor
     args:
       - executor
@@ -481,7 +478,7 @@ applications:
       - telemetryOtel
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.0-pre-operator-v2-no-app.1
+      tag: 0.78.2-rc.1773119635
     containers:
       - name: executor
   - name: filemeta
@@ -496,7 +493,7 @@ applications:
       - telemetryOtel
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.0-pre-operator-v2-no-app.1
+      tag: 0.78.2-rc.1773119635
   - name: filestream
     features:
       - filestreamQueue
@@ -511,7 +508,7 @@ applications:
       - telemetryOtel
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.0-pre-operator-v2-no-app.1
+      tag: 0.78.2-rc.1773119635
     containers:
       - name: filestream
   - name: flat-run-fields-updater
@@ -531,15 +528,13 @@ applications:
         value: "$(KAFKA_URL)/$(KAFKA_RUNS_V2_TOPIC_NAME)?consumer_group_id=flat-run-fields-updater"
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.0-pre-operator-v2-no-app.1
+      tag: 0.78.2-rc.1773119635
     containers:
       - name: flat-run-fields-updater
   - name: frontend
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/frontend-nginx
-      tag: 0.78.0-pre-operator-v2-no-app.1
-    commonEnvs:
-      - frontend
+      tag: 0.78.2-rc.1773119635
     env:
       - name: FRONTEND_APP_BACKEND
         sources:
@@ -569,6 +564,26 @@ applications:
         value: "true"
       - name: OPERATOR_ENABLED
         value: "true"
+      - name: REACT_APP_HOST
+        sources:
+          - name: hostname
+            type: custom-resource
+            field: status.wandb.hostname
+      - name: REACT_APP_ENVIRONMENT_NAME
+        value: "local"
+      - name: REACT_APP_ENVIRONMENT_IS_PRIVATE
+        value: "true"
+      - name: REACT_APP_ANALYTICS_DISABLED
+        value: "true"
+      - name: WEAVE_TRACES_ENABLED
+        value: "true"
+      - name: SERVER_FLAG_WEAVE_1_PERCENTAGE
+        value: "100"
+      - name: PUBLIC_URL
+        sources:
+          - name: hostname
+            type: custom-resource
+            field: status.wandb.hostname
     containers:
       - name: frontend
         ports:
@@ -586,6 +601,11 @@ applications:
         - port: 8080
           protocol: TCP
           name: frontend
+    ingress:
+      paths:
+        - /
+      servicePort: "8080"
+      pathType: Prefix
   - name: glue
     args:
       - glue
@@ -612,7 +632,7 @@ applications:
         value: "memory://"
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.0-pre-operator-v2-no-app.1
+      tag: 0.78.2-rc.1773119635
     containers:
       - name: glue
   - name: metric-observer
@@ -632,7 +652,7 @@ applications:
         value: "$(KAFKA_URL)/$(KAFKA_RUNS_V2_TOPIC_NAME)?consumer_group_id=metric-observer"
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.0-pre-operator-v2-no-app.1
+      tag: 0.78.2-rc.1773119635
     containers:
       - name: metric-observer
   - name: parquet
@@ -649,7 +669,7 @@ applications:
       - telemetryOtel
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.0-pre-operator-v2-no-app.1
+      tag: 0.78.2-rc.1773119635
     containers:
       - name: parquet
         ports:
@@ -670,9 +690,32 @@ applications:
   - name: weave
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-python
-      tag: 0.78.0-pre.1772047260
+      tag: 0.78.2-rc.1773119635
     commonEnvs:
       - telemetryOtel
+    containers:
+      - name: weave
+        ports:
+          - containerPort: 9239
+            name: weave
+            protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /__weave/hello
+        readinessProbe:
+          httpGet:
+            path: /__weave/hello
+      - name: weave-cache-clear
+        command:
+          - python
+          - weave-public/weave_query/scripts/clear_cache.py
+        resources:
+          limits:
+            cpu: 2
+            memory: 2Gi
+          requests:
+            cpu: 100m
+            memory: 128Mi
     env:
       - name: DATADOG_TRACE_ENABLED
         value: "false"
@@ -681,6 +724,11 @@ applications:
         - port: 9239
           protocol: TCP
           name: weave
+    ingress:
+      paths:
+        - /weave/
+      servicePort: "9239"
+      pathType: Prefix
     volumeMounts:
       - name: temp-dir
         mountPath: /tmp/
@@ -698,6 +746,18 @@ applications:
       - kafka
       - weaveTrace
       - telemetryOtel
+    image:
+      repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
+      tag: 0.78.2-rc.1773119635
+    containers:
+      - name: weave-trace
+        args:
+          - "uvicorn"
+          - "src.trace_server:app"
+          - "--host"
+          - "0.0.0.0"
+          - "--port"
+          - "8080"
     ports:
       - containerPort: 8080
         name: weave-trace
@@ -713,6 +773,11 @@ applications:
         - port: 8080
           protocol: TCP
           name: weave-trace
+    ingress:
+      paths:
+        - /traces
+      servicePort: "8080"
+      pathType: Prefix
     jwtTokens:
       - name: internal-jwt
         mountPath: /tmp/weave-trace/internal-jwt
@@ -723,7 +788,7 @@ applications:
   - name: weave-trace-worker
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
-      tag: 0.78.0-pre-operator-v2-no-app.1
+      tag: 0.78.2-rc.1773119635
     env:
       - name: DD_TRACE_ENABLED
         value: "false"
@@ -735,7 +800,7 @@ applications:
   - name: weave-trace-evaluate-model-worker
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
-      tag: 0.78.0-pre-operator-v2-no-app.1
+      tag: 0.78.2-rc.1773119635
     env:
       - name: DD_TRACE_ENABLED
         value: "false"
@@ -894,7 +959,7 @@ migrations:
   gorilla:
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.0-pre-operator-v2-no-app.1
+      tag: 0.78.2-rc.1773119635
     args:
       - "migrate"
       - "--db=$(GORILLA_METADATA_STORE)"
@@ -907,7 +972,7 @@ migrations:
   internal-signer:
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.0-pre-operator-v2-no-app.1
+      tag: 0.78.2-rc.1773119635
     args:
       - "secret-generation-job"
     env:
@@ -920,7 +985,7 @@ migrations:
   weave-trace:
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
-      tag: 0.78.0-pre-operator-v2-no-app.1
+      tag: 0.78.2-rc.1773119635
     args:
       - python
       - migrator.py

@@ -22,16 +22,12 @@ import (
 
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	appsv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/internal/logx"
 )
-
-// nolint:unused
-// log is for logging in this package.
-var applicationlog = logf.Log.WithName("application-resource")
 
 // SetupApplicationWebhookWithManager registers the webhook for Application in the manager.
 func SetupApplicationWebhookWithManager(mgr ctrl.Manager) error {
@@ -57,13 +53,14 @@ type ApplicationCustomDefaulter struct {
 var _ webhook.CustomDefaulter = &ApplicationCustomDefaulter{}
 
 // Default implements webhook.CustomDefaulter so a webhook will be registered for the Kind Application.
-func (d *ApplicationCustomDefaulter) Default(_ context.Context, obj runtime.Object) error {
+func (d *ApplicationCustomDefaulter) Default(ctx context.Context, obj runtime.Object) error {
+	logger := logx.GetSlog(ctx)
 	application, ok := obj.(*appsv2.Application)
 
 	if !ok {
 		return fmt.Errorf("expected an Application object but got %T", obj)
 	}
-	applicationlog.Info("Defaulting for Application", "name", application.GetName())
+	logger.Debug("Defaulting for Application", "name", application.GetName())
 
 	// TODO(user): fill in your defaulting logic.
 
@@ -86,12 +83,13 @@ type ApplicationCustomValidator struct {
 var _ webhook.CustomValidator = &ApplicationCustomValidator{}
 
 // ValidateCreate implements webhook.CustomValidator so a webhook will be registered for the type Application.
-func (v *ApplicationCustomValidator) ValidateCreate(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
+func (v *ApplicationCustomValidator) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+	logger := logx.GetSlog(ctx)
 	application, ok := obj.(*appsv2.Application)
 	if !ok {
 		return nil, fmt.Errorf("expected a Application object but got %T", obj)
 	}
-	applicationlog.Info("Validation for Application upon creation", "name", application.GetName())
+	logger.Debug("Validation for Application upon creation", "name", application.GetName())
 
 	if err := v.validateHPAAndReplicas(application); err != nil {
 		return nil, err
@@ -101,12 +99,13 @@ func (v *ApplicationCustomValidator) ValidateCreate(_ context.Context, obj runti
 }
 
 // ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type Application.
-func (v *ApplicationCustomValidator) ValidateUpdate(_ context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
+func (v *ApplicationCustomValidator) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
+	logger := logx.GetSlog(ctx)
 	application, ok := newObj.(*appsv2.Application)
 	if !ok {
 		return nil, fmt.Errorf("expected a Application object for the newObj but got %T", newObj)
 	}
-	applicationlog.Info("Validation for Application upon update", "name", application.GetName())
+	logger.Debug("Validation for Application upon update", "name", application.GetName())
 
 	if err := v.validateHPAAndReplicas(application); err != nil {
 		return nil, err
@@ -133,11 +132,12 @@ func (v *ApplicationCustomValidator) validateHPAAndReplicas(app *appsv2.Applicat
 
 // ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type Application.
 func (v *ApplicationCustomValidator) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+	logger := logx.GetSlog(ctx)
 	application, ok := obj.(*appsv2.Application)
 	if !ok {
 		return nil, fmt.Errorf("expected a Application object but got %T", obj)
 	}
-	applicationlog.Info("Validation for Application upon deletion", "name", application.GetName())
+	logger.Debug("Validation for Application upon deletion", "name", application.GetName())
 
 	// TODO(user): fill in your validation logic upon object deletion.
 

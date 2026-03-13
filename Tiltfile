@@ -10,6 +10,7 @@ settings = {
     "wandbCR": "hack/testing-manifests/wandb/.generated/wandb-cr.yaml",
     "wandbOverlays": [],
     "installTelemetry": True,
+    "installNginxGateway": True,
     "logFormat": "pretty",  # pretty, text, json
 }
 
@@ -107,6 +108,18 @@ local_resource("Operator-Manifests", manifests(), labels=[GROUP_WANDB_OPERATOR])
 local_resource("Operator-Generate", generate(), labels=[GROUP_WANDB_OPERATOR])
 
 deploy_cert_manager()
+
+if settings.get("installNginxGateway"):
+    helm_resource(
+        'nginx-gateway-fabric',
+        chart='oci://ghcr.io/nginx/charts/nginx-gateway-fabric',
+        namespace='nginx-gateway',
+        flags=[
+            '--create-namespace',
+            '--version=2.4.2',
+        ],
+        labels=["Gateway"],
+    )
 
 local_resource(
     'ThirdParty-Chart-Deps',

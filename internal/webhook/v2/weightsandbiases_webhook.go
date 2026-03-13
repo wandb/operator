@@ -260,6 +260,9 @@ func validateSpec(_ context.Context, newWandb *appsv2.WeightsAndBiases) (admissi
 	var warnings admission.Warnings
 
 	allErrors = append(allErrors, validateRedisSpec(newWandb)...)
+	networkingErrors, networkingWarnings := validateNetworkingSpec(newWandb)
+	allErrors = append(allErrors, networkingErrors...)
+	warnings = append(warnings, networkingWarnings...)
 
 	if len(allErrors) == 0 {
 		return warnings, nil
@@ -360,4 +363,77 @@ func validateRedisChanges(newWandb, oldWandb *appsv2.WeightsAndBiases) field.Err
 	}
 
 	return errors
+}
+
+func validateNetworkingSpec(wandb *appsv2.WeightsAndBiases) (field.ErrorList, admission.Warnings) {
+	var errors field.ErrorList
+	var warnings admission.Warnings
+	netPath := field.NewPath("spec").Child("networking")
+	spec := wandb.Spec.Networking
+
+	if spec.Mode == appsv2.NetworkingModeNone {
+		return errors, warnings
+	}
+
+	if spec.Mode == appsv2.NetworkingModeIngress && spec.GatewayAPI != nil {
+		errors = append(errors, field.Invalid(
+			netPath.Child("gatewayAPI"),
+			spec.GatewayAPI,
+			"gatewayAPI must not be set when mode is Ingress",
+		))
+	}
+
+	if spec.Mode == appsv2.NetworkingModeGatewayAPI && spec.Ingress != nil {
+		errors = append(errors, field.Invalid(
+			netPath.Child("ingress"),
+			spec.Ingress,
+			"ingress must not be set when mode is GatewayAPI",
+		))
+	}
+
+	if spec.Mode == appsv2.NetworkingModeGatewayAPI {
+		if spec.GatewayAPI == nil {
+			errors = append(errors, field.Required(
+				netPath.Child("gatewayAPI"),
+				"gatewayAPI is required when mode is GatewayAPI",
+			))
+		} else {
+			gwPath := netPath.Child("gatewayAPI").Child("gateway")
+			gw := spec.GatewayAPI.Gateway
+
+			if gw.Managed {
+				if gw.GatewayClassName == nil || *gw.GatewayClassName == "" {
+					errors = append(errors, field.Required(
+						gwPath.Child("gatewayClassName"),
+						"gatewayClassName is required when gateway.managed is true",
+					))
+				}
+				if gw.GatewayRef != nil {
+					errors = append(errors, field.Invalid(
+						gwPath.Child("gatewayRef"),
+						gw.GatewayRef,
+						"gatewayRef must not be set when gateway.managed is true",
+					))
+				}
+			} else {
+				if gw.GatewayRef == nil {
+					errors = append(errors, field.Required(
+						gwPath.Child("gatewayRef"),
+						"gatewayRef is required when gateway.managed is false",
+					))
+				} else if gw.GatewayRef.Name == "" {
+					errors = append(errors, field.Required(
+						gwPath.Child("gatewayRef").Child("name"),
+						"gatewayRef.name is required",
+					))
+				}
+			}
+		}
+	}
+
+	if spec.TLS != nil && spec.TLS.CertManager != nil && spec.Mode != appsv2.NetworkingModeIngress {
+		warnings = append(warnings, "networking.tls.certManager annotations are only applied in Ingress mode")
+	}
+
+	return errors, warnings
 }

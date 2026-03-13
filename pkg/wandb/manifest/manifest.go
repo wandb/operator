@@ -144,6 +144,13 @@ type Application struct {
 	JWTTokens    []JWTToken               `yaml:"jwtTokens,omitempty"`
 	VolumeMounts []VolumeMount            `yaml:"volumeMounts,omitempty"`
 	Sizing       map[v2.Size]SizingConfig `yaml:"sizing,omitempty"`
+	Ingress      *AppIngressSpec          `yaml:"ingress,omitempty"`
+}
+
+type AppIngressSpec struct {
+	Paths       []string `yaml:"paths,omitempty"`
+	ServicePort string   `yaml:"servicePort,omitempty"`
+	PathType    string   `yaml:"pathType,omitempty"`
 }
 
 type SizingConfig struct {
