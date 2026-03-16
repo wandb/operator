@@ -7,7 +7,12 @@ features:
   proxy: false
 
 bucket:
-  default: {}
+  default:
+    ingress:
+      paths:
+        - /bucket
+      servicePort: "9000"
+      pathType: Prefix
 
 clickhouse:
   default: {}

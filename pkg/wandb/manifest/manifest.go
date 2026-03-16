@@ -68,7 +68,8 @@ type GeneratedSecret struct {
 }
 
 type InfraConfig struct {
-	Sizing map[v2.Size]SizingConfig `yaml:"sizing"`
+	Sizing  map[v2.Size]SizingConfig `yaml:"sizing"`
+	Ingress *AppIngressSpec          `yaml:"ingress,omitempty"`
 }
 
 // KafkaTopicDef models a topic configuration used both at the top-level

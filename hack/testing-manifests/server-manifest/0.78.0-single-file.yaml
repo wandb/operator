@@ -8,6 +8,11 @@ features:
 
 bucket:
   default:
+    ingress:
+      paths:
+        - /bucket
+      servicePort: "9000"
+      pathType: Prefix
     sizing:
       default:
         replicas: 1

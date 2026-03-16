@@ -420,6 +420,14 @@ func ReconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 	if err != nil {
 		return result, err
 	}
+
+	if wandb.Spec.Networking.Mode == apiv2.NetworkingModeGatewayAPI {
+		if err := reconcileInfraHTTPRoutes(ctx, client, wandb, manifest); err != nil {
+			logger.Error(err, "Failed to reconcile infra HTTPRoutes")
+			return ctrl.Result{}, err
+		}
+	}
+
 	return ctrl.Result{}, nil
 }
 
