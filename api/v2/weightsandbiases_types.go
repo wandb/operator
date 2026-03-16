@@ -431,9 +431,10 @@ type WeightsAndBiasesStatus struct {
 }
 
 type GatewayStatusSummary struct {
-	Name      string   `json:"name,omitempty"`
-	Ready     bool     `json:"ready,omitempty"`
-	Addresses []string `json:"addresses,omitempty"`
+	Name       string            `json:"name,omitempty"`
+	Ready      bool              `json:"ready,omitempty"`
+	Addresses  []string          `json:"addresses,omitempty"`
+	GatewayRef *GatewayReference `json:"gatewayRef,omitempty"`
 }
 
 type IngressStatusSummary struct {

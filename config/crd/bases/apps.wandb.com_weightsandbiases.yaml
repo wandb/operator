@@ -3481,6 +3481,15 @@ spec:
                     items:
                       type: string
                     type: array
+                  gatewayRef:
+                    properties:
+                      name:
+                        type: string
+                      namespace:
+                        type: string
+                    required:
+                    - name
+                    type: object
                   name:
                     type: string
                   ready:

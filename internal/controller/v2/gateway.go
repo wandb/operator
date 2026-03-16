@@ -28,7 +28,21 @@ func reconcileGateway(ctx context.Context, c ctrlClient.Client, wandb *apiv2.Wei
 		if gwConfig.Gateway.GatewayRef == nil {
 			return fmt.Errorf("gatewayAPI.gateway.gatewayRef is required when managed=false")
 		}
-		return validateExternalGatewayExists(ctx, c, wandb, gwConfig.Gateway.GatewayRef)
+		if err := validateExternalGatewayExists(ctx, c, wandb, gwConfig.Gateway.GatewayRef); err != nil {
+			return err
+		}
+		ns := gwConfig.Gateway.GatewayRef.Namespace
+		if ns == "" {
+			ns = wandb.Namespace
+		}
+		if wandb.Status.GatewayStatus == nil {
+			wandb.Status.GatewayStatus = &apiv2.GatewayStatusSummary{}
+		}
+		wandb.Status.GatewayStatus.GatewayRef = &apiv2.GatewayReference{
+			Name:      gwConfig.Gateway.GatewayRef.Name,
+			Namespace: ns,
+		}
+		return nil
 	}
 
 	gatewayName := fmt.Sprintf("%s-gateway", wandb.Name)
@@ -62,13 +76,27 @@ func reconcileGateway(ctx context.Context, c ctrlClient.Client, wandb *apiv2.Wei
 	err := c.Get(ctx, types.NamespacedName{Name: gatewayName, Namespace: wandb.Namespace}, current)
 	if err != nil {
 		if apiErrors.IsNotFound(err) {
-			return c.Create(ctx, desired)
+			if err := c.Create(ctx, desired); err != nil {
+				return err
+			}
+		} else {
+			return err
 		}
-		return err
+	} else {
+		desired.ResourceVersion = current.ResourceVersion
+		if err := c.Update(ctx, desired); err != nil {
+			return err
+		}
 	}
 
-	desired.ResourceVersion = current.ResourceVersion
-	return c.Update(ctx, desired)
+	if wandb.Status.GatewayStatus == nil {
+		wandb.Status.GatewayStatus = &apiv2.GatewayStatusSummary{}
+	}
+	wandb.Status.GatewayStatus.GatewayRef = &apiv2.GatewayReference{
+		Name:      gatewayName,
+		Namespace: wandb.Namespace,
+	}
+	return nil
 }
 
 func deleteGateway(ctx context.Context, c ctrlClient.Client, wandb *apiv2.WeightsAndBiases) error {

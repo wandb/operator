@@ -26,7 +26,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-logr/logr"
 	"github.com/samber/lo"
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/ctrlqueue"
@@ -417,22 +416,24 @@ func ReconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
-	result, err = reconcileApplications(ctx, client, wandb, manifest, logger)
+	result, err = reconcileApplications(ctx, client, wandb, manifest)
 	if err != nil {
 		return result, err
 	}
 	return ctrl.Result{}, nil
 }
 
-func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest, logger logr.Logger) (ctrl.Result, error) {
+func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest) (ctrl.Result, error) {
+	logger := logx.GetSlog(ctx)
+	logger.Info("Reconciling applications")
 	serviceAccountName := wandb.Spec.Wandb.ServiceAccount.ServiceAccountName
 
 	if wandb.Spec.Wandb.InternalServiceAuth.Enabled != nil && *wandb.Spec.Wandb.InternalServiceAuth.Enabled {
 		if err := createOrUpdateOIDCDiscoveryClusterRoleBinding(ctx, client, wandb); err != nil {
-			logger.Error(err, "Failed to create ClusterRoleBinding for OIDC discovery. "+
+			logger.Error("Failed to create ClusterRoleBinding for OIDC discovery. "+
 				"This is required for JWT token validation between W&B services. "+
 				"Either grant the operator ClusterRoleBinding permissions, or manually create the ClusterRoleBinding. "+
-				"W&B will continue starting, but JWT authentication will fail until this is resolved.")
+				"W&B will continue starting, but JWT authentication will fail until this is resolved.", "err", err)
 			// Non-fatal: continue reconciliation even if ClusterRoleBinding creation fails
 		}
 	}
@@ -446,7 +447,6 @@ func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb 
 	}
 
 	for _, app := range manifest.Applications {
-		logger.Info("container envs", "name", app.Name, "envs", app.Env)
 		// If the application is gated behind features, only install it when
 		// at least one of those features is enabled in the manifest.
 		if len(app.Features) > 0 && !manifestFeaturesEnabled(app.Features, manifest.Features) {
@@ -526,7 +526,8 @@ func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb 
 			application.Spec.ServiceTemplate = nil
 		}
 
-		if wandb.Spec.Networking.Mode == apiv2.NetworkingModeGatewayAPI && app.Ingress != nil {
+		if wandb.Spec.Networking.Mode == apiv2.NetworkingModeGatewayAPI && app.Ingress != nil &&
+			wandb.Status.GatewayStatus != nil && wandb.Status.GatewayStatus.GatewayRef != nil {
 			application.Spec.HTTPRouteTemplate = buildHTTPRouteTemplate(wandb, app)
 		} else {
 			application.Spec.HTTPRouteTemplate = nil
@@ -577,14 +578,14 @@ func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb 
 
 	if wandb.Spec.Networking.Mode == apiv2.NetworkingModeIngress {
 		if err := reconcileConsolidatedIngress(ctx, client, wandb, manifest); err != nil {
-			logger.Error(err, "Failed to reconcile consolidated Ingress")
+			logger.Error("Failed to reconcile consolidated Ingress", "err", err)
 			return ctrl.Result{}, err
 		}
 	}
 
 	hostname, err := url.Parse(wandb.Spec.Wandb.Hostname)
 	if err != nil {
-		logger.Error(err, "Failed to parse provided hostname", "hostname", wandb.Spec.Wandb.Hostname)
+		logger.Error("Failed to parse provided hostname", "hostname", wandb.Spec.Wandb.Hostname, "err", err)
 	} else {
 		if wandb.Spec.Networking.Mode == apiv2.NetworkingModeNone {
 			// Only override with NodePort if user didn't specify a port in the hostname
@@ -593,7 +594,7 @@ func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb 
 				proxyServiceName := fmt.Sprintf("%s-%s", wandb.Name, "nginx-proxy")
 				err := client.Get(ctx, types.NamespacedName{Name: proxyServiceName, Namespace: wandb.Namespace}, proxyService)
 				if err != nil {
-					logger.Error(err, "Failed to get proxy service", "service", proxyServiceName)
+					logger.Error("Failed to get proxy service", "service", proxyServiceName, "err", err)
 				} else {
 					nodePort := proxyService.Spec.Ports[0].NodePort
 					hostname.Host = fmt.Sprintf("%s:%d", hostname.Hostname(), nodePort)
@@ -616,18 +617,13 @@ func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb 
 func buildHTTPRouteTemplate(wandb *apiv2.WeightsAndBiases, app serverManifest.Application) *apiv2.HTTPRouteTemplateSpec {
 	gwConfig := wandb.Spec.Networking.GatewayAPI
 
-	var parentRef gatewayv1.ParentReference
-	if gwConfig.Gateway.Managed {
-		gatewayName := gatewayv1.ObjectName(fmt.Sprintf("%s-gateway", wandb.Name))
-		parentRef = gatewayv1.ParentReference{Name: gatewayName}
-	} else {
-		parentRef = gatewayv1.ParentReference{
-			Name: gatewayv1.ObjectName(gwConfig.Gateway.GatewayRef.Name),
-		}
-		if gwConfig.Gateway.GatewayRef.Namespace != "" {
-			ns := gatewayv1.Namespace(gwConfig.Gateway.GatewayRef.Namespace)
-			parentRef.Namespace = &ns
-		}
+	ref := wandb.Status.GatewayStatus.GatewayRef
+	parentRef := gatewayv1.ParentReference{
+		Name: gatewayv1.ObjectName(ref.Name),
+	}
+	if ref.Namespace != "" && ref.Namespace != wandb.Namespace {
+		ns := gatewayv1.Namespace(ref.Namespace)
+		parentRef.Namespace = &ns
 	}
 	if gwConfig.ListenerName != nil {
 		sectionName := gatewayv1.SectionName(*gwConfig.ListenerName)
