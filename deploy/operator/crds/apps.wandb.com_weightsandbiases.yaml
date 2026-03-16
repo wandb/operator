@@ -2731,8 +2731,8 @@ spec:
                       Empty/unset means no operator-managed ingress (preserves current NodePort behavior).
                     enum:
                     - ""
-                    - Ingress
-                    - GatewayAPI
+                    - ingress
+                    - gateway
                     type: string
                   tls:
                     properties:

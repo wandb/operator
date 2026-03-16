@@ -969,6 +969,7 @@ migrations:
       - "true"
     commonEnvs:
       - gorillaMysql
+      - gorillaOnprem
   internal-signer:
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary

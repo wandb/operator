@@ -437,6 +437,14 @@ func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb 
 		}
 	}
 
+	desiredAppNames := make(map[string]bool)
+	for _, app := range manifest.Applications {
+		if len(app.Features) > 0 && !manifestFeaturesEnabled(app.Features, manifest.Features) {
+			continue
+		}
+		desiredAppNames[app.Name] = true
+	}
+
 	for _, app := range manifest.Applications {
 		logger.Info("container envs", "name", app.Name, "envs", app.Env)
 		// If the application is gated behind features, only install it when
@@ -540,6 +548,31 @@ func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb 
 		}
 
 		wandb.Status.Wandb.Applications[app.Name] = application.Status
+	}
+
+	existingApps := &apiv2.ApplicationList{}
+	if err := client.List(ctx, existingApps, ctrlClient.InNamespace(wandb.Namespace)); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to list existing applications: %w", err)
+	}
+
+	for _, app := range existingApps.Items {
+		if !isOwnedBy(&app, wandb) {
+			continue
+		}
+
+		appNamePrefix := fmt.Sprintf("%s-", wandb.Name)
+		if !strings.HasPrefix(app.Name, appNamePrefix) {
+			continue
+		}
+		appName := strings.TrimPrefix(app.Name, appNamePrefix)
+
+		if !desiredAppNames[appName] {
+			logger.Info("Deleting application no longer in manifest or disabled by feature", "application", app.Name)
+			if err := client.Delete(ctx, &app); err != nil && !apiErrors.IsNotFound(err) {
+				return ctrl.Result{}, fmt.Errorf("failed to delete application %s: %w", app.Name, err)
+			}
+			delete(wandb.Status.Wandb.Applications, appName)
+		}
 	}
 
 	if wandb.Spec.Networking.Mode == apiv2.NetworkingModeIngress {
@@ -2506,4 +2539,13 @@ func createOrUpdateOIDCDiscoveryClusterRoleBinding(
 	}
 
 	return nil
+}
+
+func isOwnedBy(obj ctrlClient.Object, owner *apiv2.WeightsAndBiases) bool {
+	for _, ref := range obj.GetOwnerReferences() {
+		if ref.UID == owner.UID {
+			return true
+		}
+	}
+	return false
 }
