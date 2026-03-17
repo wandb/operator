@@ -1,5 +1,6 @@
 ---
 requiredOperatorVersion: ^2.0.0
+manifestVersion: v1alpha1
 
 features:
   filestreamQueue: false
@@ -21,20 +22,21 @@ generatedSecrets:
     useExactName: true
 
 kafka:
-  - name: filestream
-    features:
-      - filestreamQueue
-    topic: filestream
-    partitionCount: 48
-  - name: flat-run-fields-updater
-    topic: flat-run-fields-updater
-    partitionCount: 48
-  - name: weave-worker
-    topic: weave.call_ended
-    partitionCount: 48
-  - name: weave-evaluate-model-worker
-    topic: weave.evaluate_model
-    partitionCount: 48
+  topics:
+    - name: filestream
+      features:
+        - filestreamQueue
+      topic: filestream
+      partitionCount: 48
+    - name: flat-run-fields-updater
+      topic: flat-run-fields-updater
+      partitionCount: 48
+    - name: weave-worker
+      topic: weave.call_ended
+      partitionCount: 48
+    - name: weave-evaluate-model-worker
+      topic: weave.evaluate_model
+      partitionCount: 48
 
 mysql:
   default: {}
@@ -43,7 +45,8 @@ mysql:
   usage: {}
 
 redis:
-  default: {}
+  default:
+    sentinelGroup: gorilla
 
 commonEnvvars:
   gorillaMysql:
@@ -353,17 +356,19 @@ applications:
   - name: anaconda2
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/anaconda2
-      tag: 0.78.0-pre.1772047260
-    ports:
-      - containerPort: 8080
-        name: anaconda2
-        protocol: TCP
-    livenessProbe:
-      httpGet:
-        path: /ping
-    readinessProbe:
-      httpGet:
-        path: /ping
+      tag: 0.78.0-pre-operator-v2-no-app.1
+    containers:
+      - name: anaconda2
+        ports:
+          - containerPort: 8080
+            name: anaconda2
+            protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /ping
+        readinessProbe:
+          httpGet:
+            path: /ping
     service:
       ports:
         - port: 8080
@@ -400,19 +405,21 @@ applications:
             type: mysql
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.0-pre.1772047260
-    args:
-      - gorilla
-    ports:
-      - containerPort: 8080
-        name: api
-        protocol: TCP
-    livenessProbe:
-      httpGet:
-        path: /healthz
-    readinessProbe:
-      httpGet:
-        path: /ready
+      tag: 0.78.0-pre-operator-v2-no-app.1
+    containers:
+      - name: api
+        args:
+          - gorilla
+        ports:
+          - containerPort: 8080
+            name: api
+            protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /healthz
+        readinessProbe:
+          httpGet:
+            path: /ready
     service:
       ports:
         - port: 8080
@@ -431,7 +438,9 @@ applications:
       - gorillaOnprem
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.0-pre.1772047260
+      tag: 0.78.0-pre-operator-v2-no-app.1
+    containers:
+      - name: executor
   - name: filemeta
     args:
       - filemeta
@@ -443,7 +452,7 @@ applications:
       - gorillaOnprem
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.0-pre.1772047260
+      tag: 0.78.0-pre-operator-v2-no-app.1
   - name: filestream
     features:
       - filestreamQueue
@@ -457,7 +466,9 @@ applications:
       - gorillaOnprem
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.0-pre.1772047260
+      tag: 0.78.0-pre-operator-v2-no-app.1
+    containers:
+      - name: filestream
   - name: flat-run-fields-updater
     args:
       - flat-run-fields-updater
@@ -474,11 +485,13 @@ applications:
         value: "$(KAFKA_URL)/$(KAFKA_RUNS_V2_TOPIC_NAME)?consumer_group_id=flat-run-fields-updater"
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.0-pre.1772047260
+      tag: 0.78.0-pre-operator-v2-no-app.1
+    containers:
+      - name: flat-run-fields-updater
   - name: frontend
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/frontend-nginx
-      tag: 0.78.0-pre.1772047260
+      tag: 0.78.0-pre-operator-v2-no-app.1
     commonEnvs:
       - frontend
     env:
@@ -510,16 +523,18 @@ applications:
         value: "true"
       - name: OPERATOR_ENABLED
         value: "true"
-    ports:
-      - containerPort: 8080
-        name: frontend
-        protocol: TCP
-    livenessProbe:
-      httpGet:
-        path: /healthz
-    readinessProbe:
-      httpGet:
-        path: /ready
+    containers:
+      - name: frontend
+        ports:
+          - containerPort: 8080
+            name: frontend
+            protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /healthz
+        readinessProbe:
+          httpGet:
+            path: /ready
     service:
       ports:
         - port: 8080
@@ -550,7 +565,9 @@ applications:
         value: "memory://"
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.0-pre.1772047260
+      tag: 0.78.0-pre-operator-v2-no-app.1
+    containers:
+      - name: glue
   - name: metric-observer
     args:
       - metric-observer
@@ -567,7 +584,9 @@ applications:
         value: "$(KAFKA_URL)/$(KAFKA_RUNS_V2_TOPIC_NAME)?consumer_group_id=metric-observer"
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.0-pre.1772047260
+      tag: 0.78.0-pre-operator-v2-no-app.1
+    containers:
+      - name: metric-observer
   - name: parquet
     args:
       - parquet
@@ -581,17 +600,19 @@ applications:
       - gorillaOnprem
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.0-pre.1772047260
-    ports:
-      - containerPort: 8080
-        name: parquet
-        protocol: TCP
-    livenessProbe:
-      httpGet:
-        path: /healthz
-    readinessProbe:
-      httpGet:
-        path: /ready
+      tag: 0.78.0-pre-operator-v2-no-app.1
+    containers:
+      - name: parquet
+        ports:
+          - containerPort: 8080
+            name: parquet
+            protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /healthz
+        readinessProbe:
+          httpGet:
+            path: /ready
     service:
       ports:
         - port: 8080
@@ -600,50 +621,76 @@ applications:
   - name: weave
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-python
-      tag: 0.78.0-pre.1772047260
+      tag: 0.78.0-pre-operator-v2-no-app.1
+    containers:
+      - name: weave
+        ports:
+          - containerPort: 9239
+            name: weave
+            protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /__weave/hello
+        readinessProbe:
+          httpGet:
+            path: /__weave/hello
+      - name: weave-cache-clear
+        command:
+          - python
+          - weave-public/weave_query/scripts/clear_cache.py
+        resources:
+          limits:
+            cpu: 2
+            memory: 2Gi
+          requests:
+            cpu: 100m
+            memory: 128Mi
     env:
       - name: DATADOG_TRACE_ENABLED
         value: "false"
-    ports:
-      - containerPort: 9239
-        name: weave
-        protocol: TCP
     service:
       ports:
         - port: 9239
           protocol: TCP
           name: weave
-    livenessProbe:
-      httpGet:
-        path: /__weave/hello
-    readinessProbe:
-      httpGet:
-        path: /__weave/hello
+    volumeMounts:
+      - name: temp-dir
+        mountPath: /tmp/
+        source:
+          type: emptyDir
+          name: temp-dir
+      - name: cache
+        mountPath: /vol/weave/cache
+        source:
+          type: emptyDir
+          name: cache
   - name: weave-trace
-    image:
-      repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
-      tag: 0.78.0-pre.1772047260
-    args:
-      - "uvicorn"
-      - "src.trace_server:app"
-      - "--host"
-      - "0.0.0.0"
-      - "--port"
-      - "8080"
     commonEnvs:
       - clickhouse
       - kafka
       - weaveTrace
-    ports:
-      - containerPort: 8080
-        name: weave-trace
-        protocol: TCP
-    livenessProbe:
-      httpGet:
-        path: /traces/health
-    readinessProbe:
-      httpGet:
-        path: /traces/health
+    image:
+      repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
+      tag: 0.78.0-pre-operator-v2-no-app.1
+    containers:
+      - name: weave-trace
+        args:
+          - "uvicorn"
+          - "src.trace_server:app"
+          - "--host"
+          - "0.0.0.0"
+          - "--port"
+          - "8080"
+        ports:
+          - containerPort: 8080
+            name: weave-trace
+            protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /traces/health
+        readinessProbe:
+          httpGet:
+            path: /traces/health
     service:
       ports:
         - port: 8080
@@ -659,11 +706,7 @@ applications:
   - name: weave-trace-worker
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
-      tag: 0.78.0-pre.1772047260
-    args:
-      - "python"
-      - "-m"
-      - "src.workers.scoring_worker"
+      tag: 0.78.0-pre-operator-v2-no-app.1
     env:
       - name: DD_TRACE_ENABLED
         value: "false"
@@ -671,14 +714,16 @@ applications:
       - clickhouse
       - kafka
       - weaveTrace
+    containers:
+      - name: weave-trace-worker
+        args:
+          - "python"
+          - "-m"
+          - "src.workers.scoring_worker"
   - name: weave-trace-evaluate-model-worker
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
-      tag: 0.78.0-pre.1772047260
-    args:
-      - "python"
-      - "-m"
-      - "src.workers.evaluate_model_worker.evaluate_model_worker"
+      tag: 0.78.0-pre-operator-v2-no-app.1
     env:
       - name: DD_TRACE_ENABLED
         value: "false"
@@ -686,12 +731,20 @@ applications:
       - clickhouse
       - kafka
       - weaveTrace
+    containers:
+      - name: weave-trace-evaluate-model-worker
+        args:
+          - "python"
+          - "-m"
+          - "src.workers.evaluate_model_worker.evaluate_model_worker"
   - name: nginx-proxy
     features:
       - proxy
     image:
       repository: nginxinc/nginx-unprivileged
       tag: latest
+    containers:
+      - name: nginx-proxy
     env:
       - name: UPSTREAM_FRONTEND
         sources:
@@ -834,7 +887,7 @@ migrations:
   gorilla:
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.0-pre.1772047260
+      tag: 0.78.0-pre-operator-v2-no-app.1
     args:
       - "migrate"
       - "--db=$(GORILLA_METADATA_STORE)"
@@ -844,11 +897,10 @@ migrations:
       - "true"
     commonEnvs:
       - gorillaMysql
-      - gorillaOnprem
   internal-signer:
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.0-pre.1772047260
+      tag: 0.78.0-pre-operator-v2-no-app.1
     args:
       - "secret-generation-job"
     env:
@@ -861,7 +913,7 @@ migrations:
   weave-trace:
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
-      tag: 0.78.0-pre.1772047260
+      tag: 0.78.0-pre-operator-v2-no-app.1
     args:
       - python
       - migrator.py

@@ -46,41 +46,41 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 					Namespace: WandbNamespace,
 				},
 				Spec: apiv2.WeightsAndBiasesSpec{
-					Size: apiv2.WBSizeDev,
+					Size: apiv2.SizeDev,
 					Wandb: apiv2.WandbAppSpec{
 						Hostname: "http://localhost",
 						Features: map[string]bool{
 							"proxy": true,
 						},
 						ManifestRepository: manifestsRepository,
-						Version:            "0.78.0-pre",
+						Version:            "0.78.0",
 					},
-					MySQL: apiv2.WBMySQLSpec{
-						WBInfraSpec: apiv2.WBInfraSpec{
+					MySQL: apiv2.MySQLSpec{
+						InfraSpec: apiv2.InfraSpec{
 							Enabled: true,
 						},
 						StorageSize: "10Gi",
 					},
-					Redis: apiv2.WBRedisSpec{
-						WBInfraSpec: apiv2.WBInfraSpec{
+					Redis: apiv2.RedisSpec{
+						InfraSpec: apiv2.InfraSpec{
 							Enabled: true,
 						},
 						StorageSize: "10Gi",
 					},
-					Kafka: apiv2.WBKafkaSpec{
-						WBInfraSpec: apiv2.WBInfraSpec{
+					Kafka: apiv2.KafkaSpec{
+						InfraSpec: apiv2.InfraSpec{
 							Enabled: true,
 						},
 						StorageSize: "10Gi",
 					},
-					Minio: apiv2.WBMinioSpec{
-						WBInfraSpec: apiv2.WBInfraSpec{
+					Minio: apiv2.MinioSpec{
+						InfraSpec: apiv2.InfraSpec{
 							Enabled: true,
 						},
 						StorageSize: "10Gi",
 					},
-					ClickHouse: apiv2.WBClickHouseSpec{
-						WBInfraSpec: apiv2.WBInfraSpec{
+					ClickHouse: apiv2.ClickHouseSpec{
+						InfraSpec: apiv2.InfraSpec{
 							Enabled: true,
 						},
 					},
@@ -130,18 +130,18 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 						Hostname:           "http://localhost",
 						Features:           map[string]bool{},
 						ManifestRepository: manifestsRepository,
-						Version:            "0.78.0-pre",
+						Version:            "0.78.0",
 					},
-					MySQL: apiv2.WBMySQLSpec{
-						WBInfraSpec: apiv2.WBInfraSpec{
+					MySQL: apiv2.MySQLSpec{
+						InfraSpec: apiv2.InfraSpec{
 							Enabled: true,
 						},
 						DeploymentType: apiv2.MySQLTypeMysql,
 					},
-					Redis:      apiv2.WBRedisSpec{WBInfraSpec: apiv2.WBInfraSpec{Enabled: true}},
-					Kafka:      apiv2.WBKafkaSpec{WBInfraSpec: apiv2.WBInfraSpec{Enabled: true}},
-					Minio:      apiv2.WBMinioSpec{WBInfraSpec: apiv2.WBInfraSpec{Enabled: true}},
-					ClickHouse: apiv2.WBClickHouseSpec{WBInfraSpec: apiv2.WBInfraSpec{Enabled: true}},
+					Redis:      apiv2.RedisSpec{InfraSpec: apiv2.InfraSpec{Enabled: true}},
+					Kafka:      apiv2.KafkaSpec{InfraSpec: apiv2.InfraSpec{Enabled: true}},
+					Minio:      apiv2.MinioSpec{InfraSpec: apiv2.InfraSpec{Enabled: true}},
+					ClickHouse: apiv2.ClickHouseSpec{InfraSpec: apiv2.InfraSpec{Enabled: true}},
 				},
 			}
 			Expect(k8sClient.Create(ctx, wandb)).Should(Succeed())
@@ -217,6 +217,13 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			wandb.SetFinalizers([]string{})
 			Expect(k8sClient.Update(ctx, wandb)).Should(Succeed())
 			Expect(k8sClient.Delete(ctx, secret)).Should(Succeed())
+			Eventually(func() error {
+				err := k8sClient.Get(ctx, types.NamespacedName{Name: WandbName, Namespace: WandbNamespace}, wandb)
+				if apiErrors.IsNotFound(err) {
+					return nil
+				}
+				return errors.New("wandb is not deleted")
+			}, timeout, interval).Should(Succeed())
 		})
 
 		It("Should create application components when infrastructure is ready", func() {
@@ -228,35 +235,35 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 					Namespace: WandbNamespace,
 				},
 				Spec: apiv2.WeightsAndBiasesSpec{
-					Size: apiv2.WBSizeDev,
+					Size: apiv2.SizeDev,
 					Wandb: apiv2.WandbAppSpec{
 						Hostname:           "http://localhost",
 						Features:           map[string]bool{},
 						ManifestRepository: manifestsRepository,
-						Version:            "0.78.0-pre",
+						Version:            "0.78.0",
 					},
-					MySQL: apiv2.WBMySQLSpec{
-						WBInfraSpec: apiv2.WBInfraSpec{
+					MySQL: apiv2.MySQLSpec{
+						InfraSpec: apiv2.InfraSpec{
 							Enabled: true,
 						},
 					},
-					Redis: apiv2.WBRedisSpec{
-						WBInfraSpec: apiv2.WBInfraSpec{
+					Redis: apiv2.RedisSpec{
+						InfraSpec: apiv2.InfraSpec{
 							Enabled: true,
 						},
 					},
-					Kafka: apiv2.WBKafkaSpec{
-						WBInfraSpec: apiv2.WBInfraSpec{
+					Kafka: apiv2.KafkaSpec{
+						InfraSpec: apiv2.InfraSpec{
 							Enabled: true,
 						},
 					},
-					Minio: apiv2.WBMinioSpec{
-						WBInfraSpec: apiv2.WBInfraSpec{
+					Minio: apiv2.MinioSpec{
+						InfraSpec: apiv2.InfraSpec{
 							Enabled: true,
 						},
 					},
-					ClickHouse: apiv2.WBClickHouseSpec{
-						WBInfraSpec: apiv2.WBInfraSpec{
+					ClickHouse: apiv2.ClickHouseSpec{
+						InfraSpec: apiv2.InfraSpec{
 							Enabled: true,
 						},
 					},
@@ -355,18 +362,18 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 					Namespace: WandbNamespace,
 				},
 				Spec: apiv2.WeightsAndBiasesSpec{
-					Size: apiv2.WBSizeDev,
+					Size: apiv2.SizeDev,
 					Wandb: apiv2.WandbAppSpec{
 						Hostname:           "http://localhost",
 						Features:           map[string]bool{},
 						ManifestRepository: manifestsRepository,
-						Version:            "0.78.0-pre",
+						Version:            "0.78.0",
 					},
-					MySQL:      apiv2.WBMySQLSpec{WBInfraSpec: apiv2.WBInfraSpec{Enabled: true}},
-					Redis:      apiv2.WBRedisSpec{WBInfraSpec: apiv2.WBInfraSpec{Enabled: true}},
-					Kafka:      apiv2.WBKafkaSpec{WBInfraSpec: apiv2.WBInfraSpec{Enabled: true}},
-					Minio:      apiv2.WBMinioSpec{WBInfraSpec: apiv2.WBInfraSpec{Enabled: true}},
-					ClickHouse: apiv2.WBClickHouseSpec{WBInfraSpec: apiv2.WBInfraSpec{Enabled: true}},
+					MySQL:      apiv2.MySQLSpec{InfraSpec: apiv2.InfraSpec{Enabled: true}},
+					Redis:      apiv2.RedisSpec{InfraSpec: apiv2.InfraSpec{Enabled: true}},
+					Kafka:      apiv2.KafkaSpec{InfraSpec: apiv2.InfraSpec{Enabled: true}},
+					Minio:      apiv2.MinioSpec{InfraSpec: apiv2.InfraSpec{Enabled: true}},
+					ClickHouse: apiv2.ClickHouseSpec{InfraSpec: apiv2.InfraSpec{Enabled: true}},
 				},
 			}
 			Expect(k8sClient.Create(ctx, wandb)).Should(Succeed())
@@ -427,26 +434,26 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 		It("Should trigger new migrations on version upgrade", func() {
 			By("Creating a new WeightsAndBiases v2 object with an old version")
 			ctx := context.Background()
-			oldVersion := "0.76.0"
-			newVersion := "0.76.1"
+			oldVersion := "0.78.0-pre"
+			newVersion := "0.78.0"
 			wandb := &apiv2.WeightsAndBiases{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      WandbName,
 					Namespace: WandbNamespace,
 				},
 				Spec: apiv2.WeightsAndBiasesSpec{
-					Size: apiv2.WBSizeDev,
+					Size: apiv2.SizeDev,
 					Wandb: apiv2.WandbAppSpec{
 						Hostname:           "http://localhost",
 						Features:           map[string]bool{},
 						ManifestRepository: manifestsRepository,
 						Version:            oldVersion,
 					},
-					MySQL:      apiv2.WBMySQLSpec{WBInfraSpec: apiv2.WBInfraSpec{Enabled: true}},
-					Redis:      apiv2.WBRedisSpec{WBInfraSpec: apiv2.WBInfraSpec{Enabled: true}},
-					Kafka:      apiv2.WBKafkaSpec{WBInfraSpec: apiv2.WBInfraSpec{Enabled: true}},
-					Minio:      apiv2.WBMinioSpec{WBInfraSpec: apiv2.WBInfraSpec{Enabled: true}},
-					ClickHouse: apiv2.WBClickHouseSpec{WBInfraSpec: apiv2.WBInfraSpec{Enabled: true}},
+					MySQL:      apiv2.MySQLSpec{InfraSpec: apiv2.InfraSpec{Enabled: true}},
+					Redis:      apiv2.RedisSpec{InfraSpec: apiv2.InfraSpec{Enabled: true}},
+					Kafka:      apiv2.KafkaSpec{InfraSpec: apiv2.InfraSpec{Enabled: true}},
+					Minio:      apiv2.MinioSpec{InfraSpec: apiv2.InfraSpec{Enabled: true}},
+					ClickHouse: apiv2.ClickHouseSpec{InfraSpec: apiv2.InfraSpec{Enabled: true}},
 				},
 			}
 			Expect(k8sClient.Create(ctx, wandb)).Should(Succeed())

@@ -18,7 +18,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
-// ToClickHouseVendorSpec converts a WBClickHouseSpec to a ClickHouseInstallation CR.
+// ToClickHouseVendorSpec converts a ClickHouseSpec to a ClickHouseInstallation CR.
 // This function translates the high-level ClickHouse spec into the vendor-specific
 // ClickHouseInstallation format used by the Altinity operator.
 func ToClickHouseVendorSpec(
@@ -70,7 +70,7 @@ func ToClickHouseVendorSpec(
 	}
 
 	reclaimPolicy := v1.PVCReclaimPolicyUnspecified
-	if wandb.GetRetentionPolicy(wandb.Spec.ClickHouse.WBInfraSpec).OnDelete == apiv2.WBPurgeOnDelete {
+	if wandb.GetRetentionPolicy(wandb.Spec.ClickHouse.InfraSpec).OnDelete == apiv2.PurgeOnDelete {
 		reclaimPolicy = v1.PVCReclaimPolicyDelete
 	}
 
@@ -87,7 +87,7 @@ func ToClickHouseVendorSpec(
 			Configuration: &v1.Configuration{
 				Clusters: []*v1.Cluster{
 					{
-						Name: nsnBuilder.ClusterName(),
+						Name: "default",
 						Layout: &v1.ChiClusterLayout{
 							ShardsCount:   altinity.ShardsCount,
 							ReplicasCount: int(spec.Replicas),
@@ -111,8 +111,8 @@ func ToClickHouseVendorSpec(
 							Labels: BuildWandbClickhouseLabels(wandb),
 						},
 						Spec: corev1.PodSpec{
-							Affinity:    wandb.GetAffinity(spec.WBInfraSpec),
-							Tolerations: *wandb.GetTolerations(spec.WBInfraSpec),
+							Affinity:    wandb.GetAffinity(spec.InfraSpec),
+							Tolerations: *wandb.GetTolerations(spec.InfraSpec),
 						},
 					},
 				},
@@ -178,6 +178,6 @@ func BuildWandbClickhouseLabels(wandb *apiv2.WeightsAndBiases) map[string]string
 	return BuildWandbLabels(wandb, translator.ClickhouseModuleName)
 }
 
-func ToClickHouseOnDeleteRule(wandb *apiv2.WeightsAndBiases, retentionPolicy apiv2.WBRetentionPolicy) translator.OnDeleteRule {
+func ToClickHouseOnDeleteRule(wandb *apiv2.WeightsAndBiases, retentionPolicy apiv2.RetentionPolicy) translator.OnDeleteRule {
 	return ToOnDeleteRule(wandb, retentionPolicy, translator.ClickhouseModuleName)
 }

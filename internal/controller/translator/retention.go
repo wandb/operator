@@ -12,9 +12,9 @@ const (
 )
 
 const (
-	WandbNameLabel      = "apps.wandb.com/name"
-	WandbNamespaceLabel = "apps.wandb.com/namespace"
-	WandbModuleLabel    = "apps.wandb.com/module"
+	WandbNameLabel      = "weightsandbiases.apps.wandb.com/name"
+	WandbNamespaceLabel = "weightsandbiases.apps.wandb.com/namespace"
+	WandbComponentLabel = "weightsandbiases.apps.wandb.com/component"
 )
 
 type OnDeleteRule struct {

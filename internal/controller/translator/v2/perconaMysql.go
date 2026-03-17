@@ -145,7 +145,7 @@ pxc_strict_mode=PERMISSIVE
 					Affinity: &pxcv1.PodAffinity{
 						Advanced: spec.Affinity,
 					},
-					Tolerations:   *wandb.GetTolerations(spec.WBInfraSpec),
+					Tolerations:   *wandb.GetTolerations(spec.InfraSpec),
 					Configuration: configuration,
 				},
 			},

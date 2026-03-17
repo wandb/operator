@@ -26,7 +26,7 @@ import (
 	"github.com/wandb/operator/pkg/utils"
 	v1alpha1 "github.com/wandb/operator/pkg/vendored/argo-rollouts/argoproj.io.rollouts/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
-	autoscalingv1 "k8s.io/api/autoscaling/v1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -831,7 +831,7 @@ func (r *ApplicationReconciler) reconcileHPA(ctx context.Context, app *wandbv2.A
 		return r.deleteHPA(ctx, app)
 	}
 
-	desired := &autoscalingv1.HorizontalPodAutoscaler{}
+	desired := &autoscalingv2.HorizontalPodAutoscaler{}
 	desired.Name = app.Name
 	desired.Namespace = app.Namespace
 
@@ -870,13 +870,13 @@ func (r *ApplicationReconciler) reconcileHPA(ctx context.Context, app *wandbv2.A
 		return fmt.Errorf("unsupported application kind for HPA: %s", app.Spec.Kind)
 	}
 
-	desired.Spec.ScaleTargetRef = autoscalingv1.CrossVersionObjectReference{
+	desired.Spec.ScaleTargetRef = autoscalingv2.CrossVersionObjectReference{
 		APIVersion: groupVersion,
 		Kind:       kind,
 		Name:       app.Name,
 	}
 
-	current := &autoscalingv1.HorizontalPodAutoscaler{}
+	current := &autoscalingv2.HorizontalPodAutoscaler{}
 	err := r.Get(ctx, client.ObjectKey{Namespace: app.Namespace, Name: app.Name}, current)
 	if err != nil {
 		if !errors.IsNotFound(err) {
@@ -911,7 +911,7 @@ func (r *ApplicationReconciler) reconcileHPA(ctx context.Context, app *wandbv2.A
 // deleteHPA deletes the HPA associated with the Application
 func (r *ApplicationReconciler) deleteHPA(ctx context.Context, app *wandbv2.Application) error {
 	logger := logx.GetSlog(ctx)
-	hpa := &autoscalingv1.HorizontalPodAutoscaler{}
+	hpa := &autoscalingv2.HorizontalPodAutoscaler{}
 	if err := r.Get(ctx, client.ObjectKey{Namespace: app.Namespace, Name: app.Name}, hpa); err != nil {
 		if errors.IsNotFound(err) {
 			return nil
@@ -934,7 +934,7 @@ func (r *ApplicationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&appsv1.Deployment{}).
 		Owns(&appsv1.StatefulSet{}).
 		Owns(&corev1.Service{}).
-		Owns(&autoscalingv1.HorizontalPodAutoscaler{}).
+		Owns(&autoscalingv2.HorizontalPodAutoscaler{}).
 		Named("application")
 
 	if r.EnableRollouts {

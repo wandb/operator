@@ -14,7 +14,7 @@ import (
 
 func ReadState(
 	ctx context.Context,
-	client client.Client,
+	k8sClient client.Client,
 	specNamespacedName types.NamespacedName,
 	onDeleteRule translator.OnDeleteRule,
 ) []metav1.Condition {
@@ -26,7 +26,7 @@ func ReadState(
 	nsnBuilder := createNsNameBuilder(specNamespacedName)
 
 	found, err := ctrlcommon.GetResource(
-		ctx, client, nsnBuilder.SpecNsName(), ResourceTypeName, actualResource,
+		ctx, k8sClient, nsnBuilder.SpecNsName(), ResourceTypeName, actualResource,
 	)
 	if err != nil {
 		return []metav1.Condition{
@@ -44,7 +44,7 @@ func ReadState(
 				"Attempting to purge associated minio resources after deletion",
 				"tenantName", TenantName(specNamespacedName.Name),
 			)
-			err = purgeAssociatedResources(ctx, client, specNamespacedName.Namespace, onDeleteRule.Selector)
+			err = purgeAssociatedResources(ctx, k8sClient, specNamespacedName.Namespace, onDeleteRule.Selector)
 			if err != nil {
 				conditions = append(
 					conditions,

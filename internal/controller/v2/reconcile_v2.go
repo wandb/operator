@@ -34,6 +34,7 @@ import (
 	oputils "github.com/wandb/operator/pkg/utils"
 	strimziv1 "github.com/wandb/operator/pkg/vendored/strimzi-kafka/v1"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -99,7 +100,7 @@ func Reconcile(
 			if err = clickHousePurgeFinalizer(ctx, client, wandb); err != nil {
 				return ctrl.Result{}, err
 			}
-			if wandb.GetRetentionPolicy(wandb.Spec.Kafka.WBInfraSpec).OnDelete == apiv2.WBPreserveOnDelete {
+			if wandb.GetRetentionPolicy(wandb.Spec.Kafka.InfraSpec).OnDelete == apiv2.PreserveOnDelete {
 				if err = kafkaPreserveFinalizer(ctx, client, wandb); err != nil {
 					return ctrl.Result{}, err
 				}
@@ -113,6 +114,21 @@ func Reconcile(
 		// continue post-finalizer logic in a future pass of the reconciliation loop
 		return ctrl.Result{}, nil
 	}
+
+	/////////////////////////
+	// Fetch manifest early so infra sizing can be applied before provisioning
+	manifest, err := serverManifest.GetServerManifest(ctx, wandb.Spec.Wandb.ManifestRepository, wandb.Spec.Wandb.Version)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	// Override features from CR spec if present
+	for key, enabled := range wandb.Spec.Wandb.Features {
+		manifest.Features[key] = enabled
+	}
+
+	// Apply manifest-derived infra sizing before provisioning
+	ApplyInfraSizing(wandb, manifest)
 
 	/////////////////////////
 	// Write Infra State
@@ -179,16 +195,6 @@ func Reconcile(
 		log.Info("Infra not ready in V2.Reconcile",
 			"redis", redisReady, "mysql", mysqlReady, "kafka", kafkaReady, "minio", minioReady, "clickhouse", clickHouseReady)
 		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
-	}
-
-	manifest, err := serverManifest.GetServerManifest(ctx, wandb.Spec.Wandb.ManifestRepository, wandb.Spec.Wandb.Version)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-
-	// Override features from CR spec if present
-	for key, enabled := range wandb.Spec.Wandb.Features {
-		manifest.Features[key] = enabled
 	}
 
 	res, err = ReconcileWandbManifest(ctx, client, wandb, manifest)
@@ -312,9 +318,38 @@ func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb 
 		if len(app.Features) > 0 && !manifestFeaturesEnabled(app.Features, manifest.Features) {
 			continue
 		}
+
+		envVars, err := resolveEnvvars(ctx, client, wandb, manifest, app.CommonEnvs, app.Env)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+
+		volumes, volumeMounts, err := resolveVolumeMounts(ctx, manifest, app.CommonVolumeMounts, app.VolumeMounts)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+
+		// First, resolve any inline files and JWT token volumes at the Application level
+		// so that volumeMounts/volumes are ready before constructing containers.
+		if len(app.Files) > 0 {
+			volumes, volumeMounts, err = resolveInlineFiles(ctx, client, wandb, app, volumes, volumeMounts)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+		if len(app.JWTTokens) > 0 {
+			// resolveJWTTokens appends mounts to the given container, but also returns volumes.
+			// We only use the returned volumes here, consistent with previous behavior.
+			volumes, volumeMounts = resolveJWTTokens(app, volumes, volumeMounts)
+		}
+
+		containers := resolveContainers(app, wandb, envVars, volumeMounts)
+
+		initContainers := resolveInitContainers(app, envVars, volumeMounts)
+
 		application := &apiv2.Application{}
 		applicationName := fmt.Sprintf("%s-%s", wandb.Name, app.Name)
-		err := client.Get(ctx, types.NamespacedName{Name: applicationName, Namespace: wandb.Namespace}, application)
+		err = client.Get(ctx, types.NamespacedName{Name: applicationName, Namespace: wandb.Namespace}, application)
 		if err != nil {
 			if apiErrors.IsNotFound(err) {
 				application.ObjectMeta.Name = applicationName
@@ -324,290 +359,16 @@ func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb 
 			}
 		}
 
-		envVars, err := resolveEnvvars(ctx, client, wandb, manifest, app.CommonEnvs, app.Env)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-
-		logger.Info("", "app", app.Name, "volumes", app.CommonVolumeMounts)
-		logger.Info("", "app", app.Name, "volumeMounts", app.VolumeMounts)
-		volumes, volumeMounts, err := resolveVolumeMounts(ctx, client, wandb, manifest, app.CommonVolumeMounts, app.VolumeMounts)
-		logger.Info("", "app", app.Name, "volumes", volumes)
-		logger.Info("", "app", app.Name, "volumeMounts", volumeMounts)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-
-		var Ports []corev1.ContainerPort
-		for _, port := range app.Ports {
-			containerPort := corev1.ContainerPort{
-				Name:          port.Name,
-				ContainerPort: port.ContainerPort,
-				Protocol:      port.Protocol,
-			}
-			Ports = append(Ports, containerPort)
-		}
-
-		container := corev1.Container{
-			Name:         app.Name,
-			Image:        app.Image.GetImage(),
-			Env:          envVars,
-			Args:         app.Args,
-			Command:      app.Command,
-			Ports:        Ports,
-			VolumeMounts: volumeMounts,
-		}
-
-		if app.StartupProbe != nil && app.StartupProbe.HTTPGet != nil {
-			if app.StartupProbe.HTTPGet.Port.StrVal == "" && app.StartupProbe.HTTPGet.Port.IntVal == 0 {
-				if len(app.Ports) > 0 {
-					if app.StartupProbe.HTTPGet.Path != "" {
-						app.StartupProbe.HTTPGet = &corev1.HTTPGetAction{
-							Path: app.StartupProbe.HTTPGet.Path,
-							Port: intstr.FromString(app.Ports[0].Name),
-						}
-					}
-				}
-			}
-			container.StartupProbe = app.StartupProbe
-		}
-
-		if app.LivenessProbe != nil && app.LivenessProbe.HTTPGet != nil {
-			if app.LivenessProbe.HTTPGet.Port.StrVal == "" && app.LivenessProbe.HTTPGet.Port.IntVal == 0 {
-				if len(app.Ports) > 0 {
-					if app.LivenessProbe.HTTPGet.Path != "" {
-						app.LivenessProbe.HTTPGet = &corev1.HTTPGetAction{
-							Path: app.LivenessProbe.HTTPGet.Path,
-							Port: intstr.FromString(app.Ports[0].Name),
-						}
-					}
-				}
-			}
-			container.LivenessProbe = app.LivenessProbe
-		}
-
-		if app.ReadinessProbe != nil && app.ReadinessProbe.HTTPGet != nil {
-			if app.ReadinessProbe.HTTPGet.Port.StrVal == "" && app.ReadinessProbe.HTTPGet.Port.IntVal == 0 {
-				if len(app.Ports) > 0 {
-					if app.ReadinessProbe.HTTPGet.Path != "" {
-						app.ReadinessProbe.HTTPGet = &corev1.HTTPGetAction{
-							Path: app.ReadinessProbe.HTTPGet.Path,
-							Port: intstr.FromString(app.Ports[0].Name),
-						}
-					}
-				}
-			}
-			container.ReadinessProbe = app.ReadinessProbe
-		}
-
-		// Handle file injection via ConfigMaps according to manifest Application.Files
-		if len(app.Files) > 0 {
-			// Collect inline files into a single operator-managed ConfigMap
-			inlineData := map[string]string{}
-			inlineCMName := fmt.Sprintf("%s-%s-files", wandb.Name, app.Name)
-			// Track external ConfigMap refs and create one Volume per unique ref
-			cmRefVolumeNames := map[string]string{}
-
-			for _, f := range app.Files {
-				key := f.Name
-				fileName := f.FileName
-				if fileName == "" {
-					fileName = key
-				}
-
-				var volName string
-				if f.Inline != "" {
-					// Accumulate into inline CM data
-					inlineData[key] = f.Inline
-					volName = "files-inline"
-				} else if f.ConfigMapRef != "" {
-					// external ConfigMap reference
-					if existing, ok := cmRefVolumeNames[f.ConfigMapRef]; ok {
-						volName = existing
-					} else {
-						volName = fmt.Sprintf("cm-%s", f.ConfigMapRef)
-						cmRefVolumeNames[f.ConfigMapRef] = volName
-					}
-				} else {
-					// neither inline nor ref provided; skip
-					continue
-				}
-
-				// Mount each file as a single file using subPath into the specified directory
-				mountPath := f.MountPath
-				if mountPath == "" {
-					// require a mountPath; skip if not provided
-					continue
-				}
-				volumeMounts = append(volumeMounts, corev1.VolumeMount{
-					Name:      volName,
-					MountPath: fmt.Sprintf("%s/%s", mountPath, fileName),
-					SubPath:   key,
-					ReadOnly:  true,
-				})
-			}
-
-			// Create/update inline ConfigMap if we have any inline data
-			if len(inlineData) > 0 {
-				cm := &corev1.ConfigMap{}
-				cm.Namespace = wandb.Namespace
-				cm.Name = inlineCMName
-				// Try to get existing
-				getErr := client.Get(ctx, types.NamespacedName{Name: cm.Name, Namespace: cm.Namespace}, cm)
-				if getErr != nil {
-					if apiErrors.IsNotFound(getErr) {
-						cm.Data = inlineData
-						if err := controllerutil.SetOwnerReference(wandb, cm, client.Scheme()); err != nil {
-							return ctrl.Result{}, err
-						}
-						if err := client.Create(ctx, cm); err != nil {
-							return ctrl.Result{}, err
-						}
-					} else {
-						return ctrl.Result{}, getErr
-					}
-				} else {
-					// Update data if changed
-					if cm.Data == nil {
-						cm.Data = map[string]string{}
-					}
-					cm.Data = inlineData
-					if err := client.Update(ctx, cm); err != nil {
-						return ctrl.Result{}, err
-					}
-				}
-
-				// Add a volume for the inline CM
-				volumes = append(volumes, corev1.Volume{
-					Name: "files-inline",
-					VolumeSource: corev1.VolumeSource{
-						ConfigMap: &corev1.ConfigMapVolumeSource{LocalObjectReference: corev1.LocalObjectReference{Name: inlineCMName}},
-					},
-				})
-			}
-
-			// Add volumes for each external ConfigMap ref
-			for ref, volName := range cmRefVolumeNames {
-				volumes = append(volumes, corev1.Volume{
-					Name: volName,
-					VolumeSource: corev1.VolumeSource{
-						ConfigMap: &corev1.ConfigMapVolumeSource{LocalObjectReference: corev1.LocalObjectReference{Name: ref}},
-					},
-				})
-			}
-
-			// Attach mounts to the container if any
-			if len(volumeMounts) > 0 {
-				container.VolumeMounts = append(container.VolumeMounts, volumeMounts...)
-			}
-		}
-
-		// Handle JWT token mounting according to manifest Application.JWTTokens
-		if len(app.JWTTokens) > 0 {
-			for _, jwtToken := range app.JWTTokens {
-				var volume corev1.Volume
-				volumeName := fmt.Sprintf("%s-%s", app.Name, jwtToken.Name)
-
-				// Create volume based on source type
-				switch {
-				case jwtToken.Source.KubernetesServiceAccount != nil:
-					// Projected volume with service account token
-					expirationSeconds := jwtToken.Source.KubernetesServiceAccount.ExpirationSeconds
-					if expirationSeconds == 0 {
-						expirationSeconds = 3607 // Default 1 hour + 7 seconds
-					}
-					volume = corev1.Volume{
-						Name: volumeName,
-						VolumeSource: corev1.VolumeSource{
-							Projected: &corev1.ProjectedVolumeSource{
-								Sources: []corev1.VolumeProjection{
-									{
-										ServiceAccountToken: &corev1.ServiceAccountTokenProjection{
-											Audience:          jwtToken.Source.KubernetesServiceAccount.Audience,
-											Path:              "token",
-											ExpirationSeconds: &expirationSeconds,
-										},
-									},
-								},
-							},
-						},
-					}
-
-				case jwtToken.Source.SecretRef != nil:
-					// Secret volume
-					key := jwtToken.Source.SecretRef.Key
-					if key == "" {
-						key = "token" // Default key name
-					}
-					volume = corev1.Volume{
-						Name: volumeName,
-						VolumeSource: corev1.VolumeSource{
-							Secret: &corev1.SecretVolumeSource{
-								SecretName: jwtToken.Source.SecretRef.Name,
-								Items: []corev1.KeyToPath{
-									{
-										Key:  key,
-										Path: "token",
-									},
-								},
-							},
-						},
-					}
-
-				case jwtToken.Source.CSIProvider != nil:
-					// CSI volume
-					volume = corev1.Volume{
-						Name: volumeName,
-						VolumeSource: corev1.VolumeSource{
-							CSI: &corev1.CSIVolumeSource{
-								Driver:           jwtToken.Source.CSIProvider.Driver,
-								VolumeAttributes: jwtToken.Source.CSIProvider.Parameters,
-								ReadOnly:         func() *bool { b := true; return &b }(),
-							},
-						},
-					}
-
-				default:
-					// No valid source specified, skip this token
-					continue
-				}
-
-				volumes = append(volumes, volume)
-				container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
-					Name:      volumeName,
-					MountPath: jwtToken.MountPath,
-					ReadOnly:  true,
-				})
-			}
-		}
-
-		initContainers := []corev1.Container{}
-
-		if app.InitContainers != nil {
-			for _, initContainerSpec := range app.InitContainers {
-				if initContainerSpec.Name == "migrate" {
-					continue
-				}
-				initContainer := corev1.Container{
-					Name:         initContainerSpec.Name,
-					Image:        initContainerSpec.Image.GetImage(),
-					Env:          envVars,
-					Args:         initContainerSpec.Args,
-					Command:      initContainerSpec.Command,
-					VolumeMounts: volumeMounts,
-				}
-				initContainers = append(initContainers, initContainer)
-			}
-		}
-
 		application.Spec.Kind = "Deployment"
-		application.Spec.PodTemplate.Spec.Containers = []corev1.Container{container}
+		application.Spec.PodTemplate.Spec.Containers = containers
 		// Replace volumes entirely on each reconcile to avoid accumulating duplicates
 		// across updates (e.g., duplicate "files-inline" volume names).
 		application.Spec.PodTemplate.Spec.Volumes = volumes
 		application.Spec.PodTemplate.Spec.InitContainers = initContainers
 		application.Spec.PodTemplate.Spec.Affinity = wandb.Spec.Affinity
 		application.Spec.PodTemplate.Spec.Tolerations = *wandb.Spec.Tolerations
+
+		application.Spec.HpaTemplate = ResolveAutoscaling(app, wandb)
 
 		// Set shared service account for all W&B applications
 		application.Spec.PodTemplate.Spec.ServiceAccountName = serviceAccountName
@@ -672,6 +433,573 @@ func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb 
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func resolveInitContainers(app serverManifest.Application, envVars []corev1.EnvVar, volumeMounts []corev1.VolumeMount) []corev1.Container {
+	initContainers := []corev1.Container{}
+
+	if app.InitContainers != nil {
+		for _, initContainerSpec := range app.InitContainers {
+			if initContainerSpec.Name == "migrate" {
+				continue
+			}
+			initContainer := corev1.Container{
+				Name:         initContainerSpec.Name,
+				Image:        initContainerSpec.Image.GetImage(),
+				Env:          envVars,
+				Args:         initContainerSpec.Args,
+				Command:      initContainerSpec.Command,
+				VolumeMounts: volumeMounts,
+			}
+			initContainers = append(initContainers, initContainer)
+		}
+	}
+	return initContainers
+}
+
+func ResolveResources(app serverManifest.Application, wandb *apiv2.WeightsAndBiases, containerResources *corev1.ResourceRequirements) *corev1.ResourceRequirements {
+	var resources *corev1.ResourceRequirements
+
+	// check if there is "default" in the sizing map and apply those values
+	if defaultConfig, ok := app.Sizing["default"]; ok && defaultConfig.Resources != nil {
+		resources = mergeResources(resources, defaultConfig.Resources, wandb.Spec.RequireLimits)
+	}
+
+	// check if there is a sizing config in the map that corresponds to the size in the wandb spec and apply that
+	if sizeConfig, ok := app.Sizing[wandb.Spec.Size]; ok && sizeConfig.Resources != nil {
+		resources = mergeResources(resources, sizeConfig.Resources, wandb.Spec.RequireLimits)
+	}
+
+	// check if the container has a resource and if so apply those settings
+	resources = mergeResources(resources, containerResources, wandb.Spec.RequireLimits)
+
+	if resources == nil {
+		return nil
+	}
+
+	if len(resources.Limits) == 0 && len(resources.Requests) == 0 {
+		return nil
+	}
+
+	return resources
+}
+
+func ResolveAutoscaling(app serverManifest.Application, wandb *apiv2.WeightsAndBiases) *autoscalingv2.HorizontalPodAutoscalerSpec {
+	hpa := &autoscalingv2.HorizontalPodAutoscalerSpec{}
+
+	// check if there is "default" in the sizing map and apply those values
+	if defaultConfig, ok := app.Sizing["default"]; ok && defaultConfig.Autoscaling != nil {
+		hpa.MinReplicas = defaultConfig.Autoscaling.Horizontal.MinReplicas
+		hpa.MaxReplicas = defaultConfig.Autoscaling.Horizontal.MaxReplicas
+		hpa.Metrics = defaultConfig.Autoscaling.Horizontal.Metrics
+		hpa.Behavior = defaultConfig.Autoscaling.Horizontal.Behavior
+		hpa.ScaleTargetRef = defaultConfig.Autoscaling.Horizontal.ScaleTargetRef
+	}
+
+	// check if there is a sizing config in the map that corresponds to the size in the wandb spec and apply that
+	if sizeConfig, ok := app.Sizing[wandb.Spec.Size]; ok && sizeConfig.Autoscaling != nil {
+		if sizeConfig.Autoscaling.Horizontal.MinReplicas != nil {
+			hpa.MinReplicas = sizeConfig.Autoscaling.Horizontal.MinReplicas
+		}
+		if sizeConfig.Autoscaling.Horizontal.MaxReplicas != 0 {
+			hpa.MaxReplicas = sizeConfig.Autoscaling.Horizontal.MaxReplicas
+		}
+		if len(sizeConfig.Autoscaling.Horizontal.Metrics) > 0 {
+			hpa.Metrics = sizeConfig.Autoscaling.Horizontal.Metrics
+		}
+		if sizeConfig.Autoscaling.Horizontal.Behavior != nil {
+			hpa.Behavior = sizeConfig.Autoscaling.Horizontal.Behavior
+		}
+		if sizeConfig.Autoscaling.Horizontal.ScaleTargetRef.Name != "" {
+			hpa.ScaleTargetRef = sizeConfig.Autoscaling.Horizontal.ScaleTargetRef
+		}
+	}
+
+	if hpa.MaxReplicas == 0 {
+		return nil
+	}
+
+	return hpa
+}
+
+// mergeResources merges an overlay ResourceRequirements into a base, with
+// overlay values taking precedence on a per-resource-name basis.
+func mergeResources(base, overlay *corev1.ResourceRequirements, requireLimits bool) *corev1.ResourceRequirements {
+	if base == nil && overlay == nil {
+		return nil
+	}
+	result := &corev1.ResourceRequirements{}
+	if base != nil {
+		if base.Limits != nil {
+			result.Limits = make(corev1.ResourceList)
+			for k, v := range base.Limits {
+				result.Limits[k] = v
+			}
+		}
+		if base.Requests != nil {
+			result.Requests = make(corev1.ResourceList)
+			for k, v := range base.Requests {
+				result.Requests[k] = v
+			}
+		}
+	}
+	if overlay != nil {
+		if overlay.Limits != nil {
+			if result.Limits == nil {
+				result.Limits = make(corev1.ResourceList)
+			}
+			for k, v := range overlay.Limits {
+				result.Limits[k] = v
+			}
+		}
+		if overlay.Requests != nil {
+			if result.Requests == nil {
+				result.Requests = make(corev1.ResourceList)
+			}
+			for k, v := range overlay.Requests {
+				result.Requests[k] = v
+			}
+		}
+	}
+
+	if !requireLimits {
+		result.Limits = nil
+	}
+	return result
+}
+
+// ResolveInfraSizing resolves a SizingConfig from an InfraConfig map for the
+// given Size. It merges the "default" sizing with the size-specific sizing,
+// where size-specific values override defaults.
+func ResolveInfraSizing(sizing map[apiv2.Size]serverManifest.SizingConfig, size apiv2.Size, requireLimits bool) *serverManifest.SizingConfig {
+	result := &serverManifest.SizingConfig{}
+
+	// Apply "default" sizing baseline
+	if defaultSizing, ok := sizing["default"]; ok {
+		result.Replicas = defaultSizing.Replicas
+		result.Shards = defaultSizing.Shards
+		result.VolumeSize = defaultSizing.VolumeSize
+		if defaultSizing.Resources != nil {
+			result.Resources = defaultSizing.Resources.DeepCopy()
+		}
+	}
+
+	// Override with size-specific sizing, merging resources
+	if sizeSizing, ok := sizing[size]; ok {
+		if sizeSizing.Replicas != 0 {
+			result.Replicas = sizeSizing.Replicas
+		}
+		if sizeSizing.Shards != 0 {
+			result.Shards = sizeSizing.Shards
+		}
+		if sizeSizing.VolumeSize != "" {
+			result.VolumeSize = sizeSizing.VolumeSize
+		}
+		result.Resources = mergeResources(result.Resources, sizeSizing.Resources, requireLimits)
+	}
+
+	return result
+}
+
+// ResolveKafkaSizing resolves a SizingConfig from the KafkaConfig for the given Size.
+func ResolveKafkaSizing(sizing map[apiv2.Size]serverManifest.KafkaSizingConfig, size apiv2.Size, requireLimits bool) *serverManifest.KafkaSizingConfig {
+	result := &serverManifest.KafkaSizingConfig{}
+
+	if defaultSizing, ok := sizing["default"]; ok {
+		result.Replicas = defaultSizing.Replicas
+		result.VolumeSize = defaultSizing.VolumeSize
+		result.ReplicationFactor = defaultSizing.ReplicationFactor
+		result.MinInSyncReplicas = defaultSizing.MinInSyncReplicas
+		result.OffsetsTopicRF = defaultSizing.OffsetsTopicRF
+		result.TransactionStateRF = defaultSizing.TransactionStateRF
+		result.TransactionStateISR = defaultSizing.TransactionStateISR
+		if defaultSizing.Resources != nil {
+			result.Resources = defaultSizing.Resources.DeepCopy()
+		}
+	}
+
+	if sizeSizing, ok := sizing[size]; ok {
+		if sizeSizing.Replicas != 0 {
+			result.Replicas = sizeSizing.Replicas
+		}
+		if sizeSizing.VolumeSize != "" {
+			result.VolumeSize = sizeSizing.VolumeSize
+		}
+		if sizeSizing.ReplicationFactor != 0 {
+			result.ReplicationFactor = sizeSizing.ReplicationFactor
+		}
+		if sizeSizing.MinInSyncReplicas != 0 {
+			result.MinInSyncReplicas = sizeSizing.MinInSyncReplicas
+		}
+		if sizeSizing.OffsetsTopicRF != 0 {
+			result.OffsetsTopicRF = sizeSizing.OffsetsTopicRF
+		}
+		if sizeSizing.TransactionStateRF != 0 {
+			result.TransactionStateRF = sizeSizing.TransactionStateRF
+		}
+		if sizeSizing.TransactionStateISR != 0 {
+			result.TransactionStateISR = sizeSizing.TransactionStateISR
+		}
+		result.Resources = mergeResources(result.Resources, sizeSizing.Resources, requireLimits)
+	}
+
+	return result
+}
+
+// ApplyInfraSizing applies manifest-derived sizing to the wandb spec's infra
+// components. Values from the manifest are only applied when the corresponding
+// spec field has not been explicitly set by the user (i.e., is zero-valued).
+func ApplyInfraSizing(wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest) {
+	size := wandb.Spec.Size
+
+	// Default MySQL
+	if mysqlConfig, ok := manifest.Mysql["default"]; ok {
+		sizing := ResolveInfraSizing(mysqlConfig.Sizing, size, wandb.Spec.RequireLimits)
+		if wandb.Spec.MySQL.Replicas == 0 && sizing.Replicas != 0 {
+			wandb.Spec.MySQL.Replicas = sizing.Replicas
+		}
+		if wandb.Spec.MySQL.StorageSize == "" && sizing.VolumeSize != "" {
+			wandb.Spec.MySQL.StorageSize = sizing.VolumeSize
+		}
+		if sizing.Resources != nil && len(wandb.Spec.MySQL.Config.Resources.Requests) == 0 && len(wandb.Spec.MySQL.Config.Resources.Limits) == 0 {
+			wandb.Spec.MySQL.Config.Resources = *sizing.Resources
+		}
+	}
+
+	// Default Redis
+	if redisConfig, ok := manifest.Redis["default"]; ok {
+		sizing := ResolveInfraSizing(redisConfig.Sizing, size, wandb.Spec.RequireLimits)
+		if wandb.Spec.Redis.StorageSize == "" && sizing.VolumeSize != "" {
+			wandb.Spec.Redis.StorageSize = sizing.VolumeSize
+		}
+		if sizing.Resources != nil && len(wandb.Spec.Redis.Config.Resources.Requests) == 0 && len(wandb.Spec.Redis.Config.Resources.Limits) == 0 {
+			wandb.Spec.Redis.Config.Resources = *sizing.Resources
+		}
+	}
+
+	// Default ClickHouse
+	if clickhouseConfig, ok := manifest.Redis["default"]; ok {
+		sizing := ResolveInfraSizing(clickhouseConfig.Sizing, size, wandb.Spec.RequireLimits)
+		if wandb.Spec.ClickHouse.Replicas == 0 && sizing.Replicas != 0 {
+			wandb.Spec.ClickHouse.Replicas = sizing.Replicas
+		}
+		if wandb.Spec.ClickHouse.StorageSize == "" && sizing.VolumeSize != "" {
+			wandb.Spec.ClickHouse.StorageSize = sizing.VolumeSize
+		}
+		if sizing.Resources != nil && len(wandb.Spec.ClickHouse.Config.Resources.Requests) == 0 && len(wandb.Spec.ClickHouse.Config.Resources.Limits) == 0 {
+			wandb.Spec.ClickHouse.Config.Resources = *sizing.Resources
+		}
+	}
+
+	// Default Minio (bucket)
+	if minioConfig, ok := manifest.Redis["default"]; ok {
+		sizing := ResolveInfraSizing(minioConfig.Sizing, size, wandb.Spec.RequireLimits)
+		if wandb.Spec.Minio.Replicas == 0 && sizing.Replicas != 0 {
+			wandb.Spec.Minio.Replicas = sizing.Replicas
+		}
+		if wandb.Spec.Minio.StorageSize == "" && sizing.VolumeSize != "" {
+			wandb.Spec.Minio.StorageSize = sizing.VolumeSize
+		}
+		if sizing.Resources != nil && len(wandb.Spec.Minio.Config.Resources.Requests) == 0 && len(wandb.Spec.Minio.Config.Resources.Limits) == 0 {
+			wandb.Spec.Minio.Config.Resources = *sizing.Resources
+		}
+	}
+
+	// Kafka
+	if sizing := ResolveKafkaSizing(manifest.Kafka.Sizing, size, wandb.Spec.RequireLimits); sizing != nil {
+		if wandb.Spec.Kafka.Replicas == 0 && sizing.Replicas != 0 {
+			wandb.Spec.Kafka.Replicas = sizing.Replicas
+		}
+		if wandb.Spec.Kafka.StorageSize == "" && sizing.VolumeSize != "" {
+			wandb.Spec.Kafka.StorageSize = sizing.VolumeSize
+		}
+		if sizing.Resources != nil && len(wandb.Spec.Kafka.Config.Resources.Requests) == 0 && len(wandb.Spec.Kafka.Config.Resources.Limits) == 0 {
+			wandb.Spec.Kafka.Config.Resources = *sizing.Resources
+		}
+		if wandb.Spec.Kafka.Config.ReplicationConfig.DefaultReplicationFactor == 0 && sizing.ReplicationFactor != 0 {
+			wandb.Spec.Kafka.Config.ReplicationConfig.DefaultReplicationFactor = sizing.ReplicationFactor
+		}
+		if wandb.Spec.Kafka.Config.ReplicationConfig.MinInSyncReplicas == 0 && sizing.MinInSyncReplicas != 0 {
+			wandb.Spec.Kafka.Config.ReplicationConfig.MinInSyncReplicas = sizing.MinInSyncReplicas
+		}
+		if wandb.Spec.Kafka.Config.ReplicationConfig.OffsetsTopicRF == 0 && sizing.OffsetsTopicRF != 0 {
+			wandb.Spec.Kafka.Config.ReplicationConfig.OffsetsTopicRF = sizing.OffsetsTopicRF
+		}
+		if wandb.Spec.Kafka.Config.ReplicationConfig.TransactionStateRF == 0 && sizing.TransactionStateRF != 0 {
+			wandb.Spec.Kafka.Config.ReplicationConfig.TransactionStateRF = sizing.TransactionStateRF
+		}
+		if wandb.Spec.Kafka.Config.ReplicationConfig.TransactionStateISR == 0 && sizing.TransactionStateISR != 0 {
+			wandb.Spec.Kafka.Config.ReplicationConfig.TransactionStateISR = sizing.TransactionStateISR
+		}
+	}
+}
+
+func resolveContainers(app serverManifest.Application, wandb *apiv2.WeightsAndBiases, envVars []corev1.EnvVar, volumeMounts []corev1.VolumeMount) []corev1.Container {
+	// Build containers: support multi-container apps via app.Containers; fall back to a single
+	// default container when no explicit containers are provided.
+	containers := []corev1.Container{}
+	if len(app.Containers) > 0 {
+		for _, container := range app.Containers {
+			// Convert ports
+			var containerPorts []corev1.ContainerPort
+			for _, p := range container.Ports {
+				containerPorts = append(containerPorts, corev1.ContainerPort{
+					Name:          p.Name,
+					ContainerPort: p.ContainerPort,
+					Protocol:      p.Protocol,
+				})
+			}
+
+			// Choose image/args/command with sensible fallbacks to app-level values
+			img := app.Image.GetImage()
+			if container.Image.Repository != "" {
+				img = container.Image.GetImage()
+			}
+			args := app.Args
+			if len(container.Args) > 0 {
+				args = container.Args
+			}
+			cmd := app.Command
+			if len(container.Command) > 0 {
+				cmd = container.Command
+			}
+
+			c := corev1.Container{
+				Name:         container.Name,
+				Image:        img,
+				Env:          envVars,
+				Args:         args,
+				Command:      cmd,
+				Ports:        containerPorts,
+				VolumeMounts: volumeMounts,
+			}
+
+			if resources := ResolveResources(app, wandb, container.Resources); resources != nil {
+				c.Resources = *resources
+			}
+
+			// Default HTTPGet probe ports to the first declared port name when missing
+			if container.StartupProbe != nil && container.StartupProbe.HTTPGet != nil {
+				if container.StartupProbe.HTTPGet.Port.StrVal == "" && container.StartupProbe.HTTPGet.Port.IntVal == 0 {
+					if len(container.Ports) > 0 && container.StartupProbe.HTTPGet.Path != "" {
+						container.StartupProbe.HTTPGet = &corev1.HTTPGetAction{Path: container.StartupProbe.HTTPGet.Path, Port: intstr.FromString(container.Ports[0].Name)}
+					}
+				}
+				c.StartupProbe = container.StartupProbe
+			}
+			if container.LivenessProbe != nil && container.LivenessProbe.HTTPGet != nil {
+				if container.LivenessProbe.HTTPGet.Port.StrVal == "" && container.LivenessProbe.HTTPGet.Port.IntVal == 0 {
+					if len(container.Ports) > 0 && container.LivenessProbe.HTTPGet.Path != "" {
+						container.LivenessProbe.HTTPGet = &corev1.HTTPGetAction{Path: container.LivenessProbe.HTTPGet.Path, Port: intstr.FromString(container.Ports[0].Name)}
+					}
+				}
+				c.LivenessProbe = container.LivenessProbe
+			}
+			if container.ReadinessProbe != nil && container.ReadinessProbe.HTTPGet != nil {
+				if container.ReadinessProbe.HTTPGet.Port.StrVal == "" && container.ReadinessProbe.HTTPGet.Port.IntVal == 0 {
+					if len(container.Ports) > 0 && container.ReadinessProbe.HTTPGet.Path != "" {
+						container.ReadinessProbe.HTTPGet = &corev1.HTTPGetAction{Path: container.ReadinessProbe.HTTPGet.Path, Port: intstr.FromString(container.Ports[0].Name)}
+					}
+				}
+				c.ReadinessProbe = container.ReadinessProbe
+			}
+
+			containers = append(containers, c)
+		}
+	} else {
+		// Backward-compatible single-container behavior
+		c := corev1.Container{
+			Name:         app.Name,
+			Image:        app.Image.GetImage(),
+			Env:          envVars,
+			Args:         app.Args,
+			Command:      app.Command,
+			VolumeMounts: volumeMounts,
+		}
+
+		if resources := ResolveResources(app, wandb, nil); resources != nil {
+			c.Resources = *resources
+		}
+		containers = append(containers, c)
+	}
+	return containers
+}
+
+func resolveJWTTokens(app serverManifest.Application, volumes []corev1.Volume, volumeMounts []corev1.VolumeMount) ([]corev1.Volume, []corev1.VolumeMount) {
+	for _, jwtToken := range app.JWTTokens {
+		var volume corev1.Volume
+		volumeName := fmt.Sprintf("%s-%s", app.Name, jwtToken.Name)
+
+		// Create volume based on source type
+		switch {
+		case jwtToken.Source.KubernetesServiceAccount != nil:
+			// Projected volume with service account token
+			expirationSeconds := jwtToken.Source.KubernetesServiceAccount.ExpirationSeconds
+			if expirationSeconds == 0 {
+				expirationSeconds = 3607 // Default 1 hour + 7 seconds
+			}
+			volume = corev1.Volume{
+				Name: volumeName,
+				VolumeSource: corev1.VolumeSource{
+					Projected: &corev1.ProjectedVolumeSource{
+						Sources: []corev1.VolumeProjection{
+							{
+								ServiceAccountToken: &corev1.ServiceAccountTokenProjection{
+									Audience:          jwtToken.Source.KubernetesServiceAccount.Audience,
+									Path:              "token",
+									ExpirationSeconds: &expirationSeconds,
+								},
+							},
+						},
+					},
+				},
+			}
+
+		case jwtToken.Source.SecretRef != nil:
+			// Secret volume
+			key := jwtToken.Source.SecretRef.Key
+			if key == "" {
+				key = "token" // Default key name
+			}
+			volume = corev1.Volume{
+				Name: volumeName,
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName: jwtToken.Source.SecretRef.Name,
+						Items: []corev1.KeyToPath{
+							{
+								Key:  key,
+								Path: "token",
+							},
+						},
+					},
+				},
+			}
+
+		case jwtToken.Source.CSIProvider != nil:
+			// CSI volume
+			volume = corev1.Volume{
+				Name: volumeName,
+				VolumeSource: corev1.VolumeSource{
+					CSI: &corev1.CSIVolumeSource{
+						Driver:           jwtToken.Source.CSIProvider.Driver,
+						VolumeAttributes: jwtToken.Source.CSIProvider.Parameters,
+						ReadOnly:         func() *bool { b := true; return &b }(),
+					},
+				},
+			}
+
+		default:
+			// No valid source specified, skip this token
+			continue
+		}
+
+		volumes = append(volumes, volume)
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name:      volumeName,
+			MountPath: jwtToken.MountPath,
+			ReadOnly:  true,
+		})
+	}
+	return volumes, volumeMounts
+}
+
+func resolveInlineFiles(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, app serverManifest.Application, volumes []corev1.Volume, volumeMounts []corev1.VolumeMount) ([]corev1.Volume, []corev1.VolumeMount, error) {
+	// Collect inline files into a single operator-managed ConfigMap
+	inlineData := map[string]string{}
+	inlineCMName := fmt.Sprintf("%s-%s-files", wandb.Name, app.Name)
+	// Track external ConfigMap refs and create one Volume per unique ref
+	cmRefVolumeNames := map[string]string{}
+
+	for _, f := range app.Files {
+		key := f.Name
+		fileName := f.FileName
+		if fileName == "" {
+			fileName = key
+		}
+
+		var volName string
+		if f.Inline != "" {
+			// Accumulate into inline CM data
+			inlineData[key] = f.Inline
+			volName = "files-inline"
+		} else if f.ConfigMapRef != "" {
+			// external ConfigMap reference
+			if existing, ok := cmRefVolumeNames[f.ConfigMapRef]; ok {
+				volName = existing
+			} else {
+				volName = fmt.Sprintf("cm-%s", f.ConfigMapRef)
+				cmRefVolumeNames[f.ConfigMapRef] = volName
+			}
+		} else {
+			// neither inline nor ref provided; skip
+			continue
+		}
+
+		// Mount each file as a single file using subPath into the specified directory
+		mountPath := f.MountPath
+		if mountPath == "" {
+			// require a mountPath; skip if not provided
+			continue
+		}
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name:      volName,
+			MountPath: fmt.Sprintf("%s/%s", mountPath, fileName),
+			SubPath:   key,
+			ReadOnly:  true,
+		})
+	}
+
+	// Create/update inline ConfigMap if we have any inline data
+	if len(inlineData) > 0 {
+		cm := &corev1.ConfigMap{}
+		cm.Namespace = wandb.Namespace
+		cm.Name = inlineCMName
+		// Try to get existing
+		err := client.Get(ctx, types.NamespacedName{Name: cm.Name, Namespace: cm.Namespace}, cm)
+		if err != nil {
+			if apiErrors.IsNotFound(err) {
+				cm.Data = inlineData
+				if err := controllerutil.SetOwnerReference(wandb, cm, client.Scheme()); err != nil {
+					return volumes, volumeMounts, err
+				}
+				if err := client.Create(ctx, cm); err != nil {
+					return volumes, volumeMounts, err
+				}
+			} else {
+				return volumes, volumeMounts, err
+			}
+		} else {
+			// Update data if changed
+			if cm.Data == nil {
+				cm.Data = map[string]string{}
+			}
+			cm.Data = inlineData
+			if err := client.Update(ctx, cm); err != nil {
+				return volumes, volumeMounts, err
+			}
+		}
+
+		// Add a volume for the inline CM
+		volumes = append(volumes, corev1.Volume{
+			Name: "files-inline",
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{LocalObjectReference: corev1.LocalObjectReference{Name: inlineCMName}},
+			},
+		})
+	}
+
+	// Add volumes for each external ConfigMap ref
+	for ref, volName := range cmRefVolumeNames {
+		volumes = append(volumes, corev1.Volume{
+			Name: volName,
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{LocalObjectReference: corev1.LocalObjectReference{Name: ref}},
+			},
+		})
+	}
+
+	return volumes, volumeMounts, nil
 }
 
 func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest, commonEnvs []string, envs []serverManifest.EnvVar) ([]corev1.EnvVar, error) {
@@ -905,7 +1233,7 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *apiv2.
 	return envVars, nil
 }
 
-func resolveVolumeMounts(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest, commonvms []string, vms []serverManifest.VolumeMount) ([]corev1.Volume, []corev1.VolumeMount, error) {
+func resolveVolumeMounts(ctx context.Context, manifest serverManifest.Manifest, commonvms []string, vms []serverManifest.VolumeMount) ([]corev1.Volume, []corev1.VolumeMount, error) {
 	log := logx.GetSlog(ctx)
 
 	var combinedVolumeMounts []serverManifest.VolumeMount
@@ -938,6 +1266,8 @@ func resolveVolumeMounts(ctx context.Context, client ctrlClient.Client, wandb *a
 					Name: manifestVM.Source.Name,
 				},
 			}
+		case "emptyDir":
+			volume.EmptyDir = &corev1.EmptyDirVolumeSource{}
 		default:
 			log.Error("unsupported volume source type", "type", manifestVM.Source.Type)
 			return nil, nil, fmt.Errorf("unsupported volume source type: %s", manifestVM.Source.Type)
@@ -982,12 +1312,6 @@ func runMysqlInitJob(ctx context.Context, client ctrlClient.Client, wandb *apiv2
 		})
 		secretName := fmt.Sprintf("%s-db-password", specNamespacedName.Name)
 
-		// The job will:
-		// 1. Wait for MySQL to be reachable (optional, but we assume mysqlReady is true here)
-		// 2. Create the database wandb_local
-		// 3. Create the user wandb_local with the provided password
-		// 4. Grant privileges
-		// We use the root user and rootPassword from the secret.
 		mysqlCmd := "mysql -h $MYSQL_HOST -u root -p\"${MYSQL_ROOT_PASSWORD}\" -e " +
 			"\"CREATE DATABASE IF NOT EXISTS wandb_local; " +
 			"CREATE USER IF NOT EXISTS 'wandb_local'@'%%' IDENTIFIED BY '${MYSQL_PASSWORD}'; " +
@@ -1141,7 +1465,7 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 				return ctrl.Result{}, err
 			}
 
-			volumes, volumeMounts, err := resolveVolumeMounts(ctx, client, wandb, manifest, migrationTask.CommonVolumeMounts, migrationTask.VolumeMounts)
+			volumes, volumeMounts, err := resolveVolumeMounts(ctx, manifest, migrationTask.CommonVolumeMounts, migrationTask.VolumeMounts)
 			if err != nil {
 				return ctrl.Result{}, err
 			}
@@ -1251,7 +1575,7 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 func createKafkaTopics(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest) (ctrl.Result, error) {
 	// Create Strimzi KafkaTopic resources for enabled topics
 	if wandb.Spec.Kafka.Enabled {
-		for _, topic := range manifest.Kafka {
+		for _, topic := range manifest.Kafka.Topics {
 			if len(topic.Features) > 0 && !manifestFeaturesEnabled(topic.Features, manifest.Features) {
 				continue
 			}

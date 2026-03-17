@@ -52,7 +52,7 @@ func readConnectionDetails(ctx context.Context, client client.Client, actual *v1
 
 func ReadState(
 	ctx context.Context,
-	client client.Client,
+	k8sClient client.Client,
 	specNamespacedName types.NamespacedName,
 	wandbOwner client.Object,
 ) ([]metav1.Condition, *translator.InfraConnection) {
@@ -62,7 +62,7 @@ func ReadState(
 	nsnBuilder := createNsNameBuilder(specNamespacedName)
 
 	found, err := ctrlcommon.GetResource(
-		ctx, client, nsnBuilder.ClusterNsName(), ResourceTypeName, actual,
+		ctx, k8sClient, nsnBuilder.ClusterNsName(), ResourceTypeName, actual,
 	)
 	if err != nil {
 		return []metav1.Condition{
@@ -81,10 +81,10 @@ func ReadState(
 	var connection *translator.InfraConnection
 
 	if actual != nil {
-		connInfo := readConnectionDetails(ctx, client, actual, specNamespacedName)
+		connInfo := readConnectionDetails(ctx, k8sClient, actual, specNamespacedName)
 
 		connection, err = writeMySQLConnInfo(
-			ctx, client, wandbOwner, nsnBuilder, connInfo,
+			ctx, k8sClient, wandbOwner, nsnBuilder, connInfo,
 		)
 		if err != nil {
 			if err.Error() == "missing connection info" {
