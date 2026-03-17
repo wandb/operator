@@ -126,6 +126,7 @@ var _ = BeforeSuite(func() {
 				filepath.Join("..", "..", "pkg", "vendored", "redis-operator", "crds"),
 				filepath.Join("..", "..", "pkg", "vendored", "strimzi-kafka", "crds"),
 				filepath.Join("..", "..", "pkg", "vendored", "argo-rollouts", "crds"),
+				filepath.Join("..", "..", "pkg", "vendored", "gateway-api", "crds"),
 			},
 		},
 		WebhookInstallOptions: envtest.WebhookInstallOptions{
