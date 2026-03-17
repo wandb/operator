@@ -80,8 +80,8 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	// Add finalizer if it doesn't exist
 	if app.DeletionTimestamp == nil {
-		if !utils.ContainsString(app.ObjectMeta.Finalizers, applicationFinalizer) {
-			app.ObjectMeta.Finalizers = append(app.ObjectMeta.Finalizers, applicationFinalizer)
+		if !utils.ContainsString(app.GetFinalizers(), applicationFinalizer) {
+			app.SetFinalizers(append(app.GetFinalizers(), applicationFinalizer))
 			if err := r.Update(ctx, &app); err != nil {
 				logger.Error("Failed to add finalizer", logx.ErrAttr(err))
 				return ctrl.Result{}, err
@@ -95,7 +95,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		logger.Info("Application is being deleted")
 
 		// Check if finalizer is present
-		if utils.ContainsString(app.ObjectMeta.Finalizers, applicationFinalizer) {
+		if utils.ContainsString(app.GetFinalizers(), applicationFinalizer) {
 			// Perform cleanup based on application kind
 			switch app.Spec.Kind {
 			case "Deployment":
@@ -145,7 +145,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			}
 
 			// Remove finalizer
-			app.ObjectMeta.Finalizers = utils.RemoveString(app.ObjectMeta.Finalizers, applicationFinalizer)
+			app.SetFinalizers(utils.RemoveString(app.GetFinalizers(), applicationFinalizer))
 			if err := r.Update(ctx, &app); err != nil {
 				logger.Error("Failed to remove finalizer", logx.ErrAttr(err))
 				return ctrl.Result{}, err
@@ -258,20 +258,20 @@ func (r *ApplicationReconciler) reconcileDeployment(ctx context.Context, app *wa
 	deployment.Namespace = app.Namespace
 
 	deployment.Spec.Template.Spec = *app.Spec.PodTemplate.Spec.DeepCopy()
-	deployment.Spec.Template.ObjectMeta.Labels =
+	deployment.Spec.Template.SetLabels(
 		utils.MergeMapsStringString(
-			deployment.Spec.Template.ObjectMeta.Labels,
+			deployment.Spec.Template.GetLabels(),
 			app.Spec.MetaTemplate.Labels,
-			app.Spec.PodTemplate.ObjectMeta.Labels,
+			app.Spec.PodTemplate.GetLabels(),
 			selectorLabels,
-		)
+		))
 
-	deployment.Spec.Template.ObjectMeta.Annotations =
+	deployment.Spec.Template.SetAnnotations(
 		utils.MergeMapsStringString(
-			deployment.Spec.Template.ObjectMeta.Annotations,
+			deployment.Spec.Template.GetAnnotations(),
 			app.Spec.MetaTemplate.Annotations,
-			app.Spec.PodTemplate.ObjectMeta.Annotations,
-		)
+			app.Spec.PodTemplate.GetAnnotations(),
+		))
 
 	deployment.Spec.Selector = &v1.LabelSelector{
 		MatchLabels: selectorLabels,
@@ -356,20 +356,20 @@ func (r *ApplicationReconciler) reconcileRollout(ctx context.Context, app *wandb
 	rollout.Namespace = app.Namespace
 
 	rollout.Spec.Template.Spec = *app.Spec.PodTemplate.Spec.DeepCopy()
-	rollout.Spec.Template.ObjectMeta.Labels =
+	rollout.Spec.Template.SetLabels(
 		utils.MergeMapsStringString(
-			rollout.Spec.Template.ObjectMeta.Labels,
+			rollout.Spec.Template.GetLabels(),
 			app.Spec.MetaTemplate.Labels,
-			app.Spec.PodTemplate.ObjectMeta.Labels,
+			app.Spec.PodTemplate.GetLabels(),
 			selectorLabels,
-		)
+		))
 
-	rollout.Spec.Template.ObjectMeta.Annotations =
+	rollout.Spec.Template.SetAnnotations(
 		utils.MergeMapsStringString(
-			rollout.Spec.Template.ObjectMeta.Annotations,
+			rollout.Spec.Template.GetAnnotations(),
 			app.Spec.MetaTemplate.Annotations,
-			app.Spec.PodTemplate.ObjectMeta.Annotations,
-		)
+			app.Spec.PodTemplate.GetAnnotations(),
+		))
 
 	rollout.Spec.Selector = &v1.LabelSelector{
 		MatchLabels: selectorLabels,
@@ -454,20 +454,20 @@ func (r *ApplicationReconciler) reconcileStatefulSet(ctx context.Context, app *w
 	statefulSet.Namespace = app.Namespace
 
 	statefulSet.Spec.Template.Spec = *app.Spec.PodTemplate.Spec.DeepCopy()
-	statefulSet.Spec.Template.ObjectMeta.Labels =
+	statefulSet.Spec.Template.SetLabels(
 		utils.MergeMapsStringString(
-			statefulSet.Spec.Template.ObjectMeta.Labels,
+			statefulSet.Spec.Template.GetLabels(),
 			app.Spec.MetaTemplate.Labels,
-			app.Spec.PodTemplate.ObjectMeta.Labels,
+			app.Spec.PodTemplate.GetLabels(),
 			selectorLabels,
-		)
+		))
 
-	statefulSet.Spec.Template.ObjectMeta.Annotations =
+	statefulSet.Spec.Template.SetAnnotations(
 		utils.MergeMapsStringString(
-			statefulSet.Spec.Template.ObjectMeta.Annotations,
+			statefulSet.Spec.Template.GetAnnotations(),
 			app.Spec.MetaTemplate.Annotations,
-			app.Spec.PodTemplate.ObjectMeta.Annotations,
-		)
+			app.Spec.PodTemplate.GetAnnotations(),
+		))
 
 	statefulSet.Spec.Selector = &v1.LabelSelector{
 		MatchLabels: selectorLabels,
@@ -956,7 +956,7 @@ func (r *ApplicationReconciler) reconcileHTTPRoute(ctx context.Context, app *wan
 
 	desired.Spec.ParentRefs = app.Spec.HTTPRouteTemplate.ParentRefs
 	desired.Spec.Hostnames = app.Spec.HTTPRouteTemplate.Hostnames
-	desired.Spec.Rules = app.Spec.HTTPRouteTemplate.Rules
+	desired.Spec.Rules = buildHTTPRouteRules(app)
 
 	if err := ctrl.SetControllerReference(app, desired, r.Scheme); err != nil {
 		return err
@@ -975,6 +975,44 @@ func (r *ApplicationReconciler) reconcileHTTPRoute(ctx context.Context, app *wan
 	desired.ResourceVersion = current.ResourceVersion
 	logger.Info("Updating HTTPRoute", "HTTPRoute", desired.Name)
 	return r.Update(ctx, desired)
+}
+
+func buildHTTPRouteRules(app *wandbv2.Application) []gatewayv1.HTTPRouteRule {
+	tmpl := app.Spec.HTTPRouteTemplate
+
+	paths := tmpl.Paths
+	if len(paths) == 0 {
+		paths = []string{"/"}
+	}
+
+	var matches []gatewayv1.HTTPRouteMatch
+	for _, p := range paths {
+		p := p
+		matchType := gatewayv1.PathMatchPathPrefix
+		if tmpl.PathType == "Exact" {
+			matchType = gatewayv1.PathMatchExact
+		}
+		matches = append(matches, gatewayv1.HTTPRouteMatch{
+			Path: &gatewayv1.HTTPPathMatch{
+				Type:  &matchType,
+				Value: &p,
+			},
+		})
+	}
+
+	backendRef := gatewayv1.HTTPBackendRef{
+		BackendRef: gatewayv1.BackendRef{
+			BackendObjectReference: gatewayv1.BackendObjectReference{
+				Name: gatewayv1.ObjectName(app.Name),
+				Port: tmpl.ServicePort,
+			},
+		},
+	}
+
+	return []gatewayv1.HTTPRouteRule{{
+		Matches:     matches,
+		BackendRefs: []gatewayv1.HTTPBackendRef{backendRef},
+	}}
 }
 
 func (r *ApplicationReconciler) deleteHTTPRoute(ctx context.Context, app *wandbv2.Application) error {

@@ -75,7 +75,7 @@ func ToMysqlMySQLVendorSpec(
 	wandb *apiv2.WeightsAndBiases,
 	scheme *runtime.Scheme,
 ) (*v2.InnoDBCluster, error) {
-	ctx, log := logx.WithSlog(ctx, logx.Mysql)
+	_, log := logx.WithSlog(ctx, logx.Mysql)
 
 	if !spec.Enabled {
 		return nil, nil

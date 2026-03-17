@@ -77,7 +77,7 @@ func computeMinioReportedReadyCondition(_ context.Context, tenantCR *miniov2.Ten
 		return []metav1.Condition{}
 	}
 
-	status := metav1.ConditionUnknown
+	var status metav1.ConditionStatus
 	reason := string(tenantCR.Status.HealthStatus)
 
 	switch tenantCR.Status.HealthStatus {

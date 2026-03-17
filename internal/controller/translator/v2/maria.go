@@ -64,7 +64,7 @@ func ToMariaDBMySQLVendorSpec(
 	owner metav1.Object,
 	scheme *runtime.Scheme,
 ) (*v1alpha1.MariaDB, error) {
-	ctx, log := logx.WithSlog(ctx, logx.Mysql)
+	_, log := logx.WithSlog(ctx, logx.Mysql)
 
 	if !spec.Enabled {
 		return nil, nil

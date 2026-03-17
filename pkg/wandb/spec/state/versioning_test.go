@@ -24,7 +24,7 @@ var _ = Describe("Versioning", func() {
 	})
 	Describe("New", func() {
 		It("should return a new Manager", func() {
-			m := state.New(nil, nil, nil, nil, nil)
+			m := state.New(context.TODO(), nil, nil, nil, nil)
 			Expect(m).To(BeAssignableToTypeOf(&state.Manager{}))
 		})
 	})

@@ -28,7 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/validation/field"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -95,7 +95,7 @@ func (d *WeightsAndBiasesCustomDefaulter) Default(ctx context.Context, obj runti
 	}
 
 	if wandb.Spec.Wandb.InternalServiceAuth.Enabled == nil {
-		wandb.Spec.Wandb.InternalServiceAuth.Enabled = pointer.Bool(true)
+		wandb.Spec.Wandb.InternalServiceAuth.Enabled = ptr.To(true)
 	}
 
 	if wandb.Spec.Wandb.InternalServiceAuth.OIDCIssuer == "" {
@@ -103,7 +103,7 @@ func (d *WeightsAndBiasesCustomDefaulter) Default(ctx context.Context, obj runti
 	}
 
 	if wandb.Spec.Wandb.ServiceAccount.Create == nil {
-		wandb.Spec.Wandb.ServiceAccount.Create = pointer.Bool(true)
+		wandb.Spec.Wandb.ServiceAccount.Create = ptr.To(true)
 	}
 
 	if wandb.Spec.Wandb.ServiceAccount.ServiceAccountName == "" {
@@ -178,7 +178,7 @@ func (v *WeightsAndBiasesCustomValidator) ValidateUpdate(ctx context.Context, ol
 
 // ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type WeightsAndBiases.
 func (v *WeightsAndBiasesCustomValidator) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
-	ctx, log := logx.WithSlog(ctx, logx.ValidatingWebhook)
+	_, log := logx.WithSlog(ctx, logx.ValidatingWebhook)
 	weightsandbiases, ok := obj.(*appsv2.WeightsAndBiases)
 	if !ok {
 		return nil, fmt.Errorf("expected a WeightsAndBiases object but got %T", obj)

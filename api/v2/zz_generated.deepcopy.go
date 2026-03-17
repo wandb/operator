@@ -427,12 +427,15 @@ func (in *HTTPRouteTemplateSpec) DeepCopyInto(out *HTTPRouteTemplateSpec) {
 		*out = make([]apisv1.Hostname, len(*in))
 		copy(*out, *in)
 	}
-	if in.Rules != nil {
-		in, out := &in.Rules, &out.Rules
-		*out = make([]apisv1.HTTPRouteRule, len(*in))
-		for i := range *in {
-			(*in)[i].DeepCopyInto(&(*out)[i])
-		}
+	if in.Paths != nil {
+		in, out := &in.Paths, &out.Paths
+		*out = make([]string, len(*in))
+		copy(*out, *in)
+	}
+	if in.ServicePort != nil {
+		in, out := &in.ServicePort, &out.ServicePort
+		*out = new(apisv1.PortNumber)
+		**out = **in
 	}
 }
 

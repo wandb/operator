@@ -40,7 +40,7 @@ func ToMinioVendorSpec(
 	wandb *apiv2.WeightsAndBiases,
 	scheme *runtime.Scheme,
 ) (*miniov2.Tenant, error) {
-	ctx, log := logx.WithSlog(ctx, logx.Minio)
+	_, log := logx.WithSlog(ctx, logx.Minio)
 	infraSpec := wandb.Spec.Minio
 
 	if !infraSpec.Enabled {

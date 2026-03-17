@@ -62,8 +62,19 @@ type ApplicationSpec struct {
 type HTTPRouteTemplateSpec struct {
 	ParentRefs []gatewayv1.ParentReference `json:"parentRefs"`
 	Hostnames  []gatewayv1.Hostname        `json:"hostnames,omitempty"`
-	// +kubebuilder:validation:MaxItems=5
-	Rules []gatewayv1.HTTPRouteRule `json:"rules,omitempty"`
+
+	// Paths are the URL path prefixes to match. Defaults to ["/"] if empty.
+	// +optional
+	Paths []string `json:"paths,omitempty"`
+
+	// PathType controls the match type: "Exact" for exact matching, anything else for prefix.
+	// +optional
+	PathType string `json:"pathType,omitempty"`
+
+	// ServicePort is the port on the backend service to route traffic to.
+	// Nil means no port is specified in the backend ref.
+	// +optional
+	ServicePort *gatewayv1.PortNumber `json:"servicePort,omitempty"`
 }
 
 // ApplicationStatus defines the observed state of Application.

@@ -81,7 +81,7 @@ func init() {
 	utilruntime.Must(miniov2.AddToScheme(scheme))
 	utilruntime.Must(chiv1.AddToScheme(scheme))
 	utilruntime.Must(mysqlv2.AddToScheme(scheme))
-	utilruntime.Must(gatewayv1.AddToScheme(scheme))
+	utilruntime.Must(gatewayv1.Install(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -390,7 +390,7 @@ func setFlagsFromEnvironment() []error {
 	var errors []error
 
 	flag.VisitAll(func(f *flag.Flag) {
-		name := strings.ToUpper(strings.Replace(f.Name, "-", "_", -1))
+		name := strings.ToUpper(strings.ReplaceAll(f.Name, "-", "_"))
 		if value, ok := os.LookupEnv(name); ok {
 			err := flag.Set(f.Name, value)
 			if err != nil {

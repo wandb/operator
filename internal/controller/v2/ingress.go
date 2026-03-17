@@ -35,9 +35,10 @@ func reconcileConsolidatedIngress(ctx context.Context, c ctrlClient.Client, wand
 			if len(app.Ingress.Paths) > 0 {
 				appPaths = app.Ingress.Paths
 			}
-			if app.Ingress.PathType == "Exact" {
+			switch app.Ingress.PathType {
+			case "Exact":
 				pathType = networkingv1.PathTypeExact
-			} else if app.Ingress.PathType == "ImplementationSpecific" {
+			case "ImplementationSpecific":
 				pathType = networkingv1.PathTypeImplementationSpecific
 			}
 		}

@@ -43,7 +43,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/record"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	ctrlClient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -170,11 +170,11 @@ func Reconcile(
 	/////////////////////////
 	// Retention Finalizer
 
-	isFlaggedForDeletion := !wandb.ObjectMeta.DeletionTimestamp.IsZero()
+	isFlaggedForDeletion := !wandb.GetDeletionTimestamp().IsZero()
 
 	// ensure finalizer if not present
 	if !isFlaggedForDeletion && !ctrlqueue.ContainsString(wandb.GetFinalizers(), CleanupFinalizer) {
-		wandb.ObjectMeta.Finalizers = append(wandb.ObjectMeta.Finalizers, CleanupFinalizer)
+		wandb.SetFinalizers(append(wandb.GetFinalizers(), CleanupFinalizer))
 		if err := client.Update(ctx, wandb); err != nil {
 			log.Error(fmt.Sprintf("Failed to add finalizer '%s'", CleanupFinalizer), logx.ErrAttr(err))
 			return ctrl.Result{}, err
@@ -182,7 +182,7 @@ func Reconcile(
 	}
 
 	// if deleting and handle cleanup or preservation of config and data
-	if isFlaggedForDeletion && !wandb.ObjectMeta.DeletionTimestamp.IsZero() {
+	if isFlaggedForDeletion && !wandb.GetDeletionTimestamp().IsZero() {
 		if ctrlqueue.ContainsString(wandb.GetFinalizers(), CleanupFinalizer) {
 
 			if err = runRetentionFinalizer(ctx, client, wandb, wandb.Spec.Minio.InfraSpec, minioPurgeFinalizer, minioDetachFinalizer); err != nil {
@@ -499,8 +499,8 @@ func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb 
 		err = client.Get(ctx, types.NamespacedName{Name: applicationName, Namespace: wandb.Namespace}, application)
 		if err != nil {
 			if apiErrors.IsNotFound(err) {
-				application.ObjectMeta.Name = applicationName
-				application.ObjectMeta.Namespace = wandb.Namespace
+				application.SetName(applicationName)
+				application.SetNamespace(wandb.Namespace)
 			} else {
 				return ctrl.Result{}, err
 			}
@@ -546,7 +546,7 @@ func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb 
 			return ctrl.Result{}, err
 		}
 
-		if application.ObjectMeta.CreationTimestamp.IsZero() {
+		if application.CreationTimestamp.IsZero() {
 			if err = client.Create(ctx, application); err != nil {
 				return ctrl.Result{}, err
 			}
@@ -644,45 +644,19 @@ func buildHTTPRouteTemplate(wandb *apiv2.WeightsAndBiases, app serverManifest.Ap
 		hostnames = append(hostnames, gatewayv1.Hostname(h))
 	}
 
-	appPaths := []string{"/"}
-	if app.Ingress != nil && len(app.Ingress.Paths) > 0 {
-		appPaths = app.Ingress.Paths
-	}
-
-	serviceName := fmt.Sprintf("%s-%s", wandb.Name, app.Name)
-	servicePort := resolveHTTPRouteServicePort(app)
-
-	var matches []gatewayv1.HTTPRouteMatch
-	for _, p := range appPaths {
-		p := p
-		matchType := gatewayv1.PathMatchPathPrefix
-		if app.Ingress != nil && app.Ingress.PathType == "Exact" {
-			matchType = gatewayv1.PathMatchExact
-		}
-		matches = append(matches, gatewayv1.HTTPRouteMatch{
-			Path: &gatewayv1.HTTPPathMatch{
-				Type:  &matchType,
-				Value: &p,
-			},
-		})
-	}
-
-	backendRef := gatewayv1.HTTPBackendRef{
-		BackendRef: gatewayv1.BackendRef{
-			BackendObjectReference: gatewayv1.BackendObjectReference{
-				Name: gatewayv1.ObjectName(serviceName),
-				Port: servicePort,
-			},
-		},
+	var paths []string
+	var pathType string
+	if app.Ingress != nil {
+		paths = app.Ingress.Paths
+		pathType = app.Ingress.PathType
 	}
 
 	return &apiv2.HTTPRouteTemplateSpec{
-		ParentRefs: []gatewayv1.ParentReference{parentRef},
-		Hostnames:  hostnames,
-		Rules: []gatewayv1.HTTPRouteRule{{
-			Matches:     matches,
-			BackendRefs: []gatewayv1.HTTPBackendRef{backendRef},
-		}},
+		ParentRefs:  []gatewayv1.ParentReference{parentRef},
+		Hostnames:   hostnames,
+		Paths:       paths,
+		PathType:    pathType,
+		ServicePort: resolveHTTPRouteServicePort(app),
 	}
 }
 
@@ -1366,15 +1340,11 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *apiv2.
 	var combinedEnvs []serverManifest.EnvVar
 	for _, commonVars := range commonEnvs {
 		if envvars, ok := manifest.CommonEnvvars[commonVars]; ok {
-			for _, env := range envvars {
-				combinedEnvs = append(combinedEnvs, env)
-			}
+			combinedEnvs = append(combinedEnvs, envvars...)
 		}
 	}
 
-	for _, env := range envs {
-		combinedEnvs = append(combinedEnvs, env)
-	}
+	combinedEnvs = append(combinedEnvs, envs...)
 
 	var envVars []corev1.EnvVar
 	for _, env := range combinedEnvs {
@@ -1652,15 +1622,11 @@ func resolveVolumeMounts(ctx context.Context, manifest serverManifest.Manifest, 
 	var combinedVolumeMounts []serverManifest.VolumeMount
 	for _, commonVolumeMounts := range commonvms {
 		if volumeMounts, ok := manifest.CommonVolumeMounts[commonVolumeMounts]; ok {
-			for _, volumeMount := range volumeMounts {
-				combinedVolumeMounts = append(combinedVolumeMounts, volumeMount)
-			}
+			combinedVolumeMounts = append(combinedVolumeMounts, volumeMounts...)
 		}
 	}
 
-	for _, volumeMount := range vms {
-		combinedVolumeMounts = append(combinedVolumeMounts, volumeMount)
-	}
+	combinedVolumeMounts = append(combinedVolumeMounts, vms...)
 
 	var volumes []corev1.Volume
 	var volumeMounts []corev1.VolumeMount
@@ -2331,7 +2297,7 @@ func createOrUpdateServiceAccount(
 			},
 			Annotations: wandb.Spec.Wandb.ServiceAccount.Annotations,
 		},
-		AutomountServiceAccountToken: pointer.Bool(true),
+		AutomountServiceAccountToken: ptr.To(true),
 	}
 
 	if err := controllerutil.SetControllerReference(wandb, serviceAccount, client.Scheme()); err != nil {

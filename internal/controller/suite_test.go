@@ -59,7 +59,6 @@ var (
 	cfg       *rest.Config
 	k8sClient client.Client
 	mgr       manager.Manager
-	mgrErrCh  chan error
 )
 
 func TestControllers(t *testing.T) {
@@ -108,7 +107,7 @@ var _ = BeforeSuite(func() {
 	err = mysqlv2.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = gatewayv1.AddToScheme(scheme.Scheme)
+	err = gatewayv1.Install(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
 	// +kubebuilder:scaffold:scheme
