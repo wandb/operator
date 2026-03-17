@@ -693,13 +693,16 @@ func resolveHTTPRouteServicePort(app serverManifest.Application) *gatewayv1.Port
 			p := gatewayv1.PortNumber(port.IntVal)
 			return &p
 		}
+		if port.Type == intstr.String && app.Service != nil {
+			for _, servicePort := range app.Service.Ports {
+				if servicePort.Name == port.StrVal {
+					p := gatewayv1.PortNumber(servicePort.Port)
+					return &p
+				}
+			}
+		}
 	}
-	if app.Service != nil && len(app.Service.Ports) > 0 {
-		p := gatewayv1.PortNumber(app.Service.Ports[0].Port)
-		return &p
-	}
-	p := gatewayv1.PortNumber(8080)
-	return &p
+	return nil
 }
 
 func resolveInitContainers(app serverManifest.Application, envVars []corev1.EnvVar, volumeMounts []corev1.VolumeMount) []corev1.Container {
