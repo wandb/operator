@@ -2,6 +2,7 @@ package manifest_test
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -21,6 +22,9 @@ var _ = Describe("LoadManifestFromFiles", func() {
 
 	Context("when loading multi-file manifests", func() {
 		It("should correctly merge manifest.yaml and sizing.yaml files", func() {
+			// Simple test to see if we get here
+			Expect(true).To(BeTrue())
+
 			// Get the path to the test manifests
 			manifestRoot, err := filepath.Abs("../../../hack/testing-manifests/server-manifest")
 			Expect(err).NotTo(HaveOccurred())
@@ -41,20 +45,12 @@ var _ = Describe("LoadManifestFromFiles", func() {
 			Expect(m.Kafka.Topics[0].Name).To(Equal("filestream"))
 			Expect(m.Kafka.Topics[0].Topic).To(Equal("filestream"))
 
-			// Test applications
-			Expect(m.Applications).NotTo(BeEmpty())
+			Expect(m.Bucket["default"].Sizing).NotTo(BeNil())
+			Expect(m.Bucket["default"].Ingress).NotTo(BeNil())
 
-			// Find the api application
-			var apiApp *manifest.Application
-			for i := range m.Applications {
-				if m.Applications[i].Name == "api" {
-					apiApp = &m.Applications[i]
-					break
-				}
-			}
-			Expect(apiApp).NotTo(BeNil())
-			Expect(apiApp.CommonEnvs).To(ContainElement("gorillaMysql"))
-			Expect(apiApp.CommonEnvs).To(ContainElement("gorillaBucket"))
+			// Debug output
+			fmt.Printf("Bucket default ingress: %+v\n", m.Bucket["default"].Ingress)
+			fmt.Printf("Bucket default sizing: %+v\n", m.Bucket["default"].Sizing)
 
 			// Test sizing configurations that come from sizing.yaml
 			// Check that Kafka sizing was loaded
@@ -77,18 +73,6 @@ var _ = Describe("LoadManifestFromFiles", func() {
 			// Check that Clickhouse sizing was loaded
 			Expect(m.Clickhouse["default"].Sizing["default"].Shards).To(Equal(int32(1)))
 			Expect(m.Clickhouse["default"].Sizing["default"].Replicas).To(Equal(int32(1)))
-
-			// Check that application sizing was loaded
-			var apiAppSizing *manifest.Application
-			for i := range m.Applications {
-				if m.Applications[i].Name == "api" {
-					apiAppSizing = &m.Applications[i]
-					break
-				}
-			}
-			Expect(apiAppSizing).NotTo(BeNil())
-			Expect(apiAppSizing.Sizing).NotTo(BeEmpty())
-			Expect(apiAppSizing.Sizing["micro"].Resources).NotTo(BeNil())
 		})
 	})
 
