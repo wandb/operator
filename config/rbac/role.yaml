@@ -178,6 +178,7 @@ rules:
 - apiGroups:
   - gateway.networking.k8s.io
   resources:
+  - backendtlspolicies
   - gateways
   - httproutes
   verbs:
@@ -191,6 +192,7 @@ rules:
 - apiGroups:
   - gateway.networking.k8s.io
   resources:
+  - backendtlspolicies/status
   - gateways/status
   - httproutes/status
   verbs:

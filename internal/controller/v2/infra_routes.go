@@ -21,6 +21,7 @@ import (
 type infraRouteEntry struct {
 	// name is the HTTPRoute resource name
 	name        string
+	namespace   string
 	serviceName string
 	servicePort gatewayv1.PortNumber
 	ingress     *serverManifest.AppIngressSpec
@@ -44,6 +45,7 @@ func resolveInfraRoutes(wandb *apiv2.WeightsAndBiases, manifest serverManifest.M
 			}
 			entries = append(entries, infraRouteEntry{
 				name:        fmt.Sprintf("%s-bucket-%s", wandb.Name, instanceName),
+				namespace:   wandb.Spec.Minio.Namespace,
 				serviceName: svcName,
 				servicePort: port,
 				ingress:     cfg.Ingress,
@@ -66,6 +68,7 @@ func resolveInfraRoutes(wandb *apiv2.WeightsAndBiases, manifest serverManifest.M
 			}
 			entries = append(entries, infraRouteEntry{
 				name:        fmt.Sprintf("%s-clickhouse-%s", wandb.Name, instanceName),
+				namespace:   wandb.Spec.ClickHouse.Namespace,
 				serviceName: svcName,
 				servicePort: port,
 				ingress:     cfg.Ingress,
@@ -85,6 +88,7 @@ func resolveInfraRoutes(wandb *apiv2.WeightsAndBiases, manifest serverManifest.M
 			}
 			entries = append(entries, infraRouteEntry{
 				name:        fmt.Sprintf("%s-mysql-%s", wandb.Name, instanceName),
+				namespace:   wandb.Spec.MySQL.Namespace,
 				serviceName: svcName,
 				servicePort: port,
 				ingress:     cfg.Ingress,
@@ -104,6 +108,7 @@ func resolveInfraRoutes(wandb *apiv2.WeightsAndBiases, manifest serverManifest.M
 			}
 			entries = append(entries, infraRouteEntry{
 				name:        fmt.Sprintf("%s-redis-%s", wandb.Name, instanceName),
+				namespace:   wandb.Spec.Redis.Namespace,
 				serviceName: svcName,
 				servicePort: port,
 				ingress:     cfg.Ingress,
@@ -184,7 +189,7 @@ func reconcileInfraHTTPRoutes(
 		}
 
 		current := &gatewayv1.HTTPRoute{}
-		err := c.Get(ctx, types.NamespacedName{Name: entry.name, Namespace: wandb.Namespace}, current)
+		err := c.Get(ctx, types.NamespacedName{Name: entry.name, Namespace: entry.namespace}, current)
 		if err != nil {
 			if apiErrors.IsNotFound(err) {
 				if err := c.Create(ctx, route); err != nil {
@@ -259,7 +264,7 @@ func buildInfraHTTPRoute(
 	return &gatewayv1.HTTPRoute{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      entry.name,
-			Namespace: wandb.Namespace,
+			Namespace: entry.namespace,
 		},
 		Spec: gatewayv1.HTTPRouteSpec{
 			CommonRouteSpec: gatewayv1.CommonRouteSpec{

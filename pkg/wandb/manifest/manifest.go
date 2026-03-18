@@ -334,15 +334,8 @@ func loadManifestFromFiles(ctx context.Context, manifestFiles []string) (Manifes
 			return Manifest{}, fmt.Errorf("failed to unmarshal %q: %w", manifestFile, err)
 		}
 
-		fmt.Printf("File %s - Bucket: %+v\n", manifestFile, fileManifest.Bucket)
-		fmt.Printf("File %s - Applications: %+v\n", manifestFile, len(fileManifest.Applications))
-		fmt.Printf("File %s - Kafka Topics: %+v\n", manifestFile, len(fileManifest.Kafka.Topics))
-
 		// Simple merge: preserve existing data, add new data
 		mergeSimple(&manifest, &fileManifest)
-
-		fmt.Printf("After merge - Bucket: %+v\n", manifest.Bucket)
-		fmt.Printf("After merge - Applications: %+v\n", len(manifest.Applications))
 	}
 
 	logger.Debug("loaded manifest files", "count", len(manifestFiles), "files", manifestFiles, "manifest", manifest)

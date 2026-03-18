@@ -385,7 +385,8 @@ commonVolumeMounts:
         type: secret
 
 applications:
-  - name: anaconda2
+  anaconda2:
+    name: anaconda2
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/anaconda2
       tag: 0.78.2-rc.1773119635
@@ -406,7 +407,8 @@ applications:
         - port: 8080
           protocol: TCP
           name: anaconda2
-  - name: api
+  api:
+    name: api
     commonEnvs:
       - gorillaMysql
       - gorillaBucket
@@ -469,7 +471,8 @@ applications:
         - /oidc
       servicePort: "8080"
       pathType: Prefix
-  - name: executor
+  executor:
+    name: executor
     args:
       - executor
     commonEnvs:
@@ -486,7 +489,8 @@ applications:
       tag: 0.78.2-rc.1773119635
     containers:
       - name: executor
-  - name: filemeta
+  filemeta:
+    name: filemeta
     args:
       - filemeta
     commonEnvs:
@@ -499,7 +503,8 @@ applications:
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
       tag: 0.78.2-rc.1773119635
-  - name: filestream
+  filestream:
+    name: filestream
     features:
       - filestreamQueue
     args:
@@ -516,7 +521,8 @@ applications:
       tag: 0.78.2-rc.1773119635
     containers:
       - name: filestream
-  - name: flat-run-fields-updater
+  flat-run-fields-updater:
+    name: flat-run-fields-updater
     args:
       - flat-run-fields-updater
     commonEnvs:
@@ -536,7 +542,8 @@ applications:
       tag: 0.78.2-rc.1773119635
     containers:
       - name: flat-run-fields-updater
-  - name: frontend
+  frontend:
+    name: frontend
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/frontend-nginx
       tag: 0.78.2-rc.1773119635
@@ -611,7 +618,8 @@ applications:
         - /
       servicePort: "8080"
       pathType: Prefix
-  - name: glue
+  glue:
+    name: glue
     args:
       - glue
     commonEnvs:
@@ -640,7 +648,8 @@ applications:
       tag: 0.78.2-rc.1773119635
     containers:
       - name: glue
-  - name: metric-observer
+  metric-observer:
+    name: metric-observer
     args:
       - metric-observer
     commonEnvs:
@@ -660,7 +669,8 @@ applications:
       tag: 0.78.2-rc.1773119635
     containers:
       - name: metric-observer
-  - name: parquet
+  parquet:
+    name: parquet
     args:
       - parquet
     commonEnvs:
@@ -692,7 +702,8 @@ applications:
         - port: 8080
           protocol: TCP
           name: parquet
-  - name: weave
+  weave:
+    name: weave
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-python
       tag: 0.78.2-rc.1773119635
@@ -745,7 +756,8 @@ applications:
         source:
           type: emptyDir
           name: cache
-  - name: weave-trace
+  weave-trace:
+    name: weave-trace
     commonEnvs:
       - clickhouse
       - kafka
@@ -790,7 +802,8 @@ applications:
           kubernetesServiceAccount:
             audience: internal-service
             expirationSeconds: 600
-  - name: weave-trace-worker
+  weave-trace-worker:
+    name: weave-trace-worker
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
       tag: 0.78.2-rc.1773119635
@@ -802,7 +815,14 @@ applications:
       - kafka
       - weaveTrace
       - telemetryOtel
-  - name: weave-trace-evaluate-model-worker
+    containers:
+      - name: weave-trace-worker
+        args:
+          - "python"
+          - "-m"
+          - "src.workers.scoring_worker"
+  weave-trace-evaluate-model-worker:
+    name: weave-trace-evaluate-model-worker
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
       tag: 0.78.2-rc.1773119635
@@ -814,7 +834,14 @@ applications:
       - kafka
       - weaveTrace
       - telemetryOtel
-  - name: nginx-proxy
+    containers:
+      - name: weave-trace-evaluate-model-worker
+        args:
+          - "python"
+          - "-m"
+          - "src.workers.evaluate_model_worker.evaluate_model_worker"
+  nginx-proxy:
+    name: nginx-proxy
     features:
       - proxy
     image:
