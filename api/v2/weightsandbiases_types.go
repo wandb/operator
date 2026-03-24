@@ -72,15 +72,15 @@ const (
 type OnDeletePolicy string
 
 const (
-	// PreserveOnDelete will keep the resources necessary recreate with the same connection and data
-	PreserveOnDelete OnDeletePolicy = "preserve"
+	// DetachOnDelete removes ownership of infrastructure CRs so they survive WandB CR deletion
+	DetachOnDelete OnDeletePolicy = "detach"
 	// PurgeOnDelete will delete all associated resources upon deletion
 	PurgeOnDelete OnDeletePolicy = "purge"
 )
 
 type RetentionPolicy struct {
-	// +kubebuilder:default="preserve"
-	OnDelete OnDeletePolicy `json:"onDelete" default:"preserve"`
+	// +kubebuilder:default="detach"
+	OnDelete OnDeletePolicy `json:"onDelete" default:"detach"`
 }
 
 // WeightsAndBiasesSpec defines the desired state of WeightsAndBiases.

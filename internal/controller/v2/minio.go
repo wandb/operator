@@ -24,6 +24,10 @@ func minioWriteState(
 	log := ctrl.LoggerFrom(ctx)
 	var specNamespacedName = minioSpecNamespacedName(wandb.Spec.Minio)
 
+	if conditions := tenant.CheckDetached(ctx, client, specNamespacedName, wandb.GetUID(), wandb.Spec.Minio.Replicas); conditions != nil {
+		return conditions, nil
+	}
+
 	desiredCr, err := translatorv2.ToMinioVendorSpec(ctx, wandb, client.Scheme())
 	if err != nil {
 		log.Error(err, "failed to translate MinIO spec to vendor spec")
@@ -110,6 +114,15 @@ func minioPurgeFinalizer(
 		return err
 	}
 	return nil
+}
+
+func minioDetachFinalizer(
+	ctx context.Context,
+	client client.Client,
+	wandb *apiv2.WeightsAndBiases,
+) error {
+	specNamespacedName := minioSpecNamespacedName(wandb.Spec.Minio)
+	return tenant.DetachFinalizer(ctx, client, specNamespacedName, wandb)
 }
 
 func minioSpecNamespacedName(minio apiv2.MinioSpec) types.NamespacedName {
