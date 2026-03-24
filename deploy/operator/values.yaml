@@ -29,36 +29,16 @@ wandb-operator:
           value: "false"
         TELEMETRY_ENABLED:
           value: "{{ .Values.telemetry.enabled }}"
-        TELEMETRY_MODE:
-          value: "{{ .Values.telemetry.mode }}"
-        TELEMETRY_METRICS_ENDPOINT:
-          value: "{{ .Values.telemetry.external.metricsEndpoint }}"
-        TELEMETRY_LOGS_ENDPOINT:
-          value: "{{ .Values.telemetry.external.logsEndpoint }}"
-        TELEMETRY_TRACES_ENDPOINT:
-          value: "{{ .Values.telemetry.external.tracesEndpoint }}"
         TELEMETRY_MANAGED_NAMESPACE:
           value: "{{ .Values.telemetry.namespace }}"
-        TELEMETRY_MANAGED_VMSINGLE_NAME:
-          value: "{{ .Values.telemetry.managed.vmsingle.name }}"
-        TELEMETRY_MANAGED_VLSINGLE_NAME:
-          value: "{{ .Values.telemetry.managed.vlsingle.name }}"
-        TELEMETRY_MANAGED_VTSINGLE_NAME:
-          value: "{{ .Values.telemetry.managed.vtsingle.name }}"
-        TELEMETRY_MANAGED_OTLP_GATEWAY_ENABLED:
-          value: "{{ .Values.telemetry.managed.otlpGateway.enabled }}"
-        TELEMETRY_MANAGED_OTLP_GATEWAY_NAME:
-          value: "{{ .Values.telemetry.managed.otlpGateway.name }}"
-        TELEMETRY_MANAGED_OTLP_GATEWAY_HTTP_PORT:
-          value: "{{ .Values.telemetry.managed.otlpGateway.service.httpPort }}"
         TELEMETRY_OTEL_SECRET_NAME:
-          value: "{{ .Values.telemetry.otel.secretName }}"
+          value: '{{ (index .Values "wandb-operator").telemetry.otel.secretName }}'
         TELEMETRY_OTEL_PROTOCOL:
-          value: "{{ .Values.telemetry.otel.protocol }}"
+          value: '{{ (index .Values "wandb-operator").telemetry.otel.protocol }}'
         TELEMETRY_OTEL_SERVICE_NAME:
-          value: "{{ .Values.telemetry.otel.serviceName }}"
+          value: '{{ (index .Values "wandb-operator").telemetry.otel.serviceName }}'
         TELEMETRY_OTEL_RESOURCE_ATTRIBUTES:
-          value: "{{ .Values.telemetry.otel.resourceAttributes }}"
+          value: '{{ (index .Values "wandb-operator").telemetry.otel.resourceAttributes }}'
       securityContext:
         allowPrivilegeEscalation: false
         capabilities:
@@ -120,25 +100,6 @@ wandb-operator:
     vm: true
 
   telemetry:
-    enabled: false
-    mode: managed
-    namespace: wandb
-    external:
-      metricsEndpoint: ""
-      logsEndpoint: ""
-      tracesEndpoint: ""
-    managed:
-      vmsingle:
-        name: victoria-instance
-      vlsingle:
-        name: victoria-logs
-      vtsingle:
-        name: victoria-traces
-      otlpGateway:
-        enabled: true
-        name: victoria-otlp-gateway
-        service:
-          httpPort: 4318
     otel:
       secretName: wandb-otel-connection
       protocol: http/protobuf
@@ -167,49 +128,15 @@ altinity-clickhouse-operator:
           namespaces: [".*"]
 
 victoria-metrics-operator:
-  install: true
+  enabled: true
 
 grafana-operator:
-  install: true
+  enabled: true
 
 telemetry:
   enabled: false
-  mode: managed
   namespace: ""
-  otel:
-    secretName: wandb-otel-connection
-    protocol: http/protobuf
-    serviceName: wandb-service
-    resourceAttributes: deployment.environment=dev
-  external:
-    metricsEndpoint: ""
-    logsEndpoint: ""
-    tracesEndpoint: ""
-  managed:
-    retentionPeriod: 1d
-    vmsingle:
-      name: victoria-instance
-      extraArgs:
-        opentelemetry.usePrometheusNaming: "true"
-    vmagent:
-      name: victoria-agent
-      selectAllByDefault: true
-    vlsingle:
-      name: victoria-logs
-    vtsingle:
-      name: victoria-traces
-    otlpGateway:
-      enabled: true
-      name: victoria-otlp-gateway
-      image:
-        repository: otel/opentelemetry-collector-contrib
-        tag: 0.102.1
-        pullPolicy: IfNotPresent
-      service:
-        grpcPort: 4317
-        httpPort: 4318
-        metricsPort: 8888
-      resources: {}
+  retentionPeriod: 1d
   scrape:
     enabled: true
     kubeletCadvisor: true
@@ -224,16 +151,3 @@ telemetry:
       name: default
       type: webhook
       target: http://alertmanager-operated.monitoring.svc:9093
-  perses:
-    enabled: false
-    image:
-      repository: ghcr.io/perses/perses
-      tag: v0.52.0
-      pullPolicy: IfNotPresent
-    service:
-      port: 8080
-  ui:
-    grafana:
-      enabled: false
-    vmui:
-      enabled: false

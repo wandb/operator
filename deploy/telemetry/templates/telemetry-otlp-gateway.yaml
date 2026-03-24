@@ -1,0 +1,127 @@
+{{- if .Values.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "telemetry.otlpGatewayName" . }}-config
+  namespace: {{ include "telemetry.namespace" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "telemetry.otlpGatewayName" . }}
+    app.kubernetes.io/component: telemetry
+    app.kubernetes.io/part-of: wandb
+data:
+  collector.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+
+    processors:
+      batch: {}
+
+    exporters:
+      otlphttp/vm:
+        endpoint: http://vmsingle-{{ include "telemetry.vmsingleName" . }}:8428
+        metrics_endpoint: http://vmsingle-{{ include "telemetry.vmsingleName" . }}:8428/opentelemetry/v1/metrics
+      otlphttp/vl:
+        endpoint: http://vlsingle-{{ include "telemetry.vlsingleName" . }}:9428
+        logs_endpoint: http://vlsingle-{{ include "telemetry.vlsingleName" . }}:9428/insert/opentelemetry/v1/logs
+      otlphttp/vt:
+        endpoint: http://vtsingle-{{ include "telemetry.vtsingleName" . }}:10428
+        traces_endpoint: http://vtsingle-{{ include "telemetry.vtsingleName" . }}:10428/insert/opentelemetry/v1/traces
+
+    service:
+      telemetry:
+        metrics:
+          address: 0.0.0.0:8888
+      pipelines:
+        metrics:
+          receivers: [otlp]
+          processors: [batch]
+          exporters: [otlphttp/vm]
+        logs:
+          receivers: [otlp]
+          processors: [batch]
+          exporters: [otlphttp/vl]
+        traces:
+          receivers: [otlp]
+          processors: [batch]
+          exporters: [otlphttp/vt]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "telemetry.otlpGatewayName" . }}
+  namespace: {{ include "telemetry.namespace" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "telemetry.otlpGatewayName" . }}
+    app.kubernetes.io/component: telemetry
+    app.kubernetes.io/part-of: wandb
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "telemetry.otlpGatewayName" . }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "telemetry.otlpGatewayName" . }}
+        app.kubernetes.io/component: telemetry
+        app.kubernetes.io/part-of: wandb
+    spec:
+      containers:
+        - name: otel-collector
+          image: "otel/opentelemetry-collector-contrib:0.102.1"
+          imagePullPolicy: IfNotPresent
+          args:
+            - --config=/etc/otelcol/collector.yaml
+          ports:
+            - name: otlp-grpc
+              containerPort: 4317
+              protocol: TCP
+            - name: otlp-http
+              containerPort: 4318
+              protocol: TCP
+            - name: metrics
+              containerPort: 8888
+              protocol: TCP
+          volumeMounts:
+            - name: config
+              mountPath: /etc/otelcol
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "telemetry.otlpGatewayName" . }}-config
+            items:
+              - key: collector.yaml
+                path: collector.yaml
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "telemetry.otlpGatewayName" . }}
+  namespace: {{ include "telemetry.namespace" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "telemetry.otlpGatewayName" . }}
+    app.kubernetes.io/component: telemetry
+    app.kubernetes.io/part-of: wandb
+spec:
+  selector:
+    app.kubernetes.io/name: {{ include "telemetry.otlpGatewayName" . }}
+  ports:
+    - name: otlp-grpc
+      port: 4317
+      targetPort: otlp-grpc
+      protocol: TCP
+    - name: otlp-http
+      port: 4318
+      targetPort: otlp-http
+      protocol: TCP
+    - name: metrics
+      port: 8888
+      targetPort: metrics
+      protocol: TCP
+{{- end }}

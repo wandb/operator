@@ -1,10 +1,10 @@
-{{- if and .Values.telemetry.enabled .Values.telemetry.ui.grafana.enabled }}
+{{- if .Values.enabled }}
 ---
 apiVersion: grafana.integreatly.org/v1beta1
 kind: Grafana
 metadata:
   name: grafana
-  namespace: {{ include "operator.telemetry.namespace" . }}
+  namespace: {{ include "telemetry.namespace" . }}
   labels:
     dashboards: grafana
     app.kubernetes.io/component: telemetry
@@ -18,6 +18,8 @@ spec:
     auth.anonymous:
       enabled: "true"
       org_role: Admin
+  preferences:
+    homeDashboardUid: wandb-telemetry-overview
   deployment:
     spec:
       template:
@@ -32,7 +34,7 @@ apiVersion: grafana.integreatly.org/v1beta1
 kind: GrafanaDatasource
 metadata:
   name: victoria-metrics
-  namespace: {{ include "operator.telemetry.namespace" . }}
+  namespace: {{ include "telemetry.namespace" . }}
   labels:
     app.kubernetes.io/component: telemetry
     app.kubernetes.io/part-of: wandb
@@ -44,7 +46,7 @@ spec:
     name: VictoriaMetrics
     type: victoriametrics-metrics-datasource
     access: proxy
-    url: {{ include "operator.telemetry.metricsEndpoint" . | trimSuffix "/opentelemetry/v1/metrics" | quote }}
+    url: {{ include "telemetry.metricsEndpoint" . | trimSuffix "/opentelemetry/v1/metrics" | quote }}
     isDefault: true
     jsonData:
       timeInterval: 30s
@@ -53,7 +55,7 @@ apiVersion: grafana.integreatly.org/v1beta1
 kind: GrafanaDatasource
 metadata:
   name: victoria-logs
-  namespace: {{ include "operator.telemetry.namespace" . }}
+  namespace: {{ include "telemetry.namespace" . }}
   labels:
     app.kubernetes.io/component: telemetry
     app.kubernetes.io/part-of: wandb
@@ -65,7 +67,7 @@ spec:
     name: VictoriaLogs
     type: victoriametrics-logs-datasource
     access: proxy
-    url: {{ include "operator.telemetry.logsEndpoint" . | trimSuffix "/insert/opentelemetry/v1/logs" | quote }}
+    url: {{ include "telemetry.logsEndpoint" . | trimSuffix "/insert/opentelemetry/v1/logs" | quote }}
     jsonData:
       maxLines: 1000
 ---
@@ -73,7 +75,7 @@ apiVersion: grafana.integreatly.org/v1beta1
 kind: GrafanaDatasource
 metadata:
   name: victoria-traces
-  namespace: {{ include "operator.telemetry.namespace" . }}
+  namespace: {{ include "telemetry.namespace" . }}
   labels:
     app.kubernetes.io/component: telemetry
     app.kubernetes.io/part-of: wandb
@@ -85,27 +87,25 @@ spec:
     name: VictoriaTraces
     type: jaeger
     access: proxy
-    url: {{ include "operator.telemetry.tracesEndpoint" . | trimSuffix "/insert/opentelemetry/v1/traces" | quote }}
-{{- end }}
-
-{{- if and .Values.telemetry.enabled (eq .Values.telemetry.mode "managed") .Values.telemetry.ui.vmui.enabled }}
+    url: {{ include "telemetry.tracesEndpoint" . | trimSuffix "/insert/opentelemetry/v1/traces" | quote }}
 ---
-apiVersion: v1
-kind: Service
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDashboard
 metadata:
-  name: vmui
-  namespace: {{ include "operator.telemetry.namespace" . }}
+  name: wandb-telemetry-overview
+  namespace: {{ include "telemetry.namespace" . }}
   labels:
-    app.kubernetes.io/name: vmui
     app.kubernetes.io/component: telemetry
     app.kubernetes.io/part-of: wandb
 spec:
-  selector:
-    app.kubernetes.io/name: vmsingle
-    app.kubernetes.io/instance: {{ include "operator.telemetry.vmsingleName" . }}
-  ports:
-    - name: http
-      port: 8428
-      targetPort: 8428
-      protocol: TCP
+  uid: wandb-telemetry-overview
+  folder: W&B
+  instanceSelector:
+    matchLabels:
+      dashboards: grafana
+  datasources:
+    - inputName: DS_VICTORIAMETRICS
+      datasourceName: VictoriaMetrics
+  json: |-
+{{ .Files.Get "dashboards/wandb-telemetry-overview.json" | nindent 4 }}
 {{- end }}

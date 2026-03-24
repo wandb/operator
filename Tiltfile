@@ -238,21 +238,6 @@ if settings.get("installWandb"):
     )
 
 if settings.get("installTelemetry"):
-    telemetry_stack_flags = [
-        '--set=wandb-operator.enabled=false',
-        '--set=wandb.install=false',
-        '--set=telemetry.enabled=true',
-        '--set=telemetry.namespace=default',
-        '--set=mysql-operator.enabled=false',
-        '--set=redis-operator.enabled=false',
-        '--set=strimzi-kafka-operator.enabled=false',
-        '--set=minio-operator.enabled=false',
-        '--set=altinity-clickhouse-operator.enabled=false',
-        '--set=victoria-metrics-operator.enabled=false',
-        '--set=grafana-operator.enabled=false',
-        '--create-namespace',
-    ]
-
     local_resource(
         'Telemetry-CRDs-Ready',
         'kubectl wait --for=condition=established --timeout=120s ' +
@@ -264,16 +249,23 @@ if settings.get("installTelemetry"):
         'crd/vmpodscrapes.operator.victoriametrics.com ' +
         'crd/vmnodescrapes.operator.victoriametrics.com ' +
         'crd/grafanas.grafana.integreatly.org ' +
-        'crd/grafanadatasources.grafana.integreatly.org',
+        'crd/grafanadatasources.grafana.integreatly.org' +
+        ' && kubectl wait --for=condition=available --timeout=180s -n wandb-operator ' +
+        'deploy/third-party-operators-victoria-metrics-operator ' +
+        'deploy/third-party-operators-grafana-operator',
         resource_deps=["ThirdParty-Operators"],
         labels=[GROUP_TELEMETRY],
     )
     helm_resource(
         'Telemetry-Stack',
-        chart='./deploy/operator',
+        chart='./deploy/telemetry',
         release_name='telemetry-stack',
         namespace='wandb-operator',
-        flags=telemetry_stack_flags,
+        flags=[
+            '--set=enabled=true',
+            '--set=namespace=default',
+            '--create-namespace',
+        ],
         resource_deps=["Telemetry-CRDs-Ready"],
         labels=[GROUP_TELEMETRY],
     )
@@ -335,7 +327,6 @@ manager_entrypoint = ['/manager', '--log-format=' + settings['logFormat']]
 if settings.get("installTelemetry"):
     manager_entrypoint += [
         '--telemetry-enabled=true',
-        '--telemetry-mode=managed',
     ]
 
 docker_build_with_restart(

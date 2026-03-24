@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "enabled": {
+      "type": "boolean"
+    },
+    "namespace": {
+      "type": "string"
+    },
+    "retentionPeriod": {
+      "type": "string",
+      "minLength": 1
+    },
+    "scrape": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "kubeletCadvisor": {
+          "type": "boolean"
+        },
+        "operators": {
+          "type": "boolean"
+        },
+        "wandbApi": {
+          "type": "boolean"
+        },
+        "infrastructure": {
+          "type": "boolean"
+        }
+      }
+    },
+    "alerting": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "evaluationInterval": {
+          "type": "string",
+          "minLength": 1
+        },
+        "notifier": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "type": {
+              "type": "string",
+              "enum": ["webhook", "email", "slack"]
+            },
+            "target": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      }
+    }
+  }
+}

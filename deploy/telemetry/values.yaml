@@ -1,0 +1,17 @@
+enabled: false
+namespace: ""
+retentionPeriod: 1d
+scrape:
+  enabled: true
+  kubeletCadvisor: true
+  operators: true
+  wandbApi: true
+  infrastructure: true
+alerting:
+  enabled: false
+  evaluationInterval: 30s
+  notifier:
+    enabled: false
+    name: default
+    type: webhook
+    target: http://alertmanager-operated.monitoring.svc:9093

@@ -1,0 +1,50 @@
+{{- if .Values.enabled }}
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMSingle
+metadata:
+  name: {{ include "telemetry.vmsingleName" . }}
+  namespace: {{ include "telemetry.namespace" . }}
+  labels:
+    app.kubernetes.io/component: telemetry
+    app.kubernetes.io/part-of: wandb
+spec:
+  retentionPeriod: {{ .Values.retentionPeriod | quote }}
+  extraArgs:
+    opentelemetry.usePrometheusNaming: "true"
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMAgent
+metadata:
+  name: {{ include "telemetry.vmagentName" . }}
+  namespace: {{ include "telemetry.namespace" . }}
+  labels:
+    app.kubernetes.io/component: telemetry
+    app.kubernetes.io/part-of: wandb
+spec:
+  selectAllByDefault: true
+  remoteWrite:
+    - url: {{ printf "http://vmsingle-%s:8428/api/v1/write" (include "telemetry.vmsingleName" .) | quote }}
+---
+apiVersion: operator.victoriametrics.com/v1
+kind: VLSingle
+metadata:
+  name: {{ include "telemetry.vlsingleName" . }}
+  namespace: {{ include "telemetry.namespace" . }}
+  labels:
+    app.kubernetes.io/component: telemetry
+    app.kubernetes.io/part-of: wandb
+spec:
+  retentionPeriod: {{ .Values.retentionPeriod | quote }}
+---
+apiVersion: operator.victoriametrics.com/v1
+kind: VTSingle
+metadata:
+  name: {{ include "telemetry.vtsingleName" . }}
+  namespace: {{ include "telemetry.namespace" . }}
+  labels:
+    app.kubernetes.io/component: telemetry
+    app.kubernetes.io/part-of: wandb
+spec:
+  retentionPeriod: {{ .Values.retentionPeriod | quote }}
+{{- end }}

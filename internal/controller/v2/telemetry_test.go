@@ -13,82 +13,32 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-func TestTelemetryRuntimeConfigResolveEndpointsManagedWithOTLPGateway(t *testing.T) {
+func TestTelemetryRuntimeConfigResolveEndpointsEnabled(t *testing.T) {
 	cfg := DefaultTelemetryRuntimeConfig()
 	cfg.Enabled = true
-	cfg.Mode = TelemetryModeManaged
-	cfg.Managed.OTLPGateway.Name = "gateway-a"
-	cfg.Managed.OTLPGateway.HTTPPort = 14318
+	cfg.Namespace = "wandb"
 	cfg.Normalize()
 
 	resolved := cfg.ResolveEndpoints()
-	if resolved.MetricsEndpoint != "http://gateway-a:14318/v1/metrics" {
+	if resolved.MetricsEndpoint != "http://victoria-otlp-gateway.wandb.svc:4318/v1/metrics" {
 		t.Fatalf("unexpected metrics endpoint: %s", resolved.MetricsEndpoint)
 	}
-	if resolved.LogsEndpoint != "http://gateway-a:14318/v1/logs" {
+	if resolved.LogsEndpoint != "http://victoria-otlp-gateway.wandb.svc:4318/v1/logs" {
 		t.Fatalf("unexpected logs endpoint: %s", resolved.LogsEndpoint)
 	}
-	if resolved.TracesEndpoint != "http://gateway-a:14318/v1/traces" {
+	if resolved.TracesEndpoint != "http://victoria-otlp-gateway.wandb.svc:4318/v1/traces" {
 		t.Fatalf("unexpected traces endpoint: %s", resolved.TracesEndpoint)
 	}
 }
 
-func TestTelemetryRuntimeConfigResolveEndpointsManagedWithoutOTLPGateway(t *testing.T) {
+func TestTelemetryRuntimeConfigResolveEndpointsDisabled(t *testing.T) {
 	cfg := DefaultTelemetryRuntimeConfig()
-	cfg.Enabled = true
-	cfg.Mode = TelemetryModeManaged
-	cfg.Managed.Namespace = "wandb"
-	cfg.Managed.VMSingleName = "metrics-a"
-	cfg.Managed.VLSingleName = "logs-a"
-	cfg.Managed.VTSingleName = "traces-a"
-	cfg.Managed.OTLPGateway.Enabled = false
+	cfg.Enabled = false
 	cfg.Normalize()
 
 	resolved := cfg.ResolveEndpoints()
-	if resolved.MetricsEndpoint != "http://vmsingle-metrics-a.wandb.svc:8428/opentelemetry/v1/metrics" {
-		t.Fatalf("unexpected metrics endpoint: %s", resolved.MetricsEndpoint)
-	}
-	if resolved.LogsEndpoint != "http://vlsingle-logs-a.wandb.svc:9428/insert/opentelemetry/v1/logs" {
-		t.Fatalf("unexpected logs endpoint: %s", resolved.LogsEndpoint)
-	}
-	if resolved.TracesEndpoint != "http://vtsingle-traces-a.wandb.svc:10428/insert/opentelemetry/v1/traces" {
-		t.Fatalf("unexpected traces endpoint: %s", resolved.TracesEndpoint)
-	}
-}
-
-func TestTelemetryRuntimeConfigResolveEndpointsExternal(t *testing.T) {
-	cfg := DefaultTelemetryRuntimeConfig()
-	cfg.Enabled = true
-	cfg.Mode = TelemetryModeExternal
-	cfg.External = TelemetryEndpoints{
-		MetricsEndpoint: "https://metrics.example.com/v1/metrics",
-		LogsEndpoint:    "https://logs.example.com/v1/logs",
-		TracesEndpoint:  "https://traces.example.com/v1/traces",
-	}
-	cfg.Normalize()
-
-	resolved := cfg.ResolveEndpoints()
-	if resolved != cfg.External {
-		t.Fatalf("resolved endpoints do not match external endpoints: %+v", resolved)
-	}
-}
-
-func TestTelemetryRuntimeConfigValidateExternalRequiresEndpoints(t *testing.T) {
-	cfg := DefaultTelemetryRuntimeConfig()
-	cfg.Enabled = true
-	cfg.Mode = TelemetryModeExternal
-	cfg.External.MetricsEndpoint = "https://metrics.example.com/v1/metrics"
-	cfg.Normalize()
-
-	if err := cfg.Validate(); err == nil {
-		t.Fatalf("expected validation error for missing logs/traces endpoints")
-	}
-
-	cfg.External.LogsEndpoint = "https://logs.example.com/v1/logs"
-	cfg.External.TracesEndpoint = "https://traces.example.com/v1/traces"
-	cfg.Normalize()
-	if err := cfg.Validate(); err != nil {
-		t.Fatalf("unexpected validation error: %v", err)
+	if resolved.MetricsEndpoint != "" || resolved.LogsEndpoint != "" || resolved.TracesEndpoint != "" {
+		t.Fatalf("expected empty telemetry endpoints when telemetry is disabled: %+v", resolved)
 	}
 }
 
@@ -112,7 +62,6 @@ func TestReconcileTelemetryConnectionSecretCreateManaged(t *testing.T) {
 
 	cfg := DefaultTelemetryRuntimeConfig()
 	cfg.Enabled = true
-	cfg.Mode = TelemetryModeManaged
 	cfg.Normalize()
 
 	if err := reconcileTelemetryConnectionSecret(context.Background(), client, wandb, cfg); err != nil {
@@ -154,7 +103,7 @@ func TestReconcileTelemetryConnectionSecretCreateManaged(t *testing.T) {
 	}
 }
 
-func TestReconcileTelemetryConnectionSecretUpdateExternal(t *testing.T) {
+func TestReconcileTelemetryConnectionSecretUpdateManaged(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := corev1.AddToScheme(scheme); err != nil {
 		t.Fatalf("failed adding corev1 to scheme: %v", err)
@@ -185,12 +134,7 @@ func TestReconcileTelemetryConnectionSecretUpdateExternal(t *testing.T) {
 
 	cfg := DefaultTelemetryRuntimeConfig()
 	cfg.Enabled = true
-	cfg.Mode = TelemetryModeExternal
-	cfg.External = TelemetryEndpoints{
-		MetricsEndpoint: "https://metrics.example.com/v1/metrics",
-		LogsEndpoint:    "https://logs.example.com/v1/logs",
-		TracesEndpoint:  "https://traces.example.com/v1/traces",
-	}
+	cfg.Namespace = "wandb"
 	cfg.Normalize()
 
 	if err := reconcileTelemetryConnectionSecret(context.Background(), client, wandb, cfg); err != nil {
@@ -203,16 +147,16 @@ func TestReconcileTelemetryConnectionSecretUpdateExternal(t *testing.T) {
 		t.Fatalf("failed retrieving updated telemetry secret: %v", err)
 	}
 
-	if got := string(updated.Data["OTEL_EXPORTER_OTLP_METRICS_ENDPOINT"]); got != cfg.External.MetricsEndpoint {
+	if got := string(updated.Data["OTEL_EXPORTER_OTLP_METRICS_ENDPOINT"]); got != "http://victoria-otlp-gateway.wandb.svc:4318/v1/metrics" {
 		t.Fatalf("unexpected metrics endpoint: %q", got)
 	}
-	if got := string(updated.Data["OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"]); got != cfg.External.LogsEndpoint {
+	if got := string(updated.Data["OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"]); got != "http://victoria-otlp-gateway.wandb.svc:4318/v1/logs" {
 		t.Fatalf("unexpected logs endpoint: %q", got)
 	}
-	if got := string(updated.Data["OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"]); got != cfg.External.TracesEndpoint {
+	if got := string(updated.Data["OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"]); got != "http://victoria-otlp-gateway.wandb.svc:4318/v1/traces" {
 		t.Fatalf("unexpected traces endpoint: %q", got)
 	}
-	if got := string(updated.Data["GORILLA_TRACER"]); got != "otlp+https://traces.example.com" {
+	if got := string(updated.Data["GORILLA_TRACER"]); got != "otlp+http://victoria-otlp-gateway.wandb.svc:4318" {
 		t.Fatalf("unexpected gorilla tracer connection in updated secret: %q", got)
 	}
 }

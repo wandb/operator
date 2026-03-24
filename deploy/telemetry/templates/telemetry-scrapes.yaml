@@ -1,11 +1,11 @@
-{{- if and .Values.telemetry.enabled (eq .Values.telemetry.mode "managed") .Values.telemetry.scrape.enabled }}
-{{- if .Values.telemetry.scrape.kubeletCadvisor }}
+{{- if and .Values.enabled .Values.scrape.enabled }}
+{{- if .Values.scrape.kubeletCadvisor }}
 ---
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMNodeScrape
 metadata:
   name: kubelet-cadvisor
-  namespace: {{ include "operator.telemetry.namespace" . }}
+  namespace: {{ include "telemetry.namespace" . }}
   labels:
     app.kubernetes.io/component: telemetry
     app.kubernetes.io/part-of: wandb
@@ -26,50 +26,51 @@ spec:
       replacement: /api/v1/nodes/$1/proxy/metrics/cadvisor
 {{- end }}
 
-{{- if .Values.telemetry.scrape.operators }}
+{{- if .Values.scrape.operators }}
 ---
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMServiceScrape
 metadata:
   name: wandb-operator
-  namespace: {{ include "operator.telemetry.namespace" . }}
+  namespace: {{ include "telemetry.namespace" . }}
   labels:
     app.kubernetes.io/component: telemetry
     app.kubernetes.io/part-of: wandb
 spec:
   selector:
     matchLabels:
-      app.kubernetes.io/name: wandb-operator
+      app.kubernetes.io/name: operator
+      control-plane: controller-manager
   namespaceSelector:
     matchNames:
-      - {{ .Release.Namespace }}
+      - operator-system
   endpoints:
-    - port: metrics
+    - port: https
       scheme: http
 ---
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMServiceScrape
 metadata:
   name: clickhouse-operator
-  namespace: {{ include "operator.telemetry.namespace" . }}
+  namespace: {{ include "telemetry.namespace" . }}
   labels:
     app.kubernetes.io/component: telemetry
     app.kubernetes.io/part-of: wandb
 spec:
   selector:
     matchLabels:
-      app: clickhouse-operator
+      app.kubernetes.io/name: altinity-clickhouse-operator
   namespaceSelector:
     matchNames:
       - {{ .Release.Namespace }}
   endpoints:
-    - port: metrics
+    - port: op-metrics
 ---
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMServiceScrape
 metadata:
   name: grafana-operator
-  namespace: {{ include "operator.telemetry.namespace" . }}
+  namespace: {{ include "telemetry.namespace" . }}
   labels:
     app.kubernetes.io/component: telemetry
     app.kubernetes.io/part-of: wandb
@@ -87,7 +88,7 @@ apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMServiceScrape
 metadata:
   name: victoria-metrics-operator
-  namespace: {{ include "operator.telemetry.namespace" . }}
+  namespace: {{ include "telemetry.namespace" . }}
   labels:
     app.kubernetes.io/component: telemetry
     app.kubernetes.io/part-of: wandb
@@ -100,35 +101,33 @@ spec:
       - {{ .Release.Namespace }}
   endpoints:
     - port: http
-{{- if .Values.telemetry.managed.otlpGateway.enabled }}
 ---
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMServiceScrape
 metadata:
   name: otlp-gateway
-  namespace: {{ include "operator.telemetry.namespace" . }}
+  namespace: {{ include "telemetry.namespace" . }}
   labels:
     app.kubernetes.io/component: telemetry
     app.kubernetes.io/part-of: wandb
 spec:
   selector:
     matchLabels:
-      app.kubernetes.io/name: {{ include "operator.telemetry.otlpGatewayName" . }}
+      app.kubernetes.io/name: {{ include "telemetry.otlpGatewayName" . }}
   namespaceSelector:
     matchNames:
-      - {{ include "operator.telemetry.namespace" . }}
+      - {{ include "telemetry.namespace" . }}
   endpoints:
     - port: metrics
 {{- end }}
-{{- end }}
 
-{{- if .Values.telemetry.scrape.wandbApi }}
+{{- if .Values.scrape.wandbApi }}
 ---
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMPodScrape
 metadata:
   name: wandb-api
-  namespace: {{ include "operator.telemetry.namespace" . }}
+  namespace: {{ include "telemetry.namespace" . }}
   labels:
     app.kubernetes.io/component: telemetry
     app.kubernetes.io/part-of: wandb
@@ -139,7 +138,7 @@ spec:
         operator: Exists
   namespaceSelector:
     matchNames:
-      - {{ include "operator.telemetry.namespace" . }}
+      - {{ include "telemetry.namespace" . }}
   podMetricsEndpoints:
     - path: /metrics
       relabelConfigs:
@@ -155,13 +154,13 @@ spec:
           action: replace
 {{- end }}
 
-{{- if .Values.telemetry.scrape.infrastructure }}
+{{- if .Values.scrape.infrastructure }}
 ---
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMPodScrape
 metadata:
   name: mysql-pxc
-  namespace: {{ include "operator.telemetry.namespace" . }}
+  namespace: {{ include "telemetry.namespace" . }}
   labels:
     app.kubernetes.io/component: telemetry
     app.kubernetes.io/part-of: wandb
@@ -171,7 +170,7 @@ spec:
       app.kubernetes.io/component: pxc
   namespaceSelector:
     matchNames:
-      - {{ include "operator.telemetry.namespace" . }}
+      - {{ include "telemetry.namespace" . }}
   podMetricsEndpoints:
     - port: metrics
       path: /metrics
@@ -180,7 +179,7 @@ apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMPodScrape
 metadata:
   name: mysql-proxysql
-  namespace: {{ include "operator.telemetry.namespace" . }}
+  namespace: {{ include "telemetry.namespace" . }}
   labels:
     app.kubernetes.io/component: telemetry
     app.kubernetes.io/part-of: wandb
@@ -190,7 +189,7 @@ spec:
       app.kubernetes.io/component: proxysql
   namespaceSelector:
     matchNames:
-      - {{ include "operator.telemetry.namespace" . }}
+      - {{ include "telemetry.namespace" . }}
   podMetricsEndpoints:
     - port: stats
       path: /metrics
@@ -199,7 +198,7 @@ apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMPodScrape
 metadata:
   name: mysql-innodb
-  namespace: {{ include "operator.telemetry.namespace" . }}
+  namespace: {{ include "telemetry.namespace" . }}
   labels:
     app.kubernetes.io/component: telemetry
     app.kubernetes.io/part-of: wandb
@@ -210,7 +209,7 @@ spec:
       mysql.oracle.com/instance-type: group-member
   namespaceSelector:
     matchNames:
-      - {{ include "operator.telemetry.namespace" . }}
+      - {{ include "telemetry.namespace" . }}
   podMetricsEndpoints:
     - port: metrics
       path: /metrics
@@ -219,7 +218,7 @@ apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMPodScrape
 metadata:
   name: kafka-brokers
-  namespace: {{ include "operator.telemetry.namespace" . }}
+  namespace: {{ include "telemetry.namespace" . }}
   labels:
     app.kubernetes.io/component: telemetry
     app.kubernetes.io/part-of: wandb
@@ -229,7 +228,7 @@ spec:
       strimzi.io/kind: Kafka
   namespaceSelector:
     matchNames:
-      - {{ include "operator.telemetry.namespace" . }}
+      - {{ include "telemetry.namespace" . }}
   podMetricsEndpoints:
     - port: tcp-prometheus
       path: /metrics
@@ -238,17 +237,17 @@ apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMPodScrape
 metadata:
   name: minio-tenant
-  namespace: {{ include "operator.telemetry.namespace" . }}
+  namespace: {{ include "telemetry.namespace" . }}
   labels:
     app.kubernetes.io/component: telemetry
     app.kubernetes.io/part-of: wandb
 spec:
   selector:
     matchLabels:
-      v1.min.io/tenant: wandb-minio
+      weightsandbiases.apps.wandb.com/component: minio
   namespaceSelector:
     matchNames:
-      - {{ include "operator.telemetry.namespace" . }}
+      - {{ include "telemetry.namespace" . }}
   podMetricsEndpoints:
     - port: minio-port
       path: /minio/metrics/v3
@@ -260,17 +259,17 @@ apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMPodScrape
 metadata:
   name: redis
-  namespace: {{ include "operator.telemetry.namespace" . }}
+  namespace: {{ include "telemetry.namespace" . }}
   labels:
     app.kubernetes.io/component: telemetry
     app.kubernetes.io/part-of: wandb
 spec:
   selector:
     matchLabels:
-      role: replication
+      role: standalone
   namespaceSelector:
     matchNames:
-      - {{ include "operator.telemetry.namespace" . }}
+      - {{ include "telemetry.namespace" . }}
   podMetricsEndpoints:
     - port: redis-exporter
       path: /metrics
@@ -279,14 +278,14 @@ apiVersion: v1
 kind: Service
 metadata:
   name: clickhouse-metrics
-  namespace: {{ include "operator.telemetry.namespace" . }}
+  namespace: {{ include "telemetry.namespace" . }}
   labels:
     app: clickhouse-metrics
     app.kubernetes.io/component: telemetry
     app.kubernetes.io/part-of: wandb
 spec:
   selector:
-    clickhouse.altinity.com/chi: wandb-ch-install
+    weightsandbiases.apps.wandb.com/component: clickhouse
   ports:
     - name: metrics
       port: 9363
@@ -298,7 +297,7 @@ apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMServiceScrape
 metadata:
   name: clickhouse
-  namespace: {{ include "operator.telemetry.namespace" . }}
+  namespace: {{ include "telemetry.namespace" . }}
   labels:
     app.kubernetes.io/component: telemetry
     app.kubernetes.io/part-of: wandb
@@ -308,7 +307,7 @@ spec:
       app: clickhouse-metrics
   namespaceSelector:
     matchNames:
-      - {{ include "operator.telemetry.namespace" . }}
+      - {{ include "telemetry.namespace" . }}
   endpoints:
     - port: metrics
       path: /metrics

@@ -1,0 +1,292 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_VICTORIAMETRICS",
+      "label": "VictoriaMetrics",
+      "type": "datasource",
+      "pluginId": "victoriametrics-metrics-datasource",
+      "pluginName": "VictoriaMetrics"
+    }
+  ],
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "links": [],
+  "panels": [
+    {
+      "type": "row",
+      "title": "Overview",
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0},
+      "collapsed": false
+    },
+    {
+      "type": "stat",
+      "title": "Active Targets",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 1},
+      "targets": [{"expr": "sum(up)", "refId": "A"}],
+      "fieldConfig": {"defaults": {"thresholds": {"mode": "absolute", "steps": [{"color": "red"}, {"color": "green", "value": 1}]}}, "overrides": []},
+      "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"}
+    },
+    {
+      "type": "stat",
+      "title": "Scrape Success",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 1},
+      "targets": [{"expr": "100 * avg(up)", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "percent", "thresholds": {"mode": "absolute", "steps": [{"color": "red"}, {"color": "yellow", "value": 90}, {"color": "green", "value": 99}]}}, "overrides": []},
+      "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"}
+    },
+    {
+      "type": "stat",
+      "title": "Jobs Reporting",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 1},
+      "targets": [{"expr": "count(count by (job) (up))", "refId": "A"}],
+      "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"}
+    },
+    {
+      "type": "stat",
+      "title": "Down Targets",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 1},
+      "targets": [{"expr": "count(up == 0)", "refId": "A"}],
+      "fieldConfig": {"defaults": {"thresholds": {"mode": "absolute", "steps": [{"color": "green"}, {"color": "red", "value": 1}]}}, "overrides": []},
+      "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"}
+    },
+
+    {
+      "type": "row",
+      "title": "Traces",
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 5},
+      "collapsed": false
+    },
+    {
+      "type": "stat",
+      "title": "Spans Accepted / sec",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 4, "w": 5, "x": 0, "y": 6},
+      "targets": [{"expr": "sum(rate(otelcol_receiver_accepted_spans[5m]))", "refId": "A"}],
+      "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value"}
+    },
+    {
+      "type": "stat",
+      "title": "Spans Exported / sec",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 4, "w": 5, "x": 5, "y": 6},
+      "targets": [{"expr": "sum(rate(otelcol_exporter_sent_spans[5m]))", "refId": "A"}],
+      "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value"}
+    },
+    {
+      "type": "stat",
+      "title": "Failed Span Exports / sec",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 4, "w": 5, "x": 10, "y": 6},
+      "targets": [{"expr": "sum(rate(otelcol_exporter_send_failed_spans[5m]))", "refId": "A"}],
+      "fieldConfig": {"defaults": {"thresholds": {"mode": "absolute", "steps": [{"color": "green"}, {"color": "red", "value": 0.1}]}}, "overrides": []},
+      "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value"}
+    },
+    {
+      "type": "text",
+      "title": "Trace Demo Notes",
+      "gridPos": {"h": 4, "w": 9, "x": 15, "y": 6},
+      "options": {
+        "content": "<ul><li>Trace flow is currently easiest to demo through gorilla web traffic.</li><li>Use <b>Explore</b> with the <b>VictoriaTraces</b> datasource to inspect spans.</li><li>If this section is active but request traces look thin, the next improvement is better web trace coverage and attributes at the app edge.</li></ul>",
+        "mode": "html"
+      }
+    },
+
+    {
+      "type": "row",
+      "title": "API",
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 10},
+      "collapsed": false
+    },
+    {
+      "type": "stat",
+      "title": "Requests / sec",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 11},
+      "targets": [{"expr": "sum(rate(http_server_request_duration_seconds_count{service_name=\"gorilla\"}[5m]))", "refId": "A"}],
+      "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value"}
+    },
+    {
+      "type": "stat",
+      "title": "Avg Latency",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 11},
+      "targets": [{"expr": "1000 * (sum(rate(http_server_request_duration_seconds_sum{service_name=\"gorilla\"}[5m])) / sum(rate(http_server_request_duration_seconds_count{service_name=\"gorilla\"}[5m])))", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "ms"}, "overrides": []},
+      "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value"}
+    },
+    {
+      "type": "stat",
+      "title": "P95 Latency",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 11},
+      "targets": [{"expr": "1000 * histogram_quantile(0.95, sum(rate(http_server_request_duration_seconds_bucket{service_name=\"gorilla\"}[5m])) by (le))", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "ms"}, "overrides": []},
+      "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value"}
+    },
+    {
+      "type": "timeseries",
+      "title": "Responses by Status Code",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 15},
+      "targets": [{"expr": "sum by (http_response_status_code) (rate(http_server_request_duration_seconds_count{service_name=\"gorilla\"}[5m]))", "legendFormat": "{{http_response_status_code}}", "refId": "A"}]
+    },
+
+    {
+      "type": "row",
+      "title": "ClickHouse",
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 23},
+      "collapsed": false
+    },
+    {
+      "type": "stat",
+      "title": "Uptime",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 24},
+      "targets": [{"expr": "sum(ClickHouseAsyncMetrics_Uptime)", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value"}
+    },
+    {
+      "type": "stat",
+      "title": "Memory Tracking",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 24},
+      "targets": [{"expr": "sum(ClickHouseMetrics_MemoryTracking)", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "bytes"}, "overrides": []},
+      "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value"}
+    },
+    {
+      "type": "stat",
+      "title": "HTTP Connections",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 24},
+      "targets": [{"expr": "sum(ClickHouseMetrics_HTTPConnection)", "refId": "A"}],
+      "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value"}
+    },
+    {
+      "type": "stat",
+      "title": "Active Merges",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 24},
+      "targets": [{"expr": "sum(ClickHouseMetrics_Merge)", "refId": "A"}],
+      "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value"}
+    },
+
+    {
+      "type": "row",
+      "title": "MySQL",
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 28},
+      "collapsed": false
+    },
+    {
+      "type": "text",
+      "title": "MySQL Metrics Status",
+      "gridPos": {"h": 4, "w": 24, "x": 0, "y": 29},
+      "options": {
+        "content": "<p>MySQL exporter metrics are not wired into VictoriaMetrics in this environment yet. This section is intentionally present so the gap is visible during demos and development.</p>",
+        "mode": "html"
+      }
+    },
+
+    {
+      "type": "row",
+      "title": "Kafka",
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 33},
+      "collapsed": false
+    },
+    {
+      "type": "stat",
+      "title": "Active Controllers",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 34},
+      "targets": [{"expr": "sum(kafka_controller_kafkacontroller_activecontrollercount)", "refId": "A"}],
+      "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value"}
+    },
+    {
+      "type": "stat",
+      "title": "Messages In / sec",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 34},
+      "targets": [{"expr": "sum(rate(kafka_server_brokertopicmetrics_messagesinpersec_total[5m]))", "refId": "A"}],
+      "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value"}
+    },
+    {
+      "type": "stat",
+      "title": "Bytes In / sec",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 34},
+      "targets": [{"expr": "sum(rate(kafka_server_brokertopicmetrics_bytesinpersec_total[5m]))", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "Bps"}, "overrides": []},
+      "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value"}
+    },
+    {
+      "type": "stat",
+      "title": "Offline Partitions",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 34},
+      "targets": [{"expr": "sum(kafka_controller_kafkacontroller_offlinepartitionscount)", "refId": "A"}],
+      "fieldConfig": {"defaults": {"thresholds": {"mode": "absolute", "steps": [{"color": "green"}, {"color": "red", "value": 1}]}}, "overrides": []},
+      "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value"}
+    },
+
+    {
+      "type": "row",
+      "title": "Storage",
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 38},
+      "collapsed": false
+    },
+    {
+      "type": "stat",
+      "title": "MinIO Requests / sec",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 39},
+      "targets": [{"expr": "sum(rate(minio_api_requests_total[5m]))", "refId": "A"}],
+      "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value"}
+    },
+    {
+      "type": "stat",
+      "title": "Usable Free Capacity",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 39},
+      "targets": [{"expr": "sum(minio_cluster_health_capacity_usable_free_bytes)", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "bytes"}, "overrides": []},
+      "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value"}
+    },
+    {
+      "type": "stat",
+      "title": "Usable Total Capacity",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 39},
+      "targets": [{"expr": "sum(minio_cluster_health_capacity_usable_total_bytes)", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "bytes"}, "overrides": []},
+      "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value"}
+    },
+    {
+      "type": "stat",
+      "title": "MinIO Process RSS",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 39},
+      "targets": [{"expr": "sum(minio_system_process_resident_memory_bytes)", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "bytes"}, "overrides": []},
+      "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value"}
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": ["wandb", "telemetry"],
+  "templating": {"list": []},
+  "time": {"from": "now-30m", "to": "now"},
+  "timezone": "browser",
+  "title": "W&B Telemetry Overview",
+  "uid": "wandb-telemetry-overview",
+  "version": 2
+}

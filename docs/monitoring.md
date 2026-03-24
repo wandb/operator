@@ -1,75 +1,54 @@
 # Monitoring and Telemetry Guide
 
-This repo now supports a consolidated telemetry stack with VictoriaMetrics in both Helm and Tilt workflows.
+This repo now ships one managed telemetry stack for W&B.
 
-## Modes
+## Behavior
 
-### Managed mode
-Use this when the chart should install telemetry components in-cluster.
+- `telemetry.enabled: false`  
+  No telemetry stack resources are rendered and the operator does not wire OTEL endpoints.
 
-Installed (optional/toggle-driven):
-- `VMSingle`
-- `VMAgent`
-- `VLSingle`
-- `VTSingle`
-- Scrapes (`VMNodeScrape`, `VMPodScrape`, `VMServiceScrape`)
-- Alerting (`VMRule`, `VMAlert`)
-- Optional UI (`Grafana`, `vmui`)
-- Optional `Perses`
+- `telemetry.enabled: true`  
+  The managed Victoria stack is installed and the operator writes OTEL connection settings for apps.
 
-### External mode
-Use this when metrics/logs/traces should be exported to existing external endpoints.
+Installed resources in managed mode:
+- `VMSingle`, `VMAgent`, `VLSingle`, `VTSingle`
+- OTLP gateway collector (`victoria-otlp-gateway`)
+- Scrapes (`VMNodeScrape`, `VMPodScrape`, `VMServiceScrape`) when `telemetry.scrape.enabled=true`
+- Alerting (`VMRule`, `VMAlert`) when `telemetry.alerting.enabled=true`
+- Grafana + Victoria datasources
 
-In external mode, managed VM resources are not rendered.
+Not installed:
+- Perses
+- vmui
 
-## Helm Configuration
+## Helm Values
 
-### 1. Telemetry stack values (chart resources)
-Set these under top-level `telemetry`.
-
-Managed example:
+For the full operator install, set these under top-level `telemetry`:
 
 ```yaml
 telemetry:
   enabled: true
-  mode: managed
   namespace: wandb
-  ui:
-    grafana:
-      enabled: false
-    vmui:
-      enabled: false
-  alerting:
+  retentionPeriod: 1d
+  scrape:
     enabled: true
-    notifier:
-      enabled: true
-      target: http://alertmanager-operated.monitoring.svc:9093
+  alerting:
+    enabled: false
 ```
 
-External example:
+Notes:
+- Retention defaults to `1d`.
+- There is no customer-facing external endpoint mode in this phase.
+- `helm install wandb-operator ./deploy/operator --set telemetry.enabled=true` installs the operator plus the managed telemetry stack.
+- `helm install telemetry ./deploy/telemetry --set enabled=true --set namespace=<ns>` installs just the telemetry resources and expects the VictoriaMetrics/Grafana operators and CRDs to already exist.
 
-```yaml
-telemetry:
-  enabled: true
-  mode: external
-  external:
-    metricsEndpoint: https://metrics.example.com/v1/metrics
-    logsEndpoint: https://logs.example.com/v1/logs
-    tracesEndpoint: https://traces.example.com/v1/traces
-```
+## Operator Runtime Values
 
-### 2. Operator runtime telemetry values (secret + env source resolution)
-Set these under `wandb-operator.telemetry`.
+Set OTEL secret defaults under `wandb-operator.telemetry`:
 
 ```yaml
 wandb-operator:
   telemetry:
-    enabled: true
-    mode: managed
-    managed:
-      vmsingleName: victoria-instance
-      vlsingleName: victoria-logs
-      vtsingleName: victoria-traces
     otel:
       secretName: wandb-otel-connection
       protocol: http/protobuf
@@ -77,27 +56,19 @@ wandb-operator:
       resourceAttributes: deployment.environment=prod
 ```
 
-For external runtime:
-
-```yaml
-wandb-operator:
-  telemetry:
-    enabled: true
-    mode: external
-    metricsEndpoint: https://metrics.example.com/v1/metrics
-    logsEndpoint: https://logs.example.com/v1/logs
-    tracesEndpoint: https://traces.example.com/v1/traces
-```
-
 ## Tilt Usage
 
 Set `installTelemetry: true` in `tilt-settings.json`.
 
-Tilt now uses Helm-driven telemetry resources (no static telemetry YAML apply path), and passes telemetry runtime flags to the locally built operator manager.
+Tilt installs the telemetry stack through Helm and exposes endpoints for:
+- Grafana
+- VictoriaMetrics
+- VictoriaLogs
+- VictoriaTraces
 
-## Using `source.type=telemetry` in manifests
+## Manifest `source.type=telemetry`
 
-You can source app env vars from the operator-managed telemetry secret:
+You can source env vars from the operator-managed telemetry secret:
 
 ```yaml
 env:
@@ -119,34 +90,14 @@ env:
         field: tracesEndpoint
 ```
 
-Supported telemetry `field` values:
-- `metricsEndpoint`
-- `logsEndpoint`
-- `tracesEndpoint`
-- `metricsExporter`
-- `logsExporter`
-- `tracesExporter`
-- `protocol`
-- `serviceName`
-- `resourceAttributes`
-- `gorillaTracer`
-
 ## Validation Checklist
 
-1. Render checks:
-   - `helm template ... --set telemetry.enabled=true --set telemetry.mode=managed`
-   - `helm template ... --set telemetry.enabled=true --set telemetry.mode=external --set telemetry.external.metricsEndpoint=... --set telemetry.external.logsEndpoint=... --set telemetry.external.tracesEndpoint=...`
-2. Secret check:
-   - `kubectl get secret wandb-otel-connection -n <wandb-namespace> -o yaml`
-3. Pod env check:
-   - `kubectl exec -n <wandb-namespace> deploy/<app> -- env | grep OTEL_`
-4. Alerting check:
-   - `kubectl get vmalert,vmrule -n <telemetry-namespace>`
-5. Optional UI check:
+1. Render stack:
+   - `helm template ./deploy/operator --set telemetry.enabled=true`
+   - or `helm template ./deploy/telemetry --set enabled=true --set namespace=<telemetry-namespace>`
+2. Verify Grafana resources:
    - `kubectl get grafana,grafanadatasource -n <telemetry-namespace>`
-   - `kubectl get svc vmui -n <telemetry-namespace>`
-
-## Notes
-
-- Per-infrastructure telemetry toggles in the W&B CR (`mysql/redis/kafka/minio/clickhouse.telemetry.enabled`) remain in place for exporter behavior.
-- Managed Grafana and vmui remain disabled by default.
+3. Verify telemetry secret:
+   - `kubectl get secret wandb-otel-connection -n <wandb-namespace> -o yaml`
+4. Verify pod env:
+   - `kubectl exec -n <wandb-namespace> deploy/<app> -- env | grep OTEL_`

@@ -1870,12 +1870,24 @@ func resolveServicePortFromManifest(app serverManifest.Application, requestedPor
 		}
 	}
 
-	if requestedPort == "" && len(app.Ports) > 0 {
-		return app.Ports[0].ContainerPort, true
+	for _, container := range app.Containers {
+		if requestedPort == "" && len(container.Ports) > 0 {
+			return container.Ports[0].ContainerPort, true
+		}
+		for _, p := range container.Ports {
+			if p.Name == requestedPort {
+				return p.ContainerPort, true
+			}
+		}
 	}
-	for _, p := range app.Ports {
-		if p.Name == requestedPort {
-			return p.ContainerPort, true
+	for _, container := range app.InitContainers {
+		if requestedPort == "" && len(container.Ports) > 0 {
+			return container.Ports[0].ContainerPort, true
+		}
+		for _, p := range container.Ports {
+			if p.Name == requestedPort {
+				return p.ContainerPort, true
+			}
 		}
 	}
 

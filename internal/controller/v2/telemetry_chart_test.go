@@ -11,7 +11,6 @@ func TestTelemetryChartManagedModeRendersCoreStack(t *testing.T) {
 	output := runHelmTemplate(t,
 		"--set", "wandb-operator.enabled=false",
 		"--set", "telemetry.enabled=true",
-		"--set", "telemetry.mode=managed",
 	)
 
 	mustContain(t, output, "kind: VMSingle")
@@ -20,16 +19,20 @@ func TestTelemetryChartManagedModeRendersCoreStack(t *testing.T) {
 	mustContain(t, output, "kind: VTSingle")
 	mustContain(t, output, "name: victoria-otlp-gateway-config")
 	mustContain(t, output, "name: victoria-otlp-gateway")
+	mustContain(t, output, "kind: Grafana")
+	mustContain(t, output, "kind: GrafanaDatasource")
+	mustContain(t, output, "url: \"http://vmsingle-victoria-instance:8428\"")
+	mustContain(t, output, "url: \"http://vlsingle-victoria-logs:9428\"")
+	mustContain(t, output, "url: \"http://vtsingle-victoria-traces:10428\"")
+	mustNotContain(t, output, "name: vmui")
+	mustNotContain(t, output, "name: perses")
+	mustContain(t, output, "retentionPeriod: \"1d\"")
 }
 
-func TestTelemetryChartExternalModeSkipsManagedStack(t *testing.T) {
+func TestTelemetryChartDisabledSkipsManagedStack(t *testing.T) {
 	output := runHelmTemplate(t,
 		"--set", "wandb-operator.enabled=false",
-		"--set", "telemetry.enabled=true",
-		"--set", "telemetry.mode=external",
-		"--set", "telemetry.external.metricsEndpoint=https://metrics.example.com/v1/metrics",
-		"--set", "telemetry.external.logsEndpoint=https://logs.example.com/v1/logs",
-		"--set", "telemetry.external.tracesEndpoint=https://traces.example.com/v1/traces",
+		"--set", "telemetry.enabled=false",
 	)
 
 	mustNotContain(t, output, "kind: VMSingle")
@@ -38,57 +41,46 @@ func TestTelemetryChartExternalModeSkipsManagedStack(t *testing.T) {
 	mustNotContain(t, output, "kind: VTSingle")
 	mustNotContain(t, output, "name: victoria-otlp-gateway-config")
 	mustNotContain(t, output, "name: victoria-otlp-gateway")
+	mustNotContain(t, output, "kind: Grafana")
 }
 
-func TestTelemetryChartUIToggles(t *testing.T) {
-	defaultOutput := runHelmTemplate(t,
-		"--set", "wandb-operator.enabled=false",
-		"--set", "telemetry.enabled=true",
-		"--set", "telemetry.mode=managed",
+func TestStandaloneTelemetryChartManagedModeRendersCoreStack(t *testing.T) {
+	output := runHelmTemplateForChart(t, filepath.Join("..", "..", "..", "deploy", "telemetry"),
+		"--set", "enabled=true",
+		"--set", "namespace=wandb",
 	)
-	mustNotContain(t, defaultOutput, "kind: Grafana")
-	mustNotContain(t, defaultOutput, "name: vmui")
 
-	toggledOutput := runHelmTemplate(t,
-		"--set", "wandb-operator.enabled=false",
-		"--set", "telemetry.enabled=true",
-		"--set", "telemetry.mode=managed",
-		"--set", "telemetry.ui.grafana.enabled=true",
-		"--set", "telemetry.ui.vmui.enabled=true",
-	)
-	mustContain(t, toggledOutput, "kind: Grafana")
-	mustContain(t, toggledOutput, "kind: GrafanaDatasource")
-	mustContain(t, toggledOutput, "name: vmui")
-}
-
-func TestTelemetryChartExternalModeSchemaGuard(t *testing.T) {
-	_, err := runHelmTemplateWithError(t,
-		"--set", "wandb-operator.enabled=false",
-		"--set", "telemetry.enabled=true",
-		"--set", "telemetry.mode=external",
-	)
-	if err == nil {
-		t.Fatalf("expected helm template to fail when external telemetry endpoints are missing")
-	}
+	mustContain(t, output, "kind: VMSingle")
+	mustContain(t, output, "kind: VMAgent")
+	mustContain(t, output, "kind: Grafana")
+	mustContain(t, output, "url: \"http://vmsingle-victoria-instance:8428\"")
 }
 
 func runHelmTemplate(t *testing.T, extraArgs ...string) string {
 	t.Helper()
-	output, err := runHelmTemplateWithError(t, extraArgs...)
+	output, err := runHelmTemplateWithError(t, filepath.Join("..", "..", "..", "deploy", "operator"), extraArgs...)
 	if err != nil {
 		t.Fatalf("helm template failed: %v\noutput:\n%s", err, output)
 	}
 	return output
 }
 
-func runHelmTemplateWithError(t *testing.T, extraArgs ...string) (string, error) {
+func runHelmTemplateForChart(t *testing.T, chartPath string, extraArgs ...string) string {
+	t.Helper()
+	output, err := runHelmTemplateWithError(t, chartPath, extraArgs...)
+	if err != nil {
+		t.Fatalf("helm template failed: %v\noutput:\n%s", err, output)
+	}
+	return output
+}
+
+func runHelmTemplateWithError(t *testing.T, chartPath string, extraArgs ...string) (string, error) {
 	t.Helper()
 	if _, err := exec.LookPath("helm"); err != nil {
 		t.Skipf("helm binary not found: %v", err)
 		return "", nil
 	}
 
-	chartPath := filepath.Join("..", "..", "..", "deploy", "operator")
 	args := []string{"template", "telemetry-test", chartPath, "-n", "wandb-operator"}
 	args = append(args, extraArgs...)
 
