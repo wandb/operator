@@ -8,10 +8,10 @@ import (
 
 	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 	"github.com/flosch/pongo2/v6"
-	"github.com/go-ini/ini"
 	"github.com/go-logr/logr"
 	v "github.com/hashicorp/go-version"
 	"github.com/pkg/errors"
+	ini "gopkg.in/ini.v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	// VENDORED: Removed unused import (only used in commented-out method)

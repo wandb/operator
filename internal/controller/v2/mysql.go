@@ -90,6 +90,12 @@ func mysqlWriteState(
 		}
 	}
 
+	if wandb.Spec.MySQL.DeploymentType == apiv2.MySQLTypeMysql {
+		if conditions := mysql.CheckDetached(ctx, client, specNamespacedName, wandb.GetUID(), wandb.Spec.MySQL.Replicas); conditions != nil {
+			return conditions
+		}
+	}
+
 	switch wandb.Spec.MySQL.DeploymentType {
 	case apiv2.MySQLTypePercona:
 		var desired *v1.PerconaXtraDBCluster
@@ -226,6 +232,22 @@ func mysqlPurgeFinalizer(
 	specNamespacedName := mysqlSpecNamespacedName(wandb.Spec.MySQL)
 	onDeleteRule := translatorv2.ToMysqlOnDeleteRule(wandb, wandb.GetRetentionPolicy(wandb.Spec.MySQL.InfraSpec))
 	return mysql.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule)
+}
+
+func mysqlDetachFinalizer(
+	ctx context.Context,
+	client client.Client,
+	wandb *apiv2.WeightsAndBiases,
+) error {
+	specNamespacedName := mysqlSpecNamespacedName(wandb.Spec.MySQL)
+	switch wandb.Spec.MySQL.DeploymentType {
+	case apiv2.MySQLTypeMariadb:
+		return mariadb.DetachFinalizer(ctx, client, specNamespacedName, wandb)
+	case apiv2.MySQLTypePercona:
+		return percona.DetachFinalizer(ctx, client, specNamespacedName, wandb)
+	default:
+		return mysql.DetachFinalizer(ctx, client, specNamespacedName, wandb)
+	}
 }
 
 func mysqlSpecNamespacedName(mysql apiv2.MySQLSpec) types.NamespacedName {

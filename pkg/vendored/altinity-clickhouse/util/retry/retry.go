@@ -18,12 +18,17 @@ import (
 	"context"
 	"time"
 
-	log "github.com/altinity/clickhouse-operator/pkg/announcer"
 	"github.com/wandb/operator/pkg/vendored/altinity-clickhouse/util"
 )
 
+// Announcer is a minimal logging interface matching the methods used by Retry.
+type Announcer interface {
+	Info(format string, args ...interface{})
+	Warning(format string, args ...interface{})
+}
+
 // Retry retries specified function
-func Retry(ctx context.Context, tries int, desc string, a log.Announcer, f func() error) error {
+func Retry(ctx context.Context, tries int, desc string, a Announcer, f func() error) error {
 	var err error
 	for try := 1; try <= tries; try++ {
 		if util.IsContextDone(ctx) {

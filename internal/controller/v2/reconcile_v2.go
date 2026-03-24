@@ -55,6 +55,25 @@ const CleanupFinalizer = "wandb.apps.wandb.com/cleanup"
 var defaultRequeueMinutes = 1
 var defaultRequeueDuration = time.Duration(defaultRequeueMinutes) * time.Minute
 
+type finalizerFunc func(context.Context, ctrlClient.Client, *apiv2.WeightsAndBiases) error
+
+func runRetentionFinalizer(
+	ctx context.Context,
+	client ctrlClient.Client,
+	wandb *apiv2.WeightsAndBiases,
+	infraSpec apiv2.InfraSpec,
+	purgeFn finalizerFunc,
+	detachFn finalizerFunc,
+) error {
+	switch wandb.GetRetentionPolicy(infraSpec).OnDelete {
+	case apiv2.PurgeOnDelete:
+		return purgeFn(ctx, client, wandb)
+	case apiv2.DetachOnDelete:
+		return detachFn(ctx, client, wandb)
+	}
+	return nil
+}
+
 // Reconcile for V2 of WandB as the assumed object
 func Reconcile(
 	ctx context.Context,
@@ -87,25 +106,20 @@ func Reconcile(
 	if isFlaggedForDeletion && !wandb.ObjectMeta.DeletionTimestamp.IsZero() {
 		if ctrlqueue.ContainsString(wandb.GetFinalizers(), CleanupFinalizer) {
 
-			if err = minioPurgeFinalizer(ctx, client, wandb); err != nil {
+			if err = runRetentionFinalizer(ctx, client, wandb, wandb.Spec.Minio.InfraSpec, minioPurgeFinalizer, minioDetachFinalizer); err != nil {
 				return ctrl.Result{}, err
 			}
-			if err = mysqlPurgeFinalizer(ctx, client, wandb); err != nil {
+			if err = runRetentionFinalizer(ctx, client, wandb, wandb.Spec.MySQL.InfraSpec, mysqlPurgeFinalizer, mysqlDetachFinalizer); err != nil {
 				return ctrl.Result{}, err
 			}
-			if err = redisPurgeFinalizer(ctx, client, wandb); err != nil {
+			if err = runRetentionFinalizer(ctx, client, wandb, wandb.Spec.Redis.InfraSpec, redisPurgeFinalizer, redisDetachFinalizer); err != nil {
 				return ctrl.Result{}, err
 			}
-			if err = kafkaPurgeFinalizer(ctx, client, wandb); err != nil {
+			if err = runRetentionFinalizer(ctx, client, wandb, wandb.Spec.Kafka.InfraSpec, kafkaPurgeFinalizer, kafkaDetachFinalizer); err != nil {
 				return ctrl.Result{}, err
 			}
-			if err = clickHousePurgeFinalizer(ctx, client, wandb); err != nil {
+			if err = runRetentionFinalizer(ctx, client, wandb, wandb.Spec.ClickHouse.InfraSpec, clickHousePurgeFinalizer, clickHouseDetachFinalizer); err != nil {
 				return ctrl.Result{}, err
-			}
-			if wandb.GetRetentionPolicy(wandb.Spec.Kafka.InfraSpec).OnDelete == apiv2.PreserveOnDelete {
-				if err = kafkaPreserveFinalizer(ctx, client, wandb); err != nil {
-					return ctrl.Result{}, err
-				}
 			}
 			controllerutil.RemoveFinalizer(wandb, CleanupFinalizer)
 			if err := client.Update(ctx, wandb); err != nil {

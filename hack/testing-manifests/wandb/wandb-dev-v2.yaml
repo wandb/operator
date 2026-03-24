@@ -13,7 +13,7 @@ spec:
     version: "0.79.0"
   size: dev
   retentionPolicy:
-    onDelete: preserve
+    onDelete: detach
   mysql:
     enabled: true
     deploymentType: "mysql"

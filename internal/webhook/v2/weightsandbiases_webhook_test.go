@@ -54,7 +54,7 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 			Expect(defaulter.Default(ctx, obj)).To(Succeed())
 
 			Expect(obj.Spec.Size).To(Equal(appsv2.SizeDev))
-			Expect(obj.Spec.RetentionPolicy.OnDelete).To(Equal(appsv2.PreserveOnDelete))
+			Expect(obj.Spec.RetentionPolicy.OnDelete).To(Equal(appsv2.DetachOnDelete))
 			Expect(obj.Spec.Affinity).ToNot(BeNil())
 			Expect(obj.Spec.Tolerations).ToNot(BeNil())
 			Expect(obj.Spec.Wandb.ManifestRepository).To(Equal("oci://example.com/wandb/server-manifest"))

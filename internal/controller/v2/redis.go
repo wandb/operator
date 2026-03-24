@@ -60,6 +60,10 @@ func redisWriteState(
 		}
 	}
 
+	if conditions := opstree.CheckDetached(ctx, client, specNamespacedName, wandb.GetUID()); conditions != nil {
+		return conditions
+	}
+
 	results := opstree.WriteState(ctx, client, specNamespacedName, standaloneDesired, sentinelDesired, replicationDesired, translatorv2.BuildWandbRedisLabels(wandb))
 	return results
 }
@@ -113,6 +117,15 @@ func redisPurgeFinalizer(
 	specNamespacedName := redisSpecNamespacedName(wandb.Spec.Redis)
 	onDeleteRule := translatorv2.ToRedisOnDeleteRule(wandb, wandb.GetRetentionPolicy(wandb.Spec.Redis.InfraSpec))
 	return opstree.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule)
+}
+
+func redisDetachFinalizer(
+	ctx context.Context,
+	client client.Client,
+	wandb *apiv2.WeightsAndBiases,
+) error {
+	specNamespacedName := redisSpecNamespacedName(wandb.Spec.Redis)
+	return opstree.DetachFinalizer(ctx, client, specNamespacedName, wandb)
 }
 
 func redisSpecNamespacedName(redis apiv2.RedisSpec) types.NamespacedName {

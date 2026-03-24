@@ -6,7 +6,7 @@ spec:
   wandb:
     hostname: http://localhost
     internalServiceAuth:
-      enabled: false
+      enabled: true
     features:
       proxy: true
     manifestRepository: "file:///server-manifest"

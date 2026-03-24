@@ -11,7 +11,7 @@ func ToOnDeleteRule(
 	retentionPolicy wandbv2.RetentionPolicy,
 	componentName string,
 ) translator.OnDeleteRule {
-	policy := translator.Preserve
+	policy := translator.Detach
 	if retentionPolicy.OnDelete == wandbv2.PurgeOnDelete {
 		policy = translator.Purge
 	}

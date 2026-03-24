@@ -41,6 +41,10 @@ var (
 	// isCertManagerAlreadyInstalled will be set true when CertManager CRDs be found on the cluster
 	isCertManagerAlreadyInstalled = false
 
+	// USE_EXISTING_CLUSTER=true skips image build/load and Prometheus/CertManager installation,
+	// for use against a cluster already managed externally (e.g. Tilt).
+	useExistingCluster = os.Getenv("USE_EXISTING_CLUSTER") == "true"
+
 	// projectImage is the name of the image which will be build and loaded
 	// with the code source changes to be tested.
 	projectImage = "example.com/operator:v0.0.1"
@@ -57,6 +61,10 @@ func TestE2E(t *testing.T) {
 }
 
 var _ = BeforeSuite(func() {
+	if useExistingCluster {
+		return
+	}
+
 	By("Ensure that Prometheus is enabled")
 	_ = utils.UncommentCode("config/default/kustomization.yaml", "#- ../prometheus", "#")
 
@@ -98,6 +106,9 @@ var _ = BeforeSuite(func() {
 })
 
 var _ = AfterSuite(func() {
+	if useExistingCluster {
+		return
+	}
 	// Teardown Prometheus and CertManager after the suite if not skipped and if they were not already installed
 	if !skipPrometheusInstall && !isPrometheusOperatorAlreadyInstalled {
 		_, _ = fmt.Fprintf(GinkgoWriter, "Uninstalling Prometheus Operator...\n")
