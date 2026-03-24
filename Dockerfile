@@ -1,3 +1,4 @@
+# Build the manager binary
 FROM golang:1.25 AS manager-builder
 
 ARG TARGETOS

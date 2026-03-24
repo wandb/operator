@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+### [1.21.3](https://github.com/wandb/operator/compare/v1.21.2...v1.21.3) (2025-12-04)
+
+
+### Bug Fixes
+
+* Upgrade helm to 3.19.2 ([#106](https://github.com/wandb/operator/issues/106)) ([aa4ca21](https://github.com/wandb/operator/commit/aa4ca21a9c32f84501fd1794ba8e851328a42444))
+
 ### [1.21.2](https://github.com/wandb/operator/compare/v1.21.1...v1.21.2) (2025-10-02)
 
 
