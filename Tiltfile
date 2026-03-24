@@ -212,6 +212,15 @@ local_resource(
     labels=[GROUP_WANDB_OPERATOR],
 )
 
+# Dev-only cleanup helper. Use this before `tilt down` when you want a truly clean
+# rebuild of stateful services. It waits for W&B finalizers while operators are still up.
+local_resource(
+    'Dev-Clean',
+    './hack/scripts/tilt-dev-clean.sh',
+    auto_init=False,
+    labels=[GROUP_WANDB_APP],
+)
+
 if settings.get("installWandb"):
     crdName = read_yaml('./hack/testing-manifests/wandb/' + settings.get('wandbCRD') + '.yaml')['metadata']['name']
 
