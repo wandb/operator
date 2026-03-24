@@ -10,7 +10,7 @@ spec:
     features:
       proxy: true
     manifestRepository: "file:///server-manifest"
-    version: "0.78.0-pre"
+    version: "0.79.0"
   size: dev
   retentionPolicy:
     onDelete: preserve

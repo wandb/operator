@@ -7,8 +7,8 @@ spec:
   size: small
   wandb:
     hostname: http://localhost
-    manifest-repository: "file:///server-manifest"
-    version: "0.78.0-pre"
+    manifestRepository: "file:///server-manifest"
+    version: "0.79.0"
     features:
       proxy: true
   retentionPolicy:

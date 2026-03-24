@@ -767,7 +767,7 @@ applications:
             path: ""
       - name: UPSTREAM_WEAVE_TRACE
         sources:
-          - name: weave-trace
+          - name: weave
             type: service
             proto: ""
             path: ""
