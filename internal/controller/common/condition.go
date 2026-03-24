@@ -17,6 +17,7 @@ const (
 	ControllerErrorReason = "ControllerError"
 	ResourceErrorReason   = "ResourceError"
 	UnknownReason         = "Unknown"
+	DetachedSpecMismatch  = "DetachedSpecMismatch"
 )
 
 const (

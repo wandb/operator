@@ -35,6 +35,10 @@ func clickHouseWriteState(
 		}
 	}
 
+	if conditions := altinity.CheckDetached(ctx, client, specNamespacedName, wandb.GetUID()); conditions != nil {
+		return conditions
+	}
+
 	results := altinity.WriteState(ctx, client, specNamespacedName, desired)
 	return results
 }
@@ -88,6 +92,15 @@ func clickHousePurgeFinalizer(
 	specNamespacedName := clickHouseSpecNamespacedName(wandb.Spec.ClickHouse)
 	onDeleteRule := translatorv2.ToClickHouseOnDeleteRule(wandb, wandb.GetRetentionPolicy(wandb.Spec.ClickHouse.InfraSpec))
 	return altinity.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule)
+}
+
+func clickHouseDetachFinalizer(
+	ctx context.Context,
+	client client.Client,
+	wandb *apiv2.WeightsAndBiases,
+) error {
+	specNamespacedName := clickHouseSpecNamespacedName(wandb.Spec.ClickHouse)
+	return altinity.DetachFinalizer(ctx, client, specNamespacedName, wandb)
 }
 
 func clickHouseSpecNamespacedName(clickHouse apiv2.ClickHouseSpec) types.NamespacedName {

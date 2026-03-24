@@ -20,7 +20,7 @@ spec:
     version: {{ .Values.wandb.version }}
   size: {{ .Values.wandb.size }}
   retentionPolicy:
-    onDelete: preserve
+    onDelete: detach
   mysql:
     enabled: true
     deploymentType: "mysql"

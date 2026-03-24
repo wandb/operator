@@ -57,9 +57,13 @@ func kafkaWriteState(
 		}
 	}
 
-	results := make([]metav1.Condition, 0)
-
 	specNamespacedName := kafkaSpecNamespacedName(wandb.Spec.Kafka)
+
+	if conditions := strimzi.CheckDetached(ctx, client, specNamespacedName, wandb.GetUID(), wandb.Spec.Kafka.Replicas); conditions != nil {
+		return conditions
+	}
+
+	results := make([]metav1.Condition, 0)
 	results = append(results, strimzi.WriteState(ctx, client, specNamespacedName, desiredKafka, desiredNodePool)...)
 
 	return results
@@ -116,17 +120,13 @@ func kafkaPurgeFinalizer(
 	return strimzi.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule)
 }
 
-func kafkaPreserveFinalizer(
+func kafkaDetachFinalizer(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
 ) error {
-	var specNamespacedName = kafkaSpecNamespacedName(wandb.Spec.Kafka)
-
-	if err := strimzi.PreserveFinalizer(ctx, client, specNamespacedName, wandb); err != nil {
-		return err
-	}
-	return nil
+	specNamespacedName := kafkaSpecNamespacedName(wandb.Spec.Kafka)
+	return strimzi.DetachFinalizer(ctx, client, specNamespacedName, wandb)
 }
 
 func kafkaSpecNamespacedName(kafka apiv2.KafkaSpec) types.NamespacedName {
