@@ -7,8 +7,8 @@ settings = {
         "orbstack",
     ],
     "installWandb": True,
-    "wandbCRD": "wandb-default-v1",
-    "installTelemetry": False,
+    "wandbCRD": "wandb-small-v2",
+    "installTelemetry": True,
     "logFormat": "pretty",  # pretty, text, json
 }
 
@@ -56,8 +56,13 @@ GROUP = "apps"
 VERSION = "v1"
 KIND = "wandb"
 IMG = 'controller:latest'
-CONTROLLERGEN = 'rbac:roleName=manager-role crd:allowDangerousTypes=true,generateEmbeddedObjectMeta=true webhook paths="{./api/v1,./api/v2,./internal/controller/...}" output:crd:artifacts:config=config/crd/bases'
+CONTROLLERGEN = 'rbac:roleName=manager-role crd:allowDangerousTypes=true,generateEmbeddedObjectMeta=true,maxDescLen=0 webhook paths="{./api/v1,./api/v2,./internal/controller/...}" output:crd:artifacts:config=config/crd/bases'
 DISABLE_SECURITY_CONTEXT = True
+
+GROUP_WANDB_APP = "Wandb-App"
+GROUP_TELEMETRY = "Telemetry"
+GROUP_WANDB_OPERATOR = "Wandb-Operator"
+GROUP_THIRD_PARTY_OPERATORS = "Third-Party-Operators"
 
 def manifests():
     return 'make manifests'
@@ -75,36 +80,54 @@ def vetfmt():
 def binary():
     return 'CGO_ENABLED=0 GOOS=linux GO111MODULE=on go build -o tilt_bin/manager cmd/main.go'
 
+def managed_endpoint_resource(name, anchor_object, dep, local_port, remote_port, link_name, link_url, pod_selector, labels):
+    k8s_resource(
+        new_name=name,
+        objects=[anchor_object],
+        discovery_strategy='selectors-only',
+        extra_pod_selectors=[pod_selector],
+        resource_deps=[dep],
+        port_forwards=[
+            port_forward(local_port, remote_port, name=link_name),
+        ],
+        labels=labels,
+    )
+
 
 installed = local("which kubebuilder")
 print("kubebuilder is present:", installed)
 
 DIRNAME = os.path.basename(os. getcwd())
 
-local_resource("manifests", manifests(), labels=["Operator-Resources"])
-local_resource("generate", generate(), labels=["Operator-Resources"])
+local_resource("Operator-Manifests", manifests(), labels=[GROUP_WANDB_OPERATOR])
+local_resource("Operator-Generate", generate(), labels=[GROUP_WANDB_OPERATOR])
 
 deploy_cert_manager()
 
 local_resource(
-    'helm-dep-update',
+    'ThirdParty-Chart-Deps',
     'helm dependency update ./deploy/operator',
-    labels=["Helm-Repos"],
+    labels=[GROUP_THIRD_PARTY_OPERATORS],
 )
 
+third_party_operator_flags = [
+    '--set=wandb-operator.enabled=false',
+    '--set=telemetry.enabled=false',
+    '--create-namespace',
+]
+
 helm_resource(
-    'third-party-operators',
+    'ThirdParty-Operators',
     chart='./deploy/operator',
-    resource_deps=['helm-dep-update'],
+    release_name='third-party-operators',
+    resource_deps=['ThirdParty-Chart-Deps', 'WandB-CRDs-Apply'],
     namespace='wandb-operator',
-    flags=[
-        '--set=wandb-operator.enabled=false',
-        '--create-namespace',
-    ],
-    labels=["Third-Party-Operators"],
+    flags=third_party_operator_flags,
+    labels=[GROUP_THIRD_PARTY_OPERATORS],
 )
 
 k8s_yaml(local('kustomize build config/tilt-dev'))
+k8s_yaml('hack/tilt/endpoint-anchors.yaml')
 
 k8s_resource(
     new_name='Operator-Certs',
@@ -116,25 +139,20 @@ k8s_resource(
     ],
     # deploy_cert_manager() runs local() commands and registers no Tilt resource,
     # so a resource_dep cannot be declared here. Tilt retries on failure.
-    labels=["Operator-Resources"],
+    labels=[GROUP_WANDB_OPERATOR],
+)
+
+local_resource(
+    'WandB-CRDs-Apply',
+    'kubectl apply --server-side=true --force-conflicts --field-manager=helm ' +
+    '-f deploy/operator/crds/apps.wandb.com_applications.yaml ' +
+    '-f deploy/operator/crds/apps.wandb.com_weightsandbiases.yaml',
+    resource_deps=["ThirdParty-Chart-Deps"],
+    labels=[GROUP_WANDB_OPERATOR],
 )
 
 k8s_resource(
-    new_name='Application CRD',
-    objects=['applications.apps.wandb.com:customresourcedefinition'],
-    resource_deps=["manifests", "generate"],
-    labels=["Operator-Resources"],
-)
-
-k8s_resource(
-    new_name='Wandb CRD',
-    objects=['weightsandbiases.apps.wandb.com:customresourcedefinition'],
-    resource_deps=["manifests", "generate"],
-    # wandb-operator is disabled in this Tilt setup; label is for 3rd party operator CRD grouping only
-    labels=["Operator-Resources", "third-party-operators"],
-)
-k8s_resource(
-    new_name='RBAC',
+    new_name='Operator-RBAC',
     objects=[
         'operator-manager-role:clusterrole',
         'operator-manager-rolebinding:clusterrolebinding',
@@ -150,65 +168,87 @@ k8s_resource(
         'operator-weightsandbiases-viewer-role:clusterrole',
         'operator-metrics-auth-rolebinding:clusterrolebinding',
     ],
-    resource_deps=["manifests", "generate"],
-    labels=["Operator-Resources"],
+    resource_deps=["Operator-Manifests", "Operator-Generate"],
+    labels=[GROUP_WANDB_OPERATOR],
 )
 
 local_resource(
-    'operator-crds-ready',
+    'WandB-CRDs-Ready',
     'kubectl wait --for=condition=established --timeout=120s ' +
     'crd/applications.apps.wandb.com ' +
     'crd/weightsandbiases.apps.wandb.com',
-    resource_deps=["Application CRD", "Wandb CRD"],
-    labels=["Operator-Resources"],
+    resource_deps=["WandB-CRDs-Apply"],
+    labels=[GROUP_WANDB_OPERATOR],
 )
 
 k8s_resource(
-    'operator-controller-manager',
-    'operator-controller-manager',
+    workload='operator-controller-manager',
+    new_name='Operator-Controller',
     objects=[
         'operator-mutating-webhook-configuration:mutatingwebhookconfiguration',
         'operator-validating-webhook-configuration:validatingwebhookconfiguration',
         'operator-controller-manager:serviceaccount',
     ],
-    # manifests/generate transitively satisfied via operator-crds-ready → Application CRD / Wandb CRD
-    resource_deps=["operator-crds-ready", "third-party-operators"],
-    labels=["Operator-Resources"],
+    # manifests/generate transitively satisfied via WandB-CRDs-Ready → WandB-CRDs-Apply
+    resource_deps=["WandB-CRDs-Ready", "ThirdParty-Operators"],
+    labels=[GROUP_WANDB_OPERATOR],
 )
 
 deps = ['internal', 'pkg', 'api', 'cmd']
 
 local_resource(
-    'Watch&Compile',
+    'Operator-Build',
     binary(),
     deps=deps,
-    resource_deps=["manifests", "generate"],
+    resource_deps=["Operator-Manifests", "Operator-Generate"],
     ignore=['*/*/zz_generated.deepcopy.go'],
-    labels=["Operator-Resources"],
+    labels=[GROUP_WANDB_OPERATOR],
 )
 
 local_resource(
-    'webhook-ready',
+    'Operator-Webhook-Ready',
     cmd='until kubectl get mutatingwebhookconfiguration operator-mutating-webhook-configuration -o jsonpath=\'{.webhooks[0].clientConfig.caBundle}\' | grep -q .; do echo "Waiting for webhook CA bundle to be injected..."; sleep 2; done && echo "Webhook is ready!"',
-    resource_deps=["operator-controller-manager"],
-    labels=["Operator-Resources"],
+    resource_deps=["Operator-Controller"],
+    labels=[GROUP_WANDB_OPERATOR],
+)
+
+# Dev-only cleanup helper. Use this before `tilt down` when you want a truly clean
+# rebuild of stateful services. It waits for W&B finalizers while operators are still up.
+local_resource(
+    'Dev-Clean',
+    './hack/scripts/tilt-dev-clean.sh',
+    auto_init=False,
+    labels=[GROUP_WANDB_APP],
 )
 
 if settings.get("installWandb"):
     crdName = read_yaml('./hack/testing-manifests/wandb/' + settings.get('wandbCRD') + '.yaml')['metadata']['name']
+
     k8s_yaml('./hack/testing-manifests/wandb/' + settings.get('wandbCRD') + '.yaml')
+
     k8s_resource(
         new_name='Wandb',
         objects=[
             '%s:weightsandbiases' % crdName
         ],
-        resource_deps=["webhook-ready"],
-        labels=["Operator-Resources"],
+        resource_deps=["Operator-Webhook-Ready"],
+        labels=[GROUP_WANDB_APP],
+    )
+    managed_endpoint_resource(
+        name='Wandb-Endpoint-Nginx',
+        anchor_object='wandb-nginx-endpoint-anchor:configmap:default',
+        dep='Wandb',
+        local_port=8080,
+        remote_port=8080,
+        link_name='W&B nginx',
+        link_url='http://localhost:8080',
+        pod_selector={'app.kubernetes.io/name': crdName + '-nginx-proxy'},
+        labels=[GROUP_WANDB_APP],
     )
 
 if settings.get("installTelemetry"):
     local_resource(
-        'vm-crds-ready',
+        'Telemetry-CRDs-Ready',
         'kubectl wait --for=condition=established --timeout=120s ' +
         'crd/vmsingles.operator.victoriametrics.com ' +
         'crd/vmagents.operator.victoriametrics.com ' +
@@ -216,126 +256,92 @@ if settings.get("installTelemetry"):
         'crd/vtsingles.operator.victoriametrics.com ' +
         'crd/vmservicescrapes.operator.victoriametrics.com ' +
         'crd/vmpodscrapes.operator.victoriametrics.com ' +
-        'crd/vmnodescrapes.operator.victoriametrics.com',
-        resource_deps=["third-party-operators"],
-        labels=["Telemetry"],
-    )
-    local_resource(
-        'grafana-crds-ready',
-        'kubectl wait --for=condition=established --timeout=120s ' +
+        'crd/vmnodescrapes.operator.victoriametrics.com ' +
         'crd/grafanas.grafana.integreatly.org ' +
-        'crd/grafanadatasources.grafana.integreatly.org',
-        resource_deps=["third-party-operators"],
-        labels=["Telemetry"],
+        'crd/grafanadatasources.grafana.integreatly.org' +
+        ' && kubectl wait --for=condition=available --timeout=180s -n wandb-operator ' +
+        'deploy/third-party-operators-victoria-metrics-operator ' +
+        'deploy/third-party-operators-grafana-operator',
+        resource_deps=["ThirdParty-Operators"],
+        labels=[GROUP_TELEMETRY],
     )
-    local_resource(
-        'vm-operator-ready',
-        'kubectl rollout status deployment ' +
-        '-n wandb-operator ' +
-        '-l app.kubernetes.io/name=victoria-metrics-operator ' +
-        '--timeout=120s',
-        resource_deps=["vm-crds-ready"],
-        labels=["Telemetry"],
-    )
-    k8s_yaml('./hack/testing-manifests/telemetry/victoria-dev.yaml')
-    k8s_resource(
-        new_name='Victoria-Metrics',
-        objects=[
-            'victoria-instance:vmsingle',
-            'victoria-agent:vmagent',
+    helm_resource(
+        'Telemetry-Stack',
+        chart='./deploy/telemetry',
+        release_name='telemetry-stack',
+        namespace='wandb-operator',
+        flags=[
+            '--set=enabled=true',
+            '--set=namespace=default',
+            '--create-namespace',
         ],
-        resource_deps=["vm-operator-ready"],
-        labels=["Telemetry"],
+        resource_deps=["Telemetry-CRDs-Ready"],
+        labels=[GROUP_TELEMETRY],
     )
-    k8s_resource(
-        new_name='Victoria-Logs',
-        objects=[
-            'victoria-logs:vlsingle',
-        ],
-        resource_deps=["vm-operator-ready"],
-        labels=["Telemetry"],
+    managed_endpoint_resource(
+        name='Telemetry-Endpoint-Grafana',
+        anchor_object='telemetry-grafana-endpoint-anchor:configmap:default',
+        dep='Telemetry-Stack',
+        local_port=3000,
+        remote_port=3000,
+        link_name='Grafana',
+        link_url='http://localhost:3000',
+        pod_selector={'app': 'grafana'},
+        labels=[GROUP_TELEMETRY],
     )
-    k8s_resource(
-        new_name='Victoria-Traces',
-        objects=[
-            'victoria-traces:vtsingle',
-        ],
-        resource_deps=["vm-operator-ready"],
-        labels=["Telemetry"],
+    managed_endpoint_resource(
+        name='Telemetry-Endpoint-VictoriaMetrics',
+        anchor_object='telemetry-victoria-metrics-endpoint-anchor:configmap:default',
+        dep='Telemetry-Stack',
+        local_port=8428,
+        remote_port=8429,
+        link_name='VictoriaMetrics UI',
+        link_url='http://localhost:8428/vmui/',
+        pod_selector={
+            'app.kubernetes.io/name': 'vmsingle',
+            'app.kubernetes.io/instance': 'victoria-instance',
+        },
+        labels=[GROUP_TELEMETRY],
     )
-    k8s_yaml('./hack/testing-manifests/telemetry/wandb-otel-connection-dev.yaml')
-    k8s_resource(
-        new_name='OTEL-Connection-Secret',
-        objects=[
-            'wandb-otel-connection:secret',
-        ],
-        resource_deps=["Victoria-Metrics", "Victoria-Logs", "Victoria-Traces"],
-        labels=["Telemetry"],
+    managed_endpoint_resource(
+        name='Telemetry-Endpoint-VictoriaLogs',
+        anchor_object='telemetry-victoria-logs-endpoint-anchor:configmap:default',
+        dep='Telemetry-Stack',
+        local_port=9428,
+        remote_port=9428,
+        link_name='VictoriaLogs',
+        link_url='http://localhost:9428',
+        pod_selector={
+            'app.kubernetes.io/name': 'vlsingle',
+            'app.kubernetes.io/instance': 'victoria-logs',
+        },
+        labels=[GROUP_TELEMETRY],
     )
-    k8s_yaml('./hack/testing-manifests/telemetry/kube-metrics-dev.yaml')
-    k8s_resource(
-        new_name='Kubernetes-Metrics',
-        objects=[
-            'kubelet-cadvisor:vmnodescrape',
-        ],
-        # vm-crds-ready transitively satisfied via Victoria-Metrics → vm-operator-ready → vm-crds-ready
-        resource_deps=["Victoria-Metrics"],
-        labels=["Telemetry"],
+    managed_endpoint_resource(
+        name='Telemetry-Endpoint-VictoriaTraces',
+        anchor_object='telemetry-victoria-traces-endpoint-anchor:configmap:default',
+        dep='Telemetry-Stack',
+        local_port=10428,
+        remote_port=10428,
+        link_name='VictoriaTraces',
+        link_url='http://localhost:10428',
+        pod_selector={
+            'app.kubernetes.io/name': 'vtsingle',
+            'app.kubernetes.io/instance': 'victoria-traces',
+        },
+        labels=[GROUP_TELEMETRY],
     )
-    k8s_yaml('./hack/testing-manifests/telemetry/operator-metrics-dev.yaml')
-    k8s_resource(
-        new_name='Operator-Metrics',
-        objects=[
-            'wandb-operator:vmservicescrape',
-            'clickhouse-operator:vmservicescrape',
-            'grafana-operator:vmservicescrape',
-            'victoria-metrics-operator:vmservicescrape',
-        ],
-        # vm-crds-ready transitively satisfied via Victoria-Metrics → vm-operator-ready → vm-crds-ready
-        resource_deps=["Victoria-Metrics"],
-        labels=["Telemetry"],
-    )
-    k8s_yaml('./hack/testing-manifests/telemetry/infra-metrics-dev.yaml')
-    k8s_resource(
-        new_name='Infrastructure-Metrics',
-        objects=[
-            'mysql-pxc:vmpodscrape',
-            'mysql-proxysql:vmpodscrape',
-            'kafka-brokers:vmpodscrape',
-            'minio-tenant:vmpodscrape',
-            'redis:vmpodscrape',
-            'clickhouse-metrics:service',
-            'clickhouse:vmservicescrape',
-        ],
-        # vm-crds-ready transitively satisfied via Victoria-Metrics → vm-operator-ready → vm-crds-ready
-        resource_deps=["Victoria-Metrics"],
-        labels=["Telemetry"],
-    )
-    k8s_yaml('./hack/testing-manifests/telemetry/grafana-dev.yaml')
-    k8s_resource(
-        new_name='Grafana',
-        objects=[
-            'grafana:grafana',
-        ],
-        resource_deps=["grafana-crds-ready"],
-        port_forwards="3000:3000",
-        labels=["Telemetry"],
-    )
-    k8s_resource(
-        new_name='Grafana-Datasources',
-        objects=[
-            'victoria-metrics:grafanadatasource',
-            'victoria-logs:grafanadatasource',
-            'victoria-traces:grafanadatasource',
-        ],
-        resource_deps=["grafana-crds-ready", "Grafana", "Victoria-Metrics", "Victoria-Logs", "Victoria-Traces"],
-        labels=["Telemetry"],
-    )
+
+manager_entrypoint = ['/manager', '--log-format=' + settings['logFormat']]
+if settings.get("installTelemetry"):
+    manager_entrypoint += [
+        '--telemetry-enabled=true',
+    ]
 
 docker_build_with_restart(
     IMG, '.',
     dockerfile_contents=DOCKERFILE,
-    entrypoint=['/manager', '--log-format=' + settings['logFormat']],
+    entrypoint=manager_entrypoint,
     only=['./tilt_bin/manager', './hack/testing-manifests/server-manifest'],
     live_update=[
         sync('./tilt_bin/manager', '/manager'),

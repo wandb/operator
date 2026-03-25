@@ -1,0 +1,39 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wandb-nginx-endpoint-anchor
+  namespace: default
+data:
+  managed-by: tilt
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: telemetry-grafana-endpoint-anchor
+  namespace: default
+data:
+  managed-by: tilt
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: telemetry-victoria-metrics-endpoint-anchor
+  namespace: default
+data:
+  managed-by: tilt
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: telemetry-victoria-logs-endpoint-anchor
+  namespace: default
+data:
+  managed-by: tilt
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: telemetry-victoria-traces-endpoint-anchor
+  namespace: default
+data:
+  managed-by: tilt

@@ -4,6 +4,10 @@
 ## Description
 // TODO(user): An in-depth paragraph about your project and overview of use
 
+## Documentation
+
+- [Monitoring and Telemetry Guide](docs/monitoring.md)
+
 ## Development
 
 ### Prerequisites
@@ -88,6 +92,32 @@ Please add any additional contexts to the `allowedContexts` list in your `tilt-s
 ```bash
 tilt up
 ```
+
+#### Cleaning Up Tilt
+
+`tilt down` removes Tilt-managed workloads and Helm releases, but it intentionally does not
+fully reset the cluster. The following are expected to survive a normal `tilt down`:
+
+- `cert-manager` and its namespace
+- operator CRDs, including the W&B CRDs and third-party operator CRDs
+- dev PVC-backed data unless the backing operator deletes it
+
+For a true dev reset, use the helper script instead:
+
+```bash
+./hack/scripts/tilt-down-dev-clean.sh
+```
+
+This performs a safer teardown sequence for local development:
+
+1. Deletes the `WeightsAndBiases` CR
+2. Waits for finalizer-driven cleanup while the operators are still running
+3. Uninstalls the Tilt-managed Helm releases
+4. Deletes dev PVCs and generated secrets for the app
+5. Runs `tilt down`
+
+If you are already in the Tilt UI, you can trigger the manual `Dev-Clean` resource first,
+then run `tilt down`.
 
 ## Testing
 

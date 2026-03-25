@@ -343,6 +343,47 @@ commonEnvvars:
   flatRunsV2Consumer:
     - name: KAFKA_RUNS_V2_TOPIC_NAME
       value: "flat-run-fields-updater"
+  telemetryOtel:
+    - name: OTEL_EXPORTER_OTLP_PROTOCOL
+      sources:
+        - type: telemetry
+          field: protocol
+    - name: OTEL_TRACES_EXPORTER
+      sources:
+        - type: telemetry
+          field: tracesExporter
+    - name: OTEL_METRICS_EXPORTER
+      sources:
+        - type: telemetry
+          field: metricsExporter
+    - name: OTEL_LOGS_EXPORTER
+      sources:
+        - type: telemetry
+          field: logsExporter
+    - name: OTEL_EXPORTER_OTLP_METRICS_ENDPOINT
+      sources:
+        - type: telemetry
+          field: metricsEndpoint
+    - name: OTEL_EXPORTER_OTLP_LOGS_ENDPOINT
+      sources:
+        - type: telemetry
+          field: logsEndpoint
+    - name: OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+      sources:
+        - type: telemetry
+          field: tracesEndpoint
+    - name: OTEL_SERVICE_NAME
+      sources:
+        - type: telemetry
+          field: serviceName
+    - name: OTEL_RESOURCE_ATTRIBUTES
+      sources:
+        - type: telemetry
+          field: resourceAttributes
+    - name: GORILLA_TRACER
+      sources:
+        - type: telemetry
+          field: gorillaTracer
 
 commonVolumeMounts:
   internalSigner:
@@ -386,6 +427,7 @@ applications:
       - gorillaCustomerSecrets
       - kafka
       - flatRunsV2Producer
+      - telemetryOtel
     commonVolumeMounts:
       - internalSigner
     env:
@@ -436,6 +478,7 @@ applications:
       - gorillaTaskQueueConsumer
       - gorillaService
       - gorillaOnprem
+      - telemetryOtel
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
       tag: 0.78.0-pre-operator-v2-no-app.1
@@ -450,6 +493,7 @@ applications:
       - gorillaRedis
       - gorillaService
       - gorillaOnprem
+      - telemetryOtel
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
       tag: 0.78.0-pre-operator-v2-no-app.1
@@ -464,6 +508,7 @@ applications:
       - gorillaRedis
       - gorillaService
       - gorillaOnprem
+      - telemetryOtel
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
       tag: 0.78.0-pre-operator-v2-no-app.1
@@ -480,6 +525,7 @@ applications:
       - gorillaOnprem
       - kafka
       - flatRunsV2Consumer
+      - telemetryOtel
     env:
       - name: GORILLA_RUN_UPDATE_SHADOW_QUEUE_SUBSCRIPTIONS_FLAT_RUN_FIELDS_UPDATER
         value: "$(KAFKA_URL)/$(KAFKA_RUNS_V2_TOPIC_NAME)?consumer_group_id=flat-run-fields-updater"
@@ -550,6 +596,7 @@ applications:
       - gorillaHistoryStore
       - gorillaService
       - gorillaOnprem
+      - telemetryOtel
     commonVolumeMounts:
       - internalSigner
     env:
@@ -579,6 +626,7 @@ applications:
       - gorillaOnprem
       - kafka
       - flatRunsV2Consumer
+      - telemetryOtel
     env:
       - name: GORILLA_RUN_UPDATE_SHADOW_QUEUE_SUBSCRIPTIONS_METRIC_OBSERVER
         value: "$(KAFKA_URL)/$(KAFKA_RUNS_V2_TOPIC_NAME)?consumer_group_id=metric-observer"
@@ -598,6 +646,7 @@ applications:
       - gorillaTaskQueueProducer
       - gorillaService
       - gorillaOnprem
+      - telemetryOtel
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
       tag: 0.78.0-pre-operator-v2-no-app.1
@@ -621,30 +670,9 @@ applications:
   - name: weave
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-python
-      tag: 0.78.0-pre-operator-v2-no-app.1
-    containers:
-      - name: weave
-        ports:
-          - containerPort: 9239
-            name: weave
-            protocol: TCP
-        livenessProbe:
-          httpGet:
-            path: /__weave/hello
-        readinessProbe:
-          httpGet:
-            path: /__weave/hello
-      - name: weave-cache-clear
-        command:
-          - python
-          - weave-public/weave_query/scripts/clear_cache.py
-        resources:
-          limits:
-            cpu: 2
-            memory: 2Gi
-          requests:
-            cpu: 100m
-            memory: 128Mi
+      tag: 0.78.0-pre.1772047260
+    commonEnvs:
+      - telemetryOtel
     env:
       - name: DATADOG_TRACE_ENABLED
         value: "false"
@@ -669,28 +697,17 @@ applications:
       - clickhouse
       - kafka
       - weaveTrace
-    image:
-      repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
-      tag: 0.78.0-pre-operator-v2-no-app.1
-    containers:
-      - name: weave-trace
-        args:
-          - "uvicorn"
-          - "src.trace_server:app"
-          - "--host"
-          - "0.0.0.0"
-          - "--port"
-          - "8080"
-        ports:
-          - containerPort: 8080
-            name: weave-trace
-            protocol: TCP
-        livenessProbe:
-          httpGet:
-            path: /traces/health
-        readinessProbe:
-          httpGet:
-            path: /traces/health
+      - telemetryOtel
+    ports:
+      - containerPort: 8080
+        name: weave-trace
+        protocol: TCP
+    livenessProbe:
+      httpGet:
+        path: /traces/health
+    readinessProbe:
+      httpGet:
+        path: /traces/health
     service:
       ports:
         - port: 8080
@@ -714,12 +731,7 @@ applications:
       - clickhouse
       - kafka
       - weaveTrace
-    containers:
-      - name: weave-trace-worker
-        args:
-          - "python"
-          - "-m"
-          - "src.workers.scoring_worker"
+      - telemetryOtel
   - name: weave-trace-evaluate-model-worker
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
@@ -731,20 +743,15 @@ applications:
       - clickhouse
       - kafka
       - weaveTrace
-    containers:
-      - name: weave-trace-evaluate-model-worker
-        args:
-          - "python"
-          - "-m"
-          - "src.workers.evaluate_model_worker.evaluate_model_worker"
+      - telemetryOtel
   - name: nginx-proxy
     features:
       - proxy
     image:
       repository: nginxinc/nginx-unprivileged
       tag: latest
-    containers:
-      - name: nginx-proxy
+    commonEnvs:
+      - telemetryOtel
     env:
       - name: UPSTREAM_FRONTEND
         sources:
@@ -760,7 +767,7 @@ applications:
             path: ""
       - name: UPSTREAM_WEAVE_TRACE
         sources:
-          - name: weave-trace
+          - name: weave
             type: service
             proto: ""
             path: ""

@@ -27,6 +27,18 @@ wandb-operator:
           value: ":8443"
         METRICS_SECURE:
           value: "false"
+        TELEMETRY_ENABLED:
+          value: "{{ .Values.telemetry.enabled }}"
+        TELEMETRY_MANAGED_NAMESPACE:
+          value: "{{ .Values.telemetry.namespace }}"
+        TELEMETRY_OTEL_SECRET_NAME:
+          value: '{{ (index .Values "wandb-operator").telemetry.otel.secretName }}'
+        TELEMETRY_OTEL_PROTOCOL:
+          value: '{{ (index .Values "wandb-operator").telemetry.otel.protocol }}'
+        TELEMETRY_OTEL_SERVICE_NAME:
+          value: '{{ (index .Values "wandb-operator").telemetry.otel.serviceName }}'
+        TELEMETRY_OTEL_RESOURCE_ATTRIBUTES:
+          value: '{{ (index .Values "wandb-operator").telemetry.otel.resourceAttributes }}'
       securityContext:
         allowPrivilegeEscalation: false
         capabilities:
@@ -87,6 +99,13 @@ wandb-operator:
     redis: true
     vm: true
 
+  telemetry:
+    otel:
+      secretName: wandb-otel-connection
+      protocol: http/protobuf
+      serviceName: wandb-service
+      resourceAttributes: deployment.environment=dev
+
 mysql-operator:
   install: true
 
@@ -109,7 +128,26 @@ altinity-clickhouse-operator:
           namespaces: [".*"]
 
 victoria-metrics-operator:
-  install: true
+  enabled: true
 
 grafana-operator:
-  install: true
+  enabled: true
+
+telemetry:
+  enabled: false
+  namespace: ""
+  retentionPeriod: 1d
+  scrape:
+    enabled: true
+    kubeletCadvisor: true
+    operators: true
+    wandbApi: true
+    infrastructure: true
+  alerting:
+    enabled: false
+    evaluationInterval: 30s
+    notifier:
+      enabled: false
+      name: default
+      type: webhook
+      target: http://alertmanager-operated.monitoring.svc:9093

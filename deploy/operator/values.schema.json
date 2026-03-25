@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "telemetry": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "namespace": {
+          "type": "string"
+        },
+        "retentionPeriod": {
+          "type": "string",
+          "minLength": 1
+        },
+        "scrape": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "kubeletCadvisor": {
+              "type": "boolean"
+            },
+            "operators": {
+              "type": "boolean"
+            },
+            "wandbApi": {
+              "type": "boolean"
+            },
+            "infrastructure": {
+              "type": "boolean"
+            }
+          }
+        },
+        "alerting": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "evaluationInterval": {
+              "type": "string",
+              "minLength": 1
+            },
+            "notifier": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "name": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "type": {
+                  "type": "string",
+                  "enum": ["webhook", "email", "slack"]
+                },
+                "target": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          }
+        },
+        "victoria-metrics-operator": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "grafana-operator": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "global": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    }
+  },
+  "additionalProperties": true
+}
