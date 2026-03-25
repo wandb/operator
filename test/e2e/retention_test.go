@@ -81,7 +81,27 @@ func buildLabelSelector(wandbName, wandbNs, module string) string {
 	)
 }
 
-func createWandbManifest(name, ns, size string) string {
+type manifestOpts struct {
+	name                string
+	ns                  string
+	size                string
+	specRetentionPolicy string
+	componentOverrides  map[string]string
+}
+
+func createWandbManifest(opts manifestOpts) string {
+	componentBlock := func(module string) string {
+		override := ""
+		if policy, ok := opts.componentOverrides[module]; ok {
+			override = fmt.Sprintf("\n    retentionPolicy:\n      onDelete: %s", policy)
+		}
+		extra := ""
+		if module == "mysql" {
+			extra = "\n    deploymentType: mysql"
+		}
+		return fmt.Sprintf("  %s:\n    enabled: true%s%s", module, extra, override)
+	}
+
 	return fmt.Sprintf(`apiVersion: apps.wandb.com/v2
 kind: WeightsAndBiases
 metadata:
@@ -90,21 +110,21 @@ metadata:
 spec:
   size: %s
   retentionPolicy:
-    onDelete: purge
+    onDelete: %s
   wandb:
     features: {}
-  mysql:
-    enabled: true
-    deploymentType: mysql
-  redis:
-    enabled: true
-  kafka:
-    enabled: true
-  minio:
-    enabled: true
-  clickhouse:
-    enabled: true
-`, name, ns, size)
+%s
+%s
+%s
+%s
+%s
+`, opts.name, opts.ns, opts.size, opts.specRetentionPolicy,
+		componentBlock("mysql"),
+		componentBlock("redis"),
+		componentBlock("kafka"),
+		componentBlock("minio"),
+		componentBlock("clickhouse"),
+	)
 }
 
 func applyManifest(manifest string) error {
@@ -258,32 +278,44 @@ var _ = Describe("Retention Policy Integration Tests", func() {
 		retentionSuiteSetupDone = true
 	})
 
-	runCRDeletionTest := func(size string) {
+	// setupWandbCR creates the namespace and applies the WandB CR manifest, returning cleanup func.
+	setupWandbCR := func(wandbName, wandbNs *string, namePrefix, size, specPolicy string, overrides map[string]string) {
+		BeforeEach(func() {
+			*wandbName = generateUniqueName(namePrefix)
+			*wandbNs = generateUniqueName("wandb-test")
+
+			By(fmt.Sprintf("creating namespace %s", *wandbNs))
+			Expect(createNamespace(*wandbNs)).To(Succeed())
+
+			By(fmt.Sprintf("creating WandB CR %s (size=%s, specPolicy=%s)", *wandbName, size, specPolicy))
+			manifest := createWandbManifest(manifestOpts{
+				name:                *wandbName,
+				ns:                  *wandbNs,
+				size:                size,
+				specRetentionPolicy: specPolicy,
+				componentOverrides:  overrides,
+			})
+			Expect(applyManifest(manifest)).To(Succeed())
+		})
+
+		AfterEach(func() {
+			deleteNamespace(*wandbNs)
+		})
+	}
+
+	// --- Purge: CR deletion ---
+	runPurgeCRDeletionTest := func(size string) {
 		var (
 			wandbName string
 			wandbNs   string
 		)
-
-		BeforeEach(func() {
-			wandbName = generateUniqueName(fmt.Sprintf("wandb-%s-purge", size))
-			wandbNs = generateUniqueName("wandb-test")
-
-			By(fmt.Sprintf("creating namespace %s", wandbNs))
-			Expect(createNamespace(wandbNs)).To(Succeed())
-
-			By(fmt.Sprintf("creating WandB CR %s (size=%s, purge)", wandbName, size))
-			Expect(applyManifest(createWandbManifest(wandbName, wandbNs, size))).To(Succeed())
-		})
-
-		AfterEach(func() {
-			deleteNamespace(wandbNs)
-		})
+		setupWandbCR(&wandbName, &wandbNs, fmt.Sprintf("wandb-%s-purge", size), size, "purge", nil)
 
 		It("should purge all resources when the CR is deleted", func() {
 			By("waiting for all components to be Ready")
 			waitForWandbReady(wandbName, wandbNs)
 
-			By("verifying all component resources exist with expected labels")
+			By("verifying all component resources exist")
 			for _, module := range allModules {
 				verifyComponentResourcesExist(wandbName, wandbNs, module, Default)
 			}
@@ -301,26 +333,13 @@ var _ = Describe("Retention Policy Integration Tests", func() {
 		})
 	}
 
-	runComponentDisableTest := func(size, module string) {
+	// --- Purge: component disable ---
+	runPurgeComponentDisableTest := func(size, module string) {
 		var (
 			wandbName string
 			wandbNs   string
 		)
-
-		BeforeEach(func() {
-			wandbName = generateUniqueName(fmt.Sprintf("wandb-%s-%s-dis", size, module))
-			wandbNs = generateUniqueName("wandb-test")
-
-			By(fmt.Sprintf("creating namespace %s", wandbNs))
-			Expect(createNamespace(wandbNs)).To(Succeed())
-
-			By(fmt.Sprintf("creating WandB CR %s (size=%s, purge)", wandbName, size))
-			Expect(applyManifest(createWandbManifest(wandbName, wandbNs, size))).To(Succeed())
-		})
-
-		AfterEach(func() {
-			deleteNamespace(wandbNs)
-		})
+		setupWandbCR(&wandbName, &wandbNs, fmt.Sprintf("wandb-%s-%s-dis", size, module), size, "purge", nil)
 
 		It(fmt.Sprintf("should purge %s resources when the component is disabled", module), func() {
 			By("waiting for all components to be Ready")
@@ -347,31 +366,198 @@ var _ = Describe("Retention Policy Integration Tests", func() {
 		})
 	}
 
-	Context("dev size", func() {
-		Context("CR deletion with purge policy", func() {
-			runCRDeletionTest("dev")
-		})
+	// --- Detach: CR deletion ---
+	runDetachCRDeletionTest := func(size string) {
+		var (
+			wandbName string
+			wandbNs   string
+		)
+		setupWandbCR(&wandbName, &wandbNs, fmt.Sprintf("wandb-%s-detach", size), size, "detach", nil)
 
-		Context("component disabled with purge policy", func() {
+		It("should detach all resources when the CR is deleted", func() {
+			By("waiting for all components to be Ready")
+			waitForWandbReady(wandbName, wandbNs)
+
+			By("verifying all component resources exist")
 			for _, module := range allModules {
-				Context(fmt.Sprintf("%s component", module), func() {
-					runComponentDisableTest("dev", module)
-				})
+				verifyComponentResourcesExist(wandbName, wandbNs, module, Default)
+			}
+
+			By("deleting the WandB CR")
+			Expect(deleteWandB(wandbName, wandbNs)).To(Succeed())
+
+			By("verifying the WandB CR itself is gone")
+			verifyWandbDeleted(wandbName, wandbNs)
+
+			By("verifying all component resources still exist (detached, not purged)")
+			for _, module := range allModules {
+				verifyComponentResourcesExist(wandbName, wandbNs, module, Default)
 			}
 		})
-	})
+	}
 
-	Context("small size", func() {
-		Context("CR deletion with purge policy", func() {
-			runCRDeletionTest("small")
-		})
+	// --- Detach: component disable ---
+	runDetachComponentDisableTest := func(size, module string) {
+		var (
+			wandbName string
+			wandbNs   string
+		)
+		setupWandbCR(&wandbName, &wandbNs, fmt.Sprintf("wandb-%s-%s-det", size, module), size, "detach", nil)
 
-		Context("component disabled with purge policy", func() {
-			for _, module := range allModules {
-				Context(fmt.Sprintf("%s component", module), func() {
-					runComponentDisableTest("small", module)
-				})
+		It(fmt.Sprintf("should detach %s resources when the component is disabled", module), func() {
+			By("waiting for all components to be Ready")
+			waitForWandbReady(wandbName, wandbNs)
+
+			By("verifying all component resources exist")
+			for _, m := range allModules {
+				verifyComponentResourcesExist(wandbName, wandbNs, m, Default)
+			}
+
+			By(fmt.Sprintf("disabling the %s component", module))
+			Expect(patchComponentDisabled(wandbName, wandbNs, module)).To(Succeed())
+
+			Consistently(func(g Gomega) {
+				verifyComponentResourcesExist(wandbName, wandbNs, module, g)
+			}, 30*time.Second, retentionPollingInterval).Should(Succeed(),
+				"%s resources should survive disable with detach policy", module)
+
+			By("verifying remaining components are unaffected")
+			for _, m := range allModules {
+				if m == module {
+					continue
+				}
+				verifyComponentResourcesExist(wandbName, wandbNs, m, Default)
 			}
 		})
-	})
+	}
+
+	// --- Component-level override: spec=detach, component=purge ---
+	runComponentOverridePurgeTest := func(size, module string) {
+		var (
+			wandbName string
+			wandbNs   string
+		)
+		overrides := map[string]string{module: "purge"}
+		setupWandbCR(&wandbName, &wandbNs, fmt.Sprintf("wandb-%s-%s-ovp", size, module), size, "detach", overrides)
+
+		It(fmt.Sprintf("should purge %s (override) while detaching others on CR deletion", module), func() {
+			By("waiting for all components to be Ready")
+			waitForWandbReady(wandbName, wandbNs)
+
+			By("verifying all component resources exist")
+			for _, m := range allModules {
+				verifyComponentResourcesExist(wandbName, wandbNs, m, Default)
+			}
+
+			By("deleting the WandB CR")
+			Expect(deleteWandB(wandbName, wandbNs)).To(Succeed())
+
+			By("verifying the WandB CR itself is gone")
+			verifyWandbDeleted(wandbName, wandbNs)
+
+			By(fmt.Sprintf("verifying %s resources are purged (component override)", module))
+			verifyComponentResourcesDeleted(wandbName, wandbNs, module, retentionDeleteTimeout)
+
+			By("verifying other components still exist (detached)")
+			for _, m := range allModules {
+				if m == module {
+					continue
+				}
+				verifyComponentResourcesExist(wandbName, wandbNs, m, Default)
+			}
+		})
+	}
+
+	// --- Component-level override: spec=purge, component=detach ---
+	runComponentOverrideDetachTest := func(size, module string) {
+		var (
+			wandbName string
+			wandbNs   string
+		)
+		overrides := map[string]string{module: "detach"}
+		setupWandbCR(&wandbName, &wandbNs, fmt.Sprintf("wandb-%s-%s-ovd", size, module), size, "purge", overrides)
+
+		It(fmt.Sprintf("should detach %s (override) while purging others on CR deletion", module), func() {
+			By("waiting for all components to be Ready")
+			waitForWandbReady(wandbName, wandbNs)
+
+			By("verifying all component resources exist")
+			for _, m := range allModules {
+				verifyComponentResourcesExist(wandbName, wandbNs, m, Default)
+			}
+
+			By("deleting the WandB CR")
+			Expect(deleteWandB(wandbName, wandbNs)).To(Succeed())
+
+			By("verifying the WandB CR itself is gone")
+			verifyWandbDeleted(wandbName, wandbNs)
+
+			By(fmt.Sprintf("verifying %s resources still exist (component detach override)", module))
+			verifyComponentResourcesExist(wandbName, wandbNs, module, Default)
+
+			By("verifying other components are purged")
+			for _, m := range allModules {
+				if m == module {
+					continue
+				}
+				verifyComponentResourcesDeleted(wandbName, wandbNs, m, retentionDeleteTimeout)
+			}
+		})
+	}
+
+	for _, size := range []string{"dev", "small"} {
+		size := size
+
+		Context(fmt.Sprintf("%s size", size), func() {
+			Context("spec-level purge policy", func() {
+				Context("CR deletion", func() {
+					runPurgeCRDeletionTest(size)
+				})
+
+				Context("component disable", func() {
+					for _, module := range allModules {
+						module := module
+						Context(fmt.Sprintf("%s component", module), func() {
+							runPurgeComponentDisableTest(size, module)
+						})
+					}
+				})
+			})
+
+			Context("spec-level detach policy", func() {
+				Context("CR deletion", func() {
+					runDetachCRDeletionTest(size)
+				})
+
+				Context("component disable", func() {
+					for _, module := range allModules {
+						module := module
+						Context(fmt.Sprintf("%s component", module), func() {
+							runDetachComponentDisableTest(size, module)
+						})
+					}
+				})
+			})
+
+			Context("component-level overrides", func() {
+				Context("spec=detach with component=purge override", func() {
+					for _, module := range allModules {
+						module := module
+						Context(fmt.Sprintf("%s component", module), func() {
+							runComponentOverridePurgeTest(size, module)
+						})
+					}
+				})
+
+				Context("spec=purge with component=detach override", func() {
+					for _, module := range allModules {
+						module := module
+						Context(fmt.Sprintf("%s component", module), func() {
+							runComponentOverrideDetachTest(size, module)
+						})
+					}
+				})
+			})
+		})
+	}
 })
