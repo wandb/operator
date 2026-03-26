@@ -58,7 +58,7 @@ wandb-operator:
 
 ## Tilt Usage
 
-Set `installTelemetry: true` in `tilt-settings.json`.
+Set `"installTelemetry": True` in `tilt-settings.star`.
 
 Tilt installs the telemetry stack through Helm and exposes endpoints for:
 - Grafana

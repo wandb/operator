@@ -36,7 +36,7 @@ kind create cluster
 This will create a new kind cluster with the name `kind`. The kubernetes context will be called `kind-kind`.
 
 Alternatively, you can use the provided scripts to manage the kind cluster, uses kindClusterName from
-`tilt-settings.json`, if present.
+`tilt-settings.star`, if present.
 
 ```bash
 # Create cluster
@@ -74,9 +74,9 @@ brew install kustomize
 
 #### Tilt Settings
 
-There are settings for Tilt that can be configured using a `tilt-settings.json` file. The settings file is not checked
-into source control. A sample settings file is provided in `tilt-settings.sample.json`. To use the sample settings file,
-copy it to `tilt-settings.json`
+There are settings for Tilt that can be configured using a `tilt-settings.star` file. The settings file is not checked
+into source control. A sample settings file is provided in `tilt-settings.sample.star`. To use the sample settings file,
+copy it to `tilt-settings.star`
 
 By default, Tilt is configured to only allow connections to the following Kubernetes contexts:
 
@@ -85,7 +85,7 @@ By default, Tilt is configured to only allow connections to the following Kubern
 - `kind-wandb-operator`
 - `minikube`
 
-Please add any additional contexts to the `allowedContexts` list in your `tilt-settings.json` file.
+Please add any additional contexts to the `allowedContexts` list in your `tilt-settings.star` file.
 
 #### Running Tilt
 

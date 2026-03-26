@@ -1,17 +1,17 @@
 apiVersion: apps.wandb.com/v2
 kind: WeightsAndBiases
 metadata:
-  name: wandb-small-v2
+  name: wandb
 spec:
-  size: small
   wandb:
     hostname: http://localhost
     internalServiceAuth:
       enabled: true
-    manifestRepository: "file:///server-manifest"
-    version: "0.78.0-pre"
     features:
       proxy: true
+    manifestRepository: "file:///server-manifest"
+    version: "0.79.0"
+  size: dev
   retentionPolicy:
     onDelete: detach
   mysql:

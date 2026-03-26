@@ -12,11 +12,14 @@ settings = {
     ],
 }
 
-# global settings
-settings.update(read_json(
-    "tilt-settings.json",
-    default={},
-))
+if os.path.exists("tilt-settings.json"):
+    fail("tilt-settings.json is no longer supported. Migrate to tilt-settings.star (see tilt-settings.sample.star).")
+
+if not os.path.exists("tilt-settings.star"):
+    local("cp tilt-settings.sample.star tilt-settings.star")
+
+load("./tilt-settings.star", "SETTINGS")
+settings.update(SETTINGS)
 
 # Configure global watch settings with a 2-second debounce
 watch_settings(ignore=["**/.git", "**/*.out"])

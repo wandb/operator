@@ -5,23 +5,22 @@ set -e
 CLUSTER_NAME="kind"
 DEV_PROFILE=1
 
-if ! command -v jq >/dev/null 2>&1; then
-    echo "Error: jq is required but not installed. Please install jq."
-    exit 1
+read_star_setting() {
+    local key="$1"
+    local file="tilt-settings.star"
+    if [[ -f "$file" ]]; then
+        grep "\"$key\"" "$file" | sed 's/.*: *"\(.*\)".*/\1/' | head -1
+    fi
+}
+
+KIND_CLUSTER_NAME=$(read_star_setting "kindClusterName")
+if [[ -n "$KIND_CLUSTER_NAME" ]]; then
+    CLUSTER_NAME="$KIND_CLUSTER_NAME"
 fi
 
-if [[ -f "tilt-settings.json" ]]; then
-    KIND_CLUSTER_NAME=$(jq -r '.kindClusterName // empty' tilt-settings.json)
-    if [[ -n "$KIND_CLUSTER_NAME" ]]; then
-        CLUSTER_NAME="$KIND_CLUSTER_NAME"
-    fi
-fi
-
-if [[ -f "tilt-settings.json" ]]; then
-    CRD_NAME=$(jq -r '.wandbCRD // empty' tilt-settings.json)
-    if [[ -n "$CRD_NAME" && "$CRD_NAME" != *dev* ]]; then
-        DEV_PROFILE=0
-    fi
+WANDB_OVERLAYS=$(read_star_setting "wandbOverlays")
+if [[ "$WANDB_OVERLAYS" == *"size-small"* || "$WANDB_OVERLAYS" == *"size-micro"* ]]; then
+    DEV_PROFILE=0
 fi
 
 echo "Creating kind cluster: $CLUSTER_NAME"
