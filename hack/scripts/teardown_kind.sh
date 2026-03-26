@@ -4,16 +4,17 @@ set -e
 
 CLUSTER_NAME="kind"
 
-if ! command -v jq >/dev/null 2>&1; then
-    echo "Error: jq is required but not installed. Please install jq."
-    exit 1
-fi
-
-if [[ -f "tilt-settings.json" ]]; then
-    KIND_CLUSTER_NAME=$(jq -r '.kindClusterName // empty' tilt-settings.json)
-    if [[ -n "$KIND_CLUSTER_NAME" ]]; then
-        CLUSTER_NAME="$KIND_CLUSTER_NAME"
+read_star_setting() {
+    local key="$1"
+    local file="tilt-settings.star"
+    if [[ -f "$file" ]]; then
+        grep "\"$key\"" "$file" | sed 's/.*: *"\(.*\)".*/\1/' | head -1
     fi
+}
+
+KIND_CLUSTER_NAME=$(read_star_setting "kindClusterName")
+if [[ -n "$KIND_CLUSTER_NAME" ]]; then
+    CLUSTER_NAME="$KIND_CLUSTER_NAME"
 fi
 
 echo "Deleting kind cluster: $CLUSTER_NAME"

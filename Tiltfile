@@ -7,16 +7,20 @@ settings = {
         "orbstack",
     ],
     "installWandb": True,
-    "wandbCRD": "wandb-small-v2",
+    "wandbCR": "hack/testing-manifests/wandb/.generated/wandb-cr.yaml",
+    "wandbOverlays": [],
     "installTelemetry": True,
     "logFormat": "pretty",  # pretty, text, json
 }
 
-# global settings
-settings.update(read_json(
-    "tilt-settings.json",
-    default={},
-))
+if os.path.exists("tilt-settings.json"):
+    fail("tilt-settings.json is no longer supported. Migrate to tilt-settings.star (see tilt-settings.sample.star).")
+
+if not os.path.exists("tilt-settings.star"):
+    local("cp tilt-settings.sample.star tilt-settings.star")
+
+load("./tilt-settings.star", "SETTINGS")
+settings.update(SETTINGS)
 
 # Configure global watch settings with a 2-second debounce
 watch_settings(ignore=["**/.git", "**/*.out"])
@@ -221,15 +225,33 @@ local_resource(
     labels=[GROUP_WANDB_APP],
 )
 
-if settings.get("installWandb"):
-    crdName = read_yaml('./hack/testing-manifests/wandb/' + settings.get('wandbCRD') + '.yaml')['metadata']['name']
+GENERATED_DIR = 'hack/testing-manifests/wandb/.generated'
 
-    k8s_yaml('./hack/testing-manifests/wandb/' + settings.get('wandbCRD') + '.yaml')
+def build_wandb_cr():
+    overlays = settings.get('wandbOverlays', [])
+    components_lines = ''
+    for o in overlays:
+        components_lines += '  - ../kustomize/overlays/' + o + '\n'
+
+    kustomization = 'apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\nresources:\n  - ../kustomize/base\n'
+    if components_lines:
+        kustomization += 'components:\n' + components_lines
+
+    local('mkdir -p ' + GENERATED_DIR)
+    local("cat > %s/kustomization.yaml << 'KEOF'\n%sKEOF" % (GENERATED_DIR, kustomization))
+    local('kustomize build %s > %s/wandb-cr.yaml' % (GENERATED_DIR, GENERATED_DIR))
+
+if settings.get("installWandb"):
+    build_wandb_cr()
+    wandbCR = settings.get('wandbCR')
+    crName = read_yaml(wandbCR)['metadata']['name']
+
+    k8s_yaml(wandbCR)
 
     k8s_resource(
         new_name='Wandb',
         objects=[
-            '%s:weightsandbiases' % crdName
+            '%s:weightsandbiases' % crName
         ],
         resource_deps=["Operator-Webhook-Ready"],
         labels=[GROUP_WANDB_APP],
@@ -242,7 +264,7 @@ if settings.get("installWandb"):
         remote_port=8080,
         link_name='W&B nginx',
         link_url='http://localhost:8080',
-        pod_selector={'app.kubernetes.io/name': crdName + '-nginx-proxy'},
+        pod_selector={'app.kubernetes.io/name': crName + '-nginx-proxy'},
         labels=[GROUP_WANDB_APP],
     )
 

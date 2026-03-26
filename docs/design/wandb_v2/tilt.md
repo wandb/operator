@@ -2,7 +2,7 @@
 
 Resources shown with their labels in parentheses. Telemetry resources are only
 active when `installTelemetry: true` and Wandb is only active when
-`installWandb: true` in `tilt-settings.json`.
+`installWandb: true` in `tilt-settings.star`.
 
 ## Agent Instructions
 

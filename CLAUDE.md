@@ -25,8 +25,8 @@ if kind get clusters | grep -q "^$CLUSTER_NAME$"; then
 
 **Acceptable (when context is needed):**
 ```bash
-# Use empty string fallback to handle missing kindClusterName key
-KIND_CLUSTER_NAME=$(jq -r '.kindClusterName // empty' tilt-settings.json)
+# Use empty string fallback — grep returns nothing if the key is absent
+KIND_CLUSTER_NAME=$(grep '"kindClusterName"' tilt-settings.star | sed 's/.*: *"\(.*\)".*/\1/' | head -1)
 ```
 
 ## Testing and Linting

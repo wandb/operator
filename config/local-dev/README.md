@@ -19,10 +19,10 @@ The standard webhook configuration expects the webhook server to run as a Servic
 
 If you're using Tilt for development:
 
-1. **Enable local webhook mode** in your `tilt-settings.json`:
-   ```json
-   {
-     "localWebhookDev": true
+1. **Enable local webhook mode** in your `tilt-settings.star`:
+   ```python
+   SETTINGS = {
+       "localWebhookDev": True,
    }
    ```
 
@@ -78,7 +78,7 @@ The webhook server will start on `https://host.docker.internal:9443` (or your co
 
 The `setup-local-webhook.sh` script automatically detects your environment:
 
-1. **Checks for kind cluster**: Uses the same cluster name resolution as `setup_kind.sh` (reads from `tilt-settings.json` if available)
+1. **Checks for kind cluster**: Uses the same cluster name resolution as `setup_kind.sh` (reads from `tilt-settings.star` if available)
 2. **Detects platform**: macOS, Linux, Docker Desktop, or OrbStack
 3. **Configures appropriate host**: Uses the Docker bridge gateway for kind, or `host.docker.internal` for Docker Desktop/OrbStack
 4. **Generates certificates**: Creates self-signed TLS certificates with the correct hostname

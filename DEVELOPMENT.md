@@ -194,8 +194,8 @@ open coverage.html
 **Fix**: `kubectl apply -f config/crd/bases/apps.wandb.com_*.yaml`
 
 ### Issue: "Changes to v2 API not taking effect"
-**Cause**: Kustomize patch may be disabling v2 or `wandbCrName` setting wrong
-**Fix**: Check `config/crd/patches/use_v2.yaml` and `tilt-settings.json`
+**Cause**: Kustomize patch may be disabling v2 or `wandbCR` setting wrong
+**Fix**: Check `config/crd/patches/use_v2.yaml` and `tilt-settings.star`
 
 ## Full Clean Rebuild
 

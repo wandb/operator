@@ -37,6 +37,9 @@ junit.xml
 /git
 
 tilt-settings.json
+tilt-settings.star
+hack/testing-manifests/wandb/.generated/kustomization.yaml
+hack/testing-manifests/wandb/.generated/wandb-cr.yaml
 /tilt_bin
 /dist
 
