@@ -2,8 +2,14 @@
 
 set -e
 
+WORKER_NODES="${1:-0}"
+
+if ! [[ "$WORKER_NODES" =~ ^[0-9]+$ ]]; then
+    echo "Error: WORKER_NODES must be a non-negative integer, got '$WORKER_NODES'"
+    exit 1
+fi
+
 CLUSTER_NAME="kind"
-DEV_PROFILE=1
 
 read_star_setting() {
     local key="$1"
@@ -18,11 +24,6 @@ if [[ -n "$KIND_CLUSTER_NAME" ]]; then
     CLUSTER_NAME="$KIND_CLUSTER_NAME"
 fi
 
-WANDB_OVERLAYS=$(read_star_setting "wandbOverlays")
-if [[ "$WANDB_OVERLAYS" == *"size-small"* || "$WANDB_OVERLAYS" == *"size-micro"* ]]; then
-    DEV_PROFILE=0
-fi
-
 echo "Creating kind cluster: $CLUSTER_NAME"
 
 if kind get clusters | grep -q "^$CLUSTER_NAME$"; then
@@ -31,24 +32,19 @@ if kind get clusters | grep -q "^$CLUSTER_NAME$"; then
     exit 0
 fi
 
-if [[ "$DEV_PROFILE" -eq 1 ]]; then
-    cat <<EOF | kind create cluster --name "$CLUSTER_NAME" --config=-
-kind: Cluster
-apiVersion: kind.x-k8s.io/v1alpha4
-EOF
-else
-    cat <<EOF | kind create cluster --name "$CLUSTER_NAME" --config=-
-kind: Cluster
-apiVersion: kind.x-k8s.io/v1alpha4
-nodes:
-- role: control-plane
-- role: worker
-- role: worker
-- role: worker
-EOF
+KIND_CONFIG="kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4"
+
+if [[ "$WORKER_NODES" -gt 0 ]]; then
+    KIND_CONFIG+=$'\nnodes:\n- role: control-plane'
+    for ((i = 0; i < WORKER_NODES; i++)); do
+        KIND_CONFIG+=$'\n- role: worker'
+    done
 fi
 
-echo "Kind cluster '$CLUSTER_NAME' created successfully with 3 worker nodes"
+echo "$KIND_CONFIG" | kind create cluster --name "$CLUSTER_NAME" --config=-
+
+echo "Kind cluster '$CLUSTER_NAME' created successfully with $WORKER_NODES worker nodes"
 
 echo "Installing Kubernetes Metrics Server..."
 kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
