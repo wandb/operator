@@ -21,10 +21,15 @@ func minioWriteState(
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
 ) ([]metav1.Condition, *translator.InfraConnection) {
-	log := ctrl.LoggerFrom(ctx)
-	var specNamespacedName = minioSpecNamespacedName(wandb.Spec.Minio)
+	spec := wandb.Spec.Minio.ManagedMinio
+	if spec == nil {
+		return nil, nil
+	}
 
-	if conditions := tenant.CheckDetached(ctx, client, specNamespacedName, wandb.GetUID(), wandb.Spec.Minio.Replicas); conditions != nil {
+	log := ctrl.LoggerFrom(ctx)
+	var specNamespacedName = managedMinioSpecNamespacedName(spec)
+
+	if conditions := tenant.CheckDetached(ctx, client, specNamespacedName, wandb.GetUID(), spec.Replicas); conditions != nil {
 		return conditions, nil
 	}
 
@@ -40,7 +45,7 @@ func minioWriteState(
 		}, nil
 	}
 
-	desiredConfig, err := translatorv2.ToMinioEnvConfig(ctx, wandb.Spec.Minio)
+	desiredConfig, err := translatorv2.ToMinioEnvConfig(ctx, *spec)
 	if err != nil {
 		log.Error(err, "failed to translate MinIO envConfig to vendor spec")
 		return []metav1.Condition{
@@ -62,8 +67,13 @@ func minioReadState(
 	wandb *apiv2.WeightsAndBiases,
 	newConditions []metav1.Condition,
 ) []metav1.Condition {
-	specNamespacedName := minioSpecNamespacedName(wandb.Spec.Minio)
-	retentionPolicy := wandb.GetRetentionPolicy(wandb.Spec.Minio.ManagedInfraSpec)
+	spec := wandb.Spec.Minio.ManagedMinio
+	if spec == nil {
+		return newConditions
+	}
+
+	specNamespacedName := managedMinioSpecNamespacedName(spec)
+	retentionPolicy := wandb.GetRetentionPolicy(spec.ManagedInfraSpec)
 	readConditions := tenant.ReadState(
 		ctx,
 		client,
@@ -82,12 +92,18 @@ func minioInferStatus(
 	newConditions []metav1.Condition,
 	newInfraConn *translator.InfraConnection,
 ) (ctrl.Result, error) {
+	spec := wandb.Spec.Minio.ManagedMinio
+	if spec == nil {
+		return ctrl.Result{}, nil
+	}
+
+	enabled := true
 	oldConditions := wandb.Status.MinioStatus.Conditions
 	oldInfraConn := translatorv2.ToTranslatorInfraConnection(wandb.Status.MinioStatus.Connection)
 
 	updatedStatus, events, ctrlResult := tenant.ComputeStatus(
 		ctx,
-		wandb.Spec.Minio.Enabled,
+		enabled,
 		oldConditions,
 		newConditions,
 		utils.Coalesce(newInfraConn, &oldInfraConn),
@@ -107,9 +123,13 @@ func minioPurgeFinalizer(
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
 ) error {
-	var specNamespacedName = minioSpecNamespacedName(wandb.Spec.Minio)
+	spec := wandb.Spec.Minio.ManagedMinio
+	if spec == nil {
+		return nil
+	}
+	var specNamespacedName = managedMinioSpecNamespacedName(spec)
 
-	onDeleteRule := translatorv2.ToMinioOnDeleteRule(wandb, wandb.GetRetentionPolicy(wandb.Spec.Minio.ManagedInfraSpec))
+	onDeleteRule := translatorv2.ToMinioOnDeleteRule(wandb, wandb.GetRetentionPolicy(spec.ManagedInfraSpec))
 	if err := tenant.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule); err != nil {
 		return err
 	}
@@ -121,13 +141,17 @@ func minioDetachFinalizer(
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
 ) error {
-	specNamespacedName := minioSpecNamespacedName(wandb.Spec.Minio)
+	spec := wandb.Spec.Minio.ManagedMinio
+	if spec == nil {
+		return nil
+	}
+	specNamespacedName := managedMinioSpecNamespacedName(spec)
 	return tenant.DetachFinalizer(ctx, client, specNamespacedName, wandb)
 }
 
-func minioSpecNamespacedName(minio apiv2.MinioSpec) types.NamespacedName {
+func managedMinioSpecNamespacedName(spec *apiv2.ManagedMinioSpec) types.NamespacedName {
 	return types.NamespacedName{
-		Namespace: minio.Namespace,
-		Name:      minio.Name,
+		Namespace: spec.Namespace,
+		Name:      spec.Name,
 	}
 }

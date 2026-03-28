@@ -51,25 +51,19 @@ func ToRedisStandaloneVendorSpec(
 	scheme *runtime.Scheme,
 ) (*redisv1beta2.Redis, error) {
 	ctx, log := logx.WithSlog(ctx, logx.Redis)
-	spec := wandb.Spec.Redis
-
-	if !spec.Enabled {
+	spec := wandb.Spec.Redis.ManagedRedis
+	if spec == nil {
 		return nil, nil
 	}
 
 	if spec.Sentinel.Enabled {
 		return nil, nil
-	}
-
-	if spec.Sentinel.Enabled {
-		return nil, fmt.Errorf("cannot create redis standalone with sentinel enabled")
 	}
 
 	nsnBuilder := opstree.CreateNsNameBuilder(types.NamespacedName{
 		Namespace: spec.Namespace, Name: spec.Name,
 	})
 
-	// Parse storage quantity
 	storageQuantity, err := resource.ParseQuantity(spec.StorageSize)
 	if err != nil {
 		return nil, fmt.Errorf("invalid storage size %q: %w", spec.StorageSize, err)
@@ -108,7 +102,6 @@ func ToRedisStandaloneVendorSpec(
 		},
 	}
 
-	// Add resources if specified
 	if len(spec.Config.Resources.Requests) > 0 || len(spec.Config.Resources.Limits) > 0 {
 		redis.Spec.KubernetesConfig.Resources = &corev1.ResourceRequirements{
 			Requests: spec.Config.Resources.Requests,
@@ -116,13 +109,11 @@ func ToRedisStandaloneVendorSpec(
 		}
 	}
 
-	// Set owner reference
 	if err := ctrl.SetControllerReference(wandb, redis, scheme); err != nil {
 		log.Error("failed to set owner reference on Redis CR", logx.ErrAttr(err))
 		return nil, fmt.Errorf("failed to set owner reference: %w", err)
 	}
 
-	// Add RedisExporter if telemetry is enabled
 	redis.Spec.RedisExporter = createRedisExporterConfig(spec.Telemetry)
 
 	return redis, nil
@@ -137,9 +128,8 @@ func ToRedisSentinelVendorSpec(
 	scheme *runtime.Scheme,
 ) (*redissentinelv1beta2.RedisSentinel, error) {
 	ctx, log := logx.WithSlog(ctx, logx.Redis)
-	spec := wandb.Spec.Redis
-
-	if !spec.Enabled {
+	spec := wandb.Spec.Redis.ManagedRedis
+	if spec == nil {
 		return nil, nil
 	}
 
@@ -212,9 +202,8 @@ func ToRedisReplicationVendorSpec(
 	scheme *runtime.Scheme,
 ) (*redisreplicationv1beta2.RedisReplication, error) {
 	ctx, log := logx.WithSlog(ctx, logx.Redis)
-	spec := wandb.Spec.Redis
-
-	if !spec.Enabled {
+	spec := wandb.Spec.Redis.ManagedRedis
+	if spec == nil {
 		return nil, nil
 	}
 

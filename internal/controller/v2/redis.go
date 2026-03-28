@@ -21,8 +21,13 @@ func redisWriteState(
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
 ) []metav1.Condition {
+	spec := wandb.Spec.Redis.ManagedRedis
+	if spec == nil {
+		return nil
+	}
+
 	log := ctrl.LoggerFrom(ctx)
-	var specNamespacedName = redisSpecNamespacedName(wandb.Spec.Redis)
+	var specNamespacedName = managedRedisSpecNamespacedName(spec)
 
 	standaloneDesired, err := translatorv2.ToRedisStandaloneVendorSpec(ctx, wandb, client.Scheme())
 	if err != nil {
@@ -74,8 +79,13 @@ func redisReadState(
 	wandb *apiv2.WeightsAndBiases,
 	newConditions []metav1.Condition,
 ) ([]metav1.Condition, *translator.InfraConnection) {
-	specNamespacedName := redisSpecNamespacedName(wandb.Spec.Redis)
-	onDeleteRule := translatorv2.ToRedisOnDeleteRule(wandb, wandb.GetRetentionPolicy(wandb.Spec.Redis.ManagedInfraSpec))
+	spec := wandb.Spec.Redis.ManagedRedis
+	if spec == nil {
+		return newConditions, nil
+	}
+
+	specNamespacedName := managedRedisSpecNamespacedName(spec)
+	onDeleteRule := translatorv2.ToRedisOnDeleteRule(wandb, wandb.GetRetentionPolicy(spec.ManagedInfraSpec))
 	readConditions, newInfraConn := opstree.ReadState(ctx, client, specNamespacedName, wandb, onDeleteRule)
 	newConditions = append(newConditions, readConditions...)
 	return newConditions, newInfraConn
@@ -89,12 +99,18 @@ func redisInferStatus(
 	newConditions []metav1.Condition,
 	newInfraConn *translator.InfraConnection,
 ) (ctrl.Result, error) {
+	spec := wandb.Spec.Redis.ManagedRedis
+	if spec == nil {
+		return ctrl.Result{}, nil
+	}
+
+	enabled := true
 	oldConditions := wandb.Status.RedisStatus.Conditions
 	oldInfraConn := translatorv2.ToTranslatorInfraConnection(wandb.Status.RedisStatus.Connection)
 
 	updatedStatus, events, ctrlResult := opstree.ComputeStatus(
 		ctx,
-		wandb.Spec.Redis.Enabled,
+		enabled,
 		oldConditions,
 		newConditions,
 		utils.Coalesce(newInfraConn, &oldInfraConn),
@@ -114,8 +130,12 @@ func redisPurgeFinalizer(
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
 ) error {
-	specNamespacedName := redisSpecNamespacedName(wandb.Spec.Redis)
-	onDeleteRule := translatorv2.ToRedisOnDeleteRule(wandb, wandb.GetRetentionPolicy(wandb.Spec.Redis.ManagedInfraSpec))
+	spec := wandb.Spec.Redis.ManagedRedis
+	if spec == nil {
+		return nil
+	}
+	specNamespacedName := managedRedisSpecNamespacedName(spec)
+	onDeleteRule := translatorv2.ToRedisOnDeleteRule(wandb, wandb.GetRetentionPolicy(spec.ManagedInfraSpec))
 	return opstree.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule)
 }
 
@@ -124,13 +144,17 @@ func redisDetachFinalizer(
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
 ) error {
-	specNamespacedName := redisSpecNamespacedName(wandb.Spec.Redis)
+	spec := wandb.Spec.Redis.ManagedRedis
+	if spec == nil {
+		return nil
+	}
+	specNamespacedName := managedRedisSpecNamespacedName(spec)
 	return opstree.DetachFinalizer(ctx, client, specNamespacedName, wandb)
 }
 
-func redisSpecNamespacedName(redis apiv2.RedisSpec) types.NamespacedName {
+func managedRedisSpecNamespacedName(spec *apiv2.ManagedRedisSpec) types.NamespacedName {
 	return types.NamespacedName{
-		Namespace: redis.Namespace,
-		Name:      redis.Name,
+		Namespace: spec.Namespace,
+		Name:      spec.Name,
 	}
 }

@@ -41,9 +41,8 @@ func ToMinioVendorSpec(
 	scheme *runtime.Scheme,
 ) (*miniov2.Tenant, error) {
 	ctx, log := logx.WithSlog(ctx, logx.Minio)
-	infraSpec := wandb.Spec.Minio
-
-	if !infraSpec.Enabled {
+	infraSpec := wandb.Spec.Minio.ManagedMinio
+	if infraSpec == nil {
 		return nil, nil
 	}
 
@@ -135,7 +134,7 @@ func ToMinioVendorSpec(
 
 func ToMinioEnvConfig(
 	ctx context.Context,
-	spec apiv2.MinioSpec,
+	spec apiv2.ManagedMinioSpec,
 ) (tenant.MinioEnvConfig, error) {
 	return tenant.MinioEnvConfig{
 		RootUser:            spec.Config.RootUser,

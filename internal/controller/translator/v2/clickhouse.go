@@ -27,9 +27,8 @@ func ToClickHouseVendorSpec(
 	scheme *runtime.Scheme,
 ) (*v1.ClickHouseInstallation, error) {
 	ctx, log := logx.WithSlog(ctx, logx.ClickHouse)
-	spec := wandb.Spec.ClickHouse
-
-	if !spec.Enabled {
+	spec := wandb.Spec.ClickHouse.ManagedClickHouse
+	if spec == nil {
 		return nil, nil
 	}
 
@@ -70,7 +69,7 @@ func ToClickHouseVendorSpec(
 	}
 
 	reclaimPolicy := v1.PVCReclaimPolicyUnspecified
-	if wandb.GetRetentionPolicy(wandb.Spec.ClickHouse.ManagedInfraSpec).OnDelete == apiv2.PurgeOnDelete {
+	if wandb.GetRetentionPolicy(spec.ManagedInfraSpec).OnDelete == apiv2.PurgeOnDelete {
 		reclaimPolicy = v1.PVCReclaimPolicyDelete
 	}
 

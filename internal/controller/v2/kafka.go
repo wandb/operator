@@ -22,6 +22,11 @@ func kafkaWriteState(
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
 ) []metav1.Condition {
+	spec := wandb.Spec.Kafka.ManagedKafka
+	if spec == nil {
+		return nil
+	}
+
 	log := ctrl.LoggerFrom(ctx)
 	var desiredKafka *v1.Kafka
 	desiredKafka, err := translatorv2.ToKafkaVendorSpec(
@@ -57,9 +62,9 @@ func kafkaWriteState(
 		}
 	}
 
-	specNamespacedName := kafkaSpecNamespacedName(wandb.Spec.Kafka)
+	specNamespacedName := managedKafkaSpecNamespacedName(spec)
 
-	if conditions := strimzi.CheckDetached(ctx, client, specNamespacedName, wandb.GetUID(), wandb.Spec.Kafka.Replicas); conditions != nil {
+	if conditions := strimzi.CheckDetached(ctx, client, specNamespacedName, wandb.GetUID(), spec.Replicas); conditions != nil {
 		return conditions
 	}
 
@@ -75,8 +80,13 @@ func kafkaReadState(
 	wandb *apiv2.WeightsAndBiases,
 	newConditions []metav1.Condition,
 ) ([]metav1.Condition, *translator.InfraConnection) {
-	specNamespacedName := kafkaSpecNamespacedName(wandb.Spec.Kafka)
-	onDeleteRule := translatorv2.ToKafkaOnDeleteRule(wandb, wandb.GetRetentionPolicy(wandb.Spec.Kafka.ManagedInfraSpec))
+	spec := wandb.Spec.Kafka.ManagedKafka
+	if spec == nil {
+		return newConditions, nil
+	}
+
+	specNamespacedName := managedKafkaSpecNamespacedName(spec)
+	onDeleteRule := translatorv2.ToKafkaOnDeleteRule(wandb, wandb.GetRetentionPolicy(spec.ManagedInfraSpec))
 	readConditions, newInfraConn := strimzi.ReadState(ctx, client, specNamespacedName, wandb, onDeleteRule)
 	newConditions = append(newConditions, readConditions...)
 	return newConditions, newInfraConn
@@ -90,12 +100,18 @@ func kafkaInferStatus(
 	newConditions []metav1.Condition,
 	newInfraConn *translator.InfraConnection,
 ) (ctrl.Result, error) {
+	spec := wandb.Spec.Kafka.ManagedKafka
+	if spec == nil {
+		return ctrl.Result{}, nil
+	}
+
+	enabled := true
 	oldConditions := wandb.Status.KafkaStatus.Conditions
 	oldInfraConn := translatorv2.ToTranslatorInfraConnection(wandb.Status.KafkaStatus.Connection)
 
 	updatedStatus, events, ctrlResult := strimzi.ComputeStatus(
 		ctx,
-		wandb.Spec.Kafka.Enabled,
+		enabled,
 		oldConditions,
 		newConditions,
 		utils.Coalesce(newInfraConn, &oldInfraConn),
@@ -115,8 +131,12 @@ func kafkaPurgeFinalizer(
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
 ) error {
-	specNamespacedName := kafkaSpecNamespacedName(wandb.Spec.Kafka)
-	onDeleteRule := translatorv2.ToKafkaOnDeleteRule(wandb, wandb.GetRetentionPolicy(wandb.Spec.Kafka.ManagedInfraSpec))
+	spec := wandb.Spec.Kafka.ManagedKafka
+	if spec == nil {
+		return nil
+	}
+	specNamespacedName := managedKafkaSpecNamespacedName(spec)
+	onDeleteRule := translatorv2.ToKafkaOnDeleteRule(wandb, wandb.GetRetentionPolicy(spec.ManagedInfraSpec))
 	return strimzi.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule)
 }
 
@@ -125,14 +145,18 @@ func kafkaDetachFinalizer(
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
 ) error {
-	specNamespacedName := kafkaSpecNamespacedName(wandb.Spec.Kafka)
+	spec := wandb.Spec.Kafka.ManagedKafka
+	if spec == nil {
+		return nil
+	}
+	specNamespacedName := managedKafkaSpecNamespacedName(spec)
 	return strimzi.DetachFinalizer(ctx, client, specNamespacedName, wandb)
 }
 
-func kafkaSpecNamespacedName(kafka apiv2.KafkaSpec) types.NamespacedName {
+func managedKafkaSpecNamespacedName(spec *apiv2.ManagedKafkaSpec) types.NamespacedName {
 	return types.NamespacedName{
-		Namespace: kafka.Namespace,
-		Name:      kafka.Name,
+		Namespace: spec.Namespace,
+		Name:      spec.Name,
 	}
 
 }

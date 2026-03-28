@@ -8,27 +8,17 @@ spec:
     managedMysql:
       storageSize: 5Gi
   redis:
-    enabled: true
-    storageSize: 1Gi
+    managedRedis:
+      storageSize: 1Gi
   kafka:
-    enabled: true
-    storageSize: 10Gi
-    replicas: 1
-    backup:
-      enabled: true
-      storageName: default-backup
-      storageType: filesystem
-      filesystem:
-        storageSize: 5Gi
-        storageClassName: standard
-        accessModes:
-          - ReadWriteOnce
-      timeoutSeconds: 600
+    managedKafka:
+      storageSize: 10Gi
+      replicas: 1
   minio:
-    enabled: true
-    storageSize: 10Gi
-    replicas: 1
+    managedMinio:
+      storageSize: 10Gi
+      replicas: 1
   clickhouse:
-    enabled: true
-    storageSize: 10Gi
-    replicas: 1
+    managedClickhouse:
+      storageSize: 10Gi
+      replicas: 1

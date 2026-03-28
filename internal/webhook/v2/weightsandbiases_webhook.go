@@ -209,54 +209,74 @@ func applyMySQLDefaults(wandb *appsv2.WeightsAndBiases) {
 }
 
 func applyRedisDefaults(wandb *appsv2.WeightsAndBiases) {
-	if wandb.Spec.Redis.Name == "" {
-		wandb.Spec.Redis.Name = fmt.Sprintf("%s-redis", wandb.Name)
+	spec := wandb.Spec.Redis.ManagedRedis
+	if spec == nil {
+		return
 	}
 
-	if wandb.Spec.Redis.Namespace == "" {
-		wandb.Spec.Redis.Namespace = wandb.Namespace
+	if spec.Name == "" {
+		spec.Name = fmt.Sprintf("%s-redis", wandb.Name)
+	}
+
+	if spec.Namespace == "" {
+		spec.Namespace = wandb.Namespace
 	}
 
 	if wandb.Spec.Size != appsv2.SizeDev {
-		wandb.Spec.Redis.Sentinel.Enabled = true
+		spec.Sentinel.Enabled = true
 	}
 }
 
 func applyKafkaDefaults(wandb *appsv2.WeightsAndBiases) {
-	if wandb.Spec.Kafka.Name == "" {
-		wandb.Spec.Kafka.Name = fmt.Sprintf("%s-kafka", wandb.Name)
+	spec := wandb.Spec.Kafka.ManagedKafka
+	if spec == nil {
+		return
 	}
 
-	if wandb.Spec.Kafka.Namespace == "" {
-		wandb.Spec.Kafka.Namespace = wandb.Namespace
+	if spec.Name == "" {
+		spec.Name = fmt.Sprintf("%s-kafka", wandb.Name)
+	}
+
+	if spec.Namespace == "" {
+		spec.Namespace = wandb.Namespace
 	}
 }
 
 func applyMinioDefaults(wandb *appsv2.WeightsAndBiases) {
-	if wandb.Spec.Minio.Name == "" {
-		wandb.Spec.Minio.Name = fmt.Sprintf("%s-minio", wandb.Name)
+	spec := wandb.Spec.Minio.ManagedMinio
+	if spec == nil {
+		return
 	}
 
-	if wandb.Spec.Minio.Namespace == "" {
-		wandb.Spec.Minio.Namespace = wandb.Namespace
+	if spec.Name == "" {
+		spec.Name = fmt.Sprintf("%s-minio", wandb.Name)
 	}
 
-	if wandb.Spec.Minio.Config.RootUser == "" {
-		wandb.Spec.Minio.Config.RootUser = "admin"
+	if spec.Namespace == "" {
+		spec.Namespace = wandb.Namespace
 	}
 
-	if wandb.Spec.Minio.Config.MinioBrowserSetting == "" {
-		wandb.Spec.Minio.Config.MinioBrowserSetting = "on"
+	if spec.Config.RootUser == "" {
+		spec.Config.RootUser = "admin"
+	}
+
+	if spec.Config.MinioBrowserSetting == "" {
+		spec.Config.MinioBrowserSetting = "on"
 	}
 }
 
 func applyClickHouseDefaults(wandb *appsv2.WeightsAndBiases) {
-	if wandb.Spec.ClickHouse.Name == "" {
-		wandb.Spec.ClickHouse.Name = fmt.Sprintf("%s-clickhouse", wandb.Name)
+	spec := wandb.Spec.ClickHouse.ManagedClickHouse
+	if spec == nil {
+		return
 	}
 
-	if wandb.Spec.ClickHouse.Namespace == "" {
-		wandb.Spec.ClickHouse.Namespace = wandb.Namespace
+	if spec.Name == "" {
+		spec.Name = fmt.Sprintf("%s-clickhouse", wandb.Name)
+	}
+
+	if spec.Namespace == "" {
+		spec.Namespace = wandb.Namespace
 	}
 }
 
@@ -266,6 +286,9 @@ func validateSpec(_ context.Context, newWandb *appsv2.WeightsAndBiases) (admissi
 
 	allErrors = append(allErrors, validateMySQLSpec(newWandb)...)
 	allErrors = append(allErrors, validateRedisSpec(newWandb)...)
+	allErrors = append(allErrors, validateKafkaSpec(newWandb)...)
+	allErrors = append(allErrors, validateMinioSpec(newWandb)...)
+	allErrors = append(allErrors, validateClickHouseSpec(newWandb)...)
 
 	if len(allErrors) == 0 {
 		return warnings, nil
@@ -313,28 +336,26 @@ func validateMySQLSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 func validateRedisSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 	var errors field.ErrorList
 	redisPath := field.NewPath("spec").Child("redis")
-	spec := wandb.Spec.Redis
 
-	if !spec.Enabled {
+	if wandb.Spec.Redis.ManagedRedis != nil && wandb.Spec.Redis.ExternalRedis != nil {
+		errors = append(errors, field.Invalid(
+			redisPath,
+			"",
+			"managedRedis and externalRedis are mutually exclusive",
+		))
+	}
+
+	spec := wandb.Spec.Redis.ManagedRedis
+	if spec == nil {
 		return errors
 	}
 
 	if spec.StorageSize != "" {
 		if _, err := resource.ParseQuantity(spec.StorageSize); err != nil {
 			errors = append(errors, field.Invalid(
-				redisPath.Child("storageSize"),
+				redisPath.Child("managedRedis").Child("storageSize"),
 				spec.StorageSize,
 				"must be a valid resource quantity (e.g., '10Gi')",
-			))
-		}
-	}
-
-	if spec.Sentinel.Enabled {
-		if !spec.Enabled {
-			errors = append(errors, field.Invalid(
-				redisPath.Child("sentinel").Child("enabled"),
-				spec.Sentinel.Enabled,
-				"Redis Sentinel cannot be enabled when Redis is disabled",
 			))
 		}
 	}
@@ -342,36 +363,80 @@ func validateRedisSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 	return errors
 }
 
+func validateKafkaSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
+	var errors field.ErrorList
+	kafkaPath := field.NewPath("spec").Child("kafka")
+
+	if wandb.Spec.Kafka.ManagedKafka != nil && wandb.Spec.Kafka.ExternalKafka != nil {
+		errors = append(errors, field.Invalid(
+			kafkaPath,
+			"",
+			"managedKafka and externalKafka are mutually exclusive",
+		))
+	}
+
+	return errors
+}
+
+func validateMinioSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
+	var errors field.ErrorList
+	minioPath := field.NewPath("spec").Child("minio")
+
+	if wandb.Spec.Minio.ManagedMinio != nil && wandb.Spec.Minio.ExternalMinio != nil {
+		errors = append(errors, field.Invalid(
+			minioPath,
+			"",
+			"managedMinio and externalMinio are mutually exclusive",
+		))
+	}
+
+	return errors
+}
+
+func validateClickHouseSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
+	var errors field.ErrorList
+	chPath := field.NewPath("spec").Child("clickhouse")
+
+	if wandb.Spec.ClickHouse.ManagedClickHouse != nil && wandb.Spec.ClickHouse.ExternalClickHouse != nil {
+		errors = append(errors, field.Invalid(
+			chPath,
+			"",
+			"managedClickhouse and externalClickhouse are mutually exclusive",
+		))
+	}
+
+	return errors
+}
+
 func validateRedisChanges(newWandb, oldWandb *appsv2.WeightsAndBiases) field.ErrorList {
 	var errors field.ErrorList
-	redisPath := field.NewPath("spec").Child("redis")
-	newSpec := newWandb.Spec.Redis
-	oldSpec := oldWandb.Spec.Redis
+	redisPath := field.NewPath("spec").Child("redis").Child("managedRedis")
+	newSpec := newWandb.Spec.Redis.ManagedRedis
+	oldSpec := oldWandb.Spec.Redis.ManagedRedis
 
-	if !newSpec.Enabled {
+	if newSpec == nil {
 		return errors
 	}
 
-	// storageSize may be initially set as part of an update but cannot be changed afterwards
-	if oldSpec.StorageSize != "" &&
-		oldSpec.StorageSize != newSpec.StorageSize {
-		errors = append(errors, field.Invalid(
-			redisPath.Child("storageSize"),
-			newSpec.StorageSize,
-			"storageSize may not be changed",
-		))
-	}
+	if oldSpec != nil {
+		if oldSpec.StorageSize != "" &&
+			oldSpec.StorageSize != newSpec.StorageSize {
+			errors = append(errors, field.Invalid(
+				redisPath.Child("storageSize"),
+				newSpec.StorageSize,
+				"storageSize may not be changed",
+			))
+		}
 
-	if oldSpec.Namespace != newSpec.Namespace {
-		errors = append(errors, field.Invalid(
-			redisPath.Child("namespace"),
-			newSpec.Namespace,
-			"namespace may not be changed",
-		))
-	}
+		if oldSpec.Namespace != newSpec.Namespace {
+			errors = append(errors, field.Invalid(
+				redisPath.Child("namespace"),
+				newSpec.Namespace,
+				"namespace may not be changed",
+			))
+		}
 
-	if oldSpec.Sentinel.Enabled != newSpec.Sentinel.Enabled {
-		if !newSpec.Enabled {
+		if oldSpec.Sentinel.Enabled != newSpec.Sentinel.Enabled {
 			errors = append(errors, field.Invalid(
 				redisPath.Child("sentinel").Child("enabled"),
 				newSpec.Sentinel.Enabled,

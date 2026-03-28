@@ -228,9 +228,13 @@ type Telemetry struct {
 	Enabled bool `json:"enabled" default:"true"`
 }
 
-// RedisSpec fields have many default values that, if unspecified,
-// will be applied by a defaulting webook
+// RedisSpec defines the desired state of the Redis infrastructure component.
 type RedisSpec struct {
+	ManagedRedis  *ManagedRedisSpec `json:"managedRedis,omitempty"`
+	ExternalRedis *RedisConnection  `json:"externalRedis,omitempty"`
+}
+
+type ManagedRedisSpec struct {
 	ManagedInfraSpec `json:",inline"`
 
 	StorageSize string            `json:"storageSize,omitempty"`
@@ -239,6 +243,16 @@ type RedisSpec struct {
 	Namespace   string            `json:"namespace,omitempty"`
 	Name        string            `json:"name,omitempty"`
 	Telemetry   Telemetry         `json:"telemetry,omitempty"`
+}
+
+type RedisConnection struct {
+	Host     corev1.SecretKeySelector `json:"host,omitempty"`
+	Port     corev1.SecretKeySelector `json:"port,omitempty"`
+	Password corev1.SecretKeySelector `json:"password,omitempty"`
+	Tls      corev1.SecretKeySelector `json:"tls,omitempty"`
+	SslCa    corev1.SecretKeySelector `json:"sslCa,omitempty"`
+
+	URL corev1.SecretKeySelector `json:"URL"`
 }
 
 type RedisConfig struct {
@@ -255,9 +269,13 @@ type RedisSentinelConfig struct {
 	Resources  corev1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-// KafkaSpec fields have many default values that, if unspecified,
-// will be applied by a defaulting webook
+// KafkaSpec defines the desired state of the Kafka infrastructure component.
 type KafkaSpec struct {
+	ManagedKafka  *ManagedKafkaSpec `json:"managedKafka,omitempty"`
+	ExternalKafka *KafkaConnection  `json:"externalKafka,omitempty"`
+}
+
+type ManagedKafkaSpec struct {
 	ManagedInfraSpec `json:",inline"`
 
 	StorageSize      string      `json:"storageSize,omitempty"`
@@ -267,6 +285,12 @@ type KafkaSpec struct {
 	Name             string      `json:"name,omitempty"`
 	Telemetry        Telemetry   `json:"telemetry,omitempty"`
 	SkipDataRecovery bool        `json:"skipDataRecovery,omitempty"`
+}
+
+type KafkaConnection struct {
+	BrokerEndpoint corev1.SecretKeySelector `json:"brokerEndpoint,omitempty"`
+
+	URL corev1.SecretKeySelector `json:"URL"`
 }
 
 type KafkaConfig struct {
@@ -282,9 +306,13 @@ type KafkaReplicationConfig struct {
 	TransactionStateISR      int32 `json:"transactionStateRF,omitempty"`
 }
 
-// MinioSpec fields have many default values that, if unspecified,
-// will be applied by a defaulting webook
+// MinioSpec defines the desired state of the Minio infrastructure component.
 type MinioSpec struct {
+	ManagedMinio  *ManagedMinioSpec `json:"managedMinio,omitempty"`
+	ExternalMinio *MinioConnection  `json:"externalMinio,omitempty"`
+}
+
+type ManagedMinioSpec struct {
 	ManagedInfraSpec `json:",inline"`
 
 	StorageSize string      `json:"storageSize,omitempty"`
@@ -295,15 +323,29 @@ type MinioSpec struct {
 	Telemetry   Telemetry   `json:"telemetry,omitempty"`
 }
 
+type MinioConnection struct {
+	Endpoint  corev1.SecretKeySelector `json:"endpoint,omitempty"`
+	AccessKey corev1.SecretKeySelector `json:"accessKey,omitempty"`
+	SecretKey corev1.SecretKeySelector `json:"secretKey,omitempty"`
+	Bucket    corev1.SecretKeySelector `json:"bucket,omitempty"`
+	Region    corev1.SecretKeySelector `json:"region,omitempty"`
+
+	URL corev1.SecretKeySelector `json:"URL"`
+}
+
 type MinioConfig struct {
 	Resources           corev1.ResourceRequirements `json:"resources,omitempty"`
 	RootUser            string                      `json:"rootUser,omitempty"`
 	MinioBrowserSetting string                      `json:"minioBrowserSetting,omitempty"`
 }
 
-// ClickHouseSpec fields have many default values that, if unspecified,
-// will be applied by a defaulting webook
+// ClickHouseSpec defines the desired state of the ClickHouse infrastructure component.
 type ClickHouseSpec struct {
+	ManagedClickHouse  *ManagedClickHouseSpec `json:"managedClickhouse,omitempty"`
+	ExternalClickHouse *ClickHouseConnection  `json:"externalClickhouse,omitempty"`
+}
+
+type ManagedClickHouseSpec struct {
 	ManagedInfraSpec `json:",inline"`
 
 	StorageSize string           `json:"storageSize,omitempty"`
@@ -313,6 +355,16 @@ type ClickHouseSpec struct {
 	Namespace   string           `json:"namespace,omitempty"`
 	Name        string           `json:"name,omitempty"`
 	Telemetry   Telemetry        `json:"telemetry,omitempty"`
+}
+
+type ClickHouseConnection struct {
+	Host     corev1.SecretKeySelector `json:"host,omitempty"`
+	Port     corev1.SecretKeySelector `json:"port,omitempty"`
+	Database corev1.SecretKeySelector `json:"database,omitempty"`
+	Username corev1.SecretKeySelector `json:"username,omitempty"`
+	Password corev1.SecretKeySelector `json:"password,omitempty"`
+
+	URL corev1.SecretKeySelector `json:"URL"`
 }
 
 type ClickHouseConfig struct {

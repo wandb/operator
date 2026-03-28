@@ -47,8 +47,8 @@ func ToKafkaVendorSpec(
 ) (*v1.Kafka, error) {
 	ctx, log := logx.WithSlog(ctx, logx.Kafka)
 
-	infraSpec := wandb.Spec.Kafka
-	if !infraSpec.Enabled {
+	infraSpec := wandb.Spec.Kafka.ManagedKafka
+	if infraSpec == nil {
 		log.Debug("Kafka is disabled, no vendor spec")
 		return nil, nil
 	}
@@ -143,12 +143,12 @@ func ToKafkaNodePoolVendorSpec(
 ) (*v1.KafkaNodePool, error) {
 	ctx, log := logx.WithSlog(ctx, logx.Kafka)
 
-	infraSpec := wandb.Spec.Kafka
-	if !infraSpec.Enabled {
+	infraSpec := wandb.Spec.Kafka.ManagedKafka
+	if infraSpec == nil {
 		return nil, nil
 	}
 
-	retentionPolicy := wandb.GetRetentionPolicy(wandb.Spec.Kafka.ManagedInfraSpec)
+	retentionPolicy := wandb.GetRetentionPolicy(infraSpec.ManagedInfraSpec)
 	nsnBuilder := strimzi.CreateNsNameBuilder(types.NamespacedName{
 		Namespace: infraSpec.Namespace, Name: infraSpec.Name,
 	})
