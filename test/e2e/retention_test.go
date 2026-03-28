@@ -91,15 +91,18 @@ type manifestOpts struct {
 
 func createWandbManifest(opts manifestOpts) string {
 	componentBlock := func(module string) string {
+		if module == "mysql" {
+			override := ""
+			if policy, ok := opts.componentOverrides[module]; ok {
+				override = fmt.Sprintf("\n      retentionPolicy:\n        onDelete: %s", policy)
+			}
+			return fmt.Sprintf("  mysql:\n    managedMysql:\n      deploymentType: mysql%s", override)
+		}
 		override := ""
 		if policy, ok := opts.componentOverrides[module]; ok {
 			override = fmt.Sprintf("\n    retentionPolicy:\n      onDelete: %s", policy)
 		}
-		extra := ""
-		if module == "mysql" {
-			extra = "\n    deploymentType: mysql"
-		}
-		return fmt.Sprintf("  %s:\n    enabled: true%s%s", module, extra, override)
+		return fmt.Sprintf("  %s:\n    enabled: true%s", module, override)
 	}
 
 	return fmt.Sprintf(`apiVersion: apps.wandb.com/v2

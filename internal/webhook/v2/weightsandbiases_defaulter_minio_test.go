@@ -23,7 +23,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Minio", func() {
 	It("defaults Minio namespace to the parent namespace", func() {
 		wandb := &apiv2.WeightsAndBiases{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
-			Spec:       apiv2.WeightsAndBiasesSpec{Minio: apiv2.MinioSpec{InfraSpec: apiv2.InfraSpec{Enabled: true}}},
+			Spec:       apiv2.WeightsAndBiasesSpec{Minio: apiv2.MinioSpec{ManagedInfraSpec: apiv2.ManagedInfraSpec{Enabled: true}}},
 		}
 
 		err := defaulter.Default(ctx, wandb)
@@ -35,7 +35,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Minio", func() {
 		wandb := &apiv2.WeightsAndBiases{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
 			Spec: apiv2.WeightsAndBiasesSpec{
-				Minio: apiv2.MinioSpec{InfraSpec: apiv2.InfraSpec{Enabled: true}, Namespace: "custom-minio-namespace"},
+				Minio: apiv2.MinioSpec{ManagedInfraSpec: apiv2.ManagedInfraSpec{Enabled: true}, Namespace: "custom-minio-namespace"},
 			},
 		}
 
@@ -49,10 +49,10 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Minio", func() {
 			ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
 			Spec: apiv2.WeightsAndBiasesSpec{
 				Minio: apiv2.MinioSpec{
-					InfraSpec:   apiv2.InfraSpec{Enabled: true},
-					StorageSize: "50Gi",
-					Replicas:    4,
-					Config:      apiv2.MinioConfig{MinioBrowserSetting: "off", RootUser: "custom-admin"},
+					ManagedInfraSpec: apiv2.ManagedInfraSpec{Enabled: true},
+					StorageSize:      "50Gi",
+					Replicas:         4,
+					Config:           apiv2.MinioConfig{MinioBrowserSetting: "off", RootUser: "custom-admin"},
 				},
 			},
 		}

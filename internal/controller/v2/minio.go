@@ -63,7 +63,7 @@ func minioReadState(
 	newConditions []metav1.Condition,
 ) []metav1.Condition {
 	specNamespacedName := minioSpecNamespacedName(wandb.Spec.Minio)
-	retentionPolicy := wandb.GetRetentionPolicy(wandb.Spec.Minio.InfraSpec)
+	retentionPolicy := wandb.GetRetentionPolicy(wandb.Spec.Minio.ManagedInfraSpec)
 	readConditions := tenant.ReadState(
 		ctx,
 		client,
@@ -109,7 +109,7 @@ func minioPurgeFinalizer(
 ) error {
 	var specNamespacedName = minioSpecNamespacedName(wandb.Spec.Minio)
 
-	onDeleteRule := translatorv2.ToMinioOnDeleteRule(wandb, wandb.GetRetentionPolicy(wandb.Spec.Minio.InfraSpec))
+	onDeleteRule := translatorv2.ToMinioOnDeleteRule(wandb, wandb.GetRetentionPolicy(wandb.Spec.Minio.ManagedInfraSpec))
 	if err := tenant.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule); err != nil {
 		return err
 	}

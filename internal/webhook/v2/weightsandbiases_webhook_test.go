@@ -48,7 +48,7 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 		It("sets webhook defaults and preserves user-provided values", func() {
 			obj.Spec.RetentionPolicy.OnDelete = ""
 			obj.Spec.Wandb.ManifestRepository = "example.com/wandb/server-manifest"
-			obj.Spec.MySQL.DeploymentType = ""
+			obj.Spec.MySQL.ManagedMysql = &appsv2.ManagedMysqlSpec{}
 			obj.Spec.Redis.Enabled = true
 			obj.Spec.Redis.Namespace = ""
 			Expect(defaulter.Default(ctx, obj)).To(Succeed())
@@ -65,8 +65,8 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 			Expect(*obj.Spec.Wandb.ServiceAccount.Create).To(BeTrue())
 			Expect(obj.Spec.Wandb.ServiceAccount.ServiceAccountName).To(Equal("wandb"))
 			Expect(obj.Status.Wandb.Applications).ToNot(BeNil())
-			Expect(obj.Spec.MySQL.Namespace).To(Equal("test-ns"))
-			Expect(obj.Spec.MySQL.DeploymentType).To(Equal(appsv2.MySQLTypeMysql))
+			Expect(obj.Spec.MySQL.ManagedMysql.Namespace).To(Equal("test-ns"))
+			Expect(obj.Spec.MySQL.ManagedMysql.DeploymentType).To(Equal(appsv2.MySQLTypeMysql))
 			Expect(obj.Spec.Redis.Namespace).To(Equal("test-ns"))
 			Expect(obj.Spec.Kafka.Namespace).To(Equal("test-ns"))
 			Expect(obj.Spec.Minio.Namespace).To(Equal("test-ns"))
@@ -84,8 +84,10 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 			obj.Spec.Wandb.InternalServiceAuth.OIDCIssuer = "https://issuer.example.com"
 			obj.Spec.Wandb.ServiceAccount.Create = boolPtr(false)
 			obj.Spec.Wandb.ServiceAccount.ServiceAccountName = "custom-sa"
-			obj.Spec.MySQL.Namespace = "custom-mysql"
-			obj.Spec.MySQL.DeploymentType = appsv2.MySQLTypePercona
+			obj.Spec.MySQL.ManagedMysql = &appsv2.ManagedMysqlSpec{
+				Namespace:      "custom-mysql",
+				DeploymentType: appsv2.MySQLTypePercona,
+			}
 			obj.Status.Wandb.Applications = map[string]appsv2.ApplicationStatus{"api": {}}
 
 			Expect(defaulter.Default(ctx, obj)).To(Succeed())
@@ -99,8 +101,8 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 			Expect(obj.Spec.Wandb.InternalServiceAuth.OIDCIssuer).To(Equal("https://issuer.example.com"))
 			Expect(*obj.Spec.Wandb.ServiceAccount.Create).To(BeFalse())
 			Expect(obj.Spec.Wandb.ServiceAccount.ServiceAccountName).To(Equal("custom-sa"))
-			Expect(obj.Spec.MySQL.Namespace).To(Equal("custom-mysql"))
-			Expect(obj.Spec.MySQL.DeploymentType).To(Equal(appsv2.MySQLTypePercona))
+			Expect(obj.Spec.MySQL.ManagedMysql.Namespace).To(Equal("custom-mysql"))
+			Expect(obj.Spec.MySQL.ManagedMysql.DeploymentType).To(Equal(appsv2.MySQLTypePercona))
 			Expect(obj.Status.Wandb.Applications).To(HaveKey("api"))
 		})
 

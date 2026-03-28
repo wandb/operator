@@ -23,7 +23,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 	It("defaults ClickHouse namespace to the parent namespace", func() {
 		wandb := &apiv2.WeightsAndBiases{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
-			Spec:       apiv2.WeightsAndBiasesSpec{ClickHouse: apiv2.ClickHouseSpec{InfraSpec: apiv2.InfraSpec{Enabled: true}}},
+			Spec:       apiv2.WeightsAndBiasesSpec{ClickHouse: apiv2.ClickHouseSpec{ManagedInfraSpec: apiv2.ManagedInfraSpec{Enabled: true}}},
 		}
 
 		err := defaulter.Default(ctx, wandb)
@@ -35,7 +35,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 		wandb := &apiv2.WeightsAndBiases{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
 			Spec: apiv2.WeightsAndBiasesSpec{
-				ClickHouse: apiv2.ClickHouseSpec{InfraSpec: apiv2.InfraSpec{Enabled: true}, Namespace: "custom-clickhouse-namespace"},
+				ClickHouse: apiv2.ClickHouseSpec{ManagedInfraSpec: apiv2.ManagedInfraSpec{Enabled: true}, Namespace: "custom-clickhouse-namespace"},
 			},
 		}
 
@@ -49,10 +49,10 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 			ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
 			Spec: apiv2.WeightsAndBiasesSpec{
 				ClickHouse: apiv2.ClickHouseSpec{
-					InfraSpec:   apiv2.InfraSpec{Enabled: true},
-					StorageSize: "100Gi",
-					Replicas:    2,
-					Version:     "24.1",
+					ManagedInfraSpec: apiv2.ManagedInfraSpec{Enabled: true},
+					StorageSize:      "100Gi",
+					Replicas:         2,
+					Version:          "24.1",
 				},
 			},
 		}

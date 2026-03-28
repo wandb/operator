@@ -99,8 +99,8 @@ func ToKafkaVendorSpec(
 						Metadata: &v1.MetadataTemplate{
 							Labels: BuildWandbKafkaLabels(wandb),
 						},
-						Affinity:    wandb.GetAffinity(infraSpec.InfraSpec),
-						Tolerations: *wandb.GetTolerations(infraSpec.InfraSpec),
+						Affinity:    wandb.GetAffinity(infraSpec.ManagedInfraSpec),
+						Tolerations: *wandb.GetTolerations(infraSpec.ManagedInfraSpec),
 					},
 				},
 			},
@@ -112,8 +112,8 @@ func ToKafkaVendorSpec(
 						Metadata: &v1.MetadataTemplate{
 							Labels: BuildWandbKafkaLabels(wandb),
 						},
-						Affinity:    wandb.GetAffinity(infraSpec.InfraSpec),
-						Tolerations: *wandb.GetTolerations(infraSpec.InfraSpec),
+						Affinity:    wandb.GetAffinity(infraSpec.ManagedInfraSpec),
+						Tolerations: *wandb.GetTolerations(infraSpec.ManagedInfraSpec),
 					},
 				},
 			},
@@ -148,7 +148,7 @@ func ToKafkaNodePoolVendorSpec(
 		return nil, nil
 	}
 
-	retentionPolicy := wandb.GetRetentionPolicy(wandb.Spec.Kafka.InfraSpec)
+	retentionPolicy := wandb.GetRetentionPolicy(wandb.Spec.Kafka.ManagedInfraSpec)
 	nsnBuilder := strimzi.CreateNsNameBuilder(types.NamespacedName{
 		Namespace: infraSpec.Namespace, Name: infraSpec.Name,
 	})

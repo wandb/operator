@@ -86,8 +86,8 @@ func ToRedisStandaloneVendorSpec(
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				Resources:       &corev1.ResourceRequirements{},
 			},
-			Affinity:    wandb.GetAffinity(spec.InfraSpec),
-			Tolerations: wandb.GetTolerations(spec.InfraSpec),
+			Affinity:    wandb.GetAffinity(spec.ManagedInfraSpec),
+			Tolerations: wandb.GetTolerations(spec.ManagedInfraSpec),
 			Storage: &rediscommon.Storage{
 				VolumeClaimTemplate: corev1.PersistentVolumeClaim{
 					ObjectMeta: metav1.ObjectMeta{
@@ -172,8 +172,8 @@ func ToRedisSentinelVendorSpec(
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				Resources:       &corev1.ResourceRequirements{},
 			},
-			Affinity:    wandb.GetAffinity(spec.InfraSpec),
-			Tolerations: wandb.GetTolerations(spec.InfraSpec),
+			Affinity:    wandb.GetAffinity(spec.ManagedInfraSpec),
+			Tolerations: wandb.GetTolerations(spec.ManagedInfraSpec),
 			RedisSentinelConfig: &redissentinelv1beta2.RedisSentinelConfig{
 				RedisSentinelConfig: rediscommon.RedisSentinelConfig{
 					RedisReplicationName: nsnBuilder.ReplicationName(),
@@ -248,8 +248,8 @@ func ToRedisReplicationVendorSpec(
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				Resources:       &corev1.ResourceRequirements{},
 			},
-			Affinity:    wandb.GetAffinity(spec.InfraSpec),
-			Tolerations: wandb.GetTolerations(spec.InfraSpec),
+			Affinity:    wandb.GetAffinity(spec.ManagedInfraSpec),
+			Tolerations: wandb.GetTolerations(spec.ManagedInfraSpec),
 			Storage: &rediscommon.Storage{
 				VolumeClaimTemplate: corev1.PersistentVolumeClaim{
 					ObjectMeta: metav1.ObjectMeta{

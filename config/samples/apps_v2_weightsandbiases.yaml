@@ -5,8 +5,8 @@ metadata:
 spec:
   size: dev
   mysql:
-    enabled: true
-    storageSize: 5Gi
+    managedMysql:
+      storageSize: 5Gi
   redis:
     enabled: true
     storageSize: 1Gi

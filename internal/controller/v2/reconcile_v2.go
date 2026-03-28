@@ -61,7 +61,7 @@ func runRetentionFinalizer(
 	ctx context.Context,
 	client ctrlClient.Client,
 	wandb *apiv2.WeightsAndBiases,
-	infraSpec apiv2.InfraSpec,
+	infraSpec apiv2.ManagedInfraSpec,
 	purgeFn finalizerFunc,
 	detachFn finalizerFunc,
 ) error {
@@ -106,19 +106,21 @@ func Reconcile(
 	if isFlaggedForDeletion && !wandb.ObjectMeta.DeletionTimestamp.IsZero() {
 		if ctrlqueue.ContainsString(wandb.GetFinalizers(), CleanupFinalizer) {
 
-			if err = runRetentionFinalizer(ctx, client, wandb, wandb.Spec.Minio.InfraSpec, minioPurgeFinalizer, minioDetachFinalizer); err != nil {
+			if err = runRetentionFinalizer(ctx, client, wandb, wandb.Spec.Minio.ManagedInfraSpec, minioPurgeFinalizer, minioDetachFinalizer); err != nil {
 				return ctrl.Result{}, err
 			}
-			if err = runRetentionFinalizer(ctx, client, wandb, wandb.Spec.MySQL.InfraSpec, mysqlPurgeFinalizer, mysqlDetachFinalizer); err != nil {
+			if wandb.Spec.MySQL.ManagedMysql != nil {
+				if err = runRetentionFinalizer(ctx, client, wandb, wandb.Spec.MySQL.ManagedMysql.ManagedInfraSpec, mysqlPurgeFinalizer, mysqlDetachFinalizer); err != nil {
+					return ctrl.Result{}, err
+				}
+			}
+			if err = runRetentionFinalizer(ctx, client, wandb, wandb.Spec.Redis.ManagedInfraSpec, redisPurgeFinalizer, redisDetachFinalizer); err != nil {
 				return ctrl.Result{}, err
 			}
-			if err = runRetentionFinalizer(ctx, client, wandb, wandb.Spec.Redis.InfraSpec, redisPurgeFinalizer, redisDetachFinalizer); err != nil {
+			if err = runRetentionFinalizer(ctx, client, wandb, wandb.Spec.Kafka.ManagedInfraSpec, kafkaPurgeFinalizer, kafkaDetachFinalizer); err != nil {
 				return ctrl.Result{}, err
 			}
-			if err = runRetentionFinalizer(ctx, client, wandb, wandb.Spec.Kafka.InfraSpec, kafkaPurgeFinalizer, kafkaDetachFinalizer); err != nil {
-				return ctrl.Result{}, err
-			}
-			if err = runRetentionFinalizer(ctx, client, wandb, wandb.Spec.ClickHouse.InfraSpec, clickHousePurgeFinalizer, clickHouseDetachFinalizer); err != nil {
+			if err = runRetentionFinalizer(ctx, client, wandb, wandb.Spec.ClickHouse.ManagedInfraSpec, clickHousePurgeFinalizer, clickHouseDetachFinalizer); err != nil {
 				return ctrl.Result{}, err
 			}
 			controllerutil.RemoveFinalizer(wandb, CleanupFinalizer)
@@ -279,7 +281,7 @@ func ReconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 		return result, err
 	}
 
-	if wandb.Spec.MySQL.DeploymentType == apiv2.MySQLTypeMysql && !wandb.Status.Wandb.MySQLInit.Succeeded {
+	if wandb.Spec.MySQL.ManagedMysql != nil && wandb.Spec.MySQL.ManagedMysql.DeploymentType == apiv2.MySQLTypeMysql && !wandb.Status.Wandb.MySQLInit.Succeeded {
 		logger.Info("Mysql init not yet successful", "Message", wandb.Status.Wandb.MySQLInit.Message)
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
@@ -674,16 +676,19 @@ func ApplyInfraSizing(wandb *apiv2.WeightsAndBiases, manifest serverManifest.Man
 	size := wandb.Spec.Size
 
 	// Default MySQL
-	if mysqlConfig, ok := manifest.Mysql["default"]; ok {
-		sizing := ResolveInfraSizing(mysqlConfig.Sizing, size, wandb.Spec.RequireLimits)
-		if wandb.Spec.MySQL.Replicas == 0 && sizing.Replicas != 0 {
-			wandb.Spec.MySQL.Replicas = sizing.Replicas
-		}
-		if wandb.Spec.MySQL.StorageSize == "" && sizing.VolumeSize != "" {
-			wandb.Spec.MySQL.StorageSize = sizing.VolumeSize
-		}
-		if sizing.Resources != nil && len(wandb.Spec.MySQL.Config.Resources.Requests) == 0 && len(wandb.Spec.MySQL.Config.Resources.Limits) == 0 {
-			wandb.Spec.MySQL.Config.Resources = *sizing.Resources
+	if wandb.Spec.MySQL.ManagedMysql != nil {
+		if mysqlConfig, ok := manifest.Mysql["default"]; ok {
+			sizing := ResolveInfraSizing(mysqlConfig.Sizing, size, wandb.Spec.RequireLimits)
+			spec := wandb.Spec.MySQL.ManagedMysql
+			if spec.Replicas == 0 && sizing.Replicas != 0 {
+				spec.Replicas = sizing.Replicas
+			}
+			if spec.StorageSize == "" && sizing.VolumeSize != "" {
+				spec.StorageSize = sizing.VolumeSize
+			}
+			if sizing.Resources != nil && len(spec.Config.Resources.Requests) == 0 && len(spec.Config.Resources.Limits) == 0 {
+				spec.Config.Resources = *sizing.Resources
+			}
 		}
 	}
 
@@ -1354,7 +1359,7 @@ func resolveVolumeMounts(ctx context.Context, manifest serverManifest.Manifest, 
 }
 
 func runMysqlInitJob(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest) (ctrl.Result, error) {
-	if wandb.Spec.MySQL.DeploymentType != apiv2.MySQLTypeMysql {
+	if wandb.Spec.MySQL.ManagedMysql == nil || wandb.Spec.MySQL.ManagedMysql.DeploymentType != apiv2.MySQLTypeMysql {
 		return ctrl.Result{}, nil
 	}
 
@@ -1376,7 +1381,7 @@ func runMysqlInitJob(ctx context.Context, client ctrlClient.Client, wandb *apiv2
 	if apiErrors.IsNotFound(err) {
 		logger.Info("Creating MySQL init job")
 
-		specNamespacedName := mysqlSpecNamespacedName(wandb.Spec.MySQL)
+		specNamespacedName := managedMysqlSpecNamespacedName(wandb.Spec.MySQL.ManagedMysql)
 		nsnBuilder := mysql.CreateNsNameBuilder(types.NamespacedName{
 			Name:      specNamespacedName.Name,
 			Namespace: specNamespacedName.Namespace,
@@ -1950,7 +1955,7 @@ func inferState(
 	// Infra is "ok" if either it is not enabled or if it is (enabled and) ready
 	redisOk := !wandb.Spec.Redis.Enabled || wandb.Status.RedisStatus.Ready
 	minioOk := !wandb.Spec.Minio.Enabled || wandb.Status.MinioStatus.Ready
-	mysqlOk := !wandb.Spec.MySQL.Enabled || wandb.Status.MySQLStatus.Ready
+	mysqlOk := wandb.Spec.MySQL.ManagedMysql == nil || wandb.Status.MySQLStatus.Ready
 	clickHouseOk := !wandb.Spec.ClickHouse.Enabled || wandb.Status.ClickHouseStatus.Ready
 	kafkaOk := !wandb.Spec.Kafka.Enabled || wandb.Status.KafkaStatus.Ready
 

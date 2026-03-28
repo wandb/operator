@@ -191,15 +191,20 @@ func (v *WeightsAndBiasesCustomValidator) ValidateDelete(ctx context.Context, ob
 }
 
 func applyMySQLDefaults(wandb *appsv2.WeightsAndBiases) {
-	if wandb.Spec.MySQL.Name == "" {
-		wandb.Spec.MySQL.Name = fmt.Sprintf("%s-mysql", wandb.Name)
+	spec := wandb.Spec.MySQL.ManagedMysql
+	if spec == nil {
+		return
 	}
 
-	if wandb.Spec.MySQL.Namespace == "" {
-		wandb.Spec.MySQL.Namespace = wandb.Namespace
+	if spec.Name == "" {
+		spec.Name = fmt.Sprintf("%s-mysql", wandb.Name)
 	}
-	if wandb.Spec.MySQL.DeploymentType == "" {
-		wandb.Spec.MySQL.DeploymentType = appsv2.MySQLTypeMysql
+
+	if spec.Namespace == "" {
+		spec.Namespace = wandb.Namespace
+	}
+	if spec.DeploymentType == "" {
+		spec.DeploymentType = appsv2.MySQLTypeMysql
 	}
 }
 
@@ -259,6 +264,7 @@ func validateSpec(_ context.Context, newWandb *appsv2.WeightsAndBiases) (admissi
 	var allErrors field.ErrorList
 	var warnings admission.Warnings
 
+	allErrors = append(allErrors, validateMySQLSpec(newWandb)...)
 	allErrors = append(allErrors, validateRedisSpec(newWandb)...)
 
 	if len(allErrors) == 0 {
@@ -287,6 +293,21 @@ func validateChanges(_ context.Context, newWandb *appsv2.WeightsAndBiases, oldWa
 		newWandb.Name,
 		allErrors,
 	)
+}
+
+func validateMySQLSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
+	var errors field.ErrorList
+	mysqlPath := field.NewPath("spec").Child("mysql")
+
+	if wandb.Spec.MySQL.ManagedMysql != nil && wandb.Spec.MySQL.ExternalMysql != nil {
+		errors = append(errors, field.Invalid(
+			mysqlPath,
+			"",
+			"managedMysql and externalMysql are mutually exclusive",
+		))
+	}
+
+	return errors
 }
 
 func validateRedisSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {

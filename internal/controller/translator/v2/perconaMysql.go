@@ -86,9 +86,8 @@ func ToPerconaMySQLVendorSpec(
 	scheme *runtime.Scheme,
 ) (*pxcv1.PerconaXtraDBCluster, error) {
 	ctx, log := logx.WithSlog(ctx, logx.Mysql)
-	spec := wandb.Spec.MySQL
-
-	if !spec.Enabled {
+	spec := wandb.Spec.MySQL.ManagedMysql
+	if spec == nil {
 		return nil, nil
 	}
 
@@ -143,9 +142,9 @@ pxc_strict_mode=PERMISSIVE
 						},
 					},
 					Affinity: &pxcv1.PodAffinity{
-						Advanced: spec.Affinity,
+						Advanced: wandb.GetAffinity(spec.ManagedInfraSpec),
 					},
-					Tolerations:   *wandb.GetTolerations(spec.InfraSpec),
+					Tolerations:   *wandb.GetTolerations(spec.ManagedInfraSpec),
 					Configuration: configuration,
 				},
 			},

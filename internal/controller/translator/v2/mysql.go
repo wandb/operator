@@ -19,15 +19,11 @@ import (
 
 func ToMysqlMySQLVendorSpec(
 	ctx context.Context,
-	spec apiv2.MySQLSpec,
+	spec apiv2.ManagedMysqlSpec,
 	wandb *apiv2.WeightsAndBiases,
 	scheme *runtime.Scheme,
 ) (*v2.InnoDBCluster, error) {
 	ctx, log := logx.WithSlog(ctx, logx.Mysql)
-
-	if !spec.Enabled {
-		return nil, nil
-	}
 
 	specName := spec.Name
 	nsnBuilder := mysql.CreateNsNameBuilder(types.NamespacedName{
@@ -74,13 +70,13 @@ func ToMysqlMySQLVendorSpec(
 		}
 	}
 
-	if spec.Affinity != nil || spec.Tolerations != nil {
+	if wandb.GetAffinity(spec.ManagedInfraSpec) != nil || wandb.GetTolerations(spec.ManagedInfraSpec) != nil {
 		if innodb.Spec.PodSpec == nil {
 			innodb.Spec.PodSpec = &corev1.PodSpec{}
 		}
-		innodb.Spec.PodSpec.Affinity = spec.Affinity
-		if spec.Tolerations != nil {
-			innodb.Spec.PodSpec.Tolerations = *spec.Tolerations
+		innodb.Spec.PodSpec.Affinity = wandb.GetAffinity(spec.ManagedInfraSpec)
+		if tols := wandb.GetTolerations(spec.ManagedInfraSpec); tols != nil {
+			innodb.Spec.PodSpec.Tolerations = *tols
 		}
 	}
 

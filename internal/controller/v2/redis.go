@@ -75,7 +75,7 @@ func redisReadState(
 	newConditions []metav1.Condition,
 ) ([]metav1.Condition, *translator.InfraConnection) {
 	specNamespacedName := redisSpecNamespacedName(wandb.Spec.Redis)
-	onDeleteRule := translatorv2.ToRedisOnDeleteRule(wandb, wandb.GetRetentionPolicy(wandb.Spec.Redis.InfraSpec))
+	onDeleteRule := translatorv2.ToRedisOnDeleteRule(wandb, wandb.GetRetentionPolicy(wandb.Spec.Redis.ManagedInfraSpec))
 	readConditions, newInfraConn := opstree.ReadState(ctx, client, specNamespacedName, wandb, onDeleteRule)
 	newConditions = append(newConditions, readConditions...)
 	return newConditions, newInfraConn
@@ -115,7 +115,7 @@ func redisPurgeFinalizer(
 	wandb *apiv2.WeightsAndBiases,
 ) error {
 	specNamespacedName := redisSpecNamespacedName(wandb.Spec.Redis)
-	onDeleteRule := translatorv2.ToRedisOnDeleteRule(wandb, wandb.GetRetentionPolicy(wandb.Spec.Redis.InfraSpec))
+	onDeleteRule := translatorv2.ToRedisOnDeleteRule(wandb, wandb.GetRetentionPolicy(wandb.Spec.Redis.ManagedInfraSpec))
 	return opstree.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule)
 }
 

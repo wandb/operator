@@ -70,7 +70,7 @@ func ToClickHouseVendorSpec(
 	}
 
 	reclaimPolicy := v1.PVCReclaimPolicyUnspecified
-	if wandb.GetRetentionPolicy(wandb.Spec.ClickHouse.InfraSpec).OnDelete == apiv2.PurgeOnDelete {
+	if wandb.GetRetentionPolicy(wandb.Spec.ClickHouse.ManagedInfraSpec).OnDelete == apiv2.PurgeOnDelete {
 		reclaimPolicy = v1.PVCReclaimPolicyDelete
 	}
 
@@ -111,8 +111,8 @@ func ToClickHouseVendorSpec(
 							Labels: BuildWandbClickhouseLabels(wandb),
 						},
 						Spec: corev1.PodSpec{
-							Affinity:    wandb.GetAffinity(spec.InfraSpec),
-							Tolerations: *wandb.GetTolerations(spec.InfraSpec),
+							Affinity:    wandb.GetAffinity(spec.ManagedInfraSpec),
+							Tolerations: *wandb.GetTolerations(spec.ManagedInfraSpec),
 						},
 					},
 				},

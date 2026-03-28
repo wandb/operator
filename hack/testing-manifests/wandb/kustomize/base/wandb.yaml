@@ -15,10 +15,10 @@ spec:
   retentionPolicy:
     onDelete: detach
   mysql:
-    enabled: true
-    deploymentType: "mysql"
-    telemetry:
-      enabled: true
+    managedMysql:
+      deploymentType: "mysql"
+      telemetry:
+        enabled: true
   redis:
     enabled: true
     telemetry:
