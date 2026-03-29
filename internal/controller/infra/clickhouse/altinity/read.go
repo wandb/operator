@@ -38,7 +38,7 @@ func ReadState(
 	specNamespacedName types.NamespacedName,
 	wandbOwner client.Object,
 	onDeleteRule translator.OnDeleteRule,
-) ([]metav1.Condition, *translator.InfraConnection) {
+) ([]metav1.Condition, *translator.ClickHouseConnection) {
 	ctx, log := logx.WithSlog(ctx, logx.ClickHouse)
 	var actual = &chiv1.ClickHouseInstallation{}
 
@@ -82,7 +82,7 @@ func ReadState(
 		}
 	}
 
-	var connection *translator.InfraConnection
+	var connection *translator.ClickHouseConnection
 
 	if actual != nil {
 		podsRunning, err := chPodsRunningStatus(ctx, k8sClient, nsnBuilder.Namespace(), actual)

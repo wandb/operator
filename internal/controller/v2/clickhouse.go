@@ -53,7 +53,7 @@ func clickHouseReadState(
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
 	newConditions []metav1.Condition,
-) ([]metav1.Condition, *translator.InfraConnection) {
+) ([]metav1.Condition, *translator.ClickHouseConnection) {
 	spec := wandb.Spec.ClickHouse.ManagedClickHouse
 	if spec == nil {
 		return newConditions, nil
@@ -72,7 +72,7 @@ func clickHouseInferStatus(
 	recorder record.EventRecorder,
 	wandb *apiv2.WeightsAndBiases,
 	newConditions []metav1.Condition,
-	newInfraConn *translator.InfraConnection,
+	newInfraConn *translator.ClickHouseConnection,
 ) (ctrl.Result, error) {
 	spec := wandb.Spec.ClickHouse.ManagedClickHouse
 	if spec == nil {
@@ -81,7 +81,7 @@ func clickHouseInferStatus(
 
 	enabled := true
 	oldConditions := wandb.Status.ClickHouseStatus.Conditions
-	oldInfraConn := translatorv2.ToTranslatorInfraConnection(wandb.Status.ClickHouseStatus.Connection)
+	oldInfraConn := translatorv2.ToTranslatorClickHouseConnection(wandb.Status.ClickHouseStatus.Connection)
 
 	updatedStatus, events, ctrlResult := altinity.ComputeStatus(
 		ctx,
@@ -94,7 +94,7 @@ func clickHouseInferStatus(
 	for _, e := range events {
 		recorder.Event(wandb, e.Type, e.Reason, e.Message)
 	}
-	wandb.Status.ClickHouseStatus = translatorv2.ToWbInfraStatus(updatedStatus)
+	wandb.Status.ClickHouseStatus = translatorv2.ToWbClickHouseInfraStatus(updatedStatus)
 	err := client.Status().Update(ctx, wandb)
 
 	return ctrlResult, err

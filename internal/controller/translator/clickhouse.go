@@ -1,19 +1,27 @@
 package translator
 
 import (
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	corev1 "k8s.io/api/core/v1"
 )
 
 const ClickhouseModuleName = "clickhouse"
 
 /////////////////////////////////////////////////
+// ClickHouse Connection
+
+type ClickHouseConnection struct {
+	Host     corev1.SecretKeySelector
+	Port     corev1.SecretKeySelector
+	Database corev1.SecretKeySelector
+	Username corev1.SecretKeySelector
+	Password corev1.SecretKeySelector
+	URL      corev1.SecretKeySelector
+}
+
+/////////////////////////////////////////////////
 // ClickHouse Status
 
-// ClickHouseStatus is a representation of Status that must support round-trip translation
-// between any version of WBClickHouseStatus and itself
 type ClickHouseStatus struct {
-	Ready      bool
-	State      string
-	Conditions []metav1.Condition
-	Connection InfraConnection
+	InfraStatus
+	Connection ClickHouseConnection
 }

@@ -53,7 +53,7 @@ func ReadState(
 	specNamespacedName types.NamespacedName,
 	wandbOwner client.Object,
 	onDeleteRule translator.OnDeleteRule,
-) ([]metav1.Condition, *translator.InfraConnection) {
+) ([]metav1.Condition, *translator.MysqlConnection) {
 	ctx, _ = logx.WithSlog(ctx, logx.Mysql)
 	log := logx.GetSlog(ctx)
 
@@ -101,7 +101,7 @@ func ReadState(
 		}
 	}
 
-	var connection *translator.InfraConnection
+	var connection *translator.MysqlConnection
 
 	if actual != nil {
 		connInfo := readConnectionDetails(ctx, k8sClient, actual, specNamespacedName)

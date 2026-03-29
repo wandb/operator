@@ -24,11 +24,11 @@ func ComputeStatus(
 	ctx context.Context,
 	enabled bool,
 	oldConditions, currentConditions []metav1.Condition,
-	connection *translator.InfraConnection,
+	connection *translator.MinioConnection,
 	currentGeneration int64,
-) (translator.InfraStatus, []corev1.Event, ctrl.Result) {
+) (translator.MinioStatus, []corev1.Event, ctrl.Result) {
 	ctx, _ = logx.WithSlog(ctx, logx.Minio)
-	result := translator.InfraStatus{}
+	result := translator.MinioStatus{}
 
 	if connection != nil {
 		result.Connection = *connection

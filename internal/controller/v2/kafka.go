@@ -79,7 +79,7 @@ func kafkaReadState(
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
 	newConditions []metav1.Condition,
-) ([]metav1.Condition, *translator.InfraConnection) {
+) ([]metav1.Condition, *translator.KafkaConnection) {
 	spec := wandb.Spec.Kafka.ManagedKafka
 	if spec == nil {
 		return newConditions, nil
@@ -98,7 +98,7 @@ func kafkaInferStatus(
 	recorder record.EventRecorder,
 	wandb *apiv2.WeightsAndBiases,
 	newConditions []metav1.Condition,
-	newInfraConn *translator.InfraConnection,
+	newInfraConn *translator.KafkaConnection,
 ) (ctrl.Result, error) {
 	spec := wandb.Spec.Kafka.ManagedKafka
 	if spec == nil {
@@ -107,7 +107,7 @@ func kafkaInferStatus(
 
 	enabled := true
 	oldConditions := wandb.Status.KafkaStatus.Conditions
-	oldInfraConn := translatorv2.ToTranslatorInfraConnection(wandb.Status.KafkaStatus.Connection)
+	oldInfraConn := translatorv2.ToTranslatorKafkaConnection(wandb.Status.KafkaStatus.Connection)
 
 	updatedStatus, events, ctrlResult := strimzi.ComputeStatus(
 		ctx,
@@ -120,7 +120,7 @@ func kafkaInferStatus(
 	for _, e := range events {
 		recorder.Event(wandb, e.Type, e.Reason, e.Message)
 	}
-	wandb.Status.KafkaStatus = translatorv2.ToWbInfraStatus(updatedStatus)
+	wandb.Status.KafkaStatus = translatorv2.ToWbKafkaInfraStatus(updatedStatus)
 	err := client.Status().Update(ctx, wandb)
 
 	return ctrlResult, err

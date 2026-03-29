@@ -3,7 +3,6 @@ package translator
 import (
 	apiv2 "github.com/wandb/operator/api/v2"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const MysqlModuleName = "mysql"
@@ -49,13 +48,21 @@ type MySQLConfig struct {
 }
 
 /////////////////////////////////////////////////
+// MySQL Connection
+
+type MysqlConnection struct {
+	Host     corev1.SecretKeySelector
+	Port     corev1.SecretKeySelector
+	Database corev1.SecretKeySelector
+	Username corev1.SecretKeySelector
+	Password corev1.SecretKeySelector
+	URL      corev1.SecretKeySelector
+}
+
+/////////////////////////////////////////////////
 // MySQL Status
 
-// MysqlStatus is a representation of Status that must support round-trip translation
-// between any version of WBMysqlStatus and itself
 type MysqlStatus struct {
-	Ready      bool
-	State      string
-	Conditions []metav1.Condition
-	Connection InfraConnection
+	InfraStatus
+	Connection MysqlConnection
 }

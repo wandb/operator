@@ -155,7 +155,7 @@ func mysqlReadState(
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
 	newConditions []metav1.Condition,
-) ([]metav1.Condition, *translator.InfraConnection) {
+) ([]metav1.Condition, *translator.MysqlConnection) {
 	spec := wandb.Spec.MySQL.ManagedMysql
 	if spec == nil {
 		return newConditions, nil
@@ -164,7 +164,7 @@ func mysqlReadState(
 	specNamespacedName := managedMysqlSpecNamespacedName(spec)
 
 	var readConditions []metav1.Condition
-	var newInfraConn *translator.InfraConnection
+	var newInfraConn *translator.MysqlConnection
 
 	switch spec.DeploymentType {
 	case apiv2.MySQLTypeMariadb:
@@ -185,7 +185,7 @@ func mysqlInferStatus(
 	recorder record.EventRecorder,
 	wandb *apiv2.WeightsAndBiases,
 	newConditions []metav1.Condition,
-	newInfraConn *translator.InfraConnection,
+	newInfraConn *translator.MysqlConnection,
 ) (ctrl.Result, error) {
 	spec := wandb.Spec.MySQL.ManagedMysql
 	if spec == nil {
@@ -194,9 +194,9 @@ func mysqlInferStatus(
 
 	enabled := true
 	oldConditions := wandb.Status.MySQLStatus.Conditions
-	oldInfraConn := translatorv2.ToTranslatorInfraConnection(wandb.Status.MySQLStatus.Connection)
+	oldInfraConn := translatorv2.ToTranslatorMysqlConnection(wandb.Status.MySQLStatus.Connection)
 
-	var updatedStatus translator.InfraStatus
+	var updatedStatus translator.MysqlStatus
 	var events []corev1.Event
 	var ctrlResult ctrl.Result
 
@@ -234,7 +234,7 @@ func mysqlInferStatus(
 	for _, e := range events {
 		recorder.Event(wandb, e.Type, e.Reason, e.Message)
 	}
-	wandb.Status.MySQLStatus = translatorv2.ToWbInfraStatus(updatedStatus)
+	wandb.Status.MySQLStatus = translatorv2.ToWbMysqlInfraStatus(updatedStatus)
 	err := client.Status().Update(ctx, wandb)
 
 	return ctrlResult, err

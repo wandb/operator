@@ -49,7 +49,7 @@ func ReadState(
 	k8sClient client.Client,
 	specNamespacedName types.NamespacedName,
 	wandbOwner client.Object,
-) ([]metav1.Condition, *translator.InfraConnection) {
+) ([]metav1.Condition, *translator.MysqlConnection) {
 	ctx, _ = logx.WithSlog(ctx, logx.Mysql)
 	var actual = &pxcv1.PerconaXtraDBCluster{}
 
@@ -72,7 +72,7 @@ func ReadState(
 	}
 
 	conditions := make([]metav1.Condition, 0)
-	var connection *translator.InfraConnection
+	var connection *translator.MysqlConnection
 
 	if actual != nil {
 		connInfo := readConnectionDetails(ctx, k8sClient, actual, specNamespacedName)

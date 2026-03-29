@@ -22,7 +22,7 @@ func ReadState(
 	specNamespacedName types.NamespacedName,
 	wandbOwner client.Object,
 	onDeleteRule translator.OnDeleteRule,
-) ([]metav1.Condition, *translator.InfraConnection) {
+) ([]metav1.Condition, *translator.RedisConnection) {
 	ctx, _ = logx.WithSlog(ctx, logx.Redis)
 	log := logx.GetSlog(ctx)
 	var standaloneActual = &redisv1beta2.Redis{}
@@ -80,7 +80,7 @@ func ReadState(
 	}
 
 	conditions := make([]metav1.Condition, 0)
-	var connection *translator.InfraConnection
+	var connection *translator.RedisConnection
 
 	if standaloneActual == nil && replicationActual == nil && onDeleteRule.Policy == translator.Purge {
 		log.Debug(

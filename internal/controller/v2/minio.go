@@ -20,7 +20,7 @@ func minioWriteState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
-) ([]metav1.Condition, *translator.InfraConnection) {
+) ([]metav1.Condition, *translator.MinioConnection) {
 	spec := wandb.Spec.Minio.ManagedMinio
 	if spec == nil {
 		return nil, nil
@@ -90,7 +90,7 @@ func minioInferStatus(
 	recorder record.EventRecorder,
 	wandb *apiv2.WeightsAndBiases,
 	newConditions []metav1.Condition,
-	newInfraConn *translator.InfraConnection,
+	newInfraConn *translator.MinioConnection,
 ) (ctrl.Result, error) {
 	spec := wandb.Spec.Minio.ManagedMinio
 	if spec == nil {
@@ -99,7 +99,7 @@ func minioInferStatus(
 
 	enabled := true
 	oldConditions := wandb.Status.MinioStatus.Conditions
-	oldInfraConn := translatorv2.ToTranslatorInfraConnection(wandb.Status.MinioStatus.Connection)
+	oldInfraConn := translatorv2.ToTranslatorMinioConnection(wandb.Status.MinioStatus.Connection)
 
 	updatedStatus, events, ctrlResult := tenant.ComputeStatus(
 		ctx,
@@ -112,7 +112,7 @@ func minioInferStatus(
 	for _, e := range events {
 		recorder.Event(wandb, e.Type, e.Reason, e.Message)
 	}
-	wandb.Status.MinioStatus = translatorv2.ToWbInfraStatus(updatedStatus)
+	wandb.Status.MinioStatus = translatorv2.ToWbMinioInfraStatus(updatedStatus)
 	err := client.Status().Update(ctx, wandb)
 
 	return ctrlResult, err

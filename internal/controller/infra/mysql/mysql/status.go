@@ -24,11 +24,11 @@ func ComputeStatus(
 	ctx context.Context,
 	enabled bool,
 	oldConditions, currentConditions []metav1.Condition,
-	connection *translator.InfraConnection,
+	connection *translator.MysqlConnection,
 	currentGeneration int64,
-) (translator.InfraStatus, []corev1.Event, ctrl.Result) {
+) (translator.MysqlStatus, []corev1.Event, ctrl.Result) {
 	ctx, _ = logx.WithSlog(ctx, logx.Mysql)
-	result := translator.InfraStatus{}
+	result := translator.MysqlStatus{}
 
 	if connection != nil {
 		result.Connection = *connection

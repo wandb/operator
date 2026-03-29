@@ -60,7 +60,7 @@ func writeKafkaConnInfo(
 	nsnBuilder *NsNameBuilder,
 	connInfo *kafkaConnInfo,
 ) (
-	*translator.InfraConnection, error,
+	*translator.KafkaConnection, error,
 ) {
 	log := logx.GetSlog(ctx)
 
@@ -136,13 +136,9 @@ func writeKafkaConnInfo(
 		return nil, err
 	}
 
-	return &translator.InfraConnection{
-		URL: corev1.SecretKeySelector{
-			LocalObjectReference: corev1.LocalObjectReference{
-				Name: nsName.Name,
-			},
-			Key:      urlKey,
-			Optional: ptr.To(false),
-		},
+	localRef := corev1.LocalObjectReference{Name: nsName.Name}
+	return &translator.KafkaConnection{
+		URL:            corev1.SecretKeySelector{LocalObjectReference: localRef, Key: urlKey, Optional: ptr.To(false)},
+		BrokerEndpoint: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Host", Optional: ptr.To(false)},
 	}, nil
 }

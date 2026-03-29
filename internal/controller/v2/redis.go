@@ -78,7 +78,7 @@ func redisReadState(
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
 	newConditions []metav1.Condition,
-) ([]metav1.Condition, *translator.InfraConnection) {
+) ([]metav1.Condition, *translator.RedisConnection) {
 	spec := wandb.Spec.Redis.ManagedRedis
 	if spec == nil {
 		return newConditions, nil
@@ -97,7 +97,7 @@ func redisInferStatus(
 	recorder record.EventRecorder,
 	wandb *apiv2.WeightsAndBiases,
 	newConditions []metav1.Condition,
-	newInfraConn *translator.InfraConnection,
+	newInfraConn *translator.RedisConnection,
 ) (ctrl.Result, error) {
 	spec := wandb.Spec.Redis.ManagedRedis
 	if spec == nil {
@@ -106,7 +106,7 @@ func redisInferStatus(
 
 	enabled := true
 	oldConditions := wandb.Status.RedisStatus.Conditions
-	oldInfraConn := translatorv2.ToTranslatorInfraConnection(wandb.Status.RedisStatus.Connection)
+	oldInfraConn := translatorv2.ToTranslatorRedisConnection(wandb.Status.RedisStatus.Connection)
 
 	updatedStatus, events, ctrlResult := opstree.ComputeStatus(
 		ctx,
@@ -119,7 +119,7 @@ func redisInferStatus(
 	for _, e := range events {
 		recorder.Event(wandb, e.Type, e.Reason, e.Message)
 	}
-	wandb.Status.RedisStatus = translatorv2.ToWbInfraStatus(updatedStatus)
+	wandb.Status.RedisStatus = translatorv2.ToWbRedisInfraStatus(updatedStatus)
 	err := client.Status().Update(ctx, wandb)
 
 	return ctrlResult, err

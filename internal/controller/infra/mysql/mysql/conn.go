@@ -35,7 +35,7 @@ func writeMySQLConnInfo(
 	nsnBuilder *NsNameBuilder,
 	connInfo *mysqlConnInfo,
 ) (
-	*translator.InfraConnection, error,
+	*translator.MysqlConnection, error,
 ) {
 	var err error
 	var found bool
@@ -78,7 +78,12 @@ func writeMySQLConnInfo(
 		},
 		Type: corev1.SecretTypeOpaque,
 		StringData: map[string]string{
-			urlKey: connInfo.toURL(),
+			urlKey:     connInfo.toURL(),
+			"Host":     connInfo.Host,
+			"Port":     connInfo.Port,
+			"Database": connInfo.Database,
+			"Username": connInfo.User,
+			"Password": connInfo.Password,
 		},
 	}
 
@@ -86,13 +91,13 @@ func writeMySQLConnInfo(
 		return nil, err
 	}
 
-	return &translator.InfraConnection{
-		URL: corev1.SecretKeySelector{
-			LocalObjectReference: corev1.LocalObjectReference{
-				Name: nsName.Name,
-			},
-			Key:      urlKey,
-			Optional: ptr.To(false),
-		},
+	localRef := corev1.LocalObjectReference{Name: nsName.Name}
+	return &translator.MysqlConnection{
+		URL:      corev1.SecretKeySelector{LocalObjectReference: localRef, Key: urlKey, Optional: ptr.To(false)},
+		Host:     corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Host", Optional: ptr.To(false)},
+		Port:     corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Port", Optional: ptr.To(false)},
+		Database: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Database", Optional: ptr.To(false)},
+		Username: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Username", Optional: ptr.To(false)},
+		Password: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Password", Optional: ptr.To(false)},
 	}, nil
 }

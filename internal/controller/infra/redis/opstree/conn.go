@@ -44,7 +44,7 @@ func writeRedisConnInfo(
 	nsnBuilder *NsNameBuilder,
 	connInfo *redisConnInfo,
 ) (
-	*translator.InfraConnection, error,
+	*translator.RedisConnection, error,
 ) {
 	var err error
 	var found bool
@@ -84,6 +84,8 @@ func writeRedisConnInfo(
 		Type: corev1.SecretTypeOpaque,
 		StringData: map[string]string{
 			urlKey: connInfo.toURL(),
+			"Host": connInfo.Host,
+			"Port": connInfo.Port,
 		},
 	}
 
@@ -91,13 +93,10 @@ func writeRedisConnInfo(
 		return nil, err
 	}
 
-	return &translator.InfraConnection{
-		URL: corev1.SecretKeySelector{
-			LocalObjectReference: corev1.LocalObjectReference{
-				Name: nsName.Name,
-			},
-			Key:      urlKey,
-			Optional: ptr.To(false),
-		},
+	localRef := corev1.LocalObjectReference{Name: nsName.Name}
+	return &translator.RedisConnection{
+		URL:  corev1.SecretKeySelector{LocalObjectReference: localRef, Key: urlKey, Optional: ptr.To(false)},
+		Host: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Host", Optional: ptr.To(false)},
+		Port: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Port", Optional: ptr.To(false)},
 	}, nil
 }

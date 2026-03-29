@@ -33,7 +33,7 @@ func writeClickHouseConnInfo(
 	nsnBuilder *NsNameBuilder,
 	connInfo *clickhouseConnInfo,
 ) (
-	*translator.InfraConnection, error,
+	*translator.ClickHouseConnection, error,
 ) {
 	var err error
 	var found bool
@@ -89,13 +89,13 @@ func writeClickHouseConnInfo(
 		return nil, err
 	}
 
-	return &translator.InfraConnection{
-		URL: corev1.SecretKeySelector{
-			LocalObjectReference: corev1.LocalObjectReference{
-				Name: nsName.Name,
-			},
-			Key:      urlKey,
-			Optional: ptr.To(false),
-		},
+	localRef := corev1.LocalObjectReference{Name: nsName.Name}
+	return &translator.ClickHouseConnection{
+		URL:      corev1.SecretKeySelector{LocalObjectReference: localRef, Key: urlKey, Optional: ptr.To(false)},
+		Host:     corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Host", Optional: ptr.To(false)},
+		Port:     corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Port", Optional: ptr.To(false)},
+		Username: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "User", Optional: ptr.To(false)},
+		Password: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Password", Optional: ptr.To(false)},
+		Database: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Database", Optional: ptr.To(false)},
 	}, nil
 }

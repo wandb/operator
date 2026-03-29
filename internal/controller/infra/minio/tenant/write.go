@@ -30,7 +30,7 @@ func WriteState(
 	desiredCr *miniov2.Tenant,
 	envConfig MinioEnvConfig,
 	wandbOwner client.Object,
-) ([]metav1.Condition, *translator.InfraConnection) {
+) ([]metav1.Condition, *translator.MinioConnection) {
 	ctx, _ = logx.WithSlog(ctx, logx.Minio)
 	var actual = &miniov2.Tenant{}
 

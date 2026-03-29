@@ -57,7 +57,7 @@ func writeWandbConnInfo(
 	nsnBuilder *NsNameBuilder,
 	connInfo *minioConnInfo,
 ) (
-	*translator.InfraConnection, error,
+	*translator.MinioConnection, error,
 ) {
 	var err error
 	var found bool
@@ -110,13 +110,10 @@ func writeWandbConnInfo(
 		return nil, err
 	}
 
-	return &translator.InfraConnection{
-		URL: corev1.SecretKeySelector{
-			LocalObjectReference: corev1.LocalObjectReference{
-				Name: nsName.Name,
-			},
-			Key:      urlKey,
-			Optional: ptr.To(false),
-		},
+	localRef := corev1.LocalObjectReference{Name: nsName.Name}
+	return &translator.MinioConnection{
+		URL:      corev1.SecretKeySelector{LocalObjectReference: localRef, Key: urlKey, Optional: ptr.To(false)},
+		Endpoint: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Host", Optional: ptr.To(false)},
+		Region:   corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Region", Optional: ptr.To(false)},
 	}, nil
 }

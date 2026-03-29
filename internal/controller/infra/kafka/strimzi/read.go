@@ -36,7 +36,7 @@ func ReadState(
 	specNamespacedName types.NamespacedName,
 	wandbOwner client.Object,
 	onDeleteRule translator.OnDeleteRule,
-) ([]metav1.Condition, *translator.InfraConnection) {
+) ([]metav1.Condition, *translator.KafkaConnection) {
 	ctx, log := logx.WithSlog(ctx, logx.Kafka)
 	nsnBuilder := createNsNameBuilder(specNamespacedName)
 
@@ -97,7 +97,7 @@ func ReadState(
 		actualNodePool = nil
 	}
 
-	var connection *translator.InfraConnection
+	var connection *translator.KafkaConnection
 	if actualKafka != nil {
 
 		///////////////////////////////////
