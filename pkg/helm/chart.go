@@ -4,14 +4,15 @@ import (
 	"fmt"
 	"time"
 
-	"helm.sh/helm/v3/pkg/action"
-	"helm.sh/helm/v3/pkg/chart"
-	"helm.sh/helm/v3/pkg/chartutil"
-	"helm.sh/helm/v3/pkg/cli"
-	"helm.sh/helm/v3/pkg/getter"
-	"helm.sh/helm/v3/pkg/release"
-	"helm.sh/helm/v3/pkg/releaseutil"
-	"helm.sh/helm/v3/pkg/repo"
+	"helm.sh/helm/v4/pkg/action"
+	chart "helm.sh/helm/v4/pkg/chart/v2"
+	chartutil "helm.sh/helm/v4/pkg/chart/v2/util"
+	"helm.sh/helm/v4/pkg/cli"
+	"helm.sh/helm/v4/pkg/kube"
+	"helm.sh/helm/v4/pkg/release"
+	releasecommon "helm.sh/helm/v4/pkg/release/common"
+	releasev1 "helm.sh/helm/v4/pkg/release/v1"
+	releaseutil "helm.sh/helm/v4/pkg/release/v1/util"
 )
 
 const (
@@ -19,27 +20,23 @@ const (
 	maxReleasesToKeep    = 10
 )
 
-var (
-	noopLogger = func(_ string, _ ...interface{}) {}
-)
-
 type ActionableChartInterface interface {
 	Apply(
 		chart *chart.Chart,
 		values map[string]interface{},
-	) (*release.Release, error)
+	) (release.Releaser, error)
 	Install(
 		chart *chart.Chart,
 		values map[string]interface{},
-	) (*release.Release, error)
-	History() ([]*release.Release, error)
+	) (release.Releaser, error)
+	History() ([]release.Releaser, error)
 	Rollback(version int) error
-	Upgrade(chart *chart.Chart, values map[string]interface{}) (*release.Release, error)
+	Upgrade(chart *chart.Chart, values map[string]interface{}) (release.Releaser, error)
 	Uninstall() (*release.UninstallReleaseResponse, error)
-	GetRelease(version int) (*release.Release, error)
+	GetRelease(version int) (release.Releaser, error)
 }
 
-// GetConfig returns a helm action configuration. Namespace is used to determine
+// InitConfig returns a helm action configuration. Namespace is used to determine
 // where to store the versions
 func InitConfig(namespace string) (*cli.EnvSettings, *action.Configuration, error) {
 	settings := cli.New()
@@ -49,45 +46,9 @@ func InitConfig(namespace string) (*cli.EnvSettings, *action.Configuration, erro
 		settings.RESTClientGetter(),
 		settings.Namespace(),
 		secretsStorageDriver,
-		noopLogger,
 	)
 	config.Releases.MaxHistory = maxReleasesToKeep
 	return settings, config, err
-}
-
-func DownloadChart(repoURL string, name string) (string, error) {
-	settings := cli.New()
-	providers := getter.All(settings)
-
-	entry := new(repo.Entry)
-	entry.URL = repoURL
-	entry.Name = name
-
-	file := repo.NewFile()
-	file.Update(entry)
-
-	chartRepo, err := repo.NewChartRepository(entry, providers)
-	if err != nil {
-		return "", err
-	}
-
-	_, err = chartRepo.DownloadIndexFile()
-	if err != nil {
-		return "", err
-	}
-
-	chartURL, err := repo.FindChartInRepoURL(
-		repoURL, name,
-		"", "", "", "",
-		providers,
-	)
-	if err != nil {
-		return "", err
-	}
-
-	client := action.NewPull()
-	client.Settings = settings
-	return client.Run(chartURL)
 }
 
 func NewActionableChart(releaseName string, namespace string) (*ActionableChart, error) {
@@ -119,18 +80,27 @@ func (c *ActionableChart) isInstalled() bool {
 		return false
 	}
 
-	releaseutil.Reverse(h, releaseutil.SortByRevision)
-	rel := h[0]
-	st := rel.Info.Status
+	// Convert Releaser slice to concrete releases for sorting
+	concrete := make([]*releasev1.Release, 0, len(h))
+	for _, r := range h {
+		if rel, ok := r.(*releasev1.Release); ok {
+			concrete = append(concrete, rel)
+		}
+	}
+	if len(concrete) == 0 {
+		return false
+	}
 
-	return st != release.StatusUninstalled
+	releaseutil.Reverse(concrete, releaseutil.SortByRevision)
+	st := concrete[0].Info.Status
 
+	return st != releasecommon.StatusUninstalled
 }
 
 func (c *ActionableChart) Apply(
 	chart *chart.Chart,
 	values map[string]interface{},
-) (*release.Release, error) {
+) (release.Releaser, error) {
 	if c.isInstalled() {
 		return c.Upgrade(chart, values)
 	}
@@ -140,14 +110,14 @@ func (c *ActionableChart) Apply(
 func (c *ActionableChart) Install(
 	chart *chart.Chart,
 	values map[string]interface{},
-) (*release.Release, error) {
+) (release.Releaser, error) {
 	client := action.NewInstall(c.config)
 	client.ReleaseName = c.releaseName
 	client.Namespace = c.namespace
 	return client.Run(chart, values)
 }
 
-func (c *ActionableChart) History() ([]*release.Release, error) {
+func (c *ActionableChart) History() ([]release.Releaser, error) {
 	return c.config.Releases.History(c.releaseName)
 }
 
@@ -156,7 +126,7 @@ func (c *ActionableChart) Rollback(version int) error {
 	return client.Run(c.releaseName)
 }
 
-func (c *ActionableChart) Upgrade(chart *chart.Chart, values map[string]interface{}) (*release.Release, error) {
+func (c *ActionableChart) Upgrade(chart *chart.Chart, values map[string]interface{}) (release.Releaser, error) {
 	client := action.NewUpgrade(c.config)
 	client.Namespace = c.namespace
 	client.MaxHistory = maxReleasesToKeep
@@ -165,11 +135,11 @@ func (c *ActionableChart) Upgrade(chart *chart.Chart, values map[string]interfac
 
 func (c *ActionableChart) Uninstall() (*release.UninstallReleaseResponse, error) {
 	client := action.NewUninstall(c.config)
-	client.Wait = true
+	client.WaitStrategy = kube.LegacyStrategy
 	client.Timeout = 600 * time.Second
 	return client.Run(c.releaseName)
 }
 
-func (c *ActionableChart) GetRelease(version int) (*release.Release, error) {
+func (c *ActionableChart) GetRelease(version int) (release.Releaser, error) {
 	return c.config.Releases.Get(c.releaseName, version)
 }

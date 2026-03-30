@@ -13,11 +13,11 @@ import (
 	v1 "github.com/wandb/operator/api/v1"
 	"github.com/wandb/operator/pkg/helm"
 	"github.com/wandb/operator/pkg/wandb/spec"
-	"helm.sh/helm/v3/pkg/chart"
-	"helm.sh/helm/v3/pkg/cli"
-	"helm.sh/helm/v3/pkg/downloader"
-	"helm.sh/helm/v3/pkg/getter"
-	"helm.sh/helm/v3/pkg/repo"
+	chart "helm.sh/helm/v4/pkg/chart/v2"
+	"helm.sh/helm/v4/pkg/cli"
+	"helm.sh/helm/v4/pkg/downloader"
+	"helm.sh/helm/v4/pkg/getter"
+	repo "helm.sh/helm/v4/pkg/repo/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
@@ -164,8 +164,8 @@ func (r RepoRelease) downloadChart() (string, error) {
 		return "", err
 	}
 
-	entry.InsecureSkipTLSverify = parsedURL.Scheme == "http"
-	if entry.InsecureSkipTLSverify && r.Debug {
+	entry.InsecureSkipTLSVerify = parsedURL.Scheme == "http"
+	if entry.InsecureSkipTLSVerify && r.Debug {
 		log.Info("TLS verification disabled for HTTP URL", "url", r.URL)
 	}
 

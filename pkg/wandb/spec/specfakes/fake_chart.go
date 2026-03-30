@@ -7,7 +7,7 @@ import (
 
 	v1 "github.com/wandb/operator/api/v1"
 	"github.com/wandb/operator/pkg/wandb/spec"
-	"helm.sh/helm/v3/pkg/chart"
+	v2 "helm.sh/helm/v4/pkg/chart/v2"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -28,16 +28,16 @@ type FakeChart struct {
 	applyReturnsOnCall map[int]struct {
 		result1 error
 	}
-	ChartStub        func() (*chart.Chart, error)
+	ChartStub        func() (*v2.Chart, error)
 	chartMutex       sync.RWMutex
 	chartArgsForCall []struct {
 	}
 	chartReturns struct {
-		result1 *chart.Chart
+		result1 *v2.Chart
 		result2 error
 	}
 	chartReturnsOnCall map[int]struct {
-		result1 *chart.Chart
+		result1 *v2.Chart
 		result2 error
 	}
 	PruneStub        func(context.Context, client.Client, *v1.WeightsAndBiases, *runtime.Scheme, spec.Values) error
@@ -124,7 +124,7 @@ func (fake *FakeChart) ApplyReturnsOnCall(i int, result1 error) {
 	}{result1}
 }
 
-func (fake *FakeChart) Chart() (*chart.Chart, error) {
+func (fake *FakeChart) Chart() (*v2.Chart, error) {
 	fake.chartMutex.Lock()
 	ret, specificReturn := fake.chartReturnsOnCall[len(fake.chartArgsForCall)]
 	fake.chartArgsForCall = append(fake.chartArgsForCall, struct {
@@ -148,34 +148,34 @@ func (fake *FakeChart) ChartCallCount() int {
 	return len(fake.chartArgsForCall)
 }
 
-func (fake *FakeChart) ChartCalls(stub func() (*chart.Chart, error)) {
+func (fake *FakeChart) ChartCalls(stub func() (*v2.Chart, error)) {
 	fake.chartMutex.Lock()
 	defer fake.chartMutex.Unlock()
 	fake.ChartStub = stub
 }
 
-func (fake *FakeChart) ChartReturns(result1 *chart.Chart, result2 error) {
+func (fake *FakeChart) ChartReturns(result1 *v2.Chart, result2 error) {
 	fake.chartMutex.Lock()
 	defer fake.chartMutex.Unlock()
 	fake.ChartStub = nil
 	fake.chartReturns = struct {
-		result1 *chart.Chart
+		result1 *v2.Chart
 		result2 error
 	}{result1, result2}
 }
 
-func (fake *FakeChart) ChartReturnsOnCall(i int, result1 *chart.Chart, result2 error) {
+func (fake *FakeChart) ChartReturnsOnCall(i int, result1 *v2.Chart, result2 error) {
 	fake.chartMutex.Lock()
 	defer fake.chartMutex.Unlock()
 	fake.ChartStub = nil
 	if fake.chartReturnsOnCall == nil {
 		fake.chartReturnsOnCall = make(map[int]struct {
-			result1 *chart.Chart
+			result1 *v2.Chart
 			result2 error
 		})
 	}
 	fake.chartReturnsOnCall[i] = struct {
-		result1 *chart.Chart
+		result1 *v2.Chart
 		result2 error
 	}{result1, result2}
 }
