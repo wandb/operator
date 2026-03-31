@@ -147,6 +147,21 @@ func ToMysqlMySQLVendorSpec(
 		)
 	}
 
+	if spec.Telemetry.Enabled {
+		innodb.Spec.Metrics = &v2.MetricsSpec{
+			Enable: true,
+			Image:  DefaultMySQLExporterImage,
+		}
+
+		if innodb.Spec.PodSpec == nil {
+			innodb.Spec.PodSpec = &corev1.PodSpec{}
+		}
+		innodb.Spec.PodSpec.Containers = append(
+			innodb.Spec.PodSpec.Containers,
+			createMySQLExporterOracleSidecar(spec.Name),
+		)
+	}
+
 	if err := ctrl.SetControllerReference(wandb, innodb, scheme); err != nil {
 		log.Error("failed to set owner reference on InnoDBCluster CR", logx.ErrAttr(err))
 		return nil, fmt.Errorf("failed to set owner reference: %w", err)
