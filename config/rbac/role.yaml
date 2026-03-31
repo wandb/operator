@@ -176,6 +176,28 @@ rules:
   - list
   - watch
 - apiGroups:
+  - gateway.networking.k8s.io
+  resources:
+  - backendtlspolicies
+  - gateways
+  - httproutes
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - gateway.networking.k8s.io
+  resources:
+  - backendtlspolicies/status
+  - gateways/status
+  - httproutes/status
+  verbs:
+  - get
+- apiGroups:
   - k8s.mariadb.com
   resources:
   - mariadbs

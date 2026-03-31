@@ -2,7 +2,6 @@ package tenant
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/samber/lo"
@@ -107,7 +106,7 @@ func inferInfraState(
 		events = append(events, corev1.Event{
 			Type:    corev1.EventTypeWarning,
 			Reason:  "MinioConnectionInfoUnavailable",
-			Message: fmt.Sprintf("Minio connection info is unavailable, but Minio is reported as ready."),
+			Message: "Minio connection info is unavailable, but Minio is reported as ready.",
 		})
 		summaryState = common.ErrorState
 	}

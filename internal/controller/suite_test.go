@@ -45,6 +45,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -58,7 +59,6 @@ var (
 	cfg       *rest.Config
 	k8sClient client.Client
 	mgr       manager.Manager
-	mgrErrCh  chan error
 )
 
 func TestControllers(t *testing.T) {
@@ -107,6 +107,9 @@ var _ = BeforeSuite(func() {
 	err = mysqlv2.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
+	err = gatewayv1.Install(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
+
 	// +kubebuilder:scaffold:scheme
 
 	By("bootstrapping test environment")
@@ -122,6 +125,7 @@ var _ = BeforeSuite(func() {
 				filepath.Join("..", "..", "pkg", "vendored", "redis-operator", "crds"),
 				filepath.Join("..", "..", "pkg", "vendored", "strimzi-kafka", "crds"),
 				filepath.Join("..", "..", "pkg", "vendored", "argo-rollouts", "crds"),
+				filepath.Join("..", "..", "pkg", "vendored", "gateway-api", "crds"),
 			},
 		},
 		WebhookInstallOptions: envtest.WebhookInstallOptions{

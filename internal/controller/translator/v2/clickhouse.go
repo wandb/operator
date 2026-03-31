@@ -26,7 +26,7 @@ func ToClickHouseVendorSpec(
 	wandb *apiv2.WeightsAndBiases,
 	scheme *runtime.Scheme,
 ) (*v1.ClickHouseInstallation, error) {
-	ctx, log := logx.WithSlog(ctx, logx.ClickHouse)
+	_, log := logx.WithSlog(ctx, logx.ClickHouse)
 	spec := wandb.Spec.ClickHouse
 
 	if !spec.Enabled {

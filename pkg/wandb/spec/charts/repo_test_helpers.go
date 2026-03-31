@@ -1,47 +1,10 @@
 package charts
 
 import (
-	"net/http"
-	"net/http/httptest"
-	"time"
-
 	"github.com/go-logr/logr"
 	"github.com/onsi/ginkgo/v2"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 )
-
-type mockTransport struct {
-	responses map[string]*http.Response
-	timeout   time.Duration
-}
-
-func (t *mockTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	if t.timeout > 0 {
-		time.Sleep(t.timeout)
-	}
-	resp := t.responses[req.URL.String()]
-	if resp == nil {
-		return &http.Response{
-			StatusCode: http.StatusNotFound,
-			Body:       http.NoBody,
-		}, nil
-	}
-	return resp, nil
-}
-
-func setupMockHTTPClient(responses map[string]*http.Response) *http.Client {
-	return &http.Client{
-		Transport: &mockTransport{
-			responses: responses,
-			timeout:   1 * time.Millisecond,
-		},
-		Timeout: 10 * time.Millisecond,
-	}
-}
-
-func setupTestServer(handler http.HandlerFunc) *httptest.Server {
-	return httptest.NewServer(handler)
-}
 
 type logCapture struct{}
 

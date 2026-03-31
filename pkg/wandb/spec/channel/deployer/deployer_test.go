@@ -223,7 +223,8 @@ var _ = Describe("DeployerClient", func() {
 				Expect(resp.StatusCode).To(Equal(http.StatusOK))
 
 				// Close the response body
-				io.Copy(io.Discard, resp.Body)
+				_, err = io.Copy(io.Discard, resp.Body)
+				Expect(err).NotTo(HaveOccurred())
 				resp.Body.Close()
 			})
 

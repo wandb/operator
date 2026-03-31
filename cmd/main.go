@@ -53,6 +53,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	ctrlwh "sigs.k8s.io/controller-runtime/pkg/webhook"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/wandb/operator/internal/controller"
 	controllerv2 "github.com/wandb/operator/internal/controller/v2"
@@ -80,6 +81,7 @@ func init() {
 	utilruntime.Must(miniov2.AddToScheme(scheme))
 	utilruntime.Must(chiv1.AddToScheme(scheme))
 	utilruntime.Must(mysqlv2.AddToScheme(scheme))
+	utilruntime.Must(gatewayv1.Install(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -388,7 +390,7 @@ func setFlagsFromEnvironment() []error {
 	var errors []error
 
 	flag.VisitAll(func(f *flag.Flag) {
-		name := strings.ToUpper(strings.Replace(f.Name, "-", "_", -1))
+		name := strings.ToUpper(strings.ReplaceAll(f.Name, "-", "_"))
 		if value, ok := os.LookupEnv(name); ok {
 			err := flag.Set(f.Name, value)
 			if err != nil {

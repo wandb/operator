@@ -326,7 +326,11 @@ var _ = Describe("RepoRelease", func() {
 									},
 								},
 							}
-							json.NewEncoder(w).Encode(response)
+							err := json.NewEncoder(w).Encode(response)
+							if err != nil {
+								http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+								return
+							}
 						}))
 
 						// Set up the repo release to use this server
@@ -397,7 +401,11 @@ var _ = Describe("RepoRelease", func() {
 							}
 							w.Header().Set("Content-Type", "application/json")
 							w.WriteHeader(http.StatusOK)
-							json.NewEncoder(w).Encode(indexFile)
+							err := json.NewEncoder(w).Encode(indexFile)
+							if err != nil {
+								http.Error(w, "Failed to encode index file", http.StatusInternalServerError)
+								return
+							}
 						}))
 						defer httpServer.Close()
 
@@ -774,16 +782,3 @@ var _ = Describe("RepoRelease", func() {
 		})
 	})
 })
-
-// recordingTransport is a test helper that wraps the default transport and records request information
-type recordingTransport struct {
-	originalTransport http.RoundTripper
-	requestCallback   func(*http.Request)
-}
-
-func (t *recordingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	if t.requestCallback != nil {
-		t.requestCallback(req)
-	}
-	return t.originalTransport.RoundTrip(req)
-}

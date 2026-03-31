@@ -374,7 +374,7 @@ redis:
             memory: 8Gi
 
 applications:
-  - name: anaconda2
+  anaconda2:
     sizing:
       micro:
         resources:
@@ -442,7 +442,7 @@ applications:
           limits:
             cpu: 2
             memory: 8Gi
-  - name: api
+  api:
     sizing:
       micro:
         resources:
@@ -510,7 +510,7 @@ applications:
           limits:
             cpu: 2
             memory: 8Gi
-  - name: executor
+  executor:
     sizing:
       micro:
         resources:
@@ -578,7 +578,7 @@ applications:
           limits:
             cpu: 2
             memory: 8Gi
-  - name: filemeta
+  filemeta:
     sizing:
       micro:
         resources:
@@ -646,7 +646,7 @@ applications:
           limits:
             cpu: 2
             memory: 8Gi
-  - name: filestream
+  filestream:
     sizing:
       micro:
         resources:
@@ -714,7 +714,7 @@ applications:
           limits:
             cpu: 2
             memory: 8Gi
-  - name: flat-run-fields-updater
+  flat-run-fields-updater:
     sizing:
       micro:
         resources:
@@ -782,7 +782,7 @@ applications:
           limits:
             cpu: 2
             memory: 8Gi
-  - name: frontend
+  frontend:
     sizing:
       micro:
         resources:
@@ -850,7 +850,7 @@ applications:
           limits:
             cpu: 2
             memory: 8Gi
-  - name: glue
+  glue:
     sizing:
       micro:
         resources:
@@ -908,7 +908,7 @@ applications:
           limits:
             cpu: 2
             memory: 8Gi
-  - name: metric-observer
+  metric-observer:
     sizing:
       micro:
         resources:
@@ -976,7 +976,7 @@ applications:
           limits:
             cpu: 2
             memory: 8Gi
-  - name: parquet
+  parquet:
     sizing:
       micro:
         resources:
@@ -1044,7 +1044,7 @@ applications:
           limits:
             cpu: 2
             memory: 8Gi
-  - name: weave
+  weave:
     sizing:
       micro:
         resources:
@@ -1112,7 +1112,7 @@ applications:
           limits:
             cpu: 2
             memory: 8Gi
-  - name: weave-trace
+  weave-trace:
     sizing:
       micro:
         resources:
@@ -1180,7 +1180,7 @@ applications:
           limits:
             cpu: 2
             memory: 8Gi
-  - name: weave-trace-worker
+  weave-trace-worker:
     sizing:
       micro:
         resources:
@@ -1248,7 +1248,7 @@ applications:
           limits:
             cpu: 2
             memory: 8Gi
-  - name: weave-trace-evaluate-model-worker
+  weave-trace-evaluate-model-worker:
     sizing:
       micro:
         resources:
@@ -1316,7 +1316,7 @@ applications:
           limits:
             cpu: 2
             memory: 8Gi
-  - name: nginx-proxy
+  nginx-proxy:
     sizing:
       default:
         autoscaling:

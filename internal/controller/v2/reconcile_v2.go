@@ -26,7 +26,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-logr/logr"
 	"github.com/samber/lo"
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/ctrlqueue"
@@ -44,10 +43,11 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/record"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	ctrlClient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 const CleanupFinalizer = "wandb.apps.wandb.com/cleanup"
@@ -170,11 +170,11 @@ func Reconcile(
 	/////////////////////////
 	// Retention Finalizer
 
-	isFlaggedForDeletion := !wandb.ObjectMeta.DeletionTimestamp.IsZero()
+	isFlaggedForDeletion := !wandb.GetDeletionTimestamp().IsZero()
 
 	// ensure finalizer if not present
 	if !isFlaggedForDeletion && !ctrlqueue.ContainsString(wandb.GetFinalizers(), CleanupFinalizer) {
-		wandb.ObjectMeta.Finalizers = append(wandb.ObjectMeta.Finalizers, CleanupFinalizer)
+		wandb.SetFinalizers(append(wandb.GetFinalizers(), CleanupFinalizer))
 		if err := client.Update(ctx, wandb); err != nil {
 			log.Error(fmt.Sprintf("Failed to add finalizer '%s'", CleanupFinalizer), logx.ErrAttr(err))
 			return ctrl.Result{}, err
@@ -182,7 +182,7 @@ func Reconcile(
 	}
 
 	// if deleting and handle cleanup or preservation of config and data
-	if isFlaggedForDeletion && !wandb.ObjectMeta.DeletionTimestamp.IsZero() {
+	if isFlaggedForDeletion && !wandb.GetDeletionTimestamp().IsZero() {
 		if ctrlqueue.ContainsString(wandb.GetFinalizers(), CleanupFinalizer) {
 
 			if err = runRetentionFinalizer(ctx, client, wandb, wandb.Spec.Minio.InfraSpec, minioPurgeFinalizer, minioDetachFinalizer); err != nil {
@@ -199,6 +199,23 @@ func Reconcile(
 			}
 			if err = runRetentionFinalizer(ctx, client, wandb, wandb.Spec.ClickHouse.InfraSpec, clickHousePurgeFinalizer, clickHouseDetachFinalizer); err != nil {
 				return ctrl.Result{}, err
+			}
+			if wandb.Spec.Networking.Mode == apiv2.NetworkingModeIngress {
+				if err = deleteConsolidatedIngress(ctx, client, wandb); err != nil {
+					return ctrl.Result{}, err
+				}
+			}
+			if wandb.Spec.Networking.Mode == apiv2.NetworkingModeGatewayAPI &&
+				wandb.Spec.Networking.GatewayAPI != nil &&
+				wandb.Spec.Networking.GatewayAPI.Gateway.Managed {
+				if err = deleteGateway(ctx, client, wandb); err != nil {
+					return ctrl.Result{}, err
+				}
+			}
+			if wandb.GetRetentionPolicy(wandb.Spec.Kafka.InfraSpec).OnDelete == apiv2.DetachOnDelete {
+				if err = kafkaDetachFinalizer(ctx, client, wandb); err != nil {
+					return ctrl.Result{}, err
+				}
 			}
 			controllerutil.RemoveFinalizer(wandb, CleanupFinalizer)
 			if err := client.Update(ctx, wandb); err != nil {
@@ -382,6 +399,13 @@ func ReconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 		return ctrl.Result{}, err
 	}
 
+	if wandb.Spec.Networking.Mode == apiv2.NetworkingModeGatewayAPI {
+		if err := reconcileGateway(ctx, client, wandb); err != nil {
+			logger.Error(err, "Failed to reconcile Gateway")
+			return ctrl.Result{}, err
+		}
+	}
+
 	result, err = runMigrations(ctx, client, wandb, manifest)
 	if err != nil {
 		return result, err
@@ -392,24 +416,42 @@ func ReconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
-	result, err = reconcileApplications(ctx, client, wandb, manifest, logger)
+	result, err = reconcileApplications(ctx, client, wandb, manifest)
 	if err != nil {
 		return result, err
 	}
+
+	if wandb.Spec.Networking.Mode == apiv2.NetworkingModeGatewayAPI {
+		if err := reconcileInfraHTTPRoutes(ctx, client, wandb, manifest); err != nil {
+			logger.Error(err, "Failed to reconcile infra HTTPRoutes")
+			return ctrl.Result{}, err
+		}
+	}
+
 	return ctrl.Result{}, nil
 }
 
-func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest, logger logr.Logger) (ctrl.Result, error) {
+func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest) (ctrl.Result, error) {
+	logger := logx.GetSlog(ctx)
+	logger.Info("Reconciling applications")
 	serviceAccountName := wandb.Spec.Wandb.ServiceAccount.ServiceAccountName
 
 	if wandb.Spec.Wandb.InternalServiceAuth.Enabled != nil && *wandb.Spec.Wandb.InternalServiceAuth.Enabled {
 		if err := createOrUpdateOIDCDiscoveryClusterRoleBinding(ctx, client, wandb); err != nil {
-			logger.Error(err, "Failed to create ClusterRoleBinding for OIDC discovery. "+
+			logger.Error("Failed to create ClusterRoleBinding for OIDC discovery. "+
 				"This is required for JWT token validation between W&B services. "+
 				"Either grant the operator ClusterRoleBinding permissions, or manually create the ClusterRoleBinding. "+
-				"W&B will continue starting, but JWT authentication will fail until this is resolved.")
+				"W&B will continue starting, but JWT authentication will fail until this is resolved.", "err", err)
 			// Non-fatal: continue reconciliation even if ClusterRoleBinding creation fails
 		}
+	}
+
+	desiredAppNames := make(map[string]bool)
+	for _, app := range manifest.Applications {
+		if len(app.Features) > 0 && !manifestFeaturesEnabled(app.Features, manifest.Features) {
+			continue
+		}
+		desiredAppNames[app.Name] = true
 	}
 
 	for _, app := range manifest.Applications {
@@ -457,8 +499,8 @@ func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb 
 		err = client.Get(ctx, types.NamespacedName{Name: applicationName, Namespace: wandb.Namespace}, application)
 		if err != nil {
 			if apiErrors.IsNotFound(err) {
-				application.ObjectMeta.Name = applicationName
-				application.ObjectMeta.Namespace = wandb.Namespace
+				application.SetName(applicationName)
+				application.SetNamespace(wandb.Namespace)
 			} else {
 				return ctrl.Result{}, err
 			}
@@ -492,12 +534,19 @@ func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb 
 			application.Spec.ServiceTemplate = nil
 		}
 
+		if wandb.Spec.Networking.Mode == apiv2.NetworkingModeGatewayAPI && app.Ingress != nil &&
+			wandb.Status.GatewayStatus != nil && wandb.Status.GatewayStatus.GatewayRef != nil {
+			application.Spec.HTTPRouteTemplate = buildHTTPRouteTemplate(wandb, app)
+		} else {
+			application.Spec.HTTPRouteTemplate = nil
+		}
+
 		err = controllerutil.SetOwnerReference(wandb, application, client.Scheme())
 		if err != nil {
 			return ctrl.Result{}, err
 		}
 
-		if application.ObjectMeta.CreationTimestamp.IsZero() {
+		if application.CreationTimestamp.IsZero() {
 			if err = client.Create(ctx, application); err != nil {
 				return ctrl.Result{}, err
 			}
@@ -510,22 +559,55 @@ func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb 
 		wandb.Status.Wandb.Applications[app.Name] = application.Status
 	}
 
+	existingApps := &apiv2.ApplicationList{}
+	if err := client.List(ctx, existingApps, ctrlClient.InNamespace(wandb.Namespace)); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to list existing applications: %w", err)
+	}
+
+	for _, app := range existingApps.Items {
+		if !isOwnedBy(&app, wandb) {
+			continue
+		}
+
+		appNamePrefix := fmt.Sprintf("%s-", wandb.Name)
+		if !strings.HasPrefix(app.Name, appNamePrefix) {
+			continue
+		}
+		appName := strings.TrimPrefix(app.Name, appNamePrefix)
+
+		if !desiredAppNames[appName] {
+			logger.Info("Deleting application no longer in manifest or disabled by feature", "application", app.Name)
+			if err := client.Delete(ctx, &app); err != nil && !apiErrors.IsNotFound(err) {
+				return ctrl.Result{}, fmt.Errorf("failed to delete application %s: %w", app.Name, err)
+			}
+			delete(wandb.Status.Wandb.Applications, appName)
+		}
+	}
+
+	if wandb.Spec.Networking.Mode == apiv2.NetworkingModeIngress {
+		if err := reconcileConsolidatedIngress(ctx, client, wandb, manifest); err != nil {
+			logger.Error("Failed to reconcile consolidated Ingress", "err", err)
+			return ctrl.Result{}, err
+		}
+	}
+
 	hostname, err := url.Parse(wandb.Spec.Wandb.Hostname)
 	if err != nil {
-		logger.Error(err, "Failed to parse provided hostname", "hostname", wandb.Spec.Wandb.Hostname)
+		logger.Error("Failed to parse provided hostname", "hostname", wandb.Spec.Wandb.Hostname, "err", err)
 	} else {
-		// Only override with NodePort if user didn't specify a port in the hostname
-		if manifestFeaturesEnabled([]string{"proxy"}, manifest.Features) && hostname.Port() == "" {
-			proxyService := &corev1.Service{}
-			proxyServiceName := fmt.Sprintf("%s-%s", wandb.Name, "nginx-proxy")
-			err := client.Get(ctx, types.NamespacedName{Name: proxyServiceName, Namespace: wandb.Namespace}, proxyService)
-			if err != nil {
-				logger.Error(err, "Failed to get proxy service", "service", proxyServiceName)
-			} else {
-				nodePort := proxyService.Spec.Ports[0].NodePort
-				hostname.Host = fmt.Sprintf("%s:%d", hostname.Hostname(), nodePort)
+		if wandb.Spec.Networking.Mode == apiv2.NetworkingModeNone {
+			// Only override with NodePort if user didn't specify a port in the hostname
+			if manifestFeaturesEnabled([]string{"proxy"}, manifest.Features) && hostname.Port() == "" {
+				proxyService := &corev1.Service{}
+				proxyServiceName := fmt.Sprintf("%s-%s", wandb.Name, "nginx-proxy")
+				err := client.Get(ctx, types.NamespacedName{Name: proxyServiceName, Namespace: wandb.Namespace}, proxyService)
+				if err != nil {
+					logger.Error("Failed to get proxy service", "service", proxyServiceName, "err", err)
+				} else {
+					nodePort := proxyService.Spec.Ports[0].NodePort
+					hostname.Host = fmt.Sprintf("%s:%d", hostname.Hostname(), nodePort)
+				}
 			}
-
 		}
 
 		if wandb.Status.Wandb.Hostname != hostname.String() {
@@ -538,6 +620,63 @@ func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb 
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func buildHTTPRouteTemplate(wandb *apiv2.WeightsAndBiases, app serverManifest.Application) *apiv2.HTTPRouteTemplateSpec {
+	gwConfig := wandb.Spec.Networking.GatewayAPI
+
+	ref := wandb.Status.GatewayStatus.GatewayRef
+	parentRef := gatewayv1.ParentReference{
+		Name: gatewayv1.ObjectName(ref.Name),
+	}
+	if ref.Namespace != "" && ref.Namespace != wandb.Namespace {
+		ns := gatewayv1.Namespace(ref.Namespace)
+		parentRef.Namespace = &ns
+	}
+	if gwConfig.ListenerName != nil {
+		sectionName := gatewayv1.SectionName(*gwConfig.ListenerName)
+		parentRef.SectionName = &sectionName
+	}
+
+	hostname := parseHostname(wandb.Spec.Wandb.Hostname)
+	hostnames := []gatewayv1.Hostname{gatewayv1.Hostname(hostname)}
+	for _, h := range wandb.Spec.Wandb.AdditionalHostnames {
+		hostnames = append(hostnames, gatewayv1.Hostname(h))
+	}
+
+	var paths []string
+	var pathType string
+	if app.Ingress != nil {
+		paths = app.Ingress.Paths
+		pathType = app.Ingress.PathType
+	}
+
+	return &apiv2.HTTPRouteTemplateSpec{
+		ParentRefs:  []gatewayv1.ParentReference{parentRef},
+		Hostnames:   hostnames,
+		Paths:       paths,
+		PathType:    pathType,
+		ServicePort: resolveHTTPRouteServicePort(app),
+	}
+}
+
+func resolveHTTPRouteServicePort(app serverManifest.Application) *gatewayv1.PortNumber {
+	if app.Ingress != nil && app.Ingress.ServicePort != "" {
+		port := intstr.Parse(app.Ingress.ServicePort)
+		if port.Type == intstr.Int {
+			p := gatewayv1.PortNumber(port.IntVal)
+			return &p
+		}
+		if port.Type == intstr.String && app.Service != nil {
+			for _, servicePort := range app.Service.Ports {
+				if servicePort.Name == port.StrVal {
+					p := gatewayv1.PortNumber(servicePort.Port)
+					return &p
+				}
+			}
+		}
+	}
+	return nil
 }
 
 func resolveInitContainers(app serverManifest.Application, envVars []corev1.EnvVar, volumeMounts []corev1.VolumeMount) []corev1.Container {
@@ -1197,18 +1336,15 @@ func resolveInlineFiles(ctx context.Context, client ctrlClient.Client, wandb *ap
 }
 
 func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest, commonEnvs []string, envs []serverManifest.EnvVar) ([]corev1.EnvVar, error) {
+	logger := logx.GetSlog(ctx)
 	var combinedEnvs []serverManifest.EnvVar
 	for _, commonVars := range commonEnvs {
 		if envvars, ok := manifest.CommonEnvvars[commonVars]; ok {
-			for _, env := range envvars {
-				combinedEnvs = append(combinedEnvs, env)
-			}
+			combinedEnvs = append(combinedEnvs, envvars...)
 		}
 	}
 
-	for _, env := range envs {
-		combinedEnvs = append(combinedEnvs, env)
-	}
+	combinedEnvs = append(combinedEnvs, envs...)
 
 	var envVars []corev1.EnvVar
 	for _, env := range combinedEnvs {
@@ -1440,7 +1576,10 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *apiv2.
 				}
 				if val, ok := resolveCRFieldString(wandb, src.Field); ok {
 					// Treat as a literal component (not secret-backed)
+					logger.Debug("field found in CR", "cr", wandb.Name, "field", src.Field, "value", val)
 					components = append(components, val)
+				} else {
+					logger.Debug("field not found in CR", "cr", wandb.Name, "field", src.Field)
 				}
 			default:
 				// Unknown source type; skip
@@ -1483,15 +1622,11 @@ func resolveVolumeMounts(ctx context.Context, manifest serverManifest.Manifest, 
 	var combinedVolumeMounts []serverManifest.VolumeMount
 	for _, commonVolumeMounts := range commonvms {
 		if volumeMounts, ok := manifest.CommonVolumeMounts[commonVolumeMounts]; ok {
-			for _, volumeMount := range volumeMounts {
-				combinedVolumeMounts = append(combinedVolumeMounts, volumeMount)
-			}
+			combinedVolumeMounts = append(combinedVolumeMounts, volumeMounts...)
 		}
 	}
 
-	for _, volumeMount := range vms {
-		combinedVolumeMounts = append(combinedVolumeMounts, volumeMount)
-	}
+	combinedVolumeMounts = append(combinedVolumeMounts, vms...)
 
 	var volumes []corev1.Volume
 	var volumeMounts []corev1.VolumeMount
@@ -2015,18 +2150,12 @@ func resolveServiceURLFromManifest(wandbName string, manifest serverManifest.Man
 		return "", false
 	}
 
-	var app *serverManifest.Application
-	for i := range manifest.Applications {
-		if manifest.Applications[i].Name == src.Name {
-			app = &manifest.Applications[i]
-			break
-		}
-	}
-	if app == nil {
+	app, ok := manifest.Applications[src.Name]
+	if !ok {
 		return "", false
 	}
 
-	port, ok := resolveServicePortFromManifest(*app, src.Port)
+	port, ok := resolveServicePortFromManifest(app, src.Port)
 	if !ok {
 		return "", false
 	}
@@ -2162,7 +2291,7 @@ func createOrUpdateServiceAccount(
 			},
 			Annotations: wandb.Spec.Wandb.ServiceAccount.Annotations,
 		},
-		AutomountServiceAccountToken: pointer.Bool(true),
+		AutomountServiceAccountToken: ptr.To(true),
 	}
 
 	if err := controllerutil.SetControllerReference(wandb, serviceAccount, client.Scheme()); err != nil {
@@ -2377,4 +2506,13 @@ func createOrUpdateOIDCDiscoveryClusterRoleBinding(
 	}
 
 	return nil
+}
+
+func isOwnedBy(obj ctrlClient.Object, owner *apiv2.WeightsAndBiases) bool {
+	for _, ref := range obj.GetOwnerReferences() {
+		if ref.UID == owner.UID {
+			return true
+		}
+	}
+	return false
 }

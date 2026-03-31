@@ -50,7 +50,7 @@ func ToRedisStandaloneVendorSpec(
 	wandb *apiv2.WeightsAndBiases,
 	scheme *runtime.Scheme,
 ) (*redisv1beta2.Redis, error) {
-	ctx, log := logx.WithSlog(ctx, logx.Redis)
+	_, log := logx.WithSlog(ctx, logx.Redis)
 	spec := wandb.Spec.Redis
 
 	if !spec.Enabled {
@@ -136,7 +136,7 @@ func ToRedisSentinelVendorSpec(
 	wandb *apiv2.WeightsAndBiases,
 	scheme *runtime.Scheme,
 ) (*redissentinelv1beta2.RedisSentinel, error) {
-	ctx, log := logx.WithSlog(ctx, logx.Redis)
+	_, log := logx.WithSlog(ctx, logx.Redis)
 	spec := wandb.Spec.Redis
 
 	if !spec.Enabled {
@@ -211,7 +211,7 @@ func ToRedisReplicationVendorSpec(
 	wandb *apiv2.WeightsAndBiases,
 	scheme *runtime.Scheme,
 ) (*redisreplicationv1beta2.RedisReplication, error) {
-	ctx, log := logx.WithSlog(ctx, logx.Redis)
+	_, log := logx.WithSlog(ctx, logx.Redis)
 	spec := wandb.Spec.Redis
 
 	if !spec.Enabled {

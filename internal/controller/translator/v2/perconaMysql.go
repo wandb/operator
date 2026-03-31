@@ -85,7 +85,7 @@ func ToPerconaMySQLVendorSpec(
 	wandb *apiv2.WeightsAndBiases,
 	scheme *runtime.Scheme,
 ) (*pxcv1.PerconaXtraDBCluster, error) {
-	ctx, log := logx.WithSlog(ctx, logx.Mysql)
+	_, log := logx.WithSlog(ctx, logx.Mysql)
 	spec := wandb.Spec.MySQL
 
 	if !spec.Enabled {
@@ -167,7 +167,7 @@ pxc_strict_mode=PERMISSIVE
 	}
 
 	if len(spec.Config.Resources.Requests) > 0 || len(spec.Config.Resources.Limits) > 0 {
-		pxc.Spec.PXC.PodSpec.Resources = corev1.ResourceRequirements{
+		pxc.Spec.PXC.Resources = corev1.ResourceRequirements{
 			Requests: spec.Config.Resources.Requests,
 			Limits:   spec.Config.Resources.Limits,
 		}

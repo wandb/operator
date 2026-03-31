@@ -55,13 +55,8 @@ var _ = Describe("Server manifest YAML decode", func() {
 		// Applications basic presence
 		Expect(m.Applications).NotTo(BeEmpty())
 		// Find api app
-		var api *manifest.Application
-		for i := range m.Applications {
-			if m.Applications[i].Name == "api" {
-				api = &m.Applications[i]
-				break
-			}
-		}
+		api := m.Applications["api"]
+
 		Expect(api).NotTo(BeNil())
 		Expect(api.InitContainers).To(BeEmpty())
 

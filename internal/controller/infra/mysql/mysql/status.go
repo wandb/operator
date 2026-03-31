@@ -2,7 +2,6 @@ package mysql
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/samber/lo"
@@ -107,7 +106,7 @@ func inferInfraState(
 		events = append(events, corev1.Event{
 			Type:    corev1.EventTypeWarning,
 			Reason:  "MySQLConnectionInfoUnavailable",
-			Message: fmt.Sprintf("MySQL connection info is unavailable, but MySQL is reported as ready."),
+			Message: "MySQL connection info is unavailable, but MySQL is reported as ready.",
 		})
 		summaryState = common.ErrorState
 	}

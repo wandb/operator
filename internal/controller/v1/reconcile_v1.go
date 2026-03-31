@@ -18,6 +18,7 @@ package v1
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"time"
 
@@ -178,13 +179,15 @@ func Reconcile(
 
 	log.Info("Desired spec", "spec", desiredSpec.SensitiveValuesMasked())
 
-	hasNotBeenFlaggedForDeletion := wandb.ObjectMeta.DeletionTimestamp.IsZero()
+	hasNotBeenFlaggedForDeletion := wandb.GetDeletionTimestamp().IsZero()
 	if hasNotBeenFlaggedForDeletion {
 		if currentActiveSpec != nil {
 			log.Info("Active spec found", "spec", currentActiveSpec.SensitiveValuesMasked())
 			if currentActiveSpec.IsEqual(desiredSpec) {
 				log.Info("No changes found")
-				statusManager.Set(status.Completed)
+				if err := statusManager.Set(status.Completed); err != nil {
+					log.Error(err, "Failed to set status to Completed")
+				}
 				return ctrlqueue.Requeue(desiredSpec)
 			} else {
 				diff := currentActiveSpec.DiffValues(desiredSpec)
@@ -193,8 +196,10 @@ func Reconcile(
 		}
 
 		if desiredSpec.Chart == nil {
-			statusManager.Set(status.InvalidConfig)
-			log.Error(err, "No release type was found in the spec")
+			if err := statusManager.Set(status.InvalidConfig); err != nil {
+				log.Error(err, "Failed to set status to InvalidConfig")
+			}
+			log.Error(errors.New("chart is nil"), "No release type was found in the spec")
 			return ctrlqueue.Requeue(desiredSpec)
 		}
 		t := reflect.TypeOf(desiredSpec.Chart)
@@ -204,10 +209,12 @@ func Reconcile(
 		}
 		log.Info("Found release type "+typ, "release", reflect.TypeOf(desiredSpec.Chart))
 
-		statusManager.Set(status.Loading)
+		if err := statusManager.Set(status.Loading); err != nil {
+			log.Error(err, "Failed to set status to Loading")
+		}
 
 		if !ctrlqueue.ContainsString(wandb.GetFinalizers(), ResFinalizer) {
-			wandb.ObjectMeta.Finalizers = append(wandb.ObjectMeta.Finalizers, ResFinalizer)
+			wandb.SetFinalizers(append(wandb.GetFinalizers(), ResFinalizer))
 			if err := client.Update(ctx, wandb); err != nil {
 				return ctrlqueue.Requeue(desiredSpec)
 			}
@@ -216,7 +223,9 @@ func Reconcile(
 		log.Info("Applying spec...", "spec", desiredSpec.SensitiveValuesMasked())
 		if !config.DryRun {
 			if err := desiredSpec.Apply(ctx, client, wandb, client.Scheme()); err != nil {
-				statusManager.Set(status.InvalidConfig)
+				if setStatusErr := statusManager.Set(status.InvalidConfig); setStatusErr != nil {
+					log.Error(setStatusErr, "Failed to set status to InvalidConfig")
+				}
 				config.Recorder.Event(wandb, corev1.EventTypeNormal, "ApplyFailed", "Invalid config for apply")
 				log.Error(err, "Failed to apply config changes.")
 				return ctrlqueue.Requeue(desiredSpec)
@@ -227,7 +236,9 @@ func Reconcile(
 		if err := specManager.SetActive(desiredSpec); err != nil {
 			config.Recorder.Event(wandb, corev1.EventTypeNormal, "SetActiveFailed", "Failed to save active state")
 			log.Error(err, "Failed to save active successful spec.")
-			statusManager.Set(status.InvalidConfig)
+			if setStatusErr := statusManager.Set(status.InvalidConfig); setStatusErr != nil {
+				log.Error(setStatusErr, "Failed to set status to InvalidConfig")
+			}
 			return ctrlqueue.Requeue(desiredSpec)
 		}
 		if config.Debug {
@@ -239,12 +250,14 @@ func Reconcile(
 			log.Error(err, "Failed to discover and patch resources")
 			return ctrlqueue.Requeue(desiredSpec)
 		}
-		statusManager.Set(status.Completed)
+		if err := statusManager.Set(status.Completed); err != nil {
+			log.Error(err, "Failed to set status to Completed")
+		}
 
 		return ctrlqueue.Requeue(desiredSpec)
 	}
 
-	if ctrlqueue.ContainsString(wandb.ObjectMeta.Finalizers, ResFinalizer) {
+	if ctrlqueue.ContainsString(wandb.GetFinalizers(), ResFinalizer) {
 		if desiredSpec.Chart != nil {
 			log.Info("Deprovisioning", "release", reflect.TypeOf(desiredSpec.Chart))
 			if !config.DryRun {
@@ -291,7 +304,7 @@ func discoverAndPatchResources(ctx context.Context, c client.Client, wandb *apiv
 
 		labels := client.MatchingLabels{
 			"app.kubernetes.io/managed-by": "Helm",
-			"app.kubernetes.io/instance":   wandb.ObjectMeta.Name,
+			"app.kubernetes.io/instance":   wandb.GetName(),
 		}
 		if err := c.List(ctx, resourceKind.list, client.InNamespace(wandb.Namespace), labels); err != nil {
 			log.Error(err, "Failed to list resources", "kind", resourceKind.name)
