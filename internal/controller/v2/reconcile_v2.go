@@ -55,6 +55,85 @@ const CleanupFinalizer = "wandb.apps.wandb.com/cleanup"
 var defaultRequeueMinutes = 1
 var defaultRequeueDuration = time.Duration(defaultRequeueMinutes) * time.Minute
 
+var managedWorkloadTelemetryApplications = map[string]struct{}{
+	"api":                               {},
+	"executor":                          {},
+	"filemeta":                          {},
+	"filestream":                        {},
+	"flat-run-fields-updater":           {},
+	"glue":                              {},
+	"metric-observer":                   {},
+	"nginx-proxy":                       {},
+	"parquet":                           {},
+	"weave":                             {},
+	"weave-trace":                       {},
+	"weave-trace-worker":                {},
+	"weave-trace-evaluate-model-worker": {},
+}
+
+var managedWorkloadTelemetryEnvVars = []serverManifest.EnvVar{
+	{
+		Name: "OTEL_EXPORTER_OTLP_PROTOCOL",
+		Sources: []serverManifest.EnvSource{
+			{Type: "telemetry", Field: "protocol"},
+		},
+	},
+	{
+		Name: "OTEL_TRACES_EXPORTER",
+		Sources: []serverManifest.EnvSource{
+			{Type: "telemetry", Field: "tracesExporter"},
+		},
+	},
+	{
+		Name: "OTEL_METRICS_EXPORTER",
+		Sources: []serverManifest.EnvSource{
+			{Type: "telemetry", Field: "metricsExporter"},
+		},
+	},
+	{
+		Name: "OTEL_LOGS_EXPORTER",
+		Sources: []serverManifest.EnvSource{
+			{Type: "telemetry", Field: "logsExporter"},
+		},
+	},
+	{
+		Name: "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT",
+		Sources: []serverManifest.EnvSource{
+			{Type: "telemetry", Field: "metricsEndpoint"},
+		},
+	},
+	{
+		Name: "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT",
+		Sources: []serverManifest.EnvSource{
+			{Type: "telemetry", Field: "logsEndpoint"},
+		},
+	},
+	{
+		Name: "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
+		Sources: []serverManifest.EnvSource{
+			{Type: "telemetry", Field: "tracesEndpoint"},
+		},
+	},
+	{
+		Name: "OTEL_SERVICE_NAME",
+		Sources: []serverManifest.EnvSource{
+			{Type: "telemetry", Field: "serviceName"},
+		},
+	},
+	{
+		Name: "OTEL_RESOURCE_ATTRIBUTES",
+		Sources: []serverManifest.EnvSource{
+			{Type: "telemetry", Field: "resourceAttributes"},
+		},
+	},
+	{
+		Name: "GORILLA_TRACER",
+		Sources: []serverManifest.EnvSource{
+			{Type: "telemetry", Field: "gorillaTracer"},
+		},
+	},
+}
+
 type finalizerFunc func(context.Context, ctrlClient.Client, *apiv2.WeightsAndBiases) error
 
 func runRetentionFinalizer(
@@ -340,10 +419,16 @@ func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb 
 			continue
 		}
 
+		applicationName := fmt.Sprintf("%s-%s", wandb.Name, app.Name)
 		envVars, err := resolveEnvvars(ctx, client, wandb, manifest, app.CommonEnvs, app.Env)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
+		envVars, err = injectManagedWorkloadTelemetryEnvvars(ctx, client, wandb, manifest, app, envVars)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		envVars = applyWorkloadTelemetryDefaults(envVars, applicationName)
 
 		volumes, volumeMounts, err := resolveVolumeMounts(ctx, manifest, app.CommonVolumeMounts, app.VolumeMounts)
 		if err != nil {
@@ -369,7 +454,6 @@ func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb 
 		initContainers := resolveInitContainers(app, envVars, volumeMounts)
 
 		application := &apiv2.Application{}
-		applicationName := fmt.Sprintf("%s-%s", wandb.Name, app.Name)
 		err = client.Get(ctx, types.NamespacedName{Name: applicationName, Namespace: wandb.Namespace}, application)
 		if err != nil {
 			if apiErrors.IsNotFound(err) {
@@ -844,6 +928,95 @@ func resolveContainers(app serverManifest.Application, wandb *apiv2.WeightsAndBi
 		containers = append(containers, c)
 	}
 	return containers
+}
+
+func applyWorkloadTelemetryDefaults(envVars []corev1.EnvVar, applicationName string) []corev1.EnvVar {
+	if applicationName == "" || !hasWorkloadTelemetryConfig(envVars) {
+		return envVars
+	}
+
+	serviceNameIndex := -1
+	for i, envVar := range envVars {
+		if envVar.Name != "OTEL_SERVICE_NAME" {
+			continue
+		}
+		serviceNameIndex = i
+		if envVar.Value != "" {
+			return envVars
+		}
+		break
+	}
+
+	serviceNameEnv := corev1.EnvVar{
+		Name:  "OTEL_SERVICE_NAME",
+		Value: applicationName,
+	}
+
+	if serviceNameIndex == -1 {
+		return append(envVars, serviceNameEnv)
+	}
+
+	envVars[serviceNameIndex] = serviceNameEnv
+	return envVars
+}
+
+func injectManagedWorkloadTelemetryEnvvars(
+	ctx context.Context,
+	client ctrlClient.Client,
+	wandb *apiv2.WeightsAndBiases,
+	manifest serverManifest.Manifest,
+	app serverManifest.Application,
+	envVars []corev1.EnvVar,
+) ([]corev1.EnvVar, error) {
+	if !shouldInjectManagedWorkloadTelemetry(app.Name) {
+		return envVars, nil
+	}
+
+	telemetryEnvVars, err := resolveEnvvars(ctx, client, wandb, manifest, nil, managedWorkloadTelemetryEnvVars)
+	if err != nil {
+		return nil, err
+	}
+
+	return appendMissingEnvVars(envVars, telemetryEnvVars), nil
+}
+
+func shouldInjectManagedWorkloadTelemetry(appName string) bool {
+	_, ok := managedWorkloadTelemetryApplications[appName]
+	return ok
+}
+
+func appendMissingEnvVars(existing []corev1.EnvVar, additions []corev1.EnvVar) []corev1.EnvVar {
+	seen := make(map[string]struct{}, len(existing))
+	for _, envVar := range existing {
+		seen[envVar.Name] = struct{}{}
+	}
+
+	for _, envVar := range additions {
+		if _, ok := seen[envVar.Name]; ok {
+			continue
+		}
+		existing = append(existing, envVar)
+		seen[envVar.Name] = struct{}{}
+	}
+
+	return existing
+}
+
+func hasWorkloadTelemetryConfig(envVars []corev1.EnvVar) bool {
+	for _, envVar := range envVars {
+		switch envVar.Name {
+		case "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT",
+			"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT",
+			"OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
+			"OTEL_METRICS_EXPORTER",
+			"OTEL_LOGS_EXPORTER",
+			"OTEL_TRACES_EXPORTER",
+			"OTEL_SERVICE_NAME",
+			"GORILLA_TRACER":
+			return true
+		}
+	}
+	return false
 }
 
 func resolveJWTTokens(app serverManifest.Application, volumes []corev1.Volume, volumeMounts []corev1.VolumeMount) ([]corev1.Volume, []corev1.VolumeMount) {
