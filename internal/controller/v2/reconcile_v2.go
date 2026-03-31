@@ -212,8 +212,8 @@ func Reconcile(
 					return ctrl.Result{}, err
 				}
 			}
-			if wandb.GetRetentionPolicy(wandb.Spec.Kafka.InfraSpec).OnDelete == apiv2.PreserveOnDelete {
-				if err = kafkaPreserveFinalizer(ctx, client, wandb); err != nil {
+			if wandb.GetRetentionPolicy(wandb.Spec.Kafka.InfraSpec).OnDelete == apiv2.DetachOnDelete {
+				if err = kafkaDetachFinalizer(ctx, client, wandb); err != nil {
 					return ctrl.Result{}, err
 				}
 			}
@@ -2150,18 +2150,12 @@ func resolveServiceURLFromManifest(wandbName string, manifest serverManifest.Man
 		return "", false
 	}
 
-	var app *serverManifest.Application
-	for i := range manifest.Applications {
-		if manifest.Applications[i].Name == src.Name {
-			app = &manifest.Applications[i]
-			break
-		}
-	}
-	if app == nil {
+	app, ok := manifest.Applications[src.Name]
+	if !ok {
 		return "", false
 	}
 
-	port, ok := resolveServicePortFromManifest(*app, src.Port)
+	port, ok := resolveServicePortFromManifest(app, src.Port)
 	if !ok {
 		return "", false
 	}
