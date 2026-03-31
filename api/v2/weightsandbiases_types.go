@@ -287,6 +287,8 @@ type ManagedKafkaSpec struct {
 }
 
 type KafkaConnection struct {
+	Host           corev1.SecretKeySelector `json:"host,omitempty"`
+	Port           corev1.SecretKeySelector `json:"port,omitempty"`
 	BrokerEndpoint corev1.SecretKeySelector `json:"brokerEndpoint,omitempty"`
 
 	URL corev1.SecretKeySelector `json:"URL"`

@@ -56,6 +56,10 @@ type MysqlConnection struct {
 	Database corev1.SecretKeySelector
 	Username corev1.SecretKeySelector
 	Password corev1.SecretKeySelector
+	Tls      corev1.SecretKeySelector
+	SslCa    corev1.SecretKeySelector
+	SslCert  corev1.SecretKeySelector
+	SslKey   corev1.SecretKeySelector
 	URL      corev1.SecretKeySelector
 }
 

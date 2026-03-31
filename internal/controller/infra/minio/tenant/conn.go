@@ -103,6 +103,7 @@ func writeWandbConnInfo(
 			"Host":   connInfo.Host,
 			"Port":   connInfo.Port,
 			"Region": "us-east-1",
+			"Bucket": connInfo.Bucket,
 		},
 	}
 
@@ -115,5 +116,6 @@ func writeWandbConnInfo(
 		URL:      corev1.SecretKeySelector{LocalObjectReference: localRef, Key: urlKey, Optional: ptr.To(false)},
 		Endpoint: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Host", Optional: ptr.To(false)},
 		Region:   corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Region", Optional: ptr.To(false)},
+		Bucket:   corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Bucket", Optional: ptr.To(false)},
 	}, nil
 }

@@ -18,6 +18,8 @@ const (
 // Kafka Connection
 
 type KafkaConnection struct {
+	Host           corev1.SecretKeySelector
+	Port           corev1.SecretKeySelector
 	BrokerEndpoint corev1.SecretKeySelector
 	URL            corev1.SecretKeySelector
 }

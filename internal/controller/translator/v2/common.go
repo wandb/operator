@@ -35,6 +35,10 @@ func ToTranslatorMysqlConnection(c v2.MysqlConnection) translator.MysqlConnectio
 		Database: copySelector(c.Database),
 		Username: copySelector(c.Username),
 		Password: copySelector(c.Password),
+		Tls:      copySelector(c.Tls),
+		SslCa:    copySelector(c.SslCa),
+		SslCert:  copySelector(c.SslCert),
+		SslKey:   copySelector(c.SslKey),
 		URL:      copySelector(c.URL),
 	}
 }
@@ -46,6 +50,10 @@ func ToWbMysqlConnection(c translator.MysqlConnection) v2.MysqlConnection {
 		Database: copySelector(c.Database),
 		Username: copySelector(c.Username),
 		Password: copySelector(c.Password),
+		Tls:      copySelector(c.Tls),
+		SslCa:    copySelector(c.SslCa),
+		SslCert:  copySelector(c.SslCert),
+		SslKey:   copySelector(c.SslKey),
 		URL:      copySelector(c.URL),
 	}
 }
@@ -71,6 +79,8 @@ func ToTranslatorRedisConnection(c v2.RedisConnection) translator.RedisConnectio
 		Host:     copySelector(c.Host),
 		Port:     copySelector(c.Port),
 		Password: copySelector(c.Password),
+		Tls:      copySelector(c.Tls),
+		SslCa:    copySelector(c.SslCa),
 		URL:      copySelector(c.URL),
 	}
 }
@@ -80,6 +90,8 @@ func ToWbRedisConnection(c translator.RedisConnection) v2.RedisConnection {
 		Host:     copySelector(c.Host),
 		Port:     copySelector(c.Port),
 		Password: copySelector(c.Password),
+		Tls:      copySelector(c.Tls),
+		SslCa:    copySelector(c.SslCa),
 		URL:      copySelector(c.URL),
 	}
 }
@@ -102,6 +114,8 @@ func ToTranslatorRedisInfraStatus(s v2.RedisInfraStatus) translator.RedisStatus 
 
 func ToTranslatorKafkaConnection(c v2.KafkaConnection) translator.KafkaConnection {
 	return translator.KafkaConnection{
+		Host:           copySelector(c.Host),
+		Port:           copySelector(c.Port),
 		BrokerEndpoint: copySelector(c.BrokerEndpoint),
 		URL:            copySelector(c.URL),
 	}
@@ -109,6 +123,8 @@ func ToTranslatorKafkaConnection(c v2.KafkaConnection) translator.KafkaConnectio
 
 func ToWbKafkaConnection(c translator.KafkaConnection) v2.KafkaConnection {
 	return v2.KafkaConnection{
+		Host:           copySelector(c.Host),
+		Port:           copySelector(c.Port),
 		BrokerEndpoint: copySelector(c.BrokerEndpoint),
 		URL:            copySelector(c.URL),
 	}
