@@ -72,7 +72,9 @@ func ToMysqlMySQLVendorSpec(
 
 	if wandb.GetAffinity(spec.ManagedInfraSpec) != nil || wandb.GetTolerations(spec.ManagedInfraSpec) != nil {
 		if innodb.Spec.PodSpec == nil {
-			innodb.Spec.PodSpec = &corev1.PodSpec{}
+			innodb.Spec.PodSpec = &corev1.PodSpec{
+				Containers: []corev1.Container{},
+			}
 		}
 		innodb.Spec.PodSpec.Affinity = wandb.GetAffinity(spec.ManagedInfraSpec)
 		if tols := wandb.GetTolerations(spec.ManagedInfraSpec); tols != nil {
