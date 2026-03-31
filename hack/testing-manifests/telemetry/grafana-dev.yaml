@@ -73,4 +73,4 @@ spec:
     name: VictoriaTraces
     type: jaeger
     access: proxy
-    url: http://vtsingle-victoria-traces:10428
+    url: http://vtsingle-victoria-traces:10428/select/jaeger
