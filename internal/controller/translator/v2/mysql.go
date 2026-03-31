@@ -76,7 +76,9 @@ func ToMysqlMySQLVendorSpec(
 
 	if spec.Affinity != nil || spec.Tolerations != nil {
 		if innodb.Spec.PodSpec == nil {
-			innodb.Spec.PodSpec = &corev1.PodSpec{}
+			innodb.Spec.PodSpec = &corev1.PodSpec{
+				Containers: []corev1.Container{},
+			}
 		}
 		innodb.Spec.PodSpec.Affinity = spec.Affinity
 		if spec.Tolerations != nil {
