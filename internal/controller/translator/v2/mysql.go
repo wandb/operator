@@ -60,7 +60,7 @@ func ToMysqlMySQLVendorSpec(
 	}
 
 	if len(spec.Config.Resources.Requests) > 0 || len(spec.Config.Resources.Limits) > 0 {
-		innodb.Spec.PodSpec = &corev1.PodSpec{
+		innodb.Spec.PodSpec = &v2.InnoDBPodSpec{
 			Containers: []corev1.Container{
 				{
 					Name:      "mysql",
@@ -72,9 +72,7 @@ func ToMysqlMySQLVendorSpec(
 
 	if wandb.GetAffinity(spec.ManagedInfraSpec) != nil || wandb.GetTolerations(spec.ManagedInfraSpec) != nil {
 		if innodb.Spec.PodSpec == nil {
-			innodb.Spec.PodSpec = &corev1.PodSpec{
-				Containers: []corev1.Container{},
-			}
+			innodb.Spec.PodSpec = &v2.InnoDBPodSpec{}
 		}
 		innodb.Spec.PodSpec.Affinity = wandb.GetAffinity(spec.ManagedInfraSpec)
 		if tols := wandb.GetTolerations(spec.ManagedInfraSpec); tols != nil {
