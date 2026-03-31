@@ -254,6 +254,25 @@ func Reconcile(
 					}
 				}
 			}
+			if wandb.Spec.Networking.Mode == apiv2.NetworkingModeIngress {
+				if err = deleteConsolidatedIngress(ctx, client, wandb); err != nil {
+					return ctrl.Result{}, err
+				}
+			}
+			if wandb.Spec.Networking.Mode == apiv2.NetworkingModeGatewayAPI &&
+				wandb.Spec.Networking.GatewayAPI != nil &&
+				wandb.Spec.Networking.GatewayAPI.Gateway.Managed {
+				if err = deleteGateway(ctx, client, wandb); err != nil {
+					return ctrl.Result{}, err
+				}
+			}
+			if spec := wandb.Spec.Kafka.ManagedKafka; spec != nil {
+				if wandb.GetRetentionPolicy(spec.ManagedInfraSpec).OnDelete == apiv2.DetachOnDelete {
+					if err = kafkaDetachFinalizer(ctx, client, wandb); err != nil {
+						return ctrl.Result{}, err
+					}
+				}
+			}
 			controllerutil.RemoveFinalizer(wandb, CleanupFinalizer)
 			if err := client.Update(ctx, wandb); err != nil {
 				log.Error("Failed to remove finalizer '%s'", logx.ErrAttr(err))
