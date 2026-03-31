@@ -1079,8 +1079,6 @@ spec:
                                 type: object
                             type: object
                         type: object
-                      enabled:
-                        type: boolean
                       name:
                         type: string
                       namespace:
@@ -1124,8 +1122,6 @@ spec:
                         type: array
                       version:
                         type: string
-                    required:
-                    - enabled
                     type: object
                 type: object
               kafka:
@@ -1656,8 +1652,6 @@ spec:
                                 type: object
                             type: object
                         type: object
-                      enabled:
-                        type: boolean
                       name:
                         type: string
                       namespace:
@@ -1701,8 +1695,6 @@ spec:
                               type: string
                           type: object
                         type: array
-                    required:
-                    - enabled
                     type: object
                 type: object
               minio:
@@ -2271,8 +2263,6 @@ spec:
                           rootUser:
                             type: string
                         type: object
-                      enabled:
-                        type: boolean
                       name:
                         type: string
                       namespace:
@@ -2314,8 +2304,6 @@ spec:
                               type: string
                           type: object
                         type: array
-                    required:
-                    - enabled
                     type: object
                 type: object
               mysql:
@@ -2934,8 +2922,6 @@ spec:
                         type: object
                       deploymentType:
                         type: string
-                      enabled:
-                        type: boolean
                       name:
                         type: string
                       namespace:
@@ -2979,7 +2965,6 @@ spec:
                         type: array
                     required:
                     - deploymentType
-                    - enabled
                     type: object
                 type: object
               redis:
@@ -3544,8 +3529,6 @@ spec:
                                 type: object
                             type: object
                         type: object
-                      enabled:
-                        type: boolean
                       name:
                         type: string
                       namespace:
@@ -3629,8 +3612,6 @@ spec:
                               type: string
                           type: object
                         type: array
-                    required:
-                    - enabled
                     type: object
                 type: object
               requireLimits:

@@ -174,7 +174,6 @@ const (
 )
 
 type ManagedInfraSpec struct {
-	Enabled         bool             `json:"enabled"`
 	RetentionPolicy *RetentionPolicy `json:"retentionPolicy,omitempty"`
 
 	Affinity    *corev1.Affinity     `json:"affinity,omitempty"`
