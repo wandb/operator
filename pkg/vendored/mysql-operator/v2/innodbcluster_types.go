@@ -23,17 +23,6 @@ import (
 )
 
 // +kubebuilder:object:generate=true
-// InnoDBPodSpec is a subset of corev1.PodSpec with omitempty on all fields,
-// so that only the fields we set are serialized into the InnoDBCluster CR.
-// The mysql-operator's merge_patch_object rejects null values (e.g. containers: null),
-// which corev1.PodSpec produces because Containers lacks omitempty.
-type InnoDBPodSpec struct {
-	Containers  []corev1.Container  `json:"containers,omitempty"`
-	Affinity    *corev1.Affinity    `json:"affinity,omitempty"`
-	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
-}
-
-// +kubebuilder:object:generate=true
 // InnoDBClusterSpec defines the desired state of InnoDBCluster
 // +kubebuilder:object:generate=true
 type InnoDBClusterSpec struct {
@@ -52,7 +41,7 @@ type InnoDBClusterSpec struct {
 	DatadirPermissions         *DatadirPermissions           `json:"datadirPermissions,omitempty"`
 	Mycnf                      string                        `json:"mycnf,omitempty"`
 	Instances                  int32                         `json:"instances,omitempty"`
-	PodSpec                    *InnoDBPodSpec                `json:"podSpec,omitempty"`
+	PodSpec                    *corev1.PodSpec               `json:"podSpec,omitempty"`
 	PodAnnotations             map[string]string             `json:"podAnnotations,omitempty"`
 	PodLabels                  map[string]string             `json:"podLabels,omitempty"`
 	Keyring                    *KeyringSpec                  `json:"keyring,omitempty"`
