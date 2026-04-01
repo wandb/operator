@@ -327,8 +327,8 @@ func TestResolveEnvvarsServiceSourceFromManifest(t *testing.T) {
 
 	wandb := &apiv2.WeightsAndBiases{ObjectMeta: metav1.ObjectMeta{Name: "wandb-dev-v2", Namespace: "default"}}
 	manifest := serverManifest.Manifest{
-		Applications: []serverManifest.Application{
-			{
+		Applications: map[string]serverManifest.Application{
+			"anaconda2": {
 				Name: "anaconda2",
 				Service: &serverManifest.ServiceSpec{
 					Ports: []corev1.ServicePort{
@@ -367,8 +367,8 @@ func TestResolveEnvvarsServiceSourcePortNameFromManifest(t *testing.T) {
 
 	wandb := &apiv2.WeightsAndBiases{ObjectMeta: metav1.ObjectMeta{Name: "wandb-dev-v2", Namespace: "default"}}
 	manifest := serverManifest.Manifest{
-		Applications: []serverManifest.Application{
-			{
+		Applications: map[string]serverManifest.Application{
+			"parquet": {
 				Name: "parquet",
 				Service: &serverManifest.ServiceSpec{
 					Ports: []corev1.ServicePort{
@@ -399,6 +399,129 @@ func TestResolveEnvvarsServiceSourcePortNameFromManifest(t *testing.T) {
 	}
 }
 
+func TestApplyWorkloadTelemetryDefaultsOverridesSharedServiceName(t *testing.T) {
+	envVars := []corev1.EnvVar{
+		{
+			Name: "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{Name: "wandb-otel-connection"},
+					Key:                  "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT",
+				},
+			},
+		},
+		{
+			Name: "OTEL_SERVICE_NAME",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{Name: "wandb-otel-connection"},
+					Key:                  "OTEL_SERVICE_NAME",
+				},
+			},
+		},
+	}
+
+	resolved := applyWorkloadTelemetryDefaults(envVars, "wandb-dev-v2-parquet")
+
+	serviceName := mustFindEnvVar(t, resolved, "OTEL_SERVICE_NAME")
+	if serviceName.Value != "wandb-dev-v2-parquet" {
+		t.Fatalf("expected workload-specific OTEL service name, got %q", serviceName.Value)
+	}
+	if serviceName.ValueFrom != nil {
+		t.Fatalf("expected workload-specific OTEL service name to be a literal override")
+	}
+}
+
+func TestApplyWorkloadTelemetryDefaultsPreservesExplicitServiceName(t *testing.T) {
+	envVars := []corev1.EnvVar{
+		{Name: "OTEL_METRICS_EXPORTER", Value: "otlp"},
+		{Name: "OTEL_SERVICE_NAME", Value: "custom-service-name"},
+	}
+
+	resolved := applyWorkloadTelemetryDefaults(envVars, "wandb-dev-v2-parquet")
+
+	serviceName := mustFindEnvVar(t, resolved, "OTEL_SERVICE_NAME")
+	if serviceName.Value != "custom-service-name" {
+		t.Fatalf("expected explicit OTEL service name to be preserved, got %q", serviceName.Value)
+	}
+}
+
+func TestInjectManagedWorkloadTelemetryEnvvarsCoverage(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed adding corev1 to scheme: %v", err)
+	}
+	client := fake.NewClientBuilder().WithScheme(scheme).Build()
+	wandb := &apiv2.WeightsAndBiases{ObjectMeta: metav1.ObjectMeta{Name: "wandb-dev-v2", Namespace: "default"}}
+	manifest := serverManifest.Manifest{}
+
+	expectedApps := []string{
+		"api",
+		"executor",
+		"filemeta",
+		"filestream",
+		"flat-run-fields-updater",
+		"glue",
+		"metric-observer",
+		"parquet",
+		"weave",
+		"weave-trace",
+		"weave-trace-worker",
+		"weave-trace-evaluate-model-worker",
+		"nginx-proxy",
+	}
+
+	for _, appName := range expectedApps {
+		t.Run(appName, func(t *testing.T) {
+			envVars, err := injectManagedWorkloadTelemetryEnvvars(
+				context.Background(),
+				client,
+				wandb,
+				manifest,
+				serverManifest.Application{Name: appName},
+				nil,
+			)
+			if err != nil {
+				t.Fatalf("injectManagedWorkloadTelemetryEnvvars returned error: %v", err)
+			}
+
+			for _, envName := range []string{
+				"OTEL_EXPORTER_OTLP_PROTOCOL",
+				"OTEL_TRACES_EXPORTER",
+				"OTEL_METRICS_EXPORTER",
+				"OTEL_LOGS_EXPORTER",
+				"OTEL_EXPORTER_OTLP_METRICS_ENDPOINT",
+				"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT",
+				"OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
+				"OTEL_SERVICE_NAME",
+				"OTEL_RESOURCE_ATTRIBUTES",
+				"GORILLA_TRACER",
+			} {
+				if !coreEnvVarSliceContains(envVars, envName) {
+					t.Fatalf("expected managed telemetry env %q for application %q", envName, appName)
+				}
+			}
+		})
+	}
+
+	t.Run("ineligible-workload", func(t *testing.T) {
+		envVars, err := injectManagedWorkloadTelemetryEnvvars(
+			context.Background(),
+			client,
+			wandb,
+			manifest,
+			serverManifest.Application{Name: "anaconda2"},
+			nil,
+		)
+		if err != nil {
+			t.Fatalf("injectManagedWorkloadTelemetryEnvvars returned error: %v", err)
+		}
+		if len(envVars) != 0 {
+			t.Fatalf("expected no managed telemetry envs for ineligible workload, got %#v", envVars)
+		}
+	})
+}
+
 func mustFindEnvVar(t *testing.T, envs []corev1.EnvVar, name string) corev1.EnvVar {
 	t.Helper()
 	for _, env := range envs {
@@ -408,4 +531,13 @@ func mustFindEnvVar(t *testing.T, envs []corev1.EnvVar, name string) corev1.EnvV
 	}
 	t.Fatalf("env var %q not found", name)
 	return corev1.EnvVar{}
+}
+
+func coreEnvVarSliceContains(envs []corev1.EnvVar, target string) bool {
+	for _, env := range envs {
+		if env.Name == target {
+			return true
+		}
+	}
+	return false
 }

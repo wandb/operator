@@ -9,7 +9,7 @@ import (
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 )
 
 var _ = Describe("ReconcileV2 Sizing", func() {
@@ -157,7 +157,7 @@ var _ = Describe("ReconcileV2 Sizing", func() {
 					"default": {
 						Autoscaling: &serverManifest.AutoscalingConfig{
 							Horizontal: autoscalingv2.HorizontalPodAutoscalerSpec{
-								MinReplicas: pointer.Int32(2),
+								MinReplicas: ptr.To(int32(2)),
 								MaxReplicas: 10,
 							},
 						},

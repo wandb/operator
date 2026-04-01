@@ -6,7 +6,7 @@ import (
 	"strconv"
 
 	apiv2 "github.com/wandb/operator/api/v2"
-	"github.com/wandb/operator/internal/controller/infra/kafka/strimzi"
+	"github.com/wandb/operator/internal/controller/infra/managed/kafka/strimzi"
 	"github.com/wandb/operator/internal/controller/translator"
 	"github.com/wandb/operator/internal/logx"
 	"github.com/wandb/operator/pkg/vendored/strimzi-kafka/v1"
@@ -45,7 +45,7 @@ func ToKafkaVendorSpec(
 	wandb *apiv2.WeightsAndBiases,
 	scheme *runtime.Scheme,
 ) (*v1.Kafka, error) {
-	ctx, log := logx.WithSlog(ctx, logx.Kafka)
+	_, log := logx.WithSlog(ctx, logx.Kafka)
 
 	infraSpec := wandb.Spec.Kafka.ManagedKafka
 	if infraSpec == nil {
@@ -141,7 +141,7 @@ func ToKafkaNodePoolVendorSpec(
 	wandb *apiv2.WeightsAndBiases,
 	scheme *runtime.Scheme,
 ) (*v1.KafkaNodePool, error) {
-	ctx, log := logx.WithSlog(ctx, logx.Kafka)
+	_, log := logx.WithSlog(ctx, logx.Kafka)
 
 	infraSpec := wandb.Spec.Kafka.ManagedKafka
 	if infraSpec == nil {
@@ -153,10 +153,7 @@ func ToKafkaNodePoolVendorSpec(
 		Namespace: infraSpec.Namespace, Name: infraSpec.Name,
 	})
 
-	onDeletePurge := false
-	if retentionPolicy.OnDelete == apiv2.PurgeOnDelete {
-		onDeletePurge = true
-	}
+	onDeletePurge := retentionPolicy.OnDelete == apiv2.PurgeOnDelete
 
 	nodePoolLabels := BuildWandbKafkaLabels(wandb)
 	nodePoolLabels["strimzi.io/cluster"] = nsnBuilder.KafkaName()

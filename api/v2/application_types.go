@@ -26,6 +26,7 @@ import (
 	networkingv1 "k8s.io/api/networking/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -51,6 +52,29 @@ type ApplicationSpec struct {
 	ScaledObjectTemplate *kedav1alpha1.ScaledObjectSpec             `json:"scaledObjectTemplate,omitempty"`
 	Jobs                 []batchv1.Job                              `json:"jobs,omitempty"`
 	CronJobs             []batchv1.CronJob                          `json:"cronJobs,omitempty"`
+
+	// HTTPRouteTemplate is the desired HTTPRoute spec. Nil means no HTTPRoute.
+	// +optional
+	HTTPRouteTemplate *HTTPRouteTemplateSpec `json:"httpRouteTemplate,omitempty"`
+}
+
+// HTTPRouteTemplateSpec contains the fields needed to build a Gateway API HTTPRoute.
+type HTTPRouteTemplateSpec struct {
+	ParentRefs []gatewayv1.ParentReference `json:"parentRefs"`
+	Hostnames  []gatewayv1.Hostname        `json:"hostnames,omitempty"`
+
+	// Paths are the URL path prefixes to match. Defaults to ["/"] if empty.
+	// +optional
+	Paths []string `json:"paths,omitempty"`
+
+	// PathType controls the match type: "Exact" for exact matching, anything else for prefix.
+	// +optional
+	PathType string `json:"pathType,omitempty"`
+
+	// ServicePort is the port on the backend service to route traffic to.
+	// Nil means no port is specified in the backend ref.
+	// +optional
+	ServicePort *gatewayv1.PortNumber `json:"servicePort,omitempty"`
 }
 
 // ApplicationStatus defines the observed state of Application.
@@ -64,6 +88,13 @@ type ApplicationStatus struct {
 	StatefulSetStatus *v1.StatefulSetStatus                        `json:"statefulSetStatus,omitempty"`
 	ServiceStatus     *corev1.ServiceStatus                        `json:"serviceStatus,omitempty"`
 	HPAStatus         *autoscalingv2.HorizontalPodAutoscalerStatus `json:"hpaStatus,omitempty"`
+
+	// +optional
+	HTTPRouteStatus *HTTPRouteStatusSummary `json:"httpRouteStatus,omitempty"`
+}
+
+type HTTPRouteStatusSummary struct {
+	Accepted bool `json:"accepted,omitempty"`
 }
 
 // +kubebuilder:object:root=true

@@ -87,7 +87,7 @@ spec:
     name: VictoriaTraces
     type: jaeger
     access: proxy
-    url: {{ include "telemetry.tracesEndpoint" . | trimSuffix "/insert/opentelemetry/v1/traces" | quote }}
+    url: {{ printf "%s/select/jaeger" (include "telemetry.tracesEndpoint" . | trimSuffix "/insert/opentelemetry/v1/traces") | quote }}
 ---
 apiVersion: grafana.integreatly.org/v1beta1
 kind: GrafanaDashboard
@@ -106,6 +106,8 @@ spec:
   datasources:
     - inputName: DS_VICTORIAMETRICS
       datasourceName: VictoriaMetrics
+    - inputName: DS_VICTORIATRACES
+      datasourceName: VictoriaTraces
   json: |-
 {{ .Files.Get "dashboards/wandb-telemetry-overview.json" | nindent 4 }}
 {{- end }}

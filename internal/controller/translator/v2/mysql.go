@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	apiv2 "github.com/wandb/operator/api/v2"
-	"github.com/wandb/operator/internal/controller/infra/mysql/mysql"
+	"github.com/wandb/operator/internal/controller/infra/managed/mysql/mysql"
 	"github.com/wandb/operator/internal/controller/translator"
 	"github.com/wandb/operator/internal/logx"
 	v2 "github.com/wandb/operator/pkg/vendored/mysql-operator/v2"
@@ -17,13 +17,65 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
+func createMySQLExporterOracleSidecar(clusterName string) corev1.Container {
+	dbPasswordSecretName := fmt.Sprintf("%s-db-password", clusterName)
+
+	return corev1.Container{
+		Name:            "mysqld-exporter",
+		Image:           DefaultMySQLExporterImage,
+		ImagePullPolicy: corev1.PullIfNotPresent,
+		Command:         []string{"/bin/sh", "-c"},
+		Args: []string{`
+cat > /tmp/.my.cnf <<EOF
+[client]
+user=${MYSQLD_EXPORTER_USER}
+password=${MYSQLD_EXPORTER_PASSWORD}
+host=127.0.0.1
+port=3306
+EOF
+exec /bin/mysqld_exporter --config.my-cnf=/tmp/.my.cnf
+`},
+		Ports: []corev1.ContainerPort{
+			{
+				Name:          "metrics",
+				ContainerPort: int32(DefaultMySQLExporterPort),
+				Protocol:      corev1.ProtocolTCP,
+			},
+		},
+		Env: []corev1.EnvVar{
+			{
+				Name: "MYSQLD_EXPORTER_USER",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: dbPasswordSecretName,
+						},
+						Key: "rootUser",
+					},
+				},
+			},
+			{
+				Name: "MYSQLD_EXPORTER_PASSWORD",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: dbPasswordSecretName,
+						},
+						Key: "rootPassword",
+					},
+				},
+			},
+		},
+	}
+}
+
 func ToMysqlMySQLVendorSpec(
 	ctx context.Context,
 	spec apiv2.ManagedMysqlSpec,
 	wandb *apiv2.WeightsAndBiases,
 	scheme *runtime.Scheme,
 ) (*v2.InnoDBCluster, error) {
-	ctx, log := logx.WithSlog(ctx, logx.Mysql)
+	_, log := logx.WithSlog(ctx, logx.Mysql)
 
 	specName := spec.Name
 	nsnBuilder := mysql.CreateNsNameBuilder(types.NamespacedName{
@@ -78,6 +130,21 @@ func ToMysqlMySQLVendorSpec(
 		if tols := wandb.GetTolerations(spec.ManagedInfraSpec); tols != nil {
 			innodb.Spec.PodSpec.Tolerations = *tols
 		}
+	}
+
+	if spec.Telemetry.Enabled {
+		innodb.Spec.Metrics = &v2.MetricsSpec{
+			Enable: true,
+			Image:  DefaultMySQLExporterImage,
+		}
+
+		if innodb.Spec.PodSpec == nil {
+			innodb.Spec.PodSpec = &corev1.PodSpec{}
+		}
+		innodb.Spec.PodSpec.Containers = append(
+			innodb.Spec.PodSpec.Containers,
+			createMySQLExporterOracleSidecar(spec.Name),
+		)
 	}
 
 	if err := ctrl.SetControllerReference(wandb, innodb, scheme); err != nil {

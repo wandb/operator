@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	apiv2 "github.com/wandb/operator/api/v2"
-	"github.com/wandb/operator/internal/controller/infra/mysql/percona"
+	"github.com/wandb/operator/internal/controller/infra/managed/mysql/percona"
 	"github.com/wandb/operator/internal/controller/translator"
 	"github.com/wandb/operator/internal/logx"
 	pxcv1 "github.com/wandb/operator/pkg/vendored/percona-operator/pxc/v1"
@@ -166,7 +166,7 @@ pxc_strict_mode=PERMISSIVE
 	}
 
 	if len(spec.Config.Resources.Requests) > 0 || len(spec.Config.Resources.Limits) > 0 {
-		pxc.Spec.PXC.PodSpec.Resources = corev1.ResourceRequirements{
+		pxc.Spec.PXC.Resources = corev1.ResourceRequirements{
 			Requests: spec.Config.Resources.Requests,
 			Limits:   spec.Config.Resources.Limits,
 		}

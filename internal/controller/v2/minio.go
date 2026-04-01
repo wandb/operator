@@ -5,7 +5,9 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
-	"github.com/wandb/operator/internal/controller/infra/minio/tenant"
+	"github.com/wandb/operator/internal/controller/infra/external"
+	externalminio "github.com/wandb/operator/internal/controller/infra/external/minio"
+	"github.com/wandb/operator/internal/controller/infra/managed/minio/tenant"
 	"github.com/wandb/operator/internal/controller/translator"
 	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
 	"github.com/wandb/operator/pkg/utils"
@@ -56,7 +58,9 @@ func minioInferStatus(
 	if wandb.Spec.Minio.ManagedMinio != nil {
 		return managedMinioInferStatus(ctx, client, recorder, wandb, newConditions, newInfraConn)
 	}
-	// TODO: external minio infer status
+	if wandb.Spec.Minio.ExternalMinio != nil {
+		return externalMinioInferStatus(ctx, client, wandb, newConditions, newInfraConn)
+	}
 	return ctrl.Result{}, nil
 }
 
@@ -65,15 +69,13 @@ func minioPurgeFinalizer(
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
 ) error {
-	spec := wandb.Spec.Minio.ManagedMinio
-	if spec == nil {
-		return nil
+	if spec := wandb.Spec.Minio.ManagedMinio; spec != nil {
+		specNamespacedName := managedMinioSpecNamespacedName(spec)
+		onDeleteRule := translatorv2.ToMinioOnDeleteRule(wandb, wandb.GetRetentionPolicy(spec.ManagedInfraSpec))
+		return tenant.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule)
 	}
-	var specNamespacedName = managedMinioSpecNamespacedName(spec)
-
-	onDeleteRule := translatorv2.ToMinioOnDeleteRule(wandb, wandb.GetRetentionPolicy(spec.ManagedInfraSpec))
-	if err := tenant.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule); err != nil {
-		return err
+	if wandb.Spec.Minio.ExternalMinio != nil {
+		return externalminio.DeleteConnectionSecret(ctx, client, wandb)
 	}
 	return nil
 }
@@ -186,23 +188,24 @@ func managedMinioInferStatus(
 
 // external
 
-func externalMinioWriteState(
-	_ context.Context,
-	_ client.Client,
-	_ *apiv2.WeightsAndBiases,
-) ([]metav1.Condition, *translator.MinioConnection) {
-	// TODO: implement external minio write state
-	return nil, nil
+func externalMinioWriteState(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases) ([]metav1.Condition, *translator.MinioConnection) {
+	return externalminio.WriteState(ctx, c, wandb)
 }
 
-func externalMinioReadState(
-	_ context.Context,
-	_ client.Client,
-	_ *apiv2.WeightsAndBiases,
-	newConditions []metav1.Condition,
-) []metav1.Condition {
-	// TODO: implement external minio read state
-	return newConditions
+func externalMinioReadState(_ context.Context, _ client.Client, _ *apiv2.WeightsAndBiases, newConditions []metav1.Condition) []metav1.Condition {
+	return externalminio.ReadState(nil, nil, nil, newConditions)
+}
+
+func externalMinioInferStatus(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, newConditions []metav1.Condition, newInfraConn *translator.MinioConnection) (ctrl.Result, error) {
+	oldInfraConn := translatorv2.ToTranslatorMinioConnection(wandb.Status.MinioStatus.Connection)
+	state, ready, updatedConditions := external.InferExternalStatus(wandb.Status.MinioStatus.Conditions, newConditions, wandb.Generation, newInfraConn != nil)
+	conn := utils.Coalesce(newInfraConn, &oldInfraConn)
+
+	wandb.Status.MinioStatus = translatorv2.ToWbMinioInfraStatus(translator.MinioStatus{
+		InfraStatus: translator.InfraStatus{Ready: ready, State: state, Conditions: updatedConditions},
+		Connection:  *conn,
+	})
+	return ctrl.Result{}, c.Status().Update(ctx, wandb)
 }
 
 // helpers

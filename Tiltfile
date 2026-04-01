@@ -10,6 +10,7 @@ settings = {
     "wandbCR": "hack/testing-manifests/wandb/.generated/wandb-cr.yaml",
     "wandbOverlays": [],
     "installTelemetry": True,
+    "installNginxGateway": True,
     "logFormat": "pretty",  # pretty, text, json
 }
 
@@ -107,6 +108,24 @@ local_resource("Operator-Manifests", manifests(), labels=[GROUP_WANDB_OPERATOR])
 local_resource("Operator-Generate", generate(), labels=[GROUP_WANDB_OPERATOR])
 
 deploy_cert_manager()
+
+if settings.get("installNginxGateway"):
+    local_resource(
+        'gateway-api-crds',
+        'kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.1/standard-install.yaml',
+        labels=["Gateway"],
+    )
+    helm_resource(
+        'nginx-gateway-fabric',
+        chart='oci://ghcr.io/nginx/charts/nginx-gateway-fabric',
+        namespace='nginx-gateway',
+        flags=[
+            '--create-namespace',
+            '--version=2.4.2',
+        ],
+        resource_deps=['gateway-api-crds'],
+        labels=["Gateway"],
+    )
 
 local_resource(
     'ThirdParty-Chart-Deps',

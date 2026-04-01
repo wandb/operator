@@ -2993,6 +2993,96 @@ spec:
                     - deploymentType
                     type: object
                 type: object
+              networking:
+                properties:
+                  annotations:
+                    additionalProperties:
+                      type: string
+                    type: object
+                  gatewayAPI:
+                    properties:
+                      gateway:
+                        properties:
+                          annotations:
+                            additionalProperties:
+                              type: string
+                            type: object
+                          gatewayClassName:
+                            type: string
+                          gatewayRef:
+                            properties:
+                              name:
+                                type: string
+                              namespace:
+                                type: string
+                            required:
+                            - name
+                            type: object
+                          listeners:
+                            items:
+                              properties:
+                                hostname:
+                                  type: string
+                                name:
+                                  type: string
+                                port:
+                                  format: int32
+                                  type: integer
+                                protocol:
+                                  type: string
+                                tls:
+                                  properties:
+                                    certificateRef:
+                                      properties:
+                                        name:
+                                          type: string
+                                        namespace:
+                                          type: string
+                                      required:
+                                      - name
+                                      type: object
+                                    mode:
+                                      type: string
+                                  type: object
+                              required:
+                              - name
+                              - port
+                              - protocol
+                              type: object
+                            type: array
+                          managed:
+                            default: false
+                            type: boolean
+                        type: object
+                      listenerName:
+                        type: string
+                    required:
+                    - gateway
+                    type: object
+                  ingress:
+                    properties:
+                      ingressClassName:
+                        type: string
+                    type: object
+                  mode:
+                    enum:
+                    - ""
+                    - ingress
+                    - gateway
+                    type: string
+                  tls:
+                    properties:
+                      certManager:
+                        properties:
+                          clusterIssuer:
+                            type: string
+                          issuer:
+                            type: string
+                        type: object
+                      secretName:
+                        type: string
+                    type: object
+                type: object
               redis:
                 properties:
                   externalRedis:
@@ -3870,6 +3960,26 @@ spec:
                 required:
                 - ready
                 type: object
+              gatewayStatus:
+                properties:
+                  addresses:
+                    items:
+                      type: string
+                    type: array
+                  gatewayRef:
+                    properties:
+                      name:
+                        type: string
+                      namespace:
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  name:
+                    type: string
+                  ready:
+                    type: boolean
+                type: object
               generatedSecrets:
                 additionalProperties:
                   properties:
@@ -3884,6 +3994,41 @@ spec:
                   - key
                   type: object
                   x-kubernetes-map-type: atomic
+                type: object
+              ingressStatus:
+                properties:
+                  loadBalancerIngress:
+                    items:
+                      properties:
+                        hostname:
+                          type: string
+                        ip:
+                          type: string
+                        ipMode:
+                          type: string
+                        ports:
+                          items:
+                            properties:
+                              error:
+                                maxLength: 316
+                                pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                                type: string
+                              port:
+                                format: int32
+                                type: integer
+                              protocol:
+                                type: string
+                            required:
+                            - error
+                            - port
+                            - protocol
+                            type: object
+                          type: array
+                          x-kubernetes-list-type: atomic
+                      type: object
+                    type: array
+                  name:
+                    type: string
                 type: object
               kafkaStatus:
                 properties:
@@ -4804,6 +4949,11 @@ spec:
                               type: integer
                           required:
                           - desiredReplicas
+                          type: object
+                        httpRouteStatus:
+                          properties:
+                            accepted:
+                              type: boolean
                           type: object
                         ingressStatus:
                           properties:

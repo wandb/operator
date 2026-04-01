@@ -6,9 +6,11 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
-	"github.com/wandb/operator/internal/controller/infra/mysql/mariadb"
-	"github.com/wandb/operator/internal/controller/infra/mysql/mysql"
-	"github.com/wandb/operator/internal/controller/infra/mysql/percona"
+	"github.com/wandb/operator/internal/controller/infra/external"
+	externalmysql "github.com/wandb/operator/internal/controller/infra/external/mysql"
+	"github.com/wandb/operator/internal/controller/infra/managed/mysql/mariadb"
+	"github.com/wandb/operator/internal/controller/infra/managed/mysql/mysql"
+	"github.com/wandb/operator/internal/controller/infra/managed/mysql/percona"
 	"github.com/wandb/operator/internal/controller/translator"
 	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
 	"github.com/wandb/operator/pkg/utils"
@@ -64,7 +66,9 @@ func mysqlInferStatus(
 	if wandb.Spec.MySQL.ManagedMysql != nil {
 		return managedMysqlInferStatus(ctx, client, recorder, wandb, newConditions, newInfraConn)
 	}
-	// TODO: external mysql infer status
+	if wandb.Spec.MySQL.ExternalMysql != nil {
+		return externalMysqlInferStatus(ctx, client, wandb, newConditions, newInfraConn)
+	}
 	return ctrl.Result{}, nil
 }
 
@@ -73,13 +77,15 @@ func mysqlPurgeFinalizer(
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
 ) error {
-	spec := wandb.Spec.MySQL.ManagedMysql
-	if spec == nil {
-		return nil
+	if spec := wandb.Spec.MySQL.ManagedMysql; spec != nil {
+		specNamespacedName := managedMysqlSpecNamespacedName(spec)
+		onDeleteRule := translatorv2.ToMysqlOnDeleteRule(wandb, wandb.GetRetentionPolicy(spec.ManagedInfraSpec))
+		return mysql.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule)
 	}
-	specNamespacedName := managedMysqlSpecNamespacedName(spec)
-	onDeleteRule := translatorv2.ToMysqlOnDeleteRule(wandb, wandb.GetRetentionPolicy(spec.ManagedInfraSpec))
-	return mysql.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule)
+	if wandb.Spec.MySQL.ExternalMysql != nil {
+		return externalmysql.DeleteConnectionSecret(ctx, client, wandb)
+	}
+	return nil
 }
 
 func mysqlDetachFinalizer(
@@ -313,23 +319,24 @@ func managedMysqlInferStatus(
 
 // external
 
-func externalMysqlWriteState(
-	_ context.Context,
-	_ client.Client,
-	_ *apiv2.WeightsAndBiases,
-) []metav1.Condition {
-	// TODO: implement external mysql write state
-	return nil
+func externalMysqlWriteState(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases) []metav1.Condition {
+	return externalmysql.WriteState(ctx, c, wandb)
 }
 
-func externalMysqlReadState(
-	_ context.Context,
-	_ client.Client,
-	_ *apiv2.WeightsAndBiases,
-	newConditions []metav1.Condition,
-) ([]metav1.Condition, *translator.MysqlConnection) {
-	// TODO: implement external mysql read state
-	return newConditions, nil
+func externalMysqlReadState(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, newConditions []metav1.Condition) ([]metav1.Condition, *translator.MysqlConnection) {
+	return externalmysql.ReadState(ctx, c, wandb, newConditions)
+}
+
+func externalMysqlInferStatus(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, newConditions []metav1.Condition, newInfraConn *translator.MysqlConnection) (ctrl.Result, error) {
+	oldInfraConn := translatorv2.ToTranslatorMysqlConnection(wandb.Status.MySQLStatus.Connection)
+	state, ready, updatedConditions := external.InferExternalStatus(wandb.Status.MySQLStatus.Conditions, newConditions, wandb.Generation, newInfraConn != nil)
+	conn := utils.Coalesce(newInfraConn, &oldInfraConn)
+
+	wandb.Status.MySQLStatus = translatorv2.ToWbMysqlInfraStatus(translator.MysqlStatus{
+		InfraStatus: translator.InfraStatus{Ready: ready, State: state, Conditions: updatedConditions},
+		Connection:  *conn,
+	})
+	return ctrl.Result{}, c.Status().Update(ctx, wandb)
 }
 
 // helpers
