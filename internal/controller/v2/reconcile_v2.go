@@ -131,6 +131,31 @@ func Reconcile(
 					return ctrl.Result{}, err
 				}
 			}
+			if wandb.Spec.Minio.ExternalMinio != nil && wandb.Spec.RetentionPolicy.OnDelete == apiv2.PurgeOnDelete {
+				if err = minioPurgeFinalizer(ctx, client, wandb); err != nil {
+					return ctrl.Result{}, err
+				}
+			}
+			if wandb.Spec.MySQL.ExternalMysql != nil && wandb.Spec.RetentionPolicy.OnDelete == apiv2.PurgeOnDelete {
+				if err = mysqlPurgeFinalizer(ctx, client, wandb); err != nil {
+					return ctrl.Result{}, err
+				}
+			}
+			if wandb.Spec.Redis.ExternalRedis != nil && wandb.Spec.RetentionPolicy.OnDelete == apiv2.PurgeOnDelete {
+				if err = redisPurgeFinalizer(ctx, client, wandb); err != nil {
+					return ctrl.Result{}, err
+				}
+			}
+			if wandb.Spec.Kafka.ExternalKafka != nil && wandb.Spec.RetentionPolicy.OnDelete == apiv2.PurgeOnDelete {
+				if err = kafkaPurgeFinalizer(ctx, client, wandb); err != nil {
+					return ctrl.Result{}, err
+				}
+			}
+			if wandb.Spec.ClickHouse.ExternalClickHouse != nil && wandb.Spec.RetentionPolicy.OnDelete == apiv2.PurgeOnDelete {
+				if err = clickHousePurgeFinalizer(ctx, client, wandb); err != nil {
+					return ctrl.Result{}, err
+				}
+			}
 			controllerutil.RemoveFinalizer(wandb, CleanupFinalizer)
 			if err := client.Update(ctx, wandb); err != nil {
 				log.Error("Failed to remove finalizer '%s'", logx.ErrAttr(err))

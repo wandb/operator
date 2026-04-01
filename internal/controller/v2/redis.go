@@ -9,9 +9,11 @@ import (
 	"github.com/wandb/operator/internal/controller/translator"
 	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
 	"github.com/wandb/operator/pkg/utils"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -56,7 +58,9 @@ func redisInferStatus(
 	if wandb.Spec.Redis.ManagedRedis != nil {
 		return managedRedisInferStatus(ctx, client, recorder, wandb, newConditions, newInfraConn)
 	}
-	// TODO: external redis infer status
+	if wandb.Spec.Redis.ExternalRedis != nil {
+		return externalRedisInferStatus(ctx, client, wandb, newConditions, newInfraConn)
+	}
 	return ctrl.Result{}, nil
 }
 
@@ -65,13 +69,18 @@ func redisPurgeFinalizer(
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
 ) error {
-	spec := wandb.Spec.Redis.ManagedRedis
-	if spec == nil {
-		return nil
+	if spec := wandb.Spec.Redis.ManagedRedis; spec != nil {
+		specNamespacedName := managedRedisSpecNamespacedName(spec)
+		onDeleteRule := translatorv2.ToRedisOnDeleteRule(wandb, wandb.GetRetentionPolicy(spec.ManagedInfraSpec))
+		return opstree.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule)
 	}
-	specNamespacedName := managedRedisSpecNamespacedName(spec)
-	onDeleteRule := translatorv2.ToRedisOnDeleteRule(wandb, wandb.GetRetentionPolicy(spec.ManagedInfraSpec))
-	return opstree.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule)
+	if wandb.Spec.Redis.ExternalRedis != nil {
+		return deleteWandbConnectionSecret(ctx, client, types.NamespacedName{
+			Namespace: wandb.Namespace,
+			Name:      redisConnectionName,
+		})
+	}
+	return nil
 }
 
 func redisDetachFinalizer(
@@ -190,22 +199,103 @@ func managedRedisInferStatus(
 // external
 
 func externalRedisWriteState(
-	_ context.Context,
-	_ client.Client,
-	_ *apiv2.WeightsAndBiases,
+	ctx context.Context,
+	c client.Client,
+	wandb *apiv2.WeightsAndBiases,
 ) []metav1.Condition {
-	// TODO: implement external redis write state
-	return nil
+	spec := wandb.Spec.Redis.ExternalRedis
+	logger := ctrl.LoggerFrom(ctx)
+
+	fields := map[string]corev1.SecretKeySelector{
+		"url":      spec.URL,
+		"Host":     spec.Host,
+		"Port":     spec.Port,
+		"Password": spec.Password,
+		"Tls":      spec.Tls,
+		"SslCa":    spec.SslCa,
+	}
+
+	data := map[string]string{}
+	for key, sel := range fields {
+		val, err := resolveSecretKey(ctx, c, wandb.Namespace, sel)
+		if err != nil {
+			logger.Error(err, "failed to resolve external redis field", "key", key)
+			return []metav1.Condition{{
+				Type:   common.ReconciledType,
+				Status: metav1.ConditionFalse,
+				Reason: common.ApiErrorReason,
+			}}
+		}
+		if val != "" {
+			data[key] = val
+		}
+	}
+
+	nsName := types.NamespacedName{Namespace: wandb.Namespace, Name: redisConnectionName}
+	return writeExternalConnectionSecret(ctx, c, wandb, nsName, data)
 }
 
 func externalRedisReadState(
-	_ context.Context,
-	_ client.Client,
-	_ *apiv2.WeightsAndBiases,
+	ctx context.Context,
+	c client.Client,
+	wandb *apiv2.WeightsAndBiases,
 	newConditions []metav1.Condition,
 ) ([]metav1.Condition, *translator.RedisConnection) {
-	// TODO: implement external redis read state
-	return newConditions, nil
+	nsName := types.NamespacedName{Namespace: wandb.Namespace, Name: redisConnectionName}
+	secret := &corev1.Secret{}
+	found, err := common.GetResource(ctx, c, nsName, "Secret", secret)
+	if err != nil {
+		return append(newConditions, metav1.Condition{
+			Type:   common.ReconciledType,
+			Status: metav1.ConditionFalse,
+			Reason: common.ApiErrorReason,
+		}), nil
+	}
+	if !found {
+		return newConditions, nil
+	}
+
+	localRef := corev1.LocalObjectReference{Name: nsName.Name}
+	return newConditions, &translator.RedisConnection{
+		URL:  corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "url", Optional: ptr.To(false)},
+		Host: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Host", Optional: ptr.To(false)},
+		Port: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Port", Optional: ptr.To(false)},
+	}
+}
+
+func externalRedisInferStatus(
+	ctx context.Context,
+	c client.Client,
+	wandb *apiv2.WeightsAndBiases,
+	newConditions []metav1.Condition,
+	newInfraConn *translator.RedisConnection,
+) (ctrl.Result, error) {
+	oldInfraConn := translatorv2.ToTranslatorRedisConnection(wandb.Status.RedisStatus.Connection)
+	conn := utils.Coalesce(newInfraConn, &oldInfraConn)
+
+	state := common.HealthyState
+	ready := true
+	if newInfraConn == nil {
+		state = common.ErrorState
+		ready = false
+	}
+
+	updatedConditions := common.ComputeConditionUpdates(
+		wandb.Status.RedisStatus.Conditions,
+		newConditions,
+		wandb.Generation,
+		translator.DefaultConditionExpiry,
+	)
+
+	wandb.Status.RedisStatus = translatorv2.ToWbRedisInfraStatus(translator.RedisStatus{
+		InfraStatus: translator.InfraStatus{
+			Ready:      ready,
+			State:      state,
+			Conditions: updatedConditions,
+		},
+		Connection: *conn,
+	})
+	return ctrl.Result{}, c.Status().Update(ctx, wandb)
 }
 
 // helpers

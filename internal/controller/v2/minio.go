@@ -9,9 +9,11 @@ import (
 	"github.com/wandb/operator/internal/controller/translator"
 	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
 	"github.com/wandb/operator/pkg/utils"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -56,7 +58,9 @@ func minioInferStatus(
 	if wandb.Spec.Minio.ManagedMinio != nil {
 		return managedMinioInferStatus(ctx, client, recorder, wandb, newConditions, newInfraConn)
 	}
-	// TODO: external minio infer status
+	if wandb.Spec.Minio.ExternalMinio != nil {
+		return externalMinioInferStatus(ctx, client, wandb, newConditions, newInfraConn)
+	}
 	return ctrl.Result{}, nil
 }
 
@@ -65,15 +69,16 @@ func minioPurgeFinalizer(
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
 ) error {
-	spec := wandb.Spec.Minio.ManagedMinio
-	if spec == nil {
-		return nil
+	if spec := wandb.Spec.Minio.ManagedMinio; spec != nil {
+		specNamespacedName := managedMinioSpecNamespacedName(spec)
+		onDeleteRule := translatorv2.ToMinioOnDeleteRule(wandb, wandb.GetRetentionPolicy(spec.ManagedInfraSpec))
+		return tenant.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule)
 	}
-	var specNamespacedName = managedMinioSpecNamespacedName(spec)
-
-	onDeleteRule := translatorv2.ToMinioOnDeleteRule(wandb, wandb.GetRetentionPolicy(spec.ManagedInfraSpec))
-	if err := tenant.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule); err != nil {
-		return err
+	if wandb.Spec.Minio.ExternalMinio != nil {
+		return deleteWandbConnectionSecret(ctx, client, types.NamespacedName{
+			Namespace: wandb.Namespace,
+			Name:      minioConnectionName,
+		})
 	}
 	return nil
 }
@@ -187,12 +192,52 @@ func managedMinioInferStatus(
 // external
 
 func externalMinioWriteState(
-	_ context.Context,
-	_ client.Client,
-	_ *apiv2.WeightsAndBiases,
+	ctx context.Context,
+	c client.Client,
+	wandb *apiv2.WeightsAndBiases,
 ) ([]metav1.Condition, *translator.MinioConnection) {
-	// TODO: implement external minio write state
-	return nil, nil
+	spec := wandb.Spec.Minio.ExternalMinio
+	logger := ctrl.LoggerFrom(ctx)
+
+	fields := map[string]corev1.SecretKeySelector{
+		"url":       spec.URL,
+		"Endpoint":  spec.Endpoint,
+		"AccessKey": spec.AccessKey,
+		"SecretKey": spec.SecretKey,
+		"Bucket":    spec.Bucket,
+		"Region":    spec.Region,
+	}
+
+	data := map[string]string{}
+	for key, sel := range fields {
+		val, err := resolveSecretKey(ctx, c, wandb.Namespace, sel)
+		if err != nil {
+			logger.Error(err, "failed to resolve external minio field", "key", key)
+			return []metav1.Condition{{
+				Type:   common.ReconciledType,
+				Status: metav1.ConditionFalse,
+				Reason: common.ApiErrorReason,
+			}}, nil
+		}
+		if val != "" {
+			data[key] = val
+		}
+	}
+
+	nsName := types.NamespacedName{Namespace: wandb.Namespace, Name: minioConnectionName}
+	if conditions := writeExternalConnectionSecret(ctx, c, wandb, nsName, data); conditions != nil {
+		return conditions, nil
+	}
+
+	localRef := corev1.LocalObjectReference{Name: nsName.Name}
+	return nil, &translator.MinioConnection{
+		URL:       corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "url", Optional: ptr.To(false)},
+		Endpoint:  corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Endpoint", Optional: ptr.To(false)},
+		AccessKey: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "AccessKey", Optional: ptr.To(false)},
+		SecretKey: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "SecretKey", Optional: ptr.To(false)},
+		Bucket:    corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Bucket", Optional: ptr.To(false)},
+		Region:    corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Region", Optional: ptr.To(false)},
+	}
 }
 
 func externalMinioReadState(
@@ -201,8 +246,42 @@ func externalMinioReadState(
 	_ *apiv2.WeightsAndBiases,
 	newConditions []metav1.Condition,
 ) []metav1.Condition {
-	// TODO: implement external minio read state
 	return newConditions
+}
+
+func externalMinioInferStatus(
+	ctx context.Context,
+	c client.Client,
+	wandb *apiv2.WeightsAndBiases,
+	newConditions []metav1.Condition,
+	newInfraConn *translator.MinioConnection,
+) (ctrl.Result, error) {
+	oldInfraConn := translatorv2.ToTranslatorMinioConnection(wandb.Status.MinioStatus.Connection)
+	conn := utils.Coalesce(newInfraConn, &oldInfraConn)
+
+	state := common.HealthyState
+	ready := true
+	if newInfraConn == nil {
+		state = common.ErrorState
+		ready = false
+	}
+
+	updatedConditions := common.ComputeConditionUpdates(
+		wandb.Status.MinioStatus.Conditions,
+		newConditions,
+		wandb.Generation,
+		translator.DefaultConditionExpiry,
+	)
+
+	wandb.Status.MinioStatus = translatorv2.ToWbMinioInfraStatus(translator.MinioStatus{
+		InfraStatus: translator.InfraStatus{
+			Ready:      ready,
+			State:      state,
+			Conditions: updatedConditions,
+		},
+		Connection: *conn,
+	})
+	return ctrl.Result{}, c.Status().Update(ctx, wandb)
 }
 
 // helpers

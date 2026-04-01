@@ -20,6 +20,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -64,7 +65,9 @@ func mysqlInferStatus(
 	if wandb.Spec.MySQL.ManagedMysql != nil {
 		return managedMysqlInferStatus(ctx, client, recorder, wandb, newConditions, newInfraConn)
 	}
-	// TODO: external mysql infer status
+	if wandb.Spec.MySQL.ExternalMysql != nil {
+		return externalMysqlInferStatus(ctx, client, wandb, newConditions, newInfraConn)
+	}
 	return ctrl.Result{}, nil
 }
 
@@ -73,13 +76,18 @@ func mysqlPurgeFinalizer(
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
 ) error {
-	spec := wandb.Spec.MySQL.ManagedMysql
-	if spec == nil {
-		return nil
+	if spec := wandb.Spec.MySQL.ManagedMysql; spec != nil {
+		specNamespacedName := managedMysqlSpecNamespacedName(spec)
+		onDeleteRule := translatorv2.ToMysqlOnDeleteRule(wandb, wandb.GetRetentionPolicy(spec.ManagedInfraSpec))
+		return mysql.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule)
 	}
-	specNamespacedName := managedMysqlSpecNamespacedName(spec)
-	onDeleteRule := translatorv2.ToMysqlOnDeleteRule(wandb, wandb.GetRetentionPolicy(spec.ManagedInfraSpec))
-	return mysql.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule)
+	if wandb.Spec.MySQL.ExternalMysql != nil {
+		return deleteWandbConnectionSecret(ctx, client, types.NamespacedName{
+			Namespace: wandb.Namespace,
+			Name:      mysqlConnectionName,
+		})
+	}
+	return nil
 }
 
 func mysqlDetachFinalizer(
@@ -314,22 +322,110 @@ func managedMysqlInferStatus(
 // external
 
 func externalMysqlWriteState(
-	_ context.Context,
-	_ client.Client,
-	_ *apiv2.WeightsAndBiases,
+	ctx context.Context,
+	c client.Client,
+	wandb *apiv2.WeightsAndBiases,
 ) []metav1.Condition {
-	// TODO: implement external mysql write state
-	return nil
+	spec := wandb.Spec.MySQL.ExternalMysql
+	logger := ctrl.LoggerFrom(ctx)
+
+	fields := map[string]corev1.SecretKeySelector{
+		"url":      spec.URL,
+		"Host":     spec.Host,
+		"Port":     spec.Port,
+		"Database": spec.Database,
+		"Username": spec.Username,
+		"Password": spec.Password,
+		"Tls":      spec.Tls,
+		"SslCa":    spec.SslCa,
+		"SslCert":  spec.SslCert,
+		"SslKey":   spec.SslKey,
+	}
+
+	data := map[string]string{}
+	for key, sel := range fields {
+		val, err := resolveSecretKey(ctx, c, wandb.Namespace, sel)
+		if err != nil {
+			logger.Error(err, "failed to resolve external mysql field", "key", key)
+			return []metav1.Condition{{
+				Type:   common.ReconciledType,
+				Status: metav1.ConditionFalse,
+				Reason: common.ApiErrorReason,
+			}}
+		}
+		if val != "" {
+			data[key] = val
+		}
+	}
+
+	nsName := types.NamespacedName{Namespace: wandb.Namespace, Name: mysqlConnectionName}
+	return writeExternalConnectionSecret(ctx, c, wandb, nsName, data)
 }
 
 func externalMysqlReadState(
-	_ context.Context,
-	_ client.Client,
-	_ *apiv2.WeightsAndBiases,
+	ctx context.Context,
+	c client.Client,
+	wandb *apiv2.WeightsAndBiases,
 	newConditions []metav1.Condition,
 ) ([]metav1.Condition, *translator.MysqlConnection) {
-	// TODO: implement external mysql read state
-	return newConditions, nil
+	nsName := types.NamespacedName{Namespace: wandb.Namespace, Name: mysqlConnectionName}
+	secret := &corev1.Secret{}
+	found, err := common.GetResource(ctx, c, nsName, "Secret", secret)
+	if err != nil {
+		return append(newConditions, metav1.Condition{
+			Type:   common.ReconciledType,
+			Status: metav1.ConditionFalse,
+			Reason: common.ApiErrorReason,
+		}), nil
+	}
+	if !found {
+		return newConditions, nil
+	}
+
+	localRef := corev1.LocalObjectReference{Name: nsName.Name}
+	return newConditions, &translator.MysqlConnection{
+		URL:      corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "url", Optional: ptr.To(false)},
+		Host:     corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Host", Optional: ptr.To(false)},
+		Port:     corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Port", Optional: ptr.To(false)},
+		Database: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Database", Optional: ptr.To(false)},
+		Username: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Username", Optional: ptr.To(false)},
+		Password: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Password", Optional: ptr.To(false)},
+	}
+}
+
+func externalMysqlInferStatus(
+	ctx context.Context,
+	c client.Client,
+	wandb *apiv2.WeightsAndBiases,
+	newConditions []metav1.Condition,
+	newInfraConn *translator.MysqlConnection,
+) (ctrl.Result, error) {
+	oldInfraConn := translatorv2.ToTranslatorMysqlConnection(wandb.Status.MySQLStatus.Connection)
+	conn := utils.Coalesce(newInfraConn, &oldInfraConn)
+
+	state := common.HealthyState
+	ready := true
+	if newInfraConn == nil {
+		state = common.ErrorState
+		ready = false
+	}
+
+	updatedConditions := common.ComputeConditionUpdates(
+		wandb.Status.MySQLStatus.Conditions,
+		newConditions,
+		wandb.Generation,
+		translator.DefaultConditionExpiry,
+	)
+
+	wandb.Status.MySQLStatus = translatorv2.ToWbMysqlInfraStatus(translator.MysqlStatus{
+		InfraStatus: translator.InfraStatus{
+			Ready:      ready,
+			State:      state,
+			Conditions: updatedConditions,
+		},
+		Connection: *conn,
+	})
+	return ctrl.Result{}, c.Status().Update(ctx, wandb)
 }
 
 // helpers
