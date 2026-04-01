@@ -144,10 +144,10 @@ func ToTranslatorKafkaInfraStatus(s v2.KafkaInfraStatus) translator.KafkaStatus 
 	}
 }
 
-// Minio
+// ObjectStore
 
-func ToTranslatorMinioConnection(c v2.MinioConnection) translator.MinioConnection {
-	return translator.MinioConnection{
+func ToTranslatorObjectStoreConnection(c v2.ObjectStoreConnection) translator.ObjectStoreConnection {
+	return translator.ObjectStoreConnection{
 		Endpoint:  copySelector(c.Endpoint),
 		AccessKey: copySelector(c.AccessKey),
 		SecretKey: copySelector(c.SecretKey),
@@ -157,8 +157,8 @@ func ToTranslatorMinioConnection(c v2.MinioConnection) translator.MinioConnectio
 	}
 }
 
-func ToWbMinioConnection(c translator.MinioConnection) v2.MinioConnection {
-	return v2.MinioConnection{
+func ToWbObjectStoreConnection(c translator.ObjectStoreConnection) v2.ObjectStoreConnection {
+	return v2.ObjectStoreConnection{
 		Endpoint:  copySelector(c.Endpoint),
 		AccessKey: copySelector(c.AccessKey),
 		SecretKey: copySelector(c.SecretKey),
@@ -168,17 +168,17 @@ func ToWbMinioConnection(c translator.MinioConnection) v2.MinioConnection {
 	}
 }
 
-func ToWbMinioInfraStatus(s translator.MinioStatus) v2.MinioInfraStatus {
-	return v2.MinioInfraStatus{
+func ToWbObjectStoreInfraStatus(s translator.ObjectStoreStatus) v2.ObjectStoreInfraStatus {
+	return v2.ObjectStoreInfraStatus{
 		WBInfraStatus: toWbInfraStatus(s.InfraStatus),
-		Connection:    ToWbMinioConnection(s.Connection),
+		Connection:    ToWbObjectStoreConnection(s.Connection),
 	}
 }
 
-func ToTranslatorMinioInfraStatus(s v2.MinioInfraStatus) translator.MinioStatus {
-	return translator.MinioStatus{
+func ToTranslatorObjectStoreInfraStatus(s v2.ObjectStoreInfraStatus) translator.ObjectStoreStatus {
+	return translator.ObjectStoreStatus{
 		InfraStatus: toTranslatorInfraStatus(s.WBInfraStatus),
-		Connection:  ToTranslatorMinioConnection(s.Connection),
+		Connection:  ToTranslatorObjectStoreConnection(s.Connection),
 	}
 }
 

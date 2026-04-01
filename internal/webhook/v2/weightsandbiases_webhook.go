@@ -117,7 +117,7 @@ func (d *WeightsAndBiasesCustomDefaulter) Default(ctx context.Context, obj runti
 	applyMySQLDefaults(wandb)
 	applyRedisDefaults(wandb)
 	applyKafkaDefaults(wandb)
-	applyMinioDefaults(wandb)
+	applyObjectStoreDefaults(wandb)
 	applyMySQLDefaults(wandb)
 	applyClickHouseDefaults(wandb)
 
@@ -242,8 +242,8 @@ func applyKafkaDefaults(wandb *appsv2.WeightsAndBiases) {
 	}
 }
 
-func applyMinioDefaults(wandb *appsv2.WeightsAndBiases) {
-	spec := wandb.Spec.Minio.ManagedMinio
+func applyObjectStoreDefaults(wandb *appsv2.WeightsAndBiases) {
+	spec := wandb.Spec.ObjectStore.ManagedObjectStore
 	if spec == nil {
 		return
 	}
@@ -287,7 +287,7 @@ func validateSpec(_ context.Context, newWandb *appsv2.WeightsAndBiases) (admissi
 	allErrors = append(allErrors, validateMySQLSpec(newWandb)...)
 	allErrors = append(allErrors, validateRedisSpec(newWandb)...)
 	allErrors = append(allErrors, validateKafkaSpec(newWandb)...)
-	allErrors = append(allErrors, validateMinioSpec(newWandb)...)
+	allErrors = append(allErrors, validateObjectStoreSpec(newWandb)...)
 	allErrors = append(allErrors, validateClickHouseSpec(newWandb)...)
 	networkingErrors, networkingWarnings := validateNetworkingSpec(newWandb)
 	allErrors = append(allErrors, networkingErrors...)
@@ -381,15 +381,15 @@ func validateKafkaSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 	return errors
 }
 
-func validateMinioSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
+func validateObjectStoreSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 	var errors field.ErrorList
-	minioPath := field.NewPath("spec").Child("minio")
+	objectStorePath := field.NewPath("spec").Child("objectStore")
 
-	if wandb.Spec.Minio.ManagedMinio != nil && wandb.Spec.Minio.ExternalMinio != nil {
+	if wandb.Spec.ObjectStore.ManagedObjectStore != nil && wandb.Spec.ObjectStore.ExternalObjectStore != nil {
 		errors = append(errors, field.Invalid(
-			minioPath,
+			objectStorePath,
 			"",
-			"managedMinio and externalMinio are mutually exclusive",
+			"managedObjectStore and externalObjectStore are mutually exclusive",
 		))
 	}
 

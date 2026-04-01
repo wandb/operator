@@ -23,11 +23,11 @@ func ComputeStatus(
 	ctx context.Context,
 	enabled bool,
 	oldConditions, currentConditions []metav1.Condition,
-	connection *translator.MinioConnection,
+	connection *translator.ObjectStoreConnection,
 	currentGeneration int64,
-) (translator.MinioStatus, []corev1.Event, ctrl.Result) {
-	ctx, _ = logx.WithSlog(ctx, logx.Minio)
-	result := translator.MinioStatus{}
+) (translator.ObjectStoreStatus, []corev1.Event, ctrl.Result) {
+	ctx, _ = logx.WithSlog(ctx, logx.ObjectStore)
+	result := translator.ObjectStoreStatus{}
 
 	if connection != nil {
 		result.Connection = *connection

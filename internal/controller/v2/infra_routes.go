@@ -32,19 +32,19 @@ type infraRouteEntry struct {
 func resolveInfraRoutes(wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest) ([]infraRouteEntry, error) {
 	var entries []infraRouteEntry
 
-	if minioSpec := wandb.Spec.Minio.ManagedMinio; minioSpec != nil {
+	if objectStoreSpec := wandb.Spec.ObjectStore.ManagedObjectStore; objectStoreSpec != nil {
 		for instanceName, cfg := range manifest.Bucket {
 			if cfg.Ingress == nil {
 				continue
 			}
-			svcName := fmt.Sprintf("%s-hl", minioSpec.Name)
+			svcName := fmt.Sprintf("%s-hl", objectStoreSpec.Name)
 			port, err := resolveInfraServicePort(cfg.Ingress, 9000)
 			if err != nil {
 				return nil, fmt.Errorf("bucket instance %q: %w", instanceName, err)
 			}
 			entries = append(entries, infraRouteEntry{
 				name:        fmt.Sprintf("%s-bucket-%s", wandb.Name, instanceName),
-				namespace:   minioSpec.Namespace,
+				namespace:   objectStoreSpec.Namespace,
 				serviceName: svcName,
 				servicePort: port,
 				ingress:     cfg.Ingress,

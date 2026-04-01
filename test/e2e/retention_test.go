@@ -44,14 +44,14 @@ const (
 
 // infraCRType maps a module name to its third-party Kubernetes CRD resource type.
 var infraCRType = map[string]string{
-	"mysql":      "innodbcluster",
-	"redis":      "redis",
-	"kafka":      "kafka",
-	"minio":      "tenant",
-	"clickhouse": "clickhouseinstallation",
+	"mysql":       "innodbcluster",
+	"redis":       "redis",
+	"kafka":       "kafka",
+	"objectStore": "tenant",
+	"clickhouse":  "clickhouseinstallation",
 }
 
-var allModules = []string{"mysql", "redis", "kafka", "minio", "clickhouse"}
+var allModules = []string{"mysql", "redis", "kafka", "objectStore", "clickhouse"}
 
 func generateUniqueName(prefix string) string {
 	const letters = "abcdefghijklmnopqrstuvwxyz"
@@ -91,11 +91,11 @@ type manifestOpts struct {
 
 func createWandbManifest(opts manifestOpts) string {
 	managedFieldName := map[string]string{
-		"mysql":      "managedMysql",
-		"redis":      "managedRedis",
-		"kafka":      "managedKafka",
-		"minio":      "managedMinio",
-		"clickhouse": "managedClickhouse",
+		"mysql":       "managedMysql",
+		"redis":       "managedRedis",
+		"kafka":       "managedKafka",
+		"objectStore": "managedObjectStore",
+		"clickhouse":  "managedClickhouse",
 	}
 	componentBlock := func(module string) string {
 		managed := managedFieldName[module]
@@ -130,7 +130,7 @@ spec:
 		componentBlock("mysql"),
 		componentBlock("redis"),
 		componentBlock("kafka"),
-		componentBlock("minio"),
+		componentBlock("objectStore"),
 		componentBlock("clickhouse"),
 	)
 }
@@ -178,11 +178,11 @@ func waitForWandbReady(name, ns string) {
 		g.Expect(ok).To(BeTrue(), "status field missing")
 
 		statusKeys := map[string]string{
-			"mysql":      "mysqlStatus",
-			"redis":      "redisStatus",
-			"kafka":      "kafkaStatus",
-			"minio":      "minioStatus",
-			"clickhouse": "clickhouseStatus",
+			"mysql":       "mysqlStatus",
+			"redis":       "redisStatus",
+			"kafka":       "kafkaStatus",
+			"objectStore": "objectStoreStatus",
+			"clickhouse":  "clickhouseStatus",
 		}
 		for _, key := range statusKeys {
 			cs, ok := status[key].(map[string]any)

@@ -70,8 +70,8 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 							StorageSize: "10Gi",
 						},
 					},
-					Minio: apiv2.MinioSpec{
-						ManagedMinio: &apiv2.ManagedMinioSpec{
+					ObjectStore: apiv2.ObjectStoreSpec{
+						ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{
 							StorageSize: "10Gi",
 						},
 					},
@@ -131,10 +131,10 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 							DeploymentType: apiv2.MySQLTypeMysql,
 						},
 					},
-					Redis:      apiv2.RedisSpec{ManagedRedis: &apiv2.ManagedRedisSpec{}},
-					Kafka:      apiv2.KafkaSpec{ManagedKafka: &apiv2.ManagedKafkaSpec{}},
-					Minio:      apiv2.MinioSpec{ManagedMinio: &apiv2.ManagedMinioSpec{}},
-					ClickHouse: apiv2.ClickHouseSpec{ManagedClickHouse: &apiv2.ManagedClickHouseSpec{}},
+					Redis:       apiv2.RedisSpec{ManagedRedis: &apiv2.ManagedRedisSpec{}},
+					Kafka:       apiv2.KafkaSpec{ManagedKafka: &apiv2.ManagedKafkaSpec{}},
+					ObjectStore: apiv2.ObjectStoreSpec{ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{}},
+					ClickHouse:  apiv2.ClickHouseSpec{ManagedClickHouse: &apiv2.ManagedClickHouseSpec{}},
 				},
 			}
 			Expect(k8sClient.Create(ctx, wandb)).Should(Succeed())
@@ -143,7 +143,7 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			wandb.Status.MySQLStatus.Ready = true
 			wandb.Status.RedisStatus.Ready = true
 			wandb.Status.KafkaStatus.Ready = true
-			wandb.Status.MinioStatus.Ready = true
+			wandb.Status.ObjectStoreStatus.Ready = true
 			wandb.Status.ClickHouseStatus.Ready = true
 			Expect(k8sClient.Status().Update(ctx, wandb)).Should(Succeed())
 
@@ -182,7 +182,7 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			wandb.Status.MySQLStatus.Ready = true
 			wandb.Status.RedisStatus.Ready = true
 			wandb.Status.KafkaStatus.Ready = true
-			wandb.Status.MinioStatus.Ready = true
+			wandb.Status.ObjectStoreStatus.Ready = true
 			wandb.Status.ClickHouseStatus.Ready = true
 			wandb.Status.MySQLStatus.Connection.URL = v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: WandbName}, Key: "test"}
 			wandb.Status.ClickHouseStatus.Connection.URL = v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: WandbName}, Key: "test"}
@@ -244,8 +244,8 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 					Kafka: apiv2.KafkaSpec{
 						ManagedKafka: &apiv2.ManagedKafkaSpec{},
 					},
-					Minio: apiv2.MinioSpec{
-						ManagedMinio: &apiv2.ManagedMinioSpec{},
+					ObjectStore: apiv2.ObjectStoreSpec{
+						ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{},
 					},
 					ClickHouse: apiv2.ClickHouseSpec{
 						ManagedClickHouse: &apiv2.ManagedClickHouseSpec{},
@@ -276,7 +276,7 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			wandb.Status.MySQLStatus.Ready = true
 			wandb.Status.RedisStatus.Ready = true
 			wandb.Status.KafkaStatus.Ready = true
-			wandb.Status.MinioStatus.Ready = true
+			wandb.Status.ObjectStoreStatus.Ready = true
 			wandb.Status.ClickHouseStatus.Ready = true
 			wandb.Status.MySQLStatus.Connection.URL = v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: WandbName}, Key: "test"}
 			wandb.Status.ClickHouseStatus.Connection.URL = v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: WandbName}, Key: "test"}
@@ -352,11 +352,11 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 						ManifestRepository: manifestsRepository,
 						Version:            "0.78.0",
 					},
-					MySQL:      apiv2.MySQLSpec{ManagedMysql: &apiv2.ManagedMysqlSpec{}},
-					Redis:      apiv2.RedisSpec{ManagedRedis: &apiv2.ManagedRedisSpec{}},
-					Kafka:      apiv2.KafkaSpec{ManagedKafka: &apiv2.ManagedKafkaSpec{}},
-					Minio:      apiv2.MinioSpec{ManagedMinio: &apiv2.ManagedMinioSpec{}},
-					ClickHouse: apiv2.ClickHouseSpec{ManagedClickHouse: &apiv2.ManagedClickHouseSpec{}},
+					MySQL:       apiv2.MySQLSpec{ManagedMysql: &apiv2.ManagedMysqlSpec{}},
+					Redis:       apiv2.RedisSpec{ManagedRedis: &apiv2.ManagedRedisSpec{}},
+					Kafka:       apiv2.KafkaSpec{ManagedKafka: &apiv2.ManagedKafkaSpec{}},
+					ObjectStore: apiv2.ObjectStoreSpec{ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{}},
+					ClickHouse:  apiv2.ClickHouseSpec{ManagedClickHouse: &apiv2.ManagedClickHouseSpec{}},
 				},
 			}
 			Expect(k8sClient.Create(ctx, wandb)).Should(Succeed())
@@ -368,7 +368,7 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			wandb.Status.MySQLStatus.Ready = true
 			wandb.Status.RedisStatus.Ready = true
 			wandb.Status.KafkaStatus.Ready = true
-			wandb.Status.MinioStatus.Ready = true
+			wandb.Status.ObjectStoreStatus.Ready = true
 			wandb.Status.ClickHouseStatus.Ready = true
 			Expect(k8sClient.Status().Update(ctx, wandb)).Should(Succeed())
 
@@ -432,11 +432,11 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 						ManifestRepository: manifestsRepository,
 						Version:            oldVersion,
 					},
-					MySQL:      apiv2.MySQLSpec{ManagedMysql: &apiv2.ManagedMysqlSpec{}},
-					Redis:      apiv2.RedisSpec{ManagedRedis: &apiv2.ManagedRedisSpec{}},
-					Kafka:      apiv2.KafkaSpec{ManagedKafka: &apiv2.ManagedKafkaSpec{}},
-					Minio:      apiv2.MinioSpec{ManagedMinio: &apiv2.ManagedMinioSpec{}},
-					ClickHouse: apiv2.ClickHouseSpec{ManagedClickHouse: &apiv2.ManagedClickHouseSpec{}},
+					MySQL:       apiv2.MySQLSpec{ManagedMysql: &apiv2.ManagedMysqlSpec{}},
+					Redis:       apiv2.RedisSpec{ManagedRedis: &apiv2.ManagedRedisSpec{}},
+					Kafka:       apiv2.KafkaSpec{ManagedKafka: &apiv2.ManagedKafkaSpec{}},
+					ObjectStore: apiv2.ObjectStoreSpec{ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{}},
+					ClickHouse:  apiv2.ClickHouseSpec{ManagedClickHouse: &apiv2.ManagedClickHouseSpec{}},
 				},
 			}
 			Expect(k8sClient.Create(ctx, wandb)).Should(Succeed())
@@ -448,7 +448,7 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			wandb.Status.MySQLStatus.Ready = true
 			wandb.Status.RedisStatus.Ready = true
 			wandb.Status.KafkaStatus.Ready = true
-			wandb.Status.MinioStatus.Ready = true
+			wandb.Status.ObjectStoreStatus.Ready = true
 			wandb.Status.ClickHouseStatus.Ready = true
 			wandb.Status.MySQLStatus.Connection.URL = v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: WandbName}, Key: "test"}
 			wandb.Status.ClickHouseStatus.Connection.URL = v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: WandbName}, Key: "test"}

@@ -3,9 +3,9 @@ kind: WeightsAndBiases
 metadata:
   name: wandb
 spec:
-  minio:
-    managedMinio: null
-    externalMinio:
+  objectStore:
+    managedObjectStore: null
+    externalObjectStore:
       # required
       endpoint:
         name: external-minio-connection

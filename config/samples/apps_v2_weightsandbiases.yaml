@@ -14,8 +14,8 @@ spec:
     managedKafka:
       storageSize: 10Gi
       replicas: 1
-  minio:
-    managedMinio:
+  objectStore:
+    managedObjectStore:
       storageSize: 10Gi
       replicas: 1
   clickhouse:

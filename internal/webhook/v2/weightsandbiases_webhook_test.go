@@ -51,7 +51,7 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 			obj.Spec.MySQL.ManagedMysql = &appsv2.ManagedMysqlSpec{}
 			obj.Spec.Redis.ManagedRedis = &appsv2.ManagedRedisSpec{}
 			obj.Spec.Kafka.ManagedKafka = &appsv2.ManagedKafkaSpec{}
-			obj.Spec.Minio.ManagedMinio = &appsv2.ManagedMinioSpec{}
+			obj.Spec.ObjectStore.ManagedObjectStore = &appsv2.ManagedObjectStoreSpec{}
 			Expect(defaulter.Default(ctx, obj)).To(Succeed())
 
 			Expect(obj.Spec.Size).To(Equal(appsv2.SizeDev))
@@ -70,7 +70,7 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 			Expect(obj.Spec.MySQL.ManagedMysql.DeploymentType).To(Equal(appsv2.MySQLTypeMysql))
 			Expect(obj.Spec.Redis.ManagedRedis.Namespace).To(Equal("test-ns"))
 			Expect(obj.Spec.Kafka.ManagedKafka.Namespace).To(Equal("test-ns"))
-			Expect(obj.Spec.Minio.ManagedMinio.Namespace).To(Equal("test-ns"))
+			Expect(obj.Spec.ObjectStore.ManagedObjectStore.Namespace).To(Equal("test-ns"))
 		})
 
 		It("does not override already set values", func() {
@@ -91,7 +91,7 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 			}
 			obj.Spec.Redis.ManagedRedis = &appsv2.ManagedRedisSpec{Namespace: "custom-redis"}
 			obj.Spec.Kafka.ManagedKafka = &appsv2.ManagedKafkaSpec{Namespace: "custom-kafka"}
-			obj.Spec.Minio.ManagedMinio = &appsv2.ManagedMinioSpec{Namespace: "custom-minio"}
+			obj.Spec.ObjectStore.ManagedObjectStore = &appsv2.ManagedObjectStoreSpec{Namespace: "custom-minio"}
 			obj.Status.Wandb.Applications = map[string]appsv2.ApplicationStatus{"api": {}}
 
 			Expect(defaulter.Default(ctx, obj)).To(Succeed())
@@ -109,7 +109,7 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 			Expect(obj.Spec.MySQL.ManagedMysql.DeploymentType).To(Equal(appsv2.MySQLTypePercona))
 			Expect(obj.Spec.Redis.ManagedRedis.Namespace).To(Equal("custom-redis"))
 			Expect(obj.Spec.Kafka.ManagedKafka.Namespace).To(Equal("custom-kafka"))
-			Expect(obj.Spec.Minio.ManagedMinio.Namespace).To(Equal("custom-minio"))
+			Expect(obj.Spec.ObjectStore.ManagedObjectStore.Namespace).To(Equal("custom-minio"))
 			Expect(obj.Status.Wandb.Applications).To(HaveKey("api"))
 		})
 
