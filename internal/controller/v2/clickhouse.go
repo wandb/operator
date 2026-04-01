@@ -21,31 +21,13 @@ func clickHouseWriteState(
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
 ) []metav1.Condition {
-	spec := wandb.Spec.ClickHouse.ManagedClickHouse
-	if spec == nil {
-		return nil
+	if wandb.Spec.ClickHouse.ManagedClickHouse != nil {
+		return managedClickHouseWriteState(ctx, client, wandb)
 	}
-
-	var specNamespacedName = managedClickHouseSpecNamespacedName(spec)
-	log := ctrl.LoggerFrom(ctx)
-	desired, err := translatorv2.ToClickHouseVendorSpec(ctx, wandb, client.Scheme())
-	if err != nil {
-		log.Error(err, "failed to translate ClickHouse spec to vendor spec")
-		return []metav1.Condition{
-			{
-				Type:   common.ReconciledType,
-				Status: metav1.ConditionFalse,
-				Reason: common.ControllerErrorReason,
-			},
-		}
+	if wandb.Spec.ClickHouse.ExternalClickHouse != nil {
+		return externalClickHouseWriteState(ctx, client, wandb)
 	}
-
-	if conditions := altinity.CheckDetached(ctx, client, specNamespacedName, wandb.GetUID()); conditions != nil {
-		return conditions
-	}
-
-	results := altinity.WriteState(ctx, client, specNamespacedName, desired)
-	return results
+	return nil
 }
 
 func clickHouseReadState(
@@ -54,16 +36,13 @@ func clickHouseReadState(
 	wandb *apiv2.WeightsAndBiases,
 	newConditions []metav1.Condition,
 ) ([]metav1.Condition, *translator.ClickHouseConnection) {
-	spec := wandb.Spec.ClickHouse.ManagedClickHouse
-	if spec == nil {
-		return newConditions, nil
+	if wandb.Spec.ClickHouse.ManagedClickHouse != nil {
+		return managedClickHouseReadState(ctx, client, wandb, newConditions)
 	}
-
-	specNamespacedName := managedClickHouseSpecNamespacedName(spec)
-	onDeleteRule := translatorv2.ToClickHouseOnDeleteRule(wandb, wandb.GetRetentionPolicy(spec.ManagedInfraSpec))
-	readConditions, newInfraConn := altinity.ReadState(ctx, client, specNamespacedName, wandb, onDeleteRule)
-	newConditions = append(newConditions, readConditions...)
-	return newConditions, newInfraConn
+	if wandb.Spec.ClickHouse.ExternalClickHouse != nil {
+		return externalClickHouseReadState(ctx, client, wandb, newConditions)
+	}
+	return newConditions, nil
 }
 
 func clickHouseInferStatus(
@@ -74,30 +53,11 @@ func clickHouseInferStatus(
 	newConditions []metav1.Condition,
 	newInfraConn *translator.ClickHouseConnection,
 ) (ctrl.Result, error) {
-	spec := wandb.Spec.ClickHouse.ManagedClickHouse
-	if spec == nil {
-		return ctrl.Result{}, nil
+	if wandb.Spec.ClickHouse.ManagedClickHouse != nil {
+		return managedClickHouseInferStatus(ctx, client, recorder, wandb, newConditions, newInfraConn)
 	}
-
-	enabled := true
-	oldConditions := wandb.Status.ClickHouseStatus.Conditions
-	oldInfraConn := translatorv2.ToTranslatorClickHouseConnection(wandb.Status.ClickHouseStatus.Connection)
-
-	updatedStatus, events, ctrlResult := altinity.ComputeStatus(
-		ctx,
-		enabled,
-		oldConditions,
-		newConditions,
-		utils.Coalesce(newInfraConn, &oldInfraConn),
-		wandb.Generation,
-	)
-	for _, e := range events {
-		recorder.Event(wandb, e.Type, e.Reason, e.Message)
-	}
-	wandb.Status.ClickHouseStatus = translatorv2.ToWbClickHouseInfraStatus(updatedStatus)
-	err := client.Status().Update(ctx, wandb)
-
-	return ctrlResult, err
+	// TODO: external clickhouse infer status
+	return ctrl.Result{}, nil
 }
 
 func clickHousePurgeFinalizer(
@@ -126,6 +86,104 @@ func clickHouseDetachFinalizer(
 	specNamespacedName := managedClickHouseSpecNamespacedName(spec)
 	return altinity.DetachFinalizer(ctx, client, specNamespacedName, wandb)
 }
+
+// managed
+
+func managedClickHouseWriteState(
+	ctx context.Context,
+	client client.Client,
+	wandb *apiv2.WeightsAndBiases,
+) []metav1.Condition {
+	spec := wandb.Spec.ClickHouse.ManagedClickHouse
+
+	var specNamespacedName = managedClickHouseSpecNamespacedName(spec)
+	log := ctrl.LoggerFrom(ctx)
+	desired, err := translatorv2.ToClickHouseVendorSpec(ctx, wandb, client.Scheme())
+	if err != nil {
+		log.Error(err, "failed to translate ClickHouse spec to vendor spec")
+		return []metav1.Condition{
+			{
+				Type:   common.ReconciledType,
+				Status: metav1.ConditionFalse,
+				Reason: common.ControllerErrorReason,
+			},
+		}
+	}
+
+	if conditions := altinity.CheckDetached(ctx, client, specNamespacedName, wandb.GetUID()); conditions != nil {
+		return conditions
+	}
+
+	results := altinity.WriteState(ctx, client, specNamespacedName, desired)
+	return results
+}
+
+func managedClickHouseReadState(
+	ctx context.Context,
+	client client.Client,
+	wandb *apiv2.WeightsAndBiases,
+	newConditions []metav1.Condition,
+) ([]metav1.Condition, *translator.ClickHouseConnection) {
+	spec := wandb.Spec.ClickHouse.ManagedClickHouse
+
+	specNamespacedName := managedClickHouseSpecNamespacedName(spec)
+	onDeleteRule := translatorv2.ToClickHouseOnDeleteRule(wandb, wandb.GetRetentionPolicy(spec.ManagedInfraSpec))
+	readConditions, newInfraConn := altinity.ReadState(ctx, client, specNamespacedName, wandb, onDeleteRule)
+	newConditions = append(newConditions, readConditions...)
+	return newConditions, newInfraConn
+}
+
+func managedClickHouseInferStatus(
+	ctx context.Context,
+	client client.Client,
+	recorder record.EventRecorder,
+	wandb *apiv2.WeightsAndBiases,
+	newConditions []metav1.Condition,
+	newInfraConn *translator.ClickHouseConnection,
+) (ctrl.Result, error) {
+	enabled := true
+	oldConditions := wandb.Status.ClickHouseStatus.Conditions
+	oldInfraConn := translatorv2.ToTranslatorClickHouseConnection(wandb.Status.ClickHouseStatus.Connection)
+
+	updatedStatus, events, ctrlResult := altinity.ComputeStatus(
+		ctx,
+		enabled,
+		oldConditions,
+		newConditions,
+		utils.Coalesce(newInfraConn, &oldInfraConn),
+		wandb.Generation,
+	)
+	for _, e := range events {
+		recorder.Event(wandb, e.Type, e.Reason, e.Message)
+	}
+	wandb.Status.ClickHouseStatus = translatorv2.ToWbClickHouseInfraStatus(updatedStatus)
+	err := client.Status().Update(ctx, wandb)
+
+	return ctrlResult, err
+}
+
+// external
+
+func externalClickHouseWriteState(
+	_ context.Context,
+	_ client.Client,
+	_ *apiv2.WeightsAndBiases,
+) []metav1.Condition {
+	// TODO: implement external clickhouse write state
+	return nil
+}
+
+func externalClickHouseReadState(
+	_ context.Context,
+	_ client.Client,
+	_ *apiv2.WeightsAndBiases,
+	newConditions []metav1.Condition,
+) ([]metav1.Condition, *translator.ClickHouseConnection) {
+	// TODO: implement external clickhouse read state
+	return newConditions, nil
+}
+
+// helpers
 
 func managedClickHouseSpecNamespacedName(spec *apiv2.ManagedClickHouseSpec) types.NamespacedName {
 	return types.NamespacedName{

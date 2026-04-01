@@ -29,10 +29,87 @@ func mysqlWriteState(
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
 ) []metav1.Condition {
+	if wandb.Spec.MySQL.ManagedMysql != nil {
+		return managedMysqlWriteState(ctx, client, wandb)
+	}
+	if wandb.Spec.MySQL.ExternalMysql != nil {
+		return externalMysqlWriteState(ctx, client, wandb)
+	}
+	return nil
+}
+
+func mysqlReadState(
+	ctx context.Context,
+	client client.Client,
+	wandb *apiv2.WeightsAndBiases,
+	newConditions []metav1.Condition,
+) ([]metav1.Condition, *translator.MysqlConnection) {
+	if wandb.Spec.MySQL.ManagedMysql != nil {
+		return managedMysqlReadState(ctx, client, wandb, newConditions)
+	}
+	if wandb.Spec.MySQL.ExternalMysql != nil {
+		return externalMysqlReadState(ctx, client, wandb, newConditions)
+	}
+	return newConditions, nil
+}
+
+func mysqlInferStatus(
+	ctx context.Context,
+	client client.Client,
+	recorder record.EventRecorder,
+	wandb *apiv2.WeightsAndBiases,
+	newConditions []metav1.Condition,
+	newInfraConn *translator.MysqlConnection,
+) (ctrl.Result, error) {
+	if wandb.Spec.MySQL.ManagedMysql != nil {
+		return managedMysqlInferStatus(ctx, client, recorder, wandb, newConditions, newInfraConn)
+	}
+	// TODO: external mysql infer status
+	return ctrl.Result{}, nil
+}
+
+func mysqlPurgeFinalizer(
+	ctx context.Context,
+	client client.Client,
+	wandb *apiv2.WeightsAndBiases,
+) error {
 	spec := wandb.Spec.MySQL.ManagedMysql
 	if spec == nil {
 		return nil
 	}
+	specNamespacedName := managedMysqlSpecNamespacedName(spec)
+	onDeleteRule := translatorv2.ToMysqlOnDeleteRule(wandb, wandb.GetRetentionPolicy(spec.ManagedInfraSpec))
+	return mysql.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule)
+}
+
+func mysqlDetachFinalizer(
+	ctx context.Context,
+	client client.Client,
+	wandb *apiv2.WeightsAndBiases,
+) error {
+	spec := wandb.Spec.MySQL.ManagedMysql
+	if spec == nil {
+		return nil
+	}
+	specNamespacedName := managedMysqlSpecNamespacedName(spec)
+	switch spec.DeploymentType {
+	case apiv2.MySQLTypeMariadb:
+		return mariadb.DetachFinalizer(ctx, client, specNamespacedName, wandb)
+	case apiv2.MySQLTypePercona:
+		return percona.DetachFinalizer(ctx, client, specNamespacedName, wandb)
+	default:
+		return mysql.DetachFinalizer(ctx, client, specNamespacedName, wandb)
+	}
+}
+
+// managed
+
+func managedMysqlWriteState(
+	ctx context.Context,
+	client client.Client,
+	wandb *apiv2.WeightsAndBiases,
+) []metav1.Condition {
+	spec := wandb.Spec.MySQL.ManagedMysql
 
 	var specNamespacedName = managedMysqlSpecNamespacedName(spec)
 	logger := ctrl.LoggerFrom(ctx)
@@ -150,16 +227,13 @@ func mysqlWriteState(
 	return nil
 }
 
-func mysqlReadState(
+func managedMysqlReadState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
 	newConditions []metav1.Condition,
 ) ([]metav1.Condition, *translator.MysqlConnection) {
 	spec := wandb.Spec.MySQL.ManagedMysql
-	if spec == nil {
-		return newConditions, nil
-	}
 
 	specNamespacedName := managedMysqlSpecNamespacedName(spec)
 
@@ -179,7 +253,7 @@ func mysqlReadState(
 	return newConditions, newInfraConn
 }
 
-func mysqlInferStatus(
+func managedMysqlInferStatus(
 	ctx context.Context,
 	client client.Client,
 	recorder record.EventRecorder,
@@ -188,9 +262,6 @@ func mysqlInferStatus(
 	newInfraConn *translator.MysqlConnection,
 ) (ctrl.Result, error) {
 	spec := wandb.Spec.MySQL.ManagedMysql
-	if spec == nil {
-		return ctrl.Result{}, nil
-	}
 
 	enabled := true
 	oldConditions := wandb.Status.MySQLStatus.Conditions
@@ -240,39 +311,28 @@ func mysqlInferStatus(
 	return ctrlResult, err
 }
 
-func mysqlPurgeFinalizer(
-	ctx context.Context,
-	client client.Client,
-	wandb *apiv2.WeightsAndBiases,
-) error {
-	spec := wandb.Spec.MySQL.ManagedMysql
-	if spec == nil {
-		return nil
-	}
-	specNamespacedName := managedMysqlSpecNamespacedName(spec)
-	onDeleteRule := translatorv2.ToMysqlOnDeleteRule(wandb, wandb.GetRetentionPolicy(spec.ManagedInfraSpec))
-	return mysql.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule)
+// external
+
+func externalMysqlWriteState(
+	_ context.Context,
+	_ client.Client,
+	_ *apiv2.WeightsAndBiases,
+) []metav1.Condition {
+	// TODO: implement external mysql write state
+	return nil
 }
 
-func mysqlDetachFinalizer(
-	ctx context.Context,
-	client client.Client,
-	wandb *apiv2.WeightsAndBiases,
-) error {
-	spec := wandb.Spec.MySQL.ManagedMysql
-	if spec == nil {
-		return nil
-	}
-	specNamespacedName := managedMysqlSpecNamespacedName(spec)
-	switch spec.DeploymentType {
-	case apiv2.MySQLTypeMariadb:
-		return mariadb.DetachFinalizer(ctx, client, specNamespacedName, wandb)
-	case apiv2.MySQLTypePercona:
-		return percona.DetachFinalizer(ctx, client, specNamespacedName, wandb)
-	default:
-		return mysql.DetachFinalizer(ctx, client, specNamespacedName, wandb)
-	}
+func externalMysqlReadState(
+	_ context.Context,
+	_ client.Client,
+	_ *apiv2.WeightsAndBiases,
+	newConditions []metav1.Condition,
+) ([]metav1.Condition, *translator.MysqlConnection) {
+	// TODO: implement external mysql read state
+	return newConditions, nil
 }
+
+// helpers
 
 func managedMysqlSpecNamespacedName(spec *apiv2.ManagedMysqlSpec) types.NamespacedName {
 	return types.NamespacedName{

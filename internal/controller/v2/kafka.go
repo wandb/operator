@@ -22,10 +22,80 @@ func kafkaWriteState(
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
 ) []metav1.Condition {
+	if wandb.Spec.Kafka.ManagedKafka != nil {
+		return managedKafkaWriteState(ctx, client, wandb)
+	}
+	if wandb.Spec.Kafka.ExternalKafka != nil {
+		return externalKafkaWriteState(ctx, client, wandb)
+	}
+	return nil
+}
+
+func kafkaReadState(
+	ctx context.Context,
+	client client.Client,
+	wandb *apiv2.WeightsAndBiases,
+	newConditions []metav1.Condition,
+) ([]metav1.Condition, *translator.KafkaConnection) {
+	if wandb.Spec.Kafka.ManagedKafka != nil {
+		return managedKafkaReadState(ctx, client, wandb, newConditions)
+	}
+	if wandb.Spec.Kafka.ExternalKafka != nil {
+		return externalKafkaReadState(ctx, client, wandb, newConditions)
+	}
+	return newConditions, nil
+}
+
+func kafkaInferStatus(
+	ctx context.Context,
+	client client.Client,
+	recorder record.EventRecorder,
+	wandb *apiv2.WeightsAndBiases,
+	newConditions []metav1.Condition,
+	newInfraConn *translator.KafkaConnection,
+) (ctrl.Result, error) {
+	if wandb.Spec.Kafka.ManagedKafka != nil {
+		return managedKafkaInferStatus(ctx, client, recorder, wandb, newConditions, newInfraConn)
+	}
+	// TODO: external kafka infer status
+	return ctrl.Result{}, nil
+}
+
+func kafkaPurgeFinalizer(
+	ctx context.Context,
+	client client.Client,
+	wandb *apiv2.WeightsAndBiases,
+) error {
 	spec := wandb.Spec.Kafka.ManagedKafka
 	if spec == nil {
 		return nil
 	}
+	specNamespacedName := managedKafkaSpecNamespacedName(spec)
+	onDeleteRule := translatorv2.ToKafkaOnDeleteRule(wandb, wandb.GetRetentionPolicy(spec.ManagedInfraSpec))
+	return strimzi.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule)
+}
+
+func kafkaDetachFinalizer(
+	ctx context.Context,
+	client client.Client,
+	wandb *apiv2.WeightsAndBiases,
+) error {
+	spec := wandb.Spec.Kafka.ManagedKafka
+	if spec == nil {
+		return nil
+	}
+	specNamespacedName := managedKafkaSpecNamespacedName(spec)
+	return strimzi.DetachFinalizer(ctx, client, specNamespacedName, wandb)
+}
+
+// managed
+
+func managedKafkaWriteState(
+	ctx context.Context,
+	client client.Client,
+	wandb *apiv2.WeightsAndBiases,
+) []metav1.Condition {
+	spec := wandb.Spec.Kafka.ManagedKafka
 
 	log := ctrl.LoggerFrom(ctx)
 	var desiredKafka *v1.Kafka
@@ -74,16 +144,13 @@ func kafkaWriteState(
 	return results
 }
 
-func kafkaReadState(
+func managedKafkaReadState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
 	newConditions []metav1.Condition,
 ) ([]metav1.Condition, *translator.KafkaConnection) {
 	spec := wandb.Spec.Kafka.ManagedKafka
-	if spec == nil {
-		return newConditions, nil
-	}
 
 	specNamespacedName := managedKafkaSpecNamespacedName(spec)
 	onDeleteRule := translatorv2.ToKafkaOnDeleteRule(wandb, wandb.GetRetentionPolicy(spec.ManagedInfraSpec))
@@ -92,7 +159,7 @@ func kafkaReadState(
 	return newConditions, newInfraConn
 }
 
-func kafkaInferStatus(
+func managedKafkaInferStatus(
 	ctx context.Context,
 	client client.Client,
 	recorder record.EventRecorder,
@@ -100,15 +167,10 @@ func kafkaInferStatus(
 	newConditions []metav1.Condition,
 	newInfraConn *translator.KafkaConnection,
 ) (ctrl.Result, error) {
-	spec := wandb.Spec.Kafka.ManagedKafka
-	if spec == nil {
-		return ctrl.Result{}, nil
-	}
-
-	enabled := true
 	oldConditions := wandb.Status.KafkaStatus.Conditions
 	oldInfraConn := translatorv2.ToTranslatorKafkaConnection(wandb.Status.KafkaStatus.Connection)
 
+	enabled := true
 	updatedStatus, events, ctrlResult := strimzi.ComputeStatus(
 		ctx,
 		enabled,
@@ -126,37 +188,32 @@ func kafkaInferStatus(
 	return ctrlResult, err
 }
 
-func kafkaPurgeFinalizer(
-	ctx context.Context,
-	client client.Client,
-	wandb *apiv2.WeightsAndBiases,
-) error {
-	spec := wandb.Spec.Kafka.ManagedKafka
-	if spec == nil {
-		return nil
-	}
-	specNamespacedName := managedKafkaSpecNamespacedName(spec)
-	onDeleteRule := translatorv2.ToKafkaOnDeleteRule(wandb, wandb.GetRetentionPolicy(spec.ManagedInfraSpec))
-	return strimzi.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule)
+// external
+
+func externalKafkaWriteState(
+	_ context.Context,
+	_ client.Client,
+	_ *apiv2.WeightsAndBiases,
+) []metav1.Condition {
+	// TODO: implement external kafka write state
+	return nil
 }
 
-func kafkaDetachFinalizer(
-	ctx context.Context,
-	client client.Client,
-	wandb *apiv2.WeightsAndBiases,
-) error {
-	spec := wandb.Spec.Kafka.ManagedKafka
-	if spec == nil {
-		return nil
-	}
-	specNamespacedName := managedKafkaSpecNamespacedName(spec)
-	return strimzi.DetachFinalizer(ctx, client, specNamespacedName, wandb)
+func externalKafkaReadState(
+	_ context.Context,
+	_ client.Client,
+	_ *apiv2.WeightsAndBiases,
+	newConditions []metav1.Condition,
+) ([]metav1.Condition, *translator.KafkaConnection) {
+	// TODO: implement external kafka read state
+	return newConditions, nil
 }
+
+// helpers
 
 func managedKafkaSpecNamespacedName(spec *apiv2.ManagedKafkaSpec) types.NamespacedName {
 	return types.NamespacedName{
 		Namespace: spec.Namespace,
 		Name:      spec.Name,
 	}
-
 }
