@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	apiv2 "github.com/wandb/operator/api/v2"
-	"github.com/wandb/operator/internal/controller/infra/mysql/percona"
+	"github.com/wandb/operator/internal/controller/infra/managed/mysql/percona"
 	"github.com/wandb/operator/internal/controller/translator"
 	"github.com/wandb/operator/internal/logx"
 	pxcv1 "github.com/wandb/operator/pkg/vendored/percona-operator/pxc/v1"
@@ -85,10 +85,9 @@ func ToPerconaMySQLVendorSpec(
 	wandb *apiv2.WeightsAndBiases,
 	scheme *runtime.Scheme,
 ) (*pxcv1.PerconaXtraDBCluster, error) {
-	_, log := logx.WithSlog(ctx, logx.Mysql)
-	spec := wandb.Spec.MySQL
-
-	if !spec.Enabled {
+	ctx, log := logx.WithSlog(ctx, logx.Mysql)
+	spec := wandb.Spec.MySQL.ManagedMysql
+	if spec == nil {
 		return nil, nil
 	}
 
@@ -143,9 +142,9 @@ pxc_strict_mode=PERMISSIVE
 						},
 					},
 					Affinity: &pxcv1.PodAffinity{
-						Advanced: spec.Affinity,
+						Advanced: wandb.GetAffinity(spec.ManagedInfraSpec),
 					},
-					Tolerations:   *wandb.GetTolerations(spec.InfraSpec),
+					Tolerations:   *wandb.GetTolerations(spec.ManagedInfraSpec),
 					Configuration: configuration,
 				},
 			},

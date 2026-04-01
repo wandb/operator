@@ -98,7 +98,8 @@ var _ = Describe("Infra Sizing", func() {
 		It("should apply manifest sizing to empty spec fields", func() {
 			wandb := &apiv2.WeightsAndBiases{
 				Spec: apiv2.WeightsAndBiasesSpec{
-					Size: "small",
+					Size:  "small",
+					MySQL: apiv2.MySQLSpec{ManagedMysql: &apiv2.ManagedMysqlSpec{}},
 				},
 			}
 			manifest := serverManifest.Manifest{
@@ -119,8 +120,8 @@ var _ = Describe("Infra Sizing", func() {
 				},
 			}
 			v2.ApplyInfraSizing(wandb, manifest)
-			Expect(wandb.Spec.MySQL.Replicas).To(Equal(int32(3)))
-			Expect(wandb.Spec.MySQL.Config.Resources.Requests.Cpu().String()).To(Equal("2"))
+			Expect(wandb.Spec.MySQL.ManagedMysql.Replicas).To(Equal(int32(3)))
+			Expect(wandb.Spec.MySQL.ManagedMysql.Config.Resources.Requests.Cpu().String()).To(Equal("2"))
 		})
 
 		It("should not override user-specified spec fields", func() {
@@ -128,8 +129,10 @@ var _ = Describe("Infra Sizing", func() {
 				Spec: apiv2.WeightsAndBiasesSpec{
 					Size: "small",
 					MySQL: apiv2.MySQLSpec{
-						Replicas:    5,
-						StorageSize: "50Gi",
+						ManagedMysql: &apiv2.ManagedMysqlSpec{
+							Replicas:    5,
+							StorageSize: "50Gi",
+						},
 					},
 				},
 			}
@@ -146,8 +149,8 @@ var _ = Describe("Infra Sizing", func() {
 				},
 			}
 			v2.ApplyInfraSizing(wandb, manifest)
-			Expect(wandb.Spec.MySQL.Replicas).To(Equal(int32(5)))
-			Expect(wandb.Spec.MySQL.StorageSize).To(Equal("50Gi"))
+			Expect(wandb.Spec.MySQL.ManagedMysql.Replicas).To(Equal(int32(5)))
+			Expect(wandb.Spec.MySQL.ManagedMysql.StorageSize).To(Equal("50Gi"))
 		})
 	})
 

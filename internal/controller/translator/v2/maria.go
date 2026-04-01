@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	apiv2 "github.com/wandb/operator/api/v2"
-	"github.com/wandb/operator/internal/controller/infra/mysql/mariadb"
+	"github.com/wandb/operator/internal/controller/infra/managed/mysql/mariadb"
 	"github.com/wandb/operator/internal/logx"
 	"github.com/wandb/operator/pkg/vendored/mariadb-operator/k8s.mariadb.com/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
@@ -60,15 +60,11 @@ exec /bin/mysqld_exporter --config.my-cnf=/tmp/.my.cnf
 
 func ToMariaDBMySQLVendorSpec(
 	ctx context.Context,
-	spec apiv2.MySQLSpec,
+	spec apiv2.ManagedMysqlSpec,
 	owner metav1.Object,
 	scheme *runtime.Scheme,
 ) (*v1alpha1.MariaDB, error) {
 	_, log := logx.WithSlog(ctx, logx.Mysql)
-
-	if !spec.Enabled {
-		return nil, nil
-	}
 
 	specName := spec.Name
 	nsnBuilder := mariadb.CreateNsNameBuilder(types.NamespacedName{

@@ -1,0 +1,22 @@
+apiVersion: apps.wandb.com/v2
+kind: WeightsAndBiases
+metadata:
+  name: wandb
+spec:
+  kafka:
+    managedKafka: null
+    externalKafka:
+      # required
+      brokerEndpoint:
+        name: external-kafka-connection
+        key: Host
+      URL:
+        name: external-kafka-connection
+        key: url
+      # optional
+      # host:
+      #   name: external-kafka-connection
+      #   key: Host
+      # port:
+      #   name: external-kafka-connection
+      #   key: Port

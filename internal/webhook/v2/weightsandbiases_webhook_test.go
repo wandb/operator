@@ -48,9 +48,10 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 		It("sets webhook defaults and preserves user-provided values", func() {
 			obj.Spec.RetentionPolicy.OnDelete = ""
 			obj.Spec.Wandb.ManifestRepository = "example.com/wandb/server-manifest"
-			obj.Spec.MySQL.DeploymentType = ""
-			obj.Spec.Redis.Enabled = true
-			obj.Spec.Redis.Namespace = ""
+			obj.Spec.MySQL.ManagedMysql = &appsv2.ManagedMysqlSpec{}
+			obj.Spec.Redis.ManagedRedis = &appsv2.ManagedRedisSpec{}
+			obj.Spec.Kafka.ManagedKafka = &appsv2.ManagedKafkaSpec{}
+			obj.Spec.Minio.ManagedMinio = &appsv2.ManagedMinioSpec{}
 			Expect(defaulter.Default(ctx, obj)).To(Succeed())
 
 			Expect(obj.Spec.Size).To(Equal(appsv2.SizeDev))
@@ -65,11 +66,11 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 			Expect(*obj.Spec.Wandb.ServiceAccount.Create).To(BeTrue())
 			Expect(obj.Spec.Wandb.ServiceAccount.ServiceAccountName).To(Equal("wandb"))
 			Expect(obj.Status.Wandb.Applications).ToNot(BeNil())
-			Expect(obj.Spec.MySQL.Namespace).To(Equal("test-ns"))
-			Expect(obj.Spec.MySQL.DeploymentType).To(Equal(appsv2.MySQLTypeMysql))
-			Expect(obj.Spec.Redis.Namespace).To(Equal("test-ns"))
-			Expect(obj.Spec.Kafka.Namespace).To(Equal("test-ns"))
-			Expect(obj.Spec.Minio.Namespace).To(Equal("test-ns"))
+			Expect(obj.Spec.MySQL.ManagedMysql.Namespace).To(Equal("test-ns"))
+			Expect(obj.Spec.MySQL.ManagedMysql.DeploymentType).To(Equal(appsv2.MySQLTypeMysql))
+			Expect(obj.Spec.Redis.ManagedRedis.Namespace).To(Equal("test-ns"))
+			Expect(obj.Spec.Kafka.ManagedKafka.Namespace).To(Equal("test-ns"))
+			Expect(obj.Spec.Minio.ManagedMinio.Namespace).To(Equal("test-ns"))
 		})
 
 		It("does not override already set values", func() {
@@ -84,8 +85,13 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 			obj.Spec.Wandb.InternalServiceAuth.OIDCIssuer = "https://issuer.example.com"
 			obj.Spec.Wandb.ServiceAccount.Create = boolPtr(false)
 			obj.Spec.Wandb.ServiceAccount.ServiceAccountName = "custom-sa"
-			obj.Spec.MySQL.Namespace = "custom-mysql"
-			obj.Spec.MySQL.DeploymentType = appsv2.MySQLTypePercona
+			obj.Spec.MySQL.ManagedMysql = &appsv2.ManagedMysqlSpec{
+				Namespace:      "custom-mysql",
+				DeploymentType: appsv2.MySQLTypePercona,
+			}
+			obj.Spec.Redis.ManagedRedis = &appsv2.ManagedRedisSpec{Namespace: "custom-redis"}
+			obj.Spec.Kafka.ManagedKafka = &appsv2.ManagedKafkaSpec{Namespace: "custom-kafka"}
+			obj.Spec.Minio.ManagedMinio = &appsv2.ManagedMinioSpec{Namespace: "custom-minio"}
 			obj.Status.Wandb.Applications = map[string]appsv2.ApplicationStatus{"api": {}}
 
 			Expect(defaulter.Default(ctx, obj)).To(Succeed())
@@ -99,8 +105,11 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 			Expect(obj.Spec.Wandb.InternalServiceAuth.OIDCIssuer).To(Equal("https://issuer.example.com"))
 			Expect(*obj.Spec.Wandb.ServiceAccount.Create).To(BeFalse())
 			Expect(obj.Spec.Wandb.ServiceAccount.ServiceAccountName).To(Equal("custom-sa"))
-			Expect(obj.Spec.MySQL.Namespace).To(Equal("custom-mysql"))
-			Expect(obj.Spec.MySQL.DeploymentType).To(Equal(appsv2.MySQLTypePercona))
+			Expect(obj.Spec.MySQL.ManagedMysql.Namespace).To(Equal("custom-mysql"))
+			Expect(obj.Spec.MySQL.ManagedMysql.DeploymentType).To(Equal(appsv2.MySQLTypePercona))
+			Expect(obj.Spec.Redis.ManagedRedis.Namespace).To(Equal("custom-redis"))
+			Expect(obj.Spec.Kafka.ManagedKafka.Namespace).To(Equal("custom-kafka"))
+			Expect(obj.Spec.Minio.ManagedMinio.Namespace).To(Equal("custom-minio"))
 			Expect(obj.Status.Wandb.Applications).To(HaveKey("api"))
 		})
 
@@ -112,41 +121,32 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 	})
 
 	Context("When creating or updating WeightsAndBiases under Validating Webhook", func() {
-		It("allows create when Redis is disabled", func() {
-			obj.Spec.Redis.Enabled = false
-
+		It("allows create when ManagedRedis is nil", func() {
 			warnings, err := validator.ValidateCreate(ctx, obj)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(warnings).To(BeEmpty())
 		})
 
 		It("rejects create when Redis storage size is invalid", func() {
-			obj.Spec.Redis.Enabled = true
-			obj.Spec.Redis.StorageSize = "bad-size"
+			obj.Spec.Redis.ManagedRedis = &appsv2.ManagedRedisSpec{StorageSize: "bad-size"}
 
 			_, err := validator.ValidateCreate(ctx, obj)
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("spec.redis.storageSize"))
+			Expect(err.Error()).To(ContainSubstring("storageSize"))
 		})
 
 		It("rejects redis namespace changes on update", func() {
-			oldObj.Spec.Redis.Enabled = true
-			oldObj.Spec.Redis.Namespace = "redis-a"
-			obj.Spec.Redis.Enabled = true
-			obj.Spec.Redis.Namespace = "redis-b"
+			oldObj.Spec.Redis.ManagedRedis = &appsv2.ManagedRedisSpec{Namespace: "redis-a"}
+			obj.Spec.Redis.ManagedRedis = &appsv2.ManagedRedisSpec{Namespace: "redis-b"}
 
 			_, err := validator.ValidateUpdate(ctx, oldObj, obj)
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("spec.redis.namespace"))
+			Expect(err.Error()).To(ContainSubstring("namespace"))
 		})
 
 		It("rejects redis storage size changes when already set", func() {
-			oldObj.Spec.Redis.Enabled = true
-			oldObj.Spec.Redis.Namespace = "redis"
-			oldObj.Spec.Redis.StorageSize = "10Gi"
-			obj.Spec.Redis.Enabled = true
-			obj.Spec.Redis.Namespace = "redis"
-			obj.Spec.Redis.StorageSize = "20Gi"
+			oldObj.Spec.Redis.ManagedRedis = &appsv2.ManagedRedisSpec{Namespace: "redis", StorageSize: "10Gi"}
+			obj.Spec.Redis.ManagedRedis = &appsv2.ManagedRedisSpec{Namespace: "redis", StorageSize: "20Gi"}
 
 			_, err := validator.ValidateUpdate(ctx, oldObj, obj)
 			Expect(err).To(HaveOccurred())
@@ -154,12 +154,8 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 		})
 
 		It("allows redis storage size to be initially set on update", func() {
-			oldObj.Spec.Redis.Enabled = true
-			oldObj.Spec.Redis.Namespace = "redis"
-			oldObj.Spec.Redis.StorageSize = ""
-			obj.Spec.Redis.Enabled = true
-			obj.Spec.Redis.Namespace = "redis"
-			obj.Spec.Redis.StorageSize = "20Gi"
+			oldObj.Spec.Redis.ManagedRedis = &appsv2.ManagedRedisSpec{Namespace: "redis", StorageSize: ""}
+			obj.Spec.Redis.ManagedRedis = &appsv2.ManagedRedisSpec{Namespace: "redis", StorageSize: "20Gi"}
 
 			warnings, err := validator.ValidateUpdate(ctx, oldObj, obj)
 			Expect(err).NotTo(HaveOccurred())

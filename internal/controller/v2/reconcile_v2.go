@@ -29,7 +29,7 @@ import (
 	"github.com/samber/lo"
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/ctrlqueue"
-	"github.com/wandb/operator/internal/controller/infra/mysql/mysql"
+	"github.com/wandb/operator/internal/controller/infra/managed/mysql/mysql"
 	"github.com/wandb/operator/internal/logx"
 	oputils "github.com/wandb/operator/pkg/utils"
 	strimziv1 "github.com/wandb/operator/pkg/vendored/strimzi-kafka/v1"
@@ -140,7 +140,7 @@ func runRetentionFinalizer(
 	ctx context.Context,
 	client ctrlClient.Client,
 	wandb *apiv2.WeightsAndBiases,
-	infraSpec apiv2.InfraSpec,
+	infraSpec apiv2.ManagedInfraSpec,
 	purgeFn finalizerFunc,
 	detachFn finalizerFunc,
 ) error {
@@ -185,20 +185,55 @@ func Reconcile(
 	if isFlaggedForDeletion && !wandb.GetDeletionTimestamp().IsZero() {
 		if ctrlqueue.ContainsString(wandb.GetFinalizers(), CleanupFinalizer) {
 
-			if err = runRetentionFinalizer(ctx, client, wandb, wandb.Spec.Minio.InfraSpec, minioPurgeFinalizer, minioDetachFinalizer); err != nil {
-				return ctrl.Result{}, err
+			if wandb.Spec.Minio.ManagedMinio != nil {
+				if err = runRetentionFinalizer(ctx, client, wandb, wandb.Spec.Minio.ManagedMinio.ManagedInfraSpec, minioPurgeFinalizer, minioDetachFinalizer); err != nil {
+					return ctrl.Result{}, err
+				}
 			}
-			if err = runRetentionFinalizer(ctx, client, wandb, wandb.Spec.MySQL.InfraSpec, mysqlPurgeFinalizer, mysqlDetachFinalizer); err != nil {
-				return ctrl.Result{}, err
+			if wandb.Spec.MySQL.ManagedMysql != nil {
+				if err = runRetentionFinalizer(ctx, client, wandb, wandb.Spec.MySQL.ManagedMysql.ManagedInfraSpec, mysqlPurgeFinalizer, mysqlDetachFinalizer); err != nil {
+					return ctrl.Result{}, err
+				}
 			}
-			if err = runRetentionFinalizer(ctx, client, wandb, wandb.Spec.Redis.InfraSpec, redisPurgeFinalizer, redisDetachFinalizer); err != nil {
-				return ctrl.Result{}, err
+			if wandb.Spec.Redis.ManagedRedis != nil {
+				if err = runRetentionFinalizer(ctx, client, wandb, wandb.Spec.Redis.ManagedRedis.ManagedInfraSpec, redisPurgeFinalizer, redisDetachFinalizer); err != nil {
+					return ctrl.Result{}, err
+				}
 			}
-			if err = runRetentionFinalizer(ctx, client, wandb, wandb.Spec.Kafka.InfraSpec, kafkaPurgeFinalizer, kafkaDetachFinalizer); err != nil {
-				return ctrl.Result{}, err
+			if wandb.Spec.Kafka.ManagedKafka != nil {
+				if err = runRetentionFinalizer(ctx, client, wandb, wandb.Spec.Kafka.ManagedKafka.ManagedInfraSpec, kafkaPurgeFinalizer, kafkaDetachFinalizer); err != nil {
+					return ctrl.Result{}, err
+				}
 			}
-			if err = runRetentionFinalizer(ctx, client, wandb, wandb.Spec.ClickHouse.InfraSpec, clickHousePurgeFinalizer, clickHouseDetachFinalizer); err != nil {
-				return ctrl.Result{}, err
+			if wandb.Spec.ClickHouse.ManagedClickHouse != nil {
+				if err = runRetentionFinalizer(ctx, client, wandb, wandb.Spec.ClickHouse.ManagedClickHouse.ManagedInfraSpec, clickHousePurgeFinalizer, clickHouseDetachFinalizer); err != nil {
+					return ctrl.Result{}, err
+				}
+			}
+			if wandb.Spec.Minio.ExternalMinio != nil && wandb.Spec.RetentionPolicy.OnDelete == apiv2.PurgeOnDelete {
+				if err = minioPurgeFinalizer(ctx, client, wandb); err != nil {
+					return ctrl.Result{}, err
+				}
+			}
+			if wandb.Spec.MySQL.ExternalMysql != nil && wandb.Spec.RetentionPolicy.OnDelete == apiv2.PurgeOnDelete {
+				if err = mysqlPurgeFinalizer(ctx, client, wandb); err != nil {
+					return ctrl.Result{}, err
+				}
+			}
+			if wandb.Spec.Redis.ExternalRedis != nil && wandb.Spec.RetentionPolicy.OnDelete == apiv2.PurgeOnDelete {
+				if err = redisPurgeFinalizer(ctx, client, wandb); err != nil {
+					return ctrl.Result{}, err
+				}
+			}
+			if wandb.Spec.Kafka.ExternalKafka != nil && wandb.Spec.RetentionPolicy.OnDelete == apiv2.PurgeOnDelete {
+				if err = kafkaPurgeFinalizer(ctx, client, wandb); err != nil {
+					return ctrl.Result{}, err
+				}
+			}
+			if wandb.Spec.ClickHouse.ExternalClickHouse != nil && wandb.Spec.RetentionPolicy.OnDelete == apiv2.PurgeOnDelete {
+				if err = clickHousePurgeFinalizer(ctx, client, wandb); err != nil {
+					return ctrl.Result{}, err
+				}
 			}
 			if wandb.Spec.Networking.Mode == apiv2.NetworkingModeIngress {
 				if err = deleteConsolidatedIngress(ctx, client, wandb); err != nil {
@@ -212,9 +247,11 @@ func Reconcile(
 					return ctrl.Result{}, err
 				}
 			}
-			if wandb.GetRetentionPolicy(wandb.Spec.Kafka.InfraSpec).OnDelete == apiv2.DetachOnDelete {
-				if err = kafkaDetachFinalizer(ctx, client, wandb); err != nil {
-					return ctrl.Result{}, err
+			if spec := wandb.Spec.Kafka.ManagedKafka; spec != nil {
+				if wandb.GetRetentionPolicy(spec.ManagedInfraSpec).OnDelete == apiv2.DetachOnDelete {
+					if err = kafkaDetachFinalizer(ctx, client, wandb); err != nil {
+						return ctrl.Result{}, err
+					}
 				}
 			}
 			controllerutil.RemoveFinalizer(wandb, CleanupFinalizer)
@@ -375,7 +412,7 @@ func ReconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 		return result, err
 	}
 
-	if wandb.Spec.MySQL.DeploymentType == apiv2.MySQLTypeMysql && !wandb.Status.Wandb.MySQLInit.Succeeded {
+	if wandb.Spec.MySQL.ManagedMysql != nil && wandb.Spec.MySQL.ManagedMysql.DeploymentType == apiv2.MySQLTypeMysql && !wandb.Status.Wandb.MySQLInit.Succeeded {
 		logger.Info("Mysql init not yet successful", "Message", wandb.Status.Wandb.MySQLInit.Message)
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
@@ -897,83 +934,98 @@ func ApplyInfraSizing(wandb *apiv2.WeightsAndBiases, manifest serverManifest.Man
 	size := wandb.Spec.Size
 
 	// Default MySQL
-	if mysqlConfig, ok := manifest.Mysql["default"]; ok {
-		sizing := ResolveInfraSizing(mysqlConfig.Sizing, size, wandb.Spec.RequireLimits)
-		if wandb.Spec.MySQL.Replicas == 0 && sizing.Replicas != 0 {
-			wandb.Spec.MySQL.Replicas = sizing.Replicas
-		}
-		if wandb.Spec.MySQL.StorageSize == "" && sizing.VolumeSize != "" {
-			wandb.Spec.MySQL.StorageSize = sizing.VolumeSize
-		}
-		if sizing.Resources != nil && len(wandb.Spec.MySQL.Config.Resources.Requests) == 0 && len(wandb.Spec.MySQL.Config.Resources.Limits) == 0 {
-			wandb.Spec.MySQL.Config.Resources = *sizing.Resources
+	if wandb.Spec.MySQL.ManagedMysql != nil {
+		if mysqlConfig, ok := manifest.Mysql["default"]; ok {
+			sizing := ResolveInfraSizing(mysqlConfig.Sizing, size, wandb.Spec.RequireLimits)
+			spec := wandb.Spec.MySQL.ManagedMysql
+			if spec.Replicas == 0 && sizing.Replicas != 0 {
+				spec.Replicas = sizing.Replicas
+			}
+			if spec.StorageSize == "" && sizing.VolumeSize != "" {
+				spec.StorageSize = sizing.VolumeSize
+			}
+			if sizing.Resources != nil && len(spec.Config.Resources.Requests) == 0 && len(spec.Config.Resources.Limits) == 0 {
+				spec.Config.Resources = *sizing.Resources
+			}
 		}
 	}
 
 	// Default Redis
-	if redisConfig, ok := manifest.Redis["default"]; ok {
-		sizing := ResolveInfraSizing(redisConfig.Sizing, size, wandb.Spec.RequireLimits)
-		if wandb.Spec.Redis.StorageSize == "" && sizing.VolumeSize != "" {
-			wandb.Spec.Redis.StorageSize = sizing.VolumeSize
-		}
-		if sizing.Resources != nil && len(wandb.Spec.Redis.Config.Resources.Requests) == 0 && len(wandb.Spec.Redis.Config.Resources.Limits) == 0 {
-			wandb.Spec.Redis.Config.Resources = *sizing.Resources
+	if wandb.Spec.Redis.ManagedRedis != nil {
+		if redisConfig, ok := manifest.Redis["default"]; ok {
+			sizing := ResolveInfraSizing(redisConfig.Sizing, size, wandb.Spec.RequireLimits)
+			spec := wandb.Spec.Redis.ManagedRedis
+			if spec.StorageSize == "" && sizing.VolumeSize != "" {
+				spec.StorageSize = sizing.VolumeSize
+			}
+			if sizing.Resources != nil && len(spec.Config.Resources.Requests) == 0 && len(spec.Config.Resources.Limits) == 0 {
+				spec.Config.Resources = *sizing.Resources
+			}
 		}
 	}
 
 	// Default ClickHouse
-	if clickhouseConfig, ok := manifest.Redis["default"]; ok {
-		sizing := ResolveInfraSizing(clickhouseConfig.Sizing, size, wandb.Spec.RequireLimits)
-		if wandb.Spec.ClickHouse.Replicas == 0 && sizing.Replicas != 0 {
-			wandb.Spec.ClickHouse.Replicas = sizing.Replicas
-		}
-		if wandb.Spec.ClickHouse.StorageSize == "" && sizing.VolumeSize != "" {
-			wandb.Spec.ClickHouse.StorageSize = sizing.VolumeSize
-		}
-		if sizing.Resources != nil && len(wandb.Spec.ClickHouse.Config.Resources.Requests) == 0 && len(wandb.Spec.ClickHouse.Config.Resources.Limits) == 0 {
-			wandb.Spec.ClickHouse.Config.Resources = *sizing.Resources
+	if wandb.Spec.ClickHouse.ManagedClickHouse != nil {
+		if clickhouseConfig, ok := manifest.Redis["default"]; ok {
+			sizing := ResolveInfraSizing(clickhouseConfig.Sizing, size, wandb.Spec.RequireLimits)
+			spec := wandb.Spec.ClickHouse.ManagedClickHouse
+			if spec.Replicas == 0 && sizing.Replicas != 0 {
+				spec.Replicas = sizing.Replicas
+			}
+			if spec.StorageSize == "" && sizing.VolumeSize != "" {
+				spec.StorageSize = sizing.VolumeSize
+			}
+			if sizing.Resources != nil && len(spec.Config.Resources.Requests) == 0 && len(spec.Config.Resources.Limits) == 0 {
+				spec.Config.Resources = *sizing.Resources
+			}
 		}
 	}
 
 	// Default Minio (bucket)
-	if minioConfig, ok := manifest.Redis["default"]; ok {
-		sizing := ResolveInfraSizing(minioConfig.Sizing, size, wandb.Spec.RequireLimits)
-		if wandb.Spec.Minio.Replicas == 0 && sizing.Replicas != 0 {
-			wandb.Spec.Minio.Replicas = sizing.Replicas
-		}
-		if wandb.Spec.Minio.StorageSize == "" && sizing.VolumeSize != "" {
-			wandb.Spec.Minio.StorageSize = sizing.VolumeSize
-		}
-		if sizing.Resources != nil && len(wandb.Spec.Minio.Config.Resources.Requests) == 0 && len(wandb.Spec.Minio.Config.Resources.Limits) == 0 {
-			wandb.Spec.Minio.Config.Resources = *sizing.Resources
+	if wandb.Spec.Minio.ManagedMinio != nil {
+		if minioConfig, ok := manifest.Redis["default"]; ok {
+			sizing := ResolveInfraSizing(minioConfig.Sizing, size, wandb.Spec.RequireLimits)
+			spec := wandb.Spec.Minio.ManagedMinio
+			if spec.Replicas == 0 && sizing.Replicas != 0 {
+				spec.Replicas = sizing.Replicas
+			}
+			if spec.StorageSize == "" && sizing.VolumeSize != "" {
+				spec.StorageSize = sizing.VolumeSize
+			}
+			if sizing.Resources != nil && len(spec.Config.Resources.Requests) == 0 && len(spec.Config.Resources.Limits) == 0 {
+				spec.Config.Resources = *sizing.Resources
+			}
 		}
 	}
 
 	// Kafka
-	if sizing := ResolveKafkaSizing(manifest.Kafka.Sizing, size, wandb.Spec.RequireLimits); sizing != nil {
-		if wandb.Spec.Kafka.Replicas == 0 && sizing.Replicas != 0 {
-			wandb.Spec.Kafka.Replicas = sizing.Replicas
-		}
-		if wandb.Spec.Kafka.StorageSize == "" && sizing.VolumeSize != "" {
-			wandb.Spec.Kafka.StorageSize = sizing.VolumeSize
-		}
-		if sizing.Resources != nil && len(wandb.Spec.Kafka.Config.Resources.Requests) == 0 && len(wandb.Spec.Kafka.Config.Resources.Limits) == 0 {
-			wandb.Spec.Kafka.Config.Resources = *sizing.Resources
-		}
-		if wandb.Spec.Kafka.Config.ReplicationConfig.DefaultReplicationFactor == 0 && sizing.ReplicationFactor != 0 {
-			wandb.Spec.Kafka.Config.ReplicationConfig.DefaultReplicationFactor = sizing.ReplicationFactor
-		}
-		if wandb.Spec.Kafka.Config.ReplicationConfig.MinInSyncReplicas == 0 && sizing.MinInSyncReplicas != 0 {
-			wandb.Spec.Kafka.Config.ReplicationConfig.MinInSyncReplicas = sizing.MinInSyncReplicas
-		}
-		if wandb.Spec.Kafka.Config.ReplicationConfig.OffsetsTopicRF == 0 && sizing.OffsetsTopicRF != 0 {
-			wandb.Spec.Kafka.Config.ReplicationConfig.OffsetsTopicRF = sizing.OffsetsTopicRF
-		}
-		if wandb.Spec.Kafka.Config.ReplicationConfig.TransactionStateRF == 0 && sizing.TransactionStateRF != 0 {
-			wandb.Spec.Kafka.Config.ReplicationConfig.TransactionStateRF = sizing.TransactionStateRF
-		}
-		if wandb.Spec.Kafka.Config.ReplicationConfig.TransactionStateISR == 0 && sizing.TransactionStateISR != 0 {
-			wandb.Spec.Kafka.Config.ReplicationConfig.TransactionStateISR = sizing.TransactionStateISR
+	if wandb.Spec.Kafka.ManagedKafka != nil {
+		if sizing := ResolveKafkaSizing(manifest.Kafka.Sizing, size, wandb.Spec.RequireLimits); sizing != nil {
+			spec := wandb.Spec.Kafka.ManagedKafka
+			if spec.Replicas == 0 && sizing.Replicas != 0 {
+				spec.Replicas = sizing.Replicas
+			}
+			if spec.StorageSize == "" && sizing.VolumeSize != "" {
+				spec.StorageSize = sizing.VolumeSize
+			}
+			if sizing.Resources != nil && len(spec.Config.Resources.Requests) == 0 && len(spec.Config.Resources.Limits) == 0 {
+				spec.Config.Resources = *sizing.Resources
+			}
+			if spec.Config.ReplicationConfig.DefaultReplicationFactor == 0 && sizing.ReplicationFactor != 0 {
+				spec.Config.ReplicationConfig.DefaultReplicationFactor = sizing.ReplicationFactor
+			}
+			if spec.Config.ReplicationConfig.MinInSyncReplicas == 0 && sizing.MinInSyncReplicas != 0 {
+				spec.Config.ReplicationConfig.MinInSyncReplicas = sizing.MinInSyncReplicas
+			}
+			if spec.Config.ReplicationConfig.OffsetsTopicRF == 0 && sizing.OffsetsTopicRF != 0 {
+				spec.Config.ReplicationConfig.OffsetsTopicRF = sizing.OffsetsTopicRF
+			}
+			if spec.Config.ReplicationConfig.TransactionStateRF == 0 && sizing.TransactionStateRF != 0 {
+				spec.Config.ReplicationConfig.TransactionStateRF = sizing.TransactionStateRF
+			}
+			if spec.Config.ReplicationConfig.TransactionStateISR == 0 && sizing.TransactionStateISR != 0 {
+				spec.Config.ReplicationConfig.TransactionStateISR = sizing.TransactionStateISR
+			}
 		}
 	}
 }
@@ -1662,7 +1714,7 @@ func resolveVolumeMounts(ctx context.Context, manifest serverManifest.Manifest, 
 }
 
 func runMysqlInitJob(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest) (ctrl.Result, error) {
-	if wandb.Spec.MySQL.DeploymentType != apiv2.MySQLTypeMysql {
+	if wandb.Spec.MySQL.ManagedMysql == nil || wandb.Spec.MySQL.ManagedMysql.DeploymentType != apiv2.MySQLTypeMysql {
 		return ctrl.Result{}, nil
 	}
 
@@ -1684,7 +1736,7 @@ func runMysqlInitJob(ctx context.Context, client ctrlClient.Client, wandb *apiv2
 	if apiErrors.IsNotFound(err) {
 		logger.Info("Creating MySQL init job")
 
-		specNamespacedName := mysqlSpecNamespacedName(wandb.Spec.MySQL)
+		specNamespacedName := managedMysqlSpecNamespacedName(wandb.Spec.MySQL.ManagedMysql)
 		nsnBuilder := mysql.CreateNsNameBuilder(types.NamespacedName{
 			Name:      specNamespacedName.Name,
 			Namespace: specNamespacedName.Namespace,
@@ -1953,20 +2005,19 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 
 func createKafkaTopics(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest) (ctrl.Result, error) {
 	// Create Strimzi KafkaTopic resources for enabled topics
-	if wandb.Spec.Kafka.Enabled {
+	if wandb.Spec.Kafka.ManagedKafka != nil {
+		kafkaSpec := wandb.Spec.Kafka.ManagedKafka
 		for _, topic := range manifest.Kafka.Topics {
 			if len(topic.Features) > 0 && !manifestFeaturesEnabled(topic.Features, manifest.Features) {
 				continue
 			}
 
-			// Determine namespace and cluster name for Strimzi resources
-			kafkaNS := wandb.Spec.Kafka.Namespace
+			kafkaNS := kafkaSpec.Namespace
 			if kafkaNS == "" {
 				kafkaNS = wandb.Namespace
 			}
-			clusterName := wandb.Spec.Kafka.Name
+			clusterName := kafkaSpec.Name
 			if clusterName == "" {
-				// Fallback to instance name if not explicitly configured
 				clusterName = wandb.Name
 			}
 
@@ -1993,8 +2044,8 @@ func createKafkaTopics(ctx context.Context, client ctrlClient.Client, wandb *api
 				partitions = int32(topic.PartitionCount)
 			}
 			replicas := int32(1)
-			if wandb.Spec.Kafka.Config.ReplicationConfig.DefaultReplicationFactor > 0 {
-				replicas = int32(wandb.Spec.Kafka.Config.ReplicationConfig.DefaultReplicationFactor)
+			if kafkaSpec.Config.ReplicationConfig.DefaultReplicationFactor > 0 {
+				replicas = int32(kafkaSpec.Config.ReplicationConfig.DefaultReplicationFactor)
 			}
 
 			// Build typed KafkaTopic object
@@ -2249,12 +2300,11 @@ func inferState(
 ) error {
 	log := ctrl.LoggerFrom(ctx)
 
-	// Infra is "ok" if either it is not enabled or if it is (enabled and) ready
-	redisOk := !wandb.Spec.Redis.Enabled || wandb.Status.RedisStatus.Ready
-	minioOk := !wandb.Spec.Minio.Enabled || wandb.Status.MinioStatus.Ready
-	mysqlOk := !wandb.Spec.MySQL.Enabled || wandb.Status.MySQLStatus.Ready
-	clickHouseOk := !wandb.Spec.ClickHouse.Enabled || wandb.Status.ClickHouseStatus.Ready
-	kafkaOk := !wandb.Spec.Kafka.Enabled || wandb.Status.KafkaStatus.Ready
+	redisOk := wandb.Spec.Redis.ManagedRedis == nil || wandb.Status.RedisStatus.Ready
+	minioOk := wandb.Spec.Minio.ManagedMinio == nil || wandb.Status.MinioStatus.Ready
+	mysqlOk := wandb.Spec.MySQL.ManagedMysql == nil || wandb.Status.MySQLStatus.Ready
+	clickHouseOk := wandb.Spec.ClickHouse.ManagedClickHouse == nil || wandb.Status.ClickHouseStatus.Ready
+	kafkaOk := wandb.Spec.Kafka.ManagedKafka == nil || wandb.Status.KafkaStatus.Ready
 
 	if redisOk && minioOk && mysqlOk && clickHouseOk && kafkaOk {
 		wandb.Status.Ready = true

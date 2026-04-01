@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	apiv2 "github.com/wandb/operator/api/v2"
-	"github.com/wandb/operator/internal/controller/infra/redis/opstree"
+	"github.com/wandb/operator/internal/controller/infra/managed/redis/opstree"
 	"github.com/wandb/operator/internal/controller/translator"
 	"github.com/wandb/operator/internal/logx"
 	rediscommon "github.com/wandb/operator/pkg/vendored/redis-operator/common/v1beta2"
@@ -50,26 +50,20 @@ func ToRedisStandaloneVendorSpec(
 	wandb *apiv2.WeightsAndBiases,
 	scheme *runtime.Scheme,
 ) (*redisv1beta2.Redis, error) {
-	_, log := logx.WithSlog(ctx, logx.Redis)
-	spec := wandb.Spec.Redis
-
-	if !spec.Enabled {
+	ctx, log := logx.WithSlog(ctx, logx.Redis)
+	spec := wandb.Spec.Redis.ManagedRedis
+	if spec == nil {
 		return nil, nil
 	}
 
 	if spec.Sentinel.Enabled {
 		return nil, nil
-	}
-
-	if spec.Sentinel.Enabled {
-		return nil, fmt.Errorf("cannot create redis standalone with sentinel enabled")
 	}
 
 	nsnBuilder := opstree.CreateNsNameBuilder(types.NamespacedName{
 		Namespace: spec.Namespace, Name: spec.Name,
 	})
 
-	// Parse storage quantity
 	storageQuantity, err := resource.ParseQuantity(spec.StorageSize)
 	if err != nil {
 		return nil, fmt.Errorf("invalid storage size %q: %w", spec.StorageSize, err)
@@ -86,8 +80,8 @@ func ToRedisStandaloneVendorSpec(
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				Resources:       &corev1.ResourceRequirements{},
 			},
-			Affinity:    wandb.GetAffinity(spec.InfraSpec),
-			Tolerations: wandb.GetTolerations(spec.InfraSpec),
+			Affinity:    wandb.GetAffinity(spec.ManagedInfraSpec),
+			Tolerations: wandb.GetTolerations(spec.ManagedInfraSpec),
 			Storage: &rediscommon.Storage{
 				VolumeClaimTemplate: corev1.PersistentVolumeClaim{
 					ObjectMeta: metav1.ObjectMeta{
@@ -108,7 +102,6 @@ func ToRedisStandaloneVendorSpec(
 		},
 	}
 
-	// Add resources if specified
 	if len(spec.Config.Resources.Requests) > 0 || len(spec.Config.Resources.Limits) > 0 {
 		redis.Spec.KubernetesConfig.Resources = &corev1.ResourceRequirements{
 			Requests: spec.Config.Resources.Requests,
@@ -116,13 +109,11 @@ func ToRedisStandaloneVendorSpec(
 		}
 	}
 
-	// Set owner reference
 	if err := ctrl.SetControllerReference(wandb, redis, scheme); err != nil {
 		log.Error("failed to set owner reference on Redis CR", logx.ErrAttr(err))
 		return nil, fmt.Errorf("failed to set owner reference: %w", err)
 	}
 
-	// Add RedisExporter if telemetry is enabled
 	redis.Spec.RedisExporter = createRedisExporterConfig(spec.Telemetry)
 
 	return redis, nil
@@ -136,10 +127,9 @@ func ToRedisSentinelVendorSpec(
 	wandb *apiv2.WeightsAndBiases,
 	scheme *runtime.Scheme,
 ) (*redissentinelv1beta2.RedisSentinel, error) {
-	_, log := logx.WithSlog(ctx, logx.Redis)
-	spec := wandb.Spec.Redis
-
-	if !spec.Enabled {
+	ctx, log := logx.WithSlog(ctx, logx.Redis)
+	spec := wandb.Spec.Redis.ManagedRedis
+	if spec == nil {
 		return nil, nil
 	}
 
@@ -172,8 +162,8 @@ func ToRedisSentinelVendorSpec(
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				Resources:       &corev1.ResourceRequirements{},
 			},
-			Affinity:    wandb.GetAffinity(spec.InfraSpec),
-			Tolerations: wandb.GetTolerations(spec.InfraSpec),
+			Affinity:    wandb.GetAffinity(spec.ManagedInfraSpec),
+			Tolerations: wandb.GetTolerations(spec.ManagedInfraSpec),
 			RedisSentinelConfig: &redissentinelv1beta2.RedisSentinelConfig{
 				RedisSentinelConfig: rediscommon.RedisSentinelConfig{
 					RedisReplicationName: nsnBuilder.ReplicationName(),
@@ -211,10 +201,9 @@ func ToRedisReplicationVendorSpec(
 	wandb *apiv2.WeightsAndBiases,
 	scheme *runtime.Scheme,
 ) (*redisreplicationv1beta2.RedisReplication, error) {
-	_, log := logx.WithSlog(ctx, logx.Redis)
-	spec := wandb.Spec.Redis
-
-	if !spec.Enabled {
+	ctx, log := logx.WithSlog(ctx, logx.Redis)
+	spec := wandb.Spec.Redis.ManagedRedis
+	if spec == nil {
 		return nil, nil
 	}
 
@@ -248,8 +237,8 @@ func ToRedisReplicationVendorSpec(
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				Resources:       &corev1.ResourceRequirements{},
 			},
-			Affinity:    wandb.GetAffinity(spec.InfraSpec),
-			Tolerations: wandb.GetTolerations(spec.InfraSpec),
+			Affinity:    wandb.GetAffinity(spec.ManagedInfraSpec),
+			Tolerations: wandb.GetTolerations(spec.ManagedInfraSpec),
 			Storage: &rediscommon.Storage{
 				VolumeClaimTemplate: corev1.PersistentVolumeClaim{
 					ObjectMeta: metav1.ObjectMeta{

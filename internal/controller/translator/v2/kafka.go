@@ -6,7 +6,7 @@ import (
 	"strconv"
 
 	apiv2 "github.com/wandb/operator/api/v2"
-	"github.com/wandb/operator/internal/controller/infra/kafka/strimzi"
+	"github.com/wandb/operator/internal/controller/infra/managed/kafka/strimzi"
 	"github.com/wandb/operator/internal/controller/translator"
 	"github.com/wandb/operator/internal/logx"
 	"github.com/wandb/operator/pkg/vendored/strimzi-kafka/v1"
@@ -47,8 +47,8 @@ func ToKafkaVendorSpec(
 ) (*v1.Kafka, error) {
 	_, log := logx.WithSlog(ctx, logx.Kafka)
 
-	infraSpec := wandb.Spec.Kafka
-	if !infraSpec.Enabled {
+	infraSpec := wandb.Spec.Kafka.ManagedKafka
+	if infraSpec == nil {
 		log.Debug("Kafka is disabled, no vendor spec")
 		return nil, nil
 	}
@@ -99,8 +99,8 @@ func ToKafkaVendorSpec(
 						Metadata: &v1.MetadataTemplate{
 							Labels: BuildWandbKafkaLabels(wandb),
 						},
-						Affinity:    wandb.GetAffinity(infraSpec.InfraSpec),
-						Tolerations: *wandb.GetTolerations(infraSpec.InfraSpec),
+						Affinity:    wandb.GetAffinity(infraSpec.ManagedInfraSpec),
+						Tolerations: *wandb.GetTolerations(infraSpec.ManagedInfraSpec),
 					},
 				},
 			},
@@ -112,8 +112,8 @@ func ToKafkaVendorSpec(
 						Metadata: &v1.MetadataTemplate{
 							Labels: BuildWandbKafkaLabels(wandb),
 						},
-						Affinity:    wandb.GetAffinity(infraSpec.InfraSpec),
-						Tolerations: *wandb.GetTolerations(infraSpec.InfraSpec),
+						Affinity:    wandb.GetAffinity(infraSpec.ManagedInfraSpec),
+						Tolerations: *wandb.GetTolerations(infraSpec.ManagedInfraSpec),
 					},
 				},
 			},
@@ -143,12 +143,12 @@ func ToKafkaNodePoolVendorSpec(
 ) (*v1.KafkaNodePool, error) {
 	_, log := logx.WithSlog(ctx, logx.Kafka)
 
-	infraSpec := wandb.Spec.Kafka
-	if !infraSpec.Enabled {
+	infraSpec := wandb.Spec.Kafka.ManagedKafka
+	if infraSpec == nil {
 		return nil, nil
 	}
 
-	retentionPolicy := wandb.GetRetentionPolicy(wandb.Spec.Kafka.InfraSpec)
+	retentionPolicy := wandb.GetRetentionPolicy(infraSpec.ManagedInfraSpec)
 	nsnBuilder := strimzi.CreateNsNameBuilder(types.NamespacedName{
 		Namespace: infraSpec.Namespace, Name: infraSpec.Name,
 	})

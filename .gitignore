@@ -32,6 +32,7 @@ junit.xml
 
 *.tgz
 
+/tmp
 /charts
 /cdk8s
 /git

@@ -15,23 +15,23 @@ spec:
   retentionPolicy:
     onDelete: detach
   mysql:
-    enabled: true
-    deploymentType: "mysql"
-    telemetry:
-      enabled: true
+    managedMysql:
+      deploymentType: "mysql"
+      telemetry:
+        enabled: true
   redis:
-    enabled: true
-    telemetry:
-      enabled: true
+    managedRedis:
+      telemetry:
+        enabled: true
   kafka:
-    enabled: true
-    telemetry:
-      enabled: true
+    managedKafka:
+      telemetry:
+        enabled: true
   minio:
-    enabled: true
-    telemetry:
-      enabled: true
+    managedMinio:
+      telemetry:
+        enabled: true
   clickhouse:
-    enabled: true
-    telemetry:
-      enabled: true
+    managedClickhouse:
+      telemetry:
+        enabled: true

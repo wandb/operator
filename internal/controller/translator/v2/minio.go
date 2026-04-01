@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	apiv2 "github.com/wandb/operator/api/v2"
-	"github.com/wandb/operator/internal/controller/infra/minio/tenant"
+	"github.com/wandb/operator/internal/controller/infra/managed/minio/tenant"
 	"github.com/wandb/operator/internal/controller/translator"
 	"github.com/wandb/operator/internal/logx"
 	miniov2 "github.com/wandb/operator/pkg/vendored/minio-operator/minio.min.io/v2"
@@ -41,10 +41,9 @@ func ToMinioVendorSpec(
 	wandb *apiv2.WeightsAndBiases,
 	scheme *runtime.Scheme,
 ) (*miniov2.Tenant, error) {
-	_, log := logx.WithSlog(ctx, logx.Minio)
-	infraSpec := wandb.Spec.Minio
-
-	if !infraSpec.Enabled {
+	ctx, log := logx.WithSlog(ctx, logx.Minio)
+	infraSpec := wandb.Spec.Minio.ManagedMinio
+	if infraSpec == nil {
 		return nil, nil
 	}
 
@@ -85,8 +84,8 @@ func ToMinioVendorSpec(
 			Pools: []miniov2.Pool{
 				{
 					Name:             "default",
-					Affinity:         wandb.GetAffinity(infraSpec.InfraSpec),
-					Tolerations:      *wandb.GetTolerations(infraSpec.InfraSpec),
+					Affinity:         wandb.GetAffinity(infraSpec.ManagedInfraSpec),
+					Tolerations:      *wandb.GetTolerations(infraSpec.ManagedInfraSpec),
 					Servers:          infraSpec.Replicas,
 					VolumesPerServer: volumesPerServer,
 					VolumeClaimTemplate: &corev1.PersistentVolumeClaim{
@@ -137,7 +136,7 @@ func ToMinioVendorSpec(
 
 func ToMinioEnvConfig(
 	ctx context.Context,
-	spec apiv2.MinioSpec,
+	spec apiv2.ManagedMinioSpec,
 ) (tenant.MinioEnvConfig, error) {
 	return tenant.MinioEnvConfig{
 		RootUser:            spec.Config.RootUser,

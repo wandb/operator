@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	apiv2 "github.com/wandb/operator/api/v2"
-	"github.com/wandb/operator/internal/controller/infra/mysql/mysql"
+	"github.com/wandb/operator/internal/controller/infra/managed/mysql/mysql"
 	"github.com/wandb/operator/internal/controller/translator"
 	"github.com/wandb/operator/internal/logx"
 	v2 "github.com/wandb/operator/pkg/vendored/mysql-operator/v2"
@@ -71,15 +71,11 @@ exec /bin/mysqld_exporter --config.my-cnf=/tmp/.my.cnf
 
 func ToMysqlMySQLVendorSpec(
 	ctx context.Context,
-	spec apiv2.MySQLSpec,
+	spec apiv2.ManagedMysqlSpec,
 	wandb *apiv2.WeightsAndBiases,
 	scheme *runtime.Scheme,
 ) (*v2.InnoDBCluster, error) {
 	_, log := logx.WithSlog(ctx, logx.Mysql)
-
-	if !spec.Enabled {
-		return nil, nil
-	}
 
 	specName := spec.Name
 	nsnBuilder := mysql.CreateNsNameBuilder(types.NamespacedName{
@@ -115,6 +111,9 @@ func ToMysqlMySQLVendorSpec(
 		},
 	}
 
+	innodb.Spec.PodSpec = &corev1.PodSpec{
+		Containers: []corev1.Container{},
+	}
 	if len(spec.Config.Resources.Requests) > 0 || len(spec.Config.Resources.Limits) > 0 {
 		innodb.Spec.PodSpec = &corev1.PodSpec{
 			Containers: []corev1.Container{
@@ -126,16 +125,41 @@ func ToMysqlMySQLVendorSpec(
 		}
 	}
 
-	if spec.Affinity != nil || spec.Tolerations != nil {
+	if wandb.GetAffinity(spec.ManagedInfraSpec) != nil || wandb.GetTolerations(spec.ManagedInfraSpec) != nil {
+		innodb.Spec.PodSpec.Affinity = wandb.GetAffinity(spec.ManagedInfraSpec)
+		if tols := wandb.GetTolerations(spec.ManagedInfraSpec); tols != nil {
+			innodb.Spec.PodSpec.Tolerations = *tols
+		}
+	}
+
+	if spec.Telemetry.Enabled {
+		innodb.Spec.Metrics = &v2.MetricsSpec{
+			Enable: true,
+			Image:  DefaultMySQLExporterImage,
+		}
+
 		if innodb.Spec.PodSpec == nil {
-			innodb.Spec.PodSpec = &corev1.PodSpec{
-				Containers: []corev1.Container{},
-			}
+			innodb.Spec.PodSpec = &corev1.PodSpec{}
 		}
-		innodb.Spec.PodSpec.Affinity = spec.Affinity
-		if spec.Tolerations != nil {
-			innodb.Spec.PodSpec.Tolerations = *spec.Tolerations
+		innodb.Spec.PodSpec.Containers = append(
+			innodb.Spec.PodSpec.Containers,
+			createMySQLExporterOracleSidecar(spec.Name),
+		)
+	}
+
+	if spec.Telemetry.Enabled {
+		innodb.Spec.Metrics = &v2.MetricsSpec{
+			Enable: true,
+			Image:  DefaultMySQLExporterImage,
 		}
+
+		if innodb.Spec.PodSpec == nil {
+			innodb.Spec.PodSpec = &corev1.PodSpec{}
+		}
+		innodb.Spec.PodSpec.Containers = append(
+			innodb.Spec.PodSpec.Containers,
+			createMySQLExporterOracleSidecar(spec.Name),
+		)
 	}
 
 	if spec.Telemetry.Enabled {

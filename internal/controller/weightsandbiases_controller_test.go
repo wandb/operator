@@ -56,33 +56,27 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 						Version:            "0.78.0",
 					},
 					MySQL: apiv2.MySQLSpec{
-						InfraSpec: apiv2.InfraSpec{
-							Enabled: true,
+						ManagedMysql: &apiv2.ManagedMysqlSpec{
+							StorageSize: "10Gi",
 						},
-						StorageSize: "10Gi",
 					},
 					Redis: apiv2.RedisSpec{
-						InfraSpec: apiv2.InfraSpec{
-							Enabled: true,
+						ManagedRedis: &apiv2.ManagedRedisSpec{
+							StorageSize: "10Gi",
 						},
-						StorageSize: "10Gi",
 					},
 					Kafka: apiv2.KafkaSpec{
-						InfraSpec: apiv2.InfraSpec{
-							Enabled: true,
+						ManagedKafka: &apiv2.ManagedKafkaSpec{
+							StorageSize: "10Gi",
 						},
-						StorageSize: "10Gi",
 					},
 					Minio: apiv2.MinioSpec{
-						InfraSpec: apiv2.InfraSpec{
-							Enabled: true,
+						ManagedMinio: &apiv2.ManagedMinioSpec{
+							StorageSize: "10Gi",
 						},
-						StorageSize: "10Gi",
 					},
 					ClickHouse: apiv2.ClickHouseSpec{
-						InfraSpec: apiv2.InfraSpec{
-							Enabled: true,
-						},
+						ManagedClickHouse: &apiv2.ManagedClickHouseSpec{},
 					},
 				},
 				Status: apiv2.WeightsAndBiasesStatus{},
@@ -133,15 +127,14 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 						Version:            "0.78.0",
 					},
 					MySQL: apiv2.MySQLSpec{
-						InfraSpec: apiv2.InfraSpec{
-							Enabled: true,
+						ManagedMysql: &apiv2.ManagedMysqlSpec{
+							DeploymentType: apiv2.MySQLTypeMysql,
 						},
-						DeploymentType: apiv2.MySQLTypeMysql,
 					},
-					Redis:      apiv2.RedisSpec{InfraSpec: apiv2.InfraSpec{Enabled: true}},
-					Kafka:      apiv2.KafkaSpec{InfraSpec: apiv2.InfraSpec{Enabled: true}},
-					Minio:      apiv2.MinioSpec{InfraSpec: apiv2.InfraSpec{Enabled: true}},
-					ClickHouse: apiv2.ClickHouseSpec{InfraSpec: apiv2.InfraSpec{Enabled: true}},
+					Redis:      apiv2.RedisSpec{ManagedRedis: &apiv2.ManagedRedisSpec{}},
+					Kafka:      apiv2.KafkaSpec{ManagedKafka: &apiv2.ManagedKafkaSpec{}},
+					Minio:      apiv2.MinioSpec{ManagedMinio: &apiv2.ManagedMinioSpec{}},
+					ClickHouse: apiv2.ClickHouseSpec{ManagedClickHouse: &apiv2.ManagedClickHouseSpec{}},
 				},
 			}
 			Expect(k8sClient.Create(ctx, wandb)).Should(Succeed())
@@ -243,29 +236,19 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 						Version:            "0.78.0",
 					},
 					MySQL: apiv2.MySQLSpec{
-						InfraSpec: apiv2.InfraSpec{
-							Enabled: true,
-						},
+						ManagedMysql: &apiv2.ManagedMysqlSpec{},
 					},
 					Redis: apiv2.RedisSpec{
-						InfraSpec: apiv2.InfraSpec{
-							Enabled: true,
-						},
+						ManagedRedis: &apiv2.ManagedRedisSpec{},
 					},
 					Kafka: apiv2.KafkaSpec{
-						InfraSpec: apiv2.InfraSpec{
-							Enabled: true,
-						},
+						ManagedKafka: &apiv2.ManagedKafkaSpec{},
 					},
 					Minio: apiv2.MinioSpec{
-						InfraSpec: apiv2.InfraSpec{
-							Enabled: true,
-						},
+						ManagedMinio: &apiv2.ManagedMinioSpec{},
 					},
 					ClickHouse: apiv2.ClickHouseSpec{
-						InfraSpec: apiv2.InfraSpec{
-							Enabled: true,
-						},
+						ManagedClickHouse: &apiv2.ManagedClickHouseSpec{},
 					},
 				},
 			}
@@ -369,11 +352,11 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 						ManifestRepository: manifestsRepository,
 						Version:            "0.78.0",
 					},
-					MySQL:      apiv2.MySQLSpec{InfraSpec: apiv2.InfraSpec{Enabled: true}},
-					Redis:      apiv2.RedisSpec{InfraSpec: apiv2.InfraSpec{Enabled: true}},
-					Kafka:      apiv2.KafkaSpec{InfraSpec: apiv2.InfraSpec{Enabled: true}},
-					Minio:      apiv2.MinioSpec{InfraSpec: apiv2.InfraSpec{Enabled: true}},
-					ClickHouse: apiv2.ClickHouseSpec{InfraSpec: apiv2.InfraSpec{Enabled: true}},
+					MySQL:      apiv2.MySQLSpec{ManagedMysql: &apiv2.ManagedMysqlSpec{}},
+					Redis:      apiv2.RedisSpec{ManagedRedis: &apiv2.ManagedRedisSpec{}},
+					Kafka:      apiv2.KafkaSpec{ManagedKafka: &apiv2.ManagedKafkaSpec{}},
+					Minio:      apiv2.MinioSpec{ManagedMinio: &apiv2.ManagedMinioSpec{}},
+					ClickHouse: apiv2.ClickHouseSpec{ManagedClickHouse: &apiv2.ManagedClickHouseSpec{}},
 				},
 			}
 			Expect(k8sClient.Create(ctx, wandb)).Should(Succeed())
@@ -449,11 +432,11 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 						ManifestRepository: manifestsRepository,
 						Version:            oldVersion,
 					},
-					MySQL:      apiv2.MySQLSpec{InfraSpec: apiv2.InfraSpec{Enabled: true}},
-					Redis:      apiv2.RedisSpec{InfraSpec: apiv2.InfraSpec{Enabled: true}},
-					Kafka:      apiv2.KafkaSpec{InfraSpec: apiv2.InfraSpec{Enabled: true}},
-					Minio:      apiv2.MinioSpec{InfraSpec: apiv2.InfraSpec{Enabled: true}},
-					ClickHouse: apiv2.ClickHouseSpec{InfraSpec: apiv2.InfraSpec{Enabled: true}},
+					MySQL:      apiv2.MySQLSpec{ManagedMysql: &apiv2.ManagedMysqlSpec{}},
+					Redis:      apiv2.RedisSpec{ManagedRedis: &apiv2.ManagedRedisSpec{}},
+					Kafka:      apiv2.KafkaSpec{ManagedKafka: &apiv2.ManagedKafkaSpec{}},
+					Minio:      apiv2.MinioSpec{ManagedMinio: &apiv2.ManagedMinioSpec{}},
+					ClickHouse: apiv2.ClickHouseSpec{ManagedClickHouse: &apiv2.ManagedClickHouseSpec{}},
 				},
 			}
 			Expect(k8sClient.Create(ctx, wandb)).Should(Succeed())

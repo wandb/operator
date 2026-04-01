@@ -5,7 +5,9 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
-	"github.com/wandb/operator/internal/controller/infra/minio/tenant"
+	"github.com/wandb/operator/internal/controller/infra/external"
+	externalminio "github.com/wandb/operator/internal/controller/infra/external/minio"
+	"github.com/wandb/operator/internal/controller/infra/managed/minio/tenant"
 	"github.com/wandb/operator/internal/controller/translator"
 	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
 	"github.com/wandb/operator/pkg/utils"
@@ -20,11 +22,90 @@ func minioWriteState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
-) ([]metav1.Condition, *translator.InfraConnection) {
-	log := ctrl.LoggerFrom(ctx)
-	var specNamespacedName = minioSpecNamespacedName(wandb.Spec.Minio)
+) ([]metav1.Condition, *translator.MinioConnection) {
+	if wandb.Spec.Minio.ManagedMinio != nil {
+		return managedMinioWriteState(ctx, client, wandb)
+	}
+	if wandb.Spec.Minio.ExternalMinio != nil {
+		return externalMinioWriteState(ctx, client, wandb)
+	}
+	return nil, nil
+}
 
-	if conditions := tenant.CheckDetached(ctx, client, specNamespacedName, wandb.GetUID(), wandb.Spec.Minio.Replicas); conditions != nil {
+func minioReadState(
+	ctx context.Context,
+	client client.Client,
+	wandb *apiv2.WeightsAndBiases,
+	newConditions []metav1.Condition,
+) []metav1.Condition {
+	if wandb.Spec.Minio.ManagedMinio != nil {
+		return managedMinioReadState(ctx, client, wandb, newConditions)
+	}
+	if wandb.Spec.Minio.ExternalMinio != nil {
+		return externalMinioReadState(ctx, client, wandb, newConditions)
+	}
+	return newConditions
+}
+
+func minioInferStatus(
+	ctx context.Context,
+	client client.Client,
+	recorder record.EventRecorder,
+	wandb *apiv2.WeightsAndBiases,
+	newConditions []metav1.Condition,
+	newInfraConn *translator.MinioConnection,
+) (ctrl.Result, error) {
+	if wandb.Spec.Minio.ManagedMinio != nil {
+		return managedMinioInferStatus(ctx, client, recorder, wandb, newConditions, newInfraConn)
+	}
+	if wandb.Spec.Minio.ExternalMinio != nil {
+		return externalMinioInferStatus(ctx, client, wandb, newConditions, newInfraConn)
+	}
+	return ctrl.Result{}, nil
+}
+
+func minioPurgeFinalizer(
+	ctx context.Context,
+	client client.Client,
+	wandb *apiv2.WeightsAndBiases,
+) error {
+	if spec := wandb.Spec.Minio.ManagedMinio; spec != nil {
+		specNamespacedName := managedMinioSpecNamespacedName(spec)
+		onDeleteRule := translatorv2.ToMinioOnDeleteRule(wandb, wandb.GetRetentionPolicy(spec.ManagedInfraSpec))
+		return tenant.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule)
+	}
+	if wandb.Spec.Minio.ExternalMinio != nil {
+		return externalminio.DeleteConnectionSecret(ctx, client, wandb)
+	}
+	return nil
+}
+
+func minioDetachFinalizer(
+	ctx context.Context,
+	client client.Client,
+	wandb *apiv2.WeightsAndBiases,
+) error {
+	spec := wandb.Spec.Minio.ManagedMinio
+	if spec == nil {
+		return nil
+	}
+	specNamespacedName := managedMinioSpecNamespacedName(spec)
+	return tenant.DetachFinalizer(ctx, client, specNamespacedName, wandb)
+}
+
+// managed
+
+func managedMinioWriteState(
+	ctx context.Context,
+	client client.Client,
+	wandb *apiv2.WeightsAndBiases,
+) ([]metav1.Condition, *translator.MinioConnection) {
+	spec := wandb.Spec.Minio.ManagedMinio
+
+	log := ctrl.LoggerFrom(ctx)
+	var specNamespacedName = managedMinioSpecNamespacedName(spec)
+
+	if conditions := tenant.CheckDetached(ctx, client, specNamespacedName, wandb.GetUID(), spec.Replicas); conditions != nil {
 		return conditions, nil
 	}
 
@@ -40,7 +121,7 @@ func minioWriteState(
 		}, nil
 	}
 
-	desiredConfig, err := translatorv2.ToMinioEnvConfig(ctx, wandb.Spec.Minio)
+	desiredConfig, err := translatorv2.ToMinioEnvConfig(ctx, *spec)
 	if err != nil {
 		log.Error(err, "failed to translate MinIO envConfig to vendor spec")
 		return []metav1.Condition{
@@ -56,14 +137,16 @@ func minioWriteState(
 	return conditions, connection
 }
 
-func minioReadState(
+func managedMinioReadState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
 	newConditions []metav1.Condition,
 ) []metav1.Condition {
-	specNamespacedName := minioSpecNamespacedName(wandb.Spec.Minio)
-	retentionPolicy := wandb.GetRetentionPolicy(wandb.Spec.Minio.InfraSpec)
+	spec := wandb.Spec.Minio.ManagedMinio
+
+	specNamespacedName := managedMinioSpecNamespacedName(spec)
+	retentionPolicy := wandb.GetRetentionPolicy(spec.ManagedInfraSpec)
 	readConditions := tenant.ReadState(
 		ctx,
 		client,
@@ -74,20 +157,21 @@ func minioReadState(
 	return newConditions
 }
 
-func minioInferStatus(
+func managedMinioInferStatus(
 	ctx context.Context,
 	client client.Client,
 	recorder record.EventRecorder,
 	wandb *apiv2.WeightsAndBiases,
 	newConditions []metav1.Condition,
-	newInfraConn *translator.InfraConnection,
+	newInfraConn *translator.MinioConnection,
 ) (ctrl.Result, error) {
+	enabled := true
 	oldConditions := wandb.Status.MinioStatus.Conditions
-	oldInfraConn := translatorv2.ToTranslatorInfraConnection(wandb.Status.MinioStatus.Connection)
+	oldInfraConn := translatorv2.ToTranslatorMinioConnection(wandb.Status.MinioStatus.Connection)
 
 	updatedStatus, events, ctrlResult := tenant.ComputeStatus(
 		ctx,
-		wandb.Spec.Minio.Enabled,
+		enabled,
 		oldConditions,
 		newConditions,
 		utils.Coalesce(newInfraConn, &oldInfraConn),
@@ -96,38 +180,39 @@ func minioInferStatus(
 	for _, e := range events {
 		recorder.Event(wandb, e.Type, e.Reason, e.Message)
 	}
-	wandb.Status.MinioStatus = translatorv2.ToWbInfraStatus(updatedStatus)
+	wandb.Status.MinioStatus = translatorv2.ToWbMinioInfraStatus(updatedStatus)
 	err := client.Status().Update(ctx, wandb)
 
 	return ctrlResult, err
 }
 
-func minioPurgeFinalizer(
-	ctx context.Context,
-	client client.Client,
-	wandb *apiv2.WeightsAndBiases,
-) error {
-	var specNamespacedName = minioSpecNamespacedName(wandb.Spec.Minio)
+// external
 
-	onDeleteRule := translatorv2.ToMinioOnDeleteRule(wandb, wandb.GetRetentionPolicy(wandb.Spec.Minio.InfraSpec))
-	if err := tenant.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule); err != nil {
-		return err
-	}
-	return nil
+func externalMinioWriteState(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases) ([]metav1.Condition, *translator.MinioConnection) {
+	return externalminio.WriteState(ctx, c, wandb)
 }
 
-func minioDetachFinalizer(
-	ctx context.Context,
-	client client.Client,
-	wandb *apiv2.WeightsAndBiases,
-) error {
-	specNamespacedName := minioSpecNamespacedName(wandb.Spec.Minio)
-	return tenant.DetachFinalizer(ctx, client, specNamespacedName, wandb)
+func externalMinioReadState(_ context.Context, _ client.Client, _ *apiv2.WeightsAndBiases, newConditions []metav1.Condition) []metav1.Condition {
+	return externalminio.ReadState(nil, nil, nil, newConditions)
 }
 
-func minioSpecNamespacedName(minio apiv2.MinioSpec) types.NamespacedName {
+func externalMinioInferStatus(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, newConditions []metav1.Condition, newInfraConn *translator.MinioConnection) (ctrl.Result, error) {
+	oldInfraConn := translatorv2.ToTranslatorMinioConnection(wandb.Status.MinioStatus.Connection)
+	state, ready, updatedConditions := external.InferExternalStatus(wandb.Status.MinioStatus.Conditions, newConditions, wandb.Generation, newInfraConn != nil)
+	conn := utils.Coalesce(newInfraConn, &oldInfraConn)
+
+	wandb.Status.MinioStatus = translatorv2.ToWbMinioInfraStatus(translator.MinioStatus{
+		InfraStatus: translator.InfraStatus{Ready: ready, State: state, Conditions: updatedConditions},
+		Connection:  *conn,
+	})
+	return ctrl.Result{}, c.Status().Update(ctx, wandb)
+}
+
+// helpers
+
+func managedMinioSpecNamespacedName(spec *apiv2.ManagedMinioSpec) types.NamespacedName {
 	return types.NamespacedName{
-		Namespace: minio.Namespace,
-		Name:      minio.Name,
+		Namespace: spec.Namespace,
+		Name:      spec.Name,
 	}
 }

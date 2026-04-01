@@ -1,0 +1,28 @@
+apiVersion: apps.wandb.com/v2
+kind: WeightsAndBiases
+metadata:
+  name: wandb
+spec:
+  redis:
+    managedRedis: null
+    externalRedis:
+      # required
+      host:
+        name: external-redis-connection
+        key: Host
+      port:
+        name: external-redis-connection
+        key: Port
+      URL:
+        name: external-redis-connection
+        key: url
+      # optional
+      # password:
+      #   name: external-redis-connection
+      #   key: Password
+      # tls:
+      #   name: external-redis-connection
+      #   key: Tls
+      # sslCa:
+      #   name: external-redis-connection
+      #   key: SslCa

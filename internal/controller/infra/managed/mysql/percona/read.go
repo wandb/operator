@@ -1,0 +1,143 @@
+package percona
+
+import (
+	"context"
+	"fmt"
+	"strconv"
+	"strings"
+
+	ctrlcommon "github.com/wandb/operator/internal/controller/common"
+	"github.com/wandb/operator/internal/controller/translator"
+	"github.com/wandb/operator/internal/logx"
+	pxcv1 "github.com/wandb/operator/pkg/vendored/percona-operator/pxc/v1"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+)
+
+func readConnectionDetails(ctx context.Context, client client.Client, actual *pxcv1.PerconaXtraDBCluster, specNamespacedName types.NamespacedName) *mysqlConnInfo {
+	log := logx.GetSlog(ctx)
+
+	mysqlPort := strconv.Itoa(3306)
+
+	dbPasswordSecret := &corev1.Secret{}
+	err := client.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("%s-%s", "internal", actual.Name), Namespace: specNamespacedName.Namespace}, dbPasswordSecret)
+	if err != nil {
+		log.Error("Failed to get Secret", logx.ErrAttr(err), "Secret", fmt.Sprintf("%s-%s", specNamespacedName.Name, "db-password"))
+		return nil
+	}
+
+	// Strip namespace suffix if present (e.g., "service.namespace" -> "service")
+	// This handles Percona operator versions that include namespace in status.host
+	host := actual.Status.Host
+	if idx := strings.Index(host, "."); idx > 0 {
+		host = host[:idx]
+	}
+
+	return &mysqlConnInfo{
+		Host:     host,
+		Port:     mysqlPort,
+		User:     "root",
+		Database: "wandb_local",
+		Password: string(dbPasswordSecret.Data["root"]),
+	}
+}
+
+func ReadState(
+	ctx context.Context,
+	k8sClient client.Client,
+	specNamespacedName types.NamespacedName,
+	wandbOwner client.Object,
+) ([]metav1.Condition, *translator.MysqlConnection) {
+	ctx, _ = logx.WithSlog(ctx, logx.Mysql)
+	var actual = &pxcv1.PerconaXtraDBCluster{}
+
+	nsnBuilder := createNsNameBuilder(specNamespacedName)
+
+	found, err := ctrlcommon.GetResource(
+		ctx, k8sClient, nsnBuilder.ClusterNsName(), ResourceTypeName, actual,
+	)
+	if err != nil {
+		return []metav1.Condition{
+			{
+				Type:   MySQLCustomResourceType,
+				Status: metav1.ConditionUnknown,
+				Reason: ctrlcommon.ApiErrorReason,
+			},
+		}, nil
+	}
+	if !found {
+		actual = nil
+	}
+
+	conditions := make([]metav1.Condition, 0)
+	var connection *translator.MysqlConnection
+
+	if actual != nil {
+		connInfo := readConnectionDetails(ctx, k8sClient, actual, specNamespacedName)
+
+		connection, err = writeMySQLConnInfo(
+			ctx, k8sClient, wandbOwner, nsnBuilder, connInfo,
+		)
+		if err != nil {
+			if err.Error() == "missing connection info" {
+				return []metav1.Condition{
+					{
+						Type:   MySQLConnectionInfoType,
+						Status: metav1.ConditionFalse,
+						Reason: ctrlcommon.NoResourceReason,
+					},
+				}, nil
+			}
+			return []metav1.Condition{
+				{
+					Type:   MySQLConnectionInfoType,
+					Status: metav1.ConditionUnknown,
+					Reason: ctrlcommon.ApiErrorReason,
+				},
+			}, nil
+		}
+		if connection == nil {
+			conditions = append(conditions, metav1.Condition{
+				Type:   MySQLConnectionInfoType,
+				Status: metav1.ConditionFalse,
+				Reason: ctrlcommon.NoResourceReason,
+			})
+		} else {
+			conditions = append(conditions, metav1.Condition{
+				Type:   MySQLConnectionInfoType,
+				Status: metav1.ConditionTrue,
+				Reason: ctrlcommon.ResourceExistsReason,
+			})
+		}
+
+		conditions = append(conditions, computeMySQLReportedReadyCondition(ctx, actual)...)
+	}
+
+	return conditions, connection
+}
+
+func computeMySQLReportedReadyCondition(_ context.Context, clusterCR *pxcv1.PerconaXtraDBCluster) []metav1.Condition {
+	if clusterCR == nil {
+		return []metav1.Condition{}
+	}
+
+	status := metav1.ConditionUnknown
+	reason := string(clusterCR.Status.Status)
+
+	switch clusterCR.Status.Status {
+	case pxcv1.AppStateReady:
+		status = metav1.ConditionTrue
+	case pxcv1.AppStateInit, pxcv1.AppStatePaused, pxcv1.AppStateStopping, pxcv1.AppStateError:
+		status = metav1.ConditionFalse
+	}
+
+	return []metav1.Condition{
+		{
+			Type:   MySQLReportedReadyType,
+			Status: status,
+			Reason: reason,
+		},
+	}
+}

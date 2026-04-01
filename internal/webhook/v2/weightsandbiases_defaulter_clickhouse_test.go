@@ -23,25 +23,25 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 	It("defaults ClickHouse namespace to the parent namespace", func() {
 		wandb := &apiv2.WeightsAndBiases{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
-			Spec:       apiv2.WeightsAndBiasesSpec{ClickHouse: apiv2.ClickHouseSpec{InfraSpec: apiv2.InfraSpec{Enabled: true}}},
+			Spec:       apiv2.WeightsAndBiasesSpec{ClickHouse: apiv2.ClickHouseSpec{ManagedClickHouse: &apiv2.ManagedClickHouseSpec{}}},
 		}
 
 		err := defaulter.Default(ctx, wandb)
 		g.Expect(err).ToNot(g.HaveOccurred())
-		g.Expect(wandb.Spec.ClickHouse.Namespace).To(g.Equal("test-namespace"))
+		g.Expect(wandb.Spec.ClickHouse.ManagedClickHouse.Namespace).To(g.Equal("test-namespace"))
 	})
 
 	It("preserves a custom ClickHouse namespace", func() {
 		wandb := &apiv2.WeightsAndBiases{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
 			Spec: apiv2.WeightsAndBiasesSpec{
-				ClickHouse: apiv2.ClickHouseSpec{InfraSpec: apiv2.InfraSpec{Enabled: true}, Namespace: "custom-clickhouse-namespace"},
+				ClickHouse: apiv2.ClickHouseSpec{ManagedClickHouse: &apiv2.ManagedClickHouseSpec{Namespace: "custom-clickhouse-namespace"}},
 			},
 		}
 
 		err := defaulter.Default(ctx, wandb)
 		g.Expect(err).ToNot(g.HaveOccurred())
-		g.Expect(wandb.Spec.ClickHouse.Namespace).To(g.Equal("custom-clickhouse-namespace"))
+		g.Expect(wandb.Spec.ClickHouse.ManagedClickHouse.Namespace).To(g.Equal("custom-clickhouse-namespace"))
 	})
 
 	It("does not mutate unrelated ClickHouse fields", func() {
@@ -49,18 +49,30 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 			ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
 			Spec: apiv2.WeightsAndBiasesSpec{
 				ClickHouse: apiv2.ClickHouseSpec{
-					InfraSpec:   apiv2.InfraSpec{Enabled: true},
-					StorageSize: "100Gi",
-					Replicas:    2,
-					Version:     "24.1",
+					ManagedClickHouse: &apiv2.ManagedClickHouseSpec{
+						StorageSize: "100Gi",
+						Replicas:    2,
+						Version:     "24.1",
+					},
 				},
 			},
 		}
 
 		err := defaulter.Default(ctx, wandb)
 		g.Expect(err).ToNot(g.HaveOccurred())
-		g.Expect(wandb.Spec.ClickHouse.StorageSize).To(g.Equal("100Gi"))
-		g.Expect(wandb.Spec.ClickHouse.Replicas).To(g.Equal(int32(2)))
-		g.Expect(wandb.Spec.ClickHouse.Version).To(g.Equal("24.1"))
+		g.Expect(wandb.Spec.ClickHouse.ManagedClickHouse.StorageSize).To(g.Equal("100Gi"))
+		g.Expect(wandb.Spec.ClickHouse.ManagedClickHouse.Replicas).To(g.Equal(int32(2)))
+		g.Expect(wandb.Spec.ClickHouse.ManagedClickHouse.Version).To(g.Equal("24.1"))
+	})
+
+	It("does not apply defaults when ManagedClickHouse is nil", func() {
+		wandb := &apiv2.WeightsAndBiases{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
+			Spec:       apiv2.WeightsAndBiasesSpec{},
+		}
+
+		err := defaulter.Default(ctx, wandb)
+		g.Expect(err).ToNot(g.HaveOccurred())
+		g.Expect(wandb.Spec.ClickHouse.ManagedClickHouse).To(g.BeNil())
 	})
 })
