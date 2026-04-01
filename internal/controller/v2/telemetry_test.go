@@ -327,8 +327,8 @@ func TestResolveEnvvarsServiceSourceFromManifest(t *testing.T) {
 
 	wandb := &apiv2.WeightsAndBiases{ObjectMeta: metav1.ObjectMeta{Name: "wandb-dev-v2", Namespace: "default"}}
 	manifest := serverManifest.Manifest{
-		Applications: []serverManifest.Application{
-			{
+		Applications: map[string]serverManifest.Application{
+			"anaconda2": {
 				Name: "anaconda2",
 				Service: &serverManifest.ServiceSpec{
 					Ports: []corev1.ServicePort{
@@ -367,8 +367,8 @@ func TestResolveEnvvarsServiceSourcePortNameFromManifest(t *testing.T) {
 
 	wandb := &apiv2.WeightsAndBiases{ObjectMeta: metav1.ObjectMeta{Name: "wandb-dev-v2", Namespace: "default"}}
 	manifest := serverManifest.Manifest{
-		Applications: []serverManifest.Application{
-			{
+		Applications: map[string]serverManifest.Application{
+			"parquet": {
 				Name: "parquet",
 				Service: &serverManifest.ServiceSpec{
 					Ports: []corev1.ServicePort{

@@ -247,9 +247,11 @@ func Reconcile(
 					return ctrl.Result{}, err
 				}
 			}
-			if wandb.GetRetentionPolicy(wandb.Spec.Kafka.InfraSpec).OnDelete == apiv2.DetachOnDelete {
-				if err = kafkaDetachFinalizer(ctx, client, wandb); err != nil {
-					return ctrl.Result{}, err
+			if spec := wandb.Spec.Kafka.ManagedKafka; spec != nil {
+				if wandb.GetRetentionPolicy(spec.ManagedInfraSpec).OnDelete == apiv2.DetachOnDelete {
+					if err = kafkaDetachFinalizer(ctx, client, wandb); err != nil {
+						return ctrl.Result{}, err
+					}
 				}
 			}
 			controllerutil.RemoveFinalizer(wandb, CleanupFinalizer)

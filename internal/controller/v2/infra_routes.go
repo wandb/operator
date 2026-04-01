@@ -32,20 +32,19 @@ type infraRouteEntry struct {
 func resolveInfraRoutes(wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest) ([]infraRouteEntry, error) {
 	var entries []infraRouteEntry
 
-	if wandb.Spec.Minio.Enabled {
+	if minioSpec := wandb.Spec.Minio.ManagedMinio; minioSpec != nil {
 		for instanceName, cfg := range manifest.Bucket {
 			if cfg.Ingress == nil {
 				continue
 			}
-			// Minio service is {specName}-hl
-			svcName := fmt.Sprintf("%s-hl", wandb.Spec.Minio.Name)
+			svcName := fmt.Sprintf("%s-hl", minioSpec.Name)
 			port, err := resolveInfraServicePort(cfg.Ingress, 9000)
 			if err != nil {
 				return nil, fmt.Errorf("bucket instance %q: %w", instanceName, err)
 			}
 			entries = append(entries, infraRouteEntry{
 				name:        fmt.Sprintf("%s-bucket-%s", wandb.Name, instanceName),
-				namespace:   wandb.Spec.Minio.Namespace,
+				namespace:   minioSpec.Namespace,
 				serviceName: svcName,
 				servicePort: port,
 				ingress:     cfg.Ingress,
@@ -53,14 +52,12 @@ func resolveInfraRoutes(wandb *apiv2.WeightsAndBiases, manifest serverManifest.M
 		}
 	}
 
-	if wandb.Spec.ClickHouse.Enabled {
+	if chSpec := wandb.Spec.ClickHouse.ManagedClickHouse; chSpec != nil {
 		for instanceName, cfg := range manifest.Clickhouse {
 			if cfg.Ingress == nil {
 				continue
 			}
-			// Altinity creates a service named "clickhouse-{clusterName}"
-			// where clusterName is specName truncated to 15 chars with trailing hyphens removed.
-			clusterName := clickhouseClusterName(wandb.Spec.ClickHouse.Name)
+			clusterName := clickhouseClusterName(chSpec.Name)
 			svcName := fmt.Sprintf("clickhouse-%s", clusterName)
 			port, err := resolveInfraServicePort(cfg.Ingress, 8123)
 			if err != nil {
@@ -68,7 +65,7 @@ func resolveInfraRoutes(wandb *apiv2.WeightsAndBiases, manifest serverManifest.M
 			}
 			entries = append(entries, infraRouteEntry{
 				name:        fmt.Sprintf("%s-clickhouse-%s", wandb.Name, instanceName),
-				namespace:   wandb.Spec.ClickHouse.Namespace,
+				namespace:   chSpec.Namespace,
 				serviceName: svcName,
 				servicePort: port,
 				ingress:     cfg.Ingress,
@@ -76,19 +73,19 @@ func resolveInfraRoutes(wandb *apiv2.WeightsAndBiases, manifest serverManifest.M
 		}
 	}
 
-	if wandb.Spec.MySQL.Enabled {
+	if mysqlSpec := wandb.Spec.MySQL.ManagedMysql; mysqlSpec != nil {
 		for instanceName, cfg := range manifest.Mysql {
 			if cfg.Ingress == nil {
 				continue
 			}
-			svcName := wandb.Spec.MySQL.Name
+			svcName := mysqlSpec.Name
 			port, err := resolveInfraServicePort(cfg.Ingress, 3306)
 			if err != nil {
 				return nil, fmt.Errorf("mysql instance %q: %w", instanceName, err)
 			}
 			entries = append(entries, infraRouteEntry{
 				name:        fmt.Sprintf("%s-mysql-%s", wandb.Name, instanceName),
-				namespace:   wandb.Spec.MySQL.Namespace,
+				namespace:   mysqlSpec.Namespace,
 				serviceName: svcName,
 				servicePort: port,
 				ingress:     cfg.Ingress,
@@ -96,19 +93,19 @@ func resolveInfraRoutes(wandb *apiv2.WeightsAndBiases, manifest serverManifest.M
 		}
 	}
 
-	if wandb.Spec.Redis.Enabled {
+	if redisSpec := wandb.Spec.Redis.ManagedRedis; redisSpec != nil {
 		for instanceName, cfg := range manifest.Redis {
 			if cfg.Ingress == nil {
 				continue
 			}
-			svcName := wandb.Spec.Redis.Name
+			svcName := redisSpec.Name
 			port, err := resolveInfraServicePort(cfg.Ingress, 6379)
 			if err != nil {
 				return nil, fmt.Errorf("redis instance %q: %w", instanceName, err)
 			}
 			entries = append(entries, infraRouteEntry{
 				name:        fmt.Sprintf("%s-redis-%s", wandb.Name, instanceName),
-				namespace:   wandb.Spec.Redis.Namespace,
+				namespace:   redisSpec.Namespace,
 				serviceName: svcName,
 				servicePort: port,
 				ingress:     cfg.Ingress,
