@@ -51,7 +51,7 @@ type Manifest struct {
 	Kafka              KafkaConfig              `yaml:"kafka"`
 	Mysql              map[string]InfraConfig   `yaml:"mysql"`
 	Redis              map[string]InfraConfig   `yaml:"redis"`
-	Applications       []Application            `yaml:"applications"`
+	Applications       map[string]Application   `yaml:"applications"`
 	// Migrations captures per-database migration jobs (e.g., default, runsdb, usagedb)
 	// as found in 0.76.1.yaml under the top-level "migrations" key.
 	Migrations map[string]MigrationJob `yaml:"migrations,omitempty"`
@@ -68,7 +68,8 @@ type GeneratedSecret struct {
 }
 
 type InfraConfig struct {
-	Sizing map[v2.Size]SizingConfig `yaml:"sizing"`
+	Sizing  map[v2.Size]SizingConfig `yaml:"sizing"`
+	Ingress *AppIngressSpec          `yaml:"ingress,omitempty"`
 }
 
 // KafkaTopicDef models a topic configuration used both at the top-level
@@ -144,6 +145,13 @@ type Application struct {
 	JWTTokens    []JWTToken               `yaml:"jwtTokens,omitempty"`
 	VolumeMounts []VolumeMount            `yaml:"volumeMounts,omitempty"`
 	Sizing       map[v2.Size]SizingConfig `yaml:"sizing,omitempty"`
+	Ingress      *AppIngressSpec          `yaml:"ingress,omitempty"`
+}
+
+type AppIngressSpec struct {
+	Paths       []string `yaml:"paths,omitempty"`
+	ServicePort string   `yaml:"servicePort,omitempty"`
+	PathType    string   `yaml:"pathType,omitempty"`
 }
 
 type SizingConfig struct {
@@ -310,20 +318,220 @@ func LoadManifestFromFile(ctx context.Context, repository string, version string
 func loadManifestFromFiles(ctx context.Context, manifestFiles []string) (Manifest, error) {
 	logger := logx.GetSlog(ctx)
 	manifest := Manifest{}
-	for _, manifestFile := range manifestFiles {
+
+	fmt.Printf("Processing %d files: %v\n", len(manifestFiles), manifestFiles)
+
+	for i, manifestFile := range manifestFiles {
+		fmt.Printf("Processing file %d: %s\n", i, manifestFile)
 		manifestData, err := os.ReadFile(manifestFile)
 		if err != nil {
 			logger.Error("failed to read manifest file", "file", manifestFile, "error", err)
 			return Manifest{}, err
 		}
-		if err = yaml.Unmarshal(manifestData, &manifest); err != nil {
+		var fileManifest Manifest
+		if err = yaml.Unmarshal(manifestData, &fileManifest); err != nil {
 			logger.Error("failed to unmarshal manifest file", "file", manifestFile, "error", err)
 			return Manifest{}, fmt.Errorf("failed to unmarshal %q: %w", manifestFile, err)
 		}
+
+		// Simple merge: preserve existing data, add new data
+		mergeSimple(&manifest, &fileManifest)
 	}
 
 	logger.Debug("loaded manifest files", "count", len(manifestFiles), "files", manifestFiles, "manifest", manifest)
 	return manifest, nil
+}
+
+// mergeSimple performs a simple merge that preserves existing data and adds new data
+func mergeSimple(dst, src *Manifest) {
+	// Preserve existing data, add new data from src
+
+	// Basic fields - only set if dst is zero
+	if dst.RequiredOperatorVersion == "" {
+		dst.RequiredOperatorVersion = src.RequiredOperatorVersion
+	}
+	if dst.Features == nil {
+		dst.Features = src.Features
+	} else if src.Features != nil {
+		for k, v := range src.Features {
+			dst.Features[k] = v
+		}
+	}
+
+	// Infrastructure configs - merge maps
+	if src.Bucket != nil {
+		if dst.Bucket == nil {
+			dst.Bucket = make(map[string]InfraConfig)
+		}
+		mergeInfraConfigs(dst.Bucket, src.Bucket)
+	}
+	if src.Mysql != nil {
+		if dst.Mysql == nil {
+			dst.Mysql = make(map[string]InfraConfig)
+		}
+		mergeInfraConfigs(dst.Mysql, src.Mysql)
+	}
+	if src.Redis != nil {
+		if dst.Redis == nil {
+			dst.Redis = make(map[string]InfraConfig)
+		}
+		mergeInfraConfigs(dst.Redis, src.Redis)
+	}
+	if src.Clickhouse != nil {
+		if dst.Clickhouse == nil {
+			dst.Clickhouse = make(map[string]InfraConfig)
+		}
+		mergeInfraConfigs(dst.Clickhouse, src.Clickhouse)
+	}
+
+	// Kafka sizing
+	if src.Kafka.Sizing != nil {
+		if dst.Kafka.Sizing == nil {
+			dst.Kafka.Sizing = make(map[v2.Size]KafkaSizingConfig)
+		}
+		for k, v := range src.Kafka.Sizing {
+			dst.Kafka.Sizing[k] = v
+		}
+	}
+
+	// Applications - merge maps
+	if src.Applications != nil {
+		if dst.Applications == nil {
+			dst.Applications = make(map[string]Application)
+		}
+		mergeApplications(dst.Applications, src.Applications)
+	}
+
+	// Migrations
+	if src.Migrations != nil {
+		if dst.Migrations == nil {
+			dst.Migrations = make(map[string]MigrationJob)
+		}
+		for k, v := range src.Migrations {
+			dst.Migrations[k] = v
+		}
+	}
+
+	// GeneratedSecrets - only from first file
+	if len(dst.GeneratedSecrets) == 0 {
+		dst.GeneratedSecrets = src.GeneratedSecrets
+	}
+
+	// CommonEnvvars - merge maps
+	if src.CommonEnvvars != nil {
+		if dst.CommonEnvvars == nil {
+			dst.CommonEnvvars = make(map[string][]EnvVar)
+		}
+		for k, v := range src.CommonEnvvars {
+			dst.CommonEnvvars[k] = v
+		}
+	}
+
+	// CommonVolumeMounts - merge maps
+	if src.CommonVolumeMounts != nil {
+		if dst.CommonVolumeMounts == nil {
+			dst.CommonVolumeMounts = make(map[string][]VolumeMount)
+		}
+		for k, v := range src.CommonVolumeMounts {
+			dst.CommonVolumeMounts[k] = v
+		}
+	}
+
+	// Kafka topics - only from first file (they don't exist in sizing.yaml anyway)
+	if len(dst.Kafka.Topics) == 0 {
+		dst.Kafka.Topics = src.Kafka.Topics
+	}
+}
+
+// mergeInfraConfigs merges two map[string]InfraConfig maps
+func mergeInfraConfigs(dst, src map[string]InfraConfig) {
+	if src == nil {
+		return
+	}
+	if dst == nil {
+		return
+	}
+
+	for name, srcConfig := range src {
+		if dstConfig, exists := dst[name]; exists {
+			// Merge existing config
+			mergedConfig := dstConfig
+
+			// Preserve ingress from dst if src doesn't have it
+			if srcConfig.Ingress == nil && dstConfig.Ingress != nil {
+				mergedConfig.Ingress = dstConfig.Ingress
+			} else if srcConfig.Ingress != nil {
+				mergedConfig.Ingress = srcConfig.Ingress
+			}
+
+			// Merge sizing maps
+			if srcConfig.Sizing != nil {
+				if mergedConfig.Sizing == nil {
+					mergedConfig.Sizing = make(map[v2.Size]SizingConfig)
+				}
+				for k, v := range srcConfig.Sizing {
+					mergedConfig.Sizing[k] = v
+				}
+			}
+
+			dst[name] = mergedConfig
+		} else {
+			// New config
+			dst[name] = srcConfig
+		}
+	}
+}
+
+// mergeApplications merges two map[string]Application maps
+func mergeApplications(dst, src map[string]Application) {
+	if src == nil {
+		return
+	}
+	if dst == nil {
+		return
+	}
+
+	for name, srcApp := range src {
+		if dstApp, exists := dst[name]; exists {
+			// Merge existing application
+			mergedApp := dstApp
+
+			// Preserve ingress from dst if src doesn't have it
+			if srcApp.Ingress == nil && dstApp.Ingress != nil {
+				mergedApp.Ingress = dstApp.Ingress
+			} else if srcApp.Ingress != nil {
+				mergedApp.Ingress = srcApp.Ingress
+			}
+
+			// Merge sizing maps
+			if srcApp.Sizing != nil {
+				if mergedApp.Sizing == nil {
+					mergedApp.Sizing = make(map[v2.Size]SizingConfig)
+				}
+				for k, v := range srcApp.Sizing {
+					mergedApp.Sizing[k] = v
+				}
+			}
+
+			// Merge common envs (avoid duplicates)
+			if len(srcApp.CommonEnvs) > 0 {
+				envSet := make(map[string]bool)
+				for _, env := range mergedApp.CommonEnvs {
+					envSet[env] = true
+				}
+				for _, env := range srcApp.CommonEnvs {
+					if !envSet[env] {
+						mergedApp.CommonEnvs = append(mergedApp.CommonEnvs, env)
+					}
+				}
+			}
+
+			dst[name] = mergedApp
+		} else {
+			// New application
+			dst[name] = srcApp
+		}
+	}
 }
 
 func DownloadServerManifest(ctx context.Context, repository string, version string) (Manifest, error) {

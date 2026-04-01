@@ -279,7 +279,10 @@ func (r RepoRelease) downloadChart() (string, error) {
 	if dest == "" {
 		dest = "./charts"
 	}
-	os.MkdirAll(dest, 0755)
+	if err := os.MkdirAll(dest, 0755); err != nil {
+		log.Error(err, "Failed to create charts directory", "destination", dest)
+		return "", err
+	}
 
 	if r.Debug {
 		log.Info("Attempting to download chart", "destination", dest)

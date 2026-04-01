@@ -40,7 +40,7 @@ func (n *NsNameBuilder) StandaloneNsName() types.NamespacedName {
 }
 
 func (n *NsNameBuilder) SentinelName() string {
-	return fmt.Sprintf("%s", n.SpecName())
+	return n.SpecName()
 }
 
 func (n *NsNameBuilder) SentinelNsName() types.NamespacedName {

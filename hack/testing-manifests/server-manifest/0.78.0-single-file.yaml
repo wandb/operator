@@ -8,6 +8,11 @@ features:
 
 bucket:
   default:
+    ingress:
+      paths:
+        - /bucket
+      servicePort: "9000"
+      pathType: Prefix
     sizing:
       default:
         replicas: 1
@@ -534,7 +539,8 @@ commonVolumeMounts:
         type: secret
 
 applications:
-  - name: anaconda2
+  anaconda2:
+    name: anaconda2
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/anaconda2
       tag: 0.78.0
@@ -582,7 +588,8 @@ applications:
             enabled: true
             maxReplicas: 3
             minReplicas: 2
-  - name: api
+  api:
+    name: api
     commonEnvs:
       - gorillaMysql
       - gorillaBucket
@@ -659,7 +666,8 @@ applications:
             enabled: true
             maxReplicas: 3
             minReplicas: 2
-  - name: executor
+  executor:
+    name: executor
     args:
       - executor
     commonEnvs:
@@ -690,7 +698,8 @@ applications:
             enabled: true
             maxReplicas: 2
             minReplicas: 1
-  - name: filemeta
+  filemeta:
+    name: filemeta
     args:
       - filemeta
     commonEnvs:
@@ -730,7 +739,8 @@ applications:
             enabled: true
             maxReplicas: 2
             minReplicas: 1
-  - name: filestream
+  filestream:
+    name: filestream
     features:
       - filestreamQueue
     args:
@@ -774,7 +784,8 @@ applications:
             enabled: true
             maxReplicas: 2
             minReplicas: 1
-  - name: flat-run-fields-updater
+  flat-run-fields-updater:
+    name: flat-run-fields-updater
     args:
       - flat-run-fields-updater
     commonEnvs:
@@ -821,7 +832,8 @@ applications:
             enabled: true
             maxReplicas: 5
             minReplicas: 1
-  - name: frontend
+  frontend:
+    name: frontend
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/frontend-nginx
       tag: 0.78.0
@@ -900,7 +912,8 @@ applications:
             enabled: true
             maxReplicas: 3
             minReplicas: 2
-  - name: glue
+  glue:
+    name: glue
     args:
       - glue
     commonEnvs:
@@ -944,7 +957,8 @@ applications:
           requests:
             cpu: "2"
             memory: 6Gi
-  - name: metric-observer
+  metric-observer:
+    name: metric-observer
     args:
       - metric-observer
     commonEnvs:
@@ -991,7 +1005,8 @@ applications:
             enabled: true
             maxReplicas: 4
             minReplicas: 1
-  - name: parquet
+  parquet:
+    name: parquet
     args:
       - parquet
     commonEnvs:
@@ -1050,7 +1065,8 @@ applications:
             enabled: true
             maxReplicas: 2
             minReplicas: 2
-  - name: weave
+  weave:
+    name: weave
     image:
       repository: wandb/weave-python
       tag: 0.76.1
@@ -1102,7 +1118,8 @@ applications:
             enabled: true
             maxReplicas: 2
             minReplicas: 2
-  - name: weave-trace
+  weave-trace:
+    name: weave-trace
     commonEnvs:
       - clickhouse
       - kafka
@@ -1157,7 +1174,8 @@ applications:
             enabled: true
             maxReplicas: 3
             minReplicas: 2
-  - name: weave-trace-worker
+  weave-trace-worker:
+    name: weave-trace-worker
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
       tag: 0.78.0
@@ -1169,7 +1187,41 @@ applications:
       - kafka
       - weaveTrace
       - telemetryOtel
-  - name: weave-trace-evaluate-model-worker
+    containers:
+      - name: weave-trace-worker
+        args:
+          - "python"
+          - "-m"
+          - "src.workers.scoring_worker"
+    sizing:
+      micro:
+        resources:
+          limits:
+            cpu: "1"
+            memory: 2Gi
+          requests:
+            cpu: "1"
+            memory: 2Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 2
+            minReplicas: 1
+      small:
+        resources:
+          limits:
+            cpu: "1"
+            memory: 8Gi
+          requests:
+            cpu: "1"
+            memory: 8Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 4
+            minReplicas: 1
+  weave-trace-evaluate-model-worker:
+    name: weave-trace-evaluate-model-worker
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
       tag: 0.78.0
@@ -1181,7 +1233,41 @@ applications:
       - kafka
       - weaveTrace
       - telemetryOtel
-  - name: nginx-proxy
+    containers:
+      - name: weave-trace-evaluate-model-worker
+        args:
+          - "python"
+          - "-m"
+          - "src.workers.evaluate_model_worker.evaluate_model_worker"
+    sizing:
+      micro:
+        resources:
+          limits:
+            cpu: "1"
+            memory: 2Gi
+          requests:
+            cpu: "1"
+            memory: 2Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 2
+            minReplicas: 1
+      small:
+        resources:
+          limits:
+            cpu: "1"
+            memory: 8Gi
+          requests:
+            cpu: "1"
+            memory: 8Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 2
+            minReplicas: 1
+  nginx-proxy:
+    name: nginx-proxy
     features:
       - proxy
     image:

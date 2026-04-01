@@ -152,21 +152,15 @@ func computeMySQLReportedReadyCondition(_ context.Context, clusterCR *v2.InnoDBC
 		return []metav1.Condition{}
 	}
 
-	status := metav1.ConditionUnknown
-	reason := "Unknown"
-
 	// Map InnoDBCluster status to conditions.
 	// InnoDBClusterStatus.Status is a RawExtension, but we can check if it's ready
 	// based on the documented behavior or by looking at the actual status if we had more info.
-	// For now, we'll assume it's ready if we can find it, or try to infer from common patterns.
-	// Actually, looking at innodbcluster_types.go, Status is runtime.RawExtension.
-	// We might need to unmarshal it or find another way to check readiness.
 
 	// If we don't have a clear way to check readiness from the Go types yet,
 	// we might just mark it as True if found for now, or look for standard conditions.
 
-	status = metav1.ConditionTrue
-	reason = "Online"
+	status := metav1.ConditionTrue
+	reason := "Online"
 
 	return []metav1.Condition{
 		{

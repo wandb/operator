@@ -142,7 +142,7 @@ func (v Values) SetValue(key string, value interface{}) error {
 	cursor := v
 	keyElements := strings.Split(key, ".")
 
-	var target interface{} = cursor
+	var target interface{}
 	for idx, elm := range keyElements {
 		target = cursor[elm]
 

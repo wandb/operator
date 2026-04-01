@@ -94,7 +94,7 @@ func ReadState(
 	}
 	if !found {
 		log.Info("Kafka NodePool CR not found")
-		actualNodePool = nil
+		// actualNodePool is not used elsewhere, so we don't need to set it to nil
 	}
 
 	var connection *translator.KafkaConnection

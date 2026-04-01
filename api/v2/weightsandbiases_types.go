@@ -103,6 +103,118 @@ type WeightsAndBiasesSpec struct {
 	Kafka      KafkaSpec      `json:"kafka,omitempty"`
 	Minio      MinioSpec      `json:"minio,omitempty"`
 	ClickHouse ClickHouseSpec `json:"clickhouse,omitempty"`
+
+	// Networking configures how the W&B application is exposed externally.
+	// +optional
+	Networking NetworkingSpec `json:"networking,omitempty"`
+}
+
+type NetworkingMode string
+
+const (
+	NetworkingModeNone       NetworkingMode = ""
+	NetworkingModeIngress    NetworkingMode = "ingress"
+	NetworkingModeGatewayAPI NetworkingMode = "gateway"
+)
+
+type NetworkingSpec struct {
+	// Mode selects the networking strategy: "Ingress" or "GatewayAPI".
+	// Empty/unset means no operator-managed ingress (preserves current NodePort behavior).
+	// +kubebuilder:validation:Enum="";ingress;gateway
+	Mode NetworkingMode `json:"mode,omitempty"`
+
+	// +optional
+	Ingress *IngressConfig `json:"ingress,omitempty"`
+
+	// +optional
+	GatewayAPI *GatewayAPIConfig `json:"gatewayAPI,omitempty"`
+
+	// +optional
+	TLS *TLSConfig `json:"tls,omitempty"`
+
+	// Annotations applied to all generated Ingress or HTTPRoute resources.
+	// +optional
+	Annotations map[string]string `json:"annotations,omitempty"`
+}
+
+type IngressConfig struct {
+	// +optional
+	IngressClassName *string `json:"ingressClassName,omitempty"`
+}
+
+type GatewayAPIConfig struct {
+	Gateway GatewayConfig `json:"gateway"`
+
+	// ListenerName selects which listener on the Gateway to attach HTTPRoutes to.
+	// +optional
+	ListenerName *string `json:"listenerName,omitempty"`
+}
+
+type GatewayConfig struct {
+	// Managed controls whether the operator creates and manages the Gateway resource.
+	// When false (default), gatewayRef must reference an existing Gateway.
+	// +kubebuilder:default=false
+	Managed bool `json:"managed,omitempty"`
+
+	// +optional
+	GatewayRef *GatewayReference `json:"gatewayRef,omitempty"`
+
+	// GatewayClassName is required when managed=true.
+	// +optional
+	GatewayClassName *string `json:"gatewayClassName,omitempty"`
+
+	// Listeners defines the listeners on a managed Gateway.
+	// If empty and managed=true, a default HTTPS listener is created from
+	// spec.wandb.hostname and spec.networking.tls.
+	// +optional
+	Listeners []GatewayListener `json:"listeners,omitempty"`
+
+	// Annotations applied to the managed Gateway resource.
+	// +optional
+	Annotations map[string]string `json:"annotations,omitempty"`
+}
+
+type GatewayReference struct {
+	Name string `json:"name"`
+	// +optional
+	Namespace string `json:"namespace,omitempty"`
+}
+
+type GatewayListener struct {
+	Name     string `json:"name"`
+	Port     int32  `json:"port"`
+	Protocol string `json:"protocol"`
+	// +optional
+	Hostname *string `json:"hostname,omitempty"`
+	// +optional
+	TLS *ListenerTLSConfig `json:"tls,omitempty"`
+}
+
+type ListenerTLSConfig struct {
+	// +optional
+	Mode *string `json:"mode,omitempty"`
+	// +optional
+	CertificateRef *SecretRef `json:"certificateRef,omitempty"`
+}
+
+type SecretRef struct {
+	Name string `json:"name"`
+	// +optional
+	Namespace string `json:"namespace,omitempty"`
+}
+
+type TLSConfig struct {
+	// +optional
+	SecretName string `json:"secretName,omitempty"`
+	// +optional
+	CertManager *CertManagerConfig `json:"certManager,omitempty"`
+}
+
+type CertManagerConfig struct {
+	// +optional
+	ClusterIssuer string `json:"clusterIssuer,omitempty"`
+	// +optional
+	Issuer string `json:"issuer,omitempty"`
 }
 
 func (w *WeightsAndBiases) GetRetentionPolicy(spec ManagedInfraSpec) RetentionPolicy {
@@ -387,6 +499,23 @@ type WeightsAndBiasesStatus struct {
 	// referencing the concrete Secret and key that holds the generated value.
 	GeneratedSecrets   map[string]corev1.SecretKeySelector `json:"generatedSecrets,omitempty"`
 	ObservedGeneration int64                               `json:"observedGeneration"`
+
+	// +optional
+	GatewayStatus *GatewayStatusSummary `json:"gatewayStatus,omitempty"`
+	// +optional
+	IngressStatus *IngressStatusSummary `json:"ingressStatus,omitempty"`
+}
+
+type GatewayStatusSummary struct {
+	Name       string            `json:"name,omitempty"`
+	Ready      bool              `json:"ready,omitempty"`
+	Addresses  []string          `json:"addresses,omitempty"`
+	GatewayRef *GatewayReference `json:"gatewayRef,omitempty"`
+}
+
+type IngressStatusSummary struct {
+	Name                string                       `json:"name,omitempty"`
+	LoadBalancerIngress []corev1.LoadBalancerIngress `json:"loadBalancerIngress,omitempty"`
 }
 
 type WandbStatus struct {
