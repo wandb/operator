@@ -127,9 +127,7 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 						Version:            "0.78.0",
 					},
 					MySQL: apiv2.MySQLSpec{
-						ManagedMysql: &apiv2.ManagedMysqlSpec{
-							DeploymentType: apiv2.MySQLTypeMysql,
-						},
+						ManagedMysql: &apiv2.ManagedMysqlSpec{},
 					},
 					Redis:      apiv2.RedisSpec{ManagedRedis: &apiv2.ManagedRedisSpec{}},
 					Kafka:      apiv2.KafkaSpec{ManagedKafka: &apiv2.ManagedKafkaSpec{}},

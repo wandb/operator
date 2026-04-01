@@ -20,7 +20,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - MySQL", func() {
 		defaulter = WeightsAndBiasesCustomDefaulter{}
 	})
 
-	It("defaults MySQL namespace and deployment type", func() {
+	It("defaults MySQL namespace", func() {
 		wandb := &apiv2.WeightsAndBiases{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
 			Spec:       apiv2.WeightsAndBiasesSpec{MySQL: apiv2.MySQLSpec{ManagedMysql: &apiv2.ManagedMysqlSpec{}}},
@@ -29,17 +29,15 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - MySQL", func() {
 		err := defaulter.Default(ctx, wandb)
 		g.Expect(err).ToNot(g.HaveOccurred())
 		g.Expect(wandb.Spec.MySQL.ManagedMysql.Namespace).To(g.Equal("test-namespace"))
-		g.Expect(wandb.Spec.MySQL.ManagedMysql.DeploymentType).To(g.Equal(apiv2.MySQLTypeMysql))
 	})
 
-	It("preserves custom MySQL namespace and deployment type", func() {
+	It("preserves custom MySQL namespace", func() {
 		wandb := &apiv2.WeightsAndBiases{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
 			Spec: apiv2.WeightsAndBiasesSpec{
 				MySQL: apiv2.MySQLSpec{
 					ManagedMysql: &apiv2.ManagedMysqlSpec{
-						Namespace:      "custom-mysql-namespace",
-						DeploymentType: apiv2.MySQLTypePercona,
+						Namespace: "custom-mysql-namespace",
 					},
 				},
 			},
@@ -48,7 +46,6 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - MySQL", func() {
 		err := defaulter.Default(ctx, wandb)
 		g.Expect(err).ToNot(g.HaveOccurred())
 		g.Expect(wandb.Spec.MySQL.ManagedMysql.Namespace).To(g.Equal("custom-mysql-namespace"))
-		g.Expect(wandb.Spec.MySQL.ManagedMysql.DeploymentType).To(g.Equal(apiv2.MySQLTypePercona))
 	})
 
 	It("does not mutate unrelated MySQL fields", func() {

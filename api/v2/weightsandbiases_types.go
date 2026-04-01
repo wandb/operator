@@ -277,14 +277,6 @@ type OidcSpec struct {
 	AuthMethod   string `json:"authMethod"`
 }
 
-type MYSQLType string
-
-const (
-	MySQLTypeMariadb MYSQLType = "mariadb"
-	MySQLTypePercona MYSQLType = "percona"
-	MySQLTypeMysql   MYSQLType = "mysql"
-)
-
 type ManagedInfraSpec struct {
 	RetentionPolicy *RetentionPolicy `json:"retentionPolicy,omitempty"`
 
@@ -302,13 +294,12 @@ type MySQLSpec struct {
 type ManagedMysqlSpec struct {
 	ManagedInfraSpec `json:",inline"`
 
-	DeploymentType MYSQLType   `json:"deploymentType"`
-	StorageSize    string      `json:"storageSize,omitempty"`
-	Replicas       int32       `json:"replicas,omitempty"`
-	Config         MySQLConfig `json:"config,omitempty"`
-	Namespace      string      `json:"namespace,omitempty"`
-	Name           string      `json:"name,omitempty"`
-	Telemetry      Telemetry   `json:"telemetry,omitempty"`
+	StorageSize string      `json:"storageSize,omitempty"`
+	Replicas    int32       `json:"replicas,omitempty"`
+	Config      MySQLConfig `json:"config,omitempty"`
+	Namespace   string      `json:"namespace,omitempty"`
+	Name        string      `json:"name,omitempty"`
+	Telemetry   Telemetry   `json:"telemetry,omitempty"`
 }
 
 type MysqlConnection struct {

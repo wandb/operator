@@ -1,0 +1,8 @@
+apiVersion: apps.wandb.com/v2
+kind: WeightsAndBiases
+metadata:
+  name: wandb
+spec:
+  mysql:
+    managedMysql: null
+    externalMysql: null

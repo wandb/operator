@@ -203,9 +203,6 @@ func applyMySQLDefaults(wandb *appsv2.WeightsAndBiases) {
 	if spec.Namespace == "" {
 		spec.Namespace = wandb.Namespace
 	}
-	if spec.DeploymentType == "" {
-		spec.DeploymentType = appsv2.MySQLTypeMysql
-	}
 }
 
 func applyRedisDefaults(wandb *appsv2.WeightsAndBiases) {

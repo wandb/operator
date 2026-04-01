@@ -67,7 +67,6 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 			Expect(obj.Spec.Wandb.ServiceAccount.ServiceAccountName).To(Equal("wandb"))
 			Expect(obj.Status.Wandb.Applications).ToNot(BeNil())
 			Expect(obj.Spec.MySQL.ManagedMysql.Namespace).To(Equal("test-ns"))
-			Expect(obj.Spec.MySQL.ManagedMysql.DeploymentType).To(Equal(appsv2.MySQLTypeMysql))
 			Expect(obj.Spec.Redis.ManagedRedis.Namespace).To(Equal("test-ns"))
 			Expect(obj.Spec.Kafka.ManagedKafka.Namespace).To(Equal("test-ns"))
 			Expect(obj.Spec.Minio.ManagedMinio.Namespace).To(Equal("test-ns"))
@@ -86,8 +85,7 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 			obj.Spec.Wandb.ServiceAccount.Create = boolPtr(false)
 			obj.Spec.Wandb.ServiceAccount.ServiceAccountName = "custom-sa"
 			obj.Spec.MySQL.ManagedMysql = &appsv2.ManagedMysqlSpec{
-				Namespace:      "custom-mysql",
-				DeploymentType: appsv2.MySQLTypePercona,
+				Namespace: "custom-mysql",
 			}
 			obj.Spec.Redis.ManagedRedis = &appsv2.ManagedRedisSpec{Namespace: "custom-redis"}
 			obj.Spec.Kafka.ManagedKafka = &appsv2.ManagedKafkaSpec{Namespace: "custom-kafka"}
@@ -106,7 +104,6 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 			Expect(*obj.Spec.Wandb.ServiceAccount.Create).To(BeFalse())
 			Expect(obj.Spec.Wandb.ServiceAccount.ServiceAccountName).To(Equal("custom-sa"))
 			Expect(obj.Spec.MySQL.ManagedMysql.Namespace).To(Equal("custom-mysql"))
-			Expect(obj.Spec.MySQL.ManagedMysql.DeploymentType).To(Equal(appsv2.MySQLTypePercona))
 			Expect(obj.Spec.Redis.ManagedRedis.Namespace).To(Equal("custom-redis"))
 			Expect(obj.Spec.Kafka.ManagedKafka.Namespace).To(Equal("custom-kafka"))
 			Expect(obj.Spec.Minio.ManagedMinio.Namespace).To(Equal("custom-minio"))

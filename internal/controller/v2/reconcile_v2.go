@@ -412,7 +412,7 @@ func ReconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 		return result, err
 	}
 
-	if wandb.Spec.MySQL.ManagedMysql != nil && wandb.Spec.MySQL.ManagedMysql.DeploymentType == apiv2.MySQLTypeMysql && !wandb.Status.Wandb.MySQLInit.Succeeded {
+	if wandb.Spec.MySQL.ManagedMysql != nil && !wandb.Status.Wandb.MySQLInit.Succeeded {
 		logger.Info("Mysql init not yet successful", "Message", wandb.Status.Wandb.MySQLInit.Message)
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
@@ -1714,7 +1714,7 @@ func resolveVolumeMounts(ctx context.Context, manifest serverManifest.Manifest, 
 }
 
 func runMysqlInitJob(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest) (ctrl.Result, error) {
-	if wandb.Spec.MySQL.ManagedMysql == nil || wandb.Spec.MySQL.ManagedMysql.DeploymentType != apiv2.MySQLTypeMysql {
+	if wandb.Spec.MySQL.ManagedMysql == nil {
 		return ctrl.Result{}, nil
 	}
 

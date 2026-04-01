@@ -1154,6 +1154,32 @@ spec:
                         - key
                         type: object
                         x-kubernetes-map-type: atomic
+                      host:
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            default: ""
+                            type: string
+                          optional:
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
+                      port:
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            default: ""
+                            type: string
+                          optional:
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
                     required:
                     - URL
                     type: object
@@ -2920,8 +2946,6 @@ spec:
                                 type: object
                             type: object
                         type: object
-                      deploymentType:
-                        type: string
                       name:
                         type: string
                       namespace:
@@ -2963,19 +2987,13 @@ spec:
                               type: string
                           type: object
                         type: array
-                    required:
-                    - deploymentType
                     type: object
                 type: object
               networking:
-                description: Networking configures how the W&B application is exposed
-                  externally.
                 properties:
                   annotations:
                     additionalProperties:
                       type: string
-                    description: Annotations applied to all generated Ingress or HTTPRoute
-                      resources.
                     type: object
                   gatewayAPI:
                     properties:
@@ -2984,11 +3002,8 @@ spec:
                           annotations:
                             additionalProperties:
                               type: string
-                            description: Annotations applied to the managed Gateway
-                              resource.
                             type: object
                           gatewayClassName:
-                            description: GatewayClassName is required when managed=true.
                             type: string
                           gatewayRef:
                             properties:
@@ -3000,10 +3015,6 @@ spec:
                             - name
                             type: object
                           listeners:
-                            description: |-
-                              Listeners defines the listeners on a managed Gateway.
-                              If empty and managed=true, a default HTTPS listener is created from
-                              spec.wandb.hostname and spec.networking.tls.
                             items:
                               properties:
                                 hostname:
@@ -3037,14 +3048,9 @@ spec:
                             type: array
                           managed:
                             default: false
-                            description: |-
-                              Managed controls whether the operator creates and manages the Gateway resource.
-                              When false (default), gatewayRef must reference an existing Gateway.
                             type: boolean
                         type: object
                       listenerName:
-                        description: ListenerName selects which listener on the Gateway
-                          to attach HTTPRoutes to.
                         type: string
                     required:
                     - gateway
@@ -3055,227 +3061,6 @@ spec:
                         type: string
                     type: object
                   mode:
-                    description: |-
-                      Mode selects the networking strategy: "Ingress" or "GatewayAPI".
-                      Empty/unset means no operator-managed ingress (preserves current NodePort behavior).
-                    enum:
-                    - ""
-                    - ingress
-                    - gateway
-                    type: string
-                  tls:
-                    properties:
-                      certManager:
-                        properties:
-                          clusterIssuer:
-                            type: string
-                          issuer:
-                            type: string
-                        type: object
-                      secretName:
-                        type: string
-                    type: object
-                type: object
-              networking:
-                description: Networking configures how the W&B application is exposed
-                  externally.
-                properties:
-                  annotations:
-                    additionalProperties:
-                      type: string
-                    description: Annotations applied to all generated Ingress or HTTPRoute
-                      resources.
-                    type: object
-                  gatewayAPI:
-                    properties:
-                      gateway:
-                        properties:
-                          annotations:
-                            additionalProperties:
-                              type: string
-                            description: Annotations applied to the managed Gateway
-                              resource.
-                            type: object
-                          gatewayClassName:
-                            description: GatewayClassName is required when managed=true.
-                            type: string
-                          gatewayRef:
-                            properties:
-                              name:
-                                type: string
-                              namespace:
-                                type: string
-                            required:
-                            - name
-                            type: object
-                          listeners:
-                            description: |-
-                              Listeners defines the listeners on a managed Gateway.
-                              If empty and managed=true, a default HTTPS listener is created from
-                              spec.wandb.hostname and spec.networking.tls.
-                            items:
-                              properties:
-                                hostname:
-                                  type: string
-                                name:
-                                  type: string
-                                port:
-                                  format: int32
-                                  type: integer
-                                protocol:
-                                  type: string
-                                tls:
-                                  properties:
-                                    certificateRef:
-                                      properties:
-                                        name:
-                                          type: string
-                                        namespace:
-                                          type: string
-                                      required:
-                                      - name
-                                      type: object
-                                    mode:
-                                      type: string
-                                  type: object
-                              required:
-                              - name
-                              - port
-                              - protocol
-                              type: object
-                            type: array
-                          managed:
-                            default: false
-                            description: |-
-                              Managed controls whether the operator creates and manages the Gateway resource.
-                              When false (default), gatewayRef must reference an existing Gateway.
-                            type: boolean
-                        type: object
-                      listenerName:
-                        description: ListenerName selects which listener on the Gateway
-                          to attach HTTPRoutes to.
-                        type: string
-                    required:
-                    - gateway
-                    type: object
-                  ingress:
-                    properties:
-                      ingressClassName:
-                        type: string
-                    type: object
-                  mode:
-                    description: |-
-                      Mode selects the networking strategy: "Ingress" or "GatewayAPI".
-                      Empty/unset means no operator-managed ingress (preserves current NodePort behavior).
-                    enum:
-                    - ""
-                    - ingress
-                    - gateway
-                    type: string
-                  tls:
-                    properties:
-                      certManager:
-                        properties:
-                          clusterIssuer:
-                            type: string
-                          issuer:
-                            type: string
-                        type: object
-                      secretName:
-                        type: string
-                    type: object
-                type: object
-              networking:
-                description: Networking configures how the W&B application is exposed
-                  externally.
-                properties:
-                  annotations:
-                    additionalProperties:
-                      type: string
-                    description: Annotations applied to all generated Ingress or HTTPRoute
-                      resources.
-                    type: object
-                  gatewayAPI:
-                    properties:
-                      gateway:
-                        properties:
-                          annotations:
-                            additionalProperties:
-                              type: string
-                            description: Annotations applied to the managed Gateway
-                              resource.
-                            type: object
-                          gatewayClassName:
-                            description: GatewayClassName is required when managed=true.
-                            type: string
-                          gatewayRef:
-                            properties:
-                              name:
-                                type: string
-                              namespace:
-                                type: string
-                            required:
-                            - name
-                            type: object
-                          listeners:
-                            description: |-
-                              Listeners defines the listeners on a managed Gateway.
-                              If empty and managed=true, a default HTTPS listener is created from
-                              spec.wandb.hostname and spec.networking.tls.
-                            items:
-                              properties:
-                                hostname:
-                                  type: string
-                                name:
-                                  type: string
-                                port:
-                                  format: int32
-                                  type: integer
-                                protocol:
-                                  type: string
-                                tls:
-                                  properties:
-                                    certificateRef:
-                                      properties:
-                                        name:
-                                          type: string
-                                        namespace:
-                                          type: string
-                                      required:
-                                      - name
-                                      type: object
-                                    mode:
-                                      type: string
-                                  type: object
-                              required:
-                              - name
-                              - port
-                              - protocol
-                              type: object
-                            type: array
-                          managed:
-                            default: false
-                            description: |-
-                              Managed controls whether the operator creates and manages the Gateway resource.
-                              When false (default), gatewayRef must reference an existing Gateway.
-                            type: boolean
-                        type: object
-                      listenerName:
-                        description: ListenerName selects which listener on the Gateway
-                          to attach HTTPRoutes to.
-                        type: string
-                    required:
-                    - gateway
-                    type: object
-                  ingress:
-                    properties:
-                      ingressClassName:
-                        type: string
-                    type: object
-                  mode:
-                    description: |-
-                      Mode selects the networking strategy: "Ingress" or "GatewayAPI".
-                      Empty/unset means no operator-managed ingress (preserves current NodePort behavior).
                     enum:
                     - ""
                     - ingress
@@ -4177,6 +3962,15 @@ spec:
                     items:
                       type: string
                     type: array
+                  gatewayRef:
+                    properties:
+                      name:
+                        type: string
+                      namespace:
+                        type: string
+                    required:
+                    - name
+                    type: object
                   name:
                     type: string
                   ready:
@@ -4201,57 +3995,24 @@ spec:
                 properties:
                   loadBalancerIngress:
                     items:
-                      description: |-
-                        LoadBalancerIngress represents the status of a load-balancer ingress point:
-                        traffic intended for the service should be sent to an ingress point.
                       properties:
                         hostname:
-                          description: |-
-                            Hostname is set for load-balancer ingress points that are DNS based
-                            (typically AWS load-balancers)
                           type: string
                         ip:
-                          description: |-
-                            IP is set for load-balancer ingress points that are IP based
-                            (typically GCE or OpenStack load-balancers)
                           type: string
                         ipMode:
-                          description: |-
-                            IPMode specifies how the load-balancer IP behaves, and may only be specified when the ip field is specified.
-                            Setting this to "VIP" indicates that traffic is delivered to the node with
-                            the destination set to the load-balancer's IP and port.
-                            Setting this to "Proxy" indicates that traffic is delivered to the node or pod with
-                            the destination set to the node's IP and node port or the pod's IP and port.
-                            Service implementations may use this information to adjust traffic routing.
                           type: string
                         ports:
-                          description: |-
-                            Ports is a list of records of service ports
-                            If used, every port defined in the service should have an entry in it
                           items:
-                            description: PortStatus represents the error condition
-                              of a service port
                             properties:
                               error:
-                                description: |-
-                                  Error is to record the problem with the service port
-                                  The format of the error shall comply with the following rules:
-                                  - built-in error values shall be specified in this file and those shall use
-                                    CamelCase names
-                                  - cloud provider specific error values must have names that comply with the
-                                    format foo.example.com/CamelCase.
                                 maxLength: 316
                                 pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
                                 type: string
                               port:
-                                description: Port is the port number of the service
-                                  port of which status is recorded here
                                 format: int32
                                 type: integer
                               protocol:
-                                description: |-
-                                  Protocol is the protocol of the service port of which status is recorded here
-                                  The supported values are: "TCP", "UDP", "SCTP"
                                 type: string
                             required:
                             - error
@@ -4319,6 +4080,32 @@ spec:
                         type: object
                         x-kubernetes-map-type: atomic
                       brokerEndpoint:
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            default: ""
+                            type: string
+                          optional:
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
+                      host:
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            default: ""
+                            type: string
+                          optional:
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
+                      port:
                         properties:
                           key:
                             type: string

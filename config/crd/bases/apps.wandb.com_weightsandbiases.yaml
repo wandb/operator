@@ -2946,8 +2946,6 @@ spec:
                                 type: object
                             type: object
                         type: object
-                      deploymentType:
-                        type: string
                       name:
                         type: string
                       namespace:
@@ -2989,8 +2987,6 @@ spec:
                               type: string
                           type: object
                         type: array
-                    required:
-                    - deploymentType
                     type: object
                 type: object
               networking:

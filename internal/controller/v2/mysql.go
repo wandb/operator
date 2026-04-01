@@ -8,15 +8,11 @@ import (
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/infra/external"
 	externalmysql "github.com/wandb/operator/internal/controller/infra/external/mysql"
-	"github.com/wandb/operator/internal/controller/infra/managed/mysql/mariadb"
 	"github.com/wandb/operator/internal/controller/infra/managed/mysql/mysql"
-	"github.com/wandb/operator/internal/controller/infra/managed/mysql/percona"
 	"github.com/wandb/operator/internal/controller/translator"
 	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
 	"github.com/wandb/operator/pkg/utils"
-	"github.com/wandb/operator/pkg/vendored/mariadb-operator/k8s.mariadb.com/v1alpha1"
 	mysqlv2 "github.com/wandb/operator/pkg/vendored/mysql-operator/v2"
-	"github.com/wandb/operator/pkg/vendored/percona-operator/pxc/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -98,14 +94,7 @@ func mysqlDetachFinalizer(
 		return nil
 	}
 	specNamespacedName := managedMysqlSpecNamespacedName(spec)
-	switch spec.DeploymentType {
-	case apiv2.MySQLTypeMariadb:
-		return mariadb.DetachFinalizer(ctx, client, specNamespacedName, wandb)
-	case apiv2.MySQLTypePercona:
-		return percona.DetachFinalizer(ctx, client, specNamespacedName, wandb)
-	default:
-		return mysql.DetachFinalizer(ctx, client, specNamespacedName, wandb)
-	}
+	return mysql.DetachFinalizer(ctx, client, specNamespacedName, wandb)
 }
 
 // managed
@@ -178,59 +167,23 @@ func managedMysqlWriteState(
 		}
 	}
 
-	if spec.DeploymentType == apiv2.MySQLTypeMysql {
-		if conditions := mysql.CheckDetached(ctx, client, specNamespacedName, wandb.GetUID(), spec.Replicas); conditions != nil {
-			return conditions
-		}
+	if conditions := mysql.CheckDetached(ctx, client, specNamespacedName, wandb.GetUID(), spec.Replicas); conditions != nil {
+		return conditions
 	}
 
-	switch spec.DeploymentType {
-	case apiv2.MySQLTypePercona:
-		var desired *v1.PerconaXtraDBCluster
-		desired, err = translatorv2.ToPerconaMySQLVendorSpec(ctx, wandb, client.Scheme())
-		if err != nil {
-			logger.Error(err, "failed to translate mysql spec")
-			return []metav1.Condition{
-				{
-					Type:   common.ReconciledType,
-					Status: metav1.ConditionFalse,
-					Reason: common.ControllerErrorReason,
-				},
-			}
+	var desired *mysqlv2.InnoDBCluster
+	desired, err = translatorv2.ToMysqlMySQLVendorSpec(ctx, *spec, wandb, client.Scheme())
+	if err != nil {
+		logger.Error(err, "failed to translate mysql spec")
+		return []metav1.Condition{
+			{
+				Type:   common.ReconciledType,
+				Status: metav1.ConditionFalse,
+				Reason: common.ControllerErrorReason,
+			},
 		}
-
-		results := percona.WriteState(ctx, client, specNamespacedName, desired)
-		return results
-	case apiv2.MySQLTypeMariadb:
-		var desired *v1alpha1.MariaDB
-		desired, err = translatorv2.ToMariaDBMySQLVendorSpec(ctx, *spec, wandb, client.Scheme())
-		if err != nil {
-			logger.Error(err, "failed to translate mysql spec")
-			return []metav1.Condition{
-				{
-					Type:   common.ReconciledType,
-					Status: metav1.ConditionFalse,
-					Reason: common.ControllerErrorReason,
-				},
-			}
-		}
-		return mariadb.WriteState(ctx, client, specNamespacedName, desired)
-	case apiv2.MySQLTypeMysql:
-		var desired *mysqlv2.InnoDBCluster
-		desired, err = translatorv2.ToMysqlMySQLVendorSpec(ctx, *spec, wandb, client.Scheme())
-		if err != nil {
-			logger.Error(err, "failed to translate mysql spec")
-			return []metav1.Condition{
-				{
-					Type:   common.ReconciledType,
-					Status: metav1.ConditionFalse,
-					Reason: common.ControllerErrorReason,
-				},
-			}
-		}
-		return mysql.WriteState(ctx, client, specNamespacedName, desired, translatorv2.BuildWandbMysqlLabels(wandb))
 	}
-	return nil
+	return mysql.WriteState(ctx, client, specNamespacedName, desired, translatorv2.BuildWandbMysqlLabels(wandb))
 }
 
 func managedMysqlReadState(
@@ -240,21 +193,9 @@ func managedMysqlReadState(
 	newConditions []metav1.Condition,
 ) ([]metav1.Condition, *translator.MysqlConnection) {
 	spec := wandb.Spec.MySQL.ManagedMysql
-
 	specNamespacedName := managedMysqlSpecNamespacedName(spec)
 
-	var readConditions []metav1.Condition
-	var newInfraConn *translator.MysqlConnection
-
-	switch spec.DeploymentType {
-	case apiv2.MySQLTypeMariadb:
-		readConditions, newInfraConn = mariadb.ReadState(ctx, client, specNamespacedName, wandb)
-	case apiv2.MySQLTypeMysql:
-		readConditions, newInfraConn = mysql.ReadState(ctx, client, specNamespacedName, wandb, translatorv2.ToMysqlOnDeleteRule(wandb, wandb.GetRetentionPolicy(spec.ManagedInfraSpec)))
-	case apiv2.MySQLTypePercona:
-		readConditions, newInfraConn = percona.ReadState(ctx, client, specNamespacedName, wandb)
-	}
-
+	readConditions, newInfraConn := mysql.ReadState(ctx, client, specNamespacedName, wandb, translatorv2.ToMysqlOnDeleteRule(wandb, wandb.GetRetentionPolicy(spec.ManagedInfraSpec)))
 	newConditions = append(newConditions, readConditions...)
 	return newConditions, newInfraConn
 }
@@ -267,46 +208,18 @@ func managedMysqlInferStatus(
 	newConditions []metav1.Condition,
 	newInfraConn *translator.MysqlConnection,
 ) (ctrl.Result, error) {
-	spec := wandb.Spec.MySQL.ManagedMysql
-
 	enabled := true
 	oldConditions := wandb.Status.MySQLStatus.Conditions
 	oldInfraConn := translatorv2.ToTranslatorMysqlConnection(wandb.Status.MySQLStatus.Connection)
 
-	var updatedStatus translator.MysqlStatus
-	var events []corev1.Event
-	var ctrlResult ctrl.Result
-
-	fmt.Println(spec.DeploymentType)
-	switch spec.DeploymentType {
-	case apiv2.MySQLTypeMariadb:
-		updatedStatus, events, ctrlResult = mariadb.ComputeStatus(
-			ctx,
-			enabled,
-			oldConditions,
-			newConditions,
-			utils.Coalesce(newInfraConn, &oldInfraConn),
-			wandb.Generation,
-		)
-	case apiv2.MySQLTypeMysql:
-		updatedStatus, events, ctrlResult = mysql.ComputeStatus(
-			ctx,
-			enabled,
-			oldConditions,
-			newConditions,
-			utils.Coalesce(newInfraConn, &oldInfraConn),
-			wandb.Generation,
-		)
-	case apiv2.MySQLTypePercona:
-		updatedStatus, events, ctrlResult = percona.ComputeStatus(
-			ctx,
-			enabled,
-			oldConditions,
-			newConditions,
-			utils.Coalesce(newInfraConn, &oldInfraConn),
-			wandb.Generation,
-		)
-	}
+	updatedStatus, events, ctrlResult := mysql.ComputeStatus(
+		ctx,
+		enabled,
+		oldConditions,
+		newConditions,
+		utils.Coalesce(newInfraConn, &oldInfraConn),
+		wandb.Generation,
+	)
 
 	for _, e := range events {
 		recorder.Event(wandb, e.Type, e.Reason, e.Message)

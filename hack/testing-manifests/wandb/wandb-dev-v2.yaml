@@ -16,7 +16,6 @@ spec:
     onDelete: detach
   mysql:
     managedMysql:
-      deploymentType: "mysql"
       telemetry:
         enabled: true
   redis:
