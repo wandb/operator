@@ -2337,8 +2337,6 @@ spec:
                                 type: object
                             type: object
                         type: object
-                      deploymentType:
-                        type: string
                       name:
                         type: string
                       namespace:
@@ -2380,8 +2378,6 @@ spec:
                               type: string
                           type: object
                         type: array
-                    required:
-                    - deploymentType
                     type: object
                 type: object
               networking:
@@ -3081,96 +3077,6 @@ spec:
                               type: string
                           type: object
                         type: array
-                    type: object
-                type: object
-              networking:
-                properties:
-                  annotations:
-                    additionalProperties:
-                      type: string
-                    type: object
-                  gatewayAPI:
-                    properties:
-                      gateway:
-                        properties:
-                          annotations:
-                            additionalProperties:
-                              type: string
-                            type: object
-                          gatewayClassName:
-                            type: string
-                          gatewayRef:
-                            properties:
-                              name:
-                                type: string
-                              namespace:
-                                type: string
-                            required:
-                            - name
-                            type: object
-                          listeners:
-                            items:
-                              properties:
-                                hostname:
-                                  type: string
-                                name:
-                                  type: string
-                                port:
-                                  format: int32
-                                  type: integer
-                                protocol:
-                                  type: string
-                                tls:
-                                  properties:
-                                    certificateRef:
-                                      properties:
-                                        name:
-                                          type: string
-                                        namespace:
-                                          type: string
-                                      required:
-                                      - name
-                                      type: object
-                                    mode:
-                                      type: string
-                                  type: object
-                              required:
-                              - name
-                              - port
-                              - protocol
-                              type: object
-                            type: array
-                          managed:
-                            default: false
-                            type: boolean
-                        type: object
-                      listenerName:
-                        type: string
-                    required:
-                    - gateway
-                    type: object
-                  ingress:
-                    properties:
-                      ingressClassName:
-                        type: string
-                    type: object
-                  mode:
-                    enum:
-                    - ""
-                    - ingress
-                    - gateway
-                    type: string
-                  tls:
-                    properties:
-                      certManager:
-                        properties:
-                          clusterIssuer:
-                            type: string
-                          issuer:
-                            type: string
-                        type: object
-                      secretName:
-                        type: string
                     type: object
                 type: object
               redis:
@@ -4174,32 +4080,6 @@ spec:
                         type: object
                         x-kubernetes-map-type: atomic
                       brokerEndpoint:
-                        properties:
-                          key:
-                            type: string
-                          name:
-                            default: ""
-                            type: string
-                          optional:
-                            type: boolean
-                        required:
-                        - key
-                        type: object
-                        x-kubernetes-map-type: atomic
-                      host:
-                        properties:
-                          key:
-                            type: string
-                          name:
-                            default: ""
-                            type: string
-                          optional:
-                            type: boolean
-                        required:
-                        - key
-                        type: object
-                        x-kubernetes-map-type: atomic
-                      port:
                         properties:
                           key:
                             type: string
