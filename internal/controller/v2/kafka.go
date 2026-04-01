@@ -5,16 +5,16 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
-	"github.com/wandb/operator/internal/controller/infra/kafka/strimzi"
+	"github.com/wandb/operator/internal/controller/infra/external"
+	externalkafka "github.com/wandb/operator/internal/controller/infra/external/kafka"
+	"github.com/wandb/operator/internal/controller/infra/managed/kafka/strimzi"
 	"github.com/wandb/operator/internal/controller/translator"
 	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
 	"github.com/wandb/operator/pkg/utils"
 	"github.com/wandb/operator/pkg/vendored/strimzi-kafka/v1"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
-	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -76,10 +76,7 @@ func kafkaPurgeFinalizer(
 		return strimzi.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule)
 	}
 	if wandb.Spec.Kafka.ExternalKafka != nil {
-		return deleteWandbConnectionSecret(ctx, client, types.NamespacedName{
-			Namespace: wandb.Namespace,
-			Name:      kafkaConnectionName,
-		})
+		return externalkafka.DeleteConnectionSecret(ctx, client, wandb)
 	}
 	return nil
 }
@@ -199,101 +196,22 @@ func managedKafkaInferStatus(
 
 // external
 
-func externalKafkaWriteState(
-	ctx context.Context,
-	c client.Client,
-	wandb *apiv2.WeightsAndBiases,
-) []metav1.Condition {
-	spec := wandb.Spec.Kafka.ExternalKafka
-	logger := ctrl.LoggerFrom(ctx)
-
-	fields := map[string]corev1.SecretKeySelector{
-		"url":            spec.URL,
-		"BrokerEndpoint": spec.BrokerEndpoint,
-		"Host":           spec.Host,
-		"Port":           spec.Port,
-	}
-
-	data := map[string]string{}
-	for key, sel := range fields {
-		val, err := resolveSecretKey(ctx, c, wandb.Namespace, sel)
-		if err != nil {
-			logger.Error(err, "failed to resolve external kafka field", "key", key)
-			return []metav1.Condition{{
-				Type:   common.ReconciledType,
-				Status: metav1.ConditionFalse,
-				Reason: common.ApiErrorReason,
-			}}
-		}
-		if val != "" {
-			data[key] = val
-		}
-	}
-
-	nsName := types.NamespacedName{Namespace: wandb.Namespace, Name: kafkaConnectionName}
-	return writeExternalConnectionSecret(ctx, c, wandb, nsName, data)
+func externalKafkaWriteState(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases) []metav1.Condition {
+	return externalkafka.WriteState(ctx, c, wandb)
 }
 
-func externalKafkaReadState(
-	ctx context.Context,
-	c client.Client,
-	wandb *apiv2.WeightsAndBiases,
-	newConditions []metav1.Condition,
-) ([]metav1.Condition, *translator.KafkaConnection) {
-	nsName := types.NamespacedName{Namespace: wandb.Namespace, Name: kafkaConnectionName}
-	secret := &corev1.Secret{}
-	found, err := common.GetResource(ctx, c, nsName, "Secret", secret)
-	if err != nil {
-		return append(newConditions, metav1.Condition{
-			Type:   common.ReconciledType,
-			Status: metav1.ConditionFalse,
-			Reason: common.ApiErrorReason,
-		}), nil
-	}
-	if !found {
-		return newConditions, nil
-	}
-
-	localRef := corev1.LocalObjectReference{Name: nsName.Name}
-	return newConditions, &translator.KafkaConnection{
-		URL:            corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "url", Optional: ptr.To(false)},
-		BrokerEndpoint: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "BrokerEndpoint", Optional: ptr.To(false)},
-		Host:           corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Host", Optional: ptr.To(false)},
-		Port:           corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Port", Optional: ptr.To(false)},
-	}
+func externalKafkaReadState(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, newConditions []metav1.Condition) ([]metav1.Condition, *translator.KafkaConnection) {
+	return externalkafka.ReadState(ctx, c, wandb, newConditions)
 }
 
-func externalKafkaInferStatus(
-	ctx context.Context,
-	c client.Client,
-	wandb *apiv2.WeightsAndBiases,
-	newConditions []metav1.Condition,
-	newInfraConn *translator.KafkaConnection,
-) (ctrl.Result, error) {
+func externalKafkaInferStatus(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, newConditions []metav1.Condition, newInfraConn *translator.KafkaConnection) (ctrl.Result, error) {
 	oldInfraConn := translatorv2.ToTranslatorKafkaConnection(wandb.Status.KafkaStatus.Connection)
+	state, ready, updatedConditions := external.InferExternalStatus(wandb.Status.KafkaStatus.Conditions, newConditions, wandb.Generation, newInfraConn != nil)
 	conn := utils.Coalesce(newInfraConn, &oldInfraConn)
 
-	state := common.HealthyState
-	ready := true
-	if newInfraConn == nil {
-		state = common.ErrorState
-		ready = false
-	}
-
-	updatedConditions := common.ComputeConditionUpdates(
-		wandb.Status.KafkaStatus.Conditions,
-		newConditions,
-		wandb.Generation,
-		translator.DefaultConditionExpiry,
-	)
-
 	wandb.Status.KafkaStatus = translatorv2.ToWbKafkaInfraStatus(translator.KafkaStatus{
-		InfraStatus: translator.InfraStatus{
-			Ready:      ready,
-			State:      state,
-			Conditions: updatedConditions,
-		},
-		Connection: *conn,
+		InfraStatus: translator.InfraStatus{Ready: ready, State: state, Conditions: updatedConditions},
+		Connection:  *conn,
 	})
 	return ctrl.Result{}, c.Status().Update(ctx, wandb)
 }

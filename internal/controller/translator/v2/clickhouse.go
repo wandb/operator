@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	apiv2 "github.com/wandb/operator/api/v2"
-	"github.com/wandb/operator/internal/controller/infra/clickhouse/altinity"
+	"github.com/wandb/operator/internal/controller/infra/managed/clickhouse/altinity"
 	"github.com/wandb/operator/internal/controller/translator"
 	"github.com/wandb/operator/internal/logx"
 	"github.com/wandb/operator/pkg/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"

@@ -6,7 +6,7 @@ import (
 	"strconv"
 
 	apiv2 "github.com/wandb/operator/api/v2"
-	"github.com/wandb/operator/internal/controller/infra/kafka/strimzi"
+	"github.com/wandb/operator/internal/controller/infra/managed/kafka/strimzi"
 	"github.com/wandb/operator/internal/controller/translator"
 	"github.com/wandb/operator/internal/logx"
 	"github.com/wandb/operator/pkg/vendored/strimzi-kafka/v1"

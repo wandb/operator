@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	apiv2 "github.com/wandb/operator/api/v2"
-	"github.com/wandb/operator/internal/controller/infra/redis/opstree"
+	"github.com/wandb/operator/internal/controller/infra/managed/redis/opstree"
 	"github.com/wandb/operator/internal/controller/translator"
 	"github.com/wandb/operator/internal/logx"
 	rediscommon "github.com/wandb/operator/pkg/vendored/redis-operator/common/v1beta2"

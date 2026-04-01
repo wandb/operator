@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	apiv2 "github.com/wandb/operator/api/v2"
-	"github.com/wandb/operator/internal/controller/infra/mysql/mariadb"
+	"github.com/wandb/operator/internal/controller/infra/managed/mysql/mariadb"
 	"github.com/wandb/operator/internal/logx"
 	"github.com/wandb/operator/pkg/vendored/mariadb-operator/k8s.mariadb.com/v1alpha1"
 	corev1 "k8s.io/api/core/v1"

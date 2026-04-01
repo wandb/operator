@@ -29,7 +29,7 @@ import (
 	"github.com/samber/lo"
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/ctrlqueue"
-	"github.com/wandb/operator/internal/controller/infra/mysql/mysql"
+	"github.com/wandb/operator/internal/controller/infra/managed/mysql/mysql"
 	"github.com/wandb/operator/internal/logx"
 	oputils "github.com/wandb/operator/pkg/utils"
 	strimziv1 "github.com/wandb/operator/pkg/vendored/strimzi-kafka/v1"

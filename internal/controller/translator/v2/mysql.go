@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	apiv2 "github.com/wandb/operator/api/v2"
-	"github.com/wandb/operator/internal/controller/infra/mysql/mysql"
+	"github.com/wandb/operator/internal/controller/infra/managed/mysql/mysql"
 	"github.com/wandb/operator/internal/controller/translator"
 	"github.com/wandb/operator/internal/logx"
 	v2 "github.com/wandb/operator/pkg/vendored/mysql-operator/v2"

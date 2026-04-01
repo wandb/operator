@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	apiv2 "github.com/wandb/operator/api/v2"
-	"github.com/wandb/operator/internal/controller/infra/minio/tenant"
+	"github.com/wandb/operator/internal/controller/infra/managed/minio/tenant"
 	"github.com/wandb/operator/internal/controller/translator"
 	"github.com/wandb/operator/internal/logx"
 	miniov2 "github.com/wandb/operator/pkg/vendored/minio-operator/minio.min.io/v2"
