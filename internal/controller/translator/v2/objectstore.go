@@ -17,10 +17,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
-// createMinioTelemetryEnv creates environment variables for MinIO telemetry if enabled.
-// Disables authentication for Prometheus metrics endpoint in dev environments.
-// Returns nil if telemetry is disabled.
-func createMinioTelemetryEnv(telemetry apiv2.Telemetry) []corev1.EnvVar {
+func createObjectStoreTelemetryEnv(telemetry apiv2.Telemetry) []corev1.EnvVar {
 	if !telemetry.Enabled {
 		return nil
 	}
@@ -33,35 +30,29 @@ func createMinioTelemetryEnv(telemetry apiv2.Telemetry) []corev1.EnvVar {
 	}
 }
 
-// ToMinioVendorSpec converts a MinioSpec to a Minio Tenant CR.
-// This function translates the high-level Minio spec into the vendor-specific
-// Tenant format used by the Minio operator.
-func ToMinioVendorSpec(
+func ToObjectStoreVendorSpec(
 	ctx context.Context,
 	wandb *apiv2.WeightsAndBiases,
 	scheme *runtime.Scheme,
 ) (*miniov2.Tenant, error) {
-	ctx, log := logx.WithSlog(ctx, logx.Minio)
-	infraSpec := wandb.Spec.Minio.ManagedMinio
+	_, log := logx.WithSlog(ctx, logx.ObjectStore)
+	infraSpec := wandb.Spec.ObjectStore.ManagedObjectStore
 	if infraSpec == nil {
 		return nil, nil
 	}
 
 	specName := infraSpec.Name
 
-	// Parse storage quantity
 	storageQuantity, err := resource.ParseQuantity(infraSpec.StorageSize)
 	if err != nil {
 		return nil, fmt.Errorf("invalid storage size %q: %w", infraSpec.StorageSize, err)
 	}
 
-	// Determine volumes per server based on replica count
 	volumesPerServer := translator.DevVolumesPerServer
 	if infraSpec.Replicas > 1 {
 		volumesPerServer = translator.ProdVolumesPerServer
 	}
 
-	// Build Tenant spec
 	minioTenant := &miniov2.Tenant{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      tenant.TenantName(specName),
@@ -76,10 +67,10 @@ func ToMinioVendorSpec(
 				Name: tenant.ConfigName(specName),
 			},
 			ServiceMetadata: &miniov2.ServiceMetadata{
-				MinIOServiceLabels: BuildWandbMinioLabels(wandb),
+				MinIOServiceLabels: BuildWandbObjectStoreLabels(wandb),
 			},
 			PoolsMetadata: &miniov2.PoolsMetadata{
-				Labels: BuildWandbMinioLabels(wandb),
+				Labels: BuildWandbObjectStoreLabels(wandb),
 			},
 			Pools: []miniov2.Pool{
 				{
@@ -90,7 +81,7 @@ func ToMinioVendorSpec(
 					VolumesPerServer: volumesPerServer,
 					VolumeClaimTemplate: &corev1.PersistentVolumeClaim{
 						ObjectMeta: metav1.ObjectMeta{
-							Labels: BuildWandbMinioLabels(wandb),
+							Labels: BuildWandbObjectStoreLabels(wandb),
 						},
 						Spec: corev1.PersistentVolumeClaimSpec{
 							AccessModes: []corev1.PersistentVolumeAccessMode{
@@ -114,7 +105,6 @@ func ToMinioVendorSpec(
 		},
 	}
 
-	// Add resources if specified
 	if len(infraSpec.Config.Resources.Requests) > 0 || len(infraSpec.Config.Resources.Limits) > 0 {
 		minioTenant.Spec.Pools[0].Resources = corev1.ResourceRequirements{
 			Requests: infraSpec.Config.Resources.Requests,
@@ -122,10 +112,8 @@ func ToMinioVendorSpec(
 		}
 	}
 
-	// Add telemetry environment variables if enabled
-	minioTenant.Spec.Env = createMinioTelemetryEnv(infraSpec.Telemetry)
+	minioTenant.Spec.Env = createObjectStoreTelemetryEnv(infraSpec.Telemetry)
 
-	// Set owner reference
 	if err := ctrl.SetControllerReference(wandb, minioTenant, scheme); err != nil {
 		log.Error("failed to set owner reference on Tenant CR", logx.ErrAttr(err))
 		return nil, fmt.Errorf("failed to set owner reference: %w", err)
@@ -134,9 +122,9 @@ func ToMinioVendorSpec(
 	return minioTenant, nil
 }
 
-func ToMinioEnvConfig(
+func ToObjectStoreEnvConfig(
 	ctx context.Context,
-	spec apiv2.ManagedMinioSpec,
+	spec apiv2.ManagedObjectStoreSpec,
 ) (tenant.MinioEnvConfig, error) {
 	return tenant.MinioEnvConfig{
 		RootUser:            spec.Config.RootUser,
@@ -144,10 +132,10 @@ func ToMinioEnvConfig(
 	}, nil
 }
 
-func BuildWandbMinioLabels(wandb *apiv2.WeightsAndBiases) map[string]string {
-	return BuildWandbLabels(wandb, translator.MinioModuleName)
+func BuildWandbObjectStoreLabels(wandb *apiv2.WeightsAndBiases) map[string]string {
+	return BuildWandbLabels(wandb, translator.ObjectStoreModuleName)
 }
 
-func ToMinioOnDeleteRule(wandb *apiv2.WeightsAndBiases, retentionPolicy apiv2.RetentionPolicy) translator.OnDeleteRule {
-	return ToOnDeleteRule(wandb, retentionPolicy, translator.MinioModuleName)
+func ToObjectStoreOnDeleteRule(wandb *apiv2.WeightsAndBiases, retentionPolicy apiv2.RetentionPolicy) translator.OnDeleteRule {
+	return ToOnDeleteRule(wandb, retentionPolicy, translator.ObjectStoreModuleName)
 }

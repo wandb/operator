@@ -1,4 +1,4 @@
-package minio
+package objectstore
 
 import (
 	"context"
@@ -14,14 +14,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-const ConnectionSecretName = "wandb-minio-connection"
+const ConnectionSecretName = "wandb-objectstore-connection"
 
 func WriteState(
 	ctx context.Context,
 	c client.Client,
 	wandb *apiv2.WeightsAndBiases,
-) ([]metav1.Condition, *translator.MinioConnection) {
-	spec := wandb.Spec.Minio.ExternalMinio
+) ([]metav1.Condition, *translator.ObjectStoreConnection) {
+	spec := wandb.Spec.ObjectStore.ExternalObjectStore
 	logger := ctrl.LoggerFrom(ctx)
 
 	fields := map[string]corev1.SecretKeySelector{
@@ -35,7 +35,7 @@ func WriteState(
 
 	data, err := external.ResolveFields(ctx, c, wandb.Namespace, fields)
 	if err != nil {
-		logger.Error(err, "failed to resolve external minio fields")
+		logger.Error(err, "failed to resolve external object store fields")
 		return []metav1.Condition{{
 			Type:   "Reconciled",
 			Status: metav1.ConditionFalse,
@@ -49,7 +49,7 @@ func WriteState(
 	}
 
 	localRef := corev1.LocalObjectReference{Name: nsName.Name}
-	return nil, &translator.MinioConnection{
+	return nil, &translator.ObjectStoreConnection{
 		URL:       corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "url", Optional: ptr.To(false)},
 		Endpoint:  corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Endpoint", Optional: ptr.To(false)},
 		AccessKey: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "AccessKey", Optional: ptr.To(false)},

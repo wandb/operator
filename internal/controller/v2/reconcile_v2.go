@@ -185,8 +185,8 @@ func Reconcile(
 	if isFlaggedForDeletion && !wandb.GetDeletionTimestamp().IsZero() {
 		if ctrlqueue.ContainsString(wandb.GetFinalizers(), CleanupFinalizer) {
 
-			if wandb.Spec.Minio.ManagedMinio != nil {
-				if err = runRetentionFinalizer(ctx, client, wandb, wandb.Spec.Minio.ManagedMinio.ManagedInfraSpec, minioPurgeFinalizer, minioDetachFinalizer); err != nil {
+			if wandb.Spec.ObjectStore.ManagedObjectStore != nil {
+				if err = runRetentionFinalizer(ctx, client, wandb, wandb.Spec.ObjectStore.ManagedObjectStore.ManagedInfraSpec, objectStorePurgeFinalizer, objectStoreDetachFinalizer); err != nil {
 					return ctrl.Result{}, err
 				}
 			}
@@ -210,8 +210,8 @@ func Reconcile(
 					return ctrl.Result{}, err
 				}
 			}
-			if wandb.Spec.Minio.ExternalMinio != nil && wandb.Spec.RetentionPolicy.OnDelete == apiv2.PurgeOnDelete {
-				if err = minioPurgeFinalizer(ctx, client, wandb); err != nil {
+			if wandb.Spec.ObjectStore.ExternalObjectStore != nil && wandb.Spec.RetentionPolicy.OnDelete == apiv2.PurgeOnDelete {
+				if err = objectStorePurgeFinalizer(ctx, client, wandb); err != nil {
 					return ctrl.Result{}, err
 				}
 			}
@@ -284,7 +284,7 @@ func Reconcile(
 	redisConditions := redisWriteState(ctx, client, wandb)
 	mysqlConditions := mysqlWriteState(ctx, client, wandb)
 	kafkaConditions := kafkaWriteState(ctx, client, wandb)
-	minioConditions, minioConnection := minioWriteState(ctx, client, wandb)
+	objectStoreConditions, objectStoreConnection := objectStoreWriteState(ctx, client, wandb)
 	clickHouseConditions := clickHouseWriteState(ctx, client, wandb)
 
 	/////////////////////////
@@ -292,7 +292,7 @@ func Reconcile(
 	redisConditions, redisInfraConn := redisReadState(ctx, client, wandb, redisConditions)
 	mysqlConditions, mysqlInfraConn := mysqlReadState(ctx, client, wandb, mysqlConditions)
 	kafkaConditions, kafkaInfraConn := kafkaReadState(ctx, client, wandb, kafkaConditions)
-	minioConditions = minioReadState(ctx, client, wandb, minioConditions)
+	objectStoreConditions = objectStoreReadState(ctx, client, wandb, objectStoreConditions)
 	clickHouseConditions, clickHouseInfraConn := clickHouseReadState(ctx, client, wandb, clickHouseConditions)
 
 	/////////////////////////
@@ -315,7 +315,7 @@ func Reconcile(
 	}
 	ctrlResults = append(ctrlResults, res)
 
-	if res, err = minioInferStatus(ctx, client, recorder, wandb, minioConditions, minioConnection); err != nil {
+	if res, err = objectStoreInferStatus(ctx, client, recorder, wandb, objectStoreConditions, objectStoreConnection); err != nil {
 		errorCount++
 	}
 	ctrlResults = append(ctrlResults, res)
@@ -341,13 +341,13 @@ func Reconcile(
 	redisReady := wandb.Status.RedisStatus.Ready
 	mysqlReady := wandb.Status.MySQLStatus.Ready
 	kafkaReady := wandb.Status.KafkaStatus.Ready
-	minioReady := wandb.Status.MinioStatus.Ready
+	objectStoreReady := wandb.Status.ObjectStoreStatus.Ready
 	clickHouseReady := wandb.Status.ClickHouseStatus.Ready
 
-	if !redisReady || !mysqlReady || !kafkaReady || !minioReady || !clickHouseReady {
+	if !redisReady || !mysqlReady || !kafkaReady || !objectStoreReady || !clickHouseReady {
 		log := ctrl.LoggerFrom(ctx)
 		log.Info("Infra not ready in V2.Reconcile",
-			"redis", redisReady, "mysql", mysqlReady, "kafka", kafkaReady, "minio", minioReady, "clickhouse", clickHouseReady)
+			"redis", redisReady, "mysql", mysqlReady, "kafka", kafkaReady, "objectStore", objectStoreReady, "clickhouse", clickHouseReady)
 		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
 	}
 
@@ -386,12 +386,12 @@ func ReconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 	redisReady := wandb.Status.RedisStatus.Ready
 	mysqlReady := wandb.Status.MySQLStatus.Ready
 	kafkaReady := wandb.Status.KafkaStatus.Ready
-	minioReady := wandb.Status.MinioStatus.Ready
+	objectStoreReady := wandb.Status.ObjectStoreStatus.Ready
 	clickHouseReady := wandb.Status.ClickHouseStatus.Ready
 
-	if !redisReady || !mysqlReady || !kafkaReady || !minioReady || !clickHouseReady {
+	if !redisReady || !mysqlReady || !kafkaReady || !objectStoreReady || !clickHouseReady {
 		logger.Info("Infra components not ready yet, requeuing for reconciliation",
-			"redis", redisReady, "mysql", mysqlReady, "kafka", kafkaReady, "minio", minioReady, "clickhouse", clickHouseReady)
+			"redis", redisReady, "mysql", mysqlReady, "kafka", kafkaReady, "objectStore", objectStoreReady, "clickhouse", clickHouseReady)
 		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
 	}
 
@@ -981,11 +981,11 @@ func ApplyInfraSizing(wandb *apiv2.WeightsAndBiases, manifest serverManifest.Man
 		}
 	}
 
-	// Default Minio (bucket)
-	if wandb.Spec.Minio.ManagedMinio != nil {
-		if minioConfig, ok := manifest.Redis["default"]; ok {
-			sizing := ResolveInfraSizing(minioConfig.Sizing, size, wandb.Spec.RequireLimits)
-			spec := wandb.Spec.Minio.ManagedMinio
+	// Default ObjectStore (bucket)
+	if wandb.Spec.ObjectStore.ManagedObjectStore != nil {
+		if objectStoreConfig, ok := manifest.Redis["default"]; ok {
+			sizing := ResolveInfraSizing(objectStoreConfig.Sizing, size, wandb.Spec.RequireLimits)
+			spec := wandb.Spec.ObjectStore.ManagedObjectStore
 			if spec.Replicas == 0 && sizing.Replicas != 0 {
 				spec.Replicas = sizing.Replicas
 			}
@@ -1460,7 +1460,7 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *apiv2.
 				addSecretComponent(selector, idx)
 			case "bucket":
 				selector := corev1.SecretKeySelector{
-					LocalObjectReference: wandb.Status.MinioStatus.Connection.URL.LocalObjectReference,
+					LocalObjectReference: wandb.Status.ObjectStoreStatus.Connection.URL.LocalObjectReference,
 				}
 				switch src.Field {
 				case "host":
@@ -2301,12 +2301,12 @@ func inferState(
 	log := ctrl.LoggerFrom(ctx)
 
 	redisOk := wandb.Spec.Redis.ManagedRedis == nil || wandb.Status.RedisStatus.Ready
-	minioOk := wandb.Spec.Minio.ManagedMinio == nil || wandb.Status.MinioStatus.Ready
+	objectStoreOk := wandb.Spec.ObjectStore.ManagedObjectStore == nil || wandb.Status.ObjectStoreStatus.Ready
 	mysqlOk := wandb.Spec.MySQL.ManagedMysql == nil || wandb.Status.MySQLStatus.Ready
 	clickHouseOk := wandb.Spec.ClickHouse.ManagedClickHouse == nil || wandb.Status.ClickHouseStatus.Ready
 	kafkaOk := wandb.Spec.Kafka.ManagedKafka == nil || wandb.Status.KafkaStatus.Ready
 
-	if redisOk && minioOk && mysqlOk && clickHouseOk && kafkaOk {
+	if redisOk && objectStoreOk && mysqlOk && clickHouseOk && kafkaOk {
 		wandb.Status.Ready = true
 	} else {
 		wandb.Status.Ready = false

@@ -57,7 +57,7 @@ func writeWandbConnInfo(
 	nsnBuilder *NsNameBuilder,
 	connInfo *minioConnInfo,
 ) (
-	*translator.MinioConnection, error,
+	*translator.ObjectStoreConnection, error,
 ) {
 	var err error
 	var found bool
@@ -112,7 +112,7 @@ func writeWandbConnInfo(
 	}
 
 	localRef := corev1.LocalObjectReference{Name: nsName.Name}
-	return &translator.MinioConnection{
+	return &translator.ObjectStoreConnection{
 		URL:      corev1.SecretKeySelector{LocalObjectReference: localRef, Key: urlKey, Optional: ptr.To(false)},
 		Endpoint: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Host", Optional: ptr.To(false)},
 		Region:   corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Region", Optional: ptr.To(false)},

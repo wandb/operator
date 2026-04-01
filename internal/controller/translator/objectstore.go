@@ -4,7 +4,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-const MinioModuleName = "minio"
+const ObjectStoreModuleName = "minio"
 
 /////////////////////////////////////////////////
 // Minio Constants
@@ -16,9 +16,9 @@ const (
 )
 
 /////////////////////////////////////////////////
-// Minio Config
+// ObjectStore Config
 
-type MinioConfig struct {
+type ObjectStoreConfig struct {
 	Enabled   bool
 	Namespace string
 	Name      string
@@ -38,9 +38,9 @@ type MinioConfig struct {
 }
 
 /////////////////////////////////////////////////
-// Minio Connection
+// ObjectStore Connection
 
-type MinioConnection struct {
+type ObjectStoreConnection struct {
 	Endpoint  corev1.SecretKeySelector
 	AccessKey corev1.SecretKeySelector
 	SecretKey corev1.SecretKeySelector
@@ -50,9 +50,9 @@ type MinioConnection struct {
 }
 
 /////////////////////////////////////////////////
-// Minio Status
+// ObjectStore Status
 
-type MinioStatus struct {
+type ObjectStoreStatus struct {
 	InfraStatus
-	Connection MinioConnection
+	Connection ObjectStoreConnection
 }

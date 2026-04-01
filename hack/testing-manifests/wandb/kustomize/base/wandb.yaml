@@ -26,8 +26,8 @@ spec:
     managedKafka:
       telemetry:
         enabled: true
-  minio:
-    managedMinio:
+  objectStore:
+    managedObjectStore:
       telemetry:
         enabled: true
   clickhouse:

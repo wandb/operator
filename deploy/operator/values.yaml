@@ -94,7 +94,7 @@ wandb-operator:
     clickhouse: true
     grafana: true
     kafka: true
-    minio: true
+    objectStore: true
     mysql: true
     redis: true
     vm: true

@@ -51,7 +51,7 @@ func DetachFinalizer(
 	specNamespacedName types.NamespacedName,
 	wandbOwner client.Object,
 ) error {
-	ctx, log := logx.WithSlog(ctx, logx.Minio)
+	ctx, log := logx.WithSlog(ctx, logx.ObjectStore)
 	nsnBuilder := createNsNameBuilder(specNamespacedName)
 
 	var actual = &miniov2.Tenant{}

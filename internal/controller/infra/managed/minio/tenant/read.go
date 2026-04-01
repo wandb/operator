@@ -18,7 +18,7 @@ func ReadState(
 	specNamespacedName types.NamespacedName,
 	onDeleteRule translator.OnDeleteRule,
 ) []metav1.Condition {
-	ctx, _ = logx.WithSlog(ctx, logx.Minio)
+	ctx, _ = logx.WithSlog(ctx, logx.ObjectStore)
 	log := logx.GetSlog(ctx)
 
 	var actualResource = &miniov2.Tenant{}

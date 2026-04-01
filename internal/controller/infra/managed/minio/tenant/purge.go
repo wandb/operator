@@ -18,7 +18,7 @@ func PurgeFinalizer(
 	specNamespacedName types.NamespacedName,
 	onDeleteRule translator.OnDeleteRule,
 ) error {
-	ctx, _ = logx.WithSlog(ctx, logx.Minio)
+	ctx, _ = logx.WithSlog(ctx, logx.ObjectStore)
 	if onDeleteRule.Policy != translator.Purge {
 		return nil
 	}
