@@ -1,0 +1,28 @@
+apiVersion: apps.wandb.com/v2
+kind: WeightsAndBiases
+metadata:
+  name: wandb
+spec:
+  minio:
+    managedMinio: null
+    externalMinio:
+      # required
+      endpoint:
+        name: external-minio-connection
+        key: Host
+      bucket:
+        name: external-minio-connection
+        key: Bucket
+      region:
+        name: external-minio-connection
+        key: Region
+      URL:
+        name: external-minio-connection
+        key: url
+      # optional
+      # accessKey:
+      #   name: external-minio-connection
+      #   key: AccessKey
+      # secretKey:
+      #   name: external-minio-connection
+      #   key: SecretKey

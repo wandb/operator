@@ -14,6 +14,8 @@ SETTINGS = {
     #    sizes: "size-small", "size-micro",
     #    retention policies: "purge-retention",
     #    server version: "server-version-0.78.0"
+    #    external infra: "external-mysql", "external-redis", "external-kafka",
+    #                     "external-minio", "external-clickhouse"
     # Default (empty list) uses base which is size=dev, retentionPolicy.onDelete=detach, version=0.79.0
     "wandbOverlays": [],
 }

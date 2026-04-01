@@ -1,0 +1,27 @@
+apiVersion: apps.wandb.com/v2
+kind: WeightsAndBiases
+metadata:
+  name: wandb
+spec:
+  clickhouse:
+    managedClickhouse: null
+    externalClickhouse:
+      # required
+      host:
+        name: external-clickhouse-connection
+        key: Host
+      port:
+        name: external-clickhouse-connection
+        key: Port
+      database:
+        name: external-clickhouse-connection
+        key: Database
+      username:
+        name: external-clickhouse-connection
+        key: User
+      password:
+        name: external-clickhouse-connection
+        key: Password
+      URL:
+        name: external-clickhouse-connection
+        key: url
