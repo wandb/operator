@@ -46,6 +46,7 @@ rules:
   verbs:
   - get
   - list
+  - patch
   - watch
 - apiGroups:
   - apps
