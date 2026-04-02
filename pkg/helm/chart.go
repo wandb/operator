@@ -11,8 +11,6 @@ import (
 	"helm.sh/helm/v4/pkg/kube"
 	"helm.sh/helm/v4/pkg/release"
 	releasecommon "helm.sh/helm/v4/pkg/release/common"
-	releasev1 "helm.sh/helm/v4/pkg/release/v1"
-	releaseutil "helm.sh/helm/v4/pkg/release/v1/util"
 )
 
 const (
@@ -80,21 +78,23 @@ func (c *ActionableChart) isInstalled() bool {
 		return false
 	}
 
-	// Convert Releaser slice to concrete releases for sorting
-	concrete := make([]*releasev1.Release, 0, len(h))
+	// Find the release with the highest revision using the Accessor interface,
+	// which handles any concrete release type (not just v1).
+	var latest release.Accessor
 	for _, r := range h {
-		if rel, ok := r.(*releasev1.Release); ok {
-			concrete = append(concrete, rel)
+		acc, err := release.NewAccessor(r)
+		if err != nil {
+			continue
+		}
+		if latest == nil || acc.Version() > latest.Version() {
+			latest = acc
 		}
 	}
-	if len(concrete) == 0 {
+	if latest == nil {
 		return false
 	}
 
-	releaseutil.Reverse(concrete, releaseutil.SortByRevision)
-	st := concrete[0].Info.Status
-
-	return st != releasecommon.StatusUninstalled
+	return latest.Status() != releasecommon.StatusUninstalled.String()
 }
 
 func (c *ActionableChart) Apply(

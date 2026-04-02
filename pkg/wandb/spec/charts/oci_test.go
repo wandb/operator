@@ -185,15 +185,9 @@ var _ = Describe("OCIRelease", func() {
 
 			config = spec.Values{}
 
-			os.Setenv("HELM_CACHE_HOME", filepath.Join(os.TempDir(), "oci-test-cache"))
-			os.Setenv("HELM_CONFIG_HOME", filepath.Join(os.TempDir(), "oci-test-config"))
-			os.Setenv("HELM_DATA_HOME", filepath.Join(os.TempDir(), "oci-test-data"))
-		})
-
-		AfterEach(func() {
-			os.Unsetenv("HELM_CACHE_HOME")
-			os.Unsetenv("HELM_CONFIG_HOME")
-			os.Unsetenv("HELM_DATA_HOME")
+			GinkgoT().Setenv("HELM_CACHE_HOME", filepath.Join(os.TempDir(), "oci-test-cache"))
+			GinkgoT().Setenv("HELM_CONFIG_HOME", filepath.Join(os.TempDir(), "oci-test-config"))
+			GinkgoT().Setenv("HELM_DATA_HOME", filepath.Join(os.TempDir(), "oci-test-data"))
 		})
 
 		Context("with valid credential secret", func() {
