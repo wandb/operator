@@ -8,21 +8,21 @@ spec:
     externalObjectStore:
       # required
       endpoint:
-        name: external-minio-connection
+        name: external-objectstore-connection
         key: Host
       bucket:
-        name: external-minio-connection
+        name: external-objectstore-connection
         key: Bucket
       region:
-        name: external-minio-connection
+        name: external-objectstore-connection
         key: Region
       URL:
-        name: external-minio-connection
+        name: external-objectstore-connection
         key: url
       # optional
       # accessKey:
-      #   name: external-minio-connection
+      #   name: external-objectstore-connection
       #   key: AccessKey
       # secretKey:
-      #   name: external-minio-connection
+      #   name: external-objectstore-connection
       #   key: SecretKey

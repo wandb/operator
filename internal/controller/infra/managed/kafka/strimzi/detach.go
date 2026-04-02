@@ -8,6 +8,7 @@ import (
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/logx"
 	v1 "github.com/wandb/operator/pkg/vendored/strimzi-kafka/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -56,7 +57,10 @@ func DetachFinalizer(
 	if err := detachKafka(ctx, cl, log, nsnBuilder, wandbOwner); err != nil {
 		return err
 	}
-	return detachNodePool(ctx, cl, log, nsnBuilder, wandbOwner)
+	if err := detachNodePool(ctx, cl, log, nsnBuilder, wandbOwner); err != nil {
+		return err
+	}
+	return detachConnectionSecret(ctx, cl, log, nsnBuilder, wandbOwner)
 }
 
 func detachKafka(
@@ -122,5 +126,26 @@ func detachNodePool(
 		return err
 	}
 	log.Info("detached KafkaNodePool CR", "name", actual.Name)
+	return nil
+}
+
+func detachConnectionSecret(ctx context.Context, cl client.Client, log *slog.Logger, nsnBuilder *NsNameBuilder, wandbOwner client.Object) error {
+	secret := &corev1.Secret{}
+	found, err := common.GetResource(ctx, cl, nsnBuilder.ConnectionNsName(), "Secret", secret)
+	if err != nil || !found {
+		return err
+	}
+	if common.IsDetached(secret, wandbOwner.GetUID()) {
+		return nil
+	}
+	common.RemoveOwnerReference(secret, wandbOwner.GetUID())
+	if err = cl.Update(ctx, secret); err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
+		log.Error("error detaching connection secret", logx.ErrAttr(err))
+		return err
+	}
+	log.Info("detached connection secret", "name", nsnBuilder.ConnectionNsName().Name)
 	return nil
 }

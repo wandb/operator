@@ -9,6 +9,7 @@ import (
 	redisv1beta2 "github.com/wandb/operator/pkg/vendored/redis-operator/redis/v1beta2"
 	redisreplicationv1beta2 "github.com/wandb/operator/pkg/vendored/redis-operator/redisreplication/v1beta2"
 	redissentinelv1beta2 "github.com/wandb/operator/pkg/vendored/redis-operator/redissentinel/v1beta2"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -48,7 +49,10 @@ func DetachFinalizer(
 	if err := detachResource(ctx, cl, log, nsnBuilder.SentinelNsName(), SentinelType, &redissentinelv1beta2.RedisSentinel{}, wandbOwner); err != nil {
 		return err
 	}
-	return detachResource(ctx, cl, log, nsnBuilder.ReplicationNsName(), ReplicationType, &redisreplicationv1beta2.RedisReplication{}, wandbOwner)
+	if err := detachResource(ctx, cl, log, nsnBuilder.ReplicationNsName(), ReplicationType, &redisreplicationv1beta2.RedisReplication{}, wandbOwner); err != nil {
+		return err
+	}
+	return detachResource(ctx, cl, log, nsnBuilder.ConnectionNsName(), "Secret", &corev1.Secret{}, wandbOwner)
 }
 
 func detachResource[T client.Object](

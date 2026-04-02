@@ -71,6 +71,10 @@ func ReadState(
 		Database: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Database", Optional: ptr.To(false)},
 		Username: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Username", Optional: ptr.To(false)},
 		Password: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Password", Optional: ptr.To(false)},
+		Tls:      corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Tls", Optional: ptr.To(true)},
+		SslCa:    corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "SslCa", Optional: ptr.To(true)},
+		SslCert:  corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "SslCert", Optional: ptr.To(true)},
+		SslKey:   corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "SslKey", Optional: ptr.To(true)},
 	}
 }
 
