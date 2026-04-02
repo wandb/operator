@@ -85,15 +85,15 @@ func (r OCIRelease) pullChart() (*chart.Chart, error) {
 		return nil, fmt.Errorf("failed to pull chart from %s: %w", r.URL, err)
 	}
 
+	if result.Chart == nil {
+		return nil, fmt.Errorf("registry returned empty chart for %s", r.URL)
+	}
+
 	if r.Debug {
 		log.Info("Chart pulled successfully",
 			"name", result.Chart.Meta.Name,
 			"version", result.Chart.Meta.Version,
 			"size", result.Chart.Size)
-	}
-
-	if result.Chart == nil {
-		return nil, fmt.Errorf("registry returned empty chart for %s", r.URL)
 	}
 
 	// Load the chart directly from the pulled bytes

@@ -112,9 +112,10 @@ var _ = Describe("OCIRelease", func() {
 			Expect(result).To(BeAssignableToTypeOf(&LocalRelease{}))
 		})
 
-		It("should not match OCI URL as RepoRelease", func() {
+		It("should not match OCI URL as RepoRelease even with name field", func() {
 			input := map[string]interface{}{
 				"url":     "oci://ghcr.io/wandb/charts/wandb",
+				"name":    "wandb",
 				"version": "1.0.0",
 			}
 			release := new(RepoRelease)

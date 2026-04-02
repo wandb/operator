@@ -17,6 +17,7 @@ import (
 	"helm.sh/helm/v4/pkg/cli"
 	"helm.sh/helm/v4/pkg/downloader"
 	"helm.sh/helm/v4/pkg/getter"
+	"helm.sh/helm/v4/pkg/registry"
 	repo "helm.sh/helm/v4/pkg/repo/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -27,7 +28,7 @@ const CredentialUsernameKey = "HELM_USERNAME"
 const CredentialPasswordKey = "HELM_PASSWORD"
 
 type RepoRelease struct {
-	URL  string `validate:"required,url" json:"url"`
+	URL  string `validate:"required,url,nonociurl" json:"url"`
 	Name string `validate:"required" json:"name"`
 
 	// If version is not set, download latest.
@@ -77,8 +78,14 @@ func (r RepoRelease) Chart() (*chart.Chart, error) {
 	return local.Chart()
 }
 
+func validateNonOCIURL(fl validator.FieldLevel) bool {
+	return !registry.IsOCI(fl.Field().String())
+}
+
 func (c RepoRelease) Validate() error {
-	return validator.New().Struct(c)
+	v := validator.New()
+	v.RegisterValidation("nonociurl", validateNonOCIURL)
+	return v.Struct(c)
 }
 
 func (r RepoRelease) ToLocalRelease() (*LocalRelease, error) {
