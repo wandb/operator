@@ -45,8 +45,16 @@ var _ = Describe("OCIRelease", func() {
 				Entry("ghcr.io", "oci://ghcr.io/wandb/charts/wandb"),
 				Entry("docker.io", "oci://docker.io/library/nginx"),
 				Entry("custom registry with port", "oci://registry.example.com:5000/charts/wandb"),
-				Entry("without version", "oci://ghcr.io/wandb/charts/wandb"),
 			)
+		})
+
+		Context("with missing version", func() {
+			It("should fail validation", func() {
+				ociRelease.Version = ""
+				err := ociRelease.Validate()
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("Version"))
+			})
 		})
 
 		Context("with missing URL", func() {

@@ -23,7 +23,7 @@ import (
 // The URL must use the oci:// scheme (e.g., oci://ghcr.io/wandb/helm-charts/operator-wandb).
 type OCIRelease struct {
 	URL     string `validate:"required,ociurl" json:"url"`
-	Version string `json:"version"`
+	Version string `validate:"required" json:"version"`
 
 	CredentialSecret *CredentialSecret `json:"credentialSecret,omitempty"`
 	Password         string            `json:"password"`
@@ -90,6 +90,10 @@ func (r OCIRelease) pullChart() (*chart.Chart, error) {
 			"name", result.Chart.Meta.Name,
 			"version", result.Chart.Meta.Version,
 			"size", result.Chart.Size)
+	}
+
+	if result.Chart == nil {
+		return nil, fmt.Errorf("registry returned empty chart for %s", r.URL)
 	}
 
 	// Load the chart directly from the pulled bytes
