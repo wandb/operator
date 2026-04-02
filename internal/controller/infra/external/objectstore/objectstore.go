@@ -26,7 +26,8 @@ func WriteState(
 
 	fields := map[string]corev1.SecretKeySelector{
 		"url":       spec.URL,
-		"Endpoint":  spec.Endpoint,
+		"Host":      spec.Endpoint,
+		"Port":      spec.Port,
 		"AccessKey": spec.AccessKey,
 		"SecretKey": spec.SecretKey,
 		"Bucket":    spec.Bucket,
@@ -51,7 +52,8 @@ func WriteState(
 	localRef := corev1.LocalObjectReference{Name: nsName.Name}
 	return nil, &translator.ObjectStoreConnection{
 		URL:       corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "url", Optional: ptr.To(false)},
-		Endpoint:  corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Endpoint", Optional: ptr.To(false)},
+		Endpoint:  corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Host", Optional: ptr.To(false)},
+		Port:      corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Port", Optional: ptr.To(true)},
 		AccessKey: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "AccessKey", Optional: ptr.To(false)},
 		SecretKey: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "SecretKey", Optional: ptr.To(false)},
 		Bucket:    corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Bucket", Optional: ptr.To(false)},

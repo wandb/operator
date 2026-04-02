@@ -142,5 +142,6 @@ func writeKafkaConnInfo(
 		Host:           corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Host", Optional: ptr.To(false)},
 		Port:           corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Port", Optional: ptr.To(false)},
 		BrokerEndpoint: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Host", Optional: ptr.To(false)},
+		ClusterID:      corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "ClusterID", Optional: ptr.To(true)},
 	}, nil
 }

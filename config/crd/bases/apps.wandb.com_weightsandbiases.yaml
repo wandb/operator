@@ -1154,6 +1154,19 @@ spec:
                         - key
                         type: object
                         x-kubernetes-map-type: atomic
+                      clusterID:
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            default: ""
+                            type: string
+                          optional:
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
                       host:
                         properties:
                           key:
@@ -2514,6 +2527,19 @@ spec:
                         type: object
                         x-kubernetes-map-type: atomic
                       endpoint:
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            default: ""
+                            type: string
+                          optional:
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
+                      port:
                         properties:
                           key:
                             type: string
@@ -4092,6 +4118,19 @@ spec:
                         - key
                         type: object
                         x-kubernetes-map-type: atomic
+                      clusterID:
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            default: ""
+                            type: string
+                          optional:
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
                       host:
                         properties:
                           key:
@@ -4388,6 +4427,19 @@ spec:
                         type: object
                         x-kubernetes-map-type: atomic
                       endpoint:
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            default: ""
+                            type: string
+                          optional:
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
+                      port:
                         properties:
                           key:
                             type: string

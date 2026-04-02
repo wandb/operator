@@ -11,6 +11,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -58,6 +59,9 @@ func DetachFinalizer(
 		return err
 	}
 	if err := detachNodePool(ctx, cl, log, nsnBuilder, wandbOwner); err != nil {
+		return err
+	}
+	if err := detachTopics(ctx, cl, log, nsnBuilder, wandbOwner); err != nil {
 		return err
 	}
 	return detachConnectionSecret(ctx, cl, log, nsnBuilder, wandbOwner)
@@ -126,6 +130,42 @@ func detachNodePool(
 		return err
 	}
 	log.Info("detached KafkaNodePool CR", "name", actual.Name)
+	return nil
+}
+
+func detachTopics(
+	ctx context.Context,
+	cl client.Client,
+	log *slog.Logger,
+	nsnBuilder *NsNameBuilder,
+	wandbOwner client.Object,
+) error {
+	topicList := &v1.KafkaTopicList{}
+	listOpts := &client.ListOptions{
+		Namespace: nsnBuilder.Namespace(),
+		LabelSelector: labels.SelectorFromSet(map[string]string{
+			"app.kubernetes.io/managed-by": "wandb-operator",
+			"app.kubernetes.io/instance":   wandbOwner.GetName(),
+		}),
+	}
+	if err := cl.List(ctx, topicList, listOpts); err != nil {
+		return err
+	}
+	for i := range topicList.Items {
+		topic := &topicList.Items[i]
+		if common.IsDetached(topic, wandbOwner.GetUID()) {
+			continue
+		}
+		common.RemoveOwnerReference(topic, wandbOwner.GetUID())
+		if err := cl.Update(ctx, topic); err != nil {
+			if errors.IsNotFound(err) {
+				continue
+			}
+			log.Error("error detaching KafkaTopic CR", logx.ErrAttr(err))
+			return err
+		}
+		log.Info("detached KafkaTopic CR", "name", topic.Name)
+	}
 	return nil
 }
 

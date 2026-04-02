@@ -393,6 +393,7 @@ type KafkaConnection struct {
 	Host           corev1.SecretKeySelector `json:"host,omitempty"`
 	Port           corev1.SecretKeySelector `json:"port,omitempty"`
 	BrokerEndpoint corev1.SecretKeySelector `json:"brokerEndpoint,omitempty"`
+	ClusterID      corev1.SecretKeySelector `json:"clusterID,omitempty"`
 
 	URL corev1.SecretKeySelector `json:"URL"`
 }
@@ -429,6 +430,7 @@ type ManagedObjectStoreSpec struct {
 
 type ObjectStoreConnection struct {
 	Endpoint  corev1.SecretKeySelector `json:"endpoint,omitempty"`
+	Port      corev1.SecretKeySelector `json:"port,omitempty"`
 	AccessKey corev1.SecretKeySelector `json:"accessKey,omitempty"`
 	SecretKey corev1.SecretKeySelector `json:"secretKey,omitempty"`
 	Bucket    corev1.SecretKeySelector `json:"bucket,omitempty"`

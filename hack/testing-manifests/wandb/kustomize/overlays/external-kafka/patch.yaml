@@ -13,10 +13,12 @@ spec:
       URL:
         name: external-kafka-connection
         key: url
-      # optional
-      # host:
-      #   name: external-kafka-connection
-      #   key: Host
-      # port:
-      #   name: external-kafka-connection
-      #   key: Port
+      host:
+        name: external-kafka-connection
+        key: Host
+      port:
+        name: external-kafka-connection
+        key: Port
+      clusterID:
+        name: external-kafka-connection
+        key: ClusterID

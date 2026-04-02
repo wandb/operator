@@ -52,7 +52,7 @@ func (m *minioConnInfo) toUrl() *url.URL {
 
 func writeWandbConnInfo(
 	ctx context.Context,
-	client client.Client,
+	cl client.Client,
 	owner client.Object,
 	nsnBuilder *NsNameBuilder,
 	connInfo *minioConnInfo,
@@ -64,13 +64,11 @@ func writeWandbConnInfo(
 	var gvk schema.GroupVersionKind
 	var actual = &corev1.Secret{}
 
-	//log := ctrl.LoggerFrom(ctx)
-
 	nsName := nsnBuilder.ConnectionNsName()
 	urlKey := "url"
 
 	if found, err = common.GetResource(
-		ctx, client, nsName, AppConnTypeName, actual,
+		ctx, cl, nsName, AppConnTypeName, actual,
 	); err != nil {
 		return nil, err
 	}
@@ -78,8 +76,7 @@ func writeWandbConnInfo(
 		actual = nil
 	}
 
-	// Compute owner reference
-	if gvk, err = client.GroupVersionKindFor(owner); err != nil {
+	if gvk, err = cl.GroupVersionKindFor(owner); err != nil {
 		return nil, fmt.Errorf("could not get GVK for owner: %w", err)
 	}
 	ref := metav1.OwnerReference{
@@ -99,23 +96,28 @@ func writeWandbConnInfo(
 		},
 		Type: corev1.SecretTypeOpaque,
 		StringData: map[string]string{
-			urlKey:   connInfo.toUrl().String() + "?tls=true",
-			"Host":   connInfo.Host,
-			"Port":   connInfo.Port,
-			"Region": "us-east-1",
-			"Bucket": connInfo.Bucket,
+			urlKey:      connInfo.toUrl().String() + "?tls=true",
+			"Host":      connInfo.Host,
+			"Port":      connInfo.Port,
+			"AccessKey": connInfo.RootUser,
+			"SecretKey": connInfo.RootPassword,
+			"Region":    "us-east-1",
+			"Bucket":    connInfo.Bucket,
 		},
 	}
 
-	if _, err = common.CrudResource(ctx, client, desired, actual); err != nil {
+	if _, err = common.CrudResource(ctx, cl, desired, actual); err != nil {
 		return nil, err
 	}
 
 	localRef := corev1.LocalObjectReference{Name: nsName.Name}
 	return &translator.ObjectStoreConnection{
-		URL:      corev1.SecretKeySelector{LocalObjectReference: localRef, Key: urlKey, Optional: ptr.To(false)},
-		Endpoint: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Host", Optional: ptr.To(false)},
-		Region:   corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Region", Optional: ptr.To(false)},
-		Bucket:   corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Bucket", Optional: ptr.To(false)},
+		URL:       corev1.SecretKeySelector{LocalObjectReference: localRef, Key: urlKey, Optional: ptr.To(false)},
+		Endpoint:  corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Host", Optional: ptr.To(false)},
+		Port:      corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Port", Optional: ptr.To(false)},
+		AccessKey: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "AccessKey", Optional: ptr.To(false)},
+		SecretKey: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "SecretKey", Optional: ptr.To(false)},
+		Region:    corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Region", Optional: ptr.To(false)},
+		Bucket:    corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Bucket", Optional: ptr.To(false)},
 	}, nil
 }

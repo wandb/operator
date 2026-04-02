@@ -10,6 +10,9 @@ spec:
       endpoint:
         name: external-objectstore-connection
         key: Host
+      port:
+        name: external-objectstore-connection
+        key: Port
       bucket:
         name: external-objectstore-connection
         key: Bucket
@@ -19,10 +22,9 @@ spec:
       URL:
         name: external-objectstore-connection
         key: url
-      # optional
-      # accessKey:
-      #   name: external-objectstore-connection
-      #   key: AccessKey
-      # secretKey:
-      #   name: external-objectstore-connection
-      #   key: SecretKey
+      accessKey:
+        name: external-objectstore-connection
+        key: AccessKey
+      secretKey:
+        name: external-objectstore-connection
+        key: SecretKey

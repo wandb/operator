@@ -29,6 +29,7 @@ func WriteState(
 		"BrokerEndpoint": spec.BrokerEndpoint,
 		"Host":           spec.Host,
 		"Port":           spec.Port,
+		"ClusterID":      spec.ClusterID,
 	}
 
 	data, err := external.ResolveFields(ctx, c, wandb.Namespace, fields)
@@ -63,6 +64,7 @@ func ReadState(
 		BrokerEndpoint: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "BrokerEndpoint", Optional: ptr.To(false)},
 		Host:           corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Host", Optional: ptr.To(false)},
 		Port:           corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Port", Optional: ptr.To(false)},
+		ClusterID:      corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "ClusterID", Optional: ptr.To(true)},
 	}
 }
 
