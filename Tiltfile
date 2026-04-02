@@ -24,7 +24,7 @@ load("./tilt-settings.star", "SETTINGS")
 settings.update(SETTINGS)
 
 # Configure global watch settings with a 2-second debounce
-watch_settings(ignore=["**/.git", "**/*.out"])
+watch_settings(ignore=["**/.git", "**/*.out", "hack/testing-manifests/wandb/.generated/**"])
 
 # Increase timeout for helm installations and apply operations
 update_settings(k8s_upsert_timeout_secs=300)

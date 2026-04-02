@@ -8,6 +8,8 @@
 bin
 testbin/*
 Dockerfile.cross
+.claude
+.codex
 
 # Test binary, build with `go test -c`
 *.test

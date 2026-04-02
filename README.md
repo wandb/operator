@@ -121,6 +121,15 @@ then run `tilt down`.
 
 ## Testing
 
+### Locally testing external infra
+
+1. Install the WandB CR with Tilt **without** the `purge-retention` `wandbOverlay` in `tilt-settings.star`.
+2. Delete the WandB CR — infra should be detached but remain in place.
+3. Run `./hack/scripts/managed-connections-to-external.sh` to convert the managed connection secrets into external ones.
+4. Install the WandB CR with Tilt with the following `wandbOverlay`s: `external-mysql`, `external-redis`, 
+`external-kafka`, `external-objectstore`, `external-clickhouse`.
+5. WandB should now run with externally managed infra.
+
 ### Counterfeiter
 
 ```bash

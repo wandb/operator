@@ -579,6 +579,7 @@ func (in *KafkaConnection) DeepCopyInto(out *KafkaConnection) {
 	in.Host.DeepCopyInto(&out.Host)
 	in.Port.DeepCopyInto(&out.Port)
 	in.BrokerEndpoint.DeepCopyInto(&out.BrokerEndpoint)
+	in.ClusterID.DeepCopyInto(&out.ClusterID)
 	in.URL.DeepCopyInto(&out.URL)
 }
 
@@ -956,6 +957,7 @@ func (in *ObjectStoreConfig) DeepCopy() *ObjectStoreConfig {
 func (in *ObjectStoreConnection) DeepCopyInto(out *ObjectStoreConnection) {
 	*out = *in
 	in.Endpoint.DeepCopyInto(&out.Endpoint)
+	in.Port.DeepCopyInto(&out.Port)
 	in.AccessKey.DeepCopyInto(&out.AccessKey)
 	in.SecretKey.DeepCopyInto(&out.SecretKey)
 	in.Bucket.DeepCopyInto(&out.Bucket)

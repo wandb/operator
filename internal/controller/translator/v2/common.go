@@ -117,6 +117,7 @@ func ToTranslatorKafkaConnection(c v2.KafkaConnection) translator.KafkaConnectio
 		Host:           copySelector(c.Host),
 		Port:           copySelector(c.Port),
 		BrokerEndpoint: copySelector(c.BrokerEndpoint),
+		ClusterID:      copySelector(c.ClusterID),
 		URL:            copySelector(c.URL),
 	}
 }
@@ -126,6 +127,7 @@ func ToWbKafkaConnection(c translator.KafkaConnection) v2.KafkaConnection {
 		Host:           copySelector(c.Host),
 		Port:           copySelector(c.Port),
 		BrokerEndpoint: copySelector(c.BrokerEndpoint),
+		ClusterID:      copySelector(c.ClusterID),
 		URL:            copySelector(c.URL),
 	}
 }
@@ -149,6 +151,7 @@ func ToTranslatorKafkaInfraStatus(s v2.KafkaInfraStatus) translator.KafkaStatus 
 func ToTranslatorObjectStoreConnection(c v2.ObjectStoreConnection) translator.ObjectStoreConnection {
 	return translator.ObjectStoreConnection{
 		Endpoint:  copySelector(c.Endpoint),
+		Port:      copySelector(c.Port),
 		AccessKey: copySelector(c.AccessKey),
 		SecretKey: copySelector(c.SecretKey),
 		Bucket:    copySelector(c.Bucket),
@@ -160,6 +163,7 @@ func ToTranslatorObjectStoreConnection(c v2.ObjectStoreConnection) translator.Ob
 func ToWbObjectStoreConnection(c translator.ObjectStoreConnection) v2.ObjectStoreConnection {
 	return v2.ObjectStoreConnection{
 		Endpoint:  copySelector(c.Endpoint),
+		Port:      copySelector(c.Port),
 		AccessKey: copySelector(c.AccessKey),
 		SecretKey: copySelector(c.SecretKey),
 		Bucket:    copySelector(c.Bucket),

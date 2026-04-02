@@ -42,6 +42,7 @@ type ObjectStoreConfig struct {
 
 type ObjectStoreConnection struct {
 	Endpoint  corev1.SecretKeySelector
+	Port      corev1.SecretKeySelector
 	AccessKey corev1.SecretKeySelector
 	SecretKey corev1.SecretKeySelector
 	Bucket    corev1.SecretKeySelector

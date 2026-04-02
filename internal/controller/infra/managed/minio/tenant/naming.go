@@ -2,6 +2,7 @@ package tenant
 
 import (
 	"fmt"
+	"strings"
 
 	"k8s.io/apimachinery/pkg/types"
 )
@@ -50,8 +51,12 @@ func (n *NsNameBuilder) PoolName() string {
 	return fmt.Sprintf("%s-pool", n.SpecName())
 }
 
+func (n *NsNameBuilder) connectionBaseName() string {
+	return strings.TrimSuffix(n.SpecName(), "-minio")
+}
+
 func (n *NsNameBuilder) ConnectionName() string {
-	return fmt.Sprintf("%s-connection", n.SpecName())
+	return fmt.Sprintf("%s-objectstore-connection", n.connectionBaseName())
 }
 
 func (n *NsNameBuilder) ConnectionNsName() types.NamespacedName {

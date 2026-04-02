@@ -7,6 +7,7 @@ import (
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/logx"
 	v2 "github.com/wandb/operator/pkg/vendored/mysql-operator/v2"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -76,5 +77,23 @@ func DetachFinalizer(
 		return err
 	}
 	log.Info("detached InnoDBCluster CR", "name", actual.Name)
+
+	if err = detachConnectionSecret(ctx, cl, nsnBuilder, wandbOwner); err != nil {
+		log.Error("error detaching connection secret", logx.ErrAttr(err))
+		return err
+	}
+	return nil
+}
+
+func detachConnectionSecret(ctx context.Context, cl client.Client, nsnBuilder *NsNameBuilder, wandbOwner client.Object) error {
+	secret := &corev1.Secret{}
+	found, err := common.GetResource(ctx, cl, nsnBuilder.ConnectionNsName(), "Secret", secret)
+	if err != nil || !found {
+		return err
+	}
+	common.RemoveOwnerReference(secret, wandbOwner.GetUID())
+	if err = cl.Update(ctx, secret); err != nil && !errors.IsNotFound(err) {
+		return err
+	}
 	return nil
 }
