@@ -235,6 +235,9 @@ func Reconcile(
 					return ctrl.Result{}, err
 				}
 			}
+			if err = deleteInfraHTTPRoutes(ctx, client, wandb); err != nil {
+				return ctrl.Result{}, err
+			}
 			if wandb.Spec.Networking.Mode == apiv2.NetworkingModeIngress {
 				if err = deleteConsolidatedIngress(ctx, client, wandb); err != nil {
 					return ctrl.Result{}, err
