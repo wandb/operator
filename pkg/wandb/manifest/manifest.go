@@ -319,10 +319,7 @@ func loadManifestFromFiles(ctx context.Context, manifestFiles []string) (Manifes
 	logger := logx.GetSlog(ctx)
 	manifest := Manifest{}
 
-	fmt.Printf("Processing %d files: %v\n", len(manifestFiles), manifestFiles)
-
-	for i, manifestFile := range manifestFiles {
-		fmt.Printf("Processing file %d: %s\n", i, manifestFile)
+	for _, manifestFile := range manifestFiles {
 		manifestData, err := os.ReadFile(manifestFile)
 		if err != nil {
 			logger.Error("failed to read manifest file", "file", manifestFile, "error", err)

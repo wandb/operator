@@ -22,7 +22,7 @@ func reconcileConsolidatedIngress(ctx context.Context, c ctrlClient.Client, wand
 
 	var paths []networkingv1.HTTPIngressPath
 
-	for _, app := range manifest.Applications {
+	for _, app := range sortedManifestApplications(manifest) {
 		if len(app.Features) > 0 && !manifestFeaturesEnabled(app.Features, manifest.Features) {
 			continue
 		}

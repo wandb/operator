@@ -494,14 +494,14 @@ func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb 
 	}
 
 	desiredAppNames := make(map[string]bool)
-	for _, app := range manifest.Applications {
+	for _, app := range sortedManifestApplications(manifest) {
 		if len(app.Features) > 0 && !manifestFeaturesEnabled(app.Features, manifest.Features) {
 			continue
 		}
 		desiredAppNames[app.Name] = true
 	}
 
-	for _, app := range manifest.Applications {
+	for _, app := range sortedManifestApplications(manifest) {
 		// If the application is gated behind features, only install it when
 		// at least one of those features is enabled in the manifest.
 		if len(app.Features) > 0 && !manifestFeaturesEnabled(app.Features, manifest.Features) {

@@ -37,7 +37,8 @@ func resolveInfraRoutes(wandb *apiv2.WeightsAndBiases, manifest serverManifest.M
 	var entries []infraRouteEntry
 
 	if objectStoreSpec := wandb.Spec.ObjectStore.ManagedObjectStore; objectStoreSpec != nil {
-		for instanceName, cfg := range manifest.Bucket {
+		for _, instanceName := range sortedInfraConfigNames(manifest.Bucket) {
+			cfg := manifest.Bucket[instanceName]
 			if cfg.Ingress == nil {
 				continue
 			}
@@ -57,7 +58,8 @@ func resolveInfraRoutes(wandb *apiv2.WeightsAndBiases, manifest serverManifest.M
 	}
 
 	if chSpec := wandb.Spec.ClickHouse.ManagedClickHouse; chSpec != nil {
-		for instanceName, cfg := range manifest.Clickhouse {
+		for _, instanceName := range sortedInfraConfigNames(manifest.Clickhouse) {
+			cfg := manifest.Clickhouse[instanceName]
 			if cfg.Ingress == nil {
 				continue
 			}
@@ -78,7 +80,8 @@ func resolveInfraRoutes(wandb *apiv2.WeightsAndBiases, manifest serverManifest.M
 	}
 
 	if mysqlSpec := wandb.Spec.MySQL.ManagedMysql; mysqlSpec != nil {
-		for instanceName, cfg := range manifest.Mysql {
+		for _, instanceName := range sortedInfraConfigNames(manifest.Mysql) {
+			cfg := manifest.Mysql[instanceName]
 			if cfg.Ingress == nil {
 				continue
 			}
@@ -98,7 +101,8 @@ func resolveInfraRoutes(wandb *apiv2.WeightsAndBiases, manifest serverManifest.M
 	}
 
 	if redisSpec := wandb.Spec.Redis.ManagedRedis; redisSpec != nil {
-		for instanceName, cfg := range manifest.Redis {
+		for _, instanceName := range sortedInfraConfigNames(manifest.Redis) {
+			cfg := manifest.Redis[instanceName]
 			if cfg.Ingress == nil {
 				continue
 			}
