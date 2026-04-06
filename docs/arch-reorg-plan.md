@@ -1,6 +1,6 @@
-# Architecture Reorganization Plan
+# Architecture Reorganization Plan (v2)
 
-Based on the analysis in [arch-reorg.md](./arch-reorg.md).
+Based on the analysis in [arch-reorg-v2.md](./arch-reorg-v2.md).
 
 ---
 
@@ -9,7 +9,14 @@ Based on the analysis in [arch-reorg.md](./arch-reorg.md).
 ```
 api/v2/
   application_types.go        <-- imports KEDA + Argo Rollouts directly
-  weightsandbiases_types.go
+  weightsandbiases_types.go   <-- no +kubebuilder:default for many fields
+
+internal/webhook/v2/
+  weightsandbiases_webhook.go <-- 522 lines: defaulter + validator in one file
+                                  sets defaults that have no reconciler fallback
+                                  immutability only enforced for Redis, not others
+  application_webhook.go      <-- well-scoped
+  *_test.go                   <-- already split per-service (tests ahead of impl)
 
 internal/controller/
   translator/
@@ -70,7 +77,7 @@ internal/controller/
 
 ## Proposed Changes
 
-Ten moves, grouped into three phases by risk and dependency.
+Fifteen moves, grouped into four phases by risk and dependency.
 
 ---
 
@@ -78,7 +85,67 @@ Ten moves, grouped into three phases by risk and dependency.
 
 These relocate code without altering any function signatures or call semantics. Tests should pass identically before and after.
 
-#### Move 1: Extract vendor spec builders from `translator/v2/` to `infra/managed/`
+#### Move 1: Split `reconcile_v2.go` into focused files
+
+**Why:** This file handles finalizers, infra gating, secret generation, Kafka topics, MySQL init, RBAC, Gateway, migrations, app deployment, telemetry injection, and HTTPRoutes. Each is a separable concern.
+
+```
+BEFORE                                  AFTER
+controller/v2/                          controller/v2/
+  reconcile_v2.go (everything)            reconcile_v2.go   (orchestration skeleton)
+                                          rbac.go           (ServiceAccount/Role/RoleBinding)
+                                          migrations.go     (migration job orchestration)
+                                          kafka_topics.go   (Kafka topic creation)
+                                          secrets.go        (application secret generation)
+                                          applications.go   (application deployment loop)
+```
+
+**Approach:** Extract functions, not rewrite. Each new file gets the functions that belong to it. `reconcile_v2.go` retains the top-level `ReconcileV2` method that calls into the others.
+
+---
+
+#### Move 2: Split `weightsandbiases_webhook.go` into defaulter and validator files
+
+**Why:** This 522-line file contains both the mutating defaulter and the validating webhook, plus all per-service helper functions. The test files already follow a per-service split (`weightsandbiases_defaulter_mysql_test.go`, etc.), but the implementation is monolithic.
+
+```
+BEFORE                                          AFTER
+webhook/v2/                                     webhook/v2/
+  weightsandbiases_webhook.go (522 lines)         weightsandbiases_defaulter.go
+    WeightsAndBiasesCustomDefaulter                  WeightsAndBiasesCustomDefaulter
+    Default()                                        Default()
+    applyMySQLDefaults()                             applyMySQLDefaults()
+    applyRedisDefaults()                             applyRedisDefaults()
+    applyKafkaDefaults()                             applyKafkaDefaults()
+    applyObjectStoreDefaults()                       applyObjectStoreDefaults()
+    applyClickHouseDefaults()                        applyClickHouseDefaults()
+    WeightsAndBiasesCustomValidator
+    ValidateCreate()                               weightsandbiases_validator.go
+    ValidateUpdate()                                 WeightsAndBiasesCustomValidator
+    ValidateDelete()                                 ValidateCreate()
+    validateSpec()                                   ValidateUpdate()
+    validateChanges()                                ValidateDelete()
+    validateMySQLSpec()                              validateSpec()
+    validateRedisSpec()                              validateChanges()
+    validateKafkaSpec()                              validateMySQLSpec()
+    validateObjectStoreSpec()                        validateRedisSpec()
+    validateClickHouseSpec()                         validateKafkaSpec()
+    validateRedisChanges()                           validateObjectStoreSpec()
+    validateNetworkingSpec()                         validateClickHouseSpec()
+    SetupWeightsAndBiasesWebhookWithManager          validateRedisChanges()
+                                                     validateNetworkingSpec()
+
+                                                   weightsandbiases_webhook.go (kept, slim)
+                                                     SetupWeightsAndBiasesWebhookWithManager
+```
+
+**Files touched:**
+- `webhook/v2/weightsandbiases_webhook.go` — split into three files
+- No import changes needed (same package)
+
+---
+
+#### Move 3: Extract vendor spec builders from `translator/v2/` to `infra/managed/`
 
 **Why:** `translator/v2/` bundles two unrelated jobs: shallow type converters and vendor-specific spec construction. The spec builders import all vendored CRDs and contain real business logic (sizing, HA topology). They belong next to the managed infra code that calls them.
 
@@ -92,7 +159,7 @@ translator/v2/                          translator/v2/
   objectstore.go  (same)                  objectstore.go  (converter only)
   clickhouse.go   (same)                  clickhouse.go   (converter only)
                                           retention.go (unchanged)
-                                        
+
                                         infra/managed/
                                           mysql/mysql/spec.go       <-- ToMysqlMySQLVendorSpec
                                           redis/opstree/spec.go     <-- ToRedis*VendorSpec
@@ -108,7 +175,7 @@ translator/v2/                          translator/v2/
 
 ---
 
-#### Move 2: Move telemetry domain types to `internal/telemetry/`
+#### Move 4: Move telemetry domain types to `internal/telemetry/`
 
 **Why:** `TelemetryRuntimeConfig`, `TelemetryOTelConfig`, `TelemetryEndpoints` are configuration domain concepts, not controller plumbing. Other packages may need to reason about telemetry configuration.
 
@@ -123,13 +190,13 @@ controller/v2/                      controller/v2/
 ```
 
 **Files touched:**
-- `controller/v2/telemetry_config.go` — delete (or reduce to re-exports if needed transitionally)
+- `controller/v2/telemetry_config.go` — delete
 - New `internal/telemetry/config.go` — receive type definitions
 - `controller/v2/telemetry_secret.go`, `reconcile_v2.go` — update imports
 
 ---
 
-#### Move 3: Move `InferExternalStatus` to `controller/v2/`
+#### Move 5: Move `InferExternalStatus` to `controller/v2/`
 
 **Why:** This function is defined in `infra/external/common.go` but called exclusively from `controller/v2/{redis,mysql,kafka,clickhouse,objectstore}.go`. It computes health state from connection status — an orchestration concern, not a credential-management concern.
 
@@ -156,7 +223,7 @@ controller/v2/                        | controller/v2/
 
 ---
 
-#### Move 4: Move telemetry application allowlist to manifest layer
+#### Move 6: Move telemetry application allowlist to manifest layer
 
 **Why:** `managedWorkloadTelemetryApplications` (reconcile_v2.go:58-72) is a hardcoded list of app names that must be updated whenever a new application is added to the manifest. It belongs with the manifest definition.
 
@@ -177,11 +244,35 @@ controller/v2/                          controller/v2/
 
 ---
 
+#### Move 7: Extract label patching from `managed/*/write.go`
+
+**Why:** `ensurePVCLabels()` and `ensurePodLabels()` patch labels on resources created by vendor operators, not by this controller. This is a cross-cutting concern.
+
+```
+BEFORE                                  AFTER
+managed/redis/opstree/write.go          managed/redis/opstree/write.go
+  WriteState()                            WriteState()
+  ensurePVCLabels()                         (calls common.EnsurePVCLabels)
+  ensurePodLabels()
+
+                                        internal/controller/common/labels.go  (exists)
+managed/mysql/mysql/write.go              EnsurePVCLabels()  <-- generalized
+  WriteState()                            EnsurePodLabels()  <-- generalized
+  (PVC label patching inline)
+```
+
+**Files touched:**
+- `internal/controller/common/labels.go` — already exists, add generalized functions
+- `managed/redis/opstree/write.go` — replace inline implementations with common calls
+- `managed/mysql/mysql/write.go` — same
+
+---
+
 ### Phase 2 — Semantic corrections (behavioral clarification)
 
 These change the call graph to fix naming/boundary violations. Require careful testing.
 
-#### Move 5: Fix write-in-read — relocate connection secret writes to `WriteState`
+#### Move 8: Fix write-in-read — relocate connection secret writes to `WriteState`
 
 **Why:** Every `managed/*/read.go:ReadState` silently creates/overwrites a Kubernetes Secret via `writeXxxConnInfo()`. Callers expect `ReadState` to be idempotent. The write belongs in the write path.
 
@@ -212,7 +303,7 @@ conn.go                                 conn.go
 
 ---
 
-#### Move 6: Move MySQL credential generation to managed infra layer
+#### Move 9: Move MySQL credential generation to managed infra layer
 
 **Why:** `controller/v2/mysql.go:102-168` generates random passwords and creates a `{name}-db-password` Secret. This is resource-lifecycle logic sitting in the orchestration layer. The managed MySQL package doesn't know about these credentials.
 
@@ -241,75 +332,152 @@ infra/managed/mysql/mysql/                  EnsureCredentials()
 
 ---
 
-#### Move 7: Relocate hardcoded defaults to `api/v2` or constants
+### Phase 3 — Webhook ↔ Reconciler hardening
 
-**Why:** Defaults like `DefaultSentinelGroup = "gorilla"`, sentinel replica count `3`, replication replica count `3` are invisible to API consumers when buried in `translator/v2/redis.go`.
+These address the implicit contract between the webhook and reconciler. The webhook is optional (`--enable-webhooks`), but the reconciler currently assumes webhook-applied defaults and invariants hold.
+
+#### Move 10: Consolidate static defaults into `api/v2` kubebuilder annotations
+
+**Why:** Static scalar defaults are set in the webhook defaulter but have no fallback when webhooks are disabled. `+kubebuilder:default` annotations are always applied (by the API server when creating the object), are visible in `kubectl explain`, and don't require the webhook.
 
 ```
-BEFORE                                  AFTER
-translator/v2/redis.go                  api/v2/weightsandbiases_types.go
-  DefaultSentinelGroup = "gorilla"        // +kubebuilder:default="gorilla"
-  sentinel replicas: 3                    // +kubebuilder:default=3
-  replication replicas: 3                 (or explicit constants in api/v2/)
+BEFORE                                          AFTER
+webhook/v2/weightsandbiases_defaulter.go        api/v2/weightsandbiases_types.go
+  Spec.Size = SizeDev                             // +kubebuilder:default="dev"
+  Spec.RetentionPolicy.OnDelete = Detach          // +kubebuilder:default="detach"
+  Spec.ServiceAccount.Create = true               // +kubebuilder:default=true
+  Spec.ServiceAccount.Name = "wandb"              // +kubebuilder:default="wandb"
+  Spec.InternalServiceAuth.Enabled = true         // +kubebuilder:default=true
 
-                                        translator/v2/redis.go
-                                          (reads defaults from spec, no longer sets them)
+translator/v2/redis.go                         api/v2/weightsandbiases_types.go
+  DefaultSentinelGroup = "gorilla"                // +kubebuilder:default="gorilla"
+  sentinel replicas: 3                            // +kubebuilder:default=3
+  replication replicas: 3                         // +kubebuilder:default=3
+
+                                                webhook/v2/weightsandbiases_defaulter.go
+                                                  (remove static defaults, keep computed only:
+                                                   sentinel-for-non-dev, per-service namespace,
+                                                   per-service name, manifest repo URI scheme)
+
+                                                translator/v2/redis.go
+                                                  (reads from spec, no longer sets defaults)
 ```
 
 **Files touched:**
-- `api/v2/weightsandbiases_types.go` — add kubebuilder default annotations or constants
-- `translator/v2/redis.go` — remove hardcoded defaults, read from spec fields
+- `api/v2/weightsandbiases_types.go` — add `+kubebuilder:default` annotations
+- `webhook/v2/weightsandbiases_webhook.go` (or new `weightsandbiases_defaulter.go`) — remove static defaults
+- `translator/v2/redis.go` — remove hardcoded defaults, read from spec
 - CRD regeneration required (`make manifests`)
 
-**Risk:** CRD schema change — existing CRs without explicit values will get defaults via webhook/defaulting. Requires migration consideration for existing clusters.
+**Risk:** CRD schema change — existing CRs without explicit values will get defaults from the API server on next write. Requires migration consideration for existing clusters.
 
 ---
 
-### Phase 3 — Structural splits (readability, no behavioral change)
+#### Move 11: Add reconciler-side fallback defaults for computed webhook defaults
 
-#### Move 8: Split `reconcile_v2.go` into focused files
-
-**Why:** This file handles finalizers, infra gating, secret generation, Kafka topics, MySQL init, RBAC, Gateway, migrations, app deployment, telemetry injection, and HTTPRoutes. Each is a separable concern.
+**Why:** Computed defaults (sentinel-for-non-dev, per-service namespace/name) are applied only by the webhook. When webhooks are disabled, the reconciler sees zero-value fields and may nil-pointer or create resources with empty names.
 
 ```
-BEFORE                                  AFTER
-controller/v2/                          controller/v2/
-  reconcile_v2.go (everything)            reconcile_v2.go   (orchestration skeleton)
-                                          rbac.go           (ServiceAccount/Role/RoleBinding)
-                                          migrations.go     (migration job orchestration)
-                                          kafka_topics.go   (Kafka topic creation)
-                                          secrets.go        (application secret generation)
-                                          applications.go   (application deployment loop)
+BEFORE                                          AFTER
+controller/v2/redis.go                          controller/v2/redis.go
+  redisWriteState()                               redisWriteState()
+    // assumes Spec.ManagedRedis.Namespace          if spec.ManagedRedis.Namespace == "" {
+    // is already populated by webhook                spec.ManagedRedis.Namespace = wandb.Namespace
+                                                    }
+                                                    // same for Name, SentinelEnabled, etc.
 ```
 
-**Approach:** Extract functions, not rewrite. Each new file gets the functions that belong to it. `reconcile_v2.go` retains the top-level `ReconcileV2` method that calls into the others.
+**Approach:** Add a `ensureDefaults()` or inline nil-checks at the top of each dispatcher function in `controller/v2/`. These are cheap no-ops when the webhook has already run (the field will already be set), and serve as safety nets when it hasn't.
+
+**Files touched:**
+- `controller/v2/{redis,mysql,kafka,clickhouse,objectstore}.go` — add fallback defaults at entry points
+- Possibly a shared `controller/v2/defaults.go` if the pattern is repetitive enough
 
 ---
 
-#### Move 9: Extract label patching from `managed/*/write.go`
+#### Move 12: Add immutability enforcement for non-Redis infra types in webhook
 
-**Why:** `ensurePVCLabels()` and `ensurePodLabels()` patch labels on resources created by vendor operators, not by this controller. This is a cross-cutting concern.
+**Why:** Only Redis has update-time change validation (`validateRedisChanges`). MySQL, Kafka, ObjectStore, and ClickHouse have no equivalent, even though changing their namespaces or storage sizes is equally dangerous (orphaned resources, data loss).
 
 ```
-BEFORE                                  AFTER
-managed/redis/opstree/write.go          managed/redis/opstree/write.go
-  WriteState()                            WriteState()
-  ensurePVCLabels()                         (calls common.EnsurePVCLabels)
-  ensurePodLabels()
-                                        internal/controller/common/labels.go  (exists)
-managed/mysql/mysql/write.go              EnsurePVCLabels()  <-- generalized
-  WriteState()                            EnsurePodLabels()  <-- generalized
-  (PVC label patching inline)
+BEFORE                                          AFTER
+webhook/v2/weightsandbiases_validator.go        webhook/v2/weightsandbiases_validator.go
+  validateChanges()                               validateChanges()
+    validateRedisChanges()                          validateRedisChanges()     (existing)
+                                                    validateMySQLChanges()     <-- NEW
+                                                    validateKafkaChanges()     <-- NEW
+                                                    validateObjectStoreChanges() <-- NEW
+                                                    validateClickHouseChanges()  <-- NEW
+```
+
+**Immutable fields per infra type (proposed):**
+
+| Infra Type | Immutable Fields |
+|------------|-----------------|
+| Redis | StorageSize, Namespace, SentinelEnabled (existing) |
+| MySQL | Namespace, Name (once vendor CR exists) |
+| Kafka | Namespace, Name (once vendor CR exists) |
+| ObjectStore | Namespace, Name (once vendor CR exists) |
+| ClickHouse | Namespace, Name (once vendor CR exists) |
+
+**Files touched:**
+- `webhook/v2/weightsandbiases_webhook.go` (or new `weightsandbiases_validator.go`) — add `validateXxxChanges()` functions
+- New test files: `weightsandbiases_validator_{mysql,kafka,objectstore,clickhouse}_test.go`
+
+---
+
+#### Move 13: Add reconciler-side immutability guards
+
+**Why:** Even with webhook validation, the reconciler should defensively check immutability for cases where the webhook is disabled. The reconciler check doesn't need to produce user-friendly validation errors — it just needs to set an error condition and stop reconciling.
+
+```
+BEFORE                                          AFTER
+controller/v2/redis.go                          controller/v2/redis.go
+  redisWriteState()                               redisWriteState()
+    // trusts webhook has prevented                  if statusHas(oldNamespace) && oldNamespace != newNamespace {
+    // namespace changes                               setCondition("ImmutabilityViolation", ...)
+                                                       return requeueWithError(...)
+                                                     }
+```
+
+**Approach:** Before calling `WriteState`, compare the current spec against the last-known state in `wandb.Status.XxxStatus`. If a field that should be immutable has changed, set an error condition on the status and return without proceeding.
+
+**Files touched:**
+- `controller/v2/{redis,mysql,kafka,clickhouse,objectstore}.go` — add pre-write immutability checks
+
+---
+
+### Phase 4 — High-risk structural changes
+
+These change the CRD schema representation. Require migration strategy.
+
+#### Move 14: Relocate hardcoded defaults to `api/v2` (fields that don't exist yet)
+
+**Why:** Some translator defaults (`DefaultSentinelGroup`, replica counts) have no corresponding CRD field — users cannot override them. This move adds the CRD fields first, then Move 10 can apply the defaults.
+
+```
+BEFORE                                          AFTER
+api/v2/weightsandbiases_types.go                api/v2/weightsandbiases_types.go
+  ManagedRedisSpec                                ManagedRedisSpec
+    StorageSize string                              StorageSize string
+    SentinelEnabled *bool                           SentinelEnabled *bool
+                                                    SentinelGroupName string   <-- NEW
+                                                    SentinelReplicas  *int32   <-- NEW
+                                                    ReplicationReplicas *int32 <-- NEW
 ```
 
 **Files touched:**
-- `internal/controller/common/labels.go` — already exists, add generalized functions
-- `managed/redis/opstree/write.go` — replace inline implementations with common calls
-- `managed/mysql/mysql/write.go` — same
+- `api/v2/weightsandbiases_types.go` — add new fields with `+kubebuilder:default` annotations
+- `translator/v2/redis.go` — read from spec instead of hardcoding
+- `webhook/v2/` — add validation for new fields if needed
+- CRD regeneration required (`make manifests`)
+- `make generate` for DeepCopy methods
+
+**Risk:** CRD schema change. New fields are additive (no breaking change for existing CRs), but need to ensure existing CRs get sensible defaults.
 
 ---
 
-#### Move 10: Decouple `api/v2` from KEDA and Argo Rollouts
+#### Move 15: Decouple `api/v2` from KEDA and Argo Rollouts
 
 **Why:** `application_types.go` imports KEDA `ScaledObjectSpec` and Argo `RolloutStatus`, coupling the CRD schema to two external operator APIs. These are workload orchestration details.
 
@@ -340,12 +508,15 @@ api/v2/application_types.go             api/v2/application_types.go
 ```
                     api/v2
                    /  |   \
-                KEDA  |  Argo        <-- external deps leak into CRD
+                KEDA  |  Argo          <-- external deps leak into CRD
+                      |
+          webhook/v2  |                <-- sets defaults, no reconciler fallback
+            (monolith)|                    immutability only for Redis
                       |
                translator/v2
               /    |    |    \
-         converters + vendor specs   <-- mixed concerns
-            |      |    |      |
+         converters + vendor specs     <-- mixed concerns
+            |      |    |      |          + invisible defaults
             v      v    v      v
       managed/   managed/  managed/  managed/
       redis      mysql     kafka     clickhouse ...
@@ -366,51 +537,64 @@ api/v2/application_types.go             api/v2/application_types.go
 
 ```
                     api/v2
-                      |              <-- no external operator deps
+                      |                <-- no external operator deps
+                      |                    +kubebuilder:default for all static defaults
+                      |
+          webhook/v2  |
+            defaulter.go               <-- computed defaults only
+            validator.go               <-- all infra types have immutability checks
                       |
                translator/v2
-                 (converters only)   <-- clean, stable
+                 (converters only)     <-- clean, stable, no defaults
                       |
          +-----------++-----------+
          |            |           |
    managed/redis  managed/mysql  managed/kafka ...
-     spec.go        spec.go       spec.go        <-- vendor specs live here
-     credentials.go               <-- credential lifecycle co-located
-     write.go                     <-- writes secrets in write path
-     read.go                      <-- pure reads
+     spec.go        spec.go       spec.go          <-- vendor specs live here
+     credentials.go                <-- credential lifecycle co-located
+     write.go                      <-- writes secrets in write path
+     read.go                       <-- pure reads
          |            |           |
          +-----------++-----------+
                       |
                controller/v2
-                 reconcile_v2.go     <-- slim orchestration
+                 reconcile_v2.go       <-- slim orchestration
                  rbac.go
                  migrations.go
                  kafka_topics.go
                  secrets.go
                  applications.go
-                 external_status.go  <-- InferExternalStatus lives here
+                 external_status.go    <-- InferExternalStatus lives here
+                 defaults.go           <-- reconciler fallback defaults
                       |
-              internal/telemetry/    <-- domain types
+              internal/telemetry/      <-- domain types
                       |
              pkg/wandb/manifest/
-               telemetry.go         <-- app allowlist
+               telemetry.go           <-- app allowlist
 ```
 
 ---
 
 ## Execution Order
 
-| Order | Move | Risk | Touches Tests | CRD Change |
-|-------|------|------|--------------|------------|
-| 1 | Move 8: Split `reconcile_v2.go` | Low | No | No |
-| 2 | Move 2: Telemetry types to `internal/telemetry/` | Low | No | No |
-| 3 | Move 3: `InferExternalStatus` to `controller/v2/` | Low | No | No |
-| 4 | Move 4: Telemetry allowlist to manifest | Low | No | No |
-| 5 | Move 9: Extract label patching | Low | No | No |
-| 6 | Move 1: Vendor spec builders to `infra/managed/` | Medium | Update imports in tests | No |
-| 7 | Move 6: MySQL credentials to managed layer | Medium | Possibly | No |
-| 8 | Move 5: Fix write-in-read | Medium | Yes | No |
-| 9 | Move 7: Defaults to `api/v2` | Medium | Yes | Yes |
-| 10 | Move 10: Decouple KEDA/Argo from CRD | High | Yes | Yes |
+| Order | Move | Phase | Risk | Touches Tests | CRD Change |
+|-------|------|-------|------|--------------|------------|
+| 1 | Move 1: Split `reconcile_v2.go` | 1 | Low | No | No |
+| 2 | Move 2: Split `weightsandbiases_webhook.go` | 1 | Low | No | No |
+| 3 | Move 4: Telemetry types to `internal/telemetry/` | 1 | Low | No | No |
+| 4 | Move 5: `InferExternalStatus` to `controller/v2/` | 1 | Low | No | No |
+| 5 | Move 6: Telemetry allowlist to manifest | 1 | Low | No | No |
+| 6 | Move 7: Extract label patching | 1 | Low | No | No |
+| 7 | Move 3: Vendor spec builders to `infra/managed/` | 1 | Medium | Update imports in tests | No |
+| 8 | Move 9: MySQL credentials to managed layer | 2 | Medium | Possibly | No |
+| 9 | Move 8: Fix write-in-read | 2 | Medium | Yes | No |
+| 10 | Move 11: Reconciler fallback defaults | 3 | Low | Yes (new tests) | No |
+| 11 | Move 12: Non-Redis immutability in webhook | 3 | Low | Yes (new tests) | No |
+| 12 | Move 13: Reconciler immutability guards | 3 | Low | Yes (new tests) | No |
+| 13 | Move 10: Static defaults to kubebuilder annotations | 3 | Medium | Yes | Yes |
+| 14 | Move 14: New CRD fields for translator defaults | 4 | Medium | Yes | Yes |
+| 15 | Move 15: Decouple KEDA/Argo from CRD | 4 | High | Yes | Yes |
 
-Low-risk pure moves first (1-5), then medium-risk semantic corrections (6-8), then CRD-changing moves last (9-10). Each move should be a separate PR.
+Phase 1 (pure moves, 1–7) can be done in parallel across PRs since they touch different files. Phase 2 (semantic corrections, 8–9) must be sequential. Phase 3 (webhook ↔ reconciler hardening, 10–13) can mostly be parallelized. Phase 4 (CRD changes, 14–15) must go last and each needs its own PR.
+
+Each move should be a separate PR.
