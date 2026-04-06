@@ -439,6 +439,11 @@ func ReconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 		return ctrl.Result{}, err
 	}
 
+	if err := cleanupNetworkingModeResources(ctx, client, wandb); err != nil {
+		logger.Error(err, "Failed to clean up stale networking resources")
+		return ctrl.Result{}, err
+	}
+
 	if wandb.Spec.Networking.Mode == apiv2.NetworkingModeGatewayAPI {
 		if err := reconcileGateway(ctx, client, wandb); err != nil {
 			logger.Error(err, "Failed to reconcile Gateway")
