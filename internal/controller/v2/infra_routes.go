@@ -157,18 +157,6 @@ func reconcileInfraHTTPRoutes(
 	gwConfig := wandb.Spec.Networking.GatewayAPI
 	ref := wandb.Status.GatewayStatus.GatewayRef
 
-	parentRef := gatewayv1.ParentReference{
-		Name: gatewayv1.ObjectName(ref.Name),
-	}
-	if ref.Namespace != "" && ref.Namespace != wandb.Namespace {
-		ns := gatewayv1.Namespace(ref.Namespace)
-		parentRef.Namespace = &ns
-	}
-	if gwConfig != nil && gwConfig.ListenerName != nil {
-		sectionName := gatewayv1.SectionName(*gwConfig.ListenerName)
-		parentRef.SectionName = &sectionName
-	}
-
 	hostname := parseHostname(wandb.Spec.Wandb.Hostname)
 	hostnames := []gatewayv1.Hostname{gatewayv1.Hostname(hostname)}
 	for _, h := range wandb.Spec.Wandb.AdditionalHostnames {
@@ -184,6 +172,7 @@ func reconcileInfraHTTPRoutes(
 	for _, entry := range entries {
 		desiredNames[infraHTTPRouteKey(entry.namespace, entry.name).String()] = true
 
+		parentRef := buildInfraGatewayParentRef(ref, gwConfig, entry.namespace)
 		route := buildInfraHTTPRoute(wandb, parentRef, hostnames, entry)
 		if err := setInfraHTTPRouteOwnership(wandb, route, c.Scheme()); err != nil {
 			return fmt.Errorf("failed to set ownership on infra HTTPRoute %s: %w", entry.name, err)
@@ -267,6 +256,25 @@ func buildInfraHTTPRoute(
 			}},
 		},
 	}
+}
+
+func buildInfraGatewayParentRef(
+	ref *apiv2.GatewayReference,
+	gwConfig *apiv2.GatewayAPIConfig,
+	routeNamespace string,
+) gatewayv1.ParentReference {
+	parentRef := gatewayv1.ParentReference{
+		Name: gatewayv1.ObjectName(ref.Name),
+	}
+	if ref.Namespace != "" && ref.Namespace != routeNamespace {
+		ns := gatewayv1.Namespace(ref.Namespace)
+		parentRef.Namespace = &ns
+	}
+	if gwConfig != nil && gwConfig.ListenerName != nil {
+		sectionName := gatewayv1.SectionName(*gwConfig.ListenerName)
+		parentRef.SectionName = &sectionName
+	}
+	return parentRef
 }
 
 func deleteInfraHTTPRoutes(
