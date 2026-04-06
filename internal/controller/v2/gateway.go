@@ -130,9 +130,10 @@ func buildListenersFromConfig(listeners []apiv2.GatewayListener, wandb *apiv2.We
 	var result []gatewayv1.Listener
 	for _, l := range listeners {
 		listener := gatewayv1.Listener{
-			Name:     gatewayv1.SectionName(l.Name),
-			Port:     gatewayv1.PortNumber(l.Port),
-			Protocol: gatewayv1.ProtocolType(l.Protocol),
+			Name:          gatewayv1.SectionName(l.Name),
+			Port:          gatewayv1.PortNumber(l.Port),
+			Protocol:      gatewayv1.ProtocolType(l.Protocol),
+			AllowedRoutes: buildAllowedRoutes(wandb),
 		}
 		if l.Hostname != nil {
 			h := gatewayv1.Hostname(*l.Hostname)
@@ -157,9 +158,10 @@ func buildDefaultListeners(wandb *apiv2.WeightsAndBiases) []gatewayv1.Listener {
 		return nil
 	}
 	listener := gatewayv1.Listener{
-		Name:     gatewayv1.SectionName("http"),
-		Hostname: &hostname,
-		Port:     listenerPort,
+		Name:          gatewayv1.SectionName("http"),
+		Hostname:      &hostname,
+		Port:          listenerPort,
+		AllowedRoutes: buildAllowedRoutes(wandb),
 	}
 	if parsedURL.Scheme == "https" {
 		listener.Protocol = gatewayv1.HTTPSProtocolType
@@ -227,4 +229,42 @@ func parseHostname(rawHostname string) string {
 		return parsed.Hostname()
 	}
 	return rawHostname
+}
+
+func buildAllowedRoutes(wandb *apiv2.WeightsAndBiases) *gatewayv1.AllowedRoutes {
+	from := gatewayv1.NamespacesFromSame
+	if requiresCrossNamespaceInfraRoutes(wandb) {
+		from = gatewayv1.NamespacesFromAll
+	}
+
+	return &gatewayv1.AllowedRoutes{
+		Namespaces: &gatewayv1.RouteNamespaces{
+			From: &from,
+		},
+	}
+}
+
+func requiresCrossNamespaceInfraRoutes(wandb *apiv2.WeightsAndBiases) bool {
+	namespaces := []string{}
+
+	if spec := wandb.Spec.ObjectStore.ManagedObjectStore; spec != nil {
+		namespaces = append(namespaces, spec.Namespace)
+	}
+	if spec := wandb.Spec.ClickHouse.ManagedClickHouse; spec != nil {
+		namespaces = append(namespaces, spec.Namespace)
+	}
+	if spec := wandb.Spec.MySQL.ManagedMysql; spec != nil {
+		namespaces = append(namespaces, spec.Namespace)
+	}
+	if spec := wandb.Spec.Redis.ManagedRedis; spec != nil {
+		namespaces = append(namespaces, spec.Namespace)
+	}
+
+	for _, ns := range namespaces {
+		if ns != "" && ns != wandb.Namespace {
+			return true
+		}
+	}
+
+	return false
 }
