@@ -43,3 +43,15 @@ func cleanupNetworkingModeResources(
 
 	return nil
 }
+
+func resetInactiveNetworkingStatus(wandb *apiv2.WeightsAndBiases) {
+	switch wandb.Spec.Networking.Mode {
+	case apiv2.NetworkingModeIngress:
+		wandb.Status.GatewayStatus = nil
+	case apiv2.NetworkingModeGatewayAPI:
+		wandb.Status.IngressStatus = nil
+	case apiv2.NetworkingModeNone:
+		wandb.Status.GatewayStatus = nil
+		wandb.Status.IngressStatus = nil
+	}
+}

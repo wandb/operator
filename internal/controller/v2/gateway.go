@@ -9,6 +9,7 @@ import (
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/logx"
 	apiErrors "k8s.io/apimachinery/pkg/api/errors"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrlClient "sigs.k8s.io/controller-runtime/pkg/client"
@@ -28,20 +29,11 @@ func reconcileGateway(ctx context.Context, c ctrlClient.Client, wandb *apiv2.Wei
 		if gwConfig.Gateway.GatewayRef == nil {
 			return fmt.Errorf("gatewayAPI.gateway.gatewayRef is required when managed=false")
 		}
-		if err := validateExternalGatewayExists(ctx, c, wandb, gwConfig.Gateway.GatewayRef); err != nil {
+		gw, err := validateExternalGatewayExists(ctx, c, wandb, gwConfig.Gateway.GatewayRef)
+		if err != nil {
 			return err
 		}
-		ns := gwConfig.Gateway.GatewayRef.Namespace
-		if ns == "" {
-			ns = wandb.Namespace
-		}
-		if wandb.Status.GatewayStatus == nil {
-			wandb.Status.GatewayStatus = &apiv2.GatewayStatusSummary{}
-		}
-		wandb.Status.GatewayStatus.GatewayRef = &apiv2.GatewayReference{
-			Name:      gwConfig.Gateway.GatewayRef.Name,
-			Namespace: ns,
-		}
+		wandb.Status.GatewayStatus = summarizeGatewayStatus(gw)
 		return nil
 	}
 
@@ -79,6 +71,7 @@ func reconcileGateway(ctx context.Context, c ctrlClient.Client, wandb *apiv2.Wei
 			if err := c.Create(ctx, desired); err != nil {
 				return err
 			}
+			wandb.Status.GatewayStatus = summarizeGatewayStatus(desired)
 		} else {
 			return err
 		}
@@ -87,14 +80,11 @@ func reconcileGateway(ctx context.Context, c ctrlClient.Client, wandb *apiv2.Wei
 		if err := c.Update(ctx, desired); err != nil {
 			return err
 		}
+		wandb.Status.GatewayStatus = summarizeGatewayStatus(current)
 	}
 
 	if wandb.Status.GatewayStatus == nil {
-		wandb.Status.GatewayStatus = &apiv2.GatewayStatusSummary{}
-	}
-	wandb.Status.GatewayStatus.GatewayRef = &apiv2.GatewayReference{
-		Name:      gatewayName,
-		Namespace: wandb.Namespace,
+		wandb.Status.GatewayStatus = summarizeGatewayStatus(desired)
 	}
 	return nil
 }
@@ -111,7 +101,12 @@ func deleteGateway(ctx context.Context, c ctrlClient.Client, wandb *apiv2.Weight
 	return c.Delete(ctx, gw)
 }
 
-func validateExternalGatewayExists(ctx context.Context, c ctrlClient.Client, wandb *apiv2.WeightsAndBiases, ref *apiv2.GatewayReference) error {
+func validateExternalGatewayExists(
+	ctx context.Context,
+	c ctrlClient.Client,
+	wandb *apiv2.WeightsAndBiases,
+	ref *apiv2.GatewayReference,
+) (*gatewayv1.Gateway, error) {
 	ns := ref.Namespace
 	if ns == "" {
 		ns = wandb.Namespace
@@ -119,11 +114,11 @@ func validateExternalGatewayExists(ctx context.Context, c ctrlClient.Client, wan
 	gw := &gatewayv1.Gateway{}
 	if err := c.Get(ctx, types.NamespacedName{Name: ref.Name, Namespace: ns}, gw); err != nil {
 		if apiErrors.IsNotFound(err) {
-			return fmt.Errorf("external Gateway %s/%s not found", ns, ref.Name)
+			return nil, fmt.Errorf("external Gateway %s/%s not found", ns, ref.Name)
 		}
-		return err
+		return nil, err
 	}
-	return nil
+	return gw, nil
 }
 
 func buildListenersFromConfig(listeners []apiv2.GatewayListener, wandb *apiv2.WeightsAndBiases) []gatewayv1.Listener {
@@ -267,4 +262,32 @@ func requiresCrossNamespaceInfraRoutes(wandb *apiv2.WeightsAndBiases) bool {
 	}
 
 	return false
+}
+
+func summarizeGatewayStatus(gw *gatewayv1.Gateway) *apiv2.GatewayStatusSummary {
+	if gw == nil {
+		return nil
+	}
+
+	summary := &apiv2.GatewayStatusSummary{
+		Name:  gw.Name,
+		Ready: isGatewayReady(gw.Status.Conditions),
+		GatewayRef: &apiv2.GatewayReference{
+			Name:      gw.Name,
+			Namespace: gw.Namespace,
+		},
+	}
+
+	for _, address := range gw.Status.Addresses {
+		summary.Addresses = append(summary.Addresses, address.Value)
+	}
+
+	return summary
+}
+
+func isGatewayReady(conditions []metav1.Condition) bool {
+	if apimeta.IsStatusConditionTrue(conditions, string(gatewayv1.GatewayConditionProgrammed)) {
+		return true
+	}
+	return apimeta.IsStatusConditionTrue(conditions, string(gatewayv1.GatewayConditionAccepted))
 }

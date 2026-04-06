@@ -443,8 +443,10 @@ func ReconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 		logger.Error(err, "Failed to clean up stale networking resources")
 		return ctrl.Result{}, err
 	}
+	resetInactiveNetworkingStatus(wandb)
 
 	if wandb.Spec.Networking.Mode == apiv2.NetworkingModeGatewayAPI {
+		wandb.Status.GatewayStatus = nil
 		if err := reconcileGateway(ctx, client, wandb); err != nil {
 			logger.Error(err, "Failed to reconcile Gateway")
 			return ctrl.Result{}, err
@@ -630,6 +632,7 @@ func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb 
 	}
 
 	if wandb.Spec.Networking.Mode == apiv2.NetworkingModeIngress {
+		wandb.Status.IngressStatus = nil
 		if err := reconcileConsolidatedIngress(ctx, client, wandb, manifest); err != nil {
 			logger.Error("Failed to reconcile consolidated Ingress", "err", err)
 			return ctrl.Result{}, err
