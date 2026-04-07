@@ -1,0 +1,14 @@
+apiVersion: gateway.nginx.org/v1alpha1
+kind: SnippetsPolicy
+metadata:
+  name: wandb-local-port-forwarding
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: wandb-gateway
+  snippets:
+    - context: http.server.location
+      value: |
+        proxy_set_header X-Forwarded-Host "$gw_api_compliant_host";
+        proxy_set_header X-Forwarded-Port "8080";

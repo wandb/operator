@@ -30,6 +30,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -942,7 +943,11 @@ func (r *ApplicationReconciler) deleteHPA(ctx context.Context, app *wandbv2.Appl
 
 func (r *ApplicationReconciler) reconcileHTTPRoute(ctx context.Context, app *wandbv2.Application) error {
 	if app.Spec.HTTPRouteTemplate == nil {
-		return r.deleteHTTPRoute(ctx, app)
+		if err := r.deleteHTTPRoute(ctx, app); err != nil {
+			return err
+		}
+		app.Status.HTTPRouteStatus = nil
+		return nil
 	}
 
 	logger := logx.GetSlog(ctx)
@@ -969,12 +974,20 @@ func (r *ApplicationReconciler) reconcileHTTPRoute(ctx context.Context, app *wan
 			return err
 		}
 		logger.Info("Creating HTTPRoute", "HTTPRoute", desired.Name)
-		return r.Create(ctx, desired)
+		if err := r.Create(ctx, desired); err != nil {
+			return err
+		}
+		app.Status.HTTPRouteStatus = summarizeHTTPRouteStatus(desired)
+		return nil
 	}
 
 	desired.ResourceVersion = current.ResourceVersion
 	logger.Info("Updating HTTPRoute", "HTTPRoute", desired.Name)
-	return r.Update(ctx, desired)
+	if err := r.Update(ctx, desired); err != nil {
+		return err
+	}
+	app.Status.HTTPRouteStatus = summarizeHTTPRouteStatus(current)
+	return nil
 }
 
 func buildHTTPRouteRules(app *wandbv2.Application) []gatewayv1.HTTPRouteRule {
@@ -1024,6 +1037,22 @@ func (r *ApplicationReconciler) deleteHTTPRoute(ctx context.Context, app *wandbv
 		return err
 	}
 	return r.Delete(ctx, route, client.PropagationPolicy(v1.DeletePropagationBackground))
+}
+
+func summarizeHTTPRouteStatus(route *gatewayv1.HTTPRoute) *wandbv2.HTTPRouteStatusSummary {
+	if route == nil {
+		return nil
+	}
+
+	summary := &wandbv2.HTTPRouteStatusSummary{}
+	for _, parent := range route.Status.Parents {
+		if apimeta.IsStatusConditionTrue(parent.Conditions, string(gatewayv1.RouteConditionAccepted)) {
+			summary.Accepted = true
+			break
+		}
+	}
+
+	return summary
 }
 
 // SetupWithManager sets up the controller with the Manager.

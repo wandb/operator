@@ -159,6 +159,53 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 			Expect(warnings).To(BeEmpty())
 		})
 
+		It("rejects gatewayAPI config when mode is ingress", func() {
+			obj.Spec.Networking.Mode = appsv2.NetworkingModeIngress
+			obj.Spec.Networking.GatewayAPI = &appsv2.GatewayAPIConfig{
+				Gateway: appsv2.GatewayConfig{
+					Managed: true,
+				},
+			}
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("gatewayAPI"))
+		})
+
+		It("requires gatewayAPI config when mode is gateway", func() {
+			obj.Spec.Networking.Mode = appsv2.NetworkingModeGatewayAPI
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("gatewayAPI is required"))
+		})
+
+		It("requires gatewayClassName for managed gateways", func() {
+			obj.Spec.Networking.Mode = appsv2.NetworkingModeGatewayAPI
+			obj.Spec.Networking.GatewayAPI = &appsv2.GatewayAPIConfig{
+				Gateway: appsv2.GatewayConfig{
+					Managed: true,
+				},
+			}
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("gatewayClassName"))
+		})
+
+		It("requires gatewayRef for external gateways", func() {
+			obj.Spec.Networking.Mode = appsv2.NetworkingModeGatewayAPI
+			obj.Spec.Networking.GatewayAPI = &appsv2.GatewayAPIConfig{
+				Gateway: appsv2.GatewayConfig{
+					Managed: false,
+				},
+			}
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("gatewayRef is required"))
+		})
+
 		It("returns an error for wrong object type", func() {
 			_, err := validator.ValidateCreate(ctx, &corev1.Pod{})
 			Expect(err).To(HaveOccurred())

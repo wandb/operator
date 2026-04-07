@@ -7,9 +7,11 @@ import (
 	"strings"
 
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/internal/controller/translator"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
 	apiErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrlClient "sigs.k8s.io/controller-runtime/pkg/client"
@@ -27,13 +29,16 @@ type infraRouteEntry struct {
 	ingress     *serverManifest.AppIngressSpec
 }
 
+const infraHTTPRouteComponent = "infra-route"
+
 // resolveInfraRoutes returns one entry per infra instance that has an Ingress spec and
 // whose component is enabled in the CR.
 func resolveInfraRoutes(wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest) ([]infraRouteEntry, error) {
 	var entries []infraRouteEntry
 
 	if objectStoreSpec := wandb.Spec.ObjectStore.ManagedObjectStore; objectStoreSpec != nil {
-		for instanceName, cfg := range manifest.Bucket {
+		for _, instanceName := range sortedInfraConfigNames(manifest.Bucket) {
+			cfg := manifest.Bucket[instanceName]
 			if cfg.Ingress == nil {
 				continue
 			}
@@ -53,7 +58,8 @@ func resolveInfraRoutes(wandb *apiv2.WeightsAndBiases, manifest serverManifest.M
 	}
 
 	if chSpec := wandb.Spec.ClickHouse.ManagedClickHouse; chSpec != nil {
-		for instanceName, cfg := range manifest.Clickhouse {
+		for _, instanceName := range sortedInfraConfigNames(manifest.Clickhouse) {
+			cfg := manifest.Clickhouse[instanceName]
 			if cfg.Ingress == nil {
 				continue
 			}
@@ -74,7 +80,8 @@ func resolveInfraRoutes(wandb *apiv2.WeightsAndBiases, manifest serverManifest.M
 	}
 
 	if mysqlSpec := wandb.Spec.MySQL.ManagedMysql; mysqlSpec != nil {
-		for instanceName, cfg := range manifest.Mysql {
+		for _, instanceName := range sortedInfraConfigNames(manifest.Mysql) {
+			cfg := manifest.Mysql[instanceName]
 			if cfg.Ingress == nil {
 				continue
 			}
@@ -94,7 +101,8 @@ func resolveInfraRoutes(wandb *apiv2.WeightsAndBiases, manifest serverManifest.M
 	}
 
 	if redisSpec := wandb.Spec.Redis.ManagedRedis; redisSpec != nil {
-		for instanceName, cfg := range manifest.Redis {
+		for _, instanceName := range sortedInfraConfigNames(manifest.Redis) {
+			cfg := manifest.Redis[instanceName]
 			if cfg.Ingress == nil {
 				continue
 			}
@@ -153,18 +161,6 @@ func reconcileInfraHTTPRoutes(
 	gwConfig := wandb.Spec.Networking.GatewayAPI
 	ref := wandb.Status.GatewayStatus.GatewayRef
 
-	parentRef := gatewayv1.ParentReference{
-		Name: gatewayv1.ObjectName(ref.Name),
-	}
-	if ref.Namespace != "" && ref.Namespace != wandb.Namespace {
-		ns := gatewayv1.Namespace(ref.Namespace)
-		parentRef.Namespace = &ns
-	}
-	if gwConfig != nil && gwConfig.ListenerName != nil {
-		sectionName := gatewayv1.SectionName(*gwConfig.ListenerName)
-		parentRef.SectionName = &sectionName
-	}
-
 	hostname := parseHostname(wandb.Spec.Wandb.Hostname)
 	hostnames := []gatewayv1.Hostname{gatewayv1.Hostname(hostname)}
 	for _, h := range wandb.Spec.Wandb.AdditionalHostnames {
@@ -178,11 +174,12 @@ func reconcileInfraHTTPRoutes(
 
 	desiredNames := make(map[string]bool, len(entries))
 	for _, entry := range entries {
-		desiredNames[entry.name] = true
+		desiredNames[infraHTTPRouteKey(entry.namespace, entry.name).String()] = true
 
+		parentRef := buildInfraGatewayParentRef(ref, gwConfig, entry.namespace)
 		route := buildInfraHTTPRoute(wandb, parentRef, hostnames, entry)
-		if err := controllerutil.SetOwnerReference(wandb, route, c.Scheme()); err != nil {
-			return fmt.Errorf("failed to set owner reference on infra HTTPRoute %s: %w", entry.name, err)
+		if err := setInfraHTTPRouteOwnership(wandb, route, c.Scheme()); err != nil {
+			return fmt.Errorf("failed to set ownership on infra HTTPRoute %s: %w", entry.name, err)
 		}
 
 		current := &gatewayv1.HTTPRoute{}
@@ -195,7 +192,8 @@ func reconcileInfraHTTPRoutes(
 			} else {
 				return fmt.Errorf("failed to get infra HTTPRoute %s: %w", entry.name, err)
 			}
-		} else if !reflect.DeepEqual(current.Spec, route.Spec) {
+		} else if !reflect.DeepEqual(current.Spec, route.Spec) ||
+			!reflect.DeepEqual(current.Labels, route.Labels) {
 			route.ResourceVersion = current.ResourceVersion
 			if err := c.Update(ctx, route); err != nil {
 				return fmt.Errorf("failed to update infra HTTPRoute %s: %w", entry.name, err)
@@ -203,21 +201,8 @@ func reconcileInfraHTTPRoutes(
 		}
 	}
 
-	// Remove stale infra HTTPRoutes that are no longer in the desired set.
-	routeList := &gatewayv1.HTTPRouteList{}
-	if err := c.List(ctx, routeList, ctrlClient.InNamespace(wandb.Namespace)); err != nil {
-		return fmt.Errorf("failed to list HTTPRoutes: %w", err)
-	}
-	for i := range routeList.Items {
-		route := &routeList.Items[i]
-		if !isOwnedBy(route, wandb) {
-			continue
-		}
-		if isInfraHTTPRouteName(route.Name, wandb.Name) && !desiredNames[route.Name] {
-			if err := c.Delete(ctx, route); err != nil && !apiErrors.IsNotFound(err) {
-				return fmt.Errorf("failed to delete stale infra HTTPRoute %s: %w", route.Name, err)
-			}
-		}
+	if err := deleteStaleInfraHTTPRoutes(ctx, c, wandb, desiredNames); err != nil {
+		return err
 	}
 
 	return nil
@@ -262,6 +247,7 @@ func buildInfraHTTPRoute(
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      entry.name,
 			Namespace: entry.namespace,
+			Labels:    infraHTTPRouteLabels(wandb),
 		},
 		Spec: gatewayv1.HTTPRouteSpec{
 			CommonRouteSpec: gatewayv1.CommonRouteSpec{
@@ -276,6 +262,33 @@ func buildInfraHTTPRoute(
 	}
 }
 
+func buildInfraGatewayParentRef(
+	ref *apiv2.GatewayReference,
+	gwConfig *apiv2.GatewayAPIConfig,
+	routeNamespace string,
+) gatewayv1.ParentReference {
+	parentRef := gatewayv1.ParentReference{
+		Name: gatewayv1.ObjectName(ref.Name),
+	}
+	if ref.Namespace != "" && ref.Namespace != routeNamespace {
+		ns := gatewayv1.Namespace(ref.Namespace)
+		parentRef.Namespace = &ns
+	}
+	if gwConfig != nil && gwConfig.ListenerName != nil {
+		sectionName := gatewayv1.SectionName(*gwConfig.ListenerName)
+		parentRef.SectionName = &sectionName
+	}
+	return parentRef
+}
+
+func deleteInfraHTTPRoutes(
+	ctx context.Context,
+	c ctrlClient.Client,
+	wandb *apiv2.WeightsAndBiases,
+) error {
+	return deleteStaleInfraHTTPRoutes(ctx, c, wandb, map[string]bool{})
+}
+
 // isInfraHTTPRouteName returns true for HTTPRoute names that follow the infra route naming convention.
 func isInfraHTTPRouteName(routeName, wandbName string) bool {
 	infraTypes := []string{"bucket", "clickhouse", "mysql", "redis"}
@@ -286,4 +299,72 @@ func isInfraHTTPRouteName(routeName, wandbName string) bool {
 		}
 	}
 	return false
+}
+
+func deleteStaleInfraHTTPRoutes(
+	ctx context.Context,
+	c ctrlClient.Client,
+	wandb *apiv2.WeightsAndBiases,
+	desiredRoutes map[string]bool,
+) error {
+	routeList := &gatewayv1.HTTPRouteList{}
+	if err := c.List(ctx, routeList, ctrlClient.MatchingLabels(infraHTTPRouteLabels(wandb))); err != nil {
+		return fmt.Errorf("failed to list managed infra HTTPRoutes: %w", err)
+	}
+	for i := range routeList.Items {
+		route := &routeList.Items[i]
+		key := infraHTTPRouteKey(route.Namespace, route.Name).String()
+		if desiredRoutes[key] {
+			continue
+		}
+		if err := c.Delete(ctx, route); err != nil && !apiErrors.IsNotFound(err) {
+			return fmt.Errorf("failed to delete stale infra HTTPRoute %s/%s: %w", route.Namespace, route.Name, err)
+		}
+	}
+
+	legacyRouteList := &gatewayv1.HTTPRouteList{}
+	if err := c.List(ctx, legacyRouteList, ctrlClient.InNamespace(wandb.Namespace)); err != nil {
+		return fmt.Errorf("failed to list legacy infra HTTPRoutes: %w", err)
+	}
+	for i := range legacyRouteList.Items {
+		route := &legacyRouteList.Items[i]
+		if !isOwnedBy(route, wandb) || !isInfraHTTPRouteName(route.Name, wandb.Name) {
+			continue
+		}
+		key := infraHTTPRouteKey(route.Namespace, route.Name).String()
+		if desiredRoutes[key] {
+			continue
+		}
+		if err := c.Delete(ctx, route); err != nil && !apiErrors.IsNotFound(err) {
+			return fmt.Errorf("failed to delete legacy infra HTTPRoute %s/%s: %w", route.Namespace, route.Name, err)
+		}
+	}
+
+	return nil
+}
+
+func infraHTTPRouteLabels(wandb *apiv2.WeightsAndBiases) map[string]string {
+	return map[string]string{
+		"app.kubernetes.io/managed-by": "wandb-operator",
+		"app.kubernetes.io/instance":   wandb.Name,
+		translator.WandbNameLabel:      wandb.Name,
+		translator.WandbNamespaceLabel: wandb.Namespace,
+		translator.WandbComponentLabel: infraHTTPRouteComponent,
+	}
+}
+
+func infraHTTPRouteKey(namespace, name string) types.NamespacedName {
+	return types.NamespacedName{Namespace: namespace, Name: name}
+}
+
+func setInfraHTTPRouteOwnership(
+	wandb *apiv2.WeightsAndBiases,
+	route *gatewayv1.HTTPRoute,
+	scheme *runtime.Scheme,
+) error {
+	if route.Namespace != wandb.Namespace {
+		route.OwnerReferences = nil
+		return nil
+	}
+	return controllerutil.SetOwnerReference(wandb, route, scheme)
 }

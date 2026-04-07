@@ -235,6 +235,9 @@ func Reconcile(
 					return ctrl.Result{}, err
 				}
 			}
+			if err = deleteInfraHTTPRoutes(ctx, client, wandb); err != nil {
+				return ctrl.Result{}, err
+			}
 			if wandb.Spec.Networking.Mode == apiv2.NetworkingModeIngress {
 				if err = deleteConsolidatedIngress(ctx, client, wandb); err != nil {
 					return ctrl.Result{}, err
@@ -436,7 +439,14 @@ func ReconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 		return ctrl.Result{}, err
 	}
 
+	if err := cleanupNetworkingModeResources(ctx, client, wandb); err != nil {
+		logger.Error(err, "Failed to clean up stale networking resources")
+		return ctrl.Result{}, err
+	}
+	resetInactiveNetworkingStatus(wandb)
+
 	if wandb.Spec.Networking.Mode == apiv2.NetworkingModeGatewayAPI {
+		wandb.Status.GatewayStatus = nil
 		if err := reconcileGateway(ctx, client, wandb); err != nil {
 			logger.Error(err, "Failed to reconcile Gateway")
 			return ctrl.Result{}, err
@@ -484,14 +494,14 @@ func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb 
 	}
 
 	desiredAppNames := make(map[string]bool)
-	for _, app := range manifest.Applications {
+	for _, app := range sortedManifestApplications(manifest) {
 		if len(app.Features) > 0 && !manifestFeaturesEnabled(app.Features, manifest.Features) {
 			continue
 		}
 		desiredAppNames[app.Name] = true
 	}
 
-	for _, app := range manifest.Applications {
+	for _, app := range sortedManifestApplications(manifest) {
 		// If the application is gated behind features, only install it when
 		// at least one of those features is enabled in the manifest.
 		if len(app.Features) > 0 && !manifestFeaturesEnabled(app.Features, manifest.Features) {
@@ -622,6 +632,7 @@ func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb 
 	}
 
 	if wandb.Spec.Networking.Mode == apiv2.NetworkingModeIngress {
+		wandb.Status.IngressStatus = nil
 		if err := reconcileConsolidatedIngress(ctx, client, wandb, manifest); err != nil {
 			logger.Error("Failed to reconcile consolidated Ingress", "err", err)
 			return ctrl.Result{}, err

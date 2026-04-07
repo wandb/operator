@@ -10,9 +10,14 @@ settings = {
     "wandbCR": "hack/testing-manifests/wandb/.generated/wandb-cr.yaml",
     "wandbOverlays": [],
     "installTelemetry": True,
+    "installIngressNginx": True,
     "installNginxGateway": True,
     "logFormat": "pretty",  # pretty, text, json
 }
+
+GENERATED_WANDB_CR = "hack/testing-manifests/wandb/.generated/wandb-cr.yaml"
+LOCAL_INGRESS_OVERLAY = "networking-ingress-local"
+LOCAL_GATEWAY_OVERLAY = "networking-gateway-local"
 
 if os.path.exists("tilt-settings.json"):
     fail("tilt-settings.json is no longer supported. Migrate to tilt-settings.star (see tilt-settings.sample.star).")
@@ -41,7 +46,7 @@ allow_k8s_contexts(settings.get("allowed_k8s_contexts"))
 os.putenv('PATH', './bin:' + os.getenv('PATH'))
 
 load('ext://restart_process', 'docker_build_with_restart')
-load('ext://helm_resource', 'helm_resource')
+load('ext://helm_resource', 'helm_repo', 'helm_resource')
 load('ext://cert_manager', 'deploy_cert_manager')
 
 DOCKERFILE = '''
@@ -85,18 +90,39 @@ def vetfmt():
 def binary():
     return 'CGO_ENABLED=0 GOOS=linux GO111MODULE=on go build -o tilt_bin/manager cmd/main.go'
 
-def managed_endpoint_resource(name, anchor_object, dep, local_port, remote_port, link_name, link_url, pod_selector, labels):
+def managed_endpoint_resource(name, anchor_object, deps, local_port, remote_port, link_name, pod_selector, labels, local_host='localhost'):
     k8s_resource(
         new_name=name,
         objects=[anchor_object],
         discovery_strategy='selectors-only',
         extra_pod_selectors=[pod_selector],
-        resource_deps=[dep],
+        resource_deps=deps,
         port_forwards=[
-            port_forward(local_port, remote_port, name=link_name),
+            port_forward(local_port, remote_port, name=link_name, host=local_host),
         ],
         labels=labels,
     )
+
+def local_networking_mode():
+    overlays = settings.get('wandbOverlays', [])
+    if LOCAL_INGRESS_OVERLAY in overlays and LOCAL_GATEWAY_OVERLAY in overlays:
+        fail('Only one local networking overlay may be enabled at a time.')
+    if LOCAL_INGRESS_OVERLAY in overlays:
+        return 'ingress'
+    if LOCAL_GATEWAY_OVERLAY in overlays:
+        return 'gateway'
+    return ''
+
+LOCAL_NETWORKING_MODE = local_networking_mode()
+
+if LOCAL_NETWORKING_MODE != '' and settings.get('wandbCR') != GENERATED_WANDB_CR:
+    fail('Local networking overlays are only supported with the generated wandbCR. Use wandbOverlays with the default wandbCR path.')
+
+if LOCAL_NETWORKING_MODE == 'ingress' and not settings.get('installIngressNginx'):
+    fail('The networking-ingress-local overlay requires installIngressNginx=True.')
+
+if LOCAL_NETWORKING_MODE == 'gateway' and not settings.get('installNginxGateway'):
+    fail('The networking-gateway-local overlay requires installNginxGateway=True.')
 
 
 installed = local("which kubebuilder")
@@ -110,21 +136,45 @@ local_resource("Operator-Generate", generate(), labels=[GROUP_WANDB_OPERATOR])
 deploy_cert_manager()
 
 if settings.get("installNginxGateway"):
-    local_resource(
-        'gateway-api-crds',
-        'kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.1/standard-install.yaml',
-        labels=["Gateway"],
+    if LOCAL_NETWORKING_MODE == 'gateway':
+        local_resource(
+            'gateway-api-crds',
+            'kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.1/standard-install.yaml',
+            labels=["Gateway"],
+        )
+        helm_resource(
+            'nginx-gateway-fabric',
+            chart='oci://ghcr.io/nginx/charts/nginx-gateway-fabric',
+            namespace='nginx-gateway',
+            flags=[
+                '--create-namespace',
+                '--version=2.4.2',
+            ],
+            resource_deps=['gateway-api-crds'],
+            labels=["Gateway"],
+        )
+
+if settings.get("installIngressNginx") and LOCAL_NETWORKING_MODE == 'ingress':
+    helm_repo(
+        'ingress-nginx',
+        'https://kubernetes.github.io/ingress-nginx',
+        resource_name='ingress-nginx-repo',
+        labels=["Ingress"],
     )
     helm_resource(
-        'nginx-gateway-fabric',
-        chart='oci://ghcr.io/nginx/charts/nginx-gateway-fabric',
-        namespace='nginx-gateway',
+        'ingress-nginx-controller',
+        chart='ingress-nginx/ingress-nginx',
+        release_name='ingress-nginx',
+        namespace='ingress-nginx',
         flags=[
             '--create-namespace',
-            '--version=2.4.2',
+            '--version=4.14.1',
+            '--set-string=controller.ingressClass=nginx',
+            '--set-string=controller.ingressClassResource.name=nginx',
+            '--set-string=controller.service.type=ClusterIP',
         ],
-        resource_deps=['gateway-api-crds'],
-        labels=["Gateway"],
+        resource_deps=['ingress-nginx-repo'],
+        labels=["Ingress"],
     )
 
 local_resource(
@@ -275,17 +325,47 @@ if settings.get("installWandb"):
         resource_deps=["Operator-Webhook-Ready"],
         labels=[GROUP_WANDB_APP],
     )
-    managed_endpoint_resource(
-        name='Wandb-Endpoint-Nginx',
-        anchor_object='wandb-nginx-endpoint-anchor:configmap:default',
-        dep='Wandb',
-        local_port=8080,
-        remote_port=8080,
-        link_name='W&B nginx',
-        link_url='http://localhost:8080',
-        pod_selector={'app.kubernetes.io/name': crName + '-nginx-proxy'},
-        labels=[GROUP_WANDB_APP],
-    )
+    if LOCAL_NETWORKING_MODE == 'ingress':
+        managed_endpoint_resource(
+            name='Wandb-Endpoint',
+            anchor_object='wandb-endpoint-anchor:configmap:default',
+            deps=['Wandb', 'ingress-nginx-controller'],
+            local_port=8080,
+            remote_port=80,
+            link_name='W&B ingress',
+            local_host='wandb.localhost',
+            pod_selector={
+                'app.kubernetes.io/component': 'controller',
+                'app.kubernetes.io/instance': 'ingress-nginx',
+                'app.kubernetes.io/name': 'ingress-nginx',
+            },
+            labels=[GROUP_WANDB_APP],
+        )
+    elif LOCAL_NETWORKING_MODE == 'gateway':
+        managed_endpoint_resource(
+            name='Wandb-Endpoint',
+            anchor_object='wandb-endpoint-anchor:configmap:default',
+            deps=['Wandb', 'nginx-gateway-fabric'],
+            local_port=8080,
+            remote_port=80,
+            link_name='W&B gateway',
+            local_host='wandb.localhost',
+            pod_selector={
+                'gateway.networking.k8s.io/gateway-name': crName + '-gateway',
+            },
+            labels=[GROUP_WANDB_APP],
+        )
+    else:
+        managed_endpoint_resource(
+            name='Wandb-Endpoint',
+            anchor_object='wandb-endpoint-anchor:configmap:default',
+            deps=['Wandb'],
+            local_port=8080,
+            remote_port=8080,
+            link_name='W&B nginx',
+            pod_selector={'app.kubernetes.io/name': crName + '-nginx-proxy'},
+            labels=[GROUP_WANDB_APP],
+        )
 
 if settings.get("installTelemetry"):
     local_resource(
@@ -322,22 +402,20 @@ if settings.get("installTelemetry"):
     managed_endpoint_resource(
         name='Telemetry-Endpoint-Grafana',
         anchor_object='telemetry-grafana-endpoint-anchor:configmap:default',
-        dep='Telemetry-Stack',
+        deps=['Telemetry-Stack'],
         local_port=3000,
         remote_port=3000,
         link_name='Grafana',
-        link_url='http://localhost:3000',
         pod_selector={'app': 'grafana'},
         labels=[GROUP_TELEMETRY],
     )
     managed_endpoint_resource(
         name='Telemetry-Endpoint-VictoriaMetrics',
         anchor_object='telemetry-victoria-metrics-endpoint-anchor:configmap:default',
-        dep='Telemetry-Stack',
+        deps=['Telemetry-Stack'],
         local_port=8428,
         remote_port=8429,
         link_name='VictoriaMetrics UI',
-        link_url='http://localhost:8428/vmui/',
         pod_selector={
             'app.kubernetes.io/name': 'vmsingle',
             'app.kubernetes.io/instance': 'victoria-instance',
@@ -347,11 +425,10 @@ if settings.get("installTelemetry"):
     managed_endpoint_resource(
         name='Telemetry-Endpoint-VictoriaLogs',
         anchor_object='telemetry-victoria-logs-endpoint-anchor:configmap:default',
-        dep='Telemetry-Stack',
+        deps=['Telemetry-Stack'],
         local_port=9428,
         remote_port=9428,
         link_name='VictoriaLogs',
-        link_url='http://localhost:9428',
         pod_selector={
             'app.kubernetes.io/name': 'vlsingle',
             'app.kubernetes.io/instance': 'victoria-logs',
@@ -361,11 +438,10 @@ if settings.get("installTelemetry"):
     managed_endpoint_resource(
         name='Telemetry-Endpoint-VictoriaTraces',
         anchor_object='telemetry-victoria-traces-endpoint-anchor:configmap:default',
-        dep='Telemetry-Stack',
+        deps=['Telemetry-Stack'],
         local_port=10428,
         remote_port=10428,
         link_name='VictoriaTraces',
-        link_url='http://localhost:10428',
         pod_selector={
             'app.kubernetes.io/name': 'vtsingle',
             'app.kubernetes.io/instance': 'victoria-traces',
