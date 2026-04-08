@@ -56,6 +56,9 @@ func (r OCIRelease) pullChart() (*chart.Chart, error) {
 	if r.Debug {
 		opts = append(opts, registry.ClientOptDebug(true))
 	}
+	if (r.Username == "") != (r.Password == "") {
+		return nil, fmt.Errorf("both username and password must be set together for OCI basic auth")
+	}
 	if r.Username != "" && r.Password != "" {
 		opts = append(opts, registry.ClientOptBasicAuth(r.Username, r.Password))
 	}
