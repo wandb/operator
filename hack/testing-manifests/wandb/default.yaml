@@ -13,7 +13,8 @@ spec:
   chart:
     url: https://charts.wandb.ai
     name: "operator-wandb"
-    version: "0.32.4"
+    # version: "0.32.4"
+    version: "0.41.3"
   values:
     global:
       bucket:
@@ -27,7 +28,7 @@ spec:
       resources:
         requests:
           cpu: "100m"
-        memory: "128Mi"
+          memory: "128Mi"
 
     parquet:
       resources:
@@ -67,3 +68,6 @@ spec:
 
     reloader:
       install: true
+
+    settingsMigrationJob:
+      install: false
