@@ -8,6 +8,7 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/translator"
+	"github.com/wandb/operator/pkg/utils"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
 	apiErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -308,6 +309,9 @@ func deleteStaleInfraHTTPRoutes(
 	desiredRoutes map[string]bool,
 ) error {
 	routeList := &gatewayv1.HTTPRouteList{}
+	if !utils.IsRegistered(c.Scheme(), routeList) {
+		return nil
+	}
 	if err := c.List(ctx, routeList, ctrlClient.MatchingLabels(infraHTTPRouteLabels(wandb))); err != nil {
 		return fmt.Errorf("failed to list managed infra HTTPRoutes: %w", err)
 	}

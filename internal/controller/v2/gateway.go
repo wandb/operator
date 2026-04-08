@@ -8,6 +8,7 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/logx"
+	"github.com/wandb/operator/pkg/utils"
 	apiErrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -92,6 +93,9 @@ func reconcileGateway(ctx context.Context, c ctrlClient.Client, wandb *apiv2.Wei
 func deleteGateway(ctx context.Context, c ctrlClient.Client, wandb *apiv2.WeightsAndBiases) error {
 	gatewayName := fmt.Sprintf("%s-gateway", wandb.Name)
 	gw := &gatewayv1.Gateway{}
+	if !utils.IsRegistered(c.Scheme(), gw) {
+		return nil
+	}
 	if err := c.Get(ctx, types.NamespacedName{Name: gatewayName, Namespace: wandb.Namespace}, gw); err != nil {
 		if apiErrors.IsNotFound(err) {
 			return nil

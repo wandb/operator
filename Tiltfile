@@ -147,25 +147,24 @@ local_resource("Operator-Generate", generate(), labels=[GROUP_WANDB_OPERATOR])
 deploy_cert_manager()
 
 if settings.get("installNginxGateway"):
-    if LOCAL_NETWORKING_MODE == 'gateway':
-        local_resource(
-            'gateway-api-crds',
-            'kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.1/standard-install.yaml',
-            labels=["Gateway"],
-        )
-        helm_resource(
-            'nginx-gateway-fabric',
-            chart='oci://ghcr.io/nginx/charts/nginx-gateway-fabric',
-            namespace='nginx-gateway',
-            flags=[
-                '--create-namespace',
-                '--version=2.4.2',
-            ],
-            resource_deps=['gateway-api-crds'],
-            labels=["Gateway"],
-        )
+    local_resource(
+        'gateway-api-crds',
+        'kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.1/standard-install.yaml',
+        labels=["Gateway"],
+    )
+    helm_resource(
+        'nginx-gateway-fabric',
+        chart='oci://ghcr.io/nginx/charts/nginx-gateway-fabric',
+        namespace='nginx-gateway',
+        flags=[
+            '--create-namespace',
+            '--version=2.4.2',
+        ],
+        resource_deps=['gateway-api-crds'],
+        labels=["Gateway"],
+    )
 
-if settings.get("installIngressNginx") and LOCAL_NETWORKING_MODE == 'ingress':
+if settings.get("installIngressNginx"):
     helm_repo(
         'ingress-nginx',
         'https://kubernetes.github.io/ingress-nginx',

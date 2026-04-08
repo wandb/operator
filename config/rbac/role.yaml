@@ -29,7 +29,6 @@ rules:
   - ""
   resources:
   - endpoints
-  - ingresses
   - namespaces
   - namespaces/status
   - nodes
@@ -46,7 +45,6 @@ rules:
   verbs:
   - get
   - list
-  - patch
   - watch
 - apiGroups:
   - apps
@@ -263,7 +261,6 @@ rules:
   - networking.k8s.io
   resources:
   - ingresses
-  - ingresses/status
   - networkpolicies
   verbs:
   - create
@@ -272,6 +269,14 @@ rules:
   - list
   - patch
   - update
+  - watch
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - ingresses/status
+  verbs:
+  - get
+  - list
   - watch
 - apiGroups:
   - policy
