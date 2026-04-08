@@ -45,14 +45,15 @@ import (
 // WeightsAndBiasesReconciler reconciles a WeightsAndBiases object
 type WeightsAndBiasesReconciler struct {
 	client.Client
-	IsAirgapped     bool
-	DeployerClient  deployer.DeployerInterface
-	Scheme          *runtime.Scheme
-	Recorder        record.EventRecorder
-	DryRun          bool
-	Debug           bool
-	EnableV2        bool
-	TelemetryConfig v2.TelemetryRuntimeConfig
+	IsAirgapped      bool
+	DeployerClient   deployer.DeployerInterface
+	Scheme           *runtime.Scheme
+	Recorder         record.EventRecorder
+	DryRun           bool
+	Debug            bool
+	EnableV2         bool
+	EnableGatewayAPI bool
+	TelemetryConfig  v2.TelemetryRuntimeConfig
 }
 
 //+kubebuilder:rbac:groups="",resources=configmaps;events;persistentvolumeclaims;secrets;serviceaccounts;services,verbs=update;delete;get;list;create;patch;watch
@@ -171,7 +172,7 @@ func (r *WeightsAndBiasesReconciler) Delete(e event.DeleteEvent) bool {
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *WeightsAndBiasesReconciler) SetupWithManager(mgr ctrl.Manager, enableGatewayAPI bool) error {
+func (r *WeightsAndBiasesReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	var b *ctrl.Builder
 	if r.EnableV2 {
 		b = ctrl.NewControllerManagedBy(mgr).
@@ -187,7 +188,7 @@ func (r *WeightsAndBiasesReconciler) SetupWithManager(mgr ctrl.Manager, enableGa
 			Owns(&corev1.Secret{}, builder.WithPredicates(filterSecretEventsForV1{})).
 			Owns(&corev1.ConfigMap{})
 	}
-	if enableGatewayAPI {
+	if r.EnableGatewayAPI {
 		b = b.Watches(&gatewayv1.Gateway{}, handler.EnqueueRequestsFromMapFunc(r.mapGatewayToWandb))
 	}
 	return b.Complete(r)

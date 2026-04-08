@@ -43,8 +43,9 @@ const applicationFinalizer = "applications.apps.wandb.com/finalizer"
 // ApplicationReconciler reconciles a Application object
 type ApplicationReconciler struct {
 	client.Client
-	Scheme         *runtime.Scheme
-	EnableRollouts bool
+	Scheme           *runtime.Scheme
+	EnableRollouts   bool
+	EnableGatewayAPI bool
 }
 
 // +kubebuilder:rbac:groups=apps.wandb.com,resources=applications,verbs=get;list;watch;create;update;patch;delete
@@ -1038,6 +1039,9 @@ func buildHTTPRouteRules(app *wandbv2.Application) []gatewayv1.HTTPRouteRule {
 
 func (r *ApplicationReconciler) deleteHTTPRoute(ctx context.Context, app *wandbv2.Application) error {
 	route := &gatewayv1.HTTPRoute{}
+	if !utils.IsRegistered(r.Scheme, route) {
+		return nil
+	}
 	if err := r.Get(ctx, client.ObjectKey{Namespace: app.Namespace, Name: app.Name}, route); err != nil {
 		if errors.IsNotFound(err) {
 			return nil
@@ -1071,11 +1075,14 @@ func (r *ApplicationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&appsv1.StatefulSet{}).
 		Owns(&corev1.Service{}).
 		Owns(&autoscalingv2.HorizontalPodAutoscaler{}).
-		Owns(&gatewayv1.HTTPRoute{}).
 		Named("application")
 
 	if r.EnableRollouts {
 		controller = controller.Owns(&v1alpha1.Rollout{})
+	}
+
+	if r.EnableGatewayAPI {
+		controller = controller.Owns(&gatewayv1.HTTPRoute{})
 	}
 
 	return controller.Complete(r)

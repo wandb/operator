@@ -318,15 +318,16 @@ func main() {
 	}
 
 	if err = (&controller.WeightsAndBiasesReconciler{
-		IsAirgapped:     airgapped,
-		Recorder:        mgr.GetEventRecorderFor("weightsandbiases"),
-		Client:          mgr.GetClient(),
-		Scheme:          mgr.GetScheme(),
-		DeployerClient:  &deployer.DeployerClient{DeployerAPI: deployerAPI},
-		Debug:           debug,
-		EnableV2:        enableV2,
-		TelemetryConfig: telemetryConfig,
-	}).SetupWithManager(mgr, enableGatewayAPI); err != nil {
+		IsAirgapped:      airgapped,
+		Recorder:         mgr.GetEventRecorderFor("weightsandbiases"),
+		Client:           mgr.GetClient(),
+		Scheme:           mgr.GetScheme(),
+		DeployerClient:   &deployer.DeployerClient{DeployerAPI: deployerAPI},
+		Debug:            debug,
+		EnableV2:         enableV2,
+		EnableGatewayAPI: enableGatewayAPI,
+		TelemetryConfig:  telemetryConfig,
+	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "WeightsAndBiases")
 		os.Exit(1)
 	}
