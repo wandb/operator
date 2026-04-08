@@ -114,6 +114,8 @@ func (c *ActionableChart) Install(
 	client := action.NewInstall(c.config)
 	client.ReleaseName = c.releaseName
 	client.Namespace = c.namespace
+	client.WaitStrategy = kube.HookOnlyStrategy
+	client.ServerSideApply = false
 	return client.Run(chart, values)
 }
 
@@ -123,6 +125,8 @@ func (c *ActionableChart) History() ([]release.Releaser, error) {
 
 func (c *ActionableChart) Rollback(version int) error {
 	client := action.NewRollback(c.config)
+	client.WaitStrategy = kube.HookOnlyStrategy
+	client.ServerSideApply = "false"
 	return client.Run(c.releaseName)
 }
 
@@ -130,12 +134,14 @@ func (c *ActionableChart) Upgrade(chart *chart.Chart, values map[string]interfac
 	client := action.NewUpgrade(c.config)
 	client.Namespace = c.namespace
 	client.MaxHistory = maxReleasesToKeep
+	client.WaitStrategy = kube.HookOnlyStrategy
+	client.ServerSideApply = "false"
 	return client.Run(c.releaseName, chart, values)
 }
 
 func (c *ActionableChart) Uninstall() (*release.UninstallReleaseResponse, error) {
 	client := action.NewUninstall(c.config)
-	client.WaitStrategy = kube.LegacyStrategy
+	client.WaitStrategy = kube.HookOnlyStrategy
 	client.Timeout = 600 * time.Second
 	return client.Run(c.releaseName)
 }
