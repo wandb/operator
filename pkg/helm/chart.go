@@ -141,7 +141,7 @@ func (c *ActionableChart) Upgrade(chart *chart.Chart, values map[string]interfac
 
 func (c *ActionableChart) Uninstall() (*release.UninstallReleaseResponse, error) {
 	client := action.NewUninstall(c.config)
-	client.WaitStrategy = kube.HookOnlyStrategy
+	client.WaitStrategy = kube.LegacyStrategy
 	client.Timeout = 600 * time.Second
 	return client.Run(c.releaseName)
 }
