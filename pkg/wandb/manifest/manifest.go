@@ -649,10 +649,13 @@ func processManifest(ctx context.Context, repo oras.ReadOnlyTarget, descriptor o
 
 		manifestFiles := slices.Sorted(maps.Keys(manifestFileContents))
 		for _, manifestFile := range manifestFiles {
-			if err := yaml.Unmarshal(manifestFileContents[manifestFile], &manifest); err != nil {
+			var fileManifest Manifest
+			if err := yaml.Unmarshal(manifestFileContents[manifestFile], &fileManifest); err != nil {
 				logger.Error("failed to unmarshal manifest file", "file", manifestFile, "err", err)
 				return Manifest{}, fmt.Errorf("failed to unmarshal %q: %w", manifestFile, err)
 			}
+
+			mergeSimple(&manifest, &fileManifest)
 		}
 
 		logger.Debug("successfully unmarshaled manifest files", "files", manifestFiles, "manifest", manifest)
