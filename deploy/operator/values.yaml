@@ -8,7 +8,7 @@ wandb:
 wandb-operator:
   image:
     repository: us-docker.pkg.dev/wandb-production/public/wandb/operator
-    tag: internal-testing.3
+    tag: dpanzella-test.0
   containers:
     operator:
       command:
