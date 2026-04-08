@@ -105,6 +105,7 @@ local-registry: ## Start a local OCI registry with basic auth for testing.
 	@if $(CONTAINER_TOOL) ps --filter name=$(REGISTRY_NAME) --format '{{.Names}}' | grep -q $(REGISTRY_NAME); then \
 		echo "Registry already running on port $(REGISTRY_PORT)"; \
 	else \
+		$(CONTAINER_TOOL) rm -f $(REGISTRY_NAME) >/dev/null 2>&1 || true; \
 		mkdir -p $(REGISTRY_AUTH_DIR) && \
 		$(CONTAINER_TOOL) run --rm --entrypoint sh registry:2 -c \
 			"apk add --no-cache apache2-utils >/dev/null 2>&1 && htpasswd -Bbn $(REGISTRY_USER) $(REGISTRY_PASS)" \
@@ -126,9 +127,11 @@ local-registry-push: local-registry ## Push a chart from the wandb helm repo to 
 		--plain-http --username $(REGISTRY_USER) --password $(REGISTRY_PASS) && \
 	rm -rf $$tmpdir
 
+WANDB_NAMESPACE ?= default
+
 .PHONY: local-registry-secret
 local-registry-secret: ## Create a Kubernetes secret with registry credentials for the operator.
-	@kubectl create secret generic oci-registry-creds \
+	@kubectl -n $(WANDB_NAMESPACE) create secret generic oci-registry-creds \
 		--from-literal=HELM_USERNAME=$(REGISTRY_USER) \
 		--from-literal=HELM_PASSWORD=$(REGISTRY_PASS) \
 		--dry-run=client -o yaml | kubectl apply -f -
