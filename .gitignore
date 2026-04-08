@@ -53,3 +53,11 @@ hack/testing-manifests/wandb/.generated/wandb-cr.yaml
 
 # various util artifacts
 .k8s-images
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfvars
+!*.tfvars.example
+.terraform.lock.hcl

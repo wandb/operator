@@ -1,0 +1,18 @@
+project_id          = "my-gcp-project"
+cluster_name        = "wandb-operator-test"
+region              = "us-central1"
+kubernetes_version  = "1.31"
+node_count          = 1
+node_instance_type  = "e2-standard-8"
+storage_class_name  = "standard-rwo"
+
+# Set to true to enable GKE's built-in GCE ingress controller and Gateway API controller
+install_cloud_lb_controller = false
+
+# Set to true to create a GCS bucket with HMAC credentials for external object store testing
+create_bucket = false
+# bucket_name = "my-custom-bucket-name"
+
+tags = {
+  "team" = "platform"
+}

@@ -1,0 +1,17 @@
+cluster_name        = "wandb-operator-test"
+region              = "eastus2"
+kubernetes_version  = "1.31"
+node_count          = 1
+node_instance_type  = "Standard_D8s_v5"
+storage_class_name  = "managed-csi"
+
+# Set to true to enable the Azure Application Gateway Ingress Controller (AGIC)
+install_cloud_lb_controller = false
+
+# Set to true to create an Azure Blob Storage container for external object store testing
+create_bucket = false
+# bucket_name = "mycustombucket"  # Azure storage account name: lowercase alphanumeric, 3-24 chars
+
+tags = {
+  "Team" = "platform"
+}
