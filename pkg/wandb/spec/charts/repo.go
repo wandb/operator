@@ -203,7 +203,7 @@ func (r RepoRelease) downloadChart() (string, error) {
 
 	getterOpts := []getter.Option{
 		getter.WithBasicAuth(r.Username, r.Password),
-		getter.WithInsecureSkipVerifyTLS(true),
+		getter.WithInsecureSkipVerifyTLS(entry.InsecureSkipTLSVerify),
 	}
 
 	providers := getter.All(settings)
