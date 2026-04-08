@@ -138,8 +138,18 @@ func (r OCIRelease) Apply(
 			log.Error(err, "Failed to get credentials from secret")
 			return err
 		}
-		r.Username = string(secret.Data[r.CredentialSecret.UsernameKey])
-		r.Password = string(secret.Data[r.CredentialSecret.PasswordKey])
+		usernameBytes, ok := secret.Data[r.CredentialSecret.UsernameKey]
+		if !ok || len(usernameBytes) == 0 {
+			return fmt.Errorf("credential secret %s/%s missing key %q",
+				wandb.Namespace, r.CredentialSecret.Name, r.CredentialSecret.UsernameKey)
+		}
+		passwordBytes, ok := secret.Data[r.CredentialSecret.PasswordKey]
+		if !ok || len(passwordBytes) == 0 {
+			return fmt.Errorf("credential secret %s/%s missing key %q",
+				wandb.Namespace, r.CredentialSecret.Name, r.CredentialSecret.PasswordKey)
+		}
+		r.Username = string(usernameBytes)
+		r.Password = string(passwordBytes)
 	}
 
 	chrt, err := r.pullChart()
