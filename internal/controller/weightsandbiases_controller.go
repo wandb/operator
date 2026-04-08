@@ -170,7 +170,7 @@ func (r *WeightsAndBiasesReconciler) Delete(e event.DeleteEvent) bool {
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *WeightsAndBiasesReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *WeightsAndBiasesReconciler) SetupWithManager(mgr ctrl.Manager, enableGatewayAPI bool) error {
 	var b *ctrl.Builder
 	if r.EnableV2 {
 		b = ctrl.NewControllerManagedBy(mgr).
@@ -179,13 +179,15 @@ func (r *WeightsAndBiasesReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			Owns(&batchv1.Job{}).
 			Owns(&corev1.Secret{}).
 			Owns(&corev1.ConfigMap{}).
-			Owns(&networkingv1.Ingress{}).
-			Watches(&gatewayv1.Gateway{}, handler.EnqueueRequestsFromMapFunc(r.mapGatewayToWandb))
+			Owns(&networkingv1.Ingress{})
 	} else {
 		b = ctrl.NewControllerManagedBy(mgr).
 			For(&apiv1.WeightsAndBiases{}, builder.WithPredicates(filterWBEventsForV1{})).
 			Owns(&corev1.Secret{}, builder.WithPredicates(filterSecretEventsForV1{})).
 			Owns(&corev1.ConfigMap{})
+	}
+	if enableGatewayAPI {
+		b = b.Watches(&gatewayv1.Gateway{}, handler.EnqueueRequestsFromMapFunc(r.mapGatewayToWandb))
 	}
 	return b.Complete(r)
 }

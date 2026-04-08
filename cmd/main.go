@@ -36,10 +36,14 @@ import (
 	strimziv1 "github.com/wandb/operator/pkg/vendored/strimzi-kafka/v1"
 	"github.com/wandb/operator/pkg/wandb/spec/channel/deployer"
 	corev1 "k8s.io/api/core/v1"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
+	"github.com/wandb/operator/internal/controller"
+	controllerv2 "github.com/wandb/operator/internal/controller/v2"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -52,10 +56,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	ctrlwh "sigs.k8s.io/controller-runtime/pkg/webhook"
-	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
-
-	"github.com/wandb/operator/internal/controller"
-	controllerv2 "github.com/wandb/operator/internal/controller/v2"
 
 	appsv2 "github.com/wandb/operator/api/v2"
 	webhookv2 "github.com/wandb/operator/internal/webhook/v2"
@@ -79,7 +79,6 @@ func init() {
 	utilruntime.Must(miniov2.AddToScheme(scheme))
 	utilruntime.Must(chiv1.AddToScheme(scheme))
 	utilruntime.Must(mysqlv2.AddToScheme(scheme))
-	utilruntime.Must(gatewayv1.Install(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -94,8 +93,7 @@ func main() {
 	var enableHTTP2 bool
 	var tlsOpts []func(*tls.Config)
 	var deployerAPI, isolationNamespaces string
-	var debug, airgapped, enableV2, enableWebhooks, enableRollouts bool
-	var telemetryEnabled bool
+	var debug, airgapped, enableV2, enableWebhooks, enableRollouts, enableGatewayAPI, enableTelemetry bool
 	var telemetryManagedNamespace string
 	var telemetryOTelSecretName, telemetryOTelProtocol, telemetryOTelServiceName, telemetryOTelResourceAttributes string
 
@@ -126,7 +124,8 @@ func main() {
 	flag.BoolVar(&enableV2, "enable-v2", true, "Use V2 of WandB CRD")
 	flag.BoolVar(&enableWebhooks, "enable-webhooks", true, "Enable webhooks")
 	flag.BoolVar(&enableRollouts, "enable-rollouts", false, "Enable Argo Rollout Support")
-	flag.BoolVar(&telemetryEnabled, "telemetry-enabled", false, "Enable telemetry endpoint reconciliation for W&B applications")
+	flag.BoolVar(&enableGatewayAPI, "enable-gateway-api", false, "Enable Gateway API Support")
+	flag.BoolVar(&enableTelemetry, "telemetry-enabled", false, "Enable telemetry endpoint reconciliation for W&B applications")
 	flag.StringVar(&telemetryManagedNamespace, "telemetry-managed-namespace", "", "Namespace where managed telemetry services run")
 	flag.StringVar(&telemetryOTelSecretName, "telemetry-otel-secret-name", "wandb-otel-connection", "Name of the OTEL connection secret managed by the operator")
 	flag.StringVar(&telemetryOTelProtocol, "telemetry-otel-protocol", "http/protobuf", "OTEL exporter protocol written to the OTEL connection secret")
@@ -172,8 +171,12 @@ func main() {
 		utilruntime.Must(argov1alpha1.AddToScheme(scheme))
 	}
 
+	if enableGatewayAPI {
+		utilruntime.Must(gatewayv1.Install(scheme))
+	}
+
 	telemetryConfig := controllerv2.DefaultTelemetryRuntimeConfig()
-	telemetryConfig.Enabled = telemetryEnabled
+	telemetryConfig.Enabled = enableTelemetry
 	telemetryConfig.Namespace = telemetryManagedNamespace
 	telemetryConfig.OTel.SecretName = telemetryOTelSecretName
 	telemetryConfig.OTel.Protocol = telemetryOTelProtocol
@@ -323,7 +326,7 @@ func main() {
 		Debug:           debug,
 		EnableV2:        enableV2,
 		TelemetryConfig: telemetryConfig,
-	}).SetupWithManager(mgr); err != nil {
+	}).SetupWithManager(mgr, enableGatewayAPI); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "WeightsAndBiases")
 		os.Exit(1)
 	}
