@@ -280,6 +280,7 @@ func (r RepoRelease) downloadChart() (string, error) {
 		RegistryClient:   cfg.RegistryClient,
 		RepositoryConfig: settings.RepositoryConfig,
 		RepositoryCache:  settings.RepositoryCache,
+		ContentCache:     settings.ContentCache,
 	}
 
 	dest := filepath.Join(os.Getenv("HELM_DATA_HOME"), "charts")
