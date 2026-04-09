@@ -1,3 +1,4 @@
+# aws_profile = "SbxAdmin"  # AWS CLI profile name (for SSO, named profiles, etc.)
 cluster_name        = "wandb-operator-test"
 region              = "us-west-2"
 kubernetes_version  = "1.31"

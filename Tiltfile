@@ -41,7 +41,7 @@ if currentContext in settings.get("allowedContexts"):
 else:
     fail("Selected context is not in allow list")
 
-allow_k8s_contexts(settings.get("allowed_k8s_contexts"))
+allow_k8s_contexts(settings.get("allowedContexts"))
 
 os.putenv('PATH', './bin:' + os.getenv('PATH'))
 

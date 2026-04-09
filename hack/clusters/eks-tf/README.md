@@ -4,7 +4,7 @@ Terraform configuration for provisioning an EKS cluster to test Operator v2 depl
 
 ## Prerequisites
 
-- AWS CLI configured with appropriate credentials
+- AWS CLI installed and authenticated (`aws sso login --profile <profile>` or `aws configure`)
 - Terraform >= 1.5
 - `kubectl`
 
@@ -16,7 +16,7 @@ The caller needs permissions to create: VPC, subnets, internet gateway, route ta
 
 ```bash
 cp terraform.tfvars.example terraform.tfvars
-# Edit terraform.tfvars as needed
+# Edit terraform.tfvars — set aws_profile if using SSO or named profiles
 
 terraform init
 terraform apply
@@ -25,7 +25,7 @@ terraform apply
 After apply completes, configure kubectl:
 
 ```bash
-$(terraform output -raw kubeconfig_command)
+eval "$(terraform output -raw kubeconfig_command)"
 ```
 
 Then add the context to your `tilt-settings.star`:

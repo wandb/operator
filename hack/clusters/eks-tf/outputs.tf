@@ -7,7 +7,7 @@ output "cluster_endpoint" {
 }
 
 output "kubeconfig_command" {
-  value = "aws eks update-kubeconfig --name ${aws_eks_cluster.this.name} --region ${var.region}"
+  value = "aws eks update-kubeconfig --name ${aws_eks_cluster.this.name} --region ${var.region}${var.aws_profile != "" ? " --profile ${var.aws_profile}" : ""}"
 }
 
 output "kube_context_name" {

@@ -1,3 +1,8 @@
+variable "aws_profile" {
+  type    = string
+  default = ""
+}
+
 variable "cluster_name" {
   type    = string
   default = "wandb-operator-test"
