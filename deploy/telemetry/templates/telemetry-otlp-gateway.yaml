@@ -1,4 +1,5 @@
-{{- if .Values.enabled }}
+{{- if eq (include "telemetry.stackEnabled" .) "true" }}
+{{- $forwardingEnabled := eq (include "telemetry.forwardingEnabled" .) "true" }}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -32,6 +33,25 @@ data:
       otlphttp/vt:
         endpoint: http://vtsingle-{{ include "telemetry.vtsingleName" . }}:10428
         traces_endpoint: http://vtsingle-{{ include "telemetry.vtsingleName" . }}:10428/insert/opentelemetry/v1/traces
+{{ if $forwardingEnabled }}
+{{ if eq (default "http/protobuf" .Values.forwarding.otlp.protocol) "grpc" }}
+      otlp/external:
+        endpoint: {{ .Values.forwarding.otlp.endpoint | quote }}
+        tls:
+          insecure: {{ .Values.forwarding.otlp.tls.insecure }}
+{{ with .Values.forwarding.otlp.headers }}
+        headers:
+{{ toYaml . | nindent 10 }}
+{{ end }}
+{{ else }}
+      otlphttp/external:
+        endpoint: {{ .Values.forwarding.otlp.endpoint | quote }}
+{{ with .Values.forwarding.otlp.headers }}
+        headers:
+{{ toYaml . | nindent 10 }}
+{{ end }}
+{{ end }}
+{{ end }}
 
     service:
       telemetry:
@@ -41,15 +61,15 @@ data:
         metrics:
           receivers: [otlp]
           processors: [batch]
-          exporters: [otlphttp/vm]
+          exporters: [otlphttp/vm{{ if $forwardingEnabled }}, {{ include "telemetry.forwardingExporterName" . }}{{ end }}]
         logs:
           receivers: [otlp]
           processors: [batch]
-          exporters: [otlphttp/vl]
+          exporters: [otlphttp/vl{{ if $forwardingEnabled }}, {{ include "telemetry.forwardingExporterName" . }}{{ end }}]
         traces:
           receivers: [otlp]
           processors: [batch]
-          exporters: [otlphttp/vt]
+          exporters: [otlphttp/vt{{ if $forwardingEnabled }}, {{ include "telemetry.forwardingExporterName" . }}{{ end }}]
 ---
 apiVersion: apps/v1
 kind: Deployment

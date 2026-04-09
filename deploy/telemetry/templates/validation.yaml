@@ -1,0 +1,4 @@
+{{- $mode := default "off" .Values.mode -}}
+{{- if and (eq $mode "forward") (eq (default "" .Values.forwarding.otlp.endpoint) "") -}}
+{{- fail "mode=forward requires forwarding.otlp.endpoint" -}}
+{{- end -}}

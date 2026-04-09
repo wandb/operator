@@ -1,0 +1,18 @@
+{{- $mode := default "off" .Values.telemetry.mode -}}
+{{- $stackEnabled := or (eq $mode "forward") (eq $mode "full") -}}
+{{- $uiEnabled := eq $mode "full" -}}
+{{- if and (eq $mode "off") (index .Values "victoria-metrics-operator" "enabled") -}}
+{{- fail "telemetry.mode=off requires victoria-metrics-operator.enabled=false" -}}
+{{- end -}}
+{{- if and (eq $mode "off") (index .Values "grafana-operator" "enabled") -}}
+{{- fail "telemetry.mode=off requires grafana-operator.enabled=false" -}}
+{{- end -}}
+{{- if and $stackEnabled (not (index .Values "victoria-metrics-operator" "enabled")) -}}
+{{- fail "telemetry.mode=forward/full requires victoria-metrics-operator.enabled=true" -}}
+{{- end -}}
+{{- if and $uiEnabled (not (index .Values "grafana-operator" "enabled")) -}}
+{{- fail "telemetry.mode=full requires grafana-operator.enabled=true" -}}
+{{- end -}}
+{{- if and (eq $mode "forward") (eq (default "" .Values.telemetry.forwarding.otlp.endpoint) "") -}}
+{{- fail "telemetry.mode=forward requires telemetry.forwarding.otlp.endpoint" -}}
+{{- end -}}
