@@ -1025,6 +1025,14 @@ func buildHTTPRouteRules(app *wandbv2.Application) []gatewayv1.HTTPRouteRule {
 	return []gatewayv1.HTTPRouteRule{{
 		Matches:     matches,
 		BackendRefs: []gatewayv1.HTTPBackendRef{backendRef},
+		Filters: []gatewayv1.HTTPRouteFilter{
+			{
+				Type: gatewayv1.HTTPRouteFilterRequestHeaderModifier,
+				RequestHeaderModifier: &gatewayv1.HTTPHeaderFilter{
+					Remove: []string{"X-Forwarded-Host", "X-Forwarded-Port"},
+				},
+			},
+		},
 	}}
 }
 

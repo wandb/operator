@@ -103,20 +103,31 @@ def managed_endpoint_resource(name, anchor_object, deps, local_port, remote_port
         labels=labels,
     )
 
-def local_networking_mode():
+GENERATED_DIR = 'hack/testing-manifests/wandb/.generated'
+
+def build_wandb_cr():
     overlays = settings.get('wandbOverlays', [])
-    if LOCAL_INGRESS_OVERLAY in overlays and LOCAL_GATEWAY_OVERLAY in overlays:
-        fail('Only one local networking overlay may be enabled at a time.')
-    if LOCAL_INGRESS_OVERLAY in overlays:
-        return 'ingress'
-    if LOCAL_GATEWAY_OVERLAY in overlays:
-        return 'gateway'
-    return ''
+    components_lines = ''
+    for o in overlays:
+        components_lines += '  - ../kustomize/overlays/' + o + '\n'
+
+    kustomization = 'apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\nresources:\n  - ../kustomize/base\n'
+    if components_lines:
+        kustomization += 'components:\n' + components_lines
+
+    local('mkdir -p ' + GENERATED_DIR)
+    local("cat > %s/kustomization.yaml << 'KEOF'\n%sKEOF" % (GENERATED_DIR, kustomization))
+    local('kustomize build %s > %s/wandb-cr.yaml' % (GENERATED_DIR, GENERATED_DIR))
+
+def local_networking_mode():
+    build_wandb_cr()
+    wandbCR = settings.get('wandbCR')
+    crContent = read_yaml(wandbCR)
+    networkingMode = crContent.get('spec', {}).get('networking', {}).get('mode', '')
+    return networkingMode
+
 
 LOCAL_NETWORKING_MODE = local_networking_mode()
-
-if LOCAL_NETWORKING_MODE != '' and settings.get('wandbCR') != GENERATED_WANDB_CR:
-    fail('Local networking overlays are only supported with the generated wandbCR. Use wandbOverlays with the default wandbCR path.')
 
 if LOCAL_NETWORKING_MODE == 'ingress' and not settings.get('installIngressNginx'):
     fail('The networking-ingress-local overlay requires installIngressNginx=True.')
@@ -293,22 +304,6 @@ local_resource(
     auto_init=False,
     labels=[GROUP_WANDB_APP],
 )
-
-GENERATED_DIR = 'hack/testing-manifests/wandb/.generated'
-
-def build_wandb_cr():
-    overlays = settings.get('wandbOverlays', [])
-    components_lines = ''
-    for o in overlays:
-        components_lines += '  - ../kustomize/overlays/' + o + '\n'
-
-    kustomization = 'apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\nresources:\n  - ../kustomize/base\n'
-    if components_lines:
-        kustomization += 'components:\n' + components_lines
-
-    local('mkdir -p ' + GENERATED_DIR)
-    local("cat > %s/kustomization.yaml << 'KEOF'\n%sKEOF" % (GENERATED_DIR, kustomization))
-    local('kustomize build %s > %s/wandb-cr.yaml' % (GENERATED_DIR, GENERATED_DIR))
 
 if settings.get("installWandb"):
     build_wandb_cr()
