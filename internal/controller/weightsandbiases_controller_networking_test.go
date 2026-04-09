@@ -287,7 +287,7 @@ func reconcileNetworkingManifest(ctx context.Context, wandb *apiv2.WeightsAndBia
 	wandbManifest, err := manifest.GetServerManifest(ctx, wandb.Spec.Wandb.ManifestRepository, wandb.Spec.Wandb.Version)
 	Expect(err).NotTo(HaveOccurred())
 
-	_, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest)
+	_, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, v2.DefaultTelemetryRuntimeConfig())
 	Expect(err).NotTo(HaveOccurred())
 }
 

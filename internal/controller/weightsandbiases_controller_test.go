@@ -190,7 +190,7 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			By("Checking if Applications were NOT created yet (migrations not complete)")
 			wandbManifest, err := manifest.GetServerManifest(ctx, wandb.Spec.Wandb.ManifestRepository, wandb.Spec.Wandb.Version)
 			Expect(err).Should(Succeed())
-			_, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest)
+			_, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, v2.DefaultTelemetryRuntimeConfig())
 			Expect(err).Should(Succeed())
 
 			By("Checking if the MySQL init job was created")
@@ -284,7 +284,7 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			By("Checking if Applications were NOT created yet (migrations not complete)")
 			wandbManifest, err := manifest.GetServerManifest(ctx, wandb.Spec.Wandb.ManifestRepository, wandb.Spec.Wandb.Version)
 			Expect(err).Should(Succeed())
-			ctrlResult, err := v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest)
+			ctrlResult, err := v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, v2.DefaultTelemetryRuntimeConfig())
 			Expect(err).Should(Succeed())
 			Expect(ctrlResult.RequeueAfter).Should(BeNumerically(">", 0))
 
@@ -302,7 +302,7 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			Expect(k8sClient.Status().Update(ctx, wandb)).Should(Succeed())
 
 			// For now test by calling ReconcileWandbManifest directly, but this will get refactored into the reconciler later
-			ctrlResult, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest)
+			ctrlResult, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, v2.DefaultTelemetryRuntimeConfig())
 			Expect(err).Should(Succeed())
 			Expect(ctrlResult.RequeueAfter).Should(BeZero())
 
@@ -382,7 +382,7 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			wandb.Status.ClickHouseStatus.Connection.URL = v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: WandbName}, Key: "test"}
 			Expect(k8sClient.Status().Update(ctx, wandb)).Should(Succeed())
 
-			ctrlResult, err := v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest)
+			ctrlResult, err := v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, v2.DefaultTelemetryRuntimeConfig())
 			Expect(err).Should(Succeed())
 			Expect(ctrlResult.RequeueAfter).Should(BeNumerically(">", 0), "Expected requeue when migration is running")
 
@@ -392,7 +392,7 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			wandb.Status.Wandb.Migration.Reason = "Failed"
 			Expect(k8sClient.Status().Update(ctx, wandb)).Should(Succeed())
 
-			ctrlResult, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest)
+			ctrlResult, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, v2.DefaultTelemetryRuntimeConfig())
 			Expect(err).Should(Succeed())
 			Expect(ctrlResult.RequeueAfter).Should(BeNumerically(">", 0), "Expected requeue when migration failed")
 
@@ -404,7 +404,7 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			wandb.Status.Wandb.MySQLInit.Succeeded = true
 			Expect(k8sClient.Status().Update(ctx, wandb)).Should(Succeed())
 
-			ctrlResult, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest)
+			ctrlResult, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, v2.DefaultTelemetryRuntimeConfig())
 			Expect(err).Should(Succeed())
 			Expect(ctrlResult.RequeueAfter).Should(BeZero(), "Expected no requeue when migration is complete")
 
@@ -471,7 +471,7 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 
 			// This call to ReconcileWandbManifest should trigger runMigrations,
 			// which sees version mismatch and starts migrations.
-			_, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest)
+			_, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, v2.DefaultTelemetryRuntimeConfig())
 			Expect(err).Should(Succeed())
 
 			By("Verifying migration status was reset for the new version")
