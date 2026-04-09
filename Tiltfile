@@ -196,7 +196,7 @@ local_resource(
 
 third_party_operator_flags = [
     '--set=wandb-operator.enabled=false',
-    '--set=telemetry.enabled=false',
+    '--set=telemetry.mode=off',
     '--create-namespace',
 ]
 
