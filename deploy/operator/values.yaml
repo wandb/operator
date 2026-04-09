@@ -1,3 +1,8 @@
+global:
+  telemetry:
+    enabled: true
+    namespace: ""
+
 wandb:
   install: true
   size: small
@@ -27,18 +32,20 @@ wandb-operator:
           value: ":8443"
         METRICS_SECURE:
           value: "false"
+        GATEWAY_API_ENABLED:
+          value: "{{ .Values.gatewayAPI.enabled }}"
         TELEMETRY_ENABLED:
-          value: "{{ .Values.telemetry.enabled }}"
+          value: "{{ .Values.global.telemetry.enabled }}"
         TELEMETRY_MANAGED_NAMESPACE:
-          value: "{{ .Values.telemetry.namespace }}"
+          value: "{{ .Values.global.telemetry.namespace }}"
         TELEMETRY_OTEL_SECRET_NAME:
-          value: '{{ (index .Values "wandb-operator").telemetry.otel.secretName }}'
+          value: '{{ .Values.telemetry.otel.secretName }}'
         TELEMETRY_OTEL_PROTOCOL:
-          value: '{{ (index .Values "wandb-operator").telemetry.otel.protocol }}'
+          value: '{{ .Values.telemetry.otel.protocol }}'
         TELEMETRY_OTEL_SERVICE_NAME:
-          value: '{{ (index .Values "wandb-operator").telemetry.otel.serviceName }}'
+          value: '{{ .Values.telemetry.otel.serviceName }}'
         TELEMETRY_OTEL_RESOURCE_ATTRIBUTES:
-          value: '{{ (index .Values "wandb-operator").telemetry.otel.resourceAttributes }}'
+          value: '{{ .Values.telemetry.otel.resourceAttributes }}'
       securityContext:
         allowPrivilegeEscalation: false
         capabilities:
@@ -99,6 +106,9 @@ wandb-operator:
     redis: true
     vm: true
 
+  gatewayAPI:
+    enabled: false
+
   telemetry:
     otel:
       secretName: wandb-otel-connection
@@ -134,8 +144,6 @@ grafana-operator:
   enabled: true
 
 telemetry:
-  enabled: false
-  namespace: ""
   retentionPeriod: 1d
   scrape:
     enabled: true

@@ -1,6 +1,6 @@
 {{- define "telemetry.namespace" -}}
-{{- if .Values.namespace -}}
-{{- .Values.namespace -}}
+{{- if .Values.global.telemetry.namespace -}}
+{{- .Values.global.telemetry.namespace -}}
 {{- else if .Release.Namespace -}}
 {{- .Release.Namespace -}}
 {{- else -}}

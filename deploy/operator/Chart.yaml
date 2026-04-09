@@ -47,4 +47,4 @@ dependencies:
   - name: telemetry
     version: 0.1.0
     repository: file://../telemetry
-    condition: telemetry.enabled
+    condition: global.telemetry.enabled

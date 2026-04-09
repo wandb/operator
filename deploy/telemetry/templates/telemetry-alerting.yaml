@@ -1,4 +1,4 @@
-{{- if and .Values.enabled .Values.alerting.enabled }}
+{{- if and .Values.global.telemetry.enabled .Values.alerting.enabled }}
 ---
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMRule

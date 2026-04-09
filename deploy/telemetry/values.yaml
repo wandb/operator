@@ -1,5 +1,7 @@
-enabled: false
-namespace: ""
+global:
+  telemetry:
+    namespace: ""
+    enabled: false
 retentionPeriod: 1d
 scrape:
   enabled: true

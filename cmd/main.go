@@ -93,7 +93,7 @@ func main() {
 	var enableHTTP2 bool
 	var tlsOpts []func(*tls.Config)
 	var deployerAPI, isolationNamespaces string
-	var debug, airgapped, enableV2, enableWebhooks, enableRollouts, enableGatewayAPI, enableTelemetry bool
+	var debug, airgapped, enableV2, enableWebhooks, enableRollouts, gatewayAPIEnabled, telemetryEnabled bool
 	var telemetryManagedNamespace string
 	var telemetryOTelSecretName, telemetryOTelProtocol, telemetryOTelServiceName, telemetryOTelResourceAttributes string
 
@@ -124,8 +124,8 @@ func main() {
 	flag.BoolVar(&enableV2, "enable-v2", true, "Use V2 of WandB CRD")
 	flag.BoolVar(&enableWebhooks, "enable-webhooks", true, "Enable webhooks")
 	flag.BoolVar(&enableRollouts, "enable-rollouts", false, "Enable Argo Rollout Support")
-	flag.BoolVar(&enableGatewayAPI, "enable-gateway-api", false, "Enable Gateway API Support")
-	flag.BoolVar(&enableTelemetry, "telemetry-enabled", false, "Enable telemetry endpoint reconciliation for W&B applications")
+	flag.BoolVar(&gatewayAPIEnabled, "gateway-api-enabled", false, "Enable Gateway API Support")
+	flag.BoolVar(&telemetryEnabled, "telemetry-enabled", false, "Enable telemetry endpoint reconciliation for W&B applications")
 	flag.StringVar(&telemetryManagedNamespace, "telemetry-managed-namespace", "", "Namespace where managed telemetry services run")
 	flag.StringVar(&telemetryOTelSecretName, "telemetry-otel-secret-name", "wandb-otel-connection", "Name of the OTEL connection secret managed by the operator")
 	flag.StringVar(&telemetryOTelProtocol, "telemetry-otel-protocol", "http/protobuf", "OTEL exporter protocol written to the OTEL connection secret")
@@ -171,12 +171,12 @@ func main() {
 		utilruntime.Must(argov1alpha1.AddToScheme(scheme))
 	}
 
-	if enableGatewayAPI {
+	if gatewayAPIEnabled {
 		utilruntime.Must(gatewayv1.Install(scheme))
 	}
 
 	telemetryConfig := controllerv2.DefaultTelemetryRuntimeConfig()
-	telemetryConfig.Enabled = enableTelemetry
+	telemetryConfig.Enabled = telemetryEnabled
 	telemetryConfig.Namespace = telemetryManagedNamespace
 	telemetryConfig.OTel.SecretName = telemetryOTelSecretName
 	telemetryConfig.OTel.Protocol = telemetryOTelProtocol
@@ -325,7 +325,7 @@ func main() {
 		DeployerClient:   &deployer.DeployerClient{DeployerAPI: deployerAPI},
 		Debug:            debug,
 		EnableV2:         enableV2,
-		EnableGatewayAPI: enableGatewayAPI,
+		EnableGatewayAPI: gatewayAPIEnabled,
 		TelemetryConfig:  telemetryConfig,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "WeightsAndBiases")

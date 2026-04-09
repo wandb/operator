@@ -1,4 +1,4 @@
-{{- if .Values.enabled }}
+{{- if .Values.global.telemetry.enabled }}
 ---
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMSingle
