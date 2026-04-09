@@ -74,7 +74,11 @@ telemetry:
 
 Set `"installTelemetry": True` in `tilt-settings.star`.
 
-Tilt installs the telemetry stack through Helm and exposes endpoints for:
+Tilt treats `installTelemetry=True` as the local `full` mode. It installs the
+VictoriaMetrics and Grafana operators, then installs the standalone telemetry
+chart with `mode=full`.
+
+Tilt exposes endpoints for:
 - Grafana
 - VictoriaMetrics
 - VictoriaLogs
