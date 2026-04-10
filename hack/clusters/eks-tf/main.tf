@@ -4,7 +4,7 @@ provider "aws" {
 
   default_tags {
     tags = merge(var.tags, {
-      "wandb:cluster" = var.cluster_name
+      "wandb:cluster" = local.cluster_name
       "ManagedBy"     = "terraform"
     })
   }
@@ -32,10 +32,15 @@ data "aws_availability_zones" "available" {
   }
 }
 
+resource "time_static" "suffix" {
+  count = var.append_timestamp ? 1 : 0
+}
+
 locals {
-  azs         = slice(data.aws_availability_zones.available.names, 0, 3)
-  account_id  = data.aws_caller_identity.current.account_id
-  bucket_name = var.bucket_name != "" ? var.bucket_name : "${var.cluster_name}-wandb"
+  azs          = slice(data.aws_availability_zones.available.names, 0, 3)
+  account_id   = data.aws_caller_identity.current.account_id
+  cluster_name = var.append_timestamp ? "${var.deployment_name}-${formatdate("YYMMDDhhmm", time_static.suffix[0].rfc3339)}" : var.deployment_name
+  bucket_name  = "${local.cluster_name}-wandb"
 }
 
 # -----------------------------------------------------------------------------
@@ -47,12 +52,12 @@ resource "aws_vpc" "this" {
   enable_dns_support   = true
   enable_dns_hostnames = true
 
-  tags = { Name = var.cluster_name }
+  tags = { Name = local.cluster_name }
 }
 
 resource "aws_internet_gateway" "this" {
   vpc_id = aws_vpc.this.id
-  tags   = { Name = var.cluster_name }
+  tags   = { Name = local.cluster_name }
 }
 
 resource "aws_subnet" "public" {
@@ -64,15 +69,15 @@ resource "aws_subnet" "public" {
   map_public_ip_on_launch = true
 
   tags = {
-    Name                                        = "${var.cluster_name}-public-${local.azs[count.index]}"
+    Name                                        = "${local.cluster_name}-public-${local.azs[count.index]}"
     "kubernetes.io/role/elb"                     = "1"
-    "kubernetes.io/cluster/${var.cluster_name}"  = "shared"
+    "kubernetes.io/cluster/${local.cluster_name}"  = "shared"
   }
 }
 
 resource "aws_route_table" "public" {
   vpc_id = aws_vpc.this.id
-  tags   = { Name = "${var.cluster_name}-public" }
+  tags   = { Name = "${local.cluster_name}-public" }
 }
 
 resource "aws_route" "public_internet" {
@@ -92,7 +97,7 @@ resource "aws_route_table_association" "public" {
 # -----------------------------------------------------------------------------
 
 resource "aws_iam_role" "cluster" {
-  name = "${var.cluster_name}-cluster"
+  name = "${local.cluster_name}-cluster"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -110,7 +115,7 @@ resource "aws_iam_role_policy_attachment" "cluster" {
 }
 
 resource "aws_iam_role" "node" {
-  name = "${var.cluster_name}-node"
+  name = "${local.cluster_name}-node"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -151,7 +156,7 @@ resource "aws_iam_openid_connect_provider" "cluster" {
 # -----------------------------------------------------------------------------
 
 resource "aws_eks_cluster" "this" {
-  name     = var.cluster_name
+  name     = local.cluster_name
   version  = var.kubernetes_version
   role_arn = aws_iam_role.cluster.arn
 
@@ -183,7 +188,7 @@ resource "aws_eks_addon" "kube_proxy" {
 }
 
 resource "aws_iam_role" "ebs_csi" {
-  name = "${var.cluster_name}-ebs-csi"
+  name = "${local.cluster_name}-ebs-csi"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -221,7 +226,7 @@ resource "aws_eks_addon" "ebs_csi" {
 
 resource "aws_eks_node_group" "this" {
   cluster_name    = aws_eks_cluster.this.name
-  node_group_name = "${var.cluster_name}-nodes"
+  node_group_name = "${local.cluster_name}-nodes"
   node_role_arn   = aws_iam_role.node.arn
   subnet_ids      = var.node_count == 1 ? [aws_subnet.public[0].id] : aws_subnet.public[*].id
   instance_types  = [var.node_instance_type]
@@ -242,7 +247,7 @@ resource "aws_eks_node_group" "this" {
 
 resource "aws_iam_role" "lb_controller" {
   count = var.install_cloud_lb_controller ? 1 : 0
-  name  = "${var.cluster_name}-aws-lb-controller"
+  name  = "${local.cluster_name}-aws-lb-controller"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -264,7 +269,7 @@ resource "aws_iam_role" "lb_controller" {
 
 resource "aws_iam_policy" "lb_controller" {
   count  = var.install_cloud_lb_controller ? 1 : 0
-  name   = "${var.cluster_name}-aws-lb-controller"
+  name   = "${local.cluster_name}-aws-lb-controller"
   policy = file("${path.module}/iam-policy-lb-controller.json")
 }
 
@@ -313,7 +318,7 @@ resource "helm_release" "lb_controller" {
 
 resource "aws_ecr_repository" "wandb" {
   count                = var.create_ecr ? 1 : 0
-  name                 = var.cluster_name
+  name                 = local.cluster_name
   image_tag_mutability = "MUTABLE"
   force_delete         = true
 }
@@ -330,7 +335,7 @@ resource "aws_s3_bucket" "wandb" {
 
 resource "aws_iam_user" "wandb_s3" {
   count = var.create_bucket ? 1 : 0
-  name  = "${var.cluster_name}-wandb-s3"
+  name  = "${local.cluster_name}-wandb-s3"
 }
 
 resource "aws_iam_user_policy" "wandb_s3" {

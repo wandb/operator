@@ -2,9 +2,14 @@ variable "project_id" {
   type = string
 }
 
-variable "cluster_name" {
+variable "deployment_name" {
   type    = string
   default = "wandb-operator-gke"
+}
+
+variable "append_timestamp" {
+  type    = bool
+  default = false
 }
 
 variable "region" {
@@ -60,9 +65,4 @@ variable "create_registry" {
 variable "create_bucket" {
   type    = bool
   default = false
-}
-
-variable "bucket_name" {
-  type    = string
-  default = ""
 }

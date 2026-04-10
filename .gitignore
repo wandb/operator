@@ -43,6 +43,7 @@ tilt-settings.json
 tilt-settings.star
 hack/testing-manifests/wandb/.generated/kustomization.yaml
 hack/testing-manifests/wandb/.generated/wandb-cr.yaml
+hack/clusters/tmp/
 /tilt_bin
 /dist
 

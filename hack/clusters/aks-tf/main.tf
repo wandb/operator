@@ -2,13 +2,18 @@ provider "azurerm" {
   features {}
 }
 
+resource "time_static" "suffix" {
+  count = var.append_timestamp ? 1 : 0
+}
+
 locals {
+  cluster_name = var.append_timestamp ? "${var.deployment_name}-${formatdate("YYMMDDhhmm", time_static.suffix[0].rfc3339)}" : var.deployment_name
   tags = merge(var.tags, {
-    "wandb-cluster" = var.cluster_name
+    "wandb-cluster" = local.cluster_name
     "ManagedBy"     = "terraform"
   })
   # Azure storage account names: lowercase alphanumeric, 3-24 chars
-  storage_account_name = var.bucket_name != "" ? var.bucket_name : replace(substr("${var.cluster_name}wandb", 0, 24), "-", "")
+  storage_account_name = replace(substr("${local.cluster_name}wandb", 0, 24), "-", "")
   container_name       = "wandb"
 }
 
@@ -17,7 +22,7 @@ locals {
 # -----------------------------------------------------------------------------
 
 resource "azurerm_resource_group" "this" {
-  name     = var.cluster_name
+  name     = local.cluster_name
   location = var.region
   tags     = local.tags
 }
@@ -27,7 +32,7 @@ resource "azurerm_resource_group" "this" {
 # -----------------------------------------------------------------------------
 
 resource "azurerm_virtual_network" "this" {
-  name                = var.cluster_name
+  name                = local.cluster_name
   location            = azurerm_resource_group.this.location
   resource_group_name = azurerm_resource_group.this.name
   address_space       = ["10.0.0.0/16"]
@@ -35,7 +40,7 @@ resource "azurerm_virtual_network" "this" {
 }
 
 resource "azurerm_subnet" "nodes" {
-  name                 = "${var.cluster_name}-nodes"
+  name                 = "${local.cluster_name}-nodes"
   resource_group_name  = azurerm_resource_group.this.name
   virtual_network_name = azurerm_virtual_network.this.name
   address_prefixes     = ["10.0.0.0/20"]
@@ -43,7 +48,7 @@ resource "azurerm_subnet" "nodes" {
 
 resource "azurerm_subnet" "appgw" {
   count                = var.install_cloud_lb_controller ? 1 : 0
-  name                 = "${var.cluster_name}-appgw"
+  name                 = "${local.cluster_name}-appgw"
   resource_group_name  = azurerm_resource_group.this.name
   virtual_network_name = azurerm_virtual_network.this.name
   address_prefixes     = ["10.0.16.0/24"]
@@ -54,10 +59,10 @@ resource "azurerm_subnet" "appgw" {
 # -----------------------------------------------------------------------------
 
 resource "azurerm_kubernetes_cluster" "this" {
-  name                = var.cluster_name
+  name                = local.cluster_name
   location            = azurerm_resource_group.this.location
   resource_group_name = azurerm_resource_group.this.name
-  dns_prefix          = var.cluster_name
+  dns_prefix          = local.cluster_name
   kubernetes_version  = var.kubernetes_version
   tags                = local.tags
 
@@ -71,12 +76,14 @@ resource "azurerm_kubernetes_cluster" "this" {
     vm_size             = var.node_instance_type
     os_disk_size_gb     = var.node_disk_size
     vnet_subnet_id      = azurerm_subnet.nodes.id
-    zones               = var.node_count >= 3 ? ["1", "2", "3"] : null
+    zones               = var.node_zones
     temporary_name_for_rotation = "tempdefault"
   }
 
   network_profile {
     network_plugin = "azure"
+    service_cidr   = "10.1.0.0/16"
+    dns_service_ip = "10.1.0.10"
   }
 
   storage_profile {
@@ -97,7 +104,7 @@ resource "azurerm_kubernetes_cluster" "this" {
 
 resource "azurerm_container_registry" "wandb" {
   count               = var.create_registry ? 1 : 0
-  name                = replace(var.cluster_name, "-", "")
+  name                = replace(local.cluster_name, "-", "")
   resource_group_name = azurerm_resource_group.this.name
   location            = azurerm_resource_group.this.location
   sku                 = "Basic"

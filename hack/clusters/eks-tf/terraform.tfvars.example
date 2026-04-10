@@ -1,5 +1,6 @@
 # aws_profile = "SbxAdmin"  # AWS CLI profile name (for SSO, named profiles, etc.)
-cluster_name        = "wandb-operator-test"
+deployment_name      = "wandb-op-aws"
+append_timestamp     = false
 region              = "us-west-2"
 kubernetes_version  = "1.31"
 node_count          = 1

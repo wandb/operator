@@ -1,4 +1,5 @@
-cluster_name        = "wandb-operator-aks"
+deployment_name      = "wandb-op-aks"
+append_timestamp     = false
 region              = "eastus2"
 kubernetes_version  = "1.34"
 node_count          = 1

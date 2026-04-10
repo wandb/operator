@@ -3,9 +3,14 @@ variable "aws_profile" {
   default = ""
 }
 
-variable "cluster_name" {
+variable "deployment_name" {
   type    = string
   default = "wandb-operator-aws"
+}
+
+variable "append_timestamp" {
+  type    = bool
+  default = false
 }
 
 variable "region" {
@@ -61,9 +66,4 @@ variable "create_ecr" {
 variable "create_bucket" {
   type    = bool
   default = false
-}
-
-variable "bucket_name" {
-  type    = string
-  default = ""
 }

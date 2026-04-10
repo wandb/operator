@@ -12,9 +12,18 @@ data "google_compute_zones" "available" {
   region = var.region
 }
 
+resource "time_static" "suffix" {
+  count = var.append_timestamp ? 1 : 0
+}
+
 locals {
-  zones       = slice(data.google_compute_zones.available.names, 0, 3)
-  bucket_name = var.bucket_name != "" ? var.bucket_name : "${var.cluster_name}-wandb"
+  zones        = slice(data.google_compute_zones.available.names, 0, 3)
+  cluster_name = var.append_timestamp ? "${var.deployment_name}-${formatdate("YYMMDDhhmm", time_static.suffix[0].rfc3339)}" : var.deployment_name
+  bucket_name  = "${local.cluster_name}-wandb"
+  # GCP service account IDs must be 6-30 chars
+  sa_prefix = substr(local.cluster_name, 0, 24)
+  # GCP resource labels must be lowercase
+  gcp_labels = { for k, v in var.tags : lower(k) => lower(v) }
 }
 
 # -----------------------------------------------------------------------------
@@ -22,12 +31,12 @@ locals {
 # -----------------------------------------------------------------------------
 
 resource "google_compute_network" "this" {
-  name                    = var.cluster_name
+  name                    = local.cluster_name
   auto_create_subnetworks = false
 }
 
 resource "google_compute_subnetwork" "nodes" {
-  name          = "${var.cluster_name}-nodes"
+  name          = "${local.cluster_name}-nodes"
   network       = google_compute_network.this.id
   ip_cidr_range = "10.0.0.0/20"
 
@@ -43,12 +52,12 @@ resource "google_compute_subnetwork" "nodes" {
 }
 
 resource "google_compute_router" "this" {
-  name    = var.cluster_name
+  name    = local.cluster_name
   network = google_compute_network.this.id
 }
 
 resource "google_compute_router_nat" "this" {
-  name                               = var.cluster_name
+  name                               = local.cluster_name
   router                             = google_compute_router.this.name
   nat_ip_allocate_option             = "AUTO_ONLY"
   source_subnetwork_ip_ranges_to_nat = "ALL_SUBNETWORKS_ALL_IP_RANGES"
@@ -59,8 +68,8 @@ resource "google_compute_router_nat" "this" {
 # -----------------------------------------------------------------------------
 
 resource "google_service_account" "nodes" {
-  account_id   = "${var.cluster_name}-nodes"
-  display_name = "GKE nodes for ${var.cluster_name}"
+  account_id   = "${local.sa_prefix}-nodes"
+  display_name = "GKE nodes for ${local.cluster_name}"
 }
 
 resource "google_project_iam_member" "node_roles" {
@@ -81,7 +90,7 @@ resource "google_project_iam_member" "node_roles" {
 
 resource "google_container_cluster" "this" {
   provider = google-beta
-  name     = var.cluster_name
+  name     = local.cluster_name
   location = var.region
 
   min_master_version = var.kubernetes_version
@@ -115,8 +124,8 @@ resource "google_container_cluster" "this" {
 
   deletion_protection = false
 
-  resource_labels = merge(var.tags, {
-    "wandb-cluster" = var.cluster_name
+  resource_labels = merge(local.gcp_labels, {
+    "wandb-cluster" = local.cluster_name
     "managed-by"    = "terraform"
   })
 }
@@ -127,7 +136,7 @@ resource "google_container_cluster" "this" {
 
 resource "google_container_node_pool" "this" {
   provider = google-beta
-  name     = "${var.cluster_name}-nodes"
+  name     = "${local.cluster_name}-nodes"
   cluster  = google_container_cluster.this.id
   location = var.region
 
@@ -143,7 +152,7 @@ resource "google_container_node_pool" "this" {
     oauth_scopes    = ["https://www.googleapis.com/auth/cloud-platform"]
 
     labels = {
-      "wandb-cluster" = var.cluster_name
+      "wandb-cluster" = local.cluster_name
     }
   }
 }
@@ -155,7 +164,7 @@ resource "google_container_node_pool" "this" {
 resource "google_artifact_registry_repository" "wandb" {
   count         = var.create_registry ? 1 : 0
   location      = var.region
-  repository_id = var.cluster_name
+  repository_id = local.cluster_name
   format        = "DOCKER"
   cleanup_policy_dry_run = false
 }
@@ -172,14 +181,14 @@ resource "google_storage_bucket" "wandb" {
   uniform_bucket_level_access = true
 
   labels = {
-    "wandb-cluster" = var.cluster_name
+    "wandb-cluster" = local.cluster_name
   }
 }
 
 resource "google_service_account" "wandb_gcs" {
   count        = var.create_bucket ? 1 : 0
-  account_id   = "${var.cluster_name}-gcs"
-  display_name = "W&B GCS access for ${var.cluster_name}"
+  account_id   = "${local.sa_prefix}-gcs"
+  display_name = "W&B GCS access for ${local.cluster_name}"
 }
 
 resource "google_storage_bucket_iam_member" "wandb_gcs" {

@@ -1,5 +1,6 @@
 project_id          = "playground-111"
-cluster_name        = "wandb-operator-gke"
+deployment_name     = "wandb-op-gke"
+append_timestamp    = false
 region              = "us-central1"
 kubernetes_version  = "1.34"
 node_count          = 1

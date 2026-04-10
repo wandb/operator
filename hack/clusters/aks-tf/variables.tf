@@ -1,6 +1,11 @@
-variable "cluster_name" {
+variable "deployment_name" {
   type    = string
   default = "wandb-operator-aks"
+}
+
+variable "append_timestamp" {
+  type    = bool
+  default = false
 }
 
 variable "region" {
@@ -16,11 +21,12 @@ variable "kubernetes_version" {
 variable "node_count" {
   type    = number
   default = 1
+}
 
-  validation {
-    condition     = var.node_count == 1 || var.node_count >= 3
-    error_message = "node_count must be 1 (dev) or >= 3 (cross-AZ)."
-  }
+variable "node_zones" {
+  type    = list(string)
+  default = null
+  description = "Availability zones for the default node pool. Set to [] to disable for regions without AZ support."
 }
 
 variable "node_instance_type" {
@@ -56,9 +62,4 @@ variable "create_registry" {
 variable "create_bucket" {
   type    = bool
   default = false
-}
-
-variable "bucket_name" {
-  type    = string
-  default = ""
 }
