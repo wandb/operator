@@ -1548,7 +1548,7 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *apiv2.
 			case "telemetry":
 				secretName := src.Name
 				if secretName == "" {
-					secretName = "wandb-otel-connection"
+					continue
 				}
 
 				selector := corev1.SecretKeySelector{
