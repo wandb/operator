@@ -22,6 +22,15 @@ output "cloud_gateway_class" {
   value = var.install_cloud_lb_controller ? "gke-l7-global-external-managed" : null
 }
 
+# Artifact Registry outputs
+output "registry_url" {
+  value = var.create_registry ? "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.wandb[0].repository_id}" : null
+}
+
+output "registry_login_command" {
+  value = var.create_registry ? "gcloud auth configure-docker ${var.region}-docker.pkg.dev" : null
+}
+
 # Object store outputs — map to wandb-objectstore-connection secret keys
 output "objectstore_endpoint" {
   value = var.create_bucket ? "storage.googleapis.com" : null

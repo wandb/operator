@@ -92,6 +92,28 @@ resource "azurerm_kubernetes_cluster" "this" {
 }
 
 # -----------------------------------------------------------------------------
+# Azure Container Registry (conditional)
+# -----------------------------------------------------------------------------
+
+resource "azurerm_container_registry" "wandb" {
+  count               = var.create_registry ? 1 : 0
+  name                = replace(var.cluster_name, "-", "")
+  resource_group_name = azurerm_resource_group.this.name
+  location            = azurerm_resource_group.this.location
+  sku                 = "Basic"
+  admin_enabled       = true
+  tags                = local.tags
+}
+
+# Grant AKS pull access to ACR
+resource "azurerm_role_assignment" "aks_acr_pull" {
+  count                = var.create_registry ? 1 : 0
+  principal_id         = azurerm_kubernetes_cluster.this.kubelet_identity[0].object_id
+  role_definition_name = "AcrPull"
+  scope                = azurerm_container_registry.wandb[0].id
+}
+
+# -----------------------------------------------------------------------------
 # Azure Blob Storage (conditional)
 # -----------------------------------------------------------------------------
 

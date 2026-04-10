@@ -9,6 +9,9 @@ storage_class_name  = "gp2"
 # Set to true to install the AWS Load Balancer Controller for ALB ingress / Gateway API
 install_cloud_lb_controller = false
 
+# Set to true to create an ECR repository for Tilt to push images to
+create_ecr = false
+
 # Set to true to create an S3 bucket with IAM credentials for external object store testing
 create_bucket = false
 # bucket_name = "my-custom-bucket-name"

@@ -4,10 +4,13 @@ Terraform configuration for provisioning a GKE cluster to test Operator v2 deplo
 
 ## Prerequisites
 
-- `gcloud` CLI authenticated (`gcloud auth application-default login`)
+- `gcloud` CLI installed and authenticated (`gcloud auth login` and `gcloud auth application-default login`)
 - Terraform >= 1.5
 - `kubectl`
-- GCP project with Kubernetes Engine API enabled
+- Docker (for Artifact Registry image push)
+- GCP project with the following APIs enabled:
+  - Kubernetes Engine API
+  - Artifact Registry API (if `create_registry = true`)
 
 ## Usage
 
@@ -22,19 +25,38 @@ terraform apply
 After apply completes, configure kubectl:
 
 ```bash
-$(terraform output -raw kubeconfig_command)
+eval "$(terraform output -raw kubeconfig_command)"
+kubectl get nodes  # verify all nodes are Ready
 ```
 
-Then add the context to your `tilt-settings.star`:
+If using Artifact Registry (`create_registry = true`), authenticate Docker:
+
+```bash
+eval "$(terraform output -raw registry_login_command)"
+```
+
+Then configure your `tilt-settings.star` with the terraform outputs:
+
+```bash
+terraform output -raw kube_context_name
+terraform output -raw registry_url  # if create_registry = true
+```
 
 ```python
 SETTINGS = {
-    "allowedContexts": ["<paste kube_context_name output here>"],
+    "allowedContexts": ["<paste kube_context_name>"],
+    "defaultRegistry": "<paste registry_url>",  # if create_registry = true
     ...
 }
 ```
 
 Run `tilt up` — Tilt handles cert-manager, ingress/gateway controllers, operators, and the W&B CR.
+
+## Container Registry (Artifact Registry)
+
+Remote clusters need a container registry for Tilt to push operator images to. Set `create_registry = true` to create an Artifact Registry Docker repository. GKE nodes can pull from it automatically (via the `artifactregistry.reader` role already on the node service account).
+
+Unlike ECR, Artifact Registry supports nested repositories natively, so `registrySingleName` is not needed.
 
 ## Networking Scenarios
 
@@ -68,7 +90,13 @@ Set `create_bucket = true` to create a GCS bucket with HMAC credentials (S3-comp
 | `objectstore_secret_key` | `SecretKey` |
 | `objectstore_url` | `url` |
 
-Retrieve sensitive values with `terraform output -raw objectstore_access_key`.
+Retrieve sensitive values:
+
+```bash
+terraform output -raw objectstore_access_key
+terraform output -raw objectstore_secret_key
+terraform output -raw objectstore_url
+```
 
 ## Teardown
 

@@ -308,6 +308,17 @@ resource "helm_release" "lb_controller" {
 }
 
 # -----------------------------------------------------------------------------
+# ECR Repository (conditional)
+# -----------------------------------------------------------------------------
+
+resource "aws_ecr_repository" "wandb" {
+  count                = var.create_ecr ? 1 : 0
+  name                 = var.cluster_name
+  image_tag_mutability = "MUTABLE"
+  force_delete         = true
+}
+
+# -----------------------------------------------------------------------------
 # S3 Bucket + IAM User (conditional)
 # -----------------------------------------------------------------------------
 

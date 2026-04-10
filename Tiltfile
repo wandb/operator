@@ -43,6 +43,12 @@ else:
 
 allow_k8s_contexts(settings.get("allowedContexts"))
 
+if settings.get("defaultRegistry"):
+    if settings.get("registrySingleName"):
+        default_registry(settings.get("defaultRegistry"), single_name=settings.get("registrySingleName"))
+    else:
+        default_registry(settings.get("defaultRegistry"))
+
 os.putenv('PATH', './bin:' + os.getenv('PATH'))
 
 load('ext://restart_process', 'docker_build_with_restart')

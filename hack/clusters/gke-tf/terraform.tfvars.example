@@ -1,13 +1,16 @@
-project_id          = "my-gcp-project"
-cluster_name        = "wandb-operator-test"
+project_id          = "playground-111"
+cluster_name        = "wandb-operator-gke"
 region              = "us-central1"
-kubernetes_version  = "1.31"
+kubernetes_version  = "1.34"
 node_count          = 1
 node_instance_type  = "e2-standard-8"
 storage_class_name  = "standard-rwo"
 
 # Set to true to enable GKE's built-in GCE ingress controller and Gateway API controller
 install_cloud_lb_controller = false
+
+# Set to true to create an Artifact Registry repository for Tilt to push images to
+create_registry = false
 
 # Set to true to create a GCS bucket with HMAC credentials for external object store testing
 create_bucket = false

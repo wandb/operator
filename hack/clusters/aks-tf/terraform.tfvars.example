@@ -1,12 +1,15 @@
-cluster_name        = "wandb-operator-test"
+cluster_name        = "wandb-operator-aks"
 region              = "eastus2"
-kubernetes_version  = "1.31"
+kubernetes_version  = "1.34"
 node_count          = 1
 node_instance_type  = "Standard_D8s_v5"
 storage_class_name  = "managed-csi"
 
 # Set to true to enable the Azure Application Gateway Ingress Controller (AGIC)
 install_cloud_lb_controller = false
+
+# Set to true to create an Azure Container Registry for Tilt to push images to
+create_registry = false
 
 # Set to true to create an Azure Blob Storage container for external object store testing
 create_bucket = false

@@ -5,7 +5,7 @@ variable "aws_profile" {
 
 variable "cluster_name" {
   type    = string
-  default = "wandb-operator-test"
+  default = "wandb-operator-aws"
 }
 
 variable "region" {
@@ -15,7 +15,7 @@ variable "region" {
 
 variable "kubernetes_version" {
   type    = string
-  default = "1.31"
+  default = "1.34"
 }
 
 variable "node_count" {
@@ -49,6 +49,11 @@ variable "tags" {
 }
 
 variable "install_cloud_lb_controller" {
+  type    = bool
+  default = false
+}
+
+variable "create_ecr" {
   type    = bool
   default = false
 }

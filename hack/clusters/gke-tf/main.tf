@@ -149,6 +149,18 @@ resource "google_container_node_pool" "this" {
 }
 
 # -----------------------------------------------------------------------------
+# Artifact Registry (conditional)
+# -----------------------------------------------------------------------------
+
+resource "google_artifact_registry_repository" "wandb" {
+  count         = var.create_registry ? 1 : 0
+  location      = var.region
+  repository_id = var.cluster_name
+  format        = "DOCKER"
+  cleanup_policy_dry_run = false
+}
+
+# -----------------------------------------------------------------------------
 # GCS Bucket + HMAC Key (conditional)
 # -----------------------------------------------------------------------------
 

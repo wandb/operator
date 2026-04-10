@@ -22,6 +22,19 @@ output "cloud_gateway_class" {
   value = var.install_cloud_lb_controller ? "amazon-vpc-lattice" : null
 }
 
+# ECR outputs
+output "ecr_registry_host" {
+  value = var.create_ecr ? "${local.account_id}.dkr.ecr.${var.region}.amazonaws.com" : null
+}
+
+output "ecr_repo_name" {
+  value = var.create_ecr ? aws_ecr_repository.wandb[0].name : null
+}
+
+output "ecr_login_command" {
+  value = var.create_ecr ? "aws ecr get-login-password --region ${var.region}${var.aws_profile != "" ? " --profile ${var.aws_profile}" : ""} | docker login --username AWS --password-stdin ${local.account_id}.dkr.ecr.${var.region}.amazonaws.com" : null
+}
+
 # Object store outputs — map to wandb-objectstore-connection secret keys
 output "objectstore_endpoint" {
   value = var.create_bucket ? "s3.${var.region}.amazonaws.com" : null

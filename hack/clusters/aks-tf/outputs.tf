@@ -23,6 +23,15 @@ output "cloud_gateway_class" {
   value       = null
 }
 
+# ACR outputs
+output "registry_url" {
+  value = var.create_registry ? azurerm_container_registry.wandb[0].login_server : null
+}
+
+output "registry_login_command" {
+  value = var.create_registry ? "az acr login --name ${azurerm_container_registry.wandb[0].name}" : null
+}
+
 # Object store outputs — map to wandb-objectstore-connection secret keys
 # Azure Blob Storage exposes an S3-compatible interface via the storage account key
 output "objectstore_endpoint" {

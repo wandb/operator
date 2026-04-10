@@ -4,9 +4,10 @@ Terraform configuration for provisioning an AKS cluster to test Operator v2 depl
 
 ## Prerequisites
 
-- Azure CLI authenticated (`az login`)
+- Azure CLI installed and authenticated (`az login`)
 - Terraform >= 1.5
 - `kubectl`
+- Docker (for ACR image push)
 
 ## Usage
 
@@ -21,19 +22,38 @@ terraform apply
 After apply completes, configure kubectl:
 
 ```bash
-$(terraform output -raw kubeconfig_command)
+eval "$(terraform output -raw kubeconfig_command)"
+kubectl get nodes  # verify all nodes are Ready
 ```
 
-Then add the context to your `tilt-settings.star`:
+If using ACR (`create_registry = true`), authenticate Docker:
+
+```bash
+eval "$(terraform output -raw registry_login_command)"
+```
+
+Then configure your `tilt-settings.star` with the terraform outputs:
+
+```bash
+terraform output -raw kube_context_name
+terraform output -raw registry_url  # if create_registry = true
+```
 
 ```python
 SETTINGS = {
-    "allowedContexts": ["<paste kube_context_name output here>"],
+    "allowedContexts": ["<paste kube_context_name>"],
+    "defaultRegistry": "<paste registry_url>",  # if create_registry = true
     ...
 }
 ```
 
 Run `tilt up` — Tilt handles cert-manager, ingress/gateway controllers, operators, and the W&B CR.
+
+## Container Registry (ACR)
+
+Remote clusters need a container registry for Tilt to push operator images to. Set `create_registry = true` to create an Azure Container Registry. AKS nodes can pull from it automatically (via an `AcrPull` role assignment on the kubelet identity).
+
+Like Artifact Registry, ACR supports nested repositories natively, so `registrySingleName` is not needed.
 
 ## Networking Scenarios
 
@@ -66,7 +86,13 @@ Set `create_bucket = true` to create an Azure Blob Storage account and container
 | `objectstore_secret_key` | `SecretKey` |
 | `objectstore_url` | `url` |
 
-Retrieve sensitive values with `terraform output -raw objectstore_access_key`.
+Retrieve sensitive values:
+
+```bash
+terraform output -raw objectstore_access_key
+terraform output -raw objectstore_secret_key
+terraform output -raw objectstore_url
+```
 
 ## Teardown
 
