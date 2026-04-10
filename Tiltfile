@@ -195,9 +195,15 @@ local_resource(
 
 third_party_operator_flags = [
     '--set=wandb-operator.enabled=false',
-    '--set=global.telemetry.enabled=false',
+    '--set=telemetry.mode=off',
     '--create-namespace',
 ]
+
+if settings.get("installTelemetry"):
+    third_party_operator_flags += [
+        '--set=victoria-metrics-operator.enabled=true',
+        '--set=grafana-operator.enabled=true',
+    ]
 
 helm_resource(
     'ThirdParty-Operators',
@@ -373,7 +379,8 @@ if settings.get("installTelemetry"):
         'crd/vmpodscrapes.operator.victoriametrics.com ' +
         'crd/vmnodescrapes.operator.victoriametrics.com ' +
         'crd/grafanas.grafana.integreatly.org ' +
-        'crd/grafanadatasources.grafana.integreatly.org' +
+        'crd/grafanadatasources.grafana.integreatly.org ' +
+        'crd/grafanadashboards.grafana.integreatly.org' +
         ' && kubectl wait --for=condition=available --timeout=180s -n wandb-operator ' +
         'deploy/third-party-operators-victoria-metrics-operator ' +
         'deploy/third-party-operators-grafana-operator',
@@ -386,7 +393,7 @@ if settings.get("installTelemetry"):
         release_name='telemetry-stack',
         namespace='wandb-operator',
         flags=[
-            '--set=enabled=true',
+            '--set=mode=full',
             '--set=namespace=default',
             '--create-namespace',
         ],

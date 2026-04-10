@@ -7,10 +7,12 @@ import (
 	"testing"
 )
 
-func TestTelemetryChartManagedModeRendersCoreStack(t *testing.T) {
+func TestTelemetryChartFullModeRendersCoreStack(t *testing.T) {
 	output := runHelmTemplate(t,
 		"--set", "wandb-operator.enabled=false",
-		"--set", "telemetry.enabled=true",
+		"--set", "telemetry.mode=full",
+		"--set", "victoria-metrics-operator.enabled=true",
+		"--set", "grafana-operator.enabled=true",
 	)
 
 	mustContain(t, output, "kind: VMSingle")
@@ -37,10 +39,28 @@ func TestTelemetryChartManagedModeRendersCoreStack(t *testing.T) {
 	mustContain(t, output, "retentionPeriod: \"1d\"")
 }
 
-func TestTelemetryChartDisabledSkipsManagedStack(t *testing.T) {
+func TestTelemetryChartForwardModeSkipsGrafanaButAddsForwarding(t *testing.T) {
 	output := runHelmTemplate(t,
 		"--set", "wandb-operator.enabled=false",
-		"--set", "telemetry.enabled=false",
+		"--set", "telemetry.mode=forward",
+		"--set", "telemetry.forwarding.otlp.endpoint=https://otel.example.com",
+		"--set", "victoria-metrics-operator.enabled=true",
+	)
+
+	mustContain(t, output, "kind: VMSingle")
+	mustContain(t, output, "kind: VMAgent")
+	mustContain(t, output, "kind: VLSingle")
+	mustContain(t, output, "kind: VTSingle")
+	mustContain(t, output, "name: victoria-otlp-gateway-config")
+	mustContain(t, output, "name: victoria-otlp-gateway")
+	mustContain(t, output, "endpoint: \"https://otel.example.com\"")
+	mustNotContain(t, output, "kind: Grafana")
+}
+
+func TestTelemetryChartOffModeSkipsManagedStack(t *testing.T) {
+	output := runHelmTemplate(t,
+		"--set", "wandb-operator.enabled=false",
+		"--set", "telemetry.mode=off",
 	)
 
 	mustNotContain(t, output, "kind: VMSingle")
@@ -52,9 +72,9 @@ func TestTelemetryChartDisabledSkipsManagedStack(t *testing.T) {
 	mustNotContain(t, output, "kind: Grafana")
 }
 
-func TestStandaloneTelemetryChartManagedModeRendersCoreStack(t *testing.T) {
+func TestStandaloneTelemetryChartFullModeRendersCoreStack(t *testing.T) {
 	output := runHelmTemplateForChart(t, filepath.Join("..", "..", "..", "deploy", "telemetry"),
-		"--set", "enabled=true",
+		"--set", "mode=full",
 		"--set", "namespace=wandb",
 	)
 

@@ -1,4 +1,4 @@
-{{- if .Values.global.telemetry.enabled }}
+{{- if eq (include "telemetry.stackEnabled" .) "true" }}
 ---
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMSingle

@@ -1,20 +1,25 @@
 # Monitoring and Telemetry Guide
 
-This repo now ships one managed telemetry stack for W&B.
+This repo now ships a configurable telemetry stack for W&B.
 
 ## Behavior
 
-- `telemetry.enabled: false`  
+- `telemetry.mode: off`  
   No telemetry stack resources are rendered and the operator does not wire OTEL endpoints.
 
-- `telemetry.enabled: true`  
-  The managed Victoria stack is installed and the operator writes OTEL connection settings for apps.
+- `telemetry.mode: forward`  
+  The Victoria stack is installed, workloads send OTEL data to the in-cluster gateway, and that gateway forwards OTLP data to a customer-managed endpoint.
 
-Installed resources in managed mode:
+- `telemetry.mode: full`  
+  The Victoria stack is installed and exposed through in-cluster Grafana dashboards and datasources.
+
+Installed resources in `forward` and `full` modes:
 - `VMSingle`, `VMAgent`, `VLSingle`, `VTSingle`
 - OTLP gateway collector (`victoria-otlp-gateway`)
 - Scrapes (`VMNodeScrape`, `VMPodScrape`, `VMServiceScrape`) when `telemetry.scrape.enabled=true`
 - Alerting (`VMRule`, `VMAlert`) when `telemetry.alerting.enabled=true`
+
+Installed resources only in `full` mode:
 - Grafana + Victoria datasources
 
 Not installed:
@@ -23,44 +28,57 @@ Not installed:
 
 ## Helm Values
 
-For the full operator install, set these under top-level `telemetry`:
+For the operator chart, set these under top-level `telemetry`:
 
 ```yaml
 telemetry:
-  enabled: true
+  mode: forward
   namespace: wandb
-  retentionPeriod: 1d
-  scrape:
-    enabled: true
-  alerting:
-    enabled: false
+  otel:
+    secretName: wandb-otel-connection
+    protocol: http/protobuf
+    serviceName: wandb-service
+    resourceAttributes: deployment.environment=prod
+  forwarding:
+    otlp:
+      endpoint: https://otel.example.com
+      protocol: http/protobuf
+      headers:
+        Authorization: Bearer <token>
 ```
 
 Notes:
 - Retention defaults to `1d`.
-- There is no customer-facing external endpoint mode in this phase.
-- `helm install wandb-operator ./deploy/operator --set telemetry.enabled=true` installs the operator plus the managed telemetry stack.
-- `helm install telemetry ./deploy/telemetry --set enabled=true --set namespace=<ns>` installs just the telemetry resources and expects the VictoriaMetrics/Grafana operators and CRDs to already exist.
+- `telemetry.mode=forward` requires `telemetry.forwarding.otlp.endpoint`.
+- The telemetry mode controls the stack behavior, but Helm still needs dependency booleans for the VictoriaMetrics and Grafana operator subcharts.
+- Use the preset files in `deploy/operator/profiles/` to avoid remembering those extra flags and to switch modes cleanly on an existing release.
+- `helm upgrade --install wandb-operator ./deploy/operator --reset-values -f ./deploy/operator/profiles/telemetry-full.yaml` installs the operator plus the full local telemetry stack.
+- `helm upgrade --install wandb-operator ./deploy/operator --reset-values -f ./deploy/operator/profiles/telemetry-off.yaml` disables the telemetry stack and its dependent operators.
+- `helm install telemetry ./deploy/telemetry --set mode=full --set namespace=<ns>` installs just the telemetry resources and expects the VictoriaMetrics/Grafana operators and CRDs to already exist.
+- When rendering YAML manually, use `helm template <release> ./deploy/operator --include-crds ...` so the VictoriaMetrics and Grafana CRDs are present before apply.
 
 ## Operator Runtime Values
 
-Set OTEL secret defaults under `wandb-operator.telemetry`:
+Set OTEL secret defaults under `telemetry.otel`:
 
 ```yaml
-wandb-operator:
-  telemetry:
-    otel:
-      secretName: wandb-otel-connection
-      protocol: http/protobuf
-      serviceName: wandb-service
-      resourceAttributes: deployment.environment=prod
+telemetry:
+  otel:
+    secretName: wandb-otel-connection
+    protocol: http/protobuf
+    serviceName: wandb-service
+    resourceAttributes: deployment.environment=prod
 ```
 
 ## Tilt Usage
 
 Set `"installTelemetry": True` in `tilt-settings.star`.
 
-Tilt installs the telemetry stack through Helm and exposes endpoints for:
+Tilt treats `installTelemetry=True` as the local `full` mode. It installs the
+VictoriaMetrics and Grafana operators, then installs the standalone telemetry
+chart with `mode=full`.
+
+Tilt exposes endpoints for:
 - Grafana
 - VictoriaMetrics
 - VictoriaLogs
@@ -93,8 +111,8 @@ env:
 ## Validation Checklist
 
 1. Render stack:
-   - `helm template ./deploy/operator --set telemetry.enabled=true`
-   - or `helm template ./deploy/telemetry --set enabled=true --set namespace=<telemetry-namespace>`
+   - `helm template wandb-operator ./deploy/operator --include-crds -f ./deploy/operator/profiles/telemetry-full.yaml`
+   - or `helm template ./deploy/telemetry --set mode=full --set namespace=<telemetry-namespace>`
 2. Verify Grafana resources:
    - `kubectl get grafana,grafanadatasource -n <telemetry-namespace>`
 3. Verify telemetry secret:

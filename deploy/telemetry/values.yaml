@@ -1,7 +1,12 @@
-global:
-  telemetry:
-    namespace: ""
-    enabled: false
+mode: "off"
+namespace: ""
+forwarding:
+  otlp:
+    endpoint: ""
+    protocol: http/protobuf
+    headers: {}
+    tls:
+      insecure: false
 retentionPeriod: 1d
 scrape:
   enabled: true

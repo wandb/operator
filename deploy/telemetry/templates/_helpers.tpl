@@ -8,6 +8,24 @@
 {{- end -}}
 {{- end -}}
 
+{{- define "telemetry.stackEnabled" -}}
+{{- $mode := default "off" .Values.mode -}}
+{{- if ne $mode "off" -}}true{{- else -}}false{{- end -}}
+{{- end -}}
+
+{{- define "telemetry.uiEnabled" -}}
+{{- $mode := default "off" .Values.mode -}}
+{{- if eq $mode "full" -}}true{{- else -}}false{{- end -}}
+{{- end -}}
+
+{{- define "telemetry.forwardingEnabled" -}}
+{{- if and (eq (default "off" .Values.mode) "forward") .Values.forwarding.otlp.endpoint -}}true{{- else -}}false{{- end -}}
+{{- end -}}
+
+{{- define "telemetry.forwardingExporterName" -}}
+{{- if eq (default "http/protobuf" .Values.forwarding.otlp.protocol) "grpc" -}}otlp/external{{- else -}}otlphttp/external{{- end -}}
+{{- end -}}
+
 {{- define "telemetry.vmsingleName" -}}
 victoria-instance
 {{- end -}}

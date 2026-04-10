@@ -26,5 +26,5 @@ dependencies:
 - name: telemetry
   repository: file://../telemetry
   version: 0.1.0
-digest: sha256:f3b1e47f9d0a92bb2cad70cd8e63087543a78ed19d8757cd9f6572c6d1ef10c9
-generated: "2026-04-09T10:05:37.138633-07:00"
+digest: sha256:9e8fefe7571cbdabfa706781ecde75570791fd8e153eb4f42220e99d99f7d91a
+generated: "2026-04-09T09:25:17.078486-07:00"
