@@ -3,11 +3,46 @@
   "type": "object",
   "additionalProperties": true,
   "properties": {
-    "enabled": {
-      "type": "boolean"
+    "mode": {
+      "type": "string",
+      "enum": ["off", "forward", "full"]
     },
     "namespace": {
       "type": "string"
+    },
+    "forwarding": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "otlp": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "endpoint": {
+              "type": "string"
+            },
+            "protocol": {
+              "type": "string",
+              "enum": ["http/protobuf", "grpc"]
+            },
+            "headers": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "tls": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "insecure": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        }
+      }
     },
     "retentionPeriod": {
       "type": "string",

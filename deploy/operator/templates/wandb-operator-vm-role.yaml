@@ -1,3 +1,4 @@
+{{- if ne (default "off" .Values.telemetry.mode) "off" }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -49,3 +50,4 @@ subjects:
   - kind: ServiceAccount
     name: wandb-operator
     namespace: {{ .Release.Namespace }}
+{{- end }}

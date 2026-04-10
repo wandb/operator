@@ -354,7 +354,7 @@ func Reconcile(
 		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
 	}
 
-	res, err = ReconcileWandbManifest(ctx, client, wandb, manifest)
+	res, err = ReconcileWandbManifest(ctx, client, wandb, manifest, telemetryConfig)
 	// send up the manifest error for now
 	if err != nil {
 		return res, err
@@ -379,7 +379,13 @@ func consolidateResults(results []ctrl.Result) ctrl.Result {
 	}
 }
 
-func ReconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest) (ctrl.Result, error) {
+func ReconcileWandbManifest(
+	ctx context.Context,
+	client ctrlClient.Client,
+	wandb *apiv2.WeightsAndBiases,
+	manifest serverManifest.Manifest,
+	telemetryConfig TelemetryRuntimeConfig,
+) (ctrl.Result, error) {
 	// Reconcile Wandb Manifest
 	logger := ctrl.LoggerFrom(ctx).WithName("reconcileWandbManifest")
 	logger.Info("Reconciling Wandb Manifest", "name", wandb.Name)
@@ -463,7 +469,7 @@ func ReconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
-	result, err = reconcileApplications(ctx, client, wandb, manifest)
+	result, err = reconcileApplications(ctx, client, wandb, manifest, telemetryConfig)
 	if err != nil {
 		return result, err
 	}
@@ -478,7 +484,13 @@ func ReconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 	return ctrl.Result{}, nil
 }
 
-func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest) (ctrl.Result, error) {
+func reconcileApplications(
+	ctx context.Context,
+	client ctrlClient.Client,
+	wandb *apiv2.WeightsAndBiases,
+	manifest serverManifest.Manifest,
+	telemetryConfig TelemetryRuntimeConfig,
+) (ctrl.Result, error) {
 	logger := logx.GetSlog(ctx)
 	logger.Info("Reconciling applications")
 	serviceAccountName := wandb.Spec.Wandb.ServiceAccount.ServiceAccountName
@@ -513,7 +525,7 @@ func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb 
 		if err != nil {
 			return ctrl.Result{}, err
 		}
-		envVars, err = injectManagedWorkloadTelemetryEnvvars(ctx, client, wandb, manifest, app, envVars)
+		envVars, err = injectManagedWorkloadTelemetryEnvvars(ctx, client, wandb, manifest, app, envVars, telemetryConfig.Enabled)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
@@ -1169,8 +1181,9 @@ func injectManagedWorkloadTelemetryEnvvars(
 	manifest serverManifest.Manifest,
 	app serverManifest.Application,
 	envVars []corev1.EnvVar,
+	telemetryEnabled bool,
 ) ([]corev1.EnvVar, error) {
-	if !shouldInjectManagedWorkloadTelemetry(app.Name) {
+	if !telemetryEnabled || !shouldInjectManagedWorkloadTelemetry(app.Name) {
 		return envVars, nil
 	}
 

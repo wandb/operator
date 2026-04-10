@@ -480,6 +480,7 @@ func TestInjectManagedWorkloadTelemetryEnvvarsCoverage(t *testing.T) {
 				manifest,
 				serverManifest.Application{Name: appName},
 				nil,
+				true,
 			)
 			if err != nil {
 				t.Fatalf("injectManagedWorkloadTelemetryEnvvars returned error: %v", err)
@@ -512,6 +513,7 @@ func TestInjectManagedWorkloadTelemetryEnvvarsCoverage(t *testing.T) {
 			manifest,
 			serverManifest.Application{Name: "anaconda2"},
 			nil,
+			true,
 		)
 		if err != nil {
 			t.Fatalf("injectManagedWorkloadTelemetryEnvvars returned error: %v", err)
@@ -520,6 +522,31 @@ func TestInjectManagedWorkloadTelemetryEnvvarsCoverage(t *testing.T) {
 			t.Fatalf("expected no managed telemetry envs for ineligible workload, got %#v", envVars)
 		}
 	})
+}
+
+func TestInjectManagedWorkloadTelemetryEnvvarsDisabledSkipsInjection(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed adding corev1 to scheme: %v", err)
+	}
+	client := fake.NewClientBuilder().WithScheme(scheme).Build()
+	wandb := &apiv2.WeightsAndBiases{ObjectMeta: metav1.ObjectMeta{Name: "wandb-dev-v2", Namespace: "default"}}
+
+	envVars, err := injectManagedWorkloadTelemetryEnvvars(
+		context.Background(),
+		client,
+		wandb,
+		serverManifest.Manifest{},
+		serverManifest.Application{Name: "api"},
+		nil,
+		false,
+	)
+	if err != nil {
+		t.Fatalf("injectManagedWorkloadTelemetryEnvvars returned error: %v", err)
+	}
+	if len(envVars) != 0 {
+		t.Fatalf("expected no managed telemetry envs when telemetry is disabled, got %#v", envVars)
+	}
 }
 
 func mustFindEnvVar(t *testing.T, envs []corev1.EnvVar, name string) corev1.EnvVar {
