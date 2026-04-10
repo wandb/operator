@@ -42,6 +42,7 @@ import (
 
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -66,6 +67,8 @@ var (
 	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
 )
+
+const defaultTelemetryConfigMapName = "wandb-operator-telemetry-config"
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
@@ -95,9 +98,7 @@ func main() {
 	var tlsOpts []func(*tls.Config)
 	var deployerAPI, isolationNamespaces string
 	var debug, airgapped, enableV2, enableWebhooks, enableRollouts bool
-	var telemetryEnabled bool
-	var telemetryManagedNamespace string
-	var telemetryOTelSecretName, telemetryOTelProtocol, telemetryOTelServiceName, telemetryOTelResourceAttributes string
+	var telemetryConfigName, telemetryConfigNamespace string
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
@@ -126,12 +127,8 @@ func main() {
 	flag.BoolVar(&enableV2, "enable-v2", true, "Use V2 of WandB CRD")
 	flag.BoolVar(&enableWebhooks, "enable-webhooks", true, "Enable webhooks")
 	flag.BoolVar(&enableRollouts, "enable-rollouts", false, "Enable Argo Rollout Support")
-	flag.BoolVar(&telemetryEnabled, "telemetry-enabled", false, "Enable telemetry endpoint reconciliation for W&B applications")
-	flag.StringVar(&telemetryManagedNamespace, "telemetry-managed-namespace", "", "Namespace where managed telemetry services run")
-	flag.StringVar(&telemetryOTelSecretName, "telemetry-otel-secret-name", "wandb-otel-connection", "Name of the OTEL connection secret managed by the operator")
-	flag.StringVar(&telemetryOTelProtocol, "telemetry-otel-protocol", "http/protobuf", "OTEL exporter protocol written to the OTEL connection secret")
-	flag.StringVar(&telemetryOTelServiceName, "telemetry-otel-service-name", "wandb-service", "OTEL service name written to the OTEL connection secret")
-	flag.StringVar(&telemetryOTelResourceAttributes, "telemetry-otel-resource-attributes", "", "OTEL resource attributes written to the OTEL connection secret")
+	flag.StringVar(&telemetryConfigName, "telemetry-config-name", "", "Optional override ConfigMap name containing operator telemetry configuration")
+	flag.StringVar(&telemetryConfigNamespace, "telemetry-config-namespace", "", "Optional override namespace containing the operator telemetry configuration ConfigMap")
 
 	var logLevel = flag.String("log-level", "info", "Log level: debug, info, warn, error")
 	var logFormat = flag.String("log-format", "text", "Log format: text or json")
@@ -172,17 +169,21 @@ func main() {
 		utilruntime.Must(argov1alpha1.AddToScheme(scheme))
 	}
 
-	telemetryConfig := controllerv2.DefaultTelemetryRuntimeConfig()
-	telemetryConfig.Enabled = telemetryEnabled
-	telemetryConfig.Namespace = telemetryManagedNamespace
-	telemetryConfig.OTel.SecretName = telemetryOTelSecretName
-	telemetryConfig.OTel.Protocol = telemetryOTelProtocol
-	telemetryConfig.OTel.ServiceName = telemetryOTelServiceName
-	telemetryConfig.OTel.ResourceAttributes = telemetryOTelResourceAttributes
-	telemetryConfig.Normalize()
-	if err := telemetryConfig.Validate(); err != nil {
-		setupLog.Error(err, "invalid telemetry configuration")
+	runtimeNamespace, err := detectRuntimeNamespace()
+	if err != nil {
+		setupLog.Error(err, "failed to determine runtime namespace for telemetry config")
 		os.Exit(1)
+	}
+
+	telemetryConfigRef := types.NamespacedName{
+		Name:      defaultTelemetryConfigMapName,
+		Namespace: runtimeNamespace,
+	}
+	if strings.TrimSpace(telemetryConfigName) != "" {
+		telemetryConfigRef.Name = strings.TrimSpace(telemetryConfigName)
+	}
+	if strings.TrimSpace(telemetryConfigNamespace) != "" {
+		telemetryConfigRef.Namespace = strings.TrimSpace(telemetryConfigNamespace)
 	}
 
 	// if the enable-http2 flag is false (the default), http/2 should be disabled
@@ -315,14 +316,14 @@ func main() {
 	}
 
 	if err = (&controller.WeightsAndBiasesReconciler{
-		IsAirgapped:     airgapped,
-		Recorder:        mgr.GetEventRecorderFor("weightsandbiases"),
-		Client:          mgr.GetClient(),
-		Scheme:          mgr.GetScheme(),
-		DeployerClient:  &deployer.DeployerClient{DeployerAPI: deployerAPI},
-		Debug:           debug,
-		EnableV2:        enableV2,
-		TelemetryConfig: telemetryConfig,
+		IsAirgapped:        airgapped,
+		Recorder:           mgr.GetEventRecorderFor("weightsandbiases"),
+		Client:             mgr.GetClient(),
+		Scheme:             mgr.GetScheme(),
+		DeployerClient:     &deployer.DeployerClient{DeployerAPI: deployerAPI},
+		Debug:              debug,
+		EnableV2:           enableV2,
+		TelemetryConfigRef: telemetryConfigRef,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "WeightsAndBiases")
 		os.Exit(1)
@@ -398,4 +399,18 @@ func setFlagsFromEnvironment() []error {
 	})
 
 	return errors
+}
+
+func detectRuntimeNamespace() (string, error) {
+	data, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
+	if err != nil {
+		return "", err
+	}
+
+	namespace := strings.TrimSpace(string(data))
+	if namespace == "" {
+		return "", fmt.Errorf("runtime namespace file is empty")
+	}
+
+	return namespace, nil
 }

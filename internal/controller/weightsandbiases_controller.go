@@ -31,6 +31,7 @@ import (
 	networkingv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -45,14 +46,14 @@ import (
 // WeightsAndBiasesReconciler reconciles a WeightsAndBiases object
 type WeightsAndBiasesReconciler struct {
 	client.Client
-	IsAirgapped     bool
-	DeployerClient  deployer.DeployerInterface
-	Scheme          *runtime.Scheme
-	Recorder        record.EventRecorder
-	DryRun          bool
-	Debug           bool
-	EnableV2        bool
-	TelemetryConfig v2.TelemetryRuntimeConfig
+	IsAirgapped        bool
+	DeployerClient     deployer.DeployerInterface
+	Scheme             *runtime.Scheme
+	Recorder           record.EventRecorder
+	DryRun             bool
+	Debug              bool
+	EnableV2           bool
+	TelemetryConfigRef types.NamespacedName
 }
 
 //+kubebuilder:rbac:groups="",resources=configmaps;events;persistentvolumeclaims;secrets;serviceaccounts;services,verbs=update;delete;get;list;create;patch;watch
@@ -68,12 +69,16 @@ type WeightsAndBiasesReconciler struct {
 //+kubebuilder:rbac:groups=clickhouse.altinity.com,resources=clickhouseinstallations/status,verbs=get
 //+kubebuilder:rbac:groups=cloud.google.com,resources=backendconfigs,verbs=update;delete;get;list;patch;create;watch
 //+kubebuilder:rbac:groups=events.k8s.io,resources=events,verbs=list;watch
+//+kubebuilder:rbac:groups=grafana.integreatly.org,resources=grafanas;grafanadashboards;grafanadatasources,verbs=get;list;watch
+//+kubebuilder:rbac:groups=grafana.integreatly.org,resources=grafanas/status;grafanadashboards/status;grafanadatasources/status,verbs=get
 //+kubebuilder:rbac:groups=kafka.strimzi.io,resources=kafkanodepools;kafkas;kafkatopics,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=kafka.strimzi.io,resources=kafkanodepools/status;kafkas/status;kafkatopics/status,verbs=get;update
 //+kubebuilder:rbac:groups=mysql.oracle.com,resources=innodbclusters,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=mysql.oracle.com,resources=innodbclusters/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=minio.min.io,resources=tenants,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=minio.min.io,resources=tenants/status,verbs=get
+//+kubebuilder:rbac:groups=operator.victoriametrics.com,resources=vmagents;vmalerts;vmnodescrapes;vmpodscrapes;vmrules;vmservicescrapes;vmsingles;vlsingles;vtsingles,verbs=get;list;watch
+//+kubebuilder:rbac:groups=operator.victoriametrics.com,resources=vmagents/status;vmalerts/status;vmsingles/status;vlsingles/status;vtsingles/status,verbs=get
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways;httproutes;backendtlspolicies,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways/status;backendtlspolicies/status,verbs=get
 //+kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses;ingresses/status;networkpolicies,verbs=update;delete;get;list;create;patch;watch
@@ -126,6 +131,12 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			log.Info("Set GVK on wandbv2", "gvk", gvks[0], "apiVersion", wandbv2.APIVersion, "kind", wandbv2.Kind)
 		}
 
+		telemetryConfig, err := r.loadTelemetryConfig(ctx)
+		if err != nil {
+			log.Error(err, "failed to load telemetry configuration", "configMap", r.TelemetryConfigRef)
+			return ctrl.Result{}, err
+		}
+
 		// TODO: Once proper conversion is done, remove this logic
 		if version, ok := wandbv2.Annotations["legacy.operator.wandb.com/version"]; ok && version == "v1" {
 			log.Info("Detected legacy Weights & Biases instance, reconciling as V1...")
@@ -143,7 +154,7 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			}
 			return v1.Reconcile(ctx, wandbv1, r.Client, &v1Cfg)
 		} else {
-			return v2.Reconcile(ctx, r.Client, r.Recorder, wandbv2, r.TelemetryConfig)
+			return v2.Reconcile(ctx, r.Client, r.Recorder, wandbv2, telemetryConfig)
 		}
 	} else {
 		wandb := &apiv1.WeightsAndBiases{}
@@ -181,6 +192,13 @@ func (r *WeightsAndBiasesReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			Owns(&corev1.ConfigMap{}).
 			Owns(&networkingv1.Ingress{}).
 			Watches(&gatewayv1.Gateway{}, handler.EnqueueRequestsFromMapFunc(r.mapGatewayToWandb))
+		if r.TelemetryConfigRef.Name != "" {
+			b = b.Watches(
+				&corev1.ConfigMap{},
+				handler.EnqueueRequestsFromMapFunc(r.mapTelemetryConfigToWandb),
+				builder.WithPredicates(predicate.NewPredicateFuncs(r.isTelemetryConfig)),
+			)
+		}
 	} else {
 		b = ctrl.NewControllerManagedBy(mgr).
 			For(&apiv1.WeightsAndBiases{}, builder.WithPredicates(filterWBEventsForV1{})).
@@ -188,6 +206,43 @@ func (r *WeightsAndBiasesReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			Owns(&corev1.ConfigMap{})
 	}
 	return b.Complete(r)
+}
+
+func (r *WeightsAndBiasesReconciler) loadTelemetryConfig(ctx context.Context) (v2.TelemetryRuntimeConfig, error) {
+	if r.TelemetryConfigRef.Name == "" {
+		return v2.DefaultTelemetryRuntimeConfig(), nil
+	}
+
+	return v2.LoadTelemetryRuntimeConfigFromConfigMap(
+		ctx,
+		r.Client,
+		r.TelemetryConfigRef,
+		v2.DefaultTelemetryRuntimeConfig(),
+	)
+}
+
+func (r *WeightsAndBiasesReconciler) isTelemetryConfig(obj client.Object) bool {
+	return client.ObjectKeyFromObject(obj) == r.TelemetryConfigRef
+}
+
+func (r *WeightsAndBiasesReconciler) mapTelemetryConfigToWandb(ctx context.Context, obj client.Object) []ctrl.Request {
+	if !r.isTelemetryConfig(obj) {
+		return nil
+	}
+
+	wandbList := &apiv2.WeightsAndBiasesList{}
+	if err := r.List(ctx, wandbList); err != nil {
+		return nil
+	}
+
+	requests := make([]ctrl.Request, 0, len(wandbList.Items))
+	for i := range wandbList.Items {
+		requests = append(requests, ctrl.Request{
+			NamespacedName: client.ObjectKeyFromObject(&wandbList.Items[i]),
+		})
+	}
+
+	return requests
 }
 
 func (r *WeightsAndBiasesReconciler) mapGatewayToWandb(ctx context.Context, obj client.Object) []ctrl.Request {

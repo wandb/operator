@@ -4621,6 +4621,80 @@ spec:
                 required:
                 - ready
                 type: object
+              telemetryStatus:
+                properties:
+                  conditions:
+                    items:
+                      properties:
+                        lastTransitionTime:
+                          format: date-time
+                          type: string
+                        message:
+                          maxLength: 32768
+                          type: string
+                        observedGeneration:
+                          format: int64
+                          minimum: 0
+                          type: integer
+                        reason:
+                          maxLength: 1024
+                          minLength: 1
+                          pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                          type: string
+                        status:
+                          enum:
+                          - "True"
+                          - "False"
+                          - Unknown
+                          type: string
+                        type:
+                          maxLength: 316
+                          pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                          type: string
+                      required:
+                      - lastTransitionTime
+                      - message
+                      - reason
+                      - status
+                      - type
+                      type: object
+                    type: array
+                  connection:
+                    properties:
+                      connectionSecret:
+                        type: string
+                      gorillaTracer:
+                        type: string
+                      logsEndpoint:
+                        type: string
+                      logsExporter:
+                        type: string
+                      managedNamespace:
+                        type: string
+                      metricsEndpoint:
+                        type: string
+                      metricsExporter:
+                        type: string
+                      protocol:
+                        type: string
+                      resourceAttributes:
+                        type: string
+                      serviceName:
+                        type: string
+                      tracesEndpoint:
+                        type: string
+                      tracesExporter:
+                        type: string
+                    type: object
+                  mode:
+                    type: string
+                  ready:
+                    type: boolean
+                  state:
+                    type: string
+                required:
+                - ready
+                type: object
               wandb:
                 properties:
                   applications:

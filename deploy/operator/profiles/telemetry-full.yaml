@@ -1,5 +1,7 @@
 telemetry:
   mode: "full"
+  otel:
+    secretName: wandb-otel-connection
 
 victoria-metrics-operator:
   enabled: true

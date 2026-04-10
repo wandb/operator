@@ -167,6 +167,8 @@ func Reconcile(
 
 	var errorCount int
 
+	wandb.Status.TelemetryStatus = summarizeTelemetryInfraStatus(ctx, client, telemetryConfig)
+
 	/////////////////////////
 	// Retention Finalizer
 
@@ -1546,9 +1548,12 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *apiv2.
 				secretOnlyCount++
 				addSecretComponent(selector, idx)
 			case "telemetry":
-				secretName := src.Name
+				secretName := strings.TrimSpace(src.Name)
 				if secretName == "" {
-					secretName = "wandb-otel-connection"
+					secretName = strings.TrimSpace(wandb.Status.TelemetryStatus.Connection.ConnectionSecret)
+				}
+				if secretName == "" {
+					continue
 				}
 
 				selector := corev1.SecretKeySelector{

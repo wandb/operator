@@ -49,8 +49,11 @@ telemetry:
 
 Notes:
 - Retention defaults to `1d`.
+- `telemetry.mode=forward/full` requires `telemetry.otel.secretName`.
 - `telemetry.mode=forward` requires `telemetry.forwarding.otlp.endpoint`.
 - The telemetry mode controls the stack behavior, but Helm still needs dependency booleans for the VictoriaMetrics and Grafana operator subcharts.
+- When telemetry is enabled, the operator reads settings from the in-namespace `wandb-operator-telemetry-config` ConfigMap through the Kubernetes API and re-reconciles W&B instances when that ConfigMap changes.
+- When telemetry is off, that ConfigMap is not rendered and the operator falls back to disabled telemetry behavior.
 - Use the preset files in `deploy/operator/profiles/` to avoid remembering those extra flags and to switch modes cleanly on an existing release.
 - `helm upgrade --install wandb-operator ./deploy/operator --reset-values -f ./deploy/operator/profiles/telemetry-full.yaml` installs the operator plus the full local telemetry stack.
 - `helm upgrade --install wandb-operator ./deploy/operator --reset-values -f ./deploy/operator/profiles/telemetry-off.yaml` disables the telemetry stack and its dependent operators.
@@ -59,7 +62,7 @@ Notes:
 
 ## Operator Runtime Values
 
-Set OTEL secret defaults under `telemetry.otel`:
+Set OTEL connection settings under `telemetry.otel`:
 
 ```yaml
 telemetry:
@@ -76,7 +79,9 @@ Set `"installTelemetry": True` in `tilt-settings.star`.
 
 Tilt treats `installTelemetry=True` as the local `full` mode. It installs the
 VictoriaMetrics and Grafana operators, then installs the standalone telemetry
-chart with `mode=full`.
+chart with `mode=full`, and it writes `wandb-operator-telemetry-config` in
+`operator-system` so the operator picks up the same configmap-backed telemetry
+settings as the Helm flow.
 
 Tilt exposes endpoints for:
 - Grafana
@@ -85,6 +90,19 @@ Tilt exposes endpoints for:
 - VictoriaTraces
 
 ## Manifest `source.type=telemetry`
+
+The resolved operator-managed telemetry status is also published on
+`WeightsAndBiases.status.telemetryStatus`, including `ready`, `state`, `mode`,
+and nested `connection` details such as the effective protocol, endpoints,
+secret name, and gorilla tracer connection.
+
+```bash
+kubectl get weightsandbiases <name> -n <namespace> -o jsonpath='{.status.telemetryStatus}'
+```
+
+```bash
+kubectl get weightsandbiases <name> -n <namespace> -o jsonpath='{.status.telemetryStatus.connection.connectionSecret}'
+```
 
 You can source env vars from the operator-managed telemetry secret:
 
@@ -116,6 +134,6 @@ env:
 2. Verify Grafana resources:
    - `kubectl get grafana,grafanadatasource -n <telemetry-namespace>`
 3. Verify telemetry secret:
-   - `kubectl get secret wandb-otel-connection -n <wandb-namespace> -o yaml`
+   - `kubectl get secret <configured-secret-name> -n <wandb-namespace> -o yaml`
 4. Verify pod env:
    - `kubectl exec -n <wandb-namespace> deploy/<app> -- env | grep OTEL_`

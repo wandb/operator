@@ -27,36 +27,6 @@ wandb-operator:
           value: ":8443"
         METRICS_SECURE:
           value: "false"
-        TELEMETRY_ENABLED:
-          valueFrom:
-            configMapKeyRef:
-              name: '{{ .Release.Name }}-telemetry-config'
-              key: TELEMETRY_ENABLED
-        TELEMETRY_MANAGED_NAMESPACE:
-          valueFrom:
-            configMapKeyRef:
-              name: '{{ .Release.Name }}-telemetry-config'
-              key: TELEMETRY_MANAGED_NAMESPACE
-        TELEMETRY_OTEL_SECRET_NAME:
-          valueFrom:
-            configMapKeyRef:
-              name: '{{ .Release.Name }}-telemetry-config'
-              key: TELEMETRY_OTEL_SECRET_NAME
-        TELEMETRY_OTEL_PROTOCOL:
-          valueFrom:
-            configMapKeyRef:
-              name: '{{ .Release.Name }}-telemetry-config'
-              key: TELEMETRY_OTEL_PROTOCOL
-        TELEMETRY_OTEL_SERVICE_NAME:
-          valueFrom:
-            configMapKeyRef:
-              name: '{{ .Release.Name }}-telemetry-config'
-              key: TELEMETRY_OTEL_SERVICE_NAME
-        TELEMETRY_OTEL_RESOURCE_ATTRIBUTES:
-          valueFrom:
-            configMapKeyRef:
-              name: '{{ .Release.Name }}-telemetry-config'
-              key: TELEMETRY_OTEL_RESOURCE_ATTRIBUTES
       securityContext:
         allowPrivilegeEscalation: false
         capabilities:
@@ -155,7 +125,8 @@ telemetry:
   mode: "off"
   namespace: wandb
   otel:
-    secretName: wandb-otel-connection
+    # Required when telemetry.mode is "forward" or "full".
+    secretName: ""
     protocol: http/protobuf
     serviceName: wandb-service
     resourceAttributes: ""

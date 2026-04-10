@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wandb-operator-telemetry-config
+  namespace: operator-system
+data:
+  TELEMETRY_ENABLED: "true"
+  TELEMETRY_MODE: "full"
+  TELEMETRY_MANAGED_NAMESPACE: "default"
+  TELEMETRY_OTEL_SECRET_NAME: "wandb-otel-connection"
+  TELEMETRY_OTEL_PROTOCOL: "http/protobuf"
+  TELEMETRY_OTEL_SERVICE_NAME: "wandb-service"
+  TELEMETRY_OTEL_RESOURCE_ATTRIBUTES: ""

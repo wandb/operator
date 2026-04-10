@@ -84,6 +84,44 @@ func TestStandaloneTelemetryChartFullModeRendersCoreStack(t *testing.T) {
 	mustContain(t, output, "url: \"http://vmsingle-victoria-instance:8428\"")
 }
 
+func TestOperatorChartFullModeRendersTelemetryConfigMapWithoutTelemetryEnvs(t *testing.T) {
+	output := runHelmTemplate(t,
+		"--set", "wandb.install=false",
+		"--set", "telemetry.mode=full",
+		"--set", "telemetry.otel.secretName=wandb-otel-connection",
+		"--set", "victoria-metrics-operator.enabled=true",
+		"--set", "grafana-operator.enabled=true",
+	)
+
+	mustContain(t, output, "name: wandb-operator-telemetry-config")
+	mustContain(t, output, "TELEMETRY_MODE: \"full\"")
+	mustNotContain(t, output, "name: TELEMETRY_ENABLED")
+	mustNotContain(t, output, "name: TELEMETRY_MANAGED_NAMESPACE")
+}
+
+func TestOperatorChartFullModeRequiresTelemetrySecretName(t *testing.T) {
+	output, err := runHelmTemplateWithError(t, filepath.Join("..", "..", "..", "deploy", "operator"),
+		"--set", "wandb.install=false",
+		"--set", "telemetry.mode=full",
+		"--set", "victoria-metrics-operator.enabled=true",
+		"--set", "grafana-operator.enabled=true",
+	)
+	if err == nil {
+		t.Fatalf("expected helm template to fail when telemetry secret name is missing")
+	}
+	mustContain(t, output, "telemetry.mode=forward/full requires telemetry.otel.secretName")
+}
+
+func TestOperatorChartOffModeSkipsTelemetryConfigMap(t *testing.T) {
+	output := runHelmTemplate(t,
+		"--set", "wandb.install=false",
+		"--set", "telemetry.mode=off",
+	)
+
+	mustNotContain(t, output, "name: wandb-operator-telemetry-config")
+	mustNotContain(t, output, "name: TELEMETRY_ENABLED")
+}
+
 func runHelmTemplate(t *testing.T, extraArgs ...string) string {
 	t.Helper()
 	output, err := runHelmTemplateWithError(t, filepath.Join("..", "..", "..", "deploy", "operator"), extraArgs...)

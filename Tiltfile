@@ -219,6 +219,15 @@ helm_resource(
 k8s_yaml(local('kustomize build config/tilt-dev'))
 k8s_yaml('hack/tilt/endpoint-anchors.yaml')
 
+if settings.get("installTelemetry"):
+    k8s_yaml('hack/tilt/telemetry-config.yaml')
+
+    k8s_resource(
+        new_name='Telemetry-Config',
+        objects=['wandb-operator-telemetry-config:configmap:operator-system'],
+        labels=[GROUP_TELEMETRY],
+    )
+
 k8s_resource(
     new_name='Operator-Certs',
     objects=[
@@ -452,10 +461,6 @@ if settings.get("installTelemetry"):
     )
 
 manager_entrypoint = ['/manager', '--log-format=' + settings['logFormat']]
-if settings.get("installTelemetry"):
-    manager_entrypoint += [
-        '--telemetry-enabled=true',
-    ]
 
 docker_build_with_restart(
     IMG, '.',
