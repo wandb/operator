@@ -63,7 +63,7 @@ type TLSIssuerRef struct {
 	Group string `json:"group,omitempty"`
 }
 
-// SeaweedSpec defines the desired state of Seaweed
+
 type SeaweedSpec struct {
 	TLS            *TLSSpec `json:"tls,omitempty"`
 	MetricsAddress string   `json:"metricsAddress,omitempty"`

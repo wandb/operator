@@ -1,0 +1,49 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: seaweedfs
+  labels:
+    name: seaweedfs
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    app: seaweedfs
+  name: seaweedfs
+  namespace: seaweedfs
+spec:
+  containers:
+    - name: seaweedfs
+      image: chrislusf/seaweedfs:latest
+      args:
+        - server
+        - -s3
+        - -dir=/data
+      ports:
+        - containerPort: 8333
+          name: s3
+        - containerPort: 9333
+          name: master
+        - containerPort: 8888
+          name: filer
+      volumeMounts:
+        - mountPath: /data
+          name: localvolume
+  volumes:
+    - name: localvolume
+      hostPath:
+        path: /mnt/seaweedfs/data
+        type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: seaweedfs
+  namespace: seaweedfs
+spec:
+  selector:
+    app: seaweedfs
+  ports:
+    - port: 8333
+      name: s3
