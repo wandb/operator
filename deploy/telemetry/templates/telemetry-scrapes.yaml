@@ -236,7 +236,7 @@ spec:
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMPodScrape
 metadata:
-  name: minio-tenant
+  name: seaweedfs
   namespace: {{ include "telemetry.namespace" . }}
   labels:
     app.kubernetes.io/component: telemetry
@@ -244,16 +244,13 @@ metadata:
 spec:
   selector:
     matchLabels:
-      weightsandbiases.apps.wandb.com/component: minio
+      weightsandbiases.apps.wandb.com/component: seaweedfs
   namespaceSelector:
     matchNames:
       - {{ include "telemetry.namespace" . }}
   podMetricsEndpoints:
-    - port: minio-port
-      path: /minio/metrics/v3
-      scheme: https
-      tlsConfig:
-        insecureSkipVerify: true
+    - port: metrics
+      path: /metrics
 ---
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMPodScrape

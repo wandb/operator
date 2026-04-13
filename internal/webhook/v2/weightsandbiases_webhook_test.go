@@ -89,7 +89,7 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 			}
 			obj.Spec.Redis.ManagedRedis = &appsv2.ManagedRedisSpec{Namespace: "custom-redis"}
 			obj.Spec.Kafka.ManagedKafka = &appsv2.ManagedKafkaSpec{Namespace: "custom-kafka"}
-			obj.Spec.ObjectStore.ManagedObjectStore = &appsv2.ManagedObjectStoreSpec{Namespace: "custom-minio"}
+			obj.Spec.ObjectStore.ManagedObjectStore = &appsv2.ManagedObjectStoreSpec{Namespace: "custom-objectstore"}
 			obj.Status.Wandb.Applications = map[string]appsv2.ApplicationStatus{"api": {}}
 
 			Expect(defaulter.Default(ctx, obj)).To(Succeed())
@@ -106,7 +106,7 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 			Expect(obj.Spec.MySQL.ManagedMysql.Namespace).To(Equal("custom-mysql"))
 			Expect(obj.Spec.Redis.ManagedRedis.Namespace).To(Equal("custom-redis"))
 			Expect(obj.Spec.Kafka.ManagedKafka.Namespace).To(Equal("custom-kafka"))
-			Expect(obj.Spec.ObjectStore.ManagedObjectStore.Namespace).To(Equal("custom-minio"))
+			Expect(obj.Spec.ObjectStore.ManagedObjectStore.Namespace).To(Equal("custom-objectstore"))
 			Expect(obj.Status.Wandb.Applications).To(HaveKey("api"))
 		})
 

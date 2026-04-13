@@ -1,4 +1,4 @@
-package tenant
+package seaweedfs
 
 import (
 	"context"
@@ -37,7 +37,6 @@ func purgeAssociatedResources(
 		LabelSelector: onDeleteSelector,
 	}
 
-	// PVCs
 	pvcList := &corev1.PersistentVolumeClaimList{}
 	if err := cl.List(ctx, pvcList, listOptions); err != nil {
 		return err
@@ -59,7 +58,6 @@ func purgeAssociatedResources(
 		}
 	}
 
-	// Secrets
 	secretList := &corev1.SecretList{}
 	if err := cl.List(ctx, secretList, listOptions); err != nil {
 		return err

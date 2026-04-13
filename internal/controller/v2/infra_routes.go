@@ -42,7 +42,7 @@ func resolveInfraRoutes(wandb *apiv2.WeightsAndBiases, manifest serverManifest.M
 			if cfg.Ingress == nil {
 				continue
 			}
-			svcName := fmt.Sprintf("%s-hl", objectStoreSpec.Name)
+			svcName := fmt.Sprintf("%s-s3", objectStoreSpec.Name)
 			port, err := resolveInfraServicePort(cfg.Ingress, 9000)
 			if err != nil {
 				return nil, fmt.Errorf("bucket instance %q: %w", instanceName, err)

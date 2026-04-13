@@ -1,4 +1,4 @@
-package tenant
+package seaweedfs
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/translator"
 	"github.com/wandb/operator/internal/logx"
-	miniov2 "github.com/wandb/operator/pkg/vendored/minio-operator/minio.min.io/v2"
+	seaweedv1 "github.com/wandb/operator/pkg/vendored/seaweedfs-operator/seaweed.seaweedfs.com/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -18,21 +18,21 @@ import (
 )
 
 const (
-	ResourceTypeName = "Tenant"
-	ConfigTypeName   = "MinioConfig"
-	AppConnTypeName  = "MinioAppConn"
+	ResourceTypeName = "Seaweed"
+	ConfigTypeName   = "SeaweedS3Config"
+	AppConnTypeName  = "SeaweedAppConn"
 )
 
 func WriteState(
 	ctx context.Context,
 	client client.Client,
 	specNamespacedName types.NamespacedName,
-	desiredCr *miniov2.Tenant,
-	envConfig MinioEnvConfig,
+	desiredCr *seaweedv1.Seaweed,
+	envConfig SeaweedS3Config,
 	wandbOwner client.Object,
 ) ([]metav1.Condition, *translator.ObjectStoreConnection) {
 	ctx, _ = logx.WithSlog(ctx, logx.ObjectStore)
-	var actual = &miniov2.Tenant{}
+	var actual = &seaweedv1.Seaweed{}
 
 	nsnBuilder := createNsNameBuilder(specNamespacedName)
 
@@ -47,7 +47,7 @@ func WriteState(
 				Reason: common.ApiErrorReason,
 			},
 			{
-				Type:   MinioCustomResourceType,
+				Type:   SeaweedCustomResourceType,
 				Status: metav1.ConditionUnknown,
 				Reason: common.ApiErrorReason,
 			},
@@ -71,36 +71,36 @@ func WriteState(
 	switch action {
 	case common.CreateAction:
 		result = append(result, metav1.Condition{
-			Type:   MinioCustomResourceType,
+			Type:   SeaweedCustomResourceType,
 			Status: metav1.ConditionFalse,
 			Reason: common.PendingCreateReason,
 		})
 	case common.DeleteAction:
 		result = append(result, metav1.Condition{
-			Type:   MinioCustomResourceType,
+			Type:   SeaweedCustomResourceType,
 			Status: metav1.ConditionFalse,
 			Reason: common.PendingDeleteReason,
 		})
 	case common.UpdateAction:
 		result = append(result, metav1.Condition{
-			Type:   MinioCustomResourceType,
+			Type:   SeaweedCustomResourceType,
 			Status: metav1.ConditionTrue,
 			Reason: common.ResourceExistsReason,
 		})
 	case common.NoAction:
 		result = append(result, metav1.Condition{
-			Type:   MinioCustomResourceType,
+			Type:   SeaweedCustomResourceType,
 			Status: metav1.ConditionFalse,
 			Reason: common.NoResourceReason,
 		})
 	}
 
-	connInfo, err := writeMinioConfig(
+	connInfo, err := writeSeaweedS3Config(
 		ctx, client, desiredCr, nsnBuilder, envConfig,
 	)
 	if err != nil {
 		result = append(result, metav1.Condition{
-			Type:   MinioConnectionInfoType,
+			Type:   SeaweedConnectionInfoType,
 			Status: metav1.ConditionFalse,
 			Reason: common.ApiErrorReason,
 		})
@@ -113,7 +113,7 @@ func WriteState(
 		)
 		if err != nil {
 			result = append(result, metav1.Condition{
-				Type:   MinioConnectionInfoType,
+				Type:   SeaweedConnectionInfoType,
 				Status: metav1.ConditionFalse,
 				Reason: common.ApiErrorReason,
 			})
@@ -121,7 +121,7 @@ func WriteState(
 		}
 		if connection != nil {
 			result = append(result, metav1.Condition{
-				Type:   MinioConnectionInfoType,
+				Type:   SeaweedConnectionInfoType,
 				Status: metav1.ConditionTrue,
 				Reason: common.ResourceExistsReason,
 			})
@@ -130,38 +130,31 @@ func WriteState(
 	}
 
 	result = append(result, metav1.Condition{
-		Type:   MinioConnectionInfoType,
+		Type:   SeaweedConnectionInfoType,
 		Status: metav1.ConditionFalse,
 		Reason: common.NoResourceReason,
 	})
 	return result, nil
 }
 
-// writeMinioConfig builds the Minio Config with credentials.
-// This generates a password if one does not exist.
-// Note: the owner of the minio-config is the Minio CR
-func writeMinioConfig(
+func writeSeaweedS3Config(
 	ctx context.Context,
 	client client.Client,
-	owner *miniov2.Tenant,
+	owner *seaweedv1.Seaweed,
 	nsnBuilder *NsNameBuilder,
-	envConfig MinioEnvConfig,
-) (*minioConnInfo, error) {
+	envConfig SeaweedS3Config,
+) (*s3ConnInfo, error) {
 	var err error
 	var found bool
 	var gvk schema.GroupVersionKind
-	var configFile minioConfigFile
-	var rootPassword string
+	var secretKey string
 	var actual = &corev1.Secret{}
 
-	configFileName := "config.env"
+	configFileName := "config.json"
 
-	// If owner is nil (MinIO disabled), return early
 	if owner == nil {
 		return nil, nil
 	}
-
-	//log := ctrl.LoggerFrom(ctx)
 
 	if found, err = common.GetResource(
 		ctx, client, nsnBuilder.ConfigNsName(), ConfigTypeName, actual,
@@ -173,16 +166,23 @@ func writeMinioConfig(
 	}
 
 	if actual != nil {
-		rootPassword = parseMinioConfigFile(string(actual.Data[configFileName])).rootPassword
+		existingConfig, parseErr := parseS3IdentityConfig(string(actual.Data[configFileName]))
+		if parseErr == nil {
+			secretKey = extractSecretKey(existingConfig)
+		}
 	}
-	if rootPassword == "" {
-		if rootPassword, err = goutils.RandomAlphabetic(20); err != nil {
+	if secretKey == "" {
+		if secretKey, err = goutils.RandomAlphabetic(20); err != nil {
 			return nil, err
 		}
 	}
-	configFile = buildMinioConfigFile(envConfig.RootUser, rootPassword, envConfig.MinioBrowserSetting)
 
-	// Compute owner reference
+	identityConfig := buildS3IdentityConfig(envConfig.AccessKey, secretKey)
+	configJSON, err := identityConfig.toJSON()
+	if err != nil {
+		return nil, err
+	}
+
 	if gvk, err = client.GroupVersionKindFor(owner); err != nil {
 		return nil, fmt.Errorf("could not get GVK for owner: %w", err)
 	}
@@ -203,7 +203,7 @@ func writeMinioConfig(
 		},
 		Type: corev1.SecretTypeOpaque,
 		StringData: map[string]string{
-			configFileName: configFile.toFileContents(),
+			configFileName: configJSON,
 		},
 	}
 
@@ -211,5 +211,5 @@ func writeMinioConfig(
 		return nil, err
 	}
 
-	return buildMinioConnInfo(configFile.rootUser, configFile.rootPassword, nsnBuilder), nil
+	return buildS3ConnInfo(envConfig.AccessKey, secretKey, nsnBuilder), nil
 }

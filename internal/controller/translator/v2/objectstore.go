@@ -5,36 +5,23 @@ import (
 	"fmt"
 
 	apiv2 "github.com/wandb/operator/api/v2"
-	"github.com/wandb/operator/internal/controller/infra/managed/minio/tenant"
+	"github.com/wandb/operator/internal/controller/infra/managed/objectstore/seaweedfs"
 	"github.com/wandb/operator/internal/controller/translator"
 	"github.com/wandb/operator/internal/logx"
-	miniov2 "github.com/wandb/operator/pkg/vendored/minio-operator/minio.min.io/v2"
+	seaweedv1 "github.com/wandb/operator/pkg/vendored/seaweedfs-operator/seaweed.seaweedfs.com/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"knative.dev/pkg/ptr"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
-
-func createObjectStoreTelemetryEnv(telemetry apiv2.Telemetry) []corev1.EnvVar {
-	if !telemetry.Enabled {
-		return nil
-	}
-
-	return []corev1.EnvVar{
-		{
-			Name:  "MINIO_PROMETHEUS_AUTH_TYPE",
-			Value: "public",
-		},
-	}
-}
 
 func ToObjectStoreVendorSpec(
 	ctx context.Context,
 	wandb *apiv2.WeightsAndBiases,
 	scheme *runtime.Scheme,
-) (*miniov2.Tenant, error) {
+) (*seaweedv1.Seaweed, error) {
 	_, log := logx.WithSlog(ctx, logx.ObjectStore)
 	infraSpec := wandb.Spec.ObjectStore.ManagedObjectStore
 	if infraSpec == nil {
@@ -48,87 +35,71 @@ func ToObjectStoreVendorSpec(
 		return nil, fmt.Errorf("invalid storage size %q: %w", infraSpec.StorageSize, err)
 	}
 
-	volumesPerServer := translator.DevVolumesPerServer
+	replication := "000"
 	if infraSpec.Replicas > 1 {
-		volumesPerServer = translator.ProdVolumesPerServer
+		replication = "001"
 	}
 
-	minioTenant := &miniov2.Tenant{
+	volumeSizeLimitMB := int32(storageQuantity.Value() / (1024 * 1024))
+
+	seaweedCR := &seaweedv1.Seaweed{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      tenant.TenantName(specName),
+			Name:      seaweedfs.SeaweedName(specName),
 			Namespace: infraSpec.Namespace,
 			Labels: map[string]string{
-				"app": tenant.TenantName(specName),
+				"app": seaweedfs.SeaweedName(specName),
 			},
 		},
-		Spec: miniov2.TenantSpec{
-			Image: translator.MinioImage,
-			Configuration: &corev1.LocalObjectReference{
-				Name: tenant.ConfigName(specName),
+		Spec: seaweedv1.SeaweedSpec{
+			Image: translator.SeaweedImage,
+			Master: &seaweedv1.MasterSpec{
+				Replicas:           1,
+				DefaultReplication: &replication,
+				VolumeSizeLimitMB:  &volumeSizeLimitMB,
 			},
-			ServiceMetadata: &miniov2.ServiceMetadata{
-				MinIOServiceLabels: BuildWandbObjectStoreLabels(wandb),
+			Volume: &seaweedv1.VolumeSpec{
+				Replicas: infraSpec.Replicas,
 			},
-			PoolsMetadata: &miniov2.PoolsMetadata{
-				Labels: BuildWandbObjectStoreLabels(wandb),
+			Filer: &seaweedv1.FilerSpec{
+				Replicas: 1,
 			},
-			Pools: []miniov2.Pool{
-				{
-					Name:             "default",
-					Affinity:         wandb.GetAffinity(infraSpec.ManagedInfraSpec),
-					Tolerations:      *wandb.GetTolerations(infraSpec.ManagedInfraSpec),
-					Servers:          infraSpec.Replicas,
-					VolumesPerServer: volumesPerServer,
-					VolumeClaimTemplate: &corev1.PersistentVolumeClaim{
-						ObjectMeta: metav1.ObjectMeta{
-							Labels: BuildWandbObjectStoreLabels(wandb),
-						},
-						Spec: corev1.PersistentVolumeClaimSpec{
-							AccessModes: []corev1.PersistentVolumeAccessMode{
-								corev1.ReadWriteOnce,
-							},
-							Resources: corev1.VolumeResourceRequirements{
-								Requests: corev1.ResourceList{
-									corev1.ResourceStorage: storageQuantity,
-								},
-							},
-						},
+			S3: &seaweedv1.S3GatewaySpec{
+				Replicas: 1,
+				Port:     ptr.To(int32(9000)),
+				ConfigSecret: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: seaweedfs.ConfigName(specName),
 					},
+					Key: "config.json",
 				},
+				IAM: true,
 			},
-			Buckets: []miniov2.Bucket{
-				{
-					Name: "bucket",
-				},
-			},
-			RequestAutoCert: ptr.Bool(false),
+			Affinity:    wandb.GetAffinity(infraSpec.ManagedInfraSpec),
+			Tolerations: *wandb.GetTolerations(infraSpec.ManagedInfraSpec),
 		},
 	}
 
 	if len(infraSpec.Config.Resources.Requests) > 0 || len(infraSpec.Config.Resources.Limits) > 0 {
-		minioTenant.Spec.Pools[0].Resources = corev1.ResourceRequirements{
+		seaweedCR.Spec.Volume.ResourceRequirements = corev1.ResourceRequirements{
 			Requests: infraSpec.Config.Resources.Requests,
 			Limits:   infraSpec.Config.Resources.Limits,
 		}
 	}
 
-	minioTenant.Spec.Env = createObjectStoreTelemetryEnv(infraSpec.Telemetry)
-
-	if err := ctrl.SetControllerReference(wandb, minioTenant, scheme); err != nil {
-		log.Error("failed to set owner reference on Tenant CR", logx.ErrAttr(err))
+	if err := ctrl.SetControllerReference(wandb, seaweedCR, scheme); err != nil {
+		log.Error("failed to set owner reference on Seaweed CR", logx.ErrAttr(err))
 		return nil, fmt.Errorf("failed to set owner reference: %w", err)
 	}
 
-	return minioTenant, nil
+	return seaweedCR, nil
 }
 
 func ToObjectStoreEnvConfig(
 	ctx context.Context,
 	spec apiv2.ManagedObjectStoreSpec,
-) (tenant.MinioEnvConfig, error) {
-	return tenant.MinioEnvConfig{
-		RootUser:            spec.Config.RootUser,
-		MinioBrowserSetting: spec.Config.MinioBrowserSetting,
+) (seaweedfs.SeaweedS3Config, error) {
+	return seaweedfs.SeaweedS3Config{
+		AccessKey: spec.Config.AccessKey,
 	}, nil
 }
 

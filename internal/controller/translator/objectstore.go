@@ -4,15 +4,13 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-const ObjectStoreModuleName = "minio"
+const ObjectStoreModuleName = "seaweedfs"
 
 /////////////////////////////////////////////////
-// Minio Constants
+// SeaweedFS Constants
 
 const (
-	MinioImage           = "quay.io/minio/minio:latest"
-	DevVolumesPerServer  = int32(1)
-	ProdVolumesPerServer = int32(4)
+	SeaweedImage = "chrislusf/seaweedfs:latest"
 )
 
 /////////////////////////////////////////////////
@@ -23,18 +21,11 @@ type ObjectStoreConfig struct {
 	Namespace string
 	Name      string
 
-	// Custom Config
-	RootUser            string
-	MinioBrowserSetting string
+	AccessKey string
 
-	// Storage and resources
-	StorageSize      string
-	Servers          int32
-	VolumesPerServer int32
-	Resources        corev1.ResourceRequirements
-
-	// Minio specific
-	Image string
+	StorageSize string
+	Replicas    int32
+	Resources   corev1.ResourceRequirements
 }
 
 /////////////////////////////////////////////////

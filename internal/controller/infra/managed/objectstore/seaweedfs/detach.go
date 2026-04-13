@@ -1,4 +1,4 @@
-package tenant
+package seaweedfs
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/logx"
-	miniov2 "github.com/wandb/operator/pkg/vendored/minio-operator/minio.min.io/v2"
+	seaweedv1 "github.com/wandb/operator/pkg/vendored/seaweedfs-operator/seaweed.seaweedfs.com/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -22,7 +22,7 @@ func CheckDetached(
 	desiredReplicas int32,
 ) []metav1.Condition {
 	nsnBuilder := createNsNameBuilder(specNamespacedName)
-	actual := &miniov2.Tenant{}
+	actual := &seaweedv1.Seaweed{}
 	found, err := common.GetResource(ctx, cl, nsnBuilder.SpecNsName(), ResourceTypeName, actual)
 	if err != nil || !found {
 		return nil
@@ -31,14 +31,14 @@ func CheckDetached(
 		return nil
 	}
 
-	if desiredReplicas > 0 && len(actual.Spec.Pools) > 0 {
-		if int32(actual.Spec.Pools[0].Servers) != desiredReplicas {
+	if desiredReplicas > 0 && actual.Spec.Volume != nil {
+		if actual.Spec.Volume.Replicas != desiredReplicas {
 			return []metav1.Condition{
 				{
 					Type:    common.ReconciledType,
 					Status:  metav1.ConditionFalse,
 					Reason:  common.DetachedSpecMismatch,
-					Message: fmt.Sprintf("detached Minio CR spec mismatch: replicas want %d, have %d", desiredReplicas, actual.Spec.Pools[0].Servers),
+					Message: fmt.Sprintf("detached Seaweed CR spec mismatch: volume replicas want %d, have %d", desiredReplicas, actual.Spec.Volume.Replicas),
 				},
 			}
 		}
@@ -55,18 +55,18 @@ func DetachFinalizer(
 	ctx, log := logx.WithSlog(ctx, logx.ObjectStore)
 	nsnBuilder := createNsNameBuilder(specNamespacedName)
 
-	var actual = &miniov2.Tenant{}
+	var actual = &seaweedv1.Seaweed{}
 	found, err := common.GetResource(ctx, cl, nsnBuilder.SpecNsName(), ResourceTypeName, actual)
 	if err != nil {
 		return err
 	}
 	if !found {
-		log.Info("abort detach finalizer: Tenant CR not found")
+		log.Info("abort detach finalizer: Seaweed CR not found")
 		return nil
 	}
 
 	if common.IsDetached(actual, wandbOwner.GetUID()) {
-		log.Debug("Tenant CR already detached")
+		log.Debug("Seaweed CR already detached")
 		return nil
 	}
 
@@ -75,10 +75,10 @@ func DetachFinalizer(
 		if errors.IsNotFound(err) {
 			return nil
 		}
-		log.Error("error detaching Tenant CR", logx.ErrAttr(err))
+		log.Error("error detaching Seaweed CR", logx.ErrAttr(err))
 		return err
 	}
-	log.Info("detached Tenant CR", "name", actual.Name)
+	log.Info("detached Seaweed CR", "name", actual.Name)
 
 	secret := &corev1.Secret{}
 	found, err = common.GetResource(ctx, cl, nsnBuilder.ConnectionNsName(), "Secret", secret)

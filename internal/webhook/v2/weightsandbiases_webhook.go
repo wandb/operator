@@ -246,19 +246,15 @@ func applyObjectStoreDefaults(wandb *appsv2.WeightsAndBiases) {
 	}
 
 	if spec.Name == "" {
-		spec.Name = fmt.Sprintf("%s-minio", wandb.Name)
+		spec.Name = fmt.Sprintf("%s-seaweedfs", wandb.Name)
 	}
 
 	if spec.Namespace == "" {
 		spec.Namespace = wandb.Namespace
 	}
 
-	if spec.Config.RootUser == "" {
-		spec.Config.RootUser = "admin"
-	}
-
-	if spec.Config.MinioBrowserSetting == "" {
-		spec.Config.MinioBrowserSetting = "on"
+	if spec.Config.AccessKey == "" {
+		spec.Config.AccessKey = "admin"
 	}
 }
 

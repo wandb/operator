@@ -11,9 +11,9 @@ dependencies:
 - name: strimzi-kafka-operator
   repository: https://strimzi.io/charts
   version: 0.50.0
-- name: operator
-  repository: https://operator.min.io
-  version: 7.1.1
+- name: seaweedfs-operator
+  repository: https://seaweedfs.github.io/seaweedfs-operator/
+  version: 0.1.13
 - name: altinity-clickhouse-operator
   repository: https://helm.altinity.com
   version: 0.25.6
@@ -26,5 +26,5 @@ dependencies:
 - name: telemetry
   repository: file://../telemetry
   version: 0.1.0
-digest: sha256:9e8fefe7571cbdabfa706781ecde75570791fd8e153eb4f42220e99d99f7d91a
-generated: "2026-04-09T09:25:17.078486-07:00"
+digest: sha256:79827b4bccce6431bab1ea96a0a2ea91b22d54c1968bdcd5f9defe24ce5945a8
+generated: "2026-04-13T12:09:09.215194-05:00"

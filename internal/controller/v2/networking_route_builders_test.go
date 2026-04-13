@@ -55,7 +55,7 @@ var _ = Describe("Networking Route Builders", func() {
 		entry := infraRouteEntry{
 			name:        "wandb-bucket-default",
 			namespace:   "infra-ns",
-			serviceName: "wandb-minio-hl",
+			serviceName: "wandb-seaweedfs-s3",
 			servicePort: gatewayv1.PortNumber(9000),
 			ingress: &serverManifest.AppIngressSpec{
 				Paths:    []string{"/bucket"},
@@ -83,7 +83,7 @@ var _ = Describe("Networking Route Builders", func() {
 		Expect(*route.Spec.Rules[0].Matches[0].Path.Type).To(Equal(gatewayv1.PathMatchExact))
 		Expect(*route.Spec.Rules[0].Matches[0].Path.Value).To(Equal("/bucket"))
 		Expect(route.Spec.Rules[0].BackendRefs).To(HaveLen(1))
-		Expect(route.Spec.Rules[0].BackendRefs[0].Name).To(Equal(gatewayv1.ObjectName("wandb-minio-hl")))
+		Expect(route.Spec.Rules[0].BackendRefs[0].Name).To(Equal(gatewayv1.ObjectName("wandb-seaweedfs-s3")))
 		Expect(route.Spec.Rules[0].BackendRefs[0].Port).NotTo(BeNil())
 		Expect(*route.Spec.Rules[0].BackendRefs[0].Port).To(Equal(gatewayv1.PortNumber(9000)))
 	})

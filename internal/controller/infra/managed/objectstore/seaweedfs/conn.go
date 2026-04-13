@@ -1,4 +1,4 @@
-package tenant
+package seaweedfs
 
 import (
 	"context"
@@ -15,38 +15,38 @@ import (
 )
 
 const (
-	MinioUrlScheme = "s3"
-	MinioPort      = "9000"
+	S3UrlScheme = "s3"
+	S3Port      = "9000"
 )
 
-type minioConnInfo struct {
-	RootUser     string
-	RootPassword string
-	Host         string
-	Port         string
-	Bucket       string
+type s3ConnInfo struct {
+	AccessKey string
+	SecretKey string
+	Host      string
+	Port      string
+	Bucket    string
 }
 
-func buildMinioConnInfo(
-	rootUser, rootPassword string, nsnBuilder *NsNameBuilder,
-) *minioConnInfo {
+func buildS3ConnInfo(
+	accessKey, secretKey string, nsnBuilder *NsNameBuilder,
+) *s3ConnInfo {
 	namespace := nsnBuilder.Namespace()
 	serviceName := nsnBuilder.ServiceName()
-	return &minioConnInfo{
-		RootUser:     rootUser,
-		RootPassword: rootPassword,
-		Host:         fmt.Sprintf("%s.%s.svc.cluster.local", serviceName, namespace),
-		Port:         MinioPort,
-		Bucket:       "bucket",
+	return &s3ConnInfo{
+		AccessKey: accessKey,
+		SecretKey: secretKey,
+		Host:      fmt.Sprintf("%s.%s.svc.cluster.local", serviceName, namespace),
+		Port:      S3Port,
+		Bucket:    "bucket",
 	}
 }
 
-func (m *minioConnInfo) toUrl() *url.URL {
+func (s *s3ConnInfo) toUrl() *url.URL {
 	return &url.URL{
-		Scheme: MinioUrlScheme,
-		Host:   fmt.Sprintf("%s:%s", m.Host, m.Port),
-		User:   url.UserPassword(m.RootUser, m.RootPassword),
-		Path:   m.Bucket,
+		Scheme: S3UrlScheme,
+		Host:   fmt.Sprintf("%s:%s", s.Host, s.Port),
+		User:   url.UserPassword(s.AccessKey, s.SecretKey),
+		Path:   s.Bucket,
 	}
 }
 
@@ -55,7 +55,7 @@ func writeWandbConnInfo(
 	cl client.Client,
 	owner client.Object,
 	nsnBuilder *NsNameBuilder,
-	connInfo *minioConnInfo,
+	connInfo *s3ConnInfo,
 ) (
 	*translator.ObjectStoreConnection, error,
 ) {
@@ -99,8 +99,8 @@ func writeWandbConnInfo(
 			urlKey:      connInfo.toUrl().String() + "?tls=true",
 			"Host":      connInfo.Host,
 			"Port":      connInfo.Port,
-			"AccessKey": connInfo.RootUser,
-			"SecretKey": connInfo.RootPassword,
+			"AccessKey": connInfo.AccessKey,
+			"SecretKey": connInfo.SecretKey,
 			"Region":    "us-east-1",
 			"Bucket":    connInfo.Bucket,
 		},

@@ -440,9 +440,8 @@ type ObjectStoreConnection struct {
 }
 
 type ObjectStoreConfig struct {
-	Resources           corev1.ResourceRequirements `json:"resources,omitempty"`
-	RootUser            string                      `json:"rootUser,omitempty"`
-	MinioBrowserSetting string                      `json:"minioBrowserSetting,omitempty"`
+	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+	AccessKey string                      `json:"accessKey,omitempty"`
 }
 
 // ClickHouseSpec defines the desired state of the ClickHouse infrastructure component.

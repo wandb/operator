@@ -1,4 +1,4 @@
-package tenant
+package seaweedfs
 
 import (
 	"context"
@@ -14,9 +14,9 @@ import (
 )
 
 const (
-	MinioCustomResourceType = "MinioCustomResource"
-	MinioConnectionInfoType = "MinioConnectionInfo"
-	MinioReportedReadyType  = "MinioReportedReady"
+	SeaweedCustomResourceType = "SeaweedCustomResource"
+	SeaweedConnectionInfoType = "SeaweedConnectionInfo"
+	SeaweedReportedReadyType  = "SeaweedReportedReady"
 )
 
 func ComputeStatus(
@@ -63,9 +63,9 @@ func ComputeStatus(
 }
 
 func applyDefaultConditions(conditions []metav1.Condition) []metav1.Condition {
-	if !common.ContainsType(conditions, MinioConnectionInfoType) {
+	if !common.ContainsType(conditions, SeaweedConnectionInfoType) {
 		conditions = append(conditions, metav1.Condition{
-			Type:   MinioConnectionInfoType,
+			Type:   SeaweedConnectionInfoType,
 			Status: metav1.ConditionFalse,
 			Reason: common.NoResourceReason,
 		})
@@ -85,9 +85,9 @@ func inferInfraState(
 	var events []corev1.Event
 	impliedStates := make(map[string]string, len(conditions))
 
-	impliedStates = inferStateFromCondition(ctx, MinioCustomResourceType, impliedStates, conditions)
-	impliedStates = inferStateFromCondition(ctx, MinioConnectionInfoType, impliedStates, conditions)
-	impliedStates = inferStateFromCondition(ctx, MinioReportedReadyType, impliedStates, conditions)
+	impliedStates = inferStateFromCondition(ctx, SeaweedCustomResourceType, impliedStates, conditions)
+	impliedStates = inferStateFromCondition(ctx, SeaweedConnectionInfoType, impliedStates, conditions)
+	impliedStates = inferStateFromCondition(ctx, SeaweedReportedReadyType, impliedStates, conditions)
 
 	hasImpliedState := func(target string) bool {
 		return len(lo.FilterValues(
@@ -99,24 +99,20 @@ func inferInfraState(
 
 	summaryState := common.UnknownState
 
-	// if the service is reporting as healthy but the connection info is unavailable
-	// log the missing connection as an event and mark the infraStatus as 'error'
-	if impliedStates[MinioConnectionInfoType] == common.UnavailableState &&
-		impliedStates[MinioReportedReadyType] == common.HealthyState {
+	if impliedStates[SeaweedConnectionInfoType] == common.UnavailableState &&
+		impliedStates[SeaweedReportedReadyType] == common.HealthyState {
 		events = append(events, corev1.Event{
 			Type:    corev1.EventTypeWarning,
-			Reason:  "MinioConnectionInfoUnavailable",
-			Message: "Minio connection info is unavailable, but Minio is reported as ready.",
+			Reason:  "SeaweedConnectionInfoUnavailable",
+			Message: "SeaweedFS connection info is unavailable, but SeaweedFS is reported as ready.",
 		})
 		summaryState = common.ErrorState
 	}
 
-	// if there is a specific state identified, use that
 	if summaryState != common.UnknownState {
 		return summaryState, events
 	}
 
-	// otherwise, return the most significant state mapped for any condition
 	stateSignificanceOrder := []string{
 		common.ErrorState,
 		common.UnavailableState,
@@ -139,12 +135,12 @@ func inferStateFromCondition(ctx context.Context, conditionType string, impliedS
 		impliedStates[conditionType] = common.UnknownState
 	} else {
 		switch conditionType {
-		case MinioCustomResourceType:
-			impliedStates[conditionType] = inferState_MinioCustomResourceType(ctx, cond)
-		case MinioConnectionInfoType:
-			impliedStates[conditionType] = inferState_MinioConnectionInfoType(ctx, cond)
-		case MinioReportedReadyType:
-			impliedStates[conditionType] = inferState_MinioReportedReadyType(ctx, cond)
+		case SeaweedCustomResourceType:
+			impliedStates[conditionType] = inferState_SeaweedCustomResourceType(ctx, cond)
+		case SeaweedConnectionInfoType:
+			impliedStates[conditionType] = inferState_SeaweedConnectionInfoType(ctx, cond)
+		case SeaweedReportedReadyType:
+			impliedStates[conditionType] = inferState_SeaweedReportedReadyType(ctx, cond)
 		default:
 			impliedStates[conditionType] = common.UnknownState
 		}
@@ -152,7 +148,7 @@ func inferStateFromCondition(ctx context.Context, conditionType string, impliedS
 	return impliedStates
 }
 
-func inferState_MinioCustomResourceType(ctx context.Context, condition metav1.Condition) string {
+func inferState_SeaweedCustomResourceType(ctx context.Context, condition metav1.Condition) string {
 	log := logx.GetSlog(ctx)
 	result := common.UnknownState
 	if condition.Status == metav1.ConditionTrue {
@@ -173,7 +169,7 @@ func inferState_MinioCustomResourceType(ctx context.Context, condition metav1.Co
 	return result
 }
 
-func inferState_MinioConnectionInfoType(ctx context.Context, condition metav1.Condition) string {
+func inferState_SeaweedConnectionInfoType(ctx context.Context, condition metav1.Condition) string {
 	log := logx.GetSlog(ctx)
 	result := common.UnknownState
 	if condition.Status == metav1.ConditionTrue {
@@ -189,7 +185,7 @@ func inferState_MinioConnectionInfoType(ctx context.Context, condition metav1.Co
 	return result
 }
 
-func inferState_MinioReportedReadyType(ctx context.Context, condition metav1.Condition) string {
+func inferState_SeaweedReportedReadyType(ctx context.Context, condition metav1.Condition) string {
 	log := logx.GetSlog(ctx)
 	result := common.UnknownState
 	if condition.Status == metav1.ConditionTrue {

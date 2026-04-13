@@ -1,4 +1,4 @@
-package tenant
+package seaweedfs
 
 import (
 	"testing"
@@ -7,7 +7,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-func TestTenant(t *testing.T) {
+func TestSeaweedFS(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "Tenant-Minio Suite")
+	RunSpecs(t, "SeaweedFS Suite")
 }

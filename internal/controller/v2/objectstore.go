@@ -7,7 +7,7 @@ import (
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/infra/external"
 	externalobjectstore "github.com/wandb/operator/internal/controller/infra/external/objectstore"
-	"github.com/wandb/operator/internal/controller/infra/managed/minio/tenant"
+	"github.com/wandb/operator/internal/controller/infra/managed/objectstore/seaweedfs"
 	"github.com/wandb/operator/internal/controller/translator"
 	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
 	"github.com/wandb/operator/pkg/utils"
@@ -72,7 +72,7 @@ func objectStorePurgeFinalizer(
 	if spec := wandb.Spec.ObjectStore.ManagedObjectStore; spec != nil {
 		specNamespacedName := managedObjectStoreSpecNamespacedName(spec)
 		onDeleteRule := translatorv2.ToObjectStoreOnDeleteRule(wandb, wandb.GetRetentionPolicy(spec.ManagedInfraSpec))
-		return tenant.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule)
+		return seaweedfs.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule)
 	}
 	if wandb.Spec.ObjectStore.ExternalObjectStore != nil {
 		return externalobjectstore.DeleteConnectionSecret(ctx, client, wandb)
@@ -90,7 +90,7 @@ func objectStoreDetachFinalizer(
 		return nil
 	}
 	specNamespacedName := managedObjectStoreSpecNamespacedName(spec)
-	return tenant.DetachFinalizer(ctx, client, specNamespacedName, wandb)
+	return seaweedfs.DetachFinalizer(ctx, client, specNamespacedName, wandb)
 }
 
 // managed
@@ -105,7 +105,7 @@ func managedObjectStoreWriteState(
 	log := ctrl.LoggerFrom(ctx)
 	var specNamespacedName = managedObjectStoreSpecNamespacedName(spec)
 
-	if conditions := tenant.CheckDetached(ctx, client, specNamespacedName, wandb.GetUID(), spec.Replicas); conditions != nil {
+	if conditions := seaweedfs.CheckDetached(ctx, client, specNamespacedName, wandb.GetUID(), spec.Replicas); conditions != nil {
 		return conditions, nil
 	}
 
@@ -133,7 +133,7 @@ func managedObjectStoreWriteState(
 		}, nil
 	}
 
-	conditions, connection := tenant.WriteState(ctx, client, specNamespacedName, desiredCr, desiredConfig, wandb)
+	conditions, connection := seaweedfs.WriteState(ctx, client, specNamespacedName, desiredCr, desiredConfig, wandb)
 	return conditions, connection
 }
 
@@ -147,7 +147,7 @@ func managedObjectStoreReadState(
 
 	specNamespacedName := managedObjectStoreSpecNamespacedName(spec)
 	retentionPolicy := wandb.GetRetentionPolicy(spec.ManagedInfraSpec)
-	readConditions := tenant.ReadState(
+	readConditions := seaweedfs.ReadState(
 		ctx,
 		client,
 		specNamespacedName,
@@ -169,7 +169,7 @@ func managedObjectStoreInferStatus(
 	oldConditions := wandb.Status.ObjectStoreStatus.Conditions
 	oldInfraConn := translatorv2.ToTranslatorObjectStoreConnection(wandb.Status.ObjectStoreStatus.Connection)
 
-	updatedStatus, events, ctrlResult := tenant.ComputeStatus(
+	updatedStatus, events, ctrlResult := seaweedfs.ComputeStatus(
 		ctx,
 		enabled,
 		oldConditions,

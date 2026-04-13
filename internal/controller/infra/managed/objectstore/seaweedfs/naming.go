@@ -1,4 +1,4 @@
-package tenant
+package seaweedfs
 
 import (
 	"fmt"
@@ -33,7 +33,7 @@ func (n *NsNameBuilder) SpecNsName() types.NamespacedName {
 }
 
 func (n *NsNameBuilder) ConfigName() string {
-	return fmt.Sprintf("%s-config", n.SpecName())
+	return fmt.Sprintf("%s-s3-config", n.SpecName())
 }
 
 func (n *NsNameBuilder) ConfigNsName() types.NamespacedName {
@@ -44,15 +44,11 @@ func (n *NsNameBuilder) ConfigNsName() types.NamespacedName {
 }
 
 func (n *NsNameBuilder) ServiceName() string {
-	return fmt.Sprintf("%s-hl", n.SpecName())
-}
-
-func (n *NsNameBuilder) PoolName() string {
-	return fmt.Sprintf("%s-pool", n.SpecName())
+	return fmt.Sprintf("%s-s3", n.SpecName())
 }
 
 func (n *NsNameBuilder) connectionBaseName() string {
-	return strings.TrimSuffix(n.SpecName(), "-minio")
+	return strings.TrimSuffix(n.SpecName(), "-seaweedfs")
 }
 
 func (n *NsNameBuilder) ConnectionName() string {
@@ -66,20 +62,14 @@ func (n *NsNameBuilder) ConnectionNsName() types.NamespacedName {
 	}
 }
 
-// Internal function for backward compatibility within the package
 func createNsNameBuilder(baseNsName types.NamespacedName) *NsNameBuilder {
 	return CreateNsNameBuilder(baseNsName)
 }
 
-// Standalone helper functions for backward compatibility with translator code
-func TenantName(specName string) string {
+func SeaweedName(specName string) string {
 	return specName
 }
 
 func ConfigName(specName string) string {
-	return fmt.Sprintf("%s-config", specName)
-}
-
-func PoolName(specName string) string {
-	return fmt.Sprintf("%s-pool", specName)
+	return fmt.Sprintf("%s-s3-config", specName)
 }

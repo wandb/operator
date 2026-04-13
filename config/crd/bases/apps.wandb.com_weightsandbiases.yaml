@@ -3024,7 +3024,7 @@ spec:
                         type: object
                       config:
                         properties:
-                          minioBrowserSetting:
+                          accessKey:
                             type: string
                           resources:
                             properties:
@@ -3059,8 +3059,6 @@ spec:
                                   x-kubernetes-int-or-string: true
                                 type: object
                             type: object
-                          rootUser:
-                            type: string
                         type: object
                       name:
                         type: string

@@ -1,4 +1,4 @@
-package tenant
+package seaweedfs
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	ctrlcommon "github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/translator"
 	"github.com/wandb/operator/internal/logx"
-	miniov2 "github.com/wandb/operator/pkg/vendored/minio-operator/minio.min.io/v2"
+	seaweedv1 "github.com/wandb/operator/pkg/vendored/seaweedfs-operator/seaweed.seaweedfs.com/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -21,7 +21,7 @@ func ReadState(
 	ctx, _ = logx.WithSlog(ctx, logx.ObjectStore)
 	log := logx.GetSlog(ctx)
 
-	var actualResource = &miniov2.Tenant{}
+	var actualResource = &seaweedv1.Seaweed{}
 	conditions := make([]metav1.Condition, 0)
 	nsnBuilder := createNsNameBuilder(specNamespacedName)
 
@@ -31,7 +31,7 @@ func ReadState(
 	if err != nil {
 		return []metav1.Condition{
 			{
-				Type:   MinioCustomResourceType,
+				Type:   SeaweedCustomResourceType,
 				Status: metav1.ConditionUnknown,
 				Reason: ctrlcommon.ApiErrorReason,
 			},
@@ -41,22 +41,22 @@ func ReadState(
 		actualResource = nil
 		if onDeleteRule.Policy == translator.Purge {
 			log.Debug(
-				"Attempting to purge associated minio resources after deletion",
-				"tenantName", TenantName(specNamespacedName.Name),
+				"Attempting to purge associated seaweedfs resources after deletion",
+				"seaweedName", SeaweedName(specNamespacedName.Name),
 			)
 			err = purgeAssociatedResources(ctx, k8sClient, specNamespacedName.Namespace, onDeleteRule.Selector)
 			if err != nil {
 				conditions = append(
 					conditions,
 					metav1.Condition{
-						Type:   MinioCustomResourceType,
+						Type:   SeaweedCustomResourceType,
 						Status: metav1.ConditionUnknown,
 						Reason: ctrlcommon.ApiErrorReason,
 					},
 				)
 			} else {
 				conditions = append(conditions, metav1.Condition{
-					Type:   MinioReportedReadyType,
+					Type:   SeaweedReportedReadyType,
 					Status: metav1.ConditionFalse,
 					Reason: ctrlcommon.PendingDeleteReason,
 				},
@@ -66,27 +66,53 @@ func ReadState(
 	}
 
 	if actualResource != nil {
-		conditions = append(conditions, computeMinioReportedReadyCondition(ctx, actualResource)...)
+		conditions = append(conditions, computeSeaweedReportedReadyCondition(ctx, actualResource)...)
 	}
 	log.Debug("read", "actualResource", actualResource, "rule", onDeleteRule.Policy)
 	return conditions
 }
 
-func computeMinioReportedReadyCondition(_ context.Context, tenantCR *miniov2.Tenant) []metav1.Condition {
-	if tenantCR == nil {
+func computeSeaweedReportedReadyCondition(_ context.Context, cr *seaweedv1.Seaweed) []metav1.Condition {
+	if cr == nil {
 		return []metav1.Condition{}
 	}
 
-	var status metav1.ConditionStatus
-	reason := string(tenantCR.Status.HealthStatus)
+	allReady := true
+	anyRunning := false
 
-	switch tenantCR.Status.HealthStatus {
-	case miniov2.HealthStatusGreen:
+	components := []struct {
+		name   string
+		status seaweedv1.ComponentStatus
+	}{
+		{"master", cr.Status.Master},
+		{"volume", cr.Status.Volume},
+		{"filer", cr.Status.Filer},
+		{"s3", cr.Status.S3},
+	}
+
+	for _, c := range components {
+		if c.status.Replicas == 0 {
+			continue
+		}
+		if c.status.ReadyReplicas > 0 {
+			anyRunning = true
+		}
+		if c.status.ReadyReplicas < c.status.Replicas {
+			allReady = false
+		}
+	}
+
+	var status metav1.ConditionStatus
+	var reason string
+
+	switch {
+	case allReady && anyRunning:
 		status = metav1.ConditionTrue
-	case miniov2.HealthStatusYellow:
+		reason = "green"
+	case anyRunning:
 		status = metav1.ConditionFalse
 		reason = "yellow"
-	case miniov2.HealthStatusRed:
+	case cr.Status.S3.Replicas > 0 && cr.Status.S3.ReadyReplicas == 0:
 		status = metav1.ConditionFalse
 		reason = "red"
 	default:
@@ -96,7 +122,7 @@ func computeMinioReportedReadyCondition(_ context.Context, tenantCR *miniov2.Ten
 
 	return []metav1.Condition{
 		{
-			Type:   MinioReportedReadyType,
+			Type:   SeaweedReportedReadyType,
 			Status: status,
 			Reason: reason,
 		},
