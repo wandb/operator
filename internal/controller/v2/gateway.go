@@ -93,6 +93,9 @@ func deleteGateway(ctx context.Context, c ctrlClient.Client, wandb *apiv2.Weight
 	gatewayName := fmt.Sprintf("%s-gateway", wandb.Name)
 	gw := &gatewayv1.Gateway{}
 	if err := c.Get(ctx, types.NamespacedName{Name: gatewayName, Namespace: wandb.Namespace}, gw); err != nil {
+		if apimeta.IsNoMatchError(err) {
+			return nil
+		}
 		if apiErrors.IsNotFound(err) {
 			return nil
 		}

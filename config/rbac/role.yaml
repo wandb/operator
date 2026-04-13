@@ -240,6 +240,15 @@ rules:
   - get
   - update
 - apiGroups:
+  - core.strimzi.io
+  resources:
+  - strimzipodsets
+  verbs:
+  - delete
+  - get
+  - list
+  - watch
+- apiGroups:
   - minio.min.io
   resources:
   - tenants

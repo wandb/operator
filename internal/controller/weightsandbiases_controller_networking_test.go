@@ -200,6 +200,32 @@ var _ = Describe("WeightsAndBiases Networking", func() {
 		Expect(ingress.Spec.TLS).To(HaveLen(1))
 		Expect(ingress.Spec.TLS[0].SecretName).To(Equal("wandb-tls"))
 		Expect(ingress.Spec.Rules).NotTo(BeEmpty())
+		Expect(ingress.Spec.Rules[0].HTTP).NotTo(BeNil())
+
+		pathsByBackend := map[string][]string{}
+		for _, path := range ingress.Spec.Rules[0].HTTP.Paths {
+			Expect(path.Backend.Service).NotTo(BeNil())
+			pathsByBackend[path.Backend.Service.Name] = append(pathsByBackend[path.Backend.Service.Name], path.Path)
+		}
+		Expect(pathsByBackend).To(HaveKey("network-ingress-frontend"))
+		Expect(pathsByBackend["network-ingress-frontend"]).To(ContainElement("/"))
+		Expect(pathsByBackend).To(HaveKey("network-ingress-api"))
+		Expect(pathsByBackend["network-ingress-api"]).To(ContainElements(
+			"/api",
+			"/artifacts",
+			"/artifactsV2",
+			"/files",
+			"/graphql",
+			"/graphql2",
+			"/oidc",
+		))
+		Expect(pathsByBackend).To(HaveKey("network-ingress-weave"))
+		Expect(pathsByBackend["network-ingress-weave"]).To(ContainElement("/weave/"))
+		Expect(pathsByBackend).To(HaveKey("network-ingress-weave-trace"))
+		Expect(pathsByBackend["network-ingress-weave-trace"]).To(ContainElement("/traces"))
+		Expect(pathsByBackend).NotTo(HaveKey("network-ingress-anaconda2"))
+		Expect(pathsByBackend).NotTo(HaveKey("network-ingress-parquet"))
+		Expect(pathsByBackend).NotTo(HaveKey("network-ingress-nginx-proxy"))
 
 		ingress.Status.LoadBalancer.Ingress = []networkingv1.IngressLoadBalancerIngress{{
 			IP: "34.118.10.1",

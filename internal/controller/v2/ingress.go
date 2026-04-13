@@ -26,22 +26,20 @@ func reconcileConsolidatedIngress(ctx context.Context, c ctrlClient.Client, wand
 		if len(app.Features) > 0 && !manifestFeaturesEnabled(app.Features, manifest.Features) {
 			continue
 		}
-		if app.Ingress == nil && app.Service == nil {
+		if app.Ingress == nil {
 			continue
 		}
 
 		appPaths := []string{"/"}
 		pathType := networkingv1.PathTypePrefix
-		if app.Ingress != nil {
-			if len(app.Ingress.Paths) > 0 {
-				appPaths = app.Ingress.Paths
-			}
-			switch app.Ingress.PathType {
-			case "Exact":
-				pathType = networkingv1.PathTypeExact
-			case "ImplementationSpecific":
-				pathType = networkingv1.PathTypeImplementationSpecific
-			}
+		if len(app.Ingress.Paths) > 0 {
+			appPaths = app.Ingress.Paths
+		}
+		switch app.Ingress.PathType {
+		case "Exact":
+			pathType = networkingv1.PathTypeExact
+		case "ImplementationSpecific":
+			pathType = networkingv1.PathTypeImplementationSpecific
 		}
 
 		serviceName := fmt.Sprintf("%s-%s", wandb.Name, app.Name)

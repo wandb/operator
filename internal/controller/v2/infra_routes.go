@@ -10,6 +10,7 @@ import (
 	"github.com/wandb/operator/internal/controller/translator"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
 	apiErrors "k8s.io/apimachinery/pkg/api/errors"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -309,6 +310,9 @@ func deleteStaleInfraHTTPRoutes(
 ) error {
 	routeList := &gatewayv1.HTTPRouteList{}
 	if err := c.List(ctx, routeList, ctrlClient.MatchingLabels(infraHTTPRouteLabels(wandb))); err != nil {
+		if apimeta.IsNoMatchError(err) {
+			return nil
+		}
 		return fmt.Errorf("failed to list managed infra HTTPRoutes: %w", err)
 	}
 	for i := range routeList.Items {
@@ -324,6 +328,9 @@ func deleteStaleInfraHTTPRoutes(
 
 	legacyRouteList := &gatewayv1.HTTPRouteList{}
 	if err := c.List(ctx, legacyRouteList, ctrlClient.InNamespace(wandb.Namespace)); err != nil {
+		if apimeta.IsNoMatchError(err) {
+			return nil
+		}
 		return fmt.Errorf("failed to list legacy infra HTTPRoutes: %w", err)
 	}
 	for i := range legacyRouteList.Items {

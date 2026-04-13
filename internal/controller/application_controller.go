@@ -46,6 +46,7 @@ type ApplicationReconciler struct {
 	client.Client
 	Scheme         *runtime.Scheme
 	EnableRollouts bool
+	RESTMapper     apimeta.RESTMapper
 }
 
 // +kubebuilder:rbac:groups=apps.wandb.com,resources=applications,verbs=get;list;watch;create;update;patch;delete
@@ -1038,6 +1039,18 @@ func buildHTTPRouteRules(app *wandbv2.Application) []gatewayv1.HTTPRouteRule {
 }
 
 func (r *ApplicationReconciler) deleteHTTPRoute(ctx context.Context, app *wandbv2.Application) error {
+	supported, err := isAPISupported(
+		r.RESTMapper,
+		schema.GroupKind{Group: gatewayv1.GroupVersion.Group, Kind: "HTTPRoute"},
+		gatewayv1.GroupVersion.Version,
+	)
+	if err != nil {
+		return err
+	}
+	if !supported {
+		return nil
+	}
+
 	route := &gatewayv1.HTTPRoute{}
 	if err := r.Get(ctx, client.ObjectKey{Namespace: app.Namespace, Name: app.Name}, route); err != nil {
 		if errors.IsNotFound(err) {
