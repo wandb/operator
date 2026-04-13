@@ -33,6 +33,7 @@ import (
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -1071,8 +1072,19 @@ func (r *ApplicationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&appsv1.StatefulSet{}).
 		Owns(&corev1.Service{}).
 		Owns(&autoscalingv2.HorizontalPodAutoscaler{}).
-		Owns(&gatewayv1.HTTPRoute{}).
 		Named("application")
+
+	httpRouteSupported, err := isAPISupported(
+		mgr.GetRESTMapper(),
+		schema.GroupKind{Group: gatewayv1.GroupVersion.Group, Kind: "HTTPRoute"},
+		gatewayv1.GroupVersion.Version,
+	)
+	if err != nil {
+		return err
+	}
+	if httpRouteSupported {
+		controller = controller.Owns(&gatewayv1.HTTPRoute{})
+	}
 
 	if r.EnableRollouts {
 		controller = controller.Owns(&v1alpha1.Rollout{})

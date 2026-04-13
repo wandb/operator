@@ -31,6 +31,7 @@ import (
 	networkingv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -190,8 +191,20 @@ func (r *WeightsAndBiasesReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			Owns(&batchv1.Job{}).
 			Owns(&corev1.Secret{}).
 			Owns(&corev1.ConfigMap{}).
-			Owns(&networkingv1.Ingress{}).
-			Watches(&gatewayv1.Gateway{}, handler.EnqueueRequestsFromMapFunc(r.mapGatewayToWandb))
+			Owns(&networkingv1.Ingress{})
+
+		gatewaySupported, err := isAPISupported(
+			mgr.GetRESTMapper(),
+			schema.GroupKind{Group: gatewayv1.GroupVersion.Group, Kind: "Gateway"},
+			gatewayv1.GroupVersion.Version,
+		)
+		if err != nil {
+			return err
+		}
+		if gatewaySupported {
+			b = b.Watches(&gatewayv1.Gateway{}, handler.EnqueueRequestsFromMapFunc(r.mapGatewayToWandb))
+		}
+
 		if r.TelemetryConfigRef.Name != "" {
 			b = b.Watches(
 				&corev1.ConfigMap{},

@@ -56,7 +56,6 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/wandb/operator/internal/controller"
-	controllerv2 "github.com/wandb/operator/internal/controller/v2"
 
 	appsv2 "github.com/wandb/operator/api/v2"
 	webhookv2 "github.com/wandb/operator/internal/webhook/v2"
