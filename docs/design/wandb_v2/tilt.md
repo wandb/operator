@@ -1,7 +1,7 @@
 # Tilt Resource Dependency Graph
 
 Resources shown with their labels in parentheses. Telemetry resources are only
-active when `installTelemetry: true` and Wandb is only active when
+active when `telemetryMode != "off"` and Wandb is only active when
 `installWandb: true` in `tilt-settings.star`.
 
 ## Agent Instructions
@@ -43,7 +43,7 @@ Current subgraphs:
 ### Conditional Resources
 
 Include all resources in the graph unconditionally. The intro text above the
-diagram already describes the `installTelemetry` / `installWandb` conditions.
+diagram already describes the `telemetryMode` / `installWandb` conditions.
 Use `%% comments` to mark conditional sections in the Mermaid source.
 
 ### Class Assignments

@@ -1,14 +1,9 @@
-{{- $operatorEnabled := true -}}
-{{- $operatorValues := index .Values "wandb-operator" -}}
-{{- if and $operatorValues (hasKey $operatorValues "enabled") -}}
-{{- $operatorEnabled = index $operatorValues "enabled" -}}
-{{- end -}}
-{{- if and $operatorEnabled (ne (default "off" .Values.telemetry.mode) "off") }}
+{{- if ne (default "off" .Values.telemetry.mode) "off" }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: wandb-operator-telemetry-config
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ default .Release.Namespace .Values.telemetry.operatorNamespace }}
 data:
   TELEMETRY_ENABLED: {{ ne (default "off" .Values.telemetry.mode) "off" | quote }}
   TELEMETRY_MODE: {{ default "off" .Values.telemetry.mode | quote }}

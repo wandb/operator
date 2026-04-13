@@ -28,6 +28,20 @@ if not os.path.exists("tilt-settings.star"):
 load("./tilt-settings.star", "SETTINGS")
 settings.update(SETTINGS)
 
+telemetry_mode = settings.get("telemetryMode")
+if telemetry_mode == None:
+    telemetry_mode = "full" if settings.get("installTelemetry") else "off"
+
+if telemetry_mode not in ["off", "forward", "full"]:
+    fail('telemetryMode must be one of "off", "forward", or "full".')
+
+install_telemetry = telemetry_mode != "off"
+telemetry_profile = "./deploy/operator/profiles/telemetry-%s.yaml" % telemetry_mode
+telemetry_forward_endpoint = settings.get("telemetryForwardEndpoint", "")
+
+if telemetry_mode == "forward" and telemetry_forward_endpoint == "":
+    fail('telemetryMode="forward" requires telemetryForwardEndpoint in tilt-settings.star.')
+
 # Configure global watch settings with a 2-second debounce
 watch_settings(ignore=["**/.git", "**/*.out", "hack/testing-manifests/wandb/.generated/**"])
 
@@ -200,11 +214,14 @@ third_party_operator_flags = [
     '--create-namespace',
 ]
 
-if settings.get("installTelemetry"):
+if install_telemetry:
     third_party_operator_flags += [
         '--set=victoria-metrics-operator.enabled=true',
-        '--set=grafana-operator.enabled=true',
     ]
+    if telemetry_mode == "full":
+        third_party_operator_flags += [
+            '--set=grafana-operator.enabled=true',
+        ]
 
 helm_resource(
     'ThirdParty-Operators',
@@ -218,15 +235,6 @@ helm_resource(
 
 k8s_yaml(local('kustomize build config/tilt-dev'))
 k8s_yaml('hack/tilt/endpoint-anchors.yaml')
-
-if settings.get("installTelemetry"):
-    k8s_yaml('hack/tilt/telemetry-config.yaml')
-
-    k8s_resource(
-        new_name='Telemetry-Config',
-        objects=['wandb-operator-telemetry-config:configmap:operator-system'],
-        labels=[GROUP_TELEMETRY],
-    )
 
 k8s_resource(
     new_name='Operator-Certs',
@@ -280,6 +288,10 @@ local_resource(
     labels=[GROUP_WANDB_OPERATOR],
 )
 
+operator_controller_deps = ["WandB-CRDs-Ready", "ThirdParty-Operators"]
+if install_telemetry:
+    operator_controller_deps += ["Telemetry-Stack"]
+
 k8s_resource(
     workload='operator-controller-manager',
     new_name='Operator-Controller',
@@ -289,7 +301,7 @@ k8s_resource(
         'operator-controller-manager:serviceaccount',
     ],
     # manifests/generate transitively satisfied via WandB-CRDs-Ready → WandB-CRDs-Apply
-    resource_deps=["WandB-CRDs-Ready", "ThirdParty-Operators"],
+    resource_deps=operator_controller_deps,
     labels=[GROUP_WANDB_OPERATOR],
 )
 
@@ -377,9 +389,8 @@ if settings.get("installWandb"):
             labels=[GROUP_WANDB_APP],
         )
 
-if settings.get("installTelemetry"):
-    local_resource(
-        'Telemetry-CRDs-Ready',
+if install_telemetry:
+    telemetry_crd_wait_cmd = (
         'kubectl wait --for=condition=established --timeout=120s ' +
         'crd/vmsingles.operator.victoriametrics.com ' +
         'crd/vmagents.operator.victoriametrics.com ' +
@@ -387,39 +398,58 @@ if settings.get("installTelemetry"):
         'crd/vtsingles.operator.victoriametrics.com ' +
         'crd/vmservicescrapes.operator.victoriametrics.com ' +
         'crd/vmpodscrapes.operator.victoriametrics.com ' +
-        'crd/vmnodescrapes.operator.victoriametrics.com ' +
-        'crd/grafanas.grafana.integreatly.org ' +
-        'crd/grafanadatasources.grafana.integreatly.org ' +
-        'crd/grafanadashboards.grafana.integreatly.org' +
+        'crd/vmnodescrapes.operator.victoriametrics.com'
+    )
+    if telemetry_mode == "full":
+        telemetry_crd_wait_cmd += (
+            ' crd/grafanas.grafana.integreatly.org ' +
+            'crd/grafanadatasources.grafana.integreatly.org ' +
+            'crd/grafanadashboards.grafana.integreatly.org'
+        )
+    telemetry_crd_wait_cmd += (
         ' && kubectl wait --for=condition=available --timeout=180s -n wandb-operator ' +
-        'deploy/third-party-operators-victoria-metrics-operator ' +
-        'deploy/third-party-operators-grafana-operator',
+        'deploy/third-party-operators-victoria-metrics-operator'
+    )
+    if telemetry_mode == "full":
+        telemetry_crd_wait_cmd += ' deploy/third-party-operators-grafana-operator'
+
+    local_resource(
+        'Telemetry-CRDs-Ready',
+        telemetry_crd_wait_cmd,
         resource_deps=["ThirdParty-Operators"],
         labels=[GROUP_TELEMETRY],
     )
+
+    telemetry_stack_flags = [
+        '--create-namespace',
+        '-f=' + telemetry_profile,
+        '-f=./hack/tilt/operator-telemetry-values.yaml',
+    ]
+    if telemetry_mode == "forward":
+        telemetry_stack_flags += [
+            '--set-string=telemetry.forwarding.otlp.endpoint=' + telemetry_forward_endpoint,
+        ]
+
     helm_resource(
         'Telemetry-Stack',
-        chart='./deploy/telemetry',
+        chart='./deploy/operator',
         release_name='telemetry-stack',
         namespace='wandb-operator',
-        flags=[
-            '--set=mode=full',
-            '--set=namespace=default',
-            '--create-namespace',
-        ],
+        flags=telemetry_stack_flags,
         resource_deps=["Telemetry-CRDs-Ready"],
         labels=[GROUP_TELEMETRY],
     )
-    managed_endpoint_resource(
-        name='Telemetry-Endpoint-Grafana',
-        anchor_object='telemetry-grafana-endpoint-anchor:configmap:default',
-        deps=['Telemetry-Stack'],
-        local_port=3000,
-        remote_port=3000,
-        link_name='Grafana',
-        pod_selector={'app': 'grafana'},
-        labels=[GROUP_TELEMETRY],
-    )
+    if telemetry_mode == "full":
+        managed_endpoint_resource(
+            name='Telemetry-Endpoint-Grafana',
+            anchor_object='telemetry-grafana-endpoint-anchor:configmap:default',
+            deps=['Telemetry-Stack'],
+            local_port=3000,
+            remote_port=3000,
+            link_name='Grafana',
+            pod_selector={'app': 'grafana'},
+            labels=[GROUP_TELEMETRY],
+        )
     managed_endpoint_resource(
         name='Telemetry-Endpoint-VictoriaMetrics',
         anchor_object='telemetry-victoria-metrics-endpoint-anchor:configmap:default',

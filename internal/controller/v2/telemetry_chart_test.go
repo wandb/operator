@@ -99,6 +99,36 @@ func TestOperatorChartFullModeRendersTelemetryConfigMapWithoutTelemetryEnvs(t *t
 	mustNotContain(t, output, "name: TELEMETRY_MANAGED_NAMESPACE")
 }
 
+func TestTelemetryOnlyOperatorChartRendersConfigAndStackWithoutOperatorRBAC(t *testing.T) {
+	output, err := runHelmTemplateWithError(t, filepath.Join("..", "..", "..", "deploy", "operator"),
+		"--set", "wandb-operator.enabled=false",
+		"--set", "wandb.install=false",
+		"--set", "mysql-operator.enabled=false",
+		"--set", "redis-operator.enabled=false",
+		"--set", "strimzi-kafka-operator.enabled=false",
+		"--set", "minio-operator.enabled=false",
+		"--set", "altinity-clickhouse-operator.enabled=false",
+		"--set", "victoria-metrics-operator.enabled=false",
+		"--set", "grafana-operator.enabled=false",
+		"--set", "telemetry.mode=full",
+		"--set", "telemetry.otel.secretName=wandb-otel-connection",
+		"--set", "telemetry.namespace=default",
+		"--set", "telemetry.operatorNamespace=operator-system",
+	)
+	if err != nil {
+		t.Fatalf("helm template failed: %v\noutput:\n%s", err, output)
+	}
+
+	mustContain(t, output, "name: wandb-operator-telemetry-config")
+	mustContain(t, output, "namespace: operator-system")
+	mustContain(t, output, "TELEMETRY_MODE: \"full\"")
+	mustContain(t, output, "kind: VMSingle")
+	mustContain(t, output, "kind: Grafana")
+	mustNotContain(t, output, "name: telemetry-test-application")
+	mustNotContain(t, output, "name: telemetry-test-vm")
+	mustNotContain(t, output, "name: telemetry-test-grafana")
+}
+
 func TestOperatorChartFullModeRequiresTelemetrySecretName(t *testing.T) {
 	output, err := runHelmTemplateWithError(t, filepath.Join("..", "..", "..", "deploy", "operator"),
 		"--set", "wandb.install=false",

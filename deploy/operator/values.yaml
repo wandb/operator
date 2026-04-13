@@ -123,6 +123,9 @@ telemetry:
   # full: run the in-cluster Victoria stack and local Grafana
   # forward: run the in-cluster Victoria stack and forward OTLP data externally
   mode: "off"
+  # Optional override for the namespace that holds the operator telemetry configmap.
+  # Defaults to the Helm release namespace.
+  operatorNamespace: ""
   namespace: wandb
   otel:
     # Required when telemetry.mode is "forward" or "full".

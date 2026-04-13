@@ -75,19 +75,28 @@ telemetry:
 
 ## Tilt Usage
 
-Set `"installTelemetry": True` in `tilt-settings.star`.
+Set `"telemetryMode": "full"` in `tilt-settings.star`.
 
-Tilt treats `installTelemetry=True` as the local `full` mode. It installs the
-VictoriaMetrics and Grafana operators, then installs the standalone telemetry
-chart with `mode=full`, and it writes `wandb-operator-telemetry-config` in
-`operator-system` so the operator picks up the same configmap-backed telemetry
-settings as the Helm flow.
+Tilt now uses the operator chart as the source of truth for telemetry config.
+It installs the telemetry stack from `deploy/operator` using the same
+`telemetry.mode` values as Helm, and it renders
+`wandb-operator-telemetry-config` from that chart into `operator-system` via
+`telemetry.operatorNamespace`.
+
+Supported local modes are:
+- `telemetryMode: "off"`
+- `telemetryMode: "full"`
+- `telemetryMode: "forward"`
+
+When using `telemetryMode: "forward"`, also set
+`"telemetryForwardEndpoint"` in `tilt-settings.star`.
 
 Tilt exposes endpoints for:
-- Grafana
 - VictoriaMetrics
 - VictoriaLogs
 - VictoriaTraces
+
+Grafana is additionally exposed when `telemetryMode: "full"`.
 
 ## Manifest `source.type=telemetry`
 

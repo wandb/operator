@@ -1,0 +1,30 @@
+wandb-operator:
+  enabled: false
+
+wandb:
+  install: false
+
+mysql-operator:
+  enabled: false
+
+redis-operator:
+  enabled: false
+
+strimzi-kafka-operator:
+  enabled: false
+
+minio-operator:
+  enabled: false
+
+altinity-clickhouse-operator:
+  enabled: false
+
+victoria-metrics-operator:
+  enabled: false
+
+grafana-operator:
+  enabled: false
+
+telemetry:
+  operatorNamespace: operator-system
+  namespace: default

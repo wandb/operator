@@ -10,6 +10,9 @@
           "type": "string",
           "enum": ["off", "forward", "full"]
         },
+        "operatorNamespace": {
+          "type": "string"
+        },
         "namespace": {
           "type": "string"
         },
