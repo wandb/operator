@@ -442,6 +442,11 @@ type ObjectStoreConnection struct {
 type ObjectStoreConfig struct {
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 	AccessKey string                      `json:"accessKey,omitempty"`
+
+	// Deprecated: Use AccessKey instead. Kept for backward compatibility during migration.
+	RootUser string `json:"rootUser,omitempty"`
+	// Deprecated: No longer used. Kept to avoid schema validation failures on upgrade.
+	MinioBrowserSetting string `json:"minioBrowserSetting,omitempty"`
 }
 
 // ClickHouseSpec defines the desired state of the ClickHouse infrastructure component.

@@ -31,17 +31,16 @@ func CheckDetached(
 		return nil
 	}
 
-	if desiredReplicas > 0 && actual.Spec.Volume != nil {
-		if actual.Spec.Volume.Replicas != desiredReplicas {
-			return []metav1.Condition{
-				{
-					Type:    common.ReconciledType,
-					Status:  metav1.ConditionFalse,
-					Reason:  common.DetachedSpecMismatch,
-					Message: fmt.Sprintf("detached Seaweed CR spec mismatch: volume replicas want %d, have %d", desiredReplicas, actual.Spec.Volume.Replicas),
-				},
-			}
+	if desiredReplicas > 0 && (actual.Spec.Volume != nil || actual.Spec.Volume.Replicas != desiredReplicas ) {
+		return []metav1.Condition{
+			{
+				Type:    common.ReconciledType,
+				Status:  metav1.ConditionFalse,
+				Reason:  common.DetachedSpecMismatch,
+				Message: fmt.Sprintf("detached Seaweed CR spec mismatch: volume replicas want %d, have %d", desiredReplicas, actual.Spec.Volume.Replicas),
+			},
 		}
+
 	}
 	return nil
 }

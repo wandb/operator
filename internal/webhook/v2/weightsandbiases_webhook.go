@@ -253,6 +253,9 @@ func applyObjectStoreDefaults(wandb *appsv2.WeightsAndBiases) {
 		spec.Namespace = wandb.Namespace
 	}
 
+	if spec.Config.AccessKey == "" && spec.Config.RootUser != "" { //nolint:staticcheck
+		spec.Config.AccessKey = spec.Config.RootUser  //nolint:staticcheck
+	}
 	if spec.Config.AccessKey == "" {
 		spec.Config.AccessKey = "admin"
 	}

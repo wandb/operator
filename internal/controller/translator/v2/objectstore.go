@@ -42,13 +42,14 @@ func ToObjectStoreVendorSpec(
 
 	volumeSizeLimitMB := int32(storageQuantity.Value() / (1024 * 1024))
 
+	labels := BuildWandbObjectStoreLabels(wandb)
+	labels["app"] = seaweedfs.SeaweedName(specName)
+
 	seaweedCR := &seaweedv1.Seaweed{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      seaweedfs.SeaweedName(specName),
 			Namespace: infraSpec.Namespace,
-			Labels: map[string]string{
-				"app": seaweedfs.SeaweedName(specName),
-			},
+			Labels:    labels,
 		},
 		Spec: seaweedv1.SeaweedSpec{
 			Image: translator.SeaweedImage,

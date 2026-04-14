@@ -106,15 +106,15 @@ func computeSeaweedReportedReadyCondition(_ context.Context, cr *seaweedv1.Seawe
 	var reason string
 
 	switch {
+	case cr.Status.S3.Replicas > 0 && cr.Status.S3.ReadyReplicas == 0:
+		status = metav1.ConditionFalse
+		reason = "red"
 	case allReady && anyRunning:
 		status = metav1.ConditionTrue
 		reason = "green"
 	case anyRunning:
 		status = metav1.ConditionFalse
 		reason = "yellow"
-	case cr.Status.S3.Replicas > 0 && cr.Status.S3.ReadyReplicas == 0:
-		status = metav1.ConditionFalse
-		reason = "red"
 	default:
 		status = metav1.ConditionUnknown
 		reason = ctrlcommon.UnknownReason

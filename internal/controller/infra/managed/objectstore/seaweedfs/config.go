@@ -57,9 +57,13 @@ func parseS3IdentityConfig(data string) (s3IdentityConfig, error) {
 	return config, nil
 }
 
-func extractSecretKey(config s3IdentityConfig) string {
-	if len(config.Identities) > 0 && len(config.Identities[0].Credentials) > 0 {
-		return config.Identities[0].Credentials[0].SecretKey
+func extractSecretKey(config s3IdentityConfig, accessKey string) (string, error) {
+	for _, identity := range config.Identities {
+		for _, credential := range identity.Credentials {
+			if credential.AccessKey == accessKey && credential.SecretKey != "" {
+				return credential.SecretKey, nil
+			}
+		}
 	}
-	return ""
+	return "", fmt.Errorf("secret key not found for access key %s", accessKey)
 }

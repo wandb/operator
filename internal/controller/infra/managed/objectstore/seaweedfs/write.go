@@ -166,9 +166,15 @@ func writeSeaweedS3Config(
 	}
 
 	if actual != nil {
-		existingConfig, parseErr := parseS3IdentityConfig(string(actual.Data[configFileName]))
-		if parseErr == nil {
-			secretKey = extractSecretKey(existingConfig)
+		if raw, ok := actual.Data[configFileName]; ok {
+			existingConfig, parseError := parseS3IdentityConfig(string(raw))
+			if parseError != nil {
+				return nil, fmt.Errorf("parse existing %s: %w", configFileName, parseError)
+			}
+			secretKey, err = extractSecretKey(existingConfig, envConfig.AccessKey)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	if secretKey == "" {

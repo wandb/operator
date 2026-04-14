@@ -29,12 +29,15 @@ var _ = Describe("S3IdentityConfig", func() {
 
 		It("should extract secret key from config", func() {
 			config := buildS3IdentityConfig("admin", "mysecret")
-			Expect(extractSecretKey(config)).To(Equal("mysecret"))
+			key, err := extractSecretKey(config, "admin")
+			Expect(err).ToNot(HaveOccurred())
+			Expect(key).To(Equal("mysecret"))
 		})
 
-		It("should return empty string from empty config", func() {
+		It("should return error for empty config", func() {
 			config := s3IdentityConfig{}
-			Expect(extractSecretKey(config)).To(Equal(""))
+			_, err := extractSecretKey(config, "admin")
+			Expect(err).To(HaveOccurred())
 		})
 
 		It("should handle malformed JSON", func() {

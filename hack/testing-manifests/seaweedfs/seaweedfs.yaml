@@ -10,18 +10,18 @@ kind: Pod
 metadata:
   labels:
     app: seaweedfs
-  name: seaweedfs
+  name: seaweedfs-s3
   namespace: seaweedfs
 spec:
   containers:
     - name: seaweedfs
-      image: chrislusf/seaweedfs:latest
+      image: chrislusf/seaweedfs:4.18
       args:
         - server
         - -s3
         - -dir=/data
       ports:
-        - containerPort: 8333
+        - containerPort: 9000
           name: s3
         - containerPort: 9333
           name: master

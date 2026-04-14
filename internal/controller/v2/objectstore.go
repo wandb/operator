@@ -70,8 +70,12 @@ func objectStorePurgeFinalizer(
 	wandb *apiv2.WeightsAndBiases,
 ) error {
 	if spec := wandb.Spec.ObjectStore.ManagedObjectStore; spec != nil {
-		specNamespacedName := managedObjectStoreSpecNamespacedName(spec)
 		onDeleteRule := translatorv2.ToObjectStoreOnDeleteRule(wandb, wandb.GetRetentionPolicy(spec.ManagedInfraSpec))
+		_ = seaweedfs.CleanupLegacyMinio(
+			ctx, client, wandb.Name, wandb.Namespace, wandb.GetUID(),
+			true, onDeleteRule.Selector,
+		)
+		specNamespacedName := managedObjectStoreSpecNamespacedName(spec)
 		return seaweedfs.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule)
 	}
 	if wandb.Spec.ObjectStore.ExternalObjectStore != nil {
@@ -89,6 +93,10 @@ func objectStoreDetachFinalizer(
 	if spec == nil {
 		return nil
 	}
+	_ = seaweedfs.CleanupLegacyMinio(
+		ctx, client, wandb.Name, wandb.Namespace, wandb.GetUID(),
+		false, nil,
+	)
 	specNamespacedName := managedObjectStoreSpecNamespacedName(spec)
 	return seaweedfs.DetachFinalizer(ctx, client, specNamespacedName, wandb)
 }
@@ -104,6 +112,17 @@ func managedObjectStoreWriteState(
 
 	log := ctrl.LoggerFrom(ctx)
 	var specNamespacedName = managedObjectStoreSpecNamespacedName(spec)
+
+	retentionPolicy := wandb.GetRetentionPolicy(spec.ManagedInfraSpec)
+	onDeleteRule := translatorv2.ToObjectStoreOnDeleteRule(wandb, retentionPolicy)
+	if err := seaweedfs.CleanupLegacyMinio(
+		ctx, client,
+		wandb.Name, wandb.Namespace, wandb.GetUID(),
+		onDeleteRule.Policy == translator.Purge,
+		onDeleteRule.Selector,
+	); err != nil {
+		log.Error(err, "failed to clean up legacy MinIO resources")
+	}
 
 	if conditions := seaweedfs.CheckDetached(ctx, client, specNamespacedName, wandb.GetUID(), spec.Replicas); conditions != nil {
 		return conditions, nil

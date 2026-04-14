@@ -249,7 +249,7 @@ spec:
     matchNames:
       - {{ include "telemetry.namespace" . }}
   podMetricsEndpoints:
-    - port: metrics
+    - port: swfs-s3
       path: /metrics
 ---
 apiVersion: operator.victoriametrics.com/v1beta1
