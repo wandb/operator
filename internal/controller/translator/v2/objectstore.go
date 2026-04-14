@@ -60,20 +60,34 @@ func ToObjectStoreVendorSpec(
 			},
 			Volume: &seaweedv1.VolumeSpec{
 				Replicas: infraSpec.Replicas,
+				VolumeServerConfig: seaweedv1.VolumeServerConfig{
+					ResourceRequirements: corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceStorage: storageQuantity,
+						},
+					},
+				},
 			},
 			Filer: &seaweedv1.FilerSpec{
 				Replicas: 1,
-			},
-			S3: &seaweedv1.S3GatewaySpec{
-				Replicas: 1,
-				Port:     ptr.To(int32(9000)),
-				ConfigSecret: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: seaweedfs.ConfigName(specName),
+				Config:   ptr.To("[leveldb2]\nenabled = true\ndir = \"/data/filerldb2\""),
+				S3: &seaweedv1.S3Config{
+					Enabled: true,
+					ConfigSecret: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: seaweedfs.ConfigName(specName),
+						},
+						Key: "config.json",
 					},
-					Key: "config.json",
 				},
-				IAM: true,
+				Persistence: &seaweedv1.PersistenceSpec{
+					Enabled: true,
+					Resources: corev1.VolumeResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceStorage: resource.MustParse("4Gi"),
+						},
+					},
+				},
 			},
 			Affinity:    wandb.GetAffinity(infraSpec.ManagedInfraSpec),
 			Tolerations: *wandb.GetTolerations(infraSpec.ManagedInfraSpec),

@@ -44,7 +44,7 @@ func (n *NsNameBuilder) ConfigNsName() types.NamespacedName {
 }
 
 func (n *NsNameBuilder) ServiceName() string {
-	return fmt.Sprintf("%s-s3", n.SpecName())
+	return fmt.Sprintf("%s-filer", n.SpecName())
 }
 
 func (n *NsNameBuilder) connectionBaseName() string {

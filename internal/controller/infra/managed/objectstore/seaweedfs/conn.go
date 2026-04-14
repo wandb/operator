@@ -16,7 +16,7 @@ import (
 
 const (
 	S3UrlScheme = "s3"
-	S3Port      = "9000"
+	S3Port      = "8333"
 )
 
 type s3ConnInfo struct {

@@ -87,7 +87,6 @@ func computeSeaweedReportedReadyCondition(_ context.Context, cr *seaweedv1.Seawe
 		{"master", cr.Status.Master},
 		{"volume", cr.Status.Volume},
 		{"filer", cr.Status.Filer},
-		{"s3", cr.Status.S3},
 	}
 
 	for _, c := range components {
@@ -106,7 +105,7 @@ func computeSeaweedReportedReadyCondition(_ context.Context, cr *seaweedv1.Seawe
 	var reason string
 
 	switch {
-	case cr.Status.S3.Replicas > 0 && cr.Status.S3.ReadyReplicas == 0:
+	case cr.Status.Filer.Replicas > 0 && cr.Status.Filer.ReadyReplicas == 0:
 		status = metav1.ConditionFalse
 		reason = "red"
 	case allReady && anyRunning:

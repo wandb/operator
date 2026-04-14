@@ -130,7 +130,6 @@ type MasterSpec struct {
 	Ingress            *IngressSpec `json:"ingress,omitempty"`
 }
 
-// VolumeServerConfig contains common configuration for volume servers
 type VolumeServerConfig struct {
 	ComponentSpec               `json:",inline"`
 	corev1.ResourceRequirements `json:",inline"`
