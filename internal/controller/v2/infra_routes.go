@@ -2,6 +2,7 @@ package v2
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"github.com/wandb/operator/internal/controller/translator"
 	"github.com/wandb/operator/pkg/utils"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
+	v1 "k8s.io/api/core/v1"
 	apiErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -34,7 +36,7 @@ const infraHTTPRouteComponent = "infra-route"
 
 // resolveInfraRoutes returns one entry per infra instance that has an Ingress spec and
 // whose component is enabled in the CR.
-func resolveInfraRoutes(wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest) ([]infraRouteEntry, error) {
+func resolveInfraRoutes(ctx context.Context, c ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest) ([]infraRouteEntry, error) {
 	var entries []infraRouteEntry
 
 	if objectStoreSpec := wandb.Spec.ObjectStore.ManagedObjectStore; objectStoreSpec != nil {
@@ -43,8 +45,14 @@ func resolveInfraRoutes(wandb *apiv2.WeightsAndBiases, manifest serverManifest.M
 			if cfg.Ingress == nil {
 				continue
 			}
-			svcName := fmt.Sprintf("%s-hl", objectStoreSpec.Name)
-			port, err := resolveInfraServicePort(cfg.Ingress, 9000)
+			svcName := "minio"
+			port, err := resolveInfraServicePort(
+				ctx,
+				c,
+				types.NamespacedName{Name: svcName, Namespace: wandb.Spec.ObjectStore.ManagedObjectStore.Namespace},
+				cfg.Ingress,
+				80,
+			)
 			if err != nil {
 				return nil, fmt.Errorf("bucket instance %q: %w", instanceName, err)
 			}
@@ -66,7 +74,13 @@ func resolveInfraRoutes(wandb *apiv2.WeightsAndBiases, manifest serverManifest.M
 			}
 			clusterName := clickhouseClusterName(chSpec.Name)
 			svcName := fmt.Sprintf("clickhouse-%s", clusterName)
-			port, err := resolveInfraServicePort(cfg.Ingress, 8123)
+			port, err := resolveInfraServicePort(
+				ctx,
+				c,
+				types.NamespacedName{Name: svcName, Namespace: wandb.Spec.ClickHouse.ManagedClickHouse.Namespace},
+				cfg.Ingress,
+				8123,
+			)
 			if err != nil {
 				return nil, fmt.Errorf("clickhouse instance %q: %w", instanceName, err)
 			}
@@ -80,60 +94,28 @@ func resolveInfraRoutes(wandb *apiv2.WeightsAndBiases, manifest serverManifest.M
 		}
 	}
 
-	if mysqlSpec := wandb.Spec.MySQL.ManagedMysql; mysqlSpec != nil {
-		for _, instanceName := range sortedInfraConfigNames(manifest.Mysql) {
-			cfg := manifest.Mysql[instanceName]
-			if cfg.Ingress == nil {
-				continue
-			}
-			svcName := mysqlSpec.Name
-			port, err := resolveInfraServicePort(cfg.Ingress, 3306)
-			if err != nil {
-				return nil, fmt.Errorf("mysql instance %q: %w", instanceName, err)
-			}
-			entries = append(entries, infraRouteEntry{
-				name:        fmt.Sprintf("%s-mysql-%s", wandb.Name, instanceName),
-				namespace:   mysqlSpec.Namespace,
-				serviceName: svcName,
-				servicePort: port,
-				ingress:     cfg.Ingress,
-			})
-		}
-	}
-
-	if redisSpec := wandb.Spec.Redis.ManagedRedis; redisSpec != nil {
-		for _, instanceName := range sortedInfraConfigNames(manifest.Redis) {
-			cfg := manifest.Redis[instanceName]
-			if cfg.Ingress == nil {
-				continue
-			}
-			svcName := redisSpec.Name
-			port, err := resolveInfraServicePort(cfg.Ingress, 6379)
-			if err != nil {
-				return nil, fmt.Errorf("redis instance %q: %w", instanceName, err)
-			}
-			entries = append(entries, infraRouteEntry{
-				name:        fmt.Sprintf("%s-redis-%s", wandb.Name, instanceName),
-				namespace:   redisSpec.Namespace,
-				serviceName: svcName,
-				servicePort: port,
-				ingress:     cfg.Ingress,
-			})
-		}
-	}
-
 	return entries, nil
 }
 
-func resolveInfraServicePort(ingress *serverManifest.AppIngressSpec, defaultPort int32) (gatewayv1.PortNumber, error) {
+func resolveInfraServicePort(ctx context.Context, c ctrlClient.Client, serviceRef types.NamespacedName, ingress *serverManifest.AppIngressSpec, defaultPort int32) (gatewayv1.PortNumber, error) {
 	if ingress != nil && ingress.ServicePort != "" {
 		parsed := intstr.Parse(ingress.ServicePort)
 		if parsed.Type != intstr.Int {
-			return 0, fmt.Errorf("servicePort %q must be a numeric port number", ingress.ServicePort)
+			service := &v1.Service{}
+			err := c.Get(ctx, serviceRef, service)
+			if err != nil {
+				return 0, err
+			}
+			for _, port := range service.Spec.Ports {
+				if port.Name == parsed.StrVal {
+					return port.Port, nil
+				}
+			}
+			return 0, errors.New(fmt.Sprintf("Port %s, not found in service %s", parsed.StrVal, serviceRef.Name))
 		}
-		return gatewayv1.PortNumber(parsed.IntVal), nil
+		return parsed.IntVal, nil
 	}
-	return gatewayv1.PortNumber(defaultPort), nil
+	return defaultPort, nil
 }
 
 // clickhouseClusterName mirrors the logic in the altinity NsNameBuilder.
@@ -168,7 +150,7 @@ func reconcileInfraHTTPRoutes(
 		hostnames = append(hostnames, gatewayv1.Hostname(h))
 	}
 
-	entries, err := resolveInfraRoutes(wandb, manifest)
+	entries, err := resolveInfraRoutes(ctx, c, wandb, manifest)
 	if err != nil {
 		return fmt.Errorf("failed to resolve infra routes: %w", err)
 	}
@@ -244,6 +226,8 @@ func buildInfraHTTPRoute(
 		},
 	}
 
+	hostnameOverride := fmt.Sprintf("%s.%s.svc.cluster.local", entry.serviceName, entry.namespace)
+
 	return &gatewayv1.HTTPRoute{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      entry.name,
@@ -258,6 +242,19 @@ func buildInfraHTTPRoute(
 			Rules: []gatewayv1.HTTPRouteRule{{
 				Matches:     matches,
 				BackendRefs: []gatewayv1.HTTPBackendRef{backendRef},
+				Filters: []gatewayv1.HTTPRouteFilter{
+					{
+						Type: gatewayv1.HTTPRouteFilterRequestHeaderModifier,
+						RequestHeaderModifier: &gatewayv1.HTTPHeaderFilter{
+							Remove: []string{"X-Forwarded-Host", "X-Forwarded-Port"},
+						},
+					}, {
+						Type: gatewayv1.HTTPRouteFilterURLRewrite,
+						URLRewrite: &gatewayv1.HTTPURLRewriteFilter{
+							Hostname: (*gatewayv1.PreciseHostname)(&hostnameOverride),
+						},
+					},
+				},
 			}},
 		},
 	}

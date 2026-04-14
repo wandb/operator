@@ -197,6 +197,18 @@ rules:
   verbs:
   - get
 - apiGroups:
+  - gateway.nginx.org
+  resources:
+  - clientsettingspolicies
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
   - kafka.strimzi.io
   resources:
   - kafkanodepools

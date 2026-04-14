@@ -158,7 +158,7 @@ if settings.get("installNginxGateway"):
         namespace='nginx-gateway',
         flags=[
             '--create-namespace',
-            '--version=2.4.2',
+            '--version=2.5.1',
         ],
         resource_deps=['gateway-api-crds'],
         labels=["Gateway"],
@@ -215,7 +215,12 @@ helm_resource(
     labels=[GROUP_THIRD_PARTY_OPERATORS],
 )
 
-k8s_yaml(local('kustomize build config/tilt-dev'))
+if LOCAL_NETWORKING_MODE == 'gateway':
+  tiltConfig = 'config/tilt-dev-gateway-api'
+else:
+  tiltConfig = 'config/tilt-dev'
+
+k8s_yaml(local('kustomize build ' + tiltConfig))
 k8s_yaml('hack/tilt/endpoint-anchors.yaml')
 
 k8s_resource(

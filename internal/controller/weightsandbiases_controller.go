@@ -79,6 +79,7 @@ type WeightsAndBiasesReconciler struct {
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways/status;backendtlspolicies/status,verbs=get
 //+kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses;networkpolicies,verbs=update;delete;get;list;create;patch;watch
 //+kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses/status,verbs=get;list;watch
+//+kubebuilder:rbac:groups=gateway.nginx.org,resources=clientsettingspolicies,verbs=update;delete;get;list;create;patch;watch
 //+kubebuilder:rbac:groups=policy,resources=poddisruptionbudgets,verbs=update;delete;get;list;patch;create;watch
 //+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles;rolebindings;clusterroles;clusterrolebindings,verbs=update;delete;get;list;patch;create;watch
 //+kubebuilder:rbac:groups=redis.redis.opstreelabs.in,resources=redis;redissentinels;redisreplications,verbs=get;list;watch;create;update;patch;delete
