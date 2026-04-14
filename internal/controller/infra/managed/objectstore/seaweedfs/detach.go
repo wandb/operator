@@ -31,7 +31,7 @@ func CheckDetached(
 		return nil
 	}
 
-	if desiredReplicas > 0 && (actual.Spec.Volume != nil || actual.Spec.Volume.Replicas != desiredReplicas ) {
+	if desiredReplicas > 0 && actual.Spec.Volume != nil && actual.Spec.Volume.Replicas != desiredReplicas {
 		return []metav1.Condition{
 			{
 				Type:    common.ReconciledType,
