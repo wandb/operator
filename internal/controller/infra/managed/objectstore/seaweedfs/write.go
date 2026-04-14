@@ -217,5 +217,6 @@ func writeSeaweedS3Config(
 		return nil, err
 	}
 
-	return buildS3ConnInfo(envConfig.AccessKey, secretKey, nsnBuilder), nil
+	tls := owner.Spec.TLS != nil && owner.Spec.TLS.Enabled
+	return buildS3ConnInfo(envConfig.AccessKey, secretKey, nsnBuilder, tls), nil
 }

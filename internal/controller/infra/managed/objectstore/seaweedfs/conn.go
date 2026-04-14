@@ -25,15 +25,17 @@ type s3ConnInfo struct {
 	Host      string
 	Port      string
 	Bucket    string
+	TLS       bool
 }
 
 func buildS3ConnInfo(
-	accessKey, secretKey string, nsnBuilder *NsNameBuilder,
+	accessKey, secretKey string, nsnBuilder *NsNameBuilder, tls bool,
 ) *s3ConnInfo {
 	namespace := nsnBuilder.Namespace()
 	serviceName := nsnBuilder.ServiceName()
 	return &s3ConnInfo{
 		AccessKey: accessKey,
+		TLS:       tls,
 		SecretKey: secretKey,
 		Host:      fmt.Sprintf("%s.%s.svc.cluster.local", serviceName, namespace),
 		Port:      S3Port,
@@ -48,6 +50,13 @@ func (s *s3ConnInfo) toUrl() *url.URL {
 		User:   url.UserPassword(s.AccessKey, s.SecretKey),
 		Path:   s.Bucket,
 	}
+}
+
+func (s *s3ConnInfo) scheme() string {
+	if s.TLS {
+		return "https"
+	}
+	return "http"
 }
 
 func writeWandbConnInfo(
@@ -96,13 +105,14 @@ func writeWandbConnInfo(
 		},
 		Type: corev1.SecretTypeOpaque,
 		StringData: map[string]string{
-			urlKey:      connInfo.toUrl().String() + "?tls=true",
+			urlKey:      fmt.Sprintf("%s?tls=%t", connInfo.toUrl().String(), connInfo.TLS),
 			"Host":      connInfo.Host,
 			"Port":      connInfo.Port,
 			"AccessKey": connInfo.AccessKey,
 			"SecretKey": connInfo.SecretKey,
 			"Region":    "us-east-1",
 			"Bucket":    connInfo.Bucket,
+			"Scheme":    connInfo.scheme(),
 		},
 	}
 

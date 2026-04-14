@@ -1493,6 +1493,8 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *apiv2.
 					selector.Key = "Port"
 				case "region":
 					selector.Key = "Region"
+				case "scheme":
+					selector.Key = "Scheme"
 				default:
 					selector.Key = "url"
 				}
