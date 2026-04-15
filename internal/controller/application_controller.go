@@ -1019,7 +1019,10 @@ func (r *ApplicationReconciler) reconcileHTTPRoute(ctx context.Context, app *wan
 			}
 			return nil
 		})
-
+		if err != nil {
+			logger.Error("Failed to create or update health check policy", "HealthCheckPolicy", healthCheckPolicy.Name, logx.ErrAttr(err))
+			return err
+		}
 		logger.Info(fmt.Sprintf("Successfully %s HealthCheckPolicy", op), "HealthCheckPolicy", healthCheckPolicy.Name)
 	}
 
