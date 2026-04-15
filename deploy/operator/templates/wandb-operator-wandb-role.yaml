@@ -132,6 +132,18 @@ rules:
       - patch
       - update
       - watch
+  - apiGroups:
+      - networking.gke.io
+    resources:
+      - healthcheckpolicies
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
