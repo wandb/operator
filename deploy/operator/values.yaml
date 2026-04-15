@@ -27,8 +27,6 @@ wandb-operator:
           value: ":8443"
         METRICS_SECURE:
           value: "false"
-        GATEWAY_API_ENABLED:
-          value: "{{ .Values.gatewayAPI.enabled }}"
         TELEMETRY_ENABLED:
           valueFrom:
             configMapKeyRef:
@@ -118,9 +116,6 @@ wandb-operator:
     mysql: true
     redis: true
     vm: true
-
-  gatewayAPI:
-    enabled: false
 
 mysql-operator:
   install: true
