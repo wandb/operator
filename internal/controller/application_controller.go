@@ -993,10 +993,10 @@ func (r *ApplicationReconciler) reconcileHTTPRoute(ctx context.Context, app *wan
 			healthCheckPolicy.Labels = utils.MergeMapsStringString(healthCheckPolicy.Labels, app.Spec.MetaTemplate.Labels)
 			healthCheckPolicy.Annotations = utils.MergeMapsStringString(healthCheckPolicy.Annotations, app.Spec.MetaTemplate.Annotations)
 			healthCheckPolicy.Spec.Default = &gkeGatewayApiNetworkingv1.HealthCheckPolicyConfig{
-				CheckIntervalSec:   ptr.Int64(int64(app.Spec.PodTemplate.Spec.Containers[0].ReadinessProbe.PeriodSeconds)),
-				TimeoutSec:         ptr.Int64(int64(app.Spec.PodTemplate.Spec.Containers[0].ReadinessProbe.TimeoutSeconds)),
-				UnhealthyThreshold: ptr.Int64(int64(app.Spec.PodTemplate.Spec.Containers[0].ReadinessProbe.FailureThreshold)),
-				HealthyThreshold:   ptr.Int64(int64(app.Spec.PodTemplate.Spec.Containers[0].ReadinessProbe.SuccessThreshold)),
+				CheckIntervalSec:   ptr.Int64(5),
+				TimeoutSec:         ptr.Int64(5),
+				UnhealthyThreshold: ptr.Int64(3),
+				HealthyThreshold:   ptr.Int64(2),
 				Config: &gkeGatewayApiNetworkingv1.HealthCheck{
 					HTTP: &gkeGatewayApiNetworkingv1.HTTPHealthCheck{
 						CommonHealthCheck: gkeGatewayApiNetworkingv1.CommonHealthCheck{},
