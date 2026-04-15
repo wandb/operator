@@ -998,6 +998,7 @@ func (r *ApplicationReconciler) reconcileHTTPRoute(ctx context.Context, app *wan
 				UnhealthyThreshold: ptr.Int64(3),
 				HealthyThreshold:   ptr.Int64(2),
 				Config: &gkeGatewayApiNetworkingv1.HealthCheck{
+					Type: gkeGatewayApiNetworkingv1.HTTP,
 					HTTP: &gkeGatewayApiNetworkingv1.HTTPHealthCheck{
 						CommonHealthCheck: gkeGatewayApiNetworkingv1.CommonHealthCheck{},
 						CommonHTTPHealthCheck: gkeGatewayApiNetworkingv1.CommonHTTPHealthCheck{
