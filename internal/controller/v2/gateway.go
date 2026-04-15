@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"strconv"
 
+	nginxGatewayv1alpha1 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/logx"
 	"github.com/wandb/operator/pkg/utils"
@@ -13,9 +14,11 @@ import (
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	controllerruntime "sigs.k8s.io/controller-runtime"
 	ctrlClient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
 func reconcileGateway(ctx context.Context, c ctrlClient.Client, wandb *apiv2.WeightsAndBiases) error {
@@ -87,6 +90,37 @@ func reconcileGateway(ctx context.Context, c ctrlClient.Client, wandb *apiv2.Wei
 	if wandb.Status.GatewayStatus == nil {
 		wandb.Status.GatewayStatus = summarizeGatewayStatus(desired)
 	}
+
+	maxSize := "0"
+	timeoutStr := "2m"
+	switch *wandb.Spec.Networking.GatewayAPI.Gateway.GatewayClassName {
+	case "nginx":
+		csp := &nginxGatewayv1alpha1.ClientSettingsPolicy{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      gatewayName,
+				Namespace: wandb.Namespace,
+			},
+		}
+		_, err = controllerruntime.CreateOrUpdate(ctx, c, csp, func() error {
+			csp.Spec = nginxGatewayv1alpha1.ClientSettingsPolicySpec{
+				Body: &nginxGatewayv1alpha1.ClientBody{
+					MaxSize: (*nginxGatewayv1alpha1.Size)(&maxSize),
+					Timeout: (*nginxGatewayv1alpha1.Duration)(&timeoutStr),
+				},
+				KeepAlive: nil,
+				TargetRef: gatewayv1alpha2.LocalPolicyTargetReference{
+					Name:  gatewayv1alpha2.ObjectName(gatewayName),
+					Kind:  "Gateway",
+					Group: "gateway.networking.k8s.io",
+				},
+			}
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 

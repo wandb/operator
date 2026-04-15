@@ -25,6 +25,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	gkeGatewayApiNetworkingv1 "github.com/GoogleCloudPlatform/gke-gateway-api/apis/networking/v1"
 	nginxGatewayv1alpha1 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
 	"github.com/wandb/operator/internal/logx"
 	chiv1 "github.com/wandb/operator/pkg/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
@@ -175,6 +176,7 @@ func main() {
 	if gatewayAPIEnabled {
 		utilruntime.Must(gatewayv1.Install(scheme))
 		utilruntime.Must(nginxGatewayv1alpha1.AddToScheme(scheme))
+		utilruntime.Must(gkeGatewayApiNetworkingv1.Install(scheme))
 	}
 
 	telemetryConfig := controllerv2.DefaultTelemetryRuntimeConfig()

@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"reflect"
 
+	gkeGatewayApiNetworkingv1 "github.com/GoogleCloudPlatform/gke-gateway-api/apis/networking/v1"
 	wandbv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/logx"
 	"github.com/wandb/operator/pkg/utils"
@@ -31,8 +32,11 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"knative.dev/pkg/ptr"
+	controllerruntime "sigs.k8s.io/controller-runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -953,41 +957,62 @@ func (r *ApplicationReconciler) reconcileHTTPRoute(ctx context.Context, app *wan
 
 	logger := logx.GetSlog(ctx)
 
-	desired := &gatewayv1.HTTPRoute{}
-	desired.Name = app.Name
-	desired.Namespace = app.Namespace
-
-	desired.Labels = utils.MergeMapsStringString(desired.Labels, app.Spec.MetaTemplate.Labels)
-	desired.Annotations = utils.MergeMapsStringString(desired.Annotations, app.Spec.MetaTemplate.Annotations)
-
-	desired.Spec.ParentRefs = app.Spec.HTTPRouteTemplate.ParentRefs
-	desired.Spec.Hostnames = app.Spec.HTTPRouteTemplate.Hostnames
-	desired.Spec.Rules = buildHTTPRouteRules(app)
-
-	if err := ctrl.SetControllerReference(app, desired, r.Scheme); err != nil {
-		return err
+	httpRoute := &gatewayv1.HTTPRoute{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      app.Name,
+			Namespace: app.Namespace,
+		},
 	}
-
-	current := &gatewayv1.HTTPRoute{}
-	err := r.Get(ctx, client.ObjectKey{Namespace: app.Namespace, Name: app.Name}, current)
-	if err != nil {
-		if !errors.IsNotFound(err) {
+	op, err := controllerruntime.CreateOrUpdate(ctx, r.Client, httpRoute, func() error {
+		httpRoute.Labels = utils.MergeMapsStringString(httpRoute.Labels, app.Spec.MetaTemplate.Labels)
+		httpRoute.Annotations = utils.MergeMapsStringString(httpRoute.Annotations, app.Spec.MetaTemplate.Annotations)
+		httpRoute.Spec.ParentRefs = app.Spec.HTTPRouteTemplate.ParentRefs
+		httpRoute.Spec.Hostnames = app.Spec.HTTPRouteTemplate.Hostnames
+		httpRoute.Spec.Rules = buildHTTPRouteRules(app)
+		if err := ctrl.SetControllerReference(app, httpRoute, r.Scheme); err != nil {
 			return err
 		}
-		logger.Info("Creating HTTPRoute", "HTTPRoute", desired.Name)
-		if err := r.Create(ctx, desired); err != nil {
-			return err
-		}
-		app.Status.HTTPRouteStatus = summarizeHTTPRouteStatus(desired)
 		return nil
-	}
-
-	desired.ResourceVersion = current.ResourceVersion
-	logger.Info("Updating HTTPRoute", "HTTPRoute", desired.Name)
-	if err := r.Update(ctx, desired); err != nil {
+	})
+	if err != nil {
 		return err
 	}
-	app.Status.HTTPRouteStatus = summarizeHTTPRouteStatus(current)
+	app.Status.HTTPRouteStatus = summarizeHTTPRouteStatus(httpRoute)
+	logger.Info(fmt.Sprintf("Successfully %s HTTPRoute", op), "HTTPRoute", httpRoute.Name)
+
+	if httpRoute.Status.Parents[0].ControllerName == "networking.gke.io/gateway" {
+		healthCheckPolicy := &gkeGatewayApiNetworkingv1.HealthCheckPolicy{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      app.Name,
+				Namespace: app.Namespace,
+			},
+		}
+		op, err = controllerruntime.CreateOrUpdate(ctx, r.Client, healthCheckPolicy, func() error {
+			healthCheckPolicy.Labels = utils.MergeMapsStringString(healthCheckPolicy.Labels, app.Spec.MetaTemplate.Labels)
+			healthCheckPolicy.Annotations = utils.MergeMapsStringString(healthCheckPolicy.Annotations, app.Spec.MetaTemplate.Annotations)
+			healthCheckPolicy.Spec.Default = &gkeGatewayApiNetworkingv1.HealthCheckPolicyConfig{
+				CheckIntervalSec:   ptr.Int64(int64(app.Spec.PodTemplate.Spec.Containers[0].ReadinessProbe.PeriodSeconds)),
+				TimeoutSec:         ptr.Int64(int64(app.Spec.PodTemplate.Spec.Containers[0].ReadinessProbe.TimeoutSeconds)),
+				UnhealthyThreshold: ptr.Int64(int64(app.Spec.PodTemplate.Spec.Containers[0].ReadinessProbe.FailureThreshold)),
+				HealthyThreshold:   ptr.Int64(int64(app.Spec.PodTemplate.Spec.Containers[0].ReadinessProbe.SuccessThreshold)),
+				Config: &gkeGatewayApiNetworkingv1.HealthCheck{
+					HTTP: &gkeGatewayApiNetworkingv1.HTTPHealthCheck{
+						CommonHealthCheck: gkeGatewayApiNetworkingv1.CommonHealthCheck{},
+						CommonHTTPHealthCheck: gkeGatewayApiNetworkingv1.CommonHTTPHealthCheck{
+							RequestPath: ptr.String(app.Spec.PodTemplate.Spec.Containers[0].ReadinessProbe.HTTPGet.Path),
+						},
+					},
+				},
+			}
+			if err := ctrl.SetControllerReference(app, healthCheckPolicy, r.Scheme); err != nil {
+				return err
+			}
+			return nil
+		})
+
+		logger.Info(fmt.Sprintf("Successfully %s HealthCheckPolicy", op), "HealthCheckPolicy", healthCheckPolicy.Name)
+	}
+
 	return nil
 }
 

@@ -5,6 +5,7 @@ go 1.25.5
 godebug default=go1.25
 
 require (
+	github.com/GoogleCloudPlatform/gke-gateway-api v1.4.0
 	github.com/Masterminds/goutils v1.1.1
 	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/go-logr/logr v1.4.3
