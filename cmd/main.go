@@ -28,6 +28,7 @@ import (
 	gkeGatewayApiNetworkingv1 "github.com/GoogleCloudPlatform/gke-gateway-api/apis/networking/v1"
 	nginxGatewayv1alpha1 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
 	"github.com/wandb/operator/internal/logx"
+	"github.com/wandb/operator/pkg/utils"
 	chiv1 "github.com/wandb/operator/pkg/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
 	argov1alpha1 "github.com/wandb/operator/pkg/vendored/argo-rollouts/argoproj.io.rollouts/v1alpha1"
 	miniov2 "github.com/wandb/operator/pkg/vendored/minio-operator/minio.min.io/v2"
@@ -38,6 +39,8 @@ import (
 	strimziv1 "github.com/wandb/operator/pkg/vendored/strimzi-kafka/v1"
 	"github.com/wandb/operator/pkg/wandb/spec/channel/deployer"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/discovery"
+	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
@@ -81,6 +84,9 @@ func init() {
 	utilruntime.Must(miniov2.AddToScheme(scheme))
 	utilruntime.Must(chiv1.AddToScheme(scheme))
 	utilruntime.Must(mysqlv2.AddToScheme(scheme))
+	utilruntime.Must(gatewayv1.Install(scheme))
+	utilruntime.Must(nginxGatewayv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(gkeGatewayApiNetworkingv1.Install(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -95,7 +101,7 @@ func main() {
 	var enableHTTP2 bool
 	var tlsOpts []func(*tls.Config)
 	var deployerAPI, isolationNamespaces string
-	var debug, airgapped, enableV2, enableWebhooks, enableRollouts, gatewayAPIEnabled, telemetryEnabled bool
+	var debug, airgapped, enableV2, enableWebhooks, enableRollouts, telemetryEnabled bool
 	var telemetryManagedNamespace string
 	var telemetryOTelSecretName, telemetryOTelProtocol, telemetryOTelServiceName, telemetryOTelResourceAttributes string
 
@@ -126,7 +132,6 @@ func main() {
 	flag.BoolVar(&enableV2, "enable-v2", true, "Use V2 of WandB CRD")
 	flag.BoolVar(&enableWebhooks, "enable-webhooks", true, "Enable webhooks")
 	flag.BoolVar(&enableRollouts, "enable-rollouts", false, "Enable Argo Rollout Support")
-	flag.BoolVar(&gatewayAPIEnabled, "gateway-api-enabled", false, "Enable Gateway API Support")
 	flag.BoolVar(&telemetryEnabled, "telemetry-enabled", false, "Enable telemetry endpoint reconciliation for W&B applications")
 	flag.StringVar(&telemetryManagedNamespace, "telemetry-managed-namespace", "", "Namespace where managed telemetry services run")
 	flag.StringVar(&telemetryOTelSecretName, "telemetry-otel-secret-name", "wandb-otel-connection", "Name of the OTEL connection secret managed by the operator")
@@ -171,12 +176,6 @@ func main() {
 
 	if enableRollouts {
 		utilruntime.Must(argov1alpha1.AddToScheme(scheme))
-	}
-
-	if gatewayAPIEnabled {
-		utilruntime.Must(gatewayv1.Install(scheme))
-		utilruntime.Must(nginxGatewayv1alpha1.AddToScheme(scheme))
-		utilruntime.Must(gkeGatewayApiNetworkingv1.Install(scheme))
 	}
 
 	telemetryConfig := controllerv2.DefaultTelemetryRuntimeConfig()
@@ -290,6 +289,11 @@ func main() {
 		}
 		cacheOptions.DefaultNamespaces = namespacesCacheConfig
 	}
+	err := RegisterServerResources()
+	if err != nil {
+		setupLog.Error(err, "failed to register server resources")
+		os.Exit(1)
+	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme: scheme,
@@ -322,15 +326,14 @@ func main() {
 	}
 
 	if err = (&controller.WeightsAndBiasesReconciler{
-		IsAirgapped:      airgapped,
-		Recorder:         mgr.GetEventRecorderFor("weightsandbiases"),
-		Client:           mgr.GetClient(),
-		Scheme:           mgr.GetScheme(),
-		DeployerClient:   &deployer.DeployerClient{DeployerAPI: deployerAPI},
-		Debug:            debug,
-		EnableV2:         enableV2,
-		EnableGatewayAPI: gatewayAPIEnabled,
-		TelemetryConfig:  telemetryConfig,
+		IsAirgapped:     airgapped,
+		Recorder:        mgr.GetEventRecorderFor("weightsandbiases"),
+		Client:          mgr.GetClient(),
+		Scheme:          mgr.GetScheme(),
+		DeployerClient:  &deployer.DeployerClient{DeployerAPI: deployerAPI},
+		Debug:           debug,
+		EnableV2:        enableV2,
+		TelemetryConfig: telemetryConfig,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "WeightsAndBiases")
 		os.Exit(1)
@@ -406,4 +409,30 @@ func setFlagsFromEnvironment() []error {
 	})
 
 	return errors
+}
+
+func RegisterServerResources() error {
+	cfg, err := config.GetConfig()
+	if err != nil {
+		return err
+	}
+
+	discoveryClient, err := discovery.NewDiscoveryClientForConfig(cfg)
+	if err != nil {
+		return err
+	}
+
+	// Get all resources in the cluster
+	_, resourceLists, err := discoveryClient.ServerGroupsAndResources()
+	if err != nil {
+		return err
+	}
+
+	for _, resourceList := range resourceLists {
+		for _, resource := range resourceList.APIResources {
+			gvkString := fmt.Sprintf("%s.%s/%s", resource.Kind, resource.Group, resource.Version)
+			utils.AddServerResource(gvkString)
+		}
+	}
+	return nil
 }

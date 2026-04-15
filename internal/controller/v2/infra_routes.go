@@ -4,11 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"reflect"
 	"strings"
 
+	gkeGatewayApiNetworkingv1 "github.com/GoogleCloudPlatform/gke-gateway-api/apis/networking/v1"
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/translator"
+	"github.com/wandb/operator/internal/logx"
 	"github.com/wandb/operator/pkg/utils"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
 	v1 "k8s.io/api/core/v1"
@@ -17,6 +18,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"knative.dev/pkg/ptr"
+	controllerruntime "sigs.k8s.io/controller-runtime"
 	ctrlClient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -25,11 +28,12 @@ import (
 // infraRouteEntry holds the resolved routing info for a single infra component instance.
 type infraRouteEntry struct {
 	// name is the HTTPRoute resource name
-	name        string
-	namespace   string
-	serviceName string
-	servicePort gatewayv1.PortNumber
-	ingress     *serverManifest.AppIngressSpec
+	name            string
+	namespace       string
+	serviceName     string
+	servicePort     gatewayv1.PortNumber
+	healthCheckPath string
+	ingress         *serverManifest.AppIngressSpec
 }
 
 const infraHTTPRouteComponent = "infra-route"
@@ -57,11 +61,12 @@ func resolveInfraRoutes(ctx context.Context, c ctrlClient.Client, wandb *apiv2.W
 				return nil, fmt.Errorf("bucket instance %q: %w", instanceName, err)
 			}
 			entries = append(entries, infraRouteEntry{
-				name:        fmt.Sprintf("%s-bucket-%s", wandb.Name, instanceName),
-				namespace:   objectStoreSpec.Namespace,
-				serviceName: svcName,
-				servicePort: port,
-				ingress:     cfg.Ingress,
+				name:            fmt.Sprintf("%s-bucket-%s", wandb.Name, instanceName),
+				namespace:       objectStoreSpec.Namespace,
+				serviceName:     svcName,
+				servicePort:     port,
+				ingress:         cfg.Ingress,
+				healthCheckPath: "/ready",
 			})
 		}
 	}
@@ -85,11 +90,12 @@ func resolveInfraRoutes(ctx context.Context, c ctrlClient.Client, wandb *apiv2.W
 				return nil, fmt.Errorf("clickhouse instance %q: %w", instanceName, err)
 			}
 			entries = append(entries, infraRouteEntry{
-				name:        fmt.Sprintf("%s-clickhouse-%s", wandb.Name, instanceName),
-				namespace:   chSpec.Namespace,
-				serviceName: svcName,
-				servicePort: port,
-				ingress:     cfg.Ingress,
+				name:            fmt.Sprintf("%s-clickhouse-%s", wandb.Name, instanceName),
+				namespace:       chSpec.Namespace,
+				serviceName:     svcName,
+				servicePort:     port,
+				ingress:         cfg.Ingress,
+				healthCheckPath: "/ready",
 			})
 		}
 	}
@@ -134,6 +140,7 @@ func reconcileInfraHTTPRoutes(
 	wandb *apiv2.WeightsAndBiases,
 	manifest serverManifest.Manifest,
 ) error {
+	logger := logx.GetSlog(ctx)
 	if wandb.Spec.Networking.Mode != apiv2.NetworkingModeGatewayAPI {
 		return nil
 	}
@@ -161,30 +168,70 @@ func reconcileInfraHTTPRoutes(
 
 		parentRef := buildInfraGatewayParentRef(ref, gwConfig, entry.namespace)
 		route := buildInfraHTTPRoute(wandb, parentRef, hostnames, entry)
-		if err := setInfraHTTPRouteOwnership(wandb, route, c.Scheme()); err != nil {
-			return fmt.Errorf("failed to set ownership on infra HTTPRoute %s: %w", entry.name, err)
-		}
 
-		current := &gatewayv1.HTTPRoute{}
-		err := c.Get(ctx, types.NamespacedName{Name: entry.name, Namespace: entry.namespace}, current)
+		httpRoute := &gatewayv1.HTTPRoute{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      entry.name,
+				Namespace: entry.namespace,
+			},
+		}
+		op, err := controllerruntime.CreateOrUpdate(ctx, c, httpRoute, func() error {
+			httpRoute.Labels = utils.MergeMapsStringString(httpRoute.Labels, route.Labels)
+			httpRoute.Annotations = utils.MergeMapsStringString(httpRoute.Annotations, route.Annotations)
+			httpRoute.Spec.ParentRefs = route.Spec.ParentRefs
+			httpRoute.Spec.Hostnames = route.Spec.Hostnames
+			httpRoute.Spec.Rules = route.Spec.Rules
+			if err := setInfraHTTPRouteOwnership(wandb, route, c.Scheme()); err != nil {
+				return fmt.Errorf("failed to set ownership on infra HTTPRoute %s: %w", entry.name, err)
+			}
+			return nil
+		})
 		if err != nil {
-			if apiErrors.IsNotFound(err) {
-				if err := c.Create(ctx, route); err != nil {
-					return fmt.Errorf("failed to create infra HTTPRoute %s: %w", entry.name, err)
+			return err
+		}
+		logger.Info(fmt.Sprintf("Successfully %s HTTPRoute", op), "HTTPRoute", httpRoute.Name)
+
+		if httpRoute.Status.Parents[0].ControllerName == "networking.gke.io/gateway" {
+			healthCheckPolicy := &gkeGatewayApiNetworkingv1.HealthCheckPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      entry.name,
+					Namespace: entry.namespace,
+				},
+			}
+			op, err = controllerruntime.CreateOrUpdate(ctx, c, healthCheckPolicy, func() error {
+				healthCheckPolicy.Labels = utils.MergeMapsStringString(healthCheckPolicy.Labels, infraHealthCheckPolicyLabels(wandb))
+				healthCheckPolicy.Spec.Default = &gkeGatewayApiNetworkingv1.HealthCheckPolicyConfig{
+					CheckIntervalSec:   ptr.Int64(5),
+					TimeoutSec:         ptr.Int64(5),
+					UnhealthyThreshold: ptr.Int64(3),
+					HealthyThreshold:   ptr.Int64(1),
+					Config: &gkeGatewayApiNetworkingv1.HealthCheck{
+						HTTP: &gkeGatewayApiNetworkingv1.HTTPHealthCheck{
+							CommonHealthCheck: gkeGatewayApiNetworkingv1.CommonHealthCheck{},
+							CommonHTTPHealthCheck: gkeGatewayApiNetworkingv1.CommonHTTPHealthCheck{
+								RequestPath: ptr.String(entry.healthCheckPath),
+							},
+						},
+					},
 				}
-			} else {
-				return fmt.Errorf("failed to get infra HTTPRoute %s: %w", entry.name, err)
-			}
-		} else if !reflect.DeepEqual(current.Spec, route.Spec) ||
-			!reflect.DeepEqual(current.Labels, route.Labels) {
-			route.ResourceVersion = current.ResourceVersion
-			if err := c.Update(ctx, route); err != nil {
-				return fmt.Errorf("failed to update infra HTTPRoute %s: %w", entry.name, err)
-			}
+				if err != nil {
+					return err
+				}
+				if err := controllerutil.SetControllerReference(wandb, healthCheckPolicy, c.Scheme()); err != nil {
+					return err
+				}
+				return nil
+			})
+
+			logger.Info(fmt.Sprintf("Successfully %s HealthCheckPolicy", op), "HealthCheckPolicy", healthCheckPolicy.Name)
 		}
 	}
 
 	if err := deleteStaleInfraHTTPRoutes(ctx, c, wandb, desiredNames); err != nil {
+		return err
+	}
+
+	if err := deleteStaleInfraHealthCheckPolicies(ctx, c, wandb, desiredNames); err != nil {
 		return err
 	}
 
@@ -342,6 +389,39 @@ func deleteStaleInfraHTTPRoutes(
 	}
 
 	return nil
+}
+
+func deleteStaleInfraHealthCheckPolicies(
+	ctx context.Context,
+	c ctrlClient.Client,
+	wandb *apiv2.WeightsAndBiases,
+	desiredPolicies map[string]bool,
+) error {
+	policyList := &gkeGatewayApiNetworkingv1.HealthCheckPolicyList{}
+	if !utils.IsRegistered(c.Scheme(), policyList) {
+		return nil
+	}
+	if err := c.List(ctx, policyList, ctrlClient.MatchingLabels(infraHealthCheckPolicyLabels(wandb))); err != nil {
+		return fmt.Errorf("failed to list managed infra HealthCheckPolicies: %w", err)
+	}
+	for i := range policyList.Items {
+		policy := &policyList.Items[i]
+		key := infraHTTPRouteKey(policy.Namespace, policy.Name).String()
+		if desiredPolicies[key] {
+			continue
+		}
+		if err := c.Delete(ctx, policy); err != nil && !apiErrors.IsNotFound(err) {
+			return fmt.Errorf("failed to delete stale infra HealthCheckPolicy %s/%s: %w", policy.Namespace, policy.Name, err)
+		}
+	}
+
+	return nil
+}
+
+func infraHealthCheckPolicyLabels(wandb *apiv2.WeightsAndBiases) map[string]string {
+	labels := infraHTTPRouteLabels(wandb)
+	labels[translator.WandbComponentLabel] = "infra-healthcheck-policy"
+	return labels
 }
 
 func infraHTTPRouteLabels(wandb *apiv2.WeightsAndBiases) map[string]string {

@@ -1004,6 +1004,10 @@ func (r *ApplicationReconciler) reconcileHTTPRoute(ctx context.Context, app *wan
 					},
 				},
 			}
+			if err != nil {
+				return err
+			}
+
 			if err := ctrl.SetControllerReference(app, healthCheckPolicy, r.Scheme); err != nil {
 				return err
 			}

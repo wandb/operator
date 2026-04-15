@@ -25,6 +25,7 @@ import (
 	apiv2 "github.com/wandb/operator/api/v2"
 	v1 "github.com/wandb/operator/internal/controller/v1"
 	v2 "github.com/wandb/operator/internal/controller/v2"
+	"github.com/wandb/operator/pkg/utils"
 	"github.com/wandb/operator/pkg/wandb/spec/channel/deployer"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -45,15 +46,14 @@ import (
 // WeightsAndBiasesReconciler reconciles a WeightsAndBiases object
 type WeightsAndBiasesReconciler struct {
 	client.Client
-	IsAirgapped      bool
-	DeployerClient   deployer.DeployerInterface
-	Scheme           *runtime.Scheme
-	Recorder         record.EventRecorder
-	DryRun           bool
-	Debug            bool
-	EnableV2         bool
-	EnableGatewayAPI bool
-	TelemetryConfig  v2.TelemetryRuntimeConfig
+	IsAirgapped     bool
+	DeployerClient  deployer.DeployerInterface
+	Scheme          *runtime.Scheme
+	Recorder        record.EventRecorder
+	DryRun          bool
+	Debug           bool
+	EnableV2        bool
+	TelemetryConfig v2.TelemetryRuntimeConfig
 }
 
 //+kubebuilder:rbac:groups="",resources=configmaps;events;persistentvolumeclaims;secrets;serviceaccounts;services,verbs=update;delete;get;list;create;patch;watch
@@ -183,15 +183,16 @@ func (r *WeightsAndBiasesReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			Owns(&corev1.Secret{}).
 			Owns(&corev1.ConfigMap{}).
 			Owns(&networkingv1.Ingress{})
+		if utils.IsRegistered(r.Scheme, &gatewayv1.Gateway{}) {
+			b = b.Watches(&gatewayv1.Gateway{}, handler.EnqueueRequestsFromMapFunc(r.mapGatewayToWandb))
+		}
 	} else {
 		b = ctrl.NewControllerManagedBy(mgr).
 			For(&apiv1.WeightsAndBiases{}, builder.WithPredicates(filterWBEventsForV1{})).
 			Owns(&corev1.Secret{}, builder.WithPredicates(filterSecretEventsForV1{})).
 			Owns(&corev1.ConfigMap{})
 	}
-	if r.EnableGatewayAPI {
-		b = b.Watches(&gatewayv1.Gateway{}, handler.EnqueueRequestsFromMapFunc(r.mapGatewayToWandb))
-	}
+
 	return b.Complete(r)
 }
 

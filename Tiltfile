@@ -215,12 +215,7 @@ helm_resource(
     labels=[GROUP_THIRD_PARTY_OPERATORS],
 )
 
-if LOCAL_NETWORKING_MODE == 'gateway':
-  tiltConfig = 'config/tilt-dev-gateway-api'
-else:
-  tiltConfig = 'config/tilt-dev'
-
-k8s_yaml(local('kustomize build ' + tiltConfig))
+k8s_yaml(local('kustomize build config/tilt-dev'))
 k8s_yaml('hack/tilt/endpoint-anchors.yaml')
 
 k8s_resource(
