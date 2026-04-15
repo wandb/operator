@@ -218,7 +218,7 @@ func reconcileInfraHTTPRoutes(
 				}
 				healthCheckPolicy.Spec.TargetRef = gatewayv1alpha2.NamespacedPolicyTargetReference{
 					Kind: "Service",
-					Name: gatewayv1alpha2.ObjectName(entry.name),
+					Name: gatewayv1alpha2.ObjectName(entry.serviceName),
 				}
 				if err != nil {
 					return err
