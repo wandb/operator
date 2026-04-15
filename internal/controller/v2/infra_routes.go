@@ -34,6 +34,7 @@ type infraRouteEntry struct {
 	serviceName     string
 	servicePort     gatewayv1.PortNumber
 	healthCheckPath string
+	healthCheckPort int32
 	ingress         *serverManifest.AppIngressSpec
 }
 
@@ -68,6 +69,7 @@ func resolveInfraRoutes(ctx context.Context, c ctrlClient.Client, wandb *apiv2.W
 				servicePort:     port,
 				ingress:         cfg.Ingress,
 				healthCheckPath: "/ready",
+				healthCheckPort: 4444,
 			})
 		}
 	}
@@ -97,6 +99,7 @@ func resolveInfraRoutes(ctx context.Context, c ctrlClient.Client, wandb *apiv2.W
 				servicePort:     port,
 				ingress:         cfg.Ingress,
 				healthCheckPath: "/ready",
+				healthCheckPort: port,
 			})
 		}
 	}
@@ -209,7 +212,9 @@ func reconcileInfraHTTPRoutes(
 					Config: &gkeGatewayApiNetworkingv1.HealthCheck{
 						Type: gkeGatewayApiNetworkingv1.HTTP,
 						HTTP: &gkeGatewayApiNetworkingv1.HTTPHealthCheck{
-							CommonHealthCheck: gkeGatewayApiNetworkingv1.CommonHealthCheck{},
+							CommonHealthCheck: gkeGatewayApiNetworkingv1.CommonHealthCheck{
+								Port: ptr.Int64(int64(entry.healthCheckPort)),
+							},
 							CommonHTTPHealthCheck: gkeGatewayApiNetworkingv1.CommonHTTPHealthCheck{
 								RequestPath: ptr.String(entry.healthCheckPath),
 							},
