@@ -23,6 +23,7 @@ import (
 	ctrlClient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
 // infraRouteEntry holds the resolved routing info for a single infra component instance.
@@ -213,6 +214,10 @@ func reconcileInfraHTTPRoutes(
 							},
 						},
 					},
+				}
+				healthCheckPolicy.Spec.TargetRef = gatewayv1alpha2.NamespacedPolicyTargetReference{
+					Kind: "Service",
+					Name: gatewayv1alpha2.ObjectName(entry.name),
 				}
 				if err != nil {
 					return err

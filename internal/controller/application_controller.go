@@ -40,6 +40,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
 const applicationFinalizer = "applications.apps.wandb.com/finalizer"
@@ -1004,6 +1005,10 @@ func (r *ApplicationReconciler) reconcileHTTPRoute(ctx context.Context, app *wan
 						},
 					},
 				},
+			}
+			healthCheckPolicy.Spec.TargetRef = gatewayv1alpha2.NamespacedPolicyTargetReference{
+				Kind: "Service",
+				Name: gatewayv1alpha2.ObjectName(app.Name),
 			}
 			if err != nil {
 				return err
