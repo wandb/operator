@@ -514,8 +514,8 @@ func validateNetworkingSpec(wandb *appsv2.WeightsAndBiases) (field.ErrorList, ad
 		}
 	}
 
-	if spec.TLS != nil && spec.TLS.CertManager != nil && spec.Mode != appsv2.NetworkingModeIngress {
-		warnings = append(warnings, "networking.tls.certManager annotations are only applied in Ingress mode")
+	if spec.TLS != nil && spec.TLS.CertManager != nil && spec.Mode == "" {
+		warnings = append(warnings, "networking.tls.certManager annotations are only applied when using Ingress or GatewayAPI")
 	}
 
 	return errors, warnings
