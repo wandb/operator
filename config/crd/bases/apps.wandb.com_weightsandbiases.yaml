@@ -2583,6 +2583,11 @@ spec:
                     type: object
                   managedObjectStore:
                     properties:
+                      SeaweedObjectStoreSpec:
+                        properties:
+                          tlsEnabled:
+                            type: boolean
+                        type: object
                       affinity:
                         properties:
                           nodeAffinity:

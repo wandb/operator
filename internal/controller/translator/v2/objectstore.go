@@ -53,6 +53,9 @@ func ToObjectStoreVendorSpec(
 		},
 		Spec: seaweedv1.SeaweedSpec{
 			Image: translator.SeaweedImage,
+			TLS: &seaweedv1.TLSSpec{
+				Enabled: infraSpec.SeaweedObjectStoreSpec.TlsEnabled,
+			},
 			Master: &seaweedv1.MasterSpec{
 				Replicas:           1,
 				DefaultReplication: &replication,
@@ -84,7 +87,7 @@ func ToObjectStoreVendorSpec(
 					Enabled: true,
 					Resources: corev1.VolumeResourceRequirements{
 						Requests: corev1.ResourceList{
-							corev1.ResourceStorage: resource.MustParse("4Gi"),
+							corev1.ResourceStorage: storageQuantity,
 						},
 					},
 				},

@@ -1321,11 +1321,6 @@ applications:
           - name: default
             type: bucket
             field: port
-      - name: BUCKET_SCHEME
-        sources:
-          - name: default
-            type: bucket
-            field: scheme
       - name: UPSTREAM_BUCKET
         value: "$(BUCKET_HOST):$(BUCKET_PORT)"
     files:
@@ -1355,10 +1350,6 @@ applications:
 
           map $host $bucket{
             default $UPSTREAM_BUCKET;
-          }
-
-          map $host $bucket_proto{
-            default $BUCKET_SCHEME;
           }
       - name: nginx.conf
         mountPath: /etc/nginx
@@ -1422,7 +1413,7 @@ applications:
               location /bucket {
                 proxy_ssl_verify off;
                 proxy_set_header Host $bucket;
-                proxy_pass $bucket_proto://bucket;
+                proxy_pass http://bucket;
               }
             }
           }
@@ -1472,6 +1463,7 @@ migrations:
       - "true"
     commonEnvs:
       - gorillaMysql
+      - gorillaOnprem
   internal-signer:
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
