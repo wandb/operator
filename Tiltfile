@@ -47,7 +47,6 @@ os.putenv('PATH', './bin:' + os.getenv('PATH'))
 
 load('ext://restart_process', 'docker_build_with_restart')
 load('ext://helm_resource', 'helm_repo', 'helm_resource')
-load('ext://cert_manager', 'deploy_cert_manager')
 
 DOCKERFILE = '''
 FROM registry.access.redhat.com/ubi9/ubi
@@ -144,7 +143,41 @@ DIRNAME = os.path.basename(os. getcwd())
 local_resource("Operator-Manifests", manifests(), labels=[GROUP_WANDB_OPERATOR])
 local_resource("Operator-Generate", generate(), labels=[GROUP_WANDB_OPERATOR])
 
-deploy_cert_manager()
+helm_resource(
+  'cert-manager',
+  chart='oci://quay.io/jetstack/charts/cert-manager',
+  namespace='cert-manager',
+  flags=[
+    '--create-namespace',
+    '--version=v1.20.2',
+    '--set',
+    'crds.enabled=true',
+    '--set',
+    'config.enableGatewayAPI=true',
+  ],
+  labels=["Cert-Manager"],
+)
+
+local_resource(
+  'selfsigned-issuer',
+  'kubectl apply -f hack/testing-manifests/cert-manager/selfsigned-issuer.yaml',
+  resource_deps=['cert-manager'],
+  labels=["Cert-Manager"],
+)
+
+local_resource(
+  'ca-certificate',
+  'kubectl apply -f hack/testing-manifests/cert-manager/ca-certificate.yaml',
+  resource_deps=['cert-manager'],
+  labels=["Cert-Manager"],
+)
+
+local_resource(
+  'ca-issuer',
+  'kubectl apply -f hack/testing-manifests/cert-manager/ca-issuer.yaml',
+  resource_deps=['cert-manager'],
+  labels=["Cert-Manager"],
+)
 
 if settings.get("installNginxGateway"):
     local_resource(
@@ -209,7 +242,7 @@ helm_resource(
     'ThirdParty-Operators',
     chart='./deploy/operator',
     release_name='third-party-operators',
-    resource_deps=['ThirdParty-Chart-Deps', 'WandB-CRDs-Apply'],
+    resource_deps=['ThirdParty-Chart-Deps', 'WandB-CRDs-Apply', 'cert-manager'],
     namespace='wandb-operator',
     flags=third_party_operator_flags,
     labels=[GROUP_THIRD_PARTY_OPERATORS],
@@ -226,6 +259,7 @@ k8s_resource(
         'operator-serving-cert:certificate',
         'operator-selfsigned-issuer:issuer',
     ],
+    resource_deps=["cert-manager"],
     # deploy_cert_manager() runs local() commands and registers no Tilt resource,
     # so a resource_dep cannot be declared here. Tilt retries on failure.
     labels=[GROUP_WANDB_OPERATOR],
@@ -342,19 +376,20 @@ if settings.get("installWandb"):
             labels=[GROUP_WANDB_APP],
         )
     elif LOCAL_NETWORKING_MODE == 'gateway':
-        managed_endpoint_resource(
-            name='Wandb-Endpoint',
-            anchor_object='wandb-endpoint-anchor:configmap:default',
-            deps=['Wandb', 'nginx-gateway-fabric'],
-            local_port=8080,
-            remote_port=80,
-            link_name='W&B gateway',
-            local_host='wandb.localhost',
-            pod_selector={
-                'gateway.networking.k8s.io/gateway-name': crName + '-gateway',
-            },
-            labels=[GROUP_WANDB_APP],
-        )
+      print("")
+#         managed_endpoint_resource(
+#             name='Wandb-Endpoint',
+#             anchor_object='wandb-endpoint-anchor:configmap:default',
+#             deps=['Wandb', 'nginx-gateway-fabric'],
+#             local_port=8080,
+#             remote_port=80,
+#             link_name='W&B gateway',
+#             local_host='wandb.localhost',
+#             pod_selector={
+#                 'gateway.networking.k8s.io/gateway-name': crName + '-gateway',
+#             },
+#             labels=[GROUP_WANDB_APP],
+#         )
     else:
         managed_endpoint_resource(
             name='Wandb-Endpoint',
