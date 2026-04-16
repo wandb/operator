@@ -42,6 +42,17 @@ func reconcileGateway(ctx context.Context, c ctrlClient.Client, wandb *apiv2.Wei
 	}
 
 	gatewayName := fmt.Sprintf("%s-gateway", wandb.Name)
+	annotations := utils.MergeMapsStringString(make(map[string]string), gwConfig.Gateway.Annotations)
+
+	if wandb.Spec.Networking.TLS != nil && wandb.Spec.Networking.TLS.CertManager != nil {
+		cm := wandb.Spec.Networking.TLS.CertManager
+		if cm.ClusterIssuer != "" {
+			annotations["cert-manager.io/cluster-issuer"] = cm.ClusterIssuer
+		}
+		if cm.Issuer != "" {
+			annotations["cert-manager.io/issuer"] = cm.Issuer
+		}
+	}
 
 	desired := &gatewayv1.Gateway{
 		ObjectMeta: metav1.ObjectMeta{
@@ -51,7 +62,7 @@ func reconcileGateway(ctx context.Context, c ctrlClient.Client, wandb *apiv2.Wei
 				"app.kubernetes.io/managed-by": "wandb-operator",
 				"app.kubernetes.io/instance":   wandb.Name,
 			},
-			Annotations: gwConfig.Gateway.Annotations,
+			Annotations: annotations,
 		},
 		Spec: gatewayv1.GatewaySpec{
 			GatewayClassName: gatewayv1.ObjectName(*gwConfig.Gateway.GatewayClassName),
