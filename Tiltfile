@@ -376,20 +376,19 @@ if settings.get("installWandb"):
             labels=[GROUP_WANDB_APP],
         )
     elif LOCAL_NETWORKING_MODE == 'gateway':
-      print("")
-#         managed_endpoint_resource(
-#             name='Wandb-Endpoint',
-#             anchor_object='wandb-endpoint-anchor:configmap:default',
-#             deps=['Wandb', 'nginx-gateway-fabric'],
-#             local_port=8080,
-#             remote_port=80,
-#             link_name='W&B gateway',
-#             local_host='wandb.localhost',
-#             pod_selector={
-#                 'gateway.networking.k8s.io/gateway-name': crName + '-gateway',
-#             },
-#             labels=[GROUP_WANDB_APP],
-#         )
+        managed_endpoint_resource(
+            name='Wandb-Endpoint',
+            anchor_object='wandb-endpoint-anchor:configmap:default',
+            deps=['Wandb', 'nginx-gateway-fabric'],
+            local_port=8080,
+            remote_port=80,
+            link_name='W&B gateway',
+            local_host='wandb.localhost',
+            pod_selector={
+                'gateway.networking.k8s.io/gateway-name': crName + '-gateway',
+            },
+            labels=[GROUP_WANDB_APP],
+        )
     else:
         managed_endpoint_resource(
             name='Wandb-Endpoint',
