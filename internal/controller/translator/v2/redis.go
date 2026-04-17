@@ -166,6 +166,9 @@ func ToRedisSentinelVendorSpec(
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				Resources:       &corev1.ResourceRequirements{},
 			},
+			PodSecurityContext: &corev1.PodSecurityContext{
+				FSGroup: ptr.Int64(1000),
+			},
 			Affinity:    wandb.GetAffinity(spec.ManagedInfraSpec),
 			Tolerations: wandb.GetTolerations(spec.ManagedInfraSpec),
 			RedisSentinelConfig: &redissentinelv1beta2.RedisSentinelConfig{
@@ -240,6 +243,9 @@ func ToRedisReplicationVendorSpec(
 				Image:           translator.RedisReplicationImage,
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				Resources:       &corev1.ResourceRequirements{},
+			},
+			PodSecurityContext: &corev1.PodSecurityContext{
+				FSGroup: ptr.Int64(1000),
 			},
 			Affinity:    wandb.GetAffinity(spec.ManagedInfraSpec),
 			Tolerations: wandb.GetTolerations(spec.ManagedInfraSpec),
