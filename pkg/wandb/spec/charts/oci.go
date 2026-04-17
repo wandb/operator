@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/go-playground/validator/v10"
@@ -15,6 +16,7 @@ import (
 	"helm.sh/helm/v4/pkg/registry"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	orasregistry "oras.land/oras-go/v2/registry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -23,7 +25,7 @@ import (
 // The URL must use the oci:// scheme (e.g., oci://ghcr.io/wandb/helm-charts/operator-wandb).
 type OCIRelease struct {
 	URL     string `validate:"required,ociurl" json:"url"`
-	Version string `validate:"required" json:"version"`
+	Version string `validate:"ociversion" json:"version,omitempty"`
 
 	CredentialSecret *CredentialSecret `json:"credentialSecret,omitempty"`
 	Password         string            `json:"password"`
@@ -37,14 +39,49 @@ func validateOCIURL(fl validator.FieldLevel) bool {
 	return registry.IsOCI(fl.Field().String())
 }
 
+func validateOCIVersion(fl validator.FieldLevel) bool {
+	release, ok := fl.Parent().Interface().(OCIRelease)
+	if !ok {
+		return false
+	}
+	if release.Version != "" {
+		return true
+	}
+
+	parsedRef, err := orasregistry.ParseReference(strings.TrimPrefix(
+		release.URL,
+		fmt.Sprintf("%s://", registry.OCIScheme),
+	))
+	if err != nil {
+		return false
+	}
+
+	return parsedRef.Reference != ""
+}
+
 func (c OCIRelease) Validate() error {
 	v := validator.New()
 	v.RegisterValidation("ociurl", validateOCIURL)
+	v.RegisterValidation("ociversion", validateOCIVersion)
 	return v.Struct(c)
 }
 
 func (r OCIRelease) Chart() (*chart.Chart, error) {
 	return r.pullChart()
+}
+
+func (r OCIRelease) pullReference(registryClient *registry.Client) (string, error) {
+	parsedURL, err := url.Parse(r.URL)
+	if err != nil {
+		return "", fmt.Errorf("invalid OCI URL %q: %w", r.URL, err)
+	}
+
+	_, normalizedRef, err := registryClient.ValidateReference(r.URL, r.Version, parsedURL)
+	if err != nil {
+		return "", fmt.Errorf("failed to validate OCI reference %s: %w", r.URL, err)
+	}
+
+	return normalizedRef.String(), nil
 }
 
 func (r OCIRelease) pullChart() (*chart.Chart, error) {
@@ -72,10 +109,10 @@ func (r OCIRelease) pullChart() (*chart.Chart, error) {
 		return nil, fmt.Errorf("failed to create registry client: %w", err)
 	}
 
-	// Build the OCI reference: strip oci:// prefix, append :version if set
-	ref := strings.TrimPrefix(r.URL, fmt.Sprintf("%s://", registry.OCIScheme))
-	if r.Version != "" {
-		ref = fmt.Sprintf("%s:%s", ref, r.Version)
+	ref, err := r.pullReference(registryClient)
+	if err != nil {
+		log.Error(err, "Failed to normalize OCI reference", "url", r.URL, "version", r.Version)
+		return nil, err
 	}
 
 	if r.Debug {

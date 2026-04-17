@@ -9,6 +9,7 @@ import (
 	. "github.com/onsi/gomega"
 	v1 "github.com/wandb/operator/api/v1"
 	"github.com/wandb/operator/pkg/wandb/spec"
+	"helm.sh/helm/v4/pkg/registry"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -45,15 +46,31 @@ var _ = Describe("OCIRelease", func() {
 				Entry("ghcr.io", "oci://ghcr.io/wandb/charts/wandb"),
 				Entry("docker.io", "oci://docker.io/library/nginx"),
 				Entry("custom registry with port", "oci://registry.example.com:5000/charts/wandb"),
+				Entry("tagged reference without version", "oci://ghcr.io/wandb/charts/wandb:1.0.0"),
+				Entry("digest reference without version", "oci://ghcr.io/wandb/charts/wandb@sha256:c6841b3a895f1444a6738b5d04564a57e860ce42f8519c3be807fb6d9bee7888"),
 			)
 		})
 
 		Context("with missing version", func() {
-			It("should fail validation", func() {
+			It("should fail validation for unqualified repository URLs", func() {
 				ociRelease.Version = ""
 				err := ociRelease.Validate()
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("Version"))
+			})
+
+			It("should allow tagged OCI URLs", func() {
+				ociRelease.URL = "oci://ghcr.io/wandb/charts/wandb:1.0.0"
+				ociRelease.Version = ""
+				err := ociRelease.Validate()
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should allow digest OCI URLs", func() {
+				ociRelease.URL = "oci://ghcr.io/wandb/charts/wandb@sha256:c6841b3a895f1444a6738b5d04564a57e860ce42f8519c3be807fb6d9bee7888"
+				ociRelease.Version = ""
+				err := ociRelease.Validate()
+				Expect(err).NotTo(HaveOccurred())
 			})
 		})
 
@@ -131,6 +148,49 @@ var _ = Describe("OCIRelease", func() {
 			_, err := ociRelease.pullChart()
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("failed to pull chart"))
+		})
+	})
+
+	Describe("pullReference", func() {
+		var registryClient *registry.Client
+
+		BeforeEach(func() {
+			var err error
+			registryClient, err = registry.NewClient()
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should preserve an explicit tag from the URL", func() {
+			ociRelease.URL = "oci://ghcr.io/wandb/charts/wandb:1.2.3"
+			ociRelease.Version = ""
+
+			ref, err := ociRelease.pullReference(registryClient)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ref).To(Equal("oci://ghcr.io/wandb/charts/wandb:1.2.3"))
+		})
+
+		It("should preserve an explicit digest from the URL", func() {
+			ociRelease.URL = "oci://ghcr.io/wandb/charts/wandb@sha256:c6841b3a895f1444a6738b5d04564a57e860ce42f8519c3be807fb6d9bee7888"
+			ociRelease.Version = ""
+
+			ref, err := ociRelease.pullReference(registryClient)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ref).To(Equal("oci://ghcr.io/wandb/charts/wandb@sha256:c6841b3a895f1444a6738b5d04564a57e860ce42f8519c3be807fb6d9bee7888"))
+		})
+
+		It("should combine a repository URL with the version field", func() {
+			ref, err := ociRelease.pullReference(registryClient)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ref).To(Equal("oci://ghcr.io/wandb/helm-charts/operator-wandb:1.0.0"))
+		})
+
+		It("should reject mismatched tagged URLs and version fields", func() {
+			ociRelease.URL = "oci://ghcr.io/wandb/charts/wandb:1.2.3"
+			ociRelease.Version = "2.0.0"
+
+			_, err := ociRelease.pullReference(registryClient)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("chart reference and version mismatch"))
 		})
 	})
 
