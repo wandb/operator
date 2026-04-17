@@ -33,7 +33,7 @@ dependencies:
     repository: https://operator.min.io
     condition: minio-operator.enabled
   - name: altinity-clickhouse-operator
-    version: 0.25.6
+    version: 0.26.3
     repository: https://helm.altinity.com
     condition: altinity-clickhouse-operator.enabled
   - name: victoria-metrics-operator

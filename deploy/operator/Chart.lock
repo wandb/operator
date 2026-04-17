@@ -16,7 +16,7 @@ dependencies:
   version: 7.1.1
 - name: altinity-clickhouse-operator
   repository: https://helm.altinity.com
-  version: 0.25.6
+  version: 0.26.3
 - name: victoria-metrics-operator
   repository: https://victoriametrics.github.io/helm-charts/
   version: 0.58.1
@@ -26,5 +26,5 @@ dependencies:
 - name: telemetry
   repository: file://../telemetry
   version: 0.1.0
-digest: sha256:9e8fefe7571cbdabfa706781ecde75570791fd8e153eb4f42220e99d99f7d91a
-generated: "2026-04-09T09:25:17.078486-07:00"
+digest: sha256:db393ac4649d0982f09592f14b7ba24979db0b0fb81b3f15e4ad15855bdaaf42
+generated: "2026-04-17T09:33:06.130189-07:00"
