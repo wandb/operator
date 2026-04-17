@@ -164,6 +164,7 @@ func ToClickHouseVendorSpec(
 								Requests: spec.Config.Resources.Requests,
 								Limits:   spec.Config.Resources.Limits,
 							},
+							Image: "altinity/clickhouse-server:25.8.16.10002.altinitystable",
 						},
 					},
 				},
