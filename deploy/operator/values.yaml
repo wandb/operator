@@ -131,6 +131,10 @@ minio-operator:
   install: true
 
 altinity-clickhouse-operator:
+  crdHook:
+    image:
+      repository: alpine/k8s
+      tag: 1.35.4
   install: true
   configs:
     files:
