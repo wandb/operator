@@ -49,12 +49,13 @@ func ToMysqlMySQLVendorSpec(
 			TLSUseSelfSigned: true,
 			ImagePullPolicy:  corev1.PullIfNotPresent,
 			PodLabels:        BuildWandbMysqlLabels(wandb),
-			DatadirVolumeClaimTemplate: &corev1.PersistentVolumeClaim{
-				Spec: corev1.PersistentVolumeClaimSpec{
-					Resources: corev1.VolumeResourceRequirements{
-						Requests: corev1.ResourceList{
-							corev1.ResourceStorage: storageQuantity,
-						},
+			DatadirVolumeClaimTemplate: &corev1.PersistentVolumeClaimSpec{
+				AccessModes: []corev1.PersistentVolumeAccessMode{
+					corev1.ReadWriteOnce,
+				},
+				Resources: corev1.VolumeResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceStorage: storageQuantity,
 					},
 				},
 			},
