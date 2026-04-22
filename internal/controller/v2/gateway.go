@@ -69,6 +69,13 @@ func reconcileGateway(ctx context.Context, c ctrlClient.Client, wandb *apiv2.Wei
 		},
 	}
 
+	if wandb.Spec.Networking.Annotations != nil {
+		desired.Spec.Infrastructure.Annotations = map[gatewayv1.AnnotationKey]gatewayv1.AnnotationValue{}
+		for k, v := range wandb.Spec.Networking.Annotations {
+			desired.Spec.Infrastructure.Annotations[gatewayv1.AnnotationKey(k)] = gatewayv1.AnnotationValue(v)
+		}
+	}
+
 	if len(gwConfig.Gateway.Listeners) > 0 {
 		desired.Spec.Listeners = buildListenersFromConfig(gwConfig.Gateway.Listeners, wandb)
 	} else {
