@@ -42,7 +42,7 @@ func reconcileGateway(ctx context.Context, c ctrlClient.Client, wandb *apiv2.Wei
 	}
 
 	gatewayName := fmt.Sprintf("%s-gateway", wandb.Name)
-	annotations := utils.MergeMapsStringString(make(map[string]string), gwConfig.Gateway.Annotations)
+	annotations := utils.MergeMapsStringString(make(map[string]string), wandb.Spec.Networking.Annotations)
 
 	if wandb.Spec.Networking.TLS != nil && wandb.Spec.Networking.TLS.CertManager != nil {
 		cm := wandb.Spec.Networking.TLS.CertManager
@@ -69,9 +69,12 @@ func reconcileGateway(ctx context.Context, c ctrlClient.Client, wandb *apiv2.Wei
 		},
 	}
 
-	if wandb.Spec.Networking.Annotations != nil {
+	if wandb.Spec.Networking.GatewayAPI.Gateway.InfrastructureAnnotations != nil {
+		if desired.Spec.Infrastructure == nil {
+			desired.Spec.Infrastructure = &gatewayv1.GatewayInfrastructure{}
+		}
 		desired.Spec.Infrastructure.Annotations = map[gatewayv1.AnnotationKey]gatewayv1.AnnotationValue{}
-		for k, v := range wandb.Spec.Networking.Annotations {
+		for k, v := range wandb.Spec.Networking.GatewayAPI.Gateway.InfrastructureAnnotations {
 			desired.Spec.Infrastructure.Annotations[gatewayv1.AnnotationKey(k)] = gatewayv1.AnnotationValue(v)
 		}
 	}
