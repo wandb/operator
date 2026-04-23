@@ -195,7 +195,7 @@ func reconcileInfraHTTPRoutes(
 		}
 		logger.Info(fmt.Sprintf("Successfully %s HTTPRoute", op), "HTTPRoute", httpRoute.Name)
 
-		if httpRoute.Status.Parents[0].ControllerName == "networking.gke.io/gateway" {
+		if len(httpRoute.Status.Parents) > 0 && httpRoute.Status.Parents[0].ControllerName == "networking.gke.io/gateway" {
 			healthCheckPolicy := &gkeGatewayApiNetworkingv1.HealthCheckPolicy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      entry.name,
