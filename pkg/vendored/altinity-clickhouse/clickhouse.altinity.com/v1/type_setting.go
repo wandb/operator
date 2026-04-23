@@ -20,7 +20,7 @@ import (
 	"strings"
 
 	"github.com/wandb/operator/pkg/vendored/altinity-clickhouse/common/types"
-	util2 "github.com/wandb/operator/pkg/vendored/altinity-clickhouse/util"
+	"github.com/wandb/operator/pkg/vendored/altinity-clickhouse/util"
 )
 
 // Settings value can be one of:
@@ -193,7 +193,7 @@ func (s *Setting) HasValue() bool {
 }
 
 // ApplyMacros applies macros on the Setting
-func (s *Setting) ApplyMacros(macros *util2.Replacer) {
+func (s *Setting) ApplyMacros(macros *util.Replacer) {
 	if s == nil {
 		return
 	}
@@ -226,12 +226,12 @@ func (s *Setting) MergeFrom(from *Setting) *Setting {
 	// In case recipient does not exist just copy values from source
 	if s == nil {
 		new := NewSettingVector(from.VectorOfStrings())
-		new.attributes = util2.MergeStringMapsPreserve(new.attributes, from.attributes)
+		new.attributes = util.MergeStringMapsPreserve(new.attributes, from.attributes)
 		return new
 	}
 
-	s.vector = util2.MergeStringArrays(s.vector, from.vector)
-	s.attributes = util2.MergeStringMapsPreserve(s.attributes, from.attributes)
+	s.vector = util.MergeStringArrays(s.vector, from.vector)
+	s.attributes = util.MergeStringMapsPreserve(s.attributes, from.attributes)
 
 	return s
 }

@@ -14,9 +14,7 @@
 
 package v1
 
-import (
-	"github.com/wandb/operator/pkg/vendored/altinity-clickhouse/common/types"
-)
+import "github.com/wandb/operator/pkg/vendored/altinity-clickhouse/common/types"
 
 // Defaults defines defaults section of .spec
 type Defaults struct {

@@ -18,13 +18,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-
-	types2 "github.com/wandb/operator/pkg/vendored/altinity-clickhouse/common/types"
-	swversion2 "github.com/wandb/operator/pkg/vendored/altinity-clickhouse/swversion"
-	util2 "github.com/wandb/operator/pkg/vendored/altinity-clickhouse/util"
+	"github.com/wandb/operator/pkg/vendored/altinity-clickhouse/swversion"
 
 	"github.com/imdario/mergo"
 	"gopkg.in/yaml.v3"
+
+	"github.com/wandb/operator/pkg/vendored/altinity-clickhouse/common/types"
+	"github.com/wandb/operator/pkg/vendored/altinity-clickhouse/util"
 )
 
 func (cr *ClickHouseInstallation) GetSpec() ICRSpec {
@@ -165,7 +165,7 @@ func (cr *ClickHouseInstallation) GetUsedTemplates() []*TemplateRef {
 }
 
 // FillStatus fills .Status
-func (cr *ClickHouseInstallation) FillStatus(endpoints util2.Slice[string], pods, fqdns []string, ip string) {
+func (cr *ClickHouseInstallation) FillStatus(endpoints util.Slice[string], pods, fqdns []string, ip string) {
 	cr.EnsureStatus().Fill(&FillStatusParams{
 		CHOpIP:              ip,
 		ClustersCount:       cr.ClustersCount(),
@@ -182,7 +182,7 @@ func (cr *ClickHouseInstallation) FillStatus(endpoints util2.Slice[string], pods
 		FQDNs:               fqdns,
 		Endpoint:            endpoints.First(),
 		Endpoints:           append([]string{}, endpoints...),
-		NormalizedCR: cr.Copy(types2.CopyCROptions{
+		NormalizedCR: cr.Copy(types.CopyCROptions{
 			SkipStatus:        true,
 			SkipManagedFields: true,
 		}),
@@ -210,10 +210,10 @@ func (cr *ClickHouseInstallation) MergeFrom(from *ClickHouseInstallation, _type 
 	}
 	// Exclude skipped annotations
 	cr.SetAnnotations(
-		util2.CopyMapFilter(
+		util.CopyMapFilter(
 			cr.GetAnnotations(),
 			nil,
-			util2.ListSkippedAnnotations(),
+			util.ListSkippedAnnotations(),
 		),
 	)
 
@@ -223,8 +223,8 @@ func (cr *ClickHouseInstallation) MergeFrom(from *ClickHouseInstallation, _type 
 	// Copy service attributes
 	cr.EnsureRuntime().attributes = from.EnsureRuntime().attributes
 
-	cr.EnsureStatus().CopyFrom(from.Status, types2.CopyStatusOptions{
-		CopyStatusFieldGroup: types2.CopyStatusFieldGroup{
+	cr.EnsureStatus().CopyFrom(from.Status, types.CopyStatusOptions{
+		CopyStatusFieldGroup: types.CopyStatusFieldGroup{
 			FieldGroupInheritable: true,
 		},
 	})
@@ -293,7 +293,7 @@ func (cr *ClickHouseInstallation) HostsCount() int {
 }
 
 // HostsWithAttributesCount counts hosts by attributes
-func (cr *ClickHouseInstallation) HostsWithAttributesCount(a *types2.ReconcileAttributes) int {
+func (cr *ClickHouseInstallation) HostsWithAttributesCount(a *types.ReconcileAttributes) int {
 	count := 0
 	cr.WalkHosts(func(host *Host) error {
 		if host.GetReconcileAttributes().HasIntersectionWith(a) {
@@ -304,9 +304,15 @@ func (cr *ClickHouseInstallation) HostsWithAttributesCount(a *types2.ReconcileAt
 	return count
 }
 
+// HasReconcileWork reports whether the CR has any work to reconcile:
+// either the ActionPlan has spec/label/finalizer changes, or child resources have drifted.
+func (cr *ClickHouseInstallation) HasReconcileWork() bool {
+	return cr.EnsureRuntime().ActionPlan.HasActionsToDo() || cr.GetHostsAttributesCounters().HasDrift()
+}
+
 // GetHostsAttributesCounters
-func (cr *ClickHouseInstallation) GetHostsAttributesCounters() *types2.ReconcileAttributesCounters {
-	counters := types2.NewReconcileAttributesCounters()
+func (cr *ClickHouseInstallation) GetHostsAttributesCounters() *types.ReconcileAttributesCounters {
+	counters := types.NewReconcileAttributesCounters()
 	cr.WalkHosts(func(host *Host) error {
 		counters.Add(host.GetReconcileAttributes())
 		return nil
@@ -473,7 +479,7 @@ func (cr *ClickHouseInstallation) GetReconcile() *ChiReconcile {
 }
 
 // Copy makes copy of a CHI, filtering fields according to specified CopyOptions
-func (cr *ClickHouseInstallation) Copy(opts types2.CopyCROptions) *ClickHouseInstallation {
+func (cr *ClickHouseInstallation) Copy(opts types.CopyCROptions) *ClickHouseInstallation {
 	if cr == nil {
 		return nil
 	}
@@ -482,24 +488,24 @@ func (cr *ClickHouseInstallation) Copy(opts types2.CopyCROptions) *ClickHouseIns
 		return nil
 	}
 
-	var chi2 *ClickHouseInstallation
-	if err := json.Unmarshal(jsonBytes, &chi2); err != nil {
+	var cr2 *ClickHouseInstallation
+	if err := json.Unmarshal(jsonBytes, &cr2); err != nil {
 		return nil
 	}
 
 	if opts.SkipStatus {
-		chi2.Status = nil
+		cr2.Status = nil
 	}
 
 	if opts.SkipManagedFields {
-		chi2.SetManagedFields(nil)
+		cr2.SetManagedFields(nil)
 	}
 
-	return chi2
+	return cr2
 }
 
 // JSON returns JSON string
-func (cr *ClickHouseInstallation) JSON(opts types2.CopyCROptions) string {
+func (cr *ClickHouseInstallation) JSON(opts types.CopyCROptions) string {
 	if cr == nil {
 		return ""
 	}
@@ -514,7 +520,7 @@ func (cr *ClickHouseInstallation) JSON(opts types2.CopyCROptions) string {
 }
 
 // YAML return YAML string
-func (cr *ClickHouseInstallation) YAML(opts types2.CopyCROptions) string {
+func (cr *ClickHouseInstallation) YAML(opts types.CopyCROptions) string {
 	if cr == nil {
 		return ""
 	}
@@ -527,7 +533,7 @@ func (cr *ClickHouseInstallation) YAML(opts types2.CopyCROptions) string {
 	return string(yamlBytes)
 }
 
-// FirstHost returns first host of the CHI
+// FirstHost returns first host of the CR
 func (cr *ClickHouseInstallation) FirstHost() *Host {
 	var result *Host
 	cr.WalkHosts(func(host *Host) error {
@@ -628,7 +634,7 @@ func (cr *ClickHouseInstallation) WalkHostsFullPathAndScope(
 	if cr == nil {
 		return nil
 	}
-	address := types2.NewHostScopeAddress(crScopeCycleSize, clusterScopeCycleSize)
+	address := types.NewHostScopeAddress(crScopeCycleSize, clusterScopeCycleSize)
 	for clusterIndex := range cr.GetSpecT().Configuration.Clusters {
 		cluster := cr.GetSpecT().Configuration.Clusters[clusterIndex]
 		address.ClusterScopeAddress.Init()
@@ -708,12 +714,12 @@ func (cr *ClickHouseInstallation) IsNonZero() bool {
 }
 
 func (cr *ClickHouseInstallation) NamespaceName() (string, string) {
-	return util2.NamespaceName(cr)
+	return util.NamespaceName(cr)
 }
 
 func (cr *ClickHouseInstallation) FindMinMaxVersions() {
-	cr.runtime.MinVersion = swversion2.MaxVersion()
-	cr.runtime.MaxVersion = swversion2.MinVersion()
+	cr.runtime.MinVersion = swversion.MaxVersion()
+	cr.runtime.MaxVersion = swversion.MinVersion()
 	cr.WalkHosts(func(host *Host) error {
 		if host.Runtime.Version.Cmp(cr.runtime.MinVersion) < 0 {
 			cr.runtime.MinVersion = host.Runtime.Version
@@ -725,10 +731,10 @@ func (cr *ClickHouseInstallation) FindMinMaxVersions() {
 	})
 }
 
-func (cr *ClickHouseInstallation) GetMinVersion() *swversion2.SoftWareVersion {
+func (cr *ClickHouseInstallation) GetMinVersion() *swversion.SoftWareVersion {
 	return cr.runtime.MinVersion
 }
 
-func (cr *ClickHouseInstallation) GetMaxVersion() *swversion2.SoftWareVersion {
+func (cr *ClickHouseInstallation) GetMaxVersion() *swversion.SoftWareVersion {
 	return cr.runtime.MaxVersion
 }

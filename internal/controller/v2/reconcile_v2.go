@@ -989,7 +989,7 @@ func ApplyInfraSizing(wandb *apiv2.WeightsAndBiases, manifest serverManifest.Man
 
 	// Default ClickHouse
 	if wandb.Spec.ClickHouse.ManagedClickHouse != nil {
-		if clickhouseConfig, ok := manifest.Redis["default"]; ok {
+		if clickhouseConfig, ok := manifest.Clickhouse["default"]; ok {
 			sizing := ResolveInfraSizing(clickhouseConfig.Sizing, size, wandb.Spec.RequireLimits)
 			spec := wandb.Spec.ClickHouse.ManagedClickHouse
 			if spec.Replicas == 0 && sizing.Replicas != 0 {
@@ -1006,7 +1006,7 @@ func ApplyInfraSizing(wandb *apiv2.WeightsAndBiases, manifest serverManifest.Man
 
 	// Default ObjectStore (bucket)
 	if wandb.Spec.ObjectStore.ManagedObjectStore != nil {
-		if objectStoreConfig, ok := manifest.Redis["default"]; ok {
+		if objectStoreConfig, ok := manifest.Bucket["default"]; ok {
 			sizing := ResolveInfraSizing(objectStoreConfig.Sizing, size, wandb.Spec.RequireLimits)
 			spec := wandb.Spec.ObjectStore.ManagedObjectStore
 			if spec.Replicas == 0 && sizing.Replicas != 0 {

@@ -17,8 +17,9 @@ package v1
 import (
 	"fmt"
 
-	types2 "github.com/wandb/operator/pkg/vendored/altinity-clickhouse/common/types"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/wandb/operator/pkg/vendored/altinity-clickhouse/common/types"
 )
 
 type ICustomResource interface {
@@ -62,14 +63,14 @@ type ICustomResource interface {
 	IEnsureStatus() IStatus
 	GetStatus() IStatus
 
-	YAML(opts types2.CopyCROptions) string
+	YAML(opts types.CopyCROptions) string
 }
 
 type ICRSpec interface {
-	GetNamespaceDomainPattern() *types2.String
+	GetNamespaceDomainPattern() *types.String
 	GetDefaults() *Defaults
 	GetConfiguration() IConfiguration
-	GetTaskID() *types2.Id
+	GetTaskID() *types.Id
 }
 
 type IConfiguration interface {
@@ -116,11 +117,11 @@ type ICluster interface {
 	HasName() bool
 	GetZookeeper() *ZookeeperConfig
 	GetSchemaPolicy() *SchemaPolicy
-	GetInsecure() *types2.StringBool
-	GetSecure() *types2.StringBool
+	GetInsecure() *types.StringBool
+	GetSecure() *types.StringBool
 	GetSecret() *ClusterSecret
-	GetPDBManaged() *types2.StringBool
-	GetPDBMaxUnavailable() *types2.Int32
+	GetPDBManaged() *types.StringBool
+	GetPDBMaxUnavailable() *types.Int32
 
 	WalkShards(f func(index int, shard IShard) error) []error
 	WalkHosts(func(host *Host) error) []error
@@ -133,7 +134,7 @@ type ICluster interface {
 	SelectSettingsSourceFrom(shard IShard, replica IReplica) any
 
 	GetRuntime() IClusterRuntime
-	GetReconcile() ClusterReconcile
+	GetReconcile() *ClusterReconcile
 	GetServiceTemplate() (*ServiceTemplate, bool)
 	GetAncestor() ICluster
 }
@@ -165,7 +166,7 @@ type IShard interface {
 	GetName() string
 	GetRuntime() IShardRuntime
 	GetServiceTemplate() (*ServiceTemplate, bool)
-	GetInternalReplication() *types2.StringBool
+	GetInternalReplication() *types.StringBool
 	HasWeight() bool
 	GetWeight() int
 	HasSettings() bool
@@ -277,7 +278,7 @@ type WalkHostsAddressFn func(
 	shard IShard,
 	replica IReplica,
 	host IHost,
-	address *types2.HostScopeAddress,
+	address *types.HostScopeAddress,
 ) error
 
 type IGenerateName interface {
