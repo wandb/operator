@@ -48,9 +48,8 @@ const applicationFinalizer = "applications.apps.wandb.com/finalizer"
 // ApplicationReconciler reconciles a Application object
 type ApplicationReconciler struct {
 	client.Client
-	Scheme           *runtime.Scheme
-	EnableRollouts   bool
-	EnableGatewayAPI bool
+	Scheme         *runtime.Scheme
+	EnableRollouts bool
 }
 
 // +kubebuilder:rbac:groups=apps.wandb.com,resources=applications,verbs=get;list;watch;create;update;patch;delete
