@@ -1116,11 +1116,11 @@ func (r *ApplicationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&autoscalingv2.HorizontalPodAutoscaler{}).
 		Named("application")
 
-	if r.EnableRollouts {
+	if utils.IsRegistered(r.Scheme, &v1alpha1.Rollout{}) {
 		controller = controller.Owns(&v1alpha1.Rollout{})
 	}
 
-	if r.EnableGatewayAPI {
+	if utils.IsRegistered(r.Scheme, &gatewayv1.Gateway{}) {
 		controller = controller.Owns(&gatewayv1.HTTPRoute{})
 	}
 
