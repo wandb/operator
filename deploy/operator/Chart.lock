@@ -4,7 +4,7 @@ dependencies:
   version: 0.11.8
 - name: mysql-operator
   repository: https://mysql.github.io/mysql-operator/
-  version: 2.2.7
+  version: 2.1.10
 - name: redis-operator
   repository: https://ot-container-kit.github.io/helm-charts
   version: 0.22.2
@@ -26,5 +26,5 @@ dependencies:
 - name: telemetry
   repository: file://../telemetry
   version: 0.1.0
-digest: sha256:db393ac4649d0982f09592f14b7ba24979db0b0fb81b3f15e4ad15855bdaaf42
-generated: "2026-04-17T09:33:06.130189-07:00"
+digest: sha256:5eb2714834dd8f6d5f5ebf80ac5bb783648193ed3faa43d60b0dc69cc1c44869
+generated: "2026-04-24T09:02:54.051615-07:00"
