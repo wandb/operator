@@ -3,7 +3,7 @@ name: operator
 description: A Helm chart for Weights & Biases operator
 type: application
 version: 2.0.0-alpha.1
-appVersion: "2.0.0"
+appVersion: "2.0.0-alpha.1"
 maintainers:
   - name: wandb
     email: support@wandb.com
