@@ -184,9 +184,15 @@ func (c *ReconcileAttributesCounters) Add(a *ReconcileAttributes) {
 	c.counters = len(c.status)
 }
 
-// IsNewOnly checks whether counters have specified status items only
+// HasOnly checks whether counters have specified status items only
 func (c *ReconcileAttributesCounters) HasOnly(status ObjectStatus) bool {
 	return c.getCounterByStatus(status) == c.total
+}
+
+// HasDrift checks whether any host has a status other than ObjectStatusSame,
+// meaning child resources have diverged from the desired state.
+func (c *ReconcileAttributesCounters) HasDrift() bool {
+	return !c.HasOnly(ObjectStatusSame)
 }
 
 func (c *ReconcileAttributesCounters) String() string {

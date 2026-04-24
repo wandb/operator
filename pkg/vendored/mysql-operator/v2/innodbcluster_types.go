@@ -36,35 +36,35 @@ type InnoDBPodSpec struct {
 // InnoDBClusterSpec defines the desired state of InnoDBCluster
 // +kubebuilder:object:generate=true
 type InnoDBClusterSpec struct {
-	SecretName                 string                        `json:"secretName"`
-	TLSCASecretName            string                        `json:"tlsCASecretName,omitempty"`
-	TLSSecretName              string                        `json:"tlsSecretName,omitempty"`
-	TLSUseSelfSigned           bool                          `json:"tlsUseSelfSigned,omitempty"`
-	Version                    string                        `json:"version,omitempty"`
-	Edition                    string                        `json:"edition,omitempty"`
-	ImageRepository            string                        `json:"imageRepository,omitempty"`
-	ImagePullPolicy            corev1.PullPolicy             `json:"imagePullPolicy,omitempty"`
-	ImagePullSecrets           []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
-	ServiceAccountName         string                        `json:"serviceAccountName,omitempty"`
-	BaseServerId               int32                         `json:"baseServerId,omitempty"`
-	DatadirVolumeClaimTemplate *corev1.PersistentVolumeClaim `json:"datadirVolumeClaimTemplate,omitempty"`
-	DatadirPermissions         *DatadirPermissions           `json:"datadirPermissions,omitempty"`
-	Mycnf                      string                        `json:"mycnf,omitempty"`
-	Instances                  int32                         `json:"instances,omitempty"`
-	PodSpec                    *InnoDBPodSpec                `json:"podSpec,omitempty"`
-	PodAnnotations             map[string]string             `json:"podAnnotations,omitempty"`
-	PodLabels                  map[string]string             `json:"podLabels,omitempty"`
-	Keyring                    *KeyringSpec                  `json:"keyring,omitempty"`
-	InitDB                     *InitDBSpec                   `json:"initDB,omitempty"`
-	Router                     *RouterSpec                   `json:"router,omitempty"`
-	InstanceService            *ServiceConfig                `json:"instanceService,omitempty"`
-	Service                    *ServiceConfig                `json:"service,omitempty"`
-	Metrics                    *MetricsSpec                  `json:"metrics,omitempty"`
-	BackupProfiles             []BackupProfile               `json:"backupProfiles,omitempty"`
-	BackupSchedules            []BackupSchedule              `json:"backupSchedules,omitempty"`
-	Logs                       *LogsSpec                     `json:"logs,omitempty"`
-	ReadReplicas               []ReadReplicaSpec             `json:"readReplicas,omitempty"`
-	ServiceFqdnTemplate        string                        `json:"serviceFqdnTemplate,omitempty"`
+	SecretName                 string                            `json:"secretName"`
+	TLSCASecretName            string                            `json:"tlsCASecretName,omitempty"`
+	TLSSecretName              string                            `json:"tlsSecretName,omitempty"`
+	TLSUseSelfSigned           bool                              `json:"tlsUseSelfSigned,omitempty"`
+	Version                    string                            `json:"version,omitempty"`
+	Edition                    string                            `json:"edition,omitempty"`
+	ImageRepository            string                            `json:"imageRepository,omitempty"`
+	ImagePullPolicy            corev1.PullPolicy                 `json:"imagePullPolicy,omitempty"`
+	ImagePullSecrets           []corev1.LocalObjectReference     `json:"imagePullSecrets,omitempty"`
+	ServiceAccountName         string                            `json:"serviceAccountName,omitempty"`
+	BaseServerId               int32                             `json:"baseServerId,omitempty"`
+	DatadirVolumeClaimTemplate *corev1.PersistentVolumeClaimSpec `json:"datadirVolumeClaimTemplate,omitempty"`
+	DatadirPermissions         *DatadirPermissions               `json:"datadirPermissions,omitempty"`
+	Mycnf                      string                            `json:"mycnf,omitempty"`
+	Instances                  int32                             `json:"instances,omitempty"`
+	PodSpec                    *InnoDBPodSpec                    `json:"podSpec,omitempty"`
+	PodAnnotations             map[string]string                 `json:"podAnnotations,omitempty"`
+	PodLabels                  map[string]string                 `json:"podLabels,omitempty"`
+	Keyring                    *KeyringSpec                      `json:"keyring,omitempty"`
+	InitDB                     *InitDBSpec                       `json:"initDB,omitempty"`
+	Router                     *RouterSpec                       `json:"router,omitempty"`
+	InstanceService            *ServiceConfig                    `json:"instanceService,omitempty"`
+	Service                    *ServiceConfig                    `json:"service,omitempty"`
+	Metrics                    *MetricsSpec                      `json:"metrics,omitempty"`
+	BackupProfiles             []BackupProfile                   `json:"backupProfiles,omitempty"`
+	BackupSchedules            []BackupSchedule                  `json:"backupSchedules,omitempty"`
+	Logs                       *LogsSpec                         `json:"logs,omitempty"`
+	ReadReplicas               []ReadReplicaSpec                 `json:"readReplicas,omitempty"`
+	ServiceFqdnTemplate        string                            `json:"serviceFqdnTemplate,omitempty"`
 }
 
 // +kubebuilder:object:generate=true

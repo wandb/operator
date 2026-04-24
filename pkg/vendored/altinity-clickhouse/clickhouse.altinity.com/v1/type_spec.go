@@ -15,24 +15,24 @@
 package v1
 
 import (
-	types2 "github.com/wandb/operator/pkg/vendored/altinity-clickhouse/common/types"
+	"github.com/wandb/operator/pkg/vendored/altinity-clickhouse/common/types"
 )
 
 // ChiSpec defines spec section of ClickHouseInstallation resource
 type ChiSpec struct {
-	TaskID                 *types2.Id         `json:"taskID,omitempty"                 yaml:"taskID,omitempty"`
-	Stop                   *types2.StringBool `json:"stop,omitempty"                   yaml:"stop,omitempty"`
-	Restart                *types2.String     `json:"restart,omitempty"                yaml:"restart,omitempty"`
-	Troubleshoot           *types2.StringBool `json:"troubleshoot,omitempty"           yaml:"troubleshoot,omitempty"`
-	Suspend                *types2.StringBool `json:"suspend,omitempty"                yaml:"suspend,omitempty"`
-	NamespaceDomainPattern *types2.String     `json:"namespaceDomainPattern,omitempty" yaml:"namespaceDomainPattern,omitempty"`
-	Templating             *ChiTemplating     `json:"templating,omitempty"             yaml:"templating,omitempty"`
-	Reconciling            *ChiReconcile      `json:"reconciling,omitempty"            yaml:"reconciling,omitempty"`
-	Reconcile              *ChiReconcile      `json:"reconcile,omitempty"              yaml:"reconcile,omitempty"`
-	Defaults               *Defaults          `json:"defaults,omitempty"               yaml:"defaults,omitempty"`
-	Configuration          *Configuration     `json:"configuration,omitempty"          yaml:"configuration,omitempty"`
-	Templates              *Templates         `json:"templates,omitempty"              yaml:"templates,omitempty"`
-	UseTemplates           []*TemplateRef     `json:"useTemplates,omitempty"           yaml:"useTemplates,omitempty"`
+	TaskID                 *types.Id         `json:"taskID,omitempty"                 yaml:"taskID,omitempty"`
+	Stop                   *types.StringBool `json:"stop,omitempty"                   yaml:"stop,omitempty"`
+	Restart                *types.String     `json:"restart,omitempty"                yaml:"restart,omitempty"`
+	Troubleshoot           *types.StringBool `json:"troubleshoot,omitempty"           yaml:"troubleshoot,omitempty"`
+	Suspend                *types.StringBool `json:"suspend,omitempty"                yaml:"suspend,omitempty"`
+	NamespaceDomainPattern *types.String     `json:"namespaceDomainPattern,omitempty" yaml:"namespaceDomainPattern,omitempty"`
+	Templating             *ChiTemplating    `json:"templating,omitempty"             yaml:"templating,omitempty"`
+	Reconciling            *ChiReconcile     `json:"reconciling,omitempty"            yaml:"reconciling,omitempty"`
+	Reconcile              *ChiReconcile     `json:"reconcile,omitempty"              yaml:"reconcile,omitempty"`
+	Defaults               *Defaults         `json:"defaults,omitempty"               yaml:"defaults,omitempty"`
+	Configuration          *Configuration    `json:"configuration,omitempty"          yaml:"configuration,omitempty"`
+	Templates              *Templates        `json:"templates,omitempty"              yaml:"templates,omitempty"`
+	UseTemplates           []*TemplateRef    `json:"useTemplates,omitempty"           yaml:"useTemplates,omitempty"`
 }
 
 // HasTaskID checks whether task id is specified
@@ -44,37 +44,37 @@ func (spec *ChiSpec) HasTaskID() bool {
 }
 
 // GetTaskID gets task id as a string
-func (spec *ChiSpec) GetTaskID() *types2.Id {
+func (spec *ChiSpec) GetTaskID() *types.Id {
 	if spec == nil {
 		return nil
 	}
 	return spec.TaskID
 }
 
-func (spec *ChiSpec) GetStop() *types2.StringBool {
+func (spec *ChiSpec) GetStop() *types.StringBool {
 	if spec == nil {
-		return (*types2.StringBool)(nil)
+		return (*types.StringBool)(nil)
 	}
 	return spec.Stop
 }
 
-func (spec *ChiSpec) GetRestart() *types2.String {
+func (spec *ChiSpec) GetRestart() *types.String {
 	if spec == nil {
-		return (*types2.String)(nil)
+		return (*types.String)(nil)
 	}
 	return spec.Restart
 }
 
-func (spec *ChiSpec) GetTroubleshoot() *types2.StringBool {
+func (spec *ChiSpec) GetTroubleshoot() *types.StringBool {
 	if spec == nil {
-		return (*types2.StringBool)(nil)
+		return (*types.StringBool)(nil)
 	}
 	return spec.Troubleshoot
 }
 
-func (spec *ChiSpec) GetNamespaceDomainPattern() *types2.String {
+func (spec *ChiSpec) GetNamespaceDomainPattern() *types.String {
 	if spec == nil {
-		return (*types2.String)(nil)
+		return (*types.String)(nil)
 	}
 	return spec.NamespaceDomainPattern
 }
@@ -157,8 +157,7 @@ func (spec *ChiSpec) MergeFrom(from *ChiSpec, _type MergeType) {
 			spec.NamespaceDomainPattern = spec.NamespaceDomainPattern.MergeFrom(from.NamespaceDomainPattern)
 		}
 		if from.Suspend.HasValue() {
-			// Override by non-empty values only
-			spec.Suspend = from.Suspend
+			spec.Suspend = spec.Suspend.MergeFrom(from.Suspend)
 		}
 	}
 

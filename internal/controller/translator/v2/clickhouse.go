@@ -113,6 +113,12 @@ func ToClickHouseVendorSpec(
 						Spec: corev1.PodSpec{
 							Affinity:    wandb.GetAffinity(spec.ManagedInfraSpec),
 							Tolerations: *wandb.GetTolerations(spec.ManagedInfraSpec),
+							Containers: []corev1.Container{
+								{
+									Name:  "clickhouse",
+									Image: "altinity/clickhouse-server:25.8.16.10002.altinitystable",
+								},
+							},
 						},
 					},
 				},
@@ -158,6 +164,7 @@ func ToClickHouseVendorSpec(
 								Requests: spec.Config.Resources.Requests,
 								Limits:   spec.Config.Resources.Limits,
 							},
+							Image: "altinity/clickhouse-server:25.8.16.10002.altinitystable",
 						},
 					},
 				},

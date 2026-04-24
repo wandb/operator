@@ -6,15 +6,19 @@ import (
 	"net/url"
 	"strconv"
 
+	nginxGatewayv1alpha1 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/logx"
+	"github.com/wandb/operator/pkg/utils"
 	apiErrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	controllerruntime "sigs.k8s.io/controller-runtime"
 	ctrlClient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
 func reconcileGateway(ctx context.Context, c ctrlClient.Client, wandb *apiv2.WeightsAndBiases) error {
@@ -38,6 +42,17 @@ func reconcileGateway(ctx context.Context, c ctrlClient.Client, wandb *apiv2.Wei
 	}
 
 	gatewayName := fmt.Sprintf("%s-gateway", wandb.Name)
+	annotations := utils.MergeMapsStringString(make(map[string]string), wandb.Spec.Networking.Annotations)
+
+	if wandb.Spec.Networking.TLS != nil && wandb.Spec.Networking.TLS.CertManager != nil {
+		cm := wandb.Spec.Networking.TLS.CertManager
+		if cm.ClusterIssuer != "" {
+			annotations["cert-manager.io/cluster-issuer"] = cm.ClusterIssuer
+		}
+		if cm.Issuer != "" {
+			annotations["cert-manager.io/issuer"] = cm.Issuer
+		}
+	}
 
 	desired := &gatewayv1.Gateway{
 		ObjectMeta: metav1.ObjectMeta{
@@ -47,11 +62,21 @@ func reconcileGateway(ctx context.Context, c ctrlClient.Client, wandb *apiv2.Wei
 				"app.kubernetes.io/managed-by": "wandb-operator",
 				"app.kubernetes.io/instance":   wandb.Name,
 			},
-			Annotations: gwConfig.Gateway.Annotations,
+			Annotations: annotations,
 		},
 		Spec: gatewayv1.GatewaySpec{
 			GatewayClassName: gatewayv1.ObjectName(*gwConfig.Gateway.GatewayClassName),
 		},
+	}
+
+	if wandb.Spec.Networking.GatewayAPI.Gateway.InfrastructureAnnotations != nil {
+		if desired.Spec.Infrastructure == nil {
+			desired.Spec.Infrastructure = &gatewayv1.GatewayInfrastructure{}
+		}
+		desired.Spec.Infrastructure.Annotations = map[gatewayv1.AnnotationKey]gatewayv1.AnnotationValue{}
+		for k, v := range wandb.Spec.Networking.GatewayAPI.Gateway.InfrastructureAnnotations {
+			desired.Spec.Infrastructure.Annotations[gatewayv1.AnnotationKey(k)] = gatewayv1.AnnotationValue(v)
+		}
 	}
 
 	if len(gwConfig.Gateway.Listeners) > 0 {
@@ -86,12 +111,46 @@ func reconcileGateway(ctx context.Context, c ctrlClient.Client, wandb *apiv2.Wei
 	if wandb.Status.GatewayStatus == nil {
 		wandb.Status.GatewayStatus = summarizeGatewayStatus(desired)
 	}
+
+	maxSize := "0"
+	timeoutStr := "2m"
+	switch *wandb.Spec.Networking.GatewayAPI.Gateway.GatewayClassName {
+	case "nginx":
+		csp := &nginxGatewayv1alpha1.ClientSettingsPolicy{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      gatewayName,
+				Namespace: wandb.Namespace,
+			},
+		}
+		_, err = controllerruntime.CreateOrUpdate(ctx, c, csp, func() error {
+			csp.Spec = nginxGatewayv1alpha1.ClientSettingsPolicySpec{
+				Body: &nginxGatewayv1alpha1.ClientBody{
+					MaxSize: (*nginxGatewayv1alpha1.Size)(&maxSize),
+					Timeout: (*nginxGatewayv1alpha1.Duration)(&timeoutStr),
+				},
+				KeepAlive: nil,
+				TargetRef: gatewayv1alpha2.LocalPolicyTargetReference{
+					Name:  gatewayv1alpha2.ObjectName(gatewayName),
+					Kind:  "Gateway",
+					Group: "gateway.networking.k8s.io",
+				},
+			}
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
 func deleteGateway(ctx context.Context, c ctrlClient.Client, wandb *apiv2.WeightsAndBiases) error {
 	gatewayName := fmt.Sprintf("%s-gateway", wandb.Name)
 	gw := &gatewayv1.Gateway{}
+	if !utils.IsRegistered(c.Scheme(), gw) {
+		return nil
+	}
 	if err := c.Get(ctx, types.NamespacedName{Name: gatewayName, Namespace: wandb.Namespace}, gw); err != nil {
 		if apiErrors.IsNotFound(err) {
 			return nil

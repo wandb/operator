@@ -12,15 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// +k8s:deepcopy-gen=package,register
-// +groupName=clickhouse.altinity.com
+package util
 
-// Package v1 defines version 1 of the API used with ClickHouse Installation Custom Resources.
-package v1
+import "strings"
 
-// Possible kinds of CRDs
-const (
-	ClickHouseInstallationCRDResourceKind         = "ClickHouseInstallation"
-	ClickHouseInstallationTemplateCRDResourceKind = "ClickHouseInstallationTemplate"
-	ClickHouseOperatorCRDResourceKind             = "ClickHouseOperator"
-)
+// NormalizeFQDN strips the trailing dot from an FQDN for storage/display.
+// DNS connections use the full form with dot; status fields use the clean form.
+func NormalizeFQDN(fqdn string) string {
+	return strings.TrimSuffix(fqdn, ".")
+}
+
+// NormalizeFQDNs returns a copy of fqdns with trailing dots stripped from each entry.
+func NormalizeFQDNs(fqdns []string) []string {
+	result := make([]string, len(fqdns))
+	for i, f := range fqdns {
+		result[i] = NormalizeFQDN(f)
+	}
+	return result
+}

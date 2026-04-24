@@ -18,17 +18,19 @@ package v1
 
 import (
 	"errors"
-	"log"
 
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/conversion"
 
 	appsv2 "github.com/wandb/operator/api/v2"
 )
 
+var logger = ctrl.Log.WithName("weightsandbiases-conversion")
+
 // ConvertTo converts this WeightsAndBiases (v1) to the Hub version (v2).
 func (src *WeightsAndBiases) ConvertTo(dstRaw conversion.Hub) error {
 	dst := dstRaw.(*appsv2.WeightsAndBiases)
-	log.Printf("ConvertTo: Converting WeightsAndBiases from Spoke version v1 to Hub version v2;"+
+	logger.Info("ConvertTo: Converting WeightsAndBiases from Spoke version v1 to Hub version v2;"+
 		"source: %s/%s, target: %s/%s", src.Namespace, src.Name, dst.Namespace, dst.Name)
 
 	chart, err := src.Spec.Chart.MarshalJSON()
@@ -56,11 +58,11 @@ func (src *WeightsAndBiases) ConvertTo(dstRaw conversion.Hub) error {
 // ConvertFrom converts the Hub version (v2) to this WeightsAndBiases (v1).
 func (dst *WeightsAndBiases) ConvertFrom(srcRaw conversion.Hub) error {
 	src := srcRaw.(*appsv2.WeightsAndBiases)
-	log.Printf("ConvertFrom: Converting WeightsAndBiases from Hub version v2 to Spoke version v1;"+
+	logger.Info("ConvertFrom: Converting WeightsAndBiases from Hub version v2 to Spoke version v1;"+
 		"source: %s/%s, target: %s/%s", src.Namespace, src.Name, dst.Namespace, dst.Name)
 
 	if src.Annotations["legacy.operator.wandb.com/version"] != "v1" {
-		log.Println("ConvertFrom: Skipping conversion from non-v1 version")
+		logger.Info("ConvertFrom: Skipping conversion from non-v1 version")
 		return nil
 	}
 

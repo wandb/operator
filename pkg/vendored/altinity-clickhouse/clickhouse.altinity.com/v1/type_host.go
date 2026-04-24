@@ -15,11 +15,12 @@
 package v1
 
 import (
-	types2 "github.com/wandb/operator/pkg/vendored/altinity-clickhouse/common/types"
-	"github.com/wandb/operator/pkg/vendored/altinity-clickhouse/swversion"
-	"github.com/wandb/operator/pkg/vendored/altinity-clickhouse/util"
 	apps "k8s.io/api/apps/v1"
 	core "k8s.io/api/core/v1"
+
+	"github.com/wandb/operator/pkg/vendored/altinity-clickhouse/common/types"
+	"github.com/wandb/operator/pkg/vendored/altinity-clickhouse/swversion"
+	"github.com/wandb/operator/pkg/vendored/altinity-clickhouse/util"
 )
 
 // Host defines host (a data replica within a shard) of .spec.configuration.clusters[n].shards[m]
@@ -34,21 +35,21 @@ type Host struct {
 }
 
 type HostSecure struct {
-	Insecure *types2.StringBool `json:"insecure,omitempty"            yaml:"insecure,omitempty"`
-	Secure   *types2.StringBool `json:"secure,omitempty"              yaml:"secure,omitempty"`
+	Insecure *types.StringBool `json:"insecure,omitempty"            yaml:"insecure,omitempty"`
+	Secure   *types.StringBool `json:"secure,omitempty"              yaml:"secure,omitempty"`
 }
 
 type HostPorts struct {
 	// DEPRECATED - to be removed soon
-	Port *types2.Int32 `json:"port,omitempty"  yaml:"port,omitempty"`
+	Port *types.Int32 `json:"port,omitempty"  yaml:"port,omitempty"`
 
-	TCPPort             *types2.Int32 `json:"tcpPort,omitempty"             yaml:"tcpPort,omitempty"`
-	TLSPort             *types2.Int32 `json:"tlsPort,omitempty"             yaml:"tlsPort,omitempty"`
-	HTTPPort            *types2.Int32 `json:"httpPort,omitempty"            yaml:"httpPort,omitempty"`
-	HTTPSPort           *types2.Int32 `json:"httpsPort,omitempty"           yaml:"httpsPort,omitempty"`
-	InterserverHTTPPort *types2.Int32 `json:"interserverHTTPPort,omitempty" yaml:"interserverHTTPPort,omitempty"`
-	ZKPort              *types2.Int32 `json:"zkPort,omitempty"              yaml:"zkPort,omitempty"`
-	RaftPort            *types2.Int32 `json:"raftPort,omitempty"            yaml:"raftPort,omitempty"`
+	TCPPort             *types.Int32 `json:"tcpPort,omitempty"             yaml:"tcpPort,omitempty"`
+	TLSPort             *types.Int32 `json:"tlsPort,omitempty"             yaml:"tlsPort,omitempty"`
+	HTTPPort            *types.Int32 `json:"httpPort,omitempty"            yaml:"httpPort,omitempty"`
+	HTTPSPort           *types.Int32 `json:"httpsPort,omitempty"           yaml:"httpsPort,omitempty"`
+	InterserverHTTPPort *types.Int32 `json:"interserverHTTPPort,omitempty" yaml:"interserverHTTPPort,omitempty"`
+	ZKPort              *types.Int32 `json:"zkPort,omitempty"              yaml:"zkPort,omitempty"`
+	RaftPort            *types.Int32 `json:"raftPort,omitempty"            yaml:"raftPort,omitempty"`
 }
 
 type HostSettings struct {
@@ -58,11 +59,11 @@ type HostSettings struct {
 
 type HostRuntime struct {
 	// Internal data
-	Address             HostAddress                 `json:"-" yaml:"-"`
-	Version             *swversion.SoftWareVersion  `json:"-" yaml:"-"`
-	reconcileAttributes *types2.ReconcileAttributes `json:"-" yaml:"-" testdiff:"ignore"`
-	replicas            *types2.Int32               `json:"-" yaml:"-"`
-	hasData             bool                        `json:"-" yaml:"-"`
+	Address             HostAddress                `json:"-" yaml:"-"`
+	Version             *swversion.SoftWareVersion `json:"-" yaml:"-"`
+	reconcileAttributes *types.ReconcileAttributes `json:"-" yaml:"-" testdiff:"ignore"`
+	replicas            *types.Int32               `json:"-" yaml:"-"`
+	hasData             bool                       `json:"-" yaml:"-"`
 
 	// CurStatefulSet is a current stateful set, fetched from k8s
 	CurStatefulSet *apps.StatefulSet `json:"-" yaml:"-" testdiff:"ignore"`
@@ -115,12 +116,12 @@ func (host *Host) SetTemplates(tl *TemplatesList) {
 }
 
 // GetReconcileAttributes is an ensurer getter
-func (host *Host) GetReconcileAttributes() *types2.ReconcileAttributes {
+func (host *Host) GetReconcileAttributes() *types.ReconcileAttributes {
 	if host == nil {
 		return nil
 	}
 	if host.Runtime.reconcileAttributes == nil {
-		host.Runtime.reconcileAttributes = types2.NewReconcileAttributes()
+		host.Runtime.reconcileAttributes = types.NewReconcileAttributes()
 	}
 	return host.Runtime.reconcileAttributes
 }
@@ -380,7 +381,7 @@ func (host *Host) IsTroubleshoot() bool {
 }
 
 // IsInNewCluster checks whether host is in a new cluster
-// TODO unify with common HostIsNewOne
+// TODO unify with model HostIsNewOne
 func (host *Host) IsInNewCluster() bool {
 	return !host.HasAncestor() && (host.GetCR().IEnsureStatus().GetHostsCount() == host.GetCR().IEnsureStatus().GetHostsAddedCount())
 }
@@ -557,7 +558,7 @@ const (
 	KpDefaultRaftPortNumber = int32(9444)
 )
 
-func (host *Host) WalkPorts(f func(name string, port *types2.Int32, protocol core.Protocol) bool) {
+func (host *Host) WalkPorts(f func(name string, port *types.Int32, protocol core.Protocol) bool) {
 	if host == nil {
 		return
 	}
@@ -587,9 +588,9 @@ func (host *Host) WalkPorts(f func(name string, port *types2.Int32, protocol cor
 	}
 }
 
-func (host *Host) WalkSpecifiedPorts(f func(name string, port *types2.Int32, protocol core.Protocol) bool) {
+func (host *Host) WalkSpecifiedPorts(f func(name string, port *types.Int32, protocol core.Protocol) bool) {
 	host.WalkPorts(
-		func(_name string, _port *types2.Int32, _protocol core.Protocol) bool {
+		func(_name string, _port *types.Int32, _protocol core.Protocol) bool {
 			if _port.HasValue() {
 				// Port is explicitly specified - call provided function on it
 				return f(_name, _port, _protocol)
@@ -603,7 +604,7 @@ func (host *Host) WalkSpecifiedPorts(f func(name string, port *types2.Int32, pro
 func (host *Host) AppendSpecifiedPortsToContainer(container *core.Container) {
 	// Walk over all assigned ports of the host and append each port to the list of container's ports
 	host.WalkSpecifiedPorts(
-		func(name string, port *types2.Int32, protocol core.Protocol) bool {
+		func(name string, port *types.Int32, protocol core.Protocol) bool {
 			// Append assigned port to the list of container's ports
 			container.Ports = append(container.Ports,
 				core.ContainerPort{
@@ -620,14 +621,14 @@ func (host *Host) AppendSpecifiedPortsToContainer(container *core.Container) {
 
 func (host *Host) HasListedReplicaCaughtUp(name string) bool {
 	return util.InArray(
-		name,
+		util.NormalizeFQDN(name),
 		host.GetCR().IEnsureStatus().GetHostsWithReplicaCaughtUp(),
 	)
 }
 
 func (host *Host) HasListedTablesCreated(name string) bool {
 	return util.InArray(
-		name,
+		util.NormalizeFQDN(name),
 		host.GetCR().IEnsureStatus().GetHostsWithTablesCreated(),
 	)
 }

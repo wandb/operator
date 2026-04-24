@@ -15,15 +15,15 @@
 package v1
 
 import (
-	types2 "github.com/wandb/operator/pkg/vendored/altinity-clickhouse/common/types"
+	"github.com/wandb/operator/pkg/vendored/altinity-clickhouse/common/types"
 )
 
 // ZookeeperNode defines item of nodes section of .spec.configuration.zookeeper
 type ZookeeperNode struct {
-	Host             string             `json:"host,omitempty"             yaml:"host,omitempty"`
-	Port             *types2.Int32      `json:"port,omitempty"             yaml:"port,omitempty"`
-	Secure           *types2.StringBool `json:"secure,omitempty"           yaml:"secure,omitempty"`
-	AvailabilityZone *types2.String     `json:"availabilityZone,omitempty" yaml:"availabilityZone,omitempty"`
+	Host             string            `json:"host,omitempty"             yaml:"host,omitempty"`
+	Port             *types.Int32      `json:"port,omitempty"             yaml:"port,omitempty"`
+	Secure           *types.StringBool `json:"secure,omitempty"           yaml:"secure,omitempty"`
+	AvailabilityZone *types.String     `json:"availabilityZone,omitempty" yaml:"availabilityZone,omitempty"`
 }
 
 func (zkNode *ZookeeperNode) String() string {

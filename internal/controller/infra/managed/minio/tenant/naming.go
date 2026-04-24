@@ -44,7 +44,7 @@ func (n *NsNameBuilder) ConfigNsName() types.NamespacedName {
 }
 
 func (n *NsNameBuilder) ServiceName() string {
-	return fmt.Sprintf("%s-hl", n.SpecName())
+	return "minio"
 }
 
 func (n *NsNameBuilder) PoolName() string {

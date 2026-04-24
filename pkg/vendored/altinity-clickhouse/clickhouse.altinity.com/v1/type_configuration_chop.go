@@ -27,18 +27,19 @@ import (
 
 	log "github.com/golang/glog"
 	"github.com/imdario/mergo"
-	types2 "github.com/wandb/operator/pkg/vendored/altinity-clickhouse/common/types"
-	"github.com/wandb/operator/pkg/vendored/altinity-clickhouse/deployment"
-	util2 "github.com/wandb/operator/pkg/vendored/altinity-clickhouse/util"
 	"gopkg.in/yaml.v3"
 
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/wandb/operator/pkg/vendored/altinity-clickhouse/common/types"
+	"github.com/wandb/operator/pkg/vendored/altinity-clickhouse/deployment"
+	"github.com/wandb/operator/pkg/vendored/altinity-clickhouse/util"
 )
 
 const (
 	// Default values for update timeout and polling period in seconds
 	defaultStatefulSetUpdateTimeout      = 300
-	defaultStatefulSetUpdatePollInterval = 15
+	defaultStatefulSetUpdatePollInterval = 5
 
 	// Default values for ClickHouse user configuration
 	// 1. user/profile
@@ -71,11 +72,14 @@ const (
 
 	// Timeouts used to limit connection and queries from the operator to ClickHouse instances. In seconds
 	// defaultTimeoutConnect specifies default timeout to connect to the ClickHouse instance. In seconds
-	defaultTimeoutConnect = 2
+	defaultTimeoutConnect = 5
 	// defaultTimeoutQuery specifies default timeout to query the CLickHouse instance. In seconds
 	defaultTimeoutQuery = 5
 	// defaultTimeoutCollect specifies default timeout to collect metrics from the ClickHouse instance. In seconds
 	defaultTimeoutCollect = 8
+
+	// defaultMetricsTablesRegexp specifies default regexp to match tables in system database to fetch metrics from
+	defaultMetricsTablesRegexp = "^(metrics|custom_metrics)$"
 
 	// defaultReconcileCHIsThreadsNumber specifies default number of controller threads running concurrently.
 	// Used in case no other specified in config
@@ -136,6 +140,22 @@ const (
 )
 
 const (
+	// What to do in case StatefulSet needs to be recreated due to PVC data loss or missing volumes
+	// Abort - Loss: abort CHI reconcile
+	OnStatefulSetRecreateOnDataLossActionAbort = "abort"
+
+	// Recreate - Loss: proceed and recreate StatefulSet
+	OnStatefulSetRecreateOnDataLossActionRecreate = "recreate"
+
+	// What to do in case StatefulSet needs to be recreated due to update failure or StatefulSet not ready
+	// Abort - Failure: abort CHI reconcile
+	OnStatefulSetRecreateOnUpdateFailureActionAbort = "abort"
+
+	// Recreate - Failure: proceed and recreate StatefulSet
+	OnStatefulSetRecreateOnUpdateFailureActionRecreate = "recreate"
+)
+
+const (
 	defaultMaxReplicationDelay = 10
 )
 
@@ -171,9 +191,8 @@ type OperatorConfigWatch struct {
 }
 
 type OperatorConfigWatchNamespaces struct {
-	// VENDORED CHANGE: Fixed missing closing quotes in struct tags
-	Include *types2.Strings `json:"include" yaml:"include"`
-	Exclude *types2.Strings `json:"exclude" yaml:"exclude"`
+	Include *types.Strings `json:"include" yaml:"include"`
+	Exclude *types.Strings `json:"exclude" yaml:"exclude"`
 }
 
 func (n *OperatorConfigWatchNamespaces) UnmarshalJSON(data []byte) error {
@@ -191,7 +210,7 @@ func (n *OperatorConfigWatchNamespaces) UnmarshalJSON(data []byte) error {
 	var sl []string
 	if err := json.Unmarshal(data, &sl); err == nil {
 		s := OperatorConfigWatchNamespaces{
-			Include: types2.NewStrings(sl),
+			Include: types.NewStrings(sl),
 		}
 		*n = s
 		return nil
@@ -212,7 +231,7 @@ type OperatorConfigConfig struct {
 }
 
 // OperatorConfigRestartPolicyRuleSet specifies set of rules
-type OperatorConfigRestartPolicyRuleSet map[types2.Matchable]types2.StringBool
+type OperatorConfigRestartPolicyRuleSet map[types.Matchable]types.StringBool
 
 // OperatorConfigRestartPolicyRule specifies ClickHouse version and rules for this version
 type OperatorConfigRestartPolicyRule struct {
@@ -252,7 +271,7 @@ type OperatorConfigAddons struct {
 type OperatorConfigFile struct {
 	Path struct {
 		// Paths where to look for additional ClickHouse config .xml files to be mounted into Pod
-		Common string `json:"model" yaml:"model"`
+		Common string `json:"common" yaml:"common"`
 		Host   string `json:"host"   yaml:"host"`
 		User   string `json:"user"   yaml:"user"`
 	} `json:"path" yaml:"path"`
@@ -355,6 +374,10 @@ type OperatorConfigClickHouse struct {
 		Timeouts struct {
 			Collect time.Duration `json:"collect" yaml:"collect"`
 		} `json:"timeouts" yaml:"timeouts"`
+		// TablesRegexp specifies regexp to match tables in system database to fetch metrics from.
+		// Multiple tables can be matched using regexp. Matched tables are merged using merge() table function.
+		// Default is "^(metrics|custom_metrics)$" which fetches from both system.metrics and system.custom_metrics.
+		TablesRegexp string `json:"tablesRegexp" yaml:"tablesRegexp"`
 	} `json:"metrics" yaml:"metrics"`
 }
 
@@ -422,10 +445,15 @@ type OperatorConfigReconcile struct {
 		} `json:"create" yaml:"create"`
 
 		Update struct {
-			Timeout      uint64 `json:"timeout" yaml:"timeout"`
+			Timeout      uint64 `json:"timeout"      yaml:"timeout"`
 			PollInterval uint64 `json:"pollInterval" yaml:"pollInterval"`
-			OnFailure    string `json:"onFailure" yaml:"onFailure"`
+			OnFailure    string `json:"onFailure"    yaml:"onFailure"`
 		} `json:"update" yaml:"update"`
+
+		Recreate struct {
+			OnDataLoss      string `json:"onDataLoss"      yaml:"onDataLoss"`
+			OnUpdateFailure string `json:"onUpdateFailure" yaml:"onUpdateFailure"`
+		} `json:"recreate" yaml:"recreate"`
 	} `json:"statefulSet" yaml:"statefulSet"`
 
 	Host ReconcileHost `json:"host" yaml:"host"`
@@ -460,9 +488,9 @@ func (rh ReconcileHost) MergeFrom(from ReconcileHost) ReconcileHost {
 
 // ReconcileHostWait defines reconcile host wait config
 type ReconcileHostWait struct {
-	Exclude  *types2.StringBool         `json:"exclude,omitempty"  yaml:"exclude,omitempty"`
-	Queries  *types2.StringBool         `json:"queries,omitempty"  yaml:"queries,omitempty"`
-	Include  *types2.StringBool         `json:"include,omitempty"  yaml:"include,omitempty"`
+	Exclude  *types.StringBool          `json:"exclude,omitempty"  yaml:"exclude,omitempty"`
+	Queries  *types.StringBool          `json:"queries,omitempty"  yaml:"queries,omitempty"`
+	Include  *types.StringBool          `json:"include,omitempty"  yaml:"include,omitempty"`
 	Replicas *ReconcileHostWaitReplicas `json:"replicas,omitempty" yaml:"replicas,omitempty"`
 	Probes   *ReconcileHostWaitProbes   `json:"probes,omitempty"   yaml:"probes,omitempty"`
 }
@@ -474,14 +502,11 @@ func (wait ReconcileHostWait) Normalize() ReconcileHostWait {
 
 	if wait.Replicas.Delay == nil {
 		// Default update timeout in seconds
-		wait.Replicas.Delay = types2.NewInt32(defaultMaxReplicationDelay)
+		wait.Replicas.Delay = types.NewInt32(defaultMaxReplicationDelay)
 	}
 
 	if wait.Probes == nil {
-		// Default value
-		wait.Probes = &ReconcileHostWaitProbes{
-			Readiness: types2.NewStringBool(true),
-		}
+		wait.Probes = &ReconcileHostWaitProbes{}
 	}
 
 	return wait
@@ -517,9 +542,9 @@ func (drop ReconcileHostDrop) MergeFrom(from ReconcileHostDrop) ReconcileHostDro
 }
 
 type ReconcileHostWaitReplicas struct {
-	All   *types2.StringBool `json:"all,omitempty"   yaml:"all,omitempty"`
-	New   *types2.StringBool `json:"new,omitempty"   yaml:"new,omitempty"`
-	Delay *types2.Int32      `json:"delay,omitempty" yaml:"delay,omitempty"`
+	All   *types.StringBool `json:"all,omitempty"   yaml:"all,omitempty"`
+	New   *types.StringBool `json:"new,omitempty"   yaml:"new,omitempty"`
+	Delay *types.Int32      `json:"delay,omitempty" yaml:"delay,omitempty"`
 }
 
 func (r *ReconcileHostWaitReplicas) MergeFrom(from *ReconcileHostWaitReplicas) *ReconcileHostWaitReplicas {
@@ -545,18 +570,18 @@ func (r *ReconcileHostWaitReplicas) MergeFrom(from *ReconcileHostWaitReplicas) *
 }
 
 type ReconcileHostWaitProbes struct {
-	Startup   *types2.StringBool `json:"startup,omitempty"   yaml:"startup,omitempty"`
-	Readiness *types2.StringBool `json:"readiness,omitempty" yaml:"readiness,omitempty"`
+	Startup   *types.StringBool `json:"startup,omitempty"   yaml:"startup,omitempty"`
+	Readiness *types.StringBool `json:"readiness,omitempty" yaml:"readiness,omitempty"`
 }
 
-func (p *ReconcileHostWaitProbes) GetStartup() *types2.StringBool {
+func (p *ReconcileHostWaitProbes) GetStartup() *types.StringBool {
 	if p == nil {
 		return nil
 	}
 	return p.Startup
 }
 
-func (p *ReconcileHostWaitProbes) GetReadiness() *types2.StringBool {
+func (p *ReconcileHostWaitProbes) GetReadiness() *types.StringBool {
 	if p == nil {
 		return nil
 	}
@@ -585,9 +610,9 @@ func (p *ReconcileHostWaitProbes) MergeFrom(from *ReconcileHostWaitProbes) *Reco
 }
 
 type ReconcileHostDropReplicas struct {
-	OnDelete     *types2.StringBool `json:"onDelete,omitempty"     yaml:"onDelete,omitempty"`
-	OnLostVolume *types2.StringBool `json:"onLostVolume,omitempty" yaml:"onLostVolume,omitempty"`
-	Active       *types2.StringBool `json:"active,omitempty"       yaml:"active,omitempty"`
+	OnDelete     *types.StringBool `json:"onDelete,omitempty"     yaml:"onDelete,omitempty"`
+	OnLostVolume *types.StringBool `json:"onLostVolume,omitempty" yaml:"onLostVolume,omitempty"`
+	Active       *types.StringBool `json:"active,omitempty"       yaml:"active,omitempty"`
 }
 
 func (r *ReconcileHostDropReplicas) MergeFrom(from *ReconcileHostDropReplicas) *ReconcileHostDropReplicas {
@@ -626,7 +651,7 @@ type OperatorConfigLabel struct {
 	Exclude []string `json:"exclude" yaml:"exclude"`
 
 	// Whether to append *Scope* labels to StatefulSet and Pod.
-	AppendScopeString types2.StringBool `json:"appendScope" yaml:"appendScope"`
+	AppendScopeString types.StringBool `json:"appendScope" yaml:"appendScope"`
 
 	Runtime OperatorConfigLabelRuntime `json:"runtime" yaml:"runtime"`
 }
@@ -648,10 +673,10 @@ type OperatorConfigStatus struct {
 }
 
 type OperatorConfigStatusFields struct {
-	Action  *types2.StringBool `json:"action,omitempty"  yaml:"action,omitempty"`
-	Actions *types2.StringBool `json:"actions,omitempty" yaml:"actions,omitempty"`
-	Error   *types2.StringBool `json:"error,omitempty"   yaml:"error,omitempty"`
-	Errors  *types2.StringBool `json:"errors,omitempty"  yaml:"errors,omitempty"`
+	Action  *types.StringBool `json:"action,omitempty"  yaml:"action,omitempty"`
+	Actions *types.StringBool `json:"actions,omitempty" yaml:"actions,omitempty"`
+	Error   *types.StringBool `json:"error,omitempty"   yaml:"error,omitempty"`
+	Errors  *types.StringBool `json:"errors,omitempty"  yaml:"errors,omitempty"`
 }
 
 type ConfigCRSource struct {
@@ -774,7 +799,7 @@ type OperatorConfig struct {
 	ExcludeFromPropagationLabels []string `json:"excludeFromPropagationLabels" yaml:"excludeFromPropagationLabels"`
 
 	// Whether to append *Scope* labels to StatefulSet and Pod.
-	AppendScopeLabelsString types2.StringBool `json:"appendScopeLabels" yaml:"appendScopeLabels"`
+	AppendScopeLabelsString types.StringBool `json:"appendScopeLabels" yaml:"appendScopeLabels"`
 
 	// Grace period for Pod termination.
 	TerminationGracePeriod int `json:"terminationGracePeriod" yaml:"terminationGracePeriod"`
@@ -788,7 +813,6 @@ func (c *OperatorConfig) MergeFrom(from *OperatorConfig) error {
 		return nil
 	}
 
-	// VENDORED CHANGE: Pass pointer to avoid copying mutexes
 	if err := mergo.Merge(c, from, mergo.WithAppendSlice, mergo.WithOverride); err != nil {
 		return fmt.Errorf("FAIL merge config Error: %q", err)
 	}
@@ -799,7 +823,7 @@ func (c *OperatorConfig) MergeFrom(from *OperatorConfig) error {
 // readCHITemplates build OperatorConfig.CHITemplate from template files content
 func (c *OperatorConfig) readCHITemplates() (errs []error) {
 	// Read CHI template files
-	c.Template.CHI.Runtime.TemplateFiles = util2.ReadFilesIntoMap(c.Template.CHI.Path, c.isCHITemplateExt)
+	c.Template.CHI.Runtime.TemplateFiles = util.ReadFilesIntoMap(c.Template.CHI.Path, c.isCHITemplateExt)
 
 	// Produce map of CHI templates out of CHI template files
 	for filename := range c.Template.CHI.Runtime.TemplateFiles {
@@ -905,7 +929,7 @@ func (c *OperatorConfig) GetAutoTemplates() []*ClickHouseInstallation {
 	var namespaces []string
 	for _, _template := range autoTemplates {
 		// Append template's namespace to the list of namespaces
-		if !util2.StringSliceContains(namespaces, _template.Namespace) {
+		if !util.StringSliceContains(namespaces, _template.Namespace) {
 			namespaces = append(namespaces, _template.Namespace)
 		}
 	}
@@ -918,7 +942,7 @@ func (c *OperatorConfig) GetAutoTemplates() []*ClickHouseInstallation {
 		// Prepare sorted unique list of names within this namespace
 		var names []string
 		for _, _template := range autoTemplates {
-			if _template.MatchNamespace(namespace) && !util2.StringSliceContains(names, _template.Name) {
+			if _template.MatchNamespace(namespace) && !util.StringSliceContains(names, _template.Name) {
 				names = append(names, _template.Name)
 			}
 		}
@@ -966,17 +990,17 @@ func (c *OperatorConfig) Postprocess() {
 func (c *OperatorConfig) normalizeSectionClickHouseConfigurationFile() {
 	// Process ClickHouse configuration files section
 	// Apply default paths in case nothing specified
-	util2.PreparePath(&c.ClickHouse.Config.File.Path.Common, c.Runtime.ConfigFolderPath, CommonConfigDirClickHouse)
-	util2.PreparePath(&c.ClickHouse.Config.File.Path.Host, c.Runtime.ConfigFolderPath, HostConfigDirClickHouse)
-	util2.PreparePath(&c.ClickHouse.Config.File.Path.User, c.Runtime.ConfigFolderPath, UsersConfigDirClickHouse)
+	util.PreparePath(&c.ClickHouse.Config.File.Path.Common, c.Runtime.ConfigFolderPath, CommonConfigDirClickHouse)
+	util.PreparePath(&c.ClickHouse.Config.File.Path.Host, c.Runtime.ConfigFolderPath, HostConfigDirClickHouse)
+	util.PreparePath(&c.ClickHouse.Config.File.Path.User, c.Runtime.ConfigFolderPath, UsersConfigDirClickHouse)
 }
 
 func (c *OperatorConfig) normalizeSectionKeeperConfigurationFile() {
 	// Process Keeper configuration files section
 	// Apply default paths in case nothing specified
-	util2.PreparePath(&c.Keeper.Config.File.Path.Common, c.Runtime.ConfigFolderPath, CommonConfigDirKeeper)
-	util2.PreparePath(&c.Keeper.Config.File.Path.Host, c.Runtime.ConfigFolderPath, HostConfigDirKeeper)
-	util2.PreparePath(&c.Keeper.Config.File.Path.User, c.Runtime.ConfigFolderPath, UsersConfigDirKeeper)
+	util.PreparePath(&c.Keeper.Config.File.Path.Common, c.Runtime.ConfigFolderPath, CommonConfigDirKeeper)
+	util.PreparePath(&c.Keeper.Config.File.Path.Host, c.Runtime.ConfigFolderPath, HostConfigDirKeeper)
+	util.PreparePath(&c.Keeper.Config.File.Path.User, c.Runtime.ConfigFolderPath, UsersConfigDirKeeper)
 }
 
 func (c *OperatorConfig) normalizeSectionTemplate() {
@@ -991,7 +1015,7 @@ func (c *OperatorConfig) normalizeSectionTemplate() {
 	}
 
 	// Process ClickHouseInstallation templates section
-	util2.PreparePath(&c.Template.CHI.Path, c.Runtime.ConfigFolderPath, TemplatesDirClickHouse)
+	util.PreparePath(&c.Template.CHI.Path, c.Runtime.ConfigFolderPath, TemplatesDirClickHouse)
 }
 
 func (c *OperatorConfig) normalizeSectionReconcileStatefulSet() {
@@ -1018,6 +1042,14 @@ func (c *OperatorConfig) normalizeSectionReconcileStatefulSet() {
 	// Default Updated Failure action - revert
 	if c.Reconcile.StatefulSet.Update.OnFailure == "" {
 		c.Reconcile.StatefulSet.Update.OnFailure = OnStatefulSetUpdateFailureActionRollback
+	}
+
+	// Default Recreate actions - recreate
+	if c.Reconcile.StatefulSet.Recreate.OnDataLoss == "" {
+		c.Reconcile.StatefulSet.Recreate.OnDataLoss = OnStatefulSetRecreateOnDataLossActionRecreate
+	}
+	if c.Reconcile.StatefulSet.Recreate.OnUpdateFailure == "" {
+		c.Reconcile.StatefulSet.Recreate.OnUpdateFailure = OnStatefulSetRecreateOnUpdateFailureActionRecreate
 	}
 }
 
@@ -1106,6 +1138,10 @@ func (c *OperatorConfig) normalizeSectionClickHouseMetrics() {
 	}
 	// Adjust seconds to time.Duration
 	c.ClickHouse.Metrics.Timeouts.Collect = c.ClickHouse.Metrics.Timeouts.Collect * time.Second
+
+	if c.ClickHouse.Metrics.TablesRegexp == "" {
+		c.ClickHouse.Metrics.TablesRegexp = defaultMetricsTablesRegexp
+	}
 }
 
 func (c *OperatorConfig) normalizeSectionLogger() {
@@ -1180,20 +1216,20 @@ func (c *OperatorConfig) normalize() {
 func (c *OperatorConfig) applyEnvVarParams() {
 	if ns := os.Getenv(deployment.WATCH_NAMESPACE); len(ns) > 0 {
 		// We have WATCH_NAMESPACE explicitly specified
-		c.Watch.Namespaces.Include = types2.NewStrings([]string{ns})
+		c.Watch.Namespaces.Include = types.NewStrings([]string{ns})
 	}
 
 	if nss := os.Getenv(deployment.WATCH_NAMESPACES); len(nss) > 0 {
 		// We have WATCH_NAMESPACES explicitly specified
 		if namespaces := c.splitNamespaces(nss); len(namespaces) > 0 {
-			c.Watch.Namespaces.Include = types2.NewStrings(namespaces)
+			c.Watch.Namespaces.Include = types.NewStrings(namespaces)
 		}
 	}
 
 	if nss := os.Getenv(deployment.WATCH_NAMESPACES_EXCLUDE); len(nss) > 0 {
 		// We have WATCH_NAMESPACES_EXCLUDE explicitly specified
 		if namespaces := c.splitNamespaces(nss); len(namespaces) > 0 {
-			c.Watch.Namespaces.Exclude = types2.NewStrings(namespaces)
+			c.Watch.Namespaces.Exclude = types.NewStrings(namespaces)
 		}
 	}
 }
@@ -1232,7 +1268,7 @@ func (c *OperatorConfig) applyDefaultWatchNamespace() {
 		// Do nothing, we already have len(config.WatchNamespaces) == 0
 	} else {
 		// Operator is running inside a namespace. Watch in it
-		c.Watch.Namespaces.Include = types2.NewStrings([]string{
+		c.Watch.Namespaces.Include = types.NewStrings([]string{
 			c.Runtime.Namespace,
 		})
 	}
@@ -1240,21 +1276,21 @@ func (c *OperatorConfig) applyDefaultWatchNamespace() {
 
 // readClickHouseCustomConfigFiles reads all extra user-specified ClickHouse config files
 func (c *OperatorConfig) readClickHouseCustomConfigFiles() {
-	c.ClickHouse.Config.File.Runtime.CommonConfigFiles = util2.ReadFilesIntoMap(c.ClickHouse.Config.File.Path.Common, c.isCHConfigExt)
-	c.ClickHouse.Config.File.Runtime.HostConfigFiles = util2.ReadFilesIntoMap(c.ClickHouse.Config.File.Path.Host, c.isCHConfigExt)
-	c.ClickHouse.Config.File.Runtime.UsersConfigFiles = util2.ReadFilesIntoMap(c.ClickHouse.Config.File.Path.User, c.isCHConfigExt)
+	c.ClickHouse.Config.File.Runtime.CommonConfigFiles = util.ReadFilesIntoMap(c.ClickHouse.Config.File.Path.Common, c.isCHConfigExt)
+	c.ClickHouse.Config.File.Runtime.HostConfigFiles = util.ReadFilesIntoMap(c.ClickHouse.Config.File.Path.Host, c.isCHConfigExt)
+	c.ClickHouse.Config.File.Runtime.UsersConfigFiles = util.ReadFilesIntoMap(c.ClickHouse.Config.File.Path.User, c.isCHConfigExt)
 }
 
 // readKeeperCustomConfigFiles reads all extra user-specified Keeper config files
 func (c *OperatorConfig) readKeeperCustomConfigFiles() {
-	c.Keeper.Config.File.Runtime.CommonConfigFiles = util2.ReadFilesIntoMap(c.Keeper.Config.File.Path.Common, c.isCHConfigExt)
-	c.Keeper.Config.File.Runtime.HostConfigFiles = util2.ReadFilesIntoMap(c.Keeper.Config.File.Path.Host, c.isCHConfigExt)
-	c.Keeper.Config.File.Runtime.UsersConfigFiles = util2.ReadFilesIntoMap(c.Keeper.Config.File.Path.User, c.isCHConfigExt)
+	c.Keeper.Config.File.Runtime.CommonConfigFiles = util.ReadFilesIntoMap(c.Keeper.Config.File.Path.Common, c.isCHConfigExt)
+	c.Keeper.Config.File.Runtime.HostConfigFiles = util.ReadFilesIntoMap(c.Keeper.Config.File.Path.Host, c.isCHConfigExt)
+	c.Keeper.Config.File.Runtime.UsersConfigFiles = util.ReadFilesIntoMap(c.Keeper.Config.File.Path.User, c.isCHConfigExt)
 }
 
 // isCHConfigExt returns true in case specified file has proper extension for a ClickHouse config file
 func (c *OperatorConfig) isCHConfigExt(file string) bool {
-	switch util2.ExtToLower(file) {
+	switch util.ExtToLower(file) {
 	case ".xml":
 		return true
 	}
@@ -1263,7 +1299,7 @@ func (c *OperatorConfig) isCHConfigExt(file string) bool {
 
 // isCHITemplateExt returns true in case specified file has proper extension for a CHI template config file
 func (c *OperatorConfig) isCHITemplateExt(file string) bool {
-	switch util2.ExtToLower(file) {
+	switch util.ExtToLower(file) {
 	case ".yaml":
 		return true
 	case ".json":
@@ -1376,6 +1412,28 @@ func (c *OperatorConfig) GetInformerNamespace() string {
 	return namespace
 }
 
+// GetCacheNamespaces returns namespace list suitable for controller-runtime cache.Options.Namespaces.
+// When all configured namespaces are valid DNS labels they are returned directly, allowing the cache
+// to scope its watches to those namespaces only. If any namespace is a regexp pattern (or none are
+// configured) the function falls back to []string{NamespaceAll} so the cache watches everything,
+// relying on the per-reconcile namespace guard in the controller.
+func (c *OperatorConfig) GetCacheNamespaces() []string {
+	if !c.Watch.Namespaces.Include.HasValue() {
+		return []string{meta.NamespaceAll}
+	}
+	var labelRegexp = regexp.MustCompile("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
+	namespaces := c.Watch.Namespaces.Include.Value()
+	result := make([]string, 0, len(namespaces))
+	for _, ns := range namespaces {
+		if !labelRegexp.MatchString(ns) {
+			// Contains a regexp pattern — can't enumerate exact namespaces, fall back to all
+			return []string{meta.NamespaceAll}
+		}
+		result = append(result, ns)
+	}
+	return result
+}
+
 // GetLogLevel gets logger level
 func (c *OperatorConfig) GetLogLevel() (log.Level, error) {
 	if i, err := strconv.Atoi(c.Logger.V); err == nil {
@@ -1401,7 +1459,7 @@ func (c *OperatorConfig) GetRevisionHistoryLimit() *int32 {
 func (c *OperatorConfig) move() {
 	// WatchNamespaces where operator watches for events
 	if len(c.WatchNamespaces) > 0 {
-		c.Watch.Namespaces.Include = types2.NewStrings(c.WatchNamespaces)
+		c.Watch.Namespaces.Include = types.NewStrings(c.WatchNamespaces)
 	}
 
 	if c.CHCommonConfigsPath != "" {
