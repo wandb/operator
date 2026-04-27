@@ -38,6 +38,17 @@ func ToMysqlMySQLVendorSpec(
 		return nil, fmt.Errorf("invalid storage size %q: %w", spec.StorageSize, err)
 	}
 
+	mycnf := `
+[mysqld]
+binlog_format = 'ROW'
+binlog_row_image = 'MINIMAL'
+innodb_flush_log_at_trx_commit = 1
+innodb_online_alter_log_max_size = 268435456
+max_prepared_stmt_count = 1048576
+sort_buffer_size = '67108864'
+sync_binlog = 1
+`
+
 	innodb := &v2.InnoDBCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      nsnBuilder.ClusterName(),
@@ -49,15 +60,20 @@ func ToMysqlMySQLVendorSpec(
 			TLSUseSelfSigned: true,
 			ImagePullPolicy:  corev1.PullIfNotPresent,
 			PodLabels:        BuildWandbMysqlLabels(wandb),
-			DatadirVolumeClaimTemplate: &corev1.PersistentVolumeClaim{
-				Spec: corev1.PersistentVolumeClaimSpec{
-					Resources: corev1.VolumeResourceRequirements{
-						Requests: corev1.ResourceList{
-							corev1.ResourceStorage: storageQuantity,
-						},
+			DatadirVolumeClaimTemplate: &corev1.PersistentVolumeClaimSpec{
+				AccessModes: []corev1.PersistentVolumeAccessMode{
+					corev1.ReadWriteOnce,
+				},
+				Resources: corev1.VolumeResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceStorage: storageQuantity,
 					},
 				},
 			},
+			Router: &v2.RouterSpec{
+				Instances: spec.Replicas,
+			},
+			Mycnf: mycnf,
 		},
 	}
 

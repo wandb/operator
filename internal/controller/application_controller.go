@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"reflect"
 
+	gkeGatewayApiNetworkingv1 "github.com/GoogleCloudPlatform/gke-gateway-api/apis/networking/v1"
 	wandbv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/logx"
 	"github.com/wandb/operator/pkg/utils"
@@ -31,11 +32,15 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"knative.dev/pkg/ptr"
+	controllerruntime "sigs.k8s.io/controller-runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
 const applicationFinalizer = "applications.apps.wandb.com/finalizer"
@@ -54,6 +59,7 @@ type ApplicationReconciler struct {
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes/status,verbs=get
+// +kubebuilder:rbac:groups=networking.gke.io,resources=healthcheckpolicies,verbs=update;delete;get;list;create;patch;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -952,41 +958,74 @@ func (r *ApplicationReconciler) reconcileHTTPRoute(ctx context.Context, app *wan
 
 	logger := logx.GetSlog(ctx)
 
-	desired := &gatewayv1.HTTPRoute{}
-	desired.Name = app.Name
-	desired.Namespace = app.Namespace
-
-	desired.Labels = utils.MergeMapsStringString(desired.Labels, app.Spec.MetaTemplate.Labels)
-	desired.Annotations = utils.MergeMapsStringString(desired.Annotations, app.Spec.MetaTemplate.Annotations)
-
-	desired.Spec.ParentRefs = app.Spec.HTTPRouteTemplate.ParentRefs
-	desired.Spec.Hostnames = app.Spec.HTTPRouteTemplate.Hostnames
-	desired.Spec.Rules = buildHTTPRouteRules(app)
-
-	if err := ctrl.SetControllerReference(app, desired, r.Scheme); err != nil {
-		return err
+	httpRoute := &gatewayv1.HTTPRoute{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      app.Name,
+			Namespace: app.Namespace,
+		},
 	}
-
-	current := &gatewayv1.HTTPRoute{}
-	err := r.Get(ctx, client.ObjectKey{Namespace: app.Namespace, Name: app.Name}, current)
-	if err != nil {
-		if !errors.IsNotFound(err) {
+	op, err := controllerruntime.CreateOrUpdate(ctx, r.Client, httpRoute, func() error {
+		httpRoute.Labels = utils.MergeMapsStringString(httpRoute.Labels, app.Spec.MetaTemplate.Labels)
+		httpRoute.Annotations = utils.MergeMapsStringString(httpRoute.Annotations, app.Spec.MetaTemplate.Annotations)
+		httpRoute.Spec.ParentRefs = app.Spec.HTTPRouteTemplate.ParentRefs
+		httpRoute.Spec.Hostnames = app.Spec.HTTPRouteTemplate.Hostnames
+		httpRoute.Spec.Rules = buildHTTPRouteRules(app)
+		if err := ctrl.SetControllerReference(app, httpRoute, r.Scheme); err != nil {
 			return err
 		}
-		logger.Info("Creating HTTPRoute", "HTTPRoute", desired.Name)
-		if err := r.Create(ctx, desired); err != nil {
-			return err
-		}
-		app.Status.HTTPRouteStatus = summarizeHTTPRouteStatus(desired)
 		return nil
-	}
-
-	desired.ResourceVersion = current.ResourceVersion
-	logger.Info("Updating HTTPRoute", "HTTPRoute", desired.Name)
-	if err := r.Update(ctx, desired); err != nil {
+	})
+	if err != nil {
 		return err
 	}
-	app.Status.HTTPRouteStatus = summarizeHTTPRouteStatus(current)
+	app.Status.HTTPRouteStatus = summarizeHTTPRouteStatus(httpRoute)
+	logger.Info(fmt.Sprintf("Successfully %s HTTPRoute", op), "HTTPRoute", httpRoute.Name)
+
+	if httpRoute.Status.Parents[0].ControllerName == "networking.gke.io/gateway" {
+		healthCheckPolicy := &gkeGatewayApiNetworkingv1.HealthCheckPolicy{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      app.Name,
+				Namespace: app.Namespace,
+			},
+		}
+		op, err = controllerruntime.CreateOrUpdate(ctx, r.Client, healthCheckPolicy, func() error {
+			healthCheckPolicy.Labels = utils.MergeMapsStringString(healthCheckPolicy.Labels, app.Spec.MetaTemplate.Labels)
+			healthCheckPolicy.Annotations = utils.MergeMapsStringString(healthCheckPolicy.Annotations, app.Spec.MetaTemplate.Annotations)
+			healthCheckPolicy.Spec.Default = &gkeGatewayApiNetworkingv1.HealthCheckPolicyConfig{
+				CheckIntervalSec:   ptr.Int64(5),
+				TimeoutSec:         ptr.Int64(5),
+				UnhealthyThreshold: ptr.Int64(3),
+				HealthyThreshold:   ptr.Int64(2),
+				Config: &gkeGatewayApiNetworkingv1.HealthCheck{
+					Type: gkeGatewayApiNetworkingv1.HTTP,
+					HTTP: &gkeGatewayApiNetworkingv1.HTTPHealthCheck{
+						CommonHealthCheck: gkeGatewayApiNetworkingv1.CommonHealthCheck{},
+						CommonHTTPHealthCheck: gkeGatewayApiNetworkingv1.CommonHTTPHealthCheck{
+							RequestPath: ptr.String(app.Spec.PodTemplate.Spec.Containers[0].ReadinessProbe.HTTPGet.Path),
+						},
+					},
+				},
+			}
+			healthCheckPolicy.Spec.TargetRef = gatewayv1alpha2.NamespacedPolicyTargetReference{
+				Kind: "Service",
+				Name: gatewayv1alpha2.ObjectName(app.Name),
+			}
+			if err != nil {
+				return err
+			}
+
+			if err := ctrl.SetControllerReference(app, healthCheckPolicy, r.Scheme); err != nil {
+				return err
+			}
+			return nil
+		})
+		if err != nil {
+			logger.Error("Failed to create or update health check policy", "HealthCheckPolicy", healthCheckPolicy.Name, logx.ErrAttr(err))
+			return err
+		}
+		logger.Info(fmt.Sprintf("Successfully %s HealthCheckPolicy", op), "HealthCheckPolicy", healthCheckPolicy.Name)
+	}
+
 	return nil
 }
 
@@ -1038,6 +1077,9 @@ func buildHTTPRouteRules(app *wandbv2.Application) []gatewayv1.HTTPRouteRule {
 
 func (r *ApplicationReconciler) deleteHTTPRoute(ctx context.Context, app *wandbv2.Application) error {
 	route := &gatewayv1.HTTPRoute{}
+	if !utils.IsRegistered(r.Scheme, route) {
+		return nil
+	}
 	if err := r.Get(ctx, client.ObjectKey{Namespace: app.Namespace, Name: app.Name}, route); err != nil {
 		if errors.IsNotFound(err) {
 			return nil
@@ -1071,11 +1113,14 @@ func (r *ApplicationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&appsv1.StatefulSet{}).
 		Owns(&corev1.Service{}).
 		Owns(&autoscalingv2.HorizontalPodAutoscaler{}).
-		Owns(&gatewayv1.HTTPRoute{}).
 		Named("application")
 
-	if r.EnableRollouts {
+	if utils.IsRegistered(r.Scheme, &v1alpha1.Rollout{}) {
 		controller = controller.Owns(&v1alpha1.Rollout{})
+	}
+
+	if utils.IsRegistered(r.Scheme, &gatewayv1.Gateway{}) {
+		controller = controller.Owns(&gatewayv1.HTTPRoute{})
 	}
 
 	return controller.Complete(r)

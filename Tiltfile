@@ -57,7 +57,6 @@ os.putenv('PATH', './bin:' + os.getenv('PATH'))
 
 load('ext://restart_process', 'docker_build_with_restart')
 load('ext://helm_resource', 'helm_repo', 'helm_resource')
-load('ext://cert_manager', 'deploy_cert_manager')
 
 DOCKERFILE = '''
 FROM registry.access.redhat.com/ubi9/ubi
@@ -170,28 +169,61 @@ DIRNAME = os.path.basename(os. getcwd())
 local_resource("Operator-Manifests", manifests(), labels=[GROUP_WANDB_OPERATOR])
 local_resource("Operator-Generate", generate(), labels=[GROUP_WANDB_OPERATOR])
 
-deploy_cert_manager()
+helm_resource(
+  'cert-manager',
+  chart='oci://quay.io/jetstack/charts/cert-manager',
+  namespace='cert-manager',
+  flags=[
+    '--create-namespace',
+    '--version=v1.20.2',
+    '--set',
+    'crds.enabled=true',
+    '--set',
+    'config.enableGatewayAPI=true',
+  ],
+  labels=["Cert-Manager"],
+)
+
+local_resource(
+  'selfsigned-issuer',
+  'kubectl apply -f hack/testing-manifests/cert-manager/selfsigned-issuer.yaml',
+  resource_deps=['cert-manager'],
+  labels=["Cert-Manager"],
+)
+
+local_resource(
+  'ca-certificate',
+  'kubectl apply -f hack/testing-manifests/cert-manager/ca-certificate.yaml',
+  resource_deps=['cert-manager'],
+  labels=["Cert-Manager"],
+)
+
+local_resource(
+  'ca-issuer',
+  'kubectl apply -f hack/testing-manifests/cert-manager/ca-issuer.yaml',
+  resource_deps=['cert-manager'],
+  labels=["Cert-Manager"],
+)
 
 if settings.get("installNginxGateway"):
-    if LOCAL_NETWORKING_MODE == 'gateway':
-        local_resource(
-            'gateway-api-crds',
-            'kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.1/standard-install.yaml',
-            labels=["Gateway"],
-        )
-        helm_resource(
-            'nginx-gateway-fabric',
-            chart='oci://ghcr.io/nginx/charts/nginx-gateway-fabric',
-            namespace='nginx-gateway',
-            flags=[
-                '--create-namespace',
-                '--version=2.4.2',
-            ],
-            resource_deps=['gateway-api-crds'],
-            labels=["Gateway"],
-        )
+    local_resource(
+        'gateway-api-crds',
+        'kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.1/standard-install.yaml',
+        labels=["Gateway"],
+    )
+    helm_resource(
+        'nginx-gateway-fabric',
+        chart='oci://ghcr.io/nginx/charts/nginx-gateway-fabric',
+        namespace='nginx-gateway',
+        flags=[
+            '--create-namespace',
+            '--version=2.5.1',
+        ],
+        resource_deps=['gateway-api-crds'],
+        labels=["Gateway"],
+    )
 
-if settings.get("installIngressNginx") and LOCAL_NETWORKING_MODE == 'ingress':
+if settings.get("installIngressNginx"):
     helm_repo(
         'ingress-nginx',
         'https://kubernetes.github.io/ingress-nginx',
@@ -241,7 +273,7 @@ helm_resource(
     'ThirdParty-Operators',
     chart='./deploy/operator',
     release_name='third-party-operators',
-    resource_deps=['ThirdParty-Chart-Deps', 'WandB-CRDs-Apply'],
+    resource_deps=['ThirdParty-Chart-Deps', 'WandB-CRDs-Apply', 'cert-manager'],
     namespace='wandb-operator',
     flags=third_party_operator_flags,
     labels=[GROUP_THIRD_PARTY_OPERATORS],
@@ -259,6 +291,7 @@ k8s_resource(
         'operator-serving-cert:certificate',
         'operator-selfsigned-issuer:issuer',
     ],
+    resource_deps=["cert-manager"],
     # deploy_cert_manager() runs local() commands and registers no Tilt resource,
     # so a resource_dep cannot be declared here. Tilt retries on failure.
     labels=[GROUP_WANDB_OPERATOR],

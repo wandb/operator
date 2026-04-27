@@ -25,7 +25,10 @@ import (
 	"path/filepath"
 	"strings"
 
+	gkeGatewayApiNetworkingv1 "github.com/GoogleCloudPlatform/gke-gateway-api/apis/networking/v1"
+	nginxGatewayv1alpha1 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
 	"github.com/wandb/operator/internal/logx"
+	"github.com/wandb/operator/pkg/utils"
 	chiv1 "github.com/wandb/operator/pkg/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
 	argov1alpha1 "github.com/wandb/operator/pkg/vendored/argo-rollouts/argoproj.io.rollouts/v1alpha1"
 	miniov2 "github.com/wandb/operator/pkg/vendored/minio-operator/minio.min.io/v2"
@@ -36,10 +39,16 @@ import (
 	strimziv1 "github.com/wandb/operator/pkg/vendored/strimzi-kafka/v1"
 	"github.com/wandb/operator/pkg/wandb/spec/channel/deployer"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/discovery"
+	"sigs.k8s.io/controller-runtime/pkg/client/config"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
+	"github.com/wandb/operator/internal/controller"
+	controllerv2 "github.com/wandb/operator/internal/controller/v2"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -52,10 +61,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	ctrlwh "sigs.k8s.io/controller-runtime/pkg/webhook"
-	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
-
-	"github.com/wandb/operator/internal/controller"
-	controllerv2 "github.com/wandb/operator/internal/controller/v2"
 
 	appsv2 "github.com/wandb/operator/api/v2"
 	webhookv2 "github.com/wandb/operator/internal/webhook/v2"
@@ -80,6 +85,8 @@ func init() {
 	utilruntime.Must(chiv1.AddToScheme(scheme))
 	utilruntime.Must(mysqlv2.AddToScheme(scheme))
 	utilruntime.Must(gatewayv1.Install(scheme))
+	utilruntime.Must(nginxGatewayv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(gkeGatewayApiNetworkingv1.Install(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -94,8 +101,7 @@ func main() {
 	var enableHTTP2 bool
 	var tlsOpts []func(*tls.Config)
 	var deployerAPI, isolationNamespaces string
-	var debug, airgapped, enableV2, enableWebhooks, enableRollouts bool
-	var telemetryEnabled bool
+	var debug, airgapped, enableV2, enableWebhooks, enableRollouts, telemetryEnabled bool
 	var telemetryManagedNamespace string
 	var telemetryOTelSecretName, telemetryOTelProtocol, telemetryOTelServiceName, telemetryOTelResourceAttributes string
 
@@ -283,6 +289,11 @@ func main() {
 		}
 		cacheOptions.DefaultNamespaces = namespacesCacheConfig
 	}
+	err := RegisterServerResources()
+	if err != nil {
+		setupLog.Error(err, "failed to register server resources")
+		os.Exit(1)
+	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme: scheme,
@@ -398,4 +409,30 @@ func setFlagsFromEnvironment() []error {
 	})
 
 	return errors
+}
+
+func RegisterServerResources() error {
+	cfg, err := config.GetConfig()
+	if err != nil {
+		return err
+	}
+
+	discoveryClient, err := discovery.NewDiscoveryClientForConfig(cfg)
+	if err != nil {
+		return err
+	}
+
+	// Get all resources in the cluster
+	_, resourceLists, err := discoveryClient.ServerGroupsAndResources()
+	if err != nil {
+		return err
+	}
+
+	for _, resourceList := range resourceLists {
+		for _, resource := range resourceList.APIResources {
+			gvkString := fmt.Sprintf("%s.%s/%s", resource.Kind, resource.Group, resource.Version)
+			utils.AddServerResource(gvkString)
+		}
+	}
+	return nil
 }

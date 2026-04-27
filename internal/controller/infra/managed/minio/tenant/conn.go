@@ -16,7 +16,7 @@ import (
 
 const (
 	MinioUrlScheme = "s3"
-	MinioPort      = "9000"
+	MinioPort      = "80"
 )
 
 type minioConnInfo struct {
@@ -96,7 +96,7 @@ func writeWandbConnInfo(
 		},
 		Type: corev1.SecretTypeOpaque,
 		StringData: map[string]string{
-			urlKey:      connInfo.toUrl().String() + "?tls=true",
+			urlKey:      connInfo.toUrl().String(),
 			"Host":      connInfo.Host,
 			"Port":      connInfo.Port,
 			"AccessKey": connInfo.RootUser,
