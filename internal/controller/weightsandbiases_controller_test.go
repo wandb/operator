@@ -2,7 +2,6 @@ package controller
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"path/filepath"
 	"time"
@@ -15,7 +14,7 @@ import (
 	"github.com/wandb/operator/pkg/wandb/manifest"
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
-	apiErrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -32,9 +31,34 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 		WandbName      = "test-wandb-v2"
 		WandbNamespace = "default"
 		timeout        = time.Second * 10
-		duration       = time.Second * 10
 		interval       = time.Millisecond * 250
 	)
+
+	AfterEach(func() {
+		// Cleanup
+		wandb := &apiv2.WeightsAndBiases{ObjectMeta: metav1.ObjectMeta{Name: WandbName, Namespace: WandbNamespace}}
+		wandbLookupKey := types.NamespacedName{Name: wandb.Name, Namespace: wandb.Namespace}
+		dbSecret := &v1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      WandbName + "-db-password",
+				Namespace: WandbNamespace,
+			},
+		}
+		job := &batchv1.Job{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      WandbName + "-mysql-init",
+				Namespace: WandbNamespace,
+			},
+		}
+		Expect(k8sClient.Delete(ctx, job, client.PropagationPolicy(metav1.DeletePropagationBackground))).Should(SatisfyAny(Succeed(), MatchError(ContainSubstring("not found"))))
+		Expect(k8sClient.Delete(ctx, dbSecret)).Should(SatisfyAny(Succeed(), MatchError(ContainSubstring("not found"))))
+		Expect(k8sClient.Delete(ctx, wandb)).Should(SatisfyAny(Succeed(), MatchError(ContainSubstring("not found"))))
+		err := k8sClient.Get(ctx, wandbLookupKey, wandb)
+		if !errors.IsNotFound(err) {
+			wandb.SetFinalizers([]string{})
+			Expect(k8sClient.Update(ctx, wandb)).Should(Succeed())
+		}
+	})
 
 	Context("When reconciling a v2 WeightsAndBiases object", func() {
 		It("Should successfully reconcile and update status", func() {
@@ -105,9 +129,6 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			Expect(k8sClient.Get(ctx, wandbLookupKey, wandb)).Should(Succeed())
 
 			Expect(utils.ContainsString(wandb.GetFinalizers(), "wandb.apps.wandb.com/cleanup")).Should(BeTrue())
-
-			// Cleanup
-			Expect(k8sClient.Delete(ctx, wandb)).Should(Succeed())
 		})
 
 		It("Should create a MySQL init job when deployment type is mysql", func() {
@@ -190,7 +211,7 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			By("Checking if Applications were NOT created yet (migrations not complete)")
 			wandbManifest, err := manifest.GetServerManifest(ctx, wandb.Spec.Wandb.ManifestRepository, wandb.Spec.Wandb.Version)
 			Expect(err).Should(Succeed())
-			_, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest)
+			_, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, v2.DefaultTelemetryRuntimeConfig())
 			Expect(err).Should(Succeed())
 
 			By("Checking if the MySQL init job was created")
@@ -200,21 +221,6 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			}, timeout, interval).Should(Succeed())
 
 			Expect(job.Spec.Template.Spec.Containers[0].Name).To(Equal("mysql-init"))
-
-			// Cleanup
-			Expect(k8sClient.Delete(ctx, job, client.PropagationPolicy(metav1.DeletePropagationBackground))).Should(Succeed())
-			Expect(k8sClient.Delete(ctx, wandb)).Should(Succeed())
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: WandbName, Namespace: WandbNamespace}, wandb)).Should(Succeed())
-			wandb.SetFinalizers([]string{})
-			Expect(k8sClient.Update(ctx, wandb)).Should(Succeed())
-			Expect(k8sClient.Delete(ctx, secret)).Should(Succeed())
-			Eventually(func() error {
-				err := k8sClient.Get(ctx, types.NamespacedName{Name: WandbName, Namespace: WandbNamespace}, wandb)
-				if apiErrors.IsNotFound(err) {
-					return nil
-				}
-				return errors.New("wandb is not deleted")
-			}, timeout, interval).Should(Succeed())
 		})
 
 		It("Should create application components when infrastructure is ready", func() {
@@ -284,7 +290,7 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			By("Checking if Applications were NOT created yet (migrations not complete)")
 			wandbManifest, err := manifest.GetServerManifest(ctx, wandb.Spec.Wandb.ManifestRepository, wandb.Spec.Wandb.Version)
 			Expect(err).Should(Succeed())
-			ctrlResult, err := v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest)
+			ctrlResult, err := v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, v2.DefaultTelemetryRuntimeConfig())
 			Expect(err).Should(Succeed())
 			Expect(ctrlResult.RequeueAfter).Should(BeNumerically(">", 0))
 
@@ -302,7 +308,7 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			Expect(k8sClient.Status().Update(ctx, wandb)).Should(Succeed())
 
 			// For now test by calling ReconcileWandbManifest directly, but this will get refactored into the reconciler later
-			ctrlResult, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest)
+			ctrlResult, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, v2.DefaultTelemetryRuntimeConfig())
 			Expect(err).Should(Succeed())
 			Expect(ctrlResult.RequeueAfter).Should(BeZero())
 
@@ -319,19 +325,6 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			// The 0.76.1.yaml manifest should have some applications defined.
 			// We expect them to be created as Application CRs.
 			Expect(len(appList.Items)).Should(BeNumerically("==", len(wandbManifest.Applications)-2), "Expected all non-feature flagged applications to be created")
-
-			// Cleanup
-			Expect(k8sClient.Delete(ctx, wandb)).Should(Succeed())
-			Expect(k8sClient.Get(ctx, wandbLookupKey, wandb)).Should(Succeed())
-			wandb.SetFinalizers([]string{})
-			Expect(k8sClient.Update(ctx, wandb)).Should(Succeed())
-			Eventually(func() error {
-				err := k8sClient.Get(ctx, types.NamespacedName{Name: WandbName, Namespace: WandbNamespace}, wandb)
-				if apiErrors.IsNotFound(err) {
-					return nil
-				}
-				return errors.New("wandb is not deleted")
-			}, timeout, interval).Should(Succeed())
 		})
 
 		It("Should handle various migration states correctly", func() {
@@ -382,7 +375,7 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			wandb.Status.ClickHouseStatus.Connection.URL = v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: WandbName}, Key: "test"}
 			Expect(k8sClient.Status().Update(ctx, wandb)).Should(Succeed())
 
-			ctrlResult, err := v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest)
+			ctrlResult, err := v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, v2.DefaultTelemetryRuntimeConfig())
 			Expect(err).Should(Succeed())
 			Expect(ctrlResult.RequeueAfter).Should(BeNumerically(">", 0), "Expected requeue when migration is running")
 
@@ -392,7 +385,7 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			wandb.Status.Wandb.Migration.Reason = "Failed"
 			Expect(k8sClient.Status().Update(ctx, wandb)).Should(Succeed())
 
-			ctrlResult, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest)
+			ctrlResult, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, v2.DefaultTelemetryRuntimeConfig())
 			Expect(err).Should(Succeed())
 			Expect(ctrlResult.RequeueAfter).Should(BeNumerically(">", 0), "Expected requeue when migration failed")
 
@@ -404,12 +397,9 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			wandb.Status.Wandb.MySQLInit.Succeeded = true
 			Expect(k8sClient.Status().Update(ctx, wandb)).Should(Succeed())
 
-			ctrlResult, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest)
+			ctrlResult, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, v2.DefaultTelemetryRuntimeConfig())
 			Expect(err).Should(Succeed())
 			Expect(ctrlResult.RequeueAfter).Should(BeZero(), "Expected no requeue when migration is complete")
-
-			// Cleanup
-			Expect(k8sClient.Delete(ctx, wandb)).Should(Succeed())
 		})
 
 		It("Should trigger new migrations on version upgrade", func() {
@@ -471,7 +461,7 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 
 			// This call to ReconcileWandbManifest should trigger runMigrations,
 			// which sees version mismatch and starts migrations.
-			_, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest)
+			_, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, v2.DefaultTelemetryRuntimeConfig())
 			Expect(err).Should(Succeed())
 
 			By("Verifying migration status was reset for the new version")
@@ -479,9 +469,6 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			Expect(wandb.Status.Wandb.Migration.Version).Should(Equal(newVersion))
 			Expect(wandb.Status.Wandb.Migration.Ready).Should(BeFalse())
 			Expect(wandb.Status.Wandb.Migration.Reason).Should(Equal("Running"))
-
-			// Cleanup
-			Expect(k8sClient.Delete(ctx, wandb)).Should(Succeed())
 		})
 	})
 })

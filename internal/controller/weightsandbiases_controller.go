@@ -18,15 +18,18 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	apiv1 "github.com/wandb/operator/api/v1"
 	apiv2 "github.com/wandb/operator/api/v2"
 	v1 "github.com/wandb/operator/internal/controller/v1"
 	v2 "github.com/wandb/operator/internal/controller/v2"
+	"github.com/wandb/operator/pkg/utils"
 	"github.com/wandb/operator/pkg/wandb/spec/channel/deployer"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
@@ -34,8 +37,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 // WeightsAndBiasesReconciler reconciles a WeightsAndBiases object
@@ -52,7 +57,7 @@ type WeightsAndBiasesReconciler struct {
 }
 
 //+kubebuilder:rbac:groups="",resources=configmaps;events;persistentvolumeclaims;secrets;serviceaccounts;services,verbs=update;delete;get;list;create;patch;watch
-//+kubebuilder:rbac:groups="",resources=endpoints;ingresses;nodes;nodes/spec;nodes/stats;nodes/metrics;nodes/proxy;namespaces;namespaces/status;replicationcontrollers;replicationcontrollers/status;resourcequotas;pods;pods/log;pods/status,verbs=get;list;watch;patch
+//+kubebuilder:rbac:groups="",resources=endpoints;nodes;nodes/spec;nodes/stats;nodes/metrics;nodes/proxy;namespaces;namespaces/status;replicationcontrollers;replicationcontrollers/status;resourcequotas;pods;pods/log;pods/status,verbs=get;list;watch
 //+kubebuilder:rbac:groups=apps,resources=deployments/status;daemonsets/status;replicasets/status;statefulsets/status,verbs=get
 //+kubebuilder:rbac:groups=apps,resources=deployments;controllerrevisions;daemonsets;replicasets;statefulsets,verbs=update;delete;get;list;create;patch;watch
 //+kubebuilder:rbac:groups=apps.wandb.com,resources=weightsandbiases,verbs=get;list;watch;create;update;patch;delete
@@ -70,9 +75,12 @@ type WeightsAndBiasesReconciler struct {
 //+kubebuilder:rbac:groups=mysql.oracle.com,resources=innodbclusters/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=minio.min.io,resources=tenants,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=minio.min.io,resources=tenants/status,verbs=get
-//+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways;backendtlspolicies,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways;httproutes;backendtlspolicies,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways/status;backendtlspolicies/status,verbs=get
-//+kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses;ingresses/status;networkpolicies,verbs=update;delete;get;list;create;patch;watch
+//+kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses;networkpolicies,verbs=update;delete;get;list;create;patch;watch
+//+kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses/status,verbs=get;list;watch
+//+kubebuilder:rbac:groups=gateway.nginx.org,resources=clientsettingspolicies,verbs=update;delete;get;list;create;patch;watch
+//+kubebuilder:rbac:groups=networking.gke.io,resources=healthcheckpolicies,verbs=update;delete;get;list;create;patch;watch
 //+kubebuilder:rbac:groups=policy,resources=poddisruptionbudgets,verbs=update;delete;get;list;patch;create;watch
 //+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles;rolebindings;clusterroles;clusterrolebindings,verbs=update;delete;get;list;patch;create;watch
 //+kubebuilder:rbac:groups=redis.redis.opstreelabs.in,resources=redis;redissentinels;redisreplications,verbs=get;list;watch;create;update;patch;delete
@@ -174,14 +182,67 @@ func (r *WeightsAndBiasesReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			Owns(&apiv2.Application{}).
 			Owns(&batchv1.Job{}).
 			Owns(&corev1.Secret{}).
-			Owns(&corev1.ConfigMap{})
+			Owns(&corev1.ConfigMap{}).
+			Owns(&networkingv1.Ingress{})
+		if utils.IsRegistered(r.Scheme, &gatewayv1.Gateway{}) {
+			b = b.Watches(&gatewayv1.Gateway{}, handler.EnqueueRequestsFromMapFunc(r.mapGatewayToWandb))
+		}
 	} else {
 		b = ctrl.NewControllerManagedBy(mgr).
 			For(&apiv1.WeightsAndBiases{}, builder.WithPredicates(filterWBEventsForV1{})).
 			Owns(&corev1.Secret{}, builder.WithPredicates(filterSecretEventsForV1{})).
 			Owns(&corev1.ConfigMap{})
 	}
+
 	return b.Complete(r)
+}
+
+func (r *WeightsAndBiasesReconciler) mapGatewayToWandb(ctx context.Context, obj client.Object) []ctrl.Request {
+	gateway, ok := obj.(*gatewayv1.Gateway)
+	if !ok {
+		return nil
+	}
+
+	wandbList := &apiv2.WeightsAndBiasesList{}
+	if err := r.List(ctx, wandbList); err != nil {
+		return nil
+	}
+
+	requests := make([]ctrl.Request, 0)
+	for i := range wandbList.Items {
+		wandb := &wandbList.Items[i]
+		if !gatewayMatchesWandb(gateway, wandb) {
+			continue
+		}
+		requests = append(requests, ctrl.Request{
+			NamespacedName: client.ObjectKeyFromObject(wandb),
+		})
+	}
+
+	return requests
+}
+
+func gatewayMatchesWandb(gateway *gatewayv1.Gateway, wandb *apiv2.WeightsAndBiases) bool {
+	if wandb.Spec.Networking.Mode != apiv2.NetworkingModeGatewayAPI || wandb.Spec.Networking.GatewayAPI == nil {
+		return false
+	}
+
+	if wandb.Spec.Networking.GatewayAPI.Gateway.Managed {
+		return gateway.Namespace == wandb.Namespace &&
+			gateway.Name == fmt.Sprintf("%s-gateway", wandb.Name)
+	}
+
+	ref := wandb.Spec.Networking.GatewayAPI.Gateway.GatewayRef
+	if ref == nil {
+		return false
+	}
+
+	namespace := ref.Namespace
+	if namespace == "" {
+		namespace = wandb.Namespace
+	}
+
+	return gateway.Namespace == namespace && gateway.Name == ref.Name
 }
 
 type filterWBEventsForV1 struct {

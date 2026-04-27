@@ -5,8 +5,8 @@ This directory contains vendored API types from the [Altinity ClickHouse Operato
 ## Source
 
 - **Repository**: https://github.com/Altinity/clickhouse-operator
-- **Version**: v0.0.0-20251007061817-0cf33cf23815 (pseudo-version from Oct 7, 2024)
-- **Date Vendored**: 2025-10-28
+- **Version**: release-0.26.3
+- **Date Vendored**: 2026-04-23
 
 ## Reason for Vendoring
 
@@ -36,57 +36,57 @@ Files affected:
 - `clickhouse.altinity.com/v1/api_resources.go`
 
 The Makefile's `generate` target only processes `./api/v1` and `./api/v2`, explicitly excluding all vendored APIs:
-- `internal/vendored/altinity-clickhouse/...`
-- `internal/vendored/percona-operator/...`
-- `internal/vendored/minio-operator/...`
-- `internal/vendored/redis-operator/...`
-- `internal/vendored/strimzi-kafka/...`
+- `pkg/vendored/altinity-clickhouse/...`
+- `pkg/vendored/percona-operator/...`
+- `pkg/vendored/minio-operator/...`
+- `pkg/vendored/redis-operator/...`
+- `pkg/vendored/strimzi-kafka/...`
 
 ### DeepCopy Mutex Fixes
 
 The following DeepCopyInto methods in `clickhouse.altinity.com/v1/zz_generated.deepcopy.go` were fixed to avoid copying sync.Mutex and sync.RWMutex:
 
-- **ClickHouseInstallation** (lines 518-537): Removed `*out = *in` shallow copy, commented out mutex field copies
-- **ClickHouseInstallationRuntime** (lines 591-608): Removed `*out = *in` shallow copy, commented out `commonConfigMutex` copy
-- **ClickHouseInstallationTemplate** (lines 621-639): Removed `*out = *in` shallow copy, commented out mutex field copies
-- **ClickHouseOperatorConfiguration** (lines 695-701): Removed `*out = *in` shallow copy
-- **OperatorConfig** (lines 1402-1447): Removed `*out = *in` shallow copy
-- **OperatorConfigCHI** (lines 1531-1535): Removed `*out = *in` shallow copy
-- **OperatorConfigCHIRuntime** (lines 1548-1570): Removed `*out = *in` shallow copy, commented out `mutex` field copy
-- **OperatorConfigTemplate** (lines 1981-1985): Removed `*out = *in` shallow copy
-- **Status** (lines 2603-2700): Removed `*out = *in` shallow copy, explicitly copied all non-mutex fields, commented out `mu` field copy
+- **ClickHouseInstallation** (lines 571-589): Removed `*out = *in` shallow copy, commented out mutex field copies
+- **ClickHouseInstallationRuntime** (lines 643-660): Removed `*out = *in` shallow copy, commented out `commonConfigMutex` copy
+- **ClickHouseInstallationTemplate** (lines 673-691): Removed `*out = *in` shallow copy, commented out mutex field copies
+- **ClickHouseOperatorConfiguration** (lines 745-751): Removed `*out = *in` shallow copy
+- **OperatorConfig** (lines 1456-1502): Removed `*out = *in` shallow copy
+- **OperatorConfigCHI** (lines 1585-1589): Removed `*out = *in` shallow copy
+- **OperatorConfigCHIRuntime** (lines 1602-1624): Removed `*out = *in` shallow copy, commented out `mutex` field copy
+- **OperatorConfigTemplate** (lines 2034-2038): Removed `*out = *in` shallow copy
+- **Status** (lines 2656-2747): Removed `*out = *in` shallow copy, explicitly copied all non-mutex fields, commented out `mu` field copy
 
 ### Mutex Copy in MergeFrom
 
-- **clickhouse.altinity.com/v1/type_configuration_chop.go** (line 792): Changed `mergo.Merge(c, *from, ...)` to `mergo.Merge(c, from, ...)` to pass pointer instead of dereferencing (which would copy mutexes)
+- **clickhouse.altinity.com/v1/type_configuration_chop.go** (line 816): Changed `mergo.Merge(c, *from, ...)` to `mergo.Merge(c, from, ...)` to pass pointer instead of dereferencing (which would copy mutexes)
 
 ### Struct Tag Fixes
 
-- **clickhouse.altinity.com/v1/type_configuration_chop.go** (lines 176-177): Fixed missing closing quotes in struct tags for `OperatorConfigWatchNamespaces` fields
+- **clickhouse.altinity.com/v1/type_configuration_chop.go** (lines 194-195): Fixed missing closing quotes in struct tags for `OperatorConfigWatchNamespaces` fields
 
 ### Generic Type Format String Fix
 
-- **util/map.go** (line 248): Changed format specifier from `%s` to `%v` to support any comparable type in generic map printing function
+- **util/map.go** (line 248): Format specifier is `%v` to support any comparable type in generic map printing function (already present in upstream 0.26.3)
 
 ### Unexported Field JSON Tag Fixes
 
 - **clickhouse.altinity.com/v1/type_template_indexes.go**: Removed json/yaml tags from unexported `templates` fields in:
-  - `HostTemplatesIndex` (line 21)
-  - `PodTemplatesIndex` (line 76)
-  - `VolumeClaimTemplatesIndex` (line 131)
-  - `ServiceTemplatesIndex` (line 186)
+  - `HostTemplatesIndex` (line 20)
+  - `PodTemplatesIndex` (line 74)
+  - `VolumeClaimTemplatesIndex` (line 128)
+  - `ServiceTemplatesIndex` (line 182)
 
 ### Import Path Updates
 
 All import paths have been updated from `github.com/altinity/clickhouse-operator/pkg/` to the vendored paths:
-- `github.com/wandb/operator/internal/vendored/altinity-clickhouse/clickhouse.altinity.com/v1`
-- `github.com/wandb/operator/internal/vendored/altinity-clickhouse/common/`
-- `github.com/wandb/operator/internal/vendored/altinity-clickhouse/deployment/`
-- `github.com/wandb/operator/internal/vendored/altinity-clickhouse/metrics/`
-- `github.com/wandb/operator/internal/vendored/altinity-clickhouse/swversion/`
-- `github.com/wandb/operator/internal/vendored/altinity-clickhouse/util/`
-- `github.com/wandb/operator/internal/vendored/altinity-clickhouse/version/`
-- `github.com/wandb/operator/internal/vendored/altinity-clickhouse/xml/`
+- `github.com/wandb/operator/pkg/vendored/altinity-clickhouse/clickhouse.altinity.com/v1`
+- `github.com/wandb/operator/pkg/vendored/altinity-clickhouse/common/`
+- `github.com/wandb/operator/pkg/vendored/altinity-clickhouse/deployment/`
+- `github.com/wandb/operator/pkg/vendored/altinity-clickhouse/metrics/`
+- `github.com/wandb/operator/pkg/vendored/altinity-clickhouse/swversion/`
+- `github.com/wandb/operator/pkg/vendored/altinity-clickhouse/util/`
+- `github.com/wandb/operator/pkg/vendored/altinity-clickhouse/version/`
+- `github.com/wandb/operator/pkg/vendored/altinity-clickhouse/xml/`
 
 ## What Was Vendored
 
@@ -94,28 +94,9 @@ We vendored the API type definitions and utility packages needed for our operato
 
 ### CRDs
 
-**NOTE: CRD files must be downloaded separately and are not currently vendored.**
-
-To download the CRDs for integration testing:
-
-1. Create the `crds/` directory:
-   ```bash
-   mkdir -p internal/vendored/altinity-clickhouse/crds
-   ```
-
-2. Download the ClickHouseInstallation CRD from the upstream repository at the vendored version (v0.0.0-20251007061817-0cf33cf23815):
-   ```bash
-   curl -L https://raw.githubusercontent.com/Altinity/clickhouse-operator/0cf33cf23815/deploy/operator/clickhouse-operator-install-bundle.yaml \
-     -o internal/vendored/altinity-clickhouse/crds/clickhouse-operator-install-bundle.yaml
-   ```
-
-   Or download individual CRDs:
-   ```bash
-   curl -L https://raw.githubusercontent.com/Altinity/clickhouse-operator/0cf33cf23815/deploy/operator/parts/crd.yaml \
-     -o internal/vendored/altinity-clickhouse/crds/clickhouse.altinity.com_clickhouseinstallations.yaml
-   ```
-
-3. **When updating to a new version**: Update the commit hash in the URLs above to match the new vendored version.
+CRD files are located in `pkg/vendored/altinity-clickhouse/crds/`:
+- `clickhouse-operator-install-bundle.yaml`
+- `clickhouse.altinity.com_clickhouseinstallations.yaml` (individual CRD)
 
 **Purpose**: Integration testing with real Kubernetes API server (envtest)
 

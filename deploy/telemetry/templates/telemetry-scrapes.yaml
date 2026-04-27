@@ -1,4 +1,4 @@
-{{- if and .Values.enabled .Values.scrape.enabled }}
+{{- if and (eq (include "telemetry.stackEnabled" .) "true") .Values.scrape.enabled }}
 {{- if .Values.scrape.kubeletCadvisor }}
 ---
 apiVersion: operator.victoriametrics.com/v1beta1

@@ -1,0 +1,19 @@
+apiVersion: apps.wandb.com/v2
+kind: WeightsAndBiases
+metadata:
+  name: wandb
+spec:
+  wandb:
+    hostname: http://wandb.localhost:8080
+  networking:
+    mode: gateway
+    gatewayAPI:
+      listenerName: http
+      gateway:
+        managed: true
+        gatewayClassName: nginx
+        listeners:
+          - name: http
+            port: 80
+            protocol: HTTP
+            hostname: wandb.localhost

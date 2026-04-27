@@ -358,8 +358,8 @@ func (in *GatewayConfig) DeepCopyInto(out *GatewayConfig) {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
-	if in.Annotations != nil {
-		in, out := &in.Annotations, &out.Annotations
+	if in.InfrastructureAnnotations != nil {
+		in, out := &in.InfrastructureAnnotations, &out.InfrastructureAnnotations
 		*out = make(map[string]string, len(*in))
 		for key, val := range *in {
 			(*out)[key] = val

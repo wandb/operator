@@ -6,6 +6,7 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
+	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	apiErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -21,11 +22,11 @@ func reconcileConsolidatedIngress(ctx context.Context, c ctrlClient.Client, wand
 
 	var paths []networkingv1.HTTPIngressPath
 
-	for _, app := range manifest.Applications {
+	for _, app := range sortedManifestApplications(manifest) {
 		if len(app.Features) > 0 && !manifestFeaturesEnabled(app.Features, manifest.Features) {
 			continue
 		}
-		if app.Ingress == nil && app.Service == nil {
+		if app.Ingress == nil || app.Service == nil {
 			continue
 		}
 
@@ -130,13 +131,21 @@ func reconcileConsolidatedIngress(ctx context.Context, c ctrlClient.Client, wand
 	err := c.Get(ctx, types.NamespacedName{Name: ingressName, Namespace: wandb.Namespace}, current)
 	if err != nil {
 		if apiErrors.IsNotFound(err) {
-			return c.Create(ctx, desired)
+			if err := c.Create(ctx, desired); err != nil {
+				return err
+			}
+			wandb.Status.IngressStatus = summarizeIngressStatus(desired)
+			return nil
 		}
 		return err
 	}
 
 	desired.ResourceVersion = current.ResourceVersion
-	return c.Update(ctx, desired)
+	if err := c.Update(ctx, desired); err != nil {
+		return err
+	}
+	wandb.Status.IngressStatus = summarizeIngressStatus(current)
+	return nil
 }
 
 func deleteConsolidatedIngress(ctx context.Context, c ctrlClient.Client, wandb *apiv2.WeightsAndBiases) error {
@@ -163,4 +172,30 @@ func resolveIngressServicePort(app serverManifest.Application) networkingv1.Serv
 		return networkingv1.ServiceBackendPort{Number: app.Service.Ports[0].Port}
 	}
 	return networkingv1.ServiceBackendPort{Number: 8080}
+}
+
+func summarizeIngressStatus(ingress *networkingv1.Ingress) *apiv2.IngressStatusSummary {
+	if ingress == nil {
+		return nil
+	}
+
+	summary := &apiv2.IngressStatusSummary{
+		Name: ingress.Name,
+	}
+	for _, lb := range ingress.Status.LoadBalancer.Ingress {
+		loadBalancerIngress := corev1.LoadBalancerIngress{
+			IP:       lb.IP,
+			Hostname: lb.Hostname,
+		}
+		for _, port := range lb.Ports {
+			loadBalancerIngress.Ports = append(loadBalancerIngress.Ports, corev1.PortStatus{
+				Port:     port.Port,
+				Protocol: port.Protocol,
+				Error:    port.Error,
+			})
+		}
+		summary.LoadBalancerIngress = append(summary.LoadBalancerIngress, loadBalancerIngress)
+	}
+
+	return summary
 }

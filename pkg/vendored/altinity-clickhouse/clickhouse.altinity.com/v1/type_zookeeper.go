@@ -17,8 +17,9 @@ package v1
 import (
 	"strings"
 
-	"github.com/wandb/operator/pkg/vendored/altinity-clickhouse/common/types"
 	"gopkg.in/d4l3k/messagediff.v1"
+
+	"github.com/wandb/operator/pkg/vendored/altinity-clickhouse/common/types"
 )
 
 // ZookeeperConfig defines zookeeper section of .spec.configuration

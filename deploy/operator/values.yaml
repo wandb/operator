@@ -8,7 +8,7 @@ wandb:
 wandb-operator:
   image:
     repository: us-docker.pkg.dev/wandb-production/public/wandb/operator
-    tag: internal-testing.3
+    tag: 2.0.0-alpha.1
   containers:
     operator:
       command:
@@ -28,17 +28,35 @@ wandb-operator:
         METRICS_SECURE:
           value: "false"
         TELEMETRY_ENABLED:
-          value: "{{ .Values.telemetry.enabled }}"
+          valueFrom:
+            configMapKeyRef:
+              name: '{{ .Release.Name }}-telemetry-config'
+              key: TELEMETRY_ENABLED
         TELEMETRY_MANAGED_NAMESPACE:
-          value: "{{ .Values.telemetry.namespace }}"
+          valueFrom:
+            configMapKeyRef:
+              name: '{{ .Release.Name }}-telemetry-config'
+              key: TELEMETRY_MANAGED_NAMESPACE
         TELEMETRY_OTEL_SECRET_NAME:
-          value: '{{ (index .Values "wandb-operator").telemetry.otel.secretName }}'
+          valueFrom:
+            configMapKeyRef:
+              name: '{{ .Release.Name }}-telemetry-config'
+              key: TELEMETRY_OTEL_SECRET_NAME
         TELEMETRY_OTEL_PROTOCOL:
-          value: '{{ (index .Values "wandb-operator").telemetry.otel.protocol }}'
+          valueFrom:
+            configMapKeyRef:
+              name: '{{ .Release.Name }}-telemetry-config'
+              key: TELEMETRY_OTEL_PROTOCOL
         TELEMETRY_OTEL_SERVICE_NAME:
-          value: '{{ (index .Values "wandb-operator").telemetry.otel.serviceName }}'
+          valueFrom:
+            configMapKeyRef:
+              name: '{{ .Release.Name }}-telemetry-config'
+              key: TELEMETRY_OTEL_SERVICE_NAME
         TELEMETRY_OTEL_RESOURCE_ATTRIBUTES:
-          value: '{{ (index .Values "wandb-operator").telemetry.otel.resourceAttributes }}'
+          valueFrom:
+            configMapKeyRef:
+              name: '{{ .Release.Name }}-telemetry-config'
+              key: TELEMETRY_OTEL_RESOURCE_ATTRIBUTES
       securityContext:
         allowPrivilegeEscalation: false
         capabilities:
@@ -99,13 +117,6 @@ wandb-operator:
     redis: true
     vm: true
 
-  telemetry:
-    otel:
-      secretName: wandb-otel-connection
-      protocol: http/protobuf
-      serviceName: wandb-service
-      resourceAttributes: deployment.environment=dev
-
 mysql-operator:
   install: true
 
@@ -120,6 +131,14 @@ minio-operator:
   install: true
 
 altinity-clickhouse-operator:
+  crdHook:
+    image:
+      repository: alpine/k8s
+      tag: 1.35.4
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
   install: true
   configs:
     files:
@@ -128,14 +147,33 @@ altinity-clickhouse-operator:
           namespaces: [".*"]
 
 victoria-metrics-operator:
-  enabled: true
+  # Helm dependency conditions are boolean-only, so full/forward installs
+  # must opt into this dependency explicitly or via a preset values file.
+  enabled: false
 
 grafana-operator:
-  enabled: true
+  # Helm dependency conditions are boolean-only, so full installs
+  # must opt into this dependency explicitly or via a preset values file.
+  enabled: false
 
 telemetry:
-  enabled: false
-  namespace: ""
+  # off: disable telemetry collection
+  # full: run the in-cluster Victoria stack and local Grafana
+  # forward: run the in-cluster Victoria stack and forward OTLP data externally
+  mode: "off"
+  namespace: wandb
+  otel:
+    secretName: wandb-otel-connection
+    protocol: http/protobuf
+    serviceName: wandb-service
+    resourceAttributes: ""
+  forwarding:
+    otlp:
+      endpoint: ""
+      protocol: http/protobuf
+      headers: {}
+      tls:
+        insecure: false
   retentionPeriod: 1d
   scrape:
     enabled: true

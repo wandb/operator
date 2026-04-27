@@ -8,6 +8,11 @@ features:
 
 bucket:
   default:
+    ingress:
+      paths:
+        - /bucket
+      servicePort: "http-minio"
+      pathType: Prefix
     sizing:
       default:
         replicas: 1
@@ -594,6 +599,17 @@ applications:
         - port: 8080
           protocol: TCP
           name: api
+    ingress:
+      paths:
+        - /api
+        - /artifacts
+        - /artifactsV2
+        - /files
+        - /graphql
+        - /graphql2
+        - /oidc
+      servicePort: "8080"
+      pathType: Prefix
     sizing:
       micro:
         resources:
@@ -836,6 +852,11 @@ applications:
         - port: 8080
           protocol: TCP
           name: frontend
+    ingress:
+      paths:
+        - /
+      servicePort: "8080"
+      pathType: Prefix
     sizing:
       micro:
         resources:
@@ -1051,6 +1072,11 @@ applications:
         - port: 9239
           protocol: TCP
           name: weave
+    ingress:
+      paths:
+        - /weave/
+      servicePort: "9239"
+      pathType: Prefix
     volumeMounts:
       - name: temp-dir
         mountPath: /tmp/
@@ -1122,6 +1148,11 @@ applications:
         - port: 8080
           protocol: TCP
           name: weave-trace
+    ingress:
+      paths:
+        - /traces
+      servicePort: "8080"
+      pathType: Prefix
     jwtTokens:
       - name: internal-jwt
         mountPath: /tmp/weave-trace/internal-jwt

@@ -23,7 +23,7 @@ import (
 	"strings"
 
 	"github.com/wandb/operator/pkg/vendored/altinity-clickhouse/common/types"
-	util2 "github.com/wandb/operator/pkg/vendored/altinity-clickhouse/util"
+	"github.com/wandb/operator/pkg/vendored/altinity-clickhouse/util"
 	"github.com/wandb/operator/pkg/vendored/altinity-clickhouse/xml"
 	"gopkg.in/d4l3k/messagediff.v1"
 )
@@ -263,7 +263,7 @@ func (s *Settings) DeleteKey(key string) {
 	if !s.HasKey(key) {
 		return
 	}
-	// DeleteAll storage key
+	// Delete storage key
 	delete(s.data, key)
 }
 
@@ -300,11 +300,15 @@ func (s *Settings) SetScalarsFromMap(m map[string]string) *Settings {
 	return s
 }
 
-// Keys gets keys of the settings
+// Keys gets keys of the settings in alphabetical order
 func (s *Settings) Keys() (keys []string) {
 	s.WalkKeys(func(key string, setting *Setting) {
 		keys = append(keys, key)
 	})
+
+	// Sort keys to ensure deterministic ordering for Kubernetes manifest stability.
+	// Consistent ordering prevents unnecessary resource updates during reconciliation.
+	sort.Strings(keys)
 	return keys
 }
 
@@ -325,7 +329,7 @@ func (s *Settings) Prefixes(unique bool) (prefixes []string) {
 	})
 
 	if unique {
-		prefixes = util2.Unique(prefixes)
+		prefixes = util.Unique(prefixes)
 	}
 
 	sort.Strings(prefixes)
@@ -584,7 +588,7 @@ func (s *Settings) AsSortedSliceOfStrings() []string {
 }
 
 type SettingsNormalizerOptions struct {
-	Replacers []*util2.Replacer
+	Replacers []*util.Replacer
 }
 
 // Normalize normalizes settings
@@ -592,7 +596,7 @@ func (s *Settings) Normalize(_opts ...*SettingsNormalizerOptions) *Settings {
 	s.normalizeKeys()
 	if len(_opts) > 0 {
 		opts := _opts[0]
-		macros := util2.NewReplacerFrom(opts.Replacers...)
+		macros := util.NewReplacerFrom(opts.Replacers...)
 		s.applyMacrosOnKeys(macros)
 		s.applyMacrosOnValues(macros)
 	}
@@ -621,14 +625,14 @@ func (s *Settings) normalizeKeys() {
 		s.SetKey(normalizedKey, s.GetKey(unNormalizedKey))
 	}
 
-	// DeleteAll entries with un-normalized keys
+	// Delete entries with un-normalized keys
 	for _, unNormalizedKey := range keysToNormalize {
 		s.DeleteKey(unNormalizedKey)
 	}
 }
 
 // applyMacrosOnKeys - applies macros on keys. Values are kept intact
-func (s *Settings) applyMacrosOnKeys(macros *util2.Replacer) {
+func (s *Settings) applyMacrosOnKeys(macros *util.Replacer) {
 	if s.Len() == 0 {
 		return
 	}
@@ -649,14 +653,14 @@ func (s *Settings) applyMacrosOnKeys(macros *util2.Replacer) {
 		s.SetKey(modifiedKey, s.GetKey(originalKey))
 	}
 
-	// DeleteAll entries with before-modification keys
+	// Delete entries with before-modification keys
 	for _, beforeModificationKey := range keysToModify {
 		s.DeleteKey(beforeModificationKey)
 	}
 }
 
 // applyMacrosOnValues - applies macros on values. Keys are kept intact
-func (s *Settings) applyMacrosOnValues(macros *util2.Replacer) {
+func (s *Settings) applyMacrosOnValues(macros *util.Replacer) {
 	s.Walk(func(name string, setting *Setting) {
 		setting.ApplyMacros(macros)
 	})
@@ -679,9 +683,9 @@ func (s *Settings) ClickHouseConfig(_prefix ...string) string {
 	// <clickhouse>
 	//   XML code
 	// </clickhouse>
-	util2.Iline(b, 0, "<"+xmlTagClickHouse+">")
+	util.Iline(b, 0, "<"+xmlTagClickHouse+">")
 	xml.GenerateFromSettings(b, s, prefix)
-	util2.Iline(b, 0, "</"+xmlTagClickHouse+">")
+	util.Iline(b, 0, "</"+xmlTagClickHouse+">")
 
 	return b.String()
 }
@@ -832,7 +836,7 @@ func listModifiedSettingsPaths(a, b *Settings, path *messagediff.Path, value int
 // file/setting1
 // file/setting2
 func listPrefixedModifiedSettingsPaths(a, b *Settings, pathPrefix string, path *messagediff.Path, value interface{}) (paths []string) {
-	return util2.Prefix(listModifiedSettingsPaths(a, b, path, value), pathPrefix+"/")
+	return util.Prefix(listModifiedSettingsPaths(a, b, path, value), pathPrefix+"/")
 }
 
 // ListAffectedSettingsPathsFromDiff makes list of paths that were modified between two settings prefixed with the specified `prefix`

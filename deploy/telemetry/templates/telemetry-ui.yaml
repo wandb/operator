@@ -1,4 +1,4 @@
-{{- if .Values.enabled }}
+{{- if eq (include "telemetry.uiEnabled" .) "true" }}
 ---
 apiVersion: grafana.integreatly.org/v1beta1
 kind: Grafana

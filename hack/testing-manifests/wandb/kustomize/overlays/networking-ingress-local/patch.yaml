@@ -1,0 +1,11 @@
+apiVersion: apps.wandb.com/v2
+kind: WeightsAndBiases
+metadata:
+  name: wandb
+spec:
+  wandb:
+    hostname: http://wandb.localhost:8080
+  networking:
+    mode: ingress
+    ingress:
+      ingressClassName: nginx

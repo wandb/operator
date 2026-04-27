@@ -20,7 +20,7 @@ import "strings"
 // Each section renders into separate ConfigMap mapped into Pod as ClickHouse configuration file
 var (
 	SectionEmpty  SettingsSection = ""
-	SectionCommon SettingsSection = "{model}"
+	SectionCommon SettingsSection = "{common}"
 	SectionUsers  SettingsSection = "{users}"
 	SectionHost   SettingsSection = "{hosts}"
 )

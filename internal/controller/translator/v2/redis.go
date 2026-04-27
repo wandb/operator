@@ -17,6 +17,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"knative.dev/pkg/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
@@ -80,7 +81,10 @@ func ToRedisStandaloneVendorSpec(
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				Resources:       &corev1.ResourceRequirements{},
 			},
-			Affinity:    wandb.GetAffinity(spec.ManagedInfraSpec),
+			Affinity: wandb.GetAffinity(spec.ManagedInfraSpec),
+			PodSecurityContext: &corev1.PodSecurityContext{
+				FSGroup: ptr.Int64(1000),
+			},
 			Tolerations: wandb.GetTolerations(spec.ManagedInfraSpec),
 			Storage: &rediscommon.Storage{
 				VolumeClaimTemplate: corev1.PersistentVolumeClaim{
@@ -162,6 +166,9 @@ func ToRedisSentinelVendorSpec(
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				Resources:       &corev1.ResourceRequirements{},
 			},
+			PodSecurityContext: &corev1.PodSecurityContext{
+				FSGroup: ptr.Int64(1000),
+			},
 			Affinity:    wandb.GetAffinity(spec.ManagedInfraSpec),
 			Tolerations: wandb.GetTolerations(spec.ManagedInfraSpec),
 			RedisSentinelConfig: &redissentinelv1beta2.RedisSentinelConfig{
@@ -236,6 +243,9 @@ func ToRedisReplicationVendorSpec(
 				Image:           translator.RedisReplicationImage,
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				Resources:       &corev1.ResourceRequirements{},
+			},
+			PodSecurityContext: &corev1.PodSecurityContext{
+				FSGroup: ptr.Int64(1000),
 			},
 			Affinity:    wandb.GetAffinity(spec.ManagedInfraSpec),
 			Tolerations: wandb.GetTolerations(spec.ManagedInfraSpec),

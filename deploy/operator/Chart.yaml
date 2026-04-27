@@ -2,8 +2,8 @@ apiVersion: v2
 name: operator
 description: A Helm chart for Weights & Biases operator
 type: application
-version: 1.5.2
-appVersion: "2.0.0"
+version: 2.0.0-alpha.1
+appVersion: "2.0.0-alpha.1"
 maintainers:
   - name: wandb
     email: support@wandb.com
@@ -16,7 +16,7 @@ dependencies:
     repository: https://charts.wandb.ai/
     condition: wandb-operator.enabled
   - name: mysql-operator
-    version: 2.2.7
+    version: 2.1.10
     repository: https://mysql.github.io/mysql-operator/
     condition: mysql-operator.enabled
   - name: redis-operator
@@ -33,7 +33,7 @@ dependencies:
     repository: https://operator.min.io
     condition: minio-operator.enabled
   - name: altinity-clickhouse-operator
-    version: 0.25.6
+    version: 0.26.3
     repository: https://helm.altinity.com
     condition: altinity-clickhouse-operator.enabled
   - name: victoria-metrics-operator
@@ -47,4 +47,3 @@ dependencies:
   - name: telemetry
     version: 0.1.0
     repository: file://../telemetry
-    condition: telemetry.enabled

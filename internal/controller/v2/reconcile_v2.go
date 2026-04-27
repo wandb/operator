@@ -235,6 +235,9 @@ func Reconcile(
 					return ctrl.Result{}, err
 				}
 			}
+			if err = deleteInfraHTTPRoutes(ctx, client, wandb); err != nil {
+				return ctrl.Result{}, err
+			}
 			if wandb.Spec.Networking.Mode == apiv2.NetworkingModeIngress {
 				if err = deleteConsolidatedIngress(ctx, client, wandb); err != nil {
 					return ctrl.Result{}, err
@@ -351,7 +354,7 @@ func Reconcile(
 		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
 	}
 
-	res, err = ReconcileWandbManifest(ctx, client, wandb, manifest)
+	res, err = ReconcileWandbManifest(ctx, client, wandb, manifest, telemetryConfig)
 	// send up the manifest error for now
 	if err != nil {
 		return res, err
@@ -376,7 +379,13 @@ func consolidateResults(results []ctrl.Result) ctrl.Result {
 	}
 }
 
-func ReconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest) (ctrl.Result, error) {
+func ReconcileWandbManifest(
+	ctx context.Context,
+	client ctrlClient.Client,
+	wandb *apiv2.WeightsAndBiases,
+	manifest serverManifest.Manifest,
+	telemetryConfig TelemetryRuntimeConfig,
+) (ctrl.Result, error) {
 	// Reconcile Wandb Manifest
 	logger := ctrl.LoggerFrom(ctx).WithName("reconcileWandbManifest")
 	logger.Info("Reconciling Wandb Manifest", "name", wandb.Name)
@@ -436,7 +445,14 @@ func ReconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 		return ctrl.Result{}, err
 	}
 
+	if err := cleanupNetworkingModeResources(ctx, client, wandb); err != nil {
+		logger.Error(err, "Failed to clean up stale networking resources")
+		return ctrl.Result{}, err
+	}
+	resetInactiveNetworkingStatus(wandb)
+
 	if wandb.Spec.Networking.Mode == apiv2.NetworkingModeGatewayAPI {
+		wandb.Status.GatewayStatus = nil
 		if err := reconcileGateway(ctx, client, wandb); err != nil {
 			logger.Error(err, "Failed to reconcile Gateway")
 			return ctrl.Result{}, err
@@ -453,7 +469,7 @@ func ReconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
-	result, err = reconcileApplications(ctx, client, wandb, manifest)
+	result, err = reconcileApplications(ctx, client, wandb, manifest, telemetryConfig)
 	if err != nil {
 		return result, err
 	}
@@ -468,7 +484,13 @@ func ReconcileWandbManifest(ctx context.Context, client ctrlClient.Client, wandb
 	return ctrl.Result{}, nil
 }
 
-func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest) (ctrl.Result, error) {
+func reconcileApplications(
+	ctx context.Context,
+	client ctrlClient.Client,
+	wandb *apiv2.WeightsAndBiases,
+	manifest serverManifest.Manifest,
+	telemetryConfig TelemetryRuntimeConfig,
+) (ctrl.Result, error) {
 	logger := logx.GetSlog(ctx)
 	logger.Info("Reconciling applications")
 	serviceAccountName := wandb.Spec.Wandb.ServiceAccount.ServiceAccountName
@@ -484,14 +506,14 @@ func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb 
 	}
 
 	desiredAppNames := make(map[string]bool)
-	for _, app := range manifest.Applications {
+	for _, app := range sortedManifestApplications(manifest) {
 		if len(app.Features) > 0 && !manifestFeaturesEnabled(app.Features, manifest.Features) {
 			continue
 		}
 		desiredAppNames[app.Name] = true
 	}
 
-	for _, app := range manifest.Applications {
+	for _, app := range sortedManifestApplications(manifest) {
 		// If the application is gated behind features, only install it when
 		// at least one of those features is enabled in the manifest.
 		if len(app.Features) > 0 && !manifestFeaturesEnabled(app.Features, manifest.Features) {
@@ -503,7 +525,7 @@ func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb 
 		if err != nil {
 			return ctrl.Result{}, err
 		}
-		envVars, err = injectManagedWorkloadTelemetryEnvvars(ctx, client, wandb, manifest, app, envVars)
+		envVars, err = injectManagedWorkloadTelemetryEnvvars(ctx, client, wandb, manifest, app, envVars, telemetryConfig.Enabled)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
@@ -622,6 +644,7 @@ func reconcileApplications(ctx context.Context, client ctrlClient.Client, wandb 
 	}
 
 	if wandb.Spec.Networking.Mode == apiv2.NetworkingModeIngress {
+		wandb.Status.IngressStatus = nil
 		if err := reconcileConsolidatedIngress(ctx, client, wandb, manifest); err != nil {
 			logger.Error("Failed to reconcile consolidated Ingress", "err", err)
 			return ctrl.Result{}, err
@@ -966,7 +989,7 @@ func ApplyInfraSizing(wandb *apiv2.WeightsAndBiases, manifest serverManifest.Man
 
 	// Default ClickHouse
 	if wandb.Spec.ClickHouse.ManagedClickHouse != nil {
-		if clickhouseConfig, ok := manifest.Redis["default"]; ok {
+		if clickhouseConfig, ok := manifest.Clickhouse["default"]; ok {
 			sizing := ResolveInfraSizing(clickhouseConfig.Sizing, size, wandb.Spec.RequireLimits)
 			spec := wandb.Spec.ClickHouse.ManagedClickHouse
 			if spec.Replicas == 0 && sizing.Replicas != 0 {
@@ -983,7 +1006,7 @@ func ApplyInfraSizing(wandb *apiv2.WeightsAndBiases, manifest serverManifest.Man
 
 	// Default ObjectStore (bucket)
 	if wandb.Spec.ObjectStore.ManagedObjectStore != nil {
-		if objectStoreConfig, ok := manifest.Redis["default"]; ok {
+		if objectStoreConfig, ok := manifest.Bucket["default"]; ok {
 			sizing := ResolveInfraSizing(objectStoreConfig.Sizing, size, wandb.Spec.RequireLimits)
 			spec := wandb.Spec.ObjectStore.ManagedObjectStore
 			if spec.Replicas == 0 && sizing.Replicas != 0 {
@@ -1158,8 +1181,9 @@ func injectManagedWorkloadTelemetryEnvvars(
 	manifest serverManifest.Manifest,
 	app serverManifest.Application,
 	envVars []corev1.EnvVar,
+	telemetryEnabled bool,
 ) ([]corev1.EnvVar, error) {
-	if !shouldInjectManagedWorkloadTelemetry(app.Name) {
+	if !telemetryEnabled || !shouldInjectManagedWorkloadTelemetry(app.Name) {
 		return envVars, nil
 	}
 
@@ -1524,7 +1548,7 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *apiv2.
 			case "telemetry":
 				secretName := src.Name
 				if secretName == "" {
-					secretName = "wandb-otel-connection"
+					continue
 				}
 
 				selector := corev1.SecretKeySelector{
