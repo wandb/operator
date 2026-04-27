@@ -13,6 +13,9 @@ if [[ "$CRC_STATUS" != "Running" ]]; then
     exit 1
 fi
 
+echo "Configuring CRC disk size..."
+crc config set disk-size 60
+
 eval "$(crc oc-env)"
 
 KUBEADMIN_PASSWORD=$(crc console --credentials 2>/dev/null | grep kubeadmin | sed "s/.*-p \([^ ]*\) .*/\1/" || true)
