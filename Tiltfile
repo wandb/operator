@@ -5,6 +5,7 @@ settings = {
         "minikube",
         "kind-kind",
         "orbstack",
+        "crc-admin",
     ],
     "installWandb": True,
     "wandbCR": "hack/testing-manifests/wandb/.generated/wandb-cr.yaml",
@@ -13,6 +14,7 @@ settings = {
     "installIngressNginx": True,
     "installNginxGateway": True,
     "logFormat": "pretty",  # pretty, text, json
+    "openshiftSCC": False,
 }
 
 GENERATED_WANDB_CR = "hack/testing-manifests/wandb/.generated/wandb-cr.yaml"
@@ -43,6 +45,14 @@ else:
 
 allow_k8s_contexts(settings.get("allowed_k8s_contexts"))
 
+IS_CRC = 'crc' in currentContext or 'api-crc-testing' in currentContext
+if IS_CRC:
+    settings['openshiftSCC'] = True
+    default_registry(
+        'default-route-openshift-image-registry.apps-crc.testing/operator-system',
+        host_from_cluster='image-registry.openshift-image-registry.svc:5000/operator-system',
+    )
+
 os.putenv('PATH', './bin:' + os.getenv('PATH'))
 
 load('ext://restart_process', 'docker_build_with_restart')
@@ -59,6 +69,22 @@ RUN mkdir -p /helm/.cache/helm /helm/.config/helm /helm/.local/share/helm
 ENV HELM_CACHE_HOME=/helm/.cache/helm
 ENV HELM_CONFIG_HOME=/helm/.config/helm
 ENV HELM_DATA_HOME=/helm/.local/share/helm
+'''
+
+DOCKERFILE_OPENSHIFT = '''
+FROM registry.access.redhat.com/ubi9/ubi
+
+ADD tilt_bin/manager /manager
+ADD hack/testing-manifests/server-manifest /server-manifest
+
+RUN mkdir -p /helm/.cache/helm /helm/.config/helm /helm/.local/share/helm && \
+    chgrp -R 0 /helm && chmod -R g=u /helm
+
+ENV HELM_CACHE_HOME=/helm/.cache/helm
+ENV HELM_CONFIG_HOME=/helm/.config/helm
+ENV HELM_DATA_HOME=/helm/.local/share/helm
+
+USER 1001
 '''
 DOMAIN = "wandb.com"
 GROUP = "apps"
@@ -232,6 +258,11 @@ third_party_operator_flags = [
     '--create-namespace',
 ]
 
+if settings.get('openshiftSCC'):
+    third_party_operator_flags += [
+        '--set=altinity-clickhouse-operator.crdHook.enabled=false',
+    ]
+
 if settings.get("installTelemetry"):
     third_party_operator_flags += [
         '--set=victoria-metrics-operator.enabled=true',
@@ -248,7 +279,8 @@ helm_resource(
     labels=[GROUP_THIRD_PARTY_OPERATORS],
 )
 
-k8s_yaml(local('kustomize build config/tilt-dev'))
+KUSTOMIZE_OVERLAY = 'config/openshift-dev' if settings.get('openshiftSCC') else 'config/tilt-dev'
+k8s_yaml(local('kustomize build ' + KUSTOMIZE_OVERLAY))
 k8s_yaml('hack/tilt/endpoint-anchors.yaml')
 
 k8s_resource(
@@ -492,7 +524,7 @@ if settings.get("installTelemetry"):
 
 docker_build_with_restart(
     IMG, '.',
-    dockerfile_contents=DOCKERFILE,
+    dockerfile_contents=DOCKERFILE_OPENSHIFT if settings.get('openshiftSCC') else DOCKERFILE,
     entrypoint=manager_entrypoint,
     only=['./tilt_bin/manager', './hack/testing-manifests/server-manifest'],
     live_update=[

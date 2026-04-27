@@ -1,0 +1,14 @@
+- op: replace
+  path: /spec/template/spec/securityContext
+  value:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+- op: replace
+  path: /spec/template/spec/containers/0/securityContext
+  value:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL

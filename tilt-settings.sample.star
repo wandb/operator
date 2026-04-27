@@ -22,4 +22,9 @@ SETTINGS = {
     #                    "disable-objectstore", "disable-clickhouse"
     # Default (empty list) uses base which is size=dev, retentionPolicy.onDelete=detach, version=0.79.0
     "wandbOverlays": [],
+
+    # For CRC (Red Hat OpenShift Local), add "crc-admin" to allowedContexts.
+    # CRC auto-enables openshiftSCC and configures the internal registry.
+    # Run hack/scripts/setup_crc.sh first to expose the registry and login Docker.
+    # "allowedContexts": ["crc-admin"],
 }

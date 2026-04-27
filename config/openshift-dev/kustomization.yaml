@@ -10,4 +10,4 @@ patches:
       version: v1
       kind: Deployment
       name: controller-manager
-    path: security.yaml
+    path: openshift-security.yaml
