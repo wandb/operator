@@ -6,15 +6,15 @@ command -v crc >/dev/null 2>&1 || { echo "Error: crc is required but not install
 command -v oc >/dev/null 2>&1 || { echo "Error: oc is required but not installed." >&2; echo "Install with: brew install openshift-cli" >&2; exit 1; }
 command -v docker >/dev/null 2>&1 || { echo "Error: docker is required but not installed." >&2; exit 1; }
 
+echo "Configuring CRC resources..."
+crc config set memory 16384
+crc config set disk-size 80
+
 CRC_STATUS=$(crc status --output json 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('crcStatus','Unknown'))" 2>/dev/null || echo "Unknown")
 if [[ "$CRC_STATUS" != "Running" ]]; then
-    echo "Error: CRC is not running (status: $CRC_STATUS)."
-    echo "Start it with: crc start"
-    exit 1
+    echo "Starting CRC..."
+    crc start
 fi
-
-echo "Configuring CRC disk size..."
-crc config set disk-size 60
 
 eval "$(crc oc-env)"
 

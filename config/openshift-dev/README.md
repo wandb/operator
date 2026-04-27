@@ -12,15 +12,13 @@ This overlay configures the operator deployment for OpenShift's `restricted-v2` 
 
 ## Setup
 
-### 1. Install and start CRC
+### 1. Install CRC
 
 ```bash
 crc setup
-crc config set memory 16384
-crc start
 ```
 
-The first run downloads a ~4GB VM image and prompts for a pull secret (available from the CRC download page).
+This downloads a ~4GB VM image on first run and prompts for a pull secret (available from the CRC download page). The setup script handles configuration and starting CRC.
 
 ### 2. Run the setup script
 
@@ -29,6 +27,8 @@ The first run downloads a ~4GB VM image and prompts for a pull secret (available
 ```
 
 This script:
+- Configures CRC memory (16GB) and disk size (80GB)
+- Starts CRC if not already running
 - Logs in as `kubeadmin`
 - Exposes the internal image registry via a route
 - Configures Docker to trust the CRC registry (handles OrbStack automatically)
@@ -84,12 +84,11 @@ The setup script handles this automatically for OrbStack. If using Docker Deskto
 
 ### Pods stuck in Pending (insufficient memory)
 
-CRC defaults to 10.5GB RAM. Increase it:
+The setup script configures 16GB RAM automatically. If CRC was already running when the script ran, the config won't take effect until restart:
 
 ```bash
 crc stop
-crc config set memory 16384
-crc start
+./hack/scripts/setup_crc.sh
 ```
 
 ### Docker login expired
