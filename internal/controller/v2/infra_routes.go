@@ -8,7 +8,7 @@ import (
 
 	gkeGatewayApiNetworkingv1 "github.com/GoogleCloudPlatform/gke-gateway-api/apis/networking/v1"
 	apiv2 "github.com/wandb/operator/api/v2"
-	"github.com/wandb/operator/internal/controller/translator"
+	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/logx"
 	"github.com/wandb/operator/pkg/utils"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
@@ -434,7 +434,7 @@ func deleteStaleInfraHealthCheckPolicies(
 
 func infraHealthCheckPolicyLabels(wandb *apiv2.WeightsAndBiases) map[string]string {
 	labels := infraHTTPRouteLabels(wandb)
-	labels[translator.WandbComponentLabel] = "infra-healthcheck-policy"
+	labels[common.WandbComponentLabel] = "infra-healthcheck-policy"
 	return labels
 }
 
@@ -442,9 +442,9 @@ func infraHTTPRouteLabels(wandb *apiv2.WeightsAndBiases) map[string]string {
 	return map[string]string{
 		"app.kubernetes.io/managed-by": "wandb-operator",
 		"app.kubernetes.io/instance":   wandb.Name,
-		translator.WandbNameLabel:      wandb.Name,
-		translator.WandbNamespaceLabel: wandb.Namespace,
-		translator.WandbComponentLabel: infraHTTPRouteComponent,
+		common.WandbNameLabel:          wandb.Name,
+		common.WandbNamespaceLabel:     wandb.Namespace,
+		common.WandbComponentLabel:     infraHTTPRouteComponent,
 	}
 }
 

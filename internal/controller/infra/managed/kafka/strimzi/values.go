@@ -1,10 +1,6 @@
 package strimzi
 
 const (
-	// Kafka version and metadata
-	KafkaVersion         = "4.1.0"
-	KafkaMetadataVersion = "4.1-IV0"
-
 	ConnectionName = "wandb-kafka-connection"
 
 	// Listener configuration

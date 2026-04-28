@@ -9,8 +9,6 @@ import (
 	"github.com/wandb/operator/internal/controller/infra/external"
 	externalmysql "github.com/wandb/operator/internal/controller/infra/external/mysql"
 	"github.com/wandb/operator/internal/controller/infra/managed/mysql/mysql"
-	"github.com/wandb/operator/internal/controller/translator"
-	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
 	"github.com/wandb/operator/pkg/utils"
 	mysqlv2 "github.com/wandb/operator/pkg/vendored/mysql-operator/v2"
 	corev1 "k8s.io/api/core/v1"
@@ -41,7 +39,7 @@ func mysqlReadState(
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
 	newConditions []metav1.Condition,
-) ([]metav1.Condition, *translator.MysqlConnection) {
+) ([]metav1.Condition, *apiv2.MysqlConnection) {
 	if wandb.Spec.MySQL.ManagedMysql != nil {
 		return managedMysqlReadState(ctx, client, wandb, newConditions)
 	}
@@ -57,7 +55,7 @@ func mysqlInferStatus(
 	recorder record.EventRecorder,
 	wandb *apiv2.WeightsAndBiases,
 	newConditions []metav1.Condition,
-	newInfraConn *translator.MysqlConnection,
+	newInfraConn *apiv2.MysqlConnection,
 ) (ctrl.Result, error) {
 	if wandb.Spec.MySQL.ManagedMysql != nil {
 		return managedMysqlInferStatus(ctx, client, recorder, wandb, newConditions, newInfraConn)
@@ -75,7 +73,7 @@ func mysqlPurgeFinalizer(
 ) error {
 	if spec := wandb.Spec.MySQL.ManagedMysql; spec != nil {
 		specNamespacedName := managedMysqlSpecNamespacedName(spec)
-		onDeleteRule := translatorv2.ToMysqlOnDeleteRule(wandb, wandb.GetRetentionPolicy(spec.ManagedInfraSpec))
+		onDeleteRule := mysql.ToMysqlOnDeleteRule(wandb, wandb.GetRetentionPolicy(spec.ManagedInfraSpec))
 		return mysql.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule)
 	}
 	if wandb.Spec.MySQL.ExternalMysql != nil {
@@ -138,7 +136,7 @@ func managedMysqlWriteState(
 				}
 			}
 
-			dbPasswordSecret.Labels = translatorv2.BuildWandbMysqlLabels(wandb)
+			dbPasswordSecret.Labels = mysql.BuildWandbMysqlLabels(wandb)
 			dbPasswordSecret.Data = map[string][]byte{
 				"rootUser":     []byte("root"),
 				"rootPassword": []byte(rootPassword),
@@ -172,7 +170,7 @@ func managedMysqlWriteState(
 	}
 
 	var desired *mysqlv2.InnoDBCluster
-	desired, err = translatorv2.ToMysqlMySQLVendorSpec(ctx, *spec, wandb, client.Scheme())
+	desired, err = mysql.ToMysqlMySQLVendorSpec(ctx, *spec, wandb, client.Scheme())
 	if err != nil {
 		logger.Error(err, "failed to translate mysql spec")
 		return []metav1.Condition{
@@ -183,7 +181,7 @@ func managedMysqlWriteState(
 			},
 		}
 	}
-	return mysql.WriteState(ctx, client, specNamespacedName, desired, translatorv2.BuildWandbMysqlLabels(wandb))
+	return mysql.WriteState(ctx, client, specNamespacedName, desired, mysql.BuildWandbMysqlLabels(wandb))
 }
 
 func managedMysqlReadState(
@@ -191,11 +189,11 @@ func managedMysqlReadState(
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
 	newConditions []metav1.Condition,
-) ([]metav1.Condition, *translator.MysqlConnection) {
+) ([]metav1.Condition, *apiv2.MysqlConnection) {
 	spec := wandb.Spec.MySQL.ManagedMysql
 	specNamespacedName := managedMysqlSpecNamespacedName(spec)
 
-	readConditions, newInfraConn := mysql.ReadState(ctx, client, specNamespacedName, wandb, translatorv2.ToMysqlOnDeleteRule(wandb, wandb.GetRetentionPolicy(spec.ManagedInfraSpec)))
+	readConditions, newInfraConn := mysql.ReadState(ctx, client, specNamespacedName, wandb, mysql.ToMysqlOnDeleteRule(wandb, wandb.GetRetentionPolicy(spec.ManagedInfraSpec)))
 	newConditions = append(newConditions, readConditions...)
 	return newConditions, newInfraConn
 }
@@ -206,11 +204,11 @@ func managedMysqlInferStatus(
 	recorder record.EventRecorder,
 	wandb *apiv2.WeightsAndBiases,
 	newConditions []metav1.Condition,
-	newInfraConn *translator.MysqlConnection,
+	newInfraConn *apiv2.MysqlConnection,
 ) (ctrl.Result, error) {
 	enabled := true
 	oldConditions := wandb.Status.MySQLStatus.Conditions
-	oldInfraConn := translatorv2.ToTranslatorMysqlConnection(wandb.Status.MySQLStatus.Connection)
+	oldInfraConn := wandb.Status.MySQLStatus.Connection
 
 	updatedStatus, events, ctrlResult := mysql.ComputeStatus(
 		ctx,
@@ -224,7 +222,7 @@ func managedMysqlInferStatus(
 	for _, e := range events {
 		recorder.Event(wandb, e.Type, e.Reason, e.Message)
 	}
-	wandb.Status.MySQLStatus = translatorv2.ToWbMysqlInfraStatus(updatedStatus)
+	wandb.Status.MySQLStatus = updatedStatus
 	err := client.Status().Update(ctx, wandb)
 
 	return ctrlResult, err
@@ -236,19 +234,19 @@ func externalMysqlWriteState(ctx context.Context, c client.Client, wandb *apiv2.
 	return externalmysql.WriteState(ctx, c, wandb)
 }
 
-func externalMysqlReadState(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, newConditions []metav1.Condition) ([]metav1.Condition, *translator.MysqlConnection) {
+func externalMysqlReadState(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, newConditions []metav1.Condition) ([]metav1.Condition, *apiv2.MysqlConnection) {
 	return externalmysql.ReadState(ctx, c, wandb, newConditions)
 }
 
-func externalMysqlInferStatus(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, newConditions []metav1.Condition, newInfraConn *translator.MysqlConnection) (ctrl.Result, error) {
-	oldInfraConn := translatorv2.ToTranslatorMysqlConnection(wandb.Status.MySQLStatus.Connection)
+func externalMysqlInferStatus(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, newConditions []metav1.Condition, newInfraConn *apiv2.MysqlConnection) (ctrl.Result, error) {
+	oldInfraConn := wandb.Status.MySQLStatus.Connection
 	state, ready, updatedConditions := external.InferExternalStatus(wandb.Status.MySQLStatus.Conditions, newConditions, wandb.Generation, newInfraConn != nil)
 	conn := utils.Coalesce(newInfraConn, &oldInfraConn)
 
-	wandb.Status.MySQLStatus = translatorv2.ToWbMysqlInfraStatus(translator.MysqlStatus{
-		InfraStatus: translator.InfraStatus{Ready: ready, State: state, Conditions: updatedConditions},
-		Connection:  *conn,
-	})
+	wandb.Status.MySQLStatus = apiv2.MysqlInfraStatus{
+		WBInfraStatus: apiv2.WBInfraStatus{Ready: ready, State: state, Conditions: updatedConditions},
+		Connection:    *conn,
+	}
 	return ctrl.Result{}, c.Status().Update(ctx, wandb)
 }
 

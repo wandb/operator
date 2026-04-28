@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 
+	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
-	"github.com/wandb/operator/internal/controller/translator"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -33,7 +33,7 @@ func writeClickHouseConnInfo(
 	nsnBuilder *NsNameBuilder,
 	connInfo *clickhouseConnInfo,
 ) (
-	*translator.ClickHouseConnection, error,
+	*apiv2.ClickHouseConnection, error,
 ) {
 	var err error
 	var found bool
@@ -90,7 +90,7 @@ func writeClickHouseConnInfo(
 	}
 
 	localRef := corev1.LocalObjectReference{Name: nsName.Name}
-	return &translator.ClickHouseConnection{
+	return &apiv2.ClickHouseConnection{
 		URL:      corev1.SecretKeySelector{LocalObjectReference: localRef, Key: urlKey, Optional: ptr.To(false)},
 		Host:     corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Host", Optional: ptr.To(false)},
 		Port:     corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Port", Optional: ptr.To(false)},

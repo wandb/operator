@@ -1,12 +1,11 @@
-package v2
+package mysql
 
 import (
 	"context"
 	"fmt"
 
 	apiv2 "github.com/wandb/operator/api/v2"
-	"github.com/wandb/operator/internal/controller/infra/managed/mysql/mysql"
-	"github.com/wandb/operator/internal/controller/translator"
+	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/logx"
 	v2 "github.com/wandb/operator/pkg/vendored/mysql-operator/v2"
 	corev1 "k8s.io/api/core/v1"
@@ -17,7 +16,10 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
-const DefaultMySQLExporterImage = "prom/mysqld-exporter:v0.15.1"
+const (
+	MysqlModuleName           = "mysql"
+	DefaultMySQLExporterImage = "prom/mysqld-exporter:v0.15.1"
+)
 
 func ToMysqlMySQLVendorSpec(
 	ctx context.Context,
@@ -28,7 +30,7 @@ func ToMysqlMySQLVendorSpec(
 	_, log := logx.WithSlog(ctx, logx.Mysql)
 
 	specName := spec.Name
-	nsnBuilder := mysql.CreateNsNameBuilder(types.NamespacedName{
+	nsnBuilder := createNsNameBuilder(types.NamespacedName{
 		Name:      specName,
 		Namespace: spec.Namespace,
 	})
@@ -114,9 +116,9 @@ sync_binlog = 1
 }
 
 func BuildWandbMysqlLabels(wandb *apiv2.WeightsAndBiases) map[string]string {
-	return BuildWandbLabels(wandb, translator.MysqlModuleName)
+	return common.BuildWandbLabels(wandb, MysqlModuleName)
 }
 
-func ToMysqlOnDeleteRule(wandb *apiv2.WeightsAndBiases, retentionPolicy apiv2.RetentionPolicy) translator.OnDeleteRule {
-	return ToOnDeleteRule(wandb, retentionPolicy, translator.MysqlModuleName)
+func ToMysqlOnDeleteRule(wandb *apiv2.WeightsAndBiases, retentionPolicy apiv2.RetentionPolicy) common.OnDeleteRule {
+	return common.ToOnDeleteRule(wandb, retentionPolicy, MysqlModuleName)
 }

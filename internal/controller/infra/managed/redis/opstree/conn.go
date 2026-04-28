@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
-	"github.com/wandb/operator/internal/controller/translator"
 	redisv1beta2 "github.com/wandb/operator/pkg/vendored/redis-operator/redis/v1beta2"
 	redissentinelv1beta2 "github.com/wandb/operator/pkg/vendored/redis-operator/redissentinel/v1beta2"
 	corev1 "k8s.io/api/core/v1"
@@ -44,7 +44,7 @@ func writeRedisConnInfo(
 	nsnBuilder *NsNameBuilder,
 	connInfo *redisConnInfo,
 ) (
-	*translator.RedisConnection, error,
+	*apiv2.RedisConnection, error,
 ) {
 	var err error
 	var found bool
@@ -94,7 +94,7 @@ func writeRedisConnInfo(
 	}
 
 	localRef := corev1.LocalObjectReference{Name: nsName.Name}
-	return &translator.RedisConnection{
+	return &apiv2.RedisConnection{
 		URL:  corev1.SecretKeySelector{LocalObjectReference: localRef, Key: urlKey, Optional: ptr.To(false)},
 		Host: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Host", Optional: ptr.To(false)},
 		Port: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Port", Optional: ptr.To(false)},

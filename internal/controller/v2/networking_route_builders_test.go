@@ -4,7 +4,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	apiv2 "github.com/wandb/operator/api/v2"
-	"github.com/wandb/operator/internal/controller/translator"
+	"github.com/wandb/operator/internal/controller/common"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -69,9 +69,9 @@ var _ = Describe("Networking Route Builders", func() {
 		route := buildInfraHTTPRoute(wandb, parentRef, hostnames, entry)
 
 		Expect(route.Namespace).To(Equal("infra-ns"))
-		Expect(route.Labels).To(HaveKeyWithValue(translator.WandbNameLabel, "wandb"))
-		Expect(route.Labels).To(HaveKeyWithValue(translator.WandbNamespaceLabel, "wandb-ns"))
-		Expect(route.Labels).To(HaveKeyWithValue(translator.WandbComponentLabel, infraHTTPRouteComponent))
+		Expect(route.Labels).To(HaveKeyWithValue(common.WandbNameLabel, "wandb"))
+		Expect(route.Labels).To(HaveKeyWithValue(common.WandbNamespaceLabel, "wandb-ns"))
+		Expect(route.Labels).To(HaveKeyWithValue(common.WandbComponentLabel, infraHTTPRouteComponent))
 		Expect(route.Spec.ParentRefs).To(HaveLen(1))
 		Expect(route.Spec.ParentRefs[0].Name).To(Equal(gatewayv1.ObjectName("shared-gateway")))
 		Expect(route.Spec.ParentRefs[0].Namespace).NotTo(BeNil())

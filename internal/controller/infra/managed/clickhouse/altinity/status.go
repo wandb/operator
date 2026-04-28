@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/samber/lo"
+	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
-	"github.com/wandb/operator/internal/controller/translator"
 	"github.com/wandb/operator/internal/logx"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -23,11 +23,11 @@ func ComputeStatus(
 	ctx context.Context,
 	enabled bool,
 	oldConditions, currentConditions []metav1.Condition,
-	connection *translator.ClickHouseConnection,
+	connection *apiv2.ClickHouseConnection,
 	currentGeneration int64,
-) (translator.ClickHouseStatus, []corev1.Event, ctrl.Result) {
+) (apiv2.ClickHouseInfraStatus, []corev1.Event, ctrl.Result) {
 	ctx, _ = logx.WithSlog(ctx, logx.ClickHouse)
-	result := translator.ClickHouseStatus{}
+	result := apiv2.ClickHouseInfraStatus{}
 
 	if connection != nil {
 		result.Connection = *connection
@@ -39,7 +39,7 @@ func ComputeStatus(
 		oldConditions,
 		currentConditions,
 		currentGeneration,
-		translator.DefaultConditionExpiry,
+		common.DefaultConditionExpiry,
 	)
 
 	state, events := inferInfraState(ctx, enabled, result.Conditions)

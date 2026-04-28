@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"net/url"
 
+	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
-	"github.com/wandb/operator/internal/controller/translator"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -35,7 +35,7 @@ func writeMySQLConnInfo(
 	nsnBuilder *NsNameBuilder,
 	connInfo *mysqlConnInfo,
 ) (
-	*translator.MysqlConnection, error,
+	*apiv2.MysqlConnection, error,
 ) {
 	var err error
 	var found bool
@@ -92,7 +92,7 @@ func writeMySQLConnInfo(
 	}
 
 	localRef := corev1.LocalObjectReference{Name: nsName.Name}
-	return &translator.MysqlConnection{
+	return &apiv2.MysqlConnection{
 		URL:      corev1.SecretKeySelector{LocalObjectReference: localRef, Key: urlKey, Optional: ptr.To(false)},
 		Host:     corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Host", Optional: ptr.To(false)},
 		Port:     corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Port", Optional: ptr.To(false)},

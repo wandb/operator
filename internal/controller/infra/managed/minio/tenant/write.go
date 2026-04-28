@@ -5,8 +5,8 @@ import (
 	"fmt"
 
 	"github.com/Masterminds/goutils"
+	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
-	"github.com/wandb/operator/internal/controller/translator"
 	"github.com/wandb/operator/internal/logx"
 	miniov2 "github.com/wandb/operator/pkg/vendored/minio-operator/minio.min.io/v2"
 	corev1 "k8s.io/api/core/v1"
@@ -30,7 +30,7 @@ func WriteState(
 	desiredCr *miniov2.Tenant,
 	envConfig MinioEnvConfig,
 	wandbOwner client.Object,
-) ([]metav1.Condition, *translator.ObjectStoreConnection) {
+) ([]metav1.Condition, *apiv2.ObjectStoreConnection) {
 	ctx, _ = logx.WithSlog(ctx, logx.ObjectStore)
 	var actual = &miniov2.Tenant{}
 

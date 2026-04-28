@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strconv"
 
+	apiv2 "github.com/wandb/operator/api/v2"
 	ctrlcommon "github.com/wandb/operator/internal/controller/common"
-	"github.com/wandb/operator/internal/controller/translator"
 	"github.com/wandb/operator/internal/logx"
 	"github.com/wandb/operator/pkg/vendored/mysql-operator/v2"
 	corev1 "k8s.io/api/core/v1"
@@ -52,8 +52,8 @@ func ReadState(
 	k8sClient client.Client,
 	specNamespacedName types.NamespacedName,
 	wandbOwner client.Object,
-	onDeleteRule translator.OnDeleteRule,
-) ([]metav1.Condition, *translator.MysqlConnection) {
+	onDeleteRule ctrlcommon.OnDeleteRule,
+) ([]metav1.Condition, *apiv2.MysqlConnection) {
 	ctx, _ = logx.WithSlog(ctx, logx.Mysql)
 	log := logx.GetSlog(ctx)
 
@@ -75,7 +75,7 @@ func ReadState(
 	}
 	if !found {
 		actual = nil
-		if onDeleteRule.Policy == translator.Purge {
+		if onDeleteRule.Policy == ctrlcommon.Purge {
 			log.Debug(
 				"Attempting to purge associated mysql resources after deletion",
 				"tenantName", nsnBuilder.ClusterName(),
@@ -101,7 +101,7 @@ func ReadState(
 		}
 	}
 
-	var connection *translator.MysqlConnection
+	var connection *apiv2.MysqlConnection
 
 	if actual != nil {
 		connInfo := readConnectionDetails(ctx, k8sClient, actual, specNamespacedName)
