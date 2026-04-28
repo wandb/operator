@@ -8,8 +8,6 @@ import (
 	"github.com/wandb/operator/internal/controller/infra/external"
 	externalkafka "github.com/wandb/operator/internal/controller/infra/external/kafka"
 	"github.com/wandb/operator/internal/controller/infra/managed/kafka/strimzi"
-	"github.com/wandb/operator/internal/controller/translator"
-	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
 	"github.com/wandb/operator/pkg/utils"
 	"github.com/wandb/operator/pkg/vendored/strimzi-kafka/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -38,7 +36,7 @@ func kafkaReadState(
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
 	newConditions []metav1.Condition,
-) ([]metav1.Condition, *translator.KafkaConnection) {
+) ([]metav1.Condition, *apiv2.KafkaConnection) {
 	if wandb.Spec.Kafka.ManagedKafka != nil {
 		return managedKafkaReadState(ctx, client, wandb, newConditions)
 	}
@@ -54,7 +52,7 @@ func kafkaInferStatus(
 	recorder record.EventRecorder,
 	wandb *apiv2.WeightsAndBiases,
 	newConditions []metav1.Condition,
-	newInfraConn *translator.KafkaConnection,
+	newInfraConn *apiv2.KafkaConnection,
 ) (ctrl.Result, error) {
 	if wandb.Spec.Kafka.ManagedKafka != nil {
 		return managedKafkaInferStatus(ctx, client, recorder, wandb, newConditions, newInfraConn)
@@ -72,7 +70,7 @@ func kafkaPurgeFinalizer(
 ) error {
 	if spec := wandb.Spec.Kafka.ManagedKafka; spec != nil {
 		specNamespacedName := managedKafkaSpecNamespacedName(spec)
-		onDeleteRule := translatorv2.ToKafkaOnDeleteRule(wandb, wandb.GetRetentionPolicy(spec.ManagedInfraSpec))
+		onDeleteRule := strimzi.ToKafkaOnDeleteRule(wandb, wandb.GetRetentionPolicy(spec.ManagedInfraSpec))
 		return strimzi.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule)
 	}
 	if wandb.Spec.Kafka.ExternalKafka != nil {
@@ -105,7 +103,7 @@ func managedKafkaWriteState(
 
 	log := ctrl.LoggerFrom(ctx)
 	var desiredKafka *v1.Kafka
-	desiredKafka, err := translatorv2.ToKafkaVendorSpec(
+	desiredKafka, err := strimzi.ToKafkaVendorSpec(
 		ctx,
 		wandb,
 		client.Scheme(),
@@ -122,7 +120,7 @@ func managedKafkaWriteState(
 	}
 
 	var desiredNodePool *v1.KafkaNodePool
-	desiredNodePool, err = translatorv2.ToKafkaNodePoolVendorSpec(
+	desiredNodePool, err = strimzi.ToKafkaNodePoolVendorSpec(
 		ctx,
 		wandb,
 		client.Scheme(),
@@ -155,11 +153,11 @@ func managedKafkaReadState(
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
 	newConditions []metav1.Condition,
-) ([]metav1.Condition, *translator.KafkaConnection) {
+) ([]metav1.Condition, *apiv2.KafkaConnection) {
 	spec := wandb.Spec.Kafka.ManagedKafka
 
 	specNamespacedName := managedKafkaSpecNamespacedName(spec)
-	onDeleteRule := translatorv2.ToKafkaOnDeleteRule(wandb, wandb.GetRetentionPolicy(spec.ManagedInfraSpec))
+	onDeleteRule := strimzi.ToKafkaOnDeleteRule(wandb, wandb.GetRetentionPolicy(spec.ManagedInfraSpec))
 	readConditions, newInfraConn := strimzi.ReadState(ctx, client, specNamespacedName, wandb, onDeleteRule)
 	newConditions = append(newConditions, readConditions...)
 	return newConditions, newInfraConn
@@ -171,10 +169,10 @@ func managedKafkaInferStatus(
 	recorder record.EventRecorder,
 	wandb *apiv2.WeightsAndBiases,
 	newConditions []metav1.Condition,
-	newInfraConn *translator.KafkaConnection,
+	newInfraConn *apiv2.KafkaConnection,
 ) (ctrl.Result, error) {
 	oldConditions := wandb.Status.KafkaStatus.Conditions
-	oldInfraConn := translatorv2.ToTranslatorKafkaConnection(wandb.Status.KafkaStatus.Connection)
+	oldInfraConn := wandb.Status.KafkaStatus.Connection
 
 	enabled := true
 	updatedStatus, events, ctrlResult := strimzi.ComputeStatus(
@@ -188,7 +186,7 @@ func managedKafkaInferStatus(
 	for _, e := range events {
 		recorder.Event(wandb, e.Type, e.Reason, e.Message)
 	}
-	wandb.Status.KafkaStatus = translatorv2.ToWbKafkaInfraStatus(updatedStatus)
+	wandb.Status.KafkaStatus = updatedStatus
 	err := client.Status().Update(ctx, wandb)
 
 	return ctrlResult, err
@@ -200,19 +198,19 @@ func externalKafkaWriteState(ctx context.Context, c client.Client, wandb *apiv2.
 	return externalkafka.WriteState(ctx, c, wandb)
 }
 
-func externalKafkaReadState(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, newConditions []metav1.Condition) ([]metav1.Condition, *translator.KafkaConnection) {
+func externalKafkaReadState(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, newConditions []metav1.Condition) ([]metav1.Condition, *apiv2.KafkaConnection) {
 	return externalkafka.ReadState(ctx, c, wandb, newConditions)
 }
 
-func externalKafkaInferStatus(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, newConditions []metav1.Condition, newInfraConn *translator.KafkaConnection) (ctrl.Result, error) {
-	oldInfraConn := translatorv2.ToTranslatorKafkaConnection(wandb.Status.KafkaStatus.Connection)
+func externalKafkaInferStatus(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, newConditions []metav1.Condition, newInfraConn *apiv2.KafkaConnection) (ctrl.Result, error) {
+	oldInfraConn := wandb.Status.KafkaStatus.Connection
 	state, ready, updatedConditions := external.InferExternalStatus(wandb.Status.KafkaStatus.Conditions, newConditions, wandb.Generation, newInfraConn != nil)
 	conn := utils.Coalesce(newInfraConn, &oldInfraConn)
 
-	wandb.Status.KafkaStatus = translatorv2.ToWbKafkaInfraStatus(translator.KafkaStatus{
-		InfraStatus: translator.InfraStatus{Ready: ready, State: state, Conditions: updatedConditions},
-		Connection:  *conn,
-	})
+	wandb.Status.KafkaStatus = apiv2.KafkaInfraStatus{
+		WBInfraStatus: apiv2.WBInfraStatus{Ready: ready, State: state, Conditions: updatedConditions},
+		Connection:    *conn,
+	}
 	return ctrl.Result{}, c.Status().Update(ctx, wandb)
 }
 

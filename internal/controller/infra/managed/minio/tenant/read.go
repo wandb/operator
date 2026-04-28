@@ -4,7 +4,6 @@ import (
 	"context"
 
 	ctrlcommon "github.com/wandb/operator/internal/controller/common"
-	"github.com/wandb/operator/internal/controller/translator"
 	"github.com/wandb/operator/internal/logx"
 	miniov2 "github.com/wandb/operator/pkg/vendored/minio-operator/minio.min.io/v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -16,7 +15,7 @@ func ReadState(
 	ctx context.Context,
 	k8sClient client.Client,
 	specNamespacedName types.NamespacedName,
-	onDeleteRule translator.OnDeleteRule,
+	onDeleteRule ctrlcommon.OnDeleteRule,
 ) []metav1.Condition {
 	ctx, _ = logx.WithSlog(ctx, logx.ObjectStore)
 	log := logx.GetSlog(ctx)
@@ -39,7 +38,7 @@ func ReadState(
 	}
 	if !found {
 		actualResource = nil
-		if onDeleteRule.Policy == translator.Purge {
+		if onDeleteRule.Policy == ctrlcommon.Purge {
 			log.Debug(
 				"Attempting to purge associated minio resources after deletion",
 				"tenantName", TenantName(specNamespacedName.Name),

@@ -24,6 +24,8 @@ const (
 	ReconciledType = "Reconciled"
 )
 
+const DefaultConditionExpiry = 2 * time.Hour
+
 func ContainsType(conditions []metav1.Condition, typeName string) bool {
 	return lo.ContainsBy(conditions, func(c metav1.Condition) bool {
 		return c.Type == typeName

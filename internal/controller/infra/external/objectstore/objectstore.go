@@ -5,7 +5,6 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/infra/external"
-	"github.com/wandb/operator/internal/controller/translator"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -20,7 +19,7 @@ func WriteState(
 	ctx context.Context,
 	c client.Client,
 	wandb *apiv2.WeightsAndBiases,
-) ([]metav1.Condition, *translator.ObjectStoreConnection) {
+) ([]metav1.Condition, *apiv2.ObjectStoreConnection) {
 	spec := wandb.Spec.ObjectStore.ExternalObjectStore
 	logger := ctrl.LoggerFrom(ctx)
 
@@ -50,7 +49,7 @@ func WriteState(
 	}
 
 	localRef := corev1.LocalObjectReference{Name: nsName.Name}
-	return nil, &translator.ObjectStoreConnection{
+	return nil, &apiv2.ObjectStoreConnection{
 		URL:       corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "url", Optional: ptr.To(false)},
 		Endpoint:  corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Host", Optional: ptr.To(false)},
 		Port:      corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Port", Optional: ptr.To(true)},

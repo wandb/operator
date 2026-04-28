@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	apiv2 "github.com/wandb/operator/api/v2"
 	ctrlcommon "github.com/wandb/operator/internal/controller/common"
-	"github.com/wandb/operator/internal/controller/translator"
 	"github.com/wandb/operator/internal/logx"
 	redisv1beta2 "github.com/wandb/operator/pkg/vendored/redis-operator/redis/v1beta2"
 	redisreplicationv1beta2 "github.com/wandb/operator/pkg/vendored/redis-operator/redisreplication/v1beta2"
@@ -21,8 +21,8 @@ func ReadState(
 	client client.Client,
 	specNamespacedName types.NamespacedName,
 	wandbOwner client.Object,
-	onDeleteRule translator.OnDeleteRule,
-) ([]metav1.Condition, *translator.RedisConnection) {
+	onDeleteRule ctrlcommon.OnDeleteRule,
+) ([]metav1.Condition, *apiv2.RedisConnection) {
 	ctx, _ = logx.WithSlog(ctx, logx.Redis)
 	log := logx.GetSlog(ctx)
 	var standaloneActual = &redisv1beta2.Redis{}
@@ -80,9 +80,9 @@ func ReadState(
 	}
 
 	conditions := make([]metav1.Condition, 0)
-	var connection *translator.RedisConnection
+	var connection *apiv2.RedisConnection
 
-	if standaloneActual == nil && replicationActual == nil && onDeleteRule.Policy == translator.Purge {
+	if standaloneActual == nil && replicationActual == nil && onDeleteRule.Policy == ctrlcommon.Purge {
 		log.Debug(
 			"Attempting to purge associated redis resources after deletion",
 			"specName", specNamespacedName.Name,

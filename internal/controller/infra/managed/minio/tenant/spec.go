@@ -1,12 +1,11 @@
-package v2
+package tenant
 
 import (
 	"context"
 	"fmt"
 
 	apiv2 "github.com/wandb/operator/api/v2"
-	"github.com/wandb/operator/internal/controller/infra/managed/minio/tenant"
-	"github.com/wandb/operator/internal/controller/translator"
+	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/logx"
 	miniov2 "github.com/wandb/operator/pkg/vendored/minio-operator/minio.min.io/v2"
 	corev1 "k8s.io/api/core/v1"
@@ -15,6 +14,13 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"knative.dev/pkg/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
+)
+
+const (
+	ObjectStoreModuleName = "minio"
+	MinioImage            = "quay.io/minio/minio:latest"
+	DevVolumesPerServer   = int32(1)
+	ProdVolumesPerServer  = int32(4)
 )
 
 func createObjectStoreTelemetryEnv(telemetry apiv2.Telemetry) []corev1.EnvVar {
@@ -48,23 +54,23 @@ func ToObjectStoreVendorSpec(
 		return nil, fmt.Errorf("invalid storage size %q: %w", infraSpec.StorageSize, err)
 	}
 
-	volumesPerServer := translator.DevVolumesPerServer
+	volumesPerServer := DevVolumesPerServer
 	if infraSpec.Replicas > 1 {
-		volumesPerServer = translator.ProdVolumesPerServer
+		volumesPerServer = ProdVolumesPerServer
 	}
 
 	minioTenant := &miniov2.Tenant{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      tenant.TenantName(specName),
+			Name:      TenantName(specName),
 			Namespace: infraSpec.Namespace,
 			Labels: map[string]string{
-				"app": tenant.TenantName(specName),
+				"app": TenantName(specName),
 			},
 		},
 		Spec: miniov2.TenantSpec{
-			Image: translator.MinioImage,
+			Image: MinioImage,
 			Configuration: &corev1.LocalObjectReference{
-				Name: tenant.ConfigName(specName),
+				Name: ConfigName(specName),
 			},
 			ServiceMetadata: &miniov2.ServiceMetadata{
 				MinIOServiceLabels: BuildWandbObjectStoreLabels(wandb),
@@ -125,17 +131,17 @@ func ToObjectStoreVendorSpec(
 func ToObjectStoreEnvConfig(
 	ctx context.Context,
 	spec apiv2.ManagedObjectStoreSpec,
-) (tenant.MinioEnvConfig, error) {
-	return tenant.MinioEnvConfig{
+) (MinioEnvConfig, error) {
+	return MinioEnvConfig{
 		RootUser:            spec.Config.RootUser,
 		MinioBrowserSetting: spec.Config.MinioBrowserSetting,
 	}, nil
 }
 
 func BuildWandbObjectStoreLabels(wandb *apiv2.WeightsAndBiases) map[string]string {
-	return BuildWandbLabels(wandb, translator.ObjectStoreModuleName)
+	return common.BuildWandbLabels(wandb, ObjectStoreModuleName)
 }
 
-func ToObjectStoreOnDeleteRule(wandb *apiv2.WeightsAndBiases, retentionPolicy apiv2.RetentionPolicy) translator.OnDeleteRule {
-	return ToOnDeleteRule(wandb, retentionPolicy, translator.ObjectStoreModuleName)
+func ToObjectStoreOnDeleteRule(wandb *apiv2.WeightsAndBiases, retentionPolicy apiv2.RetentionPolicy) common.OnDeleteRule {
+	return common.ToOnDeleteRule(wandb, retentionPolicy, ObjectStoreModuleName)
 }

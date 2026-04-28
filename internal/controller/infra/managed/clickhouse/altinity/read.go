@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strconv"
 
+	apiv2 "github.com/wandb/operator/api/v2"
 	ctrlcommon "github.com/wandb/operator/internal/controller/common"
-	"github.com/wandb/operator/internal/controller/translator"
 	"github.com/wandb/operator/internal/logx"
 	chiv1 "github.com/wandb/operator/pkg/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -37,8 +37,8 @@ func ReadState(
 	k8sClient client.Client,
 	specNamespacedName types.NamespacedName,
 	wandbOwner client.Object,
-	onDeleteRule translator.OnDeleteRule,
-) ([]metav1.Condition, *translator.ClickHouseConnection) {
+	onDeleteRule ctrlcommon.OnDeleteRule,
+) ([]metav1.Condition, *apiv2.ClickHouseConnection) {
 	ctx, log := logx.WithSlog(ctx, logx.ClickHouse)
 	var actual = &chiv1.ClickHouseInstallation{}
 
@@ -61,7 +61,7 @@ func ReadState(
 
 	if !found {
 		actual = nil
-		if onDeleteRule.Policy == translator.Purge {
+		if onDeleteRule.Policy == ctrlcommon.Purge {
 			log.Debug(
 				"Attempting to purge associated clickhouse resources after deletion",
 				"installationName", nsnBuilder.InstallationName(),
@@ -82,7 +82,7 @@ func ReadState(
 		}
 	}
 
-	var connection *translator.ClickHouseConnection
+	var connection *apiv2.ClickHouseConnection
 
 	if actual != nil {
 		podsRunning, err := chPodsRunningStatus(ctx, k8sClient, nsnBuilder.Namespace(), actual)
