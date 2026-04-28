@@ -32,6 +32,9 @@ api/v2/
                                   ServiceAccountName="wandb",
                                   Telemetry.Enabled=true, gateway.managed=false)
                                   but webhook also sets some of these
+                                  Connection/InfraStatus types are now the
+                                  canonical internal types — no parallel
+                                  hierarchy in translator/ anymore.
   weightsandbiases_conversion.go
 
 internal/webhook/v2/
@@ -44,47 +47,48 @@ internal/webhook/v2/
   *_test.go                   <-- already split per-service (tests ahead of impl)
 
 internal/controller/
-  translator/
-    common.go, mysql.go, redis.go, kafka.go, objectstore.go, clickhouse.go
-    retention.go               <-- pure data shapes (good)
-    utils/resources.go
-    v2/
-      common.go (225)          <-- type converters (good)
-      mysql.go (122)           <-- vendor spec builder; hardcoded mycnf
-      redis.go (298)           <-- vendor spec builder; hardcoded "gorilla", 3, 3
-      kafka.go (219)           <-- vendor spec builder
-      objectstore.go (141)     <-- vendor spec builder + envconfig
-      clickhouse.go (190)      <-- vendor spec builder; hardcoded user/pwd consts
-      retention.go
+  common/                     <-- expanded this round
+    labels.go                  <-- WandbXxxLabel constants + BuildWandbLabels
+    retention.go               <-- OnDeletePolicy/Purge/Detach/OnDeleteRule + ToOnDeleteRule
+    condition.go               <-- DefaultConditionExpiry + condition machinery
+    state.go, resource.go, detach.go  (existing)
+
+  (translator/ and translator/v2/ — DELETED this round)
 
   infra/
-    external/                  <-- NEW since previous plan
-      common.go                <-- InferExternalStatus (wrong layer)
-      redis/redis.go
-      mysql/mysql.go
-      kafka/kafka.go
-      clickhouse/clickhouse.go
-      objectstore/objectstore.go
+    external/                  <-- speaks apiv2.XxxConnection directly
+      common.go                <-- InferExternalStatus (still wrong layer; Move 5 pending)
+      redis/redis.go, mysql/mysql.go, kafka/kafka.go,
+      clickhouse/clickhouse.go, objectstore/objectstore.go
     managed/
       redis/opstree/
-        read.go                <-- calls writeRedisConnInfo (write-in-read)
-        conn.go                <-- writeRedisConnInfo
+        spec.go                <-- ToRedis* builders + RedisModuleName + image consts +
+                                   DefaultSentinelGroup + telemetry exporter helper
+        read.go                <-- still calls writeRedisConnInfo (write-in-read)
+        conn.go                <-- writeRedisConnInfo (returns *apiv2.RedisConnection)
         write.go               <-- ensurePVCLabels, ensurePodLabels (cross-cutting)
         status.go, naming.go, detach.go, purge.go, values.go
       mysql/mysql/
-        read.go                <-- calls writeMySQLConnInfo (write-in-read)
-        conn.go                <-- writeMySQLConnInfo
+        spec.go                <-- ToMysqlMySQLVendorSpec + MysqlModuleName +
+                                   DefaultMySQLExporterImage + hardcoded mycnf
+        read.go                <-- still calls writeMySQLConnInfo (write-in-read)
+        conn.go                <-- writeMySQLConnInfo (returns *apiv2.MysqlConnection)
         write.go               <-- inline PVC label patching
         status.go, naming.go, detach.go, purge.go
       kafka/strimzi/
-        read.go                <-- calls writeKafkaConnInfo (write-in-read)
+        spec.go                <-- ToKafkaVendorSpec + KafkaModuleName +
+                                   KafkaVersion + KafkaMetadataVersion + metrics helper
+        read.go                <-- still calls writeKafkaConnInfo (write-in-read)
         conn.go, write.go, restore.go
         status.go, naming.go, detach.go, purge.go, values.go
       clickhouse/altinity/
-        read.go                <-- calls writeClickHouseConnInfo (write-in-read)
+        spec.go                <-- ToClickHouseVendorSpec + ClickhouseModuleName
+        read.go                <-- still calls writeClickHouseConnInfo (write-in-read)
         conn.go, write.go
         status.go, naming.go, detach.go, purge.go, values.go
       minio/tenant/             <-- REFERENCE: writes secret in WriteState
+        spec.go                <-- ToObjectStoreVendorSpec + ObjectStoreModuleName +
+                                   MinioImage + DevVolumesPerServer + telemetry env
         read.go                <-- pure observation (correct)
         conn.go                <-- writeWandbConnInfo (called from write.go)
         write.go               <-- WriteState calls writeMinioConfig+writeWandbConnInfo
@@ -104,15 +108,16 @@ internal/controller/
                                    telemetry env injection (lines 58-135),
                                    networking-mode cleanup, infra HTTPRoutes,
                                    ingress, hostname inference, status update
-    mysql.go (262)             <-- credential generation in dispatcher (102-168)
-    redis.go, kafka.go, clickhouse.go, objectstore.go  <-- clean dispatchers
+    mysql.go (260)             <-- credential generation in dispatcher (~65 lines)
+    redis.go, kafka.go, clickhouse.go, objectstore.go  <-- clean dispatchers,
+                                   no more translator/translatorv2 imports
     telemetry_config.go (91)   <-- domain types in controller layer
-    telemetry_secret.go (117)  <-- telemetry secret reconciliation (NEW)
-    gateway.go (352)           <-- imports nginx-gateway-fabric (NEW)
-    infra_routes.go (465)      <-- imports gke-gateway-api (NEW)
-    ingress.go (201)           <-- consolidated Ingress (NEW)
-    networking_cleanup.go (57) <-- cross-mode cleanup (NEW)
-    manifest_order.go (25)     <-- ordering helpers (NEW; clean)
+    telemetry_secret.go (117)  <-- telemetry secret reconciliation
+    gateway.go (352)           <-- imports nginx-gateway-fabric
+    infra_routes.go (465)      <-- imports gke-gateway-api
+    ingress.go (201)           <-- consolidated Ingress
+    networking_cleanup.go (57) <-- cross-mode cleanup
+    manifest_order.go (25)     <-- ordering helpers (clean)
 ```
 
 ---
@@ -205,39 +210,20 @@ three; no test changes).
 
 ---
 
-#### Move 3: Extract vendor spec builders from `translator/v2/` to `infra/managed/`
+#### Move 3: Extract vendor spec builders from `translator/v2/` to `infra/managed/` — **DONE**
 
-**Why:** `translator/v2/` mixes shallow converters (which import only
-`api/v2` and `translator`) with vendor spec builders (which import every
-vendored operator CRD). These are different jobs. The builders contain
-real business logic (sizing, HA topology, telemetry exporters).
+Vendor spec builders relocated to `infra/managed/{vendor}/spec.go`. The
+move went further than originally scoped:
 
-```
-BEFORE                                  AFTER
-translator/v2/                          translator/v2/
-  common.go    (converters)               common.go    (converters)
-  mysql.go     (converter + vendor spec)  retention.go (unchanged)
-  redis.go     (converter + vendor spec)  (vendor spec builders REMOVED)
-  kafka.go     (converter + vendor spec)
-  objectstore.go (same)
-  clickhouse.go  (same)
-  retention.go
-
-                                        infra/managed/
-                                          mysql/mysql/spec.go         <-- ToMysqlMySQLVendorSpec
-                                          redis/opstree/spec.go       <-- ToRedis* builders + DefaultSentinelGroup const
-                                          kafka/strimzi/spec.go       <-- ToKafkaVendorSpec / ToKafkaNodePoolVendorSpec
-                                          minio/tenant/spec.go        <-- ToObjectStoreVendorSpec / ToObjectStoreEnvConfig
-                                          clickhouse/altinity/spec.go <-- ToClickHouseVendorSpec
-```
-
-**Files touched:**
-- `translator/v2/{mysql,redis,kafka,objectstore,clickhouse}.go` — remove
-  vendor spec builder functions.
-- New `infra/managed/*/spec.go`.
-- `controller/v2/{mysql,redis,kafka,objectstore,clickhouse}.go` —
-  callers update import path (`translatorv2.ToXxxVendorSpec` →
-  `vendor-pkg.ToXxxVendorSpec`).
+- `translator/v2/{mysql,redis,kafka,objectstore,clickhouse}.go` — deleted.
+- New `infra/managed/{mysql/mysql,redis/opstree,kafka/strimzi,minio/tenant,clickhouse/altinity}/spec.go`
+  files contain `ToXxxVendorSpec` builders, `BuildWandbXxxLabels`,
+  `ToXxxOnDeleteRule`, plus the per-vendor module-name and image constants.
+- `controller/v2/{mysql,redis,kafka,objectstore,clickhouse}.go` updated
+  to call vendor packages directly (e.g. `mysql.ToMysqlMySQLVendorSpec`,
+  `opstree.ToRedisStandaloneVendorSpec`).
+- The follow-on type-hierarchy collapse and shared-utility consolidation
+  is documented in "What's Already Done" below.
 
 ---
 
