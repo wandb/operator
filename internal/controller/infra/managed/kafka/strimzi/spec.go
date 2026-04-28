@@ -8,7 +8,8 @@ import (
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/logx"
-	"github.com/wandb/operator/pkg/vendored/strimzi-kafka/v1"
+	v1 "github.com/wandb/operator/pkg/vendored/strimzi-kafka/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -39,6 +40,15 @@ func createKafkaMetricsConfig(telemetry apiv2.Telemetry) *v1.MetricsConfig {
 			AllowList: []string{".*"},
 		},
 	}
+}
+
+// kafkaPodSecurityContext returns a PodSecurityContext with FSGroup set if fsGroup is non-nil.
+// Returns nil when fsGroup is not configured, allowing the platform to apply its own defaults.
+func kafkaPodSecurityContext(fsGroup *int64) *corev1.PodSecurityContext {
+	if fsGroup == nil {
+		return nil
+	}
+	return &corev1.PodSecurityContext{FSGroup: fsGroup}
 }
 
 // ToKafkaVendorSpec converts a KafkaSpec to a Kafka CR.
@@ -187,6 +197,7 @@ func ToKafkaNodePoolVendorSpec(
 					Metadata: &v1.MetadataTemplate{
 						Labels: BuildWandbKafkaLabels(wandb),
 					},
+					SecurityContext: kafkaPodSecurityContext(infraSpec.FsGroup),
 				},
 				PersistentVolumeClaim: &v1.ResourceTemplate{
 					Metadata: &v1.MetadataTemplate{

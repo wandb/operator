@@ -387,6 +387,7 @@ type ManagedKafkaSpec struct {
 	Name             string      `json:"name,omitempty"`
 	Telemetry        Telemetry   `json:"telemetry,omitempty"`
 	SkipDataRecovery bool        `json:"skipDataRecovery,omitempty"`
+	FsGroup          *int64      `json:"fsGroup,omitempty"`
 }
 
 type KafkaConnection struct {
