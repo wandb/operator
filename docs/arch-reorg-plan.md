@@ -419,7 +419,7 @@ internally for the password if missing).
 clickhouse/altinity):**
 - `read.go` — remove `writeXxxConnInfo` call; read existing secret instead.
 - `write.go` — `WriteState` signature changes to return
-  `(conditions, *translator.XxxConnection)`.
+  `(conditions, *apiv2.XxxConnection)`.
 - `controller/v2/{redis,mysql,kafka,clickhouse}.go` — dispatchers update
   call sites and return-value plumbing.
 
@@ -431,7 +431,7 @@ clickhouse/altinity):**
 root and user passwords and writes the `db-password` Secret before
 delegating to `mysql.WriteState`. The managed MySQL package is
 oblivious to this credential's existence; it only references the secret
-by name (plumbed via `translator/v2/mysql.go:58`).
+by name (plumbed via `infra/managed/mysql/mysql/spec.go:58`).
 
 ```
 BEFORE                                  AFTER
@@ -487,13 +487,12 @@ should be Layer 1 only.
 - ObjectStore `RootUser = "admin"`
 - ObjectStore `MinioBrowserSetting = "on"`
 
-**Currently Layer 4 (translator)** (move to Layer 1 if user-facing,
+**Currently Layer 4 (vendor `spec.go`)** (move to Layer 1 if user-facing,
 otherwise rename to "constant"):
-- `DefaultSentinelGroup = "gorilla"`
-- Sentinel size `3`
-- Replication size `3`
-- `DefaultRedisExporterImage`, `DefaultRedisExporterPort`
-- `DefaultMySQLExporterImage`
+- `DefaultSentinelGroup = "gorilla"` (`infra/managed/redis/opstree/spec.go`)
+- Sentinel size `3`, Replication size `3` (same file)
+- `DefaultRedisExporterImage`, `DefaultRedisExporterPort` (same file)
+- `DefaultMySQLExporterImage` (`infra/managed/mysql/mysql/spec.go`)
 
 **Computed defaults that stay in the webhook**:
 - Per-service `Name = {wandb-name}-{service}` (depends on parent CR name)
@@ -508,8 +507,8 @@ otherwise rename to "constant"):
   fields for sentinel-group / replica counts (see Move 16).
 - `webhook/v2/weightsandbiases_defaulter.go` (post-Move 2) — drop
   redundant defaults.
-- `translator/v2/redis.go` — read from spec instead of hardcoding
-  (depends on Move 16 adding the spec fields).
+- `infra/managed/redis/opstree/spec.go` — read from spec instead of
+  hardcoding (depends on Move 16 adding the spec fields).
 - `make manifests` regeneration.
 
 **Risk:** Medium. Changes CRD schema. Existing CRs will gain defaults
@@ -683,12 +682,13 @@ api/v2/weightsandbiases_types.go                api/v2/weightsandbiases_types.go
 ```
 
 `MasterName` already exists in `RedisSentinelConfig` and is honored by
-`translator/v2/redis.go:153`; only the default annotation is missing.
+`infra/managed/redis/opstree/spec.go`; only the default annotation is
+missing.
 
 **Files touched:**
 - `api/v2/weightsandbiases_types.go` — annotations and new fields.
-- `translator/v2/redis.go` (or post-Move 3, `infra/managed/redis/opstree/spec.go`) —
-  read from spec, drop hardcoded constants.
+- `infra/managed/redis/opstree/spec.go` — read from spec, drop hardcoded
+  constants.
 - `make manifests`, `make generate`.
 
 **Risk:** Medium. New fields are additive (existing CRs unaffected).
@@ -757,7 +757,8 @@ This is more about data-flow clarity than an active bug.
                 api/v2
                 (no KEDA/Argo deps after Move 17;
                  +kubebuilder:default for static defaults;
-                 new fields for previously-hidden translator constants)
+                 new fields for previously-hidden vendor constants;
+                 canonical Connection / InfraStatus types)
                   |
         +---------+---------+
         |                   |
@@ -765,9 +766,6 @@ This is more about data-flow clarity than an active bug.
      defaulter.go     <-- computed defaults only, possibly hosts
                           ApplyInfraSizing (Move 15A)
      validator.go     <-- per-service immutability checks for all infra
-                  |
-         translator/v2
-           common.go (converters only)
                   |
         +-----------------+
         |                 |
@@ -799,6 +797,9 @@ This is more about data-flow clarity than an active bug.
      networking/providers/{nginx,gke}/  <-- conditionally registered
      state.go
         |
+   controller/common/   <-- shared labels, retention, condition expiry,
+                           CRUD helpers, state constants
+        |
         +--> internal/telemetry/  <-- domain types
         |
         +--> pkg/wandb/manifest/   <-- includes telemetry.go
@@ -809,26 +810,26 @@ This is more about data-flow clarity than an active bug.
 
 ## Execution Order
 
-| # | Move | Phase | Risk | Touches Tests | CRD Change |
-|---|------|-------|------|--------------|------------|
-| 1 | Split `reconcile_v2.go` | 1 | Low | No (same package) | No |
-| 2 | Split `weightsandbiases_webhook.go` | 1 | Low | No | No |
-| 3 | Vendor spec builders → `infra/managed/` | 1 | Medium | Update test imports | No |
-| 4 | Telemetry types → `internal/telemetry/` | 1 | Low | Update imports | No |
-| 5 | `InferExternalStatus` → `controller/v2/` | 1 | Low | Update imports | No |
-| 6 | Telemetry allowlist → manifest layer | 1 | Low | No | No |
-| 7 | Extract label patching | 1 | Low | No | No |
-| 8 | Provider-gate networking imports | 1 | Medium | Networking tests | No |
-| 9 | Fix write-in-read (4 vendors) | 2 | Medium-High | Yes | No |
-| 10 | MySQL credentials → managed layer | 2 | Medium | Possibly | No |
-| 11 | Static defaults → kubebuilder | 3 | Medium | Yes | Yes |
-| 12 | Reconciler fallback defaults | 3 | Low | Yes | No |
-| 13 | Non-Redis immutability validators | 3 | Low | Yes (new tests) | No |
-| 14 | Reconciler immutability guards | 3 | Low | Yes (new tests) | No |
-| 15 | Surface/move `ApplyInfraSizing` | 3 | Medium-High | Yes | No (Option A) / Yes (Option B) |
-| 16 | New CRD fields for hidden constants | 4 | Medium | Yes | Yes |
-| 17 | Decouple KEDA/Argo from CRD | 4 | High | Yes | Yes |
-| 18 | Stop mutating spec in `ApplyInfraSizing` | 4 | High | Yes | No |
+| # | Move | Phase | Risk | Touches Tests | CRD Change | Status |
+|---|------|-------|------|--------------|------------|--------|
+| 1 | Split `reconcile_v2.go` | 1 | Low | No (same package) | No | pending |
+| 2 | Split `weightsandbiases_webhook.go` | 1 | Low | No | No | pending |
+| 3 | Vendor spec builders → `infra/managed/` | 1 | Medium | Update test imports | No | **DONE** |
+| 4 | Telemetry types → `internal/telemetry/` | 1 | Low | Update imports | No | pending |
+| 5 | `InferExternalStatus` → `controller/v2/` | 1 | Low | Update imports | No | pending |
+| 6 | Telemetry allowlist → manifest layer | 1 | Low | No | No | pending |
+| 7 | Extract label patching | 1 | Low | No | No | pending |
+| 8 | Provider-gate networking imports | 1 | Medium | Networking tests | No | pending |
+| 9 | Fix write-in-read (4 vendors) | 2 | Medium-High | Yes | No | pending |
+| 10 | MySQL credentials → managed layer | 2 | Medium | Possibly | No | pending |
+| 11 | Static defaults → kubebuilder | 3 | Medium | Yes | Yes | pending |
+| 12 | Reconciler fallback defaults | 3 | Low | Yes | No | pending |
+| 13 | Non-Redis immutability validators | 3 | Low | Yes (new tests) | No | pending |
+| 14 | Reconciler immutability guards | 3 | Low | Yes (new tests) | No | pending |
+| 15 | Surface/move `ApplyInfraSizing` | 3 | Medium-High | Yes | No (Option A) / Yes (Option B) | pending |
+| 16 | New CRD fields for hidden constants | 4 | Medium | Yes | Yes | pending |
+| 17 | Decouple KEDA/Argo from CRD | 4 | High | Yes | Yes | pending |
+| 18 | Stop mutating spec in `ApplyInfraSizing` | 4 | High | Yes | No | pending |
 
 Phase 1 (Moves 1-8) can be parallelized across PRs since they touch
 different files; some intersect (Move 1 + Move 6 both modify
@@ -841,16 +842,16 @@ Each move should be a separate PR with a focused commit message.
 
 ---
 
-## What's Already Done Since the Previous Plan
+## What's Already Done
 
-Worth acknowledging — these don't need re-doing:
+### From the prior round (carried over from the previous version of this plan)
 
 - **`infra/managed/minio/tenant/`** moved its connection-secret write into
   `WriteState` (the pattern Move 9 wants for the other four vendors).
 - **External infra credential management** is implemented end-to-end
   under `infra/external/` with a clean per-service pattern.
 - **A handful of `+kubebuilder:default` annotations** were added to
-  `api/v2` — this is partial progress on Move 11.
+  `api/v2` — partial progress on Move 11.
 - **`weightsandbiases_conversion.go`** added (groundwork for v1↔v2
   conversion).
 - **Per-service defaulter test split** is complete (the implementation
@@ -860,3 +861,44 @@ Worth acknowledging — these don't need re-doing:
   these).
 - **`ApplyInfraSizing`** added — solves a real problem (manifest-driven
   sizing) but introduced the four-layer default issue (Moves 11, 15, 18).
+
+### This round
+
+- **Move 3 (vendor spec builders → `infra/managed/`)** — done. Five new
+  `infra/managed/{vendor}/spec.go` files; five
+  `translator/v2/{vendor}.go` files removed.
+- **Parallel type hierarchy collapsed (was not in the original plan).**
+  `translator.{Mysql,Redis,Kafka,ObjectStore,ClickHouse}{Connection,Status}`
+  and `translator.InfraStatus` had identical shapes to the corresponding
+  `apiv2` types and required ~225 lines of converter ceremony in
+  `translator/v2/common.go`. All deleted; managed and external infra
+  packages now consume `apiv2.XxxConnection` / `apiv2.XxxInfraStatus`
+  directly. Dispatchers in `controller/v2/` no longer round-trip through
+  converters.
+- **Per-vendor constants relocated.** `MysqlModuleName`, `KafkaVersion`,
+  `RedisStandaloneImage`, `MinioImage`, etc. moved from `translator/`
+  into the corresponding vendor's `spec.go`.
+- **Shared retention/labels/condition primitives consolidated in
+  `internal/controller/common/`.** `OnDeletePolicy`, `OnDeleteRule`,
+  `Purge`, `Detach`, `WandbXxxLabel` constants, `BuildWandbLabels`,
+  `ToOnDeleteRule`, and `DefaultConditionExpiry` live there now (added
+  to existing `common/labels.go` and `common/condition.go`, plus a new
+  `common/retention.go`). When `common/` grows too crowded, the natural
+  split lines are clear.
+- **`internal/controller/translator/` and
+  `internal/controller/translator/v2/` deleted entirely** (including
+  the orphaned `translator/utils/` subpackage).
+- Net code change across the round: ~1,500 lines deleted, ~200 added.
+
+After this round, the residual issues in the analysis are:
+
+- Hidden constants in `infra/managed/{vendor}/spec.go` (still not exposed
+  in CRD; Moves 11, 16).
+- All file-organization issues in `reconcile_v2.go` (Move 1) and
+  `weightsandbiases_webhook.go` (Move 2) are unchanged.
+- All write-in-read issues for redis/mysql/kafka/clickhouse (Move 9)
+  remain.
+- Networking-vendor coupling at `controller/v2/{gateway,infra_routes}.go`
+  (Move 8) remains.
+- The four-layer default problem persists — Layer 4 just relocated from
+  `translator/v2/` to `infra/managed/{vendor}/spec.go`.
