@@ -7,6 +7,7 @@ command -v oc >/dev/null 2>&1 || { echo "Error: oc is required but not installed
 command -v docker >/dev/null 2>&1 || { echo "Error: docker is required but not installed." >&2; exit 1; }
 
 echo "Configuring CRC resources..."
+crc config set cpus 6
 crc config set memory 16384
 crc config set disk-size 80
 

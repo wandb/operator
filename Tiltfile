@@ -261,6 +261,7 @@ third_party_operator_flags = [
 if settings.get('openshiftSCC'):
     third_party_operator_flags += [
         '--set=altinity-clickhouse-operator.crdHook.enabled=false',
+        '--values=./deploy/operator/profiles/openshift.yaml'
     ]
 
 if settings.get("installTelemetry"):
