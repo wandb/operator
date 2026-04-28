@@ -1,31 +1,40 @@
 # Architecture: Separation of Concerns Analysis (v2)
 
-## `internal/controller/{infra,translator,v2}` · `internal/webhook/v2` · `api/v2`
+## `internal/controller/{infra,v2}` · `internal/webhook/v2` · `api/v2`
 
 > Refresh: substantial new code has landed since the previous version of this
 > document — networking (`gateway.go`, `infra_routes.go`, `ingress.go`,
 > `networking_cleanup.go`), manifest-derived infra sizing
 > (`ApplyInfraSizing` in `reconcile_v2.go`), telemetry connection secret
 > reconciliation (`telemetry_secret.go`), and external infra credential
-> management (`infra/external/`). This analysis reflects the current state.
+> management (`infra/external/`).
+>
+> Subsequent cleanup (this round): `internal/controller/translator/` and
+> `internal/controller/translator/v2/` have been **deleted entirely**. The
+> parallel `translator.XxxConnection`/`XxxStatus` type hierarchy has been
+> collapsed into `apiv2.XxxConnection`/`apiv2.XxxInfraStatus` — managed and
+> external infra packages now consume the schema types directly. Vendor
+> spec builders moved to `infra/managed/{vendor}/spec.go`. Shared
+> labels/retention/condition primitives moved to
+> `internal/controller/common/`. This analysis reflects the post-cleanup
+> state.
 
 ---
 
 ## 1. Intended Architecture (Inferred)
 
 ```
-api/v2              CRD schema — what the user writes in YAML
+api/v2              CRD schema — also the canonical connection/status types
 webhook/v2          Admission gate: mutate defaults, validate invariants
-translator/         Internal wire types (connection shapes, status shapes)
-translator/v2/      Adaptation: api/v2 ↔ translator, translator → vendor CRs
 infra/external/     External credential management (user-provided services)
-infra/managed/      Vendor-specific lifecycle management (operator-deployed)
+infra/managed/      Vendor-specific lifecycle, including spec.go vendor builders
 controller/v2/      Reconciliation orchestration, dispatching, networking
+controller/common/  Shared labels, retention rules, condition expiry, CRUD helpers
 pkg/wandb/manifest/ Server manifest definition (apps, sizing, topics, infra)
 ```
 
 The intended dependency direction is downward:
-`controller/v2` → `infra/` → `translator/` → `api/v2`.
+`controller/v2` → `infra/` → `api/v2`.
 The webhook is a lateral peer of the reconciler — both depend on `api/v2`,
 but neither should depend on the other.
 
@@ -42,11 +51,11 @@ but neither should depend on the other.
                     │  controller/v2   │──── reconcile loop
                     └──┬──────────┬────┘
                        │          │
-              ┌────────▼──┐  ┌────▼──────────┐
-              │ infra/    │  │ translator/v2 │
-              │ managed/  │  │               │
-              │ external/ │  │               │
-              └───────────┘  └───────────────┘
+              ┌────────▼──┐  ┌────▼──────────────┐
+              │ infra/    │  │ infra/managed/    │
+              │ external/ │  │  {vendor}/spec.go │── builds vendor CRs
+              └───────────┘  └───────────────────┘
+                       (both speak api/v2 types directly)
 ```
 
 The webhook fires synchronously on CREATE/UPDATE. The reconciler fires
@@ -179,52 +188,51 @@ Unchanged: HPA/replicas mutual exclusivity, kind immutability.
 
 ---
 
-### `internal/controller/translator/`
+### `internal/controller/translator/` and `internal/controller/translator/v2/` — REMOVED
 
-**Intended:** Pure data shapes.
+These packages have been deleted in this round of cleanup. The previous
+analysis identified two structural problems with them:
 
-**Actual:** Still pure: `InfraStatus`, `MysqlConnection`, `MysqlStatus`,
-`RedisConnection`, `RedisStatus`, `KafkaConnection`, `KafkaStatus`,
-`ObjectStoreConnection`, `ObjectStoreStatus`, `ClickHouseConnection`,
-`ClickHouseStatus`, `OnDeletePolicy`, `OnDeleteRule`. Module-name and
-image constants live here too. **Assessment: Well-designed; unchanged.**
+1. **Duplicate type hierarchies** — `translator.MysqlConnection` and
+   `apiv2.MysqlConnection` (and four other vendors' equivalents) had
+   identical shapes; `translator/v2/common.go` was 225 lines of pure
+   field-by-field copy ceremony bridging them.
+2. **Mixed concerns** — `translator/v2/` bundled shallow converters with
+   vendor spec builders that imported every vendored operator CRD.
 
----
+Both problems are resolved:
 
-### `internal/controller/translator/v2/`
+- Per-vendor connection/status types in the parent `translator/` package
+  were deleted; `infra/managed/*` and `infra/external/*` now consume
+  `apiv2.MysqlConnection`/`apiv2.MysqlInfraStatus` directly. The 225-line
+  `common.go` converter file is gone.
+- Vendor spec builders moved to `infra/managed/{vendor}/spec.go` (e.g.
+  `ToMysqlMySQLVendorSpec` is now in `mysql/mysql/spec.go` next to the
+  CRUD code that calls it). Per-vendor constants
+  (`MysqlModuleName`, `RedisStandaloneImage`, `KafkaVersion`, etc.) moved
+  with them.
+- Shared label keys (`WandbNameLabel`/`NamespaceLabel`/`ComponentLabel`),
+  the `BuildWandbLabels` helper, retention primitives (`OnDeletePolicy`,
+  `OnDeleteRule`, `ToOnDeleteRule`), and `DefaultConditionExpiry` moved
+  to `internal/controller/common/` (existing kitchen-sink for shared
+  controller utilities).
 
-**Intended:** Adaptation between `api/v2` and `translator`, plus vendor CR
-construction.
+**Residual issue (now in `infra/managed/{vendor}/spec.go`):** the hardcoded
+constants previously in `translator/v2/redis.go` are still hidden from the
+webhook and from users — they just live in the vendor package now:
 
-**Actual:** Same two responsibilities mixed in one package:
+- `DefaultSentinelGroup = "gorilla"` (`redis/opstree/spec.go`)
+- Sentinel size `int32(3)`, replication size `int32(3)`
+  (`redis/opstree/spec.go`, with `// TODO I dont think we want to default
+  this at all?` comments)
+- The hardcoded `mycnf` block in `mysql/mysql/spec.go` (binlog format,
+  sort buffer size, etc.) — no override path.
+- The `ClickHouseUser`/`ClickHousePassword` constants in
+  `clickhouse/altinity/spec.go` — configuration masquerading as
+  translation logic.
 
-1. **Bidirectional converters** (`common.go`, ~225 lines) — shallow structural
-   transforms with no business logic.
-2. **Vendor spec builders** (per-service files) — `ToMysqlMySQLVendorSpec`
-   (`mysql.go`), `ToRedisStandalone/Sentinel/ReplicationVendorSpec`
-   (`redis.go`), `ToKafkaVendorSpec`/`ToKafkaNodePoolVendorSpec` (`kafka.go`),
-   `ToObjectStoreVendorSpec`/`ToObjectStoreEnvConfig` (`objectstore.go`),
-   `ToClickHouseVendorSpec` (`clickhouse.go`).
-
-The vendor spec builders import every vendored CRD; the converters import
-nothing beyond `api/v2` and `translator`. They should be different packages,
-or the builders should live next to the managed-infra code that calls them.
-
-**Issue 6 — Hardcoded translator defaults persist:**
-
-`redis.go` still hardcodes:
-- `DefaultSentinelGroup = "gorilla"` (`redis.go:25`)
-- Sentinel size `int32(3)` (`redis.go:149`, with `// TODO I dont think we want to default this at all?` comment)
-- Replication size `int32(3)` (`redis.go:233`, same TODO)
-
-These defaults are invisible to webhook validation and to the user — there
-is no CRD field exposing them.
-
-`mysql.go:41` hardcodes a `mycnf` block (binlog format, sort buffer size,
-etc.) with no override path. Likewise `clickhouse.go` hardcodes the user
-settings (`ClickHouseUser`, `ClickHousePassword` constants — sourced from
-`infra/managed/clickhouse/altinity`). These are configuration constants
-masquerading as translation logic.
+These are still candidates for promotion to CRD fields with
+`+kubebuilder:default` annotations (see plan Move 16).
 
 ---
 
@@ -420,10 +428,10 @@ The implicit contract is unchanged in shape, but the addition of
 | Redis sentinel enabled for non-dev | Webhook | Translator topology selection | No |
 | `Spec.Wandb.ServiceAccount.Create` set | Annotation + Webhook | Reconciler dereferences `*spec.Create` | **Yes** (annotation) |
 | `Spec.Wandb.ServiceAccount.ServiceAccountName` set | Annotation + Webhook | Reconciler | **Yes** (annotation) |
-| MySQL/Redis/Kafka/ObjectStore/CH replica/storage/resources defaults | `ApplyInfraSizing` from manifest | Translator | **Yes** (sizing always runs) |
-| Sentinel group name `"gorilla"` | Translator | Managed infra | **Yes** (translator always runs) |
-| Sentinel/replication replica count `3` | Translator | Vendor CR spec | **Yes** (translator always runs) |
-| MySQL `mycnf` block | Translator | Vendor CR spec | **Yes** |
+| MySQL/Redis/Kafka/ObjectStore/CH replica/storage/resources defaults | `ApplyInfraSizing` from manifest | Vendor spec builder | **Yes** (sizing always runs) |
+| Sentinel group name `"gorilla"` | `infra/managed/redis/opstree/spec.go` | Managed infra | **Yes** (spec builder always runs) |
+| Sentinel/replication replica count `3` | `infra/managed/redis/opstree/spec.go` | Vendor CR spec | **Yes** |
+| MySQL `mycnf` block | `infra/managed/mysql/mysql/spec.go` | Vendor CR spec | **Yes** |
 
 `ApplyInfraSizing` doesn't *fix* the webhook-required defaults — it adds
 *more* fields where defaults can come from a non-webhook source. A user
@@ -435,7 +443,7 @@ on the next reconcile, with no admission validation.
 | Invariant | Enforced By | If violated at runtime |
 |-----------|-------------|------------------------|
 | Managed and external mutually exclusive | Webhook | Reconciler routes to managed; external silently ignored |
-| Redis storage size is a valid quantity | Webhook | `resource.MustParse` panics in `translator/v2/clickhouse.go` (uses MustParse for ClickHouse), translator returns error for Redis |
+| Redis storage size is a valid quantity | Webhook | `resource.MustParse` panics in `clickhouse/altinity/spec.go` (uses MustParse for ClickHouse); spec builder returns error for Redis |
 | Redis storage size/namespace/sentinel immutable | Webhook | Operator may reject change or orphan resources |
 | Networking mode matches config | Webhook | Wrong resource type created (Ingress vs HTTPRoute) |
 | Networking gatewayClassName/gatewayRef per managed flag | Webhook | Reconciler may panic on nil pointer or create unmanaged Gateway |
@@ -457,7 +465,7 @@ behind `--enable-webhooks`.
 | `Status.GatewayStatus` / `IngressStatus` | `gateway.go` / `ingress.go` | Same package | Correct |
 | Connection Secret (managed) | Mostly `infra/managed/*/conn.go` from `read.go` (**redis, mysql, kafka, clickhouse**); from `write.go` for **minio** | Cross-tick via `Status.XxxStatus.Connection` | Naming violation for 4 of 5 |
 | Connection Secret (external) | `infra/external/common.go:WriteConnectionSecret` | `infra/external/*/ReadState` | Correct |
-| `db-password` Secret | `controller/v2/mysql.go:managedMysqlWriteState` | `translator/v2/mysql.go` reads name; `infra/managed/mysql/mysql/read.go` reads value | Wrong layer — credential lifecycle in dispatcher |
+| `db-password` Secret | `controller/v2/mysql.go:managedMysqlWriteState` | `infra/managed/mysql/mysql/spec.go` reads name; `read.go` reads value | Wrong layer — credential lifecycle in dispatcher |
 | Vendor CRs (Redis/MySQL/Kafka/MinIO/CH) | `infra/managed/*/write.go` | `infra/managed/*/read.go` | Correct |
 | Telemetry Secret (`wandb-otel-connection`) | `controller/v2/telemetry_secret.go:reconcileTelemetryConnectionSecret` | Workload pods via env-var resolution | Correct, but the input config (`TelemetryRuntimeConfig`) is in the wrong package |
 | MySQL init Job | `controller/v2/reconcile_v2.go:runMysqlInitJob` | Same package next tick | Correct |
@@ -532,10 +540,17 @@ documented.
 - `managed/*/status.go` — vendor condition→state mapping close to the vendor.
 - `managed/*/detach.go`, `managed/*/purge.go`, `managed/*/naming.go` —
   finalizer logic and naming strategy correctly isolated per vendor.
-- `translator/v2/common.go` — bidirectional converters are shallow, stable,
-  and correctly placed.
+- `managed/*/spec.go` — vendor CR construction and per-vendor constants
+  co-located with the CRUD code that uses them (post-cleanup).
 - `controller/v2/{redis,kafka,clickhouse,objectstore}.go` —
-  dispatcher-only, clean. (MySQL is the exception — see below.)
+  dispatcher-only, clean. The status round-trip is now transparent: each
+  dispatcher reads `wandb.Status.XxxStatus.Connection` (an
+  `apiv2.XxxConnection`), passes it through `Coalesce`, and writes the
+  result back without any intermediate type conversion. (MySQL is the
+  exception — see below.)
+- `internal/controller/common/{labels,retention,condition}.go` —
+  cross-cutting utilities for label keys, retention policy mapping, and
+  condition expiry, used by every managed/external infra package.
 - `controller/v2/manifest_order.go` — small, focused helpers for ordering.
 - `controller/v2/infra_routes.go` — Gateway API HTTPRoute orchestration
   for infra is at the right layer; the GKE-specific HealthCheckPolicy
@@ -552,9 +567,9 @@ documented.
 | Telemetry domain types | `controller/v2/telemetry_config.go` | `internal/telemetry/` or `pkg/telemetry/` |
 | Telemetry application allowlist | `controller/v2/reconcile_v2.go:58-72` | `pkg/wandb/manifest/` |
 | Telemetry env-var blueprint | `controller/v2/reconcile_v2.go:74-135` | `pkg/wandb/manifest/` or `internal/telemetry/` |
-| Sentinel group name `"gorilla"` | `translator/v2/redis.go:25`, `infra/managed/redis/opstree/conn.go` | `api/v2` annotation or spec field |
-| Sentinel/replication replica defaults `3` | `translator/v2/redis.go:149,233` | `api/v2` field with `+kubebuilder:default=3` |
-| MySQL `mycnf` block | `translator/v2/mysql.go:41-50` | `api/v2` field, or manifest-driven, with sane default |
+| Sentinel group name `"gorilla"` | `infra/managed/redis/opstree/spec.go`, `conn.go` | `api/v2` annotation or spec field |
+| Sentinel/replication replica defaults `3` | `infra/managed/redis/opstree/spec.go` | `api/v2` field with `+kubebuilder:default=3` |
+| MySQL `mycnf` block | `infra/managed/mysql/mysql/spec.go` | `api/v2` field, or manifest-driven, with sane default |
 | External status inference | `infra/external/common.go:InferExternalStatus` | `controller/v2/external_status.go` |
 | Computed defaults (sentinel-for-non-dev, per-service Name/Namespace) | Webhook only | Webhook + reconciler fallback |
 | Immutability for non-Redis infra | Not enforced anywhere | Webhook + reconciler |
@@ -573,17 +588,17 @@ documented.
 ### The Four-Layer Default Problem
 
 ```
-Layer 1: api/v2 +kubebuilder:default        compile-time, in CRD schema
-Layer 2: webhook/v2 CustomDefaulter          admission-time, before persist
-Layer 3: ApplyInfraSizing (reconcile_v2.go)  reconcile-time, from manifest
-Layer 4: translator/v2 vendor builders       reconcile-time, in code
+Layer 1: api/v2 +kubebuilder:default              compile-time, in CRD schema
+Layer 2: webhook/v2 CustomDefaulter                admission-time, before persist
+Layer 3: ApplyInfraSizing (reconcile_v2.go)        reconcile-time, from manifest
+Layer 4: infra/managed/{vendor}/spec.go builders   reconcile-time, in code
 ```
 
-`ApplyInfraSizing` is the new layer. It lives between the webhook and the
-translator: it mutates the user-facing spec at reconcile time using values
-from the server manifest. The webhook cannot validate values it places
-there, and the user has no way to inspect them via `kubectl describe`
-beyond observing the mutated spec.
+`ApplyInfraSizing` is the third layer. It lives between the webhook and the
+vendor spec builders: it mutates the user-facing spec at reconcile time
+using values from the server manifest. The webhook cannot validate values
+it places there, and the user has no way to inspect them via
+`kubectl describe` beyond observing the mutated spec.
 
 **Recommended policy:**
 - **Static scalar defaults** → Layer 1 (`+kubebuilder:default`).
@@ -593,8 +608,9 @@ beyond observing the mutated spec.
   to "manifest-derived sizing" with explicit doc that it mutates spec at
   reconcile time, and exposed in status (`Status.AppliedSizing` or similar)
   so the user can see what was applied.
-- **Translator-internal constants** → Layer 4, but renamed to "constants"
-  if not user-facing, OR pulled up to Layer 1/2 if they should be.
+- **Vendor-internal constants** in `infra/managed/{vendor}/spec.go` →
+  Layer 4, but renamed to "constants" if not user-facing, OR pulled up to
+  Layer 1/2 if they should be.
 
 ---
 
@@ -661,14 +677,6 @@ or extracted into a `controller/v2/networking/{provider}/` sub-tree. As
 written, every operator deployment carries the union of all supported
 provider CRDs.
 
-### `translator/v2/`
-
-Same issue as before: vendor spec builders import all vendored operator
-CRDs; converters import nothing beyond `api/v2` and `translator`. They
-belong in different packages (`translator/v2/convert/` vs.
-`translator/v2/vendor/`), or the vendor builders should move next to the
-managed-infra code that owns them.
-
 ---
 
 ## 8. Summary of Cross-Cutting Concerns
@@ -706,7 +714,6 @@ managed-infra code that owns them.
 | Medium | `api/v2/application_types.go` imports KEDA, Argo Rollouts, and Gateway API |
 | Medium | `controller/v2/gateway.go` imports nginx-gateway-fabric (provider-specific CRD at orchestration layer) |
 | Medium | `controller/v2/infra_routes.go` imports gke-gateway-api (provider-specific CRD) |
-| Medium | Vendor spec builders in `translator/v2` import all vendor CRDs |
 | Low | `InferExternalStatus` in wrong package (`infra/external` instead of `controller/v2`) |
 | Low | Telemetry domain types in `controller/v2` (should be `internal/telemetry`) |
 | Low | Telemetry application allowlist hardcoded in `reconcile_v2.go` (should be in `pkg/wandb/manifest/`) |

@@ -9,6 +9,16 @@ Based on the analysis in [arch-reorg.md](./arch-reorg.md).
 > manifest-derived sizing has been added, and `infra/managed/minio/tenant/`
 > has already migrated to the read=pure / write=side-effects pattern that
 > the rest of the managed-infra packages still need.
+>
+> **Update (this round):** Move 3 is **DONE**. The cleanup also went deeper
+> than originally planned — `internal/controller/translator/` and
+> `internal/controller/translator/v2/` have been **deleted entirely**.
+> The parallel `translator.XxxConnection`/`XxxStatus` type hierarchy
+> collapsed into `apiv2.XxxConnection`/`apiv2.XxxInfraStatus`. Per-vendor
+> constants moved into `infra/managed/{vendor}/spec.go`. Shared
+> labels/retention/condition primitives moved into
+> `internal/controller/common/`. See "What's Already Done" at the bottom
+> for the full list.
 
 ---
 
