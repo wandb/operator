@@ -13,7 +13,7 @@ func IsRegistered(scheme *runtime.Scheme, obj runtime.Object) bool {
 	if err != nil || len(gvks) == 0 {
 		return false
 	}
-	return IsServerResource(fmt.Sprintf("%s.%s/%s", gvks[0].Kind, gvks[0].Group, gvks[0].Kind))
+	return IsServerResource(fmt.Sprintf("%s.%s/%s", gvks[0].Kind, gvks[0].Group, gvks[0].Version))
 }
 
 func AddServerResource(resource string) {
