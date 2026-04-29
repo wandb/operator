@@ -1869,6 +1869,19 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 	version := wandb.Spec.Wandb.Version
 
 	if wandb.Status.Wandb.Migration.Ready && wandb.Status.Wandb.Migration.Version == version {
+		for name, _ := range manifest.Migrations {
+			jobName := fmt.Sprintf("%s-%s", wandb.Name, name)
+			job := &batchv1.Job{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      jobName,
+					Namespace: wandb.Namespace,
+				},
+			}
+			err := client.Delete(ctx, job)
+			if err != nil {
+				return ctrl.Result{}, fmt.Errorf("failed to delete migration job %s: %v", jobName, err)
+			}
+		}
 		return ctrl.Result{}, nil
 	}
 
