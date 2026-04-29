@@ -91,7 +91,7 @@ flowchart LR
     Status -- patch --> CR
 ```
 
-**Reconciler — managed components.** When the manifest's `targetVersion` is set, the operator's vendor-spec builders translate it into the appropriate field on the underlying vendor CR (e.g., `InnoDBCluster.Spec.Version`, `Kafka.Spec.Kafka.Version`, image tags on the Altinity / Opstree / MinIO Tenant CRs). The deployed version is then echoed back into `status.{component}Status.version`. Managed-side version is operator-owned: there is no user override. If a user has set a version on the CR (only `ManagedClickHouseSpec.Version` exists today), it will be removed (or tombstoned for a release before removal). This avoids two competing pins.
+**Reconciler — managed components.** When the manifest's `targetVersion` is set, the operator's vendor-spec builders translate it into the appropriate field on the underlying vendor CR (e.g., `InnoDBCluster.Spec.Version`, `Kafka.Spec.Kafka.Version`, image tags on the Altinity / Opstree / MinIO Tenant CRs). The deployed version is then echoed back into `status.{component}Status.version`. Managed-side version is operator-owned: there is no user override. The only existing user-facing knob, `ManagedClickHouseSpec.Version`, is removed as part of this change. v2 is still in alpha, so the field is dropped outright with no deprecation window. This avoids two competing pins.
 
 **Reconciler — external components.** During each reconcile loop, after reading the connection secret the user supplied, the operator opens a short-lived client (using the component's native protocol), queries the running version, and writes it to `status.{component}Status.version`. Probes are best-effort — failures populate a `VersionProbeReady=False` condition with the error and leave the version field empty rather than failing the whole reconcile.
 
@@ -148,12 +148,12 @@ type WBInfraStatus struct {
 }
 ```
 
-**Removal:** `ManagedClickHouseSpec.Version` is deprecated and will be tombstoned for one release, then removed.
+**Removal:** `ManagedClickHouseSpec.Version` is removed outright (v2 is still in alpha, so no deprecation window is needed).
 
 ## 6. Backward compatibility
 
 - **Older manifests** without `minVersion` / `targetVersion` deserialize cleanly; the operator behaves exactly as today.
-- **Older CRs with `spec.clickhouse.managedClickhouse.version` set** are accepted during the tombstone window. The field is parsed and ignored, with a deprecation warning logged once per reconcile.
+- **Older CRs with `spec.clickhouse.managedClickhouse.version` set** will fail validation under the new CRD schema. v2 is still alpha, so this is acceptable; affected users update their CR to drop the field.
 - **The new `status.{x}Status.version` field is additive.** Older operator versions reading the same CRD will simply not see it.
 - **Validating webhook is opt-in by manifest content.** Manifests authored before this change have empty `minVersion`, so the webhook accepts everything (today's behavior).
 
@@ -176,7 +176,6 @@ type WBInfraStatus struct {
 - **MinIO/S3 version reporting.** Real S3 has no version. For MinIO we can read the `Server` header; for AWS/GCS we should record a marker (e.g. `"s3"` or `"gcs"`) and skip the `minVersion` check. The exact marker scheme should be agreed before implementation.
 - **Kafka version detection.** `ApiVersions` returns supported API ranges, not a clean broker version string. We will likely have to derive a representative version from the highest supported APIs, or use vendor-specific endpoints. Open as to which library to use.
 - **Probe credentials.** The probe uses the same connection secret the W&B applications use. Some users may want to provide a read-only credential specifically for version probing — out of scope for v1, but a possible extension.
-- **Tombstone vs. immediate removal of `ManagedClickHouseSpec.Version`.** Depends on how many deployments currently use it. If the answer is "none we know of," we can skip the tombstone window.
 
 ## 9. Implementation status
 

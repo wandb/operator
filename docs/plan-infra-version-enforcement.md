@@ -118,7 +118,7 @@ The `+kubebuilder:printcolumn` markers stay as they are; we don't need a column 
 
 Run `make manifests generate` to regenerate the CRD YAML and `zz_generated.deepcopy.go`.
 
-Also: **remove (or tombstone) the existing `Version` field on `ManagedClickHouseSpec`** at [api/v2/weightsandbiases_types.go:459](api/v2/weightsandbiases_types.go:459). It is the only managed spec with such a field today, and once the manifest is the source of truth, leaving it would create two competing pins. Removal is a breaking change to the v2 CRD; if any production CRs set it, the field should be tombstoned (parsed-but-ignored with a deprecation warning) for one release before deletion.
+Also: **remove the existing `Version` field on `ManagedClickHouseSpec`** at [api/v2/weightsandbiases_types.go:459](api/v2/weightsandbiases_types.go:459). It is the only managed spec with such a field today, and once the manifest is the source of truth, leaving it would create two competing pins. v2 is still in alpha, so we delete it outright with no deprecation window.
 
 ---
 
@@ -138,7 +138,7 @@ For each managed component:
 
 1. Plumb the manifest's per-component `TargetVersion` from the v2 reconciler dispatch layer ([internal/controller/v2/{mysql,redis,kafka,clickhouse,objectstore}.go](internal/controller/v2)) into the corresponding `To*VendorSpec` builder. The reconciler already has the parsed `Manifest` in scope at the dispatch site; thread the relevant `ComponentVersions` through the existing `managed*WriteState` functions (`managedMysqlWriteState` at [internal/controller/v2/mysql.go:100](internal/controller/v2/mysql.go:100), and the equivalents in the other component files).
 2. The builder translates `TargetVersion` into the appropriate field on the underlying vendor CR — e.g. `InnoDBCluster.Spec.Version` (mysql-operator), `Kafka.Spec.Kafka.Version` (Strimzi), the Altinity ClickHouseInstallation image tag, the Opstree Redis image tag, the MinIO Tenant image tag.
-3. **Managed-side version is operator-owned.** The manifest's `TargetVersion` is always used; user overrides on the CR are not honored for managed components.
+3. **Managed-side version is operator-owned.** The manifest's `TargetVersion` is always used; user overrides on the CR are not honored for managed components. The existing `ManagedClickHouseSpec.Version` field is removed (see §2).
 4. Write the resulting deployed version into `wandb.Status.{Component}Status.Version` during the existing `*InferStatus()` call.
 
 For components without an existing CRD `Version` field (everything except ClickHouse), no spec change is needed — the builder pins via the underlying vendor CR's image/version field. If the manifest leaves `TargetVersion` empty (older manifests), preserve today's behavior of letting the vendor operator pick a default.
@@ -219,7 +219,7 @@ The validating webhook today is empty-struct only. To enforce minimums on update
 - `internal/controller/infra/managed/{mysql/mysql,redis/opstree,kafka/strimzi,clickhouse/altinity,minio/tenant}/spec.go` — extend the `To*VendorSpec` builders to accept and apply the manifest `TargetVersion` to the underlying vendor CR's image/version field.
 - [internal/controller/infra/external/common.go](internal/controller/infra/external/common.go) — optional shared `InferExternalStatusWithVersion` helper.
 - [internal/webhook/v2/weightsandbiases_webhook.go](internal/webhook/v2/weightsandbiases_webhook.go) — add `validateInfraVersionRequirements` step in `ValidateUpdate`.
-- [api/v2/weightsandbiases_types.go](api/v2/weightsandbiases_types.go) — add `Version` to `WBInfraStatus`; remove (or tombstone) `Version` from `ManagedClickHouseSpec`.
+- [api/v2/weightsandbiases_types.go](api/v2/weightsandbiases_types.go) — add `Version` to `WBInfraStatus`; remove `Version` from `ManagedClickHouseSpec`.
 - `go.mod` — add `go-sql-driver/mysql`, `clickhouse-go/v2`, `redis/go-redis/v9`, `twmb/franz-go`. Verify `minio-go/v7` is sufficient for object store.
 - Regenerated: `config/crd/bases/apps.wandb.com_weightsandbiases.yaml`, `api/v2/zz_generated.deepcopy.go`.
 
@@ -258,7 +258,7 @@ Run from the worktree root.
 4. **Managed-side check**:
    - With managed MySQL on 0.78.0, bump `spec.wandb.version = 0.79.0`.
    - The reconciler should re-translate `InnoDBCluster.Spec.Version` to the manifest's `targetVersion` and `status.mysqlStatus.version` should reflect the upgraded version once mysql-operator finishes the rollout.
-   - Confirm that user-set values on managed specs are not honored: e.g. setting `spec.clickhouse.managedClickhouse.version` (during the deprecation window if tombstoned, or rejected outright if removed) does not change the deployed image — the deploy stays pinned to manifest `targetVersion`.
+   - Confirm that the removed `spec.clickhouse.managedClickhouse.version` field is rejected by the API server (CRD schema no longer permits it) — the deployed image stays pinned to manifest `targetVersion`.
 
 5. **Failure-mode checks**:
    - Point an external probe at unreachable host -> confirm `VersionProbeReady` condition is False and reconcile doesn't loop-crash.
