@@ -3,6 +3,7 @@ package strimzi
 import (
 	"context"
 	"fmt"
+	"os"
 	"strconv"
 
 	apiv2 "github.com/wandb/operator/api/v2"
@@ -42,13 +43,19 @@ func createKafkaMetricsConfig(telemetry apiv2.Telemetry) *v1.MetricsConfig {
 	}
 }
 
-// kafkaPodSecurityContext returns a PodSecurityContext with FSGroup set if fsGroup is non-nil.
-// Returns nil when fsGroup is not configured, allowing the platform to apply its own defaults.
-func kafkaPodSecurityContext(fsGroup *int64) *corev1.PodSecurityContext {
-	if fsGroup == nil {
+// kafkaPodSecurityContext returns a PodSecurityContext with FSGroup set if the
+// KAFKA_FSGROUP env var is configured on the operator. Returns nil otherwise,
+// allowing the platform to apply its own defaults.
+func kafkaPodSecurityContext() *corev1.PodSecurityContext {
+	val, ok := os.LookupEnv("KAFKA_FSGROUP")
+	if !ok {
 		return nil
 	}
-	return &corev1.PodSecurityContext{FSGroup: fsGroup}
+	fsGroup, err := strconv.ParseInt(val, 10, 64)
+	if err != nil {
+		return nil
+	}
+	return &corev1.PodSecurityContext{FSGroup: &fsGroup}
 }
 
 // ToKafkaVendorSpec converts a KafkaSpec to a Kafka CR.
@@ -197,7 +204,7 @@ func ToKafkaNodePoolVendorSpec(
 					Metadata: &v1.MetadataTemplate{
 						Labels: BuildWandbKafkaLabels(wandb),
 					},
-					SecurityContext: kafkaPodSecurityContext(infraSpec.FsGroup),
+					SecurityContext: kafkaPodSecurityContext(),
 				},
 				PersistentVolumeClaim: &v1.ResourceTemplate{
 					Metadata: &v1.MetadataTemplate{

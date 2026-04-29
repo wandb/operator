@@ -12,3 +12,8 @@
     capabilities:
       drop:
         - ALL
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: KAFKA_FSGROUP
+    value: "0"
