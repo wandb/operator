@@ -15,9 +15,11 @@ settings = {
     "installNginxGateway": True,
     "logFormat": "pretty",  # pretty, text, json
     "openshiftSCC": False,
+    "licenseFile": "",
 }
 
 GENERATED_WANDB_CR = "hack/testing-manifests/wandb/.generated/wandb-cr.yaml"
+LICENSE_PATCH = "hack/testing-manifests/wandb/kustomize/overlays/license-file/patch.yaml"
 LOCAL_INGRESS_OVERLAY = "networking-ingress-local"
 LOCAL_GATEWAY_OVERLAY = "networking-gateway-local"
 
@@ -131,7 +133,13 @@ def managed_endpoint_resource(name, anchor_object, deps, local_port, remote_port
 GENERATED_DIR = 'hack/testing-manifests/wandb/.generated'
 
 def build_wandb_cr():
-    overlays = settings.get('wandbOverlays', [])
+    local('mkdir -p ' + GENERATED_DIR)
+    overlays = [] + settings.get('wandbOverlays', [])
+    if settings.get('licenseFile', ''):
+        overlays.append('license-file')
+        license = str(read_file(settings.get('licenseFile'))).strip().replace('\n', '\n      ')
+        local("cat > %s << 'LEOF'\napiVersion: apps.wandb.com/v2\nkind: WeightsAndBiases\nmetadata:\n  name: wandb\nspec:\n  wandb:\n    license: |-\n      %s\nLEOF" % (LICENSE_PATCH, license))
+
     components_lines = ''
     for o in overlays:
         components_lines += '  - ../kustomize/overlays/' + o + '\n'
@@ -140,7 +148,6 @@ def build_wandb_cr():
     if components_lines:
         kustomization += 'components:\n' + components_lines
 
-    local('mkdir -p ' + GENERATED_DIR)
     local("cat > %s/kustomization.yaml << 'KEOF'\n%sKEOF" % (GENERATED_DIR, kustomization))
     local('kustomize build %s > %s/wandb-cr.yaml' % (GENERATED_DIR, GENERATED_DIR))
 
