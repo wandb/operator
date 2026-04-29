@@ -1877,7 +1877,9 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 					Namespace: wandb.Namespace,
 				},
 			}
-			err := client.Delete(ctx, job)
+			propagation := metav1.DeletePropagationBackground
+			deleteOptions := &ctrlClient.DeleteOptions{PropagationPolicy: &propagation}
+			err := client.Delete(ctx, job, deleteOptions)
 			if err != nil {
 				return ctrl.Result{}, fmt.Errorf("failed to delete migration job %s: %v", jobName, err)
 			}
