@@ -10,6 +10,10 @@ SETTINGS = {
     # Override this value to use your own non-kustomized CR
     "wandbCR": "hack/testing-manifests/wandb/.generated/wandb-cr.yaml",
 
+    # Optional path to a local license file. When set, Tilt reads the file and
+    # injects its trimmed content into spec.wandb.license in the generated CR.
+    # "licenseFile": "/absolute/path/to/license.txt",
+
     # Overlays to stack on top of the base CR (hack/testing-manifests/wandb/kustomize/overlays/)
     # Available overrides:
     #    sizes: "size-small", "size-micro",
