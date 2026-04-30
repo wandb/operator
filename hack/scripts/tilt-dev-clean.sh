@@ -3,7 +3,8 @@
 set -euo pipefail
 
 SCRIPT_NAME="$(basename "$0")"
-OPERATOR_NAMESPACE="wandb-operator"
+OPERATOR_NAMESPACE="${OPERATOR_NAMESPACE:-wandb-operators}"
+LEGACY_OPERATOR_NAMESPACE="wandb-operator"
 WAIT_TIMEOUT="10m"
 DRY_RUN="false"
 APP_NAMESPACE=""
@@ -168,8 +169,9 @@ for app in "${apps[@]}"; do
   delete_app_and_wait "${namespace}" "${name}"
 done
 
-uninstall_release "${OPERATOR_NAMESPACE}" "telemetry-stack"
-uninstall_release "${OPERATOR_NAMESPACE}" "third-party-operators"
+uninstall_release "${OPERATOR_NAMESPACE}" "wandb-operator"
+uninstall_release "${LEGACY_OPERATOR_NAMESPACE}" "telemetry-stack"
+uninstall_release "${LEGACY_OPERATOR_NAMESPACE}" "third-party-operators"
 
 for app in "${apps[@]}"; do
   namespace="${app%%$'\t'*}"

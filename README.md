@@ -35,8 +35,7 @@ kind create cluster
 
 This will create a new kind cluster with the name `kind`. The kubernetes context will be called `kind-kind`.
 
-Alternatively, you can use the provided scripts to manage the kind cluster, uses kindClusterName from
-`tilt-settings.star`, if present.
+Alternatively, you can use the provided scripts to manage the kind cluster.
 
 ```bash
 # Create cluster
@@ -74,9 +73,36 @@ brew install kustomize
 
 #### Tilt Settings
 
-There are settings for Tilt that can be configured using a `tilt-settings.star` file. The settings file is not checked
-into source control. A sample settings file is provided in `tilt-settings.sample.star`. To use the sample settings file,
-copy it to `tilt-settings.star`
+Tilt reads local settings from `tilt-settings.star`. The file is not checked
+into source control; start from `tilt-settings.sample.star` and keep local
+overrides there.
+
+The default Tilt setup follows the normal operator install path:
+
+- installs one `wandb-operator` Helm release in `wandb-operators`
+- builds the local controller image as `controller:latest`
+- creates a `WeightsAndBiases` CR in `wandb`
+- uses `networkMode="gateway"` with `http://localhost:8080`
+- uses the published server manifest repository by default
+- keeps telemetry off unless `observabilityMode="full"` is set
+
+Common W&B CR settings are scalar values such as `wandbHostname`,
+`wandbVersion`, `size`, `retentionPolicy`, `licenseFile`, `manifestSource`,
+and `networkMode`.
+Set `networkMode="ingress"` to use the local ingress-nginx path instead of
+Gateway API; if `wandbHostname` is not set explicitly, ingress mode uses
+`http://wandb.localhost:8080`.
+
+Tilt defaults `manifestSource="published"`, which leaves
+`spec.wandb.manifestRepository` empty so the W&B CR webhook applies the same
+published OCI repository default as production installs. To test repo-local server manifest
+definitions, set `manifestSource="local"` and keep
+`localManifestPath="hack/testing-manifests/server-manifest"`. The default local
+manifest path currently contains `0.79.0`, so also set `wandbVersion="0.79.0"`
+when using that local source.
+
+Use `crFile` for custom CR shapes; Tilt treats it as a base CR and still
+applies the scalar settings above.
 
 By default, Tilt is configured to only allow connections to the following Kubernetes contexts:
 
@@ -84,6 +110,7 @@ By default, Tilt is configured to only allow connections to the following Kubern
 - `kind-kind`
 - `kind-wandb-operator`
 - `minikube`
+- `orbstack`
 
 Please add any additional contexts to the `allowedContexts` list in your `tilt-settings.star` file.
 
@@ -99,7 +126,8 @@ tilt up
 fully reset the cluster. The following are expected to survive a normal `tilt down`:
 
 - `cert-manager` and its namespace
-- operator CRDs, including the W&B CRDs and third-party operator CRDs
+- operator CRDs, including the W&B CRDs and operator dependency CRDs
+- `wandb-operators` and dependency namespaces
 - dev PVC-backed data unless the backing operator deletes it
 
 For a true dev reset, use the helper script instead:
@@ -123,11 +151,11 @@ then run `tilt down`.
 
 ### Locally testing external infra
 
-1. Install the WandB CR with Tilt **without** the `purge-retention` `wandbOverlay` in `tilt-settings.star`.
+1. Install the WandB CR with Tilt using the default `retentionPolicy="detach"` in `tilt-settings.star`.
 2. Delete the WandB CR — infra should be detached but remain in place.
 3. Run `./hack/scripts/managed-connections-to-external.sh` to convert the managed connection secrets into external ones.
-4. Install the WandB CR with Tilt with the following `wandbOverlay`s: `external-mysql`, `external-redis`, 
-`external-kafka`, `external-objectstore`, `external-clickhouse`.
+4. Install the WandB CR with Tilt using a custom `crFile` that points at a CR
+   with the external infra connection specs.
 5. WandB should now run with externally managed infra.
 
 ### Counterfeiter
