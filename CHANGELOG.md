@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.22.0](https://github.com/wandb/operator/compare/v1.21.3...v1.22.0) (2026-04-30)
+
+
+### Features
+
+* Add OCI Helm chart registry support and upgrade to Helm v4 ([#147](https://github.com/wandb/operator/issues/147)) ([fcb72b8](https://github.com/wandb/operator/commit/fcb72b8652c6370fb05aa6a805707540c1f57d81))
+
 ### [1.21.3](https://github.com/wandb/operator/compare/v1.21.2...v1.21.3) (2025-12-04)
 
 
