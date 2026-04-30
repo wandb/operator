@@ -13,11 +13,12 @@ import (
 	v1 "github.com/wandb/operator/api/v1"
 	"github.com/wandb/operator/pkg/helm"
 	"github.com/wandb/operator/pkg/wandb/spec"
-	"helm.sh/helm/v3/pkg/chart"
-	"helm.sh/helm/v3/pkg/cli"
-	"helm.sh/helm/v3/pkg/downloader"
-	"helm.sh/helm/v3/pkg/getter"
-	"helm.sh/helm/v3/pkg/repo"
+	chart "helm.sh/helm/v4/pkg/chart/v2"
+	"helm.sh/helm/v4/pkg/cli"
+	"helm.sh/helm/v4/pkg/downloader"
+	"helm.sh/helm/v4/pkg/getter"
+	"helm.sh/helm/v4/pkg/registry"
+	repo "helm.sh/helm/v4/pkg/repo/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
@@ -27,7 +28,7 @@ const CredentialUsernameKey = "HELM_USERNAME"
 const CredentialPasswordKey = "HELM_PASSWORD"
 
 type RepoRelease struct {
-	URL  string `validate:"required,url" json:"url"`
+	URL  string `validate:"required,url,nonociurl" json:"url"`
 	Name string `validate:"required" json:"name"`
 
 	// If version is not set, download latest.
@@ -77,8 +78,14 @@ func (r RepoRelease) Chart() (*chart.Chart, error) {
 	return local.Chart()
 }
 
+func validateNonOCIURL(fl validator.FieldLevel) bool {
+	return !registry.IsOCI(fl.Field().String())
+}
+
 func (c RepoRelease) Validate() error {
-	return validator.New().Struct(c)
+	v := validator.New()
+	v.RegisterValidation("nonociurl", validateNonOCIURL)
+	return v.Struct(c)
 }
 
 func (r RepoRelease) ToLocalRelease() (*LocalRelease, error) {
@@ -164,8 +171,8 @@ func (r RepoRelease) downloadChart() (string, error) {
 		return "", err
 	}
 
-	entry.InsecureSkipTLSverify = parsedURL.Scheme == "http"
-	if entry.InsecureSkipTLSverify && r.Debug {
+	entry.InsecureSkipTLSVerify = parsedURL.Scheme == "http"
+	if entry.InsecureSkipTLSVerify && r.Debug {
 		log.Info("TLS verification disabled for HTTP URL", "url", r.URL)
 	}
 
@@ -196,7 +203,7 @@ func (r RepoRelease) downloadChart() (string, error) {
 
 	getterOpts := []getter.Option{
 		getter.WithBasicAuth(r.Username, r.Password),
-		getter.WithInsecureSkipVerifyTLS(true),
+		getter.WithInsecureSkipVerifyTLS(entry.InsecureSkipTLSVerify),
 	}
 
 	providers := getter.All(settings)
@@ -273,6 +280,7 @@ func (r RepoRelease) downloadChart() (string, error) {
 		RegistryClient:   cfg.RegistryClient,
 		RepositoryConfig: settings.RepositoryConfig,
 		RepositoryCache:  settings.RepositoryCache,
+		ContentCache:     settings.ContentCache,
 	}
 
 	dest := filepath.Join(os.Getenv("HELM_DATA_HOME"), "charts")

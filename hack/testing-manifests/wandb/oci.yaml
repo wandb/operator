@@ -11,9 +11,11 @@ metadata:
   name: wandb-default
 spec:
   chart:
-    url: https://charts.wandb.ai
-    name: "operator-wandb"
+    url: oci://host.internal:5050/wandb/operator-wandb
     version: "0.41.3"
+    plainHTTP: true
+    credentialSecret:
+      name: oci-registry-creds
   values:
     global:
       bucket:

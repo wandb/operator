@@ -9,8 +9,8 @@ import (
 	v1 "github.com/wandb/operator/api/v1"
 	"github.com/wandb/operator/pkg/helm"
 	"github.com/wandb/operator/pkg/wandb/spec"
-	"helm.sh/helm/v3/pkg/chart"
-	"helm.sh/helm/v3/pkg/chart/loader"
+	chart "helm.sh/helm/v4/pkg/chart/v2"
+	"helm.sh/helm/v4/pkg/chart/v2/loader"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )

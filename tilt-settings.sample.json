@@ -1,5 +1,10 @@
 {
-  "allowedContexts": ["docker-desktop", "minikube", "kind-kind"],
+  "allowedContexts": [
+    "docker-desktop",
+    "minikube",
+    "kind-kind",
+    "orbstack"
+  ],
   "installMinio": true,
   "installWandb": true,
   "wandbCRD": "default"

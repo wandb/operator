@@ -90,6 +90,56 @@ lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
 lint-config: golangci-lint ## Verify golangci-lint linter configuration
 	$(GOLANGCI_LINT) config verify
 
+REGISTRY_PORT ?= 5050
+REGISTRY_NAME ?= registry
+REGISTRY_USER ?= admin
+REGISTRY_PASS ?= admin123
+REGISTRY_AUTH_DIR ?= /tmp/registry-auth
+CHART_REPO ?= https://charts.wandb.ai
+CHART_NAME ?= operator-wandb
+OCI_MANIFEST ?= hack/testing-manifests/wandb/oci.yaml
+CHART_VERSION ?= $(shell grep 'version:' $(OCI_MANIFEST) | head -1 | sed 's/.*"\(.*\)"/\1/')
+
+.PHONY: local-registry
+local-registry: ## Start a local OCI registry with basic auth for testing.
+	@if $(CONTAINER_TOOL) ps --filter name=$(REGISTRY_NAME) --format '{{.Names}}' | grep -q $(REGISTRY_NAME); then \
+		echo "Registry already running on port $(REGISTRY_PORT)"; \
+	else \
+		$(CONTAINER_TOOL) rm -f $(REGISTRY_NAME) >/dev/null 2>&1 || true; \
+		mkdir -p $(REGISTRY_AUTH_DIR) && \
+		$(CONTAINER_TOOL) run --rm --entrypoint sh registry:2 -c \
+			"apk add --no-cache apache2-utils >/dev/null 2>&1 && htpasswd -Bbn $(REGISTRY_USER) $(REGISTRY_PASS)" \
+			> $(REGISTRY_AUTH_DIR)/htpasswd && \
+		$(CONTAINER_TOOL) run -d --name $(REGISTRY_NAME) -p $(REGISTRY_PORT):5000 \
+			-v $(REGISTRY_AUTH_DIR):/auth \
+			-e REGISTRY_AUTH=htpasswd \
+			-e REGISTRY_AUTH_HTPASSWD_REALM=Registry \
+			-e REGISTRY_AUTH_HTPASSWD_PATH=/auth/htpasswd \
+			registry:2; \
+		echo "Registry started on port $(REGISTRY_PORT) (user: $(REGISTRY_USER))"; \
+	fi
+
+.PHONY: local-registry-push
+local-registry-push: local-registry ## Push a chart from the wandb helm repo to the local OCI registry.
+	@tmpdir=$$(mktemp -d) && \
+	helm pull $(CHART_NAME) --repo $(CHART_REPO) --version $(CHART_VERSION) -d $$tmpdir && \
+	helm push $$tmpdir/$(CHART_NAME)-$(CHART_VERSION).tgz oci://localhost:$(REGISTRY_PORT)/wandb \
+		--plain-http --username $(REGISTRY_USER) --password $(REGISTRY_PASS) && \
+	rm -rf $$tmpdir
+
+WANDB_NAMESPACE ?= default
+
+.PHONY: local-registry-secret
+local-registry-secret: ## Create a Kubernetes secret with registry credentials for the operator.
+	@kubectl -n $(WANDB_NAMESPACE) create secret generic oci-registry-creds \
+		--from-literal=HELM_USERNAME=$(REGISTRY_USER) \
+		--from-literal=HELM_PASSWORD=$(REGISTRY_PASS) \
+		--dry-run=client -o yaml | kubectl apply -f -
+
+.PHONY: local-registry-stop
+local-registry-stop: ## Stop and remove the local OCI registry.
+	@$(CONTAINER_TOOL) rm -f $(REGISTRY_NAME) 2>/dev/null || true
+
 ##@ Build
 
 .PHONY: build

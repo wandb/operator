@@ -4,6 +4,7 @@ settings = {
         "docker-desktop",
         "minikube",
         "kind-kind",
+        "orbstack",
     ],
     "installMinio": True,
     "installWandb": True,

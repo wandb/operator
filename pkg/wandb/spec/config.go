@@ -7,8 +7,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/wandb/operator/pkg/utils"
 
-	"helm.sh/helm/v3/pkg/chartutil"
-	"helm.sh/helm/v3/pkg/strvals"
+	chartutil "helm.sh/helm/v4/pkg/chart/common/util"
+	"helm.sh/helm/v4/pkg/strvals"
 )
 
 // Values holds an arbitrary tree-like data structure, such as parsed JSON or
