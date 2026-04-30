@@ -1,0 +1,12 @@
+grafana-operator:
+  isOpenShift: true
+
+minio-operator:
+  operator:
+    securityContext:
+      runAsUser: null
+      runAsGroup: null
+      fsGroup: null
+    containerSecurityContext:
+      runAsUser: null
+      runAsGroup: null
