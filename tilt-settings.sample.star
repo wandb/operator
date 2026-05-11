@@ -1,8 +1,9 @@
 SETTINGS = {
-    "allowedContexts": ["docker-desktop", "minikube", "kind-kind", "kind-wandb-operator", "orbstack"],
+    "allowedContexts": ["docker-desktop", "minikube", "kind-kind", "kind-wandb-operator", "orbstack", "crc-admin"],
 
     # Operator install settings.
     "operatorNamespace": "wandb-operators",
+    "openshiftSCC": False,
 
     # W&B instance settings.
     "includeCR": True,
@@ -39,4 +40,9 @@ SETTINGS = {
     "observabilityMode": "off",
 
     "logFormat": "pretty",
+
+    # CRC/OpenShift Local uses the crc-admin context. Tilt auto-enables
+    # openshiftSCC on CRC; set it explicitly for other OpenShift clusters.
+    # "allowedContexts": ["crc-admin"],
+    # "openshiftSCC": True,
 }

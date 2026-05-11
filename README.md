@@ -111,8 +111,14 @@ By default, Tilt is configured to only allow connections to the following Kubern
 - `kind-wandb-operator`
 - `minikube`
 - `orbstack`
+- `crc-admin`
 
 Please add any additional contexts to the `allowedContexts` list in your `tilt-settings.star` file.
+
+For CRC/OpenShift Local, run `./hack/scripts/setup_crc.sh` and use the
+`crc-admin` context. Tilt auto-enables `openshiftSCC` for CRC, pushes the dev
+image through CRC's internal registry, and applies the OpenShift Helm profile.
+For other OpenShift clusters, set `openshiftSCC=True` explicitly.
 
 #### Running Tilt
 

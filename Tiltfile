@@ -22,10 +22,12 @@ settings = {
         "kind-kind",
         "kind-wandb-operator",
         "orbstack",
+        "crc-admin",
     ],
 
     # Operator install settings.
     "operatorNamespace": "wandb-operators",
+    "openshiftSCC": False,
 
     # W&B CR settings.
     "includeCR": True,
@@ -170,6 +172,7 @@ def url_port(url):
 settings["networkMode"] = normalize_network_mode()
 settings["observabilityMode"] = normalize_observability_mode()
 settings["manifestSource"] = normalize_manifest_source()
+settings["openshiftSCC"] = as_bool(settings.get("openshiftSCC"))
 if settings["manifestSource"] == "local":
     settings["localManifestPath"] = validate_local_manifest_path(settings.get("localManifestPath"))
 
@@ -183,6 +186,14 @@ else:
     fail("Selected context is not in allow list")
 
 allow_k8s_contexts(settings.get("allowedContexts"))
+
+IS_CRC = "crc" in currentContext or "api-crc-testing" in currentContext
+if IS_CRC:
+    settings["openshiftSCC"] = True
+    default_registry(
+        "default-route-openshift-image-registry.apps-crc.testing/%s" % settings.get("operatorNamespace"),
+        host_from_cluster="image-registry.openshift-image-registry.svc:5000/%s" % settings.get("operatorNamespace"),
+    )
 
 os.putenv("PATH", "./bin:" + os.getenv("PATH"))
 
@@ -199,15 +210,32 @@ def operator_dockerfile():
     if settings.get("manifestSource") == "local":
         lines.append("ADD %s /server-manifest" % settings.get("localManifestPath"))
 
+    if settings.get("openshiftSCC"):
+        lines += [
+            "",
+            "RUN mkdir -p /helm/.cache/helm /helm/.config/helm /helm/.local/share/helm && \\",
+            "    chgrp -R 0 /helm && chmod -R g=u /helm",
+        ]
+    else:
+        lines += [
+            "",
+            "RUN mkdir -p /helm/.cache/helm /helm/.config/helm /helm/.local/share/helm",
+        ]
+
     lines += [
-        "",
-        "RUN mkdir -p /helm/.cache/helm /helm/.config/helm /helm/.local/share/helm",
         "",
         "ENV HELM_CACHE_HOME=/helm/.cache/helm",
         "ENV HELM_CONFIG_HOME=/helm/.config/helm",
         "ENV HELM_DATA_HOME=/helm/.local/share/helm",
-        "",
     ]
+
+    if settings.get("openshiftSCC"):
+        lines += [
+            "",
+            "USER 1001",
+        ]
+
+    lines.append("")
 
     return "\n".join(lines)
 
@@ -266,7 +294,7 @@ def build_operator_values(telemetry_namespace):
     telemetry_enabled = settings.get("observabilityMode") != "off"
     grafana_enabled = settings.get("observabilityMode") == "full"
 
-    return write_generated_yaml(GENERATED_OPERATOR_VALUES, {
+    values = {
         "wandb": {
             "install": False,
         },
@@ -293,7 +321,38 @@ def build_operator_values(telemetry_namespace):
             "mode": settings.get("observabilityMode"),
             "namespace": telemetry_namespace,
         },
-    })
+    }
+
+    if settings.get("openshiftSCC"):
+        values["wandb-operator"]["podSecurityContext"] = {
+            "runAsNonRoot": True,
+            "runAsUser": None,
+            "runAsGroup": None,
+            "fsGroup": None,
+            "fsGroupChangePolicy": None,
+            "seccompProfile": {
+                "type": "RuntimeDefault",
+            },
+        }
+        values["wandb-operator"]["containers"]["operator"]["env"] = {
+            "KAFKA_FSGROUP": {
+                "value": "0",
+            },
+        }
+        values["wandb-operator"]["containers"]["operator"]["securityContext"] = {
+            "allowPrivilegeEscalation": False,
+            "readOnlyRootFilesystem": True,
+            "capabilities": {
+                "drop": ["ALL"],
+            },
+        }
+        values["altinity-clickhouse-operator"] = {
+            "crdHook": {
+                "enabled": False,
+            },
+        }
+
+    return write_generated_yaml(GENERATED_OPERATOR_VALUES, values)
 
 
 def helper_flag(name, value):
@@ -545,6 +604,17 @@ operator_flags += [
     "-f",
     OPERATOR_VALUES,
 ]
+operator_deps_files = [
+    OPERATOR_VALUES,
+    "deploy/operator/Chart.yaml",
+    "deploy/operator/values.yaml",
+]
+
+if settings.get("openshiftSCC"):
+    operator_flags += [
+        "--values=./deploy/operator/profiles/openshift.yaml",
+    ]
+    operator_deps_files.append("deploy/operator/profiles/openshift.yaml")
 
 helm_resource(
     "wandb-operator",
@@ -554,11 +624,7 @@ helm_resource(
     flags=operator_flags,
     image_deps=[IMG],
     image_keys=[("wandb-operator.image.repository", "wandb-operator.image.tag")],
-    deps=[
-        OPERATOR_VALUES,
-        "deploy/operator/Chart.yaml",
-        "deploy/operator/values.yaml",
-    ],
+    deps=operator_deps_files,
     resource_deps=operator_deps,
     labels=[GROUP_WANDB_OPERATOR],
 )
