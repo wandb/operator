@@ -154,6 +154,10 @@ victoria-metrics-operator:
   # Helm dependency conditions are boolean-only, so full/forward installs
   # must opt into this dependency explicitly or via a preset values file.
   enabled: false
+  crds:
+    # Install Victoria CRDs through Helm's CRD phase so telemetry resources
+    # in this chart can be created in the same release.
+    plain: true
 
 grafana-operator:
   # Helm dependency conditions are boolean-only, so full installs

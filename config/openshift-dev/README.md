@@ -1,6 +1,7 @@
 # OpenShift Local Development with CRC
 
-This overlay configures the operator deployment for OpenShift's `restricted-v2` SCC. It is used automatically by Tilt when targeting a CRC (Red Hat OpenShift Local) cluster.
+Tilt configures the local operator deployment for OpenShift's `restricted-v2`
+SCC when targeting a CRC (Red Hat OpenShift Local) cluster.
 
 ## Prerequisites
 
@@ -32,7 +33,7 @@ This script:
 - Logs in as `kubeadmin`
 - Exposes the internal image registry via a route
 - Configures Docker to trust the CRC registry (handles OrbStack automatically)
-- Creates `operator-system` and `wandb-operator` namespaces
+- Creates the local operator and W&B namespaces
 
 ### 3. Configure tilt-settings.star
 
@@ -54,13 +55,15 @@ tilt up
 When Tilt detects a CRC context, it automatically:
 
 - Enables `openshiftSCC` mode
-- Uses `config/openshift-dev` as the kustomize overlay
-- Builds the operator image with a non-root Dockerfile (`USER 1001`, group-writable dirs)
+- Applies `deploy/operator/profiles/openshift.yaml` to the operator Helm release
+- Builds the operator image with a non-root, group-writable `/helm` directory
+- Removes fixed pod UID/GID/fsGroup settings from the local operator deployment
+- Sets `KAFKA_FSGROUP=0` so Strimzi-managed Kafka pods satisfy OpenShift SCCs
 - Pushes images to CRC's internal registry (`default-route-openshift-image-registry.apps-crc.testing`)
 
-### What this overlay does
+### Security settings
 
-`openshift-security.yaml` patches the controller-manager deployment with a security context that satisfies the `restricted-v2` SCC:
+Tilt applies local operator Helm values that satisfy the `restricted-v2` SCC:
 
 - `runAsNonRoot: true`
 - `seccompProfile: RuntimeDefault`

@@ -69,11 +69,11 @@ p.write_text(json.dumps(cfg, indent=2) + '\n')
     fi
 fi
 
-echo "Creating operator-system namespace..."
-oc new-project operator-system 2>/dev/null || oc project operator-system 2>/dev/null || true
+echo "Creating wandb-operators namespace..."
+oc new-project wandb-operators 2>/dev/null || oc project wandb-operators 2>/dev/null || true
 
-echo "Creating wandb-operator namespace..."
-oc new-project wandb-operator 2>/dev/null || oc project wandb-operator 2>/dev/null || true
+echo "Creating wandb namespace..."
+oc new-project wandb 2>/dev/null || oc project wandb 2>/dev/null || true
 
 kubectl config use-context crc-admin
 
@@ -83,6 +83,7 @@ echo ""
 echo "Configure tilt-settings.star:"
 echo '  SETTINGS = {'
 echo '      "allowedContexts": ["crc-admin"],'
+echo '      "openshiftSCC": True,'
 echo '  }'
 echo ""
 echo "Then run: tilt up"
