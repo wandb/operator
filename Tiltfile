@@ -310,6 +310,9 @@ def build_operator_values(telemetry_namespace):
         },
         "victoria-metrics-operator": {
             "enabled": telemetry_enabled,
+            "crds": {
+                "plain": True,
+            },
             "admissionWebhooks": {
                 "enabled": False,
             },
@@ -521,19 +524,13 @@ local_resource(
     labels=[GROUP_DEPENDENCIES],
 )
 
-helm_resource(
-    "cert-manager",
-    chart="oci://quay.io/jetstack/charts/cert-manager",
-    namespace="cert-manager",
-    flags=[
+cert_manager_flags = [
         "--create-namespace",
         "--version=v1.20.2",
         "--set=crds.enabled=true",
-        "--set=config.enableGatewayAPI=true",
         "--set=startupapicheck.enabled=false",
-    ],
-    labels=[GROUP_DEPENDENCIES],
-)
+]
+cert_manager_deps = []
 
 if LOCAL_NETWORKING_MODE == "gateway":
     local_resource(
@@ -541,7 +538,19 @@ if LOCAL_NETWORKING_MODE == "gateway":
         "kubectl apply -f " + GATEWAY_API_CRDS_URL,
         labels=[GROUP_DEPENDENCIES],
     )
+    cert_manager_flags.append("--set=config.enableGatewayAPI=true")
+    cert_manager_deps.append("gateway-api-crds")
 
+helm_resource(
+    "cert-manager",
+    chart="oci://quay.io/jetstack/charts/cert-manager",
+    namespace="cert-manager",
+    flags=cert_manager_flags,
+    resource_deps=cert_manager_deps,
+    labels=[GROUP_DEPENDENCIES],
+)
+
+if LOCAL_NETWORKING_MODE == "gateway":
     nginx_gateway_flags = [
         "--create-namespace",
         "--version=2.5.1",
