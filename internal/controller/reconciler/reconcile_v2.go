@@ -1004,7 +1004,7 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 	version := wandb.Spec.Wandb.Version
 
 	if wandb.Status.Wandb.Migration.Ready && wandb.Status.Wandb.Migration.Version == version {
-		for name, _ := range manifest.Migrations {
+		for name := range manifest.Migrations {
 			jobName := fmt.Sprintf("%s-%s", wandb.Name, name)
 			job := &batchv1.Job{
 				ObjectMeta: metav1.ObjectMeta{
