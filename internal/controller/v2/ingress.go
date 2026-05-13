@@ -26,6 +26,7 @@ func reconcileConsolidatedIngress(ctx context.Context, c ctrlClient.Client, wand
 		if len(app.Features) > 0 && !manifestFeaturesEnabled(app.Features, manifest.Features) {
 			continue
 		}
+		app = applyProxyIngress(app, manifest)
 		if app.Ingress == nil || app.Service == nil {
 			continue
 		}

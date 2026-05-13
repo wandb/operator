@@ -46,31 +46,33 @@ func resolveInfraRoutes(ctx context.Context, c ctrlClient.Client, wandb *apiv2.W
 	var entries []infraRouteEntry
 
 	if objectStoreSpec := wandb.Spec.ObjectStore.ManagedObjectStore; objectStoreSpec != nil {
-		for _, instanceName := range sortedInfraConfigNames(manifest.Bucket) {
-			cfg := manifest.Bucket[instanceName]
-			if cfg.Ingress == nil {
-				continue
+		if !objectStoreProxiedThroughNginx(manifest) {
+			for _, instanceName := range sortedInfraConfigNames(manifest.Bucket) {
+				cfg := manifest.Bucket[instanceName]
+				if cfg.Ingress == nil {
+					continue
+				}
+				svcName := "minio"
+				port, err := resolveInfraServicePort(
+					ctx,
+					c,
+					types.NamespacedName{Name: svcName, Namespace: wandb.Spec.ObjectStore.ManagedObjectStore.Namespace},
+					cfg.Ingress,
+					80,
+				)
+				if err != nil {
+					return nil, fmt.Errorf("bucket instance %q: %w", instanceName, err)
+				}
+				entries = append(entries, infraRouteEntry{
+					name:            fmt.Sprintf("%s-bucket-%s", wandb.Name, instanceName),
+					namespace:       objectStoreSpec.Namespace,
+					serviceName:     svcName,
+					servicePort:     port,
+					ingress:         cfg.Ingress,
+					healthCheckPath: "/ready",
+					healthCheckPort: 4444,
+				})
 			}
-			svcName := "minio"
-			port, err := resolveInfraServicePort(
-				ctx,
-				c,
-				types.NamespacedName{Name: svcName, Namespace: wandb.Spec.ObjectStore.ManagedObjectStore.Namespace},
-				cfg.Ingress,
-				80,
-			)
-			if err != nil {
-				return nil, fmt.Errorf("bucket instance %q: %w", instanceName, err)
-			}
-			entries = append(entries, infraRouteEntry{
-				name:            fmt.Sprintf("%s-bucket-%s", wandb.Name, instanceName),
-				namespace:       objectStoreSpec.Namespace,
-				serviceName:     svcName,
-				servicePort:     port,
-				ingress:         cfg.Ingress,
-				healthCheckPath: "/ready",
-				healthCheckPort: 4444,
-			})
 		}
 	}
 

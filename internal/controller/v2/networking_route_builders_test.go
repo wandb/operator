@@ -6,6 +6,7 @@ import (
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
@@ -139,4 +140,47 @@ var _ = Describe("Networking Route Builders", func() {
 		Expect(template.ServicePort).NotTo(BeNil())
 		Expect(*template.ServicePort).To(Equal(gatewayv1.PortNumber(8080)))
 	})
+
+	It("routes /bucket through nginx-proxy when the proxy feature is enabled", func() {
+		manifest := serverManifest.Manifest{
+			Features: map[string]bool{"proxy": true},
+			Bucket: map[string]serverManifest.InfraConfig{
+				"default": {
+					Ingress: &serverManifest.AppIngressSpec{
+						Paths:       []string{"/bucket"},
+						ServicePort: "http-minio",
+						PathType:    "Prefix",
+					},
+				},
+			},
+			Applications: map[string]serverManifest.Application{
+				"nginx-proxy": {
+					Name: "nginx-proxy",
+					Service: &serverManifest.ServiceSpec{
+						Ports: []corev1.ServicePort{{Port: 8080}},
+					},
+				},
+			},
+		}
+		app := manifest.Applications["nginx-proxy"]
+
+		app = applyProxyIngress(app, manifest)
+
+		Expect(app.Ingress).NotTo(BeNil())
+		Expect(app.Ingress.Paths).To(ContainElement("/bucket"))
+		Expect(app.Ingress.ServicePort).To(Equal("8080"))
+
+		wandb := &apiv2.WeightsAndBiases{
+			ObjectMeta: metav1.ObjectMeta{Name: "wandb", Namespace: "wandb-ns"},
+			Spec: apiv2.WeightsAndBiasesSpec{
+				ObjectStore: apiv2.ObjectStoreSpec{
+					ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{Namespace: "infra-ns"},
+				},
+			},
+		}
+		entries, err := resolveInfraRoutes(nil, nil, wandb, manifest)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(entries).To(BeEmpty())
+	})
+
 })

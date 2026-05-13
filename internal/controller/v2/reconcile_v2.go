@@ -519,6 +519,7 @@ func reconcileApplications(
 		if len(app.Features) > 0 && !manifestFeaturesEnabled(app.Features, manifest.Features) {
 			continue
 		}
+		app = applyProxyIngress(app, manifest)
 
 		applicationName := fmt.Sprintf("%s-%s", wandb.Name, app.Name)
 		envVars, err := resolveEnvvars(ctx, client, wandb, manifest, app.CommonEnvs, app.Env)
