@@ -1,4 +1,4 @@
-package v2
+package reconciler
 
 import (
 	"context"
@@ -23,7 +23,7 @@ func reconcileConsolidatedIngress(ctx context.Context, c ctrlClient.Client, wand
 	var paths []networkingv1.HTTPIngressPath
 
 	for _, app := range sortedManifestApplications(manifest) {
-		if len(app.Features) > 0 && !manifestFeaturesEnabled(app.Features, manifest.Features) {
+		if len(app.Features) > 0 && !manifest.FeaturesEnabled(app.Features) {
 			continue
 		}
 		if app.Ingress == nil || app.Service == nil {

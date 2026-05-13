@@ -14,6 +14,7 @@ import (
 	"path"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	"log/slog"
@@ -715,4 +716,83 @@ type CSIProviderConfig struct {
 	Driver string `yaml:"driver"`
 	// Parameters are driver-specific configuration key-value pairs.
 	Parameters map[string]string `yaml:"parameters,omitempty"`
+}
+
+// FeaturesEnabled returns true if any of the supplied feature flags are
+// enabled in the manifest's top-level Features section.
+func (m *Manifest) FeaturesEnabled(topicFeatures []string) bool {
+	if len(topicFeatures) == 0 || m.Features == nil {
+		return false
+	}
+	for _, f := range topicFeatures {
+		if enabled, ok := m.Features[f]; ok && enabled {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *Manifest) ResolveServiceURL(wandbName string, src EnvSource) (string, bool) {
+	if src.Name == "" {
+		return "", false
+	}
+
+	app, ok := m.Applications[src.Name]
+	if !ok {
+		return "", false
+	}
+
+	port, ok := app.ResolveServicePortFromManifest(src.Port)
+	if !ok {
+		return "", false
+	}
+
+	protoPrefix := ""
+	if src.Proto != "" {
+		protoPrefix = fmt.Sprintf("%s://", src.Proto)
+	}
+	serviceName := fmt.Sprintf("%s-%s", wandbName, src.Name)
+	return fmt.Sprintf("%s%s:%d%s", protoPrefix, serviceName, port, src.Path), true
+}
+
+func (a *Application) ResolveServicePortFromManifest(requestedPort string) (int32, bool) {
+	if requestedPort != "" {
+		if n, err := strconv.ParseInt(requestedPort, 10, 32); err == nil {
+			return int32(n), true
+		}
+	}
+
+	if a.Service != nil {
+		if requestedPort == "" && len(a.Service.Ports) > 0 {
+			return a.Service.Ports[0].Port, true
+		}
+		for _, p := range a.Service.Ports {
+			if p.Name == requestedPort {
+				return p.Port, true
+			}
+		}
+	}
+
+	for _, container := range a.Containers {
+		if requestedPort == "" && len(container.Ports) > 0 {
+			return container.Ports[0].ContainerPort, true
+		}
+		for _, p := range container.Ports {
+			if p.Name == requestedPort {
+				return p.ContainerPort, true
+			}
+		}
+	}
+	for _, container := range a.InitContainers {
+		if requestedPort == "" && len(container.Ports) > 0 {
+			return container.Ports[0].ContainerPort, true
+		}
+		for _, p := range container.Ports {
+			if p.Name == requestedPort {
+				return p.ContainerPort, true
+			}
+		}
+	}
+
+	return 0, false
 }
