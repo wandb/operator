@@ -422,7 +422,7 @@ func ReconcileWandbManifest(
 
 	serviceAccountName := wandb.Spec.Wandb.ServiceAccount.ServiceAccountName
 
-	if *wandb.Spec.Wandb.ServiceAccount.Create {
+	if wandb.Spec.Wandb.ServiceAccount.Create != nil && *wandb.Spec.Wandb.ServiceAccount.Create {
 		if err := createOrUpdateServiceAccount(ctx, client, wandb, serviceAccountName); err != nil {
 			logger.Error(err, "Failed to create/update ServiceAccount")
 			return ctrl.Result{}, err
