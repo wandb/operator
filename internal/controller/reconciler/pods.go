@@ -343,7 +343,9 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 				}
 				components = append(components, fmt.Sprintf("%s%s:%d%s", proto, serviceList.Items[0].Name, selectedPort, src.Path))
 			case "jwt-issuer-map":
-				if *wandb.Spec.Wandb.InternalServiceAuth.Enabled {
+			case "jwt-issuer-map":
+				if wandb.Spec.Wandb.InternalServiceAuth.Enabled != nil &&
+					*wandb.Spec.Wandb.InternalServiceAuth.Enabled {
 					// TODO Get real OIDC Issuer
 					issuer := "https://kubernetes.default.svc.cluster.local"
 					if wandb.Spec.Wandb.InternalServiceAuth.OIDCIssuer != "" {
