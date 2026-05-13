@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"strings"
 
+	apiv2 "github.com/wandb/operator/api/v2"
 	ctrlcommon "github.com/wandb/operator/internal/controller/common"
-	"github.com/wandb/operator/internal/controller/translator"
 	"github.com/wandb/operator/internal/logx"
 	"github.com/wandb/operator/pkg/vendored/strimzi-kafka/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -35,8 +35,8 @@ func ReadState(
 	k8sClient client.Client,
 	specNamespacedName types.NamespacedName,
 	wandbOwner client.Object,
-	onDeleteRule translator.OnDeleteRule,
-) ([]metav1.Condition, *translator.KafkaConnection) {
+	onDeleteRule ctrlcommon.OnDeleteRule,
+) ([]metav1.Condition, *apiv2.KafkaConnection) {
 	ctx, log := logx.WithSlog(ctx, logx.Kafka)
 	nsnBuilder := createNsNameBuilder(specNamespacedName)
 
@@ -59,7 +59,7 @@ func ReadState(
 	if !found {
 		log.Info("Kafka CR not found")
 		actualKafka = nil
-		if onDeleteRule.Policy == translator.Purge {
+		if onDeleteRule.Policy == ctrlcommon.Purge {
 			log.Debug(
 				"Attempting to purge associated kafka resources after deletion",
 				"kafkaName", nsnBuilder.KafkaName(),
@@ -97,7 +97,7 @@ func ReadState(
 		// actualNodePool is not used elsewhere, so we don't need to set it to nil
 	}
 
-	var connection *translator.KafkaConnection
+	var connection *apiv2.KafkaConnection
 	if actualKafka != nil {
 
 		///////////////////////////////////

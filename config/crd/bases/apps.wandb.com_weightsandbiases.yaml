@@ -2403,10 +2403,6 @@ spec:
                     properties:
                       gateway:
                         properties:
-                          annotations:
-                            additionalProperties:
-                              type: string
-                            type: object
                           gatewayClassName:
                             type: string
                           gatewayRef:
@@ -2417,6 +2413,10 @@ spec:
                                 type: string
                             required:
                             - name
+                            type: object
+                          infrastructureAnnotations:
+                            additionalProperties:
+                              type: string
                             type: object
                           listeners:
                             items:

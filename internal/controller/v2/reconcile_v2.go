@@ -989,7 +989,7 @@ func ApplyInfraSizing(wandb *apiv2.WeightsAndBiases, manifest serverManifest.Man
 
 	// Default ClickHouse
 	if wandb.Spec.ClickHouse.ManagedClickHouse != nil {
-		if clickhouseConfig, ok := manifest.Redis["default"]; ok {
+		if clickhouseConfig, ok := manifest.Clickhouse["default"]; ok {
 			sizing := ResolveInfraSizing(clickhouseConfig.Sizing, size, wandb.Spec.RequireLimits)
 			spec := wandb.Spec.ClickHouse.ManagedClickHouse
 			if spec.Replicas == 0 && sizing.Replicas != 0 {
@@ -1006,7 +1006,7 @@ func ApplyInfraSizing(wandb *apiv2.WeightsAndBiases, manifest serverManifest.Man
 
 	// Default ObjectStore (bucket)
 	if wandb.Spec.ObjectStore.ManagedObjectStore != nil {
-		if objectStoreConfig, ok := manifest.Redis["default"]; ok {
+		if objectStoreConfig, ok := manifest.Bucket["default"]; ok {
 			sizing := ResolveInfraSizing(objectStoreConfig.Sizing, size, wandb.Spec.RequireLimits)
 			spec := wandb.Spec.ObjectStore.ManagedObjectStore
 			if spec.Replicas == 0 && sizing.Replicas != 0 {
@@ -1550,7 +1550,7 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *apiv2.
 			case "telemetry":
 				secretName := src.Name
 				if secretName == "" {
-					secretName = "wandb-otel-connection"
+					continue
 				}
 
 				selector := corev1.SecretKeySelector{
@@ -1871,6 +1871,21 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 	version := wandb.Spec.Wandb.Version
 
 	if wandb.Status.Wandb.Migration.Ready && wandb.Status.Wandb.Migration.Version == version {
+		for name, _ := range manifest.Migrations {
+			jobName := fmt.Sprintf("%s-%s", wandb.Name, name)
+			job := &batchv1.Job{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      jobName,
+					Namespace: wandb.Namespace,
+				},
+			}
+			propagation := metav1.DeletePropagationBackground
+			deleteOptions := &ctrlClient.DeleteOptions{PropagationPolicy: &propagation}
+			err := client.Delete(ctx, job, deleteOptions)
+			if err != nil {
+				return ctrl.Result{}, fmt.Errorf("failed to delete migration job %s: %v", jobName, err)
+			}
+		}
 		return ctrl.Result{}, nil
 	}
 

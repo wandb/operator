@@ -49,6 +49,11 @@ manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and Cust
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="{./api/v1,./api/v2}"
 
+.PHONY: generate-vendored
+generate-vendored: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
+	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="{./pkg/vendored/mysql-operator/v2}"
+
+
 .PHONY: fmt
 fmt: ## Run go fmt against code.
 	go fmt ./...

@@ -25,6 +25,7 @@ import (
 	apiv2 "github.com/wandb/operator/api/v2"
 	v1 "github.com/wandb/operator/internal/controller/v1"
 	v2 "github.com/wandb/operator/internal/controller/v2"
+	"github.com/wandb/operator/pkg/utils"
 	"github.com/wandb/operator/pkg/wandb/spec/channel/deployer"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -56,7 +57,7 @@ type WeightsAndBiasesReconciler struct {
 }
 
 //+kubebuilder:rbac:groups="",resources=configmaps;events;persistentvolumeclaims;secrets;serviceaccounts;services,verbs=update;delete;get;list;create;patch;watch
-//+kubebuilder:rbac:groups="",resources=endpoints;ingresses;nodes;nodes/spec;nodes/stats;nodes/metrics;nodes/proxy;namespaces;namespaces/status;replicationcontrollers;replicationcontrollers/status;resourcequotas;pods;pods/log;pods/status,verbs=get;list;watch;patch
+//+kubebuilder:rbac:groups="",resources=endpoints;nodes;nodes/spec;nodes/stats;nodes/metrics;nodes/proxy;namespaces;namespaces/status;replicationcontrollers;replicationcontrollers/status;resourcequotas;pods;pods/log;pods/status,verbs=get;list;watch
 //+kubebuilder:rbac:groups=apps,resources=deployments/status;daemonsets/status;replicasets/status;statefulsets/status,verbs=get
 //+kubebuilder:rbac:groups=apps,resources=deployments;controllerrevisions;daemonsets;replicasets;statefulsets,verbs=update;delete;get;list;create;patch;watch
 //+kubebuilder:rbac:groups=apps.wandb.com,resources=weightsandbiases,verbs=get;list;watch;create;update;patch;delete
@@ -76,7 +77,10 @@ type WeightsAndBiasesReconciler struct {
 //+kubebuilder:rbac:groups=seaweed.seaweedfs.com,resources=seaweeds/status,verbs=get
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways;httproutes;backendtlspolicies,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways/status;backendtlspolicies/status,verbs=get
-//+kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses;ingresses/status;networkpolicies,verbs=update;delete;get;list;create;patch;watch
+//+kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses;networkpolicies,verbs=update;delete;get;list;create;patch;watch
+//+kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses/status,verbs=get;list;watch
+//+kubebuilder:rbac:groups=gateway.nginx.org,resources=clientsettingspolicies,verbs=update;delete;get;list;create;patch;watch
+//+kubebuilder:rbac:groups=networking.gke.io,resources=healthcheckpolicies,verbs=update;delete;get;list;create;patch;watch
 //+kubebuilder:rbac:groups=policy,resources=poddisruptionbudgets,verbs=update;delete;get;list;patch;create;watch
 //+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles;rolebindings;clusterroles;clusterrolebindings,verbs=update;delete;get;list;patch;create;watch
 //+kubebuilder:rbac:groups=redis.redis.opstreelabs.in,resources=redis;redissentinels;redisreplications,verbs=get;list;watch;create;update;patch;delete
@@ -179,14 +183,17 @@ func (r *WeightsAndBiasesReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			Owns(&batchv1.Job{}).
 			Owns(&corev1.Secret{}).
 			Owns(&corev1.ConfigMap{}).
-			Owns(&networkingv1.Ingress{}).
-			Watches(&gatewayv1.Gateway{}, handler.EnqueueRequestsFromMapFunc(r.mapGatewayToWandb))
+			Owns(&networkingv1.Ingress{})
+		if utils.IsRegistered(r.Scheme, &gatewayv1.Gateway{}) {
+			b = b.Watches(&gatewayv1.Gateway{}, handler.EnqueueRequestsFromMapFunc(r.mapGatewayToWandb))
+		}
 	} else {
 		b = ctrl.NewControllerManagedBy(mgr).
 			For(&apiv1.WeightsAndBiases{}, builder.WithPredicates(filterWBEventsForV1{})).
 			Owns(&corev1.Secret{}, builder.WithPredicates(filterSecretEventsForV1{})).
 			Owns(&corev1.ConfigMap{})
 	}
+
 	return b.Complete(r)
 }
 

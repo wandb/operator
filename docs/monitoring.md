@@ -72,11 +72,12 @@ telemetry:
 
 ## Tilt Usage
 
-Set `"installTelemetry": True` in `tilt-settings.star`.
+Telemetry is off by default in Tilt. Set `"observabilityMode": "full"` in
+`tilt-settings.star` for the local full stack.
 
-Tilt treats `installTelemetry=True` as the local `full` mode. It installs the
-VictoriaMetrics and Grafana operators, then installs the standalone telemetry
-chart with `mode=full`.
+Tilt renders the operator chart with `telemetry.mode=full`, enables the
+VictoriaMetrics and Grafana operator dependencies, and turns on the controller's
+telemetry flag.
 
 Tilt exposes endpoints for:
 - Grafana

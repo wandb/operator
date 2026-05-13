@@ -4,7 +4,7 @@ dependencies:
   version: 0.11.8
 - name: mysql-operator
   repository: https://mysql.github.io/mysql-operator/
-  version: 2.2.7
+  version: 2.1.11
 - name: redis-operator
   repository: https://ot-container-kit.github.io/helm-charts
   version: 0.22.2
@@ -16,7 +16,7 @@ dependencies:
   version: 0.1.13
 - name: altinity-clickhouse-operator
   repository: https://helm.altinity.com
-  version: 0.25.6
+  version: 0.26.3
 - name: victoria-metrics-operator
   repository: https://victoriametrics.github.io/helm-charts/
   version: 0.58.1
@@ -26,5 +26,5 @@ dependencies:
 - name: telemetry
   repository: file://../telemetry
   version: 0.1.0
-digest: sha256:79827b4bccce6431bab1ea96a0a2ea91b22d54c1968bdcd5f9defe24ce5945a8
-generated: "2026-04-13T12:09:09.215194-05:00"
+digest: sha256:5c5daff2a714cdb07ba63eaddf959d8cec28b255371d210958ca571e305bce59
+generated: "2026-05-07T11:45:06.981528-05:00"

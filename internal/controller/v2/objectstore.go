@@ -22,7 +22,7 @@ func objectStoreWriteState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
-) ([]metav1.Condition, *translator.ObjectStoreConnection) {
+) ([]metav1.Condition, *apiv2.ObjectStoreConnection) {
 	if wandb.Spec.ObjectStore.ManagedObjectStore != nil {
 		return managedObjectStoreWriteState(ctx, client, wandb)
 	}
@@ -53,7 +53,7 @@ func objectStoreInferStatus(
 	recorder record.EventRecorder,
 	wandb *apiv2.WeightsAndBiases,
 	newConditions []metav1.Condition,
-	newInfraConn *translator.ObjectStoreConnection,
+	newInfraConn *apiv2.ObjectStoreConnection,
 ) (ctrl.Result, error) {
 	if wandb.Spec.ObjectStore.ManagedObjectStore != nil {
 		return managedObjectStoreInferStatus(ctx, client, recorder, wandb, newConditions, newInfraConn)
@@ -107,7 +107,7 @@ func managedObjectStoreWriteState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
-) ([]metav1.Condition, *translator.ObjectStoreConnection) {
+) ([]metav1.Condition, *apiv2.ObjectStoreConnection) {
 	spec := wandb.Spec.ObjectStore.ManagedObjectStore
 
 	log := ctrl.LoggerFrom(ctx)
@@ -128,7 +128,7 @@ func managedObjectStoreWriteState(
 		return conditions, nil
 	}
 
-	desiredCr, err := translatorv2.ToObjectStoreVendorSpec(ctx, wandb, client.Scheme())
+	desiredCr, err := tenant.ToObjectStoreVendorSpec(ctx, wandb, client.Scheme())
 	if err != nil {
 		log.Error(err, "failed to translate object store spec to vendor spec")
 		return []metav1.Condition{
@@ -140,7 +140,7 @@ func managedObjectStoreWriteState(
 		}, nil
 	}
 
-	desiredConfig, err := translatorv2.ToObjectStoreEnvConfig(ctx, *spec)
+	desiredConfig, err := tenant.ToObjectStoreEnvConfig(ctx, *spec)
 	if err != nil {
 		log.Error(err, "failed to translate object store envConfig to vendor spec")
 		return []metav1.Condition{
@@ -170,7 +170,7 @@ func managedObjectStoreReadState(
 		ctx,
 		client,
 		specNamespacedName,
-		translatorv2.ToObjectStoreOnDeleteRule(wandb, retentionPolicy),
+		tenant.ToObjectStoreOnDeleteRule(wandb, retentionPolicy),
 	)
 	newConditions = append(newConditions, readConditions...)
 	return newConditions
@@ -182,11 +182,11 @@ func managedObjectStoreInferStatus(
 	recorder record.EventRecorder,
 	wandb *apiv2.WeightsAndBiases,
 	newConditions []metav1.Condition,
-	newInfraConn *translator.ObjectStoreConnection,
+	newInfraConn *apiv2.ObjectStoreConnection,
 ) (ctrl.Result, error) {
 	enabled := true
 	oldConditions := wandb.Status.ObjectStoreStatus.Conditions
-	oldInfraConn := translatorv2.ToTranslatorObjectStoreConnection(wandb.Status.ObjectStoreStatus.Connection)
+	oldInfraConn := wandb.Status.ObjectStoreStatus.Connection
 
 	updatedStatus, events, ctrlResult := seaweedfs.ComputeStatus(
 		ctx,
@@ -199,7 +199,7 @@ func managedObjectStoreInferStatus(
 	for _, e := range events {
 		recorder.Event(wandb, e.Type, e.Reason, e.Message)
 	}
-	wandb.Status.ObjectStoreStatus = translatorv2.ToWbObjectStoreInfraStatus(updatedStatus)
+	wandb.Status.ObjectStoreStatus = updatedStatus
 	err := client.Status().Update(ctx, wandb)
 
 	return ctrlResult, err
@@ -207,7 +207,7 @@ func managedObjectStoreInferStatus(
 
 // external
 
-func externalObjectStoreWriteState(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases) ([]metav1.Condition, *translator.ObjectStoreConnection) {
+func externalObjectStoreWriteState(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases) ([]metav1.Condition, *apiv2.ObjectStoreConnection) {
 	return externalobjectstore.WriteState(ctx, c, wandb)
 }
 
@@ -215,15 +215,15 @@ func externalObjectStoreReadState(ctx context.Context, c client.Client, wandb *a
 	return externalobjectstore.ReadState(ctx, c, wandb, newConditions)
 }
 
-func externalObjectStoreInferStatus(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, newConditions []metav1.Condition, newInfraConn *translator.ObjectStoreConnection) (ctrl.Result, error) {
-	oldInfraConn := translatorv2.ToTranslatorObjectStoreConnection(wandb.Status.ObjectStoreStatus.Connection)
+func externalObjectStoreInferStatus(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, newConditions []metav1.Condition, newInfraConn *apiv2.ObjectStoreConnection) (ctrl.Result, error) {
+	oldInfraConn := wandb.Status.ObjectStoreStatus.Connection
 	state, ready, updatedConditions := external.InferExternalStatus(wandb.Status.ObjectStoreStatus.Conditions, newConditions, wandb.Generation, newInfraConn != nil)
 	conn := utils.Coalesce(newInfraConn, &oldInfraConn)
 
-	wandb.Status.ObjectStoreStatus = translatorv2.ToWbObjectStoreInfraStatus(translator.ObjectStoreStatus{
-		InfraStatus: translator.InfraStatus{Ready: ready, State: state, Conditions: updatedConditions},
-		Connection:  *conn,
-	})
+	wandb.Status.ObjectStoreStatus = apiv2.ObjectStoreInfraStatus{
+		WBInfraStatus: apiv2.WBInfraStatus{Ready: ready, State: state, Conditions: updatedConditions},
+		Connection:    *conn,
+	}
 	return ctrl.Result{}, c.Status().Update(ctx, wandb)
 }
 

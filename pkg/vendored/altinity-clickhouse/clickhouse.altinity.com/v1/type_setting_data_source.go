@@ -17,8 +17,9 @@ package v1
 import (
 	"encoding/json"
 
-	"github.com/wandb/operator/pkg/vendored/altinity-clickhouse/common/types"
 	core "k8s.io/api/core/v1"
+
+	"github.com/wandb/operator/pkg/vendored/altinity-clickhouse/common/types"
 )
 
 // SettingSource defines setting as a ref to some data source

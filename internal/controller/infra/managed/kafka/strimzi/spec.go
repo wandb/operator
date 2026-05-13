@@ -1,19 +1,26 @@
-package v2
+package strimzi
 
 import (
 	"context"
 	"fmt"
+	"os"
 	"strconv"
 
 	apiv2 "github.com/wandb/operator/api/v2"
-	"github.com/wandb/operator/internal/controller/infra/managed/kafka/strimzi"
-	"github.com/wandb/operator/internal/controller/translator"
+	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/logx"
-	"github.com/wandb/operator/pkg/vendored/strimzi-kafka/v1"
+	v1 "github.com/wandb/operator/pkg/vendored/strimzi-kafka/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+)
+
+const (
+	KafkaModuleName      = "kafka"
+	KafkaVersion         = "4.1.0"
+	KafkaMetadataVersion = "4.1-IV0"
 )
 
 const (
@@ -36,6 +43,21 @@ func createKafkaMetricsConfig(telemetry apiv2.Telemetry) *v1.MetricsConfig {
 	}
 }
 
+// kafkaPodSecurityContext returns a PodSecurityContext with FSGroup set if the
+// KAFKA_FSGROUP env var is configured on the operator. Returns nil otherwise,
+// allowing the platform to apply its own defaults.
+func kafkaPodSecurityContext() *corev1.PodSecurityContext {
+	val, ok := os.LookupEnv("KAFKA_FSGROUP")
+	if !ok {
+		return nil
+	}
+	fsGroup, err := strconv.ParseInt(val, 10, 64)
+	if err != nil {
+		return nil
+	}
+	return &corev1.PodSecurityContext{FSGroup: &fsGroup}
+}
+
 // ToKafkaVendorSpec converts a KafkaSpec to a Kafka CR.
 // This function translates the high-level Kafka spec into the vendor-specific
 // Kafka format used by the Strimzi operator.
@@ -53,7 +75,7 @@ func ToKafkaVendorSpec(
 		return nil, nil
 	}
 
-	nsnBuilder := strimzi.CreateNsNameBuilder(types.NamespacedName{
+	nsnBuilder := CreateNsNameBuilder(types.NamespacedName{
 		Namespace: infraSpec.Namespace, Name: infraSpec.Name,
 	})
 	kafkaLabels := BuildWandbKafkaLabels(wandb)
@@ -70,20 +92,20 @@ func ToKafkaVendorSpec(
 		},
 		Spec: v1.KafkaSpec{
 			Kafka: v1.KafkaClusterSpec{
-				Version:         translator.KafkaVersion,
-				MetadataVersion: translator.KafkaMetadataVersion,
+				Version:         KafkaVersion,
+				MetadataVersion: KafkaMetadataVersion,
 				Replicas:        0, // CRITICAL: Must be 0 when using node pools in KRaft mode
 				Listeners: []v1.GenericKafkaListener{
 					{
-						Name: strimzi.PlainListenerName,
-						Port: strimzi.PlainListenerPort,
-						Type: strimzi.ListenerType,
+						Name: PlainListenerName,
+						Port: PlainListenerPort,
+						Type: ListenerType,
 						Tls:  false,
 					},
 					{
-						Name: strimzi.TLSListenerName,
-						Port: strimzi.TLSListenerPort,
-						Type: strimzi.ListenerType,
+						Name: TLSListenerName,
+						Port: TLSListenerPort,
+						Type: ListenerType,
 						Tls:  true,
 					},
 				},
@@ -149,7 +171,7 @@ func ToKafkaNodePoolVendorSpec(
 	}
 
 	retentionPolicy := wandb.GetRetentionPolicy(infraSpec.ManagedInfraSpec)
-	nsnBuilder := strimzi.CreateNsNameBuilder(types.NamespacedName{
+	nsnBuilder := CreateNsNameBuilder(types.NamespacedName{
 		Namespace: infraSpec.Namespace, Name: infraSpec.Name,
 	})
 
@@ -165,13 +187,13 @@ func ToKafkaNodePoolVendorSpec(
 		},
 		Spec: v1.KafkaNodePoolSpec{
 			Replicas: infraSpec.Replicas,
-			Roles:    []string{strimzi.RoleBroker, strimzi.RoleController},
+			Roles:    []string{RoleBroker, RoleController},
 			Storage: v1.KafkaStorage{
 				Type: "jbod",
 				Volumes: []v1.StorageVolume{
 					{
 						ID:          0,
-						Type:        strimzi.StorageType,
+						Type:        StorageType,
 						Size:        infraSpec.StorageSize,
 						DeleteClaim: onDeletePurge,
 					},
@@ -182,6 +204,7 @@ func ToKafkaNodePoolVendorSpec(
 					Metadata: &v1.MetadataTemplate{
 						Labels: BuildWandbKafkaLabels(wandb),
 					},
+					SecurityContext: kafkaPodSecurityContext(),
 				},
 				PersistentVolumeClaim: &v1.ResourceTemplate{
 					Metadata: &v1.MetadataTemplate{
@@ -211,9 +234,9 @@ func ToKafkaNodePoolVendorSpec(
 }
 
 func BuildWandbKafkaLabels(wandb *apiv2.WeightsAndBiases) map[string]string {
-	return BuildWandbLabels(wandb, translator.KafkaModuleName)
+	return common.BuildWandbLabels(wandb, KafkaModuleName)
 }
 
-func ToKafkaOnDeleteRule(wandb *apiv2.WeightsAndBiases, retentionPolicy apiv2.RetentionPolicy) translator.OnDeleteRule {
-	return ToOnDeleteRule(wandb, retentionPolicy, translator.KafkaModuleName)
+func ToKafkaOnDeleteRule(wandb *apiv2.WeightsAndBiases, retentionPolicy apiv2.RetentionPolicy) common.OnDeleteRule {
+	return common.ToOnDeleteRule(wandb, retentionPolicy, KafkaModuleName)
 }

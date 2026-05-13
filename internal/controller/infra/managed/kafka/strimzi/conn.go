@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
-	"github.com/wandb/operator/internal/controller/translator"
 	"github.com/wandb/operator/internal/logx"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -60,7 +60,7 @@ func writeKafkaConnInfo(
 	nsnBuilder *NsNameBuilder,
 	connInfo *kafkaConnInfo,
 ) (
-	*translator.KafkaConnection, error,
+	*apiv2.KafkaConnection, error,
 ) {
 	log := logx.GetSlog(ctx)
 
@@ -137,7 +137,7 @@ func writeKafkaConnInfo(
 	}
 
 	localRef := corev1.LocalObjectReference{Name: nsName.Name}
-	return &translator.KafkaConnection{
+	return &apiv2.KafkaConnection{
 		URL:            corev1.SecretKeySelector{LocalObjectReference: localRef, Key: urlKey, Optional: ptr.To(false)},
 		Host:           corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Host", Optional: ptr.To(false)},
 		Port:           corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Port", Optional: ptr.To(false)},

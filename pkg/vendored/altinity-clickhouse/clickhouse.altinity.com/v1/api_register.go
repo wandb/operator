@@ -15,9 +15,10 @@
 package v1
 
 import (
-	"github.com/wandb/operator/pkg/vendored/altinity-clickhouse/clickhouse.altinity.com"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/scheme"
+
+	clickhouse_altinity_com "github.com/wandb/operator/pkg/vendored/altinity-clickhouse/clickhouse.altinity.com"
 )
 
 var (

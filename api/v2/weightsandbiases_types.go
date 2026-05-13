@@ -132,7 +132,7 @@ type NetworkingSpec struct {
 	// +optional
 	TLS *TLSConfig `json:"tls,omitempty"`
 
-	// Annotations applied to all generated Ingress or HTTPRoute resources.
+	// Annotations applied to all generated Ingress or Gateway resources.
 	// +optional
 	Annotations map[string]string `json:"annotations,omitempty"`
 }
@@ -169,9 +169,9 @@ type GatewayConfig struct {
 	// +optional
 	Listeners []GatewayListener `json:"listeners,omitempty"`
 
-	// Annotations applied to the managed Gateway resource.
+	// Annotations passed to the managed Gateway resource.
 	// +optional
-	Annotations map[string]string `json:"annotations,omitempty"`
+	InfrastructureAnnotations map[string]string `json:"infrastructureAnnotations,omitempty"`
 }
 
 type GatewayReference struct {

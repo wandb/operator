@@ -29,7 +29,6 @@ rules:
   - ""
   resources:
   - endpoints
-  - ingresses
   - namespaces
   - namespaces/status
   - nodes
@@ -46,7 +45,6 @@ rules:
   verbs:
   - get
   - list
-  - patch
   - watch
 - apiGroups:
   - apps
@@ -199,6 +197,18 @@ rules:
   verbs:
   - get
 - apiGroups:
+  - gateway.nginx.org
+  resources:
+  - clientsettingspolicies
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
   - kafka.strimzi.io
   resources:
   - kafkanodepools
@@ -242,10 +252,21 @@ rules:
   - patch
   - update
 - apiGroups:
+  - networking.gke.io
+  resources:
+  - healthcheckpolicies
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
   - networking.k8s.io
   resources:
   - ingresses
-  - ingresses/status
   - networkpolicies
   verbs:
   - create
@@ -254,6 +275,14 @@ rules:
   - list
   - patch
   - update
+  - watch
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - ingresses/status
+  verbs:
+  - get
+  - list
   - watch
 - apiGroups:
   - policy

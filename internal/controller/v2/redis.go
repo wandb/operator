@@ -8,8 +8,6 @@ import (
 	"github.com/wandb/operator/internal/controller/infra/external"
 	externalredis "github.com/wandb/operator/internal/controller/infra/external/redis"
 	"github.com/wandb/operator/internal/controller/infra/managed/redis/opstree"
-	"github.com/wandb/operator/internal/controller/translator"
-	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
 	"github.com/wandb/operator/pkg/utils"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -37,7 +35,7 @@ func redisReadState(
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
 	newConditions []metav1.Condition,
-) ([]metav1.Condition, *translator.RedisConnection) {
+) ([]metav1.Condition, *apiv2.RedisConnection) {
 	if wandb.Spec.Redis.ManagedRedis != nil {
 		return managedRedisReadState(ctx, client, wandb, newConditions)
 	}
@@ -53,7 +51,7 @@ func redisInferStatus(
 	recorder record.EventRecorder,
 	wandb *apiv2.WeightsAndBiases,
 	newConditions []metav1.Condition,
-	newInfraConn *translator.RedisConnection,
+	newInfraConn *apiv2.RedisConnection,
 ) (ctrl.Result, error) {
 	if wandb.Spec.Redis.ManagedRedis != nil {
 		return managedRedisInferStatus(ctx, client, recorder, wandb, newConditions, newInfraConn)
@@ -71,7 +69,7 @@ func redisPurgeFinalizer(
 ) error {
 	if spec := wandb.Spec.Redis.ManagedRedis; spec != nil {
 		specNamespacedName := managedRedisSpecNamespacedName(spec)
-		onDeleteRule := translatorv2.ToRedisOnDeleteRule(wandb, wandb.GetRetentionPolicy(spec.ManagedInfraSpec))
+		onDeleteRule := opstree.ToRedisOnDeleteRule(wandb, wandb.GetRetentionPolicy(spec.ManagedInfraSpec))
 		return opstree.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule)
 	}
 	if wandb.Spec.Redis.ExternalRedis != nil {
@@ -105,7 +103,7 @@ func managedRedisWriteState(
 	log := ctrl.LoggerFrom(ctx)
 	var specNamespacedName = managedRedisSpecNamespacedName(spec)
 
-	standaloneDesired, err := translatorv2.ToRedisStandaloneVendorSpec(ctx, wandb, client.Scheme())
+	standaloneDesired, err := opstree.ToRedisStandaloneVendorSpec(ctx, wandb, client.Scheme())
 	if err != nil {
 		log.Error(err, "failed to translate redis standalone spec")
 		return []metav1.Condition{
@@ -117,7 +115,7 @@ func managedRedisWriteState(
 		}
 	}
 
-	sentinelDesired, err := translatorv2.ToRedisSentinelVendorSpec(ctx, wandb, client.Scheme())
+	sentinelDesired, err := opstree.ToRedisSentinelVendorSpec(ctx, wandb, client.Scheme())
 	if err != nil {
 		log.Error(err, "failed to translate redis sentinel spec")
 		return []metav1.Condition{
@@ -129,7 +127,7 @@ func managedRedisWriteState(
 		}
 	}
 
-	replicationDesired, err := translatorv2.ToRedisReplicationVendorSpec(ctx, wandb, client.Scheme())
+	replicationDesired, err := opstree.ToRedisReplicationVendorSpec(ctx, wandb, client.Scheme())
 	if err != nil {
 		log.Error(err, "failed to translate redis replication spec")
 		return []metav1.Condition{
@@ -145,7 +143,7 @@ func managedRedisWriteState(
 		return conditions
 	}
 
-	results := opstree.WriteState(ctx, client, specNamespacedName, standaloneDesired, sentinelDesired, replicationDesired, translatorv2.BuildWandbRedisLabels(wandb))
+	results := opstree.WriteState(ctx, client, specNamespacedName, standaloneDesired, sentinelDesired, replicationDesired, opstree.BuildWandbRedisLabels(wandb))
 	return results
 }
 
@@ -154,11 +152,11 @@ func managedRedisReadState(
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
 	newConditions []metav1.Condition,
-) ([]metav1.Condition, *translator.RedisConnection) {
+) ([]metav1.Condition, *apiv2.RedisConnection) {
 	spec := wandb.Spec.Redis.ManagedRedis
 
 	specNamespacedName := managedRedisSpecNamespacedName(spec)
-	onDeleteRule := translatorv2.ToRedisOnDeleteRule(wandb, wandb.GetRetentionPolicy(spec.ManagedInfraSpec))
+	onDeleteRule := opstree.ToRedisOnDeleteRule(wandb, wandb.GetRetentionPolicy(spec.ManagedInfraSpec))
 	readConditions, newInfraConn := opstree.ReadState(ctx, client, specNamespacedName, wandb, onDeleteRule)
 	newConditions = append(newConditions, readConditions...)
 	return newConditions, newInfraConn
@@ -170,11 +168,11 @@ func managedRedisInferStatus(
 	recorder record.EventRecorder,
 	wandb *apiv2.WeightsAndBiases,
 	newConditions []metav1.Condition,
-	newInfraConn *translator.RedisConnection,
+	newInfraConn *apiv2.RedisConnection,
 ) (ctrl.Result, error) {
 	enabled := true
 	oldConditions := wandb.Status.RedisStatus.Conditions
-	oldInfraConn := translatorv2.ToTranslatorRedisConnection(wandb.Status.RedisStatus.Connection)
+	oldInfraConn := wandb.Status.RedisStatus.Connection
 
 	updatedStatus, events, ctrlResult := opstree.ComputeStatus(
 		ctx,
@@ -187,7 +185,7 @@ func managedRedisInferStatus(
 	for _, e := range events {
 		recorder.Event(wandb, e.Type, e.Reason, e.Message)
 	}
-	wandb.Status.RedisStatus = translatorv2.ToWbRedisInfraStatus(updatedStatus)
+	wandb.Status.RedisStatus = updatedStatus
 	err := client.Status().Update(ctx, wandb)
 
 	return ctrlResult, err
@@ -199,19 +197,19 @@ func externalRedisWriteState(ctx context.Context, c client.Client, wandb *apiv2.
 	return externalredis.WriteState(ctx, c, wandb)
 }
 
-func externalRedisReadState(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, newConditions []metav1.Condition) ([]metav1.Condition, *translator.RedisConnection) {
+func externalRedisReadState(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, newConditions []metav1.Condition) ([]metav1.Condition, *apiv2.RedisConnection) {
 	return externalredis.ReadState(ctx, c, wandb, newConditions)
 }
 
-func externalRedisInferStatus(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, newConditions []metav1.Condition, newInfraConn *translator.RedisConnection) (ctrl.Result, error) {
-	oldInfraConn := translatorv2.ToTranslatorRedisConnection(wandb.Status.RedisStatus.Connection)
+func externalRedisInferStatus(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, newConditions []metav1.Condition, newInfraConn *apiv2.RedisConnection) (ctrl.Result, error) {
+	oldInfraConn := wandb.Status.RedisStatus.Connection
 	state, ready, updatedConditions := external.InferExternalStatus(wandb.Status.RedisStatus.Conditions, newConditions, wandb.Generation, newInfraConn != nil)
 	conn := utils.Coalesce(newInfraConn, &oldInfraConn)
 
-	wandb.Status.RedisStatus = translatorv2.ToWbRedisInfraStatus(translator.RedisStatus{
-		InfraStatus: translator.InfraStatus{Ready: ready, State: state, Conditions: updatedConditions},
-		Connection:  *conn,
-	})
+	wandb.Status.RedisStatus = apiv2.RedisInfraStatus{
+		WBInfraStatus: apiv2.WBInfraStatus{Ready: ready, State: state, Conditions: updatedConditions},
+		Connection:    *conn,
+	}
 	return ctrl.Result{}, c.Status().Update(ctx, wandb)
 }
 

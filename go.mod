@@ -5,16 +5,14 @@ go 1.25.5
 godebug default=go1.25
 
 require (
+	github.com/GoogleCloudPlatform/gke-gateway-api v1.4.0
 	github.com/Masterminds/goutils v1.1.1
 	github.com/Masterminds/semver/v3 v3.4.0
-	github.com/cert-manager/cert-manager v1.18.2
-	github.com/flosch/pongo2/v6 v6.0.0
 	github.com/go-logr/logr v1.4.3
 	github.com/go-playground/validator/v10 v10.28.0
 	github.com/golang-jwt/jwt/v4 v4.5.2
 	github.com/golang/glog v1.2.5
 	github.com/google/uuid v1.6.0
-	github.com/hashicorp/go-version v1.8.0
 	github.com/imdario/mergo v0.3.16
 	github.com/kedacore/keda/v2 v2.18.3
 	github.com/lmittmann/tint v1.1.2
@@ -22,18 +20,17 @@ require (
 	github.com/miekg/dns v1.1.65
 	github.com/minio/madmin-go/v3 v3.0.100
 	github.com/minio/minio-go/v7 v7.0.97
+	github.com/nginx/nginx-gateway-fabric v1.6.2
 	github.com/onsi/ginkgo/v2 v2.28.0
 	github.com/onsi/gomega v1.39.1
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/pkg/errors v0.9.1
-	github.com/robfig/cron/v3 v3.0.1
 	github.com/samber/lo v1.52.0
 	github.com/sanity-io/litter v1.3.0
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/exp v0.0.0-20250408133849-7e4ce0ab07d0
 	golang.org/x/text v0.33.0
 	gopkg.in/d4l3k/messagediff.v1 v1.2.1
-	gopkg.in/ini.v1 v1.67.0
 	gopkg.in/yaml.v3 v3.0.1
 	helm.sh/helm/v3 v3.19.2
 	k8s.io/api v0.35.1
@@ -52,6 +49,7 @@ require (
 require (
 	cel.dev/expr v0.24.0 // indirect
 	dario.cat/mergo v1.0.2 // indirect
+	github.com/AdaLogics/go-fuzz-headers v0.0.0-20240806141605-e8a1dd7889d6 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
 	github.com/BurntSushi/toml v1.6.0 // indirect
 	github.com/MakeNowJust/heredoc v1.0.0 // indirect

@@ -3,7 +3,7 @@ package seaweedfs
 import (
 	"context"
 
-	"github.com/wandb/operator/internal/controller/translator"
+	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/logx"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -16,10 +16,10 @@ func PurgeFinalizer(
 	ctx context.Context,
 	client client.Client,
 	specNamespacedName types.NamespacedName,
-	onDeleteRule translator.OnDeleteRule,
+	onDeleteRule common.OnDeleteRule,
 ) error {
 	ctx, _ = logx.WithSlog(ctx, logx.ObjectStore)
-	if onDeleteRule.Policy != translator.Purge {
+	if onDeleteRule.Policy != common.Purge {
 		return nil
 	}
 	return purgeAssociatedResources(ctx, client, specNamespacedName.Namespace, onDeleteRule.Selector)

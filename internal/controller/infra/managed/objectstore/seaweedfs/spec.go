@@ -1,10 +1,11 @@
-package v2
+package tenant
 
 import (
 	"context"
 	"fmt"
 
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/infra/managed/objectstore/seaweedfs"
 	"github.com/wandb/operator/internal/controller/translator"
 	"github.com/wandb/operator/internal/logx"
@@ -122,9 +123,9 @@ func ToObjectStoreEnvConfig(
 }
 
 func BuildWandbObjectStoreLabels(wandb *apiv2.WeightsAndBiases) map[string]string {
-	return BuildWandbLabels(wandb, translator.ObjectStoreModuleName)
+	return common.BuildWandbLabels(wandb, ObjectStoreModuleName)
 }
 
-func ToObjectStoreOnDeleteRule(wandb *apiv2.WeightsAndBiases, retentionPolicy apiv2.RetentionPolicy) translator.OnDeleteRule {
-	return ToOnDeleteRule(wandb, retentionPolicy, translator.ObjectStoreModuleName)
+func ToObjectStoreOnDeleteRule(wandb *apiv2.WeightsAndBiases, retentionPolicy apiv2.RetentionPolicy) common.OnDeleteRule {
+	return common.ToOnDeleteRule(wandb, retentionPolicy, ObjectStoreModuleName)
 }

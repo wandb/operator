@@ -29,8 +29,7 @@ var _ = Describe("WeightsAndBiases Networking", func() {
 		gatewayClassName := "test-gateway-class"
 
 		createNamespaceIfMissing(ctx, infraNamespace)
-		wandb := newNetworkingWandb(wandbName)
-		wandb.Spec.ObjectStore.ManagedObjectStore.Namespace = infraNamespace
+		wandb, minioService := newNetworkingWandb(wandbName, infraNamespace)
 		wandb.Spec.Networking = apiv2.NetworkingSpec{
 			Mode: apiv2.NetworkingModeGatewayAPI,
 			GatewayAPI: &apiv2.GatewayAPIConfig{
@@ -46,7 +45,9 @@ var _ = Describe("WeightsAndBiases Networking", func() {
 				},
 			},
 		}
+
 		Expect(k8sClient.Create(ctx, wandb)).To(Succeed())
+		Expect(k8sClient.Create(ctx, minioService)).To(Succeed())
 		DeferCleanup(deleteIfPresent, ctx, wandb)
 
 		wandb = markWandbReadyForNetworking(ctx, wandbName, wandbNamespace)
@@ -116,7 +117,7 @@ var _ = Describe("WeightsAndBiases Networking", func() {
 		DeferCleanup(deleteIfPresent, ctx, externalGateway)
 
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: gatewayName, Namespace: gatewayNamespace}, externalGateway)).To(Succeed())
-		wandb := newNetworkingWandb(wandbName)
+		wandb, minioService := newNetworkingWandb(wandbName, "")
 		wandb.Spec.Networking = apiv2.NetworkingSpec{
 			Mode: apiv2.NetworkingModeGatewayAPI,
 			GatewayAPI: &apiv2.GatewayAPIConfig{
@@ -130,6 +131,7 @@ var _ = Describe("WeightsAndBiases Networking", func() {
 			},
 		}
 		Expect(k8sClient.Create(ctx, wandb)).To(Succeed())
+		Expect(k8sClient.Create(ctx, minioService)).To(Succeed())
 		DeferCleanup(deleteIfPresent, ctx, wandb)
 
 		externalGateway.Status.Addresses = []gatewayv1.GatewayStatusAddress{{Value: "10.0.0.6"}}
@@ -170,7 +172,7 @@ var _ = Describe("WeightsAndBiases Networking", func() {
 		wandbName := "network-ingress"
 		ingressClassName := "nginx"
 
-		wandb := newNetworkingWandb(wandbName)
+		wandb, _ := newNetworkingWandb(wandbName, "")
 		wandb.Spec.Networking = apiv2.NetworkingSpec{
 			Mode: apiv2.NetworkingModeIngress,
 			Ingress: &apiv2.IngressConfig{
@@ -217,10 +219,13 @@ var _ = Describe("WeightsAndBiases Networking", func() {
 	})
 })
 
-func newNetworkingWandb(name string) *apiv2.WeightsAndBiases {
+func newNetworkingWandb(name string, infraNamespace string) (*apiv2.WeightsAndBiases, *corev1.Service) {
 	internalServiceAuthEnabled := false
+	if infraNamespace == "" {
+		infraNamespace = "default"
+	}
 
-	return &apiv2.WeightsAndBiases{
+	wandb := &apiv2.WeightsAndBiases{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: "default",
@@ -249,13 +254,30 @@ func newNetworkingWandb(name string) *apiv2.WeightsAndBiases {
 				ManagedKafka: &apiv2.ManagedKafkaSpec{},
 			},
 			ObjectStore: apiv2.ObjectStoreSpec{
-				ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{},
+				ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{
+					Namespace: infraNamespace,
+				},
 			},
 			ClickHouse: apiv2.ClickHouseSpec{
 				ManagedClickHouse: &apiv2.ManagedClickHouseSpec{},
 			},
 		},
 	}
+
+	service := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "minio",
+			Namespace: infraNamespace,
+		},
+		Spec: corev1.ServiceSpec{
+			Ports: []corev1.ServicePort{{
+				Name: "http-minio",
+				Port: 80,
+			}},
+		},
+	}
+
+	return wandb, service
 }
 
 func markWandbReadyForNetworking(ctx context.Context, name, namespace string) *apiv2.WeightsAndBiases {

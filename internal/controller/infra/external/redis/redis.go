@@ -5,7 +5,6 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/infra/external"
-	"github.com/wandb/operator/internal/controller/translator"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -52,7 +51,7 @@ func ReadState(
 	c client.Client,
 	wandb *apiv2.WeightsAndBiases,
 	newConditions []metav1.Condition,
-) ([]metav1.Condition, *translator.RedisConnection) {
+) ([]metav1.Condition, *apiv2.RedisConnection) {
 	nsName := types.NamespacedName{Namespace: wandb.Namespace, Name: ConnectionSecretName}
 	_, conditions, found := external.ReadConnectionSecret(ctx, c, nsName, newConditions)
 	if !found {
@@ -60,7 +59,7 @@ func ReadState(
 	}
 
 	localRef := corev1.LocalObjectReference{Name: nsName.Name}
-	return conditions, &translator.RedisConnection{
+	return conditions, &apiv2.RedisConnection{
 		URL:      corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "url", Optional: ptr.To(false)},
 		Host:     corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Host", Optional: ptr.To(false)},
 		Port:     corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Port", Optional: ptr.To(false)},

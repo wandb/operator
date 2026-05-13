@@ -5,8 +5,8 @@ import (
 	"fmt"
 
 	"github.com/Masterminds/goutils"
+	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
-	"github.com/wandb/operator/internal/controller/translator"
 	"github.com/wandb/operator/internal/logx"
 	seaweedv1 "github.com/wandb/operator/pkg/vendored/seaweedfs-operator/seaweed.seaweedfs.com/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -30,7 +30,7 @@ func WriteState(
 	desiredCr *seaweedv1.Seaweed,
 	envConfig SeaweedS3Config,
 	wandbOwner client.Object,
-) ([]metav1.Condition, *translator.ObjectStoreConnection) {
+) ([]metav1.Condition, *apiv2.ObjectStoreConnection) {
 	ctx, _ = logx.WithSlog(ctx, logx.ObjectStore)
 	var actual = &seaweedv1.Seaweed{}
 

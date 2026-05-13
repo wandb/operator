@@ -1,4 +1,4 @@
-package v2
+package altinity
 
 import (
 	"context"
@@ -6,8 +6,7 @@ import (
 	"fmt"
 
 	apiv2 "github.com/wandb/operator/api/v2"
-	"github.com/wandb/operator/internal/controller/infra/managed/clickhouse/altinity"
-	"github.com/wandb/operator/internal/controller/translator"
+	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/logx"
 	"github.com/wandb/operator/pkg/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -17,6 +16,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
+
+const ClickhouseModuleName = "clickhouse"
 
 // ToClickHouseVendorSpec converts a ClickHouseSpec to a ClickHouseInstallation CR.
 // This function translates the high-level ClickHouse spec into the vendor-specific
@@ -33,7 +34,7 @@ func ToClickHouseVendorSpec(
 		return nil, nil
 	}
 
-	nsnBuilder := altinity.CreateNsNameBuilder(types.NamespacedName{
+	nsnBuilder := CreateNsNameBuilder(types.NamespacedName{
 		Namespace: spec.Namespace, Name: spec.Name,
 	})
 
@@ -41,19 +42,19 @@ func ToClickHouseVendorSpec(
 	storageQuantity := resource.MustParse(spec.StorageSize)
 
 	// Create user settings with password
-	passwordSha256 := fmt.Sprintf("%x", sha256.Sum256([]byte(altinity.ClickHousePassword)))
+	passwordSha256 := fmt.Sprintf("%x", sha256.Sum256([]byte(ClickHousePassword)))
 	userSettings := v1.NewSettings()
 	userSettings.Set(
-		fmt.Sprintf("%s/password_sha256_hex", altinity.ClickHouseUser),
+		fmt.Sprintf("%s/password_sha256_hex", ClickHouseUser),
 		v1.NewSettingScalar(passwordSha256),
 	)
 	userSettings.Set(
-		fmt.Sprintf("%s/networks/ip", altinity.ClickHouseUser),
+		fmt.Sprintf("%s/networks/ip", ClickHouseUser),
 		v1.NewSettingScalar("::/0"),
 	)
 	userSettings.Set(
-		fmt.Sprintf("%s/allow_databases/database", altinity.ClickHouseUser),
-		v1.NewSettingVector([]string{altinity.ClickHouseDatabase, "db_management"}),
+		fmt.Sprintf("%s/allow_databases/database", ClickHouseUser),
+		v1.NewSettingVector([]string{ClickHouseDatabase, "db_management"}),
 	)
 
 	// Create server settings
@@ -80,7 +81,7 @@ func ToClickHouseVendorSpec(
 			Name:      nsnBuilder.InstallationName(),
 			Namespace: nsnBuilder.Namespace(),
 			Labels: map[string]string{
-				"app": altinity.CHIName,
+				"app": CHIName,
 			},
 		},
 		Spec: v1.ChiSpec{
@@ -89,7 +90,7 @@ func ToClickHouseVendorSpec(
 					{
 						Name: "default",
 						Layout: &v1.ChiClusterLayout{
-							ShardsCount:   altinity.ShardsCount,
+							ShardsCount:   ShardsCount,
 							ReplicasCount: int(spec.Replicas),
 						},
 					},
@@ -113,6 +114,12 @@ func ToClickHouseVendorSpec(
 						Spec: corev1.PodSpec{
 							Affinity:    wandb.GetAffinity(spec.ManagedInfraSpec),
 							Tolerations: *wandb.GetTolerations(spec.ManagedInfraSpec),
+							Containers: []corev1.Container{
+								{
+									Name:  "clickhouse",
+									Image: "altinity/clickhouse-server:25.8.16.10002.altinitystable",
+								},
+							},
 						},
 					},
 				},
@@ -158,6 +165,7 @@ func ToClickHouseVendorSpec(
 								Requests: spec.Config.Resources.Requests,
 								Limits:   spec.Config.Resources.Limits,
 							},
+							Image: "altinity/clickhouse-server:25.8.16.10002.altinitystable",
 						},
 					},
 				},
@@ -175,9 +183,9 @@ func ToClickHouseVendorSpec(
 }
 
 func BuildWandbClickhouseLabels(wandb *apiv2.WeightsAndBiases) map[string]string {
-	return BuildWandbLabels(wandb, translator.ClickhouseModuleName)
+	return common.BuildWandbLabels(wandb, ClickhouseModuleName)
 }
 
-func ToClickHouseOnDeleteRule(wandb *apiv2.WeightsAndBiases, retentionPolicy apiv2.RetentionPolicy) translator.OnDeleteRule {
-	return ToOnDeleteRule(wandb, retentionPolicy, translator.ClickhouseModuleName)
+func ToClickHouseOnDeleteRule(wandb *apiv2.WeightsAndBiases, retentionPolicy apiv2.RetentionPolicy) common.OnDeleteRule {
+	return common.ToOnDeleteRule(wandb, retentionPolicy, ClickhouseModuleName)
 }

@@ -1,12 +1,11 @@
-package v2
+package opstree
 
 import (
 	"context"
 	"fmt"
 
 	apiv2 "github.com/wandb/operator/api/v2"
-	"github.com/wandb/operator/internal/controller/infra/managed/redis/opstree"
-	"github.com/wandb/operator/internal/controller/translator"
+	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/logx"
 	rediscommon "github.com/wandb/operator/pkg/vendored/redis-operator/common/v1beta2"
 	redisv1beta2 "github.com/wandb/operator/pkg/vendored/redis-operator/redis/v1beta2"
@@ -17,7 +16,15 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"knative.dev/pkg/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
+)
+
+const (
+	RedisModuleName       = "redis"
+	RedisStandaloneImage  = "quay.io/opstree/redis:v7.0.15"
+	RedisReplicationImage = "quay.io/opstree/redis:v7.0.15"
+	RedisSentinelImage    = "quay.io/opstree/redis-sentinel:v7.0.12"
 )
 
 const (
@@ -60,7 +67,7 @@ func ToRedisStandaloneVendorSpec(
 		return nil, nil
 	}
 
-	nsnBuilder := opstree.CreateNsNameBuilder(types.NamespacedName{
+	nsnBuilder := CreateNsNameBuilder(types.NamespacedName{
 		Namespace: spec.Namespace, Name: spec.Name,
 	})
 
@@ -76,11 +83,14 @@ func ToRedisStandaloneVendorSpec(
 		},
 		Spec: redisv1beta2.RedisSpec{
 			KubernetesConfig: rediscommon.KubernetesConfig{
-				Image:           translator.RedisStandaloneImage,
+				Image:           RedisStandaloneImage,
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				Resources:       &corev1.ResourceRequirements{},
 			},
-			Affinity:    wandb.GetAffinity(spec.ManagedInfraSpec),
+			Affinity: wandb.GetAffinity(spec.ManagedInfraSpec),
+			PodSecurityContext: &corev1.PodSecurityContext{
+				FSGroup: ptr.Int64(1000),
+			},
 			Tolerations: wandb.GetTolerations(spec.ManagedInfraSpec),
 			Storage: &rediscommon.Storage{
 				VolumeClaimTemplate: corev1.PersistentVolumeClaim{
@@ -137,7 +147,7 @@ func ToRedisSentinelVendorSpec(
 		return nil, nil
 	}
 
-	nsnBuilder := opstree.CreateNsNameBuilder(types.NamespacedName{
+	nsnBuilder := CreateNsNameBuilder(types.NamespacedName{
 		Namespace: spec.Namespace, Name: spec.Name,
 	})
 
@@ -158,9 +168,12 @@ func ToRedisSentinelVendorSpec(
 		Spec: redissentinelv1beta2.RedisSentinelSpec{
 			Size: &sentinelCount,
 			KubernetesConfig: rediscommon.KubernetesConfig{
-				Image:           translator.RedisSentinelImage,
+				Image:           RedisSentinelImage,
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				Resources:       &corev1.ResourceRequirements{},
+			},
+			PodSecurityContext: &corev1.PodSecurityContext{
+				FSGroup: ptr.Int64(1000),
 			},
 			Affinity:    wandb.GetAffinity(spec.ManagedInfraSpec),
 			Tolerations: wandb.GetTolerations(spec.ManagedInfraSpec),
@@ -211,7 +224,7 @@ func ToRedisReplicationVendorSpec(
 		return nil, nil
 	}
 
-	nsnBuilder := opstree.CreateNsNameBuilder(types.NamespacedName{
+	nsnBuilder := CreateNsNameBuilder(types.NamespacedName{
 		Namespace: spec.Namespace, Name: spec.Name,
 	})
 
@@ -233,9 +246,12 @@ func ToRedisReplicationVendorSpec(
 		Spec: redisreplicationv1beta2.RedisReplicationSpec{
 			Size: &replicaCount,
 			KubernetesConfig: rediscommon.KubernetesConfig{
-				Image:           translator.RedisReplicationImage,
+				Image:           RedisReplicationImage,
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				Resources:       &corev1.ResourceRequirements{},
+			},
+			PodSecurityContext: &corev1.PodSecurityContext{
+				FSGroup: ptr.Int64(1000),
 			},
 			Affinity:    wandb.GetAffinity(spec.ManagedInfraSpec),
 			Tolerations: wandb.GetTolerations(spec.ManagedInfraSpec),
@@ -280,9 +296,9 @@ func ToRedisReplicationVendorSpec(
 }
 
 func BuildWandbRedisLabels(wandb *apiv2.WeightsAndBiases) map[string]string {
-	return BuildWandbLabels(wandb, translator.RedisModuleName)
+	return common.BuildWandbLabels(wandb, RedisModuleName)
 }
 
-func ToRedisOnDeleteRule(wandb *apiv2.WeightsAndBiases, retentionPolicy apiv2.RetentionPolicy) translator.OnDeleteRule {
-	return ToOnDeleteRule(wandb, retentionPolicy, translator.RedisModuleName)
+func ToRedisOnDeleteRule(wandb *apiv2.WeightsAndBiases, retentionPolicy apiv2.RetentionPolicy) common.OnDeleteRule {
+	return common.ToOnDeleteRule(wandb, retentionPolicy, RedisModuleName)
 }
