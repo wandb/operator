@@ -5,6 +5,7 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/infra/external"
+	"github.com/wandb/operator/internal/controller/infra/objectstoreproxy"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -42,6 +43,7 @@ func WriteState(
 			Reason: "ApiError",
 		}}, nil
 	}
+	objectstoreproxy.Enrich(data)
 
 	nsName := types.NamespacedName{Namespace: wandb.Namespace, Name: ConnectionSecretName}
 	if conditions := external.WriteConnectionSecret(ctx, c, wandb, nsName, data); conditions != nil {

@@ -183,4 +183,53 @@ var _ = Describe("Networking Route Builders", func() {
 		Expect(entries).To(BeEmpty())
 	})
 
+	It("patches nginx-proxy object store upstream config from proxy fields", func() {
+		manifest := serverManifest.Manifest{
+			Features: map[string]bool{"proxy": true},
+			Applications: map[string]serverManifest.Application{
+				"nginx-proxy": {
+					Name: "nginx-proxy",
+					Service: &serverManifest.ServiceSpec{
+						Ports: []corev1.ServicePort{{Port: 8080}},
+					},
+				},
+			},
+		}
+		app := serverManifest.Application{
+			Name: "nginx-proxy",
+			Env: []serverManifest.EnvVar{
+				{Name: "UPSTREAM_BUCKET", Value: "$(BUCKET_HOST):$(BUCKET_PORT)"},
+			},
+			Files: []serverManifest.FileSpec{
+				{
+					FileName: "envvar.conf.template",
+					Inline:   "map $host $bucket{\n            default $UPSTREAM_BUCKET;\n          }",
+				},
+				{
+					FileName: "nginx.conf",
+					Inline:   "location /bucket {\n                proxy_ssl_verify off;\n                proxy_set_header Host $bucket;\n                proxy_pass https://bucket;\n              }",
+				},
+			},
+		}
+
+		app = applyObjectStoreProxyConfig(app, manifest)
+
+		Expect(envSourceField(app.Env, "UPSTREAM_BUCKET")).To(Equal("proxyUpstream"))
+		Expect(envSourceField(app.Env, "BUCKET_PROXY_SCHEME")).To(Equal("proxyScheme"))
+		Expect(app.Files[0].Inline).To(ContainSubstring("$bucket_proxy_pass"))
+		Expect(app.Files[0].Inline).To(ContainSubstring("$BUCKET_PROXY_HOST_HEADER"))
+		Expect(app.Files[1].Inline).To(ContainSubstring("proxy_set_header Host $bucket_host_header;"))
+		Expect(app.Files[1].Inline).To(ContainSubstring("proxy_ssl_name $bucket_ssl_name;"))
+		Expect(app.Files[1].Inline).To(ContainSubstring("proxy_pass $bucket_proxy_pass;"))
+	})
+
 })
+
+func envSourceField(envs []serverManifest.EnvVar, name string) string {
+	for _, env := range envs {
+		if env.Name == name && len(env.Sources) > 0 {
+			return env.Sources[0].Field
+		}
+	}
+	return ""
+}

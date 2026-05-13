@@ -30,6 +30,7 @@ import (
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/ctrlqueue"
 	"github.com/wandb/operator/internal/controller/infra/managed/mysql/mysql"
+	"github.com/wandb/operator/internal/controller/infra/objectstoreproxy"
 	"github.com/wandb/operator/internal/logx"
 	oputils "github.com/wandb/operator/pkg/utils"
 	strimziv1 "github.com/wandb/operator/pkg/vendored/strimzi-kafka/v1"
@@ -520,6 +521,7 @@ func reconcileApplications(
 			continue
 		}
 		app = applyProxyIngress(app, manifest)
+		app = applyObjectStoreProxyConfig(app, manifest)
 
 		applicationName := fmt.Sprintf("%s-%s", wandb.Name, app.Name)
 		envVars, err := resolveEnvvars(ctx, client, wandb, manifest, app.CommonEnvs, app.Env)
@@ -1494,6 +1496,14 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *apiv2.
 					selector.Key = "Port"
 				case "region":
 					selector.Key = "Region"
+				case "proxyScheme":
+					selector.Key = objectstoreproxy.SchemeKey
+				case "proxyUpstream":
+					selector.Key = objectstoreproxy.UpstreamKey
+				case "proxyHostHeader":
+					selector.Key = objectstoreproxy.HostHeaderKey
+				case "proxySSLName":
+					selector.Key = objectstoreproxy.SSLNameKey
 				default:
 					selector.Key = "url"
 				}

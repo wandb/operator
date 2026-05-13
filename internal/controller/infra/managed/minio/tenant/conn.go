@@ -7,6 +7,7 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
+	"github.com/wandb/operator/internal/controller/infra/objectstoreproxy"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -105,6 +106,7 @@ func writeWandbConnInfo(
 			"Bucket":    connInfo.Bucket,
 		},
 	}
+	objectstoreproxy.Enrich(desired.StringData)
 
 	if _, err = common.CrudResource(ctx, cl, desired, actual); err != nil {
 		return nil, err
