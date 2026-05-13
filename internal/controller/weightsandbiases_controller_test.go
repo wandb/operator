@@ -9,7 +9,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	apiv2 "github.com/wandb/operator/api/v2"
-	v2 "github.com/wandb/operator/internal/controller/v2"
+	v2 "github.com/wandb/operator/internal/controller/reconciler"
 	"github.com/wandb/operator/pkg/utils"
 	"github.com/wandb/operator/pkg/wandb/manifest"
 	batchv1 "k8s.io/api/batch/v1"

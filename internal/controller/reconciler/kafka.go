@@ -1,4 +1,4 @@
-package v2
+package reconciler
 
 import (
 	"context"
@@ -10,11 +10,14 @@ import (
 	"github.com/wandb/operator/internal/controller/infra/managed/kafka/strimzi"
 	"github.com/wandb/operator/pkg/utils"
 	"github.com/wandb/operator/pkg/vendored/strimzi-kafka/v1"
+	"github.com/wandb/operator/pkg/wandb/manifest"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 func kafkaWriteState(
@@ -221,4 +224,101 @@ func managedKafkaSpecNamespacedName(spec *apiv2.ManagedKafkaSpec) types.Namespac
 		Namespace: spec.Namespace,
 		Name:      spec.Name,
 	}
+}
+
+func createKafkaTopics(ctx context.Context, client client.Client, wandb *apiv2.WeightsAndBiases, manifest manifest.Manifest) (ctrl.Result, error) {
+	// Create Strimzi KafkaTopic resources for enabled topics
+	if wandb.Spec.Kafka.ManagedKafka != nil {
+		kafkaSpec := wandb.Spec.Kafka.ManagedKafka
+		for _, topic := range manifest.Kafka.Topics {
+			if len(topic.Features) > 0 && !manifest.FeaturesEnabled(topic.Features) {
+				continue
+			}
+
+			kafkaNS := kafkaSpec.Namespace
+			if kafkaNS == "" {
+				kafkaNS = wandb.Namespace
+			}
+			clusterName := kafkaSpec.Name
+			if clusterName == "" {
+				clusterName = wandb.Name
+			}
+
+			// Use the logical topic name as the resource name
+			resName := topic.Name
+			if resName == "" {
+				// If not set, fallback to topic entry name
+				resName = topic.Topic
+			}
+			if resName == "" {
+				// Nothing actionable without a name
+				continue
+			}
+			labels := map[string]string{
+				"strimzi.io/cluster":           clusterName,
+				"app.kubernetes.io/managed-by": "wandb-operator",
+				"app.kubernetes.io/part-of":    "wandb",
+				"app.kubernetes.io/instance":   wandb.Name,
+			}
+
+			// Prepare spec
+			partitions := int32(1)
+			if topic.PartitionCount > 0 {
+				partitions = int32(topic.PartitionCount)
+			}
+			replicas := int32(1)
+			if kafkaSpec.Config.ReplicationConfig.DefaultReplicationFactor > 0 {
+				replicas = int32(kafkaSpec.Config.ReplicationConfig.DefaultReplicationFactor)
+			}
+
+			// Build typed KafkaTopic object
+			kt := &v1.KafkaTopic{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      resName,
+					Namespace: kafkaNS,
+					Labels:    labels,
+				},
+				Spec: v1.KafkaTopicSpec{
+					TopicName:  topic.Topic,
+					Partitions: partitions,
+					Replicas:   replicas,
+				},
+			}
+
+			// Create or Update
+			existing := &v1.KafkaTopic{}
+			getErr := client.Get(ctx, types.NamespacedName{Name: kt.Name, Namespace: kafkaNS}, existing)
+			if getErr != nil {
+				if errors.IsNotFound(getErr) {
+					// Set ownerRef only if same namespace
+					if kafkaNS == wandb.Namespace {
+						_ = controllerutil.SetOwnerReference(wandb, kt, client.Scheme())
+					}
+					if err := client.Create(ctx, kt); err != nil {
+						return ctrl.Result{}, err
+					}
+				} else {
+					return ctrl.Result{}, getErr
+				}
+			} else {
+				// Update managed spec fields and preserve other fields
+				existing.Spec.TopicName = topic.Topic
+				existing.Spec.Partitions = partitions
+				existing.Spec.Replicas = replicas
+				// Preserve/ensure labels
+				exLabels := existing.GetLabels()
+				if exLabels == nil {
+					exLabels = map[string]string{}
+				}
+				for k, v := range labels {
+					exLabels[k] = v
+				}
+				existing.SetLabels(exLabels)
+				if err := client.Update(ctx, existing); err != nil {
+					return ctrl.Result{}, err
+				}
+			}
+		}
+	}
+	return ctrl.Result{}, nil
 }
