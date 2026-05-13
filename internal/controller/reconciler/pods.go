@@ -146,6 +146,7 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 		}
 		if env.ValueFrom != nil {
 			envVars = append(envVars, v1.EnvVar{Name: env.Name, ValueFrom: env.ValueFrom})
+			continue
 		}
 
 		// Multi-source composition: build a comma-separated value from all resolvable sources.
@@ -342,7 +343,6 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 					}
 				}
 				components = append(components, fmt.Sprintf("%s%s:%d%s", proto, serviceList.Items[0].Name, selectedPort, src.Path))
-			case "jwt-issuer-map":
 			case "jwt-issuer-map":
 				if wandb.Spec.Wandb.InternalServiceAuth.Enabled != nil &&
 					*wandb.Spec.Wandb.InternalServiceAuth.Enabled {

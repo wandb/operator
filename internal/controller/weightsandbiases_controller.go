@@ -107,7 +107,7 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	if err := r.Get(ctx, req.NamespacedName, wandb); err != nil {
 		if apierrors.IsNotFound(err) {
-			return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
+			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, err
 	}

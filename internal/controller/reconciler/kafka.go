@@ -292,7 +292,10 @@ func createKafkaTopics(ctx context.Context, client client.Client, wandb *apiv2.W
 				if errors.IsNotFound(getErr) {
 					// Set ownerRef only if same namespace
 					if kafkaNS == wandb.Namespace {
-						_ = controllerutil.SetOwnerReference(wandb, kt, client.Scheme())
+						err := controllerutil.SetOwnerReference(wandb, kt, client.Scheme())
+						if err != nil {
+							return ctrl.Result{}, err
+						}
 					}
 					if err := client.Create(ctx, kt); err != nil {
 						return ctrl.Result{}, err
