@@ -82,19 +82,7 @@ func reconcileConsolidatedIngress(ctx context.Context, c ctrlClient.Client, wand
 		})
 	}
 
-	annotations := map[string]string{}
-	for k, v := range wandb.Spec.Networking.Annotations {
-		annotations[k] = v
-	}
-	if wandb.Spec.Networking.TLS != nil && wandb.Spec.Networking.TLS.CertManager != nil {
-		cm := wandb.Spec.Networking.TLS.CertManager
-		if cm.ClusterIssuer != "" {
-			annotations["cert-manager.io/cluster-issuer"] = cm.ClusterIssuer
-		}
-		if cm.Issuer != "" {
-			annotations["cert-manager.io/issuer"] = cm.Issuer
-		}
-	}
+	annotations := consolidatedIngressAnnotations(wandb)
 
 	desired := &networkingv1.Ingress{
 		ObjectMeta: metav1.ObjectMeta{
@@ -147,6 +135,28 @@ func reconcileConsolidatedIngress(ctx context.Context, c ctrlClient.Client, wand
 	}
 	wandb.Status.IngressStatus = summarizeIngressStatus(current)
 	return nil
+}
+
+func consolidatedIngressAnnotations(wandb *apiv2.WeightsAndBiases) map[string]string {
+	annotations := map[string]string{}
+	if apiv2.UsesNginxIngressClass(wandb.Spec.Networking.Ingress) {
+		for k, v := range apiv2.DefaultNginxIngressAnnotations() {
+			annotations[k] = v
+		}
+	}
+	for k, v := range wandb.Spec.Networking.Annotations {
+		annotations[k] = v
+	}
+	if wandb.Spec.Networking.TLS != nil && wandb.Spec.Networking.TLS.CertManager != nil {
+		cm := wandb.Spec.Networking.TLS.CertManager
+		if cm.ClusterIssuer != "" {
+			annotations["cert-manager.io/cluster-issuer"] = cm.ClusterIssuer
+		}
+		if cm.Issuer != "" {
+			annotations["cert-manager.io/issuer"] = cm.Issuer
+		}
+	}
+	return annotations
 }
 
 func deleteConsolidatedIngress(ctx context.Context, c ctrlClient.Client, wandb *apiv2.WeightsAndBiases) error {

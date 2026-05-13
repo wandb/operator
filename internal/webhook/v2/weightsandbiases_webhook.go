@@ -120,6 +120,7 @@ func (d *WeightsAndBiasesCustomDefaulter) Default(ctx context.Context, obj runti
 	applyObjectStoreDefaults(wandb)
 	applyMySQLDefaults(wandb)
 	applyClickHouseDefaults(wandb)
+	applyNetworkingDefaults(wandb)
 
 	return nil
 }
@@ -274,6 +275,21 @@ func applyClickHouseDefaults(wandb *appsv2.WeightsAndBiases) {
 
 	if spec.Namespace == "" {
 		spec.Namespace = wandb.Namespace
+	}
+}
+
+func applyNetworkingDefaults(wandb *appsv2.WeightsAndBiases) {
+	if wandb.Spec.Networking.Mode != appsv2.NetworkingModeIngress ||
+		!appsv2.UsesNginxIngressClass(wandb.Spec.Networking.Ingress) {
+		return
+	}
+	if wandb.Spec.Networking.Annotations == nil {
+		wandb.Spec.Networking.Annotations = map[string]string{}
+	}
+	for k, v := range appsv2.DefaultNginxIngressAnnotations() {
+		if _, exists := wandb.Spec.Networking.Annotations[k]; !exists {
+			wandb.Spec.Networking.Annotations[k] = v
+		}
 	}
 }
 

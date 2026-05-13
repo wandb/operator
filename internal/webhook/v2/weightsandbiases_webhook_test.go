@@ -72,6 +72,21 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 			Expect(obj.Spec.ObjectStore.ManagedObjectStore.Namespace).To(Equal("test-ns"))
 		})
 
+		It("defaults nginx ingress annotations for large payloads and long object operations", func() {
+			ingressClass := "nginx"
+			obj.Spec.Networking.Mode = appsv2.NetworkingModeIngress
+			obj.Spec.Networking.Ingress = &appsv2.IngressConfig{IngressClassName: &ingressClass}
+			obj.Spec.Networking.Annotations = map[string]string{
+				appsv2.NginxIngressProxyReadTimeoutAnnotation: "7200",
+			}
+
+			Expect(defaulter.Default(ctx, obj)).To(Succeed())
+
+			Expect(obj.Spec.Networking.Annotations).To(HaveKeyWithValue(appsv2.NginxIngressProxyBodySizeAnnotation, "0"))
+			Expect(obj.Spec.Networking.Annotations).To(HaveKeyWithValue(appsv2.NginxIngressProxyReadTimeoutAnnotation, "7200"))
+			Expect(obj.Spec.Networking.Annotations).To(HaveKeyWithValue(appsv2.NginxIngressProxySendTimeoutAnnotation, "3600"))
+		})
+
 		It("does not override already set values", func() {
 			affinity := &corev1.Affinity{}
 			tolerations := &[]corev1.Toleration{{Key: "dedicated", Operator: corev1.TolerationOpExists}}
