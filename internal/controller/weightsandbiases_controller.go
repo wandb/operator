@@ -19,12 +19,9 @@ package controller
 import (
 	"context"
 	"fmt"
-	"time"
 
-	apiv1 "github.com/wandb/operator/api/v1"
 	apiv2 "github.com/wandb/operator/api/v2"
-	v1 "github.com/wandb/operator/internal/controller/v1"
-	v2 "github.com/wandb/operator/internal/controller/v2"
+	v2 "github.com/wandb/operator/internal/controller/reconciler"
 	"github.com/wandb/operator/pkg/utils"
 	"github.com/wandb/operator/pkg/wandb/spec/channel/deployer"
 	batchv1 "k8s.io/api/batch/v1"
@@ -34,12 +31,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
@@ -90,9 +85,6 @@ type WeightsAndBiasesReconciler struct {
 // Deprecated/Erroneously required RBAC rules
 //+kubebuilder:rbac:groups=extensions,resources=daemonsets;deployments;replicasets;ingresses;ingresses/status,verbs=get;list;watch
 
-var defaultRequeueMinutes = 1
-var defaultRequeueDuration = time.Duration(defaultRequeueMinutes) * time.Minute
-
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 //
@@ -107,65 +99,16 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		"start", true,
 	)
 
-	if r.EnableV2 {
-		wandbv1 := &apiv1.WeightsAndBiases{}
-		wandbv2 := &apiv2.WeightsAndBiases{}
+	wandb := &apiv2.WeightsAndBiases{}
 
-		if err := r.Get(ctx, req.NamespacedName, wandbv2); err != nil {
-			if apierrors.IsNotFound(err) {
-				return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
-			}
-			return ctrl.Result{}, err
+	if err := r.Get(ctx, req.NamespacedName, wandb); err != nil {
+		if apierrors.IsNotFound(err) {
+			return ctrl.Result{}, nil
 		}
-
-		// Ensure GVK is set for owner references (client.Get doesn't always populate TypeMeta)
-		gvks, _, err := r.Scheme.ObjectKinds(wandbv2)
-		if err != nil {
-			log.Error(err, "Failed to get GVKs from scheme")
-			return ctrl.Result{}, err
-		}
-		log.Info("Retrieved GVKs from scheme", "gvks", gvks, "count", len(gvks))
-		if len(gvks) > 0 {
-			wandbv2.SetGroupVersionKind(gvks[0])
-			log.Info("Set GVK on wandbv2", "gvk", gvks[0], "apiVersion", wandbv2.APIVersion, "kind", wandbv2.Kind)
-		}
-
-		// TODO: Once proper conversion is done, remove this logic
-		if version, ok := wandbv2.Annotations["legacy.operator.wandb.com/version"]; ok && version == "v1" {
-			log.Info("Detected legacy Weights & Biases instance, reconciling as V1...")
-
-			err := wandbv1.ConvertFrom(wandbv2)
-			if err != nil {
-				return ctrl.Result{}, err
-			}
-			v1Cfg := v1.WandbV1ReconcileConfig{
-				DeployerClient: r.DeployerClient,
-				Recorder:       r.Recorder,
-				DryRun:         r.DryRun,
-				Debug:          r.Debug,
-				IsAirgapped:    r.IsAirgapped,
-			}
-			return v1.Reconcile(ctx, wandbv1, r.Client, &v1Cfg)
-		} else {
-			return v2.Reconcile(ctx, r.Client, r.Recorder, wandbv2, r.TelemetryConfig)
-		}
-	} else {
-		wandb := &apiv1.WeightsAndBiases{}
-		if err := r.Get(ctx, req.NamespacedName, wandb); err != nil {
-			if apierrors.IsNotFound(err) {
-				return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
-			}
-			return ctrl.Result{}, err
-		}
-		v1Cfg := v1.WandbV1ReconcileConfig{
-			DeployerClient: r.DeployerClient,
-			Recorder:       r.Recorder,
-			DryRun:         r.DryRun,
-			Debug:          r.Debug,
-			IsAirgapped:    r.IsAirgapped,
-		}
-		return v1.Reconcile(ctx, wandb, r.Client, &v1Cfg)
+		return ctrl.Result{}, err
 	}
+
+	return v2.Reconcile(ctx, r.Client, r.Recorder, wandb, r.TelemetryConfig)
 }
 
 // Delete was taken from original v1 reconciler
@@ -175,23 +118,15 @@ func (r *WeightsAndBiasesReconciler) Delete(e event.DeleteEvent) bool {
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *WeightsAndBiasesReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	var b *ctrl.Builder
-	if r.EnableV2 {
-		b = ctrl.NewControllerManagedBy(mgr).
-			For(&apiv2.WeightsAndBiases{}).
-			Owns(&apiv2.Application{}).
-			Owns(&batchv1.Job{}).
-			Owns(&corev1.Secret{}).
-			Owns(&corev1.ConfigMap{}).
-			Owns(&networkingv1.Ingress{})
-		if utils.IsRegistered(r.Scheme, &gatewayv1.Gateway{}) {
-			b = b.Watches(&gatewayv1.Gateway{}, handler.EnqueueRequestsFromMapFunc(r.mapGatewayToWandb))
-		}
-	} else {
-		b = ctrl.NewControllerManagedBy(mgr).
-			For(&apiv1.WeightsAndBiases{}, builder.WithPredicates(filterWBEventsForV1{})).
-			Owns(&corev1.Secret{}, builder.WithPredicates(filterSecretEventsForV1{})).
-			Owns(&corev1.ConfigMap{})
+	var b = ctrl.NewControllerManagedBy(mgr).
+		For(&apiv2.WeightsAndBiases{}).
+		Owns(&apiv2.Application{}).
+		Owns(&batchv1.Job{}).
+		Owns(&corev1.Secret{}).
+		Owns(&corev1.ConfigMap{}).
+		Owns(&networkingv1.Ingress{})
+	if utils.IsRegistered(r.Scheme, &gatewayv1.Gateway{}) {
+		b = b.Watches(&gatewayv1.Gateway{}, handler.EnqueueRequestsFromMapFunc(r.mapGatewayToWandb))
 	}
 
 	return b.Complete(r)
@@ -243,47 +178,4 @@ func gatewayMatchesWandb(gateway *gatewayv1.Gateway, wandb *apiv2.WeightsAndBias
 	}
 
 	return gateway.Namespace == namespace && gateway.Name == ref.Name
-}
-
-type filterWBEventsForV1 struct {
-	predicate.Funcs
-}
-
-func (filterWBEventsForV1) Update(e event.UpdateEvent) bool {
-	// Checking whether the Object's Generation has changed. If it has not
-	// (indicating a non-spec change), it returns false - thus ignoring the
-	// event.
-	return e.ObjectOld.GetGeneration() != e.ObjectNew.GetGeneration()
-}
-
-func (filterWBEventsForV1) Create(e event.CreateEvent) bool {
-	return true
-}
-
-func (filterWBEventsForV1) Delete(e event.DeleteEvent) bool {
-	return true
-}
-
-func (filterWBEventsForV1) Generic(e event.GenericEvent) bool {
-	return false
-}
-
-type filterSecretEventsForV1 struct {
-	predicate.Funcs
-}
-
-func (filterSecretEventsForV1) Update(e event.UpdateEvent) bool {
-	return true
-}
-
-func (filterSecretEventsForV1) Create(e event.CreateEvent) bool {
-	return false
-}
-
-func (filterSecretEventsForV1) Delete(e event.DeleteEvent) bool {
-	return true
-}
-
-func (filterSecretEventsForV1) Generic(e event.GenericEvent) bool {
-	return false
 }

@@ -32,11 +32,9 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"knative.dev/pkg/ptr"
-	controllerruntime "sigs.k8s.io/controller-runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -959,12 +957,12 @@ func (r *ApplicationReconciler) reconcileHTTPRoute(ctx context.Context, app *wan
 	logger := logx.GetSlog(ctx)
 
 	httpRoute := &gatewayv1.HTTPRoute{
-		ObjectMeta: metav1.ObjectMeta{
+		ObjectMeta: v1.ObjectMeta{
 			Name:      app.Name,
 			Namespace: app.Namespace,
 		},
 	}
-	op, err := controllerruntime.CreateOrUpdate(ctx, r.Client, httpRoute, func() error {
+	op, err := ctrl.CreateOrUpdate(ctx, r.Client, httpRoute, func() error {
 		httpRoute.Labels = utils.MergeMapsStringString(httpRoute.Labels, app.Spec.MetaTemplate.Labels)
 		httpRoute.Annotations = utils.MergeMapsStringString(httpRoute.Annotations, app.Spec.MetaTemplate.Annotations)
 		httpRoute.Spec.ParentRefs = app.Spec.HTTPRouteTemplate.ParentRefs
@@ -983,12 +981,12 @@ func (r *ApplicationReconciler) reconcileHTTPRoute(ctx context.Context, app *wan
 
 	if httpRoute.Status.Parents[0].ControllerName == "networking.gke.io/gateway" {
 		healthCheckPolicy := &gkeGatewayApiNetworkingv1.HealthCheckPolicy{
-			ObjectMeta: metav1.ObjectMeta{
+			ObjectMeta: v1.ObjectMeta{
 				Name:      app.Name,
 				Namespace: app.Namespace,
 			},
 		}
-		op, err = controllerruntime.CreateOrUpdate(ctx, r.Client, healthCheckPolicy, func() error {
+		op, err = ctrl.CreateOrUpdate(ctx, r.Client, healthCheckPolicy, func() error {
 			healthCheckPolicy.Labels = utils.MergeMapsStringString(healthCheckPolicy.Labels, app.Spec.MetaTemplate.Labels)
 			healthCheckPolicy.Annotations = utils.MergeMapsStringString(healthCheckPolicy.Annotations, app.Spec.MetaTemplate.Annotations)
 			healthCheckPolicy.Spec.Default = &gkeGatewayApiNetworkingv1.HealthCheckPolicyConfig{
