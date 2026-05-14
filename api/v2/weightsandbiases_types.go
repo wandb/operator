@@ -271,10 +271,10 @@ type InternalServiceAuth struct {
 
 // OidcSpec defines the structure for OpenID Connect (OIDC) configuration used in Wandb application deployments.
 type OidcSpec struct {
-	ClientId     string `json:"clientId"`
-	ClientSecret string `json:"clientSecret"`
-	IssuerUrl    string `json:"issuerUrl"`
-	AuthMethod   string `json:"authMethod"`
+	ClientId     corev1.SecretKeySelector `json:"clientId"`
+	ClientSecret corev1.SecretKeySelector `json:"clientSecret"`
+	IssuerUrl    corev1.SecretKeySelector `json:"issuerUrl"`
+	AuthMethod   corev1.SecretKeySelector `json:"authMethod"`
 }
 
 type ManagedInfraSpec struct {

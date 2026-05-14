@@ -2,7 +2,6 @@ package reconciler
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -121,7 +120,7 @@ func resolveInfraServicePort(ctx context.Context, c ctrlClient.Client, serviceRe
 					return port.Port, nil
 				}
 			}
-			return 0, errors.New(fmt.Sprintf("Port %s, not found in service %s", parsed.StrVal, serviceRef.Name))
+			return 0, fmt.Errorf("port %s, not found in service %s", parsed.StrVal, serviceRef.Name)
 		}
 		return parsed.IntVal, nil
 	}

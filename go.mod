@@ -1,8 +1,8 @@
 module github.com/wandb/operator
 
-go 1.25.5
+go 1.26.3
 
-godebug default=go1.25
+godebug default=go1.26
 
 require (
 	github.com/GoogleCloudPlatform/gke-gateway-api v1.4.0

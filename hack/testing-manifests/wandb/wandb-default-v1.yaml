@@ -30,7 +30,7 @@ spec:
         enabled: true
       executor:
         enabled: true
-      size: "testing"
+      size: "dev"
 
     executor:
       install: true

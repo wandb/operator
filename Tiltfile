@@ -369,26 +369,29 @@ def helper_bool_flag(name, value):
 
 
 def build_wandb_cr():
-    cmd = "go run ./hack/tilt/wandbcr"
-    cmd += helper_flag("out", GENERATED_WANDB_CR)
-    cmd += helper_flag("cr-file", settings.get("crFile", ""))
-    cmd += helper_flag("name", settings.get("wandbName"))
-    cmd += helper_flag("namespace", settings.get("wandbNamespace"))
-    cmd += helper_flag("hostname", settings.get("wandbHostname"))
-    cmd += helper_flag("version", settings.get("wandbVersion"))
-    cmd += helper_flag("size", settings.get("size"))
-    cmd += helper_flag("retention-policy", settings.get("retentionPolicy"))
-    cmd += helper_flag("license-file", settings.get("licenseFile", ""))
-    cmd += helper_flag("manifest-source", settings.get("manifestSource"))
-    cmd += helper_flag("observability-mode", settings.get("observabilityMode"))
-    cmd += helper_flag("network-mode", settings.get("networkMode"))
-    cmd += helper_flag("gateway-class", settings.get("gatewayClass"))
-    cmd += helper_flag("ingress-class", settings.get("ingressClass"))
-    cmd += helper_bool_flag("create-ca", settings.get("createCA"))
-    cmd += helper_flag("issuer-name", settings.get("issuerName", ""))
-    local(cmd)
+    if settings.get("wandbCR"):
+      return settings.get("wandbCR")
+    else:
+      cmd = "go run ./hack/tilt/wandbcr"
+      cmd += helper_flag("out", GENERATED_WANDB_CR)
+      cmd += helper_flag("cr-file", settings.get("crFile", ""))
+      cmd += helper_flag("name", settings.get("wandbName"))
+      cmd += helper_flag("namespace", settings.get("wandbNamespace"))
+      cmd += helper_flag("hostname", settings.get("wandbHostname"))
+      cmd += helper_flag("version", settings.get("wandbVersion"))
+      cmd += helper_flag("size", settings.get("size"))
+      cmd += helper_flag("retention-policy", settings.get("retentionPolicy"))
+      cmd += helper_flag("license-file", settings.get("licenseFile", ""))
+      cmd += helper_flag("manifest-source", settings.get("manifestSource"))
+      cmd += helper_flag("observability-mode", settings.get("observabilityMode"))
+      cmd += helper_flag("network-mode", settings.get("networkMode"))
+      cmd += helper_flag("gateway-class", settings.get("gatewayClass"))
+      cmd += helper_flag("ingress-class", settings.get("ingressClass"))
+      cmd += helper_bool_flag("create-ca", settings.get("createCA"))
+      cmd += helper_flag("issuer-name", settings.get("issuerName", ""))
+      local(cmd)
 
-    return GENERATED_WANDB_CR
+      return GENERATED_WANDB_CR
 
 
 def build_wandb_ca(name, namespace):
