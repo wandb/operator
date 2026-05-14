@@ -53,7 +53,15 @@ func migrateLegacyAnnotations(
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	if !mysqlChanged && !redisChanged {
+	bucketChanged, err := migrateLegacyBucket(ctx, c, wandb)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	oidcChanged, err := migrateLegacyOIDC(ctx, c, wandb)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if !mysqlChanged && !redisChanged && !bucketChanged && !oidcChanged {
 		return ctrl.Result{}, nil
 	}
 
@@ -121,20 +129,8 @@ func migrateLegacyMySQL(
 	fill(&conn.SslCa, "sslCa", payload.CaCert)
 	fill(&conn.Password, "password", payload.Password)
 
-	if len(data) > 0 {
-		secret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      secretName,
-				Namespace: wandb.Namespace,
-			},
-		}
-		if _, err := ctrl.CreateOrUpdate(ctx, c, secret, func() error {
-			secret.Type = corev1.SecretTypeOpaque
-			secret.Data = data
-			return nil
-		}); err != nil {
-			return false, fmt.Errorf("create or update %s: %w", secretName, err)
-		}
+	if err := materializeConvertedSecret(ctx, c, wandb, secretName, data); err != nil {
+		return false, err
 	}
 
 	wandb.Spec.MySQL.ExternalMysql = conn
@@ -192,25 +188,176 @@ func migrateLegacyRedis(
 	fill(&conn.Password, "password", payload.Password)
 	fill(&conn.SslCa, "sslCa", payload.CaCert)
 
-	if len(data) > 0 {
-		secret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      secretName,
-				Namespace: wandb.Namespace,
-			},
-		}
-		if _, err := ctrl.CreateOrUpdate(ctx, c, secret, func() error {
-			secret.Type = corev1.SecretTypeOpaque
-			secret.Data = data
-			return nil
-		}); err != nil {
-			return false, fmt.Errorf("create or update %s: %w", secretName, err)
-		}
+	if err := materializeConvertedSecret(ctx, c, wandb, secretName, data); err != nil {
+		return false, err
 	}
 
 	wandb.Spec.Redis.ExternalRedis = conn
 	delete(wandb.Annotations, apiv1.RedisPendingAnnotation)
 	return true, nil
+}
+
+// legacyBucketPayload carries the flat literal fields produced by the
+// conversion webhook's bucket merge (bucket+defaultBucket minus the secret
+// block). Fields with no v2 equivalent (provider, path, kmsKey) are tolerated
+// but ignored.
+type legacyBucketPayload struct {
+	Name      string `json:"name,omitempty"`
+	Region    string `json:"region,omitempty"`
+	AccessKey string `json:"accessKey,omitempty"`
+	SecretKey string `json:"secretKey,omitempty"`
+}
+
+// migrateLegacyBucket materializes the bucket-pending annotation. Any
+// externalObjectStore field already populated by the conversion webhook
+// (typically AccessKey / SecretKey from a `bucket.secret` block) is left
+// alone — only fields with a zero selector are filled from the annotation.
+func migrateLegacyBucket(
+	ctx context.Context,
+	c ctrlClient.Client,
+	wandb *apiv2.WeightsAndBiases,
+) (bool, error) {
+	raw, ok := wandb.Annotations[apiv1.BucketPendingAnnotation]
+	if !ok {
+		return false, nil
+	}
+
+	var payload legacyBucketPayload
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		return false, fmt.Errorf("decode %s: %w", apiv1.BucketPendingAnnotation, err)
+	}
+
+	secretName := fmt.Sprintf("%s-bucket-converted", wandb.Name)
+	conn := wandb.Spec.ObjectStore.ExternalObjectStore
+	if conn == nil {
+		conn = &apiv2.ObjectStoreConnection{}
+	}
+
+	endpoint, port, bucket := parseBucketName(payload.Name)
+
+	data := map[string][]byte{}
+	fill := func(target *corev1.SecretKeySelector, dataKey, value string) {
+		if target.Name != "" || value == "" {
+			return
+		}
+		data[dataKey] = []byte(value)
+		*target = secretSelector(secretName, dataKey)
+	}
+
+	fill(&conn.Endpoint, "endpoint", endpoint)
+	fill(&conn.Port, "port", port)
+	fill(&conn.Bucket, "bucket", bucket)
+	fill(&conn.Region, "region", payload.Region)
+	fill(&conn.AccessKey, "accessKey", payload.AccessKey)
+	fill(&conn.SecretKey, "secretKey", payload.SecretKey)
+
+	if err := materializeConvertedSecret(ctx, c, wandb, secretName, data); err != nil {
+		return false, err
+	}
+
+	wandb.Spec.ObjectStore.ExternalObjectStore = conn
+	delete(wandb.Annotations, apiv1.BucketPendingAnnotation)
+	return true, nil
+}
+
+// parseBucketName splits v1's `bucket.name` field. v1 sometimes embedded the
+// endpoint as "host[:port]/bucket-name". S3 bucket names cannot contain a
+// "/", so the presence of one unambiguously signals the embedded form. A bare
+// name (no slash) returns it as bucket only.
+func parseBucketName(name string) (endpoint, port, bucket string) {
+	if name == "" || !strings.Contains(name, "/") {
+		return "", "", name
+	}
+	slash := strings.IndexByte(name, '/')
+	host := name[:slash]
+	bucket = name[slash+1:]
+	if colon := strings.IndexByte(host, ':'); colon >= 0 {
+		return host[:colon], host[colon+1:], bucket
+	}
+	return host, "", bucket
+}
+
+// legacyOIDCPayload carries the literal-string fields from v1
+// global.auth.oidc that the conversion webhook could not turn into typed
+// SecretKeySelectors on its own (the webhook already wrote any
+// {valueFrom: {secretKeyRef}} and legacy oidcSecret refs directly).
+type legacyOIDCPayload struct {
+	ClientId   string `json:"clientId,omitempty"`
+	Secret     string `json:"secret,omitempty"`
+	AuthMethod string `json:"authMethod,omitempty"`
+	Issuer     string `json:"issuer,omitempty"`
+}
+
+// migrateLegacyOIDC materializes the oidc-pending annotation. Same merge
+// semantics as the others: only fills wandb.Spec.Wandb.OIDC selectors that
+// are still zero.
+func migrateLegacyOIDC(
+	ctx context.Context,
+	c ctrlClient.Client,
+	wandb *apiv2.WeightsAndBiases,
+) (bool, error) {
+	raw, ok := wandb.Annotations[apiv1.OIDCPendingAnnotation]
+	if !ok {
+		return false, nil
+	}
+
+	var payload legacyOIDCPayload
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		return false, fmt.Errorf("decode %s: %w", apiv1.OIDCPendingAnnotation, err)
+	}
+
+	secretName := fmt.Sprintf("%s-oidc-converted", wandb.Name)
+	oidc := &wandb.Spec.Wandb.OIDC
+
+	data := map[string][]byte{}
+	fill := func(target *corev1.SecretKeySelector, dataKey, value string) {
+		if target.Name != "" || value == "" {
+			return
+		}
+		data[dataKey] = []byte(value)
+		*target = secretSelector(secretName, dataKey)
+	}
+
+	fill(&oidc.ClientId, "clientId", payload.ClientId)
+	fill(&oidc.ClientSecret, "clientSecret", payload.Secret)
+	fill(&oidc.AuthMethod, "authMethod", payload.AuthMethod)
+	fill(&oidc.IssuerUrl, "issuerUrl", payload.Issuer)
+
+	if err := materializeConvertedSecret(ctx, c, wandb, secretName, data); err != nil {
+		return false, err
+	}
+
+	delete(wandb.Annotations, apiv1.OIDCPendingAnnotation)
+	return true, nil
+}
+
+// materializeConvertedSecret writes data as an opaque Secret in
+// wandb.Namespace. No-op when data is empty. Uses CreateOrUpdate so retries
+// (and reruns after partial migration) are safe.
+func materializeConvertedSecret(
+	ctx context.Context,
+	c ctrlClient.Client,
+	wandb *apiv2.WeightsAndBiases,
+	secretName string,
+	data map[string][]byte,
+) error {
+	if len(data) == 0 {
+		return nil
+	}
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      secretName,
+			Namespace: wandb.Namespace,
+		},
+	}
+	if _, err := ctrl.CreateOrUpdate(ctx, c, secret, func() error {
+		secret.Type = corev1.SecretTypeOpaque
+		secret.Data = data
+		return nil
+	}); err != nil {
+		return fmt.Errorf("create or update %s: %w", secretName, err)
+	}
+	return nil
 }
 
 func normalizePort(v any) string {

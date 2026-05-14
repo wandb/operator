@@ -113,7 +113,7 @@ func TestConvertTo_SizeUnrecognized(t *testing.T) {
 	require.Contains(t, err.Error(), `"testing"`)
 }
 
-func TestConvertTo_OIDCPopulated(t *testing.T) {
+func TestConvertTo_OIDCAllLiterals(t *testing.T) {
 	dst := &appsv2.WeightsAndBiases{}
 	src := newV1(map[string]interface{}{
 		"global": map[string]interface{}{
@@ -123,15 +123,12 @@ func TestConvertTo_OIDCPopulated(t *testing.T) {
 					"secret":     "shh",
 					"authMethod": "client_secret_post",
 					"issuer":     "https://example.com",
-					"oidcSecret": map[string]interface{}{
-						"name":      "oidc-secret",
-						"secretKey": "OIDC_SECRET",
-					},
 				},
 			},
 		},
 	})
 	require.NoError(t, src.ConvertTo(dst))
+
 	raw, ok := dst.Annotations[OIDCPendingAnnotation]
 	require.True(t, ok, "expected oidc-pending annotation to be set")
 
@@ -141,7 +138,179 @@ func TestConvertTo_OIDCPopulated(t *testing.T) {
 	require.Equal(t, "shh", decoded["secret"])
 	require.Equal(t, "client_secret_post", decoded["authMethod"])
 	require.Equal(t, "https://example.com", decoded["issuer"])
-	require.Contains(t, decoded, "oidcSecret")
+	require.NotContains(t, decoded, "oidcSecret")
+
+	require.Empty(t, dst.Spec.Wandb.OIDC.ClientId.Name, "no ref-shaped values, so spec.wandb.oidc stays unset")
+	require.Empty(t, dst.Spec.Wandb.OIDC.ClientSecret.Name)
+}
+
+func TestConvertTo_OIDCLegacyOidcSecret(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{
+			"auth": map[string]interface{}{
+				"oidc": map[string]interface{}{
+					"clientId": "abc",
+					"secret":   "shh",
+					"oidcSecret": map[string]interface{}{
+						"name":      "user-oidc-secret",
+						"secretKey": "MY_KEY",
+					},
+				},
+			},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+
+	require.Equal(t, "user-oidc-secret", dst.Spec.Wandb.OIDC.ClientSecret.Name)
+	require.Equal(t, "MY_KEY", dst.Spec.Wandb.OIDC.ClientSecret.Key)
+
+	raw := dst.Annotations[OIDCPendingAnnotation]
+	var decoded map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(raw), &decoded))
+	require.Equal(t, "abc", decoded["clientId"])
+	require.NotContains(t, decoded, "secret", "literal secret must not be stashed when oidcSecret ref took over")
+	require.NotContains(t, decoded, "oidcSecret")
+}
+
+func TestConvertTo_OIDCLegacyOidcSecretDefaultKey(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{
+			"auth": map[string]interface{}{
+				"oidc": map[string]interface{}{
+					"oidcSecret": map[string]interface{}{
+						"name": "user-oidc-secret",
+					},
+				},
+			},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+
+	require.Equal(t, "user-oidc-secret", dst.Spec.Wandb.OIDC.ClientSecret.Name)
+	require.Equal(t, "OIDC_SECRET", dst.Spec.Wandb.OIDC.ClientSecret.Key)
+}
+
+func TestConvertTo_OIDCValueFromRef(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{
+			"auth": map[string]interface{}{
+				"oidc": map[string]interface{}{
+					"clientId": map[string]interface{}{
+						"valueFrom": map[string]interface{}{
+							"secretKeyRef": map[string]interface{}{
+								"name": "oidc-settings",
+								"key":  "clientId",
+							},
+						},
+					},
+					"secret": map[string]interface{}{
+						"valueFrom": map[string]interface{}{
+							"secretKeyRef": map[string]interface{}{
+								"name": "oidc-settings",
+								"key":  "clientSecret",
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+
+	oidc := dst.Spec.Wandb.OIDC
+	require.Equal(t, "oidc-settings", oidc.ClientId.Name)
+	require.Equal(t, "clientId", oidc.ClientId.Key)
+	require.Equal(t, "oidc-settings", oidc.ClientSecret.Name)
+	require.Equal(t, "clientSecret", oidc.ClientSecret.Key)
+
+	require.NotContains(t, dst.Annotations, OIDCPendingAnnotation,
+		"no literals provided, so no annotation should be created")
+}
+
+func TestConvertTo_OIDCMixedLiteralsAndRefs(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{
+			"auth": map[string]interface{}{
+				"oidc": map[string]interface{}{
+					"clientId":   "abc",
+					"authMethod": "client_secret_post",
+					"secret": map[string]interface{}{
+						"valueFrom": map[string]interface{}{
+							"secretKeyRef": map[string]interface{}{
+								"name": "oidc-secret",
+								"key":  "clientSecret",
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+
+	require.Equal(t, "oidc-secret", dst.Spec.Wandb.OIDC.ClientSecret.Name)
+	require.Empty(t, dst.Spec.Wandb.OIDC.ClientId.Name)
+
+	raw := dst.Annotations[OIDCPendingAnnotation]
+	var decoded map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(raw), &decoded))
+	require.Equal(t, "abc", decoded["clientId"])
+	require.Equal(t, "client_secret_post", decoded["authMethod"])
+	require.NotContains(t, decoded, "secret")
+}
+
+func TestConvertTo_OIDCValueFromWinsOverLegacyOidcSecret(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{
+			"auth": map[string]interface{}{
+				"oidc": map[string]interface{}{
+					"secret": map[string]interface{}{
+						"valueFrom": map[string]interface{}{
+							"secretKeyRef": map[string]interface{}{
+								"name": "valueFrom-secret",
+								"key":  "clientSecret",
+							},
+						},
+					},
+					"oidcSecret": map[string]interface{}{
+						"name":      "legacy-secret",
+						"secretKey": "LEGACY_KEY",
+					},
+				},
+			},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+
+	require.Equal(t, "valueFrom-secret", dst.Spec.Wandb.OIDC.ClientSecret.Name,
+		"secret.valueFrom should win over the legacy oidcSecret block")
+}
+
+func TestConvertTo_OIDCMalformedRefMap(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{
+			"auth": map[string]interface{}{
+				"oidc": map[string]interface{}{
+					"clientId": map[string]interface{}{
+						"valueFrom": map[string]interface{}{
+							"secretKeyRef": map[string]interface{}{
+								"name": "no-key-here",
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	err := src.ConvertTo(dst)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "clientId")
 }
 
 func TestConvertTo_OIDCAbsent(t *testing.T) {
@@ -153,6 +322,7 @@ func TestConvertTo_OIDCAbsent(t *testing.T) {
 	})
 	require.NoError(t, src.ConvertTo(dst))
 	require.NotContains(t, dst.Annotations, OIDCPendingAnnotation)
+	require.Empty(t, dst.Spec.Wandb.OIDC.ClientId.Name)
 }
 
 func TestConvertTo_MySQLAllLiterals(t *testing.T) {

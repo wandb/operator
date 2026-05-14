@@ -33,6 +33,7 @@ import (
 const (
 	defaultMySQLPasswordSecretKey = "MYSQL_PASSWORD"
 	defaultRedisPasswordSecretKey = "REDIS_PASSWORD"
+	defaultOIDCClientSecretKey    = "OIDC_SECRET"
 	defaultBucketAccessKeyName    = "ACCESS_KEY"
 	defaultBucketSecretKeyName    = "SECRET_KEY"
 )
@@ -81,7 +82,7 @@ func applyGlobalMappings(src *WeightsAndBiases, dst *appsv2.WeightsAndBiases) er
 	if err := mapSize(globalMap, dst); err != nil {
 		return err
 	}
-	if err := stashSubtree(globalMap, dst, OIDCPendingAnnotation, "auth", "oidc"); err != nil {
+	if err := mapOIDC(globalMap, dst); err != nil {
 		return err
 	}
 	if err := mapMySQL(globalMap, dst); err != nil {
@@ -132,20 +133,6 @@ func mapSize(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) err
 	}
 	dst.Spec.Size = mapped
 	return nil
-}
-
-// stashSubtree marshals the nested map at the given path within globalMap
-// and writes it to dst's annotations under key. No-op if the path is missing
-// or the map is empty.
-func stashSubtree(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases, key string, path ...string) error {
-	sub, found, err := unstructured.NestedMap(globalMap, path...)
-	if err != nil {
-		return fmt.Errorf("spec.values.global.%s: %w", strings.Join(path, "."), err)
-	}
-	if !found || len(sub) == 0 {
-		return nil
-	}
-	return writeAnnotation(dst, key, sub)
 }
 
 // mapBucket handles v1's two bucket-related sub-trees:
@@ -409,6 +396,80 @@ func mapRedis(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) er
 	}
 	if len(remaining) > 0 {
 		return writeAnnotation(dst, RedisPendingAnnotation, remaining)
+	}
+	return nil
+}
+
+// oidcFields maps each v1 `global.auth.oidc.<key>` to the corresponding
+// setter on an *OidcSpec. v1's `secret` field carries the *client* secret
+// (mapped to v2's ClientSecret), and `issuer` is the issuer URL.
+var oidcFields = []struct {
+	v1Key  string
+	setRef func(*appsv2.OidcSpec, corev1.SecretKeySelector)
+}{
+	{"clientId", func(o *appsv2.OidcSpec, s corev1.SecretKeySelector) { o.ClientId = s }},
+	{"secret", func(o *appsv2.OidcSpec, s corev1.SecretKeySelector) { o.ClientSecret = s }},
+	{"authMethod", func(o *appsv2.OidcSpec, s corev1.SecretKeySelector) { o.AuthMethod = s }},
+	{"issuer", func(o *appsv2.OidcSpec, s corev1.SecretKeySelector) { o.IssuerUrl = s }},
+}
+
+// mapOIDC splits v1 global.auth.oidc values by shape:
+//   - {valueFrom: {secretKeyRef: {name, key}}} maps go to typed
+//     spec.wandb.oidc.* SecretKeySelectors directly.
+//   - Plain scalars are written to the oidc-pending annotation so the
+//     reconciler can materialize them into a Secret.
+//   - The legacy `oidcSecret.{name, secretKey}` block also goes direct to
+//     oidc.clientSecret, but only when no client-secret ref has already been
+//     set by a `secret.valueFrom` block.
+func mapOIDC(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) error {
+	oidcMap, found, err := unstructured.NestedMap(globalMap, "auth", "oidc")
+	if err != nil {
+		return fmt.Errorf("spec.values.global.auth.oidc: %w", err)
+	}
+	if !found || len(oidcMap) == 0 {
+		return nil
+	}
+
+	oidc := &dst.Spec.Wandb.OIDC
+	remaining := map[string]interface{}{}
+
+	for _, f := range oidcFields {
+		raw, ok := oidcMap[f.v1Key]
+		if !ok {
+			continue
+		}
+		ref, literal, classifyErr := classifyValueFromOrLiteral(raw)
+		if classifyErr != nil {
+			return fmt.Errorf("spec.values.global.auth.oidc.%s: %w", f.v1Key, classifyErr)
+		}
+		switch {
+		case ref != nil:
+			f.setRef(oidc, *ref)
+		case literal != nil:
+			remaining[f.v1Key] = literal
+		}
+	}
+
+	if os, ok, err := unstructured.NestedMap(oidcMap, "oidcSecret"); err != nil {
+		return fmt.Errorf("spec.values.global.auth.oidc.oidcSecret: %w", err)
+	} else if ok {
+		name, _, _ := unstructured.NestedString(os, "name")
+		alreadyHasClientSecret := oidc.ClientSecret.Name != ""
+		if name != "" && !alreadyHasClientSecret {
+			key, _, _ := unstructured.NestedString(os, "secretKey")
+			if key == "" {
+				key = defaultOIDCClientSecretKey
+			}
+			oidc.ClientSecret = corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: name},
+				Key:                  key,
+			}
+			delete(remaining, "secret")
+		}
+	}
+
+	if len(remaining) > 0 {
+		return writeAnnotation(dst, OIDCPendingAnnotation, remaining)
 	}
 	return nil
 }
