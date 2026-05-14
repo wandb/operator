@@ -542,38 +542,7 @@ func reconcileApplications(
 
 		initContainers := resolveInitContainers(app, envVars, volumeMounts)
 
-		// The frontend nginx container requires writable directories for its
-		// entrypoint script (sed -i on HTML files) and runtime (cache, pid,
-		// tmp). This is required under OpenShift restricted-v2 SCC where the
-		// container runs as a random UID without write access to image dirs.
-		if app.Name == "frontend" {
-			volumes = append(volumes,
-				corev1.Volume{Name: "nginx-html", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
-				corev1.Volume{Name: "nginx-conf", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
-				corev1.Volume{Name: "nginx-cache", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
-				corev1.Volume{Name: "nginx-run", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
-				corev1.Volume{Name: "nginx-tmp", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
-			)
-			nginxMounts := []corev1.VolumeMount{
-				{Name: "nginx-html", MountPath: "/usr/share/nginx/html"},
-				{Name: "nginx-conf", MountPath: "/etc/nginx"},
-				{Name: "nginx-cache", MountPath: "/var/cache/nginx"},
-				{Name: "nginx-run", MountPath: "/var/run"},
-				{Name: "nginx-tmp", MountPath: "/tmp"},
-			}
-			for i := range containers {
-				containers[i].VolumeMounts = append(containers[i].VolumeMounts, nginxMounts...)
-			}
-			initContainers = append([]corev1.Container{{
-				Name:    "copy-nginx-html",
-				Image:   app.Image.GetImage(),
-				Command: []string{"sh", "-c", "cp -a /usr/share/nginx/html/. /writable-html/ && cp -a /etc/nginx/. /writable-nginx-conf/"},
-				VolumeMounts: []corev1.VolumeMount{
-					{Name: "nginx-html", MountPath: "/writable-html"},
-					{Name: "nginx-conf", MountPath: "/writable-nginx-conf"},
-				},
-			}}, initContainers...)
-		}
+		volumes, containers, initContainers = applyFrontendNginxVolumes(app, volumes, containers, initContainers)
 
 		application := &apiv2.Application{}
 		err = client.Get(ctx, types.NamespacedName{Name: applicationName, Namespace: wandb.Namespace}, application)

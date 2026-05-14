@@ -589,6 +589,14 @@ if LOCAL_NETWORKING_MODE == "gateway":
         labels=[GROUP_DEPENDENCIES],
     )
 
+    if IS_CRC:
+        local_resource(
+            "nginx-gateway-scc-fix",
+            'kubectl patch scc nginx-gateway-fabric-scc-nginx --type=json -p \'[{"op":"add","path":"/users/-","value":"system:serviceaccount:nginx-gateway:nginx-gateway-fabric"}]\' && kubectl rollout restart deployment -n nginx-gateway nginx-gateway-fabric',
+            resource_deps=["nginx-gateway-fabric"],
+            labels=[GROUP_DEPENDENCIES],
+        )
+
 if LOCAL_NETWORKING_MODE == "ingress":
     helm_repo(
         "ingress-nginx",

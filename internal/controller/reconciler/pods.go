@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/wandb/operator/api/v2"
+	v2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/logx"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrlClient "sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -407,6 +407,46 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 		})
 	}
 	return envVars, nil
+}
+
+// applyFrontendNginxVolumes injects writable emptyDir volumes required by the
+// frontend nginx container. Under OpenShift restricted-v2 SCC the container
+// runs as a random UID without write access to image directories. The function
+// also prepends an init container that copies the original HTML and nginx
+// config into the writable volumes.
+func applyFrontendNginxVolumes(app serverManifest.Application, volumes []v1.Volume, containers []v1.Container, initContainers []v1.Container) ([]v1.Volume, []v1.Container, []v1.Container) {
+	if app.Name != "frontend" {
+		return volumes, containers, initContainers
+	}
+
+	volumes = append(volumes,
+		v1.Volume{Name: "nginx-html", VolumeSource: v1.VolumeSource{EmptyDir: &v1.EmptyDirVolumeSource{}}},
+		v1.Volume{Name: "nginx-conf", VolumeSource: v1.VolumeSource{EmptyDir: &v1.EmptyDirVolumeSource{}}},
+		v1.Volume{Name: "nginx-cache", VolumeSource: v1.VolumeSource{EmptyDir: &v1.EmptyDirVolumeSource{}}},
+		v1.Volume{Name: "nginx-run", VolumeSource: v1.VolumeSource{EmptyDir: &v1.EmptyDirVolumeSource{}}},
+		v1.Volume{Name: "nginx-tmp", VolumeSource: v1.VolumeSource{EmptyDir: &v1.EmptyDirVolumeSource{}}},
+	)
+	nginxMounts := []v1.VolumeMount{
+		{Name: "nginx-html", MountPath: "/usr/share/nginx/html"},
+		{Name: "nginx-conf", MountPath: "/etc/nginx"},
+		{Name: "nginx-cache", MountPath: "/var/cache/nginx"},
+		{Name: "nginx-run", MountPath: "/var/run"},
+		{Name: "nginx-tmp", MountPath: "/tmp"},
+	}
+	for i := range containers {
+		containers[i].VolumeMounts = append(containers[i].VolumeMounts, nginxMounts...)
+	}
+	initContainers = append([]v1.Container{{
+		Name:    "copy-nginx-html",
+		Image:   app.Image.GetImage(),
+		Command: []string{"sh", "-c", "cp -a /usr/share/nginx/html/. /writable-html/ && cp -a /etc/nginx/. /writable-nginx-conf/"},
+		VolumeMounts: []v1.VolumeMount{
+			{Name: "nginx-html", MountPath: "/writable-html"},
+			{Name: "nginx-conf", MountPath: "/writable-nginx-conf"},
+		},
+	}}, initContainers...)
+
+	return volumes, containers, initContainers
 }
 
 func resolveVolumeMounts(ctx context.Context, manifest serverManifest.Manifest, commonvms []string, vms []serverManifest.VolumeMount) ([]v1.Volume, []v1.VolumeMount, error) {
