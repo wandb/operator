@@ -2,6 +2,8 @@ package mysql
 
 import (
 	"context"
+	"fmt"
+	"net/url"
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/infra/external"
@@ -44,6 +46,21 @@ func WriteState(
 			Status: metav1.ConditionFalse,
 			Reason: "ApiError",
 		}}
+	}
+
+	if _, hasURL := data["url"]; !hasURL {
+		host := data["Host"]
+		port := data["Port"]
+		database := data["Database"]
+		username := data["Username"]
+		password := data["Password"]
+		if host != "" && username != "" && database != "" {
+			if port == "" {
+				port = "3306"
+			}
+			data["url"] = fmt.Sprintf("mysql://%s:%s@%s:%s/%s",
+				username, url.QueryEscape(password), host, port, database)
+		}
 	}
 
 	nsName := types.NamespacedName{Namespace: wandb.Namespace, Name: ConnectionSecretName}

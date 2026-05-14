@@ -43,10 +43,14 @@ func createKafkaMetricsConfig(telemetry apiv2.Telemetry) *v1.MetricsConfig {
 	}
 }
 
-// kafkaPodSecurityContext returns a PodSecurityContext with FSGroup set if the
-// KAFKA_FSGROUP env var is configured on the operator. Returns nil otherwise,
-// allowing the platform to apply its own defaults.
-func kafkaPodSecurityContext() *corev1.PodSecurityContext {
+// kafkaPodSecurityContext returns a PodSecurityContext for Kafka pods.
+// If a base security context is provided from the CRD, it is used as-is.
+// Otherwise, if the KAFKA_FSGROUP env var is set, a minimal context with
+// just FSGroup is returned. Returns nil if neither is configured.
+func kafkaPodSecurityContext(base *corev1.PodSecurityContext) *corev1.PodSecurityContext {
+	if base != nil {
+		return base
+	}
 	val, ok := os.LookupEnv("KAFKA_FSGROUP")
 	if !ok {
 		return nil
@@ -56,6 +60,13 @@ func kafkaPodSecurityContext() *corev1.PodSecurityContext {
 		return nil
 	}
 	return &corev1.PodSecurityContext{FSGroup: &fsGroup}
+}
+
+func kafkaContainerTemplate(sc *corev1.SecurityContext) *v1.ContainerTemplate {
+	if sc == nil {
+		return nil
+	}
+	return &v1.ContainerTemplate{SecurityContext: sc}
 }
 
 // ToKafkaVendorSpec converts a KafkaSpec to a Kafka CR.
@@ -121,8 +132,9 @@ func ToKafkaVendorSpec(
 						Metadata: &v1.MetadataTemplate{
 							Labels: BuildWandbKafkaLabels(wandb),
 						},
-						Affinity:    wandb.GetAffinity(infraSpec.ManagedInfraSpec),
-						Tolerations: *wandb.GetTolerations(infraSpec.ManagedInfraSpec),
+						Affinity:        wandb.GetAffinity(infraSpec.ManagedInfraSpec),
+						Tolerations:     *wandb.GetTolerations(infraSpec.ManagedInfraSpec),
+						SecurityContext: wandb.GetPodSecurityContext(infraSpec.ManagedInfraSpec),
 					},
 				},
 			},
@@ -134,8 +146,9 @@ func ToKafkaVendorSpec(
 						Metadata: &v1.MetadataTemplate{
 							Labels: BuildWandbKafkaLabels(wandb),
 						},
-						Affinity:    wandb.GetAffinity(infraSpec.ManagedInfraSpec),
-						Tolerations: *wandb.GetTolerations(infraSpec.ManagedInfraSpec),
+						Affinity:        wandb.GetAffinity(infraSpec.ManagedInfraSpec),
+						Tolerations:     *wandb.GetTolerations(infraSpec.ManagedInfraSpec),
+						SecurityContext: wandb.GetPodSecurityContext(infraSpec.ManagedInfraSpec),
 					},
 				},
 			},
@@ -204,8 +217,10 @@ func ToKafkaNodePoolVendorSpec(
 					Metadata: &v1.MetadataTemplate{
 						Labels: BuildWandbKafkaLabels(wandb),
 					},
-					SecurityContext: kafkaPodSecurityContext(),
+					SecurityContext: kafkaPodSecurityContext(wandb.GetPodSecurityContext(infraSpec.ManagedInfraSpec)),
 				},
+				KafkaContainer: kafkaContainerTemplate(wandb.GetSecurityContext(infraSpec.ManagedInfraSpec)),
+				InitContainer:  kafkaContainerTemplate(wandb.GetSecurityContext(infraSpec.ManagedInfraSpec)),
 				PersistentVolumeClaim: &v1.ResourceTemplate{
 					Metadata: &v1.MetadataTemplate{
 						Labels: BuildWandbKafkaLabels(wandb),

@@ -213,8 +213,9 @@ def operator_dockerfile():
     if settings.get("openshiftSCC"):
         lines += [
             "",
-            "RUN mkdir -p /helm/.cache/helm /helm/.config/helm /helm/.local/share/helm && \\",
-            "    chgrp -R 0 /helm && chmod -R g=u /helm",
+            "RUN mkdir -p /helm/.cache/helm /helm/.config/helm /helm/.local/share/helm /tmp && \\",
+            "    touch /tmp/.restart-proc && chown 1001:0 /tmp/.restart-proc && chmod 666 /tmp/.restart-proc && \\",
+            "    chgrp -R 0 /helm /tmp && chmod -R g=u /helm /tmp",
         ]
     else:
         lines += [
@@ -337,14 +338,8 @@ def build_operator_values(telemetry_namespace):
                 "type": "RuntimeDefault",
             },
         }
-        values["wandb-operator"]["containers"]["operator"]["env"] = {
-            "KAFKA_FSGROUP": {
-                "value": "0",
-            },
-        }
         values["wandb-operator"]["containers"]["operator"]["securityContext"] = {
             "allowPrivilegeEscalation": False,
-            "readOnlyRootFilesystem": True,
             "capabilities": {
                 "drop": ["ALL"],
             },
@@ -353,6 +348,9 @@ def build_operator_values(telemetry_namespace):
             "crdHook": {
                 "enabled": False,
             },
+        }
+        values["mysql-operator"] = {
+            "install": False,
         }
 
     return write_generated_yaml(GENERATED_OPERATOR_VALUES, values)
@@ -386,6 +384,8 @@ def build_wandb_cr():
     cmd += helper_flag("ingress-class", settings.get("ingressClass"))
     cmd += helper_bool_flag("create-ca", settings.get("createCA"))
     cmd += helper_flag("issuer-name", settings.get("issuerName", ""))
+    if as_bool(settings.get("openshiftSCC")):
+        cmd += " --openshift"
     local(cmd)
 
     return GENERATED_WANDB_CR
@@ -484,6 +484,18 @@ if CREATE_WANDB_NAMESPACE:
         labels=[GROUP_DEPENDENCIES],
     )
 
+if IS_CRC:
+    k8s_yaml("hack/testing-manifests/openshift-mysql.yaml")
+    k8s_resource(
+        "mysql",
+        objects=[
+            "wandb-mysql:secret:%s" % WANDB_NAMESPACE,
+            "wandb-external-mysql:secret:%s" % WANDB_NAMESPACE,
+        ],
+        resource_deps=["WandB-Namespace"],
+        labels=[GROUP_DEPENDENCIES],
+    )
+
 local_resource(
     "Operator-Codegen",
     "make manifests generate",
@@ -511,6 +523,7 @@ local_resource(
     "kubectl apply --server-side=true --force-conflicts --field-manager=helm " +
     "-f config/crd/bases/apps.wandb.com_applications.yaml " +
     "-f config/crd/bases/apps.wandb.com_weightsandbiases.yaml",
+    deps=["config/crd/bases"],
     resource_deps=["Operator-Codegen"],
     labels=[GROUP_DEPENDENCIES],
 )
@@ -533,13 +546,15 @@ cert_manager_flags = [
 cert_manager_deps = []
 
 if LOCAL_NETWORKING_MODE == "gateway":
-    local_resource(
-        "gateway-api-crds",
-        "kubectl apply -f " + GATEWAY_API_CRDS_URL,
-        labels=[GROUP_DEPENDENCIES],
-    )
+    if not IS_CRC:
+        # OpenShift manages gateway-api CRDs via the Ingress Operator
+        local_resource(
+            "gateway-api-crds",
+            "kubectl apply -f " + GATEWAY_API_CRDS_URL,
+            labels=[GROUP_DEPENDENCIES],
+        )
+        cert_manager_deps.append("gateway-api-crds")
     cert_manager_flags.append("--set=config.enableGatewayAPI=true")
-    cert_manager_deps.append("gateway-api-crds")
 
 helm_resource(
     "cert-manager",
@@ -564,12 +579,13 @@ if LOCAL_NETWORKING_MODE == "gateway":
             "--set=nginx.service.nodePorts[1].listenerPort=8443",
         ]
 
+    nginx_gateway_deps = ["gateway-api-crds"] if not IS_CRC else []
     helm_resource(
         "nginx-gateway-fabric",
         chart="oci://ghcr.io/nginx/charts/nginx-gateway-fabric",
         namespace="nginx-gateway",
         flags=nginx_gateway_flags,
-        resource_deps=["gateway-api-crds"],
+        resource_deps=nginx_gateway_deps,
         labels=[GROUP_DEPENDENCIES],
     )
 
@@ -661,6 +677,8 @@ if as_bool(settings.get("includeCR")):
         wandb_deps.append("nginx-gateway-fabric")
     if LOCAL_NETWORKING_MODE == "ingress":
         wandb_deps.append("ingress-nginx-controller")
+    if IS_CRC:
+        wandb_deps.append("mysql")
 
     if str(WANDB_HOSTNAME).startswith("https://") and as_bool(settings.get("createCA")):
         build_wandb_ca(WANDB_NAME, WANDB_NAMESPACE)
@@ -689,7 +707,7 @@ if as_bool(settings.get("includeCR")):
             local_host=endpoint_host,
             pod_selector={
                 "app.kubernetes.io/instance": "nginx-gateway-fabric",
-                "app.kubernetes.io/name": "nginx-gateway-fabric",
+                "app.kubernetes.io/name": "wandb-gateway-nginx",
             },
             labels=[GROUP_WANDB_APP],
         )

@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	v2 "github.com/wandb/operator/api/v2"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/yaml"
 )
@@ -21,7 +22,7 @@ const (
 	defaultIngressHostname  = "http://wandb.localhost:8080"
 	localManifestRepository = "file:///server-manifest"
 	defaultManifestSource   = "published"
-	defaultVersion          = "0.80.0"
+	defaultVersion          = "0.80.1"
 	defaultSize             = v2.SizeDev
 	defaultRetentionPolicy  = v2.DetachOnDelete
 )
@@ -44,6 +45,7 @@ type Options struct {
 	CreateCA          bool
 	CreateCASet       bool
 	IssuerName        string
+	OpenShift         bool
 }
 
 func main() {
@@ -64,6 +66,7 @@ func main() {
 	flag.StringVar(&opts.IngressClass, "ingress-class", "nginx", "IngressClass name for ingress mode")
 	flag.BoolVar(&opts.CreateCA, "create-ca", true, "Use the generated W&B CA issuer for HTTPS hostnames")
 	flag.StringVar(&opts.IssuerName, "issuer-name", "", "Existing cert-manager issuer for HTTPS hostnames")
+	flag.BoolVar(&opts.OpenShift, "openshift", false, "Apply OpenShift restricted-v2 security contexts to managed infrastructure")
 	flag.Parse()
 	flag.Visit(func(f *flag.Flag) {
 		if f.Name == "create-ca" {
@@ -163,6 +166,9 @@ func BuildCR(opts Options) (*v2.WeightsAndBiases, error) {
 	}
 	if err := patchTelemetry(cr, opts.ObservabilityMode); err != nil {
 		return nil, err
+	}
+	if opts.OpenShift {
+		patchOpenShift(cr)
 	}
 
 	return cr, nil
@@ -419,4 +425,50 @@ func boolPtr(value bool) *bool {
 
 func stringPtr(value string) *string {
 	return &value
+}
+
+func openshiftRestrictedPodSecurityContext() *corev1.PodSecurityContext {
+	return &corev1.PodSecurityContext{
+		RunAsNonRoot: boolPtr(true),
+		SeccompProfile: &corev1.SeccompProfile{
+			Type: corev1.SeccompProfileTypeRuntimeDefault,
+		},
+	}
+}
+
+func openshiftRestrictedContainerSecurityContext() *corev1.SecurityContext {
+	return &corev1.SecurityContext{
+		AllowPrivilegeEscalation: boolPtr(false),
+		Capabilities: &corev1.Capabilities{
+			Drop: []corev1.Capability{"ALL"},
+		},
+	}
+}
+
+func applyOpenShiftSecurityContext(spec *v2.ManagedInfraSpec) {
+	spec.PodSecurityContext = openshiftRestrictedPodSecurityContext()
+	spec.SecurityContext = openshiftRestrictedContainerSecurityContext()
+}
+
+func patchOpenShift(cr *v2.WeightsAndBiases) {
+	if cr.Spec.Redis.ManagedRedis != nil {
+		applyOpenShiftSecurityContext(&cr.Spec.Redis.ManagedRedis.ManagedInfraSpec)
+	}
+	if cr.Spec.ObjectStore.ManagedObjectStore != nil {
+		applyOpenShiftSecurityContext(&cr.Spec.ObjectStore.ManagedObjectStore.ManagedInfraSpec)
+	}
+	if cr.Spec.Kafka.ManagedKafka != nil {
+		applyOpenShiftSecurityContext(&cr.Spec.Kafka.ManagedKafka.ManagedInfraSpec)
+	}
+	if cr.Spec.ClickHouse.ManagedClickHouse != nil {
+		applyOpenShiftSecurityContext(&cr.Spec.ClickHouse.ManagedClickHouse.ManagedInfraSpec)
+	}
+	cr.Spec.MySQL.ManagedMysql = nil
+	cr.Spec.MySQL.ExternalMysql = &v2.MysqlConnection{
+		Host:     corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "wandb-external-mysql"}, Key: "host"},
+		Port:     corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "wandb-external-mysql"}, Key: "port"},
+		Database: corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "wandb-external-mysql"}, Key: "database"},
+		Username: corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "wandb-external-mysql"}, Key: "username"},
+		Password: corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "wandb-external-mysql"}, Key: "password"},
+	}
 }

@@ -80,11 +80,13 @@ func ToObjectStoreVendorSpec(
 			},
 			Pools: []miniov2.Pool{
 				{
-					Name:             "default",
-					Affinity:         wandb.GetAffinity(infraSpec.ManagedInfraSpec),
-					Tolerations:      *wandb.GetTolerations(infraSpec.ManagedInfraSpec),
-					Servers:          infraSpec.Replicas,
-					VolumesPerServer: volumesPerServer,
+					Name:                     "default",
+					Affinity:                 wandb.GetAffinity(infraSpec.ManagedInfraSpec),
+					Tolerations:              *wandb.GetTolerations(infraSpec.ManagedInfraSpec),
+					Servers:                  infraSpec.Replicas,
+					VolumesPerServer:         volumesPerServer,
+					SecurityContext:          wandb.GetPodSecurityContext(infraSpec.ManagedInfraSpec),
+					ContainerSecurityContext: wandb.GetSecurityContext(infraSpec.ManagedInfraSpec),
 					VolumeClaimTemplate: &corev1.PersistentVolumeClaim{
 						ObjectMeta: metav1.ObjectMeta{
 							Labels: BuildWandbObjectStoreLabels(wandb),

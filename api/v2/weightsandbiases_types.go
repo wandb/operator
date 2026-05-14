@@ -238,6 +238,14 @@ func (w *WeightsAndBiases) GetTolerations(spec ManagedInfraSpec) *[]corev1.Toler
 	return w.Spec.Tolerations
 }
 
+func (w *WeightsAndBiases) GetPodSecurityContext(spec ManagedInfraSpec) *corev1.PodSecurityContext {
+	return spec.PodSecurityContext
+}
+
+func (w *WeightsAndBiases) GetSecurityContext(spec ManagedInfraSpec) *corev1.SecurityContext {
+	return spec.SecurityContext
+}
+
 // WandbAppSpec defines the configuration for the Wandb application deployment.
 type WandbAppSpec struct {
 	Hostname            string              `json:"hostname"`
@@ -282,6 +290,11 @@ type ManagedInfraSpec struct {
 
 	Affinity    *corev1.Affinity     `json:"affinity,omitempty"`
 	Tolerations *[]corev1.Toleration `json:"tolerations,omitempty"`
+
+	// +optional
+	PodSecurityContext *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
+	// +optional
+	SecurityContext *corev1.SecurityContext `json:"securityContext,omitempty"`
 }
 
 // MySQLSpec fields have many default values that, if unspecified,

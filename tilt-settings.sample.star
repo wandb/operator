@@ -14,7 +14,7 @@ SETTINGS = {
     "wandbName": "wandb",
     "wandbNamespace": "wandb",
     "wandbHostname": "http://localhost:8080",
-    "wandbVersion": "0.80.0",
+    "wandbVersion": "0.80.1",
     "size": "dev",
     "retentionPolicy": "detach",
     "licenseFile": "",
