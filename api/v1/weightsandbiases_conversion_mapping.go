@@ -22,9 +22,19 @@ import (
 	"sort"
 	"strings"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	appsv2 "github.com/wandb/operator/api/v2"
+)
+
+// Default Secret keys used by v1's legacy ref blocks when only the Secret
+// name was specified.
+const (
+	defaultMySQLPasswordSecretKey = "MYSQL_PASSWORD"
+	defaultRedisPasswordSecretKey = "REDIS_PASSWORD"
+	defaultBucketAccessKeyName    = "ACCESS_KEY"
+	defaultBucketSecretKeyName    = "SECRET_KEY"
 )
 
 // Annotations that stash v1 sub-trees needing downstream Secret materialization
@@ -74,13 +84,13 @@ func applyGlobalMappings(src *WeightsAndBiases, dst *appsv2.WeightsAndBiases) er
 	if err := stashSubtree(globalMap, dst, OIDCPendingAnnotation, "auth", "oidc"); err != nil {
 		return err
 	}
-	if err := stashSubtree(globalMap, dst, MySQLPendingAnnotation, "mysql"); err != nil {
+	if err := mapMySQL(globalMap, dst); err != nil {
 		return err
 	}
-	if err := stashSubtree(globalMap, dst, RedisPendingAnnotation, "redis"); err != nil {
+	if err := mapRedis(globalMap, dst); err != nil {
 		return err
 	}
-	if err := stashBucketAnnotation(globalMap, dst); err != nil {
+	if err := mapBucket(globalMap, dst); err != nil {
 		return err
 	}
 
@@ -138,11 +148,18 @@ func stashSubtree(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases
 	return writeAnnotation(dst, key, sub)
 }
 
-// stashBucketAnnotation merges v1's global.bucket and global.defaultBucket
-// sub-trees into a single annotation so the reconciler has both the
-// credentials shape (bucket) and the location shape (defaultBucket) in one
-// place. v1 historically populated either or both depending on chart version.
-func stashBucketAnnotation(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) error {
+// mapBucket handles v1's two bucket-related sub-trees:
+//   - global.bucket: optionally contains a `secret: {secretName, accessKeyName,
+//     secretKeyName}` block plus any number of literal fields (provider, name,
+//     region, path, kmsKey, etc.).
+//   - global.defaultBucket: literal fields only.
+//
+// The `bucket.secret` block is the one piece of v1 with an explicit Secret
+// reference shape, so it goes straight to spec.objectStore.externalObjectStore
+// .{AccessKey, SecretKey}. Everything else is merged into a single flat
+// annotation payload (bucket entries win over defaultBucket on collision) so a
+// follow-up reconciler step can later materialize the literals.
+func mapBucket(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) error {
 	bucket, _, err := unstructured.NestedMap(globalMap, "bucket")
 	if err != nil {
 		return fmt.Errorf("spec.values.global.bucket: %w", err)
@@ -155,14 +172,61 @@ func stashBucketAnnotation(globalMap map[string]interface{}, dst *appsv2.Weights
 		return nil
 	}
 
-	combined := map[string]interface{}{}
-	if len(bucket) > 0 {
-		combined["bucket"] = bucket
+	if sec, ok, err := unstructured.NestedMap(bucket, "secret"); err != nil {
+		return fmt.Errorf("spec.values.global.bucket.secret: %w", err)
+	} else if ok {
+		name, _, _ := unstructured.NestedString(sec, "secretName")
+		if name != "" {
+			accessKeyName, _, _ := unstructured.NestedString(sec, "accessKeyName")
+			if accessKeyName == "" {
+				accessKeyName = defaultBucketAccessKeyName
+			}
+			secretKeyName, _, _ := unstructured.NestedString(sec, "secretKeyName")
+			if secretKeyName == "" {
+				secretKeyName = defaultBucketSecretKeyName
+			}
+			dst.Spec.ObjectStore.ExternalObjectStore = &appsv2.ObjectStoreConnection{
+				AccessKey: corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{Name: name},
+					Key:                  accessKeyName,
+				},
+				SecretKey: corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{Name: name},
+					Key:                  secretKeyName,
+				},
+			}
+		}
 	}
-	if len(defaultBucket) > 0 {
-		combined["defaultBucket"] = defaultBucket
+
+	merged := map[string]interface{}{}
+	for k, v := range defaultBucket {
+		if isNonEmptyValue(v) {
+			merged[k] = v
+		}
 	}
-	return writeAnnotation(dst, BucketPendingAnnotation, combined)
+	for k, v := range bucket {
+		if k == "secret" {
+			continue
+		}
+		if isNonEmptyValue(v) {
+			merged[k] = v
+		}
+	}
+	if len(merged) == 0 {
+		return nil
+	}
+	return writeAnnotation(dst, BucketPendingAnnotation, merged)
+}
+
+func isNonEmptyValue(v interface{}) bool {
+	switch x := v.(type) {
+	case nil:
+		return false
+	case string:
+		return x != ""
+	default:
+		return true
+	}
 }
 
 func writeAnnotation(dst *appsv2.WeightsAndBiases, key string, value interface{}) error {
@@ -175,6 +239,209 @@ func writeAnnotation(dst *appsv2.WeightsAndBiases, key string, value interface{}
 	}
 	dst.Annotations[key] = string(payload)
 	return nil
+}
+
+// mysqlFields maps each v1 `global.mysql.<key>` to the corresponding setter
+// on a *MysqlConnection. Order is preserved so any test failures point at the
+// first offending field.
+var mysqlFields = []struct {
+	v1Key  string
+	setRef func(*appsv2.MysqlConnection, corev1.SecretKeySelector)
+}{
+	{"host", func(c *appsv2.MysqlConnection, s corev1.SecretKeySelector) { c.Host = s }},
+	{"port", func(c *appsv2.MysqlConnection, s corev1.SecretKeySelector) { c.Port = s }},
+	{"database", func(c *appsv2.MysqlConnection, s corev1.SecretKeySelector) { c.Database = s }},
+	{"user", func(c *appsv2.MysqlConnection, s corev1.SecretKeySelector) { c.Username = s }},
+	{"password", func(c *appsv2.MysqlConnection, s corev1.SecretKeySelector) { c.Password = s }},
+	{"caCert", func(c *appsv2.MysqlConnection, s corev1.SecretKeySelector) { c.SslCa = s }},
+}
+
+// mapMySQL splits v1 global.mysql values by shape:
+//   - {valueFrom: {secretKeyRef: {name, key}}} maps go to typed
+//     spec.mysql.externalMysql.* SecretKeySelectors directly.
+//   - Plain scalars are written to the mysql-pending annotation so the
+//     reconciler can materialize them into a Secret.
+//   - The legacy `passwordSecret.{name, passwordKey}` block also goes
+//     direct to externalMysql.password, but only when no password ref
+//     has already been set by a `password.valueFrom` block.
+func mapMySQL(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) error {
+	mysqlMap, found, err := unstructured.NestedMap(globalMap, "mysql")
+	if err != nil {
+		return fmt.Errorf("spec.values.global.mysql: %w", err)
+	}
+	if !found || len(mysqlMap) == 0 {
+		return nil
+	}
+
+	var conn *appsv2.MysqlConnection
+	ensureConn := func() *appsv2.MysqlConnection {
+		if conn == nil {
+			conn = &appsv2.MysqlConnection{}
+		}
+		return conn
+	}
+
+	remaining := map[string]interface{}{}
+
+	for _, f := range mysqlFields {
+		raw, ok := mysqlMap[f.v1Key]
+		if !ok {
+			continue
+		}
+		ref, literal, classifyErr := classifyValueFromOrLiteral(raw)
+		if classifyErr != nil {
+			return fmt.Errorf("spec.values.global.mysql.%s: %w", f.v1Key, classifyErr)
+		}
+		switch {
+		case ref != nil:
+			f.setRef(ensureConn(), *ref)
+		case literal != nil:
+			remaining[f.v1Key] = literal
+		}
+	}
+
+	if ps, ok, err := unstructured.NestedMap(mysqlMap, "passwordSecret"); err != nil {
+		return fmt.Errorf("spec.values.global.mysql.passwordSecret: %w", err)
+	} else if ok {
+		name, _, _ := unstructured.NestedString(ps, "name")
+		alreadyHasPassword := conn != nil && conn.Password.Name != ""
+		if name != "" && !alreadyHasPassword {
+			key, _, _ := unstructured.NestedString(ps, "passwordKey")
+			if key == "" {
+				key = defaultMySQLPasswordSecretKey
+			}
+			ensureConn().Password = corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: name},
+				Key:                  key,
+			}
+			delete(remaining, "password")
+		}
+	}
+
+	if conn != nil {
+		dst.Spec.MySQL.ExternalMysql = conn
+	}
+	if len(remaining) > 0 {
+		return writeAnnotation(dst, MySQLPendingAnnotation, remaining)
+	}
+	return nil
+}
+
+// redisFields maps each v1 `global.redis.<key>` to the corresponding setter
+// on a *RedisConnection.
+var redisFields = []struct {
+	v1Key  string
+	setRef func(*appsv2.RedisConnection, corev1.SecretKeySelector)
+}{
+	{"host", func(c *appsv2.RedisConnection, s corev1.SecretKeySelector) { c.Host = s }},
+	{"port", func(c *appsv2.RedisConnection, s corev1.SecretKeySelector) { c.Port = s }},
+	{"password", func(c *appsv2.RedisConnection, s corev1.SecretKeySelector) { c.Password = s }},
+	{"caCert", func(c *appsv2.RedisConnection, s corev1.SecretKeySelector) { c.SslCa = s }},
+}
+
+// mapRedis splits v1 global.redis values by shape:
+//   - {valueFrom: {secretKeyRef: {name, key}}} maps go to typed
+//     spec.redis.externalRedis.* SecretKeySelectors directly.
+//   - Plain scalars are written to the redis-pending annotation so the
+//     reconciler can materialize them into a Secret.
+//   - The legacy `secret.{secretName, secretKey}` block also goes direct to
+//     externalRedis.password, but only when no password ref has already been
+//     set by a `password.valueFrom` block.
+//
+// Fields outside the known set (e.g. v1's `external`, `parameters`, `params`)
+// have no v2 equivalent and are dropped.
+func mapRedis(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) error {
+	redisMap, found, err := unstructured.NestedMap(globalMap, "redis")
+	if err != nil {
+		return fmt.Errorf("spec.values.global.redis: %w", err)
+	}
+	if !found || len(redisMap) == 0 {
+		return nil
+	}
+
+	var conn *appsv2.RedisConnection
+	ensureConn := func() *appsv2.RedisConnection {
+		if conn == nil {
+			conn = &appsv2.RedisConnection{}
+		}
+		return conn
+	}
+
+	remaining := map[string]interface{}{}
+
+	for _, f := range redisFields {
+		raw, ok := redisMap[f.v1Key]
+		if !ok {
+			continue
+		}
+		ref, literal, classifyErr := classifyValueFromOrLiteral(raw)
+		if classifyErr != nil {
+			return fmt.Errorf("spec.values.global.redis.%s: %w", f.v1Key, classifyErr)
+		}
+		switch {
+		case ref != nil:
+			f.setRef(ensureConn(), *ref)
+		case literal != nil:
+			remaining[f.v1Key] = literal
+		}
+	}
+
+	if sec, ok, err := unstructured.NestedMap(redisMap, "secret"); err != nil {
+		return fmt.Errorf("spec.values.global.redis.secret: %w", err)
+	} else if ok {
+		name, _, _ := unstructured.NestedString(sec, "secretName")
+		alreadyHasPassword := conn != nil && conn.Password.Name != ""
+		if name != "" && !alreadyHasPassword {
+			key, _, _ := unstructured.NestedString(sec, "secretKey")
+			if key == "" {
+				key = defaultRedisPasswordSecretKey
+			}
+			ensureConn().Password = corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: name},
+				Key:                  key,
+			}
+			delete(remaining, "password")
+		}
+	}
+
+	if conn != nil {
+		dst.Spec.Redis.ExternalRedis = conn
+	}
+	if len(remaining) > 0 {
+		return writeAnnotation(dst, RedisPendingAnnotation, remaining)
+	}
+	return nil
+}
+
+// classifyValueFromOrLiteral inspects a v1 field value. If it is a map
+// matching `{valueFrom: {secretKeyRef: {name, key}}}`, it returns a typed
+// SecretKeySelector. Otherwise, if the value is a non-zero scalar (string
+// or number), it returns the literal. Empty/nil scalars return (nil, nil).
+// A malformed map (a map missing the valueFrom path) returns an error.
+func classifyValueFromOrLiteral(raw interface{}) (*corev1.SecretKeySelector, interface{}, error) {
+	switch v := raw.(type) {
+	case nil:
+		return nil, nil, nil
+	case string:
+		if v == "" {
+			return nil, nil, nil
+		}
+		return nil, v, nil
+	case map[string]interface{}:
+		name, _, _ := unstructured.NestedString(v, "valueFrom", "secretKeyRef", "name")
+		key, _, _ := unstructured.NestedString(v, "valueFrom", "secretKeyRef", "key")
+		if name == "" || key == "" {
+			return nil, nil, fmt.Errorf("map value must be {valueFrom: {secretKeyRef: {name, key}}}")
+		}
+		return &corev1.SecretKeySelector{
+			LocalObjectReference: corev1.LocalObjectReference{Name: name},
+			Key:                  key,
+		}, nil, nil
+	default:
+		// numbers (port arrives as float64 from a JSON decode), bools, etc.
+		// Treat as literal; the reconciler stringifies as needed.
+		return nil, v, nil
+	}
 }
 
 func sortedSizeList() string {

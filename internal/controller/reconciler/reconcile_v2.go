@@ -256,6 +256,12 @@ func Reconcile(
 	}
 
 	/////////////////////////
+	// Migrate legacy v1 conversion annotations into typed spec fields
+	if res, migErr := migrateLegacyAnnotations(ctx, client, wandb); migErr != nil || res.RequeueAfter > 0 {
+		return res, migErr
+	}
+
+	/////////////////////////
 	// Fetch manifest early so infra sizing can be applied before provisioning
 	manifest, err := serverManifest.GetServerManifest(ctx, wandb.Spec.Wandb.ManifestRepository, wandb.Spec.Wandb.Version)
 	if err != nil {
