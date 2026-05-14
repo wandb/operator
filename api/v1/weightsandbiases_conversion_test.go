@@ -155,6 +155,201 @@ func TestConvertTo_OIDCAbsent(t *testing.T) {
 	require.NotContains(t, dst.Annotations, OIDCPendingAnnotation)
 }
 
+func TestConvertTo_MySQLPopulated(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{
+			"mysql": map[string]interface{}{
+				"host":     "mysql.example.com",
+				"port":     int64(3306),
+				"database": "wandb_local",
+				"user":     "wandb",
+				"password": "shh",
+				"passwordSecret": map[string]interface{}{
+					"name":            "mysql-creds",
+					"rootPasswordKey": "MYSQL_ROOT_PASSWORD",
+					"passwordKey":     "MYSQL_PASSWORD",
+				},
+			},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+	raw, ok := dst.Annotations[MySQLPendingAnnotation]
+	require.True(t, ok, "expected mysql-pending annotation")
+
+	var decoded map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(raw), &decoded))
+	require.Equal(t, "mysql.example.com", decoded["host"])
+	require.Equal(t, "wandb_local", decoded["database"])
+	require.Equal(t, "shh", decoded["password"])
+	require.Contains(t, decoded, "passwordSecret")
+}
+
+func TestConvertTo_MySQLAbsent(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{"host": "http://x"},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+	require.NotContains(t, dst.Annotations, MySQLPendingAnnotation)
+}
+
+func TestConvertTo_MySQLEmptyMap(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{
+			"mysql": map[string]interface{}{},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+	require.NotContains(t, dst.Annotations, MySQLPendingAnnotation)
+}
+
+func TestConvertTo_RedisPopulated(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{
+			"redis": map[string]interface{}{
+				"host":     "redis.example.com",
+				"port":     int64(6379),
+				"password": "shh",
+				"external": true,
+				"caCert":   "----BEGIN CERT----",
+				"secret": map[string]interface{}{
+					"secretName": "redis-creds",
+					"secretKey":  "REDIS_PASSWORD",
+				},
+			},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+	raw, ok := dst.Annotations[RedisPendingAnnotation]
+	require.True(t, ok, "expected redis-pending annotation")
+
+	var decoded map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(raw), &decoded))
+	require.Equal(t, "redis.example.com", decoded["host"])
+	require.Equal(t, "shh", decoded["password"])
+	require.Equal(t, true, decoded["external"])
+	require.Contains(t, decoded, "secret")
+}
+
+func TestConvertTo_RedisAbsent(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{"host": "http://x"},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+	require.NotContains(t, dst.Annotations, RedisPendingAnnotation)
+}
+
+func TestConvertTo_RedisEmptyMap(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{
+			"redis": map[string]interface{}{},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+	require.NotContains(t, dst.Annotations, RedisPendingAnnotation)
+}
+
+func TestConvertTo_BucketOnly(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{
+			"bucket": map[string]interface{}{
+				"provider":  "s3",
+				"name":      "wandb-bucket",
+				"region":    "us-east-1",
+				"accessKey": "AKIA...",
+				"secretKey": "secret",
+			},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+	raw, ok := dst.Annotations[BucketPendingAnnotation]
+	require.True(t, ok)
+
+	var decoded map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(raw), &decoded))
+	require.Contains(t, decoded, "bucket")
+	require.NotContains(t, decoded, "defaultBucket")
+	bucket := decoded["bucket"].(map[string]interface{})
+	require.Equal(t, "s3", bucket["provider"])
+	require.Equal(t, "wandb-bucket", bucket["name"])
+}
+
+func TestConvertTo_DefaultBucketOnly(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{
+			"defaultBucket": map[string]interface{}{
+				"provider": "s3",
+				"name":     "wandb-bucket",
+				"region":   "us-east-1",
+				"kmsKey":   "arn:aws:kms:...",
+			},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+	raw, ok := dst.Annotations[BucketPendingAnnotation]
+	require.True(t, ok)
+
+	var decoded map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(raw), &decoded))
+	require.NotContains(t, decoded, "bucket")
+	require.Contains(t, decoded, "defaultBucket")
+}
+
+func TestConvertTo_BothBucketAndDefaultBucket(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{
+			"bucket": map[string]interface{}{
+				"secret": map[string]interface{}{
+					"secretName":    "bucket-creds",
+					"accessKeyName": "ACCESS_KEY",
+					"secretKeyName": "SECRET_KEY",
+				},
+			},
+			"defaultBucket": map[string]interface{}{
+				"provider": "gcs",
+				"name":     "wandb-bucket",
+			},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+	raw, ok := dst.Annotations[BucketPendingAnnotation]
+	require.True(t, ok)
+
+	var decoded map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(raw), &decoded))
+	require.Contains(t, decoded, "bucket")
+	require.Contains(t, decoded, "defaultBucket")
+}
+
+func TestConvertTo_BucketAbsent(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{"host": "http://x"},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+	require.NotContains(t, dst.Annotations, BucketPendingAnnotation)
+}
+
+func TestConvertTo_BucketEmptyMaps(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{
+			"bucket":        map[string]interface{}{},
+			"defaultBucket": map[string]interface{}{},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+	require.NotContains(t, dst.Annotations, BucketPendingAnnotation)
+}
+
 func TestConvertTo_GlobalNotAMap(t *testing.T) {
 	dst := &appsv2.WeightsAndBiases{}
 	src := newV1(map[string]interface{}{

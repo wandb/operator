@@ -20,18 +20,23 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	appsv2 "github.com/wandb/operator/api/v2"
 )
 
-// OIDCPendingAnnotation holds a JSON-encoded snapshot of v1's
-// spec.values.global.auth.oidc subtree when a v1 object is converted to v2.
-// v2 expects OIDC fields as SecretKeySelectors, which a stateless conversion
-// webhook cannot create, so the raw v1 strings + secret ref are stashed here
-// for a downstream reconciler step to materialize.
-const OIDCPendingAnnotation = "legacy.operator.wandb.com/oidc-pending"
+// Annotations that stash v1 sub-trees needing downstream Secret materialization
+// by the v2 reconciler. A stateless conversion webhook can't create Secrets, so
+// it hands raw v1 values off here and the reconciler turns them into
+// SecretKeySelectors on the spec.
+const (
+	OIDCPendingAnnotation   = "legacy.operator.wandb.com/oidc-pending"
+	MySQLPendingAnnotation  = "legacy.operator.wandb.com/mysql-pending"
+	RedisPendingAnnotation  = "legacy.operator.wandb.com/redis-pending"
+	BucketPendingAnnotation = "legacy.operator.wandb.com/bucket-pending"
+)
 
 var validSizes = map[string]appsv2.Size{
 	string(appsv2.SizeDev):     appsv2.SizeDev,
@@ -66,7 +71,16 @@ func applyGlobalMappings(src *WeightsAndBiases, dst *appsv2.WeightsAndBiases) er
 	if err := mapSize(globalMap, dst); err != nil {
 		return err
 	}
-	if err := stashOIDCAnnotation(globalMap, dst); err != nil {
+	if err := stashSubtree(globalMap, dst, OIDCPendingAnnotation, "auth", "oidc"); err != nil {
+		return err
+	}
+	if err := stashSubtree(globalMap, dst, MySQLPendingAnnotation, "mysql"); err != nil {
+		return err
+	}
+	if err := stashSubtree(globalMap, dst, RedisPendingAnnotation, "redis"); err != nil {
+		return err
+	}
+	if err := stashBucketAnnotation(globalMap, dst); err != nil {
 		return err
 	}
 
@@ -110,24 +124,56 @@ func mapSize(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) err
 	return nil
 }
 
-func stashOIDCAnnotation(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) error {
-	oidc, found, err := unstructured.NestedMap(globalMap, "auth", "oidc")
+// stashSubtree marshals the nested map at the given path within globalMap
+// and writes it to dst's annotations under key. No-op if the path is missing
+// or the map is empty.
+func stashSubtree(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases, key string, path ...string) error {
+	sub, found, err := unstructured.NestedMap(globalMap, path...)
 	if err != nil {
-		return fmt.Errorf("spec.values.global.auth.oidc: %w", err)
+		return fmt.Errorf("spec.values.global.%s: %w", strings.Join(path, "."), err)
 	}
-	if !found || len(oidc) == 0 {
+	if !found || len(sub) == 0 {
+		return nil
+	}
+	return writeAnnotation(dst, key, sub)
+}
+
+// stashBucketAnnotation merges v1's global.bucket and global.defaultBucket
+// sub-trees into a single annotation so the reconciler has both the
+// credentials shape (bucket) and the location shape (defaultBucket) in one
+// place. v1 historically populated either or both depending on chart version.
+func stashBucketAnnotation(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) error {
+	bucket, _, err := unstructured.NestedMap(globalMap, "bucket")
+	if err != nil {
+		return fmt.Errorf("spec.values.global.bucket: %w", err)
+	}
+	defaultBucket, _, err := unstructured.NestedMap(globalMap, "defaultBucket")
+	if err != nil {
+		return fmt.Errorf("spec.values.global.defaultBucket: %w", err)
+	}
+	if len(bucket) == 0 && len(defaultBucket) == 0 {
 		return nil
 	}
 
-	payload, err := json.Marshal(oidc)
-	if err != nil {
-		return fmt.Errorf("marshal global.auth.oidc: %w", err)
+	combined := map[string]interface{}{}
+	if len(bucket) > 0 {
+		combined["bucket"] = bucket
 	}
+	if len(defaultBucket) > 0 {
+		combined["defaultBucket"] = defaultBucket
+	}
+	return writeAnnotation(dst, BucketPendingAnnotation, combined)
+}
 
+func writeAnnotation(dst *appsv2.WeightsAndBiases, key string, value interface{}) error {
+	payload, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Errorf("marshal %s: %w", key, err)
+	}
 	if dst.Annotations == nil {
 		dst.Annotations = make(map[string]string)
 	}
-	dst.Annotations[OIDCPendingAnnotation] = string(payload)
+	dst.Annotations[key] = string(payload)
 	return nil
 }
 
@@ -137,12 +183,5 @@ func sortedSizeList() string {
 		names = append(names, k)
 	}
 	sort.Strings(names)
-	out := ""
-	for i, n := range names {
-		if i > 0 {
-			out += ", "
-		}
-		out += n
-	}
-	return out
+	return strings.Join(names, ", ")
 }
