@@ -3,16 +3,15 @@ package mysql
 import (
 	"context"
 	"fmt"
-	"maps"
-	"strings"
-
+	mocov1beta2 "github.com/cybozu-go/moco/api/v1beta2"
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/logx"
-	"github.com/wandb/operator/pkg/vendored/mysql-operator/v2"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"maps"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"strings"
 )
 
 const (
@@ -24,11 +23,12 @@ func WriteState(
 	ctx context.Context,
 	cl client.Client,
 	specNamespacedName types.NamespacedName,
-	desired *v2.InnoDBCluster,
+	desired *mocov1beta2.MySQLCluster,
+	confMap *corev1.ConfigMap,
 	wandbLabels map[string]string,
 ) []metav1.Condition {
 	ctx, _ = logx.WithSlog(ctx, logx.Mysql)
-	var actual = &v2.InnoDBCluster{}
+	var actual = &mocov1beta2.MySQLCluster{}
 
 	nsnBuilder := createNsNameBuilder(specNamespacedName)
 
@@ -54,6 +54,30 @@ func WriteState(
 	}
 
 	result := make([]metav1.Condition, 0)
+
+	if confMap != nil {
+		var actualConfMap = &corev1.ConfigMap{}
+		cmNsName := types.NamespacedName{Name: confMap.Name, Namespace: confMap.Namespace}
+		cmFound, cmErr := common.GetResource(ctx, cl, cmNsName, "ConfigMap", actualConfMap)
+		if cmErr != nil {
+			result = append(result, metav1.Condition{
+				Type:   common.ReconciledType,
+				Status: metav1.ConditionFalse,
+				Reason: common.ApiErrorReason,
+			})
+		} else {
+			if !cmFound {
+				actualConfMap = nil
+			}
+			if _, cmErr := common.CrudResource(ctx, cl, confMap, actualConfMap); cmErr != nil {
+				result = append(result, metav1.Condition{
+					Type:   common.ReconciledType,
+					Status: metav1.ConditionFalse,
+					Reason: common.ApiErrorReason,
+				})
+			}
+		}
+	}
 
 	action, err := common.CrudResource(ctx, cl, desired, actual)
 	if err != nil {

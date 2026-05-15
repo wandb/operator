@@ -3,47 +3,36 @@ package mysql
 import (
 	"context"
 	"fmt"
-	"strconv"
 
+	mocov1beta2 "github.com/cybozu-go/moco/api/v1beta2"
 	apiv2 "github.com/wandb/operator/api/v2"
 	ctrlcommon "github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/logx"
-	"github.com/wandb/operator/pkg/vendored/mysql-operator/v2"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func readConnectionDetails(ctx context.Context, client client.Client, actual *v2.InnoDBCluster, specNamespacedName types.NamespacedName) *mysqlConnInfo {
+func readConnectionDetails(ctx context.Context, c client.Client, actual *mocov1beta2.MySQLCluster, nn types.NamespacedName) *mysqlConnInfo {
 	log := logx.GetSlog(ctx)
 
-	// Default MySQL port
-	mysqlPort := strconv.Itoa(3306)
-
-	// Password for the initial user.
-	// In translator/v2/mysql.go, we set PasswordSecretKeyRef to point to {specName}-db-password.
-	dbPasswordSecret := &corev1.Secret{}
-	secretName := fmt.Sprintf("%s-db-password", specNamespacedName.Name)
-	err := client.Get(ctx, types.NamespacedName{
-		Name:      secretName,
-		Namespace: specNamespacedName.Namespace,
-	}, dbPasswordSecret)
-
-	if err != nil {
-		log.Error("Failed to get Secret", logx.ErrAttr(err), "Secret", secretName)
+	cred := &corev1.Secret{}
+	secretName := "moco-" + nn.Name
+	if err := c.Get(ctx, types.NamespacedName{Name: secretName, Namespace: nn.Namespace}, cred); err != nil {
+		log.Error("Failed to get Moco credentials", logx.ErrAttr(err), "Secret", secretName)
 		return nil
 	}
-
-	// For MySQL Operator, the service name is typically the same as the InnoDBCluster name
-	host := fmt.Sprintf("%s.%s.svc.cluster.local", actual.Name, actual.Namespace)
-
+	pw := string(cred.Data["WRITABLE_PASSWORD"])
+	if pw == "" {
+		return nil
+	}
 	return &mysqlConnInfo{
-		Host:     host,
-		Port:     mysqlPort,
-		User:     "root",
+		Host:     fmt.Sprintf("moco-%s-primary.%s.svc.cluster.local", actual.Name, actual.Namespace),
+		Port:     "3306",
+		User:     "moco-writable",
 		Database: "wandb_local",
-		Password: string(dbPasswordSecret.Data["rootPassword"]),
+		Password: pw,
 	}
 }
 
@@ -57,7 +46,7 @@ func ReadState(
 	ctx, _ = logx.WithSlog(ctx, logx.Mysql)
 	log := logx.GetSlog(ctx)
 
-	var actual = &v2.InnoDBCluster{}
+	var actual = &mocov1beta2.MySQLCluster{}
 	conditions := make([]metav1.Condition, 0)
 	nsnBuilder := createNsNameBuilder(specNamespacedName)
 
@@ -147,26 +136,19 @@ func ReadState(
 	return conditions, connection
 }
 
-func computeMySQLReportedReadyCondition(_ context.Context, clusterCR *v2.InnoDBCluster) []metav1.Condition {
+func computeMySQLReportedReadyCondition(_ context.Context, clusterCR *mocov1beta2.MySQLCluster) []metav1.Condition {
 	if clusterCR == nil {
 		return []metav1.Condition{}
 	}
 
-	// Map InnoDBCluster status to conditions.
-	// InnoDBClusterStatus.Status is a RawExtension, but we can check if it's ready
-	// based on the documented behavior or by looking at the actual status if we had more info.
+	// Migrated from InnoDBCluster from Oracle Mysql Operator.
+	// Check actual status condition in cluster
 
-	// If we don't have a clear way to check readiness from the Go types yet,
-	// we might just mark it as True if found for now, or look for standard conditions.
-
-	status := metav1.ConditionTrue
-	reason := "Online"
-
-	return []metav1.Condition{
-		{
-			Type:   MySQLReportedReadyType,
-			Status: status,
-			Reason: reason,
-		},
+	for _, c := range clusterCR.Status.Conditions {
+		if c.Type == "Healthy" && c.Status == metav1.ConditionTrue {
+			return []metav1.Condition{{Type: MySQLReportedReadyType, Status: metav1.ConditionTrue, Reason: "Online"}}
+		}
 	}
+	return []metav1.Condition{{Type: MySQLReportedReadyType, Status: metav1.ConditionFalse, Reason: "NotReady"}}
+
 }

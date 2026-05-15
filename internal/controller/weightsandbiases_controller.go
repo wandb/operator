@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"time"
 
+	mocov1beta2 "github.com/cybozu-go/moco/api/v1beta2"
 	apiv1 "github.com/wandb/operator/api/v1"
 	apiv2 "github.com/wandb/operator/api/v2"
 	v1 "github.com/wandb/operator/internal/controller/v1"
@@ -71,8 +72,8 @@ type WeightsAndBiasesReconciler struct {
 //+kubebuilder:rbac:groups=events.k8s.io,resources=events,verbs=list;watch
 //+kubebuilder:rbac:groups=kafka.strimzi.io,resources=kafkanodepools;kafkas;kafkatopics,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=kafka.strimzi.io,resources=kafkanodepools/status;kafkas/status;kafkatopics/status,verbs=get;update
-//+kubebuilder:rbac:groups=mysql.oracle.com,resources=innodbclusters,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=mysql.oracle.com,resources=innodbclusters/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=moco.cybozu.com,resources=mysqlclusters,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=moco.cybozu.com,resources=mysqlclusters/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=minio.min.io,resources=tenants,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=minio.min.io,resources=tenants/status,verbs=get
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways;httproutes;backendtlspolicies,verbs=get;list;watch;create;update;patch;delete
@@ -183,7 +184,8 @@ func (r *WeightsAndBiasesReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			Owns(&batchv1.Job{}).
 			Owns(&corev1.Secret{}).
 			Owns(&corev1.ConfigMap{}).
-			Owns(&networkingv1.Ingress{})
+			Owns(&networkingv1.Ingress{}).
+			Owns(&mocov1beta2.MySQLCluster{})
 		if utils.IsRegistered(r.Scheme, &gatewayv1.Gateway{}) {
 			b = b.Watches(&gatewayv1.Gateway{}, handler.EnqueueRequestsFromMapFunc(r.mapGatewayToWandb))
 		}

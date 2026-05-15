@@ -4,13 +4,13 @@ import (
 	"context"
 	"fmt"
 
+	mocov1beta2 "github.com/cybozu-go/moco/api/v1beta2"
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/infra/external"
 	externalmysql "github.com/wandb/operator/internal/controller/infra/external/mysql"
 	"github.com/wandb/operator/internal/controller/infra/managed/mysql/mysql"
 	"github.com/wandb/operator/pkg/utils"
-	mysqlv2 "github.com/wandb/operator/pkg/vendored/mysql-operator/v2"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -169,8 +169,9 @@ func managedMysqlWriteState(
 		return conditions
 	}
 
-	var desired *mysqlv2.InnoDBCluster
-	desired, err = mysql.ToMysqlMySQLVendorSpec(ctx, *spec, wandb, client.Scheme())
+	var desired *mocov1beta2.MySQLCluster
+	var confMap *corev1.ConfigMap
+	desired, confMap, err = mysql.ToMocoMySQLClusterSpec(ctx, *spec, wandb, client.Scheme())
 	if err != nil {
 		logger.Error(err, "failed to translate mysql spec")
 		return []metav1.Condition{
@@ -181,7 +182,7 @@ func managedMysqlWriteState(
 			},
 		}
 	}
-	return mysql.WriteState(ctx, client, specNamespacedName, desired, mysql.BuildWandbMysqlLabels(wandb))
+	return mysql.WriteState(ctx, client, specNamespacedName, desired, confMap, mysql.BuildWandbMysqlLabels(wandb))
 }
 
 func managedMysqlReadState(

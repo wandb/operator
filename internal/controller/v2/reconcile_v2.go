@@ -29,7 +29,6 @@ import (
 	"github.com/samber/lo"
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/ctrlqueue"
-	"github.com/wandb/operator/internal/controller/infra/managed/mysql/mysql"
 	"github.com/wandb/operator/internal/logx"
 	oputils "github.com/wandb/operator/pkg/utils"
 	strimziv1 "github.com/wandb/operator/pkg/vendored/strimzi-kafka/v1"
@@ -1761,19 +1760,22 @@ func runMysqlInitJob(ctx context.Context, client ctrlClient.Client, wandb *apiv2
 		logger.Info("Creating MySQL init job")
 
 		specNamespacedName := managedMysqlSpecNamespacedName(wandb.Spec.MySQL.ManagedMysql)
-		nsnBuilder := mysql.CreateNsNameBuilder(types.NamespacedName{
-			Name:      specNamespacedName.Name,
-			Namespace: specNamespacedName.Namespace,
-		})
-		secretName := fmt.Sprintf("%s-db-password", specNamespacedName.Name)
+		connSecretName := fmt.Sprintf("%s-connection", specNamespacedName.Name)
 
-		mysqlCmd := "mysql -h $MYSQL_HOST -u root -p\"${MYSQL_ROOT_PASSWORD}\" -e " +
-			"\"CREATE DATABASE IF NOT EXISTS wandb_local; " +
-			"CREATE USER IF NOT EXISTS 'wandb_local'@'%%' IDENTIFIED BY '${MYSQL_PASSWORD}'; " +
-			"GRANT ALL PRIVILEGES ON wandb_local.* TO 'wandb_local'@'%%'; FLUSH PRIVILEGES;\""
+		mysqlCmd := `mysql -h "$MYSQL_HOST" -P "$MYSQL_PORT" -u "$MYSQL_USER" -p"$MYSQL_PWD" ` +
+			`-e "CREATE DATABASE IF NOT EXISTS $MYSQL_DB;"`
 
-		// For InnoDBCluster, the service host is {name}.{namespace}.svc.cluster.local
-		mysqlHost := fmt.Sprintf("%s.%s.svc.cluster.local", nsnBuilder.ClusterName(), specNamespacedName.Namespace)
+		envFromConn := func(name, key string) corev1.EnvVar {
+			return corev1.EnvVar{
+				Name: name,
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: connSecretName},
+						Key:                  key,
+					},
+				},
+			}
+		}
 
 		job = &batchv1.Job{
 			ObjectMeta: metav1.ObjectMeta{
@@ -1792,31 +1794,14 @@ func runMysqlInitJob(ctx context.Context, client ctrlClient.Client, wandb *apiv2
 						Containers: []corev1.Container{
 							{
 								Name:    "mysql-init",
-								Image:   "mysql:8.0", // Use a standard mysql image
+								Image:   "mysql:8.4",
 								Command: []string{"/bin/sh", "-c", mysqlCmd},
 								Env: []corev1.EnvVar{
-									{
-										Name:  "MYSQL_HOST",
-										Value: mysqlHost,
-									},
-									{
-										Name: "MYSQL_ROOT_PASSWORD",
-										ValueFrom: &corev1.EnvVarSource{
-											SecretKeyRef: &corev1.SecretKeySelector{
-												LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
-												Key:                  "rootPassword",
-											},
-										},
-									},
-									{
-										Name: "MYSQL_PASSWORD",
-										ValueFrom: &corev1.EnvVarSource{
-											SecretKeyRef: &corev1.SecretKeySelector{
-												LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
-												Key:                  "password",
-											},
-										},
-									},
+									envFromConn("MYSQL_HOST", "Host"),
+									envFromConn("MYSQL_PORT", "Port"),
+									envFromConn("MYSQL_USER", "Username"),
+									envFromConn("MYSQL_PWD", "Password"),
+									envFromConn("MYSQL_DB", "Database"),
 								},
 							},
 						},
@@ -1880,7 +1865,7 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 			propagation := metav1.DeletePropagationBackground
 			deleteOptions := &ctrlClient.DeleteOptions{PropagationPolicy: &propagation}
 			err := client.Delete(ctx, job, deleteOptions)
-			if err != nil {
+			if ctrlClient.IgnoreNotFound(err) != nil {
 				return ctrl.Result{}, fmt.Errorf("failed to delete migration job %s: %v", jobName, err)
 			}
 		}

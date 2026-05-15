@@ -4,9 +4,9 @@ metadata:
   name: {{ .Release.Name }}-mysql
 rules:
   - apiGroups:
-      - mysql.oracle.com
+      - moco.cybozu.com
     resources:
-      - innodbclusters
+      - mysqlclusters
     verbs:
       - create
       - delete
@@ -16,9 +16,9 @@ rules:
       - update
       - watch
   - apiGroups:
-      - mysql.oracle.com
+      - moco.cybozu.com
     resources:
-      - innodbclusters/status
+      - mysqlclusters/status
     verbs:
       - get
       - patch

@@ -25,7 +25,7 @@ func (n *NsNameBuilder) SpecName() string {
 }
 
 func (n *NsNameBuilder) ClusterName() string {
-	return fmt.Sprintf("%s-mysql", n.SpecName())
+	return n.SpecName()
 }
 
 func (n *NsNameBuilder) ClusterNsName() types.NamespacedName {
@@ -48,4 +48,8 @@ func (n *NsNameBuilder) ConnectionNsName() types.NamespacedName {
 
 func createNsNameBuilder(baseNsName types.NamespacedName) *NsNameBuilder {
 	return CreateNsNameBuilder(baseNsName)
+}
+
+func MyCnfConfigMapName(specName string) string {
+	return specName + "-mycnf"
 }
