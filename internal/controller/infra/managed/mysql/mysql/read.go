@@ -140,10 +140,6 @@ func computeMySQLReportedReadyCondition(_ context.Context, clusterCR *mocov1beta
 	if clusterCR == nil {
 		return []metav1.Condition{}
 	}
-
-	// Migrated from InnoDBCluster from Oracle Mysql Operator.
-	// Check actual status condition in cluster
-
 	for _, c := range clusterCR.Status.Conditions {
 		if c.Type == "Healthy" && c.Status == metav1.ConditionTrue {
 			return []metav1.Condition{{Type: MySQLReportedReadyType, Status: metav1.ConditionTrue, Reason: "Online"}}
