@@ -1,10 +1,10 @@
-package v2_test
+package reconciler_test
 
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	apiv2 "github.com/wandb/operator/api/v2"
-	v2 "github.com/wandb/operator/internal/controller/v2"
+	v2 "github.com/wandb/operator/internal/controller/reconciler"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
