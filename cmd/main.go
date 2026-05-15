@@ -48,7 +48,7 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	"github.com/wandb/operator/internal/controller"
-	controllerv2 "github.com/wandb/operator/internal/controller/v2"
+	controllerv2 "github.com/wandb/operator/internal/controller/reconciler"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"

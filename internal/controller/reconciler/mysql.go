@@ -1,4 +1,4 @@
-package v2
+package reconciler
 
 import (
 	"context"
@@ -11,6 +11,8 @@ import (
 	externalmysql "github.com/wandb/operator/internal/controller/infra/external/mysql"
 	"github.com/wandb/operator/internal/controller/infra/managed/mysql/mysql"
 	"github.com/wandb/operator/pkg/utils"
+	"github.com/wandb/operator/pkg/wandb/manifest"
+	"k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -18,6 +20,7 @@ import (
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 func mysqlWriteState(
@@ -258,4 +261,121 @@ func managedMysqlSpecNamespacedName(spec *apiv2.ManagedMysqlSpec) types.Namespac
 		Namespace: spec.Namespace,
 		Name:      spec.Name,
 	}
+}
+
+func runMysqlInitJob(ctx context.Context, client client.Client, wandb *apiv2.WeightsAndBiases, manifest manifest.Manifest) (ctrl.Result, error) {
+	if wandb.Spec.MySQL.ManagedMysql == nil {
+		return ctrl.Result{}, nil
+	}
+
+	if wandb.Status.Wandb.MySQLInit.Succeeded {
+		return ctrl.Result{}, nil
+	}
+
+	logger := ctrl.LoggerFrom(ctx).WithName("mysqlInit")
+
+	jobName := fmt.Sprintf("%s-mysql-init", wandb.Name)
+	logger.Info("Checking for MySQL init job", "job", jobName)
+	job := &v1.Job{}
+	err := client.Get(ctx, types.NamespacedName{Name: jobName, Namespace: wandb.Namespace}, job)
+
+	if err != nil && !errors.IsNotFound(err) {
+		return ctrl.Result{}, err
+	}
+
+	if errors.IsNotFound(err) {
+		logger.Info("Creating MySQL init job")
+
+		specNamespacedName := managedMysqlSpecNamespacedName(wandb.Spec.MySQL.ManagedMysql)
+		connSecretName := fmt.Sprintf("%s-connection", specNamespacedName.Name)
+
+		// moco-writable has DDL/DML privileges on all non-system databases,
+		// so CREATE DATABASE works. The Oracle-era CREATE USER + GRANT steps
+		// are unnecessary — wandb connects directly as the secret's Username.
+		mysqlCmd := `mysql -h "$MYSQL_HOST" -P "$MYSQL_PORT" -u "$MYSQL_USER" -p"$MYSQL_PWD" ` +
+			`-e "CREATE DATABASE IF NOT EXISTS $MYSQL_DB;"`
+
+		envFromConn := func(name, key string) corev1.EnvVar {
+			return corev1.EnvVar{
+				Name: name,
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: connSecretName},
+						Key:                  key,
+					},
+				},
+			}
+		}
+
+		job = &v1.Job{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      jobName,
+				Namespace: wandb.Namespace,
+				Labels: map[string]string{
+					"app.kubernetes.io/managed-by": "wandb-operator",
+					"app.kubernetes.io/instance":   wandb.Name,
+					"app.kubernetes.io/component":  "mysql-init",
+				},
+			},
+			Spec: v1.JobSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						RestartPolicy: corev1.RestartPolicyOnFailure,
+						Containers: []corev1.Container{
+							{
+								Name:    "mysql-init",
+								Image:   "mysql:8.4",
+								Command: []string{"/bin/sh", "-c", mysqlCmd},
+								Env: []corev1.EnvVar{
+									envFromConn("MYSQL_HOST", "Host"),
+									envFromConn("MYSQL_PORT", "Port"),
+									envFromConn("MYSQL_USER", "Username"),
+									envFromConn("MYSQL_PWD", "Password"),
+									envFromConn("MYSQL_DB", "Database"),
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		if err := controllerutil.SetOwnerReference(wandb, job, client.Scheme()); err != nil {
+			return ctrl.Result{}, err
+		}
+
+		if err := client.Create(ctx, job); err != nil {
+			return ctrl.Result{}, err
+		}
+
+		wandb.Status.Wandb.MySQLInit.Name = jobName
+		wandb.Status.Wandb.MySQLInit.Succeeded = false
+		if err := client.Status().Update(ctx, wandb); err != nil {
+			return ctrl.Result{}, err
+		}
+
+		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
+	}
+
+	if job.Status.Succeeded > 0 {
+		logger.Info("MySQL init job succeeded")
+		wandb.Status.Wandb.MySQLInit.Succeeded = true
+		if err := client.Status().Update(ctx, wandb); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, nil
+	}
+
+	if job.Status.Failed > 0 {
+		logger.Info("MySQL init job failed")
+		wandb.Status.Wandb.MySQLInit.Failed = true
+		if err := client.Status().Update(ctx, wandb); err != nil {
+			return ctrl.Result{}, err
+		}
+		// We might want to return an error or just requeue
+		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
+	}
+
+	logger.Info("MySQL init job still running")
+	return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
 }
