@@ -1,12 +1,12 @@
-package mysql
+package moco
 
 import (
 	"context"
 	"fmt"
 
+	mocov1beta2 "github.com/cybozu-go/moco/api/v1beta2"
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/logx"
-	v2 "github.com/wandb/operator/pkg/vendored/mysql-operator/v2"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -22,7 +22,7 @@ func CheckDetached(
 	desiredReplicas int32,
 ) []metav1.Condition {
 	nsnBuilder := createNsNameBuilder(specNamespacedName)
-	actual := &v2.InnoDBCluster{}
+	actual := &mocov1beta2.MySQLCluster{}
 	found, err := common.GetResource(ctx, cl, nsnBuilder.ClusterNsName(), ResourceTypeName, actual)
 	if err != nil || !found {
 		return nil
@@ -31,13 +31,13 @@ func CheckDetached(
 		return nil
 	}
 
-	if desiredReplicas > 0 && actual.Spec.Instances != desiredReplicas {
+	if desiredReplicas > 0 && actual.Spec.Replicas != desiredReplicas {
 		return []metav1.Condition{
 			{
 				Type:    common.ReconciledType,
 				Status:  metav1.ConditionFalse,
 				Reason:  common.DetachedSpecMismatch,
-				Message: fmt.Sprintf("detached MySQL CR spec mismatch: replicas want %d, have %d", desiredReplicas, actual.Spec.Instances),
+				Message: fmt.Sprintf("detached MySQL CR spec mismatch: replicas want %d, have %d", desiredReplicas, actual.Spec.Replicas),
 			},
 		}
 	}
@@ -53,18 +53,18 @@ func DetachFinalizer(
 	ctx, log := logx.WithSlog(ctx, logx.Mysql)
 	nsnBuilder := createNsNameBuilder(specNamespacedName)
 
-	var actual = &v2.InnoDBCluster{}
+	var actual = &mocov1beta2.MySQLCluster{}
 	found, err := common.GetResource(ctx, cl, nsnBuilder.ClusterNsName(), ResourceTypeName, actual)
 	if err != nil {
 		return err
 	}
 	if !found {
-		log.Info("abort detach finalizer: InnoDBCluster CR not found")
+		log.Info("abort detach finalizer: MysqlCluster CR not found")
 		return nil
 	}
 
 	if common.IsDetached(actual, wandbOwner.GetUID()) {
-		log.Debug("InnoDBCluster CR already detached")
+		log.Debug("MysqlCluster CR already detached")
 		return nil
 	}
 
@@ -73,10 +73,10 @@ func DetachFinalizer(
 		if errors.IsNotFound(err) {
 			return nil
 		}
-		log.Error("error detaching InnoDBCluster CR", logx.ErrAttr(err))
+		log.Error("error detaching MysqlCluster CR", logx.ErrAttr(err))
 		return err
 	}
-	log.Info("detached InnoDBCluster CR", "name", actual.Name)
+	log.Info("detached MysqlCluster CR", "name", actual.Name)
 
 	if err = detachConnectionSecret(ctx, cl, nsnBuilder, wandbOwner); err != nil {
 		log.Error("error detaching connection secret", logx.ErrAttr(err))

@@ -2,9 +2,12 @@ dependencies:
 - name: wandb-base
   repository: https://charts.wandb.ai/
   version: 0.11.8
-- name: mysql-operator
-  repository: https://mysql.github.io/mysql-operator/
-  version: 2.1.11
+- name: moco
+  repository: https://cybozu-go.github.io/moco/
+  version: 0.24.0
+- name: cert-manager
+  repository: https://charts.jetstack.io
+  version: v1.16.3
 - name: redis-operator
   repository: https://ot-container-kit.github.io/helm-charts
   version: 0.22.2
@@ -26,5 +29,5 @@ dependencies:
 - name: telemetry
   repository: file://../telemetry
   version: 0.1.0
-digest: sha256:5c5daff2a714cdb07ba63eaddf959d8cec28b255371d210958ca571e305bce59
-generated: "2026-05-07T11:45:06.981528-05:00"
+digest: sha256:51fb84f0e6f0c7ad968fb311d06104c261d684c098972a572d2eb07af2cee0cd
+generated: "2026-05-14T14:31:46.62858-05:00"

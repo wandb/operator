@@ -8,33 +8,33 @@ spec:
     externalMysql:
       # required
       host:
-        name: external-mysql-connection
+        name: external-moco-connection
         key: Host
       port:
-        name: external-mysql-connection
+        name: external-moco-connection
         key: Port
       database:
-        name: external-mysql-connection
+        name: external-moco-connection
         key: Database
       username:
-        name: external-mysql-connection
+        name: external-moco-connection
         key: Username
       password:
-        name: external-mysql-connection
+        name: external-moco-connection
         key: Password
       URL:
-        name: external-mysql-connection
+        name: external-moco-connection
         key: url
       # optional
       # tls:
-      #   name: external-mysql-connection
+      #   name: external-moco-connection
       #   key: Tls
       # sslCa:
-      #   name: external-mysql-connection
+      #   name: external-moco-connection
       #   key: SslCa
       # sslCert:
-      #   name: external-mysql-connection
+      #   name: external-moco-connection
       #   key: SslCert
       # sslKey:
-      #   name: external-mysql-connection
+      #   name: external-moco-connection
       #   key: SslKey

@@ -98,7 +98,7 @@ type WeightsAndBiasesSpec struct {
 	Affinity    *corev1.Affinity     `json:"affinity,omitempty"`
 	Tolerations *[]corev1.Toleration `json:"tolerations,omitempty"`
 
-	MySQL       MySQLSpec       `json:"mysql,omitempty"`
+	MySQL       MySQLSpec       `json:"moco,omitempty"`
 	Redis       RedisSpec       `json:"redis,omitempty"`
 	Kafka       KafkaSpec       `json:"kafka,omitempty"`
 	ObjectStore ObjectStoreSpec `json:"objectStore,omitempty"`
