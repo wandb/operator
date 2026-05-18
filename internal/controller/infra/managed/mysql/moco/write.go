@@ -1,17 +1,18 @@
-package mysql
+package moco
 
 import (
 	"context"
 	"fmt"
+	"maps"
+	"strings"
+
 	mocov1beta2 "github.com/cybozu-go/moco/api/v1beta2"
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/logx"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"maps"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"strings"
 )
 
 const (
@@ -128,9 +129,9 @@ func WriteState(
 	return result
 }
 
-// ensurePVCLabels patches any PVCs belonging to the mysql cluster that are
+// ensurePVCLabels patches any PVCs belonging to the moco cluster that are
 // missing the wandb labels. PVCs are identified by the name prefix
-// "datadir-<clusterName>-" since the mysql-operator creates them via
+// "datadir-<clusterName>-" since the moco-operator creates them via
 // StatefulSet volumeClaimTemplates and may not propagate custom labels.
 func ensurePVCLabels(
 	ctx context.Context,

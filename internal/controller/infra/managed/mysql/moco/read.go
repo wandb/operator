@@ -1,4 +1,4 @@
-package mysql
+package moco
 
 import (
 	"context"
@@ -66,7 +66,7 @@ func ReadState(
 		actual = nil
 		if onDeleteRule.Policy == ctrlcommon.Purge {
 			log.Debug(
-				"Attempting to purge associated mysql resources after deletion",
+				"Attempting to purge associated moco resources after deletion",
 				"tenantName", nsnBuilder.ClusterName(),
 			)
 			err = purgeAssociatedResources(ctx, k8sClient, specNamespacedName.Namespace, onDeleteRule.Selector)

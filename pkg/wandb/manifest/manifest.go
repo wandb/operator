@@ -50,7 +50,7 @@ type Manifest struct {
 	Bucket             map[string]InfraConfig   `yaml:"bucket"`
 	Clickhouse         map[string]InfraConfig   `yaml:"clickhouse"`
 	Kafka              KafkaConfig              `yaml:"kafka"`
-	Mysql              map[string]InfraConfig   `yaml:"mysql"`
+	Mysql              map[string]InfraConfig   `yaml:"moco"`
 	Redis              map[string]InfraConfig   `yaml:"redis"`
 	Applications       map[string]Application   `yaml:"applications"`
 	// Migrations captures per-database migration jobs (e.g., default, runsdb, usagedb)
@@ -205,7 +205,7 @@ type VolumeMount struct {
 	Source    EnvSource `yaml:"source"`
 }
 
-// EnvSource references a named source and its type (e.g., mysql, redis, bucket).
+// EnvSource references a named source and its type (e.g., moco, redis, bucket).
 type EnvSource struct {
 	Name  string `yaml:"name"`
 	Type  string `yaml:"type"`
