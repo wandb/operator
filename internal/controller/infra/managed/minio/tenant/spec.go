@@ -7,6 +7,7 @@ import (
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/logx"
+	"github.com/wandb/operator/pkg/utils"
 	miniov2 "github.com/wandb/operator/pkg/vendored/minio-operator/minio.min.io/v2"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -22,6 +23,25 @@ const (
 	DevVolumesPerServer   = int32(1)
 	ProdVolumesPerServer  = int32(4)
 )
+
+// minioPodSecurityContext returns the pool-level pod SecurityContext to apply
+// to managed MinIO tenants. Returns nil outside of OpenShift so the
+// minio-operator's defaults apply.
+func minioPodSecurityContext() *corev1.PodSecurityContext {
+	if utils.IsOpenShift() {
+		return utils.OpenShiftPodSecurityContext()
+	}
+	return nil
+}
+
+// minioContainerSecurityContext returns the pool-level container SecurityContext
+// to apply to managed MinIO tenants. Returns nil outside of OpenShift.
+func minioContainerSecurityContext() *corev1.SecurityContext {
+	if utils.IsOpenShift() {
+		return utils.OpenShiftContainerSecurityContext()
+	}
+	return nil
+}
 
 func createObjectStoreTelemetryEnv(telemetry apiv2.Telemetry) []corev1.EnvVar {
 	if !telemetry.Enabled {
@@ -85,8 +105,8 @@ func ToObjectStoreVendorSpec(
 					Tolerations:              *wandb.GetTolerations(infraSpec.ManagedInfraSpec),
 					Servers:                  infraSpec.Replicas,
 					VolumesPerServer:         volumesPerServer,
-					SecurityContext:          wandb.GetPodSecurityContext(infraSpec.ManagedInfraSpec),
-					ContainerSecurityContext: wandb.GetSecurityContext(infraSpec.ManagedInfraSpec),
+					SecurityContext:          minioPodSecurityContext(),
+					ContainerSecurityContext: minioContainerSecurityContext(),
 					VolumeClaimTemplate: &corev1.PersistentVolumeClaim{
 						ObjectMeta: metav1.ObjectMeta{
 							Labels: BuildWandbObjectStoreLabels(wandb),

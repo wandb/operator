@@ -427,42 +427,12 @@ func stringPtr(value string) *string {
 	return &value
 }
 
-func openshiftRestrictedPodSecurityContext() *corev1.PodSecurityContext {
-	return &corev1.PodSecurityContext{
-		RunAsNonRoot: boolPtr(true),
-		SeccompProfile: &corev1.SeccompProfile{
-			Type: corev1.SeccompProfileTypeRuntimeDefault,
-		},
-	}
-}
-
-func openshiftRestrictedContainerSecurityContext() *corev1.SecurityContext {
-	return &corev1.SecurityContext{
-		AllowPrivilegeEscalation: boolPtr(false),
-		Capabilities: &corev1.Capabilities{
-			Drop: []corev1.Capability{"ALL"},
-		},
-	}
-}
-
-func applyOpenShiftSecurityContext(spec *v2.ManagedInfraSpec) {
-	spec.PodSecurityContext = openshiftRestrictedPodSecurityContext()
-	spec.SecurityContext = openshiftRestrictedContainerSecurityContext()
-}
-
+// patchOpenShift adjusts the CR for OpenShift environments. SecurityContexts
+// for managed infrastructure are now configured by the operator at runtime via
+// the --openshift flag, so this function only needs to swap the managed
+// MySQL spec for an external connection (mysql-operator is disabled on
+// OpenShift because it is incompatible with restricted-v2 SCC).
 func patchOpenShift(cr *v2.WeightsAndBiases) {
-	if cr.Spec.Redis.ManagedRedis != nil {
-		applyOpenShiftSecurityContext(&cr.Spec.Redis.ManagedRedis.ManagedInfraSpec)
-	}
-	if cr.Spec.ObjectStore.ManagedObjectStore != nil {
-		applyOpenShiftSecurityContext(&cr.Spec.ObjectStore.ManagedObjectStore.ManagedInfraSpec)
-	}
-	if cr.Spec.Kafka.ManagedKafka != nil {
-		applyOpenShiftSecurityContext(&cr.Spec.Kafka.ManagedKafka.ManagedInfraSpec)
-	}
-	if cr.Spec.ClickHouse.ManagedClickHouse != nil {
-		applyOpenShiftSecurityContext(&cr.Spec.ClickHouse.ManagedClickHouse.ManagedInfraSpec)
-	}
 	cr.Spec.MySQL.ManagedMysql = nil
 	cr.Spec.MySQL.ExternalMysql = &v2.MysqlConnection{
 		Host:     corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "wandb-external-mysql"}, Key: "host"},

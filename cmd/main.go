@@ -102,6 +102,7 @@ func main() {
 	var tlsOpts []func(*tls.Config)
 	var deployerAPI, isolationNamespaces string
 	var debug, airgapped, enableV2, enableWebhooks, enableRollouts, telemetryEnabled bool
+	var openshift bool
 	var telemetryManagedNamespace string
 	var telemetryOTelSecretName, telemetryOTelProtocol, telemetryOTelServiceName, telemetryOTelResourceAttributes string
 
@@ -132,6 +133,7 @@ func main() {
 	flag.BoolVar(&enableV2, "enable-v2", true, "Use V2 of WandB CRD")
 	flag.BoolVar(&enableWebhooks, "enable-webhooks", true, "Enable webhooks")
 	flag.BoolVar(&enableRollouts, "enable-rollouts", false, "Enable Argo Rollout Support")
+	flag.BoolVar(&openshift, "openshift", false, "Enable OpenShift mode: apply restricted-v2 SCC-compatible security contexts to managed infrastructure pods")
 	flag.BoolVar(&telemetryEnabled, "telemetry-enabled", false, "Enable telemetry endpoint reconciliation for W&B applications")
 	flag.StringVar(&telemetryManagedNamespace, "telemetry-managed-namespace", "", "Namespace where managed telemetry services run")
 	flag.StringVar(&telemetryOTelSecretName, "telemetry-otel-secret-name", "wandb-otel-connection", "Name of the OTEL connection secret managed by the operator")
@@ -145,6 +147,8 @@ func main() {
 
 	setFlagsFromEnvironment()
 	flag.Parse()
+
+	utils.SetOpenShiftMode(openshift)
 
 	var slogLevel slog.Level
 	switch strings.ToLower(*logLevel) {

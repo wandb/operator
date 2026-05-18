@@ -9,6 +9,7 @@ import (
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/logx"
+	"github.com/wandb/operator/pkg/utils"
 	v1 "github.com/wandb/operator/pkg/vendored/strimzi-kafka/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -44,12 +45,13 @@ func createKafkaMetricsConfig(telemetry apiv2.Telemetry) *v1.MetricsConfig {
 }
 
 // kafkaPodSecurityContext returns a PodSecurityContext for Kafka pods.
-// If a base security context is provided from the CRD, it is used as-is.
-// Otherwise, if the KAFKA_FSGROUP env var is set, a minimal context with
-// just FSGroup is returned. Returns nil if neither is configured.
-func kafkaPodSecurityContext(base *corev1.PodSecurityContext) *corev1.PodSecurityContext {
-	if base != nil {
-		return base
+// On OpenShift, it returns a restricted-v2 SCC-compatible context. Otherwise,
+// if the KAFKA_FSGROUP env var is set, a minimal context with just FSGroup is
+// returned. Returns nil if neither is configured, allowing the platform to
+// apply its own defaults.
+func kafkaPodSecurityContext() *corev1.PodSecurityContext {
+	if utils.IsOpenShift() {
+		return utils.OpenShiftPodSecurityContext()
 	}
 	val, ok := os.LookupEnv("KAFKA_FSGROUP")
 	if !ok {
@@ -62,11 +64,11 @@ func kafkaPodSecurityContext(base *corev1.PodSecurityContext) *corev1.PodSecurit
 	return &corev1.PodSecurityContext{FSGroup: &fsGroup}
 }
 
-func kafkaContainerTemplate(sc *corev1.SecurityContext) *v1.ContainerTemplate {
-	if sc == nil {
+func kafkaContainerTemplate() *v1.ContainerTemplate {
+	if !utils.IsOpenShift() {
 		return nil
 	}
-	return &v1.ContainerTemplate{SecurityContext: sc}
+	return &v1.ContainerTemplate{SecurityContext: utils.OpenShiftContainerSecurityContext()}
 }
 
 // ToKafkaVendorSpec converts a KafkaSpec to a Kafka CR.
@@ -134,7 +136,7 @@ func ToKafkaVendorSpec(
 						},
 						Affinity:        wandb.GetAffinity(infraSpec.ManagedInfraSpec),
 						Tolerations:     *wandb.GetTolerations(infraSpec.ManagedInfraSpec),
-						SecurityContext: wandb.GetPodSecurityContext(infraSpec.ManagedInfraSpec),
+						SecurityContext: kafkaPodSecurityContext(),
 					},
 				},
 			},
@@ -148,7 +150,7 @@ func ToKafkaVendorSpec(
 						},
 						Affinity:        wandb.GetAffinity(infraSpec.ManagedInfraSpec),
 						Tolerations:     *wandb.GetTolerations(infraSpec.ManagedInfraSpec),
-						SecurityContext: wandb.GetPodSecurityContext(infraSpec.ManagedInfraSpec),
+						SecurityContext: kafkaPodSecurityContext(),
 					},
 				},
 			},
@@ -217,10 +219,10 @@ func ToKafkaNodePoolVendorSpec(
 					Metadata: &v1.MetadataTemplate{
 						Labels: BuildWandbKafkaLabels(wandb),
 					},
-					SecurityContext: kafkaPodSecurityContext(wandb.GetPodSecurityContext(infraSpec.ManagedInfraSpec)),
+					SecurityContext: kafkaPodSecurityContext(),
 				},
-				KafkaContainer: kafkaContainerTemplate(wandb.GetSecurityContext(infraSpec.ManagedInfraSpec)),
-				InitContainer:  kafkaContainerTemplate(wandb.GetSecurityContext(infraSpec.ManagedInfraSpec)),
+				KafkaContainer: kafkaContainerTemplate(),
+				InitContainer:  kafkaContainerTemplate(),
 				PersistentVolumeClaim: &v1.ResourceTemplate{
 					Metadata: &v1.MetadataTemplate{
 						Labels: BuildWandbKafkaLabels(wandb),

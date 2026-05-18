@@ -7,6 +7,7 @@ import (
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/logx"
+	"github.com/wandb/operator/pkg/utils"
 	rediscommon "github.com/wandb/operator/pkg/vendored/redis-operator/common/v1beta2"
 	redisv1beta2 "github.com/wandb/operator/pkg/vendored/redis-operator/redis/v1beta2"
 	redisreplicationv1beta2 "github.com/wandb/operator/pkg/vendored/redis-operator/redisreplication/v1beta2"
@@ -31,6 +32,29 @@ const (
 	DefaultRedisExporterImage = "quay.io/opstree/redis-exporter:v1.44.0"
 	DefaultRedisExporterPort  = 9121
 )
+
+// redisPodSecurityContext returns the PodSecurityContext to apply to managed
+// Redis pods. On OpenShift, it returns a restricted-v2 SCC-compatible context
+// so that UIDs/GIDs are populated by the platform. Otherwise, it returns the
+// upstream default (fsGroup=1000) so the redis-operator's PVC ownership setup
+// continues to work on vanilla Kubernetes.
+func redisPodSecurityContext() *corev1.PodSecurityContext {
+	if utils.IsOpenShift() {
+		return utils.OpenShiftPodSecurityContext()
+	}
+	fsGroup := int64(1000)
+	return &corev1.PodSecurityContext{FSGroup: &fsGroup}
+}
+
+// redisContainerSecurityContext returns the container SecurityContext to apply
+// to managed Redis containers. Returns nil outside of OpenShift to preserve
+// the upstream redis-operator behavior.
+func redisContainerSecurityContext() *corev1.SecurityContext {
+	if utils.IsOpenShift() {
+		return utils.OpenShiftContainerSecurityContext()
+	}
+	return nil
+}
 
 // createRedisExporterConfig creates a RedisExporter configuration if telemetry is enabled.
 // Returns nil if telemetry is disabled.
@@ -87,8 +111,8 @@ func ToRedisStandaloneVendorSpec(
 				Resources:       &corev1.ResourceRequirements{},
 			},
 			Affinity:           wandb.GetAffinity(spec.ManagedInfraSpec),
-			PodSecurityContext: wandb.GetPodSecurityContext(spec.ManagedInfraSpec),
-			SecurityContext:    wandb.GetSecurityContext(spec.ManagedInfraSpec),
+			PodSecurityContext: redisPodSecurityContext(),
+			SecurityContext:    redisContainerSecurityContext(),
 			Tolerations:        wandb.GetTolerations(spec.ManagedInfraSpec),
 			Storage: &rediscommon.Storage{
 				VolumeClaimTemplate: corev1.PersistentVolumeClaim{
@@ -170,8 +194,8 @@ func ToRedisSentinelVendorSpec(
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				Resources:       &corev1.ResourceRequirements{},
 			},
-			PodSecurityContext: wandb.GetPodSecurityContext(spec.ManagedInfraSpec),
-			SecurityContext:    wandb.GetSecurityContext(spec.ManagedInfraSpec),
+			PodSecurityContext: redisPodSecurityContext(),
+			SecurityContext:    redisContainerSecurityContext(),
 			Affinity:           wandb.GetAffinity(spec.ManagedInfraSpec),
 			Tolerations:        wandb.GetTolerations(spec.ManagedInfraSpec),
 			RedisSentinelConfig: &redissentinelv1beta2.RedisSentinelConfig{
@@ -247,8 +271,8 @@ func ToRedisReplicationVendorSpec(
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				Resources:       &corev1.ResourceRequirements{},
 			},
-			PodSecurityContext: wandb.GetPodSecurityContext(spec.ManagedInfraSpec),
-			SecurityContext:    wandb.GetSecurityContext(spec.ManagedInfraSpec),
+			PodSecurityContext: redisPodSecurityContext(),
+			SecurityContext:    redisContainerSecurityContext(),
 			Affinity:           wandb.GetAffinity(spec.ManagedInfraSpec),
 			Tolerations:        wandb.GetTolerations(spec.ManagedInfraSpec),
 			Storage: &rediscommon.Storage{

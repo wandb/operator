@@ -7,6 +7,7 @@ import (
 
 	v2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/logx"
+	"github.com/wandb/operator/pkg/utils"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -413,9 +414,9 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 // frontend nginx container. Under OpenShift restricted-v2 SCC the container
 // runs as a random UID without write access to image directories. The function
 // also prepends an init container that copies the original HTML and nginx
-// config into the writable volumes.
+// config into the writable volumes. No-op outside of OpenShift mode.
 func applyFrontendNginxVolumes(app serverManifest.Application, volumes []v1.Volume, containers []v1.Container, initContainers []v1.Container) ([]v1.Volume, []v1.Container, []v1.Container) {
-	if app.Name != "frontend" {
+	if !utils.IsOpenShift() || app.Name != "frontend" {
 		return volumes, containers, initContainers
 	}
 

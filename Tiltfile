@@ -328,29 +328,13 @@ def build_operator_values(telemetry_namespace):
     }
 
     if settings.get("openshiftSCC"):
-        values["wandb-operator"]["podSecurityContext"] = {
-            "runAsNonRoot": True,
-            "runAsUser": None,
-            "runAsGroup": None,
-            "fsGroup": None,
-            "fsGroupChangePolicy": None,
-            "seccompProfile": {
-                "type": "RuntimeDefault",
-            },
-        }
-        values["wandb-operator"]["containers"]["operator"]["securityContext"] = {
-            "allowPrivilegeEscalation": False,
-            "capabilities": {
-                "drop": ["ALL"],
-            },
-        }
+        # Most OpenShift-related settings live in profiles/openshift.yaml so
+        # that they are shared with non-Tilt installs. Only emit Tilt-specific
+        # tweaks here that don't fit cleanly in that profile.
         values["altinity-clickhouse-operator"] = {
             "crdHook": {
                 "enabled": False,
             },
-        }
-        values["mysql-operator"] = {
-            "install": False,
         }
 
     return write_generated_yaml(GENERATED_OPERATOR_VALUES, values)
