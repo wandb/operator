@@ -129,11 +129,14 @@ func (r *WeightsAndBiasesReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&batchv1.Job{}).
 		Owns(&corev1.Secret{}).
 		Owns(&corev1.ConfigMap{}).
-		Owns(&networkingv1.Ingress{}).
-		Owns(&mocov1beta2.MySQLCluster{})
+		Owns(&networkingv1.Ingress{})
 	if utils.IsRegistered(r.Scheme, &gatewayv1.Gateway{}) {
 		b = b.Watches(&gatewayv1.Gateway{}, handler.EnqueueRequestsFromMapFunc(r.mapGatewayToWandb))
 	}
+	if utils.IsRegistered(r.Scheme, &mocov1beta2.MySQLCluster{}) {
+		b = b.Owns(&mocov1beta2.MySQLCluster{})
+	}
+
 
 	return b.Complete(r)
 }
