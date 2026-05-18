@@ -13,11 +13,6 @@ wandb-operator:
       env:
         OPENSHIFT:
           value: "true"
-      securityContext:
-        allowPrivilegeEscalation: false
-        capabilities:
-          drop:
-            - ALL
 
 grafana-operator:
   isOpenShift: true
