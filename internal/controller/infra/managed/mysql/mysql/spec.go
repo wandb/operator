@@ -26,7 +26,8 @@ func ToMocoMySQLClusterSpec(
 	wandb *apiv2.WeightsAndBiases,
 	scheme *runtime.Scheme,
 ) (*mocov1beta2.MySQLCluster, *corev1.ConfigMap, error) {
-	replicas := coerceOddReplicas(spec.Replicas)
+
+	replicas := spec.Replicas
 
 	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -68,20 +69,6 @@ func ToMocoMySQLClusterSpec(
 	return cluster, cm, nil
 }
 
-func coerceOddReplicas(n int32) int32 {
-	switch {
-	case n <= 1:
-		return 1
-	case n == 2:
-		return 3
-	case n == 4:
-		return 5
-	case n%2 == 0:
-		return n - 1
-	default:
-		return n
-	}
-}
 
 func buildMocoPodSpec(resources corev1.ResourceRequirements) mocov1beta2.PodSpecApplyConfiguration {
 	container := corev1ac.Container().
