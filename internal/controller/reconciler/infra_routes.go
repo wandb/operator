@@ -349,7 +349,7 @@ func deleteInfraHTTPRoutes(
 
 // isInfraHTTPRouteName returns true for HTTPRoute names that follow the infra route naming convention.
 func isInfraHTTPRouteName(routeName, wandbName string) bool {
-	infraTypes := []string{"bucket", "clickhouse", "mysql", "redis"}
+	infraTypes := []string{"bucket", "clickhouse", "moco", "redis"}
 	for _, t := range infraTypes {
 		prefix := fmt.Sprintf("%s-%s-", wandbName, t)
 		if strings.HasPrefix(routeName, prefix) {

@@ -46,7 +46,7 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 		}
 		job := &batchv1.Job{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      WandbName + "-mysql-init",
+				Name:      WandbName + "-moco-init",
 				Namespace: WandbNamespace,
 			},
 		}
@@ -131,10 +131,10 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			Expect(utils.ContainsString(wandb.GetFinalizers(), "wandb.apps.wandb.com/cleanup")).Should(BeTrue())
 		})
 
-		It("Should create a MySQL init job when deployment type is mysql", func() {
-			By("Creating a new WeightsAndBiases v2 object with MySQL deployment type 'mysql'")
+		It("Should create a MySQL init job when deployment type is moco", func() {
+			By("Creating a new WeightsAndBiases v2 object with MySQL deployment type 'moco'")
 			ctx := context.Background()
-			wandbName := "test-mysql-init"
+			wandbName := "test-moco-init"
 			wandb := &apiv2.WeightsAndBiases{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      wandbName,
@@ -217,10 +217,10 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			By("Checking if the MySQL init job was created")
 			job := &batchv1.Job{}
 			Eventually(func() error {
-				return k8sClient.Get(ctx, types.NamespacedName{Name: wandbName + "-mysql-init", Namespace: WandbNamespace}, job)
+				return k8sClient.Get(ctx, types.NamespacedName{Name: wandbName + "-moco-init", Namespace: WandbNamespace}, job)
 			}, timeout, interval).Should(Succeed())
 
-			Expect(job.Spec.Template.Spec.Containers[0].Name).To(Equal("mysql-init"))
+			Expect(job.Spec.Template.Spec.Containers[0].Name).To(Equal("moco-init"))
 		})
 
 		It("Should create application components when infrastructure is ready", func() {

@@ -15,7 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-const ConnectionSecretName = "wandb-mysql-connection"
+const ConnectionSecretName = "wandb-moco-connection"
 
 func WriteState(
 	ctx context.Context,
@@ -40,7 +40,7 @@ func WriteState(
 
 	data, err := external.ResolveFields(ctx, c, wandb.Namespace, fields)
 	if err != nil {
-		logger.Error(err, "failed to resolve external mysql fields")
+		logger.Error(err, "failed to resolve external moco fields")
 		return []metav1.Condition{{
 			Type:   "Reconciled",
 			Status: metav1.ConditionFalse,

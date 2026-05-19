@@ -198,27 +198,27 @@ commonEnvvars:
     - name: MYSQL
       sources:
         - name: default
-          type: mysql
+          type: moco
     - name: GORILLA_ANALYTICS_SINK
       sources:
         - name: default
-          type: mysql
+          type: moco
     - name: GORILLA_FILE_STREAM_STORE_ADDRESS
       sources:
         - name: default
-          type: mysql
+          type: moco
     - name: GORILLA_METADATA_STORE
       sources:
         - name: metadata
-          type: mysql
+          type: moco
     - name: GORILLA_RUN_STORE
       sources:
         - name: runs
-          type: mysql
+          type: moco
     - name: GORILLA_USAGE_STORE
       sources:
         - name: usage
-          type: mysql
+          type: moco
   gorillaBucket:
     - name: AWS_REGION
       sources:
@@ -311,11 +311,11 @@ commonEnvvars:
           proto: "http"
           path: "/_goRPC_"
         - name: default
-          type: mysql
+          type: moco
     - name: GORILLA_PARQUET_LIVE_HISTORY_STORE
       sources:
         - name: default
-          type: mysql
+          type: moco
   gorillaOnprem:
     - name: GORILLA_LOCAL_SERVICE_BYPASS
       value: "true"
@@ -612,11 +612,11 @@ applications:
       - name: MIGRATE_RUNS_DB
         sources:
           - name: default
-            type: mysql
+            type: moco
       - name: MIGRATE_USAGE_DB
         sources:
           - name: default
-            type: mysql
+            type: moco
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
       tag: 0.78.0

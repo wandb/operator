@@ -15,10 +15,14 @@ dependencies:
     alias: wandb-operator
     repository: https://charts.wandb.ai/
     condition: wandb-operator.enabled
-  - name: mysql-operator
-    version: 2.1.11
-    repository: https://mysql.github.io/mysql-operator/
-    condition: mysql-operator.enabled
+  - name: moco
+    version: 0.24.0
+    repository: https://cybozu-go.github.io/moco/
+    condition: moco.enabled
+  - name: cert-manager
+    version: v1.16.3
+    repository: https://charts.jetstack.io
+    condition: cert-manager.enabled
   - name: redis-operator
     version: 0.22.2
     repository: https://ot-container-kit.github.io/helm-charts
