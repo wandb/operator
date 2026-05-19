@@ -110,4 +110,48 @@ spec:
       datasourceName: VictoriaTraces
   json: |-
 {{ .Files.Get "dashboards/wandb-telemetry-overview.json" | nindent 4 }}
+---
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDashboard
+metadata:
+  name: wandb-field-investigation
+  namespace: {{ include "telemetry.namespace" . }}
+  labels:
+    app.kubernetes.io/component: telemetry
+    app.kubernetes.io/part-of: wandb
+spec:
+  uid: wandb-field-investigation
+  folder: W&B
+  instanceSelector:
+    matchLabels:
+      dashboards: grafana
+  datasources:
+    - inputName: DS_VICTORIAMETRICS
+      datasourceName: VictoriaMetrics
+    - inputName: DS_VICTORIATRACES
+      datasourceName: VictoriaTraces
+  json: |-
+{{ .Files.Get "dashboards/wandb-field-investigation.json" | nindent 4 }}
+---
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDashboard
+metadata:
+  name: wandb-managed-install-performance
+  namespace: {{ include "telemetry.namespace" . }}
+  labels:
+    app.kubernetes.io/component: telemetry
+    app.kubernetes.io/part-of: wandb
+spec:
+  uid: wandb-managed-install-performance
+  folder: W&B
+  instanceSelector:
+    matchLabels:
+      dashboards: grafana
+  datasources:
+    - inputName: DS_VICTORIAMETRICS
+      datasourceName: VictoriaMetrics
+    - inputName: DS_VICTORIATRACES
+      datasourceName: VictoriaTraces
+  json: |-
+{{ .Files.Get "dashboards/wandb-managed-install-performance.json" | nindent 4 }}
 {{- end }}

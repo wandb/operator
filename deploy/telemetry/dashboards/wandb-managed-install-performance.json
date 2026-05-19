@@ -1,0 +1,558 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_VICTORIAMETRICS",
+      "label": "VictoriaMetrics",
+      "type": "datasource",
+      "pluginId": "victoriametrics-metrics-datasource",
+      "pluginName": "VictoriaMetrics"
+    },
+    {
+      "name": "DS_VICTORIATRACES",
+      "label": "VictoriaTraces",
+      "type": "datasource",
+      "pluginId": "jaeger",
+      "pluginName": "Jaeger"
+    }
+  ],
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "links": [
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": false,
+      "keepTime": true,
+      "targetBlank": true,
+      "title": "Open Traces in Explore",
+      "type": "link",
+      "url": "/explore?panes=%7B%22A%22:%7B%22datasource%22:%22${DS_VICTORIATRACES}%22,%22queries%22:[],%22range%22:%7B%22from%22:%22now-1h%22,%22to%22:%22now%22%7D%7D%7D&schemaVersion=1&orgId=1"
+    },
+    {
+      "asDropdown": false,
+      "icon": "dashboard",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false,
+      "title": "W&B Field Investigation",
+      "type": "link",
+      "url": "/d/wandb-field-investigation"
+    }
+  ],
+  "panels": [
+    {
+      "type": "text",
+      "title": "",
+      "gridPos": {"h": 6, "w": 24, "x": 0, "y": 0},
+      "options": {
+        "mode": "markdown",
+        "content": "# W&B Managed Install Performance\n\nInfrastructure health dashboard for a W&B install. Use this dashboard to answer **\"is the underlying infrastructure that runs W&B healthy?\"** — covers all five managed components (MySQL, Redis, Kafka, MinIO, ClickHouse) plus container resource utilization across the install.\n\nFor application-layer signals (W&B API latency, ingest health, slow operations) see the [W&B Field Investigation](/d/wandb-field-investigation) dashboard.\n\n**Quick lookups from the shell:**\n\n- Install size & version: `kubectl get wandb -n <namespace> -o yaml`\n- Pod restart reasons: `kubectl get pods -n <namespace> -o jsonpath='{range .items[*]}{.metadata.name}{\"\\t\"}{.status.containerStatuses[*].lastState.terminated.reason}{\\\"\\n\\\"}{end}'`\n- OOM-killed events: `kubectl get events -n <namespace> --sort-by=.lastTimestamp | grep -i oom`\n\nUse the **W&B Namespace** dropdown above to switch installs."
+      }
+    },
+    {
+      "type": "row",
+      "title": "Stability",
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 6},
+      "collapsed": false
+    },
+    {
+      "type": "timeseries",
+      "title": "Container Restarts (last hour, by container)",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 10, "w": 16, "x": 0, "y": 7},
+      "targets": [
+        {
+          "expr": "sum by (pod, container) (changes(container_start_time_seconds{namespace=\"$namespace\", container!=\"\", container!=\"POD\", container!~\"agent|aws.*|csi.*|efs.*|external.*|kube.*|liveness.*|prometheus.*|teleport.*|gke.*\"}[1h]))",
+          "legendFormat": "{{pod}} / {{container}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {"unit": "short", "min": 0},
+        "overrides": []
+      },
+      "options": {
+        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["sum", "max"]},
+        "tooltip": {"mode": "multi"}
+      }
+    },
+    {
+      "type": "text",
+      "title": "About: Container Restarts",
+      "gridPos": {"h": 10, "w": 8, "x": 16, "y": 7},
+      "options": {
+        "mode": "markdown",
+        "content": "### What is this?\n\nNumber of times each container in the selected namespace restarted within the last hour.\n\n### Why it matters\n\nA container restarting more than a couple of times per hour is almost always a problem: out-of-memory kill, panic, failed health check, or stuck dependency.\n\n### What to do\n\n- `kubectl get pods -n <namespace>` — note pods with elevated RESTARTS.\n- `kubectl describe pod -n <namespace> <pod>` — look at Last State / Reason.\n- `kubectl logs -n <namespace> <pod> --previous` — last logs before the restart."
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Top Containers by CPU Usage",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 10, "w": 16, "x": 0, "y": 17},
+      "targets": [
+        {
+          "expr": "topk(15, sum by (pod, container) (rate(container_cpu_usage_seconds_total{namespace=\"$namespace\", container!=\"\", container!=\"POD\", container!~\"agent|aws.*|csi.*|efs.*|external.*|kube.*|liveness.*|prometheus.*|teleport.*|gke.*\"}[$__rate_interval])))",
+          "legendFormat": "{{pod}} / {{container}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {"unit": "percentunit", "min": 0},
+        "overrides": []
+      },
+      "options": {
+        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"]},
+        "tooltip": {"mode": "multi"}
+      }
+    },
+    {
+      "type": "text",
+      "title": "About: Container CPU",
+      "gridPos": {"h": 10, "w": 8, "x": 16, "y": 17},
+      "options": {
+        "mode": "markdown",
+        "content": "### What is this?\n\nTop 15 containers in the selected namespace by CPU usage (in cores), filtering out system/agent containers. Includes both W&B services and the managed infrastructure components (MySQL, Redis, Kafka, MinIO, ClickHouse).\n\n### Why it matters\n\nA container near or above its CPU limit will throttle, slowing every request it handles.\n\n### What to do\n\nFor the configured limit, run `kubectl describe pod -n <namespace> <pod>` and look at the Limits section, or check `spec.size` in the WeightsAndBiases CR. For sustained saturation, increase the install size."
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Top Containers by Memory (Working Set)",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 10, "w": 16, "x": 0, "y": 27},
+      "targets": [
+        {
+          "expr": "topk(15, sum by (pod, container) (container_memory_working_set_bytes{namespace=\"$namespace\", container!=\"\", container!=\"POD\", container!~\"agent|aws.*|csi.*|efs.*|external.*|kube.*|liveness.*|prometheus.*|teleport.*|gke.*\"}))",
+          "legendFormat": "{{pod}} / {{container}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {"unit": "bytes", "min": 0},
+        "overrides": []
+      },
+      "options": {
+        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"]},
+        "tooltip": {"mode": "multi"}
+      }
+    },
+    {
+      "type": "text",
+      "title": "About: Container Memory",
+      "gridPos": {"h": 10, "w": 8, "x": 16, "y": 27},
+      "options": {
+        "mode": "markdown",
+        "content": "### What is this?\n\nTop 15 containers in the selected namespace by working-set memory — the part the kernel would not evict.\n\n### Why it matters\n\n- A line that climbs without leveling off suggests a memory leak.\n- A line that spikes and drops to near zero suggests the container was OOMKilled (visible in the Container Restarts panel above).\n- A line consistently near the configured limit means the container is one bad allocation away from OOM.\n\n### What to do\n\nFor OOM debug: `kubectl get events -n <namespace> --sort-by=.lastTimestamp | grep -i oom`. For configured limits, see `spec.size` in the WeightsAndBiases CR."
+      }
+    },
+    {
+      "type": "row",
+      "title": "MySQL",
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 37},
+      "collapsed": false
+    },
+    {
+      "type": "timeseries",
+      "title": "MySQL CPU & Threads",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 10, "w": 16, "x": 0, "y": 38},
+      "targets": [
+        {
+          "expr": "sum by (pod, container) (rate(container_cpu_usage_seconds_total{namespace=\"$namespace\", container=~\"mysql.*|mysqld\"}[$__rate_interval]))",
+          "legendFormat": "CPU cores: {{pod}} / {{container}}",
+          "refId": "A"
+        },
+        {
+          "expr": "max by (pod) (mysql_global_status_threads_connected{job=\"default/mysql-innodb\"})",
+          "legendFormat": "Threads connected: {{pod}}",
+          "refId": "B"
+        },
+        {
+          "expr": "max by (pod) (mysql_global_status_threads_running{job=\"default/mysql-innodb\"})",
+          "legendFormat": "Threads running: {{pod}}",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {"min": 0},
+        "overrides": []
+      },
+      "options": {
+        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"]},
+        "tooltip": {"mode": "multi"}
+      }
+    },
+    {
+      "type": "text",
+      "title": "About: MySQL CPU & Threads",
+      "gridPos": {"h": 10, "w": 8, "x": 16, "y": 38},
+      "options": {
+        "mode": "markdown",
+        "content": "### What is this?\n\nMySQL CPU consumption (fraction of one core) alongside connected and currently-running thread counts.\n\n### Why it matters\n\n- High CPU + high Threads Running = MySQL is the bottleneck. Slow user-facing operations.\n- Threads Connected rising while Threads Running stays low = many idle connections, often from a leaked connection pool in an app pod.\n- Threads Running near the `max_connections` ceiling = new connections will be refused.\n\n### What to do\n\nFor sustained saturation, increase the install size (`spec.size` in the WeightsAndBiases CR), which scales MySQL resources."
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "MySQL Throughput & Lock Pressure",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 10, "w": 16, "x": 0, "y": 48},
+      "targets": [
+        {
+          "expr": "sum(rate(mysql_global_status_questions{job=\"default/mysql-innodb\"}[$__rate_interval]))",
+          "legendFormat": "questions/sec",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(mysql_global_status_innodb_data_writes{job=\"default/mysql-innodb\"}[$__rate_interval]))",
+          "legendFormat": "innodb writes/sec",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(rate(mysql_global_status_innodb_row_lock_waits{job=\"default/mysql-innodb\"}[$__rate_interval])) or vector(0)",
+          "legendFormat": "row lock waits/sec",
+          "refId": "C"
+        },
+        {
+          "expr": "max(mysql_global_status_innodb_row_lock_current_waits{job=\"default/mysql-innodb\"}) or vector(0)",
+          "legendFormat": "current row lock waits",
+          "refId": "D"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {"min": 0},
+        "overrides": []
+      },
+      "options": {
+        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"]},
+        "tooltip": {"mode": "multi"}
+      }
+    },
+    {
+      "type": "text",
+      "title": "About: MySQL Throughput & Locks",
+      "gridPos": {"h": 10, "w": 8, "x": 16, "y": 48},
+      "options": {
+        "mode": "markdown",
+        "content": "### What is this?\n\nFour signals on one panel:\n\n- **questions/sec** — overall query rate hitting MySQL.\n- **innodb writes/sec** — write rate, useful for distinguishing read-heavy vs write-heavy load.\n- **row lock waits/sec** — rate of new row-lock contention events. A non-zero rate is normal under load; a sustained spike indicates contention from concurrent writes to the same rows.\n- **current row lock waits** — point-in-time count of transactions blocked waiting for a row lock. Should be near zero in steady state.\n\n### What to do\n\nSustained row lock contention usually points to a problematic write pattern. Inspect the MySQL slow query log for the queries involved."
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "MySQL Errors & Slow Queries",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 10, "w": 16, "x": 0, "y": 58},
+      "targets": [
+        {
+          "expr": "sum(rate(mysql_global_status_aborted_clients{job=\"default/mysql-innodb\"}[$__rate_interval])) or vector(0)",
+          "legendFormat": "aborted clients/sec",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(mysql_global_status_aborted_connects{job=\"default/mysql-innodb\"}[$__rate_interval])) or vector(0)",
+          "legendFormat": "aborted connects/sec",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(rate(mysql_global_status_slow_queries{job=\"default/mysql-innodb\"}[$__rate_interval])) or vector(0)",
+          "legendFormat": "slow queries/sec",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {"min": 0},
+        "overrides": []
+      },
+      "options": {
+        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"]},
+        "tooltip": {"mode": "multi"}
+      }
+    },
+    {
+      "type": "text",
+      "title": "About: MySQL Errors & Slow Queries",
+      "gridPos": {"h": 10, "w": 8, "x": 16, "y": 58},
+      "options": {
+        "mode": "markdown",
+        "content": "### What is this?\n\n- **aborted clients/sec** — clients that connected and disconnected without properly closing the connection. Often a sign of an app pod restarting under load or a network blip.\n- **aborted connects/sec** — connection attempts that failed before reaching the auth handshake. Suggests credentials drift, MySQL refusing connections at the limit, or network-layer issues.\n- **slow queries/sec** — queries crossing the `long_query_time` threshold. Sustained non-zero rate is the leading indicator of UI slowness.\n\n### What to do\n\nFor sustained slow queries, inspect the MySQL slow query log (`kubectl exec -n <namespace> -it mysql-... -- mysql -e \"SHOW VARIABLES LIKE 'slow_query%'\"` to confirm logging is on, then inspect the file)."
+      }
+    },
+    {
+      "type": "row",
+      "title": "Redis",
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 68},
+      "collapsed": false
+    },
+    {
+      "type": "timeseries",
+      "title": "Redis CPU & Memory",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 10, "w": 16, "x": 0, "y": 69},
+      "targets": [
+        {
+          "expr": "sum by (pod) (rate(redis_cpu_user_seconds_total[$__rate_interval])) + sum by (pod) (rate(redis_cpu_sys_seconds_total[$__rate_interval]))",
+          "legendFormat": "CPU cores: {{pod}}",
+          "refId": "A"
+        },
+        {
+          "expr": "max by (pod) (redis_memory_used_bytes)",
+          "legendFormat": "memory used: {{pod}}",
+          "refId": "B"
+        },
+        {
+          "expr": "max by (pod) (redis_memory_max_bytes) > 0",
+          "legendFormat": "memory limit: {{pod}}",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {"min": 0},
+        "overrides": [
+          {"matcher": {"id": "byRegexp", "options": "memory.*"}, "properties": [{"id": "unit", "value": "bytes"}]}
+        ]
+      },
+      "options": {
+        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"]},
+        "tooltip": {"mode": "multi"}
+      }
+    },
+    {
+      "type": "text",
+      "title": "About: Redis",
+      "gridPos": {"h": 10, "w": 8, "x": 16, "y": 69},
+      "options": {
+        "mode": "markdown",
+        "content": "### What is this?\n\n- **CPU cores** — sum of user + system CPU consumed by each Redis instance, in cores.\n- **memory used** — current memory in use.\n- **memory limit** — `maxmemory` config if set; absent (zero/no series) means no maxmemory cap.\n\n### Why it matters\n\nRedis is on the hot path for run-state updates and SDK polling. When CPU saturates or memory approaches the maxmemory cap (and the eviction policy starts evicting), expected reads turn into cache misses, cascading into MySQL load.\n\n### What to do\n\nIf eviction is happening (see the **Redis Clients & Eviction** panel below), increase the install size or investigate why the cache is growing faster than expected."
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Redis Clients & Expired Keys",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 10, "w": 16, "x": 0, "y": 79},
+      "targets": [
+        {
+          "expr": "max by (pod) (redis_connected_clients)",
+          "legendFormat": "connected clients: {{pod}}",
+          "refId": "A"
+        },
+        {
+          "expr": "sum by (pod) (rate(redis_expired_keys_total[$__rate_interval])) or sum by (pod) (rate(redis_db_keys_expired_total[$__rate_interval]))",
+          "legendFormat": "expired keys/sec: {{pod}}",
+          "refId": "B"
+        },
+        {
+          "expr": "sum by (pod) (rate(redis_evicted_keys_total[$__rate_interval])) or vector(0)",
+          "legendFormat": "evicted keys/sec: {{pod}}",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {"min": 0},
+        "overrides": []
+      },
+      "options": {
+        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"]},
+        "tooltip": {"mode": "multi"}
+      }
+    },
+    {
+      "type": "text",
+      "title": "About: Redis Clients & Eviction",
+      "gridPos": {"h": 10, "w": 8, "x": 16, "y": 79},
+      "options": {
+        "mode": "markdown",
+        "content": "### What is this?\n\n- **connected clients** — live TCP connections to each Redis instance.\n- **expired keys/sec** — natural TTL-based expirations. Normal.\n- **evicted keys/sec** — forced evictions because `maxmemory` is full. **Any non-zero rate here is a problem** — it means Redis is throwing away cached data the application expected to find.\n\n### What to do\n\nSustained eviction calls for either raising the Redis memory limit (via install size increase) or investigating why the cache is growing faster than expected. A spike in `expired_keys` without eviction is benign."
+      }
+    },
+    {
+      "type": "row",
+      "title": "Kafka",
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 89},
+      "collapsed": false
+    },
+    {
+      "type": "timeseries",
+      "title": "Kafka Messages In by Topic",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 10, "w": 16, "x": 0, "y": 90},
+      "targets": [
+        {
+          "expr": "sum by (topic) (rate(kafka_server_brokertopicmetrics_messagesinpersec_total[$__rate_interval]))",
+          "legendFormat": "{{topic}}",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(kafka_controller_kafkacontroller_offlinepartitionscount)",
+          "legendFormat": "offline partitions (total)",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {"min": 0},
+        "overrides": []
+      },
+      "options": {
+        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"]},
+        "tooltip": {"mode": "multi"}
+      }
+    },
+    {
+      "type": "text",
+      "title": "About: Kafka",
+      "gridPos": {"h": 10, "w": 8, "x": 16, "y": 90},
+      "options": {
+        "mode": "markdown",
+        "content": "### What is this?\n\n- **Messages in by topic** — incoming message rate per Kafka topic, in messages/sec.\n- **offline partitions** — partitions that have no leader and can't accept reads or writes. Should always be 0.\n\n### Why it matters\n\nKafka is the asynchronous backbone for run-state events, parquet-export task scheduling, and other internal queues. When Kafka throughput drops or partitions go offline, downstream consumers stall and user-visible operations slow down.\n\n### What to do\n\n- **Offline partitions > 0**: investigate Kafka broker health immediately. `kubectl get pods -n <namespace> -l strimzi.io/kind=Kafka`, inspect logs, and check that all broker pods are Ready.\n- **Sudden drop in messages**: check whether the producer-side services (api, filestream) are healthy in the W&B Field Investigation dashboard."
+      }
+    },
+    {
+      "type": "row",
+      "title": "ClickHouse",
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 100},
+      "collapsed": false
+    },
+    {
+      "type": "timeseries",
+      "title": "ClickHouse Memory, Connections, Merges",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 10, "w": 16, "x": 0, "y": 101},
+      "targets": [
+        {
+          "expr": "sum(ClickHouseMetrics_MemoryTracking)",
+          "legendFormat": "memory tracking (bytes)",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(ClickHouseMetrics_HTTPConnection)",
+          "legendFormat": "HTTP connections",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(ClickHouseMetrics_Merge)",
+          "legendFormat": "merges in progress",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {"min": 0},
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "memory tracking (bytes)"}, "properties": [{"id": "unit", "value": "bytes"}]}
+        ]
+      },
+      "options": {
+        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"]},
+        "tooltip": {"mode": "multi"}
+      }
+    },
+    {
+      "type": "text",
+      "title": "About: ClickHouse",
+      "gridPos": {"h": 10, "w": 8, "x": 16, "y": 101},
+      "options": {
+        "mode": "markdown",
+        "content": "### What is this?\n\n- **memory tracking** — total bytes ClickHouse is currently using across all queries.\n- **HTTP connections** — active HTTP client connections to ClickHouse.\n- **merges in progress** — background MergeTree merge operations currently running.\n\n### Why it matters\n\n- **Memory** climbing toward the configured limit signals query-side pressure. ClickHouse aborts queries when memory is exhausted, which surfaces as errors in dependent services.\n- **HTTP connections** persistently near zero may indicate clients can't reach ClickHouse.\n- **Merges** that climb without coming back down indicate ingest exceeding merge throughput; this leads to part-count limits and eventual write rejections.\n\n### What to do\n\nFor sustained memory pressure or merge backlog, increase the install size, which scales ClickHouse resources. For per-query memory diagnostics, query `system.query_log` directly on the ClickHouse pod."
+      }
+    },
+    {
+      "type": "row",
+      "title": "MinIO",
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 111},
+      "collapsed": false
+    },
+    {
+      "type": "timeseries",
+      "title": "MinIO Capacity Used % & Request Rate",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 10, "w": 16, "x": 0, "y": 112},
+      "targets": [
+        {
+          "expr": "100 * (1 - (sum(minio_cluster_health_capacity_usable_free_bytes) / sum(minio_cluster_health_capacity_usable_total_bytes)))",
+          "legendFormat": "capacity used %",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(minio_api_requests_total[$__rate_interval]))",
+          "legendFormat": "requests/sec",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {"min": 0},
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "capacity used %"}, "properties": [{"id": "unit", "value": "percent"}, {"id": "max", "value": 100}]},
+          {"matcher": {"id": "byName", "options": "requests/sec"}, "properties": [{"id": "unit", "value": "reqps"}]}
+        ]
+      },
+      "options": {
+        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"]},
+        "tooltip": {"mode": "multi"}
+      },
+      "thresholds": {
+        "mode": "absolute",
+        "steps": [
+          {"color": "green"},
+          {"color": "yellow", "value": 75},
+          {"color": "red", "value": 90}
+        ]
+      }
+    },
+    {
+      "type": "text",
+      "title": "About: MinIO",
+      "gridPos": {"h": 10, "w": 8, "x": 16, "y": 112},
+      "options": {
+        "mode": "markdown",
+        "content": "### What is this?\n\n- **capacity used %** — percentage of usable cluster capacity in use.\n- **requests/sec** — total MinIO API request rate across all operations.\n\n### Why it matters\n\nMinIO is the object store for parquet files, artifact contents, and run media. \n\n- **Capacity above 90%** = urgent action required. New writes will fail soon.\n- **Capacity above 75%** = plan a storage increase.\n- **Sudden drop in request rate** = the API or executor services may be unable to reach MinIO; check service/DNS.\n\n### What to do\n\nFor capacity: increase storage in the WeightsAndBiases CR (`spec.objectStore.managedObjectStore.storageSize`) and re-apply, or migrate older artifacts off-cluster. For request failures: `kubectl logs -n <namespace> -l weightsandbiases.apps.wandb.com/component=minio --tail=200`."
+      }
+    },
+    {
+      "type": "row",
+      "title": "Storage Path Diagnostics",
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 122},
+      "collapsed": false
+    },
+    {
+      "type": "text",
+      "title": "About: Parquet Read Performance",
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 123},
+      "options": {
+        "mode": "markdown",
+        "content": "Slow chart loads are usually driven by slow parquet reads. Diagnostics for this layer live in the trace explorer rather than as a chart panel:\n\n- [Open Traces in Explore](/explore?panes=%7B%22A%22:%7B%22datasource%22:%22${DS_VICTORIATRACES}%22,%22queries%22:[],%22range%22:%7B%22from%22:%22now-1h%22,%22to%22:%22now%22%7D%7D%7D&schemaVersion=1&orgId=1), filter `service.name=gorilla` or `service.name=gorilla-parquet` with `duration > 3s`, then narrow by `resource.name` (e.g., `ParquetHistoryStore.FetchHistorySketchWithKeys`, `FileStreamStore.StoreChunks`).\n- The **Slow Operations** table in the [W&B Field Investigation](/d/wandb-field-investigation) dashboard shows the same story from the HTTP-route side — useful for identifying which user-facing operations are most affected.\n- The parquet pod's memory series in the **Container Resource Usage** section above is a leading indicator: sustained near-limit memory plus frequent restarts often correlates with parquet read slowness."
+      }
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": ["wandb", "telemetry", "performance"],
+  "templating": {
+    "list": [
+      {
+        "name": "namespace",
+        "label": "W&B Namespace",
+        "type": "query",
+        "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+        "definition": "label_values(container_last_seen, namespace)",
+        "query": {
+          "query": "label_values(container_last_seen, namespace)",
+          "refId": "namespace-variable-query"
+        },
+        "regex": "/^(?!kube-|cert-manager$|monitoring$|wandb-operators$|operator-system$|grafana$|victoria.*$|telemetry$).*$/",
+        "refresh": 1,
+        "sort": 1,
+        "includeAll": false,
+        "multi": false,
+        "current": {"text": "default", "value": "default"}
+      }
+    ]
+  },
+  "time": {"from": "now-3h", "to": "now"},
+  "timezone": "browser",
+  "title": "W&B Managed Install Performance",
+  "uid": "wandb-managed-install-performance",
+  "version": 2
+}

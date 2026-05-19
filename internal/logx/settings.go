@@ -9,7 +9,7 @@ const (
 	ReconcileInfraV2  = "reconcile-infraV2"
 	ReconcileAppV2    = "reconcile-appV2"
 	Kafka             = "kafka-reconcile"
-	Mysql             = "mysql-reconcile"
+	Mysql             = "moco-reconcile"
 	Redis             = "redis-reconcile"
 	ObjectStore       = "objectstore-reconcile"
 	ClickHouse        = "clickhouse-reconcile"

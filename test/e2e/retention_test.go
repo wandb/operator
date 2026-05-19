@@ -44,14 +44,14 @@ const (
 
 // infraCRType maps a module name to its third-party Kubernetes CRD resource type.
 var infraCRType = map[string]string{
-	"mysql":       "innodbcluster",
+	"moco":        "innodbcluster",
 	"redis":       "redis",
 	"kafka":       "kafka",
 	"objectStore": "tenant",
 	"clickhouse":  "clickhouseinstallation",
 }
 
-var allModules = []string{"mysql", "redis", "kafka", "objectStore", "clickhouse"}
+var allModules = []string{"moco", "redis", "kafka", "objectStore", "clickhouse"}
 
 func generateUniqueName(prefix string) string {
 	const letters = "abcdefghijklmnopqrstuvwxyz"
@@ -91,7 +91,7 @@ type manifestOpts struct {
 
 func createWandbManifest(opts manifestOpts) string {
 	managedFieldName := map[string]string{
-		"mysql":       "managedMysql",
+		"moco":        "managedMysql",
 		"redis":       "managedRedis",
 		"kafka":       "managedKafka",
 		"objectStore": "managedObjectStore",
@@ -123,7 +123,7 @@ spec:
 %s
 %s
 `, opts.name, opts.ns, opts.size, opts.specRetentionPolicy,
-		componentBlock("mysql"),
+		componentBlock("moco"),
 		componentBlock("redis"),
 		componentBlock("kafka"),
 		componentBlock("objectStore"),
@@ -174,7 +174,7 @@ func waitForWandbReady(name, ns string) {
 		g.Expect(ok).To(BeTrue(), "status field missing")
 
 		statusKeys := map[string]string{
-			"mysql":       "mysqlStatus",
+			"moco":        "mysqlStatus",
 			"redis":       "redisStatus",
 			"kafka":       "kafkaStatus",
 			"objectStore": "objectStoreStatus",

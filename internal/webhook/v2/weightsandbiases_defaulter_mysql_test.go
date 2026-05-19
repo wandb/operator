@@ -37,7 +37,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - MySQL", func() {
 			Spec: apiv2.WeightsAndBiasesSpec{
 				MySQL: apiv2.MySQLSpec{
 					ManagedMysql: &apiv2.ManagedMysqlSpec{
-						Namespace: "custom-mysql-namespace",
+						Namespace: "custom-moco-namespace",
 					},
 				},
 			},
@@ -45,7 +45,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - MySQL", func() {
 
 		err := defaulter.Default(ctx, wandb)
 		g.Expect(err).ToNot(g.HaveOccurred())
-		g.Expect(wandb.Spec.MySQL.ManagedMysql.Namespace).To(g.Equal("custom-mysql-namespace"))
+		g.Expect(wandb.Spec.MySQL.ManagedMysql.Namespace).To(g.Equal("custom-moco-namespace"))
 	})
 
 	It("does not mutate unrelated MySQL fields", func() {

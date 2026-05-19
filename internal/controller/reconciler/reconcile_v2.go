@@ -344,7 +344,7 @@ func Reconcile(
 	if !redisReady || !mysqlReady || !kafkaReady || !objectStoreReady || !clickHouseReady {
 		log := ctrl.LoggerFrom(ctx)
 		log.Info("Infra not ready in V2.Reconcile",
-			"redis", redisReady, "mysql", mysqlReady, "kafka", kafkaReady, "objectStore", objectStoreReady, "clickhouse", clickHouseReady)
+			"redis", redisReady, "moco", mysqlReady, "kafka", kafkaReady, "objectStore", objectStoreReady, "clickhouse", clickHouseReady)
 		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
 	}
 
@@ -394,7 +394,7 @@ func ReconcileWandbManifest(
 
 	if !redisReady || !mysqlReady || !kafkaReady || !objectStoreReady || !clickHouseReady {
 		logger.Info("Infra components not ready yet, requeuing for reconciliation",
-			"redis", redisReady, "mysql", mysqlReady, "kafka", kafkaReady, "objectStore", objectStoreReady, "clickhouse", clickHouseReady)
+			"redis", redisReady, "moco", mysqlReady, "kafka", kafkaReady, "objectStore", objectStoreReady, "clickhouse", clickHouseReady)
 		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
 	}
 

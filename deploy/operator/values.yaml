@@ -117,12 +117,12 @@ wandb-operator:
     redis: true
     vm: true
 
-mysql-operator:
-  install: true
-  image:
-    # Oracle never published as image tag with 2.1.11 — their registry only has 8.4.8-2.1.10 to 9.x.
-    # Pin to the last working 2.1.x image.
-    tag: "8.4.8-2.1.10"
+moco:
+  enabled: true
+
+cert-manager:
+  enabled: false
+  installCRDs: true
 
 redis-operator:
   install: true
