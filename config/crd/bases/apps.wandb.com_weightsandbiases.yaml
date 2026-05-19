@@ -1736,7 +1736,7 @@ spec:
                         type: array
                     type: object
                 type: object
-              moco:
+              mysql:
                 properties:
                   externalMysql:
                     properties:
