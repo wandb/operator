@@ -187,7 +187,7 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 					addSecretComponent(sel, idx)
 				}
 			case "mysql":
-				// mysql connection URL as a secret ref
+				// MySQL connection URL as a secret ref
 				selector := wandb.Status.MySQLStatus.Connection.URL
 				// Record for potential direct assignment case
 				singleSecretSelector = selector

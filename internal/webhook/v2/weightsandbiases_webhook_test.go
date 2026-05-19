@@ -85,7 +85,7 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 			obj.Spec.Wandb.ServiceAccount.Create = boolPtr(false)
 			obj.Spec.Wandb.ServiceAccount.ServiceAccountName = "custom-sa"
 			obj.Spec.MySQL.ManagedMysql = &appsv2.ManagedMysqlSpec{
-				Namespace: "custom-mysql",
+				Namespace: "custom-moco",
 			}
 			obj.Spec.Redis.ManagedRedis = &appsv2.ManagedRedisSpec{Namespace: "custom-redis"}
 			obj.Spec.Kafka.ManagedKafka = &appsv2.ManagedKafkaSpec{Namespace: "custom-kafka"}
@@ -103,7 +103,7 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 			Expect(obj.Spec.Wandb.InternalServiceAuth.OIDCIssuer).To(Equal("https://issuer.example.com"))
 			Expect(*obj.Spec.Wandb.ServiceAccount.Create).To(BeFalse())
 			Expect(obj.Spec.Wandb.ServiceAccount.ServiceAccountName).To(Equal("custom-sa"))
-			Expect(obj.Spec.MySQL.ManagedMysql.Namespace).To(Equal("custom-mysql"))
+			Expect(obj.Spec.MySQL.ManagedMysql.Namespace).To(Equal("custom-moco"))
 			Expect(obj.Spec.Redis.ManagedRedis.Namespace).To(Equal("custom-redis"))
 			Expect(obj.Spec.Kafka.ManagedKafka.Namespace).To(Equal("custom-kafka"))
 			Expect(obj.Spec.ObjectStore.ManagedObjectStore.Namespace).To(Equal("custom-objectstore"))

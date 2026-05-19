@@ -1,4 +1,4 @@
-package mysql
+package moco
 
 import (
 	"context"
@@ -6,9 +6,9 @@ import (
 	"maps"
 	"strings"
 
+	mocov1beta2 "github.com/cybozu-go/moco/api/v1beta2"
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/logx"
-	"github.com/wandb/operator/pkg/vendored/mysql-operator/v2"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -24,11 +24,12 @@ func WriteState(
 	ctx context.Context,
 	cl client.Client,
 	specNamespacedName types.NamespacedName,
-	desired *v2.InnoDBCluster,
+	desired *mocov1beta2.MySQLCluster,
+	confMap *corev1.ConfigMap,
 	wandbLabels map[string]string,
 ) []metav1.Condition {
 	ctx, _ = logx.WithSlog(ctx, logx.Mysql)
-	var actual = &v2.InnoDBCluster{}
+	var actual = &mocov1beta2.MySQLCluster{}
 
 	nsnBuilder := createNsNameBuilder(specNamespacedName)
 
@@ -53,7 +54,39 @@ func WriteState(
 		actual = nil
 	}
 
+	// MOCO's mutating admission webhook fills in spec.serverIDBase with a random
+	// positive integer on Create; its validating webhook requires the value to
+	// stay positive on Update. Our generated desired spec leaves the field at
+	// zero, which would re-trip validation. Preserve the live value.
+	if actual != nil {
+		desired.Spec.ServerIDBase = actual.Spec.ServerIDBase
+	}
+
 	result := make([]metav1.Condition, 0)
+
+	if confMap != nil {
+		var actualConfMap = &corev1.ConfigMap{}
+		cmNsName := types.NamespacedName{Name: confMap.Name, Namespace: confMap.Namespace}
+		cmFound, cmErr := common.GetResource(ctx, cl, cmNsName, "ConfigMap", actualConfMap)
+		if cmErr != nil {
+			result = append(result, metav1.Condition{
+				Type:   common.ReconciledType,
+				Status: metav1.ConditionFalse,
+				Reason: common.ApiErrorReason,
+			})
+		} else {
+			if !cmFound {
+				actualConfMap = nil
+			}
+			if _, cmErr := common.CrudResource(ctx, cl, confMap, actualConfMap); cmErr != nil {
+				result = append(result, metav1.Condition{
+					Type:   common.ReconciledType,
+					Status: metav1.ConditionFalse,
+					Reason: common.ApiErrorReason,
+				})
+			}
+		}
+	}
 
 	action, err := common.CrudResource(ctx, cl, desired, actual)
 	if err != nil {
@@ -104,9 +137,9 @@ func WriteState(
 	return result
 }
 
-// ensurePVCLabels patches any PVCs belonging to the mysql cluster that are
+// ensurePVCLabels patches any PVCs belonging to the moco cluster that are
 // missing the wandb labels. PVCs are identified by the name prefix
-// "datadir-<clusterName>-" since the mysql-operator creates them via
+// "datadir-<clusterName>-" since the moco-operator creates them via
 // StatefulSet volumeClaimTemplates and may not propagate custom labels.
 func ensurePVCLabels(
 	ctx context.Context,

@@ -197,7 +197,7 @@ func applyMySQLDefaults(wandb *appsv2.WeightsAndBiases) {
 	}
 
 	if spec.Name == "" {
-		spec.Name = fmt.Sprintf("%s-mysql", wandb.Name)
+		spec.Name = fmt.Sprintf("%s-moco", wandb.Name)
 	}
 
 	if spec.Namespace == "" {
@@ -319,7 +319,7 @@ func validateChanges(_ context.Context, newWandb *appsv2.WeightsAndBiases, oldWa
 
 func validateMySQLSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 	var errors field.ErrorList
-	mysqlPath := field.NewPath("spec").Child("mysql")
+	mysqlPath := field.NewPath("spec").Child("moco")
 
 	if wandb.Spec.MySQL.ManagedMysql != nil && wandb.Spec.MySQL.ExternalMysql != nil {
 		errors = append(errors, field.Invalid(
@@ -327,6 +327,15 @@ func validateMySQLSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 			"",
 			"managedMysql and externalMysql are mutually exclusive",
 		))
+	}
+	if spec := wandb.Spec.MySQL.ManagedMysql; spec != nil {
+		if spec.Replicas != 0 && spec.Replicas%2 == 0 {
+			errors = append(errors, field.Invalid(
+				mysqlPath.Child("managedMysql").Child("replicas"),
+				spec.Replicas,
+				"replicas must be an odd number (Moco enforces quorum-based replication)",
+			))
+		}
 	}
 
 	return errors

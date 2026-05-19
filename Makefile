@@ -50,8 +50,18 @@ generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="{./api/v1,./api/v2}"
 
 .PHONY: generate-vendored
-generate-vendored: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
-	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="{./pkg/vendored/mysql-operator/v2}"
+generate-vendored: ## Regenerate vendored Moco CRDs from the operator's Helm chart dependency.
+	@helm dependency update deploy/operator >/dev/null
+	@tar -xzOf deploy/operator/charts/moco-*.tgz moco/templates/generated/crds/moco_crds.yaml | \
+		sed -e '/^{{/d' \
+		    -e "s|: '{{ .Release.Service }}'|: Helm|g" \
+		    -e "s|: '{{ include \"moco.name\" . }}'|: moco|g" \
+		    -e "s|: '{{ .Chart.AppVersion }}'|: vendored|g" \
+		    -e "s|: '{{ include \"moco.chart\" . }}'|: moco-vendored|g" \
+		    -e "s|: '{{ .Release.Namespace }}/moco-serving-cert'|: moco-system/moco-serving-cert|g" \
+		    -e "s|: '{{ .Release.Namespace }}'|: moco-system|g" \
+		> pkg/vendored/moco/crds/moco_crds.yaml
+	@echo "Regenerated pkg/vendored/moco/crds/moco_crds.yaml"
 
 
 .PHONY: fmt

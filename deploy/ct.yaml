@@ -7,7 +7,7 @@ chart-repos:
   - altinity=https://helm.altinity.com
   - grafana=https://grafana.github.io/helm-charts/
   - minio=https://operator.min.io/
-  - mysql=https://mysql.github.io/mysql-operator
+  - moco=https://moco.github.io/moco-operator
   - redis=https://ot-container-kit.github.io/helm-charts/
   - strimzy=https://strimzi.io/charts/
   - victoria-metrics=https://victoriametrics.github.io/helm-charts/

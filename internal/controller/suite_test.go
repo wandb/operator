@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	mocov1beta2 "github.com/cybozu-go/moco/api/v1beta2"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	apiv1 "github.com/wandb/operator/api/v1"
@@ -30,7 +31,6 @@ import (
 	webhookv2 "github.com/wandb/operator/internal/webhook/v2"
 	clickhousev1 "github.com/wandb/operator/pkg/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
 	argov1alpha1 "github.com/wandb/operator/pkg/vendored/argo-rollouts/argoproj.io.rollouts/v1alpha1"
-	mysqlv2 "github.com/wandb/operator/pkg/vendored/mysql-operator/v2"
 	redisv1beta2 "github.com/wandb/operator/pkg/vendored/redis-operator/redis/v1beta2"
 	redisreplicationv1beta2 "github.com/wandb/operator/pkg/vendored/redis-operator/redisreplication/v1beta2"
 	redissentinelv1beta2 "github.com/wandb/operator/pkg/vendored/redis-operator/redissentinel/v1beta2"
@@ -100,7 +100,7 @@ var _ = BeforeSuite(func() {
 	err = argov1alpha1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = mysqlv2.AddToScheme(scheme.Scheme)
+	err = mocov1beta2.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
 	err = gatewayv1.Install(scheme.Scheme)
@@ -115,7 +115,7 @@ var _ = BeforeSuite(func() {
 				filepath.Join("..", "..", "config", "crd", "bases"),
 				filepath.Join("..", "..", "pkg", "vendored", "altinity-clickhouse", "crds"),
 				filepath.Join("..", "..", "pkg", "vendored", "seaweedfs-operator", "crds"),
-				filepath.Join("..", "..", "pkg", "vendored", "mysql-operator", "crds"),
+				filepath.Join("..", "..", "pkg", "vendored", "moco", "crds"),
 				filepath.Join("..", "..", "pkg", "vendored", "redis-operator", "crds"),
 				filepath.Join("..", "..", "pkg", "vendored", "strimzi-kafka", "crds"),
 				filepath.Join("..", "..", "pkg", "vendored", "argo-rollouts", "crds"),
