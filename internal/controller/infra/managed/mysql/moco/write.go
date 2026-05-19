@@ -54,6 +54,14 @@ func WriteState(
 		actual = nil
 	}
 
+	// MOCO's mutating admission webhook fills in spec.serverIDBase with a random
+	// positive integer on Create; its validating webhook requires the value to
+	// stay positive on Update. Our generated desired spec leaves the field at
+	// zero, which would re-trip validation. Preserve the live value.
+	if actual != nil {
+		desired.Spec.ServerIDBase = actual.Spec.ServerIDBase
+	}
+
 	result := make([]metav1.Condition, 0)
 
 	if confMap != nil {

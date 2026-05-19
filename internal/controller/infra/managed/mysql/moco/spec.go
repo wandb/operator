@@ -57,7 +57,7 @@ func ToMocoMySQLClusterSpec(
 			},
 			VolumeClaimTemplates: []mocov1beta2.PersistentVolumeClaim{
 				{
-					ObjectMeta: mocov1beta2.ObjectMeta{Name: "moco-data"},
+					ObjectMeta: mocov1beta2.ObjectMeta{Name: "mysql-data"},
 					Spec:       buildPVCSpec(spec.StorageSize),
 				},
 			},
@@ -72,7 +72,7 @@ func ToMocoMySQLClusterSpec(
 func buildMocoPodSpec(resources corev1.ResourceRequirements) mocov1beta2.PodSpecApplyConfiguration {
 	container := corev1ac.Container().
 		WithName("mysqld").
-		WithImage("ghcr.io/cybozu-go/moco/moco:8.4.8")
+		WithImage("ghcr.io/cybozu-go/moco/mysql:8.4.8")
 
 	if resources.Requests != nil || resources.Limits != nil {
 		container = container.WithResources(

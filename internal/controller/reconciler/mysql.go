@@ -292,7 +292,7 @@ func runMysqlInitJob(ctx context.Context, client client.Client, wandb *apiv2.Wei
 		// moco-writable has DDL/DML privileges on all non-system databases,
 		// so CREATE DATABASE works. The Oracle-era CREATE USER + GRANT steps
 		// are unnecessary — wandb connects directly as the secret's Username.
-		mysqlCmd := `moco -h "$MYSQL_HOST" -P "$MYSQL_PORT" -u "$MYSQL_USER" -p"$MYSQL_PWD" ` +
+		mysqlCmd := `mysql -h "$MYSQL_HOST" -P "$MYSQL_PORT" -u "$MYSQL_USER" -p"$MYSQL_PWD" ` +
 			`-e "CREATE DATABASE IF NOT EXISTS $MYSQL_DB;"`
 
 		envFromConn := func(name, key string) corev1.EnvVar {
@@ -324,7 +324,7 @@ func runMysqlInitJob(ctx context.Context, client client.Client, wandb *apiv2.Wei
 						Containers: []corev1.Container{
 							{
 								Name:    "moco-init",
-								Image:   "moco:8.4",
+								Image:   "ghcr.io/cybozu-go/moco/mysql:8.4.8",
 								Command: []string{"/bin/sh", "-c", mysqlCmd},
 								Env: []corev1.EnvVar{
 									envFromConn("MYSQL_HOST", "Host"),
