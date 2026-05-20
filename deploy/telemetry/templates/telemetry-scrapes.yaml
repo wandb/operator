@@ -125,6 +125,32 @@ spec:
     - port: metrics
 {{- end }}
 
+{{- if .Values.scrape.kubeStateMetrics }}
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMServiceScrape
+metadata:
+  name: kube-state-metrics
+  namespace: {{ include "telemetry.namespace" . }}
+  labels:
+    app.kubernetes.io/component: telemetry
+    app.kubernetes.io/part-of: wandb
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kube-state-metrics
+  namespaceSelector:
+    any: true
+  endpoints:
+      # KSM exposes its own pod's namespace/pod labels by default. honorLabels
+      # keeps the metric's intrinsic labels (kube_pod_container_*'s namespace
+      # refers to the *target* pod, which is what dashboards filter on) instead
+      # of letting the target-side namespace overwrite them.
+    - port: http
+      scheme: http
+      honorLabels: true
+{{- end }}
+
 {{- if .Values.scrape.wandbApi }}
 ---
 apiVersion: operator.victoriametrics.com/v1beta1

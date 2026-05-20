@@ -66,7 +66,7 @@
       "gridPos": {"h": 10, "w": 16, "x": 0, "y": 7},
       "targets": [
         {
-          "expr": "sum by (pod, container) (changes(container_start_time_seconds{namespace=\"$namespace\", container!=\"\", container!=\"POD\", container!~\"agent|aws.*|csi.*|efs.*|external.*|kube.*|liveness.*|prometheus.*|teleport.*|gke.*\"}[1h]))",
+          "expr": "sum by (pod, container) (increase(kube_pod_container_status_restarts_total{namespace=\"$namespace\", container!=\"\", container!~\"agent|aws.*|csi.*|efs.*|external.*|kube.*|liveness.*|prometheus.*|teleport.*|gke.*\"}[1h]))",
           "legendFormat": "{{pod}} / {{container}}",
           "refId": "A"
         }
@@ -91,12 +91,12 @@
     },
     {
       "type": "timeseries",
-      "title": "Top Containers by CPU Usage",
+      "title": "Top Containers by CPU (% of limit)",
       "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
       "gridPos": {"h": 10, "w": 16, "x": 0, "y": 17},
       "targets": [
         {
-          "expr": "topk(15, sum by (pod, container) (rate(container_cpu_usage_seconds_total{namespace=\"$namespace\", container!=\"\", container!=\"POD\", container!~\"agent|aws.*|csi.*|efs.*|external.*|kube.*|liveness.*|prometheus.*|teleport.*|gke.*\"}[$__rate_interval])))",
+          "expr": "topk(15, sum by (pod, container) (rate(container_cpu_usage_seconds_total{namespace=\"$namespace\", container!=\"\", container!=\"POD\", container!~\"agent|aws.*|csi.*|efs.*|external.*|kube.*|liveness.*|prometheus.*|teleport.*|gke.*\"}[$__rate_interval])) / on (pod, container) sum by (pod, container) (kube_pod_container_resource_limits{namespace=\"$namespace\", resource=\"cpu\"}))",
           "legendFormat": "{{pod}} / {{container}}",
           "refId": "A"
         }
@@ -106,7 +106,7 @@
         "overrides": []
       },
       "options": {
-        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"]},
+        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "min", "max", "sum"]},
         "tooltip": {"mode": "multi"}
       }
     },
@@ -116,27 +116,27 @@
       "gridPos": {"h": 10, "w": 8, "x": 16, "y": 17},
       "options": {
         "mode": "markdown",
-        "content": "### What is this?\n\nTop 15 containers in the selected namespace by CPU usage (in cores), filtering out system/agent containers. Includes both W&B services and the managed infrastructure components (MySQL, Redis, Kafka, MinIO, ClickHouse).\n\n### Why it matters\n\nA container near or above its CPU limit will throttle, slowing every request it handles.\n\n### What to do\n\nFor the configured limit, run `kubectl describe pod -n <namespace> <pod>` and look at the Limits section, or check `spec.size` in the WeightsAndBiases CR. For sustained saturation, increase the install size."
+        "content": "### What is this?\n\nTop 15 containers in the selected namespace by CPU usage as a fraction of the configured CPU limit (1.0 = 100% of limit). Filters out system/agent containers. Includes both W&B services and the managed infrastructure components (MySQL, Redis, Kafka, MinIO, ClickHouse).\n\n### Why it matters\n\nA container sustained above 0.8 (80% of limit) will throttle frequently, slowing every request it handles. Above 1.0 means kernel-side throttling is constant.\n\n### What to do\n\nFor the configured limit, run `kubectl describe pod -n <namespace> <pod>` and look at the Limits section, or check `spec.size` in the WeightsAndBiases CR. For sustained saturation, increase the install size.\n\n*Series will be missing for containers without a configured CPU limit.*"
       }
     },
     {
       "type": "timeseries",
-      "title": "Top Containers by Memory (Working Set)",
+      "title": "Top Containers by Memory (% of limit)",
       "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
       "gridPos": {"h": 10, "w": 16, "x": 0, "y": 27},
       "targets": [
         {
-          "expr": "topk(15, sum by (pod, container) (container_memory_working_set_bytes{namespace=\"$namespace\", container!=\"\", container!=\"POD\", container!~\"agent|aws.*|csi.*|efs.*|external.*|kube.*|liveness.*|prometheus.*|teleport.*|gke.*\"}))",
+          "expr": "topk(15, sum by (pod, container) (container_memory_working_set_bytes{namespace=\"$namespace\", container!=\"\", container!=\"POD\", container!~\"agent|aws.*|csi.*|efs.*|external.*|kube.*|liveness.*|prometheus.*|teleport.*|gke.*\"}) / on (pod, container) sum by (pod, container) (kube_pod_container_resource_limits{namespace=\"$namespace\", resource=\"memory\"}))",
           "legendFormat": "{{pod}} / {{container}}",
           "refId": "A"
         }
       ],
       "fieldConfig": {
-        "defaults": {"unit": "bytes", "min": 0},
+        "defaults": {"unit": "percentunit", "min": 0},
         "overrides": []
       },
       "options": {
-        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"]},
+        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "min", "max", "sum"]},
         "tooltip": {"mode": "multi"}
       }
     },
@@ -146,7 +146,7 @@
       "gridPos": {"h": 10, "w": 8, "x": 16, "y": 27},
       "options": {
         "mode": "markdown",
-        "content": "### What is this?\n\nTop 15 containers in the selected namespace by working-set memory — the part the kernel would not evict.\n\n### Why it matters\n\n- A line that climbs without leveling off suggests a memory leak.\n- A line that spikes and drops to near zero suggests the container was OOMKilled (visible in the Container Restarts panel above).\n- A line consistently near the configured limit means the container is one bad allocation away from OOM.\n\n### What to do\n\nFor OOM debug: `kubectl get events -n <namespace> --sort-by=.lastTimestamp | grep -i oom`. For configured limits, see `spec.size` in the WeightsAndBiases CR."
+        "content": "### What is this?\n\nTop 15 containers in the selected namespace by working-set memory as a fraction of the configured memory limit (1.0 = 100% of limit). Working-set is the memory the kernel will not evict.\n\n### Why it matters\n\n- A line that climbs without leveling off suggests a memory leak.\n- A line that touches 1.0 means the container was OOMKilled (visible in the Container Restarts panel above).\n- A line consistently above 0.85 means the container is one bad allocation away from OOM.\n\n### What to do\n\nFor OOM debug: `kubectl get events -n <namespace> --sort-by=.lastTimestamp | grep -i oom`. For configured limits, see `spec.size` in the WeightsAndBiases CR.\n\n*Series will be missing for containers without a configured memory limit.*"
       }
     },
     {
@@ -182,7 +182,7 @@
         "overrides": []
       },
       "options": {
-        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"]},
+        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "min", "max", "sum"]},
         "tooltip": {"mode": "multi"}
       }
     },
@@ -227,7 +227,7 @@
         "overrides": []
       },
       "options": {
-        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"]},
+        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "min", "max", "sum"]},
         "tooltip": {"mode": "multi"}
       }
     },
@@ -267,7 +267,7 @@
         "overrides": []
       },
       "options": {
-        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"]},
+        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "min", "max", "sum"]},
         "tooltip": {"mode": "multi"}
       }
     },
@@ -315,7 +315,7 @@
         ]
       },
       "options": {
-        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"]},
+        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "min", "max", "sum"]},
         "tooltip": {"mode": "multi"}
       }
     },
@@ -355,7 +355,7 @@
         "overrides": []
       },
       "options": {
-        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"]},
+        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "min", "max", "sum"]},
         "tooltip": {"mode": "multi"}
       }
     },
@@ -396,7 +396,7 @@
         "overrides": []
       },
       "options": {
-        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"]},
+        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "min", "max", "sum"]},
         "tooltip": {"mode": "multi"}
       }
     },
@@ -444,7 +444,7 @@
         ]
       },
       "options": {
-        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"]},
+        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "min", "max", "sum"]},
         "tooltip": {"mode": "multi"}
       }
     },
@@ -488,7 +488,7 @@
         ]
       },
       "options": {
-        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"]},
+        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "min", "max", "sum"]},
         "tooltip": {"mode": "multi"}
       },
       "thresholds": {
