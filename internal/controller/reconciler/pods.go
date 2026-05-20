@@ -264,7 +264,11 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 			case "telemetry":
 				secretName := src.Name
 				if secretName == "" {
-					continue
+					return nil, fmt.Errorf(
+						"[telemetry] env var %q has a telemetry source with no Name set (typically %q)",
+						env.Name,
+						"wandb-otel-connection",
+					)
 				}
 
 				selector := v1.SecretKeySelector{

@@ -539,7 +539,7 @@ func TestInjectManagedWorkloadTelemetryEnvvarsDisabledSkipsInjection(t *testing.
 		serverManifest.Manifest{},
 		serverManifest.Application{Name: "api"},
 		nil,
-		false,
+		TelemetryRuntimeConfig{Enabled: false},
 	)
 	if err != nil {
 		t.Fatalf("injectManagedWorkloadTelemetryEnvvars returned error: %v", err)
@@ -558,6 +558,66 @@ func mustFindEnvVar(t *testing.T, envs []corev1.EnvVar, name string) corev1.EnvV
 	}
 	t.Fatalf("env var %q not found", name)
 	return corev1.EnvVar{}
+}
+
+func TestInjectManagedWorkloadTelemetryEnvvarsBindsSecretName(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed adding corev1 to scheme: %v", err)
+	}
+	client := fake.NewClientBuilder().WithScheme(scheme).Build()
+	wandb := &apiv2.WeightsAndBiases{ObjectMeta: metav1.ObjectMeta{Name: "wandb-dev-v2", Namespace: "default"}}
+
+	telemetryConfig := TelemetryRuntimeConfig{
+		Enabled: true,
+		OTel: TelemetryOTelConfig{
+			SecretName:  "wandb-otel-connection",
+			Protocol:    "http/protobuf",
+			ServiceName: "wandb-service",
+		},
+	}
+
+	envVars, err := injectManagedWorkloadTelemetryEnvvars(
+		context.Background(),
+		client,
+		wandb,
+		serverManifest.Manifest{},
+		serverManifest.Application{Name: "api"},
+		nil,
+		telemetryConfig,
+	)
+	if err != nil {
+		t.Fatalf("injectManagedWorkloadTelemetryEnvvars returned error: %v", err)
+	}
+
+	expectedNames := []string{
+		"OTEL_EXPORTER_OTLP_PROTOCOL",
+		"OTEL_TRACES_EXPORTER",
+		"OTEL_METRICS_EXPORTER",
+		"OTEL_LOGS_EXPORTER",
+		"OTEL_EXPORTER_OTLP_METRICS_ENDPOINT",
+		"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT",
+		"OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
+		"OTEL_SERVICE_NAME",
+		"OTEL_RESOURCE_ATTRIBUTES",
+		"GORILLA_TRACER",
+	}
+
+	for _, name := range expectedNames {
+		env := mustFindEnvVar(t, envVars, name)
+
+		if env.ValueFrom == nil {
+			t.Errorf("env var %q has no ValueFrom; expected SecretKeyRef to %q", name, telemetryConfig.OTel.SecretName)
+			continue
+		}
+		if env.ValueFrom.SecretKeyRef == nil {
+			t.Errorf("env var %q ValueFrom has no SecretKeyRef; expected reference to %q", name, telemetryConfig.OTel.SecretName)
+			continue
+		}
+		if got := env.ValueFrom.SecretKeyRef.Name; got != telemetryConfig.OTel.SecretName {
+			t.Errorf("env var %q references secret %q, want %q", name, got, telemetryConfig.OTel.SecretName)
+		}
+	}
 }
 
 //func coreEnvVarSliceContains(envs []corev1.EnvVar, target string) bool {
