@@ -29,6 +29,7 @@ import (
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/ctrlqueue"
 	"github.com/wandb/operator/internal/logx"
+	wmetrics "github.com/wandb/operator/internal/metrics"
 	oputils "github.com/wandb/operator/pkg/utils"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
 	batchv1 "k8s.io/api/batch/v1"
@@ -603,6 +604,8 @@ func reconcileApplications(
 			}
 		}
 
+		wmetrics.SetApplicationInfo(app.Name, wandb.Namespace, app.Image.Repository, app.Image.Tag, app.Image.Digest)
+
 		wandb.Status.Wandb.Applications[app.Name] = application.Status
 	}
 
@@ -628,6 +631,7 @@ func reconcileApplications(
 				return ctrl.Result{}, fmt.Errorf("failed to delete application %s: %w", app.Name, err)
 			}
 			delete(wandb.Status.Wandb.Applications, appName)
+			wmetrics.DeleteApplicationInfo(appName, wandb.Namespace)
 		}
 	}
 

@@ -39,14 +39,18 @@ metadata:
 spec:
   selector:
     matchLabels:
-      app.kubernetes.io/name: operator
-      control-plane: controller-manager
+      app.kubernetes.io/name: wandb-operator
   namespaceSelector:
     matchNames:
-      - operator-system
+      - {{ .Release.Namespace }}
   endpoints:
-    - port: https
+      # The operator emits `wandb_application_info{namespace="<wandb-cr-ns>"}`
+      # where `namespace` is the W&B CR's namespace (what dashboards filter on),
+      # not the operator pod's namespace. honorLabels keeps the metric's label
+      # instead of letting target-side `namespace=wandb-operators` overwrite it.
+    - port: metrics
       scheme: http
+      honorLabels: true
 ---
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMServiceScrape
