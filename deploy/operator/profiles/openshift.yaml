@@ -1,8 +1,29 @@
+wandb-operator:
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: null
+    runAsGroup: null
+    fsGroup: null
+    fsGroupChangePolicy: null
+    seccompProfile:
+      type: RuntimeDefault
+
+  containers:
+    operator:
+      env:
+        OPENSHIFT:
+          value: "true"
+
 grafana-operator:
   isOpenShift: true
 
 minio-operator:
   operator:
+    env:
+      - name: OPERATOR_STS_ENABLED
+        value: "on"
+      - name: MINIO_OPERATOR_RUNTIME
+        value: "OpenShift"
     securityContext:
       runAsUser: null
       runAsGroup: null
@@ -10,3 +31,7 @@ minio-operator:
     containerSecurityContext:
       runAsUser: null
       runAsGroup: null
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL

@@ -4,8 +4,10 @@ import (
 	"context"
 
 	mocov1beta2 "github.com/cybozu-go/moco/api/v1beta2"
+	mococonstants "github.com/cybozu-go/moco/pkg/constants"
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
+	"github.com/wandb/operator/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -17,7 +19,16 @@ import (
 
 const (
 	MysqlModuleName           = "moco"
+	MocoMySQLImage            = "ghcr.io/cybozu-go/moco/mysql:8.4.8"
 	DefaultMySQLExporterImage = "prom/mysqld-exporter:v0.15.1"
+)
+
+const (
+	mocoMySQLRunAsUser  int64 = mococonstants.ContainerUID
+	mocoMySQLRunAsGroup int64 = mococonstants.ContainerGID
+	mocoMySQLFSGroup    int64 = mococonstants.ContainerGID
+
+	mocoMySQLCapabilityAll corev1.Capability = "ALL"
 )
 
 func ToMocoMySQLClusterSpec(
@@ -53,7 +64,8 @@ func ToMocoMySQLClusterSpec(
 			Replicas:           replicas,
 			MySQLConfigMapName: ptr.To(MyCnfConfigMapName(spec.Name)),
 			PodTemplate: mocov1beta2.PodTemplateSpec{
-				Spec: buildMocoPodSpec(spec.Config.Resources),
+				Spec:                buildMocoPodSpec(spec.Config.Resources),
+				OverwriteContainers: mocoOverwriteContainers(),
 			},
 			VolumeClaimTemplates: []mocov1beta2.PersistentVolumeClaim{
 				{
@@ -72,7 +84,8 @@ func ToMocoMySQLClusterSpec(
 func buildMocoPodSpec(resources corev1.ResourceRequirements) mocov1beta2.PodSpecApplyConfiguration {
 	container := corev1ac.Container().
 		WithName("mysqld").
-		WithImage("ghcr.io/cybozu-go/moco/mysql:8.4.8")
+		WithImage(MocoMySQLImage).
+		WithSecurityContext(mocoContainerSecurityContext())
 
 	if resources.Requests != nil || resources.Limits != nil {
 		container = container.WithResources(
@@ -82,8 +95,62 @@ func buildMocoPodSpec(resources corev1.ResourceRequirements) mocov1beta2.PodSpec
 		)
 	}
 
-	podSpec := corev1ac.PodSpec().WithContainers(container)
+	podSpec := corev1ac.PodSpec().
+		WithSecurityContext(mocoPodSecurityContext()).
+		WithContainers(container)
 	return mocov1beta2.PodSpecApplyConfiguration(*podSpec)
+}
+
+func mocoPodSecurityContext() *corev1ac.PodSecurityContextApplyConfiguration {
+	securityContext := corev1ac.PodSecurityContext().
+		WithRunAsNonRoot(true).
+		WithSeccompProfile(corev1ac.SeccompProfile().
+			WithType(corev1.SeccompProfileTypeRuntimeDefault))
+	if !utils.IsOpenShift() {
+		securityContext = securityContext.
+			WithRunAsUser(mocoMySQLRunAsUser).
+			WithRunAsGroup(mocoMySQLRunAsGroup).
+			WithFSGroup(mocoMySQLFSGroup).
+			WithFSGroupChangePolicy(corev1.FSGroupChangeOnRootMismatch)
+	}
+	return securityContext
+}
+
+func mocoContainerSecurityContext() *corev1ac.SecurityContextApplyConfiguration {
+	securityContext := corev1ac.SecurityContext().
+		WithRunAsNonRoot(true).
+		WithAllowPrivilegeEscalation(false).
+		WithCapabilities(corev1ac.Capabilities().WithDrop(mocoMySQLCapabilityAll)).
+		WithSeccompProfile(corev1ac.SeccompProfile().
+			WithType(corev1.SeccompProfileTypeRuntimeDefault))
+	if !utils.IsOpenShift() {
+		securityContext = securityContext.
+			WithRunAsUser(mocoMySQLRunAsUser).
+			WithRunAsGroup(mocoMySQLRunAsGroup)
+	}
+	return securityContext
+}
+
+func mocoOverwriteContainers() []mocov1beta2.OverwriteContainer {
+	securityContext := (*mocov1beta2.SecurityContextApplyConfiguration)(mocoContainerSecurityContext())
+	return []mocov1beta2.OverwriteContainer{
+		{
+			Name:            mocov1beta2.AgentContainerName,
+			SecurityContext: securityContext.DeepCopy(),
+		},
+		{
+			Name:            mocov1beta2.InitContainerName,
+			SecurityContext: securityContext.DeepCopy(),
+		},
+		{
+			Name:            mocov1beta2.SlowQueryLogAgentContainerName,
+			SecurityContext: securityContext.DeepCopy(),
+		},
+		{
+			Name:            mocov1beta2.ExporterContainerName,
+			SecurityContext: securityContext.DeepCopy(),
+		},
+	}
 }
 
 func buildPVCSpec(storageSize string) mocov1beta2.PersistentVolumeClaimSpecApplyConfiguration {

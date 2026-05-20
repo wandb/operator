@@ -7,6 +7,7 @@ import (
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/logx"
+	"github.com/wandb/operator/pkg/utils"
 	miniov2 "github.com/wandb/operator/pkg/vendored/minio-operator/minio.min.io/v2"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -22,6 +23,71 @@ const (
 	DevVolumesPerServer   = int32(1)
 	ProdVolumesPerServer  = int32(4)
 )
+
+const (
+	minioRunAsUser  int64 = 1000
+	minioRunAsGroup int64 = 1000
+	minioFSGroup    int64 = 1000
+
+	minioWritableTmpVolumeName = "minio-tmp"
+	minioWritableTmpMountPath  = "/tmp"
+
+	minioCapabilityAll corev1.Capability = "ALL"
+)
+
+func minioPodSecurityContext() *corev1.PodSecurityContext {
+	if utils.IsOpenShift() {
+		return &corev1.PodSecurityContext{
+			RunAsNonRoot:   ptr.Bool(true),
+			SeccompProfile: minioRuntimeDefaultSeccompProfile(),
+		}
+	}
+
+	return &corev1.PodSecurityContext{
+		RunAsUser:      ptr.Int64(minioRunAsUser),
+		RunAsGroup:     ptr.Int64(minioRunAsGroup),
+		RunAsNonRoot:   ptr.Bool(true),
+		FSGroup:        ptr.Int64(minioFSGroup),
+		SeccompProfile: minioRuntimeDefaultSeccompProfile(),
+	}
+}
+
+func minioContainerSecurityContext() *corev1.SecurityContext {
+	securityContext := &corev1.SecurityContext{
+		RunAsNonRoot:             ptr.Bool(true),
+		AllowPrivilegeEscalation: ptr.Bool(false),
+		Capabilities: &corev1.Capabilities{
+			Drop: []corev1.Capability{minioCapabilityAll},
+		},
+		SeccompProfile: minioRuntimeDefaultSeccompProfile(),
+	}
+	if !utils.IsOpenShift() {
+		securityContext.RunAsUser = ptr.Int64(minioRunAsUser)
+		securityContext.RunAsGroup = ptr.Int64(minioRunAsGroup)
+	}
+	return securityContext
+}
+
+func minioWritableVolumes() []corev1.Volume {
+	return []corev1.Volume{
+		{
+			Name: minioWritableTmpVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
+			},
+		},
+	}
+}
+
+func minioWritableVolumeMounts() []corev1.VolumeMount {
+	return []corev1.VolumeMount{
+		{Name: minioWritableTmpVolumeName, MountPath: minioWritableTmpMountPath},
+	}
+}
+
+func minioRuntimeDefaultSeccompProfile() *corev1.SeccompProfile {
+	return &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault}
+}
 
 func createObjectStoreTelemetryEnv(telemetry apiv2.Telemetry) []corev1.EnvVar {
 	if !telemetry.Enabled {
@@ -68,7 +134,9 @@ func ToObjectStoreVendorSpec(
 			},
 		},
 		Spec: miniov2.TenantSpec{
-			Image: MinioImage,
+			Image:     MinioImage,
+			Mountpath: miniov2.MinIOVolumeMountPath,
+			Subpath:   miniov2.MinIOVolumeSubPath,
 			Configuration: &corev1.LocalObjectReference{
 				Name: ConfigName(specName),
 			},
@@ -80,11 +148,13 @@ func ToObjectStoreVendorSpec(
 			},
 			Pools: []miniov2.Pool{
 				{
-					Name:             "default",
-					Affinity:         wandb.GetAffinity(infraSpec.ManagedInfraSpec),
-					Tolerations:      *wandb.GetTolerations(infraSpec.ManagedInfraSpec),
-					Servers:          infraSpec.Replicas,
-					VolumesPerServer: volumesPerServer,
+					Name:                     "default",
+					Affinity:                 wandb.GetAffinity(infraSpec.ManagedInfraSpec),
+					Tolerations:              *wandb.GetTolerations(infraSpec.ManagedInfraSpec),
+					Servers:                  infraSpec.Replicas,
+					VolumesPerServer:         volumesPerServer,
+					SecurityContext:          minioPodSecurityContext(),
+					ContainerSecurityContext: minioContainerSecurityContext(),
 					VolumeClaimTemplate: &corev1.PersistentVolumeClaim{
 						ObjectMeta: metav1.ObjectMeta{
 							Labels: BuildWandbObjectStoreLabels(wandb),
@@ -102,6 +172,8 @@ func ToObjectStoreVendorSpec(
 					},
 				},
 			},
+			AdditionalVolumes:      minioWritableVolumes(),
+			AdditionalVolumeMounts: minioWritableVolumeMounts(),
 			Buckets: []miniov2.Bucket{
 				{
 					Name: "bucket",

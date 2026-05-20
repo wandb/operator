@@ -338,8 +338,8 @@ def build_operator_values(telemetry_namespace):
             },
         }
         values["wandb-operator"]["containers"]["operator"]["env"] = {
-            "KAFKA_FSGROUP": {
-                "value": "0",
+            "OPENSHIFT": {
+                "value": "true",
             },
         }
         values["wandb-operator"]["containers"]["operator"]["securityContext"] = {
