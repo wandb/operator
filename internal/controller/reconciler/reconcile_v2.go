@@ -513,7 +513,7 @@ func reconcileApplications(
 		if err != nil {
 			return ctrl.Result{}, err
 		}
-		envVars, err = injectManagedWorkloadTelemetryEnvvars(ctx, client, wandb, manifest, app, envVars, telemetryConfig.Enabled)
+		envVars, err = injectManagedWorkloadTelemetryEnvvars(ctx, client, wandb, manifest, app, envVars, telemetryConfig)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
@@ -768,18 +768,40 @@ func injectManagedWorkloadTelemetryEnvvars(
 	manifest serverManifest.Manifest,
 	app serverManifest.Application,
 	envVars []corev1.EnvVar,
-	telemetryEnabled bool,
+	telemetryConfig TelemetryRuntimeConfig,
 ) ([]corev1.EnvVar, error) {
+
+	telemetryEnabled := telemetryConfig.Enabled
 	if !telemetryEnabled || !shouldInjectManagedWorkloadTelemetry(app.Name) {
 		return envVars, nil
 	}
 
-	telemetryEnvVars, err := resolveEnvvars(ctx, client, wandb, manifest, nil, managedWorkloadTelemetryEnvVars)
+	// Ensure telemetry `secretName` is present
+	cleanedEnvVars := bindTelemetrySecretName(managedWorkloadTelemetryEnvVars, telemetryConfig.OTel.SecretName)
+
+	telemetryEnvVars, err := resolveEnvvars(ctx, client, wandb, manifest, nil, cleanedEnvVars)
 	if err != nil {
 		return nil, err
 	}
 
 	return appendMissingEnvVars(envVars, telemetryEnvVars), nil
+}
+
+// This function binds the secret name if `secretName` is empty for telemetry.
+func bindTelemetrySecretName(base []serverManifest.EnvVar, secretName string) []serverManifest.EnvVar {
+	output := make([]serverManifest.EnvVar, len(base))
+	for i, envVar := range base {
+		sources := make([]serverManifest.EnvSource, len(envVar.Sources))
+		for j, source := range envVar.Sources {
+			if source.Type == "telemetry" && source.Name == "" {
+				source.Name = secretName
+			}
+			sources[j] = source
+		}
+		envVar.Sources = sources
+		output[i] = envVar
+	}
+	return output
 }
 
 func shouldInjectManagedWorkloadTelemetry(appName string) bool {
