@@ -23,6 +23,22 @@ data:
     processors:
       batch: {}
 
+    connectors:
+      # Derives RED-style metrics (request count + duration histogram) from
+      # incoming traces. service.name and span.name are implicit identity;
+      # http.route is added so dashboards can break down by HTTP route.
+      # Cardinality budget per Phase 2.5: ~50k series. user.id /
+      # project.name / entity.name dimensions are deferred to Wave C.2.
+      spanmetrics:
+        namespace: traces_spanmetrics
+        dimensions:
+          - name: http.route
+            default: ""
+        histogram:
+          explicit:
+            buckets: [5ms, 10ms, 25ms, 50ms, 100ms, 250ms, 500ms, 1s, 2.5s, 5s, 10s]
+        metrics_flush_interval: 15s
+
     exporters:
       otlphttp/vm:
         endpoint: http://vmsingle-{{ include "telemetry.vmsingleName" . }}:8428
@@ -59,7 +75,7 @@ data:
           address: 0.0.0.0:8888
       pipelines:
         metrics:
-          receivers: [otlp]
+          receivers: [otlp, spanmetrics]
           processors: [batch]
           exporters: [otlphttp/vm{{ if $forwardingEnabled }}, {{ include "telemetry.forwardingExporterName" . }}{{ end }}]
         logs:
@@ -69,7 +85,7 @@ data:
         traces:
           receivers: [otlp]
           processors: [batch]
-          exporters: [otlphttp/vt{{ if $forwardingEnabled }}, {{ include "telemetry.forwardingExporterName" . }}{{ end }}]
+          exporters: [otlphttp/vt, spanmetrics{{ if $forwardingEnabled }}, {{ include "telemetry.forwardingExporterName" . }}{{ end }}]
 ---
 apiVersion: apps/v1
 kind: Deployment

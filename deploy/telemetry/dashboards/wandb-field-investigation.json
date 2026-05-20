@@ -67,7 +67,7 @@
       "gridPos": {"h": 12, "w": 16, "x": 0, "y": 7},
       "targets": [
         {
-          "expr": "count by (container, image) (container_last_seen{namespace=\"$namespace\", container=~\"api|executor|parquet|glue|filestream|filemeta|flat-run-fields-updater|metric-observer|nginx-proxy|weave|weave-trace|weave-trace-worker|weave-trace-evaluate-model-worker\"})",
+          "expr": "wandb_application_info{namespace=\"$namespace\"}",
           "format": "table",
           "instant": true,
           "refId": "A"
@@ -77,9 +77,9 @@
         {
           "id": "organize",
           "options": {
-            "excludeByName": {"Time": true, "Value": true},
-            "indexByName": {"container": 0, "image": 1},
-            "renameByName": {"container": "Container", "image": "Image"}
+            "excludeByName": {"Time": true, "Value": true, "__name__": true, "job": true, "instance": true, "namespace": true, "pod": true, "container": true, "endpoint": true, "service": true},
+            "indexByName": {"application_name": 0, "image": 1, "tag": 2, "digest": 3},
+            "renameByName": {"application_name": "Service", "image": "Image", "tag": "Tag", "digest": "Digest"}
           }
         }
       ],
@@ -99,7 +99,7 @@
       "gridPos": {"h": 12, "w": 8, "x": 16, "y": 7},
       "options": {
         "mode": "markdown",
-        "content": "### What is this?\n\nThe currently-running container image for each managed W&B service in this install.\n\n### Why it matters\n\n- **Version lag** — knowing the tag tells you whether a fix has shipped here yet.\n- **Mid-upgrade drift** — if `api` is on a newer tag than `parquet`, a rollout is in progress (or got stuck) and behavior may be inconsistent.\n- **Internal registry** — the image path shows whether services are pulling from your internal mirror.\n\n### How to read it\n\nOne row per `(container, image)` pair observed in the last scrape window. If a container appears with two image rows, that container is mid-rollout."
+        "content": "### What is this?\n\nThe currently-running container image for each managed W&B service in this install, split into image / tag / digest columns.\n\n### Why it matters\n\n- **Version lag** — the tag column tells you whether a fix has shipped here yet.\n- **Mid-upgrade drift** — if `api` is on a newer tag than `parquet`, a rollout is in progress (or got stuck) and behavior may be inconsistent.\n- **Internal registry** — the image path shows whether services are pulling from your internal mirror.\n\n### How to read it\n\nOne row per managed W&B service. If a service appears with two rows, that service is mid-rollout."
       }
     },
     {
@@ -135,7 +135,7 @@
         "overrides": []
       },
       "options": {
-        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"]},
+        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "min", "max", "sum"]},
         "tooltip": {"mode": "multi"}
       },
       "thresholds": {
@@ -173,7 +173,7 @@
         "overrides": []
       },
       "options": {
-        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"]},
+        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "min", "max", "sum"]},
         "tooltip": {"mode": "multi"}
       }
     },
@@ -209,7 +209,7 @@
         "overrides": []
       },
       "options": {
-        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"]},
+        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "min", "max", "sum"]},
         "tooltip": {"mode": "multi"}
       }
     },

@@ -66,6 +66,9 @@
         },
         "infrastructure": {
           "type": "boolean"
+        },
+        "kubeStateMetrics": {
+          "type": "boolean"
         }
       }
     },
