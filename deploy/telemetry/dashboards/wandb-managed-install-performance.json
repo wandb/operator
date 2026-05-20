@@ -516,12 +516,33 @@
       "collapsed": false
     },
     {
+      "type": "timeseries",
+      "title": "Slowest Storage Operations (p95, by span)",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 10, "w": 16, "x": 0, "y": 123},
+      "targets": [
+        {
+          "expr": "topk(10, histogram_quantile(0.95, sum by (service_name, span_name, le) (rate(traces_spanmetrics_duration_milliseconds_bucket{service_name=~\"gorilla.*\", span_name=~\"(?i)(parquet|filestream|filehandler|runstore|historystore|metadatastore|s3|minio|sql).*\"}[$__rate_interval]))))",
+          "legendFormat": "{{service_name}} / {{span_name}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {"unit": "ms", "min": 0},
+        "overrides": []
+      },
+      "options": {
+        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["max", "mean"]},
+        "tooltip": {"mode": "multi", "sort": "desc"}
+      }
+    },
+    {
       "type": "text",
-      "title": "About: Parquet Read Performance",
-      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 123},
+      "title": "About: Slow Storage Operations",
+      "gridPos": {"h": 10, "w": 8, "x": 16, "y": 123},
       "options": {
         "mode": "markdown",
-        "content": "Slow chart loads are usually driven by slow parquet reads. Diagnostics for this layer live in the trace explorer rather than as a chart panel:\n\n- [Open Traces in Explore](/explore?panes=%7B%22A%22:%7B%22datasource%22:%22${DS_VICTORIATRACES}%22,%22queries%22:[],%22range%22:%7B%22from%22:%22now-1h%22,%22to%22:%22now%22%7D%7D%7D&schemaVersion=1&orgId=1), filter `service.name=gorilla` or `service.name=gorilla-parquet` with `duration > 3s`, then narrow by `resource.name` (e.g., `ParquetHistoryStore.FetchHistorySketchWithKeys`, `FileStreamStore.StoreChunks`).\n- The **Slow Operations** table in the [W&B Field Investigation](/d/wandb-field-investigation) dashboard shows the same story from the HTTP-route side — useful for identifying which user-facing operations are most affected.\n- The parquet pod's memory series in the **Container Resource Usage** section above is a leading indicator: sustained near-limit memory plus frequent restarts often correlates with parquet read slowness."
+        "content": "### What is this?\n\np95 latency per storage operation, derived from traces by the OTel `spanmetrics` connector. Covers parquet reads/writes, filestream chunks, MinIO/S3 calls, and SQL statements.\n\n### Why it matters\n\nSlow chart loads, slow file uploads, and stuck artifact downloads almost always trace back to one storage path being slow. This panel surfaces which one without opening individual traces.\n\n### What to do\n\n- Spikes on `ParquetHistoryStore.*` or `HistoryStore.*` → chart loads will feel slow. Check the parquet pod's CPU/memory in **Container Resource Usage** above, and ClickHouse load if installed.\n- Spikes on `FileStreamStore.*` / `FileHandler.*` → ingest stalls. Check filestream container restarts and MinIO capacity below.\n- Spikes on `sql.*` → MySQL is the bottleneck. See **MySQL Errors & Slow Queries** above.\n- For per-request detail, [open Traces in Explore](/explore?panes=%7B%22A%22:%7B%22datasource%22:%22${DS_VICTORIATRACES}%22,%22queries%22:[],%22range%22:%7B%22from%22:%22now-1h%22,%22to%22:%22now%22%7D%7D%7D&schemaVersion=1&orgId=1) and filter by the offending `service.name` + `span.name` with `duration > 1s`."
       }
     }
   ],

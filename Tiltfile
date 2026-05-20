@@ -502,7 +502,14 @@ local_resource(
 local_resource(
     "Operator-Chart-Deps",
     "helm dependency build ./deploy/operator --skip-refresh",
-    deps=["deploy/operator/Chart.yaml", "deploy/operator/Chart.lock", "deploy/telemetry/Chart.yaml"],
+    deps=[
+        "deploy/operator/Chart.yaml",
+        "deploy/operator/Chart.lock",
+        "deploy/telemetry/Chart.yaml",
+        "deploy/telemetry/values.yaml",
+        "deploy/telemetry/templates",
+        "deploy/telemetry/dashboards",
+    ],
     labels=[GROUP_DEPENDENCIES],
 )
 
