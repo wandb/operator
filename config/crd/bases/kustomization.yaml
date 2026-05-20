@@ -1,0 +1,3 @@
+resources:
+  - apps.wandb.com_weightsandbiases.yaml
+  - apps.wandb.com_applications.yaml

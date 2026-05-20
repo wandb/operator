@@ -289,7 +289,7 @@ func markWandbReadyForNetworking(ctx context.Context, name, namespace string) *a
 	wandb.Status.ClickHouseStatus.Ready = true
 	wandb.Status.MySQLStatus.Connection.URL = corev1.SecretKeySelector{
 		LocalObjectReference: corev1.LocalObjectReference{Name: name},
-		Key:                  "moco-url",
+		Key:                  "mysql-url",
 	}
 	wandb.Status.ClickHouseStatus.Connection.URL = corev1.SecretKeySelector{
 		LocalObjectReference: corev1.LocalObjectReference{Name: name},

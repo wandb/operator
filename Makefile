@@ -63,6 +63,9 @@ generate-vendored: ## Regenerate vendored Moco CRDs from the operator's Helm cha
 		> pkg/vendored/moco/crds/moco_crds.yaml
 	@echo "Regenerated pkg/vendored/moco/crds/moco_crds.yaml"
 
+.PHONY: generate-helm-crds
+generate-helm-crds: kustomize manifests generate
+	$(KUSTOMIZE) build config/helm-crds | sed "s/\'/\"/g" > deploy/operator/templates/crds.yaml
 
 .PHONY: fmt
 fmt: ## Run go fmt against code.

@@ -59,13 +59,19 @@ var validSizes = map[string]appsv2.Size{
 	string(appsv2.SizeXXLarge): appsv2.SizeXXLarge,
 }
 
-// applyGlobalMappings extracts the supported v1 spec.values.global.* fields
-// and writes them onto dst's typed v2 spec (and annotations, for fields that
-// need downstream Secret materialization).
+// applyGlobalMappings extracts the supported v1 spec.values.* fields and
+// writes them onto dst's typed v2 spec (and annotations, for fields that
+// need downstream Secret materialization). Most fields live under
+// spec.values.global; a few (e.g. the chart-version derived from
+// app.image.tag / api.image.tag) live at peers of `global`.
 func applyGlobalMappings(src *WeightsAndBiases, dst *appsv2.WeightsAndBiases) error {
 	values := src.Spec.Values.Object
 	if values == nil {
 		return nil
+	}
+
+	if err := mapVersion(values, dst); err != nil {
+		return err
 	}
 
 	globalMap, found, err := unstructured.NestedMap(values, "global")
@@ -95,6 +101,24 @@ func applyGlobalMappings(src *WeightsAndBiases, dst *appsv2.WeightsAndBiases) er
 		return err
 	}
 
+	return nil
+}
+
+// mapVersion derives spec.wandb.version from the v1 helm values. The
+// authoritative source is the app sub-chart's image tag; the api sub-chart
+// is used as a fallback because some older v1 manifests only set api.
+func mapVersion(values map[string]interface{}, dst *appsv2.WeightsAndBiases) error {
+	if tag, found, err := unstructured.NestedString(values, "app", "image", "tag"); err != nil {
+		return fmt.Errorf("spec.values.app.image.tag: %w", err)
+	} else if found && tag != "" {
+		dst.Spec.Wandb.Version = tag
+		return nil
+	}
+	if tag, found, err := unstructured.NestedString(values, "api", "image", "tag"); err != nil {
+		return fmt.Errorf("spec.values.api.image.tag: %w", err)
+	} else if found && tag != "" {
+		dst.Spec.Wandb.Version = tag
+	}
 	return nil
 }
 

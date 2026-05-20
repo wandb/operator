@@ -516,23 +516,23 @@ local_resource(
     labels=[GROUP_DEPENDENCIES],
 )
 
-local_resource(
-    "WandB-CRDs-Apply",
-    "kubectl apply --server-side=true --force-conflicts --field-manager=helm " +
-    "-f config/crd/bases/apps.wandb.com_applications.yaml " +
-    "-f config/crd/bases/apps.wandb.com_weightsandbiases.yaml",
-    resource_deps=["Operator-Codegen"],
-    labels=[GROUP_DEPENDENCIES],
-)
-
-local_resource(
-    "WandB-CRDs-Ready",
-    "kubectl wait --for=condition=established --timeout=120s " +
-    "crd/applications.apps.wandb.com " +
-    "crd/weightsandbiases.apps.wandb.com",
-    resource_deps=["WandB-CRDs-Apply"],
-    labels=[GROUP_DEPENDENCIES],
-)
+# local_resource(
+#     "WandB-CRDs-Apply",
+#     "kubectl apply --server-side=true --force-conflicts --field-manager=helm " +
+#     "-f config/crd/bases/apps.wandb.com_applications.yaml " +
+#     "-f config/crd/bases/apps.wandb.com_weightsandbiases.yaml",
+#     resource_deps=["Operator-Codegen"],
+#     labels=[GROUP_DEPENDENCIES],
+# )
+#
+# local_resource(
+#     "WandB-CRDs-Ready",
+#     "kubectl wait --for=condition=established --timeout=120s " +
+#     "crd/applications.apps.wandb.com " +
+#     "crd/weightsandbiases.apps.wandb.com",
+#     resource_deps=["WandB-CRDs-Apply"],
+#     labels=[GROUP_DEPENDENCIES],
+# )
 
 cert_manager_flags = [
         "--create-namespace",
@@ -606,7 +606,7 @@ if LOCAL_NETWORKING_MODE == "ingress":
         labels=[GROUP_DEPENDENCIES],
     )
 
-operator_deps = ["Operator-Chart-Deps", "Operator-Build", "WandB-CRDs-Ready"]
+operator_deps = ["Operator-Chart-Deps", "Operator-Build"]
 operator_deps.append("cert-manager")
 if LOCAL_NETWORKING_MODE == "gateway":
     operator_deps.append("nginx-gateway-fabric")

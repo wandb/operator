@@ -46,7 +46,7 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 		}
 		job := &batchv1.Job{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      WandbName + "-moco-init",
+				Name:      WandbName + "-mysql-init",
 				Namespace: WandbNamespace,
 			},
 		}

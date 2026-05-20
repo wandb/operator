@@ -83,3 +83,10 @@ spec:
           secretName: external-objectstore-connection
           accessKeyName: AccessKey
           secretKeyName: SecretKey
+
+    app:
+      image:
+        tag: "0.81.0-rc.1779120597"
+    api:
+      image:
+        tag: "0.81.0-rc.1779120597"

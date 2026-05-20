@@ -113,6 +113,77 @@ func TestConvertTo_SizeUnrecognized(t *testing.T) {
 	require.Contains(t, err.Error(), `"testing"`)
 }
 
+func TestConvertTo_VersionFromAppImageTag(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"app": map[string]interface{}{
+			"image": map[string]interface{}{"tag": "0.80.1"},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+	require.Equal(t, "0.80.1", dst.Spec.Wandb.Version)
+}
+
+func TestConvertTo_VersionFallsBackToApiImageTag(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"api": map[string]interface{}{
+			"image": map[string]interface{}{"tag": "0.79.2"},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+	require.Equal(t, "0.79.2", dst.Spec.Wandb.Version)
+}
+
+func TestConvertTo_VersionAppWinsOverApi(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"app": map[string]interface{}{
+			"image": map[string]interface{}{"tag": "0.80.1"},
+		},
+		"api": map[string]interface{}{
+			"image": map[string]interface{}{"tag": "0.79.2"},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+	require.Equal(t, "0.80.1", dst.Spec.Wandb.Version, "app.image.tag takes precedence over api.image.tag")
+}
+
+func TestConvertTo_VersionEmptyAppFallsBackToApi(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"app": map[string]interface{}{
+			"image": map[string]interface{}{"tag": ""},
+		},
+		"api": map[string]interface{}{
+			"image": map[string]interface{}{"tag": "0.79.2"},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+	require.Equal(t, "0.79.2", dst.Spec.Wandb.Version, "empty app tag should not consume the slot; api fallback applies")
+}
+
+func TestConvertTo_VersionAbsent(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{"host": "http://x"},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+	require.Empty(t, dst.Spec.Wandb.Version)
+}
+
+func TestConvertTo_VersionWithoutGlobal(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"app": map[string]interface{}{
+			"image": map[string]interface{}{"tag": "0.80.1"},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+	require.Equal(t, "0.80.1", dst.Spec.Wandb.Version,
+		"version mapping should run even when global is absent")
+}
+
 func TestConvertTo_OIDCAllLiterals(t *testing.T) {
 	dst := &appsv2.WeightsAndBiases{}
 	src := newV1(map[string]interface{}{
@@ -1006,8 +1077,58 @@ func TestConvertTo_PreservesObjectMeta(t *testing.T) {
 	require.Equal(t, "value", dst.Annotations["existing"])
 }
 
-func TestConvertFrom_AlwaysErrors(t *testing.T) {
+// TestConvertRoundTrip locks in the v1 → v2 → v1 → v2 lossless round-trip
+// behavior. kube-apiserver bounces objects through this sequence during
+// admission, so any data ConvertFrom can't recover would be silently dropped
+// from the persisted v2 spec on the next pass.
+func TestConvertRoundTrip(t *testing.T) {
+	original := newV1(map[string]interface{}{
+		"global": map[string]interface{}{
+			"host": "http://wandb.localhost",
+			"mysql": map[string]interface{}{
+				"host": map[string]interface{}{
+					"valueFrom": map[string]interface{}{
+						"secretKeyRef": map[string]interface{}{
+							"name": "mysql-creds",
+							"key":  "Host",
+						},
+					},
+				},
+			},
+		},
+	})
+	original.Spec.Chart.Object = map[string]interface{}{
+		"name":    "operator-wandb",
+		"version": "0.37.1",
+	}
+
+	// First conversion (apiserver applies the v1 manifest).
+	firstV2 := &appsv2.WeightsAndBiases{}
+	require.NoError(t, original.ConvertTo(firstV2))
+	require.Equal(t, "http://wandb.localhost", firstV2.Spec.Wandb.Hostname)
+	require.NotNil(t, firstV2.Spec.MySQL.ExternalMysql)
+	require.Equal(t, "mysql-creds", firstV2.Spec.MySQL.ExternalMysql.Host.Name)
+
+	// Apiserver bounces through ConvertFrom internally.
+	roundTripped := &WeightsAndBiases{}
+	require.NoError(t, roundTripped.ConvertFrom(firstV2))
+
+	// And then ConvertTo again. The second v2 must match the first; otherwise
+	// the round-trip silently erases data.
+	secondV2 := &appsv2.WeightsAndBiases{}
+	require.NoError(t, roundTripped.ConvertTo(secondV2))
+
+	require.Equal(t, firstV2.Spec.Wandb.Hostname, secondV2.Spec.Wandb.Hostname)
+	require.NotNil(t, secondV2.Spec.MySQL.ExternalMysql)
+	require.Equal(t, firstV2.Spec.MySQL.ExternalMysql.Host, secondV2.Spec.MySQL.ExternalMysql.Host)
+}
+
+func TestConvertFrom_NoAnnotations(t *testing.T) {
 	dst := &WeightsAndBiases{}
 	src := &appsv2.WeightsAndBiases{}
-	require.Error(t, dst.ConvertFrom(src))
+	require.NoError(t, dst.ConvertFrom(src))
+	require.NotNil(t, dst.Spec.Chart.Object)
+	require.Empty(t, dst.Spec.Chart.Object)
+	require.NotNil(t, dst.Spec.Values.Object)
+	require.Empty(t, dst.Spec.Values.Object)
 }
