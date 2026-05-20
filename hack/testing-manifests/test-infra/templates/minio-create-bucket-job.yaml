@@ -1,0 +1,53 @@
+{{- if .Values.minio.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Values.minio.service.name }}-create-bucket
+  labels:
+    {{- include "test-infra.componentLabels" (dict "root" . "component" "minio") | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 6
+  template:
+    metadata:
+      labels:
+        {{- include "test-infra.componentLabels" (dict "root" . "component" "minio") | nindent 8 }}
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: mc
+          image: {{ .Values.minio.mcImage }}
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: MINIO_ENDPOINT
+              value: "http://{{ include "test-infra.minioHost" . }}:{{ .Values.minio.service.apiPort }}"
+            - name: MINIO_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.minio.secret.name }}
+                  key: AccessKey
+            - name: MINIO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.minio.secret.name }}
+                  key: SecretKey
+            - name: MINIO_BUCKET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.minio.secret.name }}
+                  key: Bucket
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              until mc alias set local "$MINIO_ENDPOINT" "$MINIO_ACCESS_KEY" "$MINIO_SECRET_KEY" >/dev/null 2>&1; do
+                echo "waiting for minio at $MINIO_ENDPOINT..."
+                sleep 2
+              done
+              mc mb --ignore-existing "local/$MINIO_BUCKET"
+              mc ls "local/$MINIO_BUCKET"
+{{- end }}

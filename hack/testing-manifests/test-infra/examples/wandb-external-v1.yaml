@@ -1,0 +1,85 @@
+# v1 WeightsAndBiases CR that exercises the conversion webhook by referencing
+# the same Secrets produced by the test-infra helm chart, but expressed in v1's
+# `spec.values.global.{mysql,redis,bucket}` shape.
+#
+# After apply, the v1 → v2 conversion (see api/v1/weightsandbiases_conversion_mapping.go)
+# is expected to:
+#
+#   - Map every `{valueFrom: {secretKeyRef: {name, key}}}` entry under
+#     `global.mysql` to spec.mysql.externalMysql.<field> (note: v1 calls the
+#     username field `user`; it converts to v2 `username`).
+#   - Map every `{valueFrom: ...}` entry under `global.redis` to
+#     spec.redis.externalRedis.<field>.
+#   - Map `global.bucket.secret.{secretName, accessKeyName, secretKeyName}` to
+#     spec.objectStore.externalObjectStore.{AccessKey, SecretKey}. The literal
+#     fields (provider, name, region) currently have no typed v2 home and land
+#     in the `legacy.operator.wandb.com/bucket-pending` annotation for a later
+#     reconciler pass to materialize.
+#
+# Verify after apply:
+#   kubectl -n test-infra get weightsandbiases.v2.apps.wandb.com wandb-external-v1 -o yaml
+# and confirm spec.mysql.externalMysql / spec.redis.externalRedis /
+# spec.objectStore.externalObjectStore are populated as expected.
+---
+apiVersion: apps.wandb.com/v1
+kind: WeightsAndBiases
+metadata:
+  name: wandb-external-v1
+  namespace: test-infra
+spec:
+  chart:
+    url: https://charts.wandb.ai
+    name: operator-wandb
+    version: "0.37.1"
+  values:
+    global:
+      size: dev
+      host: http://localhost:8080
+
+      mysql:
+        host:
+          valueFrom:
+            secretKeyRef:
+              name: external-mysql-connection
+              key: Host
+        port:
+          valueFrom:
+            secretKeyRef:
+              name: external-mysql-connection
+              key: Port
+        database:
+          valueFrom:
+            secretKeyRef:
+              name: external-mysql-connection
+              key: Database
+        user:
+          valueFrom:
+            secretKeyRef:
+              name: external-mysql-connection
+              key: Username
+        password:
+          valueFrom:
+            secretKeyRef:
+              name: external-mysql-connection
+              key: Password
+
+      redis:
+        host:
+          valueFrom:
+            secretKeyRef:
+              name: external-redis-connection
+              key: Host
+        port:
+          valueFrom:
+            secretKeyRef:
+              name: external-redis-connection
+              key: Port
+
+      bucket:
+        provider: s3
+        name: wandb
+        region: us-east-1
+        secret:
+          secretName: external-objectstore-connection
+          accessKeyName: AccessKey
+          secretKeyName: SecretKey

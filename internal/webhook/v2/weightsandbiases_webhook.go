@@ -85,6 +85,10 @@ func (d *WeightsAndBiasesCustomDefaulter) Default(ctx context.Context, obj runti
 		wandb.Spec.Tolerations = &[]corev1.Toleration{}
 	}
 
+	if wandb.Spec.Wandb.Features == nil {
+		wandb.Spec.Wandb.Features = make(map[string]bool)
+	}
+
 	if wandb.Spec.Wandb.ManifestRepository == "" {
 		wandb.Spec.Wandb.ManifestRepository = "oci://us-docker.pkg.dev/wandb-production/public/wandb/server-manifest"
 	}

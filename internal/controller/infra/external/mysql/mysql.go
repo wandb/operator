@@ -2,6 +2,8 @@ package mysql
 
 import (
 	"context"
+	"fmt"
+	"net/url"
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/infra/external"
@@ -24,7 +26,6 @@ func WriteState(
 	logger := ctrl.LoggerFrom(ctx)
 
 	fields := map[string]corev1.SecretKeySelector{
-		"url":      spec.URL,
 		"Host":     spec.Host,
 		"Port":     spec.Port,
 		"Database": spec.Database,
@@ -45,6 +46,15 @@ func WriteState(
 			Reason: "ApiError",
 		}}
 	}
+
+	dbUrl := url.URL{
+		Scheme: "mysql",
+		Host:   fmt.Sprintf("%s:%s", data["Host"], data["Port"]),
+		User:   url.UserPassword(data["Username"], data["Password"]),
+		Path:   data["Database"],
+	}
+
+	data["url"] = dbUrl.String()
 
 	nsName := types.NamespacedName{Namespace: wandb.Namespace, Name: ConnectionSecretName}
 	return external.WriteConnectionSecret(ctx, c, wandb, nsName, data)
