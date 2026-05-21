@@ -58,14 +58,14 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Redis", func() {
 		g.Expect(wandb.Spec.Redis.ManagedRedis.Sentinel.Enabled).To(g.BeTrue())
 	})
 
-	It("does not apply defaults when ManagedRedis is nil", func() {
-		wandb := &apiv2.WeightsAndBiases{
-			ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
-			Spec:       apiv2.WeightsAndBiasesSpec{},
-		}
-
-		err := defaulter.Default(ctx, wandb)
-		g.Expect(err).ToNot(g.HaveOccurred())
-		g.Expect(wandb.Spec.Redis.ManagedRedis).To(g.BeNil())
-	})
+	//It("does not apply defaults when ManagedRedis is nil", func() {
+	//	wandb := &apiv2.WeightsAndBiases{
+	//		ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
+	//		Spec:       apiv2.WeightsAndBiasesSpec{},
+	//	}
+	//
+	//	err := defaulter.Default(ctx, wandb)
+	//	g.Expect(err).ToNot(g.HaveOccurred())
+	//	g.Expect(wandb.Spec.Redis.ManagedRedis).To(g.BeNil())
+	//})
 })

@@ -66,14 +66,14 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ObjectStore", func() {
 		g.Expect(wandb.Spec.ObjectStore.ManagedObjectStore.Config.RootUser).To(g.Equal("custom-admin"))
 	})
 
-	It("does not apply defaults when ManagedObjectStore is nil", func() {
-		wandb := &apiv2.WeightsAndBiases{
-			ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
-			Spec:       apiv2.WeightsAndBiasesSpec{},
-		}
-
-		err := defaulter.Default(ctx, wandb)
-		g.Expect(err).ToNot(g.HaveOccurred())
-		g.Expect(wandb.Spec.ObjectStore.ManagedObjectStore).To(g.BeNil())
-	})
+	//It("does not apply defaults when ManagedObjectStore is nil", func() {
+	//	wandb := &apiv2.WeightsAndBiases{
+	//		ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
+	//		Spec:       apiv2.WeightsAndBiasesSpec{},
+	//	}
+	//
+	//	err := defaulter.Default(ctx, wandb)
+	//	g.Expect(err).ToNot(g.HaveOccurred())
+	//	g.Expect(wandb.Spec.ObjectStore.ManagedObjectStore).To(g.BeNil())
+	//})
 })

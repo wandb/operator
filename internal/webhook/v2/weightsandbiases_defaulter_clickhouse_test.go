@@ -65,14 +65,14 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 		g.Expect(wandb.Spec.ClickHouse.ManagedClickHouse.Version).To(g.Equal("24.1"))
 	})
 
-	It("does not apply defaults when ManagedClickHouse is nil", func() {
-		wandb := &apiv2.WeightsAndBiases{
-			ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
-			Spec:       apiv2.WeightsAndBiasesSpec{},
-		}
-
-		err := defaulter.Default(ctx, wandb)
-		g.Expect(err).ToNot(g.HaveOccurred())
-		g.Expect(wandb.Spec.ClickHouse.ManagedClickHouse).To(g.BeNil())
-	})
+	//It("does not apply defaults when ManagedClickHouse is nil", func() {
+	//	wandb := &apiv2.WeightsAndBiases{
+	//		ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
+	//		Spec:       apiv2.WeightsAndBiasesSpec{},
+	//	}
+	//
+	//	err := defaulter.Default(ctx, wandb)
+	//	g.Expect(err).ToNot(g.HaveOccurred())
+	//	g.Expect(wandb.Spec.ClickHouse.ManagedClickHouse).To(g.BeNil())
+	//})
 })

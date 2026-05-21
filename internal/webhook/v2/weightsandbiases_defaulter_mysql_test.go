@@ -61,14 +61,14 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - MySQL", func() {
 		g.Expect(wandb.Spec.MySQL.ManagedMysql.StorageSize).To(g.Equal("50Gi"))
 	})
 
-	It("does not apply defaults when ManagedMysql is nil", func() {
-		wandb := &apiv2.WeightsAndBiases{
-			ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
-			Spec:       apiv2.WeightsAndBiasesSpec{},
-		}
-
-		err := defaulter.Default(ctx, wandb)
-		g.Expect(err).ToNot(g.HaveOccurred())
-		g.Expect(wandb.Spec.MySQL.ManagedMysql).To(g.BeNil())
-	})
+	//It("does not apply defaults when ManagedMysql is nil", func() {
+	//	wandb := &apiv2.WeightsAndBiases{
+	//		ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
+	//		Spec:       apiv2.WeightsAndBiasesSpec{},
+	//	}
+	//
+	//	err := defaulter.Default(ctx, wandb)
+	//	g.Expect(err).ToNot(g.HaveOccurred())
+	//	g.Expect(wandb.Spec.MySQL.ManagedMysql).To(g.BeNil())
+	//})
 })

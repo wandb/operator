@@ -195,13 +195,14 @@ func (v *WeightsAndBiasesCustomValidator) ValidateDelete(ctx context.Context, ob
 }
 
 func applyMySQLDefaults(wandb *appsv2.WeightsAndBiases) {
-	spec := &appsv2.ManagedMysqlSpec{}
 	if wandb.Spec.MySQL.ManagedMysql == nil {
 		if wandb.Spec.MySQL.ExternalMysql != nil {
 			return
 		}
-		wandb.Spec.MySQL.ManagedMysql = spec
+		wandb.Spec.MySQL.ManagedMysql = &appsv2.ManagedMysqlSpec{}
 	}
+
+	spec := wandb.Spec.MySQL.ManagedMysql
 
 	if spec.Name == "" {
 		spec.Name = fmt.Sprintf("%s-mysql", wandb.Name)
@@ -213,13 +214,14 @@ func applyMySQLDefaults(wandb *appsv2.WeightsAndBiases) {
 }
 
 func applyRedisDefaults(wandb *appsv2.WeightsAndBiases) {
-	spec := &appsv2.ManagedRedisSpec{}
 	if wandb.Spec.Redis.ManagedRedis == nil {
 		if wandb.Spec.Redis.ExternalRedis != nil {
 			return
 		}
-		wandb.Spec.Redis.ManagedRedis = spec
+		wandb.Spec.Redis.ManagedRedis = &appsv2.ManagedRedisSpec{}
 	}
+
+	spec := wandb.Spec.Redis.ManagedRedis
 
 	if spec.Name == "" {
 		spec.Name = fmt.Sprintf("%s-redis", wandb.Name)
@@ -235,13 +237,14 @@ func applyRedisDefaults(wandb *appsv2.WeightsAndBiases) {
 }
 
 func applyKafkaDefaults(wandb *appsv2.WeightsAndBiases) {
-	spec := &appsv2.ManagedKafkaSpec{}
 	if wandb.Spec.Kafka.ManagedKafka == nil {
 		if wandb.Spec.Kafka.ManagedKafka != nil {
 			return
 		}
-		wandb.Spec.Kafka.ManagedKafka = spec
+		wandb.Spec.Kafka.ManagedKafka = &appsv2.ManagedKafkaSpec{}
 	}
+
+	spec := wandb.Spec.Kafka.ManagedKafka
 
 	if spec.Name == "" {
 		spec.Name = fmt.Sprintf("%s-kafka", wandb.Name)
@@ -253,13 +256,15 @@ func applyKafkaDefaults(wandb *appsv2.WeightsAndBiases) {
 }
 
 func applyObjectStoreDefaults(wandb *appsv2.WeightsAndBiases) {
-	spec := &appsv2.ManagedObjectStoreSpec{}
+
 	if wandb.Spec.ObjectStore.ManagedObjectStore == nil {
 		if wandb.Spec.ObjectStore.ExternalObjectStore != nil {
 			return
 		}
-		wandb.Spec.ObjectStore.ManagedObjectStore = spec
+		wandb.Spec.ObjectStore.ManagedObjectStore = &appsv2.ManagedObjectStoreSpec{}
 	}
+
+	spec := wandb.Spec.ObjectStore.ManagedObjectStore
 
 	if spec.Name == "" {
 		spec.Name = fmt.Sprintf("%s-minio", wandb.Name)
@@ -279,13 +284,14 @@ func applyObjectStoreDefaults(wandb *appsv2.WeightsAndBiases) {
 }
 
 func applyClickHouseDefaults(wandb *appsv2.WeightsAndBiases) {
-	spec := &appsv2.ManagedClickHouseSpec{}
 	if wandb.Spec.ClickHouse.ManagedClickHouse == nil {
 		if wandb.Spec.ClickHouse.ExternalClickHouse != nil {
 			return
 		}
-		wandb.Spec.ClickHouse.ManagedClickHouse = spec
+		wandb.Spec.ClickHouse.ManagedClickHouse = &appsv2.ManagedClickHouseSpec{}
 	}
+
+	spec := wandb.Spec.ClickHouse.ManagedClickHouse
 
 	if spec.Name == "" {
 		spec.Name = fmt.Sprintf("%s-clickhouse", wandb.Name)
