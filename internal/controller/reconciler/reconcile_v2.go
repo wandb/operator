@@ -257,6 +257,12 @@ func Reconcile(
 	}
 
 	/////////////////////////
+	// Migrate legacy v1 conversion annotations into typed spec fields
+	if res, migErr := migrateLegacyAnnotations(ctx, client, wandb); migErr != nil || res.RequeueAfter > 0 {
+		return res, migErr
+	}
+
+	/////////////////////////
 	// Fetch manifest early so infra sizing can be applied before provisioning
 	manifest, err := serverManifest.GetServerManifest(ctx, wandb.Spec.Wandb.ManifestRepository, wandb.Spec.Wandb.Version)
 	if err != nil {
@@ -339,7 +345,7 @@ func Reconcile(
 	if !redisReady || !mysqlReady || !kafkaReady || !objectStoreReady || !clickHouseReady {
 		log := ctrl.LoggerFrom(ctx)
 		log.Info("Infra not ready in V2.Reconcile",
-			"redis", redisReady, "moco", mysqlReady, "kafka", kafkaReady, "objectStore", objectStoreReady, "clickhouse", clickHouseReady)
+			"redis", redisReady, "mysql", mysqlReady, "kafka", kafkaReady, "objectStore", objectStoreReady, "clickhouse", clickHouseReady)
 		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
 	}
 

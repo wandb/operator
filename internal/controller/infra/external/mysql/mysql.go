@@ -2,6 +2,8 @@ package mysql
 
 import (
 	"context"
+	"fmt"
+	"net/url"
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/infra/external"
@@ -13,7 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-const ConnectionSecretName = "wandb-moco-connection"
+const ConnectionSecretName = "wandb-mysql-connection"
 
 func WriteState(
 	ctx context.Context,
@@ -24,7 +26,6 @@ func WriteState(
 	logger := ctrl.LoggerFrom(ctx)
 
 	fields := map[string]corev1.SecretKeySelector{
-		"url":      spec.URL,
 		"Host":     spec.Host,
 		"Port":     spec.Port,
 		"Database": spec.Database,
@@ -38,13 +39,22 @@ func WriteState(
 
 	data, err := external.ResolveFields(ctx, c, wandb.Namespace, fields)
 	if err != nil {
-		logger.Error(err, "failed to resolve external moco fields")
+		logger.Error(err, "failed to resolve external mysql fields")
 		return []metav1.Condition{{
 			Type:   "Reconciled",
 			Status: metav1.ConditionFalse,
 			Reason: "ApiError",
 		}}
 	}
+
+	dbUrl := url.URL{
+		Scheme: "mysql",
+		Host:   fmt.Sprintf("%s:%s", data["Host"], data["Port"]),
+		User:   url.UserPassword(data["Username"], data["Password"]),
+		Path:   data["Database"],
+	}
+
+	data["url"] = dbUrl.String()
 
 	nsName := types.NamespacedName{Namespace: wandb.Namespace, Name: ConnectionSecretName}
 	return external.WriteConnectionSecret(ctx, c, wandb, nsName, data)

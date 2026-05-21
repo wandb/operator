@@ -50,7 +50,7 @@ type Manifest struct {
 	Bucket             map[string]InfraConfig   `yaml:"bucket"`
 	Clickhouse         map[string]InfraConfig   `yaml:"clickhouse"`
 	Kafka              KafkaConfig              `yaml:"kafka"`
-	Mysql              map[string]InfraConfig   `yaml:"moco"`
+	Mysql              map[string]InfraConfig   `yaml:"mysql"`
 	Redis              map[string]InfraConfig   `yaml:"redis"`
 	Applications       map[string]Application   `yaml:"applications"`
 	// Migrations captures per-database migration jobs (e.g., default, runsdb, usagedb)
