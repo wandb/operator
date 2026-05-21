@@ -111,7 +111,7 @@ func (d *WeightsAndBiasesCustomDefaulter) Default(ctx context.Context, obj runti
 	}
 
 	if wandb.Spec.Wandb.ServiceAccount.ServiceAccountName == "" {
-		wandb.Spec.Wandb.ServiceAccount.ServiceAccountName = "wandb"
+		wandb.Spec.Wandb.ServiceAccount.ServiceAccountName = "wandb-app"
 	}
 
 	if wandb.Status.Wandb.Applications == nil {
