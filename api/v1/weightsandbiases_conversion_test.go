@@ -327,6 +327,199 @@ func TestConvertTo_ServiceAccountAnnotationsPreservedMultipleKeys(t *testing.T) 
 		dst.Spec.Wandb.ServiceAccount.Annotations["azure.workload.identity/client-id"])
 }
 
+func TestConvertTo_InternalJWTIssuerFromGlobal(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{
+			"internalJWTMap": []interface{}{
+				map[string]interface{}{
+					"issuer":  "https://gke-issuer.example.com",
+					"subject": "system:serviceaccount:default:wandb-weave-trace",
+				},
+			},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+	require.Equal(t, "https://gke-issuer.example.com", dst.Spec.Wandb.InternalServiceAuth.OIDCIssuer)
+}
+
+func TestConvertTo_InternalJWTIssuerFallsBackToApp(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"app": map[string]interface{}{
+			"internalJWTMap": []interface{}{
+				map[string]interface{}{
+					"issuer":  "https://app-issuer.example.com",
+					"subject": "system:serviceaccount:default:wandb-app",
+				},
+			},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+	require.Equal(t, "https://app-issuer.example.com", dst.Spec.Wandb.InternalServiceAuth.OIDCIssuer)
+}
+
+func TestConvertTo_InternalJWTIssuerGlobalWinsOverApp(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{
+			"internalJWTMap": []interface{}{
+				map[string]interface{}{"issuer": "from-global"},
+			},
+		},
+		"app": map[string]interface{}{
+			"internalJWTMap": []interface{}{
+				map[string]interface{}{"issuer": "from-app"},
+			},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+	require.Equal(t, "from-global", dst.Spec.Wandb.InternalServiceAuth.OIDCIssuer)
+}
+
+func TestConvertTo_InternalJWTIssuerFirstEntryWins(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{
+			"internalJWTMap": []interface{}{
+				map[string]interface{}{"issuer": "first-issuer"},
+				map[string]interface{}{"issuer": "second-issuer"},
+			},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+	require.Equal(t, "first-issuer", dst.Spec.Wandb.InternalServiceAuth.OIDCIssuer)
+}
+
+func TestConvertTo_InternalJWTIssuerEmptyGlobalFallsBackToApp(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{
+			"internalJWTMap": []interface{}{},
+		},
+		"app": map[string]interface{}{
+			"internalJWTMap": []interface{}{
+				map[string]interface{}{"issuer": "from-app"},
+			},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+	require.Equal(t, "from-app", dst.Spec.Wandb.InternalServiceAuth.OIDCIssuer)
+}
+
+func TestConvertTo_InternalJWTIssuerAbsent(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{"host": "http://x"},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+	require.Empty(t, dst.Spec.Wandb.InternalServiceAuth.OIDCIssuer)
+}
+
+func TestConvertTo_IngressEnabledByChartDefaults(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{"host": "http://x"},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+	require.Equal(t, appsv2.NetworkingModeIngress, dst.Spec.Networking.Mode,
+		"ingress.install and ingress.create both default to true; mode should be ingress")
+}
+
+func TestConvertTo_IngressDisabledByInstallFalse(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"ingress": map[string]interface{}{"install": false},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+	require.Empty(t, string(dst.Spec.Networking.Mode))
+}
+
+func TestConvertTo_IngressDisabledByCreateFalse(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"ingress": map[string]interface{}{"create": false},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+	require.Empty(t, string(dst.Spec.Networking.Mode))
+}
+
+func TestConvertTo_IngressClassMaps(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"ingress": map[string]interface{}{"class": "nginx"},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+	require.NotNil(t, dst.Spec.Networking.Ingress)
+	require.NotNil(t, dst.Spec.Networking.Ingress.IngressClassName)
+	require.Equal(t, "nginx", *dst.Spec.Networking.Ingress.IngressClassName)
+}
+
+func TestConvertTo_IngressAnnotationsMap(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"ingress": map[string]interface{}{
+			"annotations": map[string]interface{}{
+				"kubernetes.io/ingress.class":               "gce",
+				"ingress.gcp.kubernetes.io/pre-shared-cert": "wandb-cert",
+			},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+	require.Equal(t, "gce", dst.Spec.Networking.Annotations["kubernetes.io/ingress.class"])
+	require.Equal(t, "wandb-cert",
+		dst.Spec.Networking.Annotations["ingress.gcp.kubernetes.io/pre-shared-cert"])
+}
+
+func TestConvertTo_IngressAdditionalHostsMap(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"ingress": map[string]interface{}{
+			"additionalHosts": []interface{}{"alt1.example.com", "alt2.example.com"},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+	require.Equal(t, []string{"alt1.example.com", "alt2.example.com"}, dst.Spec.Wandb.AdditionalHostnames)
+}
+
+func TestConvertTo_IngressTLSFirstEntryWins(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"ingress": map[string]interface{}{
+			"tls": []interface{}{
+				map[string]interface{}{
+					"secretName": "wandb-tls",
+					"hosts":      []interface{}{"wandb.example.com"},
+				},
+				map[string]interface{}{
+					"secretName": "wandb-tls-secondary",
+					"hosts":      []interface{}{"alt.example.com"},
+				},
+			},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+	require.NotNil(t, dst.Spec.Networking.TLS)
+	require.Equal(t, "wandb-tls", dst.Spec.Networking.TLS.SecretName,
+		"v2 carries only the first TLS entry's secretName")
+}
+
+func TestConvertTo_IngressNoModeOverrideWhenSet(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{
+		Spec: appsv2.WeightsAndBiasesSpec{
+			Networking: appsv2.NetworkingSpec{
+				Mode: appsv2.NetworkingModeGatewayAPI,
+			},
+		},
+	}
+	src := newV1(map[string]interface{}{
+		"ingress": map[string]interface{}{"class": "nginx"},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+	require.Equal(t, appsv2.NetworkingModeGatewayAPI, dst.Spec.Networking.Mode,
+		"already-set mode should not be overridden by ingress chart defaults")
+}
+
 func TestConvertTo_OIDCAllLiterals(t *testing.T) {
 	dst := &appsv2.WeightsAndBiases{}
 	src := newV1(map[string]interface{}{

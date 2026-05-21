@@ -24,6 +24,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/utils/ptr"
 
 	appsv2 "github.com/wandb/operator/api/v2"
 )
@@ -74,6 +75,12 @@ func applyValueMappings(src *WeightsAndBiases, dst *appsv2.WeightsAndBiases) err
 		return err
 	}
 	if err := mapServiceAccountAnnotations(values, dst); err != nil {
+		return err
+	}
+	if err := mapInternalJWTIssuer(values, dst); err != nil {
+		return err
+	}
+	if err := mapIngress(values, dst); err != nil {
 		return err
 	}
 
@@ -149,6 +156,133 @@ func mapServiceAccountAnnotations(values map[string]interface{}, dst *appsv2.Wei
 		dst.Spec.Wandb.ServiceAccount.Annotations = anns
 	}
 	return nil
+}
+
+// mapInternalJWTIssuer pulls the first entry from global.internalJWTMap (or
+// app as fallback) into spec.wandb.internalServiceAuth.oidcIssuer.
+func mapInternalJWTIssuer(values map[string]interface{}, dst *appsv2.WeightsAndBiases) error {
+	issuer, err := readFirstInternalJWTIssuer(values, "global")
+	if err != nil {
+		return err
+	}
+	if issuer == "" {
+		issuer, err = readFirstInternalJWTIssuer(values, "app")
+		if err != nil {
+			return err
+		}
+	}
+	if issuer != "" {
+		dst.Spec.Wandb.InternalServiceAuth.OIDCIssuer = issuer
+	}
+	return nil
+}
+
+// mapIngress maps v1's ingress section to spec.networking and
+// spec.wandb.additionalHostnames. ingress.install and ingress.create both
+// default to true in the chart, so an absent or partial ingress block still
+// enables networking mode "ingress".
+func mapIngress(values map[string]interface{}, dst *appsv2.WeightsAndBiases) error {
+	ingressMap, _, err := unstructured.NestedMap(values, "ingress")
+	if err != nil {
+		return fmt.Errorf("spec.values.ingress: %w", err)
+	}
+
+	if !boolFromValues(ingressMap, true, "install") || !boolFromValues(ingressMap, true, "create") {
+		return nil
+	}
+
+	if dst.Spec.Networking.Mode == "" {
+		dst.Spec.Networking.Mode = appsv2.NetworkingModeIngress
+	}
+
+	if class, _, err := unstructured.NestedString(ingressMap, "class"); err != nil {
+		return fmt.Errorf("spec.values.ingress.class: %w", err)
+	} else if class != "" {
+		if dst.Spec.Networking.Ingress == nil {
+			dst.Spec.Networking.Ingress = &appsv2.IngressConfig{}
+		}
+		dst.Spec.Networking.Ingress.IngressClassName = ptr.To(class)
+	}
+
+	if anns, _, err := unstructured.NestedStringMap(ingressMap, "annotations"); err != nil {
+		return fmt.Errorf("spec.values.ingress.annotations: %w", err)
+	} else if len(anns) > 0 {
+		dst.Spec.Networking.Annotations = anns
+	}
+
+	if hosts, _, err := unstructured.NestedStringSlice(ingressMap, "additionalHosts"); err != nil {
+		return fmt.Errorf("spec.values.ingress.additionalHosts: %w", err)
+	} else if len(hosts) > 0 {
+		dst.Spec.Wandb.AdditionalHostnames = hosts
+	}
+
+	if name, err := firstIngressTLSSecretName(ingressMap); err != nil {
+		return err
+	} else if name != "" {
+		if dst.Spec.Networking.TLS == nil {
+			dst.Spec.Networking.TLS = &appsv2.TLSConfig{}
+		}
+		dst.Spec.Networking.TLS.SecretName = name
+	}
+
+	return nil
+}
+
+// firstIngressTLSSecretName returns the secretName on the first ingress.tls
+// entry. v2 carries only a single TLS Secret; multi-cert v1 configs collapse
+// to the first entry.
+func firstIngressTLSSecretName(ingressMap map[string]interface{}) (string, error) {
+	list, _, err := unstructured.NestedSlice(ingressMap, "tls")
+	if err != nil {
+		return "", fmt.Errorf("spec.values.ingress.tls: %w", err)
+	}
+	if len(list) == 0 {
+		return "", nil
+	}
+	entry, ok := list[0].(map[string]interface{})
+	if !ok {
+		return "", nil
+	}
+	name, _, err := unstructured.NestedString(entry, "secretName")
+	if err != nil {
+		return "", fmt.Errorf("spec.values.ingress.tls[0].secretName: %w", err)
+	}
+	return name, nil
+}
+
+// boolFromValues reads a bool at path within m, returning def when the key
+// is absent or the value isn't a bool. Used to apply v1 chart defaults
+// during conversion.
+func boolFromValues(m map[string]interface{}, def bool, path ...string) bool {
+	if m == nil {
+		return def
+	}
+	v, found, err := unstructured.NestedBool(m, path...)
+	if err != nil || !found {
+		return def
+	}
+	return v
+}
+
+// readFirstInternalJWTIssuer returns the issuer on the first internalJWTMap
+// entry under values.<service>, or "" when the list is missing or empty.
+func readFirstInternalJWTIssuer(values map[string]interface{}, service string) (string, error) {
+	list, found, err := unstructured.NestedSlice(values, service, "internalJWTMap")
+	if err != nil {
+		return "", fmt.Errorf("spec.values.%s.internalJWTMap: %w", service, err)
+	}
+	if !found || len(list) == 0 {
+		return "", nil
+	}
+	entry, ok := list[0].(map[string]interface{})
+	if !ok {
+		return "", nil
+	}
+	issuer, _, err := unstructured.NestedString(entry, "issuer")
+	if err != nil {
+		return "", fmt.Errorf("spec.values.%s.internalJWTMap[0].issuer: %w", service, err)
+	}
+	return issuer, nil
 }
 
 // readServiceAccountAnnotations reads values.<service>.serviceAccount.annotations.
