@@ -33,13 +33,9 @@ import (
 	apiv2 "github.com/wandb/operator/api/v2"
 )
 
-// migrateLegacyAnnotations consumes `legacy.operator.wandb.com/*-pending`
-// annotations placed by the v1→v2 conversion webhook, materializes the Secret
-// each annotation describes, and updates the v2 spec to reference it.
-//
-// Returns (Result{RequeueAfter}, nil) when a migration was applied so the
-// next reconcile pass sees the updated spec. Returns (Result{}, nil) when
-// there is nothing to do.
+// migrateLegacyAnnotations drains `legacy.operator.wandb.com/*-pending`
+// annotations into materialized Secrets and typed spec references. Returns
+// a Requeue result when any change was applied.
 func migrateLegacyAnnotations(
 	ctx context.Context,
 	c ctrlClient.Client,
@@ -71,11 +67,8 @@ func migrateLegacyAnnotations(
 	return ctrl.Result{RequeueAfter: time.Second}, nil
 }
 
-// legacyMySQLPayload carries the *literal-string* fields from v1
-// global.mysql that the conversion webhook could not turn into typed
-// SecretKeySelectors on its own (the webhook already wrote any
-// {valueFrom: {secretKeyRef}} and legacy passwordSecret refs directly).
-// Port is `any` because v1 permitted either a JSON number or a string.
+// legacyMySQLPayload is the literal-string subset the webhook couldn't turn
+// into typed selectors. Port is `any` to accept JSON number or string.
 type legacyMySQLPayload struct {
 	Host     string `json:"host,omitempty"`
 	Port     any    `json:"port,omitempty"`
@@ -85,11 +78,9 @@ type legacyMySQLPayload struct {
 	CaCert   string `json:"caCert,omitempty"`
 }
 
-// migrateLegacyMySQL materializes the mysql-pending annotation. Returns
-// (true, nil) when it mutated wandb (caller must persist), (false, nil) when
-// the annotation was absent. Any externalMysql field already populated by the
-// conversion webhook is left alone — only fields with a zero selector are
-// filled from the annotation.
+// migrateLegacyMySQL drains the mysql-pending annotation into a Secret +
+// externalMysql selectors. Fields the webhook already set are preserved;
+// only zero selectors are filled. Returns (changed, err).
 func migrateLegacyMySQL(
 	ctx context.Context,
 	c ctrlClient.Client,
@@ -138,9 +129,8 @@ func migrateLegacyMySQL(
 	return true, nil
 }
 
-// legacyRedisPayload carries the literal-string fields from v1 global.redis
-// that the conversion webhook could not turn into typed SecretKeySelectors on
-// its own.
+// legacyRedisPayload is the literal-string subset the webhook couldn't turn
+// into typed selectors.
 type legacyRedisPayload struct {
 	Host     string `json:"host,omitempty"`
 	Port     any    `json:"port,omitempty"`
@@ -148,9 +138,8 @@ type legacyRedisPayload struct {
 	CaCert   string `json:"caCert,omitempty"`
 }
 
-// migrateLegacyRedis materializes the redis-pending annotation. Mirrors
-// migrateLegacyMySQL: only fills externalRedis fields whose selector is
-// currently zero, so anything the webhook already populated is left alone.
+// migrateLegacyRedis drains the redis-pending annotation. Mirrors
+// migrateLegacyMySQL — only zero externalRedis selectors are filled.
 func migrateLegacyRedis(
 	ctx context.Context,
 	c ctrlClient.Client,
@@ -197,10 +186,8 @@ func migrateLegacyRedis(
 	return true, nil
 }
 
-// legacyBucketPayload carries the flat literal fields produced by the
-// conversion webhook's bucket merge (bucket+defaultBucket minus the secret
-// block). Fields with no v2 equivalent (provider, path, kmsKey) are tolerated
-// but ignored.
+// legacyBucketPayload is the flat literal subset from the webhook's
+// bucket+defaultBucket merge. provider/path/kmsKey have no v2 home; ignored.
 type legacyBucketPayload struct {
 	Name      string `json:"name,omitempty"`
 	Region    string `json:"region,omitempty"`
@@ -208,10 +195,8 @@ type legacyBucketPayload struct {
 	SecretKey string `json:"secretKey,omitempty"`
 }
 
-// migrateLegacyBucket materializes the bucket-pending annotation. Any
-// externalObjectStore field already populated by the conversion webhook
-// (typically AccessKey / SecretKey from a `bucket.secret` block) is left
-// alone — only fields with a zero selector are filled from the annotation.
+// migrateLegacyBucket drains the bucket-pending annotation. Webhook-set
+// fields (typically AccessKey/SecretKey) are preserved.
 func migrateLegacyBucket(
 	ctx context.Context,
 	c ctrlClient.Client,
@@ -260,10 +245,9 @@ func migrateLegacyBucket(
 	return true, nil
 }
 
-// parseBucketName splits v1's `bucket.name` field. v1 sometimes embedded the
-// endpoint as "host[:port]/bucket-name". S3 bucket names cannot contain a
-// "/", so the presence of one unambiguously signals the embedded form. A bare
-// name (no slash) returns it as bucket only.
+// parseBucketName splits v1's bucket.name. A "/" indicates the embedded
+// "host[:port]/bucket" form (S3 bucket names can't contain "/"); otherwise
+// the whole string is the bucket name.
 func parseBucketName(name string) (endpoint, port, bucket string) {
 	if name == "" || !strings.Contains(name, "/") {
 		return "", "", name
@@ -277,10 +261,8 @@ func parseBucketName(name string) (endpoint, port, bucket string) {
 	return host, "", bucket
 }
 
-// legacyOIDCPayload carries the literal-string fields from v1
-// global.auth.oidc that the conversion webhook could not turn into typed
-// SecretKeySelectors on its own (the webhook already wrote any
-// {valueFrom: {secretKeyRef}} and legacy oidcSecret refs directly).
+// legacyOIDCPayload is the literal-string subset the webhook couldn't turn
+// into typed selectors.
 type legacyOIDCPayload struct {
 	ClientId   string `json:"clientId,omitempty"`
 	Secret     string `json:"secret,omitempty"`
@@ -288,9 +270,8 @@ type legacyOIDCPayload struct {
 	Issuer     string `json:"issuer,omitempty"`
 }
 
-// migrateLegacyOIDC materializes the oidc-pending annotation. Same merge
-// semantics as the others: only fills wandb.Spec.Wandb.OIDC selectors that
-// are still zero.
+// migrateLegacyOIDC drains the oidc-pending annotation. Only zero
+// spec.wandb.oidc selectors are filled.
 func migrateLegacyOIDC(
 	ctx context.Context,
 	c ctrlClient.Client,
@@ -331,9 +312,8 @@ func migrateLegacyOIDC(
 	return true, nil
 }
 
-// materializeConvertedSecret writes data as an opaque Secret in
-// wandb.Namespace. No-op when data is empty. Uses CreateOrUpdate so retries
-// (and reruns after partial migration) are safe.
+// materializeConvertedSecret CreateOrUpdates an opaque Secret with data,
+// no-op when empty. Safe to call on partial-migration retries.
 func materializeConvertedSecret(
 	ctx context.Context,
 	c ctrlClient.Client,

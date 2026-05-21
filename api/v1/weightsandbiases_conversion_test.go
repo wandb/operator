@@ -21,10 +21,42 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	appsv2 "github.com/wandb/operator/api/v2"
 )
+
+// withConversionReader installs a fake reader for the duration of the test
+// (cleaned up via t.Cleanup) so tests don't leak the package-level state.
+func withConversionReader(t *testing.T, secrets ...*corev1.Secret) {
+	t.Helper()
+	scheme := runtime.NewScheme()
+	require.NoError(t, corev1.AddToScheme(scheme))
+	builder := fake.NewClientBuilder().WithScheme(scheme)
+	for _, s := range secrets {
+		builder = builder.WithObjects(s)
+	}
+	SetConversionReader(builder.Build())
+	t.Cleanup(func() { SetConversionReader(nil) })
+}
+
+// activeSpecSecret builds a `<cr-name>-spec-active`-shaped Secret with the
+// given values map JSON-encoded into data.values.
+func activeSpecSecret(t *testing.T, namespace, crName string, values map[string]interface{}) *corev1.Secret {
+	t.Helper()
+	raw, err := json.Marshal(values)
+	require.NoError(t, err)
+	return &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      crName + "-spec-active",
+			Namespace: namespace,
+		},
+		Data: map[string][]byte{"values": raw},
+	}
+}
 
 func newV1(values map[string]interface{}) *WeightsAndBiases {
 	return &WeightsAndBiases{
@@ -182,6 +214,117 @@ func TestConvertTo_VersionWithoutGlobal(t *testing.T) {
 	require.NoError(t, src.ConvertTo(dst))
 	require.Equal(t, "0.80.1", dst.Spec.Wandb.Version,
 		"version mapping should run even when global is absent")
+}
+
+func TestConvertTo_ServiceAccountAnnotationsFromApp(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"app": map[string]interface{}{
+			"serviceAccount": map[string]interface{}{
+				"annotations": map[string]interface{}{
+					"iam.gke.io/gcp-service-account": "wandb-app@project.iam.gserviceaccount.com",
+				},
+			},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+	require.Equal(t, map[string]string{
+		"iam.gke.io/gcp-service-account": "wandb-app@project.iam.gserviceaccount.com",
+	}, dst.Spec.Wandb.ServiceAccount.Annotations)
+}
+
+func TestConvertTo_ServiceAccountAnnotationsFallsBackToApi(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"api": map[string]interface{}{
+			"serviceAccount": map[string]interface{}{
+				"annotations": map[string]interface{}{
+					"iam.gke.io/gcp-service-account": "wandb-api@project.iam.gserviceaccount.com",
+				},
+			},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+	require.Equal(t, "wandb-api@project.iam.gserviceaccount.com",
+		dst.Spec.Wandb.ServiceAccount.Annotations["iam.gke.io/gcp-service-account"])
+}
+
+func TestConvertTo_ServiceAccountAnnotationsAppWinsOverApi(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"app": map[string]interface{}{
+			"serviceAccount": map[string]interface{}{
+				"annotations": map[string]interface{}{
+					"iam.gke.io/gcp-service-account": "from-app",
+				},
+			},
+		},
+		"api": map[string]interface{}{
+			"serviceAccount": map[string]interface{}{
+				"annotations": map[string]interface{}{
+					"iam.gke.io/gcp-service-account": "from-api",
+				},
+			},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+	require.Equal(t, "from-app",
+		dst.Spec.Wandb.ServiceAccount.Annotations["iam.gke.io/gcp-service-account"],
+		"app annotations should take precedence over api when both present")
+}
+
+func TestConvertTo_ServiceAccountAnnotationsEmptyAppFallsBackToApi(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"app": map[string]interface{}{
+			"serviceAccount": map[string]interface{}{
+				"annotations": map[string]interface{}{},
+			},
+		},
+		"api": map[string]interface{}{
+			"serviceAccount": map[string]interface{}{
+				"annotations": map[string]interface{}{
+					"iam.gke.io/gcp-service-account": "from-api",
+				},
+			},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+	require.Equal(t, "from-api",
+		dst.Spec.Wandb.ServiceAccount.Annotations["iam.gke.io/gcp-service-account"],
+		"empty app annotations should not consume the slot; api fallback applies")
+}
+
+func TestConvertTo_ServiceAccountAnnotationsAbsent(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{"host": "http://x"},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+	require.Empty(t, dst.Spec.Wandb.ServiceAccount.Annotations)
+}
+
+func TestConvertTo_ServiceAccountAnnotationsPreservedMultipleKeys(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"app": map[string]interface{}{
+			"serviceAccount": map[string]interface{}{
+				"annotations": map[string]interface{}{
+					"iam.gke.io/gcp-service-account":    "wandb-app@p.iam.gserviceaccount.com",
+					"eks.amazonaws.com/role-arn":        "arn:aws:iam::123:role/wandb",
+					"azure.workload.identity/client-id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+				},
+			},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+	require.Len(t, dst.Spec.Wandb.ServiceAccount.Annotations, 3)
+	require.Equal(t, "wandb-app@p.iam.gserviceaccount.com",
+		dst.Spec.Wandb.ServiceAccount.Annotations["iam.gke.io/gcp-service-account"])
+	require.Equal(t, "arn:aws:iam::123:role/wandb",
+		dst.Spec.Wandb.ServiceAccount.Annotations["eks.amazonaws.com/role-arn"])
+	require.Equal(t, "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+		dst.Spec.Wandb.ServiceAccount.Annotations["azure.workload.identity/client-id"])
 }
 
 func TestConvertTo_OIDCAllLiterals(t *testing.T) {
@@ -1131,4 +1274,120 @@ func TestConvertFrom_NoAnnotations(t *testing.T) {
 	require.Empty(t, dst.Spec.Chart.Object)
 	require.NotNil(t, dst.Spec.Values.Object)
 	require.Empty(t, dst.Spec.Values.Object)
+}
+
+func TestConvertTo_ActiveSpecSecretOverridesCRValues(t *testing.T) {
+	withConversionReader(t, activeSpecSecret(t, "default", "wandb", map[string]interface{}{
+		"global": map[string]interface{}{
+			"host":    "http://wandb.from-active-spec",
+			"license": "active-spec-license",
+		},
+		"app": map[string]interface{}{
+			"image": map[string]interface{}{"tag": "0.80.5"},
+		},
+	}))
+
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{
+			"host":    "http://wandb.from-cr",
+			"license": "cr-license",
+		},
+	})
+	dst := &appsv2.WeightsAndBiases{}
+	require.NoError(t, src.ConvertTo(dst))
+
+	require.Equal(t, "http://wandb.from-active-spec", dst.Spec.Wandb.Hostname,
+		"active-spec Secret should override CR values")
+	require.Equal(t, "active-spec-license", dst.Spec.Wandb.License)
+	require.Equal(t, "0.80.5", dst.Spec.Wandb.Version,
+		"version derives from app.image.tag in the active-spec values")
+}
+
+func TestConvertTo_ActiveSpecAbsentFallsBackToCRValues(t *testing.T) {
+	// Reader is wired up but the active-spec Secret isn't present.
+	withConversionReader(t)
+
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{"host": "http://wandb.from-cr"},
+	})
+	dst := &appsv2.WeightsAndBiases{}
+	require.NoError(t, src.ConvertTo(dst))
+
+	require.Equal(t, "http://wandb.from-cr", dst.Spec.Wandb.Hostname)
+}
+
+func TestConvertTo_ActiveSpecMissingValuesKeyFallsBackToCR(t *testing.T) {
+	withConversionReader(t, &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "wandb-spec-active",
+			Namespace: "default",
+		},
+		// Only chart, no values — should still fall back to CR.
+		Data: map[string][]byte{"chart": []byte(`{}`)},
+	})
+
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{"host": "http://wandb.from-cr"},
+	})
+	dst := &appsv2.WeightsAndBiases{}
+	require.NoError(t, src.ConvertTo(dst))
+
+	require.Equal(t, "http://wandb.from-cr", dst.Spec.Wandb.Hostname)
+}
+
+func TestConvertTo_ActiveSpecMalformedJSONErrors(t *testing.T) {
+	withConversionReader(t, &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "wandb-spec-active",
+			Namespace: "default",
+		},
+		Data: map[string][]byte{"values": []byte("not json")},
+	})
+
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{"host": "http://x"},
+	})
+	dst := &appsv2.WeightsAndBiases{}
+	err := src.ConvertTo(dst)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "wandb-spec-active")
+}
+
+func TestConvertTo_ActiveSpecScopedByCRName(t *testing.T) {
+	// Active-spec Secret exists but for a different CR name.
+	withConversionReader(t, activeSpecSecret(t, "default", "some-other-cr", map[string]interface{}{
+		"global": map[string]interface{}{"host": "http://wandb.from-other-cr"},
+	}))
+
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{"host": "http://wandb.from-cr"},
+	})
+	dst := &appsv2.WeightsAndBiases{}
+	require.NoError(t, src.ConvertTo(dst))
+
+	require.Equal(t, "http://wandb.from-cr", dst.Spec.Wandb.Hostname,
+		"active spec lookup must be scoped to this CR's name")
+}
+
+// TestConvertTo_StashedAnnotationsReflectCRNotActiveSpec confirms that the
+// round-trip annotations carry the raw v1 CR values (not the merged active
+// spec). This preserves lossless round-trips even when the active-spec Secret
+// is mutated between consecutive ConvertFrom/ConvertTo bounces.
+func TestConvertTo_StashedAnnotationsReflectCRNotActiveSpec(t *testing.T) {
+	withConversionReader(t, activeSpecSecret(t, "default", "wandb", map[string]interface{}{
+		"global": map[string]interface{}{"host": "http://wandb.from-active-spec"},
+	}))
+
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{"host": "http://wandb.from-cr"},
+	})
+	dst := &appsv2.WeightsAndBiases{}
+	require.NoError(t, src.ConvertTo(dst))
+
+	stashed := dst.Annotations[v1ValuesAnnotation]
+	var decoded map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(stashed), &decoded))
+	global := decoded["global"].(map[string]interface{})
+	require.Equal(t, "http://wandb.from-cr", global["host"],
+		"stashed annotation must preserve the CR's raw values for round-trip")
 }

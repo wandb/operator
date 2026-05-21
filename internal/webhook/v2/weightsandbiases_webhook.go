@@ -243,10 +243,6 @@ func applyKafkaDefaults(wandb *appsv2.WeightsAndBiases) {
 		wandb.Spec.Kafka.ManagedKafka = spec
 	}
 
-	if spec == nil {
-		return
-	}
-
 	if spec.Name == "" {
 		spec.Name = fmt.Sprintf("%s-kafka", wandb.Name)
 	}

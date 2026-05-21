@@ -17,10 +17,15 @@ limitations under the License.
 package v1
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
+	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/conversion"
 
 	appsv2 "github.com/wandb/operator/api/v2"
@@ -28,15 +33,64 @@ import (
 
 var logger = ctrl.Log.WithName("weightsandbiases-conversion")
 
-// Round-trip annotations: kube-apiserver bounces objects through v2 → v1 → v2
-// during admission (e.g. mutating-webhook chains), so ConvertFrom must be able
-// to reproduce the original v1 chart/values it would otherwise have to invent
-// from the typed v2 spec. We stash the original JSON on ConvertTo and read it
-// back on ConvertFrom.
+// Round-trip annotations stashed on v2 so ConvertFrom can reproduce the
+// original v1 chart/values across apiserver-internal v2 → v1 → v2 bounces.
 const (
 	v1ChartAnnotation  = "legacy.operator.wandb.com/v1-chart"
 	v1ValuesAnnotation = "legacy.operator.wandb.com/v1-values"
 )
+
+const conversionLookupTimeout = 5 * time.Second
+
+var conversionReader ctrlclient.Reader
+
+// SetConversionReader wires a Reader (typically mgr.GetAPIReader()) into the
+// conversion webhook for auxiliary lookups. Call before the manager starts.
+func SetConversionReader(r ctrlclient.Reader) {
+	conversionReader = r
+}
+
+// lookupSecret returns (nil, nil) when the reader isn't wired, name is
+// empty, or the Secret doesn't exist; other errors propagate.
+func lookupSecret(namespace, name string) (*corev1.Secret, error) {
+	if conversionReader == nil || name == "" {
+		return nil, nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), conversionLookupTimeout)
+	defer cancel()
+
+	var secret corev1.Secret
+	if err := conversionReader.Get(ctx, ctrlclient.ObjectKey{Namespace: namespace, Name: name}, &secret); err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("conversion read secret %s/%s: %w", namespace, name, err)
+	}
+	return &secret, nil
+}
+
+// resolveValues prefers `<cr-name>-spec-active`'s data.values (the coalesced
+// values written by the v1 reconciler) and falls back to src.Spec.Values
+// when the Secret is absent, has no `values` key, or the reader isn't wired.
+func resolveValues(src *WeightsAndBiases) (map[string]interface{}, error) {
+	secretName := fmt.Sprintf("%s-spec-active", src.Name)
+	secret, err := lookupSecret(src.Namespace, secretName)
+	if err != nil {
+		return nil, err
+	}
+	if secret == nil {
+		return src.Spec.Values.Object, nil
+	}
+	raw, ok := secret.Data["values"]
+	if !ok || len(raw) == 0 {
+		return src.Spec.Values.Object, nil
+	}
+	var values map[string]interface{}
+	if err := json.Unmarshal(raw, &values); err != nil {
+		return nil, fmt.Errorf("decode values from secret %s/%s: %w", src.Namespace, secretName, err)
+	}
+	return values, nil
+}
 
 // ConvertTo converts this WeightsAndBiases (v1) to the Hub version (v2).
 func (src *WeightsAndBiases) ConvertTo(dstRaw conversion.Hub) error {
@@ -47,23 +101,16 @@ func (src *WeightsAndBiases) ConvertTo(dstRaw conversion.Hub) error {
 
 	dst.ObjectMeta = src.ObjectMeta
 
-	if err := applyGlobalMappings(src, dst); err != nil {
+	if err := applyValueMappings(src, dst); err != nil {
 		return err
 	}
 
-	// Preserve the original v1 chart/values JSON so a later v2 → v1 → v2
-	// round-trip can recover them. Without this, ConvertFrom would have to
-	// produce an empty v1 and the subsequent ConvertTo would erase the typed
-	// v2 fields we just populated.
+	// Stash raw v1 chart/values for round-trip recovery in ConvertFrom.
 	return stashV1Source(src, dst)
 }
 
-// ConvertFrom converts the Hub version (v2) to this WeightsAndBiases (v1).
-//
-// v1 is no longer a reconciliation target, but apiserver still bounces
-// objects through this direction during admission round-trips. We recover
-// the original v1 chart/values from the annotations stashed by ConvertTo so
-// the round-trip is lossless.
+// ConvertFrom restores the raw v1 chart/values from the annotations stashed
+// by ConvertTo so apiserver's v2 → v1 → v2 admission bounces are lossless.
 func (dst *WeightsAndBiases) ConvertFrom(srcRaw conversion.Hub) error {
 	src := srcRaw.(*appsv2.WeightsAndBiases)
 	logger.Info("ConvertFrom: Converting WeightsAndBiases from Hub version v2 to Spoke version v1",
