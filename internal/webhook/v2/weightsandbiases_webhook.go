@@ -85,6 +85,10 @@ func (d *WeightsAndBiasesCustomDefaulter) Default(ctx context.Context, obj runti
 		wandb.Spec.Tolerations = &[]corev1.Toleration{}
 	}
 
+	if wandb.Spec.Wandb.Features == nil {
+		wandb.Spec.Wandb.Features = make(map[string]bool)
+	}
+
 	if wandb.Spec.Wandb.ManifestRepository == "" {
 		wandb.Spec.Wandb.ManifestRepository = "oci://us-docker.pkg.dev/wandb-production/public/wandb/server-manifest"
 	}
@@ -191,13 +195,16 @@ func (v *WeightsAndBiasesCustomValidator) ValidateDelete(ctx context.Context, ob
 }
 
 func applyMySQLDefaults(wandb *appsv2.WeightsAndBiases) {
-	spec := wandb.Spec.MySQL.ManagedMysql
-	if spec == nil {
-		return
+	spec := &appsv2.ManagedMysqlSpec{}
+	if wandb.Spec.MySQL.ManagedMysql == nil {
+		if wandb.Spec.MySQL.ExternalMysql != nil {
+			return
+		}
+		wandb.Spec.MySQL.ManagedMysql = spec
 	}
 
 	if spec.Name == "" {
-		spec.Name = fmt.Sprintf("%s-moco", wandb.Name)
+		spec.Name = fmt.Sprintf("%s-mysql", wandb.Name)
 	}
 
 	if spec.Namespace == "" {
@@ -206,9 +213,12 @@ func applyMySQLDefaults(wandb *appsv2.WeightsAndBiases) {
 }
 
 func applyRedisDefaults(wandb *appsv2.WeightsAndBiases) {
-	spec := wandb.Spec.Redis.ManagedRedis
-	if spec == nil {
-		return
+	spec := &appsv2.ManagedRedisSpec{}
+	if wandb.Spec.Redis.ManagedRedis == nil {
+		if wandb.Spec.Redis.ExternalRedis != nil {
+			return
+		}
+		wandb.Spec.Redis.ManagedRedis = spec
 	}
 
 	if spec.Name == "" {
@@ -225,7 +235,14 @@ func applyRedisDefaults(wandb *appsv2.WeightsAndBiases) {
 }
 
 func applyKafkaDefaults(wandb *appsv2.WeightsAndBiases) {
-	spec := wandb.Spec.Kafka.ManagedKafka
+	spec := &appsv2.ManagedKafkaSpec{}
+	if wandb.Spec.Kafka.ManagedKafka == nil {
+		if wandb.Spec.Kafka.ManagedKafka != nil {
+			return
+		}
+		wandb.Spec.Kafka.ManagedKafka = spec
+	}
+
 	if spec == nil {
 		return
 	}
@@ -240,9 +257,12 @@ func applyKafkaDefaults(wandb *appsv2.WeightsAndBiases) {
 }
 
 func applyObjectStoreDefaults(wandb *appsv2.WeightsAndBiases) {
-	spec := wandb.Spec.ObjectStore.ManagedObjectStore
-	if spec == nil {
-		return
+	spec := &appsv2.ManagedObjectStoreSpec{}
+	if wandb.Spec.ObjectStore.ManagedObjectStore == nil {
+		if wandb.Spec.ObjectStore.ExternalObjectStore != nil {
+			return
+		}
+		wandb.Spec.ObjectStore.ManagedObjectStore = spec
 	}
 
 	if spec.Name == "" {
@@ -262,9 +282,12 @@ func applyObjectStoreDefaults(wandb *appsv2.WeightsAndBiases) {
 }
 
 func applyClickHouseDefaults(wandb *appsv2.WeightsAndBiases) {
-	spec := wandb.Spec.ClickHouse.ManagedClickHouse
-	if spec == nil {
-		return
+	spec := &appsv2.ManagedClickHouseSpec{}
+	if wandb.Spec.ClickHouse.ManagedClickHouse == nil {
+		if wandb.Spec.ClickHouse.ExternalClickHouse != nil {
+			return
+		}
+		wandb.Spec.ClickHouse.ManagedClickHouse = spec
 	}
 
 	if spec.Name == "" {
@@ -319,7 +342,7 @@ func validateChanges(_ context.Context, newWandb *appsv2.WeightsAndBiases, oldWa
 
 func validateMySQLSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 	var errors field.ErrorList
-	mysqlPath := field.NewPath("spec").Child("moco")
+	mysqlPath := field.NewPath("spec").Child("mysql")
 
 	if wandb.Spec.MySQL.ManagedMysql != nil && wandb.Spec.MySQL.ExternalMysql != nil {
 		errors = append(errors, field.Invalid(

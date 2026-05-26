@@ -521,19 +521,6 @@ spec:
                 properties:
                   externalClickhouse:
                     properties:
-                      URL:
-                        properties:
-                          key:
-                            type: string
-                          name:
-                            default: ""
-                            type: string
-                          optional:
-                            type: boolean
-                        required:
-                        - key
-                        type: object
-                        x-kubernetes-map-type: atomic
                       database:
                         properties:
                           key:
@@ -586,6 +573,19 @@ spec:
                         - key
                         type: object
                         x-kubernetes-map-type: atomic
+                      url:
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            default: ""
+                            type: string
+                          optional:
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
                       username:
                         properties:
                           key:
@@ -599,8 +599,6 @@ spec:
                         - key
                         type: object
                         x-kubernetes-map-type: atomic
-                    required:
-                    - URL
                     type: object
                   managedClickhouse:
                     properties:
@@ -1128,19 +1126,6 @@ spec:
                 properties:
                   externalKafka:
                     properties:
-                      URL:
-                        properties:
-                          key:
-                            type: string
-                          name:
-                            default: ""
-                            type: string
-                          optional:
-                            type: boolean
-                        required:
-                        - key
-                        type: object
-                        x-kubernetes-map-type: atomic
                       brokerEndpoint:
                         properties:
                           key:
@@ -1193,8 +1178,19 @@ spec:
                         - key
                         type: object
                         x-kubernetes-map-type: atomic
-                    required:
-                    - URL
+                      url:
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            default: ""
+                            type: string
+                          optional:
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
                     type: object
                   managedKafka:
                     properties:
@@ -1740,19 +1736,6 @@ spec:
                 properties:
                   externalMysql:
                     properties:
-                      URL:
-                        properties:
-                          key:
-                            type: string
-                          name:
-                            default: ""
-                            type: string
-                          optional:
-                            type: boolean
-                        required:
-                        - key
-                        type: object
-                        x-kubernetes-map-type: atomic
                       database:
                         properties:
                           key:
@@ -1857,6 +1840,19 @@ spec:
                         - key
                         type: object
                         x-kubernetes-map-type: atomic
+                      url:
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            default: ""
+                            type: string
+                          optional:
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
                       username:
                         properties:
                           key:
@@ -1870,8 +1866,6 @@ spec:
                         - key
                         type: object
                         x-kubernetes-map-type: atomic
-                    required:
-                    - URL
                     type: object
                   managedMysql:
                     properties:
@@ -2487,19 +2481,6 @@ spec:
                 properties:
                   externalObjectStore:
                     properties:
-                      URL:
-                        properties:
-                          key:
-                            type: string
-                          name:
-                            default: ""
-                            type: string
-                          optional:
-                            type: boolean
-                        required:
-                        - key
-                        type: object
-                        x-kubernetes-map-type: atomic
                       accessKey:
                         properties:
                           key:
@@ -2578,8 +2559,19 @@ spec:
                         - key
                         type: object
                         x-kubernetes-map-type: atomic
-                    required:
-                    - URL
+                      url:
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            default: ""
+                            type: string
+                          optional:
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
                     type: object
                   managedObjectStore:
                     properties:
@@ -3116,19 +3108,6 @@ spec:
                 properties:
                   externalRedis:
                     properties:
-                      URL:
-                        properties:
-                          key:
-                            type: string
-                          name:
-                            default: ""
-                            type: string
-                          optional:
-                            type: boolean
-                        required:
-                        - key
-                        type: object
-                        x-kubernetes-map-type: atomic
                       host:
                         properties:
                           key:
@@ -3194,8 +3173,19 @@ spec:
                         - key
                         type: object
                         x-kubernetes-map-type: atomic
-                    required:
-                    - URL
+                      url:
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            default: ""
+                            type: string
+                          optional:
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
                     type: object
                   managedRedis:
                     properties:
@@ -3821,18 +3811,57 @@ spec:
                   oidc:
                     properties:
                       authMethod:
-                        type: string
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            default: ""
+                            type: string
+                          optional:
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
                       clientId:
-                        type: string
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            default: ""
+                            type: string
+                          optional:
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
                       clientSecret:
-                        type: string
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            default: ""
+                            type: string
+                          optional:
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
                       issuerUrl:
-                        type: string
-                    required:
-                    - authMethod
-                    - clientId
-                    - clientSecret
-                    - issuerUrl
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            default: ""
+                            type: string
+                          optional:
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
                     type: object
                   serviceAccount:
                     properties:
@@ -3901,19 +3930,6 @@ spec:
                     type: array
                   connection:
                     properties:
-                      URL:
-                        properties:
-                          key:
-                            type: string
-                          name:
-                            default: ""
-                            type: string
-                          optional:
-                            type: boolean
-                        required:
-                        - key
-                        type: object
-                        x-kubernetes-map-type: atomic
                       database:
                         properties:
                           key:
@@ -3966,6 +3982,19 @@ spec:
                         - key
                         type: object
                         x-kubernetes-map-type: atomic
+                      url:
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            default: ""
+                            type: string
+                          optional:
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
                       username:
                         properties:
                           key:
@@ -3979,8 +4008,6 @@ spec:
                         - key
                         type: object
                         x-kubernetes-map-type: atomic
-                    required:
-                    - URL
                     type: object
                   ready:
                     type: boolean
@@ -4099,19 +4126,6 @@ spec:
                     type: array
                   connection:
                     properties:
-                      URL:
-                        properties:
-                          key:
-                            type: string
-                          name:
-                            default: ""
-                            type: string
-                          optional:
-                            type: boolean
-                        required:
-                        - key
-                        type: object
-                        x-kubernetes-map-type: atomic
                       brokerEndpoint:
                         properties:
                           key:
@@ -4164,8 +4178,19 @@ spec:
                         - key
                         type: object
                         x-kubernetes-map-type: atomic
-                    required:
-                    - URL
+                      url:
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            default: ""
+                            type: string
+                          optional:
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
                     type: object
                   ready:
                     type: boolean
@@ -4214,19 +4239,6 @@ spec:
                     type: array
                   connection:
                     properties:
-                      URL:
-                        properties:
-                          key:
-                            type: string
-                          name:
-                            default: ""
-                            type: string
-                          optional:
-                            type: boolean
-                        required:
-                        - key
-                        type: object
-                        x-kubernetes-map-type: atomic
                       database:
                         properties:
                           key:
@@ -4331,6 +4343,19 @@ spec:
                         - key
                         type: object
                         x-kubernetes-map-type: atomic
+                      url:
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            default: ""
+                            type: string
+                          optional:
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
                       username:
                         properties:
                           key:
@@ -4344,8 +4369,6 @@ spec:
                         - key
                         type: object
                         x-kubernetes-map-type: atomic
-                    required:
-                    - URL
                     type: object
                   ready:
                     type: boolean
@@ -4394,19 +4417,6 @@ spec:
                     type: array
                   connection:
                     properties:
-                      URL:
-                        properties:
-                          key:
-                            type: string
-                          name:
-                            default: ""
-                            type: string
-                          optional:
-                            type: boolean
-                        required:
-                        - key
-                        type: object
-                        x-kubernetes-map-type: atomic
                       accessKey:
                         properties:
                           key:
@@ -4485,8 +4495,19 @@ spec:
                         - key
                         type: object
                         x-kubernetes-map-type: atomic
-                    required:
-                    - URL
+                      url:
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            default: ""
+                            type: string
+                          optional:
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
                     type: object
                   ready:
                     type: boolean
@@ -4540,19 +4561,6 @@ spec:
                     type: array
                   connection:
                     properties:
-                      URL:
-                        properties:
-                          key:
-                            type: string
-                          name:
-                            default: ""
-                            type: string
-                          optional:
-                            type: boolean
-                        required:
-                        - key
-                        type: object
-                        x-kubernetes-map-type: atomic
                       host:
                         properties:
                           key:
@@ -4618,8 +4626,19 @@ spec:
                         - key
                         type: object
                         x-kubernetes-map-type: atomic
-                    required:
-                    - URL
+                      url:
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            default: ""
+                            type: string
+                          optional:
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
                     type: object
                   ready:
                     type: boolean

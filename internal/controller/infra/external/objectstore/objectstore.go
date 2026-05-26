@@ -2,6 +2,8 @@ package objectstore
 
 import (
 	"context"
+	"fmt"
+	"net/url"
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/infra/external"
@@ -24,7 +26,6 @@ func WriteState(
 	logger := ctrl.LoggerFrom(ctx)
 
 	fields := map[string]corev1.SecretKeySelector{
-		"url":       spec.URL,
 		"Host":      spec.Endpoint,
 		"Port":      spec.Port,
 		"AccessKey": spec.AccessKey,
@@ -42,6 +43,15 @@ func WriteState(
 			Reason: "ApiError",
 		}}, nil
 	}
+
+	bucketUrl := url.URL{
+		Scheme: "s3",
+		Host:   fmt.Sprintf("%s:%s", data["Host"], data["Port"]),
+		User:   url.UserPassword(data["AccessKey"], data["SecretKey"]),
+		Path:   data["Bucket"],
+	}
+
+	data["url"] = bucketUrl.String()
 
 	nsName := types.NamespacedName{Namespace: wandb.Namespace, Name: ConnectionSecretName}
 	if conditions := external.WriteConnectionSecret(ctx, c, wandb, nsName, data); conditions != nil {

@@ -39,14 +39,18 @@ metadata:
 spec:
   selector:
     matchLabels:
-      app.kubernetes.io/name: operator
-      control-plane: controller-manager
+      app.kubernetes.io/name: wandb-operator
   namespaceSelector:
     matchNames:
-      - operator-system
+      - {{ .Release.Namespace }}
   endpoints:
-    - port: https
+      # The operator emits `wandb_application_info{namespace="<wandb-cr-ns>"}`
+      # where `namespace` is the W&B CR's namespace (what dashboards filter on),
+      # not the operator pod's namespace. honorLabels keeps the metric's label
+      # instead of letting target-side `namespace=wandb-operators` overwrite it.
+    - port: metrics
       scheme: http
+      honorLabels: true
 ---
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMServiceScrape
@@ -119,6 +123,32 @@ spec:
       - {{ include "telemetry.namespace" . }}
   endpoints:
     - port: metrics
+{{- end }}
+
+{{- if .Values.scrape.kubeStateMetrics }}
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMServiceScrape
+metadata:
+  name: kube-state-metrics
+  namespace: {{ include "telemetry.namespace" . }}
+  labels:
+    app.kubernetes.io/component: telemetry
+    app.kubernetes.io/part-of: wandb
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kube-state-metrics
+  namespaceSelector:
+    any: true
+  endpoints:
+      # KSM exposes its own pod's namespace/pod labels by default. honorLabels
+      # keeps the metric's intrinsic labels (kube_pod_container_*'s namespace
+      # refers to the *target* pod, which is what dashboards filter on) instead
+      # of letting the target-side namespace overwrite them.
+    - port: http
+      scheme: http
+      honorLabels: true
 {{- end }}
 
 {{- if .Values.scrape.wandbApi }}

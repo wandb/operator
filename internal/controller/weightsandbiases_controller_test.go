@@ -46,9 +46,24 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 		}
 		job := &batchv1.Job{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      WandbName + "-moco-init",
+				Name:      WandbName + "-mysql-init",
 				Namespace: WandbNamespace,
 			},
+		}
+		// Applications are not owned by the WeightsAndBiases CR via OwnerReference
+		// in the envtest setup, so garbage collection doesn't cascade. Without
+		// this explicit pass, Applications from earlier It blocks leak into the
+		// next test's namespace and break assertions that count them.
+		appList := &apiv2.ApplicationList{}
+		if err := k8sClient.List(ctx, appList, client.InNamespace(WandbNamespace)); err == nil {
+			for i := range appList.Items {
+				app := &appList.Items[i]
+				if len(app.Finalizers) > 0 {
+					app.SetFinalizers(nil)
+					_ = k8sClient.Update(ctx, app)
+				}
+				_ = k8sClient.Delete(ctx, app, client.PropagationPolicy(metav1.DeletePropagationBackground))
+			}
 		}
 		Expect(k8sClient.Delete(ctx, job, client.PropagationPolicy(metav1.DeletePropagationBackground))).Should(SatisfyAny(Succeed(), MatchError(ContainSubstring("not found"))))
 		Expect(k8sClient.Delete(ctx, dbSecret)).Should(SatisfyAny(Succeed(), MatchError(ContainSubstring("not found"))))

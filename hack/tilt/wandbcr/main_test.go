@@ -35,7 +35,7 @@ func TestBuildCRDefaultGateway(t *testing.T) {
 		t.Fatalf("internal service auth should be explicitly disabled")
 	}
 	if cr.Spec.MySQL.ManagedMysql == nil || cr.Spec.MySQL.ManagedMysql.Telemetry.Enabled {
-		t.Fatalf("moco telemetry should be disabled by default")
+		t.Fatalf("mysql telemetry should be disabled by default")
 	}
 	if cr.Spec.Redis.ManagedRedis == nil || cr.Spec.Redis.ManagedRedis.Telemetry.Enabled {
 		t.Fatalf("redis telemetry should be disabled by default")

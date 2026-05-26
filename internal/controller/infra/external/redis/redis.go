@@ -2,6 +2,8 @@ package redis
 
 import (
 	"context"
+	"fmt"
+	"net/url"
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/infra/external"
@@ -24,7 +26,6 @@ func WriteState(
 	logger := ctrl.LoggerFrom(ctx)
 
 	fields := map[string]corev1.SecretKeySelector{
-		"url":      spec.URL,
 		"Host":     spec.Host,
 		"Port":     spec.Port,
 		"Password": spec.Password,
@@ -41,6 +42,17 @@ func WriteState(
 			Reason: "ApiError",
 		}}
 	}
+
+	redisUrl := url.URL{
+		Scheme: "redis",
+		Host:   fmt.Sprintf("%s:%s", data["Host"], data["Port"]),
+	}
+
+	if _, ok := data["Password"]; ok {
+		redisUrl.User = url.UserPassword(data["Password"], "")
+	}
+
+	data["url"] = redisUrl.String()
 
 	nsName := types.NamespacedName{Namespace: wandb.Namespace, Name: ConnectionSecretName}
 	return external.WriteConnectionSecret(ctx, c, wandb, nsName, data)

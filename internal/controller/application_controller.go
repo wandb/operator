@@ -33,10 +33,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"knative.dev/pkg/ptr"
-	controllerruntime "sigs.k8s.io/controller-runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -280,7 +278,7 @@ func (r *ApplicationReconciler) reconcileDeployment(ctx context.Context, app *wa
 			app.Spec.PodTemplate.GetAnnotations(),
 		))
 
-	deployment.Spec.Selector = &v1.LabelSelector{
+	deployment.Spec.Selector = &metav1.LabelSelector{
 		MatchLabels: selectorLabels,
 	}
 
@@ -329,7 +327,7 @@ func (r *ApplicationReconciler) deleteDeployment(ctx context.Context, app *wandb
 		return err
 	}
 
-	deletePolicy := client.PropagationPolicy(v1.DeletePropagationBackground)
+	deletePolicy := client.PropagationPolicy(metav1.DeletePropagationBackground)
 	if err := r.Delete(ctx, deployment, deletePolicy); err != nil {
 		logger.Error("Failed to delete Deployment", logx.ErrAttr(err), "Deployment", app.Name)
 		return err
@@ -378,7 +376,7 @@ func (r *ApplicationReconciler) reconcileRollout(ctx context.Context, app *wandb
 			app.Spec.PodTemplate.GetAnnotations(),
 		))
 
-	rollout.Spec.Selector = &v1.LabelSelector{
+	rollout.Spec.Selector = &metav1.LabelSelector{
 		MatchLabels: selectorLabels,
 	}
 
@@ -427,7 +425,7 @@ func (r *ApplicationReconciler) deleteRollout(ctx context.Context, app *wandbv2.
 		return err
 	}
 
-	deletePolicy := client.PropagationPolicy(v1.DeletePropagationBackground)
+	deletePolicy := client.PropagationPolicy(metav1.DeletePropagationBackground)
 	if err := r.Delete(ctx, rollout, deletePolicy); err != nil {
 		logger.Error("Failed to delete Rollout", logx.ErrAttr(err), "Rollout", app.Name)
 		return err
@@ -476,7 +474,7 @@ func (r *ApplicationReconciler) reconcileStatefulSet(ctx context.Context, app *w
 			app.Spec.PodTemplate.GetAnnotations(),
 		))
 
-	statefulSet.Spec.Selector = &v1.LabelSelector{
+	statefulSet.Spec.Selector = &metav1.LabelSelector{
 		MatchLabels: selectorLabels,
 	}
 
@@ -525,7 +523,7 @@ func (r *ApplicationReconciler) deleteStatefulSet(ctx context.Context, app *wand
 		return err
 	}
 
-	deletePolicy := client.PropagationPolicy(v1.DeletePropagationBackground)
+	deletePolicy := client.PropagationPolicy(metav1.DeletePropagationBackground)
 	if err := r.Delete(ctx, statefulSet, deletePolicy); err != nil {
 		logger.Error("Failed to delete StatefulSet", logx.ErrAttr(err), "StatefulSet", app.Name)
 		return err
@@ -589,7 +587,7 @@ func (r *ApplicationReconciler) reconcileJobs(ctx context.Context, app *wandbv2.
 				logger.Info("Job spec has changed, deleting and recreating", "Job", jobName)
 
 				// Delete the existing job
-				deletePolicy := client.PropagationPolicy(v1.DeletePropagationBackground)
+				deletePolicy := client.PropagationPolicy(metav1.DeletePropagationBackground)
 				if err := r.Delete(ctx, currentJob, deletePolicy); err != nil {
 					logger.Error("Failed to delete Job", logx.ErrAttr(err), "Job", jobName)
 					return err
@@ -631,7 +629,7 @@ func (r *ApplicationReconciler) deleteJobs(ctx context.Context, app *wandbv2.App
 		return err
 	}
 
-	deletePolicy := client.PropagationPolicy(v1.DeletePropagationBackground)
+	deletePolicy := client.PropagationPolicy(metav1.DeletePropagationBackground)
 	for _, job := range jobList.Items {
 		logger.Info("Deleting Job", "Job", job.Name)
 		if err := r.Delete(ctx, &job, deletePolicy); err != nil {
@@ -718,7 +716,7 @@ func (r *ApplicationReconciler) deleteCronJobs(ctx context.Context, app *wandbv2
 		return err
 	}
 
-	deletePolicy := client.PropagationPolicy(v1.DeletePropagationBackground)
+	deletePolicy := client.PropagationPolicy(metav1.DeletePropagationBackground)
 	for _, cronJob := range cronJobList.Items {
 		logger.Info("Deleting CronJob", "CronJob", cronJob.Name)
 		if err := r.Delete(ctx, &cronJob, deletePolicy); err != nil {
@@ -833,7 +831,7 @@ func (r *ApplicationReconciler) deleteService(ctx context.Context, app *wandbv2.
 		}
 		return err
 	}
-	deletePolicy := client.PropagationPolicy(v1.DeletePropagationBackground)
+	deletePolicy := client.PropagationPolicy(metav1.DeletePropagationBackground)
 	if err := r.Delete(ctx, svc, deletePolicy); err != nil {
 		logger.Error("Failed to delete Service", logx.ErrAttr(err), "Service", app.Name)
 		return err
@@ -938,7 +936,7 @@ func (r *ApplicationReconciler) deleteHPA(ctx context.Context, app *wandbv2.Appl
 		}
 		return err
 	}
-	deletePolicy := client.PropagationPolicy(v1.DeletePropagationBackground)
+	deletePolicy := client.PropagationPolicy(metav1.DeletePropagationBackground)
 	if err := r.Delete(ctx, hpa, deletePolicy); err != nil {
 		logger.Error("Failed to delete HPA", logx.ErrAttr(err), "HPA", app.Name)
 		return err
@@ -964,7 +962,7 @@ func (r *ApplicationReconciler) reconcileHTTPRoute(ctx context.Context, app *wan
 			Namespace: app.Namespace,
 		},
 	}
-	op, err := controllerruntime.CreateOrUpdate(ctx, r.Client, httpRoute, func() error {
+	op, err := ctrl.CreateOrUpdate(ctx, r.Client, httpRoute, func() error {
 		httpRoute.Labels = utils.MergeMapsStringString(httpRoute.Labels, app.Spec.MetaTemplate.Labels)
 		httpRoute.Annotations = utils.MergeMapsStringString(httpRoute.Annotations, app.Spec.MetaTemplate.Annotations)
 		httpRoute.Spec.ParentRefs = app.Spec.HTTPRouteTemplate.ParentRefs
@@ -988,7 +986,7 @@ func (r *ApplicationReconciler) reconcileHTTPRoute(ctx context.Context, app *wan
 				Namespace: app.Namespace,
 			},
 		}
-		op, err = controllerruntime.CreateOrUpdate(ctx, r.Client, healthCheckPolicy, func() error {
+		op, err = ctrl.CreateOrUpdate(ctx, r.Client, healthCheckPolicy, func() error {
 			healthCheckPolicy.Labels = utils.MergeMapsStringString(healthCheckPolicy.Labels, app.Spec.MetaTemplate.Labels)
 			healthCheckPolicy.Annotations = utils.MergeMapsStringString(healthCheckPolicy.Annotations, app.Spec.MetaTemplate.Annotations)
 			healthCheckPolicy.Spec.Default = &gkeGatewayApiNetworkingv1.HealthCheckPolicyConfig{
@@ -1086,7 +1084,7 @@ func (r *ApplicationReconciler) deleteHTTPRoute(ctx context.Context, app *wandbv
 		}
 		return err
 	}
-	return r.Delete(ctx, route, client.PropagationPolicy(v1.DeletePropagationBackground))
+	return r.Delete(ctx, route, client.PropagationPolicy(metav1.DeletePropagationBackground))
 }
 
 func summarizeHTTPRouteStatus(route *gatewayv1.HTTPRoute) *wandbv2.HTTPRouteStatusSummary {
