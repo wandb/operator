@@ -53,10 +53,10 @@ func WriteState(
 	}
 
 	if _, ok := data["Tls"]; ok {
-		redisUrl.Query().Set("tls", data["Tls"])
+		values := redisUrl.Query()
+		values.Add("tls", data["Tls"])
+		redisUrl.RawQuery = values.Encode()
 	}
-
-	redisUrl.RawQuery = redisUrl.Query().Encode()
 
 	data["url"] = redisUrl.String()
 
