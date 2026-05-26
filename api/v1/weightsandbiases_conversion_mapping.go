@@ -538,6 +538,29 @@ func mapRedis(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) er
 		}
 	}
 
+	// tls is nested under redis.params (preferred) or redis.parameters in v1.
+	for _, parent := range []string{"params", "parameters"} {
+		raw, found, err := unstructured.NestedFieldNoCopy(redisMap, parent, "tls")
+		if err != nil {
+			return fmt.Errorf("spec.values.global.redis.%s.tls: %w", parent, err)
+		}
+		if !found {
+			continue
+		}
+		ref, literal, classifyErr := classifyValueFromOrLiteral(raw)
+		if classifyErr != nil {
+			return fmt.Errorf("spec.values.global.redis.%s.tls: %w", parent, classifyErr)
+		}
+		if ref != nil {
+			conn.Tls = *ref
+			break
+		}
+		if literal != nil {
+			remaining["tls"] = literal
+			break
+		}
+	}
+
 	if sec, ok, err := unstructured.NestedMap(redisMap, "secret"); err != nil {
 		return fmt.Errorf("spec.values.global.redis.secret: %w", err)
 	} else if ok {

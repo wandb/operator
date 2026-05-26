@@ -760,7 +760,9 @@ func TestConvertTo_MySQLAllLiterals(t *testing.T) {
 	require.Equal(t, "---cert---", decoded["caCert"])
 	require.NotContains(t, decoded, "passwordSecret")
 
-	require.Nil(t, dst.Spec.MySQL.ExternalMysql, "no ref-shaped values, so externalMysql stays unset")
+	require.NotNil(t, dst.Spec.MySQL.ExternalMysql, "externalMysql is always allocated; reconciler fills selectors from the annotation")
+	require.Empty(t, dst.Spec.MySQL.ExternalMysql.Host.Name)
+	require.Empty(t, dst.Spec.MySQL.ExternalMysql.Password.Name)
 }
 
 func TestConvertTo_MySQLLegacyPasswordSecret(t *testing.T) {
@@ -971,7 +973,8 @@ func TestConvertTo_RedisAllLiterals(t *testing.T) {
 	require.NotContains(t, decoded, "external", "fields outside the known v2 mapping must be dropped")
 	require.NotContains(t, decoded, "secret")
 
-	require.Nil(t, dst.Spec.Redis.ExternalRedis, "no ref-shaped values, so externalRedis stays unset")
+	require.NotNil(t, dst.Spec.Redis.ExternalRedis, "externalRedis is always allocated; reconciler fills selectors from the annotation")
+	require.Empty(t, dst.Spec.Redis.ExternalRedis.Host.Name)
 }
 
 func TestConvertTo_RedisLegacySecretRef(t *testing.T) {
@@ -1135,6 +1138,125 @@ func TestConvertTo_RedisMalformedRefMap(t *testing.T) {
 	require.Contains(t, err.Error(), "host")
 }
 
+func TestConvertTo_RedisTLSValueFromInParams(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{
+			"redis": map[string]interface{}{
+				"params": map[string]interface{}{
+					"tls": map[string]interface{}{
+						"valueFrom": map[string]interface{}{
+							"secretKeyRef": map[string]interface{}{
+								"name": "redis-tls",
+								"key":  "enabled",
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+	require.NotNil(t, dst.Spec.Redis.ExternalRedis)
+	require.Equal(t, "redis-tls", dst.Spec.Redis.ExternalRedis.Tls.Name)
+	require.Equal(t, "enabled", dst.Spec.Redis.ExternalRedis.Tls.Key)
+}
+
+func TestConvertTo_RedisTLSValueFromInParameters(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{
+			"redis": map[string]interface{}{
+				"parameters": map[string]interface{}{
+					"tls": map[string]interface{}{
+						"valueFrom": map[string]interface{}{
+							"secretKeyRef": map[string]interface{}{
+								"name": "redis-tls",
+								"key":  "enabled",
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+	require.NotNil(t, dst.Spec.Redis.ExternalRedis)
+	require.Equal(t, "redis-tls", dst.Spec.Redis.ExternalRedis.Tls.Name)
+	require.Equal(t, "enabled", dst.Spec.Redis.ExternalRedis.Tls.Key)
+}
+
+func TestConvertTo_RedisTLSParamsWinsOverParameters(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{
+			"redis": map[string]interface{}{
+				"params": map[string]interface{}{
+					"tls": map[string]interface{}{
+						"valueFrom": map[string]interface{}{
+							"secretKeyRef": map[string]interface{}{
+								"name": "from-params",
+								"key":  "tls",
+							},
+						},
+					},
+				},
+				"parameters": map[string]interface{}{
+					"tls": map[string]interface{}{
+						"valueFrom": map[string]interface{}{
+							"secretKeyRef": map[string]interface{}{
+								"name": "from-parameters",
+								"key":  "tls",
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+	require.Equal(t, "from-params", dst.Spec.Redis.ExternalRedis.Tls.Name,
+		"params should be checked before parameters")
+}
+
+func TestConvertTo_RedisTLSLiteralStashedInAnnotation(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{
+			"redis": map[string]interface{}{
+				"params": map[string]interface{}{
+					"tls": "true",
+				},
+			},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+
+	raw, ok := dst.Annotations[RedisPendingAnnotation]
+	require.True(t, ok, "expected redis-pending annotation for the literal tls")
+
+	var decoded map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(raw), &decoded))
+	require.Equal(t, "true", decoded["tls"])
+
+	require.Empty(t, dst.Spec.Redis.ExternalRedis.Tls.Name,
+		"literal tls should not be set on the spec; reconciler materializes it")
+}
+
+func TestConvertTo_RedisTLSAbsent(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{
+			"redis": map[string]interface{}{
+				"host": "redis.example.com",
+			},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+	require.Empty(t, dst.Spec.Redis.ExternalRedis.Tls.Name)
+	require.Empty(t, dst.Spec.Redis.ExternalRedis.Tls.Key)
+}
+
 func TestConvertTo_RedisAbsent(t *testing.T) {
 	dst := &appsv2.WeightsAndBiases{}
 	src := newV1(map[string]interface{}{
@@ -1214,8 +1336,11 @@ func TestConvertTo_BucketSecretRefEmptyName(t *testing.T) {
 	})
 	require.NoError(t, src.ConvertTo(dst))
 
-	require.Nil(t, dst.Spec.ObjectStore.ExternalObjectStore,
-		"empty secretName should not produce an externalObjectStore")
+	require.NotNil(t, dst.Spec.ObjectStore.ExternalObjectStore,
+		"externalObjectStore is always allocated; reconciler fills selectors from the annotation")
+	require.Empty(t, dst.Spec.ObjectStore.ExternalObjectStore.AccessKey.Name,
+		"empty secretName should not produce an AccessKey selector")
+	require.Empty(t, dst.Spec.ObjectStore.ExternalObjectStore.SecretKey.Name)
 
 	raw := dst.Annotations[BucketPendingAnnotation]
 	var decoded map[string]interface{}
@@ -1238,7 +1363,9 @@ func TestConvertTo_BucketLiteralsOnlyBucket(t *testing.T) {
 		},
 	})
 	require.NoError(t, src.ConvertTo(dst))
-	require.Nil(t, dst.Spec.ObjectStore.ExternalObjectStore)
+	require.NotNil(t, dst.Spec.ObjectStore.ExternalObjectStore,
+		"externalObjectStore is always allocated; literals stay in the annotation")
+	require.Empty(t, dst.Spec.ObjectStore.ExternalObjectStore.AccessKey.Name)
 
 	raw, ok := dst.Annotations[BucketPendingAnnotation]
 	require.True(t, ok)

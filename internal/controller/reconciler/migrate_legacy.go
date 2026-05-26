@@ -136,6 +136,7 @@ type legacyRedisPayload struct {
 	Port     any    `json:"port,omitempty"`
 	Password string `json:"password,omitempty"`
 	CaCert   string `json:"caCert,omitempty"`
+	Tls      string `json:"tls,omitempty"`
 }
 
 // migrateLegacyRedis drains the redis-pending annotation. Mirrors
@@ -176,6 +177,7 @@ func migrateLegacyRedis(
 	fill(&conn.Port, "port", normalizePort(payload.Port))
 	fill(&conn.Password, "password", payload.Password)
 	fill(&conn.SslCa, "sslCa", payload.CaCert)
+	fill(&conn.Tls, "tls", payload.Tls)
 
 	if err := materializeConvertedSecret(ctx, c, wandb, secretName, data); err != nil {
 		return false, err
