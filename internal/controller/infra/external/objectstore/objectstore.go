@@ -46,8 +46,15 @@ func WriteState(
 
 	bucketUrl := url.URL{
 		Scheme: "s3",
-		Host:   fmt.Sprintf("%s:%s", data["Host"], data["Port"]),
 		Path:   data["Bucket"],
+	}
+
+	if _, ok := data["Region"]; ok {
+		if _, ok := data["Port"]; ok {
+			bucketUrl.Host = fmt.Sprintf("%s:%s", data["Host"], data["Port"])
+		} else {
+			bucketUrl.Host = data["Host"]
+		}
 	}
 
 	if _, ok := data["AccessKey"]; ok {
