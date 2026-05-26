@@ -981,7 +981,7 @@ func (r *ApplicationReconciler) reconcileHTTPRoute(ctx context.Context, app *wan
 	app.Status.HTTPRouteStatus = summarizeHTTPRouteStatus(httpRoute)
 	logger.Info(fmt.Sprintf("Successfully %s HTTPRoute", op), "HTTPRoute", httpRoute.Name)
 
-	if httpRoute.Status.Parents[0].ControllerName == "networking.gke.io/gateway" {
+	if len(httpRoute.Status.Parents) > 0 && httpRoute.Status.Parents[0].ControllerName == "networking.gke.io/gateway" {
 		healthCheckPolicy := &gkeGatewayApiNetworkingv1.HealthCheckPolicy{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      app.Name,

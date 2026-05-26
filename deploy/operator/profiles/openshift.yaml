@@ -8,11 +8,26 @@ wandb-operator:
     seccompProfile:
       type: RuntimeDefault
 
+  # readOnlyRootFilesystem requires writable mounts where the operator
+  # writes manifests and reads serving certs.
+  volumes:
+    - name: server-manifest
+      emptyDir: {}
+    - name: serving-certs
+      secret:
+        secretName: '{{ .Release.Name }}-serving-cert'
+
   containers:
     operator:
       env:
         OPENSHIFT:
           value: "true"
+      volumeMounts:
+        - mountPath: /tmp/server-manifest
+          name: server-manifest
+        - mountPath: /tmp/wandb-operator/serving-certs
+          name: serving-certs
+          readOnly: true
 
 grafana-operator:
   isOpenShift: true
@@ -35,3 +50,25 @@ minio-operator:
       capabilities:
         drop:
           - ALL
+
+# Strimzi's default BaselinePodSecurityProvider injects runAsUser:1001 /
+# runAsGroup:1001 into Kafka pods, which restricted-v2 rejects. Switch the
+# cluster operator to the RestrictedPodSecurityProvider so the platform
+# assigns UID/GID and the pods admit under restricted-v2.
+strimzi-kafka-operator:
+  extraEnvs:
+    - name: STRIMZI_POD_SECURITY_PROVIDER_CLASS
+      value: restricted
+
+# Override moco images with locally-built copies pushed to the CRC internal
+# registry. Used to test in-development moco changes (UID/SCC fixes) before
+# they ship upstream. Remove once a released chart includes the changes.
+moco:
+  image:
+    repository: image-registry.openshift-image-registry.svc:5000/wandb-operators/moco-controller
+    tag: dev
+    pullPolicy: Always
+  fluentbit:
+    image:
+      repository: image-registry.openshift-image-registry.svc:5000/wandb-operators/moco-fluent-bit
+      tag: dev
