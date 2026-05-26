@@ -20,7 +20,7 @@ dependencies:
     repository: https://cybozu-go.github.io/moco/
     condition: moco.enabled
   - name: cert-manager
-    version: v1.16.3
+    version: v1.20.2
     repository: https://charts.jetstack.io
     condition: cert-manager.enabled
   - name: redis-operator

@@ -40,6 +40,6 @@ roleRef:
   name: {{ .Release.Name }}-grafana
 subjects:
   - kind: ServiceAccount
-    name: wandb-operator
+    name: {{ if (dig "wandb-operator" "serviceAccount" "name" "" .Values.AsMap) }}{{ dig "wandb-operator" "serviceAccount" "name" "" .Values.AsMap }}{{ else }}{{ .Release.Name }}-wandb-operator{{ end }}
     namespace: {{ .Release.Namespace }}
 {{- end }}

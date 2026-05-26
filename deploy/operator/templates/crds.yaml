@@ -13759,8 +13759,8 @@ spec:
       clientConfig:
         service:
           name: "{{ if (dig "wandb-operator" "service" "name" "" .Values.AsMap) }}{{
-            dig "wandb-operator" "service" "name" "" .Values.AsMap }}{{ else }}wandb-operator{{
-            end }}"
+            dig "wandb-operator" "service" "name" "" .Values.AsMap }}{{ else }}{{
+            .Release.Name }}-wandb-operator{{ end }}"
           namespace: "{{ .Release.Namespace }}"
           path: /convert
       conversionReviewVersions:

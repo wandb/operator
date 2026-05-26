@@ -350,6 +350,8 @@ func mapBucket(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) e
 		return nil
 	}
 
+	dst.Spec.ObjectStore.ExternalObjectStore = &appsv2.ObjectStoreConnection{}
+
 	if sec, ok, err := unstructured.NestedMap(bucket, "secret"); err != nil {
 		return fmt.Errorf("spec.values.global.bucket.secret: %w", err)
 	} else if ok {
@@ -363,15 +365,13 @@ func mapBucket(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) e
 			if secretKeyName == "" {
 				secretKeyName = defaultBucketSecretKeyName
 			}
-			dst.Spec.ObjectStore.ExternalObjectStore = &appsv2.ObjectStoreConnection{
-				AccessKey: corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{Name: name},
-					Key:                  accessKeyName,
-				},
-				SecretKey: corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{Name: name},
-					Key:                  secretKeyName,
-				},
+			dst.Spec.ObjectStore.ExternalObjectStore.AccessKey = corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: name},
+				Key:                  accessKeyName,
+			}
+			dst.Spec.ObjectStore.ExternalObjectStore.SecretKey = corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: name},
+				Key:                  secretKeyName,
 			}
 		}
 	}
@@ -444,13 +444,7 @@ func mapMySQL(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) er
 		return nil
 	}
 
-	var conn *appsv2.MysqlConnection
-	ensureConn := func() *appsv2.MysqlConnection {
-		if conn == nil {
-			conn = &appsv2.MysqlConnection{}
-		}
-		return conn
-	}
+	var conn = &appsv2.MysqlConnection{}
 
 	remaining := map[string]interface{}{}
 
@@ -465,7 +459,7 @@ func mapMySQL(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) er
 		}
 		switch {
 		case ref != nil:
-			f.setRef(ensureConn(), *ref)
+			f.setRef(conn, *ref)
 		case literal != nil:
 			remaining[f.v1Key] = literal
 		}
@@ -481,7 +475,7 @@ func mapMySQL(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) er
 			if key == "" {
 				key = defaultMySQLPasswordSecretKey
 			}
-			ensureConn().Password = corev1.SecretKeySelector{
+			conn.Password = corev1.SecretKeySelector{
 				LocalObjectReference: corev1.LocalObjectReference{Name: name},
 				Key:                  key,
 			}
@@ -523,13 +517,7 @@ func mapRedis(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) er
 		return nil
 	}
 
-	var conn *appsv2.RedisConnection
-	ensureConn := func() *appsv2.RedisConnection {
-		if conn == nil {
-			conn = &appsv2.RedisConnection{}
-		}
-		return conn
-	}
+	var conn = &appsv2.RedisConnection{}
 
 	remaining := map[string]interface{}{}
 
@@ -544,7 +532,7 @@ func mapRedis(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) er
 		}
 		switch {
 		case ref != nil:
-			f.setRef(ensureConn(), *ref)
+			f.setRef(conn, *ref)
 		case literal != nil:
 			remaining[f.v1Key] = literal
 		}
@@ -560,7 +548,7 @@ func mapRedis(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) er
 			if key == "" {
 				key = defaultRedisPasswordSecretKey
 			}
-			ensureConn().Password = corev1.SecretKeySelector{
+			conn.Password = corev1.SecretKeySelector{
 				LocalObjectReference: corev1.LocalObjectReference{Name: name},
 				Key:                  key,
 			}

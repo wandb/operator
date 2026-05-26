@@ -11,7 +11,7 @@ webhooks:
       - v1
     clientConfig:
       service:
-        name: wandb-operator
+        name: {{ if (dig "wandb-operator" "service" "name" "" .Values.AsMap) }}{{ dig "wandb-operator" "service" "name" "" .Values.AsMap }}{{ else }}{{ .Release.Name }}-wandb-operator{{ end }}
         namespace: {{ .Release.Namespace }}
         path: /mutate-apps-wandb-com-v2-application
     failurePolicy: Fail
@@ -31,7 +31,7 @@ webhooks:
       - v1
     clientConfig:
       service:
-        name: wandb-operator
+        name: {{ if (dig "wandb-operator" "service" "name" "" .Values.AsMap) }}{{ dig "wandb-operator" "service" "name" "" .Values.AsMap }}{{ else }}{{ .Release.Name }}-wandb-operator{{ end }}
         namespace: {{ .Release.Namespace }}
         path: /mutate-apps-wandb-com-v2-weightsandbiases
     failurePolicy: Fail
@@ -59,7 +59,7 @@ webhooks:
       - v1
     clientConfig:
       service:
-        name: wandb-operator
+        name: {{ if (dig "wandb-operator" "service" "name" "" .Values.AsMap) }}{{ dig "wandb-operator" "service" "name" "" .Values.AsMap }}{{ else }}{{ .Release.Name }}-wandb-operator{{ end }}
         namespace: {{ .Release.Namespace }}
         path: /validate-apps-wandb-com-v2-application
     failurePolicy: Fail
@@ -79,7 +79,7 @@ webhooks:
       - v1
     clientConfig:
       service:
-        name: wandb-operator
+        name: {{ if (dig "wandb-operator" "service" "name" "" .Values.AsMap) }}{{ dig "wandb-operator" "service" "name" "" .Values.AsMap }}{{ else }}{{ .Release.Name }}-wandb-operator{{ end }}
         namespace: {{ .Release.Namespace }}
         path: /validate-apps-wandb-com-v2-weightsandbiases
     failurePolicy: Fail

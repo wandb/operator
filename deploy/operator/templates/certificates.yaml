@@ -7,8 +7,13 @@ metadata:
   namespace: {{ .Release.Namespace }}
 spec:
   dnsNames:
-    - {{ .Release.Name }}.{{ .Release.Namespace }}.svc
-    - {{ .Release.Name }}.{{ .Release.Namespace }}.svc.cluster.local
+    {{ if (dig "wandb-operator" "service" "name" "" .Values.AsMap) }}
+    - {{ dig "wandb-operator" "service" "name" "" .Values.AsMap }}.{{ .Release.Namespace }}.svc
+    - {{ dig "wandb-operator" "service" "name" "" .Values.AsMap }}.{{ .Release.Namespace }}.svc.cluster.local
+    {{ else }}
+    - {{ .Release.Name }}-wandb-operator.{{ .Release.Namespace }}.svc
+    - {{ .Release.Name }}-wandb-operator.{{ .Release.Namespace }}.svc.cluster.local
+    {{ end }}
   issuerRef:
     kind: Issuer
     name: {{ .Release.Name }}-selfsigned-issuer
