@@ -2457,6 +2457,8 @@ spec:
                     properties:
                       ingressClassName:
                         type: string
+                      name:
+                        type: string
                     type: object
                   mode:
                     enum:
