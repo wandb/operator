@@ -16,8 +16,17 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
+// consolidatedIngressName returns spec.networking.ingress.name when set, or
+// the default "<cr-name>-ingress" otherwise.
+func consolidatedIngressName(wandb *apiv2.WeightsAndBiases) string {
+	if wandb.Spec.Networking.Ingress != nil && wandb.Spec.Networking.Ingress.Name != "" {
+		return wandb.Spec.Networking.Ingress.Name
+	}
+	return fmt.Sprintf("%s", wandb.Name)
+}
+
 func reconcileConsolidatedIngress(ctx context.Context, c ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest) error {
-	ingressName := fmt.Sprintf("%s-ingress", wandb.Name)
+	ingressName := consolidatedIngressName(wandb)
 	hostname := parseHostname(wandb.Spec.Wandb.Hostname)
 
 	var paths []networkingv1.HTTPIngressPath
@@ -149,7 +158,7 @@ func reconcileConsolidatedIngress(ctx context.Context, c ctrlClient.Client, wand
 }
 
 func deleteConsolidatedIngress(ctx context.Context, c ctrlClient.Client, wandb *apiv2.WeightsAndBiases) error {
-	ingressName := fmt.Sprintf("%s-ingress", wandb.Name)
+	ingressName := consolidatedIngressName(wandb)
 	ingress := &networkingv1.Ingress{}
 	if err := c.Get(ctx, types.NamespacedName{Name: ingressName, Namespace: wandb.Namespace}, ingress); err != nil {
 		if apiErrors.IsNotFound(err) {

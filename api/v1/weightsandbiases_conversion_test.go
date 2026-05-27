@@ -504,6 +504,27 @@ func TestConvertTo_IngressTLSFirstEntryWins(t *testing.T) {
 		"v2 carries only the first TLS entry's secretName")
 }
 
+func TestConvertTo_IngressNameOverrideMaps(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"ingress": map[string]interface{}{"nameOverride": "dpanzella-test-gcp"},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+	require.NotNil(t, dst.Spec.Networking.Ingress)
+	require.Equal(t, "dpanzella-test-gcp", dst.Spec.Networking.Ingress.Name)
+}
+
+func TestConvertTo_IngressNameOverrideEmpty(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"ingress": map[string]interface{}{"nameOverride": ""},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+	if dst.Spec.Networking.Ingress != nil {
+		require.Empty(t, dst.Spec.Networking.Ingress.Name)
+	}
+}
+
 func TestConvertTo_IngressNoModeOverrideWhenSet(t *testing.T) {
 	dst := &appsv2.WeightsAndBiases{
 		Spec: appsv2.WeightsAndBiasesSpec{

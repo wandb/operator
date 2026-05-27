@@ -204,6 +204,15 @@ func mapIngress(values map[string]interface{}, dst *appsv2.WeightsAndBiases) err
 		dst.Spec.Networking.Ingress.IngressClassName = ptr.To(class)
 	}
 
+	if name, _, err := unstructured.NestedString(ingressMap, "nameOverride"); err != nil {
+		return fmt.Errorf("spec.values.ingress.nameOverride: %w", err)
+	} else if name != "" {
+		if dst.Spec.Networking.Ingress == nil {
+			dst.Spec.Networking.Ingress = &appsv2.IngressConfig{}
+		}
+		dst.Spec.Networking.Ingress.Name = name
+	}
+
 	if anns, _, err := unstructured.NestedStringMap(ingressMap, "annotations"); err != nil {
 		return fmt.Errorf("spec.values.ingress.annotations: %w", err)
 	} else if len(anns) > 0 {
