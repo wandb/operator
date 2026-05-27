@@ -131,8 +131,10 @@ strimzi-kafka-operator:
   install: true
   watchAnyNamespace: true
 
-minio-operator:
+seaweedfs-operator:
   install: true
+  webhook:
+    enabled: false
 
 altinity-clickhouse-operator:
   crdHook:

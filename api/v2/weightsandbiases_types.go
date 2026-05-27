@@ -419,13 +419,17 @@ type ObjectStoreSpec struct {
 
 type ManagedObjectStoreSpec struct {
 	ManagedInfraSpec `json:",inline"`
-
+	SeaweedObjectStoreSpec	SeaweedObjectStoreSpec	  `json:"SeaweedObjectStoreSpec,omitempty"`
 	StorageSize string            `json:"storageSize,omitempty"`
 	Replicas    int32             `json:"replicas,omitempty"`
 	Config      ObjectStoreConfig `json:"config,omitempty"`
 	Namespace   string            `json:"namespace,omitempty"`
 	Name        string            `json:"name,omitempty"`
 	Telemetry   Telemetry         `json:"telemetry,omitempty"`
+}
+
+type SeaweedObjectStoreSpec struct {
+	TlsEnabled bool `json:"tlsEnabled,omitempty"`
 }
 
 type ObjectStoreConnection struct {
@@ -440,9 +444,13 @@ type ObjectStoreConnection struct {
 }
 
 type ObjectStoreConfig struct {
-	Resources           corev1.ResourceRequirements `json:"resources,omitempty"`
-	RootUser            string                      `json:"rootUser,omitempty"`
-	MinioBrowserSetting string                      `json:"minioBrowserSetting,omitempty"`
+	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+	AccessKey string                      `json:"accessKey,omitempty"`
+
+	// Deprecated: Use AccessKey instead. Kept for backward compatibility during migration.
+	RootUser string `json:"rootUser,omitempty"`
+	// Deprecated: No longer used. Kept to avoid schema validation failures on upgrade.
+	MinioBrowserSetting string `json:"minioBrowserSetting,omitempty"`
 }
 
 // ClickHouseSpec defines the desired state of the ClickHouse infrastructure component.

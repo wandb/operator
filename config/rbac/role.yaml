@@ -232,24 +232,6 @@ rules:
   - get
   - update
 - apiGroups:
-  - minio.min.io
-  resources:
-  - tenants
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - minio.min.io
-  resources:
-  - tenants/status
-  verbs:
-  - get
-- apiGroups:
   - moco.cybozu.com
   resources:
   - mysqlclusters
@@ -347,5 +329,23 @@ rules:
   - redis.redis.opstreelabs.in
   resources:
   - redis/status
+  verbs:
+  - get
+- apiGroups:
+  - seaweed.seaweedfs.com
+  resources:
+  - seaweeds
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - seaweed.seaweedfs.com
+  resources:
+  - seaweeds/status
   verbs:
   - get

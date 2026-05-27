@@ -7,7 +7,9 @@ import (
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/infra/external"
 	externalobjectstore "github.com/wandb/operator/internal/controller/infra/external/objectstore"
-	"github.com/wandb/operator/internal/controller/infra/managed/minio/tenant"
+	"github.com/wandb/operator/internal/controller/infra/managed/objectstore/seaweedfs"
+	"github.com/wandb/operator/internal/controller/translator"
+	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
 	"github.com/wandb/operator/pkg/utils"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -68,9 +70,13 @@ func objectStorePurgeFinalizer(
 	wandb *apiv2.WeightsAndBiases,
 ) error {
 	if spec := wandb.Spec.ObjectStore.ManagedObjectStore; spec != nil {
+		onDeleteRule := translatorv2.ToObjectStoreOnDeleteRule(wandb, wandb.GetRetentionPolicy(spec.ManagedInfraSpec))
+		_ = seaweedfs.CleanupLegacyMinio(
+			ctx, client, wandb.Name, wandb.Namespace, wandb.GetUID(),
+			true, onDeleteRule.Selector,
+		)
 		specNamespacedName := managedObjectStoreSpecNamespacedName(spec)
-		onDeleteRule := tenant.ToObjectStoreOnDeleteRule(wandb, wandb.GetRetentionPolicy(spec.ManagedInfraSpec))
-		return tenant.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule)
+		return seaweedfs.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule)
 	}
 	if wandb.Spec.ObjectStore.ExternalObjectStore != nil {
 		return externalobjectstore.DeleteConnectionSecret(ctx, client, wandb)
@@ -87,8 +93,12 @@ func objectStoreDetachFinalizer(
 	if spec == nil {
 		return nil
 	}
+	_ = seaweedfs.CleanupLegacyMinio(
+		ctx, client, wandb.Name, wandb.Namespace, wandb.GetUID(),
+		false, nil,
+	)
 	specNamespacedName := managedObjectStoreSpecNamespacedName(spec)
-	return tenant.DetachFinalizer(ctx, client, specNamespacedName, wandb)
+	return seaweedfs.DetachFinalizer(ctx, client, specNamespacedName, wandb)
 }
 
 // managed
@@ -103,7 +113,18 @@ func managedObjectStoreWriteState(
 	log := ctrl.LoggerFrom(ctx)
 	var specNamespacedName = managedObjectStoreSpecNamespacedName(spec)
 
-	if conditions := tenant.CheckDetached(ctx, client, specNamespacedName, wandb.GetUID(), spec.Replicas); conditions != nil {
+	retentionPolicy := wandb.GetRetentionPolicy(spec.ManagedInfraSpec)
+	onDeleteRule := translatorv2.ToObjectStoreOnDeleteRule(wandb, retentionPolicy)
+	if err := seaweedfs.CleanupLegacyMinio(
+		ctx, client,
+		wandb.Name, wandb.Namespace, wandb.GetUID(),
+		onDeleteRule.Policy == translator.Purge,
+		onDeleteRule.Selector,
+	); err != nil {
+		log.Error(err, "failed to clean up legacy MinIO resources")
+	}
+
+	if conditions := seaweedfs.CheckDetached(ctx, client, specNamespacedName, wandb.GetUID(), spec.Replicas); conditions != nil {
 		return conditions, nil
 	}
 
@@ -131,7 +152,7 @@ func managedObjectStoreWriteState(
 		}, nil
 	}
 
-	conditions, connection := tenant.WriteState(ctx, client, specNamespacedName, desiredCr, desiredConfig, wandb)
+	conditions, connection := seaweedfs.WriteState(ctx, client, specNamespacedName, desiredCr, desiredConfig, wandb)
 	return conditions, connection
 }
 
@@ -145,7 +166,7 @@ func managedObjectStoreReadState(
 
 	specNamespacedName := managedObjectStoreSpecNamespacedName(spec)
 	retentionPolicy := wandb.GetRetentionPolicy(spec.ManagedInfraSpec)
-	readConditions := tenant.ReadState(
+	readConditions := seaweedfs.ReadState(
 		ctx,
 		client,
 		specNamespacedName,
@@ -167,7 +188,7 @@ func managedObjectStoreInferStatus(
 	oldConditions := wandb.Status.ObjectStoreStatus.Conditions
 	oldInfraConn := wandb.Status.ObjectStoreStatus.Connection
 
-	updatedStatus, events, ctrlResult := tenant.ComputeStatus(
+	updatedStatus, events, ctrlResult := seaweedfs.ComputeStatus(
 		ctx,
 		enabled,
 		oldConditions,
