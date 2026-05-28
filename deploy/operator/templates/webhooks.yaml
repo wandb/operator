@@ -1,4 +1,4 @@
-{{- if not (eq (index .Values "wandb-operator" "enabled") false) }}
+{{- if (dig "wandb-operator" "enabled" true .Values.AsMap) }}
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration

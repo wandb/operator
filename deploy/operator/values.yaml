@@ -1,3 +1,6 @@
+helmHooks:
+  enabled: true
+
 wandb:
   install: true
   size: small

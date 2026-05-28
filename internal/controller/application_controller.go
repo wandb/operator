@@ -256,7 +256,7 @@ func (r *ApplicationReconciler) reconcileDeployment(ctx context.Context, app *wa
 
 	selectorLabels := map[string]string{
 		"app.kubernetes.io/name":     app.Name,
-		"app.kubernetes.io/instance": app.Name,
+		"app.kubernetes.io/instance": app.Namespace,
 	}
 
 	deployment.Name = app.Name

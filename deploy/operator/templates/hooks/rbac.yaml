@@ -1,3 +1,4 @@
+{{- if .Values.helmHooks.enabled }}
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -44,3 +45,4 @@ subjects:
   - kind: ServiceAccount
     name: {{ include "wandb-operator.crdInstallerName" . }}
     namespace: {{ .Release.Namespace }}
+{{- end }}

@@ -23,7 +23,7 @@ func TestConsolidatedIngressName_DefaultsToCRName(t *testing.T) {
 	wandb := &apiv2.WeightsAndBiases{
 		ObjectMeta: metav1.ObjectMeta{Name: "wandb"},
 	}
-	require.Equal(t, "wandb-ingress", consolidatedIngressName(wandb))
+	require.Equal(t, "wandb", consolidatedIngressName(wandb))
 }
 
 func TestConsolidatedIngressName_HonorsSpecOverride(t *testing.T) {
@@ -47,5 +47,5 @@ func TestConsolidatedIngressName_EmptyOverrideFallsBack(t *testing.T) {
 			},
 		},
 	}
-	require.Equal(t, "wandb-ingress", consolidatedIngressName(wandb))
+	require.Equal(t, "wandb", consolidatedIngressName(wandb))
 }

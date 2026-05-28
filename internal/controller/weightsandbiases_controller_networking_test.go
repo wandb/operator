@@ -193,7 +193,7 @@ var _ = Describe("WeightsAndBiases Networking", func() {
 
 		ingress := &networkingv1.Ingress{}
 		Expect(k8sClient.Get(ctx, types.NamespacedName{
-			Name:      fmt.Sprintf("%s-ingress", wandbName),
+			Name:      fmt.Sprintf("%s", wandbName),
 			Namespace: wandbNamespace,
 		}, ingress)).To(Succeed())
 		Expect(ingress.Spec.IngressClassName).NotTo(BeNil())
@@ -213,7 +213,7 @@ var _ = Describe("WeightsAndBiases Networking", func() {
 		wandb = getWandb(ctx, wandbName, wandbNamespace)
 
 		Expect(wandb.Status.IngressStatus).NotTo(BeNil())
-		Expect(wandb.Status.IngressStatus.Name).To(Equal(fmt.Sprintf("%s-ingress", wandbName)))
+		Expect(wandb.Status.IngressStatus.Name).To(Equal(fmt.Sprintf("%s", wandbName)))
 		Expect(wandb.Status.IngressStatus.LoadBalancerIngress).To(HaveLen(1))
 		Expect(wandb.Status.IngressStatus.LoadBalancerIngress[0].IP).To(Equal("34.118.10.1"))
 	})

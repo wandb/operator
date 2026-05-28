@@ -53,7 +53,7 @@ func reconcileConsolidatedIngress(ctx context.Context, c ctrlClient.Client, wand
 			}
 		}
 
-		serviceName := fmt.Sprintf("%s-%s", wandb.Name, app.Name)
+		serviceName := app.Name
 		servicePort := resolveIngressServicePort(app)
 
 		for _, p := range appPaths {

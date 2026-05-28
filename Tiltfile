@@ -459,10 +459,17 @@ WANDB_CR = build_wandb_cr() if as_bool(settings.get("includeCR")) else ""
 WANDB_CR_CONTENT = read_yaml(WANDB_CR) if as_bool(settings.get("includeCR")) else {}
 WANDB_NAME = WANDB_CR_CONTENT.get("metadata", {}).get("name", settings.get("wandbName"))
 WANDB_NAMESPACE = WANDB_CR_CONTENT.get("metadata", {}).get("namespace", settings.get("wandbNamespace"))
-WANDB_HOSTNAME = WANDB_CR_CONTENT.get("spec", {}).get("wandb", {}).get("hostname", settings.get("wandbHostname"))
 OPERATOR_VALUES = build_operator_values(WANDB_NAMESPACE)
-LOCAL_NETWORKING_MODE = WANDB_CR_CONTENT.get("spec", {}).get("networking", {}).get("mode", settings.get("networkMode"))
 CREATE_WANDB_NAMESPACE = as_bool(settings.get("includeCR")) or settings.get("observabilityMode") != "off"
+
+if WANDB_CR_CONTENT.get("apiVersion") == "apps.wandb.com/v1":
+  WANDB_HOSTNAME = WANDB_CR_CONTENT.get("spec", {}).get("values", {}).get("global", {}).get("host", settings.get("host"))
+  ingress_create = WANDB_CR_CONTENT.get("spec", {}).get("values", {}).get("ingress", {}).get("create", True)
+  ingress_install = WANDB_CR_CONTENT.get("spec", {}).get("values", {}).get("ingress", {}).get("install", True)
+  LOCAL_NETWORKING_MODE = "ingress" if ingress_install and ingress_create else settings.get("networkMode")
+else:
+  WANDB_HOSTNAME = WANDB_CR_CONTENT.get("spec", {}).get("wandb", {}).get("hostname", settings.get("wandbHostname"))
+  LOCAL_NETWORKING_MODE = WANDB_CR_CONTENT.get("spec", {}).get("networking", {}).get("mode", settings.get("networkMode"))
 
 endpoint_anchors = []
 if as_bool(settings.get("includeCR")):

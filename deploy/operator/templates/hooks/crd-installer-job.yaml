@@ -13,6 +13,7 @@
     - before-hook-creation,hook-succeeded — re-runs are idempotent; cleanup
       on success keeps the cluster tidy.
 */ -}}
+{{- if .Values.helmHooks.enabled }}
 {{- $image := printf "%s:%s" (index .Values "wandb-operator" "image" "repository") (index .Values "wandb-operator" "image" "tag") -}}
 apiVersion: batch/v1
 kind: Job
@@ -52,3 +53,4 @@ spec:
             limits:
               cpu: 500m
               memory: 256Mi
+{{- end }}

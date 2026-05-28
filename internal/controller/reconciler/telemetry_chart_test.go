@@ -109,7 +109,7 @@ func runHelmTemplateWithError(t *testing.T, chartPath string, extraArgs ...strin
 		return "", nil
 	}
 
-	args := []string{"template", "telemetry-test", chartPath, "-n", "wandb-operator"}
+	args := []string{"template", "telemetry-test", chartPath, "-n", "wandb-operator", "--set", "helmHooks.enabled=false"}
 	args = append(args, extraArgs...)
 
 	cmd := exec.Command("helm", args...)
