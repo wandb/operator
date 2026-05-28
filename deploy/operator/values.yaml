@@ -8,7 +8,8 @@ wandb:
 wandb-operator:
   image:
     repository: us-docker.pkg.dev/wandb-production/public/wandb/operator
-    tag: test-conversion-webhook
+    tag: test-conversion-webhook.5
+    pullPolicy: Always
   containers:
     operator:
       command:

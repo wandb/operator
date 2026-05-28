@@ -205,6 +205,7 @@ def operator_dockerfile():
         "FROM registry.access.redhat.com/ubi9/ubi",
         "",
         "ADD tilt_bin/manager /manager",
+        "ADD tilt_bin/crd-installer /crd-installer",
     ]
 
     if settings.get("manifestSource") == "local":
@@ -241,7 +242,7 @@ def operator_dockerfile():
 
 
 def binary():
-    return "CGO_ENABLED=0 GOOS=linux GO111MODULE=on go build -o tilt_bin/manager cmd/main.go"
+    return "CGO_ENABLED=0 GOOS=linux GO111MODULE=on go build -o tilt_bin/manager ./cmd/manager && CGO_ENABLED=0 GOOS=linux GO111MODULE=on go build -o tilt_bin/crd-installer ./cmd/crd-installer"
 
 
 def managed_endpoint_resource(name, anchor_object, deps, local_port, remote_port, link_name, pod_selector, labels, local_host="localhost"):
@@ -625,8 +626,7 @@ operator_flags += [
 ]
 operator_deps_files = [
     OPERATOR_VALUES,
-    "deploy/operator/Chart.yaml",
-    "deploy/operator/values.yaml",
+    "deploy/operator/",
 ]
 
 if settings.get("openshiftSCC"):
@@ -774,9 +774,10 @@ manager_entrypoint = ["/manager", "--log-format=" + settings.get("logFormat")]
 if settings.get("observabilityMode") != "off":
     manager_entrypoint += ["--telemetry-enabled=true"]
 
-docker_only = ["./tilt_bin/manager"]
+docker_only = ["./tilt_bin/manager", "./tilt_bin/crd-installer"]
 live_update_steps = [
     sync("./tilt_bin/manager", "/manager"),
+    sync("./tilt_bin/crd-installer", "/crd-installer"),
 ]
 
 if settings.get("manifestSource") == "local":

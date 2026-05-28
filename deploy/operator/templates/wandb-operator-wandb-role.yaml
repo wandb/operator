@@ -155,7 +155,7 @@ roleRef:
   name: {{ .Release.Name }}-wandb
 subjects:
   - kind: ServiceAccount
-    name: {{ if (dig "wandb-operator" "serviceAccount" "name" "" .Values.AsMap) }}{{ dig "wandb-operator" "serviceAccount" "name" "" .Values.AsMap }}{{ else }}{{ .Release.Name }}-wandb-operator{{ end }}
+    name: {{ include "wandb-operator.fullname" . }}
     namespace: {{ .Release.Namespace }}
 
 ---
@@ -207,5 +207,5 @@ roleRef:
   name: {{ .Release.Name }}-leader-election
 subjects:
   - kind: ServiceAccount
-    name: {{ if (dig "wandb-operator" "serviceAccount" "name" "" .Values.AsMap) }}{{ dig "wandb-operator" "serviceAccount" "name" "" .Values.AsMap }}{{ else }}{{ .Release.Name }}-wandb-operator{{ end }}
+    name: {{ include "wandb-operator.fullname" . }}
     namespace: {{ .Release.Namespace }}

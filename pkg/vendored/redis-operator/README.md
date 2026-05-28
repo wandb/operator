@@ -70,15 +70,19 @@ To download the CRDs for integration testing:
    ```bash
    # Redis (standalone)
    curl -L https://raw.githubusercontent.com/OT-CONTAINER-KIT/redis-operator/v0.22.1/config/crd/bases/redis.redis.opstreelabs.in_redis.yaml \
-     -o internal/vendored/redis-operator/crds/redis.redis.opstreelabs.in_redis.yaml
+     -o pkg/vendored/redis-operator/crds/redis.redis.opstreelabs.in_redis.yaml
 
    # RedisReplication
    curl -L https://raw.githubusercontent.com/OT-CONTAINER-KIT/redis-operator/v0.22.1/config/crd/bases/redis.redis.opstreelabs.in_redisreplications.yaml \
-     -o internal/vendored/redis-operator/crds/redis.redis.opstreelabs.in_redisreplications.yaml
+     -o pkg/vendored/redis-operator/crds/redis.redis.opstreelabs.in_redisreplications.yaml
 
    # RedisSentinel
    curl -L https://raw.githubusercontent.com/OT-CONTAINER-KIT/redis-operator/v0.22.1/config/crd/bases/redis.redis.opstreelabs.in_redissentinels.yaml \
-     -o internal/vendored/redis-operator/crds/redis.redis.opstreelabs.in_redissentinels.yaml
+     -o pkg/vendored/redis-operator/crds/redis.redis.opstreelabs.in_redissentinels.yaml
+
+   # RedisCluster
+   curl -L https://raw.githubusercontent.com/OT-CONTAINER-KIT/redis-operator/v0.22.1/config/crd/bases/redis.redis.opstreelabs.in_redisclusters.yaml \
+     -o pkg/vendored/redis-operator/crds/redis.redis.opstreelabs.in_redisclusters.yaml
    ```
 
 3. **When updating to a new version**: Update the version tag (v0.22.1) in the URLs above to match the new vendored version.

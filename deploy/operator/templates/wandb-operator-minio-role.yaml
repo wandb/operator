@@ -34,5 +34,5 @@ roleRef:
   name: {{ .Release.Name }}-minio
 subjects:
   - kind: ServiceAccount
-    name: {{ if (dig "wandb-operator" "serviceAccount" "name" "" .Values.AsMap) }}{{ dig "wandb-operator" "serviceAccount" "name" "" .Values.AsMap }}{{ else }}{{ .Release.Name }}-wandb-operator{{ end }}
+    name: {{ include "wandb-operator.fullname" . }}
     namespace: {{ .Release.Namespace }}
