@@ -29,7 +29,7 @@ var _ = Describe("WeightsAndBiases Networking", func() {
 		gatewayClassName := "test-gateway-class"
 
 		createNamespaceIfMissing(ctx, infraNamespace)
-		wandb, minioService := newNetworkingWandb(wandbName, infraNamespace)
+		wandb, objectStoreService := newNetworkingWandb(wandbName, infraNamespace)
 		wandb.Spec.Networking = apiv2.NetworkingSpec{
 			Mode: apiv2.NetworkingModeGatewayAPI,
 			GatewayAPI: &apiv2.GatewayAPIConfig{
@@ -47,7 +47,7 @@ var _ = Describe("WeightsAndBiases Networking", func() {
 		}
 
 		Expect(k8sClient.Create(ctx, wandb)).To(Succeed())
-		Expect(k8sClient.Create(ctx, minioService)).To(Succeed())
+		Expect(k8sClient.Create(ctx, objectStoreService)).To(Succeed())
 		DeferCleanup(deleteIfPresent, ctx, wandb)
 
 		wandb = markWandbReadyForNetworking(ctx, wandbName, wandbNamespace)
@@ -117,7 +117,7 @@ var _ = Describe("WeightsAndBiases Networking", func() {
 		DeferCleanup(deleteIfPresent, ctx, externalGateway)
 
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: gatewayName, Namespace: gatewayNamespace}, externalGateway)).To(Succeed())
-		wandb, minioService := newNetworkingWandb(wandbName, "")
+		wandb, objectStoreService := newNetworkingWandb(wandbName, "")
 		wandb.Spec.Networking = apiv2.NetworkingSpec{
 			Mode: apiv2.NetworkingModeGatewayAPI,
 			GatewayAPI: &apiv2.GatewayAPIConfig{
@@ -131,7 +131,7 @@ var _ = Describe("WeightsAndBiases Networking", func() {
 			},
 		}
 		Expect(k8sClient.Create(ctx, wandb)).To(Succeed())
-		Expect(k8sClient.Create(ctx, minioService)).To(Succeed())
+		Expect(k8sClient.Create(ctx, objectStoreService)).To(Succeed())
 		DeferCleanup(deleteIfPresent, ctx, wandb)
 
 		externalGateway.Status.Addresses = []gatewayv1.GatewayStatusAddress{{Value: "10.0.0.6"}}
@@ -266,12 +266,12 @@ func newNetworkingWandb(name string, infraNamespace string) (*apiv2.WeightsAndBi
 
 	service := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "minio",
+			Name:      "objectstore",
 			Namespace: infraNamespace,
 		},
 		Spec: corev1.ServiceSpec{
 			Ports: []corev1.ServicePort{{
-				Name: "http-minio",
+				Name: "http-objectstore",
 				Port: 80,
 			}},
 		},
