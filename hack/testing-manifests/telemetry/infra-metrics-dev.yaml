@@ -44,23 +44,20 @@ spec:
     - port: "tcp-prometheus"
       path: /metrics
 ---
-# MinIO Tenant
-# Scrapes MinIO metrics endpoint (auth disabled when telemetry enabled)
+# SeaweedFS
+# Scrapes SeaweedFS metrics endpoint
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMPodScrape
 metadata:
-  name: minio-tenant
+  name: seaweedfs
   namespace: default
 spec:
   selector:
     matchLabels:
-      v1.min.io/tenant: wandb-minio
+      weightsandbiases.apps.wandb.com/component: seaweedfs
   podMetricsEndpoints:
-    - port: "minio-port"
-      path: /minio/metrics/v3
-      scheme: https
-      tlsConfig:
-        insecureSkipVerify: true
+    - port: swfs-s3
+      path: /metrics
 ---
 # Redis
 # Scrapes Redis exporter sidecar metrics

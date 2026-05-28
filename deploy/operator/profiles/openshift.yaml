@@ -32,25 +32,6 @@ wandb-operator:
 grafana-operator:
   isOpenShift: true
 
-minio-operator:
-  operator:
-    env:
-      - name: OPERATOR_STS_ENABLED
-        value: "on"
-      - name: MINIO_OPERATOR_RUNTIME
-        value: "OpenShift"
-    securityContext:
-      runAsUser: null
-      runAsGroup: null
-      fsGroup: null
-    containerSecurityContext:
-      runAsUser: null
-      runAsGroup: null
-      allowPrivilegeEscalation: false
-      capabilities:
-        drop:
-          - ALL
-
 # Strimzi's default BaselinePodSecurityProvider injects runAsUser:1001 /
 # runAsGroup:1001 into Kafka pods, which restricted-v2 rejects. Switch the
 # cluster operator to the RestrictedPodSecurityProvider so the platform

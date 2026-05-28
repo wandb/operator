@@ -71,18 +71,18 @@ Weave-python env vars are defined in `services/weave-python/weave-public/weave/t
 | ClickHouse | `weave-python env` | `WF_CLICKHOUSE_ASYNC_INSERT_BUSY_TIMEOUT_MAX_MS` | int | 1000 | Async insert max busy timeout (ms) |
 | ClickHouse | `weave-python env` | `WEAVE_TRACE_CLICKHOUSE_USE_ASYNC_INSERT` | string | `true` | Enable async inserts |
 | ClickHouse | `weave-python env` | `WF_CLICKHOUSE_DISABLE_LIGHTWEIGHT_UPDATE` | string | `false` | Disable lightweight UPDATE/DELETE |
-| **S3/Minio** | `connectors.ConnectionInfo` | `scheme` | string | `s3` | Also: `cw` for CoreWeave |
-| S3/Minio | `connectors.ConnectionInfo` | `host` | string | — | Empty for AWS default; set for Minio/CW |
-| S3/Minio | `connectors.ConnectionInfo` | `port` | int | — | Typically 9000 for Minio |
-| S3/Minio | `connectors.ConnectionInfo`<br>`weave-python env` | `username`<br>`WF_FILE_STORAGE_AWS_ACCESS_KEY_ID` | string | None | AWS Access Key ID |
-| S3/Minio | `connectors.ConnectionInfo`<br>`weave-python env` | `password`<br>`WF_FILE_STORAGE_AWS_SECRET_ACCESS_KEY` | string | None | AWS Secret Access Key |
-| S3/Minio | `connectors.ConnectionInfo` | `path (bucket)` | string | — | Bucket name + optional sub-path |
-| S3/Minio | `connectors.S3QueryParams` | `tls` | bool | varies | Depends on service type detection |
-| S3/Minio | `connectors.S3QueryParams` | `forcePathStyle` | bool | varies | false for AWS, true for S3-compat |
-| S3/Minio | `connectors.S3QueryParams`<br>`weave-python env` | `region`<br>`WF_FILE_STORAGE_AWS_REGION` | string | `us-west-1` | AWS region override |
-| S3/Minio | `weave-python env` | `WF_FILE_STORAGE_URI` | string | None | Storage bucket URI |
-| S3/Minio | `weave-python env` | `WF_FILE_STORAGE_AWS_SESSION_TOKEN` | string | None | AWS temporary session token |
-| S3/Minio | `weave-python env` | `WF_FILE_STORAGE_AWS_KMS_KEY` | string | None | KMS key ID for encryption |
+| **S3-compatible** | `connectors.ConnectionInfo` | `scheme` | string | `s3` | Also: `cw` for CoreWeave |
+| S3-compatible | `connectors.ConnectionInfo` | `host` | string | — | Empty for AWS default; set for self-hosted endpoints |
+| S3-compatible | `connectors.ConnectionInfo` | `port` | int | — | e.g. 8333 for SeaweedFS, 9000 for MinIO |
+| S3-compatible | `connectors.ConnectionInfo`<br>`weave-python env` | `username`<br>`WF_FILE_STORAGE_AWS_ACCESS_KEY_ID` | string | None | AWS Access Key ID |
+| S3-compatible | `connectors.ConnectionInfo`<br>`weave-python env` | `password`<br>`WF_FILE_STORAGE_AWS_SECRET_ACCESS_KEY` | string | None | AWS Secret Access Key |
+| S3-compatible | `connectors.ConnectionInfo` | `path (bucket)` | string | — | Bucket name + optional sub-path |
+| S3-compatible | `connectors.S3QueryParams` | `tls` | bool | varies | Depends on service type detection |
+| S3-compatible | `connectors.S3QueryParams` | `forcePathStyle` | bool | varies | false for AWS, true for S3-compat |
+| S3-compatible | `connectors.S3QueryParams`<br>`weave-python env` | `region`<br>`WF_FILE_STORAGE_AWS_REGION` | string | `us-west-1` | AWS region override |
+| S3-compatible | `weave-python env` | `WF_FILE_STORAGE_URI` | string | None | Storage bucket URI |
+| S3-compatible | `weave-python env` | `WF_FILE_STORAGE_AWS_SESSION_TOKEN` | string | None | AWS temporary session token |
+| S3-compatible | `weave-python env` | `WF_FILE_STORAGE_AWS_KMS_KEY` | string | None | KMS key ID for encryption |
 | **Kafka** | `connectors.ConnectionInfo` | `scheme` | string | `kafka` | — |
 | Kafka | `connectors.ConnectionInfo`<br>`weave-python env` | `host`<br>`KAFKA_BROKER_HOST` | string | `localhost` | Broker host |
 | Kafka | `connectors.ConnectionInfo`<br>`weave-python env` | `port`<br>`KAFKA_BROKER_PORT` | int | 9092 | Broker port |

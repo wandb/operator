@@ -19,8 +19,6 @@ require (
 	github.com/lmittmann/tint v1.1.2
 	github.com/maxbrunsfeld/counterfeiter/v6 v6.11.2
 	github.com/miekg/dns v1.1.65
-	github.com/minio/madmin-go/v3 v3.0.100
-	github.com/minio/minio-go/v7 v7.0.97
 	github.com/nginx/nginx-gateway-fabric v1.6.2
 	github.com/onsi/ginkgo/v2 v2.28.1
 	github.com/onsi/gomega v1.39.1
@@ -136,8 +134,6 @@ require (
 	github.com/mattn/go-runewidth v0.0.16 // indirect
 	github.com/mattn/go-sqlite3 v1.14.32 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.4 // indirect
-	github.com/minio/crc64nvme v1.1.0 // indirect
-	github.com/minio/md5-simd v1.1.2 // indirect
 	github.com/mitchellh/copystructure v1.2.0 // indirect
 	github.com/mitchellh/go-wordwrap v1.0.1 // indirect
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect

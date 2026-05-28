@@ -19,6 +19,6 @@ app.kubernetes.io/component: {{ .component }}
 {{ .Values.redis.service.name }}.{{ .Release.Namespace }}.svc.cluster.local
 {{- end -}}
 
-{{- define "test-infra.minioHost" -}}
-{{ .Values.minio.service.name }}.{{ .Release.Namespace }}.svc.cluster.local
+{{- define "test-infra.seaweedfsHost" -}}
+{{ .Values.seaweedfs.service.name }}.{{ .Release.Namespace }}.svc.cluster.local
 {{- end -}}
