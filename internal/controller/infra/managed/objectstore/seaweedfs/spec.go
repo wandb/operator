@@ -1,4 +1,4 @@
-package tenant
+package seaweedfs
 
 import (
 	"context"
@@ -6,8 +6,6 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
-	"github.com/wandb/operator/internal/controller/infra/managed/objectstore/seaweedfs"
-	"github.com/wandb/operator/internal/controller/translator"
 	"github.com/wandb/operator/internal/logx"
 	seaweedv1 "github.com/wandb/operator/pkg/vendored/seaweedfs-operator/seaweed.seaweedfs.com/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -17,6 +15,34 @@ import (
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
+
+const (
+	ObjectStoreModuleName = "seaweedfs"
+	SeaweedImage          = "chrislusf/seaweedfs:latest"
+)
+
+const (
+	seaweedWritableTmpVolumeName = "seaweedfs-tmp"
+	seaweedWritableTmpMountPath  = "/tmp"
+	seaweedFilerDataMountPath    = "/data/filerldb2"
+)
+
+func seaweedWritableVolumes() []corev1.Volume {
+	return []corev1.Volume{
+		{
+			Name: seaweedWritableTmpVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
+			},
+		},
+	}
+}
+
+func seaweedWritableVolumeMounts() []corev1.VolumeMount {
+	return []corev1.VolumeMount{
+		{Name: seaweedWritableTmpVolumeName, MountPath: seaweedWritableTmpMountPath},
+	}
+}
 
 func ToObjectStoreVendorSpec(
 	ctx context.Context,
@@ -44,16 +70,16 @@ func ToObjectStoreVendorSpec(
 	volumeSizeLimitMB := int32(storageQuantity.Value() / (1024 * 1024))
 
 	labels := BuildWandbObjectStoreLabels(wandb)
-	labels["app"] = seaweedfs.SeaweedName(specName)
+	labels["app"] = SeaweedName(specName)
 
 	seaweedCR := &seaweedv1.Seaweed{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      seaweedfs.SeaweedName(specName),
+			Name:      SeaweedName(specName),
 			Namespace: infraSpec.Namespace,
 			Labels:    labels,
 		},
 		Spec: seaweedv1.SeaweedSpec{
-			Image: translator.SeaweedImage,
+			Image: SeaweedImage,
 			TLS: &seaweedv1.TLSSpec{
 				Enabled: infraSpec.SeaweedObjectStoreSpec.TlsEnabled,
 			},
@@ -61,10 +87,18 @@ func ToObjectStoreVendorSpec(
 				Replicas:           1,
 				DefaultReplication: &replication,
 				VolumeSizeLimitMB:  &volumeSizeLimitMB,
+				ComponentSpec: seaweedv1.ComponentSpec{
+					Volumes:      seaweedWritableVolumes(),
+					VolumeMounts: seaweedWritableVolumeMounts(),
+				},
 			},
 			Volume: &seaweedv1.VolumeSpec{
 				Replicas: infraSpec.Replicas,
 				VolumeServerConfig: seaweedv1.VolumeServerConfig{
+					ComponentSpec: seaweedv1.ComponentSpec{
+						Volumes:      seaweedWritableVolumes(),
+						VolumeMounts: seaweedWritableVolumeMounts(),
+					},
 					ResourceRequirements: corev1.ResourceRequirements{
 						Requests: corev1.ResourceList{
 							corev1.ResourceStorage: storageQuantity,
@@ -74,18 +108,23 @@ func ToObjectStoreVendorSpec(
 			},
 			Filer: &seaweedv1.FilerSpec{
 				Replicas: 1,
-				Config:   ptr.To("[leveldb2]\nenabled = true\ndir = \"/data/filerldb2\""),
+				Config:   ptr.To("[leveldb2]\nenabled = true\ndir = \"" + seaweedFilerDataMountPath + "\""),
+				ComponentSpec: seaweedv1.ComponentSpec{
+					Volumes:      seaweedWritableVolumes(),
+					VolumeMounts: seaweedWritableVolumeMounts(),
+				},
 				S3: &seaweedv1.S3Config{
 					Enabled: true,
 					ConfigSecret: &corev1.SecretKeySelector{
 						LocalObjectReference: corev1.LocalObjectReference{
-							Name: seaweedfs.ConfigName(specName),
+							Name: ConfigName(specName),
 						},
 						Key: "config.json",
 					},
 				},
 				Persistence: &seaweedv1.PersistenceSpec{
-					Enabled: true,
+					Enabled:   true,
+					MountPath: ptr.To(seaweedFilerDataMountPath),
 					Resources: corev1.VolumeResourceRequirements{
 						Requests: corev1.ResourceList{
 							corev1.ResourceStorage: storageQuantity,
@@ -116,8 +155,8 @@ func ToObjectStoreVendorSpec(
 func ToObjectStoreEnvConfig(
 	ctx context.Context,
 	spec apiv2.ManagedObjectStoreSpec,
-) (seaweedfs.SeaweedS3Config, error) {
-	return seaweedfs.SeaweedS3Config{
+) (SeaweedS3Config, error) {
+	return SeaweedS3Config{
 		AccessKey: spec.Config.AccessKey,
 	}, nil
 }
