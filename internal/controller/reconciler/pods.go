@@ -309,21 +309,22 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 				secretOnlyCount++
 				addSecretComponent(selector, idx)
 			case "service":
+				// TODO(dpanzella): Determine if this is the right approach, I think writing the service to the
+				// applications status and reading from there is probably more correct
 				// Prefer deterministic manifest-derived service resolution to avoid startup races
 				// where the Service object has not been created yet.
-				if resolved, ok := manifest.ResolveServiceURL(wandb.Name, src); ok {
+				if resolved, ok := manifest.ResolveServiceURL(src); ok {
 					components = append(components, resolved)
 					continue
 				}
 
 				// Fallback: resolve from live Service object (back-compat).
 				serviceList := &v1.ServiceList{}
-				targetApplicationName := fmt.Sprintf("%s-%s", wandb.Name, src.Name)
 				err := client.List(
 					ctx,
 					serviceList,
 					ctrlClient.InNamespace(wandb.Namespace),
-					ctrlClient.MatchingLabels{"app.kubernetes.io/name": targetApplicationName},
+					ctrlClient.MatchingLabels{"app.kubernetes.io/name": src.Name},
 				)
 				if err != nil {
 					return nil, err

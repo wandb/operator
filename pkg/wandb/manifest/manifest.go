@@ -732,7 +732,7 @@ func (m *Manifest) FeaturesEnabled(topicFeatures []string) bool {
 	return false
 }
 
-func (m *Manifest) ResolveServiceURL(wandbName string, src EnvSource) (string, bool) {
+func (m *Manifest) ResolveServiceURL(src EnvSource) (string, bool) {
 	if src.Name == "" {
 		return "", false
 	}
@@ -751,8 +751,7 @@ func (m *Manifest) ResolveServiceURL(wandbName string, src EnvSource) (string, b
 	if src.Proto != "" {
 		protoPrefix = fmt.Sprintf("%s://", src.Proto)
 	}
-	serviceName := fmt.Sprintf("%s-%s", wandbName, src.Name)
-	return fmt.Sprintf("%s%s:%d%s", protoPrefix, serviceName, port, src.Path), true
+	return fmt.Sprintf("%s%s:%d%s", protoPrefix, src.Name, port, src.Path), true
 }
 
 func (a *Application) ResolveServicePortFromManifest(requestedPort string) (int32, bool) {
