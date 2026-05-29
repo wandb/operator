@@ -51,7 +51,7 @@ func resolveInfraRoutes(ctx context.Context, c ctrlClient.Client, wandb *apiv2.W
 				continue
 			}
 			svcName := fmt.Sprintf("%s-filer", objectStoreSpec.Name)
-			port, err := resolveInfraServicePort(cfg.Ingress, 8333)
+			port, err := resolveInfraServicePort(ctx, c, types.NamespacedName{Name: svcName, Namespace: wandb.Spec.ObjectStore.ManagedObjectStore.Namespace}, cfg.Ingress, 8333)
 			if err != nil {
 				return nil, fmt.Errorf("bucket instance %q: %w", instanceName, err)
 			}

@@ -133,7 +133,6 @@ func (r *WeightsAndBiasesReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		b = b.Owns(&mocov1beta2.MySQLCluster{})
 	}
 
-
 	return b.Complete(r)
 }
 
