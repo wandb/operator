@@ -36,7 +36,7 @@ func createOrUpdateServiceAccount(
 			},
 			Annotations: wandb.Spec.Wandb.ServiceAccount.Annotations,
 		},
-		AutomountServiceAccountToken: ptr.To(true),
+		AutomountServiceAccountToken: ptr.To(false),
 	}
 
 	if err := controllerutil.SetControllerReference(wandb, serviceAccount, client.Scheme()); err != nil {
@@ -89,13 +89,8 @@ func createOrUpdateRole(
 		Rules: []v4.PolicyRule{
 			{
 				APIGroups: []string{""},
-				Resources: []string{"secrets"},
-				Verbs:     []string{"get", "create", "update", "delete"},
-			},
-			{
-				APIGroups: []string{""},
 				Resources: []string{"namespaces"},
-				Verbs:     []string{"get", "list"},
+				Verbs:     []string{"get"},
 			},
 		},
 	}
