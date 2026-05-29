@@ -1,0 +1,8 @@
+apiVersion: apps.wandb.com/v2
+kind: WeightsAndBiases
+metadata:
+  name: wandb
+spec:
+  objectStore:
+    managedObjectStore: null
+    externalObjectStore: null

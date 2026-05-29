@@ -35,13 +35,13 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ObjectStore", func() {
 		wandb := &apiv2.WeightsAndBiases{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
 			Spec: apiv2.WeightsAndBiasesSpec{
-				ObjectStore: apiv2.ObjectStoreSpec{ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{Namespace: "custom-minio-namespace"}},
+				ObjectStore: apiv2.ObjectStoreSpec{ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{Namespace: "custom-objectstore-namespace"}},
 			},
 		}
 
 		err := defaulter.Default(ctx, wandb)
 		g.Expect(err).ToNot(g.HaveOccurred())
-		g.Expect(wandb.Spec.ObjectStore.ManagedObjectStore.Namespace).To(g.Equal("custom-minio-namespace"))
+		g.Expect(wandb.Spec.ObjectStore.ManagedObjectStore.Namespace).To(g.Equal("custom-objectstore-namespace"))
 	})
 
 	It("does not mutate unrelated ObjectStore fields", func() {
@@ -52,7 +52,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ObjectStore", func() {
 					ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{
 						StorageSize: "50Gi",
 						Replicas:    4,
-						Config:      apiv2.ObjectStoreConfig{MinioBrowserSetting: "off", RootUser: "custom-admin"},
+						Config:      apiv2.ObjectStoreConfig{AccessKey: "custom-admin"},
 					},
 				},
 			},
@@ -62,8 +62,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ObjectStore", func() {
 		g.Expect(err).ToNot(g.HaveOccurred())
 		g.Expect(wandb.Spec.ObjectStore.ManagedObjectStore.StorageSize).To(g.Equal("50Gi"))
 		g.Expect(wandb.Spec.ObjectStore.ManagedObjectStore.Replicas).To(g.Equal(int32(4)))
-		g.Expect(wandb.Spec.ObjectStore.ManagedObjectStore.Config.MinioBrowserSetting).To(g.Equal("off"))
-		g.Expect(wandb.Spec.ObjectStore.ManagedObjectStore.Config.RootUser).To(g.Equal("custom-admin"))
+		g.Expect(wandb.Spec.ObjectStore.ManagedObjectStore.Config.AccessKey).To(g.Equal("custom-admin"))
 	})
 
 	//It("does not apply defaults when ManagedObjectStore is nil", func() {

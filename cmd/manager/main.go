@@ -32,10 +32,10 @@ import (
 	"github.com/wandb/operator/pkg/utils"
 	chiv1 "github.com/wandb/operator/pkg/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
 	argov1alpha1 "github.com/wandb/operator/pkg/vendored/argo-rollouts/argoproj.io.rollouts/v1alpha1"
-	miniov2 "github.com/wandb/operator/pkg/vendored/minio-operator/minio.min.io/v2"
 	redisv1beta2 "github.com/wandb/operator/pkg/vendored/redis-operator/redis/v1beta2"
 	redisreplicationv1beta2 "github.com/wandb/operator/pkg/vendored/redis-operator/redisreplication/v1beta2"
 	redissentinelv1beta2 "github.com/wandb/operator/pkg/vendored/redis-operator/redissentinel/v1beta2"
+	seaweedv1 "github.com/wandb/operator/pkg/vendored/seaweedfs-operator/seaweed.seaweedfs.com/v1"
 	strimziv1 "github.com/wandb/operator/pkg/vendored/strimzi-kafka/v1"
 	"github.com/wandb/operator/pkg/wandb/spec/channel/deployer"
 	corev1 "k8s.io/api/core/v1"
@@ -83,7 +83,7 @@ func init() {
 	utilruntime.Must(redisreplicationv1beta2.AddToScheme(scheme))
 	utilruntime.Must(redissentinelv1beta2.AddToScheme(scheme))
 	utilruntime.Must(strimziv1.AddToScheme(scheme))
-	utilruntime.Must(miniov2.AddToScheme(scheme))
+	utilruntime.Must(seaweedv1.AddToScheme(scheme))
 	utilruntime.Must(chiv1.AddToScheme(scheme))
 	utilruntime.Must(mocov1beta2.AddToScheme(scheme))
 	utilruntime.Must(gatewayv1.Install(scheme))
@@ -103,7 +103,7 @@ func main() {
 	var enableHTTP2 bool
 	var tlsOpts []func(*tls.Config)
 	var deployerAPI, isolationNamespaces string
-	var debug, airgapped, enableV2, enableWebhooks, enableRollouts, telemetryEnabled bool
+	var debug, airgapped, enableV2, enableWebhooks, enableRollouts, telemetryEnabled, openshift bool
 	var telemetryManagedNamespace string
 	var telemetryOTelSecretName, telemetryOTelProtocol, telemetryOTelServiceName, telemetryOTelResourceAttributes string
 
@@ -134,6 +134,7 @@ func main() {
 	flag.BoolVar(&enableV2, "enable-v2", true, "Use V2 of WandB CRD")
 	flag.BoolVar(&enableWebhooks, "enable-webhooks", true, "Enable webhooks")
 	flag.BoolVar(&enableRollouts, "enable-rollouts", false, "Enable Argo Rollout Support")
+	flag.BoolVar(&openshift, "openshift", false, "Enable OpenShift-compatible rendering for managed infrastructure pods")
 	flag.BoolVar(&telemetryEnabled, "telemetry-enabled", false, "Enable telemetry endpoint reconciliation for W&B applications")
 	flag.StringVar(&telemetryManagedNamespace, "telemetry-managed-namespace", "", "Namespace where managed telemetry services run")
 	flag.StringVar(&telemetryOTelSecretName, "telemetry-otel-secret-name", "wandb-otel-connection", "Name of the OTEL connection secret managed by the operator")
@@ -147,6 +148,8 @@ func main() {
 
 	setFlagsFromEnvironment()
 	flag.Parse()
+
+	utils.SetOpenShiftMode(openshift)
 
 	var slogLevel slog.Level
 	switch strings.ToLower(*logLevel) {

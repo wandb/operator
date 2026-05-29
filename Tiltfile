@@ -339,8 +339,8 @@ def build_operator_values(telemetry_namespace):
             },
         }
         values["wandb-operator"]["containers"]["operator"]["env"] = {
-            "KAFKA_FSGROUP": {
-                "value": "0",
+            "OPENSHIFT": {
+                "value": "true",
             },
         }
         values["wandb-operator"]["containers"]["operator"]["securityContext"] = {
@@ -551,11 +551,29 @@ cert_manager_flags = [
 cert_manager_deps = []
 
 if LOCAL_NETWORKING_MODE == "gateway":
-    local_resource(
-        "gateway-api-crds",
-        "kubectl apply -f " + GATEWAY_API_CRDS_URL,
-        labels=[GROUP_DEPENDENCIES],
-    )
+    if settings.get("openshiftSCC"):
+        # OpenShift Ingress Operator owns Gateway API CRDs via a
+        # ValidatingAdmissionPolicy and blocks kubectl apply. Just assert
+        # the CRDs the wandb chart actually uses are present.
+        gateway_crd_check = (
+            "kubectl get crd "
+            + "gatewayclasses.gateway.networking.k8s.io "
+            + "gateways.gateway.networking.k8s.io "
+            + "httproutes.gateway.networking.k8s.io "
+            + "referencegrants.gateway.networking.k8s.io "
+            + "grpcroutes.gateway.networking.k8s.io"
+        )
+        local_resource(
+            "gateway-api-crds",
+            gateway_crd_check,
+            labels=[GROUP_DEPENDENCIES],
+        )
+    else:
+        local_resource(
+            "gateway-api-crds",
+            "kubectl apply -f " + GATEWAY_API_CRDS_URL,
+            labels=[GROUP_DEPENDENCIES],
+        )
     cert_manager_flags.append("--set=config.enableGatewayAPI=true")
     cert_manager_deps.append("gateway-api-crds")
 
@@ -706,7 +724,8 @@ if as_bool(settings.get("includeCR")):
             local_host=endpoint_host,
             pod_selector={
                 "app.kubernetes.io/instance": "nginx-gateway-fabric",
-                "app.kubernetes.io/name": "nginx-gateway-fabric",
+                "app.kubernetes.io/managed-by": "nginx-gateway-fabric-nginx",
+                "gateway.networking.k8s.io/gateway-name": "wandb-gateway",
             },
             labels=[GROUP_WANDB_APP],
         )

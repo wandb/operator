@@ -31,11 +31,10 @@ dependencies:
     version: 0.50.0
     repository: https://strimzi.io/charts
     condition: strimzi-kafka-operator.enabled
-  - name: operator
-    alias: minio-operator
-    version: 7.1.1
-    repository: https://operator.min.io
-    condition: minio-operator.enabled
+  - name: seaweedfs-operator
+    version: 0.1.13
+    repository: https://seaweedfs.github.io/seaweedfs-operator/
+    condition: seaweedfs-operator.enabled
   - name: altinity-clickhouse-operator
     version: 0.26.3
     repository: https://helm.altinity.com

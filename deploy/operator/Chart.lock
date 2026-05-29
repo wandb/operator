@@ -14,9 +14,9 @@ dependencies:
 - name: strimzi-kafka-operator
   repository: https://strimzi.io/charts
   version: 0.50.0
-- name: operator
-  repository: https://operator.min.io
-  version: 7.1.1
+- name: seaweedfs-operator
+  repository: https://seaweedfs.github.io/seaweedfs-operator/
+  version: 0.1.13
 - name: altinity-clickhouse-operator
   repository: https://helm.altinity.com
   version: 0.26.3

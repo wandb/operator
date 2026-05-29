@@ -58,7 +58,7 @@ When Tilt detects a CRC context, it automatically:
 - Applies `deploy/operator/profiles/openshift.yaml` to the operator Helm release
 - Builds the operator image with a non-root, group-writable `/helm` directory
 - Removes fixed pod UID/GID/fsGroup settings from the local operator deployment
-- Sets `KAFKA_FSGROUP=0` so Strimzi-managed Kafka pods satisfy OpenShift SCCs
+- Sets `OPENSHIFT=true` so managed dependency specs omit fixed IDs and satisfy OpenShift SCCs
 - Pushes images to CRC's internal registry (`default-route-openshift-image-registry.apps-crc.testing`)
 
 ### Security settings

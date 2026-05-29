@@ -29,18 +29,17 @@ redis:
       cpu: 50m
       memory: 128Mi
 
-minio:
+seaweedfs:
   enabled: true
-  image: quay.io/minio/minio:latest
-  mcImage: quay.io/minio/mc:latest
-  rootUser: minio
-  rootPassword: minio123
+  image: chrislusf/seaweedfs:latest
+  awsCliImage: amazon/aws-cli:latest
+  accessKey: seaweedfs
+  secretKey: seaweedfs123
   bucket: wandb
   region: us-east-1
   service:
-    name: minio
-    apiPort: 9000
-    consolePort: 9090
+    name: seaweedfs
+    apiPort: 8333
   secret:
     name: external-objectstore-connection
   resources:

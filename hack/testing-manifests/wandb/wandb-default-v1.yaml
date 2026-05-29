@@ -20,10 +20,10 @@ spec:
       imageRegistry: "us-docker.pkg.dev/wandb-production/public"
       bucket:
         provider: "s3"
-        name: "minio.minio.svc.cluster.local:9000/bucket"
+        name: "seaweedfs.seaweedfs.svc.cluster.local:8333/bucket"
         region: "us-east-1"
-        accessKey: "minio"
-        secretKey: "minio123"
+        accessKey: "seaweedfs"
+        secretKey: "seaweedfs123"
       glue:
         enabled: true
       api:
@@ -45,9 +45,9 @@ spec:
       install: true
       additionalServices:
         bucket:
-          host: "http://minio.minio.svc.cluster.local:9000/bucket"
+          host: "http://seaweedfs.seaweedfs.svc.cluster.local:8333/bucket"
           headers:
-            Host: "minio.minio.svc.cluster.local:9000"
+            Host: "seaweedfs.seaweedfs.svc.cluster.local:8333"
 
     ingress:
       install: false

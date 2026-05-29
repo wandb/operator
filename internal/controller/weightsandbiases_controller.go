@@ -67,10 +67,10 @@ type WeightsAndBiasesReconciler struct {
 //+kubebuilder:rbac:groups=events.k8s.io,resources=events,verbs=list;watch
 //+kubebuilder:rbac:groups=kafka.strimzi.io,resources=kafkanodepools;kafkas;kafkatopics,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=kafka.strimzi.io,resources=kafkanodepools/status;kafkas/status;kafkatopics/status,verbs=get;update
+//+kubebuilder:rbac:groups=seaweed.seaweedfs.com,resources=seaweeds,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=seaweed.seaweedfs.com,resources=seaweeds/status,verbs=get
 //+kubebuilder:rbac:groups=moco.cybozu.com,resources=mysqlclusters,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=moco.cybozu.com,resources=mysqlclusters/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=minio.min.io,resources=tenants,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=minio.min.io,resources=tenants/status,verbs=get
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways;httproutes;backendtlspolicies,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways/status;backendtlspolicies/status,verbs=get
 //+kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses;networkpolicies,verbs=update;delete;get;list;create;patch;watch

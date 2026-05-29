@@ -8,16 +8,98 @@ import (
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/logx"
+	"github.com/wandb/operator/pkg/utils"
 	"github.com/wandb/operator/pkg/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
-const ClickhouseModuleName = "clickhouse"
+const (
+	ClickhouseModuleName = "clickhouse"
+	ClickHouseImage      = "altinity/clickhouse-server:25.8.16.10002.altinitystable"
+)
+
+const (
+	clickHouseRunAsUser  int64 = 101
+	clickHouseRunAsGroup int64 = 101
+	clickHouseFSGroup    int64 = 101
+
+	clickHouseTmpVolumeName = "clickhouse-tmp"
+	clickHouseTmpMountPath  = "/tmp"
+	clickHouseLogVolumeName = "clickhouse-log"
+	clickHouseLogMountPath  = "/var/log/clickhouse-server"
+	clickHouseRunVolumeName = "clickhouse-run"
+	clickHouseRunMountPath  = "/var/run/clickhouse-server"
+
+	clickHouseCapabilityAll corev1.Capability = "ALL"
+)
+
+func clickHousePodSecurityContext() *corev1.PodSecurityContext {
+	if utils.IsOpenShift() {
+		return &corev1.PodSecurityContext{
+			RunAsNonRoot:   ptr.To(true),
+			SeccompProfile: clickHouseRuntimeDefaultSeccompProfile(),
+		}
+	}
+
+	return &corev1.PodSecurityContext{
+		RunAsUser:      ptr.To(clickHouseRunAsUser),
+		RunAsGroup:     ptr.To(clickHouseRunAsGroup),
+		RunAsNonRoot:   ptr.To(true),
+		FSGroup:        ptr.To(clickHouseFSGroup),
+		SeccompProfile: clickHouseRuntimeDefaultSeccompProfile(),
+	}
+}
+
+func clickHouseContainerSecurityContext() *corev1.SecurityContext {
+	securityContext := &corev1.SecurityContext{
+		RunAsNonRoot:             ptr.To(true),
+		AllowPrivilegeEscalation: ptr.To(false),
+		Capabilities: &corev1.Capabilities{
+			Drop: []corev1.Capability{clickHouseCapabilityAll},
+		},
+		SeccompProfile: clickHouseRuntimeDefaultSeccompProfile(),
+	}
+	if !utils.IsOpenShift() {
+		securityContext.RunAsUser = ptr.To(clickHouseRunAsUser)
+		securityContext.RunAsGroup = ptr.To(clickHouseRunAsGroup)
+	}
+	return securityContext
+}
+
+func clickHouseWritableVolumes() []corev1.Volume {
+	return []corev1.Volume{
+		writableEmptyDirVolume(clickHouseTmpVolumeName),
+		writableEmptyDirVolume(clickHouseLogVolumeName),
+		writableEmptyDirVolume(clickHouseRunVolumeName),
+	}
+}
+
+func clickHouseWritableVolumeMounts() []corev1.VolumeMount {
+	return []corev1.VolumeMount{
+		{Name: clickHouseTmpVolumeName, MountPath: clickHouseTmpMountPath},
+		{Name: clickHouseLogVolumeName, MountPath: clickHouseLogMountPath},
+		{Name: clickHouseRunVolumeName, MountPath: clickHouseRunMountPath},
+	}
+}
+
+func clickHouseRuntimeDefaultSeccompProfile() *corev1.SeccompProfile {
+	return &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault}
+}
+
+func writableEmptyDirVolume(name string) corev1.Volume {
+	return corev1.Volume{
+		Name: name,
+		VolumeSource: corev1.VolumeSource{
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
+		},
+	}
+}
 
 // ToClickHouseVendorSpec converts a ClickHouseSpec to a ClickHouseInstallation CR.
 // This function translates the high-level ClickHouse spec into the vendor-specific
@@ -75,7 +157,28 @@ func ToClickHouseVendorSpec(
 		reclaimPolicy = v1.PVCReclaimPolicyDelete
 	}
 
-	// Build ClickHouseInstallation spec
+	podSpec := corev1.PodSpec{
+		SecurityContext: clickHousePodSecurityContext(),
+		Affinity:        wandb.GetAffinity(spec.ManagedInfraSpec),
+		Tolerations:     *wandb.GetTolerations(spec.ManagedInfraSpec),
+		Volumes:         clickHouseWritableVolumes(),
+		Containers: []corev1.Container{
+			{
+				Name:            "clickhouse",
+				Image:           ClickHouseImage,
+				SecurityContext: clickHouseContainerSecurityContext(),
+				VolumeMounts:    clickHouseWritableVolumeMounts(),
+			},
+		},
+	}
+
+	if len(spec.Config.Resources.Requests) > 0 || len(spec.Config.Resources.Limits) > 0 {
+		podSpec.Containers[0].Resources = corev1.ResourceRequirements{
+			Requests: spec.Config.Resources.Requests,
+			Limits:   spec.Config.Resources.Limits,
+		}
+	}
+
 	chi := &v1.ClickHouseInstallation{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      nsnBuilder.InstallationName(),
@@ -111,16 +214,7 @@ func ToClickHouseVendorSpec(
 						ObjectMeta: metav1.ObjectMeta{
 							Labels: BuildWandbClickhouseLabels(wandb),
 						},
-						Spec: corev1.PodSpec{
-							Affinity:    wandb.GetAffinity(spec.ManagedInfraSpec),
-							Tolerations: *wandb.GetTolerations(spec.ManagedInfraSpec),
-							Containers: []corev1.Container{
-								{
-									Name:  "clickhouse",
-									Image: "altinity/clickhouse-server:25.8.16.10002.altinitystable",
-								},
-							},
-						},
+						Spec: podSpec,
 					},
 				},
 				VolumeClaimTemplates: []v1.VolumeClaimTemplate{
@@ -146,31 +240,6 @@ func ToClickHouseVendorSpec(
 				},
 			},
 		},
-	}
-
-	// Add pod template with resources if specified
-	// accessible even though not listed in the pod spec
-	if len(spec.Config.Resources.Requests) > 0 || len(spec.Config.Resources.Limits) > 0 {
-		chi.Spec.Templates.PodTemplates = []v1.PodTemplate{
-			{
-				Name: nsnBuilder.PodTemplateName(),
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: BuildWandbClickhouseLabels(wandb),
-				},
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{
-						{
-							Name: "clickhouse",
-							Resources: corev1.ResourceRequirements{
-								Requests: spec.Config.Resources.Requests,
-								Limits:   spec.Config.Resources.Limits,
-							},
-							Image: "altinity/clickhouse-server:25.8.16.10002.altinitystable",
-						},
-					},
-				},
-			},
-		}
 	}
 
 	// Set owner reference

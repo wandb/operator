@@ -7,6 +7,7 @@ import (
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/logx"
+	"github.com/wandb/operator/pkg/utils"
 	rediscommon "github.com/wandb/operator/pkg/vendored/redis-operator/common/v1beta2"
 	redisv1beta2 "github.com/wandb/operator/pkg/vendored/redis-operator/redis/v1beta2"
 	redisreplicationv1beta2 "github.com/wandb/operator/pkg/vendored/redis-operator/redisreplication/v1beta2"
@@ -16,7 +17,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"knative.dev/pkg/ptr"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
@@ -33,6 +34,75 @@ const (
 	DefaultRedisExporterPort  = 9121
 )
 
+const (
+	redisRunAsUser  int64 = 1000
+	redisRunAsGroup int64 = 1000
+	redisFSGroup    int64 = 1000
+
+	redisWritableTmpVolumeName = "redis-tmp"
+	redisWritableTmpMountPath  = "/tmp"
+
+	redisCapabilityAll corev1.Capability = "ALL"
+)
+
+func redisPodSecurityContext() *corev1.PodSecurityContext {
+	if utils.IsOpenShift() {
+		return &corev1.PodSecurityContext{
+			RunAsNonRoot:   ptr.To(true),
+			SeccompProfile: redisRuntimeDefaultSeccompProfile(),
+		}
+	}
+
+	return &corev1.PodSecurityContext{
+		RunAsUser:      ptr.To(redisRunAsUser),
+		RunAsGroup:     ptr.To(redisRunAsGroup),
+		RunAsNonRoot:   ptr.To(true),
+		FSGroup:        ptr.To(redisFSGroup),
+		SeccompProfile: redisRuntimeDefaultSeccompProfile(),
+	}
+}
+
+func redisContainerSecurityContext() *corev1.SecurityContext {
+	securityContext := &corev1.SecurityContext{
+		RunAsNonRoot:             ptr.To(true),
+		AllowPrivilegeEscalation: ptr.To(false),
+		Capabilities: &corev1.Capabilities{
+			Drop: []corev1.Capability{redisCapabilityAll},
+		},
+		SeccompProfile: redisRuntimeDefaultSeccompProfile(),
+	}
+	if !utils.IsOpenShift() {
+		securityContext.RunAsUser = ptr.To(redisRunAsUser)
+		securityContext.RunAsGroup = ptr.To(redisRunAsGroup)
+	}
+	return securityContext
+}
+
+func redisWritableVolumeMount() rediscommon.AdditionalVolume {
+	return rediscommon.AdditionalVolume{
+		Volume: []corev1.Volume{
+			{
+				Name: redisWritableTmpVolumeName,
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				},
+			},
+		},
+		MountPath: []corev1.VolumeMount{
+			{Name: redisWritableTmpVolumeName, MountPath: redisWritableTmpMountPath},
+		},
+	}
+}
+
+func redisAdditionalVolumePtr() *rediscommon.AdditionalVolume {
+	volumeMount := redisWritableVolumeMount()
+	return &volumeMount
+}
+
+func redisRuntimeDefaultSeccompProfile() *corev1.SeccompProfile {
+	return &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault}
+}
+
 // createRedisExporterConfig creates a RedisExporter configuration if telemetry is enabled.
 // Returns nil if telemetry is disabled.
 func createRedisExporterConfig(telemetry apiv2.Telemetry) *rediscommon.RedisExporter {
@@ -46,6 +116,7 @@ func createRedisExporterConfig(telemetry apiv2.Telemetry) *rediscommon.RedisExpo
 		Port:            &port,
 		Image:           DefaultRedisExporterImage,
 		ImagePullPolicy: corev1.PullIfNotPresent,
+		SecurityContext: redisContainerSecurityContext(),
 	}
 }
 
@@ -87,11 +158,10 @@ func ToRedisStandaloneVendorSpec(
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				Resources:       &corev1.ResourceRequirements{},
 			},
-			Affinity: wandb.GetAffinity(spec.ManagedInfraSpec),
-			PodSecurityContext: &corev1.PodSecurityContext{
-				FSGroup: ptr.Int64(1000),
-			},
-			Tolerations: wandb.GetTolerations(spec.ManagedInfraSpec),
+			Affinity:           wandb.GetAffinity(spec.ManagedInfraSpec),
+			PodSecurityContext: redisPodSecurityContext(),
+			SecurityContext:    redisContainerSecurityContext(),
+			Tolerations:        wandb.GetTolerations(spec.ManagedInfraSpec),
 			Storage: &rediscommon.Storage{
 				VolumeClaimTemplate: corev1.PersistentVolumeClaim{
 					ObjectMeta: metav1.ObjectMeta{
@@ -108,6 +178,7 @@ func ToRedisStandaloneVendorSpec(
 						},
 					},
 				},
+				VolumeMount: redisWritableVolumeMount(),
 			},
 		},
 	}
@@ -172,11 +243,11 @@ func ToRedisSentinelVendorSpec(
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				Resources:       &corev1.ResourceRequirements{},
 			},
-			PodSecurityContext: &corev1.PodSecurityContext{
-				FSGroup: ptr.Int64(1000),
-			},
-			Affinity:    wandb.GetAffinity(spec.ManagedInfraSpec),
-			Tolerations: wandb.GetTolerations(spec.ManagedInfraSpec),
+			PodSecurityContext: redisPodSecurityContext(),
+			SecurityContext:    redisContainerSecurityContext(),
+			Affinity:           wandb.GetAffinity(spec.ManagedInfraSpec),
+			Tolerations:        wandb.GetTolerations(spec.ManagedInfraSpec),
+			VolumeMount:        redisAdditionalVolumePtr(),
 			RedisSentinelConfig: &redissentinelv1beta2.RedisSentinelConfig{
 				RedisSentinelConfig: rediscommon.RedisSentinelConfig{
 					RedisReplicationName: nsnBuilder.ReplicationName(),
@@ -250,11 +321,10 @@ func ToRedisReplicationVendorSpec(
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				Resources:       &corev1.ResourceRequirements{},
 			},
-			PodSecurityContext: &corev1.PodSecurityContext{
-				FSGroup: ptr.Int64(1000),
-			},
-			Affinity:    wandb.GetAffinity(spec.ManagedInfraSpec),
-			Tolerations: wandb.GetTolerations(spec.ManagedInfraSpec),
+			PodSecurityContext: redisPodSecurityContext(),
+			SecurityContext:    redisContainerSecurityContext(),
+			Affinity:           wandb.GetAffinity(spec.ManagedInfraSpec),
+			Tolerations:        wandb.GetTolerations(spec.ManagedInfraSpec),
 			Storage: &rediscommon.Storage{
 				VolumeClaimTemplate: corev1.PersistentVolumeClaim{
 					ObjectMeta: metav1.ObjectMeta{
@@ -271,6 +341,7 @@ func ToRedisReplicationVendorSpec(
 						},
 					},
 				},
+				VolumeMount: redisWritableVolumeMount(),
 			},
 		},
 	}

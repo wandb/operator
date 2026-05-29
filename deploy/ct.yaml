@@ -6,7 +6,6 @@ chart-dirs:
 chart-repos:
   - altinity=https://helm.altinity.com
   - grafana=https://grafana.github.io/helm-charts/
-  - minio=https://operator.min.io/
   - moco=https://moco.github.io/moco-operator
   - redis=https://ot-container-kit.github.io/helm-charts/
   - strimzy=https://strimzi.io/charts/
