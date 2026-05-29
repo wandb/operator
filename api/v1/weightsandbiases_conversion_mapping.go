@@ -453,7 +453,7 @@ func mapMySQL(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) er
 		return nil
 	}
 
-	var conn = &appsv2.MysqlConnection{}
+	conn := &appsv2.MysqlConnection{}
 
 	remaining := map[string]interface{}{}
 
@@ -492,9 +492,8 @@ func mapMySQL(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) er
 		}
 	}
 
-	if conn != nil {
-		dst.Spec.MySQL.ExternalMysql = conn
-	}
+	dst.Spec.MySQL.ExternalMysql = conn
+
 	if len(remaining) > 0 {
 		return writeAnnotation(dst, MySQLPendingAnnotation, remaining)
 	}
@@ -526,7 +525,7 @@ func mapRedis(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) er
 		return nil
 	}
 
-	var conn = &appsv2.RedisConnection{}
+	conn := &appsv2.RedisConnection{}
 
 	remaining := map[string]interface{}{}
 
@@ -588,9 +587,8 @@ func mapRedis(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) er
 		}
 	}
 
-	if conn != nil {
-		dst.Spec.Redis.ExternalRedis = conn
-	}
+	dst.Spec.Redis.ExternalRedis = conn
+
 	if len(remaining) > 0 {
 		return writeAnnotation(dst, RedisPendingAnnotation, remaining)
 	}

@@ -2,7 +2,6 @@ package reconciler
 
 import (
 	"context"
-	"fmt"
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
@@ -22,7 +21,7 @@ func consolidatedIngressName(wandb *apiv2.WeightsAndBiases) string {
 	if wandb.Spec.Networking.Ingress != nil && wandb.Spec.Networking.Ingress.Name != "" {
 		return wandb.Spec.Networking.Ingress.Name
 	}
-	return fmt.Sprintf("%s", wandb.Name)
+	return wandb.Name
 }
 
 func reconcileConsolidatedIngress(ctx context.Context, c ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest) error {

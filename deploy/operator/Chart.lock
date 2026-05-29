@@ -16,7 +16,7 @@ dependencies:
   version: 0.50.0
 - name: seaweedfs-operator
   repository: https://seaweedfs.github.io/seaweedfs-operator/
-  version: 0.1.13
+  version: 0.1.24
 - name: altinity-clickhouse-operator
   repository: https://helm.altinity.com
   version: 0.26.3
@@ -29,5 +29,5 @@ dependencies:
 - name: telemetry
   repository: file://../telemetry
   version: 0.1.0
-digest: sha256:2416a18e4fc4c21ee548fa779fa733cff0fd8cfe3856513ecf11aadec674b2c3
-generated: "2026-05-22T15:33:59.778062-07:00"
+digest: sha256:03c8726bd311883771544478656f0a17bd03909447022832209502555f71987b
+generated: "2026-05-29T14:05:47.757363-07:00"

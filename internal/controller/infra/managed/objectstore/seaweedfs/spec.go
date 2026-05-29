@@ -106,21 +106,28 @@ func ToObjectStoreVendorSpec(
 					},
 				},
 			},
+			S3: &seaweedv1.S3GatewaySpec{
+				ComponentSpec: seaweedv1.ComponentSpec{
+					Affinity:    wandb.GetAffinity(infraSpec.ManagedInfraSpec),
+					Tolerations: *wandb.GetTolerations(infraSpec.ManagedInfraSpec),
+				},
+				ResourceRequirements: corev1.ResourceRequirements{},
+				Replicas:             1,
+				ConfigSecret: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: ConfigName(specName),
+					},
+					Key: "config.json",
+				},
+				Port:       new(int32(80)),
+				DomainName: nil,
+			},
 			Filer: &seaweedv1.FilerSpec{
 				Replicas: 1,
 				Config:   ptr.To("[leveldb2]\nenabled = true\ndir = \"" + seaweedFilerDataMountPath + "\""),
 				ComponentSpec: seaweedv1.ComponentSpec{
 					Volumes:      seaweedWritableVolumes(),
 					VolumeMounts: seaweedWritableVolumeMounts(),
-				},
-				S3: &seaweedv1.S3Config{
-					Enabled: true,
-					ConfigSecret: &corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: ConfigName(specName),
-						},
-						Key: "config.json",
-					},
 				},
 				Persistence: &seaweedv1.PersistenceSpec{
 					Enabled:   true,

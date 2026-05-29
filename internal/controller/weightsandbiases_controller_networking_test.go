@@ -159,7 +159,7 @@ var _ = Describe("WeightsAndBiases Networking", func() {
 		Expect(wandb.Status.GatewayStatus.Addresses).To(ContainElement("10.0.0.6"))
 
 		app := &apiv2.Application{}
-		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("%s-api", wandbName), Namespace: wandbNamespace}, app)).To(Succeed())
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "api", Namespace: wandbNamespace}, app)).To(Succeed())
 		Expect(app.Spec.HTTPRouteTemplate).NotTo(BeNil())
 		Expect(app.Spec.HTTPRouteTemplate.ParentRefs).To(HaveLen(1))
 		Expect(app.Spec.HTTPRouteTemplate.ParentRefs[0].Name).To(Equal(gatewayv1.ObjectName(gatewayName)))
@@ -193,7 +193,7 @@ var _ = Describe("WeightsAndBiases Networking", func() {
 
 		ingress := &networkingv1.Ingress{}
 		Expect(k8sClient.Get(ctx, types.NamespacedName{
-			Name:      fmt.Sprintf("%s", wandbName),
+			Name:      wandbName,
 			Namespace: wandbNamespace,
 		}, ingress)).To(Succeed())
 		Expect(ingress.Spec.IngressClassName).NotTo(BeNil())
@@ -213,7 +213,7 @@ var _ = Describe("WeightsAndBiases Networking", func() {
 		wandb = getWandb(ctx, wandbName, wandbNamespace)
 
 		Expect(wandb.Status.IngressStatus).NotTo(BeNil())
-		Expect(wandb.Status.IngressStatus.Name).To(Equal(fmt.Sprintf("%s", wandbName)))
+		Expect(wandb.Status.IngressStatus.Name).To(Equal(wandbName))
 		Expect(wandb.Status.IngressStatus.LoadBalancerIngress).To(HaveLen(1))
 		Expect(wandb.Status.IngressStatus.LoadBalancerIngress[0].IP).To(Equal("34.118.10.1"))
 	})
@@ -266,12 +266,12 @@ func newNetworkingWandb(name string, infraNamespace string) (*apiv2.WeightsAndBi
 
 	service := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "objectstore",
+			Name:      fmt.Sprintf("%s-seaweedfs-s3", name),
 			Namespace: infraNamespace,
 		},
 		Spec: corev1.ServiceSpec{
 			Ports: []corev1.ServicePort{{
-				Name: "http-objectstore",
+				Name: "s3-http",
 				Port: 80,
 			}},
 		},
