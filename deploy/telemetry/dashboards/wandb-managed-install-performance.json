@@ -50,7 +50,7 @@
       "gridPos": {"h": 6, "w": 24, "x": 0, "y": 0},
       "options": {
         "mode": "markdown",
-        "content": "# W&B Managed Install Performance\n\nInfrastructure health dashboard for a W&B install. Use this dashboard to answer **\"is the underlying infrastructure that runs W&B healthy?\"** — covers all five managed components (MySQL, Redis, Kafka, MinIO, ClickHouse) plus container resource utilization across the install.\n\nFor application-layer signals (W&B API latency, ingest health, slow operations) see the [W&B Field Investigation](/d/wandb-field-investigation) dashboard.\n\n**Quick lookups from the shell:**\n\n- Install size & version: `kubectl get wandb -n <namespace> -o yaml`\n- Pod restart reasons: `kubectl get pods -n <namespace> -o jsonpath='{range .items[*]}{.metadata.name}{\"\\t\"}{.status.containerStatuses[*].lastState.terminated.reason}{\\\"\\n\\\"}{end}'`\n- OOM-killed events: `kubectl get events -n <namespace> --sort-by=.lastTimestamp | grep -i oom`\n\nUse the **W&B Namespace** dropdown above to switch installs."
+        "content": "# W&B Managed Install Performance\n\nInfrastructure health dashboard for a W&B install. Use this dashboard to answer **\"is the underlying infrastructure that runs W&B healthy?\"** — covers all five managed components (MySQL, Redis, Kafka, SeaweedFS, ClickHouse) plus container resource utilization across the install.\n\nFor application-layer signals (W&B API latency, ingest health, slow operations) see the [W&B Field Investigation](/d/wandb-field-investigation) dashboard.\n\n**Quick lookups from the shell:**\n\n- Install size & version: `kubectl get wandb -n <namespace> -o yaml`\n- Pod restart reasons: `kubectl get pods -n <namespace> -o jsonpath='{range .items[*]}{.metadata.name}{\"\\t\"}{.status.containerStatuses[*].lastState.terminated.reason}{\\\"\\n\\\"}{end}'`\n- OOM-killed events: `kubectl get events -n <namespace> --sort-by=.lastTimestamp | grep -i oom`\n\nUse the **W&B Namespace** dropdown above to switch installs."
       }
     },
     {
@@ -116,7 +116,7 @@
       "gridPos": {"h": 10, "w": 8, "x": 16, "y": 17},
       "options": {
         "mode": "markdown",
-        "content": "### What is this?\n\nTop 15 containers in the selected namespace by CPU usage as a fraction of the configured CPU limit (1.0 = 100% of limit). Filters out system/agent containers. Includes both W&B services and the managed infrastructure components (MySQL, Redis, Kafka, MinIO, ClickHouse).\n\n### Why it matters\n\nA container sustained above 0.8 (80% of limit) will throttle frequently, slowing every request it handles. Above 1.0 means kernel-side throttling is constant.\n\n### What to do\n\nFor the configured limit, run `kubectl describe pod -n <namespace> <pod>` and look at the Limits section, or check `spec.size` in the WeightsAndBiases CR. For sustained saturation, increase the install size.\n\n*Series will be missing for containers without a configured CPU limit.*"
+        "content": "### What is this?\n\nTop 15 containers in the selected namespace by CPU usage as a fraction of the configured CPU limit (1.0 = 100% of limit). Filters out system/agent containers. Includes both W&B services and the managed infrastructure components (MySQL, Redis, Kafka, SeaweedFS, ClickHouse).\n\n### Why it matters\n\nA container sustained above 0.8 (80% of limit) will throttle frequently, slowing every request it handles. Above 1.0 means kernel-side throttling is constant.\n\n### What to do\n\nFor the configured limit, run `kubectl describe pod -n <namespace> <pod>` and look at the Limits section, or check `spec.size` in the WeightsAndBiases CR. For sustained saturation, increase the install size.\n\n*Series will be missing for containers without a configured CPU limit.*"
       }
     },
     {
@@ -459,23 +459,23 @@
     },
     {
       "type": "row",
-      "title": "MinIO",
+      "title": "Object Store",
       "gridPos": {"h": 1, "w": 24, "x": 0, "y": 111},
       "collapsed": false
     },
     {
       "type": "timeseries",
-      "title": "MinIO Capacity Used % & Request Rate",
+      "title": "Object Store Capacity Used % & Request Rate",
       "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
       "gridPos": {"h": 10, "w": 16, "x": 0, "y": 112},
       "targets": [
         {
-          "expr": "100 * (1 - (sum(minio_cluster_health_capacity_usable_free_bytes) / sum(minio_cluster_health_capacity_usable_total_bytes)))",
+          "expr": "100 * (1 - (sum(SeaweedFS_volumeServer_resource{type=\"free\"}) / sum(SeaweedFS_volumeServer_resource{type=\"all\"})))",
           "legendFormat": "capacity used %",
           "refId": "A"
         },
         {
-          "expr": "sum(rate(minio_api_requests_total[$__rate_interval]))",
+          "expr": "sum(rate(SeaweedFS_filer_request_total[$__rate_interval]))",
           "legendFormat": "requests/sec",
           "refId": "B"
         }
@@ -502,11 +502,11 @@
     },
     {
       "type": "text",
-      "title": "About: MinIO",
+      "title": "About: Object Store",
       "gridPos": {"h": 10, "w": 8, "x": 16, "y": 112},
       "options": {
         "mode": "markdown",
-        "content": "### What is this?\n\n- **capacity used %** — percentage of usable cluster capacity in use.\n- **requests/sec** — total MinIO API request rate across all operations.\n\n### Why it matters\n\nMinIO is the object store for parquet files, artifact contents, and run media. \n\n- **Capacity above 90%** = urgent action required. New writes will fail soon.\n- **Capacity above 75%** = plan a storage increase.\n- **Sudden drop in request rate** = the API or executor services may be unable to reach MinIO; check service/DNS.\n\n### What to do\n\nFor capacity: increase storage in the WeightsAndBiases CR (`spec.objectStore.managedObjectStore.storageSize`) and re-apply, or migrate older artifacts off-cluster. For request failures: `kubectl logs -n <namespace> -l weightsandbiases.apps.wandb.com/component=minio --tail=200`."
+        "content": "### What is this?\n\n- **capacity used %** — percentage of usable volume-server capacity in use, derived from `SeaweedFS_volumeServer_resource{type=\"free\"|\"all\"}`.\n- **requests/sec** — filer HTTP request rate across all operations (`SeaweedFS_filer_request_total`).\n\n### Why it matters\n\nSeaweedFS is the object store for parquet files, artifact contents, and run media.\n\n- **Capacity above 90%** = urgent action required. New writes will fail soon.\n- **Capacity above 75%** = plan a storage increase.\n- **Sudden drop in request rate** = the API or executor services may be unable to reach the filer; check the seaweedfs Service and pod logs.\n\n### What to do\n\nFor capacity: increase storage in the WeightsAndBiases CR (`spec.objectStore.managedObjectStore.storageSize`) and re-apply, or migrate older artifacts off-cluster. For request failures: `kubectl logs -n <namespace> -l app.kubernetes.io/managed-by=seaweedfs-operator,app.kubernetes.io/component=filer --tail=200`."
       }
     },
     {
@@ -522,7 +522,7 @@
       "gridPos": {"h": 10, "w": 16, "x": 0, "y": 123},
       "targets": [
         {
-          "expr": "topk(10, histogram_quantile(0.95, sum by (service_name, span_name, le) (rate(traces_spanmetrics_duration_milliseconds_bucket{service_name=~\"gorilla.*\", span_name=~\"(?i)(parquet|filestream|filehandler|runstore|historystore|metadatastore|s3|minio|sql).*\"}[$__rate_interval]))))",
+          "expr": "topk(10, histogram_quantile(0.95, sum by (service_name, span_name, le) (rate(traces_spanmetrics_duration_milliseconds_bucket{service_name=~\"gorilla.*\", span_name=~\"(?i)(parquet|filestream|filehandler|runstore|historystore|metadatastore|s3|sql).*\"}[$__rate_interval]))))",
           "legendFormat": "{{service_name}} / {{span_name}}",
           "refId": "A"
         }
@@ -542,7 +542,7 @@
       "gridPos": {"h": 10, "w": 8, "x": 16, "y": 123},
       "options": {
         "mode": "markdown",
-        "content": "### What is this?\n\np95 latency per storage operation, derived from traces by the OTel `spanmetrics` connector. Covers parquet reads/writes, filestream chunks, MinIO/S3 calls, and SQL statements.\n\n### Why it matters\n\nSlow chart loads, slow file uploads, and stuck artifact downloads almost always trace back to one storage path being slow. This panel surfaces which one without opening individual traces.\n\n### What to do\n\n- Spikes on `ParquetHistoryStore.*` or `HistoryStore.*` → chart loads will feel slow. Check the parquet pod's CPU/memory in **Container Resource Usage** above, and ClickHouse load if installed.\n- Spikes on `FileStreamStore.*` / `FileHandler.*` → ingest stalls. Check filestream container restarts and MinIO capacity below.\n- Spikes on `sql.*` → MySQL is the bottleneck. See **MySQL Errors & Slow Queries** above.\n- For per-request detail, [open Traces in Explore](/explore?panes=%7B%22A%22:%7B%22datasource%22:%22${DS_VICTORIATRACES}%22,%22queries%22:[],%22range%22:%7B%22from%22:%22now-1h%22,%22to%22:%22now%22%7D%7D%7D&schemaVersion=1&orgId=1) and filter by the offending `service.name` + `span.name` with `duration > 1s`."
+        "content": "### What is this?\n\np95 latency per storage operation, derived from traces by the OTel `spanmetrics` connector. Covers parquet reads/writes, filestream chunks, S3 calls, and SQL statements.\n\n### Why it matters\n\nSlow chart loads, slow file uploads, and stuck artifact downloads almost always trace back to one storage path being slow. This panel surfaces which one without opening individual traces.\n\n### What to do\n\n- Spikes on `ParquetHistoryStore.*` or `HistoryStore.*` → chart loads will feel slow. Check the parquet pod's CPU/memory in **Container Resource Usage** above, and ClickHouse load if installed.\n- Spikes on `FileStreamStore.*` / `FileHandler.*` → ingest stalls. Check filestream container restarts and object store capacity below.\n- Spikes on `sql.*` → MySQL is the bottleneck. See **MySQL Errors & Slow Queries** above.\n- For per-request detail, [open Traces in Explore](/explore?panes=%7B%22A%22:%7B%22datasource%22:%22${DS_VICTORIATRACES}%22,%22queries%22:[],%22range%22:%7B%22from%22:%22now-1h%22,%22to%22:%22now%22%7D%7D%7D&schemaVersion=1&orgId=1) and filter by the offending `service.name` + `span.name` with `duration > 1s`."
       }
     }
   ],

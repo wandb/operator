@@ -1946,7 +1946,7 @@
     },
     {
       "type": "stat",
-      "title": "MinIO Requests / sec",
+      "title": "SeaweedFS Requests / sec",
       "datasource": {
         "type": "victoriametrics-metrics-datasource",
         "uid": "${DS_VICTORIAMETRICS}"
@@ -1959,7 +1959,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(minio_api_requests_total[$__rate_interval]))",
+          "expr": "sum(rate(SeaweedFS_filer_request_total[$__rate_interval]))",
           "refId": "A"
         }
       ],
@@ -1980,7 +1980,7 @@
     },
     {
       "type": "stat",
-      "title": "MinIO Free Capacity",
+      "title": "SeaweedFS Free Capacity",
       "datasource": {
         "type": "victoriametrics-metrics-datasource",
         "uid": "${DS_VICTORIAMETRICS}"
@@ -1993,7 +1993,7 @@
       },
       "targets": [
         {
-          "expr": "sum(minio_cluster_health_capacity_usable_free_bytes)",
+          "expr": "sum(SeaweedFS_volumeServer_resource{type=\"free\"})",
           "refId": "A"
         }
       ],
@@ -2067,7 +2067,7 @@
     },
     {
       "type": "timeseries",
-      "title": "MinIO Capacity Used %",
+      "title": "SeaweedFS Capacity Used %",
       "datasource": {
         "type": "victoriametrics-metrics-datasource",
         "uid": "${DS_VICTORIAMETRICS}"
@@ -2080,7 +2080,7 @@
       },
       "targets": [
         {
-          "expr": "100 * (1 - (sum(minio_cluster_health_capacity_usable_free_bytes) / sum(minio_cluster_health_capacity_usable_total_bytes)))",
+          "expr": "100 * (1 - (sum(SeaweedFS_volumeServer_resource{type=\"free\"}) / sum(SeaweedFS_volumeServer_resource{type=\"all\"})))",
           "refId": "A"
         }
       ],
@@ -2120,7 +2120,7 @@
     },
     {
       "type": "timeseries",
-      "title": "MinIO Request Rate",
+      "title": "SeaweedFS Request Rate",
       "datasource": {
         "type": "victoriametrics-metrics-datasource",
         "uid": "${DS_VICTORIAMETRICS}"
@@ -2133,7 +2133,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(minio_api_requests_total[$__rate_interval]))",
+          "expr": "sum(rate(SeaweedFS_filer_request_total[$__rate_interval]))",
           "legendFormat": "requests",
           "refId": "A"
         }

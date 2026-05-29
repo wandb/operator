@@ -44,19 +44,49 @@ spec:
     - port: "tcp-prometheus"
       path: /metrics
 ---
-# SeaweedFS
-# Scrapes SeaweedFS metrics endpoint
+# SeaweedFS Master
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMPodScrape
 metadata:
-  name: seaweedfs
+  name: seaweedfs-master
   namespace: default
 spec:
   selector:
     matchLabels:
-      weightsandbiases.apps.wandb.com/component: seaweedfs
+      app.kubernetes.io/managed-by: seaweedfs-operator
+      app.kubernetes.io/component: master
   podMetricsEndpoints:
-    - port: swfs-s3
+    - port: master-metrics
+      path: /metrics
+---
+# SeaweedFS Volume
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMPodScrape
+metadata:
+  name: seaweedfs-volume
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/managed-by: seaweedfs-operator
+      app.kubernetes.io/component: volume
+  podMetricsEndpoints:
+    - port: volume-metrics
+      path: /metrics
+---
+# SeaweedFS Filer
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMPodScrape
+metadata:
+  name: seaweedfs-filer
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/managed-by: seaweedfs-operator
+      app.kubernetes.io/component: filer
+  podMetricsEndpoints:
+    - port: filer-metrics
       path: /metrics
 ---
 # Redis
