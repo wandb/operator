@@ -63,7 +63,6 @@ type TLSIssuerRef struct {
 	Group string `json:"group,omitempty"`
 }
 
-
 type SeaweedSpec struct {
 	TLS            *TLSSpec `json:"tls,omitempty"`
 	MetricsAddress string   `json:"metricsAddress,omitempty"`
