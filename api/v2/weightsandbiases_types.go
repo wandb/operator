@@ -418,14 +418,14 @@ type ObjectStoreSpec struct {
 }
 
 type ManagedObjectStoreSpec struct {
-	ManagedInfraSpec `json:",inline"`
-	SeaweedObjectStoreSpec	SeaweedObjectStoreSpec	  `json:"SeaweedObjectStoreSpec,omitempty"`
-	StorageSize string            `json:"storageSize,omitempty"`
-	Replicas    int32             `json:"replicas,omitempty"`
-	Config      ObjectStoreConfig `json:"config,omitempty"`
-	Namespace   string            `json:"namespace,omitempty"`
-	Name        string            `json:"name,omitempty"`
-	Telemetry   Telemetry         `json:"telemetry,omitempty"`
+	ManagedInfraSpec       `json:",inline"`
+	SeaweedObjectStoreSpec SeaweedObjectStoreSpec `json:"SeaweedObjectStoreSpec,omitempty"`
+	StorageSize            string                 `json:"storageSize,omitempty"`
+	Replicas               int32                  `json:"replicas,omitempty"`
+	Config                 ObjectStoreConfig      `json:"config,omitempty"`
+	Namespace              string                 `json:"namespace,omitempty"`
+	Name                   string                 `json:"name,omitempty"`
+	Telemetry              Telemetry              `json:"telemetry,omitempty"`
 }
 
 type SeaweedObjectStoreSpec struct {

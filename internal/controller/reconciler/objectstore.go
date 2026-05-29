@@ -8,8 +8,6 @@ import (
 	"github.com/wandb/operator/internal/controller/infra/external"
 	externalobjectstore "github.com/wandb/operator/internal/controller/infra/external/objectstore"
 	"github.com/wandb/operator/internal/controller/infra/managed/objectstore/seaweedfs"
-	"github.com/wandb/operator/internal/controller/translator"
-	translatorv2 "github.com/wandb/operator/internal/controller/translator/v2"
 	"github.com/wandb/operator/pkg/utils"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -70,7 +68,7 @@ func objectStorePurgeFinalizer(
 	wandb *apiv2.WeightsAndBiases,
 ) error {
 	if spec := wandb.Spec.ObjectStore.ManagedObjectStore; spec != nil {
-		onDeleteRule := translatorv2.ToObjectStoreOnDeleteRule(wandb, wandb.GetRetentionPolicy(spec.ManagedInfraSpec))
+		onDeleteRule := seaweedfs.ToObjectStoreOnDeleteRule(wandb, wandb.GetRetentionPolicy(spec.ManagedInfraSpec))
 		_ = seaweedfs.CleanupLegacyMinio(
 			ctx, client, wandb.Name, wandb.Namespace, wandb.GetUID(),
 			true, onDeleteRule.Selector,
@@ -114,11 +112,11 @@ func managedObjectStoreWriteState(
 	var specNamespacedName = managedObjectStoreSpecNamespacedName(spec)
 
 	retentionPolicy := wandb.GetRetentionPolicy(spec.ManagedInfraSpec)
-	onDeleteRule := translatorv2.ToObjectStoreOnDeleteRule(wandb, retentionPolicy)
+	onDeleteRule := seaweedfs.ToObjectStoreOnDeleteRule(wandb, retentionPolicy)
 	if err := seaweedfs.CleanupLegacyMinio(
 		ctx, client,
 		wandb.Name, wandb.Namespace, wandb.GetUID(),
-		onDeleteRule.Policy == translator.Purge,
+		onDeleteRule.Policy == common.Purge,
 		onDeleteRule.Selector,
 	); err != nil {
 		log.Error(err, "failed to clean up legacy MinIO resources")
@@ -128,7 +126,7 @@ func managedObjectStoreWriteState(
 		return conditions, nil
 	}
 
-	desiredCr, err := tenant.ToObjectStoreVendorSpec(ctx, wandb, client.Scheme())
+	desiredCr, err := seaweedfs.ToObjectStoreVendorSpec(ctx, wandb, client.Scheme())
 	if err != nil {
 		log.Error(err, "failed to translate object store spec to vendor spec")
 		return []metav1.Condition{
@@ -140,7 +138,7 @@ func managedObjectStoreWriteState(
 		}, nil
 	}
 
-	desiredConfig, err := tenant.ToObjectStoreEnvConfig(ctx, *spec)
+	desiredConfig, err := seaweedfs.ToObjectStoreEnvConfig(ctx, *spec)
 	if err != nil {
 		log.Error(err, "failed to translate object store envConfig to vendor spec")
 		return []metav1.Condition{
@@ -170,7 +168,7 @@ func managedObjectStoreReadState(
 		ctx,
 		client,
 		specNamespacedName,
-		tenant.ToObjectStoreOnDeleteRule(wandb, retentionPolicy),
+		seaweedfs.ToObjectStoreOnDeleteRule(wandb, retentionPolicy),
 	)
 	newConditions = append(newConditions, readConditions...)
 	return newConditions
