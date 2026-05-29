@@ -58,10 +58,16 @@ wandb-operator:
               name: '{{ .Release.Name }}-telemetry-config'
               key: TELEMETRY_OTEL_RESOURCE_ATTRIBUTES
       securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
         allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
         capabilities:
           drop:
             - "ALL"
+        seccompProfile:
+          type: RuntimeDefault
       livenessProbe:
         httpGet:
           path: /healthz
@@ -85,6 +91,10 @@ wandb-operator:
         - mountPath: /tmp/wandb-operator/serving-certs
           name: serving-certs
           readOnly: true
+        - mountPath: /tmp/server-manifest
+          name: server-manifest
+        - mountPath: /helm
+          name: helm-home
 
   service:
     enabled: true
@@ -98,14 +108,22 @@ wandb-operator:
         protocol: TCP
         targetPort: 8443
   replicaCount: 1
-  securityContext:
-    runAsNonRoot: false
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    runAsGroup: 65532
+    fsGroup: 65532
+    fsGroupChangePolicy: OnRootMismatch
     seccompProfile:
       type: RuntimeDefault
   volumes:
     - name: serving-certs
       secret:
         secretName: '{{ .Release.Name }}-serving-cert'
+    - name: server-manifest
+      emptyDir: {}
+    - name: helm-home
+      emptyDir: {}
 
   operators:
     application: true

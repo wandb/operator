@@ -1,5 +1,5 @@
 wandb-operator:
-  securityContext:
+  podSecurityContext:
     runAsNonRoot: true
     runAsUser: null
     runAsGroup: null
@@ -13,18 +13,33 @@ wandb-operator:
   volumes:
     - name: server-manifest
       emptyDir: {}
+    - name: helm-home
+      emptyDir: {}
     - name: serving-certs
       secret:
         secretName: '{{ .Release.Name }}-serving-cert'
 
   containers:
     operator:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: null
+        runAsGroup: null
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop:
+            - "ALL"
+        seccompProfile:
+          type: RuntimeDefault
       env:
         OPENSHIFT:
           value: "true"
       volumeMounts:
         - mountPath: /tmp/server-manifest
           name: server-manifest
+        - mountPath: /helm
+          name: helm-home
         - mountPath: /tmp/wandb-operator/serving-certs
           name: serving-certs
           readOnly: true
