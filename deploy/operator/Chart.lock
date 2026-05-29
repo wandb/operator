@@ -17,6 +17,9 @@ dependencies:
 - name: seaweedfs-operator
   repository: https://seaweedfs.github.io/seaweedfs-operator/
   version: 0.1.13
+- name: prometheus-operator-crds
+  repository: https://prometheus-community.github.io/helm-charts
+  version: 29.0.0
 - name: altinity-clickhouse-operator
   repository: https://helm.altinity.com
   version: 0.26.3
@@ -29,5 +32,5 @@ dependencies:
 - name: telemetry
   repository: file://../telemetry
   version: 0.1.0
-digest: sha256:51fb84f0e6f0c7ad968fb311d06104c261d684c098972a572d2eb07af2cee0cd
-generated: "2026-05-14T14:31:46.62858-05:00"
+digest: sha256:4b5de51ac92b6a1c4fe94c7ef9b6d044d8b634852807f2b52b44a42c5e851e0c
+generated: "2026-05-29T14:07:08.772292-05:00"
