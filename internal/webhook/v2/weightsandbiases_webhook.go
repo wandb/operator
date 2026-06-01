@@ -122,7 +122,6 @@ func (d *WeightsAndBiasesCustomDefaulter) Default(ctx context.Context, obj runti
 	applyRedisDefaults(wandb)
 	applyKafkaDefaults(wandb)
 	applyObjectStoreDefaults(wandb)
-	applyMySQLDefaults(wandb)
 	applyClickHouseDefaults(wandb)
 
 	return nil

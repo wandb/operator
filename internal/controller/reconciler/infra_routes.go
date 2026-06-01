@@ -111,7 +111,7 @@ func resolveInfraServicePort(ctx context.Context, c ctrlClient.Client, serviceRe
 			}
 			for _, port := range service.Spec.Ports {
 				// TODO(dpanzella): we need a way to unbind this from the manifest, this works, but is maybe undesirable
-				if strings.Contains(port.Name, "-http") {
+				if strings.Contains(port.Name, "s3-") {
 					return port.Port, nil
 				}
 			}

@@ -63,7 +63,7 @@ To download the CRDs for integration testing:
 
 1. Create the `crds/` directory:
    ```bash
-   mkdir -p internal/vendored/redis-operator/crds
+   mkdir -p pkg/vendored/redis-operator/crds
    ```
 
 2. Download the Redis Operator CRDs from the upstream repository at v0.22.1:
@@ -98,7 +98,6 @@ To download the CRDs for integration testing:
 
 ### Removed Content
 - All test files (`*_test.go`)
-- Unused CRD types (RedisCluster)
 - Internal operator logic and controllers
 
 ## License
