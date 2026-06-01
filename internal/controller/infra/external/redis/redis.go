@@ -52,6 +52,12 @@ func WriteState(
 		redisUrl.User = url.UserPassword(data["Password"], "")
 	}
 
+	if _, ok := data["Tls"]; ok {
+		values := redisUrl.Query()
+		values.Add("tls", data["Tls"])
+		redisUrl.RawQuery = values.Encode()
+	}
+
 	data["url"] = redisUrl.String()
 
 	nsName := types.NamespacedName{Namespace: wandb.Namespace, Name: ConnectionSecretName}

@@ -353,7 +353,7 @@ func TestResolveEnvvarsServiceSourceFromManifest(t *testing.T) {
 	}
 
 	sweepProvider := mustFindEnvVar(t, resolved, "GORILLA_SWEEP_PROVIDER")
-	if sweepProvider.Value != "http://wandb-dev-v2-anaconda2:8080" {
+	if sweepProvider.Value != "http://anaconda2:8080" {
 		t.Fatalf("unexpected sweep provider value: %s", sweepProvider.Value)
 	}
 }
@@ -394,7 +394,7 @@ func TestResolveEnvvarsServiceSourcePortNameFromManifest(t *testing.T) {
 	}
 
 	historyStore := mustFindEnvVar(t, resolved, "GORILLA_HISTORY_STORE")
-	if historyStore.Value != "http://wandb-dev-v2-parquet:9000/_goRPC_" {
+	if historyStore.Value != "http://parquet:9000/_goRPC_" {
 		t.Fatalf("unexpected history store value: %s", historyStore.Value)
 	}
 }
@@ -421,10 +421,10 @@ func TestApplyWorkloadTelemetryDefaultsOverridesSharedServiceName(t *testing.T) 
 		},
 	}
 
-	resolved := applyWorkloadTelemetryDefaults(envVars, "wandb-dev-v2-parquet")
+	resolved := applyWorkloadTelemetryDefaults(envVars, "parquet")
 
 	serviceName := mustFindEnvVar(t, resolved, "OTEL_SERVICE_NAME")
-	if serviceName.Value != "wandb-dev-v2-parquet" {
+	if serviceName.Value != "parquet" {
 		t.Fatalf("expected workload-specific OTEL service name, got %q", serviceName.Value)
 	}
 	if serviceName.ValueFrom != nil {
@@ -438,7 +438,7 @@ func TestApplyWorkloadTelemetryDefaultsPreservesExplicitServiceName(t *testing.T
 		{Name: "OTEL_SERVICE_NAME", Value: "custom-service-name"},
 	}
 
-	resolved := applyWorkloadTelemetryDefaults(envVars, "wandb-dev-v2-parquet")
+	resolved := applyWorkloadTelemetryDefaults(envVars, "parquet")
 
 	serviceName := mustFindEnvVar(t, resolved, "OTEL_SERVICE_NAME")
 	if serviceName.Value != "custom-service-name" {

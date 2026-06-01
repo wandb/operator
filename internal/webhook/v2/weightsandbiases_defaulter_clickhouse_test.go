@@ -65,10 +65,14 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 		g.Expect(wandb.Spec.ClickHouse.ManagedClickHouse.Version).To(g.Equal("24.1"))
 	})
 
-	It("does not apply defaults when ManagedClickHouse is nil", func() {
+	It("does not apply defaults when ExternalClickhouse is present", func() {
 		wandb := &apiv2.WeightsAndBiases{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
-			Spec:       apiv2.WeightsAndBiasesSpec{},
+			Spec: apiv2.WeightsAndBiasesSpec{
+				ClickHouse: apiv2.ClickHouseSpec{
+					ExternalClickHouse: &apiv2.ClickHouseConnection{},
+				},
+			},
 		}
 
 		err := defaulter.Default(ctx, wandb)

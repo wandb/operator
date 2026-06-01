@@ -280,7 +280,7 @@ func TestMigrateLegacyMySQL_PortStringified(t *testing.T) {
 }
 
 func TestMigrateLegacyRedis_FullLiteralPayload(t *testing.T) {
-	payload := `{"host":"redis.example.com","port":6379,"password":"shh","caCert":"---cert---"}`
+	payload := `{"host":"redis.example.com","port":6379,"password":"shh","caCert":"---cert---","tls":"true"}`
 	client, wandb := newMigrationFixture(t, map[string]string{
 		apiv1.RedisPendingAnnotation: payload,
 	}, nil)
@@ -296,6 +296,7 @@ func TestMigrateLegacyRedis_FullLiteralPayload(t *testing.T) {
 	require.Equal(t, []byte("6379"), secret.Data["port"])
 	require.Equal(t, []byte("shh"), secret.Data["password"])
 	require.Equal(t, []byte("---cert---"), secret.Data["sslCa"])
+	require.Equal(t, []byte("true"), secret.Data["tls"])
 
 	var fresh apiv2.WeightsAndBiases
 	require.NoError(t, client.Get(context.Background(), types.NamespacedName{Name: "wandb", Namespace: "default"}, &fresh))
@@ -307,7 +308,7 @@ func TestMigrateLegacyRedis_FullLiteralPayload(t *testing.T) {
 	require.Equal(t, "port", conn.Port.Key)
 	require.Equal(t, "password", conn.Password.Key)
 	require.Equal(t, "sslCa", conn.SslCa.Key)
-	require.Empty(t, conn.Tls.Name)
+	require.Equal(t, "tls", conn.Tls.Key)
 	require.Empty(t, conn.URL.Name)
 }
 

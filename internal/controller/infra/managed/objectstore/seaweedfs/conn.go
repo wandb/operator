@@ -32,13 +32,13 @@ func buildS3ConnInfo(
 	accessKey, secretKey string, nsnBuilder *NsNameBuilder, tls bool,
 ) *s3ConnInfo {
 	namespace := nsnBuilder.Namespace()
-	serviceName := nsnBuilder.ServiceName()
+	serviceName := fmt.Sprintf("%s-s3", SeaweedName(nsnBuilder.SpecName()))
 	return &s3ConnInfo{
 		AccessKey: accessKey,
 		TLS:       tls,
 		SecretKey: secretKey,
 		Host:      fmt.Sprintf("%s.%s.svc.cluster.local", serviceName, namespace),
-		Port:      S3Port,
+		Port:      "80",
 		Bucket:    "bucket",
 	}
 }

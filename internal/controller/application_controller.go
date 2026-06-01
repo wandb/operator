@@ -254,10 +254,7 @@ func (r *ApplicationReconciler) reconcileDeployment(ctx context.Context, app *wa
 		logger.Info("Deployment not found", "Deployment", app.Name)
 	}
 
-	selectorLabels := map[string]string{
-		"app.kubernetes.io/name":     app.Name,
-		"app.kubernetes.io/instance": app.Name,
-	}
+	selectorLabels := getSelectorLabels(app)
 
 	deployment.Name = app.Name
 	deployment.Namespace = app.Namespace
@@ -311,6 +308,13 @@ func (r *ApplicationReconciler) reconcileDeployment(ctx context.Context, app *wa
 	return ctrl.Result{}, nil
 }
 
+func getSelectorLabels(app *wandbv2.Application) map[string]string {
+	return map[string]string{
+		"app.kubernetes.io/name":     app.Name,
+		"app.kubernetes.io/instance": app.Namespace,
+	}
+}
+
 // deleteDeployment deletes the Deployment associated with the Application
 func (r *ApplicationReconciler) deleteDeployment(ctx context.Context, app *wandbv2.Application) error {
 	logger := logx.GetSlog(ctx)
@@ -352,10 +356,7 @@ func (r *ApplicationReconciler) reconcileRollout(ctx context.Context, app *wandb
 		logger.Info("Rollout not found", "Rollout", app.Name)
 	}
 
-	selectorLabels := map[string]string{
-		"app.kubernetes.io/name":     app.Name,
-		"app.kubernetes.io/instance": app.Name,
-	}
+	selectorLabels := getSelectorLabels(app)
 
 	rollout.Name = app.Name
 	rollout.Namespace = app.Namespace
@@ -450,10 +451,7 @@ func (r *ApplicationReconciler) reconcileStatefulSet(ctx context.Context, app *w
 		logger.Info("StatefulSet not found", "StatefulSet", app.Name)
 	}
 
-	selectorLabels := map[string]string{
-		"app.kubernetes.io/name":     app.Name,
-		"app.kubernetes.io/instance": app.Name,
-	}
+	selectorLabels := getSelectorLabels(app)
 
 	statefulSet.Name = app.Name
 	statefulSet.Namespace = app.Namespace
@@ -756,10 +754,7 @@ func (r *ApplicationReconciler) reconcileService(ctx context.Context, app *wandb
 	desired.Spec = *app.Spec.ServiceTemplate.DeepCopy()
 
 	// Ensure selector targets the application's pods
-	selectorLabels := map[string]string{
-		"app.kubernetes.io/name":     app.Name,
-		"app.kubernetes.io/instance": app.Name,
-	}
+	selectorLabels := getSelectorLabels(app)
 	// Merge provided selector with our standard labels
 	desired.Spec.Selector = utils.MergeMapsStringString(desired.Spec.Selector, selectorLabels)
 	// Also add selector labels to the Service's metadata labels so they are queryable on the Service itself

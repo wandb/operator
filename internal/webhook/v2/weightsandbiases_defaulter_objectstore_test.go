@@ -65,10 +65,14 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ObjectStore", func() {
 		g.Expect(wandb.Spec.ObjectStore.ManagedObjectStore.Config.AccessKey).To(g.Equal("custom-admin"))
 	})
 
-	It("does not apply defaults when ManagedObjectStore is nil", func() {
+	It("does not apply defaults when ExternalObjectStore is present", func() {
 		wandb := &apiv2.WeightsAndBiases{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
-			Spec:       apiv2.WeightsAndBiasesSpec{},
+			Spec: apiv2.WeightsAndBiasesSpec{
+				ObjectStore: apiv2.ObjectStoreSpec{
+					ExternalObjectStore: &apiv2.ObjectStoreConnection{},
+				},
+			},
 		}
 
 		err := defaulter.Default(ctx, wandb)

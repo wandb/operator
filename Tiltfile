@@ -205,6 +205,7 @@ def operator_dockerfile():
         "FROM registry.access.redhat.com/ubi9/ubi",
         "",
         "ADD tilt_bin/manager /manager",
+        "ADD tilt_bin/crd-installer /crd-installer",
     ]
 
     if settings.get("manifestSource") == "local":
@@ -241,7 +242,7 @@ def operator_dockerfile():
 
 
 def binary():
-    return "CGO_ENABLED=0 GOOS=linux GO111MODULE=on go build -o tilt_bin/manager cmd/main.go"
+    return "CGO_ENABLED=0 GOOS=linux GO111MODULE=on go build -o tilt_bin/manager ./cmd/manager && CGO_ENABLED=0 GOOS=linux GO111MODULE=on go build -o tilt_bin/crd-installer ./cmd/crd-installer"
 
 
 def managed_endpoint_resource(name, anchor_object, deps, local_port, remote_port, link_name, pod_selector, labels, local_host="localhost"):
@@ -458,10 +459,17 @@ WANDB_CR = build_wandb_cr() if as_bool(settings.get("includeCR")) else ""
 WANDB_CR_CONTENT = read_yaml(WANDB_CR) if as_bool(settings.get("includeCR")) else {}
 WANDB_NAME = WANDB_CR_CONTENT.get("metadata", {}).get("name", settings.get("wandbName"))
 WANDB_NAMESPACE = WANDB_CR_CONTENT.get("metadata", {}).get("namespace", settings.get("wandbNamespace"))
-WANDB_HOSTNAME = WANDB_CR_CONTENT.get("spec", {}).get("wandb", {}).get("hostname", settings.get("wandbHostname"))
 OPERATOR_VALUES = build_operator_values(WANDB_NAMESPACE)
-LOCAL_NETWORKING_MODE = WANDB_CR_CONTENT.get("spec", {}).get("networking", {}).get("mode", settings.get("networkMode"))
 CREATE_WANDB_NAMESPACE = as_bool(settings.get("includeCR")) or settings.get("observabilityMode") != "off"
+
+if WANDB_CR_CONTENT.get("apiVersion") == "apps.wandb.com/v1":
+  WANDB_HOSTNAME = WANDB_CR_CONTENT.get("spec", {}).get("values", {}).get("global", {}).get("host", settings.get("wandbHostname"))
+  ingress_create = WANDB_CR_CONTENT.get("spec", {}).get("values", {}).get("ingress", {}).get("create", True)
+  ingress_install = WANDB_CR_CONTENT.get("spec", {}).get("values", {}).get("ingress", {}).get("install", True)
+  LOCAL_NETWORKING_MODE = "ingress" if ingress_install and ingress_create else settings.get("networkMode")
+else:
+  WANDB_HOSTNAME = WANDB_CR_CONTENT.get("spec", {}).get("wandb", {}).get("hostname", settings.get("wandbHostname"))
+  LOCAL_NETWORKING_MODE = WANDB_CR_CONTENT.get("spec", {}).get("networking", {}).get("mode", settings.get("networkMode"))
 
 endpoint_anchors = []
 if as_bool(settings.get("includeCR")):
@@ -643,8 +651,7 @@ operator_flags += [
 ]
 operator_deps_files = [
     OPERATOR_VALUES,
-    "deploy/operator/Chart.yaml",
-    "deploy/operator/values.yaml",
+    "deploy/operator/",
 ]
 
 if settings.get("openshiftSCC"):
@@ -793,9 +800,10 @@ manager_entrypoint = ["/manager", "--log-format=" + settings.get("logFormat")]
 if settings.get("observabilityMode") != "off":
     manager_entrypoint += ["--telemetry-enabled=true"]
 
-docker_only = ["./tilt_bin/manager"]
+docker_only = ["./tilt_bin/manager", "./tilt_bin/crd-installer"]
 live_update_steps = [
     sync("./tilt_bin/manager", "/manager"),
+    sync("./tilt_bin/crd-installer", "/crd-installer"),
 ]
 
 if settings.get("manifestSource") == "local":

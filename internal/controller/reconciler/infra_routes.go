@@ -50,7 +50,7 @@ func resolveInfraRoutes(ctx context.Context, c ctrlClient.Client, wandb *apiv2.W
 			if cfg.Ingress == nil {
 				continue
 			}
-			svcName := fmt.Sprintf("%s-filer", objectStoreSpec.Name)
+			svcName := fmt.Sprintf("%s-s3", objectStoreSpec.Name)
 			port, err := resolveInfraServicePort(ctx, c, types.NamespacedName{Name: svcName, Namespace: wandb.Spec.ObjectStore.ManagedObjectStore.Namespace}, cfg.Ingress, 8333)
 			if err != nil {
 				return nil, fmt.Errorf("bucket instance %q: %w", instanceName, err)
@@ -110,7 +110,8 @@ func resolveInfraServicePort(ctx context.Context, c ctrlClient.Client, serviceRe
 				return 0, err
 			}
 			for _, port := range service.Spec.Ports {
-				if port.Name == parsed.StrVal {
+				// TODO(dpanzella): we need a way to unbind this from the manifest, this works, but is maybe undesirable
+				if strings.Contains(port.Name, "s3-") {
 					return port.Port, nil
 				}
 			}

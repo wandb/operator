@@ -58,10 +58,14 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Redis", func() {
 		g.Expect(wandb.Spec.Redis.ManagedRedis.Sentinel.Enabled).To(g.BeTrue())
 	})
 
-	It("does not apply defaults when ManagedRedis is nil", func() {
+	It("does not apply defaults when External is present", func() {
 		wandb := &apiv2.WeightsAndBiases{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
-			Spec:       apiv2.WeightsAndBiasesSpec{},
+			Spec: apiv2.WeightsAndBiasesSpec{
+				Redis: apiv2.RedisSpec{
+					ExternalRedis: &apiv2.RedisConnection{},
+				},
+			},
 		}
 
 		err := defaulter.Default(ctx, wandb)

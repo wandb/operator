@@ -34,7 +34,7 @@ spec:
   values:
     global:
       size: dev
-      host: http://localhost:8080
+      host: http://wandb.localhost:8080
 
       mysql:
         host:
@@ -90,3 +90,6 @@ spec:
     api:
       image:
         tag: "0.81.0-rc.1779120597"
+
+    ingress:
+      class: nginx
