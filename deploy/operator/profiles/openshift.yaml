@@ -8,26 +8,11 @@ wandb-operator:
     seccompProfile:
       type: RuntimeDefault
 
-  # readOnlyRootFilesystem requires writable mounts where the operator
-  # writes manifests and reads serving certs.
-  volumes:
-    - name: server-manifest
-      emptyDir: {}
-    - name: serving-certs
-      secret:
-        secretName: '{{ .Release.Name }}-serving-cert'
-
   containers:
     operator:
       env:
         OPENSHIFT:
           value: "true"
-      volumeMounts:
-        - mountPath: /tmp/server-manifest
-          name: server-manifest
-        - mountPath: /tmp/wandb-operator/serving-certs
-          name: serving-certs
-          readOnly: true
 
 grafana-operator:
   isOpenShift: true
