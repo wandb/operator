@@ -54,10 +54,10 @@ spec:
         {{- end }}
       {{- end }}
       securityContext:
-        runAsNonRoot: {{ dig "wandb-operator" "securityContext" "runAsNonRoot" true .Values.AsMap }}
-        runAsUser: {{ dig "wandb-operator" "securityContext" "runAsUser" 1000 .Values.AsMap }}
+        runAsNonRoot: {{ dig "wandb-operator" "podSecurityContext" "runAsNonRoot" true .Values.AsMap }}
+        runAsUser: {{ dig "wandb-operator" "podSecurityContext" "runAsUser" 1000 .Values.AsMap }}
         seccompProfile:
-          type: {{ dig "wandb-operator" "securityContext" "seccompProfile" "type" "RuntimeDefault" .Values.AsMap }}
+          type: {{ dig "wandb-operator" "podSecurityContext" "seccompProfile" "type" "RuntimeDefault" .Values.AsMap }}
       containers:
         - name: crd-installer
           image: {{ $image | quote }}

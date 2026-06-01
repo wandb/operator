@@ -104,7 +104,7 @@ wandb-operator:
         protocol: TCP
         targetPort: 8443
   replicaCount: 1
-  securityContext:
+  podSecurityContext:
     runAsNonRoot: true
     runAsUser: 1000
     seccompProfile:

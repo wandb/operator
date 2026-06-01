@@ -1,5 +1,5 @@
 wandb-operator:
-  securityContext:
+  podSecurityContext:
     runAsNonRoot: true
     runAsUser: null
     runAsGroup: null
