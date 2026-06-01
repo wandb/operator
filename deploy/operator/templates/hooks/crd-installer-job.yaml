@@ -15,6 +15,14 @@
 */ -}}
 {{- if .Values.helmHooks.enabled }}
 {{- $image := printf "%s:%s" (index .Values "wandb-operator" "image" "repository") (index .Values "wandb-operator" "image" "tag") -}}
+{{- /*
+  Honor the same imagePullSecrets the main operator pod uses. wandb-base
+  concatenates the subchart's own list with .Values.global.imagePullSecrets,
+  so mirror both sources here.
+*/ -}}
+{{- $operatorPullSecrets := default list (index .Values "wandb-operator" "imagePullSecrets") -}}
+{{- $globalPullSecrets := default list (dig "global" "imagePullSecrets" (list) .Values.AsMap) -}}
+{{- $combinedPullSecrets := concat $operatorPullSecrets $globalPullSecrets -}}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -35,6 +43,20 @@ spec:
     spec:
       restartPolicy: OnFailure
       serviceAccountName: {{ include "wandb-operator.crdInstallerName" . }}
+      {{- if $combinedPullSecrets }}
+      imagePullSecrets:
+        {{- range $secret := $combinedPullSecrets }}
+        {{- if kindIs "string" $secret }}
+        - name: {{ tpl $secret $ }}
+        {{- else if and (kindIs "map" $secret) (hasKey $secret "name") }}
+        - name: {{ tpl $secret.name $ }}
+        {{- end }}
+        {{- end }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: crd-installer
           image: {{ $image | quote }}
@@ -46,6 +68,11 @@ spec:
             - --webhook-service-name={{ include "wandb-operator.webhookServiceName" . }}
             - --webhook-service-namespace={{ .Release.Namespace }}
             - --groups={{ include "wandb-operator.crdGroups" . }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           resources:
             requests:
               cpu: 100m

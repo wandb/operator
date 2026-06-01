@@ -238,7 +238,7 @@ func applyRedisDefaults(wandb *appsv2.WeightsAndBiases) {
 
 func applyKafkaDefaults(wandb *appsv2.WeightsAndBiases) {
 	if wandb.Spec.Kafka.ManagedKafka == nil {
-		if wandb.Spec.Kafka.ManagedKafka != nil {
+		if wandb.Spec.Kafka.ExternalKafka != nil {
 			return
 		}
 		wandb.Spec.Kafka.ManagedKafka = &appsv2.ManagedKafkaSpec{}

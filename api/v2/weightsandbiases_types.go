@@ -142,7 +142,7 @@ type IngressConfig struct {
 	IngressClassName *string `json:"ingressClassName,omitempty"`
 
 	// Name overrides the generated Ingress resource name. When empty the
-	// operator defaults to "<cr-name>-ingress".
+	// operator defaults to the CR name.
 	// +optional
 	Name string `json:"name,omitempty"`
 }

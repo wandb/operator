@@ -1278,6 +1278,61 @@ func TestConvertTo_RedisTLSAbsent(t *testing.T) {
 	require.Empty(t, dst.Spec.Redis.ExternalRedis.Tls.Key)
 }
 
+// TestConvertTo_RedisTLSBooleanStashedAsString locks in that a YAML boolean
+// tls toggle is stringified before being stashed. Without this the
+// reconciler's string-typed payload field fails to decode a JSON boolean.
+func TestConvertTo_RedisTLSBooleanStashedAsString(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		tls  interface{}
+		want string
+	}{
+		{"true", true, "true"},
+		{"false", false, "false"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dst := &appsv2.WeightsAndBiases{}
+			src := newV1(map[string]interface{}{
+				"global": map[string]interface{}{
+					"redis": map[string]interface{}{
+						"params": map[string]interface{}{"tls": tc.tls},
+					},
+				},
+			})
+			require.NoError(t, src.ConvertTo(dst))
+
+			raw := dst.Annotations[RedisPendingAnnotation]
+			// The stashed value must be a JSON string, not a JSON boolean.
+			require.Contains(t, raw, `"tls":"`+tc.want+`"`)
+
+			var decoded map[string]interface{}
+			require.NoError(t, json.Unmarshal([]byte(raw), &decoded))
+			require.Equal(t, tc.want, decoded["tls"])
+		})
+	}
+}
+
+// TestConvertTo_RedisNumericPortStashedAsString confirms numeric scalars are
+// also stringified at stash time.
+func TestConvertTo_RedisNumericPortStashedAsString(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{
+			"redis": map[string]interface{}{
+				"port": float64(6379),
+			},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+
+	raw := dst.Annotations[RedisPendingAnnotation]
+	require.Contains(t, raw, `"port":"6379"`)
+
+	var decoded map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(raw), &decoded))
+	require.Equal(t, "6379", decoded["port"])
+}
+
 func TestConvertTo_RedisAbsent(t *testing.T) {
 	dst := &appsv2.WeightsAndBiases{}
 	src := newV1(map[string]interface{}{

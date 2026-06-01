@@ -463,7 +463,7 @@ OPERATOR_VALUES = build_operator_values(WANDB_NAMESPACE)
 CREATE_WANDB_NAMESPACE = as_bool(settings.get("includeCR")) or settings.get("observabilityMode") != "off"
 
 if WANDB_CR_CONTENT.get("apiVersion") == "apps.wandb.com/v1":
-  WANDB_HOSTNAME = WANDB_CR_CONTENT.get("spec", {}).get("values", {}).get("global", {}).get("host", settings.get("host"))
+  WANDB_HOSTNAME = WANDB_CR_CONTENT.get("spec", {}).get("values", {}).get("global", {}).get("host", settings.get("wandbHostname"))
   ingress_create = WANDB_CR_CONTENT.get("spec", {}).get("values", {}).get("ingress", {}).get("create", True)
   ingress_install = WANDB_CR_CONTENT.get("spec", {}).get("values", {}).get("ingress", {}).get("install", True)
   LOCAL_NETWORKING_MODE = "ingress" if ingress_install and ingress_create else settings.get("networkMode")

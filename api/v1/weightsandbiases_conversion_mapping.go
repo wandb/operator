@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
@@ -385,35 +386,24 @@ func mapBucket(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) e
 		}
 	}
 
-	merged := map[string]interface{}{}
+	merged := map[string]string{}
 	for k, v := range defaultBucket {
-		if isNonEmptyValue(v) {
-			merged[k] = v
+		if s, ok := scalarToString(v); ok && s != "" {
+			merged[k] = s
 		}
 	}
 	for k, v := range bucket {
 		if k == "secret" {
 			continue
 		}
-		if isNonEmptyValue(v) {
-			merged[k] = v
+		if s, ok := scalarToString(v); ok && s != "" {
+			merged[k] = s
 		}
 	}
 	if len(merged) == 0 {
 		return nil
 	}
 	return writeAnnotation(dst, BucketPendingAnnotation, merged)
-}
-
-func isNonEmptyValue(v interface{}) bool {
-	switch x := v.(type) {
-	case nil:
-		return false
-	case string:
-		return x != ""
-	default:
-		return true
-	}
 }
 
 func writeAnnotation(dst *appsv2.WeightsAndBiases, key string, value interface{}) error {
@@ -455,7 +445,7 @@ func mapMySQL(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) er
 
 	conn := &appsv2.MysqlConnection{}
 
-	remaining := map[string]interface{}{}
+	remaining := map[string]string{}
 
 	for _, f := range mysqlFields {
 		raw, ok := mysqlMap[f.v1Key]
@@ -469,7 +459,7 @@ func mapMySQL(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) er
 		switch {
 		case ref != nil:
 			f.setRef(conn, *ref)
-		case literal != nil:
+		case literal != "":
 			remaining[f.v1Key] = literal
 		}
 	}
@@ -527,7 +517,7 @@ func mapRedis(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) er
 
 	conn := &appsv2.RedisConnection{}
 
-	remaining := map[string]interface{}{}
+	remaining := map[string]string{}
 
 	for _, f := range redisFields {
 		raw, ok := redisMap[f.v1Key]
@@ -541,7 +531,7 @@ func mapRedis(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) er
 		switch {
 		case ref != nil:
 			f.setRef(conn, *ref)
-		case literal != nil:
+		case literal != "":
 			remaining[f.v1Key] = literal
 		}
 	}
@@ -563,7 +553,7 @@ func mapRedis(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) er
 			conn.Tls = *ref
 			break
 		}
-		if literal != nil {
+		if literal != "" {
 			remaining["tls"] = literal
 			break
 		}
@@ -620,7 +610,7 @@ func mapOIDC(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) err
 	}
 
 	oidc := &dst.Spec.Wandb.OIDC
-	remaining := map[string]interface{}{}
+	remaining := map[string]string{}
 
 	for _, f := range oidcFields {
 		raw, ok := oidcMap[f.v1Key]
@@ -634,7 +624,7 @@ func mapOIDC(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) err
 		switch {
 		case ref != nil:
 			f.setRef(oidc, *ref)
-		case literal != nil:
+		case literal != "":
 			remaining[f.v1Key] = literal
 		}
 	}
@@ -664,30 +654,50 @@ func mapOIDC(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) err
 }
 
 // classifyValueFromOrLiteral returns a SecretKeySelector when raw is
-// {valueFrom: {secretKeyRef: {name, key}}}, otherwise the non-empty scalar
-// as a literal, otherwise (nil, nil). Malformed ref maps error out.
-func classifyValueFromOrLiteral(raw interface{}) (*corev1.SecretKeySelector, interface{}, error) {
-	switch v := raw.(type) {
-	case nil:
-		return nil, nil, nil
-	case string:
-		if v == "" {
-			return nil, nil, nil
-		}
-		return nil, v, nil
-	case map[string]interface{}:
-		name, _, _ := unstructured.NestedString(v, "valueFrom", "secretKeyRef", "name")
-		key, _, _ := unstructured.NestedString(v, "valueFrom", "secretKeyRef", "key")
+// {valueFrom: {secretKeyRef: {name, key}}}, otherwise the scalar stringified
+// as a literal, otherwise ("", no literal). Malformed ref maps error out.
+// The literal is always a string so everything stashed in the pending
+// annotations (which the reconciler materializes into Secret data) is a
+// string regardless of the v1 value's JSON type.
+func classifyValueFromOrLiteral(raw interface{}) (*corev1.SecretKeySelector, string, error) {
+	if m, ok := raw.(map[string]interface{}); ok {
+		name, _, _ := unstructured.NestedString(m, "valueFrom", "secretKeyRef", "name")
+		key, _, _ := unstructured.NestedString(m, "valueFrom", "secretKeyRef", "key")
 		if name == "" || key == "" {
-			return nil, nil, fmt.Errorf("map value must be {valueFrom: {secretKeyRef: {name, key}}}")
+			return nil, "", fmt.Errorf("map value must be {valueFrom: {secretKeyRef: {name, key}}}")
 		}
 		return &corev1.SecretKeySelector{
 			LocalObjectReference: corev1.LocalObjectReference{Name: name},
 			Key:                  key,
-		}, nil, nil
+		}, "", nil
+	}
+	s, _ := scalarToString(raw)
+	return nil, s, nil
+}
+
+// scalarToString renders a JSON scalar (string, bool, number) as a string.
+// Returns ("", false) for nil and non-scalar values (maps, slices).
+func scalarToString(v interface{}) (string, bool) {
+	switch t := v.(type) {
+	case nil:
+		return "", false
+	case string:
+		return t, true
+	case bool:
+		return strconv.FormatBool(t), true
+	case json.Number:
+		return t.String(), true
+	case float64:
+		if t == float64(int64(t)) {
+			return strconv.FormatInt(int64(t), 10), true
+		}
+		return strconv.FormatFloat(t, 'f', -1, 64), true
+	case int64:
+		return strconv.FormatInt(t, 10), true
+	case int:
+		return strconv.Itoa(t), true
 	default:
-		// numbers, bools, etc. — reconciler stringifies as needed.
-		return nil, v, nil
+		return "", false
 	}
 }
 
