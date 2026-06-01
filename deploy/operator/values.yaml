@@ -62,6 +62,7 @@ wandb-operator:
               key: TELEMETRY_OTEL_RESOURCE_ATTRIBUTES
       securityContext:
         allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
         capabilities:
           drop:
             - "ALL"
@@ -85,6 +86,8 @@ wandb-operator:
           cpu: 10m
           memory: 64Mi
       volumeMounts:
+        - mountPath: /tmp/server-manifest
+          name: server-manifest
         - mountPath: /tmp/wandb-operator/serving-certs
           name: serving-certs
           readOnly: true
@@ -101,11 +104,14 @@ wandb-operator:
         protocol: TCP
         targetPort: 8443
   replicaCount: 1
-  securityContext:
-    runAsNonRoot: false
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
     seccompProfile:
       type: RuntimeDefault
   volumes:
+    - name: server-manifest
+      emptyDir: { }
     - name: serving-certs
       secret:
         secretName: '{{ .Release.Name }}-serving-cert'

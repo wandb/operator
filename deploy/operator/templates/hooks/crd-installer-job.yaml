@@ -54,9 +54,10 @@ spec:
         {{- end }}
       {{- end }}
       securityContext:
-        runAsNonRoot: true
+        runAsNonRoot: {{ dig "wandb-operator" "podSecurityContext" "runAsNonRoot" true .Values.AsMap }}
+        runAsUser: {{ dig "wandb-operator" "podSecurityContext" "runAsUser" 1000 .Values.AsMap }}
         seccompProfile:
-          type: RuntimeDefault
+          type: {{ dig "wandb-operator" "podSecurityContext" "seccompProfile" "type" "RuntimeDefault" .Values.AsMap }}
       containers:
         - name: crd-installer
           image: {{ $image | quote }}
@@ -70,6 +71,7 @@ spec:
             - --groups={{ include "wandb-operator.crdGroups" . }}
           securityContext:
             allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
             capabilities:
               drop:
                 - ALL
