@@ -129,10 +129,6 @@ wandb-operator:
 moco:
   enabled: true
 
-cert-manager:
-  enabled: false
-  installCRDs: true
-
 redis-operator:
   enabled: true
 

@@ -5,9 +5,6 @@ dependencies:
 - name: moco
   repository: https://cybozu-go.github.io/moco/
   version: 0.24.0
-- name: cert-manager
-  repository: https://charts.jetstack.io
-  version: v1.20.2
 - name: redis-operator
   repository: https://ot-container-kit.github.io/helm-charts
   version: 0.22.2
@@ -32,5 +29,5 @@ dependencies:
 - name: telemetry
   repository: file://../telemetry
   version: 0.1.0
-digest: sha256:4031a6ef851da28f0eabcbabb4417f073b8878cc27d277506dfdc670cac77c62
-generated: "2026-06-02T09:49:48.817908-05:00"
+digest: sha256:7766f7be7392e98f5557807fb711656d977ef7bc43a80f442edeed76c5bb385c
+generated: "2026-06-02T14:43:32.806879-07:00"
