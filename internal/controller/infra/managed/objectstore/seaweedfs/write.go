@@ -10,6 +10,7 @@ import (
 	"github.com/wandb/operator/internal/logx"
 	seaweedv1 "github.com/wandb/operator/pkg/vendored/seaweedfs-operator/seaweed.seaweedfs.com/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -30,6 +31,7 @@ func WriteState(
 	desiredCr *seaweedv1.Seaweed,
 	envConfig SeaweedS3Config,
 	wandbOwner client.Object,
+	policy *networkingv1.NetworkPolicy,
 ) ([]metav1.Condition, *apiv2.ObjectStoreConnection) {
 	ctx, _ = logx.WithSlog(ctx, logx.ObjectStore)
 	var actual = &seaweedv1.Seaweed{}
@@ -58,6 +60,33 @@ func WriteState(
 	}
 
 	result := make([]metav1.Condition, 0)
+
+	// Upsert the Filer NetworkPolicy that restricts the unauthenticated HTTP
+	// port to sibling Seaweed components. Must exist when (or before) the
+	// Filer pod comes up, so do this before the main CR upsert.
+	if policy != nil {
+		actualPolicy := &networkingv1.NetworkPolicy{}
+		policyNsName := types.NamespacedName{Name: policy.Name, Namespace: policy.Namespace}
+		policyFound, policyErr := common.GetResource(ctx, kubeClient, policyNsName, "NetworkPolicy", actualPolicy)
+		if policyErr != nil {
+			result = append(result, metav1.Condition{
+				Type:   common.ReconciledType,
+				Status: metav1.ConditionFalse,
+				Reason: common.ApiErrorReason,
+			})
+		} else {
+			if !policyFound {
+				actualPolicy = nil
+			}
+			if _, policyErr := common.CrudResource(ctx, kubeClient, policy, actualPolicy); policyErr != nil {
+				result = append(result, metav1.Condition{
+					Type:   common.ReconciledType,
+					Status: metav1.ConditionFalse,
+					Reason: common.ApiErrorReason,
+				})
+			}
+		}
+	}
 
 	action, err := common.CrudResource(ctx, kubeClient, desiredCr, actual)
 	if err != nil {

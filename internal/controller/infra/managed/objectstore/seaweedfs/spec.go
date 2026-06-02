@@ -82,6 +82,10 @@ func ToObjectStoreVendorSpec(
 			Image: SeaweedImage,
 			TLS: &seaweedv1.TLSSpec{
 				Enabled: infraSpec.SeaweedObjectStoreSpec.TlsEnabled,
+				IssuerRef: &seaweedv1.TLSIssuerRef{
+					Name:  "wandb-operator-seaweedfs-issuer",
+					Kind:  "Issuer",
+				},
 			},
 			Master: &seaweedv1.MasterSpec{
 				Replicas:           1,

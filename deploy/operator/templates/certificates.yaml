@@ -21,4 +21,12 @@ metadata:
   namespace: {{ .Release.Namespace }}
 spec:
   selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ .Release.Name }}-seaweedfs-issuer
+  namespace: {{ .Release.Namespace }}
+spec:
+  selfSigned: {}
 {{- end }}

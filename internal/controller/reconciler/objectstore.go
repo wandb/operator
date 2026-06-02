@@ -150,7 +150,19 @@ func managedObjectStoreWriteState(
 		}, nil
 	}
 
-	conditions, connection := seaweedfs.WriteState(ctx, client, specNamespacedName, desiredCr, desiredConfig, wandb)
+	desiredFilerPolicy, err := seaweedfs.ToFilerNetworkPolicy(wandb, client.Scheme())
+	if err != nil {
+		log.Error(err, "failed to build Filer NetworkPolicy")
+		return []metav1.Condition{
+			{
+				Type:   common.ReconciledType,
+				Status: metav1.ConditionFalse,
+				Reason: common.ControllerErrorReason,
+			},
+		}, nil
+	}
+
+	conditions, connection := seaweedfs.WriteState(ctx, client, specNamespacedName, desiredCr, desiredConfig, wandb, desiredFilerPolicy)
 	return conditions, connection
 }
 
