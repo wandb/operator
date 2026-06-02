@@ -34,19 +34,19 @@ func TestBuildCRDefaultGateway(t *testing.T) {
 	if cr.Spec.Wandb.InternalServiceAuth.Enabled == nil || *cr.Spec.Wandb.InternalServiceAuth.Enabled {
 		t.Fatalf("internal service auth should be explicitly disabled")
 	}
-	if cr.Spec.MySQL.ManagedMysql == nil || cr.Spec.MySQL.ManagedMysql.Telemetry.Enabled {
+	if cr.Spec.MySQL[v2.DefaultInstanceName].ManagedMysql == nil || cr.Spec.MySQL[v2.DefaultInstanceName].ManagedMysql.Telemetry.Enabled {
 		t.Fatalf("mysql telemetry should be disabled by default")
 	}
-	if cr.Spec.Redis.ManagedRedis == nil || cr.Spec.Redis.ManagedRedis.Telemetry.Enabled {
+	if cr.Spec.Redis[v2.DefaultInstanceName].ManagedRedis == nil || cr.Spec.Redis[v2.DefaultInstanceName].ManagedRedis.Telemetry.Enabled {
 		t.Fatalf("redis telemetry should be disabled by default")
 	}
 	if cr.Spec.Kafka.ManagedKafka == nil || cr.Spec.Kafka.ManagedKafka.Telemetry.Enabled {
 		t.Fatalf("kafka telemetry should be disabled by default")
 	}
-	if cr.Spec.ObjectStore.ManagedObjectStore == nil || cr.Spec.ObjectStore.ManagedObjectStore.Telemetry.Enabled {
+	if cr.Spec.ObjectStore[v2.DefaultInstanceName].ManagedObjectStore == nil || cr.Spec.ObjectStore[v2.DefaultInstanceName].ManagedObjectStore.Telemetry.Enabled {
 		t.Fatalf("object store telemetry should be disabled by default")
 	}
-	if cr.Spec.ClickHouse.ManagedClickHouse == nil || cr.Spec.ClickHouse.ManagedClickHouse.Telemetry.Enabled {
+	if cr.Spec.ClickHouse[v2.DefaultInstanceName].ManagedClickHouse == nil || cr.Spec.ClickHouse[v2.DefaultInstanceName].ManagedClickHouse.Telemetry.Enabled {
 		t.Fatalf("clickhouse telemetry should be disabled by default")
 	}
 	if cr.Spec.Networking.Mode != v2.NetworkingModeGatewayAPI {
@@ -114,11 +114,11 @@ func TestBuildCRFullObservabilityEnablesManagedTelemetry(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if !cr.Spec.MySQL.ManagedMysql.Telemetry.Enabled ||
-		!cr.Spec.Redis.ManagedRedis.Telemetry.Enabled ||
+	if !cr.Spec.MySQL[v2.DefaultInstanceName].ManagedMysql.Telemetry.Enabled ||
+		!cr.Spec.Redis[v2.DefaultInstanceName].ManagedRedis.Telemetry.Enabled ||
 		!cr.Spec.Kafka.ManagedKafka.Telemetry.Enabled ||
-		!cr.Spec.ObjectStore.ManagedObjectStore.Telemetry.Enabled ||
-		!cr.Spec.ClickHouse.ManagedClickHouse.Telemetry.Enabled {
+		!cr.Spec.ObjectStore[v2.DefaultInstanceName].ManagedObjectStore.Telemetry.Enabled ||
+		!cr.Spec.ClickHouse[v2.DefaultInstanceName].ManagedClickHouse.Telemetry.Enabled {
 		t.Fatalf("managed telemetry was not enabled")
 	}
 }

@@ -27,29 +27,38 @@ func mysqlWriteState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
-) []metav1.Condition {
-	if wandb.Spec.MySQL.ManagedMysql != nil {
-		return managedMysqlWriteState(ctx, client, wandb)
+) map[string][]metav1.Condition {
+	out := map[string][]metav1.Condition{}
+	for key, spec := range wandb.Spec.MySQL {
+		switch {
+		case spec.ManagedMysql != nil:
+			out[key] = managedMysqlWriteState(ctx, client, wandb, spec.ManagedMysql)
+		case spec.ExternalMysql != nil:
+			out[key] = externalmysql.WriteState(ctx, client, wandb, key, spec.ExternalMysql)
+		}
 	}
-	if wandb.Spec.MySQL.ExternalMysql != nil {
-		return externalMysqlWriteState(ctx, client, wandb)
-	}
-	return nil
+	return out
 }
 
 func mysqlReadState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
-	newConditions []metav1.Condition,
-) ([]metav1.Condition, *apiv2.MysqlConnection) {
-	if wandb.Spec.MySQL.ManagedMysql != nil {
-		return managedMysqlReadState(ctx, client, wandb, newConditions)
+	conditions map[string][]metav1.Condition,
+) (map[string][]metav1.Condition, map[string]*apiv2.MysqlConnection) {
+	outConds := map[string][]metav1.Condition{}
+	outConns := map[string]*apiv2.MysqlConnection{}
+	for key, spec := range wandb.Spec.MySQL {
+		switch {
+		case spec.ManagedMysql != nil:
+			outConds[key], outConns[key] = managedMysqlReadState(ctx, client, wandb, spec.ManagedMysql, conditions[key])
+		case spec.ExternalMysql != nil:
+			outConds[key], outConns[key] = externalmysql.ReadState(ctx, client, wandb, key, conditions[key])
+		default:
+			outConds[key] = conditions[key]
+		}
 	}
-	if wandb.Spec.MySQL.ExternalMysql != nil {
-		return externalMysqlReadState(ctx, client, wandb, newConditions)
-	}
-	return newConditions, nil
+	return outConds, outConns
 }
 
 func mysqlInferStatus(
@@ -57,30 +66,64 @@ func mysqlInferStatus(
 	client client.Client,
 	recorder record.EventRecorder,
 	wandb *apiv2.WeightsAndBiases,
-	newConditions []metav1.Condition,
-	newInfraConn *apiv2.MysqlConnection,
+	conditions map[string][]metav1.Condition,
+	infraConns map[string]*apiv2.MysqlConnection,
 ) (ctrl.Result, error) {
-	if wandb.Spec.MySQL.ManagedMysql != nil {
-		return managedMysqlInferStatus(ctx, client, recorder, wandb, newConditions, newInfraConn)
+	if wandb.Status.MySQLStatus == nil {
+		wandb.Status.MySQLStatus = map[string]apiv2.MysqlInfraStatus{}
 	}
-	if wandb.Spec.MySQL.ExternalMysql != nil {
-		return externalMysqlInferStatus(ctx, client, wandb, newConditions, newInfraConn)
+	var results []ctrl.Result
+	var firstErr error
+	for key, spec := range wandb.Spec.MySQL {
+		var res ctrl.Result
+		var err error
+		switch {
+		case spec.ManagedMysql != nil:
+			res, err = managedMysqlInferStatus(ctx, client, recorder, wandb, key, conditions[key], infraConns[key])
+		case spec.ExternalMysql != nil:
+			res, err = externalMysqlInferStatus(ctx, client, wandb, key, conditions[key], infraConns[key])
+		}
+		results = append(results, res)
+		if err != nil && firstErr == nil {
+			firstErr = err
+		}
 	}
-	return ctrl.Result{}, nil
+	return consolidateResults(results), firstErr
+}
+
+// runMysqlRetentionFinalizer applies the configured retention policy for a
+// single MySQL instance during deletion.
+func runMysqlRetentionFinalizer(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, key string, spec apiv2.MySQLSpec) error {
+	switch wandb.GetRetentionPolicy(mysqlInstanceInfraSpec(spec)).OnDelete {
+	case apiv2.PurgeOnDelete:
+		return mysqlPurgeFinalizer(ctx, c, wandb, key, spec)
+	case apiv2.DetachOnDelete:
+		return mysqlDetachFinalizer(ctx, c, wandb, key, spec)
+	}
+	return nil
+}
+
+func mysqlInstanceInfraSpec(spec apiv2.MySQLSpec) apiv2.ManagedInfraSpec {
+	if spec.ManagedMysql != nil {
+		return spec.ManagedMysql.ManagedInfraSpec
+	}
+	return apiv2.ManagedInfraSpec{}
 }
 
 func mysqlPurgeFinalizer(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
+	key string,
+	spec apiv2.MySQLSpec,
 ) error {
-	if spec := wandb.Spec.MySQL.ManagedMysql; spec != nil {
-		specNamespacedName := managedMysqlSpecNamespacedName(spec)
-		onDeleteRule := moco.ToMysqlOnDeleteRule(wandb, wandb.GetRetentionPolicy(spec.ManagedInfraSpec))
+	if managed := spec.ManagedMysql; managed != nil {
+		specNamespacedName := managedMysqlSpecNamespacedName(managed)
+		onDeleteRule := moco.ToMysqlOnDeleteRule(wandb, wandb.GetRetentionPolicy(managed.ManagedInfraSpec))
 		return moco.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule)
 	}
-	if wandb.Spec.MySQL.ExternalMysql != nil {
-		return externalmysql.DeleteConnectionSecret(ctx, client, wandb)
+	if spec.ExternalMysql != nil {
+		return externalmysql.DeleteConnectionSecret(ctx, client, wandb, key)
 	}
 	return nil
 }
@@ -89,12 +132,14 @@ func mysqlDetachFinalizer(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
+	_ string,
+	spec apiv2.MySQLSpec,
 ) error {
-	spec := wandb.Spec.MySQL.ManagedMysql
-	if spec == nil {
+	managed := spec.ManagedMysql
+	if managed == nil {
 		return nil
 	}
-	specNamespacedName := managedMysqlSpecNamespacedName(spec)
+	specNamespacedName := managedMysqlSpecNamespacedName(managed)
 	return moco.DetachFinalizer(ctx, client, specNamespacedName, wandb)
 }
 
@@ -104,9 +149,8 @@ func managedMysqlWriteState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
+	spec *apiv2.ManagedMysqlSpec,
 ) []metav1.Condition {
-	spec := wandb.Spec.MySQL.ManagedMysql
-
 	var specNamespacedName = managedMysqlSpecNamespacedName(spec)
 	logger := ctrl.LoggerFrom(ctx)
 
@@ -192,9 +236,9 @@ func managedMysqlReadState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
+	spec *apiv2.ManagedMysqlSpec,
 	newConditions []metav1.Condition,
 ) ([]metav1.Condition, *apiv2.MysqlConnection) {
-	spec := wandb.Spec.MySQL.ManagedMysql
 	specNamespacedName := managedMysqlSpecNamespacedName(spec)
 
 	readConditions, newInfraConn := moco.ReadState(ctx, client, specNamespacedName, wandb, moco.ToMysqlOnDeleteRule(wandb, wandb.GetRetentionPolicy(spec.ManagedInfraSpec)))
@@ -207,12 +251,14 @@ func managedMysqlInferStatus(
 	client client.Client,
 	recorder record.EventRecorder,
 	wandb *apiv2.WeightsAndBiases,
+	key string,
 	newConditions []metav1.Condition,
 	newInfraConn *apiv2.MysqlConnection,
 ) (ctrl.Result, error) {
 	enabled := true
-	oldConditions := wandb.Status.MySQLStatus.Conditions
-	oldInfraConn := wandb.Status.MySQLStatus.Connection
+	oldStatus := wandb.Status.MySQLStatus[key]
+	oldConditions := oldStatus.Conditions
+	oldInfraConn := oldStatus.Connection
 
 	updatedStatus, events, ctrlResult := moco.ComputeStatus(
 		ctx,
@@ -226,7 +272,7 @@ func managedMysqlInferStatus(
 	for _, e := range events {
 		recorder.Event(wandb, e.Type, e.Reason, e.Message)
 	}
-	wandb.Status.MySQLStatus = updatedStatus
+	wandb.Status.MySQLStatus[key] = updatedStatus
 	err := client.Status().Update(ctx, wandb)
 
 	return ctrlResult, err
@@ -234,20 +280,13 @@ func managedMysqlInferStatus(
 
 // external
 
-func externalMysqlWriteState(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases) []metav1.Condition {
-	return externalmysql.WriteState(ctx, c, wandb)
-}
-
-func externalMysqlReadState(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, newConditions []metav1.Condition) ([]metav1.Condition, *apiv2.MysqlConnection) {
-	return externalmysql.ReadState(ctx, c, wandb, newConditions)
-}
-
-func externalMysqlInferStatus(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, newConditions []metav1.Condition, newInfraConn *apiv2.MysqlConnection) (ctrl.Result, error) {
-	oldInfraConn := wandb.Status.MySQLStatus.Connection
-	state, ready, updatedConditions := external.InferExternalStatus(wandb.Status.MySQLStatus.Conditions, newConditions, wandb.Generation, newInfraConn != nil)
+func externalMysqlInferStatus(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, key string, newConditions []metav1.Condition, newInfraConn *apiv2.MysqlConnection) (ctrl.Result, error) {
+	oldStatus := wandb.Status.MySQLStatus[key]
+	oldInfraConn := oldStatus.Connection
+	state, ready, updatedConditions := external.InferExternalStatus(oldStatus.Conditions, newConditions, wandb.Generation, newInfraConn != nil)
 	conn := utils.Coalesce(newInfraConn, &oldInfraConn)
 
-	wandb.Status.MySQLStatus = apiv2.MysqlInfraStatus{
+	wandb.Status.MySQLStatus[key] = apiv2.MysqlInfraStatus{
 		WBInfraStatus: apiv2.WBInfraStatus{Ready: ready, State: state, Conditions: updatedConditions},
 		Connection:    *conn,
 	}
@@ -263,18 +302,48 @@ func managedMysqlSpecNamespacedName(spec *apiv2.ManagedMysqlSpec) types.Namespac
 	}
 }
 
+// allMysqlInitSucceeded reports whether every managed MySQL instance has a
+// successful database-initialization job.
+func allMysqlInitSucceeded(wandb *apiv2.WeightsAndBiases) bool {
+	for key, spec := range wandb.Spec.MySQL {
+		if spec.ManagedMysql == nil {
+			continue
+		}
+		if !wandb.Status.Wandb.MySQLInit[key].Succeeded {
+			return false
+		}
+	}
+	return true
+}
+
 func runMysqlInitJob(ctx context.Context, client client.Client, wandb *apiv2.WeightsAndBiases, manifest manifest.Manifest) (ctrl.Result, error) {
-	if wandb.Spec.MySQL.ManagedMysql == nil {
+	if wandb.Status.Wandb.MySQLInit == nil {
+		wandb.Status.Wandb.MySQLInit = map[string]apiv2.MigrationJobStatus{}
+	}
+
+	var results []ctrl.Result
+	for key, spec := range wandb.Spec.MySQL {
+		if spec.ManagedMysql == nil {
+			continue
+		}
+		res, err := runMysqlInitJobInstance(ctx, client, wandb, key, spec.ManagedMysql)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		results = append(results, res)
+	}
+	return consolidateResults(results), nil
+}
+
+func runMysqlInitJobInstance(ctx context.Context, client client.Client, wandb *apiv2.WeightsAndBiases, key string, spec *apiv2.ManagedMysqlSpec) (ctrl.Result, error) {
+	if wandb.Status.Wandb.MySQLInit[key].Succeeded {
 		return ctrl.Result{}, nil
 	}
 
-	if wandb.Status.Wandb.MySQLInit.Succeeded {
-		return ctrl.Result{}, nil
-	}
+	logger := ctrl.LoggerFrom(ctx).WithName("mysqlInit").WithValues("instance", key)
 
-	logger := ctrl.LoggerFrom(ctx).WithName("mysqlInit")
-
-	jobName := fmt.Sprintf("%s-moco-init", wandb.Name)
+	specNamespacedName := managedMysqlSpecNamespacedName(spec)
+	jobName := fmt.Sprintf("%s-moco-init", specNamespacedName.Name)
 	logger.Info("Checking for MySQL init job", "job", jobName)
 	job := &v1.Job{}
 	err := client.Get(ctx, types.NamespacedName{Name: jobName, Namespace: wandb.Namespace}, job)
@@ -286,7 +355,6 @@ func runMysqlInitJob(ctx context.Context, client client.Client, wandb *apiv2.Wei
 	if errors.IsNotFound(err) {
 		logger.Info("Creating MySQL init job")
 
-		specNamespacedName := managedMysqlSpecNamespacedName(wandb.Spec.MySQL.ManagedMysql)
 		connSecretName := fmt.Sprintf("%s-connection", specNamespacedName.Name)
 
 		// moco-writable has DDL/DML privileges on all non-system databases,
@@ -348,8 +416,7 @@ func runMysqlInitJob(ctx context.Context, client client.Client, wandb *apiv2.Wei
 			return ctrl.Result{}, err
 		}
 
-		wandb.Status.Wandb.MySQLInit.Name = jobName
-		wandb.Status.Wandb.MySQLInit.Succeeded = false
+		wandb.Status.Wandb.MySQLInit[key] = apiv2.MigrationJobStatus{Name: jobName, Succeeded: false}
 		if err := client.Status().Update(ctx, wandb); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -359,7 +426,7 @@ func runMysqlInitJob(ctx context.Context, client client.Client, wandb *apiv2.Wei
 
 	if job.Status.Succeeded > 0 {
 		logger.Info("MySQL init job succeeded")
-		wandb.Status.Wandb.MySQLInit.Succeeded = true
+		wandb.Status.Wandb.MySQLInit[key] = apiv2.MigrationJobStatus{Name: jobName, Succeeded: true}
 		if err := client.Status().Update(ctx, wandb); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -368,7 +435,7 @@ func runMysqlInitJob(ctx context.Context, client client.Client, wandb *apiv2.Wei
 
 	if job.Status.Failed > 0 {
 		logger.Info("MySQL init job failed")
-		wandb.Status.Wandb.MySQLInit.Failed = true
+		wandb.Status.Wandb.MySQLInit[key] = apiv2.MigrationJobStatus{Name: jobName, Failed: true}
 		if err := client.Status().Update(ctx, wandb); err != nil {
 			return ctrl.Result{}, err
 		}

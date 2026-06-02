@@ -99,7 +99,7 @@ func migrateLegacyMySQL(
 	}
 
 	secretName := fmt.Sprintf("%s-mysql-converted", wandb.Name)
-	conn := wandb.Spec.MySQL.ExternalMysql
+	conn := wandb.Spec.MySQL[apiv2.DefaultInstanceName].ExternalMysql
 	if conn == nil {
 		conn = &apiv2.MysqlConnection{}
 	}
@@ -124,7 +124,7 @@ func migrateLegacyMySQL(
 		return false, err
 	}
 
-	wandb.Spec.MySQL.ExternalMysql = conn
+	setExternalInstance(&wandb.Spec.MySQL, func(s *apiv2.MySQLSpec) { s.ExternalMysql = conn })
 	delete(wandb.Annotations, apiv1.MySQLPendingAnnotation)
 	return true, nil
 }
@@ -159,7 +159,7 @@ func migrateLegacyRedis(
 	}
 
 	secretName := fmt.Sprintf("%s-redis-converted", wandb.Name)
-	conn := wandb.Spec.Redis.ExternalRedis
+	conn := wandb.Spec.Redis[apiv2.DefaultInstanceName].ExternalRedis
 	if conn == nil {
 		conn = &apiv2.RedisConnection{}
 	}
@@ -183,7 +183,7 @@ func migrateLegacyRedis(
 		return false, err
 	}
 
-	wandb.Spec.Redis.ExternalRedis = conn
+	setExternalInstance(&wandb.Spec.Redis, func(s *apiv2.RedisSpec) { s.ExternalRedis = conn })
 	delete(wandb.Annotations, apiv1.RedisPendingAnnotation)
 	return true, nil
 }
@@ -215,7 +215,7 @@ func migrateLegacyBucket(
 	}
 
 	secretName := fmt.Sprintf("%s-bucket-converted", wandb.Name)
-	conn := wandb.Spec.ObjectStore.ExternalObjectStore
+	conn := wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ExternalObjectStore
 	if conn == nil {
 		conn = &apiv2.ObjectStoreConnection{}
 	}
@@ -242,9 +242,20 @@ func migrateLegacyBucket(
 		return false, err
 	}
 
-	wandb.Spec.ObjectStore.ExternalObjectStore = conn
+	setExternalInstance(&wandb.Spec.ObjectStore, func(s *apiv2.ObjectStoreSpec) { s.ExternalObjectStore = conn })
 	delete(wandb.Annotations, apiv1.BucketPendingAnnotation)
 	return true, nil
+}
+
+// setExternalInstance applies fn to the default instance of an infra map,
+// creating the map and/or default entry when absent.
+func setExternalInstance[T any](m *map[string]T, fn func(*T)) {
+	if *m == nil {
+		*m = map[string]T{}
+	}
+	instance := (*m)[apiv2.DefaultInstanceName]
+	fn(&instance)
+	(*m)[apiv2.DefaultInstanceName] = instance
 }
 
 // parseBucketName splits v1's bucket.name. A "/" indicates the embedded

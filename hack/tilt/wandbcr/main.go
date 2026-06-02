@@ -234,11 +234,11 @@ func baseCR(crFile string) (*v2.WeightsAndBiases, error) {
 				Features:            map[string]bool{"proxy": true},
 				InternalServiceAuth: v2.InternalServiceAuth{Enabled: boolPtr(false)},
 			},
-			MySQL:       v2.MySQLSpec{ManagedMysql: &v2.ManagedMysqlSpec{}},
-			Redis:       v2.RedisSpec{ManagedRedis: &v2.ManagedRedisSpec{}},
+			MySQL:       map[string]v2.MySQLSpec{v2.DefaultInstanceName: {ManagedMysql: &v2.ManagedMysqlSpec{}}},
+			Redis:       map[string]v2.RedisSpec{v2.DefaultInstanceName: {ManagedRedis: &v2.ManagedRedisSpec{}}},
 			Kafka:       v2.KafkaSpec{ManagedKafka: &v2.ManagedKafkaSpec{}},
-			ObjectStore: v2.ObjectStoreSpec{ManagedObjectStore: &v2.ManagedObjectStoreSpec{}},
-			ClickHouse:  v2.ClickHouseSpec{ManagedClickHouse: &v2.ManagedClickHouseSpec{}},
+			ObjectStore: map[string]v2.ObjectStoreSpec{v2.DefaultInstanceName: {ManagedObjectStore: &v2.ManagedObjectStoreSpec{}}},
+			ClickHouse:  map[string]v2.ClickHouseSpec{v2.DefaultInstanceName: {ManagedClickHouse: &v2.ManagedClickHouseSpec{}}},
 		},
 	}, nil
 }
@@ -363,20 +363,28 @@ func patchTelemetry(cr *v2.WeightsAndBiases, observabilityMode string) error {
 		return fmt.Errorf("observability-mode must be one of: off, full, forward")
 	}
 
-	if cr.Spec.MySQL.ManagedMysql != nil {
-		cr.Spec.MySQL.ManagedMysql.Telemetry.Enabled = enabled
+	for _, spec := range cr.Spec.MySQL {
+		if spec.ManagedMysql != nil {
+			spec.ManagedMysql.Telemetry.Enabled = enabled
+		}
 	}
-	if cr.Spec.Redis.ManagedRedis != nil {
-		cr.Spec.Redis.ManagedRedis.Telemetry.Enabled = enabled
+	for _, spec := range cr.Spec.Redis {
+		if spec.ManagedRedis != nil {
+			spec.ManagedRedis.Telemetry.Enabled = enabled
+		}
 	}
 	if cr.Spec.Kafka.ManagedKafka != nil {
 		cr.Spec.Kafka.ManagedKafka.Telemetry.Enabled = enabled
 	}
-	if cr.Spec.ObjectStore.ManagedObjectStore != nil {
-		cr.Spec.ObjectStore.ManagedObjectStore.Telemetry.Enabled = enabled
+	for _, spec := range cr.Spec.ObjectStore {
+		if spec.ManagedObjectStore != nil {
+			spec.ManagedObjectStore.Telemetry.Enabled = enabled
+		}
 	}
-	if cr.Spec.ClickHouse.ManagedClickHouse != nil {
-		cr.Spec.ClickHouse.ManagedClickHouse.Telemetry.Enabled = enabled
+	for _, spec := range cr.Spec.ClickHouse {
+		if spec.ManagedClickHouse != nil {
+			spec.ManagedClickHouse.Telemetry.Enabled = enabled
+		}
 	}
 	return nil
 }

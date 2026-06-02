@@ -199,71 +199,102 @@ func ResolveKafkaSizing(sizing map[v2.Size]manifest.KafkaSizingConfig, size v2.S
 // ApplyInfraSizing applies manifest-derived sizing to the wandb spec's infra
 // components. Values from the manifest are only applied when the corresponding
 // spec field has not been explicitly set by the user (i.e., is zero-valued).
+// infraSizingConfig returns the manifest sizing config for an instance key,
+// falling back to the manifest "default" config when the key has no entry.
+func infraSizingConfig[T any](m map[string]T, key string) (T, bool) {
+	if cfg, ok := m[key]; ok {
+		return cfg, true
+	}
+	cfg, ok := m[v2.DefaultInstanceName]
+	return cfg, ok
+}
+
 func ApplyInfraSizing(wandb *v2.WeightsAndBiases, manifest manifest.Manifest) {
 	size := wandb.Spec.Size
 
-	// Default MySQL
-	if wandb.Spec.MySQL.ManagedMysql != nil {
-		if mysqlConfig, ok := manifest.Mysql["default"]; ok {
-			sizing := ResolveInfraSizing(mysqlConfig.Sizing, size, wandb.Spec.RequireLimits)
-			spec := wandb.Spec.MySQL.ManagedMysql
-			if spec.Replicas == 0 && sizing.Replicas != 0 {
-				spec.Replicas = sizing.Replicas
-			}
-			if spec.StorageSize == "" && sizing.VolumeSize != "" {
-				spec.StorageSize = sizing.VolumeSize
-			}
-			if sizing.Resources != nil && len(spec.Config.Resources.Requests) == 0 && len(spec.Config.Resources.Limits) == 0 {
-				spec.Config.Resources = *sizing.Resources
-			}
+	// MySQL: size each managed instance, preferring a manifest sizing config
+	// matching the instance key and falling back to the manifest "default".
+	for key, instance := range wandb.Spec.MySQL {
+		spec := instance.ManagedMysql
+		if spec == nil {
+			continue
+		}
+		mysqlConfig, ok := infraSizingConfig(manifest.Mysql, key)
+		if !ok {
+			continue
+		}
+		sizing := ResolveInfraSizing(mysqlConfig.Sizing, size, wandb.Spec.RequireLimits)
+		if spec.Replicas == 0 && sizing.Replicas != 0 {
+			spec.Replicas = sizing.Replicas
+		}
+		if spec.StorageSize == "" && sizing.VolumeSize != "" {
+			spec.StorageSize = sizing.VolumeSize
+		}
+		if sizing.Resources != nil && len(spec.Config.Resources.Requests) == 0 && len(spec.Config.Resources.Limits) == 0 {
+			spec.Config.Resources = *sizing.Resources
 		}
 	}
 
-	// Default Redis
-	if wandb.Spec.Redis.ManagedRedis != nil {
-		if redisConfig, ok := manifest.Redis["default"]; ok {
-			sizing := ResolveInfraSizing(redisConfig.Sizing, size, wandb.Spec.RequireLimits)
-			spec := wandb.Spec.Redis.ManagedRedis
-			if spec.StorageSize == "" && sizing.VolumeSize != "" {
-				spec.StorageSize = sizing.VolumeSize
-			}
-			if sizing.Resources != nil && len(spec.Config.Resources.Requests) == 0 && len(spec.Config.Resources.Limits) == 0 {
-				spec.Config.Resources = *sizing.Resources
-			}
+	// Redis
+	for key, instance := range wandb.Spec.Redis {
+		spec := instance.ManagedRedis
+		if spec == nil {
+			continue
+		}
+		redisConfig, ok := infraSizingConfig(manifest.Redis, key)
+		if !ok {
+			continue
+		}
+		sizing := ResolveInfraSizing(redisConfig.Sizing, size, wandb.Spec.RequireLimits)
+		if spec.StorageSize == "" && sizing.VolumeSize != "" {
+			spec.StorageSize = sizing.VolumeSize
+		}
+		if sizing.Resources != nil && len(spec.Config.Resources.Requests) == 0 && len(spec.Config.Resources.Limits) == 0 {
+			spec.Config.Resources = *sizing.Resources
 		}
 	}
 
-	// Default ClickHouse
-	if wandb.Spec.ClickHouse.ManagedClickHouse != nil {
-		if clickhouseConfig, ok := manifest.Clickhouse["default"]; ok {
-			sizing := ResolveInfraSizing(clickhouseConfig.Sizing, size, wandb.Spec.RequireLimits)
-			spec := wandb.Spec.ClickHouse.ManagedClickHouse
-			if spec.Replicas == 0 && sizing.Replicas != 0 {
-				spec.Replicas = sizing.Replicas
-			}
-			if spec.StorageSize == "" && sizing.VolumeSize != "" {
-				spec.StorageSize = sizing.VolumeSize
-			}
-			if sizing.Resources != nil && len(spec.Config.Resources.Requests) == 0 && len(spec.Config.Resources.Limits) == 0 {
-				spec.Config.Resources = *sizing.Resources
-			}
+	// ClickHouse
+	for key, instance := range wandb.Spec.ClickHouse {
+		spec := instance.ManagedClickHouse
+		if spec == nil {
+			continue
+		}
+		clickhouseConfig, ok := infraSizingConfig(manifest.Clickhouse, key)
+		if !ok {
+			continue
+		}
+		sizing := ResolveInfraSizing(clickhouseConfig.Sizing, size, wandb.Spec.RequireLimits)
+		if spec.Replicas == 0 && sizing.Replicas != 0 {
+			spec.Replicas = sizing.Replicas
+		}
+		if spec.StorageSize == "" && sizing.VolumeSize != "" {
+			spec.StorageSize = sizing.VolumeSize
+		}
+		if sizing.Resources != nil && len(spec.Config.Resources.Requests) == 0 && len(spec.Config.Resources.Limits) == 0 {
+			spec.Config.Resources = *sizing.Resources
 		}
 	}
 
-	// Default ObjectStore (bucket)
-	if wandb.Spec.ObjectStore.ManagedObjectStore != nil {
-		if objectStoreConfig, ok := manifest.Bucket["default"]; ok {
-			sizing := ResolveInfraSizing(objectStoreConfig.Sizing, size, wandb.Spec.RequireLimits)
-			spec := wandb.Spec.ObjectStore.ManagedObjectStore
-			if spec.Replicas == 0 && sizing.Replicas != 0 {
-				spec.Replicas = sizing.Replicas
-			}
-			if spec.StorageSize == "" && sizing.VolumeSize != "" {
-				spec.StorageSize = sizing.VolumeSize
-			}
-			if sizing.Resources != nil && len(spec.Config.Resources.Requests) == 0 && len(spec.Config.Resources.Limits) == 0 {
-				spec.Config.Resources = *sizing.Resources
-			}
+	// ObjectStore (bucket)
+	for key, instance := range wandb.Spec.ObjectStore {
+		spec := instance.ManagedObjectStore
+		if spec == nil {
+			continue
+		}
+		objectStoreConfig, ok := infraSizingConfig(manifest.Bucket, key)
+		if !ok {
+			continue
+		}
+		sizing := ResolveInfraSizing(objectStoreConfig.Sizing, size, wandb.Spec.RequireLimits)
+		if spec.Replicas == 0 && sizing.Replicas != 0 {
+			spec.Replicas = sizing.Replicas
+		}
+		if spec.StorageSize == "" && sizing.VolumeSize != "" {
+			spec.StorageSize = sizing.VolumeSize
+		}
+		if sizing.Resources != nil && len(spec.Config.Resources.Requests) == 0 && len(spec.Config.Resources.Limits) == 0 {
+			spec.Config.Resources = *sizing.Resources
 		}
 	}
 

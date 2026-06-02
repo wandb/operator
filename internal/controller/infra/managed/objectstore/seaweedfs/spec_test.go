@@ -17,7 +17,7 @@ var _ = Describe("SeaweedFS vendor specs", func() {
 	It("renders writable runtime mounts for SeaweedFS components", func() {
 		wandb := seaweedWandb()
 
-		seaweed, err := ToObjectStoreVendorSpec(context.Background(), wandb, seaweedScheme())
+		seaweed, err := ToObjectStoreVendorSpec(context.Background(), wandb, wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ManagedObjectStore, seaweedScheme())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(seaweed).NotTo(BeNil())
 
@@ -35,7 +35,8 @@ var _ = Describe("SeaweedFS vendor specs", func() {
 	})
 
 	It("keeps the filer writable data path explicit", func() {
-		seaweed, err := ToObjectStoreVendorSpec(context.Background(), seaweedWandb(), seaweedScheme())
+		wandb := seaweedWandb()
+		seaweed, err := ToObjectStoreVendorSpec(context.Background(), wandb, wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ManagedObjectStore, seaweedScheme())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(seaweed).NotTo(BeNil())
 		Expect(seaweed.Spec.Filer.Config).NotTo(BeNil())
@@ -46,7 +47,8 @@ var _ = Describe("SeaweedFS vendor specs", func() {
 	})
 
 	It("preserves managed resource overrides", func() {
-		seaweed, err := ToObjectStoreVendorSpec(context.Background(), seaweedWandb(), seaweedScheme())
+		wandb := seaweedWandb()
+		seaweed, err := ToObjectStoreVendorSpec(context.Background(), wandb, wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ManagedObjectStore, seaweedScheme())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(seaweed).NotTo(BeNil())
 		Expect(seaweed.Spec.Volume.ResourceRequirements.Requests[corev1.ResourceCPU]).To(Equal(resource.MustParse("500m")))
@@ -73,17 +75,19 @@ func seaweedWandb() *apiv2.WeightsAndBiases {
 		},
 		Spec: apiv2.WeightsAndBiasesSpec{
 			Tolerations: &tolerations,
-			ObjectStore: apiv2.ObjectStoreSpec{
-				ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{
-					Name:        "object-store",
-					Namespace:   "wandb",
-					Replicas:    1,
-					StorageSize: "10Gi",
-					Config: apiv2.ObjectStoreConfig{
-						AccessKey: "admin",
-						Resources: corev1.ResourceRequirements{
-							Requests: corev1.ResourceList{
-								corev1.ResourceCPU: resource.MustParse("500m"),
+			ObjectStore: map[string]apiv2.ObjectStoreSpec{
+				apiv2.DefaultInstanceName: {
+					ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{
+						Name:        "object-store",
+						Namespace:   "wandb",
+						Replicas:    1,
+						StorageSize: "10Gi",
+						Config: apiv2.ObjectStoreConfig{
+							AccessKey: "admin",
+							Resources: corev1.ResourceRequirements{
+								Requests: corev1.ResourceList{
+									corev1.ResourceCPU: resource.MustParse("500m"),
+								},
 							},
 						},
 					},

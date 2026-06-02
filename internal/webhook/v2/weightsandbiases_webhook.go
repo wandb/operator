@@ -193,45 +193,66 @@ func (v *WeightsAndBiasesCustomValidator) ValidateDelete(ctx context.Context, ob
 	return nil, nil
 }
 
+// instanceResourceName builds the default name for a managed infra instance.
+// The reserved default instance keeps the historical "<cr>-<suffix>" name for
+// backward compatibility; other instances are suffixed with their key.
+func instanceResourceName(wandb *appsv2.WeightsAndBiases, suffix, key string) string {
+	if key == appsv2.DefaultInstanceName {
+		return fmt.Sprintf("%s-%s", wandb.Name, suffix)
+	}
+	return fmt.Sprintf("%s-%s-%s", wandb.Name, suffix, key)
+}
+
 func applyMySQLDefaults(wandb *appsv2.WeightsAndBiases) {
-	if wandb.Spec.MySQL.ManagedMysql == nil {
-		if wandb.Spec.MySQL.ExternalMysql != nil {
-			return
+	if wandb.Spec.MySQL == nil {
+		wandb.Spec.MySQL = map[string]appsv2.MySQLSpec{}
+	}
+	if len(wandb.Spec.MySQL) == 0 {
+		wandb.Spec.MySQL[appsv2.DefaultInstanceName] = appsv2.MySQLSpec{ManagedMysql: &appsv2.ManagedMysqlSpec{}}
+	}
+
+	for key, spec := range wandb.Spec.MySQL {
+		if spec.ExternalMysql != nil {
+			continue
 		}
-		wandb.Spec.MySQL.ManagedMysql = &appsv2.ManagedMysqlSpec{}
-	}
-
-	spec := wandb.Spec.MySQL.ManagedMysql
-
-	if spec.Name == "" {
-		spec.Name = fmt.Sprintf("%s-mysql", wandb.Name)
-	}
-
-	if spec.Namespace == "" {
-		spec.Namespace = wandb.Namespace
+		if spec.ManagedMysql == nil {
+			spec.ManagedMysql = &appsv2.ManagedMysqlSpec{}
+		}
+		if spec.ManagedMysql.Name == "" {
+			spec.ManagedMysql.Name = instanceResourceName(wandb, "mysql", key)
+		}
+		if spec.ManagedMysql.Namespace == "" {
+			spec.ManagedMysql.Namespace = wandb.Namespace
+		}
+		wandb.Spec.MySQL[key] = spec
 	}
 }
 
 func applyRedisDefaults(wandb *appsv2.WeightsAndBiases) {
-	if wandb.Spec.Redis.ManagedRedis == nil {
-		if wandb.Spec.Redis.ExternalRedis != nil {
-			return
+	if wandb.Spec.Redis == nil {
+		wandb.Spec.Redis = map[string]appsv2.RedisSpec{}
+	}
+	if len(wandb.Spec.Redis) == 0 {
+		wandb.Spec.Redis[appsv2.DefaultInstanceName] = appsv2.RedisSpec{ManagedRedis: &appsv2.ManagedRedisSpec{}}
+	}
+
+	for key, spec := range wandb.Spec.Redis {
+		if spec.ExternalRedis != nil {
+			continue
 		}
-		wandb.Spec.Redis.ManagedRedis = &appsv2.ManagedRedisSpec{}
-	}
-
-	spec := wandb.Spec.Redis.ManagedRedis
-
-	if spec.Name == "" {
-		spec.Name = fmt.Sprintf("%s-redis", wandb.Name)
-	}
-
-	if spec.Namespace == "" {
-		spec.Namespace = wandb.Namespace
-	}
-
-	if wandb.Spec.Size != appsv2.SizeDev {
-		spec.Sentinel.Enabled = true
+		if spec.ManagedRedis == nil {
+			spec.ManagedRedis = &appsv2.ManagedRedisSpec{}
+		}
+		if spec.ManagedRedis.Name == "" {
+			spec.ManagedRedis.Name = instanceResourceName(wandb, "redis", key)
+		}
+		if spec.ManagedRedis.Namespace == "" {
+			spec.ManagedRedis.Namespace = wandb.Namespace
+		}
+		if wandb.Spec.Size != appsv2.SizeDev {
+			spec.ManagedRedis.Sentinel.Enabled = true
+		}
+		wandb.Spec.Redis[key] = spec
 	}
 }
 
@@ -255,48 +276,59 @@ func applyKafkaDefaults(wandb *appsv2.WeightsAndBiases) {
 }
 
 func applyObjectStoreDefaults(wandb *appsv2.WeightsAndBiases) {
+	if wandb.Spec.ObjectStore == nil {
+		wandb.Spec.ObjectStore = map[string]appsv2.ObjectStoreSpec{}
+	}
+	if len(wandb.Spec.ObjectStore) == 0 {
+		wandb.Spec.ObjectStore[appsv2.DefaultInstanceName] = appsv2.ObjectStoreSpec{ManagedObjectStore: &appsv2.ManagedObjectStoreSpec{}}
+	}
 
-	if wandb.Spec.ObjectStore.ManagedObjectStore == nil {
-		if wandb.Spec.ObjectStore.ExternalObjectStore != nil {
-			return
+	for key, spec := range wandb.Spec.ObjectStore {
+		if spec.ExternalObjectStore != nil {
+			continue
 		}
-		wandb.Spec.ObjectStore.ManagedObjectStore = &appsv2.ManagedObjectStoreSpec{}
-	}
-
-	spec := wandb.Spec.ObjectStore.ManagedObjectStore
-
-	if spec.Name == "" {
-		spec.Name = fmt.Sprintf("%s-seaweedfs", wandb.Name)
-	}
-
-	if spec.Namespace == "" {
-		spec.Namespace = wandb.Namespace
-	}
-
-	if spec.Config.AccessKey == "" && spec.Config.RootUser != "" { //nolint:staticcheck
-		spec.Config.AccessKey = spec.Config.RootUser //nolint:staticcheck
-	}
-	if spec.Config.AccessKey == "" {
-		spec.Config.AccessKey = "admin"
+		if spec.ManagedObjectStore == nil {
+			spec.ManagedObjectStore = &appsv2.ManagedObjectStoreSpec{}
+		}
+		managed := spec.ManagedObjectStore
+		if managed.Name == "" {
+			managed.Name = instanceResourceName(wandb, "seaweedfs", key)
+		}
+		if managed.Namespace == "" {
+			managed.Namespace = wandb.Namespace
+		}
+		if managed.Config.AccessKey == "" && managed.Config.RootUser != "" { //nolint:staticcheck
+			managed.Config.AccessKey = managed.Config.RootUser //nolint:staticcheck
+		}
+		if managed.Config.AccessKey == "" {
+			managed.Config.AccessKey = "admin"
+		}
+		wandb.Spec.ObjectStore[key] = spec
 	}
 }
 
 func applyClickHouseDefaults(wandb *appsv2.WeightsAndBiases) {
-	if wandb.Spec.ClickHouse.ManagedClickHouse == nil {
-		if wandb.Spec.ClickHouse.ExternalClickHouse != nil {
-			return
+	if wandb.Spec.ClickHouse == nil {
+		wandb.Spec.ClickHouse = map[string]appsv2.ClickHouseSpec{}
+	}
+	if len(wandb.Spec.ClickHouse) == 0 {
+		wandb.Spec.ClickHouse[appsv2.DefaultInstanceName] = appsv2.ClickHouseSpec{ManagedClickHouse: &appsv2.ManagedClickHouseSpec{}}
+	}
+
+	for key, spec := range wandb.Spec.ClickHouse {
+		if spec.ExternalClickHouse != nil {
+			continue
 		}
-		wandb.Spec.ClickHouse.ManagedClickHouse = &appsv2.ManagedClickHouseSpec{}
-	}
-
-	spec := wandb.Spec.ClickHouse.ManagedClickHouse
-
-	if spec.Name == "" {
-		spec.Name = fmt.Sprintf("%s-clickhouse", wandb.Name)
-	}
-
-	if spec.Namespace == "" {
-		spec.Namespace = wandb.Namespace
+		if spec.ManagedClickHouse == nil {
+			spec.ManagedClickHouse = &appsv2.ManagedClickHouseSpec{}
+		}
+		if spec.ManagedClickHouse.Name == "" {
+			spec.ManagedClickHouse.Name = instanceResourceName(wandb, "clickhouse", key)
+		}
+		if spec.ManagedClickHouse.Namespace == "" {
+			spec.ManagedClickHouse.Namespace = wandb.Namespace
+		}
+		wandb.Spec.ClickHouse[key] = spec
 	}
 }
 
@@ -341,24 +373,45 @@ func validateChanges(_ context.Context, newWandb *appsv2.WeightsAndBiases, oldWa
 	)
 }
 
+// validateHasDefaultInstance reports an error when a multi-instance infra type
+// defines at least one instance but is missing the reserved default key, which
+// the env-var fallback relies on.
+func validateHasDefaultInstance[T any](m map[string]T, path *field.Path) field.ErrorList {
+	if len(m) == 0 {
+		return nil
+	}
+	if _, ok := m[appsv2.DefaultInstanceName]; ok {
+		return nil
+	}
+	return field.ErrorList{field.Required(
+		path.Key(appsv2.DefaultInstanceName),
+		fmt.Sprintf("a %q instance is required when other instances are defined", appsv2.DefaultInstanceName),
+	)}
+}
+
 func validateMySQLSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 	var errors field.ErrorList
 	mysqlPath := field.NewPath("spec").Child("mysql")
 
-	if wandb.Spec.MySQL.ManagedMysql != nil && wandb.Spec.MySQL.ExternalMysql != nil {
-		errors = append(errors, field.Invalid(
-			mysqlPath,
-			"",
-			"managedMysql and externalMysql are mutually exclusive",
-		))
-	}
-	if spec := wandb.Spec.MySQL.ManagedMysql; spec != nil {
-		if spec.Replicas != 0 && spec.Replicas%2 == 0 {
+	errors = append(errors, validateHasDefaultInstance(wandb.Spec.MySQL, mysqlPath)...)
+
+	for key, spec := range wandb.Spec.MySQL {
+		instancePath := mysqlPath.Key(key)
+		if spec.ManagedMysql != nil && spec.ExternalMysql != nil {
 			errors = append(errors, field.Invalid(
-				mysqlPath.Child("managedMysql").Child("replicas"),
-				spec.Replicas,
-				"replicas must be an odd number (Moco enforces quorum-based replication)",
+				instancePath,
+				"",
+				"managedMysql and externalMysql are mutually exclusive",
 			))
+		}
+		if managed := spec.ManagedMysql; managed != nil {
+			if managed.Replicas != 0 && managed.Replicas%2 == 0 {
+				errors = append(errors, field.Invalid(
+					instancePath.Child("managedMysql").Child("replicas"),
+					managed.Replicas,
+					"replicas must be an odd number (Moco enforces quorum-based replication)",
+				))
+			}
 		}
 	}
 
@@ -369,26 +422,31 @@ func validateRedisSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 	var errors field.ErrorList
 	redisPath := field.NewPath("spec").Child("redis")
 
-	if wandb.Spec.Redis.ManagedRedis != nil && wandb.Spec.Redis.ExternalRedis != nil {
-		errors = append(errors, field.Invalid(
-			redisPath,
-			"",
-			"managedRedis and externalRedis are mutually exclusive",
-		))
-	}
+	errors = append(errors, validateHasDefaultInstance(wandb.Spec.Redis, redisPath)...)
 
-	spec := wandb.Spec.Redis.ManagedRedis
-	if spec == nil {
-		return errors
-	}
-
-	if spec.StorageSize != "" {
-		if _, err := resource.ParseQuantity(spec.StorageSize); err != nil {
+	for key, spec := range wandb.Spec.Redis {
+		instancePath := redisPath.Key(key)
+		if spec.ManagedRedis != nil && spec.ExternalRedis != nil {
 			errors = append(errors, field.Invalid(
-				redisPath.Child("managedRedis").Child("storageSize"),
-				spec.StorageSize,
-				"must be a valid resource quantity (e.g., '10Gi')",
+				instancePath,
+				"",
+				"managedRedis and externalRedis are mutually exclusive",
 			))
+		}
+
+		managed := spec.ManagedRedis
+		if managed == nil {
+			continue
+		}
+
+		if managed.StorageSize != "" {
+			if _, err := resource.ParseQuantity(managed.StorageSize); err != nil {
+				errors = append(errors, field.Invalid(
+					instancePath.Child("managedRedis").Child("storageSize"),
+					managed.StorageSize,
+					"must be a valid resource quantity (e.g., '10Gi')",
+				))
+			}
 		}
 	}
 
@@ -414,12 +472,16 @@ func validateObjectStoreSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 	var errors field.ErrorList
 	objectStorePath := field.NewPath("spec").Child("objectStore")
 
-	if wandb.Spec.ObjectStore.ManagedObjectStore != nil && wandb.Spec.ObjectStore.ExternalObjectStore != nil {
-		errors = append(errors, field.Invalid(
-			objectStorePath,
-			"",
-			"managedObjectStore and externalObjectStore are mutually exclusive",
-		))
+	errors = append(errors, validateHasDefaultInstance(wandb.Spec.ObjectStore, objectStorePath)...)
+
+	for key, spec := range wandb.Spec.ObjectStore {
+		if spec.ManagedObjectStore != nil && spec.ExternalObjectStore != nil {
+			errors = append(errors, field.Invalid(
+				objectStorePath.Key(key),
+				"",
+				"managedObjectStore and externalObjectStore are mutually exclusive",
+			))
+		}
 	}
 
 	return errors
@@ -429,12 +491,16 @@ func validateClickHouseSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 	var errors field.ErrorList
 	chPath := field.NewPath("spec").Child("clickhouse")
 
-	if wandb.Spec.ClickHouse.ManagedClickHouse != nil && wandb.Spec.ClickHouse.ExternalClickHouse != nil {
-		errors = append(errors, field.Invalid(
-			chPath,
-			"",
-			"managedClickhouse and externalClickhouse are mutually exclusive",
-		))
+	errors = append(errors, validateHasDefaultInstance(wandb.Spec.ClickHouse, chPath)...)
+
+	for key, spec := range wandb.Spec.ClickHouse {
+		if spec.ManagedClickHouse != nil && spec.ExternalClickHouse != nil {
+			errors = append(errors, field.Invalid(
+				chPath.Key(key),
+				"",
+				"managedClickhouse and externalClickhouse are mutually exclusive",
+			))
+		}
 	}
 
 	return errors
@@ -442,19 +508,24 @@ func validateClickHouseSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 
 func validateRedisChanges(newWandb, oldWandb *appsv2.WeightsAndBiases) field.ErrorList {
 	var errors field.ErrorList
-	redisPath := field.NewPath("spec").Child("redis").Child("managedRedis")
-	newSpec := newWandb.Spec.Redis.ManagedRedis
-	oldSpec := oldWandb.Spec.Redis.ManagedRedis
+	redisPath := field.NewPath("spec").Child("redis")
 
-	if newSpec == nil {
-		return errors
-	}
+	for key, newInstance := range newWandb.Spec.Redis {
+		newSpec := newInstance.ManagedRedis
+		if newSpec == nil {
+			continue
+		}
+		oldInstance, ok := oldWandb.Spec.Redis[key]
+		if !ok || oldInstance.ManagedRedis == nil {
+			continue
+		}
+		oldSpec := oldInstance.ManagedRedis
+		instancePath := redisPath.Key(key).Child("managedRedis")
 
-	if oldSpec != nil {
 		if oldSpec.StorageSize != "" &&
 			oldSpec.StorageSize != newSpec.StorageSize {
 			errors = append(errors, field.Invalid(
-				redisPath.Child("storageSize"),
+				instancePath.Child("storageSize"),
 				newSpec.StorageSize,
 				"storageSize may not be changed",
 			))
@@ -462,7 +533,7 @@ func validateRedisChanges(newWandb, oldWandb *appsv2.WeightsAndBiases) field.Err
 
 		if oldSpec.Namespace != newSpec.Namespace {
 			errors = append(errors, field.Invalid(
-				redisPath.Child("namespace"),
+				instancePath.Child("namespace"),
 				newSpec.Namespace,
 				"namespace may not be changed",
 			))
@@ -470,7 +541,7 @@ func validateRedisChanges(newWandb, oldWandb *appsv2.WeightsAndBiases) field.Err
 
 		if oldSpec.Sentinel.Enabled != newSpec.Sentinel.Enabled {
 			errors = append(errors, field.Invalid(
-				redisPath.Child("sentinel").Child("enabled"),
+				instancePath.Child("sentinel").Child("enabled"),
 				newSpec.Sentinel.Enabled,
 				"Redis Sentinel cannot be toggled between enabled and disabled (yet)",
 			))

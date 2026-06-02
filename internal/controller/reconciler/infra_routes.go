@@ -44,19 +44,23 @@ const infraHTTPRouteComponent = "infra-route"
 func resolveInfraRoutes(ctx context.Context, c ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest) ([]infraRouteEntry, error) {
 	var entries []infraRouteEntry
 
-	if objectStoreSpec := wandb.Spec.ObjectStore.ManagedObjectStore; objectStoreSpec != nil {
+	for crKey, instance := range wandb.Spec.ObjectStore {
+		objectStoreSpec := instance.ManagedObjectStore
+		if objectStoreSpec == nil {
+			continue
+		}
 		for _, instanceName := range sortedInfraConfigNames(manifest.Bucket) {
 			cfg := manifest.Bucket[instanceName]
 			if cfg.Ingress == nil {
 				continue
 			}
 			svcName := fmt.Sprintf("%s-s3", objectStoreSpec.Name)
-			port, err := resolveInfraServicePort(ctx, c, types.NamespacedName{Name: svcName, Namespace: wandb.Spec.ObjectStore.ManagedObjectStore.Namespace}, cfg.Ingress, 8333)
+			port, err := resolveInfraServicePort(ctx, c, types.NamespacedName{Name: svcName, Namespace: objectStoreSpec.Namespace}, cfg.Ingress, 8333)
 			if err != nil {
 				return nil, fmt.Errorf("bucket instance %q: %w", instanceName, err)
 			}
 			entries = append(entries, infraRouteEntry{
-				name:            fmt.Sprintf("%s-bucket-%s", wandb.Name, instanceName),
+				name:            fmt.Sprintf("%s-bucket-%s", wandb.Name, infraRouteInstanceName(crKey, instanceName)),
 				namespace:       objectStoreSpec.Namespace,
 				serviceName:     svcName,
 				servicePort:     port,
@@ -67,7 +71,11 @@ func resolveInfraRoutes(ctx context.Context, c ctrlClient.Client, wandb *apiv2.W
 		}
 	}
 
-	if chSpec := wandb.Spec.ClickHouse.ManagedClickHouse; chSpec != nil {
+	for crKey, instance := range wandb.Spec.ClickHouse {
+		chSpec := instance.ManagedClickHouse
+		if chSpec == nil {
+			continue
+		}
 		for _, instanceName := range sortedInfraConfigNames(manifest.Clickhouse) {
 			cfg := manifest.Clickhouse[instanceName]
 			if cfg.Ingress == nil {
@@ -78,7 +86,7 @@ func resolveInfraRoutes(ctx context.Context, c ctrlClient.Client, wandb *apiv2.W
 			port, err := resolveInfraServicePort(
 				ctx,
 				c,
-				types.NamespacedName{Name: svcName, Namespace: wandb.Spec.ClickHouse.ManagedClickHouse.Namespace},
+				types.NamespacedName{Name: svcName, Namespace: chSpec.Namespace},
 				cfg.Ingress,
 				8123,
 			)
@@ -86,7 +94,7 @@ func resolveInfraRoutes(ctx context.Context, c ctrlClient.Client, wandb *apiv2.W
 				return nil, fmt.Errorf("clickhouse instance %q: %w", instanceName, err)
 			}
 			entries = append(entries, infraRouteEntry{
-				name:            fmt.Sprintf("%s-clickhouse-%s", wandb.Name, instanceName),
+				name:            fmt.Sprintf("%s-clickhouse-%s", wandb.Name, infraRouteInstanceName(crKey, instanceName)),
 				namespace:       chSpec.Namespace,
 				serviceName:     svcName,
 				servicePort:     port,
@@ -98,6 +106,16 @@ func resolveInfraRoutes(ctx context.Context, c ctrlClient.Client, wandb *apiv2.W
 	}
 
 	return entries, nil
+}
+
+// infraRouteInstanceName composes a unique route suffix from the CR instance key
+// and the manifest infra-config name. The default CR instance keeps the
+// historical suffix (manifest name only) to preserve existing route names.
+func infraRouteInstanceName(crKey, manifestInstanceName string) string {
+	if crKey == apiv2.DefaultInstanceName {
+		return manifestInstanceName
+	}
+	return fmt.Sprintf("%s-%s", crKey, manifestInstanceName)
 }
 
 func resolveInfraServicePort(ctx context.Context, c ctrlClient.Client, serviceRef types.NamespacedName, ingress *serverManifest.AppIngressSpec, defaultPort int32) (gatewayv1.PortNumber, error) {

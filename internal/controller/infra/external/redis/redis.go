@@ -17,12 +17,20 @@ import (
 
 const ConnectionSecretName = "wandb-redis-connection"
 
+func connectionSecretName(key string) string {
+	if key == "" || key == apiv2.DefaultInstanceName {
+		return ConnectionSecretName
+	}
+	return fmt.Sprintf("%s-%s", ConnectionSecretName, key)
+}
+
 func WriteState(
 	ctx context.Context,
 	c client.Client,
 	wandb *apiv2.WeightsAndBiases,
+	key string,
+	spec *apiv2.RedisConnection,
 ) []metav1.Condition {
-	spec := wandb.Spec.Redis.ExternalRedis
 	logger := ctrl.LoggerFrom(ctx)
 
 	fields := map[string]corev1.SecretKeySelector{
@@ -60,7 +68,7 @@ func WriteState(
 
 	data["url"] = redisUrl.String()
 
-	nsName := types.NamespacedName{Namespace: wandb.Namespace, Name: ConnectionSecretName}
+	nsName := types.NamespacedName{Namespace: wandb.Namespace, Name: connectionSecretName(key)}
 	return external.WriteConnectionSecret(ctx, c, wandb, nsName, data)
 }
 
@@ -68,9 +76,10 @@ func ReadState(
 	ctx context.Context,
 	c client.Client,
 	wandb *apiv2.WeightsAndBiases,
+	key string,
 	newConditions []metav1.Condition,
 ) ([]metav1.Condition, *apiv2.RedisConnection) {
-	nsName := types.NamespacedName{Namespace: wandb.Namespace, Name: ConnectionSecretName}
+	nsName := types.NamespacedName{Namespace: wandb.Namespace, Name: connectionSecretName(key)}
 	_, conditions, found := external.ReadConnectionSecret(ctx, c, nsName, newConditions)
 	if !found {
 		return conditions, nil
@@ -87,9 +96,9 @@ func ReadState(
 	}
 }
 
-func DeleteConnectionSecret(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases) error {
+func DeleteConnectionSecret(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, key string) error {
 	return external.DeleteConnectionSecret(ctx, c, types.NamespacedName{
 		Namespace: wandb.Namespace,
-		Name:      ConnectionSecretName,
+		Name:      connectionSecretName(key),
 	})
 }

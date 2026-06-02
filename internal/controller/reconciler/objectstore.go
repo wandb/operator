@@ -20,29 +20,38 @@ func objectStoreWriteState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
-) ([]metav1.Condition, *apiv2.ObjectStoreConnection) {
-	if wandb.Spec.ObjectStore.ManagedObjectStore != nil {
-		return managedObjectStoreWriteState(ctx, client, wandb)
+) (map[string][]metav1.Condition, map[string]*apiv2.ObjectStoreConnection) {
+	outConds := map[string][]metav1.Condition{}
+	outConns := map[string]*apiv2.ObjectStoreConnection{}
+	for key, spec := range wandb.Spec.ObjectStore {
+		switch {
+		case spec.ManagedObjectStore != nil:
+			outConds[key], outConns[key] = managedObjectStoreWriteState(ctx, client, wandb, key, spec.ManagedObjectStore)
+		case spec.ExternalObjectStore != nil:
+			outConds[key], outConns[key] = externalobjectstore.WriteState(ctx, client, wandb, key, spec.ExternalObjectStore)
+		}
 	}
-	if wandb.Spec.ObjectStore.ExternalObjectStore != nil {
-		return externalObjectStoreWriteState(ctx, client, wandb)
-	}
-	return nil, nil
+	return outConds, outConns
 }
 
 func objectStoreReadState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
-	newConditions []metav1.Condition,
-) []metav1.Condition {
-	if wandb.Spec.ObjectStore.ManagedObjectStore != nil {
-		return managedObjectStoreReadState(ctx, client, wandb, newConditions)
+	conditions map[string][]metav1.Condition,
+) map[string][]metav1.Condition {
+	out := map[string][]metav1.Condition{}
+	for key, spec := range wandb.Spec.ObjectStore {
+		switch {
+		case spec.ManagedObjectStore != nil:
+			out[key] = managedObjectStoreReadState(ctx, client, wandb, spec.ManagedObjectStore, conditions[key])
+		case spec.ExternalObjectStore != nil:
+			out[key] = externalobjectstore.ReadState(ctx, client, wandb, key, conditions[key])
+		default:
+			out[key] = conditions[key]
+		}
 	}
-	if wandb.Spec.ObjectStore.ExternalObjectStore != nil {
-		return externalObjectStoreReadState(ctx, client, wandb, newConditions)
-	}
-	return newConditions
+	return out
 }
 
 func objectStoreInferStatus(
@@ -50,34 +59,70 @@ func objectStoreInferStatus(
 	client client.Client,
 	recorder record.EventRecorder,
 	wandb *apiv2.WeightsAndBiases,
-	newConditions []metav1.Condition,
-	newInfraConn *apiv2.ObjectStoreConnection,
+	conditions map[string][]metav1.Condition,
+	infraConns map[string]*apiv2.ObjectStoreConnection,
 ) (ctrl.Result, error) {
-	if wandb.Spec.ObjectStore.ManagedObjectStore != nil {
-		return managedObjectStoreInferStatus(ctx, client, recorder, wandb, newConditions, newInfraConn)
+	if wandb.Status.ObjectStoreStatus == nil {
+		wandb.Status.ObjectStoreStatus = map[string]apiv2.ObjectStoreInfraStatus{}
 	}
-	if wandb.Spec.ObjectStore.ExternalObjectStore != nil {
-		return externalObjectStoreInferStatus(ctx, client, wandb, newConditions, newInfraConn)
+	var results []ctrl.Result
+	var firstErr error
+	for key, spec := range wandb.Spec.ObjectStore {
+		var res ctrl.Result
+		var err error
+		switch {
+		case spec.ManagedObjectStore != nil:
+			res, err = managedObjectStoreInferStatus(ctx, client, recorder, wandb, key, conditions[key], infraConns[key])
+		case spec.ExternalObjectStore != nil:
+			res, err = externalObjectStoreInferStatus(ctx, client, wandb, key, conditions[key], infraConns[key])
+		}
+		results = append(results, res)
+		if err != nil && firstErr == nil {
+			firstErr = err
+		}
 	}
-	return ctrl.Result{}, nil
+	return consolidateResults(results), firstErr
+}
+
+func runObjectStoreRetentionFinalizer(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, key string, spec apiv2.ObjectStoreSpec) error {
+	switch wandb.GetRetentionPolicy(objectStoreInstanceInfraSpec(spec)).OnDelete {
+	case apiv2.PurgeOnDelete:
+		return objectStorePurgeFinalizer(ctx, c, wandb, key, spec)
+	case apiv2.DetachOnDelete:
+		return objectStoreDetachFinalizer(ctx, c, wandb, key, spec)
+	}
+	return nil
+}
+
+func objectStoreInstanceInfraSpec(spec apiv2.ObjectStoreSpec) apiv2.ManagedInfraSpec {
+	if spec.ManagedObjectStore != nil {
+		return spec.ManagedObjectStore.ManagedInfraSpec
+	}
+	return apiv2.ManagedInfraSpec{}
 }
 
 func objectStorePurgeFinalizer(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
+	key string,
+	spec apiv2.ObjectStoreSpec,
 ) error {
-	if spec := wandb.Spec.ObjectStore.ManagedObjectStore; spec != nil {
-		onDeleteRule := seaweedfs.ToObjectStoreOnDeleteRule(wandb, wandb.GetRetentionPolicy(spec.ManagedInfraSpec))
-		_ = seaweedfs.CleanupLegacyMinio(
-			ctx, client, wandb.Name, wandb.Namespace, wandb.GetUID(),
-			true, onDeleteRule.Selector,
-		)
-		specNamespacedName := managedObjectStoreSpecNamespacedName(spec)
+	if managed := spec.ManagedObjectStore; managed != nil {
+		onDeleteRule := seaweedfs.ToObjectStoreOnDeleteRule(wandb, wandb.GetRetentionPolicy(managed.ManagedInfraSpec))
+		// Legacy MinIO predates multi-instance and is scoped to the CR, so only
+		// the default instance triggers its cleanup.
+		if key == apiv2.DefaultInstanceName {
+			_ = seaweedfs.CleanupLegacyMinio(
+				ctx, client, wandb.Name, wandb.Namespace, wandb.GetUID(),
+				true, onDeleteRule.Selector,
+			)
+		}
+		specNamespacedName := managedObjectStoreSpecNamespacedName(managed)
 		return seaweedfs.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule)
 	}
-	if wandb.Spec.ObjectStore.ExternalObjectStore != nil {
-		return externalobjectstore.DeleteConnectionSecret(ctx, client, wandb)
+	if spec.ExternalObjectStore != nil {
+		return externalobjectstore.DeleteConnectionSecret(ctx, client, wandb, key)
 	}
 	return nil
 }
@@ -86,16 +131,20 @@ func objectStoreDetachFinalizer(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
+	key string,
+	spec apiv2.ObjectStoreSpec,
 ) error {
-	spec := wandb.Spec.ObjectStore.ManagedObjectStore
-	if spec == nil {
+	managed := spec.ManagedObjectStore
+	if managed == nil {
 		return nil
 	}
-	_ = seaweedfs.CleanupLegacyMinio(
-		ctx, client, wandb.Name, wandb.Namespace, wandb.GetUID(),
-		false, nil,
-	)
-	specNamespacedName := managedObjectStoreSpecNamespacedName(spec)
+	if key == apiv2.DefaultInstanceName {
+		_ = seaweedfs.CleanupLegacyMinio(
+			ctx, client, wandb.Name, wandb.Namespace, wandb.GetUID(),
+			false, nil,
+		)
+	}
+	specNamespacedName := managedObjectStoreSpecNamespacedName(managed)
 	return seaweedfs.DetachFinalizer(ctx, client, specNamespacedName, wandb)
 }
 
@@ -105,28 +154,30 @@ func managedObjectStoreWriteState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
+	key string,
+	spec *apiv2.ManagedObjectStoreSpec,
 ) ([]metav1.Condition, *apiv2.ObjectStoreConnection) {
-	spec := wandb.Spec.ObjectStore.ManagedObjectStore
-
 	log := ctrl.LoggerFrom(ctx)
 	var specNamespacedName = managedObjectStoreSpecNamespacedName(spec)
 
 	retentionPolicy := wandb.GetRetentionPolicy(spec.ManagedInfraSpec)
 	onDeleteRule := seaweedfs.ToObjectStoreOnDeleteRule(wandb, retentionPolicy)
-	if err := seaweedfs.CleanupLegacyMinio(
-		ctx, client,
-		wandb.Name, wandb.Namespace, wandb.GetUID(),
-		onDeleteRule.Policy == common.Purge,
-		onDeleteRule.Selector,
-	); err != nil {
-		log.Error(err, "failed to clean up legacy MinIO resources")
+	if key == apiv2.DefaultInstanceName {
+		if err := seaweedfs.CleanupLegacyMinio(
+			ctx, client,
+			wandb.Name, wandb.Namespace, wandb.GetUID(),
+			onDeleteRule.Policy == common.Purge,
+			onDeleteRule.Selector,
+		); err != nil {
+			log.Error(err, "failed to clean up legacy MinIO resources")
+		}
 	}
 
 	if conditions := seaweedfs.CheckDetached(ctx, client, specNamespacedName, wandb.GetUID(), spec.Replicas); conditions != nil {
 		return conditions, nil
 	}
 
-	desiredCr, err := seaweedfs.ToObjectStoreVendorSpec(ctx, wandb, client.Scheme())
+	desiredCr, err := seaweedfs.ToObjectStoreVendorSpec(ctx, wandb, spec, client.Scheme())
 	if err != nil {
 		log.Error(err, "failed to translate object store spec to vendor spec")
 		return []metav1.Condition{
@@ -158,10 +209,9 @@ func managedObjectStoreReadState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
+	spec *apiv2.ManagedObjectStoreSpec,
 	newConditions []metav1.Condition,
 ) []metav1.Condition {
-	spec := wandb.Spec.ObjectStore.ManagedObjectStore
-
 	specNamespacedName := managedObjectStoreSpecNamespacedName(spec)
 	retentionPolicy := wandb.GetRetentionPolicy(spec.ManagedInfraSpec)
 	readConditions := seaweedfs.ReadState(
@@ -179,12 +229,14 @@ func managedObjectStoreInferStatus(
 	client client.Client,
 	recorder record.EventRecorder,
 	wandb *apiv2.WeightsAndBiases,
+	key string,
 	newConditions []metav1.Condition,
 	newInfraConn *apiv2.ObjectStoreConnection,
 ) (ctrl.Result, error) {
 	enabled := true
-	oldConditions := wandb.Status.ObjectStoreStatus.Conditions
-	oldInfraConn := wandb.Status.ObjectStoreStatus.Connection
+	oldStatus := wandb.Status.ObjectStoreStatus[key]
+	oldConditions := oldStatus.Conditions
+	oldInfraConn := oldStatus.Connection
 
 	updatedStatus, events, ctrlResult := seaweedfs.ComputeStatus(
 		ctx,
@@ -197,7 +249,7 @@ func managedObjectStoreInferStatus(
 	for _, e := range events {
 		recorder.Event(wandb, e.Type, e.Reason, e.Message)
 	}
-	wandb.Status.ObjectStoreStatus = updatedStatus
+	wandb.Status.ObjectStoreStatus[key] = updatedStatus
 	err := client.Status().Update(ctx, wandb)
 
 	return ctrlResult, err
@@ -205,20 +257,13 @@ func managedObjectStoreInferStatus(
 
 // external
 
-func externalObjectStoreWriteState(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases) ([]metav1.Condition, *apiv2.ObjectStoreConnection) {
-	return externalobjectstore.WriteState(ctx, c, wandb)
-}
-
-func externalObjectStoreReadState(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, newConditions []metav1.Condition) []metav1.Condition {
-	return externalobjectstore.ReadState(ctx, c, wandb, newConditions)
-}
-
-func externalObjectStoreInferStatus(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, newConditions []metav1.Condition, newInfraConn *apiv2.ObjectStoreConnection) (ctrl.Result, error) {
-	oldInfraConn := wandb.Status.ObjectStoreStatus.Connection
-	state, ready, updatedConditions := external.InferExternalStatus(wandb.Status.ObjectStoreStatus.Conditions, newConditions, wandb.Generation, newInfraConn != nil)
+func externalObjectStoreInferStatus(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, key string, newConditions []metav1.Condition, newInfraConn *apiv2.ObjectStoreConnection) (ctrl.Result, error) {
+	oldStatus := wandb.Status.ObjectStoreStatus[key]
+	oldInfraConn := oldStatus.Connection
+	state, ready, updatedConditions := external.InferExternalStatus(oldStatus.Conditions, newConditions, wandb.Generation, newInfraConn != nil)
 	conn := utils.Coalesce(newInfraConn, &oldInfraConn)
 
-	wandb.Status.ObjectStoreStatus = apiv2.ObjectStoreInfraStatus{
+	wandb.Status.ObjectStoreStatus[key] = apiv2.ObjectStoreInfraStatus{
 		WBInfraStatus: apiv2.WBInfraStatus{Ready: ready, State: state, Conditions: updatedConditions},
 		Connection:    *conn,
 	}

@@ -17,12 +17,20 @@ import (
 
 const ConnectionSecretName = "wandb-objectstore-connection"
 
+func connectionSecretName(key string) string {
+	if key == "" || key == apiv2.DefaultInstanceName {
+		return ConnectionSecretName
+	}
+	return fmt.Sprintf("%s-%s", ConnectionSecretName, key)
+}
+
 func WriteState(
 	ctx context.Context,
 	c client.Client,
 	wandb *apiv2.WeightsAndBiases,
+	key string,
+	spec *apiv2.ObjectStoreConnection,
 ) ([]metav1.Condition, *apiv2.ObjectStoreConnection) {
-	spec := wandb.Spec.ObjectStore.ExternalObjectStore
 	logger := ctrl.LoggerFrom(ctx)
 
 	fields := map[string]corev1.SecretKeySelector{
@@ -63,7 +71,7 @@ func WriteState(
 
 	data["url"] = bucketUrl.String()
 
-	nsName := types.NamespacedName{Namespace: wandb.Namespace, Name: ConnectionSecretName}
+	nsName := types.NamespacedName{Namespace: wandb.Namespace, Name: connectionSecretName(key)}
 	if conditions := external.WriteConnectionSecret(ctx, c, wandb, nsName, data); conditions != nil {
 		return conditions, nil
 	}
@@ -89,14 +97,15 @@ func ReadState(
 	_ context.Context,
 	_ client.Client,
 	_ *apiv2.WeightsAndBiases,
+	_ string,
 	newConditions []metav1.Condition,
 ) []metav1.Condition {
 	return newConditions
 }
 
-func DeleteConnectionSecret(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases) error {
+func DeleteConnectionSecret(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, key string) error {
 	return external.DeleteConnectionSecret(ctx, c, types.NamespacedName{
 		Namespace: wandb.Namespace,
-		Name:      ConnectionSecretName,
+		Name:      connectionSecretName(key),
 	})
 }

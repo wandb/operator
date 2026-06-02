@@ -244,22 +244,30 @@ func newNetworkingWandb(name string, infraNamespace string) (*apiv2.WeightsAndBi
 			RetentionPolicy: apiv2.RetentionPolicy{
 				OnDelete: apiv2.DetachOnDelete,
 			},
-			MySQL: apiv2.MySQLSpec{
-				ManagedMysql: &apiv2.ManagedMysqlSpec{},
+			MySQL: map[string]apiv2.MySQLSpec{
+				apiv2.DefaultInstanceName: {
+					ManagedMysql: &apiv2.ManagedMysqlSpec{},
+				},
 			},
-			Redis: apiv2.RedisSpec{
-				ManagedRedis: &apiv2.ManagedRedisSpec{},
+			Redis: map[string]apiv2.RedisSpec{
+				apiv2.DefaultInstanceName: {
+					ManagedRedis: &apiv2.ManagedRedisSpec{},
+				},
 			},
 			Kafka: apiv2.KafkaSpec{
 				ManagedKafka: &apiv2.ManagedKafkaSpec{},
 			},
-			ObjectStore: apiv2.ObjectStoreSpec{
-				ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{
-					Namespace: infraNamespace,
+			ObjectStore: map[string]apiv2.ObjectStoreSpec{
+				apiv2.DefaultInstanceName: {
+					ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{
+						Namespace: infraNamespace,
+					},
 				},
 			},
-			ClickHouse: apiv2.ClickHouseSpec{
-				ManagedClickHouse: &apiv2.ManagedClickHouseSpec{},
+			ClickHouse: map[string]apiv2.ClickHouseSpec{
+				apiv2.DefaultInstanceName: {
+					ManagedClickHouse: &apiv2.ManagedClickHouseSpec{},
+				},
 			},
 		},
 	}
@@ -282,24 +290,46 @@ func newNetworkingWandb(name string, infraNamespace string) (*apiv2.WeightsAndBi
 
 func markWandbReadyForNetworking(ctx context.Context, name, namespace string) *apiv2.WeightsAndBiases {
 	wandb := getWandb(ctx, name, namespace)
-	wandb.Status.MySQLStatus.Ready = true
-	wandb.Status.RedisStatus.Ready = true
-	wandb.Status.KafkaStatus.Ready = true
-	wandb.Status.ObjectStoreStatus.Ready = true
-	wandb.Status.ClickHouseStatus.Ready = true
-	wandb.Status.MySQLStatus.Connection.URL = corev1.SecretKeySelector{
-		LocalObjectReference: corev1.LocalObjectReference{Name: name},
-		Key:                  "mysql-url",
+	wandb.Status.MySQLStatus = map[string]apiv2.MysqlInfraStatus{
+		apiv2.DefaultInstanceName: {
+			WBInfraStatus: apiv2.WBInfraStatus{Ready: true},
+			Connection: apiv2.MysqlConnection{
+				URL: corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{Name: name},
+					Key:                  "mysql-url",
+				},
+			},
+		},
 	}
-	wandb.Status.ClickHouseStatus.Connection.URL = corev1.SecretKeySelector{
-		LocalObjectReference: corev1.LocalObjectReference{Name: name},
-		Key:                  "clickhouse-url",
+	wandb.Status.RedisStatus = map[string]apiv2.RedisInfraStatus{
+		apiv2.DefaultInstanceName: {
+			WBInfraStatus: apiv2.WBInfraStatus{Ready: true},
+		},
+	}
+	wandb.Status.KafkaStatus.Ready = true
+	wandb.Status.ObjectStoreStatus = map[string]apiv2.ObjectStoreInfraStatus{
+		apiv2.DefaultInstanceName: {
+			WBInfraStatus: apiv2.WBInfraStatus{Ready: true},
+		},
+	}
+	wandb.Status.ClickHouseStatus = map[string]apiv2.ClickHouseInfraStatus{
+		apiv2.DefaultInstanceName: {
+			WBInfraStatus: apiv2.WBInfraStatus{Ready: true},
+			Connection: apiv2.ClickHouseConnection{
+				URL: corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{Name: name},
+					Key:                  "clickhouse-url",
+				},
+			},
+		},
 	}
 	wandb.Status.Wandb.Migration.Version = wandb.Spec.Wandb.Version
 	wandb.Status.Wandb.Migration.LastSuccessVersion = wandb.Spec.Wandb.Version
 	wandb.Status.Wandb.Migration.Ready = true
 	wandb.Status.Wandb.Migration.Reason = "Complete"
-	wandb.Status.Wandb.MySQLInit.Succeeded = true
+	wandb.Status.Wandb.MySQLInit = map[string]apiv2.MigrationJobStatus{
+		apiv2.DefaultInstanceName: {Succeeded: true},
+	}
 	Expect(k8sClient.Status().Update(ctx, wandb)).To(Succeed())
 
 	return getWandb(ctx, name, namespace)

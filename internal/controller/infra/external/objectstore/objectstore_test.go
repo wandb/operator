@@ -65,12 +65,14 @@ func writeStateFixture(t *testing.T, sourceData map[string]string, present map[s
 		TypeMeta:   metav1.TypeMeta{APIVersion: "apps.wandb.com/v2", Kind: "WeightsAndBiases"},
 		ObjectMeta: metav1.ObjectMeta{Name: "wandb", Namespace: "default"},
 		Spec: apiv2.WeightsAndBiasesSpec{
-			ObjectStore: apiv2.ObjectStoreSpec{ExternalObjectStore: ext},
+			ObjectStore: map[string]apiv2.ObjectStoreSpec{
+				apiv2.DefaultInstanceName: {ExternalObjectStore: ext},
+			},
 		},
 	}
 
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(wandb, source).Build()
-	conditions, conn := WriteState(context.Background(), c, wandb)
+	conditions, conn := WriteState(context.Background(), c, wandb, apiv2.DefaultInstanceName, ext)
 
 	written := &corev1.Secret{}
 	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: ConnectionSecretName, Namespace: "default"}, written))

@@ -23,7 +23,7 @@ var _ = Describe("Redis vendor specs", func() {
 	It("renders hardened standalone Redis settings", func() {
 		wandb := redisWandb(false)
 
-		redis, err := ToRedisStandaloneVendorSpec(context.Background(), wandb, redisScheme())
+		redis, err := ToRedisStandaloneVendorSpec(context.Background(), wandb, wandb.Spec.Redis[apiv2.DefaultInstanceName].ManagedRedis, redisScheme())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(redis).NotTo(BeNil())
 
@@ -37,7 +37,7 @@ var _ = Describe("Redis vendor specs", func() {
 	It("renders hardened sentinel and replication Redis settings", func() {
 		wandb := redisWandb(true)
 
-		sentinel, err := ToRedisSentinelVendorSpec(context.Background(), wandb, redisScheme())
+		sentinel, err := ToRedisSentinelVendorSpec(context.Background(), wandb, wandb.Spec.Redis[apiv2.DefaultInstanceName].ManagedRedis, redisScheme())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(sentinel).NotTo(BeNil())
 		expectRedisDefaultPodSecurityContext(sentinel.Spec.PodSecurityContext)
@@ -45,7 +45,7 @@ var _ = Describe("Redis vendor specs", func() {
 		Expect(sentinel.Spec.VolumeMount).NotTo(BeNil())
 		expectRedisWritableTmpMount(sentinel.Spec.VolumeMount.MountPath)
 
-		replication, err := ToRedisReplicationVendorSpec(context.Background(), wandb, redisScheme())
+		replication, err := ToRedisReplicationVendorSpec(context.Background(), wandb, wandb.Spec.Redis[apiv2.DefaultInstanceName].ManagedRedis, redisScheme())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(replication).NotTo(BeNil())
 		expectRedisDefaultPodSecurityContext(replication.Spec.PodSecurityContext)
@@ -56,7 +56,8 @@ var _ = Describe("Redis vendor specs", func() {
 	It("omits fixed Redis IDs in OpenShift mode", func() {
 		utils.SetOpenShiftMode(true)
 
-		redis, err := ToRedisStandaloneVendorSpec(context.Background(), redisWandb(false), redisScheme())
+		wandb := redisWandb(false)
+		redis, err := ToRedisStandaloneVendorSpec(context.Background(), wandb, wandb.Spec.Redis[apiv2.DefaultInstanceName].ManagedRedis, redisScheme())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(redis).NotTo(BeNil())
 
@@ -86,13 +87,15 @@ func redisWandb(sentinel bool) *apiv2.WeightsAndBiases {
 			Namespace: "wandb",
 		},
 		Spec: apiv2.WeightsAndBiasesSpec{
-			Redis: apiv2.RedisSpec{
-				ManagedRedis: &apiv2.ManagedRedisSpec{
-					Name:        "redis",
-					Namespace:   "wandb",
-					StorageSize: "1Gi",
-					Telemetry:   apiv2.Telemetry{Enabled: true},
-					Sentinel:    apiv2.RedisSentinelSpec{Enabled: sentinel},
+			Redis: map[string]apiv2.RedisSpec{
+				apiv2.DefaultInstanceName: {
+					ManagedRedis: &apiv2.ManagedRedisSpec{
+						Name:        "redis",
+						Namespace:   "wandb",
+						StorageSize: "1Gi",
+						Telemetry:   apiv2.Telemetry{Enabled: true},
+						Sentinel:    apiv2.RedisSentinelSpec{Enabled: sentinel},
+					},
 				},
 			},
 		},
