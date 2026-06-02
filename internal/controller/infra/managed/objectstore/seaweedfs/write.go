@@ -63,7 +63,7 @@ func WriteState(
 
 	// Upsert the Filer NetworkPolicy that restricts the unauthenticated HTTP
 	// port to sibling Seaweed components. Must exist when (or before) the
-	// Filer pod comes up, so do this before the main CR upsert.
+	// Filer pod comes up
 	if policy != nil {
 		actualPolicy := &networkingv1.NetworkPolicy{}
 		policyNsName := types.NamespacedName{Name: policy.Name, Namespace: policy.Namespace}
