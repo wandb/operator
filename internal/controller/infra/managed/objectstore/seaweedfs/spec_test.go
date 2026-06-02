@@ -32,6 +32,10 @@ var _ = Describe("SeaweedFS vendor specs", func() {
 		expectSeaweedWritableMount(seaweed.Spec.Volume.VolumeMounts)
 		expectSeaweedWritableVolume(seaweed.Spec.Filer.Volumes)
 		expectSeaweedWritableMount(seaweed.Spec.Filer.VolumeMounts)
+		Expect(seaweed.Spec.TLS).NotTo(BeNil())
+		Expect(seaweed.Spec.TLS.IssuerRef).NotTo(BeNil())
+		Expect(seaweed.Spec.TLS.IssuerRef.Name).To(Equal("wandb-operator-seaweedfs-issuer"))
+		Expect(seaweed.Spec.TLS.IssuerRef.Kind).To(Equal("Issuer"))
 	})
 
 	It("keeps the filer writable data path explicit", func() {
