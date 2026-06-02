@@ -5,8 +5,10 @@ This directory contains vendored API types from the [Strimzi Kafka Operator](htt
 ## Source
 
 - **Repository**: https://github.com/strimzi/strimzi-kafka-operator
-- **Version**: 0.49.1
-- **Date Vendored**: 2025-12-15
+- **Go API types version**: 0.49.1 (vendored 2025-12-15)
+- **CRD YAML version**: 0.50.0 — matches the chart's `strimzi-kafka-operator` subchart dependency
+
+The Go types and CRD YAMLs are intentionally pinned to slightly different versions because the CRD YAMLs are installed by the `crd-installer` binary and must match what the deployed Strimzi controller expects, while the Go types are used only for the operator's own scheme registration / typed client access (where 0.49.1 ↔ 0.50.0 is API-compatible at v1).
 
 ## Reason for Vendoring
 
@@ -34,33 +36,22 @@ We vendored the API type definitions needed for our operator:
 
 ### CRDs
 
-**NOTE: CRD files must be downloaded separately and are not currently vendored.**
+The full Strimzi 0.50.0 CRD set is vendored under [`crds/`](./crds/). These files are installed at chart install/upgrade time by the `crd-installer` binary, which `go:embed`s them at build time.
 
-To download the CRDs for integration testing:
+| File | CRD |
+| --- | --- |
+| `kafka.strimzi.io_kafkas.yaml` | `kafkas.kafka.strimzi.io` |
+| `kafka.strimzi.io_kafkaconnects.yaml` | `kafkaconnects.kafka.strimzi.io` |
+| `core.strimzi.io_strimzipodsets.yaml` | `strimzipodsets.core.strimzi.io` |
+| `kafka.strimzi.io_kafkatopics.yaml` | `kafkatopics.kafka.strimzi.io` |
+| `kafka.strimzi.io_kafkausers.yaml` | `kafkausers.kafka.strimzi.io` |
+| `kafka.strimzi.io_kafkanodepools.yaml` | `kafkanodepools.kafka.strimzi.io` |
+| `kafka.strimzi.io_kafkabridges.yaml` | `kafkabridges.kafka.strimzi.io` |
+| `kafka.strimzi.io_kafkaconnectors.yaml` | `kafkaconnectors.kafka.strimzi.io` |
+| `kafka.strimzi.io_kafkamirrormaker2s.yaml` | `kafkamirrormaker2s.kafka.strimzi.io` |
+| `kafka.strimzi.io_kafkarebalances.yaml` | `kafkarebalances.kafka.strimzi.io` |
 
-1. Create the `crds/` directory:
-   ```bash
-   mkdir -p internal/vendored/strimzi-kafka/crds
-   ```
-
-2. Download the Strimzi Kafka Operator CRDs from the upstream repository at 0.49.1:
-   ```bash
-   # Kafka
-   curl -L https://raw.githubusercontent.com/strimzi/strimzi-kafka-operator/0.49.1/packaging/install/cluster-operator/040-Crd-kafka.yaml \
-     -o internal/vendored/strimzi-kafka/crds/kafka.strimzi.io_kafkas.yaml
-
-   # KafkaNodePool
-   curl -L https://raw.githubusercontent.com/strimzi/strimzi-kafka-operator/0.49.1/packaging/install/cluster-operator/045-Crd-kafkanodepool.yaml \
-     -o internal/vendored/strimzi-kafka/crds/kafka.strimzi.io_kafkanodepools.yaml
-
-   # KafkaTopic
-   curl -L https://raw.githubusercontent.com/strimzi/strimzi-kafka-operator/0.49.1/packaging/install/cluster-operator/043-Crd-kafkatopic.yaml \
-     -o internal/vendored/strimzi-kafka/crds/kafka.strimzi.io_kafkatopics.yaml
-   ```
-
-3. **When updating to a new version**: Update the version tag (0.49.1) in the URLs above to match the new vendored version.
-
-**Purpose**: Integration testing with real Kubernetes API server (envtest)
+**Refreshing CRDs for a new Strimzi version**: download each `0XX-Crd-*.yaml` file from `https://raw.githubusercontent.com/strimzi/strimzi-kafka-operator/<version>/packaging/install/cluster-operator/` and rename it using the `<group>_<plural>.yaml` convention shown above.
 
 ### API Types
 

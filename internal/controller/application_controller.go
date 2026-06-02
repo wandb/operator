@@ -37,6 +37,7 @@ import (
 	"knative.dev/pkg/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
@@ -254,10 +255,7 @@ func (r *ApplicationReconciler) reconcileDeployment(ctx context.Context, app *wa
 		logger.Info("Deployment not found", "Deployment", app.Name)
 	}
 
-	selectorLabels := map[string]string{
-		"app.kubernetes.io/name":     app.Name,
-		"app.kubernetes.io/instance": app.Name,
-	}
+	selectorLabels := getSelectorLabels(app)
 
 	deployment.Name = app.Name
 	deployment.Namespace = app.Namespace
@@ -291,6 +289,10 @@ func (r *ApplicationReconciler) reconcileDeployment(ctx context.Context, app *wa
 		deployment.Spec.Replicas = app.Spec.Replicas
 	}
 
+	if err = controllerutil.SetControllerReference(app, deployment, r.Scheme); err != nil {
+		return ctrl.Result{}, err
+	}
+
 	logger.Debug("Deployment spec", "Deployment", deployment.Name, "Spec", deployment.Spec)
 
 	if deployment.CreationTimestamp.IsZero() {
@@ -309,6 +311,13 @@ func (r *ApplicationReconciler) reconcileDeployment(ctx context.Context, app *wa
 
 	logger.Info("Successfully reconciled Deployment", "Deployment", deployment.Name)
 	return ctrl.Result{}, nil
+}
+
+func getSelectorLabels(app *wandbv2.Application) map[string]string {
+	return map[string]string{
+		"app.kubernetes.io/name":     app.Name,
+		"app.kubernetes.io/instance": app.Namespace,
+	}
 }
 
 // deleteDeployment deletes the Deployment associated with the Application
@@ -352,10 +361,7 @@ func (r *ApplicationReconciler) reconcileRollout(ctx context.Context, app *wandb
 		logger.Info("Rollout not found", "Rollout", app.Name)
 	}
 
-	selectorLabels := map[string]string{
-		"app.kubernetes.io/name":     app.Name,
-		"app.kubernetes.io/instance": app.Name,
-	}
+	selectorLabels := getSelectorLabels(app)
 
 	rollout.Name = app.Name
 	rollout.Namespace = app.Namespace
@@ -387,6 +393,10 @@ func (r *ApplicationReconciler) reconcileRollout(ctx context.Context, app *wandb
 		// Do not update replicas if HPA is managing them
 	} else {
 		rollout.Spec.Replicas = app.Spec.Replicas
+	}
+
+	if err = controllerutil.SetControllerReference(app, rollout, r.Scheme); err != nil {
+		return ctrl.Result{}, err
 	}
 
 	logger.Info("Rollout spec", "Rollout", rollout.Name, "Spec", rollout.Spec)
@@ -450,10 +460,7 @@ func (r *ApplicationReconciler) reconcileStatefulSet(ctx context.Context, app *w
 		logger.Info("StatefulSet not found", "StatefulSet", app.Name)
 	}
 
-	selectorLabels := map[string]string{
-		"app.kubernetes.io/name":     app.Name,
-		"app.kubernetes.io/instance": app.Name,
-	}
+	selectorLabels := getSelectorLabels(app)
 
 	statefulSet.Name = app.Name
 	statefulSet.Namespace = app.Namespace
@@ -485,6 +492,10 @@ func (r *ApplicationReconciler) reconcileStatefulSet(ctx context.Context, app *w
 		// Do not update replicas if HPA is managing them
 	} else {
 		statefulSet.Spec.Replicas = app.Spec.Replicas
+	}
+
+	if err = controllerutil.SetControllerReference(app, statefulSet, r.Scheme); err != nil {
+		return ctrl.Result{}, err
 	}
 
 	logger.Info("StatefulSet spec", "StatefulSet", statefulSet.Name, "Spec", statefulSet.Spec)
@@ -571,10 +582,14 @@ func (r *ApplicationReconciler) reconcileJobs(ctx context.Context, app *wandbv2.
 			jobToReconcile.Labels = make(map[string]string)
 		}
 		jobToReconcile.Labels["app.kubernetes.io/name"] = app.Name
-		jobToReconcile.Labels["app.kubernetes.io/instance"] = app.Name
+		jobToReconcile.Labels["app.kubernetes.io/instance"] = app.Namespace
 		jobToReconcile.Labels["app.kubernetes.io/managed-by"] = "application-controller"
 
-		if errors.IsNotFound(err) {
+		if err = controllerutil.SetControllerReference(app, jobToReconcile, r.Scheme); err != nil {
+			return err
+		}
+
+		if currentJob.CreationTimestamp.IsZero() {
 			if err := r.Create(ctx, jobToReconcile); err != nil {
 				logger.Error("Failed to create Job", logx.ErrAttr(err), "Job", jobName)
 				return err
@@ -619,7 +634,7 @@ func (r *ApplicationReconciler) deleteJobs(ctx context.Context, app *wandbv2.App
 		client.InNamespace(app.Namespace),
 		client.MatchingLabels{
 			"app.kubernetes.io/name":       app.Name,
-			"app.kubernetes.io/instance":   app.Name,
+			"app.kubernetes.io/instance":   app.Namespace,
 			"app.kubernetes.io/managed-by": "application-controller",
 		},
 	}
@@ -673,8 +688,12 @@ func (r *ApplicationReconciler) reconcileCronJobs(ctx context.Context, app *wand
 			cronJobToReconcile.Labels = make(map[string]string)
 		}
 		cronJobToReconcile.Labels["app.kubernetes.io/name"] = app.Name
-		cronJobToReconcile.Labels["app.kubernetes.io/instance"] = app.Name
+		cronJobToReconcile.Labels["app.kubernetes.io/instance"] = app.Namespace
 		cronJobToReconcile.Labels["app.kubernetes.io/managed-by"] = "application-controller"
+
+		if err = controllerutil.SetControllerReference(app, cronJobToReconcile, r.Scheme); err != nil {
+			return err
+		}
 
 		if currentCronJob.CreationTimestamp.IsZero() {
 			if err := r.Create(ctx, cronJobToReconcile); err != nil {
@@ -706,7 +725,7 @@ func (r *ApplicationReconciler) deleteCronJobs(ctx context.Context, app *wandbv2
 		client.InNamespace(app.Namespace),
 		client.MatchingLabels{
 			"app.kubernetes.io/name":       app.Name,
-			"app.kubernetes.io/instance":   app.Name,
+			"app.kubernetes.io/instance":   app.Namespace,
 			"app.kubernetes.io/managed-by": "application-controller",
 		},
 	}
@@ -756,14 +775,15 @@ func (r *ApplicationReconciler) reconcileService(ctx context.Context, app *wandb
 	desired.Spec = *app.Spec.ServiceTemplate.DeepCopy()
 
 	// Ensure selector targets the application's pods
-	selectorLabels := map[string]string{
-		"app.kubernetes.io/name":     app.Name,
-		"app.kubernetes.io/instance": app.Name,
-	}
+	selectorLabels := getSelectorLabels(app)
 	// Merge provided selector with our standard labels
 	desired.Spec.Selector = utils.MergeMapsStringString(desired.Spec.Selector, selectorLabels)
 	// Also add selector labels to the Service's metadata labels so they are queryable on the Service itself
 	desired.Labels = utils.MergeMapsStringString(desired.Labels, selectorLabels)
+
+	if err := controllerutil.SetControllerReference(app, desired, r.Scheme); err != nil {
+		return err
+	}
 
 	current := &corev1.Service{}
 	err := r.Get(ctx, client.ObjectKey{Namespace: app.Namespace, Name: app.Name}, current)
@@ -892,6 +912,10 @@ func (r *ApplicationReconciler) reconcileHPA(ctx context.Context, app *wandbv2.A
 		APIVersion: groupVersion,
 		Kind:       kind,
 		Name:       app.Name,
+	}
+
+	if err := controllerutil.SetControllerReference(app, desired, r.Scheme); err != nil {
+		return err
 	}
 
 	current := &autoscalingv2.HorizontalPodAutoscaler{}

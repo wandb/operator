@@ -46,9 +46,19 @@ func WriteState(
 
 	bucketUrl := url.URL{
 		Scheme: "s3",
-		Host:   fmt.Sprintf("%s:%s", data["Host"], data["Port"]),
-		User:   url.UserPassword(data["AccessKey"], data["SecretKey"]),
 		Path:   data["Bucket"],
+	}
+
+	if _, ok := data["Host"]; ok {
+		if _, ok := data["Port"]; ok {
+			bucketUrl.Host = fmt.Sprintf("%s:%s", data["Host"], data["Port"])
+		} else {
+			bucketUrl.Host = data["Host"]
+		}
+	}
+
+	if _, ok := data["AccessKey"]; ok {
+		bucketUrl.User = url.UserPassword(data["AccessKey"], data["SecretKey"])
 	}
 
 	data["url"] = bucketUrl.String()
@@ -59,14 +69,19 @@ func WriteState(
 	}
 
 	localRef := corev1.LocalObjectReference{Name: nsName.Name}
+	// ResolveFields only writes non-empty values, so any field that is
+	// legitimately absent for some deployment must be optional: Host (plain
+	// AWS S3 with no custom endpoint), AccessKey/SecretKey (IAM-role /
+	// workload-identity auth), Region (MinIO or region supplied out-of-band).
+	// url and Bucket are always written.
 	return nil, &apiv2.ObjectStoreConnection{
 		URL:       corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "url", Optional: ptr.To(false)},
-		Endpoint:  corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Host", Optional: ptr.To(false)},
+		Endpoint:  corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Host", Optional: ptr.To(true)},
 		Port:      corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Port", Optional: ptr.To(true)},
-		AccessKey: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "AccessKey", Optional: ptr.To(false)},
-		SecretKey: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "SecretKey", Optional: ptr.To(false)},
+		AccessKey: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "AccessKey", Optional: ptr.To(true)},
+		SecretKey: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "SecretKey", Optional: ptr.To(true)},
 		Bucket:    corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Bucket", Optional: ptr.To(false)},
-		Region:    corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Region", Optional: ptr.To(false)},
+		Region:    corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Region", Optional: ptr.To(true)},
 	}
 }
 

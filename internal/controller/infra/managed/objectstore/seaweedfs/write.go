@@ -25,7 +25,7 @@ const (
 
 func WriteState(
 	ctx context.Context,
-	client client.Client,
+	kubeClient client.Client,
 	specNamespacedName types.NamespacedName,
 	desiredCr *seaweedv1.Seaweed,
 	envConfig SeaweedS3Config,
@@ -37,7 +37,7 @@ func WriteState(
 	nsnBuilder := createNsNameBuilder(specNamespacedName)
 
 	found, err := common.GetResource(
-		ctx, client, nsnBuilder.SpecNsName(), ResourceTypeName, actual,
+		ctx, kubeClient, nsnBuilder.SpecNsName(), ResourceTypeName, actual,
 	)
 	if err != nil {
 		return []metav1.Condition{
@@ -59,7 +59,7 @@ func WriteState(
 
 	result := make([]metav1.Condition, 0)
 
-	action, err := common.CrudResource(ctx, client, desiredCr, actual)
+	action, err := common.CrudResource(ctx, kubeClient, desiredCr, actual)
 	if err != nil {
 		result = append(result, metav1.Condition{
 			Type:   common.ReconciledType,
@@ -96,7 +96,7 @@ func WriteState(
 	}
 
 	connInfo, err := writeSeaweedS3Config(
-		ctx, client, desiredCr, nsnBuilder, envConfig,
+		ctx, kubeClient, desiredCr, nsnBuilder, envConfig,
 	)
 	if err != nil {
 		result = append(result, metav1.Condition{
@@ -109,7 +109,7 @@ func WriteState(
 
 	if connInfo != nil {
 		connection, err := writeWandbConnInfo(
-			ctx, client, wandbOwner, nsnBuilder, connInfo,
+			ctx, kubeClient, wandbOwner, nsnBuilder, connInfo,
 		)
 		if err != nil {
 			result = append(result, metav1.Condition{

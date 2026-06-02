@@ -64,7 +64,7 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 			Expect(obj.Spec.Wandb.InternalServiceAuth.OIDCIssuer).To(Equal("https://kubernetes.default.svc.cluster.local"))
 			Expect(obj.Spec.Wandb.ServiceAccount.Create).ToNot(BeNil())
 			Expect(*obj.Spec.Wandb.ServiceAccount.Create).To(BeTrue())
-			Expect(obj.Spec.Wandb.ServiceAccount.ServiceAccountName).To(Equal("wandb"))
+			Expect(obj.Spec.Wandb.ServiceAccount.ServiceAccountName).To(Equal("wandb-app"))
 			Expect(obj.Status.Wandb.Applications).ToNot(BeNil())
 			Expect(obj.Spec.MySQL.ManagedMysql.Namespace).To(Equal("test-ns"))
 			Expect(obj.Spec.Redis.ManagedRedis.Namespace).To(Equal("test-ns"))

@@ -7,7 +7,7 @@ dependencies:
   version: 0.24.0
 - name: cert-manager
   repository: https://charts.jetstack.io
-  version: v1.16.3
+  version: v1.20.2
 - name: redis-operator
   repository: https://ot-container-kit.github.io/helm-charts
   version: 0.22.2
@@ -16,7 +16,7 @@ dependencies:
   version: 0.50.0
 - name: seaweedfs-operator
   repository: https://seaweedfs.github.io/seaweedfs-operator/
-  version: 0.1.13
+  version: 0.1.24
 - name: prometheus-operator-crds
   repository: https://prometheus-community.github.io/helm-charts
   version: 29.0.0
@@ -32,5 +32,5 @@ dependencies:
 - name: telemetry
   repository: file://../telemetry
   version: 0.1.0
-digest: sha256:4b5de51ac92b6a1c4fe94c7ef9b6d044d8b634852807f2b52b44a42c5e851e0c
-generated: "2026-05-29T14:07:08.772292-05:00"
+digest: sha256:4031a6ef851da28f0eabcbabb4417f073b8878cc27d277506dfdc670cac77c62
+generated: "2026-06-02T09:49:48.817908-05:00"

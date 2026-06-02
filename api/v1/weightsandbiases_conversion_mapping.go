@@ -20,10 +20,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/utils/ptr"
 
 	appsv2 "github.com/wandb/operator/api/v2"
 )
@@ -38,10 +40,8 @@ const (
 	defaultBucketSecretKeyName    = "SECRET_KEY"
 )
 
-// Annotations that stash v1 sub-trees needing downstream Secret materialization
-// by the v2 reconciler. A stateless conversion webhook can't create Secrets, so
-// it hands raw v1 values off here and the reconciler turns them into
-// SecretKeySelectors on the spec.
+// Annotations carrying v1 literals the reconciler materializes into Secrets
+// post-conversion (the webhook is stateless and can't create them itself).
 const (
 	OIDCPendingAnnotation   = "legacy.operator.wandb.com/oidc-pending"
 	MySQLPendingAnnotation  = "legacy.operator.wandb.com/mysql-pending"
@@ -59,13 +59,15 @@ var validSizes = map[string]appsv2.Size{
 	string(appsv2.SizeXXLarge): appsv2.SizeXXLarge,
 }
 
-// applyGlobalMappings extracts the supported v1 spec.values.* fields and
-// writes them onto dst's typed v2 spec (and annotations, for fields that
-// need downstream Secret materialization). Most fields live under
-// spec.values.global; a few (e.g. the chart-version derived from
-// app.image.tag / api.image.tag) live at peers of `global`.
-func applyGlobalMappings(src *WeightsAndBiases, dst *appsv2.WeightsAndBiases) error {
-	values := src.Spec.Values.Object
+// applyValueMappings is the top-level conversion orchestrator. It resolves
+// the authoritative values (active-spec Secret if present, else the CR),
+// runs peer-of-global mappers inline, and delegates global.* to
+// applyGlobalMappings.
+func applyValueMappings(src *WeightsAndBiases, dst *appsv2.WeightsAndBiases) error {
+	values, err := resolveValues(src)
+	if err != nil {
+		return err
+	}
 	if values == nil {
 		return nil
 	}
@@ -73,15 +75,31 @@ func applyGlobalMappings(src *WeightsAndBiases, dst *appsv2.WeightsAndBiases) er
 	if err := mapVersion(values, dst); err != nil {
 		return err
 	}
+	if err := mapServiceAccountAnnotations(values, dst); err != nil {
+		return err
+	}
+	if err := mapInternalJWTIssuer(values, dst); err != nil {
+		return err
+	}
+	if err := mapIngress(values, dst); err != nil {
+		return err
+	}
 
 	globalMap, found, err := unstructured.NestedMap(values, "global")
 	if err != nil {
 		return fmt.Errorf("spec.values.global: %w", err)
 	}
-	if !found {
-		return nil
+	if found {
+		if err := applyGlobalMappings(globalMap, dst); err != nil {
+			return err
+		}
 	}
 
+	return nil
+}
+
+// applyGlobalMappings runs every mapper sourced from spec.values.global.
+func applyGlobalMappings(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) error {
 	if err := mapHostnameLicense(globalMap, dst); err != nil {
 		return err
 	}
@@ -104,9 +122,8 @@ func applyGlobalMappings(src *WeightsAndBiases, dst *appsv2.WeightsAndBiases) er
 	return nil
 }
 
-// mapVersion derives spec.wandb.version from the v1 helm values. The
-// authoritative source is the app sub-chart's image tag; the api sub-chart
-// is used as a fallback because some older v1 manifests only set api.
+// mapVersion sets spec.wandb.version from app.image.tag, falling back to
+// api.image.tag.
 func mapVersion(values map[string]interface{}, dst *appsv2.WeightsAndBiases) error {
 	if tag, found, err := unstructured.NestedString(values, "app", "image", "tag"); err != nil {
 		return fmt.Errorf("spec.values.app.image.tag: %w", err)
@@ -120,6 +137,174 @@ func mapVersion(values map[string]interface{}, dst *appsv2.WeightsAndBiases) err
 		dst.Spec.Wandb.Version = tag
 	}
 	return nil
+}
+
+// mapServiceAccountAnnotations maps v1's per-sub-chart ServiceAccount
+// annotations to v2's single spec.wandb.serviceAccount.annotations,
+// preferring `app` and falling back to `api`.
+func mapServiceAccountAnnotations(values map[string]interface{}, dst *appsv2.WeightsAndBiases) error {
+	anns, err := readServiceAccountAnnotations(values, "app")
+	if err != nil {
+		return err
+	}
+	if len(anns) == 0 {
+		anns, err = readServiceAccountAnnotations(values, "api")
+		if err != nil {
+			return err
+		}
+	}
+	if len(anns) > 0 {
+		dst.Spec.Wandb.ServiceAccount.Annotations = anns
+	}
+	return nil
+}
+
+// mapInternalJWTIssuer pulls the first entry from global.internalJWTMap (or
+// app as fallback) into spec.wandb.internalServiceAuth.oidcIssuer.
+func mapInternalJWTIssuer(values map[string]interface{}, dst *appsv2.WeightsAndBiases) error {
+	issuer, err := readFirstInternalJWTIssuer(values, "global")
+	if err != nil {
+		return err
+	}
+	if issuer == "" {
+		issuer, err = readFirstInternalJWTIssuer(values, "app")
+		if err != nil {
+			return err
+		}
+	}
+	if issuer != "" {
+		dst.Spec.Wandb.InternalServiceAuth.OIDCIssuer = issuer
+	}
+	return nil
+}
+
+// mapIngress maps v1's ingress section to spec.networking and
+// spec.wandb.additionalHostnames. ingress.install and ingress.create both
+// default to true in the chart, so an absent or partial ingress block still
+// enables networking mode "ingress".
+func mapIngress(values map[string]interface{}, dst *appsv2.WeightsAndBiases) error {
+	ingressMap, _, err := unstructured.NestedMap(values, "ingress")
+	if err != nil {
+		return fmt.Errorf("spec.values.ingress: %w", err)
+	}
+
+	if !boolFromValues(ingressMap, true, "install") || !boolFromValues(ingressMap, true, "create") {
+		return nil
+	}
+
+	if dst.Spec.Networking.Mode == "" {
+		dst.Spec.Networking.Mode = appsv2.NetworkingModeIngress
+	}
+
+	if class, _, err := unstructured.NestedString(ingressMap, "class"); err != nil {
+		return fmt.Errorf("spec.values.ingress.class: %w", err)
+	} else if class != "" {
+		if dst.Spec.Networking.Ingress == nil {
+			dst.Spec.Networking.Ingress = &appsv2.IngressConfig{}
+		}
+		dst.Spec.Networking.Ingress.IngressClassName = ptr.To(class)
+	}
+
+	if name, _, err := unstructured.NestedString(ingressMap, "nameOverride"); err != nil {
+		return fmt.Errorf("spec.values.ingress.nameOverride: %w", err)
+	} else if name != "" {
+		if dst.Spec.Networking.Ingress == nil {
+			dst.Spec.Networking.Ingress = &appsv2.IngressConfig{}
+		}
+		dst.Spec.Networking.Ingress.Name = name
+	}
+
+	if anns, _, err := unstructured.NestedStringMap(ingressMap, "annotations"); err != nil {
+		return fmt.Errorf("spec.values.ingress.annotations: %w", err)
+	} else if len(anns) > 0 {
+		dst.Spec.Networking.Annotations = anns
+	}
+
+	if hosts, _, err := unstructured.NestedStringSlice(ingressMap, "additionalHosts"); err != nil {
+		return fmt.Errorf("spec.values.ingress.additionalHosts: %w", err)
+	} else if len(hosts) > 0 {
+		dst.Spec.Wandb.AdditionalHostnames = hosts
+	}
+
+	if name, err := firstIngressTLSSecretName(ingressMap); err != nil {
+		return err
+	} else if name != "" {
+		if dst.Spec.Networking.TLS == nil {
+			dst.Spec.Networking.TLS = &appsv2.TLSConfig{}
+		}
+		dst.Spec.Networking.TLS.SecretName = name
+	}
+
+	return nil
+}
+
+// firstIngressTLSSecretName returns the secretName on the first ingress.tls
+// entry. v2 carries only a single TLS Secret; multi-cert v1 configs collapse
+// to the first entry.
+func firstIngressTLSSecretName(ingressMap map[string]interface{}) (string, error) {
+	list, _, err := unstructured.NestedSlice(ingressMap, "tls")
+	if err != nil {
+		return "", fmt.Errorf("spec.values.ingress.tls: %w", err)
+	}
+	if len(list) == 0 {
+		return "", nil
+	}
+	entry, ok := list[0].(map[string]interface{})
+	if !ok {
+		return "", nil
+	}
+	name, _, err := unstructured.NestedString(entry, "secretName")
+	if err != nil {
+		return "", fmt.Errorf("spec.values.ingress.tls[0].secretName: %w", err)
+	}
+	return name, nil
+}
+
+// boolFromValues reads a bool at path within m, returning def when the key
+// is absent or the value isn't a bool. Used to apply v1 chart defaults
+// during conversion.
+func boolFromValues(m map[string]interface{}, def bool, path ...string) bool {
+	if m == nil {
+		return def
+	}
+	v, found, err := unstructured.NestedBool(m, path...)
+	if err != nil || !found {
+		return def
+	}
+	return v
+}
+
+// readFirstInternalJWTIssuer returns the issuer on the first internalJWTMap
+// entry under values.<service>, or "" when the list is missing or empty.
+func readFirstInternalJWTIssuer(values map[string]interface{}, service string) (string, error) {
+	list, found, err := unstructured.NestedSlice(values, service, "internalJWTMap")
+	if err != nil {
+		return "", fmt.Errorf("spec.values.%s.internalJWTMap: %w", service, err)
+	}
+	if !found || len(list) == 0 {
+		return "", nil
+	}
+	entry, ok := list[0].(map[string]interface{})
+	if !ok {
+		return "", nil
+	}
+	issuer, _, err := unstructured.NestedString(entry, "issuer")
+	if err != nil {
+		return "", fmt.Errorf("spec.values.%s.internalJWTMap[0].issuer: %w", service, err)
+	}
+	return issuer, nil
+}
+
+// readServiceAccountAnnotations reads values.<service>.serviceAccount.annotations.
+func readServiceAccountAnnotations(values map[string]interface{}, service string) (map[string]string, error) {
+	anns, found, err := unstructured.NestedStringMap(values, service, "serviceAccount", "annotations")
+	if err != nil {
+		return nil, fmt.Errorf("spec.values.%s.serviceAccount.annotations: %w", service, err)
+	}
+	if !found {
+		return nil, nil
+	}
+	return anns, nil
 }
 
 func mapHostnameLicense(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) error {
@@ -159,17 +344,9 @@ func mapSize(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) err
 	return nil
 }
 
-// mapBucket handles v1's two bucket-related sub-trees:
-//   - global.bucket: optionally contains a `secret: {secretName, accessKeyName,
-//     secretKeyName}` block plus any number of literal fields (provider, name,
-//     region, path, kmsKey, etc.).
-//   - global.defaultBucket: literal fields only.
-//
-// The `bucket.secret` block is the one piece of v1 with an explicit Secret
-// reference shape, so it goes straight to spec.objectStore.externalObjectStore
-// .{AccessKey, SecretKey}. Everything else is merged into a single flat
-// annotation payload (bucket entries win over defaultBucket on collision) so a
-// follow-up reconciler step can later materialize the literals.
+// mapBucket pulls `bucket.secret` directly into externalObjectStore
+// .{AccessKey,SecretKey} and merges the remaining bucket + defaultBucket
+// literals (bucket wins on collision) into the bucket-pending annotation.
 func mapBucket(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) error {
 	bucket, _, err := unstructured.NestedMap(globalMap, "bucket")
 	if err != nil {
@@ -182,6 +359,8 @@ func mapBucket(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) e
 	if len(bucket) == 0 && len(defaultBucket) == 0 {
 		return nil
 	}
+
+	dst.Spec.ObjectStore.ExternalObjectStore = &appsv2.ObjectStoreConnection{}
 
 	if sec, ok, err := unstructured.NestedMap(bucket, "secret"); err != nil {
 		return fmt.Errorf("spec.values.global.bucket.secret: %w", err)
@@ -196,48 +375,35 @@ func mapBucket(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) e
 			if secretKeyName == "" {
 				secretKeyName = defaultBucketSecretKeyName
 			}
-			dst.Spec.ObjectStore.ExternalObjectStore = &appsv2.ObjectStoreConnection{
-				AccessKey: corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{Name: name},
-					Key:                  accessKeyName,
-				},
-				SecretKey: corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{Name: name},
-					Key:                  secretKeyName,
-				},
+			dst.Spec.ObjectStore.ExternalObjectStore.AccessKey = corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: name},
+				Key:                  accessKeyName,
+			}
+			dst.Spec.ObjectStore.ExternalObjectStore.SecretKey = corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: name},
+				Key:                  secretKeyName,
 			}
 		}
 	}
 
-	merged := map[string]interface{}{}
+	merged := map[string]string{}
 	for k, v := range defaultBucket {
-		if isNonEmptyValue(v) {
-			merged[k] = v
+		if s, ok := scalarToString(v); ok && s != "" {
+			merged[k] = s
 		}
 	}
 	for k, v := range bucket {
 		if k == "secret" {
 			continue
 		}
-		if isNonEmptyValue(v) {
-			merged[k] = v
+		if s, ok := scalarToString(v); ok && s != "" {
+			merged[k] = s
 		}
 	}
 	if len(merged) == 0 {
 		return nil
 	}
 	return writeAnnotation(dst, BucketPendingAnnotation, merged)
-}
-
-func isNonEmptyValue(v interface{}) bool {
-	switch x := v.(type) {
-	case nil:
-		return false
-	case string:
-		return x != ""
-	default:
-		return true
-	}
 }
 
 func writeAnnotation(dst *appsv2.WeightsAndBiases, key string, value interface{}) error {
@@ -252,9 +418,7 @@ func writeAnnotation(dst *appsv2.WeightsAndBiases, key string, value interface{}
 	return nil
 }
 
-// mysqlFields maps each v1 `global.mysql.<key>` to the corresponding setter
-// on a *MysqlConnection. Order is preserved so any test failures point at the
-// first offending field.
+// mysqlFields maps each v1 global.mysql.<key> to a *MysqlConnection setter.
 var mysqlFields = []struct {
 	v1Key  string
 	setRef func(*appsv2.MysqlConnection, corev1.SecretKeySelector)
@@ -267,14 +431,9 @@ var mysqlFields = []struct {
 	{"caCert", func(c *appsv2.MysqlConnection, s corev1.SecretKeySelector) { c.SslCa = s }},
 }
 
-// mapMySQL splits v1 global.mysql values by shape:
-//   - {valueFrom: {secretKeyRef: {name, key}}} maps go to typed
-//     spec.mysql.externalMysql.* SecretKeySelectors directly.
-//   - Plain scalars are written to the mysql-pending annotation so the
-//     reconciler can materialize them into a Secret.
-//   - The legacy `passwordSecret.{name, passwordKey}` block also goes
-//     direct to externalMysql.password, but only when no password ref
-//     has already been set by a `password.valueFrom` block.
+// mapMySQL routes valueFrom-shaped fields to externalMysql.*, scalars to
+// the mysql-pending annotation, and the legacy passwordSecret block to
+// externalMysql.password (skipped when password.valueFrom already won).
 func mapMySQL(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) error {
 	mysqlMap, found, err := unstructured.NestedMap(globalMap, "mysql")
 	if err != nil {
@@ -284,15 +443,9 @@ func mapMySQL(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) er
 		return nil
 	}
 
-	var conn *appsv2.MysqlConnection
-	ensureConn := func() *appsv2.MysqlConnection {
-		if conn == nil {
-			conn = &appsv2.MysqlConnection{}
-		}
-		return conn
-	}
+	conn := &appsv2.MysqlConnection{}
 
-	remaining := map[string]interface{}{}
+	remaining := map[string]string{}
 
 	for _, f := range mysqlFields {
 		raw, ok := mysqlMap[f.v1Key]
@@ -305,8 +458,8 @@ func mapMySQL(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) er
 		}
 		switch {
 		case ref != nil:
-			f.setRef(ensureConn(), *ref)
-		case literal != nil:
+			f.setRef(conn, *ref)
+		case literal != "":
 			remaining[f.v1Key] = literal
 		}
 	}
@@ -321,7 +474,7 @@ func mapMySQL(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) er
 			if key == "" {
 				key = defaultMySQLPasswordSecretKey
 			}
-			ensureConn().Password = corev1.SecretKeySelector{
+			conn.Password = corev1.SecretKeySelector{
 				LocalObjectReference: corev1.LocalObjectReference{Name: name},
 				Key:                  key,
 			}
@@ -329,17 +482,15 @@ func mapMySQL(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) er
 		}
 	}
 
-	if conn != nil {
-		dst.Spec.MySQL.ExternalMysql = conn
-	}
+	dst.Spec.MySQL.ExternalMysql = conn
+
 	if len(remaining) > 0 {
 		return writeAnnotation(dst, MySQLPendingAnnotation, remaining)
 	}
 	return nil
 }
 
-// redisFields maps each v1 `global.redis.<key>` to the corresponding setter
-// on a *RedisConnection.
+// redisFields maps each v1 global.redis.<key> to a *RedisConnection setter.
 var redisFields = []struct {
 	v1Key  string
 	setRef func(*appsv2.RedisConnection, corev1.SecretKeySelector)
@@ -350,17 +501,11 @@ var redisFields = []struct {
 	{"caCert", func(c *appsv2.RedisConnection, s corev1.SecretKeySelector) { c.SslCa = s }},
 }
 
-// mapRedis splits v1 global.redis values by shape:
-//   - {valueFrom: {secretKeyRef: {name, key}}} maps go to typed
-//     spec.redis.externalRedis.* SecretKeySelectors directly.
-//   - Plain scalars are written to the redis-pending annotation so the
-//     reconciler can materialize them into a Secret.
-//   - The legacy `secret.{secretName, secretKey}` block also goes direct to
-//     externalRedis.password, but only when no password ref has already been
-//     set by a `password.valueFrom` block.
-//
-// Fields outside the known set (e.g. v1's `external`, `parameters`, `params`)
-// have no v2 equivalent and are dropped.
+// mapRedis routes valueFrom-shaped fields to externalRedis.*, scalars to
+// the redis-pending annotation, and the legacy secret block to
+// externalRedis.password (skipped when password.valueFrom already won).
+// Unknown fields (external, parameters, params) have no v2 home and are
+// dropped.
 func mapRedis(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) error {
 	redisMap, found, err := unstructured.NestedMap(globalMap, "redis")
 	if err != nil {
@@ -370,15 +515,9 @@ func mapRedis(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) er
 		return nil
 	}
 
-	var conn *appsv2.RedisConnection
-	ensureConn := func() *appsv2.RedisConnection {
-		if conn == nil {
-			conn = &appsv2.RedisConnection{}
-		}
-		return conn
-	}
+	conn := &appsv2.RedisConnection{}
 
-	remaining := map[string]interface{}{}
+	remaining := map[string]string{}
 
 	for _, f := range redisFields {
 		raw, ok := redisMap[f.v1Key]
@@ -391,9 +530,32 @@ func mapRedis(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) er
 		}
 		switch {
 		case ref != nil:
-			f.setRef(ensureConn(), *ref)
-		case literal != nil:
+			f.setRef(conn, *ref)
+		case literal != "":
 			remaining[f.v1Key] = literal
+		}
+	}
+
+	// tls is nested under redis.params (preferred) or redis.parameters in v1.
+	for _, parent := range []string{"params", "parameters"} {
+		raw, found, err := unstructured.NestedFieldNoCopy(redisMap, parent, "tls")
+		if err != nil {
+			return fmt.Errorf("spec.values.global.redis.%s.tls: %w", parent, err)
+		}
+		if !found {
+			continue
+		}
+		ref, literal, classifyErr := classifyValueFromOrLiteral(raw)
+		if classifyErr != nil {
+			return fmt.Errorf("spec.values.global.redis.%s.tls: %w", parent, classifyErr)
+		}
+		if ref != nil {
+			conn.Tls = *ref
+			break
+		}
+		if literal != "" {
+			remaining["tls"] = literal
+			break
 		}
 	}
 
@@ -407,7 +569,7 @@ func mapRedis(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) er
 			if key == "" {
 				key = defaultRedisPasswordSecretKey
 			}
-			ensureConn().Password = corev1.SecretKeySelector{
+			conn.Password = corev1.SecretKeySelector{
 				LocalObjectReference: corev1.LocalObjectReference{Name: name},
 				Key:                  key,
 			}
@@ -415,18 +577,16 @@ func mapRedis(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) er
 		}
 	}
 
-	if conn != nil {
-		dst.Spec.Redis.ExternalRedis = conn
-	}
+	dst.Spec.Redis.ExternalRedis = conn
+
 	if len(remaining) > 0 {
 		return writeAnnotation(dst, RedisPendingAnnotation, remaining)
 	}
 	return nil
 }
 
-// oidcFields maps each v1 `global.auth.oidc.<key>` to the corresponding
-// setter on an *OidcSpec. v1's `secret` field carries the *client* secret
-// (mapped to v2's ClientSecret), and `issuer` is the issuer URL.
+// oidcFields maps each v1 global.auth.oidc.<key> to an *OidcSpec setter.
+// v1's `secret` is the client secret; `issuer` is the issuer URL.
 var oidcFields = []struct {
 	v1Key  string
 	setRef func(*appsv2.OidcSpec, corev1.SecretKeySelector)
@@ -437,14 +597,9 @@ var oidcFields = []struct {
 	{"issuer", func(o *appsv2.OidcSpec, s corev1.SecretKeySelector) { o.IssuerUrl = s }},
 }
 
-// mapOIDC splits v1 global.auth.oidc values by shape:
-//   - {valueFrom: {secretKeyRef: {name, key}}} maps go to typed
-//     spec.wandb.oidc.* SecretKeySelectors directly.
-//   - Plain scalars are written to the oidc-pending annotation so the
-//     reconciler can materialize them into a Secret.
-//   - The legacy `oidcSecret.{name, secretKey}` block also goes direct to
-//     oidc.clientSecret, but only when no client-secret ref has already been
-//     set by a `secret.valueFrom` block.
+// mapOIDC routes valueFrom-shaped fields to spec.wandb.oidc.*, scalars to
+// the oidc-pending annotation, and the legacy oidcSecret block to
+// oidc.clientSecret (skipped when secret.valueFrom already won).
 func mapOIDC(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) error {
 	oidcMap, found, err := unstructured.NestedMap(globalMap, "auth", "oidc")
 	if err != nil {
@@ -455,7 +610,7 @@ func mapOIDC(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) err
 	}
 
 	oidc := &dst.Spec.Wandb.OIDC
-	remaining := map[string]interface{}{}
+	remaining := map[string]string{}
 
 	for _, f := range oidcFields {
 		raw, ok := oidcMap[f.v1Key]
@@ -469,7 +624,7 @@ func mapOIDC(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) err
 		switch {
 		case ref != nil:
 			f.setRef(oidc, *ref)
-		case literal != nil:
+		case literal != "":
 			remaining[f.v1Key] = literal
 		}
 	}
@@ -498,34 +653,51 @@ func mapOIDC(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) err
 	return nil
 }
 
-// classifyValueFromOrLiteral inspects a v1 field value. If it is a map
-// matching `{valueFrom: {secretKeyRef: {name, key}}}`, it returns a typed
-// SecretKeySelector. Otherwise, if the value is a non-zero scalar (string
-// or number), it returns the literal. Empty/nil scalars return (nil, nil).
-// A malformed map (a map missing the valueFrom path) returns an error.
-func classifyValueFromOrLiteral(raw interface{}) (*corev1.SecretKeySelector, interface{}, error) {
-	switch v := raw.(type) {
-	case nil:
-		return nil, nil, nil
-	case string:
-		if v == "" {
-			return nil, nil, nil
-		}
-		return nil, v, nil
-	case map[string]interface{}:
-		name, _, _ := unstructured.NestedString(v, "valueFrom", "secretKeyRef", "name")
-		key, _, _ := unstructured.NestedString(v, "valueFrom", "secretKeyRef", "key")
+// classifyValueFromOrLiteral returns a SecretKeySelector when raw is
+// {valueFrom: {secretKeyRef: {name, key}}}, otherwise the scalar stringified
+// as a literal, otherwise ("", no literal). Malformed ref maps error out.
+// The literal is always a string so everything stashed in the pending
+// annotations (which the reconciler materializes into Secret data) is a
+// string regardless of the v1 value's JSON type.
+func classifyValueFromOrLiteral(raw interface{}) (*corev1.SecretKeySelector, string, error) {
+	if m, ok := raw.(map[string]interface{}); ok {
+		name, _, _ := unstructured.NestedString(m, "valueFrom", "secretKeyRef", "name")
+		key, _, _ := unstructured.NestedString(m, "valueFrom", "secretKeyRef", "key")
 		if name == "" || key == "" {
-			return nil, nil, fmt.Errorf("map value must be {valueFrom: {secretKeyRef: {name, key}}}")
+			return nil, "", fmt.Errorf("map value must be {valueFrom: {secretKeyRef: {name, key}}}")
 		}
 		return &corev1.SecretKeySelector{
 			LocalObjectReference: corev1.LocalObjectReference{Name: name},
 			Key:                  key,
-		}, nil, nil
+		}, "", nil
+	}
+	s, _ := scalarToString(raw)
+	return nil, s, nil
+}
+
+// scalarToString renders a JSON scalar (string, bool, number) as a string.
+// Returns ("", false) for nil and non-scalar values (maps, slices).
+func scalarToString(v interface{}) (string, bool) {
+	switch t := v.(type) {
+	case nil:
+		return "", false
+	case string:
+		return t, true
+	case bool:
+		return strconv.FormatBool(t), true
+	case json.Number:
+		return t.String(), true
+	case float64:
+		if t == float64(int64(t)) {
+			return strconv.FormatInt(int64(t), 10), true
+		}
+		return strconv.FormatFloat(t, 'f', -1, 64), true
+	case int64:
+		return strconv.FormatInt(t, 10), true
+	case int:
+		return strconv.Itoa(t), true
 	default:
-		// numbers (port arrives as float64 from a JSON decode), bools, etc.
-		// Treat as literal; the reconciler stringifies as needed.
-		return nil, v, nil
+		return "", false
 	}
 }
 

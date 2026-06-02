@@ -366,6 +366,11 @@ func main() {
 			os.Exit(1)
 		}
 	}
+
+	// Reader for auxiliary lookups (e.g. legacy Secret refs) during
+	// v1 → v2 conversion. Uses GetAPIReader to skip the informer cache,
+	// which may not be warm when the webhook starts serving.
+	appsv1.SetConversionReader(mgr.GetAPIReader())
 	// +kubebuilder:scaffold:builder
 
 	if metricsCertWatcher != nil {

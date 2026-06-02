@@ -469,6 +469,13 @@ func ReconcileWandbManifest(
 		return result, err
 	}
 
+	if appsHealthy(wandb.Status.Wandb.Applications, buildDesiredAppNames(manifest)) {
+		if err := cleanupLegacyV1Deployments(ctx, client, wandb); err != nil {
+			logger.Error(err, "Failed to clean up legacy v1 deployments")
+			return ctrl.Result{}, err
+		}
+	}
+
 	if wandb.Spec.Networking.Mode == apiv2.NetworkingModeGatewayAPI {
 		if err := reconcileInfraHTTPRoutes(ctx, client, wandb, manifest); err != nil {
 			logger.Error(err, "Failed to reconcile infra HTTPRoutes")
@@ -500,13 +507,7 @@ func reconcileApplications(
 		}
 	}
 
-	desiredAppNames := make(map[string]bool)
-	for _, app := range sortedManifestApplications(manifest) {
-		if len(app.Features) > 0 && !manifest.FeaturesEnabled(app.Features) {
-			continue
-		}
-		desiredAppNames[app.Name] = true
-	}
+	desiredAppNames := buildDesiredAppNames(manifest)
 
 	for _, app := range sortedManifestApplications(manifest) {
 		// If the application is gated behind features, only install it when
@@ -515,7 +516,6 @@ func reconcileApplications(
 			continue
 		}
 
-		applicationName := fmt.Sprintf("%s-%s", wandb.Name, app.Name)
 		envVars, err := resolveEnvvars(ctx, client, wandb, manifest, app.CommonEnvs, app.Env)
 		if err != nil {
 			return ctrl.Result{}, err
@@ -524,7 +524,7 @@ func reconcileApplications(
 		if err != nil {
 			return ctrl.Result{}, err
 		}
-		envVars = applyWorkloadTelemetryDefaults(envVars, applicationName)
+		envVars = applyWorkloadTelemetryDefaults(envVars, app.Name)
 
 		volumes, volumeMounts, err := resolveVolumeMounts(ctx, manifest, app.CommonVolumeMounts, app.VolumeMounts)
 		if err != nil {
@@ -550,10 +550,10 @@ func reconcileApplications(
 		initContainers := resolveInitContainers(app, envVars, volumeMounts)
 
 		application := &apiv2.Application{}
-		err = client.Get(ctx, types.NamespacedName{Name: applicationName, Namespace: wandb.Namespace}, application)
+		err = client.Get(ctx, types.NamespacedName{Name: app.Name, Namespace: wandb.Namespace}, application)
 		if err != nil {
 			if apiErrors.IsNotFound(err) {
-				application.SetName(applicationName)
+				application.SetName(app.Name)
 				application.SetNamespace(wandb.Namespace)
 			} else {
 				return ctrl.Result{}, err
@@ -625,19 +625,13 @@ func reconcileApplications(
 			continue
 		}
 
-		appNamePrefix := fmt.Sprintf("%s-", wandb.Name)
-		if !strings.HasPrefix(app.Name, appNamePrefix) {
-			continue
-		}
-		appName := strings.TrimPrefix(app.Name, appNamePrefix)
-
-		if !desiredAppNames[appName] {
+		if !desiredAppNames[app.Name] {
 			logger.Info("Deleting application no longer in manifest or disabled by feature", "application", app.Name)
 			if err := client.Delete(ctx, &app); err != nil && !apiErrors.IsNotFound(err) {
 				return ctrl.Result{}, fmt.Errorf("failed to delete application %s: %w", app.Name, err)
 			}
-			delete(wandb.Status.Wandb.Applications, appName)
-			wmetrics.DeleteApplicationInfo(appName, wandb.Namespace)
+			delete(wandb.Status.Wandb.Applications, app.Name)
+			wmetrics.DeleteApplicationInfo(app.Name, wandb.Namespace)
 		}
 	}
 

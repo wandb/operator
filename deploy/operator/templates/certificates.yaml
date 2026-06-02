@@ -7,8 +7,8 @@ metadata:
   namespace: {{ .Release.Namespace }}
 spec:
   dnsNames:
-    - {{ .Release.Name }}.{{ .Release.Namespace }}.svc
-    - {{ .Release.Name }}.{{ .Release.Namespace }}.svc.cluster.local
+    - {{ include "wandb-operator.serviceName" . }}.{{ .Release.Namespace }}.svc
+    - {{ include "wandb-operator.serviceName" . }}.{{ .Release.Namespace }}.svc.cluster.local
   issuerRef:
     kind: Issuer
     name: {{ .Release.Name }}-selfsigned-issuer

@@ -140,6 +140,11 @@ type NetworkingSpec struct {
 type IngressConfig struct {
 	// +optional
 	IngressClassName *string `json:"ingressClassName,omitempty"`
+
+	// Name overrides the generated Ingress resource name. When empty the
+	// operator defaults to the CR name.
+	// +optional
+	Name string `json:"name,omitempty"`
 }
 
 type GatewayAPIConfig struct {

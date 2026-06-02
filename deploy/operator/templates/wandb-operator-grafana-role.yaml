@@ -1,4 +1,4 @@
-{{- if eq (default "off" .Values.telemetry.mode) "full" }}
+{{- if and (eq (default "off" .Values.telemetry.mode) "full") (dig "wandb-operator" "enabled" true .Values.AsMap) }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -40,6 +40,6 @@ roleRef:
   name: {{ .Release.Name }}-grafana
 subjects:
   - kind: ServiceAccount
-    name: wandb-operator
+    name: {{ include "wandb-operator.fullname" . }}
     namespace: {{ .Release.Namespace }}
 {{- end }}

@@ -63,9 +63,13 @@ generate-vendored: ## Regenerate vendored Moco CRDs from the operator's Helm cha
 		> pkg/vendored/moco/crds/moco_crds.yaml
 	@echo "Regenerated pkg/vendored/moco/crds/moco_crds.yaml"
 
-.PHONY: generate-helm-crds
-generate-helm-crds: kustomize manifests generate
-	$(KUSTOMIZE) build config/helm-crds | sed "s/\'/\"/g" > deploy/operator/templates/crds.yaml
+.PHONY: sync-crd-embed
+sync-crd-embed: manifests ## Sync embedded CRDs in internal/crdinstaller/crds from their source-of-truth locations.
+	@rm -f internal/crdinstaller/crds/operator/*.yaml internal/crdinstaller/crds/redis/*.yaml internal/crdinstaller/crds/kafka/*.yaml
+	@cp config/crd/bases/apps.wandb.com_*.yaml internal/crdinstaller/crds/operator/
+	@cp pkg/vendored/redis-operator/crds/*.yaml internal/crdinstaller/crds/redis/
+	@cp pkg/vendored/strimzi-kafka/crds/*.yaml internal/crdinstaller/crds/kafka/
+	@echo "Synced CRDs into internal/crdinstaller/crds/{operator,redis,kafka}/"
 
 .PHONY: fmt
 fmt: ## Run go fmt against code.
@@ -76,7 +80,7 @@ vet: ## Run go vet against code.
 	go vet ./...
 
 .PHONY: test
-test: manifests generate fmt vet setup-envtest ## Run tests.
+test: manifests generate sync-crd-embed vet setup-envtest ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test -v $$(go list ./... | grep -v /e2e | grep -v /vendored) -coverprofile cover.out
 
 .PHONY: setup-local-webhook
@@ -89,7 +93,7 @@ run-local-webhook: manifests generate fmt vet ## Run controller locally with web
 		echo "Webhook certificates not found. Run 'make setup-local-webhook' first."; \
 		exit 1; \
 	fi
-	go run ./cmd/controller/main.go \
+	go run ./cmd/manager \
 		--webhook-cert-path=.local-webhook-certs \
 		--webhook-cert-name=tls.crt \
 		--webhook-cert-key=tls.key \
@@ -136,12 +140,19 @@ lint-config: golangci-lint ## Verify golangci-lint linter configuration
 ##@ Build
 
 .PHONY: build
-build: manifests generate fmt vet ## Build controller binary.
-	go build -o bin/manager cmd/main.go
+build: manifests generate fmt vet sync-crd-embed build-manager build-crd-installer ## Build all binaries.
+
+.PHONY: build-manager
+build-manager: ## Build the manager binary.
+	go build -o bin/manager ./cmd/manager
+
+.PHONY: build-crd-installer
+build-crd-installer: ## Build the crd-installer binary.
+	go build -o bin/crd-installer ./cmd/crd-installer
 
 .PHONY: run
-run: manifests generate fmt vet ## Run a controller from your host.
-	go run ./cmd/main.go
+run: manifests generate fmt vet ## Run the manager from your host.
+	go run ./cmd/manager
 
 # If you wish to build the manager image targeting other platforms you can use the --platform flag.
 # (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.
