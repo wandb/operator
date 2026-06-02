@@ -145,6 +145,32 @@ seaweedfs-operator:
   webhook:
     enabled: false
 
+# Only the ServiceMonitor CRD is needed — the seaweedfs-operator creates them
+# during reconcile and the VictoriaMetrics Operator auto-converts them to
+# VMServiceScrapes.
+prometheus-operator-crds:
+  crds:
+    alertmanagerconfigs:
+      enabled: false
+    alertmanagers:
+      enabled: false
+    podmonitors:
+      enabled: false
+    probes:
+      enabled: false
+    prometheusagents:
+      enabled: false
+    prometheuses:
+      enabled: false
+    prometheusrules:
+      enabled: false
+    scrapeconfigs:
+      enabled: false
+    servicemonitors:
+      enabled: true
+    thanosrulers:
+      enabled: false
+
 altinity-clickhouse-operator:
   crdHook:
     image:

@@ -51,6 +51,21 @@ var _ = Describe("SeaweedFS vendor specs", func() {
 		Expect(seaweed).NotTo(BeNil())
 		Expect(seaweed.Spec.Volume.ResourceRequirements.Requests[corev1.ResourceCPU]).To(Equal(resource.MustParse("500m")))
 	})
+
+	It("sets metrics ports on master, volume, and filer", func() {
+		seaweed, err := ToObjectStoreVendorSpec(context.Background(), seaweedWandb(), seaweedScheme())
+		Expect(err).NotTo(HaveOccurred())
+		Expect(seaweed).NotTo(BeNil())
+
+		Expect(seaweed.Spec.Master.MetricsPort).NotTo(BeNil())
+		Expect(*seaweed.Spec.Master.MetricsPort).To(Equal(seaweedMasterMetricsPort))
+
+		Expect(seaweed.Spec.Volume.MetricsPort).NotTo(BeNil())
+		Expect(*seaweed.Spec.Volume.MetricsPort).To(Equal(seaweedVolumeMetricsPort))
+
+		Expect(seaweed.Spec.Filer.MetricsPort).NotTo(BeNil())
+		Expect(*seaweed.Spec.Filer.MetricsPort).To(Equal(seaweedFilerMetricsPort))
+	})
 })
 
 func seaweedScheme() *runtime.Scheme {

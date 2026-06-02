@@ -35,6 +35,10 @@ dependencies:
     version: 0.1.24
     repository: https://seaweedfs.github.io/seaweedfs-operator/
     condition: seaweedfs-operator.enabled
+  - name: prometheus-operator-crds
+    version: 29.0.0
+    repository: https://prometheus-community.github.io/helm-charts
+    condition: seaweedfs-operator.enabled
   - name: altinity-clickhouse-operator
     version: 0.26.3
     repository: https://helm.altinity.com

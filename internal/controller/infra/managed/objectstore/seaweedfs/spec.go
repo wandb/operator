@@ -27,6 +27,12 @@ const (
 	seaweedFilerDataMountPath    = "/data/filerldb2"
 )
 
+const (
+	seaweedMasterMetricsPort int32 = 9091
+	seaweedVolumeMetricsPort int32 = 9092
+	seaweedFilerMetricsPort  int32 = 9093
+)
+
 func seaweedWritableVolumes() []corev1.Volume {
 	return []corev1.Volume{
 		{
@@ -87,6 +93,7 @@ func ToObjectStoreVendorSpec(
 				Replicas:           1,
 				DefaultReplication: &replication,
 				VolumeSizeLimitMB:  &volumeSizeLimitMB,
+				MetricsPort:        ptr.To(seaweedMasterMetricsPort),
 				ComponentSpec: seaweedv1.ComponentSpec{
 					Volumes:      seaweedWritableVolumes(),
 					VolumeMounts: seaweedWritableVolumeMounts(),
@@ -95,6 +102,7 @@ func ToObjectStoreVendorSpec(
 			Volume: &seaweedv1.VolumeSpec{
 				Replicas: infraSpec.Replicas,
 				VolumeServerConfig: seaweedv1.VolumeServerConfig{
+					MetricsPort: ptr.To(seaweedVolumeMetricsPort),
 					ComponentSpec: seaweedv1.ComponentSpec{
 						Volumes:      seaweedWritableVolumes(),
 						VolumeMounts: seaweedWritableVolumeMounts(),
@@ -123,8 +131,9 @@ func ToObjectStoreVendorSpec(
 				DomainName: nil,
 			},
 			Filer: &seaweedv1.FilerSpec{
-				Replicas: 1,
-				Config:   ptr.To("[leveldb2]\nenabled = true\ndir = \"" + seaweedFilerDataMountPath + "\""),
+				Replicas:    1,
+				MetricsPort: ptr.To(seaweedFilerMetricsPort),
+				Config:      ptr.To("[leveldb2]\nenabled = true\ndir = \"" + seaweedFilerDataMountPath + "\""),
 				ComponentSpec: seaweedv1.ComponentSpec{
 					Volumes:      seaweedWritableVolumes(),
 					VolumeMounts: seaweedWritableVolumeMounts(),
