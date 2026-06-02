@@ -111,7 +111,7 @@ wandb-operator:
       type: RuntimeDefault
   volumes:
     - name: server-manifest
-      emptyDir: { }
+      emptyDir: {}
     - name: serving-certs
       secret:
         secretName: '{{ .Release.Name }}-serving-cert'
