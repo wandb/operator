@@ -110,12 +110,41 @@ var _ = Describe("Moco MySQL specs", func() {
 		Entry("even count", int32(2)),
 		Entry("zero / unset", int32(0)),
 	)
+
+	It("stamps wandb labels onto Moco's data PVCs", func() {
+		ctx := context.Background()
+		wandbLabels := map[string]string{"app.kubernetes.io/managed-by": "wandb"}
+
+		// Moco names PVCs "<dataVolumeName>-<PrefixedName()>-<ordinal>".
+		mocoPVC := &corev1.PersistentVolumeClaim{
+			ObjectMeta: metav1.ObjectMeta{Name: "mysql-data-moco-mysql-0", Namespace: "wandb"},
+		}
+		// A PVC matching the old (pre-Moco) "datadir-" name must NOT be matched.
+		legacyPVC := &corev1.PersistentVolumeClaim{
+			ObjectMeta: metav1.ObjectMeta{Name: "datadir-mysql-0", Namespace: "wandb"},
+		}
+		cl := fake.NewClientBuilder().
+			WithScheme(mocoScheme()).
+			WithObjects(mocoPVC, legacyPVC).
+			Build()
+
+		Expect(ensurePVCLabels(ctx, cl, "wandb", "mysql", wandbLabels)).To(Succeed())
+
+		got := &corev1.PersistentVolumeClaim{}
+		Expect(cl.Get(ctx, types.NamespacedName{Name: "mysql-data-moco-mysql-0", Namespace: "wandb"}, got)).To(Succeed())
+		Expect(got.Labels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", "wandb"))
+
+		legacy := &corev1.PersistentVolumeClaim{}
+		Expect(cl.Get(ctx, types.NamespacedName{Name: "datadir-mysql-0", Namespace: "wandb"}, legacy)).To(Succeed())
+		Expect(legacy.Labels).NotTo(HaveKey("app.kubernetes.io/managed-by"))
+	})
 })
 
 func mocoScheme() *runtime.Scheme {
 	scheme := runtime.NewScheme()
 	Expect(apiv2.AddToScheme(scheme)).To(Succeed())
 	Expect(mocov1beta2.AddToScheme(scheme)).To(Succeed())
+	Expect(corev1.AddToScheme(scheme)).To(Succeed())
 	return scheme
 }
 

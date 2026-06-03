@@ -158,10 +158,11 @@ func WriteState(
 	return result
 }
 
-// ensurePVCLabels patches any PVCs belonging to the moco cluster that are
-// missing the wandb labels. PVCs are identified by the name prefix
-// "datadir-<clusterName>-" since the moco-operator creates them via
-// StatefulSet volumeClaimTemplates and may not propagate custom labels.
+// ensurePVCLabels stamps the wandb labels onto Moco's PVCs (missing because Moco
+// doesn't propagate them through its StatefulSet volumeClaimTemplates), so
+// purgeAssociatedResources can select them by label on teardown. Moco names PVCs
+// "<dataVolumeName>-<cluster.PrefixedName()>-<ordinal>" (see Moco pvc.go); the
+// prefix is built from those same sources so it can't drift from upstream.
 func ensurePVCLabels(
 	ctx context.Context,
 	cl client.Client,
@@ -170,7 +171,8 @@ func ensurePVCLabels(
 	labels map[string]string,
 ) error {
 	log := logx.GetSlog(ctx)
-	prefix := fmt.Sprintf("datadir-%s-", clusterName)
+	cluster := &mocov1beta2.MySQLCluster{ObjectMeta: metav1.ObjectMeta{Name: clusterName}}
+	prefix := fmt.Sprintf("%s-%s-", dataVolumeName, cluster.PrefixedName())
 
 	pvcList := &corev1.PersistentVolumeClaimList{}
 	if err := cl.List(ctx, pvcList, &client.ListOptions{Namespace: namespace}); err != nil {
