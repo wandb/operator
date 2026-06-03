@@ -21,6 +21,9 @@ const (
 
 	// InvalidReplicaCountReason: manifest sizing yielded a replica count Moco rejects.
 	InvalidReplicaCountReason = "InvalidReplicaCount"
+
+	// ScaleDownUnsupportedReason: a reconcile would shrink the running cluster, which Moco forbids.
+	ScaleDownUnsupportedReason = "ScaleDownUnsupported"
 )
 
 func WriteState(
@@ -79,6 +82,28 @@ func WriteState(
 					"manifest sizing produced %d MySQL replicas; Moco requires a positive odd number",
 					desired.Spec.Replicas,
 				),
+			},
+		}
+	}
+
+	// Backstop for the webhook's scale-down check: the webhook only sees the CR
+	// (explicit edits), not the manifest-resolved count or the live cluster.
+	// Catch those shrinks here instead of letting Moco reject them opaquely.
+	if actual != nil && desired.Spec.Replicas < actual.Spec.Replicas {
+		return []metav1.Condition{
+			{
+				Type:   common.ReconciledType,
+				Status: metav1.ConditionFalse,
+				Reason: ScaleDownUnsupportedReason,
+				Message: fmt.Sprintf(
+					"cannot scale managed MySQL down from %d to %d replicas; Moco does not support in-place replica reduction (use its manual stop-clustering procedure)",
+					actual.Spec.Replicas, desired.Spec.Replicas,
+				),
+			},
+			{
+				Type:   MySQLCustomResourceType,
+				Status: metav1.ConditionTrue,
+				Reason: common.ResourceExistsReason,
 			},
 		}
 	}

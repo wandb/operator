@@ -138,6 +138,39 @@ var _ = Describe("Moco MySQL specs", func() {
 		Expect(cl.Get(ctx, types.NamespacedName{Name: "datadir-mysql-0", Namespace: "wandb"}, legacy)).To(Succeed())
 		Expect(legacy.Labels).NotTo(HaveKey("app.kubernetes.io/managed-by"))
 	})
+
+	It("backstops a scale-down the webhook can't see, leaving the cluster untouched", func() {
+		ctx := context.Background()
+		nn := types.NamespacedName{Name: "mysql", Namespace: "wandb"}
+
+		existing := &mocov1beta2.MySQLCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "mysql", Namespace: "wandb"},
+			Spec:       mocov1beta2.MySQLClusterSpec{Replicas: 3},
+		}
+		cl := fake.NewClientBuilder().WithScheme(mocoScheme()).WithObjects(existing).Build()
+
+		desired, cm, err := ToMocoMySQLClusterSpec(
+			ctx,
+			apiv2.ManagedMysqlSpec{Name: "mysql", Namespace: "wandb", Replicas: 1, StorageSize: "10Gi"},
+			mocoWandb(),
+			mocoScheme(),
+		)
+		Expect(err).NotTo(HaveOccurred())
+
+		conditions := WriteState(ctx, cl, nn, desired, cm, nil)
+
+		reconciled, found := lo.Find(conditions, func(c metav1.Condition) bool {
+			return c.Type == common.ReconciledType
+		})
+		Expect(found).To(BeTrue())
+		Expect(reconciled.Status).To(Equal(metav1.ConditionFalse))
+		Expect(reconciled.Reason).To(Equal(ScaleDownUnsupportedReason))
+		Expect(reconciled.Message).To(ContainSubstring("from 3 to 1 replicas"))
+
+		got := &mocov1beta2.MySQLCluster{}
+		Expect(cl.Get(ctx, nn, got)).To(Succeed())
+		Expect(got.Spec.Replicas).To(Equal(int32(3)))
+	})
 })
 
 func mocoScheme() *runtime.Scheme {
