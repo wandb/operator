@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	mocov1beta2 "github.com/cybozu-go/moco/api/v1beta2"
+	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/logx"
 	corev1 "k8s.io/api/core/v1"
@@ -69,10 +70,8 @@ func WriteState(
 	}
 
 	// Sizing is resolved from the manifest at reconcile time, after the CR
-	// admission webhook runs, so a bad value reaches here unvalidated. Moco
-	// requires a positive odd replica count; refuse to forward anything else
-	// (rather than rewriting it) so the manifest stays the source of truth.
-	if desired.Spec.Replicas <= 0 || desired.Spec.Replicas%2 == 0 {
+	// admission webhook runs, so a bad value reaches here unvalidated.
+	if !apiv2.ValidMysqlReplicaCount(desired.Spec.Replicas) {
 		return []metav1.Condition{
 			{
 				Type:   common.ReconciledType,

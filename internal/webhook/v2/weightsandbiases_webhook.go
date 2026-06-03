@@ -380,7 +380,7 @@ func validateMySQLSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 		))
 	}
 	if spec := wandb.Spec.MySQL.ManagedMysql; spec != nil {
-		if spec.Replicas != 0 && spec.Replicas%2 == 0 {
+		if spec.Replicas != 0 && !appsv2.ValidMysqlReplicaCount(spec.Replicas) {
 			errors = append(errors, field.Invalid(
 				mysqlPath.Child("managedMysql").Child("replicas"),
 				spec.Replicas,
