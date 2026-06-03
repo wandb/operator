@@ -244,7 +244,7 @@ mysql:
         replicas: 1
         volumeSize: 10Gi
       micro:
-        replicas: 2
+        replicas: 3
         volumeSize: 10Gi
         resources:
           requests:

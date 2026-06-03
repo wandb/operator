@@ -18,6 +18,9 @@ import (
 const (
 	ResourceTypeName = "InnoDBCluster"
 	AppConnTypeName  = "MySQLAppConn"
+
+	// InvalidReplicaCountReason: manifest sizing yielded a replica count Moco rejects.
+	InvalidReplicaCountReason = "InvalidReplicaCount"
 )
 
 func WriteState(
@@ -60,6 +63,24 @@ func WriteState(
 	// zero, which would re-trip validation. Preserve the live value.
 	if actual != nil {
 		desired.Spec.ServerIDBase = actual.Spec.ServerIDBase
+	}
+
+	// Sizing is resolved from the manifest at reconcile time, after the CR
+	// admission webhook runs, so a bad value reaches here unvalidated. Moco
+	// requires a positive odd replica count; refuse to forward anything else
+	// (rather than rewriting it) so the manifest stays the source of truth.
+	if desired.Spec.Replicas <= 0 || desired.Spec.Replicas%2 == 0 {
+		return []metav1.Condition{
+			{
+				Type:   common.ReconciledType,
+				Status: metav1.ConditionFalse,
+				Reason: InvalidReplicaCountReason,
+				Message: fmt.Sprintf(
+					"manifest sizing produced %d MySQL replicas; Moco requires a positive odd number",
+					desired.Spec.Replicas,
+				),
+			},
+		}
 	}
 
 	result := make([]metav1.Condition, 0)

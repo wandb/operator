@@ -6,12 +6,17 @@ import (
 	mocov1beta2 "github.com/cybozu-go/moco/api/v1beta2"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/samber/lo"
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	corev1ac "k8s.io/client-go/applyconfigurations/core/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 var _ = Describe("Moco MySQL specs", func() {
@@ -74,6 +79,37 @@ var _ = Describe("Moco MySQL specs", func() {
 		expectMocoOpenShiftPodSecurityContext(podSpec.SecurityContext)
 		expectMocoOpenShiftContainerSecurityContext(podSpec.Containers[0].SecurityContext)
 	})
+
+	DescribeTable("refuses to forward a replica count Moco rejects",
+		func(replicas int32) {
+			ctx := context.Background()
+			nn := types.NamespacedName{Name: "mysql", Namespace: "wandb"}
+			cl := fake.NewClientBuilder().WithScheme(mocoScheme()).Build()
+
+			desired, cm, err := ToMocoMySQLClusterSpec(
+				ctx,
+				apiv2.ManagedMysqlSpec{Name: "mysql", Namespace: "wandb", Replicas: replicas, StorageSize: "10Gi"},
+				mocoWandb(),
+				mocoScheme(),
+			)
+			Expect(err).NotTo(HaveOccurred())
+
+			conditions := WriteState(ctx, cl, nn, desired, cm, nil)
+
+			reconciled, found := lo.Find(conditions, func(c metav1.Condition) bool {
+				return c.Type == common.ReconciledType
+			})
+			Expect(found).To(BeTrue())
+			Expect(reconciled.Status).To(Equal(metav1.ConditionFalse))
+			Expect(reconciled.Reason).To(Equal(InvalidReplicaCountReason))
+
+			// an invalid count must not create a cluster
+			got := &mocov1beta2.MySQLCluster{}
+			Expect(apierrors.IsNotFound(cl.Get(ctx, nn, got))).To(BeTrue())
+		},
+		Entry("even count", int32(2)),
+		Entry("zero / unset", int32(0)),
+	)
 })
 
 func mocoScheme() *runtime.Scheme {
