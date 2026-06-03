@@ -91,6 +91,21 @@ for the available chart options and which component operators are enabled.
 - [Kubebuilder](https://book.kubebuilder.io/quick-start.html)
 - [Kustomize](https://kustomize.io/)
 - [jq](https://stedolan.github.io/jq/) for some helper scripts
+- [helm](https://github.com/helm/helm)
+
+### Install Chart Testing
+
+In order to lint and test your helm chart for creating a release, please install helm's `ct` command:
+
+```bash
+brew install chart-testing
+```
+
+If any new chart has been updated, or installed, you can run the following command to ensure everything is good!
+
+```bash
+ct lint --config deploy/ct.yaml
+```
 
 #### Install Kind
 
