@@ -6,12 +6,17 @@ import (
 	mocov1beta2 "github.com/cybozu-go/moco/api/v1beta2"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/samber/lo"
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	corev1ac "k8s.io/client-go/applyconfigurations/core/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 var _ = Describe("Moco MySQL specs", func() {
@@ -74,12 +79,105 @@ var _ = Describe("Moco MySQL specs", func() {
 		expectMocoOpenShiftPodSecurityContext(podSpec.SecurityContext)
 		expectMocoOpenShiftContainerSecurityContext(podSpec.Containers[0].SecurityContext)
 	})
+
+	DescribeTable("refuses to forward a replica count Moco rejects",
+		func(replicas int32) {
+			ctx := context.Background()
+			nn := types.NamespacedName{Name: "mysql", Namespace: "wandb"}
+			cl := fake.NewClientBuilder().WithScheme(mocoScheme()).Build()
+
+			desired, cm, err := ToMocoMySQLClusterSpec(
+				ctx,
+				apiv2.ManagedMysqlSpec{Name: "mysql", Namespace: "wandb", Replicas: replicas, StorageSize: "10Gi"},
+				mocoWandb(),
+				mocoScheme(),
+			)
+			Expect(err).NotTo(HaveOccurred())
+
+			conditions := WriteState(ctx, cl, nn, desired, cm, nil)
+
+			reconciled, found := lo.Find(conditions, func(c metav1.Condition) bool {
+				return c.Type == common.ReconciledType
+			})
+			Expect(found).To(BeTrue())
+			Expect(reconciled.Status).To(Equal(metav1.ConditionFalse))
+			Expect(reconciled.Reason).To(Equal(InvalidReplicaCountReason))
+
+			// an invalid count must not create a cluster
+			got := &mocov1beta2.MySQLCluster{}
+			Expect(apierrors.IsNotFound(cl.Get(ctx, nn, got))).To(BeTrue())
+		},
+		Entry("even count", int32(2)),
+		Entry("zero / unset", int32(0)),
+	)
+
+	It("stamps wandb labels onto Moco's data PVCs", func() {
+		ctx := context.Background()
+		wandbLabels := map[string]string{"app.kubernetes.io/managed-by": "wandb"}
+
+		// Moco names PVCs "<dataVolumeName>-<PrefixedName()>-<ordinal>".
+		mocoPVC := &corev1.PersistentVolumeClaim{
+			ObjectMeta: metav1.ObjectMeta{Name: "mysql-data-moco-mysql-0", Namespace: "wandb"},
+		}
+		// A PVC matching the old (pre-Moco) "datadir-" name must NOT be matched.
+		legacyPVC := &corev1.PersistentVolumeClaim{
+			ObjectMeta: metav1.ObjectMeta{Name: "datadir-mysql-0", Namespace: "wandb"},
+		}
+		cl := fake.NewClientBuilder().
+			WithScheme(mocoScheme()).
+			WithObjects(mocoPVC, legacyPVC).
+			Build()
+
+		Expect(ensurePVCLabels(ctx, cl, "wandb", "mysql", wandbLabels)).To(Succeed())
+
+		got := &corev1.PersistentVolumeClaim{}
+		Expect(cl.Get(ctx, types.NamespacedName{Name: "mysql-data-moco-mysql-0", Namespace: "wandb"}, got)).To(Succeed())
+		Expect(got.Labels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", "wandb"))
+
+		legacy := &corev1.PersistentVolumeClaim{}
+		Expect(cl.Get(ctx, types.NamespacedName{Name: "datadir-mysql-0", Namespace: "wandb"}, legacy)).To(Succeed())
+		Expect(legacy.Labels).NotTo(HaveKey("app.kubernetes.io/managed-by"))
+	})
+
+	It("backstops a scale-down the webhook can't see, leaving the cluster untouched", func() {
+		ctx := context.Background()
+		nn := types.NamespacedName{Name: "mysql", Namespace: "wandb"}
+
+		existing := &mocov1beta2.MySQLCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "mysql", Namespace: "wandb"},
+			Spec:       mocov1beta2.MySQLClusterSpec{Replicas: 3},
+		}
+		cl := fake.NewClientBuilder().WithScheme(mocoScheme()).WithObjects(existing).Build()
+
+		desired, cm, err := ToMocoMySQLClusterSpec(
+			ctx,
+			apiv2.ManagedMysqlSpec{Name: "mysql", Namespace: "wandb", Replicas: 1, StorageSize: "10Gi"},
+			mocoWandb(),
+			mocoScheme(),
+		)
+		Expect(err).NotTo(HaveOccurred())
+
+		conditions := WriteState(ctx, cl, nn, desired, cm, nil)
+
+		reconciled, found := lo.Find(conditions, func(c metav1.Condition) bool {
+			return c.Type == common.ReconciledType
+		})
+		Expect(found).To(BeTrue())
+		Expect(reconciled.Status).To(Equal(metav1.ConditionFalse))
+		Expect(reconciled.Reason).To(Equal(ScaleDownUnsupportedReason))
+		Expect(reconciled.Message).To(ContainSubstring("from 3 to 1 replicas"))
+
+		got := &mocov1beta2.MySQLCluster{}
+		Expect(cl.Get(ctx, nn, got)).To(Succeed())
+		Expect(got.Spec.Replicas).To(Equal(int32(3)))
+	})
 })
 
 func mocoScheme() *runtime.Scheme {
 	scheme := runtime.NewScheme()
 	Expect(apiv2.AddToScheme(scheme)).To(Succeed())
 	Expect(mocov1beta2.AddToScheme(scheme)).To(Succeed())
+	Expect(corev1.AddToScheme(scheme)).To(Succeed())
 	return scheme
 }
 

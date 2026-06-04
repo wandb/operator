@@ -329,6 +329,7 @@ func validateChanges(_ context.Context, newWandb *appsv2.WeightsAndBiases, oldWa
 	var warnings admission.Warnings
 
 	allErrors = append(allErrors, validateRedisChanges(newWandb, oldWandb)...)
+	allErrors = append(allErrors, validateMySQLChanges(newWandb, oldWandb)...)
 
 	if len(allErrors) == 0 {
 		return warnings, nil
@@ -339,6 +340,32 @@ func validateChanges(_ context.Context, newWandb *appsv2.WeightsAndBiases, oldWa
 		newWandb.Name,
 		allErrors,
 	)
+}
+
+// validateMySQLChanges rejects an update that lowers an explicitly-set replica
+// count. Moco does not support in-place replica reduction, so catch it at
+// admission for immediate feedback. A size-driven change leaves replicas unset
+// here (it is resolved from the manifest at reconcile), so this only covers a
+// directly-edited count.
+func validateMySQLChanges(newWandb, oldWandb *appsv2.WeightsAndBiases) field.ErrorList {
+	var errors field.ErrorList
+	mysqlPath := field.NewPath("spec").Child("mysql").Child("managedMysql")
+	newSpec := newWandb.Spec.MySQL.ManagedMysql
+	oldSpec := oldWandb.Spec.MySQL.ManagedMysql
+
+	if newSpec == nil || oldSpec == nil {
+		return errors
+	}
+
+	if oldSpec.Replicas != 0 && newSpec.Replicas != 0 && newSpec.Replicas < oldSpec.Replicas {
+		errors = append(errors, field.Invalid(
+			mysqlPath.Child("replicas"),
+			newSpec.Replicas,
+			"replicas cannot be decreased; Moco does not support in-place replica reduction (use its manual stop-clustering procedure)",
+		))
+	}
+
+	return errors
 }
 
 func validateMySQLSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
@@ -353,7 +380,7 @@ func validateMySQLSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 		))
 	}
 	if spec := wandb.Spec.MySQL.ManagedMysql; spec != nil {
-		if spec.Replicas != 0 && spec.Replicas%2 == 0 {
+		if spec.Replicas != 0 && !appsv2.ValidMysqlReplicaCount(spec.Replicas) {
 			errors = append(errors, field.Invalid(
 				mysqlPath.Child("managedMysql").Child("replicas"),
 				spec.Replicas,
