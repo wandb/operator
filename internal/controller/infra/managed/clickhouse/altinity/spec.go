@@ -7,9 +7,11 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
+	"github.com/wandb/operator/internal/controller/infra/managed/clickhouse/altinity/keeper"
 	"github.com/wandb/operator/internal/logx"
 	"github.com/wandb/operator/pkg/utils"
 	"github.com/wandb/operator/pkg/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
+	chtypes "github.com/wandb/operator/pkg/vendored/altinity-clickhouse/common/types"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -108,6 +110,7 @@ func ToClickHouseVendorSpec(
 	ctx context.Context,
 	wandb *apiv2.WeightsAndBiases,
 	scheme *runtime.Scheme,
+	objStorage *ObjectStorageConn,
 ) (*v1.ClickHouseInstallation, error) {
 	_, log := logx.WithSlog(ctx, logx.ClickHouse)
 	spec := wandb.Spec.ClickHouse.ManagedClickHouse
@@ -116,12 +119,23 @@ func ToClickHouseVendorSpec(
 		return nil, nil
 	}
 
+	// Managed ClickHouse stores table data in the object store; it cannot be
+	// rendered without resolved bucket connection details.
+	if objStorage == nil {
+		return nil, fmt.Errorf("managed ClickHouse requires object storage, but none was resolved")
+	}
+
 	nsnBuilder := CreateNsNameBuilder(types.NamespacedName{
 		Namespace: spec.Namespace, Name: spec.Name,
 	})
 
-	// Parse storage quantity
+	// Parse storage quantity. With object-store-backed storage this PV holds only
+	// ClickHouse metadata, system tables, and the S3 read-through cache — not
+	// table data, which lives in the bucket.
 	storageQuantity := resource.MustParse(spec.StorageSize)
+
+	// Reserve ~20% of the local PV for metadata/system; the rest backs the cache.
+	cacheMaxSizeBytes := storageQuantity.Value() * 8 / 10
 
 	// Create user settings with password
 	passwordSha256 := fmt.Sprintf("%x", sha256.Sum256([]byte(ClickHousePassword)))
@@ -141,6 +155,13 @@ func ToClickHouseVendorSpec(
 
 	// Create server settings
 	serverSettings := v1.NewSettings()
+
+	// Make the object-store-backed policy the server-wide default so every
+	// MergeTree table lands in the bucket without per-table DDL.
+	serverSettings.Set("merge_tree/storage_policy", v1.NewSettingScalar(StoragePolicyName))
+
+	// Define the S3 disk, its local read-through cache, and the storage policy.
+	applyStorageConfiguration(serverSettings, objStorage, cacheMaxSizeBytes)
 
 	// Enable built-in Prometheus metrics endpoint if telemetry is enabled
 	if spec.Telemetry.Enabled {
@@ -200,6 +221,14 @@ func ToClickHouseVendorSpec(
 				},
 				Users:    userSettings,
 				Settings: serverSettings,
+				Zookeeper: &v1.ZookeeperConfig{
+					Nodes: v1.ZookeeperNodes{
+						{
+							Host: keeper.ClientServiceFQDN(spec.Namespace, spec.Name),
+							Port: chtypes.NewInt32(int32(keeper.KeeperClientPort)),
+						},
+					},
+				},
 			},
 			Defaults: &v1.Defaults{
 				Templates: &v1.TemplatesList{

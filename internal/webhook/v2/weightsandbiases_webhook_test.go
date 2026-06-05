@@ -159,6 +159,34 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 			Expect(warnings).To(BeEmpty())
 		})
 
+		It("rejects managed ClickHouse when no object store is configured", func() {
+			obj.Spec.ClickHouse.ManagedClickHouse = &appsv2.ManagedClickHouseSpec{}
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("object store"))
+		})
+
+		It("allows managed ClickHouse when an object store is configured", func() {
+			obj.Spec.ClickHouse.ManagedClickHouse = &appsv2.ManagedClickHouseSpec{}
+			obj.Spec.ObjectStore.ManagedObjectStore = &appsv2.ManagedObjectStoreSpec{}
+
+			warnings, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(warnings).To(BeEmpty())
+		})
+
+		It("rejects even Keeper replica counts", func() {
+			obj.Spec.ClickHouse.ManagedClickHouse = &appsv2.ManagedClickHouseSpec{
+				Keeper: appsv2.ClickHouseKeeperSpec{Replicas: 2},
+			}
+			obj.Spec.ObjectStore.ExternalObjectStore = &appsv2.ObjectStoreConnection{}
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("odd number"))
+		})
+
 		It("rejects gatewayAPI config when mode is ingress", func() {
 			obj.Spec.Networking.Mode = appsv2.NetworkingModeIngress
 			obj.Spec.Networking.GatewayAPI = &appsv2.GatewayAPIConfig{

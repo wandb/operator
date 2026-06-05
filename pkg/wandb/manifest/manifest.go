@@ -49,6 +49,7 @@ type Manifest struct {
 	CommonVolumeMounts map[string][]VolumeMount `yaml:"commonVolumeMounts,omitempty"`
 	Bucket             map[string]InfraConfig   `yaml:"bucket"`
 	Clickhouse         map[string]InfraConfig   `yaml:"clickhouse"`
+	ClickhouseKeeper   map[string]InfraConfig   `yaml:"clickhouseKeeper"`
 	Kafka              KafkaConfig              `yaml:"kafka"`
 	Mysql              map[string]InfraConfig   `yaml:"mysql"`
 	Redis              map[string]InfraConfig   `yaml:"redis"`
@@ -380,6 +381,12 @@ func mergeSimple(dst, src *Manifest) {
 			dst.Clickhouse = make(map[string]InfraConfig)
 		}
 		mergeInfraConfigs(dst.Clickhouse, src.Clickhouse)
+	}
+	if src.ClickhouseKeeper != nil {
+		if dst.ClickhouseKeeper == nil {
+			dst.ClickhouseKeeper = make(map[string]InfraConfig)
+		}
+		mergeInfraConfigs(dst.ClickhouseKeeper, src.ClickhouseKeeper)
 	}
 
 	// Kafka sizing

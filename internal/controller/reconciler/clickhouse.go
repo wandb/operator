@@ -21,9 +21,10 @@ func clickHouseWriteState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
+	objStoreConn *apiv2.ObjectStoreConnection,
 ) []metav1.Condition {
 	if wandb.Spec.ClickHouse.ManagedClickHouse != nil {
-		return managedClickHouseWriteState(ctx, client, wandb)
+		return managedClickHouseWriteState(ctx, client, wandb, objStoreConn)
 	}
 	if wandb.Spec.ClickHouse.ExternalClickHouse != nil {
 		return externalClickHouseWriteState(ctx, client, wandb)
@@ -98,6 +99,7 @@ func managedClickHouseWriteState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
+	objStoreConn *apiv2.ObjectStoreConnection,
 ) []metav1.Condition {
 	spec := wandb.Spec.ClickHouse.ManagedClickHouse
 
@@ -111,7 +113,28 @@ func managedClickHouseWriteState(
 
 	var specNamespacedName = managedClickHouseSpecNamespacedName(spec)
 	log := ctrl.LoggerFrom(ctx)
-	desired, err := altinity.ToClickHouseVendorSpec(ctx, wandb, client.Scheme())
+
+	// Managed ClickHouse stores table data in the configured object store. Resolve
+	// the bucket connection (managed or external); if it is not ready yet, wait and
+	// requeue rather than creating a CHI without working storage.
+	objStorage, err := altinity.ResolveObjectStorage(ctx, client, wandb, objStoreConn)
+	if err != nil {
+		log.Error(err, "object storage not ready for ClickHouse")
+		return []metav1.Condition{
+			{
+				Type:   common.ReconciledType,
+				Status: metav1.ConditionFalse,
+				Reason: common.PendingCreateReason,
+			},
+			{
+				Type:   altinity.ClickHouseCustomResourceType,
+				Status: metav1.ConditionFalse,
+				Reason: common.PendingCreateReason,
+			},
+		}
+	}
+
+	desired, err := altinity.ToClickHouseVendorSpec(ctx, wandb, client.Scheme(), objStorage)
 	if err != nil {
 		log.Error(err, "failed to translate ClickHouse spec to vendor spec")
 		return []metav1.Condition{

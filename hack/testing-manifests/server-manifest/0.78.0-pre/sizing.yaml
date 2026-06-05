@@ -136,6 +136,32 @@ clickhouse:
             cpu: 2
             memory: 8Gi
 
+clickhouseKeeper:
+  default:
+    sizing:
+      default:
+        replicas: 1
+        volumeSize: 10Gi
+        resources:
+          requests:
+            cpu: 500m
+            memory: 1Gi
+          limits:
+            cpu: 500m
+            memory: 1Gi
+      micro:
+        replicas: 3
+      small:
+        replicas: 3
+      medium:
+        replicas: 3
+      large:
+        replicas: 3
+      xlarge:
+        replicas: 3
+      xxlarge:
+        replicas: 3
+
 kafka:
   sizing:
     default:

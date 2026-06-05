@@ -17,6 +17,9 @@ bucket:
 clickhouse:
   default: {}
 
+clickhouseKeeper:
+  default: {}
+
 generatedSecrets:
   - name: session-key
     length: 32
