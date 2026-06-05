@@ -103,20 +103,11 @@ func managedClickHouseWriteState(
 ) []metav1.Condition {
 	spec := wandb.Spec.ClickHouse.ManagedClickHouse
 
-	// ClickHouse uses ReplicatedMergeTree, which needs a ClickHouse Keeper
-	// ensemble for replication coordination. Provision Keeper before the
-	// ClickHouse installation; surface only hard API/translation errors so a
-	// Keeper that is still coming up does not block creating the CHI.
-	if conds := managedKeeperWriteState(ctx, client, wandb); conds != nil {
-		return conds
-	}
-
-	var specNamespacedName = managedClickHouseSpecNamespacedName(spec)
 	log := ctrl.LoggerFrom(ctx)
 
 	// Managed ClickHouse stores table data in the configured object store. Resolve
 	// the bucket connection (managed or external); if it is not ready yet, wait and
-	// requeue rather than creating a CHI without working storage.
+	// requeue rather than building a CHI without working storage.
 	objStorage, err := altinity.ResolveObjectStorage(ctx, client, wandb, objStoreConn)
 	if err != nil {
 		log.Error(err, "object storage not ready for ClickHouse")
@@ -134,6 +125,21 @@ func managedClickHouseWriteState(
 		}
 	}
 
+	// ClickHouse uses ReplicatedMergeTree, which needs a ClickHouse Keeper
+	// ensemble for replication coordination. Translate both into their CRs and
+	// write them together (WriteState provisions Keeper before the CHI).
+	desiredKeeper, err := keeper.ToKeeperVendorSpec(ctx, wandb, client.Scheme())
+	if err != nil {
+		log.Error(err, "failed to translate Keeper spec to vendor spec")
+		return []metav1.Condition{
+			{
+				Type:   common.ReconciledType,
+				Status: metav1.ConditionFalse,
+				Reason: common.ControllerErrorReason,
+			},
+		}
+	}
+
 	desired, err := altinity.ToClickHouseVendorSpec(ctx, wandb, client.Scheme(), objStorage)
 	if err != nil {
 		log.Error(err, "failed to translate ClickHouse spec to vendor spec")
@@ -146,43 +152,16 @@ func managedClickHouseWriteState(
 		}
 	}
 
+	specNamespacedName := managedClickHouseSpecNamespacedName(spec)
+
 	if conditions := altinity.CheckDetached(ctx, client, specNamespacedName, wandb.GetUID()); conditions != nil {
 		return conditions
 	}
 
-	results := altinity.WriteState(ctx, client, specNamespacedName, desired)
+	results := make([]metav1.Condition, 0)
+	results = append(results, altinity.WriteState(ctx, client, specNamespacedName, desiredKeeper, desired)...)
+
 	return results
-}
-
-// managedKeeperWriteState provisions the ClickHouse Keeper ensemble that backs
-// ReplicatedMergeTree replication. It returns non-nil conditions only when
-// ClickHouse reconciliation should be short-circuited (a hard API or
-// translation error); otherwise it returns nil and the CHI write proceeds.
-func managedKeeperWriteState(
-	ctx context.Context,
-	c client.Client,
-	wandb *apiv2.WeightsAndBiases,
-) []metav1.Condition {
-	spec := wandb.Spec.ClickHouse.ManagedClickHouse
-	desired, err := keeper.ToKeeperVendorSpec(ctx, wandb, c.Scheme())
-	if err != nil {
-		ctrl.LoggerFrom(ctx).Error(err, "failed to translate Keeper spec to vendor spec")
-		return []metav1.Condition{
-			{
-				Type:   common.ReconciledType,
-				Status: metav1.ConditionFalse,
-				Reason: common.ControllerErrorReason,
-			},
-		}
-	}
-
-	conds := keeper.WriteState(ctx, c, keeper.SpecNamespacedName(spec), desired)
-	for _, cond := range conds {
-		if cond.Type == common.ReconciledType && cond.Status == metav1.ConditionFalse {
-			return conds
-		}
-	}
-	return nil
 }
 
 func managedClickHouseReadState(

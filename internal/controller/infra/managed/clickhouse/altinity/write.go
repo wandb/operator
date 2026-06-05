@@ -4,7 +4,9 @@ import (
 	"context"
 
 	"github.com/wandb/operator/internal/controller/common"
+	"github.com/wandb/operator/internal/controller/infra/managed/clickhouse/altinity/keeper"
 	"github.com/wandb/operator/internal/logx"
+	chkv1 "github.com/wandb/operator/pkg/vendored/altinity-clickhouse/clickhouse-keeper.altinity.com/v1"
 	chiv1 "github.com/wandb/operator/pkg/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -16,13 +18,36 @@ const (
 	AppConnTypeName  = "ClickHouseAppConn"
 )
 
+// WriteState reconciles the ClickHouse Keeper ensemble and the ClickHouse
+// installation. Keeper is written first because ReplicatedMergeTree depends on
+// it for replication coordination. Conditions from both are aggregated; each
+// resource reports under its own condition type.
 func WriteState(
+	ctx context.Context,
+	client client.Client,
+	specNamespacedName types.NamespacedName,
+	desiredKeeper *chkv1.ClickHouseKeeperInstallation,
+	desired *chiv1.ClickHouseInstallation,
+) []metav1.Condition {
+	ctx, _ = logx.WithSlog(ctx, logx.ClickHouse)
+	results := make([]metav1.Condition, 0)
+
+	results = append(results, keeper.WriteState(
+		ctx, client,
+		types.NamespacedName{Namespace: desiredKeeper.Namespace, Name: desiredKeeper.Name},
+		desiredKeeper,
+	)...)
+	results = append(results, writeClickHouseInstallation(ctx, client, specNamespacedName, desired)...)
+
+	return results
+}
+
+func writeClickHouseInstallation(
 	ctx context.Context,
 	client client.Client,
 	specNamespacedName types.NamespacedName,
 	desired *chiv1.ClickHouseInstallation,
 ) []metav1.Condition {
-	ctx, _ = logx.WithSlog(ctx, logx.ClickHouse)
 	var actual = &chiv1.ClickHouseInstallation{}
 
 	nsnBuilder := createNsNameBuilder(specNamespacedName)
