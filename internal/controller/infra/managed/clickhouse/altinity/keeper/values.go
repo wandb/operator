@@ -18,6 +18,11 @@ const (
 	// KeeperCustomResourceType is the condition type reported for the CHK CR.
 	KeeperCustomResourceType = "KeeperCustomResource"
 
+	// KeeperReportedReadyType reports whether the Keeper ensemble's pods are
+	// running. ClickHouse depends on Keeper for ReplicatedMergeTree coordination,
+	// so this condition gates ClickHouse readiness.
+	KeeperReportedReadyType = "KeeperReportedReady"
+
 	podTemplateName     = "keeper-pod-template"
 	volumeTemplateName  = "keeper-data-volume"
 	keeperContainerName = "clickhouse-keeper"

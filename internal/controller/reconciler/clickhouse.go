@@ -176,6 +176,11 @@ func managedClickHouseReadState(
 	onDeleteRule := altinity.ToClickHouseOnDeleteRule(wandb, wandb.GetRetentionPolicy(spec.ManagedInfraSpec))
 	readConditions, newInfraConn := altinity.ReadState(ctx, client, specNamespacedName, wandb, onDeleteRule)
 	newConditions = append(newConditions, readConditions...)
+
+	// ClickHouse cannot replicate without Keeper, so its readiness gates
+	// ClickHouse readiness (see ComputeStatus/inferInfraState).
+	newConditions = append(newConditions, keeper.ReadState(ctx, client, keeper.SpecNamespacedName(spec))...)
+
 	return newConditions, newInfraConn
 }
 
