@@ -30,6 +30,7 @@ import (
 	nginxGatewayv1alpha1 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
 	"github.com/wandb/operator/internal/logx"
 	"github.com/wandb/operator/pkg/utils"
+	chkv1 "github.com/wandb/operator/pkg/vendored/altinity-clickhouse/clickhouse-keeper.altinity.com/v1"
 	chiv1 "github.com/wandb/operator/pkg/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
 	argov1alpha1 "github.com/wandb/operator/pkg/vendored/argo-rollouts/argoproj.io.rollouts/v1alpha1"
 	redisv1beta2 "github.com/wandb/operator/pkg/vendored/redis-operator/redis/v1beta2"
@@ -85,6 +86,7 @@ func init() {
 	utilruntime.Must(strimziv1.AddToScheme(scheme))
 	utilruntime.Must(seaweedv1.AddToScheme(scheme))
 	utilruntime.Must(chiv1.AddToScheme(scheme))
+	utilruntime.Must(chkv1.AddToScheme(scheme))
 	utilruntime.Must(mocov1beta2.AddToScheme(scheme))
 	utilruntime.Must(gatewayv1.Install(scheme))
 	utilruntime.Must(nginxGatewayv1alpha1.AddToScheme(scheme))
