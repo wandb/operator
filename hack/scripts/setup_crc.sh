@@ -7,8 +7,8 @@ command -v oc >/dev/null 2>&1 || { echo "Error: oc is required but not installed
 command -v docker >/dev/null 2>&1 || { echo "Error: docker is required but not installed." >&2; exit 1; }
 
 echo "Configuring CRC resources..."
-crc config set cpus 6 >/dev/null
-crc config set memory 16384 >/dev/null
+crc config set cpus 10 >/dev/null
+crc config set memory 28672 >/dev/null
 crc config set disk-size 80 >/dev/null
 
 CRC_STATUS=$(crc status --output json 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('crcStatus','Unknown'))" 2>/dev/null || echo "Unknown")

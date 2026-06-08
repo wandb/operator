@@ -261,6 +261,7 @@ func (r *ApplicationReconciler) reconcileDeployment(ctx context.Context, app *wa
 	deployment.Namespace = app.Namespace
 
 	deployment.Spec.Template.Spec = *app.Spec.PodTemplate.Spec.DeepCopy()
+	patchPodSpecForOpenShift(&deployment.Spec.Template.Spec, app.Spec.PodTemplate.Labels)
 	deployment.Spec.Template.SetLabels(
 		utils.MergeMapsStringString(
 			deployment.Spec.Template.GetLabels(),
@@ -367,6 +368,7 @@ func (r *ApplicationReconciler) reconcileRollout(ctx context.Context, app *wandb
 	rollout.Namespace = app.Namespace
 
 	rollout.Spec.Template.Spec = *app.Spec.PodTemplate.Spec.DeepCopy()
+	patchPodSpecForOpenShift(&rollout.Spec.Template.Spec, app.Spec.PodTemplate.Labels)
 	rollout.Spec.Template.SetLabels(
 		utils.MergeMapsStringString(
 			rollout.Spec.Template.GetLabels(),
@@ -466,6 +468,7 @@ func (r *ApplicationReconciler) reconcileStatefulSet(ctx context.Context, app *w
 	statefulSet.Namespace = app.Namespace
 
 	statefulSet.Spec.Template.Spec = *app.Spec.PodTemplate.Spec.DeepCopy()
+	patchPodSpecForOpenShift(&statefulSet.Spec.Template.Spec, app.Spec.PodTemplate.Labels)
 	statefulSet.Spec.Template.SetLabels(
 		utils.MergeMapsStringString(
 			statefulSet.Spec.Template.GetLabels(),

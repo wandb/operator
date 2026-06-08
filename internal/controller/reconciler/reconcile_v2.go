@@ -574,6 +574,18 @@ func reconcileApplications(
 		// Set shared service account for all W&B applications
 		application.Spec.PodTemplate.Spec.ServiceAccountName = serviceAccountName
 
+		// Under OpenShift's restricted-v2 SCC the frontend-nginx image cannot
+		// write to its bundled asset/runtime dirs (its startup script runs
+		// `sed -i` under /usr/share/nginx/html). Mark the workload so the
+		// application controller overlays those dirs with writable emptyDirs;
+		// the label value names the container the overlay applies to.
+		if oputils.IsOpenShift() && strings.Contains(app.Image.Repository, "frontend-nginx") {
+			if application.Spec.PodTemplate.Labels == nil {
+				application.Spec.PodTemplate.Labels = map[string]string{}
+			}
+			application.Spec.PodTemplate.Labels[oputils.OpenShiftNginxOverlayLabel] = app.Name
+		}
+
 		// Reconcile Service ports: fully replace the ServiceTemplate ports with
 		// the ports declared in the manifest for this app. This ensures that any
 		// change to port numbers, names, or protocols is propagated on each

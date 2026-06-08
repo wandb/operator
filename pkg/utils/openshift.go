@@ -6,6 +6,12 @@ import (
 	"sync/atomic"
 )
 
+// OpenShiftNginxOverlayLabel marks a workload that needs its read-only nginx
+// asset and runtime directories overlaid with writable emptyDirs to run under
+// OpenShift's restricted-v2 SCC (arbitrary UID). The label value is the name of
+// the container the overlay applies to.
+const OpenShiftNginxOverlayLabel = "operator.wandb.ai/openshift-nginx-overlay"
+
 var openshiftMode atomic.Bool
 
 func init() {

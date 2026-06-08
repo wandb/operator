@@ -11,6 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 var _ = Describe("SeaweedFS vendor specs", func() {
@@ -65,6 +66,24 @@ var _ = Describe("SeaweedFS vendor specs", func() {
 
 		Expect(seaweed.Spec.Filer.MetricsPort).NotTo(BeNil())
 		Expect(*seaweed.Spec.Filer.MetricsPort).To(Equal(seaweedFilerMetricsPort))
+	})
+
+	It("sets the S3 gateway port to an unprivileged port", func() {
+		seaweed, err := ToObjectStoreVendorSpec(context.Background(), seaweedWandb(), seaweedScheme())
+		Expect(err).NotTo(HaveOccurred())
+		Expect(seaweed).NotTo(BeNil())
+
+		Expect(seaweed.Spec.S3.Port).NotTo(BeNil())
+		Expect(*seaweed.Spec.S3.Port).To(Equal(seaweedS3Port))
+	})
+
+	It("advertises the unprivileged S3 port in connection info", func() {
+		builder := CreateNsNameBuilder(types.NamespacedName{Name: "wandb-seaweedfs", Namespace: "wandb"})
+
+		connInfo := buildS3ConnInfo("admin", "secret", builder, false)
+
+		Expect(connInfo.Port).To(Equal(S3Port))
+		Expect(connInfo.toUrl().Host).To(Equal("wandb-seaweedfs-s3.wandb.svc.cluster.local:" + S3Port))
 	})
 })
 

@@ -38,7 +38,7 @@ func buildS3ConnInfo(
 		TLS:       tls,
 		SecretKey: secretKey,
 		Host:      fmt.Sprintf("%s.%s.svc.cluster.local", serviceName, namespace),
-		Port:      "80",
+		Port:      S3Port,
 		Bucket:    "bucket",
 	}
 }

@@ -10,12 +10,37 @@ wandb-operator:
 
   containers:
     operator:
+      # Tilt's docker_build_with_restart syncs an updated /manager binary
+      # into the running container; readOnlyRootFilesystem prevents that
+      # write. Relax it on the OpenShift dev profile so the live_update
+      # path keeps working under restricted-v2 (the SA still runs as the
+      # SCC-assigned non-root UID with all caps dropped).
+      securityContext:
+        readOnlyRootFilesystem: false
       env:
         OPENSHIFT:
           value: "true"
 
 grafana-operator:
   isOpenShift: true
+
+# OpenShift owns the monitoring.coreos.com CRDs via cluster-version-operator.
+# Let the cluster-provided ServiceMonitor CRD satisfy seaweedfs-operator instead
+# of having Helm attempt to manage it and hit field-manager conflicts.
+prometheus-operator-crds:
+  enabled: false
+
+# The seaweedfs-operator subchart hardcodes runAsUser:65532 / fsGroup:65532
+# in podSecurityContext, which restricted-v2 rejects (UIDs must come from
+# the namespace's allocated range). Replace with a minimal context so
+# OpenShift assigns the UID/GID.
+seaweedfs-operator:
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: null
+    fsGroup: null
+    seccompProfile:
+      type: RuntimeDefault
 
 # Strimzi's default BaselinePodSecurityProvider injects runAsUser:1001 /
 # runAsGroup:1001 into Kafka pods, which restricted-v2 rejects. Switch the

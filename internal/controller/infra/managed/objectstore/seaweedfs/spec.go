@@ -31,6 +31,7 @@ const (
 	seaweedMasterMetricsPort int32 = 9091
 	seaweedVolumeMetricsPort int32 = 9092
 	seaweedFilerMetricsPort  int32 = 9093
+	seaweedS3Port            int32 = 8333
 )
 
 func seaweedWritableVolumes() []corev1.Volume {
@@ -127,7 +128,7 @@ func ToObjectStoreVendorSpec(
 					},
 					Key: "config.json",
 				},
-				Port:       new(int32(80)),
+				Port:       ptr.To(seaweedS3Port),
 				DomainName: nil,
 			},
 			Filer: &seaweedv1.FilerSpec{

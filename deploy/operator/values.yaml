@@ -128,6 +128,11 @@ wandb-operator:
 
 moco:
   enabled: true
+  # moco injects runAsUser/runAsGroup:10000 on managed containers and
+  # fsGroup:10000 on managed pods by default. Disabling that lets the platform
+  # assign IDs (required on OpenShift restricted-v2, harmless elsewhere).
+  extraArgs:
+    - --disable-default-security-context
 
 redis-operator:
   enabled: true
@@ -145,6 +150,7 @@ seaweedfs-operator:
 # during reconcile and the VictoriaMetrics Operator auto-converts them to
 # VMServiceScrapes.
 prometheus-operator-crds:
+  enabled: true
   crds:
     alertmanagerconfigs:
       enabled: false

@@ -345,7 +345,10 @@ def build_operator_values(telemetry_namespace):
         }
         values["wandb-operator"]["containers"]["operator"]["securityContext"] = {
             "allowPrivilegeEscalation": False,
-            "readOnlyRootFilesystem": True,
+            # readOnlyRootFilesystem is intentionally left to the openshift
+            # profile (deploy/operator/profiles/openshift.yaml), which sets
+            # it to false so Tilt's docker_build_with_restart live_update
+            # can sync a new /manager binary into the running container.
             "capabilities": {
                 "drop": ["ALL"],
             },
