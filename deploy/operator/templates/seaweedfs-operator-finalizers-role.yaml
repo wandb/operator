@@ -1,0 +1,26 @@
+{{- if (index .Values "seaweedfs-operator" "enabled") }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Release.Name }}-seaweedfs-operator-finalizers
+rules:
+  - apiGroups:
+      - seaweed.seaweedfs.com
+    resources:
+      - seaweeds/finalizers
+    verbs:
+      - update
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Release.Name }}-seaweedfs-operator-finalizers
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ .Release.Name }}-seaweedfs-operator-finalizers
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Release.Name }}-seaweedfs-operator
+    namespace: {{ .Release.Namespace }}
+{{- end }}
