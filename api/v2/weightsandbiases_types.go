@@ -499,6 +499,12 @@ type ClickHouseObjectStorageSpec struct {
 	// its data. Lets multiple consumers share a single bucket. Defaults to
 	// "clickhouse/".
 	Prefix string `json:"prefix,omitempty"`
+
+	// Insecure connects to the object store over HTTP instead of HTTPS. It only
+	// applies to external object stores that do not advertise a scheme; the
+	// managed object store's scheme is taken from its connection. Defaults to
+	// false (HTTPS).
+	Insecure bool `json:"insecure,omitempty"`
 }
 
 // ClickHouseKeeperSpec configures the managed ClickHouse Keeper ensemble.

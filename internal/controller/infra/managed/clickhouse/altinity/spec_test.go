@@ -71,7 +71,7 @@ var _ = Describe("ClickHouse vendor specs", func() {
 		Expect(settings.Get("storage_configuration/disks/s3_disk/endpoint").String()).
 			To(Equal("http://seaweedfs.wandb.svc.cluster.local:80/bucket/clickhouse/"))
 		Expect(settings.Get("storage_configuration/policies/" + StoragePolicyName + "/volumes/main/disk").String()).
-			To(Equal("s3_cache"))
+			To(Equal("s3_disk_cache"))
 
 		// Credentials are secret references; the operator renders from_env. No
 		// config file and no manually-injected env vars on our side.

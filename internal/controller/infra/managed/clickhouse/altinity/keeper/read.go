@@ -66,7 +66,7 @@ func keeperPodsRunningStatus(
 		if err != nil {
 			return result, err
 		}
-		result[podName] = found && pod.Status.Phase == corev1.PodRunning
+		result[podName] = found && common.PodReady(pod)
 	}
 	return result, nil
 }

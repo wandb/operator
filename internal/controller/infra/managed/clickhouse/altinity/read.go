@@ -160,7 +160,7 @@ func chPodsRunningStatus(
 				return result, err
 			}
 			if found {
-				result[podName] = pod.Status.Phase == corev1.PodRunning
+				result[podName] = ctrlcommon.PodReady(pod)
 			} else {
 				result[podName] = false
 			}

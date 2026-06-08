@@ -24,10 +24,14 @@ const (
 	// spec does not set one. The trailing slash is significant to ClickHouse.
 	DefaultObjectStoragePrefix = "clickhouse/"
 
-	s3DiskName      = "s3_disk"
-	s3CacheDiskName = "s3_cache"
+	s3DiskName = "s3_disk"
+	// s3CacheDiskName must sort after s3DiskName: the Altinity settings renderer
+	// emits <disks> children in sorted-path order, and ClickHouse requires the
+	// wrapped disk (s3_disk) to be defined before the cache disk that wraps it.
+	// "s3_disk/..." sorts before "s3_disk_cache/..." ('/' < '_'), so this works.
+	s3CacheDiskName = "s3_disk_cache"
 	s3MetadataPath  = "/var/lib/clickhouse/disks/s3_disk/"
-	s3CachePath     = "/var/lib/clickhouse/s3_cache/"
+	s3CachePath     = "/var/lib/clickhouse/disks/s3_disk_cache/"
 
 	// storageConfigKey is the settings path prefix that renders to the
 	// <storage_configuration> ClickHouse config section.
@@ -86,7 +90,7 @@ func ResolveObjectStorage(
 		return nil, fmt.Errorf("object store connection secret %q is missing Bucket", secretName)
 	}
 
-	endpoint, err := buildEndpoint(get("Scheme"), get("Host"), get("Port"), bucket, get("Region"), objectStoragePrefix(spec))
+	endpoint, err := buildEndpoint(get("Scheme"), get("Host"), get("Port"), bucket, get("Region"), objectStoragePrefix(spec), spec.ObjectStorage.Insecure)
 	if err != nil {
 		return nil, err
 	}
@@ -119,11 +123,11 @@ func normalizePrefix(prefix string) string {
 // host is present (managed SeaweedFS or an S3-compatible endpoint) it uses
 // path-style addressing; otherwise it derives the AWS virtual-hosted endpoint
 // from the region.
-func buildEndpoint(scheme, host, port, bucket, region, prefix string) (string, error) {
+func buildEndpoint(scheme, host, port, bucket, region, prefix string, insecure bool) (string, error) {
 	if host != "" {
 		if scheme == "" {
 			scheme = "https"
-			if port == "80" {
+			if insecure {
 				scheme = "http"
 			}
 		}
@@ -171,6 +175,13 @@ func applyStorageConfiguration(settings *v1.Settings, oc *ObjectStorageConn, cac
 		storageConfigKey+"/policies/"+StoragePolicyName+"/volumes/main/disk",
 		v1.NewSettingScalar(s3CacheDiskName),
 	)
+
+	// Route all MergeTree tables (i.e. W&B data) to object storage by default,
+	// without requiring per-table DDL. ClickHouse's own system_*_log tables ship
+	// with a predefined <engine> in the server image, which forbids a separate
+	// <storage_policy> override, so they inherit this default and live in the
+	// bucket too (writes still go through the local cache disk first).
+	settings.Set("merge_tree/storage_policy", v1.NewSettingScalar(StoragePolicyName))
 }
 
 // diskKey returns a helper that builds settings paths for a named disk, e.g.

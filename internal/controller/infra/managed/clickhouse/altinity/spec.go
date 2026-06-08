@@ -156,11 +156,8 @@ func ToClickHouseVendorSpec(
 	// Create server settings
 	serverSettings := v1.NewSettings()
 
-	// Make the object-store-backed policy the server-wide default so every
-	// MergeTree table lands in the bucket without per-table DDL.
-	serverSettings.Set("merge_tree/storage_policy", v1.NewSettingScalar(StoragePolicyName))
-
-	// Define the S3 disk, its local read-through cache, and the storage policy.
+	// Define the S3 disk + local read-through cache, the storage policy, make it
+	// the server-wide default, and keep system log tables on local disk.
 	applyStorageConfiguration(serverSettings, objStorage, cacheMaxSizeBytes)
 
 	// Enable built-in Prometheus metrics endpoint if telemetry is enabled

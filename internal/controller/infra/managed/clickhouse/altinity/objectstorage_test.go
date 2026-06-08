@@ -1,6 +1,8 @@
 package altinity
 
 import (
+	"strings"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/wandb/operator/pkg/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
@@ -8,32 +10,32 @@ import (
 )
 
 var _ = Describe("Object storage endpoint", func() {
-	It("uses path-style with an explicit scheme for a custom host", func() {
-		ep, err := buildEndpoint("http", "seaweedfs.wandb.svc.cluster.local", "80", "bucket", "us-east-1", "clickhouse/")
+	It("uses the scheme reported by the connection for a custom host", func() {
+		ep, err := buildEndpoint("http", "seaweedfs.wandb.svc.cluster.local", "80", "bucket", "us-east-1", "clickhouse/", false)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ep).To(Equal("http://seaweedfs.wandb.svc.cluster.local:80/bucket/clickhouse/"))
 	})
 
-	It("defaults to https for a custom host with no scheme and a non-80 port", func() {
-		ep, err := buildEndpoint("", "minio.example.com", "9000", "data", "", "clickhouse/")
+	It("defaults to https for an external host with no scheme", func() {
+		ep, err := buildEndpoint("", "minio.example.com", "9000", "data", "", "clickhouse/", false)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ep).To(Equal("https://minio.example.com:9000/data/clickhouse/"))
 	})
 
-	It("infers http when the port is 80 and no scheme is given", func() {
-		ep, err := buildEndpoint("", "minio.example.com", "80", "data", "", "clickhouse/")
+	It("uses http for an external host when insecure is set", func() {
+		ep, err := buildEndpoint("", "minio.example.com", "9000", "data", "", "clickhouse/", true)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(ep).To(Equal("http://minio.example.com:80/data/clickhouse/"))
+		Expect(ep).To(Equal("http://minio.example.com:9000/data/clickhouse/"))
 	})
 
 	It("derives an AWS virtual-hosted endpoint when no host is set", func() {
-		ep, err := buildEndpoint("", "", "", "my-bucket", "us-west-2", "clickhouse/")
+		ep, err := buildEndpoint("", "", "", "my-bucket", "us-west-2", "clickhouse/", false)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ep).To(Equal("https://my-bucket.s3.us-west-2.amazonaws.com/clickhouse/"))
 	})
 
 	It("errors when neither host nor region is available", func() {
-		_, err := buildEndpoint("", "", "", "my-bucket", "", "clickhouse/")
+		_, err := buildEndpoint("", "", "", "my-bucket", "", "clickhouse/", false)
 		Expect(err).To(HaveOccurred())
 	})
 })
@@ -50,7 +52,7 @@ var _ = Describe("Object storage prefix", func() {
 })
 
 var _ = Describe("Storage configuration settings", func() {
-	It("defines an s3 disk, cache, and policy with secret-sourced credentials", func() {
+	It("defines an s3 disk, cache, policy, default routing, and local system logs", func() {
 		ref := corev1.LocalObjectReference{Name: "objstore-conn"}
 		oc := &ObjectStorageConn{
 			Endpoint:     "http://host:80/bucket/clickhouse/",
@@ -64,9 +66,12 @@ var _ = Describe("Storage configuration settings", func() {
 		Expect(settings.Get("storage_configuration/disks/s3_disk/type").String()).To(Equal("s3"))
 		Expect(settings.Get("storage_configuration/disks/s3_disk/endpoint").String()).To(Equal("http://host:80/bucket/clickhouse/"))
 		Expect(settings.Get("storage_configuration/disks/s3_disk/region").String()).To(Equal("us-east-1"))
-		Expect(settings.Get("storage_configuration/disks/s3_cache/disk").String()).To(Equal("s3_disk"))
-		Expect(settings.Get("storage_configuration/disks/s3_cache/max_size").String()).To(Equal("8589934592"))
-		Expect(settings.Get("storage_configuration/policies/s3_main/volumes/main/disk").String()).To(Equal("s3_cache"))
+		Expect(settings.Get("storage_configuration/disks/s3_disk_cache/disk").String()).To(Equal("s3_disk"))
+		Expect(settings.Get("storage_configuration/disks/s3_disk_cache/max_size").String()).To(Equal("8589934592"))
+		Expect(settings.Get("storage_configuration/policies/s3_main/volumes/main/disk").String()).To(Equal("s3_disk_cache"))
+
+		// s3_main is the server-wide default for all MergeTree tables.
+		Expect(settings.Get("merge_tree/storage_policy").String()).To(Equal(StoragePolicyName))
 
 		// Credentials are secret references (operator renders from_env), not literals.
 		accessKey := settings.Get("storage_configuration/disks/s3_disk/access_key_id")
@@ -85,5 +90,20 @@ var _ = Describe("Storage configuration settings", func() {
 		Expect(settings.Get("storage_configuration/disks/s3_disk/use_environment_credentials").String()).To(Equal("true"))
 		Expect(settings.Has("storage_configuration/disks/s3_disk/access_key_id")).To(BeFalse())
 		Expect(settings.Has("storage_configuration/disks/s3_disk/region")).To(BeFalse())
+	})
+
+	It("renders the s3 disk before the cache disk that wraps it", func() {
+		oc := &ObjectStorageConn{Endpoint: "http://host:80/bucket/clickhouse/", UseEnvCredentials: true}
+		settings := v1.NewSettings()
+		applyStorageConfiguration(settings, oc, 1<<30)
+
+		// ClickHouse initializes disks in document order and requires the wrapped
+		// disk to be defined before the cache disk; verify the rendered XML order.
+		rendered := settings.ClickHouseConfig()
+		diskIdx := strings.Index(rendered, "<"+s3DiskName+">")
+		cacheIdx := strings.Index(rendered, "<"+s3CacheDiskName+">")
+		Expect(diskIdx).To(BeNumerically(">=", 0))
+		Expect(cacheIdx).To(BeNumerically(">=", 0))
+		Expect(diskIdx).To(BeNumerically("<", cacheIdx), "s3 disk must be rendered before the cache disk that wraps it")
 	})
 })
