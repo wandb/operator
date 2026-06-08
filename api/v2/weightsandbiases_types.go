@@ -243,6 +243,11 @@ func (w *WeightsAndBiases) GetTolerations(spec ManagedInfraSpec) *[]corev1.Toler
 	return w.Spec.Tolerations
 }
 
+// ValidMysqlReplicaCount reports whether r is a count Moco accepts: a positive odd number.
+func ValidMysqlReplicaCount(r int32) bool {
+	return r > 0 && r%2 == 1
+}
+
 // WandbAppSpec defines the configuration for the Wandb application deployment.
 type WandbAppSpec struct {
 	Hostname            string              `json:"hostname"`

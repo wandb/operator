@@ -159,6 +159,24 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 			Expect(warnings).To(BeEmpty())
 		})
 
+		It("rejects decreasing managed MySQL replicas on update", func() {
+			oldObj.Spec.MySQL.ManagedMysql = &appsv2.ManagedMysqlSpec{Replicas: 3}
+			obj.Spec.MySQL.ManagedMysql = &appsv2.ManagedMysqlSpec{Replicas: 1}
+
+			_, err := validator.ValidateUpdate(ctx, oldObj, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("replicas cannot be decreased"))
+		})
+
+		It("allows increasing managed MySQL replicas on update", func() {
+			oldObj.Spec.MySQL.ManagedMysql = &appsv2.ManagedMysqlSpec{Replicas: 1}
+			obj.Spec.MySQL.ManagedMysql = &appsv2.ManagedMysqlSpec{Replicas: 3}
+
+			warnings, err := validator.ValidateUpdate(ctx, oldObj, obj)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(warnings).To(BeEmpty())
+		})
+
 		It("rejects managed ClickHouse when no object store is configured", func() {
 			obj.Spec.ClickHouse.ManagedClickHouse = &appsv2.ManagedClickHouseSpec{}
 
