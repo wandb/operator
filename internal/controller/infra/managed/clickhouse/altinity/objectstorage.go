@@ -15,49 +15,38 @@ import (
 )
 
 const (
-	// StoragePolicyName is the ClickHouse storage policy backed by the object
-	// store. It is set as the server-wide default so all MergeTree tables land in
-	// the bucket without per-table DDL.
+	// StoragePolicyName is the object-store-backed policy, set server-wide so all
+	// MergeTree tables land in the bucket without per-table DDL.
 	StoragePolicyName = "s3_main"
 
-	// DefaultObjectStoragePrefix is the key prefix used within the bucket when the
-	// spec does not set one. The trailing slash is significant to ClickHouse.
+	// DefaultObjectStoragePrefix is the in-bucket prefix when unset (trailing slash matters).
 	DefaultObjectStoragePrefix = "clickhouse/"
 
 	s3DiskName = "s3_disk"
-	// s3CacheDiskName must sort after s3DiskName: the Altinity settings renderer
-	// emits <disks> children in sorted-path order, and ClickHouse requires the
-	// wrapped disk (s3_disk) to be defined before the cache disk that wraps it.
-	// "s3_disk/..." sorts before "s3_disk_cache/..." ('/' < '_'), so this works.
+	// Must sort after s3DiskName ('/' < '_'): the renderer emits <disks> in sorted
+	// order and ClickHouse requires the wrapped disk before its cache disk.
 	s3CacheDiskName = "s3_disk_cache"
 	s3MetadataPath  = "/var/lib/clickhouse/disks/s3_disk/"
 	s3CachePath     = "/var/lib/clickhouse/disks/s3_disk_cache/"
 
-	// storageConfigKey is the settings path prefix that renders to the
-	// <storage_configuration> ClickHouse config section.
+	// storageConfigKey renders to the <storage_configuration> config section.
 	storageConfigKey = "storage_configuration"
 )
 
-// ObjectStorageConn holds the resolved object-store connection details the CHI
-// builder needs to configure the S3-backed disk. Non-secret fields are resolved
-// to literals; credentials remain secret references that the Altinity operator
-// injects into the pod as env vars and reads back via from_env.
+// ObjectStorageConn holds the resolved bucket connection used to configure the
+// S3-backed disk: endpoint/region as literals, credentials as secret references.
 type ObjectStorageConn struct {
-	// Endpoint is the full http(s) URL including bucket and prefix, with a
-	// trailing slash (ClickHouse treats it as a path prefix).
+	// Endpoint is the full http(s) URL incl. bucket + prefix, trailing slash.
 	Endpoint string
 	Region   string
-	// UseEnvCredentials is true when the bucket relies on ambient credentials
-	// (pod IAM role / workload identity) rather than explicit access keys.
+	// UseEnvCredentials uses ambient creds (IAM role) instead of access keys.
 	UseEnvCredentials bool
 	AccessKeyRef      corev1.SecretKeySelector
 	SecretKeyRef      corev1.SecretKeySelector
 }
 
-// ResolveObjectStorage reads the object-store connection secret and derives the
-// details needed to back ClickHouse with the bucket. It reads the secret from
-// the managed ClickHouse namespace, which (with default namespace handling) is
-// also where the ClickHouse pods resolve the credential env vars.
+// ResolveObjectStorage reads the object-store connection secret (from the CH
+// namespace) and derives the S3 disk details.
 func ResolveObjectStorage(
 	ctx context.Context,
 	cl client.Client,
@@ -108,8 +97,7 @@ func objectStoragePrefix(spec *apiv2.ManagedClickHouseSpec) string {
 	return normalizePrefix(spec.ObjectStorage.Prefix)
 }
 
-// normalizePrefix returns a bucket key prefix with no leading slash and exactly
-// one trailing slash, defaulting when empty.
+// normalizePrefix strips leading slashes and ensures one trailing slash, defaulting when empty.
 func normalizePrefix(prefix string) string {
 	prefix = strings.TrimSpace(prefix)
 	if prefix == "" {
@@ -119,10 +107,8 @@ func normalizePrefix(prefix string) string {
 	return prefix + "/"
 }
 
-// buildEndpoint constructs the ClickHouse S3 disk endpoint URL. When a custom
-// host is present (managed SeaweedFS or an S3-compatible endpoint) it uses
-// path-style addressing; otherwise it derives the AWS virtual-hosted endpoint
-// from the region.
+// buildEndpoint builds the S3 disk endpoint: path-style for a custom host, else
+// the AWS virtual-hosted URL derived from the region.
 func buildEndpoint(scheme, host, port, bucket, region, prefix string, insecure bool) (string, error) {
 	if host != "" {
 		if scheme == "" {
@@ -144,12 +130,9 @@ func buildEndpoint(scheme, host, port, bucket, region, prefix string, insecure b
 	return fmt.Sprintf("https://%s.s3.%s.amazonaws.com/%s", bucket, region, prefix), nil
 }
 
-// applyStorageConfiguration adds the ClickHouse <storage_configuration> (an S3
-// disk, a local read-through cache wrapping it, and the storage policy) to the
-// given settings via the typed Settings API. Credentials are expressed as
-// secret references; the Altinity operator injects them as pod env vars and
-// renders from_env in the generated config, so plaintext credentials never
-// appear in the CHI or its ConfigMaps.
+// applyStorageConfiguration adds the <storage_configuration> (S3 disk + cache +
+// policy) to settings. Credentials are secret references so the Altinity
+// operator injects them via from_env rather than as plaintext.
 func applyStorageConfiguration(settings *v1.Settings, oc *ObjectStorageConn, cacheMaxSizeBytes int64) {
 	disk := diskKey(s3DiskName)
 	settings.Set(disk("type"), v1.NewSettingScalar("s3"))
@@ -176,23 +159,21 @@ func applyStorageConfiguration(settings *v1.Settings, oc *ObjectStorageConn, cac
 		v1.NewSettingScalar(s3CacheDiskName),
 	)
 
-	// Route all MergeTree tables (i.e. W&B data) to object storage by default,
-	// without requiring per-table DDL. ClickHouse's own system_*_log tables ship
-	// with a predefined <engine> in the server image, which forbids a separate
-	// <storage_policy> override, so they inherit this default and live in the
-	// bucket too (writes still go through the local cache disk first).
+	// Server-wide default so W&B tables use the bucket without per-table DDL.
+	// system_*_log tables ship a predefined <engine> (which can't take a separate
+	// storage_policy), so they inherit this and live in the bucket too.
 	settings.Set("merge_tree/storage_policy", v1.NewSettingScalar(StoragePolicyName))
 }
 
-// diskKey returns a helper that builds settings paths for a named disk, e.g.
+// diskKey builds settings paths for a named disk, e.g.
 // diskKey("s3_disk")("type") -> "storage_configuration/disks/s3_disk/type".
 func diskKey(name string) func(string) string {
 	prefix := storageConfigKey + "/disks/" + name + "/"
 	return func(field string) string { return prefix + field }
 }
 
-// secretSetting builds a ClickHouse setting whose value is sourced from a
-// Kubernetes secret. The Altinity operator wires it as a pod env var + from_env.
+// secretSetting builds a setting sourced from a Kubernetes secret; the Altinity
+// operator wires it as a pod env var + from_env.
 func secretSetting(ref corev1.SecretKeySelector) *v1.Setting {
 	r := ref
 	return v1.NewSettingSource(&v1.SettingSource{

@@ -12,21 +12,17 @@ func InstallationName(chSpecName string) string {
 	return chSpecName + "-keeper"
 }
 
-// ClientServiceName returns the name of the Service the Altinity keeper operator
-// creates for client (ZooKeeper-protocol) connections to a CHK. The operator's
-// namer uses the pattern "keeper-<cr-name>".
+// ClientServiceName is the Altinity-created client Service name ("keeper-<cr-name>").
 func ClientServiceName(chSpecName string) string {
 	return "keeper-" + InstallationName(chSpecName)
 }
 
-// ClientServiceFQDN returns the in-cluster DNS name of the Keeper client service
-// that ClickHouse points its <zookeeper> config at.
+// ClientServiceFQDN is the in-cluster DNS the CHI's <zookeeper> config points at.
 func ClientServiceFQDN(namespace, chSpecName string) string {
 	return fmt.Sprintf("%s.%s.svc.cluster.local", ClientServiceName(chSpecName), namespace)
 }
 
-// SpecNamespacedName returns the namespaced name of the Keeper CR for a managed
-// ClickHouse spec.
+// SpecNamespacedName is the Keeper CR's namespaced name for a managed CH spec.
 func SpecNamespacedName(spec *apiv2.ManagedClickHouseSpec) types.NamespacedName {
 	return types.NamespacedName{
 		Namespace: spec.Namespace,

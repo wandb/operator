@@ -200,8 +200,7 @@ func inferState_KeeperReportedReadyType(ctx context.Context, condition metav1.Co
 		result = common.HealthyState
 	}
 	if condition.Status == metav1.ConditionFalse {
-		// Keeper is not ready: ClickHouse cannot coordinate ReplicatedMergeTree
-		// replication yet, so hold the overall state at pending.
+		// Keeper not ready yet: ClickHouse can't coordinate replication, so hold at pending.
 		result = common.PendingState
 	}
 	log.Debug(

@@ -119,8 +119,7 @@ func ToClickHouseVendorSpec(
 		return nil, nil
 	}
 
-	// Managed ClickHouse stores table data in the object store; it cannot be
-	// rendered without resolved bucket connection details.
+	// Managed ClickHouse stores table data in the object store; require it.
 	if objStorage == nil {
 		return nil, fmt.Errorf("managed ClickHouse requires object storage, but none was resolved")
 	}
@@ -129,9 +128,8 @@ func ToClickHouseVendorSpec(
 		Namespace: spec.Namespace, Name: spec.Name,
 	})
 
-	// Parse storage quantity. With object-store-backed storage this PV holds only
-	// ClickHouse metadata, system tables, and the S3 read-through cache — not
-	// table data, which lives in the bucket.
+	// This PV holds only metadata/system tables and the S3 read-through cache;
+	// table data lives in the bucket.
 	storageQuantity := resource.MustParse(spec.StorageSize)
 
 	// Reserve ~20% of the local PV for metadata/system; the rest backs the cache.
@@ -156,8 +154,7 @@ func ToClickHouseVendorSpec(
 	// Create server settings
 	serverSettings := v1.NewSettings()
 
-	// Define the S3 disk + local read-through cache, the storage policy, make it
-	// the server-wide default, and keep system log tables on local disk.
+	// Define the S3 disk + cache + storage policy and make it the server-wide default.
 	applyStorageConfiguration(serverSettings, objStorage, cacheMaxSizeBytes)
 
 	// Enable built-in Prometheus metrics endpoint if telemetry is enabled

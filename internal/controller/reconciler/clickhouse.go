@@ -105,9 +105,7 @@ func managedClickHouseWriteState(
 
 	log := ctrl.LoggerFrom(ctx)
 
-	// Managed ClickHouse stores table data in the configured object store. Resolve
-	// the bucket connection (managed or external); if it is not ready yet, wait and
-	// requeue rather than building a CHI without working storage.
+	// Resolve the bucket connection; wait and requeue if it isn't ready yet.
 	objStorage, err := altinity.ResolveObjectStorage(ctx, client, wandb, objStoreConn)
 	if err != nil {
 		log.Error(err, "object storage not ready for ClickHouse")
@@ -125,9 +123,7 @@ func managedClickHouseWriteState(
 		}
 	}
 
-	// ClickHouse uses ReplicatedMergeTree, which needs a ClickHouse Keeper
-	// ensemble for replication coordination. Translate both into their CRs and
-	// write them together (WriteState provisions Keeper before the CHI).
+	// Translate the Keeper and ClickHouse CRs; WriteState writes Keeper first.
 	desiredKeeper, err := keeper.ToKeeperVendorSpec(ctx, wandb, client.Scheme())
 	if err != nil {
 		log.Error(err, "failed to translate Keeper spec to vendor spec")
@@ -177,8 +173,7 @@ func managedClickHouseReadState(
 	readConditions, newInfraConn := altinity.ReadState(ctx, client, specNamespacedName, wandb, onDeleteRule)
 	newConditions = append(newConditions, readConditions...)
 
-	// ClickHouse cannot replicate without Keeper, so its readiness gates
-	// ClickHouse readiness (see ComputeStatus/inferInfraState).
+	// Keeper readiness gates ClickHouse readiness (see inferInfraState).
 	newConditions = append(newConditions, keeper.ReadState(ctx, client, keeper.SpecNamespacedName(spec))...)
 
 	return newConditions, newInfraConn

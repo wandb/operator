@@ -4,12 +4,10 @@ const (
 	// KeeperModuleName is the W&B component label value for Keeper resources.
 	KeeperModuleName = "clickhouse-keeper"
 
-	// KeeperImage pins the Altinity ClickHouse Keeper image to the same version
-	// as the managed ClickHouse server image (altinity.ClickHouseImage).
+	// KeeperImage pins the Keeper image to the managed ClickHouse server version.
 	KeeperImage = "altinity/clickhouse-keeper:25.8.16.10002.altinitystable"
 
-	// KeeperClientPort is the ZooKeeper-compatible client port ClickHouse
-	// connects to for replication coordination.
+	// KeeperClientPort is the ZooKeeper-compatible client port.
 	KeeperClientPort = 2181
 
 	// ClusterName is the name of the single Keeper cluster.
@@ -18,9 +16,7 @@ const (
 	// KeeperCustomResourceType is the condition type reported for the CHK CR.
 	KeeperCustomResourceType = "KeeperCustomResource"
 
-	// KeeperReportedReadyType reports whether the Keeper ensemble's pods are
-	// running. ClickHouse depends on Keeper for ReplicatedMergeTree coordination,
-	// so this condition gates ClickHouse readiness.
+	// KeeperReportedReadyType reports Keeper pod readiness; it gates ClickHouse readiness.
 	KeeperReportedReadyType = "KeeperReportedReady"
 
 	podTemplateName     = "keeper-pod-template"

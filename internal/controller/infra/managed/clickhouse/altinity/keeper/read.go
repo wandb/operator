@@ -13,9 +13,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// ReadState reports whether the Keeper ensemble is ready (all Keeper pods
-// running). ClickHouse depends on Keeper for ReplicatedMergeTree coordination,
-// so the returned KeeperReportedReadyType condition gates ClickHouse readiness.
+// ReadState reports Keeper pod readiness via KeeperReportedReadyType, which gates
+// ClickHouse readiness.
 func ReadState(
 	ctx context.Context,
 	cl client.Client,

@@ -31,9 +31,8 @@ func ToKeeperVendorSpec(
 		return nil, nil
 	}
 
-	// Keeper sizing comes from the server manifest (clickhouseKeeper block) or
-	// explicit CR values — there are no operator-side defaults. Fail loudly if
-	// the storage size is missing rather than inventing one.
+	// Keeper sizing comes from the server manifest (clickhouseKeeper) or CR; there
+	// are no operator-side defaults, so fail loudly if the storage size is missing.
 	storageQuantity, err := resource.ParseQuantity(spec.Keeper.StorageSize)
 	if err != nil {
 		return nil, fmt.Errorf("invalid keeper storageSize %q (expected from the server manifest's clickhouseKeeper sizing): %w", spec.Keeper.StorageSize, err)
