@@ -93,6 +93,28 @@
             }
           }
         },
+        "kubeStateMetrics": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "image": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "repository": {
+                  "type": "string"
+                },
+                "tag": {
+                  "type": "string"
+                }
+              }
+            },
+            "resources": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        },
         "alerting": {
           "type": "object",
           "additionalProperties": false,
