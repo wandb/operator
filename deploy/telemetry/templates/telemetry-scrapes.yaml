@@ -247,6 +247,25 @@ spec:
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMPodScrape
 metadata:
+  name: mysql-moco
+  namespace: {{ include "telemetry.namespace" . }}
+  labels:
+    app.kubernetes.io/component: telemetry
+    app.kubernetes.io/part-of: wandb
+spec:
+  selector:
+    matchLabels:
+      weightsandbiases.apps.wandb.com/component: moco
+  namespaceSelector:
+    matchNames:
+      - {{ include "telemetry.namespace" . }}
+  podMetricsEndpoints:
+    - port: mysqld-metrics
+      path: /metrics
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMPodScrape
+metadata:
   name: kafka-brokers
   namespace: {{ include "telemetry.namespace" . }}
   labels:
