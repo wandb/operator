@@ -41,10 +41,11 @@ func WriteState(
 	return results
 }
 
-// writeClickHouseInstallation patches only the fields we own onto the CHI.
-// CreateOrPatch diffs via unstructured JSON (dropping the vendored runtime/status
-// fields whose unexported members panic Semantic.DeepEqual) and patches just the
-// diff, so the Altinity-managed finalizer and status survive untouched.
+// writeClickHouseInstallation create-or-updates the CHI, setting only the fields
+// we own (spec, labels, owner refs) and preserving the Altinity-managed
+// finalizer/status. It compares owned fields via JSON, never the vendored status
+// — whose uint64 and unexported fields panic controllerutil's reflective
+// diff/copy.
 func writeClickHouseInstallation(
 	ctx context.Context,
 	cl client.Client,
@@ -59,11 +60,13 @@ func writeClickHouseInstallation(
 		},
 	}
 
-	op, err := controllerutil.CreateOrPatch(ctx, cl, obj, func() error {
-		applyOwnedMetadata(obj, desired)
-		obj.Spec = desired.Spec
-		return nil
-	})
+	op, err := common.WriteOwnedFields(ctx, cl, obj,
+		func(o *chiv1.ClickHouseInstallation) {
+			applyOwnedMetadata(o, desired)
+			o.Spec = desired.Spec
+		},
+		clickHouseOwnedEqual,
+	)
 	if err != nil {
 		return []metav1.Condition{
 			{Type: common.ReconciledType, Status: metav1.ConditionFalse, Reason: common.ApiErrorReason},
@@ -72,6 +75,12 @@ func writeClickHouseInstallation(
 	}
 
 	return []metav1.Condition{customResourceConditionForOp(ClickHouseCustomResourceType, op)}
+}
+
+func clickHouseOwnedEqual(a, b *chiv1.ClickHouseInstallation) bool {
+	return common.JSONEqual(a.Spec, b.Spec) &&
+		common.JSONEqual(a.Labels, b.Labels) &&
+		common.JSONEqual(a.OwnerReferences, b.OwnerReferences)
 }
 
 // applyOwnedMetadata sets the metadata we own (merged labels, owner references),

@@ -15,10 +15,10 @@ import (
 // ResourceTypeName is the kind used for logging/error reporting of the CHK CR.
 const ResourceTypeName = "ClickHouseKeeperInstallation"
 
-// WriteState patches only the fields we own onto the CHK. CreateOrPatch diffs via
-// unstructured JSON (dropping the vendored runtime/status fields whose unexported
-// members panic Semantic.DeepEqual) and patches just the diff, so the
-// Altinity-managed finalizer and status survive untouched.
+// WriteState create-or-updates the CHK, setting only the fields we own (spec,
+// labels, owner refs) and preserving the Altinity-managed finalizer/status. It
+// compares owned fields via JSON, never the vendored status — whose uint64 and
+// unexported fields panic controllerutil's reflective diff/copy.
 func WriteState(
 	ctx context.Context,
 	cl client.Client,
@@ -31,20 +31,10 @@ func WriteState(
 		ObjectMeta: metav1.ObjectMeta{Name: keeperNsName.Name, Namespace: keeperNsName.Namespace},
 	}
 
-	op, err := controllerutil.CreateOrPatch(ctx, cl, obj, func() error {
-		// Set only the fields we own; leave finalizers/status/annotations intact.
-		labels := obj.GetLabels()
-		if labels == nil {
-			labels = map[string]string{}
-		}
-		for k, v := range desired.GetLabels() {
-			labels[k] = v
-		}
-		obj.SetLabels(labels)
-		obj.SetOwnerReferences(desired.GetOwnerReferences())
-		obj.Spec = desired.Spec
-		return nil
-	})
+	op, err := common.WriteOwnedFields(ctx, cl, obj,
+		func(o *chkv1.ClickHouseKeeperInstallation) { applyOwnedKeeper(o, desired) },
+		keeperOwnedEqual,
+	)
 	if err != nil {
 		return []metav1.Condition{
 			{Type: KeeperCustomResourceType, Status: metav1.ConditionUnknown, Reason: common.ApiErrorReason},
@@ -59,4 +49,23 @@ func WriteState(
 	return []metav1.Condition{
 		{Type: KeeperCustomResourceType, Status: metav1.ConditionTrue, Reason: common.ResourceExistsReason},
 	}
+}
+
+func applyOwnedKeeper(obj, desired *chkv1.ClickHouseKeeperInstallation) {
+	labels := obj.GetLabels()
+	if labels == nil {
+		labels = map[string]string{}
+	}
+	for k, v := range desired.GetLabels() {
+		labels[k] = v
+	}
+	obj.SetLabels(labels)
+	obj.SetOwnerReferences(desired.GetOwnerReferences())
+	obj.Spec = desired.Spec
+}
+
+func keeperOwnedEqual(a, b *chkv1.ClickHouseKeeperInstallation) bool {
+	return common.JSONEqual(a.Spec, b.Spec) &&
+		common.JSONEqual(a.Labels, b.Labels) &&
+		common.JSONEqual(a.OwnerReferences, b.OwnerReferences)
 }
