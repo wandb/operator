@@ -670,14 +670,23 @@ if LOCAL_NETWORKING_MODE == "ingress":
         labels=[GROUP_DEPENDENCIES],
     )
 
+kube_state_metrics_flags = [
+    "--create-namespace",
+    "--version=5.27.0",
+]
+if settings.get("openshiftSCC"):
+    # The chart defaults to runAsUser/fsGroup 65534, which restricted-v2 rejects.
+    kube_state_metrics_flags += [
+        "--set=securityContext.runAsUser=null",
+        "--set=securityContext.runAsGroup=null",
+        "--set=securityContext.fsGroup=null",
+    ]
+
 helm_resource(
     "kube-state-metrics",
     chart="oci://ghcr.io/prometheus-community/charts/kube-state-metrics",
     namespace="kube-state-metrics",
-    flags=[
-        "--create-namespace",
-        "--version=5.27.0",
-    ],
+    flags=kube_state_metrics_flags,
     labels=[GROUP_DEPENDENCIES],
 )
 
