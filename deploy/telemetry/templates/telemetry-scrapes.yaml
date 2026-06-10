@@ -255,7 +255,8 @@ metadata:
 spec:
   selector:
     matchLabels:
-      weightsandbiases.apps.wandb.com/component: moco
+      app.kubernetes.io/created-by: moco
+      app.kubernetes.io/name: mysql
   namespaceSelector:
     matchNames:
       - {{ include "telemetry.namespace" . }}
