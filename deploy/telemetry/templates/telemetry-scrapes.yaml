@@ -125,7 +125,7 @@ spec:
     - port: metrics
 {{- end }}
 
-{{- if .Values.scrape.kubeStateMetrics }}
+{{- if and (eq (include "telemetry.uiEnabled" .) "true") .Values.scrape.kubeStateMetrics }}
 ---
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMServiceScrape

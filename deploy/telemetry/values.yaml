@@ -15,17 +15,6 @@ scrape:
   wandbApi: true
   infrastructure: true
   kubeStateMetrics: true
-kubeStateMetrics:
-  image:
-    repository: registry.k8s.io/kube-state-metrics/kube-state-metrics
-    tag: v2.14.0
-  resources:
-    requests:
-      cpu: 10m
-      memory: 64Mi
-    limits:
-      cpu: 100m
-      memory: 256Mi
 alerting:
   enabled: false
   evaluationInterval: 30s

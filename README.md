@@ -206,6 +206,7 @@ tilt up
 fully reset the cluster. The following are expected to survive a normal `tilt down`:
 
 - `cert-manager` and its namespace
+- `kube-state-metrics` and its namespace
 - operator CRDs, including the W&B CRDs and operator dependency CRDs
 - `wandb-operators` and dependency namespaces
 - dev PVC-backed data unless the backing operator deletes it
