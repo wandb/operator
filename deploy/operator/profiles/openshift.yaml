@@ -1,43 +1,15 @@
 wandb-operator:
   podSecurityContext:
-    runAsNonRoot: true
     runAsUser: null
     runAsGroup: null
     fsGroup: null
     fsGroupChangePolicy: null
-    seccompProfile:
-      type: RuntimeDefault
-
-  # readOnlyRootFilesystem requires writable mounts where the operator
-  # writes manifests and reads serving certs.
-  volumes:
-    - name: server-manifest
-      emptyDir: {}
-    - name: helm-home
-      emptyDir: {}
-    - name: serving-certs
-      secret:
-        secretName: '{{ .Release.Name }}-serving-cert'
 
   containers:
     operator:
-      securityContext:
-        allowPrivilegeEscalation: false
-        readOnlyRootFilesystem: true
-        capabilities:
-          drop:
-            - "ALL"
       env:
         OPENSHIFT:
           value: "true"
-      volumeMounts:
-        - mountPath: /tmp/server-manifest
-          name: server-manifest
-        - mountPath: /helm
-          name: helm-home
-        - mountPath: /tmp/wandb-operator/serving-certs
-          name: serving-certs
-          readOnly: true
 
 grafana-operator:
   isOpenShift: true

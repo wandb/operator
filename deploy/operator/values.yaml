@@ -61,16 +61,11 @@ wandb-operator:
               name: '{{ .Release.Name }}-telemetry-config'
               key: TELEMETRY_OTEL_RESOURCE_ATTRIBUTES
       securityContext:
-        runAsNonRoot: true
-        runAsUser: 65532
-        runAsGroup: 65532
         allowPrivilegeEscalation: false
         readOnlyRootFilesystem: true
         capabilities:
           drop:
             - "ALL"
-        seccompProfile:
-          type: RuntimeDefault
       livenessProbe:
         httpGet:
           path: /healthz
@@ -96,8 +91,6 @@ wandb-operator:
         - mountPath: /tmp/wandb-operator/serving-certs
           name: serving-certs
           readOnly: true
-        - mountPath: /helm
-          name: helm-home
 
   service:
     enabled: true
@@ -125,8 +118,6 @@ wandb-operator:
     - name: serving-certs
       secret:
         secretName: '{{ .Release.Name }}-serving-cert'
-    - name: helm-home
-      emptyDir: {}
 
   operators:
     application: true
@@ -152,16 +143,11 @@ redis-operator:
     seccompProfile:
       type: RuntimeDefault
   securityContext:
-    runAsNonRoot: true
-    runAsUser: 1000
-    runAsGroup: 1000
     allowPrivilegeEscalation: false
     readOnlyRootFilesystem: true
     capabilities:
       drop:
         - "ALL"
-    seccompProfile:
-      type: RuntimeDefault
 
 strimzi-kafka-operator:
   enabled: true
@@ -175,16 +161,11 @@ strimzi-kafka-operator:
     seccompProfile:
       type: RuntimeDefault
   securityContext:
-    runAsNonRoot: true
-    runAsUser: 1001
-    runAsGroup: 1001
     allowPrivilegeEscalation: false
     readOnlyRootFilesystem: true
     capabilities:
       drop:
         - "ALL"
-    seccompProfile:
-      type: RuntimeDefault
   extraEnvs:
     - name: STRIMZI_POD_SECURITY_PROVIDER_CLASS
       value: restricted
@@ -240,28 +221,18 @@ altinity-clickhouse-operator:
       type: RuntimeDefault
   operator:
     containerSecurityContext:
-      runAsNonRoot: true
-      runAsUser: 1000
-      runAsGroup: 1000
       allowPrivilegeEscalation: false
       readOnlyRootFilesystem: true
       capabilities:
         drop:
           - "ALL"
-      seccompProfile:
-        type: RuntimeDefault
   metrics:
     containerSecurityContext:
-      runAsNonRoot: true
-      runAsUser: 1000
-      runAsGroup: 1000
       allowPrivilegeEscalation: false
       readOnlyRootFilesystem: true
       capabilities:
         drop:
           - "ALL"
-      seccompProfile:
-        type: RuntimeDefault
   configs:
     files:
       config.yaml:
