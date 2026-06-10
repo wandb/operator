@@ -1,11 +1,5 @@
 {{- if (dig "moco" "enabled" true .Values.AsMap) }}
-# Moco sets the MySQLCluster CR as the owner (with blockOwnerDeletion=true) of
-# the PVCs rendered from the StatefulSet's volumeClaimTemplates. On clusters
-# that enable the OwnerReferencesPermissionEnforcement admission plugin (e.g.
-# OpenShift), the built-in statefulset-controller service account must be able
-# to update the mysqlclusters/finalizers subresource, otherwise PVC creation is
-# rejected with: "cannot set blockOwnerDeletion if an ownerReference refers to a
-# resource you can't set finalizers on".
+# Moco blockOwnerDeletion on PVCs requires statefulset-controller to update mysqlclusters/finalizers on OpenShift
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
