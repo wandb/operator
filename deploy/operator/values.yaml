@@ -184,7 +184,6 @@ seaweedfs-operator:
 # during reconcile and the VictoriaMetrics Operator auto-converts them to
 # VMServiceScrapes.
 prometheus-operator-crds:
-  enabled: true
   crds:
     alertmanagerconfigs:
       enabled: false
