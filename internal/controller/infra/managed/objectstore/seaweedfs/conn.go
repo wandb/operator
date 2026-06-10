@@ -16,7 +16,7 @@ import (
 
 const (
 	S3UrlScheme = "s3"
-	S3Port      = "80"
+	S3Port      = "8333"
 )
 
 type s3ConnInfo struct {
@@ -38,7 +38,7 @@ func buildS3ConnInfo(
 		TLS:       tls,
 		SecretKey: secretKey,
 		Host:      fmt.Sprintf("%s.%s.svc.cluster.local", serviceName, namespace),
-		Port:      S3Port,
+		Port:      "80",
 		Bucket:    "bucket",
 	}
 }

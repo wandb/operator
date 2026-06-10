@@ -56,7 +56,7 @@ var _ = Describe("Networking Route Builders", func() {
 			name:        "wandb-bucket-default",
 			namespace:   "infra-ns",
 			serviceName: "wandb-seaweedfs-filer",
-			servicePort: gatewayv1.PortNumber(80),
+			servicePort: gatewayv1.PortNumber(8333),
 			ingress: &serverManifest.AppIngressSpec{
 				Paths:    []string{"/bucket"},
 				PathType: "Exact",
@@ -85,7 +85,7 @@ var _ = Describe("Networking Route Builders", func() {
 		Expect(route.Spec.Rules[0].BackendRefs).To(HaveLen(1))
 		Expect(route.Spec.Rules[0].BackendRefs[0].Name).To(Equal(gatewayv1.ObjectName("wandb-seaweedfs-filer")))
 		Expect(route.Spec.Rules[0].BackendRefs[0].Port).NotTo(BeNil())
-		Expect(*route.Spec.Rules[0].BackendRefs[0].Port).To(Equal(gatewayv1.PortNumber(80)))
+		Expect(*route.Spec.Rules[0].BackendRefs[0].Port).To(Equal(gatewayv1.PortNumber(8333)))
 	})
 
 	It("builds application HTTPRoute templates for external gateways", func() {

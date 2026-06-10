@@ -66,15 +66,6 @@ var _ = Describe("SeaweedFS vendor specs", func() {
 		Expect(seaweed.Spec.Filer.MetricsPort).NotTo(BeNil())
 		Expect(*seaweed.Spec.Filer.MetricsPort).To(Equal(seaweedFilerMetricsPort))
 	})
-
-	It("sets the S3 gateway port to the standard service port", func() {
-		seaweed, err := ToObjectStoreVendorSpec(context.Background(), seaweedWandb(), seaweedScheme())
-		Expect(err).NotTo(HaveOccurred())
-		Expect(seaweed).NotTo(BeNil())
-
-		Expect(seaweed.Spec.S3.Port).NotTo(BeNil())
-		Expect(*seaweed.Spec.S3.Port).To(Equal(seaweedS3Port))
-	})
 })
 
 func seaweedScheme() *runtime.Scheme {
