@@ -291,6 +291,28 @@ def build_wandb_namespace(namespace):
     })
 
 
+def build_seaweedfs_scc_rolebinding(namespace):
+    # CRC dev only: SeaweedFS S3 binds to port 80, which restricted-v2 blocks.
+    k8s_yaml_object({
+        "apiVersion": "rbac.authorization.k8s.io/v1",
+        "kind": "RoleBinding",
+        "metadata": {
+            "name": "wandb-seaweedfs-privileged",
+            "namespace": namespace,
+        },
+        "roleRef": {
+            "apiGroup": "rbac.authorization.k8s.io",
+            "kind": "ClusterRole",
+            "name": "system:openshift:scc:privileged",
+        },
+        "subjects": [{
+            "kind": "Group",
+            "name": "system:serviceaccounts:" + namespace,
+            "apiGroup": "rbac.authorization.k8s.io",
+        }],
+    })
+
+
 def build_operator_values(telemetry_namespace):
     telemetry_enabled = settings.get("observabilityMode") != "off"
     grafana_enabled = settings.get("observabilityMode") == "full"
@@ -498,6 +520,19 @@ if CREATE_WANDB_NAMESPACE:
         labels=[GROUP_DEPENDENCIES],
     )
 
+SEAWEEDFS_SCC_RESOURCE = "OpenShift-SeaweedFS-SCC"
+
+if settings.get("openshiftSCC"):
+    build_seaweedfs_scc_rolebinding(WANDB_NAMESPACE)
+    k8s_resource(
+        new_name=SEAWEEDFS_SCC_RESOURCE,
+        objects=[
+            "wandb-seaweedfs-privileged:rolebinding:%s" % WANDB_NAMESPACE,
+        ],
+        resource_deps=["WandB-Namespace"] if CREATE_WANDB_NAMESPACE else [],
+        labels=[GROUP_DEPENDENCIES],
+    )
+
 local_resource(
     "Operator-Codegen",
     "make manifests generate",
@@ -695,6 +730,8 @@ local_resource(
 
 if as_bool(settings.get("includeCR")):
     wandb_deps = ["Operator-Webhook-Ready", "WandB-Namespace"]
+    if settings.get("openshiftSCC"):
+        wandb_deps.append(SEAWEEDFS_SCC_RESOURCE)
     if LOCAL_NETWORKING_MODE == "gateway":
         wandb_deps.append("nginx-gateway-fabric")
     if LOCAL_NETWORKING_MODE == "ingress":
