@@ -7,11 +7,7 @@ wandb-operator:
 
   containers:
     operator:
-      # Tilt's docker_build_with_restart syncs an updated /manager binary
-      # into the running container; readOnlyRootFilesystem prevents that
-      # write. Relax it on the OpenShift dev profile so the live_update
-      # path keeps working under restricted-v2 (the SA still runs as the
-      # SCC-assigned non-root UID with all caps dropped).
+      # readOnlyRootFilesystem blocks Tilt live_update binary sync under restricted-v2
       securityContext:
         readOnlyRootFilesystem: false
       env:
@@ -21,16 +17,11 @@ wandb-operator:
 grafana-operator:
   isOpenShift: true
 
-# OpenShift owns the monitoring.coreos.com CRDs via cluster-version-operator.
-# Let the cluster-provided ServiceMonitor CRD satisfy seaweedfs-operator instead
-# of having Helm attempt to manage it and hit field-manager conflicts.
+# OpenShift ships monitoring.coreos.com CRDs; disable Helm-managed copies to avoid field-manager conflicts
 prometheus-operator-crds:
   enabled: false
 
-# The seaweedfs-operator subchart hardcodes runAsUser:65532 / fsGroup:65532
-# in podSecurityContext, which restricted-v2 rejects (UIDs must come from
-# the namespace's allocated range). Replace with a minimal context so
-# OpenShift assigns the UID/GID.
+# seaweedfs-operator defaults hardcode UID/GID 65532, which restricted-v2 rejects
 seaweedfs-operator:
   podSecurityContext:
     runAsNonRoot: true
@@ -39,18 +30,13 @@ seaweedfs-operator:
     seccompProfile:
       type: RuntimeDefault
 
-# Strimzi's default BaselinePodSecurityProvider injects runAsUser:1001 /
-# runAsGroup:1001 into Kafka pods, which restricted-v2 rejects. Switch the
-# cluster operator to the RestrictedPodSecurityProvider so the platform
-# assigns UID/GID and the pods admit under restricted-v2.
+# BaselinePodSecurityProvider injects fixed UID/GID 1001; restricted provider lets the platform assign them
 strimzi-kafka-operator:
   extraEnvs:
     - name: STRIMZI_POD_SECURITY_PROVIDER_CLASS
       value: restricted
 
-# Override moco images with locally-built copies pushed to the CRC internal
-# registry. Used to test in-development moco changes (UID/SCC fixes) before
-# they ship upstream. Remove once a released chart includes the changes.
+# Local CRC images for in-development moco UID/SCC fixes; remove once upstream chart ships them
 moco:
   image:
     repository: image-registry.openshift-image-registry.svc:5000/wandb-operators/moco-controller

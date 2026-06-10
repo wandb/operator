@@ -34,7 +34,7 @@ dependencies:
   - name: prometheus-operator-crds
     version: 29.0.0
     repository: https://prometheus-community.github.io/helm-charts
-    condition: seaweedfs-operator.enabled
+    condition: prometheus-operator-crds.enabled
   - name: altinity-clickhouse-operator
     version: 0.26.3
     repository: https://helm.altinity.com
