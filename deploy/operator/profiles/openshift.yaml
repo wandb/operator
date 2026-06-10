@@ -24,17 +24,8 @@ prometheus-operator-crds:
 # seaweedfs-operator defaults hardcode UID/GID 65532, which restricted-v2 rejects
 seaweedfs-operator:
   podSecurityContext:
-    runAsNonRoot: true
     runAsUser: null
     fsGroup: null
-    seccompProfile:
-      type: RuntimeDefault
-
-# BaselinePodSecurityProvider injects fixed UID/GID 1001; restricted provider lets the platform assign them
-strimzi-kafka-operator:
-  extraEnvs:
-    - name: STRIMZI_POD_SECURITY_PROVIDER_CLASS
-      value: restricted
 
 # Local CRC images for in-development moco UID/SCC fixes; remove once upstream chart ships them
 moco:
