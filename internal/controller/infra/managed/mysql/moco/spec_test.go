@@ -80,6 +80,33 @@ var _ = Describe("Moco MySQL specs", func() {
 		expectMocoOpenShiftContainerSecurityContext(podSpec.Containers[0].SecurityContext)
 	})
 
+	It("sets mysqld_exporter collectors only when telemetry is enabled", func() {
+		// A non-empty Collectors list is what makes Moco inject the mysqld_exporter sidecar.
+		enabled, _, err := ToMocoMySQLClusterSpec(
+			context.Background(),
+			apiv2.ManagedMysqlSpec{
+				Name: "mysql", Namespace: "wandb", Replicas: 3, StorageSize: "10Gi",
+				Telemetry: apiv2.Telemetry{Enabled: true},
+			},
+			mocoWandb(),
+			mocoScheme(),
+		)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(enabled.Spec.Collectors).NotTo(BeEmpty())
+
+		disabled, _, err := ToMocoMySQLClusterSpec(
+			context.Background(),
+			apiv2.ManagedMysqlSpec{
+				Name: "mysql", Namespace: "wandb", Replicas: 3, StorageSize: "10Gi",
+				Telemetry: apiv2.Telemetry{Enabled: false},
+			},
+			mocoWandb(),
+			mocoScheme(),
+		)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(disabled.Spec.Collectors).To(BeEmpty())
+	})
+
 	DescribeTable("refuses to forward a replica count Moco rejects",
 		func(replicas int32) {
 			ctx := context.Background()
