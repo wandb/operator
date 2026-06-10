@@ -79,6 +79,12 @@ func ToMocoMySQLClusterSpec(
 			},
 		},
 	}
+
+	// A non-empty Collectors list makes MOCO inject the mysqld_exporter sidecar.
+	if spec.Telemetry.Enabled {
+		cluster.Spec.Collectors = []string{"engine_innodb_status", "info_schema.innodb_metrics"}
+	}
+
 	if err := controllerutil.SetControllerReference(wandb, cluster, scheme); err != nil {
 		return nil, nil, err
 	}
