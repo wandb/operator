@@ -291,9 +291,9 @@
         "label": "W&B Namespace",
         "type": "query",
         "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
-        "definition": "label_values(container_last_seen, namespace)",
+        "definition": "label_values(wandb_application_info, namespace)",
         "query": {
-          "query": "label_values(container_last_seen, namespace)",
+          "query": "label_values(wandb_application_info, namespace)",
           "refId": "namespace-variable-query"
         },
         "regex": "/^(?!kube-|cert-manager$|monitoring$|wandb-operators$|operator-system$|grafana$|victoria.*$|telemetry$).*$/",
@@ -301,7 +301,7 @@
         "sort": 1,
         "includeAll": false,
         "multi": false,
-        "current": {"text": "default", "value": "default"}
+        "current": {"text": "wandb", "value": "wandb"}
       }
     ]
   },
