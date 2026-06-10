@@ -22,16 +22,11 @@ wandb-operator:
   containers:
     operator:
       securityContext:
-        runAsNonRoot: true
-        runAsUser: null
-        runAsGroup: null
         allowPrivilegeEscalation: false
         readOnlyRootFilesystem: true
         capabilities:
           drop:
             - "ALL"
-        seccompProfile:
-          type: RuntimeDefault
       env:
         OPENSHIFT:
           value: "true"
