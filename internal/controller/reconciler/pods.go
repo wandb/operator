@@ -407,6 +407,29 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 				} else {
 					logger.Debug("field not found in CR", "cr", wandb.Name, "field", src.Field)
 				}
+			case "oidc":
+				// OIDC login config lives on spec.wandb.oidc as four SecretKeySelectors
+				var selector v1.SecretKeySelector
+				switch src.Field {
+				case "clientId":
+					selector = wandb.Spec.Wandb.OIDC.ClientId
+				case "clientSecret":
+					selector = wandb.Spec.Wandb.OIDC.ClientSecret
+				case "issuerUrl":
+					selector = wandb.Spec.Wandb.OIDC.IssuerUrl
+				case "authMethod":
+					selector = wandb.Spec.Wandb.OIDC.AuthMethod
+				default:
+					logger.Debug("unrecognized oidc source field", "cr", wandb.Name, "field", src.Field)
+					continue
+				}
+				// Skip when OIDC isn't configured (selector references no secret).
+				if selector.Name == "" {
+					continue
+				}
+				singleSecretSelector = selector
+				secretOnlyCount++
+				addSecretComponent(selector, idx)
 			default:
 				// Unknown source type; skip
 				continue
