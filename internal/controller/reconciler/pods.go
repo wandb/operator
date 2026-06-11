@@ -290,13 +290,12 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 				secretOnlyCount++
 				addSecretComponent(selector, idx)
 			case "telemetry":
-				secretName := src.Name
+				secretName := strings.TrimSpace(src.Name)
 				if secretName == "" {
-					return nil, fmt.Errorf(
-						"[telemetry] env var %q has a telemetry source with no Name set (typically %q)",
-						env.Name,
-						"wandb-otel-connection",
-					)
+					secretName = strings.TrimSpace(wandb.Status.TelemetryStatus.Connection.ConnectionSecret)
+				}
+				if secretName == "" {
+					continue
 				}
 
 				selector := v1.SecretKeySelector{

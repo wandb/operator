@@ -6,9 +6,12 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -42,6 +45,294 @@ func TestTelemetryRuntimeConfigResolveEndpointsDisabled(t *testing.T) {
 	}
 }
 
+func TestLoadTelemetryRuntimeConfigFromConfigMap(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed adding corev1 to scheme: %v", err)
+	}
+
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "wandb-operator-telemetry-config",
+			Namespace: "wandb-operator",
+		},
+		Data: map[string]string{
+			"TELEMETRY_ENABLED":                  "true",
+			"TELEMETRY_MODE":                     "full",
+			"TELEMETRY_MANAGED_NAMESPACE":        "wandb",
+			"TELEMETRY_OTEL_SECRET_NAME":         "custom-otel-secret",
+			"TELEMETRY_OTEL_PROTOCOL":            "grpc",
+			"TELEMETRY_OTEL_SERVICE_NAME":        "custom-service",
+			"TELEMETRY_OTEL_RESOURCE_ATTRIBUTES": "deployment.environment=dev",
+		},
+	}
+
+	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cm).Build()
+
+	cfg, err := LoadTelemetryRuntimeConfigFromConfigMap(
+		context.Background(),
+		client,
+		types.NamespacedName{Name: cm.Name, Namespace: cm.Namespace},
+		DefaultTelemetryRuntimeConfig(),
+	)
+	if err != nil {
+		t.Fatalf("LoadTelemetryRuntimeConfigFromConfigMap returned error: %v", err)
+	}
+
+	if !cfg.Enabled {
+		t.Fatalf("expected telemetry to be enabled")
+	}
+	if cfg.Mode != telemetryModeFull {
+		t.Fatalf("unexpected telemetry mode: %q", cfg.Mode)
+	}
+	if cfg.Namespace != "wandb" {
+		t.Fatalf("unexpected managed namespace: %q", cfg.Namespace)
+	}
+	if cfg.OTel.SecretName != "custom-otel-secret" {
+		t.Fatalf("unexpected secret name: %q", cfg.OTel.SecretName)
+	}
+	if cfg.OTel.Protocol != "grpc" {
+		t.Fatalf("unexpected protocol: %q", cfg.OTel.Protocol)
+	}
+	if cfg.OTel.ServiceName != "custom-service" {
+		t.Fatalf("unexpected service name: %q", cfg.OTel.ServiceName)
+	}
+	if cfg.OTel.ResourceAttributes != "deployment.environment=dev" {
+		t.Fatalf("unexpected resource attributes: %q", cfg.OTel.ResourceAttributes)
+	}
+}
+
+func TestLoadTelemetryRuntimeConfigFromConfigMapInvalidBool(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed adding corev1 to scheme: %v", err)
+	}
+
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "wandb-operator-telemetry-config",
+			Namespace: "wandb-operator",
+		},
+		Data: map[string]string{
+			"TELEMETRY_ENABLED": "definitely",
+		},
+	}
+
+	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cm).Build()
+
+	_, err := LoadTelemetryRuntimeConfigFromConfigMap(
+		context.Background(),
+		client,
+		types.NamespacedName{Name: cm.Name, Namespace: cm.Namespace},
+		DefaultTelemetryRuntimeConfig(),
+	)
+	if err == nil {
+		t.Fatalf("expected invalid telemetry enabled value to return an error")
+	}
+}
+
+func TestLoadTelemetryRuntimeConfigFromConfigMapMissingSecretNameWhenEnabled(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed adding corev1 to scheme: %v", err)
+	}
+
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "wandb-operator-telemetry-config",
+			Namespace: "wandb-operator",
+		},
+		Data: map[string]string{
+			"TELEMETRY_MODE":              "forward",
+			"TELEMETRY_ENABLED":           "true",
+			"TELEMETRY_MANAGED_NAMESPACE": "wandb",
+		},
+	}
+
+	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cm).Build()
+
+	_, err := LoadTelemetryRuntimeConfigFromConfigMap(
+		context.Background(),
+		client,
+		types.NamespacedName{Name: cm.Name, Namespace: cm.Namespace},
+		DefaultTelemetryRuntimeConfig(),
+	)
+	if err == nil {
+		t.Fatalf("expected missing telemetry secret name to return an error")
+	}
+}
+
+func TestLoadTelemetryRuntimeConfigFromConfigMapMissingReturnsDisabledDefaults(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed adding corev1 to scheme: %v", err)
+	}
+
+	client := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+	defaults := DefaultTelemetryRuntimeConfig()
+	cfg, err := LoadTelemetryRuntimeConfigFromConfigMap(
+		context.Background(),
+		client,
+		types.NamespacedName{Name: "wandb-operator-telemetry-config", Namespace: "operator-system"},
+		defaults,
+	)
+	if err != nil {
+		t.Fatalf("LoadTelemetryRuntimeConfigFromConfigMap returned error: %v", err)
+	}
+
+	if cfg != defaults {
+		t.Fatalf("expected missing configmap to return disabled defaults, got %#v", cfg)
+	}
+}
+
+func TestSummarizeTelemetryInfraStatusForwardReady(t *testing.T) {
+	cfg := DefaultTelemetryRuntimeConfig()
+	cfg.Mode = telemetryModeForward
+	cfg.Enabled = true
+	cfg.Namespace = "wandb"
+	cfg.OTel.SecretName = "telemetry-secret"
+	cfg.Normalize()
+
+	client := fake.NewClientBuilder().WithRuntimeObjects(
+		readyTelemetryResource(schema.GroupVersionKind{Group: "operator.victoriametrics.com", Version: "v1beta1", Kind: "VMSingle"}, "victoria-instance", "wandb"),
+		readyTelemetryResource(schema.GroupVersionKind{Group: "operator.victoriametrics.com", Version: "v1beta1", Kind: "VMAgent"}, "victoria-agent", "wandb"),
+		readyTelemetryResource(schema.GroupVersionKind{Group: "operator.victoriametrics.com", Version: "v1", Kind: "VLSingle"}, "victoria-logs", "wandb"),
+		readyTelemetryResource(schema.GroupVersionKind{Group: "operator.victoriametrics.com", Version: "v1", Kind: "VTSingle"}, "victoria-traces", "wandb"),
+		readyTelemetryResource(appsv1.SchemeGroupVersion.WithKind("Deployment"), telemetryOTLPGatewayName, "wandb"),
+	).Build()
+
+	status := summarizeTelemetryInfraStatus(context.Background(), client, cfg)
+	if !status.Ready {
+		t.Fatalf("expected telemetry infra status to be ready: %#v", status)
+	}
+	if status.State != telemetryStateReady {
+		t.Fatalf("unexpected telemetry state: %q", status.State)
+	}
+	if status.Mode != telemetryModeForward {
+		t.Fatalf("unexpected telemetry mode: %q", status.Mode)
+	}
+	if status.Connection.ConnectionSecret != "telemetry-secret" {
+		t.Fatalf("unexpected connection secret: %q", status.Connection.ConnectionSecret)
+	}
+	if status.Connection.MetricsEndpoint != "http://victoria-otlp-gateway.wandb.svc:4318/v1/metrics" {
+		t.Fatalf("unexpected metrics endpoint: %q", status.Connection.MetricsEndpoint)
+	}
+	if status.Connection.GorillaTracer != "otlp+http://victoria-otlp-gateway.wandb.svc:4318" {
+		t.Fatalf("unexpected gorilla tracer: %q", status.Connection.GorillaTracer)
+	}
+}
+
+func TestSummarizeTelemetryInfraStatusFullReady(t *testing.T) {
+	cfg := DefaultTelemetryRuntimeConfig()
+	cfg.Mode = telemetryModeFull
+	cfg.Enabled = true
+	cfg.Namespace = "wandb"
+	cfg.OTel.SecretName = "telemetry-secret"
+	cfg.Normalize()
+
+	client := fake.NewClientBuilder().WithRuntimeObjects(
+		readyTelemetryResource(schema.GroupVersionKind{Group: "operator.victoriametrics.com", Version: "v1beta1", Kind: "VMSingle"}, "victoria-instance", "wandb"),
+		readyTelemetryResource(schema.GroupVersionKind{Group: "operator.victoriametrics.com", Version: "v1beta1", Kind: "VMAgent"}, "victoria-agent", "wandb"),
+		readyTelemetryResource(schema.GroupVersionKind{Group: "operator.victoriametrics.com", Version: "v1", Kind: "VLSingle"}, "victoria-logs", "wandb"),
+		readyTelemetryResource(schema.GroupVersionKind{Group: "operator.victoriametrics.com", Version: "v1", Kind: "VTSingle"}, "victoria-traces", "wandb"),
+		readyTelemetryResource(appsv1.SchemeGroupVersion.WithKind("Deployment"), telemetryOTLPGatewayName, "wandb"),
+		readyTelemetryResource(schema.GroupVersionKind{Group: "grafana.integreatly.org", Version: "v1beta1", Kind: "Grafana"}, "grafana", "wandb"),
+	).Build()
+
+	status := summarizeTelemetryInfraStatus(context.Background(), client, cfg)
+	if !status.Ready {
+		t.Fatalf("expected full telemetry infra status to be ready: %#v", status)
+	}
+	if status.Mode != telemetryModeFull {
+		t.Fatalf("unexpected telemetry mode: %q", status.Mode)
+	}
+}
+
+func TestSummarizeTelemetryInfraStatusVictoriaUpdateStatusOperational(t *testing.T) {
+	cfg := DefaultTelemetryRuntimeConfig()
+	cfg.Mode = telemetryModeForward
+	cfg.Enabled = true
+	cfg.Namespace = "wandb"
+	cfg.OTel.SecretName = "telemetry-secret"
+	cfg.Normalize()
+
+	client := fake.NewClientBuilder().WithRuntimeObjects(
+		operationalTelemetryResource(schema.GroupVersionKind{Group: "operator.victoriametrics.com", Version: "v1beta1", Kind: "VMSingle"}, "victoria-instance", "wandb"),
+		operationalTelemetryResource(schema.GroupVersionKind{Group: "operator.victoriametrics.com", Version: "v1beta1", Kind: "VMAgent"}, "victoria-agent", "wandb"),
+		operationalTelemetryResource(schema.GroupVersionKind{Group: "operator.victoriametrics.com", Version: "v1", Kind: "VLSingle"}, "victoria-logs", "wandb"),
+		operationalTelemetryResource(schema.GroupVersionKind{Group: "operator.victoriametrics.com", Version: "v1", Kind: "VTSingle"}, "victoria-traces", "wandb"),
+		readyTelemetryResource(appsv1.SchemeGroupVersion.WithKind("Deployment"), telemetryOTLPGatewayName, "wandb"),
+	).Build()
+
+	status := summarizeTelemetryInfraStatus(context.Background(), client, cfg)
+	if !status.Ready {
+		t.Fatalf("expected telemetry infra status to be ready for operational Victoria resources: %#v", status)
+	}
+	if status.State != telemetryStateReady {
+		t.Fatalf("unexpected telemetry state: %q", status.State)
+	}
+}
+
+func TestSummarizeTelemetryInfraStatusDisabled(t *testing.T) {
+	cfg := DefaultTelemetryRuntimeConfig()
+	cfg.Enabled = false
+	cfg.Normalize()
+
+	status := summarizeTelemetryInfraStatus(context.Background(), fake.NewClientBuilder().Build(), cfg)
+	if status.Ready {
+		t.Fatalf("expected telemetry infra status to be disabled: %#v", status)
+	}
+	if status.State != telemetryStateDisabled {
+		t.Fatalf("unexpected telemetry state: %q", status.State)
+	}
+	if status.Connection != (apiv2.TelemetryConnectionStatus{}) {
+		t.Fatalf("expected disabled telemetry connection status to be empty: %#v", status.Connection)
+	}
+}
+
+func TestSummarizeTelemetryInfraStatusMissingStackIsPending(t *testing.T) {
+	cfg := DefaultTelemetryRuntimeConfig()
+	cfg.Mode = telemetryModeForward
+	cfg.Enabled = true
+	cfg.Namespace = "wandb"
+	cfg.OTel.SecretName = "telemetry-secret"
+	cfg.Normalize()
+
+	status := summarizeTelemetryInfraStatus(context.Background(), fake.NewClientBuilder().Build(), cfg)
+	if status.Ready {
+		t.Fatalf("expected telemetry infra status to be pending when stack is missing: %#v", status)
+	}
+	if status.State != telemetryStatePending {
+		t.Fatalf("unexpected telemetry state: %q", status.State)
+	}
+}
+
+func TestSummarizeTelemetryInfraStatusDegradedIsNotReady(t *testing.T) {
+	cfg := DefaultTelemetryRuntimeConfig()
+	cfg.Mode = telemetryModeForward
+	cfg.Enabled = true
+	cfg.Namespace = "wandb"
+	cfg.OTel.SecretName = "telemetry-secret"
+	cfg.Normalize()
+
+	client := fake.NewClientBuilder().WithRuntimeObjects(
+		newTelemetryResource(schema.GroupVersionKind{Group: "operator.victoriametrics.com", Version: "v1beta1", Kind: "VMSingle"}, "victoria-instance", "wandb", []map[string]any{{"type": "Degraded", "status": "True"}}),
+		readyTelemetryResource(schema.GroupVersionKind{Group: "operator.victoriametrics.com", Version: "v1beta1", Kind: "VMAgent"}, "victoria-agent", "wandb"),
+		readyTelemetryResource(schema.GroupVersionKind{Group: "operator.victoriametrics.com", Version: "v1", Kind: "VLSingle"}, "victoria-logs", "wandb"),
+		readyTelemetryResource(schema.GroupVersionKind{Group: "operator.victoriametrics.com", Version: "v1", Kind: "VTSingle"}, "victoria-traces", "wandb"),
+		readyTelemetryResource(appsv1.SchemeGroupVersion.WithKind("Deployment"), telemetryOTLPGatewayName, "wandb"),
+	).Build()
+
+	status := summarizeTelemetryInfraStatus(context.Background(), client, cfg)
+	if status.Ready {
+		t.Fatalf("expected degraded telemetry infra status to be not ready: %#v", status)
+	}
+	if status.State != telemetryStateNotReady {
+		t.Fatalf("unexpected telemetry state: %q", status.State)
+	}
+}
+
 func TestReconcileTelemetryConnectionSecretCreateManaged(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := corev1.AddToScheme(scheme); err != nil {
@@ -62,7 +353,9 @@ func TestReconcileTelemetryConnectionSecretCreateManaged(t *testing.T) {
 
 	cfg := DefaultTelemetryRuntimeConfig()
 	cfg.Enabled = true
+	cfg.OTel.SecretName = "wandb-otel-connection"
 	cfg.Normalize()
+	wandb.Status.TelemetryStatus = summarizeTelemetryInfraStatus(context.Background(), client, cfg)
 
 	if err := reconcileTelemetryConnectionSecret(context.Background(), client, wandb, cfg); err != nil {
 		t.Fatalf("reconcileTelemetryConnectionSecret returned error: %v", err)
@@ -135,7 +428,9 @@ func TestReconcileTelemetryConnectionSecretUpdateManaged(t *testing.T) {
 	cfg := DefaultTelemetryRuntimeConfig()
 	cfg.Enabled = true
 	cfg.Namespace = "wandb"
+	cfg.OTel.SecretName = "wandb-otel-connection"
 	cfg.Normalize()
+	wandb.Status.TelemetryStatus = summarizeTelemetryInfraStatus(context.Background(), client, cfg)
 
 	if err := reconcileTelemetryConnectionSecret(context.Background(), client, wandb, cfg); err != nil {
 		t.Fatalf("reconcileTelemetryConnectionSecret returned error: %v", err)
@@ -317,6 +612,160 @@ func TestResolveGorillaTracerConnection(t *testing.T) {
 //		t.Fatalf("unexpected joined telemetry env value: %s", joined.Value)
 //	}
 //}
+
+func TestResolveEnvvarsTelemetrySourceUsesStatusSecret(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed adding corev1 to scheme: %v", err)
+	}
+	client := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+	wandb := &apiv2.WeightsAndBiases{
+		ObjectMeta: metav1.ObjectMeta{Name: "wandb", Namespace: "default"},
+		Status: apiv2.WeightsAndBiasesStatus{
+			TelemetryStatus: apiv2.TelemetryInfraStatus{
+				Connection: apiv2.TelemetryConnectionStatus{
+					ConnectionSecret: "status-otel-secret",
+				},
+			},
+		},
+	}
+	envs := []serverManifest.EnvVar{
+		{
+			Name: "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT",
+			Sources: []serverManifest.EnvSource{
+				{Type: "telemetry", Field: "metricsEndpoint"},
+			},
+		},
+		{
+			Name: "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT",
+			Sources: []serverManifest.EnvSource{
+				{Type: "telemetry", Name: "custom-otel", Field: "logsEndpoint"},
+			},
+		},
+		{
+			Name: "OTEL_TRACES_EXPORTER",
+			Sources: []serverManifest.EnvSource{
+				{Type: "telemetry", Field: "tracesExporter"},
+			},
+		},
+		{
+			Name: "GORILLA_TRACER",
+			Sources: []serverManifest.EnvSource{
+				{Type: "telemetry", Field: "gorillaTracer"},
+			},
+		},
+		{
+			Name: "OTEL_PROTOCOL_AND_SERVICE",
+			Sources: []serverManifest.EnvSource{
+				{Type: "telemetry", Field: "protocol"},
+				{Type: "telemetry", Field: "serviceName"},
+			},
+		},
+	}
+
+	resolved, err := resolveEnvvars(context.Background(), client, wandb, serverManifest.Manifest{}, nil, envs)
+	if err != nil {
+		t.Fatalf("resolveEnvvars returned error: %v", err)
+	}
+
+	metricsEnv := mustFindEnvVar(t, resolved, "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT")
+	if metricsEnv.ValueFrom == nil || metricsEnv.ValueFrom.SecretKeyRef == nil {
+		t.Fatalf("expected metrics endpoint to resolve from secret key ref")
+	}
+	if metricsEnv.ValueFrom.SecretKeyRef.Name != "status-otel-secret" {
+		t.Fatalf("unexpected metrics secret name: %s", metricsEnv.ValueFrom.SecretKeyRef.Name)
+	}
+	if metricsEnv.ValueFrom.SecretKeyRef.Key != "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT" {
+		t.Fatalf("unexpected metrics key: %s", metricsEnv.ValueFrom.SecretKeyRef.Key)
+	}
+
+	logsEnv := mustFindEnvVar(t, resolved, "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT")
+	if logsEnv.ValueFrom == nil || logsEnv.ValueFrom.SecretKeyRef == nil {
+		t.Fatalf("expected logs endpoint to resolve from secret key ref")
+	}
+	if logsEnv.ValueFrom.SecretKeyRef.Name != "custom-otel" {
+		t.Fatalf("unexpected logs secret name: %s", logsEnv.ValueFrom.SecretKeyRef.Name)
+	}
+	if logsEnv.ValueFrom.SecretKeyRef.Key != "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT" {
+		t.Fatalf("unexpected logs key: %s", logsEnv.ValueFrom.SecretKeyRef.Key)
+	}
+
+	tracesExporter := mustFindEnvVar(t, resolved, "OTEL_TRACES_EXPORTER")
+	if tracesExporter.ValueFrom == nil || tracesExporter.ValueFrom.SecretKeyRef == nil {
+		t.Fatalf("expected traces exporter to resolve from secret key ref")
+	}
+	if tracesExporter.ValueFrom.SecretKeyRef.Name != "status-otel-secret" {
+		t.Fatalf("unexpected traces exporter secret name: %s", tracesExporter.ValueFrom.SecretKeyRef.Name)
+	}
+	if tracesExporter.ValueFrom.SecretKeyRef.Key != "OTEL_TRACES_EXPORTER" {
+		t.Fatalf("unexpected traces exporter key: %s", tracesExporter.ValueFrom.SecretKeyRef.Key)
+	}
+
+	gorillaTracer := mustFindEnvVar(t, resolved, "GORILLA_TRACER")
+	if gorillaTracer.ValueFrom == nil || gorillaTracer.ValueFrom.SecretKeyRef == nil {
+		t.Fatalf("expected gorilla tracer to resolve from secret key ref")
+	}
+	if gorillaTracer.ValueFrom.SecretKeyRef.Name != "status-otel-secret" {
+		t.Fatalf("unexpected gorilla tracer secret name: %s", gorillaTracer.ValueFrom.SecretKeyRef.Name)
+	}
+	if gorillaTracer.ValueFrom.SecretKeyRef.Key != "GORILLA_TRACER" {
+		t.Fatalf("unexpected gorilla tracer key: %s", gorillaTracer.ValueFrom.SecretKeyRef.Key)
+	}
+
+	protocolComponent := mustFindEnvVar(t, resolved, "OTEL_PROTOCOL_AND_SERVICE_0")
+	if protocolComponent.ValueFrom == nil || protocolComponent.ValueFrom.SecretKeyRef == nil {
+		t.Fatalf("expected protocol component to resolve from secret")
+	}
+	if protocolComponent.ValueFrom.SecretKeyRef.Name != "status-otel-secret" {
+		t.Fatalf("unexpected protocol secret name: %s", protocolComponent.ValueFrom.SecretKeyRef.Name)
+	}
+	if protocolComponent.ValueFrom.SecretKeyRef.Key != "OTEL_EXPORTER_OTLP_PROTOCOL" {
+		t.Fatalf("unexpected protocol key: %s", protocolComponent.ValueFrom.SecretKeyRef.Key)
+	}
+
+	serviceComponent := mustFindEnvVar(t, resolved, "OTEL_PROTOCOL_AND_SERVICE_1")
+	if serviceComponent.ValueFrom == nil || serviceComponent.ValueFrom.SecretKeyRef == nil {
+		t.Fatalf("expected service component to resolve from secret")
+	}
+	if serviceComponent.ValueFrom.SecretKeyRef.Name != "status-otel-secret" {
+		t.Fatalf("unexpected service secret name: %s", serviceComponent.ValueFrom.SecretKeyRef.Name)
+	}
+	if serviceComponent.ValueFrom.SecretKeyRef.Key != "OTEL_SERVICE_NAME" {
+		t.Fatalf("unexpected service key: %s", serviceComponent.ValueFrom.SecretKeyRef.Key)
+	}
+
+	joined := mustFindEnvVar(t, resolved, "OTEL_PROTOCOL_AND_SERVICE")
+	if joined.Value != "$(OTEL_PROTOCOL_AND_SERVICE_0),$(OTEL_PROTOCOL_AND_SERVICE_1)" {
+		t.Fatalf("unexpected joined telemetry env value: %s", joined.Value)
+	}
+}
+
+func TestResolveEnvvarsTelemetrySourceWithoutStatusSecretSkipsEnv(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed adding corev1 to scheme: %v", err)
+	}
+	client := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+	wandb := &apiv2.WeightsAndBiases{ObjectMeta: metav1.ObjectMeta{Name: "wandb", Namespace: "default"}}
+	envs := []serverManifest.EnvVar{
+		{
+			Name: "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT",
+			Sources: []serverManifest.EnvSource{
+				{Type: "telemetry", Field: "metricsEndpoint"},
+			},
+		},
+	}
+
+	resolved, err := resolveEnvvars(context.Background(), client, wandb, serverManifest.Manifest{}, nil, envs)
+	if err != nil {
+		t.Fatalf("resolveEnvvars returned error: %v", err)
+	}
+	if len(resolved) != 0 {
+		t.Fatalf("expected telemetry source without status secret to be skipped, got %#v", resolved)
+	}
+}
 
 func TestResolveEnvvarsServiceSourceFromManifest(t *testing.T) {
 	scheme := runtime.NewScheme()
@@ -549,6 +998,31 @@ func TestInjectManagedWorkloadTelemetryEnvvarsDisabledSkipsInjection(t *testing.
 	}
 }
 
+func TestInjectManagedWorkloadTelemetryEnvvarsIneligibleWorkloadSkipsInjection(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed adding corev1 to scheme: %v", err)
+	}
+	client := fake.NewClientBuilder().WithScheme(scheme).Build()
+	wandb := telemetryStatusWandb("wandb-dev-v2", "default", "wandb-otel-connection")
+
+	envVars, err := injectManagedWorkloadTelemetryEnvvars(
+		context.Background(),
+		client,
+		wandb,
+		serverManifest.Manifest{},
+		serverManifest.Application{Name: "anaconda2"},
+		nil,
+		TelemetryRuntimeConfig{Enabled: true},
+	)
+	if err != nil {
+		t.Fatalf("injectManagedWorkloadTelemetryEnvvars returned error: %v", err)
+	}
+	if len(envVars) != 0 {
+		t.Fatalf("expected no managed telemetry envs for ineligible workload, got %#v", envVars)
+	}
+}
+
 func mustFindEnvVar(t *testing.T, envs []corev1.EnvVar, name string) corev1.EnvVar {
 	t.Helper()
 	for _, env := range envs {
@@ -560,21 +1034,16 @@ func mustFindEnvVar(t *testing.T, envs []corev1.EnvVar, name string) corev1.EnvV
 	return corev1.EnvVar{}
 }
 
-func TestInjectManagedWorkloadTelemetryEnvvarsBindsSecretName(t *testing.T) {
+func TestInjectManagedWorkloadTelemetryEnvvarsUsesStatusSecretName(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := corev1.AddToScheme(scheme); err != nil {
 		t.Fatalf("failed adding corev1 to scheme: %v", err)
 	}
 	client := fake.NewClientBuilder().WithScheme(scheme).Build()
-	wandb := &apiv2.WeightsAndBiases{ObjectMeta: metav1.ObjectMeta{Name: "wandb-dev-v2", Namespace: "default"}}
+	wandb := telemetryStatusWandb("wandb-dev-v2", "default", "status-otel-secret")
 
 	telemetryConfig := TelemetryRuntimeConfig{
 		Enabled: true,
-		OTel: TelemetryOTelConfig{
-			SecretName:  "wandb-otel-connection",
-			Protocol:    "http/protobuf",
-			ServiceName: "wandb-service",
-		},
 	}
 
 	envVars, err := injectManagedWorkloadTelemetryEnvvars(
@@ -607,24 +1076,69 @@ func TestInjectManagedWorkloadTelemetryEnvvarsBindsSecretName(t *testing.T) {
 		env := mustFindEnvVar(t, envVars, name)
 
 		if env.ValueFrom == nil {
-			t.Errorf("env var %q has no ValueFrom; expected SecretKeyRef to %q", name, telemetryConfig.OTel.SecretName)
+			t.Errorf("env var %q has no ValueFrom; expected SecretKeyRef to status-otel-secret", name)
 			continue
 		}
 		if env.ValueFrom.SecretKeyRef == nil {
-			t.Errorf("env var %q ValueFrom has no SecretKeyRef; expected reference to %q", name, telemetryConfig.OTel.SecretName)
+			t.Errorf("env var %q ValueFrom has no SecretKeyRef; expected reference to status-otel-secret", name)
 			continue
 		}
-		if got := env.ValueFrom.SecretKeyRef.Name; got != telemetryConfig.OTel.SecretName {
-			t.Errorf("env var %q references secret %q, want %q", name, got, telemetryConfig.OTel.SecretName)
+		if got := env.ValueFrom.SecretKeyRef.Name; got != "status-otel-secret" {
+			t.Errorf("env var %q references secret %q, want status-otel-secret", name, got)
 		}
 	}
 }
 
-//func coreEnvVarSliceContains(envs []corev1.EnvVar, target string) bool {
-//	for _, env := range envs {
-//		if env.Name == target {
-//			return true
-//		}
-//	}
-//	return false
-//}
+func readyTelemetryResource(gvk schema.GroupVersionKind, name, namespace string) *unstructured.Unstructured {
+	return newTelemetryResource(gvk, name, namespace, []map[string]any{{"type": "Available", "status": "True"}})
+}
+
+func operationalTelemetryResource(gvk schema.GroupVersionKind, name, namespace string) *unstructured.Unstructured {
+	obj := newTelemetryResource(gvk, name, namespace, nil)
+	obj.Object["status"] = map[string]any{
+		"updateStatus": "operational",
+	}
+	return obj
+}
+
+func newTelemetryResource(
+	gvk schema.GroupVersionKind,
+	name string,
+	namespace string,
+	conditions []map[string]any,
+) *unstructured.Unstructured {
+	obj := &unstructured.Unstructured{
+		Object: map[string]any{
+			"apiVersion": gvk.GroupVersion().String(),
+			"kind":       gvk.Kind,
+			"metadata": map[string]any{
+				"name":      name,
+				"namespace": namespace,
+			},
+		},
+	}
+	obj.SetGroupVersionKind(gvk)
+	if len(conditions) > 0 {
+		rawConditions := make([]any, 0, len(conditions))
+		for _, condition := range conditions {
+			rawConditions = append(rawConditions, condition)
+		}
+		obj.Object["status"] = map[string]any{
+			"conditions": rawConditions,
+		}
+	}
+	return obj
+}
+
+func telemetryStatusWandb(name, namespace, secretName string) *apiv2.WeightsAndBiases {
+	return &apiv2.WeightsAndBiases{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		Status: apiv2.WeightsAndBiasesStatus{
+			TelemetryStatus: apiv2.TelemetryInfraStatus{
+				Connection: apiv2.TelemetryConnectionStatus{
+					ConnectionSecret: secretName,
+				},
+			},
+		},
+	}
+}

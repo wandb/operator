@@ -162,6 +162,8 @@ func Reconcile(
 
 	var errorCount int
 
+	wandb.Status.TelemetryStatus = summarizeTelemetryInfraStatus(ctx, client, telemetryConfig)
+
 	/////////////////////////
 	// Retention Finalizer
 
@@ -781,10 +783,7 @@ func injectManagedWorkloadTelemetryEnvvars(
 		return envVars, nil
 	}
 
-	// Ensure telemetry `secretName` is present
-	cleanedEnvVars := bindTelemetrySecretName(managedWorkloadTelemetryEnvVars, telemetryConfig.OTel.SecretName)
-
-	telemetryEnvVars, err := resolveEnvvars(ctx, client, wandb, manifest, nil, cleanedEnvVars)
+	telemetryEnvVars, err := resolveEnvvars(ctx, client, wandb, manifest, nil, managedWorkloadTelemetryEnvVars)
 	if err != nil {
 		return nil, err
 	}
