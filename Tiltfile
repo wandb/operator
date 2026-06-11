@@ -809,8 +809,6 @@ if settings.get("observabilityMode") == "full":
     )
 
 manager_entrypoint = ["/manager", "--log-format=" + settings.get("logFormat")]
-if settings.get("observabilityMode") != "off":
-    manager_entrypoint += ["--telemetry-enabled=true"]
 
 docker_only = ["./tilt_bin/manager", "./tilt_bin/crd-installer"]
 live_update_steps = [

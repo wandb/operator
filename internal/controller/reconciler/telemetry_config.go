@@ -8,6 +8,9 @@ import (
 const (
 	telemetryOTLPGatewayName     = "victoria-otlp-gateway"
 	telemetryOTLPGatewayHTTPPort = 4318
+	telemetryModeOff             = "off"
+	telemetryModeForward         = "forward"
+	telemetryModeFull            = "full"
 )
 
 type TelemetryEndpoints struct {
@@ -25,6 +28,7 @@ type TelemetryOTelConfig struct {
 
 type TelemetryRuntimeConfig struct {
 	Enabled   bool
+	Mode      string
 	Namespace string
 	OTel      TelemetryOTelConfig
 }
@@ -32,9 +36,9 @@ type TelemetryRuntimeConfig struct {
 func DefaultTelemetryRuntimeConfig() TelemetryRuntimeConfig {
 	return TelemetryRuntimeConfig{
 		Enabled:   false,
+		Mode:      telemetryModeOff,
 		Namespace: "",
 		OTel: TelemetryOTelConfig{
-			SecretName:  "wandb-otel-connection",
 			Protocol:    "http/protobuf",
 			ServiceName: "wandb-service",
 		},
@@ -42,24 +46,43 @@ func DefaultTelemetryRuntimeConfig() TelemetryRuntimeConfig {
 }
 
 func (cfg *TelemetryRuntimeConfig) Normalize() {
+	cfg.Mode = strings.ToLower(strings.TrimSpace(cfg.Mode))
 	cfg.Namespace = strings.TrimSpace(cfg.Namespace)
 
 	cfg.OTel.SecretName = strings.TrimSpace(cfg.OTel.SecretName)
 	cfg.OTel.Protocol = strings.TrimSpace(cfg.OTel.Protocol)
 	cfg.OTel.ServiceName = strings.TrimSpace(cfg.OTel.ServiceName)
 	cfg.OTel.ResourceAttributes = strings.TrimSpace(cfg.OTel.ResourceAttributes)
-	if cfg.OTel.SecretName == "" {
-		cfg.OTel.SecretName = "wandb-otel-connection"
-	}
 	if cfg.OTel.Protocol == "" {
 		cfg.OTel.Protocol = "http/protobuf"
 	}
 	if cfg.OTel.ServiceName == "" {
 		cfg.OTel.ServiceName = "wandb-service"
 	}
+	switch cfg.Mode {
+	case "":
+		if cfg.Enabled {
+			cfg.Mode = telemetryModeForward
+		} else {
+			cfg.Mode = telemetryModeOff
+		}
+	case telemetryModeOff:
+		if cfg.Enabled {
+			cfg.Mode = telemetryModeForward
+		} else {
+			cfg.Enabled = false
+		}
+	default:
+		cfg.Enabled = true
+	}
 }
 
 func (cfg TelemetryRuntimeConfig) Validate() error {
+	switch cfg.Mode {
+	case telemetryModeOff, telemetryModeForward, telemetryModeFull:
+	default:
+		return fmt.Errorf("telemetry mode must be one of %q, %q, or %q", telemetryModeOff, telemetryModeForward, telemetryModeFull)
+	}
 	if !cfg.Enabled {
 		return nil
 	}

@@ -26,23 +26,26 @@ func reconcileTelemetryConnectionSecret(
 		return nil
 	}
 
-	resolvedEndpoints := telemetryConfig.ResolveEndpoints()
-	gorillaTracer := resolveGorillaTracerConnection(telemetryConfig.OTel.Protocol, resolvedEndpoints.TracesEndpoint)
+	connection := wandb.Status.TelemetryStatus.Connection
+	if strings.TrimSpace(connection.ConnectionSecret) == "" {
+		return nil
+	}
+
 	desiredData := map[string][]byte{
-		"OTEL_EXPORTER_OTLP_PROTOCOL":         []byte(telemetryConfig.OTel.Protocol),
-		"OTEL_EXPORTER_OTLP_METRICS_ENDPOINT": []byte(resolvedEndpoints.MetricsEndpoint),
-		"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT":    []byte(resolvedEndpoints.LogsEndpoint),
-		"OTEL_EXPORTER_OTLP_TRACES_ENDPOINT":  []byte(resolvedEndpoints.TracesEndpoint),
-		"OTEL_METRICS_EXPORTER":               []byte("otlp"),
-		"OTEL_LOGS_EXPORTER":                  []byte("otlp"),
-		"OTEL_TRACES_EXPORTER":                []byte("otlp"),
-		"OTEL_SERVICE_NAME":                   []byte(telemetryConfig.OTel.ServiceName),
-		"OTEL_RESOURCE_ATTRIBUTES":            []byte(telemetryConfig.OTel.ResourceAttributes),
-		"GORILLA_TRACER":                      []byte(gorillaTracer),
+		"OTEL_EXPORTER_OTLP_PROTOCOL":         []byte(connection.Protocol),
+		"OTEL_EXPORTER_OTLP_METRICS_ENDPOINT": []byte(connection.MetricsEndpoint),
+		"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT":    []byte(connection.LogsEndpoint),
+		"OTEL_EXPORTER_OTLP_TRACES_ENDPOINT":  []byte(connection.TracesEndpoint),
+		"OTEL_METRICS_EXPORTER":               []byte(connection.MetricsExporter),
+		"OTEL_LOGS_EXPORTER":                  []byte(connection.LogsExporter),
+		"OTEL_TRACES_EXPORTER":                []byte(connection.TracesExporter),
+		"OTEL_SERVICE_NAME":                   []byte(connection.ServiceName),
+		"OTEL_RESOURCE_ATTRIBUTES":            []byte(connection.ResourceAttributes),
+		"GORILLA_TRACER":                      []byte(connection.GorillaTracer),
 	}
 
 	secretLookup := types.NamespacedName{
-		Name:      telemetryConfig.OTel.SecretName,
+		Name:      connection.ConnectionSecret,
 		Namespace: wandb.Namespace,
 	}
 	secret := &corev1.Secret{}
