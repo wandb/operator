@@ -399,36 +399,17 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 					// No field specified; nothing to resolve
 					continue
 				}
-				if val, ok := resolveCRFieldString(wandb, src.Field); ok {
+				if sel, ok := resolveCRFieldSecretSelector(wandb, src.Field); ok {
+					singleSecretSelector = sel
+					secretOnlyCount++
+					addSecretComponent(sel, idx)
+				} else if val, ok := resolveCRFieldString(wandb, src.Field); ok {
 					// Treat as a literal component (not secret-backed)
 					logger.Debug("field found in CR", "cr", wandb.Name, "field", src.Field, "value", val)
 					components = append(components, val)
 				} else {
 					logger.Debug("field not found in CR", "cr", wandb.Name, "field", src.Field)
 				}
-			case "oidc":
-				// OIDC login config lives on spec.wandb.oidc as four SecretKeySelectors
-				var selector v1.SecretKeySelector
-				switch src.Field {
-				case "clientId":
-					selector = wandb.Spec.Wandb.OIDC.ClientId
-				case "clientSecret":
-					selector = wandb.Spec.Wandb.OIDC.ClientSecret
-				case "issuerUrl":
-					selector = wandb.Spec.Wandb.OIDC.IssuerUrl
-				case "authMethod":
-					selector = wandb.Spec.Wandb.OIDC.AuthMethod
-				default:
-					logger.Debug("unrecognized oidc source field", "cr", wandb.Name, "field", src.Field)
-					continue
-				}
-				// Skip when OIDC isn't configured (selector references no secret).
-				if selector.Name == "" {
-					continue
-				}
-				singleSecretSelector = selector
-				secretOnlyCount++
-				addSecretComponent(selector, idx)
 			default:
 				// Unknown source type; skip
 				continue
@@ -462,6 +443,19 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 		})
 	}
 	return envVars, nil
+}
+
+// resolveCRFieldSecretSelector reports whether the dotted CR field path resolves to a configured SecretKeySelector
+func resolveCRFieldSecretSelector(wandb *v2.WeightsAndBiases, path string) (v1.SecretKeySelector, bool) {
+	name, _ := resolveCRFieldString(wandb, path+".name")
+	key, _ := resolveCRFieldString(wandb, path+".key")
+	if name == "" || key == "" {
+		return v1.SecretKeySelector{}, false
+	}
+	return v1.SecretKeySelector{
+		LocalObjectReference: v1.LocalObjectReference{Name: name},
+		Key:                  key,
+	}, true
 }
 
 func resolveVolumeMounts(ctx context.Context, manifest serverManifest.Manifest, commonvms []string, vms []serverManifest.VolumeMount) ([]v1.Volume, []v1.VolumeMount, error) {
