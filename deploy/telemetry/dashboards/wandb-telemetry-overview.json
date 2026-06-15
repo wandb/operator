@@ -116,7 +116,7 @@
       },
       "targets": [
         {
-          "expr": "count(up == 0)",
+          "expr": "count(up == 0) or vector(0)",
           "refId": "A"
         }
       ],
