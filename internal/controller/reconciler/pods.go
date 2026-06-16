@@ -445,19 +445,6 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 	return envVars, nil
 }
 
-// resolveCRFieldSecretSelector reports whether the dotted CR field path resolves to a configured SecretKeySelector
-func resolveCRFieldSecretSelector(wandb *v2.WeightsAndBiases, path string) (v1.SecretKeySelector, bool) {
-	name, _ := resolveCRFieldString(wandb, path+".name")
-	key, _ := resolveCRFieldString(wandb, path+".key")
-	if name == "" || key == "" {
-		return v1.SecretKeySelector{}, false
-	}
-	return v1.SecretKeySelector{
-		LocalObjectReference: v1.LocalObjectReference{Name: name},
-		Key:                  key,
-	}, true
-}
-
 func resolveVolumeMounts(ctx context.Context, manifest serverManifest.Manifest, commonvms []string, vms []serverManifest.VolumeMount) ([]v1.Volume, []v1.VolumeMount, error) {
 	log := logx.GetSlog(ctx)
 

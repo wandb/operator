@@ -1285,38 +1285,69 @@ func generateSecrets(ctx context.Context, client ctrlClient.Client, wandb *apiv2
 	return ctrl.Result{}, nil
 }
 
-// resolveCRFieldString resolves a dotted field path (e.g., "spec.wandb.license")
-// from the provided custom resource object, returning the string value if present.
+// resolveCRFieldString resolves a dotted CR field path to a plain string value.
 // Non-string terminal values are treated as not found.
 func resolveCRFieldString(obj any, path string) (string, bool) {
-	if obj == nil || path == "" {
+	v, ok := resolveCRFieldValue(obj, path)
+	if !ok {
 		return "", false
+	}
+	s, ok := v.(string)
+	return s, ok
+}
+
+// resolveCRFieldSecretSelector resolves a dotted CR field path to a SecretKeySelector.
+func resolveCRFieldSecretSelector(obj any, path string) (corev1.SecretKeySelector, bool) {
+	v, ok := resolveCRFieldValue(obj, path)
+	if !ok {
+		return corev1.SecretKeySelector{}, false
+	}
+	node, ok := v.(map[string]any)
+	if !ok {
+		return corev1.SecretKeySelector{}, false
+	}
+	b, err := json.Marshal(node)
+	if err != nil {
+		return corev1.SecretKeySelector{}, false
+	}
+	var sel corev1.SecretKeySelector
+	if err := json.Unmarshal(b, &sel); err != nil {
+		return corev1.SecretKeySelector{}, false
+	}
+	if sel.Name == "" || sel.Key == "" {
+		return corev1.SecretKeySelector{}, false
+	}
+	return sel, true
+}
+
+// resolveCRFieldValue resolves a dotted field path (e.g., "spec.wandb.license")
+// from the provided custom resource object, returning the terminal value if present.
+func resolveCRFieldValue(obj any, path string) (any, bool) {
+	if obj == nil || path == "" {
+		return nil, false
 	}
 	// Marshal to JSON then unmarshal into a generic map for easy traversal.
 	b, err := json.Marshal(obj)
 	if err != nil {
-		return "", false
+		return nil, false
 	}
 	var m map[string]any
 	if err := json.Unmarshal(b, &m); err != nil {
-		return "", false
+		return nil, false
 	}
 	cur := any(m)
 	for _, seg := range strings.Split(path, ".") {
 		mm, ok := cur.(map[string]any)
 		if !ok {
-			return "", false
+			return nil, false
 		}
 		next, ok := mm[seg]
 		if !ok {
-			return "", false
+			return nil, false
 		}
 		cur = next
 	}
-	if s, ok := cur.(string); ok {
-		return s, true
-	}
-	return "", false
+	return cur, true
 }
 
 func inferState(
