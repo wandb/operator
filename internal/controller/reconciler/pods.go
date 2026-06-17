@@ -10,8 +10,33 @@ import (
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/utils/ptr"
 	ctrlClient "sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+const appWorkloadCapabilityAll v1.Capability = "ALL"
+
+func resolvePodSecurityContext() *v1.PodSecurityContext {
+	return &v1.PodSecurityContext{
+		SeccompProfile: resolveRuntimeDefaultSeccompProfile(),
+	}
+}
+
+func resolveContainerSecurityContext() *v1.SecurityContext {
+	return &v1.SecurityContext{
+		AllowPrivilegeEscalation: ptr.To(false),
+		Capabilities: &v1.Capabilities{
+			Drop: []v1.Capability{appWorkloadCapabilityAll},
+		},
+		SeccompProfile: resolveRuntimeDefaultSeccompProfile(),
+	}
+}
+
+func resolveRuntimeDefaultSeccompProfile() *v1.SeccompProfile {
+	return &v1.SeccompProfile{
+		Type: v1.SeccompProfileTypeRuntimeDefault,
+	}
+}
 
 func resolveInitContainers(app serverManifest.Application, envVars []v1.EnvVar, volumeMounts []v1.VolumeMount) []v1.Container {
 	initContainers := []v1.Container{}
@@ -22,12 +47,13 @@ func resolveInitContainers(app serverManifest.Application, envVars []v1.EnvVar, 
 				continue
 			}
 			initContainer := v1.Container{
-				Name:         initContainerSpec.Name,
-				Image:        initContainerSpec.Image.GetImage(),
-				Env:          envVars,
-				Args:         initContainerSpec.Args,
-				Command:      initContainerSpec.Command,
-				VolumeMounts: volumeMounts,
+				Name:            initContainerSpec.Name,
+				Image:           initContainerSpec.Image.GetImage(),
+				Env:             envVars,
+				Args:            initContainerSpec.Args,
+				Command:         initContainerSpec.Command,
+				VolumeMounts:    volumeMounts,
+				SecurityContext: resolveContainerSecurityContext(),
 			}
 			initContainers = append(initContainers, initContainer)
 		}
@@ -66,13 +92,14 @@ func resolveContainers(app serverManifest.Application, wandb *v2.WeightsAndBiase
 			}
 
 			c := v1.Container{
-				Name:         container.Name,
-				Image:        img,
-				Env:          envVars,
-				Args:         args,
-				Command:      cmd,
-				Ports:        containerPorts,
-				VolumeMounts: volumeMounts,
+				Name:            container.Name,
+				Image:           img,
+				Env:             envVars,
+				Args:            args,
+				Command:         cmd,
+				Ports:           containerPorts,
+				VolumeMounts:    volumeMounts,
+				SecurityContext: resolveContainerSecurityContext(),
 			}
 
 			if resources := ResolveResources(app, wandb, container.Resources); resources != nil {
@@ -110,12 +137,13 @@ func resolveContainers(app serverManifest.Application, wandb *v2.WeightsAndBiase
 	} else {
 		// Backward-compatible single-container behavior
 		c := v1.Container{
-			Name:         app.Name,
-			Image:        app.Image.GetImage(),
-			Env:          envVars,
-			Args:         app.Args,
-			Command:      app.Command,
-			VolumeMounts: volumeMounts,
+			Name:            app.Name,
+			Image:           app.Image.GetImage(),
+			Env:             envVars,
+			Args:            app.Args,
+			Command:         app.Command,
+			VolumeMounts:    volumeMounts,
+			SecurityContext: resolveContainerSecurityContext(),
 		}
 
 		if resources := ResolveResources(app, wandb, nil); resources != nil {
@@ -262,13 +290,12 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 				secretOnlyCount++
 				addSecretComponent(selector, idx)
 			case "telemetry":
-				secretName := src.Name
+				secretName := strings.TrimSpace(src.Name)
 				if secretName == "" {
-					return nil, fmt.Errorf(
-						"[telemetry] env var %q has a telemetry source with no Name set (typically %q)",
-						env.Name,
-						"wandb-otel-connection",
-					)
+					secretName = strings.TrimSpace(wandb.Status.TelemetryStatus.Connection.ConnectionSecret)
+				}
+				if secretName == "" {
+					continue
 				}
 
 				selector := v1.SecretKeySelector{

@@ -1,12 +1,9 @@
 wandb-operator:
   podSecurityContext:
-    runAsNonRoot: true
     runAsUser: null
     runAsGroup: null
     fsGroup: null
     fsGroupChangePolicy: null
-    seccompProfile:
-      type: RuntimeDefault
 
   containers:
     operator:

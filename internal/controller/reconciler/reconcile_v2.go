@@ -162,6 +162,8 @@ func Reconcile(
 
 	var errorCount int
 
+	wandb.Status.TelemetryStatus = summarizeTelemetryInfraStatus(ctx, client, telemetryConfig)
+
 	/////////////////////////
 	// Retention Finalizer
 
@@ -566,6 +568,7 @@ func reconcileApplications(
 		// across updates (e.g., duplicate "files-inline" volume names).
 		application.Spec.PodTemplate.Spec.Volumes = volumes
 		application.Spec.PodTemplate.Spec.InitContainers = initContainers
+		application.Spec.PodTemplate.Spec.SecurityContext = resolvePodSecurityContext()
 		application.Spec.PodTemplate.Spec.Affinity = wandb.Spec.Affinity
 		application.Spec.PodTemplate.Spec.Tolerations = *wandb.Spec.Tolerations
 
@@ -780,10 +783,7 @@ func injectManagedWorkloadTelemetryEnvvars(
 		return envVars, nil
 	}
 
-	// Ensure telemetry `secretName` is present
-	cleanedEnvVars := bindTelemetrySecretName(managedWorkloadTelemetryEnvVars, telemetryConfig.OTel.SecretName)
-
-	telemetryEnvVars, err := resolveEnvvars(ctx, client, wandb, manifest, nil, cleanedEnvVars)
+	telemetryEnvVars, err := resolveEnvvars(ctx, client, wandb, manifest, nil, managedWorkloadTelemetryEnvVars)
 	if err != nil {
 		return nil, err
 	}

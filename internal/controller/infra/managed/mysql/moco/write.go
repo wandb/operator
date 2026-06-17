@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	mocov1beta2 "github.com/cybozu-go/moco/api/v1beta2"
+	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/logx"
 	corev1 "k8s.io/api/core/v1"
@@ -18,6 +19,12 @@ import (
 const (
 	ResourceTypeName = "InnoDBCluster"
 	AppConnTypeName  = "MySQLAppConn"
+
+	// InvalidReplicaCountReason: manifest sizing yielded a replica count Moco rejects.
+	InvalidReplicaCountReason = "InvalidReplicaCount"
+
+	// ScaleDownUnsupportedReason: a reconcile would shrink the running cluster, which Moco forbids.
+	ScaleDownUnsupportedReason = "ScaleDownUnsupported"
 )
 
 func WriteState(
@@ -60,6 +67,44 @@ func WriteState(
 	// zero, which would re-trip validation. Preserve the live value.
 	if actual != nil {
 		desired.Spec.ServerIDBase = actual.Spec.ServerIDBase
+	}
+
+	// Sizing is resolved from the manifest at reconcile time, after the CR
+	// admission webhook runs, so a bad value reaches here unvalidated.
+	if !apiv2.ValidMysqlReplicaCount(desired.Spec.Replicas) {
+		return []metav1.Condition{
+			{
+				Type:   common.ReconciledType,
+				Status: metav1.ConditionFalse,
+				Reason: InvalidReplicaCountReason,
+				Message: fmt.Sprintf(
+					"manifest sizing produced %d MySQL replicas; Moco requires a positive odd number",
+					desired.Spec.Replicas,
+				),
+			},
+		}
+	}
+
+	// Backstop for the webhook's scale-down check: the webhook only sees the CR
+	// (explicit edits), not the manifest-resolved count or the live cluster.
+	// Catch those shrinks here instead of letting Moco reject them opaquely.
+	if actual != nil && desired.Spec.Replicas < actual.Spec.Replicas {
+		return []metav1.Condition{
+			{
+				Type:   common.ReconciledType,
+				Status: metav1.ConditionFalse,
+				Reason: ScaleDownUnsupportedReason,
+				Message: fmt.Sprintf(
+					"cannot scale managed MySQL down from %d to %d replicas; Moco does not support in-place replica reduction (use its manual stop-clustering procedure)",
+					actual.Spec.Replicas, desired.Spec.Replicas,
+				),
+			},
+			{
+				Type:   MySQLCustomResourceType,
+				Status: metav1.ConditionTrue,
+				Reason: common.ResourceExistsReason,
+			},
+		}
 	}
 
 	result := make([]metav1.Condition, 0)
@@ -137,10 +182,11 @@ func WriteState(
 	return result
 }
 
-// ensurePVCLabels patches any PVCs belonging to the moco cluster that are
-// missing the wandb labels. PVCs are identified by the name prefix
-// "datadir-<clusterName>-" since the moco-operator creates them via
-// StatefulSet volumeClaimTemplates and may not propagate custom labels.
+// ensurePVCLabels stamps the wandb labels onto Moco's PVCs (missing because Moco
+// doesn't propagate them through its StatefulSet volumeClaimTemplates), so
+// purgeAssociatedResources can select them by label on teardown. Moco names PVCs
+// "<dataVolumeName>-<cluster.PrefixedName()>-<ordinal>" (see Moco pvc.go); the
+// prefix is built from those same sources so it can't drift from upstream.
 func ensurePVCLabels(
 	ctx context.Context,
 	cl client.Client,
@@ -149,7 +195,8 @@ func ensurePVCLabels(
 	labels map[string]string,
 ) error {
 	log := logx.GetSlog(ctx)
-	prefix := fmt.Sprintf("datadir-%s-", clusterName)
+	cluster := &mocov1beta2.MySQLCluster{ObjectMeta: metav1.ObjectMeta{Name: clusterName}}
+	prefix := fmt.Sprintf("%s-%s-", dataVolumeName, cluster.PrefixedName())
 
 	pvcList := &corev1.PersistentVolumeClaimList{}
 	if err := cl.List(ctx, pvcList, &client.ListOptions{Namespace: namespace}); err != nil {

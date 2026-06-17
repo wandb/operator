@@ -70,6 +70,26 @@ func TestTelemetryChartOffModeSkipsManagedStack(t *testing.T) {
 	mustNotContain(t, output, "name: victoria-otlp-gateway-config")
 	mustNotContain(t, output, "name: victoria-otlp-gateway")
 	mustNotContain(t, output, "kind: Grafana")
+	mustNotContain(t, output, "name: wandb-operator-telemetry-config")
+}
+
+func TestTelemetryChartRendersRuntimeConfigWithoutOperatorEnvPassthrough(t *testing.T) {
+	output := runHelmTemplate(t,
+		"--set", "wandb.install=false",
+		"--set", "telemetry.mode=full",
+		"--set", "victoria-metrics-operator.enabled=true",
+		"--set", "grafana-operator.enabled=true",
+	)
+
+	mustContain(t, output, "name: wandb-operator-telemetry-config")
+	mustContain(t, output, "TELEMETRY_MODE: \"full\"")
+	mustContain(t, output, "TELEMETRY_OTEL_SECRET_NAME: \"wandb-otel-connection\"")
+	mustNotContain(t, output, "key: TELEMETRY_ENABLED")
+	mustNotContain(t, output, "key: TELEMETRY_MANAGED_NAMESPACE")
+	mustNotContain(t, output, "key: TELEMETRY_OTEL_SECRET_NAME")
+	mustNotContain(t, output, "key: TELEMETRY_OTEL_PROTOCOL")
+	mustNotContain(t, output, "key: TELEMETRY_OTEL_SERVICE_NAME")
+	mustNotContain(t, output, "key: TELEMETRY_OTEL_RESOURCE_ATTRIBUTES")
 }
 
 func TestStandaloneTelemetryChartFullModeRendersCoreStack(t *testing.T) {

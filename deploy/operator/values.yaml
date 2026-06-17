@@ -30,36 +30,6 @@ wandb-operator:
           value: ":8443"
         METRICS_SECURE:
           value: "false"
-        TELEMETRY_ENABLED:
-          valueFrom:
-            configMapKeyRef:
-              name: '{{ .Release.Name }}-telemetry-config'
-              key: TELEMETRY_ENABLED
-        TELEMETRY_MANAGED_NAMESPACE:
-          valueFrom:
-            configMapKeyRef:
-              name: '{{ .Release.Name }}-telemetry-config'
-              key: TELEMETRY_MANAGED_NAMESPACE
-        TELEMETRY_OTEL_SECRET_NAME:
-          valueFrom:
-            configMapKeyRef:
-              name: '{{ .Release.Name }}-telemetry-config'
-              key: TELEMETRY_OTEL_SECRET_NAME
-        TELEMETRY_OTEL_PROTOCOL:
-          valueFrom:
-            configMapKeyRef:
-              name: '{{ .Release.Name }}-telemetry-config'
-              key: TELEMETRY_OTEL_PROTOCOL
-        TELEMETRY_OTEL_SERVICE_NAME:
-          valueFrom:
-            configMapKeyRef:
-              name: '{{ .Release.Name }}-telemetry-config'
-              key: TELEMETRY_OTEL_SERVICE_NAME
-        TELEMETRY_OTEL_RESOURCE_ATTRIBUTES:
-          valueFrom:
-            configMapKeyRef:
-              name: '{{ .Release.Name }}-telemetry-config'
-              key: TELEMETRY_OTEL_RESOURCE_ATTRIBUTES
       securityContext:
         allowPrivilegeEscalation: false
         readOnlyRootFilesystem: true
@@ -106,7 +76,10 @@ wandb-operator:
   replicaCount: 1
   podSecurityContext:
     runAsNonRoot: true
-    runAsUser: 1000
+    runAsUser: 65532
+    runAsGroup: 65532
+    fsGroup: 65532
+    fsGroupChangePolicy: OnRootMismatch
     seccompProfile:
       type: RuntimeDefault
   volumes:
@@ -131,10 +104,41 @@ moco:
 
 redis-operator:
   enabled: true
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+    fsGroupChangePolicy: OnRootMismatch
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - "ALL"
 
 strimzi-kafka-operator:
   enabled: true
   watchAnyNamespace: true
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1001
+    runAsGroup: 1001
+    fsGroup: 1001
+    fsGroupChangePolicy: OnRootMismatch
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - "ALL"
+  extraEnvs:
+    - name: STRIMZI_POD_SECURITY_PROVIDER_CLASS
+      value: restricted
 
 seaweedfs-operator:
   enabled: true
@@ -177,6 +181,28 @@ altinity-clickhouse-operator:
         cpu: 100m
         memory: 128Mi
   enabled: true
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+    fsGroupChangePolicy: OnRootMismatch
+    seccompProfile:
+      type: RuntimeDefault
+  operator:
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+          - "ALL"
+  metrics:
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+          - "ALL"
   configs:
     files:
       config.yaml:

@@ -21,6 +21,10 @@ const (
 	MysqlModuleName           = "moco"
 	MocoMySQLImage            = "ghcr.io/cybozu-go/moco/mysql:8.4.8"
 	DefaultMySQLExporterImage = "prom/mysqld-exporter:v0.15.1"
+
+	// Moco names the resulting PVCs "<dataVolumeName>-<cluster.PrefixedName()>-<ordinal>"
+	// (= "<dataVolumeName>-moco-<cluster>-<n>"); ensurePVCLabels and purge rely on this.
+	dataVolumeName = mococonstants.MySQLDataVolumeName
 )
 
 const (
@@ -69,12 +73,18 @@ func ToMocoMySQLClusterSpec(
 			},
 			VolumeClaimTemplates: []mocov1beta2.PersistentVolumeClaim{
 				{
-					ObjectMeta: mocov1beta2.ObjectMeta{Name: "mysql-data"},
+					ObjectMeta: mocov1beta2.ObjectMeta{Name: dataVolumeName},
 					Spec:       buildPVCSpec(spec.StorageSize),
 				},
 			},
 		},
 	}
+
+	// A non-empty Collectors list makes MOCO inject the mysqld_exporter sidecar.
+	if spec.Telemetry.Enabled {
+		cluster.Spec.Collectors = []string{"engine_innodb_status", "info_schema.innodb_metrics"}
+	}
+
 	if err := controllerutil.SetControllerReference(wandb, cluster, scheme); err != nil {
 		return nil, nil, err
 	}

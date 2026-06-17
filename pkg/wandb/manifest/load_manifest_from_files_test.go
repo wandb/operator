@@ -64,7 +64,7 @@ var _ = Describe("LoadManifestFromFiles", func() {
 
 			// Check that MySQL sizing was loaded
 			Expect(m.Mysql["default"].Sizing["default"].Replicas).To(Equal(int32(1)))
-			Expect(m.Mysql["default"].Sizing["micro"].Replicas).To(Equal(int32(2)))
+			Expect(m.Mysql["default"].Sizing["micro"].Replicas).To(Equal(int32(3)))
 
 			// Check that Redis sizing was loaded
 			Expect(m.Redis["default"].Sizing["default"].Replicas).To(Equal(int32(1)))

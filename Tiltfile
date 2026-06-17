@@ -632,8 +632,20 @@ if LOCAL_NETWORKING_MODE == "ingress":
         labels=[GROUP_DEPENDENCIES],
     )
 
+helm_resource(
+    "kube-state-metrics",
+    chart="oci://ghcr.io/prometheus-community/charts/kube-state-metrics",
+    namespace="kube-state-metrics",
+    flags=[
+        "--create-namespace",
+        "--version=5.27.0",
+    ],
+    labels=[GROUP_DEPENDENCIES],
+)
+
 operator_deps = ["Operator-Chart-Deps", "Operator-Build"]
 operator_deps.append("cert-manager")
+operator_deps.append("kube-state-metrics")
 if LOCAL_NETWORKING_MODE == "gateway":
     operator_deps.append("nginx-gateway-fabric")
 if settings.get("observabilityMode") != "off":
@@ -797,8 +809,6 @@ if settings.get("observabilityMode") == "full":
     )
 
 manager_entrypoint = ["/manager", "--log-format=" + settings.get("logFormat")]
-if settings.get("observabilityMode") != "off":
-    manager_entrypoint += ["--telemetry-enabled=true"]
 
 docker_only = ["./tilt_bin/manager", "./tilt_bin/crd-installer"]
 live_update_steps = [
