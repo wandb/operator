@@ -105,7 +105,7 @@ func redisRuntimeDefaultSeccompProfile() *corev1.SeccompProfile {
 
 // createRedisExporterConfig creates a RedisExporter configuration if telemetry is enabled.
 // Returns nil if telemetry is disabled.
-func createRedisExporterConfig(telemetry apiv2.Telemetry) *rediscommon.RedisExporter {
+func createRedisExporterConfig(telemetry apiv2.Telemetry, imageRegistry string) *rediscommon.RedisExporter {
 	if !telemetry.Enabled {
 		return nil
 	}
@@ -114,7 +114,7 @@ func createRedisExporterConfig(telemetry apiv2.Telemetry) *rediscommon.RedisExpo
 	return &rediscommon.RedisExporter{
 		Enabled:         true,
 		Port:            &port,
-		Image:           DefaultRedisExporterImage,
+		Image:           common.ApplyImageRegistry(DefaultRedisExporterImage, imageRegistry),
 		ImagePullPolicy: corev1.PullIfNotPresent,
 		SecurityContext: redisContainerSecurityContext(),
 	}
@@ -154,7 +154,7 @@ func ToRedisStandaloneVendorSpec(
 		},
 		Spec: redisv1beta2.RedisSpec{
 			KubernetesConfig: rediscommon.KubernetesConfig{
-				Image:           RedisStandaloneImage,
+				Image:           common.ApplyImageRegistry(RedisStandaloneImage, wandb.Spec.Global.ImageRegistry),
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				Resources:       &corev1.ResourceRequirements{},
 			},
@@ -195,7 +195,7 @@ func ToRedisStandaloneVendorSpec(
 		return nil, fmt.Errorf("failed to set owner reference: %w", err)
 	}
 
-	redis.Spec.RedisExporter = createRedisExporterConfig(spec.Telemetry)
+	redis.Spec.RedisExporter = createRedisExporterConfig(spec.Telemetry, wandb.Spec.Global.ImageRegistry)
 
 	return redis, nil
 }
@@ -239,7 +239,7 @@ func ToRedisSentinelVendorSpec(
 		Spec: redissentinelv1beta2.RedisSentinelSpec{
 			Size: &sentinelCount,
 			KubernetesConfig: rediscommon.KubernetesConfig{
-				Image:           RedisSentinelImage,
+				Image:           common.ApplyImageRegistry(RedisSentinelImage, wandb.Spec.Global.ImageRegistry),
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				Resources:       &corev1.ResourceRequirements{},
 			},
@@ -272,7 +272,7 @@ func ToRedisSentinelVendorSpec(
 	}
 
 	// Add RedisExporter if telemetry is enabled
-	sentinel.Spec.RedisExporter = createRedisExporterConfig(spec.Telemetry)
+	sentinel.Spec.RedisExporter = createRedisExporterConfig(spec.Telemetry, wandb.Spec.Global.ImageRegistry)
 
 	return sentinel, nil
 }
@@ -317,7 +317,7 @@ func ToRedisReplicationVendorSpec(
 		Spec: redisreplicationv1beta2.RedisReplicationSpec{
 			Size: &replicaCount,
 			KubernetesConfig: rediscommon.KubernetesConfig{
-				Image:           RedisReplicationImage,
+				Image:           common.ApplyImageRegistry(RedisReplicationImage, wandb.Spec.Global.ImageRegistry),
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				Resources:       &corev1.ResourceRequirements{},
 			},
@@ -361,7 +361,7 @@ func ToRedisReplicationVendorSpec(
 	}
 
 	// Add RedisExporter if telemetry is enabled
-	replication.Spec.RedisExporter = createRedisExporterConfig(spec.Telemetry)
+	replication.Spec.RedisExporter = createRedisExporterConfig(spec.Telemetry, wandb.Spec.Global.ImageRegistry)
 
 	return replication, nil
 }

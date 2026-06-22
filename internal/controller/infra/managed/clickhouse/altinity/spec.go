@@ -165,7 +165,7 @@ func ToClickHouseVendorSpec(
 		Containers: []corev1.Container{
 			{
 				Name:            "clickhouse",
-				Image:           ClickHouseImage,
+				Image:           common.ApplyImageRegistry(ClickHouseImage, wandb.Spec.Global.ImageRegistry),
 				SecurityContext: clickHouseContainerSecurityContext(),
 				VolumeMounts:    clickHouseWritableVolumeMounts(),
 			},

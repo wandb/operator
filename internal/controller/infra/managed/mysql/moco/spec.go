@@ -68,7 +68,7 @@ func ToMocoMySQLClusterSpec(
 			Replicas:           replicas,
 			MySQLConfigMapName: ptr.To(MyCnfConfigMapName(spec.Name)),
 			PodTemplate: mocov1beta2.PodTemplateSpec{
-				Spec:                buildMocoPodSpec(spec.Config.Resources),
+				Spec:                buildMocoPodSpec(spec.Config.Resources, wandb.Spec.Global.ImageRegistry),
 				OverwriteContainers: mocoOverwriteContainers(),
 			},
 			VolumeClaimTemplates: []mocov1beta2.PersistentVolumeClaim{
@@ -91,10 +91,10 @@ func ToMocoMySQLClusterSpec(
 	return cluster, cm, nil
 }
 
-func buildMocoPodSpec(resources corev1.ResourceRequirements) mocov1beta2.PodSpecApplyConfiguration {
+func buildMocoPodSpec(resources corev1.ResourceRequirements, imageRegistry string) mocov1beta2.PodSpecApplyConfiguration {
 	container := corev1ac.Container().
 		WithName("mysqld").
-		WithImage(MocoMySQLImage).
+		WithImage(common.ApplyImageRegistry(MocoMySQLImage, imageRegistry)).
 		WithSecurityContext(mocoContainerSecurityContext())
 
 	if resources.Requests != nil || resources.Limits != nil {

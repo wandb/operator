@@ -85,7 +85,7 @@ func ToObjectStoreVendorSpec(
 			Labels:    labels,
 		},
 		Spec: seaweedv1.SeaweedSpec{
-			Image: SeaweedImage,
+			Image: common.ApplyImageRegistry(SeaweedImage, wandb.Spec.Global.ImageRegistry),
 			TLS: &seaweedv1.TLSSpec{
 				Enabled: infraSpec.SeaweedObjectStoreSpec.TlsEnabled,
 			},
