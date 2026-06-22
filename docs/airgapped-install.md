@@ -65,7 +65,6 @@ SeaweedFS**. An empty `ImageRegistry` is a no-op, so existing installs are unaff
 
 `wsm` drives the whole flow in two phases. Phase 1 installs the operator stack; phase 2
 creates the W&B instance. `--mirror-registry` on each phase wires the matching layer.
-
 ```
   ┌────────────────────────── CONNECTED (bastion / CI) ──────────────────────────┐
   │                                                                               │
