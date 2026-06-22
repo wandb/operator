@@ -119,3 +119,24 @@ Gateway / Ingress (`internal/controller/reconciler/gateway.go`,
 - **Everything else** (Grafana, VictoriaMetrics, and each backing-service
   operator's own pods) is pulled by the third-party operator charts at their
   chart versions in `deploy/operator/Chart.yaml`.
+
+## Master image table
+
+| Component | Image | Version / tag | Source | Where version is defined | Where consumed |
+|-----------|-------|---------------|--------|--------------------------|----------------|
+| W&B applications (api, executor, filestream, parquet, weave, weave-trace, nginx-proxy, glue, …) | per-app, from manifest | from manifest | Server manifest | Server manifest (OCI artifact, generated upstream in `wandb/core`); local copies under `hack/testing-manifests/server-manifest/<version>/`. Type: `ImageRef` in `pkg/wandb/manifest/manifest.go` | `internal/controller/reconciler/reconcile_v2.go` (`~514-619`) → `internal/controller/reconciler/pods.go` `resolveContainers` (`~64-150`) |
+| W&B DB migration jobs | from manifest | from manifest | Server manifest | `pkg/wandb/manifest/manifest.go` (`MigrationJob.Image`, `~234`) | `internal/controller/reconciler/reconcile_v2.go` `runMigrationJobs` (`~1079-1150`) |
+| MySQL (Moco) | `ghcr.io/cybozu-go/moco/mysql` | `8.4.8` | Go const | `internal/controller/infra/managed/mysql/moco/spec.go:22` (`MocoMySQLImage`) | `MySQLCluster` spec; MySQL init job in `internal/controller/reconciler/mysql.go:327` |
+| MySQL exporter | `prom/mysqld-exporter` | `v0.15.1` | Go const | `internal/controller/infra/managed/mysql/moco/spec.go:23` (`DefaultMySQLExporterImage`) | MySQLCluster exporter sidecar (telemetry only) |
+| Redis (standalone) | `quay.io/opstree/redis` | `v7.0.15` | Go const | `internal/controller/infra/managed/redis/opstree/spec.go:26` (`RedisStandaloneImage`) | Redis CR |
+| Redis (replication) | `quay.io/opstree/redis` | `v7.0.15` | Go const | `internal/controller/infra/managed/redis/opstree/spec.go:27` (`RedisReplicationImage`) | RedisReplication CR |
+| Redis sentinel | `quay.io/opstree/redis-sentinel` | `v7.0.12` | Go const | `internal/controller/infra/managed/redis/opstree/spec.go:28` (`RedisSentinelImage`) | RedisSentinel CR |
+| Redis exporter | `quay.io/opstree/redis-exporter` | `v1.44.0` | Go const | `internal/controller/infra/managed/redis/opstree/spec.go:33` (`DefaultRedisExporterImage`) | Redis exporter sidecar (telemetry only) |
+| Kafka (Strimzi) | `quay.io/strimzi/kafka` | `0.49.1-kafka-4.1.0` | Go const | `internal/controller/infra/managed/kafka/strimzi/spec.go:26` (`KafkaImage`) | Kafka CR (`ToKafkaVendorSpec`) |
+| ClickHouse (Altinity) | `altinity/clickhouse-server` | `25.8.16.10002.altinitystable` | Go const | `internal/controller/infra/managed/clickhouse/altinity/spec.go:24` (`ClickHouseImage`) | ClickHouseInstallation CR |
+| SeaweedFS (object store) | `chrislusf/seaweedfs` | `latest` ⚠️ | Go const | `internal/controller/infra/managed/objectstore/seaweedfs/spec.go:21` (`SeaweedImage`) | Seaweed CR |
+| W&B operator (manager + crd-installer) | `us-docker.pkg.dev/wandb-production/public/wandb/operator` | `2.0.0-alpha.2` | Helm values | `deploy/operator/values.yaml:13-14` | Operator Deployment (via `wandb-base` chart); built from `Dockerfile` (one image holds both `/manager` and `/crd-installer`) |
+| Altinity CRD hook | `alpine/k8s` | `1.35.4` | Helm values | `deploy/operator/values.yaml:177-178` | Altinity ClickHouse operator CRD hook |
+| OTel collector | `otel/opentelemetry-collector-contrib` | `0.102.1` | Helm template | `deploy/telemetry/templates/telemetry-otlp-gateway.yaml:113` | `victoria-otlp-gateway` Deployment |
+| VictoriaMetrics (VMSingle / VMAgent / VLSingle / VTSingle) | managed by operator | per `victoria-metrics-operator` | Helm dep operator | `deploy/operator/Chart.yaml` (`victoria-metrics-operator` 0.58.1) | `deploy/telemetry/templates/telemetry-victoria-core.yaml` |
+| Grafana | managed by operator | per `grafana-operator` | Helm dep operator | `deploy/operator/Chart.yaml` (`grafana-operator` 5.21.4) | `deploy/telemetry/templates/telemetry-ui.yaml` |
