@@ -34,6 +34,16 @@ var _ = Describe("SeaweedFS vendor specs", func() {
 		expectSeaweedWritableMount(seaweed.Spec.Filer.VolumeMounts)
 	})
 
+	It("retargets the image to spec.global.imageRegistry when set", func() {
+		wandb := seaweedWandb()
+		wandb.Spec.Global.ImageRegistry = "reg.corp:5000"
+
+		seaweed, err := ToObjectStoreVendorSpec(context.Background(), wandb, seaweedScheme())
+		Expect(err).NotTo(HaveOccurred())
+		Expect(seaweed).NotTo(BeNil())
+		Expect(seaweed.Spec.Image).To(Equal("reg.corp:5000/chrislusf/seaweedfs:latest"))
+	})
+
 	It("keeps the filer writable data path explicit", func() {
 		seaweed, err := ToObjectStoreVendorSpec(context.Background(), seaweedWandb(), seaweedScheme())
 		Expect(err).NotTo(HaveOccurred())
