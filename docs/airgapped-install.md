@@ -60,12 +60,6 @@ SeaweedFS**. An empty `ImageRegistry` is a no-op, so existing installs are unaff
 `STRIMZI_KAFKA_IMAGES`), so the Kafka data plane is retargeted at the chart level (Strimzi's
 `defaultImageRegistry`), not through this CR field.
 
-### What it does and does not control
-
-- ✅ The **registry host** of the managed data-plane images.
-- ❌ The **repository path** or **image tag** — those stay at the operator-validated
-  versions. This field is for *mirroring*, not version pinning. (Per-image / per-tag
-  overrides would be a separate, layered addition.)
 
 ## Full air-gapped install via `wsm`
 
@@ -119,23 +113,44 @@ creates the W&B instance. `--mirror-registry` on each phase wires the matching l
 
 ### Commands
 
-```bash
-# --- CONNECTED: mirror everything (tiers 1-3 + server manifest + app images) ---
-wsm registry mirror --to $REG --wandb-version <version>
-wsm registry check  --registry $REG --wandb-version <version> --fail-on-missing
+Two independent version flags are in play:
 
-# --- AIR-GAPPED: phase 1, operator stack ---
+- **`--operator-chart-version`** — the operator chart + operator image. **This is the
+  build that must include `spec.global.imageRegistry`.** Pass it to `registry mirror` *and*
+  `deploy-v2 operator`, and keep the two identical.
+- **`--wandb-version`** — the server manifest (the W&B application images). Pass it to
+  `registry mirror` *and* `wandb deploy`.
+
+```bash
+OP_VERSION=2.0.0-alpha.3   # the operator release that includes spec.global.imageRegistry
+WB_VERSION=<server-version>
+
+# --- CONNECTED: mirror everything (tiers 1-3 + server manifest + app images) ---
+wsm registry mirror --to $REG \
+  --operator-chart-version $OP_VERSION \
+  --wandb-version $WB_VERSION
+wsm registry check --registry $REG \
+  --operator-chart-version $OP_VERSION \
+  --wandb-version $WB_VERSION --fail-on-missing
+
+# --- AIR-GAPPED: phase 1, operator stack (selects the operator build here) ---
 wsm deploy-v2 operator \
   --context <kube-context> \
   --mirror-registry $REG \
+  --operator-chart-version $OP_VERSION \
   --registry-ca-file ./ca.crt        # if $REG uses a self-signed / internal CA
 
 # --- AIR-GAPPED: phase 2, W&B instance ---
 wsm deploy-v2 wandb deploy \
   --context <kube-context> \
   --mirror-registry $REG \
-  --wandb-version <version>
+  --wandb-version $WB_VERSION
 ```
+
+> `--operator-chart-version` is where you pin the operator build. It defaults to the value
+> baked into `wsm` (`2.0.0-alpha.2` at time of writing) — override it until that default is
+> bumped to a release containing `spec.global.imageRegistry`. `--wandb-version` does **not**
+> control the operator; it only selects the server manifest / app images.
 
 The resulting CR carries the field directly:
 
@@ -155,7 +170,9 @@ spec:
 
 ## Requirements
 
-- An operator build that includes `spec.global.imageRegistry` (this branch onward).
+- An operator build that includes `spec.global.imageRegistry` (this branch onward),
+  selected with `--operator-chart-version` on `wsm registry mirror` and
+  `wsm deploy-v2 operator`.
 - `wsm` with two-phase support and `--mirror-registry` on `wandb deploy`.
 - A mirror pre-populated by `wsm registry mirror` (which pushes managed images to the
   host-stripped paths the host-replacement produces).
