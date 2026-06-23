@@ -11,6 +11,7 @@ import (
 	"github.com/wandb/operator/internal/logx"
 	"github.com/wandb/operator/pkg/utils"
 	v1 "github.com/wandb/operator/pkg/vendored/strimzi-kafka/v1"
+	"github.com/wandb/operator/pkg/wandb/manifest"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -23,8 +24,20 @@ const (
 	KafkaModuleName      = "kafka"
 	KafkaVersion         = "4.1.0"
 	KafkaMetadataVersion = "4.1-IV0"
-	KafkaImage           = "quay.io/strimzi/kafka:0.49.1-kafka-4.1.0"
+
+	// TODO: remove this hardcoded default once all supported manifest versions
+	// supply kafka.image.
+	defaultKafkaImage = "quay.io/strimzi/kafka:0.49.1-kafka-4.1.0"
 )
+
+func KafkaImage(img manifest.ImageRef) string {
+	globalImageRegistry := "" // TODO: source from wandb.Spec.Global.ImageRegistry once that field exists.
+	if out := img.GetImage(globalImageRegistry); out != "" {
+		return out
+	}
+	// Fallback for older manifests that don't supply the image.
+	return defaultKafkaImage
+}
 
 const (
 	MetricsReporterType = "strimziMetricsReporter"
@@ -107,6 +120,7 @@ func ToKafkaVendorSpec(
 	ctx context.Context,
 	wandb *apiv2.WeightsAndBiases,
 	scheme *runtime.Scheme,
+	mfst manifest.Manifest,
 ) (*v1.Kafka, error) {
 	_, log := logx.WithSlog(ctx, logx.Kafka)
 
@@ -135,6 +149,7 @@ func ToKafkaVendorSpec(
 			Kafka: v1.KafkaClusterSpec{
 				Version:         KafkaVersion,
 				MetadataVersion: KafkaMetadataVersion,
+				Image:           KafkaImage(mfst.Kafka.Image),
 				Replicas:        0, // CRITICAL: Must be 0 when using node pools in KRaft mode
 				Listeners: []v1.GenericKafkaListener{
 					{
@@ -214,6 +229,7 @@ func ToKafkaNodePoolVendorSpec(
 	ctx context.Context,
 	wandb *apiv2.WeightsAndBiases,
 	scheme *runtime.Scheme,
+	mfst manifest.Manifest,
 ) (*v1.KafkaNodePool, error) {
 	_, log := logx.WithSlog(ctx, logx.Kafka)
 

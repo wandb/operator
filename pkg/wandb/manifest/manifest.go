@@ -71,6 +71,7 @@ type GeneratedSecret struct {
 type InfraConfig struct {
 	Sizing  map[v2.Size]SizingConfig `yaml:"sizing"`
 	Ingress *AppIngressSpec          `yaml:"ingress,omitempty"`
+	Images  map[string]ImageRef      `yaml:"images,omitempty"`
 }
 
 // KafkaTopicDef models a topic configuration used both at the top-level
@@ -85,6 +86,7 @@ type KafkaTopicDef struct {
 type KafkaConfig struct {
 	Sizing map[v2.Size]KafkaSizingConfig `yaml:"sizing"`
 	Topics []KafkaTopic                  `yaml:"topics"`
+	Image  ImageRef                      `yaml:"image,omitempty"`
 }
 
 // KafkaTopic models one entry in the kafka topics list in the YAML.
@@ -97,19 +99,40 @@ type KafkaTopic struct {
 
 // ImageRef represents an application container image reference.
 type ImageRef struct {
+	Registry   string `yaml:"registry"`
 	Repository string `yaml:"repository"`
 	Tag        string `yaml:"tag,omitempty"`
 	Digest     string `yaml:"digest,omitempty"`
 }
 
-func (img ImageRef) GetImage() string {
-	if img.Digest != "" {
-		return img.Repository + "@" + img.Digest
+func (img ImageRef) GetImage(registry string) string {
+	reg := img.Registry
+	repository := img.Repository
+
+	if registry != "" {
+		if reg != "" {
+			reg = registry
+		} else if idx := strings.IndexByte(repository, '/'); idx != -1 {
+			reg = registry
+			repository = repository[idx+1:]
+		} else {
+			reg = registry
+		}
 	}
-	if img.Tag != "" {
-		return img.Repository + ":" + img.Tag
+
+	if reg == "" {
+		return repository
 	}
-	return img.Repository
+
+	image := reg + "/" + repository
+	switch {
+	case img.Digest != "":
+		return image + "@" + img.Digest
+	case img.Tag != "":
+		return image + ":" + img.Tag
+	default:
+		return image
+	}
 }
 
 // AppKafkaSection is the per-application kafka section; fields are optional

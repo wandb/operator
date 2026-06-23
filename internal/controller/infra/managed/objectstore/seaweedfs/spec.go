@@ -8,6 +8,7 @@ import (
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/logx"
 	seaweedv1 "github.com/wandb/operator/pkg/vendored/seaweedfs-operator/seaweed.seaweedfs.com/v1"
+	"github.com/wandb/operator/pkg/wandb/manifest"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -18,8 +19,20 @@ import (
 
 const (
 	ObjectStoreModuleName = "seaweedfs"
-	SeaweedImage          = "chrislusf/seaweedfs:latest"
+
+	// TODO: remove this hardcoded default once all supported manifest versions
+	// supply bucket.<instance>.images.seaweedfs.
+	defaultSeaweedImage = "chrislusf/seaweedfs:latest"
 )
+
+func SeaweedImage(img manifest.ImageRef) string {
+	globalImageRegistry := "" // TODO: source from wandb.Spec.Global.ImageRegistry once that field exists.
+	if out := img.GetImage(globalImageRegistry); out != "" {
+		return out
+	}
+	// Fallback for older manifests that don't supply the image.
+	return defaultSeaweedImage
+}
 
 const (
 	seaweedWritableTmpVolumeName = "seaweedfs-tmp"
@@ -54,6 +67,7 @@ func ToObjectStoreVendorSpec(
 	ctx context.Context,
 	wandb *apiv2.WeightsAndBiases,
 	scheme *runtime.Scheme,
+	mfst manifest.Manifest,
 ) (*seaweedv1.Seaweed, error) {
 	_, log := logx.WithSlog(ctx, logx.ObjectStore)
 	infraSpec := wandb.Spec.ObjectStore.ManagedObjectStore
@@ -85,7 +99,7 @@ func ToObjectStoreVendorSpec(
 			Labels:    labels,
 		},
 		Spec: seaweedv1.SeaweedSpec{
-			Image: SeaweedImage,
+			Image: SeaweedImage(mfst.Bucket["default"].Images["seaweedfs"]),
 			TLS: &seaweedv1.TLSSpec{
 				Enabled: infraSpec.SeaweedObjectStoreSpec.TlsEnabled,
 			},

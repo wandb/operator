@@ -24,9 +24,10 @@ func kafkaWriteState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
+	mfst manifest.Manifest,
 ) []metav1.Condition {
 	if wandb.Spec.Kafka.ManagedKafka != nil {
-		return managedKafkaWriteState(ctx, client, wandb)
+		return managedKafkaWriteState(ctx, client, wandb, mfst)
 	}
 	if wandb.Spec.Kafka.ExternalKafka != nil {
 		return externalKafkaWriteState(ctx, client, wandb)
@@ -101,6 +102,7 @@ func managedKafkaWriteState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
+	mfst manifest.Manifest,
 ) []metav1.Condition {
 	spec := wandb.Spec.Kafka.ManagedKafka
 
@@ -110,6 +112,7 @@ func managedKafkaWriteState(
 		ctx,
 		wandb,
 		client.Scheme(),
+		mfst,
 	)
 	if err != nil {
 		log.Error(err, "failed to translate kafka spec")
@@ -127,6 +130,7 @@ func managedKafkaWriteState(
 		ctx,
 		wandb,
 		client.Scheme(),
+		mfst,
 	)
 	if err != nil {
 		log.Error(err, "failed to translate kafka node pool spec")
