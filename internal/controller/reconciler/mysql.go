@@ -324,7 +324,7 @@ func runMysqlInitJob(ctx context.Context, client client.Client, wandb *apiv2.Wei
 						Containers: []corev1.Container{
 							{
 								Name:    "moco-init",
-								Image:   "ghcr.io/cybozu-go/moco/mysql:8.4.8",
+								Image:   common.ApplyImageRegistry(moco.MocoMySQLImage, wandb.Spec.Global.ImageRegistry),
 								Command: []string{"/bin/sh", "-c", mysqlCmd},
 								Env: []corev1.EnvVar{
 									envFromConn("MYSQL_HOST", "Host"),

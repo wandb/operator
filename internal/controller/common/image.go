@@ -3,10 +3,7 @@ package common
 import "strings"
 
 // ApplyImageRegistry rewrites image so it is pulled from registry instead of its
-// original (public) registry host. It implements the host-replacement convention
-// used by `wsm registry mirror`: a leading registry host — the first path
-// segment when it contains '.' or ':' or equals "localhost" — is replaced by
-// registry, and an image with no host (docker.io implied) is simply prefixed.
+// original (public) registry host.
 // When registry is empty, image is returned unchanged.
 //
 //	ApplyImageRegistry("quay.io/opstree/redis:v7", "reg.corp:5000")        -> "reg.corp:5000/opstree/redis:v7"
