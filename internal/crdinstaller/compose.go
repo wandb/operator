@@ -46,7 +46,7 @@ type Options struct {
 	WebhookServiceNamespace string
 
 	// Groups is the set of optional CRD groups to install in addition to
-	// the operator's own CRDs (e.g. {"redis", "kafka"}). Unknown values are
+	// the operator's own CRDs (e.g. {"redis", "kafka", "clickhouse"}). Unknown values are
 	// rejected up-front by ParseGroups.
 	Groups []string
 }

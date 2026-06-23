@@ -108,10 +108,18 @@ spec:
         app.kubernetes.io/component: telemetry
         app.kubernetes.io/part-of: wandb
     spec:
+      {{- with .Values.otlpGateway.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: otel-collector
           image: "otel/opentelemetry-collector-contrib:0.102.1"
           imagePullPolicy: IfNotPresent
+          {{- with .Values.otlpGateway.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           args:
             - --config=/etc/otelcol/collector.yaml
           ports:

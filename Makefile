@@ -65,11 +65,13 @@ generate-vendored: ## Regenerate vendored Moco CRDs from the operator's Helm cha
 
 .PHONY: sync-crd-embed
 sync-crd-embed: manifests ## Sync embedded CRDs in internal/crdinstaller/crds from their source-of-truth locations.
-	@rm -f internal/crdinstaller/crds/operator/*.yaml internal/crdinstaller/crds/redis/*.yaml internal/crdinstaller/crds/kafka/*.yaml
+	@mkdir -p internal/crdinstaller/crds/operator internal/crdinstaller/crds/redis internal/crdinstaller/crds/kafka internal/crdinstaller/crds/clickhouse
+	@rm -f internal/crdinstaller/crds/operator/*.yaml internal/crdinstaller/crds/redis/*.yaml internal/crdinstaller/crds/kafka/*.yaml internal/crdinstaller/crds/clickhouse/*.yaml
 	@cp config/crd/bases/apps.wandb.com_*.yaml internal/crdinstaller/crds/operator/
 	@cp pkg/vendored/redis-operator/crds/*.yaml internal/crdinstaller/crds/redis/
 	@cp pkg/vendored/strimzi-kafka/crds/*.yaml internal/crdinstaller/crds/kafka/
-	@echo "Synced CRDs into internal/crdinstaller/crds/{operator,redis,kafka}/"
+	@cp pkg/vendored/altinity-clickhouse/crds/clickhouse.altinity.com_clickhouseinstallations.yaml internal/crdinstaller/crds/clickhouse/
+	@echo "Synced CRDs into internal/crdinstaller/crds/{operator,redis,kafka,clickhouse}/"
 
 .PHONY: fmt
 fmt: ## Run go fmt against code.
