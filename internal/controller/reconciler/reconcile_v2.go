@@ -27,6 +27,7 @@ import (
 
 	"github.com/samber/lo"
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/ctrlqueue"
 	"github.com/wandb/operator/internal/logx"
 	wmetrics "github.com/wandb/operator/internal/metrics"
@@ -219,11 +220,6 @@ func Reconcile(
 			}
 			if wandb.Spec.Redis.ExternalRedis != nil && wandb.Spec.RetentionPolicy.OnDelete == apiv2.PurgeOnDelete {
 				if err = redisPurgeFinalizer(ctx, client, wandb); err != nil {
-					return ctrl.Result{}, err
-				}
-			}
-			if wandb.Spec.Kafka.ExternalKafka != nil && wandb.Spec.RetentionPolicy.OnDelete == apiv2.PurgeOnDelete {
-				if err = kafkaPurgeFinalizer(ctx, client, wandb); err != nil {
 					return ctrl.Result{}, err
 				}
 			}
@@ -625,6 +621,14 @@ func reconcileApplications(
 
 	for _, app := range existingApps.Items {
 		if !isOwnedBy(&app, wandb) {
+			continue
+		}
+
+		// Infra-managed Applications (e.g. managed Kafka/etcd) carry a component
+		// label and are owned by their dedicated infra reconcilers, not the
+		// server manifest. Skip them so manifest-driven pruning never deletes
+		// them, which would otherwise cause a delete/recreate loop.
+		if _, ok := app.Labels[common.WandbComponentLabel]; ok {
 			continue
 		}
 

@@ -35,7 +35,6 @@ import (
 	redisreplicationv1beta2 "github.com/wandb/operator/pkg/vendored/redis-operator/redisreplication/v1beta2"
 	redissentinelv1beta2 "github.com/wandb/operator/pkg/vendored/redis-operator/redissentinel/v1beta2"
 	seaweedv1 "github.com/wandb/operator/pkg/vendored/seaweedfs-operator/seaweed.seaweedfs.com/v1"
-	kafkav1 "github.com/wandb/operator/pkg/vendored/strimzi-kafka/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -94,9 +93,6 @@ var _ = BeforeSuite(func() {
 	err = redissentinelv1beta2.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = kafkav1.AddToScheme(scheme.Scheme)
-	Expect(err).NotTo(HaveOccurred())
-
 	err = argov1alpha1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
@@ -117,7 +113,6 @@ var _ = BeforeSuite(func() {
 				filepath.Join("..", "..", "pkg", "vendored", "seaweedfs-operator", "crds"),
 				filepath.Join("..", "..", "pkg", "vendored", "moco", "crds"),
 				filepath.Join("..", "..", "pkg", "vendored", "redis-operator", "crds"),
-				filepath.Join("..", "..", "pkg", "vendored", "strimzi-kafka", "crds"),
 				filepath.Join("..", "..", "pkg", "vendored", "argo-rollouts", "crds"),
 				filepath.Join("..", "..", "pkg", "vendored", "gateway-api", "crds"),
 			},
