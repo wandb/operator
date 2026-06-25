@@ -595,16 +595,20 @@ type TelemetryInfraStatus struct {
 }
 
 type TelemetryConnectionStatus struct {
-	ManagedNamespace   string `json:"managedNamespace,omitempty"`
-	ConnectionSecret   string `json:"connectionSecret,omitempty"`
-	Protocol           string `json:"protocol,omitempty"`
-	MetricsExporter    string `json:"metricsExporter,omitempty"`
-	LogsExporter       string `json:"logsExporter,omitempty"`
-	TracesExporter     string `json:"tracesExporter,omitempty"`
-	MetricsEndpoint    string `json:"metricsEndpoint,omitempty"`
-	LogsEndpoint       string `json:"logsEndpoint,omitempty"`
-	TracesEndpoint     string `json:"tracesEndpoint,omitempty"`
-	ServiceName        string `json:"serviceName,omitempty"`
-	ResourceAttributes string `json:"resourceAttributes,omitempty"`
-	GorillaTracer      string `json:"gorillaTracer,omitempty"`
+	ManagedNamespace      string `json:"managedNamespace,omitempty"`
+	ConnectionSecret      string `json:"connectionSecret,omitempty"`
+	Protocol              string `json:"protocol,omitempty"`
+	MetricsExporter       string `json:"metricsExporter,omitempty"`
+	LogsExporter          string `json:"logsExporter,omitempty"`
+	TracesExporter        string `json:"tracesExporter,omitempty"`
+	MetricsEndpoint       string `json:"metricsEndpoint,omitempty"`
+	LogsEndpoint          string `json:"logsEndpoint,omitempty"`
+	TracesEndpoint        string `json:"tracesEndpoint,omitempty"`
+	ServiceName           string `json:"serviceName,omitempty"`
+	ResourceAttributes    string `json:"resourceAttributes,omitempty"`
+	GorillaTracer         string `json:"gorillaTracer,omitempty"`
+	StatsdAddress         string `json:"statsdAddress,omitempty"`
+	DatadogTraceAgentURL  string `json:"datadogTraceAgentURL,omitempty"`
+	DatadogTraceAgentHost string `json:"datadogTraceAgentHost,omitempty"`
+	DatadogTraceAgentPort string `json:"datadogTraceAgentPort,omitempty"`
 }

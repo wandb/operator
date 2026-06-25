@@ -69,6 +69,20 @@
           "type": "string",
           "minLength": 1
         },
+        "otlpGateway": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "podSecurityContext": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "securityContext": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        },
         "scrape": {
           "type": "object",
           "additionalProperties": false,

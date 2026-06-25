@@ -4623,6 +4623,12 @@ spec:
                     properties:
                       connectionSecret:
                         type: string
+                      datadogTraceAgentHost:
+                        type: string
+                      datadogTraceAgentPort:
+                        type: string
+                      datadogTraceAgentURL:
+                        type: string
                       gorillaTracer:
                         type: string
                       logsEndpoint:
@@ -4640,6 +4646,8 @@ spec:
                       resourceAttributes:
                         type: string
                       serviceName:
+                        type: string
+                      statsdAddress:
                         type: string
                       tracesEndpoint:
                         type: string
