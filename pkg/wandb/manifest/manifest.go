@@ -106,30 +106,28 @@ type ImageRef struct {
 }
 
 func (img ImageRef) GetImage(registry string) string {
-	reg := img.Registry  // from manifest
+	reg := img.Registry          // from manifest
 	repository := img.Repository // from manifest, older verisons of manifest will contain both registry and repository in this field
 
 	// manifest's ImageRef.Registry is blank, check if registry exists as part of repository string
+	var wandbImage string
 	if reg == "" {
+		wandbImage = repository
 		if idx := strings.IndexByte(repository, '/'); idx != -1 && looksLikeRegistry(repository[:idx]) {
-			reg = repository[:idx]
+			wandbRegistry := repository[:idx]
 			repository = repository[idx+1:]
+			wandbImage = wandbRegistry + "/" + repository
 		}
+	} else { // manifest's ImageRef.Registry exists. Combine with repo for full wandb path
+		wandbImage = reg + "/" + repository
 	}
-	// manifest's ImageRef.Registry exists, use that. already set at reg := above
 
-	// user provided global image registry, replace provided registry
+	// user provided global image registry, prepend full wandb reg.repo path
+	image := wandbImage
 	if registry != "" {
-		reg = registry
-
+		image = registry + "/" + wandbImage
 	}
 
-	// repository can stand alone (e.g. "redis" or a Docker Hub namespace) when no
-	// registry was supplied anywhere; only join with reg when we actually have one.
-	image := repository
-	if reg != "" {
-		image = reg + "/" + repository
-	}
 	switch {
 	case img.Digest != "":
 		return image + "@" + img.Digest
