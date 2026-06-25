@@ -113,11 +113,6 @@ func (img ImageRef) GetImage(registry string) string {
 	var wandbImage string
 	if reg == "" {
 		wandbImage = repository
-		if idx := strings.IndexByte(repository, '/'); idx != -1 && looksLikeRegistry(repository[:idx]) {
-			wandbRegistry := repository[:idx]
-			repository = repository[idx+1:]
-			wandbImage = wandbRegistry + "/" + repository
-		}
 	} else { // manifest's ImageRef.Registry exists. Combine with repo for full wandb path
 		wandbImage = reg + "/" + repository
 	}
