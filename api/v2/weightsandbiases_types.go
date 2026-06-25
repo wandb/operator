@@ -523,7 +523,8 @@ type ClickHouseKeeperSpec struct {
 
 type ClickHouseConnection struct {
 	Host     corev1.SecretKeySelector `json:"host,omitempty"`
-	Port     corev1.SecretKeySelector `json:"port,omitempty"`
+	TCPPort  corev1.SecretKeySelector `json:"tcpPort,omitempty"`
+	HTTPPort corev1.SecretKeySelector `json:"httpPort,omitempty"`
 	Database corev1.SecretKeySelector `json:"database,omitempty"`
 	Username corev1.SecretKeySelector `json:"username,omitempty"`
 	Password corev1.SecretKeySelector `json:"password,omitempty"`

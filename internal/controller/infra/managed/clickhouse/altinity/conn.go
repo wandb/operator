@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
+	"strconv"
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
@@ -16,14 +18,26 @@ import (
 
 type clickhouseConnInfo struct {
 	Host     string
-	Port     string
+	TCPPort  string
+	HTTPPort string
 	User     string
 	Password string
 	Database string
+	Tls      bool
 }
 
 func (c *clickhouseConnInfo) toURL() string {
-	return fmt.Sprintf("clickhouse://%s:%s@%s:%s/%s", c.User, c.Password, c.Host, c.Port, c.Database)
+	values := url.Values{
+		"tls": []string{strconv.FormatBool(c.Tls)},
+	}
+	clickhouseUrl := url.URL{
+		Scheme:   "clickhouse",
+		Host:     fmt.Sprintf("%s:%s", c.Host, c.TCPPort),
+		User:     url.UserPassword(c.User, c.Password),
+		Path:     c.Database,
+		RawQuery: values.Encode(),
+	}
+	return clickhouseUrl.String()
 }
 
 func writeClickHouseConnInfo(
@@ -78,7 +92,8 @@ func writeClickHouseConnInfo(
 		StringData: map[string]string{
 			urlKey:     connInfo.toURL(),
 			"Host":     connInfo.Host,
-			"Port":     connInfo.Port,
+			"TCPPort":  connInfo.TCPPort,
+			"HTTPPort": connInfo.HTTPPort,
 			"User":     connInfo.User,
 			"Password": connInfo.Password,
 			"Database": connInfo.Database,
@@ -93,7 +108,8 @@ func writeClickHouseConnInfo(
 	return &apiv2.ClickHouseConnection{
 		URL:      corev1.SecretKeySelector{LocalObjectReference: localRef, Key: urlKey, Optional: ptr.To(false)},
 		Host:     corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Host", Optional: ptr.To(false)},
-		Port:     corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Port", Optional: ptr.To(false)},
+		HTTPPort: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "HTTPPort", Optional: ptr.To(false)},
+		TCPPort:  corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "TCPPort", Optional: ptr.To(false)},
 		Username: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "User", Optional: ptr.To(false)},
 		Password: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Password", Optional: ptr.To(false)},
 		Database: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Database", Optional: ptr.To(false)},

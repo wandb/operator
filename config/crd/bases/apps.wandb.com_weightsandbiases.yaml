@@ -547,6 +547,19 @@ spec:
                         - key
                         type: object
                         x-kubernetes-map-type: atomic
+                      httpPort:
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            default: ""
+                            type: string
+                          optional:
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
                       password:
                         properties:
                           key:
@@ -560,7 +573,7 @@ spec:
                         - key
                         type: object
                         x-kubernetes-map-type: atomic
-                      port:
+                      tcpPort:
                         properties:
                           key:
                             type: string
@@ -4009,6 +4022,19 @@ spec:
                         - key
                         type: object
                         x-kubernetes-map-type: atomic
+                      httpPort:
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            default: ""
+                            type: string
+                          optional:
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
                       password:
                         properties:
                           key:
@@ -4022,7 +4048,7 @@ spec:
                         - key
                         type: object
                         x-kubernetes-map-type: atomic
-                      port:
+                      tcpPort:
                         properties:
                           key:
                             type: string

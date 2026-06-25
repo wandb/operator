@@ -27,6 +27,9 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o ma
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o crd-installer ./cmd/crd-installer
 
 FROM registry.access.redhat.com/ubi9/ubi-minimal
+
+USER 1001
+
 WORKDIR /
 COPY --from=manager-builder /workspace/manager .
 COPY --from=manager-builder /workspace/crd-installer .

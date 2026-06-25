@@ -1192,10 +1192,6 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 		return ctrl.Result{}, err
 	}
 
-	if anyFailed {
-		return ctrl.Result{}, fmt.Errorf("one or more migration jobs failed")
-	}
-
 	if allSucceeded {
 		return ctrl.Result{}, nil
 	}

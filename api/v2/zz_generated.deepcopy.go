@@ -258,7 +258,8 @@ func (in *ClickHouseConfig) DeepCopy() *ClickHouseConfig {
 func (in *ClickHouseConnection) DeepCopyInto(out *ClickHouseConnection) {
 	*out = *in
 	in.Host.DeepCopyInto(&out.Host)
-	in.Port.DeepCopyInto(&out.Port)
+	in.TCPPort.DeepCopyInto(&out.TCPPort)
+	in.HTTPPort.DeepCopyInto(&out.HTTPPort)
 	in.Database.DeepCopyInto(&out.Database)
 	in.Username.DeepCopyInto(&out.Username)
 	in.Password.DeepCopyInto(&out.Password)

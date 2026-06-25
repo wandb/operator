@@ -21,11 +21,13 @@ func readConnectionDetails(actual *chiv1.ClickHouseInstallation) *clickhouseConn
 	}
 
 	clickhouseHost := actual.Status.Endpoint
-	clickhousePort := strconv.Itoa(ClickHouseHTTPPort)
+	clickhouseHTTPPort := strconv.Itoa(ClickHouseHTTPPort)
+	clickhouseTCPPort := strconv.Itoa(ClickHouseNativePort)
 
 	return &clickhouseConnInfo{
 		Host:     clickhouseHost,
-		Port:     clickhousePort,
+		HTTPPort: clickhouseHTTPPort,
+		TCPPort:  clickhouseTCPPort,
 		User:     ClickHouseUser,
 		Password: ClickHousePassword,
 		Database: ClickHouseDatabase,
