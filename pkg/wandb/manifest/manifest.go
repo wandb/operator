@@ -106,25 +106,30 @@ type ImageRef struct {
 }
 
 func (img ImageRef) GetImage(registry string) string {
-	reg := img.Registry
-	repository := img.Repository
+	reg := img.Registry  // from manifest
+	repository := img.Repository // from manifest, older verisons of manifest will contain both registry and repository in this field
 
-	if registry != "" {
-		if reg != "" {
-			reg = registry
-		} else if idx := strings.IndexByte(repository, '/'); idx != -1 {
-			reg = registry
+	// manifest's ImageRef.Registry is blank, check if registry exists as part of repository string
+	if reg == "" {
+		if idx := strings.IndexByte(repository, '/'); idx != -1 && looksLikeRegistry(repository[:idx]) {
+			reg = repository[:idx]
 			repository = repository[idx+1:]
-		} else {
-			reg = registry
 		}
 	}
+	// manifest's ImageRef.Registry exists, use that. already set at reg := above
 
-	if reg == "" {
-		return repository
+	// user provided global image registry, replace provided registry
+	if registry != "" {
+		reg = registry
+
 	}
 
-	image := reg + "/" + repository
+	// repository can stand alone (e.g. "redis" or a Docker Hub namespace) when no
+	// registry was supplied anywhere; only join with reg when we actually have one.
+	image := repository
+	if reg != "" {
+		image = reg + "/" + repository
+	}
 	switch {
 	case img.Digest != "":
 		return image + "@" + img.Digest
@@ -133,6 +138,10 @@ func (img ImageRef) GetImage(registry string) string {
 	default:
 		return image
 	}
+}
+
+func looksLikeRegistry(segment string) bool {
+	return segment == "localhost" || strings.ContainsAny(segment, ".:")
 }
 
 // AppKafkaSection is the per-application kafka section; fields are optional

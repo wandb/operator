@@ -22,7 +22,7 @@ const (
 
 	// TODO: remove this hardcoded default once all supported manifest versions
 	// supply bucket.<instance>.images.seaweedfs.
-	defaultSeaweedImage = "chrislusf/seaweedfs:latest"
+	defaultSeaweedImage = "chrislusf/seaweedfs:4.35"
 )
 
 func SeaweedImage(img manifest.ImageRef) string {
