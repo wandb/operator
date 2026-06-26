@@ -8,6 +8,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/samber/lo"
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/pkg/wandb/manifest"
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
@@ -35,6 +36,7 @@ var _ = Describe("Moco MySQL specs", func() {
 			},
 			mocoWandb(),
 			mocoScheme(),
+			manifest.Manifest{},
 		)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(cluster).NotTo(BeNil())
@@ -71,6 +73,7 @@ var _ = Describe("Moco MySQL specs", func() {
 			},
 			mocoWandb(),
 			mocoScheme(),
+			manifest.Manifest{},
 		)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(cluster).NotTo(BeNil())
@@ -90,6 +93,7 @@ var _ = Describe("Moco MySQL specs", func() {
 			},
 			mocoWandb(),
 			mocoScheme(),
+			manifest.Manifest{},
 		)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(enabled.Spec.Collectors).NotTo(BeEmpty())
@@ -102,6 +106,7 @@ var _ = Describe("Moco MySQL specs", func() {
 			},
 			mocoWandb(),
 			mocoScheme(),
+			manifest.Manifest{},
 		)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(disabled.Spec.Collectors).To(BeEmpty())
@@ -118,6 +123,7 @@ var _ = Describe("Moco MySQL specs", func() {
 				apiv2.ManagedMysqlSpec{Name: "mysql", Namespace: "wandb", Replicas: replicas, StorageSize: "10Gi"},
 				mocoWandb(),
 				mocoScheme(),
+				manifest.Manifest{},
 			)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -181,6 +187,7 @@ var _ = Describe("Moco MySQL specs", func() {
 			apiv2.ManagedMysqlSpec{Name: "mysql", Namespace: "wandb", Replicas: 1, StorageSize: "10Gi"},
 			mocoWandb(),
 			mocoScheme(),
+			manifest.Manifest{},
 		)
 		Expect(err).NotTo(HaveOccurred())
 

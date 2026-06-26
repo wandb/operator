@@ -6,6 +6,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/pkg/wandb/manifest"
 	"github.com/wandb/operator/pkg/utils"
 	chiv1 "github.com/wandb/operator/pkg/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -22,7 +23,7 @@ var _ = Describe("ClickHouse vendor specs", func() {
 	It("renders hardened pod templates with writable runtime mounts", func() {
 		wandb := clickHouseWandb()
 
-		chi, err := ToClickHouseVendorSpec(context.Background(), wandb, clickHouseScheme())
+		chi, err := ToClickHouseVendorSpec(context.Background(), wandb, clickHouseScheme(), manifest.Manifest{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(chi).NotTo(BeNil())
 		Expect(chi.Spec.Templates.PodTemplates).To(HaveLen(1))
@@ -35,7 +36,7 @@ var _ = Describe("ClickHouse vendor specs", func() {
 
 		Expect(podSpec.Containers).To(HaveLen(1))
 		container := podSpec.Containers[0]
-		Expect(container.Image).To(Equal(ClickHouseImage))
+		Expect(container.Image).To(Equal(ClickHouseImage(manifest.ImageRef{})))
 		Expect(container.Resources.Requests[corev1.ResourceCPU]).To(Equal(resource.MustParse("500m")))
 		expectClickHouseDefaultContainerSecurityContext(container.SecurityContext)
 		expectClickHouseWritableMount(container.VolumeMounts, clickHouseTmpVolumeName, clickHouseTmpMountPath)
@@ -46,7 +47,7 @@ var _ = Describe("ClickHouse vendor specs", func() {
 	It("omits fixed ClickHouse IDs in OpenShift mode", func() {
 		utils.SetOpenShiftMode(true)
 
-		chi, err := ToClickHouseVendorSpec(context.Background(), clickHouseWandb(), clickHouseScheme())
+		chi, err := ToClickHouseVendorSpec(context.Background(), clickHouseWandb(), clickHouseScheme(), manifest.Manifest{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(chi).NotTo(BeNil())
 
