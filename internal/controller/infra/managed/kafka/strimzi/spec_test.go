@@ -7,6 +7,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/pkg/wandb/manifest"
 	"github.com/wandb/operator/pkg/utils"
 	v1 "github.com/wandb/operator/pkg/vendored/strimzi-kafka/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -32,7 +33,7 @@ var _ = Describe("Kafka vendor specs", func() {
 
 		wandb := kafkaWandb()
 
-		kafka, err := ToKafkaVendorSpec(context.Background(), wandb, kafkaScheme())
+		kafka, err := ToKafkaVendorSpec(context.Background(), wandb, kafkaScheme(), manifest.Manifest{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(kafka).NotTo(BeNil())
 		expectKafkaDefaultPodSecurityContext(kafka.Spec.Kafka.Template.Pod.SecurityContext, int64(4242))
@@ -41,7 +42,7 @@ var _ = Describe("Kafka vendor specs", func() {
 		expectKafkaDefaultContainerSecurityContext(kafka.Spec.EntityOperator.Template.UserOperatorContainer.SecurityContext)
 		expectKafkaDefaultContainerSecurityContext(kafka.Spec.EntityOperator.Template.TlsSidecarContainer.SecurityContext)
 
-		nodePool, err := ToKafkaNodePoolVendorSpec(context.Background(), wandb, kafkaScheme())
+		nodePool, err := ToKafkaNodePoolVendorSpec(context.Background(), wandb, kafkaScheme(), manifest.Manifest{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(nodePool).NotTo(BeNil())
 		expectKafkaDefaultPodSecurityContext(nodePool.Spec.Template.Pod.SecurityContext, int64(4242))
@@ -52,7 +53,7 @@ var _ = Describe("Kafka vendor specs", func() {
 	It("omits fixed Strimzi IDs in OpenShift mode", func() {
 		utils.SetOpenShiftMode(true)
 
-		kafka, err := ToKafkaVendorSpec(context.Background(), kafkaWandb(), kafkaScheme())
+		kafka, err := ToKafkaVendorSpec(context.Background(), kafkaWandb(), kafkaScheme(), manifest.Manifest{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(kafka).NotTo(BeNil())
 

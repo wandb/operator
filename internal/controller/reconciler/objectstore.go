@@ -9,6 +9,7 @@ import (
 	externalobjectstore "github.com/wandb/operator/internal/controller/infra/external/objectstore"
 	"github.com/wandb/operator/internal/controller/infra/managed/objectstore/seaweedfs"
 	"github.com/wandb/operator/pkg/utils"
+	"github.com/wandb/operator/pkg/wandb/manifest"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -20,9 +21,10 @@ func objectStoreWriteState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
+	mfst manifest.Manifest,
 ) ([]metav1.Condition, *apiv2.ObjectStoreConnection) {
 	if wandb.Spec.ObjectStore.ManagedObjectStore != nil {
-		return managedObjectStoreWriteState(ctx, client, wandb)
+		return managedObjectStoreWriteState(ctx, client, wandb, mfst)
 	}
 	if wandb.Spec.ObjectStore.ExternalObjectStore != nil {
 		return externalObjectStoreWriteState(ctx, client, wandb)
@@ -105,6 +107,7 @@ func managedObjectStoreWriteState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
+	mfst manifest.Manifest,
 ) ([]metav1.Condition, *apiv2.ObjectStoreConnection) {
 	spec := wandb.Spec.ObjectStore.ManagedObjectStore
 
@@ -126,7 +129,7 @@ func managedObjectStoreWriteState(
 		return conditions, nil
 	}
 
-	desiredCr, err := seaweedfs.ToObjectStoreVendorSpec(ctx, wandb, client.Scheme())
+	desiredCr, err := seaweedfs.ToObjectStoreVendorSpec(ctx, wandb, client.Scheme(), mfst)
 	if err != nil {
 		log.Error(err, "failed to translate object store spec to vendor spec")
 		return []metav1.Condition{

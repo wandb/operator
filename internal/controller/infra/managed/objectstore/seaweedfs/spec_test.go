@@ -6,6 +6,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/pkg/wandb/manifest"
 	seaweedv1 "github.com/wandb/operator/pkg/vendored/seaweedfs-operator/seaweed.seaweedfs.com/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -17,14 +18,14 @@ var _ = Describe("SeaweedFS vendor specs", func() {
 	It("renders writable runtime mounts for SeaweedFS components", func() {
 		wandb := seaweedWandb()
 
-		seaweed, err := ToObjectStoreVendorSpec(context.Background(), wandb, seaweedScheme())
+		seaweed, err := ToObjectStoreVendorSpec(context.Background(), wandb, seaweedScheme(), manifest.Manifest{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(seaweed).NotTo(BeNil())
 
 		Expect(seaweed.Name).To(Equal(SeaweedName("object-store")))
 		Expect(seaweed.Namespace).To(Equal("wandb"))
 		Expect(seaweed.Labels).To(HaveKeyWithValue("app", SeaweedName("object-store")))
-		Expect(seaweed.Spec.Image).To(Equal(SeaweedImage))
+		Expect(seaweed.Spec.Image).To(Equal(SeaweedImage(manifest.ImageRef{})))
 
 		expectSeaweedWritableVolume(seaweed.Spec.Master.Volumes)
 		expectSeaweedWritableMount(seaweed.Spec.Master.VolumeMounts)
@@ -45,7 +46,7 @@ var _ = Describe("SeaweedFS vendor specs", func() {
 	})
 
 	It("keeps the filer writable data path explicit", func() {
-		seaweed, err := ToObjectStoreVendorSpec(context.Background(), seaweedWandb(), seaweedScheme())
+		seaweed, err := ToObjectStoreVendorSpec(context.Background(), seaweedWandb(), seaweedScheme(), manifest.Manifest{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(seaweed).NotTo(BeNil())
 		Expect(seaweed.Spec.Filer.Config).NotTo(BeNil())
@@ -56,14 +57,14 @@ var _ = Describe("SeaweedFS vendor specs", func() {
 	})
 
 	It("preserves managed resource overrides", func() {
-		seaweed, err := ToObjectStoreVendorSpec(context.Background(), seaweedWandb(), seaweedScheme())
+		seaweed, err := ToObjectStoreVendorSpec(context.Background(), seaweedWandb(), seaweedScheme(), manifest.Manifest{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(seaweed).NotTo(BeNil())
 		Expect(seaweed.Spec.Volume.ResourceRequirements.Requests[corev1.ResourceCPU]).To(Equal(resource.MustParse("500m")))
 	})
 
 	It("sets metrics ports on master, volume, and filer", func() {
-		seaweed, err := ToObjectStoreVendorSpec(context.Background(), seaweedWandb(), seaweedScheme())
+		seaweed, err := ToObjectStoreVendorSpec(context.Background(), seaweedWandb(), seaweedScheme(), manifest.Manifest{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(seaweed).NotTo(BeNil())
 

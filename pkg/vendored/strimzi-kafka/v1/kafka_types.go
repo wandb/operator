@@ -32,6 +32,7 @@ type KafkaSpec struct {
 type KafkaClusterSpec struct {
 	Version         string                       `json:"version,omitempty"`
 	MetadataVersion string                       `json:"metadataVersion,omitempty"`
+	Image           string                       `json:"image,omitempty"`
 	Replicas        int32                        `json:"replicas,omitempty"`
 	Listeners       []GenericKafkaListener       `json:"listeners,omitempty"`
 	Config          map[string]string            `json:"config,omitempty"`
