@@ -30,8 +30,7 @@ const (
 	defaultMocoMySQLImage = "ghcr.io/cybozu-go/moco/mysql:8.4.8"
 )
 
-func MocoMySQLImage(img manifest.ImageRef) string {
-	globalImageRegistry := "" // TODO: source from wandb.Spec.Global.ImageRegistry once that field exists.
+func MocoMySQLImage(img manifest.ImageRef, globalImageRegistry string) string {
 	if out := img.GetImage(globalImageRegistry); out != "" {
 		return out
 	}
@@ -81,7 +80,7 @@ func ToMocoMySQLClusterSpec(
 			Replicas:           replicas,
 			MySQLConfigMapName: ptr.To(MyCnfConfigMapName(spec.Name)),
 			PodTemplate: mocov1beta2.PodTemplateSpec{
-				Spec:                buildMocoPodSpec(spec.Config.Resources, mfst.Mysql["default"].Images["mysql"]),
+				Spec:                buildMocoPodSpec(spec.Config.Resources, mfst.Mysql["default"].Images["mysql"], wandb),
 				OverwriteContainers: mocoOverwriteContainers(),
 			},
 			VolumeClaimTemplates: []mocov1beta2.PersistentVolumeClaim{
@@ -104,10 +103,10 @@ func ToMocoMySQLClusterSpec(
 	return cluster, cm, nil
 }
 
-func buildMocoPodSpec(resources corev1.ResourceRequirements, img manifest.ImageRef) mocov1beta2.PodSpecApplyConfiguration {
+func buildMocoPodSpec(resources corev1.ResourceRequirements, img manifest.ImageRef, wandb *apiv2.WeightsAndBiases,) mocov1beta2.PodSpecApplyConfiguration {
 	container := corev1ac.Container().
 		WithName("mysqld").
-		WithImage(MocoMySQLImage(img)).
+		WithImage(MocoMySQLImage(img, wandb.Spec.Global.ImageRegistry)).
 		WithSecurityContext(mocoContainerSecurityContext())
 
 	if resources.Requests != nil || resources.Limits != nil {

@@ -30,8 +30,7 @@ const (
 	defaultKafkaImage = "quay.io/strimzi/kafka:0.49.1-kafka-4.1.0"
 )
 
-func KafkaImage(img manifest.ImageRef) string {
-	globalImageRegistry := "" // TODO: source from wandb.Spec.Global.ImageRegistry once that field exists.
+func KafkaImage(img manifest.ImageRef, globalImageRegistry string ) string {
 	if out := img.GetImage(globalImageRegistry); out != "" {
 		return out
 	}
@@ -149,7 +148,7 @@ func ToKafkaVendorSpec(
 			Kafka: v1.KafkaClusterSpec{
 				Version:         KafkaVersion,
 				MetadataVersion: KafkaMetadataVersion,
-				Image:           KafkaImage(mfst.Kafka.Image),
+				Image:           KafkaImage(mfst.Kafka.Image, wandb.Spec.Global.ImageRegistry),
 				Replicas:        0, // CRITICAL: Must be 0 when using node pools in KRaft mode
 				Listeners: []v1.GenericKafkaListener{
 					{

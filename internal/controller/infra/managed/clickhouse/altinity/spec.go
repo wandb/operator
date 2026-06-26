@@ -28,8 +28,7 @@ const (
 	defaultClickHouseImage = "altinity/clickhouse-server:25.8.16.10002.altinitystable"
 )
 
-func ClickHouseImage(img manifest.ImageRef) string {
-	globalImageRegistry := "" // TODO: source from wandb.Spec.Global.ImageRegistry once that field exists.
+func ClickHouseImage(img manifest.ImageRef, globalImageRegistry string) string {
 	if out := img.GetImage(globalImageRegistry); out != "" {
 		return out
 	}
@@ -179,7 +178,7 @@ func ToClickHouseVendorSpec(
 		Containers: []corev1.Container{
 			{
 				Name:            "clickhouse",
-				Image:           ClickHouseImage(mfst.Clickhouse["default"].Images["server"]),
+				Image:           ClickHouseImage(mfst.Clickhouse["default"].Images["server"], wandb.Spec.Global.ImageRegistry),
 				SecurityContext: clickHouseContainerSecurityContext(),
 				VolumeMounts:    clickHouseWritableVolumeMounts(),
 			},

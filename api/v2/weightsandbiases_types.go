@@ -117,14 +117,8 @@ type WeightsAndBiasesSpec struct {
 type GlobalSpec struct {
 	// ImageRegistry, when set, retargets the container images of the managed
 	// data-plane services (ClickHouse, MySQL, Redis, object store) to this
-	// registry instead of their upstream public registries. The original
-	// registry host of each image is replaced by this value (host-strip +
-	// prefix), e.g. "quay.io/opstree/redis:tag" becomes
-	// "<ImageRegistry>/opstree/redis:tag", and "altinity/clickhouse-server:tag"
-	// becomes "<ImageRegistry>/altinity/clickhouse-server:tag". Intended for
-	// air-gapped installs whose nodes cannot reach public registries; pair it
+	// registry. Intended for air-gapped installs whose nodes cannot reach public registries; pair it
 	// with a registry pre-populated by `wsm registry mirror`.
-	// +optional
 	ImageRegistry string `json:"imageRegistry,omitempty"`
 }
 
