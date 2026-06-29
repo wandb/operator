@@ -24,17 +24,17 @@ var validOpts = Options{
 }
 
 func TestParseGroupsValid(t *testing.T) {
-	got, err := ParseGroups("redis,kafka")
+	got, err := ParseGroups("redis")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(got) != 2 || got[0] != "redis" || got[1] != "kafka" {
-		t.Errorf("got %v, want [redis kafka]", got)
+	if len(got) != 1 || got[0] != "redis" {
+		t.Errorf("got %v, want [redis]", got)
 	}
 }
 
 func TestParseGroupsRejectsUnknown(t *testing.T) {
-	_, err := ParseGroups("redis,bogus,kafka")
+	_, err := ParseGroups("redis,bogus")
 	if err == nil {
 		t.Fatal("expected error for unknown group")
 	}
@@ -108,7 +108,7 @@ func TestComposeIncludesOptionalGroup(t *testing.T) {
 
 func TestRenderIsDeterministic(t *testing.T) {
 	opts := validOpts
-	opts.Groups = []string{"redis", "kafka"}
+	opts.Groups = []string{"redis"}
 	var a, b bytes.Buffer
 	if err := Render(context.Background(), opts, &a); err != nil {
 		t.Fatalf("first render: %v", err)

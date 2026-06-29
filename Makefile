@@ -65,11 +65,10 @@ generate-vendored: ## Regenerate vendored Moco CRDs from the operator's Helm cha
 
 .PHONY: sync-crd-embed
 sync-crd-embed: manifests ## Sync embedded CRDs in internal/crdinstaller/crds from their source-of-truth locations.
-	@rm -f internal/crdinstaller/crds/operator/*.yaml internal/crdinstaller/crds/redis/*.yaml internal/crdinstaller/crds/kafka/*.yaml
+	@rm -f internal/crdinstaller/crds/operator/*.yaml internal/crdinstaller/crds/redis/*.yaml
 	@cp config/crd/bases/apps.wandb.com_*.yaml internal/crdinstaller/crds/operator/
 	@cp pkg/vendored/redis-operator/crds/*.yaml internal/crdinstaller/crds/redis/
-	@cp pkg/vendored/strimzi-kafka/crds/*.yaml internal/crdinstaller/crds/kafka/
-	@echo "Synced CRDs into internal/crdinstaller/crds/{operator,redis,kafka}/"
+	@echo "Synced CRDs into internal/crdinstaller/crds/{operator,redis}/"
 
 .PHONY: fmt
 fmt: ## Run go fmt against code.

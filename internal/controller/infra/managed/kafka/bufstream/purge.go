@@ -1,4 +1,4 @@
-package strimzi
+package bufstream
 
 import (
 	"context"
@@ -12,9 +12,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// PurgeFinalizer deletes PVCs belonging to Kafka when the retention policy is
-// Purge. Strimzi normally handles this via KafkaNodePool DeleteClaim, but we
-// also clean up here as a safety net.
+// PurgeFinalizer deletes the etcd PVCs when the retention policy is Purge. The
+// Application CRs, ConfigMap and Secret are owner-referenced by the wandb CR and
+// garbage collected automatically, but StatefulSet PVCs are not.
 func PurgeFinalizer(
 	ctx context.Context,
 	cl client.Client,
@@ -40,24 +40,16 @@ func purgeAssociatedResources(
 		LabelSelector: onDeleteSelector,
 	}
 
-	// PVCs
 	pvcList := &corev1.PersistentVolumeClaimList{}
 	if err := cl.List(ctx, pvcList, listOptions); err != nil {
 		return err
 	}
 	if len(pvcList.Items) > 0 {
-		log.Info(
-			"Purging associated PVCs",
-			"count", len(pvcList.Items), "selector", onDeleteSelector.String(),
-		)
-	} else {
-		log.Debug(
-			"No associated PVCs found to purge",
-			"selector", onDeleteSelector.String(),
-		)
+		log.Info("Purging associated PVCs", "count", len(pvcList.Items), "selector", onDeleteSelector.String())
 	}
-	for _, pvc := range pvcList.Items {
-		if err := cl.Delete(ctx, &pvc); err != nil && !errors.IsNotFound(err) {
+	for i := range pvcList.Items {
+		pvc := &pvcList.Items[i]
+		if err := cl.Delete(ctx, pvc); err != nil && !errors.IsNotFound(err) {
 			return err
 		}
 	}

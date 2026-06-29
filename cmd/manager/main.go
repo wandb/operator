@@ -36,7 +36,6 @@ import (
 	redisreplicationv1beta2 "github.com/wandb/operator/pkg/vendored/redis-operator/redisreplication/v1beta2"
 	redissentinelv1beta2 "github.com/wandb/operator/pkg/vendored/redis-operator/redissentinel/v1beta2"
 	seaweedv1 "github.com/wandb/operator/pkg/vendored/seaweedfs-operator/seaweed.seaweedfs.com/v1"
-	strimziv1 "github.com/wandb/operator/pkg/vendored/strimzi-kafka/v1"
 	"github.com/wandb/operator/pkg/wandb/spec/channel/deployer"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/discovery"
@@ -84,7 +83,6 @@ func init() {
 	utilruntime.Must(redisv1beta2.AddToScheme(scheme))
 	utilruntime.Must(redisreplicationv1beta2.AddToScheme(scheme))
 	utilruntime.Must(redissentinelv1beta2.AddToScheme(scheme))
-	utilruntime.Must(strimziv1.AddToScheme(scheme))
 	utilruntime.Must(seaweedv1.AddToScheme(scheme))
 	utilruntime.Must(chiv1.AddToScheme(scheme))
 	utilruntime.Must(mocov1beta2.AddToScheme(scheme))

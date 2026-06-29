@@ -103,6 +103,13 @@ func (in *ApplicationSpec) DeepCopyInto(out *ApplicationSpec) {
 	}
 	in.MetaTemplate.DeepCopyInto(&out.MetaTemplate)
 	in.PodTemplate.DeepCopyInto(&out.PodTemplate)
+	if in.VolumeClaimTemplates != nil {
+		in, out := &in.VolumeClaimTemplates, &out.VolumeClaimTemplates
+		*out = make([]v1.PersistentVolumeClaim, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
 	if in.ServiceTemplate != nil {
 		in, out := &in.ServiceTemplate, &out.ServiceTemplate
 		*out = new(v1.ServiceSpec)
@@ -631,11 +638,6 @@ func (in *KafkaSpec) DeepCopyInto(out *KafkaSpec) {
 	if in.ManagedKafka != nil {
 		in, out := &in.ManagedKafka, &out.ManagedKafka
 		*out = new(ManagedKafkaSpec)
-		(*in).DeepCopyInto(*out)
-	}
-	if in.ExternalKafka != nil {
-		in, out := &in.ExternalKafka, &out.ExternalKafka
-		*out = new(KafkaConnection)
 		(*in).DeepCopyInto(*out)
 	}
 }

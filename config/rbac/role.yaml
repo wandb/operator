@@ -227,29 +227,6 @@ rules:
   verbs:
   - get
 - apiGroups:
-  - kafka.strimzi.io
-  resources:
-  - kafkanodepools
-  - kafkas
-  - kafkatopics
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - kafka.strimzi.io
-  resources:
-  - kafkanodepools/status
-  - kafkas/status
-  - kafkatopics/status
-  verbs:
-  - get
-  - update
-- apiGroups:
   - moco.cybozu.com
   resources:
   - mysqlclusters
