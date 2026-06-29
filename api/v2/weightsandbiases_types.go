@@ -285,6 +285,8 @@ type OidcSpec struct {
 	ClientSecret corev1.SecretKeySelector `json:"clientSecret,omitempty"`
 	IssuerUrl    corev1.SecretKeySelector `json:"issuerUrl,omitempty"`
 	AuthMethod   corev1.SecretKeySelector `json:"authMethod,omitempty"`
+
+	SessionLength string `json:"sessionLength,omitempty"`
 }
 
 type ManagedInfraSpec struct {

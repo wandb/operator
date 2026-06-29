@@ -1319,6 +1319,46 @@ func resolveCRFieldString(obj any, path string) (string, bool) {
 	return "", false
 }
 
+func resolveCRFieldSecretSelector(obj any, path string) (corev1.SecretKeySelector, bool) {
+	if obj == nil || path == "" {
+		return corev1.SecretKeySelector{}, false
+	}
+	b, err := json.Marshal(obj)
+	if err != nil {
+		return corev1.SecretKeySelector{}, false
+	}
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		return corev1.SecretKeySelector{}, false
+	}
+	cur := any(m)
+	for _, seg := range strings.Split(path, ".") {
+		mm, ok := cur.(map[string]any)
+		if !ok {
+			return corev1.SecretKeySelector{}, false
+		}
+		next, ok := mm[seg]
+		if !ok {
+			return corev1.SecretKeySelector{}, false
+		}
+		cur = next
+	}
+	// Re-marshal the terminal node into a SecretKeySelector so we honor the same
+	// json tags (name/key/optional) the CRD uses.
+	tb, err := json.Marshal(cur)
+	if err != nil {
+		return corev1.SecretKeySelector{}, false
+	}
+	var sel corev1.SecretKeySelector
+	if err := json.Unmarshal(tb, &sel); err != nil {
+		return corev1.SecretKeySelector{}, false
+	}
+	if sel.Name == "" || sel.Key == "" {
+		return corev1.SecretKeySelector{}, false
+	}
+	return sel, true
+}
+
 func inferState(
 	ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases,
 ) error {
