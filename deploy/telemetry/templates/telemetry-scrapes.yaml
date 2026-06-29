@@ -275,12 +275,12 @@ metadata:
 spec:
   selector:
     matchLabels:
-      strimzi.io/kind: Kafka
+      weightsandbiases.apps.wandb.com/component: kafka
   namespaceSelector:
     matchNames:
       - {{ include "telemetry.namespace" . }}
   podMetricsEndpoints:
-    - port: tcp-prometheus
+    - port: metrics
       path: /metrics
 ---
 apiVersion: operator.victoriametrics.com/v1beta1

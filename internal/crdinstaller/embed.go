@@ -29,9 +29,6 @@ var operatorCRDs embed.FS
 //go:embed crds/redis/*.yaml
 var redisCRDs embed.FS
 
-//go:embed crds/kafka/*.yaml
-var kafkaCRDs embed.FS
-
 //go:embed crds/clickhouse/*.yaml
 var clickhouseCRDs embed.FS
 
@@ -41,6 +38,5 @@ var clickhouseCRDs embed.FS
 // are requested.
 var optionalGroups = map[string]embed.FS{
 	"redis":      redisCRDs,
-	"kafka":      kafkaCRDs,
 	"clickhouse": clickhouseCRDs,
 }

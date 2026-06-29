@@ -8,9 +8,6 @@ dependencies:
 - name: redis-operator
   repository: https://ot-container-kit.github.io/helm-charts
   version: 0.22.2
-- name: strimzi-kafka-operator
-  repository: https://strimzi.io/charts
-  version: 0.50.0
 - name: seaweedfs-operator
   repository: https://seaweedfs.github.io/seaweedfs-operator/
   version: 0.1.24
@@ -29,5 +26,5 @@ dependencies:
 - name: telemetry
   repository: file://../telemetry
   version: 0.1.0
-digest: sha256:7766f7be7392e98f5557807fb711656d977ef7bc43a80f442edeed76c5bb385c
-generated: "2026-06-02T14:43:32.806879-07:00"
+digest: sha256:7dd459c8c7d1bc3d27cf9adba1c50765275fe0b459f8c551ab6c25ad5b7a7d67
+generated: "2026-06-22T15:23:59.623415-07:00"

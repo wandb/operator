@@ -23,10 +23,6 @@ dependencies:
     version: 0.22.2
     repository: https://ot-container-kit.github.io/helm-charts
     condition: redis-operator.enabled
-  - name: strimzi-kafka-operator
-    version: 0.50.0
-    repository: https://strimzi.io/charts
-    condition: strimzi-kafka-operator.enabled
   - name: seaweedfs-operator
     version: 0.1.24
     repository: https://seaweedfs.github.io/seaweedfs-operator/

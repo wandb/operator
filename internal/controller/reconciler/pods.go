@@ -48,7 +48,7 @@ func resolveInitContainers(app serverManifest.Application, envVars []v1.EnvVar, 
 			}
 			initContainer := v1.Container{
 				Name:            initContainerSpec.Name,
-				Image:           initContainerSpec.Image.GetImage(),
+				Image:           initContainerSpec.Image.GetImage(""),
 				Env:             envVars,
 				Args:            initContainerSpec.Args,
 				Command:         initContainerSpec.Command,
@@ -78,9 +78,9 @@ func resolveContainers(app serverManifest.Application, wandb *v2.WeightsAndBiase
 			}
 
 			// Choose image/args/command with sensible fallbacks to app-level values
-			img := app.Image.GetImage()
+			img := app.Image.GetImage("")
 			if container.Image.Repository != "" {
-				img = container.Image.GetImage()
+				img = container.Image.GetImage("")
 			}
 			args := app.Args
 			if len(container.Args) > 0 {
@@ -138,7 +138,7 @@ func resolveContainers(app serverManifest.Application, wandb *v2.WeightsAndBiase
 		// Backward-compatible single-container behavior
 		c := v1.Container{
 			Name:            app.Name,
-			Image:           app.Image.GetImage(),
+			Image:           app.Image.GetImage(""),
 			Env:             envVars,
 			Args:            app.Args,
 			Command:         app.Command,
