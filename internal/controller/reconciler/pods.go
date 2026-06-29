@@ -16,6 +16,13 @@ import (
 
 const appWorkloadCapabilityAll v1.Capability = "ALL"
 
+const (
+	defaultStartupProbePeriodSeconds    int32 = 10
+	defaultStartupProbeTimeoutSeconds   int32 = 1
+	defaultStartupProbeFailureThreshold int32 = 30
+	defaultStartupProbeSuccessThreshold int32 = 1
+)
+
 func resolvePodSecurityContext() *v1.PodSecurityContext {
 	return &v1.PodSecurityContext{
 		SeccompProfile: resolveRuntimeDefaultSeccompProfile(),
@@ -36,6 +43,36 @@ func resolveRuntimeDefaultSeccompProfile() *v1.SeccompProfile {
 	return &v1.SeccompProfile{
 		Type: v1.SeccompProfileTypeRuntimeDefault,
 	}
+}
+
+func normalizeHTTPGetProbePort(probe *v1.Probe, ports []serverManifest.ContainerPort) *v1.Probe {
+	if probe == nil || probe.HTTPGet == nil {
+		return nil
+	}
+
+	normalized := probe.DeepCopy()
+	if normalized.HTTPGet.Port.StrVal == "" && normalized.HTTPGet.Port.IntVal == 0 {
+		if len(ports) > 0 && normalized.HTTPGet.Path != "" {
+			normalized.HTTPGet.Port = intstr.FromString(ports[0].Name)
+		}
+	}
+	return normalized
+}
+
+func defaultStartupProbeFromLiveness(container serverManifest.ContainerSpec) *v1.Probe {
+	if container.StartupProbe != nil || container.LivenessProbe == nil || container.LivenessProbe.HTTPGet == nil {
+		return nil
+	}
+
+	startupProbe := container.LivenessProbe.DeepCopy()
+	startupProbe.PeriodSeconds = defaultStartupProbePeriodSeconds
+	if startupProbe.TimeoutSeconds < defaultStartupProbeTimeoutSeconds {
+		startupProbe.TimeoutSeconds = defaultStartupProbeTimeoutSeconds
+	}
+	startupProbe.FailureThreshold = defaultStartupProbeFailureThreshold
+	startupProbe.SuccessThreshold = defaultStartupProbeSuccessThreshold
+
+	return startupProbe
 }
 
 func resolveInitContainers(app serverManifest.Application, envVars []v1.EnvVar, volumeMounts []v1.VolumeMount) []v1.Container {
@@ -107,29 +144,18 @@ func resolveContainers(app serverManifest.Application, wandb *v2.WeightsAndBiase
 			}
 
 			// Default HTTPGet probe ports to the first declared port name when missing
-			if container.StartupProbe != nil && container.StartupProbe.HTTPGet != nil {
-				if container.StartupProbe.HTTPGet.Port.StrVal == "" && container.StartupProbe.HTTPGet.Port.IntVal == 0 {
-					if len(container.Ports) > 0 && container.StartupProbe.HTTPGet.Path != "" {
-						container.StartupProbe.HTTPGet = &v1.HTTPGetAction{Path: container.StartupProbe.HTTPGet.Path, Port: intstr.FromString(container.Ports[0].Name)}
-					}
-				}
-				c.StartupProbe = container.StartupProbe
+			startupProbe := container.StartupProbe
+			if startupProbe == nil {
+				startupProbe = defaultStartupProbeFromLiveness(container)
 			}
-			if container.LivenessProbe != nil && container.LivenessProbe.HTTPGet != nil {
-				if container.LivenessProbe.HTTPGet.Port.StrVal == "" && container.LivenessProbe.HTTPGet.Port.IntVal == 0 {
-					if len(container.Ports) > 0 && container.LivenessProbe.HTTPGet.Path != "" {
-						container.LivenessProbe.HTTPGet = &v1.HTTPGetAction{Path: container.LivenessProbe.HTTPGet.Path, Port: intstr.FromString(container.Ports[0].Name)}
-					}
-				}
-				c.LivenessProbe = container.LivenessProbe
+			if startupProbe := normalizeHTTPGetProbePort(startupProbe, container.Ports); startupProbe != nil {
+				c.StartupProbe = startupProbe
 			}
-			if container.ReadinessProbe != nil && container.ReadinessProbe.HTTPGet != nil {
-				if container.ReadinessProbe.HTTPGet.Port.StrVal == "" && container.ReadinessProbe.HTTPGet.Port.IntVal == 0 {
-					if len(container.Ports) > 0 && container.ReadinessProbe.HTTPGet.Path != "" {
-						container.ReadinessProbe.HTTPGet = &v1.HTTPGetAction{Path: container.ReadinessProbe.HTTPGet.Path, Port: intstr.FromString(container.Ports[0].Name)}
-					}
-				}
-				c.ReadinessProbe = container.ReadinessProbe
+			if livenessProbe := normalizeHTTPGetProbePort(container.LivenessProbe, container.Ports); livenessProbe != nil {
+				c.LivenessProbe = livenessProbe
+			}
+			if readinessProbe := normalizeHTTPGetProbePort(container.ReadinessProbe, container.Ports); readinessProbe != nil {
+				c.ReadinessProbe = readinessProbe
 			}
 
 			containers = append(containers, c)
