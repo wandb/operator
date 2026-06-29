@@ -6,6 +6,7 @@ import (
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/logx"
+	"github.com/wandb/operator/pkg/wandb/manifest"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -19,6 +20,7 @@ func WriteState(
 	ctx context.Context,
 	cl client.Client,
 	wandb *apiv2.WeightsAndBiases,
+	mfst manifest.Manifest,
 ) []metav1.Condition {
 	ctx, log := logx.WithSlog(ctx, logx.Kafka)
 
@@ -48,11 +50,11 @@ func WriteState(
 	if err != nil {
 		return translateError(err)
 	}
-	etcdApp, err := ToEtcdApplication(wandb, nsnBuilder, cl.Scheme())
+	etcdApp, err := ToEtcdApplication(wandb, nsnBuilder, cl.Scheme(), mfst)
 	if err != nil {
 		return translateError(err)
 	}
-	bufstreamApp, err := ToBufstreamApplication(wandb, nsnBuilder, storage, cl.Scheme())
+	bufstreamApp, err := ToBufstreamApplication(wandb, nsnBuilder, storage, cl.Scheme(), mfst)
 	if err != nil {
 		return translateError(err)
 	}

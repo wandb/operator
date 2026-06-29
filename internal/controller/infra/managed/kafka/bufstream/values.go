@@ -3,19 +3,22 @@ package bufstream
 const (
 	KafkaModuleName = "kafka"
 
-	// BufstreamImage is the Bufstream broker image. Brokers are stateless; all
-	// data lives in object storage and metadata in etcd. Buf publishes images to
-	// this public OCI registry (Docker Hub mirrors are no longer maintained).
-	BufstreamImage = "us-docker.pkg.dev/buf-images-1/buf/images/bufstream:0.4.15"
+	// TODO: remove these hardcoded defaults once all supported manifest versions
+	// supply kafka.image and kafka.images.{etcd,bucketEnsure}.
 
-	// EtcdImage is the metadata store image. Uses the official upstream etcd
-	// image, which is configured via native ETCD_* environment variables.
-	EtcdImage = "quay.io/coreos/etcd:v3.5.31"
+	// defaultBufstreamImage is the Bufstream broker image. Brokers are stateless;
+	// all data lives in object storage and metadata in etcd. Buf publishes images
+	// to this public OCI registry (Docker Hub mirrors are no longer maintained).
+	defaultBufstreamImage = "us-docker.pkg.dev/buf-images-1/buf/images/bufstream:0.4.15"
 
-	// BucketEnsureImage runs a one-shot init container that creates the
+	// defaultEtcdImage is the metadata store image. Uses the official upstream
+	// etcd image, which is configured via native ETCD_* environment variables.
+	defaultEtcdImage = "quay.io/coreos/etcd:v3.5.31"
+
+	// defaultBucketEnsureImage runs a one-shot init container that creates the
 	// object-store bucket Bufstream expects, since Bufstream does not create it
 	// itself and reads from it on startup.
-	BucketEnsureImage = "amazon/aws-cli:2.35.10"
+	defaultBucketEnsureImage = "amazon/aws-cli:2.35.10"
 
 	// Kafka-compatible listener exposed by Bufstream.
 	KafkaListenerPort = 9092

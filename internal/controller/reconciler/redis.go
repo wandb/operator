@@ -9,6 +9,7 @@ import (
 	externalredis "github.com/wandb/operator/internal/controller/infra/external/redis"
 	"github.com/wandb/operator/internal/controller/infra/managed/redis/opstree"
 	"github.com/wandb/operator/pkg/utils"
+	"github.com/wandb/operator/pkg/wandb/manifest"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -20,9 +21,10 @@ func redisWriteState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
+	mfst manifest.Manifest,
 ) []metav1.Condition {
 	if wandb.Spec.Redis.ManagedRedis != nil {
-		return managedRedisWriteState(ctx, client, wandb)
+		return managedRedisWriteState(ctx, client, wandb, mfst)
 	}
 	if wandb.Spec.Redis.ExternalRedis != nil {
 		return externalRedisWriteState(ctx, client, wandb)
@@ -97,13 +99,14 @@ func managedRedisWriteState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
+	mfst manifest.Manifest,
 ) []metav1.Condition {
 	spec := wandb.Spec.Redis.ManagedRedis
 
 	log := ctrl.LoggerFrom(ctx)
 	var specNamespacedName = managedRedisSpecNamespacedName(spec)
 
-	standaloneDesired, err := opstree.ToRedisStandaloneVendorSpec(ctx, wandb, client.Scheme())
+	standaloneDesired, err := opstree.ToRedisStandaloneVendorSpec(ctx, wandb, client.Scheme(), mfst)
 	if err != nil {
 		log.Error(err, "failed to translate redis standalone spec")
 		return []metav1.Condition{
@@ -115,7 +118,7 @@ func managedRedisWriteState(
 		}
 	}
 
-	sentinelDesired, err := opstree.ToRedisSentinelVendorSpec(ctx, wandb, client.Scheme())
+	sentinelDesired, err := opstree.ToRedisSentinelVendorSpec(ctx, wandb, client.Scheme(), mfst)
 	if err != nil {
 		log.Error(err, "failed to translate redis sentinel spec")
 		return []metav1.Condition{
@@ -127,7 +130,7 @@ func managedRedisWriteState(
 		}
 	}
 
-	replicationDesired, err := opstree.ToRedisReplicationVendorSpec(ctx, wandb, client.Scheme())
+	replicationDesired, err := opstree.ToRedisReplicationVendorSpec(ctx, wandb, client.Scheme(), mfst)
 	if err != nil {
 		log.Error(err, "failed to translate redis replication spec")
 		return []metav1.Condition{

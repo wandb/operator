@@ -9,6 +9,7 @@ import (
 	externalch "github.com/wandb/operator/internal/controller/infra/external/clickhouse"
 	"github.com/wandb/operator/internal/controller/infra/managed/clickhouse/altinity"
 	"github.com/wandb/operator/pkg/utils"
+	"github.com/wandb/operator/pkg/wandb/manifest"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -20,9 +21,10 @@ func clickHouseWriteState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
+	mfst manifest.Manifest,
 ) []metav1.Condition {
 	if wandb.Spec.ClickHouse.ManagedClickHouse != nil {
-		return managedClickHouseWriteState(ctx, client, wandb)
+		return managedClickHouseWriteState(ctx, client, wandb, mfst)
 	}
 	if wandb.Spec.ClickHouse.ExternalClickHouse != nil {
 		return externalClickHouseWriteState(ctx, client, wandb)
@@ -97,12 +99,13 @@ func managedClickHouseWriteState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
+	mfst manifest.Manifest,
 ) []metav1.Condition {
 	spec := wandb.Spec.ClickHouse.ManagedClickHouse
 
 	var specNamespacedName = managedClickHouseSpecNamespacedName(spec)
 	log := ctrl.LoggerFrom(ctx)
-	desired, err := altinity.ToClickHouseVendorSpec(ctx, wandb, client.Scheme())
+	desired, err := altinity.ToClickHouseVendorSpec(ctx, wandb, client.Scheme(), mfst)
 	if err != nil {
 		log.Error(err, "failed to translate ClickHouse spec to vendor spec")
 		return []metav1.Condition{

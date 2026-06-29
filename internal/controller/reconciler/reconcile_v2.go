@@ -277,11 +277,11 @@ func Reconcile(
 
 	/////////////////////////
 	// Write Infra State
-	redisConditions := redisWriteState(ctx, client, wandb)
-	mysqlConditions := mysqlWriteState(ctx, client, wandb)
-	kafkaConditions := kafkaWriteState(ctx, client, wandb)
-	objectStoreConditions, objectStoreConnection := objectStoreWriteState(ctx, client, wandb)
-	clickHouseConditions := clickHouseWriteState(ctx, client, wandb)
+	redisConditions := redisWriteState(ctx, client, wandb, manifest)
+	mysqlConditions := mysqlWriteState(ctx, client, wandb, manifest)
+	kafkaConditions := kafkaWriteState(ctx, client, wandb, manifest)
+	objectStoreConditions, objectStoreConnection := objectStoreWriteState(ctx, client, wandb, manifest)
+	clickHouseConditions := clickHouseWriteState(ctx, client, wandb, manifest)
 
 	/////////////////////////
 	// Read Infra State
@@ -1122,7 +1122,7 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 							Containers: []corev1.Container{
 								{
 									Name:         "migrate",
-									Image:        migrationTask.Image.GetImage(),
+									Image:        migrationTask.Image.GetImage(""),
 									Args:         migrationTask.Args,
 									Command:      migrationTask.Command,
 									Env:          envVars,

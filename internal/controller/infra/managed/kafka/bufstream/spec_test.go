@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/pkg/wandb/manifest"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -38,7 +39,7 @@ func TestToEtcdApplication(t *testing.T) {
 	wandb := testWandb()
 	nsn := CreateNsNameBuilder(types.NamespacedName{Namespace: "default", Name: "wandb-kafka"})
 
-	app, err := ToEtcdApplication(wandb, nsn, testScheme(t))
+	app, err := ToEtcdApplication(wandb, nsn, testScheme(t), manifest.Manifest{})
 	require.NoError(t, err)
 
 	require.Equal(t, "wandb-kafka-etcd", app.Name)
@@ -47,7 +48,7 @@ func TestToEtcdApplication(t *testing.T) {
 	require.Equal(t, EtcdDataVolumeName, app.Spec.VolumeClaimTemplates[0].Name)
 	require.Equal(t, "20Gi", app.Spec.VolumeClaimTemplates[0].Spec.Resources.Requests.Storage().String())
 	require.Len(t, app.Spec.PodTemplate.Spec.Containers, 1)
-	require.Equal(t, EtcdImage, app.Spec.PodTemplate.Spec.Containers[0].Image)
+	require.Equal(t, defaultEtcdImage, app.Spec.PodTemplate.Spec.Containers[0].Image)
 	require.NotNil(t, app.Spec.ServiceTemplate)
 }
 
@@ -55,7 +56,7 @@ func TestToEtcdApplicationHA(t *testing.T) {
 	wandb := testWandb()
 	nsn := CreateNsNameBuilder(types.NamespacedName{Namespace: "default", Name: "wandb-kafka"})
 
-	app, err := ToEtcdApplication(wandb, nsn, testScheme(t))
+	app, err := ToEtcdApplication(wandb, nsn, testScheme(t), manifest.Manifest{})
 	require.NoError(t, err)
 
 	// Odd-sized HA cluster fronted by a headless service.
@@ -105,7 +106,7 @@ func TestToBufstreamApplication(t *testing.T) {
 	wandb := testWandb()
 	nsn := CreateNsNameBuilder(types.NamespacedName{Namespace: "default", Name: "wandb-kafka"})
 
-	app, err := ToBufstreamApplication(wandb, nsn, testStorage(), testScheme(t))
+	app, err := ToBufstreamApplication(wandb, nsn, testStorage(), testScheme(t), manifest.Manifest{})
 	require.NoError(t, err)
 
 	require.Equal(t, "wandb-kafka", app.Name)
@@ -117,7 +118,7 @@ func TestToBufstreamApplication(t *testing.T) {
 	require.Len(t, app.Spec.PodTemplate.Spec.Containers, 1)
 
 	container := app.Spec.PodTemplate.Spec.Containers[0]
-	require.Equal(t, BufstreamImage, container.Image)
+	require.Equal(t, defaultBufstreamImage, container.Image)
 
 	envNames := map[string]bool{}
 	for _, e := range container.Env {
@@ -133,7 +134,7 @@ func TestToBufstreamApplicationDefaultsReplicas(t *testing.T) {
 	wandb.Spec.Kafka.ManagedKafka.Replicas = 0
 	nsn := CreateNsNameBuilder(types.NamespacedName{Namespace: "default", Name: "wandb-kafka"})
 
-	app, err := ToBufstreamApplication(wandb, nsn, testStorage(), testScheme(t))
+	app, err := ToBufstreamApplication(wandb, nsn, testStorage(), testScheme(t), manifest.Manifest{})
 	require.NoError(t, err)
 	require.Equal(t, int32(BufstreamReplicas), *app.Spec.Replicas)
 }

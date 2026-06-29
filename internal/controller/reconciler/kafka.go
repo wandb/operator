@@ -26,9 +26,10 @@ func kafkaWriteState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
+	mfst manifest.Manifest,
 ) []metav1.Condition {
 	if wandb.Spec.Kafka.ManagedKafka != nil {
-		return managedKafkaWriteState(ctx, client, wandb)
+		return managedKafkaWriteState(ctx, client, wandb, mfst)
 	}
 	return nil
 }
@@ -91,6 +92,7 @@ func managedKafkaWriteState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
+	mfst manifest.Manifest,
 ) []metav1.Condition {
 	spec := wandb.Spec.Kafka.ManagedKafka
 	specNamespacedName := managedKafkaSpecNamespacedName(spec)
@@ -99,7 +101,7 @@ func managedKafkaWriteState(
 		return conditions
 	}
 
-	return bufstream.WriteState(ctx, client, wandb)
+	return bufstream.WriteState(ctx, client, wandb, mfst)
 }
 
 func managedKafkaReadState(
