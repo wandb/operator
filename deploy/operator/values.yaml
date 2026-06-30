@@ -121,6 +121,9 @@ redis-operator:
 
 seaweedfs-operator:
   enabled: true
+  podSecurityContext:
+    seccompProfile:
+      type: RuntimeDefault
   webhook:
     enabled: false
 
@@ -152,13 +155,7 @@ prometheus-operator-crds:
 
 altinity-clickhouse-operator:
   crdHook:
-    image:
-      repository: alpine/k8s
-      tag: 1.35.4
-    resources:
-      requests:
-        cpu: 100m
-        memory: 128Mi
+    enabled: false
   enabled: true
   podSecurityContext:
     runAsNonRoot: true
@@ -192,6 +189,9 @@ victoria-metrics-operator:
   # Helm dependency conditions are boolean-only, so full/forward installs
   # must opt into this dependency explicitly or via a preset values file.
   enabled: false
+  podSecurityContext:
+    seccompProfile:
+      type: RuntimeDefault
   crds:
     # Install Victoria CRDs through Helm's CRD phase so telemetry resources
     # in this chart can be created in the same release.
@@ -201,6 +201,10 @@ grafana-operator:
   # Helm dependency conditions are boolean-only, so full installs
   # must opt into this dependency explicitly or via a preset values file.
   enabled: false
+  podSecurityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
 
 telemetry:
   # off: disable telemetry collection

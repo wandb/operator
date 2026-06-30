@@ -1,6 +1,6 @@
 {{- /*
   Pre-install / pre-upgrade Helm hook Job that installs CRDs for the operator
-  itself and any enabled subchart whose CRDs we manage (redis, kafka, etc.).
+  itself and any enabled subchart whose CRDs we manage (redis, clickhouse, etc.).
 
   The Job runs the operator image's /crd-installer binary, which embeds the
   CRD YAML at build time and applies it via server-side apply with field

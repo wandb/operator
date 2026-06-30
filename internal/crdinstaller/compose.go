@@ -29,7 +29,7 @@ import (
 )
 
 // Options carries the chart-computed values that get plugged into the
-// operator-owned CRDs at install time. Upstream CRDs (redis) are
+// operator-owned CRDs at install time. Upstream CRDs (redis, clickhouse) are
 // applied as-is and ignore these fields.
 type Options struct {
 	// CertInjectReference is the verbatim value for the
@@ -46,7 +46,7 @@ type Options struct {
 	WebhookServiceNamespace string
 
 	// Groups is the set of optional CRD groups to install in addition to
-	// the operator's own CRDs (e.g. {"redis"}). Unknown values are
+	// the operator's own CRDs (e.g. {"redis", "clickhouse"}). Unknown values are
 	// rejected up-front by ParseGroups.
 	Groups []string
 }

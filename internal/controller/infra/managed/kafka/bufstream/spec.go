@@ -5,6 +5,7 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
+	"github.com/wandb/operator/pkg/utils"
 	"github.com/wandb/operator/pkg/wandb/manifest"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -16,6 +17,14 @@ import (
 )
 
 const defaultEtcdStorageSize = "10Gi"
+
+const (
+	kafkaRunAsUser  int64 = 65532
+	kafkaRunAsGroup int64 = 65532
+	kafkaFSGroup    int64 = 65532
+
+	kafkaCapabilityAll corev1.Capability = "ALL"
+)
 
 const (
 	// Keys for the manifest's kafka.images map for the Bufstream-specific
@@ -58,6 +67,44 @@ func BuildWandbKafkaLabels(wandb *apiv2.WeightsAndBiases) map[string]string {
 
 func ToKafkaOnDeleteRule(wandb *apiv2.WeightsAndBiases, retentionPolicy apiv2.RetentionPolicy) common.OnDeleteRule {
 	return common.ToOnDeleteRule(wandb, retentionPolicy, KafkaModuleName)
+}
+
+func kafkaPodSecurityContext() *corev1.PodSecurityContext {
+	if utils.IsOpenShift() {
+		return &corev1.PodSecurityContext{
+			RunAsNonRoot:   ptr.To(true),
+			SeccompProfile: kafkaRuntimeDefaultSeccompProfile(),
+		}
+	}
+
+	return &corev1.PodSecurityContext{
+		RunAsUser:           ptr.To(kafkaRunAsUser),
+		RunAsGroup:          ptr.To(kafkaRunAsGroup),
+		RunAsNonRoot:        ptr.To(true),
+		FSGroup:             ptr.To(kafkaFSGroup),
+		FSGroupChangePolicy: ptr.To(corev1.FSGroupChangeOnRootMismatch),
+		SeccompProfile:      kafkaRuntimeDefaultSeccompProfile(),
+	}
+}
+
+func kafkaContainerSecurityContext() *corev1.SecurityContext {
+	securityContext := &corev1.SecurityContext{
+		RunAsNonRoot:             ptr.To(true),
+		AllowPrivilegeEscalation: ptr.To(false),
+		Capabilities: &corev1.Capabilities{
+			Drop: []corev1.Capability{kafkaCapabilityAll},
+		},
+		SeccompProfile: kafkaRuntimeDefaultSeccompProfile(),
+	}
+	if !utils.IsOpenShift() {
+		securityContext.RunAsUser = ptr.To(kafkaRunAsUser)
+		securityContext.RunAsGroup = ptr.To(kafkaRunAsGroup)
+	}
+	return securityContext
+}
+
+func kafkaRuntimeDefaultSeccompProfile() *corev1.SeccompProfile {
+	return &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault}
 }
 
 // sameNamespace reports whether the managed Kafka resources live in the same
@@ -200,13 +247,15 @@ func ToEtcdApplication(
 			},
 			PodTemplate: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
-					Affinity:    spreadAffinity(wandb, infraSpec.ManagedInfraSpec, labels),
-					Tolerations: tolerations(wandb, infraSpec.ManagedInfraSpec),
+					SecurityContext: kafkaPodSecurityContext(),
+					Affinity:        spreadAffinity(wandb, infraSpec.ManagedInfraSpec, labels),
+					Tolerations:     tolerations(wandb, infraSpec.ManagedInfraSpec),
 					Containers: []corev1.Container{
 						{
-							Name:  "etcd",
-							Image: EtcdImage(mfst.Kafka.Images[imageKeyEtcd]),
-							Env:   etcdEnv,
+							Name:            "etcd",
+							Image:           EtcdImage(mfst.Kafka.Images[imageKeyEtcd]),
+							Env:             etcdEnv,
+							SecurityContext: kafkaContainerSecurityContext(),
 							Ports: []corev1.ContainerPort{
 								{Name: "client", ContainerPort: EtcdClientPort},
 								{Name: "peer", ContainerPort: EtcdPeerPort},
@@ -310,10 +359,11 @@ func bucketEnsureContainer(nsnBuilder *NsNameBuilder, storage storageConnInfo, i
 		storage.Endpoint, storage.Bucket, storage.Endpoint, storage.Bucket,
 	)
 	return corev1.Container{
-		Name:    "ensure-bucket",
-		Image:   BucketEnsureImage(img),
-		Command: []string{"/bin/sh", "-c"},
-		Args:    []string{script},
+		Name:            "ensure-bucket",
+		Image:           BucketEnsureImage(img),
+		Command:         []string{"/bin/sh", "-c"},
+		Args:            []string{script},
+		SecurityContext: kafkaContainerSecurityContext(),
 		Env: []corev1.EnvVar{
 			{Name: "AWS_REGION", Value: region},
 			{
@@ -405,9 +455,10 @@ func ToBufstreamApplication(
 	replicas := effectiveBufstreamReplicas(infraSpec.Replicas)
 
 	container := corev1.Container{
-		Name:  "bufstream",
-		Image: BufstreamImage(mfst.Kafka.Image),
-		Args:  []string{"serve", "--config", fmt.Sprintf("%s/%s", ConfigMountPath, ConfigFileName)},
+		Name:            "bufstream",
+		Image:           BufstreamImage(mfst.Kafka.Image),
+		Args:            []string{"serve", "--config", fmt.Sprintf("%s/%s", ConfigMountPath, ConfigFileName)},
+		SecurityContext: kafkaContainerSecurityContext(),
 		Ports: []corev1.ContainerPort{
 			{Name: "kafka", ContainerPort: KafkaListenerPort},
 			{Name: "metrics", ContainerPort: DebugPort},
@@ -441,10 +492,11 @@ func ToBufstreamApplication(
 			},
 			PodTemplate: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
-					Affinity:       spreadAffinity(wandb, infraSpec.ManagedInfraSpec, labels),
-					Tolerations:    tolerations(wandb, infraSpec.ManagedInfraSpec),
-					InitContainers: initContainers,
-					Containers:     []corev1.Container{container},
+					SecurityContext: kafkaPodSecurityContext(),
+					Affinity:        spreadAffinity(wandb, infraSpec.ManagedInfraSpec, labels),
+					Tolerations:     tolerations(wandb, infraSpec.ManagedInfraSpec),
+					InitContainers:  initContainers,
+					Containers:      []corev1.Container{container},
 					Volumes: []corev1.Volume{
 						{
 							Name: "config",
