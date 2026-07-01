@@ -1122,6 +1122,11 @@ spec:
                         type: string
                     type: object
                 type: object
+              global:
+                properties:
+                  imageRegistry:
+                    type: string
+                type: object
               kafka:
                 properties:
                   managedKafka:

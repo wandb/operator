@@ -36,7 +36,7 @@ var _ = Describe("ClickHouse vendor specs", func() {
 
 		Expect(podSpec.Containers).To(HaveLen(1))
 		container := podSpec.Containers[0]
-		Expect(container.Image).To(Equal(ClickHouseImage(manifest.ImageRef{})))
+		Expect(container.Image).To(Equal(ClickHouseImage(manifest.ImageRef{}, "")))
 		Expect(container.Resources.Requests[corev1.ResourceCPU]).To(Equal(resource.MustParse("500m")))
 		expectClickHouseDefaultContainerSecurityContext(container.SecurityContext)
 		expectClickHouseWritableMount(container.VolumeMounts, clickHouseTmpVolumeName, clickHouseTmpMountPath)

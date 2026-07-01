@@ -25,7 +25,7 @@ var _ = Describe("SeaweedFS vendor specs", func() {
 		Expect(seaweed.Name).To(Equal(SeaweedName("object-store")))
 		Expect(seaweed.Namespace).To(Equal("wandb"))
 		Expect(seaweed.Labels).To(HaveKeyWithValue("app", SeaweedName("object-store")))
-		Expect(seaweed.Spec.Image).To(Equal(SeaweedImage(manifest.ImageRef{})))
+		Expect(seaweed.Spec.Image).To(Equal(SeaweedImage(manifest.ImageRef{}, "")))
 
 		expectSeaweedWritableVolume(seaweed.Spec.Master.Volumes)
 		expectSeaweedWritableMount(seaweed.Spec.Master.VolumeMounts)
@@ -33,6 +33,26 @@ var _ = Describe("SeaweedFS vendor specs", func() {
 		expectSeaweedWritableMount(seaweed.Spec.Volume.VolumeMounts)
 		expectSeaweedWritableVolume(seaweed.Spec.Filer.Volumes)
 		expectSeaweedWritableMount(seaweed.Spec.Filer.VolumeMounts)
+	})
+
+	It("retargets the image to spec.global.imageRegistry when set", func() {
+		wandb := seaweedWandb()
+		wandb.Spec.Global.ImageRegistry = "reg.corp:5000"
+
+		mfst := manifest.Manifest{
+			Bucket: map[string]manifest.InfraConfig{
+				"default": {
+					Images: map[string]manifest.ImageRef{
+						"seaweedfs": {Repository: "chrislusf/seaweedfs", Tag: "latest"},
+					},
+				},
+			},
+		}
+
+		seaweed, err := ToObjectStoreVendorSpec(context.Background(), wandb, seaweedScheme(), mfst)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(seaweed).NotTo(BeNil())
+		Expect(seaweed.Spec.Image).To(Equal("reg.corp:5000/chrislusf/seaweedfs:latest"))
 	})
 
 	It("keeps the filer writable data path explicit", func() {

@@ -545,7 +545,7 @@ func reconcileApplications(
 
 		containers := resolveContainers(app, wandb, envVars, volumeMounts)
 
-		initContainers := resolveInitContainers(app, envVars, volumeMounts)
+		initContainers := resolveInitContainers(app, wandb, envVars, volumeMounts)
 
 		application := &apiv2.Application{}
 		err = client.Get(ctx, types.NamespacedName{Name: app.Name, Namespace: wandb.Namespace}, application)
