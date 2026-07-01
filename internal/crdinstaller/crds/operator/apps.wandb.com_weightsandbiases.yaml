@@ -1122,6 +1122,11 @@ spec:
                         type: string
                     type: object
                 type: object
+              global:
+                properties:
+                  imageRegistry:
+                    type: string
+                type: object
               kafka:
                 properties:
                   managedKafka:
@@ -3802,6 +3807,8 @@ spec:
                         - key
                         type: object
                         x-kubernetes-map-type: atomic
+                      sessionLength:
+                        type: string
                     type: object
                   serviceAccount:
                     properties:

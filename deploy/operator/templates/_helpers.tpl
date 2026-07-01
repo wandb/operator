@@ -15,6 +15,9 @@ installed regardless. Add new groups here as new subchart-CRD dependencies land.
 {{- if (dig "redis-operator" "enabled" false .Values.AsMap) -}}
   {{- $groups = append $groups "redis" -}}
 {{- end -}}
+{{- if (dig "altinity-clickhouse-operator" "enabled" false .Values.AsMap) -}}
+  {{- $groups = append $groups "clickhouse" -}}
+{{- end -}}
 {{- join "," $groups -}}
 {{- end -}}
 

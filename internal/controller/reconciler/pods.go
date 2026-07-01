@@ -38,7 +38,7 @@ func resolveRuntimeDefaultSeccompProfile() *v1.SeccompProfile {
 	}
 }
 
-func resolveInitContainers(app serverManifest.Application, envVars []v1.EnvVar, volumeMounts []v1.VolumeMount) []v1.Container {
+func resolveInitContainers(app serverManifest.Application, wandb *v2.WeightsAndBiases, envVars []v1.EnvVar, volumeMounts []v1.VolumeMount) []v1.Container {
 	initContainers := []v1.Container{}
 
 	if app.InitContainers != nil {
@@ -48,7 +48,7 @@ func resolveInitContainers(app serverManifest.Application, envVars []v1.EnvVar, 
 			}
 			initContainer := v1.Container{
 				Name:            initContainerSpec.Name,
-				Image:           initContainerSpec.Image.GetImage(""),
+				Image:           initContainerSpec.Image.GetImage(wandb.Spec.Global.ImageRegistry),
 				Env:             envVars,
 				Args:            initContainerSpec.Args,
 				Command:         initContainerSpec.Command,
@@ -78,9 +78,9 @@ func resolveContainers(app serverManifest.Application, wandb *v2.WeightsAndBiase
 			}
 
 			// Choose image/args/command with sensible fallbacks to app-level values
-			img := app.Image.GetImage("")
+			img := app.Image.GetImage(wandb.Spec.Global.ImageRegistry)
 			if container.Image.Repository != "" {
-				img = container.Image.GetImage("")
+				img = container.Image.GetImage(wandb.Spec.Global.ImageRegistry)
 			}
 			args := app.Args
 			if len(container.Args) > 0 {
@@ -138,7 +138,7 @@ func resolveContainers(app serverManifest.Application, wandb *v2.WeightsAndBiase
 		// Backward-compatible single-container behavior
 		c := v1.Container{
 			Name:            app.Name,
-			Image:           app.Image.GetImage(""),
+			Image:           app.Image.GetImage(wandb.Spec.Global.ImageRegistry),
 			Env:             envVars,
 			Args:            app.Args,
 			Command:         app.Command,
@@ -399,7 +399,12 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 					// No field specified; nothing to resolve
 					continue
 				}
-				if val, ok := resolveCRFieldString(wandb, src.Field); ok {
+				// secret component
+				if sel, ok := resolveCRFieldSecretSelector(wandb, src.Field); ok {
+					singleSecretSelector = sel
+					secretOnlyCount++
+					addSecretComponent(sel, idx)
+				} else if val, ok := resolveCRFieldString(wandb, src.Field); ok {
 					// Treat as a literal component (not secret-backed)
 					logger.Debug("field found in CR", "cr", wandb.Name, "field", src.Field, "value", val)
 					components = append(components, val)

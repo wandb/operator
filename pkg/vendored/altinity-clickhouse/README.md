@@ -40,7 +40,7 @@ The Makefile's `generate` target only processes `./api/v1` and `./api/v2`, expli
 - `pkg/vendored/percona-operator/...`
 - `pkg/vendored/minio-operator/...`
 - `pkg/vendored/redis-operator/...`
-- `pkg/vendored/strimzi-kafka/...`
+- `pkg/vendored/seaweedfs-operator/...`
 
 ### DeepCopy Mutex Fixes
 

@@ -86,7 +86,7 @@ type KafkaTopicDef struct {
 type KafkaConfig struct {
 	Sizing map[v2.Size]KafkaSizingConfig `yaml:"sizing"`
 	Topics []KafkaTopic                  `yaml:"topics"`
-	// Image is the primary Kafka broker image (Strimzi Kafka or Bufstream).
+	// Image is the primary managed Kafka broker image.
 	Image ImageRef `yaml:"image,omitempty"`
 	// Images holds the auxiliary images used by the managed Kafka deployment
 	// keyed by component (e.g. "etcd", "bucketEnsure" for Bufstream). Keeping

@@ -30,47 +30,37 @@ const (
 	DefaultSentinelGroup     = "gorilla"
 	DefaultRedisExporterPort = 9121
 
-	// TODO: remove these hardcoded defaults once all supported manifest versions
-	// supply redis.<instance>.images.{standalone,replication,sentinel,exporter}.
 	defaultRedisStandaloneImage  = "quay.io/opstree/redis:v7.0.15"
 	defaultRedisReplicationImage = "quay.io/opstree/redis:v7.0.15"
 	defaultRedisSentinelImage    = "quay.io/opstree/redis-sentinel:v7.0.12"
 	defaultRedisExporterImage    = "quay.io/opstree/redis-exporter:v1.44.0"
 )
 
-func RedisStandaloneImage(img manifest.ImageRef) string {
-	globalImageRegistry := "" // TODO: source from wandb.Spec.Global.ImageRegistry once that field exists.
+func RedisStandaloneImage(img manifest.ImageRef, globalImageRegistry string) string {
 	if out := img.GetImage(globalImageRegistry); out != "" {
 		return out
 	}
-	// Fallback for older manifests that don't supply the image.
 	return defaultRedisStandaloneImage
 }
 
-func RedisReplicationImage(img manifest.ImageRef) string {
-	globalImageRegistry := "" // TODO: source from wandb.Spec.Global.ImageRegistry once that field exists.
+func RedisReplicationImage(img manifest.ImageRef, globalImageRegistry string) string {
 	if out := img.GetImage(globalImageRegistry); out != "" {
 		return out
 	}
-	// Fallback for older manifests that don't supply the image.
 	return defaultRedisReplicationImage
 }
 
-func RedisSentinelImage(img manifest.ImageRef) string {
-	globalImageRegistry := "" // TODO: source from wandb.Spec.Global.ImageRegistry once that field exists.
+func RedisSentinelImage(img manifest.ImageRef, globalImageRegistry string) string {
 	if out := img.GetImage(globalImageRegistry); out != "" {
 		return out
 	}
-	// Fallback for older manifests that don't supply the image.
 	return defaultRedisSentinelImage
 }
 
-func DefaultRedisExporterImage(img manifest.ImageRef) string {
-	globalImageRegistry := "" // TODO: source from wandb.Spec.Global.ImageRegistry once that field exists.
+func DefaultRedisExporterImage(img manifest.ImageRef, globalImageRegistry string) string {
 	if out := img.GetImage(globalImageRegistry); out != "" {
 		return out
 	}
-	// Fallback for older manifests that don't supply the image.
 	return defaultRedisExporterImage
 }
 
@@ -145,7 +135,7 @@ func redisRuntimeDefaultSeccompProfile() *corev1.SeccompProfile {
 
 // createRedisExporterConfig creates a RedisExporter configuration if telemetry is enabled.
 // Returns nil if telemetry is disabled.
-func createRedisExporterConfig(telemetry apiv2.Telemetry, img manifest.ImageRef) *rediscommon.RedisExporter {
+func createRedisExporterConfig(telemetry apiv2.Telemetry, img manifest.ImageRef, wandb *apiv2.WeightsAndBiases) *rediscommon.RedisExporter {
 	if !telemetry.Enabled {
 		return nil
 	}
@@ -154,7 +144,7 @@ func createRedisExporterConfig(telemetry apiv2.Telemetry, img manifest.ImageRef)
 	return &rediscommon.RedisExporter{
 		Enabled:         true,
 		Port:            &port,
-		Image:           DefaultRedisExporterImage(img),
+		Image:           DefaultRedisExporterImage(img, wandb.Spec.Global.ImageRegistry),
 		ImagePullPolicy: corev1.PullIfNotPresent,
 		SecurityContext: redisContainerSecurityContext(),
 	}
@@ -195,7 +185,7 @@ func ToRedisStandaloneVendorSpec(
 		},
 		Spec: redisv1beta2.RedisSpec{
 			KubernetesConfig: rediscommon.KubernetesConfig{
-				Image:           RedisStandaloneImage(mfst.Redis["default"].Images["standalone"]),
+				Image:           RedisStandaloneImage(mfst.Redis["default"].Images["standalone"], wandb.Spec.Global.ImageRegistry),
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				Resources:       &corev1.ResourceRequirements{},
 			},
@@ -236,7 +226,7 @@ func ToRedisStandaloneVendorSpec(
 		return nil, fmt.Errorf("failed to set owner reference: %w", err)
 	}
 
-	redis.Spec.RedisExporter = createRedisExporterConfig(spec.Telemetry, mfst.Redis["default"].Images["exporter"])
+	redis.Spec.RedisExporter = createRedisExporterConfig(spec.Telemetry, mfst.Redis["default"].Images["exporter"], wandb)
 
 	return redis, nil
 }
@@ -281,7 +271,7 @@ func ToRedisSentinelVendorSpec(
 		Spec: redissentinelv1beta2.RedisSentinelSpec{
 			Size: &sentinelCount,
 			KubernetesConfig: rediscommon.KubernetesConfig{
-				Image:           RedisSentinelImage(mfst.Redis["default"].Images["sentinel"]),
+				Image:           RedisSentinelImage(mfst.Redis["default"].Images["sentinel"], wandb.Spec.Global.ImageRegistry),
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				Resources:       &corev1.ResourceRequirements{},
 			},
@@ -314,7 +304,7 @@ func ToRedisSentinelVendorSpec(
 	}
 
 	// Add RedisExporter if telemetry is enabled
-	sentinel.Spec.RedisExporter = createRedisExporterConfig(spec.Telemetry, mfst.Redis["default"].Images["exporter"])
+	sentinel.Spec.RedisExporter = createRedisExporterConfig(spec.Telemetry, mfst.Redis["default"].Images["exporter"], wandb)
 
 	return sentinel, nil
 }
@@ -360,7 +350,7 @@ func ToRedisReplicationVendorSpec(
 		Spec: redisreplicationv1beta2.RedisReplicationSpec{
 			Size: &replicaCount,
 			KubernetesConfig: rediscommon.KubernetesConfig{
-				Image:           RedisReplicationImage(mfst.Redis["default"].Images["replication"]),
+				Image:           RedisReplicationImage(mfst.Redis["default"].Images["replication"], wandb.Spec.Global.ImageRegistry),
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				Resources:       &corev1.ResourceRequirements{},
 			},
@@ -404,7 +394,7 @@ func ToRedisReplicationVendorSpec(
 	}
 
 	// Add RedisExporter if telemetry is enabled
-	replication.Spec.RedisExporter = createRedisExporterConfig(spec.Telemetry, mfst.Redis["default"].Images["exporter"])
+	replication.Spec.RedisExporter = createRedisExporterConfig(spec.Telemetry, mfst.Redis["default"].Images["exporter"], wandb)
 
 	return replication, nil
 }

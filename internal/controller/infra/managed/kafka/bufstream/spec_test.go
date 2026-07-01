@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/infra/external/objectstore"
+	"github.com/wandb/operator/pkg/utils"
 	"github.com/wandb/operator/pkg/wandb/manifest"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -36,7 +37,16 @@ func testWandb() *apiv2.WeightsAndBiases {
 	}
 }
 
+func setOpenShiftMode(t *testing.T, enabled bool) {
+	t.Helper()
+	utils.SetOpenShiftMode(enabled)
+	t.Cleanup(func() {
+		utils.SetOpenShiftMode(false)
+	})
+}
+
 func TestToEtcdApplication(t *testing.T) {
+	setOpenShiftMode(t, false)
 	wandb := testWandb()
 	nsn := CreateNsNameBuilder(types.NamespacedName{Namespace: "default", Name: "wandb-kafka"})
 
@@ -50,10 +60,13 @@ func TestToEtcdApplication(t *testing.T) {
 	require.Equal(t, "20Gi", app.Spec.VolumeClaimTemplates[0].Spec.Resources.Requests.Storage().String())
 	require.Len(t, app.Spec.PodTemplate.Spec.Containers, 1)
 	require.Equal(t, defaultEtcdImage, app.Spec.PodTemplate.Spec.Containers[0].Image)
+	requireKafkaPodSecurityContext(t, app.Spec.PodTemplate.Spec.SecurityContext)
+	requireKafkaContainerSecurityContext(t, app.Spec.PodTemplate.Spec.Containers[0].SecurityContext)
 	require.NotNil(t, app.Spec.ServiceTemplate)
 }
 
 func TestToEtcdApplicationHA(t *testing.T) {
+	setOpenShiftMode(t, false)
 	wandb := testWandb()
 	nsn := CreateNsNameBuilder(types.NamespacedName{Namespace: "default", Name: "wandb-kafka"})
 
@@ -104,6 +117,7 @@ func testStorage() objectstore.ConnInfo {
 }
 
 func TestToBufstreamApplication(t *testing.T) {
+	setOpenShiftMode(t, false)
 	wandb := testWandb()
 	nsn := CreateNsNameBuilder(types.NamespacedName{Namespace: "default", Name: "wandb-kafka"})
 
@@ -115,11 +129,14 @@ func TestToBufstreamApplication(t *testing.T) {
 	require.NotNil(t, app.Spec.Replicas)
 	require.Len(t, app.Spec.PodTemplate.Spec.InitContainers, 1)
 	require.Equal(t, "ensure-bucket", app.Spec.PodTemplate.Spec.InitContainers[0].Name)
+	requireKafkaContainerSecurityContext(t, app.Spec.PodTemplate.Spec.InitContainers[0].SecurityContext)
 	require.Equal(t, int32(2), *app.Spec.Replicas)
 	require.Len(t, app.Spec.PodTemplate.Spec.Containers, 1)
 
 	container := app.Spec.PodTemplate.Spec.Containers[0]
 	require.Equal(t, defaultBufstreamImage, container.Image)
+	requireKafkaPodSecurityContext(t, app.Spec.PodTemplate.Spec.SecurityContext)
+	requireKafkaContainerSecurityContext(t, container.SecurityContext)
 
 	envNames := map[string]bool{}
 	for _, e := range container.Env {
@@ -131,6 +148,7 @@ func TestToBufstreamApplication(t *testing.T) {
 }
 
 func TestToBufstreamApplicationDefaultsReplicas(t *testing.T) {
+	setOpenShiftMode(t, false)
 	wandb := testWandb()
 	wandb.Spec.Kafka.ManagedKafka.Replicas = 0
 	nsn := CreateNsNameBuilder(types.NamespacedName{Namespace: "default", Name: "wandb-kafka"})
@@ -138,6 +156,23 @@ func TestToBufstreamApplicationDefaultsReplicas(t *testing.T) {
 	app, err := ToBufstreamApplication(wandb, nsn, testStorage(), testScheme(t), manifest.Manifest{})
 	require.NoError(t, err)
 	require.Equal(t, int32(BufstreamReplicas), *app.Spec.Replicas)
+}
+
+func TestApplicationsOmitFixedIDsInOpenShiftMode(t *testing.T) {
+	setOpenShiftMode(t, true)
+	wandb := testWandb()
+	nsn := CreateNsNameBuilder(types.NamespacedName{Namespace: "default", Name: "wandb-kafka"})
+
+	etcd, err := ToEtcdApplication(wandb, nsn, testScheme(t), manifest.Manifest{})
+	require.NoError(t, err)
+	requireOpenShiftKafkaPodSecurityContext(t, etcd.Spec.PodTemplate.Spec.SecurityContext)
+	requireOpenShiftKafkaContainerSecurityContext(t, etcd.Spec.PodTemplate.Spec.Containers[0].SecurityContext)
+
+	bufstream, err := ToBufstreamApplication(wandb, nsn, testStorage(), testScheme(t), manifest.Manifest{})
+	require.NoError(t, err)
+	requireOpenShiftKafkaPodSecurityContext(t, bufstream.Spec.PodTemplate.Spec.SecurityContext)
+	requireOpenShiftKafkaContainerSecurityContext(t, bufstream.Spec.PodTemplate.Spec.Containers[0].SecurityContext)
+	requireOpenShiftKafkaContainerSecurityContext(t, bufstream.Spec.PodTemplate.Spec.InitContainers[0].SecurityContext)
 }
 
 func TestToCredentialsSecret(t *testing.T) {
@@ -149,4 +184,66 @@ func TestToCredentialsSecret(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "ak", secret.StringData[EnvStorageAccessKeyID])
 	require.Equal(t, "sk", secret.StringData[EnvStorageSecretAccessKey])
+}
+
+func requireKafkaPodSecurityContext(t *testing.T, securityContext *corev1.PodSecurityContext) {
+	t.Helper()
+	require.NotNil(t, securityContext)
+	require.NotNil(t, securityContext.RunAsUser)
+	require.Equal(t, kafkaRunAsUser, *securityContext.RunAsUser)
+	require.NotNil(t, securityContext.RunAsGroup)
+	require.Equal(t, kafkaRunAsGroup, *securityContext.RunAsGroup)
+	require.NotNil(t, securityContext.RunAsNonRoot)
+	require.True(t, *securityContext.RunAsNonRoot)
+	require.NotNil(t, securityContext.FSGroup)
+	require.Equal(t, kafkaFSGroup, *securityContext.FSGroup)
+	require.NotNil(t, securityContext.FSGroupChangePolicy)
+	require.Equal(t, corev1.FSGroupChangeOnRootMismatch, *securityContext.FSGroupChangePolicy)
+	require.NotNil(t, securityContext.SeccompProfile)
+	require.Equal(t, corev1.SeccompProfileTypeRuntimeDefault, securityContext.SeccompProfile.Type)
+}
+
+func requireKafkaContainerSecurityContext(t *testing.T, securityContext *corev1.SecurityContext) {
+	t.Helper()
+	require.NotNil(t, securityContext)
+	require.NotNil(t, securityContext.RunAsUser)
+	require.Equal(t, kafkaRunAsUser, *securityContext.RunAsUser)
+	require.NotNil(t, securityContext.RunAsGroup)
+	require.Equal(t, kafkaRunAsGroup, *securityContext.RunAsGroup)
+	require.NotNil(t, securityContext.RunAsNonRoot)
+	require.True(t, *securityContext.RunAsNonRoot)
+	require.NotNil(t, securityContext.AllowPrivilegeEscalation)
+	require.False(t, *securityContext.AllowPrivilegeEscalation)
+	require.NotNil(t, securityContext.Capabilities)
+	require.Contains(t, securityContext.Capabilities.Drop, kafkaCapabilityAll)
+	require.NotNil(t, securityContext.SeccompProfile)
+	require.Equal(t, corev1.SeccompProfileTypeRuntimeDefault, securityContext.SeccompProfile.Type)
+}
+
+func requireOpenShiftKafkaPodSecurityContext(t *testing.T, securityContext *corev1.PodSecurityContext) {
+	t.Helper()
+	require.NotNil(t, securityContext)
+	require.Nil(t, securityContext.RunAsUser)
+	require.Nil(t, securityContext.RunAsGroup)
+	require.Nil(t, securityContext.FSGroup)
+	require.Nil(t, securityContext.FSGroupChangePolicy)
+	require.NotNil(t, securityContext.RunAsNonRoot)
+	require.True(t, *securityContext.RunAsNonRoot)
+	require.NotNil(t, securityContext.SeccompProfile)
+	require.Equal(t, corev1.SeccompProfileTypeRuntimeDefault, securityContext.SeccompProfile.Type)
+}
+
+func requireOpenShiftKafkaContainerSecurityContext(t *testing.T, securityContext *corev1.SecurityContext) {
+	t.Helper()
+	require.NotNil(t, securityContext)
+	require.Nil(t, securityContext.RunAsUser)
+	require.Nil(t, securityContext.RunAsGroup)
+	require.NotNil(t, securityContext.RunAsNonRoot)
+	require.True(t, *securityContext.RunAsNonRoot)
+	require.NotNil(t, securityContext.AllowPrivilegeEscalation)
+	require.False(t, *securityContext.AllowPrivilegeEscalation)
+	require.NotNil(t, securityContext.Capabilities)
+	require.Contains(t, securityContext.Capabilities.Drop, kafkaCapabilityAll)
+	require.NotNil(t, securityContext.SeccompProfile)
+	require.Equal(t, corev1.SeccompProfileTypeRuntimeDefault, securityContext.SeccompProfile.Type)
 }

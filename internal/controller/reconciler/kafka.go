@@ -158,8 +158,7 @@ func managedKafkaSpecNamespacedName(spec *apiv2.ManagedKafkaSpec) types.Namespac
 }
 
 // createKafkaTopics provisions the manifest-defined topics directly via the Kafka
-// Admin API. Bufstream is Kafka-protocol compatible, so this replaces the Strimzi
-// Topic Operator that previously reconciled KafkaTopic CRs. Topic creation is
+// Admin API. Bufstream is Kafka-protocol compatible, so topic creation is
 // idempotent: an already-existing topic is treated as success.
 func createKafkaTopics(ctx context.Context, cl client.Client, wandb *apiv2.WeightsAndBiases, manifest manifest.Manifest) (ctrl.Result, error) {
 	if wandb.Spec.Kafka.ManagedKafka == nil {

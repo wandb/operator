@@ -25,8 +25,7 @@ const (
 	defaultSeaweedImage = "chrislusf/seaweedfs:4.35"
 )
 
-func SeaweedImage(img manifest.ImageRef) string {
-	globalImageRegistry := "" // TODO: source from wandb.Spec.Global.ImageRegistry once that field exists.
+func SeaweedImage(img manifest.ImageRef, globalImageRegistry string) string {
 	if out := img.GetImage(globalImageRegistry); out != "" {
 		return out
 	}
@@ -99,7 +98,7 @@ func ToObjectStoreVendorSpec(
 			Labels:    labels,
 		},
 		Spec: seaweedv1.SeaweedSpec{
-			Image: SeaweedImage(mfst.Bucket["default"].Images["seaweedfs"]),
+			Image: SeaweedImage(mfst.Bucket["default"].Images["seaweedfs"], wandb.Spec.Global.ImageRegistry),
 			TLS: &seaweedv1.TLSSpec{
 				Enabled: infraSpec.SeaweedObjectStoreSpec.TlsEnabled,
 			},

@@ -93,6 +93,10 @@ type WeightsAndBiasesSpec struct {
 
 	RetentionPolicy RetentionPolicy `json:"retentionPolicy"`
 
+	// Global holds settings shared across all managed components.
+	// +optional
+	Global GlobalSpec `json:"global,omitempty"`
+
 	Wandb WandbAppSpec `json:"wandb,omitempty"`
 
 	Affinity    *corev1.Affinity     `json:"affinity,omitempty"`
@@ -107,6 +111,14 @@ type WeightsAndBiasesSpec struct {
 	// Networking configures how the W&B application is exposed externally.
 	// +optional
 	Networking NetworkingSpec `json:"networking,omitempty"`
+}
+
+// GlobalSpec holds settings shared across every managed component.
+type GlobalSpec struct {
+	// ImageRegistry, when set, retargets the container images to this registry.
+	// Intended for air-gapped installs whose nodes cannot reach public registries; pair it
+	// with a registry pre-populated by `wsm registry mirror`.
+	ImageRegistry string `json:"imageRegistry,omitempty"`
 }
 
 type NetworkingMode string
@@ -285,6 +297,8 @@ type OidcSpec struct {
 	ClientSecret corev1.SecretKeySelector `json:"clientSecret,omitempty"`
 	IssuerUrl    corev1.SecretKeySelector `json:"issuerUrl,omitempty"`
 	AuthMethod   corev1.SecretKeySelector `json:"authMethod,omitempty"`
+
+	SessionLength string `json:"sessionLength,omitempty"`
 }
 
 type ManagedInfraSpec struct {
