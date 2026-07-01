@@ -115,9 +115,8 @@ type WeightsAndBiasesSpec struct {
 
 // GlobalSpec holds settings shared across every managed component.
 type GlobalSpec struct {
-	// ImageRegistry, when set, retargets the container images of the managed
-	// data-plane services (ClickHouse, MySQL, Redis, object store) to this
-	// registry. Intended for air-gapped installs whose nodes cannot reach public registries; pair it
+	// ImageRegistry, when set, retargets the container images to this registry.
+	// Intended for air-gapped installs whose nodes cannot reach public registries; pair it
 	// with a registry pre-populated by `wsm registry mirror`.
 	ImageRegistry string `json:"imageRegistry,omitempty"`
 }
