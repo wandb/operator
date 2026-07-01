@@ -255,6 +255,9 @@ func applyObjectStoreDefaults(wandb *appsv2.WeightsAndBiases) {
 
 	if wandb.Spec.ObjectStore.ManagedObjectStore == nil {
 		if wandb.Spec.ObjectStore.ExternalObjectStore != nil {
+			if wandb.Spec.ObjectStore.ExternalObjectStore.Provider == "" {
+				wandb.Spec.ObjectStore.ExternalObjectStore.Provider = appsv2.ObjectStoreProviderS3
+			}
 			return
 		}
 		wandb.Spec.ObjectStore.ManagedObjectStore = &appsv2.ManagedObjectStoreSpec{}
@@ -428,6 +431,38 @@ func validateObjectStoreSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 			"",
 			"managedObjectStore and externalObjectStore are mutually exclusive",
 		))
+	}
+
+	if ext := wandb.Spec.ObjectStore.ExternalObjectStore; ext != nil {
+		extPath := objectStorePath.Child("externalObjectStore")
+		switch ext.Provider {
+		case "", appsv2.ObjectStoreProviderS3, appsv2.ObjectStoreProviderGCS, appsv2.ObjectStoreProviderAzure:
+		default:
+			errors = append(errors, field.NotSupported(
+				extPath.Child("provider"),
+				ext.Provider,
+				[]string{
+					string(appsv2.ObjectStoreProviderS3),
+					string(appsv2.ObjectStoreProviderGCS),
+					string(appsv2.ObjectStoreProviderAzure),
+				},
+			))
+		}
+
+		if ext.Bucket.Name == "" {
+			errors = append(errors, field.Required(
+				extPath.Child("bucket"),
+				"externalObjectStore requires a bucket secret reference",
+			))
+		}
+
+		// Azure addresses the storage account via accessKey; az://<account>/<container> cannot be formed without it.
+		if ext.Provider == appsv2.ObjectStoreProviderAzure && ext.AccessKey.Name == "" {
+			errors = append(errors, field.Required(
+				extPath.Child("accessKey"),
+				"azure externalObjectStore requires accessKey to address the storage account",
+			))
+		}
 	}
 
 	return errors

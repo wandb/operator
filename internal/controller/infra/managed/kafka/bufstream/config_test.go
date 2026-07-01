@@ -6,11 +6,14 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
+
+	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/internal/controller/infra/external/objectstore"
 )
 
 func TestRenderBufstreamConfigS3(t *testing.T) {
-	storage := storageConnInfo{
-		Provider:       providerS3,
+	storage := objectstore.ConnInfo{
+		Provider:       apiv2.ObjectStoreProviderS3,
 		URI:            "s3://wandb-bucket",
 		Bucket:         "wandb-bucket",
 		Endpoint:       "http://objstore.default.svc.cluster.local:8333",
@@ -55,8 +58,8 @@ func TestRenderBufstreamConfigS3(t *testing.T) {
 }
 
 func TestRenderBufstreamConfigS3NoStaticCreds(t *testing.T) {
-	storage := storageConnInfo{
-		Provider: providerS3,
+	storage := objectstore.ConnInfo{
+		Provider: apiv2.ObjectStoreProviderS3,
 		URI:      "s3://wandb-bucket",
 		Bucket:   "wandb-bucket",
 		Region:   "us-west-2",
@@ -73,8 +76,8 @@ func TestRenderBufstreamConfigS3NoStaticCreds(t *testing.T) {
 }
 
 func TestRenderBufstreamConfigGCS(t *testing.T) {
-	storage := storageConnInfo{
-		Provider: providerGCS,
+	storage := objectstore.ConnInfo{
+		Provider: apiv2.ObjectStoreProviderGCS,
 		URI:      "gs://wandb-bucket/prefix",
 		Bucket:   "wandb-bucket",
 	}
@@ -88,8 +91,8 @@ func TestRenderBufstreamConfigGCS(t *testing.T) {
 }
 
 func TestRenderBufstreamConfigAzure(t *testing.T) {
-	storage := storageConnInfo{
-		Provider:  providerAzure,
+	storage := objectstore.ConnInfo{
+		Provider:  apiv2.ObjectStoreProviderAzure,
 		URI:       "https://acct.blob.core.windows.net/container",
 		Bucket:    "container",
 		AccessKey: "acct",

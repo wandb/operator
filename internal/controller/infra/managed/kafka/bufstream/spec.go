@@ -5,6 +5,7 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
+	"github.com/wandb/operator/internal/controller/infra/external/objectstore"
 	"github.com/wandb/operator/pkg/wandb/manifest"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -92,7 +93,7 @@ func tolerations(wandb *apiv2.WeightsAndBiases, spec apiv2.ManagedInfraSpec) []c
 func ToCredentialsSecret(
 	wandb *apiv2.WeightsAndBiases,
 	nsnBuilder *NsNameBuilder,
-	storage storageConnInfo,
+	storage objectstore.ConnInfo,
 	scheme *runtime.Scheme,
 ) (*corev1.Secret, error) {
 	secret := &corev1.Secret{
@@ -117,7 +118,7 @@ func ToCredentialsSecret(
 func ToConfigMap(
 	wandb *apiv2.WeightsAndBiases,
 	nsnBuilder *NsNameBuilder,
-	storage storageConnInfo,
+	storage objectstore.ConnInfo,
 	scheme *runtime.Scheme,
 ) (*corev1.ConfigMap, error) {
 	rendered, err := renderBufstreamConfig(
@@ -296,7 +297,7 @@ func spreadAffinity(wandb *apiv2.WeightsAndBiases, spec apiv2.ManagedInfraSpec, 
 // object-store bucket Bufstream reads from on startup. Bufstream itself never
 // creates the bucket, and it can come up before the W&B applications that would
 // otherwise create it, so it must be ensured here.
-func bucketEnsureContainer(nsnBuilder *NsNameBuilder, storage storageConnInfo, img manifest.ImageRef) corev1.Container {
+func bucketEnsureContainer(nsnBuilder *NsNameBuilder, storage objectstore.ConnInfo, img manifest.ImageRef) corev1.Container {
 	region := storage.Region
 	if region == "" {
 		region = "us-east-1"
@@ -341,8 +342,8 @@ func bucketEnsureContainer(nsnBuilder *NsNameBuilder, storage storageConnInfo, i
 // storageCredentialEnv injects the object-store credentials into the broker when
 // static keys exist. Providers that authenticate via ambient identity (AWS IAM
 // roles, GCS workload identity) get no env vars and no secret reference.
-func storageCredentialEnv(nsnBuilder *NsNameBuilder, storage storageConnInfo) []corev1.EnvVar {
-	if !storage.hasStaticCredentials() {
+func storageCredentialEnv(nsnBuilder *NsNameBuilder, storage objectstore.ConnInfo) []corev1.EnvVar {
+	if !storage.HasStaticCredentials() {
 		return nil
 	}
 	credsName := nsnBuilder.CredentialsName()
@@ -372,8 +373,8 @@ func storageCredentialEnv(nsnBuilder *NsNameBuilder, storage storageConnInfo) []
 // container. It only applies to S3-compatible endpoints (SeaweedFS, MinIO),
 // which is where the operator provisions the bucket; AWS S3, GCS, and Azure
 // buckets are expected to already exist.
-func needsBucketEnsure(storage storageConnInfo) bool {
-	return storage.Provider == providerS3 && storage.Endpoint != ""
+func needsBucketEnsure(storage objectstore.ConnInfo) bool {
+	return storage.Provider == apiv2.ObjectStoreProviderS3 && storage.Endpoint != ""
 }
 
 // effectiveBufstreamReplicas applies the HA floor to a requested broker count.
@@ -395,7 +396,7 @@ func effectiveBufstreamReplicas(requested int32) int32 {
 func ToBufstreamApplication(
 	wandb *apiv2.WeightsAndBiases,
 	nsnBuilder *NsNameBuilder,
-	storage storageConnInfo,
+	storage objectstore.ConnInfo,
 	scheme *runtime.Scheme,
 	mfst manifest.Manifest,
 ) (*apiv2.Application, error) {

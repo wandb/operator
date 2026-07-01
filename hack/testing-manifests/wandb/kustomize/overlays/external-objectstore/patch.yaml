@@ -6,6 +6,12 @@ spec:
   objectStore:
     managedObjectStore: null
     externalObjectStore:
+      # provider selects the backend: s3 (default), gcs, or azure.
+      #   gcs:   set bucket (gs://<bucket>); creds via workload identity or
+      #          accessKey (SA email) + secretKey (PEM key).
+      #   azure: set accessKey (storage account), bucket (container), and
+      #          secretKey (account key) -> az://<account>/<container>.
+      provider: s3
       # required
       endpoint:
         name: external-objectstore-connection

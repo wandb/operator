@@ -28,6 +28,11 @@ func sel(key string) corev1.SecretKeySelector {
 // the keys named in present.
 func writeStateFixture(t *testing.T, sourceData map[string]string, present map[string]bool) (*apiv2.WeightsAndBiases, *corev1.Secret, []metav1.Condition, *apiv2.ObjectStoreConnection) {
 	t.Helper()
+	return writeStateFixtureProvider(t, "", sourceData, present)
+}
+
+func writeStateFixtureProvider(t *testing.T, provider apiv2.ObjectStoreProvider, sourceData map[string]string, present map[string]bool) (*apiv2.WeightsAndBiases, *corev1.Secret, []metav1.Condition, *apiv2.ObjectStoreConnection) {
+	t.Helper()
 	scheme := runtime.NewScheme()
 	require.NoError(t, corev1.AddToScheme(scheme))
 	require.NoError(t, apiv2.AddToScheme(scheme))
@@ -41,7 +46,7 @@ func writeStateFixture(t *testing.T, sourceData map[string]string, present map[s
 		Data:       data,
 	}
 
-	ext := &apiv2.ObjectStoreConnection{}
+	ext := &apiv2.ObjectStoreConnection{Provider: provider}
 	if present["Host"] {
 		ext.Endpoint = sel("Host")
 	}
@@ -171,4 +176,65 @@ func TestWriteState_FullConfig(t *testing.T) {
 		require.NotNil(t, s.Optional)
 		require.True(t, *s.Optional)
 	}
+}
+
+func TestWriteState_GCSWorkloadIdentity(t *testing.T) {
+	_, written, conditions, conn := writeStateFixtureProvider(t, apiv2.ObjectStoreProviderGCS,
+		map[string]string{"Bucket": "my-gcs-bucket"},
+		map[string]bool{"Bucket": true},
+	)
+	require.Nil(t, conditions)
+	require.NotNil(t, conn)
+	require.Equal(t, apiv2.ObjectStoreProviderGCS, conn.Provider)
+
+	data := connectionData(written)
+	require.Equal(t, "gs://my-gcs-bucket", data["url"], "workload identity carries no credentials")
+	require.Equal(t, "gcs", data["Provider"])
+}
+
+func TestWriteState_GCSWithPrefixAndKey(t *testing.T) {
+	_, written, conditions, _ := writeStateFixtureProvider(t, apiv2.ObjectStoreProviderGCS,
+		map[string]string{
+			"Bucket":    "my-gcs-bucket/sub/prefix",
+			"AccessKey": "sa@project.iam.gserviceaccount.com",
+			"SecretKey": "pemkey",
+		},
+		map[string]bool{"Bucket": true, "AccessKey": true, "SecretKey": true},
+	)
+	require.Nil(t, conditions)
+
+	data := connectionData(written)
+	require.Equal(t, "gs://sa%40project.iam.gserviceaccount.com:pemkey@my-gcs-bucket/sub/prefix", data["url"])
+}
+
+func TestWriteState_AzureWithKey(t *testing.T) {
+	_, written, conditions, conn := writeStateFixtureProvider(t, apiv2.ObjectStoreProviderAzure,
+		map[string]string{
+			"AccessKey": "mystorageaccount",
+			"SecretKey": "accountkey==",
+			"Bucket":    "mycontainer",
+		},
+		map[string]bool{"AccessKey": true, "SecretKey": true, "Bucket": true},
+	)
+	require.Nil(t, conditions)
+	require.NotNil(t, conn)
+	require.Equal(t, apiv2.ObjectStoreProviderAzure, conn.Provider)
+
+	data := connectionData(written)
+	require.Equal(t, "az://:accountkey==@mystorageaccount/mycontainer", data["url"])
+	require.Equal(t, "azure", data["Provider"])
+}
+
+func TestWriteState_AzureAmbientIdentityWithPrefix(t *testing.T) {
+	_, written, conditions, _ := writeStateFixtureProvider(t, apiv2.ObjectStoreProviderAzure,
+		map[string]string{
+			"AccessKey": "mystorageaccount",
+			"Bucket":    "mycontainer/team/prefix",
+		},
+		map[string]bool{"AccessKey": true, "Bucket": true},
+	)
+	require.Nil(t, conditions)
+
+	data := connectionData(written)
+	require.Equal(t, "az://mystorageaccount/mycontainer/team/prefix", data["url"], "no key means ambient identity / AZURE_STORAGE_KEY")
 }
