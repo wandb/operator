@@ -3796,6 +3796,8 @@ spec:
                         - key
                         type: object
                         x-kubernetes-map-type: atomic
+                      sessionLength:
+                        type: string
                     type: object
                   serviceAccount:
                     properties:
