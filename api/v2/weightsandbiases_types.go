@@ -384,9 +384,9 @@ type RedisSentinelConfig struct {
 }
 
 // KafkaSpec defines the desired state of the Kafka infrastructure component.
+// Kafka is managed-only (backed by Bufstream); there is no external Kafka option.
 type KafkaSpec struct {
-	ManagedKafka  *ManagedKafkaSpec `json:"managedKafka,omitempty"`
-	ExternalKafka *KafkaConnection  `json:"externalKafka,omitempty"`
+	ManagedKafka *ManagedKafkaSpec `json:"managedKafka,omitempty"`
 }
 
 type ManagedKafkaSpec struct {

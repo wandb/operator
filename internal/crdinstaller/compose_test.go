@@ -24,17 +24,17 @@ var validOpts = Options{
 }
 
 func TestParseGroupsValid(t *testing.T) {
-	got, err := ParseGroups("redis,kafka")
+	got, err := ParseGroups("redis,clickhouse")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(got) != 2 || got[0] != "redis" || got[1] != "kafka" {
-		t.Errorf("got %v, want [redis kafka]", got)
+	if len(got) != 2 || got[0] != "redis" || got[1] != "clickhouse" {
+		t.Errorf("got %v, want [redis clickhouse]", got)
 	}
 }
 
 func TestParseGroupsRejectsUnknown(t *testing.T) {
-	_, err := ParseGroups("redis,bogus,kafka")
+	_, err := ParseGroups("redis,bogus")
 	if err == nil {
 		t.Fatal("expected error for unknown group")
 	}
@@ -106,9 +106,33 @@ func TestComposeIncludesOptionalGroup(t *testing.T) {
 	}
 }
 
+func TestComposeIncludesClickHouseGroup(t *testing.T) {
+	opts := validOpts
+	opts.Groups = []string{"clickhouse"}
+	crds, err := compose(opts)
+	if err != nil {
+		t.Fatalf("compose failed: %v", err)
+	}
+
+	names := make(map[string]bool, len(crds))
+	for _, crd := range crds {
+		names[crd.Name] = true
+	}
+	for _, name := range []string{
+		"clickhouseinstallations.clickhouse.altinity.com",
+		"clickhouseinstallationtemplates.clickhouse.altinity.com",
+		"clickhouseoperatorconfigurations.clickhouse.altinity.com",
+		"clickhousekeeperinstallations.clickhouse-keeper.altinity.com",
+	} {
+		if !names[name] {
+			t.Errorf("expected ClickHouse CRD %s to be included", name)
+		}
+	}
+}
+
 func TestRenderIsDeterministic(t *testing.T) {
 	opts := validOpts
-	opts.Groups = []string{"redis", "kafka"}
+	opts.Groups = []string{"redis", "clickhouse"}
 	var a, b bytes.Buffer
 	if err := Render(context.Background(), opts, &a); err != nil {
 		t.Fatalf("first render: %v", err)

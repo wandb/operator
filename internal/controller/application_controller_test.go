@@ -28,6 +28,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -295,6 +296,65 @@ var _ = Describe("Application Controller", func() {
 			err = k8sClient.Get(ctx, typeNamespacedName, found)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(found.Spec.Template.Spec.Containers[0].Image).To(Equal("redis"))
+		})
+
+		It("should propagate VolumeClaimTemplates to the StatefulSet", func() {
+			resourceName := "test-statefulset-pvc"
+			typeNamespacedName := types.NamespacedName{
+				Name:      resourceName,
+				Namespace: "default",
+			}
+
+			resource := &apiv2.Application{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      resourceName,
+					Namespace: "default",
+				},
+				Spec: apiv2.ApplicationSpec{
+					Kind: "StatefulSet",
+					PodTemplate: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{
+									Name:  "etcd",
+									Image: "etcd",
+									VolumeMounts: []corev1.VolumeMount{
+										{Name: "data", MountPath: "/data"},
+									},
+								},
+							},
+						},
+					},
+					VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
+						{
+							ObjectMeta: metav1.ObjectMeta{Name: "data"},
+							Spec: corev1.PersistentVolumeClaimSpec{
+								AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+								Resources: corev1.VolumeResourceRequirements{
+									Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("5Gi")},
+								},
+							},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+
+			controllerReconciler := &ApplicationReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+
+			found := &appsv1.StatefulSet{}
+			err = k8sClient.Get(ctx, typeNamespacedName, found)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(found.Spec.VolumeClaimTemplates).To(HaveLen(1))
+			Expect(found.Spec.VolumeClaimTemplates[0].Name).To(Equal("data"))
 		})
 
 		It("should successfully reconcile a Rollout", func() {

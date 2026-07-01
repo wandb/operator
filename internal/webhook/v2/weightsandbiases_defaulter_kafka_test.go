@@ -58,18 +58,16 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Kafka", func() {
 		g.Expect(wandb.Spec.Kafka.ManagedKafka.Replicas).To(g.Equal(int32(5)))
 	})
 
-	It("does not apply defaults when ExternalKafka is present", func() {
+	It("creates managed Kafka defaults when Kafka is unset", func() {
 		wandb := &apiv2.WeightsAndBiases{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
-			Spec: apiv2.WeightsAndBiasesSpec{
-				Kafka: apiv2.KafkaSpec{
-					ExternalKafka: &apiv2.KafkaConnection{},
-				},
-			},
+			Spec:       apiv2.WeightsAndBiasesSpec{},
 		}
 
 		err := defaulter.Default(ctx, wandb)
 		g.Expect(err).ToNot(g.HaveOccurred())
-		g.Expect(wandb.Spec.Kafka.ManagedKafka).To(g.BeNil())
+		g.Expect(wandb.Spec.Kafka.ManagedKafka).ToNot(g.BeNil())
+		g.Expect(wandb.Spec.Kafka.ManagedKafka.Name).To(g.Equal("test-wandb-kafka"))
+		g.Expect(wandb.Spec.Kafka.ManagedKafka.Namespace).To(g.Equal("test-namespace"))
 	})
 })
