@@ -70,8 +70,6 @@ type WeightsAndBiasesReconciler struct {
 //+kubebuilder:rbac:groups=events.k8s.io,resources=events,verbs=list;watch
 //+kubebuilder:rbac:groups=grafana.integreatly.org,resources=grafanas;grafanadashboards;grafanadatasources,verbs=get;list;watch
 //+kubebuilder:rbac:groups=grafana.integreatly.org,resources=grafanas/status;grafanadashboards/status;grafanadatasources/status,verbs=get
-//+kubebuilder:rbac:groups=kafka.strimzi.io,resources=kafkanodepools;kafkas;kafkatopics,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=kafka.strimzi.io,resources=kafkanodepools/status;kafkas/status;kafkatopics/status,verbs=get;update
 //+kubebuilder:rbac:groups=seaweed.seaweedfs.com,resources=seaweeds,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=seaweed.seaweedfs.com,resources=seaweeds/status,verbs=get
 //+kubebuilder:rbac:groups=moco.cybozu.com,resources=mysqlclusters,verbs=get;list;watch;create;update;patch;delete

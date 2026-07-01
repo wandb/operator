@@ -485,6 +485,22 @@ func (r *ApplicationReconciler) reconcileStatefulSet(ctx context.Context, app *w
 		MatchLabels: selectorLabels,
 	}
 
+	// ServiceName governs the StatefulSet's stable pod DNS. It is immutable once
+	// set, so only apply it at creation time.
+	if statefulSet.CreationTimestamp.IsZero() && app.Spec.ServiceName != "" {
+		statefulSet.Spec.ServiceName = app.Spec.ServiceName
+	}
+
+	// VolumeClaimTemplates are immutable once a StatefulSet exists, so only set
+	// them at creation time to avoid update errors from the apiserver.
+	if statefulSet.CreationTimestamp.IsZero() && len(app.Spec.VolumeClaimTemplates) > 0 {
+		templates := make([]corev1.PersistentVolumeClaim, len(app.Spec.VolumeClaimTemplates))
+		for i := range app.Spec.VolumeClaimTemplates {
+			templates[i] = *app.Spec.VolumeClaimTemplates[i].DeepCopy()
+		}
+		statefulSet.Spec.VolumeClaimTemplates = templates
+	}
+
 	if app.Spec.HpaTemplate != nil {
 		if statefulSet.CreationTimestamp.IsZero() {
 			statefulSet.Spec.Replicas = app.Spec.HpaTemplate.MinReplicas

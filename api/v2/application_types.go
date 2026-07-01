@@ -43,8 +43,22 @@ type ApplicationSpec struct {
 	// This field is ignored if HpaTemplate is provided.
 	Replicas *int32 `json:"replicas,omitempty"`
 
-	MetaTemplate         metav1.ObjectMeta                          `json:"metaTemplate,omitempty"`
-	PodTemplate          corev1.PodTemplateSpec                     `json:"podTemplate,omitempty"`
+	MetaTemplate metav1.ObjectMeta      `json:"metaTemplate,omitempty"`
+	PodTemplate  corev1.PodTemplateSpec `json:"podTemplate,omitempty"`
+
+	// VolumeClaimTemplates are the persistent volume claim templates used when
+	// Kind is "StatefulSet". They are immutable on a live StatefulSet, so they
+	// are only applied at creation time.
+	// +optional
+	VolumeClaimTemplates []corev1.PersistentVolumeClaim `json:"volumeClaimTemplates,omitempty"`
+
+	// ServiceName is the name of the (typically headless) Service that governs a
+	// StatefulSet, giving each pod a stable DNS identity
+	// (<pod>.<serviceName>.<namespace>.svc). Required for clustered StatefulSet
+	// workloads such as an HA etcd. Ignored for non-StatefulSet kinds.
+	// +optional
+	ServiceName string `json:"serviceName,omitempty"`
+
 	ServiceTemplate      *corev1.ServiceSpec                        `json:"serviceTemplate,omitempty"`
 	IngressTemplate      *networkingv1.IngressSpec                  `json:"ingressTemplate,omitempty"`
 	HpaTemplate          *autoscalingv2.HorizontalPodAutoscalerSpec `json:"hpaTemplate,omitempty"`
