@@ -1289,63 +1289,54 @@ func generateSecrets(ctx context.Context, client ctrlClient.Client, wandb *apiv2
 	return ctrl.Result{}, nil
 }
 
-// resolveCRFieldString resolves a dotted field path (e.g., "spec.wandb.license")
-// from the provided custom resource object, returning the string value if present.
-// Non-string terminal values are treated as not found.
-func resolveCRFieldString(obj any, path string) (string, bool) {
+// resolveCRField traverses a dotted field path (e.g., "spec.wandb.license") in the
+// provided custom resource object and returns the raw terminal value if present.
+// Typed accessors (resolveCRFieldString, resolveCRFieldSecretSelector, ...) build on
+// top of this to validate and cast the result to the type they expect.
+func resolveCRField(obj any, path string) (any, bool) {
 	if obj == nil || path == "" {
-		return "", false
+		return nil, false
 	}
 	// Marshal to JSON then unmarshal into a generic map for easy traversal.
 	b, err := json.Marshal(obj)
 	if err != nil {
-		return "", false
+		return nil, false
 	}
 	var m map[string]any
 	if err := json.Unmarshal(b, &m); err != nil {
-		return "", false
+		return nil, false
 	}
 	cur := any(m)
 	for _, seg := range strings.Split(path, ".") {
 		mm, ok := cur.(map[string]any)
 		if !ok {
-			return "", false
+			return nil, false
 		}
 		next, ok := mm[seg]
 		if !ok {
-			return "", false
+			return nil, false
 		}
 		cur = next
 	}
-	if s, ok := cur.(string); ok {
-		return s, true
+	return cur, true
+}
+
+// resolveCRFieldString resolves a dotted field path from the provided custom resource
+// object, returning the string value if present. Non-string terminal values are
+// treated as not found.
+func resolveCRFieldString(obj any, path string) (string, bool) {
+	cur, ok := resolveCRField(obj, path)
+	if !ok {
+		return "", false
 	}
-	return "", false
+	s, ok := cur.(string)
+	return s, ok
 }
 
 func resolveCRFieldSecretSelector(obj any, path string) (corev1.SecretKeySelector, bool) {
-	if obj == nil || path == "" {
+	cur, ok := resolveCRField(obj, path)
+	if !ok {
 		return corev1.SecretKeySelector{}, false
-	}
-	b, err := json.Marshal(obj)
-	if err != nil {
-		return corev1.SecretKeySelector{}, false
-	}
-	var m map[string]any
-	if err := json.Unmarshal(b, &m); err != nil {
-		return corev1.SecretKeySelector{}, false
-	}
-	cur := any(m)
-	for _, seg := range strings.Split(path, ".") {
-		mm, ok := cur.(map[string]any)
-		if !ok {
-			return corev1.SecretKeySelector{}, false
-		}
-		next, ok := mm[seg]
-		if !ok {
-			return corev1.SecretKeySelector{}, false
-		}
-		cur = next
 	}
 	// Re-marshal the terminal node into a SecretKeySelector so we honor the same
 	// json tags (name/key/optional) the CRD uses.
