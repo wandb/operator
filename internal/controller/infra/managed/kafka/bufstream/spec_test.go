@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/internal/controller/infra/external/objectstore"
 	"github.com/wandb/operator/pkg/utils"
 	"github.com/wandb/operator/pkg/wandb/manifest"
 	corev1 "k8s.io/api/core/v1"
@@ -102,9 +103,9 @@ func TestToEtcdApplicationHA(t *testing.T) {
 	require.NotNil(t, app.Spec.PodTemplate.Spec.Containers[0].ReadinessProbe)
 }
 
-func testStorage() storageConnInfo {
-	return storageConnInfo{
-		Provider:       providerS3,
+func testStorage() objectstore.ConnInfo {
+	return objectstore.ConnInfo{
+		Provider:       apiv2.ObjectStoreProviderS3,
 		URI:            "s3://bucket",
 		Bucket:         "bucket",
 		Endpoint:       "http://seaweedfs:80",
@@ -177,7 +178,7 @@ func TestApplicationsOmitFixedIDsInOpenShiftMode(t *testing.T) {
 func TestToCredentialsSecret(t *testing.T) {
 	wandb := testWandb()
 	nsn := CreateNsNameBuilder(types.NamespacedName{Namespace: "default", Name: "wandb-kafka"})
-	storage := storageConnInfo{AccessKey: "ak", SecretKey: "sk"}
+	storage := objectstore.ConnInfo{AccessKey: "ak", SecretKey: "sk"}
 
 	secret, err := ToCredentialsSecret(wandb, nsn, storage, testScheme(t))
 	require.NoError(t, err)

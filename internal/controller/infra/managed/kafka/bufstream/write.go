@@ -5,6 +5,7 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
+	"github.com/wandb/operator/internal/controller/infra/external/objectstore"
 	"github.com/wandb/operator/internal/logx"
 	"github.com/wandb/operator/pkg/wandb/manifest"
 	corev1 "k8s.io/api/core/v1"
@@ -133,14 +134,14 @@ func resolveStorage(
 	ctx context.Context,
 	cl client.Client,
 	wandb *apiv2.WeightsAndBiases,
-) (storageConnInfo, bool, error) {
+) (objectstore.ConnInfo, bool, error) {
 	if !wandb.Status.ObjectStoreStatus.Ready {
-		return storageConnInfo{}, false, nil
+		return objectstore.ConnInfo{}, false, nil
 	}
 
 	secretName := wandb.Status.ObjectStoreStatus.Connection.URL.Name
 	if secretName == "" {
-		return storageConnInfo{}, false, nil
+		return objectstore.ConnInfo{}, false, nil
 	}
 
 	secret := &corev1.Secret{}
@@ -150,15 +151,15 @@ func resolveStorage(
 		"Secret", secret,
 	)
 	if err != nil {
-		return storageConnInfo{}, false, err
+		return objectstore.ConnInfo{}, false, err
 	}
 	if !found {
-		return storageConnInfo{}, false, nil
+		return objectstore.ConnInfo{}, false, nil
 	}
 
-	info, err := parseStorageConnection(secret.Data)
+	info, err := objectstore.ParseConnection(secret.Data)
 	if err != nil {
-		return storageConnInfo{}, false, err
+		return objectstore.ConnInfo{}, false, err
 	}
 	return info, true, nil
 }

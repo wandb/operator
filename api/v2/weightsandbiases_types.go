@@ -456,7 +456,19 @@ type SeaweedObjectStoreSpec struct {
 	TlsEnabled bool `json:"tlsEnabled,omitempty"`
 }
 
+// ObjectStoreProvider selects the object store backend for an external object store.
+type ObjectStoreProvider string
+
+const (
+	ObjectStoreProviderS3    ObjectStoreProvider = "s3"
+	ObjectStoreProviderGCS   ObjectStoreProvider = "gcs"
+	ObjectStoreProviderAzure ObjectStoreProvider = "azure"
+)
+
 type ObjectStoreConnection struct {
+	// Provider selects the externalObjectStore backend (s3, gcs, or azure) from a secret key; defaults to s3 when absent.
+	Provider corev1.SecretKeySelector `json:"provider,omitempty"`
+
 	Endpoint  corev1.SecretKeySelector `json:"endpoint,omitempty"`
 	Port      corev1.SecretKeySelector `json:"port,omitempty"`
 	AccessKey corev1.SecretKeySelector `json:"accessKey,omitempty"`

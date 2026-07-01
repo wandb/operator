@@ -83,6 +83,15 @@ Weave-python env vars are defined in `services/weave-python/weave-public/weave/t
 | S3-compatible | `weave-python env` | `WF_FILE_STORAGE_URI` | string | None | Storage bucket URI |
 | S3-compatible | `weave-python env` | `WF_FILE_STORAGE_AWS_SESSION_TOKEN` | string | None | AWS temporary session token |
 | S3-compatible | `weave-python env` | `WF_FILE_STORAGE_AWS_KMS_KEY` | string | None | KMS key ID for encryption |
+| **GCS** | `connectors.ConnectionInfo` | `scheme` | string | `gs` | Google Cloud Storage; **`gcs://` is not accepted** |
+| GCS | `connectors.ConnectionInfo` | `host (bucket)` | string | — | Bucket name (`gs://<bucket>[/path]`) |
+| GCS | `connectors.ConnectionInfo` | `username`/`password` | string | None | Optional SA email + PEM private key; otherwise workload identity / `GOOGLE_APPLICATION_CREDENTIALS` |
+| GCS | `weave-python env` | `WF_FILE_STORAGE_URI` | string | None | `gs://<bucket>` |
+| **Azure** | `connectors.ConnectionInfo` | `scheme` | string | `az` | Azure Blob; **`azure://` is not accepted** |
+| Azure | `connectors.ConnectionInfo` | `host (account)` | string | — | Storage account name (`az://<account>/<container>[/path]`) |
+| Azure | `connectors.ConnectionInfo` | `path (container)` | string | — | Container name + optional sub-path |
+| Azure | `connectors.ConnectionInfo` | `password` | string | None | Storage account key; falls back to `AZURE_STORAGE_KEY` / ambient identity |
+| Azure | `weave-python env` | `WF_FILE_STORAGE_URI` | string | None | `az://<account>/<container>` |
 | **Kafka** | `connectors.ConnectionInfo` | `scheme` | string | `kafka` | — |
 | Kafka | `connectors.ConnectionInfo`<br>`weave-python env` | `host`<br>`KAFKA_BROKER_HOST` | string | `localhost` | Broker host |
 | Kafka | `connectors.ConnectionInfo`<br>`weave-python env` | `port`<br>`KAFKA_BROKER_PORT` | int | 9092 | Broker port |

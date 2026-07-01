@@ -2472,6 +2472,19 @@ spec:
                         - key
                         type: object
                         x-kubernetes-map-type: atomic
+                      provider:
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            default: ""
+                            type: string
+                          optional:
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
                       region:
                         properties:
                           key:
@@ -4398,6 +4411,19 @@ spec:
                         type: object
                         x-kubernetes-map-type: atomic
                       port:
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            default: ""
+                            type: string
+                          optional:
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
+                      provider:
                         properties:
                           key:
                             type: string

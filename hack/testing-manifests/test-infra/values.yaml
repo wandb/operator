@@ -33,6 +33,7 @@ seaweedfs:
   enabled: true
   image: chrislusf/seaweedfs:latest
   awsCliImage: amazon/aws-cli:latest
+  provider: s3
   accessKey: seaweedfs
   secretKey: seaweedfs123
   bucket: wandb
