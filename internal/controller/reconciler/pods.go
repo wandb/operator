@@ -399,7 +399,12 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 					// No field specified; nothing to resolve
 					continue
 				}
-				if val, ok := resolveCRFieldString(wandb, src.Field); ok {
+				// secret component
+				if sel, ok := resolveCRFieldSecretSelector(wandb, src.Field); ok {
+					singleSecretSelector = sel
+					secretOnlyCount++
+					addSecretComponent(sel, idx)
+				} else if val, ok := resolveCRFieldString(wandb, src.Field); ok {
 					// Treat as a literal component (not secret-backed)
 					logger.Debug("field found in CR", "cr", wandb.Name, "field", src.Field, "value", val)
 					components = append(components, val)
