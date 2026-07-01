@@ -466,10 +466,8 @@ const (
 )
 
 type ObjectStoreConnection struct {
-	// Provider selects the externalObjectStore backend: s3 (default), gcs, or azure.
-	// +kubebuilder:validation:Enum=s3;gcs;azure
-	// +optional
-	Provider ObjectStoreProvider `json:"provider,omitempty"`
+	// Provider selects the externalObjectStore backend (s3, gcs, or azure) from a secret key; defaults to s3 when absent.
+	Provider corev1.SecretKeySelector `json:"provider,omitempty"`
 
 	Endpoint  corev1.SecretKeySelector `json:"endpoint,omitempty"`
 	Port      corev1.SecretKeySelector `json:"port,omitempty"`

@@ -2473,11 +2473,18 @@ spec:
                         type: object
                         x-kubernetes-map-type: atomic
                       provider:
-                        enum:
-                        - s3
-                        - gcs
-                        - azure
-                        type: string
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            default: ""
+                            type: string
+                          optional:
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
                       region:
                         properties:
                           key:
@@ -4417,11 +4424,18 @@ spec:
                         type: object
                         x-kubernetes-map-type: atomic
                       provider:
-                        enum:
-                        - s3
-                        - gcs
-                        - azure
-                        type: string
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            default: ""
+                            type: string
+                          optional:
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
                       region:
                         properties:
                           key:

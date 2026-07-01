@@ -33,6 +33,7 @@ func WriteState(
 		"SecretKey": spec.SecretKey,
 		"Bucket":    spec.Bucket,
 		"Region":    spec.Region,
+		"Provider":  spec.Provider,
 	}
 
 	data, err := external.ResolveFields(ctx, c, wandb.Namespace, fields)
@@ -45,7 +46,7 @@ func WriteState(
 		}}, nil
 	}
 
-	provider := spec.Provider
+	provider := apiv2.ObjectStoreProvider(data["Provider"])
 	if provider == "" {
 		provider = apiv2.ObjectStoreProviderS3
 	}
@@ -72,7 +73,7 @@ func WriteState(
 	// workload-identity auth), Region (MinIO or region supplied out-of-band).
 	// url and Bucket are always written.
 	return nil, &apiv2.ObjectStoreConnection{
-		Provider:  provider,
+		Provider:  corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Provider", Optional: ptr.To(false)},
 		URL:       corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "url", Optional: ptr.To(false)},
 		Endpoint:  corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Host", Optional: ptr.To(true)},
 		Port:      corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Port", Optional: ptr.To(true)},

@@ -46,7 +46,11 @@ func writeStateFixtureProvider(t *testing.T, provider apiv2.ObjectStoreProvider,
 		Data:       data,
 	}
 
-	ext := &apiv2.ObjectStoreConnection{Provider: provider}
+	ext := &apiv2.ObjectStoreConnection{}
+	if provider != "" {
+		source.Data["Provider"] = []byte(string(provider))
+		ext.Provider = sel("Provider")
+	}
 	if present["Host"] {
 		ext.Endpoint = sel("Host")
 	}
@@ -185,7 +189,8 @@ func TestWriteState_GCSWorkloadIdentity(t *testing.T) {
 	)
 	require.Nil(t, conditions)
 	require.NotNil(t, conn)
-	require.Equal(t, apiv2.ObjectStoreProviderGCS, conn.Provider)
+	require.Equal(t, ConnectionSecretName, conn.Provider.Name)
+	require.Equal(t, "Provider", conn.Provider.Key)
 
 	data := connectionData(written)
 	require.Equal(t, "gs://my-gcs-bucket", data["url"], "workload identity carries no credentials")
@@ -218,7 +223,8 @@ func TestWriteState_AzureWithKey(t *testing.T) {
 	)
 	require.Nil(t, conditions)
 	require.NotNil(t, conn)
-	require.Equal(t, apiv2.ObjectStoreProviderAzure, conn.Provider)
+	require.Equal(t, ConnectionSecretName, conn.Provider.Name)
+	require.Equal(t, "Provider", conn.Provider.Key)
 
 	data := connectionData(written)
 	require.Equal(t, "az://:accountkey==@mystorageaccount/mycontainer", data["url"])
