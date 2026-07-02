@@ -86,12 +86,9 @@ type KafkaTopicDef struct {
 type KafkaConfig struct {
 	Sizing map[v2.Size]KafkaSizingConfig `yaml:"sizing"`
 	Topics []KafkaTopic                  `yaml:"topics"`
-	// Image is the primary managed Kafka broker image.
-	Image ImageRef `yaml:"image,omitempty"`
-	// Images holds the auxiliary images used by the managed Kafka deployment
-	// keyed by component (e.g. "etcd", "bucketEnsure" for Bufstream). Keeping
-	// these separate from the broker Image lets a manifest mirror every image a
-	// managed Kafka install pulls.
+	// Images holds every image the managed Kafka deployment pulls, keyed by
+	// component (e.g. "bufstream", "etcd", "bucketEnsure"). Keeping them all in
+	// one map lets a manifest mirror every image a managed Kafka install needs.
 	Images map[string]ImageRef `yaml:"images,omitempty"`
 }
 
@@ -419,12 +416,9 @@ func mergeSimple(dst, src *Manifest) {
 		}
 	}
 
-	// Kafka images - the broker Image and the auxiliary Images map can live in a
-	// different manifest file than the kafka sizing/topics, so merge them
-	// explicitly rather than letting them get dropped.
-	if dst.Kafka.Image == (ImageRef{}) {
-		dst.Kafka.Image = src.Kafka.Image
-	}
+	// Kafka images - the Images map can live in a different manifest file than
+	// the kafka sizing/topics, so merge it explicitly rather than letting it get
+	// dropped.
 	if src.Kafka.Images != nil {
 		if dst.Kafka.Images == nil {
 			dst.Kafka.Images = make(map[string]ImageRef)

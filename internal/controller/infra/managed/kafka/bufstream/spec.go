@@ -28,33 +28,33 @@ const (
 )
 
 const (
-	// Keys for the manifest's kafka.images map for the Bufstream-specific
-	// supporting images. The broker image comes from kafka.image instead.
+	// Keys for the manifest's kafka.images map. Every image the managed Bufstream
+	// deployment pulls is sourced from this map, keyed by component.
+	imageKeyBufstream    = "bufstream"
 	imageKeyEtcd         = "etcd"
 	imageKeyBucketEnsure = "bucketEnsure"
 )
 
 // BufstreamImage resolves the Bufstream broker image from the manifest, falling
 // back to the hardcoded default when the manifest does not supply one.
-func BufstreamImage(img manifest.ImageRef) string {
-	return resolveImage(img, defaultBufstreamImage)
+func BufstreamImage(img manifest.ImageRef, globalImageRegistry string) string {
+	return resolveImage(img, globalImageRegistry, defaultBufstreamImage)
 }
 
 // EtcdImage resolves the etcd metadata-store image from the manifest, falling
 // back to the hardcoded default when the manifest does not supply one.
-func EtcdImage(img manifest.ImageRef) string {
-	return resolveImage(img, defaultEtcdImage)
+func EtcdImage(img manifest.ImageRef, globalImageRegistry string) string {
+	return resolveImage(img, globalImageRegistry, defaultEtcdImage)
 }
 
 // BucketEnsureImage resolves the bucket-ensure init-container image from the
 // manifest, falling back to the hardcoded default when the manifest does not
 // supply one.
-func BucketEnsureImage(img manifest.ImageRef) string {
-	return resolveImage(img, defaultBucketEnsureImage)
+func BucketEnsureImage(img manifest.ImageRef, globalImageRegistry string) string {
+	return resolveImage(img, globalImageRegistry, defaultBucketEnsureImage)
 }
 
-func resolveImage(img manifest.ImageRef, fallback string) string {
-	globalImageRegistry := "" // TODO: source from wandb.Spec.Global.ImageRegistry once that field exists.
+func resolveImage(img manifest.ImageRef, globalImageRegistry, fallback string) string {
 	if out := img.GetImage(globalImageRegistry); out != "" {
 		return out
 	}
@@ -254,7 +254,7 @@ func ToEtcdApplication(
 					Containers: []corev1.Container{
 						{
 							Name:            "etcd",
-							Image:           EtcdImage(mfst.Kafka.Images[imageKeyEtcd]),
+							Image:           EtcdImage(mfst.Kafka.Images[imageKeyEtcd], wandb.Spec.Global.ImageRegistry),
 							Env:             etcdEnv,
 							SecurityContext: kafkaContainerSecurityContext(),
 							Ports: []corev1.ContainerPort{
@@ -346,7 +346,7 @@ func spreadAffinity(wandb *apiv2.WeightsAndBiases, spec apiv2.ManagedInfraSpec, 
 // object-store bucket Bufstream reads from on startup. Bufstream itself never
 // creates the bucket, and it can come up before the W&B applications that would
 // otherwise create it, so it must be ensured here.
-func bucketEnsureContainer(nsnBuilder *NsNameBuilder, storage objectstore.ConnInfo, img manifest.ImageRef) corev1.Container {
+func bucketEnsureContainer(nsnBuilder *NsNameBuilder, storage objectstore.ConnInfo, img manifest.ImageRef, globalImageRegistry string) corev1.Container {
 	region := storage.Region
 	if region == "" {
 		region = "us-east-1"
@@ -361,7 +361,7 @@ func bucketEnsureContainer(nsnBuilder *NsNameBuilder, storage objectstore.ConnIn
 	)
 	return corev1.Container{
 		Name:            "ensure-bucket",
-		Image:           BucketEnsureImage(img),
+		Image:           BucketEnsureImage(img, globalImageRegistry),
 		Command:         []string{"/bin/sh", "-c"},
 		Args:            []string{script},
 		SecurityContext: kafkaContainerSecurityContext(),
@@ -457,7 +457,7 @@ func ToBufstreamApplication(
 
 	container := corev1.Container{
 		Name:            "bufstream",
-		Image:           BufstreamImage(mfst.Kafka.Image),
+		Image:           BufstreamImage(mfst.Kafka.Images[imageKeyBufstream], wandb.Spec.Global.ImageRegistry),
 		Args:            []string{"serve", "--config", fmt.Sprintf("%s/%s", ConfigMountPath, ConfigFileName)},
 		SecurityContext: kafkaContainerSecurityContext(),
 		Ports: []corev1.ContainerPort{
@@ -476,7 +476,7 @@ func ToBufstreamApplication(
 
 	var initContainers []corev1.Container
 	if needsBucketEnsure(storage) {
-		initContainers = append(initContainers, bucketEnsureContainer(nsnBuilder, storage, mfst.Kafka.Images[imageKeyBucketEnsure]))
+		initContainers = append(initContainers, bucketEnsureContainer(nsnBuilder, storage, mfst.Kafka.Images[imageKeyBucketEnsure], wandb.Spec.Global.ImageRegistry))
 	}
 
 	app := &apiv2.Application{
