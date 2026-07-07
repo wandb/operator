@@ -116,7 +116,7 @@
       },
       "targets": [
         {
-          "expr": "count(up == 0)",
+          "expr": "count(up == 0) or vector(0)",
           "refId": "A"
         }
       ],
@@ -241,7 +241,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(mysql_global_status_questions{job=~\".*/mysql-innodb\"}[$__rate_interval]))",
+          "expr": "sum(rate(mysql_global_status_questions{job=~\"$namespace/mysql-(moco|innodb)\"}[$__rate_interval]))",
           "refId": "A"
         }
       ],
@@ -810,7 +810,7 @@
       },
       "targets": [
         {
-          "expr": "max(mysql_up{job=~\".*/mysql-innodb\"})",
+          "expr": "max(mysql_up{job=~\"$namespace/mysql-(moco|innodb)\"})",
           "refId": "A"
         }
       ],
@@ -861,7 +861,7 @@
       },
       "targets": [
         {
-          "expr": "max(mysql_global_status_threads_connected{job=~\".*/mysql-innodb\"})",
+          "expr": "max(mysql_global_status_threads_connected{job=~\"$namespace/mysql-(moco|innodb)\"})",
           "refId": "A"
         }
       ],
@@ -895,7 +895,7 @@
       },
       "targets": [
         {
-          "expr": "max(mysql_global_status_threads_running{job=~\".*/mysql-innodb\"})",
+          "expr": "max(mysql_global_status_threads_running{job=~\"$namespace/mysql-(moco|innodb)\"})",
           "refId": "A"
         }
       ],
@@ -929,7 +929,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(mysql_global_status_innodb_data_writes{job=~\".*/mysql-innodb\"}[$__rate_interval]))",
+          "expr": "sum(rate(mysql_global_status_innodb_data_writes{job=~\"$namespace/mysql-(moco|innodb)\"}[$__rate_interval]))",
           "refId": "A"
         }
       ],
@@ -963,7 +963,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(mysql_global_status_slow_queries{job=~\".*/mysql-innodb\"}[$__rate_interval])) or vector(0)",
+          "expr": "sum(rate(mysql_global_status_slow_queries{job=~\"$namespace/mysql-(moco|innodb)\"}[$__rate_interval])) or vector(0)",
           "refId": "A"
         }
       ],
@@ -1018,7 +1018,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(mysql_global_status_innodb_os_log_fsyncs{job=~\".*/mysql-innodb\"}[$__rate_interval]))",
+          "expr": "sum(rate(mysql_global_status_innodb_os_log_fsyncs{job=~\"$namespace/mysql-(moco|innodb)\"}[$__rate_interval]))",
           "refId": "A"
         }
       ],
@@ -1052,17 +1052,17 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(mysql_global_status_questions{job=~\".*/mysql-innodb\"}[$__rate_interval]))",
+          "expr": "sum(rate(mysql_global_status_questions{job=~\"$namespace/mysql-(moco|innodb)\"}[$__rate_interval]))",
           "legendFormat": "questions",
           "refId": "A"
         },
         {
-          "expr": "sum(rate(mysql_global_status_innodb_data_writes{job=~\".*/mysql-innodb\"}[$__rate_interval]))",
+          "expr": "sum(rate(mysql_global_status_innodb_data_writes{job=~\"$namespace/mysql-(moco|innodb)\"}[$__rate_interval]))",
           "legendFormat": "innodb writes",
           "refId": "B"
         },
         {
-          "expr": "sum(rate(mysql_global_status_innodb_os_log_fsyncs{job=~\".*/mysql-innodb\"}[$__rate_interval]))",
+          "expr": "sum(rate(mysql_global_status_innodb_os_log_fsyncs{job=~\"$namespace/mysql-(moco|innodb)\"}[$__rate_interval]))",
           "legendFormat": "fsyncs",
           "refId": "C"
         }
@@ -1083,12 +1083,12 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(mysql_global_status_bytes_received{job=~\".*/mysql-innodb\"}[$__rate_interval]))",
+          "expr": "sum(rate(mysql_global_status_bytes_received{job=~\"$namespace/mysql-(moco|innodb)\"}[$__rate_interval]))",
           "legendFormat": "bytes received",
           "refId": "A"
         },
         {
-          "expr": "sum(rate(mysql_global_status_bytes_sent{job=~\".*/mysql-innodb\"}[$__rate_interval]))",
+          "expr": "sum(rate(mysql_global_status_bytes_sent{job=~\"$namespace/mysql-(moco|innodb)\"}[$__rate_interval]))",
           "legendFormat": "bytes sent",
           "refId": "B"
         }
@@ -1115,12 +1115,12 @@
       },
       "targets": [
         {
-          "expr": "max(mysql_global_status_innodb_row_lock_current_waits{job=~\".*/mysql-innodb\"})",
+          "expr": "max(mysql_global_status_innodb_row_lock_current_waits{job=~\"$namespace/mysql-(moco|innodb)\"})",
           "legendFormat": "current waits",
           "refId": "A"
         },
         {
-          "expr": "sum(rate(mysql_global_status_innodb_row_lock_waits{job=~\".*/mysql-innodb\"}[$__rate_interval])) or vector(0)",
+          "expr": "sum(rate(mysql_global_status_innodb_row_lock_waits{job=~\"$namespace/mysql-(moco|innodb)\"}[$__rate_interval])) or vector(0)",
           "legendFormat": "waits / sec",
           "refId": "B"
         }
@@ -1141,12 +1141,12 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(mysql_global_status_innodb_data_reads{job=~\".*/mysql-innodb\"}[$__rate_interval])) or vector(0)",
+          "expr": "sum(rate(mysql_global_status_innodb_data_reads{job=~\"$namespace/mysql-(moco|innodb)\"}[$__rate_interval])) or vector(0)",
           "legendFormat": "reads",
           "refId": "A"
         },
         {
-          "expr": "sum(rate(mysql_global_status_innodb_data_writes{job=~\".*/mysql-innodb\"}[$__rate_interval]))",
+          "expr": "sum(rate(mysql_global_status_innodb_data_writes{job=~\"$namespace/mysql-(moco|innodb)\"}[$__rate_interval]))",
           "legendFormat": "writes",
           "refId": "B"
         }
@@ -1560,7 +1560,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"default\",pod=~\"wandb-dev-v2-(api|executor|filemeta|flat-run-fields-updater|glue|metric-observer|nginx-proxy|parquet|weave|weave-trace|weave-trace-worker|weave-trace-evaluate-model-worker).*\"}[$__rate_interval])) by (pod)",
+          "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"$namespace\",pod=~\"(api|executor|filemeta|flat-run-fields-updater|glue|metric-observer|nginx-proxy|parquet|weave|weave-trace|weave-trace-worker|weave-trace-evaluate-model-worker)-.*\"}[$__rate_interval])) by (pod)",
           "legendFormat": "{{pod}}",
           "refId": "A"
         }
@@ -1581,7 +1581,7 @@
       },
       "targets": [
         {
-          "expr": "sum(container_memory_working_set_bytes{namespace=\"default\",pod=~\"wandb-dev-v2-(api|executor|filemeta|flat-run-fields-updater|glue|metric-observer|nginx-proxy|parquet|weave|weave-trace|weave-trace-worker|weave-trace-evaluate-model-worker).*\"}) by (pod)",
+          "expr": "sum(container_memory_working_set_bytes{namespace=\"$namespace\",pod=~\"(api|executor|filemeta|flat-run-fields-updater|glue|metric-observer|nginx-proxy|parquet|weave|weave-trace|weave-trace-worker|weave-trace-evaluate-model-worker)-.*\"}) by (pod)",
           "legendFormat": "{{pod}}",
           "refId": "A"
         }
@@ -2149,7 +2149,30 @@
     "observability"
   ],
   "templating": {
-    "list": []
+    "list": [
+      {
+        "name": "namespace",
+        "label": "W&B Namespace",
+        "type": "query",
+        "datasource": {
+          "type": "victoriametrics-metrics-datasource",
+          "uid": "${DS_VICTORIAMETRICS}"
+        },
+        "definition": "label_values(wandb_application_info, namespace)",
+        "query": {
+          "query": "label_values(wandb_application_info, namespace)",
+          "refId": "namespace-variable-query"
+        },
+        "refresh": 1,
+        "sort": 1,
+        "includeAll": false,
+        "multi": false,
+        "current": {
+          "text": "wandb",
+          "value": "wandb"
+        }
+      }
+    ]
   },
   "time": {
     "from": "now-6h",

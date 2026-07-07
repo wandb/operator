@@ -27,6 +27,7 @@ import (
 
 	"github.com/samber/lo"
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/ctrlqueue"
 	"github.com/wandb/operator/internal/logx"
 	wmetrics "github.com/wandb/operator/internal/metrics"
@@ -162,6 +163,8 @@ func Reconcile(
 
 	var errorCount int
 
+	wandb.Status.TelemetryStatus = summarizeTelemetryInfraStatus(ctx, client, telemetryConfig)
+
 	/////////////////////////
 	// Retention Finalizer
 
@@ -220,11 +223,6 @@ func Reconcile(
 					return ctrl.Result{}, err
 				}
 			}
-			if wandb.Spec.Kafka.ExternalKafka != nil && wandb.Spec.RetentionPolicy.OnDelete == apiv2.PurgeOnDelete {
-				if err = kafkaPurgeFinalizer(ctx, client, wandb); err != nil {
-					return ctrl.Result{}, err
-				}
-			}
 			if wandb.Spec.ClickHouse.ExternalClickHouse != nil && wandb.Spec.RetentionPolicy.OnDelete == apiv2.PurgeOnDelete {
 				if err = clickHousePurgeFinalizer(ctx, client, wandb); err != nil {
 					return ctrl.Result{}, err
@@ -279,11 +277,11 @@ func Reconcile(
 
 	/////////////////////////
 	// Write Infra State
-	redisConditions := redisWriteState(ctx, client, wandb)
-	mysqlConditions := mysqlWriteState(ctx, client, wandb)
-	kafkaConditions := kafkaWriteState(ctx, client, wandb)
-	objectStoreConditions, objectStoreConnection := objectStoreWriteState(ctx, client, wandb)
-	clickHouseConditions := clickHouseWriteState(ctx, client, wandb, objectStoreConnection)
+	redisConditions := redisWriteState(ctx, client, wandb, manifest)
+	mysqlConditions := mysqlWriteState(ctx, client, wandb, manifest)
+	kafkaConditions := kafkaWriteState(ctx, client, wandb, manifest)
+	objectStoreConditions, objectStoreConnection := objectStoreWriteState(ctx, client, wandb, manifest)
+	clickHouseConditions := clickHouseWriteState(ctx, client, wandb, objectStoreConnection, manifest)
 
 	/////////////////////////
 	// Read Infra State
@@ -547,7 +545,7 @@ func reconcileApplications(
 
 		containers := resolveContainers(app, wandb, envVars, volumeMounts)
 
-		initContainers := resolveInitContainers(app, envVars, volumeMounts)
+		initContainers := resolveInitContainers(app, wandb, envVars, volumeMounts)
 
 		application := &apiv2.Application{}
 		err = client.Get(ctx, types.NamespacedName{Name: app.Name, Namespace: wandb.Namespace}, application)
@@ -566,6 +564,7 @@ func reconcileApplications(
 		// across updates (e.g., duplicate "files-inline" volume names).
 		application.Spec.PodTemplate.Spec.Volumes = volumes
 		application.Spec.PodTemplate.Spec.InitContainers = initContainers
+		application.Spec.PodTemplate.Spec.SecurityContext = resolvePodSecurityContext()
 		application.Spec.PodTemplate.Spec.Affinity = wandb.Spec.Affinity
 		application.Spec.PodTemplate.Spec.Tolerations = *wandb.Spec.Tolerations
 
@@ -622,6 +621,14 @@ func reconcileApplications(
 
 	for _, app := range existingApps.Items {
 		if !isOwnedBy(&app, wandb) {
+			continue
+		}
+
+		// Infra-managed Applications (e.g. managed Kafka/etcd) carry a component
+		// label and are owned by their dedicated infra reconcilers, not the
+		// server manifest. Skip them so manifest-driven pruning never deletes
+		// them, which would otherwise cause a delete/recreate loop.
+		if _, ok := app.Labels[common.WandbComponentLabel]; ok {
 			continue
 		}
 
@@ -780,10 +787,7 @@ func injectManagedWorkloadTelemetryEnvvars(
 		return envVars, nil
 	}
 
-	// Ensure telemetry `secretName` is present
-	cleanedEnvVars := bindTelemetrySecretName(managedWorkloadTelemetryEnvVars, telemetryConfig.OTel.SecretName)
-
-	telemetryEnvVars, err := resolveEnvvars(ctx, client, wandb, manifest, nil, cleanedEnvVars)
+	telemetryEnvVars, err := resolveEnvvars(ctx, client, wandb, manifest, nil, managedWorkloadTelemetryEnvVars)
 	if err != nil {
 		return nil, err
 	}
@@ -1118,7 +1122,7 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 							Containers: []corev1.Container{
 								{
 									Name:         "migrate",
-									Image:        migrationTask.Image.GetImage(),
+									Image:        migrationTask.Image.GetImage(""),
 									Args:         migrationTask.Args,
 									Command:      migrationTask.Command,
 									Env:          envVars,
@@ -1281,38 +1285,69 @@ func generateSecrets(ctx context.Context, client ctrlClient.Client, wandb *apiv2
 	return ctrl.Result{}, nil
 }
 
-// resolveCRFieldString resolves a dotted field path (e.g., "spec.wandb.license")
-// from the provided custom resource object, returning the string value if present.
-// Non-string terminal values are treated as not found.
-func resolveCRFieldString(obj any, path string) (string, bool) {
+// resolveCRField traverses a dotted field path (e.g., "spec.wandb.license") in the
+// provided custom resource object and returns the raw terminal value if present.
+// Typed accessors (resolveCRFieldString, resolveCRFieldSecretSelector, ...) build on
+// top of this to validate and cast the result to the type they expect.
+func resolveCRField(obj any, path string) (any, bool) {
 	if obj == nil || path == "" {
-		return "", false
+		return nil, false
 	}
 	// Marshal to JSON then unmarshal into a generic map for easy traversal.
 	b, err := json.Marshal(obj)
 	if err != nil {
-		return "", false
+		return nil, false
 	}
 	var m map[string]any
 	if err := json.Unmarshal(b, &m); err != nil {
-		return "", false
+		return nil, false
 	}
 	cur := any(m)
 	for _, seg := range strings.Split(path, ".") {
 		mm, ok := cur.(map[string]any)
 		if !ok {
-			return "", false
+			return nil, false
 		}
 		next, ok := mm[seg]
 		if !ok {
-			return "", false
+			return nil, false
 		}
 		cur = next
 	}
-	if s, ok := cur.(string); ok {
-		return s, true
+	return cur, true
+}
+
+// resolveCRFieldString resolves a dotted field path from the provided custom resource
+// object, returning the string value if present. Non-string terminal values are
+// treated as not found.
+func resolveCRFieldString(obj any, path string) (string, bool) {
+	cur, ok := resolveCRField(obj, path)
+	if !ok {
+		return "", false
 	}
-	return "", false
+	s, ok := cur.(string)
+	return s, ok
+}
+
+func resolveCRFieldSecretSelector(obj any, path string) (corev1.SecretKeySelector, bool) {
+	cur, ok := resolveCRField(obj, path)
+	if !ok {
+		return corev1.SecretKeySelector{}, false
+	}
+	// Re-marshal the terminal node into a SecretKeySelector so we honor the same
+	// json tags (name/key/optional) the CRD uses.
+	tb, err := json.Marshal(cur)
+	if err != nil {
+		return corev1.SecretKeySelector{}, false
+	}
+	var sel corev1.SecretKeySelector
+	if err := json.Unmarshal(tb, &sel); err != nil {
+		return corev1.SecretKeySelector{}, false
+	}
+	if sel.Name == "" || sel.Key == "" {
+		return corev1.SecretKeySelector{}, false
+	}
+	return sel, true
 }
 
 func inferState(

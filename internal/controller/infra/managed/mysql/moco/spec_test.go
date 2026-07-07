@@ -8,6 +8,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/samber/lo"
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/pkg/wandb/manifest"
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
@@ -35,6 +36,7 @@ var _ = Describe("Moco MySQL specs", func() {
 			},
 			mocoWandb(),
 			mocoScheme(),
+			manifest.Manifest{},
 		)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(cluster).NotTo(BeNil())
@@ -71,6 +73,7 @@ var _ = Describe("Moco MySQL specs", func() {
 			},
 			mocoWandb(),
 			mocoScheme(),
+			manifest.Manifest{},
 		)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(cluster).NotTo(BeNil())
@@ -78,6 +81,35 @@ var _ = Describe("Moco MySQL specs", func() {
 		podSpec := cluster.Spec.PodTemplate.Spec
 		expectMocoOpenShiftPodSecurityContext(podSpec.SecurityContext)
 		expectMocoOpenShiftContainerSecurityContext(podSpec.Containers[0].SecurityContext)
+	})
+
+	It("sets mysqld_exporter collectors only when telemetry is enabled", func() {
+		// A non-empty Collectors list is what makes Moco inject the mysqld_exporter sidecar.
+		enabled, _, err := ToMocoMySQLClusterSpec(
+			context.Background(),
+			apiv2.ManagedMysqlSpec{
+				Name: "mysql", Namespace: "wandb", Replicas: 3, StorageSize: "10Gi",
+				Telemetry: apiv2.Telemetry{Enabled: true},
+			},
+			mocoWandb(),
+			mocoScheme(),
+			manifest.Manifest{},
+		)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(enabled.Spec.Collectors).NotTo(BeEmpty())
+
+		disabled, _, err := ToMocoMySQLClusterSpec(
+			context.Background(),
+			apiv2.ManagedMysqlSpec{
+				Name: "mysql", Namespace: "wandb", Replicas: 3, StorageSize: "10Gi",
+				Telemetry: apiv2.Telemetry{Enabled: false},
+			},
+			mocoWandb(),
+			mocoScheme(),
+			manifest.Manifest{},
+		)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(disabled.Spec.Collectors).To(BeEmpty())
 	})
 
 	DescribeTable("refuses to forward a replica count Moco rejects",
@@ -91,6 +123,7 @@ var _ = Describe("Moco MySQL specs", func() {
 				apiv2.ManagedMysqlSpec{Name: "mysql", Namespace: "wandb", Replicas: replicas, StorageSize: "10Gi"},
 				mocoWandb(),
 				mocoScheme(),
+				manifest.Manifest{},
 			)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -154,6 +187,7 @@ var _ = Describe("Moco MySQL specs", func() {
 			apiv2.ManagedMysqlSpec{Name: "mysql", Namespace: "wandb", Replicas: 1, StorageSize: "10Gi"},
 			mocoWandb(),
 			mocoScheme(),
+			manifest.Manifest{},
 		)
 		Expect(err).NotTo(HaveOccurred())
 

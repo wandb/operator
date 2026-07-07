@@ -237,9 +237,6 @@ func applyRedisDefaults(wandb *appsv2.WeightsAndBiases) {
 
 func applyKafkaDefaults(wandb *appsv2.WeightsAndBiases) {
 	if wandb.Spec.Kafka.ManagedKafka == nil {
-		if wandb.Spec.Kafka.ExternalKafka != nil {
-			return
-		}
 		wandb.Spec.Kafka.ManagedKafka = &appsv2.ManagedKafkaSpec{}
 	}
 
@@ -306,7 +303,6 @@ func validateSpec(_ context.Context, newWandb *appsv2.WeightsAndBiases) (admissi
 
 	allErrors = append(allErrors, validateMySQLSpec(newWandb)...)
 	allErrors = append(allErrors, validateRedisSpec(newWandb)...)
-	allErrors = append(allErrors, validateKafkaSpec(newWandb)...)
 	allErrors = append(allErrors, validateObjectStoreSpec(newWandb)...)
 	allErrors = append(allErrors, validateClickHouseSpec(newWandb)...)
 	networkingErrors, networkingWarnings := validateNetworkingSpec(newWandb)
@@ -422,21 +418,6 @@ func validateRedisSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 	return errors
 }
 
-func validateKafkaSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
-	var errors field.ErrorList
-	kafkaPath := field.NewPath("spec").Child("kafka")
-
-	if wandb.Spec.Kafka.ManagedKafka != nil && wandb.Spec.Kafka.ExternalKafka != nil {
-		errors = append(errors, field.Invalid(
-			kafkaPath,
-			"",
-			"managedKafka and externalKafka are mutually exclusive",
-		))
-	}
-
-	return errors
-}
-
 func validateObjectStoreSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 	var errors field.ErrorList
 	objectStorePath := field.NewPath("spec").Child("objectStore")
@@ -447,6 +428,17 @@ func validateObjectStoreSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 			"",
 			"managedObjectStore and externalObjectStore are mutually exclusive",
 		))
+	}
+
+	if ext := wandb.Spec.ObjectStore.ExternalObjectStore; ext != nil {
+		extPath := objectStorePath.Child("externalObjectStore")
+		// provider is sourced from a secret key, so it is resolved and defaulted at reconcile time, not here.
+		if ext.Bucket.Name == "" {
+			errors = append(errors, field.Required(
+				extPath.Child("bucket"),
+				"externalObjectStore requires a bucket secret reference",
+			))
+		}
 	}
 
 	return errors

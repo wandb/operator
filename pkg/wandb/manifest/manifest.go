@@ -72,6 +72,7 @@ type GeneratedSecret struct {
 type InfraConfig struct {
 	Sizing  map[v2.Size]SizingConfig `yaml:"sizing"`
 	Ingress *AppIngressSpec          `yaml:"ingress,omitempty"`
+	Images  map[string]ImageRef      `yaml:"images,omitempty"`
 }
 
 // KafkaTopicDef models a topic configuration used both at the top-level
@@ -86,6 +87,10 @@ type KafkaTopicDef struct {
 type KafkaConfig struct {
 	Sizing map[v2.Size]KafkaSizingConfig `yaml:"sizing"`
 	Topics []KafkaTopic                  `yaml:"topics"`
+	// Images holds every image the managed Kafka deployment pulls, keyed by
+	// component (e.g. "bufstream", "etcd", "bucketEnsure"). Keeping them all in
+	// one map lets a manifest mirror every image a managed Kafka install needs.
+	Images map[string]ImageRef `yaml:"images,omitempty"`
 }
 
 // KafkaTopic models one entry in the kafka topics list in the YAML.
@@ -98,19 +103,38 @@ type KafkaTopic struct {
 
 // ImageRef represents an application container image reference.
 type ImageRef struct {
+	Registry   string `yaml:"registry"`
 	Repository string `yaml:"repository"`
 	Tag        string `yaml:"tag,omitempty"`
 	Digest     string `yaml:"digest,omitempty"`
 }
 
-func (img ImageRef) GetImage() string {
-	if img.Digest != "" {
-		return img.Repository + "@" + img.Digest
+func (img ImageRef) GetImage(registry string) string {
+	reg := img.Registry          // from manifest
+	repository := img.Repository // from manifest, older verisons of manifest will contain both registry and repository in this field
+
+	// manifest's ImageRef.Registry is blank, check if registry exists as part of repository string
+	var wandbImage string
+	if reg == "" {
+		wandbImage = repository
+	} else { // manifest's ImageRef.Registry exists. Combine with repo for full wandb path
+		wandbImage = reg + "/" + repository
 	}
-	if img.Tag != "" {
-		return img.Repository + ":" + img.Tag
+
+	// user provided global image registry, prepend full wandb reg.repo path
+	image := wandbImage
+	if registry != "" {
+		image = registry + "/" + wandbImage
 	}
-	return img.Repository
+
+	switch {
+	case img.Digest != "":
+		return image + "@" + img.Digest
+	case img.Tag != "":
+		return image + ":" + img.Tag
+	default:
+		return image
+	}
 }
 
 // AppKafkaSection is the per-application kafka section; fields are optional
@@ -396,6 +420,18 @@ func mergeSimple(dst, src *Manifest) {
 		}
 		for k, v := range src.Kafka.Sizing {
 			dst.Kafka.Sizing[k] = v
+		}
+	}
+
+	// Kafka images - the Images map can live in a different manifest file than
+	// the kafka sizing/topics, so merge it explicitly rather than letting it get
+	// dropped.
+	if src.Kafka.Images != nil {
+		if dst.Kafka.Images == nil {
+			dst.Kafka.Images = make(map[string]ImageRef)
+		}
+		for k, v := range src.Kafka.Images {
+			dst.Kafka.Images[k] = v
 		}
 	}
 

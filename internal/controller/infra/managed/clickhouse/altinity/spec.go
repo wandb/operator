@@ -12,6 +12,7 @@ import (
 	"github.com/wandb/operator/pkg/utils"
 	"github.com/wandb/operator/pkg/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
 	chtypes "github.com/wandb/operator/pkg/vendored/altinity-clickhouse/common/types"
+	"github.com/wandb/operator/pkg/wandb/manifest"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -23,8 +24,19 @@ import (
 
 const (
 	ClickhouseModuleName = "clickhouse"
-	ClickHouseImage      = "altinity/clickhouse-server:25.8.16.10002.altinitystable"
+
+	// TODO: remove this hardcoded default once all supported manifest versions
+	// supply clickhouse.<instance>.images.server.
+	defaultClickHouseImage = "altinity/clickhouse-server:25.8.16.10002.altinitystable"
 )
+
+func ClickHouseImage(img manifest.ImageRef, globalImageRegistry string) string {
+	if out := img.GetImage(globalImageRegistry); out != "" {
+		return out
+	}
+	// Fallback for older manifests that don't supply the image.
+	return defaultClickHouseImage
+}
 
 const (
 	clickHouseRunAsUser  int64 = 101
@@ -111,6 +123,7 @@ func ToClickHouseVendorSpec(
 	wandb *apiv2.WeightsAndBiases,
 	scheme *runtime.Scheme,
 	objStorage *ObjectStorageConn,
+	mfst manifest.Manifest,
 ) (*v1.ClickHouseInstallation, error) {
 	_, log := logx.WithSlog(ctx, logx.ClickHouse)
 	spec := wandb.Spec.ClickHouse.ManagedClickHouse
@@ -180,7 +193,7 @@ func ToClickHouseVendorSpec(
 		Containers: []corev1.Container{
 			{
 				Name:            "clickhouse",
-				Image:           ClickHouseImage,
+				Image:           ClickHouseImage(mfst.Clickhouse["default"].Images["server"], wandb.Spec.Global.ImageRegistry),
 				SecurityContext: clickHouseContainerSecurityContext(),
 				VolumeMounts:    clickHouseWritableVolumeMounts(),
 			},

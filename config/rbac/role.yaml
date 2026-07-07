@@ -227,28 +227,23 @@ rules:
   - update
   - watch
 - apiGroups:
-  - kafka.strimzi.io
+  - grafana.integreatly.org
   resources:
-  - kafkanodepools
-  - kafkas
-  - kafkatopics
+  - grafanadashboards
+  - grafanadatasources
+  - grafanas
   verbs:
-  - create
-  - delete
   - get
   - list
-  - patch
-  - update
   - watch
 - apiGroups:
-  - kafka.strimzi.io
+  - grafana.integreatly.org
   resources:
-  - kafkanodepools/status
-  - kafkas/status
-  - kafkatopics/status
+  - grafanadashboards/status
+  - grafanadatasources/status
+  - grafanas/status
   verbs:
   - get
-  - update
 - apiGroups:
   - moco.cybozu.com
   resources:
@@ -302,6 +297,32 @@ rules:
   - get
   - list
   - watch
+- apiGroups:
+  - operator.victoriametrics.com
+  resources:
+  - vlsingles
+  - vmagents
+  - vmalerts
+  - vmnodescrapes
+  - vmpodscrapes
+  - vmrules
+  - vmservicescrapes
+  - vmsingles
+  - vtsingles
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - operator.victoriametrics.com
+  resources:
+  - vlsingles/status
+  - vmagents/status
+  - vmalerts/status
+  - vmsingles/status
+  - vtsingles/status
+  verbs:
+  - get
 - apiGroups:
   - policy
   resources:

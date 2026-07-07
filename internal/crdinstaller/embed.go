@@ -29,14 +29,14 @@ var operatorCRDs embed.FS
 //go:embed crds/redis/*.yaml
 var redisCRDs embed.FS
 
-//go:embed crds/kafka/*.yaml
-var kafkaCRDs embed.FS
+//go:embed crds/clickhouse/*.yaml
+var clickhouseCRDs embed.FS
 
 // optionalGroups maps the value used on the --groups CLI flag to the
 // matching embedded filesystem. The operator's own CRDs are NOT in here
 // because they're always installed regardless of which optional groups
 // are requested.
 var optionalGroups = map[string]embed.FS{
-	"redis": redisCRDs,
-	"kafka": kafkaCRDs,
+	"redis":      redisCRDs,
+	"clickhouse": clickhouseCRDs,
 }

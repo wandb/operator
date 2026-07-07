@@ -29,8 +29,8 @@ spec:
     - port: "stats"
       path: /metrics
 ---
-# Kafka - Strimzi
-# Scrapes Kafka broker metrics via Strimzi Metrics Reporter
+# Kafka - Bufstream
+# Scrapes Bufstream broker metrics from the debug/metrics port
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMPodScrape
 metadata:
@@ -39,9 +39,9 @@ metadata:
 spec:
   selector:
     matchLabels:
-      strimzi.io/kind: Kafka
+      weightsandbiases.apps.wandb.com/component: kafka
   podMetricsEndpoints:
-    - port: "tcp-prometheus"
+    - port: "metrics"
       path: /metrics
 ---
 # SeaweedFS Master

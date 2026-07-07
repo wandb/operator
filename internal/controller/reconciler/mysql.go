@@ -27,9 +27,10 @@ func mysqlWriteState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
+	mfst manifest.Manifest,
 ) []metav1.Condition {
 	if wandb.Spec.MySQL.ManagedMysql != nil {
-		return managedMysqlWriteState(ctx, client, wandb)
+		return managedMysqlWriteState(ctx, client, wandb, mfst)
 	}
 	if wandb.Spec.MySQL.ExternalMysql != nil {
 		return externalMysqlWriteState(ctx, client, wandb)
@@ -104,6 +105,7 @@ func managedMysqlWriteState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
+	mfst manifest.Manifest,
 ) []metav1.Condition {
 	spec := wandb.Spec.MySQL.ManagedMysql
 
@@ -174,7 +176,7 @@ func managedMysqlWriteState(
 
 	var desired *mocov1beta2.MySQLCluster
 	var confMap *corev1.ConfigMap
-	desired, confMap, err = moco.ToMocoMySQLClusterSpec(ctx, *spec, wandb, client.Scheme())
+	desired, confMap, err = moco.ToMocoMySQLClusterSpec(ctx, *spec, wandb, client.Scheme(), mfst)
 	if err != nil {
 		logger.Error(err, "failed to translate moco spec")
 		return []metav1.Condition{
@@ -324,7 +326,7 @@ func runMysqlInitJob(ctx context.Context, client client.Client, wandb *apiv2.Wei
 						Containers: []corev1.Container{
 							{
 								Name:    "moco-init",
-								Image:   "ghcr.io/cybozu-go/moco/mysql:8.4.8",
+								Image:   moco.MocoMySQLImage(manifest.Mysql["default"].Images["mysql"], wandb.Spec.Global.ImageRegistry),
 								Command: []string{"/bin/sh", "-c", mysqlCmd},
 								Env: []corev1.EnvVar{
 									envFromConn("MYSQL_HOST", "Host"),

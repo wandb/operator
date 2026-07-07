@@ -1186,76 +1186,13 @@ spec:
                         type: string
                     type: object
                 type: object
+              global:
+                properties:
+                  imageRegistry:
+                    type: string
+                type: object
               kafka:
                 properties:
-                  externalKafka:
-                    properties:
-                      brokerEndpoint:
-                        properties:
-                          key:
-                            type: string
-                          name:
-                            default: ""
-                            type: string
-                          optional:
-                            type: boolean
-                        required:
-                        - key
-                        type: object
-                        x-kubernetes-map-type: atomic
-                      clusterID:
-                        properties:
-                          key:
-                            type: string
-                          name:
-                            default: ""
-                            type: string
-                          optional:
-                            type: boolean
-                        required:
-                        - key
-                        type: object
-                        x-kubernetes-map-type: atomic
-                      host:
-                        properties:
-                          key:
-                            type: string
-                          name:
-                            default: ""
-                            type: string
-                          optional:
-                            type: boolean
-                        required:
-                        - key
-                        type: object
-                        x-kubernetes-map-type: atomic
-                      port:
-                        properties:
-                          key:
-                            type: string
-                          name:
-                            default: ""
-                            type: string
-                          optional:
-                            type: boolean
-                        required:
-                        - key
-                        type: object
-                        x-kubernetes-map-type: atomic
-                      url:
-                        properties:
-                          key:
-                            type: string
-                          name:
-                            default: ""
-                            type: string
-                          optional:
-                            type: boolean
-                        required:
-                        - key
-                        type: object
-                        x-kubernetes-map-type: atomic
-                    type: object
                   managedKafka:
                     properties:
                       affinity:
@@ -2599,6 +2536,19 @@ spec:
                         - key
                         type: object
                         x-kubernetes-map-type: atomic
+                      provider:
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            default: ""
+                            type: string
+                          optional:
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
                       region:
                         properties:
                           key:
@@ -3928,6 +3878,8 @@ spec:
                         - key
                         type: object
                         x-kubernetes-map-type: atomic
+                      sessionLength:
+                        type: string
                     type: object
                   serviceAccount:
                     properties:
@@ -4548,6 +4500,19 @@ spec:
                         - key
                         type: object
                         x-kubernetes-map-type: atomic
+                      provider:
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            default: ""
+                            type: string
+                          optional:
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
                       region:
                         properties:
                           key:
@@ -4719,6 +4684,80 @@ spec:
                         type: object
                         x-kubernetes-map-type: atomic
                     type: object
+                  ready:
+                    type: boolean
+                  state:
+                    type: string
+                required:
+                - ready
+                type: object
+              telemetryStatus:
+                properties:
+                  conditions:
+                    items:
+                      properties:
+                        lastTransitionTime:
+                          format: date-time
+                          type: string
+                        message:
+                          maxLength: 32768
+                          type: string
+                        observedGeneration:
+                          format: int64
+                          minimum: 0
+                          type: integer
+                        reason:
+                          maxLength: 1024
+                          minLength: 1
+                          pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                          type: string
+                        status:
+                          enum:
+                          - "True"
+                          - "False"
+                          - Unknown
+                          type: string
+                        type:
+                          maxLength: 316
+                          pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                          type: string
+                      required:
+                      - lastTransitionTime
+                      - message
+                      - reason
+                      - status
+                      - type
+                      type: object
+                    type: array
+                  connection:
+                    properties:
+                      connectionSecret:
+                        type: string
+                      gorillaTracer:
+                        type: string
+                      logsEndpoint:
+                        type: string
+                      logsExporter:
+                        type: string
+                      managedNamespace:
+                        type: string
+                      metricsEndpoint:
+                        type: string
+                      metricsExporter:
+                        type: string
+                      protocol:
+                        type: string
+                      resourceAttributes:
+                        type: string
+                      serviceName:
+                        type: string
+                      tracesEndpoint:
+                        type: string
+                      tracesExporter:
+                        type: string
+                    type: object
+                  mode:
+                    type: string
                   ready:
                     type: boolean
                   state:

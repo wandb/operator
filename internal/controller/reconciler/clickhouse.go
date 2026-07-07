@@ -10,6 +10,7 @@ import (
 	"github.com/wandb/operator/internal/controller/infra/managed/clickhouse/altinity"
 	"github.com/wandb/operator/internal/controller/infra/managed/clickhouse/altinity/keeper"
 	"github.com/wandb/operator/pkg/utils"
+	"github.com/wandb/operator/pkg/wandb/manifest"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -22,9 +23,10 @@ func clickHouseWriteState(
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
 	objStoreConn *apiv2.ObjectStoreConnection,
+	mfst manifest.Manifest,
 ) []metav1.Condition {
 	if wandb.Spec.ClickHouse.ManagedClickHouse != nil {
-		return managedClickHouseWriteState(ctx, client, wandb, objStoreConn)
+		return managedClickHouseWriteState(ctx, client, wandb, objStoreConn, mfst)
 	}
 	if wandb.Spec.ClickHouse.ExternalClickHouse != nil {
 		return externalClickHouseWriteState(ctx, client, wandb)
@@ -100,6 +102,7 @@ func managedClickHouseWriteState(
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
 	objStoreConn *apiv2.ObjectStoreConnection,
+	mfst manifest.Manifest,
 ) []metav1.Condition {
 	spec := wandb.Spec.ClickHouse.ManagedClickHouse
 
@@ -136,7 +139,7 @@ func managedClickHouseWriteState(
 		}
 	}
 
-	desired, err := altinity.ToClickHouseVendorSpec(ctx, wandb, client.Scheme(), objStorage)
+	desired, err := altinity.ToClickHouseVendorSpec(ctx, wandb, client.Scheme(), objStorage, mfst)
 	if err != nil {
 		log.Error(err, "failed to translate ClickHouse spec to vendor spec")
 		return []metav1.Condition{

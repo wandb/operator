@@ -30,26 +30,29 @@ import (
 	networkingv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 // WeightsAndBiasesReconciler reconciles a WeightsAndBiases object
 type WeightsAndBiasesReconciler struct {
 	client.Client
-	IsAirgapped     bool
-	DeployerClient  deployer.DeployerInterface
-	Scheme          *runtime.Scheme
-	Recorder        record.EventRecorder
-	DryRun          bool
-	Debug           bool
-	EnableV2        bool
-	TelemetryConfig v2.TelemetryRuntimeConfig
+	IsAirgapped        bool
+	DeployerClient     deployer.DeployerInterface
+	Scheme             *runtime.Scheme
+	Recorder           record.EventRecorder
+	DryRun             bool
+	Debug              bool
+	EnableV2           bool
+	TelemetryConfigRef types.NamespacedName
 }
 
 //+kubebuilder:rbac:groups="",resources=configmaps;events;persistentvolumeclaims;secrets;serviceaccounts;services,verbs=update;delete;get;list;create;patch;watch
@@ -67,12 +70,14 @@ type WeightsAndBiasesReconciler struct {
 //+kubebuilder:rbac:groups=clickhouse-keeper.altinity.com,resources=clickhousekeeperinstallations/status,verbs=get
 //+kubebuilder:rbac:groups=cloud.google.com,resources=backendconfigs,verbs=update;delete;get;list;patch;create;watch
 //+kubebuilder:rbac:groups=events.k8s.io,resources=events,verbs=list;watch
-//+kubebuilder:rbac:groups=kafka.strimzi.io,resources=kafkanodepools;kafkas;kafkatopics,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=kafka.strimzi.io,resources=kafkanodepools/status;kafkas/status;kafkatopics/status,verbs=get;update
+//+kubebuilder:rbac:groups=grafana.integreatly.org,resources=grafanas;grafanadashboards;grafanadatasources,verbs=get;list;watch
+//+kubebuilder:rbac:groups=grafana.integreatly.org,resources=grafanas/status;grafanadashboards/status;grafanadatasources/status,verbs=get
 //+kubebuilder:rbac:groups=seaweed.seaweedfs.com,resources=seaweeds,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=seaweed.seaweedfs.com,resources=seaweeds/status,verbs=get
 //+kubebuilder:rbac:groups=moco.cybozu.com,resources=mysqlclusters,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=moco.cybozu.com,resources=mysqlclusters/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=operator.victoriametrics.com,resources=vmagents;vmalerts;vmnodescrapes;vmpodscrapes;vmrules;vmservicescrapes;vmsingles;vlsingles;vtsingles,verbs=get;list;watch
+//+kubebuilder:rbac:groups=operator.victoriametrics.com,resources=vmagents/status;vmalerts/status;vmsingles/status;vlsingles/status;vtsingles/status,verbs=get
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways;httproutes;backendtlspolicies,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways/status;backendtlspolicies/status,verbs=get
 //+kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses;networkpolicies,verbs=update;delete;get;list;create;patch;watch
@@ -111,7 +116,13 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, err
 	}
 
-	return v2.Reconcile(ctx, r.Client, r.Recorder, wandb, r.TelemetryConfig)
+	telemetryConfig, err := r.loadTelemetryConfig(ctx)
+	if err != nil {
+		log.Error(err, "failed to load telemetry configuration", "configMap", r.TelemetryConfigRef)
+		return ctrl.Result{}, err
+	}
+
+	return v2.Reconcile(ctx, r.Client, r.Recorder, wandb, telemetryConfig)
 }
 
 // Delete was taken from original v1 reconciler
@@ -134,8 +145,52 @@ func (r *WeightsAndBiasesReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if utils.IsRegistered(r.Scheme, &mocov1beta2.MySQLCluster{}) {
 		b = b.Owns(&mocov1beta2.MySQLCluster{})
 	}
+	if r.TelemetryConfigRef.Name != "" {
+		b = b.Watches(
+			&corev1.ConfigMap{},
+			handler.EnqueueRequestsFromMapFunc(r.mapTelemetryConfigToWandb),
+			builder.WithPredicates(predicate.NewPredicateFuncs(r.isTelemetryConfig)),
+		)
+	}
 
 	return b.Complete(r)
+}
+
+func (r *WeightsAndBiasesReconciler) loadTelemetryConfig(ctx context.Context) (v2.TelemetryRuntimeConfig, error) {
+	if r.TelemetryConfigRef.Name == "" {
+		return v2.DefaultTelemetryRuntimeConfig(), nil
+	}
+
+	return v2.LoadTelemetryRuntimeConfigFromConfigMap(
+		ctx,
+		r.Client,
+		r.TelemetryConfigRef,
+		v2.DefaultTelemetryRuntimeConfig(),
+	)
+}
+
+func (r *WeightsAndBiasesReconciler) isTelemetryConfig(obj client.Object) bool {
+	return client.ObjectKeyFromObject(obj) == r.TelemetryConfigRef
+}
+
+func (r *WeightsAndBiasesReconciler) mapTelemetryConfigToWandb(ctx context.Context, obj client.Object) []ctrl.Request {
+	if !r.isTelemetryConfig(obj) {
+		return nil
+	}
+
+	wandbList := &apiv2.WeightsAndBiasesList{}
+	if err := r.List(ctx, wandbList); err != nil {
+		return nil
+	}
+
+	requests := make([]ctrl.Request, 0, len(wandbList.Items))
+	for i := range wandbList.Items {
+		requests = append(requests, ctrl.Request{
+			NamespacedName: client.ObjectKeyFromObject(&wandbList.Items[i]),
+		})
+	}
+
+	return requests
 }
 
 func (r *WeightsAndBiasesReconciler) mapGatewayToWandb(ctx context.Context, obj client.Object) []ctrl.Request {

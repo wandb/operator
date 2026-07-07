@@ -383,6 +383,32 @@ commonEnvvars:
         - name: license
           type: custom-resource
           field: spec.wandb.license
+    - name: GORILLA_OIDC_CLIENT_ID
+      sources:
+        - name: oidc
+          type: custom-resource
+          field: spec.wandb.oidc.clientId
+    - name: GORILLA_OIDC_SECRET
+      sources:
+        - name: oidc
+          type: custom-resource
+          field: spec.wandb.oidc.clientSecret
+    - name: GORILLA_OIDC_ISSUER
+      sources:
+        - name: oidc
+          type: custom-resource
+          field: spec.wandb.oidc.issuerUrl
+    - name: GORILLA_AUTH_METHOD
+      sources:
+        - name: oidc
+          type: custom-resource
+          field: spec.wandb.oidc.authMethod
+    - name: GORILLA_SESSION_LENGTH
+      sources:
+        - name: oidc
+          type: custom-resource
+          field: spec.wandb.oidc.sessionLength
+      defaultValue: "720h"
   gorillaCustomerSecrets:
     - name: GORILLA_CUSTOMER_SECRET_STORE_SOURCE
       value: "k8s-secretmanager://"
