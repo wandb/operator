@@ -48,18 +48,22 @@ func summarizeTelemetryConnectionStatus(cfg TelemetryRuntimeConfig) apiv2.Teleme
 	resolvedEndpoints := cfg.ResolveEndpoints()
 
 	return apiv2.TelemetryConnectionStatus{
-		ManagedNamespace:   cfg.Namespace,
-		ConnectionSecret:   cfg.OTel.SecretName,
-		Protocol:           cfg.OTel.Protocol,
-		MetricsExporter:    "otlp",
-		LogsExporter:       "otlp",
-		TracesExporter:     "otlp",
-		MetricsEndpoint:    resolvedEndpoints.MetricsEndpoint,
-		LogsEndpoint:       resolvedEndpoints.LogsEndpoint,
-		TracesEndpoint:     resolvedEndpoints.TracesEndpoint,
-		ServiceName:        cfg.OTel.ServiceName,
-		ResourceAttributes: cfg.OTel.ResourceAttributes,
-		GorillaTracer:      resolveGorillaTracerConnection(cfg.OTel.Protocol, resolvedEndpoints.TracesEndpoint),
+		ManagedNamespace:      cfg.Namespace,
+		ConnectionSecret:      cfg.OTel.SecretName,
+		Protocol:              cfg.OTel.Protocol,
+		MetricsExporter:       "otlp",
+		LogsExporter:          "otlp",
+		TracesExporter:        "otlp",
+		MetricsEndpoint:       resolvedEndpoints.MetricsEndpoint,
+		LogsEndpoint:          resolvedEndpoints.LogsEndpoint,
+		TracesEndpoint:        resolvedEndpoints.TracesEndpoint,
+		ServiceName:           cfg.OTel.ServiceName,
+		ResourceAttributes:    cfg.OTel.ResourceAttributes,
+		GorillaTracer:         resolveGorillaTracerConnection(cfg.OTel.Protocol, resolvedEndpoints.TracesEndpoint),
+		StatsdAddress:         resolvedEndpoints.StatsdAddress,
+		DatadogTraceAgentURL:  resolvedEndpoints.DatadogTraceAgentURL,
+		DatadogTraceAgentHost: resolvedEndpoints.DatadogTraceAgentHost,
+		DatadogTraceAgentPort: resolvedEndpoints.DatadogTraceAgentPort,
 	}
 }
 

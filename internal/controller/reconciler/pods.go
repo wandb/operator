@@ -8,8 +8,7 @@ import (
 	v2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/logx"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
-	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/api/core/v1"
 	"k8s.io/utils/ptr"
 	ctrlClient "sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -106,30 +105,14 @@ func resolveContainers(app serverManifest.Application, wandb *v2.WeightsAndBiase
 				c.Resources = *resources
 			}
 
-			// Default HTTPGet probe ports to the first declared port name when missing
-			if container.StartupProbe != nil && container.StartupProbe.HTTPGet != nil {
-				if container.StartupProbe.HTTPGet.Port.StrVal == "" && container.StartupProbe.HTTPGet.Port.IntVal == 0 {
-					if len(container.Ports) > 0 && container.StartupProbe.HTTPGet.Path != "" {
-						container.StartupProbe.HTTPGet = &v1.HTTPGetAction{Path: container.StartupProbe.HTTPGet.Path, Port: intstr.FromString(container.Ports[0].Name)}
-					}
-				}
-				c.StartupProbe = container.StartupProbe
+			if container.StartupProbe != nil {
+				c.StartupProbe = container.StartupProbe.DeepCopy()
 			}
-			if container.LivenessProbe != nil && container.LivenessProbe.HTTPGet != nil {
-				if container.LivenessProbe.HTTPGet.Port.StrVal == "" && container.LivenessProbe.HTTPGet.Port.IntVal == 0 {
-					if len(container.Ports) > 0 && container.LivenessProbe.HTTPGet.Path != "" {
-						container.LivenessProbe.HTTPGet = &v1.HTTPGetAction{Path: container.LivenessProbe.HTTPGet.Path, Port: intstr.FromString(container.Ports[0].Name)}
-					}
-				}
-				c.LivenessProbe = container.LivenessProbe
+			if container.LivenessProbe != nil {
+				c.LivenessProbe = container.LivenessProbe.DeepCopy()
 			}
-			if container.ReadinessProbe != nil && container.ReadinessProbe.HTTPGet != nil {
-				if container.ReadinessProbe.HTTPGet.Port.StrVal == "" && container.ReadinessProbe.HTTPGet.Port.IntVal == 0 {
-					if len(container.Ports) > 0 && container.ReadinessProbe.HTTPGet.Path != "" {
-						container.ReadinessProbe.HTTPGet = &v1.HTTPGetAction{Path: container.ReadinessProbe.HTTPGet.Path, Port: intstr.FromString(container.Ports[0].Name)}
-					}
-				}
-				c.ReadinessProbe = container.ReadinessProbe
+			if container.ReadinessProbe != nil {
+				c.ReadinessProbe = container.ReadinessProbe.DeepCopy()
 			}
 
 			containers = append(containers, c)
@@ -330,6 +313,14 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 					selector.Key = "OTEL_RESOURCE_ATTRIBUTES"
 				case "gorillaTracer", "tracer":
 					selector.Key = "GORILLA_TRACER"
+				case "statsdAddress":
+					selector.Key = "GORILLA_STATSD_ADDRESS"
+				case "datadogTraceAgentURL", "ddTraceAgentURL":
+					selector.Key = "DD_TRACE_AGENT_URL"
+				case "datadogTraceAgentHost", "ddAgentHost":
+					selector.Key = "DD_AGENT_HOST"
+				case "datadogTraceAgentPort", "ddTraceAgentPort":
+					selector.Key = "DD_TRACE_AGENT_PORT"
 				default:
 					if strings.HasPrefix(src.Field, "OTEL_") {
 						selector.Key = src.Field
