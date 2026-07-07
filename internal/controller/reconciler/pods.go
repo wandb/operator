@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/wandb/operator/api/v2"
+	v2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/logx"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
 	"k8s.io/api/core/v1"
@@ -215,11 +215,17 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 				}
 				switch src.Field {
 				case "host":
+					// Host/Port/Region are provider-dependent: absent for GCS/Azure
+					// and for plain AWS S3 (no custom endpoint / no region key).
+					// Marks optional so pods still start when the key is missing.
 					selector.Key = "Host"
+					selector.Optional = ptr.To(true)
 				case "port":
 					selector.Key = "Port"
+					selector.Optional = ptr.To(true)
 				case "region":
 					selector.Key = "Region"
+					selector.Optional = ptr.To(true)
 				default:
 					selector.Key = "url"
 				}
