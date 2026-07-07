@@ -9,19 +9,11 @@ import (
 	"github.com/wandb/operator/internal/logx"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
 	"k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
 	ctrlClient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const appWorkloadCapabilityAll v1.Capability = "ALL"
-
-const (
-	defaultStartupProbePeriodSeconds    int32 = 10
-	defaultStartupProbeTimeoutSeconds   int32 = 1
-	defaultStartupProbeFailureThreshold int32 = 30
-	defaultStartupProbeSuccessThreshold int32 = 1
-)
 
 func resolvePodSecurityContext() *v1.PodSecurityContext {
 	return &v1.PodSecurityContext{
@@ -43,36 +35,6 @@ func resolveRuntimeDefaultSeccompProfile() *v1.SeccompProfile {
 	return &v1.SeccompProfile{
 		Type: v1.SeccompProfileTypeRuntimeDefault,
 	}
-}
-
-func normalizeHTTPGetProbePort(probe *v1.Probe, ports []serverManifest.ContainerPort) *v1.Probe {
-	if probe == nil || probe.HTTPGet == nil {
-		return nil
-	}
-
-	normalized := probe.DeepCopy()
-	if normalized.HTTPGet.Port.StrVal == "" && normalized.HTTPGet.Port.IntVal == 0 {
-		if len(ports) > 0 && normalized.HTTPGet.Path != "" {
-			normalized.HTTPGet.Port = intstr.FromString(ports[0].Name)
-		}
-	}
-	return normalized
-}
-
-func defaultStartupProbeFromLiveness(container serverManifest.ContainerSpec) *v1.Probe {
-	if container.StartupProbe != nil || container.LivenessProbe == nil || container.LivenessProbe.HTTPGet == nil {
-		return nil
-	}
-
-	startupProbe := container.LivenessProbe.DeepCopy()
-	startupProbe.PeriodSeconds = defaultStartupProbePeriodSeconds
-	if startupProbe.TimeoutSeconds < defaultStartupProbeTimeoutSeconds {
-		startupProbe.TimeoutSeconds = defaultStartupProbeTimeoutSeconds
-	}
-	startupProbe.FailureThreshold = defaultStartupProbeFailureThreshold
-	startupProbe.SuccessThreshold = defaultStartupProbeSuccessThreshold
-
-	return startupProbe
 }
 
 func resolveInitContainers(app serverManifest.Application, envVars []v1.EnvVar, volumeMounts []v1.VolumeMount) []v1.Container {
@@ -143,19 +105,14 @@ func resolveContainers(app serverManifest.Application, wandb *v2.WeightsAndBiase
 				c.Resources = *resources
 			}
 
-			// Default HTTPGet probe ports to the first declared port name when missing
-			startupProbe := container.StartupProbe
-			if startupProbe == nil {
-				startupProbe = defaultStartupProbeFromLiveness(container)
+			if container.StartupProbe != nil {
+				c.StartupProbe = container.StartupProbe.DeepCopy()
 			}
-			if startupProbe := normalizeHTTPGetProbePort(startupProbe, container.Ports); startupProbe != nil {
-				c.StartupProbe = startupProbe
+			if container.LivenessProbe != nil {
+				c.LivenessProbe = container.LivenessProbe.DeepCopy()
 			}
-			if livenessProbe := normalizeHTTPGetProbePort(container.LivenessProbe, container.Ports); livenessProbe != nil {
-				c.LivenessProbe = livenessProbe
-			}
-			if readinessProbe := normalizeHTTPGetProbePort(container.ReadinessProbe, container.Ports); readinessProbe != nil {
-				c.ReadinessProbe = readinessProbe
+			if container.ReadinessProbe != nil {
+				c.ReadinessProbe = container.ReadinessProbe.DeepCopy()
 			}
 
 			containers = append(containers, c)

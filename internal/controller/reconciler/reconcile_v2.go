@@ -557,6 +557,8 @@ func reconcileApplications(
 			continue
 		}
 
+		app = applyWandbProbeDefaults(app, wandb.Spec.Wandb.Probes)
+
 		envVars, err := resolveEnvvars(ctx, client, wandb, manifest, app.CommonEnvs, app.Env)
 		if err != nil {
 			return ctrl.Result{}, err
