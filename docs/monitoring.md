@@ -93,7 +93,9 @@ Tilt exposes endpoints for:
 The resolved operator-managed telemetry status is published on
 `WeightsAndBiases.status.telemetryStatus`, including `ready`, `state`, `mode`,
 and nested `connection` details such as the effective protocol, endpoints,
-Secret name, and gorilla tracer connection.
+Secret name, gorilla tracer connection, DogStatsD address, and local
+Datadog-agent compatibility endpoint. These Datadog-compatible values point at
+the in-cluster telemetry gateway; they do not add a Datadog SaaS exporter.
 
 ```bash
 kubectl get weightsandbiases <name> -n <namespace> -o jsonpath='{.status.telemetryStatus}'
@@ -111,6 +113,22 @@ env:
     sources:
       - type: telemetry
         field: gorillaTracer
+  - name: GORILLA_STATSD_ADDRESS
+    sources:
+      - type: telemetry
+        field: statsdAddress
+  - name: DD_TRACE_AGENT_URL
+    sources:
+      - type: telemetry
+        field: datadogTraceAgentURL
+  - name: DD_AGENT_HOST
+    sources:
+      - type: telemetry
+        field: datadogTraceAgentHost
+  - name: DD_TRACE_AGENT_PORT
+    sources:
+      - type: telemetry
+        field: datadogTraceAgentPort
   - name: OTEL_EXPORTER_OTLP_METRICS_ENDPOINT
     sources:
       - type: telemetry

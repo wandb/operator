@@ -8,6 +8,7 @@ import (
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -31,6 +32,18 @@ func TestTelemetryRuntimeConfigResolveEndpointsEnabled(t *testing.T) {
 	}
 	if resolved.TracesEndpoint != "http://victoria-otlp-gateway.wandb.svc:4318/v1/traces" {
 		t.Fatalf("unexpected traces endpoint: %s", resolved.TracesEndpoint)
+	}
+	if resolved.StatsdAddress != "udp://victoria-otlp-gateway.wandb.svc:8125" {
+		t.Fatalf("unexpected statsd address: %s", resolved.StatsdAddress)
+	}
+	if resolved.DatadogTraceAgentURL != "http://victoria-otlp-gateway.wandb.svc:8126" {
+		t.Fatalf("unexpected Datadog trace agent URL: %s", resolved.DatadogTraceAgentURL)
+	}
+	if resolved.DatadogTraceAgentHost != "victoria-otlp-gateway.wandb.svc" {
+		t.Fatalf("unexpected Datadog trace agent host: %s", resolved.DatadogTraceAgentHost)
+	}
+	if resolved.DatadogTraceAgentPort != "8126" {
+		t.Fatalf("unexpected Datadog trace agent port: %s", resolved.DatadogTraceAgentPort)
 	}
 }
 
@@ -221,6 +234,18 @@ func TestSummarizeTelemetryInfraStatusForwardReady(t *testing.T) {
 	if status.Connection.GorillaTracer != "otlp+http://victoria-otlp-gateway.wandb.svc:4318" {
 		t.Fatalf("unexpected gorilla tracer: %q", status.Connection.GorillaTracer)
 	}
+	if status.Connection.StatsdAddress != "udp://victoria-otlp-gateway.wandb.svc:8125" {
+		t.Fatalf("unexpected statsd address: %q", status.Connection.StatsdAddress)
+	}
+	if status.Connection.DatadogTraceAgentURL != "http://victoria-otlp-gateway.wandb.svc:8126" {
+		t.Fatalf("unexpected Datadog trace agent URL: %q", status.Connection.DatadogTraceAgentURL)
+	}
+	if status.Connection.DatadogTraceAgentHost != "victoria-otlp-gateway.wandb.svc" {
+		t.Fatalf("unexpected Datadog trace agent host: %q", status.Connection.DatadogTraceAgentHost)
+	}
+	if status.Connection.DatadogTraceAgentPort != "8126" {
+		t.Fatalf("unexpected Datadog trace agent port: %q", status.Connection.DatadogTraceAgentPort)
+	}
 }
 
 func TestSummarizeTelemetryInfraStatusFullReady(t *testing.T) {
@@ -382,6 +407,18 @@ func TestReconcileTelemetryConnectionSecretCreateManaged(t *testing.T) {
 	if got := string(secret.Data["GORILLA_TRACER"]); got != "otlp+http://victoria-otlp-gateway:4318" {
 		t.Fatalf("unexpected gorilla tracer connection in secret: %q", got)
 	}
+	if got := string(secret.Data["GORILLA_STATSD_ADDRESS"]); got != "udp://victoria-otlp-gateway:8125" {
+		t.Fatalf("unexpected gorilla statsd address in secret: %q", got)
+	}
+	if got := string(secret.Data["DD_TRACE_AGENT_URL"]); got != "http://victoria-otlp-gateway:8126" {
+		t.Fatalf("unexpected Datadog trace agent URL in secret: %q", got)
+	}
+	if got := string(secret.Data["DD_AGENT_HOST"]); got != "victoria-otlp-gateway" {
+		t.Fatalf("unexpected Datadog agent host in secret: %q", got)
+	}
+	if got := string(secret.Data["DD_TRACE_AGENT_PORT"]); got != "8126" {
+		t.Fatalf("unexpected Datadog trace agent port in secret: %q", got)
+	}
 	if got := string(secret.Data["OTEL_EXPORTER_OTLP_METRICS_ENDPOINT"]); got != "http://victoria-otlp-gateway:4318/v1/metrics" {
 		t.Fatalf("unexpected metrics endpoint in secret: %q", got)
 	}
@@ -393,6 +430,40 @@ func TestReconcileTelemetryConnectionSecretCreateManaged(t *testing.T) {
 	}
 	if len(secret.OwnerReferences) != 1 || secret.OwnerReferences[0].Name != wandb.Name {
 		t.Fatalf("expected secret to be owned by wandb resource")
+	}
+}
+
+func TestReconcileTelemetryConnectionSecretDisabledSkipsCreate(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed adding corev1 to scheme: %v", err)
+	}
+	if err := apiv2.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed adding appsv2 to scheme: %v", err)
+	}
+
+	wandb := &apiv2.WeightsAndBiases{
+		TypeMeta: metav1.TypeMeta{APIVersion: "apps.wandb.com/v2", Kind: "WeightsAndBiases"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "wandb",
+			Namespace: "default",
+		},
+	}
+	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(wandb).Build()
+
+	cfg := DefaultTelemetryRuntimeConfig()
+	cfg.Enabled = false
+	cfg.OTel.SecretName = "wandb-otel-connection"
+	cfg.Normalize()
+
+	if err := reconcileTelemetryConnectionSecret(context.Background(), client, wandb, cfg); err != nil {
+		t.Fatalf("reconcileTelemetryConnectionSecret returned error: %v", err)
+	}
+
+	secret := &corev1.Secret{}
+	lookup := types.NamespacedName{Name: cfg.OTel.SecretName, Namespace: wandb.Namespace}
+	if err := client.Get(context.Background(), lookup, secret); !apierrors.IsNotFound(err) {
+		t.Fatalf("expected telemetry secret not to be created, got error %v", err)
 	}
 }
 
@@ -453,6 +524,18 @@ func TestReconcileTelemetryConnectionSecretUpdateManaged(t *testing.T) {
 	}
 	if got := string(updated.Data["GORILLA_TRACER"]); got != "otlp+http://victoria-otlp-gateway.wandb.svc:4318" {
 		t.Fatalf("unexpected gorilla tracer connection in updated secret: %q", got)
+	}
+	if got := string(updated.Data["GORILLA_STATSD_ADDRESS"]); got != "udp://victoria-otlp-gateway.wandb.svc:8125" {
+		t.Fatalf("unexpected gorilla statsd address in updated secret: %q", got)
+	}
+	if got := string(updated.Data["DD_TRACE_AGENT_URL"]); got != "http://victoria-otlp-gateway.wandb.svc:8126" {
+		t.Fatalf("unexpected Datadog trace agent URL in updated secret: %q", got)
+	}
+	if got := string(updated.Data["DD_AGENT_HOST"]); got != "victoria-otlp-gateway.wandb.svc" {
+		t.Fatalf("unexpected Datadog agent host in updated secret: %q", got)
+	}
+	if got := string(updated.Data["DD_TRACE_AGENT_PORT"]); got != "8126" {
+		t.Fatalf("unexpected Datadog trace agent port in updated secret: %q", got)
 	}
 }
 
@@ -656,6 +739,30 @@ func TestResolveEnvvarsTelemetrySourceUsesStatusSecret(t *testing.T) {
 			},
 		},
 		{
+			Name: "GORILLA_STATSD_ADDRESS",
+			Sources: []serverManifest.EnvSource{
+				{Type: "telemetry", Field: "statsdAddress"},
+			},
+		},
+		{
+			Name: "DD_TRACE_AGENT_URL",
+			Sources: []serverManifest.EnvSource{
+				{Type: "telemetry", Field: "datadogTraceAgentURL"},
+			},
+		},
+		{
+			Name: "DD_AGENT_HOST",
+			Sources: []serverManifest.EnvSource{
+				{Type: "telemetry", Field: "datadogTraceAgentHost"},
+			},
+		},
+		{
+			Name: "DD_TRACE_AGENT_PORT",
+			Sources: []serverManifest.EnvSource{
+				{Type: "telemetry", Field: "datadogTraceAgentPort"},
+			},
+		},
+		{
 			Name: "OTEL_PROTOCOL_AND_SERVICE",
 			Sources: []serverManifest.EnvSource{
 				{Type: "telemetry", Field: "protocol"},
@@ -711,6 +818,50 @@ func TestResolveEnvvarsTelemetrySourceUsesStatusSecret(t *testing.T) {
 	}
 	if gorillaTracer.ValueFrom.SecretKeyRef.Key != "GORILLA_TRACER" {
 		t.Fatalf("unexpected gorilla tracer key: %s", gorillaTracer.ValueFrom.SecretKeyRef.Key)
+	}
+
+	statsdAddress := mustFindEnvVar(t, resolved, "GORILLA_STATSD_ADDRESS")
+	if statsdAddress.ValueFrom == nil || statsdAddress.ValueFrom.SecretKeyRef == nil {
+		t.Fatalf("expected gorilla statsd address to resolve from secret key ref")
+	}
+	if statsdAddress.ValueFrom.SecretKeyRef.Name != "status-otel-secret" {
+		t.Fatalf("unexpected gorilla statsd secret name: %s", statsdAddress.ValueFrom.SecretKeyRef.Name)
+	}
+	if statsdAddress.ValueFrom.SecretKeyRef.Key != "GORILLA_STATSD_ADDRESS" {
+		t.Fatalf("unexpected gorilla statsd key: %s", statsdAddress.ValueFrom.SecretKeyRef.Key)
+	}
+
+	ddTraceAgentURL := mustFindEnvVar(t, resolved, "DD_TRACE_AGENT_URL")
+	if ddTraceAgentURL.ValueFrom == nil || ddTraceAgentURL.ValueFrom.SecretKeyRef == nil {
+		t.Fatalf("expected Datadog trace agent URL to resolve from secret key ref")
+	}
+	if ddTraceAgentURL.ValueFrom.SecretKeyRef.Name != "status-otel-secret" {
+		t.Fatalf("unexpected Datadog trace agent URL secret name: %s", ddTraceAgentURL.ValueFrom.SecretKeyRef.Name)
+	}
+	if ddTraceAgentURL.ValueFrom.SecretKeyRef.Key != "DD_TRACE_AGENT_URL" {
+		t.Fatalf("unexpected Datadog trace agent URL key: %s", ddTraceAgentURL.ValueFrom.SecretKeyRef.Key)
+	}
+
+	ddAgentHost := mustFindEnvVar(t, resolved, "DD_AGENT_HOST")
+	if ddAgentHost.ValueFrom == nil || ddAgentHost.ValueFrom.SecretKeyRef == nil {
+		t.Fatalf("expected Datadog agent host to resolve from secret key ref")
+	}
+	if ddAgentHost.ValueFrom.SecretKeyRef.Name != "status-otel-secret" {
+		t.Fatalf("unexpected Datadog agent host secret name: %s", ddAgentHost.ValueFrom.SecretKeyRef.Name)
+	}
+	if ddAgentHost.ValueFrom.SecretKeyRef.Key != "DD_AGENT_HOST" {
+		t.Fatalf("unexpected Datadog agent host key: %s", ddAgentHost.ValueFrom.SecretKeyRef.Key)
+	}
+
+	ddTraceAgentPort := mustFindEnvVar(t, resolved, "DD_TRACE_AGENT_PORT")
+	if ddTraceAgentPort.ValueFrom == nil || ddTraceAgentPort.ValueFrom.SecretKeyRef == nil {
+		t.Fatalf("expected Datadog trace agent port to resolve from secret key ref")
+	}
+	if ddTraceAgentPort.ValueFrom.SecretKeyRef.Name != "status-otel-secret" {
+		t.Fatalf("unexpected Datadog trace agent port secret name: %s", ddTraceAgentPort.ValueFrom.SecretKeyRef.Name)
+	}
+	if ddTraceAgentPort.ValueFrom.SecretKeyRef.Key != "DD_TRACE_AGENT_PORT" {
+		t.Fatalf("unexpected Datadog trace agent port key: %s", ddTraceAgentPort.ValueFrom.SecretKeyRef.Key)
 	}
 
 	protocolComponent := mustFindEnvVar(t, resolved, "OTEL_PROTOCOL_AND_SERVICE_0")
@@ -1011,7 +1162,7 @@ func TestInjectManagedWorkloadTelemetryEnvvarsIneligibleWorkloadSkipsInjection(t
 		client,
 		wandb,
 		serverManifest.Manifest{},
-		serverManifest.Application{Name: "anaconda2"},
+		serverManifest.Application{Name: "frontend"},
 		nil,
 		TelemetryRuntimeConfig{Enabled: true},
 	)
@@ -1070,6 +1221,7 @@ func TestInjectManagedWorkloadTelemetryEnvvarsUsesStatusSecretName(t *testing.T)
 		"OTEL_SERVICE_NAME",
 		"OTEL_RESOURCE_ATTRIBUTES",
 		"GORILLA_TRACER",
+		"GORILLA_STATSD_ADDRESS",
 	}
 
 	for _, name := range expectedNames {
@@ -1086,6 +1238,55 @@ func TestInjectManagedWorkloadTelemetryEnvvarsUsesStatusSecretName(t *testing.T)
 		if got := env.ValueFrom.SecretKeyRef.Name; got != "status-otel-secret" {
 			t.Errorf("env var %q references secret %q, want status-otel-secret", name, got)
 		}
+	}
+}
+
+func TestInjectManagedWorkloadTelemetryEnvvarsAddsDatadogAgentForDdtraceApps(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed adding corev1 to scheme: %v", err)
+	}
+	client := fake.NewClientBuilder().WithScheme(scheme).Build()
+	wandb := telemetryStatusWandb("wandb-dev-v2", "default", "status-otel-secret")
+
+	for _, appName := range []string{"anaconda2", "weave-trace"} {
+		t.Run(appName, func(t *testing.T) {
+			envVars, err := injectManagedWorkloadTelemetryEnvvars(
+				context.Background(),
+				client,
+				wandb,
+				serverManifest.Manifest{},
+				serverManifest.Application{Name: appName},
+				nil,
+				TelemetryRuntimeConfig{Enabled: true},
+			)
+			if err != nil {
+				t.Fatalf("injectManagedWorkloadTelemetryEnvvars returned error: %v", err)
+			}
+
+			for _, name := range []string{"DD_TRACE_AGENT_URL", "DD_AGENT_HOST", "DD_TRACE_AGENT_PORT"} {
+				env := mustFindEnvVar(t, envVars, name)
+				if env.ValueFrom == nil || env.ValueFrom.SecretKeyRef == nil {
+					t.Fatalf("env var %q has no SecretKeyRef", name)
+				}
+				if got := env.ValueFrom.SecretKeyRef.Name; got != "status-otel-secret" {
+					t.Fatalf("env var %q references secret %q, want status-otel-secret", name, got)
+				}
+			}
+
+			ddService := mustFindEnvVar(t, envVars, "DD_SERVICE")
+			if ddService.Value != appName {
+				t.Fatalf("unexpected DD_SERVICE value: %q", ddService.Value)
+			}
+
+			for _, name := range []string{"OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "GORILLA_TRACER", "GORILLA_STATSD_ADDRESS"} {
+				for _, env := range envVars {
+					if env.Name == name {
+						t.Fatalf("did not expect %q to be injected for ddtrace-only app", name)
+					}
+				}
+			}
+		})
 	}
 }
 

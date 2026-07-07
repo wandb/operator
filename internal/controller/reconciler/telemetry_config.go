@@ -8,15 +8,21 @@ import (
 const (
 	telemetryOTLPGatewayName     = "victoria-otlp-gateway"
 	telemetryOTLPGatewayHTTPPort = 4318
+	telemetryStatsdPort          = 8125
+	telemetryDatadogTracePort    = 8126
 	telemetryModeOff             = "off"
 	telemetryModeForward         = "forward"
 	telemetryModeFull            = "full"
 )
 
 type TelemetryEndpoints struct {
-	MetricsEndpoint string
-	LogsEndpoint    string
-	TracesEndpoint  string
+	MetricsEndpoint       string
+	LogsEndpoint          string
+	TracesEndpoint        string
+	StatsdAddress         string
+	DatadogTraceAgentURL  string
+	DatadogTraceAgentHost string
+	DatadogTraceAgentPort string
 }
 
 type TelemetryOTelConfig struct {
@@ -100,9 +106,13 @@ func (cfg TelemetryRuntimeConfig) ResolveEndpoints() TelemetryEndpoints {
 	host := resolveServiceHost(telemetryOTLPGatewayName, cfg.Namespace)
 	baseURL := fmt.Sprintf("http://%s:%d", host, telemetryOTLPGatewayHTTPPort)
 	return TelemetryEndpoints{
-		MetricsEndpoint: fmt.Sprintf("%s/v1/metrics", baseURL),
-		LogsEndpoint:    fmt.Sprintf("%s/v1/logs", baseURL),
-		TracesEndpoint:  fmt.Sprintf("%s/v1/traces", baseURL),
+		MetricsEndpoint:       fmt.Sprintf("%s/v1/metrics", baseURL),
+		LogsEndpoint:          fmt.Sprintf("%s/v1/logs", baseURL),
+		TracesEndpoint:        fmt.Sprintf("%s/v1/traces", baseURL),
+		StatsdAddress:         fmt.Sprintf("udp://%s:%d", host, telemetryStatsdPort),
+		DatadogTraceAgentURL:  fmt.Sprintf("http://%s:%d", host, telemetryDatadogTracePort),
+		DatadogTraceAgentHost: host,
+		DatadogTraceAgentPort: fmt.Sprintf("%d", telemetryDatadogTracePort),
 	}
 }
 

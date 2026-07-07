@@ -52,16 +52,29 @@ var defaultRequeueMinutes = 1
 var defaultRequeueDuration = time.Duration(defaultRequeueMinutes) * time.Minute
 
 var managedWorkloadTelemetryApplications = map[string]struct{}{
-	"api":                               {},
-	"executor":                          {},
-	"filemeta":                          {},
-	"filestream":                        {},
-	"flat-run-fields-updater":           {},
-	"glue":                              {},
-	"metric-observer":                   {},
-	"nginx-proxy":                       {},
-	"parquet":                           {},
-	"weave":                             {},
+	"api":                     {},
+	"executor":                {},
+	"filemeta":                {},
+	"filestream":              {},
+	"flat-run-fields-updater": {},
+	"glue":                    {},
+	"metric-observer":         {},
+	"parquet":                 {},
+}
+
+var managedWorkloadStatsdApplications = map[string]struct{}{
+	"api":                     {},
+	"executor":                {},
+	"filemeta":                {},
+	"filestream":              {},
+	"flat-run-fields-updater": {},
+	"glue":                    {},
+	"metric-observer":         {},
+	"parquet":                 {},
+}
+
+var managedWorkloadDatadogApplications = map[string]struct{}{
+	"anaconda2":                         {},
 	"weave-trace":                       {},
 	"weave-trace-worker":                {},
 	"weave-trace-evaluate-model-worker": {},
@@ -126,6 +139,36 @@ var managedWorkloadTelemetryEnvVars = []serverManifest.EnvVar{
 		Name: "GORILLA_TRACER",
 		Sources: []serverManifest.EnvSource{
 			{Type: "telemetry", Field: "gorillaTracer"},
+		},
+	},
+}
+
+var managedWorkloadStatsdEnvVars = []serverManifest.EnvVar{
+	{
+		Name: "GORILLA_STATSD_ADDRESS",
+		Sources: []serverManifest.EnvSource{
+			{Type: "telemetry", Field: "statsdAddress"},
+		},
+	},
+}
+
+var managedWorkloadDatadogEnvVars = []serverManifest.EnvVar{
+	{
+		Name: "DD_TRACE_AGENT_URL",
+		Sources: []serverManifest.EnvSource{
+			{Type: "telemetry", Field: "datadogTraceAgentURL"},
+		},
+	},
+	{
+		Name: "DD_AGENT_HOST",
+		Sources: []serverManifest.EnvSource{
+			{Type: "telemetry", Field: "datadogTraceAgentHost"},
+		},
+	},
+	{
+		Name: "DD_TRACE_AGENT_PORT",
+		Sources: []serverManifest.EnvSource{
+			{Type: "telemetry", Field: "datadogTraceAgentPort"},
 		},
 	},
 }
@@ -514,6 +557,8 @@ func reconcileApplications(
 			continue
 		}
 
+		app = applyWandbProbeDefaults(app, wandb.Spec.Wandb.Probes)
+
 		envVars, err := resolveEnvvars(ctx, client, wandb, manifest, app.CommonEnvs, app.Env)
 		if err != nil {
 			return ctrl.Result{}, err
@@ -782,16 +827,50 @@ func injectManagedWorkloadTelemetryEnvvars(
 	telemetryConfig TelemetryRuntimeConfig,
 ) ([]corev1.EnvVar, error) {
 
-	telemetryEnabled := telemetryConfig.Enabled
-	if !telemetryEnabled || !shouldInjectManagedWorkloadTelemetry(app.Name) {
+	if !telemetryConfig.Enabled {
 		return envVars, nil
 	}
 
-	telemetryEnvVars, err := resolveEnvvars(ctx, client, wandb, manifest, nil, managedWorkloadTelemetryEnvVars)
+	if shouldInjectManagedWorkloadTelemetry(app.Name) {
+		var err error
+		envVars, err = appendResolvedManagedTelemetryEnvvars(ctx, client, wandb, manifest, envVars, managedWorkloadTelemetryEnvVars)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if shouldInjectManagedWorkloadStatsd(app.Name) {
+		var err error
+		envVars, err = appendResolvedManagedTelemetryEnvvars(ctx, client, wandb, manifest, envVars, managedWorkloadStatsdEnvVars)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if shouldInjectManagedWorkloadDatadog(app.Name) {
+		var err error
+		envVars, err = appendResolvedManagedTelemetryEnvvars(ctx, client, wandb, manifest, envVars, managedWorkloadDatadogEnvVars)
+		if err != nil {
+			return nil, err
+		}
+		envVars = appendMissingEnvVars(envVars, []corev1.EnvVar{{Name: "DD_SERVICE", Value: app.Name}})
+	}
+
+	return envVars, nil
+}
+
+func appendResolvedManagedTelemetryEnvvars(
+	ctx context.Context,
+	client ctrlClient.Client,
+	wandb *apiv2.WeightsAndBiases,
+	manifest serverManifest.Manifest,
+	envVars []corev1.EnvVar,
+	managedTelemetryEnvVars []serverManifest.EnvVar,
+) ([]corev1.EnvVar, error) {
+	telemetryEnvVars, err := resolveEnvvars(ctx, client, wandb, manifest, nil, managedTelemetryEnvVars)
 	if err != nil {
 		return nil, err
 	}
-
 	return appendMissingEnvVars(envVars, telemetryEnvVars), nil
 }
 
@@ -814,6 +893,16 @@ func bindTelemetrySecretName(base []serverManifest.EnvVar, secretName string) []
 
 func shouldInjectManagedWorkloadTelemetry(appName string) bool {
 	_, ok := managedWorkloadTelemetryApplications[appName]
+	return ok
+}
+
+func shouldInjectManagedWorkloadStatsd(appName string) bool {
+	_, ok := managedWorkloadStatsdApplications[appName]
+	return ok
+}
+
+func shouldInjectManagedWorkloadDatadog(appName string) bool {
+	_, ok := managedWorkloadDatadogApplications[appName]
 	return ok
 }
 

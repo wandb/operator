@@ -42,6 +42,10 @@ func reconcileTelemetryConnectionSecret(
 		"OTEL_SERVICE_NAME":                   []byte(connection.ServiceName),
 		"OTEL_RESOURCE_ATTRIBUTES":            []byte(connection.ResourceAttributes),
 		"GORILLA_TRACER":                      []byte(connection.GorillaTracer),
+		"GORILLA_STATSD_ADDRESS":              []byte(connection.StatsdAddress),
+		"DD_TRACE_AGENT_URL":                  []byte(connection.DatadogTraceAgentURL),
+		"DD_AGENT_HOST":                       []byte(connection.DatadogTraceAgentHost),
+		"DD_TRACE_AGENT_PORT":                 []byte(connection.DatadogTraceAgentPort),
 	}
 
 	secretLookup := types.NamespacedName{

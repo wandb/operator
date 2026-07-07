@@ -123,6 +123,7 @@ func (d *WeightsAndBiasesCustomDefaulter) Default(ctx context.Context, obj runti
 	applyKafkaDefaults(wandb)
 	applyObjectStoreDefaults(wandb)
 	applyClickHouseDefaults(wandb)
+	applyProbeDefaults(wandb)
 
 	return nil
 }
