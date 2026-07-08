@@ -604,6 +604,17 @@ func reconcileApplications(
 		}
 
 		application.Spec.Kind = "Deployment"
+
+		// Label the workload with both families: the descriptive app.kubernetes.io/*
+		// set (for tooling/NetworkPolicies) and the operator/ownership set (which
+		// backs the immutable pod selector). See docs/pod-labeling-standards.md.
+		standardLabels := common.StandardLabels(wandb, app.Name, common.AppComponentRole(app.Name), wandb.Spec.Wandb.Version)
+		operatorLabels := common.BuildWandbLabels(wandb, app.Name)
+		application.Spec.MetaTemplate.Labels = oputils.MergeMapsStringString(application.Spec.MetaTemplate.Labels, standardLabels)
+		application.Spec.PodTemplate.Labels = oputils.MergeMapsStringString(
+			application.Spec.PodTemplate.Labels, standardLabels, operatorLabels,
+		)
+
 		application.Spec.PodTemplate.Spec.Containers = containers
 		// Replace volumes entirely on each reconcile to avoid accumulating duplicates
 		// across updates (e.g., duplicate "files-inline" volume names).
@@ -1194,18 +1205,16 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 				return ctrl.Result{}, err
 			}
 
+			migrationJobLabels := common.StandardLabels(wandb, "migration", common.RoleMigration, wandb.Spec.Wandb.Version)
 			job = &batchv1.Job{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      jobName,
 					Namespace: wandb.Namespace,
-					Labels: map[string]string{
-						"app.kubernetes.io/managed-by": "wandb-operator",
-						"app.kubernetes.io/instance":   wandb.Name,
-						"app.kubernetes.io/component":  "migration",
-					},
+					Labels:    migrationJobLabels,
 				},
 				Spec: batchv1.JobSpec{
 					Template: corev1.PodTemplateSpec{
+						ObjectMeta: metav1.ObjectMeta{Labels: migrationJobLabels},
 						Spec: corev1.PodSpec{
 							RestartPolicy: corev1.RestartPolicyOnFailure,
 							Containers: []corev1.Container{
@@ -1326,11 +1335,9 @@ func generateSecrets(ctx context.Context, client ctrlClient.Client, wandb *apiv2
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      secretName,
 						Namespace: wandb.Namespace,
-						Labels: map[string]string{
-							"app.kubernetes.io/managed-by": "wandb-operator",
-							"app.kubernetes.io/instance":   wandb.Name,
-							"app.kubernetes.io/part-of":    "wandb",
-						},
+						// Generated secrets are role-less, so component is omitted
+						// per docs/pod-labeling-standards.md (non-pod resources).
+						Labels: common.StandardLabels(wandb, gs.Name, "", ""),
 					},
 					StringData: map[string]string{keyName: pw},
 					Type:       corev1.SecretTypeOpaque,

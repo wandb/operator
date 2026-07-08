@@ -225,7 +225,10 @@ func ToClickHouseVendorSpec(
 					{
 						Name: nsnBuilder.PodTemplateName(),
 						ObjectMeta: metav1.ObjectMeta{
-							Labels: BuildWandbClickhouseLabels(wandb),
+							Labels: utils.MergeMapsStringString(
+								BuildWandbClickhouseLabels(wandb),
+								common.StandardLabels(wandb, "clickhouse", common.RoleAnalyticsDB, ""),
+							),
 						},
 						Spec: podSpec,
 					},

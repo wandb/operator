@@ -80,6 +80,12 @@ func ToMocoMySQLClusterSpec(
 			Replicas:           replicas,
 			MySQLConfigMapName: ptr.To(MyCnfConfigMapName(spec.Name)),
 			PodTemplate: mocov1beta2.PodTemplateSpec{
+				ObjectMeta: mocov1beta2.ObjectMeta{
+					Labels: utils.MergeMapsStringString(
+						BuildWandbMysqlLabels(wandb),
+						common.StandardLabels(wandb, "mysql", common.RoleDatabase, ""),
+					),
+				},
 				Spec:                buildMocoPodSpec(spec.Config.Resources, mfst.Mysql["default"].Images["mysql"], wandb),
 				OverwriteContainers: mocoOverwriteContainers(),
 			},

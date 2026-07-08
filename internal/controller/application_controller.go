@@ -23,6 +23,7 @@ import (
 
 	gkeGatewayApiNetworkingv1 "github.com/GoogleCloudPlatform/gke-gateway-api/apis/networking/v1"
 	wandbv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/logx"
 	"github.com/wandb/operator/pkg/utils"
 	v1alpha1 "github.com/wandb/operator/pkg/vendored/argo-rollouts/argoproj.io.rollouts/v1alpha1"
@@ -257,6 +258,16 @@ func (r *ApplicationReconciler) reconcileDeployment(ctx context.Context, app *wa
 
 	selectorLabels := getSelectorLabels(app)
 
+	// spec.selector is immutable. If it drifted (e.g. label-standard migration),
+	// delete the existing Deployment and recreate it on the next reconcile.
+	if !deployment.CreationTimestamp.IsZero() && selectorChanged(deployment.Spec.Selector, selectorLabels) {
+		logger.Info("Deployment selector changed; deleting for recreate", "Deployment", app.Name)
+		if err := r.Delete(ctx, deployment, client.PropagationPolicy(metav1.DeletePropagationForeground)); err != nil && !errors.IsNotFound(err) {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{Requeue: true}, nil
+	}
+
 	deployment.Name = app.Name
 	deployment.Namespace = app.Namespace
 
@@ -313,11 +324,36 @@ func (r *ApplicationReconciler) reconcileDeployment(ctx context.Context, app *wa
 	return ctrl.Result{}, nil
 }
 
+// getSelectorLabels returns the immutable label set used for a workload's
+// spec.selector. It derives the selector from the operator/ownership family
+// (weightsandbiases.apps.wandb.com/*) stamped onto the pod template by the
+// WeightsAndBiases reconciler, which is stable and collision-free. Applications
+// created before that family existed fall back to the legacy app.kubernetes.io
+// selector so their live workloads keep matching.
 func getSelectorLabels(app *wandbv2.Application) map[string]string {
+	podLabels := app.Spec.PodTemplate.GetLabels()
+	if name, ok := podLabels[common.WandbNameLabel]; ok && name != "" {
+		selector := map[string]string{common.WandbNameLabel: name}
+		if component, ok := podLabels[common.WandbComponentLabel]; ok && component != "" {
+			selector[common.WandbComponentLabel] = component
+		}
+		return selector
+	}
+	// Legacy fallback (pre-operator-family Applications).
 	return map[string]string{
 		"app.kubernetes.io/name":     app.Name,
 		"app.kubernetes.io/instance": app.Namespace,
 	}
+}
+
+// recreateOnSelectorChange deletes a workload whose immutable spec.selector no
+// longer matches the desired selector so it can be recreated on the next
+// reconcile. Returns true when a delete was issued (caller should requeue).
+func selectorChanged(current *metav1.LabelSelector, desired map[string]string) bool {
+	if current == nil {
+		return false
+	}
+	return !reflect.DeepEqual(current.MatchLabels, desired)
 }
 
 // deleteDeployment deletes the Deployment associated with the Application
@@ -362,6 +398,14 @@ func (r *ApplicationReconciler) reconcileRollout(ctx context.Context, app *wandb
 	}
 
 	selectorLabels := getSelectorLabels(app)
+
+	if !rollout.CreationTimestamp.IsZero() && selectorChanged(rollout.Spec.Selector, selectorLabels) {
+		logger.Info("Rollout selector changed; deleting for recreate", "Rollout", app.Name)
+		if err := r.Delete(ctx, rollout, client.PropagationPolicy(metav1.DeletePropagationForeground)); err != nil && !errors.IsNotFound(err) {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{Requeue: true}, nil
+	}
 
 	rollout.Name = app.Name
 	rollout.Namespace = app.Namespace
@@ -461,6 +505,14 @@ func (r *ApplicationReconciler) reconcileStatefulSet(ctx context.Context, app *w
 	}
 
 	selectorLabels := getSelectorLabels(app)
+
+	if !statefulSet.CreationTimestamp.IsZero() && selectorChanged(statefulSet.Spec.Selector, selectorLabels) {
+		logger.Info("StatefulSet selector changed; deleting for recreate", "StatefulSet", app.Name)
+		if err := r.Delete(ctx, statefulSet, client.PropagationPolicy(metav1.DeletePropagationForeground)); err != nil && !errors.IsNotFound(err) {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{Requeue: true}, nil
+	}
 
 	statefulSet.Name = app.Name
 	statefulSet.Namespace = app.Namespace
