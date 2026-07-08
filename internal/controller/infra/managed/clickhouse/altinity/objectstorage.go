@@ -133,6 +133,7 @@ func buildEndpoint(scheme, host, port, bucket, region, prefix string, insecure b
 // applyStorageConfiguration adds the <storage_configuration> (S3 disk + cache +
 // policy) to settings. Credentials are secret references so the Altinity
 // operator injects them via from_env rather than as plaintext.
+// TODO(dpanzella): Currently only supports S3 compatible storage, add support for Azure and GCS
 func applyStorageConfiguration(settings *v1.Settings, oc *ObjectStorageConn, cacheMaxSizeBytes int64) {
 	disk := diskKey(s3DiskName)
 	settings.Set(disk("type"), v1.NewSettingScalar("s3"))
