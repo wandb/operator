@@ -43,6 +43,9 @@ const (
 	seaweedMasterMetricsPort int32 = 9091
 	seaweedVolumeMetricsPort int32 = 9092
 	seaweedFilerMetricsPort  int32 = 9093
+
+	// SeaweedFS caps a single volume at <30000 MB; run just under that since fewer, larger volumes are preferred.
+	seaweedVolumeSizeLimitMB int32 = 29000
 )
 
 func seaweedWritableVolumes() []corev1.Volume {
@@ -86,7 +89,8 @@ func ToObjectStoreVendorSpec(
 		replication = "001"
 	}
 
-	volumeSizeLimitMB := int32(storageQuantity.Value() / (1024 * 1024))
+	// VolumeSizeLimitMB caps per-volume rollover, not total capacity (the volume PVC governs that).
+	volumeSizeLimitMB := seaweedVolumeSizeLimitMB
 
 	labels := BuildWandbObjectStoreLabels(wandb)
 	labels["app"] = SeaweedName(specName)
