@@ -7,9 +7,9 @@ import (
 	. "github.com/onsi/gomega"
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/infra/managed/clickhouse/altinity/keeper"
-	"github.com/wandb/operator/pkg/wandb/manifest"
 	"github.com/wandb/operator/pkg/utils"
 	chiv1 "github.com/wandb/operator/pkg/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
+	"github.com/wandb/operator/pkg/wandb/manifest"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -58,7 +58,7 @@ var _ = Describe("ClickHouse vendor specs", func() {
 	})
 
 	It("backs storage with the object store, sets a default policy, and wires keeper", func() {
-		chi, err := ToClickHouseVendorSpec(context.Background(), clickHouseWandb(), clickHouseScheme(), testObjectStorageConn())
+		chi, err := ToClickHouseVendorSpec(context.Background(), clickHouseWandb(), clickHouseScheme(), testObjectStorageConn(), manifest.Manifest{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(chi).NotTo(BeNil())
 
