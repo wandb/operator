@@ -309,18 +309,16 @@ func runMysqlInitJob(ctx context.Context, client client.Client, wandb *apiv2.Wei
 			}
 		}
 
+		initJobLabels := common.StandardLabels(wandb, "moco-init", common.RoleMigration, "")
 		job = &v1.Job{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      jobName,
 				Namespace: wandb.Namespace,
-				Labels: map[string]string{
-					"app.kubernetes.io/managed-by": "wandb-operator",
-					"app.kubernetes.io/instance":   wandb.Name,
-					"app.kubernetes.io/component":  "moco-init",
-				},
+				Labels:    initJobLabels,
 			},
 			Spec: v1.JobSpec{
 				Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{Labels: initJobLabels},
 					Spec: corev1.PodSpec{
 						RestartPolicy: corev1.RestartPolicyOnFailure,
 						Containers: []corev1.Container{

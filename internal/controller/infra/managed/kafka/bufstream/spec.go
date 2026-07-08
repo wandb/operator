@@ -244,7 +244,9 @@ func ToEtcdApplication(
 			Replicas:    ptr.To(int32(EtcdReplicas)),
 			ServiceName: nsnBuilder.EtcdName(),
 			MetaTemplate: metav1.ObjectMeta{
-				Labels: labels,
+				Labels: utils.MergeMapsStringString(
+					labels, common.StandardLabels(wandb, "etcd", common.RoleDatabase, ""),
+				),
 			},
 			PodTemplate: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
@@ -489,7 +491,9 @@ func ToBufstreamApplication(
 			Kind:     "Deployment",
 			Replicas: ptr.To(replicas),
 			MetaTemplate: metav1.ObjectMeta{
-				Labels: labels,
+				Labels: utils.MergeMapsStringString(
+					labels, common.StandardLabels(wandb, "kafka", common.RoleQueue, ""),
+				),
 			},
 			PodTemplate: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{

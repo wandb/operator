@@ -29,10 +29,14 @@ func createOrUpdateServiceAccount(
 		ObjectMeta: v3.ObjectMeta{
 			Name:      serviceAccountName,
 			Namespace: wandb.Namespace,
+			// The shared ServiceAccount spans all services, so it is exempt from
+			// name/component per docs/pod-labeling-standards.md; it still carries
+			// the descriptive identity labels.
 			Labels: map[string]string{
 				"app.kubernetes.io/managed-by": "wandb-operator",
 				"app.kubernetes.io/instance":   wandb.Name,
 				"app.kubernetes.io/part-of":    "wandb",
+				"app.kubernetes.io/version":    wandb.Spec.Wandb.Version,
 			},
 			Annotations: wandb.Spec.Wandb.ServiceAccount.Annotations,
 		},
