@@ -146,6 +146,15 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 		}
 	}
 
+	for _, env := range envs {
+		for i, combinedEnv := range combinedEnvs {
+			if combinedEnv.Name == env.Name {
+				combinedEnvs = append(combinedEnvs[:i], combinedEnvs[i+1:]...)
+				break
+			}
+		}
+	}
+
 	combinedEnvs = append(combinedEnvs, envs...)
 
 	var envVars []v1.EnvVar
@@ -240,14 +249,18 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 				switch src.Field {
 				case "host":
 					selector.Key = "Host"
-				case "port":
-					selector.Key = "Port"
+				case "http-port":
+					selector.Key = "HTTPPort"
+				case "tcp-port":
+					selector.Key = "TCPPort"
 				case "user":
 					selector.Key = "User"
 				case "password":
 					selector.Key = "Password"
 				case "database":
 					selector.Key = "Database"
+				case "url":
+					selector.Key = "url"
 				default:
 					// Unrecognized field; skip
 					continue

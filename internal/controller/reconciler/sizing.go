@@ -250,6 +250,24 @@ func ApplyInfraSizing(wandb *v2.WeightsAndBiases, manifest manifest.Manifest) {
 		}
 	}
 
+	// Default ClickHouse Keeper. Keeper sizing comes from the manifest's
+	// clickhouseKeeper block; CR values are treated as user overrides.
+	if wandb.Spec.ClickHouse.ManagedClickHouse != nil {
+		if keeperConfig, ok := manifest.ClickhouseKeeper["default"]; ok {
+			sizing := ResolveInfraSizing(keeperConfig.Sizing, size, wandb.Spec.RequireLimits)
+			spec := wandb.Spec.ClickHouse.ManagedClickHouse
+			if spec.Keeper.Replicas == 0 && sizing.Replicas != 0 {
+				spec.Keeper.Replicas = sizing.Replicas
+			}
+			if spec.Keeper.StorageSize == "" && sizing.VolumeSize != "" {
+				spec.Keeper.StorageSize = sizing.VolumeSize
+			}
+			if sizing.Resources != nil && len(spec.Keeper.Config.Resources.Requests) == 0 && len(spec.Keeper.Config.Resources.Limits) == 0 {
+				spec.Keeper.Config.Resources = *sizing.Resources
+			}
+		}
+	}
+
 	// Default ObjectStore (bucket)
 	if wandb.Spec.ObjectStore.ManagedObjectStore != nil {
 		if objectStoreConfig, ok := manifest.Bucket["default"]; ok {

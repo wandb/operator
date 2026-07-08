@@ -152,6 +152,34 @@ var _ = Describe("Infra Sizing", func() {
 			Expect(wandb.Spec.MySQL.ManagedMysql.Replicas).To(Equal(int32(5)))
 			Expect(wandb.Spec.MySQL.ManagedMysql.StorageSize).To(Equal("50Gi"))
 		})
+
+		It("should apply keeper sizing from the clickhouseKeeper block, treating CR values as overrides", func() {
+			wandb := &apiv2.WeightsAndBiases{
+				Spec: apiv2.WeightsAndBiasesSpec{
+					Size: "small",
+					ClickHouse: apiv2.ClickHouseSpec{
+						ManagedClickHouse: &apiv2.ManagedClickHouseSpec{
+							// User explicitly set keeper storage; the manifest must not override it.
+							Keeper: apiv2.ClickHouseKeeperSpec{StorageSize: "20Gi"},
+						},
+					},
+				},
+			}
+			manifest := serverManifest.Manifest{
+				ClickhouseKeeper: map[string]serverManifest.InfraConfig{
+					"default": {
+						Sizing: map[apiv2.Size]serverManifest.SizingConfig{
+							"default": {Replicas: 1, VolumeSize: "10Gi"},
+							"small":   {Replicas: 3},
+						},
+					},
+				},
+			}
+			v2.ApplyInfraSizing(wandb, manifest)
+			keeper := wandb.Spec.ClickHouse.ManagedClickHouse.Keeper
+			Expect(keeper.Replicas).To(Equal(int32(3)))  // from manifest small tier
+			Expect(keeper.StorageSize).To(Equal("20Gi")) // user override preserved
+		})
 	})
 
 	Context("ResolveKafkaSizing", func() {

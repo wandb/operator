@@ -35,7 +35,7 @@ settings = {
     "wandbName": "wandb",
     "wandbNamespace": "wandb",
     "wandbHostname": "http://localhost:8080",
-    "wandbVersion": "0.80.0",
+    "wandbVersion": "0.83.0-clickhouse-keeper.2",
     "size": "dev",
     "retentionPolicy": "detach",
     "licenseFile": "",
@@ -197,12 +197,12 @@ if IS_CRC:
 
 os.putenv("PATH", "./bin:" + os.getenv("PATH"))
 
-load("ext://restart_process", "docker_build_with_restart")
 load("ext://helm_resource", "helm_repo", "helm_resource")
 
 def operator_dockerfile():
     lines = [
         "FROM registry.access.redhat.com/ubi9/ubi",
+        "USER 1001",
         "",
         "ADD tilt_bin/manager /manager",
         "ADD tilt_bin/crd-installer /crd-installer",
@@ -210,31 +210,6 @@ def operator_dockerfile():
 
     if settings.get("manifestSource") == "local":
         lines.append("ADD %s /server-manifest" % settings.get("localManifestPath"))
-
-    if settings.get("openshiftSCC"):
-        lines += [
-            "",
-            "RUN mkdir -p /helm/.cache/helm /helm/.config/helm /helm/.local/share/helm && \\",
-            "    chgrp -R 0 /helm && chmod -R g=u /helm",
-        ]
-    else:
-        lines += [
-            "",
-            "RUN mkdir -p /helm/.cache/helm /helm/.config/helm /helm/.local/share/helm",
-        ]
-
-    lines += [
-        "",
-        "ENV HELM_CACHE_HOME=/helm/.cache/helm",
-        "ENV HELM_CONFIG_HOME=/helm/.config/helm",
-        "ENV HELM_DATA_HOME=/helm/.local/share/helm",
-    ]
-
-    if settings.get("openshiftSCC"):
-        lines += [
-            "",
-            "USER 1001",
-        ]
 
     lines.append("")
 
@@ -327,27 +302,20 @@ def build_operator_values(telemetry_namespace):
         },
     }
 
+    manager_entrypoint = ["/manager", "--log-format=" + settings.get("logFormat")]
+
+    values["wandb-operator"]["containers"]["operator"]["command"] = manager_entrypoint
+
     if settings.get("openshiftSCC"):
         values["wandb-operator"]["podSecurityContext"] = {
-            "runAsNonRoot": True,
             "runAsUser": None,
             "runAsGroup": None,
             "fsGroup": None,
             "fsGroupChangePolicy": None,
-            "seccompProfile": {
-                "type": "RuntimeDefault",
-            },
         }
         values["wandb-operator"]["containers"]["operator"]["env"] = {
             "OPENSHIFT": {
                 "value": "true",
-            },
-        }
-        values["wandb-operator"]["containers"]["operator"]["securityContext"] = {
-            "allowPrivilegeEscalation": False,
-            "readOnlyRootFilesystem": True,
-            "capabilities": {
-                "drop": ["ALL"],
             },
         }
         values["altinity-clickhouse-operator"] = {
@@ -808,23 +776,20 @@ if settings.get("observabilityMode") == "full":
         labels=[GROUP_TELEMETRY],
     )
 
-manager_entrypoint = ["/manager", "--log-format=" + settings.get("logFormat")]
-
 docker_only = ["./tilt_bin/manager", "./tilt_bin/crd-installer"]
-live_update_steps = [
-    sync("./tilt_bin/manager", "/manager"),
-    sync("./tilt_bin/crd-installer", "/crd-installer"),
-]
 
 if settings.get("manifestSource") == "local":
-    docker_only.append(repo_path(settings.get("localManifestPath")))
-    live_update_steps.append(sync(settings.get("localManifestPath"), "/server-manifest"))
+  path = repo_path(settings.get("localManifestPath"))
+  if not path.endswith(".yaml"):
+    paths = listdir(path, True)
+    for path in paths:
+      docker_only.append(path)
+  else:
+    docker_only.append(path)
 
-docker_build_with_restart(
+docker_build(
     IMG,
     ".",
     dockerfile_contents=operator_dockerfile(),
-    entrypoint=manager_entrypoint,
     only=docker_only,
-    live_update=live_update_steps,
 )
