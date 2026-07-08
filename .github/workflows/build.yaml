@@ -1,0 +1,55 @@
+name: "Build"
+
+# This gate historically only ran for `main`, so PRs targeting `v2` were never
+# build- or vet-checked — which is how a non-compiling test file merged into a
+# `v2` PR (see wandb/operator#205). `go vet` type-checks every package including
+# _test.go files, so a test that no longer compiles (a signature drift like
+# #205) fails here. Adding `v2` to the triggers closes the gap.
+#
+# This job is fully hermetic: `go build`/`go vet` contact no cluster, envtest, or
+# Helm repos. Running the full `make test` suite in CI is a deliberate follow-up
+# (see the PR description) — some tests render the umbrella Helm chart and need
+# its dependencies fetched, which is the operator team's call to wire up.
+on:
+  push:
+    branches:
+      - main
+      - v2
+  pull_request:
+    branches:
+      - main
+      - v2
+
+# Least privilege: this job only reads the repo.
+permissions:
+  contents: read
+
+# Cancel superseded runs on the same ref so a new push doesn't queue behind a
+# stale one.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build & Vet
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          # Single source of truth for the Go version (go.mod), instead of a
+          # hardcoded value that drifts from the toolchain the module builds
+          # with (it was pinned to 1.25 while go.mod declares 1.26).
+          go-version-file: go.mod
+          cache: true
+      - name: Download dependencies
+        run: go mod download
+      - name: Build
+        run: go build ./...
+      # Compiles every package including _test.go files, so a test that no
+      # longer compiles fails the check.
+      - name: Vet
+        run: go vet ./...
