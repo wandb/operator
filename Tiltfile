@@ -6,6 +6,7 @@
 GENERATED_DIR = "hack/testing-manifests/wandb/.generated"
 GENERATED_WANDB_CR = GENERATED_DIR + "/tilt-wandb-cr.yaml"
 GENERATED_OPERATOR_VALUES = GENERATED_DIR + "/tilt-operator-values.yaml"
+GENERATED_CUSTOM_CA_CONFIGMAP = GENERATED_DIR + "/tilt-custom-ca-configmap.yaml"
 
 GATEWAY_API_CRDS_URL = "https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.4.0/standard-install.yaml"
 IMG = "controller:latest"
@@ -51,6 +52,11 @@ settings = {
     "observabilityMode": "off",
 
     "logFormat": "pretty",  # pretty, text, json
+
+    "useExternalMysql": False,
+    "useExternalRedis": False,
+    "useExternalObjectStore": False,
+    "useCustomCA": False,
 }
 
 if os.path.exists("tilt-settings.json"):
@@ -175,6 +181,18 @@ settings["manifestSource"] = normalize_manifest_source()
 settings["openshiftSCC"] = as_bool(settings.get("openshiftSCC"))
 if settings["manifestSource"] == "local":
     settings["localManifestPath"] = validate_local_manifest_path(settings.get("localManifestPath"))
+
+USE_EXTERNAL_MYSQL = as_bool(settings.get("useExternalMysql"))
+USE_EXTERNAL_REDIS = as_bool(settings.get("useExternalRedis"))
+USE_EXTERNAL_OBJECT_STORE = as_bool(settings.get("useExternalObjectStore"))
+USE_CUSTOM_CA = as_bool(settings.get("useCustomCA"))
+USE_EXTERNAL_INFRA = USE_EXTERNAL_MYSQL or USE_EXTERNAL_REDIS or USE_EXTERNAL_OBJECT_STORE
+USE_TEST_INFRA_TLS = USE_CUSTOM_CA and (USE_EXTERNAL_MYSQL or USE_EXTERNAL_REDIS)
+
+if (USE_EXTERNAL_INFRA or USE_CUSTOM_CA) and not as_bool(settings.get("includeCR")):
+    fail("useExternalMysql/useExternalRedis/useExternalObjectStore/useCustomCA require includeCR=True")
+if (USE_EXTERNAL_INFRA or USE_CUSTOM_CA) and settings.get("wandbCR", "") != "":
+    fail("useExternalMysql/useExternalRedis/useExternalObjectStore/useCustomCA patch generated CRs; use crFile instead of wandbCR")
 
 watch_settings(ignore=["**/.git", "**/*.out", GENERATED_DIR + "/**"])
 update_settings(k8s_upsert_timeout_secs=300)
@@ -390,6 +408,12 @@ def build_wandb_cr():
       cmd += helper_flag("ingress-class", settings.get("ingressClass"))
       cmd += helper_bool_flag("create-ca", settings.get("createCA"))
       cmd += helper_flag("issuer-name", settings.get("issuerName", ""))
+      cmd += helper_bool_flag("external-mysql", USE_EXTERNAL_MYSQL)
+      cmd += helper_bool_flag("external-redis", USE_EXTERNAL_REDIS)
+      cmd += helper_bool_flag("external-objectstore", USE_EXTERNAL_OBJECT_STORE)
+      cmd += helper_bool_flag("custom-ca", USE_CUSTOM_CA)
+      if USE_CUSTOM_CA:
+          cmd += helper_flag("custom-ca-configmap-out", GENERATED_CUSTOM_CA_CONFIGMAP)
       local(cmd)
 
       return GENERATED_WANDB_CR
@@ -495,6 +519,15 @@ if CREATE_WANDB_NAMESPACE:
         labels=[GROUP_DEPENDENCIES],
     )
 
+if USE_CUSTOM_CA:
+    k8s_yaml(GENERATED_CUSTOM_CA_CONFIGMAP)
+    k8s_resource(
+        new_name="Custom-CA-ConfigMap",
+        objects=["wandb-user-ca-certs:configmap:%s" % WANDB_NAMESPACE],
+        resource_deps=["WandB-Namespace"],
+        labels=[GROUP_WANDB_APP],
+    )
+
 local_resource(
     "Operator-Codegen",
     "make manifests generate",
@@ -585,6 +618,32 @@ helm_resource(
     resource_deps=cert_manager_deps,
     labels=[GROUP_DEPENDENCIES],
 )
+
+if USE_EXTERNAL_INFRA:
+    test_infra_deps = ["WandB-Namespace"]
+    if USE_TEST_INFRA_TLS:
+        test_infra_deps.append("cert-manager")
+
+    helm_resource(
+        "Test-Infra",
+        chart="./hack/testing-manifests/test-infra",
+        release_name="test-infra",
+        namespace=WANDB_NAMESPACE,
+        flags=[
+            "--create-namespace",
+            "--wait",
+            "--timeout=10m",
+            "--set=mysql.enabled=%s" % bool_string(USE_EXTERNAL_MYSQL),
+            "--set=redis.enabled=%s" % bool_string(USE_EXTERNAL_REDIS),
+            "--set=seaweedfs.enabled=%s" % bool_string(USE_EXTERNAL_OBJECT_STORE),
+            "--set=tls.enabled=%s" % bool_string(USE_TEST_INFRA_TLS),
+            "--set=mysql.tls.enabled=%s" % bool_string(USE_CUSTOM_CA and USE_EXTERNAL_MYSQL),
+            "--set=redis.tls.enabled=%s" % bool_string(USE_CUSTOM_CA and USE_EXTERNAL_REDIS),
+        ],
+        deps=["hack/testing-manifests/test-infra/"],
+        resource_deps=test_infra_deps,
+        labels=[GROUP_WANDB_APP],
+    )
 
 if LOCAL_NETWORKING_MODE == "gateway":
     nginx_gateway_flags = [
@@ -708,6 +767,10 @@ if as_bool(settings.get("includeCR")):
         wandb_deps.append("nginx-gateway-fabric")
     if LOCAL_NETWORKING_MODE == "ingress":
         wandb_deps.append("ingress-nginx-controller")
+    if USE_EXTERNAL_INFRA:
+        wandb_deps.append("Test-Infra")
+    if USE_CUSTOM_CA:
+        wandb_deps.append("Custom-CA-ConfigMap")
 
     if str(WANDB_HOSTNAME).startswith("https://") and as_bool(settings.get("createCA")):
         build_wandb_ca(WANDB_NAME, WANDB_NAMESPACE)
@@ -757,6 +820,7 @@ if as_bool(settings.get("includeCR")):
             },
             labels=[GROUP_WANDB_APP],
         )
+
 if settings.get("observabilityMode") == "full":
     managed_endpoint_resource(
         name="Telemetry-Endpoint-Grafana",

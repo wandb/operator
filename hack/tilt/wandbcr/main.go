@@ -1,14 +1,22 @@
 package main
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/json"
+	"encoding/pem"
 	"flag"
 	"fmt"
+	"math/big"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	v2 "github.com/wandb/operator/api/v2"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/yaml"
 )
@@ -24,6 +32,14 @@ const (
 	defaultVersion          = "0.80.0"
 	defaultSize             = v2.SizeDev
 	defaultRetentionPolicy  = v2.DetachOnDelete
+	customCAConfigMapName   = "wandb-user-ca-certs"
+	customCAConfigMapKey    = "user-ca.crt"
+
+	externalMySQLSecret       = "external-mysql-connection"
+	externalMySQLTLSSecret    = "external-mysql-tls"
+	externalRedisSecret       = "external-redis-connection"
+	externalRedisTLSSecret    = "external-redis-tls"
+	externalObjectStoreSecret = "external-objectstore-connection"
 )
 
 type Options struct {
@@ -44,6 +60,13 @@ type Options struct {
 	CreateCA          bool
 	CreateCASet       bool
 	IssuerName        string
+
+	ExternalMySQL          bool
+	ExternalRedis          bool
+	ExternalObjectStore    bool
+	CustomCA               bool
+	CustomCAConfigMapOut   string
+	CustomCACertificatePEM string
 }
 
 func main() {
@@ -64,6 +87,11 @@ func main() {
 	flag.StringVar(&opts.IngressClass, "ingress-class", "nginx", "IngressClass name for ingress mode")
 	flag.BoolVar(&opts.CreateCA, "create-ca", true, "Use the generated W&B CA issuer for HTTPS hostnames")
 	flag.StringVar(&opts.IssuerName, "issuer-name", "", "Existing cert-manager issuer for HTTPS hostnames")
+	flag.BoolVar(&opts.ExternalMySQL, "external-mysql", false, "Use the test-infra external MySQL connection Secret")
+	flag.BoolVar(&opts.ExternalRedis, "external-redis", false, "Use the test-infra external Redis connection Secret")
+	flag.BoolVar(&opts.ExternalObjectStore, "external-objectstore", false, "Use the test-infra external object store connection Secret")
+	flag.BoolVar(&opts.CustomCA, "custom-ca", false, "Generate and configure custom CA material")
+	flag.StringVar(&opts.CustomCAConfigMapOut, "custom-ca-configmap-out", "", "Path to write the generated custom CA ConfigMap YAML")
 	flag.Parse()
 	flag.Visit(func(f *flag.Flag) {
 		if f.Name == "create-ca" {
@@ -78,7 +106,9 @@ func main() {
 }
 
 func Run(opts Options) error {
-	cr, err := BuildCR(opts)
+	applyDefaults(&opts)
+
+	cr, configMap, err := BuildArtifacts(opts)
 	if err != nil {
 		return err
 	}
@@ -94,11 +124,40 @@ func Run(opts Options) error {
 	if err := os.WriteFile(opts.OutPath, data, 0o644); err != nil {
 		return fmt.Errorf("write generated CR: %w", err)
 	}
+	if configMap != nil && opts.CustomCAConfigMapOut != "" {
+		data, err := marshalObjectYAML(configMap)
+		if err != nil {
+			return fmt.Errorf("marshal custom CA ConfigMap YAML: %w", err)
+		}
+		if err := os.MkdirAll(filepath.Dir(opts.CustomCAConfigMapOut), 0o755); err != nil {
+			return fmt.Errorf("create custom CA ConfigMap directory: %w", err)
+		}
+		if err := os.WriteFile(opts.CustomCAConfigMapOut, data, 0o644); err != nil {
+			return fmt.Errorf("write custom CA ConfigMap: %w", err)
+		}
+	}
 	return nil
 }
 
 func marshalCRYAML(cr *v2.WeightsAndBiases) ([]byte, error) {
-	data, err := json.Marshal(cr)
+	obj, err := prunedObject(cr)
+	if err != nil {
+		return nil, err
+	}
+	delete(obj, "status")
+	return yaml.Marshal(obj)
+}
+
+func marshalObjectYAML(value interface{}) ([]byte, error) {
+	obj, err := prunedObject(value)
+	if err != nil {
+		return nil, err
+	}
+	return yaml.Marshal(obj)
+}
+
+func prunedObject(value interface{}) (map[string]interface{}, error) {
+	data, err := json.Marshal(value)
 	if err != nil {
 		return nil, err
 	}
@@ -107,10 +166,11 @@ func marshalCRYAML(cr *v2.WeightsAndBiases) ([]byte, error) {
 	if err := json.Unmarshal(data, &obj); err != nil {
 		return nil, err
 	}
-	delete(obj, "status")
 
-	pruned, _ := pruneEmpty(obj)
-	return yaml.Marshal(pruned)
+	if _, keep := pruneEmpty(obj); !keep {
+		return map[string]interface{}{}, nil
+	}
+	return obj, nil
 }
 
 func pruneEmpty(value interface{}) (interface{}, bool) {
@@ -142,30 +202,50 @@ func pruneEmpty(value interface{}) (interface{}, bool) {
 }
 
 func BuildCR(opts Options) (*v2.WeightsAndBiases, error) {
+	cr, _, err := BuildArtifacts(opts)
+	return cr, err
+}
+
+func BuildArtifacts(opts Options) (*v2.WeightsAndBiases, *corev1.ConfigMap, error) {
 	applyDefaults(&opts)
+
+	if opts.CustomCA && opts.CustomCACertificatePEM == "" {
+		certPEM, err := generateSelfSignedCACertificate()
+		if err != nil {
+			return nil, nil, err
+		}
+		opts.CustomCACertificatePEM = certPEM
+	}
 
 	cr, err := baseCR(opts.CRFile)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	ensureTypeMeta(cr)
 	patchMetadata(cr, opts)
 	patchScalarSpec(cr, opts)
 	if err := patchManifestRepository(cr, opts.ManifestSource); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if err := patchLicense(cr, opts.LicenseFile); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if err := patchNetworking(cr, opts); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if err := patchTelemetry(cr, opts.ObservabilityMode); err != nil {
-		return nil, err
+		return nil, nil, err
+	}
+	patchExternalInfra(cr, opts)
+
+	var configMap *corev1.ConfigMap
+	if opts.CustomCA {
+		patchCustomCA(cr, opts.CustomCACertificatePEM)
+		configMap = customCAConfigMap(cr.Namespace, opts.CustomCACertificatePEM)
 	}
 
-	return cr, nil
+	return cr, configMap, nil
 }
 
 func applyDefaults(opts *Options) {
@@ -381,6 +461,106 @@ func patchTelemetry(cr *v2.WeightsAndBiases, observabilityMode string) error {
 	return nil
 }
 
+func patchExternalInfra(cr *v2.WeightsAndBiases, opts Options) {
+	if opts.ExternalMySQL {
+		cr.Spec.MySQL.ManagedMysql = nil
+		conn := &v2.MysqlConnection{
+			Host:     secretKeySelector(externalMySQLSecret, "Host"),
+			Port:     secretKeySelector(externalMySQLSecret, "Port"),
+			Database: secretKeySelector(externalMySQLSecret, "Database"),
+			Username: secretKeySelector(externalMySQLSecret, "Username"),
+			Password: secretKeySelector(externalMySQLSecret, "Password"),
+		}
+		if opts.CustomCA {
+			conn.SslCa = secretKeySelector(externalMySQLTLSSecret, "ca.crt")
+		}
+		cr.Spec.MySQL.ExternalMysql = conn
+	}
+
+	if opts.ExternalRedis {
+		cr.Spec.Redis.ManagedRedis = nil
+		conn := &v2.RedisConnection{
+			Host: secretKeySelector(externalRedisSecret, "Host"),
+			Port: secretKeySelector(externalRedisSecret, "Port"),
+		}
+		if opts.CustomCA {
+			conn.SslCa = secretKeySelector(externalRedisTLSSecret, "ca.crt")
+		}
+		cr.Spec.Redis.ExternalRedis = conn
+	}
+
+	if opts.ExternalObjectStore {
+		cr.Spec.ObjectStore.ManagedObjectStore = nil
+		cr.Spec.ObjectStore.ExternalObjectStore = &v2.ObjectStoreConnection{
+			Provider:  secretKeySelector(externalObjectStoreSecret, "Provider"),
+			Endpoint:  secretKeySelector(externalObjectStoreSecret, "Host"),
+			Port:      secretKeySelector(externalObjectStoreSecret, "Port"),
+			Bucket:    secretKeySelector(externalObjectStoreSecret, "Bucket"),
+			Region:    secretKeySelector(externalObjectStoreSecret, "Region"),
+			AccessKey: secretKeySelector(externalObjectStoreSecret, "AccessKey"),
+			SecretKey: secretKeySelector(externalObjectStoreSecret, "SecretKey"),
+		}
+	}
+}
+
+func patchCustomCA(cr *v2.WeightsAndBiases, certPEM string) {
+	cr.Spec.Global.CustomCACerts = []string{certPEM}
+	cr.Spec.Global.CACertsConfigMap = customCAConfigMapName
+}
+
+func customCAConfigMap(namespace, certPEM string) *corev1.ConfigMap {
+	return &corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "ConfigMap",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      customCAConfigMapName,
+			Namespace: namespace,
+			Labels: map[string]string{
+				"app.kubernetes.io/managed-by": "tilt",
+				"app.kubernetes.io/part-of":    "wandb",
+			},
+		},
+		Data: map[string]string{
+			customCAConfigMapKey: certPEM,
+		},
+	}
+}
+
+func generateSelfSignedCACertificate() (string, error) {
+	serialLimit := new(big.Int).Lsh(big.NewInt(1), 128)
+	serialNumber, err := rand.Int(rand.Reader, serialLimit)
+	if err != nil {
+		return "", fmt.Errorf("generate custom CA serial: %w", err)
+	}
+
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return "", fmt.Errorf("generate custom CA key: %w", err)
+	}
+
+	now := time.Now()
+	template := x509.Certificate{
+		SerialNumber: serialNumber,
+		Subject: pkix.Name{
+			CommonName: "wandb-tilt-custom-ca",
+		},
+		NotBefore:             now.Add(-time.Hour),
+		NotAfter:              now.Add(365 * 24 * time.Hour),
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign | x509.KeyUsageDigitalSignature,
+		BasicConstraintsValid: true,
+		IsCA:                  true,
+	}
+
+	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, &key.PublicKey, key)
+	if err != nil {
+		return "", fmt.Errorf("generate custom CA certificate: %w", err)
+	}
+
+	return string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: derBytes})), nil
+}
+
 func effectiveHostname(opts Options) string {
 	if normalizeNetworkMode(opts.NetworkMode) == "ingress" && opts.Hostname == defaultHostname {
 		return defaultIngressHostname
@@ -419,4 +599,11 @@ func boolPtr(value bool) *bool {
 
 func stringPtr(value string) *string {
 	return &value
+}
+
+func secretKeySelector(secretName, key string) corev1.SecretKeySelector {
+	return corev1.SecretKeySelector{
+		LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
+		Key:                  key,
+	}
 }
