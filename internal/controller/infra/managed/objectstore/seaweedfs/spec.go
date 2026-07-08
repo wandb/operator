@@ -170,11 +170,12 @@ func ToObjectStoreVendorSpec(
 		},
 	}
 
-	if len(infraSpec.Config.Resources.Requests) > 0 || len(infraSpec.Config.Resources.Limits) > 0 {
-		seaweedCR.Spec.Volume.ResourceRequirements = corev1.ResourceRequirements{
-			Requests: infraSpec.Config.Resources.Requests,
-			Limits:   infraSpec.Config.Resources.Limits,
-		}
+	// Layer compute requests/limits onto the volume server without dropping its storage request (the PVC size).
+	for name, qty := range infraSpec.Config.Resources.Requests {
+		seaweedCR.Spec.Volume.Requests[name] = qty
+	}
+	if len(infraSpec.Config.Resources.Limits) > 0 {
+		seaweedCR.Spec.Volume.Limits = infraSpec.Config.Resources.Limits
 	}
 
 	if err := ctrl.SetControllerReference(wandb, seaweedCR, scheme); err != nil {
