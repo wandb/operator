@@ -35,7 +35,7 @@ settings = {
     "wandbName": "wandb",
     "wandbNamespace": "wandb",
     "wandbHostname": "http://localhost:8080",
-    "wandbVersion": "0.80.0",
+    "wandbVersion": "0.83.0-clickhouse-keeper.2",
     "size": "dev",
     "retentionPolicy": "detach",
     "licenseFile": "",
@@ -303,8 +303,6 @@ def build_operator_values(telemetry_namespace):
     }
 
     manager_entrypoint = ["/manager", "--log-format=" + settings.get("logFormat")]
-    if settings.get("observabilityMode") != "off":
-        manager_entrypoint += ["--telemetry-enabled=true"]
 
     values["wandb-operator"]["containers"]["operator"]["command"] = manager_entrypoint
 
