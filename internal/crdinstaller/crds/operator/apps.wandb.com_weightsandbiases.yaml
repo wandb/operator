@@ -1124,6 +1124,12 @@ spec:
                 type: object
               global:
                 properties:
+                  caCertsConfigMap:
+                    type: string
+                  customCACerts:
+                    items:
+                      type: string
+                    type: array
                   imageRegistry:
                     type: string
                 type: object

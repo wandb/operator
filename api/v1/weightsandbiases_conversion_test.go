@@ -145,6 +145,20 @@ func TestConvertTo_SizeUnrecognized(t *testing.T) {
 	require.Contains(t, err.Error(), `"testing"`)
 }
 
+func TestConvertTo_CustomCACerts(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{
+			"customCACerts":    []interface{}{"---cert-one---", "---cert-two---"},
+			"caCertsConfigMap": "corp-ca-certs",
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+
+	require.Equal(t, []string{"---cert-one---", "---cert-two---"}, dst.Spec.Global.CustomCACerts)
+	require.Equal(t, "corp-ca-certs", dst.Spec.Global.CACertsConfigMap)
+}
+
 func TestConvertTo_VersionFromAppImageTag(t *testing.T) {
 	dst := &appsv2.WeightsAndBiases{}
 	src := newV1(map[string]interface{}{
