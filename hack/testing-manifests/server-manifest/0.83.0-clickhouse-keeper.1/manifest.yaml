@@ -1,6 +1,5 @@
 ---
 requiredOperatorVersion: ^2.0.0
-manifestVersion: v1alpha1
 
 features:
   filestreamQueue: false
@@ -13,61 +12,22 @@ bucket:
         - /bucket
       servicePort: "http-minio"
       pathType: Prefix
-    sizing:
-      default:
-        replicas: 1
-        pools: 1 # Not implemented yet, but will be needed if we commit to minio
-        volumeSize: 10Gi
-      micro:
-        replicas: 3
-        pools: 1
-        volumeSize: 10Gi
-        resources:
-          requests:
-            cpu: 1
-            memory: 4Gi
-          limits:
-            cpu: 1
-            memory: 4Gi
-      small:
-        replicas: 3
-        volumeSize: 100Gi
-        resources:
-          requests:
-            cpu: 2
-            memory: 8Gi
-          limits:
-            cpu: 2
-            memory: 8Gi
+    images:
+      seaweedfs:
+        registry: "docker.io"
+        repository: "chrislusf/seaweedfs"
+        tag: "4.35"
 
 clickhouse:
   default:
-    sizing:
-      default:
-        shards: 1
-        replicas: 1
-        volumeSize: 10Gi
-      micro:
-        replicas: 3
-        volumeSize: 10Gi
-        resources:
-          requests:
-            cpu: 1
-            memory: 4Gi
-          limits:
-            cpu: 1
-            memory: 4Gi
-      small:
-        shards: 1
-        replicas: 3
-        volumeSize: 100Gi
-        resources:
-          requests:
-            cpu: 2
-            memory: 8Gi
-          limits:
-            cpu: 2
-            memory: 8Gi
+    images:
+      server:
+        registry: "docker.io"
+        repository: "altinity/clickhouse-server"
+        tag: "25.8.16.10002.altinitystable"
+
+clickhouseKeeper:
+  default: {}
 
 generatedSecrets:
   - name: session-key
@@ -79,119 +39,68 @@ generatedSecrets:
     useExactName: true
 
 kafka:
-  sizing:
-    default:
-      replicas: 1
-      volumeSize: 10Gi
-      replicationFactor: 1
-      minInSyncReplicas: 1
-      offsetsTopicRF: 1
-      transactionStateRF: 1
-      transactionStateISR: 1
-    micro:
-      replicas: 3
-      volumeSize: 10Gi
-      replicationFactor: 3
-      minInSyncReplicas: 2
-      offsetsTopicRF: 3
-      transactionStateRF: 3
-      transactionStateISR: 3
-      resources:
-        requests:
-          cpu: 1
-          memory: 4Gi
-        limits:
-          cpu: 1
-          memory: 4Gi
-    small:
-      replicas: 3
-      volumeSize: 100Gi
-      replicationFactor: 3
-      minInSyncReplicas: 2
-      offsetsTopicRF: 3
-      transactionStateRF: 3
-      transactionStateISR: 3
-      resources:
-        requests:
-          cpu: 2
-          memory: 8Gi
-        limits:
-          cpu: 2
-          memory: 8Gi
+  images:
+    bufstream:
+      registry: "us-docker.pkg.dev"
+      repository: "buf-images-1/buf/images/bufstream"
+      tag: "0.4.15"
+    etcd:
+      registry: "quay.io"
+      repository: "coreos/etcd"
+      tag: "v3.5.31"
+    bucketEnsure:
+      repository: "amazon/aws-cli"
+      tag: "2.35.10"
   topics:
     - name: filestream
       features:
         - filestreamQueue
       topic: filestream
-      partitionCount: 48
+      partitionCount: 96
     - name: flat-run-fields-updater
       topic: flat-run-fields-updater
-      partitionCount: 48
+      partitionCount: 96
     - name: weave-worker
       topic: weave.call_ended
-      partitionCount: 48
+      partitionCount: 16
     - name: weave-evaluate-model-worker
       topic: weave.evaluate_model
-      partitionCount: 48
+      partitionCount: 16
 
 mysql:
   default:
-    sizing:
-      default:
-        replicas: 1
-        volumeSize: 10Gi
-      micro:
-        replicas: 3
-        volumeSize: 10Gi
-        resources:
-          requests:
-            cpu: 1
-            memory: 4Gi
-          limits:
-            cpu: 1
-            memory: 4Gi
-      small:
-        replicas: 3
-        volumeSize: 100Gi
-        resources:
-          requests:
-            cpu: 2
-            memory: 8Gi
-          limits:
-            cpu: 2
-            memory: 8Gi
+    images:
+      mysql:
+        registry: "ghcr.io"
+        repository: "cybozu-go/moco/mysql"
+        tag: "8.4.8"
+      exporter:
+        registry: "docker.io"
+        repository: "prom/mysqld-exporter"
+        tag: "v0.15.1"
   metadata: {}
   runs: {}
   usage: {}
 
 redis:
   default:
-    sizing:
-      default:
-        shards: 1
-        replicas: 1
-        volumeSize: 10Gi
-      micro:
-        replicas: 2
-        volumeSize: 10Gi
-        resources:
-          requests:
-            cpu: 1
-            memory: 4Gi
-          limits:
-            cpu: 1
-            memory: 4Gi
-      small:
-        shards: 1
-        replicas: 3
-        volumeSize: 10Gi
-        resources:
-          requests:
-            cpu: 2
-            memory: 8Gi
-          limits:
-            cpu: 2
-            memory: 8Gi
+    images:
+      standalone:
+        registry: "quay.io"
+        repository: "opstree/redis"
+        tag: "v7.0.15"
+      replication:
+        registry: "quay.io"
+        repository: "opstree/redis"
+        tag: "v7.0.15"
+      sentinel:
+        registry: "quay.io"
+        repository: "opstree/redis-sentinel"
+        tag: "v7.0.12"
+      exporter:
+        registry: "quay.io"
+        repository: "opstree/redis-exporter"
+        tag: "v1.44.0"
 
 commonEnvvars:
   gorillaMysql:
@@ -412,7 +321,7 @@ commonEnvvars:
       sources:
         - name: default
           type: clickhouse
-          field: port
+          field: http-port
     - name: WF_CLICKHOUSE_USER
       sources:
         - name: default
@@ -472,6 +381,8 @@ commonEnvvars:
       value: "/traces"
     - name: WEAVE_ENABLE_ONLINE_EVAL
       value: "true"
+    - name: WEAVE_ENABLE_AGENT_SCORING
+      value: "false"
     - name: WEAVE_ENABLE_EVALUATE_MODEL_WORKER
       value: "true"
     - name: WANDB_INTERNAL_SERVICE_TOKEN
@@ -514,7 +425,47 @@ commonEnvvars:
   flatRunsV2Consumer:
     - name: KAFKA_RUNS_V2_TOPIC_NAME
       value: "flat-run-fields-updater"
-
+  telemetryOtel:
+    - name: OTEL_EXPORTER_OTLP_PROTOCOL
+      sources:
+        - type: telemetry
+          field: protocol
+    - name: OTEL_TRACES_EXPORTER
+      sources:
+        - type: telemetry
+          field: tracesExporter
+    - name: OTEL_METRICS_EXPORTER
+      sources:
+        - type: telemetry
+          field: metricsExporter
+    - name: OTEL_LOGS_EXPORTER
+      sources:
+        - type: telemetry
+          field: logsExporter
+    - name: OTEL_EXPORTER_OTLP_METRICS_ENDPOINT
+      sources:
+        - type: telemetry
+          field: metricsEndpoint
+    - name: OTEL_EXPORTER_OTLP_LOGS_ENDPOINT
+      sources:
+        - type: telemetry
+          field: logsEndpoint
+    - name: OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+      sources:
+        - type: telemetry
+          field: tracesEndpoint
+    - name: OTEL_SERVICE_NAME
+      sources:
+        - type: telemetry
+          field: serviceName
+    - name: OTEL_RESOURCE_ATTRIBUTES
+      sources:
+        - type: telemetry
+          field: resourceAttributes
+    - name: GORILLA_TRACER
+      sources:
+        - type: telemetry
+          field: gorillaTracer
 commonVolumeMounts:
   internalSigner:
     - mountPath: /vol/env
@@ -528,7 +479,7 @@ applications:
     name: anaconda2
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/anaconda2
-      tag: 0.79.0
+      tag: 0.83.0-clickhouse-keeper.2
     containers:
       - name: anaconda2
         ports:
@@ -546,33 +497,6 @@ applications:
         - port: 8080
           protocol: TCP
           name: anaconda2
-    sizing:
-      micro:
-        resources:
-          limits:
-            cpu: "1"
-            memory: 2Gi
-          requests:
-            cpu: "1"
-            memory: 2Gi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 2
-            minReplicas: 1
-      small:
-        resources:
-          limits:
-            cpu: "2"
-            memory: 4Gi
-          requests:
-            cpu: "2"
-            memory: 4Gi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 3
-            minReplicas: 2
   api:
     name: api
     commonEnvs:
@@ -605,7 +529,7 @@ applications:
             type: mysql
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.79.0
+      tag: 0.83.0-clickhouse-keeper.2
     containers:
       - name: api
         args:
@@ -636,37 +560,8 @@ applications:
         - /oidc
       servicePort: "8080"
       pathType: Prefix
-    sizing:
-      micro:
-        resources:
-          limits:
-            cpu: "1"
-            memory: 2Gi
-          requests:
-            cpu: "1"
-            memory: 2Gi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 2
-            minReplicas: 1
-      small:
-        resources:
-          limits:
-            cpu: "4"
-            memory: 8Gi
-          requests:
-            cpu: "4"
-            memory: 8Gi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 3
-            minReplicas: 2
   executor:
     name: executor
-    args:
-      - executor
     commonEnvs:
       - gorillaMysql
       - gorillaBucket
@@ -677,23 +572,11 @@ applications:
       - gorillaOnprem
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.79.0
+      tag: 0.83.0-clickhouse-keeper.2
     containers:
       - name: executor
-    sizing:
-      small:
-        resources:
-          limits:
-            cpu: "4"
-            memory: 16Gi
-          requests:
-            cpu: "4"
-            memory: 16Gi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 2
-            minReplicas: 1
+        args:
+          - executor
   filemeta:
     name: filemeta
     args:
@@ -706,34 +589,7 @@ applications:
       - gorillaOnprem
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.79.0
-    sizing:
-      micro:
-        resources:
-          limits:
-            cpu: "1"
-            memory: 2Gi
-          requests:
-            cpu: "1"
-            memory: 2Gi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 2
-            minReplicas: 1
-      small:
-        resources:
-          limits:
-            cpu: "2"
-            memory: 2Gi
-          requests:
-            cpu: "2"
-            memory: 2Gi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 2
-            minReplicas: 1
+      tag: 0.83.0-clickhouse-keeper.2
   filestream:
     name: filestream
     features:
@@ -748,36 +604,9 @@ applications:
       - gorillaOnprem
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.79.0
+      tag: 0.83.0-clickhouse-keeper.2
     containers:
       - name: filestream
-    sizing:
-      micro:
-        resources:
-          limits:
-            cpu: "1"
-            memory: 2Gi
-          requests:
-            cpu: "1"
-            memory: 2Gi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 2
-            minReplicas: 1
-      small:
-        resources:
-          limits:
-            cpu: "2"
-            memory: 4Gi
-          requests:
-            cpu: "2"
-            memory: 4Gi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 2
-            minReplicas: 1
   flat-run-fields-updater:
     name: flat-run-fields-updater
     args:
@@ -795,41 +624,14 @@ applications:
         value: "$(KAFKA_URL)/$(KAFKA_RUNS_V2_TOPIC_NAME)?consumer_group_id=flat-run-fields-updater"
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.79.0
+      tag: 0.83.0-clickhouse-keeper.2
     containers:
       - name: flat-run-fields-updater
-    sizing:
-      micro:
-        resources:
-          limits:
-            cpu: "1"
-            memory: 2Gi
-          requests:
-            cpu: "1"
-            memory: 2Gi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 2
-            minReplicas: 1
-      small:
-        resources:
-          limits:
-            cpu: "2"
-            memory: 4Gi
-          requests:
-            cpu: "2"
-            memory: 4Gi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 5
-            minReplicas: 1
   frontend:
     name: frontend
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/frontend-nginx
-      tag: 0.79.0
+      tag: 0.83.0-clickhouse-keeper.2
     commonEnvs:
       - frontend
     env:
@@ -883,33 +685,17 @@ applications:
         - /
       servicePort: "8080"
       pathType: Prefix
-    sizing:
-      micro:
-        resources:
-          limits:
-            cpu: "1"
-            memory: 2Gi
-          requests:
-            cpu: "1"
-            memory: 2Gi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 2
-            minReplicas: 1
-      small:
-        resources:
-          limits:
-            cpu: "2"
-            memory: 2Gi
-          requests:
-            cpu: "2"
-            memory: 2Gi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 3
-            minReplicas: 2
+    volumeMounts:
+      - name: tmp
+        mountPath: /tmp/
+        source:
+          type: emptyDir
+          name: tmp
+      - name: nginx-cache
+        mountPath: /var/cache/nginx
+        source:
+          type: emptyDir
+          name: nginx-cache
   glue:
     name: glue
     args:
@@ -936,26 +722,9 @@ applications:
         value: "memory://"
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.79.0
+      tag: 0.83.0-clickhouse-keeper.2
     containers:
       - name: glue
-    sizing:
-      micro:
-        resources:
-          limits:
-            cpu: "1"
-            memory: 3Gi
-          requests:
-            cpu: "1"
-            memory: 3Gi
-      small:
-        resources:
-          limits:
-            cpu: "2"
-            memory: 6Gi
-          requests:
-            cpu: "2"
-            memory: 6Gi
   metric-observer:
     name: metric-observer
     args:
@@ -973,36 +742,9 @@ applications:
         value: "$(KAFKA_URL)/$(KAFKA_RUNS_V2_TOPIC_NAME)?consumer_group_id=metric-observer"
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.79.0
+      tag: 0.83.0-clickhouse-keeper.2
     containers:
       - name: metric-observer
-    sizing:
-      micro:
-        resources:
-          limits:
-            cpu: "1"
-            memory: 2Gi
-          requests:
-            cpu: "1"
-            memory: 2Gi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 2
-            minReplicas: 1
-      small:
-        resources:
-          limits:
-            cpu: "2"
-            memory: 4Gi
-          requests:
-            cpu: "2"
-            memory: 4Gi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 4
-            minReplicas: 1
   parquet:
     name: parquet
     args:
@@ -1017,7 +759,7 @@ applications:
       - gorillaOnprem
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.79.0
+      tag: 0.83.0-clickhouse-keeper.2
     containers:
       - name: parquet
         ports:
@@ -1035,38 +777,25 @@ applications:
         - port: 8080
           protocol: TCP
           name: parquet
-    sizing:
-      micro:
-        resources:
-          limits:
-            cpu: "1"
-            memory: 8Gi
-          requests:
-            cpu: "1"
-            memory: 8Gi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 2
-            minReplicas: 1
-      small:
-        resources:
-          limits:
-            cpu: "4"
-            memory: 16Gi
-          requests:
-            cpu: "4"
-            memory: 16Gi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 2
-            minReplicas: 2
   weave:
     name: weave
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-python
-      tag: 0.79.0
+      tag: 0.83.0-clickhouse-keeper.2
+    commonEnvs:
+    env:
+      - name: DATADOG_TRACE_ENABLED
+        value: "false"
+    service:
+      ports:
+        - port: 9239
+          protocol: TCP
+          name: weave
+    ingress:
+      paths:
+        - /weave/
+      servicePort: "9239"
+      pathType: Prefix
     containers:
       - name: weave
         ports:
@@ -1090,19 +819,6 @@ applications:
           requests:
             cpu: 100m
             memory: 128Mi
-    env:
-      - name: DATADOG_TRACE_ENABLED
-        value: "false"
-    service:
-      ports:
-        - port: 9239
-          protocol: TCP
-          name: weave
-    ingress:
-      paths:
-        - /weave/
-      servicePort: "9239"
-      pathType: Prefix
     volumeMounts:
       - name: temp-dir
         mountPath: /tmp/
@@ -1114,42 +830,15 @@ applications:
         source:
           type: emptyDir
           name: cache
-    sizing:
-      micro:
-        resources:
-          limits:
-            cpu: "1"
-            memory: 4Gi
-          requests:
-            cpu: "1"
-            memory: 4Gi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 2
-            minReplicas: 1
-      small:
-        resources:
-          limits:
-            cpu: "4"
-            memory: 16Gi
-          requests:
-            cpu: "4"
-            memory: 16Gi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 2
-            minReplicas: 2
   weave-trace:
     name: weave-trace
+    image:
+      repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
+      tag: 0.83.0-clickhouse-keeper.2
     commonEnvs:
       - clickhouse
       - kafka
       - weaveTrace
-    image:
-      repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
-      tag: 0.79.0
     containers:
       - name: weave-trace
         args:
@@ -1186,38 +875,11 @@ applications:
           kubernetesServiceAccount:
             audience: internal-service
             expirationSeconds: 600
-    sizing:
-      micro:
-        resources:
-          limits:
-            cpu: "1"
-            memory: 2Gi
-          requests:
-            cpu: "1"
-            memory: 2Gi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 2
-            minReplicas: 1
-      small:
-        resources:
-          limits:
-            cpu: "1"
-            memory: 8Gi
-          requests:
-            cpu: "1"
-            memory: 8Gi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 3
-            minReplicas: 2
   weave-trace-worker:
     name: weave-trace-worker
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
-      tag: 0.79.0
+      tag: 0.83.0-clickhouse-keeper.2
     env:
       - name: DD_TRACE_ENABLED
         value: "false"
@@ -1231,38 +893,11 @@ applications:
           - "python"
           - "-m"
           - "src.workers.scoring_worker"
-    sizing:
-      micro:
-        resources:
-          limits:
-            cpu: "1"
-            memory: 2Gi
-          requests:
-            cpu: "1"
-            memory: 2Gi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 2
-            minReplicas: 1
-      small:
-        resources:
-          limits:
-            cpu: "1"
-            memory: 8Gi
-          requests:
-            cpu: "1"
-            memory: 8Gi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 4
-            minReplicas: 1
   weave-trace-evaluate-model-worker:
     name: weave-trace-evaluate-model-worker
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
-      tag: 0.79.0
+      tag: 0.83.0-clickhouse-keeper.2
     env:
       - name: DD_TRACE_ENABLED
         value: "false"
@@ -1276,33 +911,6 @@ applications:
           - "python"
           - "-m"
           - "src.workers.evaluate_model_worker.evaluate_model_worker"
-    sizing:
-      micro:
-        resources:
-          limits:
-            cpu: "1"
-            memory: 2Gi
-          requests:
-            cpu: "1"
-            memory: 2Gi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 2
-            minReplicas: 1
-      small:
-        resources:
-          limits:
-            cpu: "1"
-            memory: 8Gi
-          requests:
-            cpu: "1"
-            memory: 8Gi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 2
-            minReplicas: 1
   nginx-proxy:
     name: nginx-proxy
     features:
@@ -1310,8 +918,7 @@ applications:
     image:
       repository: nginxinc/nginx-unprivileged
       tag: latest
-    containers:
-      - name: nginx-proxy
+    commonEnvs:
     env:
       - name: UPSTREAM_FRONTEND
         sources:
@@ -1439,7 +1046,7 @@ applications:
               location /bucket {
                 proxy_ssl_verify off;
                 proxy_set_header Host $bucket;
-                proxy_pass http://bucket;
+                proxy_pass https://bucket;
               }
             }
           }
@@ -1449,37 +1056,12 @@ applications:
         - name: http
           port: 8080
           protocol: TCP
-    sizing:
-      default:
-        autoscaling:
-          enabled: true
-          minReplicas: 2
-          maxReplicas: 4
-        resources:
-          limits:
-            cpu: "2"
-            memory: 2Gi
-          requests:
-            cpu: "2"
-            memory: 2Gi
-      micro:
-        resources:
-          limits:
-            cpu: "1"
-            memory: 2Gi
-          requests:
-            cpu: "1"
-            memory: 2Gi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 2
-            minReplicas: 1
+
 migrations:
   gorilla:
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.79.0
+      tag: 0.83.0-clickhouse-keeper.2
     args:
       - "migrate"
       - "--db=$(GORILLA_METADATA_STORE)"
@@ -1493,7 +1075,7 @@ migrations:
   internal-signer:
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.79.0
+      tag: 0.83.0-clickhouse-keeper.2
     args:
       - "secret-generation-job"
     env:
@@ -1506,7 +1088,7 @@ migrations:
   weave-trace:
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
-      tag: 0.79.0
+      tag: 0.83.0-clickhouse-keeper.2
     args:
       - python
       - migrator.py

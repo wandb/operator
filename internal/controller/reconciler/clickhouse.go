@@ -8,6 +8,7 @@ import (
 	"github.com/wandb/operator/internal/controller/infra/external"
 	externalch "github.com/wandb/operator/internal/controller/infra/external/clickhouse"
 	"github.com/wandb/operator/internal/controller/infra/managed/clickhouse/altinity"
+	"github.com/wandb/operator/internal/controller/infra/managed/clickhouse/altinity/keeper"
 	"github.com/wandb/operator/pkg/utils"
 	"github.com/wandb/operator/pkg/wandb/manifest"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -21,10 +22,11 @@ func clickHouseWriteState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
+	objStoreConn *apiv2.ObjectStoreConnection,
 	mfst manifest.Manifest,
 ) []metav1.Condition {
 	if wandb.Spec.ClickHouse.ManagedClickHouse != nil {
-		return managedClickHouseWriteState(ctx, client, wandb, mfst)
+		return managedClickHouseWriteState(ctx, client, wandb, objStoreConn, mfst)
 	}
 	if wandb.Spec.ClickHouse.ExternalClickHouse != nil {
 		return externalClickHouseWriteState(ctx, client, wandb)
@@ -99,13 +101,45 @@ func managedClickHouseWriteState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
+	objStoreConn *apiv2.ObjectStoreConnection,
 	mfst manifest.Manifest,
 ) []metav1.Condition {
 	spec := wandb.Spec.ClickHouse.ManagedClickHouse
 
-	var specNamespacedName = managedClickHouseSpecNamespacedName(spec)
 	log := ctrl.LoggerFrom(ctx)
-	desired, err := altinity.ToClickHouseVendorSpec(ctx, wandb, client.Scheme(), mfst)
+
+	// Resolve the bucket connection; wait and requeue if it isn't ready yet.
+	objStorage, err := altinity.ResolveObjectStorage(ctx, client, wandb, objStoreConn)
+	if err != nil {
+		log.Error(err, "object storage not ready for ClickHouse")
+		return []metav1.Condition{
+			{
+				Type:   common.ReconciledType,
+				Status: metav1.ConditionFalse,
+				Reason: common.PendingCreateReason,
+			},
+			{
+				Type:   altinity.ClickHouseCustomResourceType,
+				Status: metav1.ConditionFalse,
+				Reason: common.PendingCreateReason,
+			},
+		}
+	}
+
+	// Translate the Keeper and ClickHouse CRs; WriteState writes Keeper first.
+	desiredKeeper, err := keeper.ToKeeperVendorSpec(ctx, wandb, client.Scheme())
+	if err != nil {
+		log.Error(err, "failed to translate Keeper spec to vendor spec")
+		return []metav1.Condition{
+			{
+				Type:   common.ReconciledType,
+				Status: metav1.ConditionFalse,
+				Reason: common.ControllerErrorReason,
+			},
+		}
+	}
+
+	desired, err := altinity.ToClickHouseVendorSpec(ctx, wandb, client.Scheme(), objStorage, mfst)
 	if err != nil {
 		log.Error(err, "failed to translate ClickHouse spec to vendor spec")
 		return []metav1.Condition{
@@ -117,11 +151,15 @@ func managedClickHouseWriteState(
 		}
 	}
 
+	specNamespacedName := managedClickHouseSpecNamespacedName(spec)
+
 	if conditions := altinity.CheckDetached(ctx, client, specNamespacedName, wandb.GetUID()); conditions != nil {
 		return conditions
 	}
 
-	results := altinity.WriteState(ctx, client, specNamespacedName, desired)
+	results := make([]metav1.Condition, 0)
+	results = append(results, altinity.WriteState(ctx, client, specNamespacedName, desiredKeeper, desired)...)
+
 	return results
 }
 
@@ -137,6 +175,10 @@ func managedClickHouseReadState(
 	onDeleteRule := altinity.ToClickHouseOnDeleteRule(wandb, wandb.GetRetentionPolicy(spec.ManagedInfraSpec))
 	readConditions, newInfraConn := altinity.ReadState(ctx, client, specNamespacedName, wandb, onDeleteRule)
 	newConditions = append(newConditions, readConditions...)
+
+	// Keeper readiness gates ClickHouse readiness (see inferInfraState).
+	newConditions = append(newConditions, keeper.ReadState(ctx, client, keeper.SpecNamespacedName(spec))...)
+
 	return newConditions, newInfraConn
 }
 

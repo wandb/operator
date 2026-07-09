@@ -457,6 +457,44 @@ func validateClickHouseSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 		))
 	}
 
+	spec := wandb.Spec.ClickHouse.ManagedClickHouse
+	if spec == nil {
+		return errors
+	}
+
+	// Managed ClickHouse stores table data in the object store, so one must be configured.
+	if wandb.Spec.ObjectStore.ManagedObjectStore == nil && wandb.Spec.ObjectStore.ExternalObjectStore == nil {
+		errors = append(errors, field.Invalid(
+			chPath.Child("managedClickhouse"),
+			"",
+			"managed ClickHouse stores data in the object store; configure spec.objectStore (managed or external)",
+		))
+	}
+
+	// Keeper requires an odd number of replicas to form a quorum.
+	if spec.Keeper.Replicas != 0 && spec.Keeper.Replicas%2 == 0 {
+		errors = append(errors, field.Invalid(
+			chPath.Child("managedClickhouse").Child("keeper").Child("replicas"),
+			spec.Keeper.Replicas,
+			"replicas must be an odd number so the Keeper ensemble can form a quorum",
+		))
+	}
+
+	for _, sz := range []struct {
+		value string
+		path  *field.Path
+	}{
+		{spec.StorageSize, chPath.Child("managedClickhouse").Child("storageSize")},
+		{spec.Keeper.StorageSize, chPath.Child("managedClickhouse").Child("keeper").Child("storageSize")},
+	} {
+		if sz.value == "" {
+			continue
+		}
+		if _, err := resource.ParseQuantity(sz.value); err != nil {
+			errors = append(errors, field.Invalid(sz.path, sz.value, "must be a valid resource quantity (e.g., '10Gi')"))
+		}
+	}
+
 	return errors
 }
 

@@ -324,7 +324,7 @@ func Reconcile(
 	mysqlConditions := mysqlWriteState(ctx, client, wandb, manifest)
 	kafkaConditions := kafkaWriteState(ctx, client, wandb, manifest)
 	objectStoreConditions, objectStoreConnection := objectStoreWriteState(ctx, client, wandb, manifest)
-	clickHouseConditions := clickHouseWriteState(ctx, client, wandb, manifest)
+	clickHouseConditions := clickHouseWriteState(ctx, client, wandb, objectStoreConnection, manifest)
 
 	/////////////////////////
 	// Read Infra State
@@ -1304,10 +1304,6 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 
 	if err := client.Status().Update(ctx, wandb); err != nil {
 		return ctrl.Result{}, err
-	}
-
-	if anyFailed {
-		return ctrl.Result{}, fmt.Errorf("one or more migration jobs failed")
 	}
 
 	if allSucceeded {

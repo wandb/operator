@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/wandb/operator/api/v2"
+	v2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/logx"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
 	"k8s.io/api/core/v1"
@@ -146,6 +146,15 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 		}
 	}
 
+	for _, env := range envs {
+		for i, combinedEnv := range combinedEnvs {
+			if combinedEnv.Name == env.Name {
+				combinedEnvs = append(combinedEnvs[:i], combinedEnvs[i+1:]...)
+				break
+			}
+		}
+	}
+
 	combinedEnvs = append(combinedEnvs, envs...)
 
 	var envVars []v1.EnvVar
@@ -215,11 +224,17 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 				}
 				switch src.Field {
 				case "host":
+					// Host/Port/Region are provider-dependent: absent for GCS/Azure
+					// and for plain AWS S3 (no custom endpoint / no region key).
+					// Marks optional so pods still start when the key is missing.
 					selector.Key = "Host"
+					selector.Optional = ptr.To(true)
 				case "port":
 					selector.Key = "Port"
+					selector.Optional = ptr.To(true)
 				case "region":
 					selector.Key = "Region"
+					selector.Optional = ptr.To(true)
 				default:
 					selector.Key = "url"
 				}
@@ -234,14 +249,18 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 				switch src.Field {
 				case "host":
 					selector.Key = "Host"
-				case "port":
-					selector.Key = "Port"
+				case "http-port":
+					selector.Key = "HTTPPort"
+				case "tcp-port":
+					selector.Key = "TCPPort"
 				case "user":
 					selector.Key = "User"
 				case "password":
 					selector.Key = "Password"
 				case "database":
 					selector.Key = "Database"
+				case "url":
+					selector.Key = "url"
 				default:
 					// Unrecognized field; skip
 					continue

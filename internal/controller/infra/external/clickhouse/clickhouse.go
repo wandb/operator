@@ -26,7 +26,8 @@ func WriteState(
 	fields := map[string]corev1.SecretKeySelector{
 		"url":      spec.URL,
 		"Host":     spec.Host,
-		"Port":     spec.Port,
+		"HTTPPort": spec.HTTPPort,
+		"TCPPort":  spec.TCPPort,
 		"User":     spec.Username,
 		"Password": spec.Password,
 		"Database": spec.Database,
@@ -62,7 +63,8 @@ func ReadState(
 	return conditions, &apiv2.ClickHouseConnection{
 		URL:      corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "url", Optional: ptr.To(false)},
 		Host:     corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Host", Optional: ptr.To(false)},
-		Port:     corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Port", Optional: ptr.To(false)},
+		HTTPPort: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "HTTPPort", Optional: ptr.To(false)},
+		TCPPort:  corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "TCPPort", Optional: ptr.To(false)},
 		Username: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "User", Optional: ptr.To(false)},
 		Password: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Password", Optional: ptr.To(false)},
 		Database: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Database", Optional: ptr.To(false)},

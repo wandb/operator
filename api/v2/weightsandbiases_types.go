@@ -542,11 +542,52 @@ type ManagedClickHouseSpec struct {
 	Namespace   string           `json:"namespace,omitempty"`
 	Name        string           `json:"name,omitempty"`
 	Telemetry   Telemetry        `json:"telemetry,omitempty"`
+
+	// ObjectStorage configures the S3-backed disk that holds ClickHouse table
+	// data in the configured W&B object store (managed SeaweedFS or external
+	// bucket). Managed ClickHouse always stores table data in object storage;
+	// StorageSize sizes the local PV used only for metadata, system tables, and
+	// the S3 read cache.
+	ObjectStorage ClickHouseObjectStorageSpec `json:"objectStorage,omitempty"`
+
+	// Keeper configures the ClickHouse Keeper ensemble that coordinates
+	// ReplicatedMergeTree replication across ClickHouse replicas.
+	Keeper ClickHouseKeeperSpec `json:"keeper,omitempty"`
+}
+
+// ClickHouseObjectStorageSpec configures object-store-backed storage for managed
+// ClickHouse.
+type ClickHouseObjectStorageSpec struct {
+	// Prefix is the key prefix within the bucket under which ClickHouse stores
+	// its data. Lets multiple consumers share a single bucket. Defaults to
+	// "clickhouse/".
+	Prefix string `json:"prefix,omitempty"`
+
+	// Insecure connects to the object store over HTTP instead of HTTPS. It only
+	// applies to external object stores that do not advertise a scheme; the
+	// managed object store's scheme is taken from its connection. Defaults to
+	// false (HTTPS).
+	Insecure bool `json:"insecure,omitempty"`
+}
+
+// ClickHouseKeeperSpec configures the managed ClickHouse Keeper ensemble.
+type ClickHouseKeeperSpec struct {
+	// Replicas is the number of Keeper nodes. Use an odd number (1, 3, 5) so the
+	// ensemble can form a quorum. Defaults to 3.
+	Replicas int32 `json:"replicas,omitempty"`
+
+	// StorageSize is the persistent volume size for each Keeper node's raft log
+	// and snapshots. Keeper state is small; defaults to a modest value.
+	StorageSize string `json:"storageSize,omitempty"`
+
+	// Config holds resource requirements for the Keeper pods.
+	Config ClickHouseConfig `json:"config,omitempty"`
 }
 
 type ClickHouseConnection struct {
 	Host     corev1.SecretKeySelector `json:"host,omitempty"`
-	Port     corev1.SecretKeySelector `json:"port,omitempty"`
+	TCPPort  corev1.SecretKeySelector `json:"tcpPort,omitempty"`
+	HTTPPort corev1.SecretKeySelector `json:"httpPort,omitempty"`
 	Database corev1.SecretKeySelector `json:"database,omitempty"`
 	Username corev1.SecretKeySelector `json:"username,omitempty"`
 	Password corev1.SecretKeySelector `json:"password,omitempty"`
