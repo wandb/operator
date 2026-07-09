@@ -22,3 +22,27 @@ app.kubernetes.io/component: {{ .component }}
 {{- define "test-infra.seaweedfsHost" -}}
 {{ .Values.seaweedfs.service.name }}.{{ .Release.Namespace }}.svc.cluster.local
 {{- end -}}
+
+{{- define "test-infra.mysqlTLS" -}}
+{{- if .Values.mysql.tls.enabled -}}true{{- end -}}
+{{- end -}}
+
+{{- define "test-infra.redisTLS" -}}
+{{- if .Values.redis.tls.enabled -}}true{{- end -}}
+{{- end -}}
+
+{{- define "test-infra.anyTLS" -}}
+{{- if or .Values.tls.enabled .Values.mysql.tls.enabled .Values.redis.tls.enabled -}}true{{- end -}}
+{{- end -}}
+
+{{- define "test-infra.selfSignedIssuerName" -}}
+{{ .Values.tls.issuer.selfSignedName }}
+{{- end -}}
+
+{{- define "test-infra.caIssuerName" -}}
+{{ .Values.tls.issuer.caName }}
+{{- end -}}
+
+{{- define "test-infra.caSecretName" -}}
+{{ .Values.tls.ca.secretName }}
+{{- end -}}

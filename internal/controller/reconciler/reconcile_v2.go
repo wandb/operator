@@ -487,6 +487,11 @@ func ReconcileWandbManifest(
 	}
 	resetInactiveNetworkingStatus(wandb)
 
+	if err := reconcileCustomCACerts(ctx, client, wandb); err != nil {
+		logger.Error(err, "Failed to reconcile custom CA certificates")
+		return ctrl.Result{}, err
+	}
+
 	if wandb.Spec.Networking.Mode == apiv2.NetworkingModeGatewayAPI {
 		wandb.Status.GatewayStatus = nil
 		if err := reconcileGateway(ctx, client, wandb); err != nil {
@@ -588,6 +593,12 @@ func reconcileApplications(
 			volumes, volumeMounts = resolveJWTTokens(app, volumes, volumeMounts)
 		}
 
+		var caChecksum string
+		envVars, volumes, volumeMounts, caChecksum, err = applyCustomCACertsToWorkload(ctx, client, wandb, envVars, volumes, volumeMounts)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+
 		containers := resolveContainers(app, wandb, envVars, volumeMounts)
 
 		initContainers := resolveInitContainers(app, wandb, envVars, volumeMounts)
@@ -612,6 +623,7 @@ func reconcileApplications(
 		application.Spec.PodTemplate.Spec.SecurityContext = resolvePodSecurityContext()
 		application.Spec.PodTemplate.Spec.Affinity = wandb.Spec.Affinity
 		application.Spec.PodTemplate.Spec.Tolerations = *wandb.Spec.Tolerations
+		setCustomCACertsChecksumAnnotation(&application.Spec.PodTemplate, caChecksum)
 
 		application.Spec.HpaTemplate = ResolveAutoscaling(app, wandb)
 
@@ -1194,6 +1206,31 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 				return ctrl.Result{}, err
 			}
 
+			var caChecksum string
+			envVars, volumes, volumeMounts, caChecksum, err = applyCustomCACertsToWorkload(ctx, client, wandb, envVars, volumes, volumeMounts)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+
+			podTemplate := corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					RestartPolicy: corev1.RestartPolicyOnFailure,
+					Containers: []corev1.Container{
+						{
+							Name:         "migrate",
+							Image:        migrationTask.Image.GetImage(""),
+							Args:         migrationTask.Args,
+							Command:      migrationTask.Command,
+							Env:          envVars,
+							VolumeMounts: volumeMounts,
+						},
+					},
+					Volumes:            volumes,
+					ServiceAccountName: wandb.Spec.Wandb.ServiceAccount.ServiceAccountName,
+				},
+			}
+			setCustomCACertsChecksumAnnotation(&podTemplate, caChecksum)
+
 			job = &batchv1.Job{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      jobName,
@@ -1205,23 +1242,7 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 					},
 				},
 				Spec: batchv1.JobSpec{
-					Template: corev1.PodTemplateSpec{
-						Spec: corev1.PodSpec{
-							RestartPolicy: corev1.RestartPolicyOnFailure,
-							Containers: []corev1.Container{
-								{
-									Name:         "migrate",
-									Image:        migrationTask.Image.GetImage(""),
-									Args:         migrationTask.Args,
-									Command:      migrationTask.Command,
-									Env:          envVars,
-									VolumeMounts: volumeMounts,
-								},
-							},
-							Volumes:            volumes,
-							ServiceAccountName: wandb.Spec.Wandb.ServiceAccount.ServiceAccountName,
-						},
-					},
+					Template: podTemplate,
 				},
 			}
 

@@ -119,6 +119,17 @@ type GlobalSpec struct {
 	// Intended for air-gapped installs whose nodes cannot reach public registries; pair it
 	// with a registry pre-populated by `wsm registry mirror`.
 	ImageRegistry string `json:"imageRegistry,omitempty"`
+
+	// CustomCACerts contains PEM-encoded CA certificates that should be trusted
+	// by W&B application workloads.
+	// +optional
+	CustomCACerts []string `json:"customCACerts,omitempty"`
+
+	// CACertsConfigMap references a ConfigMap in the W&B namespace whose keys
+	// contain CA certificates. Keys should use a .crt suffix so standard CA
+	// update tooling can discover them.
+	// +optional
+	CACertsConfigMap string `json:"caCertsConfigMap,omitempty"`
 }
 
 type NetworkingMode string
