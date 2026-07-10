@@ -158,21 +158,72 @@ func TestToBufstreamApplicationDefaultsReplicas(t *testing.T) {
 	require.Equal(t, int32(BufstreamReplicas), *app.Spec.Replicas)
 }
 
-func TestApplicationsOmitFixedIDsInOpenShiftMode(t *testing.T) {
+func TestApplicationsSecurityContextInOpenShiftMode(t *testing.T) {
 	setOpenShiftMode(t, true)
 	wandb := testWandb()
 	nsn := CreateNsNameBuilder(types.NamespacedName{Namespace: "default", Name: "wandb-kafka"})
 
+	// etcd tolerates an arbitrary UID, so it omits fixed IDs for restricted-v2.
 	etcd, err := ToEtcdApplication(wandb, nsn, testScheme(t), manifest.Manifest{})
 	require.NoError(t, err)
 	requireOpenShiftKafkaPodSecurityContext(t, etcd.Spec.PodTemplate.Spec.SecurityContext)
 	requireOpenShiftKafkaContainerSecurityContext(t, etcd.Spec.PodTemplate.Spec.Containers[0].SecurityContext)
 
+	// Bufstream keeps its fixed UID even on OpenShift (nonroot-v2 admits it).
 	bufstream, err := ToBufstreamApplication(wandb, nsn, testStorage(), testScheme(t), manifest.Manifest{})
 	require.NoError(t, err)
-	requireOpenShiftKafkaPodSecurityContext(t, bufstream.Spec.PodTemplate.Spec.SecurityContext)
-	requireOpenShiftKafkaContainerSecurityContext(t, bufstream.Spec.PodTemplate.Spec.Containers[0].SecurityContext)
+	requireKafkaPodSecurityContext(t, bufstream.Spec.PodTemplate.Spec.SecurityContext)
+	requireKafkaContainerSecurityContext(t, bufstream.Spec.PodTemplate.Spec.Containers[0].SecurityContext)
+	// The bucket-ensure init container omits a fixed UID and inherits the pod's.
 	requireOpenShiftKafkaContainerSecurityContext(t, bufstream.Spec.PodTemplate.Spec.InitContainers[0].SecurityContext)
+}
+
+func TestApplicationsUseDedicatedServiceAccount(t *testing.T) {
+	setOpenShiftMode(t, false)
+	wandb := testWandb()
+	nsn := CreateNsNameBuilder(types.NamespacedName{Namespace: "default", Name: "wandb-kafka"})
+
+	etcd, err := ToEtcdApplication(wandb, nsn, testScheme(t), manifest.Manifest{})
+	require.NoError(t, err)
+	require.Equal(t, nsn.ServiceAccountName(), etcd.Spec.PodTemplate.Spec.ServiceAccountName)
+	require.NotNil(t, etcd.Spec.PodTemplate.Spec.AutomountServiceAccountToken)
+	require.False(t, *etcd.Spec.PodTemplate.Spec.AutomountServiceAccountToken)
+
+	bufstream, err := ToBufstreamApplication(wandb, nsn, testStorage(), testScheme(t), manifest.Manifest{})
+	require.NoError(t, err)
+	require.Equal(t, nsn.ServiceAccountName(), bufstream.Spec.PodTemplate.Spec.ServiceAccountName)
+	require.NotNil(t, bufstream.Spec.PodTemplate.Spec.AutomountServiceAccountToken)
+	require.False(t, *bufstream.Spec.PodTemplate.Spec.AutomountServiceAccountToken)
+}
+
+func TestToServiceAccount(t *testing.T) {
+	wandb := testWandb()
+	nsn := CreateNsNameBuilder(types.NamespacedName{Namespace: "default", Name: "wandb-kafka"})
+
+	sa, err := ToServiceAccount(wandb, nsn, testScheme(t))
+	require.NoError(t, err)
+	require.Equal(t, nsn.ServiceAccountName(), sa.Name)
+	require.Equal(t, "default", sa.Namespace)
+	require.NotNil(t, sa.AutomountServiceAccountToken)
+	require.False(t, *sa.AutomountServiceAccountToken)
+	// Same-namespace resources are owned by the CR for GC.
+	require.Len(t, sa.OwnerReferences, 1)
+}
+
+func TestToSccRoleBinding(t *testing.T) {
+	wandb := testWandb()
+	nsn := CreateNsNameBuilder(types.NamespacedName{Namespace: "default", Name: "wandb-kafka"})
+
+	rb, err := ToSccRoleBinding(wandb, nsn, testScheme(t))
+	require.NoError(t, err)
+	require.Equal(t, nsn.SccRoleBindingName(), rb.Name)
+	require.Equal(t, "default", rb.Namespace)
+	require.Equal(t, "ClusterRole", rb.RoleRef.Kind)
+	require.Equal(t, nonRootV2SCCClusterRole, rb.RoleRef.Name)
+	require.Len(t, rb.Subjects, 1)
+	require.Equal(t, "ServiceAccount", rb.Subjects[0].Kind)
+	require.Equal(t, nsn.ServiceAccountName(), rb.Subjects[0].Name)
+	require.Equal(t, "default", rb.Subjects[0].Namespace)
 }
 
 func TestToCredentialsSecret(t *testing.T) {

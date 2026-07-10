@@ -73,8 +73,13 @@ const (
 )
 
 const (
-	ApplicationResourceType = "Application"
-	ConfigMapResourceType   = "ConfigMap"
-	SecretResourceType      = "Secret"
-	AppConnTypeName         = "KafkaAppConn"
+	ApplicationResourceType    = "Application"
+	ConfigMapResourceType      = "ConfigMap"
+	SecretResourceType         = "Secret"
+	ServiceAccountResourceType = "ServiceAccount"
+	RoleBindingResourceType    = "RoleBinding"
+	AppConnTypeName            = "KafkaAppConn"
 )
+
+// nonRootV2SCCClusterRole is the auto-generated ClusterRole for nonroot-v2.
+const nonRootV2SCCClusterRole = "system:openshift:scc:nonroot-v2"

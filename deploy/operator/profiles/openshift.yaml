@@ -1,3 +1,6 @@
+openshift:
+  enabled: true
+
 wandb-operator:
   podSecurityContext:
     runAsUser: null
@@ -11,18 +14,31 @@ wandb-operator:
         OPENSHIFT:
           value: "true"
 
+# Null these operators' hardcoded IDs so restricted-v2 assigns valid ones.
+redis-operator:
+  podSecurityContext:
+    runAsUser: null
+    runAsGroup: null
+    fsGroup: null
+    fsGroupChangePolicy: null
+
+altinity-clickhouse-operator:
+  podSecurityContext:
+    runAsUser: null
+    runAsGroup: null
+    fsGroup: null
+    fsGroupChangePolicy: null
+
+seaweedfs-operator:
+  podSecurityContext:
+    runAsUser: null
+    runAsGroup: null
+    fsGroup: null
+
+# Disable moco's injected fixed 10000 IDs so restricted-v2 admits MySQL pods.
+moco:
+  extraArgs:
+    - --disable-default-security-context
+
 grafana-operator:
   isOpenShift: true
-
-# Override moco images with locally-built copies pushed to the CRC internal
-# registry. Used to test in-development moco changes (UID/SCC fixes) before
-# they ship upstream. Remove once a released chart includes the changes.
-moco:
-  image:
-    repository: image-registry.openshift-image-registry.svc:5000/wandb-operators/moco-controller
-    tag: dev
-    pullPolicy: Always
-  fluentbit:
-    image:
-      repository: image-registry.openshift-image-registry.svc:5000/wandb-operators/moco-fluent-bit
-      tag: dev

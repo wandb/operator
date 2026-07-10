@@ -1,6 +1,10 @@
 helmHooks:
   enabled: true
 
+# Renders OpenShift-only resources; profiles/openshift.yaml turns this on.
+openshift:
+  enabled: false
+
 wandb:
   install: true
   size: small

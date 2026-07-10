@@ -39,6 +39,24 @@ func (n *NsNameBuilder) BufstreamHost() string {
 	return fmt.Sprintf("%s.%s.svc.cluster.local", n.BufstreamName(), n.Namespace())
 }
 
+// ServiceAccountName is the shared etcd/Bufstream identity for the SCC grant.
+func (n *NsNameBuilder) ServiceAccountName() string {
+	return n.SpecName()
+}
+
+func (n *NsNameBuilder) ServiceAccountNsName() types.NamespacedName {
+	return types.NamespacedName{Namespace: n.Namespace(), Name: n.ServiceAccountName()}
+}
+
+// SccRoleBindingName grants the Kafka SA use of nonroot-v2 (OpenShift only).
+func (n *NsNameBuilder) SccRoleBindingName() string {
+	return fmt.Sprintf("%s-scc-nonroot-v2", n.SpecName())
+}
+
+func (n *NsNameBuilder) SccRoleBindingNsName() types.NamespacedName {
+	return types.NamespacedName{Namespace: n.Namespace(), Name: n.SccRoleBindingName()}
+}
+
 func (n *NsNameBuilder) ConfigMapName() string {
 	return fmt.Sprintf("%s-config", n.SpecName())
 }
