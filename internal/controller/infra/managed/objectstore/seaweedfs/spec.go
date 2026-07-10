@@ -7,6 +7,7 @@ import (
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/logx"
+	"github.com/wandb/operator/pkg/utils"
 	seaweedv1 "github.com/wandb/operator/pkg/vendored/seaweedfs-operator/seaweed.seaweedfs.com/v1"
 	"github.com/wandb/operator/pkg/wandb/manifest"
 	corev1 "k8s.io/api/core/v1"
@@ -44,6 +45,23 @@ const (
 	seaweedVolumeMetricsPort int32 = 9092
 	seaweedFilerMetricsPort  int32 = 9093
 )
+
+const (
+	// requiredSCCAnnotation forces a pod onto a named SCC at admission.
+	requiredSCCAnnotation = "openshift.io/required-scc"
+	// sccAnyuid runs the S3 gateway as root so it can bind port 80.
+	sccAnyuid = "anyuid"
+	// sccRestrictedV2 keeps the non-S3 components non-root.
+	sccRestrictedV2 = "restricted-v2"
+)
+
+// requiredSCCAnnotations pins a component to an SCC on OpenShift, else nil.
+func requiredSCCAnnotations(scc string) map[string]string {
+	if !utils.IsOpenShift() {
+		return nil
+	}
+	return map[string]string{requiredSCCAnnotation: scc}
+}
 
 func seaweedWritableVolumes() []corev1.Volume {
 	return []corev1.Volume{
@@ -108,6 +126,7 @@ func ToObjectStoreVendorSpec(
 				VolumeSizeLimitMB:  &volumeSizeLimitMB,
 				MetricsPort:        ptr.To(seaweedMasterMetricsPort),
 				ComponentSpec: seaweedv1.ComponentSpec{
+					Annotations:  requiredSCCAnnotations(sccRestrictedV2),
 					Volumes:      seaweedWritableVolumes(),
 					VolumeMounts: seaweedWritableVolumeMounts(),
 				},
@@ -117,6 +136,7 @@ func ToObjectStoreVendorSpec(
 				VolumeServerConfig: seaweedv1.VolumeServerConfig{
 					MetricsPort: ptr.To(seaweedVolumeMetricsPort),
 					ComponentSpec: seaweedv1.ComponentSpec{
+						Annotations:  requiredSCCAnnotations(sccRestrictedV2),
 						Volumes:      seaweedWritableVolumes(),
 						VolumeMounts: seaweedWritableVolumeMounts(),
 					},
@@ -129,6 +149,8 @@ func ToObjectStoreVendorSpec(
 			},
 			S3: &seaweedv1.S3GatewaySpec{
 				ComponentSpec: seaweedv1.ComponentSpec{
+					// S3 binds port 80, which needs anyuid (root) on OpenShift.
+					Annotations: requiredSCCAnnotations(sccAnyuid),
 					Affinity:    wandb.GetAffinity(infraSpec.ManagedInfraSpec),
 					Tolerations: *wandb.GetTolerations(infraSpec.ManagedInfraSpec),
 				},
@@ -148,6 +170,7 @@ func ToObjectStoreVendorSpec(
 				MetricsPort: ptr.To(seaweedFilerMetricsPort),
 				Config:      ptr.To("[leveldb2]\nenabled = true\ndir = \"" + seaweedFilerDataMountPath + "\""),
 				ComponentSpec: seaweedv1.ComponentSpec{
+					Annotations:  requiredSCCAnnotations(sccRestrictedV2),
 					Volumes:      seaweedWritableVolumes(),
 					VolumeMounts: seaweedWritableVolumeMounts(),
 				},

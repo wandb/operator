@@ -86,6 +86,8 @@ type WeightsAndBiasesReconciler struct {
 //+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles;rolebindings;clusterroles;clusterrolebindings,verbs=update;delete;get;list;patch;create;watch
 //+kubebuilder:rbac:groups=redis.redis.opstreelabs.in,resources=redis;redissentinels;redisreplications,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=redis.redis.opstreelabs.in,resources=redis/status,verbs=get
+//+kubebuilder:rbac:groups=security.openshift.io,resources=securitycontextconstraints,resourceNames=nonroot-v2,verbs=use
+//+kubebuilder:rbac:groups=security.openshift.io,resources=securitycontextconstraints,resourceNames=anyuid,verbs=use
 //+kubebuilder:rbac:urls=/metrics,verbs=get
 
 // Deprecated/Erroneously required RBAC rules

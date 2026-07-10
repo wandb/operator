@@ -81,6 +81,7 @@ for the available chart options and which component operators are enabled.
 - [Configuration API](docs/config-api.md)
 - [Infrastructure Connection Settings](docs/infra-connection-settings.md)
 - [Monitoring and Telemetry Guide](docs/monitoring.md)
+- [Deploying on OpenShift](docs/openshift.md)
 
 ## Development
 

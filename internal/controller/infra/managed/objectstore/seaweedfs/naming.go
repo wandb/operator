@@ -47,6 +47,15 @@ func (n *NsNameBuilder) ServiceName() string {
 	return fmt.Sprintf("%s-filer", n.SpecName())
 }
 
+// SccRoleBindingName grants the default SA use of anyuid (OpenShift only).
+func (n *NsNameBuilder) SccRoleBindingName() string {
+	return fmt.Sprintf("%s-scc-anyuid", n.SpecName())
+}
+
+func (n *NsNameBuilder) SccRoleBindingNsName() types.NamespacedName {
+	return types.NamespacedName{Namespace: n.Namespace(), Name: n.SccRoleBindingName()}
+}
+
 func (n *NsNameBuilder) connectionBaseName() string {
 	return strings.TrimSuffix(n.SpecName(), "-seaweedfs")
 }

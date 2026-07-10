@@ -8,8 +8,10 @@ import (
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/logx"
+	"github.com/wandb/operator/pkg/utils"
 	seaweedv1 "github.com/wandb/operator/pkg/vendored/seaweedfs-operator/seaweed.seaweedfs.com/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -18,9 +20,15 @@ import (
 )
 
 const (
-	ResourceTypeName = "Seaweed"
-	ConfigTypeName   = "SeaweedS3Config"
-	AppConnTypeName  = "SeaweedAppConn"
+	ResourceTypeName        = "Seaweed"
+	ConfigTypeName          = "SeaweedS3Config"
+	AppConnTypeName         = "SeaweedAppConn"
+	RoleBindingResourceType = "RoleBinding"
+
+	// anyuidSCCClusterRole is the auto-generated ClusterRole for anyuid.
+	anyuidSCCClusterRole = "system:openshift:scc:anyuid"
+	// defaultServiceAccount is the SA the seaweedfs-operator gives its pods.
+	defaultServiceAccount = "default"
 )
 
 func WriteState(
@@ -93,6 +101,17 @@ func WriteState(
 			Status: metav1.ConditionFalse,
 			Reason: common.NoResourceReason,
 		})
+	}
+
+	// On OpenShift, grant the default SA anyuid so S3 can bind port 80.
+	if utils.IsOpenShift() && desiredCr != nil {
+		if err := writeSccRoleBinding(ctx, kubeClient, desiredCr, nsnBuilder); err != nil {
+			result = append(result, metav1.Condition{
+				Type:   common.ReconciledType,
+				Status: metav1.ConditionFalse,
+				Reason: common.ApiErrorReason,
+			})
+		}
 	}
 
 	connInfo, err := writeSeaweedS3Config(
@@ -219,4 +238,59 @@ func writeSeaweedS3Config(
 
 	tls := owner.Spec.TLS != nil && owner.Spec.TLS.Enabled
 	return buildS3ConnInfo(envConfig.AccessKey, secretKey, nsnBuilder, tls), nil
+}
+
+// writeSccRoleBinding grants the shared default SA anyuid (S3 binds port 80).
+func writeSccRoleBinding(
+	ctx context.Context,
+	cl client.Client,
+	owner *seaweedv1.Seaweed,
+	nsnBuilder *NsNameBuilder,
+) error {
+	gvk, err := cl.GroupVersionKindFor(owner)
+	if err != nil {
+		return fmt.Errorf("could not get GVK for owner: %w", err)
+	}
+	ref := metav1.OwnerReference{
+		APIVersion:         gvk.GroupVersion().String(),
+		Kind:               gvk.Kind,
+		Name:               owner.GetName(),
+		UID:                owner.GetUID(),
+		Controller:         ptr.To(false),
+		BlockOwnerDeletion: ptr.To(false),
+	}
+
+	actual := &rbacv1.RoleBinding{}
+	found, err := common.GetResource(
+		ctx, cl, nsnBuilder.SccRoleBindingNsName(), RoleBindingResourceType, actual,
+	)
+	if err != nil {
+		return err
+	}
+	if !found {
+		actual = nil
+	}
+
+	desired := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            nsnBuilder.SccRoleBindingName(),
+			Namespace:       nsnBuilder.Namespace(),
+			OwnerReferences: []metav1.OwnerReference{ref},
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: rbacv1.GroupName,
+			Kind:     "ClusterRole",
+			Name:     anyuidSCCClusterRole,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      defaultServiceAccount,
+				Namespace: nsnBuilder.Namespace(),
+			},
+		},
+	}
+
+	_, err = common.CrudResource(ctx, cl, desired, actual)
+	return err
 }

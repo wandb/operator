@@ -632,14 +632,23 @@ if LOCAL_NETWORKING_MODE == "ingress":
         labels=[GROUP_DEPENDENCIES],
     )
 
+kube_state_metrics_flags = [
+    "--create-namespace",
+    "--version=5.27.0",
+]
+if settings.get("openshiftSCC"):
+    # Null the chart's hardcoded 65534 IDs so restricted-v2 assigns valid ones.
+    kube_state_metrics_flags += [
+        "--set=securityContext.runAsUser=null",
+        "--set=securityContext.runAsGroup=null",
+        "--set=securityContext.fsGroup=null",
+    ]
+
 helm_resource(
     "kube-state-metrics",
     chart="oci://ghcr.io/prometheus-community/charts/kube-state-metrics",
     namespace="kube-state-metrics",
-    flags=[
-        "--create-namespace",
-        "--version=5.27.0",
-    ],
+    flags=kube_state_metrics_flags,
     labels=[GROUP_DEPENDENCIES],
 )
 
@@ -721,6 +730,69 @@ if as_bool(settings.get("includeCR")):
         resource_deps=wandb_deps,
         labels=[GROUP_WANDB_APP],
     )
+
+    if settings.get("openshiftSCC"):
+        # Dev-only frontend-nginx SCC; not shipped (prod uses its own ingress).
+        # It needs its fixed image UID: restricted-v2 assigns an arbitrary UID
+        # and nonroot-v2 rejects named user, so clone restricted-v2 + RunAsAny.
+        frontend_scc_name = "wandb-frontend-anyuid-v2"
+        k8s_yaml_object({
+            "apiVersion": "security.openshift.io/v1",
+            "kind": "SecurityContextConstraints",
+            "metadata": {
+                "name": frontend_scc_name,
+                "labels": {
+                    "app.kubernetes.io/managed-by": "tilt",
+                },
+            },
+            "allowHostDirVolumePlugin": False,
+            "allowHostIPC": False,
+            "allowHostNetwork": False,
+            "allowHostPID": False,
+            "allowHostPorts": False,
+            "allowPrivilegeEscalation": False,
+            "allowPrivilegedContainer": False,
+            "allowedCapabilities": ["NET_BIND_SERVICE"],
+            "readOnlyRootFilesystem": False,
+            "requiredDropCapabilities": ["ALL"],
+            "runAsUser": {"type": "RunAsAny"},
+            "seLinuxContext": {"type": "MustRunAs"},
+            "seccompProfiles": ["runtime/default"],
+            "fsGroup": {"type": "MustRunAs"},
+            "supplementalGroups": {"type": "RunAsAny"},
+            "volumes": [
+                "configMap",
+                "csi",
+                "downwardAPI",
+                "emptyDir",
+                "ephemeral",
+                "image",
+                "persistentVolumeClaim",
+                "projected",
+                "secret",
+            ],
+            "users": [
+                "system:serviceaccount:%s:wandb-app" % WANDB_NAMESPACE,
+            ],
+        })
+        k8s_resource(
+            new_name="OpenShift-Frontend-SCC",
+            objects=["%s:securitycontextconstraints" % frontend_scc_name],
+            resource_deps=["WandB-Namespace"],
+            labels=[GROUP_WANDB_APP],
+        )
+        # Stamp required-scc on frontend Deployment; reconcile merge keeps it.
+        local_resource(
+            "OpenShift-Frontend-SCC-Bind",
+            cmd=(
+                "until kubectl -n %s get deploy/frontend >/dev/null 2>&1; do " % WANDB_NAMESPACE +
+                "echo 'waiting for frontend deployment...'; sleep 3; done && " +
+                "kubectl -n %s patch deploy/frontend --type=merge -p " % WANDB_NAMESPACE +
+                shell_quote('{"spec":{"template":{"metadata":{"annotations":{"openshift.io/required-scc":"%s"}}}}}' % frontend_scc_name)
+            ),
+            resource_deps=["Wandb", "OpenShift-Frontend-SCC"],
+            labels=[GROUP_WANDB_APP],
+        )
 
     endpoint_port = url_port(WANDB_HOSTNAME)
     endpoint_host = url_host(WANDB_HOSTNAME)

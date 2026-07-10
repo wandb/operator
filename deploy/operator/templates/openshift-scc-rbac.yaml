@@ -1,0 +1,69 @@
+{{- /* OpenShift-only: operator needs `use` on the SCCs it grants. */ -}}
+{{- if dig "openshift" "enabled" false .Values.AsMap }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Release.Name }}-openshift-scc-nonroot-v2
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/part-of: wandb-operator
+rules:
+  - apiGroups:
+      - security.openshift.io
+    resources:
+      - securitycontextconstraints
+    resourceNames:
+      - nonroot-v2
+    verbs:
+      - use
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Release.Name }}-openshift-scc-nonroot-v2
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/part-of: wandb-operator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ .Release.Name }}-openshift-scc-nonroot-v2
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "wandb-operator.fullname" . }}
+    namespace: {{ .Release.Namespace }}
+---
+{{- /* anyuid lets the managed SeaweedFS S3 gateway bind port 80. */}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Release.Name }}-openshift-scc-anyuid
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/part-of: wandb-operator
+rules:
+  - apiGroups:
+      - security.openshift.io
+    resources:
+      - securitycontextconstraints
+    resourceNames:
+      - anyuid
+    verbs:
+      - use
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Release.Name }}-openshift-scc-anyuid
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/part-of: wandb-operator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ .Release.Name }}-openshift-scc-anyuid
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "wandb-operator.fullname" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}

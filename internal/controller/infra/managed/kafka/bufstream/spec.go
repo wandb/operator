@@ -9,6 +9,7 @@ import (
 	"github.com/wandb/operator/pkg/utils"
 	"github.com/wandb/operator/pkg/wandb/manifest"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -70,6 +71,7 @@ func ToKafkaOnDeleteRule(wandb *apiv2.WeightsAndBiases, retentionPolicy apiv2.Re
 	return common.ToOnDeleteRule(wandb, retentionPolicy, KafkaModuleName)
 }
 
+// kafkaPodSecurityContext: etcd omits fixed IDs on OpenShift, pins them else.
 func kafkaPodSecurityContext() *corev1.PodSecurityContext {
 	if utils.IsOpenShift() {
 		return &corev1.PodSecurityContext{
@@ -77,7 +79,23 @@ func kafkaPodSecurityContext() *corev1.PodSecurityContext {
 			SeccompProfile: kafkaRuntimeDefaultSeccompProfile(),
 		}
 	}
+	return bufstreamPodSecurityContext()
+}
 
+func kafkaContainerSecurityContext() *corev1.SecurityContext {
+	if utils.IsOpenShift() {
+		return &corev1.SecurityContext{
+			RunAsNonRoot:             ptr.To(true),
+			AllowPrivilegeEscalation: ptr.To(false),
+			Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{kafkaCapabilityAll}},
+			SeccompProfile:           kafkaRuntimeDefaultSeccompProfile(),
+		}
+	}
+	return bufstreamContainerSecurityContext()
+}
+
+// bufstreamPodSecurityContext pins UID/GID 65532 (its 0700 binary needs it).
+func bufstreamPodSecurityContext() *corev1.PodSecurityContext {
 	return &corev1.PodSecurityContext{
 		RunAsUser:           ptr.To(kafkaRunAsUser),
 		RunAsGroup:          ptr.To(kafkaRunAsGroup),
@@ -88,20 +106,15 @@ func kafkaPodSecurityContext() *corev1.PodSecurityContext {
 	}
 }
 
-func kafkaContainerSecurityContext() *corev1.SecurityContext {
-	securityContext := &corev1.SecurityContext{
+func bufstreamContainerSecurityContext() *corev1.SecurityContext {
+	return &corev1.SecurityContext{
+		RunAsUser:                ptr.To(kafkaRunAsUser),
+		RunAsGroup:               ptr.To(kafkaRunAsGroup),
 		RunAsNonRoot:             ptr.To(true),
 		AllowPrivilegeEscalation: ptr.To(false),
-		Capabilities: &corev1.Capabilities{
-			Drop: []corev1.Capability{kafkaCapabilityAll},
-		},
-		SeccompProfile: kafkaRuntimeDefaultSeccompProfile(),
+		Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{kafkaCapabilityAll}},
+		SeccompProfile:           kafkaRuntimeDefaultSeccompProfile(),
 	}
-	if !utils.IsOpenShift() {
-		securityContext.RunAsUser = ptr.To(kafkaRunAsUser)
-		securityContext.RunAsGroup = ptr.To(kafkaRunAsGroup)
-	}
-	return securityContext
 }
 
 func kafkaRuntimeDefaultSeccompProfile() *corev1.SeccompProfile {
@@ -192,6 +205,57 @@ func ToConfigMap(
 	return cm, nil
 }
 
+// ToServiceAccount builds the dedicated etcd/Bufstream SA for the SCC grant.
+func ToServiceAccount(
+	wandb *apiv2.WeightsAndBiases,
+	nsnBuilder *NsNameBuilder,
+	scheme *runtime.Scheme,
+) (*corev1.ServiceAccount, error) {
+	sa := &corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      nsnBuilder.ServiceAccountName(),
+			Namespace: nsnBuilder.Namespace(),
+			Labels:    BuildWandbKafkaLabels(wandb),
+		},
+		AutomountServiceAccountToken: ptr.To(false),
+	}
+	if err := setOwner(wandb, sa, nsnBuilder, scheme); err != nil {
+		return nil, err
+	}
+	return sa, nil
+}
+
+// ToSccRoleBinding binds the Kafka SA to nonroot-v2 for UID 65532 (OpenShift).
+func ToSccRoleBinding(
+	wandb *apiv2.WeightsAndBiases,
+	nsnBuilder *NsNameBuilder,
+	scheme *runtime.Scheme,
+) (*rbacv1.RoleBinding, error) {
+	rb := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      nsnBuilder.SccRoleBindingName(),
+			Namespace: nsnBuilder.Namespace(),
+			Labels:    BuildWandbKafkaLabels(wandb),
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: rbacv1.GroupName,
+			Kind:     "ClusterRole",
+			Name:     nonRootV2SCCClusterRole,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      nsnBuilder.ServiceAccountName(),
+				Namespace: nsnBuilder.Namespace(),
+			},
+		},
+	}
+	if err := setOwner(wandb, rb, nsnBuilder, scheme); err != nil {
+		return nil, err
+	}
+	return rb, nil
+}
+
 // ToEtcdApplication builds the Application CR that deploys etcd as a highly
 // available StatefulSet: an odd-sized cluster (EtcdReplicas) fronted by a
 // headless Service that gives each member a stable peer DNS identity.
@@ -248,9 +312,11 @@ func ToEtcdApplication(
 			},
 			PodTemplate: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
-					SecurityContext: kafkaPodSecurityContext(),
-					Affinity:        spreadAffinity(wandb, infraSpec.ManagedInfraSpec, labels),
-					Tolerations:     tolerations(wandb, infraSpec.ManagedInfraSpec),
+					ServiceAccountName:           nsnBuilder.ServiceAccountName(),
+					AutomountServiceAccountToken: ptr.To(false),
+					SecurityContext:              kafkaPodSecurityContext(),
+					Affinity:                     spreadAffinity(wandb, infraSpec.ManagedInfraSpec, labels),
+					Tolerations:                  tolerations(wandb, infraSpec.ManagedInfraSpec),
 					Containers: []corev1.Container{
 						{
 							Name:            "etcd",
@@ -459,7 +525,7 @@ func ToBufstreamApplication(
 		Name:            "bufstream",
 		Image:           BufstreamImage(mfst.Kafka.Images[imageKeyBufstream], wandb.Spec.Global.ImageRegistry),
 		Args:            []string{"serve", "--config", fmt.Sprintf("%s/%s", ConfigMountPath, ConfigFileName)},
-		SecurityContext: kafkaContainerSecurityContext(),
+		SecurityContext: bufstreamContainerSecurityContext(),
 		Ports: []corev1.ContainerPort{
 			{Name: "kafka", ContainerPort: KafkaListenerPort},
 			{Name: "metrics", ContainerPort: DebugPort},
@@ -493,11 +559,13 @@ func ToBufstreamApplication(
 			},
 			PodTemplate: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
-					SecurityContext: kafkaPodSecurityContext(),
-					Affinity:        spreadAffinity(wandb, infraSpec.ManagedInfraSpec, labels),
-					Tolerations:     tolerations(wandb, infraSpec.ManagedInfraSpec),
-					InitContainers:  initContainers,
-					Containers:      []corev1.Container{container},
+					ServiceAccountName:           nsnBuilder.ServiceAccountName(),
+					AutomountServiceAccountToken: ptr.To(false),
+					SecurityContext:              bufstreamPodSecurityContext(),
+					Affinity:                     spreadAffinity(wandb, infraSpec.ManagedInfraSpec, labels),
+					Tolerations:                  tolerations(wandb, infraSpec.ManagedInfraSpec),
+					InitContainers:               initContainers,
+					Containers:                   []corev1.Container{container},
 					Volumes: []corev1.Volume{
 						{
 							Name: "config",
