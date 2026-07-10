@@ -79,7 +79,7 @@ var _ = Describe("SeaweedFS vendor specs", func() {
 		Expect(seaweed).NotTo(BeNil())
 		Expect(seaweed.Spec.S3.Env).To(ContainElement(corev1.EnvVar{
 			Name:  "S3_EXTERNAL_URL",
-			Value: "http://" + SeaweedName("object-store") + "-s3.wandb.svc.cluster.local:80",
+			Value: "http://" + SeaweedName("object-store") + "-s3.wandb.svc.cluster.local:" + S3Port,
 		}))
 	})
 
@@ -92,7 +92,7 @@ var _ = Describe("SeaweedFS vendor specs", func() {
 		Expect(seaweed).NotTo(BeNil())
 		Expect(seaweed.Spec.S3.Env).To(ContainElement(corev1.EnvVar{
 			Name:  "S3_EXTERNAL_URL",
-			Value: "https://" + SeaweedName("object-store") + "-s3.wandb.svc.cluster.local:80",
+			Value: "https://" + SeaweedName("object-store") + "-s3.wandb.svc.cluster.local:" + S3Port,
 		}))
 	})
 
