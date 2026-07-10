@@ -236,7 +236,7 @@ func newNetworkingWandb(name string, infraNamespace string) (*apiv2.WeightsAndBi
 				Hostname:           "http://localhost",
 				Features:           map[string]bool{},
 				ManifestRepository: manifestsRepository,
-				Version:            "0.78.0",
+				Version:            "0.83.0-clickhouse-keeper.2",
 				InternalServiceAuth: apiv2.InternalServiceAuth{
 					Enabled: &internalServiceAuthEnabled,
 				},

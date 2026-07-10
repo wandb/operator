@@ -1,6 +1,5 @@
 ---
 requiredOperatorVersion: ^2.0.0
-manifestVersion: v1alpha1
 
 features:
   filestreamQueue: false
@@ -13,8 +12,21 @@ bucket:
         - /bucket
       servicePort: "http-minio"
       pathType: Prefix
+    images:
+      seaweedfs:
+        registry: "docker.io"
+        repository: "chrislusf/seaweedfs"
+        tag: "4.35"
 
 clickhouse:
+  default:
+    images:
+      server:
+        registry: "docker.io"
+        repository: "altinity/clickhouse-server"
+        tag: "25.8.16.10002.altinitystable"
+
+clickhouseKeeper:
   default: {}
 
 generatedSecrets:
@@ -27,31 +39,68 @@ generatedSecrets:
     useExactName: true
 
 kafka:
+  images:
+    bufstream:
+      registry: "us-docker.pkg.dev"
+      repository: "buf-images-1/buf/images/bufstream"
+      tag: "0.4.15"
+    etcd:
+      registry: "quay.io"
+      repository: "coreos/etcd"
+      tag: "v3.5.31"
+    bucketEnsure:
+      repository: "amazon/aws-cli"
+      tag: "2.35.10"
   topics:
     - name: filestream
       features:
         - filestreamQueue
       topic: filestream
-      partitionCount: 48
+      partitionCount: 96
     - name: flat-run-fields-updater
       topic: flat-run-fields-updater
-      partitionCount: 48
+      partitionCount: 96
     - name: weave-worker
       topic: weave.call_ended
-      partitionCount: 48
+      partitionCount: 16
     - name: weave-evaluate-model-worker
       topic: weave.evaluate_model
-      partitionCount: 48
+      partitionCount: 16
 
 mysql:
-  default: {}
+  default:
+    images:
+      mysql:
+        registry: "ghcr.io"
+        repository: "cybozu-go/moco/mysql"
+        tag: "8.4.8"
+      exporter:
+        registry: "docker.io"
+        repository: "prom/mysqld-exporter"
+        tag: "v0.15.1"
   metadata: {}
   runs: {}
   usage: {}
 
 redis:
   default:
-    sentinelGroup: gorilla
+    images:
+      standalone:
+        registry: "quay.io"
+        repository: "opstree/redis"
+        tag: "v7.0.15"
+      replication:
+        registry: "quay.io"
+        repository: "opstree/redis"
+        tag: "v7.0.15"
+      sentinel:
+        registry: "quay.io"
+        repository: "opstree/redis-sentinel"
+        tag: "v7.0.12"
+      exporter:
+        registry: "quay.io"
+        repository: "opstree/redis-exporter"
+        tag: "v1.44.0"
 
 commonEnvvars:
   gorillaMysql:
@@ -215,8 +264,6 @@ commonEnvvars:
         - name: hostname
           type: custom-resource
           field: status.wandb.hostname
-    - name: GORILLA_DISABLE_DYNAMIC_HOST
-      value: "true"
     - name: LICENSE
       sources:
         - name: license
@@ -227,6 +274,32 @@ commonEnvvars:
         - name: license
           type: custom-resource
           field: spec.wandb.license
+    - name: GORILLA_OIDC_CLIENT_ID
+      sources:
+        - name: oidc
+          type: custom-resource
+          field: spec.wandb.oidc.clientId
+    - name: GORILLA_OIDC_SECRET
+      sources:
+        - name: oidc
+          type: custom-resource
+          field: spec.wandb.oidc.clientSecret
+    - name: GORILLA_OIDC_ISSUER
+      sources:
+        - name: oidc
+          type: custom-resource
+          field: spec.wandb.oidc.issuerUrl
+    - name: GORILLA_AUTH_METHOD
+      sources:
+        - name: oidc
+          type: custom-resource
+          field: spec.wandb.oidc.authMethod
+    - name: GORILLA_SESSION_LENGTH
+      sources:
+        - name: oidc
+          type: custom-resource
+          field: spec.wandb.oidc.sessionLength
+      defaultValue: "720h"
   gorillaCustomerSecrets:
     - name: GORILLA_CUSTOMER_SECRET_STORE_SOURCE
       value: "k8s-secretmanager://"
@@ -248,7 +321,7 @@ commonEnvvars:
       sources:
         - name: default
           type: clickhouse
-          field: port
+          field: http-port
     - name: WF_CLICKHOUSE_USER
       sources:
         - name: default
@@ -308,6 +381,8 @@ commonEnvvars:
       value: "/traces"
     - name: WEAVE_ENABLE_ONLINE_EVAL
       value: "true"
+    - name: WEAVE_ENABLE_AGENT_SCORING
+      value: "false"
     - name: WEAVE_ENABLE_EVALUATE_MODEL_WORKER
       value: "true"
     - name: WANDB_INTERNAL_SERVICE_TOKEN
@@ -316,6 +391,22 @@ commonEnvvars:
           type: generatedSecret
     - name: WANDB_INTERNAL_SERVICE_TOKEN_SECRET_NAME
       value: "weave-worker-auth"
+  frontend:
+    - name: REACT_APP_HOST
+      source:
+        - name: hostname
+          type: custom-resource
+          field: status.wandb.hostname
+    - name: REACT_APP_ENVIRONMENT_NAME
+      value: "local"
+    - name: REACT_APP_ENVIRONMENT_IS_PRIVATE
+      value: "true"
+    - name: REACT_APP_ANALYTICS_DISABLED
+      value: "true"
+    - name: WEAVE_TRACES_ENABLED
+      value: "true"
+    - name: SERVER_FLAG_WEAVE_1_PERCENTAGE
+      value: "100"
   flatRunsV2Producer:
     - name: KAFKA_RUNS_V2_TOPIC_NAME
       value: "flat-run-fields-updater"
@@ -375,7 +466,6 @@ commonEnvvars:
       sources:
         - type: telemetry
           field: gorillaTracer
-
 commonVolumeMounts:
   internalSigner:
     - mountPath: /vol/env
@@ -389,7 +479,7 @@ applications:
     name: anaconda2
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/anaconda2
-      tag: 0.78.2-rc.1773119635
+      tag: 0.83.0-clickhouse-keeper.2
     containers:
       - name: anaconda2
         ports:
@@ -420,7 +510,6 @@ applications:
       - gorillaCustomerSecrets
       - kafka
       - flatRunsV2Producer
-      - telemetryOtel
     commonVolumeMounts:
       - internalSigner
     env:
@@ -440,7 +529,7 @@ applications:
             type: mysql
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.2-rc.1773119635
+      tag: 0.83.0-clickhouse-keeper.2
     containers:
       - name: api
         args:
@@ -473,8 +562,6 @@ applications:
       pathType: Prefix
   executor:
     name: executor
-    args:
-      - executor
     commonEnvs:
       - gorillaMysql
       - gorillaBucket
@@ -483,12 +570,13 @@ applications:
       - gorillaTaskQueueConsumer
       - gorillaService
       - gorillaOnprem
-      - telemetryOtel
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.2-rc.1773119635
+      tag: 0.83.0-clickhouse-keeper.2
     containers:
       - name: executor
+        args:
+          - executor
   filemeta:
     name: filemeta
     args:
@@ -499,10 +587,9 @@ applications:
       - gorillaRedis
       - gorillaService
       - gorillaOnprem
-      - telemetryOtel
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.2-rc.1773119635
+      tag: 0.83.0-clickhouse-keeper.2
   filestream:
     name: filestream
     features:
@@ -515,10 +602,9 @@ applications:
       - gorillaRedis
       - gorillaService
       - gorillaOnprem
-      - telemetryOtel
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.2-rc.1773119635
+      tag: 0.83.0-clickhouse-keeper.2
     containers:
       - name: filestream
   flat-run-fields-updater:
@@ -533,20 +619,21 @@ applications:
       - gorillaOnprem
       - kafka
       - flatRunsV2Consumer
-      - telemetryOtel
     env:
       - name: GORILLA_RUN_UPDATE_SHADOW_QUEUE_SUBSCRIPTIONS_FLAT_RUN_FIELDS_UPDATER
         value: "$(KAFKA_URL)/$(KAFKA_RUNS_V2_TOPIC_NAME)?consumer_group_id=flat-run-fields-updater"
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.2-rc.1773119635
+      tag: 0.83.0-clickhouse-keeper.2
     containers:
       - name: flat-run-fields-updater
   frontend:
     name: frontend
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/frontend-nginx
-      tag: 0.78.2-rc.1773119635
+      tag: 0.83.0-clickhouse-keeper.2
+    commonEnvs:
+      - frontend
     env:
       - name: FRONTEND_APP_BACKEND
         sources:
@@ -576,26 +663,6 @@ applications:
         value: "true"
       - name: OPERATOR_ENABLED
         value: "true"
-      - name: REACT_APP_HOST
-        sources:
-          - name: hostname
-            type: custom-resource
-            field: status.wandb.hostname
-      - name: REACT_APP_ENVIRONMENT_NAME
-        value: "local"
-      - name: REACT_APP_ENVIRONMENT_IS_PRIVATE
-        value: "true"
-      - name: REACT_APP_ANALYTICS_DISABLED
-        value: "true"
-      - name: WEAVE_TRACES_ENABLED
-        value: "true"
-      - name: SERVER_FLAG_WEAVE_1_PERCENTAGE
-        value: "100"
-      - name: PUBLIC_URL
-        sources:
-          - name: hostname
-            type: custom-resource
-            field: status.wandb.hostname
     containers:
       - name: frontend
         ports:
@@ -618,6 +685,17 @@ applications:
         - /
       servicePort: "8080"
       pathType: Prefix
+    volumeMounts:
+      - name: tmp
+        mountPath: /tmp/
+        source:
+          type: emptyDir
+          name: tmp
+      - name: nginx-cache
+        mountPath: /var/cache/nginx
+        source:
+          type: emptyDir
+          name: nginx-cache
   glue:
     name: glue
     args:
@@ -629,7 +707,6 @@ applications:
       - gorillaHistoryStore
       - gorillaService
       - gorillaOnprem
-      - telemetryOtel
     commonVolumeMounts:
       - internalSigner
     env:
@@ -645,7 +722,7 @@ applications:
         value: "memory://"
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.2-rc.1773119635
+      tag: 0.83.0-clickhouse-keeper.2
     containers:
       - name: glue
   metric-observer:
@@ -660,13 +737,12 @@ applications:
       - gorillaOnprem
       - kafka
       - flatRunsV2Consumer
-      - telemetryOtel
     env:
       - name: GORILLA_RUN_UPDATE_SHADOW_QUEUE_SUBSCRIPTIONS_METRIC_OBSERVER
         value: "$(KAFKA_URL)/$(KAFKA_RUNS_V2_TOPIC_NAME)?consumer_group_id=metric-observer"
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.2-rc.1773119635
+      tag: 0.83.0-clickhouse-keeper.2
     containers:
       - name: metric-observer
   parquet:
@@ -681,10 +757,9 @@ applications:
       - gorillaTaskQueueProducer
       - gorillaService
       - gorillaOnprem
-      - telemetryOtel
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.2-rc.1773119635
+      tag: 0.83.0-clickhouse-keeper.2
     containers:
       - name: parquet
         ports:
@@ -706,9 +781,21 @@ applications:
     name: weave
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-python
-      tag: 0.78.2-rc.1773119635
+      tag: 0.83.0-clickhouse-keeper.2
     commonEnvs:
-      - telemetryOtel
+    env:
+      - name: DATADOG_TRACE_ENABLED
+        value: "false"
+    service:
+      ports:
+        - port: 9239
+          protocol: TCP
+          name: weave
+    ingress:
+      paths:
+        - /weave/
+      servicePort: "9239"
+      pathType: Prefix
     containers:
       - name: weave
         ports:
@@ -732,19 +819,6 @@ applications:
           requests:
             cpu: 100m
             memory: 128Mi
-    env:
-      - name: DATADOG_TRACE_ENABLED
-        value: "false"
-    service:
-      ports:
-        - port: 9239
-          protocol: TCP
-          name: weave
-    ingress:
-      paths:
-        - /weave/
-      servicePort: "9239"
-      pathType: Prefix
     volumeMounts:
       - name: temp-dir
         mountPath: /tmp/
@@ -758,14 +832,13 @@ applications:
           name: cache
   weave-trace:
     name: weave-trace
+    image:
+      repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
+      tag: 0.83.0-clickhouse-keeper.2
     commonEnvs:
       - clickhouse
       - kafka
       - weaveTrace
-      - telemetryOtel
-    image:
-      repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
-      tag: 0.78.2-rc.1773119635
     containers:
       - name: weave-trace
         args:
@@ -775,16 +848,16 @@ applications:
           - "0.0.0.0"
           - "--port"
           - "8080"
-    ports:
-      - containerPort: 8080
-        name: weave-trace
-        protocol: TCP
-    livenessProbe:
-      httpGet:
-        path: /traces/health
-    readinessProbe:
-      httpGet:
-        path: /traces/health
+        ports:
+          - containerPort: 8080
+            name: weave-trace
+            protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /traces/health
+        readinessProbe:
+          httpGet:
+            path: /traces/health
     service:
       ports:
         - port: 8080
@@ -806,7 +879,7 @@ applications:
     name: weave-trace-worker
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
-      tag: 0.78.2-rc.1773119635
+      tag: 0.83.0-clickhouse-keeper.2
     env:
       - name: DD_TRACE_ENABLED
         value: "false"
@@ -814,7 +887,6 @@ applications:
       - clickhouse
       - kafka
       - weaveTrace
-      - telemetryOtel
     containers:
       - name: weave-trace-worker
         args:
@@ -825,7 +897,7 @@ applications:
     name: weave-trace-evaluate-model-worker
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
-      tag: 0.78.2-rc.1773119635
+      tag: 0.83.0-clickhouse-keeper.2
     env:
       - name: DD_TRACE_ENABLED
         value: "false"
@@ -833,7 +905,6 @@ applications:
       - clickhouse
       - kafka
       - weaveTrace
-      - telemetryOtel
     containers:
       - name: weave-trace-evaluate-model-worker
         args:
@@ -848,7 +919,6 @@ applications:
       repository: nginxinc/nginx-unprivileged
       tag: latest
     commonEnvs:
-      - telemetryOtel
     env:
       - name: UPSTREAM_FRONTEND
         sources:
@@ -864,7 +934,7 @@ applications:
             path: ""
       - name: UPSTREAM_WEAVE_TRACE
         sources:
-          - name: weave
+          - name: weave-trace
             type: service
             proto: ""
             path: ""
@@ -991,7 +1061,7 @@ migrations:
   gorilla:
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.2-rc.1773119635
+      tag: 0.83.0-clickhouse-keeper.2
     args:
       - "migrate"
       - "--db=$(GORILLA_METADATA_STORE)"
@@ -1005,7 +1075,7 @@ migrations:
   internal-signer:
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.78.2-rc.1773119635
+      tag: 0.83.0-clickhouse-keeper.2
     args:
       - "secret-generation-job"
     env:
@@ -1018,7 +1088,7 @@ migrations:
   weave-trace:
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
-      tag: 0.78.2-rc.1773119635
+      tag: 0.83.0-clickhouse-keeper.2
     args:
       - python
       - migrator.py

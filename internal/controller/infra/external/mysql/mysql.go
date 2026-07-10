@@ -16,6 +16,9 @@ import (
 )
 
 const ConnectionSecretName = "wandb-mysql-connection"
+const caCertPath = "/etc/ssl/certs/mysql_ca.pem"
+const sslCertPath = "/etc/ssl/certs/mysql_ssl_cert.pem"
+const sslKeyPath = "/etc/ssl/certs/mysql_ssl_key.pem"
 
 func WriteState(
 	ctx context.Context,
@@ -53,6 +56,23 @@ func WriteState(
 		User:   url.UserPassword(data["Username"], data["Password"]),
 		Path:   data["Database"],
 	}
+	values := dbUrl.Query()
+	if tls, ok := data["Tls"]; ok {
+		values.Set("tls", tls)
+	}
+	if _, ok := data["SslCa"]; ok {
+		if values.Get("tls") == "" {
+			values.Set("tls", "custom")
+		}
+		values.Set("ssl-ca", caCertPath)
+	}
+	if _, ok := data["SslCert"]; ok {
+		values.Set("ssl-cert", sslCertPath)
+	}
+	if _, ok := data["SslKey"]; ok {
+		values.Set("ssl-key", sslKeyPath)
+	}
+	dbUrl.RawQuery = values.Encode()
 
 	data["url"] = dbUrl.String()
 
