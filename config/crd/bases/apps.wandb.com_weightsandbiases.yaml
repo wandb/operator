@@ -547,6 +547,19 @@ spec:
                         - key
                         type: object
                         x-kubernetes-map-type: atomic
+                      httpPort:
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            default: ""
+                            type: string
+                          optional:
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
                       password:
                         properties:
                           key:
@@ -560,7 +573,7 @@ spec:
                         - key
                         type: object
                         x-kubernetes-map-type: atomic
-                      port:
+                      tcpPort:
                         properties:
                           key:
                             type: string
@@ -1077,10 +1090,61 @@ spec:
                                 type: object
                             type: object
                         type: object
+                      keeper:
+                        properties:
+                          config:
+                            properties:
+                              resources:
+                                properties:
+                                  claims:
+                                    items:
+                                      properties:
+                                        name:
+                                          type: string
+                                        request:
+                                          type: string
+                                      required:
+                                      - name
+                                      type: object
+                                    type: array
+                                    x-kubernetes-list-map-keys:
+                                    - name
+                                    x-kubernetes-list-type: map
+                                  limits:
+                                    additionalProperties:
+                                      anyOf:
+                                      - type: integer
+                                      - type: string
+                                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                      x-kubernetes-int-or-string: true
+                                    type: object
+                                  requests:
+                                    additionalProperties:
+                                      anyOf:
+                                      - type: integer
+                                      - type: string
+                                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                      x-kubernetes-int-or-string: true
+                                    type: object
+                                type: object
+                            type: object
+                          replicas:
+                            format: int32
+                            type: integer
+                          storageSize:
+                            type: string
+                        type: object
                       name:
                         type: string
                       namespace:
                         type: string
+                      objectStorage:
+                        properties:
+                          insecure:
+                            type: boolean
+                          prefix:
+                            type: string
+                        type: object
                       replicas:
                         format: int32
                         type: integer
@@ -1124,6 +1188,12 @@ spec:
                 type: object
               global:
                 properties:
+                  caCertsConfigMap:
+                    type: string
+                  customCACerts:
+                    items:
+                      type: string
+                    type: array
                   imageRegistry:
                     type: string
                 type: object
@@ -4156,6 +4226,19 @@ spec:
                         - key
                         type: object
                         x-kubernetes-map-type: atomic
+                      httpPort:
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            default: ""
+                            type: string
+                          optional:
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
                       password:
                         properties:
                           key:
@@ -4169,7 +4252,7 @@ spec:
                         - key
                         type: object
                         x-kubernetes-map-type: atomic
-                      port:
+                      tcpPort:
                         properties:
                           key:
                             type: string

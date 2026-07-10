@@ -21,11 +21,13 @@ func readConnectionDetails(actual *chiv1.ClickHouseInstallation) *clickhouseConn
 	}
 
 	clickhouseHost := actual.Status.Endpoint
-	clickhousePort := strconv.Itoa(ClickHouseHTTPPort)
+	clickhouseHTTPPort := strconv.Itoa(ClickHouseHTTPPort)
+	clickhouseTCPPort := strconv.Itoa(ClickHouseNativePort)
 
 	return &clickhouseConnInfo{
 		Host:     clickhouseHost,
-		Port:     clickhousePort,
+		HTTPPort: clickhouseHTTPPort,
+		TCPPort:  clickhouseTCPPort,
 		User:     ClickHouseUser,
 		Password: ClickHousePassword,
 		Database: ClickHouseDatabase,
@@ -160,7 +162,7 @@ func chPodsRunningStatus(
 				return result, err
 			}
 			if found {
-				result[podName] = pod.Status.Phase == corev1.PodRunning
+				result[podName] = ctrlcommon.PodReady(pod)
 			} else {
 				result[podName] = false
 			}

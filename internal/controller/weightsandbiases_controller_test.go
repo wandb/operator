@@ -92,7 +92,7 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 							"proxy": true,
 						},
 						ManifestRepository: manifestsRepository,
-						Version:            "0.78.0",
+						Version:            "0.83.0-clickhouse-keeper.2",
 					},
 					MySQL: apiv2.MySQLSpec{
 						ManagedMysql: &apiv2.ManagedMysqlSpec{
@@ -160,7 +160,7 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 						Hostname:           "http://localhost",
 						Features:           map[string]bool{},
 						ManifestRepository: manifestsRepository,
-						Version:            "0.78.0",
+						Version:            "0.83.0-clickhouse-keeper.2",
 					},
 					MySQL: apiv2.MySQLSpec{
 						ManagedMysql: &apiv2.ManagedMysqlSpec{},
@@ -252,7 +252,7 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 						Hostname:           "http://localhost",
 						Features:           map[string]bool{},
 						ManifestRepository: manifestsRepository,
-						Version:            "0.78.0",
+						Version:            "0.83.0-clickhouse-keeper.2",
 					},
 					MySQL: apiv2.MySQLSpec{
 						ManagedMysql: &apiv2.ManagedMysqlSpec{},
@@ -356,7 +356,7 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 						Hostname:           "http://localhost",
 						Features:           map[string]bool{},
 						ManifestRepository: manifestsRepository,
-						Version:            "0.78.0",
+						Version:            "0.83.0-clickhouse-keeper.2",
 					},
 					MySQL:       apiv2.MySQLSpec{ManagedMysql: &apiv2.ManagedMysqlSpec{}},
 					Redis:       apiv2.RedisSpec{ManagedRedis: &apiv2.ManagedRedisSpec{}},
@@ -420,8 +420,8 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 		It("Should trigger new migrations on version upgrade", func() {
 			By("Creating a new WeightsAndBiases v2 object with an old version")
 			ctx := context.Background()
-			oldVersion := "0.78.0-pre"
-			newVersion := "0.78.0"
+			oldVersion := "0.83.0-clickhouse-keeper.1"
+			newVersion := "0.83.0-clickhouse-keeper.2"
 			wandb := &apiv2.WeightsAndBiases{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      WandbName,
