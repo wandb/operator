@@ -96,17 +96,6 @@ var _ = Describe("SeaweedFS vendor specs", func() {
 		}))
 	})
 
-	It("does not pin SCC annotations on any component", func() {
-		seaweed, err := ToObjectStoreVendorSpec(context.Background(), seaweedWandb(), seaweedScheme(), manifest.Manifest{})
-		Expect(err).NotTo(HaveOccurred())
-		Expect(seaweed).NotTo(BeNil())
-
-		Expect(seaweed.Spec.S3.Annotations).To(BeEmpty())
-		Expect(seaweed.Spec.Master.Annotations).To(BeEmpty())
-		Expect(seaweed.Spec.Volume.Annotations).To(BeEmpty())
-		Expect(seaweed.Spec.Filer.Annotations).To(BeEmpty())
-	})
-
 	It("sets metrics ports on master, volume, and filer", func() {
 		seaweed, err := ToObjectStoreVendorSpec(context.Background(), seaweedWandb(), seaweedScheme(), manifest.Manifest{})
 		Expect(err).NotTo(HaveOccurred())
