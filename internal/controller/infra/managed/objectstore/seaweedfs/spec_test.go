@@ -6,7 +6,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	apiv2 "github.com/wandb/operator/api/v2"
-	"github.com/wandb/operator/pkg/utils"
 	seaweedv1 "github.com/wandb/operator/pkg/vendored/seaweedfs-operator/seaweed.seaweedfs.com/v1"
 	"github.com/wandb/operator/pkg/wandb/manifest"
 	corev1 "k8s.io/api/core/v1"
@@ -97,21 +96,7 @@ var _ = Describe("SeaweedFS vendor specs", func() {
 		}))
 	})
 
-	It("pins all components to restricted-v2 on OpenShift", func() {
-		utils.SetOpenShiftMode(true)
-		defer utils.SetOpenShiftMode(false)
-
-		seaweed, err := ToObjectStoreVendorSpec(context.Background(), seaweedWandb(), seaweedScheme(), manifest.Manifest{})
-		Expect(err).NotTo(HaveOccurred())
-		Expect(seaweed).NotTo(BeNil())
-
-		Expect(seaweed.Spec.S3.Annotations).To(HaveKeyWithValue(requiredSCCAnnotation, sccRestrictedV2))
-		Expect(seaweed.Spec.Master.Annotations).To(HaveKeyWithValue(requiredSCCAnnotation, sccRestrictedV2))
-		Expect(seaweed.Spec.Volume.Annotations).To(HaveKeyWithValue(requiredSCCAnnotation, sccRestrictedV2))
-		Expect(seaweed.Spec.Filer.Annotations).To(HaveKeyWithValue(requiredSCCAnnotation, sccRestrictedV2))
-	})
-
-	It("omits SCC annotations when not on OpenShift", func() {
+	It("does not pin SCC annotations on any component", func() {
 		seaweed, err := ToObjectStoreVendorSpec(context.Background(), seaweedWandb(), seaweedScheme(), manifest.Manifest{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(seaweed).NotTo(BeNil())

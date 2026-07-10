@@ -41,23 +41,24 @@ Both are set for you by the `profiles/openshift.yaml` values overlay.
 
 | Component | Limitation | Status / workaround |
 | --- | --- | --- |
-| **Object storage** | Managed SeaweedFS runs its S3 gateway on port 80, which `restricted-v2` blocks (it drops `ALL` caps, stripping `NET_BIND_SERVICE`). | **BYO required.** Use an external object store via `spec.objectStore.externalObjectStore`. |
 | **Ingress / Frontend (`frontend-nginx`)** | The bundled frontend image runs as a fixed, non-numeric user (`nginx`) that owns `/usr/share/nginx/html` and rewrites files there at startup. `restricted-v2`'s arbitrary UID cannot write, and `nonroot-v2` rejects the pod because the kubelet cannot verify a non-numeric user is non-root. | **BYO ingress required.** Front W&B with your own ingress/route. |
 | **Kafka (bufstream)** | The distroless broker image ships a `0700` binary owned by a fixed UID (65532) that can only be executed as that exact user, so it cannot run under `restricted-v2`. | Currently runs under `nonroot-v2` (via a dedicated ServiceAccount) rather than `restricted-v2`. |
 | **Cluster-scoped install** | The chart creates SCC grants and cluster-scoped RBAC. | Requires `cluster-admin` at install time. |
 
-## Required: bring your own ingress and object storage
+## Required: bring your own ingress
 
-On OpenShift you **must** supply your own ingress/edge and your own object
-storage. The bundled frontend and managed SeaweedFS do not run under OpenShift's
-`restricted-v2` SCC (see [Known limitations](#known-limitations)).
+On OpenShift you **must** supply your own ingress/edge. The bundled frontend does
+not run under OpenShift's `restricted-v2` SCC (see
+[Known limitations](#known-limitations)).
 
-- **Object storage (BYO required).** Point the CR at an external object store
-  (S3, GCS, Azure Blob, or any S3-compatible endpoint you run) via
-  `spec.objectStore.externalObjectStore`. See
-  [Infrastructure Connection Settings](infra-connection-settings.md).
 - **Ingress (BYO required).** Front W&B with the cluster's own edge — an
   OpenShift `Route` or your ingress controller.
+- **Object storage (optional BYO).** Managed SeaweedFS runs under `restricted-v2`
+  (its S3 gateway binds an unprivileged port, so no root/`anyuid` grant is
+  needed). You can still point the CR at an external object store (S3, GCS, Azure
+  Blob, or any S3-compatible endpoint you run) via
+  `spec.objectStore.externalObjectStore` if you prefer. See
+  [Infrastructure Connection Settings](infra-connection-settings.md).
 
 The rest of the managed infra (MySQL, Redis, ClickHouse, Kafka) is supported on
 OpenShift via the adaptations described below.
@@ -114,8 +115,10 @@ helm install wandb-operator \
 
 ### 2. Apply a `WeightsAndBiases` resource
 
-The CR must reference an external object store (BYO is required on OpenShift).
-Provide the connection details in a Secret and reference its keys:
+Object storage can be managed (SeaweedFS runs under `restricted-v2`) or external.
+The example below wires an external object store; omit the `objectStore` block to
+use the managed default. When bringing your own, provide the connection details
+in a Secret and reference its keys:
 
 ```yaml
 apiVersion: v1
