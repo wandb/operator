@@ -3083,6 +3083,9 @@ spec:
                           rootUser:
                             type: string
                         type: object
+                      copies:
+                        format: int32
+                        type: integer
                       name:
                         type: string
                       namespace:

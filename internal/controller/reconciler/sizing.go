@@ -128,6 +128,7 @@ func ResolveInfraSizing(sizing map[v2.Size]manifest.SizingConfig, size v2.Size, 
 	if defaultSizing, ok := sizing["default"]; ok {
 		result.Replicas = defaultSizing.Replicas
 		result.Shards = defaultSizing.Shards
+		result.Copies = defaultSizing.Copies
 		result.VolumeSize = defaultSizing.VolumeSize
 		if defaultSizing.Resources != nil {
 			result.Resources = defaultSizing.Resources.DeepCopy()
@@ -141,6 +142,9 @@ func ResolveInfraSizing(sizing map[v2.Size]manifest.SizingConfig, size v2.Size, 
 		}
 		if sizeSizing.Shards != 0 {
 			result.Shards = sizeSizing.Shards
+		}
+		if sizeSizing.Copies != 0 {
+			result.Copies = sizeSizing.Copies
 		}
 		if sizeSizing.VolumeSize != "" {
 			result.VolumeSize = sizeSizing.VolumeSize
@@ -275,6 +279,9 @@ func ApplyInfraSizing(wandb *v2.WeightsAndBiases, manifest manifest.Manifest) {
 			spec := wandb.Spec.ObjectStore.ManagedObjectStore
 			if spec.Replicas == 0 && sizing.Replicas != 0 {
 				spec.Replicas = sizing.Replicas
+			}
+			if spec.Copies == 0 && sizing.Copies != 0 {
+				spec.Copies = sizing.Copies
 			}
 			if spec.StorageSize == "" && sizing.VolumeSize != "" {
 				spec.StorageSize = sizing.VolumeSize

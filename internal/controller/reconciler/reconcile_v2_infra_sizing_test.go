@@ -153,6 +153,51 @@ var _ = Describe("Infra Sizing", func() {
 			Expect(wandb.Spec.MySQL.ManagedMysql.StorageSize).To(Equal("50Gi"))
 		})
 
+		It("should default object store copies from the manifest, treating CR values as overrides", func() {
+			wandb := &apiv2.WeightsAndBiases{
+				Spec: apiv2.WeightsAndBiasesSpec{
+					Size: "small",
+					ObjectStore: apiv2.ObjectStoreSpec{
+						ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{},
+					},
+				},
+			}
+			manifest := serverManifest.Manifest{
+				Bucket: map[string]serverManifest.InfraConfig{
+					"default": {
+						Sizing: map[apiv2.Size]serverManifest.SizingConfig{
+							"default": {Replicas: 1},
+							"small":   {Replicas: 3, Copies: 2},
+						},
+					},
+				},
+			}
+			v2.ApplyInfraSizing(wandb, manifest)
+			Expect(wandb.Spec.ObjectStore.ManagedObjectStore.Copies).To(Equal(int32(2)))
+		})
+
+		It("should not override a CR-specified object store copies value", func() {
+			wandb := &apiv2.WeightsAndBiases{
+				Spec: apiv2.WeightsAndBiasesSpec{
+					Size: "small",
+					ObjectStore: apiv2.ObjectStoreSpec{
+						ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{Copies: 1},
+					},
+				},
+			}
+			manifest := serverManifest.Manifest{
+				Bucket: map[string]serverManifest.InfraConfig{
+					"default": {
+						Sizing: map[apiv2.Size]serverManifest.SizingConfig{
+							"small": {Replicas: 3, Copies: 2},
+						},
+					},
+				},
+			}
+			v2.ApplyInfraSizing(wandb, manifest)
+			Expect(wandb.Spec.ObjectStore.ManagedObjectStore.Copies).To(Equal(int32(1)))
+		})
+
 		It("should apply keeper sizing from the clickhouseKeeper block, treating CR values as overrides", func() {
 			wandb := &apiv2.WeightsAndBiases{
 				Spec: apiv2.WeightsAndBiasesSpec{

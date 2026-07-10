@@ -431,6 +431,17 @@ func validateObjectStoreSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 		))
 	}
 
+	if mgd := wandb.Spec.ObjectStore.ManagedObjectStore; mgd != nil && mgd.StorageSize != "" {
+		// Reject non-positive too: "0"/"-5Gi" parse fine but only fail later at PVC creation.
+		if q, err := resource.ParseQuantity(mgd.StorageSize); err != nil || q.Sign() <= 0 {
+			errors = append(errors, field.Invalid(
+				objectStorePath.Child("managedObjectStore").Child("storageSize"),
+				mgd.StorageSize,
+				"must be a positive resource quantity (e.g., '10Gi')",
+			))
+		}
+	}
+
 	if ext := wandb.Spec.ObjectStore.ExternalObjectStore; ext != nil {
 		extPath := objectStorePath.Child("externalObjectStore")
 		// provider is sourced from a secret key, so it is resolved and defaulted at reconcile time, not here.
