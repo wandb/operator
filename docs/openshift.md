@@ -43,6 +43,7 @@ Both are set for you by the `profiles/openshift.yaml` values overlay.
 | --- | --- | --- |
 | **Object storage** | Managed SeaweedFS runs its S3 gateway on port 80, which `restricted-v2` blocks (it drops `ALL` caps, stripping `NET_BIND_SERVICE`). | **BYO required.** Use an external object store via `spec.objectStore.externalObjectStore`. |
 | **Ingress / Frontend (`frontend-nginx`)** | The bundled frontend image runs as a fixed, non-numeric user (`nginx`) that owns `/usr/share/nginx/html` and rewrites files there at startup. `restricted-v2`'s arbitrary UID cannot write, and `nonroot-v2` rejects the pod because the kubelet cannot verify a non-numeric user is non-root. | **BYO ingress required.** Front W&B with your own ingress/route. |
+| **Kafka (bufstream)** | The distroless broker image ships a `0700` binary owned by a fixed UID (65532) that can only be executed as that exact user, so it cannot run under `restricted-v2`. | Currently runs under `nonroot-v2` (via a dedicated ServiceAccount) rather than `restricted-v2`. |
 | **Cluster-scoped install** | The chart creates SCC grants and cluster-scoped RBAC. | Requires `cluster-admin` at install time. |
 
 ## Required: bring your own ingress and object storage
