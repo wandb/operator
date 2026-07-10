@@ -172,7 +172,7 @@ var _ = Describe("WeightsAndBiases Networking", func() {
 		wandbName := "network-ingress"
 		ingressClassName := "nginx"
 
-		wandb, _ := newNetworkingWandb(wandbName, "")
+		wandb, service := newNetworkingWandb(wandbName, "")
 		wandb.Spec.Networking = apiv2.NetworkingSpec{
 			Mode: apiv2.NetworkingModeIngress,
 			Ingress: &apiv2.IngressConfig{
@@ -186,6 +186,7 @@ var _ = Describe("WeightsAndBiases Networking", func() {
 			},
 		}
 		Expect(k8sClient.Create(ctx, wandb)).To(Succeed())
+		Expect(k8sClient.Create(ctx, service)).To(Succeed())
 		DeferCleanup(deleteIfPresent, ctx, wandb)
 
 		wandb = markWandbReadyForNetworking(ctx, wandbName, wandbNamespace)

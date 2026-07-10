@@ -7,8 +7,8 @@ import (
 	. "github.com/onsi/gomega"
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/pkg/utils"
-	"github.com/wandb/operator/pkg/wandb/manifest"
 	seaweedv1 "github.com/wandb/operator/pkg/vendored/seaweedfs-operator/seaweed.seaweedfs.com/v1"
+	"github.com/wandb/operator/pkg/wandb/manifest"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -74,15 +74,30 @@ var _ = Describe("SeaweedFS vendor specs", func() {
 		Expect(seaweed.Spec.Volume.ResourceRequirements.Requests[corev1.ResourceCPU]).To(Equal(resource.MustParse("500m")))
 	})
 
-	It("binds the S3 gateway to port 80", func() {
+	It("pins s3 gateway signature verification to the in-cluster endpoint", func() {
 		seaweed, err := ToObjectStoreVendorSpec(context.Background(), seaweedWandb(), seaweedScheme(), manifest.Manifest{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(seaweed).NotTo(BeNil())
-		Expect(seaweed.Spec.S3.Port).NotTo(BeNil())
-		Expect(*seaweed.Spec.S3.Port).To(Equal(int32(80)))
+		Expect(seaweed.Spec.S3.Env).To(ContainElement(corev1.EnvVar{
+			Name:  "S3_EXTERNAL_URL",
+			Value: "http://" + SeaweedName("object-store") + "-s3.wandb.svc.cluster.local:" + S3Port,
+		}))
 	})
 
-	It("pins S3 to anyuid and the rest to restricted-v2 on OpenShift", func() {
+	It("uses https for the s3 external URL when TLS is enabled", func() {
+		wandb := seaweedWandb()
+		wandb.Spec.ObjectStore.ManagedObjectStore.SeaweedObjectStoreSpec.TlsEnabled = true
+
+		seaweed, err := ToObjectStoreVendorSpec(context.Background(), wandb, seaweedScheme(), manifest.Manifest{})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(seaweed).NotTo(BeNil())
+		Expect(seaweed.Spec.S3.Env).To(ContainElement(corev1.EnvVar{
+			Name:  "S3_EXTERNAL_URL",
+			Value: "https://" + SeaweedName("object-store") + "-s3.wandb.svc.cluster.local:" + S3Port,
+		}))
+	})
+
+	It("pins all components to restricted-v2 on OpenShift", func() {
 		utils.SetOpenShiftMode(true)
 		defer utils.SetOpenShiftMode(false)
 
@@ -90,7 +105,7 @@ var _ = Describe("SeaweedFS vendor specs", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(seaweed).NotTo(BeNil())
 
-		Expect(seaweed.Spec.S3.Annotations).To(HaveKeyWithValue(requiredSCCAnnotation, sccAnyuid))
+		Expect(seaweed.Spec.S3.Annotations).To(HaveKeyWithValue(requiredSCCAnnotation, sccRestrictedV2))
 		Expect(seaweed.Spec.Master.Annotations).To(HaveKeyWithValue(requiredSCCAnnotation, sccRestrictedV2))
 		Expect(seaweed.Spec.Volume.Annotations).To(HaveKeyWithValue(requiredSCCAnnotation, sccRestrictedV2))
 		Expect(seaweed.Spec.Filer.Annotations).To(HaveKeyWithValue(requiredSCCAnnotation, sccRestrictedV2))

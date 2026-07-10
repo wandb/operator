@@ -69,6 +69,29 @@ func reconcileConsolidatedIngress(ctx context.Context, c ctrlClient.Client, wand
 		}
 	}
 
+	infraRoutes, err := resolveInfraRoutes(ctx, c, wandb, manifest)
+	if err != nil {
+		return err
+	}
+	for _, route := range infraRoutes {
+		if len(route.ingress.Paths) == 0 {
+			continue
+		}
+		pathType := networkingv1.PathType(route.ingress.PathType)
+		paths = append(paths, networkingv1.HTTPIngressPath{
+			Path:     route.ingress.Paths[0],
+			PathType: &pathType,
+			Backend: networkingv1.IngressBackend{
+				Service: &networkingv1.IngressServiceBackend{
+					Name: route.serviceName,
+					Port: networkingv1.ServiceBackendPort{
+						Number: route.servicePort,
+					},
+				},
+			},
+		})
+	}
+
 	if len(paths) == 0 {
 		return nil
 	}
@@ -93,6 +116,7 @@ func reconcileConsolidatedIngress(ctx context.Context, c ctrlClient.Client, wand
 	for k, v := range wandb.Spec.Networking.Annotations {
 		annotations[k] = v
 	}
+
 	if wandb.Spec.Networking.TLS != nil && wandb.Spec.Networking.TLS.CertManager != nil {
 		cm := wandb.Spec.Networking.TLS.CertManager
 		if cm.ClusterIssuer != "" {
@@ -120,6 +144,9 @@ func reconcileConsolidatedIngress(ctx context.Context, c ctrlClient.Client, wand
 
 	if wandb.Spec.Networking.Ingress != nil {
 		desired.Spec.IngressClassName = wandb.Spec.Networking.Ingress.IngressClassName
+		if *desired.Spec.IngressClassName == "nginx" {
+			desired.ObjectMeta.Annotations["nginx.ingress.kubernetes.io/proxy-body-size"] = "0"
+		}
 	}
 
 	if wandb.Spec.Networking.TLS != nil && wandb.Spec.Networking.TLS.SecretName != "" {
@@ -136,7 +163,7 @@ func reconcileConsolidatedIngress(ctx context.Context, c ctrlClient.Client, wand
 	}
 
 	current := &networkingv1.Ingress{}
-	err := c.Get(ctx, types.NamespacedName{Name: ingressName, Namespace: wandb.Namespace}, current)
+	err = c.Get(ctx, types.NamespacedName{Name: ingressName, Namespace: wandb.Namespace}, current)
 	if err != nil {
 		if apiErrors.IsNotFound(err) {
 			if err := c.Create(ctx, desired); err != nil {

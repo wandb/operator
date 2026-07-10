@@ -31,16 +31,33 @@ type s3ConnInfo struct {
 func buildS3ConnInfo(
 	accessKey, secretKey string, nsnBuilder *NsNameBuilder, tls bool,
 ) *s3ConnInfo {
-	namespace := nsnBuilder.Namespace()
-	serviceName := fmt.Sprintf("%s-s3", SeaweedName(nsnBuilder.SpecName()))
 	return &s3ConnInfo{
 		AccessKey: accessKey,
 		TLS:       tls,
 		SecretKey: secretKey,
-		Host:      fmt.Sprintf("%s.%s.svc.cluster.local", serviceName, namespace),
-		Port:      "80",
+		Host:      s3ServiceHost(nsnBuilder.SpecName(), nsnBuilder.Namespace()),
+		Port:      S3Port,
 		Bucket:    "bucket",
 	}
+}
+
+func s3ServiceHost(specName, namespace string) string {
+	return fmt.Sprintf("%s-s3.%s.svc.cluster.local", SeaweedName(specName), namespace)
+}
+
+// s3ExternalURL is the endpoint the W&B server signs S3 requests against
+// (it presigns with this host and rewrites the URL for external clients
+// without re-signing). The s3 gateway must verify signatures against this
+// host rather than the Host/X-Forwarded-Host of proxied requests.
+func s3ExternalURL(specName, namespace string, tls bool) string {
+	return fmt.Sprintf("%s://%s:%s", s3Scheme(tls), s3ServiceHost(specName, namespace), S3Port)
+}
+
+func s3Scheme(tls bool) string {
+	if tls {
+		return "https"
+	}
+	return "http"
 }
 
 func (s *s3ConnInfo) toUrl() *url.URL {
@@ -53,10 +70,7 @@ func (s *s3ConnInfo) toUrl() *url.URL {
 }
 
 func (s *s3ConnInfo) scheme() string {
-	if s.TLS {
-		return "https"
-	}
-	return "http"
+	return s3Scheme(s.TLS)
 }
 
 func writeWandbConnInfo(

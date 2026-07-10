@@ -153,6 +153,15 @@ func ToObjectStoreVendorSpec(
 					Annotations: requiredSCCAnnotations(sccAnyuid),
 					Affinity:    wandb.GetAffinity(infraSpec.ManagedInfraSpec),
 					Tolerations: *wandb.GetTolerations(infraSpec.ManagedInfraSpec),
+					Env: []corev1.EnvVar{{
+						// W&B presigns S3 URLs against the in-cluster endpoint and
+						// rewrites the host for external clients without re-signing;
+						// pin signature verification to that endpoint so presigned
+						// requests arriving through an ingress proxy (whose
+						// Host/X-Forwarded-Host is the external hostname) validate.
+						Name:  "S3_EXTERNAL_URL",
+						Value: s3ExternalURL(specName, infraSpec.Namespace, infraSpec.SeaweedObjectStoreSpec.TlsEnabled),
+					}},
 				},
 				ResourceRequirements: corev1.ResourceRequirements{},
 				Replicas:             1,
@@ -162,7 +171,6 @@ func ToObjectStoreVendorSpec(
 					},
 					Key: "config.json",
 				},
-				Port:       new(int32(80)),
 				DomainName: nil,
 			},
 			Filer: &seaweedv1.FilerSpec{
