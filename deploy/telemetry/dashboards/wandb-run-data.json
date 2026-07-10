@@ -1,0 +1,333 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_VICTORIAMETRICS",
+      "label": "VictoriaMetrics",
+      "type": "datasource",
+      "pluginId": "victoriametrics-metrics-datasource",
+      "pluginName": "VictoriaMetrics"
+    },
+    {
+      "name": "DS_VICTORIATRACES",
+      "label": "VictoriaTraces",
+      "type": "datasource",
+      "pluginId": "jaeger",
+      "pluginName": "Jaeger"
+    }
+  ],
+  "annotations": {"list": []},
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "links": [
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": false,
+      "keepTime": true,
+      "targetBlank": true,
+      "title": "Open Traces in Explore",
+      "type": "link",
+      "url": "/explore?panes=%7B%22A%22:%7B%22datasource%22:%22${DS_VICTORIATRACES}%22,%22queries%22:[],%22range%22:%7B%22from%22:%22now-1h%22,%22to%22:%22now%22%7D%7D%7D&schemaVersion=1&orgId=1"
+    },
+    {
+      "asDropdown": false,
+      "icon": "dashboard",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false,
+      "title": "W&B Field Investigation",
+      "type": "link",
+      "url": "/d/wandb-field-investigation"
+    },
+    {
+      "asDropdown": false,
+      "icon": "dashboard",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false,
+      "title": "W&B Datastores",
+      "type": "link",
+      "url": "/d/wandb-datastores"
+    }
+  ],
+  "panels": [
+    {
+      "type": "text",
+      "title": "",
+      "gridPos": {"h": 6, "w": 24, "x": 0, "y": 0},
+      "options": {
+        "mode": "markdown",
+        "content": "# W&B Run Data (history read path)\n\nUse this when a customer says **\"my run charts won't load, or show the wrong/missing data.\"** This is the **time-series READ path** — the code that fetches logged metric history out of the datastore (ClickHouse and the legacy Bigtable-style store) and hands it to the workspace charts.\n\n**Two very different failure shapes — decide which one you're seeing first:**\n- **SLOW data** — charts eventually load but take a long time. Look at **Read latency**.\n- **WRONG or MISSING data** — charts load fast but points are missing, flat, or disagree with what the user expects. Look at **Fallbacks & correctness** and **Sampling adequacy** — the datastore returned an answer, it was just the wrong one.\n\nMost DogStatsD panels here are per-namespace application metrics; the trace-derived latency panel is sampled. Use the **Open Traces in Explore** link (top-right) to jump into a slow read trace. For the underlying datastore health (ClickHouse cluster, disk, etc.) see the [W&B Datastores](/d/wandb-datastores) dashboard."
+      }
+    },
+    {
+      "type": "row",
+      "title": "Read latency (is data SLOW?)",
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 6},
+      "collapsed": false
+    },
+    {
+      "type": "timeseries",
+      "title": "ClickHouse read latency vs baseline",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 9, "w": 16, "x": 0, "y": 7},
+      "targets": [
+        {
+          "expr": "avg(ch_hard_read_ch_latency_ms{namespace=\"$namespace\"})",
+          "legendFormat": "ClickHouse read (ch)",
+          "refId": "A"
+        },
+        {
+          "expr": "avg(ch_hard_read_base_latency_ms{namespace=\"$namespace\"})",
+          "legendFormat": "baseline store",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "ms", "min": 0}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"]}, "tooltip": {"mode": "multi"}},
+      "description": "TODO: DogStatsD metric — currently EMPTY because gorilla runs with GORILLA_STATSD_PORT=0, which disables DogStatsD emission (a core/manifest-side setting, not the operator); it populates once that port is set. Names may carry a service prefix; if still empty after enabling, check label_values(__name__). ch_hard_read_ch_latency_ms / ch_hard_read_base_latency_ms are filtered {namespace=\"$namespace\"}. If these are exported as histograms rather than gauges, switch the avg to sum(rate(<name>_sum[...]))/sum(rate(<name>_count[...]))."
+    },
+    {
+      "type": "text",
+      "title": "About: Read latency",
+      "gridPos": {"h": 9, "w": 8, "x": 16, "y": 7},
+      "options": {
+        "mode": "markdown",
+        "content": "**What it shows** — how long the history read path takes to fetch metric points from ClickHouse (`ch`) versus the legacy baseline store, in milliseconds.\n\n**What bad looks like** — ClickHouse latency sustained in the multi-hundred-ms to seconds range, or ClickHouse far above the baseline line. Brief spikes under load are normal.\n\n**Do next** — if latency is the problem, this is SLOW data, not wrong data. Confirm with the span p95 panel below, then check the ClickHouse cluster on the [W&B Datastores](/d/wandb-datastores) dashboard. Grab a slow trace via **Open Traces in Explore** (top-right)."
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "History-reader span latency p95 (traces, sampled)",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 9, "w": 16, "x": 0, "y": 16},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, span_name) (rate(traces_spanmetrics_duration_milliseconds_bucket{span_name=~\"(?i).*(history|clickhouse|read).*\"}[$__rate_interval])))",
+          "legendFormat": "{{span_name}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "ms", "min": 0}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "right", "calcs": ["mean", "max"]}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "description": "Trace-derived (traces_spanmetrics_*, confirmed present) so it is SAMPLED — trust the shape, not exact values. The span_name regex is a best guess; if this panel is empty, run label_values(traces_spanmetrics_duration_milliseconds_bucket, span_name) and adjust the regex to the history-reader / clickhouse span names on your stack."
+    },
+    {
+      "type": "text",
+      "title": "About: History-reader span latency",
+      "gridPos": {"h": 9, "w": 8, "x": 16, "y": 16},
+      "options": {
+        "mode": "markdown",
+        "content": "**What it shows** — p95 duration of the read-path spans (history reader / ClickHouse query) from sampled traces, split by span.\n\n**What bad looks like** — one span's p95 climbing into seconds, or a new span appearing at a specific minute.\n\n**Do next** — note the slow span and the minute it started, then **Open Traces in Explore** (top-right) and read the actual span chain. If the panel is empty, the span-name regex needs adjusting (see the panel description)."
+      }
+    },
+    {
+      "type": "row",
+      "title": "Fallbacks & correctness (is data WRONG?)",
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 25},
+      "collapsed": false
+    },
+    {
+      "type": "timeseries",
+      "title": "Hard-read fallbacks & shadow-read disagreements",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 9, "w": 16, "x": 0, "y": 26},
+      "targets": [
+        {
+          "expr": "sum(rate(ch_hard_read_success{namespace=\"$namespace\"}[$__rate_interval]))",
+          "legendFormat": "hard-read success",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(ch_hard_read_fallback{namespace=\"$namespace\"}[$__rate_interval]))",
+          "legendFormat": "hard-read fallback",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(rate(ch_shadow_read_error{namespace=\"$namespace\"}[$__rate_interval]))",
+          "legendFormat": "shadow error",
+          "refId": "C"
+        },
+        {
+          "expr": "sum(rate(ch_shadow_read_empty{namespace=\"$namespace\"}[$__rate_interval]))",
+          "legendFormat": "shadow empty",
+          "refId": "D"
+        },
+        {
+          "expr": "sum(rate(ch_shadow_read_len_diff{namespace=\"$namespace\"}[$__rate_interval]))",
+          "legendFormat": "shadow length diff",
+          "refId": "E"
+        },
+        {
+          "expr": "sum(rate(ch_shadow_read_not_enabled{namespace=\"$namespace\"}[$__rate_interval]))",
+          "legendFormat": "shadow not enabled",
+          "refId": "F"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "reqps", "min": 0}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "right", "calcs": ["mean", "max"]}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "description": "TODO: DogStatsD metric — currently EMPTY because gorilla runs with GORILLA_STATSD_PORT=0, which disables DogStatsD emission (a core/manifest-side setting, not the operator); it populates once that port is set. Names may carry a service prefix; if still empty after enabling, check label_values(__name__). ch_hard_read_success / ch_hard_read_fallback / ch_shadow_read_error / ch_shadow_read_empty / ch_shadow_read_len_diff / ch_shadow_read_not_enabled are all filtered {namespace=\"$namespace\"}."
+    },
+    {
+      "type": "text",
+      "title": "About: Fallbacks & shadow-read",
+      "gridPos": {"h": 9, "w": 8, "x": 16, "y": 26},
+      "options": {
+        "mode": "markdown",
+        "content": "**What it shows** — how often the read path fell back off ClickHouse (`fallback`), and where the shadow read (ClickHouse compared against the trusted store) disagreed: `error`, `empty`, or `length diff`.\n\n**What bad looks like** — any sustained rate of `fallback`, `shadow error`, or `shadow length diff`. A fallback or a shadow-read diff means the newer store disagreed with the trusted store, so what the user sees may be WRONG or MISSING data.\n\n**Do next** — this is a correctness signal, not a quick fix. Take a snapshot of this panel (with the time range) and **escalate** — note which signal is firing and the affected namespace. Cross-check dual-write below."
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Dual-write & replica-read activity",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 9, "w": 16, "x": 0, "y": 35},
+      "targets": [
+        {
+          "expr": "sum(rate(dual_write{namespace=\"$namespace\"}[$__rate_interval]))",
+          "legendFormat": "dual_write",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(replica_read{namespace=\"$namespace\"}[$__rate_interval]))",
+          "legendFormat": "replica_read",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "reqps", "min": 0}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"]}, "tooltip": {"mode": "multi"}},
+      "description": "TODO: DogStatsD metric — currently EMPTY because gorilla runs with GORILLA_STATSD_PORT=0, which disables DogStatsD emission (a core/manifest-side setting, not the operator); it populates once that port is set. Names may carry a service prefix; if still empty after enabling, check label_values(__name__). dual_write / replica_read are filtered {namespace=\"$namespace\"}."
+    },
+    {
+      "type": "text",
+      "title": "About: Dual-write / replica-read",
+      "gridPos": {"h": 9, "w": 8, "x": 16, "y": 35},
+      "options": {
+        "mode": "markdown",
+        "content": "**What it shows** — how much traffic is going through the dual-write migration path (writing to both stores) and reading from the replica.\n\n**What bad looks like** — dual-write dropping to zero while reads still hit ClickHouse can mean the two stores are drifting apart; a sudden change in either line usually lines up with a migration config change.\n\n**Do next** — use this as context for the fallback/shadow-read panel above. If those show disagreement and dual-write is off or partial, that is likely the cause — snapshot both and escalate with the namespace and time range."
+      }
+    },
+    {
+      "type": "row",
+      "title": "Sampling adequacy (are points silently missing?)",
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 44},
+      "collapsed": false
+    },
+    {
+      "type": "timeseries",
+      "title": "Sampling adequacy classification",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 9, "w": 16, "x": 0, "y": 45},
+      "targets": [
+        {
+          "expr": "sum(rate(gorilla_bigtablev2_sampling_adequate_normal{namespace=\"$namespace\"}[$__rate_interval]))",
+          "legendFormat": "adequate (normal)",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(gorilla_bigtablev2_sampling_insufficient_intentional{namespace=\"$namespace\"}[$__rate_interval]))",
+          "legendFormat": "insufficient (intentional)",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(rate(gorilla_bigtablev2_sampling_insufficient_accidental{namespace=\"$namespace\"}[$__rate_interval]))",
+          "legendFormat": "insufficient (accidental)",
+          "refId": "C"
+        },
+        {
+          "expr": "sum(rate(gorilla_bigtablev2_queried_no_samples{namespace=\"$namespace\"}[$__rate_interval]))",
+          "legendFormat": "queried, no samples",
+          "refId": "D"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "reqps", "min": 0}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "right", "calcs": ["mean", "max"]}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "description": "TODO: DogStatsD metric — currently EMPTY because gorilla runs with GORILLA_STATSD_PORT=0, which disables DogStatsD emission (a core/manifest-side setting, not the operator); it populates once that port is set. Names may carry a service prefix; if still empty after enabling, check label_values(__name__). gorilla_bigtablev2_sampling_adequate_normal / gorilla_bigtablev2_sampling_insufficient_intentional / gorilla_bigtablev2_sampling_insufficient_accidental / gorilla_bigtablev2_queried_no_samples are filtered {namespace=\"$namespace\"}."
+    },
+    {
+      "type": "text",
+      "title": "About: Sampling adequacy",
+      "gridPos": {"h": 9, "w": 8, "x": 16, "y": 45},
+      "options": {
+        "mode": "markdown",
+        "content": "**What it shows** — how the read path classified each query's sample coverage. `intentional` insufficiency is expected downsampling for zoomed-out views; `accidental` insufficiency and `queried, no samples` are not.\n\n**What bad looks like** — any sustained `insufficient (accidental)` or `queried, no samples`. Accidental undersampling = charts silently missing points, so the user sees WRONG or incomplete data without any error.\n\n**Do next** — if `accidental` or `no samples` is firing, snapshot this panel and **escalate** with the namespace and time range. Confirm against the ratio/counts panel below."
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Undersample ratio & sample counts",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 9, "w": 16, "x": 0, "y": 54},
+      "targets": [
+        {
+          "expr": "avg(gorilla_bigtablev2_undersample_ratio{namespace=\"$namespace\"})",
+          "legendFormat": "undersample ratio",
+          "refId": "A"
+        },
+        {
+          "expr": "avg(gorilla_bigtablev2_raw_rows_ratio{namespace=\"$namespace\"})",
+          "legendFormat": "raw rows ratio (actual/expected)",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(rate(gorilla_bigtablev2_undersamples{namespace=\"$namespace\"}[$__rate_interval]))",
+          "legendFormat": "undersamples/sec",
+          "refId": "C"
+        },
+        {
+          "expr": "sum(rate(gorilla_bigtablev2_samples_requested{namespace=\"$namespace\"}[$__rate_interval]))",
+          "legendFormat": "samples requested/sec",
+          "refId": "D"
+        },
+        {
+          "expr": "sum(rate(gorilla_bigtablev2_samples_actual{namespace=\"$namespace\"}[$__rate_interval]))",
+          "legendFormat": "samples actual/sec",
+          "refId": "E"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "short", "min": 0}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "right", "calcs": ["mean", "max"]}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "description": "TODO: DogStatsD metric — currently EMPTY because gorilla runs with GORILLA_STATSD_PORT=0, which disables DogStatsD emission (a core/manifest-side setting, not the operator); it populates once that port is set. Names may carry a service prefix; if still empty after enabling, check label_values(__name__). gorilla_bigtablev2_undersample_ratio / gorilla_bigtablev2_raw_rows_ratio / gorilla_bigtablev2_undersamples / gorilla_bigtablev2_samples_requested / gorilla_bigtablev2_samples_actual are filtered {namespace=\"$namespace\"}. Related raw metrics: gorilla_bigtablev2_raw_rows_expected, gorilla_bigtablev2_raw_rows_actual, gorilla_bigtablev2_samples_attempted."
+    },
+    {
+      "type": "text",
+      "title": "About: Undersample ratio & counts",
+      "gridPos": {"h": 9, "w": 8, "x": 16, "y": 54},
+      "options": {
+        "mode": "markdown",
+        "content": "**What it shows** — the raw numbers behind sampling: the undersample ratio, how far actual rows fell short of expected (`raw rows ratio`), and requested vs actual sample counts.\n\n**What bad looks like** — undersample ratio climbing, `raw rows ratio` well below 1.0 (fewer rows came back than expected), or `samples actual` sitting far under `samples requested`.\n\n**Do next** — pair this with the classification panel to the left. If both point at accidental undersampling, snapshot both and **escalate** with the namespace and time range."
+      }
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": ["wandb", "run-data", "history", "read-path", "observability"],
+  "templating": {
+    "list": [
+      {
+        "name": "namespace",
+        "label": "W&B Namespace",
+        "type": "query",
+        "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+        "definition": "label_values(wandb_application_info, namespace)",
+        "query": {
+          "query": "label_values(wandb_application_info, namespace)",
+          "refId": "namespace-variable-query"
+        },
+        "regex": "/^(?!kube-|cert-manager$|monitoring$|wandb-operators$|operator-system$|grafana$|victoria.*$|telemetry$).*$/",
+        "refresh": 1,
+        "sort": 1,
+        "includeAll": false,
+        "multi": false,
+        "current": {"text": "wandb", "value": "wandb"}
+      }
+    ]
+  },
+  "time": {"from": "now-3h", "to": "now"},
+  "timezone": "browser",
+  "title": "W&B Run Data (history read path)",
+  "uid": "wandb-run-data",
+  "version": 1
+}

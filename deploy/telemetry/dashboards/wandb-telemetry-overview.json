@@ -2138,6 +2138,37 @@
           "refId": "A"
         }
       ]
+    },
+    {
+      "type": "row",
+      "title": "Telemetry Self-Health (can I trust this data?)",
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 137},
+      "collapsed": false
+    },
+    {
+      "type": "timeseries",
+      "title": "Span Export Failure %",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 8, "w": 16, "x": 0, "y": 138},
+      "targets": [
+        {
+          "expr": "sum(rate(otelcol_exporter_send_failed_spans[$__rate_interval])) / clamp_min(sum(rate(otelcol_exporter_sent_spans[$__rate_interval])) + sum(rate(otelcol_exporter_send_failed_spans[$__rate_interval])), 1)",
+          "legendFormat": "failed export ratio",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0}, "overrides": []},
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+      "thresholds": {"mode": "absolute", "steps": [{"color": "green"}, {"color": "yellow", "value": 0.01}, {"color": "red", "value": 0.05}]}
+    },
+    {
+      "type": "text",
+      "title": "About: Telemetry Self-Health",
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 138},
+      "options": {
+        "mode": "markdown",
+        "content": "### Read this FIRST when a dashboard looks wrong\n\n**What it shows** — the fraction of trace spans the collector failed to export to storage. If this is non-zero, the trace/RED panels across every dashboard are **undercounting** — the data itself is lossy, not the app.\n\n**What bad looks like** — sustained > ~1%. Above ~5% treat trace-derived numbers as unreliable.\n\n**Do next** — if failures are high, check the `victoria-otlp-gateway` collector pod and the VictoriaTraces backend before trusting any trace panel. Also cross-check **Scrape Success** / **Down Targets** at the top of this dashboard for metric-side gaps."
+      }
     }
   ],
   "refresh": "30s",

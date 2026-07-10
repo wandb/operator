@@ -1,0 +1,404 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_VICTORIAMETRICS",
+      "label": "VictoriaMetrics",
+      "type": "datasource",
+      "pluginId": "victoriametrics-metrics-datasource",
+      "pluginName": "VictoriaMetrics"
+    },
+    {
+      "name": "DS_VICTORIATRACES",
+      "label": "VictoriaTraces",
+      "type": "datasource",
+      "pluginId": "jaeger",
+      "pluginName": "Jaeger"
+    }
+  ],
+  "annotations": {"list": []},
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "links": [
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": false,
+      "keepTime": true,
+      "targetBlank": true,
+      "title": "Open Traces in Explore",
+      "type": "link",
+      "url": "/explore?panes=%7B%22A%22:%7B%22datasource%22:%22${DS_VICTORIATRACES}%22,%22queries%22:[],%22range%22:%7B%22from%22:%22now-1h%22,%22to%22:%22now%22%7D%7D%7D&schemaVersion=1&orgId=1"
+    },
+    {
+      "asDropdown": false,
+      "icon": "dashboard",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false,
+      "title": "W&B Artifacts",
+      "type": "link",
+      "url": "/d/wandb-artifacts"
+    },
+    {
+      "asDropdown": false,
+      "icon": "dashboard",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false,
+      "title": "W&B Managed Install Performance",
+      "type": "link",
+      "url": "/d/wandb-managed-install-performance"
+    }
+  ],
+  "panels": [
+    {
+      "type": "text",
+      "title": "",
+      "gridPos": {"h": 6, "w": 24, "x": 0, "y": 0},
+      "options": {
+        "mode": "markdown",
+        "content": "# W&B Async Jobs & Lifecycle\n\nUse this when a customer reports **\"old run data is slow or missing, and storage keeps growing.\"** It shows the background jobs that move finished run data into Parquet and the housekeeping crons (log deletion, run/file garbage collection, sweep early-stop).\n\n**Start here, in order:** (1) **Parquet export lag** — is recent run data behind? (2) **Parquet throughput & duration** — are the export tasks actually running and finishing? (3) **Cron & background jobs** — are the housekeeping jobs backing up?\n\n**NOTE — artifact garbage collection does NOT live here.** For artifact/blob GC and object-storage cleanup use the [W&B Artifacts](/d/wandb-artifacts) dashboard. For the stores' own CPU/memory/disk see [W&B Managed Install Performance](/d/wandb-managed-install-performance).\n\nUse the **W&B Namespace** dropdown above to switch installs."
+      }
+    },
+    {
+      "type": "row",
+      "title": "Parquet export lag",
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 6},
+      "collapsed": false
+    },
+    {
+      "type": "timeseries",
+      "title": "Parquet export lag (history & events)",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 9, "w": 16, "x": 0, "y": 7},
+      "targets": [
+        {
+          "expr": "max(export_history_to_parquet_lag{namespace=\"$namespace\"})",
+          "legendFormat": "history lag",
+          "refId": "A"
+        },
+        {
+          "expr": "max(export_events_to_parquet_lag{namespace=\"$namespace\"})",
+          "legendFormat": "events lag",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "s", "min": 0}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"]}, "tooltip": {"mode": "multi"}},
+      "description": "TODO: DogStatsD metric — currently EMPTY because gorilla runs with GORILLA_STATSD_PORT=0, which disables DogStatsD emission (a core/manifest-side setting, not the operator); it populates once that port is set. Names may carry a service prefix; if still empty after enabling, check label_values(__name__). Gauges export_history_to_parquet_lag / export_events_to_parquet_lag."
+    },
+    {
+      "type": "text",
+      "title": "About: Parquet export lag",
+      "gridPos": {"h": 9, "w": 8, "x": 16, "y": 7},
+      "options": {
+        "mode": "markdown",
+        "content": "**What it shows** — how far behind the Parquet export jobs are: the gap between the newest run/event data and what has been written to Parquet for fast historical queries.\n\n**What bad looks like** — lag climbing steadily and not coming back down (e.g. rising for more than ~30 min, or much higher than usual for this install).\n\n**Reassure the customer** — high lag means **recent run data is slow to query, NOT lost.** It self-heals once throughput catches up.\n\n**Do next** — check **Parquet throughput & duration** below: if tasks are completing but lag stays high, the store is the bottleneck (see [Managed Install Performance](/d/wandb-managed-install-performance)); if tasks aren't running at all, snapshot + escalate."
+      }
+    },
+    {
+      "type": "row",
+      "title": "Parquet throughput & duration",
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 16},
+      "collapsed": false
+    },
+    {
+      "type": "timeseries",
+      "title": "Parquet task started vs completed (per sec)",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 9, "w": 16, "x": 0, "y": 17},
+      "targets": [
+        {
+          "expr": "sum(rate(export_history_to_parquet_task_started{namespace=\"$namespace\"}[$__rate_interval]))",
+          "legendFormat": "history started",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(export_history_to_parquet_task_completed{namespace=\"$namespace\"}[$__rate_interval]))",
+          "legendFormat": "history completed",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(rate(export_events_to_parquet_task_started{namespace=\"$namespace\"}[$__rate_interval]))",
+          "legendFormat": "events started",
+          "refId": "C"
+        },
+        {
+          "expr": "sum(rate(export_events_to_parquet_task_completed{namespace=\"$namespace\"}[$__rate_interval]))",
+          "legendFormat": "events completed",
+          "refId": "D"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "ops", "min": 0}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"]}, "tooltip": {"mode": "multi"}},
+      "description": "TODO: DogStatsD metric — currently EMPTY because gorilla runs with GORILLA_STATSD_PORT=0, which disables DogStatsD emission (a core/manifest-side setting, not the operator); it populates once that port is set. Names may carry a service prefix; if still empty after enabling, check label_values(__name__). Counters export_history_to_parquet_task_started/_task_completed and export_events_to_parquet_*."
+    },
+    {
+      "type": "text",
+      "title": "About: Parquet throughput",
+      "gridPos": {"h": 9, "w": 8, "x": 16, "y": 17},
+      "options": {
+        "mode": "markdown",
+        "content": "**What it shows** — the rate at which export tasks are **started** vs **completed**, for both run history and events.\n\n**What bad looks like** — `completed` sitting well below `started` (tasks pile up and don't finish), or both flat at zero while lag (panel above) is high (the worker isn't running).\n\n**Do next** — completed tracking started but lag still high → the store is slow, check the duration panel and [Managed Install Performance](/d/wandb-managed-install-performance). Both flat at zero → the export worker is down; snapshot this panel + the export pod logs and escalate."
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Parquet task & export duration (avg / p95)",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 9, "w": 16, "x": 0, "y": 26},
+      "targets": [
+        {
+          "expr": "sum(rate(export_history_to_parquet_task_duration_sum{namespace=\"$namespace\"}[$__rate_interval])) / sum(rate(export_history_to_parquet_task_duration_count{namespace=\"$namespace\"}[$__rate_interval]))",
+          "legendFormat": "history task avg",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by(le)(rate(export_history_to_parquet_task_duration_bucket{namespace=\"$namespace\"}[$__rate_interval])))",
+          "legendFormat": "history task p95",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by(le)(rate(export_events_to_parquet_task_duration_bucket{namespace=\"$namespace\"}[$__rate_interval])))",
+          "legendFormat": "events task p95",
+          "refId": "C"
+        },
+        {
+          "expr": "avg(export_history_to_parquet_export_duration{namespace=\"$namespace\"})",
+          "legendFormat": "history export duration",
+          "refId": "D"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "s", "min": 0}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"]}, "tooltip": {"mode": "multi"}},
+      "description": "TODO: DogStatsD metric — currently EMPTY because gorilla runs with GORILLA_STATSD_PORT=0, which disables DogStatsD emission (a core/manifest-side setting, not the operator); it populates once that port is set. Names may carry a service prefix; if still empty after enabling, check label_values(__name__). Histogram export_history_to_parquet_task_duration (_bucket/_sum/_count) and export_history_to_parquet_export_duration."
+    },
+    {
+      "type": "text",
+      "title": "About: Parquet duration",
+      "gridPos": {"h": 9, "w": 8, "x": 16, "y": 26},
+      "options": {
+        "mode": "markdown",
+        "content": "**What it shows** — how long individual export tasks take (avg and p95) and the overall export duration.\n\n**What bad looks like** — p95 climbing well above its normal band for this install, or a sudden step-up after a version change (see **Service Image Versions** on [Field Investigation](/d/wandb-field-investigation)).\n\n**Do next** — durations rising alongside store pressure → the DB/object-store is slow, check [Managed Install Performance](/d/wandb-managed-install-performance) and the [Data Stores app view](/d/wandb-datastores). If durations are normal but lag is high, the worker just isn't keeping up with volume; snapshot + escalate."
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Parquet compaction & deletion (per sec)",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 9, "w": 16, "x": 0, "y": 35},
+      "targets": [
+        {
+          "expr": "sum(rate(export_history_to_parquet_compact_completed{namespace=\"$namespace\"}[$__rate_interval]))",
+          "legendFormat": "history compact completed",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(export_history_to_parquet_delete_completed{namespace=\"$namespace\"}[$__rate_interval]))",
+          "legendFormat": "history delete completed",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(rate(export_events_to_parquet_compact_completed{namespace=\"$namespace\"}[$__rate_interval]))",
+          "legendFormat": "events compact completed",
+          "refId": "C"
+        },
+        {
+          "expr": "sum(rate(export_events_to_parquet_delete_completed{namespace=\"$namespace\"}[$__rate_interval]))",
+          "legendFormat": "events delete completed",
+          "refId": "D"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "ops", "min": 0}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"]}, "tooltip": {"mode": "multi"}},
+      "description": "TODO: DogStatsD metric — currently EMPTY because gorilla runs with GORILLA_STATSD_PORT=0, which disables DogStatsD emission (a core/manifest-side setting, not the operator); it populates once that port is set. Names may carry a service prefix; if still empty after enabling, check label_values(__name__). Counters export_*_to_parquet_compact_completed / _delete_completed."
+    },
+    {
+      "type": "text",
+      "title": "About: Compaction & deletion",
+      "gridPos": {"h": 9, "w": 8, "x": 16, "y": 35},
+      "options": {
+        "mode": "markdown",
+        "content": "**What it shows** — the maintenance side of Parquet export: compaction (merging small files) and deletion of superseded intermediate files.\n\n**What bad looks like** — compaction/deletion flat at zero while export volume is high — small files accumulate and **storage grows** (the customer's \"storage keeps growing\" symptom).\n\n**Do next** — if these are stalled, snapshot this panel and check the export worker/pod logs, then escalate. For object-store growth from artifacts specifically, use the [W&B Artifacts](/d/wandb-artifacts) dashboard."
+      }
+    },
+    {
+      "type": "row",
+      "title": "Cron & background jobs",
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 44},
+      "collapsed": false
+    },
+    {
+      "type": "timeseries",
+      "title": "Cron seconds behind",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 9, "w": 16, "x": 0, "y": 45},
+      "targets": [
+        {
+          "expr": "max(cron_seconds_behind{namespace=\"$namespace\"})",
+          "legendFormat": "max seconds behind",
+          "refId": "A"
+        },
+        {
+          "expr": "max by (job) (cron_seconds_behind{namespace=\"$namespace\"})",
+          "legendFormat": "{{job}}",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "s", "min": 0}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "right", "calcs": ["mean", "max"]}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "description": "TODO: DogStatsD metric — currently EMPTY because gorilla runs with GORILLA_STATSD_PORT=0, which disables DogStatsD emission (a core/manifest-side setting, not the operator); it populates once that port is set. Names may carry a service prefix; if still empty after enabling, check label_values(__name__). Gauge cron_seconds_behind (per-job label name may differ)."
+    },
+    {
+      "type": "text",
+      "title": "About: Cron seconds behind",
+      "gridPos": {"h": 9, "w": 8, "x": 16, "y": 45},
+      "options": {
+        "mode": "markdown",
+        "content": "**What it shows** — how far behind schedule the background cron jobs are running.\n\n**What bad looks like** — `cron_seconds_behind` **climbing and not recovering** = jobs are backing up. This is the clearest signal that housekeeping (log/run cleanup, sweeps) has stalled.\n\n**Do next** — if it keeps climbing, **snapshot this panel and escalate** — a stuck cron scheduler affects deletion and cleanup across the install. Check which job label is worst and correlate with the deletion/GC panels below."
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Garbage collection & log deletion (per sec)",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 9, "w": 16, "x": 0, "y": 54},
+      "targets": [
+        {
+          "expr": "sum(rate(garbage_collect_files{namespace=\"$namespace\"}[$__rate_interval]))",
+          "legendFormat": "gc files",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(garbage_collect_runs{namespace=\"$namespace\"}[$__rate_interval]))",
+          "legendFormat": "gc runs",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(rate(garbage_collect_runs_v2{namespace=\"$namespace\"}[$__rate_interval]))",
+          "legendFormat": "gc runs v2",
+          "refId": "C"
+        },
+        {
+          "expr": "sum(rate(delete_logs{namespace=\"$namespace\"}[$__rate_interval]))",
+          "legendFormat": "delete logs",
+          "refId": "D"
+        },
+        {
+          "expr": "sum(rate(delete_logs_error{namespace=\"$namespace\"}[$__rate_interval]))",
+          "legendFormat": "delete logs error",
+          "refId": "E"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "ops", "min": 0}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"]}, "tooltip": {"mode": "multi"}},
+      "description": "TODO: DogStatsD metric — currently EMPTY because gorilla runs with GORILLA_STATSD_PORT=0, which disables DogStatsD emission (a core/manifest-side setting, not the operator); it populates once that port is set. Names may carry a service prefix; if still empty after enabling, check label_values(__name__). Counters garbage_collect_files/_runs/_runs_v2, delete_logs, delete_logs_error."
+    },
+    {
+      "type": "text",
+      "title": "About: GC & log deletion",
+      "gridPos": {"h": 9, "w": 8, "x": 16, "y": 54},
+      "options": {
+        "mode": "markdown",
+        "content": "**What it shows** — the housekeeping jobs that reclaim space: file/run garbage collection and log deletion, plus the log-deletion error counter.\n\n**What bad looks like** — `delete logs error` above zero, or GC rates dropping to zero while storage grows. Errors mean cleanup is failing and disk will keep filling.\n\n**Do next** — persistent `delete_logs_error` → snapshot + escalate. Note: this is run/file/log cleanup, **not** artifact blob GC — for that use the [W&B Artifacts](/d/wandb-artifacts) dashboard."
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Sweep early-stop activity (per sec)",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 9, "w": 16, "x": 0, "y": 63},
+      "targets": [
+        {
+          "expr": "sum(rate(early_stop_sweeps_stopped{namespace=\"$namespace\"}[$__rate_interval]))",
+          "legendFormat": "stopped",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(early_stop_sweeps_skipped{namespace=\"$namespace\"}[$__rate_interval]))",
+          "legendFormat": "skipped",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(rate(early_stop_sweeps_error{namespace=\"$namespace\"}[$__rate_interval]))",
+          "legendFormat": "error",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "ops", "min": 0}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"]}, "tooltip": {"mode": "multi"}},
+      "description": "TODO: DogStatsD metric — currently EMPTY because gorilla runs with GORILLA_STATSD_PORT=0, which disables DogStatsD emission (a core/manifest-side setting, not the operator); it populates once that port is set. Names may carry a service prefix; if still empty after enabling, check label_values(__name__). Counters early_stop_sweeps_stopped/_skipped/_error."
+    },
+    {
+      "type": "text",
+      "title": "About: Sweep early-stop",
+      "gridPos": {"h": 9, "w": 8, "x": 16, "y": 63},
+      "options": {
+        "mode": "markdown",
+        "content": "**What it shows** — the sweep early-stopping cron: runs it stopped, runs it skipped, and errors.\n\n**What bad looks like** — a rising `error` line, or `stopped`/`skipped` flat at zero when the customer expects sweeps to early-stop (the job may not be running).\n\n**Do next** — if `error` is non-zero or the customer reports sweeps not stopping, snapshot this panel and the sweep/cron pod logs and escalate. Correlate onset with **Cron seconds behind** above."
+      }
+    },
+    {
+      "type": "row",
+      "title": "Traces: parquet & glue spans",
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 72},
+      "collapsed": false
+    },
+    {
+      "type": "bargauge",
+      "title": "Top parquet/glue spans by call count (sampled)",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 9, "w": 16, "x": 0, "y": 73},
+      "targets": [
+        {
+          "expr": "topk(15, sum by (span_name) (increase(traces_spanmetrics_calls_milliseconds_total{span_name=~\".*(parquet|glue).*\"}[$__range])))",
+          "legendFormat": "{{span_name}}",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "short", "min": 0, "decimals": 0}, "overrides": []},
+      "options": {"orientation": "horizontal", "displayMode": "gradient", "showUnfilled": true}
+    },
+    {
+      "type": "text",
+      "title": "About: Parquet & glue spans",
+      "gridPos": {"h": 9, "w": 8, "x": 16, "y": 73},
+      "options": {
+        "mode": "markdown",
+        "content": "**What it shows** — trace-derived (spanmetrics) call counts for spans whose name mentions parquet or glue. This is the export/compaction work as seen from tracing.\n\n**Note** — spanmetrics are **not** namespace-scoped and are **sampled**: trust the *shape* (which span dominates), not exact counts.\n\n**Do next** — to see an actual slow/failed export, use **Open Traces in Explore** (top-right) and filter by the span name shown here. If this panel is empty, the span name pattern may differ on your stack — check `label_values(traces_spanmetrics_calls_milliseconds_total, span_name)`."
+      }
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": ["wandb", "jobs", "lifecycle", "observability"],
+  "templating": {
+    "list": [
+      {
+        "name": "namespace",
+        "label": "W&B Namespace",
+        "type": "query",
+        "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+        "definition": "label_values(wandb_application_info, namespace)",
+        "query": {
+          "query": "label_values(wandb_application_info, namespace)",
+          "refId": "namespace-variable-query"
+        },
+        "regex": "/^(?!kube-|cert-manager$|monitoring$|wandb-operators$|operator-system$|grafana$|victoria.*$|telemetry$).*$/",
+        "refresh": 1,
+        "sort": 1,
+        "includeAll": false,
+        "multi": false,
+        "current": {"text": "wandb", "value": "wandb"}
+      }
+    ]
+  },
+  "time": {"from": "now-3h", "to": "now"},
+  "timezone": "browser",
+  "title": "W&B Async Jobs & Lifecycle",
+  "uid": "wandb-jobs",
+  "version": 1
+}
