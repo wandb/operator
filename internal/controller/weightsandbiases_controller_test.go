@@ -342,6 +342,96 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			Expect(len(appList.Items)).Should(BeNumerically("==", len(wandbManifest.Applications)-2), "Expected all non-feature flagged applications to be created")
 		})
 
+		It("Should advance status.observedGeneration only once applications are reconciled for a generation", func() {
+			By("Creating a new WeightsAndBiases v2 object at the initial version")
+			ctx := context.Background()
+			wandb := &apiv2.WeightsAndBiases{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      WandbName,
+					Namespace: WandbNamespace,
+				},
+				Spec: apiv2.WeightsAndBiasesSpec{
+					Size: apiv2.SizeDev,
+					Wandb: apiv2.WandbAppSpec{
+						Hostname:           "http://localhost",
+						Features:           map[string]bool{},
+						ManifestRepository: manifestsRepository,
+						Version:            "0.83.0-clickhouse-keeper.1",
+					},
+					MySQL:       apiv2.MySQLSpec{ManagedMysql: &apiv2.ManagedMysqlSpec{}},
+					Redis:       apiv2.RedisSpec{ManagedRedis: &apiv2.ManagedRedisSpec{}},
+					Kafka:       apiv2.KafkaSpec{ManagedKafka: &apiv2.ManagedKafkaSpec{}},
+					ObjectStore: apiv2.ObjectStoreSpec{ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{}},
+					ClickHouse:  apiv2.ClickHouseSpec{ManagedClickHouse: &apiv2.ManagedClickHouseSpec{}},
+				},
+			}
+			Expect(k8sClient.Create(ctx, wandb)).Should(Succeed())
+
+			wandbLookupKey := types.NamespacedName{Name: wandb.Name, Namespace: wandb.Namespace}
+			Expect(k8sClient.Get(ctx, wandbLookupKey, wandb)).Should(Succeed())
+			Expect(wandb.Status.ObservedGeneration).Should(BeZero())
+
+			By("Marking infrastructure, mysql init, and migrations ready")
+			wandb.Status.MySQLStatus.Ready = true
+			wandb.Status.RedisStatus.Ready = true
+			wandb.Status.KafkaStatus.Ready = true
+			wandb.Status.ObjectStoreStatus.Ready = true
+			wandb.Status.ClickHouseStatus.Ready = true
+			wandb.Status.MySQLStatus.Connection.URL = v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: WandbName}, Key: "test"}
+			wandb.Status.ClickHouseStatus.Connection.URL = v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: WandbName}, Key: "test"}
+			wandb.Status.Wandb.Migration.Version = wandb.Spec.Wandb.Version
+			wandb.Status.Wandb.Migration.LastSuccessVersion = wandb.Spec.Wandb.Version
+			wandb.Status.Wandb.Migration.Ready = true
+			wandb.Status.Wandb.Migration.Reason = "Complete"
+			wandb.Status.Wandb.MySQLInit.Succeeded = true
+			Expect(k8sClient.Status().Update(ctx, wandb)).Should(Succeed())
+
+			By("Reconciling the manifest to completion for the initial generation")
+			wandbManifest, err := manifest.GetServerManifest(ctx, wandb.Spec.Wandb.ManifestRepository, wandb.Spec.Wandb.Version)
+			Expect(err).Should(Succeed())
+			ctrlResult, err := v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, v2.DefaultTelemetryRuntimeConfig())
+			Expect(err).Should(Succeed())
+			Expect(ctrlResult.RequeueAfter).Should(BeZero())
+
+			Expect(k8sClient.Get(ctx, wandbLookupKey, wandb)).Should(Succeed())
+			initialGeneration := wandb.Generation
+			Expect(initialGeneration).Should(BeNumerically(">", 0))
+			Expect(wandb.Status.ObservedGeneration).Should(Equal(initialGeneration))
+
+			By("Upgrading spec.wandb.version to bump the generation")
+			wandb.Spec.Wandb.Version = "0.83.0-clickhouse-keeper.2"
+			Expect(k8sClient.Update(ctx, wandb)).Should(Succeed())
+			Expect(k8sClient.Get(ctx, wandbLookupKey, wandb)).Should(Succeed())
+			Expect(wandb.Generation).Should(BeNumerically(">", initialGeneration))
+			Expect(wandb.Status.ObservedGeneration).Should(Equal(initialGeneration))
+
+			By("Reconciling while the new version's migration is still pending")
+			wandbManifest, err = manifest.GetServerManifest(ctx, wandb.Spec.Wandb.ManifestRepository, wandb.Spec.Wandb.Version)
+			Expect(err).Should(Succeed())
+			ctrlResult, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, v2.DefaultTelemetryRuntimeConfig())
+			Expect(err).Should(Succeed())
+			Expect(ctrlResult.RequeueAfter).Should(BeNumerically(">", 0))
+
+			Expect(k8sClient.Get(ctx, wandbLookupKey, wandb)).Should(Succeed())
+			Expect(wandb.Status.ObservedGeneration).Should(Equal(initialGeneration),
+				"observedGeneration must not advance before applications carry the new generation's spec")
+
+			By("Completing the migration and reconciling to completion")
+			wandb.Status.Wandb.Migration.Version = wandb.Spec.Wandb.Version
+			wandb.Status.Wandb.Migration.LastSuccessVersion = wandb.Spec.Wandb.Version
+			wandb.Status.Wandb.Migration.Ready = true
+			wandb.Status.Wandb.Migration.Reason = "Complete"
+			Expect(k8sClient.Status().Update(ctx, wandb)).Should(Succeed())
+
+			ctrlResult, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, v2.DefaultTelemetryRuntimeConfig())
+			Expect(err).Should(Succeed())
+			Expect(ctrlResult.RequeueAfter).Should(BeZero())
+
+			Expect(k8sClient.Get(ctx, wandbLookupKey, wandb)).Should(Succeed())
+			Expect(wandb.Status.ObservedGeneration).Should(Equal(wandb.Generation))
+			Expect(wandb.Status.ObservedGeneration).Should(BeNumerically(">", initialGeneration))
+		})
+
 		It("Should handle various migration states correctly", func() {
 			By("Creating a new WeightsAndBiases v2 object")
 			ctx := context.Background()
