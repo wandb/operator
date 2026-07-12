@@ -15,7 +15,7 @@ wandb:
 wandb-operator:
   image:
     repository: us-docker.pkg.dev/wandb-production/public/wandb/operator
-    tag: 2.0.0-alpha.2
+    tag: 2.0.0-westest-validation.0
   containers:
     operator:
       command:
