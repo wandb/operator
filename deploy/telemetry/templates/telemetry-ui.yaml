@@ -176,13 +176,13 @@ spec:
 apiVersion: grafana.integreatly.org/v1beta1
 kind: GrafanaDashboard
 metadata:
-  name: wandb-graphql-errors
+  name: wandb-application
   namespace: {{ include "telemetry.namespace" . }}
   labels:
     app.kubernetes.io/component: telemetry
     app.kubernetes.io/part-of: wandb
 spec:
-  uid: wandb-graphql-errors
+  uid: wandb-application
   folder: W&B
   instanceSelector:
     matchLabels:
@@ -195,29 +195,5 @@ spec:
     - inputName: DS_VICTORIALOGS
       datasourceName: VictoriaLogs
   json: |-
-{{ .Files.Get "dashboards/wandb-graphql-errors.json" | nindent 4 }}
-{{- range $dashboard := list "wandb-api" "wandb-ingest" "wandb-run-data" "wandb-artifacts" "wandb-jobs" "wandb-datastores" }}
----
-apiVersion: grafana.integreatly.org/v1beta1
-kind: GrafanaDashboard
-metadata:
-  name: {{ $dashboard }}
-  namespace: {{ include "telemetry.namespace" $ }}
-  labels:
-    app.kubernetes.io/component: telemetry
-    app.kubernetes.io/part-of: wandb
-spec:
-  uid: {{ $dashboard }}
-  folder: W&B
-  instanceSelector:
-    matchLabels:
-      dashboards: grafana
-  datasources:
-    - inputName: DS_VICTORIAMETRICS
-      datasourceName: VictoriaMetrics
-    - inputName: DS_VICTORIATRACES
-      datasourceName: VictoriaTraces
-  json: |-
-{{ $.Files.Get (printf "dashboards/%s.json" $dashboard) | nindent 4 }}
-{{- end }}
+{{ .Files.Get "dashboards/wandb-application.json" | nindent 4 }}
 {{- end }}
