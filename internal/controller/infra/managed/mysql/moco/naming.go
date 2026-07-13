@@ -7,15 +7,12 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-// MaxClusterNameLength mirrors Moco's MySQLCluster admission webhook, which
-// rejects names longer than 40 characters (Moco prefixes derived StatefulSets
-// and CronJobs with "moco-"/"moco-backup-").
+// MaxClusterNameLength mirrors Moco's admission cap on MySQLCluster names.
 const MaxClusterNameLength = 40
 
 const defaultNameSuffix = "-mysql"
 
-// DefaultSpecName derives the managed MySQL name for a CR, shortening it when
-// the plain "<name>-mysql" would exceed Moco's cluster-name cap.
+// DefaultSpecName derives the managed MySQL name, shortened to Moco's cap.
 func DefaultSpecName(crName string) string {
 	return common.FitDefaultInfraName(crName, defaultNameSuffix, MaxClusterNameLength)
 }

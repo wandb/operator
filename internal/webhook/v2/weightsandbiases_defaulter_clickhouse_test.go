@@ -77,9 +77,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 	})
 
 	It("defaults a deployable name for CR names the plain default would wedge", func() {
-		// 32 chars: "<cr>-chi" would push the derived per-host volume names
-		// past the 63-char DNS-1123 label limit and the Altinity operator
-		// would silently never converge.
+		// 32 chars: "<cr>-chi" would overflow the derived per-host volume names
 		wandb := &apiv2.WeightsAndBiases{
 			ObjectMeta: metav1.ObjectMeta{Name: "wandb-integration-environments-2", Namespace: "test-namespace"},
 			Spec:       apiv2.WeightsAndBiasesSpec{ClickHouse: apiv2.ClickHouseSpec{ManagedClickHouse: &apiv2.ManagedClickHouseSpec{}}},
@@ -92,7 +90,7 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 		g.Expect(len(name)).To(g.BeNumerically("<=", altinity.MaxSpecNameLength()))
 		g.Expect(altinity.ValidateDerivedNames(wandb.Spec.ClickHouse.ManagedClickHouse)).To(g.Succeed())
 
-		// The default is persisted in the spec, so it must be deterministic.
+		// persisted in the spec, so it must be deterministic
 		again := &apiv2.WeightsAndBiases{
 			ObjectMeta: wandb.ObjectMeta,
 			Spec:       apiv2.WeightsAndBiasesSpec{ClickHouse: apiv2.ClickHouseSpec{ManagedClickHouse: &apiv2.ManagedClickHouseSpec{}}},

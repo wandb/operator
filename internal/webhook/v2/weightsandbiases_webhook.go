@@ -305,8 +305,7 @@ func applyClickHouseDefaults(wandb *appsv2.WeightsAndBiases) {
 }
 
 // validateSpec validates the (already defaulted) spec. oldWandb is nil on
-// create; on update it lets rules skip values that are unchanged from the
-// stored object, so pre-existing CRs are never blocked retroactively.
+// create; update rules use it to skip values unchanged from the stored object.
 func validateSpec(_ context.Context, newWandb, oldWandb *appsv2.WeightsAndBiases) (admission.Warnings, error) {
 	var allErrors field.ErrorList
 	var warnings admission.Warnings
@@ -508,14 +507,10 @@ func validateClickHouseSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 	return errors
 }
 
-// validateInfraNames rejects managed infra names whose derived Kubernetes
-// object names cannot be deployed (the vendor operators suffix them into
-// StatefulSet/Service/volume names that must fit DNS-1123 labels, and at
-// least the Altinity one wedges silently when they don't). The names are
-// almost always webhook defaults — already sized to fit — so this guards
-// explicitly-set values; empty names are the defaulter's to fill and are
-// skipped. On update only names that changed are checked, so a pre-existing
-// CR keeps working (and stays deletable) even if it predates this rule.
+// validateInfraNames rejects managed infra names whose derived object names
+// cannot be deployed (vendor operators wedge silently past DNS-1123 limits).
+// Empty names are the defaulter's to fill; on update only changed names are
+// checked, so pre-existing CRs stay updatable and deletable.
 func validateInfraNames(newWandb, oldWandb *appsv2.WeightsAndBiases) field.ErrorList {
 	var errors field.ErrorList
 

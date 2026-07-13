@@ -7,18 +7,14 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-// MaxSpecNameLength is a conservative budget for the Redis spec name. This
-// package derives CR names by suffixing it (ReplicationName adds "-replica"),
-// and the opstree operator suffixes those further for workloads and Services
-// ("-sentinel", "-headless", "-additional", pod ordinals — see the vendored
-// redis-operator types). 40 leaves 23 characters of headroom inside the
-// 63-char DNS-1123 label limit, more than the longest known combination.
+// MaxSpecNameLength is a conservative budget: this package and the opstree
+// operator suffix the spec name ("-replica", "-sentinel", "-headless", ...);
+// 40 leaves 23 chars of DNS-1123 label headroom.
 const MaxSpecNameLength = 40
 
 const defaultNameSuffix = "-redis"
 
-// DefaultSpecName derives the managed Redis name for a CR, shortening it when
-// the plain "<name>-redis" would leave derived names past the budget.
+// DefaultSpecName derives the managed Redis name, shortened to the budget.
 func DefaultSpecName(crName string) string {
 	return common.FitDefaultInfraName(crName, defaultNameSuffix, MaxSpecNameLength)
 }

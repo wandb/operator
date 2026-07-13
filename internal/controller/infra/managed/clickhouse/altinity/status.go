@@ -86,8 +86,7 @@ func inferInfraState(
 	var events []corev1.Event
 	impliedStates := make(map[string]string, len(conditions))
 
-	// An undeployable name is a terminal config error; raise it as an event so
-	// it is visible in `kubectl describe` and not only in conditions.
+	// undeployable name = terminal config error; surface it in `kubectl describe`
 	if cond, found := lo.Find(conditions, func(c metav1.Condition) bool {
 		return c.Type == ClickHouseCustomResourceType && c.Reason == common.InvalidNameReason
 	}); found {

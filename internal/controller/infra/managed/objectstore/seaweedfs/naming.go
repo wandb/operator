@@ -8,18 +8,15 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-// MaxSpecNameLength is a conservative budget for the object-store spec name:
-// the seaweedfs operator derives per-component workloads and Services by
-// suffixing the Seaweed name ("-master", "-volume", "-filer", peer Services,
-// pod ordinals). 40 leaves 23 characters of headroom inside the 63-char
-// DNS-1123 label limit, more than the longest known combination.
+// MaxSpecNameLength is a conservative budget: the seaweedfs operator suffixes
+// the Seaweed name ("-master", "-volume", "-filer", peer Services, ordinals);
+// 40 leaves 23 chars of DNS-1123 label headroom.
 const MaxSpecNameLength = 40
 
 const defaultNameSuffix = "-seaweedfs"
 
-// DefaultSpecName derives the managed object-store name for a CR, shortening
-// it when the plain "<name>-seaweedfs" would leave derived names past the
-// budget. The suffix is preserved so ConnectionName can still strip it.
+// DefaultSpecName derives the object-store name, shortened to the budget; the
+// suffix is preserved so ConnectionName can still strip it.
 func DefaultSpecName(crName string) string {
 	return common.FitDefaultInfraName(crName, defaultNameSuffix, MaxSpecNameLength)
 }

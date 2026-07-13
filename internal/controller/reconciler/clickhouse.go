@@ -108,10 +108,8 @@ func managedClickHouseWriteState(
 
 	log := ctrl.LoggerFrom(ctx)
 
-	// A name whose derived Altinity object names don't fit can never converge,
-	// and the Altinity operator does not surface the apiserver rejection —
-	// report the error instead of provisioning a permanently wedged install.
-	// This also covers CRs stored before the admission-time name checks.
+	// Altinity swallows the apiserver's rejection of over-long derived names, so
+	// fail the status loudly here; also covers CRs that predate admission checks.
 	if err := altinity.ValidateDerivedNames(spec); err != nil {
 		log.Error(err, "managed ClickHouse name cannot be deployed")
 		return []metav1.Condition{

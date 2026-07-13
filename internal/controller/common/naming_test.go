@@ -7,8 +7,7 @@ import (
 )
 
 var _ = Describe("FitDefaultInfraName", func() {
-	// A deliberately tight budget so the long-suffix cases exercise shortening;
-	// real budgets come from each infra package's naming helpers.
+	// deliberately tight so the cases exercise shortening
 	const budget = 27
 
 	It("keeps the plain name when it fits the budget", func() {

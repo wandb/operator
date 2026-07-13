@@ -30,14 +30,12 @@ var _ = Describe("managed ClickHouse naming", func() {
 	Describe("DefaultSpecName", func() {
 		It("keeps the plain '<cr>-chi' for CR names that fit", func() {
 			Expect(DefaultSpecName("wandb")).To(Equal("wandb-chi"))
-			// 25 chars — wedged the old "<cr>-clickhouse"/"-keeper" naming, but
-			// fits the terse suffixes without shortening.
+			// 25 chars — wedged the old "-clickhouse"/"-keeper" naming
 			Expect(DefaultSpecName("wandb-legacy-overrides-v1")).To(Equal("wandb-legacy-overrides-v1-chi"))
 		})
 
 		It("derives a deployable name for CR names the plain default would wedge", func() {
-			// 32 chars: "<cr>-chi" would push the per-host volume names past 63
-			// chars and the Altinity operator would never converge.
+			// 32 chars: "<cr>-chi" would overflow the per-host volume names
 			name := DefaultSpecName("wandb-integration-environments-2")
 
 			Expect(name).To(HaveSuffix("-chi"))
@@ -59,7 +57,7 @@ var _ = Describe("managed ClickHouse naming", func() {
 		})
 
 		It("accounts for replica counts that add host-ordinal digits", func() {
-			// 30-char CR name: the plain default lands exactly on the budget.
+			// 30-char CR name: the plain default lands exactly on the budget
 			atBudget := &apiv2.ManagedClickHouseSpec{Name: DefaultSpecName("wandb-integration-environments")}
 			Expect(len(atBudget.Name)).To(Equal(MaxSpecNameLength()))
 			Expect(ValidateDerivedNames(atBudget)).To(Succeed())

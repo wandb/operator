@@ -8,18 +8,12 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation"
 )
 
-// infraNameHashLen is the number of hex digest characters appended when a
-// default infra name must be shortened; enough that sibling CRs sharing a
-// long prefix in one namespace don't collide.
+// infraNameHashLen is enough to keep sibling CRs sharing a long prefix from colliding.
 const infraNameHashLen = 5
 
-// FitDefaultInfraName returns "<crName><suffix>" when that is a valid
-// DNS-1123 label within budget. Otherwise it returns "<prefix>-<hash><suffix>",
-// where prefix is what fits of crName and hash is a short stable digest of the
-// full CR name, so any CR name (however long, or containing dots) yields a
-// usable, collision-free default. The budget must leave room for the suffix
-// plus the hashed form; derived names are persisted in the spec by the
-// defaulting webhook, so the result must be deterministic.
+// FitDefaultInfraName returns "<crName><suffix>", falling back to a
+// deterministic "<prefix>-<hash><suffix>" when that would not be a valid
+// DNS-1123 label within budget — any CR name yields a usable default.
 func FitDefaultInfraName(crName, suffix string, budget int) string {
 	plain := crName + suffix
 	if len(plain) <= budget && len(validation.IsDNS1123Label(plain)) == 0 {
@@ -34,9 +28,8 @@ func FitDefaultInfraName(crName, suffix string, budget int) string {
 	return fmt.Sprintf("%s-%s%s", prefix, digest, suffix)
 }
 
-// sanitizeLabelPrefix truncates s to maxLen and makes it usable as the leading
-// part of a DNS-1123 label: CR names may contain dots (they are DNS
-// subdomains), and a truncation point may leave stray hyphens.
+// sanitizeLabelPrefix truncates s to maxLen and strips what can't lead a
+// DNS-1123 label (CR names may contain dots; truncation may leave hyphens).
 func sanitizeLabelPrefix(s string, maxLen int) string {
 	if maxLen <= 0 {
 		return ""

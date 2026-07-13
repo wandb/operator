@@ -80,20 +80,17 @@ const (
 	// chiClusterName is the single cluster the CHI defines.
 	chiClusterName = "default"
 
-	// defaultNameSuffix is what the defaulting webhook appends to the CR name.
-	// Terse ("chi" = ClickHouseInstallation) to leave the CR name as much of
-	// the derived-name DNS-1123 label budget as possible. Sibling resources
-	// derive their names from the base this suffix leaves behind (see baseName).
+	// defaultNameSuffix is appended to the CR name by the defaulting webhook;
+	// terse to leave the CR name as much of the derived-name budget as possible.
 	defaultNameSuffix = "-chi"
 
-	// assumedMaxHostOrdinal sizes name budgets when replica counts are not yet
-	// known at admission (they are resolved from the server manifest, which
-	// uses 1 or 3); it reserves room for up to 10 replicas per shard.
+	// assumedMaxHostOrdinal reserves room for 10 replicas per shard when counts
+	// are still unset at admission (manifest sizing uses 1 or 3).
 	assumedMaxHostOrdinal = 9
 )
 
-// maxHostOrdinal is the highest host ordinal to budget names for; counts that
-// are unset (0) or below the assumed headroom fall back to the assumption.
+// maxHostOrdinal is the highest host ordinal to budget names for, floored at
+// the assumption for unset or small replica counts.
 func maxHostOrdinal(replicas int32) int {
 	if int(replicas)-1 > assumedMaxHostOrdinal {
 		return int(replicas) - 1
@@ -101,9 +98,7 @@ func maxHostOrdinal(replicas int32) int {
 	return assumedMaxHostOrdinal
 }
 
-// baseName strips the default "-chi" suffix from the managed ClickHouse name;
-// sibling resources (the Keeper CR) build their names on this shared base, so
-// the keeper package never sees the suffixed spec name.
+// baseName strips the "-chi" suffix; the Keeper builds its names on the base.
 func baseName(specName string) string {
 	return strings.TrimSuffix(specName, defaultNameSuffix)
 }
@@ -116,19 +111,16 @@ func KeeperNsName(spec *apiv2.ManagedClickHouseSpec) types.NamespacedName {
 	}
 }
 
-// perHostConfigVolumeName mirrors the Altinity operator's per-host ConfigMap
-// name for a CHI — "chi-{cr}-deploy-confd-{cluster}-{shard}-{replica}"
-// (upstream pkg/model/chi/namer/patterns.go, patternConfigMapHostName). Like
-// the Keeper equivalent it doubles as a StatefulSet volume name, so it must
-// fit a DNS-1123 label and is the longest CHI-derived name.
+// perHostConfigVolumeName mirrors the Altinity operator's per-host
+// ConfigMap/StatefulSet-volume name for a CHI (pkg/model/chi/namer/patterns.go);
+// the longest CHI-derived name and a DNS-1123 label.
 func perHostConfigVolumeName(specName string, shardOrdinal, replicaOrdinal int) string {
 	return fmt.Sprintf("chi-%s-deploy-confd-%s-%d-%d", specName, chiClusterName, shardOrdinal, replicaOrdinal)
 }
 
-// MaxSpecNameLength is the longest managed ClickHouse spec name of the
-// defaulted "<base>-chi" shape whose derived per-host object names all fit
-// DNS-1123 labels. Keeper names build on the base, so their room extends by
-// the suffix the base gives back.
+// MaxSpecNameLength is the longest defaulted ("<base>-chi") spec name whose
+// derived names all fit DNS-1123 labels; Keeper names build on the base, so
+// their room extends by the suffix the base gives back.
 func MaxSpecNameLength() int {
 	chiRoom := validation.DNS1123LabelMaxLength - len(perHostConfigVolumeName("", ShardsCount-1, assumedMaxHostOrdinal))
 	chkRoom := validation.DNS1123LabelMaxLength -
@@ -137,24 +129,20 @@ func MaxSpecNameLength() int {
 }
 
 // DefaultSpecName derives the managed ClickHouse name for a CR, shortening it
-// when the plain "<name>-chi" would push derived per-host names past the
-// DNS-1123 label limit.
+// when "<name>-chi" would overflow the derived-name budget.
 func DefaultSpecName(crName string) string {
 	return common.FitDefaultInfraName(crName, defaultNameSuffix, MaxSpecNameLength())
 }
 
-// ValidateDerivedNames reports why a managed ClickHouse spec name cannot be
-// deployed: the Altinity operator derives per-host StatefulSet volume names
-// from it that must fit DNS-1123 labels, and it does not surface the
-// apiserver's rejection when they don't — the installation just never
-// converges. Returns nil when every derived name fits.
+// ValidateDerivedNames reports why a spec name cannot be deployed: derived
+// per-host volume names must fit DNS-1123 labels, and the Altinity operator
+// wedges silently when they don't. Nil when every derived name fits.
 func ValidateDerivedNames(spec *apiv2.ManagedClickHouseSpec) error {
 	for _, derived := range []string{
 		keeper.PerHostConfigVolumeName(baseName(spec.Name), maxHostOrdinal(spec.Keeper.Replicas)),
 		perHostConfigVolumeName(spec.Name, ShardsCount-1, maxHostOrdinal(spec.Replicas)),
 	} {
-		// Derived length grows 1:1 with the spec name, so the excess converts
-		// directly into a maximum length for a name of this shape.
+		// derived length grows 1:1 with the name, so excess → max usable length
 		if over := len(derived) - validation.DNS1123LabelMaxLength; over > 0 {
 			return fmt.Errorf(
 				"managed ClickHouse name %q cannot be deployed: the Altinity operator derives object name %q from it, which exceeds the %d-character DNS-1123 label limit; use at most %d characters, e.g. by shortening the CR name or setting spec.clickhouse.managedClickhouse.name",

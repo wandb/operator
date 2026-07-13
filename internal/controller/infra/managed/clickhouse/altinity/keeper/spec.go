@@ -20,9 +20,8 @@ import (
 )
 
 // ToKeeperVendorSpec builds the ClickHouseKeeperInstallation CR that coordinates
-// ReplicatedMergeTree replication for the managed ClickHouse installation.
-// nsName is the CHK's namespaced name, derived by the caller (see
-// altinity.KeeperNsName) — this package never sees the "-chi"-suffixed spec name.
+// ReplicatedMergeTree replication. nsName comes from altinity.KeeperNsName —
+// this package never sees the "-chi"-suffixed spec name.
 func ToKeeperVendorSpec(
 	ctx context.Context,
 	wandb *apiv2.WeightsAndBiases,
