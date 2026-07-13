@@ -1,0 +1,558 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_VICTORIAMETRICS",
+      "label": "VictoriaMetrics",
+      "type": "datasource",
+      "pluginId": "victoriametrics-metrics-datasource",
+      "pluginName": "VictoriaMetrics"
+    },
+    {"name": "DS_VICTORIATRACES", "label": "VictoriaTraces", "type": "datasource", "pluginId": "jaeger", "pluginName": "Jaeger"}
+  ],
+  "annotations": {"list": []},
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "links": [
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": false,
+      "keepTime": true,
+      "targetBlank": true,
+      "title": "Open Traces in Explore",
+      "type": "link",
+      "url": "/explore?panes=%7B%22A%22:%7B%22datasource%22:%22${DS_VICTORIATRACES}%22,%22queries%22:[],%22range%22:%7B%22from%22:%22now-1h%22,%22to%22:%22now%22%7D%7D%7D&schemaVersion=1&orgId=1"
+    },
+    {
+      "asDropdown": false,
+      "icon": "dashboard",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false,
+      "title": "W&B Field Investigation",
+      "type": "link",
+      "url": "/d/wandb-field-investigation"
+    }
+  ],
+  "panels": [
+    {
+      "type": "text",
+      "title": "",
+      "gridPos": {"h": 6, "w": 24, "x": 0, "y": 0},
+      "options": {
+        "mode": "markdown",
+        "content": "# W&B Application\n\nAnswers **\"is the whole W&B app slow or erroring for this customer?\"** Start here when a customer reports the UI is slow, requests fail, or the SDK can't reach the server.\n\nThe top sections cover **overall API health** — request rate, error codes, and latency. The **GraphQL errors** section attributes failures to the specific service/operation responsible. The **Operations & background** section shows read-path, artifact, and export span latencies from traces.\n\nUse the **W&B Namespace** dropdown to pick the customer's install. Use **Open Traces in Explore** (top-right) to drill from any symptom to a real trace."
+      }
+    },
+    {
+      "type": "row",
+      "title": "Request health",
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 6},
+      "collapsed": false
+    },
+    {
+      "type": "timeseries",
+      "title": "Request rate by status code",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 8, "w": 16, "x": 0, "y": 7},
+      "targets": [
+        {
+          "expr": "sum by (http_response_status_code) (rate(http_server_request_duration_seconds_count{service_name=\"gorilla\"}[$__rate_interval]))",
+          "legendFormat": "{{http_response_status_code}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "reqps", "min": 0}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"]}, "tooltip": {"mode": "multi"}}
+    },
+    {
+      "type": "text",
+      "title": "About: Request rate by status code",
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 7},
+      "options": {
+        "mode": "markdown",
+        "content": "**What it shows** — every HTTP request the W&B API serves, per second, split by response code. This is the single best \"is the app up?\" view.\n\n**What bad looks like** — a wall of `5xx` appearing, or `2xx` dropping to near-zero (traffic no longer reaching the API: ingress / service / DNS / pod crash).\n\n**Do next** — 5xx climbing → check pod logs. To attribute GraphQL errors to a feature, see the **GraphQL errors** section below."
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "4xx vs 5xx request rate",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 8, "w": 16, "x": 0, "y": 15},
+      "targets": [
+        {
+          "expr": "sum(rate(http_server_request_duration_seconds_count{service_name=\"gorilla\", http_response_status_code=~\"4..\"}[$__rate_interval])) or vector(0)",
+          "legendFormat": "4xx (client)",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(http_server_request_duration_seconds_count{service_name=\"gorilla\", http_response_status_code=~\"5..\"}[$__rate_interval])) or vector(0)",
+          "legendFormat": "5xx (server)",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "reqps", "min": 0}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"]}, "tooltip": {"mode": "multi"}}
+    },
+    {
+      "type": "text",
+      "title": "About: 4xx vs 5xx",
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 15},
+      "options": {
+        "mode": "markdown",
+        "content": "**What it shows** — client errors (`4xx`) vs server errors (`5xx`) as two clean lines, so you can tell whose fault it is.\n\n**What bad looks like** — any sustained `5xx` is a server problem. A `4xx` spike is usually the customer's SDK/auth (version mismatch, bad token, malformed query) and is often *not* an outage.\n\n**Do next** — 5xx → check API pod logs. 4xx → confirm SDK version against **Service Image Versions** on [W&B Field Investigation](/d/wandb-field-investigation).\n\n**Note** — GraphQL errors return HTTP `200` (the error is in the response body), so they don't appear here; use the **GraphQL errors** section below for those. This panel catches HTTP transport/server failures; a flat `0` means healthy."
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Error ratio (5xx / all requests)",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 8, "w": 16, "x": 0, "y": 23},
+      "targets": [
+        {
+          "expr": "(sum(rate(http_server_request_duration_seconds_count{service_name=\"gorilla\", http_response_status_code=~\"5..\"}[$__rate_interval])) or vector(0)) / sum(rate(http_server_request_duration_seconds_count{service_name=\"gorilla\"}[$__rate_interval]))",
+          "legendFormat": "5xx ratio",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"]}, "tooltip": {"mode": "multi"}}
+    },
+    {
+      "type": "text",
+      "title": "About: Error ratio",
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 23},
+      "options": {
+        "mode": "markdown",
+        "content": "**What it shows** — the share of requests failing with a server error, as a percentage. Normalizes for traffic so a busy install and a quiet one read the same.\n\n**What bad looks like** — above ~1% sustained is a real incident; a brief blip during a deploy is usually fine.\n\n**Do next** — if the ratio is high, capture a snapshot of this panel and use the **GraphQL errors** section below to see which feature is responsible, then drill to a trace.\n\n**Note** — this is HTTP `5xx` only; GraphQL errors are HTTP `200`, so a `0` ratio doesn't mean error-free — check the **GraphQL errors** section below."
+      }
+    },
+    {
+      "type": "row",
+      "title": "Latency",
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 31},
+      "collapsed": false
+    },
+    {
+      "type": "timeseries",
+      "title": "Request latency (p50 / p95 / p99)",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 8, "w": 16, "x": 0, "y": 32},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by(le)(rate(http_server_request_duration_seconds_bucket{service_name=\"gorilla\"}[$__rate_interval])))",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by(le)(rate(http_server_request_duration_seconds_bucket{service_name=\"gorilla\"}[$__rate_interval])))",
+          "legendFormat": "p95",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by(le)(rate(http_server_request_duration_seconds_bucket{service_name=\"gorilla\"}[$__rate_interval])))",
+          "legendFormat": "p99",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "s", "min": 0}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"]}, "tooltip": {"mode": "multi"}},
+      "thresholds": {"mode": "absolute", "steps": [{"color": "green"}, {"color": "yellow", "value": 1}, {"color": "red", "value": 3}]}
+    },
+    {
+      "type": "text",
+      "title": "About: Request latency",
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 32},
+      "options": {
+        "mode": "markdown",
+        "content": "**What it shows** — how long requests take, across all gorilla requests. p50 is the typical user; p95/p99 are the slowest 5% / 1%.\n\n**What bad looks like** — p95 above ~3s sustained for more than a few minutes means users feel it. Brief spikes under load are tolerable.\n\n**Do next** — if p95/p99 are high, use **p95 by operation** and **Top operations by slow request count** below to find the culprit, then Open Traces in Explore (top-right) and filter `duration>3s`."
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "p95 latency by operation (top 10)",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 8, "w": 16, "x": 0, "y": 40},
+      "targets": [
+        {
+          "expr": "topk(10, histogram_quantile(0.95, sum by(le, span_name)(rate(traces_spanmetrics_duration_milliseconds_bucket{service_name=\"gorilla\"}[$__rate_interval]))))",
+          "legendFormat": "{{span_name}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "ms", "min": 0}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "right", "calcs": ["mean", "max"]}, "tooltip": {"mode": "multi", "sort": "desc"}}
+    },
+    {
+      "type": "text",
+      "title": "About: p95 by operation",
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 40},
+      "options": {
+        "mode": "markdown",
+        "content": "**What it shows** — the 10 operations (trace span names) with the highest p95 latency, over time. Tells you *which operation* is slow, not just that something is. Sourced from spanmetrics (`traces_spanmetrics_*`, milliseconds) since gorilla's HTTP metrics don't carry a route label.\n\n**What bad looks like** — one operation sitting well above the rest, especially graphql spans climbing after a deploy.\n\n**Do next** — a slow graphql span → see the **GraphQL errors** section below; a slow read/export span → see **Operations & background** below. Then drill to a trace for that operation."
+      }
+    },
+    {
+      "type": "table",
+      "title": "Top operations by slow request count (>2.5s)",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 10, "w": 16, "x": 0, "y": 48},
+      "targets": [
+        {
+          "expr": "topk(20, sum by (span_name) (increase(traces_spanmetrics_duration_milliseconds_count{service_name=\"gorilla\"}[$__range]) - increase(traces_spanmetrics_duration_milliseconds_bucket{service_name=\"gorilla\", le=\"2500\"}[$__range])))",
+          "format": "table",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {"Time": true},
+            "indexByName": {"span_name": 0, "Value": 1},
+            "renameByName": {"span_name": "Operation", "Value": "Slow requests (>2.5s) in range"}
+          }
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "md",
+        "footer": {"show": true, "reducer": ["sum"], "fields": ["Value"]},
+        "sortBy": [{"displayName": "Slow requests (>2.5s) in range", "desc": true}]
+      },
+      "fieldConfig": {
+        "defaults": {"custom": {"align": "left", "filterable": true}},
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Slow requests (>2.5s) in range"},
+            "properties": [
+              {"id": "custom.cellOptions", "value": {"type": "gauge", "mode": "gradient"}},
+              {"id": "custom.align", "value": "right"}
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "type": "text",
+      "title": "About: Top operations by slow request count",
+      "gridPos": {"h": 10, "w": 8, "x": 16, "y": 48},
+      "options": {
+        "mode": "markdown",
+        "content": "**What it shows** — the operations that produced the most requests slower than 2.5 seconds over the selected range (counted from the latency histogram). This is the volume view of slowness: which operations hurt the most users.\n\n**What bad looks like** — an operation with a large, growing count of >2.5s requests, especially the workspace, run-table, or artifact operations.\n\n**Do next** — note the top operation, Open Traces in Explore (top-right), filter `service.name=gorilla` and `duration>2.5s` on that operation to read a real slow trace."
+      }
+    },
+    {
+      "type": "row",
+      "title": "GraphQL operations",
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 58},
+      "collapsed": false
+    },
+    {
+      "type": "timeseries",
+      "title": "GraphQL operation rate by span (top, sampled)",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 8, "w": 16, "x": 0, "y": 59},
+      "targets": [
+        {
+          "expr": "topk(10, sum by (span_name) (rate(traces_spanmetrics_calls_milliseconds_total{graphql_service!=\"\"}[$__rate_interval])))",
+          "legendFormat": "{{span_name}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "reqps", "min": 0}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "right", "calcs": ["mean", "max"]}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "description": "From spanmetrics (traces), which are sampled — trust the shape, not the absolute count. Spanmetrics have NO namespace label, so this is not filtered by $namespace; it reflects the whole trace stream."
+    },
+    {
+      "type": "text",
+      "title": "About: GraphQL operation rate",
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 59},
+      "options": {
+        "mode": "markdown",
+        "content": "**What it shows** — the busiest GraphQL operations by request rate, from sampled traces. Good for seeing *what the customer's app is doing* and whether a particular operation surged.\n\n**What bad looks like** — one operation dominating far above normal (a client hot-loop or retry storm), or the whole stream going flat (traffic stopped).\n\n**Do next** — for *errors* by GraphQL service/operation, see the **GraphQL errors** section below. Note: spanmetrics have no namespace label, so this is not scoped to the selected install."
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "GraphQL p95 latency by span (sampled)",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 8, "w": 16, "x": 0, "y": 67},
+      "targets": [
+        {
+          "expr": "topk(10, histogram_quantile(0.95, sum by(le, span_name)(rate(traces_spanmetrics_duration_milliseconds_bucket{graphql_service!=\"\"}[$__rate_interval]))))",
+          "legendFormat": "{{span_name}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "ms", "min": 0}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "right", "calcs": ["mean", "max"]}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "description": "From spanmetrics (traces), which are sampled. Spanmetrics have NO namespace label, so this is not filtered by $namespace."
+    },
+    {
+      "type": "text",
+      "title": "About: GraphQL p95 latency",
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 67},
+      "options": {
+        "mode": "markdown",
+        "content": "**What it shows** — the slowest GraphQL operations at p95, in milliseconds, from sampled traces.\n\n**What bad looks like** — an operation's p95 climbing into the seconds, especially if it lines up with the customer's complaint.\n\n**Do next** — Open Traces in Explore (top-right), filter to that operation, and read the resolver chain. For error attribution by service, see the **GraphQL errors** section below."
+      }
+    },
+    {
+      "type": "row",
+      "title": "GraphQL errors — attribution (traces)",
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 75},
+      "collapsed": false
+    },
+    {
+      "type": "stat",
+      "title": "GraphQL errors in range (sampled)",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 4, "w": 12, "x": 0, "y": 76},
+      "targets": [
+        {
+          "expr": "sum(increase(traces_spanmetrics_calls_milliseconds_total{graphql_service!=\"\", status_code=\"STATUS_CODE_ERROR\"}[$__range]))",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "short", "decimals": 0}, "overrides": []},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "area"}
+    },
+    {
+      "type": "stat",
+      "title": "Distinct erroring services",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 4, "w": 12, "x": 12, "y": 76},
+      "targets": [
+        {
+          "expr": "count(count by (graphql_service) (increase(traces_spanmetrics_calls_milliseconds_total{graphql_service!=\"\", status_code=\"STATUS_CODE_ERROR\"}[$__range]) > 0))",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "short", "decimals": 0}, "overrides": []},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none"}
+    },
+    {
+      "type": "text",
+      "title": "About: Error overview",
+      "gridPos": {"h": 4, "w": 24, "x": 0, "y": 80},
+      "options": {
+        "mode": "markdown",
+        "content": "**What it shows** — top-line GraphQL error health, from sampled traces (trust the trend, not the exact count).\n\n**What bad looks like** — *distinct erroring services* jumping from ~1 to many (a broad outage vs. one bad dependency), or the error count climbing off a flat baseline.\n\n**Do next** — one service dominating → look at **Attribution by service** below and open its trace via **Open Traces in Explore** (top-right)."
+      }
+    },
+    {
+      "type": "bargauge",
+      "title": "Top services by error count",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 9, "w": 12, "x": 0, "y": 84},
+      "targets": [
+        {
+          "expr": "topk(15, sum by (graphql_service) (increase(traces_spanmetrics_calls_milliseconds_total{graphql_service!=\"\", status_code=\"STATUS_CODE_ERROR\"}[$__range])))",
+          "legendFormat": "{{graphql_service}}",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "short", "decimals": 0}, "overrides": []},
+      "options": {"orientation": "horizontal", "displayMode": "gradient", "showUnfilled": true}
+    },
+    {
+      "type": "table",
+      "title": "Top service × operation by errors",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 9, "w": 12, "x": 12, "y": 84},
+      "targets": [
+        {
+          "expr": "topk(50, sum by (graphql_service, graphql_operationName) (increase(traces_spanmetrics_calls_milliseconds_total{graphql_service!=\"\", status_code=\"STATUS_CODE_ERROR\"}[$__range])))",
+          "format": "table",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {"Time": true},
+            "indexByName": {"graphql_service": 0, "graphql_operationName": 1, "Value": 2},
+            "renameByName": {"graphql_service": "Service", "graphql_operationName": "Operation", "Value": "Errors in range"}
+          }
+        }
+      ],
+      "options": {"showHeader": true, "cellHeight": "sm", "footer": {"show": false}, "sortBy": [{"displayName": "Errors in range", "desc": true}]},
+      "fieldConfig": {
+        "defaults": {"custom": {"align": "left", "filterable": true}},
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Errors in range"},
+            "properties": [{"id": "custom.cellOptions", "value": {"type": "gauge", "mode": "gradient"}}, {"id": "custom.align", "value": "right"}]
+          }
+        ]
+      }
+    },
+    {
+      "type": "text",
+      "title": "About: Attribution by service",
+      "gridPos": {"h": 5, "w": 24, "x": 0, "y": 93},
+      "options": {
+        "mode": "markdown",
+        "content": "**What it shows** — which GraphQL **service** (schema source file) and which **operation** are producing errors, from sampled traces. The `graphql.service` label rides on gorilla's spans (core PR #43519).\n\n**What bad looks like** — one service far above the rest = a single dependency/resolver in trouble; errors spread evenly across many services = something shared (DB, auth, rate-limiter).\n\n**Do next** — note the top service/operation, then **Open Traces in Explore** (top-right), filter to gorilla + `error=true` and that operation name, and read the resolver chain / error message on the actual trace. If this panel is empty, the spanmetrics `graphql.service` dimension may not be flowing yet — confirm traces reach the gateway and the collector was restarted after the dimension was added."
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "GraphQL errors per minute, by service (sampled)",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 9, "w": 16, "x": 0, "y": 98},
+      "targets": [
+        {
+          "expr": "sum by (graphql_service) (rate(traces_spanmetrics_calls_milliseconds_total{graphql_service!=\"\", status_code=\"STATUS_CODE_ERROR\"}[$__rate_interval])) * 60",
+          "legendFormat": "{{graphql_service}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "short", "min": 0, "custom": {"fillOpacity": 30, "stacking": {"mode": "normal"}}}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "right", "calcs": ["mean", "max"]}, "tooltip": {"mode": "multi", "sort": "desc"}}
+    },
+    {
+      "type": "text",
+      "title": "About: Errors/min by service",
+      "gridPos": {"h": 9, "w": 8, "x": 16, "y": 98},
+      "options": {
+        "mode": "markdown",
+        "content": "**What it shows** — the same service attribution over time, stacked so you can see *when* a service started erroring and whether it correlates with a deploy.\n\n**What bad looks like** — a service's band appearing or ballooning at a specific minute.\n\n**Do next** — line up the onset time with the **Service Image Versions** panel on [W&B Field Investigation](/d/wandb-field-investigation) (a rollout?) and with the customer's report. Then drill to a trace from that window."
+      }
+    },
+    {
+      "type": "row",
+      "title": "Drill down to traces",
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 107},
+      "collapsed": false
+    },
+    {
+      "type": "text",
+      "title": "About: Drill-down",
+      "gridPos": {"h": 4, "w": 24, "x": 0, "y": 108},
+      "options": {
+        "mode": "markdown",
+        "content": "**Get to the cause in three hops:** (1) identify the top service/operation above → (2) **Open Traces in Explore** (top-right), filter `service.name` to gorilla, `error=true`, and the operation → (3) read the resolver chain and error message on the actual trace. If gorilla's OTEL log export is enabled, follow **Trace → Logs** from there to the correlated log lines."
+      }
+    },
+    {
+      "type": "row",
+      "title": "Operations & background (traces)",
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 112},
+      "collapsed": false
+    },
+    {
+      "type": "timeseries",
+      "title": "History-reader span latency p95 (traces, sampled)",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 9, "w": 16, "x": 0, "y": 113},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, span_name) (rate(traces_spanmetrics_duration_milliseconds_bucket{span_name=~\"(?i).*(history|clickhouse|read).*\"}[$__rate_interval])))",
+          "legendFormat": "{{span_name}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "ms", "min": 0}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "right", "calcs": ["mean", "max"]}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "description": "Trace-derived (traces_spanmetrics_*, confirmed present) so it is SAMPLED — trust the shape, not exact values. The span_name regex is a best guess; if this panel is empty, run label_values(traces_spanmetrics_duration_milliseconds_bucket, span_name) and adjust the regex to the history-reader / clickhouse span names on your stack."
+    },
+    {
+      "type": "text",
+      "title": "About: History-reader span latency",
+      "gridPos": {"h": 9, "w": 8, "x": 16, "y": 113},
+      "options": {
+        "mode": "markdown",
+        "content": "**What it shows** — p95 duration of the read-path spans (history reader / ClickHouse query) from sampled traces, split by span. Answers \"why won't the customer's charts load?\"\n\n**What bad looks like** — one span's p95 climbing into seconds, or a new span appearing at a specific minute.\n\n**Do next** — note the slow span and the minute it started, then **Open Traces in Explore** (top-right) and read the actual span chain. If the panel is empty, the span-name regex needs adjusting (see the panel description)."
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Artifact operation latency p95 (traces, sampled)",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 9, "w": 16, "x": 0, "y": 122},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, span_name) (rate(traces_spanmetrics_duration_milliseconds_bucket{span_name=~\"(?i).*artifact.*\"}[$__rate_interval])))",
+          "legendFormat": "{{span_name}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "ms", "min": 0}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "right", "calcs": ["mean", "max"]}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "description": "Trace-derived (traces_spanmetrics_*, confirmed present) so it is SAMPLED — trust the shape, not exact values. The span_name regex matches any span containing 'artifact'; if this panel is empty, run label_values(traces_spanmetrics_duration_milliseconds_bucket, span_name) and adjust the regex to the artifact span names on your stack."
+    },
+    {
+      "type": "text",
+      "title": "About: Artifact traces",
+      "gridPos": {"h": 9, "w": 8, "x": 16, "y": 122},
+      "options": {
+        "mode": "markdown",
+        "content": "**What it shows** — p95 latency of artifact-related spans from sampled traces, split by span. Answers \"why is the customer's artifact upload/download slow?\"\n\n**What bad looks like** — one artifact span's p95 climbing into seconds.\n\n**Do next** — to see an individual slow artifact request end to end, use the **Open Traces in Explore** link (top-right), set the service to gorilla and filter for `duration > 3s` and an artifact operation, then read the span chain. If this panel is empty, adjust the span-name regex (see the panel description)."
+      }
+    },
+    {
+      "type": "bargauge",
+      "title": "Top parquet/glue spans by call count (sampled)",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 9, "w": 16, "x": 0, "y": 131},
+      "targets": [
+        {
+          "expr": "topk(15, sum by (span_name) (increase(traces_spanmetrics_calls_milliseconds_total{span_name=~\".*(parquet|glue).*\"}[$__range])))",
+          "legendFormat": "{{span_name}}",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "short", "min": 0, "decimals": 0}, "overrides": []},
+      "options": {"orientation": "horizontal", "displayMode": "gradient", "showUnfilled": true}
+    },
+    {
+      "type": "text",
+      "title": "About: Parquet & glue spans",
+      "gridPos": {"h": 9, "w": 8, "x": 16, "y": 131},
+      "options": {
+        "mode": "markdown",
+        "content": "**What it shows** — trace-derived (spanmetrics) call counts for spans whose name mentions parquet or glue. This is the background export/compaction work as seen from tracing.\n\n**Note** — spanmetrics are **not** namespace-scoped and are **sampled**: trust the *shape* (which span dominates), not exact counts.\n\n**Do next** — to see an actual slow/failed export, use **Open Traces in Explore** (top-right) and filter by the span name shown here. If this panel is empty, the span name pattern may differ on your stack — check `label_values(traces_spanmetrics_calls_milliseconds_total, span_name)`."
+      }
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": ["wandb", "application", "api", "graphql", "observability"],
+  "templating": {
+    "list": [
+      {
+        "name": "namespace",
+        "label": "W&B Namespace",
+        "type": "query",
+        "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+        "definition": "label_values(wandb_application_info, namespace)",
+        "query": {
+          "query": "label_values(wandb_application_info, namespace)",
+          "refId": "namespace-variable-query"
+        },
+        "regex": "/^(?!kube-|cert-manager$|monitoring$|wandb-operators$|operator-system$|grafana$|victoria.*$|telemetry$).*$/",
+        "refresh": 1,
+        "sort": 1,
+        "includeAll": false,
+        "multi": false,
+        "current": {"text": "wandb", "value": "wandb"}
+      }
+    ]
+  },
+  "time": {"from": "now-3h", "to": "now"},
+  "timezone": "browser",
+  "title": "W&B Application",
+  "uid": "wandb-application",
+  "version": 1
+}

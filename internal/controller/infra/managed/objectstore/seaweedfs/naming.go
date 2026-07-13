@@ -15,10 +15,10 @@ const MaxSpecNameLength = 40
 
 const defaultNameSuffix = "-seaweedfs"
 
-// DefaultSpecName derives the object-store name, shortened to the budget; the
-// suffix is preserved so ConnectionName can still strip it.
-func DefaultSpecName(crName string) string {
-	return common.FitDefaultInfraName(crName, defaultNameSuffix, MaxSpecNameLength)
+// DefaultSpecName derives the object-store name for a CR instance, shortened
+// to the budget; the suffix is preserved so ConnectionName can still strip it.
+func DefaultSpecName(crName, instanceKey string) string {
+	return common.FitDefaultInfraName(common.InstanceBaseName(crName, instanceKey), defaultNameSuffix, MaxSpecNameLength)
 }
 
 type NsNameBuilder struct {

@@ -121,10 +121,10 @@ func MaxSpecNameLength() int {
 	return min(chiRoom, chkRoom)
 }
 
-// DefaultSpecName derives the managed ClickHouse name for a CR, shortening it
-// when "<name>-chi" would overflow the derived-name budget.
-func DefaultSpecName(crName string) string {
-	return common.FitDefaultInfraName(crName, defaultNameSuffix, MaxSpecNameLength())
+// DefaultSpecName derives the managed ClickHouse name for a CR instance,
+// shortening it when the plain form would overflow the derived-name budget.
+func DefaultSpecName(crName, instanceKey string) string {
+	return common.FitDefaultInfraName(common.InstanceBaseName(crName, instanceKey), defaultNameSuffix, MaxSpecNameLength())
 }
 
 // ValidateDerivedNames reports why a spec name cannot be deployed: derived

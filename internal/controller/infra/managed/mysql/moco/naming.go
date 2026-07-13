@@ -12,9 +12,10 @@ const MaxClusterNameLength = 40
 
 const defaultNameSuffix = "-mysql"
 
-// DefaultSpecName derives the managed MySQL name, shortened to Moco's cap.
-func DefaultSpecName(crName string) string {
-	return common.FitDefaultInfraName(crName, defaultNameSuffix, MaxClusterNameLength)
+// DefaultSpecName derives the managed MySQL name for a CR instance, shortened
+// to Moco's cap.
+func DefaultSpecName(crName, instanceKey string) string {
+	return common.FitDefaultInfraName(common.InstanceBaseName(crName, instanceKey), defaultNameSuffix, MaxClusterNameLength)
 }
 
 type NsNameBuilder struct {

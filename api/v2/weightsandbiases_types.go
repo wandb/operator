@@ -29,11 +29,11 @@ import (
 //+kubebuilder:subresource:status
 //+kubebuilder:resource:shortName=wandb
 //+kubebuilder:printcolumn:name="Ready",type=boolean,JSONPath=`.status.ready`
-//+kubebuilder:printcolumn:name="MySQL",type=string,JSONPath=`.status.mysqlStatus.state`
-//+kubebuilder:printcolumn:name="Redis",type=string,JSONPath=`.status.redisStatus.state`
+//+kubebuilder:printcolumn:name="MySQL",type=string,JSONPath=`.status.mysqlStatus.default.state`
+//+kubebuilder:printcolumn:name="Redis",type=string,JSONPath=`.status.redisStatus.default.state`
 //+kubebuilder:printcolumn:name="Kafka",type=string,JSONPath=`.status.kafkaStatus.state`
-//+kubebuilder:printcolumn:name="ObjectStore",type=string,JSONPath=`.status.objectStoreStatus.state`
-//+kubebuilder:printcolumn:name="ClickHouse",type=string,JSONPath=`.status.clickhouseStatus.state`
+//+kubebuilder:printcolumn:name="ObjectStore",type=string,JSONPath=`.status.objectStoreStatus.default.state`
+//+kubebuilder:printcolumn:name="ClickHouse",type=string,JSONPath=`.status.clickhouseStatus.default.state`
 
 // WeightsAndBiases is the Schema for the weightsandbiases API.
 type WeightsAndBiases struct {
@@ -55,6 +55,29 @@ type WeightsAndBiasesList struct {
 
 func init() {
 	SchemeBuilder.Register(&WeightsAndBiases{}, &WeightsAndBiasesList{})
+}
+
+// DefaultInstanceName is the reserved map key identifying the fallback instance
+// for each multi-instance infrastructure type (MySQL, Redis, ObjectStore,
+// ClickHouse). When an application requests an instance that is not provisioned,
+// the operator resolves to this instance instead.
+const DefaultInstanceName = "default"
+
+// ResolveInstance returns the entry for key, falling back to the
+// DefaultInstanceName entry when key is empty or absent. The boolean reports
+// whether a value was found.
+func ResolveInstance[T any](m map[string]T, key string) (T, bool) {
+	if key == "" {
+		key = DefaultInstanceName
+	}
+	if v, ok := m[key]; ok {
+		return v, true
+	}
+	if v, ok := m[DefaultInstanceName]; ok {
+		return v, true
+	}
+	var zero T
+	return zero, false
 }
 
 type Size string
@@ -102,11 +125,14 @@ type WeightsAndBiasesSpec struct {
 	Affinity    *corev1.Affinity     `json:"affinity,omitempty"`
 	Tolerations *[]corev1.Toleration `json:"tolerations,omitempty"`
 
-	MySQL       MySQLSpec       `json:"mysql,omitempty"`
-	Redis       RedisSpec       `json:"redis,omitempty"`
-	Kafka       KafkaSpec       `json:"kafka,omitempty"`
-	ObjectStore ObjectStoreSpec `json:"objectStore,omitempty"`
-	ClickHouse  ClickHouseSpec  `json:"clickhouse,omitempty"`
+	// MySQL, Redis, ObjectStore and ClickHouse are keyed by instance name. The
+	// reserved DefaultInstanceName key identifies the fallback instance used when
+	// an application requests an instance that is not provisioned.
+	MySQL       map[string]MySQLSpec       `json:"mysql,omitempty"`
+	Redis       map[string]RedisSpec       `json:"redis,omitempty"`
+	Kafka       KafkaSpec                  `json:"kafka,omitempty"`
+	ObjectStore map[string]ObjectStoreSpec `json:"objectStore,omitempty"`
+	ClickHouse  map[string]ClickHouseSpec  `json:"clickhouse,omitempty"`
 
 	// Networking configures how the W&B application is exposed externally.
 	// +optional
@@ -296,12 +322,33 @@ type WandbAppSpec struct {
 	// +optional
 	OIDC OidcSpec `json:"oidc,omitempty"`
 
-	LegacyOveriddes map[string]LegacyOverrides `json:"legacyOverrides,omitempty"`
+	// LegacyOverrides holds env/resource overrides extracted from v1
+	// spec.values, keyed by manifest application name plus the reserved
+	// "global" key (env only, applied to every application). Unknown keys are
+	// logged and ignored. Conversion-owned; prefer first-class fields over
+	// hand-editing.
+	// +optional
+	LegacyOverrides map[string]LegacyOverrides `json:"legacyOverrides,omitempty"`
 }
 
+// LegacyOverridesGlobalKey is the reserved LegacyOverrides key whose env
+// applies to every application and migration job.
+const LegacyOverridesGlobalKey = "global"
+
+// DefaultManifestRepository is used when spec.wandb.manifestRepository is
+// unset — by the defaulting webhook and by v1 conversion (which runs first).
+const DefaultManifestRepository = "oci://us-docker.pkg.dev/wandb-production/public/wandb/server-manifest"
+
+// LegacyOverrides holds v1-derived overrides for one application (or "global").
 type LegacyOverrides struct {
-	Env       []corev1.EnvVar             `json:"env,omitempty"`
-	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+	// Env is applied last, replacing same-named manifest or injected vars.
+	// +optional
+	Env []corev1.EnvVar `json:"env,omitempty"`
+
+	// Resources overlays sizing-derived resources per field; limits are still
+	// gated by spec.requireLimits.
+	// +optional
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
 }
 
 type WandbProbeDefaults struct {
@@ -608,14 +655,16 @@ type ClickHouseConfig struct {
 
 // WeightsAndBiasesStatus defines the observed state of WeightsAndBiases.
 type WeightsAndBiasesStatus struct {
-	Ready             bool                   `json:"ready"`
-	Wandb             WandbStatus            `json:"wandb,omitempty"`
-	MySQLStatus       MysqlInfraStatus       `json:"mysqlStatus,omitempty"`
-	RedisStatus       RedisInfraStatus       `json:"redisStatus,omitempty"`
-	KafkaStatus       KafkaInfraStatus       `json:"kafkaStatus,omitempty"`
-	ObjectStoreStatus ObjectStoreInfraStatus `json:"objectStoreStatus,omitempty"`
-	ClickHouseStatus  ClickHouseInfraStatus  `json:"clickhouseStatus,omitempty"`
-	TelemetryStatus   TelemetryInfraStatus   `json:"telemetryStatus,omitempty"`
+	Ready bool        `json:"ready"`
+	Wandb WandbStatus `json:"wandb,omitempty"`
+	// MySQLStatus, RedisStatus, ObjectStoreStatus and ClickHouseStatus are keyed
+	// by instance name, mirroring the corresponding spec maps.
+	MySQLStatus       map[string]MysqlInfraStatus       `json:"mysqlStatus,omitempty"`
+	RedisStatus       map[string]RedisInfraStatus       `json:"redisStatus,omitempty"`
+	KafkaStatus       KafkaInfraStatus                  `json:"kafkaStatus,omitempty"`
+	ObjectStoreStatus map[string]ObjectStoreInfraStatus `json:"objectStoreStatus,omitempty"`
+	ClickHouseStatus  map[string]ClickHouseInfraStatus  `json:"clickhouseStatus,omitempty"`
+	TelemetryStatus   TelemetryInfraStatus              `json:"telemetryStatus,omitempty"`
 	// GeneratedSecrets stores references to secrets generated by the operator
 	// from the server manifest's generatedSecrets section. The key is the
 	// logical secret name from the manifest, and the value is a SecretKeySelector
@@ -649,8 +698,10 @@ type WandbStatus struct {
 
 	Migration WandbMigrationStatus `json:"migration,omitempty"`
 
+	// MySQLInit tracks the per-instance database-initialization job, keyed by
+	// managed MySQL instance name.
 	// +kubebuilder:default:={}
-	MySQLInit MigrationJobStatus `json:"mysqlInit,omitempty"`
+	MySQLInit map[string]MigrationJobStatus `json:"mysqlInit,omitempty"`
 }
 
 type WandbMigrationStatus struct {

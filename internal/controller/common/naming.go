@@ -5,8 +5,20 @@ import (
 	"fmt"
 	"strings"
 
+	apiv2 "github.com/wandb/operator/api/v2"
 	"k8s.io/apimachinery/pkg/util/validation"
 )
+
+// InstanceBaseName is what default infra names derive from: the CR name, plus
+// the instance key for non-default instances. The key sits before the infra
+// suffix so suffix-based derivations (Keeper pairing, connection-name trims)
+// keep working.
+func InstanceBaseName(crName, instanceKey string) string {
+	if instanceKey == "" || instanceKey == apiv2.DefaultInstanceName {
+		return crName
+	}
+	return crName + "-" + instanceKey
+}
 
 // infraNameHashLen is enough to keep sibling CRs sharing a long prefix from colliding.
 const infraNameHashLen = 5

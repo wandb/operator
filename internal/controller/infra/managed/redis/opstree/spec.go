@@ -156,11 +156,11 @@ func createRedisExporterConfig(telemetry apiv2.Telemetry, img manifest.ImageRef,
 func ToRedisStandaloneVendorSpec(
 	ctx context.Context,
 	wandb *apiv2.WeightsAndBiases,
+	spec *apiv2.ManagedRedisSpec,
 	scheme *runtime.Scheme,
 	mfst manifest.Manifest,
 ) (*redisv1beta2.Redis, error) {
 	_, log := logx.WithSlog(ctx, logx.Redis)
-	spec := wandb.Spec.Redis.ManagedRedis
 	if spec == nil {
 		return nil, nil
 	}
@@ -237,11 +237,11 @@ func ToRedisStandaloneVendorSpec(
 func ToRedisSentinelVendorSpec(
 	ctx context.Context,
 	wandb *apiv2.WeightsAndBiases,
+	spec *apiv2.ManagedRedisSpec,
 	scheme *runtime.Scheme,
 	mfst manifest.Manifest,
 ) (*redissentinelv1beta2.RedisSentinel, error) {
 	_, log := logx.WithSlog(ctx, logx.Redis)
-	spec := wandb.Spec.Redis.ManagedRedis
 	if spec == nil {
 		return nil, nil
 	}
@@ -315,11 +315,11 @@ func ToRedisSentinelVendorSpec(
 func ToRedisReplicationVendorSpec(
 	ctx context.Context,
 	wandb *apiv2.WeightsAndBiases,
+	spec *apiv2.ManagedRedisSpec,
 	scheme *runtime.Scheme,
 	mfst manifest.Manifest,
 ) (*redisreplicationv1beta2.RedisReplication, error) {
 	_, log := logx.WithSlog(ctx, logx.Redis)
-	spec := wandb.Spec.Redis.ManagedRedis
 	if spec == nil {
 		return nil, nil
 	}

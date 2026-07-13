@@ -23,21 +23,23 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - MySQL", func() {
 	It("defaults MySQL namespace", func() {
 		wandb := &apiv2.WeightsAndBiases{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
-			Spec:       apiv2.WeightsAndBiasesSpec{MySQL: apiv2.MySQLSpec{ManagedMysql: &apiv2.ManagedMysqlSpec{}}},
+			Spec:       apiv2.WeightsAndBiasesSpec{MySQL: map[string]apiv2.MySQLSpec{apiv2.DefaultInstanceName: {ManagedMysql: &apiv2.ManagedMysqlSpec{}}}},
 		}
 
 		err := defaulter.Default(ctx, wandb)
 		g.Expect(err).ToNot(g.HaveOccurred())
-		g.Expect(wandb.Spec.MySQL.ManagedMysql.Namespace).To(g.Equal("test-namespace"))
+		g.Expect(wandb.Spec.MySQL[apiv2.DefaultInstanceName].ManagedMysql.Namespace).To(g.Equal("test-namespace"))
 	})
 
 	It("preserves custom MySQL namespace", func() {
 		wandb := &apiv2.WeightsAndBiases{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
 			Spec: apiv2.WeightsAndBiasesSpec{
-				MySQL: apiv2.MySQLSpec{
-					ManagedMysql: &apiv2.ManagedMysqlSpec{
-						Namespace: "custom-moco-namespace",
+				MySQL: map[string]apiv2.MySQLSpec{
+					apiv2.DefaultInstanceName: {
+						ManagedMysql: &apiv2.ManagedMysqlSpec{
+							Namespace: "custom-moco-namespace",
+						},
 					},
 				},
 			},
@@ -45,34 +47,34 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - MySQL", func() {
 
 		err := defaulter.Default(ctx, wandb)
 		g.Expect(err).ToNot(g.HaveOccurred())
-		g.Expect(wandb.Spec.MySQL.ManagedMysql.Namespace).To(g.Equal("custom-moco-namespace"))
+		g.Expect(wandb.Spec.MySQL[apiv2.DefaultInstanceName].ManagedMysql.Namespace).To(g.Equal("custom-moco-namespace"))
 	})
 
 	It("does not mutate unrelated MySQL fields", func() {
 		wandb := &apiv2.WeightsAndBiases{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
 			Spec: apiv2.WeightsAndBiasesSpec{
-				MySQL: apiv2.MySQLSpec{ManagedMysql: &apiv2.ManagedMysqlSpec{StorageSize: "50Gi"}},
+				MySQL: map[string]apiv2.MySQLSpec{apiv2.DefaultInstanceName: {ManagedMysql: &apiv2.ManagedMysqlSpec{StorageSize: "50Gi"}}},
 			},
 		}
 
 		err := defaulter.Default(ctx, wandb)
 		g.Expect(err).ToNot(g.HaveOccurred())
-		g.Expect(wandb.Spec.MySQL.ManagedMysql.StorageSize).To(g.Equal("50Gi"))
+		g.Expect(wandb.Spec.MySQL[apiv2.DefaultInstanceName].ManagedMysql.StorageSize).To(g.Equal("50Gi"))
 	})
 
 	It("does not apply defaults when ExternalMysql is present", func() {
 		wandb := &apiv2.WeightsAndBiases{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
 			Spec: apiv2.WeightsAndBiasesSpec{
-				MySQL: apiv2.MySQLSpec{
-					ExternalMysql: &apiv2.MysqlConnection{},
+				MySQL: map[string]apiv2.MySQLSpec{
+					apiv2.DefaultInstanceName: {ExternalMysql: &apiv2.MysqlConnection{}},
 				},
 			},
 		}
 
 		err := defaulter.Default(ctx, wandb)
 		g.Expect(err).ToNot(g.HaveOccurred())
-		g.Expect(wandb.Spec.MySQL.ManagedMysql).To(g.BeNil())
+		g.Expect(wandb.Spec.MySQL[apiv2.DefaultInstanceName].ManagedMysql).To(g.BeNil())
 	})
 })

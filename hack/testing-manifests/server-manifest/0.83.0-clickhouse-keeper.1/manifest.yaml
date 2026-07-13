@@ -895,6 +895,7 @@ applications:
           - "src.workers.scoring_worker"
   weave-trace-evaluate-model-worker:
     name: weave-trace-evaluate-model-worker
+    legacyKey: weave-evaluate-model-worker
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
       tag: 0.83.0-clickhouse-keeper.2
@@ -913,6 +914,7 @@ applications:
           - "src.workers.evaluate_model_worker.evaluate_model_worker"
   nginx-proxy:
     name: nginx-proxy
+    legacyKey: nginx
     features:
       - proxy
     image:

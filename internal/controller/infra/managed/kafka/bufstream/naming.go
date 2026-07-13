@@ -21,9 +21,10 @@ func MaxSpecNameLength() int {
 	return validation.DNS1123LabelMaxLength - len(builder.EtcdPodName(assumedMaxEtcdOrdinal))
 }
 
-// DefaultSpecName derives the managed Kafka name, shortened to the budget.
-func DefaultSpecName(crName string) string {
-	return common.FitDefaultInfraName(crName, defaultNameSuffix, MaxSpecNameLength())
+// DefaultSpecName derives the managed Kafka name for a CR instance, shortened
+// to the budget.
+func DefaultSpecName(crName, instanceKey string) string {
+	return common.FitDefaultInfraName(common.InstanceBaseName(crName, instanceKey), defaultNameSuffix, MaxSpecNameLength())
 }
 
 // NsNameBuilder derives the names of all resources that make up a managed

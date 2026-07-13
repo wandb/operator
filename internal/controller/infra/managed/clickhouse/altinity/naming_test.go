@@ -32,14 +32,23 @@ var _ = Describe("managed ClickHouse naming", func() {
 
 	Describe("DefaultSpecName", func() {
 		It("keeps the plain '<cr>-chi' for CR names that fit", func() {
-			Expect(DefaultSpecName("wandb")).To(Equal("wandb-chi"))
+			Expect(DefaultSpecName("wandb", apiv2.DefaultInstanceName)).To(Equal("wandb-chi"))
 			// 25 chars — wedged the old "-clickhouse"/"-keeper" naming
-			Expect(DefaultSpecName("wandb-legacy-overrides-v1")).To(Equal("wandb-legacy-overrides-v1-chi"))
+			Expect(DefaultSpecName("wandb-legacy-overrides-v1", apiv2.DefaultInstanceName)).To(Equal("wandb-legacy-overrides-v1-chi"))
+		})
+
+		It("keys non-default instances before the suffix so derivations still work", func() {
+			name := DefaultSpecName("wandb", "analytics")
+
+			Expect(name).To(Equal("wandb-analytics-chi"))
+			spec := &apiv2.ManagedClickHouseSpec{Name: name}
+			Expect(KeeperNsName(spec).Name).To(Equal("wandb-analytics-chk"))
+			Expect(ValidateDerivedNames(spec)).To(Succeed())
 		})
 
 		It("derives a deployable name for CR names the plain default would wedge", func() {
 			// 32 chars: "<cr>-chi" would overflow the per-host volume names
-			name := DefaultSpecName("wandb-integration-environments-2")
+			name := DefaultSpecName("wandb-integration-environments-2", apiv2.DefaultInstanceName)
 
 			Expect(name).To(HaveSuffix("-chi"))
 			Expect(ValidateDerivedNames(&apiv2.ManagedClickHouseSpec{Name: name})).To(Succeed())

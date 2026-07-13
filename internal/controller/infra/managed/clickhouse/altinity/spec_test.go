@@ -24,7 +24,7 @@ var _ = Describe("ClickHouse vendor specs", func() {
 	It("renders hardened pod templates with writable runtime mounts", func() {
 		wandb := clickHouseWandb()
 
-		chi, err := ToClickHouseVendorSpec(context.Background(), wandb, clickHouseScheme(), testObjectStorageConn(), manifest.Manifest{})
+		chi, err := ToClickHouseVendorSpec(context.Background(), wandb, wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse, clickHouseScheme(), testObjectStorageConn(), manifest.Manifest{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(chi).NotTo(BeNil())
 		Expect(chi.Spec.Templates.PodTemplates).To(HaveLen(1))
@@ -48,7 +48,8 @@ var _ = Describe("ClickHouse vendor specs", func() {
 	It("omits fixed ClickHouse IDs in OpenShift mode", func() {
 		utils.SetOpenShiftMode(true)
 
-		chi, err := ToClickHouseVendorSpec(context.Background(), clickHouseWandb(), clickHouseScheme(), testObjectStorageConn(), manifest.Manifest{})
+		wandb := clickHouseWandb()
+		chi, err := ToClickHouseVendorSpec(context.Background(), wandb, wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse, clickHouseScheme(), testObjectStorageConn(), manifest.Manifest{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(chi).NotTo(BeNil())
 
@@ -58,7 +59,8 @@ var _ = Describe("ClickHouse vendor specs", func() {
 	})
 
 	It("backs storage with the object store, sets a default policy, and wires keeper", func() {
-		chi, err := ToClickHouseVendorSpec(context.Background(), clickHouseWandb(), clickHouseScheme(), testObjectStorageConn(), manifest.Manifest{})
+		wandb := clickHouseWandb()
+		chi, err := ToClickHouseVendorSpec(context.Background(), wandb, wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse, clickHouseScheme(), testObjectStorageConn(), manifest.Manifest{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(chi).NotTo(BeNil())
 
@@ -120,16 +122,18 @@ func clickHouseWandb() *apiv2.WeightsAndBiases {
 		},
 		Spec: apiv2.WeightsAndBiasesSpec{
 			Tolerations: &tolerations,
-			ClickHouse: apiv2.ClickHouseSpec{
-				ManagedClickHouse: &apiv2.ManagedClickHouseSpec{
-					Name:        "clickhouse",
-					Namespace:   "wandb",
-					Replicas:    1,
-					StorageSize: "10Gi",
-					Config: apiv2.ClickHouseConfig{
-						Resources: corev1.ResourceRequirements{
-							Requests: corev1.ResourceList{
-								corev1.ResourceCPU: resource.MustParse("500m"),
+			ClickHouse: map[string]apiv2.ClickHouseSpec{
+				apiv2.DefaultInstanceName: {
+					ManagedClickHouse: &apiv2.ManagedClickHouseSpec{
+						Name:        "clickhouse",
+						Namespace:   "wandb",
+						Replicas:    1,
+						StorageSize: "10Gi",
+						Config: apiv2.ClickHouseConfig{
+							Resources: corev1.ResourceRequirements{
+								Requests: corev1.ResourceList{
+									corev1.ResourceCPU: resource.MustParse("500m"),
+								},
 							},
 						},
 					},
