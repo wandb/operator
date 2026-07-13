@@ -22,29 +22,38 @@ func redisWriteState(
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
 	mfst manifest.Manifest,
-) []metav1.Condition {
-	if wandb.Spec.Redis.ManagedRedis != nil {
-		return managedRedisWriteState(ctx, client, wandb, mfst)
+) map[string][]metav1.Condition {
+	out := map[string][]metav1.Condition{}
+	for key, spec := range wandb.Spec.Redis {
+		switch {
+		case spec.ManagedRedis != nil:
+			out[key] = managedRedisWriteState(ctx, client, wandb, spec.ManagedRedis, mfst)
+		case spec.ExternalRedis != nil:
+			out[key] = externalredis.WriteState(ctx, client, wandb, key, spec.ExternalRedis)
+		}
 	}
-	if wandb.Spec.Redis.ExternalRedis != nil {
-		return externalRedisWriteState(ctx, client, wandb)
-	}
-	return nil
+	return out
 }
 
 func redisReadState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
-	newConditions []metav1.Condition,
-) ([]metav1.Condition, *apiv2.RedisConnection) {
-	if wandb.Spec.Redis.ManagedRedis != nil {
-		return managedRedisReadState(ctx, client, wandb, newConditions)
+	conditions map[string][]metav1.Condition,
+) (map[string][]metav1.Condition, map[string]*apiv2.RedisConnection) {
+	outConds := map[string][]metav1.Condition{}
+	outConns := map[string]*apiv2.RedisConnection{}
+	for key, spec := range wandb.Spec.Redis {
+		switch {
+		case spec.ManagedRedis != nil:
+			outConds[key], outConns[key] = managedRedisReadState(ctx, client, wandb, spec.ManagedRedis, conditions[key])
+		case spec.ExternalRedis != nil:
+			outConds[key], outConns[key] = externalredis.ReadState(ctx, client, wandb, key, conditions[key])
+		default:
+			outConds[key] = conditions[key]
+		}
 	}
-	if wandb.Spec.Redis.ExternalRedis != nil {
-		return externalRedisReadState(ctx, client, wandb, newConditions)
-	}
-	return newConditions, nil
+	return outConds, outConns
 }
 
 func redisInferStatus(
@@ -52,30 +61,62 @@ func redisInferStatus(
 	client client.Client,
 	recorder record.EventRecorder,
 	wandb *apiv2.WeightsAndBiases,
-	newConditions []metav1.Condition,
-	newInfraConn *apiv2.RedisConnection,
+	conditions map[string][]metav1.Condition,
+	infraConns map[string]*apiv2.RedisConnection,
 ) (ctrl.Result, error) {
-	if wandb.Spec.Redis.ManagedRedis != nil {
-		return managedRedisInferStatus(ctx, client, recorder, wandb, newConditions, newInfraConn)
+	if wandb.Status.RedisStatus == nil {
+		wandb.Status.RedisStatus = map[string]apiv2.RedisInfraStatus{}
 	}
-	if wandb.Spec.Redis.ExternalRedis != nil {
-		return externalRedisInferStatus(ctx, client, wandb, newConditions, newInfraConn)
+	var results []ctrl.Result
+	var firstErr error
+	for key, spec := range wandb.Spec.Redis {
+		var res ctrl.Result
+		var err error
+		switch {
+		case spec.ManagedRedis != nil:
+			res, err = managedRedisInferStatus(ctx, client, recorder, wandb, key, conditions[key], infraConns[key])
+		case spec.ExternalRedis != nil:
+			res, err = externalRedisInferStatus(ctx, client, wandb, key, conditions[key], infraConns[key])
+		}
+		results = append(results, res)
+		if err != nil && firstErr == nil {
+			firstErr = err
+		}
 	}
-	return ctrl.Result{}, nil
+	return consolidateResults(results), firstErr
+}
+
+func runRedisRetentionFinalizer(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, key string, spec apiv2.RedisSpec) error {
+	switch wandb.GetRetentionPolicy(redisInstanceInfraSpec(spec)).OnDelete {
+	case apiv2.PurgeOnDelete:
+		return redisPurgeFinalizer(ctx, c, wandb, key, spec)
+	case apiv2.DetachOnDelete:
+		return redisDetachFinalizer(ctx, c, wandb, key, spec)
+	}
+	return nil
+}
+
+func redisInstanceInfraSpec(spec apiv2.RedisSpec) apiv2.ManagedInfraSpec {
+	if spec.ManagedRedis != nil {
+		return spec.ManagedRedis.ManagedInfraSpec
+	}
+	return apiv2.ManagedInfraSpec{}
 }
 
 func redisPurgeFinalizer(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
+	key string,
+	spec apiv2.RedisSpec,
 ) error {
-	if spec := wandb.Spec.Redis.ManagedRedis; spec != nil {
-		specNamespacedName := managedRedisSpecNamespacedName(spec)
-		onDeleteRule := opstree.ToRedisOnDeleteRule(wandb, wandb.GetRetentionPolicy(spec.ManagedInfraSpec))
+	if managed := spec.ManagedRedis; managed != nil {
+		specNamespacedName := managedRedisSpecNamespacedName(managed)
+		onDeleteRule := opstree.ToRedisOnDeleteRule(wandb, wandb.GetRetentionPolicy(managed.ManagedInfraSpec))
 		return opstree.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule)
 	}
-	if wandb.Spec.Redis.ExternalRedis != nil {
-		return externalredis.DeleteConnectionSecret(ctx, client, wandb)
+	if spec.ExternalRedis != nil {
+		return externalredis.DeleteConnectionSecret(ctx, client, wandb, key)
 	}
 	return nil
 }
@@ -84,12 +125,14 @@ func redisDetachFinalizer(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
+	_ string,
+	spec apiv2.RedisSpec,
 ) error {
-	spec := wandb.Spec.Redis.ManagedRedis
-	if spec == nil {
+	managed := spec.ManagedRedis
+	if managed == nil {
 		return nil
 	}
-	specNamespacedName := managedRedisSpecNamespacedName(spec)
+	specNamespacedName := managedRedisSpecNamespacedName(managed)
 	return opstree.DetachFinalizer(ctx, client, specNamespacedName, wandb)
 }
 
@@ -99,14 +142,13 @@ func managedRedisWriteState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
+	spec *apiv2.ManagedRedisSpec,
 	mfst manifest.Manifest,
 ) []metav1.Condition {
-	spec := wandb.Spec.Redis.ManagedRedis
-
 	log := ctrl.LoggerFrom(ctx)
 	var specNamespacedName = managedRedisSpecNamespacedName(spec)
 
-	standaloneDesired, err := opstree.ToRedisStandaloneVendorSpec(ctx, wandb, client.Scheme(), mfst)
+	standaloneDesired, err := opstree.ToRedisStandaloneVendorSpec(ctx, wandb, spec, client.Scheme(), mfst)
 	if err != nil {
 		log.Error(err, "failed to translate redis standalone spec")
 		return []metav1.Condition{
@@ -118,7 +160,7 @@ func managedRedisWriteState(
 		}
 	}
 
-	sentinelDesired, err := opstree.ToRedisSentinelVendorSpec(ctx, wandb, client.Scheme(), mfst)
+	sentinelDesired, err := opstree.ToRedisSentinelVendorSpec(ctx, wandb, spec, client.Scheme(), mfst)
 	if err != nil {
 		log.Error(err, "failed to translate redis sentinel spec")
 		return []metav1.Condition{
@@ -130,7 +172,7 @@ func managedRedisWriteState(
 		}
 	}
 
-	replicationDesired, err := opstree.ToRedisReplicationVendorSpec(ctx, wandb, client.Scheme(), mfst)
+	replicationDesired, err := opstree.ToRedisReplicationVendorSpec(ctx, wandb, spec, client.Scheme(), mfst)
 	if err != nil {
 		log.Error(err, "failed to translate redis replication spec")
 		return []metav1.Condition{
@@ -154,10 +196,9 @@ func managedRedisReadState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
+	spec *apiv2.ManagedRedisSpec,
 	newConditions []metav1.Condition,
 ) ([]metav1.Condition, *apiv2.RedisConnection) {
-	spec := wandb.Spec.Redis.ManagedRedis
-
 	specNamespacedName := managedRedisSpecNamespacedName(spec)
 	onDeleteRule := opstree.ToRedisOnDeleteRule(wandb, wandb.GetRetentionPolicy(spec.ManagedInfraSpec))
 	readConditions, newInfraConn := opstree.ReadState(ctx, client, specNamespacedName, wandb, onDeleteRule)
@@ -170,12 +211,14 @@ func managedRedisInferStatus(
 	client client.Client,
 	recorder record.EventRecorder,
 	wandb *apiv2.WeightsAndBiases,
+	key string,
 	newConditions []metav1.Condition,
 	newInfraConn *apiv2.RedisConnection,
 ) (ctrl.Result, error) {
 	enabled := true
-	oldConditions := wandb.Status.RedisStatus.Conditions
-	oldInfraConn := wandb.Status.RedisStatus.Connection
+	oldStatus := wandb.Status.RedisStatus[key]
+	oldConditions := oldStatus.Conditions
+	oldInfraConn := oldStatus.Connection
 
 	updatedStatus, events, ctrlResult := opstree.ComputeStatus(
 		ctx,
@@ -188,7 +231,7 @@ func managedRedisInferStatus(
 	for _, e := range events {
 		recorder.Event(wandb, e.Type, e.Reason, e.Message)
 	}
-	wandb.Status.RedisStatus = updatedStatus
+	wandb.Status.RedisStatus[key] = updatedStatus
 	err := client.Status().Update(ctx, wandb)
 
 	return ctrlResult, err
@@ -196,20 +239,13 @@ func managedRedisInferStatus(
 
 // external
 
-func externalRedisWriteState(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases) []metav1.Condition {
-	return externalredis.WriteState(ctx, c, wandb)
-}
-
-func externalRedisReadState(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, newConditions []metav1.Condition) ([]metav1.Condition, *apiv2.RedisConnection) {
-	return externalredis.ReadState(ctx, c, wandb, newConditions)
-}
-
-func externalRedisInferStatus(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, newConditions []metav1.Condition, newInfraConn *apiv2.RedisConnection) (ctrl.Result, error) {
-	oldInfraConn := wandb.Status.RedisStatus.Connection
-	state, ready, updatedConditions := external.InferExternalStatus(wandb.Status.RedisStatus.Conditions, newConditions, wandb.Generation, newInfraConn != nil)
+func externalRedisInferStatus(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, key string, newConditions []metav1.Condition, newInfraConn *apiv2.RedisConnection) (ctrl.Result, error) {
+	oldStatus := wandb.Status.RedisStatus[key]
+	oldInfraConn := oldStatus.Connection
+	state, ready, updatedConditions := external.InferExternalStatus(oldStatus.Conditions, newConditions, wandb.Generation, newInfraConn != nil)
 	conn := utils.Coalesce(newInfraConn, &oldInfraConn)
 
-	wandb.Status.RedisStatus = apiv2.RedisInfraStatus{
+	wandb.Status.RedisStatus[key] = apiv2.RedisInfraStatus{
 		WBInfraStatus: apiv2.WBInfraStatus{Ready: ready, State: state, Conditions: updatedConditions},
 		Connection:    *conn,
 	}

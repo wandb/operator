@@ -41,19 +41,19 @@ func TestWriteStateAddsCACertPathAndTLSWhenCACertPresent(t *testing.T) {
 		TypeMeta:   metav1.TypeMeta{APIVersion: "apps.wandb.com/v2", Kind: "WeightsAndBiases"},
 		ObjectMeta: metav1.ObjectMeta{Name: "wandb", Namespace: "default"},
 		Spec: apiv2.WeightsAndBiasesSpec{
-			Redis: apiv2.RedisSpec{
+			Redis: map[string]apiv2.RedisSpec{apiv2.DefaultInstanceName: {
 				ExternalRedis: &apiv2.RedisConnection{
 					Host:     redisSel("Host"),
 					Port:     redisSel("Port"),
 					Password: redisSel("Password"),
 					SslCa:    redisSel("SslCa"),
 				},
-			},
+			}},
 		},
 	}
 	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(wandb, source).Build()
 
-	conditions := WriteState(context.Background(), client, wandb)
+	conditions := WriteState(context.Background(), client, wandb, apiv2.DefaultInstanceName, wandb.Spec.Redis[apiv2.DefaultInstanceName].ExternalRedis)
 	require.Nil(t, conditions)
 
 	written := &corev1.Secret{}

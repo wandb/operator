@@ -226,48 +226,31 @@ func Reconcile(
 	if isFlaggedForDeletion && !wandb.GetDeletionTimestamp().IsZero() {
 		if ctrlqueue.ContainsString(wandb.GetFinalizers(), CleanupFinalizer) {
 
-			if wandb.Spec.ObjectStore.ManagedObjectStore != nil {
-				if err = runRetentionFinalizer(ctx, client, wandb, wandb.Spec.ObjectStore.ManagedObjectStore.ManagedInfraSpec, objectStorePurgeFinalizer, objectStoreDetachFinalizer); err != nil {
+			// Multi-instance infra: the per-type retention dispatcher applies the
+			// configured policy to each managed or external instance.
+			for key, spec := range wandb.Spec.ObjectStore {
+				if err = runObjectStoreRetentionFinalizer(ctx, client, wandb, key, spec); err != nil {
 					return ctrl.Result{}, err
 				}
 			}
-			if wandb.Spec.MySQL.ManagedMysql != nil {
-				if err = runRetentionFinalizer(ctx, client, wandb, wandb.Spec.MySQL.ManagedMysql.ManagedInfraSpec, mysqlPurgeFinalizer, mysqlDetachFinalizer); err != nil {
+			for key, spec := range wandb.Spec.MySQL {
+				if err = runMysqlRetentionFinalizer(ctx, client, wandb, key, spec); err != nil {
 					return ctrl.Result{}, err
 				}
 			}
-			if wandb.Spec.Redis.ManagedRedis != nil {
-				if err = runRetentionFinalizer(ctx, client, wandb, wandb.Spec.Redis.ManagedRedis.ManagedInfraSpec, redisPurgeFinalizer, redisDetachFinalizer); err != nil {
+			for key, spec := range wandb.Spec.Redis {
+				if err = runRedisRetentionFinalizer(ctx, client, wandb, key, spec); err != nil {
 					return ctrl.Result{}, err
 				}
 			}
+			for key, spec := range wandb.Spec.ClickHouse {
+				if err = runClickHouseRetentionFinalizer(ctx, client, wandb, key, spec); err != nil {
+					return ctrl.Result{}, err
+				}
+			}
+			// Kafka remains single-instance.
 			if wandb.Spec.Kafka.ManagedKafka != nil {
 				if err = runRetentionFinalizer(ctx, client, wandb, wandb.Spec.Kafka.ManagedKafka.ManagedInfraSpec, kafkaPurgeFinalizer, kafkaDetachFinalizer); err != nil {
-					return ctrl.Result{}, err
-				}
-			}
-			if wandb.Spec.ClickHouse.ManagedClickHouse != nil {
-				if err = runRetentionFinalizer(ctx, client, wandb, wandb.Spec.ClickHouse.ManagedClickHouse.ManagedInfraSpec, clickHousePurgeFinalizer, clickHouseDetachFinalizer); err != nil {
-					return ctrl.Result{}, err
-				}
-			}
-			if wandb.Spec.ObjectStore.ExternalObjectStore != nil && wandb.Spec.RetentionPolicy.OnDelete == apiv2.PurgeOnDelete {
-				if err = objectStorePurgeFinalizer(ctx, client, wandb); err != nil {
-					return ctrl.Result{}, err
-				}
-			}
-			if wandb.Spec.MySQL.ExternalMysql != nil && wandb.Spec.RetentionPolicy.OnDelete == apiv2.PurgeOnDelete {
-				if err = mysqlPurgeFinalizer(ctx, client, wandb); err != nil {
-					return ctrl.Result{}, err
-				}
-			}
-			if wandb.Spec.Redis.ExternalRedis != nil && wandb.Spec.RetentionPolicy.OnDelete == apiv2.PurgeOnDelete {
-				if err = redisPurgeFinalizer(ctx, client, wandb); err != nil {
-					return ctrl.Result{}, err
-				}
-			}
-			if wandb.Spec.ClickHouse.ExternalClickHouse != nil && wandb.Spec.RetentionPolicy.OnDelete == apiv2.PurgeOnDelete {
-				if err = clickHousePurgeFinalizer(ctx, client, wandb); err != nil {
 					return ctrl.Result{}, err
 				}
 			}
@@ -377,11 +360,11 @@ func Reconcile(
 		return ctrl.Result{}, err
 	}
 
-	redisReady := wandb.Status.RedisStatus.Ready
-	mysqlReady := wandb.Status.MySQLStatus.Ready
+	redisReady := redisAllReady(wandb)
+	mysqlReady := mysqlAllReady(wandb)
 	kafkaReady := wandb.Status.KafkaStatus.Ready
-	objectStoreReady := wandb.Status.ObjectStoreStatus.Ready
-	clickHouseReady := wandb.Status.ClickHouseStatus.Ready
+	objectStoreReady := objectStoreAllReady(wandb)
+	clickHouseReady := clickHouseAllReady(wandb)
 
 	if !redisReady || !mysqlReady || !kafkaReady || !objectStoreReady || !clickHouseReady {
 		log := ctrl.LoggerFrom(ctx)
@@ -428,11 +411,11 @@ func ReconcileWandbManifest(
 	var result ctrl.Result
 	var err error
 
-	redisReady := wandb.Status.RedisStatus.Ready
-	mysqlReady := wandb.Status.MySQLStatus.Ready
+	redisReady := redisAllReady(wandb)
+	mysqlReady := mysqlAllReady(wandb)
 	kafkaReady := wandb.Status.KafkaStatus.Ready
-	objectStoreReady := wandb.Status.ObjectStoreStatus.Ready
-	clickHouseReady := wandb.Status.ClickHouseStatus.Ready
+	objectStoreReady := objectStoreAllReady(wandb)
+	clickHouseReady := clickHouseAllReady(wandb)
 
 	if !redisReady || !mysqlReady || !kafkaReady || !objectStoreReady || !clickHouseReady {
 		logger.Info("Infra components not ready yet, requeuing for reconciliation",
@@ -457,8 +440,8 @@ func ReconcileWandbManifest(
 		return result, err
 	}
 
-	if wandb.Spec.MySQL.ManagedMysql != nil && !wandb.Status.Wandb.MySQLInit.Succeeded {
-		logger.Info("Mysql init not yet successful", "Message", wandb.Status.Wandb.MySQLInit.Message)
+	if !allMysqlInitSucceeded(wandb) {
+		logger.Info("Mysql init not yet successful")
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
@@ -884,23 +867,6 @@ func appendResolvedManagedTelemetryEnvvars(
 		return nil, err
 	}
 	return appendMissingEnvVars(envVars, telemetryEnvVars), nil
-}
-
-// This function binds the secret name if `secretName` is empty for telemetry.
-func bindTelemetrySecretName(base []serverManifest.EnvVar, secretName string) []serverManifest.EnvVar {
-	output := make([]serverManifest.EnvVar, len(base))
-	for i, envVar := range base {
-		sources := make([]serverManifest.EnvSource, len(envVar.Sources))
-		for j, source := range envVar.Sources {
-			if source.Type == "telemetry" && source.Name == "" {
-				source.Name = secretName
-			}
-			sources[j] = source
-		}
-		envVar.Sources = sources
-		output[i] = envVar
-	}
-	return output
 }
 
 func shouldInjectManagedWorkloadTelemetry(appName string) bool {
@@ -1460,15 +1426,55 @@ func resolveCRFieldSecretSelector(obj any, path string) (corev1.SecretKeySelecto
 	return sel, true
 }
 
+// managedInstancesReady reports whether every managed instance has a ready
+// status. External and absent instances are treated as ready, matching the
+// pre-multi-instance behavior where only operator-managed infra gated overall
+// readiness.
+func managedInstancesReady[S any, T any](specs map[string]S, statuses map[string]T, isManaged func(S) bool, ready func(T) bool) bool {
+	for key, spec := range specs {
+		if isManaged(spec) && !ready(statuses[key]) {
+			return false
+		}
+	}
+	return true
+}
+
+// allInstancesReady reports whether every instance (managed or external) has a
+// ready status.
+func allInstancesReady[S any, T any](specs map[string]S, statuses map[string]T, ready func(T) bool) bool {
+	for key := range specs {
+		if !ready(statuses[key]) {
+			return false
+		}
+	}
+	return true
+}
+
+func redisAllReady(wandb *apiv2.WeightsAndBiases) bool {
+	return allInstancesReady(wandb.Spec.Redis, wandb.Status.RedisStatus, func(s apiv2.RedisInfraStatus) bool { return s.Ready })
+}
+
+func mysqlAllReady(wandb *apiv2.WeightsAndBiases) bool {
+	return allInstancesReady(wandb.Spec.MySQL, wandb.Status.MySQLStatus, func(s apiv2.MysqlInfraStatus) bool { return s.Ready })
+}
+
+func objectStoreAllReady(wandb *apiv2.WeightsAndBiases) bool {
+	return allInstancesReady(wandb.Spec.ObjectStore, wandb.Status.ObjectStoreStatus, func(s apiv2.ObjectStoreInfraStatus) bool { return s.Ready })
+}
+
+func clickHouseAllReady(wandb *apiv2.WeightsAndBiases) bool {
+	return allInstancesReady(wandb.Spec.ClickHouse, wandb.Status.ClickHouseStatus, func(s apiv2.ClickHouseInfraStatus) bool { return s.Ready })
+}
+
 func inferState(
 	ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases,
 ) error {
 	log := ctrl.LoggerFrom(ctx)
 
-	redisOk := wandb.Spec.Redis.ManagedRedis == nil || wandb.Status.RedisStatus.Ready
-	objectStoreOk := wandb.Spec.ObjectStore.ManagedObjectStore == nil || wandb.Status.ObjectStoreStatus.Ready
-	mysqlOk := wandb.Spec.MySQL.ManagedMysql == nil || wandb.Status.MySQLStatus.Ready
-	clickHouseOk := wandb.Spec.ClickHouse.ManagedClickHouse == nil || wandb.Status.ClickHouseStatus.Ready
+	redisOk := managedInstancesReady(wandb.Spec.Redis, wandb.Status.RedisStatus, func(s apiv2.RedisSpec) bool { return s.ManagedRedis != nil }, func(s apiv2.RedisInfraStatus) bool { return s.Ready })
+	objectStoreOk := managedInstancesReady(wandb.Spec.ObjectStore, wandb.Status.ObjectStoreStatus, func(s apiv2.ObjectStoreSpec) bool { return s.ManagedObjectStore != nil }, func(s apiv2.ObjectStoreInfraStatus) bool { return s.Ready })
+	mysqlOk := managedInstancesReady(wandb.Spec.MySQL, wandb.Status.MySQLStatus, func(s apiv2.MySQLSpec) bool { return s.ManagedMysql != nil }, func(s apiv2.MysqlInfraStatus) bool { return s.Ready })
+	clickHouseOk := managedInstancesReady(wandb.Spec.ClickHouse, wandb.Status.ClickHouseStatus, func(s apiv2.ClickHouseSpec) bool { return s.ManagedClickHouse != nil }, func(s apiv2.ClickHouseInfraStatus) bool { return s.Ready })
 	kafkaOk := wandb.Spec.Kafka.ManagedKafka == nil || wandb.Status.KafkaStatus.Ready
 
 	if redisOk && objectStoreOk && mysqlOk && clickHouseOk && kafkaOk {

@@ -145,7 +145,7 @@ func reconcileConsolidatedIngress(ctx context.Context, c ctrlClient.Client, wand
 	if wandb.Spec.Networking.Ingress != nil {
 		desired.Spec.IngressClassName = wandb.Spec.Networking.Ingress.IngressClassName
 		if *desired.Spec.IngressClassName == "nginx" {
-			desired.ObjectMeta.Annotations["nginx.ingress.kubernetes.io/proxy-body-size"] = "0"
+			desired.Annotations["nginx.ingress.kubernetes.io/proxy-body-size"] = "0"
 		}
 	}
 

@@ -23,10 +23,10 @@ import (
 func ToKeeperVendorSpec(
 	ctx context.Context,
 	wandb *apiv2.WeightsAndBiases,
+	spec *apiv2.ManagedClickHouseSpec,
 	scheme *runtime.Scheme,
 ) (*chkv1.ClickHouseKeeperInstallation, error) {
 	_, log := logx.WithSlog(ctx, logx.ClickHouse)
-	spec := wandb.Spec.ClickHouse.ManagedClickHouse
 	if spec == nil {
 		return nil, nil
 	}

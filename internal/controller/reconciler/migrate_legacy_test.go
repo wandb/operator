@@ -93,7 +93,7 @@ func TestMigrateLegacyAnnotations_NoAnnotation(t *testing.T) {
 	res, err := migrateLegacyAnnotations(context.Background(), client, wandb)
 	require.NoError(t, err)
 	require.Zero(t, res.RequeueAfter)
-	require.Nil(t, wandb.Spec.MySQL.ExternalMysql)
+	require.Nil(t, wandb.Spec.MySQL[apiv2.DefaultInstanceName].ExternalMysql)
 
 	_, err = getConvertedSecret(t, client)
 	require.True(t, apiErrors.IsNotFound(err), "expected no converted Secret, got err=%v", err)
@@ -122,8 +122,8 @@ func TestMigrateLegacyMySQL_FullLiteralPayload(t *testing.T) {
 	var fresh apiv2.WeightsAndBiases
 	require.NoError(t, client.Get(context.Background(), types.NamespacedName{Name: "wandb", Namespace: "default"}, &fresh))
 	require.NotContains(t, fresh.Annotations, apiv1.MySQLPendingAnnotation)
-	require.NotNil(t, fresh.Spec.MySQL.ExternalMysql)
-	conn := fresh.Spec.MySQL.ExternalMysql
+	require.NotNil(t, fresh.Spec.MySQL[apiv2.DefaultInstanceName].ExternalMysql)
+	conn := fresh.Spec.MySQL[apiv2.DefaultInstanceName].ExternalMysql
 	require.Equal(t, "wandb-mysql-converted", conn.Host.Name)
 	require.Equal(t, "host", conn.Host.Key)
 	require.Equal(t, "port", conn.Port.Key)
@@ -156,7 +156,7 @@ func TestMigrateLegacyMySQL_PartialPayload(t *testing.T) {
 	require.NotContains(t, secret.Data, "username")
 	require.NotContains(t, secret.Data, "sslCa")
 
-	conn := wandb.Spec.MySQL.ExternalMysql
+	conn := wandb.Spec.MySQL[apiv2.DefaultInstanceName].ExternalMysql
 	require.NotNil(t, conn)
 	require.Equal(t, "host", conn.Host.Key)
 	require.Equal(t, "password", conn.Password.Key)
@@ -171,10 +171,14 @@ func TestMigrateLegacyMySQL_PreSetFieldsAreRespected(t *testing.T) {
 	client, wandb := newMigrationFixture(t, map[string]string{
 		apiv1.MySQLPendingAnnotation: payload,
 	}, func(w *apiv2.WeightsAndBiases) {
-		w.Spec.MySQL.ExternalMysql = &apiv2.MysqlConnection{
-			Host: corev1.SecretKeySelector{
-				LocalObjectReference: corev1.LocalObjectReference{Name: "preset-secret"},
-				Key:                  "preset-host-key",
+		w.Spec.MySQL = map[string]apiv2.MySQLSpec{
+			apiv2.DefaultInstanceName: {
+				ExternalMysql: &apiv2.MysqlConnection{
+					Host: corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: "preset-secret"},
+						Key:                  "preset-host-key",
+					},
+				},
 			},
 		}
 	})
@@ -189,7 +193,7 @@ func TestMigrateLegacyMySQL_PreSetFieldsAreRespected(t *testing.T) {
 	require.Contains(t, secret.Data, "port")
 	require.Contains(t, secret.Data, "database")
 
-	conn := wandb.Spec.MySQL.ExternalMysql
+	conn := wandb.Spec.MySQL[apiv2.DefaultInstanceName].ExternalMysql
 	require.Equal(t, "preset-secret", conn.Host.Name)
 	require.Equal(t, "preset-host-key", conn.Host.Key)
 	require.Equal(t, "wandb-mysql-converted", conn.Port.Name)
@@ -201,10 +205,14 @@ func TestMigrateLegacyMySQL_AllPreSetEmptyAnnotationPayload(t *testing.T) {
 	client, wandb := newMigrationFixture(t, map[string]string{
 		apiv1.MySQLPendingAnnotation: payload,
 	}, func(w *apiv2.WeightsAndBiases) {
-		w.Spec.MySQL.ExternalMysql = &apiv2.MysqlConnection{
-			Host: corev1.SecretKeySelector{
-				LocalObjectReference: corev1.LocalObjectReference{Name: "preset"},
-				Key:                  "host",
+		w.Spec.MySQL = map[string]apiv2.MySQLSpec{
+			apiv2.DefaultInstanceName: {
+				ExternalMysql: &apiv2.MysqlConnection{
+					Host: corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: "preset"},
+						Key:                  "host",
+					},
+				},
 			},
 		}
 	})
@@ -219,7 +227,7 @@ func TestMigrateLegacyMySQL_AllPreSetEmptyAnnotationPayload(t *testing.T) {
 	var fresh apiv2.WeightsAndBiases
 	require.NoError(t, client.Get(context.Background(), types.NamespacedName{Name: "wandb", Namespace: "default"}, &fresh))
 	require.NotContains(t, fresh.Annotations, apiv1.MySQLPendingAnnotation)
-	require.Equal(t, "preset", fresh.Spec.MySQL.ExternalMysql.Host.Name)
+	require.Equal(t, "preset", fresh.Spec.MySQL[apiv2.DefaultInstanceName].ExternalMysql.Host.Name)
 }
 
 func TestMigrateLegacyMySQL_PreExistingSecretOverwritten(t *testing.T) {
@@ -254,7 +262,7 @@ func TestMigrateLegacyMySQL_MalformedJSON(t *testing.T) {
 	require.Error(t, err)
 
 	require.Contains(t, wandb.Annotations, apiv1.MySQLPendingAnnotation)
-	require.Nil(t, wandb.Spec.MySQL.ExternalMysql)
+	require.Nil(t, wandb.Spec.MySQL[apiv2.DefaultInstanceName].ExternalMysql)
 }
 
 func TestMigrateLegacyMySQL_EmptyAnnotation(t *testing.T) {
@@ -301,7 +309,7 @@ func TestMigrateLegacyRedis_FullLiteralPayload(t *testing.T) {
 	var fresh apiv2.WeightsAndBiases
 	require.NoError(t, client.Get(context.Background(), types.NamespacedName{Name: "wandb", Namespace: "default"}, &fresh))
 	require.NotContains(t, fresh.Annotations, apiv1.RedisPendingAnnotation)
-	conn := fresh.Spec.Redis.ExternalRedis
+	conn := fresh.Spec.Redis[apiv2.DefaultInstanceName].ExternalRedis
 	require.NotNil(t, conn)
 	require.Equal(t, "wandb-redis-converted", conn.Host.Name)
 	require.Equal(t, "host", conn.Host.Key)
@@ -317,10 +325,14 @@ func TestMigrateLegacyRedis_PreSetFieldsAreRespected(t *testing.T) {
 	client, wandb := newMigrationFixture(t, map[string]string{
 		apiv1.RedisPendingAnnotation: payload,
 	}, func(w *apiv2.WeightsAndBiases) {
-		w.Spec.Redis.ExternalRedis = &apiv2.RedisConnection{
-			Host: corev1.SecretKeySelector{
-				LocalObjectReference: corev1.LocalObjectReference{Name: "preset-secret"},
-				Key:                  "preset-host-key",
+		w.Spec.Redis = map[string]apiv2.RedisSpec{
+			apiv2.DefaultInstanceName: {
+				ExternalRedis: &apiv2.RedisConnection{
+					Host: corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: "preset-secret"},
+						Key:                  "preset-host-key",
+					},
+				},
 			},
 		}
 	})
@@ -333,7 +345,7 @@ func TestMigrateLegacyRedis_PreSetFieldsAreRespected(t *testing.T) {
 	require.NotContains(t, secret.Data, "host")
 	require.Contains(t, secret.Data, "port")
 
-	conn := wandb.Spec.Redis.ExternalRedis
+	conn := wandb.Spec.Redis[apiv2.DefaultInstanceName].ExternalRedis
 	require.Equal(t, "preset-secret", conn.Host.Name)
 	require.Equal(t, "preset-host-key", conn.Host.Key)
 	require.Equal(t, "wandb-redis-converted", conn.Port.Name)
@@ -347,7 +359,7 @@ func TestMigrateLegacyRedis_MalformedJSON(t *testing.T) {
 	require.Error(t, err)
 
 	require.Contains(t, wandb.Annotations, apiv1.RedisPendingAnnotation)
-	require.Nil(t, wandb.Spec.Redis.ExternalRedis)
+	require.Nil(t, wandb.Spec.Redis[apiv2.DefaultInstanceName].ExternalRedis)
 }
 
 func TestMigrateLegacyAnnotations_MySQLAndRedisInOneCall(t *testing.T) {
@@ -364,8 +376,8 @@ func TestMigrateLegacyAnnotations_MySQLAndRedisInOneCall(t *testing.T) {
 	require.NoError(t, client.Get(context.Background(), types.NamespacedName{Name: "wandb", Namespace: "default"}, &fresh))
 	require.NotContains(t, fresh.Annotations, apiv1.MySQLPendingAnnotation)
 	require.NotContains(t, fresh.Annotations, apiv1.RedisPendingAnnotation)
-	require.NotNil(t, fresh.Spec.MySQL.ExternalMysql)
-	require.NotNil(t, fresh.Spec.Redis.ExternalRedis)
+	require.NotNil(t, fresh.Spec.MySQL[apiv2.DefaultInstanceName].ExternalMysql)
+	require.NotNil(t, fresh.Spec.Redis[apiv2.DefaultInstanceName].ExternalRedis)
 
 	mysqlSecret, err := getConvertedSecret(t, client)
 	require.NoError(t, err)
@@ -431,7 +443,7 @@ func TestMigrateLegacyBucket_BareBucketName(t *testing.T) {
 	require.NotContains(t, secret.Data, "endpoint")
 	require.NotContains(t, secret.Data, "port")
 
-	conn := wandb.Spec.ObjectStore.ExternalObjectStore
+	conn := wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ExternalObjectStore
 	require.NotNil(t, conn)
 	require.Equal(t, "bucket", conn.Bucket.Key)
 	require.Equal(t, "region", conn.Region.Key)
@@ -456,7 +468,7 @@ func TestMigrateLegacyBucket_EmbeddedEndpoint(t *testing.T) {
 	require.Equal(t, []byte("9000"), secret.Data["port"])
 	require.Equal(t, []byte("wandb-bucket"), secret.Data["bucket"])
 
-	conn := wandb.Spec.ObjectStore.ExternalObjectStore
+	conn := wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ExternalObjectStore
 	require.Equal(t, "endpoint", conn.Endpoint.Key)
 	require.Equal(t, "port", conn.Port.Key)
 	require.Equal(t, "bucket", conn.Bucket.Key)
@@ -467,14 +479,18 @@ func TestMigrateLegacyBucket_PreSetCredentialsRespected(t *testing.T) {
 	client, wandb := newMigrationFixture(t, map[string]string{
 		apiv1.BucketPendingAnnotation: payload,
 	}, func(w *apiv2.WeightsAndBiases) {
-		w.Spec.ObjectStore.ExternalObjectStore = &apiv2.ObjectStoreConnection{
-			AccessKey: corev1.SecretKeySelector{
-				LocalObjectReference: corev1.LocalObjectReference{Name: "preset"},
-				Key:                  "ACCESS_KEY",
-			},
-			SecretKey: corev1.SecretKeySelector{
-				LocalObjectReference: corev1.LocalObjectReference{Name: "preset"},
-				Key:                  "SECRET_KEY",
+		w.Spec.ObjectStore = map[string]apiv2.ObjectStoreSpec{
+			apiv2.DefaultInstanceName: {
+				ExternalObjectStore: &apiv2.ObjectStoreConnection{
+					AccessKey: corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: "preset"},
+						Key:                  "ACCESS_KEY",
+					},
+					SecretKey: corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: "preset"},
+						Key:                  "SECRET_KEY",
+					},
+				},
 			},
 		}
 	})
@@ -488,7 +504,7 @@ func TestMigrateLegacyBucket_PreSetCredentialsRespected(t *testing.T) {
 	require.NotContains(t, secret.Data, "secretKey", "webhook-set SecretKey must not be overwritten")
 	require.Contains(t, secret.Data, "bucket")
 
-	conn := wandb.Spec.ObjectStore.ExternalObjectStore
+	conn := wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ExternalObjectStore
 	require.Equal(t, "preset", conn.AccessKey.Name)
 	require.Equal(t, "preset", conn.SecretKey.Name)
 	require.Equal(t, "wandb-bucket-converted", conn.Bucket.Name)
@@ -517,7 +533,7 @@ func TestMigrateLegacyBucket_MalformedJSON(t *testing.T) {
 	_, err := migrateLegacyAnnotations(context.Background(), client, wandb)
 	require.Error(t, err)
 	require.Contains(t, wandb.Annotations, apiv1.BucketPendingAnnotation)
-	require.Nil(t, wandb.Spec.ObjectStore.ExternalObjectStore)
+	require.Nil(t, wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ExternalObjectStore)
 }
 
 func TestMigrateLegacyOIDC_AllLiterals(t *testing.T) {
