@@ -33,6 +33,9 @@ var _ = Describe("SeaweedFS vendor specs", func() {
 		expectSeaweedWritableMount(seaweed.Spec.Volume.VolumeMounts)
 		expectSeaweedWritableVolume(seaweed.Spec.Filer.Volumes)
 		expectSeaweedWritableMount(seaweed.Spec.Filer.VolumeMounts)
+		Expect(seaweed.Spec.Master.ExtraArgs).To(ContainElement("-ip.bind=0.0.0.0"))
+		Expect(seaweed.Spec.Volume.ExtraArgs).To(ContainElement("-ip.bind=0.0.0.0"))
+		Expect(seaweed.Spec.Filer.ExtraArgs).To(ContainElement("-ip.bind=0.0.0.0"))
 	})
 
 	It("retargets the image to spec.global.imageRegistry when set", func() {
@@ -74,6 +77,29 @@ var _ = Describe("SeaweedFS vendor specs", func() {
 		Expect(seaweed).NotTo(BeNil())
 		Expect(seaweed.Spec.Volume.ResourceRequirements.Requests[corev1.ResourceCPU]).To(Equal(resource.MustParse("500m")))
 	})
+
+	It("reserves storage headroom for writable volumes", func() {
+		wandb := seaweedWandb()
+		seaweed, err := ToObjectStoreVendorSpec(context.Background(), wandb, wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ManagedObjectStore, seaweedScheme(), manifest.Manifest{})
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(seaweed.Spec.Master.VolumeSizeLimitMB).NotTo(BeNil())
+		Expect(*seaweed.Spec.Master.VolumeSizeLimitMB).To(Equal(int32(1024)))
+		Expect(seaweed.Spec.Volume.MaxVolumeCounts).NotTo(BeNil())
+		Expect(*seaweed.Spec.Volume.MaxVolumeCounts).To(Equal(int32(9)))
+	})
+
+	DescribeTable("computes a writable volume layout",
+		func(storage string, expectedSizeMB, expectedMaxVolumes int32) {
+			size, count := volumeLayout(resource.MustParse(storage))
+			Expect(size).To(Equal(expectedSizeMB))
+			Expect(count).To(Equal(expectedMaxVolumes))
+		},
+		Entry("a development volume", "10Gi", int32(1024), int32(9)),
+		Entry("the upstream minimum example", "2Gi", int32(1024), int32(1)),
+		Entry("a sub-gibibyte volume", "512Mi", int32(256), int32(1)),
+		Entry("a large volume", "1Ti", int32(1024), int32(1023)),
+	)
 
 	It("pins s3 gateway signature verification to the in-cluster endpoint", func() {
 		wandb := seaweedWandb()

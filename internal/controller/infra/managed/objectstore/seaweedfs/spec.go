@@ -43,7 +43,23 @@ const (
 	seaweedMasterMetricsPort int32 = 9091
 	seaweedVolumeMetricsPort int32 = 9092
 	seaweedFilerMetricsPort  int32 = 9093
+	seaweedVolumeSizeLimitMB int64 = 1024
 )
+
+func volumeLayout(storageQuantity resource.Quantity) (int32, int32) {
+	storageMB := storageQuantity.Value() / (1024 * 1024)
+	volumeSizeMB := min(seaweedVolumeSizeLimitMB, storageMB/2)
+	if volumeSizeMB < 1 {
+		volumeSizeMB = 1
+	}
+
+	maxVolumeCount := storageMB/volumeSizeMB - 1
+	if maxVolumeCount < 1 {
+		maxVolumeCount = 1
+	}
+
+	return int32(volumeSizeMB), int32(maxVolumeCount)
+}
 
 func seaweedWritableVolumes() []corev1.Volume {
 	return []corev1.Volume{
@@ -86,7 +102,7 @@ func ToObjectStoreVendorSpec(
 		replication = "001"
 	}
 
-	volumeSizeLimitMB := int32(storageQuantity.Value() / (1024 * 1024))
+	volumeSizeLimitMB, maxVolumeCount := volumeLayout(storageQuantity)
 
 	labels := BuildWandbObjectStoreLabels(wandb)
 	labels["app"] = SeaweedName(specName)
@@ -110,15 +126,18 @@ func ToObjectStoreVendorSpec(
 				ComponentSpec: seaweedv1.ComponentSpec{
 					Volumes:      seaweedWritableVolumes(),
 					VolumeMounts: seaweedWritableVolumeMounts(),
+					ExtraArgs:    []string{"-ip.bind=0.0.0.0"},
 				},
 			},
 			Volume: &seaweedv1.VolumeSpec{
 				Replicas: infraSpec.Replicas,
 				VolumeServerConfig: seaweedv1.VolumeServerConfig{
-					MetricsPort: ptr.To(seaweedVolumeMetricsPort),
+					MetricsPort:     ptr.To(seaweedVolumeMetricsPort),
+					MaxVolumeCounts: ptr.To(maxVolumeCount),
 					ComponentSpec: seaweedv1.ComponentSpec{
 						Volumes:      seaweedWritableVolumes(),
 						VolumeMounts: seaweedWritableVolumeMounts(),
+						ExtraArgs:    []string{"-ip.bind=0.0.0.0"},
 					},
 					ResourceRequirements: corev1.ResourceRequirements{
 						Requests: corev1.ResourceList{
@@ -158,6 +177,7 @@ func ToObjectStoreVendorSpec(
 				ComponentSpec: seaweedv1.ComponentSpec{
 					Volumes:      seaweedWritableVolumes(),
 					VolumeMounts: seaweedWritableVolumeMounts(),
+					ExtraArgs:    []string{"-ip.bind=0.0.0.0"},
 				},
 				Persistence: &seaweedv1.PersistenceSpec{
 					Enabled:   true,
