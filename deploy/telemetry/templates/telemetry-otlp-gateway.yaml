@@ -22,6 +22,23 @@ data:
       statsd/dogstatsd:
         endpoint: 0.0.0.0:8125
         aggregation_interval: 15s
+        # Map DogStatsD timing/histogram/distribution metrics to histograms so
+        # percentiles (p50/p95/p99) are queryable. Without this the receiver emits
+        # summaries (count/sum only) and gorilla's operation.duration, dist_*, and
+        # *_dist_duration families lose their tails — leaving only averages.
+        timer_histogram_mapping:
+          - statsd_type: timing
+            observer_type: histogram
+            histogram:
+              max_size: 100
+          - statsd_type: histogram
+            observer_type: histogram
+            histogram:
+              max_size: 100
+          - statsd_type: distribution
+            observer_type: histogram
+            histogram:
+              max_size: 100
       datadog:
         endpoint: 0.0.0.0:8126
 
@@ -30,15 +47,28 @@ data:
 
     connectors:
       # Derives RED-style metrics (request count + duration histogram) from
-      # incoming traces. service.name and span.name are implicit identity;
-      # http.route is added so dashboards can break down by HTTP route.
-      # Cardinality budget per Phase 2.5: ~50k series. user.id /
-      # project.name / entity.name dimensions are deferred to Wave C.2.
+      # incoming traces. service.name and span.name are implicit identity.
+      # Dimensions promote span attributes to metric labels for breakdowns:
+      #   - http.route: HTTP route.
+      #   - graphql.service / graphql.operationName: gorilla sets these on its
+      #     OTEL spans (core PR #43519), enabling per-service GraphQL error
+      #     attribution from metrics. graphql.service is bounded (~schema source
+      #     files); graphql.operationName is higher-cardinality — watch the
+      #     ~50k-series budget and drop it to trace-only if threatened.
+      # user.id / project.name / entity.name remain deferred (too high-card).
       spanmetrics:
         namespace: traces_spanmetrics
         dimensions:
           - name: http.route
             default: ""
+          - name: graphql.service
+            default: ""
+          - name: graphql.operationName
+            default: ""
+        # Attach trace IDs to metric datapoints so a latency/error spike links
+        # straight to an example trace.
+        exemplars:
+          enabled: true
         histogram:
           explicit:
             buckets: [5ms, 10ms, 25ms, 50ms, 100ms, 250ms, 500ms, 1s, 2.5s, 5s, 10s]

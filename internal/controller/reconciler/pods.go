@@ -207,20 +207,34 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 					addSecretComponent(sel, idx)
 				}
 			case "mysql":
-				// MySQL connection URL as a secret ref
-				selector := wandb.Status.MySQLStatus.Connection.URL
+				// MySQL connection URL as a secret ref. src.Name selects the
+				// instance, falling back to the default instance when empty or
+				// when the named instance has no status yet.
+				status, ok := v2.ResolveInstance(wandb.Status.MySQLStatus, src.Name)
+				if !ok {
+					continue
+				}
+				selector := status.Connection.URL
 				// Record for potential direct assignment case
 				singleSecretSelector = selector
 				secretOnlyCount++
 				addSecretComponent(selector, idx)
 			case "redis":
-				selector := wandb.Status.RedisStatus.Connection.URL
+				status, ok := v2.ResolveInstance(wandb.Status.RedisStatus, src.Name)
+				if !ok {
+					continue
+				}
+				selector := status.Connection.URL
 				singleSecretSelector = selector
 				secretOnlyCount++
 				addSecretComponent(selector, idx)
 			case "bucket":
+				status, ok := v2.ResolveInstance(wandb.Status.ObjectStoreStatus, src.Name)
+				if !ok {
+					continue
+				}
 				selector := v1.SecretKeySelector{
-					LocalObjectReference: wandb.Status.ObjectStoreStatus.Connection.URL.LocalObjectReference,
+					LocalObjectReference: status.Connection.URL.LocalObjectReference,
 				}
 				switch src.Field {
 				case "host":
@@ -243,8 +257,12 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 				addSecretComponent(selector, idx)
 			case "clickhouse":
 				// clickhouse fields are provided as separate keys in the same secret
+				status, ok := v2.ResolveInstance(wandb.Status.ClickHouseStatus, src.Name)
+				if !ok {
+					continue
+				}
 				selector := v1.SecretKeySelector{
-					LocalObjectReference: wandb.Status.ClickHouseStatus.Connection.URL.LocalObjectReference,
+					LocalObjectReference: status.Connection.URL.LocalObjectReference,
 				}
 				switch src.Field {
 				case "host":

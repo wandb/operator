@@ -48,10 +48,10 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 		It("sets webhook defaults and preserves user-provided values", func() {
 			obj.Spec.RetentionPolicy.OnDelete = ""
 			obj.Spec.Wandb.ManifestRepository = "example.com/wandb/server-manifest"
-			obj.Spec.MySQL.ManagedMysql = &appsv2.ManagedMysqlSpec{}
-			obj.Spec.Redis.ManagedRedis = &appsv2.ManagedRedisSpec{}
+			obj.Spec.MySQL = map[string]appsv2.MySQLSpec{appsv2.DefaultInstanceName: {ManagedMysql: &appsv2.ManagedMysqlSpec{}}}
+			obj.Spec.Redis = map[string]appsv2.RedisSpec{appsv2.DefaultInstanceName: {ManagedRedis: &appsv2.ManagedRedisSpec{}}}
 			obj.Spec.Kafka.ManagedKafka = &appsv2.ManagedKafkaSpec{}
-			obj.Spec.ObjectStore.ManagedObjectStore = &appsv2.ManagedObjectStoreSpec{}
+			obj.Spec.ObjectStore = map[string]appsv2.ObjectStoreSpec{appsv2.DefaultInstanceName: {ManagedObjectStore: &appsv2.ManagedObjectStoreSpec{}}}
 			Expect(defaulter.Default(ctx, obj)).To(Succeed())
 
 			Expect(obj.Spec.Size).To(Equal(appsv2.SizeDev))
@@ -66,10 +66,10 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 			Expect(*obj.Spec.Wandb.ServiceAccount.Create).To(BeTrue())
 			Expect(obj.Spec.Wandb.ServiceAccount.ServiceAccountName).To(Equal("wandb-app"))
 			Expect(obj.Status.Wandb.Applications).ToNot(BeNil())
-			Expect(obj.Spec.MySQL.ManagedMysql.Namespace).To(Equal("test-ns"))
-			Expect(obj.Spec.Redis.ManagedRedis.Namespace).To(Equal("test-ns"))
+			Expect(obj.Spec.MySQL[appsv2.DefaultInstanceName].ManagedMysql.Namespace).To(Equal("test-ns"))
+			Expect(obj.Spec.Redis[appsv2.DefaultInstanceName].ManagedRedis.Namespace).To(Equal("test-ns"))
 			Expect(obj.Spec.Kafka.ManagedKafka.Namespace).To(Equal("test-ns"))
-			Expect(obj.Spec.ObjectStore.ManagedObjectStore.Namespace).To(Equal("test-ns"))
+			Expect(obj.Spec.ObjectStore[appsv2.DefaultInstanceName].ManagedObjectStore.Namespace).To(Equal("test-ns"))
 		})
 
 		It("does not override already set values", func() {
@@ -84,12 +84,12 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 			obj.Spec.Wandb.InternalServiceAuth.OIDCIssuer = "https://issuer.example.com"
 			obj.Spec.Wandb.ServiceAccount.Create = boolPtr(false)
 			obj.Spec.Wandb.ServiceAccount.ServiceAccountName = "custom-sa"
-			obj.Spec.MySQL.ManagedMysql = &appsv2.ManagedMysqlSpec{
+			obj.Spec.MySQL = map[string]appsv2.MySQLSpec{appsv2.DefaultInstanceName: {ManagedMysql: &appsv2.ManagedMysqlSpec{
 				Namespace: "custom-moco",
-			}
-			obj.Spec.Redis.ManagedRedis = &appsv2.ManagedRedisSpec{Namespace: "custom-redis"}
+			}}}
+			obj.Spec.Redis = map[string]appsv2.RedisSpec{appsv2.DefaultInstanceName: {ManagedRedis: &appsv2.ManagedRedisSpec{Namespace: "custom-redis"}}}
 			obj.Spec.Kafka.ManagedKafka = &appsv2.ManagedKafkaSpec{Namespace: "custom-kafka"}
-			obj.Spec.ObjectStore.ManagedObjectStore = &appsv2.ManagedObjectStoreSpec{Namespace: "custom-objectstore"}
+			obj.Spec.ObjectStore = map[string]appsv2.ObjectStoreSpec{appsv2.DefaultInstanceName: {ManagedObjectStore: &appsv2.ManagedObjectStoreSpec{Namespace: "custom-objectstore"}}}
 			obj.Status.Wandb.Applications = map[string]appsv2.ApplicationStatus{"api": {}}
 
 			Expect(defaulter.Default(ctx, obj)).To(Succeed())
@@ -103,10 +103,10 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 			Expect(obj.Spec.Wandb.InternalServiceAuth.OIDCIssuer).To(Equal("https://issuer.example.com"))
 			Expect(*obj.Spec.Wandb.ServiceAccount.Create).To(BeFalse())
 			Expect(obj.Spec.Wandb.ServiceAccount.ServiceAccountName).To(Equal("custom-sa"))
-			Expect(obj.Spec.MySQL.ManagedMysql.Namespace).To(Equal("custom-moco"))
-			Expect(obj.Spec.Redis.ManagedRedis.Namespace).To(Equal("custom-redis"))
+			Expect(obj.Spec.MySQL[appsv2.DefaultInstanceName].ManagedMysql.Namespace).To(Equal("custom-moco"))
+			Expect(obj.Spec.Redis[appsv2.DefaultInstanceName].ManagedRedis.Namespace).To(Equal("custom-redis"))
 			Expect(obj.Spec.Kafka.ManagedKafka.Namespace).To(Equal("custom-kafka"))
-			Expect(obj.Spec.ObjectStore.ManagedObjectStore.Namespace).To(Equal("custom-objectstore"))
+			Expect(obj.Spec.ObjectStore[appsv2.DefaultInstanceName].ManagedObjectStore.Namespace).To(Equal("custom-objectstore"))
 			Expect(obj.Status.Wandb.Applications).To(HaveKey("api"))
 		})
 
@@ -125,7 +125,7 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 		})
 
 		It("rejects create when Redis storage size is invalid", func() {
-			obj.Spec.Redis.ManagedRedis = &appsv2.ManagedRedisSpec{StorageSize: "bad-size"}
+			obj.Spec.Redis = map[string]appsv2.RedisSpec{appsv2.DefaultInstanceName: {ManagedRedis: &appsv2.ManagedRedisSpec{StorageSize: "bad-size"}}}
 
 			_, err := validator.ValidateCreate(ctx, obj)
 			Expect(err).To(HaveOccurred())
@@ -133,8 +133,8 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 		})
 
 		It("rejects redis namespace changes on update", func() {
-			oldObj.Spec.Redis.ManagedRedis = &appsv2.ManagedRedisSpec{Namespace: "redis-a"}
-			obj.Spec.Redis.ManagedRedis = &appsv2.ManagedRedisSpec{Namespace: "redis-b"}
+			oldObj.Spec.Redis = map[string]appsv2.RedisSpec{appsv2.DefaultInstanceName: {ManagedRedis: &appsv2.ManagedRedisSpec{Namespace: "redis-a"}}}
+			obj.Spec.Redis = map[string]appsv2.RedisSpec{appsv2.DefaultInstanceName: {ManagedRedis: &appsv2.ManagedRedisSpec{Namespace: "redis-b"}}}
 
 			_, err := validator.ValidateUpdate(ctx, oldObj, obj)
 			Expect(err).To(HaveOccurred())
@@ -142,8 +142,8 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 		})
 
 		It("rejects redis storage size changes when already set", func() {
-			oldObj.Spec.Redis.ManagedRedis = &appsv2.ManagedRedisSpec{Namespace: "redis", StorageSize: "10Gi"}
-			obj.Spec.Redis.ManagedRedis = &appsv2.ManagedRedisSpec{Namespace: "redis", StorageSize: "20Gi"}
+			oldObj.Spec.Redis = map[string]appsv2.RedisSpec{appsv2.DefaultInstanceName: {ManagedRedis: &appsv2.ManagedRedisSpec{Namespace: "redis", StorageSize: "10Gi"}}}
+			obj.Spec.Redis = map[string]appsv2.RedisSpec{appsv2.DefaultInstanceName: {ManagedRedis: &appsv2.ManagedRedisSpec{Namespace: "redis", StorageSize: "20Gi"}}}
 
 			_, err := validator.ValidateUpdate(ctx, oldObj, obj)
 			Expect(err).To(HaveOccurred())
@@ -151,8 +151,8 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 		})
 
 		It("allows redis storage size to be initially set on update", func() {
-			oldObj.Spec.Redis.ManagedRedis = &appsv2.ManagedRedisSpec{Namespace: "redis", StorageSize: ""}
-			obj.Spec.Redis.ManagedRedis = &appsv2.ManagedRedisSpec{Namespace: "redis", StorageSize: "20Gi"}
+			oldObj.Spec.Redis = map[string]appsv2.RedisSpec{appsv2.DefaultInstanceName: {ManagedRedis: &appsv2.ManagedRedisSpec{Namespace: "redis", StorageSize: ""}}}
+			obj.Spec.Redis = map[string]appsv2.RedisSpec{appsv2.DefaultInstanceName: {ManagedRedis: &appsv2.ManagedRedisSpec{Namespace: "redis", StorageSize: "20Gi"}}}
 
 			warnings, err := validator.ValidateUpdate(ctx, oldObj, obj)
 			Expect(err).NotTo(HaveOccurred())
@@ -160,8 +160,8 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 		})
 
 		It("rejects decreasing managed MySQL replicas on update", func() {
-			oldObj.Spec.MySQL.ManagedMysql = &appsv2.ManagedMysqlSpec{Replicas: 3}
-			obj.Spec.MySQL.ManagedMysql = &appsv2.ManagedMysqlSpec{Replicas: 1}
+			oldObj.Spec.MySQL = map[string]appsv2.MySQLSpec{appsv2.DefaultInstanceName: {ManagedMysql: &appsv2.ManagedMysqlSpec{Replicas: 3}}}
+			obj.Spec.MySQL = map[string]appsv2.MySQLSpec{appsv2.DefaultInstanceName: {ManagedMysql: &appsv2.ManagedMysqlSpec{Replicas: 1}}}
 
 			_, err := validator.ValidateUpdate(ctx, oldObj, obj)
 			Expect(err).To(HaveOccurred())
@@ -169,8 +169,8 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 		})
 
 		It("allows increasing managed MySQL replicas on update", func() {
-			oldObj.Spec.MySQL.ManagedMysql = &appsv2.ManagedMysqlSpec{Replicas: 1}
-			obj.Spec.MySQL.ManagedMysql = &appsv2.ManagedMysqlSpec{Replicas: 3}
+			oldObj.Spec.MySQL = map[string]appsv2.MySQLSpec{appsv2.DefaultInstanceName: {ManagedMysql: &appsv2.ManagedMysqlSpec{Replicas: 1}}}
+			obj.Spec.MySQL = map[string]appsv2.MySQLSpec{appsv2.DefaultInstanceName: {ManagedMysql: &appsv2.ManagedMysqlSpec{Replicas: 3}}}
 
 			warnings, err := validator.ValidateUpdate(ctx, oldObj, obj)
 			Expect(err).NotTo(HaveOccurred())
@@ -178,7 +178,7 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 		})
 
 		It("rejects managed ClickHouse when no object store is configured", func() {
-			obj.Spec.ClickHouse.ManagedClickHouse = &appsv2.ManagedClickHouseSpec{}
+			obj.Spec.ClickHouse = map[string]appsv2.ClickHouseSpec{appsv2.DefaultInstanceName: {ManagedClickHouse: &appsv2.ManagedClickHouseSpec{}}}
 
 			_, err := validator.ValidateCreate(ctx, obj)
 			Expect(err).To(HaveOccurred())
@@ -186,8 +186,8 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 		})
 
 		It("allows managed ClickHouse when an object store is configured", func() {
-			obj.Spec.ClickHouse.ManagedClickHouse = &appsv2.ManagedClickHouseSpec{}
-			obj.Spec.ObjectStore.ManagedObjectStore = &appsv2.ManagedObjectStoreSpec{}
+			obj.Spec.ClickHouse = map[string]appsv2.ClickHouseSpec{appsv2.DefaultInstanceName: {ManagedClickHouse: &appsv2.ManagedClickHouseSpec{}}}
+			obj.Spec.ObjectStore = map[string]appsv2.ObjectStoreSpec{appsv2.DefaultInstanceName: {ManagedObjectStore: &appsv2.ManagedObjectStoreSpec{}}}
 
 			warnings, err := validator.ValidateCreate(ctx, obj)
 			Expect(err).NotTo(HaveOccurred())
@@ -195,10 +195,10 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 		})
 
 		It("rejects even Keeper replica counts", func() {
-			obj.Spec.ClickHouse.ManagedClickHouse = &appsv2.ManagedClickHouseSpec{
+			obj.Spec.ClickHouse = map[string]appsv2.ClickHouseSpec{appsv2.DefaultInstanceName: {ManagedClickHouse: &appsv2.ManagedClickHouseSpec{
 				Keeper: appsv2.ClickHouseKeeperSpec{Replicas: 2},
-			}
-			obj.Spec.ObjectStore.ExternalObjectStore = &appsv2.ObjectStoreConnection{}
+			}}}
+			obj.Spec.ObjectStore = map[string]appsv2.ObjectStoreSpec{appsv2.DefaultInstanceName: {ExternalObjectStore: &appsv2.ObjectStoreConnection{}}}
 
 			_, err := validator.ValidateCreate(ctx, obj)
 			Expect(err).To(HaveOccurred())

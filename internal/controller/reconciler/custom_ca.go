@@ -58,6 +58,21 @@ func hasGlobalCustomCACertConfig(wandb *apiv2.WeightsAndBiases) bool {
 	return len(wandb.Spec.Global.CustomCACerts) > 0 || wandb.Spec.Global.CACertsConfigMap != ""
 }
 
+// defaultMySQLConnection returns the default MySQL instance's connection. The
+// app's TLS env vars (MYSQL_CA_CERT_PATH etc.) are singular, so only the
+// default instance's certificate material is mounted.
+func defaultMySQLConnection(wandb *apiv2.WeightsAndBiases) apiv2.MysqlConnection {
+	status, _ := apiv2.ResolveInstance(wandb.Status.MySQLStatus, "")
+	return status.Connection
+}
+
+// defaultRedisConnection returns the default Redis instance's connection; see
+// defaultMySQLConnection.
+func defaultRedisConnection(wandb *apiv2.WeightsAndBiases) apiv2.RedisConnection {
+	status, _ := apiv2.ResolveInstance(wandb.Status.RedisStatus, "")
+	return status.Connection
+}
+
 func secretSelectorConfigured(sel corev1.SecretKeySelector) bool {
 	return sel.Name != "" && sel.Key != ""
 }
@@ -126,6 +141,9 @@ func applyCustomCACertsToWorkload(
 	volumes []corev1.Volume,
 	volumeMounts []corev1.VolumeMount,
 ) ([]corev1.EnvVar, []corev1.Volume, []corev1.VolumeMount, string, error) {
+	mysqlConn := defaultMySQLConnection(wandb)
+	redisConn := defaultRedisConnection(wandb)
+
 	if hasGlobalCustomCACertConfig(wandb) {
 		envVars = appendMissingEnvVars(envVars, customCACertsEnvVars)
 		volumes = upsertVolume(volumes, corev1.Volume{
@@ -174,14 +192,14 @@ func applyCustomCACertsToWorkload(
 		}
 	}
 
-	if hasValue, err := secretSelectorHasValue(ctx, c, wandb.Namespace, wandb.Status.MySQLStatus.Connection.SslCa); err != nil {
+	if hasValue, err := secretSelectorHasValue(ctx, c, wandb.Namespace, mysqlConn.SslCa); err != nil {
 		return nil, nil, nil, "", err
 	} else if hasValue {
 		envVars = appendMissingEnvVars(envVars, []corev1.EnvVar{{Name: "MYSQL_CA_CERT_PATH", Value: mysqlCACertPath}})
 		volumes = upsertVolume(volumes, corev1.Volume{
 			Name: mysqlCACertVolumeName,
 			VolumeSource: corev1.VolumeSource{
-				Secret: secretCACertVolumeSource(wandb.Status.MySQLStatus.Connection.SslCa, mysqlCACertFileName),
+				Secret: secretCACertVolumeSource(mysqlConn.SslCa, mysqlCACertFileName),
 			},
 		})
 		volumeMounts = upsertVolumeMount(volumeMounts, corev1.VolumeMount{
@@ -191,13 +209,13 @@ func applyCustomCACertsToWorkload(
 			ReadOnly:  true,
 		})
 	}
-	if hasValue, err := secretSelectorHasValue(ctx, c, wandb.Namespace, wandb.Status.MySQLStatus.Connection.SslCert); err != nil {
+	if hasValue, err := secretSelectorHasValue(ctx, c, wandb.Namespace, mysqlConn.SslCert); err != nil {
 		return nil, nil, nil, "", err
 	} else if hasValue {
 		volumes = upsertVolume(volumes, corev1.Volume{
 			Name: mysqlSSLCertVolumeName,
 			VolumeSource: corev1.VolumeSource{
-				Secret: secretCACertVolumeSource(wandb.Status.MySQLStatus.Connection.SslCert, mysqlSSLCertFileName),
+				Secret: secretCACertVolumeSource(mysqlConn.SslCert, mysqlSSLCertFileName),
 			},
 		})
 		volumeMounts = upsertVolumeMount(volumeMounts, corev1.VolumeMount{
@@ -207,13 +225,13 @@ func applyCustomCACertsToWorkload(
 			ReadOnly:  true,
 		})
 	}
-	if hasValue, err := secretSelectorHasValue(ctx, c, wandb.Namespace, wandb.Status.MySQLStatus.Connection.SslKey); err != nil {
+	if hasValue, err := secretSelectorHasValue(ctx, c, wandb.Namespace, mysqlConn.SslKey); err != nil {
 		return nil, nil, nil, "", err
 	} else if hasValue {
 		volumes = upsertVolume(volumes, corev1.Volume{
 			Name: mysqlSSLKeyVolumeName,
 			VolumeSource: corev1.VolumeSource{
-				Secret: secretCACertVolumeSource(wandb.Status.MySQLStatus.Connection.SslKey, mysqlSSLKeyFileName),
+				Secret: secretCACertVolumeSource(mysqlConn.SslKey, mysqlSSLKeyFileName),
 			},
 		})
 		volumeMounts = upsertVolumeMount(volumeMounts, corev1.VolumeMount{
@@ -224,13 +242,13 @@ func applyCustomCACertsToWorkload(
 		})
 	}
 
-	if hasValue, err := secretSelectorHasValue(ctx, c, wandb.Namespace, wandb.Status.RedisStatus.Connection.SslCa); err != nil {
+	if hasValue, err := secretSelectorHasValue(ctx, c, wandb.Namespace, redisConn.SslCa); err != nil {
 		return nil, nil, nil, "", err
 	} else if hasValue {
 		volumes = upsertVolume(volumes, corev1.Volume{
 			Name: redisCACertVolumeName,
 			VolumeSource: corev1.VolumeSource{
-				Secret: secretCACertVolumeSource(wandb.Status.RedisStatus.Connection.SslCa, redisCACertFileName),
+				Secret: secretCACertVolumeSource(redisConn.SslCa, redisCACertFileName),
 			},
 		})
 		volumeMounts = upsertVolumeMount(volumeMounts, corev1.VolumeMount{
@@ -323,19 +341,22 @@ func secretSelectorHasValue(ctx context.Context, c ctrlClient.Client, namespace 
 }
 
 func customCACertsChecksum(ctx context.Context, c ctrlClient.Client, wandb *apiv2.WeightsAndBiases) (string, error) {
-	hasMySQLCA, err := secretSelectorHasValue(ctx, c, wandb.Namespace, wandb.Status.MySQLStatus.Connection.SslCa)
+	mysqlConn := defaultMySQLConnection(wandb)
+	redisConn := defaultRedisConnection(wandb)
+
+	hasMySQLCA, err := secretSelectorHasValue(ctx, c, wandb.Namespace, mysqlConn.SslCa)
 	if err != nil {
 		return "", err
 	}
-	hasMySQLCert, err := secretSelectorHasValue(ctx, c, wandb.Namespace, wandb.Status.MySQLStatus.Connection.SslCert)
+	hasMySQLCert, err := secretSelectorHasValue(ctx, c, wandb.Namespace, mysqlConn.SslCert)
 	if err != nil {
 		return "", err
 	}
-	hasMySQLKey, err := secretSelectorHasValue(ctx, c, wandb.Namespace, wandb.Status.MySQLStatus.Connection.SslKey)
+	hasMySQLKey, err := secretSelectorHasValue(ctx, c, wandb.Namespace, mysqlConn.SslKey)
 	if err != nil {
 		return "", err
 	}
-	hasRedisCA, err := secretSelectorHasValue(ctx, c, wandb.Namespace, wandb.Status.RedisStatus.Connection.SslCa)
+	hasRedisCA, err := secretSelectorHasValue(ctx, c, wandb.Namespace, redisConn.SslCa)
 	if err != nil {
 		return "", err
 	}
@@ -356,26 +377,26 @@ func customCACertsChecksum(ctx context.Context, c ctrlClient.Client, wandb *apiv
 		}
 	}
 
-	if sel := wandb.Status.MySQLStatus.Connection.SslCa; hasMySQLCA {
+	if sel := mysqlConn.SslCa; hasMySQLCA {
 		_, _ = fmt.Fprintf(hash, "mysql:%s/%s\n", sel.Name, sel.Key)
 		if err := hashSecretKeyData(ctx, c, wandb.Namespace, sel, hashWriteString(hash)); err != nil {
 			return "", err
 		}
 	}
-	if sel := wandb.Status.MySQLStatus.Connection.SslCert; hasMySQLCert {
+	if sel := mysqlConn.SslCert; hasMySQLCert {
 		_, _ = fmt.Fprintf(hash, "mysql-cert:%s/%s\n", sel.Name, sel.Key)
 		if err := hashSecretKeyData(ctx, c, wandb.Namespace, sel, hashWriteString(hash)); err != nil {
 			return "", err
 		}
 	}
-	if sel := wandb.Status.MySQLStatus.Connection.SslKey; hasMySQLKey {
+	if sel := mysqlConn.SslKey; hasMySQLKey {
 		_, _ = fmt.Fprintf(hash, "mysql-key:%s/%s\n", sel.Name, sel.Key)
 		if err := hashSecretKeyData(ctx, c, wandb.Namespace, sel, hashWriteString(hash)); err != nil {
 			return "", err
 		}
 	}
 
-	if sel := wandb.Status.RedisStatus.Connection.SslCa; hasRedisCA {
+	if sel := redisConn.SslCa; hasRedisCA {
 		_, _ = fmt.Fprintf(hash, "redis:%s/%s\n", sel.Name, sel.Key)
 		if err := hashSecretKeyData(ctx, c, wandb.Namespace, sel, hashWriteString(hash)); err != nil {
 			return "", err

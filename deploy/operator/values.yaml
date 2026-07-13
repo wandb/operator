@@ -247,6 +247,7 @@ telemetry:
     operators: true
     wandbApi: true
     infrastructure: true
+    kubeStateMetrics: false
   alerting:
     enabled: false
     evaluationInterval: 30s

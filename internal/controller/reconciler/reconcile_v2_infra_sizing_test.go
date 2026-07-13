@@ -99,7 +99,7 @@ var _ = Describe("Infra Sizing", func() {
 			wandb := &apiv2.WeightsAndBiases{
 				Spec: apiv2.WeightsAndBiasesSpec{
 					Size:  "small",
-					MySQL: apiv2.MySQLSpec{ManagedMysql: &apiv2.ManagedMysqlSpec{}},
+					MySQL: map[string]apiv2.MySQLSpec{apiv2.DefaultInstanceName: {ManagedMysql: &apiv2.ManagedMysqlSpec{}}},
 				},
 			}
 			manifest := serverManifest.Manifest{
@@ -120,18 +120,20 @@ var _ = Describe("Infra Sizing", func() {
 				},
 			}
 			v2.ApplyInfraSizing(wandb, manifest)
-			Expect(wandb.Spec.MySQL.ManagedMysql.Replicas).To(Equal(int32(3)))
-			Expect(wandb.Spec.MySQL.ManagedMysql.Config.Resources.Requests.Cpu().String()).To(Equal("2"))
+			Expect(wandb.Spec.MySQL[apiv2.DefaultInstanceName].ManagedMysql.Replicas).To(Equal(int32(3)))
+			Expect(wandb.Spec.MySQL[apiv2.DefaultInstanceName].ManagedMysql.Config.Resources.Requests.Cpu().String()).To(Equal("2"))
 		})
 
 		It("should not override user-specified spec fields", func() {
 			wandb := &apiv2.WeightsAndBiases{
 				Spec: apiv2.WeightsAndBiasesSpec{
 					Size: "small",
-					MySQL: apiv2.MySQLSpec{
-						ManagedMysql: &apiv2.ManagedMysqlSpec{
-							Replicas:    5,
-							StorageSize: "50Gi",
+					MySQL: map[string]apiv2.MySQLSpec{
+						apiv2.DefaultInstanceName: {
+							ManagedMysql: &apiv2.ManagedMysqlSpec{
+								Replicas:    5,
+								StorageSize: "50Gi",
+							},
 						},
 					},
 				},
@@ -149,18 +151,20 @@ var _ = Describe("Infra Sizing", func() {
 				},
 			}
 			v2.ApplyInfraSizing(wandb, manifest)
-			Expect(wandb.Spec.MySQL.ManagedMysql.Replicas).To(Equal(int32(5)))
-			Expect(wandb.Spec.MySQL.ManagedMysql.StorageSize).To(Equal("50Gi"))
+			Expect(wandb.Spec.MySQL[apiv2.DefaultInstanceName].ManagedMysql.Replicas).To(Equal(int32(5)))
+			Expect(wandb.Spec.MySQL[apiv2.DefaultInstanceName].ManagedMysql.StorageSize).To(Equal("50Gi"))
 		})
 
 		It("should apply keeper sizing from the clickhouseKeeper block, treating CR values as overrides", func() {
 			wandb := &apiv2.WeightsAndBiases{
 				Spec: apiv2.WeightsAndBiasesSpec{
 					Size: "small",
-					ClickHouse: apiv2.ClickHouseSpec{
-						ManagedClickHouse: &apiv2.ManagedClickHouseSpec{
-							// User explicitly set keeper storage; the manifest must not override it.
-							Keeper: apiv2.ClickHouseKeeperSpec{StorageSize: "20Gi"},
+					ClickHouse: map[string]apiv2.ClickHouseSpec{
+						apiv2.DefaultInstanceName: {
+							ManagedClickHouse: &apiv2.ManagedClickHouseSpec{
+								// User explicitly set keeper storage; the manifest must not override it.
+								Keeper: apiv2.ClickHouseKeeperSpec{StorageSize: "20Gi"},
+							},
 						},
 					},
 				},
@@ -176,7 +180,7 @@ var _ = Describe("Infra Sizing", func() {
 				},
 			}
 			v2.ApplyInfraSizing(wandb, manifest)
-			keeper := wandb.Spec.ClickHouse.ManagedClickHouse.Keeper
+			keeper := wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse.Keeper
 			Expect(keeper.Replicas).To(Equal(int32(3)))  // from manifest small tier
 			Expect(keeper.StorageSize).To(Equal("20Gi")) // user override preserved
 		})

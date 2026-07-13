@@ -65,11 +65,11 @@ func seaweedWritableVolumeMounts() []corev1.VolumeMount {
 func ToObjectStoreVendorSpec(
 	ctx context.Context,
 	wandb *apiv2.WeightsAndBiases,
+	infraSpec *apiv2.ManagedObjectStoreSpec,
 	scheme *runtime.Scheme,
 	mfst manifest.Manifest,
 ) (*seaweedv1.Seaweed, error) {
 	_, log := logx.WithSlog(ctx, logx.ObjectStore)
-	infraSpec := wandb.Spec.ObjectStore.ManagedObjectStore
 	if infraSpec == nil {
 		return nil, nil
 	}
