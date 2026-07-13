@@ -145,6 +145,11 @@ func actionToCondition(conditionType string, action common.CrudAction) metav1.Co
 	}
 }
 
+// bufstreamObjectStoreInstance is the object-store instance name Bufstream
+// prefers for message storage; ResolveInstance falls back to the default
+// instance when it is not provisioned.
+const bufstreamObjectStoreInstance = "bufstream"
+
 // resolveStorage reads the object store connection secret and parses its
 // connection string into the provider-specific values needed to configure
 // Bufstream. Returns ready=false when the object store is not yet available.
@@ -153,11 +158,12 @@ func resolveStorage(
 	cl client.Client,
 	wandb *apiv2.WeightsAndBiases,
 ) (objectstore.ConnInfo, bool, error) {
-	if !wandb.Status.ObjectStoreStatus.Ready {
+	status, ok := apiv2.ResolveInstance(wandb.Status.ObjectStoreStatus, bufstreamObjectStoreInstance)
+	if !ok || !status.Ready {
 		return objectstore.ConnInfo{}, false, nil
 	}
 
-	secretName := wandb.Status.ObjectStoreStatus.Connection.URL.Name
+	secretName := status.Connection.URL.Name
 	if secretName == "" {
 		return objectstore.ConnInfo{}, false, nil
 	}

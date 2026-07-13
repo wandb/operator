@@ -50,10 +50,9 @@ type ObjectStorageConn struct {
 func ResolveObjectStorage(
 	ctx context.Context,
 	cl client.Client,
-	wandb *apiv2.WeightsAndBiases,
+	spec *apiv2.ManagedClickHouseSpec,
 	conn *apiv2.ObjectStoreConnection,
 ) (*ObjectStorageConn, error) {
-	spec := wandb.Spec.ClickHouse.ManagedClickHouse
 	if spec == nil {
 		return nil, nil
 	}
