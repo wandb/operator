@@ -1,7 +1,5 @@
 telemetry:
   mode: "full"
-  # Longer than the 1d default so incident data survives a support triage session.
-  retentionPeriod: 3d
   scrape:
     kubeStateMetrics: true
 
