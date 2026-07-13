@@ -442,6 +442,8 @@ func ReconcileWandbManifest(
 
 	logger.Info("Manifest Features", "features", manifest.Features)
 
+	validateLegacyOverrides(ctx, wandb, manifest)
+
 	result, err = generateSecrets(ctx, client, wandb, manifest)
 	if err != nil {
 		return result, err
@@ -598,6 +600,10 @@ func reconcileApplications(
 		if err != nil {
 			return ctrl.Result{}, err
 		}
+
+		// Applied last so v1-derived overrides beat manifest and injected env,
+		// matching v1 chart behavior where user env displaced chart-computed env.
+		envVars = applyLegacyOverrideEnv(ctx, wandb, app.Name, envVars)
 
 		containers := resolveContainers(app, wandb, envVars, volumeMounts)
 
@@ -1211,6 +1217,10 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 			if err != nil {
 				return ctrl.Result{}, err
 			}
+
+			// v1's global env reached job pods too (e.g. HTTP_PROXY); per-app
+			// entries have no migration analog and are not applied here.
+			envVars = overrideEnvVars(ctx, envVars, wandb.Spec.Wandb.LegacyOverrides[apiv2.LegacyOverridesGlobalKey].Env)
 
 			podTemplate := corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{

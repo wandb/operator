@@ -296,12 +296,34 @@ type WandbAppSpec struct {
 	// +optional
 	OIDC OidcSpec `json:"oidc,omitempty"`
 
-	LegacyOveriddes map[string]LegacyOverrides `json:"legacyOverrides,omitempty"`
+	// LegacyOverrides carries per-application env and resource overrides
+	// extracted from a v1 spec.values during conversion, keyed by server
+	// manifest application name plus the reserved key "global" (env only),
+	// which applies to every application. Keys that do not match a manifest
+	// application are logged and ignored. Populated by the v1 -> v2
+	// conversion; hand-editing is discouraged — prefer first-class fields as
+	// they become available.
+	// +optional
+	LegacyOverrides map[string]LegacyOverrides `json:"legacyOverrides,omitempty"`
 }
 
+// LegacyOverridesGlobalKey is the reserved LegacyOverrides map key whose env
+// entries apply to every application (and migration jobs). It has no v2
+// application counterpart, so the reconciler treats it as always valid.
+const LegacyOverridesGlobalKey = "global"
+
+// LegacyOverrides holds v1-derived overrides for a single application (or the
+// reserved "global" entry).
 type LegacyOverrides struct {
-	Env       []corev1.EnvVar             `json:"env,omitempty"`
-	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+	// Env entries are applied last when building application containers,
+	// replacing same-named vars from the manifest or operator injection.
+	// +optional
+	Env []corev1.EnvVar `json:"env,omitempty"`
+
+	// Resources is overlaid per-field onto manifest sizing-derived resources.
+	// Limits are still gated by spec.requireLimits.
+	// +optional
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
 }
 
 type WandbProbeDefaults struct {

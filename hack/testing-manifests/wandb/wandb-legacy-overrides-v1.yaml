@@ -1,0 +1,71 @@
+---
+# v1 CR exercising the legacyOverrides conversion path:
+# - global env/extraEnv (env wins on BOTH_LAYERS) -> legacyOverrides.global
+# - per-app env (api, incl. a valueFrom body) and resources (parquet sizing)
+# - a renamed section (nginx -> nginx-proxy)
+# - sections with no v2 application (app, console) that the reconciler
+#   should log as unmapped and leave unapplied
+# - a helm-templated env value the conversion should drop with a log
+apiVersion: apps.wandb.com/v1
+kind: WeightsAndBiases
+metadata:
+  labels:
+    app.kubernetes.io/name: weightsandbiases
+    app.kubernetes.io/instance: weightsandbiases-sample
+    app.kubernetes.io/part-of: operator
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: operator
+  # Keep CR names <=16 chars: managed ClickHouse derives
+  # chk-<name>-clickhouse-keeper-deploy-confd-default-0-0 volume names that
+  # must fit the 63-char DNS label limit or the Altinity operator silently
+  # fails to create the StatefulSets.
+  name: wandb-legacy-v1
+spec:
+  chart:
+    url: https://charts.wandb.ai
+    name: "operator-wandb"
+    version: "0.37.1"
+  values:
+    global:
+      size: "dev"
+      env:
+        GLOBAL_FROM_ENV: "global-env"
+        BOTH_LAYERS: "from-env"
+      extraEnv:
+        BOTH_LAYERS: "from-extra-env"
+        HTTP_PROXY: "http://proxy.internal:3128"
+        NO_PROXY: "10.0.0.0/8,.svc.cluster.local"
+        TEMPLATED_DROPPED: "{{ .Release.Name }}-value"
+
+    api:
+      env:
+        GORILLA_CUSTOM_FLAG: "true"
+        API_SECRET_VAR:
+          valueFrom:
+            secretKeyRef:
+              name: my-api-secret
+              key: token
+
+    parquet:
+      sizing:
+        dev:
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              memory: "1Gi"
+
+    nginx:
+      env:
+        NGINX_EXTRA: "1"
+
+    app:
+      image:
+        tag: 0.83.0-daily.17
+      env:
+        MONOLITH_ONLY_VAR: "ignored-by-v2"
+
+    console:
+      env:
+        CONSOLE_ONLY_VAR: "ignored-by-v2"
