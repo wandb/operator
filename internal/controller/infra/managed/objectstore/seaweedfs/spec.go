@@ -46,10 +46,23 @@ const (
 	seaweedMasterMetricsPort int32 = 9091
 	seaweedVolumeMetricsPort int32 = 9092
 	seaweedFilerMetricsPort  int32 = 9093
-
-	// Volume count auto-sizes as disk / this limit, so keep it small enough that even a modest disk yields writable volumes.
-	seaweedVolumeSizeLimitMB int32 = 1024
+	seaweedVolumeSizeLimitMB int64 = 1024
 )
+
+func volumeLayout(storageQuantity resource.Quantity) (int32, int32) {
+	storageMB := storageQuantity.Value() / (1024 * 1024)
+	volumeSizeMB := min(seaweedVolumeSizeLimitMB, storageMB/2)
+	if volumeSizeMB < 1 {
+		volumeSizeMB = 1
+	}
+
+	maxVolumeCount := storageMB/volumeSizeMB - 1
+	if maxVolumeCount < 1 {
+		maxVolumeCount = 1
+	}
+
+	return int32(volumeSizeMB), int32(maxVolumeCount)
+}
 
 func seaweedWritableVolumes() []corev1.Volume {
 	return []corev1.Volume{
@@ -89,8 +102,7 @@ func ToObjectStoreVendorSpec(
 
 	replication := seaweedReplication(infraSpec.Copies, infraSpec.Replicas)
 
-	// VolumeSizeLimitMB caps per-volume rollover, not total capacity (the volume PVC governs that).
-	volumeSizeLimitMB := seaweedVolumeSizeLimitMB
+	volumeSizeLimitMB, maxVolumeCount := volumeLayout(storageQuantity)
 
 	// Merge the storage request (PVC size) with any configured cpu/memory so neither drops the other.
 	volumeRequests := corev1.ResourceList{corev1.ResourceStorage: storageQuantity}
@@ -122,17 +134,18 @@ func ToObjectStoreVendorSpec(
 				ComponentSpec: seaweedv1.ComponentSpec{
 					Volumes:      seaweedWritableVolumes(),
 					VolumeMounts: seaweedWritableVolumeMounts(),
+					ExtraArgs:    []string{"-ip.bind=0.0.0.0"},
 				},
 			},
 			Volume: &seaweedv1.VolumeSpec{
 				Replicas: infraSpec.Replicas,
 				VolumeServerConfig: seaweedv1.VolumeServerConfig{
-					MetricsPort: ptr.To(seaweedVolumeMetricsPort),
-					// 0 lets each server fill its whole disk (disk / volumeSizeLimitMB volumes) instead of a low fixed cap.
-					MaxVolumeCounts: ptr.To(int32(0)),
+					MetricsPort:     ptr.To(seaweedVolumeMetricsPort),
+					MaxVolumeCounts: ptr.To(maxVolumeCount),
 					ComponentSpec: seaweedv1.ComponentSpec{
 						Volumes:      seaweedWritableVolumes(),
 						VolumeMounts: seaweedWritableVolumeMounts(),
+						ExtraArgs:    []string{"-ip.bind=0.0.0.0"},
 					},
 					// Operator sizes the data PVC from Requests[storage] — a persistent disk, not ephemeral.
 					ResourceRequirements: corev1.ResourceRequirements{
@@ -172,6 +185,7 @@ func ToObjectStoreVendorSpec(
 				ComponentSpec: seaweedv1.ComponentSpec{
 					Volumes:      seaweedWritableVolumes(),
 					VolumeMounts: seaweedWritableVolumeMounts(),
+					ExtraArgs:    []string{"-ip.bind=0.0.0.0"},
 				},
 				Persistence: &seaweedv1.PersistenceSpec{
 					Enabled:   true,

@@ -62,8 +62,8 @@ var _ = Describe("ObjectStore sizing per tier", func() {
 	})
 
 	// Values mirror bucket.default.sizing in the local manifest. Every tier must
-	// keep the same hardening regardless of size: 1024MB rollover, auto-fill
-	// disk (maxVolumeCounts 0), and a small fixed filer disk.
+	// keep the same hardening regardless of size: 1024MB rollover, a writable
+	// volume count sized to the disk, and a small fixed filer disk.
 	DescribeTable("renders a healthy Seaweed spec for each size",
 		func(size apiv2.Size, wantReplicas int32, wantVolumeSize, wantReplication string, wantCPU string) {
 			wandb := objectStoreWandb(size)
@@ -81,7 +81,7 @@ var _ = Describe("ObjectStore sizing per tier", func() {
 			// Hardening that must hold for every tier.
 			Expect(*seaweed.Spec.Master.VolumeSizeLimitMB).To(Equal(int32(1024)))
 			Expect(seaweed.Spec.Volume.MaxVolumeCounts).NotTo(BeNil())
-			Expect(*seaweed.Spec.Volume.MaxVolumeCounts).To(Equal(int32(0)))
+			Expect(*seaweed.Spec.Volume.MaxVolumeCounts).To(BeNumerically(">", int32(0)))
 			Expect(seaweed.Spec.Filer.Persistence.Resources.Requests[corev1.ResourceStorage]).To(Equal(resource.MustParse("1Gi")))
 
 			if wantCPU == "" {
