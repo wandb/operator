@@ -1,6 +1,6 @@
 {{- /*
   Pre-install / pre-upgrade Helm hook Job that installs CRDs for the operator
-  itself and any enabled subchart whose CRDs we manage (redis, kafka, etc.).
+  itself and any enabled subchart whose CRDs we manage (redis, clickhouse, etc.).
 
   The Job runs the operator image's /crd-installer binary, which embeds the
   CRD YAML at build time and applies it via server-side apply with field
@@ -55,7 +55,11 @@ spec:
       {{- end }}
       securityContext:
         runAsNonRoot: {{ dig "wandb-operator" "podSecurityContext" "runAsNonRoot" true .Values.AsMap }}
-        runAsUser: {{ dig "wandb-operator" "podSecurityContext" "runAsUser" 1000 .Values.AsMap }}
+        {{- /* runAsUser only if set, else restricted-v2 assigns it. */ -}}
+        {{- $crdInstallerRunAsUser := dig "wandb-operator" "podSecurityContext" "runAsUser" nil .Values.AsMap }}
+        {{- if $crdInstallerRunAsUser }}
+        runAsUser: {{ $crdInstallerRunAsUser }}
+        {{- end }}
         seccompProfile:
           type: {{ dig "wandb-operator" "podSecurityContext" "seccompProfile" "type" "RuntimeDefault" .Values.AsMap }}
       containers:

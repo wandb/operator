@@ -7,9 +7,12 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
+	"github.com/wandb/operator/internal/controller/infra/managed/clickhouse/altinity/keeper"
 	"github.com/wandb/operator/internal/logx"
 	"github.com/wandb/operator/pkg/utils"
 	"github.com/wandb/operator/pkg/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
+	chtypes "github.com/wandb/operator/pkg/vendored/altinity-clickhouse/common/types"
+	"github.com/wandb/operator/pkg/wandb/manifest"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -21,8 +24,19 @@ import (
 
 const (
 	ClickhouseModuleName = "clickhouse"
-	ClickHouseImage      = "altinity/clickhouse-server:25.8.16.10002.altinitystable"
+
+	// TODO: remove this hardcoded default once all supported manifest versions
+	// supply clickhouse.<instance>.images.server.
+	defaultClickHouseImage = "altinity/clickhouse-server:25.8.16.10002.altinitystable"
 )
+
+func ClickHouseImage(img manifest.ImageRef, globalImageRegistry string) string {
+	if out := img.GetImage(globalImageRegistry); out != "" {
+		return out
+	}
+	// Fallback for older manifests that don't supply the image.
+	return defaultClickHouseImage
+}
 
 const (
 	clickHouseRunAsUser  int64 = 101
@@ -109,6 +123,8 @@ func ToClickHouseVendorSpec(
 	wandb *apiv2.WeightsAndBiases,
 	spec *apiv2.ManagedClickHouseSpec,
 	scheme *runtime.Scheme,
+	objStorage *ObjectStorageConn,
+	mfst manifest.Manifest,
 ) (*v1.ClickHouseInstallation, error) {
 	_, log := logx.WithSlog(ctx, logx.ClickHouse)
 
@@ -116,12 +132,21 @@ func ToClickHouseVendorSpec(
 		return nil, nil
 	}
 
+	// Managed ClickHouse stores table data in the object store; require it.
+	if objStorage == nil {
+		return nil, fmt.Errorf("managed ClickHouse requires object storage, but none was resolved")
+	}
+
 	nsnBuilder := CreateNsNameBuilder(types.NamespacedName{
 		Namespace: spec.Namespace, Name: spec.Name,
 	})
 
-	// Parse storage quantity
+	// This PV holds only metadata/system tables and the S3 read-through cache;
+	// table data lives in the bucket.
 	storageQuantity := resource.MustParse(spec.StorageSize)
+
+	// Reserve ~20% of the local PV for metadata/system; the rest backs the cache.
+	cacheMaxSizeBytes := storageQuantity.Value() * 8 / 10
 
 	// Create user settings with password
 	passwordSha256 := fmt.Sprintf("%x", sha256.Sum256([]byte(ClickHousePassword)))
@@ -141,6 +166,9 @@ func ToClickHouseVendorSpec(
 
 	// Create server settings
 	serverSettings := v1.NewSettings()
+
+	// Define the S3 disk + cache + storage policy and make it the server-wide default.
+	applyStorageConfiguration(serverSettings, objStorage, cacheMaxSizeBytes)
 
 	// Enable built-in Prometheus metrics endpoint if telemetry is enabled
 	if spec.Telemetry.Enabled {
@@ -165,7 +193,7 @@ func ToClickHouseVendorSpec(
 		Containers: []corev1.Container{
 			{
 				Name:            "clickhouse",
-				Image:           ClickHouseImage,
+				Image:           ClickHouseImage(mfst.Clickhouse["default"].Images["server"], wandb.Spec.Global.ImageRegistry),
 				SecurityContext: clickHouseContainerSecurityContext(),
 				VolumeMounts:    clickHouseWritableVolumeMounts(),
 			},
@@ -200,6 +228,14 @@ func ToClickHouseVendorSpec(
 				},
 				Users:    userSettings,
 				Settings: serverSettings,
+				Zookeeper: &v1.ZookeeperConfig{
+					Nodes: v1.ZookeeperNodes{
+						{
+							Host: keeper.ClientServiceFQDN(spec.Namespace, spec.Name),
+							Port: chtypes.NewInt32(int32(keeper.KeeperClientPort)),
+						},
+					},
+				},
 			},
 			Defaults: &v1.Defaults{
 				Templates: &v1.TemplatesList{

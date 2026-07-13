@@ -106,6 +106,9 @@ func applyGlobalMappings(globalMap map[string]interface{}, dst *appsv2.WeightsAn
 	if err := mapSize(globalMap, dst); err != nil {
 		return err
 	}
+	if err := mapCustomCACerts(globalMap, dst); err != nil {
+		return err
+	}
 	if err := mapOIDC(globalMap, dst); err != nil {
 		return err
 	}
@@ -117,6 +120,22 @@ func applyGlobalMappings(globalMap map[string]interface{}, dst *appsv2.WeightsAn
 	}
 	if err := mapBucket(globalMap, dst); err != nil {
 		return err
+	}
+
+	return nil
+}
+
+func mapCustomCACerts(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) error {
+	if certs, found, err := unstructured.NestedStringSlice(globalMap, "customCACerts"); err != nil {
+		return fmt.Errorf("spec.values.global.customCACerts: %w", err)
+	} else if found {
+		dst.Spec.Global.CustomCACerts = certs
+	}
+
+	if configMap, found, err := unstructured.NestedString(globalMap, "caCertsConfigMap"); err != nil {
+		return fmt.Errorf("spec.values.global.caCertsConfigMap: %w", err)
+	} else if found {
+		dst.Spec.Global.CACertsConfigMap = configMap
 	}
 
 	return nil

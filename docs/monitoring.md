@@ -49,8 +49,11 @@ telemetry:
 
 Notes:
 - Retention defaults to `1d`.
+- `telemetry.mode=forward/full` requires `telemetry.otel.secretName`.
 - `telemetry.mode=forward` requires `telemetry.forwarding.otlp.endpoint`.
 - The telemetry mode controls the stack behavior, but Helm still needs dependency booleans for the VictoriaMetrics and Grafana operator subcharts.
+- When telemetry is enabled, Helm renders `wandb-operator-telemetry-config` in the operator release namespace. The operator reads that ConfigMap through the Kubernetes API and re-reconciles W&B instances when it changes.
+- When telemetry is off, that ConfigMap is not rendered and the operator treats telemetry as disabled.
 - Use the preset files in `deploy/operator/profiles/` to avoid remembering those extra flags and to switch modes cleanly on an existing release.
 - `helm upgrade --install wandb-operator ./deploy/operator --reset-values -f ./deploy/operator/profiles/telemetry-full.yaml` installs the operator plus the full local telemetry stack.
 - `helm upgrade --install wandb-operator ./deploy/operator --reset-values -f ./deploy/operator/profiles/telemetry-off.yaml` disables the telemetry stack and its dependent operators.
@@ -76,8 +79,8 @@ Telemetry is off by default in Tilt. Set `"observabilityMode": "full"` in
 `tilt-settings.star` for the local full stack.
 
 Tilt renders the operator chart with `telemetry.mode=full`, enables the
-VictoriaMetrics and Grafana operator dependencies, and turns on the controller's
-telemetry flag.
+VictoriaMetrics and Grafana operator dependencies, and lets the controller read
+the chart-rendered telemetry ConfigMap.
 
 Tilt exposes endpoints for:
 - Grafana
@@ -87,6 +90,21 @@ Tilt exposes endpoints for:
 
 ## Manifest `source.type=telemetry`
 
+The resolved operator-managed telemetry status is published on
+`WeightsAndBiases.status.telemetryStatus`, including `ready`, `state`, `mode`,
+and nested `connection` details such as the effective protocol, endpoints,
+Secret name, gorilla tracer connection, DogStatsD address, and local
+Datadog-agent compatibility endpoint. These Datadog-compatible values point at
+the in-cluster telemetry gateway; they do not add a Datadog SaaS exporter.
+
+```bash
+kubectl get weightsandbiases <name> -n <namespace> -o jsonpath='{.status.telemetryStatus}'
+```
+
+```bash
+kubectl get weightsandbiases <name> -n <namespace> -o jsonpath='{.status.telemetryStatus.connection.connectionSecret}'
+```
+
 You can source env vars from the operator-managed telemetry secret:
 
 ```yaml
@@ -95,6 +113,22 @@ env:
     sources:
       - type: telemetry
         field: gorillaTracer
+  - name: GORILLA_STATSD_ADDRESS
+    sources:
+      - type: telemetry
+        field: statsdAddress
+  - name: DD_TRACE_AGENT_URL
+    sources:
+      - type: telemetry
+        field: datadogTraceAgentURL
+  - name: DD_AGENT_HOST
+    sources:
+      - type: telemetry
+        field: datadogTraceAgentHost
+  - name: DD_TRACE_AGENT_PORT
+    sources:
+      - type: telemetry
+        field: datadogTraceAgentPort
   - name: OTEL_EXPORTER_OTLP_METRICS_ENDPOINT
     sources:
       - type: telemetry
@@ -117,6 +151,6 @@ env:
 2. Verify Grafana resources:
    - `kubectl get grafana,grafanadatasource -n <telemetry-namespace>`
 3. Verify telemetry secret:
-   - `kubectl get secret wandb-otel-connection -n <wandb-namespace> -o yaml`
+   - `kubectl get secret <configured-secret-name> -n <wandb-namespace> -o yaml`
 4. Verify pod env:
    - `kubectl exec -n <wandb-namespace> deploy/<app> -- env | grep OTEL_`

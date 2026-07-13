@@ -21,6 +21,17 @@ func TestTelemetryChartFullModeRendersCoreStack(t *testing.T) {
 	mustContain(t, output, "kind: VTSingle")
 	mustContain(t, output, "name: victoria-otlp-gateway-config")
 	mustContain(t, output, "name: victoria-otlp-gateway")
+	mustContain(t, output, "statsd/dogstatsd:")
+	mustContain(t, output, "endpoint: 0.0.0.0:8125")
+	mustContain(t, output, "datadog:")
+	mustContain(t, output, "endpoint: 0.0.0.0:8126")
+	mustContain(t, output, "receivers: [otlp, statsd/dogstatsd, spanmetrics]")
+	mustContain(t, output, "receivers: [otlp, datadog]")
+	mustContain(t, output, "name: statsd")
+	mustContain(t, output, "port: 8125")
+	mustContain(t, output, "protocol: UDP")
+	mustContain(t, output, "name: datadog-trace")
+	mustContain(t, output, "port: 8126")
 	mustContain(t, output, "kind: Grafana")
 	mustContain(t, output, "kind: GrafanaDatasource")
 	mustContain(t, output, "url: \"http://vmsingle-victoria-instance:8428\"")
@@ -54,6 +65,11 @@ func TestTelemetryChartForwardModeSkipsGrafanaButAddsForwarding(t *testing.T) {
 	mustContain(t, output, "name: victoria-otlp-gateway-config")
 	mustContain(t, output, "name: victoria-otlp-gateway")
 	mustContain(t, output, "endpoint: \"https://otel.example.com\"")
+	mustContain(t, output, "receivers: [otlp, statsd/dogstatsd, spanmetrics]")
+	mustContain(t, output, "exporters: [otlphttp/vm, otlphttp/external]")
+	mustContain(t, output, "exporters: [otlphttp/vl, otlphttp/external]")
+	mustContain(t, output, "receivers: [otlp, datadog]")
+	mustContain(t, output, "exporters: [otlphttp/vt, spanmetrics, otlphttp/external]")
 	mustNotContain(t, output, "kind: Grafana")
 }
 
@@ -70,6 +86,26 @@ func TestTelemetryChartOffModeSkipsManagedStack(t *testing.T) {
 	mustNotContain(t, output, "name: victoria-otlp-gateway-config")
 	mustNotContain(t, output, "name: victoria-otlp-gateway")
 	mustNotContain(t, output, "kind: Grafana")
+	mustNotContain(t, output, "name: wandb-operator-telemetry-config")
+}
+
+func TestTelemetryChartRendersRuntimeConfigWithoutOperatorEnvPassthrough(t *testing.T) {
+	output := runHelmTemplate(t,
+		"--set", "wandb.install=false",
+		"--set", "telemetry.mode=full",
+		"--set", "victoria-metrics-operator.enabled=true",
+		"--set", "grafana-operator.enabled=true",
+	)
+
+	mustContain(t, output, "name: wandb-operator-telemetry-config")
+	mustContain(t, output, "TELEMETRY_MODE: \"full\"")
+	mustContain(t, output, "TELEMETRY_OTEL_SECRET_NAME: \"wandb-otel-connection\"")
+	mustNotContain(t, output, "key: TELEMETRY_ENABLED")
+	mustNotContain(t, output, "key: TELEMETRY_MANAGED_NAMESPACE")
+	mustNotContain(t, output, "key: TELEMETRY_OTEL_SECRET_NAME")
+	mustNotContain(t, output, "key: TELEMETRY_OTEL_PROTOCOL")
+	mustNotContain(t, output, "key: TELEMETRY_OTEL_SERVICE_NAME")
+	mustNotContain(t, output, "key: TELEMETRY_OTEL_RESOURCE_ATTRIBUTES")
 }
 
 func TestStandaloneTelemetryChartFullModeRendersCoreStack(t *testing.T) {
@@ -82,6 +118,8 @@ func TestStandaloneTelemetryChartFullModeRendersCoreStack(t *testing.T) {
 	mustContain(t, output, "kind: VMAgent")
 	mustContain(t, output, "kind: Grafana")
 	mustContain(t, output, "url: \"http://vmsingle-victoria-instance:8428\"")
+	mustContain(t, output, "statsd/dogstatsd:")
+	mustContain(t, output, "datadog:")
 }
 
 func runHelmTemplate(t *testing.T, extraArgs ...string) string {

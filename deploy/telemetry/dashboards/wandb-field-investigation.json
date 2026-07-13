@@ -51,7 +51,7 @@
       "gridPos": {"h": 6, "w": 24, "x": 0, "y": 0},
       "options": {
         "mode": "markdown",
-        "content": "# W&B Field Investigation\n\nFirst-look diagnostic for the W&B application stack. Use this dashboard to answer **\"are users seeing problems, and where in the W&B app stack?\"**\n\nFor underlying infrastructure (MySQL, Redis, Kafka, MinIO, ClickHouse, container resources) see the [W&B Managed Install Performance](/d/wandb-managed-install-performance) dashboard.\n\n**Quick lookups from the shell:**\n\n- Install size & version: `kubectl get wandb -n <namespace> -o yaml`\n- Per-pod images: `kubectl get pods -n <namespace> -o jsonpath='{range .items[*]}{.metadata.name}{\"\\t\"}{.spec.containers[*].image}{\\\"\\n\\\"}{end}'`\n- Operator logs: `kubectl logs -n wandb-operators -l control-plane=controller-manager --tail=200`\n\nUse the **W&B Namespace** dropdown above to switch installs."
+        "content": "# W&B Field Investigation\n\nFirst-look diagnostic for the W&B application stack. Use this dashboard to answer **\"are users seeing problems, and where in the W&B app stack?\"**\n\nFor underlying infrastructure (MySQL, Redis, Kafka, SeaweedFS, ClickHouse, container resources) see the [W&B Managed Install Performance](/d/wandb-managed-install-performance) dashboard.\n\n**Quick lookups from the shell:**\n\n- Install size & version: `kubectl get wandb -n <namespace> -o yaml`\n- Per-pod images: `kubectl get pods -n <namespace> -o jsonpath='{range .items[*]}{.metadata.name}{\"\\t\"}{.spec.containers[*].image}{\\\"\\n\\\"}{end}'`\n- Operator logs: `kubectl logs -n wandb-operators -l control-plane=controller-manager --tail=200`\n\nUse the **W&B Namespace** dropdown above to switch installs."
       }
     },
     {
@@ -291,9 +291,9 @@
         "label": "W&B Namespace",
         "type": "query",
         "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
-        "definition": "label_values(container_last_seen, namespace)",
+        "definition": "label_values(wandb_application_info, namespace)",
         "query": {
-          "query": "label_values(container_last_seen, namespace)",
+          "query": "label_values(wandb_application_info, namespace)",
           "refId": "namespace-variable-query"
         },
         "regex": "/^(?!kube-|cert-manager$|monitoring$|wandb-operators$|operator-system$|grafana$|victoria.*$|telemetry$).*$/",
@@ -301,7 +301,7 @@
         "sort": 1,
         "includeAll": false,
         "multi": false,
-        "current": {"text": "default", "value": "default"}
+        "current": {"text": "wandb", "value": "wandb"}
       }
     ]
   },

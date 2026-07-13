@@ -8,6 +8,7 @@ import (
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/logx"
 	seaweedv1 "github.com/wandb/operator/pkg/vendored/seaweedfs-operator/seaweed.seaweedfs.com/v1"
+	"github.com/wandb/operator/pkg/wandb/manifest"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -18,13 +19,30 @@ import (
 
 const (
 	ObjectStoreModuleName = "seaweedfs"
-	SeaweedImage          = "chrislusf/seaweedfs:latest"
+
+	// TODO: remove this hardcoded default once all supported manifest versions
+	// supply bucket.<instance>.images.seaweedfs.
+	defaultSeaweedImage = "chrislusf/seaweedfs:4.35"
 )
+
+func SeaweedImage(img manifest.ImageRef, globalImageRegistry string) string {
+	if out := img.GetImage(globalImageRegistry); out != "" {
+		return out
+	}
+	// Fallback for older manifests that don't supply the image.
+	return defaultSeaweedImage
+}
 
 const (
 	seaweedWritableTmpVolumeName = "seaweedfs-tmp"
 	seaweedWritableTmpMountPath  = "/tmp"
 	seaweedFilerDataMountPath    = "/data/filerldb2"
+)
+
+const (
+	seaweedMasterMetricsPort int32 = 9091
+	seaweedVolumeMetricsPort int32 = 9092
+	seaweedFilerMetricsPort  int32 = 9093
 )
 
 func seaweedWritableVolumes() []corev1.Volume {
@@ -49,6 +67,7 @@ func ToObjectStoreVendorSpec(
 	wandb *apiv2.WeightsAndBiases,
 	infraSpec *apiv2.ManagedObjectStoreSpec,
 	scheme *runtime.Scheme,
+	mfst manifest.Manifest,
 ) (*seaweedv1.Seaweed, error) {
 	_, log := logx.WithSlog(ctx, logx.ObjectStore)
 	if infraSpec == nil {
@@ -79,7 +98,7 @@ func ToObjectStoreVendorSpec(
 			Labels:    labels,
 		},
 		Spec: seaweedv1.SeaweedSpec{
-			Image: SeaweedImage,
+			Image: SeaweedImage(mfst.Bucket["default"].Images["seaweedfs"], wandb.Spec.Global.ImageRegistry),
 			TLS: &seaweedv1.TLSSpec{
 				Enabled: infraSpec.SeaweedObjectStoreSpec.TlsEnabled,
 			},
@@ -87,6 +106,7 @@ func ToObjectStoreVendorSpec(
 				Replicas:           1,
 				DefaultReplication: &replication,
 				VolumeSizeLimitMB:  &volumeSizeLimitMB,
+				MetricsPort:        ptr.To(seaweedMasterMetricsPort),
 				ComponentSpec: seaweedv1.ComponentSpec{
 					Volumes:      seaweedWritableVolumes(),
 					VolumeMounts: seaweedWritableVolumeMounts(),
@@ -95,6 +115,7 @@ func ToObjectStoreVendorSpec(
 			Volume: &seaweedv1.VolumeSpec{
 				Replicas: infraSpec.Replicas,
 				VolumeServerConfig: seaweedv1.VolumeServerConfig{
+					MetricsPort: ptr.To(seaweedVolumeMetricsPort),
 					ComponentSpec: seaweedv1.ComponentSpec{
 						Volumes:      seaweedWritableVolumes(),
 						VolumeMounts: seaweedWritableVolumeMounts(),
@@ -110,6 +131,15 @@ func ToObjectStoreVendorSpec(
 				ComponentSpec: seaweedv1.ComponentSpec{
 					Affinity:    wandb.GetAffinity(infraSpec.ManagedInfraSpec),
 					Tolerations: *wandb.GetTolerations(infraSpec.ManagedInfraSpec),
+					Env: []corev1.EnvVar{{
+						// W&B presigns S3 URLs against the in-cluster endpoint and
+						// rewrites the host for external clients without re-signing;
+						// pin signature verification to that endpoint so presigned
+						// requests arriving through an ingress proxy (whose
+						// Host/X-Forwarded-Host is the external hostname) validate.
+						Name:  "S3_EXTERNAL_URL",
+						Value: s3ExternalURL(specName, infraSpec.Namespace, infraSpec.SeaweedObjectStoreSpec.TlsEnabled),
+					}},
 				},
 				ResourceRequirements: corev1.ResourceRequirements{},
 				Replicas:             1,
@@ -119,12 +149,12 @@ func ToObjectStoreVendorSpec(
 					},
 					Key: "config.json",
 				},
-				Port:       new(int32(80)),
 				DomainName: nil,
 			},
 			Filer: &seaweedv1.FilerSpec{
-				Replicas: 1,
-				Config:   ptr.To("[leveldb2]\nenabled = true\ndir = \"" + seaweedFilerDataMountPath + "\""),
+				Replicas:    1,
+				MetricsPort: ptr.To(seaweedFilerMetricsPort),
+				Config:      ptr.To("[leveldb2]\nenabled = true\ndir = \"" + seaweedFilerDataMountPath + "\""),
 				ComponentSpec: seaweedv1.ComponentSpec{
 					Volumes:      seaweedWritableVolumes(),
 					VolumeMounts: seaweedWritableVolumeMounts(),

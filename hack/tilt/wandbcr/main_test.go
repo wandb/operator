@@ -1,14 +1,22 @@
 package main
 
 import (
+	"crypto/x509"
+	"encoding/pem"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	v2 "github.com/wandb/operator/api/v2"
+	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/yaml"
 )
+
+const testCustomCAPEM = `-----BEGIN CERTIFICATE-----
+MIIBtest
+-----END CERTIFICATE-----
+`
 
 func TestBuildCRDefaultGateway(t *testing.T) {
 	cr, err := BuildCR(Options{})
@@ -49,11 +57,183 @@ func TestBuildCRDefaultGateway(t *testing.T) {
 	if cr.Spec.ClickHouse[v2.DefaultInstanceName].ManagedClickHouse == nil || cr.Spec.ClickHouse[v2.DefaultInstanceName].ManagedClickHouse.Telemetry.Enabled {
 		t.Fatalf("clickhouse telemetry should be disabled by default")
 	}
+	if cr.Spec.MySQL[v2.DefaultInstanceName].ExternalMysql != nil {
+		t.Fatalf("external mysql should be unset by default")
+	}
+	if cr.Spec.Redis[v2.DefaultInstanceName].ExternalRedis != nil {
+		t.Fatalf("external redis should be unset by default")
+	}
+	if cr.Spec.ObjectStore[v2.DefaultInstanceName].ExternalObjectStore != nil {
+		t.Fatalf("external object store should be unset by default")
+	}
+	if len(cr.Spec.Global.CustomCACerts) != 0 || cr.Spec.Global.CACertsConfigMap != "" {
+		t.Fatalf("custom CA fields should be unset by default: %#v", cr.Spec.Global)
+	}
 	if cr.Spec.Networking.Mode != v2.NetworkingModeGatewayAPI {
 		t.Fatalf("networking mode = %q", cr.Spec.Networking.Mode)
 	}
 	if cr.Spec.Networking.GatewayAPI == nil || cr.Spec.Networking.GatewayAPI.Gateway.GatewayClassName == nil || *cr.Spec.Networking.GatewayAPI.Gateway.GatewayClassName != "nginx" {
 		t.Fatalf("gateway class was not set")
+	}
+}
+
+func TestBuildCRExternalMySQLOnly(t *testing.T) {
+	cr, err := BuildCR(Options{ExternalMySQL: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if cr.Spec.MySQL[v2.DefaultInstanceName].ManagedMysql != nil {
+		t.Fatalf("managed mysql should be disabled")
+	}
+	if cr.Spec.MySQL[v2.DefaultInstanceName].ExternalMysql == nil {
+		t.Fatalf("external mysql should be configured")
+	}
+	assertSelector(t, cr.Spec.MySQL[v2.DefaultInstanceName].ExternalMysql.Host, externalMySQLSecret, "Host")
+	assertSelector(t, cr.Spec.MySQL[v2.DefaultInstanceName].ExternalMysql.Port, externalMySQLSecret, "Port")
+	assertSelector(t, cr.Spec.MySQL[v2.DefaultInstanceName].ExternalMysql.Database, externalMySQLSecret, "Database")
+	assertSelector(t, cr.Spec.MySQL[v2.DefaultInstanceName].ExternalMysql.Username, externalMySQLSecret, "Username")
+	assertSelector(t, cr.Spec.MySQL[v2.DefaultInstanceName].ExternalMysql.Password, externalMySQLSecret, "Password")
+	assertEmptySelector(t, cr.Spec.MySQL[v2.DefaultInstanceName].ExternalMysql.SslCa, "mysql sslCa")
+
+	if cr.Spec.Redis[v2.DefaultInstanceName].ManagedRedis == nil || cr.Spec.Redis[v2.DefaultInstanceName].ExternalRedis != nil {
+		t.Fatalf("redis should remain managed")
+	}
+	if cr.Spec.ObjectStore[v2.DefaultInstanceName].ManagedObjectStore == nil || cr.Spec.ObjectStore[v2.DefaultInstanceName].ExternalObjectStore != nil {
+		t.Fatalf("object store should remain managed")
+	}
+}
+
+func TestBuildCRExternalRedisOnly(t *testing.T) {
+	cr, err := BuildCR(Options{ExternalRedis: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if cr.Spec.Redis[v2.DefaultInstanceName].ManagedRedis != nil {
+		t.Fatalf("managed redis should be disabled")
+	}
+	if cr.Spec.Redis[v2.DefaultInstanceName].ExternalRedis == nil {
+		t.Fatalf("external redis should be configured")
+	}
+	assertSelector(t, cr.Spec.Redis[v2.DefaultInstanceName].ExternalRedis.Host, externalRedisSecret, "Host")
+	assertSelector(t, cr.Spec.Redis[v2.DefaultInstanceName].ExternalRedis.Port, externalRedisSecret, "Port")
+	assertEmptySelector(t, cr.Spec.Redis[v2.DefaultInstanceName].ExternalRedis.Password, "redis password")
+	assertEmptySelector(t, cr.Spec.Redis[v2.DefaultInstanceName].ExternalRedis.SslCa, "redis sslCa")
+
+	if cr.Spec.MySQL[v2.DefaultInstanceName].ManagedMysql == nil || cr.Spec.MySQL[v2.DefaultInstanceName].ExternalMysql != nil {
+		t.Fatalf("mysql should remain managed")
+	}
+	if cr.Spec.ObjectStore[v2.DefaultInstanceName].ManagedObjectStore == nil || cr.Spec.ObjectStore[v2.DefaultInstanceName].ExternalObjectStore != nil {
+		t.Fatalf("object store should remain managed")
+	}
+}
+
+func TestBuildCRExternalObjectStoreOnly(t *testing.T) {
+	cr, err := BuildCR(Options{ExternalObjectStore: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if cr.Spec.ObjectStore[v2.DefaultInstanceName].ManagedObjectStore != nil {
+		t.Fatalf("managed object store should be disabled")
+	}
+	if cr.Spec.ObjectStore[v2.DefaultInstanceName].ExternalObjectStore == nil {
+		t.Fatalf("external object store should be configured")
+	}
+	assertSelector(t, cr.Spec.ObjectStore[v2.DefaultInstanceName].ExternalObjectStore.Provider, externalObjectStoreSecret, "Provider")
+	assertSelector(t, cr.Spec.ObjectStore[v2.DefaultInstanceName].ExternalObjectStore.Endpoint, externalObjectStoreSecret, "Host")
+	assertSelector(t, cr.Spec.ObjectStore[v2.DefaultInstanceName].ExternalObjectStore.Port, externalObjectStoreSecret, "Port")
+	assertSelector(t, cr.Spec.ObjectStore[v2.DefaultInstanceName].ExternalObjectStore.Bucket, externalObjectStoreSecret, "Bucket")
+	assertSelector(t, cr.Spec.ObjectStore[v2.DefaultInstanceName].ExternalObjectStore.Region, externalObjectStoreSecret, "Region")
+	assertSelector(t, cr.Spec.ObjectStore[v2.DefaultInstanceName].ExternalObjectStore.AccessKey, externalObjectStoreSecret, "AccessKey")
+	assertSelector(t, cr.Spec.ObjectStore[v2.DefaultInstanceName].ExternalObjectStore.SecretKey, externalObjectStoreSecret, "SecretKey")
+
+	if cr.Spec.MySQL[v2.DefaultInstanceName].ManagedMysql == nil || cr.Spec.MySQL[v2.DefaultInstanceName].ExternalMysql != nil {
+		t.Fatalf("mysql should remain managed")
+	}
+	if cr.Spec.Redis[v2.DefaultInstanceName].ManagedRedis == nil || cr.Spec.Redis[v2.DefaultInstanceName].ExternalRedis != nil {
+		t.Fatalf("redis should remain managed")
+	}
+}
+
+func TestBuildArtifactsCustomCAOnly(t *testing.T) {
+	cr, configMap, err := BuildArtifacts(Options{
+		CustomCA:               true,
+		CustomCACertificatePEM: testCustomCAPEM,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(cr.Spec.Global.CustomCACerts) != 1 || cr.Spec.Global.CustomCACerts[0] != testCustomCAPEM {
+		t.Fatalf("custom CA certs not configured: %#v", cr.Spec.Global.CustomCACerts)
+	}
+	if cr.Spec.Global.CACertsConfigMap != customCAConfigMapName {
+		t.Fatalf("caCertsConfigMap = %q", cr.Spec.Global.CACertsConfigMap)
+	}
+	if configMap == nil {
+		t.Fatalf("custom CA ConfigMap should be generated")
+	}
+	if configMap.Name != customCAConfigMapName || configMap.Namespace != defaultNamespace {
+		t.Fatalf("unexpected ConfigMap metadata: %s/%s", configMap.Namespace, configMap.Name)
+	}
+	if configMap.Data[customCAConfigMapKey] != testCustomCAPEM {
+		t.Fatalf("ConfigMap cert data not populated")
+	}
+	if cr.Spec.MySQL[v2.DefaultInstanceName].ExternalMysql != nil || cr.Spec.Redis[v2.DefaultInstanceName].ExternalRedis != nil || cr.Spec.ObjectStore[v2.DefaultInstanceName].ExternalObjectStore != nil {
+		t.Fatalf("custom CA should not switch infra to external by itself")
+	}
+}
+
+func TestBuildArtifactsGeneratesValidCustomCA(t *testing.T) {
+	cr, configMap, err := BuildArtifacts(Options{CustomCA: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(cr.Spec.Global.CustomCACerts) != 1 {
+		t.Fatalf("expected one generated custom CA, got %d", len(cr.Spec.Global.CustomCACerts))
+	}
+	if configMap == nil || configMap.Data[customCAConfigMapKey] != cr.Spec.Global.CustomCACerts[0] {
+		t.Fatalf("generated ConfigMap should contain the same CA cert as the CR")
+	}
+
+	block, _ := pem.Decode([]byte(cr.Spec.Global.CustomCACerts[0]))
+	if block == nil {
+		t.Fatalf("generated custom CA is not PEM encoded")
+	}
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cert.IsCA {
+		t.Fatalf("generated certificate is not a CA")
+	}
+}
+
+func TestBuildArtifactsExternalInfraWithCustomCA(t *testing.T) {
+	cr, configMap, err := BuildArtifacts(Options{
+		ExternalMySQL:          true,
+		ExternalRedis:          true,
+		ExternalObjectStore:    true,
+		CustomCA:               true,
+		CustomCACertificatePEM: testCustomCAPEM,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if configMap == nil {
+		t.Fatalf("custom CA ConfigMap should be generated")
+	}
+	assertSelector(t, cr.Spec.MySQL[v2.DefaultInstanceName].ExternalMysql.SslCa, externalMySQLTLSSecret, "ca.crt")
+	assertSelector(t, cr.Spec.Redis[v2.DefaultInstanceName].ExternalRedis.SslCa, externalRedisTLSSecret, "ca.crt")
+	if cr.Spec.ObjectStore[v2.DefaultInstanceName].ExternalObjectStore == nil {
+		t.Fatalf("external object store should be configured")
+	}
+	if cr.Spec.ObjectStore[v2.DefaultInstanceName].ManagedObjectStore != nil || cr.Spec.MySQL[v2.DefaultInstanceName].ManagedMysql != nil || cr.Spec.Redis[v2.DefaultInstanceName].ManagedRedis != nil {
+		t.Fatalf("selected external infra should disable corresponding managed infra")
 	}
 }
 
@@ -269,5 +449,51 @@ func TestRunWritesStableYAML(t *testing.T) {
 	rendered := string(data)
 	if strings.Contains(rendered, "\nstatus:") || strings.Contains(rendered, "\noidc:") || strings.Contains(rendered, "manifestRepository") {
 		t.Fatalf("generated CR contains empty runtime/defaulted fields:\n%s", rendered)
+	}
+}
+
+func TestRunWritesCustomCAConfigMapYAML(t *testing.T) {
+	dir := t.TempDir()
+	out := filepath.Join(dir, "generated", "wandb.yaml")
+	configMapOut := filepath.Join(dir, "generated", "custom-ca-configmap.yaml")
+
+	if err := Run(Options{
+		OutPath:                out,
+		Namespace:              "custom-ns",
+		CustomCA:               true,
+		CustomCACertificatePEM: testCustomCAPEM,
+		CustomCAConfigMapOut:   configMapOut,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	data, err := os.ReadFile(configMapOut)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var configMap corev1.ConfigMap
+	if err := yaml.Unmarshal(data, &configMap); err != nil {
+		t.Fatal(err)
+	}
+	if configMap.Name != customCAConfigMapName || configMap.Namespace != "custom-ns" {
+		t.Fatalf("unexpected ConfigMap metadata: %s/%s", configMap.Namespace, configMap.Name)
+	}
+	if configMap.Data[customCAConfigMapKey] != testCustomCAPEM {
+		t.Fatalf("ConfigMap cert data not populated")
+	}
+}
+
+func assertSelector(t *testing.T, selector corev1.SecretKeySelector, name, key string) {
+	t.Helper()
+	if selector.Name != name || selector.Key != key {
+		t.Fatalf("selector = %s/%s, want %s/%s", selector.Name, selector.Key, name, key)
+	}
+}
+
+func assertEmptySelector(t *testing.T, selector corev1.SecretKeySelector, field string) {
+	t.Helper()
+	if selector.Name != "" || selector.Key != "" {
+		t.Fatalf("%s selector should be empty, got %s/%s", field, selector.Name, selector.Key)
 	}
 }

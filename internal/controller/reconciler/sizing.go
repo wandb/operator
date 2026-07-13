@@ -260,6 +260,23 @@ func ApplyInfraSizing(wandb *v2.WeightsAndBiases, manifest manifest.Manifest) {
 		if spec == nil {
 			continue
 		}
+
+		// Keeper sizing comes from the manifest's clickhouseKeeper block
+		// (independent of the clickhouse block); CR values are treated as user
+		// overrides.
+		if keeperConfig, ok := infraSizingConfig(manifest.ClickhouseKeeper, key); ok {
+			keeperSizing := ResolveInfraSizing(keeperConfig.Sizing, size, wandb.Spec.RequireLimits)
+			if spec.Keeper.Replicas == 0 && keeperSizing.Replicas != 0 {
+				spec.Keeper.Replicas = keeperSizing.Replicas
+			}
+			if spec.Keeper.StorageSize == "" && keeperSizing.VolumeSize != "" {
+				spec.Keeper.StorageSize = keeperSizing.VolumeSize
+			}
+			if keeperSizing.Resources != nil && len(spec.Keeper.Config.Resources.Requests) == 0 && len(spec.Keeper.Config.Resources.Limits) == 0 {
+				spec.Keeper.Config.Resources = *keeperSizing.Resources
+			}
+		}
+
 		clickhouseConfig, ok := infraSizingConfig(manifest.Clickhouse, key)
 		if !ok {
 			continue

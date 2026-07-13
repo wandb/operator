@@ -299,8 +299,6 @@ func buildInfraHTTPRoute(
 		},
 	}
 
-	hostnameOverride := fmt.Sprintf("%s.%s.svc.cluster.local", entry.serviceName, entry.namespace)
-
 	return &gatewayv1.HTTPRoute{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      entry.name,
@@ -315,19 +313,6 @@ func buildInfraHTTPRoute(
 			Rules: []gatewayv1.HTTPRouteRule{{
 				Matches:     matches,
 				BackendRefs: []gatewayv1.HTTPBackendRef{backendRef},
-				Filters: []gatewayv1.HTTPRouteFilter{
-					{
-						Type: gatewayv1.HTTPRouteFilterRequestHeaderModifier,
-						RequestHeaderModifier: &gatewayv1.HTTPHeaderFilter{
-							Remove: []string{"X-Forwarded-Host", "X-Forwarded-Port"},
-						},
-					}, {
-						Type: gatewayv1.HTTPRouteFilterURLRewrite,
-						URLRewrite: &gatewayv1.HTTPURLRewriteFilter{
-							Hostname: (*gatewayv1.PreciseHostname)(&hostnameOverride),
-						},
-					},
-				},
 			}},
 		},
 	}

@@ -6,6 +6,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/pkg/wandb/manifest"
 	"github.com/wandb/operator/pkg/utils"
 	redisv1beta2 "github.com/wandb/operator/pkg/vendored/redis-operator/redis/v1beta2"
 	redisreplicationv1beta2 "github.com/wandb/operator/pkg/vendored/redis-operator/redisreplication/v1beta2"
@@ -23,7 +24,7 @@ var _ = Describe("Redis vendor specs", func() {
 	It("renders hardened standalone Redis settings", func() {
 		wandb := redisWandb(false)
 
-		redis, err := ToRedisStandaloneVendorSpec(context.Background(), wandb, wandb.Spec.Redis[apiv2.DefaultInstanceName].ManagedRedis, redisScheme())
+		redis, err := ToRedisStandaloneVendorSpec(context.Background(), wandb, wandb.Spec.Redis[apiv2.DefaultInstanceName].ManagedRedis, redisScheme(), manifest.Manifest{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(redis).NotTo(BeNil())
 
@@ -37,7 +38,7 @@ var _ = Describe("Redis vendor specs", func() {
 	It("renders hardened sentinel and replication Redis settings", func() {
 		wandb := redisWandb(true)
 
-		sentinel, err := ToRedisSentinelVendorSpec(context.Background(), wandb, wandb.Spec.Redis[apiv2.DefaultInstanceName].ManagedRedis, redisScheme())
+		sentinel, err := ToRedisSentinelVendorSpec(context.Background(), wandb, wandb.Spec.Redis[apiv2.DefaultInstanceName].ManagedRedis, redisScheme(), manifest.Manifest{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(sentinel).NotTo(BeNil())
 		expectRedisDefaultPodSecurityContext(sentinel.Spec.PodSecurityContext)
@@ -45,7 +46,7 @@ var _ = Describe("Redis vendor specs", func() {
 		Expect(sentinel.Spec.VolumeMount).NotTo(BeNil())
 		expectRedisWritableTmpMount(sentinel.Spec.VolumeMount.MountPath)
 
-		replication, err := ToRedisReplicationVendorSpec(context.Background(), wandb, wandb.Spec.Redis[apiv2.DefaultInstanceName].ManagedRedis, redisScheme())
+		replication, err := ToRedisReplicationVendorSpec(context.Background(), wandb, wandb.Spec.Redis[apiv2.DefaultInstanceName].ManagedRedis, redisScheme(), manifest.Manifest{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(replication).NotTo(BeNil())
 		expectRedisDefaultPodSecurityContext(replication.Spec.PodSecurityContext)
@@ -57,7 +58,7 @@ var _ = Describe("Redis vendor specs", func() {
 		utils.SetOpenShiftMode(true)
 
 		wandb := redisWandb(false)
-		redis, err := ToRedisStandaloneVendorSpec(context.Background(), wandb, wandb.Spec.Redis[apiv2.DefaultInstanceName].ManagedRedis, redisScheme())
+		redis, err := ToRedisStandaloneVendorSpec(context.Background(), wandb, wandb.Spec.Redis[apiv2.DefaultInstanceName].ManagedRedis, redisScheme(), manifest.Manifest{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(redis).NotTo(BeNil())
 

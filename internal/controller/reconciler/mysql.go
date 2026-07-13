@@ -27,12 +27,13 @@ func mysqlWriteState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
+	mfst manifest.Manifest,
 ) map[string][]metav1.Condition {
 	out := map[string][]metav1.Condition{}
 	for key, spec := range wandb.Spec.MySQL {
 		switch {
 		case spec.ManagedMysql != nil:
-			out[key] = managedMysqlWriteState(ctx, client, wandb, spec.ManagedMysql)
+			out[key] = managedMysqlWriteState(ctx, client, wandb, spec.ManagedMysql, mfst)
 		case spec.ExternalMysql != nil:
 			out[key] = externalmysql.WriteState(ctx, client, wandb, key, spec.ExternalMysql)
 		}
@@ -150,6 +151,7 @@ func managedMysqlWriteState(
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
 	spec *apiv2.ManagedMysqlSpec,
+	mfst manifest.Manifest,
 ) []metav1.Condition {
 	var specNamespacedName = managedMysqlSpecNamespacedName(spec)
 	logger := ctrl.LoggerFrom(ctx)
@@ -218,7 +220,7 @@ func managedMysqlWriteState(
 
 	var desired *mocov1beta2.MySQLCluster
 	var confMap *corev1.ConfigMap
-	desired, confMap, err = moco.ToMocoMySQLClusterSpec(ctx, *spec, wandb, client.Scheme())
+	desired, confMap, err = moco.ToMocoMySQLClusterSpec(ctx, *spec, wandb, client.Scheme(), mfst)
 	if err != nil {
 		logger.Error(err, "failed to translate moco spec")
 		return []metav1.Condition{
@@ -316,7 +318,14 @@ func allMysqlInitSucceeded(wandb *apiv2.WeightsAndBiases) bool {
 	return true
 }
 
-func runMysqlInitJob(ctx context.Context, client client.Client, wandb *apiv2.WeightsAndBiases, manifest manifest.Manifest) (ctrl.Result, error) {
+// mysqlManifestConfig returns the manifest infra config for the instance key,
+// falling back to the manifest "default" entry.
+func mysqlManifestConfig(mfst manifest.Manifest, key string) manifest.InfraConfig {
+	cfg, _ := infraSizingConfig(mfst.Mysql, key)
+	return cfg
+}
+
+func runMysqlInitJob(ctx context.Context, client client.Client, wandb *apiv2.WeightsAndBiases, mfst manifest.Manifest) (ctrl.Result, error) {
 	if wandb.Status.Wandb.MySQLInit == nil {
 		wandb.Status.Wandb.MySQLInit = map[string]apiv2.MigrationJobStatus{}
 	}
@@ -326,7 +335,7 @@ func runMysqlInitJob(ctx context.Context, client client.Client, wandb *apiv2.Wei
 		if spec.ManagedMysql == nil {
 			continue
 		}
-		res, err := runMysqlInitJobInstance(ctx, client, wandb, key, spec.ManagedMysql)
+		res, err := runMysqlInitJobInstance(ctx, client, wandb, key, spec.ManagedMysql, mfst)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
@@ -335,7 +344,7 @@ func runMysqlInitJob(ctx context.Context, client client.Client, wandb *apiv2.Wei
 	return consolidateResults(results), nil
 }
 
-func runMysqlInitJobInstance(ctx context.Context, client client.Client, wandb *apiv2.WeightsAndBiases, key string, spec *apiv2.ManagedMysqlSpec) (ctrl.Result, error) {
+func runMysqlInitJobInstance(ctx context.Context, client client.Client, wandb *apiv2.WeightsAndBiases, key string, spec *apiv2.ManagedMysqlSpec, mfst manifest.Manifest) (ctrl.Result, error) {
 	if wandb.Status.Wandb.MySQLInit[key].Succeeded {
 		return ctrl.Result{}, nil
 	}
@@ -392,7 +401,7 @@ func runMysqlInitJobInstance(ctx context.Context, client client.Client, wandb *a
 						Containers: []corev1.Container{
 							{
 								Name:    "moco-init",
-								Image:   "ghcr.io/cybozu-go/moco/mysql:8.4.8",
+								Image:   moco.MocoMySQLImage(mysqlManifestConfig(mfst, key).Images["mysql"], wandb.Spec.Global.ImageRegistry),
 								Command: []string{"/bin/sh", "-c", mysqlCmd},
 								Env: []corev1.EnvVar{
 									envFromConn("MYSQL_HOST", "Host"),

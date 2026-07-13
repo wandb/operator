@@ -22,6 +22,13 @@ spec:
         - name: mysql
           image: {{ .Values.mysql.image }}
           imagePullPolicy: IfNotPresent
+          {{- if include "test-infra.mysqlTLS" . }}
+          args:
+            - --require-secure-transport=ON
+            - --ssl-ca=/etc/mysql/tls/ca.crt
+            - --ssl-cert=/etc/mysql/tls/tls.crt
+            - --ssl-key=/etc/mysql/tls/tls.key
+          {{- end }}
           ports:
             - name: mysql
               containerPort: 3306
@@ -58,7 +65,17 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /var/lib/mysql
+            {{- if include "test-infra.mysqlTLS" . }}
+            - name: tls
+              mountPath: /etc/mysql/tls
+              readOnly: true
+            {{- end }}
       volumes:
         - name: data
           emptyDir: {}
+        {{- if include "test-infra.mysqlTLS" . }}
+        - name: tls
+          secret:
+            secretName: {{ .Values.mysql.tls.secretName }}
+        {{- end }}
 {{- end }}

@@ -16,6 +16,7 @@ import (
 )
 
 const ConnectionSecretName = "wandb-redis-connection"
+const caCertPath = "/etc/ssl/certs/redis_ca.pem"
 
 func connectionSecretName(key string) string {
 	if key == "" || key == apiv2.DefaultInstanceName {
@@ -63,6 +64,14 @@ func WriteState(
 	if _, ok := data["Tls"]; ok {
 		values := redisUrl.Query()
 		values.Add("tls", data["Tls"])
+		redisUrl.RawQuery = values.Encode()
+	}
+	if _, ok := data["SslCa"]; ok {
+		values := redisUrl.Query()
+		if values.Get("tls") == "" {
+			values.Set("tls", "true")
+		}
+		values.Set("caCertPath", caCertPath)
 		redisUrl.RawQuery = values.Encode()
 	}
 

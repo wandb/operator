@@ -8,7 +8,9 @@ import (
 	"github.com/wandb/operator/internal/controller/infra/external"
 	externalch "github.com/wandb/operator/internal/controller/infra/external/clickhouse"
 	"github.com/wandb/operator/internal/controller/infra/managed/clickhouse/altinity"
+	"github.com/wandb/operator/internal/controller/infra/managed/clickhouse/altinity/keeper"
 	"github.com/wandb/operator/pkg/utils"
+	"github.com/wandb/operator/pkg/wandb/manifest"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -16,16 +18,23 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+// clickHouseObjectStoreInstance is the object-store instance name managed
+// ClickHouse prefers for its S3 disk; ResolveInstance falls back to the
+// default instance when it is not provisioned.
+const clickHouseObjectStoreInstance = "clickhouse"
+
 func clickHouseWriteState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
+	objStoreConns map[string]*apiv2.ObjectStoreConnection,
+	mfst manifest.Manifest,
 ) map[string][]metav1.Condition {
 	out := map[string][]metav1.Condition{}
 	for key, spec := range wandb.Spec.ClickHouse {
 		switch {
 		case spec.ManagedClickHouse != nil:
-			out[key] = managedClickHouseWriteState(ctx, client, wandb, spec.ManagedClickHouse)
+			out[key] = managedClickHouseWriteState(ctx, client, wandb, spec.ManagedClickHouse, objStoreConns, mfst)
 		case spec.ExternalClickHouse != nil:
 			out[key] = externalch.WriteState(ctx, client, wandb, key, spec.ExternalClickHouse)
 		}
@@ -141,10 +150,47 @@ func managedClickHouseWriteState(
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
 	spec *apiv2.ManagedClickHouseSpec,
+	objStoreConns map[string]*apiv2.ObjectStoreConnection,
+	mfst manifest.Manifest,
 ) []metav1.Condition {
-	var specNamespacedName = managedClickHouseSpecNamespacedName(spec)
 	log := ctrl.LoggerFrom(ctx)
-	desired, err := altinity.ToClickHouseVendorSpec(ctx, wandb, spec, client.Scheme())
+
+	// ClickHouse table data lives in the object store: use the "clickhouse"
+	// instance when provisioned, otherwise the default instance.
+	objStoreConn, _ := apiv2.ResolveInstance(objStoreConns, clickHouseObjectStoreInstance)
+
+	// Resolve the bucket connection; wait and requeue if it isn't ready yet.
+	objStorage, err := altinity.ResolveObjectStorage(ctx, client, spec, objStoreConn)
+	if err != nil {
+		log.Error(err, "object storage not ready for ClickHouse")
+		return []metav1.Condition{
+			{
+				Type:   common.ReconciledType,
+				Status: metav1.ConditionFalse,
+				Reason: common.PendingCreateReason,
+			},
+			{
+				Type:   altinity.ClickHouseCustomResourceType,
+				Status: metav1.ConditionFalse,
+				Reason: common.PendingCreateReason,
+			},
+		}
+	}
+
+	// Translate the Keeper and ClickHouse CRs; WriteState writes Keeper first.
+	desiredKeeper, err := keeper.ToKeeperVendorSpec(ctx, wandb, spec, client.Scheme())
+	if err != nil {
+		log.Error(err, "failed to translate Keeper spec to vendor spec")
+		return []metav1.Condition{
+			{
+				Type:   common.ReconciledType,
+				Status: metav1.ConditionFalse,
+				Reason: common.ControllerErrorReason,
+			},
+		}
+	}
+
+	desired, err := altinity.ToClickHouseVendorSpec(ctx, wandb, spec, client.Scheme(), objStorage, mfst)
 	if err != nil {
 		log.Error(err, "failed to translate ClickHouse spec to vendor spec")
 		return []metav1.Condition{
@@ -156,11 +202,15 @@ func managedClickHouseWriteState(
 		}
 	}
 
+	specNamespacedName := managedClickHouseSpecNamespacedName(spec)
+
 	if conditions := altinity.CheckDetached(ctx, client, specNamespacedName, wandb.GetUID()); conditions != nil {
 		return conditions
 	}
 
-	results := altinity.WriteState(ctx, client, specNamespacedName, desired)
+	results := make([]metav1.Condition, 0)
+	results = append(results, altinity.WriteState(ctx, client, specNamespacedName, desiredKeeper, desired)...)
+
 	return results
 }
 
@@ -175,6 +225,10 @@ func managedClickHouseReadState(
 	onDeleteRule := altinity.ToClickHouseOnDeleteRule(wandb, wandb.GetRetentionPolicy(spec.ManagedInfraSpec))
 	readConditions, newInfraConn := altinity.ReadState(ctx, client, specNamespacedName, wandb, onDeleteRule)
 	newConditions = append(newConditions, readConditions...)
+
+	// Keeper readiness gates ClickHouse readiness (see inferInfraState).
+	newConditions = append(newConditions, keeper.ReadState(ctx, client, keeper.SpecNamespacedName(spec))...)
+
 	return newConditions, newInfraConn
 }
 

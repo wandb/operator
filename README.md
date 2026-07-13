@@ -1,12 +1,87 @@
-# operator
-// TODO(user): Add simple overview of use/purpose
+# W&B Operator
+
+A Kubernetes operator for deploying and managing self-hosted [Weights & Biases](https://wandb.ai)
+on your own cluster.
 
 ## Description
-// TODO(user): An in-depth paragraph about your project and overview of use
+
+The operator turns a single `WeightsAndBiases` custom resource into a fully running
+W&B platform. You declare the desired state — version, scale, networking, and which
+backing services to use — and the operator reconciles the application together with
+its dependencies (database, cache, message queue, object storage, and analytics
+store) to match.
+
+It supports two modes for backing infrastructure:
+
+- **Managed**: the operator provisions and operates dependencies in-cluster through
+  bundled component operators:
+  1. MySQL via [Moco](https://github.com/cybozu-go/moco) 
+  2. Redis
+  3. Kafka via [Strimzi](https://strimzi.io/)
+  4. Object Storage via
+    [SeaweedFS](https://github.com/seaweedfs/seaweedfs)
+  5. [ClickHouse](https://github.com/Altinity/clickhouse-operator)
+- **External**: you point the resource at infrastructure you already run (for
+  example a managed cloud database or object store) and the operator connects to it
+  instead of provisioning its own.
+
+An optional telemetry stack ([VictoriaMetrics](https://victoriametrics.com/) and
+[Grafana](https://grafana.com/)) can be enabled to collect metrics and ship
+pre-built dashboards for the deployment.
+
+### Custom Resources
+
+| Kind | Group/Version | Purpose |
+| --- | --- | --- |
+| `WeightsAndBiases` | `apps.wandb.com/v2` | Top-level desired state for a W&B deployment and its backing services. |
+| `Application` | `apps.wandb.com/v2` | Lower-level building block the operator uses to render a workload (Deployment, Service, Ingress/HTTPRoute, autoscaling, jobs) for a component. |
+
+`v1` of `WeightsAndBiases` is still served; a conversion webhook converts between
+`v1` and `v2`.
+
+## Installation
+
+The operator and its component dependencies are distributed as a Helm chart
+([`deploy/operator`](deploy/operator)), published as an OCI artifact.
+
+```bash
+helm install wandb-operator \
+  oci://us-docker.pkg.dev/wandb-production/public/wandb/charts/operator \
+  --namespace wandb-operators --create-namespace
+```
+
+Then apply a `WeightsAndBiases` resource describing your deployment:
+
+```yaml
+apiVersion: apps.wandb.com/v2
+kind: WeightsAndBiases
+metadata:
+  name: wandb
+  namespace: wandb
+spec:
+  size: small
+  retentionPolicy:
+    onDelete: detach
+  wandb:
+    version: <wandb-version>
+  networking:
+    mode: ingress
+```
+
+```bash
+kubectl apply -f wandb.yaml
+```
+
+The operator reconciles the resource, brings up the requested backing services,
+and rolls out the W&B application. See [`deploy/operator/values.yaml`](deploy/operator/values.yaml)
+for the available chart options and which component operators are enabled.
 
 ## Documentation
 
+- [Configuration API](docs/config-api.md)
+- [Infrastructure Connection Settings](docs/infra-connection-settings.md)
 - [Monitoring and Telemetry Guide](docs/monitoring.md)
+- [Deploying on OpenShift](docs/openshift.md)
 
 ## Development
 
@@ -17,6 +92,21 @@
 - [Kubebuilder](https://book.kubebuilder.io/quick-start.html)
 - [Kustomize](https://kustomize.io/)
 - [jq](https://stedolan.github.io/jq/) for some helper scripts
+- [helm](https://github.com/helm/helm)
+
+### Install Chart Testing
+
+In order to lint and test your helm chart for creating a release, please install helm's `ct` command:
+
+```bash
+brew install chart-testing
+```
+
+If any new chart has been updated, or installed, you can run the following command to ensure everything is good!
+
+```bash
+ct lint --config deploy/ct.yaml
+```
 
 #### Install Kind
 
@@ -132,6 +222,7 @@ tilt up
 fully reset the cluster. The following are expected to survive a normal `tilt down`:
 
 - `cert-manager` and its namespace
+- `kube-state-metrics` and its namespace
 - operator CRDs, including the W&B CRDs and operator dependency CRDs
 - `wandb-operators` and dependency namespaces
 - dev PVC-backed data unless the backing operator deletes it

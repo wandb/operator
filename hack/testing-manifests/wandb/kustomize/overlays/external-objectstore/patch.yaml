@@ -6,6 +6,10 @@ spec:
   objectStore:
     managedObjectStore: null
     externalObjectStore:
+      # provider: secret key holding s3 (default), gcs, or azure; omit to default to s3.
+      provider:
+        name: external-objectstore-connection
+        key: Provider
       # required
       endpoint:
         name: external-objectstore-connection

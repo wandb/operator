@@ -9,6 +9,7 @@ import (
 	externalredis "github.com/wandb/operator/internal/controller/infra/external/redis"
 	"github.com/wandb/operator/internal/controller/infra/managed/redis/opstree"
 	"github.com/wandb/operator/pkg/utils"
+	"github.com/wandb/operator/pkg/wandb/manifest"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -20,12 +21,13 @@ func redisWriteState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
+	mfst manifest.Manifest,
 ) map[string][]metav1.Condition {
 	out := map[string][]metav1.Condition{}
 	for key, spec := range wandb.Spec.Redis {
 		switch {
 		case spec.ManagedRedis != nil:
-			out[key] = managedRedisWriteState(ctx, client, wandb, spec.ManagedRedis)
+			out[key] = managedRedisWriteState(ctx, client, wandb, spec.ManagedRedis, mfst)
 		case spec.ExternalRedis != nil:
 			out[key] = externalredis.WriteState(ctx, client, wandb, key, spec.ExternalRedis)
 		}
@@ -141,11 +143,12 @@ func managedRedisWriteState(
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
 	spec *apiv2.ManagedRedisSpec,
+	mfst manifest.Manifest,
 ) []metav1.Condition {
 	log := ctrl.LoggerFrom(ctx)
 	var specNamespacedName = managedRedisSpecNamespacedName(spec)
 
-	standaloneDesired, err := opstree.ToRedisStandaloneVendorSpec(ctx, wandb, spec, client.Scheme())
+	standaloneDesired, err := opstree.ToRedisStandaloneVendorSpec(ctx, wandb, spec, client.Scheme(), mfst)
 	if err != nil {
 		log.Error(err, "failed to translate redis standalone spec")
 		return []metav1.Condition{
@@ -157,7 +160,7 @@ func managedRedisWriteState(
 		}
 	}
 
-	sentinelDesired, err := opstree.ToRedisSentinelVendorSpec(ctx, wandb, spec, client.Scheme())
+	sentinelDesired, err := opstree.ToRedisSentinelVendorSpec(ctx, wandb, spec, client.Scheme(), mfst)
 	if err != nil {
 		log.Error(err, "failed to translate redis sentinel spec")
 		return []metav1.Condition{
@@ -169,7 +172,7 @@ func managedRedisWriteState(
 		}
 	}
 
-	replicationDesired, err := opstree.ToRedisReplicationVendorSpec(ctx, wandb, spec, client.Scheme())
+	replicationDesired, err := opstree.ToRedisReplicationVendorSpec(ctx, wandb, spec, client.Scheme(), mfst)
 	if err != nil {
 		log.Error(err, "failed to translate redis replication spec")
 		return []metav1.Condition{

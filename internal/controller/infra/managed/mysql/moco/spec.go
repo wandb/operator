@@ -8,6 +8,7 @@ import (
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/pkg/utils"
+	"github.com/wandb/operator/pkg/wandb/manifest"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -18,10 +19,24 @@ import (
 )
 
 const (
-	MysqlModuleName           = "moco"
-	MocoMySQLImage            = "ghcr.io/cybozu-go/moco/mysql:8.4.8"
-	DefaultMySQLExporterImage = "prom/mysqld-exporter:v0.15.1"
+	MysqlModuleName = "moco"
+
+	// Moco names the resulting PVCs "<dataVolumeName>-<cluster.PrefixedName()>-<ordinal>"
+	// (= "<dataVolumeName>-moco-<cluster>-<n>"); ensurePVCLabels and purge rely on this.
+	dataVolumeName = mococonstants.MySQLDataVolumeName
+
+	// TODO: remove this hardcoded default once all supported manifest versions
+	// supply mysql.<instance>.images.mysql.
+	defaultMocoMySQLImage = "ghcr.io/cybozu-go/moco/mysql:8.4.8"
 )
+
+func MocoMySQLImage(img manifest.ImageRef, globalImageRegistry string) string {
+	if out := img.GetImage(globalImageRegistry); out != "" {
+		return out
+	}
+	// Fallback for older manifests that don't supply the image.
+	return defaultMocoMySQLImage
+}
 
 const (
 	mocoMySQLRunAsUser  int64 = mococonstants.ContainerUID
@@ -36,6 +51,7 @@ func ToMocoMySQLClusterSpec(
 	spec apiv2.ManagedMysqlSpec,
 	wandb *apiv2.WeightsAndBiases,
 	scheme *runtime.Scheme,
+	mfst manifest.Manifest,
 ) (*mocov1beta2.MySQLCluster, *corev1.ConfigMap, error) {
 
 	replicas := spec.Replicas
@@ -64,27 +80,33 @@ func ToMocoMySQLClusterSpec(
 			Replicas:           replicas,
 			MySQLConfigMapName: ptr.To(MyCnfConfigMapName(spec.Name)),
 			PodTemplate: mocov1beta2.PodTemplateSpec{
-				Spec:                buildMocoPodSpec(spec.Config.Resources),
+				Spec:                buildMocoPodSpec(spec.Config.Resources, mfst.Mysql["default"].Images["mysql"], wandb),
 				OverwriteContainers: mocoOverwriteContainers(),
 			},
 			VolumeClaimTemplates: []mocov1beta2.PersistentVolumeClaim{
 				{
-					ObjectMeta: mocov1beta2.ObjectMeta{Name: "mysql-data"},
+					ObjectMeta: mocov1beta2.ObjectMeta{Name: dataVolumeName},
 					Spec:       buildPVCSpec(spec.StorageSize),
 				},
 			},
 		},
 	}
+
+	// A non-empty Collectors list makes MOCO inject the mysqld_exporter sidecar.
+	if spec.Telemetry.Enabled {
+		cluster.Spec.Collectors = []string{"engine_innodb_status", "info_schema.innodb_metrics"}
+	}
+
 	if err := controllerutil.SetControllerReference(wandb, cluster, scheme); err != nil {
 		return nil, nil, err
 	}
 	return cluster, cm, nil
 }
 
-func buildMocoPodSpec(resources corev1.ResourceRequirements) mocov1beta2.PodSpecApplyConfiguration {
+func buildMocoPodSpec(resources corev1.ResourceRequirements, img manifest.ImageRef, wandb *apiv2.WeightsAndBiases,) mocov1beta2.PodSpecApplyConfiguration {
 	container := corev1ac.Container().
 		WithName("mysqld").
-		WithImage(MocoMySQLImage).
+		WithImage(MocoMySQLImage(img, wandb.Spec.Global.ImageRegistry)).
 		WithSecurityContext(mocoContainerSecurityContext())
 
 	if resources.Requests != nil || resources.Limits != nil {

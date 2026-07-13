@@ -2,8 +2,8 @@ apiVersion: v2
 name: operator
 description: A Helm chart for Weights & Biases operator
 type: application
-version: 2.0.0-alpha.1
-appVersion: "2.0.0-alpha.1"
+version: 2.0.0-alpha.2
+appVersion: "2.0.0-alpha.2"
 maintainers:
   - name: wandb
     email: support@wandb.com
@@ -16,24 +16,20 @@ dependencies:
     repository: https://charts.wandb.ai/
     condition: wandb-operator.enabled
   - name: moco
-    version: 0.24.0
+    version: 0.26.0
     repository: https://cybozu-go.github.io/moco/
     condition: moco.enabled
-  - name: cert-manager
-    version: v1.20.2
-    repository: https://charts.jetstack.io
-    condition: cert-manager.enabled
   - name: redis-operator
     version: 0.22.2
     repository: https://ot-container-kit.github.io/helm-charts
     condition: redis-operator.enabled
-  - name: strimzi-kafka-operator
-    version: 0.50.0
-    repository: https://strimzi.io/charts
-    condition: strimzi-kafka-operator.enabled
   - name: seaweedfs-operator
     version: 0.1.24
     repository: https://seaweedfs.github.io/seaweedfs-operator/
+    condition: seaweedfs-operator.enabled
+  - name: prometheus-operator-crds
+    version: 29.0.0
+    repository: https://prometheus-community.github.io/helm-charts
     condition: seaweedfs-operator.enabled
   - name: altinity-clickhouse-operator
     version: 0.26.3

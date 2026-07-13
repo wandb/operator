@@ -6,6 +6,7 @@
 GENERATED_DIR = "hack/testing-manifests/wandb/.generated"
 GENERATED_WANDB_CR = GENERATED_DIR + "/tilt-wandb-cr.yaml"
 GENERATED_OPERATOR_VALUES = GENERATED_DIR + "/tilt-operator-values.yaml"
+GENERATED_CUSTOM_CA_CONFIGMAP = GENERATED_DIR + "/tilt-custom-ca-configmap.yaml"
 
 GATEWAY_API_CRDS_URL = "https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.4.0/standard-install.yaml"
 IMG = "controller:latest"
@@ -35,7 +36,7 @@ settings = {
     "wandbName": "wandb",
     "wandbNamespace": "wandb",
     "wandbHostname": "http://localhost:8080",
-    "wandbVersion": "0.80.0",
+    "wandbVersion": "0.83.0-clickhouse-keeper.2",
     "size": "dev",
     "retentionPolicy": "detach",
     "licenseFile": "",
@@ -51,6 +52,11 @@ settings = {
     "observabilityMode": "off",
 
     "logFormat": "pretty",  # pretty, text, json
+
+    "useExternalMysql": False,
+    "useExternalRedis": False,
+    "useExternalObjectStore": False,
+    "useCustomCA": False,
 }
 
 if os.path.exists("tilt-settings.json"):
@@ -176,6 +182,18 @@ settings["openshiftSCC"] = as_bool(settings.get("openshiftSCC"))
 if settings["manifestSource"] == "local":
     settings["localManifestPath"] = validate_local_manifest_path(settings.get("localManifestPath"))
 
+USE_EXTERNAL_MYSQL = as_bool(settings.get("useExternalMysql"))
+USE_EXTERNAL_REDIS = as_bool(settings.get("useExternalRedis"))
+USE_EXTERNAL_OBJECT_STORE = as_bool(settings.get("useExternalObjectStore"))
+USE_CUSTOM_CA = as_bool(settings.get("useCustomCA"))
+USE_EXTERNAL_INFRA = USE_EXTERNAL_MYSQL or USE_EXTERNAL_REDIS or USE_EXTERNAL_OBJECT_STORE
+USE_TEST_INFRA_TLS = USE_CUSTOM_CA and (USE_EXTERNAL_MYSQL or USE_EXTERNAL_REDIS)
+
+if (USE_EXTERNAL_INFRA or USE_CUSTOM_CA) and not as_bool(settings.get("includeCR")):
+    fail("useExternalMysql/useExternalRedis/useExternalObjectStore/useCustomCA require includeCR=True")
+if (USE_EXTERNAL_INFRA or USE_CUSTOM_CA) and settings.get("wandbCR", "") != "":
+    fail("useExternalMysql/useExternalRedis/useExternalObjectStore/useCustomCA patch generated CRs; use crFile instead of wandbCR")
+
 watch_settings(ignore=["**/.git", "**/*.out", GENERATED_DIR + "/**"])
 update_settings(k8s_upsert_timeout_secs=300)
 
@@ -197,12 +215,12 @@ if IS_CRC:
 
 os.putenv("PATH", "./bin:" + os.getenv("PATH"))
 
-load("ext://restart_process", "docker_build_with_restart")
 load("ext://helm_resource", "helm_repo", "helm_resource")
 
 def operator_dockerfile():
     lines = [
         "FROM registry.access.redhat.com/ubi9/ubi",
+        "USER 1001",
         "",
         "ADD tilt_bin/manager /manager",
         "ADD tilt_bin/crd-installer /crd-installer",
@@ -210,31 +228,6 @@ def operator_dockerfile():
 
     if settings.get("manifestSource") == "local":
         lines.append("ADD %s /server-manifest" % settings.get("localManifestPath"))
-
-    if settings.get("openshiftSCC"):
-        lines += [
-            "",
-            "RUN mkdir -p /helm/.cache/helm /helm/.config/helm /helm/.local/share/helm && \\",
-            "    chgrp -R 0 /helm && chmod -R g=u /helm",
-        ]
-    else:
-        lines += [
-            "",
-            "RUN mkdir -p /helm/.cache/helm /helm/.config/helm /helm/.local/share/helm",
-        ]
-
-    lines += [
-        "",
-        "ENV HELM_CACHE_HOME=/helm/.cache/helm",
-        "ENV HELM_CONFIG_HOME=/helm/.config/helm",
-        "ENV HELM_DATA_HOME=/helm/.local/share/helm",
-    ]
-
-    if settings.get("openshiftSCC"):
-        lines += [
-            "",
-            "USER 1001",
-        ]
 
     lines.append("")
 
@@ -327,27 +320,20 @@ def build_operator_values(telemetry_namespace):
         },
     }
 
+    manager_entrypoint = ["/manager", "--log-format=" + settings.get("logFormat")]
+
+    values["wandb-operator"]["containers"]["operator"]["command"] = manager_entrypoint
+
     if settings.get("openshiftSCC"):
         values["wandb-operator"]["podSecurityContext"] = {
-            "runAsNonRoot": True,
             "runAsUser": None,
             "runAsGroup": None,
             "fsGroup": None,
             "fsGroupChangePolicy": None,
-            "seccompProfile": {
-                "type": "RuntimeDefault",
-            },
         }
         values["wandb-operator"]["containers"]["operator"]["env"] = {
             "OPENSHIFT": {
                 "value": "true",
-            },
-        }
-        values["wandb-operator"]["containers"]["operator"]["securityContext"] = {
-            "allowPrivilegeEscalation": False,
-            "readOnlyRootFilesystem": True,
-            "capabilities": {
-                "drop": ["ALL"],
             },
         }
         values["altinity-clickhouse-operator"] = {
@@ -390,6 +376,12 @@ def build_wandb_cr():
       cmd += helper_flag("ingress-class", settings.get("ingressClass"))
       cmd += helper_bool_flag("create-ca", settings.get("createCA"))
       cmd += helper_flag("issuer-name", settings.get("issuerName", ""))
+      cmd += helper_bool_flag("external-mysql", USE_EXTERNAL_MYSQL)
+      cmd += helper_bool_flag("external-redis", USE_EXTERNAL_REDIS)
+      cmd += helper_bool_flag("external-objectstore", USE_EXTERNAL_OBJECT_STORE)
+      cmd += helper_bool_flag("custom-ca", USE_CUSTOM_CA)
+      if USE_CUSTOM_CA:
+          cmd += helper_flag("custom-ca-configmap-out", GENERATED_CUSTOM_CA_CONFIGMAP)
       local(cmd)
 
       return GENERATED_WANDB_CR
@@ -495,6 +487,15 @@ if CREATE_WANDB_NAMESPACE:
         labels=[GROUP_DEPENDENCIES],
     )
 
+if USE_CUSTOM_CA:
+    k8s_yaml(GENERATED_CUSTOM_CA_CONFIGMAP)
+    k8s_resource(
+        new_name="Custom-CA-ConfigMap",
+        objects=["wandb-user-ca-certs:configmap:%s" % WANDB_NAMESPACE],
+        resource_deps=["WandB-Namespace"],
+        labels=[GROUP_WANDB_APP],
+    )
+
 local_resource(
     "Operator-Codegen",
     "make manifests generate",
@@ -586,6 +587,32 @@ helm_resource(
     labels=[GROUP_DEPENDENCIES],
 )
 
+if USE_EXTERNAL_INFRA:
+    test_infra_deps = ["WandB-Namespace"]
+    if USE_TEST_INFRA_TLS:
+        test_infra_deps.append("cert-manager")
+
+    helm_resource(
+        "Test-Infra",
+        chart="./hack/testing-manifests/test-infra",
+        release_name="test-infra",
+        namespace=WANDB_NAMESPACE,
+        flags=[
+            "--create-namespace",
+            "--wait",
+            "--timeout=10m",
+            "--set=mysql.enabled=%s" % bool_string(USE_EXTERNAL_MYSQL),
+            "--set=redis.enabled=%s" % bool_string(USE_EXTERNAL_REDIS),
+            "--set=seaweedfs.enabled=%s" % bool_string(USE_EXTERNAL_OBJECT_STORE),
+            "--set=tls.enabled=%s" % bool_string(USE_TEST_INFRA_TLS),
+            "--set=mysql.tls.enabled=%s" % bool_string(USE_CUSTOM_CA and USE_EXTERNAL_MYSQL),
+            "--set=redis.tls.enabled=%s" % bool_string(USE_CUSTOM_CA and USE_EXTERNAL_REDIS),
+        ],
+        deps=["hack/testing-manifests/test-infra/"],
+        resource_deps=test_infra_deps,
+        labels=[GROUP_WANDB_APP],
+    )
+
 if LOCAL_NETWORKING_MODE == "gateway":
     nginx_gateway_flags = [
         "--create-namespace",
@@ -632,8 +659,29 @@ if LOCAL_NETWORKING_MODE == "ingress":
         labels=[GROUP_DEPENDENCIES],
     )
 
+kube_state_metrics_flags = [
+    "--create-namespace",
+    "--version=5.27.0",
+]
+if settings.get("openshiftSCC"):
+    # Null the chart's hardcoded 65534 IDs so restricted-v2 assigns valid ones.
+    kube_state_metrics_flags += [
+        "--set=securityContext.runAsUser=null",
+        "--set=securityContext.runAsGroup=null",
+        "--set=securityContext.fsGroup=null",
+    ]
+
+helm_resource(
+    "kube-state-metrics",
+    chart="oci://ghcr.io/prometheus-community/charts/kube-state-metrics",
+    namespace="kube-state-metrics",
+    flags=kube_state_metrics_flags,
+    labels=[GROUP_DEPENDENCIES],
+)
+
 operator_deps = ["Operator-Chart-Deps", "Operator-Build"]
 operator_deps.append("cert-manager")
+operator_deps.append("kube-state-metrics")
 if LOCAL_NETWORKING_MODE == "gateway":
     operator_deps.append("nginx-gateway-fabric")
 if settings.get("observabilityMode") != "off":
@@ -696,6 +744,10 @@ if as_bool(settings.get("includeCR")):
         wandb_deps.append("nginx-gateway-fabric")
     if LOCAL_NETWORKING_MODE == "ingress":
         wandb_deps.append("ingress-nginx-controller")
+    if USE_EXTERNAL_INFRA:
+        wandb_deps.append("Test-Infra")
+    if USE_CUSTOM_CA:
+        wandb_deps.append("Custom-CA-ConfigMap")
 
     if str(WANDB_HOSTNAME).startswith("https://") and as_bool(settings.get("createCA")):
         build_wandb_ca(WANDB_NAME, WANDB_NAMESPACE)
@@ -709,6 +761,69 @@ if as_bool(settings.get("includeCR")):
         resource_deps=wandb_deps,
         labels=[GROUP_WANDB_APP],
     )
+
+    if settings.get("openshiftSCC"):
+        # Dev-only frontend-nginx SCC; not shipped (prod uses its own ingress).
+        # It needs its fixed image UID: restricted-v2 assigns an arbitrary UID
+        # and nonroot-v2 rejects named user, so clone restricted-v2 + RunAsAny.
+        frontend_scc_name = "wandb-frontend-anyuid-v2"
+        k8s_yaml_object({
+            "apiVersion": "security.openshift.io/v1",
+            "kind": "SecurityContextConstraints",
+            "metadata": {
+                "name": frontend_scc_name,
+                "labels": {
+                    "app.kubernetes.io/managed-by": "tilt",
+                },
+            },
+            "allowHostDirVolumePlugin": False,
+            "allowHostIPC": False,
+            "allowHostNetwork": False,
+            "allowHostPID": False,
+            "allowHostPorts": False,
+            "allowPrivilegeEscalation": False,
+            "allowPrivilegedContainer": False,
+            "allowedCapabilities": ["NET_BIND_SERVICE"],
+            "readOnlyRootFilesystem": False,
+            "requiredDropCapabilities": ["ALL"],
+            "runAsUser": {"type": "RunAsAny"},
+            "seLinuxContext": {"type": "MustRunAs"},
+            "seccompProfiles": ["runtime/default"],
+            "fsGroup": {"type": "MustRunAs"},
+            "supplementalGroups": {"type": "RunAsAny"},
+            "volumes": [
+                "configMap",
+                "csi",
+                "downwardAPI",
+                "emptyDir",
+                "ephemeral",
+                "image",
+                "persistentVolumeClaim",
+                "projected",
+                "secret",
+            ],
+            "users": [
+                "system:serviceaccount:%s:wandb-app" % WANDB_NAMESPACE,
+            ],
+        })
+        k8s_resource(
+            new_name="OpenShift-Frontend-SCC",
+            objects=["%s:securitycontextconstraints" % frontend_scc_name],
+            resource_deps=["WandB-Namespace"],
+            labels=[GROUP_WANDB_APP],
+        )
+        # Stamp required-scc on frontend Deployment; reconcile merge keeps it.
+        local_resource(
+            "OpenShift-Frontend-SCC-Bind",
+            cmd=(
+                "until kubectl -n %s get deploy/frontend >/dev/null 2>&1; do " % WANDB_NAMESPACE +
+                "echo 'waiting for frontend deployment...'; sleep 3; done && " +
+                "kubectl -n %s patch deploy/frontend --type=merge -p " % WANDB_NAMESPACE +
+                shell_quote('{"spec":{"template":{"metadata":{"annotations":{"openshift.io/required-scc":"%s"}}}}}' % frontend_scc_name)
+            ),
+            resource_deps=["Wandb", "OpenShift-Frontend-SCC"],
+            labels=[GROUP_WANDB_APP],
+        )
 
     endpoint_port = url_port(WANDB_HOSTNAME)
     endpoint_host = url_host(WANDB_HOSTNAME)
@@ -745,6 +860,7 @@ if as_bool(settings.get("includeCR")):
             },
             labels=[GROUP_WANDB_APP],
         )
+
 if settings.get("observabilityMode") == "full":
     managed_endpoint_resource(
         name="Telemetry-Endpoint-Grafana",
@@ -796,25 +912,20 @@ if settings.get("observabilityMode") == "full":
         labels=[GROUP_TELEMETRY],
     )
 
-manager_entrypoint = ["/manager", "--log-format=" + settings.get("logFormat")]
-if settings.get("observabilityMode") != "off":
-    manager_entrypoint += ["--telemetry-enabled=true"]
-
 docker_only = ["./tilt_bin/manager", "./tilt_bin/crd-installer"]
-live_update_steps = [
-    sync("./tilt_bin/manager", "/manager"),
-    sync("./tilt_bin/crd-installer", "/crd-installer"),
-]
 
 if settings.get("manifestSource") == "local":
-    docker_only.append(repo_path(settings.get("localManifestPath")))
-    live_update_steps.append(sync(settings.get("localManifestPath"), "/server-manifest"))
+  path = repo_path(settings.get("localManifestPath"))
+  if not path.endswith(".yaml"):
+    paths = listdir(path, True)
+    for path in paths:
+      docker_only.append(path)
+  else:
+    docker_only.append(path)
 
-docker_build_with_restart(
+docker_build(
     IMG,
     ".",
     dockerfile_contents=operator_dockerfile(),
-    entrypoint=manager_entrypoint,
     only=docker_only,
-    live_update=live_update_steps,
 )

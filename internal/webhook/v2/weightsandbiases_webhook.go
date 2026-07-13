@@ -123,6 +123,7 @@ func (d *WeightsAndBiasesCustomDefaulter) Default(ctx context.Context, obj runti
 	applyKafkaDefaults(wandb)
 	applyObjectStoreDefaults(wandb)
 	applyClickHouseDefaults(wandb)
+	applyProbeDefaults(wandb)
 
 	return nil
 }
@@ -258,9 +259,6 @@ func applyRedisDefaults(wandb *appsv2.WeightsAndBiases) {
 
 func applyKafkaDefaults(wandb *appsv2.WeightsAndBiases) {
 	if wandb.Spec.Kafka.ManagedKafka == nil {
-		if wandb.Spec.Kafka.ExternalKafka != nil {
-			return
-		}
 		wandb.Spec.Kafka.ManagedKafka = &appsv2.ManagedKafkaSpec{}
 	}
 
@@ -338,7 +336,6 @@ func validateSpec(_ context.Context, newWandb *appsv2.WeightsAndBiases) (admissi
 
 	allErrors = append(allErrors, validateMySQLSpec(newWandb)...)
 	allErrors = append(allErrors, validateRedisSpec(newWandb)...)
-	allErrors = append(allErrors, validateKafkaSpec(newWandb)...)
 	allErrors = append(allErrors, validateObjectStoreSpec(newWandb)...)
 	allErrors = append(allErrors, validateClickHouseSpec(newWandb)...)
 	networkingErrors, networkingWarnings := validateNetworkingSpec(newWandb)
@@ -361,6 +358,7 @@ func validateChanges(_ context.Context, newWandb *appsv2.WeightsAndBiases, oldWa
 	var warnings admission.Warnings
 
 	allErrors = append(allErrors, validateRedisChanges(newWandb, oldWandb)...)
+	allErrors = append(allErrors, validateMySQLChanges(newWandb, oldWandb)...)
 
 	if len(allErrors) == 0 {
 		return warnings, nil
@@ -389,6 +387,38 @@ func validateHasDefaultInstance[T any](m map[string]T, path *field.Path) field.E
 	)}
 }
 
+// validateMySQLChanges rejects an update that lowers an explicitly-set replica
+// count. Moco does not support in-place replica reduction, so catch it at
+// admission for immediate feedback. A size-driven change leaves replicas unset
+// here (it is resolved from the manifest at reconcile), so this only covers a
+// directly-edited count.
+func validateMySQLChanges(newWandb, oldWandb *appsv2.WeightsAndBiases) field.ErrorList {
+	var errors field.ErrorList
+	mysqlPath := field.NewPath("spec").Child("mysql")
+
+	for key, newInstance := range newWandb.Spec.MySQL {
+		oldInstance, ok := oldWandb.Spec.MySQL[key]
+		if !ok {
+			continue
+		}
+		newSpec := newInstance.ManagedMysql
+		oldSpec := oldInstance.ManagedMysql
+		if newSpec == nil || oldSpec == nil {
+			continue
+		}
+
+		if oldSpec.Replicas != 0 && newSpec.Replicas != 0 && newSpec.Replicas < oldSpec.Replicas {
+			errors = append(errors, field.Invalid(
+				mysqlPath.Key(key).Child("managedMysql").Child("replicas"),
+				newSpec.Replicas,
+				"replicas cannot be decreased; Moco does not support in-place replica reduction (use its manual stop-clustering procedure)",
+			))
+		}
+	}
+
+	return errors
+}
+
 func validateMySQLSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 	var errors field.ErrorList
 	mysqlPath := field.NewPath("spec").Child("mysql")
@@ -405,7 +435,7 @@ func validateMySQLSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 			))
 		}
 		if managed := spec.ManagedMysql; managed != nil {
-			if managed.Replicas != 0 && managed.Replicas%2 == 0 {
+			if managed.Replicas != 0 && !appsv2.ValidMysqlReplicaCount(managed.Replicas) {
 				errors = append(errors, field.Invalid(
 					instancePath.Child("managedMysql").Child("replicas"),
 					managed.Replicas,
@@ -453,21 +483,6 @@ func validateRedisSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 	return errors
 }
 
-func validateKafkaSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
-	var errors field.ErrorList
-	kafkaPath := field.NewPath("spec").Child("kafka")
-
-	if wandb.Spec.Kafka.ManagedKafka != nil && wandb.Spec.Kafka.ExternalKafka != nil {
-		errors = append(errors, field.Invalid(
-			kafkaPath,
-			"",
-			"managedKafka and externalKafka are mutually exclusive",
-		))
-	}
-
-	return errors
-}
-
 func validateObjectStoreSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 	var errors field.ErrorList
 	objectStorePath := field.NewPath("spec").Child("objectStore")
@@ -482,6 +497,17 @@ func validateObjectStoreSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 				"managedObjectStore and externalObjectStore are mutually exclusive",
 			))
 		}
+
+		if ext := spec.ExternalObjectStore; ext != nil {
+			extPath := objectStorePath.Key(key).Child("externalObjectStore")
+			// provider is sourced from a secret key, so it is resolved and defaulted at reconcile time, not here.
+			if ext.Bucket.Name == "" {
+				errors = append(errors, field.Required(
+					extPath.Child("bucket"),
+					"externalObjectStore requires a bucket secret reference",
+				))
+			}
+		}
 	}
 
 	return errors
@@ -494,12 +520,51 @@ func validateClickHouseSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 	errors = append(errors, validateHasDefaultInstance(wandb.Spec.ClickHouse, chPath)...)
 
 	for key, spec := range wandb.Spec.ClickHouse {
+		instancePath := chPath.Key(key)
 		if spec.ManagedClickHouse != nil && spec.ExternalClickHouse != nil {
 			errors = append(errors, field.Invalid(
-				chPath.Key(key),
+				instancePath,
 				"",
 				"managedClickhouse and externalClickhouse are mutually exclusive",
 			))
+		}
+
+		managed := spec.ManagedClickHouse
+		if managed == nil {
+			continue
+		}
+
+		// Managed ClickHouse stores table data in the object store, so one must be configured.
+		if len(wandb.Spec.ObjectStore) == 0 {
+			errors = append(errors, field.Invalid(
+				instancePath.Child("managedClickhouse"),
+				"",
+				"managed ClickHouse stores data in the object store; configure spec.objectStore (managed or external)",
+			))
+		}
+
+		// Keeper requires an odd number of replicas to form a quorum.
+		if managed.Keeper.Replicas != 0 && managed.Keeper.Replicas%2 == 0 {
+			errors = append(errors, field.Invalid(
+				instancePath.Child("managedClickhouse").Child("keeper").Child("replicas"),
+				managed.Keeper.Replicas,
+				"replicas must be an odd number so the Keeper ensemble can form a quorum",
+			))
+		}
+
+		for _, sz := range []struct {
+			value string
+			path  *field.Path
+		}{
+			{managed.StorageSize, instancePath.Child("managedClickhouse").Child("storageSize")},
+			{managed.Keeper.StorageSize, instancePath.Child("managedClickhouse").Child("keeper").Child("storageSize")},
+		} {
+			if sz.value == "" {
+				continue
+			}
+			if _, err := resource.ParseQuantity(sz.value); err != nil {
+				errors = append(errors, field.Invalid(sz.path, sz.value, "must be a valid resource quantity (e.g., '10Gi')"))
+			}
 		}
 	}
 

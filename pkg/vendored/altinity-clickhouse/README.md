@@ -40,7 +40,7 @@ The Makefile's `generate` target only processes `./api/v1` and `./api/v2`, expli
 - `pkg/vendored/percona-operator/...`
 - `pkg/vendored/minio-operator/...`
 - `pkg/vendored/redis-operator/...`
-- `pkg/vendored/strimzi-kafka/...`
+- `pkg/vendored/seaweedfs-operator/...`
 
 ### DeepCopy Mutex Fixes
 
@@ -55,6 +55,18 @@ The following DeepCopyInto methods in `clickhouse.altinity.com/v1/zz_generated.d
 - **OperatorConfigCHIRuntime** (lines 1602-1624): Removed `*out = *in` shallow copy, commented out `mutex` field copy
 - **OperatorConfigTemplate** (lines 2034-2038): Removed `*out = *in` shallow copy
 - **Status** (lines 2656-2747): Removed `*out = *in` shallow copy, explicitly copied all non-mutex fields, commented out `mu` field copy
+
+The same class of fixes was applied to
+`clickhouse-keeper.altinity.com/v1/zz_generated.deepcopy.go` (commented out the
+`*out = *in` shallow copy and the mutex field copies, explicitly copying the
+non-mutex scalar fields for `Status`):
+
+- **ClickHouseKeeperInstallation** — commented out the shallow copy and the
+  `statusCreatorMutex` / `runtimeCreatorMutex` copies
+- **ClickHouseKeeperInstallationRuntime** — commented out the shallow copy and
+  the `commonConfigMutex` copy
+- **Status** — replaced the shallow copy with explicit non-mutex field copies and
+  commented out the `mu` (sync.RWMutex) copy
 
 ### Mutex Copy in MergeFrom
 
@@ -106,6 +118,14 @@ CRD files are located in `pkg/vendored/altinity-clickhouse/crds/`:
   - Generated DeepCopy methods (`zz_generated.deepcopy.go`)
   - API registration and scheme builder
   - Configuration helpers
+- `clickhouse-keeper.altinity.com/v1/` - ClickHouseKeeperInstallation (CHK) CRD
+  types, used to provision the ClickHouse Keeper ensemble that backs
+  ReplicatedMergeTree replication. Same upstream version (release-0.26.3); reuses
+  many shared types from `clickhouse.altinity.com/v1`.
+  - `api_group.go` parent package holding `APIGroupName`
+    (`clickhouse-keeper.altinity.com`)
+  - Same import-path rewrites as the CHI package (see "Import Path Updates")
+  - Same DeepCopy mutex fixes applied (see below)
 
 ### Supporting Packages
 - `common/` - Common types and constants shared across the operator

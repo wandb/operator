@@ -7,6 +7,7 @@ import (
 	. "github.com/onsi/gomega"
 	apiv2 "github.com/wandb/operator/api/v2"
 	seaweedv1 "github.com/wandb/operator/pkg/vendored/seaweedfs-operator/seaweed.seaweedfs.com/v1"
+	"github.com/wandb/operator/pkg/wandb/manifest"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -17,14 +18,14 @@ var _ = Describe("SeaweedFS vendor specs", func() {
 	It("renders writable runtime mounts for SeaweedFS components", func() {
 		wandb := seaweedWandb()
 
-		seaweed, err := ToObjectStoreVendorSpec(context.Background(), wandb, wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ManagedObjectStore, seaweedScheme())
+		seaweed, err := ToObjectStoreVendorSpec(context.Background(), wandb, wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ManagedObjectStore, seaweedScheme(), manifest.Manifest{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(seaweed).NotTo(BeNil())
 
 		Expect(seaweed.Name).To(Equal(SeaweedName("object-store")))
 		Expect(seaweed.Namespace).To(Equal("wandb"))
 		Expect(seaweed.Labels).To(HaveKeyWithValue("app", SeaweedName("object-store")))
-		Expect(seaweed.Spec.Image).To(Equal(SeaweedImage))
+		Expect(seaweed.Spec.Image).To(Equal(SeaweedImage(manifest.ImageRef{}, "")))
 
 		expectSeaweedWritableVolume(seaweed.Spec.Master.Volumes)
 		expectSeaweedWritableMount(seaweed.Spec.Master.VolumeMounts)
@@ -34,9 +35,29 @@ var _ = Describe("SeaweedFS vendor specs", func() {
 		expectSeaweedWritableMount(seaweed.Spec.Filer.VolumeMounts)
 	})
 
+	It("retargets the image to spec.global.imageRegistry when set", func() {
+		wandb := seaweedWandb()
+		wandb.Spec.Global.ImageRegistry = "reg.corp:5000"
+
+		mfst := manifest.Manifest{
+			Bucket: map[string]manifest.InfraConfig{
+				"default": {
+					Images: map[string]manifest.ImageRef{
+						"seaweedfs": {Repository: "chrislusf/seaweedfs", Tag: "latest"},
+					},
+				},
+			},
+		}
+
+		seaweed, err := ToObjectStoreVendorSpec(context.Background(), wandb, wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ManagedObjectStore, seaweedScheme(), mfst)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(seaweed).NotTo(BeNil())
+		Expect(seaweed.Spec.Image).To(Equal("reg.corp:5000/chrislusf/seaweedfs:latest"))
+	})
+
 	It("keeps the filer writable data path explicit", func() {
 		wandb := seaweedWandb()
-		seaweed, err := ToObjectStoreVendorSpec(context.Background(), wandb, wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ManagedObjectStore, seaweedScheme())
+		seaweed, err := ToObjectStoreVendorSpec(context.Background(), wandb, wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ManagedObjectStore, seaweedScheme(), manifest.Manifest{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(seaweed).NotTo(BeNil())
 		Expect(seaweed.Spec.Filer.Config).NotTo(BeNil())
@@ -48,10 +69,50 @@ var _ = Describe("SeaweedFS vendor specs", func() {
 
 	It("preserves managed resource overrides", func() {
 		wandb := seaweedWandb()
-		seaweed, err := ToObjectStoreVendorSpec(context.Background(), wandb, wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ManagedObjectStore, seaweedScheme())
+		seaweed, err := ToObjectStoreVendorSpec(context.Background(), wandb, wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ManagedObjectStore, seaweedScheme(), manifest.Manifest{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(seaweed).NotTo(BeNil())
 		Expect(seaweed.Spec.Volume.ResourceRequirements.Requests[corev1.ResourceCPU]).To(Equal(resource.MustParse("500m")))
+	})
+
+	It("pins s3 gateway signature verification to the in-cluster endpoint", func() {
+		wandb := seaweedWandb()
+		seaweed, err := ToObjectStoreVendorSpec(context.Background(), wandb, wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ManagedObjectStore, seaweedScheme(), manifest.Manifest{})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(seaweed).NotTo(BeNil())
+		Expect(seaweed.Spec.S3.Env).To(ContainElement(corev1.EnvVar{
+			Name:  "S3_EXTERNAL_URL",
+			Value: "http://" + SeaweedName("object-store") + "-s3.wandb.svc.cluster.local:" + S3Port,
+		}))
+	})
+
+	It("uses https for the s3 external URL when TLS is enabled", func() {
+		wandb := seaweedWandb()
+		wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ManagedObjectStore.SeaweedObjectStoreSpec.TlsEnabled = true
+
+		seaweed, err := ToObjectStoreVendorSpec(context.Background(), wandb, wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ManagedObjectStore, seaweedScheme(), manifest.Manifest{})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(seaweed).NotTo(BeNil())
+		Expect(seaweed.Spec.S3.Env).To(ContainElement(corev1.EnvVar{
+			Name:  "S3_EXTERNAL_URL",
+			Value: "https://" + SeaweedName("object-store") + "-s3.wandb.svc.cluster.local:" + S3Port,
+		}))
+	})
+
+	It("sets metrics ports on master, volume, and filer", func() {
+		wandb := seaweedWandb()
+		seaweed, err := ToObjectStoreVendorSpec(context.Background(), wandb, wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ManagedObjectStore, seaweedScheme(), manifest.Manifest{})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(seaweed).NotTo(BeNil())
+
+		Expect(seaweed.Spec.Master.MetricsPort).NotTo(BeNil())
+		Expect(*seaweed.Spec.Master.MetricsPort).To(Equal(seaweedMasterMetricsPort))
+
+		Expect(seaweed.Spec.Volume.MetricsPort).NotTo(BeNil())
+		Expect(*seaweed.Spec.Volume.MetricsPort).To(Equal(seaweedVolumeMetricsPort))
+
+		Expect(seaweed.Spec.Filer.MetricsPort).NotTo(BeNil())
+		Expect(*seaweed.Spec.Filer.MetricsPort).To(Equal(seaweedFilerMetricsPort))
 	})
 })
 

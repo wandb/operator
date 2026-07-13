@@ -5,15 +5,39 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/wandb/operator/api/v2"
+	v2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/logx"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
 	"k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/utils/ptr"
 	ctrlClient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func resolveInitContainers(app serverManifest.Application, envVars []v1.EnvVar, volumeMounts []v1.VolumeMount) []v1.Container {
+const appWorkloadCapabilityAll v1.Capability = "ALL"
+
+func resolvePodSecurityContext() *v1.PodSecurityContext {
+	return &v1.PodSecurityContext{
+		SeccompProfile: resolveRuntimeDefaultSeccompProfile(),
+	}
+}
+
+func resolveContainerSecurityContext() *v1.SecurityContext {
+	return &v1.SecurityContext{
+		AllowPrivilegeEscalation: ptr.To(false),
+		Capabilities: &v1.Capabilities{
+			Drop: []v1.Capability{appWorkloadCapabilityAll},
+		},
+		SeccompProfile: resolveRuntimeDefaultSeccompProfile(),
+	}
+}
+
+func resolveRuntimeDefaultSeccompProfile() *v1.SeccompProfile {
+	return &v1.SeccompProfile{
+		Type: v1.SeccompProfileTypeRuntimeDefault,
+	}
+}
+
+func resolveInitContainers(app serverManifest.Application, wandb *v2.WeightsAndBiases, envVars []v1.EnvVar, volumeMounts []v1.VolumeMount) []v1.Container {
 	initContainers := []v1.Container{}
 
 	if app.InitContainers != nil {
@@ -22,12 +46,13 @@ func resolveInitContainers(app serverManifest.Application, envVars []v1.EnvVar, 
 				continue
 			}
 			initContainer := v1.Container{
-				Name:         initContainerSpec.Name,
-				Image:        initContainerSpec.Image.GetImage(),
-				Env:          envVars,
-				Args:         initContainerSpec.Args,
-				Command:      initContainerSpec.Command,
-				VolumeMounts: volumeMounts,
+				Name:            initContainerSpec.Name,
+				Image:           initContainerSpec.Image.GetImage(wandb.Spec.Global.ImageRegistry),
+				Env:             envVars,
+				Args:            initContainerSpec.Args,
+				Command:         initContainerSpec.Command,
+				VolumeMounts:    volumeMounts,
+				SecurityContext: resolveContainerSecurityContext(),
 			}
 			initContainers = append(initContainers, initContainer)
 		}
@@ -52,9 +77,9 @@ func resolveContainers(app serverManifest.Application, wandb *v2.WeightsAndBiase
 			}
 
 			// Choose image/args/command with sensible fallbacks to app-level values
-			img := app.Image.GetImage()
+			img := app.Image.GetImage(wandb.Spec.Global.ImageRegistry)
 			if container.Image.Repository != "" {
-				img = container.Image.GetImage()
+				img = container.Image.GetImage(wandb.Spec.Global.ImageRegistry)
 			}
 			args := app.Args
 			if len(container.Args) > 0 {
@@ -66,43 +91,28 @@ func resolveContainers(app serverManifest.Application, wandb *v2.WeightsAndBiase
 			}
 
 			c := v1.Container{
-				Name:         container.Name,
-				Image:        img,
-				Env:          envVars,
-				Args:         args,
-				Command:      cmd,
-				Ports:        containerPorts,
-				VolumeMounts: volumeMounts,
+				Name:            container.Name,
+				Image:           img,
+				Env:             envVars,
+				Args:            args,
+				Command:         cmd,
+				Ports:           containerPorts,
+				VolumeMounts:    volumeMounts,
+				SecurityContext: resolveContainerSecurityContext(),
 			}
 
 			if resources := ResolveResources(app, wandb, container.Resources); resources != nil {
 				c.Resources = *resources
 			}
 
-			// Default HTTPGet probe ports to the first declared port name when missing
-			if container.StartupProbe != nil && container.StartupProbe.HTTPGet != nil {
-				if container.StartupProbe.HTTPGet.Port.StrVal == "" && container.StartupProbe.HTTPGet.Port.IntVal == 0 {
-					if len(container.Ports) > 0 && container.StartupProbe.HTTPGet.Path != "" {
-						container.StartupProbe.HTTPGet = &v1.HTTPGetAction{Path: container.StartupProbe.HTTPGet.Path, Port: intstr.FromString(container.Ports[0].Name)}
-					}
-				}
-				c.StartupProbe = container.StartupProbe
+			if container.StartupProbe != nil {
+				c.StartupProbe = container.StartupProbe.DeepCopy()
 			}
-			if container.LivenessProbe != nil && container.LivenessProbe.HTTPGet != nil {
-				if container.LivenessProbe.HTTPGet.Port.StrVal == "" && container.LivenessProbe.HTTPGet.Port.IntVal == 0 {
-					if len(container.Ports) > 0 && container.LivenessProbe.HTTPGet.Path != "" {
-						container.LivenessProbe.HTTPGet = &v1.HTTPGetAction{Path: container.LivenessProbe.HTTPGet.Path, Port: intstr.FromString(container.Ports[0].Name)}
-					}
-				}
-				c.LivenessProbe = container.LivenessProbe
+			if container.LivenessProbe != nil {
+				c.LivenessProbe = container.LivenessProbe.DeepCopy()
 			}
-			if container.ReadinessProbe != nil && container.ReadinessProbe.HTTPGet != nil {
-				if container.ReadinessProbe.HTTPGet.Port.StrVal == "" && container.ReadinessProbe.HTTPGet.Port.IntVal == 0 {
-					if len(container.Ports) > 0 && container.ReadinessProbe.HTTPGet.Path != "" {
-						container.ReadinessProbe.HTTPGet = &v1.HTTPGetAction{Path: container.ReadinessProbe.HTTPGet.Path, Port: intstr.FromString(container.Ports[0].Name)}
-					}
-				}
-				c.ReadinessProbe = container.ReadinessProbe
+			if container.ReadinessProbe != nil {
+				c.ReadinessProbe = container.ReadinessProbe.DeepCopy()
 			}
 
 			containers = append(containers, c)
@@ -110,12 +120,13 @@ func resolveContainers(app serverManifest.Application, wandb *v2.WeightsAndBiase
 	} else {
 		// Backward-compatible single-container behavior
 		c := v1.Container{
-			Name:         app.Name,
-			Image:        app.Image.GetImage(),
-			Env:          envVars,
-			Args:         app.Args,
-			Command:      app.Command,
-			VolumeMounts: volumeMounts,
+			Name:            app.Name,
+			Image:           app.Image.GetImage(wandb.Spec.Global.ImageRegistry),
+			Env:             envVars,
+			Args:            app.Args,
+			Command:         app.Command,
+			VolumeMounts:    volumeMounts,
+			SecurityContext: resolveContainerSecurityContext(),
 		}
 
 		if resources := ResolveResources(app, wandb, nil); resources != nil {
@@ -132,6 +143,15 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 	for _, commonVars := range commonEnvs {
 		if envvars, ok := manifest.CommonEnvvars[commonVars]; ok {
 			combinedEnvs = append(combinedEnvs, envvars...)
+		}
+	}
+
+	for _, env := range envs {
+		for i, combinedEnv := range combinedEnvs {
+			if combinedEnv.Name == env.Name {
+				combinedEnvs = append(combinedEnvs[:i], combinedEnvs[i+1:]...)
+				break
+			}
 		}
 	}
 
@@ -218,11 +238,17 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 				}
 				switch src.Field {
 				case "host":
+					// Host/Port/Region are provider-dependent: absent for GCS/Azure
+					// and for plain AWS S3 (no custom endpoint / no region key).
+					// Marks optional so pods still start when the key is missing.
 					selector.Key = "Host"
+					selector.Optional = ptr.To(true)
 				case "port":
 					selector.Key = "Port"
+					selector.Optional = ptr.To(true)
 				case "region":
 					selector.Key = "Region"
+					selector.Optional = ptr.To(true)
 				default:
 					selector.Key = "url"
 				}
@@ -241,14 +267,18 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 				switch src.Field {
 				case "host":
 					selector.Key = "Host"
-				case "port":
-					selector.Key = "Port"
+				case "http-port":
+					selector.Key = "HTTPPort"
+				case "tcp-port":
+					selector.Key = "TCPPort"
 				case "user":
 					selector.Key = "User"
 				case "password":
 					selector.Key = "Password"
 				case "database":
 					selector.Key = "Database"
+				case "url":
+					selector.Key = "url"
 				default:
 					// Unrecognized field; skip
 					continue
@@ -280,13 +310,12 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 				secretOnlyCount++
 				addSecretComponent(selector, idx)
 			case "telemetry":
-				secretName := src.Name
+				secretName := strings.TrimSpace(src.Name)
 				if secretName == "" {
-					return nil, fmt.Errorf(
-						"[telemetry] env var %q has a telemetry source with no Name set (typically %q)",
-						env.Name,
-						"wandb-otel-connection",
-					)
+					secretName = strings.TrimSpace(wandb.Status.TelemetryStatus.Connection.ConnectionSecret)
+				}
+				if secretName == "" {
+					continue
 				}
 
 				selector := v1.SecretKeySelector{
@@ -315,6 +344,14 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 					selector.Key = "OTEL_RESOURCE_ATTRIBUTES"
 				case "gorillaTracer", "tracer":
 					selector.Key = "GORILLA_TRACER"
+				case "statsdAddress":
+					selector.Key = "GORILLA_STATSD_ADDRESS"
+				case "datadogTraceAgentURL", "ddTraceAgentURL":
+					selector.Key = "DD_TRACE_AGENT_URL"
+				case "datadogTraceAgentHost", "ddAgentHost":
+					selector.Key = "DD_AGENT_HOST"
+				case "datadogTraceAgentPort", "ddTraceAgentPort":
+					selector.Key = "DD_TRACE_AGENT_PORT"
 				default:
 					if strings.HasPrefix(src.Field, "OTEL_") {
 						selector.Key = src.Field
@@ -390,7 +427,12 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 					// No field specified; nothing to resolve
 					continue
 				}
-				if val, ok := resolveCRFieldString(wandb, src.Field); ok {
+				// secret component
+				if sel, ok := resolveCRFieldSecretSelector(wandb, src.Field); ok {
+					singleSecretSelector = sel
+					secretOnlyCount++
+					addSecretComponent(sel, idx)
+				} else if val, ok := resolveCRFieldString(wandb, src.Field); ok {
 					// Treat as a literal component (not secret-backed)
 					logger.Debug("field found in CR", "cr", wandb.Name, "field", src.Field, "value", val)
 					components = append(components, val)

@@ -27,6 +27,7 @@ import (
 
 	"github.com/samber/lo"
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/ctrlqueue"
 	"github.com/wandb/operator/internal/logx"
 	wmetrics "github.com/wandb/operator/internal/metrics"
@@ -51,16 +52,29 @@ var defaultRequeueMinutes = 1
 var defaultRequeueDuration = time.Duration(defaultRequeueMinutes) * time.Minute
 
 var managedWorkloadTelemetryApplications = map[string]struct{}{
-	"api":                               {},
-	"executor":                          {},
-	"filemeta":                          {},
-	"filestream":                        {},
-	"flat-run-fields-updater":           {},
-	"glue":                              {},
-	"metric-observer":                   {},
-	"nginx-proxy":                       {},
-	"parquet":                           {},
-	"weave":                             {},
+	"api":                     {},
+	"executor":                {},
+	"filemeta":                {},
+	"filestream":              {},
+	"flat-run-fields-updater": {},
+	"glue":                    {},
+	"metric-observer":         {},
+	"parquet":                 {},
+}
+
+var managedWorkloadStatsdApplications = map[string]struct{}{
+	"api":                     {},
+	"executor":                {},
+	"filemeta":                {},
+	"filestream":              {},
+	"flat-run-fields-updater": {},
+	"glue":                    {},
+	"metric-observer":         {},
+	"parquet":                 {},
+}
+
+var managedWorkloadDatadogApplications = map[string]struct{}{
+	"anaconda2":                         {},
 	"weave-trace":                       {},
 	"weave-trace-worker":                {},
 	"weave-trace-evaluate-model-worker": {},
@@ -129,6 +143,36 @@ var managedWorkloadTelemetryEnvVars = []serverManifest.EnvVar{
 	},
 }
 
+var managedWorkloadStatsdEnvVars = []serverManifest.EnvVar{
+	{
+		Name: "GORILLA_STATSD_ADDRESS",
+		Sources: []serverManifest.EnvSource{
+			{Type: "telemetry", Field: "statsdAddress"},
+		},
+	},
+}
+
+var managedWorkloadDatadogEnvVars = []serverManifest.EnvVar{
+	{
+		Name: "DD_TRACE_AGENT_URL",
+		Sources: []serverManifest.EnvSource{
+			{Type: "telemetry", Field: "datadogTraceAgentURL"},
+		},
+	},
+	{
+		Name: "DD_AGENT_HOST",
+		Sources: []serverManifest.EnvSource{
+			{Type: "telemetry", Field: "datadogTraceAgentHost"},
+		},
+	},
+	{
+		Name: "DD_TRACE_AGENT_PORT",
+		Sources: []serverManifest.EnvSource{
+			{Type: "telemetry", Field: "datadogTraceAgentPort"},
+		},
+	},
+}
+
 type finalizerFunc func(context.Context, ctrlClient.Client, *apiv2.WeightsAndBiases) error
 
 func runRetentionFinalizer(
@@ -161,6 +205,8 @@ func Reconcile(
 	var err error
 
 	var errorCount int
+
+	wandb.Status.TelemetryStatus = summarizeTelemetryInfraStatus(ctx, client, telemetryConfig)
 
 	/////////////////////////
 	// Retention Finalizer
@@ -205,11 +251,6 @@ func Reconcile(
 			// Kafka remains single-instance.
 			if wandb.Spec.Kafka.ManagedKafka != nil {
 				if err = runRetentionFinalizer(ctx, client, wandb, wandb.Spec.Kafka.ManagedKafka.ManagedInfraSpec, kafkaPurgeFinalizer, kafkaDetachFinalizer); err != nil {
-					return ctrl.Result{}, err
-				}
-			}
-			if wandb.Spec.Kafka.ExternalKafka != nil && wandb.Spec.RetentionPolicy.OnDelete == apiv2.PurgeOnDelete {
-				if err = kafkaPurgeFinalizer(ctx, client, wandb); err != nil {
 					return ctrl.Result{}, err
 				}
 			}
@@ -262,11 +303,11 @@ func Reconcile(
 
 	/////////////////////////
 	// Write Infra State
-	redisConditions := redisWriteState(ctx, client, wandb)
-	mysqlConditions := mysqlWriteState(ctx, client, wandb)
-	kafkaConditions := kafkaWriteState(ctx, client, wandb)
-	objectStoreConditions, objectStoreConnection := objectStoreWriteState(ctx, client, wandb)
-	clickHouseConditions := clickHouseWriteState(ctx, client, wandb)
+	redisConditions := redisWriteState(ctx, client, wandb, manifest)
+	mysqlConditions := mysqlWriteState(ctx, client, wandb, manifest)
+	kafkaConditions := kafkaWriteState(ctx, client, wandb, manifest)
+	objectStoreConditions, objectStoreConnection := objectStoreWriteState(ctx, client, wandb, manifest)
+	clickHouseConditions := clickHouseWriteState(ctx, client, wandb, objectStoreConnection, manifest)
 
 	/////////////////////////
 	// Read Infra State
@@ -429,6 +470,11 @@ func ReconcileWandbManifest(
 	}
 	resetInactiveNetworkingStatus(wandb)
 
+	if err := reconcileCustomCACerts(ctx, client, wandb); err != nil {
+		logger.Error(err, "Failed to reconcile custom CA certificates")
+		return ctrl.Result{}, err
+	}
+
 	if wandb.Spec.Networking.Mode == apiv2.NetworkingModeGatewayAPI {
 		wandb.Status.GatewayStatus = nil
 		if err := reconcileGateway(ctx, client, wandb); err != nil {
@@ -499,6 +545,8 @@ func reconcileApplications(
 			continue
 		}
 
+		app = applyWandbProbeDefaults(app, wandb.Spec.Wandb.Probes)
+
 		envVars, err := resolveEnvvars(ctx, client, wandb, manifest, app.CommonEnvs, app.Env)
 		if err != nil {
 			return ctrl.Result{}, err
@@ -528,9 +576,15 @@ func reconcileApplications(
 			volumes, volumeMounts = resolveJWTTokens(app, volumes, volumeMounts)
 		}
 
+		var caChecksum string
+		envVars, volumes, volumeMounts, caChecksum, err = applyCustomCACertsToWorkload(ctx, client, wandb, envVars, volumes, volumeMounts)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+
 		containers := resolveContainers(app, wandb, envVars, volumeMounts)
 
-		initContainers := resolveInitContainers(app, envVars, volumeMounts)
+		initContainers := resolveInitContainers(app, wandb, envVars, volumeMounts)
 
 		application := &apiv2.Application{}
 		err = client.Get(ctx, types.NamespacedName{Name: app.Name, Namespace: wandb.Namespace}, application)
@@ -549,8 +603,10 @@ func reconcileApplications(
 		// across updates (e.g., duplicate "files-inline" volume names).
 		application.Spec.PodTemplate.Spec.Volumes = volumes
 		application.Spec.PodTemplate.Spec.InitContainers = initContainers
+		application.Spec.PodTemplate.Spec.SecurityContext = resolvePodSecurityContext()
 		application.Spec.PodTemplate.Spec.Affinity = wandb.Spec.Affinity
 		application.Spec.PodTemplate.Spec.Tolerations = *wandb.Spec.Tolerations
+		setCustomCACertsChecksumAnnotation(&application.Spec.PodTemplate, caChecksum)
 
 		application.Spec.HpaTemplate = ResolveAutoscaling(app, wandb)
 
@@ -605,6 +661,14 @@ func reconcileApplications(
 
 	for _, app := range existingApps.Items {
 		if !isOwnedBy(&app, wandb) {
+			continue
+		}
+
+		// Infra-managed Applications (e.g. managed Kafka/etcd) carry a component
+		// label and are owned by their dedicated infra reconcilers, not the
+		// server manifest. Skip them so manifest-driven pruning never deletes
+		// them, which would otherwise cause a delete/recreate loop.
+		if _, ok := app.Labels[common.WandbComponentLabel]; ok {
 			continue
 		}
 
@@ -758,41 +822,65 @@ func injectManagedWorkloadTelemetryEnvvars(
 	telemetryConfig TelemetryRuntimeConfig,
 ) ([]corev1.EnvVar, error) {
 
-	telemetryEnabled := telemetryConfig.Enabled
-	if !telemetryEnabled || !shouldInjectManagedWorkloadTelemetry(app.Name) {
+	if !telemetryConfig.Enabled {
 		return envVars, nil
 	}
 
-	// Ensure telemetry `secretName` is present
-	cleanedEnvVars := bindTelemetrySecretName(managedWorkloadTelemetryEnvVars, telemetryConfig.OTel.SecretName)
+	if shouldInjectManagedWorkloadTelemetry(app.Name) {
+		var err error
+		envVars, err = appendResolvedManagedTelemetryEnvvars(ctx, client, wandb, manifest, envVars, managedWorkloadTelemetryEnvVars)
+		if err != nil {
+			return nil, err
+		}
+	}
 
-	telemetryEnvVars, err := resolveEnvvars(ctx, client, wandb, manifest, nil, cleanedEnvVars)
+	if shouldInjectManagedWorkloadStatsd(app.Name) {
+		var err error
+		envVars, err = appendResolvedManagedTelemetryEnvvars(ctx, client, wandb, manifest, envVars, managedWorkloadStatsdEnvVars)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if shouldInjectManagedWorkloadDatadog(app.Name) {
+		var err error
+		envVars, err = appendResolvedManagedTelemetryEnvvars(ctx, client, wandb, manifest, envVars, managedWorkloadDatadogEnvVars)
+		if err != nil {
+			return nil, err
+		}
+		envVars = appendMissingEnvVars(envVars, []corev1.EnvVar{{Name: "DD_SERVICE", Value: app.Name}})
+	}
+
+	return envVars, nil
+}
+
+func appendResolvedManagedTelemetryEnvvars(
+	ctx context.Context,
+	client ctrlClient.Client,
+	wandb *apiv2.WeightsAndBiases,
+	manifest serverManifest.Manifest,
+	envVars []corev1.EnvVar,
+	managedTelemetryEnvVars []serverManifest.EnvVar,
+) ([]corev1.EnvVar, error) {
+	telemetryEnvVars, err := resolveEnvvars(ctx, client, wandb, manifest, nil, managedTelemetryEnvVars)
 	if err != nil {
 		return nil, err
 	}
-
 	return appendMissingEnvVars(envVars, telemetryEnvVars), nil
-}
-
-// This function binds the secret name if `secretName` is empty for telemetry.
-func bindTelemetrySecretName(base []serverManifest.EnvVar, secretName string) []serverManifest.EnvVar {
-	output := make([]serverManifest.EnvVar, len(base))
-	for i, envVar := range base {
-		sources := make([]serverManifest.EnvSource, len(envVar.Sources))
-		for j, source := range envVar.Sources {
-			if source.Type == "telemetry" && source.Name == "" {
-				source.Name = secretName
-			}
-			sources[j] = source
-		}
-		envVar.Sources = sources
-		output[i] = envVar
-	}
-	return output
 }
 
 func shouldInjectManagedWorkloadTelemetry(appName string) bool {
 	_, ok := managedWorkloadTelemetryApplications[appName]
+	return ok
+}
+
+func shouldInjectManagedWorkloadStatsd(appName string) bool {
+	_, ok := managedWorkloadStatsdApplications[appName]
+	return ok
+}
+
+func shouldInjectManagedWorkloadDatadog(appName string) bool {
+	_, ok := managedWorkloadDatadogApplications[appName]
 	return ok
 }
 
@@ -1084,6 +1172,31 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 				return ctrl.Result{}, err
 			}
 
+			var caChecksum string
+			envVars, volumes, volumeMounts, caChecksum, err = applyCustomCACertsToWorkload(ctx, client, wandb, envVars, volumes, volumeMounts)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+
+			podTemplate := corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					RestartPolicy: corev1.RestartPolicyOnFailure,
+					Containers: []corev1.Container{
+						{
+							Name:         "migrate",
+							Image:        migrationTask.Image.GetImage(""),
+							Args:         migrationTask.Args,
+							Command:      migrationTask.Command,
+							Env:          envVars,
+							VolumeMounts: volumeMounts,
+						},
+					},
+					Volumes:            volumes,
+					ServiceAccountName: wandb.Spec.Wandb.ServiceAccount.ServiceAccountName,
+				},
+			}
+			setCustomCACertsChecksumAnnotation(&podTemplate, caChecksum)
+
 			job = &batchv1.Job{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      jobName,
@@ -1095,23 +1208,7 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 					},
 				},
 				Spec: batchv1.JobSpec{
-					Template: corev1.PodTemplateSpec{
-						Spec: corev1.PodSpec{
-							RestartPolicy: corev1.RestartPolicyOnFailure,
-							Containers: []corev1.Container{
-								{
-									Name:         "migrate",
-									Image:        migrationTask.Image.GetImage(),
-									Args:         migrationTask.Args,
-									Command:      migrationTask.Command,
-									Env:          envVars,
-									VolumeMounts: volumeMounts,
-								},
-							},
-							Volumes:            volumes,
-							ServiceAccountName: wandb.Spec.Wandb.ServiceAccount.ServiceAccountName,
-						},
-					},
+					Template: podTemplate,
 				},
 			}
 
@@ -1173,10 +1270,6 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 
 	if err := client.Status().Update(ctx, wandb); err != nil {
 		return ctrl.Result{}, err
-	}
-
-	if anyFailed {
-		return ctrl.Result{}, fmt.Errorf("one or more migration jobs failed")
 	}
 
 	if allSucceeded {
@@ -1268,38 +1361,69 @@ func generateSecrets(ctx context.Context, client ctrlClient.Client, wandb *apiv2
 	return ctrl.Result{}, nil
 }
 
-// resolveCRFieldString resolves a dotted field path (e.g., "spec.wandb.license")
-// from the provided custom resource object, returning the string value if present.
-// Non-string terminal values are treated as not found.
-func resolveCRFieldString(obj any, path string) (string, bool) {
+// resolveCRField traverses a dotted field path (e.g., "spec.wandb.license") in the
+// provided custom resource object and returns the raw terminal value if present.
+// Typed accessors (resolveCRFieldString, resolveCRFieldSecretSelector, ...) build on
+// top of this to validate and cast the result to the type they expect.
+func resolveCRField(obj any, path string) (any, bool) {
 	if obj == nil || path == "" {
-		return "", false
+		return nil, false
 	}
 	// Marshal to JSON then unmarshal into a generic map for easy traversal.
 	b, err := json.Marshal(obj)
 	if err != nil {
-		return "", false
+		return nil, false
 	}
 	var m map[string]any
 	if err := json.Unmarshal(b, &m); err != nil {
-		return "", false
+		return nil, false
 	}
 	cur := any(m)
 	for _, seg := range strings.Split(path, ".") {
 		mm, ok := cur.(map[string]any)
 		if !ok {
-			return "", false
+			return nil, false
 		}
 		next, ok := mm[seg]
 		if !ok {
-			return "", false
+			return nil, false
 		}
 		cur = next
 	}
-	if s, ok := cur.(string); ok {
-		return s, true
+	return cur, true
+}
+
+// resolveCRFieldString resolves a dotted field path from the provided custom resource
+// object, returning the string value if present. Non-string terminal values are
+// treated as not found.
+func resolveCRFieldString(obj any, path string) (string, bool) {
+	cur, ok := resolveCRField(obj, path)
+	if !ok {
+		return "", false
 	}
-	return "", false
+	s, ok := cur.(string)
+	return s, ok
+}
+
+func resolveCRFieldSecretSelector(obj any, path string) (corev1.SecretKeySelector, bool) {
+	cur, ok := resolveCRField(obj, path)
+	if !ok {
+		return corev1.SecretKeySelector{}, false
+	}
+	// Re-marshal the terminal node into a SecretKeySelector so we honor the same
+	// json tags (name/key/optional) the CRD uses.
+	tb, err := json.Marshal(cur)
+	if err != nil {
+		return corev1.SecretKeySelector{}, false
+	}
+	var sel corev1.SecretKeySelector
+	if err := json.Unmarshal(tb, &sel); err != nil {
+		return corev1.SecretKeySelector{}, false
+	}
+	if sel.Name == "" || sel.Key == "" {
+		return corev1.SecretKeySelector{}, false
+	}
+	return sel, true
 }
 
 // managedInstancesReady reports whether every managed instance has a ready

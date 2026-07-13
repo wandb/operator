@@ -125,7 +125,7 @@ spec:
     - port: metrics
 {{- end }}
 
-{{- if .Values.scrape.kubeStateMetrics }}
+{{- if and (eq (include "telemetry.uiEnabled" .) "true") .Values.scrape.kubeStateMetrics }}
 ---
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMServiceScrape
@@ -247,6 +247,26 @@ spec:
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMPodScrape
 metadata:
+  name: mysql-moco
+  namespace: {{ include "telemetry.namespace" . }}
+  labels:
+    app.kubernetes.io/component: telemetry
+    app.kubernetes.io/part-of: wandb
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/created-by: moco
+      app.kubernetes.io/name: mysql
+  namespaceSelector:
+    matchNames:
+      - {{ include "telemetry.namespace" . }}
+  podMetricsEndpoints:
+    - port: mysqld-metrics
+      path: /metrics
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMPodScrape
+metadata:
   name: kafka-brokers
   namespace: {{ include "telemetry.namespace" . }}
   labels:
@@ -255,18 +275,18 @@ metadata:
 spec:
   selector:
     matchLabels:
-      strimzi.io/kind: Kafka
+      weightsandbiases.apps.wandb.com/component: kafka
   namespaceSelector:
     matchNames:
       - {{ include "telemetry.namespace" . }}
   podMetricsEndpoints:
-    - port: tcp-prometheus
+    - port: metrics
       path: /metrics
 ---
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMPodScrape
 metadata:
-  name: seaweedfs
+  name: seaweedfs-master
   namespace: {{ include "telemetry.namespace" . }}
   labels:
     app.kubernetes.io/component: telemetry
@@ -274,12 +294,53 @@ metadata:
 spec:
   selector:
     matchLabels:
-      weightsandbiases.apps.wandb.com/component: seaweedfs
+      app.kubernetes.io/managed-by: seaweedfs-operator
+      app.kubernetes.io/component: master
   namespaceSelector:
     matchNames:
       - {{ include "telemetry.namespace" . }}
   podMetricsEndpoints:
-    - port: swfs-s3
+    - port: master-metrics
+      path: /metrics
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMPodScrape
+metadata:
+  name: seaweedfs-volume
+  namespace: {{ include "telemetry.namespace" . }}
+  labels:
+    app.kubernetes.io/component: telemetry
+    app.kubernetes.io/part-of: wandb
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/managed-by: seaweedfs-operator
+      app.kubernetes.io/component: volume
+  namespaceSelector:
+    matchNames:
+      - {{ include "telemetry.namespace" . }}
+  podMetricsEndpoints:
+    - port: volume-metrics
+      path: /metrics
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMPodScrape
+metadata:
+  name: seaweedfs-filer
+  namespace: {{ include "telemetry.namespace" . }}
+  labels:
+    app.kubernetes.io/component: telemetry
+    app.kubernetes.io/part-of: wandb
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/managed-by: seaweedfs-operator
+      app.kubernetes.io/component: filer
+  namespaceSelector:
+    matchNames:
+      - {{ include "telemetry.namespace" . }}
+  podMetricsEndpoints:
+    - port: filer-metrics
       path: /metrics
 ---
 apiVersion: operator.victoriametrics.com/v1beta1

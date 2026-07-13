@@ -4,19 +4,16 @@ dependencies:
   version: 0.11.8
 - name: moco
   repository: https://cybozu-go.github.io/moco/
-  version: 0.24.0
-- name: cert-manager
-  repository: https://charts.jetstack.io
-  version: v1.20.2
+  version: 0.26.0
 - name: redis-operator
   repository: https://ot-container-kit.github.io/helm-charts
   version: 0.22.2
-- name: strimzi-kafka-operator
-  repository: https://strimzi.io/charts
-  version: 0.50.0
 - name: seaweedfs-operator
   repository: https://seaweedfs.github.io/seaweedfs-operator/
   version: 0.1.24
+- name: prometheus-operator-crds
+  repository: https://prometheus-community.github.io/helm-charts
+  version: 29.0.0
 - name: altinity-clickhouse-operator
   repository: https://helm.altinity.com
   version: 0.26.3
@@ -29,5 +26,5 @@ dependencies:
 - name: telemetry
   repository: file://../telemetry
   version: 0.1.0
-digest: sha256:03c8726bd311883771544478656f0a17bd03909447022832209502555f71987b
-generated: "2026-05-29T14:05:47.757363-07:00"
+digest: sha256:c236896848dcfa23f87e476e0ea552ffb874e294e08e614a7908019e03ee68a1
+generated: "2026-07-08T16:05:34.522143-07:00"
