@@ -46,40 +46,40 @@ const (
 	legacyDefaultSize = "small"
 
 	manifestFetchTimeout    = 15 * time.Second
-	manifestCacheSuccessTTL = 5 * time.Minute
-	manifestCacheFailureTTL = time.Minute
+	manifestFailureCooldown = time.Minute
 )
 
 // conversionManifestGetter resolves the server manifest; a package-level seam
 // so tests (and alternate wiring) can avoid the real OCI/file fetch.
 var conversionManifestGetter = serverManifest.GetServerManifest
 
-// manifestAppsCache memoizes application-name sets per (repository, version).
-// Manifests are immutable per version, but a short success TTL keeps local
-// file:// manifests fresh during development; failures are cached briefly so
-// bursts of conversions (e.g. storage migration) don't hammer a dead registry.
+// Successful fetches need no caching here — GetServerManifest is local-first
+// (the ORAS store under /tmp/server-manifest, populated on first download).
+// Failures are the gap: the store retries the remote on every call, and in a
+// conversion webhook that would stall every v1 write for the full fetch
+// timeout while the registry is unreachable, so failures are remembered
+// briefly per (repository, version).
 var (
-	manifestAppsMu    sync.Mutex
-	manifestAppsCache = map[string]manifestAppsEntry{}
+	manifestFailuresMu sync.Mutex
+	manifestFailures   = map[string]manifestFailure{}
 )
 
-type manifestAppsEntry struct {
-	apps      map[string]struct{}
-	err       error
-	expiresAt time.Time
+type manifestFailure struct {
+	err   error
+	until time.Time
 }
 
 // SetConversionManifestGetter swaps the manifest resolver used by conversion
-// and clears the cache. Intended for tests; call with nil to restore the
-// default resolver.
+// and clears the failure cooldowns. Intended for tests; call with nil to
+// restore the default resolver.
 func SetConversionManifestGetter(getter func(ctx context.Context, repository, version string) (serverManifest.Manifest, error)) {
-	manifestAppsMu.Lock()
-	defer manifestAppsMu.Unlock()
+	manifestFailuresMu.Lock()
+	defer manifestFailuresMu.Unlock()
 	if getter == nil {
 		getter = serverManifest.GetServerManifest
 	}
 	conversionManifestGetter = getter
-	manifestAppsCache = map[string]manifestAppsEntry{}
+	manifestFailures = map[string]manifestFailure{}
 }
 
 // legacyManifestApps returns the application-name set of the server manifest
@@ -88,34 +88,32 @@ func SetConversionManifestGetter(getter func(ctx context.Context, repository, ve
 // defaulting webhook applies).
 func legacyManifestApps(version string) (map[string]struct{}, error) {
 	repository := appsv2.DefaultManifestRepository
-	cacheKey := repository + "|" + version
+	key := repository + "|" + version
 
-	manifestAppsMu.Lock()
+	manifestFailuresMu.Lock()
 	getter := conversionManifestGetter
-	if entry, ok := manifestAppsCache[cacheKey]; ok && time.Now().Before(entry.expiresAt) {
-		manifestAppsMu.Unlock()
-		return entry.apps, entry.err
+	if failure, ok := manifestFailures[key]; ok && time.Now().Before(failure.until) {
+		manifestFailuresMu.Unlock()
+		return nil, failure.err
 	}
-	manifestAppsMu.Unlock()
+	manifestFailuresMu.Unlock()
 
 	ctx, cancel := context.WithTimeout(context.Background(), manifestFetchTimeout)
 	defer cancel()
 
 	m, err := getter(ctx, repository, version)
-	entry := manifestAppsEntry{err: err, expiresAt: time.Now().Add(manifestCacheFailureTTL)}
-	if err == nil {
-		apps := make(map[string]struct{}, len(m.Applications))
-		for name := range m.Applications {
-			apps[name] = struct{}{}
-		}
-		entry = manifestAppsEntry{apps: apps, expiresAt: time.Now().Add(manifestCacheSuccessTTL)}
+	if err != nil {
+		manifestFailuresMu.Lock()
+		manifestFailures[key] = manifestFailure{err: err, until: time.Now().Add(manifestFailureCooldown)}
+		manifestFailuresMu.Unlock()
+		return nil, err
 	}
 
-	manifestAppsMu.Lock()
-	manifestAppsCache[cacheKey] = entry
-	manifestAppsMu.Unlock()
-
-	return entry.apps, entry.err
+	apps := make(map[string]struct{}, len(m.Applications))
+	for name := range m.Applications {
+		apps[name] = struct{}{}
+	}
+	return apps, nil
 }
 
 // legacyValuesKeyForApp returns the v1 values key holding a v2 application's

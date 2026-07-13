@@ -379,8 +379,16 @@ func TestConvertTo_LegacyOverridesManifestUnavailable(t *testing.T) {
 	require.NotContains(t, overrides, "api")
 }
 
-func TestConvertTo_LegacyOverridesManifestCached(t *testing.T) {
-	calls := withConversionManifestApps(t, "api")
+func TestConvertTo_LegacyOverridesManifestFailureCooldown(t *testing.T) {
+	// Successful fetches are cached on disk by the ORAS store, but failures
+	// retry the remote every call — the cooldown keeps a burst of conversions
+	// from stalling on an unreachable registry for every v1 write.
+	var calls atomic.Int32
+	SetConversionManifestGetter(func(_ context.Context, _, _ string) (serverManifest.Manifest, error) {
+		calls.Add(1)
+		return serverManifest.Manifest{}, errors.New("registry unreachable")
+	})
+	t.Cleanup(disableConversionManifestFetch)
 
 	for i := 0; i < 3; i++ {
 		dst := &appsv2.WeightsAndBiases{}
@@ -390,10 +398,10 @@ func TestConvertTo_LegacyOverridesManifestCached(t *testing.T) {
 			},
 		}))
 		require.NoError(t, src.ConvertTo(dst))
-		require.Contains(t, dst.Spec.Wandb.LegacyOverrides, "api")
+		require.NotContains(t, dst.Spec.Wandb.LegacyOverrides, "api")
 	}
 
-	require.Equal(t, int32(1), calls.Load(), "manifest should be resolved once and cached per (repository, version)")
+	require.Equal(t, int32(1), calls.Load(), "repeat conversions within the cooldown must not retry the fetch")
 }
 
 func TestConvertTo_LegacyOverridesPrefersActiveSpecValues(t *testing.T) {

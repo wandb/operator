@@ -66,11 +66,14 @@ there is no hardcoded list of helm app keys anywhere. Conversion resolves the
 manifest itself: `mapVersion` runs first and derives `spec.wandb.version` from
 `app.image.tag`/`api.image.tag`, and the manifest for that version is an
 immutable artifact fetched through the same `manifest.GetServerManifest`
-resolver the reconciler uses (OCI via ORAS with its on-disk store, or
-`file://`). This keeps conversion stateless in the way that matters: it remains
-a pure function of (values, version) — the manifest is just versioned static
-data, cached in-process (5 min success / 1 min failure TTL, 15 s fetch
-timeout).
+resolver the reconciler uses (OCI via ORAS, or `file://`). This keeps
+conversion stateless in the way that matters: it remains a pure function of
+(values, version) — the manifest is just versioned static data. Successful
+fetches need no extra caching (the resolver is local-first: once a version is
+in its on-disk ORAS store, no network is involved); only *failures* are
+remembered in-process for a minute, because the store retries the remote on
+every call and a conversion webhook stalling for the fetch timeout (15 s) on
+every v1 write would make an unreachable registry very painful.
 
 Reconcile-time validation still exists as a second line — it guards
 hand-edited v2 CRs and version drift — mirroring the existing split for
@@ -292,8 +295,10 @@ never enter the spec.
    - `legacyManifestApps`: resolves the manifest via
      `manifest.GetServerManifest` (repository = the shared
      `appsv2.DefaultManifestRepository` constant, also used by the defaulting
-     webhook) behind a TTL cache and a `SetConversionManifestGetter` test seam;
-     failures skip per-app extraction with a log.
+     webhook) with a per-(repository, version) failure cooldown — successes are
+     already cached on disk by the resolver's ORAS store — and a
+     `SetConversionManifestGetter` test seam; failures skip per-app extraction
+     with a log.
    - The two-entry rename map plus helpers following existing idioms
      (`unstructured.Nested*`, errors prefixed `spec.values.<path>`): env over
      extraEnv merge, scalar coercion, strict EnvVar-body decode, `{{` skip,
