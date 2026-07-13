@@ -312,6 +312,11 @@ type WandbAppSpec struct {
 // application counterpart, so the reconciler treats it as always valid.
 const LegacyOverridesGlobalKey = "global"
 
+// DefaultManifestRepository is the server-manifest source used when
+// spec.wandb.manifestRepository is unset — applied by the defaulting webhook
+// and by the v1 conversion, which resolves the manifest before defaulting runs.
+const DefaultManifestRepository = "oci://us-docker.pkg.dev/wandb-production/public/wandb/server-manifest"
+
 // LegacyOverrides holds v1-derived overrides for a single application (or the
 // reserved "global" entry).
 type LegacyOverrides struct {

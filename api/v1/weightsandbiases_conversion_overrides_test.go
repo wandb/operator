@@ -17,6 +17,10 @@ limitations under the License.
 package v1
 
 import (
+	"context"
+	"errors"
+	"os"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -24,18 +28,70 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 
 	appsv2 "github.com/wandb/operator/api/v2"
+	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
 )
 
-func TestConvertTo_LegacyOverridesAbsent(t *testing.T) {
-	dst := &appsv2.WeightsAndBiases{}
-	src := newV1(map[string]interface{}{
-		"global": map[string]interface{}{"host": "https://wandb.example.com"},
+const testLegacyVersion = "0.83.0-test"
+
+// disableConversionManifestFetch installs a resolver that always errors, so no
+// unit test ever fetches a real manifest over the network. Tests opt in to
+// per-app extraction via withConversionManifestApps.
+func disableConversionManifestFetch() {
+	SetConversionManifestGetter(func(_ context.Context, _, _ string) (serverManifest.Manifest, error) {
+		return serverManifest.Manifest{}, errors.New("manifest fetch disabled in unit tests")
 	})
+}
+
+func TestMain(m *testing.M) {
+	disableConversionManifestFetch()
+	os.Exit(m.Run())
+}
+
+// withConversionManifestApps installs a fake manifest resolver returning the
+// given application names (cleaned up via t.Cleanup, which also clears the
+// cache). Returns a counter of resolver invocations.
+func withConversionManifestApps(t *testing.T, apps ...string) *atomic.Int32 {
+	t.Helper()
+	var calls atomic.Int32
+	SetConversionManifestGetter(func(_ context.Context, _, _ string) (serverManifest.Manifest, error) {
+		calls.Add(1)
+		m := serverManifest.Manifest{Applications: map[string]serverManifest.Application{}}
+		for _, app := range apps {
+			m.Applications[app] = serverManifest.Application{Name: app}
+		}
+		return m, nil
+	})
+	t.Cleanup(disableConversionManifestFetch)
+	return &calls
+}
+
+// withVersion adds the app.image.tag mapVersion reads, so per-app extraction
+// has a version to resolve the manifest with.
+func withVersion(values map[string]interface{}) map[string]interface{} {
+	values["app"] = map[string]interface{}{
+		"image": map[string]interface{}{"tag": testLegacyVersion},
+	}
+	return values
+}
+
+func TestConvertTo_LegacyOverridesAbsent(t *testing.T) {
+	withConversionManifestApps(t, "api")
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(withVersion(map[string]interface{}{
+		"global": map[string]interface{}{"host": "https://wandb.example.com"},
+	}))
 	require.NoError(t, src.ConvertTo(dst))
 	require.Nil(t, dst.Spec.Wandb.LegacyOverrides)
 }
 
 func TestConvertTo_LegacyOverridesGlobalEnvPrecedence(t *testing.T) {
+	// No version in values: global env must convert without any manifest fetch.
+	SetConversionManifestGetter(func(_ context.Context, _, _ string) (serverManifest.Manifest, error) {
+		t.Fatal("manifest must not be resolved when no version is derived")
+		return serverManifest.Manifest{}, nil
+	})
+	t.Cleanup(disableConversionManifestFetch)
+
 	dst := &appsv2.WeightsAndBiases{}
 	src := newV1(map[string]interface{}{
 		"global": map[string]interface{}{
@@ -62,8 +118,9 @@ func TestConvertTo_LegacyOverridesGlobalEnvPrecedence(t *testing.T) {
 }
 
 func TestConvertTo_LegacyOverridesScalarCoercion(t *testing.T) {
+	withConversionManifestApps(t, "parquet")
 	dst := &appsv2.WeightsAndBiases{}
-	src := newV1(map[string]interface{}{
+	src := newV1(withVersion(map[string]interface{}{
 		"parquet": map[string]interface{}{
 			"env": map[string]interface{}{
 				"BOOL":  true,
@@ -72,7 +129,7 @@ func TestConvertTo_LegacyOverridesScalarCoercion(t *testing.T) {
 				"STR":   "plain",
 			},
 		},
-	})
+	}))
 	require.NoError(t, src.ConvertTo(dst))
 
 	require.Equal(t, []corev1.EnvVar{
@@ -84,8 +141,9 @@ func TestConvertTo_LegacyOverridesScalarCoercion(t *testing.T) {
 }
 
 func TestConvertTo_LegacyOverridesValueFromBody(t *testing.T) {
+	withConversionManifestApps(t, "api")
 	dst := &appsv2.WeightsAndBiases{}
-	src := newV1(map[string]interface{}{
+	src := newV1(withVersion(map[string]interface{}{
 		"api": map[string]interface{}{
 			"env": map[string]interface{}{
 				"API_KEY": map[string]interface{}{
@@ -98,7 +156,7 @@ func TestConvertTo_LegacyOverridesValueFromBody(t *testing.T) {
 				},
 			},
 		},
-	})
+	}))
 	require.NoError(t, src.ConvertTo(dst))
 
 	env := dst.Spec.Wandb.LegacyOverrides["api"].Env
@@ -111,8 +169,9 @@ func TestConvertTo_LegacyOverridesValueFromBody(t *testing.T) {
 }
 
 func TestConvertTo_LegacyOverridesMalformedBodyFails(t *testing.T) {
+	withConversionManifestApps(t, "api")
 	dst := &appsv2.WeightsAndBiases{}
-	src := newV1(map[string]interface{}{
+	src := newV1(withVersion(map[string]interface{}{
 		"api": map[string]interface{}{
 			"env": map[string]interface{}{
 				"BROKEN": map[string]interface{}{
@@ -122,15 +181,16 @@ func TestConvertTo_LegacyOverridesMalformedBodyFails(t *testing.T) {
 				},
 			},
 		},
-	})
+	}))
 	err := src.ConvertTo(dst)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "spec.values.api env BROKEN")
 }
 
 func TestConvertTo_LegacyOverridesTemplateValuesDropped(t *testing.T) {
+	withConversionManifestApps(t, "executor")
 	dst := &appsv2.WeightsAndBiases{}
-	src := newV1(map[string]interface{}{
+	src := newV1(withVersion(map[string]interface{}{
 		"global": map[string]interface{}{
 			"extraEnv": map[string]interface{}{
 				"TEMPLATED": "{{ .Release.Name }}-suffix",
@@ -143,7 +203,7 @@ func TestConvertTo_LegacyOverridesTemplateValuesDropped(t *testing.T) {
 				"ONLY_TEMPLATED": `{{ include "wandb.executor.taskQueue" . }}`,
 			},
 		},
-	})
+	}))
 	require.NoError(t, src.ConvertTo(dst))
 
 	global := dst.Spec.Wandb.LegacyOverrides[appsv2.LegacyOverridesGlobalKey]
@@ -157,15 +217,16 @@ func TestConvertTo_LegacyOverridesTemplateValuesDropped(t *testing.T) {
 }
 
 func TestConvertTo_LegacyOverridesRenames(t *testing.T) {
+	withConversionManifestApps(t, "nginx-proxy", "weave-trace-evaluate-model-worker")
 	dst := &appsv2.WeightsAndBiases{}
-	src := newV1(map[string]interface{}{
+	src := newV1(withVersion(map[string]interface{}{
 		"nginx": map[string]interface{}{
 			"env": map[string]interface{}{"NGINX_VAR": "1"},
 		},
 		"weave-evaluate-model-worker": map[string]interface{}{
 			"env": map[string]interface{}{"WORKER_VAR": "2"},
 		},
-	})
+	}))
 	require.NoError(t, src.ConvertTo(dst))
 
 	overrides := dst.Spec.Wandb.LegacyOverrides
@@ -175,29 +236,34 @@ func TestConvertTo_LegacyOverridesRenames(t *testing.T) {
 	require.NotContains(t, overrides, "weave-evaluate-model-worker")
 }
 
-func TestConvertTo_LegacyOverridesUnmappedSectionsCopiedVerbatim(t *testing.T) {
+func TestConvertTo_LegacyOverridesUnmappedSectionsSkipped(t *testing.T) {
+	withConversionManifestApps(t, "api")
 	dst := &appsv2.WeightsAndBiases{}
-	src := newV1(map[string]interface{}{
-		"app": map[string]interface{}{
-			"env": map[string]interface{}{"MONOLITH_VAR": "1"},
-		},
+	values := withVersion(map[string]interface{}{
 		"console": map[string]interface{}{
 			"env": map[string]interface{}{"CONSOLE_VAR": "2"},
 		},
+		"api": map[string]interface{}{
+			"env": map[string]interface{}{"API_VAR": "1"},
+		},
 	})
+	// The monolith section carries env alongside the image tag withVersion set.
+	values["app"].(map[string]interface{})["env"] = map[string]interface{}{"MONOLITH_VAR": "1"}
+	src := newV1(values)
 	require.NoError(t, src.ConvertTo(dst))
 
-	// No app -> api grafting: sections keep their own keys; the reconciler
-	// logs and ignores the ones the manifest doesn't know.
+	// Only manifest applications are converted; app/console are logged and
+	// skipped (still recoverable from the v1-values annotation).
 	overrides := dst.Spec.Wandb.LegacyOverrides
-	require.Equal(t, []corev1.EnvVar{{Name: "MONOLITH_VAR", Value: "1"}}, overrides["app"].Env)
-	require.Equal(t, []corev1.EnvVar{{Name: "CONSOLE_VAR", Value: "2"}}, overrides["console"].Env)
-	require.NotContains(t, overrides, "api")
+	require.Equal(t, []corev1.EnvVar{{Name: "API_VAR", Value: "1"}}, overrides["api"].Env)
+	require.NotContains(t, overrides, "app")
+	require.NotContains(t, overrides, "console")
 }
 
 func TestConvertTo_LegacyOverridesResourcesSizingMerge(t *testing.T) {
+	withConversionManifestApps(t, "api")
 	dst := &appsv2.WeightsAndBiases{}
-	src := newV1(map[string]interface{}{
+	src := newV1(withVersion(map[string]interface{}{
 		"global": map[string]interface{}{"size": "medium"},
 		"api": map[string]interface{}{
 			"sizing": map[string]interface{}{
@@ -222,7 +288,7 @@ func TestConvertTo_LegacyOverridesResourcesSizingMerge(t *testing.T) {
 				"limits": map[string]interface{}{"cpu": "3"},
 			},
 		},
-	})
+	}))
 	require.NoError(t, src.ConvertTo(dst))
 
 	resources := dst.Spec.Wandb.LegacyOverrides["api"].Resources
@@ -236,8 +302,9 @@ func TestConvertTo_LegacyOverridesResourcesSizingMerge(t *testing.T) {
 }
 
 func TestConvertTo_LegacyOverridesResourcesPerAppSizeWins(t *testing.T) {
+	withConversionManifestApps(t, "parquet")
 	dst := &appsv2.WeightsAndBiases{}
-	src := newV1(map[string]interface{}{
+	src := newV1(withVersion(map[string]interface{}{
 		"global": map[string]interface{}{"size": "small"},
 		"parquet": map[string]interface{}{
 			"size": "xlarge",
@@ -254,7 +321,7 @@ func TestConvertTo_LegacyOverridesResourcesPerAppSizeWins(t *testing.T) {
 				},
 			},
 		},
-	})
+	}))
 	require.NoError(t, src.ConvertTo(dst))
 
 	resources := dst.Spec.Wandb.LegacyOverrides["parquet"].Resources
@@ -263,8 +330,9 @@ func TestConvertTo_LegacyOverridesResourcesPerAppSizeWins(t *testing.T) {
 }
 
 func TestConvertTo_LegacyOverridesResourcesDefaultSizeIsSmall(t *testing.T) {
+	withConversionManifestApps(t, "weave")
 	dst := &appsv2.WeightsAndBiases{}
-	src := newV1(map[string]interface{}{
+	src := newV1(withVersion(map[string]interface{}{
 		"weave": map[string]interface{}{
 			"sizing": map[string]interface{}{
 				"small": map[string]interface{}{
@@ -279,7 +347,7 @@ func TestConvertTo_LegacyOverridesResourcesDefaultSizeIsSmall(t *testing.T) {
 				},
 			},
 		},
-	})
+	}))
 	require.NoError(t, src.ConvertTo(dst))
 
 	resources := dst.Spec.Wandb.LegacyOverrides["weave"].Resources
@@ -287,27 +355,70 @@ func TestConvertTo_LegacyOverridesResourcesDefaultSizeIsSmall(t *testing.T) {
 	require.Equal(t, resource.MustParse("1Gi"), resources.Requests[corev1.ResourceMemory])
 }
 
-func TestConvertTo_LegacyOverridesPrefersActiveSpecValues(t *testing.T) {
-	withConversionReader(t, activeSpecSecret(t, "default", "wandb", map[string]interface{}{
-		"global": map[string]interface{}{
-			"env": map[string]interface{}{"FROM_ACTIVE": "yes"},
-		},
-	}))
+func TestConvertTo_LegacyOverridesManifestUnavailable(t *testing.T) {
+	SetConversionManifestGetter(func(_ context.Context, _, _ string) (serverManifest.Manifest, error) {
+		return serverManifest.Manifest{}, errors.New("registry unreachable")
+	})
+	t.Cleanup(disableConversionManifestFetch)
 
 	dst := &appsv2.WeightsAndBiases{}
-	src := newV1(map[string]interface{}{
+	src := newV1(withVersion(map[string]interface{}{
 		"global": map[string]interface{}{
-			"env": map[string]interface{}{"FROM_CR": "yes"},
+			"env": map[string]interface{}{"HTTP_PROXY": "http://proxy"},
 		},
-	})
+		"api": map[string]interface{}{
+			"env": map[string]interface{}{"API_VAR": "1"},
+		},
+	}))
+	// A manifest fetch failure must never fail conversion: global env still
+	// converts, per-app extraction is skipped.
 	require.NoError(t, src.ConvertTo(dst))
 
-	global := dst.Spec.Wandb.LegacyOverrides[appsv2.LegacyOverridesGlobalKey]
-	require.Equal(t, []corev1.EnvVar{{Name: "FROM_ACTIVE", Value: "yes"}}, global.Env)
+	overrides := dst.Spec.Wandb.LegacyOverrides
+	require.Contains(t, overrides, appsv2.LegacyOverridesGlobalKey)
+	require.NotContains(t, overrides, "api")
+}
+
+func TestConvertTo_LegacyOverridesManifestCached(t *testing.T) {
+	calls := withConversionManifestApps(t, "api")
+
+	for i := 0; i < 3; i++ {
+		dst := &appsv2.WeightsAndBiases{}
+		src := newV1(withVersion(map[string]interface{}{
+			"api": map[string]interface{}{
+				"env": map[string]interface{}{"API_VAR": "1"},
+			},
+		}))
+		require.NoError(t, src.ConvertTo(dst))
+		require.Contains(t, dst.Spec.Wandb.LegacyOverrides, "api")
+	}
+
+	require.Equal(t, int32(1), calls.Load(), "manifest should be resolved once and cached per (repository, version)")
+}
+
+func TestConvertTo_LegacyOverridesPrefersActiveSpecValues(t *testing.T) {
+	withConversionManifestApps(t, "api")
+	withConversionReader(t, activeSpecSecret(t, "default", "wandb", withVersion(map[string]interface{}{
+		"api": map[string]interface{}{
+			"env": map[string]interface{}{"FROM_ACTIVE": "yes"},
+		},
+	})))
+
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(withVersion(map[string]interface{}{
+		"api": map[string]interface{}{
+			"env": map[string]interface{}{"FROM_CR": "yes"},
+		},
+	}))
+	require.NoError(t, src.ConvertTo(dst))
+
+	require.Equal(t, []corev1.EnvVar{{Name: "FROM_ACTIVE", Value: "yes"}},
+		dst.Spec.Wandb.LegacyOverrides["api"].Env)
 }
 
 func TestConvertRoundTrip_LegacyOverridesIdempotent(t *testing.T) {
-	values := map[string]interface{}{
+	withConversionManifestApps(t, "api")
+	values := withVersion(map[string]interface{}{
 		"global": map[string]interface{}{
 			"size": "medium",
 			"env":  map[string]interface{}{"B": "2", "A": "1"},
@@ -331,7 +442,7 @@ func TestConvertRoundTrip_LegacyOverridesIdempotent(t *testing.T) {
 				},
 			},
 		},
-	}
+	})
 
 	first := &appsv2.WeightsAndBiases{}
 	require.NoError(t, newV1(values).ConvertTo(first))
@@ -343,4 +454,5 @@ func TestConvertRoundTrip_LegacyOverridesIdempotent(t *testing.T) {
 	require.NoError(t, bounced.ConvertTo(second))
 
 	require.Equal(t, first.Spec.Wandb.LegacyOverrides, second.Spec.Wandb.LegacyOverrides)
+	require.Contains(t, first.Spec.Wandb.LegacyOverrides, "api")
 }

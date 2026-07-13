@@ -61,19 +61,21 @@ from them.
 
 ## Design
 
-The feature is two-phase because the two halves need different knowledge:
+The server manifest is the single authority on which applications exist —
+there is no hardcoded list of helm app keys anywhere. Conversion resolves the
+manifest itself: `mapVersion` runs first and derives `spec.wandb.version` from
+`app.image.tag`/`api.image.tag`, and the manifest for that version is an
+immutable artifact fetched through the same `manifest.GetServerManifest`
+resolver the reconciler uses (OCI via ORAS with its on-disk store, or
+`file://`). This keeps conversion stateless in the way that matters: it remains
+a pure function of (values, version) — the manifest is just versioned static
+data, cached in-process (5 min success / 1 min failure TTL, 15 s fetch
+timeout).
 
-- **Conversion** (`api/v1`) knows helm-values *shape* — how env maps, `extraEnv`
-  layering, and sizing merges work — but is a stateless webhook with no access to
-  the server manifest (an OCI artifact resolved at reconcile time from
-  `spec.wandb.version`/`manifestRepository`).
-- **Reconcile** knows which applications actually *exist* — it has the resolved
-  manifest — but shouldn't carry helm-values knowledge.
-
-So conversion extracts candidate sections mechanically, and the reconciler
-validates them against the manifest, logging anything that doesn't map (and
-simply never applying it). This mirrors the existing split for external-infra
-literals (`mapMySQL` → pending annotation → `migrateLegacyAnnotations`).
+Reconcile-time validation still exists as a second line — it guards
+hand-edited v2 CRs and version drift — mirroring the existing split for
+external-infra literals (`mapMySQL` → pending annotation →
+`migrateLegacyAnnotations`).
 
 ### Phase 1: Conversion (v1 → v2)
 
@@ -84,25 +86,32 @@ It is pure extraction — stateless, no client — over the `resolveValues()` ou
 so the spec-active Secret's coalesced values are preferred, same as every other
 mapper.
 
-**Candidate sections.** Conversion walks a fixed candidate list — the wandb-base
-alias keys from the chart's `Chart.yaml` (`app`, `api`, `console`, `executor`,
-`filemeta`, `anaconda2`, `filestream`, `flat-run-fields-updater`,
-`history-updater`, `history-reader`, `frontend`, `glue`, `metric-observer`,
-`parquet`, `parquet-metadata-cache`, `weave`, `weave-trace`, `weave-trace-worker`,
-`weave-evaluate-model-worker`, `weave-trace-agent-scoring-worker`, `mcp-server`,
-`nginx`, `lumen-agent`, plus the job aliases). The list is safe to freeze: the v1
-chart is legacy and its key set no longer grows. Each candidate with any
-env/extraEnv/resources/sizing content is extracted and stored under its key,
-with only two **unambiguous 1:1 renames** applied (helm knowledge, so it lives
-here): `nginx` → `nginx-proxy` and `weave-evaluate-model-worker` →
-`weave-trace-evaluate-model-worker`.
+**Manifest-driven extraction.** Conversion resolves the server manifest for the
+converted version and iterates `manifest.Applications`: for each application
+name, it reads the matching top-level values section — the helm alias for the
+two **unambiguous 1:1 renames** (`nginx-proxy` ← `nginx`,
+`weave-trace-evaluate-model-worker` ← `weave-evaluate-model-worker`; helm
+knowledge, so the tiny rename map lives here), the name itself otherwise — and
+extracts its env/extraEnv/resources. Only manifest applications are ever
+copied, so the spec never carries junk keys, and a new application in a future
+manifest needs no conversion change.
 
-There is **no `app` → `api` translation**. The v1 monolith's (`wandb/local`)
-overrides were tuned for a different binary and grafting them onto v2's `api`
-risks more than it fixes. The `app` section is copied under its own key and —
-since no manifest application is named `app` — gets logged and ignored by
-manifest validation like any other unmapped section. The raw values also remain
-in the `legacy.operator.wandb.com/v1-values` annotation.
+Sections that carry the override shape we extract (`env`/`extraEnv`/`sizing`)
+but match no manifest application — the v1 monolith `app`, `console`,
+`history-updater`, `mcp-server`, … — are **logged and skipped** at conversion.
+(The flat `resources` key is deliberately not part of that detection signature:
+infra subchart sections like `mysql` legitimately carry it and would be false
+positives.) There is **no `app` → `api` translation**: the monolith's overrides
+were tuned for a different binary, and grafting them onto v2's `api` risks more
+than it fixes. Skipped sections stay recoverable in the
+`legacy.operator.wandb.com/v1-values` annotation.
+
+**Failure containment.** Manifest resolution is best-effort and never fails
+conversion: a fetch error (offline cluster, version with no published manifest)
+would otherwise make v1 objects unservable and v1 writes impossible. On error —
+or when values yield no version at all — only the per-application extraction is
+skipped, with a log; global env still converts, and a later re-apply (once the
+manifest is reachable) re-extracts everything.
 
 **Env extraction.**
 
@@ -132,9 +141,12 @@ the v1-values annotation.
 
 ### Phase 2: Manifest validation at reconcile (log-only, no pruning for now)
 
-A new step `validateLegacyOverrides(ctx, wandb, manifest)` runs in the v2
-reconcile immediately after the server manifest is resolved and before
-`reconcileApplications`:
+`validateLegacyOverrides(ctx, wandb, manifest)` runs in the v2 reconcile
+immediately after the server manifest is resolved and before
+`reconcileApplications`. With conversion already filtering against the
+manifest, this is a second line of defense for hand-edited v2 CRs and for
+version drift (the spec's overrides were extracted against one manifest
+version; the reconciler may be running another):
 
 - Valid keys are the reserved `"global"` plus any name in
   `manifest.Applications`. Validity is judged against the full application map,
@@ -147,13 +159,6 @@ reconcile immediately after the server manifest is resolved and before
   path only ever looks up `"global"` and manifest application names. Pruning the
   spec was considered and deferred — we can revisit once migration behavior has
   been observed in the field.
-
-This is what makes the *manifest* — not a table in conversion code — the
-authority on valid applications, and it degrades well: if a future manifest adds
-an application, conversion needs no change, and — since unmapped sections are
-retained — an override that didn't map under one manifest version automatically
-takes effect if a later manifest introduces that application. (That auto-
-activation is a consequence to keep in mind if pruning is added later.)
 
 ### Phase 3: Applying overrides during reconcile
 
@@ -239,7 +244,7 @@ flowchart LR
         V[spec.values<br/>global.env / extraEnv<br/>app.env / resources / sizing]
     end
     subgraph conv["Conversion webhook (api/v1)"]
-        RV[resolveValues<br/>spec-active Secret or spec.values] --> MLO[mapLegacyOverrides<br/>candidate keys, 1:1 renames<br/>env map → EnvVar list + sizing merge]
+        RV[resolveValues<br/>spec-active Secret or spec.values] --> MLO[mapLegacyOverrides<br/>fetch manifest for mapVersion's version<br/>iterate manifest apps, 1:1 renames<br/>env map → EnvVar list + sizing merge<br/>log + skip unmapped sections]
     end
     subgraph rec["v2 reconcile"]
         GM[GetServerManifest] --> PR[validateLegacyOverrides<br/>log keys not in<br/>manifest.Applications]
@@ -261,8 +266,8 @@ flowchart LR
   mapped to typed fields by the other conversion mappers, or genuinely not apps
 
 Sections for apps with no v2 counterpart (`app`, `console`, `history-updater`,
-`mcp-server`, job/hook keys, …) are copied at conversion, then logged by
-manifest validation and left in the spec unapplied.
+`mcp-server`, job/hook keys, …) are logged and skipped at conversion — they
+never enter the spec.
 
 ## Implementation plan
 
@@ -281,21 +286,28 @@ manifest validation and left in the spec unapplied.
 ### Step 1 — Conversion
 
 3. New `api/v1/weightsandbiases_conversion_overrides.go`:
-   - `legacyAppSectionKeys` candidate list (wandb-base aliases) and the two-entry
-     rename map.
    - `mapLegacyOverrides(values map[string]interface{}, dst *appsv2.WeightsAndBiases) error`,
-     registered in `applyValueMappings` after `mapIngress`.
-   - Helpers following existing idioms (`unstructured.Nested*`, errors prefixed
-     `spec.values.<path>`): `readEnvMaps` (env over extraEnv), `envMapToVars`
-     (scalar coercion, EnvVar-body decode, `{{` skip, sort by name),
-     `readAppResources` (sizing default → effective size → flat `resources` merge,
-     using `coalesce(<app>.size, global.size, "small")`).
-4. Tests in `api/v1/weightsandbiases_conversion_test.go` (plain Go + `require`,
-   `newV1(values)` fixtures, `withConversionReader` for spec-active Secret cases):
-   global/per-app extraction and env/extraEnv precedence, scalar coercion,
-   `valueFrom` bodies, template-string drop, renames, `app`/`console` copied
-   verbatim (pruning is reconcile's job), resources/size selection, deterministic
-   ordering, round-trip idempotency, spec-active Secret preference.
+     registered in `applyValueMappings` after `mapIngress` (so `mapVersion` has
+     already derived the version).
+   - `legacyManifestApps`: resolves the manifest via
+     `manifest.GetServerManifest` (repository = the shared
+     `appsv2.DefaultManifestRepository` constant, also used by the defaulting
+     webhook) behind a TTL cache and a `SetConversionManifestGetter` test seam;
+     failures skip per-app extraction with a log.
+   - The two-entry rename map plus helpers following existing idioms
+     (`unstructured.Nested*`, errors prefixed `spec.values.<path>`): env over
+     extraEnv merge, scalar coercion, strict EnvVar-body decode, `{{` skip,
+     name-sorted output; resources = sizing default → effective size → flat
+     `resources` merge, using `coalesce(<app>.size, global.size, "small")`;
+     unmapped-section logging keyed on the `env`/`extraEnv`/`sizing` shape.
+4. Tests in `api/v1/weightsandbiases_conversion_overrides_test.go` (plain Go +
+   `require`, `newV1(values)` fixtures, fake manifest getter installed by a
+   package `TestMain` so unit tests never fetch over the network,
+   `withConversionReader` for spec-active Secret cases): global/per-app
+   extraction and env/extraEnv precedence, scalar coercion, `valueFrom` bodies,
+   template-string drop, renames, unmapped sections skipped, resources/size
+   selection, manifest-unavailable and no-version fallbacks, per-version fetch
+   caching, round-trip idempotency, spec-active Secret preference.
 
 ### Step 2 — Manifest validation
 
@@ -337,9 +349,10 @@ manifest validation and left in the spec unapplied.
 
 | Decision | Choice | Rationale |
 |---|---|---|
-| Authority on valid app names | the resolved server manifest, at reconcile | conversion is stateless and can't fetch the manifest; a hardcoded validity table would rot |
-| Unmapped sections | copied by conversion, logged by reconcile, left in spec unapplied | visibility without destructive spec edits; pruning deferred until migration behavior is observed in the field |
-| helm `app` (monolith) overrides | not translated to `api`; unmapped, so logged and ignored | monolith env/resources were tuned for a different binary; grafting them onto v2 `api` causes more problems than it solves |
+| Authority on valid app names | the server manifest, resolved *during conversion* (and re-checked at reconcile) | no hardcoded app list to rot; the manifest is immutable versioned data, so fetching it keeps conversion a pure function of (values, version) |
+| Manifest fetch failure / no version | skip per-app extraction with a log, never fail conversion; global env still converts | erroring would make v1 objects unservable for offline clusters or versions with no published manifest |
+| Unmapped sections | logged and skipped at conversion; reconcile re-checks spec keys (hand-edits, version drift) and leaves them in place | visibility without destructive spec edits; only manifest apps ever enter the spec |
+| helm `app` (monolith) overrides | not translated to `api`; unmapped, so logged and skipped | monolith env/resources were tuned for a different binary; grafting them onto v2 `api` causes more problems than it solves |
 | Renames (`nginx`, `weave-evaluate-model-worker`) | applied at conversion | unambiguous 1:1, and helm-key knowledge belongs in conversion |
 | Global env representation | reserved `"global"` map key, merged at reconcile | keeps CR small; apps added by newer manifests still inherit it |
 | Override vs manifest env | overrides win (replace-by-name) | mirrors v1, where user env at any layer displaced chart-computed env |

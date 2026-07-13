@@ -90,7 +90,7 @@ func (d *WeightsAndBiasesCustomDefaulter) Default(ctx context.Context, obj runti
 	}
 
 	if wandb.Spec.Wandb.ManifestRepository == "" {
-		wandb.Spec.Wandb.ManifestRepository = "oci://us-docker.pkg.dev/wandb-production/public/wandb/server-manifest"
+		wandb.Spec.Wandb.ManifestRepository = appsv2.DefaultManifestRepository
 	}
 
 	if !strings.Contains(wandb.Spec.Wandb.ManifestRepository, "://") {

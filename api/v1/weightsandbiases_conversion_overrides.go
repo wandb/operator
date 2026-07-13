@@ -18,69 +18,128 @@ package v1
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	appsv2 "github.com/wandb/operator/api/v2"
+	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
 )
-
-// legacyAppSectionKeys are the wandb-base subchart aliases of the v1
-// operator-wandb chart — the top-level values keys that configure a deployable
-// app, job, or hook. The v1 chart is legacy, so this list is frozen; validity
-// of the resulting map keys is judged against the server manifest at reconcile
-// time, not here.
-var legacyAppSectionKeys = []string{
-	"anaconda2",
-	"api",
-	"app",
-	"appRenamePostHook",
-	"appRenamePreHook",
-	"clickhouseMigrationJob",
-	"console",
-	"executor",
-	"filemeta",
-	"filestream",
-	"flat-run-fields-updater",
-	"frontend",
-	"glue",
-	"history-reader",
-	"history-updater",
-	"internalSignerPreHook",
-	"lumen-agent",
-	"mcp-server",
-	"metric-observer",
-	"nginx",
-	"parquet",
-	"parquet-metadata-cache",
-	"settingsMigrationJob",
-	"weave",
-	"weave-evaluate-model-worker",
-	"weave-trace",
-	"weave-trace-agent-scoring-worker",
-	"weave-trace-worker",
-}
 
 // legacyKeyRenames maps a helm alias to its v2 manifest application name for
 // the unambiguous 1:1 renames. Deliberately no app -> api entry: the monolith's
-// overrides were tuned for a different binary, so `app` stays under its own
-// key and falls out at manifest validation.
+// overrides were tuned for a different binary, so `app` never maps and is
+// logged as unmapped instead.
 var legacyKeyRenames = map[string]string{
 	"nginx":                       "nginx-proxy",
 	"weave-evaluate-model-worker": "weave-trace-evaluate-model-worker",
 }
 
-const legacyDefaultSize = "small"
+const (
+	legacyDefaultSize = "small"
+
+	manifestFetchTimeout    = 15 * time.Second
+	manifestCacheSuccessTTL = 5 * time.Minute
+	manifestCacheFailureTTL = time.Minute
+)
+
+// conversionManifestGetter resolves the server manifest; a package-level seam
+// so tests (and alternate wiring) can avoid the real OCI/file fetch.
+var conversionManifestGetter = serverManifest.GetServerManifest
+
+// manifestAppsCache memoizes application-name sets per (repository, version).
+// Manifests are immutable per version, but a short success TTL keeps local
+// file:// manifests fresh during development; failures are cached briefly so
+// bursts of conversions (e.g. storage migration) don't hammer a dead registry.
+var (
+	manifestAppsMu    sync.Mutex
+	manifestAppsCache = map[string]manifestAppsEntry{}
+)
+
+type manifestAppsEntry struct {
+	apps      map[string]struct{}
+	err       error
+	expiresAt time.Time
+}
+
+// SetConversionManifestGetter swaps the manifest resolver used by conversion
+// and clears the cache. Intended for tests; call with nil to restore the
+// default resolver.
+func SetConversionManifestGetter(getter func(ctx context.Context, repository, version string) (serverManifest.Manifest, error)) {
+	manifestAppsMu.Lock()
+	defer manifestAppsMu.Unlock()
+	if getter == nil {
+		getter = serverManifest.GetServerManifest
+	}
+	conversionManifestGetter = getter
+	manifestAppsCache = map[string]manifestAppsEntry{}
+}
+
+// legacyManifestApps returns the application-name set of the server manifest
+// for version, resolving it from the default manifest repository (v1 values
+// have no repository field, so conversion uses the same default the v2
+// defaulting webhook applies).
+func legacyManifestApps(version string) (map[string]struct{}, error) {
+	repository := appsv2.DefaultManifestRepository
+	cacheKey := repository + "|" + version
+
+	manifestAppsMu.Lock()
+	getter := conversionManifestGetter
+	if entry, ok := manifestAppsCache[cacheKey]; ok && time.Now().Before(entry.expiresAt) {
+		manifestAppsMu.Unlock()
+		return entry.apps, entry.err
+	}
+	manifestAppsMu.Unlock()
+
+	ctx, cancel := context.WithTimeout(context.Background(), manifestFetchTimeout)
+	defer cancel()
+
+	m, err := getter(ctx, repository, version)
+	entry := manifestAppsEntry{err: err, expiresAt: time.Now().Add(manifestCacheFailureTTL)}
+	if err == nil {
+		apps := make(map[string]struct{}, len(m.Applications))
+		for name := range m.Applications {
+			apps[name] = struct{}{}
+		}
+		entry = manifestAppsEntry{apps: apps, expiresAt: time.Now().Add(manifestCacheSuccessTTL)}
+	}
+
+	manifestAppsMu.Lock()
+	manifestAppsCache[cacheKey] = entry
+	manifestAppsMu.Unlock()
+
+	return entry.apps, entry.err
+}
+
+// legacyValuesKeyForApp returns the v1 values key holding a v2 application's
+// section: the helm alias for the renamed apps, else the name itself.
+func legacyValuesKeyForApp(appName string) string {
+	for helmKey, v2Name := range legacyKeyRenames {
+		if v2Name == appName {
+			return helmKey
+		}
+	}
+	return appName
+}
 
 // mapLegacyOverrides extracts global and per-application env/extraEnv and
-// resource overrides from v1 values into spec.wandb.legacyOverrides. Every
-// candidate section with content is copied; the reconciler validates the keys
-// against the server manifest (conversion is stateless and cannot resolve it)
-// and ignores those that don't map.
+// resource overrides from v1 values into spec.wandb.legacyOverrides. The
+// server manifest for the converted version (set by mapVersion, which runs
+// first) is the authority on which sections are applications; override-shaped
+// sections that match no manifest application are logged and skipped.
+//
+// Manifest resolution is best-effort: conversion stays a pure function of
+// (values, version), and a fetch failure — offline cluster, unpublished
+// version — must never make v1 objects unservable, so on error only the
+// per-application extraction is skipped (with a log); global env still
+// converts, and the raw values remain in the v1-values annotation.
 func mapLegacyOverrides(values map[string]interface{}, dst *appsv2.WeightsAndBiases) error {
 	overrides := map[string]appsv2.LegacyOverrides{}
 
@@ -103,7 +162,36 @@ func mapLegacyOverrides(values map[string]interface{}, dst *appsv2.WeightsAndBia
 		return fmt.Errorf("spec.values.global.size: %w", err)
 	}
 
-	for _, key := range legacyAppSectionKeys {
+	if err := mapPerAppLegacyOverrides(values, dst.Spec.Wandb.Version, globalSize, overrides); err != nil {
+		return err
+	}
+
+	if len(overrides) > 0 {
+		dst.Spec.Wandb.LegacyOverrides = overrides
+	}
+	return nil
+}
+
+func mapPerAppLegacyOverrides(values map[string]interface{}, version, globalSize string, overrides map[string]appsv2.LegacyOverrides) error {
+	if version == "" {
+		logger.Info("no version derived from v1 values; skipping per-application legacy overrides")
+		return nil
+	}
+	apps, err := legacyManifestApps(version)
+	if err != nil {
+		logger.Error(err, "failed to resolve server manifest; skipping per-application legacy overrides",
+			"version", version)
+		return nil
+	}
+
+	appNames := make([]string, 0, len(apps))
+	for name := range apps {
+		appNames = append(appNames, name)
+	}
+	sort.Strings(appNames)
+
+	for _, name := range appNames {
+		key := legacyValuesKeyForApp(name)
 		section, found, err := unstructured.NestedMap(values, key)
 		if err != nil {
 			return fmt.Errorf("spec.values.%s: %w", key, err)
@@ -123,18 +211,55 @@ func mapLegacyOverrides(values map[string]interface{}, dst *appsv2.WeightsAndBia
 		if len(env) == 0 && resources == nil {
 			continue
 		}
+		overrides[name] = appsv2.LegacyOverrides{Env: env, Resources: resources}
+	}
 
+	logUnmappedLegacySections(values, apps, version)
+	return nil
+}
+
+// logUnmappedLegacySections logs every top-level values section that carries
+// the override shape we extract (env/extraEnv/sizing) but matches no manifest
+// application — e.g. the v1 monolith `app` or `console`. Their values are not
+// converted and remain only in the v1-values annotation.
+func logUnmappedLegacySections(values map[string]interface{}, apps map[string]struct{}, version string) {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	for _, key := range keys {
+		if key == "global" {
+			continue
+		}
+		section, ok := values[key].(map[string]interface{})
+		if !ok || !hasLegacyOverrideShape(section) {
+			continue
+		}
 		name := key
 		if renamed, ok := legacyKeyRenames[key]; ok {
 			name = renamed
 		}
-		overrides[name] = appsv2.LegacyOverrides{Env: env, Resources: resources}
+		if _, ok := apps[name]; ok {
+			continue
+		}
+		logger.Info("legacy values section does not map to any application in the server manifest; its env/resources are not converted",
+			"section", key, "version", version)
 	}
+}
 
-	if len(overrides) > 0 {
-		dst.Spec.Wandb.LegacyOverrides = overrides
+// hasLegacyOverrideShape reports whether a values section carries any of the
+// keys legacy override extraction reads. The flat `resources` key is
+// deliberately excluded: infra subchart sections (mysql, redis, …) legitimately
+// carry it and would be false positives.
+func hasLegacyOverrideShape(section map[string]interface{}) bool {
+	for _, key := range []string{"env", "extraEnv", "sizing"} {
+		if _, ok := section[key]; ok {
+			return true
+		}
 	}
-	return nil
+	return false
 }
 
 // legacyEnvFromSection merges <section>.env over <section>.extraEnv (the
