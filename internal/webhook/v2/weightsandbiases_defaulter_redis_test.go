@@ -23,53 +23,53 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Redis", func() {
 	It("defaults Redis namespace to the parent namespace", func() {
 		wandb := &apiv2.WeightsAndBiases{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
-			Spec:       apiv2.WeightsAndBiasesSpec{Redis: apiv2.RedisSpec{ManagedRedis: &apiv2.ManagedRedisSpec{}}},
+			Spec:       apiv2.WeightsAndBiasesSpec{Redis: map[string]apiv2.RedisSpec{apiv2.DefaultInstanceName: {ManagedRedis: &apiv2.ManagedRedisSpec{}}}},
 		}
 
 		err := defaulter.Default(ctx, wandb)
 		g.Expect(err).ToNot(g.HaveOccurred())
-		g.Expect(wandb.Spec.Redis.ManagedRedis.Namespace).To(g.Equal("test-namespace"))
+		g.Expect(wandb.Spec.Redis[apiv2.DefaultInstanceName].ManagedRedis.Namespace).To(g.Equal("test-namespace"))
 	})
 
 	It("preserves a custom Redis namespace", func() {
 		wandb := &apiv2.WeightsAndBiases{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
 			Spec: apiv2.WeightsAndBiasesSpec{
-				Redis: apiv2.RedisSpec{ManagedRedis: &apiv2.ManagedRedisSpec{Namespace: "custom-redis-namespace"}},
+				Redis: map[string]apiv2.RedisSpec{apiv2.DefaultInstanceName: {ManagedRedis: &apiv2.ManagedRedisSpec{Namespace: "custom-redis-namespace"}}},
 			},
 		}
 
 		err := defaulter.Default(ctx, wandb)
 		g.Expect(err).ToNot(g.HaveOccurred())
-		g.Expect(wandb.Spec.Redis.ManagedRedis.Namespace).To(g.Equal("custom-redis-namespace"))
+		g.Expect(wandb.Spec.Redis[apiv2.DefaultInstanceName].ManagedRedis.Namespace).To(g.Equal("custom-redis-namespace"))
 	})
 
 	It("does not mutate unrelated Redis fields", func() {
 		wandb := &apiv2.WeightsAndBiases{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
 			Spec: apiv2.WeightsAndBiasesSpec{
-				Redis: apiv2.RedisSpec{ManagedRedis: &apiv2.ManagedRedisSpec{StorageSize: "20Gi", Sentinel: apiv2.RedisSentinelSpec{Enabled: true}}},
+				Redis: map[string]apiv2.RedisSpec{apiv2.DefaultInstanceName: {ManagedRedis: &apiv2.ManagedRedisSpec{StorageSize: "20Gi", Sentinel: apiv2.RedisSentinelSpec{Enabled: true}}}},
 			},
 		}
 
 		err := defaulter.Default(ctx, wandb)
 		g.Expect(err).ToNot(g.HaveOccurred())
-		g.Expect(wandb.Spec.Redis.ManagedRedis.StorageSize).To(g.Equal("20Gi"))
-		g.Expect(wandb.Spec.Redis.ManagedRedis.Sentinel.Enabled).To(g.BeTrue())
+		g.Expect(wandb.Spec.Redis[apiv2.DefaultInstanceName].ManagedRedis.StorageSize).To(g.Equal("20Gi"))
+		g.Expect(wandb.Spec.Redis[apiv2.DefaultInstanceName].ManagedRedis.Sentinel.Enabled).To(g.BeTrue())
 	})
 
 	It("does not apply defaults when External is present", func() {
 		wandb := &apiv2.WeightsAndBiases{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
 			Spec: apiv2.WeightsAndBiasesSpec{
-				Redis: apiv2.RedisSpec{
-					ExternalRedis: &apiv2.RedisConnection{},
+				Redis: map[string]apiv2.RedisSpec{
+					apiv2.DefaultInstanceName: {ExternalRedis: &apiv2.RedisConnection{}},
 				},
 			},
 		}
 
 		err := defaulter.Default(ctx, wandb)
 		g.Expect(err).ToNot(g.HaveOccurred())
-		g.Expect(wandb.Spec.Redis.ManagedRedis).To(g.BeNil())
+		g.Expect(wandb.Spec.Redis[apiv2.DefaultInstanceName].ManagedRedis).To(g.BeNil())
 	})
 })

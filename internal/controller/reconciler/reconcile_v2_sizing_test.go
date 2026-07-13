@@ -125,6 +125,117 @@ var _ = Describe("ReconcileV2 Sizing", func() {
 			Expect(res.Requests.Cpu().String()).To(Equal("100m"))
 			Expect(res.Limits).To(BeNil())
 		})
+
+		It("should apply legacy overrides over sizing-derived resources", func() {
+			app := serverManifest.Application{
+				Name: "api",
+				Sizing: map[apiv2.Size]serverManifest.SizingConfig{
+					"default": {
+						Resources: &corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceCPU:    resource.MustParse("100m"),
+								corev1.ResourceMemory: resource.MustParse("128Mi"),
+							},
+							Limits: corev1.ResourceList{
+								corev1.ResourceCPU: resource.MustParse("200m"),
+							},
+						},
+					},
+				},
+			}
+			wandb := &apiv2.WeightsAndBiases{
+				Spec: apiv2.WeightsAndBiasesSpec{
+					Size:          "small",
+					RequireLimits: true,
+					Wandb: apiv2.WandbAppSpec{
+						LegacyOverrides: map[string]apiv2.LegacyOverrides{
+							"api": {
+								Resources: &corev1.ResourceRequirements{
+									Requests: corev1.ResourceList{
+										corev1.ResourceCPU: resource.MustParse("2"),
+									},
+									Limits: corev1.ResourceList{
+										corev1.ResourceCPU: resource.MustParse("4"),
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+
+			res := v2.ResolveResources(app, wandb, nil)
+			Expect(res).NotTo(BeNil())
+			// Override wins per resource name; untouched fields survive.
+			Expect(res.Requests.Cpu().String()).To(Equal("2"))
+			Expect(res.Requests.Memory().String()).To(Equal("128Mi"))
+			Expect(res.Limits.Cpu().String()).To(Equal("4"))
+		})
+
+		It("should strip legacy override limits when RequireLimits is false", func() {
+			app := serverManifest.Application{Name: "api"}
+			wandb := &apiv2.WeightsAndBiases{
+				Spec: apiv2.WeightsAndBiasesSpec{
+					Size:          "small",
+					RequireLimits: false,
+					Wandb: apiv2.WandbAppSpec{
+						LegacyOverrides: map[string]apiv2.LegacyOverrides{
+							"api": {
+								Resources: &corev1.ResourceRequirements{
+									Requests: corev1.ResourceList{
+										corev1.ResourceCPU: resource.MustParse("2"),
+									},
+									Limits: corev1.ResourceList{
+										corev1.ResourceCPU: resource.MustParse("4"),
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+
+			res := v2.ResolveResources(app, wandb, nil)
+			Expect(res).NotTo(BeNil())
+			Expect(res.Requests.Cpu().String()).To(Equal("2"))
+			Expect(res.Limits).To(BeNil())
+		})
+
+		It("should not apply another application's legacy override", func() {
+			app := serverManifest.Application{
+				Name: "weave",
+				Sizing: map[apiv2.Size]serverManifest.SizingConfig{
+					"default": {
+						Resources: &corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceCPU: resource.MustParse("100m"),
+							},
+						},
+					},
+				},
+			}
+			wandb := &apiv2.WeightsAndBiases{
+				Spec: apiv2.WeightsAndBiasesSpec{
+					Size:          "small",
+					RequireLimits: true,
+					Wandb: apiv2.WandbAppSpec{
+						LegacyOverrides: map[string]apiv2.LegacyOverrides{
+							"api": {
+								Resources: &corev1.ResourceRequirements{
+									Requests: corev1.ResourceList{
+										corev1.ResourceCPU: resource.MustParse("2"),
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+
+			res := v2.ResolveResources(app, wandb, nil)
+			Expect(res).NotTo(BeNil())
+			Expect(res.Requests.Cpu().String()).To(Equal("100m"))
+		})
 	})
 
 	Context("ResolveAutoscaling", func() {

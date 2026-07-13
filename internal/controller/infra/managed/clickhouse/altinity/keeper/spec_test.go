@@ -22,7 +22,7 @@ var _ = Describe("Keeper vendor spec", func() {
 
 	It("builds a CHK with explicit replicas, storage, and a hardened pod", func() {
 		wandb := keeperWandb()
-		wandb.Spec.ClickHouse.ManagedClickHouse.Keeper = apiv2.ClickHouseKeeperSpec{
+		wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse.Keeper = apiv2.ClickHouseKeeperSpec{
 			Replicas:    5,
 			StorageSize: "20Gi",
 			Config: apiv2.ClickHouseConfig{
@@ -32,7 +32,7 @@ var _ = Describe("Keeper vendor spec", func() {
 			},
 		}
 
-		chk, err := ToKeeperVendorSpec(context.Background(), wandb, keeperScheme())
+		chk, err := ToKeeperVendorSpec(context.Background(), wandb, wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse, keeperScheme())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(chk).NotTo(BeNil())
 		Expect(chk.Name).To(Equal("clickhouse-keeper"))
@@ -61,14 +61,15 @@ var _ = Describe("Keeper vendor spec", func() {
 
 	It("errors when keeper storage size is unset (no operator defaults)", func() {
 		wandb := keeperWandb()
-		wandb.Spec.ClickHouse.ManagedClickHouse.Keeper = apiv2.ClickHouseKeeperSpec{}
-		_, err := ToKeeperVendorSpec(context.Background(), wandb, keeperScheme())
+		wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse.Keeper = apiv2.ClickHouseKeeperSpec{}
+		_, err := ToKeeperVendorSpec(context.Background(), wandb, wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse, keeperScheme())
 		Expect(err).To(HaveOccurred())
 	})
 
 	It("omits fixed IDs in OpenShift mode", func() {
 		utils.SetOpenShiftMode(true)
-		chk, err := ToKeeperVendorSpec(context.Background(), keeperWandb(), keeperScheme())
+		wandb := keeperWandb()
+		chk, err := ToKeeperVendorSpec(context.Background(), wandb, wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse, keeperScheme())
 		Expect(err).NotTo(HaveOccurred())
 		sc := chk.Spec.Templates.PodTemplates[0].Spec.SecurityContext
 		Expect(sc.RunAsUser).To(BeNil())
@@ -95,13 +96,15 @@ func keeperWandb() *apiv2.WeightsAndBiases {
 		ObjectMeta: metav1.ObjectMeta{Name: "wandb", Namespace: "wandb"},
 		Spec: apiv2.WeightsAndBiasesSpec{
 			Tolerations: &tolerations,
-			ClickHouse: apiv2.ClickHouseSpec{
-				ManagedClickHouse: &apiv2.ManagedClickHouseSpec{
-					Name:      "clickhouse",
-					Namespace: "wandb",
-					Keeper: apiv2.ClickHouseKeeperSpec{
-						Replicas:    3,
-						StorageSize: "10Gi",
+			ClickHouse: map[string]apiv2.ClickHouseSpec{
+				apiv2.DefaultInstanceName: {
+					ManagedClickHouse: &apiv2.ManagedClickHouseSpec{
+						Name:      "clickhouse",
+						Namespace: "wandb",
+						Keeper: apiv2.ClickHouseKeeperSpec{
+							Replicas:    3,
+							StorageSize: "10Gi",
+						},
 					},
 				},
 			},
