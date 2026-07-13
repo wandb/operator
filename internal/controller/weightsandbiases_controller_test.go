@@ -376,11 +376,11 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 						ManifestRepository: manifestsRepository,
 						Version:            "0.83.0-clickhouse-keeper.1",
 					},
-					MySQL:       apiv2.MySQLSpec{ManagedMysql: &apiv2.ManagedMysqlSpec{}},
-					Redis:       apiv2.RedisSpec{ManagedRedis: &apiv2.ManagedRedisSpec{}},
+					MySQL:       map[string]apiv2.MySQLSpec{apiv2.DefaultInstanceName: {ManagedMysql: &apiv2.ManagedMysqlSpec{}}},
+					Redis:       map[string]apiv2.RedisSpec{apiv2.DefaultInstanceName: {ManagedRedis: &apiv2.ManagedRedisSpec{}}},
 					Kafka:       apiv2.KafkaSpec{ManagedKafka: &apiv2.ManagedKafkaSpec{}},
-					ObjectStore: apiv2.ObjectStoreSpec{ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{}},
-					ClickHouse:  apiv2.ClickHouseSpec{ManagedClickHouse: &apiv2.ManagedClickHouseSpec{}},
+					ObjectStore: map[string]apiv2.ObjectStoreSpec{apiv2.DefaultInstanceName: {ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{}}},
+					ClickHouse:  map[string]apiv2.ClickHouseSpec{apiv2.DefaultInstanceName: {ManagedClickHouse: &apiv2.ManagedClickHouseSpec{}}},
 				},
 			}
 			Expect(k8sClient.Create(ctx, wandb)).Should(Succeed())
@@ -390,18 +390,22 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			Expect(wandb.Status.ObservedGeneration).Should(BeZero())
 
 			By("Marking infrastructure, mysql init, and migrations ready")
-			wandb.Status.MySQLStatus.Ready = true
-			wandb.Status.RedisStatus.Ready = true
+			wandb.Status.MySQLStatus = map[string]apiv2.MysqlInfraStatus{apiv2.DefaultInstanceName: {WBInfraStatus: apiv2.WBInfraStatus{Ready: true}}}
+			wandb.Status.RedisStatus = map[string]apiv2.RedisInfraStatus{apiv2.DefaultInstanceName: {WBInfraStatus: apiv2.WBInfraStatus{Ready: true}}}
 			wandb.Status.KafkaStatus.Ready = true
-			wandb.Status.ObjectStoreStatus.Ready = true
-			wandb.Status.ClickHouseStatus.Ready = true
-			wandb.Status.MySQLStatus.Connection.URL = v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: WandbName}, Key: "test"}
-			wandb.Status.ClickHouseStatus.Connection.URL = v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: WandbName}, Key: "test"}
+			wandb.Status.ObjectStoreStatus = map[string]apiv2.ObjectStoreInfraStatus{apiv2.DefaultInstanceName: {WBInfraStatus: apiv2.WBInfraStatus{Ready: true}}}
+			wandb.Status.ClickHouseStatus = map[string]apiv2.ClickHouseInfraStatus{apiv2.DefaultInstanceName: {WBInfraStatus: apiv2.WBInfraStatus{Ready: true}}}
+			mysqlStatus := wandb.Status.MySQLStatus[apiv2.DefaultInstanceName]
+			mysqlStatus.Connection.URL = v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: WandbName}, Key: "test"}
+			wandb.Status.MySQLStatus[apiv2.DefaultInstanceName] = mysqlStatus
+			clickHouseStatus := wandb.Status.ClickHouseStatus[apiv2.DefaultInstanceName]
+			clickHouseStatus.Connection.URL = v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: WandbName}, Key: "test"}
+			wandb.Status.ClickHouseStatus[apiv2.DefaultInstanceName] = clickHouseStatus
 			wandb.Status.Wandb.Migration.Version = wandb.Spec.Wandb.Version
 			wandb.Status.Wandb.Migration.LastSuccessVersion = wandb.Spec.Wandb.Version
 			wandb.Status.Wandb.Migration.Ready = true
 			wandb.Status.Wandb.Migration.Reason = "Complete"
-			wandb.Status.Wandb.MySQLInit.Succeeded = true
+			wandb.Status.Wandb.MySQLInit = map[string]apiv2.MigrationJobStatus{apiv2.DefaultInstanceName: {Succeeded: true}}
 			Expect(k8sClient.Status().Update(ctx, wandb)).Should(Succeed())
 
 			By("Reconciling the manifest to completion for the initial generation")
