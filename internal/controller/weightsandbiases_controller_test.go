@@ -390,17 +390,17 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			Expect(wandb.Status.ObservedGeneration).Should(BeZero())
 
 			By("Marking infrastructure, mysql init, and migrations ready")
-			wandb.Status.MySQLStatus = map[string]apiv2.MysqlInfraStatus{apiv2.DefaultInstanceName: {
-				WBInfraStatus: apiv2.WBInfraStatus{Ready: true},
-				Connection:    apiv2.MysqlConnection{URL: v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: WandbName}, Key: "test"}},
-			}}
+			wandb.Status.MySQLStatus = map[string]apiv2.MysqlInfraStatus{apiv2.DefaultInstanceName: {WBInfraStatus: apiv2.WBInfraStatus{Ready: true}}}
 			wandb.Status.RedisStatus = map[string]apiv2.RedisInfraStatus{apiv2.DefaultInstanceName: {WBInfraStatus: apiv2.WBInfraStatus{Ready: true}}}
 			wandb.Status.KafkaStatus.Ready = true
 			wandb.Status.ObjectStoreStatus = map[string]apiv2.ObjectStoreInfraStatus{apiv2.DefaultInstanceName: {WBInfraStatus: apiv2.WBInfraStatus{Ready: true}}}
-			wandb.Status.ClickHouseStatus = map[string]apiv2.ClickHouseInfraStatus{apiv2.DefaultInstanceName: {
-				WBInfraStatus: apiv2.WBInfraStatus{Ready: true},
-				Connection:    apiv2.ClickHouseConnection{URL: v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: WandbName}, Key: "test"}},
-			}}
+			wandb.Status.ClickHouseStatus = map[string]apiv2.ClickHouseInfraStatus{apiv2.DefaultInstanceName: {WBInfraStatus: apiv2.WBInfraStatus{Ready: true}}}
+			mysqlStatus := wandb.Status.MySQLStatus[apiv2.DefaultInstanceName]
+			mysqlStatus.Connection.URL = v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: WandbName}, Key: "test"}
+			wandb.Status.MySQLStatus[apiv2.DefaultInstanceName] = mysqlStatus
+			clickHouseStatus := wandb.Status.ClickHouseStatus[apiv2.DefaultInstanceName]
+			clickHouseStatus.Connection.URL = v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: WandbName}, Key: "test"}
+			wandb.Status.ClickHouseStatus[apiv2.DefaultInstanceName] = clickHouseStatus
 			wandb.Status.Wandb.Migration.Version = wandb.Spec.Wandb.Version
 			wandb.Status.Wandb.Migration.LastSuccessVersion = wandb.Spec.Wandb.Version
 			wandb.Status.Wandb.Migration.Ready = true
