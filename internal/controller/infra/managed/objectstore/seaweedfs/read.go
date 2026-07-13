@@ -67,7 +67,7 @@ func ReadState(
 	if actualResource != nil {
 		conditions = append(conditions, computeSeaweedReportedReadyCondition(ctx, actualResource)...)
 	}
-	log.Debug("read", "actualResource", actualResource, "rule", onDeleteRule.Policy)
+	log.Debug("read", "resourceExists", actualResource != nil, "rule", onDeleteRule.Policy)
 	return conditions
 }
 

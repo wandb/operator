@@ -213,7 +213,7 @@ func writeStandaloneState(
 			Status: metav1.ConditionFalse,
 			Reason: common.PendingDeleteReason,
 		})
-	case common.UpdateAction:
+	case common.UpdateAction, common.UnchangedAction:
 		result = append(result, metav1.Condition{
 			Type:   RedisStandaloneCustomResourceType,
 			Status: metav1.ConditionTrue,
@@ -283,7 +283,7 @@ func writeSentinelState(
 			Status: metav1.ConditionFalse,
 			Reason: common.PendingDeleteReason,
 		})
-	case common.UpdateAction:
+	case common.UpdateAction, common.UnchangedAction:
 		result = append(result, metav1.Condition{
 			Type:   RedisSentinelCustomResourceType,
 			Status: metav1.ConditionTrue,
@@ -353,7 +353,7 @@ func writeReplicationState(
 			Status: metav1.ConditionFalse,
 			Reason: common.PendingDeleteReason,
 		})
-	case common.UpdateAction:
+	case common.UpdateAction, common.UnchangedAction:
 		result = append(result, metav1.Condition{
 			Type:   RedisReplicationCustomResourceType,
 			Status: metav1.ConditionTrue,

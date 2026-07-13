@@ -127,6 +127,7 @@ func managedKafkaInferStatus(
 	newConditions []metav1.Condition,
 	newInfraConn *apiv2.KafkaConnection,
 ) (ctrl.Result, error) {
+	statusBefore := wandb.DeepCopy().Status
 	oldConditions := wandb.Status.KafkaStatus.Conditions
 	oldInfraConn := wandb.Status.KafkaStatus.Connection
 
@@ -143,7 +144,7 @@ func managedKafkaInferStatus(
 		recorder.Event(wandb, e.Type, e.Reason, e.Message)
 	}
 	wandb.Status.KafkaStatus = updatedStatus
-	err := client.Status().Update(ctx, wandb)
+	err := updateWandbStatusIfChanged(ctx, client, wandb, statusBefore)
 
 	return ctrlResult, err
 }

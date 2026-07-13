@@ -241,6 +241,7 @@ func managedClickHouseInferStatus(
 	newConditions []metav1.Condition,
 	newInfraConn *apiv2.ClickHouseConnection,
 ) (ctrl.Result, error) {
+	statusBefore := wandb.DeepCopy().Status
 	enabled := true
 	oldStatus := wandb.Status.ClickHouseStatus[key]
 	oldConditions := oldStatus.Conditions
@@ -258,7 +259,7 @@ func managedClickHouseInferStatus(
 		recorder.Event(wandb, e.Type, e.Reason, e.Message)
 	}
 	wandb.Status.ClickHouseStatus[key] = updatedStatus
-	err := client.Status().Update(ctx, wandb)
+	err := updateWandbStatusIfChanged(ctx, client, wandb, statusBefore)
 
 	return ctrlResult, err
 }
@@ -266,6 +267,7 @@ func managedClickHouseInferStatus(
 // external
 
 func externalClickHouseInferStatus(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, key string, newConditions []metav1.Condition, newInfraConn *apiv2.ClickHouseConnection) (ctrl.Result, error) {
+	statusBefore := wandb.DeepCopy().Status
 	oldStatus := wandb.Status.ClickHouseStatus[key]
 	oldInfraConn := oldStatus.Connection
 	state, ready, updatedConditions := external.InferExternalStatus(oldStatus.Conditions, newConditions, wandb.Generation, newInfraConn != nil)
@@ -275,7 +277,7 @@ func externalClickHouseInferStatus(ctx context.Context, c client.Client, wandb *
 		WBInfraStatus: apiv2.WBInfraStatus{Ready: ready, State: state, Conditions: updatedConditions},
 		Connection:    *conn,
 	}
-	return ctrl.Result{}, c.Status().Update(ctx, wandb)
+	return ctrl.Result{}, updateWandbStatusIfChanged(ctx, c, wandb, statusBefore)
 }
 
 // helpers
