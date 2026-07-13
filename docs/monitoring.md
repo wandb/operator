@@ -113,10 +113,10 @@ env:
     sources:
       - type: telemetry
         field: gorillaTracer
-  - name: GORILLA_STATSD_HOST
+  - name: GORILLA_STATSD_ADDRESS
     sources:
       - type: telemetry
-        field: statsdHost
+        field: statsdAddress
   - name: DD_TRACE_AGENT_URL
     sources:
       - type: telemetry

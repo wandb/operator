@@ -5146,7 +5146,7 @@ spec:
                         type: string
                       serviceName:
                         type: string
-                      statsdHost:
+                      statsdAddress:
                         type: string
                       tracesEndpoint:
                         type: string

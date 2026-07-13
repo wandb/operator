@@ -60,7 +60,7 @@ func summarizeTelemetryConnectionStatus(cfg TelemetryRuntimeConfig) apiv2.Teleme
 		ServiceName:           cfg.OTel.ServiceName,
 		ResourceAttributes:    cfg.OTel.ResourceAttributes,
 		GorillaTracer:         resolveGorillaTracerConnection(cfg.OTel.Protocol, resolvedEndpoints.TracesEndpoint),
-		StatsdHost:            resolvedEndpoints.StatsdHost,
+		StatsdAddress:         resolvedEndpoints.StatsdAddress,
 		DatadogTraceAgentURL:  resolvedEndpoints.DatadogTraceAgentURL,
 		DatadogTraceAgentHost: resolvedEndpoints.DatadogTraceAgentHost,
 		DatadogTraceAgentPort: resolvedEndpoints.DatadogTraceAgentPort,

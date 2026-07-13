@@ -33,8 +33,8 @@ func TestTelemetryRuntimeConfigResolveEndpointsEnabled(t *testing.T) {
 	if resolved.TracesEndpoint != "http://victoria-otlp-gateway.wandb.svc:4318/v1/traces" {
 		t.Fatalf("unexpected traces endpoint: %s", resolved.TracesEndpoint)
 	}
-	if resolved.StatsdHost != "victoria-otlp-gateway.wandb.svc" {
-		t.Fatalf("unexpected statsd host: %s", resolved.StatsdHost)
+	if resolved.StatsdAddress != "udp://victoria-otlp-gateway.wandb.svc:8125" {
+		t.Fatalf("unexpected statsd address: %s", resolved.StatsdAddress)
 	}
 	if resolved.DatadogTraceAgentURL != "http://victoria-otlp-gateway.wandb.svc:8126" {
 		t.Fatalf("unexpected Datadog trace agent URL: %s", resolved.DatadogTraceAgentURL)
@@ -234,8 +234,8 @@ func TestSummarizeTelemetryInfraStatusForwardReady(t *testing.T) {
 	if status.Connection.GorillaTracer != "otlp+http://victoria-otlp-gateway.wandb.svc:4318" {
 		t.Fatalf("unexpected gorilla tracer: %q", status.Connection.GorillaTracer)
 	}
-	if status.Connection.StatsdHost != "victoria-otlp-gateway.wandb.svc" {
-		t.Fatalf("unexpected statsd host: %q", status.Connection.StatsdHost)
+	if status.Connection.StatsdAddress != "udp://victoria-otlp-gateway.wandb.svc:8125" {
+		t.Fatalf("unexpected statsd address: %q", status.Connection.StatsdAddress)
 	}
 	if status.Connection.DatadogTraceAgentURL != "http://victoria-otlp-gateway.wandb.svc:8126" {
 		t.Fatalf("unexpected Datadog trace agent URL: %q", status.Connection.DatadogTraceAgentURL)
@@ -407,8 +407,8 @@ func TestReconcileTelemetryConnectionSecretCreateManaged(t *testing.T) {
 	if got := string(secret.Data["GORILLA_TRACER"]); got != "otlp+http://victoria-otlp-gateway:4318" {
 		t.Fatalf("unexpected gorilla tracer connection in secret: %q", got)
 	}
-	if got := string(secret.Data["GORILLA_STATSD_HOST"]); got != "victoria-otlp-gateway" {
-		t.Fatalf("unexpected gorilla statsd host in secret: %q", got)
+	if got := string(secret.Data["GORILLA_STATSD_ADDRESS"]); got != "udp://victoria-otlp-gateway:8125" {
+		t.Fatalf("unexpected gorilla statsd address in secret: %q", got)
 	}
 	if got := string(secret.Data["DD_TRACE_AGENT_URL"]); got != "http://victoria-otlp-gateway:8126" {
 		t.Fatalf("unexpected Datadog trace agent URL in secret: %q", got)
@@ -525,8 +525,8 @@ func TestReconcileTelemetryConnectionSecretUpdateManaged(t *testing.T) {
 	if got := string(updated.Data["GORILLA_TRACER"]); got != "otlp+http://victoria-otlp-gateway.wandb.svc:4318" {
 		t.Fatalf("unexpected gorilla tracer connection in updated secret: %q", got)
 	}
-	if got := string(updated.Data["GORILLA_STATSD_HOST"]); got != "victoria-otlp-gateway.wandb.svc" {
-		t.Fatalf("unexpected gorilla statsd host in updated secret: %q", got)
+	if got := string(updated.Data["GORILLA_STATSD_ADDRESS"]); got != "udp://victoria-otlp-gateway.wandb.svc:8125" {
+		t.Fatalf("unexpected gorilla statsd address in updated secret: %q", got)
 	}
 	if got := string(updated.Data["DD_TRACE_AGENT_URL"]); got != "http://victoria-otlp-gateway.wandb.svc:8126" {
 		t.Fatalf("unexpected Datadog trace agent URL in updated secret: %q", got)
@@ -739,9 +739,9 @@ func TestResolveEnvvarsTelemetrySourceUsesStatusSecret(t *testing.T) {
 			},
 		},
 		{
-			Name: "GORILLA_STATSD_HOST",
+			Name: "GORILLA_STATSD_ADDRESS",
 			Sources: []serverManifest.EnvSource{
-				{Type: "telemetry", Field: "statsdHost"},
+				{Type: "telemetry", Field: "statsdAddress"},
 			},
 		},
 		{
@@ -820,15 +820,15 @@ func TestResolveEnvvarsTelemetrySourceUsesStatusSecret(t *testing.T) {
 		t.Fatalf("unexpected gorilla tracer key: %s", gorillaTracer.ValueFrom.SecretKeyRef.Key)
 	}
 
-	statsdHost := mustFindEnvVar(t, resolved, "GORILLA_STATSD_HOST")
-	if statsdHost.ValueFrom == nil || statsdHost.ValueFrom.SecretKeyRef == nil {
-		t.Fatalf("expected gorilla statsd host to resolve from secret key ref")
+	statsdAddress := mustFindEnvVar(t, resolved, "GORILLA_STATSD_ADDRESS")
+	if statsdAddress.ValueFrom == nil || statsdAddress.ValueFrom.SecretKeyRef == nil {
+		t.Fatalf("expected gorilla statsd address to resolve from secret key ref")
 	}
-	if statsdHost.ValueFrom.SecretKeyRef.Name != "status-otel-secret" {
-		t.Fatalf("unexpected gorilla statsd secret name: %s", statsdHost.ValueFrom.SecretKeyRef.Name)
+	if statsdAddress.ValueFrom.SecretKeyRef.Name != "status-otel-secret" {
+		t.Fatalf("unexpected gorilla statsd secret name: %s", statsdAddress.ValueFrom.SecretKeyRef.Name)
 	}
-	if statsdHost.ValueFrom.SecretKeyRef.Key != "GORILLA_STATSD_HOST" {
-		t.Fatalf("unexpected gorilla statsd key: %s", statsdHost.ValueFrom.SecretKeyRef.Key)
+	if statsdAddress.ValueFrom.SecretKeyRef.Key != "GORILLA_STATSD_ADDRESS" {
+		t.Fatalf("unexpected gorilla statsd key: %s", statsdAddress.ValueFrom.SecretKeyRef.Key)
 	}
 
 	ddTraceAgentURL := mustFindEnvVar(t, resolved, "DD_TRACE_AGENT_URL")
@@ -1221,7 +1221,7 @@ func TestInjectManagedWorkloadTelemetryEnvvarsUsesStatusSecretName(t *testing.T)
 		"OTEL_SERVICE_NAME",
 		"OTEL_RESOURCE_ATTRIBUTES",
 		"GORILLA_TRACER",
-		"GORILLA_STATSD_HOST",
+		"GORILLA_STATSD_ADDRESS",
 	}
 
 	for _, name := range expectedNames {
@@ -1279,7 +1279,7 @@ func TestInjectManagedWorkloadTelemetryEnvvarsAddsDatadogAgentForDdtraceApps(t *
 				t.Fatalf("unexpected DD_SERVICE value: %q", ddService.Value)
 			}
 
-			for _, name := range []string{"OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "GORILLA_TRACER", "GORILLA_STATSD_HOST"} {
+			for _, name := range []string{"OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "GORILLA_TRACER", "GORILLA_STATSD_ADDRESS"} {
 				for _, env := range envVars {
 					if env.Name == name {
 						t.Fatalf("did not expect %q to be injected for ddtrace-only app", name)
