@@ -7,8 +7,10 @@ import (
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/infra/external/objectstore"
 	"github.com/wandb/operator/internal/logx"
+	"github.com/wandb/operator/pkg/utils"
 	"github.com/wandb/operator/pkg/wandb/manifest"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -51,6 +53,18 @@ func WriteState(
 	if err != nil {
 		return translateError(err)
 	}
+	serviceAccount, err := ToServiceAccount(wandb, nsnBuilder, cl.Scheme())
+	if err != nil {
+		return translateError(err)
+	}
+	// On OpenShift, bind the SA to nonroot-v2 so broker runs as its fixed UID.
+	var sccRoleBinding *rbacv1.RoleBinding
+	if utils.IsOpenShift() {
+		sccRoleBinding, err = ToSccRoleBinding(wandb, nsnBuilder, cl.Scheme())
+		if err != nil {
+			return translateError(err)
+		}
+	}
 	etcdApp, err := ToEtcdApplication(wandb, nsnBuilder, cl.Scheme(), mfst)
 	if err != nil {
 		return translateError(err)
@@ -65,6 +79,10 @@ func WriteState(
 	}
 	results = append(results, writeResource(ctx, cl, common.ReconciledType, SecretResourceType, credsSecret, &corev1.Secret{})...)
 	results = append(results, writeResource(ctx, cl, common.ReconciledType, ConfigMapResourceType, configMap, &corev1.ConfigMap{})...)
+	results = append(results, writeResource(ctx, cl, common.ReconciledType, ServiceAccountResourceType, serviceAccount, &corev1.ServiceAccount{})...)
+	if sccRoleBinding != nil {
+		results = append(results, writeResource(ctx, cl, common.ReconciledType, RoleBindingResourceType, sccRoleBinding, &rbacv1.RoleBinding{})...)
+	}
 	results = append(results, writeResource(ctx, cl, EtcdApplicationType, ApplicationResourceType, etcdApp, &apiv2.Application{})...)
 	results = append(results, writeResource(ctx, cl, BufstreamApplicationType, ApplicationResourceType, bufstreamApp, &apiv2.Application{})...)
 

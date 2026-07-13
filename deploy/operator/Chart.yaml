@@ -16,7 +16,7 @@ dependencies:
     repository: https://charts.wandb.ai/
     condition: wandb-operator.enabled
   - name: moco
-    version: 0.24.0
+    version: 0.26.0
     repository: https://cybozu-go.github.io/moco/
     condition: moco.enabled
   - name: redis-operator
