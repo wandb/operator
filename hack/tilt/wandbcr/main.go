@@ -314,11 +314,11 @@ func baseCR(crFile string) (*v2.WeightsAndBiases, error) {
 				Features:            map[string]bool{"proxy": true},
 				InternalServiceAuth: v2.InternalServiceAuth{Enabled: boolPtr(false)},
 			},
-			MySQL:       v2.MySQLSpec{ManagedMysql: &v2.ManagedMysqlSpec{}},
-			Redis:       v2.RedisSpec{ManagedRedis: &v2.ManagedRedisSpec{}},
+			MySQL:       map[string]v2.MySQLSpec{v2.DefaultInstanceName: {ManagedMysql: &v2.ManagedMysqlSpec{}}},
+			Redis:       map[string]v2.RedisSpec{v2.DefaultInstanceName: {ManagedRedis: &v2.ManagedRedisSpec{}}},
 			Kafka:       v2.KafkaSpec{ManagedKafka: &v2.ManagedKafkaSpec{}},
-			ObjectStore: v2.ObjectStoreSpec{ManagedObjectStore: &v2.ManagedObjectStoreSpec{}},
-			ClickHouse:  v2.ClickHouseSpec{ManagedClickHouse: &v2.ManagedClickHouseSpec{}},
+			ObjectStore: map[string]v2.ObjectStoreSpec{v2.DefaultInstanceName: {ManagedObjectStore: &v2.ManagedObjectStoreSpec{}}},
+			ClickHouse:  map[string]v2.ClickHouseSpec{v2.DefaultInstanceName: {ManagedClickHouse: &v2.ManagedClickHouseSpec{}}},
 		},
 	}, nil
 }
@@ -443,27 +443,34 @@ func patchTelemetry(cr *v2.WeightsAndBiases, observabilityMode string) error {
 		return fmt.Errorf("observability-mode must be one of: off, full, forward")
 	}
 
-	if cr.Spec.MySQL.ManagedMysql != nil {
-		cr.Spec.MySQL.ManagedMysql.Telemetry.Enabled = enabled
+	for _, spec := range cr.Spec.MySQL {
+		if spec.ManagedMysql != nil {
+			spec.ManagedMysql.Telemetry.Enabled = enabled
+		}
 	}
-	if cr.Spec.Redis.ManagedRedis != nil {
-		cr.Spec.Redis.ManagedRedis.Telemetry.Enabled = enabled
+	for _, spec := range cr.Spec.Redis {
+		if spec.ManagedRedis != nil {
+			spec.ManagedRedis.Telemetry.Enabled = enabled
+		}
 	}
 	if cr.Spec.Kafka.ManagedKafka != nil {
 		cr.Spec.Kafka.ManagedKafka.Telemetry.Enabled = enabled
 	}
-	if cr.Spec.ObjectStore.ManagedObjectStore != nil {
-		cr.Spec.ObjectStore.ManagedObjectStore.Telemetry.Enabled = enabled
+	for _, spec := range cr.Spec.ObjectStore {
+		if spec.ManagedObjectStore != nil {
+			spec.ManagedObjectStore.Telemetry.Enabled = enabled
+		}
 	}
-	if cr.Spec.ClickHouse.ManagedClickHouse != nil {
-		cr.Spec.ClickHouse.ManagedClickHouse.Telemetry.Enabled = enabled
+	for _, spec := range cr.Spec.ClickHouse {
+		if spec.ManagedClickHouse != nil {
+			spec.ManagedClickHouse.Telemetry.Enabled = enabled
+		}
 	}
 	return nil
 }
 
 func patchExternalInfra(cr *v2.WeightsAndBiases, opts Options) {
 	if opts.ExternalMySQL {
-		cr.Spec.MySQL.ManagedMysql = nil
 		conn := &v2.MysqlConnection{
 			Host:     secretKeySelector(externalMySQLSecret, "Host"),
 			Port:     secretKeySelector(externalMySQLSecret, "Port"),
@@ -474,11 +481,10 @@ func patchExternalInfra(cr *v2.WeightsAndBiases, opts Options) {
 		if opts.CustomCA {
 			conn.SslCa = secretKeySelector(externalMySQLTLSSecret, "ca.crt")
 		}
-		cr.Spec.MySQL.ExternalMysql = conn
+		cr.Spec.MySQL[v2.DefaultInstanceName] = v2.MySQLSpec{ExternalMysql: conn}
 	}
 
 	if opts.ExternalRedis {
-		cr.Spec.Redis.ManagedRedis = nil
 		conn := &v2.RedisConnection{
 			Host: secretKeySelector(externalRedisSecret, "Host"),
 			Port: secretKeySelector(externalRedisSecret, "Port"),
@@ -486,12 +492,11 @@ func patchExternalInfra(cr *v2.WeightsAndBiases, opts Options) {
 		if opts.CustomCA {
 			conn.SslCa = secretKeySelector(externalRedisTLSSecret, "ca.crt")
 		}
-		cr.Spec.Redis.ExternalRedis = conn
+		cr.Spec.Redis[v2.DefaultInstanceName] = v2.RedisSpec{ExternalRedis: conn}
 	}
 
 	if opts.ExternalObjectStore {
-		cr.Spec.ObjectStore.ManagedObjectStore = nil
-		cr.Spec.ObjectStore.ExternalObjectStore = &v2.ObjectStoreConnection{
+		cr.Spec.ObjectStore[v2.DefaultInstanceName] = v2.ObjectStoreSpec{ExternalObjectStore: &v2.ObjectStoreConnection{
 			Provider:  secretKeySelector(externalObjectStoreSecret, "Provider"),
 			Endpoint:  secretKeySelector(externalObjectStoreSecret, "Host"),
 			Port:      secretKeySelector(externalObjectStoreSecret, "Port"),
@@ -499,7 +504,7 @@ func patchExternalInfra(cr *v2.WeightsAndBiases, opts Options) {
 			Region:    secretKeySelector(externalObjectStoreSecret, "Region"),
 			AccessKey: secretKeySelector(externalObjectStoreSecret, "AccessKey"),
 			SecretKey: secretKeySelector(externalObjectStoreSecret, "SecretKey"),
-		}
+		}}
 	}
 }
 

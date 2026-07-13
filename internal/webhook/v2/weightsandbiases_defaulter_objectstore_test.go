@@ -23,36 +23,38 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ObjectStore", func() {
 	It("defaults ObjectStore namespace to the parent namespace", func() {
 		wandb := &apiv2.WeightsAndBiases{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
-			Spec:       apiv2.WeightsAndBiasesSpec{ObjectStore: apiv2.ObjectStoreSpec{ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{}}},
+			Spec:       apiv2.WeightsAndBiasesSpec{ObjectStore: map[string]apiv2.ObjectStoreSpec{apiv2.DefaultInstanceName: {ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{}}}},
 		}
 
 		err := defaulter.Default(ctx, wandb)
 		g.Expect(err).ToNot(g.HaveOccurred())
-		g.Expect(wandb.Spec.ObjectStore.ManagedObjectStore.Namespace).To(g.Equal("test-namespace"))
+		g.Expect(wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ManagedObjectStore.Namespace).To(g.Equal("test-namespace"))
 	})
 
 	It("preserves a custom ObjectStore namespace", func() {
 		wandb := &apiv2.WeightsAndBiases{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
 			Spec: apiv2.WeightsAndBiasesSpec{
-				ObjectStore: apiv2.ObjectStoreSpec{ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{Namespace: "custom-objectstore-namespace"}},
+				ObjectStore: map[string]apiv2.ObjectStoreSpec{apiv2.DefaultInstanceName: {ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{Namespace: "custom-objectstore-namespace"}}},
 			},
 		}
 
 		err := defaulter.Default(ctx, wandb)
 		g.Expect(err).ToNot(g.HaveOccurred())
-		g.Expect(wandb.Spec.ObjectStore.ManagedObjectStore.Namespace).To(g.Equal("custom-objectstore-namespace"))
+		g.Expect(wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ManagedObjectStore.Namespace).To(g.Equal("custom-objectstore-namespace"))
 	})
 
 	It("does not mutate unrelated ObjectStore fields", func() {
 		wandb := &apiv2.WeightsAndBiases{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
 			Spec: apiv2.WeightsAndBiasesSpec{
-				ObjectStore: apiv2.ObjectStoreSpec{
-					ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{
-						StorageSize: "50Gi",
-						Replicas:    4,
-						Config:      apiv2.ObjectStoreConfig{AccessKey: "custom-admin"},
+				ObjectStore: map[string]apiv2.ObjectStoreSpec{
+					apiv2.DefaultInstanceName: {
+						ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{
+							StorageSize: "50Gi",
+							Replicas:    4,
+							Config:      apiv2.ObjectStoreConfig{AccessKey: "custom-admin"},
+						},
 					},
 				},
 			},
@@ -60,23 +62,23 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ObjectStore", func() {
 
 		err := defaulter.Default(ctx, wandb)
 		g.Expect(err).ToNot(g.HaveOccurred())
-		g.Expect(wandb.Spec.ObjectStore.ManagedObjectStore.StorageSize).To(g.Equal("50Gi"))
-		g.Expect(wandb.Spec.ObjectStore.ManagedObjectStore.Replicas).To(g.Equal(int32(4)))
-		g.Expect(wandb.Spec.ObjectStore.ManagedObjectStore.Config.AccessKey).To(g.Equal("custom-admin"))
+		g.Expect(wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ManagedObjectStore.StorageSize).To(g.Equal("50Gi"))
+		g.Expect(wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ManagedObjectStore.Replicas).To(g.Equal(int32(4)))
+		g.Expect(wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ManagedObjectStore.Config.AccessKey).To(g.Equal("custom-admin"))
 	})
 
 	It("does not apply defaults when ExternalObjectStore is present", func() {
 		wandb := &apiv2.WeightsAndBiases{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
 			Spec: apiv2.WeightsAndBiasesSpec{
-				ObjectStore: apiv2.ObjectStoreSpec{
-					ExternalObjectStore: &apiv2.ObjectStoreConnection{},
+				ObjectStore: map[string]apiv2.ObjectStoreSpec{
+					apiv2.DefaultInstanceName: {ExternalObjectStore: &apiv2.ObjectStoreConnection{}},
 				},
 			},
 		}
 
 		err := defaulter.Default(ctx, wandb)
 		g.Expect(err).ToNot(g.HaveOccurred())
-		g.Expect(wandb.Spec.ObjectStore.ManagedObjectStore).To(g.BeNil())
+		g.Expect(wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ManagedObjectStore).To(g.BeNil())
 	})
 })

@@ -18,7 +18,7 @@ var _ = Describe("SeaweedFS vendor specs", func() {
 	It("renders writable runtime mounts for SeaweedFS components", func() {
 		wandb := seaweedWandb()
 
-		seaweed, err := ToObjectStoreVendorSpec(context.Background(), wandb, seaweedScheme(), manifest.Manifest{})
+		seaweed, err := ToObjectStoreVendorSpec(context.Background(), wandb, wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ManagedObjectStore, seaweedScheme(), manifest.Manifest{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(seaweed).NotTo(BeNil())
 
@@ -49,14 +49,15 @@ var _ = Describe("SeaweedFS vendor specs", func() {
 			},
 		}
 
-		seaweed, err := ToObjectStoreVendorSpec(context.Background(), wandb, seaweedScheme(), mfst)
+		seaweed, err := ToObjectStoreVendorSpec(context.Background(), wandb, wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ManagedObjectStore, seaweedScheme(), mfst)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(seaweed).NotTo(BeNil())
 		Expect(seaweed.Spec.Image).To(Equal("reg.corp:5000/chrislusf/seaweedfs:latest"))
 	})
 
 	It("keeps the filer writable data path explicit", func() {
-		seaweed, err := ToObjectStoreVendorSpec(context.Background(), seaweedWandb(), seaweedScheme(), manifest.Manifest{})
+		wandb := seaweedWandb()
+		seaweed, err := ToObjectStoreVendorSpec(context.Background(), wandb, wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ManagedObjectStore, seaweedScheme(), manifest.Manifest{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(seaweed).NotTo(BeNil())
 		Expect(seaweed.Spec.Filer.Config).NotTo(BeNil())
@@ -67,14 +68,16 @@ var _ = Describe("SeaweedFS vendor specs", func() {
 	})
 
 	It("preserves managed resource overrides", func() {
-		seaweed, err := ToObjectStoreVendorSpec(context.Background(), seaweedWandb(), seaweedScheme(), manifest.Manifest{})
+		wandb := seaweedWandb()
+		seaweed, err := ToObjectStoreVendorSpec(context.Background(), wandb, wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ManagedObjectStore, seaweedScheme(), manifest.Manifest{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(seaweed).NotTo(BeNil())
 		Expect(seaweed.Spec.Volume.ResourceRequirements.Requests[corev1.ResourceCPU]).To(Equal(resource.MustParse("500m")))
 	})
 
 	It("pins s3 gateway signature verification to the in-cluster endpoint", func() {
-		seaweed, err := ToObjectStoreVendorSpec(context.Background(), seaweedWandb(), seaweedScheme(), manifest.Manifest{})
+		wandb := seaweedWandb()
+		seaweed, err := ToObjectStoreVendorSpec(context.Background(), wandb, wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ManagedObjectStore, seaweedScheme(), manifest.Manifest{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(seaweed).NotTo(BeNil())
 		Expect(seaweed.Spec.S3.Env).To(ContainElement(corev1.EnvVar{
@@ -85,9 +88,9 @@ var _ = Describe("SeaweedFS vendor specs", func() {
 
 	It("uses https for the s3 external URL when TLS is enabled", func() {
 		wandb := seaweedWandb()
-		wandb.Spec.ObjectStore.ManagedObjectStore.SeaweedObjectStoreSpec.TlsEnabled = true
+		wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ManagedObjectStore.SeaweedObjectStoreSpec.TlsEnabled = true
 
-		seaweed, err := ToObjectStoreVendorSpec(context.Background(), wandb, seaweedScheme(), manifest.Manifest{})
+		seaweed, err := ToObjectStoreVendorSpec(context.Background(), wandb, wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ManagedObjectStore, seaweedScheme(), manifest.Manifest{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(seaweed).NotTo(BeNil())
 		Expect(seaweed.Spec.S3.Env).To(ContainElement(corev1.EnvVar{
@@ -97,7 +100,8 @@ var _ = Describe("SeaweedFS vendor specs", func() {
 	})
 
 	It("sets metrics ports on master, volume, and filer", func() {
-		seaweed, err := ToObjectStoreVendorSpec(context.Background(), seaweedWandb(), seaweedScheme(), manifest.Manifest{})
+		wandb := seaweedWandb()
+		seaweed, err := ToObjectStoreVendorSpec(context.Background(), wandb, wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ManagedObjectStore, seaweedScheme(), manifest.Manifest{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(seaweed).NotTo(BeNil())
 
@@ -132,17 +136,19 @@ func seaweedWandb() *apiv2.WeightsAndBiases {
 		},
 		Spec: apiv2.WeightsAndBiasesSpec{
 			Tolerations: &tolerations,
-			ObjectStore: apiv2.ObjectStoreSpec{
-				ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{
-					Name:        "object-store",
-					Namespace:   "wandb",
-					Replicas:    1,
-					StorageSize: "10Gi",
-					Config: apiv2.ObjectStoreConfig{
-						AccessKey: "admin",
-						Resources: corev1.ResourceRequirements{
-							Requests: corev1.ResourceList{
-								corev1.ResourceCPU: resource.MustParse("500m"),
+			ObjectStore: map[string]apiv2.ObjectStoreSpec{
+				apiv2.DefaultInstanceName: {
+					ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{
+						Name:        "object-store",
+						Namespace:   "wandb",
+						Replicas:    1,
+						StorageSize: "10Gi",
+						Config: apiv2.ObjectStoreConfig{
+							AccessKey: "admin",
+							Resources: corev1.ResourceRequirements{
+								Requests: corev1.ResourceList{
+									corev1.ResourceCPU: resource.MustParse("500m"),
+								},
 							},
 						},
 					},

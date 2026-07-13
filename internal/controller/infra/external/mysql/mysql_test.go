@@ -45,7 +45,7 @@ func TestWriteStateAddsCustomTLSParamsWhenCACertPresent(t *testing.T) {
 		TypeMeta:   metav1.TypeMeta{APIVersion: "apps.wandb.com/v2", Kind: "WeightsAndBiases"},
 		ObjectMeta: metav1.ObjectMeta{Name: "wandb", Namespace: "default"},
 		Spec: apiv2.WeightsAndBiasesSpec{
-			MySQL: apiv2.MySQLSpec{
+			MySQL: map[string]apiv2.MySQLSpec{apiv2.DefaultInstanceName: {
 				ExternalMysql: &apiv2.MysqlConnection{
 					Host:     mysqlSel("Host"),
 					Port:     mysqlSel("Port"),
@@ -56,12 +56,12 @@ func TestWriteStateAddsCustomTLSParamsWhenCACertPresent(t *testing.T) {
 					SslCert:  mysqlSel("SslCert"),
 					SslKey:   mysqlSel("SslKey"),
 				},
-			},
+			}},
 		},
 	}
 	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(wandb, source).Build()
 
-	conditions := WriteState(context.Background(), client, wandb)
+	conditions := WriteState(context.Background(), client, wandb, apiv2.DefaultInstanceName, wandb.Spec.MySQL[apiv2.DefaultInstanceName].ExternalMysql)
 	require.Nil(t, conditions)
 
 	written := &corev1.Secret{}
