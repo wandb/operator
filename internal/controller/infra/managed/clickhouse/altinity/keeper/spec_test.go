@@ -35,7 +35,7 @@ var _ = Describe("Keeper vendor spec", func() {
 		chk, err := ToKeeperVendorSpec(context.Background(), wandb, keeperScheme())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(chk).NotTo(BeNil())
-		Expect(chk.Name).To(Equal("clickhouse-keeper"))
+		Expect(chk.Name).To(Equal("clickhouse-chk"))
 		Expect(chk.Namespace).To(Equal("wandb"))
 
 		Expect(chk.Spec.Configuration.Clusters).To(HaveLen(1))

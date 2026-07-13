@@ -219,7 +219,7 @@ func ToClickHouseVendorSpec(
 			Configuration: &v1.Configuration{
 				Clusters: []*v1.Cluster{
 					{
-						Name: "default",
+						Name: chiClusterName,
 						Layout: &v1.ChiClusterLayout{
 							ShardsCount:   ShardsCount,
 							ReplicasCount: int(spec.Replicas),

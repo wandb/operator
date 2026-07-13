@@ -3,8 +3,22 @@ package moco
 import (
 	"fmt"
 
+	"github.com/wandb/operator/internal/controller/common"
 	"k8s.io/apimachinery/pkg/types"
 )
+
+// MaxClusterNameLength mirrors Moco's MySQLCluster admission webhook, which
+// rejects names longer than 40 characters (Moco prefixes derived StatefulSets
+// and CronJobs with "moco-"/"moco-backup-").
+const MaxClusterNameLength = 40
+
+const defaultNameSuffix = "-mysql"
+
+// DefaultSpecName derives the managed MySQL name for a CR, shortening it when
+// the plain "<name>-mysql" would exceed Moco's cluster-name cap.
+func DefaultSpecName(crName string) string {
+	return common.FitDefaultInfraName(crName, defaultNameSuffix, MaxClusterNameLength)
+}
 
 type NsNameBuilder struct {
 	baseNsName types.NamespacedName

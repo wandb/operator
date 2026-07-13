@@ -108,6 +108,28 @@ func managedClickHouseWriteState(
 
 	log := ctrl.LoggerFrom(ctx)
 
+	// A name whose derived Altinity object names don't fit can never converge,
+	// and the Altinity operator does not surface the apiserver rejection —
+	// report the error instead of provisioning a permanently wedged install.
+	// This also covers CRs stored before the admission-time name checks.
+	if err := altinity.ValidateDerivedNames(spec); err != nil {
+		log.Error(err, "managed ClickHouse name cannot be deployed")
+		return []metav1.Condition{
+			{
+				Type:    common.ReconciledType,
+				Status:  metav1.ConditionFalse,
+				Reason:  common.InvalidNameReason,
+				Message: err.Error(),
+			},
+			{
+				Type:    altinity.ClickHouseCustomResourceType,
+				Status:  metav1.ConditionFalse,
+				Reason:  common.InvalidNameReason,
+				Message: err.Error(),
+			},
+		}
+	}
+
 	// Resolve the bucket connection; wait and requeue if it isn't ready yet.
 	objStorage, err := altinity.ResolveObjectStorage(ctx, client, wandb, objStoreConn)
 	if err != nil {

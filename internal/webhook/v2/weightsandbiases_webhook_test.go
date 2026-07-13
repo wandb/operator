@@ -194,6 +194,49 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 			Expect(warnings).To(BeEmpty())
 		})
 
+		It("rejects a managed ClickHouse name whose derived object names cannot be deployed", func() {
+			obj.Spec.ClickHouse.ManagedClickHouse = &appsv2.ManagedClickHouseSpec{Name: "wandb-legacy-overrides-v1-clickhouse"}
+			obj.Spec.ObjectStore.ManagedObjectStore = &appsv2.ManagedObjectStoreSpec{}
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("cannot be deployed"))
+			Expect(err.Error()).To(ContainSubstring("deploy-confd"))
+		})
+
+		It("rejects a managed MySQL name beyond Moco's cluster-name cap", func() {
+			obj.Spec.MySQL.ManagedMysql = &appsv2.ManagedMysqlSpec{
+				Name: "a-managed-mysql-name-that-is-well-past-forty-characters",
+			}
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("Moco"))
+		})
+
+		It("grandfathers an over-budget name that is unchanged on update", func() {
+			longName := "wandb-legacy-overrides-v1-clickhouse"
+			oldObj.Spec.ClickHouse.ManagedClickHouse = &appsv2.ManagedClickHouseSpec{Name: longName}
+			oldObj.Spec.ObjectStore.ManagedObjectStore = &appsv2.ManagedObjectStoreSpec{}
+			obj.Spec.ClickHouse.ManagedClickHouse = &appsv2.ManagedClickHouseSpec{Name: longName}
+			obj.Spec.ObjectStore.ManagedObjectStore = &appsv2.ManagedObjectStoreSpec{}
+
+			warnings, err := validator.ValidateUpdate(ctx, oldObj, obj)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(warnings).To(BeEmpty())
+		})
+
+		It("rejects changing a name to one that cannot be deployed on update", func() {
+			oldObj.Spec.ClickHouse.ManagedClickHouse = &appsv2.ManagedClickHouseSpec{Name: "wandb-clickhouse"}
+			oldObj.Spec.ObjectStore.ManagedObjectStore = &appsv2.ManagedObjectStoreSpec{}
+			obj.Spec.ClickHouse.ManagedClickHouse = &appsv2.ManagedClickHouseSpec{Name: "wandb-legacy-overrides-v1-clickhouse"}
+			obj.Spec.ObjectStore.ManagedObjectStore = &appsv2.ManagedObjectStoreSpec{}
+
+			_, err := validator.ValidateUpdate(ctx, oldObj, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("cannot be deployed"))
+		})
+
 		It("rejects even Keeper replica counts", func() {
 			obj.Spec.ClickHouse.ManagedClickHouse = &appsv2.ManagedClickHouseSpec{
 				Keeper: appsv2.ClickHouseKeeperSpec{Replicas: 2},
