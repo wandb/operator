@@ -25,14 +25,11 @@ func ClientServiceFQDN(namespace, baseName string) string {
 	return fmt.Sprintf("%s.%s.svc.cluster.local", ClientServiceName(baseName), namespace)
 }
 
-// keeperShardOrdinal is always 0: the CHK layout sets only ReplicasCount.
-const keeperShardOrdinal = 0
-
 // PerHostConfigVolumeName mirrors the Altinity operator's per-host
 // ConfigMap/StatefulSet-volume name (pkg/model/chk/namer/patterns.go). The
 // longest derived name, and a DNS-1123 label: past 63 chars the apiserver
 // rejects the StatefulSet and Altinity retries without surfacing the failure.
-func PerHostConfigVolumeName(baseName string, replicaOrdinal int) string {
+func PerHostConfigVolumeName(baseName string, shardOrdinal, replicaOrdinal int) string {
 	return fmt.Sprintf("chk-%s-deploy-confd-%s-%d-%d",
-		InstallationName(baseName), ClusterName, keeperShardOrdinal, replicaOrdinal)
+		InstallationName(baseName), ClusterName, shardOrdinal, replicaOrdinal)
 }

@@ -84,19 +84,11 @@ const (
 	// terse to leave the CR name as much of the derived-name budget as possible.
 	defaultNameSuffix = "-chi"
 
-	// assumedMaxHostOrdinal reserves room for 10 replicas per shard when counts
-	// are still unset at admission (manifest sizing uses 1 or 3).
-	assumedMaxHostOrdinal = 9
+	// maxExpectedHostOrdinal reserves two digits each for shard and replica
+	// ordinals (largest expected cluster ~100 pods), so a persisted name can
+	// never overflow when the cluster is scaled up later.
+	maxExpectedHostOrdinal = 99
 )
-
-// maxHostOrdinal is the highest host ordinal to budget names for, floored at
-// the assumption for unset or small replica counts.
-func maxHostOrdinal(replicas int32) int {
-	if int(replicas)-1 > assumedMaxHostOrdinal {
-		return int(replicas) - 1
-	}
-	return assumedMaxHostOrdinal
-}
 
 // baseName strips the "-chi" suffix; the Keeper builds its names on the base.
 func baseName(specName string) string {
@@ -122,9 +114,10 @@ func perHostConfigVolumeName(specName string, shardOrdinal, replicaOrdinal int) 
 // derived names all fit DNS-1123 labels; Keeper names build on the base, so
 // their room extends by the suffix the base gives back.
 func MaxSpecNameLength() int {
-	chiRoom := validation.DNS1123LabelMaxLength - len(perHostConfigVolumeName("", ShardsCount-1, assumedMaxHostOrdinal))
+	chiRoom := validation.DNS1123LabelMaxLength -
+		len(perHostConfigVolumeName("", maxExpectedHostOrdinal, maxExpectedHostOrdinal))
 	chkRoom := validation.DNS1123LabelMaxLength -
-		len(keeper.PerHostConfigVolumeName("", assumedMaxHostOrdinal)) + len(defaultNameSuffix)
+		len(keeper.PerHostConfigVolumeName("", maxExpectedHostOrdinal, maxExpectedHostOrdinal)) + len(defaultNameSuffix)
 	return min(chiRoom, chkRoom)
 }
 
@@ -139,8 +132,8 @@ func DefaultSpecName(crName string) string {
 // wedges silently when they don't. Nil when every derived name fits.
 func ValidateDerivedNames(spec *apiv2.ManagedClickHouseSpec) error {
 	for _, derived := range []string{
-		keeper.PerHostConfigVolumeName(baseName(spec.Name), maxHostOrdinal(spec.Keeper.Replicas)),
-		perHostConfigVolumeName(spec.Name, ShardsCount-1, maxHostOrdinal(spec.Replicas)),
+		keeper.PerHostConfigVolumeName(baseName(spec.Name), maxExpectedHostOrdinal, maxExpectedHostOrdinal),
+		perHostConfigVolumeName(spec.Name, maxExpectedHostOrdinal, maxExpectedHostOrdinal),
 	} {
 		// derived length grows 1:1 with the name, so excess → max usable length
 		if over := len(derived) - validation.DNS1123LabelMaxLength; over > 0 {

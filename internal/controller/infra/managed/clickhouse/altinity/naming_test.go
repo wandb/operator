@@ -1,6 +1,8 @@
 package altinity
 
 import (
+	"strings"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	apiv2 "github.com/wandb/operator/api/v2"
@@ -22,7 +24,8 @@ var _ = Describe("managed ClickHouse naming", func() {
 
 	Describe("MaxSpecNameLength", func() {
 		It("costs the Keeper chain no more than the CHI chain, thanks to the suffix swap", func() {
-			chiRoom := validation.DNS1123LabelMaxLength - len(perHostConfigVolumeName("", ShardsCount-1, assumedMaxHostOrdinal))
+			chiRoom := validation.DNS1123LabelMaxLength -
+				len(perHostConfigVolumeName("", maxExpectedHostOrdinal, maxExpectedHostOrdinal))
 			Expect(MaxSpecNameLength()).To(Equal(chiRoom))
 		})
 	})
@@ -56,13 +59,15 @@ var _ = Describe("managed ClickHouse naming", func() {
 			Expect(err.Error()).To(ContainSubstring("spec.clickhouse.managedClickhouse.name"))
 		})
 
-		It("accounts for replica counts that add host-ordinal digits", func() {
-			// 30-char CR name: the plain default lands exactly on the budget
-			atBudget := &apiv2.ManagedClickHouseSpec{Name: DefaultSpecName("wandb-integration-environments")}
-			Expect(len(atBudget.Name)).To(Equal(MaxSpecNameLength()))
+		It("reserves ordinal digits so a name at the budget survives scaling to 100 pods", func() {
+			atBudget := &apiv2.ManagedClickHouseSpec{
+				Name:     strings.Repeat("a", MaxSpecNameLength()-len(defaultNameSuffix)) + defaultNameSuffix,
+				Replicas: 99,
+			}
+			atBudget.Keeper.Replicas = 99
 			Expect(ValidateDerivedNames(atBudget)).To(Succeed())
 
-			atBudget.Keeper.Replicas = 11
+			atBudget.Name = "a" + atBudget.Name
 			Expect(ValidateDerivedNames(atBudget)).To(HaveOccurred())
 		})
 
