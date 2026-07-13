@@ -50,7 +50,7 @@ var _ = Describe("SeaweedFS WriteState", func() {
 		ctx = context.Background()
 		wandb = seaweedWandb()
 		var err error
-		desired, err = ToObjectStoreVendorSpec(ctx, wandb, writeScheme(), manifest.Manifest{})
+		desired, err = ToObjectStoreVendorSpec(ctx, wandb, wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ManagedObjectStore, writeScheme(), manifest.Manifest{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(desired).NotTo(BeNil())
 		envCfg = SeaweedS3Config{AccessKey: "admin"}

@@ -36,11 +36,13 @@ func objectStoreWandb(size apiv2.Size) *apiv2.WeightsAndBiases {
 		Spec: apiv2.WeightsAndBiasesSpec{
 			Size:        size,
 			Tolerations: &tolerations,
-			ObjectStore: apiv2.ObjectStoreSpec{
-				ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{
-					Name:      "object-store",
-					Namespace: "wandb",
-					Config:    apiv2.ObjectStoreConfig{AccessKey: "admin"},
+			ObjectStore: map[string]apiv2.ObjectStoreSpec{
+				apiv2.DefaultInstanceName: {
+					ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{
+						Name:      "object-store",
+						Namespace: "wandb",
+						Config:    apiv2.ObjectStoreConfig{AccessKey: "admin"},
+					},
 				},
 			},
 		},
@@ -67,7 +69,7 @@ var _ = Describe("ObjectStore sizing per tier", func() {
 			wandb := objectStoreWandb(size)
 			v2.ApplyInfraSizing(wandb, mfst)
 
-			seaweed, err := seaweedfs.ToObjectStoreVendorSpec(context.Background(), wandb, objectStoreScheme(), mfst)
+			seaweed, err := seaweedfs.ToObjectStoreVendorSpec(context.Background(), wandb, wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ManagedObjectStore, objectStoreScheme(), mfst)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(seaweed).NotTo(BeNil())
 

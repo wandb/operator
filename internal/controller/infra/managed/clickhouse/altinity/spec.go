@@ -121,12 +121,12 @@ func writableEmptyDirVolume(name string) corev1.Volume {
 func ToClickHouseVendorSpec(
 	ctx context.Context,
 	wandb *apiv2.WeightsAndBiases,
+	spec *apiv2.ManagedClickHouseSpec,
 	scheme *runtime.Scheme,
 	objStorage *ObjectStorageConn,
 	mfst manifest.Manifest,
 ) (*v1.ClickHouseInstallation, error) {
 	_, log := logx.WithSlog(ctx, logx.ClickHouse)
-	spec := wandb.Spec.ClickHouse.ManagedClickHouse
 
 	if spec == nil {
 		return nil, nil

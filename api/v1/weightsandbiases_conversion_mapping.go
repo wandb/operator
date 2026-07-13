@@ -84,6 +84,9 @@ func applyValueMappings(src *WeightsAndBiases, dst *appsv2.WeightsAndBiases) err
 	if err := mapIngress(values, dst); err != nil {
 		return err
 	}
+	if err := mapLegacyOverrides(values, dst); err != nil {
+		return err
+	}
 
 	globalMap, found, err := unstructured.NestedMap(values, "global")
 	if err != nil {
@@ -379,7 +382,10 @@ func mapBucket(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) e
 		return nil
 	}
 
-	dst.Spec.ObjectStore.ExternalObjectStore = &appsv2.ObjectStoreConnection{}
+	conn := &appsv2.ObjectStoreConnection{}
+	dst.Spec.ObjectStore = map[string]appsv2.ObjectStoreSpec{
+		appsv2.DefaultInstanceName: {ExternalObjectStore: conn},
+	}
 
 	if sec, ok, err := unstructured.NestedMap(bucket, "secret"); err != nil {
 		return fmt.Errorf("spec.values.global.bucket.secret: %w", err)
@@ -394,11 +400,11 @@ func mapBucket(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) e
 			if secretKeyName == "" {
 				secretKeyName = defaultBucketSecretKeyName
 			}
-			dst.Spec.ObjectStore.ExternalObjectStore.AccessKey = corev1.SecretKeySelector{
+			conn.AccessKey = corev1.SecretKeySelector{
 				LocalObjectReference: corev1.LocalObjectReference{Name: name},
 				Key:                  accessKeyName,
 			}
-			dst.Spec.ObjectStore.ExternalObjectStore.SecretKey = corev1.SecretKeySelector{
+			conn.SecretKey = corev1.SecretKeySelector{
 				LocalObjectReference: corev1.LocalObjectReference{Name: name},
 				Key:                  secretKeyName,
 			}
@@ -501,7 +507,9 @@ func mapMySQL(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) er
 		}
 	}
 
-	dst.Spec.MySQL.ExternalMysql = conn
+	dst.Spec.MySQL = map[string]appsv2.MySQLSpec{
+		appsv2.DefaultInstanceName: {ExternalMysql: conn},
+	}
 
 	if len(remaining) > 0 {
 		return writeAnnotation(dst, MySQLPendingAnnotation, remaining)
@@ -596,7 +604,9 @@ func mapRedis(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) er
 		}
 	}
 
-	dst.Spec.Redis.ExternalRedis = conn
+	dst.Spec.Redis = map[string]appsv2.RedisSpec{
+		appsv2.DefaultInstanceName: {ExternalRedis: conn},
+	}
 
 	if len(remaining) > 0 {
 		return writeAnnotation(dst, RedisPendingAnnotation, remaining)
