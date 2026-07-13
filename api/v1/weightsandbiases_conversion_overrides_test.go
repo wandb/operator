@@ -33,9 +33,8 @@ import (
 
 const testLegacyVersion = "0.83.0-test"
 
-// disableConversionManifestFetch installs a resolver that always errors, so no
-// unit test ever fetches a real manifest over the network. Tests opt in to
-// per-app extraction via withConversionManifestApps.
+// disableConversionManifestFetch keeps unit tests off the network; tests opt
+// in via withConversionManifest*.
 func disableConversionManifestFetch() {
 	SetConversionManifestGetter(func(_ context.Context, _, _ string) (serverManifest.Manifest, error) {
 		return serverManifest.Manifest{}, errors.New("manifest fetch disabled in unit tests")
@@ -47,9 +46,8 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// withConversionManifest installs a fake manifest resolver returning the given
-// applications (cleaned up via t.Cleanup, which also clears the failure
-// cooldowns). Returns a counter of resolver invocations.
+// withConversionManifest installs a fake resolver returning the given
+// applications and returns its call counter.
 func withConversionManifest(t *testing.T, apps map[string]serverManifest.Application) *atomic.Int32 {
 	t.Helper()
 	var calls atomic.Int32
@@ -224,8 +222,7 @@ func TestConvertTo_LegacyOverridesTemplateValuesDropped(t *testing.T) {
 }
 
 func TestConvertTo_LegacyOverridesManifestLegacyKey(t *testing.T) {
-	// Renamed apps declare their v1 values key via the manifest's legacyKey
-	// field; the operator carries no rename table.
+	// Renamed apps declare their v1 values key via legacyKey; no rename table.
 	withConversionManifest(t, map[string]serverManifest.Application{
 		"nginx-proxy": {Name: "nginx-proxy", LegacyKey: "nginx"},
 		"weave-trace-evaluate-model-worker": {
@@ -257,8 +254,8 @@ func TestConvertTo_LegacyOverridesManifestLegacyKey(t *testing.T) {
 }
 
 func TestConvertTo_LegacyOverridesWithoutLegacyKeyRenamedSectionSkipped(t *testing.T) {
-	// A manifest that predates the legacyKey field: the nginx section has no
-	// reader, so it is logged as unmapped and skipped rather than guessed.
+	// Manifest predating legacyKey: the nginx section has no reader, so it is
+	// logged as unmapped and skipped rather than guessed.
 	withConversionManifestApps(t, "nginx-proxy")
 	dst := &appsv2.WeightsAndBiases{}
 	src := newV1(withVersion(map[string]interface{}{
@@ -287,8 +284,7 @@ func TestConvertTo_LegacyOverridesUnmappedSectionsSkipped(t *testing.T) {
 	src := newV1(values)
 	require.NoError(t, src.ConvertTo(dst))
 
-	// Only manifest applications are converted; app/console are logged and
-	// skipped (still recoverable from the v1-values annotation).
+	// Only manifest applications convert; app/console are logged and skipped.
 	overrides := dst.Spec.Wandb.LegacyOverrides
 	require.Equal(t, []corev1.EnvVar{{Name: "API_VAR", Value: "1"}}, overrides["api"].Env)
 	require.NotContains(t, overrides, "app")
@@ -415,9 +411,7 @@ func TestConvertTo_LegacyOverridesManifestUnavailable(t *testing.T) {
 }
 
 func TestConvertTo_LegacyOverridesManifestFailureCooldown(t *testing.T) {
-	// Successful fetches are cached on disk by the ORAS store, but failures
-	// retry the remote every call — the cooldown keeps a burst of conversions
-	// from stalling on an unreachable registry for every v1 write.
+	// The cooldown keeps repeat conversions from stalling on an unreachable registry.
 	var calls atomic.Int32
 	SetConversionManifestGetter(func(_ context.Context, _, _ string) (serverManifest.Manifest, error) {
 		calls.Add(1)

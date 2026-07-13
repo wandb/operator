@@ -40,16 +40,12 @@ const (
 	manifestFailureCooldown = time.Minute
 )
 
-// conversionManifestGetter resolves the server manifest; a package-level seam
-// so tests (and alternate wiring) can avoid the real OCI/file fetch.
+// conversionManifestGetter is a test seam over the real manifest resolver.
 var conversionManifestGetter = serverManifest.GetServerManifest
 
-// Successful fetches need no caching here — GetServerManifest is local-first
-// (the ORAS store under /tmp/server-manifest, populated on first download).
-// Failures are the gap: the store retries the remote on every call, and in a
-// conversion webhook that would stall every v1 write for the full fetch
-// timeout while the registry is unreachable, so failures are remembered
-// briefly per (repository, version).
+// Failure cooldown per (repository, version): GetServerManifest caches
+// successes in its on-disk ORAS store but retries the remote on every failure,
+// which would stall each v1 write for the fetch timeout.
 var (
 	manifestFailuresMu sync.Mutex
 	manifestFailures   = map[string]manifestFailure{}
@@ -60,9 +56,8 @@ type manifestFailure struct {
 	until time.Time
 }
 
-// SetConversionManifestGetter swaps the manifest resolver used by conversion
-// and clears the failure cooldowns. Intended for tests; call with nil to
-// restore the default resolver.
+// SetConversionManifestGetter swaps the resolver and clears the failure
+// cooldowns. For tests; nil restores the default.
 func SetConversionManifestGetter(getter func(ctx context.Context, repository, version string) (serverManifest.Manifest, error)) {
 	manifestFailuresMu.Lock()
 	defer manifestFailuresMu.Unlock()
@@ -73,12 +68,9 @@ func SetConversionManifestGetter(getter func(ctx context.Context, repository, ve
 	manifestFailures = map[string]manifestFailure{}
 }
 
-// legacyManifestApps maps each application name in the server manifest for
-// version to the v1 values key holding its section: the application's
-// legacyKey when the manifest sets one (renamed helm aliases like nginx ->
-// nginx-proxy), else the name itself. The manifest is resolved from the
-// default manifest repository — v1 values have no repository field, so
-// conversion uses the same default the v2 defaulting webhook applies.
+// legacyManifestApps maps each manifest application name to the v1 values key
+// holding its section (legacyKey when set, else the name). v1 values carry no
+// repository field, so the defaulting webhook's default repository is used.
 func legacyManifestApps(version string) (map[string]string, error) {
 	repository := appsv2.DefaultManifestRepository
 	key := repository + "|" + version
@@ -114,16 +106,9 @@ func legacyManifestApps(version string) (map[string]string, error) {
 }
 
 // mapLegacyOverrides extracts global and per-application env/extraEnv and
-// resource overrides from v1 values into spec.wandb.legacyOverrides. The
-// server manifest for the converted version (set by mapVersion, which runs
-// first) is the authority on which sections are applications; override-shaped
-// sections that match no manifest application are logged and skipped.
-//
-// Manifest resolution is best-effort: conversion stays a pure function of
-// (values, version), and a fetch failure — offline cluster, unpublished
-// version — must never make v1 objects unservable, so on error only the
-// per-application extraction is skipped (with a log); global env still
-// converts, and the raw values remain in the v1-values annotation.
+// resource overrides from v1 values into spec.wandb.legacyOverrides, with the
+// server manifest for the converted version (set by mapVersion earlier) as
+// the authority on which sections are applications.
 func mapLegacyOverrides(values map[string]interface{}, dst *appsv2.WeightsAndBiases) error {
 	overrides := map[string]appsv2.LegacyOverrides{}
 
@@ -156,6 +141,8 @@ func mapLegacyOverrides(values map[string]interface{}, dst *appsv2.WeightsAndBia
 	return nil
 }
 
+// mapPerAppLegacyOverrides is best-effort: a manifest fetch failure must never
+// make v1 objects unservable, so it logs and skips instead of erroring.
 func mapPerAppLegacyOverrides(values map[string]interface{}, version, globalSize string, overrides map[string]appsv2.LegacyOverrides) error {
 	if version == "" {
 		logger.Info("no version derived from v1 values; skipping per-application legacy overrides")
@@ -202,11 +189,9 @@ func mapPerAppLegacyOverrides(values map[string]interface{}, version, globalSize
 	return nil
 }
 
-// logUnmappedLegacySections logs every top-level values section that carries
-// the override shape we extract (env/extraEnv/sizing) but is read by no
-// manifest application (by name or legacyKey) — e.g. the v1 monolith `app` or
-// `console`. Their values are not converted and remain only in the v1-values
-// annotation.
+// logUnmappedLegacySections logs override-shaped sections no manifest
+// application reads (e.g. the v1 monolith `app`, `console`) — not converted,
+// preserved only in the v1-values annotation.
 func logUnmappedLegacySections(values map[string]interface{}, apps map[string]string, version string) {
 	mappedKeys := make(map[string]struct{}, len(apps))
 	for _, valuesKey := range apps {
@@ -235,10 +220,9 @@ func logUnmappedLegacySections(values map[string]interface{}, apps map[string]st
 	}
 }
 
-// hasLegacyOverrideShape reports whether a values section carries any of the
-// keys legacy override extraction reads. The flat `resources` key is
-// deliberately excluded: infra subchart sections (mysql, redis, …) legitimately
-// carry it and would be false positives.
+// hasLegacyOverrideShape reports whether a section carries keys the extraction
+// reads. Flat `resources` is excluded: infra sections (mysql, redis, …)
+// legitimately carry it.
 func hasLegacyOverrideShape(section map[string]interface{}) bool {
 	for _, key := range []string{"env", "extraEnv", "sizing"} {
 		if _, ok := section[key]; ok {
@@ -248,9 +232,8 @@ func hasLegacyOverrideShape(section map[string]interface{}) bool {
 	return false
 }
 
-// legacyEnvFromSection merges <section>.env over <section>.extraEnv (the
-// chart's layer precedence) and renders the result as a name-sorted EnvVar
-// list so conversion output is deterministic across round-trips.
+// legacyEnvFromSection merges env over extraEnv (the chart's precedence) into
+// a name-sorted EnvVar list, keeping round-trips deterministic.
 func legacyEnvFromSection(section map[string]interface{}, sectionName string) ([]corev1.EnvVar, error) {
 	merged := map[string]interface{}{}
 	for _, sub := range []string{"extraEnv", "env"} {
@@ -286,11 +269,9 @@ func legacyEnvFromSection(section map[string]interface{}, sectionName string) ([
 	return vars, nil
 }
 
-// legacyEnvVar renders one helm env map entry as an EnvVar. Map values are
-// full EnvVar bodies (valueFrom etc.) and decode strictly — a malformed body
-// fails conversion like other mappers. Scalars are string-coerced the way
-// helm's toString rendered them. Helm template expressions can't be evaluated
-// outside helm, so those entries are dropped with a log, never an error.
+// legacyEnvVar renders one helm env entry: map values decode strictly as
+// EnvVar bodies (malformed fails conversion, like other mappers), scalars
+// coerce as helm's toString did, and `{{ }}` templates drop with a log.
 func legacyEnvVar(name string, raw interface{}, sectionName string) (corev1.EnvVar, bool, error) {
 	if body, isMap := raw.(map[string]interface{}); isMap {
 		payload, err := json.Marshal(body)
@@ -326,11 +307,9 @@ func legacyEnvVar(name string, raw interface{}, sectionName string) (corev1.EnvV
 	return corev1.EnvVar{Name: name, Value: s}, true, nil
 }
 
-// legacyResourcesFromSection deep-merges the resource fragments a section
-// sets — sizing.default.resources, then sizing.<effective size>.resources,
-// then the legacy flat resources key — mirroring the chart's merge order.
-// Only fragments present in the values contribute, so a section that never
-// touched resources yields nil and v2 manifest sizing applies untouched.
+// legacyResourcesFromSection deep-merges sizing.default → sizing.<effective
+// size> → flat resources, mirroring the chart. Sections that set nothing
+// yield nil so v2 manifest sizing applies untouched.
 func legacyResourcesFromSection(section map[string]interface{}, sectionName, globalSize string) (*corev1.ResourceRequirements, error) {
 	size, _, err := unstructured.NestedString(section, "size")
 	if err != nil {
@@ -374,8 +353,7 @@ func legacyResourcesFromSection(section map[string]interface{}, sectionName, glo
 	return &resources, nil
 }
 
-// mergeLegacyValueMaps deep-merges src into dst, overwriting non-map values —
-// the same shape of merge helm applies to values maps.
+// mergeLegacyValueMaps deep-merges src into dst like helm merges values maps.
 func mergeLegacyValueMaps(dst, src map[string]interface{}) {
 	for k, v := range src {
 		if srcMap, ok := v.(map[string]interface{}); ok {

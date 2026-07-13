@@ -147,10 +147,8 @@ type AppKafkaSection struct {
 // Application describes one entry in the applications list.
 type Application struct {
 	Name string `yaml:"name"`
-	// LegacyKey is the operator-wandb helm values key that configured this
-	// application in the legacy v1 chart, when it differs from the
-	// application name (e.g. nginx-proxy was `nginx`). The v1 -> v2
-	// conversion uses it to locate legacy override sections in spec.values.
+	// LegacyKey is the v1 operator-wandb helm values key for this application
+	// when it differs from the name (e.g. nginx-proxy was `nginx`).
 	LegacyKey string   `yaml:"legacyKey,omitempty"`
 	Image     ImageRef `yaml:"image"`
 	Args      []string `yaml:"args,omitempty"`

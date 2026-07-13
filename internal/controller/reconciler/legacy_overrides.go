@@ -10,11 +10,9 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-// validateLegacyOverrides logs every spec.wandb.legacyOverrides key that is
-// neither the reserved global entry nor an application in the resolved server
-// manifest. The spec is deliberately left untouched: unknown keys stay in
-// place and are simply never applied, because the apply path only looks up
-// "global" and manifest application names.
+// validateLegacyOverrides logs legacyOverrides keys that are neither "global"
+// nor a manifest application. The spec is left untouched — unknown keys are
+// simply never applied.
 func validateLegacyOverrides(ctx context.Context, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest) {
 	if len(wandb.Spec.Wandb.LegacyOverrides) == 0 {
 		return
@@ -39,11 +37,9 @@ func validateLegacyOverrides(ctx context.Context, wandb *apiv2.WeightsAndBiases,
 	}
 }
 
-// applyLegacyOverrideEnv layers the v1-derived env overrides onto a fully
-// built env list — global first, then per-app so per-app wins. Applying after
-// all other env construction means overrides beat manifest and
-// operator-injected vars, matching the v1 chart where user env displaced
-// chart-computed env.
+// applyLegacyOverrideEnv layers global then per-app overrides (per-app wins)
+// onto a fully built env list, so they beat manifest and injected vars — as
+// in v1, where user env displaced chart-computed env.
 func applyLegacyOverrideEnv(ctx context.Context, wandb *apiv2.WeightsAndBiases, appName string, envVars []corev1.EnvVar) []corev1.EnvVar {
 	overrides := wandb.Spec.Wandb.LegacyOverrides
 	if len(overrides) == 0 {
@@ -54,11 +50,9 @@ func applyLegacyOverrideEnv(ctx context.Context, wandb *apiv2.WeightsAndBiases, 
 	return envVars
 }
 
-// overrideEnvVars applies each override by name: it replaces a same-named var
-// in place and appends otherwise, so overrides win regardless of how the base
-// list was built (the inverse of appendMissingEnvVars). Hand-authored input is
-// handled defensively: empty names are skipped with a log and a later
-// duplicate within overrides wins.
+// overrideEnvVars replaces same-named vars in place and appends the rest —
+// the inverse of appendMissingEnvVars. Empty names skip with a log; a later
+// duplicate wins.
 func overrideEnvVars(ctx context.Context, base []corev1.EnvVar, overrides []corev1.EnvVar) []corev1.EnvVar {
 	if len(overrides) == 0 {
 		return base
