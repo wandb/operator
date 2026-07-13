@@ -146,10 +146,15 @@ type AppKafkaSection struct {
 
 // Application describes one entry in the applications list.
 type Application struct {
-	Name    string   `yaml:"name"`
-	Image   ImageRef `yaml:"image"`
-	Args    []string `yaml:"args,omitempty"`
-	Command []string `yaml:"command,omitempty"`
+	Name string `yaml:"name"`
+	// LegacyKey is the operator-wandb helm values key that configured this
+	// application in the legacy v1 chart, when it differs from the
+	// application name (e.g. nginx-proxy was `nginx`). The v1 -> v2
+	// conversion uses it to locate legacy override sections in spec.values.
+	LegacyKey string   `yaml:"legacyKey,omitempty"`
+	Image     ImageRef `yaml:"image"`
+	Args      []string `yaml:"args,omitempty"`
+	Command   []string `yaml:"command,omitempty"`
 	// CommonEnvs is a list of keys referencing top-level commonEnvvars groups
 	// to be included for this application (e.g., ["gorillaMysql", "gorillaBucket"]).
 	CommonEnvs         []string `yaml:"commonEnvs,omitempty"`

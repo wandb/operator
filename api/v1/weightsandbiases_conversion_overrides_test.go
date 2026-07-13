@@ -47,22 +47,29 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// withConversionManifestApps installs a fake manifest resolver returning the
-// given application names (cleaned up via t.Cleanup, which also clears the
-// cache). Returns a counter of resolver invocations.
-func withConversionManifestApps(t *testing.T, apps ...string) *atomic.Int32 {
+// withConversionManifest installs a fake manifest resolver returning the given
+// applications (cleaned up via t.Cleanup, which also clears the failure
+// cooldowns). Returns a counter of resolver invocations.
+func withConversionManifest(t *testing.T, apps map[string]serverManifest.Application) *atomic.Int32 {
 	t.Helper()
 	var calls atomic.Int32
 	SetConversionManifestGetter(func(_ context.Context, _, _ string) (serverManifest.Manifest, error) {
 		calls.Add(1)
-		m := serverManifest.Manifest{Applications: map[string]serverManifest.Application{}}
-		for _, app := range apps {
-			m.Applications[app] = serverManifest.Application{Name: app}
-		}
-		return m, nil
+		return serverManifest.Manifest{Applications: apps}, nil
 	})
 	t.Cleanup(disableConversionManifestFetch)
 	return &calls
+}
+
+// withConversionManifestApps is withConversionManifest for plain names with no
+// legacyKey.
+func withConversionManifestApps(t *testing.T, names ...string) *atomic.Int32 {
+	t.Helper()
+	apps := make(map[string]serverManifest.Application, len(names))
+	for _, name := range names {
+		apps[name] = serverManifest.Application{Name: name}
+	}
+	return withConversionManifest(t, apps)
 }
 
 // withVersion adds the app.image.tag mapVersion reads, so per-app extraction
@@ -216,8 +223,17 @@ func TestConvertTo_LegacyOverridesTemplateValuesDropped(t *testing.T) {
 	require.NotContains(t, dst.Spec.Wandb.LegacyOverrides, "executor")
 }
 
-func TestConvertTo_LegacyOverridesRenames(t *testing.T) {
-	withConversionManifestApps(t, "nginx-proxy", "weave-trace-evaluate-model-worker")
+func TestConvertTo_LegacyOverridesManifestLegacyKey(t *testing.T) {
+	// Renamed apps declare their v1 values key via the manifest's legacyKey
+	// field; the operator carries no rename table.
+	withConversionManifest(t, map[string]serverManifest.Application{
+		"nginx-proxy": {Name: "nginx-proxy", LegacyKey: "nginx"},
+		"weave-trace-evaluate-model-worker": {
+			Name:      "weave-trace-evaluate-model-worker",
+			LegacyKey: "weave-evaluate-model-worker",
+		},
+		"parquet": {Name: "parquet"},
+	})
 	dst := &appsv2.WeightsAndBiases{}
 	src := newV1(withVersion(map[string]interface{}{
 		"nginx": map[string]interface{}{
@@ -225,6 +241,9 @@ func TestConvertTo_LegacyOverridesRenames(t *testing.T) {
 		},
 		"weave-evaluate-model-worker": map[string]interface{}{
 			"env": map[string]interface{}{"WORKER_VAR": "2"},
+		},
+		"parquet": map[string]interface{}{
+			"env": map[string]interface{}{"PARQUET_VAR": "3"},
 		},
 	}))
 	require.NoError(t, src.ConvertTo(dst))
@@ -234,6 +253,22 @@ func TestConvertTo_LegacyOverridesRenames(t *testing.T) {
 	require.NotContains(t, overrides, "nginx")
 	require.Contains(t, overrides, "weave-trace-evaluate-model-worker")
 	require.NotContains(t, overrides, "weave-evaluate-model-worker")
+	require.Contains(t, overrides, "parquet")
+}
+
+func TestConvertTo_LegacyOverridesWithoutLegacyKeyRenamedSectionSkipped(t *testing.T) {
+	// A manifest that predates the legacyKey field: the nginx section has no
+	// reader, so it is logged as unmapped and skipped rather than guessed.
+	withConversionManifestApps(t, "nginx-proxy")
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(withVersion(map[string]interface{}{
+		"nginx": map[string]interface{}{
+			"env": map[string]interface{}{"NGINX_VAR": "1"},
+		},
+	}))
+	require.NoError(t, src.ConvertTo(dst))
+	require.NotContains(t, dst.Spec.Wandb.LegacyOverrides, "nginx-proxy")
+	require.NotContains(t, dst.Spec.Wandb.LegacyOverrides, "nginx")
 }
 
 func TestConvertTo_LegacyOverridesUnmappedSectionsSkipped(t *testing.T) {

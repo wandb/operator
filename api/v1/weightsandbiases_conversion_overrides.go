@@ -33,15 +33,6 @@ import (
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
 )
 
-// legacyKeyRenames maps a helm alias to its v2 manifest application name for
-// the unambiguous 1:1 renames. Deliberately no app -> api entry: the monolith's
-// overrides were tuned for a different binary, so `app` never maps and is
-// logged as unmapped instead.
-var legacyKeyRenames = map[string]string{
-	"nginx":                       "nginx-proxy",
-	"weave-evaluate-model-worker": "weave-trace-evaluate-model-worker",
-}
-
 const (
 	legacyDefaultSize = "small"
 
@@ -82,11 +73,13 @@ func SetConversionManifestGetter(getter func(ctx context.Context, repository, ve
 	manifestFailures = map[string]manifestFailure{}
 }
 
-// legacyManifestApps returns the application-name set of the server manifest
-// for version, resolving it from the default manifest repository (v1 values
-// have no repository field, so conversion uses the same default the v2
-// defaulting webhook applies).
-func legacyManifestApps(version string) (map[string]struct{}, error) {
+// legacyManifestApps maps each application name in the server manifest for
+// version to the v1 values key holding its section: the application's
+// legacyKey when the manifest sets one (renamed helm aliases like nginx ->
+// nginx-proxy), else the name itself. The manifest is resolved from the
+// default manifest repository — v1 values have no repository field, so
+// conversion uses the same default the v2 defaulting webhook applies.
+func legacyManifestApps(version string) (map[string]string, error) {
 	repository := appsv2.DefaultManifestRepository
 	key := repository + "|" + version
 
@@ -109,22 +102,15 @@ func legacyManifestApps(version string) (map[string]struct{}, error) {
 		return nil, err
 	}
 
-	apps := make(map[string]struct{}, len(m.Applications))
-	for name := range m.Applications {
-		apps[name] = struct{}{}
+	apps := make(map[string]string, len(m.Applications))
+	for name, app := range m.Applications {
+		valuesKey := app.LegacyKey
+		if valuesKey == "" {
+			valuesKey = name
+		}
+		apps[name] = valuesKey
 	}
 	return apps, nil
-}
-
-// legacyValuesKeyForApp returns the v1 values key holding a v2 application's
-// section: the helm alias for the renamed apps, else the name itself.
-func legacyValuesKeyForApp(appName string) string {
-	for helmKey, v2Name := range legacyKeyRenames {
-		if v2Name == appName {
-			return helmKey
-		}
-	}
-	return appName
 }
 
 // mapLegacyOverrides extracts global and per-application env/extraEnv and
@@ -189,7 +175,7 @@ func mapPerAppLegacyOverrides(values map[string]interface{}, version, globalSize
 	sort.Strings(appNames)
 
 	for _, name := range appNames {
-		key := legacyValuesKeyForApp(name)
+		key := apps[name]
 		section, found, err := unstructured.NestedMap(values, key)
 		if err != nil {
 			return fmt.Errorf("spec.values.%s: %w", key, err)
@@ -217,10 +203,16 @@ func mapPerAppLegacyOverrides(values map[string]interface{}, version, globalSize
 }
 
 // logUnmappedLegacySections logs every top-level values section that carries
-// the override shape we extract (env/extraEnv/sizing) but matches no manifest
-// application — e.g. the v1 monolith `app` or `console`. Their values are not
-// converted and remain only in the v1-values annotation.
-func logUnmappedLegacySections(values map[string]interface{}, apps map[string]struct{}, version string) {
+// the override shape we extract (env/extraEnv/sizing) but is read by no
+// manifest application (by name or legacyKey) — e.g. the v1 monolith `app` or
+// `console`. Their values are not converted and remain only in the v1-values
+// annotation.
+func logUnmappedLegacySections(values map[string]interface{}, apps map[string]string, version string) {
+	mappedKeys := make(map[string]struct{}, len(apps))
+	for _, valuesKey := range apps {
+		mappedKeys[valuesKey] = struct{}{}
+	}
+
 	keys := make([]string, 0, len(values))
 	for key := range values {
 		keys = append(keys, key)
@@ -231,15 +223,11 @@ func logUnmappedLegacySections(values map[string]interface{}, apps map[string]st
 		if key == "global" {
 			continue
 		}
-		section, ok := values[key].(map[string]interface{})
-		if !ok || !hasLegacyOverrideShape(section) {
+		if _, ok := mappedKeys[key]; ok {
 			continue
 		}
-		name := key
-		if renamed, ok := legacyKeyRenames[key]; ok {
-			name = renamed
-		}
-		if _, ok := apps[name]; ok {
+		section, ok := values[key].(map[string]interface{})
+		if !ok || !hasLegacyOverrideShape(section) {
 			continue
 		}
 		logger.Info("legacy values section does not map to any application in the server manifest; its env/resources are not converted",

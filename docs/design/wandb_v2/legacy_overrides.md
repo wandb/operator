@@ -90,14 +90,17 @@ so the spec-active Secret's coalesced values are preferred, same as every other
 mapper.
 
 **Manifest-driven extraction.** Conversion resolves the server manifest for the
-converted version and iterates `manifest.Applications`: for each application
-name, it reads the matching top-level values section — the helm alias for the
-two **unambiguous 1:1 renames** (`nginx-proxy` ← `nginx`,
-`weave-trace-evaluate-model-worker` ← `weave-evaluate-model-worker`; helm
-knowledge, so the tiny rename map lives here), the name itself otherwise — and
-extracts its env/extraEnv/resources. Only manifest applications are ever
-copied, so the spec never carries junk keys, and a new application in a future
-manifest needs no conversion change.
+converted version and iterates `manifest.Applications`: for each application it
+reads the top-level values section named by the application's **`legacyKey`**
+when the manifest sets one (renamed helm aliases, e.g. `nginx-proxy` declares
+`legacyKey: nginx`, `weave-trace-evaluate-model-worker` declares
+`legacyKey: weave-evaluate-model-worker`), else by the application name — and
+extracts its env/extraEnv/resources. The operator carries **no rename table**:
+even the helm-key knowledge ships with the manifest (`legacyKey` is set
+upstream in the wandb/core server-manifest generator; a manifest that predates
+the field simply leaves renamed sections unmapped, logged like any other).
+Only manifest applications are ever copied, so the spec never carries junk
+keys, and a new application in a future manifest needs no conversion change.
 
 Sections that carry the override shape we extract (`env`/`extraEnv`/`sizing`)
 but match no manifest application — the v1 monolith `app`, `console`,
@@ -247,7 +250,7 @@ flowchart LR
         V[spec.values<br/>global.env / extraEnv<br/>app.env / resources / sizing]
     end
     subgraph conv["Conversion webhook (api/v1)"]
-        RV[resolveValues<br/>spec-active Secret or spec.values] --> MLO[mapLegacyOverrides<br/>fetch manifest for mapVersion's version<br/>iterate manifest apps, 1:1 renames<br/>env map → EnvVar list + sizing merge<br/>log + skip unmapped sections]
+        RV[resolveValues<br/>spec-active Secret or spec.values] --> MLO[mapLegacyOverrides<br/>fetch manifest for mapVersion's version<br/>iterate manifest apps via legacyKey/name<br/>env map → EnvVar list + sizing merge<br/>log + skip unmapped sections]
     end
     subgraph rec["v2 reconcile"]
         GM[GetServerManifest] --> PR[validateLegacyOverrides<br/>log keys not in<br/>manifest.Applications]
@@ -299,12 +302,15 @@ never enter the spec.
      already cached on disk by the resolver's ORAS store — and a
      `SetConversionManifestGetter` test seam; failures skip per-app extraction
      with a log.
-   - The two-entry rename map plus helpers following existing idioms
-     (`unstructured.Nested*`, errors prefixed `spec.values.<path>`): env over
-     extraEnv merge, scalar coercion, strict EnvVar-body decode, `{{` skip,
-     name-sorted output; resources = sizing default → effective size → flat
-     `resources` merge, using `coalesce(<app>.size, global.size, "small")`;
-     unmapped-section logging keyed on the `env`/`extraEnv`/`sizing` shape.
+   - `LegacyKey` field on the manifest `Application` type (set upstream by the
+     wandb/core server-manifest generator; also added to the local dev
+     manifests under `hack/testing-manifests/server-manifest/`), plus helpers
+     following existing idioms (`unstructured.Nested*`, errors prefixed
+     `spec.values.<path>`): env over extraEnv merge, scalar coercion, strict
+     EnvVar-body decode, `{{` skip, name-sorted output; resources = sizing
+     default → effective size → flat `resources` merge, using
+     `coalesce(<app>.size, global.size, "small")`; unmapped-section logging
+     keyed on the `env`/`extraEnv`/`sizing` shape.
 4. Tests in `api/v1/weightsandbiases_conversion_overrides_test.go` (plain Go +
    `require`, `newV1(values)` fixtures, fake manifest getter installed by a
    package `TestMain` so unit tests never fetch over the network,
@@ -358,7 +364,7 @@ never enter the spec.
 | Manifest fetch failure / no version | skip per-app extraction with a log, never fail conversion; global env still converts | erroring would make v1 objects unservable for offline clusters or versions with no published manifest |
 | Unmapped sections | logged and skipped at conversion; reconcile re-checks spec keys (hand-edits, version drift) and leaves them in place | visibility without destructive spec edits; only manifest apps ever enter the spec |
 | helm `app` (monolith) overrides | not translated to `api`; unmapped, so logged and skipped | monolith env/resources were tuned for a different binary; grafting them onto v2 `api` causes more problems than it solves |
-| Renames (`nginx`, `weave-evaluate-model-worker`) | applied at conversion | unambiguous 1:1, and helm-key knowledge belongs in conversion |
+| Renamed helm keys | `legacyKey` field on the manifest `Application`, set upstream | no rename table in the operator; the manifest owns all application knowledge, helm aliases included |
 | Global env representation | reserved `"global"` map key, merged at reconcile | keeps CR small; apps added by newer manifests still inherit it |
 | Override vs manifest env | overrides win (replace-by-name) | mirrors v1, where user env at any layer displaced chart-computed env |
 | Legacy limits vs `requireLimits=false` | respect `requireLimits`: limits stripped unless it's true | keeps the v2 no-limits-by-default policy uniform; reevaluate later if migrated installs need their v1 limits back |
