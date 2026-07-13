@@ -231,7 +231,7 @@ func ToClickHouseVendorSpec(
 				Zookeeper: &v1.ZookeeperConfig{
 					Nodes: v1.ZookeeperNodes{
 						{
-							Host: keeper.ClientServiceFQDN(spec.Namespace, spec.Name),
+							Host: keeper.ClientServiceFQDN(spec.Namespace, baseName(spec.Name)),
 							Port: chtypes.NewInt32(int32(keeper.KeeperClientPort)),
 						},
 					},

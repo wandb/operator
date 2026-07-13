@@ -4,18 +4,19 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	apiv2 "github.com/wandb/operator/api/v2"
-	"github.com/wandb/operator/internal/controller/infra/managed/clickhouse/altinity/keeper"
 	"k8s.io/apimachinery/pkg/util/validation"
 )
 
 var _ = Describe("managed ClickHouse naming", func() {
-	Describe("keeper.InstallationName", func() {
-		It("swaps the -chi suffix so the Keeper shares the base name", func() {
-			Expect(keeper.InstallationName("wandb-legacy-overrides-v1-chi")).To(Equal("wandb-legacy-overrides-v1-chk"))
+	Describe("KeeperNsName", func() {
+		It("pairs the Keeper with the installation via the shared base name", func() {
+			spec := &apiv2.ManagedClickHouseSpec{Name: "wandb-legacy-overrides-v1-chi", Namespace: "wandb"}
+			Expect(KeeperNsName(spec).Name).To(Equal("wandb-legacy-overrides-v1-chk"))
 		})
 
 		It("appends -chk to explicit names without the default suffix", func() {
-			Expect(keeper.InstallationName("myclickhouse")).To(Equal("myclickhouse-chk"))
+			spec := &apiv2.ManagedClickHouseSpec{Name: "myclickhouse", Namespace: "wandb"}
+			Expect(KeeperNsName(spec).Name).To(Equal("myclickhouse-chk"))
 		})
 	})
 

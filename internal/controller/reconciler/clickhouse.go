@@ -149,7 +149,7 @@ func managedClickHouseWriteState(
 	}
 
 	// Translate the Keeper and ClickHouse CRs; WriteState writes Keeper first.
-	desiredKeeper, err := keeper.ToKeeperVendorSpec(ctx, wandb, client.Scheme())
+	desiredKeeper, err := keeper.ToKeeperVendorSpec(ctx, wandb, client.Scheme(), altinity.KeeperNsName(spec))
 	if err != nil {
 		log.Error(err, "failed to translate Keeper spec to vendor spec")
 		return []metav1.Condition{
@@ -199,7 +199,7 @@ func managedClickHouseReadState(
 	newConditions = append(newConditions, readConditions...)
 
 	// Keeper readiness gates ClickHouse readiness (see inferInfraState).
-	newConditions = append(newConditions, keeper.ReadState(ctx, client, keeper.SpecNamespacedName(spec))...)
+	newConditions = append(newConditions, keeper.ReadState(ctx, client, altinity.KeeperNsName(spec))...)
 
 	return newConditions, newInfraConn
 }

@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 var _ = Describe("Keeper vendor spec", func() {
@@ -32,7 +33,7 @@ var _ = Describe("Keeper vendor spec", func() {
 			},
 		}
 
-		chk, err := ToKeeperVendorSpec(context.Background(), wandb, keeperScheme())
+		chk, err := ToKeeperVendorSpec(context.Background(), wandb, keeperScheme(), keeperNsName())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(chk).NotTo(BeNil())
 		Expect(chk.Name).To(Equal("clickhouse-chk"))
@@ -62,13 +63,13 @@ var _ = Describe("Keeper vendor spec", func() {
 	It("errors when keeper storage size is unset (no operator defaults)", func() {
 		wandb := keeperWandb()
 		wandb.Spec.ClickHouse.ManagedClickHouse.Keeper = apiv2.ClickHouseKeeperSpec{}
-		_, err := ToKeeperVendorSpec(context.Background(), wandb, keeperScheme())
+		_, err := ToKeeperVendorSpec(context.Background(), wandb, keeperScheme(), keeperNsName())
 		Expect(err).To(HaveOccurred())
 	})
 
 	It("omits fixed IDs in OpenShift mode", func() {
 		utils.SetOpenShiftMode(true)
-		chk, err := ToKeeperVendorSpec(context.Background(), keeperWandb(), keeperScheme())
+		chk, err := ToKeeperVendorSpec(context.Background(), keeperWandb(), keeperScheme(), keeperNsName())
 		Expect(err).NotTo(HaveOccurred())
 		sc := chk.Spec.Templates.PodTemplates[0].Spec.SecurityContext
 		Expect(sc.RunAsUser).To(BeNil())
@@ -76,6 +77,11 @@ var _ = Describe("Keeper vendor spec", func() {
 		Expect(*sc.RunAsNonRoot).To(BeTrue())
 	})
 })
+
+// keeperNsName mirrors what altinity.KeeperNsName derives for keeperWandb().
+func keeperNsName() types.NamespacedName {
+	return types.NamespacedName{Namespace: "wandb", Name: InstallationName("clickhouse")}
+}
 
 func keeperScheme() *runtime.Scheme {
 	scheme := runtime.NewScheme()

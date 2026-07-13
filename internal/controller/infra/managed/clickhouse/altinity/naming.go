@@ -82,9 +82,9 @@ const (
 
 	// defaultNameSuffix is what the defaulting webhook appends to the CR name.
 	// Terse ("chi" = ClickHouseInstallation) to leave the CR name as much of
-	// the derived-name DNS-1123 label budget as possible. Owned by the keeper
-	// package, which swaps it for "-chk" when naming the Keeper CR.
-	defaultNameSuffix = keeper.ChiNameSuffix
+	// the derived-name DNS-1123 label budget as possible. Sibling resources
+	// derive their names from the base this suffix leaves behind (see baseName).
+	defaultNameSuffix = "-chi"
 
 	// assumedMaxHostOrdinal sizes name budgets when replica counts are not yet
 	// known at admission (they are resolved from the server manifest, which
@@ -101,6 +101,21 @@ func maxHostOrdinal(replicas int32) int {
 	return assumedMaxHostOrdinal
 }
 
+// baseName strips the default "-chi" suffix from the managed ClickHouse name;
+// sibling resources (the Keeper CR) build their names on this shared base, so
+// the keeper package never sees the suffixed spec name.
+func baseName(specName string) string {
+	return strings.TrimSuffix(specName, defaultNameSuffix)
+}
+
+// KeeperNsName is the Keeper CR's namespaced name for a managed CH spec.
+func KeeperNsName(spec *apiv2.ManagedClickHouseSpec) types.NamespacedName {
+	return types.NamespacedName{
+		Namespace: spec.Namespace,
+		Name:      keeper.InstallationName(baseName(spec.Name)),
+	}
+}
+
 // perHostConfigVolumeName mirrors the Altinity operator's per-host ConfigMap
 // name for a CHI — "chi-{cr}-deploy-confd-{cluster}-{shard}-{replica}"
 // (upstream pkg/model/chi/namer/patterns.go, patternConfigMapHostName). Like
@@ -112,12 +127,12 @@ func perHostConfigVolumeName(specName string, shardOrdinal, replicaOrdinal int) 
 
 // MaxSpecNameLength is the longest managed ClickHouse spec name of the
 // defaulted "<base>-chi" shape whose derived per-host object names all fit
-// DNS-1123 labels. The Keeper probe passes the bare suffix so the "-chi" →
-// "-chk" swap its InstallationName performs is reflected in the budget.
+// DNS-1123 labels. Keeper names build on the base, so their room extends by
+// the suffix the base gives back.
 func MaxSpecNameLength() int {
 	chiRoom := validation.DNS1123LabelMaxLength - len(perHostConfigVolumeName("", ShardsCount-1, assumedMaxHostOrdinal))
 	chkRoom := validation.DNS1123LabelMaxLength -
-		len(keeper.PerHostConfigVolumeName(defaultNameSuffix, assumedMaxHostOrdinal)) + len(defaultNameSuffix)
+		len(keeper.PerHostConfigVolumeName("", assumedMaxHostOrdinal)) + len(defaultNameSuffix)
 	return min(chiRoom, chkRoom)
 }
 
@@ -135,7 +150,7 @@ func DefaultSpecName(crName string) string {
 // converges. Returns nil when every derived name fits.
 func ValidateDerivedNames(spec *apiv2.ManagedClickHouseSpec) error {
 	for _, derived := range []string{
-		keeper.PerHostConfigVolumeName(spec.Name, maxHostOrdinal(spec.Keeper.Replicas)),
+		keeper.PerHostConfigVolumeName(baseName(spec.Name), maxHostOrdinal(spec.Keeper.Replicas)),
 		perHostConfigVolumeName(spec.Name, ShardsCount-1, maxHostOrdinal(spec.Replicas)),
 	} {
 		// Derived length grows 1:1 with the spec name, so the excess converts
