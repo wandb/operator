@@ -723,6 +723,12 @@ func reconcileApplications(
 		}
 	}
 
+	// Every application now carries this generation's spec, so consumers can
+	// gate on observedGeneration == generation plus workload rollout. Earlier
+	// exits (infra, mysql-init, migrations) must not advance it: their specs
+	// haven't reached the workloads yet.
+	wandb.Status.ObservedGeneration = wandb.GetGeneration()
+
 	if err := client.Status().Update(ctx, wandb); err != nil {
 		return ctrl.Result{}, err
 	}
