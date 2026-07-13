@@ -295,6 +295,13 @@ type WandbAppSpec struct {
 
 	// +optional
 	OIDC OidcSpec `json:"oidc,omitempty"`
+
+	LegacyOveriddes map[string]LegacyOverrides `json:"legacyOverrides,omitempty"`
+}
+
+type LegacyOverrides struct {
+	Env       []corev1.EnvVar             `json:"env,omitempty"`
+	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 }
 
 type WandbProbeDefaults struct {
