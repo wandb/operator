@@ -145,9 +145,9 @@ var managedWorkloadTelemetryEnvVars = []serverManifest.EnvVar{
 
 var managedWorkloadStatsdEnvVars = []serverManifest.EnvVar{
 	{
-		Name: "GORILLA_STATSD_ADDRESS",
+		Name: "GORILLA_STATSD_HOST",
 		Sources: []serverManifest.EnvSource{
-			{Type: "telemetry", Field: "statsdAddress"},
+			{Type: "telemetry", Field: "statsdHost"},
 		},
 	},
 }

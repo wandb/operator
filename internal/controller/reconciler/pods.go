@@ -344,8 +344,8 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 					selector.Key = "OTEL_RESOURCE_ATTRIBUTES"
 				case "gorillaTracer", "tracer":
 					selector.Key = "GORILLA_TRACER"
-				case "statsdAddress":
-					selector.Key = "GORILLA_STATSD_ADDRESS"
+				case "statsdHost":
+					selector.Key = "GORILLA_STATSD_HOST"
 				case "datadogTraceAgentURL", "ddTraceAgentURL":
 					selector.Key = "DD_TRACE_AGENT_URL"
 				case "datadogTraceAgentHost", "ddAgentHost":

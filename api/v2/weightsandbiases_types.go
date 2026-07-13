@@ -769,7 +769,7 @@ type TelemetryConnectionStatus struct {
 	ServiceName           string `json:"serviceName,omitempty"`
 	ResourceAttributes    string `json:"resourceAttributes,omitempty"`
 	GorillaTracer         string `json:"gorillaTracer,omitempty"`
-	StatsdAddress         string `json:"statsdAddress,omitempty"`
+	StatsdHost            string `json:"statsdHost,omitempty"`
 	DatadogTraceAgentURL  string `json:"datadogTraceAgentURL,omitempty"`
 	DatadogTraceAgentHost string `json:"datadogTraceAgentHost,omitempty"`
 	DatadogTraceAgentPort string `json:"datadogTraceAgentPort,omitempty"`
