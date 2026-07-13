@@ -2138,6 +2138,87 @@
           "refId": "A"
         }
       ]
+    },
+    {
+      "type": "row",
+      "title": "Telemetry Self-Health (can I trust this data?)",
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 137},
+      "collapsed": false
+    },
+    {
+      "type": "timeseries",
+      "title": "Span Export Failure %",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 8, "w": 16, "x": 0, "y": 138},
+      "targets": [
+        {
+          "expr": "sum(rate(otelcol_exporter_send_failed_spans[$__rate_interval])) / clamp_min(sum(rate(otelcol_exporter_sent_spans[$__rate_interval])) + sum(rate(otelcol_exporter_send_failed_spans[$__rate_interval])), 1)",
+          "legendFormat": "failed export ratio",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0}, "overrides": []},
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+      "thresholds": {"mode": "absolute", "steps": [{"color": "green"}, {"color": "yellow", "value": 0.01}, {"color": "red", "value": 0.05}]}
+    },
+    {
+      "type": "text",
+      "title": "About: Telemetry Self-Health",
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 138},
+      "options": {
+        "mode": "markdown",
+        "content": "### Read this FIRST when a dashboard looks wrong\n\n**What it shows** — the fraction of trace spans the collector failed to export to storage. If this is non-zero, the trace/RED panels across every dashboard are **undercounting** — the data itself is lossy, not the app.\n\n**What bad looks like** — sustained > ~1%. Above ~5% treat trace-derived numbers as unreliable.\n\n**Do next** — if failures are high, check the `victoria-otlp-gateway` collector pod and the VictoriaTraces backend before trusting any trace panel. Also cross-check **Scrape Success** / **Down Targets** at the top of this dashboard for metric-side gaps."
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Trace ingestion by receiver (DataDog / OTLP)",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 8, "w": 16, "x": 0, "y": 146},
+      "targets": [
+        {
+          "expr": "sum by (receiver) (rate(otelcol_receiver_accepted_spans[$__rate_interval]))",
+          "legendFormat": "{{receiver}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "cps", "min": 0}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"]}, "tooltip": {"mode": "multi"}},
+      "description": "Spans/sec the collector accepts, split by receiver. The `datadog` receiver (port 8126) is the DataDog-APM path — background/SDK services (weave-trace, glue, parquet, filemeta, metric-observer, anaconda2) send here; `otlp` is the main gorilla trace path."
+    },
+    {
+      "type": "text",
+      "title": "About: Ingestion by receiver",
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 146},
+      "options": {
+        "mode": "markdown",
+        "content": "**What it shows** — whether each ingestion path on the gateway is receiving data. This is how you confirm **DataDog** traces/metrics are populated.\n\n- **`datadog`** — DataDog-APM traces (port 8126). A non-zero line here means DataDog-protocol tracing is flowing; downstream it appears as `traces_spanmetrics_calls_total` for the SDK services.\n- **`otlp`** — the main gorilla OpenTelemetry path (the bulk of spans/metrics).\n- **`statsd`** — DogStatsD metrics (port 8125). **Expect this to be absent/zero** unless gorilla runs with `GORILLA_STATSD_PORT` > 0 (a core/manifest-side setting). Zero here is the reason the DogStatsD-only panels were dropped.\n\n**What bad looks like** — a receiver you expect traffic on flatlining at 0, or `otelcol_receiver_refused_*` climbing (data arriving but rejected)."
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Metric-point ingestion by receiver (DogStatsD / OTLP)",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 8, "w": 16, "x": 0, "y": 154},
+      "targets": [
+        {
+          "expr": "sum by (receiver) (rate(otelcol_receiver_accepted_metric_points[$__rate_interval]))",
+          "legendFormat": "{{receiver}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "cps", "min": 0}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"]}, "tooltip": {"mode": "multi"}},
+      "description": "Metric points/sec the collector accepts, split by receiver. A `statsd` line appears only when gorilla emits DogStatsD (GORILLA_STATSD_PORT > 0); today only `otlp` carries metrics."
+    },
+    {
+      "type": "text",
+      "title": "About: Receiver errors",
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 154},
+      "options": {
+        "mode": "markdown",
+        "content": "**Pairs with the panel to the left.** If a receiver shows accepted traffic but data still isn't landing in dashboards, check the refused counters:\n\n- `sum by (receiver) (rate(otelcol_receiver_refused_spans[$__rate_interval]))`\n- `sum by (receiver) (rate(otelcol_receiver_refused_metric_points[$__rate_interval]))`\n\n**Accepted > 0, refused ≈ 0** = healthy ingestion. **Refused climbing** = the gateway is receiving but rejecting (bad payloads, queue full) — check the `victoria-otlp-gateway` collector logs."
+      }
     }
   ],
   "refresh": "30s",
