@@ -84,6 +84,9 @@ func applyValueMappings(src *WeightsAndBiases, dst *appsv2.WeightsAndBiases) err
 	if err := mapIngress(values, dst); err != nil {
 		return err
 	}
+	if err := mapLegacyOverrides(values, dst); err != nil {
+		return err
+	}
 
 	globalMap, found, err := unstructured.NestedMap(values, "global")
 	if err != nil {

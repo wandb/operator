@@ -23,6 +23,11 @@ func ResolveResources(app manifest.Application, wandb *v2.WeightsAndBiases, cont
 	// check if the container has a resource and if so apply those settings
 	resources = mergeResources(resources, containerResources, wandb.Spec.RequireLimits)
 
+	// Legacy override wins over sizing/container resources; limits stay gated by requireLimits.
+	if lo, ok := wandb.Spec.Wandb.LegacyOverrides[app.Name]; ok && lo.Resources != nil {
+		resources = mergeResources(resources, lo.Resources, wandb.Spec.RequireLimits)
+	}
+
 	if resources == nil {
 		return nil
 	}

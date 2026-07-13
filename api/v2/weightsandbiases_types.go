@@ -321,6 +321,34 @@ type WandbAppSpec struct {
 
 	// +optional
 	OIDC OidcSpec `json:"oidc,omitempty"`
+
+	// LegacyOverrides holds env/resource overrides extracted from v1
+	// spec.values, keyed by manifest application name plus the reserved
+	// "global" key (env only, applied to every application). Unknown keys are
+	// logged and ignored. Conversion-owned; prefer first-class fields over
+	// hand-editing.
+	// +optional
+	LegacyOverrides map[string]LegacyOverrides `json:"legacyOverrides,omitempty"`
+}
+
+// LegacyOverridesGlobalKey is the reserved LegacyOverrides key whose env
+// applies to every application and migration job.
+const LegacyOverridesGlobalKey = "global"
+
+// DefaultManifestRepository is used when spec.wandb.manifestRepository is
+// unset — by the defaulting webhook and by v1 conversion (which runs first).
+const DefaultManifestRepository = "oci://us-docker.pkg.dev/wandb-production/public/wandb/server-manifest"
+
+// LegacyOverrides holds v1-derived overrides for one application (or "global").
+type LegacyOverrides struct {
+	// Env is applied last, replacing same-named manifest or injected vars.
+	// +optional
+	Env []corev1.EnvVar `json:"env,omitempty"`
+
+	// Resources overlays sizing-derived resources per field; limits are still
+	// gated by spec.requireLimits.
+	// +optional
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
 }
 
 type WandbProbeDefaults struct {
