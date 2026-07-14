@@ -3826,6 +3826,8 @@ spec:
                     items:
                       type: string
                     type: array
+                  bucketProxy:
+                    type: boolean
                   features:
                     additionalProperties:
                       type: boolean
@@ -4285,6 +4287,7 @@ spec:
                   version:
                     type: string
                 required:
+                - bucketProxy
                 - features
                 - hostname
                 - version
