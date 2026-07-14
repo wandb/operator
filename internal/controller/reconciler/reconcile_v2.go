@@ -412,6 +412,8 @@ func ReconcileWandbManifest(
 	var result ctrl.Result
 	var err error
 
+	statusBefore := wandb.DeepCopy().Status
+
 	redisReady := redisAllReady(wandb)
 	mysqlReady := mysqlAllReady(wandb)
 	kafkaReady := wandb.Status.KafkaStatus.Ready
@@ -515,6 +517,10 @@ func ReconcileWandbManifest(
 		}
 	}
 
+	if err := updateWandbStatusIfChanged(ctx, client, wandb, statusBefore); err != nil {
+		return ctrl.Result{}, err
+	}
+
 	return ctrl.Result{}, nil
 }
 
@@ -525,7 +531,6 @@ func reconcileApplications(
 	manifest serverManifest.Manifest,
 	telemetryConfig TelemetryRuntimeConfig,
 ) (ctrl.Result, error) {
-	statusBefore := wandb.DeepCopy().Status
 	logger := logx.GetSlog(ctx)
 	logger.Info("Reconciling applications")
 	serviceAccountName := wandb.Spec.Wandb.ServiceAccount.ServiceAccountName
@@ -731,10 +736,6 @@ func reconcileApplications(
 	// exits (infra, mysql-init, migrations) must not advance it: their specs
 	// haven't reached the workloads yet.
 	wandb.Status.ObservedGeneration = wandb.GetGeneration()
-
-	if err := updateWandbStatusIfChanged(ctx, client, wandb, statusBefore); err != nil {
-		return ctrl.Result{}, err
-	}
 
 	return ctrl.Result{}, nil
 }

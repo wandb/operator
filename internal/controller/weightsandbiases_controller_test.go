@@ -357,7 +357,7 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 
 			// The 0.76.1.yaml manifest should have some applications defined.
 			// We expect them to be created as Application CRs.
-			Expect(len(appList.Items)).Should(BeNumerically("==", len(wandbManifest.Applications)-2), "Expected all non-feature flagged applications to be created")
+			Expect(len(appList.Items)).Should(BeNumerically("==", len(wandbManifest.Applications)-1), "Expected all non-feature flagged applications to be created")
 		})
 
 		It("Should advance status.observedGeneration only once applications are reconciled for a generation", func() {
