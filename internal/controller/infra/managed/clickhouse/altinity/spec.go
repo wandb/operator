@@ -8,7 +8,6 @@ import (
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/infra/managed/clickhouse/altinity/keeper"
-	"github.com/wandb/operator/internal/controller/infra/managed/objectstore/s3wait"
 	"github.com/wandb/operator/internal/logx"
 	"github.com/wandb/operator/pkg/utils"
 	"github.com/wandb/operator/pkg/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
@@ -28,8 +27,10 @@ const (
 
 	// TODO: remove this hardcoded default once all supported manifest versions
 	// supply clickhouse.<instance>.images.server.
-	defaultClickHouseImage  = "altinity/clickhouse-server:25.8.16.10002.altinitystable"
-	objectStoreWaitImageKey = "bucketEnsure"
+	defaultClickHouseImage = "altinity/clickhouse-server:25.8.16.10002.altinitystable"
+
+	objectStoreWaitMaxAttempts  = 150
+	objectStoreWaitDelaySeconds = 2
 )
 
 func ClickHouseImage(img manifest.ImageRef, globalImageRegistry string) string {
@@ -126,6 +127,7 @@ func ToClickHouseVendorSpec(
 	spec *apiv2.ManagedClickHouseSpec,
 	scheme *runtime.Scheme,
 	objStorage *ObjectStorageConn,
+	waitForObjectStore bool,
 	mfst manifest.Manifest,
 ) (*v1.ClickHouseInstallation, error) {
 	_, log := logx.WithSlog(ctx, logx.ClickHouse)
@@ -187,6 +189,7 @@ func ToClickHouseVendorSpec(
 		reclaimPolicy = v1.PVCReclaimPolicyDelete
 	}
 
+	clickHouseImage := ClickHouseImage(mfst.Clickhouse["default"].Images["server"], wandb.Spec.Global.ImageRegistry)
 	podSpec := corev1.PodSpec{
 		SecurityContext: clickHousePodSecurityContext(),
 		Affinity:        wandb.GetAffinity(spec.ManagedInfraSpec),
@@ -195,14 +198,14 @@ func ToClickHouseVendorSpec(
 		Containers: []corev1.Container{
 			{
 				Name:            "clickhouse",
-				Image:           ClickHouseImage(mfst.Clickhouse["default"].Images["server"], wandb.Spec.Global.ImageRegistry),
+				Image:           clickHouseImage,
 				SecurityContext: clickHouseContainerSecurityContext(),
 				VolumeMounts:    clickHouseWritableVolumeMounts(),
 			},
 		},
 	}
-	if wait := clickHouseObjectStoreWaitContainer(objStorage, mfst.Kafka.Images[objectStoreWaitImageKey], wandb.Spec.Global.ImageRegistry); wait != nil {
-		podSpec.InitContainers = []corev1.Container{*wait}
+	if waitForObjectStore {
+		podSpec.InitContainers = []corev1.Container{clickHouseObjectStoreWaitContainer(objStorage.Endpoint, clickHouseImage)}
 	}
 
 	if len(spec.Config.Resources.Requests) > 0 || len(spec.Config.Resources.Limits) > 0 {
@@ -292,31 +295,33 @@ func ToClickHouseVendorSpec(
 	return chi, nil
 }
 
-func clickHouseObjectStoreWaitContainer(storage *ObjectStorageConn, img manifest.ImageRef, globalImageRegistry string) *corev1.Container {
-	// Ambient-credential and public-cloud configurations are not gated here.
-	// Managed SeaweedFS and other static, path-style endpoints provide these
-	// fields and can be checked without the operator making an S3 request.
-	if storage == nil || storage.UseEnvCredentials || storage.ServiceEndpoint == "" || storage.Bucket == "" {
-		return nil
-	}
-	region := storage.Region
-	if region == "" {
-		region = "us-east-1"
-	}
-	return &corev1.Container{
+func clickHouseObjectStoreWaitContainer(endpoint, image string) corev1.Container {
+	// The existing ClickHouse image includes wget. Any HTTP response below 500
+	// proves DNS and the S3 API are reachable; authentication remains ClickHouse's
+	// responsibility when its main process starts.
+	script := fmt.Sprintf(
+		`attempt=1
+while [ "$attempt" -le %d ]; do
+  response="$(wget --no-check-certificate --server-response --spider "$1" 2>&1)"
+  result=$?
+  if [ "$result" -eq 0 ] || printf '%%s\n' "$response" | grep -Eq 'HTTP/[0-9.]+ [1-4][0-9][0-9]'; then
+    exit 0
+  fi
+  attempt=$((attempt + 1))
+  if [ "$attempt" -le %d ]; then sleep %d; fi
+done
+echo 'object-store endpoint did not become reachable before timeout' >&2
+exit 1`,
+		objectStoreWaitMaxAttempts,
+		objectStoreWaitMaxAttempts,
+		objectStoreWaitDelaySeconds,
+	)
+	return corev1.Container{
 		Name:            "wait-object-store",
-		Image:           s3wait.Image(img, globalImageRegistry),
+		Image:           image,
 		Command:         []string{"/bin/sh", "-c"},
-		Args:            []string{s3wait.BucketReadyScript(storage.ServiceEndpoint, storage.Bucket, false)},
+		Args:            []string{script, "wait-object-store", endpoint},
 		SecurityContext: clickHouseContainerSecurityContext(),
-		Env: []corev1.EnvVar{
-			{Name: "AWS_REGION", Value: region},
-			{Name: "AWS_EC2_METADATA_DISABLED", Value: "true"},
-			{Name: "AWS_PAGER", Value: ""},
-			{Name: "HOME", Value: "/tmp"},
-			{Name: "AWS_ACCESS_KEY_ID", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &storage.AccessKeyRef}},
-			{Name: "AWS_SECRET_ACCESS_KEY", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &storage.SecretKeyRef}},
-		},
 	}
 }
 

@@ -37,10 +37,8 @@ const (
 // S3-backed disk: endpoint/region as literals, credentials as secret references.
 type ObjectStorageConn struct {
 	// Endpoint is the full http(s) URL incl. bucket + prefix, trailing slash.
-	Endpoint        string
-	ServiceEndpoint string
-	Bucket          string
-	Region          string
+	Endpoint string
+	Region   string
 	// UseEnvCredentials uses ambient creds (IAM role) instead of access keys.
 	UseEnvCredentials bool
 	AccessKeyRef      corev1.SecretKeySelector
@@ -87,30 +85,11 @@ func ResolveObjectStorage(
 
 	return &ObjectStorageConn{
 		Endpoint:          endpoint,
-		ServiceEndpoint:   customServiceEndpoint(get("Scheme"), get("Host"), get("Port"), spec.ObjectStorage.Insecure),
-		Bucket:            bucket,
 		Region:            get("Region"),
 		UseEnvCredentials: get("AccessKey") == "",
 		AccessKeyRef:      conn.AccessKey,
 		SecretKeyRef:      conn.SecretKey,
 	}, nil
-}
-
-func customServiceEndpoint(scheme, host, port string, insecure bool) string {
-	if host == "" {
-		return ""
-	}
-	if scheme == "" {
-		scheme = "https"
-		if insecure {
-			scheme = "http"
-		}
-	}
-	hostport := host
-	if port != "" {
-		hostport += ":" + port
-	}
-	return scheme + "://" + hostport
 }
 
 func objectStoragePrefix(spec *apiv2.ManagedClickHouseSpec) string {

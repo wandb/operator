@@ -1,7 +1,5 @@
 package bufstream
 
-import "github.com/wandb/operator/internal/controller/infra/managed/objectstore/s3wait"
-
 const (
 	KafkaModuleName = "kafka"
 
@@ -17,7 +15,7 @@ const (
 	// etcd image, which is configured via native ETCD_* environment variables.
 	defaultEtcdImage = "quay.io/coreos/etcd:v3.5.31"
 
-	defaultBucketEnsureImage = s3wait.DefaultImage
+	defaultBucketEnsureImage = "amazon/aws-cli:2.35.10"
 
 	// Kafka-compatible listener exposed by Bufstream.
 	KafkaListenerPort = 9092
