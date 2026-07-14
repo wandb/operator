@@ -125,6 +125,10 @@ func (d *WeightsAndBiasesCustomDefaulter) Default(ctx context.Context, obj runti
 	applyClickHouseDefaults(wandb)
 	applyProbeDefaults(wandb)
 
+	if defaultStore, ok := wandb.Spec.ObjectStore["default"]; ok && defaultStore.ManagedObjectStore != nil {
+		wandb.Spec.Wandb.BucketProxy = true
+	}
+
 	return nil
 }
 

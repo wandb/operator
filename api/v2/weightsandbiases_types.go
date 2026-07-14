@@ -305,6 +305,7 @@ type WandbAppSpec struct {
 	Version             string              `json:"version"`
 	Features            map[string]bool     `json:"features"`
 	InternalServiceAuth InternalServiceAuth `json:"internalServiceAuth,omitempty"`
+	BucketProxy         bool                `json:"bucketProxy"`
 
 	ServiceAccount ServiceAccountSpec `json:"serviceAccount,omitempty"`
 

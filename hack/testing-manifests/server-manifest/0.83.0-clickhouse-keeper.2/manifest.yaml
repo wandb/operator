@@ -249,11 +249,20 @@ commonEnvvars:
         - name: session-key
           type: generatedSecret
     - name: BUCKET_PROXY
-      value: "true"
+      sources:
+        - name: bucket-proxy
+          type: custom-resource
+          field: spec.wandb.bucketProxy
     - name: GORILLA_GLUE_FILE_STORE_IS_PROXIED
-      value: "true"
+      sources:
+        - name: bucket-proxy
+          type: custom-resource
+          field: spec.wandb.bucketProxy
     - name: GORILLA_FILE_STORE_IS_PROXIED
-      value: "true"
+      sources:
+        - name: bucket-proxy
+          type: custom-resource
+          field: spec.wandb.bucketProxy
     - name: GORILLA_FILE_HOST
       sources:
         - name: hostname
@@ -1048,7 +1057,7 @@ applications:
               location /bucket {
                 proxy_ssl_verify off;
                 proxy_set_header Host $bucket;
-                proxy_pass https://bucket;
+                proxy_pass http://bucket;
               }
             }
           }
