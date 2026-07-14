@@ -66,6 +66,7 @@ func WriteState(
 			Status: metav1.ConditionFalse,
 			Reason: common.ApiErrorReason,
 		})
+		return result, nil
 	}
 
 	switch action {
@@ -81,7 +82,7 @@ func WriteState(
 			Status: metav1.ConditionFalse,
 			Reason: common.PendingDeleteReason,
 		})
-	case common.UpdateAction:
+	case common.UpdateAction, common.UnchangedAction:
 		result = append(result, metav1.Condition{
 			Type:   SeaweedCustomResourceType,
 			Status: metav1.ConditionTrue,

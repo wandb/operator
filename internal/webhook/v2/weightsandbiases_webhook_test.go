@@ -237,6 +237,37 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 			Expect(err.Error()).To(ContainSubstring("cannot be deployed"))
 		})
 
+		It("allows object store copies within the data-node count", func() {
+			obj.Spec.ObjectStore = map[string]appsv2.ObjectStoreSpec{appsv2.DefaultInstanceName: {ManagedObjectStore: &appsv2.ManagedObjectStoreSpec{Replicas: 3, Copies: 2}}}
+
+			warnings, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(warnings).To(BeEmpty())
+		})
+
+		It("rejects object store copies that exceed replicas-1", func() {
+			obj.Spec.ObjectStore = map[string]appsv2.ObjectStoreSpec{appsv2.DefaultInstanceName: {ManagedObjectStore: &appsv2.ManagedObjectStoreSpec{Replicas: 3, Copies: 3}}}
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("copies"))
+		})
+
+		It("rejects negative object store copies", func() {
+			obj.Spec.ObjectStore = map[string]appsv2.ObjectStoreSpec{appsv2.DefaultInstanceName: {ManagedObjectStore: &appsv2.ManagedObjectStoreSpec{Copies: -1}}}
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("copies"))
+		})
+
+		It("allows object store copies when replicas is unset (deferred to reconcile)", func() {
+			obj.Spec.ObjectStore = map[string]appsv2.ObjectStoreSpec{appsv2.DefaultInstanceName: {ManagedObjectStore: &appsv2.ManagedObjectStoreSpec{Copies: 2}}}
+
+			warnings, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(warnings).To(BeEmpty())		})
+
 		It("rejects even Keeper replica counts", func() {
 			obj.Spec.ClickHouse = map[string]appsv2.ClickHouseSpec{appsv2.DefaultInstanceName: {ManagedClickHouse: &appsv2.ManagedClickHouseSpec{
 				Keeper: appsv2.ClickHouseKeeperSpec{Replicas: 2},

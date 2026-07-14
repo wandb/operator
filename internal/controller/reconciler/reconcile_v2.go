@@ -35,6 +35,7 @@ import (
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	apiErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -411,6 +412,8 @@ func ReconcileWandbManifest(
 	var result ctrl.Result
 	var err error
 
+	statusBefore := wandb.DeepCopy().Status
+
 	redisReady := redisAllReady(wandb)
 	mysqlReady := mysqlAllReady(wandb)
 	kafkaReady := wandb.Status.KafkaStatus.Ready
@@ -514,6 +517,10 @@ func ReconcileWandbManifest(
 		}
 	}
 
+	if err := updateWandbStatusIfChanged(ctx, client, wandb, statusBefore); err != nil {
+		return ctrl.Result{}, err
+	}
+
 	return ctrl.Result{}, nil
 }
 
@@ -593,6 +600,7 @@ func reconcileApplications(
 
 		application := &apiv2.Application{}
 		err = client.Get(ctx, types.NamespacedName{Name: app.Name, Namespace: wandb.Namespace}, application)
+		before := application.DeepCopy()
 		if err != nil {
 			if apiErrors.IsNotFound(err) {
 				application.SetName(app.Name)
@@ -648,7 +656,7 @@ func reconcileApplications(
 			if err = client.Create(ctx, application); err != nil {
 				return ctrl.Result{}, err
 			}
-		} else {
+		} else if !applicationManagedFieldsEqual(before, application) {
 			if err = client.Update(ctx, application); err != nil {
 				return ctrl.Result{}, err
 			}
@@ -729,11 +737,14 @@ func reconcileApplications(
 	// haven't reached the workloads yet.
 	wandb.Status.ObservedGeneration = wandb.GetGeneration()
 
-	if err := client.Status().Update(ctx, wandb); err != nil {
-		return ctrl.Result{}, err
-	}
-
 	return ctrl.Result{}, nil
+}
+
+func applicationManagedFieldsEqual(before, after *apiv2.Application) bool {
+	return apiequality.Semantic.DeepEqual(before.Spec, after.Spec) &&
+		apiequality.Semantic.DeepEqual(before.Labels, after.Labels) &&
+		apiequality.Semantic.DeepEqual(before.Annotations, after.Annotations) &&
+		apiequality.Semantic.DeepEqual(before.OwnerReferences, after.OwnerReferences)
 }
 
 func buildHTTPRouteTemplate(wandb *apiv2.WeightsAndBiases, app serverManifest.Application) *apiv2.HTTPRouteTemplateSpec {
@@ -1107,6 +1118,7 @@ func resolveInlineFiles(ctx context.Context, client ctrlClient.Client, wandb *ap
 }
 
 func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest) (ctrl.Result, error) {
+	statusBefore := wandb.DeepCopy().Status
 	version := wandb.Spec.Wandb.Version
 
 	if wandb.Status.Wandb.Migration.Ready && wandb.Status.Wandb.Migration.Version == version {
@@ -1135,16 +1147,17 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 		wandb.Status.Wandb.Migration.Ready = false
 		wandb.Status.Wandb.Migration.Reason = "Running"
 		wandb.Status.Wandb.Migration.Jobs = make(map[string]apiv2.MigrationJobStatus)
-		if err := client.Status().Update(ctx, wandb); err != nil {
+		if err := updateWandbStatusIfChanged(ctx, client, wandb, statusBefore); err != nil {
 			return ctrl.Result{}, err
 		}
+		statusBefore = wandb.DeepCopy().Status
 	}
 
 	if len(manifest.Migrations) == 0 {
 		wandb.Status.Wandb.Migration.Ready = true
 		wandb.Status.Wandb.Migration.Reason = "Complete"
 		wandb.Status.Wandb.Migration.LastSuccessVersion = version
-		if err := client.Status().Update(ctx, wandb); err != nil {
+		if err := updateWandbStatusIfChanged(ctx, client, wandb, statusBefore); err != nil {
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
@@ -1238,7 +1251,7 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 			wandb.Status.Wandb.Migration.Jobs[name] = jobStatus
 			wandb.Status.Wandb.Migration.Reason = "Running"
 			wandb.Status.Wandb.Migration.Ready = false
-			if err := client.Status().Update(ctx, wandb); err != nil {
+			if err := updateWandbStatusIfChanged(ctx, client, wandb, statusBefore); err != nil {
 				return ctrl.Result{}, err
 			}
 
@@ -1282,7 +1295,7 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 		wandb.Status.Wandb.Migration.Ready = false
 	}
 
-	if err := client.Status().Update(ctx, wandb); err != nil {
+	if err := updateWandbStatusIfChanged(ctx, client, wandb, statusBefore); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -1294,6 +1307,7 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 }
 
 func generateSecrets(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest) (ctrl.Result, error) {
+	statusBefore := wandb.DeepCopy().Status
 	// Ensure any manifest-declared generated secrets exist and capture their selectors in status
 	if wandb.Status.GeneratedSecrets == nil {
 		wandb.Status.GeneratedSecrets = map[string]corev1.SecretKeySelector{}
@@ -1369,7 +1383,7 @@ func generateSecrets(ctx context.Context, client ctrlClient.Client, wandb *apiv2
 		}
 	}
 	// Persist status after updating generated secret selectors
-	if err := client.Status().Update(ctx, wandb); err != nil {
+	if err := updateWandbStatusIfChanged(ctx, client, wandb, statusBefore); err != nil {
 		return ctrl.Result{}, err
 	}
 	return ctrl.Result{}, nil
@@ -1484,6 +1498,7 @@ func inferState(
 	ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases,
 ) error {
 	log := ctrl.LoggerFrom(ctx)
+	statusBefore := wandb.DeepCopy().Status
 
 	redisOk := managedInstancesReady(wandb.Spec.Redis, wandb.Status.RedisStatus, func(s apiv2.RedisSpec) bool { return s.ManagedRedis != nil }, func(s apiv2.RedisInfraStatus) bool { return s.Ready })
 	objectStoreOk := managedInstancesReady(wandb.Spec.ObjectStore, wandb.Status.ObjectStoreStatus, func(s apiv2.ObjectStoreSpec) bool { return s.ManagedObjectStore != nil }, func(s apiv2.ObjectStoreInfraStatus) bool { return s.Ready })
@@ -1497,12 +1512,10 @@ func inferState(
 		wandb.Status.Ready = false
 	}
 
-	log.Info("About to update status", "apiVersion", wandb.APIVersion, "kind", wandb.Kind)
-	if err := client.Status().Update(ctx, wandb); err != nil {
+	if err := updateWandbStatusIfChanged(ctx, client, wandb, statusBefore); err != nil {
 		log.Error(err, "Failed to update status")
 		return err
 	}
-	log.Info("Status update successful")
 	return nil
 }
 

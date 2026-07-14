@@ -34,6 +34,9 @@ const (
 	imageKeyBufstream    = "bufstream"
 	imageKeyEtcd         = "etcd"
 	imageKeyBucketEnsure = "bucketEnsure"
+
+	bucketEnsureMaxAttempts  = 150
+	bucketEnsureDelaySeconds = 2
 )
 
 // BufstreamImage resolves the Bufstream broker image from the manifest, falling
@@ -418,18 +421,23 @@ func bucketEnsureContainer(nsnBuilder *NsNameBuilder, storage objectstore.ConnIn
 		region = "us-east-1"
 	}
 	credsName := nsnBuilder.CredentialsName()
-	// head-bucket succeeds when the bucket already exists; otherwise create it.
-	// Both paths tolerate concurrent creation by other brokers.
-	script := fmt.Sprintf(
-		"aws --endpoint-url %q s3api head-bucket --bucket %q || "+
-			"aws --endpoint-url %q s3api create-bucket --bucket %q",
-		storage.Endpoint, storage.Bucket, storage.Endpoint, storage.Bucket,
-	)
+	// Retry in this process so transient DNS and API startup failures do not
+	// become init-container restarts subject to kubelet exponential backoff.
+	script := fmt.Sprintf(`attempt=1
+while [ "$attempt" -le %d ]; do
+  if { aws --endpoint-url "$1" s3api head-bucket --bucket "$2" || aws --endpoint-url "$1" s3api create-bucket --bucket "$2"; } >/dev/null 2>&1; then
+    exit 0
+  fi
+  attempt=$((attempt + 1))
+  if [ "$attempt" -le %d ]; then sleep %d; fi
+done
+echo 'object-store bucket did not become ready before timeout' >&2
+exit 1`, bucketEnsureMaxAttempts, bucketEnsureMaxAttempts, bucketEnsureDelaySeconds)
 	return corev1.Container{
 		Name:            "ensure-bucket",
 		Image:           BucketEnsureImage(img, globalImageRegistry),
 		Command:         []string{"/bin/sh", "-c"},
-		Args:            []string{script},
+		Args:            []string{script, "ensure-bucket", storage.Endpoint, storage.Bucket},
 		SecurityContext: kafkaContainerSecurityContext(),
 		Env: []corev1.EnvVar{
 			{Name: "AWS_REGION", Value: region},
@@ -485,10 +493,9 @@ func storageCredentialEnv(nsnBuilder *NsNameBuilder, storage objectstore.ConnInf
 	}
 }
 
-// needsBucketEnsure reports whether to run the S3 bucket-creation init
-// container. It only applies to S3-compatible endpoints (SeaweedFS, MinIO),
-// which is where the operator provisions the bucket; AWS S3, GCS, and Azure
-// buckets are expected to already exist.
+// needsBucketEnsure reports whether a connection supports the managed
+// S3 bucket initializer. The caller separately verifies that the selected
+// object store is operator-managed so BYOB endpoints are never mutated.
 func needsBucketEnsure(storage objectstore.ConnInfo) bool {
 	return storage.Provider == apiv2.ObjectStoreProviderS3 && storage.Endpoint != ""
 }
@@ -513,6 +520,7 @@ func ToBufstreamApplication(
 	wandb *apiv2.WeightsAndBiases,
 	nsnBuilder *NsNameBuilder,
 	storage objectstore.ConnInfo,
+	ensureBucket bool,
 	scheme *runtime.Scheme,
 	mfst manifest.Manifest,
 ) (*apiv2.Application, error) {
@@ -541,7 +549,7 @@ func ToBufstreamApplication(
 	}
 
 	var initContainers []corev1.Container
-	if needsBucketEnsure(storage) {
+	if ensureBucket && needsBucketEnsure(storage) {
 		initContainers = append(initContainers, bucketEnsureContainer(nsnBuilder, storage, mfst.Kafka.Images[imageKeyBucketEnsure], wandb.Spec.Global.ImageRegistry))
 	}
 

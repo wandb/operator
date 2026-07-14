@@ -24,7 +24,7 @@ var _ = Describe("ClickHouse vendor specs", func() {
 	It("renders hardened pod templates with writable runtime mounts", func() {
 		wandb := clickHouseWandb()
 
-		chi, err := ToClickHouseVendorSpec(context.Background(), wandb, wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse, clickHouseScheme(), testObjectStorageConn(), manifest.Manifest{})
+		chi, err := ToClickHouseVendorSpec(context.Background(), wandb, wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse, clickHouseScheme(), testObjectStorageConn(), true, manifest.Manifest{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(chi).NotTo(BeNil())
 		Expect(chi.Spec.Templates.PodTemplates).To(HaveLen(1))
@@ -36,6 +36,20 @@ var _ = Describe("ClickHouse vendor specs", func() {
 		expectClickHouseWritableVolume(podSpec.Volumes, clickHouseRunVolumeName)
 
 		Expect(podSpec.Containers).To(HaveLen(1))
+		Expect(podSpec.InitContainers).To(HaveLen(1))
+		wait := podSpec.InitContainers[0]
+		Expect(wait.Name).To(Equal("wait-object-store"))
+		Expect(wait.Image).To(Equal(podSpec.Containers[0].Image))
+		Expect(wait.Args).To(HaveLen(3))
+		Expect(wait.Args[0]).To(ContainSubstring("wget"))
+		Expect(wait.Args[0]).To(ContainSubstring("HTTP/[0-9.]+ [1-4]"))
+		Expect(wait.Args[0]).To(ContainSubstring("sleep 2"))
+		Expect(wait.Args[0]).NotTo(ContainSubstring("aws"))
+		Expect(wait.Args[0]).NotTo(ContainSubstring("head-bucket"))
+		Expect(wait.Args[0]).NotTo(ContainSubstring("AccessKey"))
+		Expect(wait.Args[0]).NotTo(ContainSubstring("SecretKey"))
+		Expect(wait.Args[2]).To(Equal(testObjectStorageConn().Endpoint))
+		Expect(wait.Env).To(BeEmpty())
 		container := podSpec.Containers[0]
 		Expect(container.Image).To(Equal(ClickHouseImage(manifest.ImageRef{}, "")))
 		Expect(container.Resources.Requests[corev1.ResourceCPU]).To(Equal(resource.MustParse("500m")))
@@ -49,7 +63,7 @@ var _ = Describe("ClickHouse vendor specs", func() {
 		utils.SetOpenShiftMode(true)
 
 		wandb := clickHouseWandb()
-		chi, err := ToClickHouseVendorSpec(context.Background(), wandb, wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse, clickHouseScheme(), testObjectStorageConn(), manifest.Manifest{})
+		chi, err := ToClickHouseVendorSpec(context.Background(), wandb, wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse, clickHouseScheme(), testObjectStorageConn(), true, manifest.Manifest{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(chi).NotTo(BeNil())
 
@@ -60,7 +74,7 @@ var _ = Describe("ClickHouse vendor specs", func() {
 
 	It("backs storage with the object store, sets a default policy, and wires keeper", func() {
 		wandb := clickHouseWandb()
-		chi, err := ToClickHouseVendorSpec(context.Background(), wandb, wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse, clickHouseScheme(), testObjectStorageConn(), manifest.Manifest{})
+		chi, err := ToClickHouseVendorSpec(context.Background(), wandb, wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse, clickHouseScheme(), testObjectStorageConn(), true, manifest.Manifest{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(chi).NotTo(BeNil())
 
@@ -89,6 +103,13 @@ var _ = Describe("ClickHouse vendor specs", func() {
 		Expect(chi.Spec.Configuration.Zookeeper).NotTo(BeNil())
 		Expect(chi.Spec.Configuration.Zookeeper.Nodes).To(HaveLen(1))
 		Expect(chi.Spec.Configuration.Zookeeper.Nodes[0].Host).To(Equal(keeper.ClientServiceFQDN("wandb", "clickhouse")))
+	})
+
+	It("does not gate ClickHouse for bring-your-own object storage", func() {
+		wandb := clickHouseWandb()
+		chi, err := ToClickHouseVendorSpec(context.Background(), wandb, wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse, clickHouseScheme(), testObjectStorageConn(), false, manifest.Manifest{})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(chi.Spec.Templates.PodTemplates[0].Spec.InitContainers).To(BeEmpty())
 	})
 })
 

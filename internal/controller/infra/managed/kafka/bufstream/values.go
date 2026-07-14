@@ -15,9 +15,6 @@ const (
 	// etcd image, which is configured via native ETCD_* environment variables.
 	defaultEtcdImage = "quay.io/coreos/etcd:v3.5.31"
 
-	// defaultBucketEnsureImage runs a one-shot init container that creates the
-	// object-store bucket Bufstream expects, since Bufstream does not create it
-	// itself and reads from it on startup.
 	defaultBucketEnsureImage = "amazon/aws-cli:2.35.10"
 
 	// Kafka-compatible listener exposed by Bufstream.

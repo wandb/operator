@@ -44,6 +44,8 @@ func WriteState(
 			{Type: ObjectStoreReadyType, Status: metav1.ConditionFalse, Reason: common.PendingCreateReason},
 		}
 	}
+	objectStoreSpec, _ := apiv2.ResolveInstance(wandb.Spec.ObjectStore, bufstreamObjectStoreInstance)
+	ensureBucket := objectStoreSpec.ManagedObjectStore != nil
 
 	credsSecret, err := ToCredentialsSecret(wandb, nsnBuilder, storage, cl.Scheme())
 	if err != nil {
@@ -69,7 +71,7 @@ func WriteState(
 	if err != nil {
 		return translateError(err)
 	}
-	bufstreamApp, err := ToBufstreamApplication(wandb, nsnBuilder, storage, cl.Scheme(), mfst)
+	bufstreamApp, err := ToBufstreamApplication(wandb, nsnBuilder, storage, ensureBucket, cl.Scheme(), mfst)
 	if err != nil {
 		return translateError(err)
 	}
@@ -138,7 +140,7 @@ func actionToCondition(conditionType string, action common.CrudAction) metav1.Co
 		return metav1.Condition{Type: conditionType, Status: metav1.ConditionFalse, Reason: common.PendingCreateReason}
 	case common.DeleteAction:
 		return metav1.Condition{Type: conditionType, Status: metav1.ConditionFalse, Reason: common.PendingDeleteReason}
-	case common.UpdateAction:
+	case common.UpdateAction, common.UnchangedAction:
 		return metav1.Condition{Type: conditionType, Status: metav1.ConditionTrue, Reason: common.ResourceExistsReason}
 	default:
 		return metav1.Condition{Type: conditionType, Status: metav1.ConditionFalse, Reason: common.NoResourceReason}

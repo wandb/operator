@@ -236,6 +236,7 @@ func managedObjectStoreInferStatus(
 	newConditions []metav1.Condition,
 	newInfraConn *apiv2.ObjectStoreConnection,
 ) (ctrl.Result, error) {
+	statusBefore := wandb.DeepCopy().Status
 	enabled := true
 	oldStatus := wandb.Status.ObjectStoreStatus[key]
 	oldConditions := oldStatus.Conditions
@@ -253,7 +254,7 @@ func managedObjectStoreInferStatus(
 		recorder.Event(wandb, e.Type, e.Reason, e.Message)
 	}
 	wandb.Status.ObjectStoreStatus[key] = updatedStatus
-	err := client.Status().Update(ctx, wandb)
+	err := updateWandbStatusIfChanged(ctx, client, wandb, statusBefore)
 
 	return ctrlResult, err
 }
@@ -261,6 +262,7 @@ func managedObjectStoreInferStatus(
 // external
 
 func externalObjectStoreInferStatus(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, key string, newConditions []metav1.Condition, newInfraConn *apiv2.ObjectStoreConnection) (ctrl.Result, error) {
+	statusBefore := wandb.DeepCopy().Status
 	oldStatus := wandb.Status.ObjectStoreStatus[key]
 	oldInfraConn := oldStatus.Connection
 	state, ready, updatedConditions := external.InferExternalStatus(oldStatus.Conditions, newConditions, wandb.Generation, newInfraConn != nil)
@@ -270,7 +272,7 @@ func externalObjectStoreInferStatus(ctx context.Context, c client.Client, wandb 
 		WBInfraStatus: apiv2.WBInfraStatus{Ready: ready, State: state, Conditions: updatedConditions},
 		Connection:    *conn,
 	}
-	return ctrl.Result{}, c.Status().Update(ctx, wandb)
+	return ctrl.Result{}, updateWandbStatusIfChanged(ctx, c, wandb, statusBefore)
 }
 
 // helpers

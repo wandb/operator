@@ -257,6 +257,7 @@ func managedMysqlInferStatus(
 	newConditions []metav1.Condition,
 	newInfraConn *apiv2.MysqlConnection,
 ) (ctrl.Result, error) {
+	statusBefore := wandb.DeepCopy().Status
 	enabled := true
 	oldStatus := wandb.Status.MySQLStatus[key]
 	oldConditions := oldStatus.Conditions
@@ -275,7 +276,7 @@ func managedMysqlInferStatus(
 		recorder.Event(wandb, e.Type, e.Reason, e.Message)
 	}
 	wandb.Status.MySQLStatus[key] = updatedStatus
-	err := client.Status().Update(ctx, wandb)
+	err := updateWandbStatusIfChanged(ctx, client, wandb, statusBefore)
 
 	return ctrlResult, err
 }
@@ -283,6 +284,7 @@ func managedMysqlInferStatus(
 // external
 
 func externalMysqlInferStatus(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, key string, newConditions []metav1.Condition, newInfraConn *apiv2.MysqlConnection) (ctrl.Result, error) {
+	statusBefore := wandb.DeepCopy().Status
 	oldStatus := wandb.Status.MySQLStatus[key]
 	oldInfraConn := oldStatus.Connection
 	state, ready, updatedConditions := external.InferExternalStatus(oldStatus.Conditions, newConditions, wandb.Generation, newInfraConn != nil)
@@ -292,7 +294,7 @@ func externalMysqlInferStatus(ctx context.Context, c client.Client, wandb *apiv2
 		WBInfraStatus: apiv2.WBInfraStatus{Ready: ready, State: state, Conditions: updatedConditions},
 		Connection:    *conn,
 	}
-	return ctrl.Result{}, c.Status().Update(ctx, wandb)
+	return ctrl.Result{}, updateWandbStatusIfChanged(ctx, c, wandb, statusBefore)
 }
 
 // helpers
@@ -348,6 +350,7 @@ func runMysqlInitJobInstance(ctx context.Context, client client.Client, wandb *a
 	if wandb.Status.Wandb.MySQLInit[key].Succeeded {
 		return ctrl.Result{}, nil
 	}
+	statusBefore := wandb.DeepCopy().Status
 
 	logger := ctrl.LoggerFrom(ctx).WithName("mysqlInit").WithValues("instance", key)
 
@@ -426,7 +429,7 @@ func runMysqlInitJobInstance(ctx context.Context, client client.Client, wandb *a
 		}
 
 		wandb.Status.Wandb.MySQLInit[key] = apiv2.MigrationJobStatus{Name: jobName, Succeeded: false}
-		if err := client.Status().Update(ctx, wandb); err != nil {
+		if err := updateWandbStatusIfChanged(ctx, client, wandb, statusBefore); err != nil {
 			return ctrl.Result{}, err
 		}
 
@@ -436,7 +439,7 @@ func runMysqlInitJobInstance(ctx context.Context, client client.Client, wandb *a
 	if job.Status.Succeeded > 0 {
 		logger.Info("MySQL init job succeeded")
 		wandb.Status.Wandb.MySQLInit[key] = apiv2.MigrationJobStatus{Name: jobName, Succeeded: true}
-		if err := client.Status().Update(ctx, wandb); err != nil {
+		if err := updateWandbStatusIfChanged(ctx, client, wandb, statusBefore); err != nil {
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
@@ -445,7 +448,7 @@ func runMysqlInitJobInstance(ctx context.Context, client client.Client, wandb *a
 	if job.Status.Failed > 0 {
 		logger.Info("MySQL init job failed")
 		wandb.Status.Wandb.MySQLInit[key] = apiv2.MigrationJobStatus{Name: jobName, Failed: true}
-		if err := client.Status().Update(ctx, wandb); err != nil {
+		if err := updateWandbStatusIfChanged(ctx, client, wandb, statusBefore); err != nil {
 			return ctrl.Result{}, err
 		}
 		// We might want to return an error or just requeue

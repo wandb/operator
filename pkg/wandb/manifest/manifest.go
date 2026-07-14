@@ -186,9 +186,12 @@ type AppIngressSpec struct {
 type SizingConfig struct {
 	Replicas    int32                        `yaml:"replicas,omitempty"`
 	Shards      int32                        `yaml:"shards,omitempty"`
+	Copies      int32                        `yaml:"copies,omitempty"`
 	VolumeSize  string                       `yaml:"volumeSize,omitempty"`
 	Resources   *corev1.ResourceRequirements `yaml:"resources,omitempty"`
 	Autoscaling *AutoscalingConfig           `yaml:"autoscaling,omitempty"`
+	// MetadataVolumeSize sizes the disk backing an object store's index/metadata
+	MetadataVolumeSize string `yaml:"metadataVolumeSize,omitempty"`
 }
 
 type KafkaSizingConfig struct {

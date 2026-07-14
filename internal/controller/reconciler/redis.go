@@ -215,6 +215,7 @@ func managedRedisInferStatus(
 	newConditions []metav1.Condition,
 	newInfraConn *apiv2.RedisConnection,
 ) (ctrl.Result, error) {
+	statusBefore := wandb.DeepCopy().Status
 	enabled := true
 	oldStatus := wandb.Status.RedisStatus[key]
 	oldConditions := oldStatus.Conditions
@@ -232,7 +233,7 @@ func managedRedisInferStatus(
 		recorder.Event(wandb, e.Type, e.Reason, e.Message)
 	}
 	wandb.Status.RedisStatus[key] = updatedStatus
-	err := client.Status().Update(ctx, wandb)
+	err := updateWandbStatusIfChanged(ctx, client, wandb, statusBefore)
 
 	return ctrlResult, err
 }
@@ -240,6 +241,7 @@ func managedRedisInferStatus(
 // external
 
 func externalRedisInferStatus(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, key string, newConditions []metav1.Condition, newInfraConn *apiv2.RedisConnection) (ctrl.Result, error) {
+	statusBefore := wandb.DeepCopy().Status
 	oldStatus := wandb.Status.RedisStatus[key]
 	oldInfraConn := oldStatus.Connection
 	state, ready, updatedConditions := external.InferExternalStatus(oldStatus.Conditions, newConditions, wandb.Generation, newInfraConn != nil)
@@ -249,7 +251,7 @@ func externalRedisInferStatus(ctx context.Context, c client.Client, wandb *apiv2
 		WBInfraStatus: apiv2.WBInfraStatus{Ready: ready, State: state, Conditions: updatedConditions},
 		Connection:    *conn,
 	}
-	return ctrl.Result{}, c.Status().Update(ctx, wandb)
+	return ctrl.Result{}, updateWandbStatusIfChanged(ctx, c, wandb, statusBefore)
 }
 
 // helpers

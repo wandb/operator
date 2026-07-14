@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"strings"
 
+	v1 "github.com/wandb/operator/api/v1"
 	"github.com/wandb/operator/internal/controller/infra/managed/clickhouse/altinity"
 	"github.com/wandb/operator/internal/controller/infra/managed/kafka/bufstream"
 	"github.com/wandb/operator/internal/controller/infra/managed/mysql/moco"
@@ -130,6 +131,10 @@ func (d *WeightsAndBiasesCustomDefaulter) Default(ctx context.Context, obj runti
 	applyObjectStoreDefaults(wandb)
 	applyClickHouseDefaults(wandb)
 	applyProbeDefaults(wandb)
+
+	if defaultStore, ok := wandb.Spec.ObjectStore["default"]; ok && defaultStore.ManagedObjectStore != nil {
+		wandb.Spec.Wandb.BucketProxy = true
+	}
 
 	return nil
 }
@@ -497,10 +502,43 @@ func validateObjectStoreSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 			))
 		}
 
+		if mgd := spec.ManagedObjectStore; mgd != nil && mgd.StorageSize != "" {
+			// Reject non-positive too: "0"/"-5Gi" parse fine but only fail later at PVC creation.
+			if q, err := resource.ParseQuantity(mgd.StorageSize); err != nil || q.Sign() <= 0 {
+				errors = append(errors, field.Invalid(
+					objectStorePath.Key(key).Child("managedObjectStore").Child("storageSize"),
+					mgd.StorageSize,
+					"must be a positive resource quantity (e.g., '10Gi')",
+				))
+			}
+		}
+
+		if mgd := spec.ManagedObjectStore; mgd != nil && mgd.SeaweedObjectStoreSpec.FilerStorageSize != "" {
+			if q, err := resource.ParseQuantity(mgd.SeaweedObjectStoreSpec.FilerStorageSize); err != nil || q.Sign() <= 0 {
+				errors = append(errors, field.Invalid(
+					objectStorePath.Key(key).Child("managedObjectStore").Child("SeaweedObjectStoreSpec").Child("filerStorageSize"),
+					mgd.SeaweedObjectStoreSpec.FilerStorageSize,
+					"must be a positive resource quantity (e.g., '10Gi')",
+				))
+			}
+		}
+
+		if mgd := spec.ManagedObjectStore; mgd != nil {
+			// Only check the copies/replicas relationship when the user pinned replicas;
+			// otherwise the manifest supplies it at reconcile and seaweedReplication clamps it.
+			if mgd.Copies < 0 || (mgd.Replicas > 0 && mgd.Copies > mgd.Replicas-1) {
+				errors = append(errors, field.Invalid(
+					objectStorePath.Key(key).Child("managedObjectStore").Child("copies"),
+					mgd.Copies,
+					"copies cannot be negative or exceed replicas-1 (one copy per other data node)",
+				))
+			}
+		}
+
 		if ext := spec.ExternalObjectStore; ext != nil {
 			extPath := objectStorePath.Key(key).Child("externalObjectStore")
 			// provider is sourced from a secret key, so it is resolved and defaulted at reconcile time, not here.
-			if ext.Bucket.Name == "" {
+			if _, ok := wandb.ObjectMeta.GetAnnotations()[v1.BucketPendingAnnotation]; !ok && ext.Bucket.Name == "" {
 				errors = append(errors, field.Required(
 					extPath.Child("bucket"),
 					"externalObjectStore requires a bucket secret reference",
