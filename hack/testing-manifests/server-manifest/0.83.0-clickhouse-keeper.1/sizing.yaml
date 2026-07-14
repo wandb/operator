@@ -1515,30 +1515,3 @@ applications:
             enabled: true
             maxReplicas: 8
             minReplicas: 4
-  nginx-proxy:
-    sizing:
-      default:
-        autoscaling:
-          enabled: true
-          minReplicas: 2
-          maxReplicas: 4
-        resources:
-          limits:
-            cpu: "2"
-            memory: 2Gi
-          requests:
-            cpu: "2"
-            memory: 2Gi
-      micro:
-        resources:
-          limits:
-            cpu: "1"
-            memory: 2Gi
-          requests:
-            cpu: "1"
-            memory: 2Gi
-        autoscaling:
-          horizontal:
-            enabled: true
-            maxReplicas: 2
-            minReplicas: 1
