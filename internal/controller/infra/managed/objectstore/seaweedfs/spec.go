@@ -38,8 +38,10 @@ const (
 	seaweedWritableTmpMountPath  = "/tmp"
 	seaweedFilerDataMountPath    = "/data/filerldb2"
 
-	// Filer holds only the leveldb2 path index, so it needs far less disk than the data volumes.
-	seaweedFilerStorageSize = "1Gi"
+	// Filer holds only the leveldb2 path index; its size scales with object count,
+	// not total data. 20Gi is a safe default for large counts; override with
+	// FilerStorageSize when a deployment needs more.
+	seaweedFilerStorageSize = "20Gi"
 )
 
 const (
@@ -110,7 +112,14 @@ func ToObjectStoreVendorSpec(
 		volumeRequests[name] = qty
 	}
 
-	filerStorageQuantity := resource.MustParse(seaweedFilerStorageSize)
+	filerStorageSize := seaweedFilerStorageSize
+	if infraSpec.SeaweedObjectStoreSpec.FilerStorageSize != "" {
+		filerStorageSize = infraSpec.SeaweedObjectStoreSpec.FilerStorageSize
+	}
+	filerStorageQuantity, err := resource.ParseQuantity(filerStorageSize)
+	if err != nil {
+		return nil, fmt.Errorf("invalid filer storage size %q: %w", filerStorageSize, err)
+	}
 
 	labels := BuildWandbObjectStoreLabels(wandb)
 	labels["app"] = SeaweedName(specName)

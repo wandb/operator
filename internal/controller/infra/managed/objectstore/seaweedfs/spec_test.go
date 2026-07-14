@@ -162,6 +162,15 @@ var _ = Describe("SeaweedFS vendor specs", func() {
 		Expect(filerStorage).To(Equal(resource.MustParse(seaweedFilerStorageSize)))
 		Expect(filerStorage).NotTo(Equal(resource.MustParse("10Gi")))
 	})
+
+	It("honors a configured filer storage size over the default", func() {
+		wandb := seaweedWandb()
+		wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ManagedObjectStore.SeaweedObjectStoreSpec.FilerStorageSize = "50Gi"
+		seaweed, err := ToObjectStoreVendorSpec(context.Background(), wandb, wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ManagedObjectStore, seaweedScheme(), manifest.Manifest{})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(seaweed).NotTo(BeNil())
+		Expect(seaweed.Spec.Filer.Persistence.Resources.Requests[corev1.ResourceStorage]).To(Equal(resource.MustParse("50Gi")))
+	})
 })
 
 var _ = Describe("SeaweedFS translation edge cases", func() {
@@ -238,7 +247,7 @@ var _ = Describe("SeaweedFS translation edge cases", func() {
 			seaweed, err := ToObjectStoreVendorSpec(context.Background(), w, w.Spec.ObjectStore[apiv2.DefaultInstanceName].ManagedObjectStore, seaweedScheme(), manifest.Manifest{})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(seaweed.Spec.Volume.Requests[corev1.ResourceStorage]).To(Equal(resource.MustParse(storage)))
-			Expect(seaweed.Spec.Filer.Persistence.Resources.Requests[corev1.ResourceStorage]).To(Equal(resource.MustParse("1Gi")))
+			Expect(seaweed.Spec.Filer.Persistence.Resources.Requests[corev1.ResourceStorage]).To(Equal(resource.MustParse(seaweedFilerStorageSize)))
 		},
 		Entry("small data disk", "10Gi"),
 		Entry("large data disk", "1Ti"),

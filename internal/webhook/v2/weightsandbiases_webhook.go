@@ -509,6 +509,16 @@ func validateObjectStoreSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 			}
 		}
 
+		if mgd := spec.ManagedObjectStore; mgd != nil && mgd.SeaweedObjectStoreSpec.FilerStorageSize != "" {
+			if q, err := resource.ParseQuantity(mgd.SeaweedObjectStoreSpec.FilerStorageSize); err != nil || q.Sign() <= 0 {
+				errors = append(errors, field.Invalid(
+					objectStorePath.Key(key).Child("managedObjectStore").Child("SeaweedObjectStoreSpec").Child("filerStorageSize"),
+					mgd.SeaweedObjectStoreSpec.FilerStorageSize,
+					"must be a positive resource quantity (e.g., '10Gi')",
+				))
+			}
+		}
+
 		if ext := spec.ExternalObjectStore; ext != nil {
 			extPath := objectStorePath.Key(key).Child("externalObjectStore")
 			// provider is sourced from a secret key, so it is resolved and defaulted at reconcile time, not here.

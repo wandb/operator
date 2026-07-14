@@ -546,6 +546,10 @@ type ManagedObjectStoreSpec struct {
 
 type SeaweedObjectStoreSpec struct {
 	TlsEnabled bool `json:"tlsEnabled,omitempty"`
+	// FilerStorageSize sizes the filer's metadata index disk. It grows with the
+	// number of objects, not their total size, so bump it for large object counts.
+	// Defaults to 1Gi when unset.
+	FilerStorageSize string `json:"filerStorageSize,omitempty"`
 }
 
 // ObjectStoreProvider selects the object store backend for an external object store.

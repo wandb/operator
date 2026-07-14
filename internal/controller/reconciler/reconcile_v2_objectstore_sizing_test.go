@@ -82,7 +82,7 @@ var _ = Describe("ObjectStore sizing per tier", func() {
 			Expect(*seaweed.Spec.Master.VolumeSizeLimitMB).To(Equal(int32(1024)))
 			Expect(seaweed.Spec.Volume.MaxVolumeCounts).NotTo(BeNil())
 			Expect(*seaweed.Spec.Volume.MaxVolumeCounts).To(BeNumerically(">", int32(0)))
-			Expect(seaweed.Spec.Filer.Persistence.Resources.Requests[corev1.ResourceStorage]).To(Equal(resource.MustParse("1Gi")))
+			Expect(seaweed.Spec.Filer.Persistence.Resources.Requests[corev1.ResourceStorage]).To(Equal(resource.MustParse("20Gi")))
 
 			if wantCPU == "" {
 				Expect(seaweed.Spec.Volume.Requests).NotTo(HaveKey(corev1.ResourceCPU))
