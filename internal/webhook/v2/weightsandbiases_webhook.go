@@ -519,6 +519,18 @@ func validateObjectStoreSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 			}
 		}
 
+		if mgd := spec.ManagedObjectStore; mgd != nil {
+			// Only check the copies/replicas relationship when the user pinned replicas;
+			// otherwise the manifest supplies it at reconcile and seaweedReplication clamps it.
+			if mgd.Copies < 0 || (mgd.Replicas > 0 && mgd.Copies > mgd.Replicas-1) {
+				errors = append(errors, field.Invalid(
+					objectStorePath.Key(key).Child("managedObjectStore").Child("copies"),
+					mgd.Copies,
+					"copies cannot be negative or exceed replicas-1 (one copy per other data node)",
+				))
+			}
+		}
+
 		if ext := spec.ExternalObjectStore; ext != nil {
 			extPath := objectStorePath.Key(key).Child("externalObjectStore")
 			// provider is sourced from a secret key, so it is resolved and defaulted at reconcile time, not here.

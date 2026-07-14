@@ -190,6 +190,8 @@ type SizingConfig struct {
 	VolumeSize  string                       `yaml:"volumeSize,omitempty"`
 	Resources   *corev1.ResourceRequirements `yaml:"resources,omitempty"`
 	Autoscaling *AutoscalingConfig           `yaml:"autoscaling,omitempty"`
+	// MetadataVolumeSize sizes the disk backing an object store's index/metadata
+	MetadataVolumeSize string `yaml:"metadataVolumeSize,omitempty"`
 }
 
 type KafkaSizingConfig struct {

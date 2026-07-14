@@ -135,6 +135,7 @@ func ResolveInfraSizing(sizing map[v2.Size]manifest.SizingConfig, size v2.Size, 
 		result.Shards = defaultSizing.Shards
 		result.Copies = defaultSizing.Copies
 		result.VolumeSize = defaultSizing.VolumeSize
+		result.MetadataVolumeSize = defaultSizing.MetadataVolumeSize
 		if defaultSizing.Resources != nil {
 			result.Resources = defaultSizing.Resources.DeepCopy()
 		}
@@ -153,6 +154,9 @@ func ResolveInfraSizing(sizing map[v2.Size]manifest.SizingConfig, size v2.Size, 
 		}
 		if sizeSizing.VolumeSize != "" {
 			result.VolumeSize = sizeSizing.VolumeSize
+		}
+		if sizeSizing.MetadataVolumeSize != "" {
+			result.MetadataVolumeSize = sizeSizing.MetadataVolumeSize
 		}
 		result.Resources = mergeResources(result.Resources, sizeSizing.Resources, requireLimits)
 	}
@@ -321,6 +325,10 @@ func ApplyInfraSizing(wandb *v2.WeightsAndBiases, manifest manifest.Manifest) {
 		}
 		if spec.StorageSize == "" && sizing.VolumeSize != "" {
 			spec.StorageSize = sizing.VolumeSize
+		}
+		// Neutral manifest value maps to the SeaweedFS-specific filer disk; CR override wins.
+		if spec.SeaweedObjectStoreSpec.FilerStorageSize == "" && sizing.MetadataVolumeSize != "" {
+			spec.SeaweedObjectStoreSpec.FilerStorageSize = sizing.MetadataVolumeSize
 		}
 		if sizing.Resources != nil && len(spec.Config.Resources.Requests) == 0 && len(spec.Config.Resources.Limits) == 0 {
 			spec.Config.Resources = *sizing.Resources
