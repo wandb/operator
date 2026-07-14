@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"strings"
 
+	v1 "github.com/wandb/operator/api/v1"
 	"github.com/wandb/operator/internal/logx"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -538,7 +539,7 @@ func validateObjectStoreSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 		if ext := spec.ExternalObjectStore; ext != nil {
 			extPath := objectStorePath.Key(key).Child("externalObjectStore")
 			// provider is sourced from a secret key, so it is resolved and defaulted at reconcile time, not here.
-			if ext.Bucket.Name == "" {
+			if _, ok := wandb.ObjectMeta.GetAnnotations()[v1.BucketPendingAnnotation]; !ok && ext.Bucket.Name == "" {
 				errors = append(errors, field.Required(
 					extPath.Child("bucket"),
 					"externalObjectStore requires a bucket secret reference",
