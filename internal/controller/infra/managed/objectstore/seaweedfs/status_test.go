@@ -57,6 +57,7 @@ var _ = Describe("SeaweedFS status", func() {
 				{Type: SeaweedConnectionInfoType, Status: metav1.ConditionTrue},
 				{Type: SeaweedReportedReadyType, Status: metav1.ConditionTrue},
 				{Type: SeaweedWritableType, Status: metav1.ConditionTrue, Reason: "AllocationSucceeded"},
+				{Type: SeaweedS3ReachableType, Status: metav1.ConditionTrue, Reason: "EndpointReachable"},
 			},
 			nil,
 			1,

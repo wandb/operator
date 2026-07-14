@@ -28,6 +28,14 @@ var _ = Describe("Object storage endpoint", func() {
 		Expect(ep).To(Equal("http://minio.example.com:9000/data/clickhouse/"))
 	})
 
+	It("derives the custom service endpoint used by workload startup gates", func() {
+		Expect(customServiceEndpoint("http", "seaweedfs.wandb.svc.cluster.local", "8333", false)).
+			To(Equal("http://seaweedfs.wandb.svc.cluster.local:8333"))
+		Expect(customServiceEndpoint("", "minio.example.com", "9000", true)).
+			To(Equal("http://minio.example.com:9000"))
+		Expect(customServiceEndpoint("", "", "", false)).To(BeEmpty())
+	})
+
 	It("derives an AWS virtual-hosted endpoint when no host is set", func() {
 		ep, err := buildEndpoint("", "", "", "my-bucket", "us-west-2", "clickhouse/", false)
 		Expect(err).NotTo(HaveOccurred())

@@ -128,8 +128,16 @@ func TestToBufstreamApplication(t *testing.T) {
 	require.Equal(t, "Deployment", app.Spec.Kind)
 	require.NotNil(t, app.Spec.Replicas)
 	require.Len(t, app.Spec.PodTemplate.Spec.InitContainers, 1)
-	require.Equal(t, "ensure-bucket", app.Spec.PodTemplate.Spec.InitContainers[0].Name)
-	requireKafkaContainerSecurityContext(t, app.Spec.PodTemplate.Spec.InitContainers[0].SecurityContext)
+	ensureBucket := app.Spec.PodTemplate.Spec.InitContainers[0]
+	require.Equal(t, "ensure-bucket", ensureBucket.Name)
+	requireKafkaContainerSecurityContext(t, ensureBucket.SecurityContext)
+	require.Len(t, ensureBucket.Args, 1)
+	require.Contains(t, ensureBucket.Args[0], "head-bucket")
+	require.Contains(t, ensureBucket.Args[0], "create-bucket")
+	require.Contains(t, ensureBucket.Args[0], "sleep 2")
+	require.Contains(t, ensureBucket.Args[0], "-le 150")
+	require.NotContains(t, ensureBucket.Args[0], testStorage().AccessKey)
+	require.NotContains(t, ensureBucket.Args[0], testStorage().SecretKey)
 	require.Equal(t, int32(2), *app.Spec.Replicas)
 	require.Len(t, app.Spec.PodTemplate.Spec.Containers, 1)
 

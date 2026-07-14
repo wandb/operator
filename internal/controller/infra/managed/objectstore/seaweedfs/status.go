@@ -18,6 +18,7 @@ const (
 	SeaweedConnectionInfoType = "SeaweedConnectionInfo"
 	SeaweedReportedReadyType  = "SeaweedReportedReady"
 	SeaweedWritableType       = "SeaweedWritable"
+	SeaweedS3ReachableType    = "SeaweedS3Reachable"
 )
 
 func ComputeStatus(
@@ -78,6 +79,13 @@ func applyDefaultConditions(conditions []metav1.Condition) []metav1.Condition {
 			Reason: common.NoResourceReason,
 		})
 	}
+	if !common.ContainsType(conditions, SeaweedS3ReachableType) {
+		conditions = append(conditions, metav1.Condition{
+			Type:   SeaweedS3ReachableType,
+			Status: metav1.ConditionUnknown,
+			Reason: common.NoResourceReason,
+		})
+	}
 
 	return conditions
 }
@@ -97,6 +105,7 @@ func inferInfraState(
 	impliedStates = inferStateFromCondition(ctx, SeaweedConnectionInfoType, impliedStates, conditions)
 	impliedStates = inferStateFromCondition(ctx, SeaweedReportedReadyType, impliedStates, conditions)
 	impliedStates = inferStateFromCondition(ctx, SeaweedWritableType, impliedStates, conditions)
+	impliedStates = inferStateFromCondition(ctx, SeaweedS3ReachableType, impliedStates, conditions)
 
 	hasImpliedState := func(target string) bool {
 		return len(lo.FilterValues(
@@ -150,7 +159,7 @@ func inferStateFromCondition(ctx context.Context, conditionType string, impliedS
 			impliedStates[conditionType] = inferState_SeaweedConnectionInfoType(ctx, cond)
 		case SeaweedReportedReadyType:
 			impliedStates[conditionType] = inferState_SeaweedReportedReadyType(ctx, cond)
-		case SeaweedWritableType:
+		case SeaweedWritableType, SeaweedS3ReachableType:
 			impliedStates[conditionType] = inferState_SeaweedWritableType(ctx, cond)
 		default:
 			impliedStates[conditionType] = common.UnknownState

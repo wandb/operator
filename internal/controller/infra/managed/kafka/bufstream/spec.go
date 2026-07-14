@@ -6,6 +6,7 @@ import (
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/infra/external/objectstore"
+	"github.com/wandb/operator/internal/controller/infra/managed/objectstore/s3wait"
 	"github.com/wandb/operator/pkg/utils"
 	"github.com/wandb/operator/pkg/wandb/manifest"
 	corev1 "k8s.io/api/core/v1"
@@ -52,7 +53,7 @@ func EtcdImage(img manifest.ImageRef, globalImageRegistry string) string {
 // manifest, falling back to the hardcoded default when the manifest does not
 // supply one.
 func BucketEnsureImage(img manifest.ImageRef, globalImageRegistry string) string {
-	return resolveImage(img, globalImageRegistry, defaultBucketEnsureImage)
+	return s3wait.Image(img, globalImageRegistry)
 }
 
 func resolveImage(img manifest.ImageRef, globalImageRegistry, fallback string) string {
@@ -418,13 +419,9 @@ func bucketEnsureContainer(nsnBuilder *NsNameBuilder, storage objectstore.ConnIn
 		region = "us-east-1"
 	}
 	credsName := nsnBuilder.CredentialsName()
-	// head-bucket succeeds when the bucket already exists; otherwise create it.
-	// Both paths tolerate concurrent creation by other brokers.
-	script := fmt.Sprintf(
-		"aws --endpoint-url %q s3api head-bucket --bucket %q || "+
-			"aws --endpoint-url %q s3api create-bucket --bucket %q",
-		storage.Endpoint, storage.Bucket, storage.Endpoint, storage.Bucket,
-	)
+	// Retry in this process so transient DNS and API startup failures do not
+	// become init-container restarts subject to kubelet exponential backoff.
+	script := s3wait.BucketReadyScript(storage.Endpoint, storage.Bucket, true)
 	return corev1.Container{
 		Name:            "ensure-bucket",
 		Image:           BucketEnsureImage(img, globalImageRegistry),

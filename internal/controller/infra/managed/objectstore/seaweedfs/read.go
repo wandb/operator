@@ -18,7 +18,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-const seaweedAllocationProbeTimeout = 5 * time.Second
+const seaweedProbeTimeout = 5 * time.Second
 
 func ReadState(
 	ctx context.Context,
@@ -78,9 +78,10 @@ func ReadState(
 		conditions = append(conditions, readyConditions...)
 		if readyConditions[0].Status == metav1.ConditionTrue {
 			conditions = append(conditions, computeSeaweedWritableCondition(ctx, actualResource))
+			conditions = append(conditions, computeSeaweedS3ReachableCondition(ctx, actualResource))
 		}
 	}
-	log.Debug("read", "actualResource", actualResource, "rule", onDeleteRule.Policy)
+	log.Debug("read", "seaweedName", nsnBuilder.SpecNsName().Name, "namespace", nsnBuilder.SpecNsName().Namespace, "rule", onDeleteRule.Policy)
 	return conditions
 }
 
@@ -119,7 +120,50 @@ func computeSeaweedWritableCondition(ctx context.Context, cr *seaweedv1.Seaweed)
 	}
 	endpoint.RawQuery = query.Encode()
 
-	return probeSeaweedAllocation(ctx, &http.Client{Transport: transport, Timeout: seaweedAllocationProbeTimeout}, endpoint.String())
+	return probeSeaweedAllocation(ctx, &http.Client{Transport: transport, Timeout: seaweedProbeTimeout}, endpoint.String())
+}
+
+func computeSeaweedS3ReachableCondition(ctx context.Context, cr *seaweedv1.Seaweed) metav1.Condition {
+	scheme := "http"
+	transport := http.DefaultTransport
+	if cr.Spec.TLS != nil && cr.Spec.TLS.Enabled {
+		scheme = "https"
+		tlsTransport := http.DefaultTransport.(*http.Transport).Clone()
+		// The generated internal CA is not mounted into this controller. This
+		// unauthenticated probe stays on the cluster-local service address.
+		tlsTransport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, InsecureSkipVerify: true} // #nosec G402
+		transport = tlsTransport
+	}
+	endpoint := url.URL{
+		Scheme: scheme,
+		Host:   fmt.Sprintf("%s-s3.%s.svc.cluster.local:%s", cr.Name, cr.Namespace, S3Port),
+		Path:   "/",
+	}
+	return probeSeaweedS3(ctx, &http.Client{Transport: transport, Timeout: seaweedProbeTimeout}, endpoint.String())
+}
+
+func probeSeaweedS3(ctx context.Context, client *http.Client, endpoint string) metav1.Condition {
+	condition := metav1.Condition{Type: SeaweedS3ReachableType, Status: metav1.ConditionFalse, Reason: "EndpointUnavailable"}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		condition.Message = err.Error()
+		return condition
+	}
+	response, err := client.Do(req)
+	if err != nil {
+		condition.Message = err.Error()
+		return condition
+	}
+	defer response.Body.Close()
+	// An unauthenticated S3 service commonly returns 403. Any non-5xx response
+	// proves cluster DNS resolved and the S3 API accepted the connection.
+	if response.StatusCode >= http.StatusInternalServerError {
+		condition.Message = fmt.Sprintf("S3 endpoint returned HTTP %d", response.StatusCode)
+		return condition
+	}
+	condition.Status = metav1.ConditionTrue
+	condition.Reason = "EndpointReachable"
+	return condition
 }
 
 func probeSeaweedAllocation(ctx context.Context, client *http.Client, endpoint string) metav1.Condition {

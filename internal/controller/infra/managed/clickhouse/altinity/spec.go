@@ -8,6 +8,7 @@ import (
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/infra/managed/clickhouse/altinity/keeper"
+	"github.com/wandb/operator/internal/controller/infra/managed/objectstore/s3wait"
 	"github.com/wandb/operator/internal/logx"
 	"github.com/wandb/operator/pkg/utils"
 	"github.com/wandb/operator/pkg/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
@@ -27,7 +28,8 @@ const (
 
 	// TODO: remove this hardcoded default once all supported manifest versions
 	// supply clickhouse.<instance>.images.server.
-	defaultClickHouseImage = "altinity/clickhouse-server:25.8.16.10002.altinitystable"
+	defaultClickHouseImage  = "altinity/clickhouse-server:25.8.16.10002.altinitystable"
+	objectStoreWaitImageKey = "bucketEnsure"
 )
 
 func ClickHouseImage(img manifest.ImageRef, globalImageRegistry string) string {
@@ -199,6 +201,9 @@ func ToClickHouseVendorSpec(
 			},
 		},
 	}
+	if wait := clickHouseObjectStoreWaitContainer(objStorage, mfst.Kafka.Images[objectStoreWaitImageKey], wandb.Spec.Global.ImageRegistry); wait != nil {
+		podSpec.InitContainers = []corev1.Container{*wait}
+	}
 
 	if len(spec.Config.Resources.Requests) > 0 || len(spec.Config.Resources.Limits) > 0 {
 		podSpec.Containers[0].Resources = corev1.ResourceRequirements{
@@ -285,6 +290,34 @@ func ToClickHouseVendorSpec(
 	}
 
 	return chi, nil
+}
+
+func clickHouseObjectStoreWaitContainer(storage *ObjectStorageConn, img manifest.ImageRef, globalImageRegistry string) *corev1.Container {
+	// Ambient-credential and public-cloud configurations are not gated here.
+	// Managed SeaweedFS and other static, path-style endpoints provide these
+	// fields and can be checked without the operator making an S3 request.
+	if storage == nil || storage.UseEnvCredentials || storage.ServiceEndpoint == "" || storage.Bucket == "" {
+		return nil
+	}
+	region := storage.Region
+	if region == "" {
+		region = "us-east-1"
+	}
+	return &corev1.Container{
+		Name:            "wait-object-store",
+		Image:           s3wait.Image(img, globalImageRegistry),
+		Command:         []string{"/bin/sh", "-c"},
+		Args:            []string{s3wait.BucketReadyScript(storage.ServiceEndpoint, storage.Bucket, false)},
+		SecurityContext: clickHouseContainerSecurityContext(),
+		Env: []corev1.EnvVar{
+			{Name: "AWS_REGION", Value: region},
+			{Name: "AWS_EC2_METADATA_DISABLED", Value: "true"},
+			{Name: "AWS_PAGER", Value: ""},
+			{Name: "HOME", Value: "/tmp"},
+			{Name: "AWS_ACCESS_KEY_ID", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &storage.AccessKeyRef}},
+			{Name: "AWS_SECRET_ACCESS_KEY", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &storage.SecretKeyRef}},
+		},
+	}
 }
 
 func BuildWandbClickhouseLabels(wandb *apiv2.WeightsAndBiases) map[string]string {

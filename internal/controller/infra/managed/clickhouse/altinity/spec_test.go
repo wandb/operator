@@ -36,6 +36,22 @@ var _ = Describe("ClickHouse vendor specs", func() {
 		expectClickHouseWritableVolume(podSpec.Volumes, clickHouseRunVolumeName)
 
 		Expect(podSpec.Containers).To(HaveLen(1))
+		Expect(podSpec.InitContainers).To(HaveLen(1))
+		wait := podSpec.InitContainers[0]
+		Expect(wait.Name).To(Equal("wait-object-store"))
+		Expect(wait.Args).To(HaveLen(1))
+		Expect(wait.Args[0]).To(ContainSubstring("head-bucket"))
+		Expect(wait.Args[0]).NotTo(ContainSubstring("create-bucket"))
+		Expect(wait.Args[0]).To(ContainSubstring("sleep 2"))
+		Expect(wait.Args[0]).NotTo(ContainSubstring("AccessKey"))
+		Expect(wait.Args[0]).NotTo(ContainSubstring("SecretKey"))
+		env := map[string]corev1.EnvVar{}
+		for _, variable := range wait.Env {
+			env[variable.Name] = variable
+		}
+		Expect(env["AWS_ACCESS_KEY_ID"].ValueFrom.SecretKeyRef.Name).To(Equal("objstore-conn"))
+		Expect(env["AWS_ACCESS_KEY_ID"].ValueFrom.SecretKeyRef.Key).To(Equal("AccessKey"))
+		Expect(env["AWS_SECRET_ACCESS_KEY"].ValueFrom.SecretKeyRef.Key).To(Equal("SecretKey"))
 		container := podSpec.Containers[0]
 		Expect(container.Image).To(Equal(ClickHouseImage(manifest.ImageRef{}, "")))
 		Expect(container.Resources.Requests[corev1.ResourceCPU]).To(Equal(resource.MustParse("500m")))
@@ -95,10 +111,12 @@ var _ = Describe("ClickHouse vendor specs", func() {
 func testObjectStorageConn() *ObjectStorageConn {
 	ref := corev1.LocalObjectReference{Name: "objstore-conn"}
 	return &ObjectStorageConn{
-		Endpoint:     "http://seaweedfs.wandb.svc.cluster.local:80/bucket/clickhouse/",
-		Region:       "us-east-1",
-		AccessKeyRef: corev1.SecretKeySelector{LocalObjectReference: ref, Key: "AccessKey"},
-		SecretKeyRef: corev1.SecretKeySelector{LocalObjectReference: ref, Key: "SecretKey"},
+		Endpoint:        "http://seaweedfs.wandb.svc.cluster.local:80/bucket/clickhouse/",
+		ServiceEndpoint: "http://seaweedfs.wandb.svc.cluster.local:80",
+		Bucket:          "bucket",
+		Region:          "us-east-1",
+		AccessKeyRef:    corev1.SecretKeySelector{LocalObjectReference: ref, Key: "AccessKey"},
+		SecretKeyRef:    corev1.SecretKeySelector{LocalObjectReference: ref, Key: "SecretKey"},
 	}
 }
 

@@ -53,4 +53,29 @@ var _ = Describe("SeaweedFS writable storage probe", func() {
 		Expect(condition.Status).To(Equal(metav1.ConditionFalse))
 		Expect(condition.Message).To(ContainSubstring("file ID"))
 	})
+
+	It("reports an unauthenticated S3 API response as reachable", func() {
+		server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
+			response.WriteHeader(http.StatusForbidden)
+		}))
+		DeferCleanup(server.Close)
+
+		condition := probeSeaweedS3(context.Background(), server.Client(), server.URL)
+
+		Expect(condition.Type).To(Equal(SeaweedS3ReachableType))
+		Expect(condition.Status).To(Equal(metav1.ConditionTrue))
+		Expect(condition.Reason).To(Equal("EndpointReachable"))
+	})
+
+	It("rejects an unavailable S3 API", func() {
+		server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
+			response.WriteHeader(http.StatusServiceUnavailable)
+		}))
+		DeferCleanup(server.Close)
+
+		condition := probeSeaweedS3(context.Background(), server.Client(), server.URL)
+
+		Expect(condition.Status).To(Equal(metav1.ConditionFalse))
+		Expect(condition.Reason).To(Equal("EndpointUnavailable"))
+	})
 })
