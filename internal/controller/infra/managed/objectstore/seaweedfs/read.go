@@ -81,7 +81,7 @@ func ReadState(
 			conditions = append(conditions, computeSeaweedS3ReachableCondition(ctx, actualResource))
 		}
 	}
-	log.Debug("read", "seaweedName", nsnBuilder.SpecNsName().Name, "namespace", nsnBuilder.SpecNsName().Namespace, "rule", onDeleteRule.Policy)
+	log.Debug("read", "resourceExists", actualResource != nil, "rule", onDeleteRule.Policy)
 	return conditions
 }
 
