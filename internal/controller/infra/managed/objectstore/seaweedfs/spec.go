@@ -37,13 +37,34 @@ const (
 	seaweedWritableTmpVolumeName = "seaweedfs-tmp"
 	seaweedWritableTmpMountPath  = "/tmp"
 	seaweedFilerDataMountPath    = "/data/filerldb2"
+
+	// Filer holds only the leveldb2 path index; its size scales with object count,
+	// not total data. 20Gi is a safe default for large counts; override with
+	// FilerStorageSize when a deployment needs more.
+	seaweedFilerStorageSize = "20Gi"
 )
 
 const (
 	seaweedMasterMetricsPort int32 = 9091
 	seaweedVolumeMetricsPort int32 = 9092
 	seaweedFilerMetricsPort  int32 = 9093
+	seaweedVolumeSizeLimitMB int64 = 1024
 )
+
+func volumeLayout(storageQuantity resource.Quantity) (int32, int32) {
+	storageMB := storageQuantity.Value() / (1024 * 1024)
+	volumeSizeMB := min(seaweedVolumeSizeLimitMB, storageMB/2)
+	if volumeSizeMB < 1 {
+		volumeSizeMB = 1
+	}
+
+	maxVolumeCount := storageMB/volumeSizeMB - 1
+	if maxVolumeCount < 1 {
+		maxVolumeCount = 1
+	}
+
+	return int32(volumeSizeMB), int32(maxVolumeCount)
+}
 
 func seaweedWritableVolumes() []corev1.Volume {
 	return []corev1.Volume{
@@ -81,12 +102,24 @@ func ToObjectStoreVendorSpec(
 		return nil, fmt.Errorf("invalid storage size %q: %w", infraSpec.StorageSize, err)
 	}
 
-	replication := "000"
-	if infraSpec.Replicas > 1 {
-		replication = "001"
+	replication := seaweedReplication(infraSpec.Copies, infraSpec.Replicas)
+
+	volumeSizeLimitMB, maxVolumeCount := volumeLayout(storageQuantity)
+
+	// Merge the storage request (PVC size) with any configured cpu/memory so neither drops the other.
+	volumeRequests := corev1.ResourceList{corev1.ResourceStorage: storageQuantity}
+	for name, qty := range infraSpec.Config.Resources.Requests {
+		volumeRequests[name] = qty
 	}
 
-	volumeSizeLimitMB := int32(storageQuantity.Value() / (1024 * 1024))
+	filerStorageSize := seaweedFilerStorageSize
+	if infraSpec.SeaweedObjectStoreSpec.FilerStorageSize != "" {
+		filerStorageSize = infraSpec.SeaweedObjectStoreSpec.FilerStorageSize
+	}
+	filerStorageQuantity, err := resource.ParseQuantity(filerStorageSize)
+	if err != nil {
+		return nil, fmt.Errorf("invalid filer storage size %q: %w", filerStorageSize, err)
+	}
 
 	labels := BuildWandbObjectStoreLabels(wandb)
 	labels["app"] = SeaweedName(specName)
@@ -110,20 +143,23 @@ func ToObjectStoreVendorSpec(
 				ComponentSpec: seaweedv1.ComponentSpec{
 					Volumes:      seaweedWritableVolumes(),
 					VolumeMounts: seaweedWritableVolumeMounts(),
+					ExtraArgs:    []string{"-ip.bind=0.0.0.0"},
 				},
 			},
 			Volume: &seaweedv1.VolumeSpec{
 				Replicas: infraSpec.Replicas,
 				VolumeServerConfig: seaweedv1.VolumeServerConfig{
-					MetricsPort: ptr.To(seaweedVolumeMetricsPort),
+					MetricsPort:     ptr.To(seaweedVolumeMetricsPort),
+					MaxVolumeCounts: ptr.To(maxVolumeCount),
 					ComponentSpec: seaweedv1.ComponentSpec{
 						Volumes:      seaweedWritableVolumes(),
 						VolumeMounts: seaweedWritableVolumeMounts(),
+						ExtraArgs:    []string{"-ip.bind=0.0.0.0"},
 					},
+					// Operator sizes the data PVC from Requests[storage] — a persistent disk, not ephemeral.
 					ResourceRequirements: corev1.ResourceRequirements{
-						Requests: corev1.ResourceList{
-							corev1.ResourceStorage: storageQuantity,
-						},
+						Requests: volumeRequests,
+						Limits:   infraSpec.Config.Resources.Limits,
 					},
 				},
 			},
@@ -158,13 +194,14 @@ func ToObjectStoreVendorSpec(
 				ComponentSpec: seaweedv1.ComponentSpec{
 					Volumes:      seaweedWritableVolumes(),
 					VolumeMounts: seaweedWritableVolumeMounts(),
+					ExtraArgs:    []string{"-ip.bind=0.0.0.0"},
 				},
 				Persistence: &seaweedv1.PersistenceSpec{
 					Enabled:   true,
 					MountPath: ptr.To(seaweedFilerDataMountPath),
 					Resources: corev1.VolumeResourceRequirements{
 						Requests: corev1.ResourceList{
-							corev1.ResourceStorage: storageQuantity,
+							corev1.ResourceStorage: filerStorageQuantity,
 						},
 					},
 				},
@@ -174,19 +211,33 @@ func ToObjectStoreVendorSpec(
 		},
 	}
 
-	if len(infraSpec.Config.Resources.Requests) > 0 || len(infraSpec.Config.Resources.Limits) > 0 {
-		seaweedCR.Spec.Volume.ResourceRequirements = corev1.ResourceRequirements{
-			Requests: infraSpec.Config.Resources.Requests,
-			Limits:   infraSpec.Config.Resources.Limits,
-		}
-	}
-
 	if err := ctrl.SetControllerReference(wandb, seaweedCR, scheme); err != nil {
 		log.Error("failed to set owner reference on Seaweed CR", logx.ErrAttr(err))
 		return nil, fmt.Errorf("failed to set owner reference: %w", err)
 	}
 
 	return seaweedCR, nil
+}
+
+// seaweedReplication builds the SeaweedFS replication code from the neutral copy
+// count, clamped to the data-node count so we never request more copies than servers.
+func seaweedReplication(copies, replicas int32) string {
+	// Unset copies keeps the legacy behavior: one extra copy once there is more than one server.
+	if copies <= 0 {
+		if replicas > 1 {
+			return "001"
+		}
+		return "000"
+	}
+	// Never request more copies than there are other servers to hold them.
+	maxCopies := replicas - 1
+	if maxCopies < 0 {
+		maxCopies = 0
+	}
+	if copies > maxCopies {
+		copies = maxCopies
+	}
+	return fmt.Sprintf("00%d", copies)
 }
 
 func ToObjectStoreEnvConfig(

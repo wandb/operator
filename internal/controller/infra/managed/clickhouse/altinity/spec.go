@@ -28,6 +28,9 @@ const (
 	// TODO: remove this hardcoded default once all supported manifest versions
 	// supply clickhouse.<instance>.images.server.
 	defaultClickHouseImage = "altinity/clickhouse-server:25.8.16.10002.altinitystable"
+
+	objectStoreWaitMaxAttempts  = 150
+	objectStoreWaitDelaySeconds = 2
 )
 
 func ClickHouseImage(img manifest.ImageRef, globalImageRegistry string) string {
@@ -124,6 +127,7 @@ func ToClickHouseVendorSpec(
 	spec *apiv2.ManagedClickHouseSpec,
 	scheme *runtime.Scheme,
 	objStorage *ObjectStorageConn,
+	waitForObjectStore bool,
 	mfst manifest.Manifest,
 ) (*v1.ClickHouseInstallation, error) {
 	_, log := logx.WithSlog(ctx, logx.ClickHouse)
@@ -185,6 +189,7 @@ func ToClickHouseVendorSpec(
 		reclaimPolicy = v1.PVCReclaimPolicyDelete
 	}
 
+	clickHouseImage := ClickHouseImage(mfst.Clickhouse["default"].Images["server"], wandb.Spec.Global.ImageRegistry)
 	podSpec := corev1.PodSpec{
 		SecurityContext: clickHousePodSecurityContext(),
 		Affinity:        wandb.GetAffinity(spec.ManagedInfraSpec),
@@ -193,11 +198,14 @@ func ToClickHouseVendorSpec(
 		Containers: []corev1.Container{
 			{
 				Name:            "clickhouse",
-				Image:           ClickHouseImage(mfst.Clickhouse["default"].Images["server"], wandb.Spec.Global.ImageRegistry),
+				Image:           clickHouseImage,
 				SecurityContext: clickHouseContainerSecurityContext(),
 				VolumeMounts:    clickHouseWritableVolumeMounts(),
 			},
 		},
+	}
+	if waitForObjectStore {
+		podSpec.InitContainers = []corev1.Container{clickHouseObjectStoreWaitContainer(objStorage.Endpoint, clickHouseImage)}
 	}
 
 	if len(spec.Config.Resources.Requests) > 0 || len(spec.Config.Resources.Limits) > 0 {
@@ -285,6 +293,36 @@ func ToClickHouseVendorSpec(
 	}
 
 	return chi, nil
+}
+
+func clickHouseObjectStoreWaitContainer(endpoint, image string) corev1.Container {
+	// The existing ClickHouse image includes wget. Any HTTP response below 500
+	// proves DNS and the S3 API are reachable; authentication remains ClickHouse's
+	// responsibility when its main process starts.
+	script := fmt.Sprintf(
+		`attempt=1
+while [ "$attempt" -le %d ]; do
+  response="$(wget --no-check-certificate --server-response --spider "$1" 2>&1)"
+  result=$?
+  if [ "$result" -eq 0 ] || printf '%%s\n' "$response" | grep -Eq 'HTTP/[0-9.]+ [1-4][0-9][0-9]'; then
+    exit 0
+  fi
+  attempt=$((attempt + 1))
+  if [ "$attempt" -le %d ]; then sleep %d; fi
+done
+echo 'object-store endpoint did not become reachable before timeout' >&2
+exit 1`,
+		objectStoreWaitMaxAttempts,
+		objectStoreWaitMaxAttempts,
+		objectStoreWaitDelaySeconds,
+	)
+	return corev1.Container{
+		Name:            "wait-object-store",
+		Image:           image,
+		Command:         []string{"/bin/sh", "-c"},
+		Args:            []string{script, "wait-object-store", endpoint},
+		SecurityContext: clickHouseContainerSecurityContext(),
+	}
 }
 
 func BuildWandbClickhouseLabels(wandb *apiv2.WeightsAndBiases) map[string]string {

@@ -38,6 +38,7 @@ bucket:
       large:
         replicas: 3
         volumeSize: 200Gi
+        metadataVolumeSize: 40Gi
         resources:
           requests:
             cpu: 8

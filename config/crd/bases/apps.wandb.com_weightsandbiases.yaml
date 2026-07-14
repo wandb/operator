@@ -2604,6 +2604,8 @@ spec:
                       properties:
                         SeaweedObjectStoreSpec:
                           properties:
+                            filerStorageSize:
+                              type: string
                             tlsEnabled:
                               type: boolean
                           type: object
@@ -3088,6 +3090,9 @@ spec:
                             rootUser:
                               type: string
                           type: object
+                        copies:
+                          format: int32
+                          type: integer
                         name:
                           type: string
                         namespace:

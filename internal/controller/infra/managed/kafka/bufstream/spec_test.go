@@ -121,15 +121,25 @@ func TestToBufstreamApplication(t *testing.T) {
 	wandb := testWandb()
 	nsn := CreateNsNameBuilder(types.NamespacedName{Namespace: "default", Name: "wandb-kafka"})
 
-	app, err := ToBufstreamApplication(wandb, nsn, testStorage(), testScheme(t), manifest.Manifest{})
+	app, err := ToBufstreamApplication(wandb, nsn, testStorage(), true, testScheme(t), manifest.Manifest{})
 	require.NoError(t, err)
 
 	require.Equal(t, "wandb-kafka", app.Name)
 	require.Equal(t, "Deployment", app.Spec.Kind)
 	require.NotNil(t, app.Spec.Replicas)
 	require.Len(t, app.Spec.PodTemplate.Spec.InitContainers, 1)
-	require.Equal(t, "ensure-bucket", app.Spec.PodTemplate.Spec.InitContainers[0].Name)
-	requireKafkaContainerSecurityContext(t, app.Spec.PodTemplate.Spec.InitContainers[0].SecurityContext)
+	ensureBucket := app.Spec.PodTemplate.Spec.InitContainers[0]
+	require.Equal(t, "ensure-bucket", ensureBucket.Name)
+	requireKafkaContainerSecurityContext(t, ensureBucket.SecurityContext)
+	require.Len(t, ensureBucket.Args, 4)
+	require.Contains(t, ensureBucket.Args[0], "head-bucket")
+	require.Contains(t, ensureBucket.Args[0], "create-bucket")
+	require.Contains(t, ensureBucket.Args[0], "sleep 2")
+	require.Contains(t, ensureBucket.Args[0], "-le 150")
+	require.NotContains(t, ensureBucket.Args[0], testStorage().AccessKey)
+	require.NotContains(t, ensureBucket.Args[0], testStorage().SecretKey)
+	require.Equal(t, testStorage().Endpoint, ensureBucket.Args[2])
+	require.Equal(t, testStorage().Bucket, ensureBucket.Args[3])
 	require.Equal(t, int32(2), *app.Spec.Replicas)
 	require.Len(t, app.Spec.PodTemplate.Spec.Containers, 1)
 
@@ -147,13 +157,33 @@ func TestToBufstreamApplication(t *testing.T) {
 	require.True(t, envNames[EnvStorageSecretAccessKey])
 }
 
+func TestBringYourOwnObjectStoresDoNotGetBucketInitializer(t *testing.T) {
+	setOpenShiftMode(t, false)
+	wandb := testWandb()
+	nsn := CreateNsNameBuilder(types.NamespacedName{Namespace: "default", Name: "wandb-kafka"})
+
+	tests := map[string]objectstore.ConnInfo{
+		"custom S3":  testStorage(),
+		"native AWS": {Provider: apiv2.ObjectStoreProviderS3, URI: "s3://bucket", Bucket: "bucket", Region: "us-east-1"},
+		"GCS":        {Provider: apiv2.ObjectStoreProviderGCS, URI: "gs://bucket", Bucket: "bucket"},
+		"Azure":      {Provider: apiv2.ObjectStoreProviderAzure, URI: "https://account.blob.core.windows.net/container", Bucket: "container"},
+	}
+	for name, storage := range tests {
+		t.Run(name, func(t *testing.T) {
+			app, err := ToBufstreamApplication(wandb, nsn, storage, false, testScheme(t), manifest.Manifest{})
+			require.NoError(t, err)
+			require.Empty(t, app.Spec.PodTemplate.Spec.InitContainers)
+		})
+	}
+}
+
 func TestToBufstreamApplicationDefaultsReplicas(t *testing.T) {
 	setOpenShiftMode(t, false)
 	wandb := testWandb()
 	wandb.Spec.Kafka.ManagedKafka.Replicas = 0
 	nsn := CreateNsNameBuilder(types.NamespacedName{Namespace: "default", Name: "wandb-kafka"})
 
-	app, err := ToBufstreamApplication(wandb, nsn, testStorage(), testScheme(t), manifest.Manifest{})
+	app, err := ToBufstreamApplication(wandb, nsn, testStorage(), true, testScheme(t), manifest.Manifest{})
 	require.NoError(t, err)
 	require.Equal(t, int32(BufstreamReplicas), *app.Spec.Replicas)
 }
@@ -170,7 +200,7 @@ func TestApplicationsSecurityContextInOpenShiftMode(t *testing.T) {
 	requireOpenShiftKafkaContainerSecurityContext(t, etcd.Spec.PodTemplate.Spec.Containers[0].SecurityContext)
 
 	// Bufstream keeps its fixed UID even on OpenShift (nonroot-v2 admits it).
-	bufstream, err := ToBufstreamApplication(wandb, nsn, testStorage(), testScheme(t), manifest.Manifest{})
+	bufstream, err := ToBufstreamApplication(wandb, nsn, testStorage(), true, testScheme(t), manifest.Manifest{})
 	require.NoError(t, err)
 	requireKafkaPodSecurityContext(t, bufstream.Spec.PodTemplate.Spec.SecurityContext)
 	requireKafkaContainerSecurityContext(t, bufstream.Spec.PodTemplate.Spec.Containers[0].SecurityContext)
@@ -189,7 +219,7 @@ func TestApplicationsUseDedicatedServiceAccount(t *testing.T) {
 	require.NotNil(t, etcd.Spec.PodTemplate.Spec.AutomountServiceAccountToken)
 	require.False(t, *etcd.Spec.PodTemplate.Spec.AutomountServiceAccountToken)
 
-	bufstream, err := ToBufstreamApplication(wandb, nsn, testStorage(), testScheme(t), manifest.Manifest{})
+	bufstream, err := ToBufstreamApplication(wandb, nsn, testStorage(), true, testScheme(t), manifest.Manifest{})
 	require.NoError(t, err)
 	require.Equal(t, nsn.ServiceAccountName(), bufstream.Spec.PodTemplate.Spec.ServiceAccountName)
 	require.NotNil(t, bufstream.Spec.PodTemplate.Spec.AutomountServiceAccountToken)
