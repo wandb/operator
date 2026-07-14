@@ -158,6 +158,8 @@ func managedClickHouseWriteState(
 	// ClickHouse table data lives in the object store: use the "clickhouse"
 	// instance when provisioned, otherwise the default instance.
 	objStoreConn, _ := apiv2.ResolveInstance(objStoreConns, clickHouseObjectStoreInstance)
+	objStoreSpec, _ := apiv2.ResolveInstance(wandb.Spec.ObjectStore, clickHouseObjectStoreInstance)
+	waitForObjectStore := objStoreSpec.ManagedObjectStore != nil
 
 	// Resolve the bucket connection; wait and requeue if it isn't ready yet.
 	objStorage, err := altinity.ResolveObjectStorage(ctx, client, spec, objStoreConn)
@@ -190,7 +192,7 @@ func managedClickHouseWriteState(
 		}
 	}
 
-	desired, err := altinity.ToClickHouseVendorSpec(ctx, wandb, spec, client.Scheme(), objStorage, mfst)
+	desired, err := altinity.ToClickHouseVendorSpec(ctx, wandb, spec, client.Scheme(), objStorage, waitForObjectStore, mfst)
 	if err != nil {
 		log.Error(err, "failed to translate ClickHouse spec to vendor spec")
 		return []metav1.Condition{

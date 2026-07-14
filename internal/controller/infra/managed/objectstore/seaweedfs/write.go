@@ -66,6 +66,7 @@ func WriteState(
 			Status: metav1.ConditionFalse,
 			Reason: common.ApiErrorReason,
 		})
+		return result, nil
 	}
 
 	switch action {

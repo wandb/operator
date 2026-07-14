@@ -44,12 +44,18 @@ spec:
       dashboards: grafana
   datasource:
     name: VictoriaMetrics
+    uid: victoriametrics
     type: victoriametrics-metrics-datasource
     access: proxy
     url: {{ include "telemetry.metricsEndpoint" . | trimSuffix "/opentelemetry/v1/metrics" | quote }}
     isDefault: true
     jsonData:
       timeInterval: 30s
+      # Pivot from a metric exemplar (spanmetrics attaches trace IDs) to the trace.
+      exemplarTraceIdDestinations:
+        - name: trace_id
+          datasourceUid: victoriatraces
+          urlDisplayLabel: View trace
 ---
 apiVersion: grafana.integreatly.org/v1beta1
 kind: GrafanaDatasource
@@ -65,6 +71,7 @@ spec:
       dashboards: grafana
   datasource:
     name: VictoriaLogs
+    uid: victorialogs
     type: victoriametrics-logs-datasource
     access: proxy
     url: {{ include "telemetry.logsEndpoint" . | trimSuffix "/insert/opentelemetry/v1/logs" | quote }}
@@ -85,9 +92,20 @@ spec:
       dashboards: grafana
   datasource:
     name: VictoriaTraces
+    uid: victoriatraces
     type: jaeger
     access: proxy
     url: {{ printf "%s/select/jaeger" (include "telemetry.tracesEndpoint" . | trimSuffix "/insert/opentelemetry/v1/traces") | quote }}
+    jsonData:
+      # Pivot from a trace to its logs in VictoriaLogs, correlating on service name.
+      tracesToLogsV2:
+        datasourceUid: victorialogs
+        spanStartTimeShift: "-1h"
+        spanEndTimeShift: "1h"
+        filterByTraceID: false
+        tags:
+          - key: service.name
+            value: service
 ---
 apiVersion: grafana.integreatly.org/v1beta1
 kind: GrafanaDashboard
@@ -154,4 +172,28 @@ spec:
       datasourceName: VictoriaTraces
   json: |-
 {{ .Files.Get "dashboards/wandb-managed-install-performance.json" | nindent 4 }}
+---
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDashboard
+metadata:
+  name: wandb-application
+  namespace: {{ include "telemetry.namespace" . }}
+  labels:
+    app.kubernetes.io/component: telemetry
+    app.kubernetes.io/part-of: wandb
+spec:
+  uid: wandb-application
+  folder: W&B
+  instanceSelector:
+    matchLabels:
+      dashboards: grafana
+  datasources:
+    - inputName: DS_VICTORIAMETRICS
+      datasourceName: VictoriaMetrics
+    - inputName: DS_VICTORIATRACES
+      datasourceName: VictoriaTraces
+    - inputName: DS_VICTORIALOGS
+      datasourceName: VictoriaLogs
+  json: |-
+{{ .Files.Get "dashboards/wandb-application.json" | nindent 4 }}
 {{- end }}

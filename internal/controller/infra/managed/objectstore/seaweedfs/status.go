@@ -17,6 +17,8 @@ const (
 	SeaweedCustomResourceType = "SeaweedCustomResource"
 	SeaweedConnectionInfoType = "SeaweedConnectionInfo"
 	SeaweedReportedReadyType  = "SeaweedReportedReady"
+	SeaweedWritableType       = "SeaweedWritable"
+	SeaweedS3ReachableType    = "SeaweedS3Reachable"
 )
 
 func ComputeStatus(
@@ -70,6 +72,20 @@ func applyDefaultConditions(conditions []metav1.Condition) []metav1.Condition {
 			Reason: common.NoResourceReason,
 		})
 	}
+	if !common.ContainsType(conditions, SeaweedWritableType) {
+		conditions = append(conditions, metav1.Condition{
+			Type:   SeaweedWritableType,
+			Status: metav1.ConditionUnknown,
+			Reason: common.NoResourceReason,
+		})
+	}
+	if !common.ContainsType(conditions, SeaweedS3ReachableType) {
+		conditions = append(conditions, metav1.Condition{
+			Type:   SeaweedS3ReachableType,
+			Status: metav1.ConditionUnknown,
+			Reason: common.NoResourceReason,
+		})
+	}
 
 	return conditions
 }
@@ -88,6 +104,8 @@ func inferInfraState(
 	impliedStates = inferStateFromCondition(ctx, SeaweedCustomResourceType, impliedStates, conditions)
 	impliedStates = inferStateFromCondition(ctx, SeaweedConnectionInfoType, impliedStates, conditions)
 	impliedStates = inferStateFromCondition(ctx, SeaweedReportedReadyType, impliedStates, conditions)
+	impliedStates = inferStateFromCondition(ctx, SeaweedWritableType, impliedStates, conditions)
+	impliedStates = inferStateFromCondition(ctx, SeaweedS3ReachableType, impliedStates, conditions)
 
 	hasImpliedState := func(target string) bool {
 		return len(lo.FilterValues(
@@ -141,11 +159,29 @@ func inferStateFromCondition(ctx context.Context, conditionType string, impliedS
 			impliedStates[conditionType] = inferState_SeaweedConnectionInfoType(ctx, cond)
 		case SeaweedReportedReadyType:
 			impliedStates[conditionType] = inferState_SeaweedReportedReadyType(ctx, cond)
+		case SeaweedWritableType, SeaweedS3ReachableType:
+			impliedStates[conditionType] = inferState_SeaweedWritableType(ctx, cond)
 		default:
 			impliedStates[conditionType] = common.UnknownState
 		}
 	}
 	return impliedStates
+}
+
+func inferState_SeaweedWritableType(ctx context.Context, condition metav1.Condition) string {
+	log := logx.GetSlog(ctx)
+	result := common.PendingState
+	if condition.Status == metav1.ConditionTrue {
+		result = common.HealthyState
+	}
+	if condition.Status == metav1.ConditionFalse {
+		result = common.ErrorState
+	}
+	log.Debug(
+		"implied state", "state", result, "condition", condition.Type,
+		"reason", condition.Reason, "status", condition.Status,
+	)
+	return result
 }
 
 func inferState_SeaweedCustomResourceType(ctx context.Context, condition metav1.Condition) string {
