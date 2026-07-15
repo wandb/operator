@@ -503,11 +503,14 @@ func ReconcileWandbManifest(
 		return result, err
 	}
 
-	if appsHealthy(wandb.Status.Wandb.Applications, buildDesiredAppNames(manifest)) {
+	if desiredApps := buildDesiredAppNames(manifest); appsHealthy(wandb.Status.Wandb.Applications, desiredApps) {
 		if err := cleanupLegacyV1Deployments(ctx, client, wandb); err != nil {
 			logger.Error(err, "Failed to clean up legacy v1 deployments")
 			return ctrl.Result{}, err
 		}
+	} else {
+		logger.Info("Deferring legacy v1 deployment cleanup until all applications report ready",
+			"notReady", notReadyApps(wandb.Status.Wandb.Applications, desiredApps))
 	}
 
 	if wandb.Spec.Networking.Mode == apiv2.NetworkingModeGatewayAPI {
@@ -631,10 +634,16 @@ func reconcileApplications(
 		// change to port numbers, names, or protocols is propagated on each
 		// reconcile. If no service ports are declared, clear the ServiceTemplate.
 		if app.Service != nil && len(app.Service.Ports) > 0 {
+			// Copy + normalize: the CRD schema defaults ports[].protocol, so an
+			// un-normalized template never round-trips equal and the update gate
+			// below would fire on every reconcile, churning the Application.
+			ports := make([]corev1.ServicePort, len(app.Service.Ports))
+			copy(ports, app.Service.Ports)
+			common.NormalizeServicePorts(ports)
 			application.Spec.ServiceTemplate = &corev1.ServiceSpec{
-				Type: app.Service.Type,
+				Type:  app.Service.Type,
+				Ports: ports,
 			}
-			application.Spec.ServiceTemplate.Ports = app.Service.Ports
 		} else {
 			// No service declared in manifest; ensure we clear any previous template
 			application.Spec.ServiceTemplate = nil

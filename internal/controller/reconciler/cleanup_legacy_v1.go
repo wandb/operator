@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/logx"
@@ -70,6 +71,22 @@ func appsHealthy(
 		}
 	}
 	return true
+}
+
+// notReadyApps lists the desired applications blocking legacy cleanup, so the
+// gate is visible in operator logs instead of skipping silently.
+func notReadyApps(
+	appStatuses map[string]apiv2.ApplicationStatus,
+	desiredAppNames map[string]bool,
+) []string {
+	var out []string
+	for name := range desiredAppNames {
+		if s, ok := appStatuses[name]; !ok || !s.Ready {
+			out = append(out, name)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 func cleanupLegacyV1Deployments(

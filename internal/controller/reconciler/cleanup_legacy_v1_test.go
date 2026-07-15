@@ -233,3 +233,16 @@ func TestCleanupLegacyV1Deployments(t *testing.T) {
 		}
 	})
 }
+
+func TestNotReadyApps(t *testing.T) {
+	statuses := map[string]apiv2.ApplicationStatus{
+		"api":      {Ready: false},
+		"frontend": {Ready: true},
+		"weave":    {Ready: false},
+	}
+	desired := map[string]bool{"api": true, "frontend": true, "weave": true, "glue": true}
+	require.Equal(t, []string{"api", "glue", "weave"}, notReadyApps(statuses, desired),
+		"unready and missing apps are listed sorted")
+
+	require.Empty(t, notReadyApps(map[string]apiv2.ApplicationStatus{"api": {Ready: true}}, map[string]bool{"api": true}))
+}
