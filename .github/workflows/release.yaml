@@ -136,12 +136,19 @@ jobs:
           VERSION: ${{ steps.release.outputs.version }}
         run: make docker-build docker-push IMG="${IMAGE_REPOSITORY}:${VERSION}"
 
+      - name: Install chart-testing
+        uses: helm/chart-testing-action@e6669bcd63d7cb57cb4380c33043eebe5d111992 # v2.6.1
+        with:
+          version: v3.14.0
+
+      - name: Lint charts
+        run: ct lint --all --config deploy/ct.yaml
+
       - name: Package and publish chart
         env:
           VERSION: ${{ steps.release.outputs.version }}
         run: |
           set -euo pipefail
-          helm dependency update deploy/operator
           helm dependency build deploy/operator
           mkdir -p dist
           helm package deploy/operator --destination dist
