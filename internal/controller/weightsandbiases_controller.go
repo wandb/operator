@@ -135,7 +135,7 @@ func (r *WeightsAndBiasesReconciler) Delete(e event.DeleteEvent) bool {
 func (r *WeightsAndBiasesReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	var b = ctrl.NewControllerManagedBy(mgr).
 		For(&apiv2.WeightsAndBiases{}).
-		Owns(&apiv2.Application{}).
+		Owns(&apiv2.Application{}, builder.MatchEveryOwner).
 		Owns(&batchv1.Job{}).
 		Owns(&corev1.Secret{}).
 		Owns(&corev1.ConfigMap{}).
