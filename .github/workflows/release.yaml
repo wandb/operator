@@ -37,10 +37,13 @@ jobs:
           set -euo pipefail
 
           tag="${GITHUB_REF_NAME}"
+
           if [[ ! "${tag}" =~ ^v2\.([0-9]+)\.([0-9]+)(\-.*)?$ ]]; then
             echo "Expected a stable v2 tag in the form v2.x.y; got ${tag}" >&2
             exit 1
           fi
+
+          git fetch origin "refs/tags/${tag}:refs/tags/${tag}" --no-tags
 
           if [[ "$(git cat-file -t "refs/tags/${tag}")" != "tag" ]]; then
             echo "Release tag ${tag} must be annotated" >&2
