@@ -4,13 +4,14 @@ import (
 	"fmt"
 	"time"
 
-	"helm.sh/helm/v4/pkg/action"
-	chart "helm.sh/helm/v4/pkg/chart/v2"
-	chartutil "helm.sh/helm/v4/pkg/chart/v2/util"
-	"helm.sh/helm/v4/pkg/cli"
-	"helm.sh/helm/v4/pkg/kube"
-	"helm.sh/helm/v4/pkg/release"
-	releasecommon "helm.sh/helm/v4/pkg/release/common"
+	"helm.sh/helm/v3/pkg/action"
+	"helm.sh/helm/v3/pkg/chart"
+	"helm.sh/helm/v3/pkg/chartutil"
+	"helm.sh/helm/v3/pkg/cli"
+	"helm.sh/helm/v3/pkg/getter"
+	"helm.sh/helm/v3/pkg/release"
+	"helm.sh/helm/v3/pkg/releaseutil"
+	"helm.sh/helm/v3/pkg/repo"
 )
 
 const (
@@ -18,23 +19,27 @@ const (
 	maxReleasesToKeep    = 10
 )
 
+var (
+	noopLogger = func(_ string, _ ...interface{}) {}
+)
+
 type ActionableChartInterface interface {
 	Apply(
 		chart *chart.Chart,
 		values map[string]interface{},
-	) (release.Releaser, error)
+	) (*release.Release, error)
 	Install(
 		chart *chart.Chart,
 		values map[string]interface{},
-	) (release.Releaser, error)
-	History() ([]release.Releaser, error)
+	) (*release.Release, error)
+	History() ([]*release.Release, error)
 	Rollback(version int) error
-	Upgrade(chart *chart.Chart, values map[string]interface{}) (release.Releaser, error)
+	Upgrade(chart *chart.Chart, values map[string]interface{}) (*release.Release, error)
 	Uninstall() (*release.UninstallReleaseResponse, error)
-	GetRelease(version int) (release.Releaser, error)
+	GetRelease(version int) (*release.Release, error)
 }
 
-// InitConfig returns a helm action configuration. Namespace is used to determine
+// GetConfig returns a helm action configuration. Namespace is used to determine
 // where to store the versions
 func InitConfig(namespace string) (*cli.EnvSettings, *action.Configuration, error) {
 	settings := cli.New()
@@ -44,9 +49,45 @@ func InitConfig(namespace string) (*cli.EnvSettings, *action.Configuration, erro
 		settings.RESTClientGetter(),
 		settings.Namespace(),
 		secretsStorageDriver,
+		noopLogger,
 	)
 	config.Releases.MaxHistory = maxReleasesToKeep
 	return settings, config, err
+}
+
+func DownloadChart(repoURL string, name string) (string, error) {
+	settings := cli.New()
+	providers := getter.All(settings)
+
+	entry := new(repo.Entry)
+	entry.URL = repoURL
+	entry.Name = name
+
+	file := repo.NewFile()
+	file.Update(entry)
+
+	chartRepo, err := repo.NewChartRepository(entry, providers)
+	if err != nil {
+		return "", err
+	}
+
+	_, err = chartRepo.DownloadIndexFile()
+	if err != nil {
+		return "", err
+	}
+
+	chartURL, err := repo.FindChartInRepoURL(
+		repoURL, name,
+		"", "", "", "",
+		providers,
+	)
+	if err != nil {
+		return "", err
+	}
+
+	client := action.NewPull()
+	client.Settings = settings
+	return client.Run(chartURL)
 }
 
 func NewActionableChart(releaseName string, namespace string) (*ActionableChart, error) {
@@ -78,29 +119,18 @@ func (c *ActionableChart) isInstalled() bool {
 		return false
 	}
 
-	// Find the release with the highest revision using the Accessor interface,
-	// which handles any concrete release type (not just v1).
-	var latest release.Accessor
-	for _, r := range h {
-		acc, err := release.NewAccessor(r)
-		if err != nil {
-			continue
-		}
-		if latest == nil || acc.Version() > latest.Version() {
-			latest = acc
-		}
-	}
-	if latest == nil {
-		return false
-	}
+	releaseutil.Reverse(h, releaseutil.SortByRevision)
+	rel := h[0]
+	st := rel.Info.Status
 
-	return latest.Status() != releasecommon.StatusUninstalled.String()
+	return st != release.StatusUninstalled
+
 }
 
 func (c *ActionableChart) Apply(
 	chart *chart.Chart,
 	values map[string]interface{},
-) (release.Releaser, error) {
+) (*release.Release, error) {
 	if c.isInstalled() {
 		return c.Upgrade(chart, values)
 	}
@@ -110,42 +140,36 @@ func (c *ActionableChart) Apply(
 func (c *ActionableChart) Install(
 	chart *chart.Chart,
 	values map[string]interface{},
-) (release.Releaser, error) {
+) (*release.Release, error) {
 	client := action.NewInstall(c.config)
 	client.ReleaseName = c.releaseName
 	client.Namespace = c.namespace
-	client.WaitStrategy = kube.HookOnlyStrategy
-	client.ServerSideApply = false
 	return client.Run(chart, values)
 }
 
-func (c *ActionableChart) History() ([]release.Releaser, error) {
+func (c *ActionableChart) History() ([]*release.Release, error) {
 	return c.config.Releases.History(c.releaseName)
 }
 
 func (c *ActionableChart) Rollback(version int) error {
 	client := action.NewRollback(c.config)
-	client.WaitStrategy = kube.HookOnlyStrategy
-	client.ServerSideApply = "false"
 	return client.Run(c.releaseName)
 }
 
-func (c *ActionableChart) Upgrade(chart *chart.Chart, values map[string]interface{}) (release.Releaser, error) {
+func (c *ActionableChart) Upgrade(chart *chart.Chart, values map[string]interface{}) (*release.Release, error) {
 	client := action.NewUpgrade(c.config)
 	client.Namespace = c.namespace
 	client.MaxHistory = maxReleasesToKeep
-	client.WaitStrategy = kube.HookOnlyStrategy
-	client.ServerSideApply = "false"
 	return client.Run(c.releaseName, chart, values)
 }
 
 func (c *ActionableChart) Uninstall() (*release.UninstallReleaseResponse, error) {
 	client := action.NewUninstall(c.config)
-	client.WaitStrategy = kube.LegacyStrategy
+	client.Wait = true
 	client.Timeout = 600 * time.Second
 	return client.Run(c.releaseName)
 }
 
-func (c *ActionableChart) GetRelease(version int) (release.Releaser, error) {
+func (c *ActionableChart) GetRelease(version int) (*release.Release, error) {
 	return c.config.Releases.Get(c.releaseName, version)
 }

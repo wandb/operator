@@ -1,0 +1,53 @@
+{{- if and (ne (default "off" .Values.telemetry.mode) "off") (dig "wandb-operator" "enabled" true .Values.AsMap) }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Release.Name }}-vm
+rules:
+  - apiGroups:
+      - operator.victoriametrics.com
+    resources:
+      - vmagents
+      - vmalerts
+      - vmnodescrapes
+      - vmpodscrapes
+      - vmrules
+      - vmservicescrapes
+      - vmsingles
+      - vlsingles
+      - vtsingles
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - operator.victoriametrics.com
+    resources:
+      - vmagents/status
+      - vmalerts/status
+      - vmsingles/status
+      - vlsingles/status
+      - vtsingles/status
+    verbs:
+      - get
+      - patch
+      - update
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Release.Name }}-vm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ .Release.Name }}-vm
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "wandb-operator.fullname" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}

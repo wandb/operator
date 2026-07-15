@@ -1,0 +1,81 @@
+{{- if .Values.mysql.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.mysql.service.name }}
+  labels:
+    {{- include "test-infra.componentLabels" (dict "root" . "component" "mysql") | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/name: mysql
+  template:
+    metadata:
+      labels:
+        {{- include "test-infra.componentLabels" (dict "root" . "component" "mysql") | nindent 8 }}
+    spec:
+      containers:
+        - name: mysql
+          image: {{ .Values.mysql.image }}
+          imagePullPolicy: IfNotPresent
+          {{- if include "test-infra.mysqlTLS" . }}
+          args:
+            - --require-secure-transport=ON
+            - --ssl-ca=/etc/mysql/tls/ca.crt
+            - --ssl-cert=/etc/mysql/tls/tls.crt
+            - --ssl-key=/etc/mysql/tls/tls.key
+          {{- end }}
+          ports:
+            - name: mysql
+              containerPort: 3306
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              value: {{ .Values.mysql.rootPassword | quote }}
+            - name: MYSQL_DATABASE
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.mysql.secret.name }}
+                  key: Database
+            - name: MYSQL_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.mysql.secret.name }}
+                  key: Username
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.mysql.secret.name }}
+                  key: Password
+          readinessProbe:
+            tcpSocket:
+              port: 3306
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: 3306
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.mysql.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/mysql
+            {{- if include "test-infra.mysqlTLS" . }}
+            - name: tls
+              mountPath: /etc/mysql/tls
+              readOnly: true
+            {{- end }}
+      volumes:
+        - name: data
+          emptyDir: {}
+        {{- if include "test-infra.mysqlTLS" . }}
+        - name: tls
+          secret:
+            secretName: {{ .Values.mysql.tls.secretName }}
+        {{- end }}
+{{- end }}

@@ -20,10 +20,10 @@ spec:
     global:
       bucket:
         provider: "s3"
-        name: "minio.minio.svc.cluster.local:9000/bucket"
+        name: "seaweedfs.seaweedfs.svc.cluster.local:8333/bucket"
         region: "us-east-1"
-        accessKey: "minio"
-        secretKey: "minio123"
+        accessKey: "seaweedfs"
+        secretKey: "seaweedfs123"
 
     app:
       image:

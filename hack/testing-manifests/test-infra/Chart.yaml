@@ -1,0 +1,6 @@
+apiVersion: v2
+name: test-infra
+description: Standalone single-container MySQL / Redis / SeaweedFS for testing user-provided infrastructure against the wandb operator. Not for production use.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

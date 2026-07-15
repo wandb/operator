@@ -7,8 +7,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/wandb/operator/pkg/utils"
 
-	chartutil "helm.sh/helm/v4/pkg/chart/common/util"
-	"helm.sh/helm/v4/pkg/strvals"
+	"helm.sh/helm/v3/pkg/chartutil"
+	"helm.sh/helm/v3/pkg/strvals"
 )
 
 // Values holds an arbitrary tree-like data structure, such as parsed JSON or
@@ -142,7 +142,7 @@ func (v Values) SetValue(key string, value interface{}) error {
 	cursor := v
 	keyElements := strings.Split(key, ".")
 
-	var target interface{} = cursor
+	var target interface{}
 	for idx, elm := range keyElements {
 		target = cursor[elm]
 

@@ -8,6 +8,7 @@
 bin
 testbin/*
 Dockerfile.cross
+.codex
 
 # Test binary, build with `go test -c`
 *.test
@@ -30,11 +31,23 @@ junit.xml
 *.swo
 *~
 
+*.tgz
+
+/tmp
 /charts
 /cdk8s
 /git
 
 tilt-settings.json
+tilt-settings.star
+hack/testing-manifests/wandb/.generated/*.yaml
 /tilt_bin
+/dist
 
 .DS_Store
+
+# Local webhook development certificates
+.local-webhook-certs/
+
+# various util artifacts
+.k8s-images

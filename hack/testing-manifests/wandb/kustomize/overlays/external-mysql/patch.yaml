@@ -1,0 +1,40 @@
+apiVersion: apps.wandb.com/v2
+kind: WeightsAndBiases
+metadata:
+  name: wandb
+spec:
+  mysql:
+    managedMysql: null
+    externalMysql:
+      # required
+      host:
+        name: external-mysql-connection
+        key: Host
+      port:
+        name: external-mysql-connection
+        key: Port
+      database:
+        name: external-mysql-connection
+        key: Database
+      username:
+        name: external-mysql-connection
+        key: Username
+      password:
+        name: external-mysql-connection
+        key: Password
+      URL:
+        name: external-mysql-connection
+        key: url
+      # optional
+      # tls:
+      #   name: external-mysql-connection
+      #   key: Tls
+      # sslCa:
+      #   name: external-mysql-connection
+      #   key: SslCa
+      # sslCert:
+      #   name: external-mysql-connection
+      #   key: SslCert
+      # sslKey:
+      #   name: external-mysql-connection
+      #   key: SslKey

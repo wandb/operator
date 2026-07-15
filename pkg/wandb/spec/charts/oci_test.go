@@ -9,7 +9,7 @@ import (
 	. "github.com/onsi/gomega"
 	v1 "github.com/wandb/operator/api/v1"
 	"github.com/wandb/operator/pkg/wandb/spec"
-	"helm.sh/helm/v4/pkg/registry"
+	"helm.sh/helm/v3/pkg/registry"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"

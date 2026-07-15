@@ -1,0 +1,44 @@
+openshift:
+  enabled: true
+
+wandb-operator:
+  podSecurityContext:
+    runAsUser: null
+    runAsGroup: null
+    fsGroup: null
+    fsGroupChangePolicy: null
+
+  containers:
+    operator:
+      env:
+        OPENSHIFT:
+          value: "true"
+
+# Null these operators' hardcoded IDs so restricted-v2 assigns valid ones.
+redis-operator:
+  podSecurityContext:
+    runAsUser: null
+    runAsGroup: null
+    fsGroup: null
+    fsGroupChangePolicy: null
+
+altinity-clickhouse-operator:
+  podSecurityContext:
+    runAsUser: null
+    runAsGroup: null
+    fsGroup: null
+    fsGroupChangePolicy: null
+
+seaweedfs-operator:
+  podSecurityContext:
+    runAsUser: null
+    runAsGroup: null
+    fsGroup: null
+
+# Disable moco's injected fixed 10000 IDs so restricted-v2 admits MySQL pods.
+moco:
+  extraArgs:
+    - --disable-default-security-context
+
+grafana-operator:
+  isOpenShift: true

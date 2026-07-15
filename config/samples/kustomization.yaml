@@ -1,4 +1,6 @@
 ## Append samples of your project ##
 resources:
 - apps_v1_weightsandbiases.yaml
+- apps_v2_weightsandbiases.yaml
+- apps_v2_application.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

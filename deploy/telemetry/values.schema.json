@@ -1,0 +1,124 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "mode": {
+      "type": "string",
+      "enum": ["off", "forward", "full"]
+    },
+    "namespace": {
+      "type": "string"
+    },
+    "forwarding": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "otlp": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "endpoint": {
+              "type": "string"
+            },
+            "protocol": {
+              "type": "string",
+              "enum": ["http/protobuf", "grpc"]
+            },
+            "headers": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "tls": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "insecure": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "retentionPeriod": {
+      "type": "string",
+      "minLength": 1
+    },
+    "otlpGateway": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "podSecurityContext": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "securityContext": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "scrape": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "kubeletCadvisor": {
+          "type": "boolean"
+        },
+        "operators": {
+          "type": "boolean"
+        },
+        "wandbApi": {
+          "type": "boolean"
+        },
+        "infrastructure": {
+          "type": "boolean"
+        },
+        "kubeStateMetrics": {
+          "type": "boolean"
+        }
+      }
+    },
+    "alerting": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "evaluationInterval": {
+          "type": "string",
+          "minLength": 1
+        },
+        "notifier": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "type": {
+              "type": "string",
+              "enum": ["webhook", "email", "slack"]
+            },
+            "target": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      }
+    }
+  }
+}

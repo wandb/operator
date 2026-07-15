@@ -1,0 +1,20 @@
+{{- $operatorEnabled := true -}}
+{{- $operatorValues := index .Values "wandb-operator" -}}
+{{- if and $operatorValues (hasKey $operatorValues "enabled") -}}
+{{- $operatorEnabled = index $operatorValues "enabled" -}}
+{{- end -}}
+{{- if and $operatorEnabled (ne (default "off" .Values.telemetry.mode) "off") }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wandb-operator-telemetry-config
+  namespace: {{ .Release.Namespace }}
+data:
+  TELEMETRY_ENABLED: {{ ne (default "off" .Values.telemetry.mode) "off" | quote }}
+  TELEMETRY_MODE: {{ default "off" .Values.telemetry.mode | quote }}
+  TELEMETRY_MANAGED_NAMESPACE: {{ .Values.telemetry.namespace | quote }}
+  TELEMETRY_OTEL_SECRET_NAME: {{ .Values.telemetry.otel.secretName | quote }}
+  TELEMETRY_OTEL_PROTOCOL: {{ .Values.telemetry.otel.protocol | quote }}
+  TELEMETRY_OTEL_SERVICE_NAME: {{ .Values.telemetry.otel.serviceName | quote }}
+  TELEMETRY_OTEL_RESOURCE_ATTRIBUTES: {{ .Values.telemetry.otel.resourceAttributes | quote }}
+{{- end }}

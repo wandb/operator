@@ -1,0 +1,220 @@
+{{- if eq (include "telemetry.stackEnabled" .) "true" }}
+{{- $forwardingEnabled := eq (include "telemetry.forwardingEnabled" .) "true" }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "telemetry.otlpGatewayName" . }}-config
+  namespace: {{ include "telemetry.namespace" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "telemetry.otlpGatewayName" . }}
+    app.kubernetes.io/component: telemetry
+    app.kubernetes.io/part-of: wandb
+data:
+  collector.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+      statsd/dogstatsd:
+        endpoint: 0.0.0.0:8125
+        aggregation_interval: 15s
+        # Map DogStatsD timing/histogram/distribution metrics to histograms so
+        # percentiles (p50/p95/p99) are queryable. Without this the receiver emits
+        # summaries (count/sum only) and gorilla's operation.duration, dist_*, and
+        # *_dist_duration families lose their tails — leaving only averages.
+        timer_histogram_mapping:
+          - statsd_type: timing
+            observer_type: histogram
+            histogram:
+              max_size: 100
+          - statsd_type: histogram
+            observer_type: histogram
+            histogram:
+              max_size: 100
+          - statsd_type: distribution
+            observer_type: histogram
+            histogram:
+              max_size: 100
+      datadog:
+        endpoint: 0.0.0.0:8126
+
+    processors:
+      batch: {}
+
+    connectors:
+      # Derives RED-style metrics (request count + duration histogram) from
+      # incoming traces. service.name and span.name are implicit identity.
+      # Dimensions promote span attributes to metric labels for breakdowns:
+      #   - http.route: HTTP route.
+      #   - graphql.service / graphql.operationName: gorilla sets these on its
+      #     OTEL spans (core PR #43519), enabling per-service GraphQL error
+      #     attribution from metrics. graphql.service is bounded (~schema source
+      #     files); graphql.operationName is higher-cardinality — watch the
+      #     ~50k-series budget and drop it to trace-only if threatened.
+      # user.id / project.name / entity.name remain deferred (too high-card).
+      spanmetrics:
+        namespace: traces_spanmetrics
+        dimensions:
+          - name: http.route
+            default: ""
+          - name: graphql.service
+            default: ""
+          - name: graphql.operationName
+            default: ""
+        # Attach trace IDs to metric datapoints so a latency/error spike links
+        # straight to an example trace.
+        exemplars:
+          enabled: true
+        histogram:
+          explicit:
+            buckets: [5ms, 10ms, 25ms, 50ms, 100ms, 250ms, 500ms, 1s, 2.5s, 5s, 10s]
+        metrics_flush_interval: 15s
+
+    exporters:
+      otlphttp/vm:
+        endpoint: http://vmsingle-{{ include "telemetry.vmsingleName" . }}:8428
+        metrics_endpoint: http://vmsingle-{{ include "telemetry.vmsingleName" . }}:8428/opentelemetry/v1/metrics
+      otlphttp/vl:
+        endpoint: http://vlsingle-{{ include "telemetry.vlsingleName" . }}:9428
+        logs_endpoint: http://vlsingle-{{ include "telemetry.vlsingleName" . }}:9428/insert/opentelemetry/v1/logs
+      otlphttp/vt:
+        endpoint: http://vtsingle-{{ include "telemetry.vtsingleName" . }}:10428
+        traces_endpoint: http://vtsingle-{{ include "telemetry.vtsingleName" . }}:10428/insert/opentelemetry/v1/traces
+{{ if $forwardingEnabled }}
+{{ if eq (default "http/protobuf" .Values.forwarding.otlp.protocol) "grpc" }}
+      otlp/external:
+        endpoint: {{ .Values.forwarding.otlp.endpoint | quote }}
+        tls:
+          insecure: {{ .Values.forwarding.otlp.tls.insecure }}
+{{ with .Values.forwarding.otlp.headers }}
+        headers:
+{{ toYaml . | nindent 10 }}
+{{ end }}
+{{ else }}
+      otlphttp/external:
+        endpoint: {{ .Values.forwarding.otlp.endpoint | quote }}
+{{ with .Values.forwarding.otlp.headers }}
+        headers:
+{{ toYaml . | nindent 10 }}
+{{ end }}
+{{ end }}
+{{ end }}
+
+    service:
+      telemetry:
+        metrics:
+          address: 0.0.0.0:8888
+      pipelines:
+        metrics:
+          receivers: [otlp, statsd/dogstatsd, spanmetrics]
+          processors: [batch]
+          exporters: [otlphttp/vm{{ if $forwardingEnabled }}, {{ include "telemetry.forwardingExporterName" . }}{{ end }}]
+        logs:
+          receivers: [otlp]
+          processors: [batch]
+          exporters: [otlphttp/vl{{ if $forwardingEnabled }}, {{ include "telemetry.forwardingExporterName" . }}{{ end }}]
+        traces:
+          receivers: [otlp, datadog]
+          processors: [batch]
+          exporters: [otlphttp/vt, spanmetrics{{ if $forwardingEnabled }}, {{ include "telemetry.forwardingExporterName" . }}{{ end }}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "telemetry.otlpGatewayName" . }}
+  namespace: {{ include "telemetry.namespace" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "telemetry.otlpGatewayName" . }}
+    app.kubernetes.io/component: telemetry
+    app.kubernetes.io/part-of: wandb
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "telemetry.otlpGatewayName" . }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "telemetry.otlpGatewayName" . }}
+        app.kubernetes.io/component: telemetry
+        app.kubernetes.io/part-of: wandb
+    spec:
+      {{- with .Values.otlpGateway.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: otel-collector
+          image: "otel/opentelemetry-collector-contrib:0.102.1"
+          imagePullPolicy: IfNotPresent
+          {{- with .Values.otlpGateway.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          args:
+            - --config=/etc/otelcol/collector.yaml
+          ports:
+            - name: otlp-grpc
+              containerPort: 4317
+              protocol: TCP
+            - name: otlp-http
+              containerPort: 4318
+              protocol: TCP
+            - name: statsd
+              containerPort: 8125
+              protocol: UDP
+            - name: datadog-trace
+              containerPort: 8126
+              protocol: TCP
+            - name: metrics
+              containerPort: 8888
+              protocol: TCP
+          volumeMounts:
+            - name: config
+              mountPath: /etc/otelcol
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "telemetry.otlpGatewayName" . }}-config
+            items:
+              - key: collector.yaml
+                path: collector.yaml
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "telemetry.otlpGatewayName" . }}
+  namespace: {{ include "telemetry.namespace" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "telemetry.otlpGatewayName" . }}
+    app.kubernetes.io/component: telemetry
+    app.kubernetes.io/part-of: wandb
+spec:
+  selector:
+    app.kubernetes.io/name: {{ include "telemetry.otlpGatewayName" . }}
+  ports:
+    - name: otlp-grpc
+      port: 4317
+      targetPort: otlp-grpc
+      protocol: TCP
+    - name: otlp-http
+      port: 4318
+      targetPort: otlp-http
+      protocol: TCP
+    - name: statsd
+      port: 8125
+      targetPort: statsd
+      protocol: UDP
+    - name: datadog-trace
+      port: 8126
+      targetPort: datadog-trace
+      protocol: TCP
+    - name: metrics
+      port: 8888
+      targetPort: metrics
+      protocol: TCP
+{{- end }}

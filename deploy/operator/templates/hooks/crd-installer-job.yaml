@@ -1,0 +1,89 @@
+{{- /*
+  Pre-install / pre-upgrade Helm hook Job that installs CRDs for the operator
+  itself and any enabled subchart whose CRDs we manage (redis, clickhouse, etc.).
+
+  The Job runs the operator image's /crd-installer binary, which embeds the
+  CRD YAML at build time and applies it via server-side apply with field
+  manager "wandb-crd-installer". cert-manager's CA injector owns the
+  caBundle field separately, so SSA preserves it across re-applies.
+
+  Hook lifecycle:
+    - pre-install, pre-upgrade — runs on both fresh installs and upgrades.
+    - weight 0 (RBAC at weight -10 in rbac.yaml runs first).
+    - before-hook-creation,hook-succeeded — re-runs are idempotent; cleanup
+      on success keeps the cluster tidy.
+*/ -}}
+{{- if .Values.helmHooks.enabled }}
+{{- $image := printf "%s:%s" (index .Values "wandb-operator" "image" "repository") (index .Values "wandb-operator" "image" "tag") -}}
+{{- /*
+  Honor the same imagePullSecrets the main operator pod uses. wandb-base
+  concatenates the subchart's own list with .Values.global.imagePullSecrets,
+  so mirror both sources here.
+*/ -}}
+{{- $operatorPullSecrets := default list (index .Values "wandb-operator" "imagePullSecrets") -}}
+{{- $globalPullSecrets := default list (dig "global" "imagePullSecrets" (list) .Values.AsMap) -}}
+{{- $combinedPullSecrets := concat $operatorPullSecrets $globalPullSecrets -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "wandb-operator.crdInstallerName" . }}
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": "pre-install,pre-upgrade"
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": "before-hook-creation,hook-succeeded"
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 300
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: crd-installer
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: {{ include "wandb-operator.crdInstallerName" . }}
+      {{- if $combinedPullSecrets }}
+      imagePullSecrets:
+        {{- range $secret := $combinedPullSecrets }}
+        {{- if kindIs "string" $secret }}
+        - name: {{ tpl $secret $ }}
+        {{- else if and (kindIs "map" $secret) (hasKey $secret "name") }}
+        - name: {{ tpl $secret.name $ }}
+        {{- end }}
+        {{- end }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: {{ dig "wandb-operator" "podSecurityContext" "runAsNonRoot" true .Values.AsMap }}
+        {{- /* runAsUser only if set, else restricted-v2 assigns it. */ -}}
+        {{- $crdInstallerRunAsUser := dig "wandb-operator" "podSecurityContext" "runAsUser" nil .Values.AsMap }}
+        {{- if $crdInstallerRunAsUser }}
+        runAsUser: {{ $crdInstallerRunAsUser }}
+        {{- end }}
+        seccompProfile:
+          type: {{ dig "wandb-operator" "podSecurityContext" "seccompProfile" "type" "RuntimeDefault" .Values.AsMap }}
+      containers:
+        - name: crd-installer
+          image: {{ $image | quote }}
+          imagePullPolicy: {{ index .Values "wandb-operator" "image" "pullPolicy" | default "IfNotPresent" }}
+          command: ["/crd-installer"]
+          args:
+            - apply
+            - --cert-inject-reference={{ .Release.Namespace }}/{{ .Release.Name }}-serving-cert
+            - --webhook-service-name={{ include "wandb-operator.webhookServiceName" . }}
+            - --webhook-service-namespace={{ .Release.Namespace }}
+            - --groups={{ include "wandb-operator.crdGroups" . }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+{{- end }}

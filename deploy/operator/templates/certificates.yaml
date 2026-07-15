@@ -1,0 +1,24 @@
+{{- if not (eq (index .Values "wandb-operator" "enabled") false) }}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ .Release.Name }}-serving-cert
+  namespace: {{ .Release.Namespace }}
+spec:
+  dnsNames:
+    - {{ include "wandb-operator.serviceName" . }}.{{ .Release.Namespace }}.svc
+    - {{ include "wandb-operator.serviceName" . }}.{{ .Release.Namespace }}.svc.cluster.local
+  issuerRef:
+    kind: Issuer
+    name: {{ .Release.Name }}-selfsigned-issuer
+  secretName: {{ .Release.Name }}-serving-cert
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ .Release.Name }}-selfsigned-issuer
+  namespace: {{ .Release.Namespace }}
+spec:
+  selfSigned: {}
+{{- end }}

@@ -1,128 +1,938 @@
-# default values
+# Local operator development.
+#
+# Tilt keeps the fast local controller loop while installing the operator
+# through the same Helm chart path as a normal install.
+
+GENERATED_DIR = "hack/testing-manifests/wandb/.generated"
+GENERATED_WANDB_CR = GENERATED_DIR + "/tilt-wandb-cr.yaml"
+GENERATED_OPERATOR_VALUES = GENERATED_DIR + "/tilt-operator-values.yaml"
+GENERATED_CUSTOM_CA_CONFIGMAP = GENERATED_DIR + "/tilt-custom-ca-configmap.yaml"
+
+GATEWAY_API_CRDS_URL = "https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.4.0/standard-install.yaml"
+IMG = "controller:latest"
+
+GROUP_DEPENDENCIES = "Dependencies"
+GROUP_WANDB_APP = "Wandb-App"
+GROUP_TELEMETRY = "Telemetry"
+GROUP_WANDB_OPERATOR = "Wandb-Operator"
+
 settings = {
     "allowedContexts": [
         "docker-desktop",
         "minikube",
         "kind-kind",
+        "kind-wandb-operator",
         "orbstack",
+        "crc-admin",
     ],
-    "installMinio": True,
-    "installWandb": True,
-    "wandbCRD": "default",
+
+    # Operator install settings.
+    "operatorNamespace": "wandb-operators",
+    "openshiftSCC": False,
+
+    # W&B CR settings.
+    "includeCR": True,
+    "crFile": "",
+    "wandbName": "wandb",
+    "wandbNamespace": "wandb",
+    "wandbHostname": "http://localhost:8080",
+    "wandbVersion": "0.83.0-clickhouse-keeper.2",
+    "size": "dev",
+    "retentionPolicy": "detach",
+    "licenseFile": "",
+    "manifestSource": "published",  # published or local
+    "localManifestPath": "hack/testing-manifests/server-manifest",
+    "networkMode": "gateway",  # gateway or ingress
+    "gatewayClass": "nginx",
+    "ingressClass": "nginx",
+    "createCA": True,
+    "issuerName": "",
+
+    # off, full, forward.
+    "observabilityMode": "off",
+
+    "logFormat": "pretty",  # pretty, text, json
+
+    "useExternalMysql": False,
+    "useExternalRedis": False,
+    "useExternalObjectStore": False,
+    "useCustomCA": False,
 }
 
-# global settings
-settings.update(read_json(
-    "tilt-settings.json",
-    default={},
-))
+if os.path.exists("tilt-settings.json"):
+    fail("tilt-settings.json is no longer supported. Migrate to tilt-settings.star (see tilt-settings.sample.star).")
 
-# Configure global watch settings with a 2-second debounce
-watch_settings(ignore=["**/.git", "**/*.out"])
+if not os.path.exists("tilt-settings.star"):
+    local("cp tilt-settings.sample.star tilt-settings.star")
 
-if k8s_context() in settings.get("allowedContexts"):
+load("./tilt-settings.star", "SETTINGS")
+settings.update(SETTINGS)
+
+
+def warn(message):
+    print("WARNING: " + message)
+
+
+def as_bool(value):
+    if value == True:
+        return True
+    if value == False or value == None:
+        return False
+    return str(value).lower() in ["true", "yes", "1", "on"]
+
+
+def bool_string(value):
+    if value:
+        return "true"
+    return "false"
+
+
+def normalize_observability_mode():
+    mode = str(settings.get("observabilityMode", "off")).lower()
+    if mode in ["off", "full", "forward"]:
+        return mode
+
+    fail("observabilityMode must be one of: off, full, forward")
+
+
+def normalize_network_mode():
+    mode = str(settings.get("networkMode", "gateway")).lower()
+    if mode in ["gateway", "ingress"]:
+        return mode
+
+    fail("networkMode must be one of: gateway, ingress")
+
+
+def normalize_manifest_source():
+    source = str(settings.get("manifestSource", "published")).lower()
+    if source in ["published", "local"]:
+        return source
+
+    fail("manifestSource must be one of: published, local")
+
+
+def shell_quote(value):
+    return "'" + str(value).replace("'", "'\"'\"'") + "'"
+
+
+def write_file_cmd(path, contents):
+    return "cat > %s <<'EOF'\n%s\nEOF" % (path, contents)
+
+
+def k8s_yaml_object(obj):
+    k8s_yaml(encode_yaml(obj))
+
+
+def repo_path(path):
+    path = str(path)
+    if path.startswith("./"):
+        return path
+    return "./" + path
+
+
+def validate_local_manifest_path(path):
+    path = str(path)
+    if path.startswith("/") or path.startswith("../") or "/../" in path or path == "..":
+        fail("localManifestPath must be a repo-relative Docker build-context path.")
+    if " " in path:
+        fail("localManifestPath cannot contain spaces because it is used in a Dockerfile ADD instruction.")
+    if not os.path.exists(path):
+        fail("manifestSource='local' requires localManifestPath to exist: %s" % path)
+    return path
+
+
+def write_generated_yaml(path, obj):
+    local("mkdir -p " + GENERATED_DIR)
+    local(write_file_cmd(path, encode_yaml(obj)))
+    return path
+
+
+def helm_supports_take_ownership():
+    return str(local("helm upgrade --help | grep -q -- '--take-ownership' && echo true || echo false")).strip() == "true"
+
+
+def url_host(url):
+    rest = str(url)
+    if "://" in rest:
+        rest = rest.split("://", 1)[1]
+    host_port = rest.split("/", 1)[0]
+    if "@" in host_port:
+        host_port = host_port.split("@", 1)[1]
+    parts = host_port.split(":")
+    return parts[0]
+
+
+def url_port(url):
+    rest = str(url)
+    if "://" in rest:
+        rest = rest.split("://", 1)[1]
+    host_port = rest.split("/", 1)[0]
+    parts = host_port.split(":")
+    if len(parts) > 1:
+        return int(parts[len(parts) - 1])
+    if str(url).startswith("https://"):
+        return 443
+    return 80
+
+
+settings["networkMode"] = normalize_network_mode()
+settings["observabilityMode"] = normalize_observability_mode()
+settings["manifestSource"] = normalize_manifest_source()
+settings["openshiftSCC"] = as_bool(settings.get("openshiftSCC"))
+if settings["manifestSource"] == "local":
+    settings["localManifestPath"] = validate_local_manifest_path(settings.get("localManifestPath"))
+
+USE_EXTERNAL_MYSQL = as_bool(settings.get("useExternalMysql"))
+USE_EXTERNAL_REDIS = as_bool(settings.get("useExternalRedis"))
+USE_EXTERNAL_OBJECT_STORE = as_bool(settings.get("useExternalObjectStore"))
+USE_CUSTOM_CA = as_bool(settings.get("useCustomCA"))
+USE_EXTERNAL_INFRA = USE_EXTERNAL_MYSQL or USE_EXTERNAL_REDIS or USE_EXTERNAL_OBJECT_STORE
+USE_TEST_INFRA_TLS = USE_CUSTOM_CA and (USE_EXTERNAL_MYSQL or USE_EXTERNAL_REDIS)
+
+if (USE_EXTERNAL_INFRA or USE_CUSTOM_CA) and not as_bool(settings.get("includeCR")):
+    fail("useExternalMysql/useExternalRedis/useExternalObjectStore/useCustomCA require includeCR=True")
+if (USE_EXTERNAL_INFRA or USE_CUSTOM_CA) and settings.get("wandbCR", "") != "":
+    fail("useExternalMysql/useExternalRedis/useExternalObjectStore/useCustomCA patch generated CRs; use crFile instead of wandbCR")
+
+watch_settings(ignore=["**/.git", "**/*.out", GENERATED_DIR + "/**"])
+update_settings(k8s_upsert_timeout_secs=300)
+
+currentContext = k8s_context()
+if currentContext in settings.get("allowedContexts"):
     print("Context is allowed")
 else:
     fail("Selected context is not in allow list")
 
-allow_k8s_contexts(settings.get("allowed_k8s_contexts"))
+allow_k8s_contexts(settings.get("allowedContexts"))
 
-os.putenv('PATH', './bin:' + os.getenv('PATH'))
+IS_CRC = "crc" in currentContext or "api-crc-testing" in currentContext
+if IS_CRC:
+    settings["openshiftSCC"] = True
+    default_registry(
+        "default-route-openshift-image-registry.apps-crc.testing/%s" % settings.get("operatorNamespace"),
+        host_from_cluster="image-registry.openshift-image-registry.svc:5000/%s" % settings.get("operatorNamespace"),
+    )
 
-load('ext://restart_process', 'docker_build_with_restart')
+os.putenv("PATH", "./bin:" + os.getenv("PATH"))
 
-DOCKERFILE = '''
-FROM registry.access.redhat.com/ubi9/ubi-minimal
+load("ext://helm_resource", "helm_repo", "helm_resource")
 
-ADD tilt_bin/manager /manager
+def operator_dockerfile():
+    lines = [
+        "FROM registry.access.redhat.com/ubi9/ubi",
+        "",
+        "ADD tilt_bin/manager /manager",
+        "ADD tilt_bin/crd-installer /crd-installer",
+    ]
 
-RUN mkdir -p /helm/.cache/helm /helm/.config/helm /helm/.local/share/helm && chown -R 65532:65532 /helm
+    if settings.get("manifestSource") == "local":
+        lines.append("ADD %s /server-manifest" % settings.get("localManifestPath"))
 
-USER 65532:65532
+    lines.extend([
+        "",
+        "RUN mkdir -p /helm/.cache/helm /helm/.config/helm /helm/.local/share/helm && chown -R 65532:65532 /helm",
+        "USER 65532:65532",
+        "ENV HELM_CACHE_HOME=/helm/.cache/helm",
+        "ENV HELM_CONFIG_HOME=/helm/.config/helm",
+        "ENV HELM_DATA_HOME=/helm/.local/share/helm",
+        "",
+    ])
 
-ENV HELM_CACHE_HOME=/helm/.cache/helm
-ENV HELM_CONFIG_HOME=/helm/.config/helm
-ENV HELM_DATA_HOME=/helm/.local/share/helm
-'''
-DOMAIN = "wandb.com"
-GROUP = "apps"
-VERSION = "v1"
-KIND = "wandb"
-IMG = 'controller:latest'
-CONTROLLERGEN = 'rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases;'
-DISABLE_SECURITY_CONTEXT = True
+    return "\n".join(lines)
 
-def manifests():
-    return 'controller-gen ' + CONTROLLERGEN
-
-
-def generate():
-    return 'controller-gen object:headerFile="hack/boilerplate.go.txt" paths="./...";'
-
-
-def vetfmt():
-    return 'go vet ./...; go fmt ./...'
-
-# build to tilt_bin because kubebuilder has a dockerignore for bin/
 
 def binary():
-    return 'CGO_ENABLED=0 GOOS=linux GO111MODULE=on go build -o tilt_bin/manager cmd/main.go'
+    return "CGO_ENABLED=0 GOOS=linux GO111MODULE=on go build -o tilt_bin/manager ./cmd/manager && CGO_ENABLED=0 GOOS=linux GO111MODULE=on go build -o tilt_bin/crd-installer ./cmd/crd-installer"
 
 
-installed = local("which kubebuilder")
-print("kubebuilder is present:", installed)
-
-DIRNAME = os.path.basename(os. getcwd())
-
-local(manifests() + generate())
-
-if settings.get("installMinio"):
-    k8s_yaml('./hack/testing-manifests/minio/minio.yaml')
+def managed_endpoint_resource(name, anchor_object, deps, local_port, remote_port, link_name, pod_selector, labels, local_host="localhost"):
     k8s_resource(
-        'minio',
-        'Minio',
-        objects=[
-            'minio:service',
-            'minio:namespace'
-        ]
+        new_name=name,
+        objects=[anchor_object],
+        discovery_strategy="selectors-only",
+        extra_pod_selectors=[pod_selector],
+        resource_deps=deps,
+        port_forwards=[
+            port_forward(local_port, remote_port, name=link_name, host=local_host),
+        ],
+        labels=labels,
     )
 
-k8s_yaml(local(manifests() + 'kustomize build config/default'))
 
-k8s_resource(
-    new_name='CRD',
-    objects=['weightsandbiases.apps.wandb.com:customresourcedefinition'])
-k8s_resource(
-    new_name='RBAC',
-    objects=[
-        'operator-manager-role:clusterrole',
-        'operator-manager-rolebinding:clusterrolebinding',
-        'operator-leader-election-role:role',
-        'operator-leader-election-rolebinding:rolebinding'
+def endpoint_anchor(name):
+    return {
+        "apiVersion": "v1",
+        "kind": "ConfigMap",
+        "metadata": {
+            "name": name,
+            "namespace": "default",
+        },
+        "data": {
+            "managed-by": "tilt",
+        },
+    }
+
+
+def build_endpoint_anchors(names):
+    for name in names:
+        k8s_yaml_object(endpoint_anchor(name))
+
+
+def build_wandb_namespace(namespace):
+    k8s_yaml_object({
+        "apiVersion": "v1",
+        "kind": "Namespace",
+        "metadata": {
+            "name": namespace,
+            "labels": {
+                "app.kubernetes.io/managed-by": "tilt",
+            },
+        },
+    })
+
+
+def build_operator_values(telemetry_namespace):
+    telemetry_enabled = settings.get("observabilityMode") != "off"
+    grafana_enabled = settings.get("observabilityMode") == "full"
+
+    values = {
+        "wandb": {
+            "install": False,
+        },
+        "wandb-operator": {
+            "image": {
+                "pullPolicy": "IfNotPresent",
+            },
+            "containers": {
+                "operator": {
+                    "command": [],
+                },
+            },
+        },
+        "victoria-metrics-operator": {
+            "enabled": telemetry_enabled,
+            "crds": {
+                "plain": True,
+            },
+            "admissionWebhooks": {
+                "enabled": False,
+            },
+        },
+        "grafana-operator": {
+            "enabled": grafana_enabled,
+        },
+        "telemetry": {
+            "mode": settings.get("observabilityMode"),
+            "namespace": telemetry_namespace,
+        },
+    }
+
+    manager_entrypoint = ["/manager", "--log-format=" + settings.get("logFormat")]
+
+    values["wandb-operator"]["containers"]["operator"]["command"] = manager_entrypoint
+
+    if settings.get("openshiftSCC"):
+        values["wandb-operator"]["podSecurityContext"] = {
+            "runAsUser": None,
+            "runAsGroup": None,
+            "fsGroup": None,
+            "fsGroupChangePolicy": None,
+        }
+        values["wandb-operator"]["containers"]["operator"]["env"] = {
+            "OPENSHIFT": {
+                "value": "true",
+            },
+        }
+        values["altinity-clickhouse-operator"] = {
+            "crdHook": {
+                "enabled": False,
+            },
+        }
+
+    return write_generated_yaml(GENERATED_OPERATOR_VALUES, values)
+
+
+def helper_flag(name, value):
+    if value == None or value == "":
+        return ""
+    return " --%s %s" % (name, shell_quote(value))
+
+
+def helper_bool_flag(name, value):
+    return " --%s=%s" % (name, bool_string(as_bool(value)))
+
+
+def build_wandb_cr():
+    if settings.get("wandbCR"):
+      return settings.get("wandbCR")
+    else:
+      cmd = "go run ./hack/tilt/wandbcr"
+      cmd += helper_flag("out", GENERATED_WANDB_CR)
+      cmd += helper_flag("cr-file", settings.get("crFile", ""))
+      cmd += helper_flag("name", settings.get("wandbName"))
+      cmd += helper_flag("namespace", settings.get("wandbNamespace"))
+      cmd += helper_flag("hostname", settings.get("wandbHostname"))
+      cmd += helper_flag("version", settings.get("wandbVersion"))
+      cmd += helper_flag("size", settings.get("size"))
+      cmd += helper_flag("retention-policy", settings.get("retentionPolicy"))
+      cmd += helper_flag("license-file", settings.get("licenseFile", ""))
+      cmd += helper_flag("manifest-source", settings.get("manifestSource"))
+      cmd += helper_flag("observability-mode", settings.get("observabilityMode"))
+      cmd += helper_flag("network-mode", settings.get("networkMode"))
+      cmd += helper_flag("gateway-class", settings.get("gatewayClass"))
+      cmd += helper_flag("ingress-class", settings.get("ingressClass"))
+      cmd += helper_bool_flag("create-ca", settings.get("createCA"))
+      cmd += helper_flag("issuer-name", settings.get("issuerName", ""))
+      cmd += helper_bool_flag("external-mysql", USE_EXTERNAL_MYSQL)
+      cmd += helper_bool_flag("external-redis", USE_EXTERNAL_REDIS)
+      cmd += helper_bool_flag("external-objectstore", USE_EXTERNAL_OBJECT_STORE)
+      cmd += helper_bool_flag("custom-ca", USE_CUSTOM_CA)
+      if USE_CUSTOM_CA:
+          cmd += helper_flag("custom-ca-configmap-out", GENERATED_CUSTOM_CA_CONFIGMAP)
+      local(cmd)
+
+      return GENERATED_WANDB_CR
+
+
+def build_wandb_ca(name, namespace):
+    root_cert_name = name + "-root-cert"
+    selfsigned_issuer_name = name + "-selfsigned-issuer"
+    ca_issuer_name = name + "-ca-issuer"
+
+    k8s_yaml_object({
+        "apiVersion": "cert-manager.io/v1",
+        "kind": "Issuer",
+        "metadata": {
+            "name": selfsigned_issuer_name,
+            "namespace": namespace,
+        },
+        "spec": {
+            "selfSigned": {},
+        },
+    })
+    k8s_yaml_object({
+        "apiVersion": "cert-manager.io/v1",
+        "kind": "Certificate",
+        "metadata": {
+            "name": root_cert_name,
+            "namespace": namespace,
+        },
+        "spec": {
+            "secretName": root_cert_name,
+            "isCA": True,
+            "commonName": "wandb-ca",
+            "duration": "210240h",
+            "issuerRef": {
+                "name": selfsigned_issuer_name,
+                "kind": "Issuer",
+                "group": "cert-manager.io",
+            },
+        },
+    })
+    k8s_yaml_object({
+        "apiVersion": "cert-manager.io/v1",
+        "kind": "Issuer",
+        "metadata": {
+            "name": ca_issuer_name,
+            "namespace": namespace,
+        },
+        "spec": {
+            "ca": {
+                "secretName": root_cert_name,
+            },
+        },
+    })
+    k8s_resource(
+        new_name="WandB-CA",
+        objects=[
+            "%s:issuer:%s" % (selfsigned_issuer_name, namespace),
+            "%s:certificate:%s" % (root_cert_name, namespace),
+            "%s:issuer:%s" % (ca_issuer_name, namespace),
+        ],
+        resource_deps=["cert-manager"],
+        labels=[GROUP_WANDB_APP],
+    )
+
+
+WANDB_CR = build_wandb_cr() if as_bool(settings.get("includeCR")) else ""
+WANDB_CR_CONTENT = read_yaml(WANDB_CR) if as_bool(settings.get("includeCR")) else {}
+WANDB_NAME = WANDB_CR_CONTENT.get("metadata", {}).get("name", settings.get("wandbName"))
+WANDB_NAMESPACE = WANDB_CR_CONTENT.get("metadata", {}).get("namespace", settings.get("wandbNamespace"))
+OPERATOR_VALUES = build_operator_values(WANDB_NAMESPACE)
+CREATE_WANDB_NAMESPACE = as_bool(settings.get("includeCR")) or settings.get("observabilityMode") != "off"
+
+if WANDB_CR_CONTENT.get("apiVersion") == "apps.wandb.com/v1":
+  WANDB_HOSTNAME = WANDB_CR_CONTENT.get("spec", {}).get("values", {}).get("global", {}).get("host", settings.get("wandbHostname"))
+  ingress_create = WANDB_CR_CONTENT.get("spec", {}).get("values", {}).get("ingress", {}).get("create", True)
+  ingress_install = WANDB_CR_CONTENT.get("spec", {}).get("values", {}).get("ingress", {}).get("install", True)
+  LOCAL_NETWORKING_MODE = "ingress" if ingress_install and ingress_create else settings.get("networkMode")
+else:
+  WANDB_HOSTNAME = WANDB_CR_CONTENT.get("spec", {}).get("wandb", {}).get("hostname", settings.get("wandbHostname"))
+  LOCAL_NETWORKING_MODE = WANDB_CR_CONTENT.get("spec", {}).get("networking", {}).get("mode", settings.get("networkMode"))
+
+endpoint_anchors = []
+if as_bool(settings.get("includeCR")):
+    if LOCAL_NETWORKING_MODE in ["gateway", "ingress"]:
+        endpoint_anchors.append("wandb-endpoint-anchor")
+
+if settings.get("observabilityMode") == "full":
+    endpoint_anchors += [
+        "telemetry-grafana-endpoint-anchor",
+        "telemetry-victoria-metrics-endpoint-anchor",
+        "telemetry-victoria-logs-endpoint-anchor",
+        "telemetry-victoria-traces-endpoint-anchor",
     ]
+
+if endpoint_anchors:
+    build_endpoint_anchors(endpoint_anchors)
+
+if CREATE_WANDB_NAMESPACE:
+    build_wandb_namespace(WANDB_NAMESPACE)
+    k8s_resource(
+        new_name="WandB-Namespace",
+        objects=["%s:namespace" % WANDB_NAMESPACE],
+        labels=[GROUP_DEPENDENCIES],
+    )
+
+if USE_CUSTOM_CA:
+    k8s_yaml(GENERATED_CUSTOM_CA_CONFIGMAP)
+    k8s_resource(
+        new_name="Custom-CA-ConfigMap",
+        objects=["wandb-user-ca-certs:configmap:%s" % WANDB_NAMESPACE],
+        resource_deps=["WandB-Namespace"],
+        labels=[GROUP_WANDB_APP],
+    )
+
+local_resource(
+    "Operator-Codegen",
+    "make manifests generate",
+    labels=[GROUP_WANDB_OPERATOR],
 )
 
-deps = ['controllers', 'pkg', 'cmd/main.go']
-deps.append('api')
+local_resource(
+    "Operator-Build",
+    binary(),
+    deps=["internal", "pkg", "api", "cmd"],
+    resource_deps=["Operator-Codegen"],
+    ignore=["*/*/zz_generated.deepcopy.go"],
+    labels=[GROUP_WANDB_OPERATOR],
+)
 
-local_resource('Watch&Compile', generate() + binary(),
-               deps=deps, ignore=['*/*/zz_generated.deepcopy.go'])
+local_resource(
+    "Operator-Chart-Deps",
+    "helm dependency build ./deploy/operator --skip-refresh",
+    deps=[
+        "deploy/operator/Chart.yaml",
+        "deploy/operator/Chart.lock",
+        "deploy/telemetry/Chart.yaml",
+        "deploy/telemetry/values.yaml",
+        "deploy/telemetry/templates",
+        "deploy/telemetry/dashboards",
+    ],
+    labels=[GROUP_DEPENDENCIES],
+)
 
-if settings.get("installWandb"):
-    k8s_yaml('./hack/testing-manifests/wandb/' + settings.get('wandbCRD') + '.yaml')
-    k8s_resource(
-        new_name='Wandb',
-        objects=[
-            'wandb-default:weightsandbiases'
+# local_resource(
+#     "WandB-CRDs-Apply",
+#     "kubectl apply --server-side=true --force-conflicts --field-manager=helm " +
+#     "-f config/crd/bases/apps.wandb.com_applications.yaml " +
+#     "-f config/crd/bases/apps.wandb.com_weightsandbiases.yaml",
+#     resource_deps=["Operator-Codegen"],
+#     labels=[GROUP_DEPENDENCIES],
+# )
+#
+# local_resource(
+#     "WandB-CRDs-Ready",
+#     "kubectl wait --for=condition=established --timeout=120s " +
+#     "crd/applications.apps.wandb.com " +
+#     "crd/weightsandbiases.apps.wandb.com",
+#     resource_deps=["WandB-CRDs-Apply"],
+#     labels=[GROUP_DEPENDENCIES],
+# )
+
+cert_manager_flags = [
+        "--create-namespace",
+        "--version=v1.20.2",
+        "--set=crds.enabled=true",
+        "--set=startupapicheck.enabled=false",
+]
+cert_manager_deps = []
+
+if LOCAL_NETWORKING_MODE == "gateway":
+    if settings.get("openshiftSCC"):
+        # OpenShift Ingress Operator owns Gateway API CRDs via a
+        # ValidatingAdmissionPolicy and blocks kubectl apply. Just assert
+        # the CRDs the wandb chart actually uses are present.
+        gateway_crd_check = (
+            "kubectl get crd "
+            + "gatewayclasses.gateway.networking.k8s.io "
+            + "gateways.gateway.networking.k8s.io "
+            + "httproutes.gateway.networking.k8s.io "
+            + "referencegrants.gateway.networking.k8s.io "
+            + "grpcroutes.gateway.networking.k8s.io"
+        )
+        local_resource(
+            "gateway-api-crds",
+            gateway_crd_check,
+            labels=[GROUP_DEPENDENCIES],
+        )
+    else:
+        local_resource(
+            "gateway-api-crds",
+            "kubectl apply -f " + GATEWAY_API_CRDS_URL,
+            labels=[GROUP_DEPENDENCIES],
+        )
+    cert_manager_flags.append("--set=config.enableGatewayAPI=true")
+    cert_manager_deps.append("gateway-api-crds")
+
+helm_resource(
+    "cert-manager",
+    chart="oci://quay.io/jetstack/charts/cert-manager",
+    namespace="cert-manager",
+    flags=cert_manager_flags,
+    resource_deps=cert_manager_deps,
+    labels=[GROUP_DEPENDENCIES],
+)
+
+if USE_EXTERNAL_INFRA:
+    test_infra_deps = ["WandB-Namespace"]
+    if USE_TEST_INFRA_TLS:
+        test_infra_deps.append("cert-manager")
+
+    helm_resource(
+        "Test-Infra",
+        chart="./hack/testing-manifests/test-infra",
+        release_name="test-infra",
+        namespace=WANDB_NAMESPACE,
+        flags=[
+            "--create-namespace",
+            "--wait",
+            "--timeout=10m",
+            "--set=mysql.enabled=%s" % bool_string(USE_EXTERNAL_MYSQL),
+            "--set=redis.enabled=%s" % bool_string(USE_EXTERNAL_REDIS),
+            "--set=seaweedfs.enabled=%s" % bool_string(USE_EXTERNAL_OBJECT_STORE),
+            "--set=tls.enabled=%s" % bool_string(USE_TEST_INFRA_TLS),
+            "--set=mysql.tls.enabled=%s" % bool_string(USE_CUSTOM_CA and USE_EXTERNAL_MYSQL),
+            "--set=redis.tls.enabled=%s" % bool_string(USE_CUSTOM_CA and USE_EXTERNAL_REDIS),
         ],
-        resource_deps=["operator-controller-manager"]
+        deps=["hack/testing-manifests/test-infra/"],
+        resource_deps=test_infra_deps,
+        labels=[GROUP_WANDB_APP],
     )
 
-docker_build_with_restart(IMG, '.',
-                          dockerfile_contents=DOCKERFILE,
-                          entrypoint='/manager',
-                          only=['./tilt_bin/manager'],
-                          live_update=[
-                              sync('./tilt_bin/manager', '/manager'),
-                          ]
-                          )
+if LOCAL_NETWORKING_MODE == "gateway":
+    nginx_gateway_flags = [
+        "--create-namespace",
+        "--version=2.5.1",
+    ]
+    if currentContext.startswith("kind-"):
+        nginx_gateway_flags += [
+            "--set=nginx.service.type=NodePort",
+            "--set=nginx.service.nodePorts[0].port=31437",
+            "--set=nginx.service.nodePorts[0].listenerPort=8080",
+            "--set=nginx.service.nodePorts[1].port=30478",
+            "--set=nginx.service.nodePorts[1].listenerPort=8443",
+        ]
+
+    helm_resource(
+        "nginx-gateway-fabric",
+        chart="oci://ghcr.io/nginx/charts/nginx-gateway-fabric",
+        namespace="nginx-gateway",
+        flags=nginx_gateway_flags,
+        resource_deps=["gateway-api-crds"],
+        labels=[GROUP_DEPENDENCIES],
+    )
+
+if LOCAL_NETWORKING_MODE == "ingress":
+    helm_repo(
+        "ingress-nginx",
+        "https://kubernetes.github.io/ingress-nginx",
+        resource_name="ingress-nginx-repo",
+        labels=[GROUP_DEPENDENCIES],
+    )
+    helm_resource(
+        "ingress-nginx-controller",
+        chart="ingress-nginx/ingress-nginx",
+        release_name="ingress-nginx",
+        namespace="ingress-nginx",
+        flags=[
+            "--create-namespace",
+            "--version=4.14.1",
+            "--set-string=controller.ingressClass=%s" % settings.get("ingressClass"),
+            "--set-string=controller.ingressClassResource.name=%s" % settings.get("ingressClass"),
+            "--set-string=controller.service.type=ClusterIP",
+        ],
+        resource_deps=["ingress-nginx-repo"],
+        labels=[GROUP_DEPENDENCIES],
+    )
+
+kube_state_metrics_flags = [
+    "--create-namespace",
+    "--version=5.27.0",
+]
+if settings.get("openshiftSCC"):
+    # Null the chart's hardcoded 65534 IDs so restricted-v2 assigns valid ones.
+    kube_state_metrics_flags += [
+        "--set=securityContext.runAsUser=null",
+        "--set=securityContext.runAsGroup=null",
+        "--set=securityContext.fsGroup=null",
+    ]
+
+helm_resource(
+    "kube-state-metrics",
+    chart="oci://ghcr.io/prometheus-community/charts/kube-state-metrics",
+    namespace="kube-state-metrics",
+    flags=kube_state_metrics_flags,
+    labels=[GROUP_DEPENDENCIES],
+)
+
+operator_deps = ["Operator-Chart-Deps", "Operator-Build"]
+operator_deps.append("cert-manager")
+operator_deps.append("kube-state-metrics")
+if LOCAL_NETWORKING_MODE == "gateway":
+    operator_deps.append("nginx-gateway-fabric")
+if settings.get("observabilityMode") != "off":
+    operator_deps.append("WandB-Namespace")
+
+operator_flags = ["--create-namespace"]
+if helm_supports_take_ownership():
+    operator_flags.append("--take-ownership")
+else:
+    warn("helm does not support --take-ownership; legacy CRD ownership may require Dev-Clean before the operator release can install.")
+
+operator_flags += [
+    "-f",
+    OPERATOR_VALUES,
+]
+operator_deps_files = [
+    OPERATOR_VALUES,
+    "deploy/operator/",
+]
+
+if settings.get("openshiftSCC"):
+    operator_flags += [
+        "--values=./deploy/operator/profiles/openshift.yaml",
+    ]
+    operator_deps_files.append("deploy/operator/profiles/openshift.yaml")
+
+helm_resource(
+    "wandb-operator",
+    chart="./deploy/operator",
+    release_name="wandb-operator",
+    namespace=settings.get("operatorNamespace"),
+    flags=operator_flags,
+    image_deps=[IMG],
+    image_keys=[("wandb-operator.image.repository", "wandb-operator.image.tag")],
+    deps=operator_deps_files,
+    resource_deps=operator_deps,
+    labels=[GROUP_WANDB_OPERATOR],
+)
+
+local_resource(
+    "Operator-Webhook-Ready",
+    cmd="kubectl wait --for=condition=available --timeout=300s -n %s deploy/wandb-operator && " % settings.get("operatorNamespace") +
+    "until kubectl get mutatingwebhookconfiguration wandb-operator-mutating-webhook-configuration " +
+    "-o jsonpath='{.webhooks[0].clientConfig.caBundle}' | grep -q .; " +
+    "do echo 'Waiting for webhook CA bundle to be injected...'; sleep 2; done && echo 'Webhook is ready!'",
+    resource_deps=["wandb-operator"],
+    labels=[GROUP_WANDB_OPERATOR],
+)
+
+local_resource(
+    "Dev-Clean",
+    "./hack/scripts/tilt-dev-clean.sh",
+    auto_init=False,
+    labels=[GROUP_WANDB_APP],
+)
+
+if as_bool(settings.get("includeCR")):
+    wandb_deps = ["Operator-Webhook-Ready", "WandB-Namespace"]
+    if LOCAL_NETWORKING_MODE == "gateway":
+        wandb_deps.append("nginx-gateway-fabric")
+    if LOCAL_NETWORKING_MODE == "ingress":
+        wandb_deps.append("ingress-nginx-controller")
+    if USE_EXTERNAL_INFRA:
+        wandb_deps.append("Test-Infra")
+    if USE_CUSTOM_CA:
+        wandb_deps.append("Custom-CA-ConfigMap")
+
+    if str(WANDB_HOSTNAME).startswith("https://") and as_bool(settings.get("createCA")):
+        build_wandb_ca(WANDB_NAME, WANDB_NAMESPACE)
+        wandb_deps.append("WandB-CA")
+
+    k8s_yaml(WANDB_CR)
+
+    k8s_resource(
+        new_name="Wandb",
+        objects=["%s:weightsandbiases:%s" % (WANDB_NAME, WANDB_NAMESPACE)],
+        resource_deps=wandb_deps,
+        labels=[GROUP_WANDB_APP],
+    )
+
+    if settings.get("openshiftSCC"):
+        # Dev-only frontend-nginx SCC; not shipped (prod uses its own ingress).
+        # It needs its fixed image UID: restricted-v2 assigns an arbitrary UID
+        # and nonroot-v2 rejects named user, so clone restricted-v2 + RunAsAny.
+        frontend_scc_name = "wandb-frontend-anyuid-v2"
+        k8s_yaml_object({
+            "apiVersion": "security.openshift.io/v1",
+            "kind": "SecurityContextConstraints",
+            "metadata": {
+                "name": frontend_scc_name,
+                "labels": {
+                    "app.kubernetes.io/managed-by": "tilt",
+                },
+            },
+            "allowHostDirVolumePlugin": False,
+            "allowHostIPC": False,
+            "allowHostNetwork": False,
+            "allowHostPID": False,
+            "allowHostPorts": False,
+            "allowPrivilegeEscalation": False,
+            "allowPrivilegedContainer": False,
+            "allowedCapabilities": ["NET_BIND_SERVICE"],
+            "readOnlyRootFilesystem": False,
+            "requiredDropCapabilities": ["ALL"],
+            "runAsUser": {"type": "RunAsAny"},
+            "seLinuxContext": {"type": "MustRunAs"},
+            "seccompProfiles": ["runtime/default"],
+            "fsGroup": {"type": "MustRunAs"},
+            "supplementalGroups": {"type": "RunAsAny"},
+            "volumes": [
+                "configMap",
+                "csi",
+                "downwardAPI",
+                "emptyDir",
+                "ephemeral",
+                "image",
+                "persistentVolumeClaim",
+                "projected",
+                "secret",
+            ],
+            "users": [
+                "system:serviceaccount:%s:wandb-app" % WANDB_NAMESPACE,
+            ],
+        })
+        k8s_resource(
+            new_name="OpenShift-Frontend-SCC",
+            objects=["%s:securitycontextconstraints" % frontend_scc_name],
+            resource_deps=["WandB-Namespace"],
+            labels=[GROUP_WANDB_APP],
+        )
+        # Stamp required-scc on frontend Deployment; reconcile merge keeps it.
+        local_resource(
+            "OpenShift-Frontend-SCC-Bind",
+            cmd=(
+                "until kubectl -n %s get deploy/frontend >/dev/null 2>&1; do " % WANDB_NAMESPACE +
+                "echo 'waiting for frontend deployment...'; sleep 3; done && " +
+                "kubectl -n %s patch deploy/frontend --type=merge -p " % WANDB_NAMESPACE +
+                shell_quote('{"spec":{"template":{"metadata":{"annotations":{"openshift.io/required-scc":"%s"}}}}}' % frontend_scc_name)
+            ),
+            resource_deps=["Wandb", "OpenShift-Frontend-SCC"],
+            labels=[GROUP_WANDB_APP],
+        )
+
+    endpoint_port = url_port(WANDB_HOSTNAME)
+    endpoint_host = url_host(WANDB_HOSTNAME)
+
+    if LOCAL_NETWORKING_MODE == "gateway":
+        managed_endpoint_resource(
+            name="Wandb-Endpoint",
+            anchor_object="wandb-endpoint-anchor:configmap:default",
+            deps=["Wandb", "nginx-gateway-fabric"],
+            local_port=endpoint_port,
+            remote_port=endpoint_port,
+            link_name="W&B gateway",
+            local_host=endpoint_host,
+            pod_selector={
+                "app.kubernetes.io/instance": "nginx-gateway-fabric",
+                "app.kubernetes.io/managed-by": "nginx-gateway-fabric-nginx",
+                "gateway.networking.k8s.io/gateway-name": "wandb-gateway",
+            },
+            labels=[GROUP_WANDB_APP],
+        )
+    elif LOCAL_NETWORKING_MODE == "ingress":
+        managed_endpoint_resource(
+            name="Wandb-Endpoint",
+            anchor_object="wandb-endpoint-anchor:configmap:default",
+            deps=["Wandb", "ingress-nginx-controller"],
+            local_port=endpoint_port,
+            remote_port=80,
+            link_name="W&B ingress",
+            local_host=endpoint_host,
+            pod_selector={
+                "app.kubernetes.io/component": "controller",
+                "app.kubernetes.io/instance": "ingress-nginx",
+                "app.kubernetes.io/name": "ingress-nginx",
+            },
+            labels=[GROUP_WANDB_APP],
+        )
+
+if settings.get("observabilityMode") == "full":
+    managed_endpoint_resource(
+        name="Telemetry-Endpoint-Grafana",
+        anchor_object="telemetry-grafana-endpoint-anchor:configmap:default",
+        deps=["wandb-operator"],
+        local_port=3000,
+        remote_port=3000,
+        link_name="Grafana",
+        pod_selector={"app": "grafana"},
+        labels=[GROUP_TELEMETRY],
+    )
+    managed_endpoint_resource(
+        name="Telemetry-Endpoint-VictoriaMetrics",
+        anchor_object="telemetry-victoria-metrics-endpoint-anchor:configmap:default",
+        deps=["wandb-operator"],
+        local_port=8428,
+        remote_port=8429,
+        link_name="VictoriaMetrics UI",
+        pod_selector={
+            "app.kubernetes.io/name": "vmsingle",
+            "app.kubernetes.io/instance": "victoria-instance",
+        },
+        labels=[GROUP_TELEMETRY],
+    )
+    managed_endpoint_resource(
+        name="Telemetry-Endpoint-VictoriaLogs",
+        anchor_object="telemetry-victoria-logs-endpoint-anchor:configmap:default",
+        deps=["wandb-operator"],
+        local_port=9428,
+        remote_port=9428,
+        link_name="VictoriaLogs",
+        pod_selector={
+            "app.kubernetes.io/name": "vlsingle",
+            "app.kubernetes.io/instance": "victoria-logs",
+        },
+        labels=[GROUP_TELEMETRY],
+    )
+    managed_endpoint_resource(
+        name="Telemetry-Endpoint-VictoriaTraces",
+        anchor_object="telemetry-victoria-traces-endpoint-anchor:configmap:default",
+        deps=["wandb-operator"],
+        local_port=10428,
+        remote_port=10428,
+        link_name="VictoriaTraces",
+        pod_selector={
+            "app.kubernetes.io/name": "vtsingle",
+            "app.kubernetes.io/instance": "victoria-traces",
+        },
+        labels=[GROUP_TELEMETRY],
+    )
+
+docker_only = ["./tilt_bin/manager", "./tilt_bin/crd-installer"]
+
+if settings.get("manifestSource") == "local":
+  path = repo_path(settings.get("localManifestPath"))
+  if not path.endswith(".yaml"):
+    paths = listdir(path, True)
+    for path in paths:
+      docker_only.append(path)
+  else:
+    docker_only.append(path)
+
+docker_build(
+    IMG,
+    ".",
+    dockerfile_contents=operator_dockerfile(),
+    only=docker_only,
+)

@@ -1,0 +1,68 @@
+package v1beta2
+
+import (
+	common "github.com/wandb/operator/pkg/vendored/redis-operator/common/v1beta2"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+type RedisReplicationSpec struct {
+	Size                          *int32                            `json:"clusterSize"`
+	KubernetesConfig              common.KubernetesConfig           `json:"kubernetesConfig"`
+	RedisExporter                 *common.RedisExporter             `json:"redisExporter,omitempty"`
+	RedisConfig                   *common.RedisConfig               `json:"redisConfig,omitempty"`
+	Storage                       *common.Storage                   `json:"storage,omitempty"`
+	NodeSelector                  map[string]string                 `json:"nodeSelector,omitempty"`
+	PodSecurityContext            *corev1.PodSecurityContext        `json:"podSecurityContext,omitempty"`
+	SecurityContext               *corev1.SecurityContext           `json:"securityContext,omitempty"`
+	PriorityClassName             string                            `json:"priorityClassName,omitempty"`
+	Affinity                      *corev1.Affinity                  `json:"affinity,omitempty"`
+	Tolerations                   *[]corev1.Toleration              `json:"tolerations,omitempty"`
+	TLS                           *common.TLSConfig                 `json:"TLS,omitempty"`
+	PodDisruptionBudget           *common.RedisPodDisruptionBudget  `json:"pdb,omitempty"`
+	ACL                           *common.ACLConfig                 `json:"acl,omitempty"`
+	ReadinessProbe                *corev1.Probe                     `json:"readinessProbe,omitempty" protobuf:"bytes,11,opt,name=readinessProbe"`
+	LivenessProbe                 *corev1.Probe                     `json:"livenessProbe,omitempty" protobuf:"bytes,12,opt,name=livenessProbe"`
+	InitContainer                 *common.InitContainer             `json:"initContainer,omitempty"`
+	Sidecars                      *[]common.Sidecar                 `json:"sidecars,omitempty"`
+	ServiceAccountName            *string                           `json:"serviceAccountName,omitempty"`
+	TerminationGracePeriodSeconds *int64                            `json:"terminationGracePeriodSeconds,omitempty" protobuf:"varint,4,opt,name=terminationGracePeriodSeconds"`
+	EnvVars                       *[]corev1.EnvVar                  `json:"env,omitempty"`
+	TopologySpreadConstrains      []corev1.TopologySpreadConstraint `json:"topologySpreadConstraints,omitempty"`
+	HostPort                      *int                              `json:"hostPort,omitempty"`
+}
+
+func (cr *RedisReplicationSpec) GetReplicationCounts(t string) int32 {
+	replica := cr.Size
+	return *replica
+}
+
+// RedisStatus defines the observed state of Redis
+type RedisReplicationStatus struct {
+	MasterNode string `json:"masterNode,omitempty"`
+}
+
+// Redis is the Schema for the redis API
+type RedisReplication struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	Spec   RedisReplicationSpec   `json:"spec"`
+	Status RedisReplicationStatus `json:"status,omitempty"`
+}
+
+func (rr *RedisReplication) GetStatefulSetName() string {
+	return rr.Name
+}
+
+// RedisList contains a list of Redis
+type RedisReplicationList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
+	Items           []RedisReplication `json:"items"`
+}
+
+//nolint:gochecknoinits
+func init() {
+	SchemeBuilder.Register(&RedisReplication{}, &RedisReplicationList{})
+}

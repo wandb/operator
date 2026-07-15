@@ -1,0 +1,17 @@
+{{- if .Values.seaweedfs.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.seaweedfs.service.name }}
+  labels:
+    {{- include "test-infra.componentLabels" (dict "root" . "component" "seaweedfs") | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/name: seaweedfs
+  ports:
+    - name: s3
+      port: {{ .Values.seaweedfs.service.apiPort }}
+      targetPort: 8333
+{{- end }}
