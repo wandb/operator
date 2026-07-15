@@ -1,0 +1,64 @@
+tls:
+  enabled: false
+  ca:
+    secretName: test-infra-ca
+  issuer:
+    selfSignedName: test-infra-selfsigned
+    caName: test-infra-ca
+  duration: 2160h
+
+mysql:
+  enabled: true
+  image: mysql:8.0
+  rootPassword: wandb
+  database: wandb_local
+  username: wandb
+  password: wandb
+  service:
+    name: mysql
+    port: 3306
+  secret:
+    name: external-mysql-connection
+  tls:
+    enabled: false
+    secretName: external-mysql-tls
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+
+redis:
+  enabled: true
+  image: redis:7
+  password: ""
+  service:
+    name: redis
+    port: 6379
+  secret:
+    name: external-redis-connection
+  tls:
+    enabled: false
+    secretName: external-redis-tls
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+
+seaweedfs:
+  enabled: true
+  image: chrislusf/seaweedfs:latest
+  awsCliImage: amazon/aws-cli:latest
+  provider: s3
+  accessKey: seaweedfs
+  secretKey: seaweedfs123
+  bucket: wandb
+  region: us-east-1
+  service:
+    name: seaweedfs
+    apiPort: 8333
+  secret:
+    name: external-objectstore-connection
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi

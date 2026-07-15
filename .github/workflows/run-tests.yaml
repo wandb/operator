@@ -2,10 +2,12 @@ name: "Run Tests"
 on:
   push:
     branches:
-      - v1
+      - v2
+      - main
   pull_request:
     branches:
-      - v1
+      - v2
+      - main
 jobs:
   test:
     name: Test
@@ -15,13 +17,29 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
-          go-version: 1.25
+          go-version: 1.26.3
       - name: Install dependencies
         run: go mod download
       - name: Install Ginkgo
-        run: go install github.com/onsi/ginkgo/v2/ginkgo@latest
+        run: go install github.com/onsi/ginkgo/v2/ginkgo@v2.28.1
+      - name: Install Helm
+        uses: azure/setup-helm@bf6a7d304bc2fdb57e0331155b7ebf2c504acf0a # v4
+        with:
+          version: v3.19.0
+      - name: Resolve chart dependencies
+        run: |
+          helm repo add ci-wandb https://charts.wandb.ai/
+          helm repo add ci-moco https://cybozu-go.github.io/moco/
+          helm repo add ci-ot-container-kit https://ot-container-kit.github.io/helm-charts
+          helm repo add ci-seaweedfs https://seaweedfs.github.io/seaweedfs-operator/
+          helm repo add ci-prometheus-community https://prometheus-community.github.io/helm-charts
+          helm repo add ci-altinity https://helm.altinity.com
+          helm repo add ci-victoria-metrics https://victoriametrics.github.io/helm-charts/
+          helm repo add ci-grafana https://grafana.github.io/helm-charts
+          helm dependency build deploy/operator
+          git diff --exit-code deploy/operator/Chart.lock
       - name: Tests
-        run: make test-coverage
+        run: make test
 
   build:
     name: Build
@@ -31,7 +49,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
-          go-version: 1.25
+          go-version: 1.26.3
       - name: Build
         run: make build
 
@@ -43,7 +61,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
-          go-version: 1.25
+          go-version: 1.26.3
       - name: Install dependencies
         run: go mod download
       - name: Check for changes in go.mod or go.sum

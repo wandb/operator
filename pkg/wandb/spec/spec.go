@@ -7,7 +7,7 @@ import (
 	"reflect"
 
 	v1 "github.com/wandb/operator/api/v1"
-	chart "helm.sh/helm/v4/pkg/chart/v2"
+	"helm.sh/helm/v3/pkg/chart"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )

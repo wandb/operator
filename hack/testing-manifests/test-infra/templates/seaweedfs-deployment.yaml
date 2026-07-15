@@ -1,0 +1,81 @@
+{{- if .Values.seaweedfs.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.seaweedfs.service.name }}-s3-config
+  labels:
+    {{- include "test-infra.componentLabels" (dict "root" . "component" "seaweedfs") | nindent 4 }}
+data:
+  s3.json: |
+    {
+      "identities": [
+        {
+          "name": "admin",
+          "credentials": [
+            {
+              "accessKey": {{ .Values.seaweedfs.accessKey | quote }},
+              "secretKey": {{ .Values.seaweedfs.secretKey | quote }}
+            }
+          ],
+          "actions": ["Admin"]
+        }
+      ]
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.seaweedfs.service.name }}
+  labels:
+    {{- include "test-infra.componentLabels" (dict "root" . "component" "seaweedfs") | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/name: seaweedfs
+  template:
+    metadata:
+      labels:
+        {{- include "test-infra.componentLabels" (dict "root" . "component" "seaweedfs") | nindent 8 }}
+    spec:
+      containers:
+        - name: seaweedfs
+          image: {{ .Values.seaweedfs.image }}
+          imagePullPolicy: IfNotPresent
+          args:
+            - server
+            - -dir=/data
+            - -s3
+            - -s3.config=/etc/seaweedfs/s3.json
+          ports:
+            - name: s3
+              containerPort: 8333
+          readinessProbe:
+            httpGet:
+              path: /status
+              port: 8333
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: 8333
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.seaweedfs.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: s3-config
+              mountPath: /etc/seaweedfs
+              readOnly: true
+      volumes:
+        - name: data
+          emptyDir: {}
+        - name: s3-config
+          configMap:
+            name: {{ .Values.seaweedfs.service.name }}-s3-config
+{{- end }}

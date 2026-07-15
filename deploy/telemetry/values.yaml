@@ -1,0 +1,37 @@
+mode: "off"
+namespace: ""
+forwarding:
+  otlp:
+    endpoint: ""
+    protocol: http/protobuf
+    headers: {}
+    tls:
+      insecure: false
+retentionPeriod: 1d
+otlpGateway:
+  podSecurityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
+    runAsNonRoot: true
+scrape:
+  enabled: true
+  kubeletCadvisor: true
+  operators: true
+  wandbApi: true
+  infrastructure: true
+  kubeStateMetrics: true
+alerting:
+  enabled: false
+  evaluationInterval: 30s
+  notifier:
+    enabled: false
+    name: default
+    type: webhook
+    target: http://alertmanager-operated.monitoring.svc:9093

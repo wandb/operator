@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kafka-operator-templates
+  namespace: wandb-system
+  labels:
+    app.kubernetes.io/name: wandb-operator
+    app.kubernetes.io/component: kafka-templates
+data:
+  # This ConfigMap is generated using kustomize from the kafka-templates directory
+  # To regenerate: kubectl kustomize config/kafka-templates > config/samples/kafka-operator-configmap.yaml
+  # Then you need to manually extract just the data section or use the full generated ConfigMap

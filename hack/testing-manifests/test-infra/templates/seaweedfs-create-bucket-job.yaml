@@ -1,0 +1,58 @@
+{{- if .Values.seaweedfs.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Values.seaweedfs.service.name }}-create-bucket
+  labels:
+    {{- include "test-infra.componentLabels" (dict "root" . "component" "seaweedfs") | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 6
+  template:
+    metadata:
+      labels:
+        {{- include "test-infra.componentLabels" (dict "root" . "component" "seaweedfs") | nindent 8 }}
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: aws
+          image: {{ .Values.seaweedfs.awsCliImage }}
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: S3_ENDPOINT
+              value: "http://{{ include "test-infra.seaweedfsHost" . }}:{{ .Values.seaweedfs.service.apiPort }}"
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.seaweedfs.secret.name }}
+                  key: AccessKey
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.seaweedfs.secret.name }}
+                  key: SecretKey
+            - name: AWS_DEFAULT_REGION
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.seaweedfs.secret.name }}
+                  key: Region
+            - name: BUCKET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.seaweedfs.secret.name }}
+                  key: Bucket
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              until aws --endpoint-url "$S3_ENDPOINT" s3 ls >/dev/null 2>&1; do
+                echo "waiting for seaweedfs at $S3_ENDPOINT..."
+                sleep 2
+              done
+              aws --endpoint-url "$S3_ENDPOINT" s3 mb "s3://$BUCKET" 2>/dev/null || true
+              aws --endpoint-url "$S3_ENDPOINT" s3 ls "s3://$BUCKET"
+{{- end }}

@@ -5,14 +5,88 @@ on:
 
 jobs:
   release:
-    name: Release
+    name: Publish prerelease chart
     runs-on: ubuntu-latest
     permissions:
-      contents: 'read'
-      id-token: 'write'
+      contents: read
+      id-token: write
+    env:
+      CHART_REPOSITORY: us-docker.pkg.dev/wandb-production/public/wandb/charts
     steps:
       - name: Checkout
-        uses: actions/checkout@ee0669bd1cc54295c223e0bb666b733df41de1c5 # v2
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
-          persist-credentials: false
           fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate prerelease chart version
+        id: chart
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(awk '$1 == "version:" { print $2; exit }' deploy/operator/Chart.yaml | tr -d '\"')"
+          if [[ ! "${version}" =~ ^2\.[0-9]+\.[0-9]+-[0-9A-Za-z][0-9A-Za-z.-]*$ ]]; then
+            echo "Internal chart publishing requires a v2 prerelease version; got ${version}" >&2
+            exit 1
+          fi
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+
+      - name: Install Helm
+        uses: azure/setup-helm@bf6a7d304bc2fdb57e0331155b7ebf2c504acf0a # v4
+        with:
+          version: v3.19.0
+
+      - name: Install chart-testing
+        uses: helm/chart-testing-action@e6669bcd63d7cb57cb4380c33043eebe5d111992 # v2.6.1
+        with:
+          version: v3.14.0
+
+      - name: Lint charts
+        run: ct lint --all --config deploy/ct.yaml
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+
+      - id: auth
+        name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          create_credentials_file: 'true'
+          token_format: access_token
+          project_id: wandb-production
+          workload_identity_provider: ${{ secrets.CI_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.CI_WORKLOAD_IDENTITY_SERVICE_ACCOUNT }}
+
+      - name: Authorize Docker for Artifact Registry
+        run: gcloud auth configure-docker us-docker.pkg.dev --quiet
+
+      - name: Reject existing chart version
+        env:
+          VERSION: ${{ steps.chart.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          artifact="${CHART_REPOSITORY}/operator:${VERSION}"
+          set +e
+          output="$(gcloud artifacts docker images describe "${artifact}" --format='value(image_summary.digest)' 2>&1)"
+          status=$?
+          set -e
+          if [[ ${status} -eq 0 ]]; then
+            echo "Refusing to overwrite existing chart ${artifact}" >&2
+            exit 1
+          fi
+          if ! grep -Eqi 'NOT_FOUND|not found' <<< "${output}"; then
+            echo "Could not safely determine whether ${artifact} exists:" >&2
+            echo "${output}" >&2
+            exit 1
+          fi
+
+      - name: Package and publish prerelease chart
+        env:
+          VERSION: ${{ steps.chart.outputs.version }}
+        run: |
+          set -euo pipefail
+          helm dependency build deploy/operator
+          mkdir -p dist
+          helm package deploy/operator --destination dist
+          helm push "dist/operator-${VERSION}.tgz" "oci://${CHART_REPOSITORY}"

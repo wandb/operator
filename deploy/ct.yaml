@@ -1,0 +1,15 @@
+# See https://github.com/helm/chart-testing#configuration
+remote: origin
+target-branch: main
+chart-dirs:
+  - deploy
+chart-repos:
+  - altinity=https://helm.altinity.com
+  - grafana=https://grafana.github.io/helm-charts/
+  - moco=https://cybozu-go.github.io/moco/
+  - redis=https://ot-container-kit.github.io/helm-charts/
+  - victoria-metrics=https://victoriametrics.github.io/helm-charts/
+  - prometheus-community=https://prometheus-community.github.io/helm-charts/
+  - seaweedfs=https://seaweedfs.github.io/seaweedfs-operator/
+  - wandb=https://charts.wandb.ai
+yamllint-config: .yamllint.yaml

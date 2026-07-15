@@ -11,9 +11,9 @@ import (
 	v1 "github.com/wandb/operator/api/v1"
 	"github.com/wandb/operator/pkg/helm"
 	"github.com/wandb/operator/pkg/wandb/spec"
-	chart "helm.sh/helm/v4/pkg/chart/v2"
-	"helm.sh/helm/v4/pkg/chart/v2/loader"
-	"helm.sh/helm/v4/pkg/registry"
+	"helm.sh/helm/v3/pkg/chart"
+	"helm.sh/helm/v3/pkg/chart/loader"
+	"helm.sh/helm/v3/pkg/registry"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	orasregistry "oras.land/oras-go/v2/registry"
@@ -76,7 +76,7 @@ func (r OCIRelease) pullReference(registryClient *registry.Client) (string, erro
 		return "", fmt.Errorf("invalid OCI URL %q: %w", r.URL, err)
 	}
 
-	_, normalizedRef, err := registryClient.ValidateReference(r.URL, r.Version, parsedURL)
+	normalizedRef, err := registryClient.ValidateReference(r.URL, r.Version, parsedURL)
 	if err != nil {
 		return "", fmt.Errorf("failed to validate OCI reference %s: %w", r.URL, err)
 	}

@@ -29,7 +29,6 @@ rules:
   - ""
   resources:
   - endpoints
-  - ingresses
   - namespaces
   - namespaces/status
   - nodes
@@ -75,6 +74,7 @@ rules:
 - apiGroups:
   - apps.wandb.com
   resources:
+  - applications
   - weightsandbiases
   verbs:
   - create
@@ -87,12 +87,14 @@ rules:
 - apiGroups:
   - apps.wandb.com
   resources:
+  - applications/finalizers
   - weightsandbiases/finalizers
   verbs:
   - update
 - apiGroups:
   - apps.wandb.com
   resources:
+  - applications/status
   - weightsandbiases/status
   verbs:
   - get
@@ -121,7 +123,44 @@ rules:
   - get
   - list
   - patch
+  - update
   - watch
+- apiGroups:
+  - clickhouse-keeper.altinity.com
+  resources:
+  - clickhousekeeperinstallations
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - clickhouse-keeper.altinity.com
+  resources:
+  - clickhousekeeperinstallations/status
+  verbs:
+  - get
+- apiGroups:
+  - clickhouse.altinity.com
+  resources:
+  - clickhouseinstallations
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - clickhouse.altinity.com
+  resources:
+  - clickhouseinstallations/status
+  verbs:
+  - get
 - apiGroups:
   - cloud.google.com
   resources:
@@ -154,10 +193,93 @@ rules:
   - list
   - watch
 - apiGroups:
+  - gateway.networking.k8s.io
+  resources:
+  - backendtlspolicies
+  - gateways
+  - httproutes
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - gateway.networking.k8s.io
+  resources:
+  - backendtlspolicies/status
+  - gateways/status
+  - httproutes/status
+  verbs:
+  - get
+- apiGroups:
+  - gateway.nginx.org
+  resources:
+  - clientsettingspolicies
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - grafana.integreatly.org
+  resources:
+  - grafanadashboards
+  - grafanadatasources
+  - grafanas
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - grafana.integreatly.org
+  resources:
+  - grafanadashboards/status
+  - grafanadatasources/status
+  - grafanas/status
+  verbs:
+  - get
+- apiGroups:
+  - moco.cybozu.com
+  resources:
+  - mysqlclusters
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - moco.cybozu.com
+  resources:
+  - mysqlclusters/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - networking.gke.io
+  resources:
+  - healthcheckpolicies
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
   - networking.k8s.io
   resources:
   - ingresses
-  - ingresses/status
   - networkpolicies
   verbs:
   - create
@@ -167,6 +289,40 @@ rules:
   - patch
   - update
   - watch
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - ingresses/status
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - operator.victoriametrics.com
+  resources:
+  - vlsingles
+  - vmagents
+  - vmalerts
+  - vmnodescrapes
+  - vmpodscrapes
+  - vmrules
+  - vmservicescrapes
+  - vmsingles
+  - vtsingles
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - operator.victoriametrics.com
+  resources:
+  - vlsingles/status
+  - vmagents/status
+  - vmalerts/status
+  - vmsingles/status
+  - vtsingles/status
+  verbs:
+  - get
 - apiGroups:
   - policy
   resources:
@@ -194,3 +350,49 @@ rules:
   - patch
   - update
   - watch
+- apiGroups:
+  - redis.redis.opstreelabs.in
+  resources:
+  - redis
+  - redisreplications
+  - redissentinels
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - redis.redis.opstreelabs.in
+  resources:
+  - redis/status
+  verbs:
+  - get
+- apiGroups:
+  - seaweed.seaweedfs.com
+  resources:
+  - seaweeds
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - seaweed.seaweedfs.com
+  resources:
+  - seaweeds/status
+  verbs:
+  - get
+- apiGroups:
+  - security.openshift.io
+  resourceNames:
+  - nonroot-v2
+  resources:
+  - securitycontextconstraints
+  verbs:
+  - use

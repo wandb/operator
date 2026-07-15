@@ -1,0 +1,44 @@
+{{ if and .Values.wandb.install (not (eq (index .Values "wandb-operator" "enabled") false)) }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.wandb.namespace }}
+
+---
+apiVersion: apps.wandb.com/v2
+kind: WeightsAndBiases
+metadata:
+  name: wandb
+  namespace: {{ .Values.wandb.namespace }}
+spec:
+  wandb:
+    internalServiceAuth:
+      enabled: {{ .Values.wandb.internalServiceAuth }}
+    hostname: http://localhost
+    features:
+      proxy: true
+    version: {{ .Values.wandb.version }}
+  size: {{ .Values.wandb.size }}
+  retentionPolicy:
+    onDelete: detach
+  mysql:
+    managedMysql:
+      telemetry:
+        enabled: false
+  redis:
+    managedRedis:
+      telemetry:
+        enabled: false
+  kafka:
+    managedKafka:
+      telemetry:
+        enabled: false
+  objectStore:
+    managedObjectStore:
+      telemetry:
+        enabled: false
+  clickhouse:
+    managedClickhouse:
+      telemetry:
+        enabled: false
+{{ end }}

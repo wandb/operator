@@ -13,12 +13,12 @@ import (
 	v1 "github.com/wandb/operator/api/v1"
 	"github.com/wandb/operator/pkg/helm"
 	"github.com/wandb/operator/pkg/wandb/spec"
-	chart "helm.sh/helm/v4/pkg/chart/v2"
-	"helm.sh/helm/v4/pkg/cli"
-	"helm.sh/helm/v4/pkg/downloader"
-	"helm.sh/helm/v4/pkg/getter"
-	"helm.sh/helm/v4/pkg/registry"
-	repo "helm.sh/helm/v4/pkg/repo/v1"
+	"helm.sh/helm/v3/pkg/chart"
+	"helm.sh/helm/v3/pkg/cli"
+	"helm.sh/helm/v3/pkg/downloader"
+	"helm.sh/helm/v3/pkg/getter"
+	"helm.sh/helm/v3/pkg/registry"
+	"helm.sh/helm/v3/pkg/repo"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
@@ -171,8 +171,8 @@ func (r RepoRelease) downloadChart() (string, error) {
 		return "", err
 	}
 
-	entry.InsecureSkipTLSVerify = parsedURL.Scheme == "http"
-	if entry.InsecureSkipTLSVerify && r.Debug {
+	entry.InsecureSkipTLSverify = parsedURL.Scheme == "http"
+	if entry.InsecureSkipTLSverify && r.Debug {
 		log.Info("TLS verification disabled for HTTP URL", "url", r.URL)
 	}
 
@@ -203,7 +203,7 @@ func (r RepoRelease) downloadChart() (string, error) {
 
 	getterOpts := []getter.Option{
 		getter.WithBasicAuth(r.Username, r.Password),
-		getter.WithInsecureSkipVerifyTLS(entry.InsecureSkipTLSVerify),
+		getter.WithInsecureSkipVerifyTLS(true),
 	}
 
 	providers := getter.All(settings)
@@ -280,14 +280,16 @@ func (r RepoRelease) downloadChart() (string, error) {
 		RegistryClient:   cfg.RegistryClient,
 		RepositoryConfig: settings.RepositoryConfig,
 		RepositoryCache:  settings.RepositoryCache,
-		ContentCache:     settings.ContentCache,
 	}
 
 	dest := filepath.Join(os.Getenv("HELM_DATA_HOME"), "charts")
 	if dest == "" {
 		dest = "./charts"
 	}
-	os.MkdirAll(dest, 0755)
+	if err := os.MkdirAll(dest, 0755); err != nil {
+		log.Error(err, "Failed to create charts directory", "destination", dest)
+		return "", err
+	}
 
 	if r.Debug {
 		log.Info("Attempting to download chart", "destination", dest)

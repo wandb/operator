@@ -1,0 +1,74 @@
+---
+apiVersion: apps.wandb.com/v1
+kind: WeightsAndBiases
+metadata:
+  labels:
+    app.kubernetes.io/name: weightsandbiases
+    app.kubernetes.io/instance: weightsandbiases-sample
+    app.kubernetes.io/part-of: operator
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: operator
+  name: wandb-default-v1
+spec:
+  chart:
+    url: https://charts.wandb.ai
+    name: "operator-wandb"
+    version: "0.37.1"
+  values:
+    global:
+      repositoryPrefix: "us-docker.pkg.dev/wandb-production/public"
+      imageRegistry: "us-docker.pkg.dev/wandb-production/public"
+      bucket:
+        provider: "s3"
+        name: "seaweedfs.seaweedfs.svc.cluster.local:8333/bucket"
+        region: "us-east-1"
+        accessKey: "seaweedfs"
+        secretKey: "seaweedfs123"
+      glue:
+        enabled: true
+      api:
+        enabled: true
+      executor:
+        enabled: true
+      size: "dev"
+
+    executor:
+      install: true
+
+    filemeta:
+      install: true
+
+    frontend:
+      install: true
+
+    nginx:
+      install: true
+      additionalServices:
+        bucket:
+          host: "http://seaweedfs.seaweedfs.svc.cluster.local:8333/bucket"
+          headers:
+            Host: "seaweedfs.seaweedfs.svc.cluster.local:8333"
+
+    ingress:
+      install: false
+      create: false
+
+    mysql:
+      install: true
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "128Mi"
+
+    redis:
+      install: true
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "128Mi"
+
+    reloader:
+      install: true
+
+    settingsMigrationJob:
+      install: false

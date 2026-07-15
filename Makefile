@@ -43,11 +43,34 @@ help: ## Display this help.
 
 .PHONY: manifests
 manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
-	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
+	$(CONTROLLER_GEN) rbac:roleName=manager-role crd:allowDangerousTypes=true,generateEmbeddedObjectMeta=true,maxDescLen=0 webhook paths="{./api/v1,./api/v2,./internal/controller/...,./internal/webhook/...}" output:crd:artifacts:config=config/crd/bases
 
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
-	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
+	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="{./api/v1,./api/v2}"
+
+.PHONY: generate-vendored
+generate-vendored: ## Regenerate vendored Moco CRDs from the operator's Helm chart dependency.
+	@helm dependency update deploy/operator >/dev/null
+	@tar -xzOf deploy/operator/charts/moco-*.tgz moco/templates/generated/crds/moco_crds.yaml | \
+		sed -e '/^{{/d' \
+		    -e "s|: '{{ .Release.Service }}'|: Helm|g" \
+		    -e "s|: '{{ include \"moco.name\" . }}'|: moco|g" \
+		    -e "s|: '{{ .Chart.AppVersion }}'|: vendored|g" \
+		    -e "s|: '{{ include \"moco.chart\" . }}'|: moco-vendored|g" \
+		    -e "s|: '{{ .Release.Namespace }}/moco-serving-cert'|: moco-system/moco-serving-cert|g" \
+		    -e "s|: '{{ .Release.Namespace }}'|: moco-system|g" \
+		> pkg/vendored/moco/crds/moco_crds.yaml
+	@echo "Regenerated pkg/vendored/moco/crds/moco_crds.yaml"
+
+.PHONY: sync-crd-embed
+sync-crd-embed: manifests ## Sync embedded CRDs in internal/crdinstaller/crds from their source-of-truth locations.
+	@mkdir -p internal/crdinstaller/crds/operator internal/crdinstaller/crds/redis internal/crdinstaller/crds/clickhouse
+	@rm -f internal/crdinstaller/crds/operator/*.yaml internal/crdinstaller/crds/redis/*.yaml internal/crdinstaller/crds/clickhouse/*.yaml
+	@cp config/crd/bases/apps.wandb.com_*.yaml internal/crdinstaller/crds/operator/
+	@cp pkg/vendored/redis-operator/crds/*.yaml internal/crdinstaller/crds/redis/
+	@cp pkg/vendored/altinity-clickhouse/crds/clickhouse.altinity.com_clickhouseinstallations.yaml internal/crdinstaller/crds/clickhouse/
+	@echo "Synced CRDs into internal/crdinstaller/crds/{operator,redis,clickhouse}/"
 
 .PHONY: fmt
 fmt: ## Run go fmt against code.
@@ -58,14 +81,39 @@ vet: ## Run go vet against code.
 	go vet ./...
 
 .PHONY: test
-test: manifests generate fmt vet setup-envtest ## Run tests.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /e2e) -coverprofile cover.out
+test: manifests generate sync-crd-embed vet setup-envtest ## Run tests.
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test -v $$(go list ./... | grep -v /e2e | grep -v /vendored) -coverprofile cover.out
+
+.PHONY: setup-local-webhook
+setup-local-webhook: ## Setup local webhook development environment with certificates.
+	@./scripts/setup-local-webhook.sh
+
+.PHONY: run-local-webhook
+run-local-webhook: manifests generate fmt vet ## Run controller locally with webhook support.
+	@if [ ! -d ".local-webhook-certs" ]; then \
+		echo "Webhook certificates not found. Run 'make setup-local-webhook' first."; \
+		exit 1; \
+	fi
+	go run ./cmd/manager \
+		--webhook-cert-path=.local-webhook-certs \
+		--webhook-cert-name=tls.crt \
+		--webhook-cert-key=tls.key \
+		--v2-webhook=true
 
 # TODO(user): To use a different vendor for e2e tests, modify the setup under 'tests/e2e'.
 # The default setup assumes Kind is pre-installed and builds/loads the Manager Docker image locally.
 # Prometheus and CertManager are installed by default; skip with:
 # - PROMETHEUS_INSTALL_SKIP=true
 # - CERT_MANAGER_INSTALL_SKIP=true
+.PHONY: test-e2e-retention
+test-e2e-retention: manifests generate fmt vet ## Run retention policy integration tests against a real cluster.
+	@command -v kubectl >/dev/null 2>&1 || { \
+		echo "kubectl is not installed."; \
+		exit 1; \
+	}
+	PROMETHEUS_INSTALL_SKIP=true CERT_MANAGER_INSTALL_SKIP=true USE_EXISTING_CLUSTER=true \
+	go test ./test/e2e/ -v -ginkgo.v -ginkgo.focus="Retention Policy" -timeout 90m
+
 .PHONY: test-e2e
 test-e2e: manifests generate fmt vet ## Run the e2e tests. Expected an isolated environment using Kind.
 	@command -v kind >/dev/null 2>&1 || { \
@@ -143,23 +191,30 @@ local-registry-stop: ## Stop and remove the local OCI registry.
 ##@ Build
 
 .PHONY: build
-build: manifests generate fmt vet ## Build manager binary.
-	go build -o bin/manager cmd/main.go
+build: manifests generate fmt vet sync-crd-embed build-manager build-crd-installer ## Build all binaries.
+
+.PHONY: build-manager
+build-manager: ## Build the manager binary.
+	go build -o bin/manager ./cmd/manager
+
+.PHONY: build-crd-installer
+build-crd-installer: ## Build the crd-installer binary.
+	go build -o bin/crd-installer ./cmd/crd-installer
 
 .PHONY: run
-run: manifests generate fmt vet ## Run a controller from your host.
-	go run ./cmd/main.go
+run: manifests generate fmt vet ## Run the manager from your host.
+	go run ./cmd/manager
 
 # If you wish to build the manager image targeting other platforms you can use the --platform flag.
 # (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 .PHONY: docker-build
-docker-build: ## Build docker image with the manager.
-	$(CONTAINER_TOOL) build -t ${IMG} .
+docker-build: ## Build controller docker image.
+	$(CONTAINER_TOOL) build --platform linux/amd64 -t ${IMG} -f Dockerfile .
 
 .PHONY: docker-push
-docker-push: ## Push docker image with the manager.
-	$(CONTAINER_TOOL) push ${IMG}
+docker-push:
+	$(CONTAINER_TOOL) push --platform linux/amd64 ${IMG}
 
 # PLATFORMS defines the target platforms for the manager image be built to provide support to multiple
 # architectures. (i.e. make docker-buildx IMG=myregistry/mypoperator:0.0.1). To use this option you need to:
@@ -178,6 +233,15 @@ docker-buildx: ## Build and push docker image for the manager for cross-platform
 	- $(CONTAINER_TOOL) buildx rm operator-builder
 	rm Dockerfile.cross
 
+.PHONY: docker-buildx-push
+docker-buildx-push:
+	sed -e '1 s/\(^FROM\)/FROM --platform=\$$\{BUILDPLATFORM\}/; t' -e ' 1,// s//FROM --platform=\$$\{BUILDPLATFORM\}/' Dockerfile.controller > Dockerfile.cross
+	- $(CONTAINER_TOOL) buildx create --name controller-builder
+	$(CONTAINER_TOOL) buildx use controller-builder
+	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${IMG} -f Dockerfile.cross .
+	- $(CONTAINER_TOOL) buildx rm controller-builder
+	rm Dockerfile.cross
+
 .PHONY: build-installer
 build-installer: manifests generate kustomize ## Generate a consolidated YAML with CRDs and deployment.
 	mkdir -p dist
@@ -192,7 +256,11 @@ endif
 
 .PHONY: install
 install: manifests kustomize ## Install CRDs into the K8s cluster specified in ~/.kube/config.
-	$(KUSTOMIZE) build config/crd | $(KUBECTL) apply -f -
+	$(KUSTOMIZE) build config/crd | $(KUBECTL) apply -f - --server-side
+
+.PHONY: apply-local-dev
+apply-local-dev: manifests kustomize ## Apply local webhook development configuration (CRDs, RBAC, webhook).
+	$(KUSTOMIZE) build config/local-dev | $(KUBECTL) apply -f - --server-side
 
 .PHONY: uninstall
 uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
@@ -223,12 +291,12 @@ GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
 
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v5.5.0
-CONTROLLER_TOOLS_VERSION ?= v0.17.1
+CONTROLLER_TOOLS_VERSION ?= v0.19.0
 #ENVTEST_VERSION is the version of controller-runtime release branch to fetch the envtest setup script (i.e. release-0.20)
 ENVTEST_VERSION ?= $(shell go list -m -f "{{ .Version }}" sigs.k8s.io/controller-runtime | awk -F'[v.]' '{printf "release-%d.%d", $$2, $$3}')
 #ENVTEST_K8S_VERSION is the version of Kubernetes to use for setting up ENVTEST binaries (i.e. 1.31)
 ENVTEST_K8S_VERSION ?= $(shell go list -m -f "{{ .Version }}" k8s.io/api | awk -F'[v.]' '{printf "1.%d", $$3}')
-GOLANGCI_LINT_VERSION ?= v1.63.4
+GOLANGCI_LINT_VERSION ?= v2.12.2
 
 .PHONY: kustomize
 kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary.
@@ -256,7 +324,7 @@ $(ENVTEST): $(LOCALBIN)
 .PHONY: golangci-lint
 golangci-lint: $(GOLANGCI_LINT) ## Download golangci-lint locally if necessary.
 $(GOLANGCI_LINT): $(LOCALBIN)
-	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
+	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/v2/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
 
 # go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
 # $1 - target path with name of binary
@@ -280,4 +348,4 @@ $(GINKGO): $(LOCALBIN)
 	test -s $(LOCALBIN)/ginkgo || GOBIN=$(LOCALBIN) go install github.com/onsi/ginkgo/v2/ginkgo@latest
 
 
-include dep-management.mk olm.mk ginko.mk
+include dep-management.mk olm.mk

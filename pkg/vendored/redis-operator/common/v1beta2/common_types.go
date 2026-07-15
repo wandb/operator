@@ -1,0 +1,245 @@
+package v1beta2
+
+import (
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+)
+
+// KubernetesConfig will be the JSON struct for Basic Redis Config
+type KubernetesConfig struct {
+	Image                                string                                                  `json:"image"`
+	ImagePullPolicy                      corev1.PullPolicy                                       `json:"imagePullPolicy,omitempty"`
+	Resources                            *corev1.ResourceRequirements                            `json:"resources,omitempty"`
+	ExistingPasswordSecret               *ExistingPasswordSecret                                 `json:"redisSecret,omitempty"`
+	ImagePullSecrets                     *[]corev1.LocalObjectReference                          `json:"imagePullSecrets,omitempty"`
+	UpdateStrategy                       appsv1.StatefulSetUpdateStrategy                        `json:"updateStrategy,omitempty"`
+	PersistentVolumeClaimRetentionPolicy *appsv1.StatefulSetPersistentVolumeClaimRetentionPolicy `json:"persistentVolumeClaimRetentionPolicy,omitempty"`
+	Service                              *ServiceConfig                                          `json:"service,omitempty"`
+	IgnoreAnnotations                    []string                                                `json:"ignoreAnnotations,omitempty"`
+	MinReadySeconds                      *int32                                                  `json:"minReadySeconds,omitempty"`
+}
+
+func (in *KubernetesConfig) GetServiceType() string {
+	if in.Service == nil {
+		return "ClusterIP"
+	}
+	return in.Service.ServiceType
+}
+
+func (in *KubernetesConfig) GetServiceAnnotations() map[string]string {
+	if in.Service == nil {
+		return nil
+	}
+	return in.Service.ServiceAnnotations
+}
+
+func (in *KubernetesConfig) GetHeadlessServiceAnnotations() map[string]string {
+	if in.Service == nil {
+		return nil
+	}
+	if in.Service.Headless == nil {
+		return nil
+	}
+	return in.Service.Headless.AdditionalAnnotations
+}
+
+// ShouldCreateAdditionalService returns whether additional service should be created
+func (in *KubernetesConfig) ShouldCreateAdditionalService() bool {
+	if in.Service == nil {
+		return true
+	}
+	if in.Service.Additional == nil {
+		return true
+	}
+	if in.Service.Additional.Enabled == nil {
+		return true
+	}
+	return *in.Service.Additional.Enabled
+}
+
+// ShouldIncludeBusPort returns whether bus port should be included in the service
+func (in *KubernetesConfig) ShouldIncludeBusPort() bool {
+	if in.Service == nil {
+		return false
+	}
+	if in.Service.IncludeBusPort == nil {
+		return false
+	}
+	return *in.Service.IncludeBusPort
+}
+
+// ShouldIncludeBusPortForHeadless returns whether bus port should be included in the headless service
+func (in *KubernetesConfig) ShouldIncludeBusPortForHeadless() bool {
+	if in.Service == nil {
+		return false
+	}
+	if in.Service.Headless == nil {
+		return false
+	}
+	if in.Service.Headless.IncludeBusPort == nil {
+		return false
+	}
+	return *in.Service.Headless.IncludeBusPort
+}
+
+// ShouldIncludeBusPortForAdditional returns whether bus port should be included in the additional service
+func (in *KubernetesConfig) ShouldIncludeBusPortForAdditional() bool {
+	if in.Service == nil {
+		return false
+	}
+	if in.Service.Additional == nil {
+		return false
+	}
+	if in.Service.Additional.IncludeBusPort == nil {
+		return false
+	}
+	return *in.Service.Additional.IncludeBusPort
+}
+
+// ServiceConfig define the type of service to be created and its annotations
+type ServiceConfig struct {
+	ServiceType        string            `json:"serviceType,omitempty"`
+	ServiceAnnotations map[string]string `json:"annotations,omitempty"`
+	// IncludeBusPort when set to true, it will add bus port to the service, such as 16379.
+	// This field is only used for Redis cluster mode.
+	IncludeBusPort *bool `json:"includeBusPort,omitempty"`
+	// Headless config for which suffix is -headless service
+	Headless *Service `json:"headless,omitempty"`
+	// Additional config for which suffix is -additional service
+	Additional *Service `json:"additional,omitempty"`
+}
+
+// Service is the struct to define the service type and its annotations
+type Service struct {
+	Type                  string            `json:"type,omitempty"`
+	AdditionalAnnotations map[string]string `json:"additionalAnnotations,omitempty"`
+	// IncludeBusPort when set to true, it will add bus port to the service, such as 16379.
+	// This field is only used for Redis cluster mode.
+	IncludeBusPort *bool `json:"includeBusPort,omitempty"`
+	Enabled        *bool `json:"enabled,omitempty"`
+}
+
+// ExistingPasswordSecret is the struct to access the existing secret
+type ExistingPasswordSecret struct {
+	Name *string `json:"name,omitempty"`
+	Key  *string `json:"key,omitempty"`
+}
+
+// RedisExporter interface will have the information for redis exporter related stuff
+type RedisExporter struct {
+	Enabled         bool                         `json:"enabled,omitempty"`
+	Port            *int                         `json:"port,omitempty"`
+	Image           string                       `json:"image"`
+	Resources       *corev1.ResourceRequirements `json:"resources,omitempty"`
+	ImagePullPolicy corev1.PullPolicy            `json:"imagePullPolicy,omitempty"`
+	EnvVars         *[]corev1.EnvVar             `json:"env,omitempty"`
+	SecurityContext *corev1.SecurityContext      `json:"securityContext,omitempty"`
+}
+
+// RedisConfig defines the external configuration of Redis
+type RedisConfig struct {
+	// MaxMemoryPercentOfLimit is the percentage of redis container memory limit to be used as maxmemory.
+	MaxMemoryPercentOfLimit *int     `json:"maxMemoryPercentOfLimit,omitempty"`
+	DynamicConfig           []string `json:"dynamicConfig,omitempty"`
+	AdditionalRedisConfig   *string  `json:"additionalRedisConfig,omitempty"`
+}
+
+// Storage is the inteface to add pvc and pv support in redis
+type Storage struct {
+	KeepAfterDelete     bool                         `json:"keepAfterDelete,omitempty"`
+	VolumeClaimTemplate corev1.PersistentVolumeClaim `json:"volumeClaimTemplate,omitempty"`
+	VolumeMount         AdditionalVolume             `json:"volumeMount,omitempty"`
+}
+
+// Additional Volume is provided by user that is mounted on the pods
+type AdditionalVolume struct {
+	Volume    []corev1.Volume      `json:"volume,omitempty"`
+	MountPath []corev1.VolumeMount `json:"mountPath,omitempty"`
+}
+
+// TLS Configuration for redis instances
+type TLSConfig struct {
+	CaKeyFile   string `json:"ca,omitempty"`
+	CertKeyFile string `json:"cert,omitempty"`
+	KeyFile     string `json:"key,omitempty"`
+	// Reference to secret which contains the certificates
+	Secret corev1.SecretVolumeSource `json:"secret"`
+}
+
+// Sidecar for each Redis pods
+type Sidecar struct {
+	Name            string                       `json:"name"`
+	Image           string                       `json:"image"`
+	ImagePullPolicy corev1.PullPolicy            `json:"imagePullPolicy,omitempty"`
+	Resources       *corev1.ResourceRequirements `json:"resources,omitempty"`
+	EnvVars         *[]corev1.EnvVar             `json:"env,omitempty"`
+	Volumes         *[]corev1.VolumeMount        `json:"mountPath,omitempty"`
+	Command         []string                     `json:"command,omitempty" protobuf:"bytes,3,rep,name=command"`
+	Ports           *[]corev1.ContainerPort      `json:"ports,omitempty" patchStrategy:"merge" patchMergeKey:"containerPort" protobuf:"bytes,6,rep,name=ports"`
+	SecurityContext *corev1.SecurityContext      `json:"securityContext,omitempty"`
+}
+
+// RedisLeader interface will have the redis leader configuration
+type RedisLeader struct {
+	// Replicas overrides clusterSize for leader nodes count. If not set, uses clusterSize value
+	Replicas                  *int32                            `json:"replicas,omitempty"`
+	RedisConfig               *RedisConfig                      `json:"redisConfig,omitempty"`
+	Affinity                  *corev1.Affinity                  `json:"affinity,omitempty"`
+	PodDisruptionBudget       *RedisPodDisruptionBudget         `json:"pdb,omitempty"`
+	ReadinessProbe            *corev1.Probe                     `json:"readinessProbe,omitempty" protobuf:"bytes,11,opt,name=readinessProbe"`
+	LivenessProbe             *corev1.Probe                     `json:"livenessProbe,omitempty" protobuf:"bytes,12,opt,name=livenessProbe"`
+	Tolerations               *[]corev1.Toleration              `json:"tolerations,omitempty"`
+	NodeSelector              map[string]string                 `json:"nodeSelector,omitempty"`
+	TopologySpreadConstraints []corev1.TopologySpreadConstraint `json:"topologySpreadConstraints,omitempty"`
+}
+
+// RedisFollower interface will have the redis follower configuration
+type RedisFollower struct {
+	// Replicas overrides clusterSize for follower nodes count. If not set, uses clusterSize value
+	Replicas                  *int32                            `json:"replicas,omitempty"`
+	RedisConfig               *RedisConfig                      `json:"redisConfig,omitempty"`
+	Affinity                  *corev1.Affinity                  `json:"affinity,omitempty"`
+	PodDisruptionBudget       *RedisPodDisruptionBudget         `json:"pdb,omitempty"`
+	ReadinessProbe            *corev1.Probe                     `json:"readinessProbe,omitempty" protobuf:"bytes,11,opt,name=readinessProbe"`
+	LivenessProbe             *corev1.Probe                     `json:"livenessProbe,omitempty" protobuf:"bytes,12,opt,name=livenessProbe"`
+	Tolerations               *[]corev1.Toleration              `json:"tolerations,omitempty"`
+	NodeSelector              map[string]string                 `json:"nodeSelector,omitempty"`
+	TopologySpreadConstraints []corev1.TopologySpreadConstraint `json:"topologySpreadConstraints,omitempty"`
+}
+
+// RedisPodDisruptionBudget configure a PodDisruptionBudget on the resource (leader/follower)
+type RedisPodDisruptionBudget struct {
+	Enabled        bool   `json:"enabled,omitempty"`
+	MinAvailable   *int32 `json:"minAvailable,omitempty"`
+	MaxUnavailable *int32 `json:"maxUnavailable,omitempty"`
+}
+
+type RedisSentinelConfig struct {
+	AdditionalSentinelConfig *string              `json:"additionalSentinelConfig,omitempty"`
+	RedisReplicationName     string               `json:"redisReplicationName"`
+	RedisReplicationPassword *corev1.EnvVarSource `json:"redisReplicationPassword,omitempty"`
+	MasterGroupName          string               `json:"masterGroupName,omitempty"`
+	RedisPort                string               `json:"redisPort,omitempty"`
+	Quorum                   string               `json:"quorum,omitempty"`
+	ParallelSyncs            string               `json:"parallelSyncs,omitempty"`
+	FailoverTimeout          string               `json:"failoverTimeout,omitempty"`
+	DownAfterMilliseconds    string               `json:"downAfterMilliseconds,omitempty"`
+	ResolveHostnames         string               `json:"resolveHostnames,omitempty"`
+	AnnounceHostnames        string               `json:"announceHostnames,omitempty"`
+}
+
+// InitContainer for each Redis pods
+type InitContainer struct {
+	Enabled         *bool                        `json:"enabled,omitempty"`
+	Image           string                       `json:"image"`
+	ImagePullPolicy corev1.PullPolicy            `json:"imagePullPolicy,omitempty"`
+	Resources       *corev1.ResourceRequirements `json:"resources,omitempty"`
+	EnvVars         *[]corev1.EnvVar             `json:"env,omitempty"`
+	Command         []string                     `json:"command,omitempty"`
+	Args            []string                     `json:"args,omitempty"`
+	SecurityContext *corev1.SecurityContext      `json:"securityContext,omitempty"`
+}
+
+type ACLConfig struct {
+	Secret *corev1.SecretVolumeSource `json:"secret,omitempty"`
+}

@@ -1,0 +1,258 @@
+helmHooks:
+  enabled: true
+
+# Renders OpenShift-only resources; profiles/openshift.yaml turns this on.
+openshift:
+  enabled: false
+
+wandb:
+  install: true
+  size: small
+  namespace: wandb
+  version: 0.81.0
+  internalServiceAuth: false
+
+wandb-operator:
+  image:
+    repository: us-docker.pkg.dev/wandb-production/public/wandb/operator
+    tag: 2.0.0-alpha.2
+  containers:
+    operator:
+      command:
+        - /manager
+      args:
+        - --metrics-bind-address=:8443
+        - --leader-elect
+        - --health-probe-bind-address=:8081
+        - --webhook-cert-path=/tmp/wandb-operator/serving-certs
+      ports:
+        - containerPort: 8443
+          name: metrics
+          protocol: TCP
+      env:
+        METRICS_BIND_ADDRESS:
+          value: ":8443"
+        METRICS_SECURE:
+          value: "false"
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop:
+            - "ALL"
+      livenessProbe:
+        httpGet:
+          path: /healthz
+          port: 8081
+        initialDelaySeconds: 15
+        periodSeconds: 20
+      readinessProbe:
+        httpGet:
+          path: /readyz
+          port: 8081
+        initialDelaySeconds: 5
+        periodSeconds: 10
+      resources:
+        limits:
+          cpu: 500m
+          memory: 512Mi
+        requests:
+          cpu: 10m
+          memory: 64Mi
+      volumeMounts:
+        - mountPath: /tmp/server-manifest
+          name: server-manifest
+        - mountPath: /tmp/wandb-operator/serving-certs
+          name: serving-certs
+          readOnly: true
+
+  service:
+    enabled: true
+    ports:
+      - name: webhook
+        port: 443
+        protocol: TCP
+        targetPort: 9443
+      - name: metrics
+        port: 8443
+        protocol: TCP
+        targetPort: 8443
+  replicaCount: 1
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    runAsGroup: 65532
+    fsGroup: 65532
+    fsGroupChangePolicy: OnRootMismatch
+    seccompProfile:
+      type: RuntimeDefault
+  volumes:
+    - name: server-manifest
+      emptyDir: {}
+    - name: serving-certs
+      secret:
+        secretName: '{{ .Release.Name }}-serving-cert'
+
+  operators:
+    application: true
+    clickhouse: true
+    grafana: true
+    kafka: true
+    objectStore: true
+    mysql: true
+    redis: true
+    vm: true
+
+moco:
+  enabled: true
+
+redis-operator:
+  enabled: true
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+    fsGroupChangePolicy: OnRootMismatch
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - "ALL"
+
+seaweedfs-operator:
+  enabled: true
+  podSecurityContext:
+    seccompProfile:
+      type: RuntimeDefault
+  webhook:
+    enabled: false
+
+# Only the ServiceMonitor CRD is needed — the seaweedfs-operator creates them
+# during reconcile and the VictoriaMetrics Operator auto-converts them to
+# VMServiceScrapes.
+prometheus-operator-crds:
+  crds:
+    alertmanagerconfigs:
+      enabled: false
+    alertmanagers:
+      enabled: false
+    podmonitors:
+      enabled: false
+    probes:
+      enabled: false
+    prometheusagents:
+      enabled: false
+    prometheuses:
+      enabled: false
+    prometheusrules:
+      enabled: false
+    scrapeconfigs:
+      enabled: false
+    servicemonitors:
+      enabled: true
+    thanosrulers:
+      enabled: false
+
+altinity-clickhouse-operator:
+  crdHook:
+    enabled: false
+  enabled: true
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+    fsGroupChangePolicy: OnRootMismatch
+    seccompProfile:
+      type: RuntimeDefault
+  operator:
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+          - "ALL"
+  metrics:
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+          - "ALL"
+  configs:
+    files:
+      config.yaml:
+        watch:
+          namespaces: [".*"]
+
+victoria-metrics-operator:
+  # Helm dependency conditions are boolean-only, so full/forward installs
+  # must opt into this dependency explicitly or via a preset values file.
+  enabled: false
+  podSecurityContext:
+    seccompProfile:
+      type: RuntimeDefault
+  crds:
+    # Install Victoria CRDs through Helm's CRD phase so telemetry resources
+    # in this chart can be created in the same release.
+    plain: true
+
+grafana-operator:
+  # Helm dependency conditions are boolean-only, so full installs
+  # must opt into this dependency explicitly or via a preset values file.
+  enabled: false
+  podSecurityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+
+telemetry:
+  # off: disable telemetry collection
+  # full: run the in-cluster Victoria stack and local Grafana
+  # forward: run the in-cluster Victoria stack and forward OTLP data externally
+  mode: "off"
+  namespace: wandb
+  otel:
+    secretName: wandb-otel-connection
+    protocol: http/protobuf
+    serviceName: wandb-service
+    resourceAttributes: ""
+  forwarding:
+    otlp:
+      endpoint: ""
+      protocol: http/protobuf
+      headers: {}
+      tls:
+        insecure: false
+  retentionPeriod: 1d
+  otlpGateway:
+    podSecurityContext:
+      runAsNonRoot: true
+      seccompProfile:
+        type: RuntimeDefault
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+          - ALL
+      runAsNonRoot: true
+  scrape:
+    enabled: true
+    kubeletCadvisor: true
+    operators: true
+    wandbApi: true
+    infrastructure: true
+    kubeStateMetrics: false
+  alerting:
+    enabled: false
+    evaluationInterval: 30s
+    notifier:
+      enabled: false
+      name: default
+      type: webhook
+      target: http://alertmanager-operated.monitoring.svc:9093

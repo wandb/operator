@@ -1,0 +1,139 @@
+---
+# MySQL - Percona XtraDB Cluster
+# Scrapes mysqld-exporter sidecar from PXC nodes
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMPodScrape
+metadata:
+  name: mysql-pxc
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: pxc
+  podMetricsEndpoints:
+    - port: "metrics"
+      path: /metrics
+---
+# MySQL - ProxySQL
+# Scrapes ProxySQL built-in Prometheus metrics
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMPodScrape
+metadata:
+  name: mysql-proxysql
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: proxysql
+  podMetricsEndpoints:
+    - port: "stats"
+      path: /metrics
+---
+# Kafka - Bufstream
+# Scrapes Bufstream broker metrics from the debug/metrics port
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMPodScrape
+metadata:
+  name: kafka-brokers
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      weightsandbiases.apps.wandb.com/component: kafka
+  podMetricsEndpoints:
+    - port: "metrics"
+      path: /metrics
+---
+# SeaweedFS Master
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMPodScrape
+metadata:
+  name: seaweedfs-master
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/managed-by: seaweedfs-operator
+      app.kubernetes.io/component: master
+  podMetricsEndpoints:
+    - port: master-metrics
+      path: /metrics
+---
+# SeaweedFS Volume
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMPodScrape
+metadata:
+  name: seaweedfs-volume
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/managed-by: seaweedfs-operator
+      app.kubernetes.io/component: volume
+  podMetricsEndpoints:
+    - port: volume-metrics
+      path: /metrics
+---
+# SeaweedFS Filer
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMPodScrape
+metadata:
+  name: seaweedfs-filer
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/managed-by: seaweedfs-operator
+      app.kubernetes.io/component: filer
+  podMetricsEndpoints:
+    - port: filer-metrics
+      path: /metrics
+---
+# Redis
+# Scrapes Redis exporter sidecar metrics
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMPodScrape
+metadata:
+  name: redis
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      role: replication
+  podMetricsEndpoints:
+    - port: "redis-exporter"
+      path: /metrics
+---
+# ClickHouse Metrics Service
+# Service to expose ClickHouse Prometheus metrics on port 9363
+apiVersion: v1
+kind: Service
+metadata:
+  name: clickhouse-metrics
+  namespace: default
+  labels:
+    app: clickhouse-metrics
+spec:
+  selector:
+    clickhouse.altinity.com/chi: wandb-ch-install
+  ports:
+    - name: metrics
+      port: 9363
+      targetPort: 9363
+      protocol: TCP
+  clusterIP: None
+---
+# ClickHouse
+# Scrapes ClickHouse built-in Prometheus endpoint via Service
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMServiceScrape
+metadata:
+  name: clickhouse
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: clickhouse-metrics
+  endpoints:
+    - port: metrics
+      path: /metrics

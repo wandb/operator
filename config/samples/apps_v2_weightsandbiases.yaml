@@ -1,0 +1,24 @@
+apiVersion: apps.wandb.com/v2
+kind: WeightsAndBiases
+metadata:
+  name: wandb-dev-v2
+spec:
+  size: dev
+  mysql:
+    managedMysql:
+      storageSize: 5Gi
+  redis:
+    managedRedis:
+      storageSize: 1Gi
+  kafka:
+    managedKafka:
+      storageSize: 10Gi
+      replicas: 1
+  objectStore:
+    managedObjectStore:
+      storageSize: 10Gi
+      replicas: 1
+  clickhouse:
+    managedClickhouse:
+      storageSize: 10Gi
+      replicas: 1

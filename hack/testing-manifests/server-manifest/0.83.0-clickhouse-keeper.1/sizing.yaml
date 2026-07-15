@@ -1,0 +1,1517 @@
+bucket:
+  default:
+    sizing:
+      default:
+        replicas: 1
+        pools: 1
+        volumeSize: 10Gi
+      micro:
+        replicas: 3
+        volumeSize: 50Gi
+        resources:
+          requests:
+            cpu: 1
+            memory: 4Gi
+          limits:
+            cpu: 1
+            memory: 4Gi
+      small:
+        replicas: 3
+        volumeSize: 100Gi
+        resources:
+          requests:
+            cpu: 2
+            memory: 8Gi
+          limits:
+            cpu: 2
+            memory: 8Gi
+      medium:
+        replicas: 3
+        volumeSize: 100Gi
+        resources:
+          requests:
+            cpu: 4
+            memory: 16Gi
+          limits:
+            cpu: 4
+            memory: 16Gi
+      large:
+        replicas: 3
+        volumeSize: 200Gi
+        resources:
+          requests:
+            cpu: 8
+            memory: 32Gi
+          limits:
+            cpu: 8
+            memory: 32Gi
+      xlarge:
+        replicas: 3
+        volumeSize: 200Gi
+        resources:
+          requests:
+            cpu: 8
+            memory: 32Gi
+          limits:
+            cpu: 8
+            memory: 32Gi
+      2xlarge:
+        replicas: 3
+        volumeSize: 200Gi
+        resources:
+          requests:
+            cpu: 8
+            memory: 32Gi
+          limits:
+            cpu: 8
+            memory: 32Gi
+clickhouse:
+  default:
+    sizing:
+      default:
+        shards: 1
+        replicas: 1
+        volumeSize: 10Gi
+      micro:
+        replicas: 2
+        volumeSize: 30Gi
+        resources:
+          requests:
+            cpu: 1
+            memory: 4Gi
+          limits:
+            cpu: 1
+            memory: 4Gi
+      small:
+        shards: 1
+        replicas: 3
+        volumeSize: 50Gi
+        resources:
+          requests:
+            cpu: 2
+            memory: 8Gi
+          limits:
+            cpu: 2
+            memory: 8Gi
+      medium:
+        shards: 1
+        replicas: 3
+        volumeSize: 100Gi
+        resources:
+          requests:
+            cpu: 4
+            memory: 16Gi
+          limits:
+            cpu: 4
+            memory: 16Gi
+      large:
+        shards: 1
+        replicas: 3
+        volumeSize: 200Gi
+        resources:
+          requests:
+            cpu: 8
+            memory: 32Gi
+          limits:
+            cpu: 8
+            memory: 32Gi
+      xlarge:
+        shards: 2
+        replicas: 3
+        volumeSize: 200Gi
+        resources:
+          requests:
+            cpu: 8
+            memory: 32Gi
+          limits:
+            cpu: 8
+            memory: 32Gi
+      2xlarge:
+        shards: 4
+        replicas: 3
+        volumeSize: 200Gi
+        resources:
+          requests:
+            cpu: 8
+            memory: 32Gi
+          limits:
+            cpu: 8
+            memory: 32Gi
+# Keeper coordinates ReplicatedMergeTree replication; it stores only the Raft
+# log + metadata snapshots, so its volume is small and independent of CH data.
+# replicas must be odd (Raft quorum): 1 for single-node, 3 for replicated CH.
+clickhouseKeeper:
+  default:
+    sizing:
+      default:
+        replicas: 1
+        volumeSize: 10Gi
+        resources:
+          requests:
+            cpu: 500m
+            memory: 1Gi
+          limits:
+            cpu: 500m
+            memory: 1Gi
+      micro:
+        replicas: 3
+        volumeSize: 10Gi
+        resources:
+          requests:
+            cpu: 500m
+            memory: 1Gi
+          limits:
+            cpu: 500m
+            memory: 1Gi
+      small:
+        replicas: 3
+        volumeSize: 20Gi
+        resources:
+          requests:
+            cpu: 1
+            memory: 2Gi
+          limits:
+            cpu: 1
+            memory: 2Gi
+      medium:
+        replicas: 3
+        volumeSize: 20Gi
+        resources:
+          requests:
+            cpu: 1
+            memory: 2Gi
+          limits:
+            cpu: 1
+            memory: 2Gi
+      large:
+        replicas: 3
+        volumeSize: 20Gi
+        resources:
+          requests:
+            cpu: 2
+            memory: 4Gi
+          limits:
+            cpu: 2
+            memory: 4Gi
+      xlarge:
+        replicas: 3
+        volumeSize: 20Gi
+        resources:
+          requests:
+            cpu: 2
+            memory: 4Gi
+          limits:
+            cpu: 2
+            memory: 4Gi
+      2xlarge:
+        replicas: 3
+        volumeSize: 20Gi
+        resources:
+          requests:
+            cpu: 2
+            memory: 4Gi
+          limits:
+            cpu: 2
+            memory: 4Gi
+kafka:
+  sizing:
+    # Bufstream brokers are stateless; replicas = broker count (floored at 2), volumeSize = etcd metadata PVC, replicationFactor = topic RF (1 for object-store backed).
+    default:
+      replicas: 2
+      volumeSize: 10Gi
+      replicationFactor: 1
+    micro:
+      replicas: 2
+      volumeSize: 10Gi
+      replicationFactor: 1
+      resources:
+        requests:
+          cpu: 1
+          memory: 4Gi
+        limits:
+          cpu: 1
+          memory: 4Gi
+    small:
+      replicas: 2
+      volumeSize: 10Gi
+      replicationFactor: 1
+      resources:
+        requests:
+          cpu: 2
+          memory: 8Gi
+        limits:
+          cpu: 2
+          memory: 8Gi
+    medium:
+      replicas: 3
+      volumeSize: 10Gi
+      replicationFactor: 1
+      resources:
+        requests:
+          cpu: 4
+          memory: 16Gi
+        limits:
+          cpu: 4
+          memory: 16Gi
+    large:
+      replicas: 3
+      volumeSize: 10Gi
+      replicationFactor: 1
+      resources:
+        requests:
+          cpu: 8
+          memory: 30Gi
+        limits:
+          cpu: 8
+          memory: 30Gi
+    xlarge:
+      replicas: 4
+      volumeSize: 10Gi
+      replicationFactor: 1
+      resources:
+        requests:
+          cpu: 8
+          memory: 30Gi
+        limits:
+          cpu: 8
+          memory: 30Gi
+    2xlarge:
+      replicas: 6
+      volumeSize: 10Gi
+      replicationFactor: 1
+      resources:
+        requests:
+          cpu: 8
+          memory: 30Gi
+        limits:
+          cpu: 8
+          memory: 30Gi
+mysql:
+  default:
+    sizing:
+      default:
+        replicas: 1
+        volumeSize: 10Gi
+      micro:
+        replicas: 3
+        volumeSize: 50Gi
+        resources:
+          requests:
+            cpu: 1
+            memory: 4Gi
+          limits:
+            cpu: 1
+            memory: 4Gi
+      small:
+        replicas: 3
+        volumeSize: 100Gi
+        resources:
+          requests:
+            cpu: 2
+            memory: 8Gi
+          limits:
+            cpu: 2
+            memory: 8Gi
+      medium:
+        replicas: 3
+        volumeSize: 200Gi
+        resources:
+          requests:
+            cpu: 4
+            memory: 16Gi
+          limits:
+            cpu: 4
+            memory: 16Gi
+      large:
+        replicas: 3
+        volumeSize: 500Gi
+        resources:
+          requests:
+            cpu: 8
+            memory: 30Gi
+          limits:
+            cpu: 8
+            memory: 30Gi
+      xlarge:
+        replicas: 3
+        volumeSize: 1Ti
+        resources:
+          requests:
+            cpu: 15
+            memory: 60Gi
+          limits:
+            cpu: 15
+            memory: 60Gi
+      2xlarge:
+        replicas: 3
+        volumeSize: 2Ti
+        resources:
+          requests:
+            cpu: 30
+            memory: 120Gi
+          limits:
+            cpu: 30
+            memory: 120Gi
+redis:
+  default:
+    sizing:
+      default:
+        shards: 1
+        replicas: 1
+        volumeSize: 5Gi
+      micro:
+        replicas: 2
+        volumeSize: 8Gi
+        resources:
+          requests:
+            cpu: 1
+            memory: 4Gi
+          limits:
+            cpu: 1
+            memory: 4Gi
+      small:
+        shards: 1
+        replicas: 3
+        volumeSize: 16Gi
+        resources:
+          requests:
+            cpu: 2
+            memory: 8Gi
+          limits:
+            cpu: 2
+            memory: 8Gi
+      medium:
+        shards: 1
+        replicas: 3
+        volumeSize: 32Gi
+        resources:
+          requests:
+            cpu: 4
+            memory: 16Gi
+          limits:
+            cpu: 4
+            memory: 16Gi
+      large:
+        shards: 1
+        replicas: 3
+        volumeSize: 64Gi
+        resources:
+          requests:
+            cpu: 8
+            memory: 30Gi
+          limits:
+            cpu: 8
+            memory: 30Gi
+      xlarge:
+        shards: 2
+        replicas: 3
+        volumeSize: 128Gi
+        resources:
+          requests:
+            cpu: 8
+            memory: 30Gi
+          limits:
+            cpu: 8
+            memory: 30Gi
+      2xlarge:
+        shards: 4
+        replicas: 3
+        volumeSize: 256Gi
+        resources:
+          requests:
+            cpu: 8
+            memory: 30Gi
+          limits:
+            cpu: 8
+            memory: 30Gi
+applications:
+  anaconda2:
+    sizing:
+      micro:
+        resources:
+          limits:
+            cpu: "1"
+            memory: 2Gi
+          requests:
+            cpu: "1"
+            memory: 2Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 2
+            minReplicas: 1
+      small:
+        resources:
+          limits:
+            cpu: "2"
+            memory: 4Gi
+          requests:
+            cpu: "2"
+            memory: 4Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 3
+            minReplicas: 2
+      medium:
+        resources:
+          limits:
+            cpu: "4"
+            memory: 8Gi
+          requests:
+            cpu: "4"
+            memory: 8Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 3
+            minReplicas: 2
+      large:
+        resources:
+          limits:
+            cpu: "8"
+            memory: 16Gi
+          requests:
+            cpu: "8"
+            memory: 16Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 3
+            minReplicas: 2
+      xlarge:
+        resources:
+          limits:
+            cpu: "8"
+            memory: 16Gi
+          requests:
+            cpu: "8"
+            memory: 16Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 6
+            minReplicas: 4
+      2xlarge:
+        resources:
+          limits:
+            cpu: "8"
+            memory: 16Gi
+          requests:
+            cpu: "8"
+            memory: 16Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 6
+            minReplicas: 4
+  api:
+    sizing:
+      micro:
+        resources:
+          limits:
+            cpu: "1"
+            memory: 2Gi
+          requests:
+            cpu: "1"
+            memory: 2Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 2
+            minReplicas: 1
+      small:
+        resources:
+          limits:
+            cpu: "4"
+            memory: 8Gi
+          requests:
+            cpu: "4"
+            memory: 8Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 3
+            minReplicas: 2
+      medium:
+        resources:
+          limits:
+            cpu: "8"
+            memory: 16Gi
+          requests:
+            cpu: "8"
+            memory: 16Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 3
+            minReplicas: 2
+      large:
+        resources:
+          limits:
+            cpu: "16"
+            memory: 32Gi
+          requests:
+            cpu: "16"
+            memory: 32Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 6
+            minReplicas: 4
+      xlarge:
+        resources:
+          limits:
+            cpu: "16"
+            memory: 32Gi
+          requests:
+            cpu: "16"
+            memory: 32Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 12
+            minReplicas: 6
+      2xlarge:
+        resources:
+          limits:
+            cpu: "16"
+            memory: 32Gi
+          requests:
+            cpu: "16"
+            memory: 32Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 16
+            minReplicas: 8
+  executor:
+    sizing:
+      micro:
+        resources:
+          limits:
+            cpu: "1"
+            memory: 4Gi
+          requests:
+            cpu: "1"
+            memory: 4Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 2
+            minReplicas: 1
+      small:
+        resources:
+          limits:
+            cpu: "4"
+            memory: 16Gi
+          requests:
+            cpu: "4"
+            memory: 16Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 2
+            minReplicas: 1
+      medium:
+        resources:
+          limits:
+            cpu: "8"
+            memory: 32Gi
+          requests:
+            cpu: "8"
+            memory: 32Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 4
+            minReplicas: 2
+      large:
+        resources:
+          limits:
+            cpu: "16"
+            memory: 64Gi
+          requests:
+            cpu: "16"
+            memory: 64Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 8
+            minReplicas: 4
+      xlarge:
+        resources:
+          limits:
+            cpu: "16"
+            memory: 64Gi
+          requests:
+            cpu: "16"
+            memory: 64Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 16
+            minReplicas: 8
+      2xlarge:
+        resources:
+          limits:
+            cpu: "16"
+            memory: 64Gi
+          requests:
+            cpu: "16"
+            memory: 64Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 32
+            minReplicas: 16
+  filemeta:
+    sizing:
+      micro:
+        resources:
+          limits:
+            cpu: "1"
+            memory: 2Gi
+          requests:
+            cpu: "1"
+            memory: 2Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 2
+            minReplicas: 1
+      small:
+        resources:
+          limits:
+            cpu: "2"
+            memory: 2Gi
+          requests:
+            cpu: "2"
+            memory: 2Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 2
+            minReplicas: 1
+      medium:
+        resources:
+          limits:
+            cpu: "4"
+            memory: 4Gi
+          requests:
+            cpu: "4"
+            memory: 4Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 2
+            minReplicas: 1
+      large:
+        resources:
+          limits:
+            cpu: "8"
+            memory: 16Gi
+          requests:
+            cpu: "8"
+            memory: 16Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 2
+            minReplicas: 1
+      xlarge:
+        resources:
+          limits:
+            cpu: "8"
+            memory: 16Gi
+          requests:
+            cpu: "8"
+            memory: 16Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 2
+            minReplicas: 1
+      2xlarge:
+        resources:
+          limits:
+            cpu: "8"
+            memory: 16Gi
+          requests:
+            cpu: "8"
+            memory: 16Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 2
+            minReplicas: 1
+  filestream:
+    sizing:
+      micro:
+        resources:
+          limits:
+            cpu: "1"
+            memory: 2Gi
+          requests:
+            cpu: "1"
+            memory: 2Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 2
+            minReplicas: 1
+      small:
+        resources:
+          limits:
+            cpu: "2"
+            memory: 4Gi
+          requests:
+            cpu: "2"
+            memory: 4Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 2
+            minReplicas: 1
+      medium:
+        resources:
+          limits:
+            cpu: "4"
+            memory: 8Gi
+          requests:
+            cpu: "4"
+            memory: 8Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 2
+            minReplicas: 1
+      large:
+        resources:
+          limits:
+            cpu: "8"
+            memory: 16Gi
+          requests:
+            cpu: "8"
+            memory: 16Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 2
+            minReplicas: 1
+      xlarge:
+        resources:
+          limits:
+            cpu: "8"
+            memory: 16Gi
+          requests:
+            cpu: "8"
+            memory: 16Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 4
+            minReplicas: 2
+      2xlarge:
+        resources:
+          limits:
+            cpu: "8"
+            memory: 16Gi
+          requests:
+            cpu: "8"
+            memory: 16Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 8
+            minReplicas: 4
+  flat-run-fields-updater:
+    sizing:
+      micro:
+        resources:
+          limits:
+            cpu: "1"
+            memory: 2Gi
+          requests:
+            cpu: "1"
+            memory: 2Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 2
+            minReplicas: 1
+      small:
+        resources:
+          limits:
+            cpu: "2"
+            memory: 4Gi
+          requests:
+            cpu: "2"
+            memory: 4Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 2
+            minReplicas: 1
+      medium:
+        resources:
+          limits:
+            cpu: "4"
+            memory: 8Gi
+          requests:
+            cpu: "4"
+            memory: 8Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 2
+            minReplicas: 1
+      large:
+        resources:
+          limits:
+            cpu: "8"
+            memory: 16Gi
+          requests:
+            cpu: "8"
+            memory: 16Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 2
+            minReplicas: 1
+      xlarge:
+        resources:
+          limits:
+            cpu: "8"
+            memory: 16Gi
+          requests:
+            cpu: "8"
+            memory: 16Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 4
+            minReplicas: 2
+      2xlarge:
+        resources:
+          limits:
+            cpu: "8"
+            memory: 16Gi
+          requests:
+            cpu: "8"
+            memory: 16Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 8
+            minReplicas: 4
+  frontend:
+    sizing:
+      micro:
+        resources:
+          limits:
+            cpu: "1"
+            memory: 2Gi
+          requests:
+            cpu: "1"
+            memory: 2Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 2
+            minReplicas: 1
+      small:
+        resources:
+          limits:
+            cpu: "2"
+            memory: 2Gi
+          requests:
+            cpu: "2"
+            memory: 2Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 3
+            minReplicas: 2
+      medium:
+        resources:
+          limits:
+            cpu: "4"
+            memory: 4Gi
+          requests:
+            cpu: "4"
+            memory: 4Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 3
+            minReplicas: 2
+      large:
+        resources:
+          limits:
+            cpu: "8"
+            memory: 8Gi
+          requests:
+            cpu: "8"
+            memory: 8Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 3
+            minReplicas: 2
+      xlarge:
+        resources:
+          limits:
+            cpu: "8"
+            memory: 8Gi
+          requests:
+            cpu: "8"
+            memory: 8Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 3
+            minReplicas: 2
+      2xlarge:
+        resources:
+          limits:
+            cpu: "8"
+            memory: 8Gi
+          requests:
+            cpu: "8"
+            memory: 8Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 3
+            minReplicas: 2
+  glue:
+    sizing:
+      micro:
+        resources:
+          limits:
+            cpu: "1"
+            memory: 3Gi
+          requests:
+            cpu: "1"
+            memory: 3Gi
+      small:
+        resources:
+          limits:
+            cpu: "2"
+            memory: 6Gi
+          requests:
+            cpu: "2"
+            memory: 6Gi
+      medium:
+        resources:
+          limits:
+            cpu: "4"
+            memory: 12Gi
+          requests:
+            cpu: "4"
+            memory: 12Gi
+      large:
+        resources:
+          limits:
+            cpu: "8"
+            memory: 24Gi
+          requests:
+            cpu: "8"
+            memory: 24Gi
+      xlarge:
+        resources:
+          limits:
+            cpu: "16"
+            memory: 48Gi
+          requests:
+            cpu: "16"
+            memory: 48Gi
+      2xlarge:
+        resources:
+          limits:
+            cpu: "30"
+            memory: 64Gi
+          requests:
+            cpu: "30"
+            memory: 64Gi
+  metric-observer:
+    sizing:
+      micro:
+        resources:
+          limits:
+            cpu: "1"
+            memory: 2Gi
+          requests:
+            cpu: "1"
+            memory: 2Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 2
+            minReplicas: 1
+      small:
+        resources:
+          limits:
+            cpu: "2"
+            memory: 4Gi
+          requests:
+            cpu: "2"
+            memory: 4Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 2
+            minReplicas: 1
+      medium:
+        resources:
+          limits:
+            cpu: "4"
+            memory: 8Gi
+          requests:
+            cpu: "4"
+            memory: 8Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 2
+            minReplicas: 1
+      large:
+        resources:
+          limits:
+            cpu: "8"
+            memory: 16Gi
+          requests:
+            cpu: "8"
+            memory: 16Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 2
+            minReplicas: 1
+      xlarge:
+        resources:
+          limits:
+            cpu: "8"
+            memory: 16Gi
+          requests:
+            cpu: "8"
+            memory: 16Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 4
+            minReplicas: 2
+      2xlarge:
+        resources:
+          limits:
+            cpu: "8"
+            memory: 16Gi
+          requests:
+            cpu: "8"
+            memory: 16Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 8
+            minReplicas: 4
+  parquet:
+    sizing:
+      micro:
+        resources:
+          limits:
+            cpu: "1"
+            memory: 8Gi
+          requests:
+            cpu: "1"
+            memory: 8Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 2
+            minReplicas: 1
+      small:
+        resources:
+          limits:
+            cpu: "4"
+            memory: 16Gi
+          requests:
+            cpu: "4"
+            memory: 16Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 2
+            minReplicas: 2
+      medium:
+        resources:
+          limits:
+            cpu: "8"
+            memory: 32Gi
+          requests:
+            cpu: "8"
+            memory: 32Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 2
+            minReplicas: 2
+      large:
+        resources:
+          limits:
+            cpu: "16"
+            memory: 64Gi
+          requests:
+            cpu: "16"
+            memory: 64Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 4
+            minReplicas: 2
+      xlarge:
+        resources:
+          limits:
+            cpu: "16"
+            memory: 64Gi
+          requests:
+            cpu: "16"
+            memory: 64Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 6
+            minReplicas: 4
+      2xlarge:
+        resources:
+          limits:
+            cpu: "16"
+            memory: 64Gi
+          requests:
+            cpu: "16"
+            memory: 64Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 8
+            minReplicas: 4
+  weave:
+    sizing:
+      micro:
+        resources:
+          limits:
+            cpu: "1"
+            memory: 4Gi
+          requests:
+            cpu: "1"
+            memory: 4Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 2
+            minReplicas: 1
+      small:
+        resources:
+          limits:
+            cpu: "4"
+            memory: 16Gi
+          requests:
+            cpu: "4"
+            memory: 16Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 2
+            minReplicas: 2
+      medium:
+        resources:
+          limits:
+            cpu: "8"
+            memory: 32Gi
+          requests:
+            cpu: "8"
+            memory: 32Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 3
+            minReplicas: 2
+      large:
+        resources:
+          limits:
+            cpu: "8"
+            memory: 32Gi
+          requests:
+            cpu: "8"
+            memory: 32Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 4
+            minReplicas: 2
+      xlarge:
+        resources:
+          limits:
+            cpu: "8"
+            memory: 32Gi
+          requests:
+            cpu: "8"
+            memory: 32Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 5
+            minReplicas: 2
+      2xlarge:
+        resources:
+          limits:
+            cpu: "16"
+            memory: 64Gi
+          requests:
+            cpu: "16"
+            memory: 64Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 5
+            minReplicas: 2
+  weave-trace:
+    sizing:
+      micro:
+        resources:
+          limits:
+            cpu: "1"
+            memory: 2Gi
+          requests:
+            cpu: "1"
+            memory: 2Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 2
+            minReplicas: 1
+      small:
+        resources:
+          limits:
+            cpu: "1"
+            memory: 8Gi
+          requests:
+            cpu: "1"
+            memory: 8Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 3
+            minReplicas: 2
+      medium:
+        resources:
+          limits:
+            cpu: "2"
+            memory: 16Gi
+          requests:
+            cpu: "2"
+            memory: 16Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 2
+            minReplicas: 1
+      large:
+        resources:
+          limits:
+            cpu: "4"
+            memory: 32Gi
+          requests:
+            cpu: "4"
+            memory: 32Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 2
+            minReplicas: 1
+      xlarge:
+        resources:
+          limits:
+            cpu: "4"
+            memory: 32Gi
+          requests:
+            cpu: "4"
+            memory: 32Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 4
+            minReplicas: 2
+      2xlarge:
+        resources:
+          limits:
+            cpu: "4"
+            memory: 32Gi
+          requests:
+            cpu: "4"
+            memory: 32Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 8
+            minReplicas: 4
+  weave-trace-worker:
+    sizing:
+      micro:
+        resources:
+          limits:
+            cpu: "1"
+            memory: 2Gi
+          requests:
+            cpu: "1"
+            memory: 2Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 2
+            minReplicas: 1
+      small:
+        resources:
+          limits:
+            cpu: "1"
+            memory: 8Gi
+          requests:
+            cpu: "1"
+            memory: 8Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 4
+            minReplicas: 1
+      medium:
+        resources:
+          limits:
+            cpu: "2"
+            memory: 16Gi
+          requests:
+            cpu: "2"
+            memory: 16Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 2
+            minReplicas: 1
+      large:
+        resources:
+          limits:
+            cpu: "4"
+            memory: 32Gi
+          requests:
+            cpu: "4"
+            memory: 32Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 2
+            minReplicas: 1
+      xlarge:
+        resources:
+          limits:
+            cpu: "4"
+            memory: 32Gi
+          requests:
+            cpu: "4"
+            memory: 32Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 4
+            minReplicas: 2
+      2xlarge:
+        resources:
+          limits:
+            cpu: "4"
+            memory: 32Gi
+          requests:
+            cpu: "4"
+            memory: 32Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 8
+            minReplicas: 4
+  weave-trace-evaluate-model-worker:
+    sizing:
+      micro:
+        resources:
+          limits:
+            cpu: "1"
+            memory: 2Gi
+          requests:
+            cpu: "1"
+            memory: 2Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 2
+            minReplicas: 1
+      small:
+        resources:
+          limits:
+            cpu: "1"
+            memory: 8Gi
+          requests:
+            cpu: "1"
+            memory: 8Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 2
+            minReplicas: 1
+      medium:
+        resources:
+          limits:
+            cpu: "2"
+            memory: 16Gi
+          requests:
+            cpu: "2"
+            memory: 16Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 2
+            minReplicas: 1
+      large:
+        resources:
+          limits:
+            cpu: "4"
+            memory: 32Gi
+          requests:
+            cpu: "4"
+            memory: 32Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 2
+            minReplicas: 1
+      xlarge:
+        resources:
+          limits:
+            cpu: "4"
+            memory: 32Gi
+          requests:
+            cpu: "4"
+            memory: 32Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 4
+            minReplicas: 2
+      2xlarge:
+        resources:
+          limits:
+            cpu: "4"
+            memory: 32Gi
+          requests:
+            cpu: "4"
+            memory: 32Gi
+        autoscaling:
+          horizontal:
+            enabled: true
+            maxReplicas: 8
+            minReplicas: 4

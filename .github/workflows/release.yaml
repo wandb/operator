@@ -1,20 +1,25 @@
-name: Release v1
+name: Release v2
 
 on:
   push:
     tags:
-      - "v1.*.*"
+      - "v2.*.*"
 
 permissions:
   contents: write
+  id-token: write
 
 concurrency:
-  group: release-v1
+  group: release-v2
   cancel-in-progress: false
+
+env:
+  CHART_REPOSITORY: us-docker.pkg.dev/wandb-production/public/wandb/charts
+  IMAGE_REPOSITORY: us-docker.pkg.dev/wandb-production/public/wandb/operator
 
 jobs:
   release:
-    name: Release v1
+    name: Release v2
     if: github.repository_owner == 'wandb'
     runs-on: ubuntu-latest
     steps:
@@ -24,15 +29,15 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Validate release tag
+      - name: Validate tag and release versions
         id: release
         shell: bash
         run: |
           set -euo pipefail
 
           tag="${GITHUB_REF_NAME}"
-          if [[ ! "${tag}" =~ ^v(1)\.([0-9]+)\.([0-9]+)$ ]]; then
-            echo "Expected a stable v1 tag in the form v1.x.y; got ${tag}" >&2
+          if [[ ! "${tag}" =~ ^v2\.([0-9]+)\.([0-9]+)$ ]]; then
+            echo "Expected a stable v2 tag in the form v2.x.y; got ${tag}" >&2
             exit 1
           fi
 
@@ -41,72 +46,100 @@ jobs:
             exit 1
           fi
 
-          git fetch --no-tags origin refs/heads/v1:refs/remotes/origin/v1
+          git fetch --no-tags origin refs/heads/main:refs/remotes/origin/main
           tagged_commit="$(git rev-list -n 1 "${tag}")"
-          if ! git merge-base --is-ancestor "${tagged_commit}" refs/remotes/origin/v1; then
-            echo "Tagged commit ${tagged_commit} is not reachable from origin/v1" >&2
+          if ! git merge-base --is-ancestor "${tagged_commit}" refs/remotes/origin/main; then
+            echo "Tagged commit ${tagged_commit} is not reachable from origin/main" >&2
             exit 1
           fi
 
           version="${tag#v}"
-          minor="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}"
-          major="${BASH_REMATCH[1]}"
+          chart_version="$(awk '$1 == "version:" { print $2; exit }' deploy/operator/Chart.yaml | tr -d '\"')"
+          app_version="$(awk '$1 == "appVersion:" { print $2; exit }' deploy/operator/Chart.yaml | tr -d '\"')"
+          image_tag="$(awk '
+            $0 == "wandb-operator:" { in_operator = 1; next }
+            in_operator && $0 == "  image:" { in_image = 1; next }
+            in_image && $1 == "tag:" { print $2; exit }
+          ' deploy/operator/values.yaml | tr -d '\"')"
+
+          for value in "${chart_version}" "${app_version}" "${image_tag}"; do
+            if [[ "${value}" != "${version}" ]]; then
+              echo "Chart version, appVersion, and operator image tag must all equal ${version}" >&2
+              echo "Found chart=${chart_version}, appVersion=${app_version}, image=${image_tag}" >&2
+              exit 1
+            fi
+          done
 
           echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
           echo "tagged_commit=${tagged_commit}" >> "${GITHUB_OUTPUT}"
           echo "version=${version}" >> "${GITHUB_OUTPUT}"
-          echo "minor=${minor}" >> "${GITHUB_OUTPUT}"
-          echo "major=${major}" >> "${GITHUB_OUTPUT}"
 
-      - name: Login to Docker Hub
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+      - name: Install Helm
+        uses: azure/setup-helm@bf6a7d304bc2fdb57e0331155b7ebf2c504acf0a # v4
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}
+          version: v3.19.0
 
-      - name: Login to Quay.io
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+
+      - id: auth
+        name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
         with:
-          registry: quay.io
-          username: ${{ secrets.QUAY_USERNAME }}
-          password: ${{ secrets.QUAY_TOKEN }}
+          create_credentials_file: 'true'
+          token_format: access_token
+          project_id: wandb-production
+          workload_identity_provider: ${{ secrets.CI_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.CI_WORKLOAD_IDENTITY_SERVICE_ACCOUNT }}
 
-      - name: Build release image
+      - name: Authorize Docker for Artifact Registry
+        run: gcloud auth configure-docker us-docker.pkg.dev --quiet
+
+      - name: Reject existing production artifacts
         env:
           VERSION: ${{ steps.release.outputs.version }}
-        run: make docker-build IMG="wandb/controller:${VERSION}"
-
-      - name: Publish Docker Hub tags
-        env:
-          MAJOR: ${{ steps.release.outputs.major }}
-          MINOR: ${{ steps.release.outputs.minor }}
-          VERSION: ${{ steps.release.outputs.version }}
+        shell: bash
         run: |
           set -euo pipefail
 
-          docker push "wandb/controller:${VERSION}"
-          docker tag "wandb/controller:${VERSION}" "wandb/controller:${MINOR}"
-          docker push "wandb/controller:${MINOR}"
-          docker tag "wandb/controller:${VERSION}" "wandb/controller:${MAJOR}"
-          docker push "wandb/controller:${MAJOR}"
-          docker tag "wandb/controller:${VERSION}" wandb/controller:latest
-          docker push wandb/controller:latest
+          assert_absent() {
+            local artifact=$1
+            local output
+            local status
 
-      - name: Publish Quay.io tags
+            set +e
+            output="$(gcloud artifacts docker images describe "${artifact}" --format='value(image_summary.digest)' 2>&1)"
+            status=$?
+            set -e
+
+            if [[ ${status} -eq 0 ]]; then
+              echo "Refusing to overwrite existing artifact ${artifact}" >&2
+              exit 1
+            fi
+            if ! grep -Eqi 'NOT_FOUND|not found' <<< "${output}"; then
+              echo "Could not safely determine whether ${artifact} exists:" >&2
+              echo "${output}" >&2
+              exit 1
+            fi
+          }
+
+          assert_absent "${IMAGE_REPOSITORY}:${VERSION}"
+          assert_absent "${CHART_REPOSITORY}/operator:${VERSION}"
+
+      - name: Build and publish image
         env:
-          MAJOR: ${{ steps.release.outputs.major }}
-          MINOR: ${{ steps.release.outputs.minor }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: make docker-build docker-push IMG="${IMAGE_REPOSITORY}:${VERSION}"
+
+      - name: Package and publish chart
+        env:
           VERSION: ${{ steps.release.outputs.version }}
         run: |
           set -euo pipefail
-
-          quay_image="quay.io/wandb_tools/wandb-k8s-operator"
-          docker tag "wandb/controller:${VERSION}" "${quay_image}:${VERSION}"
-          docker push "${quay_image}:${VERSION}"
-          docker tag "wandb/controller:${VERSION}" "${quay_image}:${MINOR}"
-          docker push "${quay_image}:${MINOR}"
-          docker tag "wandb/controller:${VERSION}" "${quay_image}:${MAJOR}"
-          docker push "${quay_image}:${MAJOR}"
+          helm dependency build deploy/operator
+          mkdir -p dist
+          helm package deploy/operator --destination dist
+          helm push "dist/operator-${VERSION}.tgz" "oci://${CHART_REPOSITORY}"
 
       - name: Create GitHub release
         env:

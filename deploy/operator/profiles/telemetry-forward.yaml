@@ -1,0 +1,8 @@
+telemetry:
+  mode: "forward"
+
+victoria-metrics-operator:
+  enabled: true
+
+grafana-operator:
+  enabled: false
