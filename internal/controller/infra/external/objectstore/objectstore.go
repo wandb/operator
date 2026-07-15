@@ -35,13 +35,15 @@ func WriteState(
 	logger := ctrl.LoggerFrom(ctx)
 
 	fields := map[string]corev1.SecretKeySelector{
-		"Host":      spec.Endpoint,
-		"Port":      spec.Port,
-		"AccessKey": spec.AccessKey,
-		"SecretKey": spec.SecretKey,
-		"Bucket":    spec.Bucket,
-		"Region":    spec.Region,
-		"Provider":  spec.Provider,
+		"Host":           spec.Endpoint,
+		"Port":           spec.Port,
+		"AccessKey":      spec.AccessKey,
+		"SecretKey":      spec.SecretKey,
+		"Bucket":         spec.Bucket,
+		"Region":         spec.Region,
+		"Provider":       spec.Provider,
+		"TlsEnabled":     spec.TlsEnabled,
+		"ForcePathStyle": spec.ForcePathStyle,
 	}
 
 	data, err := external.ResolveFields(ctx, c, wandb.Namespace, fields)
@@ -81,14 +83,16 @@ func WriteState(
 	// workload-identity auth), Region (MinIO or region supplied out-of-band).
 	// url and Bucket are always written.
 	return nil, &apiv2.ObjectStoreConnection{
-		Provider:  corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Provider", Optional: ptr.To(false)},
-		URL:       corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "url", Optional: ptr.To(false)},
-		Endpoint:  corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Host", Optional: ptr.To(true)},
-		Port:      corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Port", Optional: ptr.To(true)},
-		AccessKey: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "AccessKey", Optional: ptr.To(true)},
-		SecretKey: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "SecretKey", Optional: ptr.To(true)},
-		Bucket:    corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Bucket", Optional: ptr.To(false)},
-		Region:    corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Region", Optional: ptr.To(true)},
+		Provider:       corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Provider", Optional: ptr.To(false)},
+		URL:            corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "url", Optional: ptr.To(false)},
+		Endpoint:       corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Host", Optional: ptr.To(true)},
+		Port:           corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Port", Optional: ptr.To(true)},
+		AccessKey:      corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "AccessKey", Optional: ptr.To(true)},
+		SecretKey:      corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "SecretKey", Optional: ptr.To(true)},
+		Bucket:         corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Bucket", Optional: ptr.To(false)},
+		Region:         corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Region", Optional: ptr.To(true)},
+		TlsEnabled:     corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "TlsEnabled", Optional: ptr.To(true)},
+		ForcePathStyle: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "ForcePathStyle", Optional: ptr.To(true)},
 	}
 }
 

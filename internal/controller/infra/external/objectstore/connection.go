@@ -23,6 +23,8 @@ type ConnInfo struct {
 	SecretKey string
 	// ForcePathStyle is required by most non-AWS S3-compatible providers.
 	ForcePathStyle bool
+	TlsEnabled     bool
+	Port           string
 }
 
 // HasStaticCredentials reports whether explicit keys were provided; when false, credentials come from ambient identity (IAM role / workload identity).

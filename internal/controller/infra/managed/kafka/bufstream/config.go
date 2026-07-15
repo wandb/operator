@@ -129,10 +129,19 @@ func renderS3Storage(storage objectstore.ConnInfo) *bufstreamS3 {
 	if region == "" {
 		region = "us-east-1"
 	}
+	uri := fmt.Sprintf("%s://%s/wandb-bufstream", storage.Provider, storage.Bucket)
+	endpoint := ""
+	if storage.Endpoint != "" {
+		scheme := "http"
+		if storage.TlsEnabled {
+			scheme = "https"
+		}
+		endpoint = fmt.Sprintf("%s://%s:%s", scheme, storage.Endpoint, storage.Port)
+	}
 	s3 := &bufstreamS3{
-		URI:            storage.URI,
+		URI:            uri,
 		Region:         region,
-		Endpoint:       storage.Endpoint,
+		Endpoint:       endpoint,
 		ForcePathStyle: storage.ForcePathStyle,
 	}
 	if storage.HasStaticCredentials() {

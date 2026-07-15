@@ -2534,6 +2534,19 @@ spec:
                           - key
                           type: object
                           x-kubernetes-map-type: atomic
+                        forcePathStyle:
+                          properties:
+                            key:
+                              type: string
+                            name:
+                              default: ""
+                              type: string
+                            optional:
+                              type: boolean
+                          required:
+                          - key
+                          type: object
+                          x-kubernetes-map-type: atomic
                         port:
                           properties:
                             key:
@@ -2574,6 +2587,19 @@ spec:
                           type: object
                           x-kubernetes-map-type: atomic
                         secretKey:
+                          properties:
+                            key:
+                              type: string
+                            name:
+                              default: ""
+                              type: string
+                            optional:
+                              type: boolean
+                          required:
+                          - key
+                          type: object
+                          x-kubernetes-map-type: atomic
+                        tlsEnabled:
                           properties:
                             key:
                               type: string
@@ -4881,6 +4907,19 @@ spec:
                           - key
                           type: object
                           x-kubernetes-map-type: atomic
+                        forcePathStyle:
+                          properties:
+                            key:
+                              type: string
+                            name:
+                              default: ""
+                              type: string
+                            optional:
+                              type: boolean
+                          required:
+                          - key
+                          type: object
+                          x-kubernetes-map-type: atomic
                         port:
                           properties:
                             key:
@@ -4921,6 +4960,19 @@ spec:
                           type: object
                           x-kubernetes-map-type: atomic
                         secretKey:
+                          properties:
+                            key:
+                              type: string
+                            name:
+                              default: ""
+                              type: string
+                            optional:
+                              type: boolean
+                          required:
+                          - key
+                          type: object
+                          x-kubernetes-map-type: atomic
+                        tlsEnabled:
                           properties:
                             key:
                               type: string

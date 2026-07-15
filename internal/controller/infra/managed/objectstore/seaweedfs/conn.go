@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"strconv"
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
@@ -20,24 +21,26 @@ const (
 )
 
 type s3ConnInfo struct {
-	AccessKey string
-	SecretKey string
-	Host      string
-	Port      string
-	Bucket    string
-	TLS       bool
+	AccessKey      string
+	SecretKey      string
+	Host           string
+	Port           string
+	Bucket         string
+	TLS            bool
+	ForcePathStyle bool
 }
 
 func buildS3ConnInfo(
 	accessKey, secretKey string, nsnBuilder *NsNameBuilder, tls bool,
 ) *s3ConnInfo {
 	return &s3ConnInfo{
-		AccessKey: accessKey,
-		TLS:       tls,
-		SecretKey: secretKey,
-		Host:      s3ServiceHost(nsnBuilder.SpecName(), nsnBuilder.Namespace()),
-		Port:      S3Port,
-		Bucket:    "bucket",
+		AccessKey:      accessKey,
+		TLS:            tls,
+		SecretKey:      secretKey,
+		Host:           s3ServiceHost(nsnBuilder.SpecName(), nsnBuilder.Namespace()),
+		Port:           S3Port,
+		Bucket:         "bucket",
+		ForcePathStyle: true,
 	}
 }
 
@@ -119,14 +122,17 @@ func writeWandbConnInfo(
 		},
 		Type: corev1.SecretTypeOpaque,
 		StringData: map[string]string{
-			urlKey:      fmt.Sprintf("%s?tls=%t", connInfo.toUrl().String(), connInfo.TLS),
-			"Host":      connInfo.Host,
-			"Port":      connInfo.Port,
-			"AccessKey": connInfo.AccessKey,
-			"SecretKey": connInfo.SecretKey,
-			"Region":    "us-east-1",
-			"Bucket":    connInfo.Bucket,
-			"Scheme":    connInfo.scheme(),
+			urlKey:           fmt.Sprintf("%s?tls=%t", connInfo.toUrl().String(), connInfo.TLS),
+			"Host":           connInfo.Host,
+			"Port":           connInfo.Port,
+			"AccessKey":      connInfo.AccessKey,
+			"SecretKey":      connInfo.SecretKey,
+			"Region":         "us-east-1",
+			"Bucket":         connInfo.Bucket,
+			"Scheme":         connInfo.scheme(),
+			"TlsEnabled":     strconv.FormatBool(connInfo.TLS),
+			"Provider":       "s3",
+			"ForcePathStyle": strconv.FormatBool(connInfo.ForcePathStyle),
 		},
 	}
 
@@ -136,12 +142,15 @@ func writeWandbConnInfo(
 
 	localRef := corev1.LocalObjectReference{Name: nsName.Name}
 	return &apiv2.ObjectStoreConnection{
-		URL:       corev1.SecretKeySelector{LocalObjectReference: localRef, Key: urlKey, Optional: ptr.To(false)},
-		Endpoint:  corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Host", Optional: ptr.To(false)},
-		Port:      corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Port", Optional: ptr.To(false)},
-		AccessKey: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "AccessKey", Optional: ptr.To(false)},
-		SecretKey: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "SecretKey", Optional: ptr.To(false)},
-		Region:    corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Region", Optional: ptr.To(false)},
-		Bucket:    corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Bucket", Optional: ptr.To(false)},
+		URL:            corev1.SecretKeySelector{LocalObjectReference: localRef, Key: urlKey, Optional: ptr.To(false)},
+		Endpoint:       corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Host", Optional: ptr.To(false)},
+		Port:           corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Port", Optional: ptr.To(false)},
+		AccessKey:      corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "AccessKey", Optional: ptr.To(false)},
+		SecretKey:      corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "SecretKey", Optional: ptr.To(false)},
+		Region:         corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Region", Optional: ptr.To(false)},
+		Bucket:         corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Bucket", Optional: ptr.To(false)},
+		TlsEnabled:     corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "TlsEnabled", Optional: ptr.To(false)},
+		Provider:       corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Provider", Optional: ptr.To(false)},
+		ForcePathStyle: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "ForcePathStyle", Optional: ptr.To(false)},
 	}, nil
 }

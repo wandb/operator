@@ -2,6 +2,7 @@ package bufstream
 
 import (
 	"context"
+	"strconv"
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
@@ -30,7 +31,7 @@ func WriteState(
 	spec := wandb.Spec.Kafka.ManagedKafka
 	nsnBuilder := CreateNsNameBuilder(types.NamespacedName{Namespace: spec.Namespace, Name: spec.Name})
 
-	storage, ready, err := resolveStorage(ctx, cl, wandb)
+	storage, ready, err := resolveStorage(ctx, cl, wandb, spec)
 	if err != nil {
 		log.Error("failed to resolve object store connection for bufstream", logx.ErrAttr(err))
 		return []metav1.Condition{
@@ -44,8 +45,8 @@ func WriteState(
 			{Type: ObjectStoreReadyType, Status: metav1.ConditionFalse, Reason: common.PendingCreateReason},
 		}
 	}
-	objectStoreSpec, _ := apiv2.ResolveInstance(wandb.Spec.ObjectStore, bufstreamObjectStoreInstance)
-	ensureBucket := objectStoreSpec.ManagedObjectStore != nil
+	//objectStoreSpec, _ := apiv2.ResolveInstance(wandb.Spec.ObjectStore, bufstreamObjectStoreInstance)
+	ensureBucket := false
 
 	credsSecret, err := ToCredentialsSecret(wandb, nsnBuilder, storage, cl.Scheme())
 	if err != nil {
@@ -159,33 +160,70 @@ func resolveStorage(
 	ctx context.Context,
 	cl client.Client,
 	wandb *apiv2.WeightsAndBiases,
+	spec *apiv2.ManagedKafkaSpec,
 ) (objectstore.ConnInfo, bool, error) {
 	status, ok := apiv2.ResolveInstance(wandb.Status.ObjectStoreStatus, bufstreamObjectStoreInstance)
 	if !ok || !status.Ready {
 		return objectstore.ConnInfo{}, false, nil
 	}
 
-	secretName := status.Connection.URL.Name
-	if secretName == "" {
-		return objectstore.ConnInfo{}, false, nil
+	resolver := &utils.ConnSecretResolver{Client: cl, Namespace: spec.Namespace, Cache: map[string]*corev1.Secret{}}
+
+	connInfo := objectstore.ConnInfo{}
+
+	provider, err := resolver.Value(ctx, status.Connection.Provider)
+	if err != nil {
+		return objectstore.ConnInfo{}, true, err
+	}
+	connInfo.Provider = apiv2.ObjectStoreProvider(provider)
+
+	connInfo.Bucket, err = resolver.Value(ctx, status.Connection.Bucket)
+	if err != nil {
+		return objectstore.ConnInfo{}, true, err
 	}
 
-	secret := &corev1.Secret{}
-	found, err := common.GetResource(
-		ctx, cl,
-		types.NamespacedName{Namespace: wandb.Namespace, Name: secretName},
-		"Secret", secret,
-	)
+	connInfo.Endpoint, err = resolver.Value(ctx, status.Connection.Endpoint)
 	if err != nil {
-		return objectstore.ConnInfo{}, false, err
-	}
-	if !found {
-		return objectstore.ConnInfo{}, false, nil
+		return objectstore.ConnInfo{}, true, err
 	}
 
-	info, err := objectstore.ParseConnection(secret.Data)
+	connInfo.Port, err = resolver.Value(ctx, status.Connection.Port)
 	if err != nil {
-		return objectstore.ConnInfo{}, false, err
+		return objectstore.ConnInfo{}, true, err
 	}
-	return info, true, nil
+
+	connInfo.Region, err = resolver.Value(ctx, status.Connection.Region)
+	if err != nil {
+		return objectstore.ConnInfo{}, true, err
+	}
+
+	connInfo.AccessKey, err = resolver.Value(ctx, status.Connection.AccessKey)
+	if err != nil {
+		return objectstore.ConnInfo{}, true, err
+	}
+
+	connInfo.SecretKey, err = resolver.Value(ctx, status.Connection.SecretKey)
+	if err != nil {
+		return objectstore.ConnInfo{}, true, err
+	}
+
+	forcePathStyleString, err := resolver.Value(ctx, status.Connection.ForcePathStyle)
+	if err != nil {
+		return objectstore.ConnInfo{}, true, err
+	}
+	connInfo.ForcePathStyle, err = strconv.ParseBool(forcePathStyleString)
+	if err != nil {
+		return objectstore.ConnInfo{}, true, err
+	}
+
+	tlsEnabledString, err := resolver.Value(ctx, status.Connection.TlsEnabled)
+	if err != nil {
+		return objectstore.ConnInfo{}, true, err
+	}
+	connInfo.TlsEnabled, err = strconv.ParseBool(tlsEnabledString)
+	if err != nil {
+		return objectstore.ConnInfo{}, true, err
+	}
+
+	return connInfo, true, nil
 }

@@ -69,6 +69,9 @@ func writeStateFixtureProvider(t *testing.T, provider apiv2.ObjectStoreProvider,
 	if present["Region"] {
 		ext.Region = sel("Region")
 	}
+	if present["TlsEnabled"] {
+		ext.TlsEnabled = sel("TlsEnabled")
+	}
 
 	wandb := &apiv2.WeightsAndBiases{
 		TypeMeta:   metav1.TypeMeta{APIVersion: "apps.wandb.com/v2", Kind: "WeightsAndBiases"},
