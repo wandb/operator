@@ -1,91 +1,122 @@
-name: Release
+name: Release v1
 
 on:
-  workflow_dispatch:
   push:
-    branches:
-      - main
+    tags:
+      - "v1.*.*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-v1
+  cancel-in-progress: false
 
 jobs:
   release:
-    name: Release
-    runs-on: ubuntu-latest
-    # Skip running release workflow on forks
+    name: Release v1
     if: github.repository_owner == 'wandb'
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@ee0669bd1cc54295c223e0bb666b733df41de1c5 # v2
+      - name: Checkout release tag
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
-          persist-credentials: false
           fetch-depth: 0
+          persist-credentials: false
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@2b82ce82d56a2a04d2637cd93a637ae1b359c0a7 # v2
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@885d1462b80bc1c1c7f0b00334ad271f09369c55 # v2
+      - name: Validate release tag
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          tag="${GITHUB_REF_NAME}"
+          if [[ ! "${tag}" =~ ^v(1)\.([0-9]+)\.([0-9]+)$ ]]; then
+            echo "Expected a stable v1 tag in the form v1.x.y; got ${tag}" >&2
+            exit 1
+          fi
+
+          if [[ "$(git cat-file -t "refs/tags/${tag}")" != "tag" ]]; then
+            echo "Release tag ${tag} must be annotated" >&2
+            exit 1
+          fi
+
+          git fetch --no-tags origin refs/heads/v1:refs/remotes/origin/v1
+          tagged_commit="$(git rev-list -n 1 "${tag}")"
+          if ! git merge-base --is-ancestor "${tagged_commit}" refs/remotes/origin/v1; then
+            echo "Tagged commit ${tagged_commit} is not reachable from origin/v1" >&2
+            exit 1
+          fi
+
+          version="${tag#v}"
+          minor="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}"
+          major="${BASH_REMATCH[1]}"
+
+          echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
+          echo "tagged_commit=${tagged_commit}" >> "${GITHUB_OUTPUT}"
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "minor=${minor}" >> "${GITHUB_OUTPUT}"
+          echo "major=${major}" >> "${GITHUB_OUTPUT}"
 
       - name: Login to Docker Hub
-        uses: docker/login-action@465a07811f14bebb1938fbed4728c6a1ff8901fc # v2
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
 
-      - name: Login to quay.io
-        uses: docker/login-action@465a07811f14bebb1938fbed4728c6a1ff8901fc # v2
+      - name: Login to Quay.io
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
+          registry: quay.io
           username: ${{ secrets.QUAY_USERNAME }}
           password: ${{ secrets.QUAY_TOKEN }}
-          registry: quay.io
 
-      - name: Versioning
-        id: release
-        uses: cycjimmy/semantic-release-action@v3
-        with:
-          semantic_version: 19.0.2
-          extra_plugins: |
-            @semantic-release/changelog@6.0.1
-            @semantic-release/git@10.0.1
-            conventional-changelog-conventionalcommits@4.6.3
+      - name: Build release image
         env:
-          GITHUB_TOKEN: ${{ secrets.GH_SECRET }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: make docker-build IMG="wandb/controller:${VERSION}"
 
-      - uses: actions/setup-go@7b8cf10d4e4a01d4992d18a89f4d7dc5a3e6d6f4 # v4
-        with:
-          go-version: 1.25
-
-      - name: Install Ginkgo
-        run: go install github.com/onsi/ginkgo/v2/ginkgo@latest
-
-      - name: Build and Push Latest
-        if: steps.release.outputs.new_release_version
-        run: |
-          export IMG=$IMAGE_TAG_BASE:$VERSION
-          make docker-build docker-push
+      - name: Publish Docker Hub tags
         env:
-          IMAGE_TAG_BASE: wandb/controller
-          VERSION: latest
-
-      - name: Tag and Push to Docker Hub
-        if: steps.release.outputs.new_release_version
+          MAJOR: ${{ steps.release.outputs.major }}
+          MINOR: ${{ steps.release.outputs.minor }}
+          VERSION: ${{ steps.release.outputs.version }}
         run: |
-          docker tag wandb/controller:latest wandb/controller:${{ steps.release.outputs.new_release_version }}
-          docker push wandb/controller:${{ steps.release.outputs.new_release_version }}
+          set -euo pipefail
 
-          docker tag wandb/controller:latest wandb/controller:${{ steps.release.outputs.new_release_major_version }}.${{ steps.release.outputs.new_release_minor_version }}
-          docker push wandb/controller:${{ steps.release.outputs.new_release_major_version }}.${{ steps.release.outputs.new_release_minor_version }}
+          docker push "wandb/controller:${VERSION}"
+          docker tag "wandb/controller:${VERSION}" "wandb/controller:${MINOR}"
+          docker push "wandb/controller:${MINOR}"
+          docker tag "wandb/controller:${VERSION}" "wandb/controller:${MAJOR}"
+          docker push "wandb/controller:${MAJOR}"
+          docker tag "wandb/controller:${VERSION}" wandb/controller:latest
+          docker push wandb/controller:latest
 
-          docker tag wandb/controller:latest wandb/controller:${{ steps.release.outputs.new_release_major_version }}
-          docker push wandb/controller:${{ steps.release.outputs.new_release_major_version }}
-
-
-      - name: Tag and Push to Quay.io
-        if: steps.release.outputs.new_release_version
+      - name: Publish Quay.io tags
+        env:
+          MAJOR: ${{ steps.release.outputs.major }}
+          MINOR: ${{ steps.release.outputs.minor }}
+          VERSION: ${{ steps.release.outputs.version }}
         run: |
-          docker tag wandb/controller:latest quay.io/wandb_tools/wandb-k8s-operator:${{ steps.release.outputs.new_release_version }}
-          docker push quay.io/wandb_tools/wandb-k8s-operator:${{ steps.release.outputs.new_release_version }}
-          
-          docker tag wandb/controller:latest quay.io/wandb_tools/wandb-k8s-operator:${{ steps.release.outputs.new_release_major_version }}.${{ steps.release.outputs.new_release_minor_version }}
-          docker push quay.io/wandb_tools/wandb-k8s-operator:${{ steps.release.outputs.new_release_major_version }}.${{ steps.release.outputs.new_release_minor_version }}
-          
-          docker tag wandb/controller:latest quay.io/wandb_tools/wandb-k8s-operator:${{ steps.release.outputs.new_release_major_version }}
-          docker push quay.io/wandb_tools/wandb-k8s-operator:${{ steps.release.outputs.new_release_major_version }}
+          set -euo pipefail
+
+          quay_image="quay.io/wandb_tools/wandb-k8s-operator"
+          docker tag "wandb/controller:${VERSION}" "${quay_image}:${VERSION}"
+          docker push "${quay_image}:${VERSION}"
+          docker tag "wandb/controller:${VERSION}" "${quay_image}:${MINOR}"
+          docker push "${quay_image}:${MINOR}"
+          docker tag "wandb/controller:${VERSION}" "${quay_image}:${MAJOR}"
+          docker push "${quay_image}:${MAJOR}"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+          TAGGED_COMMIT: ${{ steps.release.outputs.tagged_commit }}
+        run: |
+          gh release create "${TAG}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --target "${TAGGED_COMMIT}" \
+            --verify-tag \
+            --generate-notes \
+            --title "${TAG}"
