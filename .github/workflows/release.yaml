@@ -100,36 +100,36 @@ jobs:
       - name: Authorize Docker for Artifact Registry
         run: gcloud auth configure-docker us-docker.pkg.dev --quiet
 
-      # - name: Reject existing production artifacts
-      #   env:
-      #     VERSION: ${{ steps.release.outputs.version }}
-      #   shell: bash
-      #   run: |
-      #     set -euo pipefail
+      - name: Reject existing production artifacts
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
 
-      #     assert_absent() {
-      #       local artifact=$1
-      #       local output
-      #       local status
+          assert_absent() {
+            local artifact=$1
+            local output
+            local status
 
-      #       set +e
-      #       output="$(gcloud artifacts docker images describe "${artifact}" --format='value(image_summary.digest)' 2>&1)"
-      #       status=$?
-      #       set -e
+            set +e
+            output="$(gcloud artifacts docker images describe "${artifact}" --format='value(image_summary.digest)' 2>&1)"
+            status=$?
+            set -e
 
-      #       if [[ ${status} -eq 0 ]]; then
-      #         echo "Refusing to overwrite existing artifact ${artifact}" >&2
-      #         exit 1
-      #       fi
-      #       if ! grep -Eqi 'NOT_FOUND|not found' <<< "${output}"; then
-      #         echo "Could not safely determine whether ${artifact} exists:" >&2
-      #         echo "${output}" >&2
-      #         exit 1
-      #       fi
-      #     }
+            if [[ ${status} -eq 0 ]]; then
+              echo "Refusing to overwrite existing artifact ${artifact}" >&2
+              exit 1
+            fi
+            if ! grep -Eqi 'NOT_FOUND|not found' <<< "${output}"; then
+              echo "Could not safely determine whether ${artifact} exists:" >&2
+              echo "${output}" >&2
+              exit 1
+            fi
+          }
 
-      #     assert_absent "${IMAGE_REPOSITORY}:${VERSION}"
-      #     assert_absent "${CHART_REPOSITORY}/operator:${VERSION}"
+          assert_absent "${IMAGE_REPOSITORY}:${VERSION}"
+          assert_absent "${CHART_REPOSITORY}/operator:${VERSION}"
 
       - name: Build and publish image
         env:
