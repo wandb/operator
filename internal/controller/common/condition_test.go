@@ -81,10 +81,18 @@ var _ = Describe("Condition", func() {
 			result := ComputeConditionUpdates(oldConditions, currentConditions, currentGeneration, expiry)
 
 			Expect(result).To(HaveLen(2))
-			Expect(result[0].Reason).To(Equal("NewReason1"))
-			Expect(result[1].Reason).To(Equal("NewReason2"))
-			Expect(result[0].ObservedGeneration).To(Equal(currentGeneration))
-			Expect(result[1].ObservedGeneration).To(Equal(currentGeneration))
+			Expect(result).To(ConsistOf(
+				And(
+					HaveField("Type", "Type1"),
+					HaveField("Reason", "NewReason1"),
+					HaveField("ObservedGeneration", currentGeneration),
+				),
+				And(
+					HaveField("Type", "Type2"),
+					HaveField("Reason", "NewReason2"),
+					HaveField("ObservedGeneration", currentGeneration),
+				),
+			))
 		})
 
 		It("should keep old condition when current has no changes", func() {
