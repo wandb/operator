@@ -503,14 +503,17 @@ func ReconcileWandbManifest(
 		return result, err
 	}
 
-	if desiredApps := buildDesiredAppNames(manifest); appsHealthy(wandb.Status.Wandb.Applications, desiredApps) {
+	// Gate on live Deployment readiness, not status.wandb.applications: the
+	// copied status map can be a stale snapshot (it only refreshes when this
+	// reconciler runs), and a frozen mid-rollout entry would block cleanup forever.
+	if healthy, notReady := deploymentsHealthy(ctx, client, wandb.Namespace, buildDesiredAppNames(manifest)); healthy {
 		if err := cleanupLegacyV1Deployments(ctx, client, wandb); err != nil {
 			logger.Error(err, "Failed to clean up legacy v1 deployments")
 			return ctrl.Result{}, err
 		}
 	} else {
-		logger.Info("Deferring legacy v1 deployment cleanup until all applications report ready",
-			"notReady", notReadyApps(wandb.Status.Wandb.Applications, desiredApps))
+		logger.Info("Deferring legacy v1 deployment cleanup until all application Deployments are ready",
+			"notReady", notReady)
 	}
 
 	if wandb.Spec.Networking.Mode == apiv2.NetworkingModeGatewayAPI {
@@ -656,6 +659,9 @@ func reconcileApplications(
 			application.Spec.HTTPRouteTemplate = nil
 		}
 
+		// A plain owner ref (not a controller ref) so multiple CRs can share a
+		// namespace; the parent's Owns(Application) watch uses MatchEveryOwner
+		// to still enqueue on app status changes.
 		err = controllerutil.SetOwnerReference(wandb, application, client.Scheme())
 		if err != nil {
 			return ctrl.Result{}, err

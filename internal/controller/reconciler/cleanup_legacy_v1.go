@@ -57,36 +57,34 @@ func buildDesiredAppNames(manifest serverManifest.Manifest) map[string]bool {
 	return out
 }
 
-func appsHealthy(
-	appStatuses map[string]apiv2.ApplicationStatus,
+// deploymentsHealthy reports whether every manifest-desired application's
+// Deployment is fully rolled out, plus the sorted names still blocking. It
+// reads live Deployments rather than status.wandb.applications so the legacy
+// cleanup gate cannot act on a stale status snapshot.
+func deploymentsHealthy(
+	ctx context.Context,
+	c ctrlClient.Client,
+	namespace string,
 	desiredAppNames map[string]bool,
-) bool {
+) (bool, []string) {
 	if len(desiredAppNames) == 0 {
-		return false
+		return false, nil
 	}
+	var notReady []string
 	for name := range desiredAppNames {
-		s, ok := appStatuses[name]
-		if !ok || !s.Ready {
-			return false
+		dep := &appsv1.Deployment{}
+		if err := c.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, dep); err != nil {
+			notReady = append(notReady, name)
+			continue
+		}
+		if dep.Status.ObservedGeneration != dep.Generation ||
+			dep.Status.ReadyReplicas != dep.Status.Replicas ||
+			dep.Status.Replicas == 0 {
+			notReady = append(notReady, name)
 		}
 	}
-	return true
-}
-
-// notReadyApps lists the desired applications blocking legacy cleanup, so the
-// gate is visible in operator logs instead of skipping silently.
-func notReadyApps(
-	appStatuses map[string]apiv2.ApplicationStatus,
-	desiredAppNames map[string]bool,
-) []string {
-	var out []string
-	for name := range desiredAppNames {
-		if s, ok := appStatuses[name]; !ok || !s.Ready {
-			out = append(out, name)
-		}
-	}
-	sort.Strings(out)
-	return out
+	sort.Strings(notReady)
+	return len(notReady) == 0, notReady
 }
 
 func cleanupLegacyV1Deployments(

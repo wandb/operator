@@ -135,7 +135,10 @@ func (r *WeightsAndBiasesReconciler) Delete(e event.DeleteEvent) bool {
 func (r *WeightsAndBiasesReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	var b = ctrl.NewControllerManagedBy(mgr).
 		For(&apiv2.WeightsAndBiases{}).
-		Owns(&apiv2.Application{}).
+		// Applications carry plain (non-controller) owner refs; without
+		// MatchEveryOwner this watch never fires and app status changes stop
+		// refreshing status.wandb.applications once the estate settles.
+		Owns(&apiv2.Application{}, builder.MatchEveryOwner).
 		Owns(&batchv1.Job{}).
 		Owns(&corev1.Secret{}).
 		Owns(&corev1.ConfigMap{}).

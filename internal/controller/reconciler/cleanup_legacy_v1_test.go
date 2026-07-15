@@ -54,48 +54,92 @@ func legacyDeployment(wandbName, suffix, namespace string) *appsv1.Deployment {
 	}
 }
 
-func TestLegacyV1AppsHealthy(t *testing.T) {
+// readyDeployment builds a fully rolled-out Deployment for gate tests.
+func readyDeployment(name, namespace string) *appsv1.Deployment {
+	return &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace, Generation: 2},
+		Status: appsv1.DeploymentStatus{
+			ObservedGeneration: 2,
+			Replicas:           1,
+			ReadyReplicas:      1,
+		},
+	}
+}
+
+func TestDeploymentsHealthy(t *testing.T) {
+	const namespace = "default"
+	desired := map[string]bool{"api": true, "console": true}
+
 	tests := []struct {
 		name        string
-		statuses    map[string]apiv2.ApplicationStatus
 		desired     map[string]bool
+		deployments []*appsv1.Deployment
 		wantHealthy bool
+		wantBlocked []string
 	}{
 		{
 			name:        "empty desired set is never healthy",
-			statuses:    map[string]apiv2.ApplicationStatus{"api": {Ready: true}},
 			desired:     map[string]bool{},
 			wantHealthy: false,
 		},
 		{
-			name:        "missing status entry blocks gate",
-			statuses:    map[string]apiv2.ApplicationStatus{"api": {Ready: true}},
-			desired:     map[string]bool{"api": true, "console": true},
+			name:        "missing deployment blocks gate",
+			desired:     desired,
+			deployments: []*appsv1.Deployment{readyDeployment("api", namespace)},
 			wantHealthy: false,
+			wantBlocked: []string{"console"},
 		},
 		{
-			name:        "one not-ready app blocks gate",
-			statuses:    map[string]apiv2.ApplicationStatus{"api": {Ready: true}, "console": {Ready: false}},
-			desired:     map[string]bool{"api": true, "console": true},
+			name:    "mid-rollout deployment blocks gate",
+			desired: desired,
+			deployments: func() []*appsv1.Deployment {
+				rolling := readyDeployment("console", namespace)
+				rolling.Status.ReadyReplicas = 0
+				return []*appsv1.Deployment{readyDeployment("api", namespace), rolling}
+			}(),
 			wantHealthy: false,
+			wantBlocked: []string{"console"},
 		},
 		{
-			name:        "all desired apps ready opens gate",
-			statuses:    map[string]apiv2.ApplicationStatus{"api": {Ready: true}, "console": {Ready: true}},
-			desired:     map[string]bool{"api": true, "console": true},
-			wantHealthy: true,
+			name:    "zero replicas blocks gate",
+			desired: desired,
+			deployments: func() []*appsv1.Deployment {
+				scaled := readyDeployment("console", namespace)
+				scaled.Status.Replicas = 0
+				scaled.Status.ReadyReplicas = 0
+				return []*appsv1.Deployment{readyDeployment("api", namespace), scaled}
+			}(),
+			wantHealthy: false,
+			wantBlocked: []string{"console"},
 		},
 		{
-			name:        "extra status entries do not block gate",
-			statuses:    map[string]apiv2.ApplicationStatus{"api": {Ready: true}, "console": {Ready: true}, "stale": {Ready: false}},
-			desired:     map[string]bool{"api": true, "console": true},
+			name:    "stale observedGeneration blocks gate",
+			desired: desired,
+			deployments: func() []*appsv1.Deployment {
+				stale := readyDeployment("console", namespace)
+				stale.Status.ObservedGeneration = 1
+				return []*appsv1.Deployment{readyDeployment("api", namespace), stale}
+			}(),
+			wantHealthy: false,
+			wantBlocked: []string{"console"},
+		},
+		{
+			name:        "all deployments rolled out opens gate",
+			desired:     desired,
+			deployments: []*appsv1.Deployment{readyDeployment("api", namespace), readyDeployment("console", namespace)},
 			wantHealthy: true,
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			require.Equal(t, tc.wantHealthy, appsHealthy(tc.statuses, tc.desired))
+			builder := fake.NewClientBuilder().WithScheme(newCleanupFixtureScheme(t))
+			for _, dep := range tc.deployments {
+				builder = builder.WithObjects(dep)
+			}
+			healthy, blocked := deploymentsHealthy(context.Background(), builder.Build(), namespace, tc.desired)
+			require.Equal(t, tc.wantHealthy, healthy)
+			require.Equal(t, tc.wantBlocked, blocked)
 		})
 	}
 }
@@ -234,15 +278,10 @@ func TestCleanupLegacyV1Deployments(t *testing.T) {
 	})
 }
 
-func TestNotReadyApps(t *testing.T) {
-	statuses := map[string]apiv2.ApplicationStatus{
-		"api":      {Ready: false},
-		"frontend": {Ready: true},
-		"weave":    {Ready: false},
-	}
-	desired := map[string]bool{"api": true, "frontend": true, "weave": true, "glue": true}
-	require.Equal(t, []string{"api", "glue", "weave"}, notReadyApps(statuses, desired),
-		"unready and missing apps are listed sorted")
-
-	require.Empty(t, notReadyApps(map[string]apiv2.ApplicationStatus{"api": {Ready: true}}, map[string]bool{"api": true}))
+func TestDeploymentsHealthy_BlockedListSorted(t *testing.T) {
+	cl := fake.NewClientBuilder().WithScheme(newCleanupFixtureScheme(t)).Build()
+	healthy, blocked := deploymentsHealthy(context.Background(), cl, "default",
+		map[string]bool{"weave": true, "api": true, "glue": true})
+	require.False(t, healthy)
+	require.Equal(t, []string{"api", "glue", "weave"}, blocked)
 }
