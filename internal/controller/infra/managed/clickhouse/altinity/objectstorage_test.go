@@ -16,26 +16,26 @@ var _ = Describe("Object storage endpoint", func() {
 		Expect(ep).To(Equal("http://seaweedfs.wandb.svc.cluster.local:80/bucket/clickhouse/"))
 	})
 
-	It("defaults to https for an external host with no scheme", func() {
-		ep, err := buildEndpoint("", "minio.example.com", "9000", "data", "", "clickhouse/", false)
+	It("defaults to https for an external host with tls enabled", func() {
+		ep, err := buildEndpoint("", "minio.example.com", "9000", "data", "", "clickhouse/", true)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ep).To(Equal("https://minio.example.com:9000/data/clickhouse/"))
 	})
 
-	It("uses http for an external host when insecure is set", func() {
-		ep, err := buildEndpoint("", "minio.example.com", "9000", "data", "", "clickhouse/", true)
+	It("uses http for an external host when tls is disabled", func() {
+		ep, err := buildEndpoint("", "minio.example.com", "9000", "data", "", "clickhouse/", false)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ep).To(Equal("http://minio.example.com:9000/data/clickhouse/"))
 	})
 
 	It("derives an AWS virtual-hosted endpoint when no host is set", func() {
-		ep, err := buildEndpoint("", "", "", "my-bucket", "us-west-2", "clickhouse/", false)
+		ep, err := buildEndpoint("", "", "", "my-bucket", "us-west-2", "clickhouse/", true)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ep).To(Equal("https://my-bucket.s3.us-west-2.amazonaws.com/clickhouse/"))
 	})
 
 	It("errors when neither host nor region is available", func() {
-		_, err := buildEndpoint("", "", "", "my-bucket", "", "clickhouse/", false)
+		_, err := buildEndpoint("", "", "", "my-bucket", "", "clickhouse/", true)
 		Expect(err).To(HaveOccurred())
 	})
 })

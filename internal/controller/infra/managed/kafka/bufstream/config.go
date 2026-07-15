@@ -74,9 +74,9 @@ func renderBufstreamConfig(clusterName, advertiseHost string, etcdAddresses []st
 	// Isolate Bufstream's objects under a dedicated key prefix (the cluster name)
 	// so they never collide with W&B artifact data, which shares the same bucket.
 	// storage is passed by value, so this only affects the rendered config.
-	storage.URI = strings.TrimSuffix(storage.URI, "/") + "/" + clusterName
+	uri := fmt.Sprintf("%s://%s/%s", storage.Provider, storage.Bucket, clusterName)
 
-	data, err := renderData(storage)
+	data, err := renderData(storage, uri)
 	if err != nil {
 		return "", err
 	}
@@ -110,33 +110,38 @@ func renderBufstreamConfig(clusterName, advertiseHost string, etcdAddresses []st
 
 // renderData maps the resolved object-store connection onto Bufstream's
 // provider-specific data storage config.
-func renderData(storage objectstore.ConnInfo) (bufstreamData, error) {
+func renderData(storage objectstore.ConnInfo, uri string) (bufstreamData, error) {
 	switch storage.Provider {
 	case apiv2.ObjectStoreProviderS3:
-		return bufstreamData{S3: renderS3Storage(storage)}, nil
+		return bufstreamData{S3: renderS3Storage(storage, uri)}, nil
 	case apiv2.ObjectStoreProviderGCS:
 		// GCS authenticates via workload identity / ADC, so only the bucket URI is configured.
-		return bufstreamData{GCS: storage.URI}, nil
+		return bufstreamData{GCS: uri}, nil
 	case apiv2.ObjectStoreProviderAzure:
-		return bufstreamData{Azure: renderAzureStorage(storage)}, nil
+		return bufstreamData{Azure: renderAzureStorage(storage, uri)}, nil
 	default:
 		return bufstreamData{}, fmt.Errorf("unsupported object-store provider %q", storage.Provider)
 	}
 }
 
-func renderS3Storage(storage objectstore.ConnInfo) *bufstreamS3 {
+func renderS3Storage(storage objectstore.ConnInfo, uri string) *bufstreamS3 {
 	region := storage.Region
 	if region == "" {
 		region = "us-east-1"
 	}
-	uri := fmt.Sprintf("%s://%s/wandb-bufstream", storage.Provider, storage.Bucket)
+
 	endpoint := ""
 	if storage.Endpoint != "" {
-		scheme := "http"
-		if storage.TlsEnabled {
-			scheme = "https"
+		if strings.Contains(storage.Endpoint, "://") {
+			endpoint = storage.Endpoint
+		} else {
+			scheme := "http"
+			if storage.TlsEnabled {
+				scheme = "https"
+			}
+			endpoint = fmt.Sprintf("%s://%s:%s", scheme, storage.Endpoint, storage.Port)
+
 		}
-		endpoint = fmt.Sprintf("%s://%s:%s", scheme, storage.Endpoint, storage.Port)
 	}
 	s3 := &bufstreamS3{
 		URI:            uri,
@@ -151,8 +156,8 @@ func renderS3Storage(storage objectstore.ConnInfo) *bufstreamS3 {
 	return s3
 }
 
-func renderAzureStorage(storage objectstore.ConnInfo) *bufstreamAzure {
-	az := &bufstreamAzure{URI: storage.URI}
+func renderAzureStorage(storage objectstore.ConnInfo, uri string) *bufstreamAzure {
+	az := &bufstreamAzure{URI: uri}
 	if storage.HasStaticCredentials() {
 		az.AccessKeyID = &dataSource{EnvVar: EnvStorageAccessKeyID}
 		az.SecretAccessKey = &dataSource{EnvVar: EnvStorageSecretAccessKey}
