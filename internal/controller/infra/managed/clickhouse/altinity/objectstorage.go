@@ -91,9 +91,10 @@ func ResolveObjectStorage(
 	if err != nil {
 		return nil, err
 	}
+
 	tlsEnabled, err := strconv.ParseBool(tlsEnabledString)
 	if err != nil {
-		return nil, err
+		tlsEnabled = false
 	}
 
 	// The connection has no scheme reference; honor one advertised in the

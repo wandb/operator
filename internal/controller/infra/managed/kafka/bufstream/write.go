@@ -213,7 +213,7 @@ func resolveStorage(
 	}
 	connInfo.ForcePathStyle, err = strconv.ParseBool(forcePathStyleString)
 	if err != nil {
-		return objectstore.ConnInfo{}, true, err
+		connInfo.ForcePathStyle = false
 	}
 
 	tlsEnabledString, err := resolver.Value(ctx, status.Connection.TlsEnabled)
@@ -222,7 +222,7 @@ func resolveStorage(
 	}
 	connInfo.TlsEnabled, err = strconv.ParseBool(tlsEnabledString)
 	if err != nil {
-		return objectstore.ConnInfo{}, true, err
+		connInfo.TlsEnabled = false
 	}
 
 	return connInfo, true, nil
