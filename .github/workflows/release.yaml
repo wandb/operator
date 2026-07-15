@@ -43,14 +43,15 @@ jobs:
             exit 1
           fi
 
-          git fetch origin "refs/tags/${tag}:refs/tags/${tag}" --no-tags
+          git fetch  --no-tags --force origin "refs/tags/${tag}:refs/tags/${tag}"
 
           if [[ "$(git cat-file -t "refs/tags/${tag}")" != "tag" ]]; then
             echo "Release tag ${tag} must be annotated" >&2
             exit 1
           fi
 
-          git fetch --no-tags origin refs/heads/main:refs/remotes/origin/main
+          git fetch --no-tags --force origin refs/heads/main:refs/remotes/origin/main
+
           tagged_commit="$(git rev-list -n 1 "${tag}")"
           if ! git merge-base --is-ancestor "${tagged_commit}" refs/remotes/origin/main; then
             echo "Tagged commit ${tagged_commit} is not reachable from origin/main" >&2
