@@ -33,6 +33,8 @@ jobs:
       - name: Validate tag and release versions
         id: release
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
 
@@ -42,8 +44,11 @@ jobs:
             exit 1
           fi
 
-          if [[ "$(git cat-file -t "refs/tags/${tag}")" != "tag" ]]; then
-            echo "Release tag ${tag} must be annotated" >&2
+          # Ask GitHub for the tag's object type: actions/checkout materializes the
+          # triggering tag as a lightweight ref locally, so git cat-file can't tell us.
+          object_type="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${tag}" --jq '.object.type')"
+          if [[ "${object_type}" != "tag" ]]; then
+            echo "Release tag ${tag} must be annotated (remote object is a ${object_type})" >&2
             exit 1
           fi
 
