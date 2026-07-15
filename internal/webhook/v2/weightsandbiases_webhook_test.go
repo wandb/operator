@@ -194,6 +194,49 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 			Expect(warnings).To(BeEmpty())
 		})
 
+		It("rejects a managed ClickHouse name whose derived object names cannot be deployed", func() {
+			obj.Spec.ClickHouse = map[string]appsv2.ClickHouseSpec{appsv2.DefaultInstanceName: {ManagedClickHouse: &appsv2.ManagedClickHouseSpec{Name: "wandb-legacy-overrides-v1-clickhouse"}}}
+			obj.Spec.ObjectStore = map[string]appsv2.ObjectStoreSpec{appsv2.DefaultInstanceName: {ManagedObjectStore: &appsv2.ManagedObjectStoreSpec{}}}
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("cannot be deployed"))
+			Expect(err.Error()).To(ContainSubstring("deploy-confd"))
+		})
+
+		It("rejects a managed MySQL name beyond Moco's cluster-name cap", func() {
+			obj.Spec.MySQL = map[string]appsv2.MySQLSpec{appsv2.DefaultInstanceName: {ManagedMysql: &appsv2.ManagedMysqlSpec{
+				Name: "a-managed-mysql-name-that-is-well-past-forty-characters",
+			}}}
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("Moco"))
+		})
+
+		It("grandfathers an over-budget name that is unchanged on update", func() {
+			longName := "wandb-legacy-overrides-v1-clickhouse"
+			oldObj.Spec.ClickHouse = map[string]appsv2.ClickHouseSpec{appsv2.DefaultInstanceName: {ManagedClickHouse: &appsv2.ManagedClickHouseSpec{Name: longName}}}
+			oldObj.Spec.ObjectStore = map[string]appsv2.ObjectStoreSpec{appsv2.DefaultInstanceName: {ManagedObjectStore: &appsv2.ManagedObjectStoreSpec{}}}
+			obj.Spec.ClickHouse = map[string]appsv2.ClickHouseSpec{appsv2.DefaultInstanceName: {ManagedClickHouse: &appsv2.ManagedClickHouseSpec{Name: longName}}}
+			obj.Spec.ObjectStore = map[string]appsv2.ObjectStoreSpec{appsv2.DefaultInstanceName: {ManagedObjectStore: &appsv2.ManagedObjectStoreSpec{}}}
+
+			warnings, err := validator.ValidateUpdate(ctx, oldObj, obj)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(warnings).To(BeEmpty())
+		})
+
+		It("rejects changing a name to one that cannot be deployed on update", func() {
+			oldObj.Spec.ClickHouse = map[string]appsv2.ClickHouseSpec{appsv2.DefaultInstanceName: {ManagedClickHouse: &appsv2.ManagedClickHouseSpec{Name: "wandb-chi"}}}
+			oldObj.Spec.ObjectStore = map[string]appsv2.ObjectStoreSpec{appsv2.DefaultInstanceName: {ManagedObjectStore: &appsv2.ManagedObjectStoreSpec{}}}
+			obj.Spec.ClickHouse = map[string]appsv2.ClickHouseSpec{appsv2.DefaultInstanceName: {ManagedClickHouse: &appsv2.ManagedClickHouseSpec{Name: "wandb-legacy-overrides-v1-clickhouse"}}}
+			obj.Spec.ObjectStore = map[string]appsv2.ObjectStoreSpec{appsv2.DefaultInstanceName: {ManagedObjectStore: &appsv2.ManagedObjectStoreSpec{}}}
+
+			_, err := validator.ValidateUpdate(ctx, oldObj, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("cannot be deployed"))
+		})
+
 		It("allows object store copies within the data-node count", func() {
 			obj.Spec.ObjectStore = map[string]appsv2.ObjectStoreSpec{appsv2.DefaultInstanceName: {ManagedObjectStore: &appsv2.ManagedObjectStoreSpec{Replicas: 3, Copies: 2}}}
 
@@ -223,8 +266,7 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 
 			warnings, err := validator.ValidateCreate(ctx, obj)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(warnings).To(BeEmpty())
-		})
+			Expect(warnings).To(BeEmpty())		})
 
 		It("rejects even Keeper replica counts", func() {
 			obj.Spec.ClickHouse = map[string]appsv2.ClickHouseSpec{appsv2.DefaultInstanceName: {ManagedClickHouse: &appsv2.ManagedClickHouseSpec{

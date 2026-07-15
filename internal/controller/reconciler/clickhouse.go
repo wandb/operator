@@ -153,6 +153,26 @@ func managedClickHouseWriteState(
 ) []metav1.Condition {
 	log := ctrl.LoggerFrom(ctx)
 
+	// Altinity swallows the apiserver's rejection of over-long derived names, so
+	// fail the status loudly here; also covers CRs that predate admission checks.
+	if err := altinity.ValidateDerivedNames(spec); err != nil {
+		log.Error(err, "managed ClickHouse name cannot be deployed")
+		return []metav1.Condition{
+			{
+				Type:    common.ReconciledType,
+				Status:  metav1.ConditionFalse,
+				Reason:  common.InvalidNameReason,
+				Message: err.Error(),
+			},
+			{
+				Type:    altinity.ClickHouseCustomResourceType,
+				Status:  metav1.ConditionFalse,
+				Reason:  common.InvalidNameReason,
+				Message: err.Error(),
+			},
+		}
+	}
+
 	// ClickHouse table data lives in the object store: use the "clickhouse"
 	// instance when provisioned, otherwise the default instance.
 	objStoreStatus, _ := apiv2.ResolveInstance(wandb.Status.ObjectStoreStatus, clickHouseObjectStoreInstance)
@@ -178,7 +198,7 @@ func managedClickHouseWriteState(
 	}
 
 	// Translate the Keeper and ClickHouse CRs; WriteState writes Keeper first.
-	desiredKeeper, err := keeper.ToKeeperVendorSpec(ctx, wandb, spec, client.Scheme())
+	desiredKeeper, err := keeper.ToKeeperVendorSpec(ctx, wandb, spec, client.Scheme(), altinity.KeeperNsName(spec))
 	if err != nil {
 		log.Error(err, "failed to translate Keeper spec to vendor spec")
 		return []metav1.Condition{
@@ -227,7 +247,7 @@ func managedClickHouseReadState(
 	newConditions = append(newConditions, readConditions...)
 
 	// Keeper readiness gates ClickHouse readiness (see inferInfraState).
-	newConditions = append(newConditions, keeper.ReadState(ctx, client, keeper.SpecNamespacedName(spec))...)
+	newConditions = append(newConditions, keeper.ReadState(ctx, client, altinity.KeeperNsName(spec))...)
 
 	return newConditions, newInfraConn
 }

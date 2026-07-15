@@ -227,7 +227,7 @@ func ToClickHouseVendorSpec(
 			Configuration: &v1.Configuration{
 				Clusters: []*v1.Cluster{
 					{
-						Name: "default",
+						Name: chiClusterName,
 						Layout: &v1.ChiClusterLayout{
 							ShardsCount:   ShardsCount,
 							ReplicasCount: int(spec.Replicas),
@@ -239,7 +239,7 @@ func ToClickHouseVendorSpec(
 				Zookeeper: &v1.ZookeeperConfig{
 					Nodes: v1.ZookeeperNodes{
 						{
-							Host: keeper.ClientServiceFQDN(spec.Namespace, spec.Name),
+							Host: keeper.ClientServiceFQDN(spec.Namespace, baseName(spec.Name)),
 							Port: chtypes.NewInt32(int32(keeper.KeeperClientPort)),
 						},
 					},

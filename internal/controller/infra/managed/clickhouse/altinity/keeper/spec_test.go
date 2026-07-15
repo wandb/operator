@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 var _ = Describe("Keeper vendor spec", func() {
@@ -32,10 +33,10 @@ var _ = Describe("Keeper vendor spec", func() {
 			},
 		}
 
-		chk, err := ToKeeperVendorSpec(context.Background(), wandb, wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse, keeperScheme())
+		chk, err := ToKeeperVendorSpec(context.Background(), wandb, wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse, keeperScheme(), keeperNsName())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(chk).NotTo(BeNil())
-		Expect(chk.Name).To(Equal("clickhouse-keeper"))
+		Expect(chk.Name).To(Equal("clickhouse-chk"))
 		Expect(chk.Namespace).To(Equal("wandb"))
 
 		Expect(chk.Spec.Configuration.Clusters).To(HaveLen(1))
@@ -62,14 +63,14 @@ var _ = Describe("Keeper vendor spec", func() {
 	It("errors when keeper storage size is unset (no operator defaults)", func() {
 		wandb := keeperWandb()
 		wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse.Keeper = apiv2.ClickHouseKeeperSpec{}
-		_, err := ToKeeperVendorSpec(context.Background(), wandb, wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse, keeperScheme())
+		_, err := ToKeeperVendorSpec(context.Background(), wandb, wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse, keeperScheme(), keeperNsName())
 		Expect(err).To(HaveOccurred())
 	})
 
 	It("omits fixed IDs in OpenShift mode", func() {
 		utils.SetOpenShiftMode(true)
 		wandb := keeperWandb()
-		chk, err := ToKeeperVendorSpec(context.Background(), wandb, wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse, keeperScheme())
+		chk, err := ToKeeperVendorSpec(context.Background(), wandb, wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse, keeperScheme(), keeperNsName())
 		Expect(err).NotTo(HaveOccurred())
 		sc := chk.Spec.Templates.PodTemplates[0].Spec.SecurityContext
 		Expect(sc.RunAsUser).To(BeNil())
@@ -77,6 +78,11 @@ var _ = Describe("Keeper vendor spec", func() {
 		Expect(*sc.RunAsNonRoot).To(BeTrue())
 	})
 })
+
+// keeperNsName mirrors what altinity.KeeperNsName derives for keeperWandb().
+func keeperNsName() types.NamespacedName {
+	return types.NamespacedName{Namespace: "wandb", Name: InstallationName("clickhouse")}
+}
 
 func keeperScheme() *runtime.Scheme {
 	scheme := runtime.NewScheme()

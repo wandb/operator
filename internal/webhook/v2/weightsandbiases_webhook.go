@@ -22,12 +22,18 @@ import (
 	"strings"
 
 	v1 "github.com/wandb/operator/api/v1"
+	"github.com/wandb/operator/internal/controller/infra/managed/clickhouse/altinity"
+	"github.com/wandb/operator/internal/controller/infra/managed/kafka/bufstream"
+	"github.com/wandb/operator/internal/controller/infra/managed/mysql/moco"
+	"github.com/wandb/operator/internal/controller/infra/managed/objectstore/seaweedfs"
+	"github.com/wandb/operator/internal/controller/infra/managed/redis/opstree"
 	"github.com/wandb/operator/internal/logx"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -157,7 +163,7 @@ func (v *WeightsAndBiasesCustomValidator) ValidateCreate(ctx context.Context, ob
 	}
 	log.Info("Validation for WeightsAndBiases upon creation", "name", wandb.GetName())
 
-	return validateSpec(ctx, wandb)
+	return validateSpec(ctx, wandb, nil)
 }
 
 // ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type WeightsAndBiases.
@@ -178,7 +184,7 @@ func (v *WeightsAndBiasesCustomValidator) ValidateUpdate(ctx context.Context, ol
 
 	log.Info("validate V2 update", "name", newWandb.Name)
 
-	if specWarnings, err = validateSpec(ctx, newWandb); err != nil {
+	if specWarnings, err = validateSpec(ctx, newWandb, oldWandb); err != nil {
 		return specWarnings, err
 	}
 	changeWarnings, err = validateChanges(ctx, newWandb, oldWandb)
@@ -199,16 +205,6 @@ func (v *WeightsAndBiasesCustomValidator) ValidateDelete(ctx context.Context, ob
 	return nil, nil
 }
 
-// instanceResourceName builds the default name for a managed infra instance.
-// The reserved default instance keeps the historical "<cr>-<suffix>" name for
-// backward compatibility; other instances are suffixed with their key.
-func instanceResourceName(wandb *appsv2.WeightsAndBiases, suffix, key string) string {
-	if key == appsv2.DefaultInstanceName {
-		return fmt.Sprintf("%s-%s", wandb.Name, suffix)
-	}
-	return fmt.Sprintf("%s-%s-%s", wandb.Name, suffix, key)
-}
-
 func applyMySQLDefaults(wandb *appsv2.WeightsAndBiases) {
 	if wandb.Spec.MySQL == nil {
 		wandb.Spec.MySQL = map[string]appsv2.MySQLSpec{}
@@ -225,7 +221,7 @@ func applyMySQLDefaults(wandb *appsv2.WeightsAndBiases) {
 			spec.ManagedMysql = &appsv2.ManagedMysqlSpec{}
 		}
 		if spec.ManagedMysql.Name == "" {
-			spec.ManagedMysql.Name = instanceResourceName(wandb, "mysql", key)
+			spec.ManagedMysql.Name = moco.DefaultSpecName(wandb.Name, key)
 		}
 		if spec.ManagedMysql.Namespace == "" {
 			spec.ManagedMysql.Namespace = wandb.Namespace
@@ -250,7 +246,7 @@ func applyRedisDefaults(wandb *appsv2.WeightsAndBiases) {
 			spec.ManagedRedis = &appsv2.ManagedRedisSpec{}
 		}
 		if spec.ManagedRedis.Name == "" {
-			spec.ManagedRedis.Name = instanceResourceName(wandb, "redis", key)
+			spec.ManagedRedis.Name = opstree.DefaultSpecName(wandb.Name, key)
 		}
 		if spec.ManagedRedis.Namespace == "" {
 			spec.ManagedRedis.Namespace = wandb.Namespace
@@ -270,7 +266,7 @@ func applyKafkaDefaults(wandb *appsv2.WeightsAndBiases) {
 	spec := wandb.Spec.Kafka.ManagedKafka
 
 	if spec.Name == "" {
-		spec.Name = fmt.Sprintf("%s-kafka", wandb.Name)
+		spec.Name = bufstream.DefaultSpecName(wandb.Name, appsv2.DefaultInstanceName)
 	}
 
 	if spec.Namespace == "" {
@@ -295,7 +291,7 @@ func applyObjectStoreDefaults(wandb *appsv2.WeightsAndBiases) {
 		}
 		managed := spec.ManagedObjectStore
 		if managed.Name == "" {
-			managed.Name = instanceResourceName(wandb, "seaweedfs", key)
+			managed.Name = seaweedfs.DefaultSpecName(wandb.Name, key)
 		}
 		if managed.Namespace == "" {
 			managed.Namespace = wandb.Namespace
@@ -326,7 +322,7 @@ func applyClickHouseDefaults(wandb *appsv2.WeightsAndBiases) {
 			spec.ManagedClickHouse = &appsv2.ManagedClickHouseSpec{}
 		}
 		if spec.ManagedClickHouse.Name == "" {
-			spec.ManagedClickHouse.Name = instanceResourceName(wandb, "clickhouse", key)
+			spec.ManagedClickHouse.Name = altinity.DefaultSpecName(wandb.Name, key)
 		}
 		if spec.ManagedClickHouse.Namespace == "" {
 			spec.ManagedClickHouse.Namespace = wandb.Namespace
@@ -335,7 +331,9 @@ func applyClickHouseDefaults(wandb *appsv2.WeightsAndBiases) {
 	}
 }
 
-func validateSpec(_ context.Context, newWandb *appsv2.WeightsAndBiases) (admission.Warnings, error) {
+// validateSpec validates the (already defaulted) spec. oldWandb is nil on
+// create; update rules use it to skip values unchanged from the stored object.
+func validateSpec(_ context.Context, newWandb, oldWandb *appsv2.WeightsAndBiases) (admission.Warnings, error) {
 	var allErrors field.ErrorList
 	var warnings admission.Warnings
 
@@ -343,6 +341,7 @@ func validateSpec(_ context.Context, newWandb *appsv2.WeightsAndBiases) (admissi
 	allErrors = append(allErrors, validateRedisSpec(newWandb)...)
 	allErrors = append(allErrors, validateObjectStoreSpec(newWandb)...)
 	allErrors = append(allErrors, validateClickHouseSpec(newWandb)...)
+	allErrors = append(allErrors, validateInfraNames(newWandb, oldWandb)...)
 	networkingErrors, networkingWarnings := validateNetworkingSpec(newWandb)
 	allErrors = append(allErrors, networkingErrors...)
 	warnings = append(warnings, networkingWarnings...)
@@ -606,6 +605,134 @@ func validateClickHouseSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 		}
 	}
 
+	return errors
+}
+
+// validateInfraNames rejects managed infra names whose derived object names
+// cannot be deployed (vendor operators wedge silently past DNS-1123 limits).
+// Empty names are the defaulter's to fill; on update only changed names are
+// checked (per instance key), so pre-existing CRs stay updatable and deletable.
+func validateInfraNames(newWandb, oldWandb *appsv2.WeightsAndBiases) field.ErrorList {
+	var errors field.ErrorList
+
+	changed := func(oldName, name string) bool {
+		if name == "" {
+			return false
+		}
+		return oldWandb == nil || oldName != name
+	}
+
+	for key, spec := range newWandb.Spec.ClickHouse {
+		managed := spec.ManagedClickHouse
+		if managed == nil {
+			continue
+		}
+		oldName := ""
+		if oldWandb != nil {
+			if old, ok := oldWandb.Spec.ClickHouse[key]; ok && old.ManagedClickHouse != nil {
+				oldName = old.ManagedClickHouse.Name
+			}
+		}
+		if changed(oldName, managed.Name) {
+			if err := altinity.ValidateDerivedNames(managed); err != nil {
+				errors = append(errors, field.Invalid(
+					field.NewPath("spec").Child("clickhouse").Key(key).Child("managedClickhouse").Child("name"),
+					managed.Name, err.Error(),
+				))
+			}
+		}
+	}
+
+	for key, spec := range newWandb.Spec.MySQL {
+		managed := spec.ManagedMysql
+		if managed == nil {
+			continue
+		}
+		oldName := ""
+		if oldWandb != nil {
+			if old, ok := oldWandb.Spec.MySQL[key]; ok && old.ManagedMysql != nil {
+				oldName = old.ManagedMysql.Name
+			}
+		}
+		if changed(oldName, managed.Name) {
+			errors = append(errors, validateInfraName(
+				field.NewPath("spec").Child("mysql").Key(key).Child("managedMysql").Child("name"),
+				managed.Name, moco.MaxClusterNameLength,
+				"Moco rejects MySQLCluster names longer than 40 characters",
+			)...)
+		}
+	}
+
+	for key, spec := range newWandb.Spec.Redis {
+		managed := spec.ManagedRedis
+		if managed == nil {
+			continue
+		}
+		oldName := ""
+		if oldWandb != nil {
+			if old, ok := oldWandb.Spec.Redis[key]; ok && old.ManagedRedis != nil {
+				oldName = old.ManagedRedis.Name
+			}
+		}
+		if changed(oldName, managed.Name) {
+			errors = append(errors, validateInfraName(
+				field.NewPath("spec").Child("redis").Key(key).Child("managedRedis").Child("name"),
+				managed.Name, opstree.MaxSpecNameLength,
+				"derived Redis workload and Service names must fit 63-character DNS-1123 labels",
+			)...)
+		}
+	}
+
+	if spec := newWandb.Spec.Kafka.ManagedKafka; spec != nil {
+		oldName := ""
+		if oldWandb != nil && oldWandb.Spec.Kafka.ManagedKafka != nil {
+			oldName = oldWandb.Spec.Kafka.ManagedKafka.Name
+		}
+		if changed(oldName, spec.Name) {
+			errors = append(errors, validateInfraName(
+				field.NewPath("spec").Child("kafka").Child("managedKafka").Child("name"),
+				spec.Name, bufstream.MaxSpecNameLength(),
+				"derived Kafka/etcd pod names must fit 63-character DNS-1123 labels",
+			)...)
+		}
+	}
+
+	for key, spec := range newWandb.Spec.ObjectStore {
+		managed := spec.ManagedObjectStore
+		if managed == nil {
+			continue
+		}
+		oldName := ""
+		if oldWandb != nil {
+			if old, ok := oldWandb.Spec.ObjectStore[key]; ok && old.ManagedObjectStore != nil {
+				oldName = old.ManagedObjectStore.Name
+			}
+		}
+		if changed(oldName, managed.Name) {
+			errors = append(errors, validateInfraName(
+				field.NewPath("spec").Child("objectStore").Key(key).Child("managedObjectStore").Child("name"),
+				managed.Name, seaweedfs.MaxSpecNameLength,
+				"derived SeaweedFS workload and Service names must fit 63-character DNS-1123 labels",
+			)...)
+		}
+	}
+
+	return errors
+}
+
+func validateInfraName(path *field.Path, name string, budget int, why string) field.ErrorList {
+	var errors field.ErrorList
+	if labelErrs := validation.IsDNS1123Label(name); len(labelErrs) > 0 {
+		errors = append(errors, field.Invalid(
+			path, name,
+			fmt.Sprintf("must be a valid DNS-1123 label: %s", strings.Join(labelErrs, "; ")),
+		))
+	} else if len(name) > budget {
+		errors = append(errors, field.Invalid(
+			path, name,
+			fmt.Sprintf("must be at most %d characters: %s", budget, why),
+		))
+	}
 	return errors
 }
 

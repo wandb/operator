@@ -86,6 +86,17 @@ func inferInfraState(
 	var events []corev1.Event
 	impliedStates := make(map[string]string, len(conditions))
 
+	// undeployable name = terminal config error; surface it in `kubectl describe`
+	if cond, found := lo.Find(conditions, func(c metav1.Condition) bool {
+		return c.Type == ClickHouseCustomResourceType && c.Reason == common.InvalidNameReason
+	}); found {
+		events = append(events, corev1.Event{
+			Type:    corev1.EventTypeWarning,
+			Reason:  "ClickHouseInvalidName",
+			Message: cond.Message,
+		})
+	}
+
 	impliedStates = inferStateFromCondition(ctx, ClickHouseCustomResourceType, impliedStates, conditions)
 	impliedStates = inferStateFromCondition(ctx, ClickHouseConnectionInfoType, impliedStates, conditions)
 	impliedStates = inferStateFromCondition(ctx, ClickHouseReportedReadyType, impliedStates, conditions)
@@ -168,6 +179,9 @@ func inferState_ClickHouseCustomResourceType(ctx context.Context, condition meta
 		}
 		if condition.Reason == common.PendingDeleteReason {
 			result = common.UnavailableState
+		}
+		if condition.Reason == common.InvalidNameReason {
+			result = common.ErrorState
 		}
 	}
 	log.Debug(

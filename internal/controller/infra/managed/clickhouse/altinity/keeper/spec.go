@@ -14,17 +14,20 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
 // ToKeeperVendorSpec builds the ClickHouseKeeperInstallation CR that coordinates
-// ReplicatedMergeTree replication for the managed ClickHouse installation.
+// ReplicatedMergeTree replication. nsName comes from altinity.KeeperNsName —
+// this package never sees the "-chi"-suffixed spec name.
 func ToKeeperVendorSpec(
 	ctx context.Context,
 	wandb *apiv2.WeightsAndBiases,
 	spec *apiv2.ManagedClickHouseSpec,
 	scheme *runtime.Scheme,
+	nsName types.NamespacedName,
 ) (*chkv1.ClickHouseKeeperInstallation, error) {
 	_, log := logx.WithSlog(ctx, logx.ClickHouse)
 	if spec == nil {
@@ -61,8 +64,8 @@ func ToKeeperVendorSpec(
 
 	chk := &chkv1.ClickHouseKeeperInstallation{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      InstallationName(spec.Name),
-			Namespace: spec.Namespace,
+			Name:      nsName.Name,
+			Namespace: nsName.Namespace,
 			Labels:    labels,
 		},
 		Spec: chkv1.ChkSpec{

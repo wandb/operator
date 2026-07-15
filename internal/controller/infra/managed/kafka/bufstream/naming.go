@@ -4,8 +4,28 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/wandb/operator/internal/controller/common"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/validation"
 )
+
+// assumedMaxEtcdOrdinal covers quorum-sized etcd ensembles (1, 3, 5).
+const assumedMaxEtcdOrdinal = 9
+
+const defaultNameSuffix = "-kafka"
+
+// MaxSpecNameLength is the room left by the longest label-constrained derived
+// name, the etcd pod name.
+func MaxSpecNameLength() int {
+	builder := CreateNsNameBuilder(types.NamespacedName{})
+	return validation.DNS1123LabelMaxLength - len(builder.EtcdPodName(assumedMaxEtcdOrdinal))
+}
+
+// DefaultSpecName derives the managed Kafka name for a CR instance, shortened
+// to the budget.
+func DefaultSpecName(crName, instanceKey string) string {
+	return common.FitDefaultInfraName(common.InstanceBaseName(crName, instanceKey), defaultNameSuffix, MaxSpecNameLength())
+}
 
 // NsNameBuilder derives the names of all resources that make up a managed
 // Bufstream deployment from the base Kafka spec name/namespace.

@@ -3,8 +3,20 @@ package moco
 import (
 	"fmt"
 
+	"github.com/wandb/operator/internal/controller/common"
 	"k8s.io/apimachinery/pkg/types"
 )
+
+// MaxClusterNameLength mirrors Moco's admission cap on MySQLCluster names.
+const MaxClusterNameLength = 40
+
+const defaultNameSuffix = "-mysql"
+
+// DefaultSpecName derives the managed MySQL name for a CR instance, shortened
+// to Moco's cap.
+func DefaultSpecName(crName, instanceKey string) string {
+	return common.FitDefaultInfraName(common.InstanceBaseName(crName, instanceKey), defaultNameSuffix, MaxClusterNameLength)
+}
 
 type NsNameBuilder struct {
 	baseNsName types.NamespacedName

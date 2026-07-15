@@ -18,6 +18,7 @@ const (
 	ResourceErrorReason   = "ResourceError"
 	UnknownReason         = "Unknown"
 	DetachedSpecMismatch  = "DetachedSpecMismatch"
+	InvalidNameReason     = "InvalidName"
 )
 
 const (

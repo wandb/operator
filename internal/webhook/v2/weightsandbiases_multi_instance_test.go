@@ -35,7 +35,7 @@ var _ = Describe("WeightsAndBiases multi-instance infra", func() {
 		g.Expect(mysql.ManagedMysql.Name).To(g.Equal("wb-mysql"))
 	})
 
-	It("names the default instance historically and suffixes other instances", func() {
+	It("names the default instance plainly and keys other instances before the suffix", func() {
 		wandb := &apiv2.WeightsAndBiases{
 			ObjectMeta: metav1.ObjectMeta{Name: "wb", Namespace: "ns"},
 			Spec: apiv2.WeightsAndBiasesSpec{
@@ -49,7 +49,7 @@ var _ = Describe("WeightsAndBiases multi-instance infra", func() {
 		g.Expect(defaulter.Default(ctx, wandb)).To(g.Succeed())
 
 		g.Expect(wandb.Spec.MySQL[apiv2.DefaultInstanceName].ManagedMysql.Name).To(g.Equal("wb-mysql"))
-		g.Expect(wandb.Spec.MySQL["analytics"].ManagedMysql.Name).To(g.Equal("wb-mysql-analytics"))
+		g.Expect(wandb.Spec.MySQL["analytics"].ManagedMysql.Name).To(g.Equal("wb-analytics-mysql"))
 		g.Expect(wandb.Spec.MySQL["analytics"].ManagedMysql.Namespace).To(g.Equal("ns"))
 	})
 

@@ -38,4 +38,21 @@ var _ = Describe("ClickHouse status keeper gating", func() {
 		state, _ := inferInfraState(context.Background(), true, conditions)
 		Expect(state).To(Equal(common.HealthyState))
 	})
+
+	It("reports an error state and event when the managed name cannot be deployed", func() {
+		conditions := []metav1.Condition{
+			{
+				Type:    ClickHouseCustomResourceType,
+				Status:  metav1.ConditionFalse,
+				Reason:  common.InvalidNameReason,
+				Message: "managed ClickHouse name is too long",
+			},
+		}
+		state, events := inferInfraState(context.Background(), true, conditions)
+
+		Expect(state).To(Equal(common.ErrorState))
+		Expect(events).To(HaveLen(1))
+		Expect(events[0].Reason).To(Equal("ClickHouseInvalidName"))
+		Expect(events[0].Message).To(ContainSubstring("too long"))
+	})
 })
