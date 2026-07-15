@@ -141,7 +141,8 @@ jobs:
           VERSION: ${{ steps.release.outputs.version }}
         run: |
           set -euo pipefail
-          helm dependency build deploy/operator --update-dependencies
+          helm dependency update deploy/operator
+          helm dependency build deploy/operator
           mkdir -p dist
           helm package deploy/operator --destination dist
           helm push "dist/operator-${VERSION}.tgz" "oci://${CHART_REPOSITORY}"
