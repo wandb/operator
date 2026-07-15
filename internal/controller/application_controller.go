@@ -23,6 +23,7 @@ import (
 
 	gkeGatewayApiNetworkingv1 "github.com/GoogleCloudPlatform/gke-gateway-api/apis/networking/v1"
 	wandbv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/logx"
 	"github.com/wandb/operator/pkg/utils"
 	v1alpha1 "github.com/wandb/operator/pkg/vendored/argo-rollouts/argoproj.io.rollouts/v1alpha1"
@@ -841,9 +842,16 @@ func (r *ApplicationReconciler) reconcileService(ctx context.Context, app *wandb
 		desired.Annotations,
 		app.Spec.MetaTemplate.Annotations,
 	)
+	// The API server stores empty annotations as nil; keep them nil so the
+	// steady-state metadata compare below settles.
+	if len(desired.Annotations) == 0 {
+		desired.Annotations = nil
+	}
 
-	// Copy spec from template
+	// Copy spec from template, filling the port defaults the API server would
+	// apply (templates written before normalization may lack them).
 	desired.Spec = *app.Spec.ServiceTemplate.DeepCopy()
+	common.NormalizeServicePorts(desired.Spec.Ports)
 
 	// Ensure selector targets the application's pods
 	selectorLabels := getSelectorLabels(app)
@@ -884,6 +892,7 @@ func (r *ApplicationReconciler) reconcileService(ctx context.Context, app *wandb
 	desired.Spec.IPFamilies = current.Spec.IPFamilies
 	desired.Spec.IPFamilyPolicy = current.Spec.IPFamilyPolicy
 	desired.Spec.HealthCheckNodePort = current.Spec.HealthCheckNodePort
+	preserveServerDefaultedServiceFields(&desired.Spec, &current.Spec)
 
 	// Only update if there are changes
 	// Apply desired into current to minimize overwrite
@@ -913,6 +922,43 @@ func (r *ApplicationReconciler) reconcileService(ctx context.Context, app *wandb
 	app.Status.ServiceStatus = &current.Status
 
 	return nil
+}
+
+// preserveServerDefaultedServiceFields keeps API-server-defaulted or -allocated
+// values for fields the template leaves unset, so a settled Service compares
+// equal and Update only fires on real changes.
+func preserveServerDefaultedServiceFields(desired, current *corev1.ServiceSpec) {
+	if desired.Type == "" {
+		desired.Type = current.Type
+	}
+	if desired.SessionAffinity == "" {
+		desired.SessionAffinity = current.SessionAffinity
+	}
+	if desired.ExternalTrafficPolicy == "" {
+		desired.ExternalTrafficPolicy = current.ExternalTrafficPolicy
+	}
+	if desired.InternalTrafficPolicy == nil {
+		desired.InternalTrafficPolicy = current.InternalTrafficPolicy
+	}
+	if desired.AllocateLoadBalancerNodePorts == nil {
+		desired.AllocateLoadBalancerNodePorts = current.AllocateLoadBalancerNodePorts
+	}
+	if desired.Type != corev1.ServiceTypeNodePort && desired.Type != corev1.ServiceTypeLoadBalancer {
+		return
+	}
+	// NodePorts are allocated by the API server; keep them unless the template pins one.
+	for i := range desired.Ports {
+		p := &desired.Ports[i]
+		if p.NodePort != 0 {
+			continue
+		}
+		for j := range current.Ports {
+			if current.Ports[j].Name == p.Name {
+				p.NodePort = current.Ports[j].NodePort
+				break
+			}
+		}
+	}
 }
 
 // deleteService deletes the Service associated with the Application

@@ -1046,7 +1046,10 @@ func (in *ObjectStoreConnection) DeepCopyInto(out *ObjectStoreConnection) {
 	in.AccessKey.DeepCopyInto(&out.AccessKey)
 	in.SecretKey.DeepCopyInto(&out.SecretKey)
 	in.Bucket.DeepCopyInto(&out.Bucket)
+	in.Path.DeepCopyInto(&out.Path)
 	in.Region.DeepCopyInto(&out.Region)
+	in.TlsEnabled.DeepCopyInto(&out.TlsEnabled)
+	in.ForcePathStyle.DeepCopyInto(&out.ForcePathStyle)
 	in.URL.DeepCopyInto(&out.URL)
 }
 

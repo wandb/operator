@@ -27,14 +27,13 @@ func clickHouseWriteState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
-	objStoreConns map[string]*apiv2.ObjectStoreConnection,
 	mfst manifest.Manifest,
 ) map[string][]metav1.Condition {
 	out := map[string][]metav1.Condition{}
 	for key, spec := range wandb.Spec.ClickHouse {
 		switch {
 		case spec.ManagedClickHouse != nil:
-			out[key] = managedClickHouseWriteState(ctx, client, wandb, spec.ManagedClickHouse, objStoreConns, mfst)
+			out[key] = managedClickHouseWriteState(ctx, client, wandb, spec.ManagedClickHouse, mfst)
 		case spec.ExternalClickHouse != nil:
 			out[key] = externalch.WriteState(ctx, client, wandb, key, spec.ExternalClickHouse)
 		}
@@ -150,19 +149,18 @@ func managedClickHouseWriteState(
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
 	spec *apiv2.ManagedClickHouseSpec,
-	objStoreConns map[string]*apiv2.ObjectStoreConnection,
 	mfst manifest.Manifest,
 ) []metav1.Condition {
 	log := ctrl.LoggerFrom(ctx)
 
 	// ClickHouse table data lives in the object store: use the "clickhouse"
 	// instance when provisioned, otherwise the default instance.
-	objStoreConn, _ := apiv2.ResolveInstance(objStoreConns, clickHouseObjectStoreInstance)
+	objStoreStatus, _ := apiv2.ResolveInstance(wandb.Status.ObjectStoreStatus, clickHouseObjectStoreInstance)
 	objStoreSpec, _ := apiv2.ResolveInstance(wandb.Spec.ObjectStore, clickHouseObjectStoreInstance)
 	waitForObjectStore := objStoreSpec.ManagedObjectStore != nil
 
 	// Resolve the bucket connection; wait and requeue if it isn't ready yet.
-	objStorage, err := altinity.ResolveObjectStorage(ctx, client, spec, objStoreConn)
+	objStorage, err := altinity.ResolveObjectStorage(ctx, client, spec, &objStoreStatus.Connection)
 	if err != nil {
 		log.Error(err, "object storage not ready for ClickHouse")
 		return []metav1.Condition{

@@ -306,9 +306,9 @@ func Reconcile(
 	// Write Infra State
 	redisConditions := redisWriteState(ctx, client, wandb, manifest)
 	mysqlConditions := mysqlWriteState(ctx, client, wandb, manifest)
-	kafkaConditions := kafkaWriteState(ctx, client, wandb, manifest)
 	objectStoreConditions, objectStoreConnection := objectStoreWriteState(ctx, client, wandb, manifest)
-	clickHouseConditions := clickHouseWriteState(ctx, client, wandb, objectStoreConnection, manifest)
+	kafkaConditions := kafkaWriteState(ctx, client, wandb, manifest)
+	clickHouseConditions := clickHouseWriteState(ctx, client, wandb, manifest)
 
 	/////////////////////////
 	// Read Infra State
@@ -503,11 +503,17 @@ func ReconcileWandbManifest(
 		return result, err
 	}
 
-	if appsHealthy(wandb.Status.Wandb.Applications, buildDesiredAppNames(manifest)) {
+	// Gate on live Deployment readiness, not status.wandb.applications: the
+	// copied status map can be a stale snapshot (it only refreshes when this
+	// reconciler runs), and a frozen mid-rollout entry would block cleanup forever.
+	if healthy, notReady := deploymentsHealthy(ctx, client, wandb.Namespace, buildDesiredAppNames(manifest)); healthy {
 		if err := cleanupLegacyV1Deployments(ctx, client, wandb); err != nil {
 			logger.Error(err, "Failed to clean up legacy v1 deployments")
 			return ctrl.Result{}, err
 		}
+	} else {
+		logger.Info("Deferring legacy v1 deployment cleanup until all application Deployments are ready",
+			"notReady", notReady)
 	}
 
 	if wandb.Spec.Networking.Mode == apiv2.NetworkingModeGatewayAPI {
@@ -631,10 +637,16 @@ func reconcileApplications(
 		// change to port numbers, names, or protocols is propagated on each
 		// reconcile. If no service ports are declared, clear the ServiceTemplate.
 		if app.Service != nil && len(app.Service.Ports) > 0 {
+			// Copy + normalize: the CRD schema defaults ports[].protocol, so an
+			// un-normalized template never round-trips equal and the update gate
+			// below would fire on every reconcile, churning the Application.
+			ports := make([]corev1.ServicePort, len(app.Service.Ports))
+			copy(ports, app.Service.Ports)
+			common.NormalizeServicePorts(ports)
 			application.Spec.ServiceTemplate = &corev1.ServiceSpec{
-				Type: app.Service.Type,
+				Type:  app.Service.Type,
+				Ports: ports,
 			}
-			application.Spec.ServiceTemplate.Ports = app.Service.Ports
 		} else {
 			// No service declared in manifest; ensure we clear any previous template
 			application.Spec.ServiceTemplate = nil
@@ -647,6 +659,9 @@ func reconcileApplications(
 			application.Spec.HTTPRouteTemplate = nil
 		}
 
+		// A plain owner ref (not a controller ref) so multiple CRs can share a
+		// namespace; the parent's Owns(Application) watch uses MatchEveryOwner
+		// to still enqueue on app status changes.
 		err = controllerutil.SetOwnerReference(wandb, application, client.Scheme())
 		if err != nil {
 			return ctrl.Result{}, err

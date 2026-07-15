@@ -7,10 +7,10 @@ import (
 	"strings"
 
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/pkg/utils"
 	"github.com/wandb/operator/pkg/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
 	chtypes "github.com/wandb/operator/pkg/vendored/altinity-clickhouse/common/types"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -45,8 +45,8 @@ type ObjectStorageConn struct {
 	SecretKeyRef      corev1.SecretKeySelector
 }
 
-// ResolveObjectStorage reads the object-store connection secret (from the CH
-// namespace) and derives the S3 disk details.
+// ResolveObjectStorage reads the object-store connection's secret key references
+// (which may span multiple secrets) and derives the S3 disk details.
 func ResolveObjectStorage(
 	ctx context.Context,
 	cl client.Client,
@@ -60,33 +60,59 @@ func ResolveObjectStorage(
 		return nil, fmt.Errorf("object store connection is not available yet")
 	}
 
-	secretName := conn.Bucket.Name
-	if secretName == "" {
-		return nil, fmt.Errorf("object store connection has no secret reference")
+	r := &utils.ConnSecretResolver{Client: cl, Namespace: spec.Namespace, Cache: map[string]*corev1.Secret{}}
+
+	bucket, err := r.Value(ctx, conn.Bucket)
+	if err != nil {
+		return nil, err
 	}
-
-	secret := &corev1.Secret{}
-	key := types.NamespacedName{Namespace: spec.Namespace, Name: secretName}
-	if err := cl.Get(ctx, key, secret); err != nil {
-		return nil, fmt.Errorf("read object store connection secret %q: %w", key, err)
-	}
-
-	get := func(k string) string { return strings.TrimSpace(string(secret.Data[k])) }
-
-	bucket := get("Bucket")
 	if bucket == "" {
-		return nil, fmt.Errorf("object store connection secret %q is missing Bucket", secretName)
+		return nil, fmt.Errorf("object store connection has no bucket reference")
 	}
 
-	endpoint, err := buildEndpoint(get("Scheme"), get("Host"), get("Port"), bucket, get("Region"), objectStoragePrefix(spec), spec.ObjectStorage.Insecure)
+	host, err := r.Value(ctx, conn.Endpoint)
+	if err != nil {
+		return nil, err
+	}
+	port, err := r.Value(ctx, conn.Port)
+	if err != nil {
+		return nil, err
+	}
+	region, err := r.Value(ctx, conn.Region)
+	if err != nil {
+		return nil, err
+	}
+	accessKey, err := r.Value(ctx, conn.AccessKey)
+	if err != nil {
+		return nil, err
+	}
+
+	tlsEnabledString, err := r.Value(ctx, conn.TlsEnabled)
+	if err != nil {
+		return nil, err
+	}
+
+	tlsEnabled, err := strconv.ParseBool(tlsEnabledString)
+	if err != nil {
+		tlsEnabled = false
+	}
+
+	// The connection has no scheme reference; honor one advertised in the
+	// endpoint value, otherwise let buildEndpoint infer from spec.Insecure.
+	scheme := ""
+	if i := strings.Index(host, "://"); i >= 0 {
+		scheme, host = host[:i], host[i+len("://"):]
+	}
+
+	endpoint, err := buildEndpoint(scheme, host, port, bucket, region, objectStoragePrefix(spec), tlsEnabled)
 	if err != nil {
 		return nil, err
 	}
 
 	return &ObjectStorageConn{
 		Endpoint:          endpoint,
-		Region:            get("Region"),
-		UseEnvCredentials: get("AccessKey") == "",
+		Region:            region,
+		UseEnvCredentials: accessKey == "",
 		AccessKeyRef:      conn.AccessKey,
 		SecretKeyRef:      conn.SecretKey,
 	}, nil
@@ -108,12 +134,12 @@ func normalizePrefix(prefix string) string {
 
 // buildEndpoint builds the S3 disk endpoint: path-style for a custom host, else
 // the AWS virtual-hosted URL derived from the region.
-func buildEndpoint(scheme, host, port, bucket, region, prefix string, insecure bool) (string, error) {
+func buildEndpoint(scheme, host, port, bucket, region, prefix string, secure bool) (string, error) {
 	if host != "" {
 		if scheme == "" {
-			scheme = "https"
-			if insecure {
-				scheme = "http"
+			scheme = "http"
+			if secure {
+				scheme = "https"
 			}
 		}
 		hostport := host

@@ -571,9 +571,12 @@ type ObjectStoreConnection struct {
 	AccessKey corev1.SecretKeySelector `json:"accessKey,omitempty"`
 	SecretKey corev1.SecretKeySelector `json:"secretKey,omitempty"`
 	Bucket    corev1.SecretKeySelector `json:"bucket,omitempty"`
-	Region    corev1.SecretKeySelector `json:"region,omitempty"`
-
-	URL corev1.SecretKeySelector `json:"url,omitempty"`
+	// Path is an optional key prefix within the bucket under which W&B stores its data.
+	Path           corev1.SecretKeySelector `json:"path,omitempty"`
+	Region         corev1.SecretKeySelector `json:"region,omitempty"`
+	TlsEnabled     corev1.SecretKeySelector `json:"tlsEnabled,omitempty"`
+	ForcePathStyle corev1.SecretKeySelector `json:"forcePathStyle,omitempty"`
+	URL            corev1.SecretKeySelector `json:"url,omitempty"`
 }
 
 type ObjectStoreConfig struct {
