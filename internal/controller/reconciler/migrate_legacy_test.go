@@ -442,6 +442,8 @@ func TestMigrateLegacyBucket_BareBucketName(t *testing.T) {
 	require.Equal(t, []byte("shh"), secret.Data["secretKey"])
 	require.NotContains(t, secret.Data, "endpoint")
 	require.NotContains(t, secret.Data, "port")
+	require.Equal(t, []byte("false"), secret.Data["forcePathStyle"], "bare name means native AWS, virtual-hosted")
+	require.NotContains(t, secret.Data, "tlsEnabled", "tls is meaningless without a custom endpoint")
 
 	conn := wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ExternalObjectStore
 	require.NotNil(t, conn)
@@ -451,6 +453,7 @@ func TestMigrateLegacyBucket_BareBucketName(t *testing.T) {
 	require.Equal(t, "secretKey", conn.SecretKey.Key)
 	require.Empty(t, conn.Endpoint.Name)
 	require.Empty(t, conn.Port.Name)
+	require.Equal(t, "forcePathStyle", conn.ForcePathStyle.Key)
 }
 
 func TestMigrateLegacyBucket_EmbeddedEndpoint(t *testing.T) {
@@ -467,11 +470,128 @@ func TestMigrateLegacyBucket_EmbeddedEndpoint(t *testing.T) {
 	require.Equal(t, []byte("minio.minio.svc"), secret.Data["endpoint"])
 	require.Equal(t, []byte("9000"), secret.Data["port"])
 	require.Equal(t, []byte("wandb-bucket"), secret.Data["bucket"])
+	require.Equal(t, []byte("true"), secret.Data["forcePathStyle"], "custom endpoint requires path-style")
+	require.Equal(t, []byte("false"), secret.Data["tlsEnabled"], "gorilla defaulted custom endpoints to http")
 
 	conn := wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ExternalObjectStore
 	require.Equal(t, "endpoint", conn.Endpoint.Key)
 	require.Equal(t, "port", conn.Port.Key)
 	require.Equal(t, "bucket", conn.Bucket.Key)
+	require.Equal(t, "forcePathStyle", conn.ForcePathStyle.Key)
+	require.Equal(t, "tlsEnabled", conn.TlsEnabled.Key)
+}
+
+func TestMigrateLegacyBucket_QueryParamOverrides(t *testing.T) {
+	payload := `{"provider":"s3","name":"minio.example.com:9000/wandb","region":"us-east-1","path":"prefix?tls=true&forcePathStyle=false&region=eu-west-1"}`
+	client, wandb := newMigrationFixture(t, map[string]string{
+		apiv1.BucketPendingAnnotation: payload,
+	}, nil)
+
+	_, err := migrateLegacyAnnotations(context.Background(), client, wandb)
+	require.NoError(t, err)
+
+	secret, err := getBucketConvertedSecret(t, client)
+	require.NoError(t, err)
+	require.Equal(t, []byte("minio.example.com"), secret.Data["endpoint"])
+	require.Equal(t, []byte("wandb"), secret.Data["bucket"])
+	require.Equal(t, []byte("false"), secret.Data["forcePathStyle"], "explicit ?forcePathStyle= wins over the endpoint rule")
+	require.Equal(t, []byte("true"), secret.Data["tlsEnabled"], "explicit ?tls= wins over the http default")
+	require.Equal(t, []byte("eu-west-1"), secret.Data["region"], "?region= beats the region field, matching gorilla")
+	require.Equal(t, []byte("prefix"), secret.Data["path"], "the prefix survives with its query stripped")
+}
+
+func TestMigrateLegacyBucket_PathPrefix(t *testing.T) {
+	payload := `{"name":"minio.example.com:9000/wandb","path":"wandb-files/"}`
+	client, wandb := newMigrationFixture(t, map[string]string{
+		apiv1.BucketPendingAnnotation: payload,
+	}, nil)
+
+	_, err := migrateLegacyAnnotations(context.Background(), client, wandb)
+	require.NoError(t, err)
+
+	secret, err := getBucketConvertedSecret(t, client)
+	require.NoError(t, err)
+	require.Equal(t, []byte("wandb-files"), secret.Data["path"])
+
+	conn := wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ExternalObjectStore
+	require.Equal(t, "path", conn.Path.Key)
+}
+
+func TestMigrateLegacyBucket_QueryOnlyPath(t *testing.T) {
+	payload := `{"name":"my-bucket","path":"?forcePathStyle=true"}`
+	client, wandb := newMigrationFixture(t, map[string]string{
+		apiv1.BucketPendingAnnotation: payload,
+	}, nil)
+
+	_, err := migrateLegacyAnnotations(context.Background(), client, wandb)
+	require.NoError(t, err)
+
+	secret, err := getBucketConvertedSecret(t, client)
+	require.NoError(t, err)
+	require.NotContains(t, secret.Data, "path", "a query-only path carries no prefix")
+	require.Equal(t, []byte("true"), secret.Data["forcePathStyle"], "explicit override applies even without an endpoint")
+}
+
+func TestMigrateLegacyBucket_QueryInName(t *testing.T) {
+	payload := `{"name":"minio.example.com/wandb?tls=true"}`
+	client, wandb := newMigrationFixture(t, map[string]string{
+		apiv1.BucketPendingAnnotation: payload,
+	}, nil)
+
+	_, err := migrateLegacyAnnotations(context.Background(), client, wandb)
+	require.NoError(t, err)
+
+	secret, err := getBucketConvertedSecret(t, client)
+	require.NoError(t, err)
+	require.Equal(t, []byte("wandb"), secret.Data["bucket"], "query must be stripped from the bucket name")
+	require.Equal(t, []byte("true"), secret.Data["forcePathStyle"])
+	require.Equal(t, []byte("true"), secret.Data["tlsEnabled"])
+}
+
+func TestMigrateLegacyBucket_AwsEndpointInName(t *testing.T) {
+	payload := `{"name":"s3.us-east-1.amazonaws.com/my-bucket"}`
+	client, wandb := newMigrationFixture(t, map[string]string{
+		apiv1.BucketPendingAnnotation: payload,
+	}, nil)
+
+	_, err := migrateLegacyAnnotations(context.Background(), client, wandb)
+	require.NoError(t, err)
+
+	secret, err := getBucketConvertedSecret(t, client)
+	require.NoError(t, err)
+	require.Equal(t, []byte("s3.us-east-1.amazonaws.com"), secret.Data["endpoint"])
+	require.Equal(t, []byte("true"), secret.Data["forcePathStyle"],
+		"a host in bucket.name is always an endpoint (prefixes belong in bucket.path) and gets path-style")
+}
+
+func TestMigrateLegacyBucket_CoreWeaveProvider(t *testing.T) {
+	payload := `{"provider":"cw","name":"cwobject.com/my-bucket"}`
+	client, wandb := newMigrationFixture(t, map[string]string{
+		apiv1.BucketPendingAnnotation: payload,
+	}, nil)
+
+	_, err := migrateLegacyAnnotations(context.Background(), client, wandb)
+	require.NoError(t, err)
+
+	secret, err := getBucketConvertedSecret(t, client)
+	require.NoError(t, err)
+	require.Equal(t, []byte("false"), secret.Data["forcePathStyle"], "CoreWeave object storage is virtual-hosted")
+	require.Equal(t, []byte("true"), secret.Data["tlsEnabled"], "CoreWeave object storage is https")
+}
+
+func TestMigrateLegacyBucket_NonS3ProviderSkipsAddressing(t *testing.T) {
+	payload := `{"provider":"gcs","name":"my-gcs-bucket"}`
+	client, wandb := newMigrationFixture(t, map[string]string{
+		apiv1.BucketPendingAnnotation: payload,
+	}, nil)
+
+	_, err := migrateLegacyAnnotations(context.Background(), client, wandb)
+	require.NoError(t, err)
+
+	secret, err := getBucketConvertedSecret(t, client)
+	require.NoError(t, err)
+	require.NotContains(t, secret.Data, "forcePathStyle")
+	require.NotContains(t, secret.Data, "tlsEnabled")
 }
 
 func TestMigrateLegacyBucket_PreSetCredentialsRespected(t *testing.T) {
@@ -522,7 +642,7 @@ func TestMigrateLegacyBucket_UnknownFieldsIgnored(t *testing.T) {
 	secret, err := getBucketConvertedSecret(t, client)
 	require.NoError(t, err)
 	require.NotContains(t, secret.Data, "provider")
-	require.NotContains(t, secret.Data, "path")
+	require.Equal(t, []byte("sub/path"), secret.Data["path"])
 	require.NotContains(t, secret.Data, "kmsKey")
 }
 

@@ -78,7 +78,7 @@ func TestRenderBufstreamConfigS3NoStaticCreds(t *testing.T) {
 func TestRenderBufstreamConfigGCS(t *testing.T) {
 	storage := objectstore.ConnInfo{
 		Provider: apiv2.ObjectStoreProviderGCS,
-		URI:      "gs://wandb-bucket/prefix",
+		Path:     "prefix",
 		Bucket:   "wandb-bucket",
 	}
 	rendered, err := renderBufstreamConfig("k", "k.ns.svc", []string{"e:2379"}, storage)
@@ -93,9 +93,8 @@ func TestRenderBufstreamConfigGCS(t *testing.T) {
 func TestRenderBufstreamConfigAzure(t *testing.T) {
 	storage := objectstore.ConnInfo{
 		Provider:  apiv2.ObjectStoreProviderAzure,
-		URI:       "https://acct.blob.core.windows.net/container",
 		Bucket:    "container",
-		AccessKey: "acct",
+		AccessKey: "wandbstorageacct",
 		SecretKey: "azsupersecret",
 	}
 	rendered, err := renderBufstreamConfig("k", "k.ns.svc", []string{"e:2379"}, storage)
@@ -105,7 +104,8 @@ func TestRenderBufstreamConfigAzure(t *testing.T) {
 	require.NoError(t, yaml.Unmarshal([]byte(rendered), &parsed))
 	require.Nil(t, parsed.Data.S3)
 	require.NotNil(t, parsed.Data.Azure)
-	require.Equal(t, "https://acct.blob.core.windows.net/container/k", parsed.Data.Azure.URI)
+	require.Equal(t, "https://wandbstorageacct.blob.core.windows.net/container/k", parsed.Data.Azure.URI,
+		"the blob host must derive from the connection's storage account")
 	require.NotNil(t, parsed.Data.Azure.AccessKeyID)
 	require.Equal(t, EnvStorageAccessKeyID, parsed.Data.Azure.AccessKeyID.EnvVar)
 	require.NotContains(t, rendered, "azsupersecret")

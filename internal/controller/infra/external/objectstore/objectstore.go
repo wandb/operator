@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 
 	apiv2 "github.com/wandb/operator/api/v2"
@@ -40,6 +41,7 @@ func WriteState(
 		"AccessKey":      spec.AccessKey,
 		"SecretKey":      spec.SecretKey,
 		"Bucket":         spec.Bucket,
+		"Path":           spec.Path,
 		"Region":         spec.Region,
 		"Provider":       spec.Provider,
 		"TlsEnabled":     spec.TlsEnabled,
@@ -56,6 +58,13 @@ func WriteState(
 		}}, nil
 	}
 
+	// Normalize the prefix once so every consumer joins it without stray slashes.
+	if trimmed := strings.Trim(data["Path"], "/"); trimmed != "" {
+		data["Path"] = trimmed
+	} else {
+		delete(data, "Path")
+	}
+
 	provider := apiv2.ObjectStoreProvider(data["Provider"])
 	if provider == "" {
 		provider = apiv2.ObjectStoreProviderS3
@@ -68,6 +77,10 @@ func WriteState(
 	case apiv2.ObjectStoreProviderAzure:
 		data["url"] = buildAzureURL(data)
 	default:
+		// Consumers (Bufstream) render this verbatim, so derive it when the CR doesn't say.
+		if _, ok := data["ForcePathStyle"]; !ok {
+			data["ForcePathStyle"] = strconv.FormatBool(RequiresPathStyle(data["Host"]))
+		}
 		data["url"] = buildS3URL(data)
 	}
 
@@ -90,17 +103,18 @@ func WriteState(
 		AccessKey:      corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "AccessKey", Optional: ptr.To(true)},
 		SecretKey:      corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "SecretKey", Optional: ptr.To(true)},
 		Bucket:         corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Bucket", Optional: ptr.To(false)},
+		Path:           corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Path", Optional: ptr.To(true)},
 		Region:         corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Region", Optional: ptr.To(true)},
 		TlsEnabled:     corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "TlsEnabled", Optional: ptr.To(true)},
 		ForcePathStyle: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "ForcePathStyle", Optional: ptr.To(true)},
 	}
 }
 
-// buildS3URL assembles s3://[accessKey:secretKey@][host[:port]]/bucket; host and creds are omitted for native AWS S3 / IAM-role auth.
+// buildS3URL assembles s3://[accessKey:secretKey@][host[:port]]/bucket[/path]; host and creds are omitted for native AWS S3 / IAM-role auth.
 func buildS3URL(data map[string]string) string {
 	bucketURL := url.URL{
 		Scheme: "s3",
-		Path:   data["Bucket"],
+		Path:   joinBucketPrefix(data["Bucket"], data["Path"]),
 	}
 	if _, ok := data["Host"]; ok {
 		if _, ok := data["Port"]; ok {
@@ -118,6 +132,7 @@ func buildS3URL(data map[string]string) string {
 // buildGCSURL assembles gs://<bucket>[/path]; creds default to workload identity, or accessKey (SA email) + secretKey (PEM key) as userinfo.
 func buildGCSURL(data map[string]string) string {
 	bucket, path := splitBucketPath(data["Bucket"])
+	path = joinBucketPrefix(path, data["Path"])
 	bucketURL := url.URL{Scheme: "gs", Host: bucket}
 	if path != "" {
 		bucketURL.Path = "/" + path
@@ -132,6 +147,7 @@ func buildGCSURL(data map[string]string) string {
 func buildAzureURL(data map[string]string) string {
 	account := data["AccessKey"]
 	container, path := splitBucketPath(data["Bucket"])
+	path = joinBucketPrefix(path, data["Path"])
 	bucketURL := url.URL{Scheme: "az", Host: account, Path: "/" + container}
 	if path != "" {
 		bucketURL.Path += "/" + path
@@ -140,6 +156,19 @@ func buildAzureURL(data map[string]string) string {
 		bucketURL.User = url.UserPassword("", key)
 	}
 	return bucketURL.String()
+}
+
+// joinBucketPrefix appends a normalized key prefix to base (a bucket or an existing prefix).
+func joinBucketPrefix(base, prefix string) string {
+	prefix = strings.Trim(prefix, "/")
+	switch {
+	case prefix == "":
+		return base
+	case base == "":
+		return prefix
+	default:
+		return base + "/" + prefix
+	}
 }
 
 // splitBucketPath splits "bucket/optional/prefix" into the leading bucket (or container) segment and the remaining object prefix.

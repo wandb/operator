@@ -539,7 +539,7 @@ func validateObjectStoreSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 		if ext := spec.ExternalObjectStore; ext != nil {
 			extPath := objectStorePath.Key(key).Child("externalObjectStore")
 			// provider is sourced from a secret key, so it is resolved and defaulted at reconcile time, not here.
-			if _, ok := wandb.ObjectMeta.GetAnnotations()[v1.BucketPendingAnnotation]; !ok && ext.Bucket.Name == "" {
+			if _, ok := wandb.GetAnnotations()[v1.BucketPendingAnnotation]; !ok && ext.Bucket.Name == "" {
 				errors = append(errors, field.Required(
 					extPath.Child("bucket"),
 					"externalObjectStore requires a bucket secret reference",

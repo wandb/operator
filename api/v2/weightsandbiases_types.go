@@ -566,11 +566,13 @@ type ObjectStoreConnection struct {
 	// Provider selects the externalObjectStore backend (s3, gcs, or azure) from a secret key; defaults to s3 when absent.
 	Provider corev1.SecretKeySelector `json:"provider,omitempty"`
 
-	Endpoint       corev1.SecretKeySelector `json:"endpoint,omitempty"`
-	Port           corev1.SecretKeySelector `json:"port,omitempty"`
-	AccessKey      corev1.SecretKeySelector `json:"accessKey,omitempty"`
-	SecretKey      corev1.SecretKeySelector `json:"secretKey,omitempty"`
-	Bucket         corev1.SecretKeySelector `json:"bucket,omitempty"`
+	Endpoint  corev1.SecretKeySelector `json:"endpoint,omitempty"`
+	Port      corev1.SecretKeySelector `json:"port,omitempty"`
+	AccessKey corev1.SecretKeySelector `json:"accessKey,omitempty"`
+	SecretKey corev1.SecretKeySelector `json:"secretKey,omitempty"`
+	Bucket    corev1.SecretKeySelector `json:"bucket,omitempty"`
+	// Path is an optional key prefix within the bucket under which W&B stores its data.
+	Path           corev1.SecretKeySelector `json:"path,omitempty"`
 	Region         corev1.SecretKeySelector `json:"region,omitempty"`
 	TlsEnabled     corev1.SecretKeySelector `json:"tlsEnabled,omitempty"`
 	ForcePathStyle corev1.SecretKeySelector `json:"forcePathStyle,omitempty"`

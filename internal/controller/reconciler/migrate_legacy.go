@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -31,6 +32,7 @@ import (
 
 	apiv1 "github.com/wandb/operator/api/v1"
 	apiv2 "github.com/wandb/operator/api/v2"
+	externalobjectstore "github.com/wandb/operator/internal/controller/infra/external/objectstore"
 )
 
 // migrateLegacyAnnotations drains `legacy.operator.wandb.com/*-pending`
@@ -189,9 +191,11 @@ func migrateLegacyRedis(
 }
 
 // legacyBucketPayload is the flat literal subset from the webhook's
-// bucket+defaultBucket merge. provider/path/kmsKey have no v2 home; ignored.
+// bucket+defaultBucket merge. kmsKey has no v2 home; ignored.
 type legacyBucketPayload struct {
+	Provider  string `json:"provider,omitempty"`
 	Name      string `json:"name,omitempty"`
+	Path      string `json:"path,omitempty"`
 	Region    string `json:"region,omitempty"`
 	AccessKey string `json:"accessKey,omitempty"`
 	SecretKey string `json:"secretKey,omitempty"`
@@ -220,7 +224,14 @@ func migrateLegacyBucket(
 		conn = &apiv2.ObjectStoreConnection{}
 	}
 
-	endpoint, port, bucket := parseBucketName(payload.Name)
+	name, path, query := splitBucketQuery(payload.Name, payload.Path)
+	endpoint, port, bucket := parseBucketName(name)
+	// Query param beats the region field, matching gorilla's precedence.
+	region := payload.Region
+	if v := query.Get("region"); v != "" {
+		region = v
+	}
+	forcePathStyle, tlsEnabled := deriveBucketAddressing(payload.Provider, endpoint, query)
 
 	data := map[string][]byte{}
 	fill := func(target *corev1.SecretKeySelector, dataKey, value string) {
@@ -234,9 +245,12 @@ func migrateLegacyBucket(
 	fill(&conn.Endpoint, "endpoint", endpoint)
 	fill(&conn.Port, "port", port)
 	fill(&conn.Bucket, "bucket", bucket)
-	fill(&conn.Region, "region", payload.Region)
+	fill(&conn.Path, "path", strings.Trim(path, "/"))
+	fill(&conn.Region, "region", region)
 	fill(&conn.AccessKey, "accessKey", payload.AccessKey)
 	fill(&conn.SecretKey, "secretKey", payload.SecretKey)
+	fill(&conn.ForcePathStyle, "forcePathStyle", forcePathStyle)
+	fill(&conn.TlsEnabled, "tlsEnabled", tlsEnabled)
 
 	if err := materializeConvertedSecret(ctx, c, wandb, secretName, data); err != nil {
 		return false, err
@@ -256,6 +270,46 @@ func setExternalInstance[T any](m *map[string]T, fn func(*T)) {
 	instance := (*m)[apiv2.DefaultInstanceName]
 	fn(&instance)
 	(*m)[apiv2.DefaultInstanceName] = instance
+}
+
+// splitBucketQuery strips the ?tls=/?forcePathStyle=/?region= overrides gorilla
+// accepted on v1 bucket URLs; they rode in bucket.name or bucket.path.
+func splitBucketQuery(name, path string) (cleanName, cleanPath string, q url.Values) {
+	raw := ""
+	if i := strings.IndexByte(path, '?'); i >= 0 {
+		path, raw = path[:i], path[i+1:]
+	}
+	if i := strings.IndexByte(name, '?'); i >= 0 {
+		name, raw = name[:i], name[i+1:]
+	}
+	query, err := url.ParseQuery(raw)
+	if err != nil {
+		return name, path, url.Values{}
+	}
+	return name, path, query
+}
+
+// deriveBucketAddressing decides forcePathStyle/tlsEnabled for a drained v1 bucket:
+// explicit ?forcePathStyle=/?tls= win, else any embedded endpoint means path-style over
+// http (prefixes belong in bucket.path, so a host in bucket.name is always an endpoint).
+func deriveBucketAddressing(provider, endpoint string, query url.Values) (forcePathStyle, tlsEnabled string) {
+	if provider != "" && provider != "s3" && provider != "cw" {
+		return "", ""
+	}
+	fps := provider != "cw" && externalobjectstore.RequiresPathStyle(endpoint)
+	if v, err := strconv.ParseBool(query.Get("forcePathStyle")); err == nil {
+		fps = v
+	}
+	forcePathStyle = strconv.FormatBool(fps)
+	if endpoint == "" {
+		return forcePathStyle, ""
+	}
+	// gorilla defaulted S3-compatible endpoints to http, CoreWeave to https.
+	tls := provider == "cw"
+	if v, err := strconv.ParseBool(query.Get("tls")); err == nil {
+		tls = v
+	}
+	return forcePathStyle, strconv.FormatBool(tls)
 }
 
 // parseBucketName splits v1's bucket.name. A "/" indicates the embedded

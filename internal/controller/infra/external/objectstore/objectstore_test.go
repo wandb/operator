@@ -66,11 +66,17 @@ func writeStateFixtureProvider(t *testing.T, provider apiv2.ObjectStoreProvider,
 	if present["Bucket"] {
 		ext.Bucket = sel("Bucket")
 	}
+	if present["Path"] {
+		ext.Path = sel("Path")
+	}
 	if present["Region"] {
 		ext.Region = sel("Region")
 	}
 	if present["TlsEnabled"] {
 		ext.TlsEnabled = sel("TlsEnabled")
+	}
+	if present["ForcePathStyle"] {
+		ext.ForcePathStyle = sel("ForcePathStyle")
 	}
 
 	wandb := &apiv2.WeightsAndBiases{
@@ -187,6 +193,90 @@ func TestWriteState_FullConfig(t *testing.T) {
 	}
 }
 
+func TestWriteState_PathPrefix(t *testing.T) {
+	// S3-compatible endpoint with a key prefix.
+	_, written, conditions, conn := writeStateFixture(t,
+		map[string]string{
+			"Host":      "minio.local",
+			"Port":      "9000",
+			"AccessKey": "minio",
+			"SecretKey": "minio123",
+			"Bucket":    "my-bucket",
+			"Path":      "team/prefix",
+		},
+		map[string]bool{"Host": true, "Port": true, "AccessKey": true, "SecretKey": true, "Bucket": true, "Path": true},
+	)
+	require.Nil(t, conditions)
+	data := connectionData(written)
+	require.Equal(t, "s3://minio:minio123@minio.local:9000/my-bucket/team/prefix", data["url"])
+	require.Equal(t, "team/prefix", data["Path"])
+	require.Equal(t, "Path", conn.Path.Key)
+	require.NotNil(t, conn.Path.Optional)
+	require.True(t, *conn.Path.Optional)
+
+	// Native AWS with a prefix; slashes are normalized.
+	_, written, conditions, _ = writeStateFixture(t,
+		map[string]string{"Bucket": "my-bucket", "Path": "/prefix/"},
+		map[string]bool{"Bucket": true, "Path": true},
+	)
+	require.Nil(t, conditions)
+	data = connectionData(written)
+	require.Equal(t, "s3://my-bucket/prefix", data["url"])
+	require.Equal(t, "prefix", data["Path"], "the stored key is normalized, not raw")
+}
+
+func TestWriteState_GCSPathPrefix(t *testing.T) {
+	_, written, conditions, _ := writeStateFixtureProvider(t, apiv2.ObjectStoreProviderGCS,
+		map[string]string{"Bucket": "my-gcs-bucket", "Path": "team/prefix"},
+		map[string]bool{"Bucket": true, "Path": true},
+	)
+	require.Nil(t, conditions)
+	require.Equal(t, "gs://my-gcs-bucket/team/prefix", connectionData(written)["url"])
+}
+
+func TestWriteState_ForcePathStyleDerived(t *testing.T) {
+	// Custom endpoint → path-style.
+	_, written, conditions, _ := writeStateFixture(t,
+		map[string]string{"Host": "minio.local", "Bucket": "b"},
+		map[string]bool{"Host": true, "Bucket": true},
+	)
+	require.Nil(t, conditions)
+	require.Equal(t, "true", connectionData(written)["ForcePathStyle"])
+
+	// No endpoint (native AWS) → virtual-hosted.
+	_, written, conditions, _ = writeStateFixture(t,
+		map[string]string{"Bucket": "b"},
+		map[string]bool{"Bucket": true},
+	)
+	require.Nil(t, conditions)
+	require.Equal(t, "false", connectionData(written)["ForcePathStyle"])
+
+	// An explicit AWS endpoint override is still a custom endpoint → path-style.
+	_, written, conditions, _ = writeStateFixture(t,
+		map[string]string{"Host": "s3.us-east-1.amazonaws.com", "Bucket": "b"},
+		map[string]bool{"Host": true, "Bucket": true},
+	)
+	require.Nil(t, conditions)
+	require.Equal(t, "true", connectionData(written)["ForcePathStyle"])
+
+	// CoreWeave object storage is virtual-hosted.
+	_, written, conditions, _ = writeStateFixture(t,
+		map[string]string{"Host": "cwobject.com", "Bucket": "b"},
+		map[string]bool{"Host": true, "Bucket": true},
+	)
+	require.Nil(t, conditions)
+	require.Equal(t, "false", connectionData(written)["ForcePathStyle"])
+}
+
+func TestWriteState_ForcePathStyleExplicitWins(t *testing.T) {
+	_, written, conditions, _ := writeStateFixture(t,
+		map[string]string{"Host": "minio.local", "Bucket": "b", "ForcePathStyle": "false"},
+		map[string]bool{"Host": true, "Bucket": true, "ForcePathStyle": true},
+	)
+	require.Nil(t, conditions)
+	require.Equal(t, "false", connectionData(written)["ForcePathStyle"], "explicit CR value must not be overridden by derivation")
+}
+
 func TestWriteState_GCSWorkloadIdentity(t *testing.T) {
 	_, written, conditions, conn := writeStateFixtureProvider(t, apiv2.ObjectStoreProviderGCS,
 		map[string]string{"Bucket": "my-gcs-bucket"},
@@ -200,6 +290,7 @@ func TestWriteState_GCSWorkloadIdentity(t *testing.T) {
 	data := connectionData(written)
 	require.Equal(t, "gs://my-gcs-bucket", data["url"], "workload identity carries no credentials")
 	require.Equal(t, "gcs", data["Provider"])
+	require.NotContains(t, data, "ForcePathStyle", "path-style is an S3-only concept")
 }
 
 func TestWriteState_GCSWithPrefixAndKey(t *testing.T) {

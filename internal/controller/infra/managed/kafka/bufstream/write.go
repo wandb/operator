@@ -211,9 +211,11 @@ func resolveStorage(
 	if err != nil {
 		return objectstore.ConnInfo{}, true, err
 	}
-	connInfo.ForcePathStyle, err = strconv.ParseBool(forcePathStyleString)
-	if err != nil {
-		connInfo.ForcePathStyle = false
+	if fps, parseErr := strconv.ParseBool(forcePathStyleString); parseErr == nil {
+		connInfo.ForcePathStyle = fps
+	} else {
+		// Connection secrets written before the operator derived this key lack it.
+		connInfo.ForcePathStyle = objectstore.RequiresPathStyle(connInfo.Endpoint)
 	}
 
 	tlsEnabledString, err := resolver.Value(ctx, status.Connection.TlsEnabled)
@@ -223,6 +225,11 @@ func resolveStorage(
 	connInfo.TlsEnabled, err = strconv.ParseBool(tlsEnabledString)
 	if err != nil {
 		connInfo.TlsEnabled = false
+	}
+
+	connInfo.Path, err = resolver.Value(ctx, status.Connection.Path)
+	if err != nil {
+		return objectstore.ConnInfo{}, true, err
 	}
 
 	return connInfo, true, nil

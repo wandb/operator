@@ -25,6 +25,7 @@ type ConnInfo struct {
 	ForcePathStyle bool
 	TlsEnabled     bool
 	Port           string
+	Path           string
 }
 
 // HasStaticCredentials reports whether explicit keys were provided; when false, credentials come from ambient identity (IAM role / workload identity).

@@ -74,7 +74,22 @@ func renderBufstreamConfig(clusterName, advertiseHost string, etcdAddresses []st
 	// Isolate Bufstream's objects under a dedicated key prefix (the cluster name)
 	// so they never collide with W&B artifact data, which shares the same bucket.
 	// storage is passed by value, so this only affects the rendered config.
-	uri := fmt.Sprintf("%s://%s/%s", storage.Provider, storage.Bucket, clusterName)
+	uri := ""
+	switch storage.Provider {
+	case apiv2.ObjectStoreProviderS3:
+		uri = fmt.Sprintf("s3://%s", storage.Bucket)
+	case apiv2.ObjectStoreProviderGCS:
+		uri = fmt.Sprintf("gs://%s", storage.Bucket)
+	case apiv2.ObjectStoreProviderAzure:
+		// For Azure the connection's AccessKey carries the storage account.
+		uri = fmt.Sprintf("https://%s.blob.core.windows.net/%s", storage.AccessKey, storage.Bucket)
+	}
+
+	if storage.Path != "" {
+		uri = fmt.Sprintf("%s/%s", uri, storage.Path)
+	}
+
+	uri = fmt.Sprintf("%s/%s", uri, clusterName)
 
 	data, err := renderData(storage, uri)
 	if err != nil {
