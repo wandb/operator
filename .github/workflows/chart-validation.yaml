@@ -1,0 +1,63 @@
+name: Chart Validation
+
+on:
+  push:
+    branches: [v2, main]
+  pull_request:
+    branches: [v2, main]
+
+jobs:
+  chart-validation:
+    name: Chart Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@bf6a7d304bc2fdb57e0331155b7ebf2c504acf0a # v4
+        with:
+          version: v3.19.0
+
+      - name: Install chart-testing
+        uses: helm/chart-testing-action@e6669bcd63d7cb57cb4380c33043eebe5d111992 # v2.6.1
+        with:
+          version: v3.14.0
+
+      - name: Resolve chart dependencies
+        run: |
+          helm dependency build deploy/operator
+          git diff --exit-code deploy/operator/Chart.lock
+
+      - name: Run chart-testing
+        run: ct lint --all --config deploy/ct.yaml
+
+      - name: Validate values schema
+        run: |
+          set -euo pipefail
+          helm lint --strict deploy/operator
+          for profile in deploy/operator/profiles/*.yaml; do
+            extra_args=()
+            if [[ "${profile}" == *telemetry-forward.yaml ]]; then
+              extra_args+=(--set-string telemetry.forwarding.otlp.endpoint=https://example.invalid:4317)
+            fi
+            helm lint --strict deploy/operator --values "${profile}" "${extra_args[@]}"
+          done
+
+      - name: Render representative configurations
+        run: |
+          set -euo pipefail
+          helm template wandb-operator deploy/operator \
+            --namespace wandb-operators \
+            --include-crds >/dev/null
+          for profile in deploy/operator/profiles/*.yaml; do
+            extra_args=()
+            if [[ "${profile}" == *telemetry-forward.yaml ]]; then
+              extra_args+=(--set-string telemetry.forwarding.otlp.endpoint=https://example.invalid:4317)
+            fi
+            helm template wandb-operator deploy/operator \
+              --namespace wandb-operators \
+              --include-crds \
+              --values "${profile}" \
+              "${extra_args[@]}" >/dev/null
+          done
