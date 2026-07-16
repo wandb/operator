@@ -5,6 +5,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/wandb/operator/internal/controller/infra/external/objectstore"
 	"github.com/wandb/operator/pkg/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
 	corev1 "k8s.io/api/core/v1"
 )
@@ -54,14 +55,15 @@ var _ = Describe("Object storage prefix", func() {
 var _ = Describe("Storage configuration settings", func() {
 	It("defines an s3 disk, cache, policy, default routing, and local system logs", func() {
 		ref := corev1.LocalObjectReference{Name: "objstore-conn"}
-		oc := &ObjectStorageConn{
-			Endpoint:     "http://host:80/bucket/clickhouse/",
+		ci := &objectstore.ConnInfo{
 			Region:       "us-east-1",
+			AccessKey:    "AKIA",
+			SecretKey:    "secret",
 			AccessKeyRef: corev1.SecretKeySelector{LocalObjectReference: ref, Key: "AccessKey"},
 			SecretKeyRef: corev1.SecretKeySelector{LocalObjectReference: ref, Key: "SecretKey"},
 		}
 		settings := v1.NewSettings()
-		applyStorageConfiguration(settings, oc, 8<<30)
+		applyStorageConfiguration(settings, ci, "http://host:80/bucket/clickhouse/", 8<<30)
 
 		Expect(settings.Get("storage_configuration/disks/s3_disk/type").String()).To(Equal("s3"))
 		Expect(settings.Get("storage_configuration/disks/s3_disk/endpoint").String()).To(Equal("http://host:80/bucket/clickhouse/"))
@@ -83,9 +85,9 @@ var _ = Describe("Storage configuration settings", func() {
 	})
 
 	It("uses ambient credentials when no access keys are present", func() {
-		oc := &ObjectStorageConn{Endpoint: "https://b.s3.us-east-1.amazonaws.com/clickhouse/", UseEnvCredentials: true}
+		ci := &objectstore.ConnInfo{}
 		settings := v1.NewSettings()
-		applyStorageConfiguration(settings, oc, 1024)
+		applyStorageConfiguration(settings, ci, "https://b.s3.us-east-1.amazonaws.com/clickhouse/", 1024)
 
 		Expect(settings.Get("storage_configuration/disks/s3_disk/use_environment_credentials").String()).To(Equal("true"))
 		Expect(settings.Has("storage_configuration/disks/s3_disk/access_key_id")).To(BeFalse())
@@ -93,9 +95,9 @@ var _ = Describe("Storage configuration settings", func() {
 	})
 
 	It("renders the s3 disk before the cache disk that wraps it", func() {
-		oc := &ObjectStorageConn{Endpoint: "http://host:80/bucket/clickhouse/", UseEnvCredentials: true}
+		ci := &objectstore.ConnInfo{}
 		settings := v1.NewSettings()
-		applyStorageConfiguration(settings, oc, 1<<30)
+		applyStorageConfiguration(settings, ci, "http://host:80/bucket/clickhouse/", 1<<30)
 
 		// ClickHouse initializes disks in document order and requires the wrapped
 		// disk to be defined before the cache disk; verify the rendered XML order.

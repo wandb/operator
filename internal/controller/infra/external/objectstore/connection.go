@@ -1,12 +1,16 @@
 package objectstore
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"strconv"
 	"strings"
 
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/pkg/utils"
+	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // ConnInfo is the resolved object-store connection: the read-side counterpart to WriteState, decoded back from the connection secret.
@@ -26,11 +30,82 @@ type ConnInfo struct {
 	TlsEnabled     bool
 	Port           string
 	Path           string
+	// Credential selectors, kept for consumers that inject creds by reference.
+	AccessKeyRef corev1.SecretKeySelector
+	SecretKeyRef corev1.SecretKeySelector
 }
 
 // HasStaticCredentials reports whether explicit keys were provided; when false, credentials come from ambient identity (IAM role / workload identity).
 func (c ConnInfo) HasStaticCredentials() bool {
 	return c.AccessKey != "" && c.SecretKey != ""
+}
+
+// Resolve reads the connection's secret selectors into a shared ConnInfo.
+func Resolve(
+	ctx context.Context,
+	cl client.Client,
+	namespace string,
+	conn *apiv2.ObjectStoreConnection,
+) (ConnInfo, error) {
+	if conn == nil {
+		return ConnInfo{}, fmt.Errorf("object store connection is not available yet")
+	}
+
+	resolver := &utils.ConnSecretResolver{Client: cl, Namespace: namespace, Cache: map[string]*corev1.Secret{}}
+
+	info := ConnInfo{
+		AccessKeyRef: conn.AccessKey,
+		SecretKeyRef: conn.SecretKey,
+	}
+
+	provider, err := resolver.Value(ctx, conn.Provider)
+	if err != nil {
+		return ConnInfo{}, err
+	}
+	info.Provider = apiv2.ObjectStoreProvider(provider)
+
+	if info.Bucket, err = resolver.Value(ctx, conn.Bucket); err != nil {
+		return ConnInfo{}, err
+	}
+	if info.Endpoint, err = resolver.Value(ctx, conn.Endpoint); err != nil {
+		return ConnInfo{}, err
+	}
+	if info.Port, err = resolver.Value(ctx, conn.Port); err != nil {
+		return ConnInfo{}, err
+	}
+	if info.Region, err = resolver.Value(ctx, conn.Region); err != nil {
+		return ConnInfo{}, err
+	}
+	if info.AccessKey, err = resolver.Value(ctx, conn.AccessKey); err != nil {
+		return ConnInfo{}, err
+	}
+	if info.SecretKey, err = resolver.Value(ctx, conn.SecretKey); err != nil {
+		return ConnInfo{}, err
+	}
+	if info.Path, err = resolver.Value(ctx, conn.Path); err != nil {
+		return ConnInfo{}, err
+	}
+
+	forcePathStyleString, err := resolver.Value(ctx, conn.ForcePathStyle)
+	if err != nil {
+		return ConnInfo{}, err
+	}
+	if fps, parseErr := strconv.ParseBool(forcePathStyleString); parseErr == nil {
+		info.ForcePathStyle = fps
+	} else {
+		// Connection secrets written before the operator derived this key lack it.
+		info.ForcePathStyle = RequiresPathStyle(info.Endpoint)
+	}
+
+	tlsEnabledString, err := resolver.Value(ctx, conn.TlsEnabled)
+	if err != nil {
+		return ConnInfo{}, err
+	}
+	if tls, parseErr := strconv.ParseBool(tlsEnabledString); parseErr == nil {
+		info.TlsEnabled = tls
+	}
+
+	return info, nil
 }
 
 // ParseConnection decodes an object-store connection secret's canonical `url` (scheme->provider, userinfo->creds, path->bucket, query->tls/region/forcePathStyle), falling back to discrete keys.

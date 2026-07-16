@@ -7,6 +7,7 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
+	"github.com/wandb/operator/internal/controller/infra/external/objectstore"
 	"github.com/wandb/operator/internal/controller/infra/managed/clickhouse/altinity/keeper"
 	"github.com/wandb/operator/internal/logx"
 	"github.com/wandb/operator/pkg/utils"
@@ -126,7 +127,8 @@ func ToClickHouseVendorSpec(
 	wandb *apiv2.WeightsAndBiases,
 	spec *apiv2.ManagedClickHouseSpec,
 	scheme *runtime.Scheme,
-	objStorage *ObjectStorageConn,
+	objStorage *objectstore.ConnInfo,
+	objStorageEndpoint string,
 	waitForObjectStore bool,
 	mfst manifest.Manifest,
 ) (*v1.ClickHouseInstallation, error) {
@@ -172,7 +174,7 @@ func ToClickHouseVendorSpec(
 	serverSettings := v1.NewSettings()
 
 	// Define the S3 disk + cache + storage policy and make it the server-wide default.
-	applyStorageConfiguration(serverSettings, objStorage, cacheMaxSizeBytes)
+	applyStorageConfiguration(serverSettings, objStorage, objStorageEndpoint, cacheMaxSizeBytes)
 
 	// Enable built-in Prometheus metrics endpoint if telemetry is enabled
 	if spec.Telemetry.Enabled {
@@ -205,7 +207,7 @@ func ToClickHouseVendorSpec(
 		},
 	}
 	if waitForObjectStore {
-		podSpec.InitContainers = []corev1.Container{clickHouseObjectStoreWaitContainer(objStorage.Endpoint, clickHouseImage)}
+		podSpec.InitContainers = []corev1.Container{clickHouseObjectStoreWaitContainer(objStorageEndpoint, clickHouseImage)}
 	}
 
 	if len(spec.Config.Resources.Requests) > 0 || len(spec.Config.Resources.Limits) > 0 {
