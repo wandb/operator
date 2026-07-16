@@ -82,6 +82,10 @@ func Resolve(
 	if info.SecretKey, err = resolver.Value(ctx, conn.SecretKey); err != nil {
 		return ConnInfo{}, err
 	}
+	// A half-configured pair silently picks the wrong credential mode downstream.
+	if (info.AccessKey == "") != (info.SecretKey == "") {
+		return ConnInfo{}, fmt.Errorf("object store access key and secret key must be configured together")
+	}
 	if info.Path, err = resolver.Value(ctx, conn.Path); err != nil {
 		return ConnInfo{}, err
 	}

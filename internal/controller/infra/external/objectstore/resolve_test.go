@@ -127,6 +127,22 @@ func TestResolve_ForcePathStyleFallbackFromEndpoint(t *testing.T) {
 	require.False(t, info.ForcePathStyle)
 }
 
+func TestResolve_RejectsPartialCredentialPair(t *testing.T) {
+	// Access key without a secret key.
+	_, _, err := resolveFixture(t, map[string]string{
+		"Bucket":    "my-bucket",
+		"AccessKey": "only-access",
+	})
+	require.Error(t, err)
+
+	// Secret key without an access key.
+	_, _, err = resolveFixture(t, map[string]string{
+		"Bucket":    "my-bucket",
+		"SecretKey": "only-secret",
+	})
+	require.Error(t, err)
+}
+
 func TestResolve_MissingTlsDefaultsFalse(t *testing.T) {
 	_, info, err := resolveFixture(t, map[string]string{
 		"Host":   "minio.local",
