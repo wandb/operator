@@ -24,7 +24,7 @@ dependencies:
     repository: https://ot-container-kit.github.io/helm-charts
     condition: redis-operator.enabled
   - name: seaweedfs-operator
-    version: 0.1.24
+    version: 0.1.35
     repository: https://seaweedfs.github.io/seaweedfs-operator/
     condition: seaweedfs-operator.enabled
   - name: prometheus-operator-crds

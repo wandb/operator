@@ -2,6 +2,7 @@ package seaweedfs
 
 import (
 	"context"
+	"encoding/json"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -139,6 +140,23 @@ var _ = Describe("SeaweedFS vendor specs", func() {
 
 		Expect(seaweed.Spec.Filer.MetricsPort).NotTo(BeNil())
 		Expect(*seaweed.Spec.Filer.MetricsPort).To(Equal(seaweedFilerMetricsPort))
+	})
+
+	It("uses a fast readiness cadence for volume servers", func() {
+		wandb := seaweedWandb()
+		seaweed, err := ToObjectStoreVendorSpec(context.Background(), wandb, wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ManagedObjectStore, seaweedScheme(), manifest.Manifest{})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(seaweed).NotTo(BeNil())
+
+		Expect(seaweed.Spec.Volume.ReadinessProbe).NotTo(BeNil())
+		Expect(seaweed.Spec.Volume.ReadinessProbe.PeriodSeconds).NotTo(BeNil())
+		Expect(*seaweed.Spec.Volume.ReadinessProbe.PeriodSeconds).To(Equal(seaweedVolumeReadinessPeriodSeconds))
+		Expect(seaweed.Spec.Volume.LivenessProbe).To(BeNil())
+
+		encoded, err := json.Marshal(seaweed)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(string(encoded)).To(ContainSubstring(`"readinessProbe":{"periodSeconds":15}`))
+		Expect(string(encoded)).NotTo(ContainSubstring(`"livenessProbe"`))
 	})
 
 	It("keeps the volume storage request when cpu/memory overrides are set", func() {
