@@ -22,9 +22,9 @@ dependencies:
   version: 0.58.1
 - name: grafana-operator
   repository: https://grafana.github.io/helm-charts
-  version: 5.21.4
+  version: 5.22.2
 - name: telemetry
   repository: file://../telemetry
   version: 0.1.0
-digest: sha256:c236896848dcfa23f87e476e0ea552ffb874e294e08e614a7908019e03ee68a1
-generated: "2026-07-08T16:05:34.522143-07:00"
+digest: sha256:c8fc2d9388166eaff6b9b97ca0467168a50b8745814eed70b425b422cea2709d
+generated: "2026-07-20T11:55:30.771184-04:00"
