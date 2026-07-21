@@ -16,6 +16,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
+const (
+	oidcDiscoveryClusterRoleName = "system:service-account-issuer-discovery"
+
+	// Internal service auth uses projected service-account tokens, so issuer
+	// discovery only needs authenticated Kubernetes callers.
+	oidcDiscoverySubjectGroup = "system:authenticated"
+)
+
 // createOrUpdateServiceAccount creates or updates the ServiceAccount for the W&B applications
 func createOrUpdateServiceAccount(
 	ctx context.Context,
@@ -36,7 +44,7 @@ func createOrUpdateServiceAccount(
 			},
 			Annotations: wandb.Spec.Wandb.ServiceAccount.Annotations,
 		},
-		AutomountServiceAccountToken: ptr.To(true),
+		AutomountServiceAccountToken: ptr.To(false),
 	}
 
 	if err := controllerutil.SetControllerReference(wandb, serviceAccount, client.Scheme()); err != nil {
@@ -89,13 +97,8 @@ func createOrUpdateRole(
 		Rules: []v4.PolicyRule{
 			{
 				APIGroups: []string{""},
-				Resources: []string{"secrets"},
-				Verbs:     []string{"get", "create", "update", "delete"},
-			},
-			{
-				APIGroups: []string{""},
 				Resources: []string{"namespaces"},
-				Verbs:     []string{"get", "list"},
+				Verbs:     []string{"get"},
 			},
 		},
 	}
@@ -214,13 +217,13 @@ func createOrUpdateOIDCDiscoveryClusterRoleBinding(
 		RoleRef: v4.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
-			Name:     "system:service-account-issuer-discovery",
+			Name:     oidcDiscoveryClusterRoleName,
 		},
 		Subjects: []v4.Subject{
 			{
 				APIGroup: "rbac.authorization.k8s.io",
 				Kind:     "Group",
-				Name:     "system:unauthenticated",
+				Name:     oidcDiscoverySubjectGroup,
 			},
 		},
 	}
