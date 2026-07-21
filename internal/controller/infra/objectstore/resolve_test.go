@@ -127,6 +127,16 @@ func TestResolve_ForcePathStyleFallbackFromEndpoint(t *testing.T) {
 	require.False(t, info.ForcePathStyle)
 }
 
+func TestResolve_DefaultsEmptyProviderToS3(t *testing.T) {
+	// Legacy-migrated connections omit Provider; Resolve must default it to S3 so
+	// downstream provider switches (ProviderURI, ToSecretData) don't fall through.
+	_, info, err := resolveFixture(t, map[string]string{
+		"Bucket": "my-bucket",
+	})
+	require.NoError(t, err)
+	require.Equal(t, apiv2.ObjectStoreProviderS3, info.Provider)
+}
+
 func TestResolve_RejectsPartialCredentialPair(t *testing.T) {
 	// Access key without a secret key.
 	_, _, err := resolveFixture(t, map[string]string{

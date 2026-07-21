@@ -121,6 +121,11 @@ func Resolve(
 	if err != nil {
 		return ConnInfo{}, err
 	}
+	// Legacy-migrated connections never set Provider; match WriteState's default so
+	// downstream provider switches (ProviderURI, ToSecretData) stay correct.
+	if provider == "" {
+		provider = string(apiv2.ObjectStoreProviderS3)
+	}
 	info.Provider = apiv2.ObjectStoreProvider(provider)
 
 	if info.Bucket, err = resolver.Value(ctx, conn.Bucket); err != nil {
@@ -230,8 +235,9 @@ func ParseSecretData(data map[string][]byte) (ConnInfo, error) {
 		if fps := q.Get("forcePathStyle"); fps != "" {
 			info.ForcePathStyle, _ = strconv.ParseBool(fps)
 		} else {
-			// Non-AWS S3-compatible endpoints generally require path-style.
-			info.ForcePathStyle = info.Endpoint != ""
+			// Custom S3-compatible endpoints need path-style, except CoreWeave's
+			// virtual-hosted object storage (RequiresPathStyle carves it out).
+			info.ForcePathStyle = RequiresPathStyle(info.Endpoint)
 		}
 	case "gs", "gcs":
 		info.Provider = apiv2.ObjectStoreProviderGCS

@@ -38,6 +38,20 @@ func TestParseSecretDataS3TLS(t *testing.T) {
 	require.Equal(t, "https://minio.example.com:9000", info.Endpoint)
 }
 
+func TestParseSecretDataCoreWeaveVirtualHosted(t *testing.T) {
+	// CoreWeave is a custom endpoint but uses virtual-hosted addressing, so the
+	// no-query fallback must keep ForcePathStyle off (matching Resolve()).
+	data := map[string][]byte{
+		"url": []byte("cw://ak:sk@cwobject.com/my-bucket?tls=true"),
+	}
+	info, err := ParseSecretData(data)
+	require.NoError(t, err)
+	require.Equal(t, apiv2.ObjectStoreProviderS3, info.Provider)
+	require.Equal(t, "my-bucket", info.Bucket)
+	require.Equal(t, "https://cwobject.com", info.Endpoint)
+	require.False(t, info.ForcePathStyle, "CoreWeave is virtual-hosted, not path-style")
+}
+
 func TestParseSecretDataAWS(t *testing.T) {
 	// AWS S3 with IAM role: no host, no credentials.
 	data := map[string][]byte{
