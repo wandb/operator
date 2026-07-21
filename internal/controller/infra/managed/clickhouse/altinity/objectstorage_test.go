@@ -5,38 +5,46 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/wandb/operator/internal/controller/infra/external/objectstore"
+	"github.com/wandb/operator/internal/controller/infra/objectstore"
 	"github.com/wandb/operator/pkg/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
 	corev1 "k8s.io/api/core/v1"
 )
 
 var _ = Describe("Object storage endpoint", func() {
 	It("uses the scheme reported by the connection for a custom host", func() {
-		ep, err := buildEndpoint("http", "seaweedfs.wandb.svc.cluster.local", "80", "bucket", "us-east-1", "clickhouse/", false)
+		ep, err := buildEndpoint(objectstore.ConnInfo{
+			Endpoint: "http://seaweedfs.wandb.svc.cluster.local", Port: "80", Bucket: "bucket", Region: "us-east-1",
+		}, "clickhouse/")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ep).To(Equal("http://seaweedfs.wandb.svc.cluster.local:80/bucket/clickhouse/"))
 	})
 
 	It("defaults to https for an external host with tls enabled", func() {
-		ep, err := buildEndpoint("", "minio.example.com", "9000", "data", "", "clickhouse/", true)
+		ep, err := buildEndpoint(objectstore.ConnInfo{
+			Endpoint: "minio.example.com", Port: "9000", Bucket: "data", TlsEnabled: true,
+		}, "clickhouse/")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ep).To(Equal("https://minio.example.com:9000/data/clickhouse/"))
 	})
 
 	It("uses http for an external host when tls is disabled", func() {
-		ep, err := buildEndpoint("", "minio.example.com", "9000", "data", "", "clickhouse/", false)
+		ep, err := buildEndpoint(objectstore.ConnInfo{
+			Endpoint: "minio.example.com", Port: "9000", Bucket: "data",
+		}, "clickhouse/")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ep).To(Equal("http://minio.example.com:9000/data/clickhouse/"))
 	})
 
 	It("derives an AWS virtual-hosted endpoint when no host is set", func() {
-		ep, err := buildEndpoint("", "", "", "my-bucket", "us-west-2", "clickhouse/", true)
+		ep, err := buildEndpoint(objectstore.ConnInfo{
+			Bucket: "my-bucket", Region: "us-west-2", TlsEnabled: true,
+		}, "clickhouse/")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ep).To(Equal("https://my-bucket.s3.us-west-2.amazonaws.com/clickhouse/"))
 	})
 
 	It("errors when neither host nor region is available", func() {
-		_, err := buildEndpoint("", "", "", "my-bucket", "", "clickhouse/", true)
+		_, err := buildEndpoint(objectstore.ConnInfo{Bucket: "my-bucket"}, "clickhouse/")
 		Expect(err).To(HaveOccurred())
 	})
 })

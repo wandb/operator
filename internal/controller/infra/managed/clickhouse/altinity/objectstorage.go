@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	apiv2 "github.com/wandb/operator/api/v2"
-	"github.com/wandb/operator/internal/controller/infra/external/objectstore"
+	"github.com/wandb/operator/internal/controller/infra/objectstore"
 	"github.com/wandb/operator/pkg/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
 	chtypes "github.com/wandb/operator/pkg/vendored/altinity-clickhouse/common/types"
 	corev1 "k8s.io/api/core/v1"
@@ -52,13 +52,7 @@ func ResolveObjectStorage(
 		return nil, "", fmt.Errorf("object store connection has no bucket reference")
 	}
 
-	// Honor a scheme in the endpoint value; else buildEndpoint infers from TLS.
-	scheme, host := "", ci.Endpoint
-	if i := strings.Index(host, "://"); i >= 0 {
-		scheme, host = host[:i], host[i+len("://"):]
-	}
-
-	endpoint, err := buildEndpoint(scheme, host, ci.Port, ci.Bucket, ci.Region, objectStoragePrefix(spec), ci.TlsEnabled)
+	endpoint, err := buildEndpoint(ci, objectStoragePrefix(spec))
 	if err != nil {
 		return nil, "", err
 	}
@@ -80,27 +74,17 @@ func normalizePrefix(prefix string) string {
 	return prefix + "/"
 }
 
-// buildEndpoint builds the S3 disk endpoint: path-style for a custom host, else
-// the AWS virtual-hosted URL derived from the region.
-func buildEndpoint(scheme, host, port, bucket, region, prefix string, secure bool) (string, error) {
-	if host != "" {
-		if scheme == "" {
-			scheme = "http"
-			if secure {
-				scheme = "https"
-			}
-		}
-		hostport := host
-		if port != "" {
-			hostport = host + ":" + port
-		}
-		return fmt.Sprintf("%s://%s/%s/%s", scheme, hostport, bucket, prefix), nil
+// buildEndpoint builds the S3 disk endpoint: path-style for a custom endpoint,
+// else the AWS virtual-hosted URL derived from the region.
+func buildEndpoint(ci objectstore.ConnInfo, prefix string) (string, error) {
+	if base := ci.EndpointURL(); base != "" {
+		return fmt.Sprintf("%s/%s/%s", base, ci.Bucket, prefix), nil
 	}
 
-	if region == "" {
+	if ci.Region == "" {
 		return "", fmt.Errorf("object store has no Host and no Region; cannot derive an S3 endpoint")
 	}
-	return fmt.Sprintf("https://%s.s3.%s.amazonaws.com/%s", bucket, region, prefix), nil
+	return fmt.Sprintf("https://%s.s3.%s.amazonaws.com/%s", ci.Bucket, ci.Region, prefix), nil
 }
 
 // applyStorageConfiguration sets the S3 disk, cache, and storage policy.

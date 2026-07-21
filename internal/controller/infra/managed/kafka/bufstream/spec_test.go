@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	apiv2 "github.com/wandb/operator/api/v2"
-	"github.com/wandb/operator/internal/controller/infra/external/objectstore"
+	"github.com/wandb/operator/internal/controller/infra/objectstore"
 	"github.com/wandb/operator/pkg/utils"
 	"github.com/wandb/operator/pkg/wandb/manifest"
 	corev1 "k8s.io/api/core/v1"
@@ -104,11 +104,14 @@ func TestToEtcdApplicationHA(t *testing.T) {
 }
 
 func testStorage() objectstore.ConnInfo {
+	// Mirror the managed SeaweedFS shape: a bare host with the port/scheme carried
+	// separately, so EndpointURL() must reassemble "http://seaweedfs:8333".
 	return objectstore.ConnInfo{
 		Provider:       apiv2.ObjectStoreProviderS3,
 		URI:            "s3://bucket",
 		Bucket:         "bucket",
-		Endpoint:       "http://seaweedfs:80",
+		Endpoint:       "seaweedfs",
+		Port:           "8333",
 		Region:         "us-east-1",
 		AccessKey:      "ak",
 		SecretKey:      "sk",
@@ -138,7 +141,8 @@ func TestToBufstreamApplication(t *testing.T) {
 	require.Contains(t, ensureBucket.Args[0], "-le 150")
 	require.NotContains(t, ensureBucket.Args[0], testStorage().AccessKey)
 	require.NotContains(t, ensureBucket.Args[0], testStorage().SecretKey)
-	require.Equal(t, testStorage().Endpoint, ensureBucket.Args[2])
+	require.Equal(t, "http://seaweedfs:8333", ensureBucket.Args[2])
+	require.Equal(t, testStorage().EndpointURL(), ensureBucket.Args[2])
 	require.Equal(t, testStorage().Bucket, ensureBucket.Args[3])
 	require.Equal(t, int32(2), *app.Spec.Replicas)
 	require.Len(t, app.Spec.PodTemplate.Spec.Containers, 1)

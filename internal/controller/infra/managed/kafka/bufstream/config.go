@@ -2,12 +2,11 @@ package bufstream
 
 import (
 	"fmt"
-	"strings"
 
 	"gopkg.in/yaml.v3"
 
 	apiv2 "github.com/wandb/operator/api/v2"
-	"github.com/wandb/operator/internal/controller/infra/external/objectstore"
+	"github.com/wandb/operator/internal/controller/infra/objectstore"
 )
 
 type dataSource struct {
@@ -74,16 +73,7 @@ func renderBufstreamConfig(clusterName, advertiseHost string, etcdAddresses []st
 	// Isolate Bufstream's objects under a dedicated key prefix (the cluster name)
 	// so they never collide with W&B artifact data, which shares the same bucket.
 	// storage is passed by value, so this only affects the rendered config.
-	uri := ""
-	switch storage.Provider {
-	case apiv2.ObjectStoreProviderS3:
-		uri = fmt.Sprintf("s3://%s", storage.Bucket)
-	case apiv2.ObjectStoreProviderGCS:
-		uri = fmt.Sprintf("gs://%s", storage.Bucket)
-	case apiv2.ObjectStoreProviderAzure:
-		// For Azure the connection's AccessKey carries the storage account.
-		uri = fmt.Sprintf("https://%s.blob.core.windows.net/%s", storage.AccessKey, storage.Bucket)
-	}
+	uri := storage.ProviderURI()
 
 	if storage.Path != "" {
 		uri = fmt.Sprintf("%s/%s", uri, storage.Path)
@@ -142,26 +132,13 @@ func renderData(storage objectstore.ConnInfo, uri string) (bufstreamData, error)
 func renderS3Storage(storage objectstore.ConnInfo, uri string) *bufstreamS3 {
 	region := storage.Region
 	if region == "" {
-		region = "us-east-1"
+		region = objectstore.DefaultRegion
 	}
 
-	endpoint := ""
-	if storage.Endpoint != "" {
-		if strings.Contains(storage.Endpoint, "://") {
-			endpoint = storage.Endpoint
-		} else {
-			scheme := "http"
-			if storage.TlsEnabled {
-				scheme = "https"
-			}
-			endpoint = fmt.Sprintf("%s://%s:%s", scheme, storage.Endpoint, storage.Port)
-
-		}
-	}
 	s3 := &bufstreamS3{
 		URI:            uri,
 		Region:         region,
-		Endpoint:       endpoint,
+		Endpoint:       storage.EndpointURL(),
 		ForcePathStyle: storage.ForcePathStyle,
 	}
 	if storage.HasStaticCredentials() {
