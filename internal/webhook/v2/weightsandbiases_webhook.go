@@ -337,6 +337,7 @@ func validateSpec(_ context.Context, newWandb, oldWandb *appsv2.WeightsAndBiases
 	var allErrors field.ErrorList
 	var warnings admission.Warnings
 
+	allErrors = append(allErrors, validateWandbSpec(newWandb)...)
 	allErrors = append(allErrors, validateMySQLSpec(newWandb)...)
 	allErrors = append(allErrors, validateRedisSpec(newWandb)...)
 	allErrors = append(allErrors, validateObjectStoreSpec(newWandb)...)
@@ -418,6 +419,19 @@ func validateMySQLChanges(newWandb, oldWandb *appsv2.WeightsAndBiases) field.Err
 				"replicas cannot be decreased; Moco does not support in-place replica reduction (use its manual stop-clustering procedure)",
 			))
 		}
+	}
+
+	return errors
+}
+
+func validateWandbSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
+	var errors field.ErrorList
+
+	if strings.TrimSpace(wandb.Spec.Wandb.Hostname) == "" {
+		errors = append(errors, field.Required(
+			field.NewPath("spec").Child("wandb").Child("hostname"),
+			"hostname is required",
+		))
 	}
 
 	return errors

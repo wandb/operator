@@ -39,7 +39,9 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 	BeforeEach(func() {
 		ctx = context.Background()
 		obj = &appsv2.WeightsAndBiases{ObjectMeta: metav1.ObjectMeta{Name: "wandb", Namespace: "test-ns"}}
+		obj.Spec.Wandb.Hostname = "https://wandb.example.com"
 		oldObj = &appsv2.WeightsAndBiases{ObjectMeta: metav1.ObjectMeta{Name: "wandb", Namespace: "test-ns"}}
+		oldObj.Spec.Wandb.Hostname = "https://wandb.example.com"
 		validator = WeightsAndBiasesCustomValidator{}
 		defaulter = WeightsAndBiasesCustomDefaulter{}
 	})
@@ -122,6 +124,31 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 			warnings, err := validator.ValidateCreate(ctx, obj)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(warnings).To(BeEmpty())
+		})
+
+		It("rejects create when hostname is missing", func() {
+			obj.Spec.Wandb.Hostname = ""
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("spec.wandb.hostname"))
+			Expect(err.Error()).To(ContainSubstring("hostname is required"))
+		})
+
+		It("rejects create when hostname is only whitespace", func() {
+			obj.Spec.Wandb.Hostname = "   "
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("spec.wandb.hostname"))
+		})
+
+		It("rejects update when hostname is missing", func() {
+			obj.Spec.Wandb.Hostname = ""
+
+			_, err := validator.ValidateUpdate(ctx, oldObj, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("spec.wandb.hostname"))
 		})
 
 		It("rejects create when Redis storage size is invalid", func() {
