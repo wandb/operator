@@ -1198,6 +1198,49 @@ spec:
                     type: array
                   imageRegistry:
                     type: string
+                  proxy:
+                    properties:
+                      httpProxy:
+                        properties:
+                          value:
+                            type: string
+                          valueFrom:
+                            properties:
+                              key:
+                                type: string
+                              name:
+                                default: ""
+                                type: string
+                              optional:
+                                type: boolean
+                            required:
+                            - key
+                            type: object
+                            x-kubernetes-map-type: atomic
+                        type: object
+                      httpsProxy:
+                        properties:
+                          value:
+                            type: string
+                          valueFrom:
+                            properties:
+                              key:
+                                type: string
+                              name:
+                                default: ""
+                                type: string
+                              optional:
+                                type: boolean
+                            required:
+                            - key
+                            type: object
+                            x-kubernetes-map-type: atomic
+                        type: object
+                      noProxy:
+                        items:
+                          type: string
+                        type: array
+                    type: object
                 type: object
               kafka:
                 properties:
