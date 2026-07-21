@@ -5,8 +5,9 @@ This directory contains vendored API types from the [SeaweedFS Operator](https:/
 ## Source
 
 - **Repository**: https://github.com/seaweedfs/seaweedfs-operator
-- **Version**: v0.1.13
-- **Date Vendored**: 2026-04-13
+- **Operator Version**: 1.0.32
+- **Helm Chart Version**: 0.1.35
+- **Date Vendored**: 2026-07-17
 
 ## Reason for Vendoring
 
