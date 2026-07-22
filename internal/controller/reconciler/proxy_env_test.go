@@ -89,9 +89,11 @@ func TestProxyEnvVarsLiteral(t *testing.T) {
 func TestProxyEnvVarsValueFromStaysSecretRef(t *testing.T) {
 	proxy := &apiv2.ProxySpec{
 		HTTPSProxy: &apiv2.ProxyValue{
-			ValueFrom: &corev1.SecretKeySelector{
-				LocalObjectReference: corev1.LocalObjectReference{Name: "egress-proxy"},
-				Key:                  "httpsProxy",
+			ValueFrom: &apiv2.ProxyValueSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{Name: "egress-proxy"},
+					Key:                  "httpsProxy",
+				},
 			},
 		},
 	}

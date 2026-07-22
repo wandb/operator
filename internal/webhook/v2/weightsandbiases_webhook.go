@@ -810,6 +810,10 @@ func validateProxySpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 			errors = append(errors, field.Required(p, "one of value or valueFrom is required"))
 			return
 		}
+		if hasValueFrom && pv.ValueFrom.SecretKeyRef == nil {
+			errors = append(errors, field.Required(p.Child("valueFrom").Child("secretKeyRef"),
+				"valueFrom requires secretKeyRef"))
+		}
 		if hasValue {
 			parsed, err := url.Parse(pv.Value)
 			if err != nil {

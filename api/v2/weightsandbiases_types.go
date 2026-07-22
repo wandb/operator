@@ -197,7 +197,15 @@ type ProxyValue struct {
 
 	// ValueFrom sources the proxy URL from a Secret key (may embed credentials).
 	// +optional
-	ValueFrom *corev1.SecretKeySelector `json:"valueFrom,omitempty"`
+	ValueFrom *ProxyValueSource `json:"valueFrom,omitempty"`
+}
+
+// ProxyValueSource mirrors corev1.EnvVarSource (the secret case): the proxy URL
+// is read from a Secret key.
+type ProxyValueSource struct {
+	// SecretKeyRef selects a key of a Secret in the W&B namespace.
+	// +optional
+	SecretKeyRef *corev1.SecretKeySelector `json:"secretKeyRef,omitempty"`
 }
 
 type NetworkingMode string

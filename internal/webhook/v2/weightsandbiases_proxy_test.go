@@ -15,9 +15,11 @@ func wandbWithProxy(proxy *appsv2.ProxySpec) *appsv2.WeightsAndBiases {
 }
 
 func TestValidateProxySpec(t *testing.T) {
-	secretRef := &corev1.SecretKeySelector{
-		LocalObjectReference: corev1.LocalObjectReference{Name: "egress-proxy"},
-		Key:                  "httpsProxy",
+	secretRef := &appsv2.ProxyValueSource{
+		SecretKeyRef: &corev1.SecretKeySelector{
+			LocalObjectReference: corev1.LocalObjectReference{Name: "egress-proxy"},
+			Key:                  "httpsProxy",
+		},
 	}
 	cases := []struct {
 		name    string

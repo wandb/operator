@@ -1206,17 +1206,20 @@ spec:
                             type: string
                           valueFrom:
                             properties:
-                              key:
-                                type: string
-                              name:
-                                default: ""
-                                type: string
-                              optional:
-                                type: boolean
-                            required:
-                            - key
+                              secretKeyRef:
+                                properties:
+                                  key:
+                                    type: string
+                                  name:
+                                    default: ""
+                                    type: string
+                                  optional:
+                                    type: boolean
+                                required:
+                                - key
+                                type: object
+                                x-kubernetes-map-type: atomic
                             type: object
-                            x-kubernetes-map-type: atomic
                         type: object
                       httpsProxy:
                         properties:
@@ -1224,17 +1227,20 @@ spec:
                             type: string
                           valueFrom:
                             properties:
-                              key:
-                                type: string
-                              name:
-                                default: ""
-                                type: string
-                              optional:
-                                type: boolean
-                            required:
-                            - key
+                              secretKeyRef:
+                                properties:
+                                  key:
+                                    type: string
+                                  name:
+                                    default: ""
+                                    type: string
+                                  optional:
+                                    type: boolean
+                                required:
+                                - key
+                                type: object
+                                x-kubernetes-map-type: atomic
                             type: object
-                            x-kubernetes-map-type: atomic
                         type: object
                       noProxy:
                         items:

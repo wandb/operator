@@ -68,11 +68,10 @@ func proxyValueEnvVars(upper, lower string, pv *apiv2.ProxyValue) []corev1.EnvVa
 			{Name: upper, Value: pv.Value},
 			{Name: lower, Value: pv.Value},
 		}
-	case pv.ValueFrom != nil:
-		ref := pv.ValueFrom.DeepCopy()
+	case pv.ValueFrom != nil && pv.ValueFrom.SecretKeyRef != nil:
 		return []corev1.EnvVar{
-			{Name: upper, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: ref}},
-			{Name: lower, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: pv.ValueFrom.DeepCopy()}},
+			{Name: upper, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: pv.ValueFrom.SecretKeyRef.DeepCopy()}},
+			{Name: lower, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: pv.ValueFrom.SecretKeyRef.DeepCopy()}},
 		}
 	default:
 		return nil
