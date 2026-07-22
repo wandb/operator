@@ -25,7 +25,7 @@ require (
 	github.com/prometheus/client_golang v1.23.2
 	github.com/prometheus/client_model v0.6.2
 	github.com/samber/lo v1.52.0
-	github.com/sanity-io/litter v1.3.0
+	github.com/sanity-io/litter v1.5.8
 	github.com/stretchr/testify v1.11.1
 	github.com/twmb/franz-go v1.21.3
 	github.com/twmb/franz-go/pkg/kadm v1.18.0
