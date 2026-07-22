@@ -156,6 +156,56 @@ type GlobalSpec struct {
 	// update tooling can discover them.
 	// +optional
 	CACertsConfigMap string `json:"caCertsConfigMap,omitempty"`
+
+	// Proxy configures the forward-proxy egress settings injected into the
+	// application workloads (app Deployments, their init containers, and
+	// migration Jobs). The operator emits HTTP_PROXY/HTTPS_PROXY/NO_PROXY and
+	// their lowercase variants; NO_PROXY is always the operator-computed
+	// in-cluster exclusions merged over the user-supplied noProxy entries, so
+	// in-cluster datastore/service traffic never hairpins through the proxy.
+	// Pair with CustomCACerts for a TLS-intercepting proxy.
+	// +optional
+	Proxy *ProxySpec `json:"proxy,omitempty"`
+}
+
+// ProxySpec is the forward-proxy configuration under spec.global.proxy.
+type ProxySpec struct {
+	// HTTPProxy is the proxy URL for plain HTTP egress (HTTP_PROXY/http_proxy).
+	// +optional
+	HTTPProxy *ProxyValue `json:"httpProxy,omitempty"`
+
+	// HTTPSProxy is the proxy URL for HTTPS egress (HTTPS_PROXY/https_proxy).
+	// +optional
+	HTTPSProxy *ProxyValue `json:"httpsProxy,omitempty"`
+
+	// NoProxy holds EXTRA no-proxy entries appended to the operator-computed
+	// in-cluster exclusions. Use it for external endpoints (e.g. a BYOB object
+	// store) that must bypass the proxy. Entries must be comma-free; the
+	// operator owns the join.
+	// +optional
+	NoProxy []string `json:"noProxy,omitempty"`
+}
+
+// ProxyValue is a value-or-secret union mirroring corev1.EnvVar semantics:
+// exactly one of Value or ValueFrom must be set. Credential-bearing proxy URLs
+// (http://user:pass@host:port) MUST use ValueFrom; the webhook rejects userinfo
+// in a literal Value so credentials never land in the CR / etcd / kubectl output.
+type ProxyValue struct {
+	// Value is a literal proxy URL. Must not contain userinfo (credentials).
+	// +optional
+	Value string `json:"value,omitempty"`
+
+	// ValueFrom sources the proxy URL from a Secret key (may embed credentials).
+	// +optional
+	ValueFrom *ProxyValueSource `json:"valueFrom,omitempty"`
+}
+
+// ProxyValueSource mirrors corev1.EnvVarSource (the secret case): the proxy URL
+// is read from a Secret key.
+type ProxyValueSource struct {
+	// SecretKeyRef selects a key of a Secret in the W&B namespace.
+	// +optional
+	SecretKeyRef *corev1.SecretKeySelector `json:"secretKeyRef,omitempty"`
 }
 
 type NetworkingMode string

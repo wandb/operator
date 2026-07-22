@@ -597,6 +597,10 @@ func reconcileApplications(
 			return ctrl.Result{}, err
 		}
 
+		// spec.global.proxy env: after CA (so both are present) and before legacy
+		// overrides (so legacyOverrides can still override/blank any proxy var).
+		envVars = applyProxyToWorkload(wandb, envVars)
+
 		// Applied last so legacy overrides beat manifest and injected env, as in v1.
 		envVars = applyLegacyOverrideEnv(ctx, wandb, app.Name, envVars)
 
@@ -1216,6 +1220,10 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 			if err != nil {
 				return ctrl.Result{}, err
 			}
+
+			// spec.global.proxy env (migration Jobs egress too — v1 parity); before
+			// legacy overrides so the escape hatch still wins.
+			envVars = applyProxyToWorkload(wandb, envVars)
 
 			// v1's global env reached job pods too (e.g. HTTP_PROXY); per-app entries don't apply here.
 			envVars = overrideEnvVars(ctx, envVars, wandb.Spec.Wandb.LegacyOverrides[apiv2.LegacyOverridesGlobalKey].Env)
