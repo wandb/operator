@@ -76,6 +76,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 
 		g.Expect(defaulter.Default(ctx, wandb)).To(g.Succeed())
 		g.Expect(wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse.Name).To(g.Equal("test-wandb-chi"))
+		g.Expect(wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse.ServiceAccount.Create).ToNot(g.BeNil())
+		g.Expect(*wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse.ServiceAccount.Create).To(g.BeTrue())
+		g.Expect(wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse.ServiceAccount.ServiceAccountName).To(g.Equal("test-wandb-chi"))
 	})
 
 	It("keys non-default instance names before the suffix", func() {

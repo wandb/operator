@@ -56,7 +56,7 @@ func WriteState(
 	if err != nil {
 		return translateError(err)
 	}
-	serviceAccount, err := ToServiceAccount(wandb, nsnBuilder, cl.Scheme())
+	serviceAccount, err := ToServiceAccount(wandb, nsnBuilder, storage, cl.Scheme())
 	if err != nil {
 		return translateError(err)
 	}
@@ -82,7 +82,13 @@ func WriteState(
 	}
 	results = append(results, writeResource(ctx, cl, common.ReconciledType, SecretResourceType, credsSecret, &corev1.Secret{})...)
 	results = append(results, writeResource(ctx, cl, common.ReconciledType, ConfigMapResourceType, configMap, &corev1.ConfigMap{})...)
-	results = append(results, writeResource(ctx, cl, common.ReconciledType, ServiceAccountResourceType, serviceAccount, &corev1.ServiceAccount{})...)
+	if serviceAccount != nil {
+		serviceAccountConditions := writeResource(ctx, cl, common.ReconciledType, ServiceAccountResourceType, serviceAccount, &corev1.ServiceAccount{})
+		results = append(results, serviceAccountConditions...)
+		if len(serviceAccountConditions) > 0 {
+			return results
+		}
+	}
 	if sccRoleBinding != nil {
 		results = append(results, writeResource(ctx, cl, common.ReconciledType, RoleBindingResourceType, sccRoleBinding, &rbacv1.RoleBinding{})...)
 	}
