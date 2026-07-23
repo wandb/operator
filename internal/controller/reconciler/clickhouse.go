@@ -210,6 +210,18 @@ func managedClickHouseWriteState(
 		}
 	}
 
+	desiredServiceAccount, err := altinity.ToServiceAccount(wandb, spec, objStorage, client.Scheme())
+	if err != nil {
+		log.Error(err, "failed to translate ClickHouse ServiceAccount")
+		return []metav1.Condition{
+			{
+				Type:   common.ReconciledType,
+				Status: metav1.ConditionFalse,
+				Reason: common.ControllerErrorReason,
+			},
+		}
+	}
+
 	desired, err := altinity.ToClickHouseVendorSpec(ctx, wandb, spec, client.Scheme(), objStorage, waitForObjectStore, mfst)
 	if err != nil {
 		log.Error(err, "failed to translate ClickHouse spec to vendor spec")
@@ -229,7 +241,7 @@ func managedClickHouseWriteState(
 	}
 
 	results := make([]metav1.Condition, 0)
-	results = append(results, altinity.WriteState(ctx, client, specNamespacedName, desiredKeeper, desired)...)
+	results = append(results, altinity.WriteState(ctx, client, specNamespacedName, desiredServiceAccount, desiredKeeper, desired)...)
 
 	return results
 }

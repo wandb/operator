@@ -8,6 +8,7 @@ import (
 	"github.com/wandb/operator/internal/logx"
 	chkv1 "github.com/wandb/operator/pkg/vendored/altinity-clickhouse/clickhouse-keeper.altinity.com/v1"
 	chiv1 "github.com/wandb/operator/pkg/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -25,12 +26,20 @@ func WriteState(
 	ctx context.Context,
 	client client.Client,
 	specNamespacedName types.NamespacedName,
+	desiredServiceAccount *corev1.ServiceAccount,
 	desiredKeeper *chkv1.ClickHouseKeeperInstallation,
 	desired *chiv1.ClickHouseInstallation,
 ) []metav1.Condition {
 	ctx, _ = logx.WithSlog(ctx, logx.ClickHouse)
 	results := make([]metav1.Condition, 0)
 
+	if desiredServiceAccount != nil {
+		serviceAccountConditions := writeServiceAccount(ctx, client, desiredServiceAccount)
+		results = append(results, serviceAccountConditions...)
+		if len(serviceAccountConditions) > 0 {
+			return results
+		}
+	}
 	results = append(results, keeper.WriteState(
 		ctx, client,
 		types.NamespacedName{Namespace: desiredKeeper.Namespace, Name: desiredKeeper.Name},
@@ -39,6 +48,33 @@ func WriteState(
 	results = append(results, writeClickHouseInstallation(ctx, client, specNamespacedName, desired)...)
 
 	return results
+}
+
+func writeServiceAccount(
+	ctx context.Context,
+	cl client.Client,
+	desired *corev1.ServiceAccount,
+) []metav1.Condition {
+	actual := &corev1.ServiceAccount{}
+	found, err := common.GetResource(ctx, cl, client.ObjectKeyFromObject(desired), "ServiceAccount", actual)
+	if err != nil {
+		return []metav1.Condition{{
+			Type:   common.ReconciledType,
+			Status: metav1.ConditionFalse,
+			Reason: common.ApiErrorReason,
+		}}
+	}
+	if !found {
+		actual = nil
+	}
+	if _, err := common.CrudResource(ctx, cl, desired, actual); err != nil {
+		return []metav1.Condition{{
+			Type:   common.ReconciledType,
+			Status: metav1.ConditionFalse,
+			Reason: common.ApiErrorReason,
+		}}
+	}
+	return nil
 }
 
 // writeClickHouseInstallation create-or-updates the CHI, setting only the fields

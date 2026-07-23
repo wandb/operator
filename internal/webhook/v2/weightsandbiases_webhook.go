@@ -273,6 +273,8 @@ func applyKafkaDefaults(wandb *appsv2.WeightsAndBiases) {
 	if spec.Namespace == "" {
 		spec.Namespace = wandb.Namespace
 	}
+
+	applyManagedServiceAccountDefaults(&spec.ServiceAccount, spec.Name)
 }
 
 func applyObjectStoreDefaults(wandb *appsv2.WeightsAndBiases) {
@@ -328,7 +330,17 @@ func applyClickHouseDefaults(wandb *appsv2.WeightsAndBiases) {
 		if spec.ManagedClickHouse.Namespace == "" {
 			spec.ManagedClickHouse.Namespace = wandb.Namespace
 		}
+		applyManagedServiceAccountDefaults(&spec.ManagedClickHouse.ServiceAccount, spec.ManagedClickHouse.Name)
 		wandb.Spec.ClickHouse[key] = spec
+	}
+}
+
+func applyManagedServiceAccountDefaults(serviceAccount *appsv2.ManagedServiceAccountSpec, defaultName string) {
+	if serviceAccount.Create == nil {
+		serviceAccount.Create = ptr.To(true)
+	}
+	if serviceAccount.ServiceAccountName == "" {
+		serviceAccount.ServiceAccountName = defaultName
 	}
 }
 

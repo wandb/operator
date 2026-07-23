@@ -212,15 +212,22 @@ func ToConfigMap(
 func ToServiceAccount(
 	wandb *apiv2.WeightsAndBiases,
 	nsnBuilder *NsNameBuilder,
+	storage objectstore.ConnInfo,
 	scheme *runtime.Scheme,
 ) (*corev1.ServiceAccount, error) {
+	spec := wandb.Spec.Kafka.ManagedKafka
+	if spec.ServiceAccount.Create != nil && !*spec.ServiceAccount.Create {
+		return nil, nil
+	}
+
 	sa := &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      nsnBuilder.ServiceAccountName(),
-			Namespace: nsnBuilder.Namespace(),
-			Labels:    BuildWandbKafkaLabels(wandb),
+			Name:        kafkaServiceAccountName(spec),
+			Namespace:   nsnBuilder.Namespace(),
+			Labels:      BuildWandbKafkaLabels(wandb),
+			Annotations: spec.ServiceAccount.Annotations,
 		},
-		AutomountServiceAccountToken: ptr.To(false),
+		AutomountServiceAccountToken: ptr.To(!storage.HasStaticCredentials()),
 	}
 	if err := setOwner(wandb, sa, nsnBuilder, scheme); err != nil {
 		return nil, err
@@ -248,7 +255,7 @@ func ToSccRoleBinding(
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      nsnBuilder.ServiceAccountName(),
+				Name:      kafkaServiceAccountName(wandb.Spec.Kafka.ManagedKafka),
 				Namespace: nsnBuilder.Namespace(),
 			},
 		},
@@ -315,7 +322,7 @@ func ToEtcdApplication(
 			},
 			PodTemplate: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
-					ServiceAccountName:           nsnBuilder.ServiceAccountName(),
+					ServiceAccountName:           kafkaServiceAccountName(infraSpec),
 					AutomountServiceAccountToken: ptr.To(false),
 					SecurityContext:              kafkaPodSecurityContext(),
 					Affinity:                     spreadAffinity(wandb, infraSpec.ManagedInfraSpec, labels),
@@ -567,8 +574,8 @@ func ToBufstreamApplication(
 			},
 			PodTemplate: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
-					ServiceAccountName:           nsnBuilder.ServiceAccountName(),
-					AutomountServiceAccountToken: ptr.To(false),
+					ServiceAccountName:           kafkaServiceAccountName(infraSpec),
+					AutomountServiceAccountToken: ptr.To(!storage.HasStaticCredentials()),
 					SecurityContext:              bufstreamPodSecurityContext(),
 					Affinity:                     spreadAffinity(wandb, infraSpec.ManagedInfraSpec, labels),
 					Tolerations:                  tolerations(wandb, infraSpec.ManagedInfraSpec),
@@ -601,4 +608,11 @@ func ToBufstreamApplication(
 		return nil, err
 	}
 	return app, nil
+}
+
+func kafkaServiceAccountName(spec *apiv2.ManagedKafkaSpec) string {
+	if spec.ServiceAccount.ServiceAccountName != "" {
+		return spec.ServiceAccount.ServiceAccountName
+	}
+	return spec.Name
 }
