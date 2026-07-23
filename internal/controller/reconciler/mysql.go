@@ -428,7 +428,11 @@ func runMysqlInitJobInstance(ctx context.Context, client client.Client, wandb *a
 			return ctrl.Result{}, err
 		}
 
-		wandb.Status.Wandb.MySQLInit[key] = apiv2.MigrationJobStatus{Name: jobName, Succeeded: false}
+		wandb.Status.Wandb.MySQLInit[key] = apiv2.MigrationJobStatus{
+			Name:   jobName,
+			Phase:  migrationPhaseRunning,
+			Reason: "JobCreated",
+		}
 		if err := updateWandbStatusIfChanged(ctx, client, wandb, statusBefore); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -438,7 +442,12 @@ func runMysqlInitJobInstance(ctx context.Context, client client.Client, wandb *a
 
 	if job.Status.Succeeded > 0 {
 		logger.Info("MySQL init job succeeded")
-		wandb.Status.Wandb.MySQLInit[key] = apiv2.MigrationJobStatus{Name: jobName, Succeeded: true}
+		wandb.Status.Wandb.MySQLInit[key] = apiv2.MigrationJobStatus{
+			Name:      jobName,
+			Succeeded: true,
+			Phase:     migrationPhaseSucceeded,
+			Reason:    "JobSucceeded",
+		}
 		if err := updateWandbStatusIfChanged(ctx, client, wandb, statusBefore); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -447,7 +456,12 @@ func runMysqlInitJobInstance(ctx context.Context, client client.Client, wandb *a
 
 	if job.Status.Failed > 0 {
 		logger.Info("MySQL init job failed")
-		wandb.Status.Wandb.MySQLInit[key] = apiv2.MigrationJobStatus{Name: jobName, Failed: true}
+		wandb.Status.Wandb.MySQLInit[key] = apiv2.MigrationJobStatus{
+			Name:   jobName,
+			Failed: true,
+			Phase:  migrationPhaseFailed,
+			Reason: "JobFailed",
+		}
 		if err := updateWandbStatusIfChanged(ctx, client, wandb, statusBefore); err != nil {
 			return ctrl.Result{}, err
 		}
