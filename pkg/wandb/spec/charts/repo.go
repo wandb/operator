@@ -84,7 +84,9 @@ func validateNonOCIURL(fl validator.FieldLevel) bool {
 
 func (c RepoRelease) Validate() error {
 	v := validator.New()
-	v.RegisterValidation("nonociurl", validateNonOCIURL)
+	if err := v.RegisterValidation("nonociurl", validateNonOCIURL); err != nil {
+		return fmt.Errorf("register non-OCI URL validation: %w", err)
+	}
 	return v.Struct(c)
 }
 
