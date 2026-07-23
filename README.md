@@ -50,8 +50,13 @@ The operator and its component dependencies are distributed as a Helm chart
 ```bash
 helm install wandb-operator \
   oci://us-docker.pkg.dev/wandb-production/public/wandb/charts/operator \
+  --version <operator-version> \
   --namespace wandb-operators --create-namespace
 ```
+
+Operator v2 is published through this OCI path. The `wandb/operator` chart in
+the legacy `charts.wandb.ai` Helm repository is Operator v1; do not use that
+repository to install or upgrade Operator v2.
 
 Then apply a `WeightsAndBiases` resource describing your deployment:
 
@@ -83,6 +88,7 @@ for the available chart options and which component operators are enabled.
 
 - [Configuration API](docs/config-api.md)
 - [Infrastructure Connection Settings](docs/infra-connection-settings.md)
+- [Migrating from Operator v1 to v2](docs/migrating-v1-to-v2.md)
 - [Monitoring and Telemetry Guide](docs/monitoring.md)
 - [Deploying on OpenShift](docs/openshift.md)
 
