@@ -24,6 +24,7 @@ import (
 	"net/url"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/samber/lo"
 	apiv2 "github.com/wandb/operator/api/v2"
@@ -1379,12 +1380,17 @@ func generateSecrets(ctx context.Context, client ctrlClient.Client, wandb *apiv2
 				return ctrl.Result{}, err
 			}
 		} else {
-			// Secret exists. Ensure it has the expected key; do not overwrite existing value.
-			if sec.Data == nil || (sec.Data != nil && sec.Data[keyName] == nil && sec.StringData == nil) {
+			// Secret exists. Ensure it has a usable key; do not overwrite a
+			// valid existing value.
+			existing, hasKey := sec.Data[keyName]
+			needsValue := !hasKey && sec.StringData == nil
+			// An adopted v1 secret can hold a non-UTF-8 token that breaks
+			// container creation as a string env var; regenerate it.
+			invalidUTF8 := hasKey && !utf8.Valid(existing)
+			if needsValue || invalidUTF8 {
 				if sec.StringData == nil {
 					sec.StringData = map[string]string{}
 				}
-				// Generate a value only if missing
 				valueLen := gs.Length
 				if valueLen <= 0 {
 					valueLen = 32
