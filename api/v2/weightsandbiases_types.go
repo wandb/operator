@@ -34,6 +34,7 @@ import (
 //+kubebuilder:printcolumn:name="Kafka",type=string,JSONPath=`.status.kafkaStatus.state`
 //+kubebuilder:printcolumn:name="ObjectStore",type=string,JSONPath=`.status.objectStoreStatus.default.state`
 //+kubebuilder:printcolumn:name="ClickHouse",type=string,JSONPath=`.status.clickhouseStatus.default.state`
+//+kubebuilder:printcolumn:name="Migration",type=string,JSONPath=`.status.wandb.migration.phase`
 
 // WeightsAndBiases is the Schema for the weightsandbiases API.
 type WeightsAndBiases struct {
@@ -714,8 +715,12 @@ type ClickHouseConfig struct {
 
 // WeightsAndBiasesStatus defines the observed state of WeightsAndBiases.
 type WeightsAndBiasesStatus struct {
-	Ready bool        `json:"ready"`
-	Wandb WandbStatus `json:"wandb,omitempty"`
+	Ready bool `json:"ready"`
+	// Conditions includes the standard Ready condition for the current generation.
+	// +listType=map
+	// +listMapKey=type
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+	Wandb      WandbStatus        `json:"wandb,omitempty"`
 	// MySQLStatus, RedisStatus, ObjectStoreStatus and ClickHouseStatus are keyed
 	// by instance name, mirroring the corresponding spec maps.
 	MySQLStatus       map[string]MysqlInfraStatus       `json:"mysqlStatus,omitempty"`
@@ -764,18 +769,24 @@ type WandbStatus struct {
 }
 
 type WandbMigrationStatus struct {
-	Version            string                        `json:"version,omitempty"`
-	LastSuccessVersion string                        `json:"lastSuccessVersion,omitempty"`
-	Ready              bool                          `json:"ready,omitempty"`
-	Reason             string                        `json:"reason,omitempty"`
-	Jobs               map[string]MigrationJobStatus `json:"jobs,omitempty"`
+	Version            string `json:"version,omitempty"`
+	LastSuccessVersion string `json:"lastSuccessVersion,omitempty"`
+	Ready              bool   `json:"ready,omitempty"`
+	// Phase is Running, Failed, Succeeded, or Unknown.
+	Phase  string                        `json:"phase,omitempty"`
+	Reason string                        `json:"reason,omitempty"`
+	Jobs   map[string]MigrationJobStatus `json:"jobs,omitempty"`
 }
 
 type MigrationJobStatus struct {
 	Name      string `json:"name,omitempty"`
 	Succeeded bool   `json:"succeeded,omitempty"`
 	Failed    bool   `json:"failed,omitempty"`
-	Message   string `json:"message,omitempty"`
+	// Phase is Running, Failed, Succeeded, or Unknown.
+	Phase string `json:"phase,omitempty"`
+	// Reason is copied from the terminal Kubernetes Job condition when present.
+	Reason  string `json:"reason,omitempty"`
+	Message string `json:"message,omitempty"`
 }
 
 type WBInfraStatus struct {
