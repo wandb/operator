@@ -47,6 +47,11 @@ pre-built dashboards for the deployment.
 The operator and its component dependencies are distributed as a Helm chart
 ([`deploy/operator`](deploy/operator)), published as an OCI artifact.
 
+> **Prerequisite:** cert-manager must be installed first, and existing component
+> operators (e.g. a standalone Altinity ClickHouse operator) may need to be
+> disabled. See the [chart README](deploy/operator/README.md) for clean-install,
+> bring-your-own-operator, and v1-to-v2 upgrade instructions.
+
 ```bash
 helm install wandb-operator \
   oci://us-docker.pkg.dev/wandb-production/public/wandb/charts/operator \
