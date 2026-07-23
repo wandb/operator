@@ -135,11 +135,19 @@ func InferExternalStatus(
 	generation int64,
 	hasConnection bool,
 ) (string, bool, []metav1.Condition) {
-	state := common.HealthyState
-	ready := true
-	if !hasConnection {
-		state = common.ErrorState
-		ready = false
+	hasCurrentReconciledCondition := false
+	for _, condition := range newConditions {
+		if condition.Type == common.ReconciledType {
+			hasCurrentReconciledCondition = true
+			break
+		}
+	}
+	if hasConnection && !hasCurrentReconciledCondition {
+		newConditions = append(newConditions, metav1.Condition{
+			Type:   common.ReconciledType,
+			Status: metav1.ConditionTrue,
+			Reason: common.ResourceExistsReason,
+		})
 	}
 
 	updatedConditions := common.ComputeConditionUpdates(
@@ -148,6 +156,19 @@ func InferExternalStatus(
 		generation,
 		common.DefaultConditionExpiry,
 	)
+
+	ready := hasConnection
+	for _, condition := range newConditions {
+		if condition.Type == common.ReconciledType && condition.Status != metav1.ConditionTrue {
+			ready = false
+			break
+		}
+	}
+
+	state := common.HealthyState
+	if !ready {
+		state = common.ErrorState
+	}
 	return state, ready, updatedConditions
 }
 

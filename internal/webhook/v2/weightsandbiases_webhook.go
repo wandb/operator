@@ -471,6 +471,7 @@ func validateMySQLSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 func validateRedisSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 	var errors field.ErrorList
 	redisPath := field.NewPath("spec").Child("redis")
+	_, hasPendingLegacyRedis := wandb.Annotations[v1.RedisPendingAnnotation]
 
 	errors = append(errors, validateHasDefaultInstance(wandb.Spec.Redis, redisPath)...)
 
@@ -484,22 +485,38 @@ func validateRedisSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 			))
 		}
 
-		managed := spec.ManagedRedis
-		if managed == nil {
+		if externalRedis := spec.ExternalRedis; externalRedis != nil && !hasPendingLegacyRedis {
+			externalPath := instancePath.Child("externalRedis")
+			errors = append(errors, validateRequiredSecretSelector(externalRedis.Host, externalPath.Child("host"))...)
+			errors = append(errors, validateRequiredSecretSelector(externalRedis.Port, externalPath.Child("port"))...)
+		}
+
+		if spec.ManagedRedis == nil {
 			continue
 		}
 
-		if managed.StorageSize != "" {
-			if _, err := resource.ParseQuantity(managed.StorageSize); err != nil {
+		if spec.ManagedRedis.StorageSize != "" {
+			if _, err := resource.ParseQuantity(spec.ManagedRedis.StorageSize); err != nil {
 				errors = append(errors, field.Invalid(
 					instancePath.Child("managedRedis").Child("storageSize"),
-					managed.StorageSize,
+					spec.ManagedRedis.StorageSize,
 					"must be a valid resource quantity (e.g., '10Gi')",
 				))
 			}
 		}
 	}
 
+	return errors
+}
+
+func validateRequiredSecretSelector(selector corev1.SecretKeySelector, path *field.Path) field.ErrorList {
+	var errors field.ErrorList
+	if selector.Name == "" {
+		errors = append(errors, field.Required(path.Child("name"), "secret name is required"))
+	}
+	if selector.Key == "" {
+		errors = append(errors, field.Required(path.Child("key"), "secret key is required"))
+	}
 	return errors
 }
 
