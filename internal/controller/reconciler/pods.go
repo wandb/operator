@@ -368,7 +368,7 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 				// applications status and reading from there is probably more correct
 				// Prefer deterministic manifest-derived service resolution to avoid startup races
 				// where the Service object has not been created yet.
-				if resolved, ok := manifest.ResolveServiceURL(src); ok {
+				if resolved, ok := manifest.ResolveServiceURL(src, wandb.Namespace); ok {
 					components = append(components, resolved)
 					continue
 				}
@@ -402,7 +402,13 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 						}
 					}
 				}
-				components = append(components, fmt.Sprintf("%s%s:%d%s", proto, serviceList.Items[0].Name, selectedPort, src.Path))
+				// Fully-qualified host (see ResolveServiceURL) so NO_PROXY cluster
+				// suffixes cover it; the Service was just listed InNamespace(wandb.Namespace).
+				svcHost := serviceList.Items[0].Name
+				if wandb.Namespace != "" {
+					svcHost = fmt.Sprintf("%s.%s.svc.cluster.local", serviceList.Items[0].Name, wandb.Namespace)
+				}
+				components = append(components, fmt.Sprintf("%s%s:%d%s", proto, svcHost, selectedPort, src.Path))
 			case "jwt-issuer-map":
 				if wandb.Spec.Wandb.InternalServiceAuth.Enabled != nil &&
 					*wandb.Spec.Wandb.InternalServiceAuth.Enabled {

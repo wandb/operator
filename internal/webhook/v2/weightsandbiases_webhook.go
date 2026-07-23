@@ -19,6 +19,7 @@ package v2
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 
 	v1 "github.com/wandb/operator/api/v1"
@@ -337,6 +338,7 @@ func validateSpec(_ context.Context, newWandb, oldWandb *appsv2.WeightsAndBiases
 	var allErrors field.ErrorList
 	var warnings admission.Warnings
 
+	allErrors = append(allErrors, validateWandbSpec(newWandb)...)
 	allErrors = append(allErrors, validateMySQLSpec(newWandb)...)
 	allErrors = append(allErrors, validateRedisSpec(newWandb)...)
 	allErrors = append(allErrors, validateObjectStoreSpec(newWandb)...)
@@ -345,6 +347,7 @@ func validateSpec(_ context.Context, newWandb, oldWandb *appsv2.WeightsAndBiases
 	networkingErrors, networkingWarnings := validateNetworkingSpec(newWandb)
 	allErrors = append(allErrors, networkingErrors...)
 	warnings = append(warnings, networkingWarnings...)
+	allErrors = append(allErrors, validateProxySpec(newWandb)...)
 
 	if len(allErrors) == 0 {
 		return warnings, nil
@@ -418,6 +421,19 @@ func validateMySQLChanges(newWandb, oldWandb *appsv2.WeightsAndBiases) field.Err
 				"replicas cannot be decreased; Moco does not support in-place replica reduction (use its manual stop-clustering procedure)",
 			))
 		}
+	}
+
+	return errors
+}
+
+func validateWandbSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
+	var errors field.ErrorList
+
+	if strings.TrimSpace(wandb.Spec.Wandb.Hostname) == "" {
+		errors = append(errors, field.Required(
+			field.NewPath("spec").Child("wandb").Child("hostname"),
+			"hostname is required",
+		))
 	}
 
 	return errors
@@ -778,6 +794,67 @@ func validateRedisChanges(newWandb, oldWandb *appsv2.WeightsAndBiases) field.Err
 		}
 	}
 
+	return errors
+}
+
+// validateProxySpec validates spec.global.proxy: each proxy value sets exactly
+// one of value|valueFrom, a literal value parses as an http(s) URL with no
+// userinfo (credentials must use valueFrom so they never land in the CR), and
+// noProxy entries are non-empty and comma-free (the operator owns the join).
+func validateProxySpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
+	var errors field.ErrorList
+	if wandb.Spec.Global.Proxy == nil {
+		return errors
+	}
+	proxy := wandb.Spec.Global.Proxy
+	base := field.NewPath("spec").Child("global").Child("proxy")
+
+	validateValue := func(pv *appsv2.ProxyValue, child string) {
+		if pv == nil {
+			return
+		}
+		p := base.Child(child)
+		hasValue := pv.Value != ""
+		hasValueFrom := pv.ValueFrom != nil
+		switch {
+		case hasValue && hasValueFrom:
+			errors = append(errors, field.Invalid(p, pv, "set exactly one of value or valueFrom, not both"))
+			return
+		case !hasValue && !hasValueFrom:
+			errors = append(errors, field.Required(p, "one of value or valueFrom is required"))
+			return
+		}
+		if hasValueFrom && pv.ValueFrom.SecretKeyRef == nil {
+			errors = append(errors, field.Required(p.Child("valueFrom").Child("secretKeyRef"),
+				"valueFrom requires secretKeyRef"))
+		}
+		if hasValue {
+			parsed, err := url.Parse(pv.Value)
+			if err != nil {
+				errors = append(errors, field.Invalid(p.Child("value"), pv.Value, "must be a valid URL"))
+				return
+			}
+			if parsed.Scheme != "http" && parsed.Scheme != "https" {
+				errors = append(errors, field.Invalid(p.Child("value"), pv.Value, "scheme must be http or https"))
+			}
+			if parsed.User != nil {
+				errors = append(errors, field.Invalid(p.Child("value"), "[redacted]",
+					"must not contain credentials (userinfo); use valueFrom with a Secret for authenticated proxies"))
+			}
+		}
+	}
+	validateValue(proxy.HTTPProxy, "httpProxy")
+	validateValue(proxy.HTTPSProxy, "httpsProxy")
+
+	for i, entry := range proxy.NoProxy {
+		p := base.Child("noProxy").Index(i)
+		if strings.TrimSpace(entry) == "" {
+			errors = append(errors, field.Invalid(p, entry, "must not be empty"))
+		}
+		if strings.Contains(entry, ",") {
+			errors = append(errors, field.Invalid(p, entry, "must not contain commas; use separate list entries"))
+		}
+	}
 	return errors
 }
 

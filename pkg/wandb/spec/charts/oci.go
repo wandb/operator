@@ -61,8 +61,12 @@ func validateOCIVersion(fl validator.FieldLevel) bool {
 
 func (c OCIRelease) Validate() error {
 	v := validator.New()
-	v.RegisterValidation("ociurl", validateOCIURL)
-	v.RegisterValidation("ociversion", validateOCIVersion)
+	if err := v.RegisterValidation("ociurl", validateOCIURL); err != nil {
+		return fmt.Errorf("register OCI URL validation: %w", err)
+	}
+	if err := v.RegisterValidation("ociversion", validateOCIVersion); err != nil {
+		return fmt.Errorf("register OCI version validation: %w", err)
+	}
 	return v.Struct(c)
 }
 
