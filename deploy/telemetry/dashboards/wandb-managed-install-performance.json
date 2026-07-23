@@ -376,50 +376,160 @@
     },
     {
       "type": "timeseries",
-      "title": "Kafka Messages In by Topic",
+      "title": "Kafka Request Rate by API",
       "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
       "gridPos": {"h": 10, "w": 16, "x": 0, "y": 90},
       "targets": [
         {
-          "expr": "sum by (topic) (rate(kafka_server_brokertopicmetrics_messagesinpersec_total[$__rate_interval]))",
-          "legendFormat": "{{topic}}",
+          "expr": "sum by (kafka_api_key) (rate(bufstream_kafka_request_count_total{namespace=\"$namespace\"}[$__rate_interval]))",
+          "legendFormat": "{{kafka_api_key}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {"unit": "reqps", "min": 0},
+        "overrides": []
+      },
+      "options": {
+        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"]},
+        "tooltip": {"mode": "multi"}
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Bufstream Status",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 4, "w": 8, "x": 16, "y": 90},
+      "targets": [
+        {
+          "expr": "max(bufstream_status{namespace=\"$namespace\"})",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green"}, {"color": "red", "value": 1}]}
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "textMode": "value"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Kafka Consumer Lag by Topic/Partition",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 10, "w": 16, "x": 0, "y": 100},
+      "targets": [
+        {
+          "expr": "max by (kafka_topic_name, kafka_topic_partition) (bufstream_kafka_consumer_group_offset_lag{namespace=\"$namespace\"})",
+          "legendFormat": "{{kafka_topic_name}} p{{kafka_topic_partition}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {"unit": "short", "min": 0},
+        "overrides": []
+      },
+      "options": {
+        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"]},
+        "tooltip": {"mode": "multi"}
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Kafka Request Latency p95 by API",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 10, "w": 8, "x": 16, "y": 100},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, kafka_api_key) (rate(bufstream_kafka_request_latency_seconds_bucket{namespace=\"$namespace\"}[$__rate_interval])))",
+          "legendFormat": "{{kafka_api_key}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {"unit": "s", "min": 0},
+        "overrides": []
+      },
+      "options": {
+        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"]},
+        "tooltip": {"mode": "multi"}
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Kafka Byte Throughput (in/out)",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 10, "w": 16, "x": 0, "y": 110},
+      "targets": [
+        {
+          "expr": "sum(rate(bufstream_kafka_request_bytes_sum{namespace=\"$namespace\"}[$__rate_interval]))",
+          "legendFormat": "in (requests)",
           "refId": "A"
         },
         {
-          "expr": "sum(kafka_controller_kafkacontroller_offlinepartitionscount)",
-          "legendFormat": "offline partitions (total)",
+          "expr": "sum(rate(bufstream_kafka_response_bytes_sum{namespace=\"$namespace\"}[$__rate_interval]))",
+          "legendFormat": "out (responses)",
           "refId": "B"
         }
       ],
       "fieldConfig": {
-        "defaults": {"min": 0},
+        "defaults": {"unit": "Bps", "min": 0},
         "overrides": []
       },
       "options": {
-        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "min", "max", "sum"]},
+        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"]},
+        "tooltip": {"mode": "multi"}
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Partitions by Topic",
+      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 10, "w": 8, "x": 16, "y": 110},
+      "targets": [
+        {
+          "expr": "sum by (kafka_topic_name) (bufstream_kafka_topic_partition_count{namespace=\"$namespace\"})",
+          "legendFormat": "{{kafka_topic_name}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {"unit": "short", "min": 0},
+        "overrides": []
+      },
+      "options": {
+        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["last"]},
         "tooltip": {"mode": "multi"}
       }
     },
     {
       "type": "text",
       "title": "About: Kafka",
-      "gridPos": {"h": 10, "w": 8, "x": 16, "y": 90},
+      "gridPos": {"h": 6, "w": 8, "x": 16, "y": 94},
       "options": {
         "mode": "markdown",
-        "content": "### What is this?\n\n- **Messages in by topic** — incoming message rate per Kafka topic, in messages/sec.\n- **offline partitions** — partitions that have no leader and can't accept reads or writes. Should always be 0.\n\n### Why it matters\n\nKafka is the asynchronous backbone for run-state events, parquet-export task scheduling, and other internal queues. When Kafka throughput drops or partitions go offline, downstream consumers stall and user-visible operations slow down.\n\n### What to do\n\n- **Offline partitions > 0**: investigate managed Kafka health immediately. `kubectl get pods -n <namespace> -l weightsandbiases.apps.wandb.com/component=kafka`, inspect logs, and check that Bufstream and etcd pods are Ready.\n- **Sudden drop in messages**: check whether the producer-side services (api, filestream) are healthy in the W&B Field Investigation dashboard."
+        "content": "### What is this?\n\nManaged Kafka is **Bufstream** — stateless and object-storage-backed, so broker-era metrics like offline / under-replicated partitions don't exist.\n\n- **Bufstream Status** — `max(bufstream_status)` across the health probes (etcd, object storage, metadata, kafka). **0 = healthy**; &ge;1 means a probe is failing.\n- **Request rate / latency** — Kafka API throughput and p95 latency by request type (`bufstream_kafka_request_*`).\n- **Consumer lag** — committed-offset lag per topic/partition (`bufstream_kafka_consumer_group_offset_lag`); sustained growth means consumers are falling behind.\n- **Byte throughput** — bytes in/out on the wire.\n\n### What to do\n\n**Status &ge; 1 or lag climbing**: check managed Kafka health — `kubectl get pods -n <namespace> -l weightsandbiases.apps.wandb.com/component=kafka` and inspect the Bufstream and etcd pods."
       }
     },
     {
       "type": "row",
       "title": "ClickHouse",
-      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 100},
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 120},
       "collapsed": false
     },
     {
       "type": "timeseries",
       "title": "ClickHouse Memory, Connections, Merges",
       "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
-      "gridPos": {"h": 10, "w": 16, "x": 0, "y": 101},
+      "gridPos": {"h": 10, "w": 16, "x": 0, "y": 121},
       "targets": [
         {
           "expr": "sum(ClickHouseMetrics_MemoryTracking)",
@@ -451,7 +561,7 @@
     {
       "type": "text",
       "title": "About: ClickHouse",
-      "gridPos": {"h": 10, "w": 8, "x": 16, "y": 101},
+      "gridPos": {"h": 10, "w": 8, "x": 16, "y": 121},
       "options": {
         "mode": "markdown",
         "content": "### What is this?\n\n- **memory tracking** — total bytes ClickHouse is currently using across all queries.\n- **HTTP connections** — active HTTP client connections to ClickHouse.\n- **merges in progress** — background MergeTree merge operations currently running.\n\n### Why it matters\n\n- **Memory** climbing toward the configured limit signals query-side pressure. ClickHouse aborts queries when memory is exhausted, which surfaces as errors in dependent services.\n- **HTTP connections** persistently near zero may indicate clients can't reach ClickHouse.\n- **Merges** that climb without coming back down indicate ingest exceeding merge throughput; this leads to part-count limits and eventual write rejections.\n\n### What to do\n\nFor sustained memory pressure or merge backlog, increase the install size, which scales ClickHouse resources. For per-query memory diagnostics, query `system.query_log` directly on the ClickHouse pod."
@@ -460,14 +570,14 @@
     {
       "type": "row",
       "title": "Object Store",
-      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 111},
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 131},
       "collapsed": false
     },
     {
       "type": "timeseries",
       "title": "Object Store Capacity Used % & Request Rate",
       "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
-      "gridPos": {"h": 10, "w": 16, "x": 0, "y": 112},
+      "gridPos": {"h": 10, "w": 16, "x": 0, "y": 132},
       "targets": [
         {
           "expr": "100 * (1 - (sum(SeaweedFS_volumeServer_resource{type=\"free\"}) / sum(SeaweedFS_volumeServer_resource{type=\"all\"})))",
@@ -503,7 +613,7 @@
     {
       "type": "text",
       "title": "About: Object Store",
-      "gridPos": {"h": 10, "w": 8, "x": 16, "y": 112},
+      "gridPos": {"h": 10, "w": 8, "x": 16, "y": 132},
       "options": {
         "mode": "markdown",
         "content": "### What is this?\n\n- **capacity used %** — percentage of usable volume-server capacity in use, derived from `SeaweedFS_volumeServer_resource{type=\"free\"|\"all\"}`.\n- **requests/sec** — filer HTTP request rate across all operations (`SeaweedFS_filer_request_total`).\n\n### Why it matters\n\nSeaweedFS is the object store for parquet files, artifact contents, and run media.\n\n- **Capacity above 90%** = urgent action required. New writes will fail soon.\n- **Capacity above 75%** = plan a storage increase.\n- **Sudden drop in request rate** = the API or executor services may be unable to reach the filer; check the seaweedfs Service and pod logs.\n\n### What to do\n\nFor capacity: increase storage in the WeightsAndBiases CR (`spec.objectStore.managedObjectStore.storageSize`) and re-apply, or migrate older artifacts off-cluster. For request failures: `kubectl logs -n <namespace> -l app.kubernetes.io/managed-by=seaweedfs-operator,app.kubernetes.io/component=filer --tail=200`."
@@ -512,14 +622,14 @@
     {
       "type": "row",
       "title": "Storage Path Diagnostics",
-      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 122},
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 142},
       "collapsed": false
     },
     {
       "type": "timeseries",
       "title": "Slowest Storage Operations (p95, by span)",
       "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
-      "gridPos": {"h": 10, "w": 16, "x": 0, "y": 123},
+      "gridPos": {"h": 10, "w": 16, "x": 0, "y": 143},
       "targets": [
         {
           "expr": "topk(10, histogram_quantile(0.95, sum by (service_name, span_name, le) (rate(traces_spanmetrics_duration_milliseconds_bucket{service_name=~\"gorilla.*\", span_name=~\"(?i)(parquet|filestream|filehandler|runstore|historystore|metadatastore|s3|sql).*\"}[$__rate_interval]))))",
@@ -539,7 +649,7 @@
     {
       "type": "text",
       "title": "About: Slow Storage Operations",
-      "gridPos": {"h": 10, "w": 8, "x": 16, "y": 123},
+      "gridPos": {"h": 10, "w": 8, "x": 16, "y": 143},
       "options": {
         "mode": "markdown",
         "content": "### What is this?\n\np95 latency per storage operation, derived from traces by the OTel `spanmetrics` connector. Covers parquet reads/writes, filestream chunks, S3 calls, and SQL statements.\n\n### Why it matters\n\nSlow chart loads, slow file uploads, and stuck artifact downloads almost always trace back to one storage path being slow. This panel surfaces which one without opening individual traces.\n\n### What to do\n\n- Spikes on `ParquetHistoryStore.*` or `HistoryStore.*` → chart loads will feel slow. Check the parquet pod's CPU/memory in **Container Resource Usage** above, and ClickHouse load if installed.\n- Spikes on `FileStreamStore.*` / `FileHandler.*` → ingest stalls. Check filestream container restarts and object store capacity below.\n- Spikes on `sql.*` → MySQL is the bottleneck. See **MySQL Errors & Slow Queries** above.\n- For per-request detail, [open Traces in Explore](/explore?panes=%7B%22A%22:%7B%22datasource%22:%22${DS_VICTORIATRACES}%22,%22queries%22:[],%22range%22:%7B%22from%22:%22now-1h%22,%22to%22:%22now%22%7D%7D%7D&schemaVersion=1&orgId=1) and filter by the offending `service.name` + `span.name` with `duration > 1s`."
