@@ -3,7 +3,6 @@ package objectstore
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"strconv"
 	"strings"
 
@@ -173,99 +172,6 @@ func Resolve(
 		info.TlsEnabled = tls
 	}
 
-	return info, nil
-}
-
-// ParseSecretData decodes an object-store connection secret's canonical `url`
-// (scheme->provider, userinfo->creds, path->bucket, query->tls/region/forcePathStyle),
-// falling back to discrete keys.
-func ParseSecretData(data map[string][]byte) (ConnInfo, error) {
-	get := func(k string) string { return string(data[k]) }
-
-	raw := get("url")
-	if raw == "" {
-		return ConnInfo{}, fmt.Errorf("object store connection secret missing url")
-	}
-	u, err := url.Parse(raw)
-	if err != nil {
-		return ConnInfo{}, fmt.Errorf("parse object store url %q: %w", raw, err)
-	}
-
-	info := ConnInfo{}
-	if u.User != nil {
-		info.AccessKey = u.User.Username()
-		if pw, ok := u.User.Password(); ok {
-			info.SecretKey = pw
-		}
-	}
-	if info.AccessKey == "" {
-		info.AccessKey = get("AccessKey")
-	}
-	if info.SecretKey == "" {
-		info.SecretKey = get("SecretKey")
-	}
-
-	q := u.Query()
-	info.Region = q.Get("region")
-	if info.Region == "" {
-		info.Region = get("Region")
-	}
-
-	switch strings.ToLower(u.Scheme) {
-	case "s3", "cw":
-		info.Provider = apiv2.ObjectStoreProviderS3
-		bucket := strings.TrimPrefix(u.Path, "/")
-		host := u.Host
-		if bucket == "" {
-			// No path: bucket is the host (s3://my-bucket) or opaque part (s3:my-bucket), with no endpoint override.
-			if u.Opaque != "" {
-				bucket = u.Opaque
-			} else {
-				bucket = host
-			}
-			host = ""
-		}
-		info.Bucket = bucket
-		info.URI = "s3://" + bucket
-		// A host alongside a bucket path means an S3-compatible endpoint (SeaweedFS, MinIO); AWS S3 has no endpoint override.
-		if host != "" {
-			tls, _ := strconv.ParseBool(q.Get("tls"))
-			info.Endpoint = fmt.Sprintf("%s://%s", SchemeForTLS(tls), host)
-		}
-		if fps := q.Get("forcePathStyle"); fps != "" {
-			info.ForcePathStyle, _ = strconv.ParseBool(fps)
-		} else {
-			// Custom S3-compatible endpoints need path-style, except CoreWeave's
-			// virtual-hosted object storage (RequiresPathStyle carves it out).
-			info.ForcePathStyle = RequiresPathStyle(info.Endpoint)
-		}
-	case "gs", "gcs":
-		info.Provider = apiv2.ObjectStoreProviderGCS
-		info.Bucket = u.Host
-		info.URI = "gs://" + u.Host + u.Path
-	case "azure", "az":
-		// az://<account>/<container>/<prefix>
-		info.Provider = apiv2.ObjectStoreProviderAzure
-		account := u.Host
-		container, prefix := SplitBucketPath(u.Path)
-		info.Bucket = container
-		info.URI = AzureBlobURI(account, container, prefix)
-	case "http", "https":
-		if !strings.Contains(u.Host, "blob.core.windows.net") {
-			return ConnInfo{}, fmt.Errorf("unsupported object store url scheme %q", u.Scheme)
-		}
-		info.Provider = apiv2.ObjectStoreProviderAzure
-		container, _ := SplitBucketPath(u.Path)
-		info.Bucket = container
-		// Pass the container URI through verbatim (sans credentials/query).
-		info.URI = (&url.URL{Scheme: u.Scheme, Host: u.Host, Path: u.Path}).String()
-	default:
-		return ConnInfo{}, fmt.Errorf("unsupported object store url scheme %q", u.Scheme)
-	}
-
-	if info.Bucket == "" && info.Provider != "" {
-		return ConnInfo{}, fmt.Errorf("object store url %q has no bucket/container", raw)
-	}
 	return info, nil
 }
 
