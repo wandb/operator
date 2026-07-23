@@ -5,7 +5,7 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
-	"github.com/wandb/operator/internal/controller/infra/external/objectstore"
+	"github.com/wandb/operator/internal/controller/infra/objectstore"
 	"github.com/wandb/operator/pkg/utils"
 	"github.com/wandb/operator/pkg/wandb/manifest"
 	corev1 "k8s.io/api/core/v1"
@@ -418,7 +418,7 @@ func spreadAffinity(wandb *apiv2.WeightsAndBiases, spec apiv2.ManagedInfraSpec, 
 func bucketEnsureContainer(nsnBuilder *NsNameBuilder, storage objectstore.ConnInfo, img manifest.ImageRef, globalImageRegistry string) corev1.Container {
 	region := storage.Region
 	if region == "" {
-		region = "us-east-1"
+		region = objectstore.DefaultRegion
 	}
 	credsName := nsnBuilder.CredentialsName()
 	// Retry in this process so transient DNS and API startup failures do not
@@ -437,7 +437,7 @@ exit 1`, bucketEnsureMaxAttempts, bucketEnsureMaxAttempts, bucketEnsureDelaySeco
 		Name:            "ensure-bucket",
 		Image:           BucketEnsureImage(img, globalImageRegistry),
 		Command:         []string{"/bin/sh", "-c"},
-		Args:            []string{script, "ensure-bucket", storage.Endpoint, storage.Bucket},
+		Args:            []string{script, "ensure-bucket", storage.EndpointURL(), storage.Bucket},
 		SecurityContext: kafkaContainerSecurityContext(),
 		Env: []corev1.EnvVar{
 			{Name: "AWS_REGION", Value: region},

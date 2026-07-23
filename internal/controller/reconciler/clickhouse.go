@@ -180,7 +180,7 @@ func managedClickHouseWriteState(
 	waitForObjectStore := objStoreSpec.ManagedObjectStore != nil
 
 	// Resolve the bucket connection; wait and requeue if it isn't ready yet.
-	objStorage, err := altinity.ResolveObjectStorage(ctx, client, spec, &objStoreStatus.Connection)
+	objStorage, objStorageEndpoint, err := altinity.ResolveObjectStorage(ctx, client, spec, &objStoreStatus.Connection)
 	if err != nil {
 		log.Error(err, "object storage not ready for ClickHouse")
 		return []metav1.Condition{
@@ -210,7 +210,7 @@ func managedClickHouseWriteState(
 		}
 	}
 
-	desired, err := altinity.ToClickHouseVendorSpec(ctx, wandb, spec, client.Scheme(), objStorage, waitForObjectStore, mfst)
+	desired, err := altinity.ToClickHouseVendorSpec(ctx, wandb, spec, client.Scheme(), objStorage, objStorageEndpoint, waitForObjectStore, mfst)
 	if err != nil {
 		log.Error(err, "failed to translate ClickHouse spec to vendor spec")
 		return []metav1.Condition{

@@ -9,10 +9,10 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/infra/external"
+	osconn "github.com/wandb/operator/internal/controller/infra/objectstore"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -69,45 +69,46 @@ func WriteState(
 	if provider == "" {
 		provider = apiv2.ObjectStoreProviderS3
 	}
-	data["Provider"] = string(provider)
+
+	connInfo := osconn.ConnInfo{
+		Provider:  provider,
+		Endpoint:  data["Host"],
+		Port:      data["Port"],
+		AccessKey: data["AccessKey"],
+		SecretKey: data["SecretKey"],
+		Bucket:    data["Bucket"],
+		Path:      data["Path"],
+		Region:    data["Region"],
+	}
+	if tls, err := strconv.ParseBool(data["TlsEnabled"]); err == nil {
+		connInfo.TlsEnabled = tls
+	}
 
 	switch provider {
 	case apiv2.ObjectStoreProviderGCS:
-		data["url"] = buildGCSURL(data)
+		connInfo.URL = buildGCSURL(data)
 	case apiv2.ObjectStoreProviderAzure:
-		data["url"] = buildAzureURL(data)
+		connInfo.URL = buildAzureURL(data)
 	default:
 		// Consumers (Bufstream) render this verbatim, so derive it when the CR doesn't say.
-		if _, ok := data["ForcePathStyle"]; !ok {
-			data["ForcePathStyle"] = strconv.FormatBool(RequiresPathStyle(data["Host"]))
+		if fps, ok := data["ForcePathStyle"]; ok {
+			connInfo.ForcePathStyle, _ = strconv.ParseBool(fps)
+		} else {
+			connInfo.ForcePathStyle = osconn.RequiresPathStyle(data["Host"])
 		}
-		data["url"] = buildS3URL(data)
+		connInfo.URL = buildS3URL(data)
 	}
 
 	nsName := types.NamespacedName{Namespace: wandb.Namespace, Name: connectionSecretName(key)}
-	if conditions := external.WriteConnectionSecret(ctx, c, wandb, nsName, data); conditions != nil {
+	if conditions := external.WriteConnectionSecret(ctx, c, wandb, nsName, connInfo.ToSecretData()); conditions != nil {
 		return conditions, nil
 	}
 
-	localRef := corev1.LocalObjectReference{Name: nsName.Name}
-	// ResolveFields only writes non-empty values, so any field that is
-	// legitimately absent for some deployment must be optional: Host (plain
-	// AWS S3 with no custom endpoint), AccessKey/SecretKey (IAM-role /
-	// workload-identity auth), Region (MinIO or region supplied out-of-band).
-	// url and Bucket are always written.
-	return nil, &apiv2.ObjectStoreConnection{
-		Provider:       corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Provider", Optional: ptr.To(false)},
-		URL:            corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "url", Optional: ptr.To(false)},
-		Endpoint:       corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Host", Optional: ptr.To(true)},
-		Port:           corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Port", Optional: ptr.To(true)},
-		AccessKey:      corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "AccessKey", Optional: ptr.To(true)},
-		SecretKey:      corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "SecretKey", Optional: ptr.To(true)},
-		Bucket:         corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Bucket", Optional: ptr.To(false)},
-		Path:           corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Path", Optional: ptr.To(true)},
-		Region:         corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Region", Optional: ptr.To(true)},
-		TlsEnabled:     corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "TlsEnabled", Optional: ptr.To(true)},
-		ForcePathStyle: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "ForcePathStyle", Optional: ptr.To(true)},
-	}
+	// ToSecretData only writes non-empty values, so any field that is
+	// legitimately absent for some deployment (Host for plain AWS S3,
+	// AccessKey/SecretKey for IAM-role / workload-identity auth, Region for
+	// MinIO) stays optional; url/Provider/Bucket are always required.
+	return nil, connInfo.ToObjectStoreConnection(nsName.Name, false)
 }
 
 // buildS3URL assembles s3://[accessKey:secretKey@][host[:port]]/bucket[/path]; host and creds are omitted for native AWS S3 / IAM-role auth.
@@ -131,7 +132,7 @@ func buildS3URL(data map[string]string) string {
 
 // buildGCSURL assembles gs://<bucket>[/path]; creds default to workload identity, or accessKey (SA email) + secretKey (PEM key) as userinfo.
 func buildGCSURL(data map[string]string) string {
-	bucket, path := splitBucketPath(data["Bucket"])
+	bucket, path := osconn.SplitBucketPath(data["Bucket"])
 	path = joinBucketPrefix(path, data["Path"])
 	bucketURL := url.URL{Scheme: "gs", Host: bucket}
 	if path != "" {
@@ -146,7 +147,7 @@ func buildGCSURL(data map[string]string) string {
 // buildAzureURL assembles az://<account>/<container>[/path] from accessKey (account), bucket (container), and secretKey (account key, when set).
 func buildAzureURL(data map[string]string) string {
 	account := data["AccessKey"]
-	container, path := splitBucketPath(data["Bucket"])
+	container, path := osconn.SplitBucketPath(data["Bucket"])
 	path = joinBucketPrefix(path, data["Path"])
 	bucketURL := url.URL{Scheme: "az", Host: account, Path: "/" + container}
 	if path != "" {
@@ -169,15 +170,6 @@ func joinBucketPrefix(base, prefix string) string {
 	default:
 		return base + "/" + prefix
 	}
-}
-
-// splitBucketPath splits "bucket/optional/prefix" into the leading bucket (or container) segment and the remaining object prefix.
-func splitBucketPath(raw string) (bucket, path string) {
-	trimmed := strings.TrimPrefix(raw, "/")
-	if slash := strings.IndexByte(trimmed, '/'); slash >= 0 {
-		return trimmed[:slash], trimmed[slash+1:]
-	}
-	return trimmed, ""
 }
 
 func ReadState(

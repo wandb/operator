@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	apiv2 "github.com/wandb/operator/api/v2"
-	"github.com/wandb/operator/pkg/utils"
+	"github.com/wandb/operator/internal/controller/infra/objectstore"
 	"github.com/wandb/operator/pkg/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
 	chtypes "github.com/wandb/operator/pkg/vendored/altinity-clickhouse/common/types"
 	corev1 "k8s.io/api/core/v1"
@@ -33,89 +33,31 @@ const (
 	storageConfigKey = "storage_configuration"
 )
 
-// ObjectStorageConn holds the resolved bucket connection used to configure the
-// S3-backed disk: endpoint/region as literals, credentials as secret references.
-type ObjectStorageConn struct {
-	// Endpoint is the full http(s) URL incl. bucket + prefix, trailing slash.
-	Endpoint string
-	Region   string
-	// UseEnvCredentials uses ambient creds (IAM role) instead of access keys.
-	UseEnvCredentials bool
-	AccessKeyRef      corev1.SecretKeySelector
-	SecretKeyRef      corev1.SecretKeySelector
-}
-
-// ResolveObjectStorage reads the object-store connection's secret key references
-// (which may span multiple secrets) and derives the S3 disk details.
+// ResolveObjectStorage resolves the connection and builds the S3 endpoint.
 func ResolveObjectStorage(
 	ctx context.Context,
 	cl client.Client,
 	spec *apiv2.ManagedClickHouseSpec,
 	conn *apiv2.ObjectStoreConnection,
-) (*ObjectStorageConn, error) {
+) (*objectstore.ConnInfo, string, error) {
 	if spec == nil {
-		return nil, nil
-	}
-	if conn == nil {
-		return nil, fmt.Errorf("object store connection is not available yet")
+		return nil, "", nil
 	}
 
-	r := &utils.ConnSecretResolver{Client: cl, Namespace: spec.Namespace, Cache: map[string]*corev1.Secret{}}
-
-	bucket, err := r.Value(ctx, conn.Bucket)
+	ci, err := objectstore.Resolve(ctx, cl, spec.Namespace, conn)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	if bucket == "" {
-		return nil, fmt.Errorf("object store connection has no bucket reference")
+	if ci.Bucket == "" {
+		return nil, "", fmt.Errorf("object store connection has no bucket reference")
 	}
 
-	host, err := r.Value(ctx, conn.Endpoint)
+	endpoint, err := buildEndpoint(ci, objectStoragePrefix(spec))
 	if err != nil {
-		return nil, err
-	}
-	port, err := r.Value(ctx, conn.Port)
-	if err != nil {
-		return nil, err
-	}
-	region, err := r.Value(ctx, conn.Region)
-	if err != nil {
-		return nil, err
-	}
-	accessKey, err := r.Value(ctx, conn.AccessKey)
-	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
-	tlsEnabledString, err := r.Value(ctx, conn.TlsEnabled)
-	if err != nil {
-		return nil, err
-	}
-
-	tlsEnabled, err := strconv.ParseBool(tlsEnabledString)
-	if err != nil {
-		tlsEnabled = false
-	}
-
-	// The connection has no scheme reference; honor one advertised in the
-	// endpoint value, otherwise let buildEndpoint infer from spec.Insecure.
-	scheme := ""
-	if i := strings.Index(host, "://"); i >= 0 {
-		scheme, host = host[:i], host[i+len("://"):]
-	}
-
-	endpoint, err := buildEndpoint(scheme, host, port, bucket, region, objectStoragePrefix(spec), tlsEnabled)
-	if err != nil {
-		return nil, err
-	}
-
-	return &ObjectStorageConn{
-		Endpoint:          endpoint,
-		Region:            region,
-		UseEnvCredentials: accessKey == "",
-		AccessKeyRef:      conn.AccessKey,
-		SecretKeyRef:      conn.SecretKey,
-	}, nil
+	return &ci, endpoint, nil
 }
 
 func objectStoragePrefix(spec *apiv2.ManagedClickHouseSpec) string {
@@ -132,46 +74,34 @@ func normalizePrefix(prefix string) string {
 	return prefix + "/"
 }
 
-// buildEndpoint builds the S3 disk endpoint: path-style for a custom host, else
-// the AWS virtual-hosted URL derived from the region.
-func buildEndpoint(scheme, host, port, bucket, region, prefix string, secure bool) (string, error) {
-	if host != "" {
-		if scheme == "" {
-			scheme = "http"
-			if secure {
-				scheme = "https"
-			}
-		}
-		hostport := host
-		if port != "" {
-			hostport = host + ":" + port
-		}
-		return fmt.Sprintf("%s://%s/%s/%s", scheme, hostport, bucket, prefix), nil
+// buildEndpoint builds the S3 disk endpoint: path-style for a custom endpoint,
+// else the AWS virtual-hosted URL derived from the region.
+func buildEndpoint(ci objectstore.ConnInfo, prefix string) (string, error) {
+	if base := ci.EndpointURL(); base != "" {
+		return fmt.Sprintf("%s/%s/%s", base, ci.Bucket, prefix), nil
 	}
 
-	if region == "" {
+	if ci.Region == "" {
 		return "", fmt.Errorf("object store has no Host and no Region; cannot derive an S3 endpoint")
 	}
-	return fmt.Sprintf("https://%s.s3.%s.amazonaws.com/%s", bucket, region, prefix), nil
+	return fmt.Sprintf("https://%s.s3.%s.amazonaws.com/%s", ci.Bucket, ci.Region, prefix), nil
 }
 
-// applyStorageConfiguration adds the <storage_configuration> (S3 disk + cache +
-// policy) to settings. Credentials are secret references so the Altinity
-// operator injects them via from_env rather than as plaintext.
-// TODO(dpanzella): Currently only supports S3 compatible storage, add support for Azure and GCS
-func applyStorageConfiguration(settings *v1.Settings, oc *ObjectStorageConn, cacheMaxSizeBytes int64) {
+// applyStorageConfiguration sets the S3 disk, cache, and storage policy.
+// TODO(dpanzella): only S3 supported; add Azure and GCS.
+func applyStorageConfiguration(settings *v1.Settings, ci *objectstore.ConnInfo, endpoint string, cacheMaxSizeBytes int64) {
 	disk := diskKey(s3DiskName)
 	settings.Set(disk("type"), v1.NewSettingScalar("s3"))
-	settings.Set(disk("endpoint"), v1.NewSettingScalar(oc.Endpoint))
+	settings.Set(disk("endpoint"), v1.NewSettingScalar(endpoint))
 	settings.Set(disk("metadata_path"), v1.NewSettingScalar(s3MetadataPath))
-	if oc.Region != "" {
-		settings.Set(disk("region"), v1.NewSettingScalar(oc.Region))
+	if ci.Region != "" {
+		settings.Set(disk("region"), v1.NewSettingScalar(ci.Region))
 	}
-	if oc.UseEnvCredentials {
+	if ci.AccessKey == "" {
 		settings.Set(disk("use_environment_credentials"), v1.NewSettingScalar("true"))
 	} else {
-		settings.Set(disk("access_key_id"), secretSetting(oc.AccessKeyRef))
-		settings.Set(disk("secret_access_key"), secretSetting(oc.SecretKeyRef))
+		settings.Set(disk("access_key_id"), secretSetting(ci.AccessKeyRef))
+		settings.Set(disk("secret_access_key"), secretSetting(ci.SecretKeyRef))
 	}
 
 	cache := diskKey(s3CacheDiskName)

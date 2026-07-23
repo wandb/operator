@@ -7,6 +7,7 @@ import (
 	"github.com/Masterminds/goutils"
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
+	"github.com/wandb/operator/internal/controller/infra/objectstore"
 	"github.com/wandb/operator/internal/logx"
 	seaweedv1 "github.com/wandb/operator/pkg/vendored/seaweedfs-operator/seaweed.seaweedfs.com/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -144,7 +145,7 @@ func writeSeaweedS3Config(
 	owner *seaweedv1.Seaweed,
 	nsnBuilder *NsNameBuilder,
 	envConfig SeaweedS3Config,
-) (*s3ConnInfo, error) {
+) (*objectstore.ConnInfo, error) {
 	var err error
 	var found bool
 	var gvk schema.GroupVersionKind
