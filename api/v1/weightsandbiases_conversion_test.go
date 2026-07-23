@@ -1801,3 +1801,187 @@ func TestConvertTo_StashedAnnotationsReflectCRNotActiveSpec(t *testing.T) {
 	require.Equal(t, "http://wandb.from-cr", global["host"],
 		"stashed annotation must preserve the CR's raw values for round-trip")
 }
+
+func TestConvertTo_ClickHouseValueFromRef(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{
+			"clickhouse": map[string]interface{}{
+				"host": map[string]interface{}{
+					"valueFrom": map[string]interface{}{
+						"secretKeyRef": map[string]interface{}{
+							"name": "ch-settings",
+							"key":  "endpoint",
+						},
+					},
+				},
+				"password": map[string]interface{}{
+					"valueFrom": map[string]interface{}{
+						"secretKeyRef": map[string]interface{}{
+							"name": "ch-secret",
+							"key":  "password",
+						},
+					},
+				},
+			},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+
+	conn := dst.Spec.ClickHouse[appsv2.DefaultInstanceName].ExternalClickHouse
+	require.NotNil(t, conn)
+	require.Nil(t, dst.Spec.ClickHouse[appsv2.DefaultInstanceName].ManagedClickHouse,
+		"external clickhouse must not also be managed")
+	require.Equal(t, "ch-settings", conn.Host.Name)
+	require.Equal(t, "endpoint", conn.Host.Key)
+	require.Equal(t, "ch-secret", conn.Password.Name)
+	require.Equal(t, "password", conn.Password.Key)
+
+	require.NotContains(t, dst.Annotations, ClickHousePendingAnnotation,
+		"no literals provided, so no annotation should be created")
+}
+
+func TestConvertTo_ClickHouseLiterals(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{
+			"clickhouse": map[string]interface{}{
+				"host":     "clickhouse.example.com",
+				"port":     int64(8123),
+				"database": "weave",
+				"user":     "weave",
+				"password": "shh",
+			},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+
+	raw, ok := dst.Annotations[ClickHousePendingAnnotation]
+	require.True(t, ok, "expected clickhouse-pending annotation")
+
+	var decoded map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(raw), &decoded))
+	require.Equal(t, "clickhouse.example.com", decoded["host"])
+	require.Equal(t, "8123", decoded["port"])
+	require.Equal(t, "weave", decoded["database"])
+	require.Equal(t, "weave", decoded["user"])
+	require.Equal(t, "shh", decoded["password"])
+
+	require.NotNil(t, dst.Spec.ClickHouse[appsv2.DefaultInstanceName].ExternalClickHouse,
+		"externalClickhouse is always allocated; reconciler fills selectors from the annotation")
+	require.Empty(t, dst.Spec.ClickHouse[appsv2.DefaultInstanceName].ExternalClickHouse.Host.Name)
+}
+
+func TestConvertTo_ClickHouseMixedLiteralsAndRefs(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{
+			"clickhouse": map[string]interface{}{
+				"host": "clickhouse.example.com",
+				"port": int64(8123),
+				"password": map[string]interface{}{
+					"valueFrom": map[string]interface{}{
+						"secretKeyRef": map[string]interface{}{
+							"name": "ch-secret",
+							"key":  "password",
+						},
+					},
+				},
+			},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+
+	conn := dst.Spec.ClickHouse[appsv2.DefaultInstanceName].ExternalClickHouse
+	require.NotNil(t, conn)
+	require.Equal(t, "ch-secret", conn.Password.Name)
+	require.Equal(t, "password", conn.Password.Key)
+
+	raw := dst.Annotations[ClickHousePendingAnnotation]
+	var decoded map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(raw), &decoded))
+	require.Equal(t, "clickhouse.example.com", decoded["host"])
+	require.Equal(t, "8123", decoded["port"])
+	require.NotContains(t, decoded, "password", "password came from a ref, not a literal")
+}
+
+func TestConvertTo_ClickHouseLegacyPasswordSecret(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{
+			"clickhouse": map[string]interface{}{
+				"host":     "clickhouse.example.com",
+				"password": "shh",
+				"passwordSecret": map[string]interface{}{
+					"name":        "ch-creds",
+					"passwordKey": "CLICKHOUSE_PASSWORD",
+				},
+			},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+
+	conn := dst.Spec.ClickHouse[appsv2.DefaultInstanceName].ExternalClickHouse
+	require.NotNil(t, conn)
+	require.Equal(t, "ch-creds", conn.Password.Name)
+	require.Equal(t, "CLICKHOUSE_PASSWORD", conn.Password.Key)
+
+	raw := dst.Annotations[ClickHousePendingAnnotation]
+	var decoded map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(raw), &decoded))
+	require.Equal(t, "clickhouse.example.com", decoded["host"])
+	require.NotContains(t, decoded, "password", "literal password must not be stashed when passwordSecret took over")
+}
+
+func TestConvertTo_ClickHousePasswordSecretDefaultKey(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{
+			"clickhouse": map[string]interface{}{
+				"passwordSecret": map[string]interface{}{
+					"name": "ch-creds",
+				},
+			},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+
+	conn := dst.Spec.ClickHouse[appsv2.DefaultInstanceName].ExternalClickHouse
+	require.NotNil(t, conn)
+	require.Equal(t, "ch-creds", conn.Password.Name)
+	require.Equal(t, "CLICKHOUSE_PASSWORD", conn.Password.Key)
+}
+
+// TestConvertTo_NoClickHouseLeavesEmpty: no clickhouse block means conversion
+// leaves it empty for the defaulter to manage.
+func TestConvertTo_NoClickHouseLeavesEmpty(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{
+			"host": "http://wandb.example.com",
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+
+	require.Empty(t, dst.Spec.ClickHouse,
+		"no global.clickhouse means conversion leaves ClickHouse empty for the defaulter to manage")
+	require.NotContains(t, dst.Annotations, ClickHousePendingAnnotation)
+}
+
+// TestConvertTo_ClickHouseOnlyNonConnectionKeys: keys like replicated/install
+// must not be misread as an external connection.
+func TestConvertTo_ClickHouseOnlyNonConnectionKeys(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{
+			"clickhouse": map[string]interface{}{
+				"replicated": true,
+			},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+
+	require.Empty(t, dst.Spec.ClickHouse,
+		"only non-connection keys must not assert an external clickhouse")
+	require.NotContains(t, dst.Annotations, ClickHousePendingAnnotation)
+}
