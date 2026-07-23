@@ -781,7 +781,7 @@ func (m *Manifest) FeaturesEnabled(topicFeatures []string) bool {
 	return false
 }
 
-func (m *Manifest) ResolveServiceURL(src EnvSource) (string, bool) {
+func (m *Manifest) ResolveServiceURL(src EnvSource, namespace string) (string, bool) {
 	if src.Name == "" {
 		return "", false
 	}
@@ -800,7 +800,19 @@ func (m *Manifest) ResolveServiceURL(src EnvSource) (string, bool) {
 	if src.Proto != "" {
 		protoPrefix = fmt.Sprintf("%s://", src.Proto)
 	}
-	return fmt.Sprintf("%s%s:%d%s", protoPrefix, src.Name, port, src.Path), true
+	// Emit the fully-qualified service host (<name>.<namespace>.svc.cluster.local)
+	// rather than the bare service name. A bare single-label host only resolves
+	// via the consuming pod's DNS search domain, and — critically — is not
+	// matched by NO_PROXY suffix rules (.svc/.svc.cluster.local), so when a proxy
+	// is configured these internal service-to-service calls hairpin through it.
+	// The FQDN resolves unambiguously and is covered by the standard cluster-DNS
+	// NO_PROXY suffixes. Matches the FQDN convention the managed-infra reconcilers
+	// already use for datastore hosts.
+	host := src.Name
+	if namespace != "" {
+		host = fmt.Sprintf("%s.%s.svc.cluster.local", src.Name, namespace)
+	}
+	return fmt.Sprintf("%s%s:%d%s", protoPrefix, host, port, src.Path), true
 }
 
 func (a *Application) ResolveServicePortFromManifest(requestedPort string) (int32, bool) {
