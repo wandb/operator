@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	apiv2 "github.com/wandb/operator/api/v2"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
 	appsv1 "k8s.io/api/apps/v1"
@@ -1249,7 +1250,7 @@ func TestInjectManagedWorkloadTelemetryEnvvarsAddsDatadogAgentForDdtraceApps(t *
 	client := fake.NewClientBuilder().WithScheme(scheme).Build()
 	wandb := telemetryStatusWandb("wandb-dev-v2", "default", "status-otel-secret")
 
-	for _, appName := range []string{"anaconda2", "weave-trace"} {
+	for _, appName := range []string{"anaconda2"} {
 		t.Run(appName, func(t *testing.T) {
 			envVars, err := injectManagedWorkloadTelemetryEnvvars(
 				context.Background(),
@@ -1287,6 +1288,17 @@ func TestInjectManagedWorkloadTelemetryEnvvarsAddsDatadogAgentForDdtraceApps(t *
 				}
 			}
 		})
+	}
+}
+
+func TestManagedWorkloadTelemetryApplicationsContainsWeaveTraceApps(t *testing.T) {
+	for _, name := range []string{
+		"weave-trace",
+		"weave-trace-worker",
+		"weave-trace-evaluate-model-worker",
+	} {
+		_, ok := managedWorkloadTelemetryApplications[name]
+		assert.True(t, ok, "%q should be in the OTel allowlist", name)
 	}
 }
 
