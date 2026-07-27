@@ -118,6 +118,40 @@ func writableEmptyDirVolume(name string) corev1.Volume {
 	}
 }
 
+func ToServiceAccount(
+	wandb *apiv2.WeightsAndBiases,
+	spec *apiv2.ManagedClickHouseSpec,
+	objStorage *ObjectStorageConn,
+	scheme *runtime.Scheme,
+) (*corev1.ServiceAccount, error) {
+	if spec.ServiceAccount.Create != nil && !*spec.ServiceAccount.Create {
+		return nil, nil
+	}
+
+	serviceAccount := &corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        clickHouseServiceAccountName(spec),
+			Namespace:   spec.Namespace,
+			Labels:      BuildWandbClickhouseLabels(wandb),
+			Annotations: spec.ServiceAccount.Annotations,
+		},
+		AutomountServiceAccountToken: ptr.To(objStorage.UseEnvCredentials),
+	}
+	if wandb.Namespace == spec.Namespace {
+		if err := ctrl.SetControllerReference(wandb, serviceAccount, scheme); err != nil {
+			return nil, fmt.Errorf("failed to set owner reference on ClickHouse ServiceAccount: %w", err)
+		}
+	}
+	return serviceAccount, nil
+}
+
+func clickHouseServiceAccountName(spec *apiv2.ManagedClickHouseSpec) string {
+	if spec.ServiceAccount.ServiceAccountName != "" {
+		return spec.ServiceAccount.ServiceAccountName
+	}
+	return spec.Name
+}
+
 // ToClickHouseVendorSpec converts a ClickHouseSpec to a ClickHouseInstallation CR.
 // This function translates the high-level ClickHouse spec into the vendor-specific
 // ClickHouseInstallation format used by the Altinity operator.
@@ -191,10 +225,12 @@ func ToClickHouseVendorSpec(
 
 	clickHouseImage := ClickHouseImage(mfst.Clickhouse["default"].Images["server"], wandb.Spec.Global.ImageRegistry)
 	podSpec := corev1.PodSpec{
-		SecurityContext: clickHousePodSecurityContext(),
-		Affinity:        wandb.GetAffinity(spec.ManagedInfraSpec),
-		Tolerations:     *wandb.GetTolerations(spec.ManagedInfraSpec),
-		Volumes:         clickHouseWritableVolumes(),
+		ServiceAccountName:           clickHouseServiceAccountName(spec),
+		AutomountServiceAccountToken: ptr.To(objStorage.UseEnvCredentials),
+		SecurityContext:              clickHousePodSecurityContext(),
+		Affinity:                     wandb.GetAffinity(spec.ManagedInfraSpec),
+		Tolerations:                  *wandb.GetTolerations(spec.ManagedInfraSpec),
+		Volumes:                      clickHouseWritableVolumes(),
 		Containers: []corev1.Container{
 			{
 				Name:            "clickhouse",
