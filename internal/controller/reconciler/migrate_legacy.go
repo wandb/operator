@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/url"
 	"strconv"
 	"strings"
@@ -226,6 +227,10 @@ func migrateLegacyBucket(
 
 	name, path, query := splitBucketQuery(payload.Name, payload.Path)
 	endpoint, port, bucket := parseBucketName(name)
+	if host, hostPort := parseLegacyBucketEndpoint(payload.Provider, name, path); host != "" {
+		endpoint, port = host, hostPort
+		bucket, path, _ = strings.Cut(strings.Trim(path, "/"), "/")
+	}
 	// Query param beats the region field, matching gorilla's precedence.
 	region := payload.Region
 	if v := query.Get("region"); v != "" {
@@ -293,7 +298,7 @@ func splitBucketQuery(name, path string) (cleanName, cleanPath string, q url.Val
 // explicit ?forcePathStyle=/?tls= win, else any embedded endpoint means path-style over
 // http (prefixes belong in bucket.path, so a host in bucket.name is always an endpoint).
 func deriveBucketAddressing(provider, endpoint string, query url.Values) (forcePathStyle, tlsEnabled string) {
-	if provider != "" && provider != "s3" && provider != "cw" {
+	if !s3Compatible(provider) {
 		return "", ""
 	}
 	fps := provider != "cw" && externalobjectstore.RequiresPathStyle(endpoint)
@@ -326,6 +331,31 @@ func parseBucketName(name string) (endpoint, port, bucket string) {
 		return host[:colon], host[colon+1:], bucket
 	}
 	return host, "", bucket
+}
+
+// s3Compatible reports whether a legacy provider uses S3-style endpoint addressing.
+func s3Compatible(provider string) bool {
+	return provider == "" || provider == "s3" || provider == "cw"
+}
+
+// Handles bucket.name="host:port" with the bucket in bucket.path.
+// Needs a port to tell an endpoint from a bucket name.
+func parseLegacyBucketEndpoint(provider, name, path string) (endpoint, port string) {
+	if !s3Compatible(provider) {
+		return "", ""
+	}
+	if strings.Trim(path, "/") == "" || strings.Contains(name, "/") {
+		return "", ""
+	}
+	host, port, err := net.SplitHostPort(name)
+	if err != nil || host == "" {
+		return "", ""
+	}
+	portNumber, err := strconv.ParseUint(port, 10, 16)
+	if err != nil || portNumber == 0 {
+		return "", ""
+	}
+	return host, port
 }
 
 // legacyOIDCPayload is the literal-string subset the webhook couldn't turn
