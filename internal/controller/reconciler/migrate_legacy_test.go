@@ -88,6 +88,13 @@ func getOIDCConvertedSecret(t *testing.T, c ctrlClient.Client) (*corev1.Secret, 
 	return &secret, err
 }
 
+func getClickHouseConvertedSecret(t *testing.T, c ctrlClient.Client) (*corev1.Secret, error) {
+	t.Helper()
+	var secret corev1.Secret
+	err := c.Get(context.Background(), types.NamespacedName{Name: "wandb-clickhouse-converted", Namespace: "default"}, &secret)
+	return &secret, err
+}
+
 func TestMigrateLegacyAnnotations_NoAnnotation(t *testing.T) {
 	client, wandb := newMigrationFixture(t, nil, nil)
 	res, err := migrateLegacyAnnotations(context.Background(), client, wandb)
@@ -716,4 +723,121 @@ func TestMigrateLegacyOIDC_MalformedJSON(t *testing.T) {
 	_, err := migrateLegacyAnnotations(context.Background(), client, wandb)
 	require.Error(t, err)
 	require.Contains(t, wandb.Annotations, apiv1.OIDCPendingAnnotation)
+}
+
+func TestMigrateLegacyClickHouse_FullLiteralPayload(t *testing.T) {
+	payload := `{"host":"clickhouse.example.com","port":8123,"database":"weave","user":"weave","password":"shh"}`
+	client, wandb := newMigrationFixture(t, map[string]string{
+		apiv1.ClickHousePendingAnnotation: payload,
+	}, nil)
+
+	res, err := migrateLegacyAnnotations(context.Background(), client, wandb)
+	require.NoError(t, err)
+	require.NotZero(t, res.RequeueAfter)
+
+	secret, err := getClickHouseConvertedSecret(t, client)
+	require.NoError(t, err)
+	require.Equal(t, corev1.SecretTypeOpaque, secret.Type)
+	require.Equal(t, []byte("clickhouse.example.com"), secret.Data["host"])
+	require.Equal(t, []byte("8123"), secret.Data["httpPort"])
+	require.Equal(t, []byte("weave"), secret.Data["database"])
+	require.Equal(t, []byte("weave"), secret.Data["username"])
+	require.Equal(t, []byte("shh"), secret.Data["password"])
+
+	var fresh apiv2.WeightsAndBiases
+	require.NoError(t, client.Get(context.Background(), types.NamespacedName{Name: "wandb", Namespace: "default"}, &fresh))
+	require.NotContains(t, fresh.Annotations, apiv1.ClickHousePendingAnnotation)
+	conn := fresh.Spec.ClickHouse[apiv2.DefaultInstanceName].ExternalClickHouse
+	require.NotNil(t, conn)
+	require.Nil(t, fresh.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse)
+	require.Equal(t, "wandb-clickhouse-converted", conn.Host.Name)
+	require.Equal(t, "host", conn.Host.Key)
+	require.Equal(t, "httpPort", conn.HTTPPort.Key)
+	require.Equal(t, "database", conn.Database.Key)
+	require.Equal(t, "username", conn.Username.Key)
+	require.Equal(t, "password", conn.Password.Key)
+	require.Empty(t, conn.TCPPort.Name)
+	require.Empty(t, conn.URL.Name)
+}
+
+func TestMigrateLegacyClickHouse_PartialPayload(t *testing.T) {
+	payload := `{"host":"clickhouse.example.com","password":"shh"}`
+	client, wandb := newMigrationFixture(t, map[string]string{
+		apiv1.ClickHousePendingAnnotation: payload,
+	}, nil)
+
+	res, err := migrateLegacyAnnotations(context.Background(), client, wandb)
+	require.NoError(t, err)
+	require.NotZero(t, res.RequeueAfter)
+
+	secret, err := getClickHouseConvertedSecret(t, client)
+	require.NoError(t, err)
+	require.Contains(t, secret.Data, "host")
+	require.Contains(t, secret.Data, "password")
+	require.NotContains(t, secret.Data, "httpPort")
+	require.NotContains(t, secret.Data, "database")
+	require.NotContains(t, secret.Data, "username")
+
+	conn := wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ExternalClickHouse
+	require.NotNil(t, conn)
+	require.Equal(t, "host", conn.Host.Key)
+	require.Equal(t, "password", conn.Password.Key)
+	require.Empty(t, conn.HTTPPort.Name)
+	require.Empty(t, conn.Database.Name)
+	require.Empty(t, conn.Username.Name)
+}
+
+// TestMigrateLegacyClickHouse_PreSetFieldsAreRespected: preset selectors are
+// not overwritten by the annotation drain.
+func TestMigrateLegacyClickHouse_PreSetFieldsAreRespected(t *testing.T) {
+	payload := `{"host":"clickhouse.example.com","password":"shh"}`
+	client, wandb := newMigrationFixture(t, map[string]string{
+		apiv1.ClickHousePendingAnnotation: payload,
+	}, func(w *apiv2.WeightsAndBiases) {
+		w.Spec.ClickHouse = map[string]apiv2.ClickHouseSpec{
+			apiv2.DefaultInstanceName: {
+				ExternalClickHouse: &apiv2.ClickHouseConnection{
+					Password: corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: "preset-ch"},
+						Key:                  "PRESET",
+					},
+				},
+			},
+		}
+	})
+
+	_, err := migrateLegacyAnnotations(context.Background(), client, wandb)
+	require.NoError(t, err)
+
+	secret, err := getClickHouseConvertedSecret(t, client)
+	require.NoError(t, err)
+	require.Contains(t, secret.Data, "host")
+	require.NotContains(t, secret.Data, "password", "preset password selector must be respected")
+
+	conn := wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ExternalClickHouse
+	require.Equal(t, "preset-ch", conn.Password.Name)
+	require.Equal(t, "PRESET", conn.Password.Key)
+}
+
+func TestMigrateLegacyClickHouse_PortStringified(t *testing.T) {
+	payload := `{"port":"8123"}`
+	client, wandb := newMigrationFixture(t, map[string]string{
+		apiv1.ClickHousePendingAnnotation: payload,
+	}, nil)
+
+	_, err := migrateLegacyAnnotations(context.Background(), client, wandb)
+	require.NoError(t, err)
+
+	secret, err := getClickHouseConvertedSecret(t, client)
+	require.NoError(t, err)
+	require.Equal(t, []byte("8123"), secret.Data["httpPort"])
+}
+
+func TestMigrateLegacyClickHouse_MalformedJSON(t *testing.T) {
+	client, wandb := newMigrationFixture(t, map[string]string{
+		apiv1.ClickHousePendingAnnotation: "{not json",
+	}, nil)
+	_, err := migrateLegacyAnnotations(context.Background(), client, wandb)
+	require.Error(t, err)
+	require.Contains(t, wandb.Annotations, apiv1.ClickHousePendingAnnotation)
 }
