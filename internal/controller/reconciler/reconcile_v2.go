@@ -423,6 +423,18 @@ func ReconcileWandbManifest(
 	if !redisReady || !mysqlReady || !kafkaReady || !objectStoreReady || !clickHouseReady {
 		logger.Info("Infra components not ready yet, requeuing for reconciliation",
 			"redis", redisReady, "moco", mysqlReady, "kafka", kafkaReady, "objectStore", objectStoreReady, "clickhouse", clickHouseReady)
+		blockers := infrastructureBlockers(wandb)
+		if err := updateReadyStatus(
+			ctx,
+			client,
+			wandb,
+			statusBefore,
+			false,
+			"DependenciesNotReady",
+			"dependencies not ready: "+strings.Join(blockers, ", "),
+		); err != nil {
+			return ctrl.Result{}, err
+		}
 		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
 	}
 
@@ -447,6 +459,10 @@ func ReconcileWandbManifest(
 
 	if !allMysqlInitSucceeded(wandb) {
 		logger.Info("Mysql init not yet successful")
+		reason, message := mysqlInitializationReadiness(wandb)
+		if err := updateReadyStatus(ctx, client, wandb, statusBefore, false, reason, message); err != nil {
+			return ctrl.Result{}, err
+		}
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
@@ -495,6 +511,10 @@ func ReconcileWandbManifest(
 
 	if !wandb.Status.Wandb.Migration.Ready {
 		logger.Info("Migration not yet successful for version", "version", wandb.Spec.Wandb.Version, "reason", wandb.Status.Wandb.Migration.Reason)
+		reason, message := migrationReadiness(wandb)
+		if err := updateReadyStatus(ctx, client, wandb, statusBefore, false, reason, message); err != nil {
+			return ctrl.Result{}, err
+		}
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
@@ -506,7 +526,8 @@ func ReconcileWandbManifest(
 	// Gate on live Deployment readiness, not status.wandb.applications: the
 	// copied status map can be a stale snapshot (it only refreshes when this
 	// reconciler runs), and a frozen mid-rollout entry would block cleanup forever.
-	if healthy, notReady := deploymentsHealthy(ctx, client, wandb.Namespace, buildDesiredAppNames(manifest)); healthy {
+	applicationsHealthy, notReady := deploymentsHealthy(ctx, client, wandb.Namespace, buildDesiredAppNames(manifest))
+	if applicationsHealthy {
 		if err := cleanupLegacyV1Deployments(ctx, client, wandb); err != nil {
 			logger.Error(err, "Failed to clean up legacy v1 deployments")
 			return ctrl.Result{}, err
@@ -523,11 +544,26 @@ func ReconcileWandbManifest(
 		}
 	}
 
+	if applicationsHealthy {
+		setReadyStatus(
+			wandb,
+			true,
+			"ReconciliationSucceeded",
+			"all dependencies, migrations, and application deployments are ready",
+		)
+	} else {
+		message := "waiting for application deployments: " + strings.Join(notReady, ", ")
+		if len(notReady) == 0 {
+			message = "no desired application deployments were found"
+		}
+		setReadyStatus(wandb, false, "ApplicationsNotReady", message)
+	}
+
 	if err := updateWandbStatusIfChanged(ctx, client, wandb, statusBefore); err != nil {
 		return ctrl.Result{}, err
 	}
 
-	return ctrl.Result{}, nil
+	return result, nil
 }
 
 func reconcileApplications(
@@ -1141,6 +1177,17 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 	version := wandb.Spec.Wandb.Version
 
 	if wandb.Status.Wandb.Migration.Ready && wandb.Status.Wandb.Migration.Version == version {
+		wandb.Status.Wandb.Migration.Phase = migrationPhaseSucceeded
+		if wandb.Status.Wandb.Migration.Reason == "" {
+			wandb.Status.Wandb.Migration.Reason = "Complete"
+		}
+		for name, jobStatus := range wandb.Status.Wandb.Migration.Jobs {
+			if jobStatus.Succeeded && jobStatus.Phase == "" {
+				jobStatus.Phase = migrationPhaseSucceeded
+				jobStatus.Reason = "JobSucceeded"
+				wandb.Status.Wandb.Migration.Jobs[name] = jobStatus
+			}
+		}
 		for name := range manifest.Migrations {
 			jobName := fmt.Sprintf("%s-%s", wandb.Name, name)
 			job := &batchv1.Job{
@@ -1158,12 +1205,16 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 				}
 			}
 		}
+		if err := updateWandbStatusIfChanged(ctx, client, wandb, statusBefore); err != nil {
+			return ctrl.Result{}, err
+		}
 		return ctrl.Result{}, nil
 	}
 
 	if wandb.Status.Wandb.Migration.Version != version {
 		wandb.Status.Wandb.Migration.Version = version
 		wandb.Status.Wandb.Migration.Ready = false
+		wandb.Status.Wandb.Migration.Phase = migrationPhaseRunning
 		wandb.Status.Wandb.Migration.Reason = "Running"
 		wandb.Status.Wandb.Migration.Jobs = make(map[string]apiv2.MigrationJobStatus)
 		if err := updateWandbStatusIfChanged(ctx, client, wandb, statusBefore); err != nil {
@@ -1174,6 +1225,7 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 
 	if len(manifest.Migrations) == 0 {
 		wandb.Status.Wandb.Migration.Ready = true
+		wandb.Status.Wandb.Migration.Phase = migrationPhaseSucceeded
 		wandb.Status.Wandb.Migration.Reason = "Complete"
 		wandb.Status.Wandb.Migration.LastSuccessVersion = version
 		if err := updateWandbStatusIfChanged(ctx, client, wandb, statusBefore); err != nil {
@@ -1271,7 +1323,10 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 			}
 
 			jobStatus.Succeeded = false
+			jobStatus.Phase = migrationPhaseRunning
+			jobStatus.Reason = "JobCreated"
 			wandb.Status.Wandb.Migration.Jobs[name] = jobStatus
+			wandb.Status.Wandb.Migration.Phase = migrationPhaseRunning
 			wandb.Status.Wandb.Migration.Reason = "Running"
 			wandb.Status.Wandb.Migration.Ready = false
 			if err := updateWandbStatusIfChanged(ctx, client, wandb, statusBefore); err != nil {
@@ -1283,11 +1338,27 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 
 		if job.Status.Succeeded > 0 {
 			jobStatus.Succeeded = true
+			jobStatus.Phase = migrationPhaseSucceeded
+			jobStatus.Reason = "JobSucceeded"
+			for _, cond := range job.Status.Conditions {
+				if cond.Type == batchv1.JobComplete && cond.Status == corev1.ConditionTrue {
+					if cond.Reason != "" {
+						jobStatus.Reason = cond.Reason
+					}
+					jobStatus.Message = cond.Message
+					break
+				}
+			}
 		} else {
 			allSucceeded = false
 			for _, cond := range job.Status.Conditions {
 				if cond.Type == batchv1.JobFailed && cond.Status == corev1.ConditionTrue {
 					jobStatus.Failed = true
+					jobStatus.Phase = migrationPhaseFailed
+					jobStatus.Reason = cond.Reason
+					if jobStatus.Reason == "" {
+						jobStatus.Reason = "JobFailed"
+					}
 					jobStatus.Message = cond.Message
 					anyFailed = true
 					break
@@ -1295,6 +1366,12 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 			}
 			if !jobStatus.Failed {
 				anyRunning = true
+				jobStatus.Phase = migrationPhaseRunning
+				if job.Status.Active > 0 {
+					jobStatus.Reason = "JobRunning"
+				} else {
+					jobStatus.Reason = "JobPending"
+				}
 			}
 		}
 
@@ -1302,18 +1379,22 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 	}
 
 	if anyFailed {
+		wandb.Status.Wandb.Migration.Phase = migrationPhaseFailed
 		wandb.Status.Wandb.Migration.Reason = "Failed"
 		wandb.Status.Wandb.Migration.Ready = false
 	} else if anyRunning || !allSucceeded {
+		wandb.Status.Wandb.Migration.Phase = migrationPhaseRunning
 		wandb.Status.Wandb.Migration.Reason = "Running"
 		wandb.Status.Wandb.Migration.Ready = false
 	} else if allSucceeded {
+		wandb.Status.Wandb.Migration.Phase = migrationPhaseSucceeded
 		wandb.Status.Wandb.Migration.Reason = "Complete"
 		wandb.Status.Wandb.Migration.Ready = true
 		if wandb.Status.Wandb.Migration.LastSuccessVersion != version {
 			wandb.Status.Wandb.Migration.LastSuccessVersion = version
 		}
 	} else {
+		wandb.Status.Wandb.Migration.Phase = migrationPhaseUnknown
 		wandb.Status.Wandb.Migration.Reason = "Unknown"
 		wandb.Status.Wandb.Migration.Ready = false
 	}
@@ -1477,19 +1558,6 @@ func resolveCRFieldSecretSelector(obj any, path string) (corev1.SecretKeySelecto
 	return sel, true
 }
 
-// managedInstancesReady reports whether every managed instance has a ready
-// status. External and absent instances are treated as ready, matching the
-// pre-multi-instance behavior where only operator-managed infra gated overall
-// readiness.
-func managedInstancesReady[S any, T any](specs map[string]S, statuses map[string]T, isManaged func(S) bool, ready func(T) bool) bool {
-	for key, spec := range specs {
-		if isManaged(spec) && !ready(statuses[key]) {
-			return false
-		}
-	}
-	return true
-}
-
 // allInstancesReady reports whether every instance (managed or external) has a
 // ready status.
 func allInstancesReady[S any, T any](specs map[string]S, statuses map[string]T, ready func(T) bool) bool {
@@ -1523,16 +1591,28 @@ func inferState(
 	log := ctrl.LoggerFrom(ctx)
 	statusBefore := wandb.DeepCopy().Status
 
-	redisOk := managedInstancesReady(wandb.Spec.Redis, wandb.Status.RedisStatus, func(s apiv2.RedisSpec) bool { return s.ManagedRedis != nil }, func(s apiv2.RedisInfraStatus) bool { return s.Ready })
-	objectStoreOk := managedInstancesReady(wandb.Spec.ObjectStore, wandb.Status.ObjectStoreStatus, func(s apiv2.ObjectStoreSpec) bool { return s.ManagedObjectStore != nil }, func(s apiv2.ObjectStoreInfraStatus) bool { return s.Ready })
-	mysqlOk := managedInstancesReady(wandb.Spec.MySQL, wandb.Status.MySQLStatus, func(s apiv2.MySQLSpec) bool { return s.ManagedMysql != nil }, func(s apiv2.MysqlInfraStatus) bool { return s.Ready })
-	clickHouseOk := managedInstancesReady(wandb.Spec.ClickHouse, wandb.Status.ClickHouseStatus, func(s apiv2.ClickHouseSpec) bool { return s.ManagedClickHouse != nil }, func(s apiv2.ClickHouseInfraStatus) bool { return s.Ready })
-	kafkaOk := wandb.Spec.Kafka.ManagedKafka == nil || wandb.Status.KafkaStatus.Ready
-
-	if redisOk && objectStoreOk && mysqlOk && clickHouseOk && kafkaOk {
-		wandb.Status.Ready = true
-	} else {
-		wandb.Status.Ready = false
+	blockers := infrastructureBlockers(wandb)
+	switch {
+	case len(blockers) > 0:
+		setReadyStatus(
+			wandb,
+			false,
+			"DependenciesNotReady",
+			"dependencies not ready: "+strings.Join(blockers, ", "),
+		)
+	case wandb.Status.ObservedGeneration != wandb.Generation:
+		setReadyStatus(
+			wandb,
+			false,
+			"Reconciling",
+			fmt.Sprintf(
+				"observed generation %d does not match generation %d",
+				wandb.Status.ObservedGeneration,
+				wandb.Generation,
+			),
+		)
+	default:
+		return nil
 	}
 
 	if err := updateWandbStatusIfChanged(ctx, client, wandb, statusBefore); err != nil {
