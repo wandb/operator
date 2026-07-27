@@ -129,6 +129,9 @@ func renderData(storage objectstore.ConnInfo, uri string) (bufstreamData, error)
 	}
 }
 
+// renderS3Storage maps the resolved connection onto Bufstream's S3 data config,
+// applying the region default, endpoint, and path-style, and wiring env-var
+// credential sources only when static keys are present.
 func renderS3Storage(storage objectstore.ConnInfo, uri string) *bufstreamS3 {
 	region := storage.Region
 	if region == "" {
@@ -148,6 +151,8 @@ func renderS3Storage(storage objectstore.ConnInfo, uri string) *bufstreamS3 {
 	return s3
 }
 
+// renderAzureStorage maps the resolved connection onto Bufstream's Azure data
+// config, wiring env-var credential sources only when static keys are present.
 func renderAzureStorage(storage objectstore.ConnInfo, uri string) *bufstreamAzure {
 	az := &bufstreamAzure{URI: uri}
 	if storage.HasStaticCredentials() {

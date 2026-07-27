@@ -19,6 +19,8 @@ import (
 
 const ConnectionSecretName = "wandb-objectstore-connection"
 
+// connectionSecretName builds the connection secret name for an object-store
+// instance key, using the shared default name for the primary instance.
 func connectionSecretName(key string) string {
 	if key == "" || key == apiv2.DefaultInstanceName {
 		return ConnectionSecretName
@@ -26,6 +28,9 @@ func connectionSecretName(key string) string {
 	return fmt.Sprintf("%s-%s", ConnectionSecretName, key)
 }
 
+// WriteState resolves the external object-store fields into a connection secret
+// and returns the reconcile conditions plus the resulting ObjectStoreConnection
+// selectors (nil on error).
 func WriteState(
 	ctx context.Context,
 	c client.Client,
@@ -172,6 +177,8 @@ func joinBucketPrefix(base, prefix string) string {
 	}
 }
 
+// ReadState is a no-op for external object stores; it passes through the
+// conditions produced by WriteState since there is no additional state to read.
 func ReadState(
 	_ context.Context,
 	_ client.Client,
@@ -182,6 +189,8 @@ func ReadState(
 	return newConditions
 }
 
+// DeleteConnectionSecret removes the connection secret written for the given
+// object-store instance key.
 func DeleteConnectionSecret(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, key string) error {
 	return external.DeleteConnectionSecret(ctx, c, types.NamespacedName{
 		Namespace: wandb.Namespace,

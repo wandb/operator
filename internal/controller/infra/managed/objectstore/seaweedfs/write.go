@@ -24,6 +24,9 @@ const (
 	AppConnTypeName  = "SeaweedAppConn"
 )
 
+// WriteState reconciles the managed SeaweedFS CR, its S3 identity config, and
+// the W&B connection secret, returning the reconcile conditions plus the
+// resulting ObjectStoreConnection (nil until the connection is available).
 func WriteState(
 	ctx context.Context,
 	kubeClient client.Client,
@@ -139,6 +142,9 @@ func WriteState(
 	return result, nil
 }
 
+// writeSeaweedS3Config persists the SeaweedFS S3 identity config secret,
+// preserving the existing secret key when one is already present so credentials
+// stay stable across reconciles, and returns the resolved ConnInfo.
 func writeSeaweedS3Config(
 	ctx context.Context,
 	client client.Client,

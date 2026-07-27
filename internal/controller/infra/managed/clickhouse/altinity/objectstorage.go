@@ -60,6 +60,7 @@ func ResolveObjectStorage(
 	return &ci, endpoint, nil
 }
 
+// objectStoragePrefix returns the normalized in-bucket prefix for the spec.
 func objectStoragePrefix(spec *apiv2.ManagedClickHouseSpec) string {
 	return normalizePrefix(spec.ObjectStorage.Prefix)
 }

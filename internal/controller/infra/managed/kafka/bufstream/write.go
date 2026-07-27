@@ -97,6 +97,7 @@ func WriteState(
 	return results
 }
 
+// translateError wraps an error as a failed Reconciled condition.
 func translateError(err error) []metav1.Condition {
 	return []metav1.Condition{
 		{Type: common.ReconciledType, Status: metav1.ConditionFalse, Reason: common.ControllerErrorReason, Message: err.Error()},
@@ -140,6 +141,7 @@ func writeResource[T client.Object](
 	return []metav1.Condition{actionToCondition(conditionType, action)}
 }
 
+// actionToCondition maps a CRUD action onto the status condition it implies.
 func actionToCondition(conditionType string, action common.CrudAction) metav1.Condition {
 	switch action {
 	case common.CreateAction:

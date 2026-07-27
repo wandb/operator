@@ -20,6 +20,8 @@ const (
 	S3Port      = "8333"
 )
 
+// buildS3ConnInfo assembles the ConnInfo for the managed SeaweedFS S3 gateway:
+// the in-cluster service host/port, path-style addressing, and default region.
 func buildS3ConnInfo(
 	accessKey, secretKey string, nsnBuilder *NsNameBuilder, tls bool,
 ) *objectstore.ConnInfo {
@@ -51,6 +53,7 @@ func managedS3URL(connInfo *objectstore.ConnInfo) string {
 	return fmt.Sprintf("%s?tls=%t", s3URL.String(), connInfo.TlsEnabled)
 }
 
+// s3ServiceHost returns the in-cluster FQDN of the SeaweedFS S3 service.
 func s3ServiceHost(specName, namespace string) string {
 	return fmt.Sprintf("%s-s3.%s.svc.cluster.local", SeaweedName(specName), namespace)
 }
@@ -63,6 +66,9 @@ func s3ExternalURL(specName, namespace string, tls bool) string {
 	return fmt.Sprintf("%s://%s:%s", objectstore.SchemeForTLS(tls), s3ServiceHost(specName, namespace), S3Port)
 }
 
+// writeWandbConnInfo writes the connection secret consumed by W&B and returns
+// the ObjectStoreConnection with every selector required, since managed
+// SeaweedFS always persists the full key set.
 func writeWandbConnInfo(
 	ctx context.Context,
 	cl client.Client,
