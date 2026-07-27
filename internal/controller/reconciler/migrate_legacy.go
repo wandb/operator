@@ -32,7 +32,7 @@ import (
 
 	apiv1 "github.com/wandb/operator/api/v1"
 	apiv2 "github.com/wandb/operator/api/v2"
-	externalobjectstore "github.com/wandb/operator/internal/controller/infra/external/objectstore"
+	"github.com/wandb/operator/internal/controller/infra/objectstore"
 )
 
 // migrateLegacyAnnotations drains `legacy.operator.wandb.com/*-pending`
@@ -296,7 +296,7 @@ func deriveBucketAddressing(provider, endpoint string, query url.Values) (forceP
 	if provider != "" && provider != "s3" && provider != "cw" {
 		return "", ""
 	}
-	fps := provider != "cw" && externalobjectstore.RequiresPathStyle(endpoint)
+	fps := provider != "cw" && objectstore.RequiresPathStyle(endpoint)
 	if v, err := strconv.ParseBool(query.Get("forcePathStyle")); err == nil {
 		fps = v
 	}
