@@ -69,5 +69,8 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Kafka", func() {
 		g.Expect(wandb.Spec.Kafka.ManagedKafka).ToNot(g.BeNil())
 		g.Expect(wandb.Spec.Kafka.ManagedKafka.Name).To(g.Equal("test-wandb-kafka"))
 		g.Expect(wandb.Spec.Kafka.ManagedKafka.Namespace).To(g.Equal("test-namespace"))
+		g.Expect(wandb.Spec.Kafka.ManagedKafka.ServiceAccount.Create).ToNot(g.BeNil())
+		g.Expect(*wandb.Spec.Kafka.ManagedKafka.ServiceAccount.Create).To(g.BeTrue())
+		g.Expect(wandb.Spec.Kafka.ManagedKafka.ServiceAccount.ServiceAccountName).To(g.Equal("test-wandb-kafka"))
 	})
 })

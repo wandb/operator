@@ -428,6 +428,18 @@ type ServiceAccountSpec struct {
 	Annotations        map[string]string `json:"annotations,omitempty"`
 }
 
+// ManagedServiceAccountSpec configures the Kubernetes identity used by a
+// managed infrastructure workload.
+type ManagedServiceAccountSpec struct {
+	// Create controls whether the operator reconciles the ServiceAccount. It
+	// defaults to true; set it to false to reference an existing identity.
+	Create *bool `json:"create,omitempty"`
+	// ServiceAccountName defaults to the managed infrastructure resource name.
+	ServiceAccountName string `json:"serviceAccountName,omitempty"`
+	// Annotations supports cloud workload identity integrations such as IRSA.
+	Annotations map[string]string `json:"annotations,omitempty"`
+}
+
 type InternalServiceAuth struct {
 	Enabled    *bool  `json:"enabled,omitempty"`
 	OIDCIssuer string `json:"oidcIssuer,omitempty"`
@@ -546,13 +558,15 @@ type KafkaSpec struct {
 type ManagedKafkaSpec struct {
 	ManagedInfraSpec `json:",inline"`
 
-	StorageSize      string      `json:"storageSize,omitempty"`
-	Replicas         int32       `json:"replicas,omitempty"`
-	Config           KafkaConfig `json:"config,omitempty"`
-	Namespace        string      `json:"namespace,omitempty"`
-	Name             string      `json:"name,omitempty"`
-	Telemetry        Telemetry   `json:"telemetry,omitempty"`
-	SkipDataRecovery bool        `json:"skipDataRecovery,omitempty"`
+	StorageSize string      `json:"storageSize,omitempty"`
+	Replicas    int32       `json:"replicas,omitempty"`
+	Config      KafkaConfig `json:"config,omitempty"`
+	Namespace   string      `json:"namespace,omitempty"`
+	Name        string      `json:"name,omitempty"`
+	Telemetry   Telemetry   `json:"telemetry,omitempty"`
+	// ServiceAccount configures the identity used by the Bufstream broker.
+	ServiceAccount   ManagedServiceAccountSpec `json:"serviceAccount,omitempty"`
+	SkipDataRecovery bool                      `json:"skipDataRecovery,omitempty"`
 }
 
 type KafkaConnection struct {
@@ -655,6 +669,8 @@ type ManagedClickHouseSpec struct {
 	Namespace   string           `json:"namespace,omitempty"`
 	Name        string           `json:"name,omitempty"`
 	Telemetry   Telemetry        `json:"telemetry,omitempty"`
+	// ServiceAccount configures the identity used by ClickHouse server pods.
+	ServiceAccount ManagedServiceAccountSpec `json:"serviceAccount,omitempty"`
 
 	// ObjectStorage configures the S3-backed disk that holds ClickHouse table
 	// data in the configured W&B object store (managed SeaweedFS or external
