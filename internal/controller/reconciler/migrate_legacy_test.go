@@ -409,28 +409,6 @@ func TestMigrateLegacyMySQL_PortStringValueAccepted(t *testing.T) {
 	require.Equal(t, []byte("3308"), secret.Data["port"])
 }
 
-func TestParseBucketName(t *testing.T) {
-	cases := []struct {
-		name                string
-		endpoint, port, bkt string
-	}{
-		{"", "", "", ""},
-		{"my-bucket", "", "", "my-bucket"},
-		{"minio.example.com/wandb", "minio.example.com", "", "wandb"},
-		{"minio.example.com:9000/wandb", "minio.example.com", "9000", "wandb"},
-		{"minio:9000/wandb", "minio", "9000", "wandb"},
-		{"minio.minio.svc.cluster.local:9000/bucket", "minio.minio.svc.cluster.local", "9000", "bucket"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			e, p, b := parseBucketName(tc.name)
-			require.Equal(t, tc.endpoint, e)
-			require.Equal(t, tc.port, p)
-			require.Equal(t, tc.bkt, b)
-		})
-	}
-}
-
 func TestMigrateLegacyBucket_BareBucketName(t *testing.T) {
 	payload := `{"name":"my-bucket","region":"us-east-1","accessKey":"AKIA","secretKey":"shh"}`
 	client, wandb := newMigrationFixture(t, map[string]string{

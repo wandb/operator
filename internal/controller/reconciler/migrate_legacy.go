@@ -20,7 +20,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net"
 	"net/url"
 	"strconv"
 	"strings"
@@ -289,11 +288,7 @@ func migrateLegacyBucket(
 	}
 
 	name, path, query := splitBucketQuery(payload.Name, payload.Path)
-	endpoint, port, bucket := parseBucketName(name)
-	if host, hostPort := parseLegacyBucketEndpoint(payload.Provider, name, path); host != "" {
-		endpoint, port = host, hostPort
-		bucket, path, _ = strings.Cut(strings.Trim(path, "/"), "/")
-	}
+	endpoint, port, bucket, path := objectstore.ParseLegacyBucket(payload.Provider, name, path)
 	// Query param beats the region field, matching gorilla's precedence.
 	region := payload.Region
 	if v := query.Get("region"); v != "" {
@@ -313,7 +308,7 @@ func migrateLegacyBucket(
 	fill(&conn.Endpoint, "endpoint", endpoint)
 	fill(&conn.Port, "port", port)
 	fill(&conn.Bucket, "bucket", bucket)
-	fill(&conn.Path, "path", strings.Trim(path, "/"))
+	fill(&conn.Path, "path", path)
 	fill(&conn.Region, "region", region)
 	fill(&conn.AccessKey, "accessKey", payload.AccessKey)
 	fill(&conn.SecretKey, "secretKey", payload.SecretKey)
@@ -361,7 +356,7 @@ func splitBucketQuery(name, path string) (cleanName, cleanPath string, q url.Val
 // explicit ?forcePathStyle=/?tls= win, else any embedded endpoint means path-style over
 // http (prefixes belong in bucket.path, so a host in bucket.name is always an endpoint).
 func deriveBucketAddressing(provider, endpoint string, query url.Values) (forcePathStyle, tlsEnabled string) {
-	if !s3Compatible(provider) {
+	if !objectstore.S3Compatible(provider) {
 		return "", ""
 	}
 	fps := provider != "cw" && objectstore.RequiresPathStyle(endpoint)
@@ -378,47 +373,6 @@ func deriveBucketAddressing(provider, endpoint string, query url.Values) (forceP
 		tls = v
 	}
 	return forcePathStyle, strconv.FormatBool(tls)
-}
-
-// parseBucketName splits v1's bucket.name. A "/" indicates the embedded
-// "host[:port]/bucket" form (S3 bucket names can't contain "/"); otherwise
-// the whole string is the bucket name.
-func parseBucketName(name string) (endpoint, port, bucket string) {
-	if name == "" || !strings.Contains(name, "/") {
-		return "", "", name
-	}
-	slash := strings.IndexByte(name, '/')
-	host := name[:slash]
-	bucket = name[slash+1:]
-	if colon := strings.IndexByte(host, ':'); colon >= 0 {
-		return host[:colon], host[colon+1:], bucket
-	}
-	return host, "", bucket
-}
-
-// s3Compatible reports whether a legacy provider uses S3-style endpoint addressing.
-func s3Compatible(provider string) bool {
-	return provider == "" || provider == "s3" || provider == "cw"
-}
-
-// Handles bucket.name="host:port" with the bucket in bucket.path.
-// Needs a port to tell an endpoint from a bucket name.
-func parseLegacyBucketEndpoint(provider, name, path string) (endpoint, port string) {
-	if !s3Compatible(provider) {
-		return "", ""
-	}
-	if strings.Trim(path, "/") == "" || strings.Contains(name, "/") {
-		return "", ""
-	}
-	host, port, err := net.SplitHostPort(name)
-	if err != nil || host == "" {
-		return "", ""
-	}
-	portNumber, err := strconv.ParseUint(port, 10, 16)
-	if err != nil || portNumber == 0 {
-		return "", ""
-	}
-	return host, port
 }
 
 // legacyOIDCPayload is the literal-string subset the webhook couldn't turn
