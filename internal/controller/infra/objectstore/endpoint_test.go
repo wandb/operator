@@ -60,3 +60,43 @@ func TestAzureBlobURI(t *testing.T) {
 		"https://acct.blob.core.windows.net/container/some/prefix",
 		AzureBlobURI("acct", "container", "some/prefix"))
 }
+
+func TestS3Compatible(t *testing.T) {
+	for _, p := range []string{"", "s3", "cw"} {
+		require.True(t, S3Compatible(p), p)
+	}
+	for _, p := range []string{"gcs", "az", "azure"} {
+		require.False(t, S3Compatible(p), p)
+	}
+}
+
+func TestParseLegacyBucket(t *testing.T) {
+	cases := []struct {
+		desc                        string
+		provider, name, path        string
+		endpoint, port, bkt, prefix string
+	}{
+		{"empty", "", "", "", "", "", "", ""},
+		{"bare bucket", "s3", "my-bucket", "", "", "", "my-bucket", ""},
+		{"bare bucket with prefix", "s3", "my-bucket", "prefix", "", "", "my-bucket", "prefix"},
+		{"embedded host", "", "minio.example.com/wandb", "", "minio.example.com", "", "wandb", ""},
+		{"embedded host:port", "", "minio.example.com:9000/wandb", "", "minio.example.com", "9000", "wandb", ""},
+		{"embedded short host:port", "", "minio:9000/wandb", "", "minio", "9000", "wandb", ""},
+		{"embedded fqdn host:port", "", "minio.minio.svc.cluster.local:9000/bucket", "", "minio.minio.svc.cluster.local", "9000", "bucket", ""},
+		{"host:port name, bucket in path", "s3", "minio.minio.svc.cluster.local:9000", "lsahu-minio-bucket", "minio.minio.svc.cluster.local", "9000", "lsahu-minio-bucket", ""},
+		{"host:port name, bucket + prefix in path", "s3", "minio:9000", "/bucket/team/project/", "minio", "9000", "bucket", "team/project"},
+		{"host:port name, no provider", "", "minio:9000", "bucket", "minio", "9000", "bucket", ""},
+		{"aws bucket with path is not endpoint", "s3", "my-aws-bucket", "prefix", "", "", "my-aws-bucket", "prefix"},
+		{"host:port name but non-s3 provider", "gcs", "foo:9000", "bucket", "", "", "foo:9000", "bucket"},
+		{"ipv6 host:port name", "s3", "[fd00::1]:9000", "bucket", "fd00::1", "9000", "bucket", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.desc, func(t *testing.T) {
+			e, p, b, pre := ParseLegacyBucket(tc.provider, tc.name, tc.path)
+			require.Equal(t, tc.endpoint, e)
+			require.Equal(t, tc.port, p)
+			require.Equal(t, tc.bkt, b)
+			require.Equal(t, tc.prefix, pre)
+		})
+	}
+}

@@ -288,7 +288,7 @@ func migrateLegacyBucket(
 	}
 
 	name, path, query := splitBucketQuery(payload.Name, payload.Path)
-	endpoint, port, bucket := parseBucketName(name)
+	endpoint, port, bucket, path := objectstore.ParseLegacyBucket(payload.Provider, name, path)
 	// Query param beats the region field, matching gorilla's precedence.
 	region := payload.Region
 	if v := query.Get("region"); v != "" {
@@ -308,7 +308,7 @@ func migrateLegacyBucket(
 	fill(&conn.Endpoint, "endpoint", endpoint)
 	fill(&conn.Port, "port", port)
 	fill(&conn.Bucket, "bucket", bucket)
-	fill(&conn.Path, "path", strings.Trim(path, "/"))
+	fill(&conn.Path, "path", path)
 	fill(&conn.Region, "region", region)
 	fill(&conn.AccessKey, "accessKey", payload.AccessKey)
 	fill(&conn.SecretKey, "secretKey", payload.SecretKey)
@@ -356,7 +356,7 @@ func splitBucketQuery(name, path string) (cleanName, cleanPath string, q url.Val
 // explicit ?forcePathStyle=/?tls= win, else any embedded endpoint means path-style over
 // http (prefixes belong in bucket.path, so a host in bucket.name is always an endpoint).
 func deriveBucketAddressing(provider, endpoint string, query url.Values) (forcePathStyle, tlsEnabled string) {
-	if provider != "" && provider != "s3" && provider != "cw" {
+	if !objectstore.S3Compatible(provider) {
 		return "", ""
 	}
 	fps := provider != "cw" && objectstore.RequiresPathStyle(endpoint)
@@ -373,22 +373,6 @@ func deriveBucketAddressing(provider, endpoint string, query url.Values) (forceP
 		tls = v
 	}
 	return forcePathStyle, strconv.FormatBool(tls)
-}
-
-// parseBucketName splits v1's bucket.name. A "/" indicates the embedded
-// "host[:port]/bucket" form (S3 bucket names can't contain "/"); otherwise
-// the whole string is the bucket name.
-func parseBucketName(name string) (endpoint, port, bucket string) {
-	if name == "" || !strings.Contains(name, "/") {
-		return "", "", name
-	}
-	slash := strings.IndexByte(name, '/')
-	host := name[:slash]
-	bucket = name[slash+1:]
-	if colon := strings.IndexByte(host, ':'); colon >= 0 {
-		return host[:colon], host[colon+1:], bucket
-	}
-	return host, "", bucket
 }
 
 // legacyOIDCPayload is the literal-string subset the webhook couldn't turn

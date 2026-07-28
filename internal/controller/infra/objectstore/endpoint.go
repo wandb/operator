@@ -2,6 +2,8 @@ package objectstore
 
 import (
 	"fmt"
+	"net"
+	"strconv"
 	"strings"
 )
 
@@ -48,4 +50,43 @@ func AzureBlobURI(account, container, prefix string) string {
 		uri += "/" + prefix
 	}
 	return uri
+}
+
+// ParseLegacyBucket splits a v1 bucket.name/path into endpoint, port, bucket and prefix.
+func ParseLegacyBucket(provider, name, path string) (endpoint, port, bucket, prefix string) {
+	prefix = strings.Trim(path, "/")
+
+	// host[:port]/bucket
+	if slash := strings.IndexByte(name, '/'); slash >= 0 {
+		host, bkt := name[:slash], name[slash+1:]
+		if colon := strings.IndexByte(host, ':'); colon >= 0 {
+			return host[:colon], host[colon+1:], bkt, prefix
+		}
+		return host, "", bkt, prefix
+	}
+
+	// host:port name, bucket in path
+	if host, hostPort := splitHostPort(name); host != "" && prefix != "" && S3Compatible(provider) {
+		bkt, rest, _ := strings.Cut(prefix, "/")
+		return host, hostPort, bkt, rest
+	}
+
+	return "", "", name, prefix
+}
+
+// splitHostPort parses "host:port", returning "","" if the port is missing or invalid.
+func splitHostPort(name string) (host, port string) {
+	host, port, err := net.SplitHostPort(name)
+	if err != nil || host == "" {
+		return "", ""
+	}
+	if n, err := strconv.ParseUint(port, 10, 16); err != nil || n == 0 {
+		return "", ""
+	}
+	return host, port
+}
+
+// S3Compatible reports whether the provider uses an S3-style endpoint.
+func S3Compatible(provider string) bool {
+	return provider == "" || provider == "s3" || provider == "cw"
 }
