@@ -68,14 +68,7 @@ wandb-operator:
       # Mounts the custom CA bundle (see caCerts below) into the operator
       # container. Rendered only when caCerts has a source.
       volumeMountsTpls:
-        - |
-          {{- $ca := .Values.caCerts | default dict }}
-          {{- $mp := $ca.mountPath | default "/etc/wandb/ca-certs" }}
-          {{- if or $ca.certs $ca.existingSecret $ca.existingConfigMap }}
-          - name: wandb-operator-ca-certs
-            mountPath: {{ $mp }}
-            readOnly: true
-          {{- end }}
+        - '{{ include "wandb-operator.caCertsVolumeMount" . }}'
 
   # Custom CA certificates trusted by the operator process. Required when the
   # operator must pull the server manifest from a private/self-signed OCI
@@ -90,26 +83,9 @@ wandb-operator:
     existingConfigMap: ""
     mountPath: /etc/wandb/ca-certs
   volumesTpls:
-    - |
-      {{- $ca := .Values.caCerts | default dict }}
-      {{- if or $ca.certs $ca.existingSecret $ca.existingConfigMap }}
-      - name: wandb-operator-ca-certs
-        {{- if $ca.existingConfigMap }}
-        configMap:
-          name: {{ $ca.existingConfigMap }}
-        {{- else }}
-        secret:
-          secretName: {{ $ca.existingSecret | default (printf "%s-operator-ca-certs" .Release.Name) }}
-        {{- end }}
-      {{- end }}
+    - '{{ include "wandb-operator.caCertsVolume" . }}'
   envTpls:
-    - |
-      {{- $ca := .Values.caCerts | default dict }}
-      {{- $mp := $ca.mountPath | default "/etc/wandb/ca-certs" }}
-      {{- if or $ca.certs $ca.existingSecret $ca.existingConfigMap }}
-      - name: SSL_CERT_DIR
-        value: "{{ $mp }}:/etc/ssl/certs:/etc/pki/tls/certs"
-      {{- end }}
+    - '{{ include "wandb-operator.caCertsEnv" . }}'
 
   service:
     enabled: true
