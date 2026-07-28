@@ -33,7 +33,7 @@ import (
 
 	apiv1 "github.com/wandb/operator/api/v1"
 	apiv2 "github.com/wandb/operator/api/v2"
-	externalobjectstore "github.com/wandb/operator/internal/controller/infra/external/objectstore"
+	"github.com/wandb/operator/internal/controller/infra/objectstore"
 )
 
 // migrateLegacyAnnotations drains `legacy.operator.wandb.com/*-pending`
@@ -60,7 +60,11 @@ func migrateLegacyAnnotations(
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	if !mysqlChanged && !redisChanged && !bucketChanged && !oidcChanged {
+	clickHouseChanged, err := migrateLegacyClickHouse(ctx, c, wandb)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if !mysqlChanged && !redisChanged && !bucketChanged && !oidcChanged && !clickHouseChanged {
 		return ctrl.Result{}, nil
 	}
 
@@ -191,6 +195,65 @@ func migrateLegacyRedis(
 	return true, nil
 }
 
+// legacyClickHousePayload is the literal-string subset the webhook couldn't
+// turn into typed selectors. Port is `any` to accept JSON number or string.
+type legacyClickHousePayload struct {
+	Host     string `json:"host,omitempty"`
+	Port     any    `json:"port,omitempty"`
+	Database string `json:"database,omitempty"`
+	User     string `json:"user,omitempty"`
+	Password string `json:"password,omitempty"`
+}
+
+// migrateLegacyClickHouse drains the clickhouse-pending annotation into a
+// Secret + externalClickhouse selectors (v1 `port` fills HTTPPort).
+func migrateLegacyClickHouse(
+	ctx context.Context,
+	c ctrlClient.Client,
+	wandb *apiv2.WeightsAndBiases,
+) (bool, error) {
+	raw, ok := wandb.Annotations[apiv1.ClickHousePendingAnnotation]
+	if !ok {
+		return false, nil
+	}
+
+	dec := json.NewDecoder(strings.NewReader(raw))
+	dec.UseNumber()
+	var payload legacyClickHousePayload
+	if err := dec.Decode(&payload); err != nil {
+		return false, fmt.Errorf("decode %s: %w", apiv1.ClickHousePendingAnnotation, err)
+	}
+
+	secretName := fmt.Sprintf("%s-clickhouse-converted", wandb.Name)
+	conn := wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ExternalClickHouse
+	if conn == nil {
+		conn = &apiv2.ClickHouseConnection{}
+	}
+
+	data := map[string][]byte{}
+	fill := func(target *corev1.SecretKeySelector, dataKey, value string) {
+		if target.Name != "" || value == "" {
+			return
+		}
+		data[dataKey] = []byte(value)
+		*target = secretSelector(secretName, dataKey)
+	}
+
+	fill(&conn.Host, "host", payload.Host)
+	fill(&conn.HTTPPort, "httpPort", normalizePort(payload.Port))
+	fill(&conn.Database, "database", payload.Database)
+	fill(&conn.Username, "username", payload.User)
+	fill(&conn.Password, "password", payload.Password)
+
+	if err := materializeConvertedSecret(ctx, c, wandb, secretName, data); err != nil {
+		return false, err
+	}
+
+	setExternalInstance(&wandb.Spec.ClickHouse, func(s *apiv2.ClickHouseSpec) { s.ExternalClickHouse = conn })
+	delete(wandb.Annotations, apiv1.ClickHousePendingAnnotation)
+	return true, nil
+}
+
 // legacyBucketPayload is the flat literal subset from the webhook's
 // bucket+defaultBucket merge. kmsKey has no v2 home; ignored.
 type legacyBucketPayload struct {
@@ -301,7 +364,7 @@ func deriveBucketAddressing(provider, endpoint string, query url.Values) (forceP
 	if !s3Compatible(provider) {
 		return "", ""
 	}
-	fps := provider != "cw" && externalobjectstore.RequiresPathStyle(endpoint)
+	fps := provider != "cw" && objectstore.RequiresPathStyle(endpoint)
 	if v, err := strconv.ParseBool(query.Get("forcePathStyle")); err == nil {
 		fps = v
 	}
