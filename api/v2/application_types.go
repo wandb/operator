@@ -67,9 +67,65 @@ type ApplicationSpec struct {
 	Jobs                 []batchv1.Job                              `json:"jobs,omitempty"`
 	CronJobs             []batchv1.CronJob                          `json:"cronJobs,omitempty"`
 
+	// Triage declares the bounded diagnostic actions that may be requested for
+	// this application through TriageRun resources.
+	// +optional
+	Triage *ApplicationTriageSpec `json:"triage,omitempty"`
+
 	// HTTPRouteTemplate is the desired HTTPRoute spec. Nil means no HTTPRoute.
 	// +optional
 	HTTPRouteTemplate *HTTPRouteTemplateSpec `json:"httpRouteTemplate,omitempty"`
+}
+
+// ApplicationTriageSpec contains the diagnostic actions exposed by an
+// Application. The Application remains the source of runtime configuration;
+// TriageRun only selects one of these actions.
+type ApplicationTriageSpec struct {
+	// Actions maps stable action names to their execution overrides.
+	// +kubebuilder:validation:MinProperties=1
+	// +kubebuilder:validation:MaxProperties=16
+	Actions map[string]TriageActionSpec `json:"actions"`
+}
+
+// TriageActionSpec is a compact override applied to one container from the
+// Application pod template. Image, identity, environment, volumes, and
+// scheduling settings are inherited from the Application.
+type TriageActionSpec struct {
+	// ContainerName selects a container from the Application pod template. It
+	// may be omitted when the Application has exactly one container.
+	// +optional
+	ContainerName string `json:"containerName,omitempty"`
+
+	// Command replaces the selected container's entrypoint when non-empty.
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=64
+	// +optional
+	Command []string `json:"command,omitempty"`
+
+	// Args replaces the selected container's arguments when non-empty.
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=64
+	// +optional
+	Args []string `json:"args,omitempty"`
+
+	// Env adds or overrides environment variables inherited from the selected
+	// application container.
+	// +kubebuilder:validation:MaxItems=128
+	// +optional
+	Env []corev1.EnvVar `json:"env,omitempty"`
+
+	// Resources deliberately does not inherit the parent container's resource
+	// requirements. When omitted, the controller applies small bounded
+	// defaults suitable for diagnostics.
+	// +optional
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	// TimeoutSeconds is the Job execution deadline. Zero selects the controller
+	// default.
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=3600
+	// +optional
+	TimeoutSeconds int64 `json:"timeoutSeconds,omitempty"`
 }
 
 // HTTPRouteTemplateSpec contains the fields needed to build a Gateway API HTTPRoute.
