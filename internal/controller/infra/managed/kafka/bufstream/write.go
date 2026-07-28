@@ -2,11 +2,10 @@ package bufstream
 
 import (
 	"context"
-	"strconv"
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
-	"github.com/wandb/operator/internal/controller/infra/external/objectstore"
+	"github.com/wandb/operator/internal/controller/infra/objectstore"
 	"github.com/wandb/operator/internal/logx"
 	"github.com/wandb/operator/pkg/utils"
 	"github.com/wandb/operator/pkg/wandb/manifest"
@@ -98,6 +97,7 @@ func WriteState(
 	return results
 }
 
+// translateError wraps an error as a failed Reconciled condition.
 func translateError(err error) []metav1.Condition {
 	return []metav1.Condition{
 		{Type: common.ReconciledType, Status: metav1.ConditionFalse, Reason: common.ControllerErrorReason, Message: err.Error()},
@@ -141,6 +141,7 @@ func writeResource[T client.Object](
 	return []metav1.Condition{actionToCondition(conditionType, action)}
 }
 
+// actionToCondition maps a CRUD action onto the status condition it implies.
 func actionToCondition(conditionType string, action common.CrudAction) metav1.Condition {
 	switch action {
 	case common.CreateAction:
@@ -173,70 +174,9 @@ func resolveStorage(
 		return objectstore.ConnInfo{}, false, nil
 	}
 
-	resolver := &utils.ConnSecretResolver{Client: cl, Namespace: spec.Namespace, Cache: map[string]*corev1.Secret{}}
-
-	connInfo := objectstore.ConnInfo{}
-
-	provider, err := resolver.Value(ctx, status.Connection.Provider)
+	connInfo, err := objectstore.Resolve(ctx, cl, spec.Namespace, &status.Connection)
 	if err != nil {
 		return objectstore.ConnInfo{}, true, err
 	}
-	connInfo.Provider = apiv2.ObjectStoreProvider(provider)
-
-	connInfo.Bucket, err = resolver.Value(ctx, status.Connection.Bucket)
-	if err != nil {
-		return objectstore.ConnInfo{}, true, err
-	}
-
-	connInfo.Endpoint, err = resolver.Value(ctx, status.Connection.Endpoint)
-	if err != nil {
-		return objectstore.ConnInfo{}, true, err
-	}
-
-	connInfo.Port, err = resolver.Value(ctx, status.Connection.Port)
-	if err != nil {
-		return objectstore.ConnInfo{}, true, err
-	}
-
-	connInfo.Region, err = resolver.Value(ctx, status.Connection.Region)
-	if err != nil {
-		return objectstore.ConnInfo{}, true, err
-	}
-
-	connInfo.AccessKey, err = resolver.Value(ctx, status.Connection.AccessKey)
-	if err != nil {
-		return objectstore.ConnInfo{}, true, err
-	}
-
-	connInfo.SecretKey, err = resolver.Value(ctx, status.Connection.SecretKey)
-	if err != nil {
-		return objectstore.ConnInfo{}, true, err
-	}
-
-	forcePathStyleString, err := resolver.Value(ctx, status.Connection.ForcePathStyle)
-	if err != nil {
-		return objectstore.ConnInfo{}, true, err
-	}
-	if fps, parseErr := strconv.ParseBool(forcePathStyleString); parseErr == nil {
-		connInfo.ForcePathStyle = fps
-	} else {
-		// Connection secrets written before the operator derived this key lack it.
-		connInfo.ForcePathStyle = objectstore.RequiresPathStyle(connInfo.Endpoint)
-	}
-
-	tlsEnabledString, err := resolver.Value(ctx, status.Connection.TlsEnabled)
-	if err != nil {
-		return objectstore.ConnInfo{}, true, err
-	}
-	connInfo.TlsEnabled, err = strconv.ParseBool(tlsEnabledString)
-	if err != nil {
-		connInfo.TlsEnabled = false
-	}
-
-	connInfo.Path, err = resolver.Value(ctx, status.Connection.Path)
-	if err != nil {
-		return objectstore.ConnInfo{}, true, err
-	}
-
 	return connInfo, true, nil
 }
