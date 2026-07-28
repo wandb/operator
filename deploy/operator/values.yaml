@@ -65,6 +65,27 @@ wandb-operator:
         - mountPath: /tmp/wandb-operator/serving-certs
           name: serving-certs
           readOnly: true
+      # Mounts the custom CA bundle (see caCerts below) into the operator
+      # container. Rendered only when caCerts has a source.
+      volumeMountsTpls:
+        - '{{ include "wandb-operator.caCertsVolumeMount" . }}'
+
+  # Custom CA certificates trusted by the operator process. Required when the
+  # operator must pull the server manifest from a private/self-signed OCI
+  # registry (air-gapped installs). Activates when any source below is set;
+  # certs are added to SSL_CERT_DIR additively (Go still loads the ubi system
+  # bundle, so public roots are preserved).
+  caCerts:
+    # Inline PEM blocks; the parent chart synthesizes them into a Secret.
+    certs: []
+    # Or reference an existing Secret / ConfigMap whose keys are PEM certs.
+    existingSecret: ""
+    existingConfigMap: ""
+    mountPath: /etc/wandb/ca-certs
+  volumesTpls:
+    - '{{ include "wandb-operator.caCertsVolume" . }}'
+  envTpls:
+    - '{{ include "wandb-operator.caCertsEnv" . }}'
 
   service:
     enabled: true

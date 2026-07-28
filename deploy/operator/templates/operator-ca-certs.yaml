@@ -1,0 +1,25 @@
+{{- /*
+Synthesizes a Secret from inline wandb-operator.caCerts.certs (PEM blocks) so the
+operator container can trust a private/self-signed registry CA. Skipped when the
+user points caCerts at an existing Secret/ConfigMap instead. The name matches the
+default secretName referenced by wandb-operator.volumesTpls in values.yaml.
+*/ -}}
+{{- $op := index .Values "wandb-operator" | default dict -}}
+{{- $ca := $op.caCerts | default dict -}}
+{{- if and $ca.certs (not $ca.existingSecret) (not $ca.existingConfigMap) }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Release.Name }}-operator-ca-certs
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/part-of: wandb
+type: Opaque
+stringData:
+  {{- range $i, $pem := $ca.certs }}
+  ca-{{ $i }}.crt: |
+    {{- $pem | nindent 4 }}
+  {{- end }}
+{{- end }}
