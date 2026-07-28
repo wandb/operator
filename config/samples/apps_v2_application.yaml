@@ -16,6 +16,20 @@ spec:
       - name: my-app
         image: nginx:1.14.2
 
+  triage:
+    actions:
+      default:
+        containerName: my-app
+        command: ["nginx", "-t"]
+        timeoutSeconds: 60
+        resources:
+          requests:
+            cpu: 25m
+            memory: 32Mi
+          limits:
+            cpu: 100m
+            memory: 128Mi
+
   jobs:
     - metadata:
         name: my-job
@@ -42,4 +56,3 @@ spec:
                 - name: my-cronjob
                   image: nginx:1.14.2
                   command: ["sleep", "10"]
-
