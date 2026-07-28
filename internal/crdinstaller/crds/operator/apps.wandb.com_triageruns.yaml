@@ -1,0 +1,212 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.19.0
+  name: triageruns.apps.wandb.com
+spec:
+  group: apps.wandb.com
+  names:
+    kind: TriageRun
+    listKind: TriageRunList
+    plural: triageruns
+    singular: triagerun
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.applicationRef.name
+      name: Application
+      type: string
+    - jsonPath: .spec.action
+      name: Action
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.summary.overallSeverity
+      name: Severity
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v2
+    schema:
+      openAPIV3Schema:
+        properties:
+          apiVersion:
+            type: string
+          kind:
+            type: string
+          metadata:
+            type: object
+          spec:
+            properties:
+              action:
+                default: default
+                minLength: 1
+                type: string
+              applicationRef:
+                properties:
+                  name:
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+            required:
+            - applicationRef
+            type: object
+            x-kubernetes-validations:
+            - message: spec is immutable
+              rule: self == oldSelf
+          status:
+            properties:
+              completedAt:
+                format: date-time
+                type: string
+              conditions:
+                items:
+                  properties:
+                    lastTransitionTime:
+                      format: date-time
+                      type: string
+                    message:
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              jobRef:
+                properties:
+                  name:
+                    default: ""
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+              observedGeneration:
+                format: int64
+                type: integer
+              phase:
+                enum:
+                - Pending
+                - Running
+                - Succeeded
+                - Failed
+                type: string
+              resolvedExecution:
+                properties:
+                  applicationGeneration:
+                    format: int64
+                    type: integer
+                  args:
+                    items:
+                      type: string
+                    type: array
+                  command:
+                    items:
+                      type: string
+                    type: array
+                  containerName:
+                    type: string
+                  image:
+                    type: string
+                  timeoutSeconds:
+                    format: int64
+                    type: integer
+                type: object
+              results:
+                items:
+                  properties:
+                    durationMs:
+                      format: int64
+                      type: integer
+                    endedAt:
+                      format: date-time
+                      type: string
+                    evidence:
+                      x-kubernetes-preserve-unknown-fields: true
+                    message:
+                      type: string
+                    name:
+                      type: string
+                    remediation:
+                      type: string
+                    severity:
+                      enum:
+                      - pass
+                      - warn
+                      - fail
+                      - error
+                      type: string
+                    startedAt:
+                      format: date-time
+                      type: string
+                    umbrella:
+                      type: string
+                  required:
+                  - name
+                  - severity
+                  type: object
+                type: array
+              startedAt:
+                format: date-time
+                type: string
+              summary:
+                properties:
+                  error:
+                    format: int32
+                    type: integer
+                  fail:
+                    format: int32
+                    type: integer
+                  overallSeverity:
+                    enum:
+                    - pass
+                    - warn
+                    - fail
+                    - error
+                    type: string
+                  pass:
+                    format: int32
+                    type: integer
+                  total:
+                    format: int32
+                    type: integer
+                  warn:
+                    format: int32
+                    type: integer
+                type: object
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

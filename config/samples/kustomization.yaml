@@ -3,4 +3,5 @@ resources:
 - apps_v1_weightsandbiases.yaml
 - apps_v2_weightsandbiases.yaml
 - apps_v2_application.yaml
+- apps_v2_triagerun.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples
