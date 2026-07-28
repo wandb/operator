@@ -668,6 +668,7 @@ func reconcileApplications(
 		setCustomCACertsChecksumAnnotation(&application.Spec.PodTemplate, caChecksum)
 
 		application.Spec.HpaTemplate = ResolveAutoscaling(app, wandb)
+		application.Spec.Triage = resolveApplicationTriage(app.Triage)
 
 		// Set shared service account for all W&B applications
 		application.Spec.PodTemplate.Spec.ServiceAccountName = serviceAccountName
