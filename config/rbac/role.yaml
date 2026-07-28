@@ -95,11 +95,20 @@ rules:
   - apps.wandb.com
   resources:
   - applications/status
+  - triageruns/status
   - weightsandbiases/status
   verbs:
   - get
   - patch
   - update
+- apiGroups:
+  - apps.wandb.com
+  resources:
+  - triageruns
+  verbs:
+  - get
+  - list
+  - watch
 - apiGroups:
   - autoscaling
   resources:

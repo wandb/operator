@@ -20,6 +20,14 @@ rules:
   - apiGroups:
       - apps.wandb.com
     resources:
+      - triageruns
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - apps.wandb.com
+    resources:
       - applications/finalizers
       - weightsandbiases/finalizers
     verbs:
@@ -28,6 +36,7 @@ rules:
       - apps.wandb.com
     resources:
       - applications/status
+      - triageruns/status
       - weightsandbiases/status
     verbs:
       - get
