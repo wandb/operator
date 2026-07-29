@@ -9,7 +9,7 @@ wandb:
   install: true
   size: small
   namespace: wandb
-  version: 0.82.2
+  version: 0.83.1
   internalServiceAuth: false
 
 wandb-operator:
