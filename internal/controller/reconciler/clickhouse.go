@@ -198,7 +198,7 @@ func managedClickHouseWriteState(
 	}
 
 	// Translate the Keeper and ClickHouse CRs; WriteState writes Keeper first.
-	desiredKeeper, err := keeper.ToKeeperVendorSpec(ctx, wandb, spec, client.Scheme(), altinity.KeeperNsName(spec))
+	desiredKeeper, err := keeper.ToKeeperVendorSpec(ctx, wandb, spec, client.Scheme(), altinity.KeeperNsName(spec), mfst)
 	if err != nil {
 		log.Error(err, "failed to translate Keeper spec to vendor spec")
 		return []metav1.Condition{

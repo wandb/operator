@@ -9,6 +9,7 @@ import (
 	"github.com/wandb/operator/pkg/utils"
 	chkv1 "github.com/wandb/operator/pkg/vendored/altinity-clickhouse/clickhouse-keeper.altinity.com/v1"
 	chiv1 "github.com/wandb/operator/pkg/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
+	"github.com/wandb/operator/pkg/wandb/manifest"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -33,7 +34,7 @@ var _ = Describe("Keeper vendor spec", func() {
 			},
 		}
 
-		chk, err := ToKeeperVendorSpec(context.Background(), wandb, wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse, keeperScheme(), keeperNsName())
+		chk, err := ToKeeperVendorSpec(context.Background(), wandb, wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse, keeperScheme(), keeperNsName(), manifest.Manifest{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(chk).NotTo(BeNil())
 		Expect(chk.Name).To(Equal("clickhouse-chk"))
@@ -48,7 +49,7 @@ var _ = Describe("Keeper vendor spec", func() {
 
 		Expect(chk.Spec.Templates.PodTemplates).To(HaveLen(1))
 		container := chk.Spec.Templates.PodTemplates[0].Spec.Containers[0]
-		Expect(container.Image).To(Equal(KeeperImage))
+		Expect(container.Image).To(Equal(KeeperImage(manifest.ImageRef{}, "")))
 		Expect(container.Name).To(Equal(keeperContainerName))
 		Expect(container.Resources.Requests[corev1.ResourceCPU]).To(Equal(resource.MustParse("250m")))
 
@@ -60,17 +61,36 @@ var _ = Describe("Keeper vendor spec", func() {
 		Expect(*sc.RunAsNonRoot).To(BeTrue())
 	})
 
+	It("uses the Keeper image from the server manifest", func() {
+		wandb := keeperWandb()
+		wandb.Spec.Global.ImageRegistry = "myregistry.io"
+		mfst := manifest.Manifest{
+			ClickhouseKeeper: map[string]manifest.InfraConfig{
+				"default": {
+					Images: map[string]manifest.ImageRef{
+						"keeper": {Registry: "docker.io", Repository: "altinity/clickhouse-keeper", Tag: "25.8"},
+					},
+				},
+			},
+		}
+
+		chk, err := ToKeeperVendorSpec(context.Background(), wandb, wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse, keeperScheme(), keeperNsName(), mfst)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(chk.Spec.Templates.PodTemplates[0].Spec.Containers[0].Image).
+			To(Equal("myregistry.io/docker.io/altinity/clickhouse-keeper:25.8"))
+	})
+
 	It("errors when keeper storage size is unset (no operator defaults)", func() {
 		wandb := keeperWandb()
 		wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse.Keeper = apiv2.ClickHouseKeeperSpec{}
-		_, err := ToKeeperVendorSpec(context.Background(), wandb, wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse, keeperScheme(), keeperNsName())
+		_, err := ToKeeperVendorSpec(context.Background(), wandb, wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse, keeperScheme(), keeperNsName(), manifest.Manifest{})
 		Expect(err).To(HaveOccurred())
 	})
 
 	It("omits fixed IDs in OpenShift mode", func() {
 		utils.SetOpenShiftMode(true)
 		wandb := keeperWandb()
-		chk, err := ToKeeperVendorSpec(context.Background(), wandb, wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse, keeperScheme(), keeperNsName())
+		chk, err := ToKeeperVendorSpec(context.Background(), wandb, wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse, keeperScheme(), keeperNsName(), manifest.Manifest{})
 		Expect(err).NotTo(HaveOccurred())
 		sc := chk.Spec.Templates.PodTemplates[0].Spec.SecurityContext
 		Expect(sc.RunAsUser).To(BeNil())
