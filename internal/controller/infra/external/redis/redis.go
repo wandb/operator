@@ -4,8 +4,16 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+<<<<<<< HEAD
 
 	apiv2 "github.com/wandb/operator/api/v2"
+=======
+	"strconv"
+	"strings"
+
+	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/internal/controller/common"
+>>>>>>> main
 	"github.com/wandb/operator/internal/controller/infra/external"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -46,9 +54,26 @@ func WriteState(
 	if err != nil {
 		logger.Error(err, "failed to resolve external redis fields")
 		return []metav1.Condition{{
+<<<<<<< HEAD
 			Type:   "Reconciled",
 			Status: metav1.ConditionFalse,
 			Reason: "ApiError",
+=======
+			Type:    common.ReconciledType,
+			Status:  metav1.ConditionFalse,
+			Reason:  common.ApiErrorReason,
+			Message: err.Error(),
+		}}
+	}
+
+	if err := validateConnectionData(data); err != nil {
+		logger.Error(err, "invalid external redis connection")
+		return []metav1.Condition{{
+			Type:    common.ReconciledType,
+			Status:  metav1.ConditionFalse,
+			Reason:  common.ResourceErrorReason,
+			Message: err.Error(),
+>>>>>>> main
 		}}
 	}
 
@@ -81,6 +106,26 @@ func WriteState(
 	return external.WriteConnectionSecret(ctx, c, wandb, nsName, data)
 }
 
+<<<<<<< HEAD
+=======
+func validateConnectionData(data map[string]string) error {
+	host := strings.TrimSpace(data["Host"])
+	if host == "" {
+		return fmt.Errorf("external Redis host is empty")
+	}
+
+	portValue := strings.TrimSpace(data["Port"])
+	port, err := strconv.Atoi(portValue)
+	if err != nil || port < 1 || port > 65535 {
+		return fmt.Errorf("external Redis port %q must be an integer between 1 and 65535", portValue)
+	}
+
+	data["Host"] = host
+	data["Port"] = strconv.Itoa(port)
+	return nil
+}
+
+>>>>>>> main
 func ReadState(
 	ctx context.Context,
 	c client.Client,

@@ -27,6 +27,10 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
+<<<<<<< HEAD
+=======
+          fetch-tags: true
+>>>>>>> main
           persist-credentials: false
 
       - name: Validate tag and release versions
@@ -36,17 +40,32 @@ jobs:
           set -euo pipefail
 
           tag="${GITHUB_REF_NAME}"
+<<<<<<< HEAD
           if [[ ! "${tag}" =~ ^v2\.([0-9]+)\.([0-9]+)$ ]]; then
+=======
+
+          if [[ ! "${tag}" =~ ^v2\.([0-9]+)\.([0-9]+)(\-.*)?$ ]]; then
+>>>>>>> main
             echo "Expected a stable v2 tag in the form v2.x.y; got ${tag}" >&2
             exit 1
           fi
 
+<<<<<<< HEAD
+=======
+          git fetch  --no-tags --force origin "refs/tags/${tag}:refs/tags/${tag}"
+
+>>>>>>> main
           if [[ "$(git cat-file -t "refs/tags/${tag}")" != "tag" ]]; then
             echo "Release tag ${tag} must be annotated" >&2
             exit 1
           fi
 
+<<<<<<< HEAD
           git fetch --no-tags origin refs/heads/main:refs/remotes/origin/main
+=======
+          git fetch --no-tags --force origin refs/heads/main:refs/remotes/origin/main
+
+>>>>>>> main
           tagged_commit="$(git rev-list -n 1 "${tag}")"
           if ! git merge-base --is-ancestor "${tagged_commit}" refs/remotes/origin/main; then
             echo "Tagged commit ${tagged_commit} is not reachable from origin/main" >&2
@@ -95,6 +114,7 @@ jobs:
       - name: Authorize Docker for Artifact Registry
         run: gcloud auth configure-docker us-docker.pkg.dev --quiet
 
+<<<<<<< HEAD
       - name: Reject existing production artifacts
         env:
           VERSION: ${{ steps.release.outputs.version }}
@@ -147,6 +167,68 @@ jobs:
           TAG: ${{ steps.release.outputs.tag }}
           TAGGED_COMMIT: ${{ steps.release.outputs.tagged_commit }}
         run: |
+=======
+#      - name: Reject existing production artifacts
+#        env:
+#          VERSION: ${{ steps.release.outputs.version }}
+#        shell: bash
+#        run: |
+#          set -euo pipefail
+#
+#          assert_absent() {
+#            local artifact=$1
+#            local output
+#            local status
+#
+#            set +e
+#            output="$(gcloud artifacts docker images describe "${artifact}" --format='value(image_summary.digest)' 2>&1)"
+#            status=$?
+#            set -e
+#
+#            if [[ ${status} -eq 0 ]]; then
+#              echo "Refusing to overwrite existing artifact ${artifact}" >&2
+#              exit 1
+#            fi
+#            if ! grep -Eqi 'NOT_FOUND|not found' <<< "${output}"; then
+#              echo "Could not safely determine whether ${artifact} exists:" >&2
+#              echo "${output}" >&2
+#              exit 1
+#            fi
+#          }
+#
+#          assert_absent "${IMAGE_REPOSITORY}:${VERSION}"
+#          assert_absent "${CHART_REPOSITORY}/operator:${VERSION}"
+
+      - name: Build and publish image
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: make docker-build docker-push IMG="${IMAGE_REPOSITORY}:${VERSION}"
+
+      - name: Install chart-testing
+        uses: helm/chart-testing-action@e6669bcd63d7cb57cb4380c33043eebe5d111992 # v2.6.1
+        with:
+          version: v3.14.0
+
+      - name: Lint charts
+        run: ct lint --all --config deploy/ct.yaml
+
+      - name: Package and publish chart
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          helm dependency build deploy/operator
+          mkdir -p dist
+          helm package deploy/operator --destination dist
+          helm push "dist/operator-${VERSION}.tgz" "oci://${CHART_REPOSITORY}"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+          TAGGED_COMMIT: ${{ steps.release.outputs.tagged_commit }}
+        run: |
+>>>>>>> main
           gh release create "${TAG}" \
             --repo "${GITHUB_REPOSITORY}" \
             --target "${TAGGED_COMMIT}" \

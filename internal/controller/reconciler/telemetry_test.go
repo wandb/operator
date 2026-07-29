@@ -953,7 +953,11 @@ func TestResolveEnvvarsServiceSourceFromManifest(t *testing.T) {
 	}
 
 	sweepProvider := mustFindEnvVar(t, resolved, "GORILLA_SWEEP_PROVIDER")
+<<<<<<< HEAD
 	if sweepProvider.Value != "http://anaconda2:8080" {
+=======
+	if sweepProvider.Value != "http://anaconda2.default.svc.cluster.local:8080" {
+>>>>>>> main
 		t.Fatalf("unexpected sweep provider value: %s", sweepProvider.Value)
 	}
 }
@@ -994,7 +998,11 @@ func TestResolveEnvvarsServiceSourcePortNameFromManifest(t *testing.T) {
 	}
 
 	historyStore := mustFindEnvVar(t, resolved, "GORILLA_HISTORY_STORE")
+<<<<<<< HEAD
 	if historyStore.Value != "http://parquet:9000/_goRPC_" {
+=======
+	if historyStore.Value != "http://parquet.default.svc.cluster.local:9000/_goRPC_" {
+>>>>>>> main
 		t.Fatalf("unexpected history store value: %s", historyStore.Value)
 	}
 }

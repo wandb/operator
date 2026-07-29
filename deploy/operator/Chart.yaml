@@ -2,8 +2,13 @@ apiVersion: v2
 name: operator
 description: A Helm chart for Weights & Biases operator
 type: application
+<<<<<<< HEAD
 version: 2.0.0-alpha.2
 appVersion: "2.0.0-alpha.2"
+=======
+version: 2.0.0-beta.3
+appVersion: "2.0.0-beta.3"
+>>>>>>> main
 maintainers:
   - name: wandb
     email: support@wandb.com
@@ -24,7 +29,11 @@ dependencies:
     repository: https://ot-container-kit.github.io/helm-charts
     condition: redis-operator.enabled
   - name: seaweedfs-operator
+<<<<<<< HEAD
     version: 0.1.24
+=======
+    version: 0.1.35
+>>>>>>> main
     repository: https://seaweedfs.github.io/seaweedfs-operator/
     condition: seaweedfs-operator.enabled
   - name: prometheus-operator-crds

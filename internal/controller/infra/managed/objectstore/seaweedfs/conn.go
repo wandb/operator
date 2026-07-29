@@ -4,10 +4,17 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+<<<<<<< HEAD
 	"strconv"
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
+=======
+
+	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/internal/controller/common"
+	"github.com/wandb/operator/internal/controller/infra/objectstore"
+>>>>>>> main
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -20,6 +27,7 @@ const (
 	S3Port      = "8333"
 )
 
+<<<<<<< HEAD
 type s3ConnInfo struct {
 	AccessKey      string
 	SecretKey      string
@@ -44,6 +52,42 @@ func buildS3ConnInfo(
 	}
 }
 
+=======
+// buildS3ConnInfo assembles the ConnInfo for the managed SeaweedFS S3 gateway:
+// the in-cluster service host/port, path-style addressing, and default region.
+func buildS3ConnInfo(
+	accessKey, secretKey string, nsnBuilder *NsNameBuilder, tls bool,
+) *objectstore.ConnInfo {
+	connInfo := &objectstore.ConnInfo{
+		Provider:       apiv2.ObjectStoreProviderS3,
+		AccessKey:      accessKey,
+		SecretKey:      secretKey,
+		Endpoint:       s3ServiceHost(nsnBuilder.SpecName(), nsnBuilder.Namespace()),
+		Port:           S3Port,
+		Region:         objectstore.DefaultRegion,
+		Bucket:         "bucket",
+		Scheme:         objectstore.SchemeForTLS(tls),
+		TlsEnabled:     tls,
+		ForcePathStyle: true,
+	}
+	connInfo.URL = managedS3URL(connInfo)
+	return connInfo
+}
+
+// managedS3URL builds the canonical connection URL the W&B server signs against:
+// s3://<accessKey>:<secretKey>@<host>:<port>/<bucket>?tls=<bool>.
+func managedS3URL(connInfo *objectstore.ConnInfo) string {
+	s3URL := &url.URL{
+		Scheme: S3UrlScheme,
+		Host:   fmt.Sprintf("%s:%s", connInfo.Endpoint, connInfo.Port),
+		User:   url.UserPassword(connInfo.AccessKey, connInfo.SecretKey),
+		Path:   connInfo.Bucket,
+	}
+	return fmt.Sprintf("%s?tls=%t", s3URL.String(), connInfo.TlsEnabled)
+}
+
+// s3ServiceHost returns the in-cluster FQDN of the SeaweedFS S3 service.
+>>>>>>> main
 func s3ServiceHost(specName, namespace string) string {
 	return fmt.Sprintf("%s-s3.%s.svc.cluster.local", SeaweedName(specName), namespace)
 }
@@ -53,6 +97,7 @@ func s3ServiceHost(specName, namespace string) string {
 // without re-signing). The s3 gateway must verify signatures against this
 // host rather than the Host/X-Forwarded-Host of proxied requests.
 func s3ExternalURL(specName, namespace string, tls bool) string {
+<<<<<<< HEAD
 	return fmt.Sprintf("%s://%s:%s", s3Scheme(tls), s3ServiceHost(specName, namespace), S3Port)
 }
 
@@ -76,12 +121,24 @@ func (s *s3ConnInfo) scheme() string {
 	return s3Scheme(s.TLS)
 }
 
+=======
+	return fmt.Sprintf("%s://%s:%s", objectstore.SchemeForTLS(tls), s3ServiceHost(specName, namespace), S3Port)
+}
+
+// writeWandbConnInfo writes the connection secret consumed by W&B and returns
+// the ObjectStoreConnection with every selector required, since managed
+// SeaweedFS always persists the full key set.
+>>>>>>> main
 func writeWandbConnInfo(
 	ctx context.Context,
 	cl client.Client,
 	owner client.Object,
 	nsnBuilder *NsNameBuilder,
+<<<<<<< HEAD
 	connInfo *s3ConnInfo,
+=======
+	connInfo *objectstore.ConnInfo,
+>>>>>>> main
 ) (
 	*apiv2.ObjectStoreConnection, error,
 ) {
@@ -91,7 +148,10 @@ func writeWandbConnInfo(
 	var actual = &corev1.Secret{}
 
 	nsName := nsnBuilder.ConnectionNsName()
+<<<<<<< HEAD
 	urlKey := "url"
+=======
+>>>>>>> main
 
 	if found, err = common.GetResource(
 		ctx, cl, nsName, AppConnTypeName, actual,
@@ -120,6 +180,7 @@ func writeWandbConnInfo(
 			Namespace:       nsName.Namespace,
 			OwnerReferences: []metav1.OwnerReference{ref},
 		},
+<<<<<<< HEAD
 		Type: corev1.SecretTypeOpaque,
 		StringData: map[string]string{
 			urlKey:           fmt.Sprintf("%s?tls=%t", connInfo.toUrl().String(), connInfo.TLS),
@@ -134,12 +195,17 @@ func writeWandbConnInfo(
 			"Provider":       "s3",
 			"ForcePathStyle": strconv.FormatBool(connInfo.ForcePathStyle),
 		},
+=======
+		Type:       corev1.SecretTypeOpaque,
+		StringData: connInfo.ToSecretData(),
+>>>>>>> main
 	}
 
 	if _, err = common.CrudResource(ctx, cl, desired, actual); err != nil {
 		return nil, err
 	}
 
+<<<<<<< HEAD
 	localRef := corev1.LocalObjectReference{Name: nsName.Name}
 	return &apiv2.ObjectStoreConnection{
 		URL:            corev1.SecretKeySelector{LocalObjectReference: localRef, Key: urlKey, Optional: ptr.To(false)},
@@ -153,4 +219,8 @@ func writeWandbConnInfo(
 		Provider:       corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Provider", Optional: ptr.To(false)},
 		ForcePathStyle: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "ForcePathStyle", Optional: ptr.To(false)},
 	}, nil
+=======
+	// Managed SeaweedFS always writes the full key set, so every selector is required.
+	return connInfo.ToObjectStoreConnection(nsName.Name, true), nil
+>>>>>>> main
 }

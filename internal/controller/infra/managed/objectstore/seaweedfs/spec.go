@@ -49,6 +49,11 @@ const (
 	seaweedVolumeMetricsPort int32 = 9092
 	seaweedFilerMetricsPort  int32 = 9093
 	seaweedVolumeSizeLimitMB int64 = 1024
+<<<<<<< HEAD
+=======
+
+	seaweedVolumeReadinessPeriodSeconds int32 = 15
+>>>>>>> main
 )
 
 func volumeLayout(storageQuantity resource.Quantity) (int32, int32) {
@@ -155,6 +160,12 @@ func ToObjectStoreVendorSpec(
 						Volumes:      seaweedWritableVolumes(),
 						VolumeMounts: seaweedWritableVolumeMounts(),
 						ExtraArgs:    []string{"-ip.bind=0.0.0.0"},
+<<<<<<< HEAD
+=======
+						ReadinessProbe: &seaweedv1.ProbeOverride{
+							PeriodSeconds: ptr.To(seaweedVolumeReadinessPeriodSeconds),
+						},
+>>>>>>> main
 					},
 					// Operator sizes the data PVC from Requests[storage] — a persistent disk, not ephemeral.
 					ResourceRequirements: corev1.ResourceRequirements{

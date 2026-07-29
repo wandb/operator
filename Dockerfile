@@ -28,12 +28,26 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o cr
 
 FROM registry.access.redhat.com/ubi9/ubi-minimal
 
+<<<<<<< HEAD
 USER 1001
 
+=======
+>>>>>>> main
 WORKDIR /
 COPY --from=manager-builder /workspace/manager .
 COPY --from=manager-builder /workspace/crd-installer .
 
+<<<<<<< HEAD
+=======
+RUN mkdir -p /helm/.cache/helm /helm/.config/helm /helm/.local/share/helm && \
+    chown -R 65532:65532 /helm
+
+USER 65532:65532
+
+ENV HELM_CACHE_HOME=/helm/.cache/helm
+ENV HELM_CONFIG_HOME=/helm/.config/helm
+ENV HELM_DATA_HOME=/helm/.local/share/helm
+>>>>>>> main
 ENV OPERATOR_MODE=production
 
 ENTRYPOINT ["/manager"]

@@ -33,6 +33,7 @@ type ValidatableRelease interface {
 func Get(maybeRelease interface{}) spec.Chart {
 	releases := []ValidatableRelease{
 		new(LocalRelease),
+		new(OCIRelease),
 		new(RepoRelease),
 	}
 

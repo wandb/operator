@@ -4,10 +4,15 @@ const (
 	// KeeperModuleName is the W&B component label value for Keeper resources.
 	KeeperModuleName = "clickhouse-keeper"
 
+<<<<<<< HEAD
 	// TODO: remove this hardcoded default once all supported manifest versions
 	// supply clickhouseKeeper.<instance>.images.keeper. Pinned to the managed
 	// ClickHouse server version.
 	defaultKeeperImage = "altinity/clickhouse-keeper:25.8.16.10002.altinitystable"
+=======
+	// KeeperImage pins the Keeper image to the managed ClickHouse server version.
+	KeeperImage = "altinity/clickhouse-keeper:25.8.16.10002.altinitystable"
+>>>>>>> main
 
 	// KeeperClientPort is the ZooKeeper-compatible client port.
 	KeeperClientPort = 2181

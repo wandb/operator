@@ -2,12 +2,19 @@ package bufstream
 
 import (
 	"fmt"
+<<<<<<< HEAD
 	"strings"
+=======
+>>>>>>> main
 
 	"gopkg.in/yaml.v3"
 
 	apiv2 "github.com/wandb/operator/api/v2"
+<<<<<<< HEAD
 	"github.com/wandb/operator/internal/controller/infra/external/objectstore"
+=======
+	"github.com/wandb/operator/internal/controller/infra/objectstore"
+>>>>>>> main
 )
 
 type dataSource struct {
@@ -74,6 +81,7 @@ func renderBufstreamConfig(clusterName, advertiseHost string, etcdAddresses []st
 	// Isolate Bufstream's objects under a dedicated key prefix (the cluster name)
 	// so they never collide with W&B artifact data, which shares the same bucket.
 	// storage is passed by value, so this only affects the rendered config.
+<<<<<<< HEAD
 	uri := ""
 	switch storage.Provider {
 	case apiv2.ObjectStoreProviderS3:
@@ -84,6 +92,9 @@ func renderBufstreamConfig(clusterName, advertiseHost string, etcdAddresses []st
 		// For Azure the connection's AccessKey carries the storage account.
 		uri = fmt.Sprintf("https://%s.blob.core.windows.net/%s", storage.AccessKey, storage.Bucket)
 	}
+=======
+	uri := storage.ProviderURI()
+>>>>>>> main
 
 	if storage.Path != "" {
 		uri = fmt.Sprintf("%s/%s", uri, storage.Path)
@@ -139,6 +150,7 @@ func renderData(storage objectstore.ConnInfo, uri string) (bufstreamData, error)
 	}
 }
 
+<<<<<<< HEAD
 func renderS3Storage(storage objectstore.ConnInfo, uri string) *bufstreamS3 {
 	region := storage.Region
 	if region == "" {
@@ -162,6 +174,21 @@ func renderS3Storage(storage objectstore.ConnInfo, uri string) *bufstreamS3 {
 		URI:            uri,
 		Region:         region,
 		Endpoint:       endpoint,
+=======
+// renderS3Storage maps the resolved connection onto Bufstream's S3 data config,
+// applying the region default, endpoint, and path-style, and wiring env-var
+// credential sources only when static keys are present.
+func renderS3Storage(storage objectstore.ConnInfo, uri string) *bufstreamS3 {
+	region := storage.Region
+	if region == "" {
+		region = objectstore.DefaultRegion
+	}
+
+	s3 := &bufstreamS3{
+		URI:            uri,
+		Region:         region,
+		Endpoint:       storage.EndpointURL(),
+>>>>>>> main
 		ForcePathStyle: storage.ForcePathStyle,
 	}
 	if storage.HasStaticCredentials() {
@@ -171,6 +198,11 @@ func renderS3Storage(storage objectstore.ConnInfo, uri string) *bufstreamS3 {
 	return s3
 }
 
+<<<<<<< HEAD
+=======
+// renderAzureStorage maps the resolved connection onto Bufstream's Azure data
+// config, wiring env-var credential sources only when static keys are present.
+>>>>>>> main
 func renderAzureStorage(storage objectstore.ConnInfo, uri string) *bufstreamAzure {
 	az := &bufstreamAzure{URI: uri}
 	if storage.HasStaticCredentials() {

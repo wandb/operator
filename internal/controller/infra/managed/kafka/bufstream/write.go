@@ -2,11 +2,18 @@ package bufstream
 
 import (
 	"context"
+<<<<<<< HEAD
 	"strconv"
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/infra/external/objectstore"
+=======
+
+	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/internal/controller/common"
+	"github.com/wandb/operator/internal/controller/infra/objectstore"
+>>>>>>> main
 	"github.com/wandb/operator/internal/logx"
 	"github.com/wandb/operator/pkg/utils"
 	"github.com/wandb/operator/pkg/wandb/manifest"
@@ -56,7 +63,11 @@ func WriteState(
 	if err != nil {
 		return translateError(err)
 	}
+<<<<<<< HEAD
 	serviceAccount, err := ToServiceAccount(wandb, nsnBuilder, cl.Scheme())
+=======
+	serviceAccount, err := ToServiceAccount(wandb, nsnBuilder, storage, cl.Scheme())
+>>>>>>> main
 	if err != nil {
 		return translateError(err)
 	}
@@ -82,7 +93,17 @@ func WriteState(
 	}
 	results = append(results, writeResource(ctx, cl, common.ReconciledType, SecretResourceType, credsSecret, &corev1.Secret{})...)
 	results = append(results, writeResource(ctx, cl, common.ReconciledType, ConfigMapResourceType, configMap, &corev1.ConfigMap{})...)
+<<<<<<< HEAD
 	results = append(results, writeResource(ctx, cl, common.ReconciledType, ServiceAccountResourceType, serviceAccount, &corev1.ServiceAccount{})...)
+=======
+	if serviceAccount != nil {
+		serviceAccountConditions := writeResource(ctx, cl, common.ReconciledType, ServiceAccountResourceType, serviceAccount, &corev1.ServiceAccount{})
+		results = append(results, serviceAccountConditions...)
+		if len(serviceAccountConditions) > 0 {
+			return results
+		}
+	}
+>>>>>>> main
 	if sccRoleBinding != nil {
 		results = append(results, writeResource(ctx, cl, common.ReconciledType, RoleBindingResourceType, sccRoleBinding, &rbacv1.RoleBinding{})...)
 	}
@@ -92,6 +113,10 @@ func WriteState(
 	return results
 }
 
+<<<<<<< HEAD
+=======
+// translateError wraps an error as a failed Reconciled condition.
+>>>>>>> main
 func translateError(err error) []metav1.Condition {
 	return []metav1.Condition{
 		{Type: common.ReconciledType, Status: metav1.ConditionFalse, Reason: common.ControllerErrorReason, Message: err.Error()},
@@ -135,6 +160,10 @@ func writeResource[T client.Object](
 	return []metav1.Condition{actionToCondition(conditionType, action)}
 }
 
+<<<<<<< HEAD
+=======
+// actionToCondition maps a CRUD action onto the status condition it implies.
+>>>>>>> main
 func actionToCondition(conditionType string, action common.CrudAction) metav1.Condition {
 	switch action {
 	case common.CreateAction:
@@ -167,6 +196,7 @@ func resolveStorage(
 		return objectstore.ConnInfo{}, false, nil
 	}
 
+<<<<<<< HEAD
 	resolver := &utils.ConnSecretResolver{Client: cl, Namespace: spec.Namespace, Cache: map[string]*corev1.Secret{}}
 
 	connInfo := objectstore.ConnInfo{}
@@ -232,5 +262,11 @@ func resolveStorage(
 		return objectstore.ConnInfo{}, true, err
 	}
 
+=======
+	connInfo, err := objectstore.Resolve(ctx, cl, spec.Namespace, &status.Connection)
+	if err != nil {
+		return objectstore.ConnInfo{}, true, err
+	}
+>>>>>>> main
 	return connInfo, true, nil
 }

@@ -22,8 +22,27 @@ jobs:
         run: go mod download
       - name: Install Ginkgo
         run: go install github.com/onsi/ginkgo/v2/ginkgo@v2.28.1
+<<<<<<< HEAD
+=======
+      - name: Install Helm
+        uses: azure/setup-helm@bf6a7d304bc2fdb57e0331155b7ebf2c504acf0a # v4
+        with:
+          version: v3.19.0
+      - name: Resolve chart dependencies
+        run: |
+          helm repo add ci-wandb https://charts.wandb.ai/
+          helm repo add ci-moco https://cybozu-go.github.io/moco/
+          helm repo add ci-ot-container-kit https://ot-container-kit.github.io/helm-charts
+          helm repo add ci-seaweedfs https://seaweedfs.github.io/seaweedfs-operator/
+          helm repo add ci-prometheus-community https://prometheus-community.github.io/helm-charts
+          helm repo add ci-altinity https://helm.altinity.com
+          helm repo add ci-victoria-metrics https://victoriametrics.github.io/helm-charts/
+          helm repo add ci-grafana https://grafana.github.io/helm-charts
+          helm dependency build deploy/operator
+          git diff --exit-code deploy/operator/Chart.lock
+>>>>>>> main
       - name: Tests
-        run: make test-coverage
+        run: make test
 
   build:
     name: Build

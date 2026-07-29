@@ -26,12 +26,16 @@ clickhouse:
         tag: "25.8.16.10002.altinitystable"
 
 clickhouseKeeper:
+<<<<<<< HEAD
   default:
     images:
       keeper:
         registry: "docker.io"
         repository: "altinity/clickhouse-keeper"
         tag: "25.8.16.10002.altinitystable"
+=======
+  default: {}
+>>>>>>> main
 
 generatedSecrets:
   - name: session-key

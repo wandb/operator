@@ -10,7 +10,10 @@ import (
 	"github.com/wandb/operator/pkg/utils"
 	chkv1 "github.com/wandb/operator/pkg/vendored/altinity-clickhouse/clickhouse-keeper.altinity.com/v1"
 	chiv1 "github.com/wandb/operator/pkg/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
+<<<<<<< HEAD
 	"github.com/wandb/operator/pkg/wandb/manifest"
+=======
+>>>>>>> main
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -20,6 +23,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
+<<<<<<< HEAD
 func KeeperImage(img manifest.ImageRef, globalImageRegistry string) string {
 	if out := img.GetImage(globalImageRegistry); out != "" {
 		return out
@@ -28,6 +32,8 @@ func KeeperImage(img manifest.ImageRef, globalImageRegistry string) string {
 	return defaultKeeperImage
 }
 
+=======
+>>>>>>> main
 // ToKeeperVendorSpec builds the ClickHouseKeeperInstallation CR that coordinates
 // ReplicatedMergeTree replication. nsName comes from altinity.KeeperNsName —
 // this package never sees the "-chi"-suffixed spec name.
@@ -37,7 +43,10 @@ func ToKeeperVendorSpec(
 	spec *apiv2.ManagedClickHouseSpec,
 	scheme *runtime.Scheme,
 	nsName types.NamespacedName,
+<<<<<<< HEAD
 	mfst manifest.Manifest,
+=======
+>>>>>>> main
 ) (*chkv1.ClickHouseKeeperInstallation, error) {
 	_, log := logx.WithSlog(ctx, logx.ClickHouse)
 	if spec == nil {
@@ -60,7 +69,11 @@ func ToKeeperVendorSpec(
 		Containers: []corev1.Container{
 			{
 				Name:            keeperContainerName,
+<<<<<<< HEAD
 				Image:           KeeperImage(mfst.ClickhouseKeeper["default"].Images["keeper"], wandb.Spec.Global.ImageRegistry),
+=======
+				Image:           KeeperImage,
+>>>>>>> main
 				SecurityContext: keeperContainerSecurityContext(),
 			},
 		},

@@ -7,6 +7,10 @@ import (
 	"github.com/Masterminds/goutils"
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
+<<<<<<< HEAD
+=======
+	"github.com/wandb/operator/internal/controller/infra/objectstore"
+>>>>>>> main
 	"github.com/wandb/operator/internal/logx"
 	seaweedv1 "github.com/wandb/operator/pkg/vendored/seaweedfs-operator/seaweed.seaweedfs.com/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -23,6 +27,12 @@ const (
 	AppConnTypeName  = "SeaweedAppConn"
 )
 
+<<<<<<< HEAD
+=======
+// WriteState reconciles the managed SeaweedFS CR, its S3 identity config, and
+// the W&B connection secret, returning the reconcile conditions plus the
+// resulting ObjectStoreConnection (nil until the connection is available).
+>>>>>>> main
 func WriteState(
 	ctx context.Context,
 	kubeClient client.Client,
@@ -138,13 +148,23 @@ func WriteState(
 	return result, nil
 }
 
+<<<<<<< HEAD
+=======
+// writeSeaweedS3Config persists the SeaweedFS S3 identity config secret,
+// preserving the existing secret key when one is already present so credentials
+// stay stable across reconciles, and returns the resolved ConnInfo.
+>>>>>>> main
 func writeSeaweedS3Config(
 	ctx context.Context,
 	client client.Client,
 	owner *seaweedv1.Seaweed,
 	nsnBuilder *NsNameBuilder,
 	envConfig SeaweedS3Config,
+<<<<<<< HEAD
 ) (*s3ConnInfo, error) {
+=======
+) (*objectstore.ConnInfo, error) {
+>>>>>>> main
 	var err error
 	var found bool
 	var gvk schema.GroupVersionKind

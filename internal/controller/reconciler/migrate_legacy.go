@@ -32,7 +32,11 @@ import (
 
 	apiv1 "github.com/wandb/operator/api/v1"
 	apiv2 "github.com/wandb/operator/api/v2"
+<<<<<<< HEAD
 	externalobjectstore "github.com/wandb/operator/internal/controller/infra/external/objectstore"
+=======
+	"github.com/wandb/operator/internal/controller/infra/objectstore"
+>>>>>>> main
 )
 
 // migrateLegacyAnnotations drains `legacy.operator.wandb.com/*-pending`
@@ -59,7 +63,15 @@ func migrateLegacyAnnotations(
 	if err != nil {
 		return ctrl.Result{}, err
 	}
+<<<<<<< HEAD
 	if !mysqlChanged && !redisChanged && !bucketChanged && !oidcChanged {
+=======
+	clickHouseChanged, err := migrateLegacyClickHouse(ctx, c, wandb)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if !mysqlChanged && !redisChanged && !bucketChanged && !oidcChanged && !clickHouseChanged {
+>>>>>>> main
 		return ctrl.Result{}, nil
 	}
 
@@ -190,6 +202,68 @@ func migrateLegacyRedis(
 	return true, nil
 }
 
+<<<<<<< HEAD
+=======
+// legacyClickHousePayload is the literal-string subset the webhook couldn't
+// turn into typed selectors. Port is `any` to accept JSON number or string.
+type legacyClickHousePayload struct {
+	Host     string `json:"host,omitempty"`
+	Port     any    `json:"port,omitempty"`
+	Database string `json:"database,omitempty"`
+	User     string `json:"user,omitempty"`
+	Password string `json:"password,omitempty"`
+}
+
+// migrateLegacyClickHouse drains the clickhouse-pending annotation into a
+// Secret + externalClickhouse selectors (v1 `port` fills HTTPPort).
+func migrateLegacyClickHouse(
+	ctx context.Context,
+	c ctrlClient.Client,
+	wandb *apiv2.WeightsAndBiases,
+) (bool, error) {
+	raw, ok := wandb.Annotations[apiv1.ClickHousePendingAnnotation]
+	if !ok {
+		return false, nil
+	}
+
+	dec := json.NewDecoder(strings.NewReader(raw))
+	dec.UseNumber()
+	var payload legacyClickHousePayload
+	if err := dec.Decode(&payload); err != nil {
+		return false, fmt.Errorf("decode %s: %w", apiv1.ClickHousePendingAnnotation, err)
+	}
+
+	secretName := fmt.Sprintf("%s-clickhouse-converted", wandb.Name)
+	conn := wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ExternalClickHouse
+	if conn == nil {
+		conn = &apiv2.ClickHouseConnection{}
+	}
+
+	data := map[string][]byte{}
+	fill := func(target *corev1.SecretKeySelector, dataKey, value string) {
+		if target.Name != "" || value == "" {
+			return
+		}
+		data[dataKey] = []byte(value)
+		*target = secretSelector(secretName, dataKey)
+	}
+
+	fill(&conn.Host, "host", payload.Host)
+	fill(&conn.HTTPPort, "httpPort", normalizePort(payload.Port))
+	fill(&conn.Database, "database", payload.Database)
+	fill(&conn.Username, "username", payload.User)
+	fill(&conn.Password, "password", payload.Password)
+
+	if err := materializeConvertedSecret(ctx, c, wandb, secretName, data); err != nil {
+		return false, err
+	}
+
+	setExternalInstance(&wandb.Spec.ClickHouse, func(s *apiv2.ClickHouseSpec) { s.ExternalClickHouse = conn })
+	delete(wandb.Annotations, apiv1.ClickHousePendingAnnotation)
+	return true, nil
+}
+
+>>>>>>> main
 // legacyBucketPayload is the flat literal subset from the webhook's
 // bucket+defaultBucket merge. kmsKey has no v2 home; ignored.
 type legacyBucketPayload struct {
@@ -225,7 +299,11 @@ func migrateLegacyBucket(
 	}
 
 	name, path, query := splitBucketQuery(payload.Name, payload.Path)
+<<<<<<< HEAD
 	endpoint, port, bucket := parseBucketName(name)
+=======
+	endpoint, port, bucket, path := objectstore.ParseLegacyBucket(payload.Provider, name, path)
+>>>>>>> main
 	// Query param beats the region field, matching gorilla's precedence.
 	region := payload.Region
 	if v := query.Get("region"); v != "" {
@@ -245,7 +323,11 @@ func migrateLegacyBucket(
 	fill(&conn.Endpoint, "endpoint", endpoint)
 	fill(&conn.Port, "port", port)
 	fill(&conn.Bucket, "bucket", bucket)
+<<<<<<< HEAD
 	fill(&conn.Path, "path", strings.Trim(path, "/"))
+=======
+	fill(&conn.Path, "path", path)
+>>>>>>> main
 	fill(&conn.Region, "region", region)
 	fill(&conn.AccessKey, "accessKey", payload.AccessKey)
 	fill(&conn.SecretKey, "secretKey", payload.SecretKey)
@@ -293,10 +375,17 @@ func splitBucketQuery(name, path string) (cleanName, cleanPath string, q url.Val
 // explicit ?forcePathStyle=/?tls= win, else any embedded endpoint means path-style over
 // http (prefixes belong in bucket.path, so a host in bucket.name is always an endpoint).
 func deriveBucketAddressing(provider, endpoint string, query url.Values) (forcePathStyle, tlsEnabled string) {
+<<<<<<< HEAD
 	if provider != "" && provider != "s3" && provider != "cw" {
 		return "", ""
 	}
 	fps := provider != "cw" && externalobjectstore.RequiresPathStyle(endpoint)
+=======
+	if !objectstore.S3Compatible(provider) {
+		return "", ""
+	}
+	fps := provider != "cw" && objectstore.RequiresPathStyle(endpoint)
+>>>>>>> main
 	if v, err := strconv.ParseBool(query.Get("forcePathStyle")); err == nil {
 		fps = v
 	}
@@ -312,6 +401,7 @@ func deriveBucketAddressing(provider, endpoint string, query url.Values) (forceP
 	return forcePathStyle, strconv.FormatBool(tls)
 }
 
+<<<<<<< HEAD
 // parseBucketName splits v1's bucket.name. A "/" indicates the embedded
 // "host[:port]/bucket" form (S3 bucket names can't contain "/"); otherwise
 // the whole string is the bucket name.
@@ -328,6 +418,8 @@ func parseBucketName(name string) (endpoint, port, bucket string) {
 	return host, "", bucket
 }
 
+=======
+>>>>>>> main
 // legacyOIDCPayload is the literal-string subset the webhook couldn't turn
 // into typed selectors.
 type legacyOIDCPayload struct {

@@ -8,6 +8,10 @@ import (
 	"github.com/wandb/operator/internal/logx"
 	chkv1 "github.com/wandb/operator/pkg/vendored/altinity-clickhouse/clickhouse-keeper.altinity.com/v1"
 	chiv1 "github.com/wandb/operator/pkg/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
+<<<<<<< HEAD
+=======
+	corev1 "k8s.io/api/core/v1"
+>>>>>>> main
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -25,12 +29,26 @@ func WriteState(
 	ctx context.Context,
 	client client.Client,
 	specNamespacedName types.NamespacedName,
+<<<<<<< HEAD
+=======
+	desiredServiceAccount *corev1.ServiceAccount,
+>>>>>>> main
 	desiredKeeper *chkv1.ClickHouseKeeperInstallation,
 	desired *chiv1.ClickHouseInstallation,
 ) []metav1.Condition {
 	ctx, _ = logx.WithSlog(ctx, logx.ClickHouse)
 	results := make([]metav1.Condition, 0)
 
+<<<<<<< HEAD
+=======
+	if desiredServiceAccount != nil {
+		serviceAccountConditions := writeServiceAccount(ctx, client, desiredServiceAccount)
+		results = append(results, serviceAccountConditions...)
+		if len(serviceAccountConditions) > 0 {
+			return results
+		}
+	}
+>>>>>>> main
 	results = append(results, keeper.WriteState(
 		ctx, client,
 		types.NamespacedName{Namespace: desiredKeeper.Namespace, Name: desiredKeeper.Name},
@@ -41,6 +59,36 @@ func WriteState(
 	return results
 }
 
+<<<<<<< HEAD
+=======
+func writeServiceAccount(
+	ctx context.Context,
+	cl client.Client,
+	desired *corev1.ServiceAccount,
+) []metav1.Condition {
+	actual := &corev1.ServiceAccount{}
+	found, err := common.GetResource(ctx, cl, client.ObjectKeyFromObject(desired), "ServiceAccount", actual)
+	if err != nil {
+		return []metav1.Condition{{
+			Type:   common.ReconciledType,
+			Status: metav1.ConditionFalse,
+			Reason: common.ApiErrorReason,
+		}}
+	}
+	if !found {
+		actual = nil
+	}
+	if _, err := common.CrudResource(ctx, cl, desired, actual); err != nil {
+		return []metav1.Condition{{
+			Type:   common.ReconciledType,
+			Status: metav1.ConditionFalse,
+			Reason: common.ApiErrorReason,
+		}}
+	}
+	return nil
+}
+
+>>>>>>> main
 // writeClickHouseInstallation create-or-updates the CHI, setting only the fields
 // we own (spec, labels, owner refs) and preserving the Altinity-managed
 // finalizer/status. It compares owned fields via JSON, never the vendored status

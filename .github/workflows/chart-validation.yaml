@@ -26,6 +26,17 @@ jobs:
 
       - name: Resolve chart dependencies
         run: |
+<<<<<<< HEAD
+=======
+          helm repo add ci-wandb https://charts.wandb.ai/
+          helm repo add ci-moco https://cybozu-go.github.io/moco/
+          helm repo add ci-ot-container-kit https://ot-container-kit.github.io/helm-charts
+          helm repo add ci-seaweedfs https://seaweedfs.github.io/seaweedfs-operator/
+          helm repo add ci-prometheus-community https://prometheus-community.github.io/helm-charts
+          helm repo add ci-altinity https://helm.altinity.com
+          helm repo add ci-victoria-metrics https://victoriametrics.github.io/helm-charts/
+          helm repo add ci-grafana https://grafana.github.io/helm-charts
+>>>>>>> main
           helm dependency build deploy/operator
           git diff --exit-code deploy/operator/Chart.lock
 

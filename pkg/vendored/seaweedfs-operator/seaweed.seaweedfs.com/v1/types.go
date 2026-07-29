@@ -242,6 +242,29 @@ type WorkerSpec struct {
 	MaxExecute  *int32           `json:"maxExecute,omitempty"`
 }
 
+<<<<<<< HEAD
+=======
+// ProbeOverride tunes the timing fields of an operator-managed readiness probe.
+// Nil fields retain the SeaweedFS operator defaults; the probe handler itself
+// remains managed by the SeaweedFS operator.
+type ProbeOverride struct {
+	InitialDelaySeconds *int32 `json:"initialDelaySeconds,omitempty"`
+	TimeoutSeconds      *int32 `json:"timeoutSeconds,omitempty"`
+	PeriodSeconds       *int32 `json:"periodSeconds,omitempty"`
+	SuccessThreshold    *int32 `json:"successThreshold,omitempty"`
+	FailureThreshold    *int32 `json:"failureThreshold,omitempty"`
+}
+
+// LivenessProbeOverride is ProbeOverride without SuccessThreshold, which
+// Kubernetes requires to remain 1 for liveness probes.
+type LivenessProbeOverride struct {
+	InitialDelaySeconds *int32 `json:"initialDelaySeconds,omitempty"`
+	TimeoutSeconds      *int32 `json:"timeoutSeconds,omitempty"`
+	PeriodSeconds       *int32 `json:"periodSeconds,omitempty"`
+	FailureThreshold    *int32 `json:"failureThreshold,omitempty"`
+}
+
+>>>>>>> main
 // ComponentSpec is the base spec of each component
 type ComponentSpec struct {
 	Version                       *string                              `json:"version,omitempty"`
@@ -260,6 +283,11 @@ type ComponentSpec struct {
 	Volumes                       []corev1.Volume                      `json:"volumes,omitempty"`
 	VolumeMounts                  []corev1.VolumeMount                 `json:"volumeMounts,omitempty"`
 	ExtraArgs                     []string                             `json:"extraArgs,omitempty"`
+<<<<<<< HEAD
+=======
+	ReadinessProbe                *ProbeOverride                       `json:"readinessProbe,omitempty"`
+	LivenessProbe                 *LivenessProbeOverride               `json:"livenessProbe,omitempty"`
+>>>>>>> main
 }
 
 // ServiceSpec is a subset of the original k8s spec

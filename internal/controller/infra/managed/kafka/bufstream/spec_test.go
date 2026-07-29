@@ -5,7 +5,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 	apiv2 "github.com/wandb/operator/api/v2"
+<<<<<<< HEAD
 	"github.com/wandb/operator/internal/controller/infra/external/objectstore"
+=======
+	"github.com/wandb/operator/internal/controller/infra/objectstore"
+>>>>>>> main
 	"github.com/wandb/operator/pkg/utils"
 	"github.com/wandb/operator/pkg/wandb/manifest"
 	corev1 "k8s.io/api/core/v1"
@@ -104,11 +108,21 @@ func TestToEtcdApplicationHA(t *testing.T) {
 }
 
 func testStorage() objectstore.ConnInfo {
+<<<<<<< HEAD
+=======
+	// Mirror the managed SeaweedFS shape: a bare host with the port/scheme carried
+	// separately, so EndpointURL() must reassemble "http://seaweedfs:8333".
+>>>>>>> main
 	return objectstore.ConnInfo{
 		Provider:       apiv2.ObjectStoreProviderS3,
 		URI:            "s3://bucket",
 		Bucket:         "bucket",
+<<<<<<< HEAD
 		Endpoint:       "http://seaweedfs:80",
+=======
+		Endpoint:       "seaweedfs",
+		Port:           "8333",
+>>>>>>> main
 		Region:         "us-east-1",
 		AccessKey:      "ak",
 		SecretKey:      "sk",
@@ -138,7 +152,12 @@ func TestToBufstreamApplication(t *testing.T) {
 	require.Contains(t, ensureBucket.Args[0], "-le 150")
 	require.NotContains(t, ensureBucket.Args[0], testStorage().AccessKey)
 	require.NotContains(t, ensureBucket.Args[0], testStorage().SecretKey)
+<<<<<<< HEAD
 	require.Equal(t, testStorage().Endpoint, ensureBucket.Args[2])
+=======
+	require.Equal(t, "http://seaweedfs:8333", ensureBucket.Args[2])
+	require.Equal(t, testStorage().EndpointURL(), ensureBucket.Args[2])
+>>>>>>> main
 	require.Equal(t, testStorage().Bucket, ensureBucket.Args[3])
 	require.Equal(t, int32(2), *app.Spec.Replicas)
 	require.Len(t, app.Spec.PodTemplate.Spec.Containers, 1)
@@ -226,11 +245,52 @@ func TestApplicationsUseDedicatedServiceAccount(t *testing.T) {
 	require.False(t, *bufstream.Spec.PodTemplate.Spec.AutomountServiceAccountToken)
 }
 
+<<<<<<< HEAD
+=======
+func TestApplicationsUseWorkloadIdentityForAmbientCredentials(t *testing.T) {
+	setOpenShiftMode(t, false)
+	wandb := testWandb()
+	wandb.Spec.Kafka.ManagedKafka.ServiceAccount = apiv2.ManagedServiceAccountSpec{
+		ServiceAccountName: "kafka-workload-identity",
+		Annotations: map[string]string{
+			"eks.amazonaws.com/role-arn": "arn:aws:iam::123456789012:role/wandb-kafka",
+		},
+	}
+	nsn := CreateNsNameBuilder(types.NamespacedName{Namespace: "default", Name: "wandb-kafka"})
+	storage := testStorage()
+	storage.AccessKey = ""
+	storage.SecretKey = ""
+
+	sa, err := ToServiceAccount(wandb, nsn, storage, testScheme(t))
+	require.NoError(t, err)
+	require.Equal(t, "kafka-workload-identity", sa.Name)
+	require.Equal(t, wandb.Spec.Kafka.ManagedKafka.ServiceAccount.Annotations, sa.Annotations)
+	require.NotNil(t, sa.AutomountServiceAccountToken)
+	require.True(t, *sa.AutomountServiceAccountToken)
+
+	bufstream, err := ToBufstreamApplication(wandb, nsn, storage, false, testScheme(t), manifest.Manifest{})
+	require.NoError(t, err)
+	require.Equal(t, sa.Name, bufstream.Spec.PodTemplate.Spec.ServiceAccountName)
+	require.NotNil(t, bufstream.Spec.PodTemplate.Spec.AutomountServiceAccountToken)
+	require.True(t, *bufstream.Spec.PodTemplate.Spec.AutomountServiceAccountToken)
+
+	etcd, err := ToEtcdApplication(wandb, nsn, testScheme(t), manifest.Manifest{})
+	require.NoError(t, err)
+	require.Equal(t, sa.Name, etcd.Spec.PodTemplate.Spec.ServiceAccountName)
+	require.NotNil(t, etcd.Spec.PodTemplate.Spec.AutomountServiceAccountToken)
+	require.False(t, *etcd.Spec.PodTemplate.Spec.AutomountServiceAccountToken)
+}
+
+>>>>>>> main
 func TestToServiceAccount(t *testing.T) {
 	wandb := testWandb()
 	nsn := CreateNsNameBuilder(types.NamespacedName{Namespace: "default", Name: "wandb-kafka"})
 
+<<<<<<< HEAD
 	sa, err := ToServiceAccount(wandb, nsn, testScheme(t))
+=======
+	sa, err := ToServiceAccount(wandb, nsn, testStorage(), testScheme(t))
+>>>>>>> main
 	require.NoError(t, err)
 	require.Equal(t, nsn.ServiceAccountName(), sa.Name)
 	require.Equal(t, "default", sa.Namespace)
@@ -240,6 +300,27 @@ func TestToServiceAccount(t *testing.T) {
 	require.Len(t, sa.OwnerReferences, 1)
 }
 
+<<<<<<< HEAD
+=======
+func TestToServiceAccountCanReferenceExistingIdentity(t *testing.T) {
+	wandb := testWandb()
+	create := false
+	wandb.Spec.Kafka.ManagedKafka.ServiceAccount = apiv2.ManagedServiceAccountSpec{
+		Create:             &create,
+		ServiceAccountName: "existing-kafka-identity",
+	}
+	nsn := CreateNsNameBuilder(types.NamespacedName{Namespace: "default", Name: "wandb-kafka"})
+
+	sa, err := ToServiceAccount(wandb, nsn, testStorage(), testScheme(t))
+	require.NoError(t, err)
+	require.Nil(t, sa)
+
+	app, err := ToBufstreamApplication(wandb, nsn, testStorage(), false, testScheme(t), manifest.Manifest{})
+	require.NoError(t, err)
+	require.Equal(t, "existing-kafka-identity", app.Spec.PodTemplate.Spec.ServiceAccountName)
+}
+
+>>>>>>> main
 func TestToSccRoleBinding(t *testing.T) {
 	wandb := testWandb()
 	nsn := CreateNsNameBuilder(types.NamespacedName{Namespace: "default", Name: "wandb-kafka"})

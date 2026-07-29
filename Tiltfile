@@ -220,7 +220,10 @@ load("ext://helm_resource", "helm_repo", "helm_resource")
 def operator_dockerfile():
     lines = [
         "FROM registry.access.redhat.com/ubi9/ubi",
+<<<<<<< HEAD
         "USER 1001",
+=======
+>>>>>>> main
         "",
         "ADD tilt_bin/manager /manager",
         "ADD tilt_bin/crd-installer /crd-installer",
@@ -229,7 +232,19 @@ def operator_dockerfile():
     if settings.get("manifestSource") == "local":
         lines.append("ADD %s /server-manifest" % settings.get("localManifestPath"))
 
+<<<<<<< HEAD
     lines.append("")
+=======
+    lines.extend([
+        "",
+        "RUN mkdir -p /helm/.cache/helm /helm/.config/helm /helm/.local/share/helm && chown -R 65532:65532 /helm",
+        "USER 65532:65532",
+        "ENV HELM_CACHE_HOME=/helm/.cache/helm",
+        "ENV HELM_CONFIG_HOME=/helm/.config/helm",
+        "ENV HELM_DATA_HOME=/helm/.local/share/helm",
+        "",
+    ])
+>>>>>>> main
 
     return "\n".join(lines)
 

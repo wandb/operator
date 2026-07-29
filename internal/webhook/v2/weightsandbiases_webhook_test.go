@@ -22,6 +22,10 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+<<<<<<< HEAD
+=======
+	appsv1 "github.com/wandb/operator/api/v1"
+>>>>>>> main
 	appsv2 "github.com/wandb/operator/api/v2"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -39,7 +43,13 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 	BeforeEach(func() {
 		ctx = context.Background()
 		obj = &appsv2.WeightsAndBiases{ObjectMeta: metav1.ObjectMeta{Name: "wandb", Namespace: "test-ns"}}
+<<<<<<< HEAD
 		oldObj = &appsv2.WeightsAndBiases{ObjectMeta: metav1.ObjectMeta{Name: "wandb", Namespace: "test-ns"}}
+=======
+		obj.Spec.Wandb.Hostname = "https://wandb.example.com"
+		oldObj = &appsv2.WeightsAndBiases{ObjectMeta: metav1.ObjectMeta{Name: "wandb", Namespace: "test-ns"}}
+		oldObj.Spec.Wandb.Hostname = "https://wandb.example.com"
+>>>>>>> main
 		validator = WeightsAndBiasesCustomValidator{}
 		defaulter = WeightsAndBiasesCustomDefaulter{}
 	})
@@ -121,9 +131,83 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 		It("allows create when ManagedRedis is nil", func() {
 			warnings, err := validator.ValidateCreate(ctx, obj)
 			Expect(err).NotTo(HaveOccurred())
+<<<<<<< HEAD
 			Expect(warnings).To(BeEmpty())
 		})
 
+=======
+			Expect(warnings).To(BeEmpty())		})
+
+		It("rejects external Redis without host and port selectors", func() {
+			obj.Spec.Redis = map[string]appsv2.RedisSpec{
+				appsv2.DefaultInstanceName: {ExternalRedis: &appsv2.RedisConnection{}},
+			}
+
+			_, err := validator.ValidateCreate(ctx, obj)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("externalRedis.host.name"))
+			Expect(err.Error()).To(ContainSubstring("externalRedis.host.key"))
+			Expect(err.Error()).To(ContainSubstring("externalRedis.port.name"))
+			Expect(err.Error()).To(ContainSubstring("externalRedis.port.key"))
+		})
+
+		It("allows external Redis with host and port selectors", func() {
+			obj.Spec.Redis = map[string]appsv2.RedisSpec{
+				appsv2.DefaultInstanceName: {
+					ExternalRedis: &appsv2.RedisConnection{
+						Host: secretKeySelector("redis", "host"),
+						Port: secretKeySelector("redis", "port"),
+					},
+				},
+			}
+
+			warnings, err := validator.ValidateCreate(ctx, obj)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(warnings).To(BeEmpty())
+		})
+
+		It("allows external Redis while v1 literal values are pending materialization", func() {
+			obj.Annotations = map[string]string{
+				appsv1.RedisPendingAnnotation: `{"host":"redis.example.com","port":"6379"}`,
+			}
+			obj.Spec.Redis = map[string]appsv2.RedisSpec{
+				appsv2.DefaultInstanceName: {ExternalRedis: &appsv2.RedisConnection{}},
+			}
+
+			warnings, err := validator.ValidateCreate(ctx, obj)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(warnings).To(BeEmpty())
+		})
+
+		It("rejects create when hostname is missing", func() {
+			obj.Spec.Wandb.Hostname = ""
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("spec.wandb.hostname"))
+			Expect(err.Error()).To(ContainSubstring("hostname is required"))
+		})
+
+		It("rejects create when hostname is only whitespace", func() {
+			obj.Spec.Wandb.Hostname = "   "
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("spec.wandb.hostname"))
+		})
+
+		It("rejects update when hostname is missing", func() {
+			obj.Spec.Wandb.Hostname = ""
+
+			_, err := validator.ValidateUpdate(ctx, oldObj, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("spec.wandb.hostname"))
+		})
+
+>>>>>>> main
 		It("rejects create when Redis storage size is invalid", func() {
 			obj.Spec.Redis = map[string]appsv2.RedisSpec{appsv2.DefaultInstanceName: {ManagedRedis: &appsv2.ManagedRedisSpec{StorageSize: "bad-size"}}}
 
@@ -266,7 +350,12 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 
 			warnings, err := validator.ValidateCreate(ctx, obj)
 			Expect(err).NotTo(HaveOccurred())
+<<<<<<< HEAD
 			Expect(warnings).To(BeEmpty())		})
+=======
+			Expect(warnings).To(BeEmpty())
+		})
+>>>>>>> main
 
 		It("rejects even Keeper replica counts", func() {
 			obj.Spec.ClickHouse = map[string]appsv2.ClickHouseSpec{appsv2.DefaultInstanceName: {ManagedClickHouse: &appsv2.ManagedClickHouseSpec{
@@ -338,3 +427,13 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 func boolPtr(v bool) *bool {
 	return &v
 }
+<<<<<<< HEAD
+=======
+
+func secretKeySelector(name, key string) corev1.SecretKeySelector {
+	return corev1.SecretKeySelector{
+		LocalObjectReference: corev1.LocalObjectReference{Name: name},
+		Key:                  key,
+	}
+}
+>>>>>>> main
