@@ -203,6 +203,45 @@ func Reconcile(
 	// Apply manifest-derived infra sizing before provisioning
 	ApplyInfraSizing(wandb, manifest)
 
+	expansionBlockers, expansionPending, err := reconcileSeaweedFSVolumeExpansion(ctx, client, wandb)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("reconcile SeaweedFS volume expansion: %w", err)
+	}
+	if len(expansionBlockers) > 0 {
+		statusBefore := wandb.DeepCopy().Status
+		message := volumeExpansionBlockersMessage(expansionBlockers)
+		if err := updateReadyStatus(
+			ctx,
+			client,
+			wandb,
+			statusBefore,
+			false,
+			"StorageExpansionUnsupported",
+			message,
+		); err != nil {
+			return ctrl.Result{}, err
+		}
+		recorder.Event(wandb, corev1.EventTypeWarning, "StorageExpansionUnsupported", message)
+		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
+	}
+
+	if len(expansionPending) > 0 {
+		statusBefore := wandb.DeepCopy().Status
+		message := volumeExpansionPendingMessage(expansionPending)
+		if err := updateReadyStatus(
+			ctx,
+			client,
+			wandb,
+			statusBefore,
+			false,
+			"StorageExpansionInProgress",
+			message,
+		); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
+	}
+
 	/////////////////////////
 	// Write Infra State
 	redisConditions := redisWriteState(ctx, client, wandb, manifest)
