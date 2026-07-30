@@ -3864,9 +3864,8 @@ spec:
                                   type: object
                               type: object
                             enabled:
+                              default: true
                               type: boolean
-                          required:
-                          - enabled
                           type: object
                         storageSize:
                           type: string

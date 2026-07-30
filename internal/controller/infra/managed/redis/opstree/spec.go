@@ -165,7 +165,7 @@ func ToRedisStandaloneVendorSpec(
 		return nil, nil
 	}
 
-	if spec.Sentinel.Enabled {
+	if ptr.Deref(spec.Sentinel.Enabled, true) {
 		return nil, nil
 	}
 
@@ -246,7 +246,7 @@ func ToRedisSentinelVendorSpec(
 		return nil, nil
 	}
 
-	if !spec.Sentinel.Enabled {
+	if !ptr.Deref(spec.Sentinel.Enabled, true) {
 		return nil, nil
 	}
 
@@ -324,7 +324,7 @@ func ToRedisReplicationVendorSpec(
 		return nil, nil
 	}
 
-	if !spec.Sentinel.Enabled {
+	if !ptr.Deref(spec.Sentinel.Enabled, true) {
 		return nil, nil
 	}
 

@@ -541,7 +541,8 @@ type RedisConfig struct {
 }
 
 type RedisSentinelSpec struct {
-	Enabled bool                `json:"enabled"`
+	// +kubebuilder:default=true
+	Enabled *bool               `json:"enabled,omitempty"`
 	Config  RedisSentinelConfig `json:"config,omitempty"`
 }
 
