@@ -625,6 +625,9 @@ type RedisSpec struct {
 type ManagedRedisSpec struct {
 	ManagedInfraSpec `json:",inline"`
 
+	// Replicas applies only to Redis Replication mode and is ignored when Sentinel is disabled.
+	// +kubebuilder:validation:Minimum=1
+	Replicas    int32             `json:"replicas,omitempty"`
 	StorageSize string            `json:"storageSize,omitempty"`
 	Config      RedisConfig       `json:"config,omitempty"`
 	Sentinel    RedisSentinelSpec `json:"sentinel,omitempty"`
@@ -648,8 +651,11 @@ type RedisConfig struct {
 }
 
 type RedisSentinelSpec struct {
-	Enabled bool                `json:"enabled"`
+	// +kubebuilder:default=true
+	Enabled *bool               `json:"enabled,omitempty"`
 	Config  RedisSentinelConfig `json:"config,omitempty"`
+	// +kubebuilder:validation:Minimum=1
+	Replicas int32 `json:"replicas,omitempty"`
 }
 
 type RedisSentinelConfig struct {

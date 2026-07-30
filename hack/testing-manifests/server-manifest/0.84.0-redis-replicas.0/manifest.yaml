@@ -580,7 +580,7 @@ applications:
       - runtimeTmp
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/anaconda2
-      tag: 0.84.0-notifications-security-flags.0
+      tag: 0.84.0-redis-replicas.0
     containers:
       - name: anaconda2
         ports:
@@ -632,7 +632,7 @@ applications:
             type: mysql
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.84.0-notifications-security-flags.0
+      tag: 0.84.0-redis-replicas.0
     containers:
       - name: api
         args:
@@ -678,7 +678,7 @@ applications:
       - runtimeTmp
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.84.0-notifications-security-flags.0
+      tag: 0.84.0-redis-replicas.0
     containers:
       - name: executor
         args:
@@ -698,7 +698,7 @@ applications:
       - runtimeTmp
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.84.0-notifications-security-flags.0
+      tag: 0.84.0-redis-replicas.0
   filestream:
     name: filestream
     features:
@@ -716,7 +716,7 @@ applications:
       - runtimeTmp
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.84.0-notifications-security-flags.0
+      tag: 0.84.0-redis-replicas.0
     containers:
       - name: filestream
   flat-run-fields-updater:
@@ -739,14 +739,14 @@ applications:
         value: "$(KAFKA_URL)/$(KAFKA_RUNS_V2_TOPIC_NAME)?consumer_group_id=flat-run-fields-updater"
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.84.0-notifications-security-flags.0
+      tag: 0.84.0-redis-replicas.0
     containers:
       - name: flat-run-fields-updater
   frontend:
     name: frontend
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/frontend-nginx
-      tag: 0.84.0-notifications-security-flags.0
+      tag: 0.84.0-redis-replicas.0
     commonEnvs:
       - frontend
     env:
@@ -839,7 +839,7 @@ applications:
         value: "memory://"
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.84.0-notifications-security-flags.0
+      tag: 0.84.0-redis-replicas.0
     containers:
       - name: glue
   metric-observer:
@@ -862,7 +862,7 @@ applications:
         value: "$(KAFKA_URL)/$(KAFKA_RUNS_V2_TOPIC_NAME)?consumer_group_id=metric-observer"
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.84.0-notifications-security-flags.0
+      tag: 0.84.0-redis-replicas.0
     containers:
       - name: metric-observer
   parquet:
@@ -882,7 +882,7 @@ applications:
       - runtimeTmp
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.84.0-notifications-security-flags.0
+      tag: 0.84.0-redis-replicas.0
     containers:
       - name: parquet
         ports:
@@ -904,7 +904,7 @@ applications:
     name: weave
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-python
-      tag: 0.84.0-notifications-security-flags.0
+      tag: 0.84.0-redis-replicas.0
     commonEnvs:
       - runtimePaths
       - pythonRuntimePaths
@@ -960,7 +960,7 @@ applications:
     name: weave-trace
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
-      tag: 0.84.0-notifications-security-flags.0
+      tag: 0.84.0-redis-replicas.0
     commonEnvs:
       - clickhouse
       - kafka
@@ -1009,7 +1009,7 @@ applications:
     name: weave-trace-worker
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
-      tag: 0.84.0-notifications-security-flags.0
+      tag: 0.84.0-redis-replicas.0
     env:
       - name: DD_TRACE_ENABLED
         value: "false"
@@ -1032,7 +1032,7 @@ applications:
     legacyKey: weave-evaluate-model-worker
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
-      tag: 0.84.0-notifications-security-flags.0
+      tag: 0.84.0-redis-replicas.0
     env:
       - name: DD_TRACE_ENABLED
         value: "false"
@@ -1055,7 +1055,7 @@ migrations:
   gorilla:
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.84.0-notifications-security-flags.0
+      tag: 0.84.0-redis-replicas.0
     args:
       - "migrate"
       - "--db=$(GORILLA_METADATA_STORE)"
@@ -1072,7 +1072,7 @@ migrations:
   internal-signer:
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.84.0-notifications-security-flags.0
+      tag: 0.84.0-redis-replicas.0
     args:
       - "secret-generation-job"
     env:
@@ -1089,7 +1089,7 @@ migrations:
   weave-trace:
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
-      tag: 0.84.0-notifications-security-flags.0
+      tag: 0.84.0-redis-replicas.0
     args:
       - python
       - migrator.py

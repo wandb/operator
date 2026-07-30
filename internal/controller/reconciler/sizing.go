@@ -147,6 +147,7 @@ func ResolveInfraSizing(sizing map[v2.Size]manifest.SizingConfig, size v2.Size, 
 	// Apply "default" sizing baseline
 	if defaultSizing, ok := sizing["default"]; ok {
 		result.Replicas = defaultSizing.Replicas
+		result.Sentinel = defaultSizing.Sentinel
 		result.Shards = defaultSizing.Shards
 		result.Copies = defaultSizing.Copies
 		result.VolumeSize = defaultSizing.VolumeSize
@@ -160,6 +161,9 @@ func ResolveInfraSizing(sizing map[v2.Size]manifest.SizingConfig, size v2.Size, 
 	if sizeSizing, ok := sizing[size]; ok {
 		if sizeSizing.Replicas != 0 {
 			result.Replicas = sizeSizing.Replicas
+		}
+		if sizeSizing.Sentinel.Replicas != 0 {
+			result.Sentinel.Replicas = sizeSizing.Sentinel.Replicas
 		}
 		if sizeSizing.Shards != 0 {
 			result.Shards = sizeSizing.Shards
@@ -274,6 +278,12 @@ func ApplyInfraSizing(wandb *v2.WeightsAndBiases, manifest manifest.Manifest) {
 			continue
 		}
 		sizing := ResolveInfraSizing(redisConfig.Sizing, size, wandb.Spec.RequireLimits)
+		if spec.Replicas == 0 && sizing.Replicas != 0 {
+			spec.Replicas = sizing.Replicas
+		}
+		if spec.Sentinel.Replicas == 0 && sizing.Sentinel.Replicas != 0 {
+			spec.Sentinel.Replicas = sizing.Sentinel.Replicas
+		}
 		if spec.StorageSize == "" && sizing.VolumeSize != "" {
 			spec.StorageSize = sizing.VolumeSize
 		}

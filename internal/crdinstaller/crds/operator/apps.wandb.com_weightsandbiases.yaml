@@ -3855,6 +3855,10 @@ spec:
                           type: string
                         namespace:
                           type: string
+                        replicas:
+                          format: int32
+                          minimum: 1
+                          type: integer
                         retentionPolicy:
                           properties:
                             onDelete:
@@ -3904,9 +3908,12 @@ spec:
                                   type: object
                               type: object
                             enabled:
+                              default: true
                               type: boolean
-                          required:
-                          - enabled
+                            replicas:
+                              format: int32
+                              minimum: 1
+                              type: integer
                           type: object
                         storageSize:
                           type: string

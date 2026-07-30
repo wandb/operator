@@ -370,9 +370,13 @@ redis:
       default:
         shards: 1
         replicas: 1
+        sentinel:
+          replicas: 1
         volumeSize: 5Gi
       micro:
         replicas: 2
+        sentinel:
+          replicas: 3
         volumeSize: 8Gi
         resources:
           requests:
@@ -384,6 +388,8 @@ redis:
       small:
         shards: 1
         replicas: 3
+        sentinel:
+          replicas: 3
         volumeSize: 16Gi
         resources:
           requests:
@@ -395,6 +401,8 @@ redis:
       medium:
         shards: 1
         replicas: 3
+        sentinel:
+          replicas: 3
         volumeSize: 32Gi
         resources:
           requests:
@@ -406,6 +414,8 @@ redis:
       large:
         shards: 1
         replicas: 3
+        sentinel:
+          replicas: 3
         volumeSize: 64Gi
         resources:
           requests:
@@ -417,6 +427,8 @@ redis:
       xlarge:
         shards: 2
         replicas: 3
+        sentinel:
+          replicas: 3
         volumeSize: 128Gi
         resources:
           requests:
@@ -428,6 +440,8 @@ redis:
       2xlarge:
         shards: 4
         replicas: 3
+        sentinel:
+          replicas: 3
         volumeSize: 256Gi
         resources:
           requests:
