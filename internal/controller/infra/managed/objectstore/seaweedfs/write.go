@@ -10,7 +10,10 @@ import (
 	"github.com/wandb/operator/internal/controller/infra/objectstore"
 	"github.com/wandb/operator/internal/logx"
 	seaweedv1 "github.com/wandb/operator/pkg/vendored/seaweedfs-operator/seaweed.seaweedfs.com/v1"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -62,6 +65,15 @@ func WriteState(
 	}
 
 	result := make([]metav1.Condition, 0)
+
+	if err := preserveClaimTemplateStorage(ctx, kubeClient, desiredCr); err != nil {
+		result = append(result, metav1.Condition{
+			Type:   common.ReconciledType,
+			Status: metav1.ConditionFalse,
+			Reason: common.ApiErrorReason,
+		})
+		return result, nil
+	}
 
 	action, err := common.CrudResource(ctx, kubeClient, desiredCr, actual)
 	if err != nil {
@@ -140,6 +152,68 @@ func WriteState(
 		Reason: common.NoResourceReason,
 	})
 	return result, nil
+}
+
+func preserveClaimTemplateStorage(
+	ctx context.Context,
+	kubeClient client.Client,
+	desired *seaweedv1.Seaweed,
+) error {
+	if desired == nil {
+		return nil
+	}
+
+	volumeStorage, found, err := statefulSetClaimTemplateStorage(
+		ctx,
+		kubeClient,
+		types.NamespacedName{Namespace: desired.Namespace, Name: desired.Name + "-volume"},
+	)
+	if err != nil {
+		return err
+	}
+	if found && desired.Spec.Volume != nil {
+		if desired.Spec.Volume.Requests == nil {
+			desired.Spec.Volume.Requests = corev1.ResourceList{}
+		}
+		desired.Spec.Volume.Requests[corev1.ResourceStorage] = volumeStorage
+	}
+
+	filerStorage, found, err := statefulSetClaimTemplateStorage(
+		ctx,
+		kubeClient,
+		types.NamespacedName{Namespace: desired.Namespace, Name: desired.Name + "-filer"},
+	)
+	if err != nil {
+		return err
+	}
+	if found && desired.Spec.Filer != nil && desired.Spec.Filer.Persistence != nil {
+		if desired.Spec.Filer.Persistence.Resources.Requests == nil {
+			desired.Spec.Filer.Persistence.Resources.Requests = corev1.ResourceList{}
+		}
+		desired.Spec.Filer.Persistence.Resources.Requests[corev1.ResourceStorage] = filerStorage
+	}
+
+	return nil
+}
+
+func statefulSetClaimTemplateStorage(
+	ctx context.Context,
+	kubeClient client.Client,
+	nsn types.NamespacedName,
+) (resource.Quantity, bool, error) {
+	statefulSet := &appsv1.StatefulSet{}
+	if err := kubeClient.Get(ctx, nsn, statefulSet); err != nil {
+		if apierrors.IsNotFound(err) {
+			return resource.Quantity{}, false, nil
+		}
+		return resource.Quantity{}, false, fmt.Errorf("get StatefulSet %s/%s: %w", nsn.Namespace, nsn.Name, err)
+	}
+	for _, claimTemplate := range statefulSet.Spec.VolumeClaimTemplates {
+		if storage, ok := claimTemplate.Spec.Resources.Requests[corev1.ResourceStorage]; ok {
+			return storage, true, nil
+		}
+	}
+	return resource.Quantity{}, false, nil
 }
 
 // writeSeaweedS3Config persists the SeaweedFS S3 identity config secret,
