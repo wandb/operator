@@ -615,6 +615,7 @@ type ManagedRedisSpec struct {
 	ManagedInfraSpec `json:",inline"`
 
 	StorageSize string            `json:"storageSize,omitempty"`
+	Replicas    int32             `json:"replicas,omitempty"`
 	Config      RedisConfig       `json:"config,omitempty"`
 	Sentinel    RedisSentinelSpec `json:"sentinel,omitempty"`
 	Namespace   string            `json:"namespace,omitempty"`
@@ -637,8 +638,11 @@ type RedisConfig struct {
 }
 
 type RedisSentinelSpec struct {
-	Enabled bool                `json:"enabled"`
+	// +kubebuilder:default=true
+	Enabled *bool               `json:"enabled,omitempty"`
 	Config  RedisSentinelConfig `json:"config,omitempty"`
+	// +kubebuilder:validation:Minimum=1
+	Replicas int32 `json:"replicas,omitempty"`
 }
 
 type RedisSentinelConfig struct {

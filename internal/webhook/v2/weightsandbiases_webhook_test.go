@@ -286,6 +286,40 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 			Expect(warnings).To(BeEmpty())
 		})
 
+		It("allows size upgrades when managed Redis topology is unchanged", func() {
+			oldObj.Spec.Size = appsv2.SizeDev
+			oldObj.Spec.Redis = map[string]appsv2.RedisSpec{appsv2.DefaultInstanceName: {ManagedRedis: &appsv2.ManagedRedisSpec{
+				Namespace: "redis",
+				Sentinel:  appsv2.RedisSentinelSpec{Enabled: boolPtr(false)},
+			}}}
+			obj.Spec.Size = appsv2.SizeSmall
+			obj.Spec.Redis = map[string]appsv2.RedisSpec{appsv2.DefaultInstanceName: {ManagedRedis: &appsv2.ManagedRedisSpec{
+				Namespace: "redis",
+				Sentinel:  appsv2.RedisSentinelSpec{Enabled: boolPtr(false)},
+			}}}
+
+			Expect(defaulter.Default(ctx, obj)).To(Succeed())
+			Expect(obj.Spec.Redis[appsv2.DefaultInstanceName].ManagedRedis.Sentinel.Enabled).To(HaveValue(BeFalse()))
+			warnings, err := validator.ValidateUpdate(ctx, oldObj, obj)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(warnings).To(BeEmpty())
+		})
+
+		It("rejects managed Redis topology changes", func() {
+			oldObj.Spec.Redis = map[string]appsv2.RedisSpec{appsv2.DefaultInstanceName: {ManagedRedis: &appsv2.ManagedRedisSpec{
+				Namespace: "redis",
+				Sentinel:  appsv2.RedisSentinelSpec{Enabled: boolPtr(false)},
+			}}}
+			obj.Spec.Redis = map[string]appsv2.RedisSpec{appsv2.DefaultInstanceName: {ManagedRedis: &appsv2.ManagedRedisSpec{
+				Namespace: "redis",
+				Sentinel:  appsv2.RedisSentinelSpec{Enabled: boolPtr(true)},
+			}}}
+
+			_, err := validator.ValidateUpdate(ctx, oldObj, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("Redis Sentinel cannot be toggled"))
+		})
+
 		It("rejects decreasing managed MySQL replicas on update", func() {
 			oldObj.Spec.MySQL = map[string]appsv2.MySQLSpec{appsv2.DefaultInstanceName: {ManagedMysql: &appsv2.ManagedMysqlSpec{Replicas: 3}}}
 			obj.Spec.MySQL = map[string]appsv2.MySQLSpec{appsv2.DefaultInstanceName: {ManagedMysql: &appsv2.ManagedMysqlSpec{Replicas: 1}}}
