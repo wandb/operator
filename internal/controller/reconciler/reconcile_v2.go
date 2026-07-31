@@ -347,7 +347,7 @@ func Reconcile(
 	mysqlConditions := mysqlWriteState(ctx, client, wandb, manifest)
 	objectStoreConditions, objectStoreConnection := objectStoreWriteState(ctx, client, wandb, manifest)
 	kafkaConditions := kafkaWriteState(ctx, client, wandb, manifest)
-	clickHouseConditions := clickHouseWriteState(ctx, client, wandb, manifest)
+	clickHouseConditions := clickHouseWriteState(ctx, client, wandb, manifest, objectStoreConditions)
 
 	/////////////////////////
 	// Read Infra State
