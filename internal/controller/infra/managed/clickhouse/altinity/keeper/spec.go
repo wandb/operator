@@ -42,6 +42,8 @@ func ToKeeperVendorSpec(
 	}
 
 	labels := common.BuildWandbLabels(wandb, KeeperModuleName)
+	settings := chiv1.NewSettings()
+	settings.Set("keeper_server/enable_reconfiguration", chiv1.NewSettingScalar("true"))
 
 	podSpec := corev1.PodSpec{
 		SecurityContext: keeperPodSecurityContext(),
@@ -70,6 +72,7 @@ func ToKeeperVendorSpec(
 		},
 		Spec: chkv1.ChkSpec{
 			Configuration: &chkv1.Configuration{
+				Settings: settings,
 				Clusters: []*chkv1.Cluster{
 					{
 						Name: ClusterName,
