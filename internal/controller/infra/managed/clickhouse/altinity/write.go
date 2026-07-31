@@ -9,6 +9,7 @@ import (
 	chkv1 "github.com/wandb/operator/pkg/vendored/altinity-clickhouse/clickhouse-keeper.altinity.com/v1"
 	chiv1 "github.com/wandb/operator/pkg/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
 	corev1 "k8s.io/api/core/v1"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -40,11 +41,57 @@ func WriteState(
 			return results
 		}
 	}
-	results = append(results, keeper.WriteState(
-		ctx, client,
-		types.NamespacedName{Namespace: desiredKeeper.Namespace, Name: desiredKeeper.Name},
-		desiredKeeper,
-	)...)
+	keeperConditions := keeper.ReconcileState(ctx, client, desiredKeeper)
+	results = append(results, keeperConditions...)
+	if !apimeta.IsStatusConditionTrue(keeperConditions, keeper.KeeperReportedReadyType) {
+		results = append(results, metav1.Condition{
+			Type:    ClickHouseCustomResourceType,
+			Status:  metav1.ConditionFalse,
+			Reason:  common.PendingCreateReason,
+			Message: "waiting for the desired ClickHouse Keeper replicas",
+		})
+		return results
+	}
+
+	installationNsName := createNsNameBuilder(specNamespacedName).InstallationNsName()
+	actualClickHouse := &chiv1.ClickHouseInstallation{}
+	clickHouseFound, err := common.GetResource(
+		ctx,
+		client,
+		installationNsName,
+		ResourceTypeName,
+		actualClickHouse,
+	)
+	if err != nil {
+		results = append(results, metav1.Condition{
+			Type:   ClickHouseCustomResourceType,
+			Status: metav1.ConditionUnknown,
+			Reason: common.ApiErrorReason,
+		})
+		return results
+	}
+	if clickHouseFound && !common.JSONEqual(actualClickHouse.Spec, desired.Spec) {
+		podsRunning, err := chPodsRunningStatus(ctx, client, installationNsName.Namespace, actualClickHouse)
+		if err != nil {
+			results = append(results, metav1.Condition{
+				Type:   ClickHouseReportedReadyType,
+				Status: metav1.ConditionUnknown,
+				Reason: common.ApiErrorReason,
+			})
+			return results
+		}
+		currentConditions := computeClickHouseReportedReadyCondition(ctx, actualClickHouse, podsRunning)
+		results = append(results, currentConditions...)
+		if !apimeta.IsStatusConditionTrue(currentConditions, ClickHouseReportedReadyType) {
+			results = append(results, metav1.Condition{
+				Type:    ClickHouseCustomResourceType,
+				Status:  metav1.ConditionFalse,
+				Reason:  common.PendingCreateReason,
+				Message: "waiting for the current ClickHouse topology before applying the desired topology",
+			})
+			return results
+		}
+	}
 	results = append(results, writeClickHouseInstallation(ctx, client, specNamespacedName, desired)...)
 
 	return results
