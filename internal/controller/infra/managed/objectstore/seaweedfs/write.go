@@ -65,6 +65,16 @@ func WriteState(
 	}
 
 	result := make([]metav1.Condition, 0)
+	topologyConditions, err := reconcileTopology(ctx, kubeClient, desiredCr, actual, wandbOwner)
+	if err != nil {
+		result = append(result, metav1.Condition{
+			Type:   common.ReconciledType,
+			Status: metav1.ConditionFalse,
+			Reason: common.ApiErrorReason,
+		})
+		return result, nil
+	}
+	result = append(result, topologyConditions...)
 
 	if err := preserveClaimTemplateStorage(ctx, kubeClient, desiredCr); err != nil {
 		result = append(result, metav1.Condition{
