@@ -48,7 +48,7 @@ func ReadState(
 		}}
 	}
 
-	return computeKeeperReadyCondition(ctx, podsRunning)
+	return computeKeeperReadyCondition(ctx, expectedKeeperPodCount(actual), podsRunning)
 }
 
 func keeperPodsRunningStatus(
@@ -70,7 +70,7 @@ func keeperPodsRunningStatus(
 	return result, nil
 }
 
-func computeKeeperReadyCondition(ctx context.Context, podsRunning map[string]bool) []metav1.Condition {
+func computeKeeperReadyCondition(ctx context.Context, expectedPodCount int, podsRunning map[string]bool) []metav1.Condition {
 	log := logx.GetSlog(ctx)
 
 	var runningCount, podCount int
@@ -80,19 +80,19 @@ func computeKeeperReadyCondition(ctx context.Context, podsRunning map[string]boo
 			runningCount++
 		}
 	}
-	log.Info("Keeper pods status", "running", runningCount, "total", podCount)
+	log.Info("Keeper pods status", "running", runningCount, "reported", podCount, "expected", expectedPodCount)
 
 	status := metav1.ConditionUnknown
 	reason := common.UnknownReason
 	message := ""
 	switch {
-	case podCount > 0 && podCount == runningCount:
+	case expectedPodCount > 0 && podCount == expectedPodCount && podCount == runningCount:
 		status = metav1.ConditionTrue
 		reason = common.ResourceExistsReason
-	case podCount > 0:
+	case expectedPodCount > 0 || podCount > 0:
 		status = metav1.ConditionFalse
 		reason = common.NoResourceReason
-		message = fmt.Sprintf("%d of %d keeper pods running", runningCount, podCount)
+		message = fmt.Sprintf("%d of %d expected keeper pods running (%d reported)", runningCount, expectedPodCount, podCount)
 	}
 
 	return []metav1.Condition{{
@@ -101,4 +101,22 @@ func computeKeeperReadyCondition(ctx context.Context, podsRunning map[string]boo
 		Reason:  reason,
 		Message: message,
 	}}
+}
+
+func expectedKeeperPodCount(chk *chkv1.ClickHouseKeeperInstallation) int {
+	if chk == nil || chk.Spec.Configuration == nil {
+		return 0
+	}
+	var count int
+	for _, cluster := range chk.Spec.Configuration.Clusters {
+		if cluster == nil || cluster.Layout == nil {
+			continue
+		}
+		replicas := cluster.Layout.ReplicasCount
+		if replicas < 1 {
+			replicas = 1
+		}
+		count += replicas
+	}
+	return count
 }
