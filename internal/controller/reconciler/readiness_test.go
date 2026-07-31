@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 	apiv2 "github.com/wandb/operator/api/v2"
 	servermanifest "github.com/wandb/operator/pkg/wandb/manifest"
 	batchv1 "k8s.io/api/batch/v1"
@@ -82,6 +84,29 @@ func TestSetReadyStatusKeepsBooleanAndConditionConsistent(t *testing.T) {
 		t.Fatalf("observed generation = %d, want 4", condition.ObservedGeneration)
 	}
 }
+
+var _ = Describe("Infrastructure blockers", func() {
+	It("includes degraded ClickHouse", func() {
+		wandb := &apiv2.WeightsAndBiases{
+			Spec: apiv2.WeightsAndBiasesSpec{
+				ClickHouse: map[string]apiv2.ClickHouseSpec{
+					apiv2.DefaultInstanceName: {ManagedClickHouse: &apiv2.ManagedClickHouseSpec{}},
+				},
+			},
+			Status: apiv2.WeightsAndBiasesStatus{
+				ClickHouseStatus: map[string]apiv2.ClickHouseInfraStatus{
+					apiv2.DefaultInstanceName: {
+						WBInfraStatus: apiv2.WBInfraStatus{Ready: false, State: "Degraded"},
+					},
+				},
+			},
+		}
+
+		blockers := infrastructureBlockers(wandb)
+
+		Expect(blockers).To(Equal([]string{"clickhouse/default"}))
+	})
+})
 
 func TestRunMigrationsSurfacesFailedJobPhaseAndReason(t *testing.T) {
 	scheme := runtime.NewScheme()
