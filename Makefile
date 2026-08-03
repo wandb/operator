@@ -58,7 +58,7 @@ generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="{./api/v1,./api/v2}"
 
 .PHONY: generate-vendored
-generate-vendored: ## Regenerate vendored Moco CRDs from the operator's Helm chart dependency.
+generate-vendored: ## Regenerate vendored Moco/VictoriaMetrics/Grafana CRDs from the operator's Helm chart dependencies.
 	@helm dependency update deploy/operator >/dev/null
 	@tar -xzOf deploy/operator/charts/moco-*.tgz moco/templates/generated/crds/moco_crds.yaml | \
 		sed -e '/^{{/d' \
@@ -70,15 +70,24 @@ generate-vendored: ## Regenerate vendored Moco CRDs from the operator's Helm cha
 		    -e "s|: '{{ .Release.Namespace }}'|: moco-system|g" \
 		> pkg/vendored/moco/crds/moco_crds.yaml
 	@echo "Regenerated pkg/vendored/moco/crds/moco_crds.yaml"
+	@mkdir -p pkg/vendored/victoria-metrics-operator/crds pkg/vendored/grafana-operator/crds
+	@tar -xzOf deploy/operator/charts/victoria-metrics-operator-*.tgz victoria-metrics-operator/crd.yaml \
+		> pkg/vendored/victoria-metrics-operator/crds/vm_crds.yaml
+	@rm -f pkg/vendored/grafana-operator/crds/*.yaml
+	@tar -xzf deploy/operator/charts/grafana-operator-*.tgz -C pkg/vendored/grafana-operator/crds \
+		--strip-components=3 grafana-operator/files/crds
+	@echo "Regenerated vendored VictoriaMetrics + Grafana CRDs"
 
 .PHONY: sync-crd-embed
 sync-crd-embed: manifests ## Sync embedded CRDs in internal/crdinstaller/crds from their source-of-truth locations.
-	@mkdir -p internal/crdinstaller/crds/operator internal/crdinstaller/crds/redis internal/crdinstaller/crds/clickhouse
-	@rm -f internal/crdinstaller/crds/operator/*.yaml internal/crdinstaller/crds/redis/*.yaml internal/crdinstaller/crds/clickhouse/*.yaml
+	@mkdir -p internal/crdinstaller/crds/operator internal/crdinstaller/crds/redis internal/crdinstaller/crds/clickhouse internal/crdinstaller/crds/victoriametrics internal/crdinstaller/crds/grafana
+	@rm -f internal/crdinstaller/crds/operator/*.yaml internal/crdinstaller/crds/redis/*.yaml internal/crdinstaller/crds/clickhouse/*.yaml internal/crdinstaller/crds/victoriametrics/*.yaml internal/crdinstaller/crds/grafana/*.yaml
 	@cp config/crd/bases/apps.wandb.com_*.yaml internal/crdinstaller/crds/operator/
 	@cp pkg/vendored/redis-operator/crds/*.yaml internal/crdinstaller/crds/redis/
 	@cp pkg/vendored/altinity-clickhouse/crds/clickhouse.altinity.com_clickhouseinstallations.yaml internal/crdinstaller/crds/clickhouse/
-	@echo "Synced CRDs into internal/crdinstaller/crds/{operator,redis,clickhouse}/"
+	@cp pkg/vendored/victoria-metrics-operator/crds/*.yaml internal/crdinstaller/crds/victoriametrics/
+	@cp pkg/vendored/grafana-operator/crds/*.yaml internal/crdinstaller/crds/grafana/
+	@echo "Synced CRDs into internal/crdinstaller/crds/{operator,redis,clickhouse,victoriametrics,grafana}/"
 
 .PHONY: fmt
 fmt: ## Run go fmt against code.
