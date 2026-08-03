@@ -18,6 +18,8 @@ installed regardless. Add new groups here as new subchart-CRD dependencies land.
 {{- if (dig "altinity-clickhouse-operator" "enabled" false .Values.AsMap) -}}
   {{- $groups = append $groups "clickhouse" -}}
 {{- end -}}
+{{- /* Telemetry CRDs install in every mode so an off→full upgrade never has to add CRDs. */ -}}
+{{- $groups = concat $groups (list "victoriametrics" "grafana") -}}
 {{- join "," $groups -}}
 {{- end -}}
 
