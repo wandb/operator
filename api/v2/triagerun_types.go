@@ -58,6 +58,14 @@ type TriageApplicationReference struct {
 // +kubebuilder:validation:MinLength=1
 type TriageActionName string
 
+// TriageActionReference selects one action declared by the referenced
+// Application. Descriptive and execution metadata remain owned by the
+// Application and are resolved by the controller.
+type TriageActionReference struct {
+	// Name is the stable action name exposed by the Application.
+	Name TriageActionName `json:"name"`
+}
+
 // TriageRunSpec defines one immutable request to run one or more diagnostic
 // actions for an Application.
 // Creating another run requires creating another TriageRun.
@@ -70,8 +78,9 @@ type TriageRunSpec struct {
 	// Actions selects one or more triage actions declared by the referenced
 	// Application. Each action is executed independently.
 	// +kubebuilder:validation:MinItems=1
-	// +listType=set
-	Actions []TriageActionName `json:"actions"`
+	// +listType=map
+	// +listMapKey=name
+	Actions []TriageActionReference `json:"actions"`
 }
 
 // TriageResolvedExecution records the concrete execution selected from the
