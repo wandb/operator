@@ -77,20 +77,10 @@ type ApplicationSpec struct {
 	HTTPRouteTemplate *HTTPRouteTemplateSpec `json:"httpRouteTemplate,omitempty"`
 }
 
-// ApplicationTriageSpec contains the diagnostic actions exposed by an
-// Application. The Application remains the source of runtime configuration;
-// TriageRun only selects one of these actions.
+// ApplicationTriageSpec contains the shared diagnostic runner and the actions
+// exposed by an Application. TriageRun selects actions by name; the controller
+// appends each selected name to the resolved runner arguments.
 type ApplicationTriageSpec struct {
-	// Actions maps stable action names to their execution overrides.
-	// +kubebuilder:validation:MinProperties=1
-	// +kubebuilder:validation:MaxProperties=16
-	Actions map[string]TriageActionSpec `json:"actions"`
-}
-
-// TriageActionSpec is a compact override applied to one container from the
-// Application pod template. Image, identity, environment, volumes, and
-// scheduling settings are inherited from the Application.
-type TriageActionSpec struct {
 	// ContainerName selects a container from the Application pod template. It
 	// may be omitted when the Application has exactly one container.
 	// +optional
@@ -102,7 +92,8 @@ type TriageActionSpec struct {
 	// +optional
 	Command []string `json:"command,omitempty"`
 
-	// Args replaces the selected container's arguments when non-empty.
+	// Args replaces the selected container's arguments when non-empty. The
+	// controller appends the selected action name and then that action's Args.
 	// +kubebuilder:validation:MinItems=1
 	// +kubebuilder:validation:MaxItems=64
 	// +optional
@@ -126,6 +117,33 @@ type TriageActionSpec struct {
 	// +kubebuilder:validation:Maximum=3600
 	// +optional
 	TimeoutSeconds int64 `json:"timeoutSeconds,omitempty"`
+
+	// Actions lists the stable action names and metadata exposed to callers.
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=16
+	// +listType=map
+	// +listMapKey=name
+	Actions []TriageActionSpec `json:"actions"`
+}
+
+// TriageActionSpec describes one action exposed by the shared diagnostic
+// runner. Execution identity and resource settings remain on the parent
+// ApplicationTriageSpec so every action uses the same bounded runtime.
+type TriageActionSpec struct {
+	// Name is the stable identifier selected by TriageRun and passed to the
+	// diagnostic runner as its next argument.
+	Name TriageActionName `json:"name"`
+
+	// Description is human-readable help shown by clients such as Watchtower.
+	// +kubebuilder:validation:MaxLength=512
+	// +optional
+	Description string `json:"description,omitempty"`
+
+	// Args are appended after the action name when starting the diagnostic
+	// runner. They are suitable for action-specific flags, not executable paths.
+	// +kubebuilder:validation:MaxItems=32
+	// +optional
+	Args []string `json:"args,omitempty"`
 }
 
 // HTTPRouteTemplateSpec contains the fields needed to build a Gateway API HTTPRoute.

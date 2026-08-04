@@ -11,24 +11,28 @@ func resolveApplicationTriage(triage *serverManifest.ApplicationTriage) *apiv2.A
 		return nil
 	}
 
-	actions := make(map[string]apiv2.TriageActionSpec, len(triage.Actions))
-	for name, action := range triage.Actions {
-		env := make([]corev1.EnvVar, len(action.Env))
-		for i := range action.Env {
-			env[i] = *action.Env[i].DeepCopy()
-		}
-		resolved := apiv2.TriageActionSpec{
-			ContainerName:  action.ContainerName,
-			Command:        append([]string(nil), action.Command...),
-			Args:           append([]string(nil), action.Args...),
-			Env:            env,
-			TimeoutSeconds: action.TimeoutSeconds,
-		}
-		if action.Resources != nil {
-			resolved.Resources = action.Resources.DeepCopy()
-		}
-		actions[name] = resolved
+	env := make([]corev1.EnvVar, len(triage.Env))
+	for i := range triage.Env {
+		env[i] = *triage.Env[i].DeepCopy()
 	}
-
-	return &apiv2.ApplicationTriageSpec{Actions: actions}
+	actions := make([]apiv2.TriageActionSpec, len(triage.Actions))
+	for i := range triage.Actions {
+		actions[i] = apiv2.TriageActionSpec{
+			Name:        apiv2.TriageActionName(triage.Actions[i].Name),
+			Description: triage.Actions[i].Description,
+			Args:        append([]string(nil), triage.Actions[i].Args...),
+		}
+	}
+	resolved := &apiv2.ApplicationTriageSpec{
+		ContainerName:  triage.ContainerName,
+		Command:        append([]string(nil), triage.Command...),
+		Args:           append([]string(nil), triage.Args...),
+		Env:            env,
+		TimeoutSeconds: triage.TimeoutSeconds,
+		Actions:        actions,
+	}
+	if triage.Resources != nil {
+		resolved.Resources = triage.Resources.DeepCopy()
+	}
+	return resolved
 }
