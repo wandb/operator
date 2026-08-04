@@ -44,11 +44,18 @@ spec:
             properties:
               actions:
                 items:
-                  minLength: 1
-                  type: string
+                  properties:
+                    name:
+                      minLength: 1
+                      type: string
+                  required:
+                  - name
+                  type: object
                 minItems: 1
                 type: array
-                x-kubernetes-list-type: set
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
               applicationRef:
                 properties:
                   name:
