@@ -70,7 +70,7 @@ type TriageRunSpec struct {
 	// Actions selects one or more triage actions declared by the referenced
 	// Application. Each action is executed independently.
 	// +kubebuilder:validation:MinItems=1
-	// +kubebuilder:validation:UniqueItems=true
+	// +listType=set
 	Actions []TriageActionName `json:"actions"`
 }
 
