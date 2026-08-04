@@ -31,10 +31,11 @@ func TestTriageRunCreatesBoundedJobFromApplication(t *testing.T) {
 		WithStatusSubresource(&wandbv2.TriageRun{}, &batchv1.Job{}).
 		WithObjects(run, application).
 		Build()
+	logReader := &staticTriageLogReader{}
 	reconciler := &TriageRunReconciler{
 		Client:  fakeClient,
 		Scheme:  testScheme,
-		PodLogs: &staticTriageLogReader{},
+		PodLogs: logReader,
 	}
 
 	_, err := reconciler.Reconcile(context.Background(), requestFor(run))
@@ -45,7 +46,7 @@ func TestTriageRunCreatesBoundedJobFromApplication(t *testing.T) {
 	var job batchv1.Job
 	if err := fakeClient.Get(context.Background(), types.NamespacedName{
 		Namespace: run.Namespace,
-		Name:      "weave-check-triage",
+		Name:      "weave-check-triage-0",
 	}, &job); err != nil {
 		t.Fatalf("get triage Job: %v", err)
 	}
@@ -107,12 +108,116 @@ func TestTriageRunCreatesBoundedJobFromApplication(t *testing.T) {
 	if updatedRun.Status.Phase != wandbv2.TriageRunPhaseRunning {
 		t.Fatalf("phase = %q, want Running", updatedRun.Status.Phase)
 	}
-	if updatedRun.Status.JobRef == nil || updatedRun.Status.JobRef.Name != job.Name {
-		t.Fatalf("jobRef = %#v, want %q", updatedRun.Status.JobRef, job.Name)
+	if len(updatedRun.Status.ActionStatuses) != 1 {
+		t.Fatalf("action statuses = %d, want 1", len(updatedRun.Status.ActionStatuses))
 	}
-	if updatedRun.Status.ResolvedExecution == nil ||
-		updatedRun.Status.ResolvedExecution.ContainerName != "weave-trace" {
-		t.Fatalf("resolved execution = %#v, want weave-trace container", updatedRun.Status.ResolvedExecution)
+	actionStatus := updatedRun.Status.ActionStatuses[0]
+	if actionStatus.Action != defaultTriageAction ||
+		actionStatus.JobRef == nil || actionStatus.JobRef.Name != job.Name {
+		t.Fatalf("action status = %#v, want %q Job %q", actionStatus, defaultTriageAction, job.Name)
+	}
+	if actionStatus.ResolvedExecution == nil ||
+		actionStatus.ResolvedExecution.ContainerName != "weave-trace" {
+		t.Fatalf("resolved execution = %#v, want weave-trace container", actionStatus.ResolvedExecution)
+	}
+}
+
+func TestTriageRunCreatesOneJobPerSelectedAction(t *testing.T) {
+	t.Parallel()
+
+	testScheme := newTriageTestScheme(t)
+	run := testTriageRun()
+	run.Spec.Actions = []wandbv2.TriageActionName{"default", "deep"}
+	application := testTriageApplication()
+	application.Spec.Triage.Actions["deep"] = wandbv2.TriageActionSpec{
+		ContainerName: "weave-trace",
+		Args:          []string{"python", "-m", "weave_triage", "deep"},
+	}
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(testScheme).
+		WithStatusSubresource(&wandbv2.TriageRun{}, &batchv1.Job{}).
+		WithObjects(run, application).
+		Build()
+	logReader := &staticTriageLogReader{}
+	reconciler := &TriageRunReconciler{
+		Client:  fakeClient,
+		Scheme:  testScheme,
+		PodLogs: logReader,
+	}
+
+	if _, err := reconciler.Reconcile(context.Background(), requestFor(run)); err != nil {
+		t.Fatalf("reconcile multi-action TriageRun: %v", err)
+	}
+
+	for index, action := range []string{"default", "deep"} {
+		var job batchv1.Job
+		name := fmt.Sprintf("weave-check-triage-%d", index)
+		if err := fakeClient.Get(context.Background(), types.NamespacedName{
+			Namespace: run.Namespace,
+			Name:      name,
+		}, &job); err != nil {
+			t.Fatalf("get Job for action %q: %v", action, err)
+		}
+		if job.Annotations[triageActionAnnotation] != action {
+			t.Fatalf("Job %q action annotation = %q, want %q",
+				job.Name, job.Annotations[triageActionAnnotation], action)
+		}
+	}
+
+	var updatedRun wandbv2.TriageRun
+	if err := fakeClient.Get(context.Background(), client.ObjectKeyFromObject(run), &updatedRun); err != nil {
+		t.Fatalf("get updated TriageRun: %v", err)
+	}
+	if updatedRun.Status.Phase != wandbv2.TriageRunPhaseRunning ||
+		len(updatedRun.Status.ActionStatuses) != 2 {
+		t.Fatalf("status = %#v, want two running actions", updatedRun.Status)
+	}
+	for i, action := range run.Spec.Actions {
+		if updatedRun.Status.ActionStatuses[i].Action != action {
+			t.Fatalf("action status %d = %q, want %q",
+				i, updatedRun.Status.ActionStatuses[i].Action, action)
+		}
+	}
+
+	logReader.output = []byte(`{"name":"reachable","severity":"pass"}` + "\n")
+	for index := range run.Spec.Actions {
+		name := fmt.Sprintf("weave-check-triage-%d", index)
+		var job batchv1.Job
+		if err := fakeClient.Get(context.Background(), types.NamespacedName{
+			Namespace: run.Namespace,
+			Name:      name,
+		}, &job); err != nil {
+			t.Fatalf("get Job %q for completion: %v", name, err)
+		}
+		job.Status.Conditions = []batchv1.JobCondition{{
+			Type: batchv1.JobComplete, Status: corev1.ConditionTrue,
+		}}
+		if err := fakeClient.Status().Update(context.Background(), &job); err != nil {
+			t.Fatalf("mark Job %q complete: %v", name, err)
+		}
+		pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{
+			Name:      name + "-pod",
+			Namespace: run.Namespace,
+			Labels:    map[string]string{"batch.kubernetes.io/job-name": name},
+		}}
+		if err := fakeClient.Create(context.Background(), pod); err != nil {
+			t.Fatalf("create pod for Job %q: %v", name, err)
+		}
+	}
+	if _, err := reconciler.Reconcile(context.Background(), requestFor(run)); err != nil {
+		t.Fatalf("reconcile completed multi-action TriageRun: %v", err)
+	}
+	if err := fakeClient.Get(context.Background(), client.ObjectKeyFromObject(run), &updatedRun); err != nil {
+		t.Fatalf("get completed TriageRun: %v", err)
+	}
+	if updatedRun.Status.Phase != wandbv2.TriageRunPhaseSucceeded ||
+		updatedRun.Status.Summary == nil || updatedRun.Status.Summary.Total != 2 {
+		t.Fatalf("completed status = %#v, want two aggregated results", updatedRun.Status)
+	}
+	for _, status := range updatedRun.Status.ActionStatuses {
+		if status.Phase != wandbv2.TriageRunPhaseSucceeded || len(status.Results) != 1 {
+			t.Fatalf("action status = %#v, want one successful result", status)
+		}
 	}
 }
 
@@ -122,12 +227,15 @@ func TestTriageRunCollectsFailedCheckAsSuccessfulExecution(t *testing.T) {
 	testScheme := newTriageTestScheme(t)
 	run := testTriageRun()
 	run.Status.Phase = wandbv2.TriageRunPhaseRunning
-	run.Status.JobRef = &corev1.LocalObjectReference{Name: "weave-check-triage"}
+	run.Status.ActionStatuses = []wandbv2.TriageActionStatus{{
+		Action: defaultTriageAction,
+		JobRef: &corev1.LocalObjectReference{Name: "weave-check-triage-0"},
+	}}
 	application := testTriageApplication()
 	action := application.Spec.Triage.Actions[defaultTriageAction]
 	source := &application.Spec.PodTemplate.Spec.Containers[0]
 	job := buildTriageJob(
-		run, application, source, action, defaultTriageTimeoutSeconds, "weave-check-triage")
+		run, application, source, action, defaultTriageTimeoutSeconds, "weave-check-triage-0")
 	if err := controllerutil.SetControllerReference(run, job, testScheme); err != nil {
 		t.Fatalf("set Job owner: %v", err)
 	}
@@ -174,8 +282,9 @@ func TestTriageRunCollectsFailedCheckAsSuccessfulExecution(t *testing.T) {
 		updatedRun.Status.Summary.Fail != 1 {
 		t.Fatalf("summary = %#v, want one failed diagnostic check", updatedRun.Status.Summary)
 	}
-	if len(updatedRun.Status.Results) != 2 {
-		t.Fatalf("results = %d, want 2", len(updatedRun.Status.Results))
+	if len(updatedRun.Status.ActionStatuses) != 1 ||
+		len(updatedRun.Status.ActionStatuses[0].Results) != 2 {
+		t.Fatalf("action statuses = %#v, want 2 results", updatedRun.Status.ActionStatuses)
 	}
 }
 
@@ -261,7 +370,7 @@ func testTriageRun() *wandbv2.TriageRun {
 		},
 		Spec: wandbv2.TriageRunSpec{
 			ApplicationRef: wandbv2.TriageApplicationReference{Name: "weave-trace"},
-			Action:         defaultTriageAction,
+			Actions:        []wandbv2.TriageActionName{defaultTriageAction},
 		},
 	}
 }

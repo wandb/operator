@@ -24,6 +24,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"time"
 
@@ -53,6 +54,7 @@ const (
 	triageConditionSucceeded    = "Succeeded"
 	triageRunLabel              = "apps.wandb.com/triage-run"
 	triageApplicationLabel      = "apps.wandb.com/triage-application"
+	triageActionAnnotation      = "apps.wandb.com/triage-action"
 )
 
 // TriagePodLogReader reads the structured output from a completed triage pod.
@@ -97,8 +99,8 @@ func (r *KubernetesTriagePodLogReader) ReadPodLogs(
 	return output, nil
 }
 
-// TriageRunReconciler turns each immutable TriageRun into exactly one Job and
-// records the Job's structured JSONL output on the run status.
+// TriageRunReconciler turns each selected action on an immutable TriageRun into
+// one Job and records every Job's structured JSONL output on the run status.
 type TriageRunReconciler struct {
 	client.Client
 	Scheme  *runtime.Scheme
@@ -135,82 +137,153 @@ func (r *TriageRunReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, err
 	}
 
-	actionName := run.Spec.Action
-	if actionName == "" {
-		actionName = defaultTriageAction
-	}
-	action, err := resolveTriageAction(&application, actionName)
+	actions, err := resolveRequestedTriageActions(&run, &application)
 	if err != nil {
 		return r.failRun(ctx, &run, "InvalidAction", err.Error())
 	}
 
-	sourceContainer, err := selectTriageContainer(&application, action.ContainerName)
-	if err != nil {
-		return r.failRun(ctx, &run, "InvalidContainer", err.Error())
-	}
-
-	timeoutSeconds := action.TimeoutSeconds
-	if timeoutSeconds == 0 {
-		timeoutSeconds = defaultTriageTimeoutSeconds
-	}
-	resolved := resolvedTriageExecution(&application, sourceContainer, action, timeoutSeconds)
-	jobName := common.FitDefaultInfraName(run.Name, "-triage", 63)
-
-	var job batchv1.Job
-	err = r.Get(ctx, types.NamespacedName{Namespace: run.Namespace, Name: jobName}, &job)
-	if err != nil && !apierrors.IsNotFound(err) {
-		return ctrl.Result{}, err
-	}
-	if apierrors.IsNotFound(err) {
-		if run.Status.JobRef != nil {
-			return r.failRun(ctx, &run, "JobMissing",
-				fmt.Sprintf("Job %q disappeared before the run completed", run.Status.JobRef.Name))
+	statusBefore := run.DeepCopy().Status
+	statuses := make([]wandbv2.TriageActionStatus, 0, len(actions))
+	requeueForOutput := false
+	failureMessages := make([]string, 0)
+	for i := range actions {
+		action := &actions[i]
+		previous := findTriageActionStatus(run.Status.ActionStatuses, action.name)
+		job, err := r.getOrCreateTriageJob(ctx, &run, &application, action, previous)
+		if err != nil {
+			var missing *triageJobMissingError
+			if errors.As(err, &missing) {
+				return r.failRun(ctx, &run, "JobMissing", missing.Error())
+			}
+			return ctrl.Result{}, err
+		}
+		if !metav1.IsControlledBy(job, &run) {
+			return r.failRun(ctx, &run, "JobNameCollision",
+				fmt.Sprintf("Job %q already exists and is not owned by this TriageRun", job.Name))
 		}
 
-		job = *buildTriageJob(&run, &application, sourceContainer, action, timeoutSeconds, jobName)
-		if err := controllerutil.SetControllerReference(&run, &job, r.Scheme); err != nil {
+		status, outputUnavailable, failureMessage := r.actionStatus(ctx, action, job, previous)
+		statuses = append(statuses, status)
+		requeueForOutput = requeueForOutput || outputUnavailable
+		if failureMessage != "" {
+			failureMessages = append(failureMessages, failureMessage)
+		}
+	}
+
+	run.Status.ActionStatuses = statuses
+	setAggregateTriageStatus(&run, failureMessages)
+	if !apiequality.Semantic.DeepEqual(statusBefore, run.Status) {
+		if err := r.Status().Update(ctx, &run); err != nil {
 			return ctrl.Result{}, err
+		}
+	}
+	if requeueForOutput {
+		return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
+	}
+	return ctrl.Result{}, nil
+}
+
+type resolvedTriageAction struct {
+	name           wandbv2.TriageActionName
+	spec           wandbv2.TriageActionSpec
+	source         *corev1.Container
+	timeoutSeconds int64
+	resolved       *wandbv2.TriageResolvedExecution
+	jobName        string
+}
+
+func resolveRequestedTriageActions(
+	run *wandbv2.TriageRun,
+	application *wandbv2.Application,
+) ([]resolvedTriageAction, error) {
+	if len(run.Spec.Actions) == 0 {
+		return nil, errors.New("at least one triage action is required")
+	}
+	actions := make([]resolvedTriageAction, 0, len(run.Spec.Actions))
+	for i, actionName := range run.Spec.Actions {
+		spec, err := resolveTriageAction(application, string(actionName))
+		if err != nil {
+			return nil, err
+		}
+		source, err := selectTriageContainer(application, spec.ContainerName)
+		if err != nil {
+			return nil, err
+		}
+		timeoutSeconds := spec.TimeoutSeconds
+		if timeoutSeconds == 0 {
+			timeoutSeconds = defaultTriageTimeoutSeconds
+		}
+		actions = append(actions, resolvedTriageAction{
+			name:           actionName,
+			spec:           spec,
+			source:         source,
+			timeoutSeconds: timeoutSeconds,
+			resolved:       resolvedTriageExecution(application, source, spec, timeoutSeconds),
+			jobName: common.FitDefaultInfraName(
+				run.Name, "-triage-"+strconv.Itoa(i), 63),
+		})
+	}
+	return actions, nil
+}
+
+func findTriageActionStatus(
+	statuses []wandbv2.TriageActionStatus,
+	action wandbv2.TriageActionName,
+) *wandbv2.TriageActionStatus {
+	for i := range statuses {
+		if statuses[i].Action == action {
+			return &statuses[i]
+		}
+	}
+	return nil
+}
+
+func (r *TriageRunReconciler) getOrCreateTriageJob(
+	ctx context.Context,
+	run *wandbv2.TriageRun,
+	application *wandbv2.Application,
+	action *resolvedTriageAction,
+	previous *wandbv2.TriageActionStatus,
+) (*batchv1.Job, error) {
+	var job batchv1.Job
+	err := r.Get(ctx, types.NamespacedName{Namespace: run.Namespace, Name: action.jobName}, &job)
+	if err != nil && !apierrors.IsNotFound(err) {
+		return nil, err
+	}
+	if apierrors.IsNotFound(err) {
+		if previous != nil && previous.JobRef != nil {
+			return nil, &triageJobMissingError{
+				name: previous.JobRef.Name, action: action.name,
+			}
+		}
+		job = *buildTriageJob(
+			run, application, action.source, action.spec, action.timeoutSeconds, action.jobName)
+		job.Annotations = map[string]string{triageActionAnnotation: string(action.name)}
+		if err := controllerutil.SetControllerReference(run, &job, r.Scheme); err != nil {
+			return nil, err
 		}
 		if err := r.Create(ctx, &job); err != nil {
 			if !apierrors.IsAlreadyExists(err) {
-				return ctrl.Result{}, err
+				return nil, err
 			}
-			if err := r.Get(ctx, types.NamespacedName{Namespace: run.Namespace, Name: jobName}, &job); err != nil {
-				return ctrl.Result{}, err
+			if err := r.Get(ctx, types.NamespacedName{
+				Namespace: run.Namespace,
+				Name:      action.jobName,
+			}, &job); err != nil {
+				return nil, err
 			}
 		}
 	}
+	return &job, nil
+}
 
-	if !metav1.IsControlledBy(&job, &run) {
-		return r.failRun(ctx, &run, "JobNameCollision",
-			fmt.Sprintf("Job %q already exists and is not owned by this TriageRun", job.Name))
-	}
+type triageJobMissingError struct {
+	name   string
+	action wandbv2.TriageActionName
+}
 
-	if jobFailed(&job) {
-		message := jobConditionMessage(&job, batchv1.JobFailed)
-		if message == "" {
-			message = fmt.Sprintf("Job %q failed", job.Name)
-		}
-		if results, collectErr := r.collectTriageResults(ctx, &job); collectErr == nil {
-			run.Status.Results = results
-			run.Status.Summary = summarizeTriageResults(results)
-		}
-		return r.failRunWithJob(ctx, &run, &job, resolved, "JobFailed", message)
-	}
-
-	if jobComplete(&job) {
-		results, err := r.collectTriageResults(ctx, &job)
-		if err != nil {
-			var unavailable *triageOutputUnavailableError
-			if errors.As(err, &unavailable) {
-				return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
-			}
-			return r.failRunWithJob(ctx, &run, &job, resolved, "InvalidOutput", err.Error())
-		}
-		return r.completeRun(ctx, &run, &job, resolved, results)
-	}
-
-	return r.markRunRunning(ctx, &run, &job, resolved)
+func (e *triageJobMissingError) Error() string {
+	return fmt.Sprintf("Job %q disappeared before action %q completed", e.name, e.action)
 }
 
 func resolveTriageAction(application *wandbv2.Application, actionName string) (wandbv2.TriageActionSpec, error) {
@@ -360,70 +433,154 @@ func resolvedTriageExecution(
 	}
 }
 
-func (r *TriageRunReconciler) markRunRunning(
+func (r *TriageRunReconciler) actionStatus(
 	ctx context.Context,
-	run *wandbv2.TriageRun,
+	action *resolvedTriageAction,
 	job *batchv1.Job,
-	resolved *wandbv2.TriageResolvedExecution,
-) (ctrl.Result, error) {
-	statusBefore := run.DeepCopy().Status
-	run.Status.Phase = wandbv2.TriageRunPhaseRunning
-	run.Status.ObservedGeneration = run.Generation
-	run.Status.JobRef = &corev1.LocalObjectReference{Name: job.Name}
-	run.Status.ResolvedExecution = resolved
-	if run.Status.StartedAt == nil {
-		switch {
-		case job.Status.StartTime != nil:
-			run.Status.StartedAt = job.Status.StartTime.DeepCopy()
-		case !job.CreationTimestamp.IsZero():
-			run.Status.StartedAt = job.CreationTimestamp.DeepCopy()
-		default:
-			now := metav1.Now()
-			run.Status.StartedAt = &now
+	previous *wandbv2.TriageActionStatus,
+) (wandbv2.TriageActionStatus, bool, string) {
+	status := wandbv2.TriageActionStatus{
+		Action:            action.name,
+		Phase:             wandbv2.TriageRunPhaseRunning,
+		JobRef:            &corev1.LocalObjectReference{Name: job.Name},
+		ResolvedExecution: action.resolved,
+		StartedAt:         triageActionStartTime(previous, job),
+	}
+	if jobFailed(job) {
+		status.Phase = wandbv2.TriageRunPhaseFailed
+		status.CompletedAt = triageCompletionTime(job)
+		message := jobConditionMessage(job, batchv1.JobFailed)
+		if message == "" {
+			message = fmt.Sprintf("Job %q failed", job.Name)
 		}
+		if results, err := r.collectTriageResults(ctx, job); err == nil {
+			status.Results = results
+			status.Summary = summarizeTriageResults(results)
+		}
+		return status, false, fmt.Sprintf("action %q: %s", action.name, message)
 	}
-	apimeta.SetStatusCondition(&run.Status.Conditions, metav1.Condition{
-		Type:               triageConditionSucceeded,
-		Status:             metav1.ConditionUnknown,
-		ObservedGeneration: run.Generation,
-		Reason:             "JobRunning",
-		Message:            fmt.Sprintf("Job %q is running", job.Name),
-	})
-	if apiequality.Semantic.DeepEqual(statusBefore, run.Status) {
-		return ctrl.Result{}, nil
+	if !jobComplete(job) {
+		return status, false, ""
 	}
-	if err := r.Status().Update(ctx, run); err != nil {
-		return ctrl.Result{}, err
+
+	results, err := r.collectTriageResults(ctx, job)
+	if err != nil {
+		var unavailable *triageOutputUnavailableError
+		if errors.As(err, &unavailable) {
+			return status, true, ""
+		}
+		status.Phase = wandbv2.TriageRunPhaseFailed
+		status.CompletedAt = triageCompletionTime(job)
+		return status, false, fmt.Sprintf("action %q: %s", action.name, err)
 	}
-	return ctrl.Result{}, nil
+	status.Phase = wandbv2.TriageRunPhaseSucceeded
+	status.CompletedAt = triageCompletionTime(job)
+	status.Results = results
+	status.Summary = summarizeTriageResults(results)
+	return status, false, ""
 }
 
-func (r *TriageRunReconciler) completeRun(
-	ctx context.Context,
-	run *wandbv2.TriageRun,
-	job *batchv1.Job,
-	resolved *wandbv2.TriageResolvedExecution,
-	results []wandbv2.TriageCheckResult,
-) (ctrl.Result, error) {
-	run.Status.Phase = wandbv2.TriageRunPhaseSucceeded
+func setAggregateTriageStatus(run *wandbv2.TriageRun, failureMessages []string) {
 	run.Status.ObservedGeneration = run.Generation
-	run.Status.JobRef = &corev1.LocalObjectReference{Name: job.Name}
-	run.Status.ResolvedExecution = resolved
-	run.Status.Results = results
-	run.Status.Summary = summarizeTriageResults(results)
-	run.Status.StartedAt = triageStartTime(run, job)
-	run.Status.CompletedAt = triageCompletionTime(job)
+	run.Status.StartedAt = nil
+	run.Status.CompletedAt = nil
+	run.Status.Summary = nil
+
+	completedActions := 0
+	failedActions := 0
+	var completedAt *metav1.Time
+	var summary wandbv2.TriageRunSummary
+	hasSummary := false
+	for i := range run.Status.ActionStatuses {
+		status := &run.Status.ActionStatuses[i]
+		if status.StartedAt != nil &&
+			(run.Status.StartedAt == nil || status.StartedAt.Time.Before(run.Status.StartedAt.Time)) {
+			run.Status.StartedAt = status.StartedAt.DeepCopy()
+		}
+		if isTerminalTriagePhase(status.Phase) {
+			completedActions++
+			if status.Phase == wandbv2.TriageRunPhaseFailed {
+				failedActions++
+			}
+			if status.CompletedAt != nil &&
+				(completedAt == nil || status.CompletedAt.Time.After(completedAt.Time)) {
+				completedAt = status.CompletedAt.DeepCopy()
+			}
+		}
+		if status.Summary != nil {
+			hasSummary = true
+			summary.Total += status.Summary.Total
+			summary.Pass += status.Summary.Pass
+			summary.Warn += status.Summary.Warn
+			summary.Fail += status.Summary.Fail
+			summary.Error += status.Summary.Error
+		}
+	}
+	if hasSummary {
+		setTriageSummarySeverity(&summary)
+		run.Status.Summary = &summary
+	}
+
+	if completedActions < len(run.Status.ActionStatuses) {
+		run.Status.Phase = wandbv2.TriageRunPhaseRunning
+		apimeta.SetStatusCondition(&run.Status.Conditions, metav1.Condition{
+			Type:               triageConditionSucceeded,
+			Status:             metav1.ConditionUnknown,
+			ObservedGeneration: run.Generation,
+			Reason:             "ActionsRunning",
+			Message: fmt.Sprintf(
+				"%d of %d triage actions completed", completedActions, len(run.Status.ActionStatuses)),
+		})
+		return
+	}
+
+	run.Status.CompletedAt = completedAt
+	if run.Status.CompletedAt == nil {
+		now := metav1.Now()
+		run.Status.CompletedAt = &now
+	}
+	if failedActions > 0 {
+		run.Status.Phase = wandbv2.TriageRunPhaseFailed
+		message := strings.Join(failureMessages, "; ")
+		if message == "" {
+			message = fmt.Sprintf("%d triage actions failed", failedActions)
+		}
+		apimeta.SetStatusCondition(&run.Status.Conditions, metav1.Condition{
+			Type:               triageConditionSucceeded,
+			Status:             metav1.ConditionFalse,
+			ObservedGeneration: run.Generation,
+			Reason:             "ActionFailed",
+			Message:            message,
+		})
+		return
+	}
+
+	run.Status.Phase = wandbv2.TriageRunPhaseSucceeded
+	totalResults := int32(0)
+	if run.Status.Summary != nil {
+		totalResults = run.Status.Summary.Total
+	}
 	apimeta.SetStatusCondition(&run.Status.Conditions, metav1.Condition{
 		Type:               triageConditionSucceeded,
 		Status:             metav1.ConditionTrue,
 		ObservedGeneration: run.Generation,
 		Reason:             "ResultsCollected",
-		Message:            fmt.Sprintf("Collected %d triage check results", len(results)),
+		Message: fmt.Sprintf(
+			"Collected %d triage check results from %d actions", totalResults, completedActions),
 	})
-	if err := r.Status().Update(ctx, run); err != nil {
-		return ctrl.Result{}, err
+}
+
+func setTriageSummarySeverity(summary *wandbv2.TriageRunSummary) {
+	switch {
+	case summary.Error > 0:
+		summary.OverallSeverity = wandbv2.TriageSeverityError
+	case summary.Fail > 0:
+		summary.OverallSeverity = wandbv2.TriageSeverityFail
+	case summary.Warn > 0:
+		summary.OverallSeverity = wandbv2.TriageSeverityWarn
+	default:
+		summary.OverallSeverity = wandbv2.TriageSeverityPass
 	}
-	return ctrl.Result{}, nil
 }
 
 func (r *TriageRunReconciler) failRun(
@@ -432,29 +589,10 @@ func (r *TriageRunReconciler) failRun(
 	reason string,
 	message string,
 ) (ctrl.Result, error) {
-	return r.failRunWithJob(ctx, run, nil, run.Status.ResolvedExecution, reason, message)
-}
-
-func (r *TriageRunReconciler) failRunWithJob(
-	ctx context.Context,
-	run *wandbv2.TriageRun,
-	job *batchv1.Job,
-	resolved *wandbv2.TriageResolvedExecution,
-	reason string,
-	message string,
-) (ctrl.Result, error) {
 	run.Status.Phase = wandbv2.TriageRunPhaseFailed
 	run.Status.ObservedGeneration = run.Generation
-	run.Status.ResolvedExecution = resolved
 	now := metav1.Now()
 	run.Status.CompletedAt = &now
-	if job != nil {
-		run.Status.JobRef = &corev1.LocalObjectReference{Name: job.Name}
-		run.Status.StartedAt = triageStartTime(run, job)
-		if completedAt := triageCompletionTime(job); completedAt != nil {
-			run.Status.CompletedAt = completedAt
-		}
-	}
 	apimeta.SetStatusCondition(&run.Status.Conditions, metav1.Condition{
 		Type:               triageConditionSucceeded,
 		Status:             metav1.ConditionFalse,
@@ -468,17 +606,21 @@ func (r *TriageRunReconciler) failRunWithJob(
 	return ctrl.Result{}, nil
 }
 
-func triageStartTime(run *wandbv2.TriageRun, job *batchv1.Job) *metav1.Time {
+func triageActionStartTime(
+	previous *wandbv2.TriageActionStatus,
+	job *batchv1.Job,
+) *metav1.Time {
 	if job.Status.StartTime != nil {
 		return job.Status.StartTime.DeepCopy()
 	}
-	if run.Status.StartedAt != nil {
-		return run.Status.StartedAt.DeepCopy()
+	if previous != nil && previous.StartedAt != nil {
+		return previous.StartedAt.DeepCopy()
 	}
 	if !job.CreationTimestamp.IsZero() {
 		return job.CreationTimestamp.DeepCopy()
 	}
-	return nil
+	now := metav1.Now()
+	return &now
 }
 
 func triageCompletionTime(job *batchv1.Job) *metav1.Time {
