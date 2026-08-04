@@ -54,7 +54,12 @@ type TriageApplicationReference struct {
 	Name string `json:"name"`
 }
 
-// TriageRunSpec defines one immutable request to run a diagnostic action.
+// TriageActionName identifies an action declared by an Application.
+// +kubebuilder:validation:MinLength=1
+type TriageActionName string
+
+// TriageRunSpec defines one immutable request to run one or more diagnostic
+// actions for an Application.
 // Creating another run requires creating another TriageRun.
 // +kubebuilder:validation:XValidation:rule="self == oldSelf",message="spec is immutable"
 type TriageRunSpec struct {
@@ -62,10 +67,11 @@ type TriageRunSpec struct {
 	// references are intentionally unsupported.
 	ApplicationRef TriageApplicationReference `json:"applicationRef"`
 
-	// Action selects a triage action declared by the referenced Application.
-	// +kubebuilder:default=default
-	// +kubebuilder:validation:MinLength=1
-	Action string `json:"action,omitempty"`
+	// Actions selects one or more triage actions declared by the referenced
+	// Application. Each action is executed independently.
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:UniqueItems=true
+	Actions []TriageActionName `json:"actions"`
 }
 
 // TriageResolvedExecution records the concrete execution selected from the
@@ -127,13 +133,15 @@ type TriageCheckResult struct {
 	DurationMilliseconds int64 `json:"durationMs,omitempty"`
 }
 
-// TriageRunStatus defines the observed execution state and diagnostic output.
-type TriageRunStatus struct {
+// TriageActionStatus records the execution and structured diagnostic output
+// for one selected action.
+type TriageActionStatus struct {
+	// Action is the selected Application action represented by this status.
+	Action TriageActionName `json:"action"`
+
 	Phase TriageRunPhase `json:"phase,omitempty"`
 
-	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
-
-	// JobRef identifies the Kubernetes Job executing this run.
+	// JobRef identifies the Kubernetes Job executing this action.
 	JobRef *corev1.LocalObjectReference `json:"jobRef,omitempty"`
 
 	// ResolvedExecution is the execution snapshot selected from the referenced
@@ -145,6 +153,23 @@ type TriageRunStatus struct {
 
 	Summary *TriageRunSummary   `json:"summary,omitempty"`
 	Results []TriageCheckResult `json:"results,omitempty"`
+}
+
+// TriageRunStatus defines the observed execution state and diagnostic output.
+type TriageRunStatus struct {
+	Phase TriageRunPhase `json:"phase,omitempty"`
+
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	StartedAt   *metav1.Time `json:"startedAt,omitempty"`
+	CompletedAt *metav1.Time `json:"completedAt,omitempty"`
+
+	Summary *TriageRunSummary `json:"summary,omitempty"`
+
+	// ActionStatuses contains one entry for every selected action.
+	// +listType=map
+	// +listMapKey=action
+	ActionStatuses []TriageActionStatus `json:"actionStatuses,omitempty"`
 
 	// Conditions represent the latest available observations of the run.
 	// +listType=map
@@ -155,7 +180,7 @@ type TriageRunStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Application",type=string,JSONPath=`.spec.applicationRef.name`
-// +kubebuilder:printcolumn:name="Action",type=string,JSONPath=`.spec.action`
+// +kubebuilder:printcolumn:name="Actions",type=string,JSONPath=`.spec.actions`
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
 // +kubebuilder:printcolumn:name="Severity",type=string,JSONPath=`.status.summary.overallSeverity`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
@@ -165,7 +190,7 @@ type TriageRun struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   TriageRunSpec   `json:"spec,omitempty"`
+	Spec   TriageRunSpec   `json:"spec"`
 	Status TriageRunStatus `json:"status,omitempty"`
 }
 

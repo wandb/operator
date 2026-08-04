@@ -18,8 +18,8 @@ spec:
     - jsonPath: .spec.applicationRef.name
       name: Application
       type: string
-    - jsonPath: .spec.action
-      name: Action
+    - jsonPath: .spec.actions
+      name: Actions
       type: string
     - jsonPath: .status.phase
       name: Phase
@@ -42,10 +42,13 @@ spec:
             type: object
           spec:
             properties:
-              action:
-                default: default
-                minLength: 1
-                type: string
+              actions:
+                items:
+                  minLength: 1
+                  type: string
+                minItems: 1
+                type: array
+                uniqueItems: true
               applicationRef:
                 properties:
                   name:
@@ -55,6 +58,7 @@ spec:
                 - name
                 type: object
             required:
+            - actions
             - applicationRef
             type: object
             x-kubernetes-validations:
@@ -62,6 +66,119 @@ spec:
               rule: self == oldSelf
           status:
             properties:
+              actionStatuses:
+                items:
+                  properties:
+                    action:
+                      minLength: 1
+                      type: string
+                    completedAt:
+                      format: date-time
+                      type: string
+                    jobRef:
+                      properties:
+                        name:
+                          default: ""
+                          type: string
+                      type: object
+                      x-kubernetes-map-type: atomic
+                    phase:
+                      enum:
+                      - Pending
+                      - Running
+                      - Succeeded
+                      - Failed
+                      type: string
+                    resolvedExecution:
+                      properties:
+                        applicationGeneration:
+                          format: int64
+                          type: integer
+                        args:
+                          items:
+                            type: string
+                          type: array
+                        command:
+                          items:
+                            type: string
+                          type: array
+                        containerName:
+                          type: string
+                        image:
+                          type: string
+                        timeoutSeconds:
+                          format: int64
+                          type: integer
+                      type: object
+                    results:
+                      items:
+                        properties:
+                          durationMs:
+                            format: int64
+                            type: integer
+                          endedAt:
+                            format: date-time
+                            type: string
+                          evidence:
+                            x-kubernetes-preserve-unknown-fields: true
+                          message:
+                            type: string
+                          name:
+                            type: string
+                          remediation:
+                            type: string
+                          severity:
+                            enum:
+                            - pass
+                            - warn
+                            - fail
+                            - error
+                            type: string
+                          startedAt:
+                            format: date-time
+                            type: string
+                          umbrella:
+                            type: string
+                        required:
+                        - name
+                        - severity
+                        type: object
+                      type: array
+                    startedAt:
+                      format: date-time
+                      type: string
+                    summary:
+                      properties:
+                        error:
+                          format: int32
+                          type: integer
+                        fail:
+                          format: int32
+                          type: integer
+                        overallSeverity:
+                          enum:
+                          - pass
+                          - warn
+                          - fail
+                          - error
+                          type: string
+                        pass:
+                          format: int32
+                          type: integer
+                        total:
+                          format: int32
+                          type: integer
+                        warn:
+                          format: int32
+                          type: integer
+                      type: object
+                  required:
+                  - action
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - action
+                x-kubernetes-list-type: map
               completedAt:
                 format: date-time
                 type: string
@@ -104,13 +221,6 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
-              jobRef:
-                properties:
-                  name:
-                    default: ""
-                    type: string
-                type: object
-                x-kubernetes-map-type: atomic
               observedGeneration:
                 format: int64
                 type: integer
@@ -121,61 +231,6 @@ spec:
                 - Succeeded
                 - Failed
                 type: string
-              resolvedExecution:
-                properties:
-                  applicationGeneration:
-                    format: int64
-                    type: integer
-                  args:
-                    items:
-                      type: string
-                    type: array
-                  command:
-                    items:
-                      type: string
-                    type: array
-                  containerName:
-                    type: string
-                  image:
-                    type: string
-                  timeoutSeconds:
-                    format: int64
-                    type: integer
-                type: object
-              results:
-                items:
-                  properties:
-                    durationMs:
-                      format: int64
-                      type: integer
-                    endedAt:
-                      format: date-time
-                      type: string
-                    evidence:
-                      x-kubernetes-preserve-unknown-fields: true
-                    message:
-                      type: string
-                    name:
-                      type: string
-                    remediation:
-                      type: string
-                    severity:
-                      enum:
-                      - pass
-                      - warn
-                      - fail
-                      - error
-                      type: string
-                    startedAt:
-                      format: date-time
-                      type: string
-                    umbrella:
-                      type: string
-                  required:
-                  - name
-                  - severity
-                  type: object
-                type: array
               startedAt:
                 format: date-time
                 type: string
@@ -205,6 +260,8 @@ spec:
                     type: integer
                 type: object
             type: object
+        required:
+        - spec
         type: object
     served: true
     storage: true
