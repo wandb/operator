@@ -16,38 +16,45 @@ func TestResolveApplicationTriageCopiesCompactAction(t *testing.T) {
 		},
 	}
 	input := &serverManifest.ApplicationTriage{
-		Actions: map[string]serverManifest.TriageAction{
-			"default": {
-				ContainerName: "weave-trace",
-				Args:          []string{"python", "-m", "weave_triage", "run-all", "--stream"},
-				Env: []corev1.EnvVar{{
-					Name:  "PYTHONPATH",
-					Value: "/weave/src",
-				}},
-				Resources:      resources,
-				TimeoutSeconds: 600,
-			},
-		},
+		ContainerName: "weave-trace",
+		Args:          []string{"python", "-m", "weave_triage"},
+		Env: []corev1.EnvVar{{
+			Name:  "PYTHONPATH",
+			Value: "/weave/src",
+		}},
+		Resources:      resources,
+		TimeoutSeconds: 600,
+		Actions: []serverManifest.TriageAction{{
+			Name:        "default",
+			Description: "Run all diagnostics",
+			Args:        []string{"--verbose"},
+		}},
 	}
 
 	resolved := resolveApplicationTriage(input)
-	action := resolved.Actions["default"]
-	if action.ContainerName != "weave-trace" {
-		t.Fatalf("containerName = %q", action.ContainerName)
+	action := resolved.Actions[0]
+	if resolved.ContainerName != "weave-trace" {
+		t.Fatalf("containerName = %q", resolved.ContainerName)
 	}
-	if len(action.Args) != 5 || action.Args[4] != "--stream" {
-		t.Fatalf("args = %#v", action.Args)
+	if len(resolved.Args) != 3 || resolved.Args[0] != "python" {
+		t.Fatalf("runner args = %#v", resolved.Args)
 	}
-	if action.Resources == nil || action.Resources.Requests.Memory().String() != "128Mi" {
-		t.Fatalf("resources = %#v", action.Resources)
+	if resolved.Resources == nil || resolved.Resources.Requests.Memory().String() != "128Mi" {
+		t.Fatalf("resources = %#v", resolved.Resources)
 	}
-	if action.TimeoutSeconds != 600 {
-		t.Fatalf("timeoutSeconds = %d", action.TimeoutSeconds)
+	if resolved.TimeoutSeconds != 600 {
+		t.Fatalf("timeoutSeconds = %d", resolved.TimeoutSeconds)
+	}
+	if action.Name != "default" || action.Description != "Run all diagnostics" ||
+		len(action.Args) != 1 || action.Args[0] != "--verbose" {
+		t.Fatalf("action = %#v", action)
 	}
 
-	input.Actions["default"].Args[0] = "mutated"
+	input.Args[0] = "mutated"
+	input.Actions[0].Args[0] = "mutated"
 	resources.Requests[corev1.ResourceMemory] = resource.MustParse("1Gi")
-	if action.Args[0] != "python" || action.Resources.Requests.Memory().String() != "128Mi" {
+	if resolved.Args[0] != "python" || action.Args[0] != "--verbose" ||
+		resolved.Resources.Requests.Memory().String() != "128Mi" {
 		t.Fatal("resolved action aliases mutable manifest data")
 	}
 }
