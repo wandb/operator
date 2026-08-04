@@ -8,4 +8,5 @@ metadata:
 spec:
   applicationRef:
     name: application-sample
-  action: default
+  actions:
+    - default
