@@ -185,6 +185,7 @@ func (r *TriageRunReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 type resolvedTriageAction struct {
 	name           wandbv2.TriageActionName
+	runner         *wandbv2.ApplicationTriageSpec
 	spec           wandbv2.TriageActionSpec
 	source         *corev1.Container
 	timeoutSeconds int64
@@ -200,25 +201,29 @@ func resolveRequestedTriageActions(
 		return nil, errors.New("at least one triage action is required")
 	}
 	actions := make([]resolvedTriageAction, 0, len(run.Spec.Actions))
-	for i, actionName := range run.Spec.Actions {
-		spec, err := resolveTriageAction(application, string(actionName))
+	for i, actionRef := range run.Spec.Actions {
+		actionName := actionRef.Name
+		spec, err := resolveTriageAction(application, actionName)
 		if err != nil {
 			return nil, err
 		}
-		source, err := selectTriageContainer(application, spec.ContainerName)
+		runner := application.Spec.Triage
+		source, err := selectTriageContainer(application, runner.ContainerName)
 		if err != nil {
 			return nil, err
 		}
-		timeoutSeconds := spec.TimeoutSeconds
+		timeoutSeconds := runner.TimeoutSeconds
 		if timeoutSeconds == 0 {
 			timeoutSeconds = defaultTriageTimeoutSeconds
 		}
 		actions = append(actions, resolvedTriageAction{
 			name:           actionName,
+			runner:         runner,
 			spec:           spec,
 			source:         source,
 			timeoutSeconds: timeoutSeconds,
-			resolved:       resolvedTriageExecution(application, source, spec, timeoutSeconds),
+			resolved: resolvedTriageExecution(
+				application, source, runner, spec, timeoutSeconds),
 			jobName: common.FitDefaultInfraName(
 				run.Name, "-triage-"+strconv.Itoa(i), 63),
 		})
@@ -256,8 +261,8 @@ func (r *TriageRunReconciler) getOrCreateTriageJob(
 				name: previous.JobRef.Name, action: action.name,
 			}
 		}
-		job = *buildTriageJob(
-			run, application, action.source, action.spec, action.timeoutSeconds, action.jobName)
+		job = *buildTriageJob(run, application, action.source, action.runner,
+			action.spec, action.timeoutSeconds, action.jobName)
 		job.Annotations = map[string]string{triageActionAnnotation: string(action.name)}
 		if err := controllerutil.SetControllerReference(run, &job, r.Scheme); err != nil {
 			return nil, err
@@ -286,20 +291,25 @@ func (e *triageJobMissingError) Error() string {
 	return fmt.Sprintf("Job %q disappeared before action %q completed", e.name, e.action)
 }
 
-func resolveTriageAction(application *wandbv2.Application, actionName string) (wandbv2.TriageActionSpec, error) {
+func resolveTriageAction(
+	application *wandbv2.Application,
+	actionName wandbv2.TriageActionName,
+) (wandbv2.TriageActionSpec, error) {
 	if application.Spec.Triage == nil {
 		return wandbv2.TriageActionSpec{}, fmt.Errorf("Application %q does not declare triage actions", application.Name)
 	}
-	action, ok := application.Spec.Triage.Actions[actionName]
-	if !ok {
+	if len(application.Spec.Triage.Command) == 0 && len(application.Spec.Triage.Args) == 0 {
 		return wandbv2.TriageActionSpec{}, fmt.Errorf(
-			"Application %q does not declare triage action %q", application.Name, actionName)
+			"Application %q triage runner must override command or args", application.Name)
 	}
-	if len(action.Command) == 0 && len(action.Args) == 0 {
-		return wandbv2.TriageActionSpec{}, fmt.Errorf(
-			"triage action %q must override command or args", actionName)
+	for i := range application.Spec.Triage.Actions {
+		action := application.Spec.Triage.Actions[i]
+		if action.Name == actionName {
+			return action, nil
+		}
 	}
-	return action, nil
+	return wandbv2.TriageActionSpec{}, fmt.Errorf(
+		"Application %q does not declare triage action %q", application.Name, actionName)
 }
 
 func selectTriageContainer(application *wandbv2.Application, name string) (*corev1.Container, error) {
@@ -324,6 +334,7 @@ func buildTriageJob(
 	run *wandbv2.TriageRun,
 	application *wandbv2.Application,
 	source *corev1.Container,
+	runner *wandbv2.ApplicationTriageSpec,
 	action wandbv2.TriageActionSpec,
 	timeoutSeconds int64,
 	jobName string,
@@ -334,7 +345,7 @@ func buildTriageJob(
 	podSpec.InitContainers = nil
 	podSpec.EphemeralContainers = nil
 	podSpec.ReadinessGates = nil
-	podSpec.Containers = []corev1.Container{buildTriageContainer(source, action)}
+	podSpec.Containers = []corev1.Container{buildTriageContainer(source, runner, action)}
 
 	labels := map[string]string{
 		triageRunLabel:         common.FitDefaultInfraName(run.Name, "", 63),
@@ -357,7 +368,11 @@ func buildTriageJob(
 	}
 }
 
-func buildTriageContainer(source *corev1.Container, action wandbv2.TriageActionSpec) corev1.Container {
+func buildTriageContainer(
+	source *corev1.Container,
+	runner *wandbv2.ApplicationTriageSpec,
+	action wandbv2.TriageActionSpec,
+) corev1.Container {
 	container := corev1.Container{
 		Name:                     triageContainerName,
 		Image:                    source.Image,
@@ -366,7 +381,7 @@ func buildTriageContainer(source *corev1.Container, action wandbv2.TriageActionS
 		Args:                     append([]string(nil), source.Args...),
 		WorkingDir:               source.WorkingDir,
 		EnvFrom:                  append([]corev1.EnvFromSource(nil), source.EnvFrom...),
-		Env:                      mergeTriageEnv(source.Env, action.Env),
+		Env:                      mergeTriageEnv(source.Env, runner.Env),
 		Resources:                defaultTriageResources(),
 		VolumeMounts:             append([]corev1.VolumeMount(nil), source.VolumeMounts...),
 		VolumeDevices:            append([]corev1.VolumeDevice(nil), source.VolumeDevices...),
@@ -374,14 +389,17 @@ func buildTriageContainer(source *corev1.Container, action wandbv2.TriageActionS
 		TerminationMessagePath:   source.TerminationMessagePath,
 		TerminationMessagePolicy: source.TerminationMessagePolicy,
 	}
-	if len(action.Command) > 0 {
-		container.Command = append([]string(nil), action.Command...)
+	if len(runner.Command) > 0 {
+		container.Command = append([]string(nil), runner.Command...)
+		container.Args = nil
 	}
-	if len(action.Args) > 0 {
-		container.Args = append([]string(nil), action.Args...)
+	if len(runner.Args) > 0 {
+		container.Args = append([]string(nil), runner.Args...)
 	}
-	if action.Resources != nil {
-		container.Resources = *action.Resources.DeepCopy()
+	container.Args = append(container.Args, string(action.Name))
+	container.Args = append(container.Args, action.Args...)
+	if runner.Resources != nil {
+		container.Resources = *runner.Resources.DeepCopy()
 	}
 	return container
 }
@@ -419,10 +437,11 @@ func defaultTriageResources() corev1.ResourceRequirements {
 func resolvedTriageExecution(
 	application *wandbv2.Application,
 	source *corev1.Container,
+	runner *wandbv2.ApplicationTriageSpec,
 	action wandbv2.TriageActionSpec,
 	timeoutSeconds int64,
 ) *wandbv2.TriageResolvedExecution {
-	container := buildTriageContainer(source, action)
+	container := buildTriageContainer(source, runner, action)
 	return &wandbv2.TriageResolvedExecution{
 		ApplicationGeneration: application.Generation,
 		ContainerName:         source.Name,
