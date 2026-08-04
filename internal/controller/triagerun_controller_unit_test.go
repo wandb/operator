@@ -82,7 +82,8 @@ func TestTriageRunCreatesBoundedJobFromApplication(t *testing.T) {
 	) >= 0 {
 		t.Fatal("triage memory request must be smaller than the parent application request")
 	}
-	if len(container.Args) != 4 || container.Args[0] != "python" {
+	if len(container.Args) != 4 || container.Args[0] != "python" ||
+		container.Args[3] != defaultTriageAction {
 		t.Fatalf("args = %#v, want triage action args", container.Args)
 	}
 	if got := envValue(container.Env, "PYTHONPATH"); got != "/weave/src" {
@@ -127,12 +128,16 @@ func TestTriageRunCreatesOneJobPerSelectedAction(t *testing.T) {
 
 	testScheme := newTriageTestScheme(t)
 	run := testTriageRun()
-	run.Spec.Actions = []wandbv2.TriageActionName{"default", "deep"}
-	application := testTriageApplication()
-	application.Spec.Triage.Actions["deep"] = wandbv2.TriageActionSpec{
-		ContainerName: "weave-trace",
-		Args:          []string{"python", "-m", "weave_triage", "deep"},
+	run.Spec.Actions = []wandbv2.TriageActionReference{
+		{Name: "default"},
+		{Name: "deep"},
 	}
+	application := testTriageApplication()
+	application.Spec.Triage.Actions = append(application.Spec.Triage.Actions,
+		wandbv2.TriageActionSpec{
+			Name:        "deep",
+			Description: "Run deeper diagnostics",
+		})
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(testScheme).
 		WithStatusSubresource(&wandbv2.TriageRun{}, &batchv1.Job{}).
@@ -162,6 +167,10 @@ func TestTriageRunCreatesOneJobPerSelectedAction(t *testing.T) {
 			t.Fatalf("Job %q action annotation = %q, want %q",
 				job.Name, job.Annotations[triageActionAnnotation], action)
 		}
+		args := job.Spec.Template.Spec.Containers[0].Args
+		if len(args) != 4 || args[3] != action {
+			t.Fatalf("Job %q args = %#v, want selected action %q appended", job.Name, args, action)
+		}
 	}
 
 	var updatedRun wandbv2.TriageRun
@@ -173,9 +182,9 @@ func TestTriageRunCreatesOneJobPerSelectedAction(t *testing.T) {
 		t.Fatalf("status = %#v, want two running actions", updatedRun.Status)
 	}
 	for i, action := range run.Spec.Actions {
-		if updatedRun.Status.ActionStatuses[i].Action != action {
+		if updatedRun.Status.ActionStatuses[i].Action != action.Name {
 			t.Fatalf("action status %d = %q, want %q",
-				i, updatedRun.Status.ActionStatuses[i].Action, action)
+				i, updatedRun.Status.ActionStatuses[i].Action, action.Name)
 		}
 	}
 
@@ -232,10 +241,11 @@ func TestTriageRunCollectsFailedCheckAsSuccessfulExecution(t *testing.T) {
 		JobRef: &corev1.LocalObjectReference{Name: "weave-check-triage-0"},
 	}}
 	application := testTriageApplication()
-	action := application.Spec.Triage.Actions[defaultTriageAction]
+	action := application.Spec.Triage.Actions[0]
 	source := &application.Spec.PodTemplate.Spec.Containers[0]
 	job := buildTriageJob(
-		run, application, source, action, defaultTriageTimeoutSeconds, "weave-check-triage-0")
+		run, application, source, application.Spec.Triage, action,
+		defaultTriageTimeoutSeconds, "weave-check-triage-0")
 	if err := controllerutil.SetControllerReference(run, job, testScheme); err != nil {
 		t.Fatalf("set Job owner: %v", err)
 	}
@@ -308,22 +318,25 @@ func TestManifestTriageActionDecodes(t *testing.T) {
 applications:
   weave-trace:
     triage:
+      containerName: weave-trace
+      args: [python, -m, weave_triage]
+      timeoutSeconds: 600
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
       actions:
-        default:
-          containerName: weave-trace
-          args: [python, -m, weave_triage, run-all, --stream]
-          timeoutSeconds: 600
-          resources:
-            requests:
-              cpu: 100m
-              memory: 128Mi
+
+        - name: default
+          description: Run all diagnostics
 `)
 	if err := yaml.Unmarshal(input, &decoded); err != nil {
 		t.Fatalf("decode manifest triage action: %v", err)
 	}
-	action := decoded.Applications["weave-trace"].Triage.Actions["default"]
-	if action.ContainerName != "weave-trace" || action.TimeoutSeconds != 600 {
-		t.Fatalf("decoded action = %#v", action)
+	triage := decoded.Applications["weave-trace"].Triage
+	if triage.ContainerName != "weave-trace" || triage.TimeoutSeconds != 600 ||
+		len(triage.Actions) != 1 || triage.Actions[0].Name != defaultTriageAction {
+		t.Fatalf("decoded triage = %#v", triage)
 	}
 }
 
@@ -370,7 +383,9 @@ func testTriageRun() *wandbv2.TriageRun {
 		},
 		Spec: wandbv2.TriageRunSpec{
 			ApplicationRef: wandbv2.TriageApplicationReference{Name: "weave-trace"},
-			Actions:        []wandbv2.TriageActionName{defaultTriageAction},
+			Actions: []wandbv2.TriageActionReference{{
+				Name: defaultTriageAction,
+			}},
 		},
 	}
 }
@@ -420,16 +435,16 @@ func testTriageApplication() *wandbv2.Application {
 				},
 			},
 			Triage: &wandbv2.ApplicationTriageSpec{
-				Actions: map[string]wandbv2.TriageActionSpec{
-					defaultTriageAction: {
-						ContainerName: "weave-trace",
-						Args:          []string{"python", "-m", "weave_triage", "run-all"},
-						Env: []corev1.EnvVar{{
-							Name:  "PYTHONPATH",
-							Value: "/weave/src",
-						}},
-					},
-				},
+				ContainerName: "weave-trace",
+				Args:          []string{"python", "-m", "weave_triage"},
+				Env: []corev1.EnvVar{{
+					Name:  "PYTHONPATH",
+					Value: "/weave/src",
+				}},
+				Actions: []wandbv2.TriageActionSpec{{
+					Name:        defaultTriageAction,
+					Description: "Run all diagnostics",
+				}},
 			},
 		},
 	}

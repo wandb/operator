@@ -17,11 +17,12 @@ spec:
         image: nginx:1.14.2
 
   triage:
+    containerName: my-app
+    command: ["/bin/echo"]
+    timeoutSeconds: 60
     actions:
-      default:
-        containerName: my-app
-        command: ["nginx", "-t"]
-        timeoutSeconds: 60
+      - name: default
+        description: Run the default application diagnostic
         resources:
           requests:
             cpu: 25m
