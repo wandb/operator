@@ -271,6 +271,7 @@ func Reconcile(
 				}
 			}
 
+			wmetrics.DeleteWeightsAndBiasesMetrics(wandb.Namespace, wandb.Name)
 			controllerutil.RemoveFinalizer(wandb, CleanupFinalizer)
 			if err := client.Update(ctx, wandb); err != nil {
 				log.Error("Failed to remove finalizer '%s'", logx.ErrAttr(err))
@@ -347,6 +348,8 @@ func Reconcile(
 		errorCount++
 	}
 	ctrlResults = append(ctrlResults, res)
+
+	recordInfraStateMetrics(wandb)
 
 	if err = inferState(ctx, client, wandb); err != nil {
 		errorCount++
@@ -1583,6 +1586,27 @@ func objectStoreAllReady(wandb *apiv2.WeightsAndBiases) bool {
 
 func clickHouseAllReady(wandb *apiv2.WeightsAndBiases) bool {
 	return allInstancesReady(wandb.Spec.ClickHouse, wandb.Status.ClickHouseStatus, func(s apiv2.ClickHouseInfraStatus) bool { return s.Ready })
+}
+
+// recordInfraStateMetrics publishes the current state of each dependency as
+// wandb_infra_state, keyed by component and status-map instance.
+func recordInfraStateMetrics(wandb *apiv2.WeightsAndBiases) {
+	ns, name := wandb.Namespace, wandb.Name
+	for key, s := range wandb.Status.MySQLStatus {
+		wmetrics.SetInfraState(ns, name, "mysql", key, s.State)
+	}
+	for key, s := range wandb.Status.RedisStatus {
+		wmetrics.SetInfraState(ns, name, "redis", key, s.State)
+	}
+	for key, s := range wandb.Status.ObjectStoreStatus {
+		wmetrics.SetInfraState(ns, name, "objectstore", key, s.State)
+	}
+	for key, s := range wandb.Status.ClickHouseStatus {
+		wmetrics.SetInfraState(ns, name, "clickhouse", key, s.State)
+	}
+	if wandb.Spec.Kafka.ManagedKafka != nil {
+		wmetrics.SetInfraState(ns, name, "kafka", "", wandb.Status.KafkaStatus.State)
+	}
 }
 
 func inferState(
