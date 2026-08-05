@@ -22,7 +22,7 @@
       "transparent": false,
       "options": {
         "mode": "markdown",
-        "content": "# W&B Operator Health\n\n**What this shows:** the health of the **W&B operator** \u2014 the controller that installs W&B and keeps it running by reconciling your `WeightsAndBiases` resource. It is *not* the W&B app or its databases. Open this board when an install or upgrade is stuck, a resource won't turn Ready, or the operator seems unresponsive.\n\n**Who it's for:** whoever runs the operator (SRE / platform).\n\n**How to read it:** green means healthy, red means it needs attention. Every section below opens with a note like this one that explains its panels and what a *bad* reading looks like. All data comes from the operator's own `/metrics` endpoint \u2014 the controller-runtime, Kubernetes-client and Go-runtime libraries expose most of it automatically, plus three gauges the operator publishes itself (`wandb_weightsandbiases_ready`, `wandb_infra_state`, `wandb_application_info`).\n\n**When something here looks wrong, drill into:** [Application](/d/wandb-application) for app request health \u00b7 [Managed Install](/d/wandb-managed-install-performance) for database / dependency resources \u00b7 [Telemetry Overview](/d/wandb-telemetry-overview) for the metrics pipeline itself.\n"
+        "content": "# W&B Operator Health\n\n**What this shows:** the health of the **W&B operator** \u2014 the controller that installs W&B and keeps it running by reconciling your `WeightsAndBiases` resource. It is *not* the W&B app or its databases. Open this board when an install or upgrade is stuck, a resource won't turn Ready, or the operator seems unresponsive.\n\n**How to read it:** green means healthy, red means it needs attention. Every section below opens with a note like this one that explains its panels and what a *bad* reading looks like. All data comes from the operator's own `/metrics` endpoint \u2014 the controller-runtime, Kubernetes-client and Go-runtime libraries expose most of it automatically, plus three gauges the operator publishes itself (`wandb_weightsandbiases_ready`, `wandb_infra_state`, `wandb_application_info`).\n\n**When something here looks wrong, drill into:** [Application](/d/wandb-application) for app request health \u00b7 [Managed Install](/d/wandb-managed-install-performance) for database / dependency resources \u00b7 [Telemetry Overview](/d/wandb-telemetry-overview) for the metrics pipeline itself.\n"
       },
       "gridPos": {
         "h": 6,
@@ -1281,13 +1281,81 @@
       "transparent": false,
       "options": {
         "mode": "markdown",
-        "content": "### Is the operator process itself healthy?\n\nStandard signals about the running program \u2014 useful for spotting crashes and memory leaks.\n\n- **Uptime** \u2014 how long the operator has been running. If this keeps **resetting to a small value**, the operator is crash-looping.\n- **Leader election** \u2014 for high availability you can run several operator replicas, but only **one** is allowed to act at a time: it holds a \"leader\" lock and the others stand by. This tile shows whether the replica you're looking at is the active **Leader** or on **Standby**. Exactly one replica should read *Leader*.\n- **Goroutines** and **Memory** \u2014 should stay stable. A line that only ever climbs suggests a leak.\n- **CPU cores used** and **Open file descriptors** \u2014 resource usage. File descriptors climbing toward the max is a warning sign.\n"
+        "content": "### Is the operator process itself healthy?\n\nStandard signals about the running program \u2014 useful for spotting crashes, restarts and memory leaks.\n\n- **Up** \u2014 is the operator alive and serving metrics right now? Green means yes.\n- **Uptime** and **Last restarted** \u2014 how long the operator has been running and when it last (re)started. A short, shrinking uptime means it's crash-looping.\n- **Restarts (in range)** \u2014 how many times the operator process restarted within the dashboard's selected time window. A one-off is usually just a deploy; a climbing count means crash-looping.\n- **Leader election** \u2014 for high availability you can run several operator replicas, but only **one** acts at a time: it holds a \"leader\" lock and the others stand by. This shows whether the replica you're looking at is the active **Leader** or on **Standby**. Exactly one replica should read *Leader*.\n- **CPU throttling** \u2014 how much the container is being CPU-throttled by its limit. **0% is ideal;** a high value means the CPU limit is too low.\n- **Goroutines** and **Memory** \u2014 should stay stable. A line that only ever climbs suggests a leak.\n- **CPU cores used** and **Open file descriptors** \u2014 resource usage. File descriptors climbing toward the max is a warning sign.\n"
       },
       "gridPos": {
-        "h": 6,
+        "h": 8,
         "w": 24,
         "x": 0,
         "y": 129
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Up",
+      "datasource": {
+        "type": "victoriametrics-metrics-datasource",
+        "uid": "${DS_VICTORIAMETRICS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "Down"
+                },
+                "1": {
+                  "text": "Up"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red"
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value"
+      },
+      "targets": [
+        {
+          "expr": "min(up{job=~\"(.*/)?wandb-operator\"})",
+          "legendFormat": "",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "description": "Whether the operator is alive and serving its metrics endpoint right now.",
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 137
       }
     },
     {
@@ -1319,18 +1387,116 @@
       },
       "targets": [
         {
-          "expr": "time() - process_start_time_seconds{job=~\"(.*/)?wandb-operator\"}",
+          "expr": "time() - max(process_start_time_seconds{job=~\"(.*/)?wandb-operator\"})",
           "legendFormat": "",
           "refId": "A",
           "instant": true
         }
       ],
-      "description": "Time since the operator process started. Resets to zero on restart.",
+      "description": "Time since the operator process started. Resets on restart.",
       "gridPos": {
         "h": 7,
-        "w": 12,
+        "w": 8,
+        "x": 8,
+        "y": 137
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Last restarted",
+      "datasource": {
+        "type": "victoriametrics-metrics-datasource",
+        "uid": "${DS_VICTORIAMETRICS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "dateTimeFromNow"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "max(process_start_time_seconds{job=~\"(.*/)?wandb-operator\"}) * 1000",
+          "legendFormat": "",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "description": "When the operator process last (re)started.",
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 16,
+        "y": 137
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Restarts (in range)",
+      "datasource": {
+        "type": "victoriametrics-metrics-datasource",
+        "uid": "${DS_VICTORIAMETRICS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "sum(changes(process_start_time_seconds{job=~\"(.*/)?wandb-operator\"}[$__range]))",
+          "legendFormat": "",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "description": "Operator process restarts within the selected time range. One is usually a deploy; a growing count means crash-looping.",
+      "gridPos": {
+        "h": 7,
+        "w": 8,
         "x": 0,
-        "y": 135
+        "y": 144
       }
     },
     {
@@ -1396,9 +1562,68 @@
       "description": "Whether this operator replica currently holds the leader lock. Exactly one replica should be Leader.",
       "gridPos": {
         "h": 7,
-        "w": 12,
-        "x": 12,
-        "y": 135
+        "w": 8,
+        "x": 8,
+        "y": 144
+      }
+    },
+    {
+      "type": "stat",
+      "title": "CPU throttling",
+      "datasource": {
+        "type": "victoriametrics-metrics-datasource",
+        "uid": "${DS_VICTORIAMETRICS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "yellow",
+                "value": 0.05
+              },
+              {
+                "color": "red",
+                "value": 0.25
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(container_cpu_cfs_throttled_periods_total{container=\"operator\", pod=~\".*wandb-operator-[^-]+-[^-]+\"}[$__rate_interval])) / sum(rate(container_cpu_cfs_periods_total{container=\"operator\", pod=~\".*wandb-operator-[^-]+-[^-]+\"}[$__rate_interval])) or vector(0)",
+          "legendFormat": "",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "description": "Share of CPU scheduling periods the operator container was throttled. 0% is ideal.",
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 16,
+        "y": 144
       }
     },
     {
@@ -1440,7 +1665,7 @@
         "h": 9,
         "w": 12,
         "x": 0,
-        "y": 142
+        "y": 151
       }
     },
     {
@@ -1486,7 +1711,7 @@
         "h": 9,
         "w": 12,
         "x": 12,
-        "y": 142
+        "y": 151
       }
     },
     {
@@ -1527,7 +1752,7 @@
         "h": 9,
         "w": 12,
         "x": 0,
-        "y": 151
+        "y": 160
       }
     },
     {
@@ -1573,7 +1798,7 @@
         "h": 9,
         "w": 12,
         "x": 12,
-        "y": 151
+        "y": 160
       }
     }
   ],
