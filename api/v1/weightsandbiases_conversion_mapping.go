@@ -89,6 +89,10 @@ func applyValueMappings(src *WeightsAndBiases, dst *appsv2.WeightsAndBiases) err
 	if err := mapLegacyOverrides(values, dst); err != nil {
 		return err
 	}
+	// Peer-of-global: reads both the Altinity subchart section and global.clickhouse.
+	if err := mapClickHouse(values, dst); err != nil {
+		return err
+	}
 
 	globalMap, found, err := unstructured.NestedMap(values, "global")
 	if err != nil {
@@ -124,9 +128,6 @@ func applyGlobalMappings(globalMap map[string]interface{}, dst *appsv2.WeightsAn
 		return err
 	}
 	if err := mapBucket(globalMap, dst); err != nil {
-		return err
-	}
-	if err := mapClickHouse(globalMap, dst); err != nil {
 		return err
 	}
 
@@ -535,15 +536,49 @@ var clickHouseFields = []struct {
 	{"password", func(c *appsv2.ClickHouseConnection, s corev1.SecretKeySelector) { c.Password = s }},
 }
 
-// mapClickHouse routes v1 global.clickhouse to externalClickhouse (like
-// mapMySQL); external is asserted only when a connection field is present.
-func mapClickHouse(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) error {
-	chMap, found, err := unstructured.NestedMap(globalMap, "clickhouse")
+// clickHouseInstallPaths are the v1 locations of the ClickHouse install flag,
+// in precedence order: the Altinity subchart section wins over global.
+var clickHouseInstallPaths = [][]string{
+	{"clickhouse", "install"},
+	{"global", "clickhouse", "install"},
+}
+
+// clickHouseSource pairs a v1 values section with its path, so errors name the
+// section the offending key actually came from.
+type clickHouseSource struct {
+	path string
+	m    map[string]interface{}
+}
+
+// mapClickHouse routes v1 ClickHouse config to externalClickhouse. Connection
+// fields come from global.clickhouse, falling back to the top-level clickhouse
+// section (the Altinity subchart values) for installs that configured them
+// there. install=true means the v1 chart owned ClickHouse, so the spec is left
+// empty for the defaulter to make it managed; install=false asserts external
+// and fails loudly when no connection is present, because falling through to
+// the defaulter would silently provision a managed cluster alongside the
+// external one the deployment is already using.
+func mapClickHouse(values map[string]interface{}, dst *appsv2.WeightsAndBiases) error {
+	globalCH, _, err := unstructured.NestedMap(values, "global", "clickhouse")
 	if err != nil {
 		return fmt.Errorf("spec.values.global.clickhouse: %w", err)
 	}
-	if !found || len(chMap) == 0 {
+	topCH, _, err := unstructured.NestedMap(values, "clickhouse")
+	if err != nil {
+		return fmt.Errorf("spec.values.clickhouse: %w", err)
+	}
+	if len(globalCH) == 0 && len(topCH) == 0 {
 		return nil
+	}
+
+	install, installSet := firstClickHouseInstallFlag(values)
+	if installSet && install {
+		return nil
+	}
+
+	sources := []clickHouseSource{
+		{"spec.values.global.clickhouse", globalCH},
+		{"spec.values.clickhouse", topCH},
 	}
 
 	conn := &appsv2.ClickHouseConnection{}
@@ -551,50 +586,69 @@ func mapClickHouse(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiase
 	sawField := false
 
 	for _, f := range clickHouseFields {
-		raw, ok := chMap[f.v1Key]
+		for _, src := range sources {
+			raw, ok := src.m[f.v1Key]
+			if !ok {
+				continue
+			}
+			ref, literal, classifyErr := classifyValueFromOrLiteral(raw)
+			if classifyErr != nil {
+				return fmt.Errorf("%s.%s: %w", src.path, f.v1Key, classifyErr)
+			}
+			if ref != nil {
+				f.setRef(conn, *ref)
+				sawField = true
+				break
+			}
+			// An empty value is no value: let the next source supply it.
+			if literal != "" {
+				remaining[f.v1Key] = literal
+				sawField = true
+				break
+			}
+		}
+	}
+
+	for _, src := range sources {
+		ps, ok, err := unstructured.NestedMap(src.m, "passwordSecret")
+		if err != nil {
+			return fmt.Errorf("%s.passwordSecret: %w", src.path, err)
+		}
 		if !ok {
 			continue
 		}
-		ref, literal, classifyErr := classifyValueFromOrLiteral(raw)
-		if classifyErr != nil {
-			return fmt.Errorf("spec.values.global.clickhouse.%s: %w", f.v1Key, classifyErr)
-		}
-		switch {
-		case ref != nil:
-			f.setRef(conn, *ref)
-			sawField = true
-		case literal != "":
-			remaining[f.v1Key] = literal
-			sawField = true
-		}
-	}
-
-	if ps, ok, err := unstructured.NestedMap(chMap, "passwordSecret"); err != nil {
-		return fmt.Errorf("spec.values.global.clickhouse.passwordSecret: %w", err)
-	} else if ok {
 		name, _, err := unstructured.NestedString(ps, "name")
 		if err != nil {
-			return fmt.Errorf("spec.values.global.clickhouse.passwordSecret.name: %w", err)
+			return fmt.Errorf("%s.passwordSecret.name: %w", src.path, err)
 		}
-		alreadyHasPassword := conn.Password.Name != ""
-		if name != "" && !alreadyHasPassword {
-			key, _, err := unstructured.NestedString(ps, "passwordKey")
-			if err != nil {
-				return fmt.Errorf("spec.values.global.clickhouse.passwordSecret.passwordKey: %w", err)
-			}
-			if key == "" {
-				key = defaultClickHousePasswordSecretKey
-			}
-			conn.Password = corev1.SecretKeySelector{
-				LocalObjectReference: corev1.LocalObjectReference{Name: name},
-				Key:                  key,
-			}
-			delete(remaining, "password")
-			sawField = true
+		if name == "" || conn.Password.Name != "" {
+			continue
 		}
+		key, _, err := unstructured.NestedString(ps, "passwordKey")
+		if err != nil {
+			return fmt.Errorf("%s.passwordSecret.passwordKey: %w", src.path, err)
+		}
+		if key == "" {
+			key = defaultClickHousePasswordSecretKey
+		}
+		conn.Password = corev1.SecretKeySelector{
+			LocalObjectReference: corev1.LocalObjectReference{Name: name},
+			Key:                  key,
+		}
+		delete(remaining, "password")
+		sawField = true
+		break
 	}
 
 	if !sawField {
+		if installSet && !install {
+			return fmt.Errorf(
+				"spec.values: ClickHouse install=false but no connection found under "+
+					"global.clickhouse or clickhouse (%s, passwordSecret); set "+
+					"spec.clickhouse.%s.externalClickhouse explicitly",
+				clickHouseFieldNames(), appsv2.DefaultInstanceName,
+			)
+		}
 		return nil
 	}
 
@@ -606,6 +660,36 @@ func mapClickHouse(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiase
 		return writeAnnotation(dst, ClickHousePendingAnnotation, remaining)
 	}
 	return nil
+}
+
+// firstClickHouseInstallFlag returns the install flag from the first v1
+// location that sets it. Non-boolean values are treated as unset rather than
+// failing, so a stringly-typed flag can't make a v1 object unservable.
+func firstClickHouseInstallFlag(values map[string]interface{}) (install bool, found bool) {
+	for _, path := range clickHouseInstallPaths {
+		raw, ok, err := unstructured.NestedFieldNoCopy(values, path...)
+		if err != nil || !ok {
+			continue
+		}
+		s, isScalar := scalarToString(raw)
+		if !isScalar {
+			continue
+		}
+		parsed, parseErr := strconv.ParseBool(s)
+		if parseErr != nil {
+			continue
+		}
+		return parsed, true
+	}
+	return false, false
+}
+
+func clickHouseFieldNames() string {
+	names := make([]string, 0, len(clickHouseFields))
+	for _, f := range clickHouseFields {
+		names = append(names, f.v1Key)
+	}
+	return strings.Join(names, ", ")
 }
 
 // redisFields maps each v1 global.redis.<key> to a *RedisConnection setter.
