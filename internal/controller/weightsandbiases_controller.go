@@ -90,6 +90,9 @@ type WeightsAndBiasesReconciler struct {
 //+kubebuilder:rbac:groups=redis.redis.opstreelabs.in,resources=redis/status,verbs=get
 //+kubebuilder:rbac:groups=security.openshift.io,resources=securitycontextconstraints,resourceNames=nonroot-v2,verbs=use
 //+kubebuilder:rbac:urls=/metrics,verbs=get
+// Read the cluster's service-account issuer, which internal service auth must
+// match exactly (see RegisterServiceAccountIssuer).
+//+kubebuilder:rbac:urls=/.well-known/openid-configuration,verbs=get
 
 // Deprecated/Erroneously required RBAC rules
 //+kubebuilder:rbac:groups=extensions,resources=daemonsets;deployments;replicasets;ingresses;ingresses/status,verbs=get;list;watch

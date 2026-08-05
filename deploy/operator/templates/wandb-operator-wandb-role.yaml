@@ -145,6 +145,13 @@ rules:
       - patch
       - update
       - watch
+  # Read the cluster's service-account issuer. Internal service auth must be told
+  # the API server's exact --service-account-issuer, or W&B services reject each
+  # other's projected tokens with a 401.
+  - nonResourceURLs:
+      - /.well-known/openid-configuration
+    verbs:
+      - get
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

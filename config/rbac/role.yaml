@@ -5,6 +5,7 @@ metadata:
   name: manager-role
 rules:
 - nonResourceURLs:
+  - /.well-known/openid-configuration
   - /metrics
   verbs:
   - get

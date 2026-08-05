@@ -110,9 +110,11 @@ func (d *WeightsAndBiasesCustomDefaulter) Default(ctx context.Context, obj runti
 		wandb.Spec.Wandb.InternalServiceAuth.Enabled = ptr.To(true)
 	}
 
-	if wandb.Spec.Wandb.InternalServiceAuth.OIDCIssuer == "" {
-		wandb.Spec.Wandb.InternalServiceAuth.OIDCIssuer = "https://kubernetes.default.svc.cluster.local"
-	}
+	// OIDCIssuer is deliberately not defaulted: it must match the API server's
+	// --service-account-issuer, which only kubeadm sets to
+	// kubernetes.default.svc.cluster.local. Defaulting it here would mask the
+	// issuer discovered from the cluster and pin every install to a value that
+	// fails token validation on EKS/GKE/AKS.
 
 	if wandb.Spec.Wandb.ServiceAccount.Create == nil {
 		wandb.Spec.Wandb.ServiceAccount.Create = ptr.To(true)

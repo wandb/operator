@@ -64,7 +64,8 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 			Expect(obj.Spec.Wandb.ManifestRepository).To(Equal("oci://example.com/wandb/server-manifest"))
 			Expect(obj.Spec.Wandb.InternalServiceAuth.Enabled).ToNot(BeNil())
 			Expect(*obj.Spec.Wandb.InternalServiceAuth.Enabled).To(BeTrue())
-			Expect(obj.Spec.Wandb.InternalServiceAuth.OIDCIssuer).To(Equal("https://kubernetes.default.svc.cluster.local"))
+			Expect(obj.Spec.Wandb.InternalServiceAuth.OIDCIssuer).To(BeEmpty(),
+				"oidcIssuer must not be defaulted; it has to match the cluster's --service-account-issuer")
 			Expect(obj.Spec.Wandb.ServiceAccount.Create).ToNot(BeNil())
 			Expect(*obj.Spec.Wandb.ServiceAccount.Create).To(BeTrue())
 			Expect(obj.Spec.Wandb.ServiceAccount.ServiceAccountName).To(Equal("wandb-app"))

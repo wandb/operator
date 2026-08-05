@@ -17,7 +17,9 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"crypto/tls"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -286,6 +288,14 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Non-fatal: a cluster that blocks the discovery endpoint should still start.
+	// The reconciler surfaces a not-ready condition rather than asserting an
+	// issuer it never verified.
+	if err := RegisterServiceAccountIssuer(context.Background()); err != nil {
+		setupLog.Error(err, "failed to discover the cluster service-account issuer; "+
+			"internal service auth will not reconcile until spec.wandb.internalServiceAuth.oidcIssuer is set")
+	}
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme: scheme,
 		Cache:  cacheOptions,
@@ -443,6 +453,47 @@ func detectRuntimeNamespace() (string, error) {
 	}
 
 	return namespace, nil
+}
+
+// serviceAccountIssuerDiscoveryPath is the API server's OIDC discovery document.
+// Its `issuer` field is the value the API server stamps as `iss` on projected
+// ServiceAccount tokens.
+const serviceAccountIssuerDiscoveryPath = "/.well-known/openid-configuration"
+
+// RegisterServiceAccountIssuer discovers the cluster's service-account issuer so
+// W&B services can be told the exact issuer their projected tokens carry. The
+// issuer is a fixed property of the API server's --service-account-issuer flag,
+// so one lookup at start-up is enough; granting the operator access after the
+// fact requires a restart.
+func RegisterServiceAccountIssuer(ctx context.Context) error {
+	cfg, err := config.GetConfig()
+	if err != nil {
+		return err
+	}
+
+	discoveryClient, err := discovery.NewDiscoveryClientForConfig(cfg)
+	if err != nil {
+		return err
+	}
+
+	raw, err := discoveryClient.RESTClient().Get().AbsPath(serviceAccountIssuerDiscoveryPath).DoRaw(ctx)
+	if err != nil {
+		return fmt.Errorf("get %s: %w", serviceAccountIssuerDiscoveryPath, err)
+	}
+
+	var doc struct {
+		Issuer string `json:"issuer"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		return fmt.Errorf("decode %s: %w", serviceAccountIssuerDiscoveryPath, err)
+	}
+	if doc.Issuer == "" {
+		return fmt.Errorf("%s returned no issuer field", serviceAccountIssuerDiscoveryPath)
+	}
+
+	setupLog.Info("discovered cluster service-account issuer", "issuer", doc.Issuer)
+	utils.SetServiceAccountIssuer(doc.Issuer)
+	return nil
 }
 
 func RegisterServerResources() error {

@@ -521,6 +521,18 @@ func ReconcileWandbManifest(
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
+	// Refuse to reconcile applications with an unknown issuer rather than emitting
+	// a guessed one: W&B services reject a mismatched `iss` with a 401 and the API
+	// panics on that path, so no value is safer than a wrong value.
+	if internalServiceAuthEnabled(wandb) && resolveInternalServiceAuthIssuer(wandb) == "" {
+		logger.Info("Cluster service-account issuer unknown; not reconciling applications")
+		if err := updateReadyStatus(ctx, client, wandb, statusBefore, false,
+			serviceAccountIssuerUnknownReason, serviceAccountIssuerUnknownMessage); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{RequeueAfter: time.Minute}, nil
+	}
+
 	result, err = reconcileApplications(ctx, client, wandb, manifest, telemetryConfig)
 	if err != nil {
 		return result, err
