@@ -77,7 +77,7 @@ func applyValueMappings(src *WeightsAndBiases, dst *appsv2.WeightsAndBiases) err
 	if err := mapVersion(values, dst); err != nil {
 		return err
 	}
-	if err := mapServiceAccountAnnotations(values, dst); err != nil {
+	if err := mapServiceAccount(values, dst); err != nil {
 		return err
 	}
 	if err := mapInternalJWTIssuer(values, dst); err != nil {
@@ -166,24 +166,126 @@ func mapVersion(values map[string]interface{}, dst *appsv2.WeightsAndBiases) err
 	return nil
 }
 
-// mapServiceAccountAnnotations maps v1's per-sub-chart ServiceAccount
-// annotations to v2's single spec.wandb.serviceAccount.annotations,
-// preferring `app` and falling back to `api`.
-func mapServiceAccountAnnotations(values map[string]interface{}, dst *appsv2.WeightsAndBiases) error {
-	anns, err := readServiceAccountAnnotations(values, "app")
+// v1ServiceAccountSubcharts are the v1 subcharts whose serviceAccount block
+// describes the W&B application identity, in precedence order. Infra subcharts
+// (mysql, redis, …) are deliberately excluded: their serviceAccount blocks
+// configure those workloads, and v2 models them separately as
+// ManagedServiceAccountSpec.
+var v1ServiceAccountSubcharts = []string{"app", "api"}
+
+// v1ServiceAccount is one subchart's serviceAccount block.
+type v1ServiceAccount struct {
+	subchart    string
+	create      *bool
+	name        string
+	annotations map[string]string
+}
+
+// mapServiceAccount maps v1's per-subchart ServiceAccount blocks to v2's single
+// spec.wandb.serviceAccount.
+//
+// create and name must be carried together: v2's CRD defaults create=true and
+// serviceAccountName=wandb, so dropping either one makes the operator stand up
+// its own ServiceAccount and orphan the identity the deployment's cloud IAM
+// binding is attached to. Carrying create without name is worse still — pods
+// would reference a ServiceAccount nothing creates and fail admission.
+func mapServiceAccount(values map[string]interface{}, dst *appsv2.WeightsAndBiases) error {
+	blocks, err := readV1ServiceAccounts(values)
 	if err != nil {
 		return err
 	}
-	if len(anns) == 0 {
-		anns, err = readServiceAccountAnnotations(values, "api")
-		if err != nil {
-			return err
+	if len(blocks) == 0 {
+		return nil
+	}
+	if err := assertServiceAccountAgreement(blocks); err != nil {
+		return err
+	}
+
+	// First non-empty wins, so earlier subcharts take precedence.
+	sa := &dst.Spec.Wandb.ServiceAccount
+	for _, block := range blocks {
+		if block.create != nil && sa.Create == nil {
+			sa.Create = ptr.To(*block.create)
+		}
+		if block.name != "" && sa.ServiceAccountName == "" {
+			sa.ServiceAccountName = block.name
+		}
+		if len(block.annotations) > 0 && len(sa.Annotations) == 0 {
+			sa.Annotations = block.annotations
 		}
 	}
-	if len(anns) > 0 {
-		dst.Spec.Wandb.ServiceAccount.Annotations = anns
+	return nil
+}
+
+// assertServiceAccountAgreement fails when subcharts disagree on the identity.
+// v2 has one application ServiceAccount, so silently picking a winner would
+// point pods at the wrong cloud identity — the exact failure this mapper
+// exists to prevent.
+func assertServiceAccountAgreement(blocks []v1ServiceAccount) error {
+	var nameOwner, createOwner *v1ServiceAccount
+	for i := range blocks {
+		block := &blocks[i]
+		if block.name != "" {
+			if nameOwner != nil && nameOwner.name != block.name {
+				return fmt.Errorf(
+					"spec.values: %s.serviceAccount.name=%q conflicts with %s.serviceAccount.name=%q; "+
+						"v2 has a single spec.wandb.serviceAccount, so set it explicitly",
+					nameOwner.subchart, nameOwner.name, block.subchart, block.name)
+			}
+			if nameOwner == nil {
+				nameOwner = block
+			}
+		}
+		if block.create != nil {
+			if createOwner != nil && *createOwner.create != *block.create {
+				return fmt.Errorf(
+					"spec.values: %s.serviceAccount.create=%v conflicts with %s.serviceAccount.create=%v; "+
+						"v2 has a single spec.wandb.serviceAccount, so set it explicitly",
+					createOwner.subchart, *createOwner.create, block.subchart, *block.create)
+			}
+			if createOwner == nil {
+				createOwner = block
+			}
+		}
 	}
 	return nil
+}
+
+// readV1ServiceAccounts collects the serviceAccount block from each known
+// subchart that sets one, preserving v1ServiceAccountSubcharts order.
+func readV1ServiceAccounts(values map[string]interface{}) ([]v1ServiceAccount, error) {
+	var out []v1ServiceAccount
+	for _, subchart := range v1ServiceAccountSubcharts {
+		saMap, found, err := unstructured.NestedMap(values, subchart, "serviceAccount")
+		if err != nil {
+			return nil, fmt.Errorf("spec.values.%s.serviceAccount: %w", subchart, err)
+		}
+		if !found || len(saMap) == 0 {
+			continue
+		}
+
+		block := v1ServiceAccount{subchart: subchart}
+
+		// Non-boolean create is treated as unset rather than failing, so a
+		// stringly-typed helm value can't make a v1 object unservable.
+		if raw, ok := saMap["create"]; ok {
+			if s, isScalar := scalarToString(raw); isScalar {
+				if parsed, parseErr := strconv.ParseBool(s); parseErr == nil {
+					block.create = ptr.To(parsed)
+				}
+			}
+		}
+
+		if block.name, _, err = unstructured.NestedString(saMap, "name"); err != nil {
+			return nil, fmt.Errorf("spec.values.%s.serviceAccount.name: %w", subchart, err)
+		}
+		if block.annotations, _, err = unstructured.NestedStringMap(saMap, "annotations"); err != nil {
+			return nil, fmt.Errorf("spec.values.%s.serviceAccount.annotations: %w", subchart, err)
+		}
+
+		out = append(out, block)
+	}
+	return out, nil
 }
 
 // mapInternalJWTIssuer pulls the first entry from global.internalJWTMap (or
@@ -320,18 +422,6 @@ func readFirstInternalJWTIssuer(values map[string]interface{}, service string) (
 		return "", fmt.Errorf("spec.values.%s.internalJWTMap[0].issuer: %w", service, err)
 	}
 	return issuer, nil
-}
-
-// readServiceAccountAnnotations reads values.<service>.serviceAccount.annotations.
-func readServiceAccountAnnotations(values map[string]interface{}, service string) (map[string]string, error) {
-	anns, found, err := unstructured.NestedStringMap(values, service, "serviceAccount", "annotations")
-	if err != nil {
-		return nil, fmt.Errorf("spec.values.%s.serviceAccount.annotations: %w", service, err)
-	}
-	if !found {
-		return nil, nil
-	}
-	return anns, nil
 }
 
 func mapHostnameLicense(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) error {
