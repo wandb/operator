@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"slices"
 	"testing"
 
 	wandbv2 "github.com/wandb/operator/api/v2"
@@ -82,9 +83,8 @@ func TestTriageRunCreatesBoundedJobFromApplication(t *testing.T) {
 	) >= 0 {
 		t.Fatal("triage memory request must be smaller than the parent application request")
 	}
-	if len(container.Args) != 4 || container.Args[0] != "python" ||
-		container.Args[3] != defaultTriageAction {
-		t.Fatalf("args = %#v, want triage action args", container.Args)
+	if got, want := container.Args, []string{"python", "-m", "weave_triage"}; !slices.Equal(got, want) {
+		t.Fatalf("args = %#v, want default runner args %#v", got, want)
 	}
 	if got := envValue(container.Env, "PYTHONPATH"); got != "/weave/src" {
 		t.Fatalf("PYTHONPATH = %q, want action override", got)
@@ -137,6 +137,7 @@ func TestTriageRunCreatesOneJobPerSelectedAction(t *testing.T) {
 		wandbv2.TriageActionSpec{
 			Name:        "deep",
 			Description: "Run deeper diagnostics",
+			Args:        []string{"--verbose"},
 		})
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(testScheme).
@@ -168,8 +169,12 @@ func TestTriageRunCreatesOneJobPerSelectedAction(t *testing.T) {
 				job.Name, job.Annotations[triageActionAnnotation], action)
 		}
 		args := job.Spec.Template.Spec.Containers[0].Args
-		if len(args) != 4 || args[3] != action {
-			t.Fatalf("Job %q args = %#v, want selected action %q appended", job.Name, args, action)
+		want := []string{"python", "-m", "weave_triage"}
+		if action != defaultTriageAction {
+			want = append(want, triageActionFlag, action, "--verbose")
+		}
+		if !slices.Equal(args, want) {
+			t.Fatalf("Job %q args = %#v, want %#v", job.Name, args, want)
 		}
 	}
 
