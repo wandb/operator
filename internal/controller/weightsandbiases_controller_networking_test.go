@@ -14,6 +14,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
@@ -340,7 +341,7 @@ func reconcileNetworkingManifest(ctx context.Context, wandb *apiv2.WeightsAndBia
 	wandbManifest, err := manifest.GetServerManifest(ctx, wandb.Spec.Wandb.ManifestRepository, wandb.Spec.Wandb.Version)
 	Expect(err).NotTo(HaveOccurred())
 
-	_, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, v2.DefaultTelemetryRuntimeConfig())
+	_, err = v2.ReconcileWandbManifest(ctx, k8sClient, record.NewFakeRecorder(100), wandb, wandbManifest, v2.DefaultTelemetryRuntimeConfig())
 	Expect(err).NotTo(HaveOccurred())
 }
 

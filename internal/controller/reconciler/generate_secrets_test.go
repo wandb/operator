@@ -23,13 +23,16 @@ import (
 
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	ctrlClient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/internal/controller/common"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
 )
 
@@ -72,9 +75,10 @@ func weaveWorkerAuthManifest() serverManifest.Manifest {
 	}
 }
 
-// TestGenerateSecrets_RegeneratesNonUTF8AdoptedSecret: an adopted non-UTF-8
-// token must be overwritten with a UTF-8-safe one.
-func TestGenerateSecrets_RegeneratesNonUTF8AdoptedSecret(t *testing.T) {
+// TestGenerateSecrets_FailsOnNonUTF8AdoptedSecret: a non-UTF-8 token must fail
+// the reconcile loudly (error + Ready=false condition + warning event) rather
+// than being silently rewritten.
+func TestGenerateSecrets_FailsOnNonUTF8AdoptedSecret(t *testing.T) {
 	invalid := []byte{0xff, 0xfe, 0xfd, 0x00, 0x80}
 	require.False(t, utf8.Valid(invalid), "test precondition: bytes must be invalid UTF-8")
 
@@ -84,23 +88,30 @@ func TestGenerateSecrets_RegeneratesNonUTF8AdoptedSecret(t *testing.T) {
 		Data:       map[string][]byte{"key": invalid},
 	}
 	client, wandb := newGenerateSecretsFixture(t, seeded)
+	recorder := record.NewFakeRecorder(10)
 
-	_, err := generateSecrets(context.Background(), client, wandb, weaveWorkerAuthManifest())
-	require.NoError(t, err)
+	_, err := generateSecrets(context.Background(), client, recorder, wandb, weaveWorkerAuthManifest())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "non-UTF-8")
 
 	var sec corev1.Secret
 	require.NoError(t, client.Get(context.Background(),
 		types.NamespacedName{Name: "weave-worker-auth", Namespace: "default"}, &sec))
+	require.Equal(t, invalid, sec.Data["key"], "invalid secret must not be overwritten")
+	require.NotContains(t, sec.StringData, "key", "no regeneration should have occurred")
 
-	value := effectiveSecretValue(&sec, "key")
-	require.NotEmpty(t, value)
-	require.True(t, utf8.ValidString(value), "regenerated token must be valid UTF-8")
-	require.NotEqual(t, string(invalid), value, "the non-UTF-8 token must be replaced")
+	require.False(t, wandb.Status.Ready)
+	cond := apimeta.FindStatusCondition(wandb.Status.Conditions, readyConditionType)
+	require.NotNil(t, cond)
+	require.Equal(t, metav1.ConditionFalse, cond.Status)
+	require.Equal(t, common.InvalidSecretEncodingReason, cond.Reason)
 
-	sel, ok := wandb.Status.GeneratedSecrets["weave-worker-auth"]
-	require.True(t, ok)
-	require.Equal(t, "weave-worker-auth", sel.Name)
-	require.Equal(t, "key", sel.Key)
+	select {
+	case ev := <-recorder.Events:
+		require.Contains(t, ev, common.InvalidSecretEncodingReason)
+	default:
+		t.Fatal("expected a warning event to be recorded")
+	}
 }
 
 // TestGenerateSecrets_LeavesValidExistingValueUntouched: a valid adopted token
@@ -114,7 +125,7 @@ func TestGenerateSecrets_LeavesValidExistingValueUntouched(t *testing.T) {
 	}
 	client, wandb := newGenerateSecretsFixture(t, seeded)
 
-	_, err := generateSecrets(context.Background(), client, wandb, weaveWorkerAuthManifest())
+	_, err := generateSecrets(context.Background(), client, record.NewFakeRecorder(10), wandb, weaveWorkerAuthManifest())
 	require.NoError(t, err)
 
 	var sec corev1.Secret
@@ -130,7 +141,7 @@ func TestGenerateSecrets_LeavesValidExistingValueUntouched(t *testing.T) {
 func TestGenerateSecrets_CreatesMissingSecretWithUTF8Token(t *testing.T) {
 	client, wandb := newGenerateSecretsFixture(t)
 
-	_, err := generateSecrets(context.Background(), client, wandb, weaveWorkerAuthManifest())
+	_, err := generateSecrets(context.Background(), client, record.NewFakeRecorder(10), wandb, weaveWorkerAuthManifest())
 	require.NoError(t, err)
 
 	var sec corev1.Secret
