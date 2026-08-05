@@ -218,9 +218,9 @@ victoria-metrics-operator:
     seccompProfile:
       type: RuntimeDefault
   crds:
-    # Install Victoria CRDs through Helm's CRD phase so telemetry resources
-    # in this chart can be created in the same release.
-    plain: true
+    # Installed upgrade-safely by the crd-installer Job; subchart ships the controller only.
+    enabled: false
+    plain: false
 
 grafana-operator:
   # Helm dependency conditions are boolean-only, so full installs
