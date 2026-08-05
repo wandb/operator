@@ -5,10 +5,12 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
-	"github.com/wandb/operator/internal/controller/infra/external/objectstore"
+	"github.com/wandb/operator/internal/controller/infra/objectstore"
 	"github.com/wandb/operator/internal/logx"
+	"github.com/wandb/operator/pkg/utils"
 	"github.com/wandb/operator/pkg/wandb/manifest"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -28,7 +30,7 @@ func WriteState(
 	spec := wandb.Spec.Kafka.ManagedKafka
 	nsnBuilder := CreateNsNameBuilder(types.NamespacedName{Namespace: spec.Namespace, Name: spec.Name})
 
-	storage, ready, err := resolveStorage(ctx, cl, wandb)
+	storage, ready, err := resolveStorage(ctx, cl, wandb, spec)
 	if err != nil {
 		log.Error("failed to resolve object store connection for bufstream", logx.ErrAttr(err))
 		return []metav1.Condition{
@@ -42,6 +44,8 @@ func WriteState(
 			{Type: ObjectStoreReadyType, Status: metav1.ConditionFalse, Reason: common.PendingCreateReason},
 		}
 	}
+	//objectStoreSpec, _ := apiv2.ResolveInstance(wandb.Spec.ObjectStore, bufstreamObjectStoreInstance)
+	ensureBucket := false
 
 	credsSecret, err := ToCredentialsSecret(wandb, nsnBuilder, storage, cl.Scheme())
 	if err != nil {
@@ -51,11 +55,23 @@ func WriteState(
 	if err != nil {
 		return translateError(err)
 	}
+	serviceAccount, err := ToServiceAccount(wandb, nsnBuilder, storage, cl.Scheme())
+	if err != nil {
+		return translateError(err)
+	}
+	// On OpenShift, bind the SA to nonroot-v2 so broker runs as its fixed UID.
+	var sccRoleBinding *rbacv1.RoleBinding
+	if utils.IsOpenShift() {
+		sccRoleBinding, err = ToSccRoleBinding(wandb, nsnBuilder, cl.Scheme())
+		if err != nil {
+			return translateError(err)
+		}
+	}
 	etcdApp, err := ToEtcdApplication(wandb, nsnBuilder, cl.Scheme(), mfst)
 	if err != nil {
 		return translateError(err)
 	}
-	bufstreamApp, err := ToBufstreamApplication(wandb, nsnBuilder, storage, cl.Scheme(), mfst)
+	bufstreamApp, err := ToBufstreamApplication(wandb, nsnBuilder, storage, ensureBucket, cl.Scheme(), mfst)
 	if err != nil {
 		return translateError(err)
 	}
@@ -65,12 +81,23 @@ func WriteState(
 	}
 	results = append(results, writeResource(ctx, cl, common.ReconciledType, SecretResourceType, credsSecret, &corev1.Secret{})...)
 	results = append(results, writeResource(ctx, cl, common.ReconciledType, ConfigMapResourceType, configMap, &corev1.ConfigMap{})...)
+	if serviceAccount != nil {
+		serviceAccountConditions := writeResource(ctx, cl, common.ReconciledType, ServiceAccountResourceType, serviceAccount, &corev1.ServiceAccount{})
+		results = append(results, serviceAccountConditions...)
+		if len(serviceAccountConditions) > 0 {
+			return results
+		}
+	}
+	if sccRoleBinding != nil {
+		results = append(results, writeResource(ctx, cl, common.ReconciledType, RoleBindingResourceType, sccRoleBinding, &rbacv1.RoleBinding{})...)
+	}
 	results = append(results, writeResource(ctx, cl, EtcdApplicationType, ApplicationResourceType, etcdApp, &apiv2.Application{})...)
 	results = append(results, writeResource(ctx, cl, BufstreamApplicationType, ApplicationResourceType, bufstreamApp, &apiv2.Application{})...)
 
 	return results
 }
 
+// translateError wraps an error as a failed Reconciled condition.
 func translateError(err error) []metav1.Condition {
 	return []metav1.Condition{
 		{Type: common.ReconciledType, Status: metav1.ConditionFalse, Reason: common.ControllerErrorReason, Message: err.Error()},
@@ -114,18 +141,24 @@ func writeResource[T client.Object](
 	return []metav1.Condition{actionToCondition(conditionType, action)}
 }
 
+// actionToCondition maps a CRUD action onto the status condition it implies.
 func actionToCondition(conditionType string, action common.CrudAction) metav1.Condition {
 	switch action {
 	case common.CreateAction:
 		return metav1.Condition{Type: conditionType, Status: metav1.ConditionFalse, Reason: common.PendingCreateReason}
 	case common.DeleteAction:
 		return metav1.Condition{Type: conditionType, Status: metav1.ConditionFalse, Reason: common.PendingDeleteReason}
-	case common.UpdateAction:
+	case common.UpdateAction, common.UnchangedAction:
 		return metav1.Condition{Type: conditionType, Status: metav1.ConditionTrue, Reason: common.ResourceExistsReason}
 	default:
 		return metav1.Condition{Type: conditionType, Status: metav1.ConditionFalse, Reason: common.NoResourceReason}
 	}
 }
+
+// bufstreamObjectStoreInstance is the object-store instance name Bufstream
+// prefers for message storage; ResolveInstance falls back to the default
+// instance when it is not provisioned.
+const bufstreamObjectStoreInstance = "bufstream"
 
 // resolveStorage reads the object store connection secret and parses its
 // connection string into the provider-specific values needed to configure
@@ -134,32 +167,16 @@ func resolveStorage(
 	ctx context.Context,
 	cl client.Client,
 	wandb *apiv2.WeightsAndBiases,
+	spec *apiv2.ManagedKafkaSpec,
 ) (objectstore.ConnInfo, bool, error) {
-	if !wandb.Status.ObjectStoreStatus.Ready {
+	status, ok := apiv2.ResolveInstance(wandb.Status.ObjectStoreStatus, bufstreamObjectStoreInstance)
+	if !ok || !status.Ready {
 		return objectstore.ConnInfo{}, false, nil
 	}
 
-	secretName := wandb.Status.ObjectStoreStatus.Connection.URL.Name
-	if secretName == "" {
-		return objectstore.ConnInfo{}, false, nil
-	}
-
-	secret := &corev1.Secret{}
-	found, err := common.GetResource(
-		ctx, cl,
-		types.NamespacedName{Namespace: wandb.Namespace, Name: secretName},
-		"Secret", secret,
-	)
+	connInfo, err := objectstore.Resolve(ctx, cl, spec.Namespace, &status.Connection)
 	if err != nil {
-		return objectstore.ConnInfo{}, false, err
+		return objectstore.ConnInfo{}, true, err
 	}
-	if !found {
-		return objectstore.ConnInfo{}, false, nil
-	}
-
-	info, err := objectstore.ParseConnection(secret.Data)
-	if err != nil {
-		return objectstore.ConnInfo{}, false, err
-	}
-	return info, true, nil
+	return connInfo, true, nil
 }

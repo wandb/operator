@@ -7,6 +7,7 @@ import (
 	"github.com/Masterminds/goutils"
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
+	"github.com/wandb/operator/internal/controller/infra/objectstore"
 	"github.com/wandb/operator/internal/logx"
 	seaweedv1 "github.com/wandb/operator/pkg/vendored/seaweedfs-operator/seaweed.seaweedfs.com/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -23,6 +24,9 @@ const (
 	AppConnTypeName  = "SeaweedAppConn"
 )
 
+// WriteState reconciles the managed SeaweedFS CR, its S3 identity config, and
+// the W&B connection secret, returning the reconcile conditions plus the
+// resulting ObjectStoreConnection (nil until the connection is available).
 func WriteState(
 	ctx context.Context,
 	kubeClient client.Client,
@@ -66,6 +70,7 @@ func WriteState(
 			Status: metav1.ConditionFalse,
 			Reason: common.ApiErrorReason,
 		})
+		return result, nil
 	}
 
 	switch action {
@@ -81,7 +86,7 @@ func WriteState(
 			Status: metav1.ConditionFalse,
 			Reason: common.PendingDeleteReason,
 		})
-	case common.UpdateAction:
+	case common.UpdateAction, common.UnchangedAction:
 		result = append(result, metav1.Condition{
 			Type:   SeaweedCustomResourceType,
 			Status: metav1.ConditionTrue,
@@ -137,13 +142,16 @@ func WriteState(
 	return result, nil
 }
 
+// writeSeaweedS3Config persists the SeaweedFS S3 identity config secret,
+// preserving the existing secret key when one is already present so credentials
+// stay stable across reconciles, and returns the resolved ConnInfo.
 func writeSeaweedS3Config(
 	ctx context.Context,
 	client client.Client,
 	owner *seaweedv1.Seaweed,
 	nsnBuilder *NsNameBuilder,
 	envConfig SeaweedS3Config,
-) (*s3ConnInfo, error) {
+) (*objectstore.ConnInfo, error) {
 	var err error
 	var found bool
 	var gvk schema.GroupVersionKind

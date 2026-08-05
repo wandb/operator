@@ -7,6 +7,7 @@ import (
 	"github.com/samber/lo"
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
+	"github.com/wandb/operator/internal/controller/infra/managed/clickhouse/altinity/keeper"
 	"github.com/wandb/operator/internal/logx"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -85,9 +86,21 @@ func inferInfraState(
 	var events []corev1.Event
 	impliedStates := make(map[string]string, len(conditions))
 
+	// undeployable name = terminal config error; surface it in `kubectl describe`
+	if cond, found := lo.Find(conditions, func(c metav1.Condition) bool {
+		return c.Type == ClickHouseCustomResourceType && c.Reason == common.InvalidNameReason
+	}); found {
+		events = append(events, corev1.Event{
+			Type:    corev1.EventTypeWarning,
+			Reason:  "ClickHouseInvalidName",
+			Message: cond.Message,
+		})
+	}
+
 	impliedStates = inferStateFromCondition(ctx, ClickHouseCustomResourceType, impliedStates, conditions)
 	impliedStates = inferStateFromCondition(ctx, ClickHouseConnectionInfoType, impliedStates, conditions)
 	impliedStates = inferStateFromCondition(ctx, ClickHouseReportedReadyType, impliedStates, conditions)
+	impliedStates = inferStateFromCondition(ctx, keeper.KeeperReportedReadyType, impliedStates, conditions)
 
 	hasImpliedState := func(target string) bool {
 		return len(lo.FilterValues(
@@ -145,6 +158,8 @@ func inferStateFromCondition(ctx context.Context, conditionType string, impliedS
 			impliedStates[conditionType] = inferState_ClickHouseConnectionInfoType(ctx, cond)
 		case ClickHouseReportedReadyType:
 			impliedStates[conditionType] = inferState_ClickHouseReportedReadyType(ctx, cond)
+		case keeper.KeeperReportedReadyType:
+			impliedStates[conditionType] = inferState_KeeperReportedReadyType(ctx, cond)
 		default:
 			impliedStates[conditionType] = common.UnknownState
 		}
@@ -165,6 +180,9 @@ func inferState_ClickHouseCustomResourceType(ctx context.Context, condition meta
 		if condition.Reason == common.PendingDeleteReason {
 			result = common.UnavailableState
 		}
+		if condition.Reason == common.InvalidNameReason {
+			result = common.ErrorState
+		}
 	}
 	log.Debug(
 		"implied state", "state", result, "condition", condition.Type,
@@ -181,6 +199,23 @@ func inferState_ClickHouseConnectionInfoType(ctx context.Context, condition meta
 	}
 	if condition.Status == metav1.ConditionFalse {
 		result = common.UnavailableState
+	}
+	log.Debug(
+		"implied state", "state", result, "condition", condition.Type,
+		"reason", condition.Reason, "status", condition.Status,
+	)
+	return result
+}
+
+func inferState_KeeperReportedReadyType(ctx context.Context, condition metav1.Condition) string {
+	log := logx.GetSlog(ctx)
+	result := common.UnknownState
+	if condition.Status == metav1.ConditionTrue {
+		result = common.HealthyState
+	}
+	if condition.Status == metav1.ConditionFalse {
+		// Keeper not ready yet: ClickHouse can't coordinate replication, so hold at pending.
+		result = common.PendingState
 	}
 	log.Debug(
 		"implied state", "state", result, "condition", condition.Type,

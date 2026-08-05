@@ -88,12 +88,19 @@ func getOIDCConvertedSecret(t *testing.T, c ctrlClient.Client) (*corev1.Secret, 
 	return &secret, err
 }
 
+func getClickHouseConvertedSecret(t *testing.T, c ctrlClient.Client) (*corev1.Secret, error) {
+	t.Helper()
+	var secret corev1.Secret
+	err := c.Get(context.Background(), types.NamespacedName{Name: "wandb-clickhouse-converted", Namespace: "default"}, &secret)
+	return &secret, err
+}
+
 func TestMigrateLegacyAnnotations_NoAnnotation(t *testing.T) {
 	client, wandb := newMigrationFixture(t, nil, nil)
 	res, err := migrateLegacyAnnotations(context.Background(), client, wandb)
 	require.NoError(t, err)
 	require.Zero(t, res.RequeueAfter)
-	require.Nil(t, wandb.Spec.MySQL.ExternalMysql)
+	require.Nil(t, wandb.Spec.MySQL[apiv2.DefaultInstanceName].ExternalMysql)
 
 	_, err = getConvertedSecret(t, client)
 	require.True(t, apiErrors.IsNotFound(err), "expected no converted Secret, got err=%v", err)
@@ -122,8 +129,8 @@ func TestMigrateLegacyMySQL_FullLiteralPayload(t *testing.T) {
 	var fresh apiv2.WeightsAndBiases
 	require.NoError(t, client.Get(context.Background(), types.NamespacedName{Name: "wandb", Namespace: "default"}, &fresh))
 	require.NotContains(t, fresh.Annotations, apiv1.MySQLPendingAnnotation)
-	require.NotNil(t, fresh.Spec.MySQL.ExternalMysql)
-	conn := fresh.Spec.MySQL.ExternalMysql
+	require.NotNil(t, fresh.Spec.MySQL[apiv2.DefaultInstanceName].ExternalMysql)
+	conn := fresh.Spec.MySQL[apiv2.DefaultInstanceName].ExternalMysql
 	require.Equal(t, "wandb-mysql-converted", conn.Host.Name)
 	require.Equal(t, "host", conn.Host.Key)
 	require.Equal(t, "port", conn.Port.Key)
@@ -156,7 +163,7 @@ func TestMigrateLegacyMySQL_PartialPayload(t *testing.T) {
 	require.NotContains(t, secret.Data, "username")
 	require.NotContains(t, secret.Data, "sslCa")
 
-	conn := wandb.Spec.MySQL.ExternalMysql
+	conn := wandb.Spec.MySQL[apiv2.DefaultInstanceName].ExternalMysql
 	require.NotNil(t, conn)
 	require.Equal(t, "host", conn.Host.Key)
 	require.Equal(t, "password", conn.Password.Key)
@@ -171,10 +178,14 @@ func TestMigrateLegacyMySQL_PreSetFieldsAreRespected(t *testing.T) {
 	client, wandb := newMigrationFixture(t, map[string]string{
 		apiv1.MySQLPendingAnnotation: payload,
 	}, func(w *apiv2.WeightsAndBiases) {
-		w.Spec.MySQL.ExternalMysql = &apiv2.MysqlConnection{
-			Host: corev1.SecretKeySelector{
-				LocalObjectReference: corev1.LocalObjectReference{Name: "preset-secret"},
-				Key:                  "preset-host-key",
+		w.Spec.MySQL = map[string]apiv2.MySQLSpec{
+			apiv2.DefaultInstanceName: {
+				ExternalMysql: &apiv2.MysqlConnection{
+					Host: corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: "preset-secret"},
+						Key:                  "preset-host-key",
+					},
+				},
 			},
 		}
 	})
@@ -189,7 +200,7 @@ func TestMigrateLegacyMySQL_PreSetFieldsAreRespected(t *testing.T) {
 	require.Contains(t, secret.Data, "port")
 	require.Contains(t, secret.Data, "database")
 
-	conn := wandb.Spec.MySQL.ExternalMysql
+	conn := wandb.Spec.MySQL[apiv2.DefaultInstanceName].ExternalMysql
 	require.Equal(t, "preset-secret", conn.Host.Name)
 	require.Equal(t, "preset-host-key", conn.Host.Key)
 	require.Equal(t, "wandb-mysql-converted", conn.Port.Name)
@@ -201,10 +212,14 @@ func TestMigrateLegacyMySQL_AllPreSetEmptyAnnotationPayload(t *testing.T) {
 	client, wandb := newMigrationFixture(t, map[string]string{
 		apiv1.MySQLPendingAnnotation: payload,
 	}, func(w *apiv2.WeightsAndBiases) {
-		w.Spec.MySQL.ExternalMysql = &apiv2.MysqlConnection{
-			Host: corev1.SecretKeySelector{
-				LocalObjectReference: corev1.LocalObjectReference{Name: "preset"},
-				Key:                  "host",
+		w.Spec.MySQL = map[string]apiv2.MySQLSpec{
+			apiv2.DefaultInstanceName: {
+				ExternalMysql: &apiv2.MysqlConnection{
+					Host: corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: "preset"},
+						Key:                  "host",
+					},
+				},
 			},
 		}
 	})
@@ -219,7 +234,7 @@ func TestMigrateLegacyMySQL_AllPreSetEmptyAnnotationPayload(t *testing.T) {
 	var fresh apiv2.WeightsAndBiases
 	require.NoError(t, client.Get(context.Background(), types.NamespacedName{Name: "wandb", Namespace: "default"}, &fresh))
 	require.NotContains(t, fresh.Annotations, apiv1.MySQLPendingAnnotation)
-	require.Equal(t, "preset", fresh.Spec.MySQL.ExternalMysql.Host.Name)
+	require.Equal(t, "preset", fresh.Spec.MySQL[apiv2.DefaultInstanceName].ExternalMysql.Host.Name)
 }
 
 func TestMigrateLegacyMySQL_PreExistingSecretOverwritten(t *testing.T) {
@@ -254,7 +269,7 @@ func TestMigrateLegacyMySQL_MalformedJSON(t *testing.T) {
 	require.Error(t, err)
 
 	require.Contains(t, wandb.Annotations, apiv1.MySQLPendingAnnotation)
-	require.Nil(t, wandb.Spec.MySQL.ExternalMysql)
+	require.Nil(t, wandb.Spec.MySQL[apiv2.DefaultInstanceName].ExternalMysql)
 }
 
 func TestMigrateLegacyMySQL_EmptyAnnotation(t *testing.T) {
@@ -301,7 +316,7 @@ func TestMigrateLegacyRedis_FullLiteralPayload(t *testing.T) {
 	var fresh apiv2.WeightsAndBiases
 	require.NoError(t, client.Get(context.Background(), types.NamespacedName{Name: "wandb", Namespace: "default"}, &fresh))
 	require.NotContains(t, fresh.Annotations, apiv1.RedisPendingAnnotation)
-	conn := fresh.Spec.Redis.ExternalRedis
+	conn := fresh.Spec.Redis[apiv2.DefaultInstanceName].ExternalRedis
 	require.NotNil(t, conn)
 	require.Equal(t, "wandb-redis-converted", conn.Host.Name)
 	require.Equal(t, "host", conn.Host.Key)
@@ -317,10 +332,14 @@ func TestMigrateLegacyRedis_PreSetFieldsAreRespected(t *testing.T) {
 	client, wandb := newMigrationFixture(t, map[string]string{
 		apiv1.RedisPendingAnnotation: payload,
 	}, func(w *apiv2.WeightsAndBiases) {
-		w.Spec.Redis.ExternalRedis = &apiv2.RedisConnection{
-			Host: corev1.SecretKeySelector{
-				LocalObjectReference: corev1.LocalObjectReference{Name: "preset-secret"},
-				Key:                  "preset-host-key",
+		w.Spec.Redis = map[string]apiv2.RedisSpec{
+			apiv2.DefaultInstanceName: {
+				ExternalRedis: &apiv2.RedisConnection{
+					Host: corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: "preset-secret"},
+						Key:                  "preset-host-key",
+					},
+				},
 			},
 		}
 	})
@@ -333,7 +352,7 @@ func TestMigrateLegacyRedis_PreSetFieldsAreRespected(t *testing.T) {
 	require.NotContains(t, secret.Data, "host")
 	require.Contains(t, secret.Data, "port")
 
-	conn := wandb.Spec.Redis.ExternalRedis
+	conn := wandb.Spec.Redis[apiv2.DefaultInstanceName].ExternalRedis
 	require.Equal(t, "preset-secret", conn.Host.Name)
 	require.Equal(t, "preset-host-key", conn.Host.Key)
 	require.Equal(t, "wandb-redis-converted", conn.Port.Name)
@@ -347,7 +366,7 @@ func TestMigrateLegacyRedis_MalformedJSON(t *testing.T) {
 	require.Error(t, err)
 
 	require.Contains(t, wandb.Annotations, apiv1.RedisPendingAnnotation)
-	require.Nil(t, wandb.Spec.Redis.ExternalRedis)
+	require.Nil(t, wandb.Spec.Redis[apiv2.DefaultInstanceName].ExternalRedis)
 }
 
 func TestMigrateLegacyAnnotations_MySQLAndRedisInOneCall(t *testing.T) {
@@ -364,8 +383,8 @@ func TestMigrateLegacyAnnotations_MySQLAndRedisInOneCall(t *testing.T) {
 	require.NoError(t, client.Get(context.Background(), types.NamespacedName{Name: "wandb", Namespace: "default"}, &fresh))
 	require.NotContains(t, fresh.Annotations, apiv1.MySQLPendingAnnotation)
 	require.NotContains(t, fresh.Annotations, apiv1.RedisPendingAnnotation)
-	require.NotNil(t, fresh.Spec.MySQL.ExternalMysql)
-	require.NotNil(t, fresh.Spec.Redis.ExternalRedis)
+	require.NotNil(t, fresh.Spec.MySQL[apiv2.DefaultInstanceName].ExternalMysql)
+	require.NotNil(t, fresh.Spec.Redis[apiv2.DefaultInstanceName].ExternalRedis)
 
 	mysqlSecret, err := getConvertedSecret(t, client)
 	require.NoError(t, err)
@@ -390,28 +409,6 @@ func TestMigrateLegacyMySQL_PortStringValueAccepted(t *testing.T) {
 	require.Equal(t, []byte("3308"), secret.Data["port"])
 }
 
-func TestParseBucketName(t *testing.T) {
-	cases := []struct {
-		name                string
-		endpoint, port, bkt string
-	}{
-		{"", "", "", ""},
-		{"my-bucket", "", "", "my-bucket"},
-		{"minio.example.com/wandb", "minio.example.com", "", "wandb"},
-		{"minio.example.com:9000/wandb", "minio.example.com", "9000", "wandb"},
-		{"minio:9000/wandb", "minio", "9000", "wandb"},
-		{"minio.minio.svc.cluster.local:9000/bucket", "minio.minio.svc.cluster.local", "9000", "bucket"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			e, p, b := parseBucketName(tc.name)
-			require.Equal(t, tc.endpoint, e)
-			require.Equal(t, tc.port, p)
-			require.Equal(t, tc.bkt, b)
-		})
-	}
-}
-
 func TestMigrateLegacyBucket_BareBucketName(t *testing.T) {
 	payload := `{"name":"my-bucket","region":"us-east-1","accessKey":"AKIA","secretKey":"shh"}`
 	client, wandb := newMigrationFixture(t, map[string]string{
@@ -430,8 +427,10 @@ func TestMigrateLegacyBucket_BareBucketName(t *testing.T) {
 	require.Equal(t, []byte("shh"), secret.Data["secretKey"])
 	require.NotContains(t, secret.Data, "endpoint")
 	require.NotContains(t, secret.Data, "port")
+	require.Equal(t, []byte("false"), secret.Data["forcePathStyle"], "bare name means native AWS, virtual-hosted")
+	require.NotContains(t, secret.Data, "tlsEnabled", "tls is meaningless without a custom endpoint")
 
-	conn := wandb.Spec.ObjectStore.ExternalObjectStore
+	conn := wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ExternalObjectStore
 	require.NotNil(t, conn)
 	require.Equal(t, "bucket", conn.Bucket.Key)
 	require.Equal(t, "region", conn.Region.Key)
@@ -439,6 +438,7 @@ func TestMigrateLegacyBucket_BareBucketName(t *testing.T) {
 	require.Equal(t, "secretKey", conn.SecretKey.Key)
 	require.Empty(t, conn.Endpoint.Name)
 	require.Empty(t, conn.Port.Name)
+	require.Equal(t, "forcePathStyle", conn.ForcePathStyle.Key)
 }
 
 func TestMigrateLegacyBucket_EmbeddedEndpoint(t *testing.T) {
@@ -455,11 +455,278 @@ func TestMigrateLegacyBucket_EmbeddedEndpoint(t *testing.T) {
 	require.Equal(t, []byte("minio.minio.svc"), secret.Data["endpoint"])
 	require.Equal(t, []byte("9000"), secret.Data["port"])
 	require.Equal(t, []byte("wandb-bucket"), secret.Data["bucket"])
+	require.Equal(t, []byte("true"), secret.Data["forcePathStyle"], "custom endpoint requires path-style")
+	require.Equal(t, []byte("false"), secret.Data["tlsEnabled"], "gorilla defaulted custom endpoints to http")
 
-	conn := wandb.Spec.ObjectStore.ExternalObjectStore
+	conn := wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ExternalObjectStore
 	require.Equal(t, "endpoint", conn.Endpoint.Key)
 	require.Equal(t, "port", conn.Port.Key)
 	require.Equal(t, "bucket", conn.Bucket.Key)
+	require.Equal(t, "forcePathStyle", conn.ForcePathStyle.Key)
+	require.Equal(t, "tlsEnabled", conn.TlsEnabled.Key)
+}
+
+func TestMigrateLegacyBucket_HostPortEndpointWithBucketInPath(t *testing.T) {
+	payload := `{
+  "provider": "s3",
+  "name": "minio.minio.svc.cluster.local:9000",
+  "path": "lsahu-minio-bucket",
+  "region": "us-east-1"
+}`
+	client, wandb := newMigrationFixture(t, map[string]string{
+		apiv1.BucketPendingAnnotation: payload,
+	}, func(w *apiv2.WeightsAndBiases) {
+		w.Spec.ObjectStore = map[string]apiv2.ObjectStoreSpec{
+			apiv2.DefaultInstanceName: {
+				ExternalObjectStore: &apiv2.ObjectStoreConnection{
+					AccessKey: secretSelector("wandb-minio", "ACCESS_KEY"),
+					SecretKey: secretSelector("wandb-minio", "SECRET_KEY"),
+				},
+			},
+		}
+	})
+
+	res, err := migrateLegacyAnnotations(context.Background(), client, wandb)
+	require.NoError(t, err)
+	require.NotZero(t, res.RequeueAfter)
+
+	secret, err := getBucketConvertedSecret(t, client)
+	require.NoError(t, err)
+	require.Equal(t, []byte("minio.minio.svc.cluster.local"), secret.Data["endpoint"])
+	require.Equal(t, []byte("9000"), secret.Data["port"])
+	require.Equal(t, []byte("lsahu-minio-bucket"), secret.Data["bucket"])
+	require.Equal(t, []byte("us-east-1"), secret.Data["region"])
+	require.Equal(t, []byte("true"), secret.Data["forcePathStyle"])
+	require.Equal(t, []byte("false"), secret.Data["tlsEnabled"])
+	require.NotContains(t, secret.Data, "path")
+	require.NotContains(t, secret.Data, "accessKey")
+	require.NotContains(t, secret.Data, "secretKey")
+
+	var fresh apiv2.WeightsAndBiases
+	require.NoError(t, client.Get(context.Background(), types.NamespacedName{Name: "wandb", Namespace: "default"}, &fresh))
+	require.NotContains(t, fresh.Annotations, apiv1.BucketPendingAnnotation)
+
+	conn := fresh.Spec.ObjectStore[apiv2.DefaultInstanceName].ExternalObjectStore
+	require.Equal(t, secretSelector("wandb-bucket-converted", "endpoint"), conn.Endpoint)
+	require.Equal(t, secretSelector("wandb-bucket-converted", "port"), conn.Port)
+	require.Equal(t, secretSelector("wandb-bucket-converted", "bucket"), conn.Bucket)
+	require.Equal(t, secretSelector("wandb-bucket-converted", "region"), conn.Region)
+	require.Equal(t, secretSelector("wandb-bucket-converted", "forcePathStyle"), conn.ForcePathStyle)
+	require.Equal(t, secretSelector("wandb-bucket-converted", "tlsEnabled"), conn.TlsEnabled)
+	require.Empty(t, conn.Path.Name)
+	require.Equal(t, secretSelector("wandb-minio", "ACCESS_KEY"), conn.AccessKey)
+	require.Equal(t, secretSelector("wandb-minio", "SECRET_KEY"), conn.SecretKey)
+}
+
+func TestMigrateLegacyBucket_HostPortEndpointWithBucketAndPrefixInPath(t *testing.T) {
+	payload := `{
+  "provider": "s3",
+  "name": "minio.minio.svc.cluster.local:9000",
+  "path": "/lsahu-minio-bucket/team/project/",
+  "region": "us-east-1"
+}`
+	client, wandb := newMigrationFixture(t, map[string]string{
+		apiv1.BucketPendingAnnotation: payload,
+	}, nil)
+
+	_, err := migrateLegacyAnnotations(context.Background(), client, wandb)
+	require.NoError(t, err)
+
+	secret, err := getBucketConvertedSecret(t, client)
+	require.NoError(t, err)
+	require.Equal(t, []byte("minio.minio.svc.cluster.local"), secret.Data["endpoint"])
+	require.Equal(t, []byte("9000"), secret.Data["port"])
+	require.Equal(t, []byte("lsahu-minio-bucket"), secret.Data["bucket"])
+	require.Equal(t, []byte("team/project"), secret.Data["path"])
+
+	conn := wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ExternalObjectStore
+	require.Equal(t, "bucket", conn.Bucket.Key)
+	require.Equal(t, "path", conn.Path.Key)
+}
+
+func TestMigrateLegacyBucket_AWSBucketWithPathIsNotEndpoint(t *testing.T) {
+	payload := `{"provider":"s3","name":"my-aws-bucket","path":"prefix","region":"us-east-1"}`
+	client, wandb := newMigrationFixture(t, map[string]string{
+		apiv1.BucketPendingAnnotation: payload,
+	}, nil)
+
+	_, err := migrateLegacyAnnotations(context.Background(), client, wandb)
+	require.NoError(t, err)
+
+	secret, err := getBucketConvertedSecret(t, client)
+	require.NoError(t, err)
+	require.Equal(t, []byte("my-aws-bucket"), secret.Data["bucket"])
+	require.Equal(t, []byte("prefix"), secret.Data["path"])
+	require.NotContains(t, secret.Data, "endpoint")
+	require.NotContains(t, secret.Data, "port")
+	require.Equal(t, []byte("false"), secret.Data["forcePathStyle"])
+	require.NotContains(t, secret.Data, "tlsEnabled")
+}
+
+func TestMigrateLegacyBucket_HostPortEndpointNoProvider(t *testing.T) {
+	payload := `{"name":"minio.minio.svc:9000","path":"wandb-bucket","region":"us-east-1"}`
+	client, wandb := newMigrationFixture(t, map[string]string{
+		apiv1.BucketPendingAnnotation: payload,
+	}, nil)
+
+	_, err := migrateLegacyAnnotations(context.Background(), client, wandb)
+	require.NoError(t, err)
+
+	secret, err := getBucketConvertedSecret(t, client)
+	require.NoError(t, err)
+	require.Equal(t, []byte("minio.minio.svc"), secret.Data["endpoint"], "host:port name is an endpoint even without a provider")
+	require.Equal(t, []byte("9000"), secret.Data["port"])
+	require.Equal(t, []byte("wandb-bucket"), secret.Data["bucket"])
+	require.Equal(t, []byte("true"), secret.Data["forcePathStyle"])
+	require.Equal(t, []byte("false"), secret.Data["tlsEnabled"])
+	require.NotContains(t, secret.Data, "path")
+}
+
+func TestMigrateLegacyBucket_HostPortEndpointQueryInPath(t *testing.T) {
+	payload := `{"provider":"s3","name":"minio.example.com:9000","path":"wandb-bucket/team?tls=true"}`
+	client, wandb := newMigrationFixture(t, map[string]string{
+		apiv1.BucketPendingAnnotation: payload,
+	}, nil)
+
+	_, err := migrateLegacyAnnotations(context.Background(), client, wandb)
+	require.NoError(t, err)
+
+	secret, err := getBucketConvertedSecret(t, client)
+	require.NoError(t, err)
+	require.Equal(t, []byte("minio.example.com"), secret.Data["endpoint"])
+	require.Equal(t, []byte("9000"), secret.Data["port"])
+	require.Equal(t, []byte("wandb-bucket"), secret.Data["bucket"])
+	require.Equal(t, []byte("team"), secret.Data["path"], "query is stripped, the prefix survives")
+	require.Equal(t, []byte("true"), secret.Data["tlsEnabled"], "?tls= on the path still wins")
+}
+
+func TestMigrateLegacyBucket_HostPortEndpointIPv6(t *testing.T) {
+	payload := `{"provider":"s3","name":"[fd00::1]:9000","path":"wandb-bucket"}`
+	client, wandb := newMigrationFixture(t, map[string]string{
+		apiv1.BucketPendingAnnotation: payload,
+	}, nil)
+
+	_, err := migrateLegacyAnnotations(context.Background(), client, wandb)
+	require.NoError(t, err)
+
+	secret, err := getBucketConvertedSecret(t, client)
+	require.NoError(t, err)
+	require.Equal(t, []byte("fd00::1"), secret.Data["endpoint"])
+	require.Equal(t, []byte("9000"), secret.Data["port"])
+	require.Equal(t, []byte("wandb-bucket"), secret.Data["bucket"])
+}
+
+func TestMigrateLegacyBucket_QueryParamOverrides(t *testing.T) {
+	payload := `{"provider":"s3","name":"minio.example.com:9000/wandb","region":"us-east-1","path":"prefix?tls=true&forcePathStyle=false&region=eu-west-1"}`
+	client, wandb := newMigrationFixture(t, map[string]string{
+		apiv1.BucketPendingAnnotation: payload,
+	}, nil)
+
+	_, err := migrateLegacyAnnotations(context.Background(), client, wandb)
+	require.NoError(t, err)
+
+	secret, err := getBucketConvertedSecret(t, client)
+	require.NoError(t, err)
+	require.Equal(t, []byte("minio.example.com"), secret.Data["endpoint"])
+	require.Equal(t, []byte("wandb"), secret.Data["bucket"])
+	require.Equal(t, []byte("false"), secret.Data["forcePathStyle"], "explicit ?forcePathStyle= wins over the endpoint rule")
+	require.Equal(t, []byte("true"), secret.Data["tlsEnabled"], "explicit ?tls= wins over the http default")
+	require.Equal(t, []byte("eu-west-1"), secret.Data["region"], "?region= beats the region field, matching gorilla")
+	require.Equal(t, []byte("prefix"), secret.Data["path"], "the prefix survives with its query stripped")
+}
+
+func TestMigrateLegacyBucket_PathPrefix(t *testing.T) {
+	payload := `{"name":"minio.example.com:9000/wandb","path":"wandb-files/"}`
+	client, wandb := newMigrationFixture(t, map[string]string{
+		apiv1.BucketPendingAnnotation: payload,
+	}, nil)
+
+	_, err := migrateLegacyAnnotations(context.Background(), client, wandb)
+	require.NoError(t, err)
+
+	secret, err := getBucketConvertedSecret(t, client)
+	require.NoError(t, err)
+	require.Equal(t, []byte("wandb-files"), secret.Data["path"])
+
+	conn := wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ExternalObjectStore
+	require.Equal(t, "path", conn.Path.Key)
+}
+
+func TestMigrateLegacyBucket_QueryOnlyPath(t *testing.T) {
+	payload := `{"name":"my-bucket","path":"?forcePathStyle=true"}`
+	client, wandb := newMigrationFixture(t, map[string]string{
+		apiv1.BucketPendingAnnotation: payload,
+	}, nil)
+
+	_, err := migrateLegacyAnnotations(context.Background(), client, wandb)
+	require.NoError(t, err)
+
+	secret, err := getBucketConvertedSecret(t, client)
+	require.NoError(t, err)
+	require.NotContains(t, secret.Data, "path", "a query-only path carries no prefix")
+	require.Equal(t, []byte("true"), secret.Data["forcePathStyle"], "explicit override applies even without an endpoint")
+}
+
+func TestMigrateLegacyBucket_QueryInName(t *testing.T) {
+	payload := `{"name":"minio.example.com/wandb?tls=true"}`
+	client, wandb := newMigrationFixture(t, map[string]string{
+		apiv1.BucketPendingAnnotation: payload,
+	}, nil)
+
+	_, err := migrateLegacyAnnotations(context.Background(), client, wandb)
+	require.NoError(t, err)
+
+	secret, err := getBucketConvertedSecret(t, client)
+	require.NoError(t, err)
+	require.Equal(t, []byte("wandb"), secret.Data["bucket"], "query must be stripped from the bucket name")
+	require.Equal(t, []byte("true"), secret.Data["forcePathStyle"])
+	require.Equal(t, []byte("true"), secret.Data["tlsEnabled"])
+}
+
+func TestMigrateLegacyBucket_AwsEndpointInName(t *testing.T) {
+	payload := `{"name":"s3.us-east-1.amazonaws.com/my-bucket"}`
+	client, wandb := newMigrationFixture(t, map[string]string{
+		apiv1.BucketPendingAnnotation: payload,
+	}, nil)
+
+	_, err := migrateLegacyAnnotations(context.Background(), client, wandb)
+	require.NoError(t, err)
+
+	secret, err := getBucketConvertedSecret(t, client)
+	require.NoError(t, err)
+	require.Equal(t, []byte("s3.us-east-1.amazonaws.com"), secret.Data["endpoint"])
+	require.Equal(t, []byte("true"), secret.Data["forcePathStyle"],
+		"a host in bucket.name is always an endpoint (prefixes belong in bucket.path) and gets path-style")
+}
+
+func TestMigrateLegacyBucket_CoreWeaveProvider(t *testing.T) {
+	payload := `{"provider":"cw","name":"cwobject.com/my-bucket"}`
+	client, wandb := newMigrationFixture(t, map[string]string{
+		apiv1.BucketPendingAnnotation: payload,
+	}, nil)
+
+	_, err := migrateLegacyAnnotations(context.Background(), client, wandb)
+	require.NoError(t, err)
+
+	secret, err := getBucketConvertedSecret(t, client)
+	require.NoError(t, err)
+	require.Equal(t, []byte("false"), secret.Data["forcePathStyle"], "CoreWeave object storage is virtual-hosted")
+	require.Equal(t, []byte("true"), secret.Data["tlsEnabled"], "CoreWeave object storage is https")
+}
+
+func TestMigrateLegacyBucket_NonS3ProviderSkipsAddressing(t *testing.T) {
+	payload := `{"provider":"gcs","name":"my-gcs-bucket"}`
+	client, wandb := newMigrationFixture(t, map[string]string{
+		apiv1.BucketPendingAnnotation: payload,
+	}, nil)
+
+	_, err := migrateLegacyAnnotations(context.Background(), client, wandb)
+	require.NoError(t, err)
+
+	secret, err := getBucketConvertedSecret(t, client)
+	require.NoError(t, err)
+	require.NotContains(t, secret.Data, "forcePathStyle")
+	require.NotContains(t, secret.Data, "tlsEnabled")
 }
 
 func TestMigrateLegacyBucket_PreSetCredentialsRespected(t *testing.T) {
@@ -467,14 +734,18 @@ func TestMigrateLegacyBucket_PreSetCredentialsRespected(t *testing.T) {
 	client, wandb := newMigrationFixture(t, map[string]string{
 		apiv1.BucketPendingAnnotation: payload,
 	}, func(w *apiv2.WeightsAndBiases) {
-		w.Spec.ObjectStore.ExternalObjectStore = &apiv2.ObjectStoreConnection{
-			AccessKey: corev1.SecretKeySelector{
-				LocalObjectReference: corev1.LocalObjectReference{Name: "preset"},
-				Key:                  "ACCESS_KEY",
-			},
-			SecretKey: corev1.SecretKeySelector{
-				LocalObjectReference: corev1.LocalObjectReference{Name: "preset"},
-				Key:                  "SECRET_KEY",
+		w.Spec.ObjectStore = map[string]apiv2.ObjectStoreSpec{
+			apiv2.DefaultInstanceName: {
+				ExternalObjectStore: &apiv2.ObjectStoreConnection{
+					AccessKey: corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: "preset"},
+						Key:                  "ACCESS_KEY",
+					},
+					SecretKey: corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: "preset"},
+						Key:                  "SECRET_KEY",
+					},
+				},
 			},
 		}
 	})
@@ -488,7 +759,7 @@ func TestMigrateLegacyBucket_PreSetCredentialsRespected(t *testing.T) {
 	require.NotContains(t, secret.Data, "secretKey", "webhook-set SecretKey must not be overwritten")
 	require.Contains(t, secret.Data, "bucket")
 
-	conn := wandb.Spec.ObjectStore.ExternalObjectStore
+	conn := wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ExternalObjectStore
 	require.Equal(t, "preset", conn.AccessKey.Name)
 	require.Equal(t, "preset", conn.SecretKey.Name)
 	require.Equal(t, "wandb-bucket-converted", conn.Bucket.Name)
@@ -506,7 +777,7 @@ func TestMigrateLegacyBucket_UnknownFieldsIgnored(t *testing.T) {
 	secret, err := getBucketConvertedSecret(t, client)
 	require.NoError(t, err)
 	require.NotContains(t, secret.Data, "provider")
-	require.NotContains(t, secret.Data, "path")
+	require.Equal(t, []byte("sub/path"), secret.Data["path"])
 	require.NotContains(t, secret.Data, "kmsKey")
 }
 
@@ -517,7 +788,7 @@ func TestMigrateLegacyBucket_MalformedJSON(t *testing.T) {
 	_, err := migrateLegacyAnnotations(context.Background(), client, wandb)
 	require.Error(t, err)
 	require.Contains(t, wandb.Annotations, apiv1.BucketPendingAnnotation)
-	require.Nil(t, wandb.Spec.ObjectStore.ExternalObjectStore)
+	require.Nil(t, wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ExternalObjectStore)
 }
 
 func TestMigrateLegacyOIDC_AllLiterals(t *testing.T) {
@@ -580,4 +851,121 @@ func TestMigrateLegacyOIDC_MalformedJSON(t *testing.T) {
 	_, err := migrateLegacyAnnotations(context.Background(), client, wandb)
 	require.Error(t, err)
 	require.Contains(t, wandb.Annotations, apiv1.OIDCPendingAnnotation)
+}
+
+func TestMigrateLegacyClickHouse_FullLiteralPayload(t *testing.T) {
+	payload := `{"host":"clickhouse.example.com","port":8123,"database":"weave","user":"weave","password":"shh"}`
+	client, wandb := newMigrationFixture(t, map[string]string{
+		apiv1.ClickHousePendingAnnotation: payload,
+	}, nil)
+
+	res, err := migrateLegacyAnnotations(context.Background(), client, wandb)
+	require.NoError(t, err)
+	require.NotZero(t, res.RequeueAfter)
+
+	secret, err := getClickHouseConvertedSecret(t, client)
+	require.NoError(t, err)
+	require.Equal(t, corev1.SecretTypeOpaque, secret.Type)
+	require.Equal(t, []byte("clickhouse.example.com"), secret.Data["host"])
+	require.Equal(t, []byte("8123"), secret.Data["httpPort"])
+	require.Equal(t, []byte("weave"), secret.Data["database"])
+	require.Equal(t, []byte("weave"), secret.Data["username"])
+	require.Equal(t, []byte("shh"), secret.Data["password"])
+
+	var fresh apiv2.WeightsAndBiases
+	require.NoError(t, client.Get(context.Background(), types.NamespacedName{Name: "wandb", Namespace: "default"}, &fresh))
+	require.NotContains(t, fresh.Annotations, apiv1.ClickHousePendingAnnotation)
+	conn := fresh.Spec.ClickHouse[apiv2.DefaultInstanceName].ExternalClickHouse
+	require.NotNil(t, conn)
+	require.Nil(t, fresh.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse)
+	require.Equal(t, "wandb-clickhouse-converted", conn.Host.Name)
+	require.Equal(t, "host", conn.Host.Key)
+	require.Equal(t, "httpPort", conn.HTTPPort.Key)
+	require.Equal(t, "database", conn.Database.Key)
+	require.Equal(t, "username", conn.Username.Key)
+	require.Equal(t, "password", conn.Password.Key)
+	require.Empty(t, conn.TCPPort.Name)
+	require.Empty(t, conn.URL.Name)
+}
+
+func TestMigrateLegacyClickHouse_PartialPayload(t *testing.T) {
+	payload := `{"host":"clickhouse.example.com","password":"shh"}`
+	client, wandb := newMigrationFixture(t, map[string]string{
+		apiv1.ClickHousePendingAnnotation: payload,
+	}, nil)
+
+	res, err := migrateLegacyAnnotations(context.Background(), client, wandb)
+	require.NoError(t, err)
+	require.NotZero(t, res.RequeueAfter)
+
+	secret, err := getClickHouseConvertedSecret(t, client)
+	require.NoError(t, err)
+	require.Contains(t, secret.Data, "host")
+	require.Contains(t, secret.Data, "password")
+	require.NotContains(t, secret.Data, "httpPort")
+	require.NotContains(t, secret.Data, "database")
+	require.NotContains(t, secret.Data, "username")
+
+	conn := wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ExternalClickHouse
+	require.NotNil(t, conn)
+	require.Equal(t, "host", conn.Host.Key)
+	require.Equal(t, "password", conn.Password.Key)
+	require.Empty(t, conn.HTTPPort.Name)
+	require.Empty(t, conn.Database.Name)
+	require.Empty(t, conn.Username.Name)
+}
+
+// TestMigrateLegacyClickHouse_PreSetFieldsAreRespected: preset selectors are
+// not overwritten by the annotation drain.
+func TestMigrateLegacyClickHouse_PreSetFieldsAreRespected(t *testing.T) {
+	payload := `{"host":"clickhouse.example.com","password":"shh"}`
+	client, wandb := newMigrationFixture(t, map[string]string{
+		apiv1.ClickHousePendingAnnotation: payload,
+	}, func(w *apiv2.WeightsAndBiases) {
+		w.Spec.ClickHouse = map[string]apiv2.ClickHouseSpec{
+			apiv2.DefaultInstanceName: {
+				ExternalClickHouse: &apiv2.ClickHouseConnection{
+					Password: corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: "preset-ch"},
+						Key:                  "PRESET",
+					},
+				},
+			},
+		}
+	})
+
+	_, err := migrateLegacyAnnotations(context.Background(), client, wandb)
+	require.NoError(t, err)
+
+	secret, err := getClickHouseConvertedSecret(t, client)
+	require.NoError(t, err)
+	require.Contains(t, secret.Data, "host")
+	require.NotContains(t, secret.Data, "password", "preset password selector must be respected")
+
+	conn := wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ExternalClickHouse
+	require.Equal(t, "preset-ch", conn.Password.Name)
+	require.Equal(t, "PRESET", conn.Password.Key)
+}
+
+func TestMigrateLegacyClickHouse_PortStringified(t *testing.T) {
+	payload := `{"port":"8123"}`
+	client, wandb := newMigrationFixture(t, map[string]string{
+		apiv1.ClickHousePendingAnnotation: payload,
+	}, nil)
+
+	_, err := migrateLegacyAnnotations(context.Background(), client, wandb)
+	require.NoError(t, err)
+
+	secret, err := getClickHouseConvertedSecret(t, client)
+	require.NoError(t, err)
+	require.Equal(t, []byte("8123"), secret.Data["httpPort"])
+}
+
+func TestMigrateLegacyClickHouse_MalformedJSON(t *testing.T) {
+	client, wandb := newMigrationFixture(t, map[string]string{
+		apiv1.ClickHousePendingAnnotation: "{not json",
+	}, nil)
+	_, err := migrateLegacyAnnotations(context.Background(), client, wandb)
+	require.Error(t, err)
+	require.Contains(t, wandb.Annotations, apiv1.ClickHousePendingAnnotation)
 }

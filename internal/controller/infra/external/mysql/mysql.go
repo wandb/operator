@@ -16,13 +16,27 @@ import (
 )
 
 const ConnectionSecretName = "wandb-mysql-connection"
+const caCertPath = "/etc/ssl/certs/mysql_ca.pem"
+const sslCertPath = "/etc/ssl/certs/mysql_ssl_cert.pem"
+const sslKeyPath = "/etc/ssl/certs/mysql_ssl_key.pem"
+
+// connectionSecretName returns the connection secret name for an instance. The
+// reserved default instance keeps the historical name for backward
+// compatibility; other instances are suffixed with their key.
+func connectionSecretName(key string) string {
+	if key == "" || key == apiv2.DefaultInstanceName {
+		return ConnectionSecretName
+	}
+	return fmt.Sprintf("%s-%s", ConnectionSecretName, key)
+}
 
 func WriteState(
 	ctx context.Context,
 	c client.Client,
 	wandb *apiv2.WeightsAndBiases,
+	key string,
+	spec *apiv2.MysqlConnection,
 ) []metav1.Condition {
-	spec := wandb.Spec.MySQL.ExternalMysql
 	logger := ctrl.LoggerFrom(ctx)
 
 	fields := map[string]corev1.SecretKeySelector{
@@ -53,10 +67,27 @@ func WriteState(
 		User:   url.UserPassword(data["Username"], data["Password"]),
 		Path:   data["Database"],
 	}
+	values := dbUrl.Query()
+	if tls, ok := data["Tls"]; ok {
+		values.Set("tls", tls)
+	}
+	if _, ok := data["SslCa"]; ok {
+		if values.Get("tls") == "" {
+			values.Set("tls", "custom")
+		}
+		values.Set("ssl-ca", caCertPath)
+	}
+	if _, ok := data["SslCert"]; ok {
+		values.Set("ssl-cert", sslCertPath)
+	}
+	if _, ok := data["SslKey"]; ok {
+		values.Set("ssl-key", sslKeyPath)
+	}
+	dbUrl.RawQuery = values.Encode()
 
 	data["url"] = dbUrl.String()
 
-	nsName := types.NamespacedName{Namespace: wandb.Namespace, Name: ConnectionSecretName}
+	nsName := types.NamespacedName{Namespace: wandb.Namespace, Name: connectionSecretName(key)}
 	return external.WriteConnectionSecret(ctx, c, wandb, nsName, data)
 }
 
@@ -64,9 +95,10 @@ func ReadState(
 	ctx context.Context,
 	c client.Client,
 	wandb *apiv2.WeightsAndBiases,
+	key string,
 	newConditions []metav1.Condition,
 ) ([]metav1.Condition, *apiv2.MysqlConnection) {
-	nsName := types.NamespacedName{Namespace: wandb.Namespace, Name: ConnectionSecretName}
+	nsName := types.NamespacedName{Namespace: wandb.Namespace, Name: connectionSecretName(key)}
 	_, conditions, found := external.ReadConnectionSecret(ctx, c, nsName, newConditions)
 	if !found {
 		return conditions, nil
@@ -87,9 +119,9 @@ func ReadState(
 	}
 }
 
-func DeleteConnectionSecret(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases) error {
+func DeleteConnectionSecret(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, key string) error {
 	return external.DeleteConnectionSecret(ctx, c, types.NamespacedName{
 		Namespace: wandb.Namespace,
-		Name:      ConnectionSecretName,
+		Name:      connectionSecretName(key),
 	})
 }

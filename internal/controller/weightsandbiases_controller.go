@@ -66,6 +66,8 @@ type WeightsAndBiasesReconciler struct {
 //+kubebuilder:rbac:groups=batch,resources=cronjobs;jobs,verbs=get;list;watch;create;delete;update;patch
 //+kubebuilder:rbac:groups=clickhouse.altinity.com,resources=clickhouseinstallations,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=clickhouse.altinity.com,resources=clickhouseinstallations/status,verbs=get
+//+kubebuilder:rbac:groups=clickhouse-keeper.altinity.com,resources=clickhousekeeperinstallations,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=clickhouse-keeper.altinity.com,resources=clickhousekeeperinstallations/status,verbs=get
 //+kubebuilder:rbac:groups=cloud.google.com,resources=backendconfigs,verbs=update;delete;get;list;patch;create;watch
 //+kubebuilder:rbac:groups=events.k8s.io,resources=events,verbs=list;watch
 //+kubebuilder:rbac:groups=grafana.integreatly.org,resources=grafanas;grafanadashboards;grafanadatasources,verbs=get;list;watch
@@ -86,6 +88,7 @@ type WeightsAndBiasesReconciler struct {
 //+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles;rolebindings;clusterroles;clusterrolebindings,verbs=update;delete;get;list;patch;create;watch
 //+kubebuilder:rbac:groups=redis.redis.opstreelabs.in,resources=redis;redissentinels;redisreplications,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=redis.redis.opstreelabs.in,resources=redis/status,verbs=get
+//+kubebuilder:rbac:groups=security.openshift.io,resources=securitycontextconstraints,resourceNames=nonroot-v2,verbs=use
 //+kubebuilder:rbac:urls=/metrics,verbs=get
 
 // Deprecated/Erroneously required RBAC rules
@@ -132,7 +135,10 @@ func (r *WeightsAndBiasesReconciler) Delete(e event.DeleteEvent) bool {
 func (r *WeightsAndBiasesReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	var b = ctrl.NewControllerManagedBy(mgr).
 		For(&apiv2.WeightsAndBiases{}).
-		Owns(&apiv2.Application{}).
+		// Applications carry plain (non-controller) owner refs; without
+		// MatchEveryOwner this watch never fires and app status changes stop
+		// refreshing status.wandb.applications once the estate settles.
+		Owns(&apiv2.Application{}, builder.MatchEveryOwner).
 		Owns(&batchv1.Job{}).
 		Owns(&corev1.Secret{}).
 		Owns(&corev1.ConfigMap{}).

@@ -5,10 +5,11 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
-	"github.com/wandb/operator/internal/controller/infra/external/objectstore"
+	"github.com/wandb/operator/internal/controller/infra/objectstore"
 	"github.com/wandb/operator/pkg/utils"
 	"github.com/wandb/operator/pkg/wandb/manifest"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -33,6 +34,9 @@ const (
 	imageKeyBufstream    = "bufstream"
 	imageKeyEtcd         = "etcd"
 	imageKeyBucketEnsure = "bucketEnsure"
+
+	bucketEnsureMaxAttempts  = 150
+	bucketEnsureDelaySeconds = 2
 )
 
 // BufstreamImage resolves the Bufstream broker image from the manifest, falling
@@ -54,6 +58,8 @@ func BucketEnsureImage(img manifest.ImageRef, globalImageRegistry string) string
 	return resolveImage(img, globalImageRegistry, defaultBucketEnsureImage)
 }
 
+// resolveImage returns the manifest-supplied image, falling back to the given
+// default for older manifests that omit it.
 func resolveImage(img manifest.ImageRef, globalImageRegistry, fallback string) string {
 	if out := img.GetImage(globalImageRegistry); out != "" {
 		return out
@@ -62,14 +68,17 @@ func resolveImage(img manifest.ImageRef, globalImageRegistry, fallback string) s
 	return fallback
 }
 
+// BuildWandbKafkaLabels returns the standard W&B labels for the Kafka module.
 func BuildWandbKafkaLabels(wandb *apiv2.WeightsAndBiases) map[string]string {
 	return common.BuildWandbLabels(wandb, KafkaModuleName)
 }
 
+// ToKafkaOnDeleteRule builds the on-delete retention rule for the Kafka module.
 func ToKafkaOnDeleteRule(wandb *apiv2.WeightsAndBiases, retentionPolicy apiv2.RetentionPolicy) common.OnDeleteRule {
 	return common.ToOnDeleteRule(wandb, retentionPolicy, KafkaModuleName)
 }
 
+// kafkaPodSecurityContext: etcd omits fixed IDs on OpenShift, pins them else.
 func kafkaPodSecurityContext() *corev1.PodSecurityContext {
 	if utils.IsOpenShift() {
 		return &corev1.PodSecurityContext{
@@ -77,7 +86,25 @@ func kafkaPodSecurityContext() *corev1.PodSecurityContext {
 			SeccompProfile: kafkaRuntimeDefaultSeccompProfile(),
 		}
 	}
+	return bufstreamPodSecurityContext()
+}
 
+// kafkaContainerSecurityContext returns the container security context, dropping
+// the fixed UID/GID on OpenShift where the platform assigns them.
+func kafkaContainerSecurityContext() *corev1.SecurityContext {
+	if utils.IsOpenShift() {
+		return &corev1.SecurityContext{
+			RunAsNonRoot:             ptr.To(true),
+			AllowPrivilegeEscalation: ptr.To(false),
+			Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{kafkaCapabilityAll}},
+			SeccompProfile:           kafkaRuntimeDefaultSeccompProfile(),
+		}
+	}
+	return bufstreamContainerSecurityContext()
+}
+
+// bufstreamPodSecurityContext pins UID/GID 65532 (its 0700 binary needs it).
+func bufstreamPodSecurityContext() *corev1.PodSecurityContext {
 	return &corev1.PodSecurityContext{
 		RunAsUser:           ptr.To(kafkaRunAsUser),
 		RunAsGroup:          ptr.To(kafkaRunAsGroup),
@@ -88,22 +115,20 @@ func kafkaPodSecurityContext() *corev1.PodSecurityContext {
 	}
 }
 
-func kafkaContainerSecurityContext() *corev1.SecurityContext {
-	securityContext := &corev1.SecurityContext{
+// bufstreamContainerSecurityContext pins UID/GID 65532, which the broker's 0700
+// binary requires, and drops all capabilities.
+func bufstreamContainerSecurityContext() *corev1.SecurityContext {
+	return &corev1.SecurityContext{
+		RunAsUser:                ptr.To(kafkaRunAsUser),
+		RunAsGroup:               ptr.To(kafkaRunAsGroup),
 		RunAsNonRoot:             ptr.To(true),
 		AllowPrivilegeEscalation: ptr.To(false),
-		Capabilities: &corev1.Capabilities{
-			Drop: []corev1.Capability{kafkaCapabilityAll},
-		},
-		SeccompProfile: kafkaRuntimeDefaultSeccompProfile(),
+		Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{kafkaCapabilityAll}},
+		SeccompProfile:           kafkaRuntimeDefaultSeccompProfile(),
 	}
-	if !utils.IsOpenShift() {
-		securityContext.RunAsUser = ptr.To(kafkaRunAsUser)
-		securityContext.RunAsGroup = ptr.To(kafkaRunAsGroup)
-	}
-	return securityContext
 }
 
+// kafkaRuntimeDefaultSeccompProfile returns the RuntimeDefault seccomp profile.
 func kafkaRuntimeDefaultSeccompProfile() *corev1.SeccompProfile {
 	return &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault}
 }
@@ -115,6 +140,8 @@ func sameNamespace(wandb *apiv2.WeightsAndBiases, nsnBuilder *NsNameBuilder) boo
 	return wandb.Namespace == nsnBuilder.Namespace()
 }
 
+// setOwner sets the WeightsAndBiases controller reference on obj, but only when
+// it shares the CR's namespace, since owner references are namespace-scoped.
 func setOwner(wandb *apiv2.WeightsAndBiases, obj metav1.Object, nsnBuilder *NsNameBuilder, scheme *runtime.Scheme) error {
 	if !sameNamespace(wandb, nsnBuilder) {
 		return nil
@@ -122,6 +149,7 @@ func setOwner(wandb *apiv2.WeightsAndBiases, obj metav1.Object, nsnBuilder *NsNa
 	return ctrl.SetControllerReference(wandb, obj, scheme)
 }
 
+// intstrFromInt converts a port number to an IntOrString for service/probe specs.
 func intstrFromInt(port int) intstr.IntOrString {
 	return intstr.FromInt32(int32(port))
 }
@@ -192,6 +220,64 @@ func ToConfigMap(
 	return cm, nil
 }
 
+// ToServiceAccount builds the dedicated etcd/Bufstream SA for the SCC grant.
+func ToServiceAccount(
+	wandb *apiv2.WeightsAndBiases,
+	nsnBuilder *NsNameBuilder,
+	storage objectstore.ConnInfo,
+	scheme *runtime.Scheme,
+) (*corev1.ServiceAccount, error) {
+	spec := wandb.Spec.Kafka.ManagedKafka
+	if spec.ServiceAccount.Create != nil && !*spec.ServiceAccount.Create {
+		return nil, nil
+	}
+
+	sa := &corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        kafkaServiceAccountName(spec),
+			Namespace:   nsnBuilder.Namespace(),
+			Labels:      BuildWandbKafkaLabels(wandb),
+			Annotations: spec.ServiceAccount.Annotations,
+		},
+		AutomountServiceAccountToken: ptr.To(!storage.HasStaticCredentials()),
+	}
+	if err := setOwner(wandb, sa, nsnBuilder, scheme); err != nil {
+		return nil, err
+	}
+	return sa, nil
+}
+
+// ToSccRoleBinding binds the Kafka SA to nonroot-v2 for UID 65532 (OpenShift).
+func ToSccRoleBinding(
+	wandb *apiv2.WeightsAndBiases,
+	nsnBuilder *NsNameBuilder,
+	scheme *runtime.Scheme,
+) (*rbacv1.RoleBinding, error) {
+	rb := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      nsnBuilder.SccRoleBindingName(),
+			Namespace: nsnBuilder.Namespace(),
+			Labels:    BuildWandbKafkaLabels(wandb),
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: rbacv1.GroupName,
+			Kind:     "ClusterRole",
+			Name:     nonRootV2SCCClusterRole,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      kafkaServiceAccountName(wandb.Spec.Kafka.ManagedKafka),
+				Namespace: nsnBuilder.Namespace(),
+			},
+		},
+	}
+	if err := setOwner(wandb, rb, nsnBuilder, scheme); err != nil {
+		return nil, err
+	}
+	return rb, nil
+}
+
 // ToEtcdApplication builds the Application CR that deploys etcd as a highly
 // available StatefulSet: an odd-sized cluster (EtcdReplicas) fronted by a
 // headless Service that gives each member a stable peer DNS identity.
@@ -250,9 +336,11 @@ func ToEtcdApplication(
 			},
 			PodTemplate: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
-					SecurityContext: kafkaPodSecurityContext(),
-					Affinity:        spreadAffinity(wandb, infraSpec.ManagedInfraSpec, labels),
-					Tolerations:     tolerations(wandb, infraSpec.ManagedInfraSpec),
+					ServiceAccountName:           kafkaServiceAccountName(infraSpec),
+					AutomountServiceAccountToken: ptr.To(false),
+					SecurityContext:              kafkaPodSecurityContext(),
+					Affinity:                     spreadAffinity(wandb, infraSpec.ManagedInfraSpec, labels),
+					Tolerations:                  tolerations(wandb, infraSpec.ManagedInfraSpec),
 					Containers: []corev1.Container{
 						{
 							Name:            "etcd",
@@ -351,21 +439,26 @@ func spreadAffinity(wandb *apiv2.WeightsAndBiases, spec apiv2.ManagedInfraSpec, 
 func bucketEnsureContainer(nsnBuilder *NsNameBuilder, storage objectstore.ConnInfo, img manifest.ImageRef, globalImageRegistry string) corev1.Container {
 	region := storage.Region
 	if region == "" {
-		region = "us-east-1"
+		region = objectstore.DefaultRegion
 	}
 	credsName := nsnBuilder.CredentialsName()
-	// head-bucket succeeds when the bucket already exists; otherwise create it.
-	// Both paths tolerate concurrent creation by other brokers.
-	script := fmt.Sprintf(
-		"aws --endpoint-url %q s3api head-bucket --bucket %q || "+
-			"aws --endpoint-url %q s3api create-bucket --bucket %q",
-		storage.Endpoint, storage.Bucket, storage.Endpoint, storage.Bucket,
-	)
+	// Retry in this process so transient DNS and API startup failures do not
+	// become init-container restarts subject to kubelet exponential backoff.
+	script := fmt.Sprintf(`attempt=1
+while [ "$attempt" -le %d ]; do
+  if { aws --endpoint-url "$1" s3api head-bucket --bucket "$2" || aws --endpoint-url "$1" s3api create-bucket --bucket "$2"; } >/dev/null 2>&1; then
+    exit 0
+  fi
+  attempt=$((attempt + 1))
+  if [ "$attempt" -le %d ]; then sleep %d; fi
+done
+echo 'object-store bucket did not become ready before timeout' >&2
+exit 1`, bucketEnsureMaxAttempts, bucketEnsureMaxAttempts, bucketEnsureDelaySeconds)
 	return corev1.Container{
 		Name:            "ensure-bucket",
 		Image:           BucketEnsureImage(img, globalImageRegistry),
 		Command:         []string{"/bin/sh", "-c"},
-		Args:            []string{script},
+		Args:            []string{script, "ensure-bucket", storage.EndpointURL(), storage.Bucket},
 		SecurityContext: kafkaContainerSecurityContext(),
 		Env: []corev1.EnvVar{
 			{Name: "AWS_REGION", Value: region},
@@ -421,10 +514,9 @@ func storageCredentialEnv(nsnBuilder *NsNameBuilder, storage objectstore.ConnInf
 	}
 }
 
-// needsBucketEnsure reports whether to run the S3 bucket-creation init
-// container. It only applies to S3-compatible endpoints (SeaweedFS, MinIO),
-// which is where the operator provisions the bucket; AWS S3, GCS, and Azure
-// buckets are expected to already exist.
+// needsBucketEnsure reports whether a connection supports the managed
+// S3 bucket initializer. The caller separately verifies that the selected
+// object store is operator-managed so BYOB endpoints are never mutated.
 func needsBucketEnsure(storage objectstore.ConnInfo) bool {
 	return storage.Provider == apiv2.ObjectStoreProviderS3 && storage.Endpoint != ""
 }
@@ -449,6 +541,7 @@ func ToBufstreamApplication(
 	wandb *apiv2.WeightsAndBiases,
 	nsnBuilder *NsNameBuilder,
 	storage objectstore.ConnInfo,
+	ensureBucket bool,
 	scheme *runtime.Scheme,
 	mfst manifest.Manifest,
 ) (*apiv2.Application, error) {
@@ -461,7 +554,7 @@ func ToBufstreamApplication(
 		Name:            "bufstream",
 		Image:           BufstreamImage(mfst.Kafka.Images[imageKeyBufstream], wandb.Spec.Global.ImageRegistry),
 		Args:            []string{"serve", "--config", fmt.Sprintf("%s/%s", ConfigMountPath, ConfigFileName)},
-		SecurityContext: kafkaContainerSecurityContext(),
+		SecurityContext: bufstreamContainerSecurityContext(),
 		Ports: []corev1.ContainerPort{
 			{Name: "kafka", ContainerPort: KafkaListenerPort},
 			{Name: "metrics", ContainerPort: DebugPort},
@@ -477,7 +570,7 @@ func ToBufstreamApplication(
 	}
 
 	var initContainers []corev1.Container
-	if needsBucketEnsure(storage) {
+	if ensureBucket && needsBucketEnsure(storage) {
 		initContainers = append(initContainers, bucketEnsureContainer(nsnBuilder, storage, mfst.Kafka.Images[imageKeyBucketEnsure], wandb.Spec.Global.ImageRegistry))
 	}
 
@@ -497,11 +590,13 @@ func ToBufstreamApplication(
 			},
 			PodTemplate: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
-					SecurityContext: kafkaPodSecurityContext(),
-					Affinity:        spreadAffinity(wandb, infraSpec.ManagedInfraSpec, labels),
-					Tolerations:     tolerations(wandb, infraSpec.ManagedInfraSpec),
-					InitContainers:  initContainers,
-					Containers:      []corev1.Container{container},
+					ServiceAccountName:           kafkaServiceAccountName(infraSpec),
+					AutomountServiceAccountToken: ptr.To(!storage.HasStaticCredentials()),
+					SecurityContext:              bufstreamPodSecurityContext(),
+					Affinity:                     spreadAffinity(wandb, infraSpec.ManagedInfraSpec, labels),
+					Tolerations:                  tolerations(wandb, infraSpec.ManagedInfraSpec),
+					InitContainers:               initContainers,
+					Containers:                   []corev1.Container{container},
 					Volumes: []corev1.Volume{
 						{
 							Name: "config",
@@ -529,4 +624,13 @@ func ToBufstreamApplication(
 		return nil, err
 	}
 	return app, nil
+}
+
+// kafkaServiceAccountName returns the configured ServiceAccount name, defaulting
+// to the spec name when unset.
+func kafkaServiceAccountName(spec *apiv2.ManagedKafkaSpec) string {
+	if spec.ServiceAccount.ServiceAccountName != "" {
+		return spec.ServiceAccount.ServiceAccountName
+	}
+	return spec.Name
 }

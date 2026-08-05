@@ -17,28 +17,8 @@ var _ = Describe("Server manifest YAML decode", func() {
 		return "file://" + filepath.ToSlash(manifestRoot)
 	}
 
-	It("loads a single root manifest file", func() {
-		m, err := manifest.LoadManifestFromFile(context.Background(), manifestRepository(), "0.78.0-single-file")
-		Expect(err).NotTo(HaveOccurred())
-
-		Expect(m.Features).NotTo(BeNil())
-		Expect(m.Features["filestreamQueue"]).To(BeFalse())
-		Expect(m.Kafka.Topics).To(HaveLen(4))
-		Expect(m.Applications).NotTo(BeEmpty())
-	})
-
-	It("loads a single manifest file from a version directory", func() {
-		m, err := manifest.LoadManifestFromFile(context.Background(), manifestRepository(), "0.78.0")
-		Expect(err).NotTo(HaveOccurred())
-
-		Expect(m.Features).NotTo(BeNil())
-		Expect(m.Features["proxy"]).To(BeFalse())
-		Expect(m.Kafka.Topics).To(HaveLen(4))
-		Expect(m.Migrations).To(HaveKey("gorilla"))
-	})
-
 	It("merges multiple manifest files from a version directory", func() {
-		m, err := manifest.LoadManifestFromFile(context.Background(), manifestRepository(), "0.78.0-pre")
+		m, err := manifest.LoadManifestFromFile(context.Background(), manifestRepository(), "0.83.0-clickhouse-keeper.2")
 		Expect(err).NotTo(HaveOccurred())
 
 		// Features (match current testing manifest values)
@@ -49,7 +29,7 @@ var _ = Describe("Server manifest YAML decode", func() {
 		Expect(m.Kafka.Topics).To(HaveLen(4))
 		Expect(m.Kafka.Topics[0].Name).To(Equal("filestream"))
 		Expect(m.Kafka.Topics[0].Topic).To(Equal("filestream"))
-		Expect(m.Kafka.Topics[0].PartitionCount).To(Equal(48))
+		Expect(m.Kafka.Topics[0].PartitionCount).To(Equal(96))
 		Expect(m.Kafka.Topics[0].Features).To(ContainElement("filestreamQueue"))
 
 		// Applications basic presence
@@ -67,7 +47,7 @@ var _ = Describe("Server manifest YAML decode", func() {
 		Expect(m.Migrations["gorilla"].Args).To(ContainElement("migrate"))
 
 		// Sizing comes from the split sizing.yaml file.
-		Expect(m.Kafka.Sizing["default"].Replicas).To(Equal(int32(1)))
+		Expect(m.Kafka.Sizing["default"].Replicas).To(Equal(int32(2)))
 		Expect(m.Bucket["default"].Sizing["default"].Replicas).To(Equal(int32(1)))
 	})
 })

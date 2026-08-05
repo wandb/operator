@@ -7,9 +7,12 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
+	"github.com/wandb/operator/internal/controller/infra/objectstore"
+	"github.com/wandb/operator/internal/controller/infra/managed/clickhouse/altinity/keeper"
 	"github.com/wandb/operator/internal/logx"
 	"github.com/wandb/operator/pkg/utils"
 	"github.com/wandb/operator/pkg/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
+	chtypes "github.com/wandb/operator/pkg/vendored/altinity-clickhouse/common/types"
 	"github.com/wandb/operator/pkg/wandb/manifest"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -26,8 +29,13 @@ const (
 	// TODO: remove this hardcoded default once all supported manifest versions
 	// supply clickhouse.<instance>.images.server.
 	defaultClickHouseImage = "altinity/clickhouse-server:25.8.16.10002.altinitystable"
+
+	objectStoreWaitMaxAttempts  = 150
+	objectStoreWaitDelaySeconds = 2
 )
 
+// ClickHouseImage resolves the ClickHouse server image from the manifest,
+// falling back to the hardcoded default for older manifests that omit it.
 func ClickHouseImage(img manifest.ImageRef, globalImageRegistry string) string {
 	if out := img.GetImage(globalImageRegistry); out != "" {
 		return out
@@ -51,6 +59,8 @@ const (
 	clickHouseCapabilityAll corev1.Capability = "ALL"
 )
 
+// clickHousePodSecurityContext returns the pod security context, omitting the
+// fixed UID/GID/FSGroup on OpenShift where the platform assigns them.
 func clickHousePodSecurityContext() *corev1.PodSecurityContext {
 	if utils.IsOpenShift() {
 		return &corev1.PodSecurityContext{
@@ -68,6 +78,8 @@ func clickHousePodSecurityContext() *corev1.PodSecurityContext {
 	}
 }
 
+// clickHouseContainerSecurityContext returns the container security context,
+// pinning the fixed UID/GID off OpenShift and always dropping all capabilities.
 func clickHouseContainerSecurityContext() *corev1.SecurityContext {
 	securityContext := &corev1.SecurityContext{
 		RunAsNonRoot:             ptr.To(true),
@@ -84,6 +96,8 @@ func clickHouseContainerSecurityContext() *corev1.SecurityContext {
 	return securityContext
 }
 
+// clickHouseWritableVolumes returns the emptyDir volumes that back the writable
+// paths a read-only-root-filesystem ClickHouse container still needs.
 func clickHouseWritableVolumes() []corev1.Volume {
 	return []corev1.Volume{
 		writableEmptyDirVolume(clickHouseTmpVolumeName),
@@ -92,6 +106,8 @@ func clickHouseWritableVolumes() []corev1.Volume {
 	}
 }
 
+// clickHouseWritableVolumeMounts returns the mounts pairing the writable
+// emptyDir volumes with their in-container paths.
 func clickHouseWritableVolumeMounts() []corev1.VolumeMount {
 	return []corev1.VolumeMount{
 		{Name: clickHouseTmpVolumeName, MountPath: clickHouseTmpMountPath},
@@ -100,10 +116,12 @@ func clickHouseWritableVolumeMounts() []corev1.VolumeMount {
 	}
 }
 
+// clickHouseRuntimeDefaultSeccompProfile returns the RuntimeDefault seccomp profile.
 func clickHouseRuntimeDefaultSeccompProfile() *corev1.SeccompProfile {
 	return &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault}
 }
 
+// writableEmptyDirVolume returns a named emptyDir volume.
 func writableEmptyDirVolume(name string) corev1.Volume {
 	return corev1.Volume{
 		Name: name,
@@ -113,28 +131,81 @@ func writableEmptyDirVolume(name string) corev1.Volume {
 	}
 }
 
+// ToServiceAccount builds the ClickHouse ServiceAccount, automounting its token
+// only when object-store credentials are ambient (IAM / workload identity).
+// Returns nil when the spec opts out of ServiceAccount creation.
+func ToServiceAccount(
+	wandb *apiv2.WeightsAndBiases,
+	spec *apiv2.ManagedClickHouseSpec,
+	objStorage *objectstore.ConnInfo,
+	scheme *runtime.Scheme,
+) (*corev1.ServiceAccount, error) {
+	if spec.ServiceAccount.Create != nil && !*spec.ServiceAccount.Create {
+		return nil, nil
+	}
+
+	serviceAccount := &corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        clickHouseServiceAccountName(spec),
+			Namespace:   spec.Namespace,
+			Labels:      BuildWandbClickhouseLabels(wandb),
+			Annotations: spec.ServiceAccount.Annotations,
+		},
+		// Ambient (IAM/workload-identity) credentials require the projected SA
+		// token; static access keys don't, so only automount when creds are ambient.
+		AutomountServiceAccountToken: ptr.To(!objStorage.HasStaticCredentials()),
+	}
+	if wandb.Namespace == spec.Namespace {
+		if err := ctrl.SetControllerReference(wandb, serviceAccount, scheme); err != nil {
+			return nil, fmt.Errorf("failed to set owner reference on ClickHouse ServiceAccount: %w", err)
+		}
+	}
+	return serviceAccount, nil
+}
+
+// clickHouseServiceAccountName returns the configured ServiceAccount name,
+// defaulting to the spec name when unset.
+func clickHouseServiceAccountName(spec *apiv2.ManagedClickHouseSpec) string {
+	if spec.ServiceAccount.ServiceAccountName != "" {
+		return spec.ServiceAccount.ServiceAccountName
+	}
+	return spec.Name
+}
+
 // ToClickHouseVendorSpec converts a ClickHouseSpec to a ClickHouseInstallation CR.
 // This function translates the high-level ClickHouse spec into the vendor-specific
 // ClickHouseInstallation format used by the Altinity operator.
 func ToClickHouseVendorSpec(
 	ctx context.Context,
 	wandb *apiv2.WeightsAndBiases,
+	spec *apiv2.ManagedClickHouseSpec,
 	scheme *runtime.Scheme,
+	objStorage *objectstore.ConnInfo,
+	objStorageEndpoint string,
+	waitForObjectStore bool,
 	mfst manifest.Manifest,
 ) (*v1.ClickHouseInstallation, error) {
 	_, log := logx.WithSlog(ctx, logx.ClickHouse)
-	spec := wandb.Spec.ClickHouse.ManagedClickHouse
 
 	if spec == nil {
 		return nil, nil
+	}
+
+	// Managed ClickHouse stores table data in the object store; require it.
+	if objStorage == nil {
+		return nil, fmt.Errorf("managed ClickHouse requires object storage, but none was resolved")
 	}
 
 	nsnBuilder := CreateNsNameBuilder(types.NamespacedName{
 		Namespace: spec.Namespace, Name: spec.Name,
 	})
 
-	// Parse storage quantity
+	// This PV holds only metadata/system tables and the S3 read-through cache;
+	// table data lives in the bucket.
 	storageQuantity := resource.MustParse(spec.StorageSize)
+
+	// Reserve ~20% of the local PV for metadata/system; the rest backs the cache.
+	cacheMaxSizeBytes := storageQuantity.Value() * 8 / 10
 
 	// Create user settings with password
 	passwordSha256 := fmt.Sprintf("%x", sha256.Sum256([]byte(ClickHousePassword)))
@@ -155,6 +226,9 @@ func ToClickHouseVendorSpec(
 	// Create server settings
 	serverSettings := v1.NewSettings()
 
+	// Define the S3 disk + cache + storage policy and make it the server-wide default.
+	applyStorageConfiguration(serverSettings, objStorage, objStorageEndpoint, cacheMaxSizeBytes)
+
 	// Enable built-in Prometheus metrics endpoint if telemetry is enabled
 	if spec.Telemetry.Enabled {
 		serverSettings.Set("prometheus/endpoint", v1.NewSettingScalar("/metrics"))
@@ -170,19 +244,25 @@ func ToClickHouseVendorSpec(
 		reclaimPolicy = v1.PVCReclaimPolicyDelete
 	}
 
+	clickHouseImage := ClickHouseImage(mfst.Clickhouse["default"].Images["server"], wandb.Spec.Global.ImageRegistry)
 	podSpec := corev1.PodSpec{
-		SecurityContext: clickHousePodSecurityContext(),
-		Affinity:        wandb.GetAffinity(spec.ManagedInfraSpec),
-		Tolerations:     *wandb.GetTolerations(spec.ManagedInfraSpec),
-		Volumes:         clickHouseWritableVolumes(),
+		ServiceAccountName:           clickHouseServiceAccountName(spec),
+		AutomountServiceAccountToken: ptr.To(!objStorage.HasStaticCredentials()),
+		SecurityContext:              clickHousePodSecurityContext(),
+		Affinity:                     wandb.GetAffinity(spec.ManagedInfraSpec),
+		Tolerations:                  *wandb.GetTolerations(spec.ManagedInfraSpec),
+		Volumes:                      clickHouseWritableVolumes(),
 		Containers: []corev1.Container{
 			{
 				Name:            "clickhouse",
-				Image:           ClickHouseImage(mfst.Clickhouse["default"].Images["server"], wandb.Spec.Global.ImageRegistry),
+				Image:           clickHouseImage,
 				SecurityContext: clickHouseContainerSecurityContext(),
 				VolumeMounts:    clickHouseWritableVolumeMounts(),
 			},
 		},
+	}
+	if waitForObjectStore {
+		podSpec.InitContainers = []corev1.Container{clickHouseObjectStoreWaitContainer(objStorageEndpoint, clickHouseImage)}
 	}
 
 	if len(spec.Config.Resources.Requests) > 0 || len(spec.Config.Resources.Limits) > 0 {
@@ -204,7 +284,7 @@ func ToClickHouseVendorSpec(
 			Configuration: &v1.Configuration{
 				Clusters: []*v1.Cluster{
 					{
-						Name: "default",
+						Name: chiClusterName,
 						Layout: &v1.ChiClusterLayout{
 							ShardsCount:   ShardsCount,
 							ReplicasCount: int(spec.Replicas),
@@ -213,6 +293,14 @@ func ToClickHouseVendorSpec(
 				},
 				Users:    userSettings,
 				Settings: serverSettings,
+				Zookeeper: &v1.ZookeeperConfig{
+					Nodes: v1.ZookeeperNodes{
+						{
+							Host: keeper.ClientServiceFQDN(spec.Namespace, baseName(spec.Name)),
+							Port: chtypes.NewInt32(int32(keeper.KeeperClientPort)),
+						},
+					},
+				},
 			},
 			Defaults: &v1.Defaults{
 				Templates: &v1.TemplatesList{
@@ -267,10 +355,45 @@ func ToClickHouseVendorSpec(
 	return chi, nil
 }
 
+// clickHouseObjectStoreWaitContainer returns an init container that blocks until
+// the object-store endpoint is reachable, so ClickHouse does not start before
+// its backing bucket is available.
+func clickHouseObjectStoreWaitContainer(endpoint, image string) corev1.Container {
+	// The existing ClickHouse image includes wget. Any HTTP response below 500
+	// proves DNS and the S3 API are reachable; authentication remains ClickHouse's
+	// responsibility when its main process starts.
+	script := fmt.Sprintf(
+		`attempt=1
+while [ "$attempt" -le %d ]; do
+  response="$(wget --no-check-certificate --server-response --spider "$1" 2>&1)"
+  result=$?
+  if [ "$result" -eq 0 ] || printf '%%s\n' "$response" | grep -Eq 'HTTP/[0-9.]+ [1-4][0-9][0-9]'; then
+    exit 0
+  fi
+  attempt=$((attempt + 1))
+  if [ "$attempt" -le %d ]; then sleep %d; fi
+done
+echo 'object-store endpoint did not become reachable before timeout' >&2
+exit 1`,
+		objectStoreWaitMaxAttempts,
+		objectStoreWaitMaxAttempts,
+		objectStoreWaitDelaySeconds,
+	)
+	return corev1.Container{
+		Name:            "wait-object-store",
+		Image:           image,
+		Command:         []string{"/bin/sh", "-c"},
+		Args:            []string{script, "wait-object-store", endpoint},
+		SecurityContext: clickHouseContainerSecurityContext(),
+	}
+}
+
+// BuildWandbClickhouseLabels returns the standard W&B labels for the ClickHouse module.
 func BuildWandbClickhouseLabels(wandb *apiv2.WeightsAndBiases) map[string]string {
 	return common.BuildWandbLabels(wandb, ClickhouseModuleName)
 }
 
+// ToClickHouseOnDeleteRule builds the on-delete retention rule for the ClickHouse module.
 func ToClickHouseOnDeleteRule(wandb *apiv2.WeightsAndBiases, retentionPolicy apiv2.RetentionPolicy) common.OnDeleteRule {
 	return common.ToOnDeleteRule(wandb, retentionPolicy, ClickhouseModuleName)
 }

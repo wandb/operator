@@ -31,6 +31,7 @@ import (
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -84,6 +85,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	logger.Info("Handling Application", "Application", app.Name)
+	statusBefore := app.DeepCopy().Status
 
 	// Add finalizer if it doesn't exist
 	if app.DeletionTimestamp == nil {
@@ -233,6 +235,9 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		}
 	}
 
+	if apiequality.Semantic.DeepEqual(statusBefore, app.Status) {
+		return result, nil
+	}
 	if err := r.Status().Update(ctx, &app); err != nil {
 		logger.Error("Failed to update Application status", logx.ErrAttr(err))
 		return ctrl.Result{}, err
@@ -248,6 +253,7 @@ func (r *ApplicationReconciler) reconcileDeployment(ctx context.Context, app *wa
 
 	deployment := &appsv1.Deployment{}
 	err := r.Get(ctx, client.ObjectKey{Namespace: app.Namespace, Name: app.Name}, deployment)
+	before := deployment.DeepCopy()
 	if err != nil {
 		if client.IgnoreNotFound(err) != nil {
 			logger.Error("Failed to get Deployment", logx.ErrAttr(err))
@@ -271,7 +277,7 @@ func (r *ApplicationReconciler) reconcileDeployment(ctx context.Context, app *wa
 	deployment.Name = app.Name
 	deployment.Namespace = app.Namespace
 
-	deployment.Spec.Template.Spec = *app.Spec.PodTemplate.Spec.DeepCopy()
+	deployment.Spec.Template.Spec = r.defaultPodSpec(app.Spec.PodTemplate.Spec)
 	deployment.Spec.Template.SetLabels(
 		utils.MergeMapsStringString(
 			deployment.Spec.Template.GetLabels(),
@@ -304,14 +310,19 @@ func (r *ApplicationReconciler) reconcileDeployment(ctx context.Context, app *wa
 		return ctrl.Result{}, err
 	}
 
-	logger.Debug("Deployment spec", "Deployment", deployment.Name, "Spec", deployment.Spec)
+	logger.Debug(
+		"Desired Deployment",
+		"Deployment", deployment.Name,
+		"containers", len(deployment.Spec.Template.Spec.Containers),
+		"initContainers", len(deployment.Spec.Template.Spec.InitContainers),
+	)
 
 	if deployment.CreationTimestamp.IsZero() {
 		if err := r.Create(ctx, deployment); err != nil {
 			logger.Error("Failed to create Deployment", logx.ErrAttr(err))
 			return ctrl.Result{}, err
 		}
-	} else {
+	} else if !deploymentManagedFieldsEqual(before, deployment) {
 		if err := r.Update(ctx, deployment); err != nil {
 			logger.Error("Failed to update Deployment", logx.ErrAttr(err))
 			return ctrl.Result{}, err
@@ -346,14 +357,42 @@ func getSelectorLabels(app *wandbv2.Application) map[string]string {
 	}
 }
 
-// recreateOnSelectorChange deletes a workload whose immutable spec.selector no
-// longer matches the desired selector so it can be recreated on the next
-// reconcile. Returns true when a delete was issued (caller should requeue).
+// selectorChanged reports whether a workload's immutable spec.selector no longer
+// matches the desired selector. A workload's selector cannot be mutated in place,
+// so a change requires deleting and recreating the workload.
 func selectorChanged(current *metav1.LabelSelector, desired map[string]string) bool {
 	if current == nil {
 		return false
 	}
 	return !reflect.DeepEqual(current.MatchLabels, desired)
+}
+
+func managedObjectMetadataEqual(before, after client.Object) bool {
+	return apiequality.Semantic.DeepEqual(before.GetLabels(), after.GetLabels()) &&
+		apiequality.Semantic.DeepEqual(before.GetAnnotations(), after.GetAnnotations()) &&
+		apiequality.Semantic.DeepEqual(before.GetOwnerReferences(), after.GetOwnerReferences())
+}
+
+func (r *ApplicationReconciler) defaultPodSpec(spec corev1.PodSpec) corev1.PodSpec {
+	pod := &corev1.Pod{Spec: *spec.DeepCopy()}
+	if r.Scheme != nil {
+		r.Scheme.Default(pod)
+	}
+	return pod.Spec
+}
+
+func deploymentManagedFieldsEqual(before, after *appsv1.Deployment) bool {
+	return managedObjectMetadataEqual(before, after) &&
+		apiequality.Semantic.DeepEqual(before.Spec, after.Spec)
+}
+
+func rolloutManagedFieldsEqual(before, after *v1alpha1.Rollout) bool {
+	return managedObjectMetadataEqual(before, after) && reflect.DeepEqual(before.Spec, after.Spec)
+}
+
+func statefulSetManagedFieldsEqual(before, after *appsv1.StatefulSet) bool {
+	return managedObjectMetadataEqual(before, after) &&
+		apiequality.Semantic.DeepEqual(before.Spec, after.Spec)
 }
 
 // deleteDeployment deletes the Deployment associated with the Application
@@ -389,6 +428,7 @@ func (r *ApplicationReconciler) reconcileRollout(ctx context.Context, app *wandb
 
 	rollout := &v1alpha1.Rollout{}
 	err := r.Get(ctx, client.ObjectKey{Namespace: app.Namespace, Name: app.Name}, rollout)
+	before := rollout.DeepCopy()
 	if err != nil {
 		if client.IgnoreNotFound(err) != nil {
 			logger.Error("Failed to get Rollout", logx.ErrAttr(err))
@@ -410,7 +450,7 @@ func (r *ApplicationReconciler) reconcileRollout(ctx context.Context, app *wandb
 	rollout.Name = app.Name
 	rollout.Namespace = app.Namespace
 
-	rollout.Spec.Template.Spec = *app.Spec.PodTemplate.Spec.DeepCopy()
+	rollout.Spec.Template.Spec = r.defaultPodSpec(app.Spec.PodTemplate.Spec)
 	rollout.Spec.Template.SetLabels(
 		utils.MergeMapsStringString(
 			rollout.Spec.Template.GetLabels(),
@@ -443,14 +483,19 @@ func (r *ApplicationReconciler) reconcileRollout(ctx context.Context, app *wandb
 		return ctrl.Result{}, err
 	}
 
-	logger.Info("Rollout spec", "Rollout", rollout.Name, "Spec", rollout.Spec)
+	logger.Debug(
+		"Desired Rollout",
+		"Rollout", rollout.Name,
+		"containers", len(rollout.Spec.Template.Spec.Containers),
+		"initContainers", len(rollout.Spec.Template.Spec.InitContainers),
+	)
 
 	if rollout.CreationTimestamp.IsZero() {
 		if err := r.Create(ctx, rollout); err != nil {
 			logger.Error("Failed to create Rollout", logx.ErrAttr(err))
 			return ctrl.Result{}, err
 		}
-	} else {
+	} else if !rolloutManagedFieldsEqual(before, rollout) {
 		if err := r.Update(ctx, rollout); err != nil {
 			logger.Error("Failed to update Rollout", logx.ErrAttr(err))
 			return ctrl.Result{}, err
@@ -496,6 +541,7 @@ func (r *ApplicationReconciler) reconcileStatefulSet(ctx context.Context, app *w
 
 	statefulSet := &appsv1.StatefulSet{}
 	err := r.Get(ctx, client.ObjectKey{Namespace: app.Namespace, Name: app.Name}, statefulSet)
+	before := statefulSet.DeepCopy()
 	if err != nil {
 		if client.IgnoreNotFound(err) != nil {
 			logger.Error("Failed to get StatefulSet", logx.ErrAttr(err))
@@ -517,7 +563,7 @@ func (r *ApplicationReconciler) reconcileStatefulSet(ctx context.Context, app *w
 	statefulSet.Name = app.Name
 	statefulSet.Namespace = app.Namespace
 
-	statefulSet.Spec.Template.Spec = *app.Spec.PodTemplate.Spec.DeepCopy()
+	statefulSet.Spec.Template.Spec = r.defaultPodSpec(app.Spec.PodTemplate.Spec)
 	statefulSet.Spec.Template.SetLabels(
 		utils.MergeMapsStringString(
 			statefulSet.Spec.Template.GetLabels(),
@@ -566,14 +612,19 @@ func (r *ApplicationReconciler) reconcileStatefulSet(ctx context.Context, app *w
 		return ctrl.Result{}, err
 	}
 
-	logger.Info("StatefulSet spec", "StatefulSet", statefulSet.Name, "Spec", statefulSet.Spec)
+	logger.Debug(
+		"Desired StatefulSet",
+		"StatefulSet", statefulSet.Name,
+		"containers", len(statefulSet.Spec.Template.Spec.Containers),
+		"initContainers", len(statefulSet.Spec.Template.Spec.InitContainers),
+	)
 
 	if statefulSet.CreationTimestamp.IsZero() {
 		if err := r.Create(ctx, statefulSet); err != nil {
 			logger.Error("Failed to create StatefulSet", logx.ErrAttr(err))
 			return ctrl.Result{}, err
 		}
-	} else {
+	} else if !statefulSetManagedFieldsEqual(before, statefulSet) {
 		if err := r.Update(ctx, statefulSet); err != nil {
 			logger.Error("Failed to update StatefulSet", logx.ErrAttr(err))
 			return ctrl.Result{}, err
@@ -772,6 +823,10 @@ func (r *ApplicationReconciler) reconcileCronJobs(ctx context.Context, app *wand
 		} else {
 			// Update existing cronjob
 			cronJobToReconcile.ResourceVersion = currentCronJob.ResourceVersion
+			if managedObjectMetadataEqual(currentCronJob, cronJobToReconcile) &&
+				apiequality.Semantic.DeepEqual(currentCronJob.Spec, cronJobToReconcile.Spec) {
+				continue
+			}
 			if err := r.Update(ctx, cronJobToReconcile); err != nil {
 				logger.Error("Failed to update CronJob", logx.ErrAttr(err), "CronJob", cronJobName)
 				return err
@@ -838,9 +893,16 @@ func (r *ApplicationReconciler) reconcileService(ctx context.Context, app *wandb
 		desired.Annotations,
 		app.Spec.MetaTemplate.Annotations,
 	)
+	// The API server stores empty annotations as nil; keep them nil so the
+	// steady-state metadata compare below settles.
+	if len(desired.Annotations) == 0 {
+		desired.Annotations = nil
+	}
 
-	// Copy spec from template
+	// Copy spec from template, filling the port defaults the API server would
+	// apply (templates written before normalization may lack them).
 	desired.Spec = *app.Spec.ServiceTemplate.DeepCopy()
+	common.NormalizeServicePorts(desired.Spec.Ports)
 
 	// Ensure selector targets the application's pods
 	selectorLabels := getSelectorLabels(app)
@@ -872,6 +934,7 @@ func (r *ApplicationReconciler) reconcileService(ctx context.Context, app *wandb
 		logger.Info("Successfully created Service", "Service", desired.Name)
 		return nil
 	}
+	before := current.DeepCopy()
 
 	// Update path: preserve immutable fields
 	desired.ResourceVersion = current.ResourceVersion
@@ -880,6 +943,7 @@ func (r *ApplicationReconciler) reconcileService(ctx context.Context, app *wandb
 	desired.Spec.IPFamilies = current.Spec.IPFamilies
 	desired.Spec.IPFamilyPolicy = current.Spec.IPFamilyPolicy
 	desired.Spec.HealthCheckNodePort = current.Spec.HealthCheckNodePort
+	preserveServerDefaultedServiceFields(&desired.Spec, &current.Spec)
 
 	// Only update if there are changes
 	// Apply desired into current to minimize overwrite
@@ -897,16 +961,55 @@ func (r *ApplicationReconciler) reconcileService(ctx context.Context, app *wandb
 	current.Spec.LoadBalancerIP = desired.Spec.LoadBalancerIP
 	current.Spec.LoadBalancerSourceRanges = desired.Spec.LoadBalancerSourceRanges
 
-	logger.Info("Updating Service", "Service", current.Name)
-	if err := r.Update(ctx, current); err != nil {
-		logger.Error("Failed to update Service", logx.ErrAttr(err))
-		return err
+	if !managedObjectMetadataEqual(before, current) || !apiequality.Semantic.DeepEqual(before.Spec, current.Spec) {
+		logger.Info("Updating Service", "Service", current.Name)
+		if err := r.Update(ctx, current); err != nil {
+			logger.Error("Failed to update Service", logx.ErrAttr(err))
+			return err
+		}
+		logger.Info("Successfully updated Service", "Service", current.Name)
 	}
 
 	app.Status.ServiceStatus = &current.Status
 
-	logger.Info("Successfully updated Service", "Service", current.Name)
 	return nil
+}
+
+// preserveServerDefaultedServiceFields keeps API-server-defaulted or -allocated
+// values for fields the template leaves unset, so a settled Service compares
+// equal and Update only fires on real changes.
+func preserveServerDefaultedServiceFields(desired, current *corev1.ServiceSpec) {
+	if desired.Type == "" {
+		desired.Type = current.Type
+	}
+	if desired.SessionAffinity == "" {
+		desired.SessionAffinity = current.SessionAffinity
+	}
+	if desired.ExternalTrafficPolicy == "" {
+		desired.ExternalTrafficPolicy = current.ExternalTrafficPolicy
+	}
+	if desired.InternalTrafficPolicy == nil {
+		desired.InternalTrafficPolicy = current.InternalTrafficPolicy
+	}
+	if desired.AllocateLoadBalancerNodePorts == nil {
+		desired.AllocateLoadBalancerNodePorts = current.AllocateLoadBalancerNodePorts
+	}
+	if desired.Type != corev1.ServiceTypeNodePort && desired.Type != corev1.ServiceTypeLoadBalancer {
+		return
+	}
+	// NodePorts are allocated by the API server; keep them unless the template pins one.
+	for i := range desired.Ports {
+		p := &desired.Ports[i]
+		if p.NodePort != 0 {
+			continue
+		}
+		for j := range current.Ports {
+			if current.Ports[j].Name == p.Name {
+				p.NodePort = current.Ports[j].NodePort
+				break
+			}
+		}
+	}
 }
 
 // deleteService deletes the Service associated with the Application
@@ -1007,6 +1110,10 @@ func (r *ApplicationReconciler) reconcileHPA(ctx context.Context, app *wandbv2.A
 
 	// Update path
 	desired.ResourceVersion = current.ResourceVersion
+	if managedObjectMetadataEqual(current, desired) && apiequality.Semantic.DeepEqual(current.Spec, desired.Spec) {
+		app.Status.HPAStatus = &current.Status
+		return nil
+	}
 	logger.Info("Updating HPA", "HPA", desired.Name)
 	if err := r.Update(ctx, desired); err != nil {
 		logger.Error("Failed to update HPA", logx.ErrAttr(err))

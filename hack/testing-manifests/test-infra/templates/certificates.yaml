@@ -1,0 +1,100 @@
+{{- if include "test-infra.anyTLS" . }}
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ include "test-infra.selfSignedIssuerName" . }}
+  labels:
+    {{- include "test-infra.componentLabels" (dict "root" . "component" "tls") | nindent 4 }}
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "test-infra.caSecretName" . }}
+  labels:
+    {{- include "test-infra.componentLabels" (dict "root" . "component" "tls") | nindent 4 }}
+spec:
+  secretName: {{ include "test-infra.caSecretName" . }}
+  isCA: true
+  commonName: test-infra-ca
+  duration: {{ .Values.tls.duration }}
+  usages:
+    - cert sign
+    - crl sign
+  privateKey:
+    algorithm: RSA
+    size: 2048
+  issuerRef:
+    name: {{ include "test-infra.selfSignedIssuerName" . }}
+    kind: Issuer
+    group: cert-manager.io
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ include "test-infra.caIssuerName" . }}
+  labels:
+    {{- include "test-infra.componentLabels" (dict "root" . "component" "tls") | nindent 4 }}
+spec:
+  ca:
+    secretName: {{ include "test-infra.caSecretName" . }}
+{{- if include "test-infra.mysqlTLS" . }}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ .Values.mysql.tls.secretName }}
+  labels:
+    {{- include "test-infra.componentLabels" (dict "root" . "component" "mysql") | nindent 4 }}
+spec:
+  secretName: {{ .Values.mysql.tls.secretName }}
+  commonName: {{ include "test-infra.mysqlHost" . }}
+  duration: {{ .Values.tls.duration }}
+  usages:
+    - digital signature
+    - key encipherment
+    - server auth
+  dnsNames:
+    - {{ .Values.mysql.service.name | quote }}
+    - {{ printf "%s.%s" .Values.mysql.service.name .Release.Namespace | quote }}
+    - {{ printf "%s.%s.svc" .Values.mysql.service.name .Release.Namespace | quote }}
+    - {{ include "test-infra.mysqlHost" . | quote }}
+  privateKey:
+    algorithm: RSA
+    size: 2048
+  issuerRef:
+    name: {{ include "test-infra.caIssuerName" . }}
+    kind: Issuer
+    group: cert-manager.io
+{{- end }}
+{{- if include "test-infra.redisTLS" . }}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ .Values.redis.tls.secretName }}
+  labels:
+    {{- include "test-infra.componentLabels" (dict "root" . "component" "redis") | nindent 4 }}
+spec:
+  secretName: {{ .Values.redis.tls.secretName }}
+  commonName: {{ include "test-infra.redisHost" . }}
+  duration: {{ .Values.tls.duration }}
+  usages:
+    - digital signature
+    - key encipherment
+    - server auth
+  dnsNames:
+    - {{ .Values.redis.service.name | quote }}
+    - {{ printf "%s.%s" .Values.redis.service.name .Release.Namespace | quote }}
+    - {{ printf "%s.%s.svc" .Values.redis.service.name .Release.Namespace | quote }}
+    - {{ include "test-infra.redisHost" . | quote }}
+  privateKey:
+    algorithm: RSA
+    size: 2048
+  issuerRef:
+    name: {{ include "test-infra.caIssuerName" . }}
+    kind: Issuer
+    group: cert-manager.io
+{{- end }}
+{{- end }}

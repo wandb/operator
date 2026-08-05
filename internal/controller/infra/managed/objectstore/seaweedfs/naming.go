@@ -4,8 +4,22 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/wandb/operator/internal/controller/common"
 	"k8s.io/apimachinery/pkg/types"
 )
+
+// MaxSpecNameLength is a conservative budget: the seaweedfs operator suffixes
+// the Seaweed name ("-master", "-volume", "-filer", peer Services, ordinals);
+// 40 leaves 23 chars of DNS-1123 label headroom.
+const MaxSpecNameLength = 40
+
+const defaultNameSuffix = "-seaweedfs"
+
+// DefaultSpecName derives the object-store name for a CR instance, shortened
+// to the budget; the suffix is preserved so ConnectionName can still strip it.
+func DefaultSpecName(crName, instanceKey string) string {
+	return common.FitDefaultInfraName(common.InstanceBaseName(crName, instanceKey), defaultNameSuffix, MaxSpecNameLength)
+}
 
 type NsNameBuilder struct {
 	baseNsName types.NamespacedName

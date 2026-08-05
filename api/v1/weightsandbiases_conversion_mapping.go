@@ -33,20 +33,22 @@ import (
 // Default Secret keys used by v1's legacy ref blocks when only the Secret
 // name was specified.
 const (
-	defaultMySQLPasswordSecretKey = "MYSQL_PASSWORD"
-	defaultRedisPasswordSecretKey = "REDIS_PASSWORD"
-	defaultOIDCClientSecretKey    = "OIDC_SECRET"
-	defaultBucketAccessKeyName    = "ACCESS_KEY"
-	defaultBucketSecretKeyName    = "SECRET_KEY"
+	defaultMySQLPasswordSecretKey      = "MYSQL_PASSWORD"
+	defaultRedisPasswordSecretKey      = "REDIS_PASSWORD"
+	defaultOIDCClientSecretKey         = "OIDC_SECRET"
+	defaultBucketAccessKeyName         = "ACCESS_KEY"
+	defaultBucketSecretKeyName         = "SECRET_KEY"
+	defaultClickHousePasswordSecretKey = "CLICKHOUSE_PASSWORD"
 )
 
 // Annotations carrying v1 literals the reconciler materializes into Secrets
 // post-conversion (the webhook is stateless and can't create them itself).
 const (
-	OIDCPendingAnnotation   = "legacy.operator.wandb.com/oidc-pending"
-	MySQLPendingAnnotation  = "legacy.operator.wandb.com/mysql-pending"
-	RedisPendingAnnotation  = "legacy.operator.wandb.com/redis-pending"
-	BucketPendingAnnotation = "legacy.operator.wandb.com/bucket-pending"
+	OIDCPendingAnnotation       = "legacy.operator.wandb.com/oidc-pending"
+	MySQLPendingAnnotation      = "legacy.operator.wandb.com/mysql-pending"
+	RedisPendingAnnotation      = "legacy.operator.wandb.com/redis-pending"
+	BucketPendingAnnotation     = "legacy.operator.wandb.com/bucket-pending"
+	ClickHousePendingAnnotation = "legacy.operator.wandb.com/clickhouse-pending"
 )
 
 var validSizes = map[string]appsv2.Size{
@@ -84,6 +86,9 @@ func applyValueMappings(src *WeightsAndBiases, dst *appsv2.WeightsAndBiases) err
 	if err := mapIngress(values, dst); err != nil {
 		return err
 	}
+	if err := mapLegacyOverrides(values, dst); err != nil {
+		return err
+	}
 
 	globalMap, found, err := unstructured.NestedMap(values, "global")
 	if err != nil {
@@ -106,6 +111,9 @@ func applyGlobalMappings(globalMap map[string]interface{}, dst *appsv2.WeightsAn
 	if err := mapSize(globalMap, dst); err != nil {
 		return err
 	}
+	if err := mapCustomCACerts(globalMap, dst); err != nil {
+		return err
+	}
 	if err := mapOIDC(globalMap, dst); err != nil {
 		return err
 	}
@@ -117,6 +125,25 @@ func applyGlobalMappings(globalMap map[string]interface{}, dst *appsv2.WeightsAn
 	}
 	if err := mapBucket(globalMap, dst); err != nil {
 		return err
+	}
+	if err := mapClickHouse(globalMap, dst); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func mapCustomCACerts(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) error {
+	if certs, found, err := unstructured.NestedStringSlice(globalMap, "customCACerts"); err != nil {
+		return fmt.Errorf("spec.values.global.customCACerts: %w", err)
+	} else if found {
+		dst.Spec.Global.CustomCACerts = certs
+	}
+
+	if configMap, found, err := unstructured.NestedString(globalMap, "caCertsConfigMap"); err != nil {
+		return fmt.Errorf("spec.values.global.caCertsConfigMap: %w", err)
+	} else if found {
+		dst.Spec.Global.CACertsConfigMap = configMap
 	}
 
 	return nil
@@ -360,7 +387,10 @@ func mapBucket(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) e
 		return nil
 	}
 
-	dst.Spec.ObjectStore.ExternalObjectStore = &appsv2.ObjectStoreConnection{}
+	conn := &appsv2.ObjectStoreConnection{}
+	dst.Spec.ObjectStore = map[string]appsv2.ObjectStoreSpec{
+		appsv2.DefaultInstanceName: {ExternalObjectStore: conn},
+	}
 
 	if sec, ok, err := unstructured.NestedMap(bucket, "secret"); err != nil {
 		return fmt.Errorf("spec.values.global.bucket.secret: %w", err)
@@ -375,11 +405,11 @@ func mapBucket(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) e
 			if secretKeyName == "" {
 				secretKeyName = defaultBucketSecretKeyName
 			}
-			dst.Spec.ObjectStore.ExternalObjectStore.AccessKey = corev1.SecretKeySelector{
+			conn.AccessKey = corev1.SecretKeySelector{
 				LocalObjectReference: corev1.LocalObjectReference{Name: name},
 				Key:                  accessKeyName,
 			}
-			dst.Spec.ObjectStore.ExternalObjectStore.SecretKey = corev1.SecretKeySelector{
+			conn.SecretKey = corev1.SecretKeySelector{
 				LocalObjectReference: corev1.LocalObjectReference{Name: name},
 				Key:                  secretKeyName,
 			}
@@ -482,10 +512,98 @@ func mapMySQL(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) er
 		}
 	}
 
-	dst.Spec.MySQL.ExternalMysql = conn
+	dst.Spec.MySQL = map[string]appsv2.MySQLSpec{
+		appsv2.DefaultInstanceName: {ExternalMysql: conn},
+	}
 
 	if len(remaining) > 0 {
 		return writeAnnotation(dst, MySQLPendingAnnotation, remaining)
+	}
+	return nil
+}
+
+// clickHouseFields maps each v1 global.clickhouse.<key> to a
+// *ClickHouseConnection setter (v1 `port` is the HTTP interface).
+var clickHouseFields = []struct {
+	v1Key  string
+	setRef func(*appsv2.ClickHouseConnection, corev1.SecretKeySelector)
+}{
+	{"host", func(c *appsv2.ClickHouseConnection, s corev1.SecretKeySelector) { c.Host = s }},
+	{"port", func(c *appsv2.ClickHouseConnection, s corev1.SecretKeySelector) { c.HTTPPort = s }},
+	{"database", func(c *appsv2.ClickHouseConnection, s corev1.SecretKeySelector) { c.Database = s }},
+	{"user", func(c *appsv2.ClickHouseConnection, s corev1.SecretKeySelector) { c.Username = s }},
+	{"password", func(c *appsv2.ClickHouseConnection, s corev1.SecretKeySelector) { c.Password = s }},
+}
+
+// mapClickHouse routes v1 global.clickhouse to externalClickhouse (like
+// mapMySQL); external is asserted only when a connection field is present.
+func mapClickHouse(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) error {
+	chMap, found, err := unstructured.NestedMap(globalMap, "clickhouse")
+	if err != nil {
+		return fmt.Errorf("spec.values.global.clickhouse: %w", err)
+	}
+	if !found || len(chMap) == 0 {
+		return nil
+	}
+
+	conn := &appsv2.ClickHouseConnection{}
+	remaining := map[string]string{}
+	sawField := false
+
+	for _, f := range clickHouseFields {
+		raw, ok := chMap[f.v1Key]
+		if !ok {
+			continue
+		}
+		ref, literal, classifyErr := classifyValueFromOrLiteral(raw)
+		if classifyErr != nil {
+			return fmt.Errorf("spec.values.global.clickhouse.%s: %w", f.v1Key, classifyErr)
+		}
+		switch {
+		case ref != nil:
+			f.setRef(conn, *ref)
+			sawField = true
+		case literal != "":
+			remaining[f.v1Key] = literal
+			sawField = true
+		}
+	}
+
+	if ps, ok, err := unstructured.NestedMap(chMap, "passwordSecret"); err != nil {
+		return fmt.Errorf("spec.values.global.clickhouse.passwordSecret: %w", err)
+	} else if ok {
+		name, _, err := unstructured.NestedString(ps, "name")
+		if err != nil {
+			return fmt.Errorf("spec.values.global.clickhouse.passwordSecret.name: %w", err)
+		}
+		alreadyHasPassword := conn.Password.Name != ""
+		if name != "" && !alreadyHasPassword {
+			key, _, err := unstructured.NestedString(ps, "passwordKey")
+			if err != nil {
+				return fmt.Errorf("spec.values.global.clickhouse.passwordSecret.passwordKey: %w", err)
+			}
+			if key == "" {
+				key = defaultClickHousePasswordSecretKey
+			}
+			conn.Password = corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: name},
+				Key:                  key,
+			}
+			delete(remaining, "password")
+			sawField = true
+		}
+	}
+
+	if !sawField {
+		return nil
+	}
+
+	dst.Spec.ClickHouse = map[string]appsv2.ClickHouseSpec{
+		appsv2.DefaultInstanceName: {ExternalClickHouse: conn},
+	}
+
+	if len(remaining) > 0 {
+		return writeAnnotation(dst, ClickHousePendingAnnotation, remaining)
 	}
 	return nil
 }
@@ -577,7 +695,9 @@ func mapRedis(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) er
 		}
 	}
 
-	dst.Spec.Redis.ExternalRedis = conn
+	dst.Spec.Redis = map[string]appsv2.RedisSpec{
+		appsv2.DefaultInstanceName: {ExternalRedis: conn},
+	}
 
 	if len(remaining) > 0 {
 		return writeAnnotation(dst, RedisPendingAnnotation, remaining)

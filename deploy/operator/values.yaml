@@ -1,17 +1,21 @@
 helmHooks:
   enabled: true
 
+# Renders OpenShift-only resources; profiles/openshift.yaml turns this on.
+openshift:
+  enabled: false
+
 wandb:
   install: true
   size: small
   namespace: wandb
-  version: 0.81.0
+  version: 0.83.1
   internalServiceAuth: false
 
 wandb-operator:
   image:
     repository: us-docker.pkg.dev/wandb-production/public/wandb/operator
-    tag: 2.0.0-alpha.2
+    tag: 2.0.0-beta.3
   containers:
     operator:
       command:
@@ -61,6 +65,27 @@ wandb-operator:
         - mountPath: /tmp/wandb-operator/serving-certs
           name: serving-certs
           readOnly: true
+      # Mounts the custom CA bundle (see caCerts below) into the operator
+      # container. Rendered only when caCerts has a source.
+      volumeMountsTpls:
+        - '{{ include "wandb-operator.caCertsVolumeMount" . }}'
+
+  # Custom CA certificates trusted by the operator process. Required when the
+  # operator must pull the server manifest from a private/self-signed OCI
+  # registry (air-gapped installs). Activates when any source below is set;
+  # certs are added to SSL_CERT_DIR additively (Go still loads the ubi system
+  # bundle, so public roots are preserved).
+  caCerts:
+    # Inline PEM blocks; the parent chart synthesizes them into a Secret.
+    certs: []
+    # Or reference an existing Secret / ConfigMap whose keys are PEM certs.
+    existingSecret: ""
+    existingConfigMap: ""
+    mountPath: /etc/wandb/ca-certs
+  volumesTpls:
+    - '{{ include "wandb-operator.caCertsVolume" . }}'
+  envTpls:
+    - '{{ include "wandb-operator.caCertsEnv" . }}'
 
   service:
     enabled: true
@@ -243,6 +268,7 @@ telemetry:
     operators: true
     wandbApi: true
     infrastructure: true
+    kubeStateMetrics: false
   alerting:
     enabled: false
     evaluationInterval: 30s

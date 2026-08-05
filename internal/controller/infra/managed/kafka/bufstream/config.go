@@ -2,12 +2,11 @@ package bufstream
 
 import (
 	"fmt"
-	"strings"
 
 	"gopkg.in/yaml.v3"
 
 	apiv2 "github.com/wandb/operator/api/v2"
-	"github.com/wandb/operator/internal/controller/infra/external/objectstore"
+	"github.com/wandb/operator/internal/controller/infra/objectstore"
 )
 
 type dataSource struct {
@@ -74,9 +73,15 @@ func renderBufstreamConfig(clusterName, advertiseHost string, etcdAddresses []st
 	// Isolate Bufstream's objects under a dedicated key prefix (the cluster name)
 	// so they never collide with W&B artifact data, which shares the same bucket.
 	// storage is passed by value, so this only affects the rendered config.
-	storage.URI = strings.TrimSuffix(storage.URI, "/") + "/" + clusterName
+	uri := storage.ProviderURI()
 
-	data, err := renderData(storage)
+	if storage.Path != "" {
+		uri = fmt.Sprintf("%s/%s", uri, storage.Path)
+	}
+
+	uri = fmt.Sprintf("%s/%s", uri, clusterName)
+
+	data, err := renderData(storage, uri)
 	if err != nil {
 		return "", err
 	}
@@ -110,29 +115,33 @@ func renderBufstreamConfig(clusterName, advertiseHost string, etcdAddresses []st
 
 // renderData maps the resolved object-store connection onto Bufstream's
 // provider-specific data storage config.
-func renderData(storage objectstore.ConnInfo) (bufstreamData, error) {
+func renderData(storage objectstore.ConnInfo, uri string) (bufstreamData, error) {
 	switch storage.Provider {
 	case apiv2.ObjectStoreProviderS3:
-		return bufstreamData{S3: renderS3Storage(storage)}, nil
+		return bufstreamData{S3: renderS3Storage(storage, uri)}, nil
 	case apiv2.ObjectStoreProviderGCS:
 		// GCS authenticates via workload identity / ADC, so only the bucket URI is configured.
-		return bufstreamData{GCS: storage.URI}, nil
+		return bufstreamData{GCS: uri}, nil
 	case apiv2.ObjectStoreProviderAzure:
-		return bufstreamData{Azure: renderAzureStorage(storage)}, nil
+		return bufstreamData{Azure: renderAzureStorage(storage, uri)}, nil
 	default:
 		return bufstreamData{}, fmt.Errorf("unsupported object-store provider %q", storage.Provider)
 	}
 }
 
-func renderS3Storage(storage objectstore.ConnInfo) *bufstreamS3 {
+// renderS3Storage maps the resolved connection onto Bufstream's S3 data config,
+// applying the region default, endpoint, and path-style, and wiring env-var
+// credential sources only when static keys are present.
+func renderS3Storage(storage objectstore.ConnInfo, uri string) *bufstreamS3 {
 	region := storage.Region
 	if region == "" {
-		region = "us-east-1"
+		region = objectstore.DefaultRegion
 	}
+
 	s3 := &bufstreamS3{
-		URI:            storage.URI,
+		URI:            uri,
 		Region:         region,
-		Endpoint:       storage.Endpoint,
+		Endpoint:       storage.EndpointURL(),
 		ForcePathStyle: storage.ForcePathStyle,
 	}
 	if storage.HasStaticCredentials() {
@@ -142,8 +151,10 @@ func renderS3Storage(storage objectstore.ConnInfo) *bufstreamS3 {
 	return s3
 }
 
-func renderAzureStorage(storage objectstore.ConnInfo) *bufstreamAzure {
-	az := &bufstreamAzure{URI: storage.URI}
+// renderAzureStorage maps the resolved connection onto Bufstream's Azure data
+// config, wiring env-var credential sources only when static keys are present.
+func renderAzureStorage(storage objectstore.ConnInfo, uri string) *bufstreamAzure {
+	az := &bufstreamAzure{URI: uri}
 	if storage.HasStaticCredentials() {
 		az.AccessKeyID = &dataSource{EnvVar: EnvStorageAccessKeyID}
 		az.SecretAccessKey = &dataSource{EnvVar: EnvStorageSecretAccessKey}

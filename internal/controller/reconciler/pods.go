@@ -146,6 +146,15 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 		}
 	}
 
+	for _, env := range envs {
+		for i, combinedEnv := range combinedEnvs {
+			if combinedEnv.Name == env.Name {
+				combinedEnvs = append(combinedEnvs[:i], combinedEnvs[i+1:]...)
+				break
+			}
+		}
+	}
+
 	combinedEnvs = append(combinedEnvs, envs...)
 
 	var envVars []v1.EnvVar
@@ -198,20 +207,34 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 					addSecretComponent(sel, idx)
 				}
 			case "mysql":
-				// MySQL connection URL as a secret ref
-				selector := wandb.Status.MySQLStatus.Connection.URL
+				// MySQL connection URL as a secret ref. src.Name selects the
+				// instance, falling back to the default instance when empty or
+				// when the named instance has no status yet.
+				status, ok := v2.ResolveInstance(wandb.Status.MySQLStatus, src.Name)
+				if !ok {
+					continue
+				}
+				selector := status.Connection.URL
 				// Record for potential direct assignment case
 				singleSecretSelector = selector
 				secretOnlyCount++
 				addSecretComponent(selector, idx)
 			case "redis":
-				selector := wandb.Status.RedisStatus.Connection.URL
+				status, ok := v2.ResolveInstance(wandb.Status.RedisStatus, src.Name)
+				if !ok {
+					continue
+				}
+				selector := status.Connection.URL
 				singleSecretSelector = selector
 				secretOnlyCount++
 				addSecretComponent(selector, idx)
 			case "bucket":
+				status, ok := v2.ResolveInstance(wandb.Status.ObjectStoreStatus, src.Name)
+				if !ok {
+					continue
+				}
 				selector := v1.SecretKeySelector{
-					LocalObjectReference: wandb.Status.ObjectStoreStatus.Connection.URL.LocalObjectReference,
+					LocalObjectReference: status.Connection.URL.LocalObjectReference,
 				}
 				switch src.Field {
 				case "host":
@@ -234,20 +257,28 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 				addSecretComponent(selector, idx)
 			case "clickhouse":
 				// clickhouse fields are provided as separate keys in the same secret
+				status, ok := v2.ResolveInstance(wandb.Status.ClickHouseStatus, src.Name)
+				if !ok {
+					continue
+				}
 				selector := v1.SecretKeySelector{
-					LocalObjectReference: wandb.Status.ClickHouseStatus.Connection.URL.LocalObjectReference,
+					LocalObjectReference: status.Connection.URL.LocalObjectReference,
 				}
 				switch src.Field {
 				case "host":
 					selector.Key = "Host"
-				case "port":
-					selector.Key = "Port"
+				case "http-port":
+					selector.Key = "HTTPPort"
+				case "tcp-port":
+					selector.Key = "TCPPort"
 				case "user":
 					selector.Key = "User"
 				case "password":
 					selector.Key = "Password"
 				case "database":
 					selector.Key = "Database"
+				case "url":
+					selector.Key = "url"
 				default:
 					// Unrecognized field; skip
 					continue
@@ -337,7 +368,7 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 				// applications status and reading from there is probably more correct
 				// Prefer deterministic manifest-derived service resolution to avoid startup races
 				// where the Service object has not been created yet.
-				if resolved, ok := manifest.ResolveServiceURL(src); ok {
+				if resolved, ok := manifest.ResolveServiceURL(src, wandb.Namespace); ok {
 					components = append(components, resolved)
 					continue
 				}
@@ -371,7 +402,13 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 						}
 					}
 				}
-				components = append(components, fmt.Sprintf("%s%s:%d%s", proto, serviceList.Items[0].Name, selectedPort, src.Path))
+				// Fully-qualified host (see ResolveServiceURL) so NO_PROXY cluster
+				// suffixes cover it; the Service was just listed InNamespace(wandb.Namespace).
+				svcHost := serviceList.Items[0].Name
+				if wandb.Namespace != "" {
+					svcHost = fmt.Sprintf("%s.%s.svc.cluster.local", serviceList.Items[0].Name, wandb.Namespace)
+				}
+				components = append(components, fmt.Sprintf("%s%s:%d%s", proto, svcHost, selectedPort, src.Path))
 			case "jwt-issuer-map":
 				if wandb.Spec.Wandb.InternalServiceAuth.Enabled != nil &&
 					*wandb.Spec.Wandb.InternalServiceAuth.Enabled {

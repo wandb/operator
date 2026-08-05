@@ -49,6 +49,7 @@ type Manifest struct {
 	CommonVolumeMounts map[string][]VolumeMount `yaml:"commonVolumeMounts,omitempty"`
 	Bucket             map[string]InfraConfig   `yaml:"bucket"`
 	Clickhouse         map[string]InfraConfig   `yaml:"clickhouse"`
+	ClickhouseKeeper   map[string]InfraConfig   `yaml:"clickhouseKeeper"`
 	Kafka              KafkaConfig              `yaml:"kafka"`
 	Mysql              map[string]InfraConfig   `yaml:"mysql"`
 	Redis              map[string]InfraConfig   `yaml:"redis"`
@@ -145,10 +146,13 @@ type AppKafkaSection struct {
 
 // Application describes one entry in the applications list.
 type Application struct {
-	Name    string   `yaml:"name"`
-	Image   ImageRef `yaml:"image"`
-	Args    []string `yaml:"args,omitempty"`
-	Command []string `yaml:"command,omitempty"`
+	Name string `yaml:"name"`
+	// LegacyKey is the v1 operator-wandb helm values key for this application
+	// when it differs from the name (e.g. nginx-proxy was `nginx`).
+	LegacyKey string   `yaml:"legacyKey,omitempty"`
+	Image     ImageRef `yaml:"image"`
+	Args      []string `yaml:"args,omitempty"`
+	Command   []string `yaml:"command,omitempty"`
 	// CommonEnvs is a list of keys referencing top-level commonEnvvars groups
 	// to be included for this application (e.g., ["gorillaMysql", "gorillaBucket"]).
 	CommonEnvs         []string `yaml:"commonEnvs,omitempty"`
@@ -182,9 +186,12 @@ type AppIngressSpec struct {
 type SizingConfig struct {
 	Replicas    int32                        `yaml:"replicas,omitempty"`
 	Shards      int32                        `yaml:"shards,omitempty"`
+	Copies      int32                        `yaml:"copies,omitempty"`
 	VolumeSize  string                       `yaml:"volumeSize,omitempty"`
 	Resources   *corev1.ResourceRequirements `yaml:"resources,omitempty"`
 	Autoscaling *AutoscalingConfig           `yaml:"autoscaling,omitempty"`
+	// MetadataVolumeSize sizes the disk backing an object store's index/metadata
+	MetadataVolumeSize string `yaml:"metadataVolumeSize,omitempty"`
 }
 
 type KafkaSizingConfig struct {
@@ -404,6 +411,12 @@ func mergeSimple(dst, src *Manifest) {
 			dst.Clickhouse = make(map[string]InfraConfig)
 		}
 		mergeInfraConfigs(dst.Clickhouse, src.Clickhouse)
+	}
+	if src.ClickhouseKeeper != nil {
+		if dst.ClickhouseKeeper == nil {
+			dst.ClickhouseKeeper = make(map[string]InfraConfig)
+		}
+		mergeInfraConfigs(dst.ClickhouseKeeper, src.ClickhouseKeeper)
 	}
 
 	// Kafka sizing
@@ -768,7 +781,7 @@ func (m *Manifest) FeaturesEnabled(topicFeatures []string) bool {
 	return false
 }
 
-func (m *Manifest) ResolveServiceURL(src EnvSource) (string, bool) {
+func (m *Manifest) ResolveServiceURL(src EnvSource, namespace string) (string, bool) {
 	if src.Name == "" {
 		return "", false
 	}
@@ -787,7 +800,19 @@ func (m *Manifest) ResolveServiceURL(src EnvSource) (string, bool) {
 	if src.Proto != "" {
 		protoPrefix = fmt.Sprintf("%s://", src.Proto)
 	}
-	return fmt.Sprintf("%s%s:%d%s", protoPrefix, src.Name, port, src.Path), true
+	// Emit the fully-qualified service host (<name>.<namespace>.svc.cluster.local)
+	// rather than the bare service name. A bare single-label host only resolves
+	// via the consuming pod's DNS search domain, and — critically — is not
+	// matched by NO_PROXY suffix rules (.svc/.svc.cluster.local), so when a proxy
+	// is configured these internal service-to-service calls hairpin through it.
+	// The FQDN resolves unambiguously and is covered by the standard cluster-DNS
+	// NO_PROXY suffixes. Matches the FQDN convention the managed-infra reconcilers
+	// already use for datastore hosts.
+	host := src.Name
+	if namespace != "" {
+		host = fmt.Sprintf("%s.%s.svc.cluster.local", src.Name, namespace)
+	}
+	return fmt.Sprintf("%s%s:%d%s", protoPrefix, host, port, src.Path), true
 }
 
 func (a *Application) ResolveServicePortFromManifest(requestedPort string) (int32, bool) {

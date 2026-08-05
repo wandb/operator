@@ -145,6 +145,20 @@ func TestConvertTo_SizeUnrecognized(t *testing.T) {
 	require.Contains(t, err.Error(), `"testing"`)
 }
 
+func TestConvertTo_CustomCACerts(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{
+			"customCACerts":    []interface{}{"---cert-one---", "---cert-two---"},
+			"caCertsConfigMap": "corp-ca-certs",
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+
+	require.Equal(t, []string{"---cert-one---", "---cert-two---"}, dst.Spec.Global.CustomCACerts)
+	require.Equal(t, "corp-ca-certs", dst.Spec.Global.CACertsConfigMap)
+}
+
 func TestConvertTo_VersionFromAppImageTag(t *testing.T) {
 	dst := &appsv2.WeightsAndBiases{}
 	src := newV1(map[string]interface{}{
@@ -781,9 +795,9 @@ func TestConvertTo_MySQLAllLiterals(t *testing.T) {
 	require.Equal(t, "---cert---", decoded["caCert"])
 	require.NotContains(t, decoded, "passwordSecret")
 
-	require.NotNil(t, dst.Spec.MySQL.ExternalMysql, "externalMysql is always allocated; reconciler fills selectors from the annotation")
-	require.Empty(t, dst.Spec.MySQL.ExternalMysql.Host.Name)
-	require.Empty(t, dst.Spec.MySQL.ExternalMysql.Password.Name)
+	require.NotNil(t, dst.Spec.MySQL[appsv2.DefaultInstanceName].ExternalMysql, "externalMysql is always allocated; reconciler fills selectors from the annotation")
+	require.Empty(t, dst.Spec.MySQL[appsv2.DefaultInstanceName].ExternalMysql.Host.Name)
+	require.Empty(t, dst.Spec.MySQL[appsv2.DefaultInstanceName].ExternalMysql.Password.Name)
 }
 
 func TestConvertTo_MySQLLegacyPasswordSecret(t *testing.T) {
@@ -803,9 +817,9 @@ func TestConvertTo_MySQLLegacyPasswordSecret(t *testing.T) {
 	})
 	require.NoError(t, src.ConvertTo(dst))
 
-	require.NotNil(t, dst.Spec.MySQL.ExternalMysql)
-	require.Equal(t, "mysql-creds", dst.Spec.MySQL.ExternalMysql.Password.Name)
-	require.Equal(t, "MYSQL_PASSWORD", dst.Spec.MySQL.ExternalMysql.Password.Key)
+	require.NotNil(t, dst.Spec.MySQL[appsv2.DefaultInstanceName].ExternalMysql)
+	require.Equal(t, "mysql-creds", dst.Spec.MySQL[appsv2.DefaultInstanceName].ExternalMysql.Password.Name)
+	require.Equal(t, "MYSQL_PASSWORD", dst.Spec.MySQL[appsv2.DefaultInstanceName].ExternalMysql.Password.Key)
 
 	raw := dst.Annotations[MySQLPendingAnnotation]
 	var decoded map[string]interface{}
@@ -828,9 +842,9 @@ func TestConvertTo_MySQLLegacyPasswordSecretDefaultKey(t *testing.T) {
 	})
 	require.NoError(t, src.ConvertTo(dst))
 
-	require.NotNil(t, dst.Spec.MySQL.ExternalMysql)
-	require.Equal(t, "mysql-creds", dst.Spec.MySQL.ExternalMysql.Password.Name)
-	require.Equal(t, "MYSQL_PASSWORD", dst.Spec.MySQL.ExternalMysql.Password.Key)
+	require.NotNil(t, dst.Spec.MySQL[appsv2.DefaultInstanceName].ExternalMysql)
+	require.Equal(t, "mysql-creds", dst.Spec.MySQL[appsv2.DefaultInstanceName].ExternalMysql.Password.Name)
+	require.Equal(t, "MYSQL_PASSWORD", dst.Spec.MySQL[appsv2.DefaultInstanceName].ExternalMysql.Password.Key)
 }
 
 func TestConvertTo_MySQLValueFromRef(t *testing.T) {
@@ -859,8 +873,8 @@ func TestConvertTo_MySQLValueFromRef(t *testing.T) {
 	})
 	require.NoError(t, src.ConvertTo(dst))
 
-	require.NotNil(t, dst.Spec.MySQL.ExternalMysql)
-	conn := dst.Spec.MySQL.ExternalMysql
+	require.NotNil(t, dst.Spec.MySQL[appsv2.DefaultInstanceName].ExternalMysql)
+	conn := dst.Spec.MySQL[appsv2.DefaultInstanceName].ExternalMysql
 	require.Equal(t, "mysql-settings", conn.Host.Name)
 	require.Equal(t, "endpoint", conn.Host.Key)
 	require.Equal(t, "mysql-secret", conn.Password.Name)
@@ -890,9 +904,9 @@ func TestConvertTo_MySQLMixedLiteralsAndRefs(t *testing.T) {
 	})
 	require.NoError(t, src.ConvertTo(dst))
 
-	require.NotNil(t, dst.Spec.MySQL.ExternalMysql)
-	require.Equal(t, "mysql-secret", dst.Spec.MySQL.ExternalMysql.Password.Name)
-	require.Empty(t, dst.Spec.MySQL.ExternalMysql.Host.Name)
+	require.NotNil(t, dst.Spec.MySQL[appsv2.DefaultInstanceName].ExternalMysql)
+	require.Equal(t, "mysql-secret", dst.Spec.MySQL[appsv2.DefaultInstanceName].ExternalMysql.Password.Name)
+	require.Empty(t, dst.Spec.MySQL[appsv2.DefaultInstanceName].ExternalMysql.Host.Name)
 
 	raw := dst.Annotations[MySQLPendingAnnotation]
 	var decoded map[string]interface{}
@@ -924,8 +938,8 @@ func TestConvertTo_MySQLValueFromWinsOverPasswordSecret(t *testing.T) {
 	})
 	require.NoError(t, src.ConvertTo(dst))
 
-	require.NotNil(t, dst.Spec.MySQL.ExternalMysql)
-	require.Equal(t, "valueFrom-secret", dst.Spec.MySQL.ExternalMysql.Password.Name,
+	require.NotNil(t, dst.Spec.MySQL[appsv2.DefaultInstanceName].ExternalMysql)
+	require.Equal(t, "valueFrom-secret", dst.Spec.MySQL[appsv2.DefaultInstanceName].ExternalMysql.Password.Name,
 		"password.valueFrom should win over the legacy passwordSecret block")
 }
 
@@ -994,8 +1008,8 @@ func TestConvertTo_RedisAllLiterals(t *testing.T) {
 	require.NotContains(t, decoded, "external", "fields outside the known v2 mapping must be dropped")
 	require.NotContains(t, decoded, "secret")
 
-	require.NotNil(t, dst.Spec.Redis.ExternalRedis, "externalRedis is always allocated; reconciler fills selectors from the annotation")
-	require.Empty(t, dst.Spec.Redis.ExternalRedis.Host.Name)
+	require.NotNil(t, dst.Spec.Redis[appsv2.DefaultInstanceName].ExternalRedis, "externalRedis is always allocated; reconciler fills selectors from the annotation")
+	require.Empty(t, dst.Spec.Redis[appsv2.DefaultInstanceName].ExternalRedis.Host.Name)
 }
 
 func TestConvertTo_RedisLegacySecretRef(t *testing.T) {
@@ -1014,9 +1028,9 @@ func TestConvertTo_RedisLegacySecretRef(t *testing.T) {
 	})
 	require.NoError(t, src.ConvertTo(dst))
 
-	require.NotNil(t, dst.Spec.Redis.ExternalRedis)
-	require.Equal(t, "redis-creds", dst.Spec.Redis.ExternalRedis.Password.Name)
-	require.Equal(t, "REDIS_PASSWORD", dst.Spec.Redis.ExternalRedis.Password.Key)
+	require.NotNil(t, dst.Spec.Redis[appsv2.DefaultInstanceName].ExternalRedis)
+	require.Equal(t, "redis-creds", dst.Spec.Redis[appsv2.DefaultInstanceName].ExternalRedis.Password.Name)
+	require.Equal(t, "REDIS_PASSWORD", dst.Spec.Redis[appsv2.DefaultInstanceName].ExternalRedis.Password.Key)
 
 	raw := dst.Annotations[RedisPendingAnnotation]
 	var decoded map[string]interface{}
@@ -1038,9 +1052,9 @@ func TestConvertTo_RedisLegacySecretRefDefaultKey(t *testing.T) {
 	})
 	require.NoError(t, src.ConvertTo(dst))
 
-	require.NotNil(t, dst.Spec.Redis.ExternalRedis)
-	require.Equal(t, "redis-creds", dst.Spec.Redis.ExternalRedis.Password.Name)
-	require.Equal(t, "REDIS_PASSWORD", dst.Spec.Redis.ExternalRedis.Password.Key)
+	require.NotNil(t, dst.Spec.Redis[appsv2.DefaultInstanceName].ExternalRedis)
+	require.Equal(t, "redis-creds", dst.Spec.Redis[appsv2.DefaultInstanceName].ExternalRedis.Password.Name)
+	require.Equal(t, "REDIS_PASSWORD", dst.Spec.Redis[appsv2.DefaultInstanceName].ExternalRedis.Password.Key)
 }
 
 func TestConvertTo_RedisValueFromRef(t *testing.T) {
@@ -1069,8 +1083,8 @@ func TestConvertTo_RedisValueFromRef(t *testing.T) {
 	})
 	require.NoError(t, src.ConvertTo(dst))
 
-	require.NotNil(t, dst.Spec.Redis.ExternalRedis)
-	conn := dst.Spec.Redis.ExternalRedis
+	require.NotNil(t, dst.Spec.Redis[appsv2.DefaultInstanceName].ExternalRedis)
+	conn := dst.Spec.Redis[appsv2.DefaultInstanceName].ExternalRedis
 	require.Equal(t, "redis-settings", conn.Host.Name)
 	require.Equal(t, "endpoint", conn.Host.Key)
 	require.Equal(t, "redis-secret", conn.Password.Name)
@@ -1100,9 +1114,9 @@ func TestConvertTo_RedisMixedLiteralsAndRefs(t *testing.T) {
 	})
 	require.NoError(t, src.ConvertTo(dst))
 
-	require.NotNil(t, dst.Spec.Redis.ExternalRedis)
-	require.Equal(t, "redis-secret", dst.Spec.Redis.ExternalRedis.Password.Name)
-	require.Empty(t, dst.Spec.Redis.ExternalRedis.Host.Name)
+	require.NotNil(t, dst.Spec.Redis[appsv2.DefaultInstanceName].ExternalRedis)
+	require.Equal(t, "redis-secret", dst.Spec.Redis[appsv2.DefaultInstanceName].ExternalRedis.Password.Name)
+	require.Empty(t, dst.Spec.Redis[appsv2.DefaultInstanceName].ExternalRedis.Host.Name)
 
 	raw := dst.Annotations[RedisPendingAnnotation]
 	var decoded map[string]interface{}
@@ -1134,8 +1148,8 @@ func TestConvertTo_RedisValueFromWinsOverLegacySecret(t *testing.T) {
 	})
 	require.NoError(t, src.ConvertTo(dst))
 
-	require.NotNil(t, dst.Spec.Redis.ExternalRedis)
-	require.Equal(t, "valueFrom-secret", dst.Spec.Redis.ExternalRedis.Password.Name,
+	require.NotNil(t, dst.Spec.Redis[appsv2.DefaultInstanceName].ExternalRedis)
+	require.Equal(t, "valueFrom-secret", dst.Spec.Redis[appsv2.DefaultInstanceName].ExternalRedis.Password.Name,
 		"password.valueFrom should win over the legacy secret block")
 }
 
@@ -1178,9 +1192,9 @@ func TestConvertTo_RedisTLSValueFromInParams(t *testing.T) {
 		},
 	})
 	require.NoError(t, src.ConvertTo(dst))
-	require.NotNil(t, dst.Spec.Redis.ExternalRedis)
-	require.Equal(t, "redis-tls", dst.Spec.Redis.ExternalRedis.Tls.Name)
-	require.Equal(t, "enabled", dst.Spec.Redis.ExternalRedis.Tls.Key)
+	require.NotNil(t, dst.Spec.Redis[appsv2.DefaultInstanceName].ExternalRedis)
+	require.Equal(t, "redis-tls", dst.Spec.Redis[appsv2.DefaultInstanceName].ExternalRedis.Tls.Name)
+	require.Equal(t, "enabled", dst.Spec.Redis[appsv2.DefaultInstanceName].ExternalRedis.Tls.Key)
 }
 
 func TestConvertTo_RedisTLSValueFromInParameters(t *testing.T) {
@@ -1202,9 +1216,9 @@ func TestConvertTo_RedisTLSValueFromInParameters(t *testing.T) {
 		},
 	})
 	require.NoError(t, src.ConvertTo(dst))
-	require.NotNil(t, dst.Spec.Redis.ExternalRedis)
-	require.Equal(t, "redis-tls", dst.Spec.Redis.ExternalRedis.Tls.Name)
-	require.Equal(t, "enabled", dst.Spec.Redis.ExternalRedis.Tls.Key)
+	require.NotNil(t, dst.Spec.Redis[appsv2.DefaultInstanceName].ExternalRedis)
+	require.Equal(t, "redis-tls", dst.Spec.Redis[appsv2.DefaultInstanceName].ExternalRedis.Tls.Name)
+	require.Equal(t, "enabled", dst.Spec.Redis[appsv2.DefaultInstanceName].ExternalRedis.Tls.Key)
 }
 
 func TestConvertTo_RedisTLSParamsWinsOverParameters(t *testing.T) {
@@ -1236,7 +1250,7 @@ func TestConvertTo_RedisTLSParamsWinsOverParameters(t *testing.T) {
 		},
 	})
 	require.NoError(t, src.ConvertTo(dst))
-	require.Equal(t, "from-params", dst.Spec.Redis.ExternalRedis.Tls.Name,
+	require.Equal(t, "from-params", dst.Spec.Redis[appsv2.DefaultInstanceName].ExternalRedis.Tls.Name,
 		"params should be checked before parameters")
 }
 
@@ -1260,7 +1274,7 @@ func TestConvertTo_RedisTLSLiteralStashedInAnnotation(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(raw), &decoded))
 	require.Equal(t, "true", decoded["tls"])
 
-	require.Empty(t, dst.Spec.Redis.ExternalRedis.Tls.Name,
+	require.Empty(t, dst.Spec.Redis[appsv2.DefaultInstanceName].ExternalRedis.Tls.Name,
 		"literal tls should not be set on the spec; reconciler materializes it")
 }
 
@@ -1274,8 +1288,8 @@ func TestConvertTo_RedisTLSAbsent(t *testing.T) {
 		},
 	})
 	require.NoError(t, src.ConvertTo(dst))
-	require.Empty(t, dst.Spec.Redis.ExternalRedis.Tls.Name)
-	require.Empty(t, dst.Spec.Redis.ExternalRedis.Tls.Key)
+	require.Empty(t, dst.Spec.Redis[appsv2.DefaultInstanceName].ExternalRedis.Tls.Name)
+	require.Empty(t, dst.Spec.Redis[appsv2.DefaultInstanceName].ExternalRedis.Tls.Key)
 }
 
 // TestConvertTo_RedisTLSBooleanStashedAsString locks in that a YAML boolean
@@ -1368,8 +1382,8 @@ func TestConvertTo_BucketSecretRef(t *testing.T) {
 	})
 	require.NoError(t, src.ConvertTo(dst))
 
-	require.NotNil(t, dst.Spec.ObjectStore.ExternalObjectStore)
-	ext := dst.Spec.ObjectStore.ExternalObjectStore
+	require.NotNil(t, dst.Spec.ObjectStore[appsv2.DefaultInstanceName].ExternalObjectStore)
+	ext := dst.Spec.ObjectStore[appsv2.DefaultInstanceName].ExternalObjectStore
 	require.Equal(t, "bucket-creds", ext.AccessKey.Name)
 	require.Equal(t, "MY_ACCESS", ext.AccessKey.Key)
 	require.Equal(t, "bucket-creds", ext.SecretKey.Name)
@@ -1392,8 +1406,8 @@ func TestConvertTo_BucketSecretRefDefaultKeys(t *testing.T) {
 	})
 	require.NoError(t, src.ConvertTo(dst))
 
-	require.NotNil(t, dst.Spec.ObjectStore.ExternalObjectStore)
-	ext := dst.Spec.ObjectStore.ExternalObjectStore
+	require.NotNil(t, dst.Spec.ObjectStore[appsv2.DefaultInstanceName].ExternalObjectStore)
+	ext := dst.Spec.ObjectStore[appsv2.DefaultInstanceName].ExternalObjectStore
 	require.Equal(t, "ACCESS_KEY", ext.AccessKey.Key)
 	require.Equal(t, "SECRET_KEY", ext.SecretKey.Key)
 }
@@ -1412,11 +1426,11 @@ func TestConvertTo_BucketSecretRefEmptyName(t *testing.T) {
 	})
 	require.NoError(t, src.ConvertTo(dst))
 
-	require.NotNil(t, dst.Spec.ObjectStore.ExternalObjectStore,
+	require.NotNil(t, dst.Spec.ObjectStore[appsv2.DefaultInstanceName].ExternalObjectStore,
 		"externalObjectStore is always allocated; reconciler fills selectors from the annotation")
-	require.Empty(t, dst.Spec.ObjectStore.ExternalObjectStore.AccessKey.Name,
+	require.Empty(t, dst.Spec.ObjectStore[appsv2.DefaultInstanceName].ExternalObjectStore.AccessKey.Name,
 		"empty secretName should not produce an AccessKey selector")
-	require.Empty(t, dst.Spec.ObjectStore.ExternalObjectStore.SecretKey.Name)
+	require.Empty(t, dst.Spec.ObjectStore[appsv2.DefaultInstanceName].ExternalObjectStore.SecretKey.Name)
 
 	raw := dst.Annotations[BucketPendingAnnotation]
 	var decoded map[string]interface{}
@@ -1439,9 +1453,9 @@ func TestConvertTo_BucketLiteralsOnlyBucket(t *testing.T) {
 		},
 	})
 	require.NoError(t, src.ConvertTo(dst))
-	require.NotNil(t, dst.Spec.ObjectStore.ExternalObjectStore,
+	require.NotNil(t, dst.Spec.ObjectStore[appsv2.DefaultInstanceName].ExternalObjectStore,
 		"externalObjectStore is always allocated; literals stay in the annotation")
-	require.Empty(t, dst.Spec.ObjectStore.ExternalObjectStore.AccessKey.Name)
+	require.Empty(t, dst.Spec.ObjectStore[appsv2.DefaultInstanceName].ExternalObjectStore.AccessKey.Name)
 
 	raw, ok := dst.Annotations[BucketPendingAnnotation]
 	require.True(t, ok)
@@ -1545,8 +1559,8 @@ func TestConvertTo_BucketSecretRefAndLiterals(t *testing.T) {
 	})
 	require.NoError(t, src.ConvertTo(dst))
 
-	require.NotNil(t, dst.Spec.ObjectStore.ExternalObjectStore)
-	require.Equal(t, "bucket-creds", dst.Spec.ObjectStore.ExternalObjectStore.AccessKey.Name)
+	require.NotNil(t, dst.Spec.ObjectStore[appsv2.DefaultInstanceName].ExternalObjectStore)
+	require.Equal(t, "bucket-creds", dst.Spec.ObjectStore[appsv2.DefaultInstanceName].ExternalObjectStore.AccessKey.Name)
 
 	raw := dst.Annotations[BucketPendingAnnotation]
 	var decoded map[string]interface{}
@@ -1564,7 +1578,7 @@ func TestConvertTo_BucketAbsent(t *testing.T) {
 	})
 	require.NoError(t, src.ConvertTo(dst))
 	require.NotContains(t, dst.Annotations, BucketPendingAnnotation)
-	require.Nil(t, dst.Spec.ObjectStore.ExternalObjectStore)
+	require.Nil(t, dst.Spec.ObjectStore[appsv2.DefaultInstanceName].ExternalObjectStore)
 }
 
 func TestConvertTo_BucketEmptyMaps(t *testing.T) {
@@ -1577,7 +1591,7 @@ func TestConvertTo_BucketEmptyMaps(t *testing.T) {
 	})
 	require.NoError(t, src.ConvertTo(dst))
 	require.NotContains(t, dst.Annotations, BucketPendingAnnotation)
-	require.Nil(t, dst.Spec.ObjectStore.ExternalObjectStore)
+	require.Nil(t, dst.Spec.ObjectStore[appsv2.DefaultInstanceName].ExternalObjectStore)
 }
 
 func TestConvertTo_BucketAllEmptyValues(t *testing.T) {
@@ -1645,8 +1659,8 @@ func TestConvertRoundTrip(t *testing.T) {
 	firstV2 := &appsv2.WeightsAndBiases{}
 	require.NoError(t, original.ConvertTo(firstV2))
 	require.Equal(t, "http://wandb.localhost", firstV2.Spec.Wandb.Hostname)
-	require.NotNil(t, firstV2.Spec.MySQL.ExternalMysql)
-	require.Equal(t, "mysql-creds", firstV2.Spec.MySQL.ExternalMysql.Host.Name)
+	require.NotNil(t, firstV2.Spec.MySQL[appsv2.DefaultInstanceName].ExternalMysql)
+	require.Equal(t, "mysql-creds", firstV2.Spec.MySQL[appsv2.DefaultInstanceName].ExternalMysql.Host.Name)
 
 	// Apiserver bounces through ConvertFrom internally.
 	roundTripped := &WeightsAndBiases{}
@@ -1658,8 +1672,8 @@ func TestConvertRoundTrip(t *testing.T) {
 	require.NoError(t, roundTripped.ConvertTo(secondV2))
 
 	require.Equal(t, firstV2.Spec.Wandb.Hostname, secondV2.Spec.Wandb.Hostname)
-	require.NotNil(t, secondV2.Spec.MySQL.ExternalMysql)
-	require.Equal(t, firstV2.Spec.MySQL.ExternalMysql.Host, secondV2.Spec.MySQL.ExternalMysql.Host)
+	require.NotNil(t, secondV2.Spec.MySQL[appsv2.DefaultInstanceName].ExternalMysql)
+	require.Equal(t, firstV2.Spec.MySQL[appsv2.DefaultInstanceName].ExternalMysql.Host, secondV2.Spec.MySQL[appsv2.DefaultInstanceName].ExternalMysql.Host)
 }
 
 func TestConvertFrom_NoAnnotations(t *testing.T) {
@@ -1786,4 +1800,206 @@ func TestConvertTo_StashedAnnotationsReflectCRNotActiveSpec(t *testing.T) {
 	global := decoded["global"].(map[string]interface{})
 	require.Equal(t, "http://wandb.from-cr", global["host"],
 		"stashed annotation must preserve the CR's raw values for round-trip")
+}
+
+func TestConvertTo_ClickHouseValueFromRef(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{
+			"clickhouse": map[string]interface{}{
+				"host": map[string]interface{}{
+					"valueFrom": map[string]interface{}{
+						"secretKeyRef": map[string]interface{}{
+							"name": "ch-settings",
+							"key":  "endpoint",
+						},
+					},
+				},
+				"password": map[string]interface{}{
+					"valueFrom": map[string]interface{}{
+						"secretKeyRef": map[string]interface{}{
+							"name": "ch-secret",
+							"key":  "password",
+						},
+					},
+				},
+			},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+
+	conn := dst.Spec.ClickHouse[appsv2.DefaultInstanceName].ExternalClickHouse
+	require.NotNil(t, conn)
+	require.Nil(t, dst.Spec.ClickHouse[appsv2.DefaultInstanceName].ManagedClickHouse,
+		"external clickhouse must not also be managed")
+	require.Equal(t, "ch-settings", conn.Host.Name)
+	require.Equal(t, "endpoint", conn.Host.Key)
+	require.Equal(t, "ch-secret", conn.Password.Name)
+	require.Equal(t, "password", conn.Password.Key)
+
+	require.NotContains(t, dst.Annotations, ClickHousePendingAnnotation,
+		"no literals provided, so no annotation should be created")
+}
+
+func TestConvertTo_ClickHouseLiterals(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{
+			"clickhouse": map[string]interface{}{
+				"host":     "clickhouse.example.com",
+				"port":     int64(8123),
+				"database": "weave",
+				"user":     "weave",
+				"password": "shh",
+			},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+
+	raw, ok := dst.Annotations[ClickHousePendingAnnotation]
+	require.True(t, ok, "expected clickhouse-pending annotation")
+
+	var decoded map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(raw), &decoded))
+	require.Equal(t, "clickhouse.example.com", decoded["host"])
+	require.Equal(t, "8123", decoded["port"])
+	require.Equal(t, "weave", decoded["database"])
+	require.Equal(t, "weave", decoded["user"])
+	require.Equal(t, "shh", decoded["password"])
+
+	require.NotNil(t, dst.Spec.ClickHouse[appsv2.DefaultInstanceName].ExternalClickHouse,
+		"externalClickhouse is always allocated; reconciler fills selectors from the annotation")
+	require.Empty(t, dst.Spec.ClickHouse[appsv2.DefaultInstanceName].ExternalClickHouse.Host.Name)
+}
+
+func TestConvertTo_ClickHouseMixedLiteralsAndRefs(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{
+			"clickhouse": map[string]interface{}{
+				"host": "clickhouse.example.com",
+				"port": int64(8123),
+				"password": map[string]interface{}{
+					"valueFrom": map[string]interface{}{
+						"secretKeyRef": map[string]interface{}{
+							"name": "ch-secret",
+							"key":  "password",
+						},
+					},
+				},
+			},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+
+	conn := dst.Spec.ClickHouse[appsv2.DefaultInstanceName].ExternalClickHouse
+	require.NotNil(t, conn)
+	require.Equal(t, "ch-secret", conn.Password.Name)
+	require.Equal(t, "password", conn.Password.Key)
+
+	raw := dst.Annotations[ClickHousePendingAnnotation]
+	var decoded map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(raw), &decoded))
+	require.Equal(t, "clickhouse.example.com", decoded["host"])
+	require.Equal(t, "8123", decoded["port"])
+	require.NotContains(t, decoded, "password", "password came from a ref, not a literal")
+}
+
+func TestConvertTo_ClickHouseLegacyPasswordSecret(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{
+			"clickhouse": map[string]interface{}{
+				"host":     "clickhouse.example.com",
+				"password": "shh",
+				"passwordSecret": map[string]interface{}{
+					"name":        "ch-creds",
+					"passwordKey": "CLICKHOUSE_PASSWORD",
+				},
+			},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+
+	conn := dst.Spec.ClickHouse[appsv2.DefaultInstanceName].ExternalClickHouse
+	require.NotNil(t, conn)
+	require.Equal(t, "ch-creds", conn.Password.Name)
+	require.Equal(t, "CLICKHOUSE_PASSWORD", conn.Password.Key)
+
+	raw := dst.Annotations[ClickHousePendingAnnotation]
+	var decoded map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(raw), &decoded))
+	require.Equal(t, "clickhouse.example.com", decoded["host"])
+	require.NotContains(t, decoded, "password", "literal password must not be stashed when passwordSecret took over")
+}
+
+func TestConvertTo_ClickHousePasswordSecretDefaultKey(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{
+			"clickhouse": map[string]interface{}{
+				"passwordSecret": map[string]interface{}{
+					"name": "ch-creds",
+				},
+			},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+
+	conn := dst.Spec.ClickHouse[appsv2.DefaultInstanceName].ExternalClickHouse
+	require.NotNil(t, conn)
+	require.Equal(t, "ch-creds", conn.Password.Name)
+	require.Equal(t, "CLICKHOUSE_PASSWORD", conn.Password.Key)
+}
+
+// TestConvertTo_ClickHousePasswordSecretMalformed: a non-string name must
+// surface an error instead of being silently skipped.
+func TestConvertTo_ClickHousePasswordSecretMalformed(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{
+			"clickhouse": map[string]interface{}{
+				"passwordSecret": map[string]interface{}{
+					"name": float64(123),
+				},
+			},
+		},
+	})
+	err := src.ConvertTo(dst)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "clickhouse.passwordSecret.name")
+}
+
+// TestConvertTo_NoClickHouseLeavesEmpty: no clickhouse block means conversion
+// leaves it empty for the defaulter to manage.
+func TestConvertTo_NoClickHouseLeavesEmpty(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{
+			"host": "http://wandb.example.com",
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+
+	require.Empty(t, dst.Spec.ClickHouse,
+		"no global.clickhouse means conversion leaves ClickHouse empty for the defaulter to manage")
+	require.NotContains(t, dst.Annotations, ClickHousePendingAnnotation)
+}
+
+// TestConvertTo_ClickHouseOnlyNonConnectionKeys: keys like replicated/install
+// must not be misread as an external connection.
+func TestConvertTo_ClickHouseOnlyNonConnectionKeys(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{
+			"clickhouse": map[string]interface{}{
+				"replicated": true,
+			},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+
+	require.Empty(t, dst.Spec.ClickHouse,
+		"only non-connection keys must not assert an external clickhouse")
+	require.NotContains(t, dst.Annotations, ClickHousePendingAnnotation)
 }

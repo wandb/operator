@@ -1,24 +1,61 @@
-# Release
+# Releasing Operator v2
 
-## Description
+Production v2 releases are prepared through a reviewed pull request and
+published from an annotated `v2.x.y` tag. A single workflow publishes the
+operator image and Helm chart from the same commit.
 
-In this document, we'll go over on how to properly create a release, and push it.
+## Production release
 
-## Creating a Release
+1. Open a release pull request against `main`.
+2. Update `wandb.version` in `deploy/operator/values.yaml` to the intended W&B
+   server release.
+3. Set all three operator versions to the release number without a leading
+   `v`:
+   - `version` in `deploy/operator/Chart.yaml`
+   - `appVersion` in `deploy/operator/Chart.yaml`
+   - `wandb-operator.image.tag` in `deploy/operator/values.yaml`
+4. Run the chart validation commands used by CI:
 
-1. Create a branch off `v2` -- it's irrelevant of what the branch name is.
-2. Think of the tag you'd like to update to, and we'll continue to use **tag** to reference this. For example, `2.0.0-alpha.3`.
-3. In the [operator values](../deploy/operator/values.yaml), update the following:
-   1. The version at the top under `wandb:` is pointing to the latest server release. This server release should be the latest that was cut specifically for On-Prem.
-   2. The version under `wandb-operator:` needs to update the tag version to the one desired on point 2.
-4. In the [operator chart](../deploy/operator/Chart.yaml), update the `version` and `appVersion` to the desired tag.
-5. Ensure the [chart repos](..deploy/ct.yaml) match to that of the [chart](..deploy/operator/Chart.yaml). If there's missing ones, please proceed to add them, or update it.
-6. Alas, run `ct lint --config deploy/ct.yaml` from root directory of this repository to ensure things will pass
-7. Create a PR and get manager approval to merge and create the release
+   ```bash
+   helm dependency build deploy/operator
+   ct lint --all --config deploy/ct.yaml
+   helm lint --strict deploy/operator
+   ```
 
-## Pushing the Release
+5. Merge the pull request after all required checks and approvals pass.
+6. Update the local branch and confirm it exactly matches the remote branch:
 
-Ensure the PR created has been merged onto `v2` branch.
+   ```bash
+   git switch main
+   git pull --ff-only origin main
+   test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
+   ```
 
-1. Run the following GitHub Action: [Internal Image Publish](https://github.com/wandb/operator/actions/workflows/internal-image-publish.yaml) off the `v2` branch and use the desired tag that was used in part 1.
-2. Run the following GitHub Action: [Internal Chart Publish](https://github.com/wandb/operator/actions/workflows/internal-chart-publish.yaml) off the `v2` branch
+7. Create and push an annotated release tag at that commit:
+
+   ```bash
+   version=v2.0.0
+   git tag -a "${version}" -m "Operator ${version}"
+   git push origin "${version}"
+   ```
+
+8. Monitor the `Release v2` workflow. It publishes the versioned GAR image
+   first, then the matching OCI Helm chart, and creates the GitHub Release only
+   after both artifacts succeed.
+9. Record the source commit, image digest, chart digest, and GitHub Release URL
+   in the release record.
+
+Production versions are immutable. Never move, delete, reuse, or overwrite a
+`v2.x.y` tag or its `2.x.y` image/chart tags. If a release is incorrect or only
+partially publishes, fix it with a new patch version. The production workflow
+does not publish a `latest` tag.
+
+## Development artifacts
+
+The `Internal Image Publish` workflow accepts only tags in the form
+`dev-<name>-<7-to-40-character-sha>`, for example
+`dev-bucket-proxy-1106901`. It cannot publish production-style tags.
+
+The `Internal Chart Publish` workflow accepts the prerelease version already
+declared in `deploy/operator/Chart.yaml`, such as `2.0.0-rc.1`. It rejects
+stable versions and refuses to overwrite an existing prerelease chart tag.

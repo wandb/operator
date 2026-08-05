@@ -5,35 +5,38 @@ on:
     inputs:
       image_tag:
         type: string
-        description: 'Tags for Images in GAR'
+        description: 'Development tag in the form dev-<name>-<7-to-40-character-sha>'
         required: true
 
 jobs:
   release:
-    name: Release
+    name: Publish development image
     runs-on: ubuntu-latest
     permissions:
-      contents: 'read'
-      id-token: 'write'
+      contents: read
+      id-token: write
     steps:
+      - name: Validate development tag
+        env:
+          VERSION: ${{ inputs.image_tag }}
+        run: |
+          if [[ ! "${VERSION}" =~ ^dev-[a-z0-9][a-z0-9._-]*-[0-9a-f]{7,40}$ ]]; then
+            echo "Development tags must use dev-<name>-<7-to-40-character-sha>" >&2
+            exit 1
+          fi
+
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
-          persist-credentials: false
           fetch-depth: 0
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+          persist-credentials: false
 
       - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v3.0.1
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
 
       - id: auth
         name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v3
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
         with:
           create_credentials_file: 'true'
           token_format: access_token
@@ -41,21 +44,11 @@ jobs:
           workload_identity_provider: ${{ secrets.CI_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.CI_WORKLOAD_IDENTITY_SERVICE_ACCOUNT }}
 
-      - name: Authorize Docker to use Google Container Registry
-        run: |
-          gcloud auth configure-docker us-docker.pkg.dev
+      - name: Authorize Docker for Artifact Registry
+        run: gcloud auth configure-docker us-docker.pkg.dev --quiet
 
-      - uses: actions/setup-go@v4
-        with:
-          go-version: 1.25
-
-      - name: Install Ginkgo
-        run: go install github.com/onsi/ginkgo/v2/ginkgo@latest
-
-      - name: Build and Push to GAR
-        run: |
-          export IMG=$IMAGE_TAG_BASE:$VERSION
-          make docker-build docker-push
+      - name: Build and publish development image
         env:
-          IMAGE_TAG_BASE: us-docker.pkg.dev/wandb-production/public/wandb/operator
-          VERSION: ${{ github.event.inputs.image_tag }}
+          IMAGE_REPOSITORY: us-docker.pkg.dev/wandb-production/public/wandb/operator
+          VERSION: ${{ inputs.image_tag }}
+        run: make docker-build docker-push IMG="${IMAGE_REPOSITORY}:${VERSION}"

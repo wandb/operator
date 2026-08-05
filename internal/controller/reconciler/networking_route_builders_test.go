@@ -15,8 +15,10 @@ var _ = Describe("Networking Route Builders", func() {
 		wandb := &apiv2.WeightsAndBiases{
 			ObjectMeta: metav1.ObjectMeta{Name: "wandb", Namespace: "wandb-ns"},
 			Spec: apiv2.WeightsAndBiasesSpec{
-				ObjectStore: apiv2.ObjectStoreSpec{
-					ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{Namespace: "wandb-ns"},
+				ObjectStore: map[string]apiv2.ObjectStoreSpec{
+					apiv2.DefaultInstanceName: {
+						ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{Namespace: "wandb-ns"},
+					},
 				},
 			},
 		}
@@ -32,8 +34,10 @@ var _ = Describe("Networking Route Builders", func() {
 		wandb := &apiv2.WeightsAndBiases{
 			ObjectMeta: metav1.ObjectMeta{Name: "wandb", Namespace: "wandb-ns"},
 			Spec: apiv2.WeightsAndBiasesSpec{
-				ObjectStore: apiv2.ObjectStoreSpec{
-					ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{Namespace: "infra-ns"},
+				ObjectStore: map[string]apiv2.ObjectStoreSpec{
+					apiv2.DefaultInstanceName: {
+						ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{Namespace: "infra-ns"},
+					},
 				},
 			},
 		}

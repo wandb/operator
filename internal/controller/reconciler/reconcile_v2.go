@@ -35,6 +35,7 @@ import (
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	apiErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -226,48 +227,31 @@ func Reconcile(
 	if isFlaggedForDeletion && !wandb.GetDeletionTimestamp().IsZero() {
 		if ctrlqueue.ContainsString(wandb.GetFinalizers(), CleanupFinalizer) {
 
-			if wandb.Spec.ObjectStore.ManagedObjectStore != nil {
-				if err = runRetentionFinalizer(ctx, client, wandb, wandb.Spec.ObjectStore.ManagedObjectStore.ManagedInfraSpec, objectStorePurgeFinalizer, objectStoreDetachFinalizer); err != nil {
+			// Multi-instance infra: the per-type retention dispatcher applies the
+			// configured policy to each managed or external instance.
+			for key, spec := range wandb.Spec.ObjectStore {
+				if err = runObjectStoreRetentionFinalizer(ctx, client, wandb, key, spec); err != nil {
 					return ctrl.Result{}, err
 				}
 			}
-			if wandb.Spec.MySQL.ManagedMysql != nil {
-				if err = runRetentionFinalizer(ctx, client, wandb, wandb.Spec.MySQL.ManagedMysql.ManagedInfraSpec, mysqlPurgeFinalizer, mysqlDetachFinalizer); err != nil {
+			for key, spec := range wandb.Spec.MySQL {
+				if err = runMysqlRetentionFinalizer(ctx, client, wandb, key, spec); err != nil {
 					return ctrl.Result{}, err
 				}
 			}
-			if wandb.Spec.Redis.ManagedRedis != nil {
-				if err = runRetentionFinalizer(ctx, client, wandb, wandb.Spec.Redis.ManagedRedis.ManagedInfraSpec, redisPurgeFinalizer, redisDetachFinalizer); err != nil {
+			for key, spec := range wandb.Spec.Redis {
+				if err = runRedisRetentionFinalizer(ctx, client, wandb, key, spec); err != nil {
 					return ctrl.Result{}, err
 				}
 			}
+			for key, spec := range wandb.Spec.ClickHouse {
+				if err = runClickHouseRetentionFinalizer(ctx, client, wandb, key, spec); err != nil {
+					return ctrl.Result{}, err
+				}
+			}
+			// Kafka remains single-instance.
 			if wandb.Spec.Kafka.ManagedKafka != nil {
 				if err = runRetentionFinalizer(ctx, client, wandb, wandb.Spec.Kafka.ManagedKafka.ManagedInfraSpec, kafkaPurgeFinalizer, kafkaDetachFinalizer); err != nil {
-					return ctrl.Result{}, err
-				}
-			}
-			if wandb.Spec.ClickHouse.ManagedClickHouse != nil {
-				if err = runRetentionFinalizer(ctx, client, wandb, wandb.Spec.ClickHouse.ManagedClickHouse.ManagedInfraSpec, clickHousePurgeFinalizer, clickHouseDetachFinalizer); err != nil {
-					return ctrl.Result{}, err
-				}
-			}
-			if wandb.Spec.ObjectStore.ExternalObjectStore != nil && wandb.Spec.RetentionPolicy.OnDelete == apiv2.PurgeOnDelete {
-				if err = objectStorePurgeFinalizer(ctx, client, wandb); err != nil {
-					return ctrl.Result{}, err
-				}
-			}
-			if wandb.Spec.MySQL.ExternalMysql != nil && wandb.Spec.RetentionPolicy.OnDelete == apiv2.PurgeOnDelete {
-				if err = mysqlPurgeFinalizer(ctx, client, wandb); err != nil {
-					return ctrl.Result{}, err
-				}
-			}
-			if wandb.Spec.Redis.ExternalRedis != nil && wandb.Spec.RetentionPolicy.OnDelete == apiv2.PurgeOnDelete {
-				if err = redisPurgeFinalizer(ctx, client, wandb); err != nil {
-					return ctrl.Result{}, err
-				}
-			}
-			if wandb.Spec.ClickHouse.ExternalClickHouse != nil && wandb.Spec.RetentionPolicy.OnDelete == apiv2.PurgeOnDelete {
-				if err = clickHousePurgeFinalizer(ctx, client, wandb); err != nil {
 					return ctrl.Result{}, err
 				}
 			}
@@ -322,8 +306,8 @@ func Reconcile(
 	// Write Infra State
 	redisConditions := redisWriteState(ctx, client, wandb, manifest)
 	mysqlConditions := mysqlWriteState(ctx, client, wandb, manifest)
-	kafkaConditions := kafkaWriteState(ctx, client, wandb, manifest)
 	objectStoreConditions, objectStoreConnection := objectStoreWriteState(ctx, client, wandb, manifest)
+	kafkaConditions := kafkaWriteState(ctx, client, wandb, manifest)
 	clickHouseConditions := clickHouseWriteState(ctx, client, wandb, manifest)
 
 	/////////////////////////
@@ -377,11 +361,11 @@ func Reconcile(
 		return ctrl.Result{}, err
 	}
 
-	redisReady := wandb.Status.RedisStatus.Ready
-	mysqlReady := wandb.Status.MySQLStatus.Ready
+	redisReady := redisAllReady(wandb)
+	mysqlReady := mysqlAllReady(wandb)
 	kafkaReady := wandb.Status.KafkaStatus.Ready
-	objectStoreReady := wandb.Status.ObjectStoreStatus.Ready
-	clickHouseReady := wandb.Status.ClickHouseStatus.Ready
+	objectStoreReady := objectStoreAllReady(wandb)
+	clickHouseReady := clickHouseAllReady(wandb)
 
 	if !redisReady || !mysqlReady || !kafkaReady || !objectStoreReady || !clickHouseReady {
 		log := ctrl.LoggerFrom(ctx)
@@ -428,19 +412,35 @@ func ReconcileWandbManifest(
 	var result ctrl.Result
 	var err error
 
-	redisReady := wandb.Status.RedisStatus.Ready
-	mysqlReady := wandb.Status.MySQLStatus.Ready
+	statusBefore := wandb.DeepCopy().Status
+
+	redisReady := redisAllReady(wandb)
+	mysqlReady := mysqlAllReady(wandb)
 	kafkaReady := wandb.Status.KafkaStatus.Ready
-	objectStoreReady := wandb.Status.ObjectStoreStatus.Ready
-	clickHouseReady := wandb.Status.ClickHouseStatus.Ready
+	objectStoreReady := objectStoreAllReady(wandb)
+	clickHouseReady := clickHouseAllReady(wandb)
 
 	if !redisReady || !mysqlReady || !kafkaReady || !objectStoreReady || !clickHouseReady {
 		logger.Info("Infra components not ready yet, requeuing for reconciliation",
 			"redis", redisReady, "moco", mysqlReady, "kafka", kafkaReady, "objectStore", objectStoreReady, "clickhouse", clickHouseReady)
+		blockers := infrastructureBlockers(wandb)
+		if err := updateReadyStatus(
+			ctx,
+			client,
+			wandb,
+			statusBefore,
+			false,
+			"DependenciesNotReady",
+			"dependencies not ready: "+strings.Join(blockers, ", "),
+		); err != nil {
+			return ctrl.Result{}, err
+		}
 		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
 	}
 
 	logger.Info("Manifest Features", "features", manifest.Features)
+
+	validateLegacyOverrides(ctx, wandb, manifest)
 
 	result, err = generateSecrets(ctx, client, wandb, manifest)
 	if err != nil {
@@ -457,8 +457,12 @@ func ReconcileWandbManifest(
 		return result, err
 	}
 
-	if wandb.Spec.MySQL.ManagedMysql != nil && !wandb.Status.Wandb.MySQLInit.Succeeded {
-		logger.Info("Mysql init not yet successful", "Message", wandb.Status.Wandb.MySQLInit.Message)
+	if !allMysqlInitSucceeded(wandb) {
+		logger.Info("Mysql init not yet successful")
+		reason, message := mysqlInitializationReadiness(wandb)
+		if err := updateReadyStatus(ctx, client, wandb, statusBefore, false, reason, message); err != nil {
+			return ctrl.Result{}, err
+		}
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
@@ -487,6 +491,11 @@ func ReconcileWandbManifest(
 	}
 	resetInactiveNetworkingStatus(wandb)
 
+	if err := reconcileCustomCACerts(ctx, client, wandb); err != nil {
+		logger.Error(err, "Failed to reconcile custom CA certificates")
+		return ctrl.Result{}, err
+	}
+
 	if wandb.Spec.Networking.Mode == apiv2.NetworkingModeGatewayAPI {
 		wandb.Status.GatewayStatus = nil
 		if err := reconcileGateway(ctx, client, wandb); err != nil {
@@ -502,6 +511,10 @@ func ReconcileWandbManifest(
 
 	if !wandb.Status.Wandb.Migration.Ready {
 		logger.Info("Migration not yet successful for version", "version", wandb.Spec.Wandb.Version, "reason", wandb.Status.Wandb.Migration.Reason)
+		reason, message := migrationReadiness(wandb)
+		if err := updateReadyStatus(ctx, client, wandb, statusBefore, false, reason, message); err != nil {
+			return ctrl.Result{}, err
+		}
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
@@ -510,11 +523,18 @@ func ReconcileWandbManifest(
 		return result, err
 	}
 
-	if appsHealthy(wandb.Status.Wandb.Applications, buildDesiredAppNames(manifest)) {
+	// Gate on live Deployment readiness, not status.wandb.applications: the
+	// copied status map can be a stale snapshot (it only refreshes when this
+	// reconciler runs), and a frozen mid-rollout entry would block cleanup forever.
+	applicationsHealthy, notReady := deploymentsHealthy(ctx, client, wandb.Namespace, buildDesiredAppNames(manifest))
+	if applicationsHealthy {
 		if err := cleanupLegacyV1Deployments(ctx, client, wandb); err != nil {
 			logger.Error(err, "Failed to clean up legacy v1 deployments")
 			return ctrl.Result{}, err
 		}
+	} else {
+		logger.Info("Deferring legacy v1 deployment cleanup until all application Deployments are ready",
+			"notReady", notReady)
 	}
 
 	if wandb.Spec.Networking.Mode == apiv2.NetworkingModeGatewayAPI {
@@ -524,7 +544,26 @@ func ReconcileWandbManifest(
 		}
 	}
 
-	return ctrl.Result{}, nil
+	if applicationsHealthy {
+		setReadyStatus(
+			wandb,
+			true,
+			"ReconciliationSucceeded",
+			"all dependencies, migrations, and application deployments are ready",
+		)
+	} else {
+		message := "waiting for application deployments: " + strings.Join(notReady, ", ")
+		if len(notReady) == 0 {
+			message = "no desired application deployments were found"
+		}
+		setReadyStatus(wandb, false, "ApplicationsNotReady", message)
+	}
+
+	if err := updateWandbStatusIfChanged(ctx, client, wandb, statusBefore); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	return result, nil
 }
 
 func reconcileApplications(
@@ -588,12 +627,26 @@ func reconcileApplications(
 			volumes, volumeMounts = resolveJWTTokens(app, volumes, volumeMounts)
 		}
 
+		var caChecksum string
+		envVars, volumes, volumeMounts, caChecksum, err = applyCustomCACertsToWorkload(ctx, client, wandb, envVars, volumes, volumeMounts)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+
+		// spec.global.proxy env: after CA (so both are present) and before legacy
+		// overrides (so legacyOverrides can still override/blank any proxy var).
+		envVars = applyProxyToWorkload(wandb, envVars)
+
+		// Applied last so legacy overrides beat manifest and injected env, as in v1.
+		envVars = applyLegacyOverrideEnv(ctx, wandb, app.Name, envVars)
+
 		containers := resolveContainers(app, wandb, envVars, volumeMounts)
 
 		initContainers := resolveInitContainers(app, wandb, envVars, volumeMounts)
 
 		application := &apiv2.Application{}
 		err = client.Get(ctx, types.NamespacedName{Name: app.Name, Namespace: wandb.Namespace}, application)
+		before := application.DeepCopy()
 		if err != nil {
 			if apiErrors.IsNotFound(err) {
 				application.SetName(app.Name)
@@ -623,6 +676,7 @@ func reconcileApplications(
 		application.Spec.PodTemplate.Spec.SecurityContext = resolvePodSecurityContext()
 		application.Spec.PodTemplate.Spec.Affinity = wandb.Spec.Affinity
 		application.Spec.PodTemplate.Spec.Tolerations = *wandb.Spec.Tolerations
+		setCustomCACertsChecksumAnnotation(&application.Spec.PodTemplate, caChecksum)
 
 		application.Spec.HpaTemplate = ResolveAutoscaling(app, wandb)
 
@@ -634,10 +688,16 @@ func reconcileApplications(
 		// change to port numbers, names, or protocols is propagated on each
 		// reconcile. If no service ports are declared, clear the ServiceTemplate.
 		if app.Service != nil && len(app.Service.Ports) > 0 {
+			// Copy + normalize: the CRD schema defaults ports[].protocol, so an
+			// un-normalized template never round-trips equal and the update gate
+			// below would fire on every reconcile, churning the Application.
+			ports := make([]corev1.ServicePort, len(app.Service.Ports))
+			copy(ports, app.Service.Ports)
+			common.NormalizeServicePorts(ports)
 			application.Spec.ServiceTemplate = &corev1.ServiceSpec{
-				Type: app.Service.Type,
+				Type:  app.Service.Type,
+				Ports: ports,
 			}
-			application.Spec.ServiceTemplate.Ports = app.Service.Ports
 		} else {
 			// No service declared in manifest; ensure we clear any previous template
 			application.Spec.ServiceTemplate = nil
@@ -650,6 +710,9 @@ func reconcileApplications(
 			application.Spec.HTTPRouteTemplate = nil
 		}
 
+		// A plain owner ref (not a controller ref) so multiple CRs can share a
+		// namespace; the parent's Owns(Application) watch uses MatchEveryOwner
+		// to still enqueue on app status changes.
 		err = controllerutil.SetOwnerReference(wandb, application, client.Scheme())
 		if err != nil {
 			return ctrl.Result{}, err
@@ -659,7 +722,7 @@ func reconcileApplications(
 			if err = client.Create(ctx, application); err != nil {
 				return ctrl.Result{}, err
 			}
-		} else {
+		} else if !applicationManagedFieldsEqual(before, application) {
 			if err = client.Update(ctx, application); err != nil {
 				return ctrl.Result{}, err
 			}
@@ -734,11 +797,20 @@ func reconcileApplications(
 		}
 	}
 
-	if err := client.Status().Update(ctx, wandb); err != nil {
-		return ctrl.Result{}, err
-	}
+	// Every application now carries this generation's spec, so consumers can
+	// gate on observedGeneration == generation plus workload rollout. Earlier
+	// exits (infra, mysql-init, migrations) must not advance it: their specs
+	// haven't reached the workloads yet.
+	wandb.Status.ObservedGeneration = wandb.GetGeneration()
 
 	return ctrl.Result{}, nil
+}
+
+func applicationManagedFieldsEqual(before, after *apiv2.Application) bool {
+	return apiequality.Semantic.DeepEqual(before.Spec, after.Spec) &&
+		apiequality.Semantic.DeepEqual(before.Labels, after.Labels) &&
+		apiequality.Semantic.DeepEqual(before.Annotations, after.Annotations) &&
+		apiequality.Semantic.DeepEqual(before.OwnerReferences, after.OwnerReferences)
 }
 
 func buildHTTPRouteTemplate(wandb *apiv2.WeightsAndBiases, app serverManifest.Application) *apiv2.HTTPRouteTemplateSpec {
@@ -883,23 +955,6 @@ func appendResolvedManagedTelemetryEnvvars(
 		return nil, err
 	}
 	return appendMissingEnvVars(envVars, telemetryEnvVars), nil
-}
-
-// This function binds the secret name if `secretName` is empty for telemetry.
-func bindTelemetrySecretName(base []serverManifest.EnvVar, secretName string) []serverManifest.EnvVar {
-	output := make([]serverManifest.EnvVar, len(base))
-	for i, envVar := range base {
-		sources := make([]serverManifest.EnvSource, len(envVar.Sources))
-		for j, source := range envVar.Sources {
-			if source.Type == "telemetry" && source.Name == "" {
-				source.Name = secretName
-			}
-			sources[j] = source
-		}
-		envVar.Sources = sources
-		output[i] = envVar
-	}
-	return output
 }
 
 func shouldInjectManagedWorkloadTelemetry(appName string) bool {
@@ -1129,9 +1184,21 @@ func resolveInlineFiles(ctx context.Context, client ctrlClient.Client, wandb *ap
 }
 
 func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest) (ctrl.Result, error) {
+	statusBefore := wandb.DeepCopy().Status
 	version := wandb.Spec.Wandb.Version
 
 	if wandb.Status.Wandb.Migration.Ready && wandb.Status.Wandb.Migration.Version == version {
+		wandb.Status.Wandb.Migration.Phase = migrationPhaseSucceeded
+		if wandb.Status.Wandb.Migration.Reason == "" {
+			wandb.Status.Wandb.Migration.Reason = "Complete"
+		}
+		for name, jobStatus := range wandb.Status.Wandb.Migration.Jobs {
+			if jobStatus.Succeeded && jobStatus.Phase == "" {
+				jobStatus.Phase = migrationPhaseSucceeded
+				jobStatus.Reason = "JobSucceeded"
+				wandb.Status.Wandb.Migration.Jobs[name] = jobStatus
+			}
+		}
 		for name := range manifest.Migrations {
 			jobName := fmt.Sprintf("%s-%s", wandb.Name, name)
 			job := &batchv1.Job{
@@ -1149,24 +1216,30 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 				}
 			}
 		}
+		if err := updateWandbStatusIfChanged(ctx, client, wandb, statusBefore); err != nil {
+			return ctrl.Result{}, err
+		}
 		return ctrl.Result{}, nil
 	}
 
 	if wandb.Status.Wandb.Migration.Version != version {
 		wandb.Status.Wandb.Migration.Version = version
 		wandb.Status.Wandb.Migration.Ready = false
+		wandb.Status.Wandb.Migration.Phase = migrationPhaseRunning
 		wandb.Status.Wandb.Migration.Reason = "Running"
 		wandb.Status.Wandb.Migration.Jobs = make(map[string]apiv2.MigrationJobStatus)
-		if err := client.Status().Update(ctx, wandb); err != nil {
+		if err := updateWandbStatusIfChanged(ctx, client, wandb, statusBefore); err != nil {
 			return ctrl.Result{}, err
 		}
+		statusBefore = wandb.DeepCopy().Status
 	}
 
 	if len(manifest.Migrations) == 0 {
 		wandb.Status.Wandb.Migration.Ready = true
+		wandb.Status.Wandb.Migration.Phase = migrationPhaseSucceeded
 		wandb.Status.Wandb.Migration.Reason = "Complete"
 		wandb.Status.Wandb.Migration.LastSuccessVersion = version
-		if err := client.Status().Update(ctx, wandb); err != nil {
+		if err := updateWandbStatusIfChanged(ctx, client, wandb, statusBefore); err != nil {
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
@@ -1205,7 +1278,40 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 				return ctrl.Result{}, err
 			}
 
+			var caChecksum string
+			envVars, volumes, volumeMounts, caChecksum, err = applyCustomCACertsToWorkload(ctx, client, wandb, envVars, volumes, volumeMounts)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+
+			// spec.global.proxy env (migration Jobs egress too — v1 parity); before
+			// legacy overrides so the escape hatch still wins.
+			envVars = applyProxyToWorkload(wandb, envVars)
+
+			// v1's global env reached job pods too (e.g. HTTP_PROXY); per-app entries don't apply here.
+			envVars = overrideEnvVars(ctx, envVars, wandb.Spec.Wandb.LegacyOverrides[apiv2.LegacyOverridesGlobalKey].Env)
+
 			migrationJobLabels := common.StandardLabels(wandb, "migration", common.RoleMigration, wandb.Spec.Wandb.Version)
+			podTemplate := corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{Labels: migrationJobLabels},
+				Spec: corev1.PodSpec{
+					RestartPolicy: corev1.RestartPolicyOnFailure,
+					Containers: []corev1.Container{
+						{
+							Name:         "migrate",
+							Image:        migrationTask.Image.GetImage(""),
+							Args:         migrationTask.Args,
+							Command:      migrationTask.Command,
+							Env:          envVars,
+							VolumeMounts: volumeMounts,
+						},
+					},
+					Volumes:            volumes,
+					ServiceAccountName: wandb.Spec.Wandb.ServiceAccount.ServiceAccountName,
+				},
+			}
+			setCustomCACertsChecksumAnnotation(&podTemplate, caChecksum)
+
 			job = &batchv1.Job{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      jobName,
@@ -1213,24 +1319,7 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 					Labels:    migrationJobLabels,
 				},
 				Spec: batchv1.JobSpec{
-					Template: corev1.PodTemplateSpec{
-						ObjectMeta: metav1.ObjectMeta{Labels: migrationJobLabels},
-						Spec: corev1.PodSpec{
-							RestartPolicy: corev1.RestartPolicyOnFailure,
-							Containers: []corev1.Container{
-								{
-									Name:         "migrate",
-									Image:        migrationTask.Image.GetImage(""),
-									Args:         migrationTask.Args,
-									Command:      migrationTask.Command,
-									Env:          envVars,
-									VolumeMounts: volumeMounts,
-								},
-							},
-							Volumes:            volumes,
-							ServiceAccountName: wandb.Spec.Wandb.ServiceAccount.ServiceAccountName,
-						},
-					},
+					Template: podTemplate,
 				},
 			}
 
@@ -1243,10 +1332,13 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 			}
 
 			jobStatus.Succeeded = false
+			jobStatus.Phase = migrationPhaseRunning
+			jobStatus.Reason = "JobCreated"
 			wandb.Status.Wandb.Migration.Jobs[name] = jobStatus
+			wandb.Status.Wandb.Migration.Phase = migrationPhaseRunning
 			wandb.Status.Wandb.Migration.Reason = "Running"
 			wandb.Status.Wandb.Migration.Ready = false
-			if err := client.Status().Update(ctx, wandb); err != nil {
+			if err := updateWandbStatusIfChanged(ctx, client, wandb, statusBefore); err != nil {
 				return ctrl.Result{}, err
 			}
 
@@ -1255,11 +1347,27 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 
 		if job.Status.Succeeded > 0 {
 			jobStatus.Succeeded = true
+			jobStatus.Phase = migrationPhaseSucceeded
+			jobStatus.Reason = "JobSucceeded"
+			for _, cond := range job.Status.Conditions {
+				if cond.Type == batchv1.JobComplete && cond.Status == corev1.ConditionTrue {
+					if cond.Reason != "" {
+						jobStatus.Reason = cond.Reason
+					}
+					jobStatus.Message = cond.Message
+					break
+				}
+			}
 		} else {
 			allSucceeded = false
 			for _, cond := range job.Status.Conditions {
 				if cond.Type == batchv1.JobFailed && cond.Status == corev1.ConditionTrue {
 					jobStatus.Failed = true
+					jobStatus.Phase = migrationPhaseFailed
+					jobStatus.Reason = cond.Reason
+					if jobStatus.Reason == "" {
+						jobStatus.Reason = "JobFailed"
+					}
 					jobStatus.Message = cond.Message
 					anyFailed = true
 					break
@@ -1267,6 +1375,12 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 			}
 			if !jobStatus.Failed {
 				anyRunning = true
+				jobStatus.Phase = migrationPhaseRunning
+				if job.Status.Active > 0 {
+					jobStatus.Reason = "JobRunning"
+				} else {
+					jobStatus.Reason = "JobPending"
+				}
 			}
 		}
 
@@ -1274,28 +1388,28 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 	}
 
 	if anyFailed {
+		wandb.Status.Wandb.Migration.Phase = migrationPhaseFailed
 		wandb.Status.Wandb.Migration.Reason = "Failed"
 		wandb.Status.Wandb.Migration.Ready = false
 	} else if anyRunning || !allSucceeded {
+		wandb.Status.Wandb.Migration.Phase = migrationPhaseRunning
 		wandb.Status.Wandb.Migration.Reason = "Running"
 		wandb.Status.Wandb.Migration.Ready = false
 	} else if allSucceeded {
+		wandb.Status.Wandb.Migration.Phase = migrationPhaseSucceeded
 		wandb.Status.Wandb.Migration.Reason = "Complete"
 		wandb.Status.Wandb.Migration.Ready = true
 		if wandb.Status.Wandb.Migration.LastSuccessVersion != version {
 			wandb.Status.Wandb.Migration.LastSuccessVersion = version
 		}
 	} else {
+		wandb.Status.Wandb.Migration.Phase = migrationPhaseUnknown
 		wandb.Status.Wandb.Migration.Reason = "Unknown"
 		wandb.Status.Wandb.Migration.Ready = false
 	}
 
-	if err := client.Status().Update(ctx, wandb); err != nil {
+	if err := updateWandbStatusIfChanged(ctx, client, wandb, statusBefore); err != nil {
 		return ctrl.Result{}, err
-	}
-
-	if anyFailed {
-		return ctrl.Result{}, fmt.Errorf("one or more migration jobs failed")
 	}
 
 	if allSucceeded {
@@ -1306,6 +1420,7 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 }
 
 func generateSecrets(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest) (ctrl.Result, error) {
+	statusBefore := wandb.DeepCopy().Status
 	// Ensure any manifest-declared generated secrets exist and capture their selectors in status
 	if wandb.Status.GeneratedSecrets == nil {
 		wandb.Status.GeneratedSecrets = map[string]corev1.SecretKeySelector{}
@@ -1379,7 +1494,7 @@ func generateSecrets(ctx context.Context, client ctrlClient.Client, wandb *apiv2
 		}
 	}
 	// Persist status after updating generated secret selectors
-	if err := client.Status().Update(ctx, wandb); err != nil {
+	if err := updateWandbStatusIfChanged(ctx, client, wandb, statusBefore); err != nil {
 		return ctrl.Result{}, err
 	}
 	return ctrl.Result{}, nil
@@ -1450,29 +1565,67 @@ func resolveCRFieldSecretSelector(obj any, path string) (corev1.SecretKeySelecto
 	return sel, true
 }
 
+// allInstancesReady reports whether every instance (managed or external) has a
+// ready status.
+func allInstancesReady[S any, T any](specs map[string]S, statuses map[string]T, ready func(T) bool) bool {
+	for key := range specs {
+		if !ready(statuses[key]) {
+			return false
+		}
+	}
+	return true
+}
+
+func redisAllReady(wandb *apiv2.WeightsAndBiases) bool {
+	return allInstancesReady(wandb.Spec.Redis, wandb.Status.RedisStatus, func(s apiv2.RedisInfraStatus) bool { return s.Ready })
+}
+
+func mysqlAllReady(wandb *apiv2.WeightsAndBiases) bool {
+	return allInstancesReady(wandb.Spec.MySQL, wandb.Status.MySQLStatus, func(s apiv2.MysqlInfraStatus) bool { return s.Ready })
+}
+
+func objectStoreAllReady(wandb *apiv2.WeightsAndBiases) bool {
+	return allInstancesReady(wandb.Spec.ObjectStore, wandb.Status.ObjectStoreStatus, func(s apiv2.ObjectStoreInfraStatus) bool { return s.Ready })
+}
+
+func clickHouseAllReady(wandb *apiv2.WeightsAndBiases) bool {
+	return allInstancesReady(wandb.Spec.ClickHouse, wandb.Status.ClickHouseStatus, func(s apiv2.ClickHouseInfraStatus) bool { return s.Ready })
+}
+
 func inferState(
 	ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases,
 ) error {
 	log := ctrl.LoggerFrom(ctx)
+	statusBefore := wandb.DeepCopy().Status
 
-	redisOk := wandb.Spec.Redis.ManagedRedis == nil || wandb.Status.RedisStatus.Ready
-	objectStoreOk := wandb.Spec.ObjectStore.ManagedObjectStore == nil || wandb.Status.ObjectStoreStatus.Ready
-	mysqlOk := wandb.Spec.MySQL.ManagedMysql == nil || wandb.Status.MySQLStatus.Ready
-	clickHouseOk := wandb.Spec.ClickHouse.ManagedClickHouse == nil || wandb.Status.ClickHouseStatus.Ready
-	kafkaOk := wandb.Spec.Kafka.ManagedKafka == nil || wandb.Status.KafkaStatus.Ready
-
-	if redisOk && objectStoreOk && mysqlOk && clickHouseOk && kafkaOk {
-		wandb.Status.Ready = true
-	} else {
-		wandb.Status.Ready = false
+	blockers := infrastructureBlockers(wandb)
+	switch {
+	case len(blockers) > 0:
+		setReadyStatus(
+			wandb,
+			false,
+			"DependenciesNotReady",
+			"dependencies not ready: "+strings.Join(blockers, ", "),
+		)
+	case wandb.Status.ObservedGeneration != wandb.Generation:
+		setReadyStatus(
+			wandb,
+			false,
+			"Reconciling",
+			fmt.Sprintf(
+				"observed generation %d does not match generation %d",
+				wandb.Status.ObservedGeneration,
+				wandb.Generation,
+			),
+		)
+	default:
+		return nil
 	}
 
-	log.Info("About to update status", "apiVersion", wandb.APIVersion, "kind", wandb.Kind)
-	if err := client.Status().Update(ctx, wandb); err != nil {
+	if err := updateWandbStatusIfChanged(ctx, client, wandb, statusBefore); err != nil {
 		log.Error(err, "Failed to update status")
 		return err
 	}
-	log.Info("Status update successful")
 	return nil
 }
 

@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -31,6 +32,7 @@ import (
 
 	apiv1 "github.com/wandb/operator/api/v1"
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/internal/controller/infra/objectstore"
 )
 
 // migrateLegacyAnnotations drains `legacy.operator.wandb.com/*-pending`
@@ -57,7 +59,11 @@ func migrateLegacyAnnotations(
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	if !mysqlChanged && !redisChanged && !bucketChanged && !oidcChanged {
+	clickHouseChanged, err := migrateLegacyClickHouse(ctx, c, wandb)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if !mysqlChanged && !redisChanged && !bucketChanged && !oidcChanged && !clickHouseChanged {
 		return ctrl.Result{}, nil
 	}
 
@@ -99,7 +105,7 @@ func migrateLegacyMySQL(
 	}
 
 	secretName := fmt.Sprintf("%s-mysql-converted", wandb.Name)
-	conn := wandb.Spec.MySQL.ExternalMysql
+	conn := wandb.Spec.MySQL[apiv2.DefaultInstanceName].ExternalMysql
 	if conn == nil {
 		conn = &apiv2.MysqlConnection{}
 	}
@@ -124,7 +130,7 @@ func migrateLegacyMySQL(
 		return false, err
 	}
 
-	wandb.Spec.MySQL.ExternalMysql = conn
+	setExternalInstance(&wandb.Spec.MySQL, func(s *apiv2.MySQLSpec) { s.ExternalMysql = conn })
 	delete(wandb.Annotations, apiv1.MySQLPendingAnnotation)
 	return true, nil
 }
@@ -159,7 +165,7 @@ func migrateLegacyRedis(
 	}
 
 	secretName := fmt.Sprintf("%s-redis-converted", wandb.Name)
-	conn := wandb.Spec.Redis.ExternalRedis
+	conn := wandb.Spec.Redis[apiv2.DefaultInstanceName].ExternalRedis
 	if conn == nil {
 		conn = &apiv2.RedisConnection{}
 	}
@@ -183,15 +189,76 @@ func migrateLegacyRedis(
 		return false, err
 	}
 
-	wandb.Spec.Redis.ExternalRedis = conn
+	setExternalInstance(&wandb.Spec.Redis, func(s *apiv2.RedisSpec) { s.ExternalRedis = conn })
 	delete(wandb.Annotations, apiv1.RedisPendingAnnotation)
 	return true, nil
 }
 
+// legacyClickHousePayload is the literal-string subset the webhook couldn't
+// turn into typed selectors. Port is `any` to accept JSON number or string.
+type legacyClickHousePayload struct {
+	Host     string `json:"host,omitempty"`
+	Port     any    `json:"port,omitempty"`
+	Database string `json:"database,omitempty"`
+	User     string `json:"user,omitempty"`
+	Password string `json:"password,omitempty"`
+}
+
+// migrateLegacyClickHouse drains the clickhouse-pending annotation into a
+// Secret + externalClickhouse selectors (v1 `port` fills HTTPPort).
+func migrateLegacyClickHouse(
+	ctx context.Context,
+	c ctrlClient.Client,
+	wandb *apiv2.WeightsAndBiases,
+) (bool, error) {
+	raw, ok := wandb.Annotations[apiv1.ClickHousePendingAnnotation]
+	if !ok {
+		return false, nil
+	}
+
+	dec := json.NewDecoder(strings.NewReader(raw))
+	dec.UseNumber()
+	var payload legacyClickHousePayload
+	if err := dec.Decode(&payload); err != nil {
+		return false, fmt.Errorf("decode %s: %w", apiv1.ClickHousePendingAnnotation, err)
+	}
+
+	secretName := fmt.Sprintf("%s-clickhouse-converted", wandb.Name)
+	conn := wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ExternalClickHouse
+	if conn == nil {
+		conn = &apiv2.ClickHouseConnection{}
+	}
+
+	data := map[string][]byte{}
+	fill := func(target *corev1.SecretKeySelector, dataKey, value string) {
+		if target.Name != "" || value == "" {
+			return
+		}
+		data[dataKey] = []byte(value)
+		*target = secretSelector(secretName, dataKey)
+	}
+
+	fill(&conn.Host, "host", payload.Host)
+	fill(&conn.HTTPPort, "httpPort", normalizePort(payload.Port))
+	fill(&conn.Database, "database", payload.Database)
+	fill(&conn.Username, "username", payload.User)
+	fill(&conn.Password, "password", payload.Password)
+
+	if err := materializeConvertedSecret(ctx, c, wandb, secretName, data); err != nil {
+		return false, err
+	}
+
+	setExternalInstance(&wandb.Spec.ClickHouse, func(s *apiv2.ClickHouseSpec) { s.ExternalClickHouse = conn })
+	delete(wandb.Annotations, apiv1.ClickHousePendingAnnotation)
+	return true, nil
+}
+
 // legacyBucketPayload is the flat literal subset from the webhook's
-// bucket+defaultBucket merge. provider/path/kmsKey have no v2 home; ignored.
+// bucket+defaultBucket merge. kmsKey has no v2 home; ignored.
 type legacyBucketPayload struct {
+	Provider  string `json:"provider,omitempty"`
 	Name      string `json:"name,omitempty"`
+	Path      string `json:"path,omitempty"`
 	Region    string `json:"region,omitempty"`
 	AccessKey string `json:"accessKey,omitempty"`
 	SecretKey string `json:"secretKey,omitempty"`
@@ -215,12 +282,19 @@ func migrateLegacyBucket(
 	}
 
 	secretName := fmt.Sprintf("%s-bucket-converted", wandb.Name)
-	conn := wandb.Spec.ObjectStore.ExternalObjectStore
+	conn := wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ExternalObjectStore
 	if conn == nil {
 		conn = &apiv2.ObjectStoreConnection{}
 	}
 
-	endpoint, port, bucket := parseBucketName(payload.Name)
+	name, path, query := splitBucketQuery(payload.Name, payload.Path)
+	endpoint, port, bucket, path := objectstore.ParseLegacyBucket(payload.Provider, name, path)
+	// Query param beats the region field, matching gorilla's precedence.
+	region := payload.Region
+	if v := query.Get("region"); v != "" {
+		region = v
+	}
+	forcePathStyle, tlsEnabled := deriveBucketAddressing(payload.Provider, endpoint, query)
 
 	data := map[string][]byte{}
 	fill := func(target *corev1.SecretKeySelector, dataKey, value string) {
@@ -234,33 +308,71 @@ func migrateLegacyBucket(
 	fill(&conn.Endpoint, "endpoint", endpoint)
 	fill(&conn.Port, "port", port)
 	fill(&conn.Bucket, "bucket", bucket)
-	fill(&conn.Region, "region", payload.Region)
+	fill(&conn.Path, "path", path)
+	fill(&conn.Region, "region", region)
 	fill(&conn.AccessKey, "accessKey", payload.AccessKey)
 	fill(&conn.SecretKey, "secretKey", payload.SecretKey)
+	fill(&conn.ForcePathStyle, "forcePathStyle", forcePathStyle)
+	fill(&conn.TlsEnabled, "tlsEnabled", tlsEnabled)
 
 	if err := materializeConvertedSecret(ctx, c, wandb, secretName, data); err != nil {
 		return false, err
 	}
 
-	wandb.Spec.ObjectStore.ExternalObjectStore = conn
+	setExternalInstance(&wandb.Spec.ObjectStore, func(s *apiv2.ObjectStoreSpec) { s.ExternalObjectStore = conn })
 	delete(wandb.Annotations, apiv1.BucketPendingAnnotation)
 	return true, nil
 }
 
-// parseBucketName splits v1's bucket.name. A "/" indicates the embedded
-// "host[:port]/bucket" form (S3 bucket names can't contain "/"); otherwise
-// the whole string is the bucket name.
-func parseBucketName(name string) (endpoint, port, bucket string) {
-	if name == "" || !strings.Contains(name, "/") {
-		return "", "", name
+// setExternalInstance applies fn to the default instance of an infra map,
+// creating the map and/or default entry when absent.
+func setExternalInstance[T any](m *map[string]T, fn func(*T)) {
+	if *m == nil {
+		*m = map[string]T{}
 	}
-	slash := strings.IndexByte(name, '/')
-	host := name[:slash]
-	bucket = name[slash+1:]
-	if colon := strings.IndexByte(host, ':'); colon >= 0 {
-		return host[:colon], host[colon+1:], bucket
+	instance := (*m)[apiv2.DefaultInstanceName]
+	fn(&instance)
+	(*m)[apiv2.DefaultInstanceName] = instance
+}
+
+// splitBucketQuery strips the ?tls=/?forcePathStyle=/?region= overrides gorilla
+// accepted on v1 bucket URLs; they rode in bucket.name or bucket.path.
+func splitBucketQuery(name, path string) (cleanName, cleanPath string, q url.Values) {
+	raw := ""
+	if i := strings.IndexByte(path, '?'); i >= 0 {
+		path, raw = path[:i], path[i+1:]
 	}
-	return host, "", bucket
+	if i := strings.IndexByte(name, '?'); i >= 0 {
+		name, raw = name[:i], name[i+1:]
+	}
+	query, err := url.ParseQuery(raw)
+	if err != nil {
+		return name, path, url.Values{}
+	}
+	return name, path, query
+}
+
+// deriveBucketAddressing decides forcePathStyle/tlsEnabled for a drained v1 bucket:
+// explicit ?forcePathStyle=/?tls= win, else any embedded endpoint means path-style over
+// http (prefixes belong in bucket.path, so a host in bucket.name is always an endpoint).
+func deriveBucketAddressing(provider, endpoint string, query url.Values) (forcePathStyle, tlsEnabled string) {
+	if !objectstore.S3Compatible(provider) {
+		return "", ""
+	}
+	fps := provider != "cw" && objectstore.RequiresPathStyle(endpoint)
+	if v, err := strconv.ParseBool(query.Get("forcePathStyle")); err == nil {
+		fps = v
+	}
+	forcePathStyle = strconv.FormatBool(fps)
+	if endpoint == "" {
+		return forcePathStyle, ""
+	}
+	// gorilla defaulted S3-compatible endpoints to http, CoreWeave to https.
+	tls := provider == "cw"
+	if v, err := strconv.ParseBool(query.Get("tls")); err == nil {
+		tls = v
+	}
+	return forcePathStyle, strconv.FormatBool(tls)
 }
 
 // legacyOIDCPayload is the literal-string subset the webhook couldn't turn

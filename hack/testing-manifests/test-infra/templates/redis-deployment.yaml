@@ -22,19 +22,34 @@ spec:
         - name: redis
           image: {{ .Values.redis.image }}
           imagePullPolicy: IfNotPresent
-          {{- if .Values.redis.password }}
+          {{- if include "test-infra.redisTLS" . }}
+          command:
+            - /bin/sh
+            - -c
+          args:
+            - >
+              exec redis-server
+              --port 0
+              --tls-port {{ .Values.redis.service.port }}
+              --tls-cert-file /etc/redis/tls/tls.crt
+              --tls-key-file /etc/redis/tls/tls.key
+              --tls-ca-cert-file /etc/redis/tls/ca.crt
+              --tls-auth-clients no{{- if .Values.redis.password }} --requirepass "$REDIS_PASSWORD"{{- end }}
+          {{- else if .Values.redis.password }}
           command:
             - /bin/sh
             - -c
             - exec redis-server --requirepass "$REDIS_PASSWORD"
+          {{- else }}
+          args: ["redis-server"]
+          {{- end }}
+          {{- if .Values.redis.password }}
           env:
             - name: REDIS_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.redis.secret.name }}
                   key: Password
-          {{- else }}
-          args: ["redis-server"]
           {{- end }}
           ports:
             - name: redis
@@ -54,7 +69,17 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /data
+            {{- if include "test-infra.redisTLS" . }}
+            - name: tls
+              mountPath: /etc/redis/tls
+              readOnly: true
+            {{- end }}
       volumes:
         - name: data
           emptyDir: {}
+        {{- if include "test-infra.redisTLS" . }}
+        - name: tls
+          secret:
+            secretName: {{ .Values.redis.tls.secretName }}
+        {{- end }}
 {{- end }}

@@ -22,11 +22,13 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/pkg/vendored/argo-rollouts/argoproj.io.rollouts/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -34,6 +36,19 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
+
+// serviceUpdateCounter counts Service Update calls passing through the client.
+type serviceUpdateCounter struct {
+	client.Client
+	updates int
+}
+
+func (c *serviceUpdateCounter) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+	if _, ok := obj.(*corev1.Service); ok {
+		c.updates++
+	}
+	return c.Client.Update(ctx, obj, opts...)
+}
 
 var _ = Describe("Application Controller", func() {
 	Context("When reconciling a resource", func() {
@@ -494,6 +509,99 @@ var _ = Describe("Application Controller", func() {
 			err := k8sClient.Get(ctx, typeNamespacedName, found)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(found.Spec.Ports[0].Port).To(Equal(int32(80)))
+		})
+
+		It("round-trips a normalized ServiceTemplate without drift", func() {
+			// The Application CRD schema defaults serviceTemplate.ports[].protocol,
+			// so an un-normalized template reads back different from what was
+			// written — the drift that made the parent's update gate fire on every
+			// reconcile and kept Service-bearing Applications churning.
+			raw := &corev1.ServiceSpec{Ports: []corev1.ServicePort{{Name: "http", Port: 8080}}}
+
+			rawApp := &apiv2.Application{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-roundtrip-raw", Namespace: "default"},
+				Spec: apiv2.ApplicationSpec{
+					Kind: "Deployment",
+					PodTemplate: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "web", Image: "nginx"}}},
+					},
+					ServiceTemplate: raw.DeepCopy(),
+				},
+			}
+			Expect(k8sClient.Create(ctx, rawApp)).To(Succeed())
+
+			fetched := &apiv2.Application{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "test-roundtrip-raw", Namespace: "default"}, fetched)).To(Succeed())
+			Expect(fetched.Spec.ServiceTemplate.Ports[0].Protocol).To(Equal(corev1.ProtocolTCP),
+				"CRD schema defaulting fills ports[].protocol")
+			Expect(apiequality.Semantic.DeepEqual(fetched.Spec.ServiceTemplate, raw)).To(BeFalse(),
+				"un-normalized templates do not round-trip; reconcilers must not build them")
+
+			// The normalized form (what reconcileApplications writes now) is stable.
+			normalized := raw.DeepCopy()
+			common.NormalizeServicePorts(normalized.Ports)
+			normApp := &apiv2.Application{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-roundtrip-norm", Namespace: "default"},
+				Spec: apiv2.ApplicationSpec{
+					Kind: "Deployment",
+					PodTemplate: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "web", Image: "nginx"}}},
+					},
+					ServiceTemplate: normalized.DeepCopy(),
+				},
+			}
+			Expect(k8sClient.Create(ctx, normApp)).To(Succeed())
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "test-roundtrip-norm", Namespace: "default"}, fetched)).To(Succeed())
+			Expect(apiequality.Semantic.DeepEqual(fetched.Spec.ServiceTemplate, normalized)).To(BeTrue(),
+				"normalized templates round-trip unchanged, so the update gate settles")
+		})
+
+		It("does not update the Service on a steady-state reconcile", func() {
+			resourceName := "test-service-steady"
+			typeNamespacedName := types.NamespacedName{Name: resourceName, Namespace: "default"}
+
+			resource := &apiv2.Application{
+				ObjectMeta: metav1.ObjectMeta{Name: resourceName, Namespace: "default"},
+				Spec: apiv2.ApplicationSpec{
+					Kind: "Deployment",
+					PodTemplate: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "web", Image: "nginx"}}},
+					},
+					// No protocol/targetPort: mirrors templates written before
+					// normalization existed.
+					ServiceTemplate: &corev1.ServiceSpec{
+						Ports: []corev1.ServicePort{{Name: "http", Port: 80}},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+
+			// Count Service Update calls: the API server absorbs writes of
+			// defaulted-back fields as no-ops (resourceVersion holds), but each
+			// call still fires the Owns(Service) watch and re-queues the
+			// Application — the hot loop this test pins.
+			counter := &serviceUpdateCounter{Client: k8sClient}
+			controllerReconciler := &ApplicationReconciler{Client: counter, Scheme: k8sClient.Scheme()}
+
+			// 1. Add finalizer; 2. create Deployment and Service.
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+
+			svc := &corev1.Service{}
+			Expect(k8sClient.Get(ctx, typeNamespacedName, svc)).To(Succeed())
+
+			// Steady state: the API server has defaulted fields the template leaves
+			// unset (protocol, targetPort, sessionAffinity, type, ...); reconciling
+			// again must not write the Service at all.
+			counter.updates = 0
+			for i := 0; i < 3; i++ {
+				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+				Expect(err).NotTo(HaveOccurred())
+			}
+			Expect(counter.updates).To(BeZero(),
+				"steady-state reconciles must not update the Service")
 		})
 
 		It("should successfully reconcile Jobs and CronJobs", func() {

@@ -41,6 +41,14 @@ SETTINGS = {
 
     "logFormat": "pretty",
 
+    # Optional composable Tilt infra settings. External infra installs the
+    # local test-infra chart for the selected service. useCustomCA generates
+    # test CA material through the normal W&B CR and user ConfigMap inputs.
+    "useExternalMysql": False,
+    "useExternalRedis": False,
+    "useExternalObjectStore": False,
+    "useCustomCA": False,
+
     # CRC/OpenShift Local uses the crc-admin context. Tilt auto-enables
     # openshiftSCC on CRC; set it explicitly for other OpenShift clusters.
     # "allowedContexts": ["crc-admin"],

@@ -1,0 +1,56 @@
+{{- /* OpenShift-only: finalizers grants for moco + seaweedfs owners. */ -}}
+{{- if dig "openshift" "enabled" false .Values.AsMap }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Release.Name }}-openshift-owner-finalizers
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/part-of: wandb-operator
+rules:
+  - apiGroups:
+      - moco.cybozu.com
+    resources:
+      - mysqlclusters/finalizers
+    verbs:
+      - update
+  - apiGroups:
+      - seaweed.seaweedfs.com
+    resources:
+      - seaweeds/finalizers
+    verbs:
+      - update
+---
+# StatefulSet controller creates moco PVCs, so it sets mysqlcluster finalizers.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Release.Name }}-openshift-mysqlcluster-finalizers
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/part-of: wandb-operator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ .Release.Name }}-openshift-owner-finalizers
+subjects:
+  - kind: ServiceAccount
+    name: statefulset-controller
+    namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Release.Name }}-openshift-seaweed-finalizers
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/part-of: wandb-operator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ .Release.Name }}-openshift-owner-finalizers
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Release.Name }}-seaweedfs-operator
+    namespace: {{ .Release.Namespace }}
+{{- end }}

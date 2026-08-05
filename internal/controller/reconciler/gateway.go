@@ -301,17 +301,25 @@ func buildAllowedRoutes(wandb *apiv2.WeightsAndBiases) *gatewayv1.AllowedRoutes 
 func requiresCrossNamespaceInfraRoutes(wandb *apiv2.WeightsAndBiases) bool {
 	namespaces := []string{}
 
-	if spec := wandb.Spec.ObjectStore.ManagedObjectStore; spec != nil {
-		namespaces = append(namespaces, spec.Namespace)
+	for _, instance := range wandb.Spec.ObjectStore {
+		if spec := instance.ManagedObjectStore; spec != nil {
+			namespaces = append(namespaces, spec.Namespace)
+		}
 	}
-	if spec := wandb.Spec.ClickHouse.ManagedClickHouse; spec != nil {
-		namespaces = append(namespaces, spec.Namespace)
+	for _, instance := range wandb.Spec.ClickHouse {
+		if spec := instance.ManagedClickHouse; spec != nil {
+			namespaces = append(namespaces, spec.Namespace)
+		}
 	}
-	if spec := wandb.Spec.MySQL.ManagedMysql; spec != nil {
-		namespaces = append(namespaces, spec.Namespace)
+	for _, instance := range wandb.Spec.MySQL {
+		if spec := instance.ManagedMysql; spec != nil {
+			namespaces = append(namespaces, spec.Namespace)
+		}
 	}
-	if spec := wandb.Spec.Redis.ManagedRedis; spec != nil {
-		namespaces = append(namespaces, spec.Namespace)
+	for _, instance := range wandb.Spec.Redis {
+		if spec := instance.ManagedRedis; spec != nil {
+			namespaces = append(namespaces, spec.Namespace)
+		}
 	}
 
 	for _, ns := range namespaces {

@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	apiv2 "github.com/wandb/operator/api/v2"
-	"github.com/wandb/operator/internal/controller/infra/external/objectstore"
+	"github.com/wandb/operator/internal/controller/infra/objectstore"
 	"github.com/wandb/operator/pkg/utils"
 	"github.com/wandb/operator/pkg/wandb/manifest"
 	corev1 "k8s.io/api/core/v1"
@@ -104,11 +104,14 @@ func TestToEtcdApplicationHA(t *testing.T) {
 }
 
 func testStorage() objectstore.ConnInfo {
+	// Mirror the managed SeaweedFS shape: a bare host with the port/scheme carried
+	// separately, so EndpointURL() must reassemble "http://seaweedfs:8333".
 	return objectstore.ConnInfo{
 		Provider:       apiv2.ObjectStoreProviderS3,
 		URI:            "s3://bucket",
 		Bucket:         "bucket",
-		Endpoint:       "http://seaweedfs:80",
+		Endpoint:       "seaweedfs",
+		Port:           "8333",
 		Region:         "us-east-1",
 		AccessKey:      "ak",
 		SecretKey:      "sk",
@@ -121,15 +124,26 @@ func TestToBufstreamApplication(t *testing.T) {
 	wandb := testWandb()
 	nsn := CreateNsNameBuilder(types.NamespacedName{Namespace: "default", Name: "wandb-kafka"})
 
-	app, err := ToBufstreamApplication(wandb, nsn, testStorage(), testScheme(t), manifest.Manifest{})
+	app, err := ToBufstreamApplication(wandb, nsn, testStorage(), true, testScheme(t), manifest.Manifest{})
 	require.NoError(t, err)
 
 	require.Equal(t, "wandb-kafka", app.Name)
 	require.Equal(t, "Deployment", app.Spec.Kind)
 	require.NotNil(t, app.Spec.Replicas)
 	require.Len(t, app.Spec.PodTemplate.Spec.InitContainers, 1)
-	require.Equal(t, "ensure-bucket", app.Spec.PodTemplate.Spec.InitContainers[0].Name)
-	requireKafkaContainerSecurityContext(t, app.Spec.PodTemplate.Spec.InitContainers[0].SecurityContext)
+	ensureBucket := app.Spec.PodTemplate.Spec.InitContainers[0]
+	require.Equal(t, "ensure-bucket", ensureBucket.Name)
+	requireKafkaContainerSecurityContext(t, ensureBucket.SecurityContext)
+	require.Len(t, ensureBucket.Args, 4)
+	require.Contains(t, ensureBucket.Args[0], "head-bucket")
+	require.Contains(t, ensureBucket.Args[0], "create-bucket")
+	require.Contains(t, ensureBucket.Args[0], "sleep 2")
+	require.Contains(t, ensureBucket.Args[0], "-le 150")
+	require.NotContains(t, ensureBucket.Args[0], testStorage().AccessKey)
+	require.NotContains(t, ensureBucket.Args[0], testStorage().SecretKey)
+	require.Equal(t, "http://seaweedfs:8333", ensureBucket.Args[2])
+	require.Equal(t, testStorage().EndpointURL(), ensureBucket.Args[2])
+	require.Equal(t, testStorage().Bucket, ensureBucket.Args[3])
 	require.Equal(t, int32(2), *app.Spec.Replicas)
 	require.Len(t, app.Spec.PodTemplate.Spec.Containers, 1)
 
@@ -147,32 +161,155 @@ func TestToBufstreamApplication(t *testing.T) {
 	require.True(t, envNames[EnvStorageSecretAccessKey])
 }
 
+func TestBringYourOwnObjectStoresDoNotGetBucketInitializer(t *testing.T) {
+	setOpenShiftMode(t, false)
+	wandb := testWandb()
+	nsn := CreateNsNameBuilder(types.NamespacedName{Namespace: "default", Name: "wandb-kafka"})
+
+	tests := map[string]objectstore.ConnInfo{
+		"custom S3":  testStorage(),
+		"native AWS": {Provider: apiv2.ObjectStoreProviderS3, URI: "s3://bucket", Bucket: "bucket", Region: "us-east-1"},
+		"GCS":        {Provider: apiv2.ObjectStoreProviderGCS, URI: "gs://bucket", Bucket: "bucket"},
+		"Azure":      {Provider: apiv2.ObjectStoreProviderAzure, URI: "https://account.blob.core.windows.net/container", Bucket: "container"},
+	}
+	for name, storage := range tests {
+		t.Run(name, func(t *testing.T) {
+			app, err := ToBufstreamApplication(wandb, nsn, storage, false, testScheme(t), manifest.Manifest{})
+			require.NoError(t, err)
+			require.Empty(t, app.Spec.PodTemplate.Spec.InitContainers)
+		})
+	}
+}
+
 func TestToBufstreamApplicationDefaultsReplicas(t *testing.T) {
 	setOpenShiftMode(t, false)
 	wandb := testWandb()
 	wandb.Spec.Kafka.ManagedKafka.Replicas = 0
 	nsn := CreateNsNameBuilder(types.NamespacedName{Namespace: "default", Name: "wandb-kafka"})
 
-	app, err := ToBufstreamApplication(wandb, nsn, testStorage(), testScheme(t), manifest.Manifest{})
+	app, err := ToBufstreamApplication(wandb, nsn, testStorage(), true, testScheme(t), manifest.Manifest{})
 	require.NoError(t, err)
 	require.Equal(t, int32(BufstreamReplicas), *app.Spec.Replicas)
 }
 
-func TestApplicationsOmitFixedIDsInOpenShiftMode(t *testing.T) {
+func TestApplicationsSecurityContextInOpenShiftMode(t *testing.T) {
 	setOpenShiftMode(t, true)
 	wandb := testWandb()
 	nsn := CreateNsNameBuilder(types.NamespacedName{Namespace: "default", Name: "wandb-kafka"})
 
+	// etcd tolerates an arbitrary UID, so it omits fixed IDs for restricted-v2.
 	etcd, err := ToEtcdApplication(wandb, nsn, testScheme(t), manifest.Manifest{})
 	require.NoError(t, err)
 	requireOpenShiftKafkaPodSecurityContext(t, etcd.Spec.PodTemplate.Spec.SecurityContext)
 	requireOpenShiftKafkaContainerSecurityContext(t, etcd.Spec.PodTemplate.Spec.Containers[0].SecurityContext)
 
-	bufstream, err := ToBufstreamApplication(wandb, nsn, testStorage(), testScheme(t), manifest.Manifest{})
+	// Bufstream keeps its fixed UID even on OpenShift (nonroot-v2 admits it).
+	bufstream, err := ToBufstreamApplication(wandb, nsn, testStorage(), true, testScheme(t), manifest.Manifest{})
 	require.NoError(t, err)
-	requireOpenShiftKafkaPodSecurityContext(t, bufstream.Spec.PodTemplate.Spec.SecurityContext)
-	requireOpenShiftKafkaContainerSecurityContext(t, bufstream.Spec.PodTemplate.Spec.Containers[0].SecurityContext)
+	requireKafkaPodSecurityContext(t, bufstream.Spec.PodTemplate.Spec.SecurityContext)
+	requireKafkaContainerSecurityContext(t, bufstream.Spec.PodTemplate.Spec.Containers[0].SecurityContext)
+	// The bucket-ensure init container omits a fixed UID and inherits the pod's.
 	requireOpenShiftKafkaContainerSecurityContext(t, bufstream.Spec.PodTemplate.Spec.InitContainers[0].SecurityContext)
+}
+
+func TestApplicationsUseDedicatedServiceAccount(t *testing.T) {
+	setOpenShiftMode(t, false)
+	wandb := testWandb()
+	nsn := CreateNsNameBuilder(types.NamespacedName{Namespace: "default", Name: "wandb-kafka"})
+
+	etcd, err := ToEtcdApplication(wandb, nsn, testScheme(t), manifest.Manifest{})
+	require.NoError(t, err)
+	require.Equal(t, nsn.ServiceAccountName(), etcd.Spec.PodTemplate.Spec.ServiceAccountName)
+	require.NotNil(t, etcd.Spec.PodTemplate.Spec.AutomountServiceAccountToken)
+	require.False(t, *etcd.Spec.PodTemplate.Spec.AutomountServiceAccountToken)
+
+	bufstream, err := ToBufstreamApplication(wandb, nsn, testStorage(), true, testScheme(t), manifest.Manifest{})
+	require.NoError(t, err)
+	require.Equal(t, nsn.ServiceAccountName(), bufstream.Spec.PodTemplate.Spec.ServiceAccountName)
+	require.NotNil(t, bufstream.Spec.PodTemplate.Spec.AutomountServiceAccountToken)
+	require.False(t, *bufstream.Spec.PodTemplate.Spec.AutomountServiceAccountToken)
+}
+
+func TestApplicationsUseWorkloadIdentityForAmbientCredentials(t *testing.T) {
+	setOpenShiftMode(t, false)
+	wandb := testWandb()
+	wandb.Spec.Kafka.ManagedKafka.ServiceAccount = apiv2.ManagedServiceAccountSpec{
+		ServiceAccountName: "kafka-workload-identity",
+		Annotations: map[string]string{
+			"eks.amazonaws.com/role-arn": "arn:aws:iam::123456789012:role/wandb-kafka",
+		},
+	}
+	nsn := CreateNsNameBuilder(types.NamespacedName{Namespace: "default", Name: "wandb-kafka"})
+	storage := testStorage()
+	storage.AccessKey = ""
+	storage.SecretKey = ""
+
+	sa, err := ToServiceAccount(wandb, nsn, storage, testScheme(t))
+	require.NoError(t, err)
+	require.Equal(t, "kafka-workload-identity", sa.Name)
+	require.Equal(t, wandb.Spec.Kafka.ManagedKafka.ServiceAccount.Annotations, sa.Annotations)
+	require.NotNil(t, sa.AutomountServiceAccountToken)
+	require.True(t, *sa.AutomountServiceAccountToken)
+
+	bufstream, err := ToBufstreamApplication(wandb, nsn, storage, false, testScheme(t), manifest.Manifest{})
+	require.NoError(t, err)
+	require.Equal(t, sa.Name, bufstream.Spec.PodTemplate.Spec.ServiceAccountName)
+	require.NotNil(t, bufstream.Spec.PodTemplate.Spec.AutomountServiceAccountToken)
+	require.True(t, *bufstream.Spec.PodTemplate.Spec.AutomountServiceAccountToken)
+
+	etcd, err := ToEtcdApplication(wandb, nsn, testScheme(t), manifest.Manifest{})
+	require.NoError(t, err)
+	require.Equal(t, sa.Name, etcd.Spec.PodTemplate.Spec.ServiceAccountName)
+	require.NotNil(t, etcd.Spec.PodTemplate.Spec.AutomountServiceAccountToken)
+	require.False(t, *etcd.Spec.PodTemplate.Spec.AutomountServiceAccountToken)
+}
+
+func TestToServiceAccount(t *testing.T) {
+	wandb := testWandb()
+	nsn := CreateNsNameBuilder(types.NamespacedName{Namespace: "default", Name: "wandb-kafka"})
+
+	sa, err := ToServiceAccount(wandb, nsn, testStorage(), testScheme(t))
+	require.NoError(t, err)
+	require.Equal(t, nsn.ServiceAccountName(), sa.Name)
+	require.Equal(t, "default", sa.Namespace)
+	require.NotNil(t, sa.AutomountServiceAccountToken)
+	require.False(t, *sa.AutomountServiceAccountToken)
+	// Same-namespace resources are owned by the CR for GC.
+	require.Len(t, sa.OwnerReferences, 1)
+}
+
+func TestToServiceAccountCanReferenceExistingIdentity(t *testing.T) {
+	wandb := testWandb()
+	create := false
+	wandb.Spec.Kafka.ManagedKafka.ServiceAccount = apiv2.ManagedServiceAccountSpec{
+		Create:             &create,
+		ServiceAccountName: "existing-kafka-identity",
+	}
+	nsn := CreateNsNameBuilder(types.NamespacedName{Namespace: "default", Name: "wandb-kafka"})
+
+	sa, err := ToServiceAccount(wandb, nsn, testStorage(), testScheme(t))
+	require.NoError(t, err)
+	require.Nil(t, sa)
+
+	app, err := ToBufstreamApplication(wandb, nsn, testStorage(), false, testScheme(t), manifest.Manifest{})
+	require.NoError(t, err)
+	require.Equal(t, "existing-kafka-identity", app.Spec.PodTemplate.Spec.ServiceAccountName)
+}
+
+func TestToSccRoleBinding(t *testing.T) {
+	wandb := testWandb()
+	nsn := CreateNsNameBuilder(types.NamespacedName{Namespace: "default", Name: "wandb-kafka"})
+
+	rb, err := ToSccRoleBinding(wandb, nsn, testScheme(t))
+	require.NoError(t, err)
+	require.Equal(t, nsn.SccRoleBindingName(), rb.Name)
+	require.Equal(t, "default", rb.Namespace)
+	require.Equal(t, "ClusterRole", rb.RoleRef.Kind)
+	require.Equal(t, nonRootV2SCCClusterRole, rb.RoleRef.Name)
+	require.Len(t, rb.Subjects, 1)
+	require.Equal(t, "ServiceAccount", rb.Subjects[0].Kind)
+	require.Equal(t, nsn.ServiceAccountName(), rb.Subjects[0].Name)
+	require.Equal(t, "default", rb.Subjects[0].Namespace)
 }
 
 func TestToCredentialsSecret(t *testing.T) {
