@@ -24,6 +24,7 @@ import (
 	"net/url"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/samber/lo"
 	apiv2 "github.com/wandb/operator/api/v2"
@@ -377,7 +378,7 @@ func Reconcile(
 		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
 	}
 
-	res, err = ReconcileWandbManifest(ctx, client, wandb, manifest, telemetryConfig)
+	res, err = ReconcileWandbManifest(ctx, client, recorder, wandb, manifest, telemetryConfig)
 	// send up the manifest error for now
 	if err != nil {
 		return res, err
@@ -405,6 +406,7 @@ func consolidateResults(results []ctrl.Result) ctrl.Result {
 func ReconcileWandbManifest(
 	ctx context.Context,
 	client ctrlClient.Client,
+	recorder record.EventRecorder,
 	wandb *apiv2.WeightsAndBiases,
 	manifest serverManifest.Manifest,
 	telemetryConfig TelemetryRuntimeConfig,
@@ -445,7 +447,7 @@ func ReconcileWandbManifest(
 
 	validateLegacyOverrides(ctx, wandb, manifest)
 
-	result, err = generateSecrets(ctx, client, wandb, manifest)
+	result, err = generateSecrets(ctx, client, recorder, wandb, manifest)
 	if err != nil {
 		return result, err
 	}
@@ -1413,7 +1415,7 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 	return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 }
 
-func generateSecrets(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest) (ctrl.Result, error) {
+func generateSecrets(ctx context.Context, client ctrlClient.Client, recorder record.EventRecorder, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest) (ctrl.Result, error) {
 	statusBefore := wandb.DeepCopy().Status
 	// Ensure any manifest-declared generated secrets exist and capture their selectors in status
 	if wandb.Status.GeneratedSecrets == nil {
@@ -1463,12 +1465,23 @@ func generateSecrets(ctx context.Context, client ctrlClient.Client, wandb *apiv2
 				return ctrl.Result{}, err
 			}
 		} else {
-			// Secret exists. Ensure it has the expected key; do not overwrite existing value.
-			if sec.Data == nil || (sec.Data != nil && sec.Data[keyName] == nil && sec.StringData == nil) {
-				if sec.StringData == nil {
-					sec.StringData = map[string]string{}
+			// Secret exists; don't overwrite a valid existing value.
+			existing, hasKey := sec.Data[keyName]
+			// Non-UTF-8 secretKeyRef env vars break container creation.
+			if hasKey && !utf8.Valid(existing) {
+				msg := fmt.Sprintf(
+					"generated secret %q key %q contains non-UTF-8 bytes; values consumed as container environment variables must be valid UTF-8 — replace it with a UTF-8-safe value",
+					secretName, keyName,
+				)
+				recorder.Event(wandb, corev1.EventTypeWarning, common.InvalidSecretEncodingReason, msg)
+				if err := updateReadyStatus(ctx, client, wandb, statusBefore, false, common.InvalidSecretEncodingReason, msg); err != nil {
+					return ctrl.Result{}, err
 				}
-				// Generate a value only if missing
+				return ctrl.Result{}, errors.New(msg)
+			}
+			if !hasKey && sec.StringData == nil {
+				// Secret exists but has no usable key; populate one.
+				sec.StringData = map[string]string{}
 				valueLen := gs.Length
 				if valueLen <= 0 {
 					valueLen = 32

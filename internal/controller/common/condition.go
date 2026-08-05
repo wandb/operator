@@ -19,6 +19,8 @@ const (
 	UnknownReason         = "Unknown"
 	DetachedSpecMismatch  = "DetachedSpecMismatch"
 	InvalidNameReason     = "InvalidName"
+	// Non-UTF-8 generated secret; kubelet rejects it as a secretKeyRef env var.
+	InvalidSecretEncodingReason = "InvalidSecretEncoding"
 )
 
 const (
