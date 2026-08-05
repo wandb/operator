@@ -10,9 +10,22 @@ import (
 
 func gatherApplicationInfo(t *testing.T) []*dto.Metric {
 	t.Helper()
+	return gather(t, ApplicationInfo)
+}
+
+func labelMap(m *dto.Metric) map[string]string {
+	out := make(map[string]string, len(m.Label))
+	for _, lp := range m.Label {
+		out[lp.GetName()] = lp.GetValue()
+	}
+	return out
+}
+
+func gather(t *testing.T, c prometheus.Collector) []*dto.Metric {
+	t.Helper()
 	out := make(chan prometheus.Metric, 64)
 	go func() {
-		ApplicationInfo.Collect(out)
+		c.Collect(out)
 		close(out)
 	}()
 	var metrics []*dto.Metric
@@ -24,12 +37,54 @@ func gatherApplicationInfo(t *testing.T) []*dto.Metric {
 	return metrics
 }
 
-func labelMap(m *dto.Metric) map[string]string {
-	out := make(map[string]string, len(m.Label))
-	for _, lp := range m.Label {
-		out[lp.GetName()] = lp.GetValue()
-	}
-	return out
+func TestSetWeightsAndBiasesReady_FlipsValue(t *testing.T) {
+	t.Cleanup(WeightsAndBiasesReady.Reset)
+	WeightsAndBiasesReady.Reset()
+
+	SetWeightsAndBiasesReady("wandb", "prod", true)
+	got := gather(t, WeightsAndBiasesReady)
+	assert.Len(t, got, 1)
+	assert.Equal(t, 1.0, got[0].Gauge.GetValue())
+
+	SetWeightsAndBiasesReady("wandb", "prod", false)
+	got = gather(t, WeightsAndBiasesReady)
+	assert.Len(t, got, 1)
+	assert.Equal(t, 0.0, got[0].Gauge.GetValue())
+}
+
+func TestSetInfraState_ReplacesPriorState(t *testing.T) {
+	t.Cleanup(InfraState.Reset)
+	InfraState.Reset()
+
+	SetInfraState("wandb", "prod", "mysql", "default", "Pending")
+	SetInfraState("wandb", "prod", "mysql", "default", "Healthy")
+
+	got := gather(t, InfraState)
+	assert.Len(t, got, 1, "a state transition must not leave the previous state as an active series")
+	got0 := labelMap(got[0])
+	assert.Equal(t, "Healthy", got0["state"])
+	assert.Equal(t, "default", got0["instance_name"])
+}
+
+func TestDeleteWeightsAndBiasesMetrics_ScopesToCR(t *testing.T) {
+	t.Cleanup(func() { WeightsAndBiasesReady.Reset(); InfraState.Reset() })
+	WeightsAndBiasesReady.Reset()
+	InfraState.Reset()
+
+	SetWeightsAndBiasesReady("wandb", "gone", true)
+	SetInfraState("wandb", "gone", "mysql", "default", "Healthy")
+	SetWeightsAndBiasesReady("wandb", "stays", true)
+	SetInfraState("wandb", "stays", "redis", "default", "Healthy")
+
+	DeleteWeightsAndBiasesMetrics("wandb", "gone")
+
+	ready := gather(t, WeightsAndBiasesReady)
+	assert.Len(t, ready, 1)
+	assert.Equal(t, "stays", labelMap(ready[0])["name"])
+
+	infra := gather(t, InfraState)
+	assert.Len(t, infra, 1)
+	assert.Equal(t, "stays", labelMap(infra[0])["name"])
 }
 
 func TestSetApplicationInfo_EmitsExpectedLabels(t *testing.T) {
