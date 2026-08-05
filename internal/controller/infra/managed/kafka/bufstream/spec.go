@@ -5,7 +5,7 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
-	"github.com/wandb/operator/internal/controller/infra/external/objectstore"
+	"github.com/wandb/operator/internal/controller/infra/objectstore"
 	"github.com/wandb/operator/pkg/utils"
 	"github.com/wandb/operator/pkg/wandb/manifest"
 	corev1 "k8s.io/api/core/v1"
@@ -58,6 +58,8 @@ func BucketEnsureImage(img manifest.ImageRef, globalImageRegistry string) string
 	return resolveImage(img, globalImageRegistry, defaultBucketEnsureImage)
 }
 
+// resolveImage returns the manifest-supplied image, falling back to the given
+// default for older manifests that omit it.
 func resolveImage(img manifest.ImageRef, globalImageRegistry, fallback string) string {
 	if out := img.GetImage(globalImageRegistry); out != "" {
 		return out
@@ -66,10 +68,12 @@ func resolveImage(img manifest.ImageRef, globalImageRegistry, fallback string) s
 	return fallback
 }
 
+// BuildWandbKafkaLabels returns the standard W&B labels for the Kafka module.
 func BuildWandbKafkaLabels(wandb *apiv2.WeightsAndBiases) map[string]string {
 	return common.BuildWandbLabels(wandb, KafkaModuleName)
 }
 
+// ToKafkaOnDeleteRule builds the on-delete retention rule for the Kafka module.
 func ToKafkaOnDeleteRule(wandb *apiv2.WeightsAndBiases, retentionPolicy apiv2.RetentionPolicy) common.OnDeleteRule {
 	return common.ToOnDeleteRule(wandb, retentionPolicy, KafkaModuleName)
 }
@@ -85,6 +89,8 @@ func kafkaPodSecurityContext() *corev1.PodSecurityContext {
 	return bufstreamPodSecurityContext()
 }
 
+// kafkaContainerSecurityContext returns the container security context, dropping
+// the fixed UID/GID on OpenShift where the platform assigns them.
 func kafkaContainerSecurityContext() *corev1.SecurityContext {
 	if utils.IsOpenShift() {
 		return &corev1.SecurityContext{
@@ -109,6 +115,8 @@ func bufstreamPodSecurityContext() *corev1.PodSecurityContext {
 	}
 }
 
+// bufstreamContainerSecurityContext pins UID/GID 65532, which the broker's 0700
+// binary requires, and drops all capabilities.
 func bufstreamContainerSecurityContext() *corev1.SecurityContext {
 	return &corev1.SecurityContext{
 		RunAsUser:                ptr.To(kafkaRunAsUser),
@@ -120,6 +128,7 @@ func bufstreamContainerSecurityContext() *corev1.SecurityContext {
 	}
 }
 
+// kafkaRuntimeDefaultSeccompProfile returns the RuntimeDefault seccomp profile.
 func kafkaRuntimeDefaultSeccompProfile() *corev1.SeccompProfile {
 	return &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault}
 }
@@ -131,6 +140,8 @@ func sameNamespace(wandb *apiv2.WeightsAndBiases, nsnBuilder *NsNameBuilder) boo
 	return wandb.Namespace == nsnBuilder.Namespace()
 }
 
+// setOwner sets the WeightsAndBiases controller reference on obj, but only when
+// it shares the CR's namespace, since owner references are namespace-scoped.
 func setOwner(wandb *apiv2.WeightsAndBiases, obj metav1.Object, nsnBuilder *NsNameBuilder, scheme *runtime.Scheme) error {
 	if !sameNamespace(wandb, nsnBuilder) {
 		return nil
@@ -138,6 +149,7 @@ func setOwner(wandb *apiv2.WeightsAndBiases, obj metav1.Object, nsnBuilder *NsNa
 	return ctrl.SetControllerReference(wandb, obj, scheme)
 }
 
+// intstrFromInt converts a port number to an IntOrString for service/probe specs.
 func intstrFromInt(port int) intstr.IntOrString {
 	return intstr.FromInt32(int32(port))
 }
@@ -425,7 +437,7 @@ func spreadAffinity(wandb *apiv2.WeightsAndBiases, spec apiv2.ManagedInfraSpec, 
 func bucketEnsureContainer(nsnBuilder *NsNameBuilder, storage objectstore.ConnInfo, img manifest.ImageRef, globalImageRegistry string) corev1.Container {
 	region := storage.Region
 	if region == "" {
-		region = "us-east-1"
+		region = objectstore.DefaultRegion
 	}
 	credsName := nsnBuilder.CredentialsName()
 	// Retry in this process so transient DNS and API startup failures do not
@@ -444,7 +456,7 @@ exit 1`, bucketEnsureMaxAttempts, bucketEnsureMaxAttempts, bucketEnsureDelaySeco
 		Name:            "ensure-bucket",
 		Image:           BucketEnsureImage(img, globalImageRegistry),
 		Command:         []string{"/bin/sh", "-c"},
-		Args:            []string{script, "ensure-bucket", storage.Endpoint, storage.Bucket},
+		Args:            []string{script, "ensure-bucket", storage.EndpointURL(), storage.Bucket},
 		SecurityContext: kafkaContainerSecurityContext(),
 		Env: []corev1.EnvVar{
 			{Name: "AWS_REGION", Value: region},
@@ -610,6 +622,8 @@ func ToBufstreamApplication(
 	return app, nil
 }
 
+// kafkaServiceAccountName returns the configured ServiceAccount name, defaulting
+// to the spec name when unset.
 func kafkaServiceAccountName(spec *apiv2.ManagedKafkaSpec) string {
 	if spec.ServiceAccount.ServiceAccountName != "" {
 		return spec.ServiceAccount.ServiceAccountName
