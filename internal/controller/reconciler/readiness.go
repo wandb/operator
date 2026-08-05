@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	apiv2 "github.com/wandb/operator/api/v2"
+	wmetrics "github.com/wandb/operator/internal/metrics"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
@@ -23,6 +24,7 @@ const (
 
 func setReadyStatus(wandb *apiv2.WeightsAndBiases, ready bool, reason, message string) {
 	wandb.Status.Ready = ready
+	wmetrics.SetWeightsAndBiasesReady(wandb.Namespace, wandb.Name, ready)
 	status := metav1.ConditionFalse
 	if ready {
 		status = metav1.ConditionTrue
