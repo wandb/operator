@@ -187,6 +187,45 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 			Expect(err.Error()).To(ContainSubstring("spec.wandb.hostname"))
 		})
 
+		It("rejects create when version is the mutable latest tag", func() {
+			obj.Spec.Wandb.Version = "latest"
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("spec.wandb.version"))
+			Expect(err.Error()).To(ContainSubstring("must be pinned"))
+		})
+
+		It("rejects a whitespace-padded latest", func() {
+			obj.Spec.Wandb.Version = " latest "
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("spec.wandb.version"))
+		})
+
+		It("rejects update to the latest tag", func() {
+			obj.Spec.Wandb.Version = "latest"
+
+			_, err := validator.ValidateUpdate(ctx, oldObj, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("spec.wandb.version"))
+		})
+
+		It("accepts a pinned version", func() {
+			obj.Spec.Wandb.Version = "0.83.1"
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("accepts an empty version (nothing pinned in v1 values)", func() {
+			obj.Spec.Wandb.Version = ""
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).ToNot(HaveOccurred())
+		})
+
 		It("rejects update when hostname is missing", func() {
 			obj.Spec.Wandb.Hostname = ""
 

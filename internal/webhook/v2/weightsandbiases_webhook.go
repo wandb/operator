@@ -448,6 +448,18 @@ func validateWandbSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 		))
 	}
 
+	// v1 installs commonly ran app.image.tag=latest, which conversion copies
+	// verbatim. No server-manifest artifact is published under a mutable tag, so
+	// the manifest lookup fails and the whole reconcile aborts. Reject it at
+	// admission, where the message is actionable, instead of at reconcile time.
+	if strings.TrimSpace(wandb.Spec.Wandb.Version) == "latest" {
+		errors = append(errors, field.Invalid(
+			field.NewPath("spec").Child("wandb").Child("version"),
+			wandb.Spec.Wandb.Version,
+			"must be pinned to a published server version; no server-manifest is published for the \"latest\" tag",
+		))
+	}
+
 	return errors
 }
 
