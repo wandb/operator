@@ -141,8 +141,7 @@ func mapLegacyOverrides(values map[string]interface{}, dst *appsv2.WeightsAndBia
 	return nil
 }
 
-// mapPerAppLegacyOverrides is best-effort: a manifest fetch failure must never
-// make v1 objects unservable, so it logs and skips instead of erroring.
+// fail on manifest fetch failure
 func mapPerAppLegacyOverrides(values map[string]interface{}, version, globalSize string, overrides map[string]appsv2.LegacyOverrides) error {
 	if version == "" {
 		logger.Info("no version derived from v1 values; skipping per-application legacy overrides")
@@ -150,9 +149,8 @@ func mapPerAppLegacyOverrides(values map[string]interface{}, version, globalSize
 	}
 	apps, err := legacyManifestApps(version)
 	if err != nil {
-		logger.Error(err, "failed to resolve server manifest; skipping per-application legacy overrides",
-			"version", version)
-		return nil
+		return fmt.Errorf("resolve server manifest for version %q (required to map per-application "+
+			"env/resources overrides): %w", version, err)
 	}
 
 	appNames := make([]string, 0, len(apps))
