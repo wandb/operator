@@ -53,14 +53,17 @@ var defaultRequeueMinutes = 1
 var defaultRequeueDuration = time.Duration(defaultRequeueMinutes) * time.Minute
 
 var managedWorkloadTelemetryApplications = map[string]struct{}{
-	"api":                     {},
-	"executor":                {},
-	"filemeta":                {},
-	"filestream":              {},
-	"flat-run-fields-updater": {},
-	"glue":                    {},
-	"metric-observer":         {},
-	"parquet":                 {},
+	"api":                               {},
+	"executor":                          {},
+	"filemeta":                          {},
+	"filestream":                        {},
+	"flat-run-fields-updater":           {},
+	"glue":                              {},
+	"metric-observer":                   {},
+	"parquet":                           {},
+	"weave-trace":                       {},
+	"weave-trace-evaluate-model-worker": {},
+	"weave-trace-worker":                {},
 }
 
 var managedWorkloadStatsdApplications = map[string]struct{}{
