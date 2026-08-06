@@ -141,12 +141,7 @@ func mapLegacyOverrides(values map[string]interface{}, dst *appsv2.WeightsAndBia
 	return nil
 }
 
-// mapPerAppLegacyOverrides fails when the server manifest can't be resolved.
-// The manifest is the only authority on which values sections are applications,
-// so continuing would silently discard every per-application env and resource
-// override while reporting a successful conversion — the failure mode that gets
-// discovered in production. Rejecting the write is recoverable; a silently
-// gutted CR is not.
+// fail on manifest fetch failure
 func mapPerAppLegacyOverrides(values map[string]interface{}, version, globalSize string, overrides map[string]appsv2.LegacyOverrides) error {
 	if version == "" {
 		logger.Info("no version derived from v1 values; skipping per-application legacy overrides")
