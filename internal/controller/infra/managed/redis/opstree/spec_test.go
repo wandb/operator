@@ -6,14 +6,15 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	apiv2 "github.com/wandb/operator/api/v2"
-	"github.com/wandb/operator/pkg/wandb/manifest"
 	"github.com/wandb/operator/pkg/utils"
 	redisv1beta2 "github.com/wandb/operator/pkg/vendored/redis-operator/redis/v1beta2"
 	redisreplicationv1beta2 "github.com/wandb/operator/pkg/vendored/redis-operator/redisreplication/v1beta2"
 	redissentinelv1beta2 "github.com/wandb/operator/pkg/vendored/redis-operator/redissentinel/v1beta2"
+	"github.com/wandb/operator/pkg/wandb/manifest"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/utils/ptr"
 )
 
 var _ = Describe("Redis vendor specs", func() {
@@ -52,6 +53,24 @@ var _ = Describe("Redis vendor specs", func() {
 		expectRedisDefaultPodSecurityContext(replication.Spec.PodSecurityContext)
 		expectRedisDefaultContainerSecurityContext(replication.Spec.SecurityContext)
 		expectRedisWritableTmpMount(replication.Spec.Storage.VolumeMount.MountPath)
+	})
+
+	It("treats omitted Sentinel configuration as enabled", func() {
+		wandb := redisWandb(true)
+		wandb.Spec.Redis[apiv2.DefaultInstanceName].ManagedRedis.Sentinel.Enabled = nil
+		spec := wandb.Spec.Redis[apiv2.DefaultInstanceName].ManagedRedis
+
+		standalone, err := ToRedisStandaloneVendorSpec(context.Background(), wandb, spec, redisScheme(), manifest.Manifest{})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(standalone).To(BeNil())
+
+		sentinel, err := ToRedisSentinelVendorSpec(context.Background(), wandb, spec, redisScheme(), manifest.Manifest{})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(sentinel).NotTo(BeNil())
+
+		replication, err := ToRedisReplicationVendorSpec(context.Background(), wandb, spec, redisScheme(), manifest.Manifest{})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(replication).NotTo(BeNil())
 	})
 
 	It("omits fixed Redis IDs in OpenShift mode", func() {
@@ -95,7 +114,7 @@ func redisWandb(sentinel bool) *apiv2.WeightsAndBiases {
 						Namespace:   "wandb",
 						StorageSize: "1Gi",
 						Telemetry:   apiv2.Telemetry{Enabled: true},
-						Sentinel:    apiv2.RedisSentinelSpec{Enabled: sentinel},
+						Sentinel:    apiv2.RedisSentinelSpec{Enabled: ptr.To(sentinel)},
 					},
 				},
 			},

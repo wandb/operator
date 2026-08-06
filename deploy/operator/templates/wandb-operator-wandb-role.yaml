@@ -5,6 +5,14 @@ metadata:
   name: {{ .Release.Name }}-wandb
 rules:
   - apiGroups:
+      - storage.k8s.io
+    resources:
+      - storageclasses
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
       - apps.wandb.com
     resources:
       - applications

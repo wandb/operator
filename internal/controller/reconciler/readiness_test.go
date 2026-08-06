@@ -83,6 +83,29 @@ func TestSetReadyStatusKeepsBooleanAndConditionConsistent(t *testing.T) {
 	}
 }
 
+func TestInfrastructureBlockersIncludesDegradedClickHouse(t *testing.T) {
+	wandb := &apiv2.WeightsAndBiases{
+		Spec: apiv2.WeightsAndBiasesSpec{
+			ClickHouse: map[string]apiv2.ClickHouseSpec{
+				apiv2.DefaultInstanceName: {ManagedClickHouse: &apiv2.ManagedClickHouseSpec{}},
+			},
+		},
+		Status: apiv2.WeightsAndBiasesStatus{
+			ClickHouseStatus: map[string]apiv2.ClickHouseInfraStatus{
+				apiv2.DefaultInstanceName: {
+					WBInfraStatus: apiv2.WBInfraStatus{Ready: false, State: "Degraded"},
+				},
+			},
+		},
+	}
+
+	blockers := infrastructureBlockers(wandb)
+
+	if len(blockers) != 1 || blockers[0] != "clickhouse/default" {
+		t.Fatalf("unexpected infrastructure blockers: %#v", blockers)
+	}
+}
+
 func TestRunMigrationsSurfacesFailedJobPhaseAndReason(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := apiv2.AddToScheme(scheme); err != nil {
