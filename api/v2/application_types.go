@@ -67,9 +67,87 @@ type ApplicationSpec struct {
 	Jobs                 []batchv1.Job                              `json:"jobs,omitempty"`
 	CronJobs             []batchv1.CronJob                          `json:"cronJobs,omitempty"`
 
+	// Triage declares the bounded diagnostic actions that may be requested for
+	// this application through TriageRun resources.
+	// +optional
+	Triage *ApplicationTriageSpec `json:"triage,omitempty"`
+
 	// HTTPRouteTemplate is the desired HTTPRoute spec. Nil means no HTTPRoute.
 	// +optional
 	HTTPRouteTemplate *HTTPRouteTemplateSpec `json:"httpRouteTemplate,omitempty"`
+}
+
+// ApplicationTriageSpec contains the shared diagnostic runner and the actions
+// exposed by an Application. TriageRun selects actions by name. The default
+// action runs the declared runner unchanged; named actions receive an explicit
+// --action selector.
+type ApplicationTriageSpec struct {
+	// ContainerName selects a container from the Application pod template. It
+	// may be omitted when the Application has exactly one container.
+	// +optional
+	ContainerName string `json:"containerName,omitempty"`
+
+	// Command replaces the selected container's entrypoint when non-empty.
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=64
+	// +optional
+	Command []string `json:"command,omitempty"`
+
+	// Args replaces the selected container's arguments when non-empty. For a
+	// named action, the controller appends "--action", the selected action name,
+	// and then that action's Args. The default action only appends its Args.
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=64
+	// +optional
+	Args []string `json:"args,omitempty"`
+
+	// Env adds or overrides environment variables inherited from the selected
+	// application container.
+	// +kubebuilder:validation:MaxItems=128
+	// +optional
+	Env []corev1.EnvVar `json:"env,omitempty"`
+
+	// Resources deliberately does not inherit the parent container's resource
+	// requirements. When omitted, the controller applies small bounded
+	// defaults suitable for diagnostics.
+	// +optional
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	// TimeoutSeconds is the Job execution deadline. Zero selects the controller
+	// default.
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=3600
+	// +optional
+	TimeoutSeconds int64 `json:"timeoutSeconds,omitempty"`
+
+	// Actions lists the stable action names and metadata exposed to callers.
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=16
+	// +listType=map
+	// +listMapKey=name
+	Actions []TriageActionSpec `json:"actions"`
+}
+
+// TriageActionSpec describes one action exposed by the shared diagnostic
+// runner. Execution identity and resource settings remain on the parent
+// ApplicationTriageSpec so every action uses the same bounded runtime.
+type TriageActionSpec struct {
+	// Name is the stable identifier selected by TriageRun. "default" invokes the
+	// shared runner without an action selector; every other name is passed as
+	// "--action <name>".
+	Name TriageActionName `json:"name"`
+
+	// Description is human-readable help shown by clients such as Watchtower.
+	// +kubebuilder:validation:MaxLength=512
+	// +optional
+	Description string `json:"description,omitempty"`
+
+	// Args are appended after the optional action selector when starting the
+	// diagnostic runner. They are suitable for action-specific flags, not
+	// executable paths.
+	// +kubebuilder:validation:MaxItems=32
+	// +optional
+	Args []string `json:"args,omitempty"`
 }
 
 // HTTPRouteTemplateSpec contains the fields needed to build a Gateway API HTTPRoute.
