@@ -1986,8 +1986,8 @@ func TestConvertTo_NoClickHouseLeavesEmpty(t *testing.T) {
 	require.NotContains(t, dst.Annotations, ClickHousePendingAnnotation)
 }
 
-// TestConvertTo_ClickHouseOnlyNonConnectionKeys: keys like replicated/install
-// must not be misread as an external connection.
+// TestConvertTo_ClickHouseOnlyNonConnectionKeys: keys like replicated must not
+// be misread as an external connection. (install is meaningful — see below.)
 func TestConvertTo_ClickHouseOnlyNonConnectionKeys(t *testing.T) {
 	dst := &appsv2.WeightsAndBiases{}
 	src := newV1(map[string]interface{}{
@@ -2002,4 +2002,136 @@ func TestConvertTo_ClickHouseOnlyNonConnectionKeys(t *testing.T) {
 	require.Empty(t, dst.Spec.ClickHouse,
 		"only non-connection keys must not assert an external clickhouse")
 	require.NotContains(t, dst.Annotations, ClickHousePendingAnnotation)
+}
+
+// TestConvertTo_ClickHouseTopLevelSectionConnection: the Altinity subchart
+// section supplies the connection when global.clickhouse doesn't.
+func TestConvertTo_ClickHouseTopLevelSectionConnection(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"clickhouse": map[string]interface{}{
+			"install":  false,
+			"host":     "ch.example.com",
+			"database": "wandb",
+			"password": map[string]interface{}{
+				"valueFrom": map[string]interface{}{
+					"secretKeyRef": map[string]interface{}{
+						"name": "ch-secret",
+						"key":  "password",
+					},
+				},
+			},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+
+	conn := dst.Spec.ClickHouse[appsv2.DefaultInstanceName].ExternalClickHouse
+	require.NotNil(t, conn, "install=false must assert an external clickhouse")
+	require.Equal(t, "ch-secret", conn.Password.Name)
+	require.Equal(t, "password", conn.Password.Key)
+
+	var pending map[string]string
+	require.NoError(t, json.Unmarshal([]byte(dst.Annotations[ClickHousePendingAnnotation]), &pending))
+	require.Equal(t, "ch.example.com", pending["host"])
+	require.Equal(t, "wandb", pending["database"])
+}
+
+// TestConvertTo_ClickHouseInstallFalseGlobalConnection: install lives in the
+// subchart section while the connection lives under global.
+func TestConvertTo_ClickHouseInstallFalseGlobalConnection(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"clickhouse": map[string]interface{}{"install": false},
+		"global": map[string]interface{}{
+			"clickhouse": map[string]interface{}{"host": "ch.example.com"},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+
+	require.NotNil(t, dst.Spec.ClickHouse[appsv2.DefaultInstanceName].ExternalClickHouse)
+}
+
+// TestConvertTo_ClickHouseGlobalWinsOverTopLevel: global.clickhouse is the
+// app-facing connection, so it takes precedence per field.
+func TestConvertTo_ClickHouseGlobalWinsOverTopLevel(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"clickhouse": map[string]interface{}{
+			"install": false,
+			"host":    "subchart.example.com",
+			"user":    "subchart-user",
+		},
+		"global": map[string]interface{}{
+			"clickhouse": map[string]interface{}{"host": "global.example.com"},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+
+	var pending map[string]string
+	require.NoError(t, json.Unmarshal([]byte(dst.Annotations[ClickHousePendingAnnotation]), &pending))
+	require.Equal(t, "global.example.com", pending["host"], "global.clickhouse wins")
+	require.Equal(t, "subchart-user", pending["user"], "subchart fills what global omits")
+}
+
+// TestConvertTo_ClickHouseInstallTrueStaysManaged: v1 owned ClickHouse, so the
+// spec is left empty for the defaulter even though a connection is present.
+func TestConvertTo_ClickHouseInstallTrueStaysManaged(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"clickhouse": map[string]interface{}{"install": true},
+		"global": map[string]interface{}{
+			"clickhouse": map[string]interface{}{
+				"host": "clickhouse.default.svc.cluster.local",
+				"user": "wandb",
+			},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+
+	require.Empty(t, dst.Spec.ClickHouse,
+		"install=true must not assert external; the defaulter makes it managed")
+	require.NotContains(t, dst.Annotations, ClickHousePendingAnnotation)
+}
+
+// TestConvertTo_ClickHouseInstallFalseNoConnectionFails: falling through to the
+// defaulter here would silently provision managed ClickHouse.
+func TestConvertTo_ClickHouseInstallFalseNoConnectionFails(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"clickhouse": map[string]interface{}{
+			"install":    false,
+			"replicated": true,
+		},
+	})
+	err := src.ConvertTo(dst)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "install=false but no connection found")
+}
+
+// TestConvertTo_ClickHouseInstallStringBool: helm values are frequently
+// stringly-typed; "false" must behave like false.
+func TestConvertTo_ClickHouseInstallStringBool(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"clickhouse": map[string]interface{}{
+			"install": "false",
+			"host":    "ch.example.com",
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+
+	require.NotNil(t, dst.Spec.ClickHouse[appsv2.DefaultInstanceName].ExternalClickHouse)
+}
+
+// TestConvertTo_ClickHouseInstallNonBoolIsUnset: an uninterpretable flag must
+// not make a v1 object unservable; it falls back to connection presence.
+func TestConvertTo_ClickHouseInstallNonBoolIsUnset(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"clickhouse": map[string]interface{}{
+			"install": map[string]interface{}{"nested": "nonsense"},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+	require.Empty(t, dst.Spec.ClickHouse)
 }
