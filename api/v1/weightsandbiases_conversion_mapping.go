@@ -553,11 +553,7 @@ type clickHouseSource struct {
 // mapClickHouse routes v1 ClickHouse config to externalClickhouse. Connection
 // fields come from global.clickhouse, falling back to the top-level clickhouse
 // section (the Altinity subchart values) for installs that configured them
-// there. install=true means the v1 chart owned ClickHouse, so the spec is left
-// empty for the defaulter to make it managed; install=false asserts external
-// and fails loudly when no connection is present, because falling through to
-// the defaulter would silently provision a managed cluster alongside the
-// external one the deployment is already using.
+// there.
 func mapClickHouse(values map[string]interface{}, dst *appsv2.WeightsAndBiases) error {
 	globalCH, _, err := unstructured.NestedMap(values, "global", "clickhouse")
 	if err != nil {
@@ -663,8 +659,7 @@ func mapClickHouse(values map[string]interface{}, dst *appsv2.WeightsAndBiases) 
 }
 
 // firstClickHouseInstallFlag returns the install flag from the first v1
-// location that sets it. Non-boolean values are treated as unset rather than
-// failing, so a stringly-typed flag can't make a v1 object unservable.
+// location that sets it. Non-boolean values are treated as unset rather than failing
 func firstClickHouseInstallFlag(values map[string]interface{}) (install bool, found bool) {
 	for _, path := range clickHouseInstallPaths {
 		raw, ok, err := unstructured.NestedFieldNoCopy(values, path...)
