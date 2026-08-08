@@ -238,6 +238,23 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			}
 		}
 
+		if err := validateConsoleServiceOwnership(ctx, r.Client, wandb, desiredSpec); err != nil {
+			if isConsoleServiceOwnershipConflict(err) {
+				statusManager.Set(status.InvalidConfig)
+				r.Recorder.Event(
+					wandb,
+					corev1.EventTypeWarning,
+					"ConsoleOwnershipConflict",
+					"Bundled Console cannot be enabled while the standalone Console release owns its Service",
+				)
+				log.Error(err, "Refusing to enable bundled Console")
+				return ctrlqueue.Requeue(desiredSpec)
+			}
+
+			log.Error(err, "Failed to check Console Service ownership")
+			return ctrlqueue.RequeueWithError(err)
+		}
+
 		if desiredSpec.Chart == nil {
 			statusManager.Set(status.InvalidConfig)
 			log.Error(err, "No release type was found in the spec")
