@@ -27,7 +27,7 @@ require (
 	github.com/samber/lo v1.52.0
 	github.com/sanity-io/litter v1.3.0
 	github.com/stretchr/testify v1.11.1
-	github.com/twmb/franz-go v1.21.3
+	github.com/twmb/franz-go v1.21.5
 	github.com/twmb/franz-go/pkg/kadm v1.18.0
 	golang.org/x/exp v0.0.0-20250408133849-7e4ce0ab07d0
 	golang.org/x/text v0.38.0
