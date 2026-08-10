@@ -201,7 +201,6 @@ var _ = Describe("CtrlState", func() {
 			result, err := state.ReconcilerResult()
 			Expect(err).To(BeNil())
 			Expect(result).To(Equal(ctrl.Result{}))
-			Expect(result.Requeue).To(BeFalse()) // nolint:SA1019
 			Expect(result.RequeueAfter).To(Equal(time.Duration(0)))
 		})
 

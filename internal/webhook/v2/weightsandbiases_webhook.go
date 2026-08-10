@@ -110,7 +110,7 @@ func (d *WeightsAndBiasesCustomDefaulter) Default(ctx context.Context, obj runti
 		wandb.Spec.Wandb.InternalServiceAuth.Enabled = ptr.To(true)
 	}
 
-	if wandb.Spec.Wandb.InternalServiceAuth.OIDCIssuer == "" {
+	if wandb.Spec.Wandb.InternalServiceAuth.OIDCIssuer == "" && wandb.Spec.Wandb.InternalServiceAuth.Enabled != nil && *wandb.Spec.Wandb.InternalServiceAuth.Enabled{
 		wandb.Spec.Wandb.InternalServiceAuth.OIDCIssuer = "https://kubernetes.default.svc.cluster.local"
 	}
 
@@ -273,6 +273,8 @@ func applyKafkaDefaults(wandb *appsv2.WeightsAndBiases) {
 	if spec.Namespace == "" {
 		spec.Namespace = wandb.Namespace
 	}
+
+	applyManagedServiceAccountDefaults(&spec.ServiceAccount, spec.Name)
 }
 
 func applyObjectStoreDefaults(wandb *appsv2.WeightsAndBiases) {
@@ -328,7 +330,17 @@ func applyClickHouseDefaults(wandb *appsv2.WeightsAndBiases) {
 		if spec.ManagedClickHouse.Namespace == "" {
 			spec.ManagedClickHouse.Namespace = wandb.Namespace
 		}
+		applyManagedServiceAccountDefaults(&spec.ManagedClickHouse.ServiceAccount, spec.ManagedClickHouse.Name)
 		wandb.Spec.ClickHouse[key] = spec
+	}
+}
+
+func applyManagedServiceAccountDefaults(serviceAccount *appsv2.ManagedServiceAccountSpec, defaultName string) {
+	if serviceAccount.Create == nil {
+		serviceAccount.Create = ptr.To(true)
+	}
+	if serviceAccount.ServiceAccountName == "" {
+		serviceAccount.ServiceAccountName = defaultName
 	}
 }
 
@@ -471,6 +483,7 @@ func validateMySQLSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 func validateRedisSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 	var errors field.ErrorList
 	redisPath := field.NewPath("spec").Child("redis")
+	_, hasPendingLegacyRedis := wandb.Annotations[v1.RedisPendingAnnotation]
 
 	errors = append(errors, validateHasDefaultInstance(wandb.Spec.Redis, redisPath)...)
 
@@ -484,22 +497,38 @@ func validateRedisSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 			))
 		}
 
-		managed := spec.ManagedRedis
-		if managed == nil {
+		if externalRedis := spec.ExternalRedis; externalRedis != nil && !hasPendingLegacyRedis {
+			externalPath := instancePath.Child("externalRedis")
+			errors = append(errors, validateRequiredSecretSelector(externalRedis.Host, externalPath.Child("host"))...)
+			errors = append(errors, validateRequiredSecretSelector(externalRedis.Port, externalPath.Child("port"))...)
+		}
+
+		if spec.ManagedRedis == nil {
 			continue
 		}
 
-		if managed.StorageSize != "" {
-			if _, err := resource.ParseQuantity(managed.StorageSize); err != nil {
+		if spec.ManagedRedis.StorageSize != "" {
+			if _, err := resource.ParseQuantity(spec.ManagedRedis.StorageSize); err != nil {
 				errors = append(errors, field.Invalid(
 					instancePath.Child("managedRedis").Child("storageSize"),
-					managed.StorageSize,
+					spec.ManagedRedis.StorageSize,
 					"must be a valid resource quantity (e.g., '10Gi')",
 				))
 			}
 		}
 	}
 
+	return errors
+}
+
+func validateRequiredSecretSelector(selector corev1.SecretKeySelector, path *field.Path) field.ErrorList {
+	var errors field.ErrorList
+	if selector.Name == "" {
+		errors = append(errors, field.Required(path.Child("name"), "secret name is required"))
+	}
+	if selector.Key == "" {
+		errors = append(errors, field.Required(path.Child("key"), "secret key is required"))
+	}
 	return errors
 }
 

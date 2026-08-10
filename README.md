@@ -84,6 +84,44 @@ The operator reconciles the resource, brings up the requested backing services,
 and rolls out the W&B application. See [`deploy/operator/values.yaml`](deploy/operator/values.yaml)
 for the available chart options and which component operators are enabled.
 
+### Custom CA certificates (air-gapped / private registry)
+
+When the operator must reach a private OCI registry served with a self-signed or
+corporate CA — for example to pull the server manifest in an air-gapped install —
+provide the CA at install time via `wandb-operator.caCerts`. The certs are mounted
+into the operator pod and added to `SSL_CERT_DIR` additively, so the system trust
+bundle (and any public roots) is preserved.
+
+Provide the CA one of three ways:
+
+```yaml
+# values.yaml — pick ONE source
+wandb-operator:
+  caCerts:
+    # 1. inline PEM blocks (synthesized into a Secret by the chart)
+    certs:
+      - |
+        -----BEGIN CERTIFICATE-----
+        ...
+        -----END CERTIFICATE-----
+    # 2. or an existing Secret whose keys are PEM certs
+    existingSecret: my-registry-ca
+    # 3. or an existing ConfigMap whose keys are PEM certs
+    existingConfigMap: my-registry-ca
+```
+
+```bash
+# e.g. mount a CA file straight from disk
+helm install wandb-operator oci://.../charts/operator \
+  --namespace wandb-operators --create-namespace \
+  --set-file 'wandb-operator.caCerts.certs[0]=./registry-ca.crt'
+```
+
+This trusts the CA for the operator's own egress (the server-manifest pull). To
+trust a CA on the W&B **application** workloads instead, use
+`spec.global.customCACerts` / `spec.global.caCertsConfigMap` on the
+`WeightsAndBiases` resource.
+
 ## Documentation
 
 - [Configuration API](docs/config-api.md)
