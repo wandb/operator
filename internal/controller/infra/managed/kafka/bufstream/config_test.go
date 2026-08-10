@@ -8,7 +8,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	apiv2 "github.com/wandb/operator/api/v2"
-	"github.com/wandb/operator/internal/controller/infra/external/objectstore"
+	"github.com/wandb/operator/internal/controller/infra/objectstore"
 )
 
 func TestRenderBufstreamConfigS3(t *testing.T) {

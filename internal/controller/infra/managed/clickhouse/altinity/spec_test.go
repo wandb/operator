@@ -6,6 +6,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/internal/controller/infra/objectstore"
 	"github.com/wandb/operator/internal/controller/infra/managed/clickhouse/altinity/keeper"
 	"github.com/wandb/operator/pkg/utils"
 	chiv1 "github.com/wandb/operator/pkg/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
@@ -24,12 +25,15 @@ var _ = Describe("ClickHouse vendor specs", func() {
 	It("renders hardened pod templates with writable runtime mounts", func() {
 		wandb := clickHouseWandb()
 
-		chi, err := ToClickHouseVendorSpec(context.Background(), wandb, wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse, clickHouseScheme(), testObjectStorageConn(), true, manifest.Manifest{})
+		chi, err := ToClickHouseVendorSpec(context.Background(), wandb, wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse, clickHouseScheme(), testObjectStorageConn(), testObjectStorageEndpoint, true, manifest.Manifest{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(chi).NotTo(BeNil())
 		Expect(chi.Spec.Templates.PodTemplates).To(HaveLen(1))
 
 		podSpec := chi.Spec.Templates.PodTemplates[0].Spec
+		Expect(podSpec.ServiceAccountName).To(Equal("clickhouse"))
+		Expect(podSpec.AutomountServiceAccountToken).NotTo(BeNil())
+		Expect(*podSpec.AutomountServiceAccountToken).To(BeFalse())
 		expectClickHouseDefaultPodSecurityContext(podSpec.SecurityContext)
 		expectClickHouseWritableVolume(podSpec.Volumes, clickHouseTmpVolumeName)
 		expectClickHouseWritableVolume(podSpec.Volumes, clickHouseLogVolumeName)
@@ -48,7 +52,7 @@ var _ = Describe("ClickHouse vendor specs", func() {
 		Expect(wait.Args[0]).NotTo(ContainSubstring("head-bucket"))
 		Expect(wait.Args[0]).NotTo(ContainSubstring("AccessKey"))
 		Expect(wait.Args[0]).NotTo(ContainSubstring("SecretKey"))
-		Expect(wait.Args[2]).To(Equal(testObjectStorageConn().Endpoint))
+		Expect(wait.Args[2]).To(Equal(testObjectStorageEndpoint))
 		Expect(wait.Env).To(BeEmpty())
 		container := podSpec.Containers[0]
 		Expect(container.Image).To(Equal(ClickHouseImage(manifest.ImageRef{}, "")))
@@ -63,7 +67,7 @@ var _ = Describe("ClickHouse vendor specs", func() {
 		utils.SetOpenShiftMode(true)
 
 		wandb := clickHouseWandb()
-		chi, err := ToClickHouseVendorSpec(context.Background(), wandb, wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse, clickHouseScheme(), testObjectStorageConn(), true, manifest.Manifest{})
+		chi, err := ToClickHouseVendorSpec(context.Background(), wandb, wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse, clickHouseScheme(), testObjectStorageConn(), testObjectStorageEndpoint, true, manifest.Manifest{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(chi).NotTo(BeNil())
 
@@ -74,7 +78,7 @@ var _ = Describe("ClickHouse vendor specs", func() {
 
 	It("backs storage with the object store, sets a default policy, and wires keeper", func() {
 		wandb := clickHouseWandb()
-		chi, err := ToClickHouseVendorSpec(context.Background(), wandb, wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse, clickHouseScheme(), testObjectStorageConn(), true, manifest.Manifest{})
+		chi, err := ToClickHouseVendorSpec(context.Background(), wandb, wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse, clickHouseScheme(), testObjectStorageConn(), testObjectStorageEndpoint, true, manifest.Manifest{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(chi).NotTo(BeNil())
 
@@ -107,17 +111,67 @@ var _ = Describe("ClickHouse vendor specs", func() {
 
 	It("does not gate ClickHouse for bring-your-own object storage", func() {
 		wandb := clickHouseWandb()
-		chi, err := ToClickHouseVendorSpec(context.Background(), wandb, wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse, clickHouseScheme(), testObjectStorageConn(), false, manifest.Manifest{})
+		chi, err := ToClickHouseVendorSpec(context.Background(), wandb, wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse, clickHouseScheme(), testObjectStorageConn(), testObjectStorageEndpoint, false, manifest.Manifest{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(chi.Spec.Templates.PodTemplates[0].Spec.InitContainers).To(BeEmpty())
 	})
+
+	It("wires ambient object storage credentials through the configured service account", func() {
+		wandb := clickHouseWandb()
+		spec := wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse
+		spec.ServiceAccount = apiv2.ManagedServiceAccountSpec{
+			ServiceAccountName: "clickhouse-workload-identity",
+			Annotations: map[string]string{
+				"eks.amazonaws.com/role-arn": "arn:aws:iam::123456789012:role/wandb-clickhouse",
+			},
+		}
+		objStorage := testObjectStorageConn()
+		// Ambient credentials: no static access/secret keys are set.
+		objStorage.AccessKey = ""
+		objStorage.SecretKey = ""
+
+		serviceAccount, err := ToServiceAccount(wandb, spec, objStorage, clickHouseScheme())
+		Expect(err).NotTo(HaveOccurred())
+		Expect(serviceAccount.Name).To(Equal("clickhouse-workload-identity"))
+		Expect(serviceAccount.Annotations).To(Equal(spec.ServiceAccount.Annotations))
+		Expect(serviceAccount.AutomountServiceAccountToken).NotTo(BeNil())
+		Expect(*serviceAccount.AutomountServiceAccountToken).To(BeTrue())
+
+		chi, err := ToClickHouseVendorSpec(context.Background(), wandb, spec, clickHouseScheme(), objStorage, testObjectStorageEndpoint, false, manifest.Manifest{})
+		Expect(err).NotTo(HaveOccurred())
+		podSpec := chi.Spec.Templates.PodTemplates[0].Spec
+		Expect(podSpec.ServiceAccountName).To(Equal(serviceAccount.Name))
+		Expect(podSpec.AutomountServiceAccountToken).NotTo(BeNil())
+		Expect(*podSpec.AutomountServiceAccountToken).To(BeTrue())
+	})
+
+	It("can reference an existing ClickHouse service account", func() {
+		wandb := clickHouseWandb()
+		spec := wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse
+		create := false
+		spec.ServiceAccount = apiv2.ManagedServiceAccountSpec{
+			Create:             &create,
+			ServiceAccountName: "existing-clickhouse-identity",
+		}
+
+		serviceAccount, err := ToServiceAccount(wandb, spec, testObjectStorageConn(), clickHouseScheme())
+		Expect(err).NotTo(HaveOccurred())
+		Expect(serviceAccount).To(BeNil())
+
+		chi, err := ToClickHouseVendorSpec(context.Background(), wandb, spec, clickHouseScheme(), testObjectStorageConn(), testObjectStorageEndpoint, false, manifest.Manifest{})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(chi.Spec.Templates.PodTemplates[0].Spec.ServiceAccountName).To(Equal("existing-clickhouse-identity"))
+	})
 })
 
-func testObjectStorageConn() *ObjectStorageConn {
+const testObjectStorageEndpoint = "http://seaweedfs.wandb.svc.cluster.local:80/bucket/clickhouse/"
+
+func testObjectStorageConn() *objectstore.ConnInfo {
 	ref := corev1.LocalObjectReference{Name: "objstore-conn"}
-	return &ObjectStorageConn{
-		Endpoint:     "http://seaweedfs.wandb.svc.cluster.local:80/bucket/clickhouse/",
+	return &objectstore.ConnInfo{
 		Region:       "us-east-1",
+		AccessKey:    "AKIA",
+		SecretKey:    "secret",
 		AccessKeyRef: corev1.SecretKeySelector{LocalObjectReference: ref, Key: "AccessKey"},
 		SecretKeyRef: corev1.SecretKeySelector{LocalObjectReference: ref, Key: "SecretKey"},
 	}
