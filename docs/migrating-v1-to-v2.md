@@ -37,7 +37,7 @@ helm install cert-manager jetstack/cert-manager \
 ### Other tooling
 
 - `kubectl` within one minor version of your cluster.
-- Helm v3.5.2 or later.
+- Helm v3.8.0 or later.
 - A default `StorageClass` (managed backing services request PersistentVolumes).
 
 ## Before the change window
