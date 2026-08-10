@@ -72,6 +72,7 @@ var _ = Describe("WeightsAndBiases multi-instance infra", func() {
 		wandb := &apiv2.WeightsAndBiases{
 			ObjectMeta: metav1.ObjectMeta{Name: "wb", Namespace: "ns"},
 			Spec: apiv2.WeightsAndBiasesSpec{
+				Wandb: apiv2.WandbAppSpec{Hostname: "https://wandb.example.com"},
 				MySQL: map[string]apiv2.MySQLSpec{
 					apiv2.DefaultInstanceName: {ManagedMysql: &apiv2.ManagedMysqlSpec{Name: "wb-mysql", Namespace: "ns"}},
 					"analytics":               {ManagedMysql: &apiv2.ManagedMysqlSpec{Name: "wb-mysql-analytics", Namespace: "ns"}},
