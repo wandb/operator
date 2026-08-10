@@ -1,10 +1,5 @@
 # Migrating from Operator v1 to v2
 
-Use this runbook for an existing W&B deployment managed by Operator v1. Treat
-the migration as a controlled cutover: preserve stateful dependencies, run one
-operator controller at a time, and keep a tested rollback path until v2 is
-healthy.
-
 Operator v2 adopts an existing v1 `WeightsAndBiases` resource in place: a
 conversion webhook converts it to `apps.wandb.com/v2`, and the operator
 reconnects to the same backing services without migrating data. MySQL, Redis,
@@ -48,12 +43,11 @@ helm install cert-manager jetstack/cert-manager \
 ## Before the change window
 
 1. Record the v1 operator and W&B Helm release names, namespaces, chart
-   versions, values, and current replica counts.
+   versions, and values.
 2. Back up MySQL, object storage, ClickHouse, and Redis according to the
    provider's restore procedure, and verify that the backups can be read.
 3. Use `spec.retentionPolicy.onDelete: detach` in the v2 resource while
-   validating the migration. Do not delete the v1 resource or uninstall a
-   state-owning Helm release as a migration step.
+   validating the migration.
 4. Inspect the converted `apps.wandb.com/v2` `WeightsAndBiases` resource before
    applying it:
 
@@ -133,8 +127,8 @@ do not delete existing CRDs as a recovery shortcut.
 ## Wait for the cutover gates
 
 Applications are gated on infrastructure readiness, MySQL initialization, and
-the W&B migration Jobs. Do not switch traffic or remove v1 workloads until all
-of these checks pass:
+the W&B migration Jobs. Do not treat the upgrade as complete until all of these
+checks pass:
 
 ```bash
 kubectl -n <wandb-namespace> get wandb <wandb-name> -o yaml
