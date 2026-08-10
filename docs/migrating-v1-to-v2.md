@@ -5,9 +5,45 @@ the migration as a controlled cutover: preserve stateful dependencies, run one
 operator controller at a time, and keep a tested rollback path until v2 is
 healthy.
 
+Operator v2 adopts an existing v1 `WeightsAndBiases` resource in place: a
+conversion webhook converts it to `apps.wandb.com/v2`, and the operator
+reconnects to the same backing services without migrating data. MySQL, Redis,
+and object storage convert to their external connection specs automatically.
+
 Operator v2 does not uninstall the v1 Helm releases or modify migration
 metadata inside MySQL or ClickHouse. Those actions can destroy data or make
 rollback impossible and must remain explicit operator decisions.
+
+## Prerequisites
+
+### cert-manager (required)
+
+The v2 chart renders cert-manager resources (`Certificate` and `Issuer`) to
+provision the webhook serving certificate and inject the CA into the operator's
+webhooks and CRDs. cert-manager must be installed first — even though Operator
+v1 did not require it — otherwise `helm install` fails with:
+
+```
+INSTALLATION FAILED: no matches for kind "Certificate"/"Issuer" in version "cert-manager.io/v1" - ensure CRDs are installed first
+```
+
+cert-manager is intentionally not a chart dependency (many clusters already run
+it, and it is a cluster-wide singleton). Install it with its CRDs before the
+operator:
+
+```bash
+helm repo add jetstack https://charts.jetstack.io
+helm repo update
+helm install cert-manager jetstack/cert-manager \
+  --namespace cert-manager --create-namespace \
+  --set crds.enabled=true
+```
+
+### Other tooling
+
+- `kubectl` within one minor version of your cluster.
+- Helm v3.5.2 or later.
+- A default `StorageClass` (managed backing services request PersistentVolumes).
 
 ## Before the change window
 
@@ -43,31 +79,39 @@ rollback impossible and must remain explicit operator decisions.
    Pointing v2 at the v1 Redis Service does not make it safe to uninstall the
    v1 release.
 
-## Enter single-controller mode
-
-Do not let Operator v1 and v2 reconcile the same W&B deployment concurrently.
-The v1 controller can restore legacy values or Secrets while v2 is trying to
-apply the converted configuration.
-
-1. Identify the v1 controller Deployment from its Helm release and save its
-   replica count.
-2. Scale that Deployment to zero.
-3. Confirm no v1 controller pods remain before applying the v2 resource.
-
-For example:
-
-```bash
-kubectl -n <v1-operator-namespace> scale \
-  deployment/<v1-controller-deployment> --replicas=0
-kubectl -n <v1-operator-namespace> get pods
-```
-
-Do not uninstall the v1 operator yet. Leaving the release installed makes the
-controller rollback reversible.
+## TODO: What needs to happen before applying `helm upgrade`
 
 ## Install Operator v2 and apply the resource
 
-Pin a reviewed version from the Operator v2 OCI repository:
+Each managed backing service is provisioned by a component operator that the v2
+chart installs as a subchart (and whose CRDs its bundled crd-installer applies).
+If your v1 environment already runs one of these operators cluster-wide — most
+commonly a standalone Altinity ClickHouse operator — disable the overlapping
+component operator so the chart reuses your existing one instead of fighting it
+for CRD ownership. A conflict looks like:
+
+```
+Installation failed: failed to install CRD clickhouseinstallations.clickhouse.altinity.com … conflicts with "kubectl": .spec.versions
+```
+
+Disable the conflicting component operator with the matching toggle:
+
+| Component operator | Value | Default |
+| --- | --- | --- |
+| MySQL (Moco) | `moco.enabled` | `true` |
+| Redis | `redis-operator.enabled` | `true` |
+| Object storage (SeaweedFS) | `seaweedfs-operator.enabled` | `true` |
+| ClickHouse (Altinity) | `altinity-clickhouse-operator.enabled` | `true` |
+| VictoriaMetrics (telemetry) | `victoria-metrics-operator.enabled` | `false` |
+| Grafana (telemetry) | `grafana-operator.enabled` | `false` |
+
+Disabling a component operator also drops its CRDs from the bundled
+crd-installer. Provision that backing service externally and point the
+`WeightsAndBiases` CR at it (see
+[Infrastructure Connection Settings](infra-connection-settings.md)).
+
+Pin a reviewed version from the Operator v2 OCI repository, adding any
+`*-operator.enabled=false` toggles from the table above:
 
 ```bash
 helm upgrade --install wandb-operator \
@@ -120,6 +164,20 @@ Do not infer migration success from a similarly named Deployment. Do not
 automatically clear `partially_applied_version` or edit migration tables: that
 requires a migration-specific recovery decision and a verified backup.
 
+## Known migration caveats
+
+- **ClickHouse must land as external.** If your v1 deployment used an external
+  (for example weave-trace) ClickHouse, confirm the converted CR resolves it to
+  `spec.clickhouse.default.externalClickhouse` rather than a managed instance. If
+  the status shows a managed ClickHouse (`ClickHouseConnectionInfo: NoResource`),
+  patch the CR to null `managedClickhouse` and set `externalClickhouse` pointing
+  at your cluster via a connection secret.
+- **`weave-worker-auth` token encoding.** If the v1 `weave-worker-auth` secret
+  holds a non-UTF-8 (binary) token, weave-trace pods can fail with
+  `CreateContainerError: grpc: error while marshaling: string field contains
+  invalid UTF-8`. Regenerate the token, overwrite the `weave-worker-auth` secret,
+  and restart the weave-trace deployments.
+
 ## Smoke test before cleanup
 
 Run the tests through the customer-facing hostname:
@@ -135,38 +193,9 @@ Run the tests through the customer-facing hostname:
 An SDK upload alone is not sufficient for S3-compatible storage. Browser
 downloads can still fail when the external endpoint or CORS policy is wrong.
 
-## Retire v1 in the safe order
+## Further reading
 
-1. Keep the v1 controller at zero replicas.
-2. Verify the v2 route and workloads remain healthy for the agreed observation
-   period.
-3. Inventory remaining v1 Deployments and scale any that are still serving
-   traffic to zero. Operator v2 removes the known legacy `*-bc` Deployments
-   only after all desired v2 Deployments are ready; verify rather than assume
-   that all v1 workloads are covered.
-4. Uninstall the v1 operator release only after the rollback window no longer
-   requires it.
-5. Uninstall the v1 W&B release only after confirming it owns no Redis,
-   database, object-store, ClickHouse, PVC, Secret, or other resource still
-   used by v2.
-
-Never uninstall the v1 W&B release while v2 still references its Helm-owned
-Redis. The uninstall deletes the Redis workload even if the v2 resource calls
-it "external."
-
-## Rollback
-
-Rollback must also use one controller at a time:
-
-1. Stop traffic to the v2 workloads or restore the previous route.
-2. Scale the v2 operator controller to zero.
-3. Restore the saved v1 configuration and workload replica counts.
-4. Scale the v1 operator controller back to its saved replica count.
-5. Verify database compatibility before rolling the W&B application version
-   back; a completed forward migration may not be reversible by changing only
-   the image tag.
-6. Re-run the UI, SDK, artifact, and browser-download smoke tests.
-
-Do not delete the v2 resource or its dependencies during rollback. Keep them
-detached until the incident is understood and the retained data is no longer
-needed.
+- [Configuration API](config-api.md)
+- [Infrastructure Connection Settings](infra-connection-settings.md)
+- [Monitoring and Telemetry Guide](monitoring.md)
+- [Deploying on OpenShift](openshift.md)
