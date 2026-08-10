@@ -18,7 +18,7 @@ provision the webhook serving certificate and inject the CA into the operator's
 webhooks and CRDs. cert-manager must be installed first — even though Operator
 v1 did not require it — otherwise `helm install` fails with:
 
-```
+```text
 INSTALLATION FAILED: no matches for kind "Certificate"/"Issuer" in version "cert-manager.io/v1" - ensure CRDs are installed first
 ```
 
@@ -84,7 +84,7 @@ commonly a standalone Altinity ClickHouse operator — disable the overlapping
 component operator so the chart reuses your existing one instead of fighting it
 for CRD ownership. A conflict looks like:
 
-```
+```text
 Installation failed: failed to install CRD clickhouseinstallations.clickhouse.altinity.com … conflicts with "kubectl": .spec.versions
 ```
 
