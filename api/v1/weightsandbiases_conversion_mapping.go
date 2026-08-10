@@ -201,6 +201,8 @@ func mapInternalJWTIssuer(values map[string]interface{}, dst *appsv2.WeightsAndB
 	}
 	if issuer != "" {
 		dst.Spec.Wandb.InternalServiceAuth.OIDCIssuer = issuer
+	} else {
+		dst.Spec.Wandb.InternalServiceAuth.Enabled = ptr.To(false)
 	}
 	return nil
 }
