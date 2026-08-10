@@ -180,7 +180,7 @@ func managedClickHouseWriteState(
 	waitForObjectStore := objStoreSpec.ManagedObjectStore != nil
 
 	// Resolve the bucket connection; wait and requeue if it isn't ready yet.
-	objStorage, err := altinity.ResolveObjectStorage(ctx, client, spec, &objStoreStatus.Connection)
+	objStorage, objStorageEndpoint, err := altinity.ResolveObjectStorage(ctx, client, spec, &objStoreStatus.Connection)
 	if err != nil {
 		log.Error(err, "object storage not ready for ClickHouse")
 		return []metav1.Condition{
@@ -198,7 +198,7 @@ func managedClickHouseWriteState(
 	}
 
 	// Translate the Keeper and ClickHouse CRs; WriteState writes Keeper first.
-	desiredKeeper, err := keeper.ToKeeperVendorSpec(ctx, wandb, spec, client.Scheme(), altinity.KeeperNsName(spec))
+	desiredKeeper, err := keeper.ToKeeperVendorSpec(ctx, wandb, spec, client.Scheme(), altinity.KeeperNsName(spec), mfst)
 	if err != nil {
 		log.Error(err, "failed to translate Keeper spec to vendor spec")
 		return []metav1.Condition{
@@ -210,7 +210,19 @@ func managedClickHouseWriteState(
 		}
 	}
 
-	desired, err := altinity.ToClickHouseVendorSpec(ctx, wandb, spec, client.Scheme(), objStorage, waitForObjectStore, mfst)
+	desiredServiceAccount, err := altinity.ToServiceAccount(wandb, spec, objStorage, client.Scheme())
+	if err != nil {
+		log.Error(err, "failed to translate ClickHouse ServiceAccount")
+		return []metav1.Condition{
+			{
+				Type:   common.ReconciledType,
+				Status: metav1.ConditionFalse,
+				Reason: common.ControllerErrorReason,
+			},
+		}
+	}
+
+	desired, err := altinity.ToClickHouseVendorSpec(ctx, wandb, spec, client.Scheme(), objStorage, objStorageEndpoint, waitForObjectStore, mfst)
 	if err != nil {
 		log.Error(err, "failed to translate ClickHouse spec to vendor spec")
 		return []metav1.Condition{
@@ -229,7 +241,7 @@ func managedClickHouseWriteState(
 	}
 
 	results := make([]metav1.Condition, 0)
-	results = append(results, altinity.WriteState(ctx, client, specNamespacedName, desiredKeeper, desired)...)
+	results = append(results, altinity.WriteState(ctx, client, specNamespacedName, desiredServiceAccount, desiredKeeper, desired)...)
 
 	return results
 }
