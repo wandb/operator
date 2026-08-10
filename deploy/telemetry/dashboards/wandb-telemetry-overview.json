@@ -1861,7 +1861,7 @@
     },
     {
       "type": "stat",
-      "title": "Kafka Messages / sec",
+      "title": "Kafka Requests / sec",
       "datasource": {
         "type": "victoriametrics-metrics-datasource",
         "uid": "${DS_VICTORIAMETRICS}"
@@ -1874,7 +1874,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(kafka_server_brokertopicmetrics_messagesinpersec_total[$__rate_interval]))",
+          "expr": "sum(rate(bufstream_kafka_request_count_total{namespace=\"$namespace\"}[$__rate_interval]))",
           "refId": "A"
         }
       ],
@@ -1895,7 +1895,7 @@
     },
     {
       "type": "stat",
-      "title": "Offline Partitions",
+      "title": "Bufstream Status",
       "datasource": {
         "type": "victoriametrics-metrics-datasource",
         "uid": "${DS_VICTORIAMETRICS}"
@@ -1908,7 +1908,7 @@
       },
       "targets": [
         {
-          "expr": "sum(kafka_controller_kafkacontroller_offlinepartitionscount)",
+          "expr": "max(bufstream_status{namespace=\"$namespace\"})",
           "refId": "A"
         }
       ],
@@ -2046,7 +2046,7 @@
     },
     {
       "type": "timeseries",
-      "title": "Kafka Messages by Topic",
+      "title": "Kafka Consumer Lag by Topic",
       "datasource": {
         "type": "victoriametrics-metrics-datasource",
         "uid": "${DS_VICTORIAMETRICS}"
@@ -2059,11 +2059,12 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(kafka_server_brokertopicmetrics_messagesinpersec_total[$__rate_interval])) by (topic)",
-          "legendFormat": "{{topic}}",
+          "expr": "max by (kafka_topic_name) (bufstream_kafka_consumer_group_offset_lag{namespace=\"$namespace\"})",
+          "legendFormat": "{{kafka_topic_name}}",
           "refId": "A"
         }
-      ]
+      ],
+      "fieldConfig": {"defaults": {"unit": "short", "min": 0}, "overrides": []}
     },
     {
       "type": "timeseries",
@@ -2192,7 +2193,7 @@
       "gridPos": {"h": 8, "w": 8, "x": 16, "y": 146},
       "options": {
         "mode": "markdown",
-        "content": "**What it shows** — whether each ingestion path on the gateway is receiving data. This is how you confirm **DataDog** traces/metrics are populated.\n\n- **`datadog`** — DataDog-APM traces (port 8126). A non-zero line here means DataDog-protocol tracing is flowing; downstream it appears as `traces_spanmetrics_calls_total` for the SDK services.\n- **`otlp`** — the main gorilla OpenTelemetry path (the bulk of spans/metrics).\n- **`statsd`** — DogStatsD metrics (port 8125). **Expect this to be absent/zero** unless gorilla runs with `GORILLA_STATSD_PORT` > 0 (a core/manifest-side setting). Zero here is the reason the DogStatsD-only panels were dropped.\n\n**What bad looks like** — a receiver you expect traffic on flatlining at 0, or `otelcol_receiver_refused_*` climbing (data arriving but rejected)."
+        "content": "**What it shows** — whether each ingestion path on the gateway is receiving data. This is how you confirm **DataDog** traces/metrics are populated.\n\n- **`datadog`** — DataDog-APM traces (port 8126). A non-zero line here means DataDog-protocol tracing is flowing; downstream it appears as `traces_spanmetrics_calls_milliseconds_total` for the SDK services.\n- **`otlp`** — the main gorilla OpenTelemetry path (the bulk of spans/metrics).\n- **`statsd`** — DogStatsD metrics (port 8125). Gorilla emits these via `GORILLA_STATSD_ADDRESS` regardless of the `GORILLA_STATSD_PORT` setting (`GORILLA_STATSD_PORT=0` is a vestigial no-op), so datagrams do reach the collector. This line can look thin on an idle cluster because gorilla emits most app metrics only under traffic — not because DogStatsD is disabled.\n\n**What bad looks like** — a receiver you expect traffic on flatlining at 0, or `otelcol_receiver_refused_*` climbing (data arriving but rejected)."
       }
     },
     {
@@ -2209,7 +2210,7 @@
       ],
       "fieldConfig": {"defaults": {"unit": "cps", "min": 0}, "overrides": []},
       "options": {"legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"]}, "tooltip": {"mode": "multi"}},
-      "description": "Metric points/sec the collector accepts, split by receiver. A `statsd` line appears only when gorilla emits DogStatsD (GORILLA_STATSD_PORT > 0); today only `otlp` carries metrics."
+      "description": "Metric points/sec the collector accepts, split by receiver. Gorilla emits DogStatsD via `GORILLA_STATSD_ADDRESS`, so a `statsd` line can appear here; it may be sparse on an idle cluster because most app metrics are emitted only under traffic."
     },
     {
       "type": "text",

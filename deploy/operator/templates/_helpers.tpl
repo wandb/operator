@@ -37,3 +37,45 @@ inside operator-crds/crds.yaml: honor an explicit override on
 {{- define "wandb-operator.serviceName" -}}
 {{ include "wandb-base.serviceName" (dict "Release" (dict "Name" .Release.Name) "Chart" (dict "Name" "wandb-operator") "Values" (dict "nameOverride" (dig "wandb-operator" "nameOverride" "" .Values.AsMap) "service" (dict "name" (dig "wandb-operator" "service" "name" "" .Values.AsMap)))) }}
 {{- end }}
+
+{{/*
+Operator custom-CA trust (wandb-operator.caCerts). Referenced from the
+wandb-operator subchart values as volumesTpls / volumeMountsTpls / envTpls
+strings, so they render in the subchart context where .Values is the
+wandb-operator values. Each is inert unless a CA source is configured.
+*/}}
+{{- define "wandb-operator.caCertsActive" -}}
+{{- $ca := .Values.caCerts | default dict -}}
+{{- if or $ca.certs $ca.existingSecret $ca.existingConfigMap -}}true{{- end -}}
+{{- end -}}
+
+{{- define "wandb-operator.caCertsVolume" -}}
+{{- $ca := .Values.caCerts | default dict -}}
+{{- if include "wandb-operator.caCertsActive" . -}}
+- name: wandb-operator-ca-certs
+  {{- if $ca.existingConfigMap }}
+  configMap:
+    name: {{ $ca.existingConfigMap }}
+  {{- else }}
+  secret:
+    secretName: {{ $ca.existingSecret | default (printf "%s-operator-ca-certs" .Release.Name) }}
+  {{- end }}
+{{- end -}}
+{{- end -}}
+
+{{- define "wandb-operator.caCertsVolumeMount" -}}
+{{- $ca := .Values.caCerts | default dict -}}
+{{- if include "wandb-operator.caCertsActive" . -}}
+- name: wandb-operator-ca-certs
+  mountPath: {{ $ca.mountPath | default "/etc/wandb/ca-certs" }}
+  readOnly: true
+{{- end -}}
+{{- end -}}
+
+{{- define "wandb-operator.caCertsEnv" -}}
+{{- $ca := .Values.caCerts | default dict -}}
+{{- if include "wandb-operator.caCertsActive" . -}}
+- name: SSL_CERT_DIR
+  value: "{{ $ca.mountPath | default "/etc/wandb/ca-certs" }}:/etc/ssl/certs:/etc/pki/tls/certs"
+{{- end -}}
+{{- end -}}

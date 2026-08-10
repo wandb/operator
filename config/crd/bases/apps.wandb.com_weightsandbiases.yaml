@@ -66,6 +66,9 @@ spec:
     - jsonPath: .status.clickhouseStatus.default.state
       name: ClickHouse
       type: string
+    - jsonPath: .status.wandb.migration.phase
+      name: Migration
+      type: string
     name: v2
     schema:
       openAPIV3Schema:
@@ -1157,6 +1160,17 @@ spec:
                           required:
                           - onDelete
                           type: object
+                        serviceAccount:
+                          properties:
+                            annotations:
+                              additionalProperties:
+                                type: string
+                              type: object
+                            create:
+                              type: boolean
+                            serviceAccountName:
+                              type: string
+                          type: object
                         storageSize:
                           type: string
                         telemetry:
@@ -1198,6 +1212,55 @@ spec:
                     type: array
                   imageRegistry:
                     type: string
+                  proxy:
+                    properties:
+                      httpProxy:
+                        properties:
+                          value:
+                            type: string
+                          valueFrom:
+                            properties:
+                              secretKeyRef:
+                                properties:
+                                  key:
+                                    type: string
+                                  name:
+                                    default: ""
+                                    type: string
+                                  optional:
+                                    type: boolean
+                                required:
+                                - key
+                                type: object
+                                x-kubernetes-map-type: atomic
+                            type: object
+                        type: object
+                      httpsProxy:
+                        properties:
+                          value:
+                            type: string
+                          valueFrom:
+                            properties:
+                              secretKeyRef:
+                                properties:
+                                  key:
+                                    type: string
+                                  name:
+                                    default: ""
+                                    type: string
+                                  optional:
+                                    type: boolean
+                                required:
+                                - key
+                                type: object
+                                x-kubernetes-map-type: atomic
+                            type: object
+                        type: object
+                      noProxy:
+                        items:
+                          type: string
+                        type: array
+                    type: object
                 type: object
               kafka:
                 properties:
@@ -1710,6 +1773,17 @@ spec:
                             type: string
                         required:
                         - onDelete
+                        type: object
+                      serviceAccount:
+                        properties:
+                          annotations:
+                            additionalProperties:
+                              type: string
+                            type: object
+                          create:
+                            type: boolean
+                          serviceAccountName:
+                            type: string
                         type: object
                       skipDataRecovery:
                         type: boolean
@@ -4477,6 +4551,45 @@ spec:
                   - ready
                   type: object
                 type: object
+              conditions:
+                items:
+                  properties:
+                    lastTransitionTime:
+                      format: date-time
+                      type: string
+                    message:
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
               gatewayStatus:
                 properties:
                   addresses:
@@ -6203,11 +6316,17 @@ spec:
                               type: string
                             name:
                               type: string
+                            phase:
+                              type: string
+                            reason:
+                              type: string
                             succeeded:
                               type: boolean
                           type: object
                         type: object
                       lastSuccessVersion:
+                        type: string
+                      phase:
                         type: string
                       ready:
                         type: boolean
@@ -6224,6 +6343,10 @@ spec:
                         message:
                           type: string
                         name:
+                          type: string
+                        phase:
+                          type: string
+                        reason:
                           type: string
                         succeeded:
                           type: boolean

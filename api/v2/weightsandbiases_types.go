@@ -34,6 +34,7 @@ import (
 //+kubebuilder:printcolumn:name="Kafka",type=string,JSONPath=`.status.kafkaStatus.state`
 //+kubebuilder:printcolumn:name="ObjectStore",type=string,JSONPath=`.status.objectStoreStatus.default.state`
 //+kubebuilder:printcolumn:name="ClickHouse",type=string,JSONPath=`.status.clickhouseStatus.default.state`
+//+kubebuilder:printcolumn:name="Migration",type=string,JSONPath=`.status.wandb.migration.phase`
 
 // WeightsAndBiases is the Schema for the weightsandbiases API.
 type WeightsAndBiases struct {
@@ -156,6 +157,56 @@ type GlobalSpec struct {
 	// update tooling can discover them.
 	// +optional
 	CACertsConfigMap string `json:"caCertsConfigMap,omitempty"`
+
+	// Proxy configures the forward-proxy egress settings injected into the
+	// application workloads (app Deployments, their init containers, and
+	// migration Jobs). The operator emits HTTP_PROXY/HTTPS_PROXY/NO_PROXY and
+	// their lowercase variants; NO_PROXY is always the operator-computed
+	// in-cluster exclusions merged over the user-supplied noProxy entries, so
+	// in-cluster datastore/service traffic never hairpins through the proxy.
+	// Pair with CustomCACerts for a TLS-intercepting proxy.
+	// +optional
+	Proxy *ProxySpec `json:"proxy,omitempty"`
+}
+
+// ProxySpec is the forward-proxy configuration under spec.global.proxy.
+type ProxySpec struct {
+	// HTTPProxy is the proxy URL for plain HTTP egress (HTTP_PROXY/http_proxy).
+	// +optional
+	HTTPProxy *ProxyValue `json:"httpProxy,omitempty"`
+
+	// HTTPSProxy is the proxy URL for HTTPS egress (HTTPS_PROXY/https_proxy).
+	// +optional
+	HTTPSProxy *ProxyValue `json:"httpsProxy,omitempty"`
+
+	// NoProxy holds EXTRA no-proxy entries appended to the operator-computed
+	// in-cluster exclusions. Use it for external endpoints (e.g. a BYOB object
+	// store) that must bypass the proxy. Entries must be comma-free; the
+	// operator owns the join.
+	// +optional
+	NoProxy []string `json:"noProxy,omitempty"`
+}
+
+// ProxyValue is a value-or-secret union mirroring corev1.EnvVar semantics:
+// exactly one of Value or ValueFrom must be set. Credential-bearing proxy URLs
+// (http://user:pass@host:port) MUST use ValueFrom; the webhook rejects userinfo
+// in a literal Value so credentials never land in the CR / etcd / kubectl output.
+type ProxyValue struct {
+	// Value is a literal proxy URL. Must not contain userinfo (credentials).
+	// +optional
+	Value string `json:"value,omitempty"`
+
+	// ValueFrom sources the proxy URL from a Secret key (may embed credentials).
+	// +optional
+	ValueFrom *ProxyValueSource `json:"valueFrom,omitempty"`
+}
+
+// ProxyValueSource mirrors corev1.EnvVarSource (the secret case): the proxy URL
+// is read from a Secret key.
+type ProxyValueSource struct {
+	// SecretKeyRef selects a key of a Secret in the W&B namespace.
+	// +optional
+	SecretKeyRef *corev1.SecretKeySelector `json:"secretKeyRef,omitempty"`
 }
 
 type NetworkingMode string
@@ -378,6 +429,18 @@ type ServiceAccountSpec struct {
 	Annotations        map[string]string `json:"annotations,omitempty"`
 }
 
+// ManagedServiceAccountSpec configures the Kubernetes identity used by a
+// managed infrastructure workload.
+type ManagedServiceAccountSpec struct {
+	// Create controls whether the operator reconciles the ServiceAccount. It
+	// defaults to true; set it to false to reference an existing identity.
+	Create *bool `json:"create,omitempty"`
+	// ServiceAccountName defaults to the managed infrastructure resource name.
+	ServiceAccountName string `json:"serviceAccountName,omitempty"`
+	// Annotations supports cloud workload identity integrations such as IRSA.
+	Annotations map[string]string `json:"annotations,omitempty"`
+}
+
 type InternalServiceAuth struct {
 	Enabled    *bool  `json:"enabled,omitempty"`
 	OIDCIssuer string `json:"oidcIssuer,omitempty"`
@@ -496,13 +559,15 @@ type KafkaSpec struct {
 type ManagedKafkaSpec struct {
 	ManagedInfraSpec `json:",inline"`
 
-	StorageSize      string      `json:"storageSize,omitempty"`
-	Replicas         int32       `json:"replicas,omitempty"`
-	Config           KafkaConfig `json:"config,omitempty"`
-	Namespace        string      `json:"namespace,omitempty"`
-	Name             string      `json:"name,omitempty"`
-	Telemetry        Telemetry   `json:"telemetry,omitempty"`
-	SkipDataRecovery bool        `json:"skipDataRecovery,omitempty"`
+	StorageSize string      `json:"storageSize,omitempty"`
+	Replicas    int32       `json:"replicas,omitempty"`
+	Config      KafkaConfig `json:"config,omitempty"`
+	Namespace   string      `json:"namespace,omitempty"`
+	Name        string      `json:"name,omitempty"`
+	Telemetry   Telemetry   `json:"telemetry,omitempty"`
+	// ServiceAccount configures the identity used by the Bufstream broker.
+	ServiceAccount   ManagedServiceAccountSpec `json:"serviceAccount,omitempty"`
+	SkipDataRecovery bool                      `json:"skipDataRecovery,omitempty"`
 }
 
 type KafkaConnection struct {
@@ -605,6 +670,8 @@ type ManagedClickHouseSpec struct {
 	Namespace   string           `json:"namespace,omitempty"`
 	Name        string           `json:"name,omitempty"`
 	Telemetry   Telemetry        `json:"telemetry,omitempty"`
+	// ServiceAccount configures the identity used by ClickHouse server pods.
+	ServiceAccount ManagedServiceAccountSpec `json:"serviceAccount,omitempty"`
 
 	// ObjectStorage configures the S3-backed disk that holds ClickHouse table
 	// data in the configured W&B object store (managed SeaweedFS or external
@@ -664,8 +731,12 @@ type ClickHouseConfig struct {
 
 // WeightsAndBiasesStatus defines the observed state of WeightsAndBiases.
 type WeightsAndBiasesStatus struct {
-	Ready bool        `json:"ready"`
-	Wandb WandbStatus `json:"wandb,omitempty"`
+	Ready bool `json:"ready"`
+	// Conditions includes the standard Ready condition for the current generation.
+	// +listType=map
+	// +listMapKey=type
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+	Wandb      WandbStatus        `json:"wandb,omitempty"`
 	// MySQLStatus, RedisStatus, ObjectStoreStatus and ClickHouseStatus are keyed
 	// by instance name, mirroring the corresponding spec maps.
 	MySQLStatus       map[string]MysqlInfraStatus       `json:"mysqlStatus,omitempty"`
@@ -714,18 +785,24 @@ type WandbStatus struct {
 }
 
 type WandbMigrationStatus struct {
-	Version            string                        `json:"version,omitempty"`
-	LastSuccessVersion string                        `json:"lastSuccessVersion,omitempty"`
-	Ready              bool                          `json:"ready,omitempty"`
-	Reason             string                        `json:"reason,omitempty"`
-	Jobs               map[string]MigrationJobStatus `json:"jobs,omitempty"`
+	Version            string `json:"version,omitempty"`
+	LastSuccessVersion string `json:"lastSuccessVersion,omitempty"`
+	Ready              bool   `json:"ready,omitempty"`
+	// Phase is Running, Failed, Succeeded, or Unknown.
+	Phase  string                        `json:"phase,omitempty"`
+	Reason string                        `json:"reason,omitempty"`
+	Jobs   map[string]MigrationJobStatus `json:"jobs,omitempty"`
 }
 
 type MigrationJobStatus struct {
 	Name      string `json:"name,omitempty"`
 	Succeeded bool   `json:"succeeded,omitempty"`
 	Failed    bool   `json:"failed,omitempty"`
-	Message   string `json:"message,omitempty"`
+	// Phase is Running, Failed, Succeeded, or Unknown.
+	Phase string `json:"phase,omitempty"`
+	// Reason is copied from the terminal Kubernetes Job condition when present.
+	Reason  string `json:"reason,omitempty"`
+	Message string `json:"message,omitempty"`
 }
 
 type WBInfraStatus struct {

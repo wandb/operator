@@ -19,6 +19,7 @@ package v2
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 
 	v1 "github.com/wandb/operator/api/v1"
@@ -109,7 +110,7 @@ func (d *WeightsAndBiasesCustomDefaulter) Default(ctx context.Context, obj runti
 		wandb.Spec.Wandb.InternalServiceAuth.Enabled = ptr.To(true)
 	}
 
-	if wandb.Spec.Wandb.InternalServiceAuth.OIDCIssuer == "" {
+	if wandb.Spec.Wandb.InternalServiceAuth.OIDCIssuer == "" && wandb.Spec.Wandb.InternalServiceAuth.Enabled != nil && *wandb.Spec.Wandb.InternalServiceAuth.Enabled{
 		wandb.Spec.Wandb.InternalServiceAuth.OIDCIssuer = "https://kubernetes.default.svc.cluster.local"
 	}
 
@@ -272,6 +273,8 @@ func applyKafkaDefaults(wandb *appsv2.WeightsAndBiases) {
 	if spec.Namespace == "" {
 		spec.Namespace = wandb.Namespace
 	}
+
+	applyManagedServiceAccountDefaults(&spec.ServiceAccount, spec.Name)
 }
 
 func applyObjectStoreDefaults(wandb *appsv2.WeightsAndBiases) {
@@ -327,7 +330,17 @@ func applyClickHouseDefaults(wandb *appsv2.WeightsAndBiases) {
 		if spec.ManagedClickHouse.Namespace == "" {
 			spec.ManagedClickHouse.Namespace = wandb.Namespace
 		}
+		applyManagedServiceAccountDefaults(&spec.ManagedClickHouse.ServiceAccount, spec.ManagedClickHouse.Name)
 		wandb.Spec.ClickHouse[key] = spec
+	}
+}
+
+func applyManagedServiceAccountDefaults(serviceAccount *appsv2.ManagedServiceAccountSpec, defaultName string) {
+	if serviceAccount.Create == nil {
+		serviceAccount.Create = ptr.To(true)
+	}
+	if serviceAccount.ServiceAccountName == "" {
+		serviceAccount.ServiceAccountName = defaultName
 	}
 }
 
@@ -337,6 +350,7 @@ func validateSpec(_ context.Context, newWandb, oldWandb *appsv2.WeightsAndBiases
 	var allErrors field.ErrorList
 	var warnings admission.Warnings
 
+	allErrors = append(allErrors, validateWandbSpec(newWandb)...)
 	allErrors = append(allErrors, validateMySQLSpec(newWandb)...)
 	allErrors = append(allErrors, validateRedisSpec(newWandb)...)
 	allErrors = append(allErrors, validateObjectStoreSpec(newWandb)...)
@@ -345,6 +359,7 @@ func validateSpec(_ context.Context, newWandb, oldWandb *appsv2.WeightsAndBiases
 	networkingErrors, networkingWarnings := validateNetworkingSpec(newWandb)
 	allErrors = append(allErrors, networkingErrors...)
 	warnings = append(warnings, networkingWarnings...)
+	allErrors = append(allErrors, validateProxySpec(newWandb)...)
 
 	if len(allErrors) == 0 {
 		return warnings, nil
@@ -423,6 +438,19 @@ func validateMySQLChanges(newWandb, oldWandb *appsv2.WeightsAndBiases) field.Err
 	return errors
 }
 
+func validateWandbSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
+	var errors field.ErrorList
+
+	if strings.TrimSpace(wandb.Spec.Wandb.Hostname) == "" {
+		errors = append(errors, field.Required(
+			field.NewPath("spec").Child("wandb").Child("hostname"),
+			"hostname is required",
+		))
+	}
+
+	return errors
+}
+
 func validateMySQLSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 	var errors field.ErrorList
 	mysqlPath := field.NewPath("spec").Child("mysql")
@@ -455,6 +483,7 @@ func validateMySQLSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 func validateRedisSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 	var errors field.ErrorList
 	redisPath := field.NewPath("spec").Child("redis")
+	_, hasPendingLegacyRedis := wandb.Annotations[v1.RedisPendingAnnotation]
 
 	errors = append(errors, validateHasDefaultInstance(wandb.Spec.Redis, redisPath)...)
 
@@ -468,22 +497,38 @@ func validateRedisSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 			))
 		}
 
-		managed := spec.ManagedRedis
-		if managed == nil {
+		if externalRedis := spec.ExternalRedis; externalRedis != nil && !hasPendingLegacyRedis {
+			externalPath := instancePath.Child("externalRedis")
+			errors = append(errors, validateRequiredSecretSelector(externalRedis.Host, externalPath.Child("host"))...)
+			errors = append(errors, validateRequiredSecretSelector(externalRedis.Port, externalPath.Child("port"))...)
+		}
+
+		if spec.ManagedRedis == nil {
 			continue
 		}
 
-		if managed.StorageSize != "" {
-			if _, err := resource.ParseQuantity(managed.StorageSize); err != nil {
+		if spec.ManagedRedis.StorageSize != "" {
+			if _, err := resource.ParseQuantity(spec.ManagedRedis.StorageSize); err != nil {
 				errors = append(errors, field.Invalid(
 					instancePath.Child("managedRedis").Child("storageSize"),
-					managed.StorageSize,
+					spec.ManagedRedis.StorageSize,
 					"must be a valid resource quantity (e.g., '10Gi')",
 				))
 			}
 		}
 	}
 
+	return errors
+}
+
+func validateRequiredSecretSelector(selector corev1.SecretKeySelector, path *field.Path) field.ErrorList {
+	var errors field.ErrorList
+	if selector.Name == "" {
+		errors = append(errors, field.Required(path.Child("name"), "secret name is required"))
+	}
+	if selector.Key == "" {
+		errors = append(errors, field.Required(path.Child("key"), "secret key is required"))
+	}
 	return errors
 }
 
@@ -778,6 +823,67 @@ func validateRedisChanges(newWandb, oldWandb *appsv2.WeightsAndBiases) field.Err
 		}
 	}
 
+	return errors
+}
+
+// validateProxySpec validates spec.global.proxy: each proxy value sets exactly
+// one of value|valueFrom, a literal value parses as an http(s) URL with no
+// userinfo (credentials must use valueFrom so they never land in the CR), and
+// noProxy entries are non-empty and comma-free (the operator owns the join).
+func validateProxySpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
+	var errors field.ErrorList
+	if wandb.Spec.Global.Proxy == nil {
+		return errors
+	}
+	proxy := wandb.Spec.Global.Proxy
+	base := field.NewPath("spec").Child("global").Child("proxy")
+
+	validateValue := func(pv *appsv2.ProxyValue, child string) {
+		if pv == nil {
+			return
+		}
+		p := base.Child(child)
+		hasValue := pv.Value != ""
+		hasValueFrom := pv.ValueFrom != nil
+		switch {
+		case hasValue && hasValueFrom:
+			errors = append(errors, field.Invalid(p, pv, "set exactly one of value or valueFrom, not both"))
+			return
+		case !hasValue && !hasValueFrom:
+			errors = append(errors, field.Required(p, "one of value or valueFrom is required"))
+			return
+		}
+		if hasValueFrom && pv.ValueFrom.SecretKeyRef == nil {
+			errors = append(errors, field.Required(p.Child("valueFrom").Child("secretKeyRef"),
+				"valueFrom requires secretKeyRef"))
+		}
+		if hasValue {
+			parsed, err := url.Parse(pv.Value)
+			if err != nil {
+				errors = append(errors, field.Invalid(p.Child("value"), pv.Value, "must be a valid URL"))
+				return
+			}
+			if parsed.Scheme != "http" && parsed.Scheme != "https" {
+				errors = append(errors, field.Invalid(p.Child("value"), pv.Value, "scheme must be http or https"))
+			}
+			if parsed.User != nil {
+				errors = append(errors, field.Invalid(p.Child("value"), "[redacted]",
+					"must not contain credentials (userinfo); use valueFrom with a Secret for authenticated proxies"))
+			}
+		}
+	}
+	validateValue(proxy.HTTPProxy, "httpProxy")
+	validateValue(proxy.HTTPSProxy, "httpsProxy")
+
+	for i, entry := range proxy.NoProxy {
+		p := base.Child("noProxy").Index(i)
+		if strings.TrimSpace(entry) == "" {
+			errors = append(errors, field.Invalid(p, entry, "must not be empty"))
+		}
+		if strings.Contains(entry, ",") {
+			errors = append(errors, field.Invalid(p, entry, "must not contain commas; use separate list entries"))
+		}
+	}
 	return errors
 }
 
