@@ -10,6 +10,7 @@ import (
 	"github.com/wandb/operator/pkg/utils"
 	chkv1 "github.com/wandb/operator/pkg/vendored/altinity-clickhouse/clickhouse-keeper.altinity.com/v1"
 	chiv1 "github.com/wandb/operator/pkg/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
+	"github.com/wandb/operator/pkg/wandb/manifest"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -18,6 +19,14 @@ import (
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
+
+func KeeperImage(img manifest.ImageRef, globalImageRegistry string) string {
+	if out := img.GetImage(globalImageRegistry); out != "" {
+		return out
+	}
+	// Fallback for older manifests that don't supply the image.
+	return defaultKeeperImage
+}
 
 // ToKeeperVendorSpec builds the ClickHouseKeeperInstallation CR that coordinates
 // ReplicatedMergeTree replication. nsName comes from altinity.KeeperNsName —
@@ -28,6 +37,7 @@ func ToKeeperVendorSpec(
 	spec *apiv2.ManagedClickHouseSpec,
 	scheme *runtime.Scheme,
 	nsName types.NamespacedName,
+	mfst manifest.Manifest,
 ) (*chkv1.ClickHouseKeeperInstallation, error) {
 	_, log := logx.WithSlog(ctx, logx.ClickHouse)
 	if spec == nil {
@@ -50,7 +60,7 @@ func ToKeeperVendorSpec(
 		Containers: []corev1.Container{
 			{
 				Name:            keeperContainerName,
-				Image:           KeeperImage,
+				Image:           KeeperImage(mfst.ClickhouseKeeper["default"].Images["keeper"], wandb.Spec.Global.ImageRegistry),
 				SecurityContext: keeperContainerSecurityContext(),
 			},
 		},

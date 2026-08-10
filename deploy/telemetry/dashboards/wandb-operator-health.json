@@ -1,0 +1,1824 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_VICTORIAMETRICS",
+      "label": "VictoriaMetrics",
+      "type": "datasource",
+      "pluginId": "victoriametrics-metrics-datasource",
+      "pluginName": "VictoriaMetrics"
+    }
+  ],
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "links": [],
+  "panels": [
+    {
+      "type": "text",
+      "title": "",
+      "transparent": false,
+      "options": {
+        "mode": "markdown",
+        "content": "# W&B Operator Health\n\n**What this shows:** the health of the **W&B operator** \u2014 the controller that installs W&B and keeps it running by reconciling your `WeightsAndBiases` resource. It is *not* the W&B app or its databases. Open this board when an install or upgrade is stuck, a resource won't turn Ready, or the operator seems unresponsive.\n\n**How to read it:** green means healthy, red means it needs attention. Every section below opens with a note like this one that explains its panels and what a *bad* reading looks like. All data comes from the operator's own `/metrics` endpoint \u2014 the controller-runtime, Kubernetes-client and Go-runtime libraries expose most of it automatically, plus three gauges the operator publishes itself (`wandb_weightsandbiases_ready`, `wandb_infra_state`, `wandb_application_info`).\n\n**When something here looks wrong, drill into:** [Application](/d/wandb-application) for app request health \u00b7 [Managed Install](/d/wandb-managed-install-performance) for database / dependency resources \u00b7 [Telemetry Overview](/d/wandb-telemetry-overview) for the metrics pipeline itself.\n"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "type": "row",
+      "title": "W&B Resources",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 6
+      }
+    },
+    {
+      "type": "text",
+      "title": "",
+      "transparent": false,
+      "options": {
+        "mode": "markdown",
+        "content": "### Are the W&B resources healthy, and is every service on the same version?\n\n- **CR Ready** \u2014 one tile per `WeightsAndBiases` resource. Green **Ready** means the operator finished reconciling and everything it manages is up. Red **Not Ready** means it's still working or blocked \u2014 the reason shows up in the dependency panels to the right.\n- **Unhealthy dependencies** \u2014 how many backing services (MySQL, Redis, Kafka, object store, ClickHouse) are in any state other than *Healthy*. **0 (green) is what you want.** Any higher number is exactly *why* a resource above isn't Ready \u2014 check the table for which one.\n- **Dependency states** \u2014 every backing service and its current state (*Healthy / Degraded / Pending / Error / Unavailable*), so you can see *which* service is in *which* state.\n- **Distinct image versions** \u2014 how many different image tags the managed services are running. **1** means everything is on the same version; **2 or more** means **version drift** (usually a half-finished upgrade), and the *Managed service versions* table shows which service is behind.\n\n*These tiles show the current value only, so a service that was briefly Pending while starting up won't linger here.*\n"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 7
+      }
+    },
+    {
+      "type": "stat",
+      "title": "CR Ready",
+      "datasource": {
+        "type": "victoriametrics-metrics-datasource",
+        "uid": "${DS_VICTORIAMETRICS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "Not Ready"
+                },
+                "1": {
+                  "text": "Ready"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red"
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value_and_name"
+      },
+      "targets": [
+        {
+          "expr": "wandb_weightsandbiases_ready",
+          "legendFormat": "{{namespace}}/{{name}}",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 14
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Unhealthy dependencies",
+      "datasource": {
+        "type": "victoriametrics-metrics-datasource",
+        "uid": "${DS_VICTORIAMETRICS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "count(wandb_infra_state{state!=\"Healthy\"} == 1) or vector(0)",
+          "legendFormat": "",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "description": "Backing services in any state other than Healthy right now. 0 is good.",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 14
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Distinct image versions",
+      "datasource": {
+        "type": "victoriametrics-metrics-datasource",
+        "uid": "${DS_VICTORIAMETRICS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 2
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "count(count by (tag) (wandb_application_info))",
+          "legendFormat": "",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "description": "Number of image tags in use across managed services. 1 = consistent; 2+ = version drift.",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 14
+      }
+    },
+    {
+      "type": "table",
+      "title": "Dependency states",
+      "datasource": {
+        "type": "victoriametrics-metrics-datasource",
+        "uid": "${DS_VICTORIAMETRICS}"
+      },
+      "targets": [
+        {
+          "expr": "wandb_infra_state == 1",
+          "format": "table",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "Value": true,
+              "__name__": true,
+              "job": true,
+              "instance": true,
+              "pod": true,
+              "container": true,
+              "endpoint": true,
+              "service": true,
+              "prometheus": true
+            },
+            "indexByName": {
+              "namespace": 0,
+              "name": 1,
+              "component": 2,
+              "instance_name": 3,
+              "state": 4
+            },
+            "renameByName": {
+              "namespace": "Namespace",
+              "name": "Name",
+              "component": "Component",
+              "instance_name": "Instance",
+              "state": "State"
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "left",
+            "filterable": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "md"
+      },
+      "description": "Current state of each backing dependency.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 22
+      }
+    },
+    {
+      "type": "table",
+      "title": "Managed service versions",
+      "datasource": {
+        "type": "victoriametrics-metrics-datasource",
+        "uid": "${DS_VICTORIAMETRICS}"
+      },
+      "targets": [
+        {
+          "expr": "wandb_application_info",
+          "format": "table",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "Value": true,
+              "__name__": true,
+              "job": true,
+              "instance": true,
+              "pod": true,
+              "container": true,
+              "endpoint": true,
+              "service": true,
+              "prometheus": true,
+              "namespace": true
+            },
+            "indexByName": {
+              "application_name": 0,
+              "image": 1,
+              "tag": 2,
+              "digest": 3
+            },
+            "renameByName": {
+              "application_name": "Service",
+              "image": "Image",
+              "tag": "Tag",
+              "digest": "Digest"
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "left",
+            "filterable": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "md"
+      },
+      "description": "Image the operator wants each service to run.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 22
+      }
+    },
+    {
+      "type": "row",
+      "title": "Reconciler",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 30
+      }
+    },
+    {
+      "type": "text",
+      "title": "",
+      "transparent": false,
+      "options": {
+        "mode": "markdown",
+        "content": "### Is the operator successfully doing its job?\n\nThe operator works in a loop called a **reconcile**: whenever your resource (or something it manages) changes, the operator runs this loop to make the cluster match what you asked for. These panels show whether that loop is healthy.\n\n- **Reconcile errors / sec** \u2014 how often a loop fails. **Should stay at zero.** A steady non-zero rate means the operator keeps trying and failing to finish setting something up (check the operator logs for the reason).\n- **Terminal reconcile errors** \u2014 failures the operator has **given up** retrying. Should be **0**; above zero means a resource is stuck and won't recover on its own.\n- **Reconcile panics** \u2014 times the operator's code crashed mid-loop (it recovers, but it shouldn't happen). Should be **0**; a non-zero value is a bug worth reporting.\n- **Reconciles / sec by result** \u2014 every loop ends as *success*, *error*, or *requeue* (asked to try again later). Lots of *requeue* usually means it's waiting on a dependency to come up.\n- **Reconcile errors by controller** \u2014 which specific controller is the one failing.\n- **Reconcile latency** \u2014 how long a loop takes (50th / 95th / 99th percentile). Rising latency means loops are getting slow.\n- **Active vs max workers** \u2014 how many loops run at once versus the configured limit. If *active* sits pinned on the *max* line, the operator is at capacity and work will start to queue.\n"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 31
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Reconcile errors / sec",
+      "datasource": {
+        "type": "victoriametrics-metrics-datasource",
+        "uid": "${DS_VICTORIAMETRICS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 0.001
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(controller_runtime_reconcile_errors_total{job=~\"(.*/)?wandb-operator\"}[$__rate_interval])) or vector(0)",
+          "legendFormat": "",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "description": "Reconcile loops ending in error, per second. Should be zero.",
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 39
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Terminal reconcile errors",
+      "datasource": {
+        "type": "victoriametrics-metrics-datasource",
+        "uid": "${DS_VICTORIAMETRICS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "sum(controller_runtime_terminal_reconcile_errors_total{job=~\"(.*/)?wandb-operator\"}) or vector(0)",
+          "legendFormat": "",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "description": "Total reconciles the operator gave up retrying since it started. Should be 0.",
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 8,
+        "y": 39
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Reconcile panics",
+      "datasource": {
+        "type": "victoriametrics-metrics-datasource",
+        "uid": "${DS_VICTORIAMETRICS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "sum(controller_runtime_reconcile_panics_total{job=~\"(.*/)?wandb-operator\"}) or vector(0)",
+          "legendFormat": "",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "description": "Total times a reconcile crashed and was recovered since the operator started. Should be 0.",
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 16,
+        "y": 39
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Reconciles / sec by result",
+      "datasource": {
+        "type": "victoriametrics-metrics-datasource",
+        "uid": "${DS_VICTORIAMETRICS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (result) (rate(controller_runtime_reconcile_total{job=~\"(.*/)?wandb-operator\"}[$__rate_interval]))",
+          "legendFormat": "{{result}}",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 46
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Reconcile errors / sec by controller",
+      "datasource": {
+        "type": "victoriametrics-metrics-datasource",
+        "uid": "${DS_VICTORIAMETRICS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (controller) (rate(controller_runtime_reconcile_errors_total{job=~\"(.*/)?wandb-operator\"}[$__rate_interval]))",
+          "legendFormat": "{{controller}}",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 46
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Reconcile latency",
+      "datasource": {
+        "type": "victoriametrics-metrics-datasource",
+        "uid": "${DS_VICTORIAMETRICS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(controller_runtime_reconcile_time_seconds_bucket{job=~\"(.*/)?wandb-operator\"}[$__rate_interval])))",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(controller_runtime_reconcile_time_seconds_bucket{job=~\"(.*/)?wandb-operator\"}[$__rate_interval])))",
+          "legendFormat": "p95",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(controller_runtime_reconcile_time_seconds_bucket{job=~\"(.*/)?wandb-operator\"}[$__rate_interval])))",
+          "legendFormat": "p99",
+          "refId": "C"
+        }
+      ],
+      "description": "How long a reconcile loop takes.",
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 55
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Active vs max workers",
+      "datasource": {
+        "type": "victoriametrics-metrics-datasource",
+        "uid": "${DS_VICTORIAMETRICS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (controller) (controller_runtime_active_workers{job=~\"(.*/)?wandb-operator\"})",
+          "legendFormat": "active {{controller}}",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(controller_runtime_max_concurrent_reconciles{job=~\"(.*/)?wandb-operator\"})",
+          "legendFormat": "max concurrent",
+          "refId": "B"
+        }
+      ],
+      "description": "Loops running concurrently versus the configured limit. Active pinned at max = saturated.",
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 55
+      }
+    },
+    {
+      "type": "row",
+      "title": "Workqueue",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 64
+      }
+    },
+    {
+      "type": "text",
+      "title": "",
+      "transparent": false,
+      "options": {
+        "mode": "markdown",
+        "content": "### Is the operator keeping up with its workload?\n\nWork the operator needs to do is placed on a **queue** (one per controller) and processed in order. These panels show whether the queue is draining or backing up.\n\n- **Queue depth** \u2014 items waiting to be processed. It should sit near zero and drain quickly. A depth that keeps **climbing** means the operator is falling behind.\n- **Adds & retries / sec** \u2014 how fast new work arrives versus how often failed work is retried. A spike in *retries* goes hand-in-hand with the reconcile errors above.\n- **Queue wait & work p95** \u2014 how long items **wait** in the queue versus how long they take to **process**. Both rising means the operator is overloaded.\n- **Oldest in-flight work** \u2014 the age of the oldest item still being worked on. A large, growing value means a single reconcile is stuck.\n"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 24,
+        "x": 0,
+        "y": 65
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Queue depth",
+      "datasource": {
+        "type": "victoriametrics-metrics-datasource",
+        "uid": "${DS_VICTORIAMETRICS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (name) (workqueue_depth{job=~\"(.*/)?wandb-operator\"})",
+          "legendFormat": "{{name}}",
+          "refId": "A"
+        }
+      ],
+      "description": "Items waiting to be reconciled, per controller.",
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 71
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Adds & retries / sec",
+      "datasource": {
+        "type": "victoriametrics-metrics-datasource",
+        "uid": "${DS_VICTORIAMETRICS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (name) (rate(workqueue_adds_total{job=~\"(.*/)?wandb-operator\"}[$__rate_interval]))",
+          "legendFormat": "adds {{name}}",
+          "refId": "A"
+        },
+        {
+          "expr": "sum by (name) (rate(workqueue_retries_total{job=~\"(.*/)?wandb-operator\"}[$__rate_interval]))",
+          "legendFormat": "retries {{name}}",
+          "refId": "B"
+        }
+      ],
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 71
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Queue wait & work p95",
+      "datasource": {
+        "type": "victoriametrics-metrics-datasource",
+        "uid": "${DS_VICTORIAMETRICS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, name) (rate(workqueue_queue_duration_seconds_bucket{job=~\"(.*/)?wandb-operator\"}[$__rate_interval])))",
+          "legendFormat": "wait {{name}}",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, name) (rate(workqueue_work_duration_seconds_bucket{job=~\"(.*/)?wandb-operator\"}[$__rate_interval])))",
+          "legendFormat": "work {{name}}",
+          "refId": "B"
+        }
+      ],
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 80
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Oldest in-flight work",
+      "datasource": {
+        "type": "victoriametrics-metrics-datasource",
+        "uid": "${DS_VICTORIAMETRICS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "max by (name) (workqueue_unfinished_work_seconds{job=~\"(.*/)?wandb-operator\"})",
+          "legendFormat": "unfinished {{name}}",
+          "refId": "A"
+        },
+        {
+          "expr": "max by (name) (workqueue_longest_running_processor_seconds{job=~\"(.*/)?wandb-operator\"})",
+          "legendFormat": "longest {{name}}",
+          "refId": "B"
+        }
+      ],
+      "description": "Age of the oldest item still being processed. A large, growing value means a stuck reconcile.",
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 80
+      }
+    },
+    {
+      "type": "row",
+      "title": "Kubernetes API client",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 89
+      }
+    },
+    {
+      "type": "text",
+      "title": "",
+      "transparent": false,
+      "options": {
+        "mode": "markdown",
+        "content": "### Are the operator's calls to Kubernetes healthy?\n\nThe operator constantly reads and writes objects in the Kubernetes API (Deployments, Secrets, your resource, and so on). If those calls fail, nothing the operator does can succeed.\n\n- **Requests / sec by code** \u2014 API responses grouped by HTTP status. The vast majority should be **2xx**. A wall of **4xx** points at permission (RBAC) problems or conflicts; **5xx** points at an unhealthy API server.\n- **Errors / sec (4xx / 5xx)** \u2014 the failing responses on their own, so a small error rate isn't hidden by all the healthy traffic.\n\n*There's no latency panel here on purpose: this operator's Kubernetes client doesn't publish a request-latency metric, so rather than show an always-empty chart we leave it out.*\n"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 24,
+        "x": 0,
+        "y": 90
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Requests / sec by code",
+      "datasource": {
+        "type": "victoriametrics-metrics-datasource",
+        "uid": "${DS_VICTORIAMETRICS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (code) (rate(rest_client_requests_total{job=~\"(.*/)?wandb-operator\"}[$__rate_interval]))",
+          "legendFormat": "{{code}}",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 96
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Errors / sec (4xx / 5xx)",
+      "datasource": {
+        "type": "victoriametrics-metrics-datasource",
+        "uid": "${DS_VICTORIAMETRICS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (code) (rate(rest_client_requests_total{job=~\"(.*/)?wandb-operator\", code=~\"[45]..\"}[$__rate_interval])) or vector(0)",
+          "legendFormat": "{{code}}",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 96
+      }
+    },
+    {
+      "type": "row",
+      "title": "Admission & conversion webhooks",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 105
+      }
+    },
+    {
+      "type": "text",
+      "title": "",
+      "transparent": false,
+      "options": {
+        "mode": "markdown",
+        "content": "### Are the operator's webhooks serving?\n\nBefore Kubernetes accepts a `WeightsAndBiases` (or the operator's other resources) it calls the operator's **webhooks** to fill in defaults (*mutate*), check the object is valid (*validate*), and convert between API versions v1\u2194v2 (*convert*). If these fail, `kubectl apply` is rejected and upgrades can break.\n\n- **Webhook requests / sec by code** \u2014 should be almost entirely **2xx**. These fire on every apply and during reconciles, so on a busy cluster they're constantly active.\n- **Webhook errors / sec (5xx)** \u2014 server-side webhook failures. Should be **0**.\n- **Webhook panics** \u2014 crashes inside a webhook handler. Should be **0**.\n"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 24,
+        "x": 0,
+        "y": 106
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Webhook requests / sec by code",
+      "datasource": {
+        "type": "victoriametrics-metrics-datasource",
+        "uid": "${DS_VICTORIAMETRICS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (code) (rate(controller_runtime_webhook_requests_total{job=~\"(.*/)?wandb-operator\"}[$__rate_interval]))",
+          "legendFormat": "{{code}}",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 112
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Webhook errors / sec (5xx)",
+      "datasource": {
+        "type": "victoriametrics-metrics-datasource",
+        "uid": "${DS_VICTORIAMETRICS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (code) (rate(controller_runtime_webhook_requests_total{job=~\"(.*/)?wandb-operator\", code=~\"5..\"}[$__rate_interval])) or vector(0)",
+          "legendFormat": "{{code}}",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 112
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Webhook panics",
+      "datasource": {
+        "type": "victoriametrics-metrics-datasource",
+        "uid": "${DS_VICTORIAMETRICS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "(sum(controller_runtime_webhook_panics_total{job=~\"(.*/)?wandb-operator\"}) + sum(controller_runtime_conversion_webhook_panics_total{job=~\"(.*/)?wandb-operator\"})) or vector(0)",
+          "legendFormat": "",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "description": "Total crashes inside admission or conversion webhook handlers since start. Should be 0.",
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 121
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Webhook requests in flight",
+      "datasource": {
+        "type": "victoriametrics-metrics-datasource",
+        "uid": "${DS_VICTORIAMETRICS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "sum(controller_runtime_webhook_requests_in_flight{job=~\"(.*/)?wandb-operator\"}) or vector(0)",
+          "legendFormat": "",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "description": "Webhook calls being served right now. A number that only grows suggests handlers are hanging.",
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 121
+      }
+    },
+    {
+      "type": "row",
+      "title": "Process & runtime",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 128
+      }
+    },
+    {
+      "type": "text",
+      "title": "",
+      "transparent": false,
+      "options": {
+        "mode": "markdown",
+        "content": "### Is the operator process itself healthy?\n\nStandard signals about the running program \u2014 useful for spotting crashes, restarts and memory leaks.\n\n- **Up** \u2014 is the operator alive and serving metrics right now? Green means yes.\n- **Uptime** and **Last restarted** \u2014 how long the operator has been running and when it last (re)started. A short, shrinking uptime means it's crash-looping.\n- **Restarts (in range)** \u2014 how many times the operator process restarted within the dashboard's selected time window. A one-off is usually just a deploy; a climbing count means crash-looping.\n- **Leader election** \u2014 for high availability you can run several operator replicas, but only **one** acts at a time: it holds a \"leader\" lock and the others stand by. This shows whether the replica you're looking at is the active **Leader** or on **Standby**. Exactly one replica should read *Leader*.\n- **CPU throttling** \u2014 how much the container is being CPU-throttled by its limit. **0% is ideal;** a high value means the CPU limit is too low.\n- **Goroutines** and **Memory** \u2014 should stay stable. A line that only ever climbs suggests a leak.\n- **CPU cores used** and **Open file descriptors** \u2014 resource usage. File descriptors climbing toward the max is a warning sign.\n"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 129
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Up",
+      "datasource": {
+        "type": "victoriametrics-metrics-datasource",
+        "uid": "${DS_VICTORIAMETRICS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "Down"
+                },
+                "1": {
+                  "text": "Up"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red"
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value"
+      },
+      "targets": [
+        {
+          "expr": "min(up{job=~\"(.*/)?wandb-operator\"})",
+          "legendFormat": "",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "description": "Whether the operator is alive and serving its metrics endpoint right now.",
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 137
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Uptime",
+      "datasource": {
+        "type": "victoriametrics-metrics-datasource",
+        "uid": "${DS_VICTORIAMETRICS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "time() - max(process_start_time_seconds{job=~\"(.*/)?wandb-operator\"})",
+          "legendFormat": "",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "description": "Time since the operator process started. Resets on restart.",
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 8,
+        "y": 137
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Last restarted",
+      "datasource": {
+        "type": "victoriametrics-metrics-datasource",
+        "uid": "${DS_VICTORIAMETRICS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "dateTimeFromNow"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "max(process_start_time_seconds{job=~\"(.*/)?wandb-operator\"}) * 1000",
+          "legendFormat": "",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "description": "When the operator process last (re)started.",
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 16,
+        "y": 137
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Restarts (in range)",
+      "datasource": {
+        "type": "victoriametrics-metrics-datasource",
+        "uid": "${DS_VICTORIAMETRICS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "sum(changes(process_start_time_seconds{job=~\"(.*/)?wandb-operator\"}[$__range]))",
+          "legendFormat": "",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "description": "Operator process restarts within the selected time range. One is usually a deploy; a growing count means crash-looping.",
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 144
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Leader election",
+      "datasource": {
+        "type": "victoriametrics-metrics-datasource",
+        "uid": "${DS_VICTORIAMETRICS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "Standby"
+                },
+                "1": {
+                  "text": "Leader"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red"
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value"
+      },
+      "targets": [
+        {
+          "expr": "max(leader_election_master_status{job=~\"(.*/)?wandb-operator\"})",
+          "legendFormat": "",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "description": "Whether this operator replica currently holds the leader lock. Exactly one replica should be Leader.",
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 8,
+        "y": 144
+      }
+    },
+    {
+      "type": "stat",
+      "title": "CPU throttling",
+      "datasource": {
+        "type": "victoriametrics-metrics-datasource",
+        "uid": "${DS_VICTORIAMETRICS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "yellow",
+                "value": 0.05
+              },
+              {
+                "color": "red",
+                "value": 0.25
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(container_cpu_cfs_throttled_periods_total{container=\"operator\", pod=~\".*wandb-operator-[^-]+-[^-]+\"}[$__rate_interval])) / sum(rate(container_cpu_cfs_periods_total{container=\"operator\", pod=~\".*wandb-operator-[^-]+-[^-]+\"}[$__rate_interval])) or vector(0)",
+          "legendFormat": "",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "description": "Share of CPU scheduling periods the operator container was throttled. 0% is ideal.",
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 16,
+        "y": 144
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Goroutines",
+      "datasource": {
+        "type": "victoriametrics-metrics-datasource",
+        "uid": "${DS_VICTORIAMETRICS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "go_goroutines{job=~\"(.*/)?wandb-operator\"}",
+          "legendFormat": "goroutines",
+          "refId": "A"
+        }
+      ],
+      "description": "Concurrent Go routines. Steady is good; a steadily climbing line suggests a leak.",
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 151
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Memory",
+      "datasource": {
+        "type": "victoriametrics-metrics-datasource",
+        "uid": "${DS_VICTORIAMETRICS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "process_resident_memory_bytes{job=~\"(.*/)?wandb-operator\"}",
+          "legendFormat": "resident",
+          "refId": "A"
+        },
+        {
+          "expr": "go_memstats_heap_inuse_bytes{job=~\"(.*/)?wandb-operator\"}",
+          "legendFormat": "go heap in-use",
+          "refId": "B"
+        }
+      ],
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 151
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "CPU cores used",
+      "datasource": {
+        "type": "victoriametrics-metrics-datasource",
+        "uid": "${DS_VICTORIAMETRICS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "rate(process_cpu_seconds_total{job=~\"(.*/)?wandb-operator\"}[$__rate_interval])",
+          "legendFormat": "cores",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 160
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Open file descriptors",
+      "datasource": {
+        "type": "victoriametrics-metrics-datasource",
+        "uid": "${DS_VICTORIAMETRICS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "process_open_fds{job=~\"(.*/)?wandb-operator\"}",
+          "legendFormat": "open",
+          "refId": "A"
+        },
+        {
+          "expr": "process_max_fds{job=~\"(.*/)?wandb-operator\"}",
+          "legendFormat": "max",
+          "refId": "B"
+        }
+      ],
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 160
+      }
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": [
+    "wandb",
+    "operator",
+    "observability"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timezone": "browser",
+  "title": "W&B Operator Health",
+  "uid": "wandb-operator-health",
+  "version": 1
+}

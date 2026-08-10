@@ -7,6 +7,7 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
+	"github.com/wandb/operator/internal/controller/infra/objectstore"
 	"github.com/wandb/operator/internal/controller/infra/managed/clickhouse/altinity/keeper"
 	"github.com/wandb/operator/internal/logx"
 	"github.com/wandb/operator/pkg/utils"
@@ -33,6 +34,8 @@ const (
 	objectStoreWaitDelaySeconds = 2
 )
 
+// ClickHouseImage resolves the ClickHouse server image from the manifest,
+// falling back to the hardcoded default for older manifests that omit it.
 func ClickHouseImage(img manifest.ImageRef, globalImageRegistry string) string {
 	if out := img.GetImage(globalImageRegistry); out != "" {
 		return out
@@ -56,6 +59,8 @@ const (
 	clickHouseCapabilityAll corev1.Capability = "ALL"
 )
 
+// clickHousePodSecurityContext returns the pod security context, omitting the
+// fixed UID/GID/FSGroup on OpenShift where the platform assigns them.
 func clickHousePodSecurityContext() *corev1.PodSecurityContext {
 	if utils.IsOpenShift() {
 		return &corev1.PodSecurityContext{
@@ -73,6 +78,8 @@ func clickHousePodSecurityContext() *corev1.PodSecurityContext {
 	}
 }
 
+// clickHouseContainerSecurityContext returns the container security context,
+// pinning the fixed UID/GID off OpenShift and always dropping all capabilities.
 func clickHouseContainerSecurityContext() *corev1.SecurityContext {
 	securityContext := &corev1.SecurityContext{
 		RunAsNonRoot:             ptr.To(true),
@@ -89,6 +96,8 @@ func clickHouseContainerSecurityContext() *corev1.SecurityContext {
 	return securityContext
 }
 
+// clickHouseWritableVolumes returns the emptyDir volumes that back the writable
+// paths a read-only-root-filesystem ClickHouse container still needs.
 func clickHouseWritableVolumes() []corev1.Volume {
 	return []corev1.Volume{
 		writableEmptyDirVolume(clickHouseTmpVolumeName),
@@ -97,6 +106,8 @@ func clickHouseWritableVolumes() []corev1.Volume {
 	}
 }
 
+// clickHouseWritableVolumeMounts returns the mounts pairing the writable
+// emptyDir volumes with their in-container paths.
 func clickHouseWritableVolumeMounts() []corev1.VolumeMount {
 	return []corev1.VolumeMount{
 		{Name: clickHouseTmpVolumeName, MountPath: clickHouseTmpMountPath},
@@ -105,10 +116,12 @@ func clickHouseWritableVolumeMounts() []corev1.VolumeMount {
 	}
 }
 
+// clickHouseRuntimeDefaultSeccompProfile returns the RuntimeDefault seccomp profile.
 func clickHouseRuntimeDefaultSeccompProfile() *corev1.SeccompProfile {
 	return &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault}
 }
 
+// writableEmptyDirVolume returns a named emptyDir volume.
 func writableEmptyDirVolume(name string) corev1.Volume {
 	return corev1.Volume{
 		Name: name,
@@ -116,6 +129,47 @@ func writableEmptyDirVolume(name string) corev1.Volume {
 			EmptyDir: &corev1.EmptyDirVolumeSource{},
 		},
 	}
+}
+
+// ToServiceAccount builds the ClickHouse ServiceAccount, automounting its token
+// only when object-store credentials are ambient (IAM / workload identity).
+// Returns nil when the spec opts out of ServiceAccount creation.
+func ToServiceAccount(
+	wandb *apiv2.WeightsAndBiases,
+	spec *apiv2.ManagedClickHouseSpec,
+	objStorage *objectstore.ConnInfo,
+	scheme *runtime.Scheme,
+) (*corev1.ServiceAccount, error) {
+	if spec.ServiceAccount.Create != nil && !*spec.ServiceAccount.Create {
+		return nil, nil
+	}
+
+	serviceAccount := &corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        clickHouseServiceAccountName(spec),
+			Namespace:   spec.Namespace,
+			Labels:      BuildWandbClickhouseLabels(wandb),
+			Annotations: spec.ServiceAccount.Annotations,
+		},
+		// Ambient (IAM/workload-identity) credentials require the projected SA
+		// token; static access keys don't, so only automount when creds are ambient.
+		AutomountServiceAccountToken: ptr.To(!objStorage.HasStaticCredentials()),
+	}
+	if wandb.Namespace == spec.Namespace {
+		if err := ctrl.SetControllerReference(wandb, serviceAccount, scheme); err != nil {
+			return nil, fmt.Errorf("failed to set owner reference on ClickHouse ServiceAccount: %w", err)
+		}
+	}
+	return serviceAccount, nil
+}
+
+// clickHouseServiceAccountName returns the configured ServiceAccount name,
+// defaulting to the spec name when unset.
+func clickHouseServiceAccountName(spec *apiv2.ManagedClickHouseSpec) string {
+	if spec.ServiceAccount.ServiceAccountName != "" {
+		return spec.ServiceAccount.ServiceAccountName
+	}
+	return spec.Name
 }
 
 // ToClickHouseVendorSpec converts a ClickHouseSpec to a ClickHouseInstallation CR.
@@ -126,7 +180,8 @@ func ToClickHouseVendorSpec(
 	wandb *apiv2.WeightsAndBiases,
 	spec *apiv2.ManagedClickHouseSpec,
 	scheme *runtime.Scheme,
-	objStorage *ObjectStorageConn,
+	objStorage *objectstore.ConnInfo,
+	objStorageEndpoint string,
 	waitForObjectStore bool,
 	mfst manifest.Manifest,
 ) (*v1.ClickHouseInstallation, error) {
@@ -172,7 +227,7 @@ func ToClickHouseVendorSpec(
 	serverSettings := v1.NewSettings()
 
 	// Define the S3 disk + cache + storage policy and make it the server-wide default.
-	applyStorageConfiguration(serverSettings, objStorage, cacheMaxSizeBytes)
+	applyStorageConfiguration(serverSettings, objStorage, objStorageEndpoint, cacheMaxSizeBytes)
 
 	// Enable built-in Prometheus metrics endpoint if telemetry is enabled
 	if spec.Telemetry.Enabled {
@@ -191,10 +246,12 @@ func ToClickHouseVendorSpec(
 
 	clickHouseImage := ClickHouseImage(mfst.Clickhouse["default"].Images["server"], wandb.Spec.Global.ImageRegistry)
 	podSpec := corev1.PodSpec{
-		SecurityContext: clickHousePodSecurityContext(),
-		Affinity:        wandb.GetAffinity(spec.ManagedInfraSpec),
-		Tolerations:     *wandb.GetTolerations(spec.ManagedInfraSpec),
-		Volumes:         clickHouseWritableVolumes(),
+		ServiceAccountName:           clickHouseServiceAccountName(spec),
+		AutomountServiceAccountToken: ptr.To(!objStorage.HasStaticCredentials()),
+		SecurityContext:              clickHousePodSecurityContext(),
+		Affinity:                     wandb.GetAffinity(spec.ManagedInfraSpec),
+		Tolerations:                  *wandb.GetTolerations(spec.ManagedInfraSpec),
+		Volumes:                      clickHouseWritableVolumes(),
 		Containers: []corev1.Container{
 			{
 				Name:            "clickhouse",
@@ -205,7 +262,7 @@ func ToClickHouseVendorSpec(
 		},
 	}
 	if waitForObjectStore {
-		podSpec.InitContainers = []corev1.Container{clickHouseObjectStoreWaitContainer(objStorage.Endpoint, clickHouseImage)}
+		podSpec.InitContainers = []corev1.Container{clickHouseObjectStoreWaitContainer(objStorageEndpoint, clickHouseImage)}
 	}
 
 	if len(spec.Config.Resources.Requests) > 0 || len(spec.Config.Resources.Limits) > 0 {
@@ -295,6 +352,9 @@ func ToClickHouseVendorSpec(
 	return chi, nil
 }
 
+// clickHouseObjectStoreWaitContainer returns an init container that blocks until
+// the object-store endpoint is reachable, so ClickHouse does not start before
+// its backing bucket is available.
 func clickHouseObjectStoreWaitContainer(endpoint, image string) corev1.Container {
 	// The existing ClickHouse image includes wget. Any HTTP response below 500
 	// proves DNS and the S3 API are reachable; authentication remains ClickHouse's
@@ -325,10 +385,12 @@ exit 1`,
 	}
 }
 
+// BuildWandbClickhouseLabels returns the standard W&B labels for the ClickHouse module.
 func BuildWandbClickhouseLabels(wandb *apiv2.WeightsAndBiases) map[string]string {
 	return common.BuildWandbLabels(wandb, ClickhouseModuleName)
 }
 
+// ToClickHouseOnDeleteRule builds the on-delete retention rule for the ClickHouse module.
 func ToClickHouseOnDeleteRule(wandb *apiv2.WeightsAndBiases, retentionPolicy apiv2.RetentionPolicy) common.OnDeleteRule {
 	return common.ToOnDeleteRule(wandb, retentionPolicy, ClickhouseModuleName)
 }
