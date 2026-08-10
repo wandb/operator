@@ -355,6 +355,9 @@ func TestConvertTo_InternalJWTIssuerFromGlobal(t *testing.T) {
 	})
 	require.NoError(t, src.ConvertTo(dst))
 	require.Equal(t, "https://gke-issuer.example.com", dst.Spec.Wandb.InternalServiceAuth.OIDCIssuer)
+	// An issuer means v1 was using internal service auth; leave Enabled unset so
+	// the defaulter turns it on.
+	require.Nil(t, dst.Spec.Wandb.InternalServiceAuth.Enabled)
 }
 
 func TestConvertTo_InternalJWTIssuerFallsBackToApp(t *testing.T) {
@@ -419,6 +422,8 @@ func TestConvertTo_InternalJWTIssuerEmptyGlobalFallsBackToApp(t *testing.T) {
 	})
 	require.NoError(t, src.ConvertTo(dst))
 	require.Equal(t, "from-app", dst.Spec.Wandb.InternalServiceAuth.OIDCIssuer)
+	// A value anywhere outranks an empty list, so this is not a "disabled" signal.
+	require.Nil(t, dst.Spec.Wandb.InternalServiceAuth.Enabled)
 }
 
 func TestConvertTo_InternalJWTIssuerAbsent(t *testing.T) {
@@ -428,6 +433,34 @@ func TestConvertTo_InternalJWTIssuerAbsent(t *testing.T) {
 	})
 	require.NoError(t, src.ConvertTo(dst))
 	require.Empty(t, dst.Spec.Wandb.InternalServiceAuth.OIDCIssuer)
+	require.NotNil(t, dst.Spec.Wandb.InternalServiceAuth.Enabled)
+	require.False(t, *dst.Spec.Wandb.InternalServiceAuth.Enabled)
+}
+
+// The shape that regressed in the field: an explicitly empty per-app map and no
+// global one. v1 asserted no issuers, so v2 must say off rather than leave
+// internalServiceAuth empty for the defaulter to turn on with a guessed issuer.
+func TestConvertTo_InternalJWTIssuerEmptyAppDisables(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"app": map[string]interface{}{"internalJWTMap": []interface{}{}},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+	require.Empty(t, dst.Spec.Wandb.InternalServiceAuth.OIDCIssuer)
+	require.NotNil(t, dst.Spec.Wandb.InternalServiceAuth.Enabled)
+	require.False(t, *dst.Spec.Wandb.InternalServiceAuth.Enabled)
+}
+
+func TestConvertTo_InternalJWTIssuerEmptyBothDisables(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{"internalJWTMap": []interface{}{}},
+		"app":    map[string]interface{}{"internalJWTMap": []interface{}{}},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+	require.Empty(t, dst.Spec.Wandb.InternalServiceAuth.OIDCIssuer)
+	require.NotNil(t, dst.Spec.Wandb.InternalServiceAuth.Enabled)
+	require.False(t, *dst.Spec.Wandb.InternalServiceAuth.Enabled)
 }
 
 func TestConvertTo_IngressEnabledByChartDefaults(t *testing.T) {
