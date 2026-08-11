@@ -13,9 +13,6 @@ import (
 
 var _ = Describe("managed ClickHouse naming", func() {
 	Describe("CHIClusterName", func() {
-		// Applications run ReplicatedMergeTree DDL as `ON CLUSTER <name>`, so this
-		// must be the cluster the CHI actually declares — not ClusterName(), which
-		// is the truncated spec name used to build the Service name.
 		It("matches the cluster the CHI declares", func() {
 			wandb := clickHouseWandb()
 			spec := wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse
