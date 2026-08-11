@@ -5,7 +5,7 @@ on:
 
 jobs:
   release:
-    name: Publish prerelease chart
+    name: Publish development chart
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -19,14 +19,14 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Validate prerelease chart version
+      - name: Validate development chart version
         id: chart
         shell: bash
         run: |
           set -euo pipefail
           version="$(awk '$1 == "version:" { print $2; exit }' deploy/operator/Chart.yaml | tr -d '\"')"
-          if [[ ! "${version}" =~ ^2\.[0-9]+\.[0-9]+-[0-9A-Za-z][0-9A-Za-z.-]*$ ]]; then
-            echo "Internal chart publishing requires a v2 prerelease version; got ${version}" >&2
+          if [[ ! "${version}" =~ ^2\.[0-9]+\.[0-9]+-dev\.[0-9A-Za-z]+([.-][0-9A-Za-z]+)*$ ]]; then
+            echo "Internal chart publishing requires 2.x.y-dev.<identifier>; got ${version}" >&2
             exit 1
           fi
           echo "version=${version}" >> "${GITHUB_OUTPUT}"
@@ -81,7 +81,7 @@ jobs:
             exit 1
           fi
 
-      - name: Package and publish prerelease chart
+      - name: Package and publish development chart
         env:
           VERSION: ${{ steps.chart.outputs.version }}
         run: |
