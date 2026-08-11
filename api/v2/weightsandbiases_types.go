@@ -834,6 +834,8 @@ type ObjectStoreInfraStatus struct {
 type ClickHouseInfraStatus struct {
 	WBInfraStatus `json:",inline"`
 	Connection    ClickHouseConnection `json:"connection,omitempty"`
+	Replicated    bool                 `json:"replicated,omitempty"`
+	ClusterName   string               `json:"clusterName,omitempty"`
 }
 
 type TelemetryInfraStatus struct {

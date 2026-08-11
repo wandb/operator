@@ -290,6 +290,9 @@ func managedClickHouseInferStatus(
 	for _, e := range events {
 		recorder.Event(wandb, e.Type, e.Reason, e.Message)
 	}
+	managed := wandb.Spec.ClickHouse[key].ManagedClickHouse
+	updatedStatus.Replicated = managed.Replicas > 1
+	updatedStatus.ClusterName = altinity.CHIClusterName()
 	wandb.Status.ClickHouseStatus[key] = updatedStatus
 	err := updateWandbStatusIfChanged(ctx, client, wandb, statusBefore)
 

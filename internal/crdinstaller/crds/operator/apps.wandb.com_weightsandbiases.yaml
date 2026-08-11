@@ -4413,6 +4413,8 @@ spec:
               clickhouseStatus:
                 additionalProperties:
                   properties:
+                    clusterName:
+                      type: string
                     conditions:
                       items:
                         properties:
@@ -4544,6 +4546,8 @@ spec:
                           x-kubernetes-map-type: atomic
                       type: object
                     ready:
+                      type: boolean
+                    replicated:
                       type: boolean
                     state:
                       type: string
