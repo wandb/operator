@@ -3,6 +3,7 @@ package moco
 import (
 	"context"
 
+	mocov1beta2 "github.com/cybozu-go/moco/api/v1beta2"
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/logx"
 	corev1 "k8s.io/api/core/v1"
@@ -21,6 +22,39 @@ func PurgeFinalizer(
 	ctx, _ = logx.WithSlog(ctx, logx.Mysql)
 	if onDeleteRule.Policy != common.Purge {
 		return nil
+	}
+	cluster := &mocov1beta2.MySQLCluster{}
+	if err := cl.Get(ctx, specNamespacedName, cluster); err == nil {
+		if err := cl.Delete(ctx, cluster); err != nil && !errors.IsNotFound(err) {
+			return err
+		}
+	} else if !errors.IsNotFound(err) {
+		return err
+	}
+
+	configMap := &corev1.ConfigMap{}
+	configMapName := types.NamespacedName{
+		Namespace: specNamespacedName.Namespace,
+		Name:      MyCnfConfigMapName(specNamespacedName.Name),
+	}
+	if err := cl.Get(ctx, configMapName, configMap); err == nil {
+		if err := cl.Delete(ctx, configMap); err != nil && !errors.IsNotFound(err) {
+			return err
+		}
+	} else if !errors.IsNotFound(err) {
+		return err
+	}
+	credentials := &corev1.Secret{}
+	credentialsName := types.NamespacedName{
+		Namespace: specNamespacedName.Namespace,
+		Name:      "moco-" + specNamespacedName.Name,
+	}
+	if err := cl.Get(ctx, credentialsName, credentials); err == nil {
+		if err := cl.Delete(ctx, credentials); err != nil && !errors.IsNotFound(err) {
+			return err
+		}
+	} else if !errors.IsNotFound(err) {
+		return err
 	}
 	return purgeAssociatedResources(ctx, cl, specNamespacedName.Namespace, onDeleteRule.Selector)
 }

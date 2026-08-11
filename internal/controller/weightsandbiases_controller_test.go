@@ -190,19 +190,6 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			wandb.Status.ClickHouseStatus = map[string]apiv2.ClickHouseInfraStatus{apiv2.DefaultInstanceName: {WBInfraStatus: apiv2.WBInfraStatus{Ready: true}}}
 			Expect(k8sClient.Status().Update(ctx, wandb)).Should(Succeed())
 
-			By("Creating the db-password secret")
-			secret := &v1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      wandbName + "-db-password",
-					Namespace: WandbNamespace,
-				},
-				Data: map[string][]byte{
-					"rootPassword": []byte("root-pass"),
-					"password":     []byte("user-pass"),
-				},
-			}
-			Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
-
 			wandbLookupKey := types.NamespacedName{Name: wandb.Name, Namespace: wandb.Namespace}
 			Expect(k8sClient.Get(ctx, wandbLookupKey, wandb)).Should(Succeed())
 
@@ -218,6 +205,11 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 				NamespacedName: wandbLookupKey,
 			})
 			Expect(err).Should(Succeed())
+			unusedPasswordSecret := &v1.Secret{}
+			Expect(errors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{
+				Name:      wandbName + "-db-password",
+				Namespace: WandbNamespace,
+			}, unusedPasswordSecret))).To(BeTrue())
 
 			By("Setting infrastructure status to ready")
 			Expect(k8sClient.Get(ctx, wandbLookupKey, wandb)).Should(Succeed())
@@ -251,6 +243,13 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			}, timeout, interval).Should(Succeed())
 
 			Expect(job.Spec.Template.Spec.Containers[0].Name).To(Equal("moco-init"))
+			Expect(job.Spec.Template.Spec.Containers[0].Command).To(Equal([]string{"mysql"}))
+			Expect(job.Spec.Template.Spec.Containers[0].Args).To(ContainElement(
+				"--execute=CREATE DATABASE IF NOT EXISTS `wandb_local`;",
+			))
+			Expect(job.Spec.Template.Spec.Containers[0].Env).To(ContainElement(
+				HaveField("Name", "MYSQL_PWD"),
+			))
 		})
 
 		It("Should create application components when infrastructure is ready", func() {

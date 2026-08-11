@@ -7,11 +7,13 @@ import (
 	mococonstants "github.com/cybozu-go/moco/pkg/constants"
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
+	"github.com/wandb/operator/internal/controller/infra/mysqlconnection"
 	"github.com/wandb/operator/pkg/utils"
 	"github.com/wandb/operator/pkg/wandb/manifest"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	corev1ac "k8s.io/client-go/applyconfigurations/core/v1"
 	"k8s.io/utils/ptr"
@@ -19,10 +21,14 @@ import (
 )
 
 const (
-	MysqlModuleName = "moco"
+	MysqlModuleName           = "moco"
+	WandbUIDLabel             = "weightsandbiases.apps.wandb.com/uid"
+	InstanceLabel             = "weightsandbiases.apps.wandb.com/mysql-instance-id"
+	RetentionPolicyAnnotation = "weightsandbiases.apps.wandb.com/retention-policy"
+	DetachedAnnotation        = "weightsandbiases.apps.wandb.com/detached"
 
 	// Moco names the resulting PVCs "<dataVolumeName>-<cluster.PrefixedName()>-<ordinal>"
-	// (= "<dataVolumeName>-moco-<cluster>-<n>"); ensurePVCLabels and purge rely on this.
+	// (= "<dataVolumeName>-moco-<cluster>-<n>"); ensurePVCMetadata and purge rely on this.
 	dataVolumeName = mococonstants.MySQLDataVolumeName
 
 	// TODO: remove this hardcoded default once all supported manifest versions
@@ -48,6 +54,7 @@ const (
 
 func ToMocoMySQLClusterSpec(
 	ctx context.Context,
+	instance string,
 	spec apiv2.ManagedMysqlSpec,
 	wandb *apiv2.WeightsAndBiases,
 	scheme *runtime.Scheme,
@@ -60,21 +67,29 @@ func ToMocoMySQLClusterSpec(
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      MyCnfConfigMapName(spec.Name),
 			Namespace: spec.Namespace,
-			Labels:    BuildWandbMysqlLabels(wandb),
+			Labels:    BuildWandbMysqlLabels(wandb, instance),
+			Annotations: map[string]string{
+				RetentionPolicyAnnotation: string(wandb.GetRetentionPolicy(spec.ManagedInfraSpec).OnDelete),
+			},
 		},
 		Data: map[string]string{
 			"sync_binlog":                    "1",
 			"innodb_flush_log_at_trx_commit": "1",
 		},
 	}
-	if err := controllerutil.SetControllerReference(wandb, cm, scheme); err != nil {
-		return nil, nil, err
+	if cm.Namespace == wandb.Namespace {
+		if err := controllerutil.SetControllerReference(wandb, cm, scheme); err != nil {
+			return nil, nil, err
+		}
 	}
 
 	cluster := &mocov1beta2.MySQLCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: spec.Name, Namespace: spec.Namespace,
-			Labels: BuildWandbMysqlLabels(wandb),
+			Labels: BuildWandbMysqlLabels(wandb, instance),
+			Annotations: map[string]string{
+				RetentionPolicyAnnotation: string(wandb.GetRetentionPolicy(spec.ManagedInfraSpec).OnDelete),
+			},
 		},
 		Spec: mocov1beta2.MySQLClusterSpec{
 			Replicas:           replicas,
@@ -97,13 +112,15 @@ func ToMocoMySQLClusterSpec(
 		cluster.Spec.Collectors = []string{"engine_innodb_status", "info_schema.innodb_metrics"}
 	}
 
-	if err := controllerutil.SetControllerReference(wandb, cluster, scheme); err != nil {
-		return nil, nil, err
+	if cluster.Namespace == wandb.Namespace {
+		if err := controllerutil.SetControllerReference(wandb, cluster, scheme); err != nil {
+			return nil, nil, err
+		}
 	}
 	return cluster, cm, nil
 }
 
-func buildMocoPodSpec(resources corev1.ResourceRequirements, img manifest.ImageRef, wandb *apiv2.WeightsAndBiases,) mocov1beta2.PodSpecApplyConfiguration {
+func buildMocoPodSpec(resources corev1.ResourceRequirements, img manifest.ImageRef, wandb *apiv2.WeightsAndBiases) mocov1beta2.PodSpecApplyConfiguration {
 	container := corev1ac.Container().
 		WithName("mysqld").
 		WithImage(MocoMySQLImage(img, wandb.Spec.Global.ImageRegistry)).
@@ -188,10 +205,17 @@ func buildPVCSpec(storageSize string) mocov1beta2.PersistentVolumeClaimSpecApply
 	return mocov1beta2.PersistentVolumeClaimSpecApplyConfiguration(*pvcSpec)
 }
 
-func BuildWandbMysqlLabels(wandb *apiv2.WeightsAndBiases) map[string]string {
-	return common.BuildWandbLabels(wandb, MysqlModuleName)
+func BuildWandbMysqlLabels(wandb *apiv2.WeightsAndBiases, instance string) map[string]string {
+	result := common.BuildWandbLabels(wandb, MysqlModuleName)
+	result[InstanceLabel] = mysqlconnection.InstanceID(instance)
+	if wandb.UID != "" {
+		result[WandbUIDLabel] = string(wandb.UID)
+	}
+	return result
 }
 
-func ToMysqlOnDeleteRule(wandb *apiv2.WeightsAndBiases, retentionPolicy apiv2.RetentionPolicy) common.OnDeleteRule {
-	return common.ToOnDeleteRule(wandb, retentionPolicy, MysqlModuleName)
+func ToMysqlOnDeleteRule(wandb *apiv2.WeightsAndBiases, instance string, retentionPolicy apiv2.RetentionPolicy) common.OnDeleteRule {
+	rule := common.ToOnDeleteRule(wandb, retentionPolicy, MysqlModuleName)
+	rule.Selector = labels.SelectorFromSet(BuildWandbMysqlLabels(wandb, instance))
+	return rule
 }

@@ -92,24 +92,6 @@ func TestApplyCustomCACertsToWorkloadAddsGlobalAndInfraMounts(t *testing.T) {
 			},
 		},
 		Status: apiv2.WeightsAndBiasesStatus{
-			MySQLStatus: map[string]apiv2.MysqlInfraStatus{
-				apiv2.DefaultInstanceName: apiv2.MysqlInfraStatus{
-					Connection: apiv2.MysqlConnection{
-						SslCa: corev1.SecretKeySelector{
-							LocalObjectReference: corev1.LocalObjectReference{Name: "wandb-mysql-connection"},
-							Key:                  "SslCa",
-						},
-						SslCert: corev1.SecretKeySelector{
-							LocalObjectReference: corev1.LocalObjectReference{Name: "wandb-mysql-connection"},
-							Key:                  "SslCert",
-						},
-						SslKey: corev1.SecretKeySelector{
-							LocalObjectReference: corev1.LocalObjectReference{Name: "wandb-mysql-connection"},
-							Key:                  "SslKey",
-						},
-					},
-				},
-			},
 			RedisStatus: map[string]apiv2.RedisInfraStatus{
 				apiv2.DefaultInstanceName: apiv2.RedisInfraStatus{
 					Connection: apiv2.RedisConnection{
@@ -123,14 +105,6 @@ func TestApplyCustomCACertsToWorkloadAddsGlobalAndInfraMounts(t *testing.T) {
 			},
 		},
 	}
-	mysqlSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: "wandb-mysql-connection", Namespace: "default"},
-		Data: map[string][]byte{
-			"SslCa":   []byte("---mysql-ca---"),
-			"SslCert": []byte("---mysql-cert---"),
-			"SslKey":  []byte("---mysql-key---"),
-		},
-	}
 	redisSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: "wandb-redis-connection", Namespace: "default"},
 		Data:       map[string][]byte{"SslCa": []byte("---redis-ca---")},
@@ -139,7 +113,7 @@ func TestApplyCustomCACertsToWorkloadAddsGlobalAndInfraMounts(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "user-ca-certs", Namespace: "default"},
 		Data:       map[string]string{"corp.crt": "---corp---"},
 	}
-	builder := customCATestClient(t, wandb, mysqlSecret, redisSecret, userCM)
+	builder := customCATestClient(t, wandb, redisSecret, userCM)
 	client := builder.Build()
 
 	envs, volumes, mounts, checksum, err := applyCustomCACertsToWorkload(context.Background(), client, wandb, nil, nil, nil)
@@ -149,22 +123,15 @@ func TestApplyCustomCACertsToWorkloadAddsGlobalAndInfraMounts(t *testing.T) {
 	requireContainsEnv(t, envs, "SSL_CERT_FILE", "/etc/ssl/certs/ca-certificates.crt")
 	requireContainsEnv(t, envs, "SSL_CERT_DIR", "/etc/ssl/certs")
 	requireContainsEnv(t, envs, "REQUESTS_CA_BUNDLE", "/etc/ssl/certs/ca-certificates.crt")
-	requireContainsEnv(t, envs, "MYSQL_CA_CERT_PATH", mysqlCACertPath)
 
 	requireVolume(t, volumes, customCACertsRootVolumeName)
 	requireVolume(t, volumes, customCACertsInlineVolumeName)
 	requireVolume(t, volumes, customCACertsConfigMapVolumeName)
-	requireVolume(t, volumes, mysqlCACertVolumeName)
-	requireVolume(t, volumes, mysqlSSLCertVolumeName)
-	requireVolume(t, volumes, mysqlSSLKeyVolumeName)
 	requireVolume(t, volumes, redisCACertVolumeName)
 
 	requireMount(t, mounts, customCACertsRootVolumeName, customCACertsRootMountPath)
 	requireMount(t, mounts, customCACertsInlineVolumeName, customCACertsInlineMountPath)
 	requireMount(t, mounts, customCACertsConfigMapVolumeName, customCACertsConfigMapMountPath)
-	requireMount(t, mounts, mysqlCACertVolumeName, mysqlCACertPath)
-	requireMount(t, mounts, mysqlSSLCertVolumeName, mysqlSSLCertPath)
-	requireMount(t, mounts, mysqlSSLKeyVolumeName, mysqlSSLKeyPath)
 	requireMount(t, mounts, redisCACertVolumeName, redisCACertPath)
 
 	podTemplate := &corev1.PodTemplateSpec{}
@@ -179,17 +146,6 @@ func TestApplyCustomCACertsToWorkloadSkipsMissingOptionalInfraKeys(t *testing.T)
 			Namespace: "default",
 		},
 		Status: apiv2.WeightsAndBiasesStatus{
-			MySQLStatus: map[string]apiv2.MysqlInfraStatus{
-				apiv2.DefaultInstanceName: apiv2.MysqlInfraStatus{
-					Connection: apiv2.MysqlConnection{
-						SslCa: corev1.SecretKeySelector{
-							LocalObjectReference: corev1.LocalObjectReference{Name: "wandb-mysql-connection"},
-							Key:                  "SslCa",
-							Optional:             ptr.To(true),
-						},
-					},
-				},
-			},
 			RedisStatus: map[string]apiv2.RedisInfraStatus{
 				apiv2.DefaultInstanceName: apiv2.RedisInfraStatus{
 					Connection: apiv2.RedisConnection{
@@ -203,22 +159,16 @@ func TestApplyCustomCACertsToWorkloadSkipsMissingOptionalInfraKeys(t *testing.T)
 			},
 		},
 	}
-	mysqlSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: "wandb-mysql-connection", Namespace: "default"},
-		Data:       map[string][]byte{"url": []byte("mysql://user:pass@db:3306/wandb")},
-	}
 	redisSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: "wandb-redis-connection", Namespace: "default"},
 		Data:       map[string][]byte{"url": []byte("redis://redis:6379")},
 	}
-	builder := customCATestClient(t, wandb, mysqlSecret, redisSecret)
+	builder := customCATestClient(t, wandb, redisSecret)
 	client := builder.Build()
 
-	envs, volumes, mounts, checksum, err := applyCustomCACertsToWorkload(context.Background(), client, wandb, nil, nil, nil)
+	_, volumes, mounts, checksum, err := applyCustomCACertsToWorkload(context.Background(), client, wandb, nil, nil, nil)
 	require.NoError(t, err)
 	require.Empty(t, checksum)
-	requireNoEnv(t, envs, "MYSQL_CA_CERT_PATH")
-	requireNoVolume(t, volumes, mysqlCACertVolumeName)
 	requireNoVolume(t, volumes, redisCACertVolumeName)
 	require.Empty(t, mounts)
 }
@@ -232,13 +182,6 @@ func requireContainsEnv(t *testing.T, envs []corev1.EnvVar, name, value string) 
 		}
 	}
 	t.Fatalf("env var %q not found in %+v", name, envs)
-}
-
-func requireNoEnv(t *testing.T, envs []corev1.EnvVar, name string) {
-	t.Helper()
-	for _, env := range envs {
-		require.NotEqual(t, name, env.Name)
-	}
 }
 
 func requireVolume(t *testing.T, volumes []corev1.Volume, name string) {

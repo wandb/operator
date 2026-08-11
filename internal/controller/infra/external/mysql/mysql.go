@@ -2,33 +2,15 @@ package mysql
 
 import (
 	"context"
-	"fmt"
-	"net/url"
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/infra/external"
+	"github.com/wandb/operator/internal/controller/infra/mysqlconnection"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
-
-const ConnectionSecretName = "wandb-mysql-connection"
-const caCertPath = "/etc/ssl/certs/mysql_ca.pem"
-const sslCertPath = "/etc/ssl/certs/mysql_ssl_cert.pem"
-const sslKeyPath = "/etc/ssl/certs/mysql_ssl_key.pem"
-
-// connectionSecretName returns the connection secret name for an instance. The
-// reserved default instance keeps the historical name for backward
-// compatibility; other instances are suffixed with their key.
-func connectionSecretName(key string) string {
-	if key == "" || key == apiv2.DefaultInstanceName {
-		return ConnectionSecretName
-	}
-	return fmt.Sprintf("%s-%s", ConnectionSecretName, key)
-}
 
 func WriteState(
 	ctx context.Context,
@@ -54,41 +36,87 @@ func WriteState(
 	data, err := external.ResolveFields(ctx, c, wandb.Namespace, fields)
 	if err != nil {
 		logger.Error(err, "failed to resolve external mysql fields")
-		return []metav1.Condition{{
-			Type:   "Reconciled",
-			Status: metav1.ConditionFalse,
-			Reason: "ApiError",
-		}}
-	}
-
-	dbUrl := url.URL{
-		Scheme: "mysql",
-		Host:   fmt.Sprintf("%s:%s", data["Host"], data["Port"]),
-		User:   url.UserPassword(data["Username"], data["Password"]),
-		Path:   data["Database"],
-	}
-	values := dbUrl.Query()
-	if tls, ok := data["Tls"]; ok {
-		values.Set("tls", tls)
-	}
-	if _, ok := data["SslCa"]; ok {
-		if values.Get("tls") == "" {
-			values.Set("tls", "custom")
+		return []metav1.Condition{
+			{
+				Type:    mysqlconnection.ProviderReadyType,
+				Status:  metav1.ConditionFalse,
+				Reason:  "SourceSecretsUnavailable",
+				Message: err.Error(),
+			},
+			{
+				Type:    mysqlconnection.ConnectionResolvedType,
+				Status:  metav1.ConditionFalse,
+				Reason:  "SourceSecretsUnavailable",
+				Message: err.Error(),
+			},
+			{
+				Type:   mysqlconnection.BundleReadyType,
+				Status: metav1.ConditionFalse,
+				Reason: "ConnectionNotResolved",
+			},
+			{
+				Type:   "Reconciled",
+				Status: metav1.ConditionFalse,
+				Reason: "ApiError",
+			},
 		}
-		values.Set("ssl-ca", caCertPath)
 	}
-	if _, ok := data["SslCert"]; ok {
-		values.Set("ssl-cert", sslCertPath)
-	}
-	if _, ok := data["SslKey"]; ok {
-		values.Set("ssl-key", sslKeyPath)
-	}
-	dbUrl.RawQuery = values.Encode()
 
-	data["url"] = dbUrl.String()
+	material := mysqlconnection.Material{
+		Host:       data["Host"],
+		Port:       data["Port"],
+		Database:   data["Database"],
+		Username:   data["Username"],
+		Password:   data["Password"],
+		TLS:        data["Tls"],
+		CACert:     []byte(data["SslCa"]),
+		ClientCert: []byte(data["SslCert"]),
+		ClientKey:  []byte(data["SslKey"]),
+	}
+	if _, err := mysqlconnection.Write(ctx, c, wandb, key, material); err != nil {
+		logger.Error(err, "failed to write external mysql connection bundle")
+		return []metav1.Condition{
+			{
+				Type:   mysqlconnection.ProviderReadyType,
+				Status: metav1.ConditionTrue,
+				Reason: "SourceSecretsResolved",
+			},
+			{
+				Type:    mysqlconnection.ConnectionResolvedType,
+				Status:  metav1.ConditionFalse,
+				Reason:  "InvalidConnection",
+				Message: err.Error(),
+			},
+			{
+				Type:   mysqlconnection.BundleReadyType,
+				Status: metav1.ConditionFalse,
+				Reason: "InvalidConnection",
+			},
+			{
+				Type:   "Reconciled",
+				Status: metav1.ConditionFalse,
+				Reason: "InvalidConnection",
+			},
+		}
+	}
 
-	nsName := types.NamespacedName{Namespace: wandb.Namespace, Name: connectionSecretName(key)}
-	return external.WriteConnectionSecret(ctx, c, wandb, nsName, data)
+	return []metav1.Condition{
+		{
+			Type:   mysqlconnection.ProviderReadyType,
+			Status: metav1.ConditionTrue,
+			Reason: "SourceSecretsResolved",
+		},
+		{
+			Type:   mysqlconnection.ConnectionResolvedType,
+			Status: metav1.ConditionTrue,
+			Reason: "SourceSecretsResolved",
+		},
+		{
+			Type:   mysqlconnection.BundleReadyType,
+			Status: metav1.ConditionTrue,
+			Reason: "BundleWritten",
+		},
+	}
 }
 
 func ReadState(
@@ -98,30 +126,17 @@ func ReadState(
 	key string,
 	newConditions []metav1.Condition,
 ) ([]metav1.Condition, *apiv2.MysqlConnection) {
-	nsName := types.NamespacedName{Namespace: wandb.Namespace, Name: connectionSecretName(key)}
-	_, conditions, found := external.ReadConnectionSecret(ctx, c, nsName, newConditions)
-	if !found {
-		return conditions, nil
+	connection, err := mysqlconnection.Read(ctx, c, wandb, key)
+	if err != nil {
+		return append(newConditions, metav1.Condition{
+			Type:   "Reconciled",
+			Status: metav1.ConditionFalse,
+			Reason: "ApiError",
+		}), nil
 	}
-
-	localRef := corev1.LocalObjectReference{Name: nsName.Name}
-	return conditions, &apiv2.MysqlConnection{
-		URL:      corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "url", Optional: ptr.To(false)},
-		Host:     corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Host", Optional: ptr.To(false)},
-		Port:     corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Port", Optional: ptr.To(false)},
-		Database: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Database", Optional: ptr.To(false)},
-		Username: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Username", Optional: ptr.To(false)},
-		Password: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Password", Optional: ptr.To(false)},
-		Tls:      corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Tls", Optional: ptr.To(true)},
-		SslCa:    corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "SslCa", Optional: ptr.To(true)},
-		SslCert:  corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "SslCert", Optional: ptr.To(true)},
-		SslKey:   corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "SslKey", Optional: ptr.To(true)},
-	}
+	return newConditions, connection
 }
 
 func DeleteConnectionSecret(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, key string) error {
-	return external.DeleteConnectionSecret(ctx, c, types.NamespacedName{
-		Namespace: wandb.Namespace,
-		Name:      connectionSecretName(key),
-	})
+	return mysqlconnection.Delete(ctx, c, wandb, key)
 }

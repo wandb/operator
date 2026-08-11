@@ -10,12 +10,14 @@ import (
 	"github.com/wandb/operator/internal/controller/infra/external"
 	externalmysql "github.com/wandb/operator/internal/controller/infra/external/mysql"
 	"github.com/wandb/operator/internal/controller/infra/managed/mysql/moco"
+	"github.com/wandb/operator/internal/controller/infra/mysqlconnection"
 	"github.com/wandb/operator/pkg/utils"
 	"github.com/wandb/operator/pkg/wandb/manifest"
 	"k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -28,17 +30,99 @@ func mysqlWriteState(
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
 	mfst manifest.Manifest,
-) map[string][]metav1.Condition {
+) (map[string][]metav1.Condition, error) {
+	if err := reconcileStaleManagedMySQL(ctx, client, wandb); err != nil {
+		return nil, err
+	}
+	desiredInstances := make(map[string]struct{}, len(wandb.Spec.MySQL))
+	for key := range wandb.Spec.MySQL {
+		desiredInstances[key] = struct{}{}
+	}
+	if err := mysqlconnection.DeleteStale(ctx, client, wandb, desiredInstances); err != nil {
+		return nil, err
+	}
 	out := map[string][]metav1.Condition{}
 	for key, spec := range wandb.Spec.MySQL {
 		switch {
 		case spec.ManagedMysql != nil:
-			out[key] = managedMysqlWriteState(ctx, client, wandb, spec.ManagedMysql, mfst)
+			out[key] = managedMysqlWriteState(ctx, client, wandb, key, spec.ManagedMysql, mfst)
 		case spec.ExternalMysql != nil:
 			out[key] = externalmysql.WriteState(ctx, client, wandb, key, spec.ExternalMysql)
 		}
 	}
-	return out
+	return out, nil
+}
+
+func reconcileStaleManagedMySQL(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases) error {
+	desired := map[string]types.NamespacedName{}
+	for key, spec := range wandb.Spec.MySQL {
+		if spec.ManagedMysql == nil {
+			continue
+		}
+		desired[mysqlconnection.InstanceID(key)] = managedMysqlSpecNamespacedName(spec.ManagedMysql)
+	}
+
+	clusters := &mocov1beta2.MySQLClusterList{}
+	if err := c.List(ctx, clusters, client.MatchingLabels(common.BuildWandbLabels(wandb, moco.MysqlModuleName))); err != nil {
+		return err
+	}
+	for i := range clusters.Items {
+		cluster := &clusters.Items[i]
+		if cluster.Annotations[moco.DetachedAnnotation] == "true" {
+			continue
+		}
+		ownerMatches := !common.IsDetached(cluster, wandb.UID)
+		labelUID := cluster.Labels[moco.WandbUIDLabel]
+		if labelUID != "" && labelUID != string(wandb.UID) {
+			continue
+		}
+		if labelUID == "" && !ownerMatches {
+			continue
+		}
+
+		instanceID := cluster.Labels[moco.InstanceLabel]
+		clusterName := client.ObjectKeyFromObject(cluster)
+		if desiredName, ok := desired[instanceID]; ok && desiredName == clusterName {
+			continue
+		}
+		if instanceID == "" {
+			matchedLegacyResource := false
+			for _, desiredName := range desired {
+				if desiredName == clusterName {
+					matchedLegacyResource = true
+					break
+				}
+			}
+			if matchedLegacyResource {
+				continue
+			}
+		}
+
+		policy := apiv2.OnDeletePolicy(cluster.Annotations[moco.RetentionPolicyAnnotation])
+		if policy == "" {
+			policy = wandb.Spec.RetentionPolicy.OnDelete
+		}
+		if policy == apiv2.PurgeOnDelete {
+			selectorLabels := common.BuildWandbLabels(wandb, moco.MysqlModuleName)
+			if labelUID != "" {
+				selectorLabels[moco.WandbUIDLabel] = labelUID
+			}
+			if instanceID != "" {
+				selectorLabels[moco.InstanceLabel] = instanceID
+			}
+			if err := moco.PurgeFinalizer(ctx, c, clusterName, common.OnDeleteRule{
+				Policy:   common.Purge,
+				Selector: labels.SelectorFromSet(selectorLabels),
+			}); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := moco.DetachFinalizer(ctx, c, clusterName, wandb); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func mysqlReadState(
@@ -52,7 +136,7 @@ func mysqlReadState(
 	for key, spec := range wandb.Spec.MySQL {
 		switch {
 		case spec.ManagedMysql != nil:
-			outConds[key], outConns[key] = managedMysqlReadState(ctx, client, wandb, spec.ManagedMysql, conditions[key])
+			outConds[key], outConns[key] = managedMysqlReadState(ctx, client, wandb, key, spec.ManagedMysql, conditions[key])
 		case spec.ExternalMysql != nil:
 			outConds[key], outConns[key] = externalmysql.ReadState(ctx, client, wandb, key, conditions[key])
 		default:
@@ -120,7 +204,7 @@ func mysqlPurgeFinalizer(
 ) error {
 	if managed := spec.ManagedMysql; managed != nil {
 		specNamespacedName := managedMysqlSpecNamespacedName(managed)
-		onDeleteRule := moco.ToMysqlOnDeleteRule(wandb, wandb.GetRetentionPolicy(managed.ManagedInfraSpec))
+		onDeleteRule := moco.ToMysqlOnDeleteRule(wandb, key, wandb.GetRetentionPolicy(managed.ManagedInfraSpec))
 		return moco.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule)
 	}
 	if spec.ExternalMysql != nil {
@@ -150,77 +234,24 @@ func managedMysqlWriteState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
+	key string,
 	spec *apiv2.ManagedMysqlSpec,
 	mfst manifest.Manifest,
 ) []metav1.Condition {
 	var specNamespacedName = managedMysqlSpecNamespacedName(spec)
 	logger := ctrl.LoggerFrom(ctx)
 
-	dbPasswordSecret := &corev1.Secret{}
-	err := client.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("%s-%s", specNamespacedName.Name, "db-password"), Namespace: specNamespacedName.Namespace}, dbPasswordSecret)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			dbPasswordSecret.Name = fmt.Sprintf("%s-%s", specNamespacedName.Name, "db-password")
-			dbPasswordSecret.Namespace = specNamespacedName.Namespace
-			userPassword, err := utils.GenerateRandomPassword(32)
-			if err != nil {
-				logger.Error(err, "failed to generate random password")
-				return []metav1.Condition{
-					{
-						Type:   common.ReconciledType,
-						Status: metav1.ConditionFalse,
-						Reason: common.ControllerErrorReason,
-					},
-				}
-			}
-			rootPassword, err := utils.GenerateRandomPassword(32)
-			if err != nil {
-				logger.Error(err, "failed to generate random password")
-				return []metav1.Condition{
-					{
-						Type:   common.ReconciledType,
-						Status: metav1.ConditionFalse,
-						Reason: common.ControllerErrorReason,
-					},
-				}
-			}
-
-			dbPasswordSecret.Labels = moco.BuildWandbMysqlLabels(wandb)
-			dbPasswordSecret.Data = map[string][]byte{
-				"rootUser":     []byte("root"),
-				"rootPassword": []byte(rootPassword),
-				"rootHost":     []byte("%"),
-				"password":     []byte(userPassword),
-			}
-			if err = client.Create(ctx, dbPasswordSecret); err != nil {
-				logger.Error(err, "failed to create db password secret")
-				return []metav1.Condition{
-					{
-						Type:   common.ReconciledType,
-						Status: metav1.ConditionFalse,
-						Reason: common.ApiErrorReason,
-					},
-				}
-			}
-		} else {
-			logger.Error(err, "failed to retrieve db password secret")
-			return []metav1.Condition{
-				{
-					Type:   common.ReconciledType,
-					Status: metav1.ConditionFalse,
-					Reason: common.ApiErrorReason,
-				},
-			}
-		}
-	}
-
 	if conditions := moco.CheckDetached(ctx, client, specNamespacedName, wandb.GetUID(), spec.Replicas); conditions != nil {
-		return conditions
+		return append(conditions, metav1.Condition{
+			Type:   mysqlconnection.ProviderReadyType,
+			Status: metav1.ConditionFalse,
+			Reason: "Detached",
+		})
 	}
 
 	var desired *mocov1beta2.MySQLCluster
 	var confMap *corev1.ConfigMap
-	desired, confMap, err = moco.ToMocoMySQLClusterSpec(ctx, *spec, wandb, client.Scheme(), mfst)
+	desired, confMap, err := moco.ToMocoMySQLClusterSpec(ctx, key, *spec, wandb, client.Scheme(), mfst)
 	if err != nil {
 		logger.Error(err, "failed to translate moco spec")
 		return []metav1.Condition{
@@ -229,23 +260,77 @@ func managedMysqlWriteState(
 				Status: metav1.ConditionFalse,
 				Reason: common.ControllerErrorReason,
 			},
+			{
+				Type:   mysqlconnection.ProviderReadyType,
+				Status: metav1.ConditionFalse,
+				Reason: common.ControllerErrorReason,
+			},
 		}
 	}
-	return moco.WriteState(ctx, client, specNamespacedName, desired, confMap, moco.BuildWandbMysqlLabels(wandb))
+	conditions := moco.WriteState(ctx, client, specNamespacedName, desired, confMap, moco.BuildWandbMysqlLabels(wandb, key))
+	providerCondition := metav1.Condition{
+		Type:   mysqlconnection.ProviderReadyType,
+		Status: metav1.ConditionFalse,
+		Reason: "Provisioning",
+	}
+	for _, condition := range conditions {
+		if condition.Type == moco.MySQLCustomResourceType {
+			providerCondition.Status = condition.Status
+			providerCondition.Reason = condition.Reason
+		}
+		if condition.Type == common.ReconciledType && condition.Status == metav1.ConditionFalse {
+			providerCondition.Status = metav1.ConditionFalse
+			providerCondition.Reason = condition.Reason
+		}
+	}
+	return append(conditions, providerCondition)
 }
 
 func managedMysqlReadState(
 	ctx context.Context,
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
+	key string,
 	spec *apiv2.ManagedMysqlSpec,
 	newConditions []metav1.Condition,
 ) ([]metav1.Condition, *apiv2.MysqlConnection) {
 	specNamespacedName := managedMysqlSpecNamespacedName(spec)
 
-	readConditions, newInfraConn := moco.ReadState(ctx, client, specNamespacedName, wandb, moco.ToMysqlOnDeleteRule(wandb, wandb.GetRetentionPolicy(spec.ManagedInfraSpec)))
+	readConditions, material := moco.ReadState(ctx, client, specNamespacedName, moco.ToMysqlOnDeleteRule(wandb, key, wandb.GetRetentionPolicy(spec.ManagedInfraSpec)))
 	newConditions = append(newConditions, readConditions...)
-	return newConditions, newInfraConn
+	if material == nil {
+		return newConditions, nil
+	}
+
+	connection, err := mysqlconnection.Write(ctx, client, wandb, key, *material)
+	if err != nil {
+		return append(newConditions,
+			metav1.Condition{
+				Type:    mysqlconnection.BundleReadyType,
+				Status:  metav1.ConditionFalse,
+				Reason:  common.ApiErrorReason,
+				Message: err.Error(),
+			},
+			metav1.Condition{
+				Type:   moco.MySQLConnectionInfoType,
+				Status: metav1.ConditionFalse,
+				Reason: common.ApiErrorReason,
+			},
+		), nil
+	}
+	newConditions = append(newConditions,
+		metav1.Condition{
+			Type:   mysqlconnection.ConnectionResolvedType,
+			Status: metav1.ConditionTrue,
+			Reason: "MocoCredentialsResolved",
+		},
+		metav1.Condition{
+			Type:   mysqlconnection.BundleReadyType,
+			Status: metav1.ConditionTrue,
+			Reason: "BundleWritten",
+		},
+	)
+	return newConditions, connection
 }
 
 func managedMysqlInferStatus(
@@ -262,6 +347,19 @@ func managedMysqlInferStatus(
 	oldStatus := wandb.Status.MySQLStatus[key]
 	oldConditions := oldStatus.Conditions
 	oldInfraConn := oldStatus.Connection
+	initStatus := wandb.Status.Wandb.MySQLInit[key]
+	initialized := metav1.Condition{
+		Type:   mysqlconnection.DatabaseInitializedType,
+		Status: metav1.ConditionFalse,
+		Reason: "InitializationPending",
+	}
+	if initStatus.Succeeded {
+		initialized.Status = metav1.ConditionTrue
+		initialized.Reason = "JobSucceeded"
+	} else if initStatus.Failed {
+		initialized.Reason = "JobFailed"
+	}
+	newConditions = append(newConditions, initialized)
 
 	updatedStatus, events, ctrlResult := moco.ComputeStatus(
 		ctx,
@@ -363,26 +461,52 @@ func runMysqlInitJobInstance(ctx context.Context, client client.Client, wandb *a
 	if err != nil && !errors.IsNotFound(err) {
 		return ctrl.Result{}, err
 	}
+	jobNotFound := errors.IsNotFound(err)
+	_, _, bundleChecksum, err := applyMySQLBundlesToWorkload(
+		ctx,
+		client,
+		wandb,
+		map[string]struct{}{key: {}},
+		nil,
+		nil,
+	)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if !jobNotFound && job.Status.Succeeded == 0 && bundleChecksum != "" &&
+		job.Spec.Template.Annotations[mysqlBundlesChecksumAnnotation] != bundleChecksum {
+		if err := client.Delete(ctx, job); err != nil && !errors.IsNotFound(err) {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
+	}
 
-	if errors.IsNotFound(err) {
+	if jobNotFound {
 		logger.Info("Creating MySQL init job")
-
-		connSecretName := fmt.Sprintf("%s-connection", specNamespacedName.Name)
 
 		// moco-writable has DDL/DML privileges on all non-system databases,
 		// so CREATE DATABASE works. The Oracle-era CREATE USER + GRANT steps
 		// are unnecessary — wandb connects directly as the secret's Username.
-		mysqlCmd := `mysql -h "$MYSQL_HOST" -P "$MYSQL_PORT" -u "$MYSQL_USER" -p"$MYSQL_PWD" ` +
-			`-e "CREATE DATABASE IF NOT EXISTS $MYSQL_DB;"`
+		connectionStatus, ok := wandb.Status.MySQLStatus[key]
+		if !ok || connectionStatus.Connection.URL.Name == "" {
+			return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
+		}
+		connection := connectionStatus.Connection
+		selectorOrDefault := func(selector corev1.SecretKeySelector, bundleKey string) corev1.SecretKeySelector {
+			if selector.Name != "" && selector.Key != "" {
+				return selector
+			}
+			return corev1.SecretKeySelector{
+				LocalObjectReference: connection.URL.LocalObjectReference,
+				Key:                  bundleKey,
+			}
+		}
 
-		envFromConn := func(name, key string) corev1.EnvVar {
+		envFromConn := func(name string, selector corev1.SecretKeySelector) corev1.EnvVar {
 			return corev1.EnvVar{
 				Name: name,
 				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: &corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{Name: connSecretName},
-						Key:                  key,
-					},
+					SecretKeyRef: &selector,
 				},
 			}
 		}
@@ -405,13 +529,18 @@ func runMysqlInitJobInstance(ctx context.Context, client client.Client, wandb *a
 							{
 								Name:    "moco-init",
 								Image:   moco.MocoMySQLImage(mysqlManifestConfig(mfst, key).Images["mysql"], wandb.Spec.Global.ImageRegistry),
-								Command: []string{"/bin/sh", "-c", mysqlCmd},
+								Command: []string{"mysql"},
+								Args: []string{
+									"--host=$(MYSQL_HOST)",
+									"--port=$(MYSQL_PORT)",
+									"--user=$(MYSQL_USER)",
+									"--execute=CREATE DATABASE IF NOT EXISTS `wandb_local`;",
+								},
 								Env: []corev1.EnvVar{
-									envFromConn("MYSQL_HOST", "Host"),
-									envFromConn("MYSQL_PORT", "Port"),
-									envFromConn("MYSQL_USER", "Username"),
-									envFromConn("MYSQL_PWD", "Password"),
-									envFromConn("MYSQL_DB", "Database"),
+									envFromConn("MYSQL_HOST", selectorOrDefault(connection.Host, mysqlconnection.HostKey)),
+									envFromConn("MYSQL_PORT", selectorOrDefault(connection.Port, mysqlconnection.PortKey)),
+									envFromConn("MYSQL_USER", selectorOrDefault(connection.Username, mysqlconnection.UsernameKey)),
+									envFromConn("MYSQL_PWD", selectorOrDefault(connection.Password, mysqlconnection.PasswordKey)),
 								},
 							},
 						},
@@ -423,6 +552,7 @@ func runMysqlInitJobInstance(ctx context.Context, client client.Client, wandb *a
 		if err := controllerutil.SetOwnerReference(wandb, job, client.Scheme()); err != nil {
 			return ctrl.Result{}, err
 		}
+		setMySQLBundlesChecksumAnnotation(&job.Spec.Template, bundleChecksum)
 
 		if err := client.Create(ctx, job); err != nil {
 			return ctrl.Result{}, err

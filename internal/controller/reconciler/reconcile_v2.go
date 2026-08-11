@@ -307,7 +307,10 @@ func Reconcile(
 	/////////////////////////
 	// Write Infra State
 	redisConditions := redisWriteState(ctx, client, wandb, manifest)
-	mysqlConditions := mysqlWriteState(ctx, client, wandb, manifest)
+	mysqlConditions, err := mysqlWriteState(ctx, client, wandb, manifest)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
 	objectStoreConditions, objectStoreConnection := objectStoreWriteState(ctx, client, wandb, manifest)
 	kafkaConditions := kafkaWriteState(ctx, client, wandb, manifest)
 	clickHouseConditions := clickHouseWriteState(ctx, client, wandb, manifest)
@@ -602,10 +605,11 @@ func reconcileApplications(
 
 		app = applyWandbProbeDefaults(app, wandb.Spec.Wandb.Probes)
 
-		envVars, err := resolveEnvvars(ctx, client, wandb, manifest, app.CommonEnvs, app.Env)
+		envResolution, err := resolveEnvvarsWithDependencies(ctx, client, wandb, manifest, app.CommonEnvs, app.Env)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
+		envVars := envResolution.EnvVars
 		envVars, err = injectManagedWorkloadTelemetryEnvvars(ctx, client, wandb, manifest, app, envVars, telemetryConfig)
 		if err != nil {
 			return ctrl.Result{}, err
@@ -633,6 +637,18 @@ func reconcileApplications(
 
 		var caChecksum string
 		envVars, volumes, volumeMounts, caChecksum, err = applyCustomCACertsToWorkload(ctx, client, wandb, envVars, volumes, volumeMounts)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		var mysqlChecksum string
+		volumes, volumeMounts, mysqlChecksum, err = applyMySQLBundlesToWorkload(
+			ctx,
+			client,
+			wandb,
+			envResolution.MySQLInstances,
+			volumes,
+			volumeMounts,
+		)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
@@ -670,6 +686,7 @@ func reconcileApplications(
 		application.Spec.PodTemplate.Spec.Affinity = wandb.Spec.Affinity
 		application.Spec.PodTemplate.Spec.Tolerations = *wandb.Spec.Tolerations
 		setCustomCACertsChecksumAnnotation(&application.Spec.PodTemplate, caChecksum)
+		setMySQLBundlesChecksumAnnotation(&application.Spec.PodTemplate, mysqlChecksum)
 
 		application.Spec.HpaTemplate = ResolveAutoscaling(app, wandb)
 
@@ -1261,12 +1278,32 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 
 		if apiErrors.IsNotFound(err) {
 
-			envVars, err := resolveEnvvars(ctx, client, wandb, manifest, migrationTask.CommonEnvs, migrationTask.Env)
+			envResolution, err := resolveEnvvarsWithDependencies(
+				ctx,
+				client,
+				wandb,
+				manifest,
+				migrationTask.CommonEnvs,
+				migrationTask.Env,
+			)
 			if err != nil {
 				return ctrl.Result{}, err
 			}
+			envVars := envResolution.EnvVars
 
 			volumes, volumeMounts, err := resolveVolumeMounts(ctx, manifest, migrationTask.CommonVolumeMounts, migrationTask.VolumeMounts)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+			var mysqlChecksum string
+			volumes, volumeMounts, mysqlChecksum, err = applyMySQLBundlesToWorkload(
+				ctx,
+				client,
+				wandb,
+				envResolution.MySQLInstances,
+				volumes,
+				volumeMounts,
+			)
 			if err != nil {
 				return ctrl.Result{}, err
 			}
@@ -1302,6 +1339,7 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 				},
 			}
 			setCustomCACertsChecksumAnnotation(&podTemplate, caChecksum)
+			setMySQLBundlesChecksumAnnotation(&podTemplate, mysqlChecksum)
 
 			job = &batchv1.Job{
 				ObjectMeta: metav1.ObjectMeta{
@@ -1338,6 +1376,37 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 			}
 
 			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		}
+
+		if job.Status.Succeeded == 0 {
+			envResolution, err := resolveEnvvarsWithDependencies(
+				ctx,
+				client,
+				wandb,
+				manifest,
+				migrationTask.CommonEnvs,
+				migrationTask.Env,
+			)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+			_, _, mysqlChecksum, err := applyMySQLBundlesToWorkload(
+				ctx,
+				client,
+				wandb,
+				envResolution.MySQLInstances,
+				nil,
+				nil,
+			)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+			if mysqlChecksum != "" && job.Spec.Template.Annotations[mysqlBundlesChecksumAnnotation] != mysqlChecksum {
+				if err := client.Delete(ctx, job); err != nil && !apiErrors.IsNotFound(err) {
+					return ctrl.Result{}, err
+				}
+				return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+			}
 		}
 
 		if job.Status.Succeeded > 0 {

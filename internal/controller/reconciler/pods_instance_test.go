@@ -78,3 +78,32 @@ func TestResolveEnvvarsMysqlMissingInstanceFallsBackToDefault(t *testing.T) {
 		t.Fatalf("expected fallback to default-conn, got %q", got)
 	}
 }
+
+func TestResolveEnvvarsMysqlReportsResolvedFallbackDependency(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed adding corev1 to scheme: %v", err)
+	}
+	client := fake.NewClientBuilder().WithScheme(scheme).Build()
+	envs := []serverManifest.EnvVar{
+		{Name: "MYSQL", Sources: []serverManifest.EnvSource{{Type: "mysql", Name: "missing"}}},
+	}
+
+	resolved, err := resolveEnvvarsWithDependencies(
+		context.Background(),
+		client,
+		wandbWithTwoMysqlInstances(),
+		serverManifest.Manifest{},
+		nil,
+		envs,
+	)
+	if err != nil {
+		t.Fatalf("resolveEnvvarsWithDependencies returned error: %v", err)
+	}
+	if _, ok := resolved.MySQLInstances[apiv2.DefaultInstanceName]; !ok {
+		t.Fatalf("expected default MySQL dependency, got %+v", resolved.MySQLInstances)
+	}
+	if _, ok := resolved.MySQLInstances["missing"]; ok {
+		t.Fatalf("unexpected unresolved MySQL dependency: %+v", resolved.MySQLInstances)
+	}
+}

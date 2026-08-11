@@ -110,7 +110,7 @@ func (d *WeightsAndBiasesCustomDefaulter) Default(ctx context.Context, obj runti
 		wandb.Spec.Wandb.InternalServiceAuth.Enabled = ptr.To(true)
 	}
 
-	if wandb.Spec.Wandb.InternalServiceAuth.OIDCIssuer == "" && wandb.Spec.Wandb.InternalServiceAuth.Enabled != nil && *wandb.Spec.Wandb.InternalServiceAuth.Enabled{
+	if wandb.Spec.Wandb.InternalServiceAuth.OIDCIssuer == "" && wandb.Spec.Wandb.InternalServiceAuth.Enabled != nil && *wandb.Spec.Wandb.InternalServiceAuth.Enabled {
 		wandb.Spec.Wandb.InternalServiceAuth.OIDCIssuer = "https://kubernetes.default.svc.cluster.local"
 	}
 
@@ -454,6 +454,8 @@ func validateWandbSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 func validateMySQLSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 	var errors field.ErrorList
 	mysqlPath := field.NewPath("spec").Child("mysql")
+	_, hasPendingLegacyMySQL := wandb.Annotations[v1.MySQLPendingAnnotation]
+	managedLocations := map[string]string{}
 
 	errors = append(errors, validateHasDefaultInstance(wandb.Spec.MySQL, mysqlPath)...)
 
@@ -467,6 +469,18 @@ func validateMySQLSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 			))
 		}
 		if managed := spec.ManagedMysql; managed != nil {
+			if managed.Name != "" {
+				location := managed.Namespace + "/" + managed.Name
+				if existingInstance, found := managedLocations[location]; found {
+					errors = append(errors, field.Invalid(
+						instancePath.Child("managedMysql").Child("name"),
+						managed.Name,
+						fmt.Sprintf("managed MySQL resource is already used by instance %q", existingInstance),
+					))
+				} else {
+					managedLocations[location] = key
+				}
+			}
 			if managed.Replicas != 0 && !appsv2.ValidMysqlReplicaCount(managed.Replicas) {
 				errors = append(errors, field.Invalid(
 					instancePath.Child("managedMysql").Child("replicas"),
@@ -475,9 +489,38 @@ func validateMySQLSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 				))
 			}
 		}
+		if external := spec.ExternalMysql; external != nil && !hasPendingLegacyMySQL {
+			externalPath := instancePath.Child("externalMysql")
+			errors = append(errors, validateRequiredSecretSelector(external.Host, externalPath.Child("host"))...)
+			errors = append(errors, validateRequiredSecretSelector(external.Port, externalPath.Child("port"))...)
+			errors = append(errors, validateRequiredSecretSelector(external.Database, externalPath.Child("database"))...)
+			errors = append(errors, validateRequiredSecretSelector(external.Username, externalPath.Child("username"))...)
+			errors = append(errors, validateRequiredSecretSelector(external.Password, externalPath.Child("password"))...)
+			errors = append(errors, validateOptionalSecretSelector(external.Tls, externalPath.Child("tls"))...)
+			errors = append(errors, validateOptionalSecretSelector(external.SslCa, externalPath.Child("sslCa"))...)
+			errors = append(errors, validateOptionalSecretSelector(external.SslCert, externalPath.Child("sslCert"))...)
+			errors = append(errors, validateOptionalSecretSelector(external.SslKey, externalPath.Child("sslKey"))...)
+
+			hasCert := external.SslCert.Name != "" || external.SslCert.Key != ""
+			hasKey := external.SslKey.Name != "" || external.SslKey.Key != ""
+			if hasCert != hasKey {
+				errors = append(errors, field.Invalid(
+					externalPath,
+					"",
+					"sslCert and sslKey must be configured together",
+				))
+			}
+		}
 	}
 
 	return errors
+}
+
+func validateOptionalSecretSelector(selector corev1.SecretKeySelector, path *field.Path) field.ErrorList {
+	if selector.Name == "" && selector.Key == "" {
+		return nil
+	}
+	return validateRequiredSecretSelector(selector, path)
 }
 
 func validateRedisSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {

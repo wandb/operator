@@ -8,9 +8,10 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/samber/lo"
 	apiv2 "github.com/wandb/operator/api/v2"
-	"github.com/wandb/operator/pkg/wandb/manifest"
 	"github.com/wandb/operator/internal/controller/common"
+	"github.com/wandb/operator/internal/controller/infra/mysqlconnection"
 	"github.com/wandb/operator/pkg/utils"
+	"github.com/wandb/operator/pkg/wandb/manifest"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -28,6 +29,7 @@ var _ = Describe("Moco MySQL specs", func() {
 	It("renders hardened pod and container security settings", func() {
 		cluster, _, err := ToMocoMySQLClusterSpec(
 			context.Background(),
+			apiv2.DefaultInstanceName,
 			apiv2.ManagedMysqlSpec{
 				Name:        "mysql",
 				Namespace:   "wandb",
@@ -65,6 +67,7 @@ var _ = Describe("Moco MySQL specs", func() {
 
 		cluster, _, err := ToMocoMySQLClusterSpec(
 			context.Background(),
+			apiv2.DefaultInstanceName,
 			apiv2.ManagedMysqlSpec{
 				Name:        "mysql",
 				Namespace:   "wandb",
@@ -87,6 +90,7 @@ var _ = Describe("Moco MySQL specs", func() {
 		// A non-empty Collectors list is what makes Moco inject the mysqld_exporter sidecar.
 		enabled, _, err := ToMocoMySQLClusterSpec(
 			context.Background(),
+			apiv2.DefaultInstanceName,
 			apiv2.ManagedMysqlSpec{
 				Name: "mysql", Namespace: "wandb", Replicas: 3, StorageSize: "10Gi",
 				Telemetry: apiv2.Telemetry{Enabled: true},
@@ -100,6 +104,7 @@ var _ = Describe("Moco MySQL specs", func() {
 
 		disabled, _, err := ToMocoMySQLClusterSpec(
 			context.Background(),
+			apiv2.DefaultInstanceName,
 			apiv2.ManagedMysqlSpec{
 				Name: "mysql", Namespace: "wandb", Replicas: 3, StorageSize: "10Gi",
 				Telemetry: apiv2.Telemetry{Enabled: false},
@@ -112,6 +117,65 @@ var _ = Describe("Moco MySQL specs", func() {
 		Expect(disabled.Spec.Collectors).To(BeEmpty())
 	})
 
+	It("uses labels instead of invalid owner references across namespaces", func() {
+		wandb := mocoWandb()
+		wandb.UID = "wandb-uid"
+		cluster, configMap, err := ToMocoMySQLClusterSpec(
+			context.Background(),
+			"analytics",
+			apiv2.ManagedMysqlSpec{
+				Name:        "mysql",
+				Namespace:   "database",
+				Replicas:    3,
+				StorageSize: "10Gi",
+			},
+			wandb,
+			mocoScheme(),
+			manifest.Manifest{},
+		)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(cluster.OwnerReferences).To(BeEmpty())
+		Expect(configMap.OwnerReferences).To(BeEmpty())
+		Expect(cluster.Labels).To(HaveKeyWithValue(WandbUIDLabel, "wandb-uid"))
+		Expect(cluster.Labels).To(HaveKeyWithValue(InstanceLabel, mysqlconnection.InstanceID("analytics")))
+	})
+
+	It("removes legacy W&B owner references from cross-namespace resources", func() {
+		wandb := mocoWandb()
+		wandb.UID = "wandb-uid"
+		desired, desiredConfigMap, err := ToMocoMySQLClusterSpec(
+			context.Background(),
+			"analytics",
+			apiv2.ManagedMysqlSpec{
+				Name: "mysql", Namespace: "database", Replicas: 3, StorageSize: "10Gi",
+			},
+			wandb,
+			mocoScheme(),
+			manifest.Manifest{},
+		)
+		Expect(err).NotTo(HaveOccurred())
+		legacyRef := metav1.OwnerReference{
+			APIVersion: apiv2.GroupVersion.String(), Kind: "WeightsAndBiases", Name: wandb.Name, UID: wandb.UID,
+		}
+		actual := desired.DeepCopy()
+		actual.OwnerReferences = []metav1.OwnerReference{legacyRef}
+		actualConfigMap := desiredConfigMap.DeepCopy()
+		actualConfigMap.OwnerReferences = []metav1.OwnerReference{legacyRef}
+		cl := fake.NewClientBuilder().WithScheme(mocoScheme()).WithObjects(actual, actualConfigMap).Build()
+
+		WriteState(
+			context.Background(), cl, types.NamespacedName{Name: "mysql", Namespace: "database"},
+			desired, desiredConfigMap, BuildWandbMysqlLabels(wandb, "analytics"),
+		)
+
+		gotCluster := &mocov1beta2.MySQLCluster{}
+		Expect(cl.Get(context.Background(), types.NamespacedName{Name: "mysql", Namespace: "database"}, gotCluster)).To(Succeed())
+		Expect(gotCluster.OwnerReferences).To(BeEmpty())
+		gotConfigMap := &corev1.ConfigMap{}
+		Expect(cl.Get(context.Background(), types.NamespacedName{Name: desiredConfigMap.Name, Namespace: "database"}, gotConfigMap)).To(Succeed())
+		Expect(gotConfigMap.OwnerReferences).To(BeEmpty())
+	})
+
 	DescribeTable("refuses to forward a replica count Moco rejects",
 		func(replicas int32) {
 			ctx := context.Background()
@@ -120,6 +184,7 @@ var _ = Describe("Moco MySQL specs", func() {
 
 			desired, cm, err := ToMocoMySQLClusterSpec(
 				ctx,
+				apiv2.DefaultInstanceName,
 				apiv2.ManagedMysqlSpec{Name: "mysql", Namespace: "wandb", Replicas: replicas, StorageSize: "10Gi"},
 				mocoWandb(),
 				mocoScheme(),
@@ -152,24 +217,52 @@ var _ = Describe("Moco MySQL specs", func() {
 		mocoPVC := &corev1.PersistentVolumeClaim{
 			ObjectMeta: metav1.ObjectMeta{Name: "mysql-data-moco-mysql-0", Namespace: "wandb"},
 		}
+		credentials := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: "moco-mysql", Namespace: "wandb"},
+		}
 		// A PVC matching the old (pre-Moco) "datadir-" name must NOT be matched.
 		legacyPVC := &corev1.PersistentVolumeClaim{
 			ObjectMeta: metav1.ObjectMeta{Name: "datadir-mysql-0", Namespace: "wandb"},
 		}
 		cl := fake.NewClientBuilder().
 			WithScheme(mocoScheme()).
-			WithObjects(mocoPVC, legacyPVC).
+			WithObjects(mocoPVC, legacyPVC, credentials).
 			Build()
 
-		Expect(ensurePVCLabels(ctx, cl, "wandb", "mysql", wandbLabels)).To(Succeed())
+		annotations := map[string]string{RetentionPolicyAnnotation: string(apiv2.PurgeOnDelete)}
+		Expect(ensurePVCMetadata(ctx, cl, "wandb", "mysql", wandbLabels, annotations)).To(Succeed())
+		Expect(ensureCredentialMetadata(ctx, cl, "wandb", "mysql", wandbLabels, annotations)).To(Succeed())
 
 		got := &corev1.PersistentVolumeClaim{}
 		Expect(cl.Get(ctx, types.NamespacedName{Name: "mysql-data-moco-mysql-0", Namespace: "wandb"}, got)).To(Succeed())
 		Expect(got.Labels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", "wandb"))
+		Expect(got.Annotations).To(HaveKeyWithValue(RetentionPolicyAnnotation, string(apiv2.PurgeOnDelete)))
 
 		legacy := &corev1.PersistentVolumeClaim{}
 		Expect(cl.Get(ctx, types.NamespacedName{Name: "datadir-mysql-0", Namespace: "wandb"}, legacy)).To(Succeed())
 		Expect(legacy.Labels).NotTo(HaveKey("app.kubernetes.io/managed-by"))
+
+		gotCredentials := &corev1.Secret{}
+		Expect(cl.Get(ctx, types.NamespacedName{Name: "moco-mysql", Namespace: "wandb"}, gotCredentials)).To(Succeed())
+		Expect(gotCredentials.Labels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", "wandb"))
+		Expect(gotCredentials.Annotations).To(HaveKeyWithValue(RetentionPolicyAnnotation, string(apiv2.PurgeOnDelete)))
+	})
+
+	It("recognizes a labeled cross-namespace cluster as attached", func() {
+		wandb := mocoWandb()
+		wandb.UID = "wandb-uid"
+		cluster := &mocov1beta2.MySQLCluster{ObjectMeta: metav1.ObjectMeta{
+			Name: "mysql", Namespace: "database", Labels: BuildWandbMysqlLabels(wandb, "default"),
+		}}
+		cl := fake.NewClientBuilder().WithScheme(mocoScheme()).WithObjects(cluster).Build()
+
+		Expect(CheckDetached(
+			context.Background(),
+			cl,
+			types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace},
+			wandb.UID,
+			3,
+		)).To(BeNil())
 	})
 
 	It("backstops a scale-down the webhook can't see, leaving the cluster untouched", func() {
@@ -184,6 +277,7 @@ var _ = Describe("Moco MySQL specs", func() {
 
 		desired, cm, err := ToMocoMySQLClusterSpec(
 			ctx,
+			apiv2.DefaultInstanceName,
 			apiv2.ManagedMysqlSpec{Name: "mysql", Namespace: "wandb", Replicas: 1, StorageSize: "10Gi"},
 			mocoWandb(),
 			mocoScheme(),

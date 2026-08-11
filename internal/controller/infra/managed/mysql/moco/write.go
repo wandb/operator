@@ -59,6 +59,16 @@ func WriteState(
 	}
 	if !found {
 		actual = nil
+	} else if len(desired.OwnerReferences) == 0 {
+		if err := removeLegacyCrossNamespaceOwnerReferences(ctx, cl, actual); err != nil {
+			return []metav1.Condition{
+				{
+					Type:   common.ReconciledType,
+					Status: metav1.ConditionFalse,
+					Reason: common.ApiErrorReason,
+				},
+			}
+		}
 	}
 
 	// MOCO's mutating admission webhook fills in spec.serverIDBase with a random
@@ -122,6 +132,14 @@ func WriteState(
 		} else {
 			if !cmFound {
 				actualConfMap = nil
+			} else if len(confMap.OwnerReferences) == 0 {
+				if cmErr := removeLegacyCrossNamespaceOwnerReferences(ctx, cl, actualConfMap); cmErr != nil {
+					result = append(result, metav1.Condition{
+						Type:   common.ReconciledType,
+						Status: metav1.ConditionFalse,
+						Reason: common.ApiErrorReason,
+					})
+				}
 			}
 			if _, cmErr := common.CrudResource(ctx, cl, confMap, actualConfMap); cmErr != nil {
 				result = append(result, metav1.Condition{
@@ -170,7 +188,17 @@ func WriteState(
 	}
 
 	if len(wandbLabels) > 0 {
-		if err := ensurePVCLabels(ctx, cl, specNamespacedName.Namespace, nsnBuilder.ClusterName(), wandbLabels); err != nil {
+		managedAnnotations := map[string]string{
+			RetentionPolicyAnnotation: desired.Annotations[RetentionPolicyAnnotation],
+		}
+		if err := ensurePVCMetadata(ctx, cl, specNamespacedName.Namespace, nsnBuilder.ClusterName(), wandbLabels, managedAnnotations); err != nil {
+			result = append(result, metav1.Condition{
+				Type:   common.ReconciledType,
+				Status: metav1.ConditionFalse,
+				Reason: common.ApiErrorReason,
+			})
+		}
+		if err := ensureCredentialMetadata(ctx, cl, specNamespacedName.Namespace, nsnBuilder.ClusterName(), wandbLabels, managedAnnotations); err != nil {
 			result = append(result, metav1.Condition{
 				Type:   common.ReconciledType,
 				Status: metav1.ConditionFalse,
@@ -182,17 +210,79 @@ func WriteState(
 	return result
 }
 
-// ensurePVCLabels stamps the wandb labels onto Moco's PVCs (missing because Moco
-// doesn't propagate them through its StatefulSet volumeClaimTemplates), so
-// purgeAssociatedResources can select them by label on teardown. Moco names PVCs
-// "<dataVolumeName>-<cluster.PrefixedName()>-<ordinal>" (see Moco pvc.go); the
-// prefix is built from those same sources so it can't drift from upstream.
-func ensurePVCLabels(
+func removeLegacyCrossNamespaceOwnerReferences(ctx context.Context, cl client.Client, obj client.Object) error {
+	ownerReferences := obj.GetOwnerReferences()
+	filtered := make([]metav1.OwnerReference, 0, len(ownerReferences))
+	for _, ref := range ownerReferences {
+		if ref.Kind == "WeightsAndBiases" && strings.HasPrefix(ref.APIVersion, apiv2.GroupVersion.Group+"/") {
+			continue
+		}
+		filtered = append(filtered, ref)
+	}
+	if len(filtered) == len(ownerReferences) {
+		return nil
+	}
+	patch := client.MergeFrom(obj.DeepCopyObject().(client.Object))
+	obj.SetOwnerReferences(filtered)
+	return cl.Patch(ctx, obj, patch)
+}
+
+func ensureCredentialMetadata(
 	ctx context.Context,
 	cl client.Client,
 	namespace string,
 	clusterName string,
-	labels map[string]string,
+	desiredLabels map[string]string,
+	desiredAnnotations map[string]string,
+) error {
+	secret := &corev1.Secret{}
+	nsName := types.NamespacedName{Namespace: namespace, Name: "moco-" + clusterName}
+	if err := cl.Get(ctx, nsName, secret); err != nil {
+		if client.IgnoreNotFound(err) == nil {
+			return nil
+		}
+		return err
+	}
+	if hasMetadataValues(secret, desiredLabels, desiredAnnotations) {
+		return nil
+	}
+	patch := client.MergeFrom(secret.DeepCopy())
+	if secret.Labels == nil {
+		secret.Labels = make(map[string]string)
+	}
+	maps.Copy(secret.Labels, desiredLabels)
+	if secret.Annotations == nil {
+		secret.Annotations = make(map[string]string)
+	}
+	maps.Copy(secret.Annotations, desiredAnnotations)
+	return cl.Patch(ctx, secret, patch)
+}
+
+func hasMetadataValues(obj client.Object, desiredLabels, desiredAnnotations map[string]string) bool {
+	for key, value := range desiredLabels {
+		if obj.GetLabels()[key] != value {
+			return false
+		}
+	}
+	for key, value := range desiredAnnotations {
+		if obj.GetAnnotations()[key] != value {
+			return false
+		}
+	}
+	return true
+}
+
+// ensurePVCMetadata stamps provenance and retention metadata onto Moco's PVCs
+// (Moco does not propagate it through StatefulSet volumeClaimTemplates), so
+// lifecycle cleanup can select the complete instance inventory. Moco names
+// PVCs "<dataVolumeName>-<cluster.PrefixedName()>-<ordinal>" (see Moco pvc.go).
+func ensurePVCMetadata(
+	ctx context.Context,
+	cl client.Client,
+	namespace string,
+	clusterName string,
+	desiredLabels map[string]string,
+	desiredAnnotations map[string]string,
 ) error {
 	log := logx.GetSlog(ctx)
 	cluster := &mocov1beta2.MySQLCluster{ObjectMeta: metav1.ObjectMeta{Name: clusterName}}
@@ -207,19 +297,23 @@ func ensurePVCLabels(
 		if !strings.HasPrefix(pvc.Name, prefix) {
 			continue
 		}
-		if common.HasAllLabelKeys(pvc.Labels, labels) {
+		if hasMetadataValues(&pvc, desiredLabels, desiredAnnotations) {
 			continue
 		}
 		patch := client.MergeFrom(pvc.DeepCopy())
 		if pvc.Labels == nil {
 			pvc.Labels = make(map[string]string)
 		}
-		maps.Copy(pvc.Labels, labels)
+		maps.Copy(pvc.Labels, desiredLabels)
+		if pvc.Annotations == nil {
+			pvc.Annotations = make(map[string]string)
+		}
+		maps.Copy(pvc.Annotations, desiredAnnotations)
 		if err := cl.Patch(ctx, &pvc, patch); err != nil {
-			log.Error("failed to patch PVC labels", logx.ErrAttr(err), "pvc", pvc.Name)
+			log.Error("failed to patch PVC metadata", logx.ErrAttr(err), "pvc", pvc.Name)
 			return err
 		}
-		log.Debug("patched wandb labels onto PVC", "pvc", pvc.Name)
+		log.Debug("patched wandb metadata onto PVC", "pvc", pvc.Name)
 	}
 	return nil
 }
