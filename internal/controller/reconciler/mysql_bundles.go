@@ -9,8 +9,10 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/infra/mysqlconnection"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -40,7 +42,9 @@ func applyMySQLBundlesToWorkload(
 	for _, key := range keys {
 		status, ok := wandb.Status.MySQLStatus[key]
 		if !ok || status.Connection.URL.Name == "" {
-			return nil, nil, "", fmt.Errorf("mysql instance %q has no connection bundle", key)
+			// Status has not caught up with the spec yet; mount what exists and
+			// let the checksum change once the bundle is published.
+			continue
 		}
 
 		secret := &corev1.Secret{}
@@ -108,6 +112,13 @@ func applyMySQLBundlesToWorkload(
 	}
 
 	return volumes, volumeMounts, hex.EncodeToString(hash.Sum(nil)), nil
+}
+
+// deleteJobCascading deletes a Job together with its pods: a superseded pod left
+// running would race the pod of the recreated Job against the same database.
+func deleteJobCascading(ctx context.Context, c ctrlclient.Client, job *batchv1.Job) error {
+	propagation := metav1.DeletePropagationBackground
+	return c.Delete(ctx, job, &ctrlclient.DeleteOptions{PropagationPolicy: &propagation})
 }
 
 func setMySQLBundlesChecksumAnnotation(podTemplate *corev1.PodTemplateSpec, checksum string) {

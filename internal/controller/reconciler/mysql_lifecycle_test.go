@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/infra/managed/mysql/moco"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -80,6 +81,94 @@ func TestReconcileStaleManagedMySQLPurgesRemovedInstance(t *testing.T) {
 	assert.True(t, apierrors.IsNotFound(client.Get(t.Context(), types.NamespacedName{
 		Name: credentials.Name, Namespace: credentials.Namespace,
 	}, &corev1.Secret{})))
+}
+
+func TestReconcileStaleManagedMySQLPurgeKeepsOtherInstanceStorage(t *testing.T) {
+	scheme := mysqlLifecycleScheme(t)
+	wandb := mysqlLifecycleWandb(apiv2.PurgeOnDelete)
+	wandb.Spec.MySQL["default"] = apiv2.MySQLSpec{ManagedMysql: &apiv2.ManagedMysqlSpec{
+		Name: "primary", Namespace: "database",
+	}}
+	// A cluster from before the per-instance labels existed: only the
+	// deployment-wide labels and a legacy owner reference identify it.
+	legacyLabels := common.BuildWandbLabels(wandb, moco.MysqlModuleName)
+	cluster := &mocov1beta2.MySQLCluster{ObjectMeta: metav1.ObjectMeta{
+		Name: "analytics", Namespace: "database", Labels: legacyLabels,
+		OwnerReferences: []metav1.OwnerReference{{
+			APIVersion: apiv2.GroupVersion.String(),
+			Kind:       "WeightsAndBiases",
+			Name:       wandb.Name,
+			UID:        wandb.UID,
+		}},
+	}}
+	stalePVC := &corev1.PersistentVolumeClaim{ObjectMeta: metav1.ObjectMeta{
+		Name: "mysql-data-moco-analytics-0", Namespace: "database", Labels: legacyLabels,
+	}}
+	otherInstancePVC := &corev1.PersistentVolumeClaim{ObjectMeta: metav1.ObjectMeta{
+		Name: "mysql-data-moco-primary-0", Namespace: "database", Labels: legacyLabels,
+	}}
+	client := fake.NewClientBuilder().WithScheme(scheme).
+		WithObjects(wandb, cluster, stalePVC, otherInstancePVC).Build()
+
+	require.NoError(t, reconcileStaleManagedMySQL(t.Context(), client, wandb))
+	assert.True(t, apierrors.IsNotFound(client.Get(t.Context(), types.NamespacedName{
+		Name: stalePVC.Name, Namespace: stalePVC.Namespace,
+	}, &corev1.PersistentVolumeClaim{})), "stale instance PVC should be purged")
+	assert.NoError(t, client.Get(t.Context(), types.NamespacedName{
+		Name: otherInstancePVC.Name, Namespace: otherInstancePVC.Namespace,
+	}, &corev1.PersistentVolumeClaim{}), "still-desired instance PVC must survive")
+}
+
+func TestReconcileStaleManagedMySQLKeepsRenamedInstanceKey(t *testing.T) {
+	scheme := mysqlLifecycleScheme(t)
+	wandb := mysqlLifecycleWandb(apiv2.DetachOnDelete)
+	wandb.Spec.MySQL["renamed"] = apiv2.MySQLSpec{ManagedMysql: &apiv2.ManagedMysqlSpec{
+		Name: "analytics", Namespace: "database",
+	}}
+	cluster := &mocov1beta2.MySQLCluster{ObjectMeta: metav1.ObjectMeta{
+		Name:      "analytics",
+		Namespace: "database",
+		Labels:    moco.BuildWandbMysqlLabels(wandb, "analytics"),
+	}}
+	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(wandb, cluster).Build()
+
+	require.NoError(t, reconcileStaleManagedMySQL(t.Context(), client, wandb))
+	require.NoError(t, client.Get(t.Context(), types.NamespacedName{
+		Name: cluster.Name, Namespace: cluster.Namespace,
+	}, cluster))
+	assert.Empty(t, cluster.Annotations[moco.DetachedAnnotation])
+}
+
+func TestReconcileStaleManagedMySQLReadoptsRestoredInstance(t *testing.T) {
+	scheme := mysqlLifecycleScheme(t)
+	wandb := mysqlLifecycleWandb(apiv2.DetachOnDelete)
+	wandb.Spec.MySQL["analytics"] = apiv2.MySQLSpec{ManagedMysql: &apiv2.ManagedMysqlSpec{
+		Name: "analytics", Namespace: "database",
+	}}
+	labels := moco.BuildWandbMysqlLabels(wandb, "analytics")
+	cluster := &mocov1beta2.MySQLCluster{ObjectMeta: metav1.ObjectMeta{
+		Name:        "analytics",
+		Namespace:   "database",
+		Labels:      labels,
+		Annotations: map[string]string{moco.DetachedAnnotation: "true"},
+	}}
+	configMap := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
+		Name:        moco.MyCnfConfigMapName(cluster.Name),
+		Namespace:   cluster.Namespace,
+		Labels:      labels,
+		Annotations: map[string]string{moco.DetachedAnnotation: "true"},
+	}}
+	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(wandb, cluster, configMap).Build()
+
+	require.NoError(t, reconcileStaleManagedMySQL(t.Context(), client, wandb))
+	require.NoError(t, client.Get(t.Context(), types.NamespacedName{
+		Name: cluster.Name, Namespace: cluster.Namespace,
+	}, cluster))
+	assert.Empty(t, cluster.Annotations[moco.DetachedAnnotation])
+	require.NoError(t, client.Get(t.Context(), types.NamespacedName{
+		Name: configMap.Name, Namespace: configMap.Namespace,
+	}, configMap))
+	assert.Empty(t, configMap.Annotations[moco.DetachedAnnotation])
 }
 
 func mysqlLifecycleWandb(policy apiv2.OnDeletePolicy) *apiv2.WeightsAndBiases {

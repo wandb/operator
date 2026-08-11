@@ -109,6 +109,54 @@ func DetachFinalizer(
 	return nil
 }
 
+// ClearDetached re-adopts a cluster (and its config map) that a previous
+// reconcile detached, so an instance removed and then restored in the spec does
+// not stay permanently unmanageable.
+func ClearDetached(ctx context.Context, cl client.Client, specNamespacedName types.NamespacedName) error {
+	ctx, log := logx.WithSlog(ctx, logx.Mysql)
+	nsnBuilder := createNsNameBuilder(specNamespacedName)
+
+	cluster := &mocov1beta2.MySQLCluster{}
+	found, err := common.GetResource(ctx, cl, nsnBuilder.ClusterNsName(), ResourceTypeName, cluster)
+	if err != nil || !found {
+		return err
+	}
+	if cluster.Annotations[DetachedAnnotation] != "true" {
+		return nil
+	}
+	if err := clearDetachedAnnotation(ctx, cl, cluster); err != nil {
+		return err
+	}
+	log.Info("re-adopted detached MysqlCluster CR", "name", cluster.Name)
+
+	configMap := &corev1.ConfigMap{}
+	found, err = common.GetResource(
+		ctx,
+		cl,
+		types.NamespacedName{Namespace: specNamespacedName.Namespace, Name: MyCnfConfigMapName(specNamespacedName.Name)},
+		"ConfigMap",
+		configMap,
+	)
+	if err != nil || !found {
+		return err
+	}
+	return clearDetachedAnnotation(ctx, cl, configMap)
+}
+
+func clearDetachedAnnotation(ctx context.Context, cl client.Client, obj client.Object) error {
+	annotations := obj.GetAnnotations()
+	if annotations[DetachedAnnotation] == "" {
+		return nil
+	}
+	patch := client.MergeFrom(obj.DeepCopyObject().(client.Object))
+	delete(annotations, DetachedAnnotation)
+	obj.SetAnnotations(annotations)
+	if err := cl.Patch(ctx, obj, patch); err != nil && !errors.IsNotFound(err) {
+		return err
+	}
+	return nil
+}
+
 func markDetached(obj client.Object, ownerUID types.UID) bool {
 	changed := !common.IsDetached(obj, ownerUID)
 	common.RemoveOwnerReference(obj, ownerUID)

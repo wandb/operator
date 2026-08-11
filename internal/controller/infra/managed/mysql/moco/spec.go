@@ -36,6 +36,16 @@ const (
 	defaultMocoMySQLImage = "ghcr.io/cybozu-go/moco/mysql:8.4.8"
 )
 
+// manifestMysqlConfig resolves the manifest infra config for an instance,
+// falling back to the manifest "default" entry, matching how the init job
+// resolves its image.
+func manifestMysqlConfig(mfst manifest.Manifest, instance string) manifest.InfraConfig {
+	if cfg, ok := mfst.Mysql[instance]; ok {
+		return cfg
+	}
+	return mfst.Mysql[apiv2.DefaultInstanceName]
+}
+
 func MocoMySQLImage(img manifest.ImageRef, globalImageRegistry string) string {
 	if out := img.GetImage(globalImageRegistry); out != "" {
 		return out
@@ -95,7 +105,7 @@ func ToMocoMySQLClusterSpec(
 			Replicas:           replicas,
 			MySQLConfigMapName: ptr.To(MyCnfConfigMapName(spec.Name)),
 			PodTemplate: mocov1beta2.PodTemplateSpec{
-				Spec:                buildMocoPodSpec(spec.Config.Resources, mfst.Mysql["default"].Images["mysql"], wandb),
+				Spec:                buildMocoPodSpec(spec.Config.Resources, manifestMysqlConfig(mfst, instance).Images["mysql"], wandb),
 				OverwriteContainers: mocoOverwriteContainers(),
 			},
 			VolumeClaimTemplates: []mocov1beta2.PersistentVolumeClaim{

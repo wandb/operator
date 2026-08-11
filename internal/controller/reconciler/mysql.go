@@ -54,12 +54,14 @@ func mysqlWriteState(
 }
 
 func reconcileStaleManagedMySQL(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases) error {
-	desired := map[string]types.NamespacedName{}
-	for key, spec := range wandb.Spec.MySQL {
+	// Keyed by the Moco resource each desired instance points at: an instance key
+	// can be renamed while still referring to the same live database.
+	desired := map[types.NamespacedName]struct{}{}
+	for _, spec := range wandb.Spec.MySQL {
 		if spec.ManagedMysql == nil {
 			continue
 		}
-		desired[mysqlconnection.InstanceID(key)] = managedMysqlSpecNamespacedName(spec.ManagedMysql)
+		desired[managedMysqlSpecNamespacedName(spec.ManagedMysql)] = struct{}{}
 	}
 
 	clusters := &mocov1beta2.MySQLClusterList{}
@@ -68,9 +70,6 @@ func reconcileStaleManagedMySQL(ctx context.Context, c client.Client, wandb *api
 	}
 	for i := range clusters.Items {
 		cluster := &clusters.Items[i]
-		if cluster.Annotations[moco.DetachedAnnotation] == "true" {
-			continue
-		}
 		ownerMatches := !common.IsDetached(cluster, wandb.UID)
 		labelUID := cluster.Labels[moco.WandbUIDLabel]
 		if labelUID != "" && labelUID != string(wandb.UID) {
@@ -80,22 +79,19 @@ func reconcileStaleManagedMySQL(ctx context.Context, c client.Client, wandb *api
 			continue
 		}
 
-		instanceID := cluster.Labels[moco.InstanceLabel]
 		clusterName := client.ObjectKeyFromObject(cluster)
-		if desiredName, ok := desired[instanceID]; ok && desiredName == clusterName {
-			continue
-		}
-		if instanceID == "" {
-			matchedLegacyResource := false
-			for _, desiredName := range desired {
-				if desiredName == clusterName {
-					matchedLegacyResource = true
-					break
+		if _, ok := desired[clusterName]; ok {
+			// Still wanted: undo a detach this deployment applied earlier so a
+			// removed-then-restored instance does not stay frozen forever.
+			if labelUID == string(wandb.UID) {
+				if err := moco.ClearDetached(ctx, c, clusterName); err != nil {
+					return err
 				}
 			}
-			if matchedLegacyResource {
-				continue
-			}
+			continue
+		}
+		if cluster.Annotations[moco.DetachedAnnotation] == "true" {
+			continue
 		}
 
 		policy := apiv2.OnDeletePolicy(cluster.Annotations[moco.RetentionPolicyAnnotation])
@@ -103,16 +99,22 @@ func reconcileStaleManagedMySQL(ctx context.Context, c client.Client, wandb *api
 			policy = wandb.Spec.RetentionPolicy.OnDelete
 		}
 		if policy == apiv2.PurgeOnDelete {
-			selectorLabels := common.BuildWandbLabels(wandb, moco.MysqlModuleName)
-			if labelUID != "" {
-				selectorLabels[moco.WandbUIDLabel] = labelUID
-			}
-			if instanceID != "" {
+			// Only select resources provably belonging to this instance: the
+			// deployment-wide labels alone also match sibling instances, and a
+			// cluster predating the instance labels has nothing narrower. The
+			// cluster's own storage is purged by name instead.
+			selector := labels.Nothing()
+			if instanceID := cluster.Labels[moco.InstanceLabel]; instanceID != "" {
+				selectorLabels := common.BuildWandbLabels(wandb, moco.MysqlModuleName)
 				selectorLabels[moco.InstanceLabel] = instanceID
+				if labelUID != "" {
+					selectorLabels[moco.WandbUIDLabel] = labelUID
+				}
+				selector = labels.SelectorFromSet(selectorLabels)
 			}
 			if err := moco.PurgeFinalizer(ctx, c, clusterName, common.OnDeleteRule{
 				Policy:   common.Purge,
-				Selector: labels.SelectorFromSet(selectorLabels),
+				Selector: selector,
 			}); err != nil {
 				return err
 			}
@@ -475,7 +477,7 @@ func runMysqlInitJobInstance(ctx context.Context, client client.Client, wandb *a
 	}
 	if !jobNotFound && job.Status.Succeeded == 0 && bundleChecksum != "" &&
 		job.Spec.Template.Annotations[mysqlBundlesChecksumAnnotation] != bundleChecksum {
-		if err := client.Delete(ctx, job); err != nil && !errors.IsNotFound(err) {
+		if err := deleteJobCascading(ctx, client, job); err != nil && !errors.IsNotFound(err) {
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil

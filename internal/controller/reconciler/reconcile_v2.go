@@ -1402,7 +1402,7 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 				return ctrl.Result{}, err
 			}
 			if mysqlChecksum != "" && job.Spec.Template.Annotations[mysqlBundlesChecksumAnnotation] != mysqlChecksum {
-				if err := client.Delete(ctx, job); err != nil && !apiErrors.IsNotFound(err) {
+				if err := deleteJobCascading(ctx, client, job); err != nil && !apiErrors.IsNotFound(err) {
 					return ctrl.Result{}, err
 				}
 				return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
