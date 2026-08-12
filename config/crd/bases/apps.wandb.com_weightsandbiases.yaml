@@ -3946,11 +3946,17 @@ spec:
                           properties:
                             maxReplicas:
                               format: int32
+                              minimum: 1
                               type: integer
                             minReplicas:
                               format: int32
+                              minimum: 0
                               type: integer
                           type: object
+                          x-kubernetes-validations:
+                          - message: minReplicas must be <= maxReplicas
+                            rule: '!has(self.minReplicas) || !has(self.maxReplicas)
+                              || self.minReplicas <= self.maxReplicas'
                       type: object
                     type: object
                   bucketProxy:

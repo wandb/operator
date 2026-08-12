@@ -393,10 +393,13 @@ type WandbApplicationOverride struct {
 	Autoscaling *ApplicationAutoscalingOverride `json:"autoscaling,omitempty"`
 }
 
+// +kubebuilder:validation:XValidation:rule="!has(self.minReplicas) || !has(self.maxReplicas) || self.minReplicas <= self.maxReplicas",message="minReplicas must be <= maxReplicas"
 type ApplicationAutoscalingOverride struct {
 	// +optional
+	// +kubebuilder:validation:Minimum=0
 	MinReplicas *int32 `json:"minReplicas,omitempty"`
 	// +optional
+	// +kubebuilder:validation:Minimum=1
 	MaxReplicas *int32 `json:"maxReplicas,omitempty"`
 }
 
