@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -1513,7 +1514,7 @@ func generateSecrets(ctx context.Context, client ctrlClient.Client, wandb *apiv2
 
 // resolveCRField traverses a dotted field path (e.g., "spec.wandb.license") in the
 // provided custom resource object and returns the raw terminal value if present.
-// Typed accessors (resolveCRFieldString, resolveCRFieldSecretSelector, ...) build on
+// Typed accessors (resolveCRFieldEnvValue, resolveCRFieldSecretSelector, ...) build on
 // top of this to validate and cast the result to the type they expect.
 func resolveCRField(obj any, path string) (any, bool) {
 	if obj == nil || path == "" {
@@ -1543,16 +1544,24 @@ func resolveCRField(obj any, path string) (any, bool) {
 	return cur, true
 }
 
-// resolveCRFieldString resolves a dotted field path from the provided custom resource
-// object, returning the string value if present. Non-string terminal values are
-// treated as not found.
-func resolveCRFieldString(obj any, path string) (string, bool) {
+// resolveCRFieldEnvValue resolves a dotted field path from the provided custom
+// resource object into a literal Kubernetes environment variable value. String
+// values pass through unchanged, while booleans use their lowercase Go/Kubernetes
+// representation. Other terminal values are treated as not found.
+func resolveCRFieldEnvValue(obj any, path string) (string, bool) {
 	cur, ok := resolveCRField(obj, path)
 	if !ok {
 		return "", false
 	}
-	s, ok := cur.(string)
-	return s, ok
+
+	switch value := cur.(type) {
+	case string:
+		return value, true
+	case bool:
+		return strconv.FormatBool(value), true
+	default:
+		return "", false
+	}
 }
 
 func resolveCRFieldSecretSelector(obj any, path string) (corev1.SecretKeySelector, bool) {

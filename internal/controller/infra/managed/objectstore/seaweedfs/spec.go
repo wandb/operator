@@ -171,8 +171,10 @@ func ToObjectStoreVendorSpec(
 			},
 			S3: &seaweedv1.S3GatewaySpec{
 				ComponentSpec: seaweedv1.ComponentSpec{
-					Affinity:    wandb.GetAffinity(infraSpec.ManagedInfraSpec),
-					Tolerations: *wandb.GetTolerations(infraSpec.ManagedInfraSpec),
+					Affinity:     wandb.GetAffinity(infraSpec.ManagedInfraSpec),
+					Tolerations:  *wandb.GetTolerations(infraSpec.ManagedInfraSpec),
+					Volumes:      seaweedWritableVolumes(),
+					VolumeMounts: seaweedWritableVolumeMounts(),
 					Env: []corev1.EnvVar{{
 						// W&B presigns S3 URLs against the in-cluster endpoint and
 						// rewrites the host for external clients without re-signing;

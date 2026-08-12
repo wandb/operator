@@ -52,6 +52,16 @@ var _ = Describe("Keeper vendor spec", func() {
 		Expect(container.Image).To(Equal(KeeperImage(manifest.ImageRef{}, "")))
 		Expect(container.Name).To(Equal(keeperContainerName))
 		Expect(container.Resources.Requests[corev1.ResourceCPU]).To(Equal(resource.MustParse("250m")))
+		Expect(container.VolumeMounts).To(ConsistOf(corev1.VolumeMount{
+			Name:      keeperLogVolumeName,
+			MountPath: keeperLogMountPath,
+		}))
+		Expect(chk.Spec.Templates.PodTemplates[0].Spec.Volumes).To(ConsistOf(corev1.Volume{
+			Name: keeperLogVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
+			},
+		}))
 
 		sc := chk.Spec.Templates.PodTemplates[0].Spec.SecurityContext
 		Expect(sc).NotTo(BeNil())
