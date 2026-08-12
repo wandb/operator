@@ -147,6 +147,13 @@ type GlobalSpec struct {
 	// with a registry pre-populated by `wsm registry mirror`.
 	ImageRegistry string `json:"imageRegistry,omitempty"`
 
+	// ImagePullSecrets references kubernetes.io/dockerconfigjson Secrets in the
+	// W&B namespace. They authenticate BOTH the operator's server-manifest pull
+	// and, propagated onto the workload ServiceAccount, the workloads' image
+	// pulls — a single credential for both.
+	// +optional
+	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+
 	// CustomCACerts contains PEM-encoded CA certificates that should be trusted
 	// by W&B application workloads.
 	// +optional
@@ -387,9 +394,28 @@ type WandbAppSpec struct {
 // applies to every application and migration job.
 const LegacyOverridesGlobalKey = "global"
 
-// DefaultManifestRepository is used when spec.wandb.manifestRepository is
-// unset — by the defaulting webhook and by v1 conversion (which runs first).
-const DefaultManifestRepository = "oci://us-docker.pkg.dev/wandb-production/public/wandb/server-manifest"
+const (
+	// DefaultImageRegistry hosts the public W&B images and the server manifest.
+	// wsm mirrors both into one registry, so the manifest sits next to the images.
+	DefaultImageRegistry = "us-docker.pkg.dev/wandb-production/public"
+	// ManifestRepositorySuffix is the path under a registry where the server
+	// manifest lives; manifestRepository defaults to <imageRegistry>/<suffix>.
+	ManifestRepositorySuffix = "wandb/server-manifest"
+	// DefaultManifestRepository is used when spec.wandb.manifestRepository is
+	// unset and no spec.global.imageRegistry override is set.
+	DefaultManifestRepository = "oci://" + DefaultImageRegistry + "/" + ManifestRepositorySuffix
+)
+
+// ManifestRepositoryFor derives the server-manifest repository from an image
+// registry (spec.global.imageRegistry). An empty registry yields the public
+// default. This mirrors the wsm flow: the manifest is mirrored alongside the
+// images at <imageRegistry>/wandb/server-manifest.
+func ManifestRepositoryFor(imageRegistry string) string {
+	if imageRegistry == "" {
+		return DefaultManifestRepository
+	}
+	return "oci://" + imageRegistry + "/" + ManifestRepositorySuffix
+}
 
 // LegacyOverrides holds v1-derived overrides for one application (or "global").
 type LegacyOverrides struct {

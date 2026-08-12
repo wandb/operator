@@ -237,7 +237,7 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			Expect(k8sClient.Status().Update(ctx, wandb)).Should(Succeed())
 
 			By("Checking if Applications were NOT created yet (migrations not complete)")
-			wandbManifest, err := manifest.GetServerManifest(ctx, wandb.Spec.Wandb.ManifestRepository, wandb.Spec.Wandb.Version)
+			wandbManifest, err := manifest.GetServerManifest(ctx, wandb.Spec.Wandb.ManifestRepository, wandb.Spec.Wandb.Version, nil)
 			Expect(err).Should(Succeed())
 			_, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, v2.DefaultTelemetryRuntimeConfig())
 			Expect(err).Should(Succeed())
@@ -322,7 +322,7 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			Expect(k8sClient.Status().Update(ctx, wandb)).Should(Succeed())
 
 			By("Checking if Applications were NOT created yet (migrations not complete)")
-			wandbManifest, err := manifest.GetServerManifest(ctx, wandb.Spec.Wandb.ManifestRepository, wandb.Spec.Wandb.Version)
+			wandbManifest, err := manifest.GetServerManifest(ctx, wandb.Spec.Wandb.ManifestRepository, wandb.Spec.Wandb.Version, nil)
 			Expect(err).Should(Succeed())
 			ctrlResult, err := v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, v2.DefaultTelemetryRuntimeConfig())
 			Expect(err).Should(Succeed())
@@ -410,7 +410,7 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			Expect(k8sClient.Status().Update(ctx, wandb)).Should(Succeed())
 
 			By("Reconciling the manifest to completion for the initial generation")
-			wandbManifest, err := manifest.GetServerManifest(ctx, wandb.Spec.Wandb.ManifestRepository, wandb.Spec.Wandb.Version)
+			wandbManifest, err := manifest.GetServerManifest(ctx, wandb.Spec.Wandb.ManifestRepository, wandb.Spec.Wandb.Version, nil)
 			Expect(err).Should(Succeed())
 			ctrlResult, err := v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, v2.DefaultTelemetryRuntimeConfig())
 			Expect(err).Should(Succeed())
@@ -429,7 +429,7 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			Expect(wandb.Status.ObservedGeneration).Should(Equal(initialGeneration))
 
 			By("Reconciling while the new version's migration is still pending")
-			wandbManifest, err = manifest.GetServerManifest(ctx, wandb.Spec.Wandb.ManifestRepository, wandb.Spec.Wandb.Version)
+			wandbManifest, err = manifest.GetServerManifest(ctx, wandb.Spec.Wandb.ManifestRepository, wandb.Spec.Wandb.Version, nil)
 			Expect(err).Should(Succeed())
 			ctrlResult, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, v2.DefaultTelemetryRuntimeConfig())
 			Expect(err).Should(Succeed())
@@ -518,7 +518,7 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			Expect(k8sClient.Status().Update(ctx, wandb)).Should(Succeed())
 
 			By("Reconciling the manifest to create the Applications")
-			wandbManifest, err := manifest.GetServerManifest(ctx, wandb.Spec.Wandb.ManifestRepository, wandb.Spec.Wandb.Version)
+			wandbManifest, err := manifest.GetServerManifest(ctx, wandb.Spec.Wandb.ManifestRepository, wandb.Spec.Wandb.Version, nil)
 			Expect(err).Should(Succeed())
 			_, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, v2.DefaultTelemetryRuntimeConfig())
 			Expect(err).Should(Succeed())
@@ -624,7 +624,7 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			wandb.Status.ClickHouseStatus = map[string]apiv2.ClickHouseInfraStatus{apiv2.DefaultInstanceName: {WBInfraStatus: apiv2.WBInfraStatus{Ready: true}}}
 			Expect(k8sClient.Status().Update(ctx, wandb)).Should(Succeed())
 
-			wandbManifest, err := manifest.GetServerManifest(ctx, wandb.Spec.Wandb.ManifestRepository, wandb.Spec.Wandb.Version)
+			wandbManifest, err := manifest.GetServerManifest(ctx, wandb.Spec.Wandb.ManifestRepository, wandb.Spec.Wandb.Version, nil)
 			Expect(err).Should(Succeed())
 
 			By("Simulating migration in Running state")
@@ -722,7 +722,7 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			Expect(k8sClient.Update(ctx, wandb)).Should(Succeed())
 
 			By("Running ReconcileWandbManifest and verifying it triggers migrations")
-			wandbManifest, err := manifest.GetServerManifest(ctx, wandb.Spec.Wandb.ManifestRepository, newVersion)
+			wandbManifest, err := manifest.GetServerManifest(ctx, wandb.Spec.Wandb.ManifestRepository, newVersion, nil)
 			Expect(err).Should(Succeed())
 
 			// Re-fetch to get updated Spec and Status

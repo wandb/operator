@@ -103,7 +103,7 @@ func ToMocoMySQLClusterSpec(
 	return cluster, cm, nil
 }
 
-func buildMocoPodSpec(resources corev1.ResourceRequirements, img manifest.ImageRef, wandb *apiv2.WeightsAndBiases,) mocov1beta2.PodSpecApplyConfiguration {
+func buildMocoPodSpec(resources corev1.ResourceRequirements, img manifest.ImageRef, wandb *apiv2.WeightsAndBiases) mocov1beta2.PodSpecApplyConfiguration {
 	container := corev1ac.Container().
 		WithName("mysqld").
 		WithImage(MocoMySQLImage(img, wandb.Spec.Global.ImageRegistry)).
@@ -120,6 +120,9 @@ func buildMocoPodSpec(resources corev1.ResourceRequirements, img manifest.ImageR
 	podSpec := corev1ac.PodSpec().
 		WithSecurityContext(mocoPodSecurityContext()).
 		WithContainers(container)
+	for _, s := range wandb.Spec.Global.ImagePullSecrets {
+		podSpec = podSpec.WithImagePullSecrets(corev1ac.LocalObjectReference().WithName(s.Name))
+	}
 	return mocov1beta2.PodSpecApplyConfiguration(*podSpec)
 }
 

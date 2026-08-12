@@ -33,6 +33,7 @@ import (
 	wmetrics "github.com/wandb/operator/internal/metrics"
 	oputils "github.com/wandb/operator/pkg/utils"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
+	"github.com/wandb/operator/pkg/wandb/manifest/registryauth"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
@@ -289,8 +290,20 @@ func Reconcile(
 	}
 
 	/////////////////////////
-	// Fetch manifest early so infra sizing can be applied before provisioning
-	manifest, err := serverManifest.GetServerManifest(ctx, wandb.Spec.Wandb.ManifestRepository, wandb.Spec.Wandb.Version)
+	// Fetch manifest early so infra sizing can be applied before provisioning.
+	// Local file:// manifests need no registry credentials, so a missing pull
+	// secret must not block reconcile for them.
+	var registryAuth *serverManifest.RegistryAuth
+	if !serverManifest.IsFileRepository(wandb.Spec.Wandb.ManifestRepository) {
+		// Ambient cloud creds only for non-default (private) registries; the
+		// public default pulls anonymously and must not probe cloud metadata.
+		allowAmbient := wandb.Spec.Wandb.ManifestRepository != apiv2.DefaultManifestRepository
+		registryAuth, err = registryauth.Resolve(ctx, client, wandb.Namespace, wandb.Spec.Global.ImagePullSecrets, allowAmbient)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+	manifest, err := serverManifest.GetServerManifest(ctx, wandb.Spec.Wandb.ManifestRepository, wandb.Spec.Wandb.Version, registryAuth)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -668,6 +681,7 @@ func reconcileApplications(
 		application.Spec.PodTemplate.Spec.SecurityContext = resolvePodSecurityContext()
 		application.Spec.PodTemplate.Spec.Affinity = wandb.Spec.Affinity
 		application.Spec.PodTemplate.Spec.Tolerations = *wandb.Spec.Tolerations
+		application.Spec.PodTemplate.Spec.ImagePullSecrets = wandb.Spec.Global.ImagePullSecrets
 		setCustomCACertsChecksumAnnotation(&application.Spec.PodTemplate, caChecksum)
 
 		application.Spec.HpaTemplate = ResolveAutoscaling(app, wandb)
@@ -1289,7 +1303,7 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 					Containers: []corev1.Container{
 						{
 							Name:         "migrate",
-							Image:        migrationTask.Image.GetImage(""),
+							Image:        migrationTask.Image.GetImage(wandb.Spec.Global.ImageRegistry),
 							Args:         migrationTask.Args,
 							Command:      migrationTask.Command,
 							Env:          envVars,
@@ -1298,6 +1312,7 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 					},
 					Volumes:            volumes,
 					ServiceAccountName: wandb.Spec.Wandb.ServiceAccount.ServiceAccountName,
+					ImagePullSecrets:   wandb.Spec.Global.ImagePullSecrets,
 				},
 			}
 			setCustomCACertsChecksumAnnotation(&podTemplate, caChecksum)

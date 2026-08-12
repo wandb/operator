@@ -36,7 +36,7 @@ const testLegacyVersion = "0.83.0-test"
 // disableConversionManifestFetch keeps unit tests off the network; tests opt
 // in via withConversionManifest*.
 func disableConversionManifestFetch() {
-	SetConversionManifestGetter(func(_ context.Context, _, _ string) (serverManifest.Manifest, error) {
+	SetConversionManifestGetter(func(_ context.Context, _, _ string, _ *serverManifest.RegistryAuth) (serverManifest.Manifest, error) {
 		return serverManifest.Manifest{}, errors.New("manifest fetch disabled in unit tests")
 	})
 }
@@ -51,7 +51,7 @@ func TestMain(m *testing.M) {
 func withConversionManifest(t *testing.T, apps map[string]serverManifest.Application) *atomic.Int32 {
 	t.Helper()
 	var calls atomic.Int32
-	SetConversionManifestGetter(func(_ context.Context, _, _ string) (serverManifest.Manifest, error) {
+	SetConversionManifestGetter(func(_ context.Context, _, _ string, _ *serverManifest.RegistryAuth) (serverManifest.Manifest, error) {
 		calls.Add(1)
 		return serverManifest.Manifest{Applications: apps}, nil
 	})
@@ -91,7 +91,7 @@ func TestConvertTo_LegacyOverridesAbsent(t *testing.T) {
 
 func TestConvertTo_LegacyOverridesGlobalEnvPrecedence(t *testing.T) {
 	// No version in values: global env must convert without any manifest fetch.
-	SetConversionManifestGetter(func(_ context.Context, _, _ string) (serverManifest.Manifest, error) {
+	SetConversionManifestGetter(func(_ context.Context, _, _ string, _ *serverManifest.RegistryAuth) (serverManifest.Manifest, error) {
 		t.Fatal("manifest must not be resolved when no version is derived")
 		return serverManifest.Manifest{}, nil
 	})
@@ -387,7 +387,7 @@ func TestConvertTo_LegacyOverridesResourcesDefaultSizeIsSmall(t *testing.T) {
 }
 
 func TestConvertTo_LegacyOverridesManifestUnavailable(t *testing.T) {
-	SetConversionManifestGetter(func(_ context.Context, _, _ string) (serverManifest.Manifest, error) {
+	SetConversionManifestGetter(func(_ context.Context, _, _ string, _ *serverManifest.RegistryAuth) (serverManifest.Manifest, error) {
 		return serverManifest.Manifest{}, errors.New("registry unreachable")
 	})
 	t.Cleanup(disableConversionManifestFetch)
@@ -413,7 +413,7 @@ func TestConvertTo_LegacyOverridesManifestUnavailable(t *testing.T) {
 func TestConvertTo_LegacyOverridesManifestFailureCooldown(t *testing.T) {
 	// The cooldown keeps repeat conversions from stalling on an unreachable registry.
 	var calls atomic.Int32
-	SetConversionManifestGetter(func(_ context.Context, _, _ string) (serverManifest.Manifest, error) {
+	SetConversionManifestGetter(func(_ context.Context, _, _ string, _ *serverManifest.RegistryAuth) (serverManifest.Manifest, error) {
 		calls.Add(1)
 		return serverManifest.Manifest{}, errors.New("registry unreachable")
 	})
