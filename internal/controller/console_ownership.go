@@ -45,7 +45,10 @@ func validateConsoleServiceOwnership(
 	wandb *wandbcomv1.WeightsAndBiases,
 	desiredSpec *spec.Spec,
 ) error {
-	if desiredSpec == nil || !desiredSpec.Values.GetBool("console.install") {
+	// The operator-wandb chart defaults bundled Console on. Treat an omitted
+	// value as enabled so a partial/transient spec cannot bypass the ownership
+	// check before Helm coalesces the chart defaults during Apply.
+	if desiredSpec == nil || !desiredSpec.Values.GetBool("console.install", true) {
 		return nil
 	}
 

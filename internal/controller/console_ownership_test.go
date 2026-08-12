@@ -89,6 +89,7 @@ func TestValidateConsoleServiceOwnership(t *testing.T) {
 		name            string
 		wandbName       string
 		consoleEnabled  bool
+		omitInstall     bool
 		objects         []runtime.Object
 		wantConflictErr bool
 	}{
@@ -118,6 +119,12 @@ func TestValidateConsoleServiceOwnership(t *testing.T) {
 			objects:         []runtime.Object{ownedByStandaloneConsole},
 			wantConflictErr: true,
 		},
+		{
+			name:            "rejects omitted install when standalone release owns the target service",
+			omitInstall:     true,
+			objects:         []runtime.Object{ownedByStandaloneConsole},
+			wantConflictErr: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -138,9 +145,11 @@ func TestValidateConsoleServiceOwnership(t *testing.T) {
 				wandbName = "wandb"
 			}
 			wandb := &wandbcomv1.WeightsAndBiases{ObjectMeta: metav1.ObjectMeta{Name: wandbName, Namespace: "customer"}}
-			desired := &spec.Spec{Values: spec.Values{
-				"console": map[string]interface{}{"install": tt.consoleEnabled},
-			}}
+			desiredValues := spec.Values{}
+			if !tt.omitInstall {
+				desiredValues["console"] = map[string]interface{}{"install": tt.consoleEnabled}
+			}
+			desired := &spec.Spec{Values: desiredValues}
 
 			err := validateConsoleServiceOwnership(context.Background(), client, wandb, desired)
 			if tt.wantConflictErr {
