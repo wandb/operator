@@ -17,6 +17,8 @@ limitations under the License.
 package v2
 
 import (
+	"strings"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -138,6 +140,119 @@ type WeightsAndBiasesSpec struct {
 	// Networking configures how the W&B application is exposed externally.
 	// +optional
 	Networking NetworkingSpec `json:"networking,omitempty"`
+
+	// Watchtower configures the in-cluster Watchtower admin UI.
+	// +optional
+	Watchtower WatchtowerSpec `json:"watchtower,omitempty"`
+}
+
+// WatchtowerSpec configures the operator-managed Watchtower deployment.
+//
+// Watchtower is served under spec.watchtower.basePath on the same hostname as
+// the W&B app so the browser's existing session cookie can be validated against
+// the app's /oidc/auth endpoint — the same piggyback the deprecated console used.
+// It is not published in the server manifest and versions independently of W&B,
+// so its image is configured here rather than resolved from the manifest.
+type WatchtowerSpec struct {
+	// Install deploys Watchtower. Defaults to false.
+	// +optional
+	Install *bool `json:"install,omitempty"`
+
+	// Image is the Watchtower container image. Defaults to
+	// DefaultWatchtowerImageRepository at DefaultWatchtowerImageTag.
+	// +optional
+	Image WatchtowerImageSpec `json:"image,omitempty"`
+
+	// BasePath is the URL prefix Watchtower is served under. The operator
+	// publishes this path on the Ingress/HTTPRoute and passes it to the
+	// container, so the two can never drift. Defaults to
+	// DefaultWatchtowerBasePath.
+	// +optional
+	BasePath string `json:"basePath,omitempty"`
+
+	// AuthService is the host:port Watchtower calls to validate the caller's W&B
+	// session cookie (GET /oidc/auth). Empty means derive it from the server
+	// manifest: the application serving the /oidc ingress path.
+	// +optional
+	AuthService string `json:"authService,omitempty"`
+
+	// Resources holds the container resource requirements.
+	// +optional
+	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	// ServiceAccount controls the ServiceAccount Watchtower runs as. It is
+	// separate from the W&B app's account because Watchtower needs read access to
+	// the cluster resources it inspects.
+	// +optional
+	ServiceAccount ManagedServiceAccountSpec `json:"serviceAccount,omitempty"`
+}
+
+// WatchtowerImageSpec identifies the Watchtower container image. Digest wins
+// over Tag when both are set.
+type WatchtowerImageSpec struct {
+	// +optional
+	Repository string `json:"repository,omitempty"`
+	// +optional
+	Tag string `json:"tag,omitempty"`
+	// +optional
+	Digest string `json:"digest,omitempty"`
+}
+
+const (
+	// DefaultWatchtowerImageRepository is the published Watchtower image.
+	DefaultWatchtowerImageRepository = "us-docker.pkg.dev/wandb-production/public/wandb/watchtower"
+	// DefaultWatchtowerImageTag pins the Watchtower version this operator ships
+	// against. Watchtower releases independently of W&B, so bumping it is an
+	// operator change.
+	DefaultWatchtowerImageTag = "0.11.0"
+	// DefaultWatchtowerBasePath is the URL prefix Watchtower is served under,
+	// mirroring how console was mounted at /console.
+	DefaultWatchtowerBasePath = "/watchtower"
+	// DefaultWatchtowerServiceAccountName is the ServiceAccount Watchtower runs as.
+	DefaultWatchtowerServiceAccountName = "wandb-watchtower"
+)
+
+// WatchtowerEnabled reports whether Watchtower should be deployed.
+func (w *WeightsAndBiases) WatchtowerEnabled() bool {
+	return w.Spec.Watchtower.Install != nil && *w.Spec.Watchtower.Install
+}
+
+// GetImage returns the fully qualified Watchtower image, retargeted to the
+// global image registry when one is configured for air-gapped installs.
+func (s WatchtowerSpec) GetImage(globalImageRegistry string) string {
+	repository := s.Repository()
+	if globalImageRegistry != "" {
+		repository = globalImageRegistry + "/" + repository
+	}
+	if s.Image.Digest != "" {
+		return repository + "@" + s.Image.Digest
+	}
+	tag := s.Image.Tag
+	if tag == "" {
+		tag = DefaultWatchtowerImageTag
+	}
+	return repository + ":" + tag
+}
+
+// Repository returns the configured image repository or the published default.
+func (s WatchtowerSpec) Repository() string {
+	if s.Image.Repository != "" {
+		return s.Image.Repository
+	}
+	return DefaultWatchtowerImageRepository
+}
+
+// ResolvedBasePath returns the URL prefix Watchtower is served under, without a
+// trailing slash so callers can concatenate paths onto it.
+func (s WatchtowerSpec) ResolvedBasePath() string {
+	basePath := s.BasePath
+	if basePath == "" {
+		basePath = DefaultWatchtowerBasePath
+	}
+	if !strings.HasPrefix(basePath, "/") {
+		basePath = "/" + basePath
+	}
+	return strings.TrimSuffix(basePath, "/")
 }
 
 // GlobalSpec holds settings shared across every managed component.
@@ -756,6 +871,34 @@ type WeightsAndBiasesStatus struct {
 	GatewayStatus *GatewayStatusSummary `json:"gatewayStatus,omitempty"`
 	// +optional
 	IngressStatus *IngressStatusSummary `json:"ingressStatus,omitempty"`
+
+	// WatchtowerStatus reports the Watchtower deployment. Nil when Watchtower is
+	// not installed. Watchtower is an optional admin UI, so it is kept out of
+	// status.wandb.applications and never gates the Ready condition.
+	// +optional
+	WatchtowerStatus *WatchtowerStatusSummary `json:"watchtowerStatus,omitempty"`
+}
+
+// WatchtowerStatusSummary is a flat summary rather than the full
+// ApplicationStatus: the latter embeds the Rollout/HPA/StatefulSet schemas and
+// would add roughly a thousand lines to the CRD for no added signal.
+type WatchtowerStatusSummary struct {
+	// Ready mirrors the Watchtower Application's readiness.
+	Ready bool `json:"ready"`
+
+	// URL is where Watchtower is served, for operators to hand to their users.
+	// +optional
+	URL string `json:"url,omitempty"`
+
+	// Image is the running Watchtower image, so the deployed version is visible
+	// without inspecting the Deployment.
+	// +optional
+	Image string `json:"image,omitempty"`
+
+	// AuthService is the host:port validating W&B sessions, recorded because it
+	// is usually derived from the server manifest rather than set in the spec.
+	// +optional
+	AuthService string `json:"authService,omitempty"`
 }
 
 type GatewayStatusSummary struct {

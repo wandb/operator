@@ -42,6 +42,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	ctrlClient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -259,6 +260,12 @@ func Reconcile(
 			if err = deleteInfraHTTPRoutes(ctx, client, wandb); err != nil {
 				return ctrl.Result{}, err
 			}
+			// Watchtower's ClusterRole and ClusterRoleBinding are cluster-scoped
+			// and cannot own-reference the CR, so garbage collection would leave
+			// them behind.
+			if err = deleteWatchtower(ctx, client, wandb); err != nil {
+				return ctrl.Result{}, err
+			}
 			if wandb.Spec.Networking.Mode == apiv2.NetworkingModeIngress {
 				if err = deleteConsolidatedIngress(ctx, client, wandb); err != nil {
 					return ctrl.Result{}, err
@@ -417,6 +424,14 @@ func ReconcileWandbManifest(
 	var err error
 
 	statusBefore := wandb.DeepCopy().Status
+
+	// Reconciled ahead of the infra gate below: Watchtower is the UI customers use
+	// to diagnose a deploy, so it has to come up even when the install it manages
+	// is stuck. It does not depend on any backing service.
+	if err := reconcileWatchtower(ctx, client, wandb, manifest); err != nil {
+		logger.Error(err, "Failed to reconcile Watchtower")
+		return ctrl.Result{}, err
+	}
 
 	redisReady := redisAllReady(wandb)
 	mysqlReady := mysqlAllReady(wandb)
@@ -807,17 +822,41 @@ func applicationManagedFieldsEqual(before, after *apiv2.Application) bool {
 }
 
 func buildHTTPRouteTemplate(wandb *apiv2.WeightsAndBiases, app serverManifest.Application) *apiv2.HTTPRouteTemplateSpec {
+	var paths []string
+	var pathType string
+	if app.Ingress != nil {
+		paths = app.Ingress.Paths
+		pathType = app.Ingress.PathType
+	}
+
+	return buildHTTPRouteTemplateForPaths(wandb, paths, pathType, resolveHTTPRouteServicePort(app))
+}
+
+// buildHTTPRouteTemplateForPaths builds an HTTPRoute template against the CR's
+// gateway and hostnames for an arbitrary set of paths, so operator-owned
+// components (not just manifest applications) can be routed.
+func buildHTTPRouteTemplateForPaths(
+	wandb *apiv2.WeightsAndBiases,
+	paths []string,
+	pathType string,
+	servicePort *gatewayv1.PortNumber,
+) *apiv2.HTTPRouteTemplateSpec {
 	gwConfig := wandb.Spec.Networking.GatewayAPI
 
 	ref := wandb.Status.GatewayStatus.GatewayRef
 	parentRef := gatewayv1.ParentReference{
 		Name: gatewayv1.ObjectName(ref.Name),
+		// Spelled out even though these are the schema defaults: otherwise the
+		// stored Application never equals the one we build, and the update gate
+		// fires on every reconcile.
+		Group: ptr.To(gatewayv1.Group(gatewayv1.GroupName)),
+		Kind:  ptr.To(gatewayv1.Kind("Gateway")),
 	}
 	if ref.Namespace != "" && ref.Namespace != wandb.Namespace {
 		ns := gatewayv1.Namespace(ref.Namespace)
 		parentRef.Namespace = &ns
 	}
-	if gwConfig.ListenerName != nil {
+	if gwConfig != nil && gwConfig.ListenerName != nil {
 		sectionName := gatewayv1.SectionName(*gwConfig.ListenerName)
 		parentRef.SectionName = &sectionName
 	}
@@ -828,19 +867,12 @@ func buildHTTPRouteTemplate(wandb *apiv2.WeightsAndBiases, app serverManifest.Ap
 		hostnames = append(hostnames, gatewayv1.Hostname(h))
 	}
 
-	var paths []string
-	var pathType string
-	if app.Ingress != nil {
-		paths = app.Ingress.Paths
-		pathType = app.Ingress.PathType
-	}
-
 	return &apiv2.HTTPRouteTemplateSpec{
 		ParentRefs:  []gatewayv1.ParentReference{parentRef},
 		Hostnames:   hostnames,
 		Paths:       paths,
 		PathType:    pathType,
-		ServicePort: resolveHTTPRouteServicePort(app),
+		ServicePort: servicePort,
 	}
 }
 

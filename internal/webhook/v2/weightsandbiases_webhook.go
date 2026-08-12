@@ -132,6 +132,7 @@ func (d *WeightsAndBiasesCustomDefaulter) Default(ctx context.Context, obj runti
 	applyObjectStoreDefaults(wandb)
 	applyClickHouseDefaults(wandb)
 	applyProbeDefaults(wandb)
+	applyWatchtowerDefaults(wandb)
 
 	if defaultStore, ok := wandb.Spec.ObjectStore["default"]; ok && defaultStore.ManagedObjectStore != nil {
 		wandb.Spec.Wandb.BucketProxy = true
@@ -335,6 +336,32 @@ func applyClickHouseDefaults(wandb *appsv2.WeightsAndBiases) {
 	}
 }
 
+// applyWatchtowerDefaults fills the Watchtower block. install defaults to false:
+// Watchtower grants cluster-wide read access to whoever holds a W&B session, so
+// enabling it is an explicit decision.
+func applyWatchtowerDefaults(wandb *appsv2.WeightsAndBiases) {
+	watchtower := &wandb.Spec.Watchtower
+
+	if watchtower.Install == nil {
+		watchtower.Install = ptr.To(false)
+	}
+
+	if !*watchtower.Install {
+		return
+	}
+
+	if watchtower.Image.Repository == "" {
+		watchtower.Image.Repository = appsv2.DefaultWatchtowerImageRepository
+	}
+	if watchtower.Image.Tag == "" && watchtower.Image.Digest == "" {
+		watchtower.Image.Tag = appsv2.DefaultWatchtowerImageTag
+	}
+	if watchtower.BasePath == "" {
+		watchtower.BasePath = appsv2.DefaultWatchtowerBasePath
+	}
+	applyManagedServiceAccountDefaults(&watchtower.ServiceAccount, appsv2.DefaultWatchtowerServiceAccountName)
+}
+
 func applyManagedServiceAccountDefaults(serviceAccount *appsv2.ManagedServiceAccountSpec, defaultName string) {
 	if serviceAccount.Create == nil {
 		serviceAccount.Create = ptr.To(true)
@@ -360,6 +387,7 @@ func validateSpec(_ context.Context, newWandb, oldWandb *appsv2.WeightsAndBiases
 	allErrors = append(allErrors, networkingErrors...)
 	warnings = append(warnings, networkingWarnings...)
 	allErrors = append(allErrors, validateProxySpec(newWandb)...)
+	allErrors = append(allErrors, validateWatchtowerSpec(newWandb)...)
 
 	if len(allErrors) == 0 {
 		return warnings, nil
@@ -446,6 +474,42 @@ func validateWandbSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 			field.NewPath("spec").Child("wandb").Child("hostname"),
 			"hostname is required",
 		))
+	}
+
+	return errors
+}
+
+func validateWatchtowerSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
+	var errors field.ErrorList
+
+	if !wandb.WatchtowerEnabled() {
+		return errors
+	}
+
+	watchtower := wandb.Spec.Watchtower
+	watchtowerPath := field.NewPath("spec").Child("watchtower")
+
+	basePath := watchtower.BasePath
+	switch {
+	case !strings.HasPrefix(basePath, "/"):
+		errors = append(errors, field.Invalid(
+			watchtowerPath.Child("basePath"), basePath, "must start with '/'",
+		))
+	case strings.Trim(basePath, "/") == "":
+		// "/" is the W&B frontend's own path; mounting Watchtower there would
+		// shadow the app it is meant to manage.
+		errors = append(errors, field.Invalid(
+			watchtowerPath.Child("basePath"), basePath, "must not be '/', which is served by the W&B frontend",
+		))
+	}
+
+	if authService := watchtower.AuthService; authService != "" {
+		if strings.Contains(authService, "://") || strings.Contains(authService, "/") {
+			errors = append(errors, field.Invalid(
+				watchtowerPath.Child("authService"), authService,
+				"must be a bare host:port, without a scheme or path",
+			))
+		}
 	}
 
 	return errors

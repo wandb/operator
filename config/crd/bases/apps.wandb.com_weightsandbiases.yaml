@@ -4405,6 +4405,68 @@ spec:
                 - hostname
                 - version
                 type: object
+              watchtower:
+                properties:
+                  authService:
+                    type: string
+                  basePath:
+                    type: string
+                  image:
+                    properties:
+                      digest:
+                        type: string
+                      repository:
+                        type: string
+                      tag:
+                        type: string
+                    type: object
+                  install:
+                    type: boolean
+                  resources:
+                    properties:
+                      claims:
+                        items:
+                          properties:
+                            name:
+                              type: string
+                            request:
+                              type: string
+                          required:
+                          - name
+                          type: object
+                        type: array
+                        x-kubernetes-list-map-keys:
+                        - name
+                        x-kubernetes-list-type: map
+                      limits:
+                        additionalProperties:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        type: object
+                      requests:
+                        additionalProperties:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        type: object
+                    type: object
+                  serviceAccount:
+                    properties:
+                      annotations:
+                        additionalProperties:
+                          type: string
+                        type: object
+                      create:
+                        type: boolean
+                      serviceAccountName:
+                        type: string
+                    type: object
+                type: object
             required:
             - retentionPolicy
             type: object
@@ -6355,6 +6417,19 @@ spec:
                     type: object
                 required:
                 - hostname
+                type: object
+              watchtowerStatus:
+                properties:
+                  authService:
+                    type: string
+                  image:
+                    type: string
+                  ready:
+                    type: boolean
+                  url:
+                    type: string
+                required:
+                - ready
                 type: object
             required:
             - observedGeneration

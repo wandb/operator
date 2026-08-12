@@ -92,6 +92,10 @@ func reconcileConsolidatedIngress(ctx context.Context, c ctrlClient.Client, wand
 		})
 	}
 
+	if watchtowerPath := watchtowerIngressPath(wandb); watchtowerPath != nil {
+		paths = append(paths, *watchtowerPath)
+	}
+
 	if len(paths) == 0 {
 		return nil
 	}
