@@ -78,9 +78,8 @@ type ApplicationSpec struct {
 }
 
 // ApplicationTriageSpec contains the shared diagnostic runner and the actions
-// exposed by an Application. TriageRun selects actions by name. The default
-// action runs the declared runner unchanged; named actions receive an explicit
-// --action selector.
+// exposed by an Application. TriageRun selects actions by name. The controller
+// exposes the selected action to the runner through WANDB_TRIAGE_ACTION.
 type ApplicationTriageSpec struct {
 	// ContainerName selects a container from the Application pod template. It
 	// may be omitted when the Application has exactly one container.
@@ -93,9 +92,8 @@ type ApplicationTriageSpec struct {
 	// +optional
 	Command []string `json:"command,omitempty"`
 
-	// Args replaces the selected container's arguments when non-empty. For a
-	// named action, the controller appends "--action", the selected action name,
-	// and then that action's Args. The default action only appends its Args.
+	// Args replaces the selected container's arguments when non-empty. The
+	// selected action's Args are appended when starting the diagnostic runner.
 	// +kubebuilder:validation:MinItems=1
 	// +kubebuilder:validation:MaxItems=64
 	// +optional
@@ -132,9 +130,8 @@ type ApplicationTriageSpec struct {
 // runner. Execution identity and resource settings remain on the parent
 // ApplicationTriageSpec so every action uses the same bounded runtime.
 type TriageActionSpec struct {
-	// Name is the stable identifier selected by TriageRun. "default" invokes the
-	// shared runner without an action selector; every other name is passed as
-	// "--action <name>".
+	// Name is the stable identifier selected by TriageRun and passed to the
+	// shared runner through WANDB_TRIAGE_ACTION.
 	Name TriageActionName `json:"name"`
 
 	// Description is human-readable help shown by clients such as Watchtower.
@@ -142,9 +139,8 @@ type TriageActionSpec struct {
 	// +optional
 	Description string `json:"description,omitempty"`
 
-	// Args are appended after the optional action selector when starting the
-	// diagnostic runner. They are suitable for action-specific flags, not
-	// executable paths.
+	// Args are appended when starting the diagnostic runner. They are suitable
+	// for action-specific flags, not executable paths.
 	// +kubebuilder:validation:MaxItems=32
 	// +optional
 	Args []string `json:"args,omitempty"`

@@ -92,6 +92,9 @@ func TestTriageRunCreatesBoundedJobFromApplication(t *testing.T) {
 	if got := envValue(container.Env, "DATABASE_URL"); got != "mysql://wandb" {
 		t.Fatalf("DATABASE_URL = %q, want inherited env", got)
 	}
+	if got := envValue(container.Env, triageActionEnv); got != defaultTriageAction {
+		t.Fatalf("%s = %q, want %q", triageActionEnv, got, defaultTriageAction)
+	}
 	if len(container.Ports) != 0 || container.ReadinessProbe != nil || container.LivenessProbe != nil {
 		t.Fatal("triage container must not inherit serving ports or probes")
 	}
@@ -171,10 +174,13 @@ func TestTriageRunCreatesOneJobPerSelectedAction(t *testing.T) {
 		args := job.Spec.Template.Spec.Containers[0].Args
 		want := []string{"python", "-m", "weave_triage"}
 		if action != defaultTriageAction {
-			want = append(want, triageActionFlag, action, "--verbose")
+			want = append(want, "--verbose")
 		}
 		if !slices.Equal(args, want) {
 			t.Fatalf("Job %q args = %#v, want %#v", job.Name, args, want)
+		}
+		if got := envValue(job.Spec.Template.Spec.Containers[0].Env, triageActionEnv); got != action {
+			t.Fatalf("Job %q %s = %q, want %q", job.Name, triageActionEnv, got, action)
 		}
 	}
 
@@ -442,10 +448,10 @@ func testTriageApplication() *wandbv2.Application {
 			Triage: &wandbv2.ApplicationTriageSpec{
 				ContainerName: "weave-trace",
 				Args:          []string{"python", "-m", "weave_triage"},
-				Env: []corev1.EnvVar{{
-					Name:  "PYTHONPATH",
-					Value: "/weave/src",
-				}},
+				Env: []corev1.EnvVar{
+					{Name: "PYTHONPATH", Value: "/weave/src"},
+					{Name: triageActionEnv, Value: "manifest-value-must-not-win"},
+				},
 				Actions: []wandbv2.TriageActionSpec{{
 					Name:        defaultTriageAction,
 					Description: "Run all diagnostics",
