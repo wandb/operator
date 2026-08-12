@@ -58,8 +58,7 @@ func inferManagedClickHouseStatus(t *testing.T, replicas int32) apiv2.ClickHouse
 }
 
 // Weave creates ReplicatedMergeTree tables only when told the cluster is
-// replicated; without this the operator provisions replicas that never receive
-// writes.
+// replicated
 func TestManagedClickHouseStatusPublishesReplication(t *testing.T) {
 	for _, tc := range []struct {
 		name       string

@@ -615,33 +615,22 @@ func mapClickHouse(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiase
 	return nil
 }
 
-// ClickHouse replication env names. v1 installs set these by hand, in any
-// combination of global and per-application env/extraEnv sections. They describe
-// the datastore rather than one deployment — and every application talking to it
-// must agree — so conversion lifts them onto the ClickHouse connection instead of
-// leaving them as per-application legacyOverrides.
 const (
 	envClickHouseReplicated        = "WF_CLICKHOUSE_REPLICATED"
 	envClickHouseReplicatedCluster = "WF_CLICKHOUSE_REPLICATED_CLUSTER"
 )
 
-// isClickHouseReplicationEnv reports whether an env name is harvested onto the
-// ClickHouse connection, and therefore excluded from legacyOverrides.
 func isClickHouseReplicationEnv(name string) bool {
 	return name == envClickHouseReplicated || name == envClickHouseReplicatedCluster
 }
 
-// clickHouseEnvFinding is one occurrence of a replication env var, tagged with
-// the values path it came from so conflicts can name both sides.
 type clickHouseEnvFinding struct {
 	source string
 	value  string
 }
 
 // mapClickHouseReplication lifts the replication env vars from anywhere in the v1
-// values onto spec.clickhouse.<instance>.externalClickhouse. Managed ClickHouse
-// derives its own topology at reconcile time, so the harvested values are dropped
-// with a log rather than fighting the derived ones.
+// values onto spec.clickhouse.<instance>.externalClickhouse
 func mapClickHouseReplication(values map[string]interface{}, dst *appsv2.WeightsAndBiases) error {
 	replicated, cluster, err := harvestClickHouseReplication(values)
 	if err != nil {
@@ -670,9 +659,8 @@ func mapClickHouseReplication(values map[string]interface{}, dst *appsv2.Weights
 }
 
 // harvestClickHouseReplication scans every v1 values section for the replication
-// env vars. Per-application sections win over global (mirroring v1's runtime
-// precedence) and global.clickhouse.replicated is the last resort. Applications
-// that disagree are a misconfiguration v2 cannot represent, so they error.
+// env vars. Per-application sections win over global. Applications
+// that disagree are a v2 misconfiguration, error.
 func harvestClickHouseReplication(values map[string]interface{}) (*bool, string, error) {
 	perApp := map[string][]clickHouseEnvFinding{}
 	global := map[string]clickHouseEnvFinding{}
