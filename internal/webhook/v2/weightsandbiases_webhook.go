@@ -449,11 +449,18 @@ func validateWandbSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 	}
 
 	// Reject latest manifest tag
-	if strings.TrimSpace(wandb.Spec.Wandb.Version) == "latest" {
+	version := strings.TrimSpace(wandb.Spec.Wandb.Version)
+	if version == "latest" {
 		errors = append(errors, field.Invalid(
 			field.NewPath("spec").Child("wandb").Child("version"),
 			wandb.Spec.Wandb.Version,
 			"must be pinned to a published server version; no server-manifest is published for the \"latest\" tag",
+		))
+	} else if version != wandb.Spec.Wandb.Version {
+		errors = append(errors, field.Invalid(
+			field.NewPath("spec").Child("wandb").Child("version"),
+			wandb.Spec.Wandb.Version,
+			"must not contain leading or trailing whitespace",
 		))
 	}
 
