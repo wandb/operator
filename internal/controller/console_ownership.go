@@ -61,7 +61,8 @@ func validateConsoleServiceOwnership(
 		return fmt.Errorf("check Console Service ownership: %w", err)
 	}
 
-	if service.Annotations[helmReleaseNameAnnotation] != standaloneConsoleRelease {
+	ownerRelease := service.Annotations[helmReleaseNameAnnotation]
+	if ownerRelease != standaloneConsoleRelease || ownerRelease == wandb.Name {
 		return nil
 	}
 

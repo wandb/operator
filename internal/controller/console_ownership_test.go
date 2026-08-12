@@ -82,9 +82,12 @@ func TestValidateConsoleServiceOwnership(t *testing.T) {
 	}
 	ownedByAnotherRelease := ownedByStandaloneConsole.DeepCopy()
 	ownedByAnotherRelease.Annotations["meta.helm.sh/release-name"] = "another-release"
+	ownedByMainConsoleRelease := ownedByStandaloneConsole.DeepCopy()
+	ownedByMainConsoleRelease.Name = "console-console"
 
 	tests := []struct {
 		name            string
+		wandbName       string
 		consoleEnabled  bool
 		objects         []runtime.Object
 		wantConflictErr bool
@@ -102,6 +105,12 @@ func TestValidateConsoleServiceOwnership(t *testing.T) {
 			name:           "allows bundled console when another Helm release owns the target service",
 			consoleEnabled: true,
 			objects:        []runtime.Object{ownedByAnotherRelease},
+		},
+		{
+			name:           "allows bundled console when the main release is named console",
+			wandbName:      standaloneConsoleRelease,
+			consoleEnabled: true,
+			objects:        []runtime.Object{ownedByMainConsoleRelease},
 		},
 		{
 			name:            "rejects bundled console when standalone release owns the target service",
@@ -124,7 +133,11 @@ func TestValidateConsoleServiceOwnership(t *testing.T) {
 				objects[i] = object.DeepCopyObject()
 			}
 			client := fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(objects...).Build()
-			wandb := &wandbcomv1.WeightsAndBiases{ObjectMeta: metav1.ObjectMeta{Name: "wandb", Namespace: "customer"}}
+			wandbName := tt.wandbName
+			if wandbName == "" {
+				wandbName = "wandb"
+			}
+			wandb := &wandbcomv1.WeightsAndBiases{ObjectMeta: metav1.ObjectMeta{Name: wandbName, Namespace: "customer"}}
 			desired := &spec.Spec{Values: spec.Values{
 				"console": map[string]interface{}{"install": tt.consoleEnabled},
 			}}
