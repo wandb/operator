@@ -525,6 +525,8 @@ spec:
                   properties:
                     externalClickhouse:
                       properties:
+                        clusterName:
+                          type: string
                         database:
                           properties:
                             key:
@@ -577,6 +579,8 @@ spec:
                           - key
                           type: object
                           x-kubernetes-map-type: atomic
+                        replicated:
+                          type: boolean
                         tcpPort:
                           properties:
                             key:
@@ -4413,8 +4417,6 @@ spec:
               clickhouseStatus:
                 additionalProperties:
                   properties:
-                    clusterName:
-                      type: string
                     conditions:
                       items:
                         properties:
@@ -4453,6 +4455,8 @@ spec:
                       type: array
                     connection:
                       properties:
+                        clusterName:
+                          type: string
                         database:
                           properties:
                             key:
@@ -4505,6 +4509,8 @@ spec:
                           - key
                           type: object
                           x-kubernetes-map-type: atomic
+                        replicated:
+                          type: boolean
                         tcpPort:
                           properties:
                             key:
@@ -4546,8 +4552,6 @@ spec:
                           x-kubernetes-map-type: atomic
                       type: object
                     ready:
-                      type: boolean
-                    replicated:
                       type: boolean
                     state:
                       type: string

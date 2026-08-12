@@ -245,6 +245,12 @@ func legacyEnvFromSection(section map[string]interface{}, sectionName string) ([
 			continue
 		}
 		for k, v := range m {
+			// ClickHouse replication is lifted onto the connection by
+			// mapClickHouseReplication; leaving it here too would let a stale
+			// per-application override outrank the datastore's own topology.
+			if isClickHouseReplicationEnv(k) {
+				continue
+			}
 			merged[k] = v
 		}
 	}

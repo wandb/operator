@@ -723,6 +723,16 @@ type ClickHouseConnection struct {
 	Password corev1.SecretKeySelector `json:"password,omitempty"`
 
 	URL corev1.SecretKeySelector `json:"url,omitempty"`
+
+	// Replicated declares that this ClickHouse is a replicated cluster, so
+	// applications create ReplicatedMergeTree tables instead of MergeTree. For
+	// managed ClickHouse the operator derives it; for external ClickHouse the
+	// user declares it, since the operator cannot inspect the topology.
+	Replicated bool `json:"replicated,omitempty"`
+
+	// ClusterName is the ClickHouse cluster applications target for
+	// ReplicatedMergeTree DDL (ON CLUSTER ...). Only meaningful when Replicated.
+	ClusterName string `json:"clusterName,omitempty"`
 }
 
 type ClickHouseConfig struct {
@@ -834,8 +844,6 @@ type ObjectStoreInfraStatus struct {
 type ClickHouseInfraStatus struct {
 	WBInfraStatus `json:",inline"`
 	Connection    ClickHouseConnection `json:"connection,omitempty"`
-	Replicated    bool                 `json:"replicated,omitempty"`
-	ClusterName   string               `json:"clusterName,omitempty"`
 }
 
 type TelemetryInfraStatus struct {

@@ -72,9 +72,9 @@ func TestManagedClickHouseStatusPublishesReplication(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			status := inferManagedClickHouseStatus(t, tc.replicas)
-			if status.Replicated != tc.replicated {
+			if status.Connection.Replicated != tc.replicated {
 				t.Fatalf("expected Replicated=%t for %d replicas, got %t",
-					tc.replicated, tc.replicas, status.Replicated)
+					tc.replicated, tc.replicas, status.Connection.Replicated)
 			}
 		})
 	}
@@ -85,17 +85,19 @@ func TestManagedClickHouseStatusPublishesReplication(t *testing.T) {
 func TestManagedClickHouseStatusPublishesCHIClusterName(t *testing.T) {
 	status := inferManagedClickHouseStatus(t, 2)
 
-	if status.ClusterName != altinity.CHIClusterName() {
-		t.Fatalf("expected ClusterName=%q, got %q", altinity.CHIClusterName(), status.ClusterName)
+	if status.Connection.ClusterName != altinity.CHIClusterName() {
+		t.Fatalf("expected ClusterName=%q, got %q", altinity.CHIClusterName(), status.Connection.ClusterName)
 	}
-	if status.ClusterName == altinity.ClusterName("wandb-chi") {
+	if status.Connection.ClusterName == altinity.ClusterName("wandb-chi") {
 		t.Fatal("published the Service-name derivation instead of the CHI cluster name")
 	}
 }
 
-// External ClickHouse topology is unknown to the operator: the fields must stay
-// zero so the server manifest's defaultValue applies.
-func TestExternalClickHouseStatusLeavesReplicationUnset(t *testing.T) {
+// inferExternalClickHouseStatus runs the external status path for a declared
+// connection and returns the published status.
+func inferExternalClickHouseStatus(t *testing.T, declared *apiv2.ClickHouseConnection) apiv2.ClickHouseInfraStatus {
+	t.Helper()
+
 	scheme := runtime.NewScheme()
 	if err := apiv2.AddToScheme(scheme); err != nil {
 		t.Fatalf("add apiv2 to scheme: %v", err)
@@ -106,7 +108,7 @@ func TestExternalClickHouseStatusLeavesReplicationUnset(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "wandb", Namespace: "wandb"},
 		Spec: apiv2.WeightsAndBiasesSpec{
 			ClickHouse: map[string]apiv2.ClickHouseSpec{
-				apiv2.DefaultInstanceName: {ExternalClickHouse: &apiv2.ClickHouseConnection{}},
+				apiv2.DefaultInstanceName: {ExternalClickHouse: declared},
 			},
 		},
 	}
@@ -123,12 +125,34 @@ func TestExternalClickHouseStatusLeavesReplicationUnset(t *testing.T) {
 	); err != nil {
 		t.Fatalf("externalClickHouseInferStatus: %v", err)
 	}
+	return wandb.Status.ClickHouseStatus[apiv2.DefaultInstanceName]
+}
 
-	status := wandb.Status.ClickHouseStatus[apiv2.DefaultInstanceName]
-	if status.Replicated {
+// ReadState rebuilds the connection from the Secret, which carries no topology,
+// so the user-declared values have to be carried across from the spec.
+func TestExternalClickHouseStatusCarriesDeclaredReplication(t *testing.T) {
+	status := inferExternalClickHouseStatus(t, &apiv2.ClickHouseConnection{
+		Replicated:  true,
+		ClusterName: "weavecluster",
+	})
+
+	if !status.Connection.Replicated {
+		t.Error("declared Replicated=true did not reach the published status")
+	}
+	if status.Connection.ClusterName != "weavecluster" {
+		t.Errorf("expected ClusterName=%q, got %q", "weavecluster", status.Connection.ClusterName)
+	}
+}
+
+// Undeclared external topology must stay zero so the manifest's defaultValue
+// applies rather than the operator asserting something it cannot know.
+func TestExternalClickHouseStatusLeavesReplicationUnset(t *testing.T) {
+	status := inferExternalClickHouseStatus(t, &apiv2.ClickHouseConnection{})
+
+	if status.Connection.Replicated {
 		t.Error("external ClickHouse must not be reported as replicated")
 	}
-	if status.ClusterName != "" {
-		t.Errorf("expected an empty ClusterName for external ClickHouse, got %q", status.ClusterName)
+	if status.Connection.ClusterName != "" {
+		t.Errorf("expected an empty ClusterName for external ClickHouse, got %q", status.Connection.ClusterName)
 	}
 }
