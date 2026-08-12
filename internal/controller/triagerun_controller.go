@@ -55,7 +55,7 @@ const (
 	triageRunLabel              = "apps.wandb.com/triage-run"
 	triageApplicationLabel      = "apps.wandb.com/triage-application"
 	triageActionAnnotation      = "apps.wandb.com/triage-action"
-	triageActionFlag            = "--action"
+	triageActionEnv             = "WANDB_TRIAGE_ACTION"
 )
 
 // TriagePodLogReader reads the structured output from a completed triage pod.
@@ -397,10 +397,11 @@ func buildTriageContainer(
 	if len(runner.Args) > 0 {
 		container.Args = append([]string(nil), runner.Args...)
 	}
-	if action.Name != defaultTriageAction {
-		container.Args = append(container.Args, triageActionFlag, string(action.Name))
-	}
 	container.Args = append(container.Args, action.Args...)
+	container.Env = mergeTriageEnv(container.Env, []corev1.EnvVar{{
+		Name:  triageActionEnv,
+		Value: string(action.Name),
+	}})
 	if runner.Resources != nil {
 		container.Resources = *runner.Resources.DeepCopy()
 	}
