@@ -145,7 +145,7 @@ func mapLegacyOverrides(values map[string]interface{}, dst *appsv2.WeightsAndBia
 func mapPerAppLegacyOverrides(values map[string]interface{}, version, globalSize string, overrides map[string]appsv2.LegacyOverrides) error {
 	if version == "" {
 		logger.Info("no version derived from v1 values; skipping per-application legacy overrides")
-		return nil
+		return fmt.Errorf("no version derived from v1 values, version must be pinned to specific version")
 	}
 	apps, err := legacyManifestApps(version)
 	if err != nil {
