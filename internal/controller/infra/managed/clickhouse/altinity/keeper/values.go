@@ -24,6 +24,8 @@ const (
 	podTemplateName     = "keeper-pod-template"
 	volumeTemplateName  = "keeper-data-volume"
 	keeperContainerName = "clickhouse-keeper"
+	keeperLogVolumeName = "keeper-log"
+	keeperLogMountPath  = "/var/log/clickhouse-keeper"
 
 	keeperRunAsUser  int64 = 101
 	keeperRunAsGroup int64 = 101
