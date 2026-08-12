@@ -28,6 +28,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// testPinnedVersion is any published-looking version; validateWandbSpec now
+// requires one, so fixtures that are not about versions still need it set.
+const testPinnedVersion = "0.83.1"
+
 var _ = Describe("WeightsAndBiases Webhook", func() {
 	var (
 		ctx       context.Context
@@ -41,8 +45,10 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 		ctx = context.Background()
 		obj = &appsv2.WeightsAndBiases{ObjectMeta: metav1.ObjectMeta{Name: "wandb", Namespace: "test-ns"}}
 		obj.Spec.Wandb.Hostname = "https://wandb.example.com"
+		obj.Spec.Wandb.Version = testPinnedVersion
 		oldObj = &appsv2.WeightsAndBiases{ObjectMeta: metav1.ObjectMeta{Name: "wandb", Namespace: "test-ns"}}
 		oldObj.Spec.Wandb.Hostname = "https://wandb.example.com"
+		oldObj.Spec.Wandb.Version = testPinnedVersion
 		validator = WeightsAndBiasesCustomValidator{}
 		defaulter = WeightsAndBiasesCustomDefaulter{}
 	})
@@ -124,7 +130,8 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 		It("allows create when ManagedRedis is nil", func() {
 			warnings, err := validator.ValidateCreate(ctx, obj)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(warnings).To(BeEmpty())		})
+			Expect(warnings).To(BeEmpty())
+		})
 
 		It("rejects external Redis without host and port selectors", func() {
 			obj.Spec.Redis = map[string]appsv2.RedisSpec{
@@ -219,11 +226,21 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 			Expect(err).ToNot(HaveOccurred())
 		})
 
-		It("accepts an empty version (nothing pinned in v1 values)", func() {
+		It("rejects an empty version", func() {
 			obj.Spec.Wandb.Version = ""
 
 			_, err := validator.ValidateCreate(ctx, obj)
-			Expect(err).ToNot(HaveOccurred())
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("spec.wandb.version"))
+			Expect(err.Error()).To(ContainSubstring("version is required"))
+		})
+
+		It("rejects a whitespace-only version", func() {
+			obj.Spec.Wandb.Version = "   "
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("spec.wandb.version"))
 		})
 
 		It("rejects update when hostname is missing", func() {
