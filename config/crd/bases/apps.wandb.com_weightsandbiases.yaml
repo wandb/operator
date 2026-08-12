@@ -3939,6 +3939,20 @@ spec:
                     items:
                       type: string
                     type: array
+                  applications:
+                    additionalProperties:
+                      properties:
+                        autoscaling:
+                          properties:
+                            maxReplicas:
+                              format: int32
+                              type: integer
+                            minReplicas:
+                              format: int32
+                              type: integer
+                          type: object
+                      type: object
+                    type: object
                   bucketProxy:
                     type: boolean
                   features:

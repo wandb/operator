@@ -293,5 +293,112 @@ var _ = Describe("ReconcileV2 Sizing", func() {
 			Expect(*hpa.MinReplicas).To(Equal(int32(2)))
 			Expect(hpa.MaxReplicas).To(Equal(int32(5)))
 		})
+
+		It("should apply spec.wandb.applications.autoscaling on top of sizing", func() {
+			app := serverManifest.Application{
+				Name: "weave-trace",
+				Sizing: map[apiv2.Size]serverManifest.SizingConfig{
+					"large": {
+						Autoscaling: &serverManifest.AutoscalingConfig{
+							Horizontal: autoscalingv2.HorizontalPodAutoscalerSpec{
+								MinReplicas: ptr.To(int32(1)),
+								MaxReplicas: 2,
+							},
+						},
+					},
+				},
+			}
+			wandb := &apiv2.WeightsAndBiases{
+				Spec: apiv2.WeightsAndBiasesSpec{
+					Size: "large",
+					Wandb: apiv2.WandbAppSpec{
+						Applications: map[string]apiv2.WandbApplicationOverride{
+							"weave-trace": {
+								Autoscaling: &apiv2.ApplicationAutoscalingOverride{
+									MinReplicas: ptr.To(int32(4)),
+									MaxReplicas: ptr.To(int32(10)),
+								},
+							},
+						},
+					},
+				},
+			}
+
+			hpa := v2.ResolveAutoscaling(app, wandb)
+			Expect(hpa).NotTo(BeNil())
+			Expect(*hpa.MinReplicas).To(Equal(int32(4)))
+			Expect(hpa.MaxReplicas).To(Equal(int32(10)))
+		})
+
+		It("should leave sizing untouched when applications.autoscaling fields are nil", func() {
+			app := serverManifest.Application{
+				Name: "weave-trace",
+				Sizing: map[apiv2.Size]serverManifest.SizingConfig{
+					"large": {
+						Autoscaling: &serverManifest.AutoscalingConfig{
+							Horizontal: autoscalingv2.HorizontalPodAutoscalerSpec{
+								MinReplicas: ptr.To(int32(1)),
+								MaxReplicas: 2,
+							},
+						},
+					},
+				},
+			}
+			wandb := &apiv2.WeightsAndBiases{
+				Spec: apiv2.WeightsAndBiasesSpec{
+					Size: "large",
+					Wandb: apiv2.WandbAppSpec{
+						Applications: map[string]apiv2.WandbApplicationOverride{
+							"weave-trace": {
+								Autoscaling: &apiv2.ApplicationAutoscalingOverride{
+									MaxReplicas: ptr.To(int32(10)),
+								},
+							},
+						},
+					},
+				},
+			}
+
+			hpa := v2.ResolveAutoscaling(app, wandb)
+			Expect(hpa).NotTo(BeNil())
+			Expect(*hpa.MinReplicas).To(Equal(int32(1)))
+			Expect(hpa.MaxReplicas).To(Equal(int32(10)))
+		})
+
+		It("should ignore an override targeting an unrelated application name", func() {
+			app := serverManifest.Application{
+				Name: "weave-trace",
+				Sizing: map[apiv2.Size]serverManifest.SizingConfig{
+					"large": {
+						Autoscaling: &serverManifest.AutoscalingConfig{
+							Horizontal: autoscalingv2.HorizontalPodAutoscalerSpec{
+								MinReplicas: ptr.To(int32(1)),
+								MaxReplicas: 2,
+							},
+						},
+					},
+				},
+			}
+			wandb := &apiv2.WeightsAndBiases{
+				Spec: apiv2.WeightsAndBiasesSpec{
+					Size: "large",
+					Wandb: apiv2.WandbAppSpec{
+						Applications: map[string]apiv2.WandbApplicationOverride{
+							"executor": {
+								Autoscaling: &apiv2.ApplicationAutoscalingOverride{
+									MinReplicas: ptr.To(int32(99)),
+									MaxReplicas: ptr.To(int32(99)),
+								},
+							},
+						},
+					},
+				},
+			}
+
+			hpa := v2.ResolveAutoscaling(app, wandb)
+			Expect(hpa).NotTo(BeNil())
+			Expect(*hpa.MinReplicas).To(Equal(int32(1)))
+			Expect(hpa.MaxReplicas).To(Equal(int32(2)))
+		})
 	})
 })

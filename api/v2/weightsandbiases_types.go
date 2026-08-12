@@ -381,6 +381,23 @@ type WandbAppSpec struct {
 	// hand-editing.
 	// +optional
 	LegacyOverrides map[string]LegacyOverrides `json:"legacyOverrides,omitempty"`
+
+	// Applications overlays sizing-derived per-application config, keyed by
+	// manifest application name. Unknown keys are logged and ignored.
+	// +optional
+	Applications map[string]WandbApplicationOverride `json:"applications,omitempty"`
+}
+
+type WandbApplicationOverride struct {
+	// +optional
+	Autoscaling *ApplicationAutoscalingOverride `json:"autoscaling,omitempty"`
+}
+
+type ApplicationAutoscalingOverride struct {
+	// +optional
+	MinReplicas *int32 `json:"minReplicas,omitempty"`
+	// +optional
+	MaxReplicas *int32 `json:"maxReplicas,omitempty"`
 }
 
 // LegacyOverridesGlobalKey is the reserved LegacyOverrides key whose env

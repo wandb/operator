@@ -70,6 +70,15 @@ func ResolveAutoscaling(app manifest.Application, wandb *v2.WeightsAndBiases) *v
 		}
 	}
 
+	if ao, ok := wandb.Spec.Wandb.Applications[app.Name]; ok && ao.Autoscaling != nil {
+		if ao.Autoscaling.MinReplicas != nil {
+			hpa.MinReplicas = ao.Autoscaling.MinReplicas
+		}
+		if ao.Autoscaling.MaxReplicas != nil {
+			hpa.MaxReplicas = *ao.Autoscaling.MaxReplicas
+		}
+	}
+
 	if hpa.MaxReplicas == 0 {
 		return nil
 	}
