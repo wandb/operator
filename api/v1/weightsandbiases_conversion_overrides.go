@@ -157,8 +157,7 @@ func mapPerAppLegacyOverrides(values map[string]interface{}, version, globalSize
 	}
 	apps, err := legacyManifestApps(version)
 	if err != nil {
-		return fmt.Errorf("resolve server manifest for version %q (required to map per-application "+
-			"env/resources overrides): %w", version, err)
+		return fmt.Errorf("resolve server manifest for version %q (required to map per-application env/resources overrides): %w", version, err)
 	}
 
 	appNames := make([]string, 0, len(apps))
