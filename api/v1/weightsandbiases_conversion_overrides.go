@@ -145,15 +145,9 @@ func mapLegacyOverrides(values map[string]interface{}, dst *appsv2.WeightsAndBia
 // resolved: the manifest decides which values sections are applications, so
 // continuing would silently discard every per-application override while
 // reporting success.
-//
-// An absent version is not an error here — v1 routinely left the version to the
-// deployer channel, and there is nothing to drop when there is nothing to
-// resolve. "A version is required" is enforced on the v2 object by
-// validateWandbSpec, where the error names the field.
 func mapPerAppLegacyOverrides(values map[string]interface{}, version, globalSize string, overrides map[string]appsv2.LegacyOverrides) error {
 	if version == "" {
-		logger.Info("no version derived from v1 values; skipping per-application legacy overrides")
-		return nil
+		return fmt.Errorf("Manifest version required. No version derived from v1 values")
 	}
 	apps, err := legacyManifestApps(version)
 	if err != nil {
