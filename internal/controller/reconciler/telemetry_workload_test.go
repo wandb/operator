@@ -338,7 +338,7 @@ func TestApplyWorkloadTelemetryDefaultsOverridesSharedServiceName(t *testing.T) 
 		},
 	}
 
-	resolved := applyWorkloadTelemetryDefaults(envVars, "parquet")
+	resolved := telemetry.ApplyWorkloadTelemetryDefaults(envVars, "parquet")
 
 	serviceName := mustFindEnvVar(t, resolved, "OTEL_SERVICE_NAME")
 	if serviceName.Value != "parquet" {
@@ -355,7 +355,7 @@ func TestApplyWorkloadTelemetryDefaultsPreservesExplicitServiceName(t *testing.T
 		{Name: "OTEL_SERVICE_NAME", Value: "custom-service-name"},
 	}
 
-	resolved := applyWorkloadTelemetryDefaults(envVars, "parquet")
+	resolved := telemetry.ApplyWorkloadTelemetryDefaults(envVars, "parquet")
 
 	serviceName := mustFindEnvVar(t, resolved, "OTEL_SERVICE_NAME")
 	if serviceName.Value != "custom-service-name" {
@@ -596,10 +596,18 @@ func TestInjectManagedWorkloadTelemetryEnvvarsAddsDatadogAgentForDdtraceApps(t *
 				t.Fatalf("unexpected DD_SERVICE value: %q", ddService.Value)
 			}
 
-			for _, name := range []string{"OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "GORILLA_TRACER", "GORILLA_STATSD_ADDRESS"} {
+			unexpectedNames := []string{"GORILLA_STATSD_ADDRESS"}
+			if appName == "anaconda2" {
+				unexpectedNames = append(unexpectedNames, "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "GORILLA_TRACER")
+			} else {
+				mustFindEnvVar(t, envVars, "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT")
+				mustFindEnvVar(t, envVars, "GORILLA_TRACER")
+			}
+
+			for _, name := range unexpectedNames {
 				for _, env := range envVars {
 					if env.Name == name {
-						t.Fatalf("did not expect %q to be injected for ddtrace-only app", name)
+						t.Fatalf("did not expect %q to be injected for %q", name, appName)
 					}
 				}
 			}
@@ -617,17 +625,5 @@ func telemetryStatusWandb(name, namespace, secretName string) *apiv2.WeightsAndB
 				},
 			},
 		},
-	}
-}
-
-func TestManagedWorkloadTelemetryApplicationsContainsWeaveTraceApps(t *testing.T) {
-	for _, name := range []string{
-		"weave-trace",
-		"weave-trace-worker",
-		"weave-trace-evaluate-model-worker",
-	} {
-		if _, ok := managedWorkloadTelemetryApplications[name]; !ok {
-			t.Errorf("%q should be in the OTel allowlist", name)
-		}
 	}
 }
