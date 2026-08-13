@@ -724,12 +724,8 @@ type ClickHouseConnection struct {
 
 	URL corev1.SecretKeySelector `json:"url,omitempty"`
 
-	// Replicated declares that this ClickHouse is a replicated cluster, so
-	// applications create ReplicatedMergeTree tables instead of MergeTree.
 	Replicated bool `json:"replicated,omitempty"`
 
-	// ClusterName is the ClickHouse cluster applications target for
-	// ReplicatedMergeTree DDL (ON CLUSTER ...). Only meaningful when Replicated.
 	ClusterName string `json:"clusterName,omitempty"`
 }
 
