@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -141,13 +142,13 @@ func mapLegacyOverrides(values map[string]interface{}, dst *appsv2.WeightsAndBia
 	return nil
 }
 
-// mapPerAppLegacyOverrides fails when a version is set but its manifest can't be
-// resolved: the manifest decides which values sections are applications, so
-// continuing would silently discard every per-application override while
-// reporting success.
+// mapPerAppLegacyOverrides fails when no version is derivable, or when a
+// version's manifest can't be resolved: the manifest decides which values
+// sections are applications, so continuing would silently discard every
+// per-application override while reporting success.
 func mapPerAppLegacyOverrides(values map[string]interface{}, version, globalSize string, overrides map[string]appsv2.LegacyOverrides) error {
 	if version == "" {
-		return fmt.Errorf("Manifest version required. No version derived from v1 values")
+		return errors.New("manifest version required: no version derived from v1 values (spec.values.app.image.tag or spec.values.api.image.tag)")
 	}
 	apps, err := legacyManifestApps(version)
 	if err != nil {
