@@ -68,7 +68,7 @@ type ApplicationSpec struct {
 	CronJobs             []batchv1.CronJob                          `json:"cronJobs,omitempty"`
 
 	// Triage declares the bounded diagnostic actions that may be requested for
-	// this application through TriageRun resources.
+	// this application through ActionRun resources whose type is triage.
 	// +optional
 	Triage *ApplicationTriageSpec `json:"triage,omitempty"`
 
@@ -78,8 +78,9 @@ type ApplicationSpec struct {
 }
 
 // ApplicationTriageSpec contains the shared diagnostic runner and the actions
-// exposed by an Application. TriageRun selects actions by name. The controller
-// exposes the selected action to the runner through WANDB_TRIAGE_ACTION.
+// exposed by an Application. An ActionRun selects one action by name. The
+// controller exposes its type and name through WANDB_ACTION_TYPE and
+// WANDB_ACTION_NAME.
 type ApplicationTriageSpec struct {
 	// ContainerName selects a container from the Application pod template. It
 	// may be omitted when the Application has exactly one container.
@@ -123,16 +124,16 @@ type ApplicationTriageSpec struct {
 	// +kubebuilder:validation:MaxItems=16
 	// +listType=map
 	// +listMapKey=name
-	Actions []TriageActionSpec `json:"actions"`
+	Actions []ApplicationActionSpec `json:"actions"`
 }
 
-// TriageActionSpec describes one action exposed by the shared diagnostic
+// ApplicationActionSpec describes one action exposed by a shared application
 // runner. Execution identity and resource settings remain on the parent
 // ApplicationTriageSpec so every action uses the same bounded runtime.
-type TriageActionSpec struct {
-	// Name is the stable identifier selected by TriageRun and passed to the
-	// shared runner through WANDB_TRIAGE_ACTION.
-	Name TriageActionName `json:"name"`
+type ApplicationActionSpec struct {
+	// Name is the stable identifier selected by ActionRun and passed to the
+	// shared runner through WANDB_ACTION_NAME.
+	Name ActionName `json:"name"`
 
 	// Description is human-readable help shown by clients such as Watchtower.
 	// +kubebuilder:validation:MaxLength=512

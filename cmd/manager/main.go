@@ -342,17 +342,17 @@ func main() {
 
 	kubernetesClient, err := kubernetes.NewForConfig(mgr.GetConfig())
 	if err != nil {
-		setupLog.Error(err, "unable to create Kubernetes client", "controller", "TriageRun")
+		setupLog.Error(err, "unable to create Kubernetes client", "controller", "ActionRun")
 		os.Exit(1)
 	}
-	if err = (&controller.TriageRunReconciler{
+	if err = (&controller.ActionRunReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
-		PodLogs: &controller.KubernetesTriagePodLogReader{
+		PodLogs: &controller.KubernetesActionPodLogReader{
 			CoreV1: kubernetesClient.CoreV1(),
 		},
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "TriageRun")
+		setupLog.Error(err, "unable to create controller", "controller", "ActionRun")
 		os.Exit(1)
 	}
 

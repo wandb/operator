@@ -74,6 +74,24 @@ rules:
 - apiGroups:
   - apps.wandb.com
   resources:
+  - actionruns
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - apps.wandb.com
+  resources:
+  - actionruns/status
+  - applications/status
+  - weightsandbiases/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - apps.wandb.com
+  resources:
   - applications
   - weightsandbiases
   verbs:
@@ -91,24 +109,6 @@ rules:
   - weightsandbiases/finalizers
   verbs:
   - update
-- apiGroups:
-  - apps.wandb.com
-  resources:
-  - applications/status
-  - triageruns/status
-  - weightsandbiases/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - apps.wandb.com
-  resources:
-  - triageruns
-  verbs:
-  - get
-  - list
-  - watch
 - apiGroups:
   - autoscaling
   resources:
