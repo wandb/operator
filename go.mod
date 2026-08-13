@@ -8,7 +8,7 @@ require (
 	github.com/GoogleCloudPlatform/gke-gateway-api v1.4.0
 	github.com/Masterminds/goutils v1.1.1
 	github.com/Masterminds/semver/v3 v3.4.0
-	github.com/cybozu-go/moco v0.34.0
+	github.com/cybozu-go/moco v0.36.0
 	github.com/go-logr/logr v1.4.3
 	github.com/go-playground/validator/v10 v10.30.3
 	github.com/golang/glog v1.2.5
@@ -41,7 +41,7 @@ require (
 	k8s.io/utils v0.0.0-20260319190234-28399d86e0b5
 	knative.dev/pkg v0.0.0-20250326102644-9f3e60a9244c
 	oras.land/oras-go/v2 v2.6.2
-	sigs.k8s.io/controller-runtime v0.22.4
+	sigs.k8s.io/controller-runtime v0.23.3
 	sigs.k8s.io/gateway-api v1.5.0
 	sigs.k8s.io/yaml v1.6.0
 )
