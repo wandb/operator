@@ -5,8 +5,8 @@ import (
 	"fmt"
 
 	mocov1beta2 "github.com/cybozu-go/moco/api/v1beta2"
-	apiv2 "github.com/wandb/operator/api/v2"
 	ctrlcommon "github.com/wandb/operator/internal/controller/common"
+	"github.com/wandb/operator/internal/controller/infra/mysqlconnection"
 	"github.com/wandb/operator/internal/logx"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -14,7 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func readConnectionDetails(ctx context.Context, c client.Client, actual *mocov1beta2.MySQLCluster, nn types.NamespacedName) *mysqlConnInfo {
+func readConnectionDetails(ctx context.Context, c client.Client, actual *mocov1beta2.MySQLCluster, nn types.NamespacedName) *mysqlconnection.Material {
 	log := logx.GetSlog(ctx)
 
 	cred := &corev1.Secret{}
@@ -27,10 +27,10 @@ func readConnectionDetails(ctx context.Context, c client.Client, actual *mocov1b
 	if pw == "" {
 		return nil
 	}
-	return &mysqlConnInfo{
+	return &mysqlconnection.Material{
 		Host:     fmt.Sprintf("moco-%s-primary.%s.svc.cluster.local", actual.Name, actual.Namespace),
 		Port:     "3306",
-		User:     "moco-writable",
+		Username: "moco-writable",
 		Database: "wandb_local",
 		Password: pw,
 	}
@@ -40,9 +40,8 @@ func ReadState(
 	ctx context.Context,
 	k8sClient client.Client,
 	specNamespacedName types.NamespacedName,
-	wandbOwner client.Object,
 	onDeleteRule ctrlcommon.OnDeleteRule,
-) ([]metav1.Condition, *apiv2.MysqlConnection) {
+) ([]metav1.Condition, *mysqlconnection.Material) {
 	ctx, _ = logx.WithSlog(ctx, logx.Mysql)
 	log := logx.GetSlog(ctx)
 
@@ -90,32 +89,10 @@ func ReadState(
 		}
 	}
 
-	var connection *apiv2.MysqlConnection
+	var connection *mysqlconnection.Material
 
 	if actual != nil {
-		connInfo := readConnectionDetails(ctx, k8sClient, actual, specNamespacedName)
-
-		connection, err = writeMySQLConnInfo(
-			ctx, k8sClient, wandbOwner, nsnBuilder, connInfo,
-		)
-		if err != nil {
-			if err.Error() == "missing connection info" {
-				return []metav1.Condition{
-					{
-						Type:   MySQLConnectionInfoType,
-						Status: metav1.ConditionFalse,
-						Reason: ctrlcommon.NoResourceReason,
-					},
-				}, nil
-			}
-			return []metav1.Condition{
-				{
-					Type:   MySQLConnectionInfoType,
-					Status: metav1.ConditionUnknown,
-					Reason: ctrlcommon.ApiErrorReason,
-				},
-			}, nil
-		}
+		connection = readConnectionDetails(ctx, k8sClient, actual, specNamespacedName)
 		if connection == nil {
 			conditions = append(conditions, metav1.Condition{
 				Type:   MySQLConnectionInfoType,

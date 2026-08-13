@@ -2,11 +2,19 @@ package mysql
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
+	"math/big"
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/internal/controller/infra/mysqlconnection"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -36,9 +44,7 @@ func TestWriteStateAddsCustomTLSParamsWhenCACertPresent(t *testing.T) {
 			"Database": []byte("wandb"),
 			"Username": []byte("wandb"),
 			"Password": []byte("secret"),
-			"SslCa":    []byte("---ca---"),
-			"SslCert":  []byte("---cert---"),
-			"SslKey":   []byte("---key---"),
+			"SslCa":    testCACertificate(t),
 		},
 	}
 	wandb := &apiv2.WeightsAndBiases{
@@ -53,8 +59,6 @@ func TestWriteStateAddsCustomTLSParamsWhenCACertPresent(t *testing.T) {
 					Username: mysqlSel("Username"),
 					Password: mysqlSel("Password"),
 					SslCa:    mysqlSel("SslCa"),
-					SslCert:  mysqlSel("SslCert"),
-					SslKey:   mysqlSel("SslKey"),
 				},
 			}},
 		},
@@ -62,10 +66,27 @@ func TestWriteStateAddsCustomTLSParamsWhenCACertPresent(t *testing.T) {
 	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(wandb, source).Build()
 
 	conditions := WriteState(context.Background(), client, wandb, apiv2.DefaultInstanceName, wandb.Spec.MySQL[apiv2.DefaultInstanceName].ExternalMysql)
-	require.Nil(t, conditions)
+	require.Len(t, conditions, 3)
+	for _, conditionType := range []string{
+		mysqlconnection.ProviderReadyType,
+		mysqlconnection.ConnectionResolvedType,
+		mysqlconnection.BundleReadyType,
+	} {
+		require.Condition(t, func() bool {
+			for _, condition := range conditions {
+				if condition.Type == conditionType {
+					return condition.Status == metav1.ConditionTrue
+				}
+			}
+			return false
+		})
+	}
 
 	written := &corev1.Secret{}
-	require.NoError(t, client.Get(context.Background(), types.NamespacedName{Name: ConnectionSecretName, Namespace: "default"}, written))
+	require.NoError(t, client.Get(context.Background(), types.NamespacedName{
+		Name:      mysqlconnection.SecretName(wandb.Name, apiv2.DefaultInstanceName),
+		Namespace: "default",
+	}, written))
 	data := mysqlConnectionData(written)
 	parsed, err := url.Parse(data["url"])
 	require.NoError(t, err)
@@ -73,9 +94,13 @@ func TestWriteStateAddsCustomTLSParamsWhenCACertPresent(t *testing.T) {
 	require.Equal(t, "mysql.example.com:3306", parsed.Host)
 	require.Equal(t, "/wandb", parsed.Path)
 	require.Equal(t, "custom", parsed.Query().Get("tls"))
-	require.Equal(t, caCertPath, parsed.Query().Get("ssl-ca"))
-	require.Equal(t, sslCertPath, parsed.Query().Get("ssl-cert"))
-	require.Equal(t, sslKeyPath, parsed.Query().Get("ssl-key"))
+	require.Equal(
+		t,
+		mysqlconnection.MountPath(apiv2.DefaultInstanceName)+"/"+mysqlconnection.CACertFile,
+		parsed.Query().Get("ssl-ca"),
+	)
+	require.Empty(t, parsed.Query().Get("ssl-cert"))
+	require.Equal(t, mysqlconnection.BundleVersion, written.Annotations[mysqlconnection.BundleVersionAnnotation])
 }
 
 func mysqlConnectionData(secret *corev1.Secret) map[string]string {
@@ -87,4 +112,21 @@ func mysqlConnectionData(secret *corev1.Secret) map[string]string {
 		out[k] = v
 	}
 	return out
+}
+
+func testCACertificate(t *testing.T) []byte {
+	t.Helper()
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject:      pkix.Name{CommonName: "test CA"},
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(time.Hour),
+		IsCA:         true,
+		KeyUsage:     x509.KeyUsageCertSign,
+	}
+	certificate, err := x509.CreateCertificate(rand.Reader, template, template, publicKey, privateKey)
+	require.NoError(t, err)
+	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certificate})
 }

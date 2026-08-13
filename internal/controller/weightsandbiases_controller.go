@@ -19,9 +19,12 @@ package controller
 import (
 	"context"
 	"fmt"
+	"sort"
 
 	mocov1beta2 "github.com/cybozu-go/moco/api/v1beta2"
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/internal/controller/common"
+	managedmysqlmoco "github.com/wandb/operator/internal/controller/infra/managed/mysql/moco"
 	v2 "github.com/wandb/operator/internal/controller/reconciler"
 	"github.com/wandb/operator/pkg/utils"
 	"github.com/wandb/operator/pkg/wandb/spec/channel/deployer"
@@ -54,6 +57,8 @@ type WeightsAndBiasesReconciler struct {
 	EnableV2           bool
 	TelemetryConfigRef types.NamespacedName
 }
+
+const mysqlSecretDependencyIndex = "mysqlSecretDependencies"
 
 //+kubebuilder:rbac:groups="",resources=configmaps;events;persistentvolumeclaims;secrets;serviceaccounts;services,verbs=update;delete;get;list;create;patch;watch
 //+kubebuilder:rbac:groups="",resources=endpoints;nodes;nodes/spec;nodes/stats;nodes/metrics;nodes/proxy;namespaces;namespaces/status;replicationcontrollers;replicationcontrollers/status;resourcequotas;pods;pods/log;pods/status,verbs=get;list;watch
@@ -133,6 +138,15 @@ func (r *WeightsAndBiasesReconciler) Delete(e event.DeleteEvent) bool {
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *WeightsAndBiasesReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if err := mgr.GetFieldIndexer().IndexField(
+		context.Background(),
+		&apiv2.WeightsAndBiases{},
+		mysqlSecretDependencyIndex,
+		mysqlSecretDependencies,
+	); err != nil {
+		return err
+	}
+
 	var b = ctrl.NewControllerManagedBy(mgr).
 		For(&apiv2.WeightsAndBiases{}).
 		// Applications carry plain (non-controller) owner refs; without
@@ -141,13 +155,14 @@ func (r *WeightsAndBiasesReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&apiv2.Application{}, builder.MatchEveryOwner).
 		Owns(&batchv1.Job{}).
 		Owns(&corev1.Secret{}).
+		Watches(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(r.mapMySQLSecretToWandb)).
 		Owns(&corev1.ConfigMap{}).
 		Owns(&networkingv1.Ingress{})
 	if utils.IsRegistered(r.Scheme, &gatewayv1.Gateway{}) {
 		b = b.Watches(&gatewayv1.Gateway{}, handler.EnqueueRequestsFromMapFunc(r.mapGatewayToWandb))
 	}
 	if utils.IsRegistered(r.Scheme, &mocov1beta2.MySQLCluster{}) {
-		b = b.Owns(&mocov1beta2.MySQLCluster{})
+		b = b.Watches(&mocov1beta2.MySQLCluster{}, handler.EnqueueRequestsFromMapFunc(mapMocoToWandb))
 	}
 	if r.TelemetryConfigRef.Name != "" {
 		b = b.Watches(
@@ -158,6 +173,79 @@ func (r *WeightsAndBiasesReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	return b.Complete(r)
+}
+
+func mapMocoToWandb(_ context.Context, obj client.Object) []ctrl.Request {
+	name := obj.GetLabels()[common.WandbNameLabel]
+	namespace := obj.GetLabels()[common.WandbNamespaceLabel]
+	if name == "" || namespace == "" {
+		return nil
+	}
+	return []ctrl.Request{{NamespacedName: types.NamespacedName{Name: name, Namespace: namespace}}}
+}
+
+func mysqlSecretDependencies(obj client.Object) []string {
+	wandb, ok := obj.(*apiv2.WeightsAndBiases)
+	if !ok {
+		return nil
+	}
+
+	dependencies := map[string]struct{}{}
+	add := func(namespace string, selector corev1.SecretKeySelector) {
+		if selector.Name == "" {
+			return
+		}
+		dependencies[types.NamespacedName{Namespace: namespace, Name: selector.Name}.String()] = struct{}{}
+	}
+	for key, spec := range wandb.Spec.MySQL {
+		if external := spec.ExternalMysql; external != nil {
+			add(wandb.Namespace, external.Host)
+			add(wandb.Namespace, external.Port)
+			add(wandb.Namespace, external.Database)
+			add(wandb.Namespace, external.Username)
+			add(wandb.Namespace, external.Password)
+			add(wandb.Namespace, external.Tls)
+			add(wandb.Namespace, external.SslCa)
+			add(wandb.Namespace, external.SslCert)
+			add(wandb.Namespace, external.SslKey)
+		}
+		if managed := spec.ManagedMysql; managed != nil {
+			name := managed.Name
+			if name == "" {
+				name = managedmysqlmoco.DefaultSpecName(wandb.Name, key)
+			}
+			namespace := managed.Namespace
+			if namespace == "" {
+				namespace = wandb.Namespace
+			}
+			dependencies[types.NamespacedName{
+				Namespace: namespace,
+				Name:      "moco-" + name,
+			}.String()] = struct{}{}
+		}
+	}
+
+	result := make([]string, 0, len(dependencies))
+	for dependency := range dependencies {
+		result = append(result, dependency)
+	}
+	sort.Strings(result)
+	return result
+}
+
+func (r *WeightsAndBiasesReconciler) mapMySQLSecretToWandb(ctx context.Context, obj client.Object) []ctrl.Request {
+	wandbList := &apiv2.WeightsAndBiasesList{}
+	if err := r.List(ctx, wandbList, client.MatchingFields{
+		mysqlSecretDependencyIndex: client.ObjectKeyFromObject(obj).String(),
+	}); err != nil {
+		return nil
+	}
+
+	requests := make([]ctrl.Request, 0, len(wandbList.Items))
+	for i := range wandbList.Items {
+		requests = append(requests, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(&wandbList.Items[i])})
+	}
+	return requests
 }
 
 func (r *WeightsAndBiasesReconciler) loadTelemetryConfig(ctx context.Context) (v2.TelemetryRuntimeConfig, error) {

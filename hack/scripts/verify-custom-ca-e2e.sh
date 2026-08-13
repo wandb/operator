@@ -5,6 +5,7 @@ set -euo pipefail
 NAMESPACE="wandb-ca-e2e"
 NAME="wandb"
 API_APP="api"
+MYSQL_INSTANCE="default"
 TIMEOUT="20m"
 POLL_SECONDS=10
 
@@ -76,6 +77,18 @@ url, key, expected = sys.argv[1:]
 actual = parse_qs(urlparse(url).query).get(key, [""])[0]
 if actual != expected:
     raise SystemExit(f"{key}={actual!r}, expected {expected!r} in {url}")
+PY
+}
+
+url_param() {
+  local url="$1"
+  local key="$2"
+  python3 - "${url}" "${key}" <<'PY'
+import sys
+from urllib.parse import parse_qs, urlparse
+
+url, key = sys.argv[1:]
+print(parse_qs(urlparse(url).query).get(key, [""])[0])
 PY
 }
 
@@ -203,7 +216,7 @@ wait_until "WeightsAndBiases ${NAMESPACE}/${NAME} status.ready=true" check_wandb
 wandb_json="$(kubectl -n "${NAMESPACE}" get weightsandbiases.apps.wandb.com "${NAME}" -o json)"
 inline_ca_count="$(echo "${wandb_json}" | jq -r '(.spec.global.customCACerts // []) | length')"
 USER_CONFIGMAP="$(echo "${wandb_json}" | jq -r '.spec.global.caCertsConfigMap // ""')"
-mysql_ca_enabled="$(echo "${wandb_json}" | jq -r '(((.spec.mysql.externalMysql.sslCa.name // "") | length) > 0 and ((.spec.mysql.externalMysql.sslCa.key // "") | length) > 0)')"
+mysql_ca_enabled="$(echo "${wandb_json}" | jq -r --arg instance "${MYSQL_INSTANCE}" '(((.spec.mysql[$instance].externalMysql.sslCa.name // "") | length) > 0 and ((.spec.mysql[$instance].externalMysql.sslCa.key // "") | length) > 0)')"
 redis_ca_enabled="$(echo "${wandb_json}" | jq -r '(((.spec.redis.externalRedis.sslCa.name // "") | length) > 0 and ((.spec.redis.externalRedis.sslCa.key // "") | length) > 0)')"
 
 if [[ "${inline_ca_count}" == "0" && -z "${USER_CONFIGMAP}" ]]; then
@@ -219,9 +232,16 @@ if [[ -n "${USER_CONFIGMAP}" ]]; then
 fi
 
 if [[ "${mysql_ca_enabled}" == "true" ]]; then
-  mysql_url="$(secret_value wandb-mysql-connection url)"
+  # The connection bundle Secret is named per instance; take it from status
+  # rather than reconstructing the instance fingerprint here.
+  mysql_secret="$(echo "${wandb_json}" | jq -r --arg instance "${MYSQL_INSTANCE}" '.status.mysqlStatus[$instance].connection.url.name // ""')"
+  [[ -n "${mysql_secret}" ]] || fail "no MySQL connection Secret in status for instance ${MYSQL_INSTANCE}"
+  mysql_url="$(secret_value "${mysql_secret}" url)"
   assert_url_param "${mysql_url}" "tls" "custom"
-  assert_url_param "${mysql_url}" "ssl-ca" "/etc/ssl/certs/mysql_ca.pem"
+  mysql_ca_path="$(url_param "${mysql_url}" "ssl-ca")"
+  [[ "${mysql_ca_path}" == /*/ca.pem ]] || fail "unexpected ssl-ca path ${mysql_ca_path} in MySQL URL"
+  mysql_ca_dir="$(dirname "${mysql_ca_path}")"
+  mysql_ca_volume="mysql-$(basename "${mysql_ca_dir}")"
   log "MySQL connection URL includes expected CA parameters"
 fi
 
@@ -238,9 +258,6 @@ workload_ref="${WORKLOAD_KIND} ${WORKLOAD_NAME}"
 for env_name in SSL_CERT_FILE SSL_CERT_DIR REQUESTS_CA_BUNDLE; do
   echo "${WORKLOAD_TEMPLATE_JSON}" | json_has_env "${env_name}" || fail "missing env ${env_name} on ${workload_ref}"
 done
-if [[ "${mysql_ca_enabled}" == "true" ]]; then
-  echo "${WORKLOAD_TEMPLATE_JSON}" | json_has_env MYSQL_CA_CERT_PATH || fail "missing env MYSQL_CA_CERT_PATH on ${workload_ref}"
-fi
 
 echo "${WORKLOAD_TEMPLATE_JSON}" | json_has_volume wandb-ca-certs-root || fail "missing volume wandb-ca-certs-root on ${workload_ref}"
 echo "${WORKLOAD_TEMPLATE_JSON}" | json_has_mount wandb-ca-certs-root /usr/local/share/ca-certificates/ ||
@@ -257,8 +274,9 @@ if [[ -n "${USER_CONFIGMAP}" ]]; then
     fail "missing user CA ConfigMap mount"
 fi
 if [[ "${mysql_ca_enabled}" == "true" ]]; then
-  echo "${WORKLOAD_TEMPLATE_JSON}" | json_has_volume mysql-ca || fail "missing volume mysql-ca on ${workload_ref}"
-  echo "${WORKLOAD_TEMPLATE_JSON}" | json_has_mount mysql-ca /etc/ssl/certs/mysql_ca.pem ||
+  echo "${WORKLOAD_TEMPLATE_JSON}" | json_has_volume "${mysql_ca_volume}" ||
+    fail "missing volume ${mysql_ca_volume} on ${workload_ref}"
+  echo "${WORKLOAD_TEMPLATE_JSON}" | json_has_mount "${mysql_ca_volume}" "${mysql_ca_dir}" ||
     fail "missing MySQL CA mount"
 fi
 if [[ "${redis_ca_enabled}" == "true" ]]; then
@@ -281,7 +299,7 @@ if [[ -n "${workload_pod}" ]]; then
     pod_checks+=("test -d /usr/local/share/ca-certificates/configmap")
   fi
   if [[ "${mysql_ca_enabled}" == "true" ]]; then
-    pod_checks+=("test -s /etc/ssl/certs/mysql_ca.pem")
+    pod_checks+=("test -s ${mysql_ca_path}")
   fi
   if [[ "${redis_ca_enabled}" == "true" ]]; then
     pod_checks+=("test -s /etc/ssl/certs/redis_ca.pem")

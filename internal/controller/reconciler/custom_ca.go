@@ -27,18 +27,6 @@ const (
 	customCACertsInlineMountPath    = "/usr/local/share/ca-certificates/inline"
 	customCACertsConfigMapMountPath = "/usr/local/share/ca-certificates/configmap"
 
-	mysqlCACertVolumeName = "mysql-ca"
-	mysqlCACertPath       = "/etc/ssl/certs/mysql_ca.pem"
-	mysqlCACertFileName   = "mysql_ca.pem"
-
-	mysqlSSLCertVolumeName = "mysql-ssl-cert"
-	mysqlSSLCertPath       = "/etc/ssl/certs/mysql_ssl_cert.pem"
-	mysqlSSLCertFileName   = "mysql_ssl_cert.pem"
-
-	mysqlSSLKeyVolumeName = "mysql-ssl-key"
-	mysqlSSLKeyPath       = "/etc/ssl/certs/mysql_ssl_key.pem"
-	mysqlSSLKeyFileName   = "mysql_ssl_key.pem"
-
 	redisCACertVolumeName = "redis-ca"
 	redisCACertPath       = "/etc/ssl/certs/redis_ca.pem"
 	redisCACertFileName   = "redis_ca.pem"
@@ -58,16 +46,8 @@ func hasGlobalCustomCACertConfig(wandb *apiv2.WeightsAndBiases) bool {
 	return len(wandb.Spec.Global.CustomCACerts) > 0 || wandb.Spec.Global.CACertsConfigMap != ""
 }
 
-// defaultMySQLConnection returns the default MySQL instance's connection. The
-// app's TLS env vars (MYSQL_CA_CERT_PATH etc.) are singular, so only the
-// default instance's certificate material is mounted.
-func defaultMySQLConnection(wandb *apiv2.WeightsAndBiases) apiv2.MysqlConnection {
-	status, _ := apiv2.ResolveInstance(wandb.Status.MySQLStatus, "")
-	return status.Connection
-}
-
 // defaultRedisConnection returns the default Redis instance's connection; see
-// defaultMySQLConnection.
+// the legacy singular Redis CA wiring.
 func defaultRedisConnection(wandb *apiv2.WeightsAndBiases) apiv2.RedisConnection {
 	status, _ := apiv2.ResolveInstance(wandb.Status.RedisStatus, "")
 	return status.Connection
@@ -141,7 +121,6 @@ func applyCustomCACertsToWorkload(
 	volumes []corev1.Volume,
 	volumeMounts []corev1.VolumeMount,
 ) ([]corev1.EnvVar, []corev1.Volume, []corev1.VolumeMount, string, error) {
-	mysqlConn := defaultMySQLConnection(wandb)
 	redisConn := defaultRedisConnection(wandb)
 
 	if hasGlobalCustomCACertConfig(wandb) {
@@ -190,56 +169,6 @@ func applyCustomCACertsToWorkload(
 				ReadOnly:  true,
 			})
 		}
-	}
-
-	if hasValue, err := secretSelectorHasValue(ctx, c, wandb.Namespace, mysqlConn.SslCa); err != nil {
-		return nil, nil, nil, "", err
-	} else if hasValue {
-		envVars = appendMissingEnvVars(envVars, []corev1.EnvVar{{Name: "MYSQL_CA_CERT_PATH", Value: mysqlCACertPath}})
-		volumes = upsertVolume(volumes, corev1.Volume{
-			Name: mysqlCACertVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				Secret: secretCACertVolumeSource(mysqlConn.SslCa, mysqlCACertFileName),
-			},
-		})
-		volumeMounts = upsertVolumeMount(volumeMounts, corev1.VolumeMount{
-			Name:      mysqlCACertVolumeName,
-			MountPath: mysqlCACertPath,
-			SubPath:   mysqlCACertFileName,
-			ReadOnly:  true,
-		})
-	}
-	if hasValue, err := secretSelectorHasValue(ctx, c, wandb.Namespace, mysqlConn.SslCert); err != nil {
-		return nil, nil, nil, "", err
-	} else if hasValue {
-		volumes = upsertVolume(volumes, corev1.Volume{
-			Name: mysqlSSLCertVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				Secret: secretCACertVolumeSource(mysqlConn.SslCert, mysqlSSLCertFileName),
-			},
-		})
-		volumeMounts = upsertVolumeMount(volumeMounts, corev1.VolumeMount{
-			Name:      mysqlSSLCertVolumeName,
-			MountPath: mysqlSSLCertPath,
-			SubPath:   mysqlSSLCertFileName,
-			ReadOnly:  true,
-		})
-	}
-	if hasValue, err := secretSelectorHasValue(ctx, c, wandb.Namespace, mysqlConn.SslKey); err != nil {
-		return nil, nil, nil, "", err
-	} else if hasValue {
-		volumes = upsertVolume(volumes, corev1.Volume{
-			Name: mysqlSSLKeyVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				Secret: secretCACertVolumeSource(mysqlConn.SslKey, mysqlSSLKeyFileName),
-			},
-		})
-		volumeMounts = upsertVolumeMount(volumeMounts, corev1.VolumeMount{
-			Name:      mysqlSSLKeyVolumeName,
-			MountPath: mysqlSSLKeyPath,
-			SubPath:   mysqlSSLKeyFileName,
-			ReadOnly:  true,
-		})
 	}
 
 	if hasValue, err := secretSelectorHasValue(ctx, c, wandb.Namespace, redisConn.SslCa); err != nil {
@@ -341,27 +270,14 @@ func secretSelectorHasValue(ctx context.Context, c ctrlClient.Client, namespace 
 }
 
 func customCACertsChecksum(ctx context.Context, c ctrlClient.Client, wandb *apiv2.WeightsAndBiases) (string, error) {
-	mysqlConn := defaultMySQLConnection(wandb)
 	redisConn := defaultRedisConnection(wandb)
 
-	hasMySQLCA, err := secretSelectorHasValue(ctx, c, wandb.Namespace, mysqlConn.SslCa)
-	if err != nil {
-		return "", err
-	}
-	hasMySQLCert, err := secretSelectorHasValue(ctx, c, wandb.Namespace, mysqlConn.SslCert)
-	if err != nil {
-		return "", err
-	}
-	hasMySQLKey, err := secretSelectorHasValue(ctx, c, wandb.Namespace, mysqlConn.SslKey)
-	if err != nil {
-		return "", err
-	}
 	hasRedisCA, err := secretSelectorHasValue(ctx, c, wandb.Namespace, redisConn.SslCa)
 	if err != nil {
 		return "", err
 	}
 
-	if !hasGlobalCustomCACertConfig(wandb) && !hasMySQLCA && !hasMySQLCert && !hasMySQLKey && !hasRedisCA {
+	if !hasGlobalCustomCACertConfig(wandb) && !hasRedisCA {
 		return "", nil
 	}
 
@@ -373,25 +289,6 @@ func customCACertsChecksum(ctx context.Context, c ctrlClient.Client, wandb *apiv
 	if wandb.Spec.Global.CACertsConfigMap != "" {
 		_, _ = fmt.Fprintf(hash, "configmap:%s\n", wandb.Spec.Global.CACertsConfigMap)
 		if err := hashConfigMapData(ctx, c, wandb.Namespace, wandb.Spec.Global.CACertsConfigMap, hashWriteString(hash)); err != nil {
-			return "", err
-		}
-	}
-
-	if sel := mysqlConn.SslCa; hasMySQLCA {
-		_, _ = fmt.Fprintf(hash, "mysql:%s/%s\n", sel.Name, sel.Key)
-		if err := hashSecretKeyData(ctx, c, wandb.Namespace, sel, hashWriteString(hash)); err != nil {
-			return "", err
-		}
-	}
-	if sel := mysqlConn.SslCert; hasMySQLCert {
-		_, _ = fmt.Fprintf(hash, "mysql-cert:%s/%s\n", sel.Name, sel.Key)
-		if err := hashSecretKeyData(ctx, c, wandb.Namespace, sel, hashWriteString(hash)); err != nil {
-			return "", err
-		}
-	}
-	if sel := mysqlConn.SslKey; hasMySQLKey {
-		_, _ = fmt.Fprintf(hash, "mysql-key:%s/%s\n", sel.Name, sel.Key)
-		if err := hashSecretKeyData(ctx, c, wandb.Namespace, sel, hashWriteString(hash)); err != nil {
 			return "", err
 		}
 	}

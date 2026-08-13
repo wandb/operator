@@ -137,8 +137,19 @@ func resolveContainers(app serverManifest.Application, wandb *v2.WeightsAndBiase
 	return containers
 }
 
+type envResolution struct {
+	EnvVars        []v1.EnvVar
+	MySQLInstances map[string]struct{}
+}
+
 func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.WeightsAndBiases, manifest serverManifest.Manifest, commonEnvs []string, envs []serverManifest.EnvVar) ([]v1.EnvVar, error) {
+	resolved, err := resolveEnvvarsWithDependencies(ctx, client, wandb, manifest, commonEnvs, envs)
+	return resolved.EnvVars, err
+}
+
+func resolveEnvvarsWithDependencies(ctx context.Context, client ctrlClient.Client, wandb *v2.WeightsAndBiases, manifest serverManifest.Manifest, commonEnvs []string, envs []serverManifest.EnvVar) (envResolution, error) {
 	logger := logx.GetSlog(ctx)
+	result := envResolution{MySQLInstances: map[string]struct{}{}}
 	var combinedEnvs []serverManifest.EnvVar
 	for _, commonVars := range commonEnvs {
 		if envvars, ok := manifest.CommonEnvvars[commonVars]; ok {
@@ -214,6 +225,14 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 				if !ok {
 					continue
 				}
+				instance := src.Name
+				if instance == "" {
+					instance = v2.DefaultInstanceName
+				}
+				if _, found := wandb.Status.MySQLStatus[instance]; !found {
+					instance = v2.DefaultInstanceName
+				}
+				result.MySQLInstances[instance] = struct{}{}
 				selector := status.Connection.URL
 				// Record for potential direct assignment case
 				singleSecretSelector = selector
@@ -382,7 +401,7 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 					ctrlClient.MatchingLabels{"app.kubernetes.io/name": src.Name},
 				)
 				if err != nil {
-					return nil, err
+					return envResolution{}, err
 				}
 				if len(serviceList.Items) == 0 || len(serviceList.Items[0].Spec.Ports) == 0 {
 					// Can't resolve; skip this component
@@ -477,7 +496,8 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 			Value: strings.Join(components, ","),
 		})
 	}
-	return envVars, nil
+	result.EnvVars = envVars
+	return result, nil
 }
 
 func resolveVolumeMounts(ctx context.Context, manifest serverManifest.Manifest, commonvms []string, vms []serverManifest.VolumeMount) ([]v1.Volume, []v1.VolumeMount, error) {

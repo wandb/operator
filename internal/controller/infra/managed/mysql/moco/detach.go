@@ -27,6 +27,19 @@ func CheckDetached(
 	if err != nil || !found {
 		return nil
 	}
+	if actual.Annotations[DetachedAnnotation] == "true" {
+		return []metav1.Condition{
+			{
+				Type:    common.ReconciledType,
+				Status:  metav1.ConditionFalse,
+				Reason:  common.DetachedSpecMismatch,
+				Message: "detached MySQL CR must be renamed before it can be managed again",
+			},
+		}
+	}
+	if actual.Labels[WandbUIDLabel] == string(wandbUID) {
+		return nil
+	}
 	if !common.IsDetached(actual, wandbUID) {
 		return nil
 	}
@@ -63,37 +76,98 @@ func DetachFinalizer(
 		return nil
 	}
 
-	if common.IsDetached(actual, wandbOwner.GetUID()) {
+	if markDetached(actual, wandbOwner.GetUID()) {
+		if err = cl.Update(ctx, actual); err != nil {
+			if errors.IsNotFound(err) {
+				return nil
+			}
+			log.Error("error detaching MysqlCluster CR", logx.ErrAttr(err))
+			return err
+		}
+		log.Info("detached MysqlCluster CR", "name", actual.Name)
+	} else {
 		log.Debug("MysqlCluster CR already detached")
-		return nil
 	}
 
-	common.RemoveOwnerReference(actual, wandbOwner.GetUID())
-	if err = cl.Update(ctx, actual); err != nil {
-		if errors.IsNotFound(err) {
-			return nil
-		}
-		log.Error("error detaching MysqlCluster CR", logx.ErrAttr(err))
+	configMap := &corev1.ConfigMap{}
+	found, err = common.GetResource(
+		ctx,
+		cl,
+		types.NamespacedName{Namespace: specNamespacedName.Namespace, Name: MyCnfConfigMapName(specNamespacedName.Name)},
+		"ConfigMap",
+		configMap,
+	)
+	if err != nil || !found {
 		return err
 	}
-	log.Info("detached MysqlCluster CR", "name", actual.Name)
+	if markDetached(configMap, wandbOwner.GetUID()) {
+		if err := cl.Update(ctx, configMap); err != nil && !errors.IsNotFound(err) {
+			return err
+		}
+	}
 
-	if err = detachConnectionSecret(ctx, cl, nsnBuilder, wandbOwner); err != nil {
-		log.Error("error detaching connection secret", logx.ErrAttr(err))
+	return nil
+}
+
+// ClearDetached re-adopts a cluster (and its config map) that a previous
+// reconcile detached, so an instance removed and then restored in the spec does
+// not stay permanently unmanageable.
+func ClearDetached(ctx context.Context, cl client.Client, specNamespacedName types.NamespacedName) error {
+	ctx, log := logx.WithSlog(ctx, logx.Mysql)
+	nsnBuilder := createNsNameBuilder(specNamespacedName)
+
+	cluster := &mocov1beta2.MySQLCluster{}
+	found, err := common.GetResource(ctx, cl, nsnBuilder.ClusterNsName(), ResourceTypeName, cluster)
+	if err != nil || !found {
+		return err
+	}
+	if cluster.Annotations[DetachedAnnotation] != "true" {
+		return nil
+	}
+	if err := clearDetachedAnnotation(ctx, cl, cluster); err != nil {
+		return err
+	}
+	log.Info("re-adopted detached MysqlCluster CR", "name", cluster.Name)
+
+	configMap := &corev1.ConfigMap{}
+	found, err = common.GetResource(
+		ctx,
+		cl,
+		types.NamespacedName{Namespace: specNamespacedName.Namespace, Name: MyCnfConfigMapName(specNamespacedName.Name)},
+		"ConfigMap",
+		configMap,
+	)
+	if err != nil || !found {
+		return err
+	}
+	return clearDetachedAnnotation(ctx, cl, configMap)
+}
+
+func clearDetachedAnnotation(ctx context.Context, cl client.Client, obj client.Object) error {
+	annotations := obj.GetAnnotations()
+	if annotations[DetachedAnnotation] == "" {
+		return nil
+	}
+	patch := client.MergeFrom(obj.DeepCopyObject().(client.Object))
+	delete(annotations, DetachedAnnotation)
+	obj.SetAnnotations(annotations)
+	if err := cl.Patch(ctx, obj, patch); err != nil && !errors.IsNotFound(err) {
 		return err
 	}
 	return nil
 }
 
-func detachConnectionSecret(ctx context.Context, cl client.Client, nsnBuilder *NsNameBuilder, wandbOwner client.Object) error {
-	secret := &corev1.Secret{}
-	found, err := common.GetResource(ctx, cl, nsnBuilder.ConnectionNsName(), "Secret", secret)
-	if err != nil || !found {
-		return err
+func markDetached(obj client.Object, ownerUID types.UID) bool {
+	changed := !common.IsDetached(obj, ownerUID)
+	common.RemoveOwnerReference(obj, ownerUID)
+	annotations := obj.GetAnnotations()
+	if annotations == nil {
+		annotations = map[string]string{}
 	}
-	common.RemoveOwnerReference(secret, wandbOwner.GetUID())
-	if err = cl.Update(ctx, secret); err != nil && !errors.IsNotFound(err) {
-		return err
+	if annotations[DetachedAnnotation] != "true" {
+		annotations[DetachedAnnotation] = "true"
+		obj.SetAnnotations(annotations)
+		changed = true
 	}
-	return nil
+	return changed
 }
