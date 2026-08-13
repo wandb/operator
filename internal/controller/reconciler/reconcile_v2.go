@@ -32,6 +32,7 @@ import (
 	"github.com/wandb/operator/internal/controller/ctrlqueue"
 	"github.com/wandb/operator/internal/logx"
 	wmetrics "github.com/wandb/operator/internal/metrics"
+	"github.com/wandb/operator/internal/observability/telemetry"
 	oputils "github.com/wandb/operator/pkg/utils"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
 	batchv1 "k8s.io/api/batch/v1"
@@ -203,7 +204,7 @@ func Reconcile(
 	client ctrlClient.Client,
 	recorder record.EventRecorder,
 	wandb *apiv2.WeightsAndBiases,
-	telemetryConfig TelemetryRuntimeConfig,
+	telemetryConfig telemetry.TelemetryRuntimeConfig,
 ) (ctrl.Result, error) {
 	ctx, log := logx.WithSlog(ctx, logx.ReconcileInfraV2)
 
@@ -211,7 +212,7 @@ func Reconcile(
 
 	var errorCount int
 
-	wandb.Status.TelemetryStatus = summarizeTelemetryInfraStatus(ctx, client, telemetryConfig)
+	wandb.Status.TelemetryStatus = telemetry.SummarizeTelemetryInfraStatus(ctx, client, telemetryConfig)
 
 	/////////////////////////
 	// Retention Finalizer
@@ -363,7 +364,7 @@ func Reconcile(
 		return ctrl.Result{}, errors.New("infra state update errors")
 	}
 
-	if err := reconcileTelemetryConnectionSecret(ctx, client, wandb, telemetryConfig); err != nil {
+	if err := telemetry.ReconcileTelemetryConnectionSecret(ctx, client, wandb, telemetryConfig); err != nil {
 		log.Error("failed to reconcile telemetry connection secret", logx.ErrAttr(err))
 		return ctrl.Result{}, err
 	}
@@ -411,7 +412,7 @@ func ReconcileWandbManifest(
 	client ctrlClient.Client,
 	wandb *apiv2.WeightsAndBiases,
 	manifest serverManifest.Manifest,
-	telemetryConfig TelemetryRuntimeConfig,
+	telemetryConfig telemetry.TelemetryRuntimeConfig,
 ) (ctrl.Result, error) {
 	// Reconcile Wandb Manifest
 	logger := ctrl.LoggerFrom(ctx).WithName("reconcileWandbManifest")
@@ -578,7 +579,7 @@ func reconcileApplications(
 	client ctrlClient.Client,
 	wandb *apiv2.WeightsAndBiases,
 	manifest serverManifest.Manifest,
-	telemetryConfig TelemetryRuntimeConfig,
+	telemetryConfig telemetry.TelemetryRuntimeConfig,
 ) (ctrl.Result, error) {
 	logger := logx.GetSlog(ctx)
 	logger.Info("Reconciling applications")
@@ -903,7 +904,7 @@ func injectManagedWorkloadTelemetryEnvvars(
 	manifest serverManifest.Manifest,
 	app serverManifest.Application,
 	envVars []corev1.EnvVar,
-	telemetryConfig TelemetryRuntimeConfig,
+	telemetryConfig telemetry.TelemetryRuntimeConfig,
 ) ([]corev1.EnvVar, error) {
 
 	if !telemetryConfig.Enabled {

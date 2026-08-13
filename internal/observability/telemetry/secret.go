@@ -1,4 +1,4 @@
-package reconciler
+package telemetry
 
 import (
 	"context"
@@ -16,7 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
-func reconcileTelemetryConnectionSecret(
+func ReconcileTelemetryConnectionSecret(
 	ctx context.Context,
 	client ctrlClient.Client,
 	wandb *apiv2.WeightsAndBiases,

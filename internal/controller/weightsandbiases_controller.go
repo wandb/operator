@@ -23,6 +23,7 @@ import (
 	mocov1beta2 "github.com/cybozu-go/moco/api/v1beta2"
 	apiv2 "github.com/wandb/operator/api/v2"
 	v2 "github.com/wandb/operator/internal/controller/reconciler"
+	"github.com/wandb/operator/internal/observability/telemetry"
 	"github.com/wandb/operator/pkg/utils"
 	"github.com/wandb/operator/pkg/wandb/spec/channel/deployer"
 	batchv1 "k8s.io/api/batch/v1"
@@ -160,16 +161,16 @@ func (r *WeightsAndBiasesReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return b.Complete(r)
 }
 
-func (r *WeightsAndBiasesReconciler) loadTelemetryConfig(ctx context.Context) (v2.TelemetryRuntimeConfig, error) {
+func (r *WeightsAndBiasesReconciler) loadTelemetryConfig(ctx context.Context) (telemetry.TelemetryRuntimeConfig, error) {
 	if r.TelemetryConfigRef.Name == "" {
-		return v2.DefaultTelemetryRuntimeConfig(), nil
+		return telemetry.DefaultTelemetryRuntimeConfig(), nil
 	}
 
-	return v2.LoadTelemetryRuntimeConfigFromConfigMap(
+	return telemetry.LoadTelemetryRuntimeConfigFromConfigMap(
 		ctx,
 		r.Client,
 		r.TelemetryConfigRef,
-		v2.DefaultTelemetryRuntimeConfig(),
+		telemetry.DefaultTelemetryRuntimeConfig(),
 	)
 }
 
