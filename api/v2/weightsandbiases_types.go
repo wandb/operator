@@ -154,36 +154,11 @@ type WeightsAndBiasesSpec struct {
 // It is not published in the server manifest and versions independently of W&B,
 // so its image is configured here rather than resolved from the manifest.
 type WatchtowerSpec struct {
-	// Install deploys Watchtower. Defaults to false.
-	// +optional
 	Install *bool `json:"install,omitempty"`
-
-	// Image is the Watchtower container image. Defaults to
-	// DefaultWatchtowerImageRepository at DefaultWatchtowerImageTag.
-	// +optional
 	Image WatchtowerImageSpec `json:"image,omitempty"`
-
-	// BasePath is the URL prefix Watchtower is served under. The operator
-	// publishes this path on the Ingress/HTTPRoute and passes it to the
-	// container, so the two can never drift. Defaults to
-	// DefaultWatchtowerBasePath.
-	// +optional
 	BasePath string `json:"basePath,omitempty"`
-
-	// AuthService is the host:port Watchtower calls to validate the caller's W&B
-	// session cookie (GET /oidc/auth). Empty means derive it from the server
-	// manifest: the application serving the /oidc ingress path.
-	// +optional
 	AuthService string `json:"authService,omitempty"`
-
-	// Resources holds the container resource requirements.
-	// +optional
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
-
-	// ServiceAccount controls the ServiceAccount Watchtower runs as. It is
-	// separate from the W&B app's account because Watchtower needs read access to
-	// the cluster resources it inspects.
-	// +optional
 	ServiceAccount ManagedServiceAccountSpec `json:"serviceAccount,omitempty"`
 }
 
@@ -879,25 +854,10 @@ type WeightsAndBiasesStatus struct {
 	WatchtowerStatus *WatchtowerStatusSummary `json:"watchtowerStatus,omitempty"`
 }
 
-// WatchtowerStatusSummary is a flat summary rather than the full
-// ApplicationStatus: the latter embeds the Rollout/HPA/StatefulSet schemas and
-// would add roughly a thousand lines to the CRD for no added signal.
 type WatchtowerStatusSummary struct {
-	// Ready mirrors the Watchtower Application's readiness.
 	Ready bool `json:"ready"`
-
-	// URL is where Watchtower is served, for operators to hand to their users.
-	// +optional
 	URL string `json:"url,omitempty"`
-
-	// Image is the running Watchtower image, so the deployed version is visible
-	// without inspecting the Deployment.
-	// +optional
 	Image string `json:"image,omitempty"`
-
-	// AuthService is the host:port validating W&B sessions, recorded because it
-	// is usually derived from the server manifest rather than set in the spec.
-	// +optional
 	AuthService string `json:"authService,omitempty"`
 }
 
