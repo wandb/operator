@@ -476,6 +476,32 @@ func validateWandbSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 		))
 	}
 
+	// The version selects the server manifest that drives the whole reconcile, so
+	// it has to resolve to a published artifact. v1 commonly left it to the
+	// deployer channel and converted CRs inherit nothing, hence "required" rather
+	// than a default: guessing a version would reconcile the wrong release.
+	versionPath := field.NewPath("spec").Child("wandb").Child("version")
+	version := strings.TrimSpace(wandb.Spec.Wandb.Version)
+	switch {
+	case version == "":
+		errors = append(errors, field.Required(
+			versionPath,
+			"version is required; pin it to a published server version",
+		))
+	case version == "latest":
+		errors = append(errors, field.Invalid(
+			versionPath,
+			wandb.Spec.Wandb.Version,
+			"must be pinned to a published server version; no server-manifest is published for the \"latest\" tag",
+		))
+	case version != wandb.Spec.Wandb.Version:
+		errors = append(errors, field.Invalid(
+			versionPath,
+			wandb.Spec.Wandb.Version,
+			"must not contain leading or trailing whitespace",
+		))
+	}
+
 	return errors
 }
 

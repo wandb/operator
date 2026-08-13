@@ -59,6 +59,7 @@ helm install cert-manager jetstack/cert-manager \
    - Verify object-store endpoint, bucket, region, TLS, and path-style settings.
    - Remove `status` and other server-populated metadata from a live-resource
      export before applying it as desired state.
+   - Make sure the wandb server manifest is pinned to a specific version. If version is `latest` or empty, it will fail.
 
 5. Determine whether the v1 W&B Helm release owns Redis or another dependency
    that v2 will continue using:
