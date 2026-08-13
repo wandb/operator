@@ -88,7 +88,7 @@ func TestComposeOperatorOnly(t *testing.T) {
 	}
 	for _, name := range []string{
 		"applications.apps.wandb.com",
-		"triageruns.apps.wandb.com",
+		"actionruns.apps.wandb.com",
 		"weightsandbiases.apps.wandb.com",
 	} {
 		if !names[name] {

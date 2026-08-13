@@ -54,7 +54,7 @@ resources:
     namespaced: true
   domain: wandb.com
   group: apps
-  kind: TriageRun
+  kind: ActionRun
   path: github.com/wandb/operator/api/v2
   version: v2
 version: "3"

@@ -1,7 +1,7 @@
 # This rule is not used by the project operator itself.
 # It is provided to allow the cluster admin to help manage permissions for users.
 #
-# Grants permissions to create and manage TriageRun resources.
+# Grants full permissions ('*') over ActionRun resources.
 
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -9,23 +9,17 @@ metadata:
   labels:
     app.kubernetes.io/name: operator
     app.kubernetes.io/managed-by: kustomize
-  name: triagerun-editor-role
+  name: actionrun-admin-role
 rules:
 - apiGroups:
   - apps.wandb.com
   resources:
-  - triageruns
+  - actionruns
   verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
+  - '*'
 - apiGroups:
   - apps.wandb.com
   resources:
-  - triageruns/status
+  - actionruns/status
   verbs:
   - get
