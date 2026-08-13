@@ -289,6 +289,7 @@ func ToEtcdApplication(
 ) (*apiv2.Application, error) {
 	infraSpec := wandb.Spec.Kafka.ManagedKafka
 	labels := BuildWandbKafkaLabels(wandb)
+	metaLabels := utils.MergeMapsStringString(labels, common.BuildIdentityLabels(wandb, nsnBuilder.EtcdName()))
 
 	storageSize := infraSpec.StorageSize
 	if storageSize == "" {
@@ -330,7 +331,7 @@ func ToEtcdApplication(
 			Replicas:    ptr.To(int32(EtcdReplicas)),
 			ServiceName: nsnBuilder.EtcdName(),
 			MetaTemplate: metav1.ObjectMeta{
-				Labels: labels,
+				Labels: metaLabels,
 			},
 			PodTemplate: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
@@ -545,6 +546,7 @@ func ToBufstreamApplication(
 ) (*apiv2.Application, error) {
 	infraSpec := wandb.Spec.Kafka.ManagedKafka
 	labels := BuildWandbKafkaLabels(wandb)
+	metaLabels := utils.MergeMapsStringString(labels, common.BuildIdentityLabels(wandb, nsnBuilder.BufstreamName()))
 
 	replicas := effectiveBufstreamReplicas(infraSpec.Replicas)
 
@@ -582,7 +584,7 @@ func ToBufstreamApplication(
 			Kind:     "Deployment",
 			Replicas: ptr.To(replicas),
 			MetaTemplate: metav1.ObjectMeta{
-				Labels: labels,
+				Labels: metaLabels,
 			},
 			PodTemplate: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
