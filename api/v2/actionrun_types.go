@@ -22,72 +22,79 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// TriageRunPhase describes the execution lifecycle of a TriageRun. A
-// Succeeded run means that the diagnostic command completed successfully; it
-// does not mean that every diagnostic check passed.
+// ActionRunPhase describes the execution lifecycle of an ActionRun. A
+// Succeeded run means that the action command completed successfully; it does
+// not mean that every result reported a passing verdict.
 // +kubebuilder:validation:Enum=Pending;Running;Succeeded;Failed
-type TriageRunPhase string
+type ActionRunPhase string
 
 const (
-	TriageRunPhasePending   TriageRunPhase = "Pending"
-	TriageRunPhaseRunning   TriageRunPhase = "Running"
-	TriageRunPhaseSucceeded TriageRunPhase = "Succeeded"
-	TriageRunPhaseFailed    TriageRunPhase = "Failed"
+	ActionRunPhasePending   ActionRunPhase = "Pending"
+	ActionRunPhaseRunning   ActionRunPhase = "Running"
+	ActionRunPhaseSucceeded ActionRunPhase = "Succeeded"
+	ActionRunPhaseFailed    ActionRunPhase = "Failed"
 )
 
-// TriageSeverity is the verdict emitted by an individual diagnostic check.
+// ActionSeverity is the verdict emitted by an individual action result.
 // +kubebuilder:validation:Enum=pass;warn;fail;error
-type TriageSeverity string
+type ActionSeverity string
 
 const (
-	TriageSeverityPass  TriageSeverity = "pass"
-	TriageSeverityWarn  TriageSeverity = "warn"
-	TriageSeverityFail  TriageSeverity = "fail"
-	TriageSeverityError TriageSeverity = "error"
+	ActionSeverityPass  ActionSeverity = "pass"
+	ActionSeverityWarn  ActionSeverity = "warn"
+	ActionSeverityFail  ActionSeverity = "fail"
+	ActionSeverityError ActionSeverity = "error"
 )
 
-// TriageApplicationReference identifies an Application in the TriageRun's
-// namespace.
-type TriageApplicationReference struct {
-	// Name is the name of the Application to diagnose.
+// ActionType identifies the class of action selected from an Application.
+// +kubebuilder:validation:Enum=triage;maintenance
+type ActionType string
+
+const (
+	ActionTypeTriage      ActionType = "triage"
+	ActionTypeMaintenance ActionType = "maintenance"
+)
+
+// ApplicationReference identifies an Application in the ActionRun's namespace.
+type ApplicationReference struct {
+	// Name is the name of the Application that declares the selected action.
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=253
 	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$`
 	Name string `json:"name"`
 }
 
-// TriageActionName identifies an action declared by an Application.
+// ActionName identifies an action declared by an Application.
 // +kubebuilder:validation:MinLength=1
-type TriageActionName string
+type ActionName string
 
-// TriageActionReference selects one action declared by the referenced
+// ActionReference selects one action declared by the referenced
 // Application. Descriptive and execution metadata remain owned by the
 // Application and are resolved by the controller.
-type TriageActionReference struct {
+type ActionReference struct {
 	// Name is the stable action name exposed by the Application.
-	Name TriageActionName `json:"name"`
+	Name ActionName `json:"name"`
 }
 
-// TriageRunSpec defines one immutable request to run one or more diagnostic
-// actions for an Application.
-// Creating another run requires creating another TriageRun.
+// ActionRunSpec defines one immutable request to run one Application action.
+// Creating another run requires creating another ActionRun.
 // +kubebuilder:validation:XValidation:rule="self == oldSelf",message="spec is immutable"
-type TriageRunSpec struct {
-	// ApplicationRef identifies the Application to diagnose. Cross-namespace
-	// references are intentionally unsupported.
-	ApplicationRef TriageApplicationReference `json:"applicationRef"`
+type ActionRunSpec struct {
+	// Type selects the Application action catalog. Triage is executable in this
+	// release; maintenance is reserved for its future safety contract.
+	Type ActionType `json:"type"`
 
-	// Actions selects one or more triage actions declared by the referenced
-	// Application. Each action is executed independently.
-	// +kubebuilder:validation:MinItems=1
-	// +listType=map
-	// +listMapKey=name
-	Actions []TriageActionReference `json:"actions"`
+	// ApplicationRef identifies the Application whose action will run. Cross-namespace
+	// references are intentionally unsupported.
+	ApplicationRef ApplicationReference `json:"applicationRef"`
+
+	// Action selects exactly one action declared by the referenced Application.
+	Action ActionReference `json:"action"`
 }
 
-// TriageResolvedExecution records the concrete execution selected from the
+// ActionResolvedExecution records the concrete execution selected from the
 // Application at reconciliation time. It is an audit snapshot, not user input.
-type TriageResolvedExecution struct {
+type ActionResolvedExecution struct {
 	// ApplicationGeneration is the Application generation used to resolve this
 	// execution.
 	ApplicationGeneration int64 `json:"applicationGeneration,omitempty"`
@@ -109,8 +116,8 @@ type TriageResolvedExecution struct {
 	TimeoutSeconds int64 `json:"timeoutSeconds,omitempty"`
 }
 
-// TriageRunSummary contains aggregate verdict counts for a completed run.
-type TriageRunSummary struct {
+// ActionRunSummary contains aggregate verdict counts for a completed run.
+type ActionRunSummary struct {
 	Total int32 `json:"total,omitempty"`
 	Pass  int32 `json:"pass,omitempty"`
 	Warn  int32 `json:"warn,omitempty"`
@@ -118,18 +125,17 @@ type TriageRunSummary struct {
 	Error int32 `json:"error,omitempty"`
 
 	// OverallSeverity is the most severe check verdict in the run.
-	OverallSeverity TriageSeverity `json:"overallSeverity,omitempty"`
+	OverallSeverity ActionSeverity `json:"overallSeverity,omitempty"`
 }
 
-// TriageCheckResult contains one structured record emitted by the diagnostic
-// command.
-type TriageCheckResult struct {
+// ActionResult contains one structured record emitted by the action command.
+type ActionResult struct {
 	Name string `json:"name"`
 
 	// Umbrella is an optional logical grouping for related checks.
 	Umbrella string `json:"umbrella,omitempty"`
 
-	Severity TriageSeverity `json:"severity"`
+	Severity ActionSeverity `json:"severity"`
 	Message  string         `json:"message,omitempty"`
 
 	// Evidence preserves application-defined structured evidence.
@@ -144,43 +150,24 @@ type TriageCheckResult struct {
 	DurationMilliseconds int64 `json:"durationMs,omitempty"`
 }
 
-// TriageActionStatus records the execution and structured diagnostic output
-// for one selected action.
-type TriageActionStatus struct {
-	// Action is the selected Application action represented by this status.
-	Action TriageActionName `json:"action"`
+// ActionRunStatus defines the observed execution state and structured output.
+type ActionRunStatus struct {
+	Phase ActionRunPhase `json:"phase,omitempty"`
 
-	Phase TriageRunPhase `json:"phase,omitempty"`
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 
-	// JobRef identifies the Kubernetes Job executing this action.
+	// JobRef identifies the Kubernetes Job executing the selected action.
 	JobRef *corev1.LocalObjectReference `json:"jobRef,omitempty"`
 
 	// ResolvedExecution is the execution snapshot selected from the referenced
 	// Application.
-	ResolvedExecution *TriageResolvedExecution `json:"resolvedExecution,omitempty"`
+	ResolvedExecution *ActionResolvedExecution `json:"resolvedExecution,omitempty"`
 
 	StartedAt   *metav1.Time `json:"startedAt,omitempty"`
 	CompletedAt *metav1.Time `json:"completedAt,omitempty"`
 
-	Summary *TriageRunSummary   `json:"summary,omitempty"`
-	Results []TriageCheckResult `json:"results,omitempty"`
-}
-
-// TriageRunStatus defines the observed execution state and diagnostic output.
-type TriageRunStatus struct {
-	Phase TriageRunPhase `json:"phase,omitempty"`
-
-	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
-
-	StartedAt   *metav1.Time `json:"startedAt,omitempty"`
-	CompletedAt *metav1.Time `json:"completedAt,omitempty"`
-
-	Summary *TriageRunSummary `json:"summary,omitempty"`
-
-	// ActionStatuses contains one entry for every selected action.
-	// +listType=map
-	// +listMapKey=action
-	ActionStatuses []TriageActionStatus `json:"actionStatuses,omitempty"`
+	Summary *ActionRunSummary `json:"summary,omitempty"`
+	Results []ActionResult    `json:"results,omitempty"`
 
 	// Conditions represent the latest available observations of the run.
 	// +listType=map
@@ -190,30 +177,33 @@ type TriageRunStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:selectablefield:JSONPath=.spec.type
+// +kubebuilder:selectablefield:JSONPath=.spec.applicationRef.name
+// +kubebuilder:printcolumn:name="Type",type=string,JSONPath=`.spec.type`
 // +kubebuilder:printcolumn:name="Application",type=string,JSONPath=`.spec.applicationRef.name`
-// +kubebuilder:printcolumn:name="Actions",type=string,JSONPath=`.spec.actions`
+// +kubebuilder:printcolumn:name="Action",type=string,JSONPath=`.spec.action.name`
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
 // +kubebuilder:printcolumn:name="Severity",type=string,JSONPath=`.status.summary.overallSeverity`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
-// TriageRun is one immutable request to diagnose an Application.
-type TriageRun struct {
+// ActionRun is one immutable request to execute an Application action.
+type ActionRun struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   TriageRunSpec   `json:"spec"`
-	Status TriageRunStatus `json:"status,omitempty"`
+	Spec   ActionRunSpec   `json:"spec"`
+	Status ActionRunStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 
-// TriageRunList contains a list of TriageRun.
-type TriageRunList struct {
+// ActionRunList contains a list of ActionRun.
+type ActionRunList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []TriageRun `json:"items"`
+	Items           []ActionRun `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&TriageRun{}, &TriageRunList{})
+	SchemeBuilder.Register(&ActionRun{}, &ActionRunList{})
 }

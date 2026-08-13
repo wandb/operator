@@ -12,8 +12,8 @@ patches:
       group: apiextensions.k8s.io
       version: v1
       kind: CustomResourceDefinition
-      name: triageruns.apps.wandb.com
-    path: delete-triageruns-crd.yaml
+      name: actionruns.apps.wandb.com
+    path: delete-actionruns-crd.yaml
   - target:
       group: apiextensions.k8s.io
       version: v1
