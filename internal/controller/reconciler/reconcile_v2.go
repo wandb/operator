@@ -31,7 +31,7 @@ import (
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/ctrlqueue"
 	"github.com/wandb/operator/internal/logx"
-	wmetrics "github.com/wandb/operator/internal/metrics"
+	wmetrics "github.com/wandb/operator/internal/observability/metrics"
 	"github.com/wandb/operator/internal/observability/telemetry"
 	oputils "github.com/wandb/operator/pkg/utils"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
