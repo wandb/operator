@@ -7,6 +7,7 @@ import (
 
 	v2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/logx"
+	"github.com/wandb/operator/internal/observability/telemetry"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
 	"k8s.io/api/core/v1"
 	"k8s.io/utils/ptr"
@@ -323,36 +324,10 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 						Name: secretName,
 					},
 				}
-				switch src.Field {
-				case "", "metrics", "metricsEndpoint":
-					selector.Key = "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT"
-				case "logs", "logsEndpoint":
-					selector.Key = "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"
-				case "traces", "tracesEndpoint":
-					selector.Key = "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"
-				case "metricsExporter":
-					selector.Key = "OTEL_METRICS_EXPORTER"
-				case "logsExporter":
-					selector.Key = "OTEL_LOGS_EXPORTER"
-				case "tracesExporter":
-					selector.Key = "OTEL_TRACES_EXPORTER"
-				case "protocol":
-					selector.Key = "OTEL_EXPORTER_OTLP_PROTOCOL"
-				case "serviceName":
-					selector.Key = "OTEL_SERVICE_NAME"
-				case "resourceAttributes":
-					selector.Key = "OTEL_RESOURCE_ATTRIBUTES"
-				case "gorillaTracer", "tracer":
-					selector.Key = "GORILLA_TRACER"
-				case "statsdAddress":
-					selector.Key = "GORILLA_STATSD_ADDRESS"
-				case "datadogTraceAgentURL", "ddTraceAgentURL":
-					selector.Key = "DD_TRACE_AGENT_URL"
-				case "datadogTraceAgentHost", "ddAgentHost":
-					selector.Key = "DD_AGENT_HOST"
-				case "datadogTraceAgentPort", "ddTraceAgentPort":
-					selector.Key = "DD_TRACE_AGENT_PORT"
-				default:
+
+				var isFound bool
+				selector.Key, isFound = telemetry.SecretKeyForField(src.Field)
+				if !isFound {
 					if strings.HasPrefix(src.Field, "OTEL_") {
 						selector.Key = src.Field
 					} else {

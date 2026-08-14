@@ -1,4 +1,4 @@
-package reconciler
+package telemetry
 
 import (
 	"context"
@@ -28,7 +28,7 @@ type telemetryResourceRef struct {
 	gvk       schema.GroupVersionKind
 }
 
-func summarizeTelemetryInfraStatus(
+func SummarizeTelemetryInfraStatus(
 	ctx context.Context,
 	client ctrlClient.Client,
 	cfg TelemetryRuntimeConfig,
