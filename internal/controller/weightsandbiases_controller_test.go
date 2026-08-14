@@ -10,6 +10,7 @@ import (
 	. "github.com/onsi/gomega"
 	apiv2 "github.com/wandb/operator/api/v2"
 	v2 "github.com/wandb/operator/internal/controller/reconciler"
+	"github.com/wandb/operator/internal/observability/telemetry"
 	"github.com/wandb/operator/pkg/utils"
 	"github.com/wandb/operator/pkg/wandb/manifest"
 	appsv1 "k8s.io/api/apps/v1"
@@ -239,7 +240,7 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			By("Checking if Applications were NOT created yet (migrations not complete)")
 			wandbManifest, err := manifest.GetServerManifest(ctx, wandb.Spec.Wandb.ManifestRepository, wandb.Spec.Wandb.Version)
 			Expect(err).Should(Succeed())
-			_, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, v2.DefaultTelemetryRuntimeConfig())
+			_, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, telemetry.DefaultTelemetryRuntimeConfig())
 			Expect(err).Should(Succeed())
 
 			By("Checking if the MySQL init job was created")
@@ -324,7 +325,7 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			By("Checking if Applications were NOT created yet (migrations not complete)")
 			wandbManifest, err := manifest.GetServerManifest(ctx, wandb.Spec.Wandb.ManifestRepository, wandb.Spec.Wandb.Version)
 			Expect(err).Should(Succeed())
-			ctrlResult, err := v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, v2.DefaultTelemetryRuntimeConfig())
+			ctrlResult, err := v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, telemetry.DefaultTelemetryRuntimeConfig())
 			Expect(err).Should(Succeed())
 			Expect(ctrlResult.RequeueAfter).Should(BeNumerically(">", 0))
 
@@ -342,7 +343,7 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			Expect(k8sClient.Status().Update(ctx, wandb)).Should(Succeed())
 
 			// For now test by calling ReconcileWandbManifest directly, but this will get refactored into the reconciler later
-			ctrlResult, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, v2.DefaultTelemetryRuntimeConfig())
+			ctrlResult, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, telemetry.DefaultTelemetryRuntimeConfig())
 			Expect(err).Should(Succeed())
 			Expect(ctrlResult.RequeueAfter).Should(BeZero())
 
@@ -412,7 +413,7 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			By("Reconciling the manifest to completion for the initial generation")
 			wandbManifest, err := manifest.GetServerManifest(ctx, wandb.Spec.Wandb.ManifestRepository, wandb.Spec.Wandb.Version)
 			Expect(err).Should(Succeed())
-			ctrlResult, err := v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, v2.DefaultTelemetryRuntimeConfig())
+			ctrlResult, err := v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, telemetry.DefaultTelemetryRuntimeConfig())
 			Expect(err).Should(Succeed())
 			Expect(ctrlResult.RequeueAfter).Should(BeZero())
 
@@ -431,7 +432,7 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			By("Reconciling while the new version's migration is still pending")
 			wandbManifest, err = manifest.GetServerManifest(ctx, wandb.Spec.Wandb.ManifestRepository, wandb.Spec.Wandb.Version)
 			Expect(err).Should(Succeed())
-			ctrlResult, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, v2.DefaultTelemetryRuntimeConfig())
+			ctrlResult, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, telemetry.DefaultTelemetryRuntimeConfig())
 			Expect(err).Should(Succeed())
 			Expect(ctrlResult.RequeueAfter).Should(BeNumerically(">", 0))
 
@@ -446,7 +447,7 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			wandb.Status.Wandb.Migration.Reason = "Complete"
 			Expect(k8sClient.Status().Update(ctx, wandb)).Should(Succeed())
 
-			ctrlResult, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, v2.DefaultTelemetryRuntimeConfig())
+			ctrlResult, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, telemetry.DefaultTelemetryRuntimeConfig())
 			Expect(err).Should(Succeed())
 			Expect(ctrlResult.RequeueAfter).Should(BeZero())
 
@@ -520,7 +521,7 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			By("Reconciling the manifest to create the Applications")
 			wandbManifest, err := manifest.GetServerManifest(ctx, wandb.Spec.Wandb.ManifestRepository, wandb.Spec.Wandb.Version)
 			Expect(err).Should(Succeed())
-			_, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, v2.DefaultTelemetryRuntimeConfig())
+			_, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, telemetry.DefaultTelemetryRuntimeConfig())
 			Expect(err).Should(Succeed())
 
 			appList := &apiv2.ApplicationList{}
@@ -566,7 +567,7 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 
 			By("Reconciling again: the gate must pass on live Deployments even though the status map says not-ready")
 			Expect(k8sClient.Get(ctx, wandbLookupKey, wandb)).Should(Succeed())
-			_, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, v2.DefaultTelemetryRuntimeConfig())
+			_, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, telemetry.DefaultTelemetryRuntimeConfig())
 			Expect(err).Should(Succeed())
 
 			err = k8sClient.Get(ctx, types.NamespacedName{Name: legacy.Name, Namespace: WandbNamespace}, &appsv1.Deployment{})
@@ -581,7 +582,7 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			Expect(k8sClient.Status().Update(ctx, refreshed)).Should(Succeed())
 
 			Expect(k8sClient.Get(ctx, wandbLookupKey, wandb)).Should(Succeed())
-			_, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, v2.DefaultTelemetryRuntimeConfig())
+			_, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, telemetry.DefaultTelemetryRuntimeConfig())
 			Expect(err).Should(Succeed())
 			Expect(k8sClient.Get(ctx, wandbLookupKey, wandb)).Should(Succeed())
 			Expect(wandb.Status.Wandb.Applications[appName].Ready).To(BeTrue(),
@@ -640,7 +641,7 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			wandb.Status.ClickHouseStatus[apiv2.DefaultInstanceName] = clickHouseStatus
 			Expect(k8sClient.Status().Update(ctx, wandb)).Should(Succeed())
 
-			ctrlResult, err := v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, v2.DefaultTelemetryRuntimeConfig())
+			ctrlResult, err := v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, telemetry.DefaultTelemetryRuntimeConfig())
 			Expect(err).Should(Succeed())
 			Expect(ctrlResult.RequeueAfter).Should(BeNumerically(">", 0), "Expected requeue when migration is running")
 
@@ -650,7 +651,7 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			wandb.Status.Wandb.Migration.Reason = "Failed"
 			Expect(k8sClient.Status().Update(ctx, wandb)).Should(Succeed())
 
-			ctrlResult, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, v2.DefaultTelemetryRuntimeConfig())
+			ctrlResult, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, telemetry.DefaultTelemetryRuntimeConfig())
 			Expect(err).Should(Succeed())
 			Expect(ctrlResult.RequeueAfter).Should(BeNumerically(">", 0), "Expected requeue when migration failed")
 
@@ -662,7 +663,7 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			wandb.Status.Wandb.MySQLInit = map[string]apiv2.MigrationJobStatus{apiv2.DefaultInstanceName: {Succeeded: true}}
 			Expect(k8sClient.Status().Update(ctx, wandb)).Should(Succeed())
 
-			ctrlResult, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, v2.DefaultTelemetryRuntimeConfig())
+			ctrlResult, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, telemetry.DefaultTelemetryRuntimeConfig())
 			Expect(err).Should(Succeed())
 			Expect(ctrlResult.RequeueAfter).Should(BeZero(), "Expected no requeue when migration is complete")
 		})
@@ -730,7 +731,7 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 
 			// This call to ReconcileWandbManifest should trigger runMigrations,
 			// which sees version mismatch and starts migrations.
-			_, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, v2.DefaultTelemetryRuntimeConfig())
+			_, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, telemetry.DefaultTelemetryRuntimeConfig())
 			Expect(err).Should(Succeed())
 
 			By("Verifying migration status was reset for the new version")
