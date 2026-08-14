@@ -39,10 +39,7 @@ func readConnectionDetails(actual *chiv1.ClickHouseInstallation) *clickhouseConn
 }
 
 // readClusterTopology reports whether applications should use
-// ReplicatedMergeTree, and the cluster their DDL runs ON CLUSTER. It reads the
-// layout off the live CHI rather than the CR: what is provisioned is what
-// applications have to match, and a spec change hasn't reached ClickHouse until
-// the CHI carries it.
+// ReplicatedMergeTree, and the cluster their DDL runs ON CLUSTER.
 func readClusterTopology(actual *chiv1.ClickHouseInstallation) (bool, string) {
 	if actual.Spec.Configuration == nil {
 		return false, ""

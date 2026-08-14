@@ -637,8 +637,7 @@ type clickHouseEnvFinding struct {
 // mapClickHouseReplication lifts the replication env vars from anywhere in the v1
 // values into the clickhouse-pending annotation, alongside the other literals
 // this conversion can't express as selectors. The reconciler drains it into the
-// converted connection Secret, which is where replication belongs: applications
-// read it from the same Secret as host and database.
+// converted connection Secret
 func mapClickHouseReplication(values map[string]interface{}, dst *appsv2.WeightsAndBiases) error {
 	replicated, cluster, err := harvestClickHouseReplication(values)
 	if err != nil {
@@ -671,7 +670,6 @@ func mapClickHouseReplication(values map[string]interface{}, dst *appsv2.Weights
 
 // readClickHousePendingAnnotation decodes the annotation mapClickHouse may have
 // already written, so replication merges into it instead of replacing it.
-// UseNumber keeps a numeric v1 port from round-tripping through float64.
 func readClickHousePendingAnnotation(dst *appsv2.WeightsAndBiases) (map[string]interface{}, error) {
 	pending := map[string]interface{}{}
 	raw, found := dst.Annotations[ClickHousePendingAnnotation]

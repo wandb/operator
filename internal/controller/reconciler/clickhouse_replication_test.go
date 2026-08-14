@@ -22,8 +22,7 @@ func clickHouseSel(key string) corev1.SecretKeySelector {
 }
 
 // wandbWithClickHouseConnection publishes a connection whose topology selectors
-// are whatever the infra layer resolved — set for managed and for an external
-// ClickHouse that declared it, unset otherwise.
+// are whatever the infra layer resolved
 func wandbWithClickHouseConnection(conn apiv2.ClickHouseConnection) *apiv2.WeightsAndBiases {
 	return &apiv2.WeightsAndBiases{
 		ObjectMeta: metav1.ObjectMeta{Name: "wandb", Namespace: "default"},
