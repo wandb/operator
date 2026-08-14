@@ -34,10 +34,6 @@ wandb-operator:
           value: ":8443"
         METRICS_SECURE:
           value: "false"
-        # The amazon-ecr-credential-helper (used by the ambient ECR keychain when
-        # pulling the server manifest from private ECR) caches its auth token on
-        # disk; its default ~/.ecr fails under readOnlyRootFilesystem. Redirect it
-        # to the writable emptyDir below so nothing writes to the container root.
         AWS_ECR_CACHE_DIR:
           value: /tmp/ecr-cache
       securityContext:
