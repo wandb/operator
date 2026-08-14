@@ -160,6 +160,8 @@ func TestConvertTo_CustomCACerts(t *testing.T) {
 }
 
 func TestConvertTo_VersionFromAppImageTag(t *testing.T) {
+	// A resolvable manifest: these assert version mapping, not per-app overrides.
+	withConversionManifestApps(t)
 	dst := &appsv2.WeightsAndBiases{}
 	src := newV1(map[string]interface{}{
 		"app": map[string]interface{}{
@@ -171,6 +173,8 @@ func TestConvertTo_VersionFromAppImageTag(t *testing.T) {
 }
 
 func TestConvertTo_VersionFallsBackToApiImageTag(t *testing.T) {
+	// A resolvable manifest: these assert version mapping, not per-app overrides.
+	withConversionManifestApps(t)
 	dst := &appsv2.WeightsAndBiases{}
 	src := newV1(map[string]interface{}{
 		"api": map[string]interface{}{
@@ -182,6 +186,8 @@ func TestConvertTo_VersionFallsBackToApiImageTag(t *testing.T) {
 }
 
 func TestConvertTo_VersionAppWinsOverApi(t *testing.T) {
+	// A resolvable manifest: these assert version mapping, not per-app overrides.
+	withConversionManifestApps(t)
 	dst := &appsv2.WeightsAndBiases{}
 	src := newV1(map[string]interface{}{
 		"app": map[string]interface{}{
@@ -196,6 +202,8 @@ func TestConvertTo_VersionAppWinsOverApi(t *testing.T) {
 }
 
 func TestConvertTo_VersionEmptyAppFallsBackToApi(t *testing.T) {
+	// A resolvable manifest: these assert version mapping, not per-app overrides.
+	withConversionManifestApps(t)
 	dst := &appsv2.WeightsAndBiases{}
 	src := newV1(map[string]interface{}{
 		"app": map[string]interface{}{
@@ -219,6 +227,8 @@ func TestConvertTo_VersionAbsent(t *testing.T) {
 }
 
 func TestConvertTo_VersionWithoutGlobal(t *testing.T) {
+	// A resolvable manifest: these assert version mapping, not per-app overrides.
+	withConversionManifestApps(t)
 	dst := &appsv2.WeightsAndBiases{}
 	src := newV1(map[string]interface{}{
 		"app": map[string]interface{}{
@@ -1720,6 +1730,8 @@ func TestConvertFrom_NoAnnotations(t *testing.T) {
 }
 
 func TestConvertTo_ActiveSpecSecretOverridesCRValues(t *testing.T) {
+	// A resolvable manifest: these assert version mapping, not per-app overrides.
+	withConversionManifestApps(t)
 	withConversionReader(t, activeSpecSecret(t, "default", "wandb", map[string]interface{}{
 		"global": map[string]interface{}{
 			"host":    "http://wandb.from-active-spec",

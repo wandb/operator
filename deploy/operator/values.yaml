@@ -231,6 +231,10 @@ victoria-metrics-operator:
     # Install Victoria CRDs through Helm's CRD phase so telemetry resources
     # in this chart can be created in the same release.
     plain: true
+    upgrade:
+      enabled: true
+      # Required to update the Victoria CRD Fields
+      forceConflicts: true
 
 grafana-operator:
   # Helm dependency conditions are boolean-only, so full installs
