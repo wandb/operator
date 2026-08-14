@@ -290,11 +290,6 @@ func managedClickHouseInferStatus(
 	for _, e := range events {
 		recorder.Event(wandb, e.Type, e.Reason, e.Message)
 	}
-	// The operator provisions the cluster, so it is the authority on the topology
-	// applications must match: replicas > 1 means ReplicatedMergeTree.
-	managed := wandb.Spec.ClickHouse[key].ManagedClickHouse
-	updatedStatus.Connection.Replicated = managed.Replicas > 1
-	updatedStatus.Connection.ClusterName = altinity.CHIClusterName()
 	wandb.Status.ClickHouseStatus[key] = updatedStatus
 	err := updateWandbStatusIfChanged(ctx, client, wandb, statusBefore)
 
@@ -310,18 +305,9 @@ func externalClickHouseInferStatus(ctx context.Context, c client.Client, wandb *
 	state, ready, updatedConditions := external.InferExternalStatus(oldStatus.Conditions, newConditions, wandb.Generation, newInfraConn != nil)
 	conn := utils.Coalesce(newInfraConn, &oldInfraConn)
 
-	// ReadState rebuilds the connection from the connection Secret, which only
-	// carries endpoints and credentials. Replication is user-declared topology the
-	// operator can't inspect, so carry it from the spec.
-	published := *conn
-	if declared := wandb.Spec.ClickHouse[key].ExternalClickHouse; declared != nil {
-		published.Replicated = declared.Replicated
-		published.ClusterName = declared.ClusterName
-	}
-
 	wandb.Status.ClickHouseStatus[key] = apiv2.ClickHouseInfraStatus{
 		WBInfraStatus: apiv2.WBInfraStatus{Ready: ready, State: state, Conditions: updatedConditions},
-		Connection:    published,
+		Connection:    *conn,
 	}
 	return ctrl.Result{}, updateWandbStatusIfChanged(ctx, c, wandb, statusBefore)
 }

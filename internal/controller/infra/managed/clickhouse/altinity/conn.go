@@ -17,13 +17,15 @@ import (
 )
 
 type clickhouseConnInfo struct {
-	Host     string
-	TCPPort  string
-	HTTPPort string
-	User     string
-	Password string
-	Database string
-	Tls      bool
+	Host        string
+	TCPPort     string
+	HTTPPort    string
+	User        string
+	Password    string
+	Database    string
+	Tls         bool
+	Replicated  bool
+	ClusterName string
 }
 
 func (c *clickhouseConnInfo) toURL() string {
@@ -90,13 +92,15 @@ func writeClickHouseConnInfo(
 		},
 		Type: corev1.SecretTypeOpaque,
 		StringData: map[string]string{
-			urlKey:     connInfo.toURL(),
-			"Host":     connInfo.Host,
-			"TCPPort":  connInfo.TCPPort,
-			"HTTPPort": connInfo.HTTPPort,
-			"User":     connInfo.User,
-			"Password": connInfo.Password,
-			"Database": connInfo.Database,
+			urlKey:        connInfo.toURL(),
+			"Host":        connInfo.Host,
+			"TCPPort":     connInfo.TCPPort,
+			"HTTPPort":    connInfo.HTTPPort,
+			"User":        connInfo.User,
+			"Password":    connInfo.Password,
+			"Database":    connInfo.Database,
+			"Replicated":  strconv.FormatBool(connInfo.Replicated),
+			"ClusterName": connInfo.ClusterName,
 		},
 	}
 
@@ -113,5 +117,8 @@ func writeClickHouseConnInfo(
 		Username: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "User", Optional: ptr.To(false)},
 		Password: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Password", Optional: ptr.To(false)},
 		Database: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Database", Optional: ptr.To(false)},
+		// The operator provisions the cluster, so these keys always exist.
+		Replicated:  corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Replicated", Optional: ptr.To(false)},
+		ClusterName: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "ClusterName", Optional: ptr.To(false)},
 	}, nil
 }

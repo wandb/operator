@@ -526,7 +526,18 @@ spec:
                     externalClickhouse:
                       properties:
                         clusterName:
-                          type: string
+                          properties:
+                            key:
+                              type: string
+                            name:
+                              default: ""
+                              type: string
+                            optional:
+                              type: boolean
+                          required:
+                          - key
+                          type: object
+                          x-kubernetes-map-type: atomic
                         database:
                           properties:
                             key:
@@ -580,7 +591,18 @@ spec:
                           type: object
                           x-kubernetes-map-type: atomic
                         replicated:
-                          type: boolean
+                          properties:
+                            key:
+                              type: string
+                            name:
+                              default: ""
+                              type: string
+                            optional:
+                              type: boolean
+                          required:
+                          - key
+                          type: object
+                          x-kubernetes-map-type: atomic
                         tcpPort:
                           properties:
                             key:
@@ -4456,7 +4478,18 @@ spec:
                     connection:
                       properties:
                         clusterName:
-                          type: string
+                          properties:
+                            key:
+                              type: string
+                            name:
+                              default: ""
+                              type: string
+                            optional:
+                              type: boolean
+                          required:
+                          - key
+                          type: object
+                          x-kubernetes-map-type: atomic
                         database:
                           properties:
                             key:
@@ -4510,7 +4543,18 @@ spec:
                           type: object
                           x-kubernetes-map-type: atomic
                         replicated:
-                          type: boolean
+                          properties:
+                            key:
+                              type: string
+                            name:
+                              default: ""
+                              type: string
+                            optional:
+                              type: boolean
+                          required:
+                          - key
+                          type: object
+                          x-kubernetes-map-type: atomic
                         tcpPort:
                           properties:
                             key:

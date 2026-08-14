@@ -618,6 +618,11 @@ func mapClickHouse(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiase
 const (
 	envClickHouseReplicated        = "WF_CLICKHOUSE_REPLICATED"
 	envClickHouseReplicatedCluster = "WF_CLICKHOUSE_REPLICATED_CLUSTER"
+
+	// Keys in the clickhouse-pending annotation payload; migrateLegacyClickHouse
+	// turns them into keys of the converted connection Secret.
+	clickHousePendingReplicatedKey = "replicated"
+	clickHousePendingClusterKey    = "replicatedCluster"
 )
 
 func isClickHouseReplicationEnv(name string) bool {
@@ -630,7 +635,10 @@ type clickHouseEnvFinding struct {
 }
 
 // mapClickHouseReplication lifts the replication env vars from anywhere in the v1
-// values onto spec.clickhouse.<instance>.externalClickhouse
+// values into the clickhouse-pending annotation, alongside the other literals
+// this conversion can't express as selectors. The reconciler drains it into the
+// converted connection Secret, which is where replication belongs: applications
+// read it from the same Secret as host and database.
 func mapClickHouseReplication(values map[string]interface{}, dst *appsv2.WeightsAndBiases) error {
 	replicated, cluster, err := harvestClickHouseReplication(values)
 	if err != nil {
@@ -648,14 +656,34 @@ func mapClickHouseReplication(values map[string]interface{}, dst *appsv2.Weights
 		return nil
 	}
 
+	pending, err := readClickHousePendingAnnotation(dst)
+	if err != nil {
+		return err
+	}
 	if replicated != nil {
-		spec.ExternalClickHouse.Replicated = *replicated
+		pending[clickHousePendingReplicatedKey] = strconv.FormatBool(*replicated)
 	}
 	if cluster != "" {
-		spec.ExternalClickHouse.ClusterName = cluster
+		pending[clickHousePendingClusterKey] = cluster
 	}
-	dst.Spec.ClickHouse[appsv2.DefaultInstanceName] = spec
-	return nil
+	return writeAnnotation(dst, ClickHousePendingAnnotation, pending)
+}
+
+// readClickHousePendingAnnotation decodes the annotation mapClickHouse may have
+// already written, so replication merges into it instead of replacing it.
+// UseNumber keeps a numeric v1 port from round-tripping through float64.
+func readClickHousePendingAnnotation(dst *appsv2.WeightsAndBiases) (map[string]interface{}, error) {
+	pending := map[string]interface{}{}
+	raw, found := dst.Annotations[ClickHousePendingAnnotation]
+	if !found || raw == "" {
+		return pending, nil
+	}
+	dec := json.NewDecoder(strings.NewReader(raw))
+	dec.UseNumber()
+	if err := dec.Decode(&pending); err != nil {
+		return nil, fmt.Errorf("decode %s: %w", ClickHousePendingAnnotation, err)
+	}
+	return pending, nil
 }
 
 // harvestClickHouseReplication scans every v1 values section for the replication

@@ -51,6 +51,23 @@ func convertedClickHouse(t *testing.T, values map[string]interface{}) *appsv2.Cl
 	return dst.Spec.ClickHouse[appsv2.DefaultInstanceName].ExternalClickHouse
 }
 
+// convertedClickHousePending decodes the clickhouse-pending annotation. Conversion
+// leaves replication there, with the other literals it can't express as
+// selectors, for the reconciler to drain into the connection Secret.
+func convertedClickHousePending(t *testing.T, values map[string]interface{}) map[string]interface{} {
+	t.Helper()
+	dst := &appsv2.WeightsAndBiases{}
+	require.NoError(t, newV1(values).ConvertTo(dst))
+
+	raw, found := dst.Annotations[ClickHousePendingAnnotation]
+	if !found {
+		return map[string]interface{}{}
+	}
+	var pending map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(raw), &pending))
+	return pending
+}
+
 func legacyOverrideEnvNames(t *testing.T, values map[string]interface{}) map[string][]string {
 	t.Helper()
 	dst := &appsv2.WeightsAndBiases{}
@@ -67,7 +84,7 @@ func legacyOverrideEnvNames(t *testing.T, values map[string]interface{}) map[str
 
 // The real cutover shape: both env vars under weave-trace.extraEnv.
 func TestConvertTo_ClickHouseReplicationFromAppExtraEnv(t *testing.T) {
-	conn := convertedClickHouse(t, externalClickHouseValues(map[string]interface{}{
+	pending := convertedClickHousePending(t, externalClickHouseValues(map[string]interface{}{
 		"weave-trace": map[string]interface{}{
 			"extraEnv": map[string]interface{}{
 				"DISABLE_TELEMETRY":                "true",
@@ -77,13 +94,12 @@ func TestConvertTo_ClickHouseReplicationFromAppExtraEnv(t *testing.T) {
 		},
 	}))
 
-	require.NotNil(t, conn)
-	require.True(t, conn.Replicated)
-	require.Equal(t, "weavecluster", conn.ClusterName)
+	require.Equal(t, "true", pending["replicated"])
+	require.Equal(t, "weavecluster", pending["replicatedCluster"])
 }
 
 func TestConvertTo_ClickHouseReplicationFromAppEnv(t *testing.T) {
-	conn := convertedClickHouse(t, externalClickHouseValues(map[string]interface{}{
+	pending := convertedClickHousePending(t, externalClickHouseValues(map[string]interface{}{
 		"weave-trace": map[string]interface{}{
 			"env": map[string]interface{}{
 				"WF_CLICKHOUSE_REPLICATED":         "true",
@@ -92,12 +108,12 @@ func TestConvertTo_ClickHouseReplicationFromAppEnv(t *testing.T) {
 		},
 	}))
 
-	require.True(t, conn.Replicated)
-	require.Equal(t, "from-env", conn.ClusterName)
+	require.Equal(t, "true", pending["replicated"])
+	require.Equal(t, "from-env", pending["replicatedCluster"])
 }
 
 func TestConvertTo_ClickHouseReplicationFromGlobalEnv(t *testing.T) {
-	conn := convertedClickHouse(t, externalClickHouseValues(map[string]interface{}{
+	pending := convertedClickHousePending(t, externalClickHouseValues(map[string]interface{}{
 		"global": map[string]interface{}{
 			"env": map[string]interface{}{
 				"WF_CLICKHOUSE_REPLICATED":         "true",
@@ -106,12 +122,12 @@ func TestConvertTo_ClickHouseReplicationFromGlobalEnv(t *testing.T) {
 		},
 	}))
 
-	require.True(t, conn.Replicated)
-	require.Equal(t, "global-cluster", conn.ClusterName)
+	require.Equal(t, "true", pending["replicated"])
+	require.Equal(t, "global-cluster", pending["replicatedCluster"])
 }
 
 func TestConvertTo_ClickHouseReplicationFromGlobalExtraEnv(t *testing.T) {
-	conn := convertedClickHouse(t, externalClickHouseValues(map[string]interface{}{
+	pending := convertedClickHousePending(t, externalClickHouseValues(map[string]interface{}{
 		"global": map[string]interface{}{
 			"extraEnv": map[string]interface{}{
 				"WF_CLICKHOUSE_REPLICATED": "true",
@@ -119,24 +135,24 @@ func TestConvertTo_ClickHouseReplicationFromGlobalExtraEnv(t *testing.T) {
 		},
 	}))
 
-	require.True(t, conn.Replicated)
+	require.Equal(t, "true", pending["replicated"])
 }
 
 // The structured v1 flag, with no env var anywhere.
 func TestConvertTo_ClickHouseReplicationFromGlobalClickhouseFlag(t *testing.T) {
-	conn := convertedClickHouse(t, externalClickHouseValues(map[string]interface{}{
+	pending := convertedClickHousePending(t, externalClickHouseValues(map[string]interface{}{
 		"global": map[string]interface{}{
 			"clickhouse": map[string]interface{}{"replicated": true},
 		},
 	}))
 
-	require.True(t, conn.Replicated)
-	require.Empty(t, conn.ClusterName, "the v1 flag carries no cluster name")
+	require.Equal(t, "true", pending["replicated"])
+	require.NotContains(t, pending, "replicatedCluster", "the v1 flag carries no cluster name")
 }
 
 // Per-application env is more specific than global, mirroring v1 at runtime.
 func TestConvertTo_ClickHouseReplicationAppWinsOverGlobal(t *testing.T) {
-	conn := convertedClickHouse(t, externalClickHouseValues(map[string]interface{}{
+	pending := convertedClickHousePending(t, externalClickHouseValues(map[string]interface{}{
 		"global": map[string]interface{}{
 			"env": map[string]interface{}{"WF_CLICKHOUSE_REPLICATED_CLUSTER": "global-cluster"},
 		},
@@ -145,31 +161,31 @@ func TestConvertTo_ClickHouseReplicationAppWinsOverGlobal(t *testing.T) {
 		},
 	}))
 
-	require.Equal(t, "app-cluster", conn.ClusterName)
+	require.Equal(t, "app-cluster", pending["replicatedCluster"])
 }
 
 // An explicit env var is more specific than the structured flag.
 func TestConvertTo_ClickHouseReplicationEnvWinsOverFlag(t *testing.T) {
-	conn := convertedClickHouse(t, externalClickHouseValues(map[string]interface{}{
+	pending := convertedClickHousePending(t, externalClickHouseValues(map[string]interface{}{
 		"global": map[string]interface{}{
 			"clickhouse": map[string]interface{}{"replicated": true},
 			"env":        map[string]interface{}{"WF_CLICKHOUSE_REPLICATED": "false"},
 		},
 	}))
 
-	require.False(t, conn.Replicated)
+	require.Equal(t, "false", pending["replicated"])
 }
 
 // env beats extraEnv within one section, as the chart did.
 func TestConvertTo_ClickHouseReplicationEnvBeatsExtraEnvInSection(t *testing.T) {
-	conn := convertedClickHouse(t, externalClickHouseValues(map[string]interface{}{
+	pending := convertedClickHousePending(t, externalClickHouseValues(map[string]interface{}{
 		"weave-trace": map[string]interface{}{
 			"extraEnv": map[string]interface{}{"WF_CLICKHOUSE_REPLICATED_CLUSTER": "from-extra"},
 			"env":      map[string]interface{}{"WF_CLICKHOUSE_REPLICATED_CLUSTER": "from-env"},
 		},
 	}))
 
-	require.Equal(t, "from-env", conn.ClusterName)
+	require.Equal(t, "from-env", pending["replicatedCluster"])
 }
 
 // Applications that disagree describe one datastore two ways; v2 can't hold both.
@@ -193,7 +209,7 @@ func TestConvertTo_ClickHouseReplicationConflictingAppsFails(t *testing.T) {
 
 // Identical values across applications are not a conflict.
 func TestConvertTo_ClickHouseReplicationAgreeingAppsOK(t *testing.T) {
-	conn := convertedClickHouse(t, externalClickHouseValues(map[string]interface{}{
+	pending := convertedClickHousePending(t, externalClickHouseValues(map[string]interface{}{
 		"weave-trace": map[string]interface{}{
 			"env": map[string]interface{}{"WF_CLICKHOUSE_REPLICATED_CLUSTER": "shared"},
 		},
@@ -202,7 +218,7 @@ func TestConvertTo_ClickHouseReplicationAgreeingAppsOK(t *testing.T) {
 		},
 	}))
 
-	require.Equal(t, "shared", conn.ClusterName)
+	require.Equal(t, "shared", pending["replicatedCluster"])
 }
 
 // The whole point: they must not also survive as per-application overrides, where
@@ -267,7 +283,7 @@ func TestConvertTo_ClickHouseReplicationNonBooleanFails(t *testing.T) {
 
 // Helm templates never resolve in the operator, so they must not be harvested.
 func TestConvertTo_ClickHouseReplicationTemplatedValueIgnored(t *testing.T) {
-	conn := convertedClickHouse(t, externalClickHouseValues(map[string]interface{}{
+	pending := convertedClickHousePending(t, externalClickHouseValues(map[string]interface{}{
 		"weave-trace": map[string]interface{}{
 			"env": map[string]interface{}{
 				"WF_CLICKHOUSE_REPLICATED_CLUSTER": "{{ .Release.Name }}-cluster",
@@ -275,16 +291,38 @@ func TestConvertTo_ClickHouseReplicationTemplatedValueIgnored(t *testing.T) {
 		},
 	}))
 
-	require.Empty(t, conn.ClusterName)
+	require.NotContains(t, pending, "replicatedCluster")
 }
 
 // Absent everywhere: nothing declared, so the manifest's defaultValue applies.
 func TestConvertTo_ClickHouseReplicationAbsent(t *testing.T) {
 	conn := convertedClickHouse(t, externalClickHouseValues(nil))
-
 	require.NotNil(t, conn)
-	require.False(t, conn.Replicated)
-	require.Empty(t, conn.ClusterName)
+
+	pending := convertedClickHousePending(t, externalClickHouseValues(nil))
+	require.NotContains(t, pending, "replicated")
+	require.NotContains(t, pending, "replicatedCluster")
+}
+
+// Replication is written into an annotation mapClickHouse has already populated,
+// so it has to merge: clobbering it would drop the connection literals and leave
+// the converted Secret with nothing but a topology.
+func TestConvertTo_ClickHouseReplicationMergesIntoPendingLiterals(t *testing.T) {
+	pending := convertedClickHousePending(t, externalClickHouseValues(map[string]interface{}{
+		"weave-trace": map[string]interface{}{
+			"env": map[string]interface{}{
+				"WF_CLICKHOUSE_REPLICATED":         "true",
+				"WF_CLICKHOUSE_REPLICATED_CLUSTER": "weavecluster",
+			},
+		},
+	}))
+
+	require.Equal(t, "clickhouse-wandb.clickhouse.svc.cluster.local", pending["host"])
+	require.Equal(t, "weave", pending["database"])
+	require.Equal(t, "weave", pending["user"])
+	require.Equal(t, "8123", pending["port"], "a numeric v1 port must survive the merge as written")
+	require.Equal(t, "true", pending["replicated"])
+	require.Equal(t, "weavecluster", pending["replicatedCluster"])
 }
 
 // The connection must still round-trip through the raw v1 annotation untouched.
