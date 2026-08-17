@@ -313,16 +313,6 @@ commonEnvvars:
           type: custom-resource
           field: spec.wandb.oidc.sessionLength
       defaultValue: "720h"
-    - name: GORILLA_SLACK_CLIENT_ID
-      sources:
-        - name: slack
-          type: custom-resource
-          field: spec.wandb.notifications.slack.clientId
-    - name: GORILLA_SLACK_SECRET
-      sources:
-        - name: slack
-          type: custom-resource
-          field: spec.wandb.notifications.slack.clientSecret
   gorillaCustomerSecrets:
     - name: GORILLA_CUSTOMER_SECRET_STORE_SOURCE
       value: "k8s-secretmanager://"
