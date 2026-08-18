@@ -2576,6 +2576,9 @@ spec:
               objectStore:
                 additionalProperties:
                   properties:
+                    bucketAttributionDisabled:
+                      default: false
+                      type: boolean
                     externalObjectStore:
                       properties:
                         accessKey:
@@ -4498,6 +4501,27 @@ spec:
                             format: int32
                             type: integer
                         type: object
+                    type: object
+                  security:
+                    properties:
+                      allowAnonymousPublicProjects:
+                        default: false
+                        type: boolean
+                      allowUserTeamCreation:
+                        default: false
+                        type: boolean
+                      disableCodeSaving:
+                        default: false
+                        type: boolean
+                      disableSSOProvisioning:
+                        default: false
+                        type: boolean
+                      hideUpgradeBanner:
+                        default: false
+                        type: boolean
+                      insecureAllowAPIKeyAdminAccess:
+                        default: false
+                        type: boolean
                     type: object
                   serviceAccount:
                     properties:
