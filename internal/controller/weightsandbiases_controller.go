@@ -57,12 +57,13 @@ const resFinalizer = "finalizer.app.wandb.com"
 // WeightsAndBiasesReconciler reconciles a WeightsAndBiases object
 type WeightsAndBiasesReconciler struct {
 	client.Client
-	IsAirgapped    bool
-	DeployerClient deployer.DeployerInterface
-	Scheme         *runtime.Scheme
-	Recorder       record.EventRecorder
-	DryRun         bool
-	Debug          bool
+	IsAirgapped        bool
+	DeployerClient     deployer.DeployerInterface
+	Scheme             *runtime.Scheme
+	Recorder           record.EventRecorder
+	DryRun             bool
+	Debug              bool
+	ManagedSpecEnabled bool
 }
 
 //+kubebuilder:rbac:groups=apps.wandb.com,resources=weightsandbiases,verbs=get;list;watch;create;update;patch;delete
@@ -401,16 +402,18 @@ func (r *WeightsAndBiasesReconciler) Delete(e event.DeleteEvent) bool {
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *WeightsAndBiasesReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	builder := ctrl.NewControllerManagedBy(mgr).
+	controllerBuilder := ctrl.NewControllerManagedBy(mgr).
 		For(&apiv1.WeightsAndBiases{}, builder.WithPredicates(filterWBEvents{})).
 		Owns(&corev1.Secret{}, builder.WithPredicates(filterSecretEvents{})).
-		Owns(&corev1.ConfigMap{}).
-		Watches(
+		Owns(&corev1.ConfigMap{})
+	if r.ManagedSpecEnabled {
+		controllerBuilder = controllerBuilder.Watches(
 			&corev1.ConfigMap{},
 			handler.EnqueueRequestsFromMapFunc(r.managedSpecConfigMapRequests),
 			builder.WithPredicates(predicate.NewPredicateFuncs(isManagedSpecConfigMap)),
 		)
-	return builder.Complete(r)
+	}
+	return controllerBuilder.Complete(r)
 }
 
 func isManagedSpecConfigMap(object client.Object) bool {
@@ -421,6 +424,10 @@ func (r *WeightsAndBiasesReconciler) managedSpecConfigMapRequests(
 	ctx context.Context,
 	object client.Object,
 ) []reconcile.Request {
+	if !r.ManagedSpecEnabled {
+		return nil
+	}
+
 	instances := &apiv1.WeightsAndBiasesList{}
 	if err := r.List(ctx, instances, client.InNamespace(object.GetNamespace())); err != nil {
 		ctrllog.FromContext(ctx).Error(err, "Failed to list WeightsAndBiases instances for managed spec ConfigMap")

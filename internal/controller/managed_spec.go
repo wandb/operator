@@ -32,6 +32,11 @@ func (r *WeightsAndBiasesReconciler) selectBaseSpec(
 	namespace string,
 	getDeployerSpec func() (*spec.Spec, error),
 ) (*spec.Spec, bool, error) {
+	if !r.ManagedSpecEnabled {
+		deployerSpec, err := getDeployerSpec()
+		return deployerSpec, false, err
+	}
+
 	log := ctrllog.FromContext(ctx)
 	managed, err := r.managedSpecEnabled(ctx, namespace)
 	if err != nil {

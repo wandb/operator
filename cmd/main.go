@@ -69,7 +69,7 @@ func main() {
 	var enableHTTP2 bool
 	var tlsOpts []func(*tls.Config)
 	var deployerAPI, isolationNamespaces string
-	var debug, airgapped bool
+	var debug, airgapped, managedSpecEnabled bool
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
@@ -94,6 +94,7 @@ func main() {
 	flag.StringVar(&isolationNamespaces, "isolation-namespaces", "", "Specify namespaces (as a comma separated string) that the controller should monitor when operating in namespace isolation mode.")
 
 	flag.BoolVar(&debug, "debug", false, "Enable debug mode")
+	flag.BoolVar(&managedSpecEnabled, "managed-spec-enabled", false, "Enable managed spec cutover")
 
 	opts := zap.Options{
 		Development: true,
@@ -229,12 +230,13 @@ func main() {
 	}
 
 	if err = (&controller.WeightsAndBiasesReconciler{
-		IsAirgapped:    airgapped,
-		Recorder:       mgr.GetEventRecorderFor("weightsandbiases"),
-		Client:         mgr.GetClient(),
-		Scheme:         mgr.GetScheme(),
-		DeployerClient: &deployer.DeployerClient{DeployerAPI: deployerAPI},
-		Debug:          debug,
+		IsAirgapped:        airgapped,
+		Recorder:           mgr.GetEventRecorderFor("weightsandbiases"),
+		Client:             mgr.GetClient(),
+		Scheme:             mgr.GetScheme(),
+		DeployerClient:     &deployer.DeployerClient{DeployerAPI: deployerAPI},
+		Debug:              debug,
+		ManagedSpecEnabled: managedSpecEnabled,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "WeightsAndBiases")
 		os.Exit(1)

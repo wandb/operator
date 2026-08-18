@@ -24,6 +24,37 @@ func TestManagedSpecSelection(t *testing.T) {
 		"global": map[string]interface{}{"enabled": true},
 	})
 
+	t.Run("uses Deployer when managed spec is disabled even after cutover", func(t *testing.T) {
+		reconciler := testManagedSpecReconciler(
+			t,
+			testManagedSpecConfigMap(namespace, deployerSpec.Values),
+			&corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{Name: managedSpecStateConfigMapName, Namespace: namespace},
+				Data:       map[string]string{managedSpecStateKey: "true"},
+			},
+		)
+		reconciler.ManagedSpecEnabled = false
+		calls := 0
+
+		selected, pendingCutover, err := reconciler.selectBaseSpec(ctx, namespace, func() (*spec.Spec, error) {
+			calls++
+			return deployerSpec, nil
+		})
+
+		if err != nil {
+			t.Fatalf("selectBaseSpec returned an error: %v", err)
+		}
+		if selected != deployerSpec {
+			t.Fatal("selectBaseSpec did not return the Deployer spec while managed spec was disabled")
+		}
+		if pendingCutover {
+			t.Fatal("cutover must not be pending while managed spec is disabled")
+		}
+		if calls != 1 {
+			t.Fatalf("Deployer was called %d times, want 1", calls)
+		}
+	})
+
 	t.Run("uses Deployer when the managed spec does not exist", func(t *testing.T) {
 		reconciler := testManagedSpecReconciler(t)
 		calls := 0
@@ -243,7 +274,8 @@ func TestManagedSpecConfigMapRequests(t *testing.T) {
 			&appsv1.WeightsAndBiases{ObjectMeta: metav1.ObjectMeta{Name: "first", Namespace: "default"}},
 			&appsv1.WeightsAndBiases{ObjectMeta: metav1.ObjectMeta{Name: "other", Namespace: "other"}},
 		).Build(),
-		Scheme: scheme,
+		Scheme:             scheme,
+		ManagedSpecEnabled: true,
 	}
 
 	requests := reconciler.managedSpecConfigMapRequests(context.Background(), &corev1.ConfigMap{
@@ -256,6 +288,14 @@ func TestManagedSpecConfigMapRequests(t *testing.T) {
 	if requests[0].NamespacedName != want {
 		t.Fatalf("managedSpecConfigMapRequests returned %v, want %v", requests[0].NamespacedName, want)
 	}
+
+	reconciler.ManagedSpecEnabled = false
+	requests = reconciler.managedSpecConfigMapRequests(context.Background(), &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: managedSpecConfigMapName, Namespace: "default"},
+	})
+	if len(requests) != 0 {
+		t.Fatalf("managedSpecConfigMapRequests returned %d requests while disabled, want 0", len(requests))
+	}
 }
 
 func testManagedSpecReconciler(t *testing.T, objects ...client.Object) *WeightsAndBiasesReconciler {
@@ -265,8 +305,9 @@ func testManagedSpecReconciler(t *testing.T, objects ...client.Object) *WeightsA
 		t.Fatalf("could not register core Kubernetes types: %v", err)
 	}
 	return &WeightsAndBiasesReconciler{
-		Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build(),
-		Scheme: scheme,
+		Client:             fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build(),
+		Scheme:             scheme,
+		ManagedSpecEnabled: true,
 	}
 }
 
