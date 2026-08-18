@@ -98,7 +98,9 @@ func (d *WeightsAndBiasesCustomDefaulter) Default(ctx context.Context, obj runti
 	}
 
 	if wandb.Spec.Wandb.ManifestRepository == "" {
-		wandb.Spec.Wandb.ManifestRepository = appsv2.DefaultManifestRepository
+		// Default the manifest location to where wsm mirrors it, next to the
+		// images: <spec.global.imageRegistry>/wandb/server-manifest.
+		wandb.Spec.Wandb.ManifestRepository = appsv2.ManifestRepositoryFor(wandb.Spec.Global.ImageRegistry)
 	}
 
 	if !strings.Contains(wandb.Spec.Wandb.ManifestRepository, "://") {

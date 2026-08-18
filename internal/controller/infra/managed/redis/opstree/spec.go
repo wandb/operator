@@ -75,6 +75,16 @@ const (
 	redisCapabilityAll corev1.Capability = "ALL"
 )
 
+// pullSecretsPtr adapts global.imagePullSecrets to the redis CRD's pointer field,
+// returning nil when none are configured.
+func pullSecretsPtr(wandb *apiv2.WeightsAndBiases) *[]corev1.LocalObjectReference {
+	if len(wandb.Spec.Global.ImagePullSecrets) == 0 {
+		return nil
+	}
+	secrets := wandb.Spec.Global.ImagePullSecrets
+	return &secrets
+}
+
 func redisPodSecurityContext() *corev1.PodSecurityContext {
 	if utils.IsOpenShift() {
 		return &corev1.PodSecurityContext{
@@ -185,9 +195,10 @@ func ToRedisStandaloneVendorSpec(
 		},
 		Spec: redisv1beta2.RedisSpec{
 			KubernetesConfig: rediscommon.KubernetesConfig{
-				Image:           RedisStandaloneImage(mfst.Redis["default"].Images["standalone"], wandb.Spec.Global.ImageRegistry),
-				ImagePullPolicy: corev1.PullIfNotPresent,
-				Resources:       &corev1.ResourceRequirements{},
+				Image:            RedisStandaloneImage(mfst.Redis["default"].Images["standalone"], wandb.Spec.Global.ImageRegistry),
+				ImagePullPolicy:  corev1.PullIfNotPresent,
+				ImagePullSecrets: pullSecretsPtr(wandb),
+				Resources:        &corev1.ResourceRequirements{},
 			},
 			Affinity:           wandb.GetAffinity(spec.ManagedInfraSpec),
 			PodSecurityContext: redisPodSecurityContext(),
@@ -271,9 +282,10 @@ func ToRedisSentinelVendorSpec(
 		Spec: redissentinelv1beta2.RedisSentinelSpec{
 			Size: &sentinelCount,
 			KubernetesConfig: rediscommon.KubernetesConfig{
-				Image:           RedisSentinelImage(mfst.Redis["default"].Images["sentinel"], wandb.Spec.Global.ImageRegistry),
-				ImagePullPolicy: corev1.PullIfNotPresent,
-				Resources:       &corev1.ResourceRequirements{},
+				Image:            RedisSentinelImage(mfst.Redis["default"].Images["sentinel"], wandb.Spec.Global.ImageRegistry),
+				ImagePullPolicy:  corev1.PullIfNotPresent,
+				ImagePullSecrets: pullSecretsPtr(wandb),
+				Resources:        &corev1.ResourceRequirements{},
 			},
 			PodSecurityContext: redisPodSecurityContext(),
 			SecurityContext:    redisContainerSecurityContext(),
@@ -350,9 +362,10 @@ func ToRedisReplicationVendorSpec(
 		Spec: redisreplicationv1beta2.RedisReplicationSpec{
 			Size: &replicaCount,
 			KubernetesConfig: rediscommon.KubernetesConfig{
-				Image:           RedisReplicationImage(mfst.Redis["default"].Images["replication"], wandb.Spec.Global.ImageRegistry),
-				ImagePullPolicy: corev1.PullIfNotPresent,
-				Resources:       &corev1.ResourceRequirements{},
+				Image:            RedisReplicationImage(mfst.Redis["default"].Images["replication"], wandb.Spec.Global.ImageRegistry),
+				ImagePullPolicy:  corev1.PullIfNotPresent,
+				ImagePullSecrets: pullSecretsPtr(wandb),
+				Resources:        &corev1.ResourceRequirements{},
 			},
 			PodSecurityContext: redisPodSecurityContext(),
 			SecurityContext:    redisContainerSecurityContext(),
