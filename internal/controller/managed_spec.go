@@ -27,58 +27,66 @@ type managedSpecSource struct {
 	rawValues map[string]interface{}
 }
 
+type baseSpecSelection struct {
+	selectedSpec          *spec.Spec
+	shouldCompleteCutover bool
+}
+
 func (r *WeightsAndBiasesReconciler) selectBaseSpec(
 	ctx context.Context,
 	namespace string,
 	getDeployerSpec func() (*spec.Spec, error),
-) (*spec.Spec, bool, error) {
-	if !r.ManagedSpecEnabled {
+) (baseSpecSelection, error) {
+	if !r.ManagedSpecCutoverEnabled {
 		deployerSpec, err := getDeployerSpec()
-		return deployerSpec, false, err
+		return baseSpecSelection{selectedSpec: deployerSpec}, err
 	}
 
 	log := ctrllog.FromContext(ctx)
-	managed, err := r.managedSpecEnabled(ctx, namespace)
+	cutoverComplete, err := r.isManagedSpecCutoverComplete(ctx, namespace)
 	if err != nil {
-		return nil, false, err
+		return baseSpecSelection{}, err
 	}
-	if managed {
+	if cutoverComplete {
 		log.Info("Managed spec cutover is active; skipping Deployer")
 		managedSpec, err := r.getManagedSpec(ctx, namespace)
 		if err != nil {
-			return nil, false, err
+			return baseSpecSelection{}, err
 		}
-		return managedSpec.spec, false, nil
+		return baseSpecSelection{selectedSpec: managedSpec.spec}, nil
 	}
 
 	deployerSpec, err := getDeployerSpec()
 	if err != nil {
-		return nil, false, err
+		return baseSpecSelection{}, err
 	}
 
 	managedSpec, err := r.getManagedSpec(ctx, namespace)
 	if apierrors.IsNotFound(err) {
-		return deployerSpec, false, nil
+		return baseSpecSelection{selectedSpec: deployerSpec}, nil
 	}
 	if err != nil {
 		log.Info("Managed spec is invalid; continuing with Deployer", "error", err)
-		return deployerSpec, false, nil
+		return baseSpecSelection{selectedSpec: deployerSpec}, nil
 	}
 	matches, err := managedSpecConfigurationMatches(managedSpec, deployerSpec)
 	if err != nil {
 		log.Info("Managed spec could not be compared; continuing with Deployer", "error", err)
-		return deployerSpec, false, nil
+		return baseSpecSelection{selectedSpec: deployerSpec}, nil
 	}
 	if matches {
 		log.Info("Managed spec matches Deployer; cutover is pending successful apply")
-		return managedSpec.spec, true, nil
+		return baseSpecSelection{
+			selectedSpec:          managedSpec.spec,
+			shouldCompleteCutover: true,
+		}, nil
 	}
 
 	log.Info("Managed spec does not match Deployer; continuing with Deployer")
-	return deployerSpec, false, nil
+	return baseSpecSelection{selectedSpec: deployerSpec}, nil
 }
 
-func (r *WeightsAndBiasesReconciler) managedSpecEnabled(ctx context.Context, namespace string) (bool, error) {
+func (r *WeightsAndBiasesReconciler) isManagedSpecCutoverComplete(ctx context.Context, namespace string) (bool, error) {
 	state := &corev1.ConfigMap{}
 	err := r.Get(ctx, client.ObjectKey{Name: managedSpecStateConfigMapName, Namespace: namespace}, state)
 	if apierrors.IsNotFound(err) {
@@ -98,7 +106,7 @@ func (r *WeightsAndBiasesReconciler) managedSpecEnabled(ctx context.Context, nam
 	return false, fmt.Errorf("invalid %s value %q in ConfigMap %s", managedSpecStateKey, value, managedSpecStateConfigMapName)
 }
 
-func (r *WeightsAndBiasesReconciler) setManagedSpecEnabled(ctx context.Context, namespace string) error {
+func (r *WeightsAndBiasesReconciler) markManagedSpecCutoverComplete(ctx context.Context, namespace string) error {
 	key := client.ObjectKey{Name: managedSpecStateConfigMapName, Namespace: namespace}
 	state := &corev1.ConfigMap{}
 	err := r.Get(ctx, key, state)
@@ -119,6 +127,21 @@ func (r *WeightsAndBiasesReconciler) setManagedSpecEnabled(ctx context.Context, 
 	}
 	state.Data[managedSpecStateKey] = "true"
 	return r.Update(ctx, state)
+}
+
+func (r *WeightsAndBiasesReconciler) completeManagedSpecCutoverIfNeeded(
+	ctx context.Context,
+	namespace string,
+	shouldComplete bool,
+) error {
+	if !shouldComplete {
+		return nil
+	}
+	if err := r.markManagedSpecCutoverComplete(ctx, namespace); err != nil {
+		return err
+	}
+	ctrllog.FromContext(ctx).Info("Managed spec cutover completed")
+	return nil
 }
 
 func (r *WeightsAndBiasesReconciler) getManagedSpec(ctx context.Context, namespace string) (*managedSpecSource, error) {

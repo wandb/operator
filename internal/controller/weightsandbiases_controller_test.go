@@ -333,13 +333,13 @@ var _ = Describe("WeightsandbiasesController", func() {
 			deployerClient = &deployerfakes.FakeDeployerInterface{}
 			deployerClient.GetSpecReturns(&deployerSpec, nil)
 			reconciler = &WeightsAndBiasesReconciler{
-				Client:             k8sClient,
-				IsAirgapped:        false,
-				DeployerClient:     deployerClient,
-				Scheme:             scheme.Scheme,
-				Recorder:           recorder,
-				DryRun:             true,
-				ManagedSpecEnabled: true,
+				Client:                    k8sClient,
+				IsAirgapped:               false,
+				DeployerClient:            deployerClient,
+				Scheme:                    scheme.Scheme,
+				Recorder:                  recorder,
+				DryRun:                    true,
+				ManagedSpecCutoverEnabled: true,
 			}
 
 			wandb := &wandbcomv1.WeightsAndBiases{
