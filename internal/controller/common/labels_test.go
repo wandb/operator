@@ -8,14 +8,9 @@ import (
 )
 
 var _ = Describe("BuildIdentityLabels", func() {
-	It("sets descriptive identity labels with CR name as instance", func() {
-		wandb := &apiv2.WeightsAndBiases{
-			ObjectMeta: metav1.ObjectMeta{Name: "wandb", Namespace: "wandb-ns"},
-		}
-
-		Expect(BuildIdentityLabels(wandb, "api")).To(Equal(map[string]string{
+	It("sets name, part-of, and managed-by without instance", func() {
+		Expect(BuildIdentityLabels("api")).To(Equal(map[string]string{
 			AppNameLabel:      "api",
-			AppInstanceLabel:  "wandb",
 			AppPartOfLabel:    PartOfWandb,
 			AppManagedByLabel: ManagedByWandbOperator,
 		}))
@@ -33,7 +28,6 @@ var _ = Describe("BuildApplicationLabels", func() {
 			WandbNamespaceLabel: "wandb-ns",
 			WandbComponentLabel: "api",
 			AppNameLabel:        "api",
-			AppInstanceLabel:    "wandb",
 			AppPartOfLabel:      PartOfWandb,
 			AppManagedByLabel:   ManagedByWandbOperator,
 		}))

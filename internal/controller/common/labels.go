@@ -38,11 +38,10 @@ func BuildWandbLabels(wandb *apiv2.WeightsAndBiases, componentName string) map[s
 	}
 }
 
-// BuildIdentityLabels returns app.kubernetes.io identity labels for a release.
-func BuildIdentityLabels(wandb *apiv2.WeightsAndBiases, serviceName string) map[string]string {
+// BuildIdentityLabels returns name, part-of, and managed-by (not instance).
+func BuildIdentityLabels(serviceName string) map[string]string {
 	return map[string]string{
 		AppNameLabel:      serviceName,
-		AppInstanceLabel:  wandb.Name,
 		AppPartOfLabel:    PartOfWandb,
 		AppManagedByLabel: ManagedByWandbOperator,
 	}
@@ -52,6 +51,6 @@ func BuildIdentityLabels(wandb *apiv2.WeightsAndBiases, serviceName string) map[
 func BuildApplicationLabels(wandb *apiv2.WeightsAndBiases, serviceName string) map[string]string {
 	return utils.MergeMapsStringString(
 		BuildWandbLabels(wandb, serviceName),
-		BuildIdentityLabels(wandb, serviceName),
+		BuildIdentityLabels(serviceName),
 	)
 }

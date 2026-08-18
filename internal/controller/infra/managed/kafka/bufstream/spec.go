@@ -289,7 +289,7 @@ func ToEtcdApplication(
 ) (*apiv2.Application, error) {
 	infraSpec := wandb.Spec.Kafka.ManagedKafka
 	labels := BuildWandbKafkaLabels(wandb)
-	metaLabels := utils.MergeMapsStringString(labels, common.BuildIdentityLabels(wandb, nsnBuilder.EtcdName()))
+	metaLabels := utils.MergeMapsStringString(labels, common.BuildIdentityLabels(nsnBuilder.EtcdName()))
 
 	storageSize := infraSpec.StorageSize
 	if storageSize == "" {
@@ -546,7 +546,7 @@ func ToBufstreamApplication(
 ) (*apiv2.Application, error) {
 	infraSpec := wandb.Spec.Kafka.ManagedKafka
 	labels := BuildWandbKafkaLabels(wandb)
-	metaLabels := utils.MergeMapsStringString(labels, common.BuildIdentityLabels(wandb, nsnBuilder.BufstreamName()))
+	metaLabels := utils.MergeMapsStringString(labels, common.BuildIdentityLabels(nsnBuilder.BufstreamName()))
 
 	replicas := effectiveBufstreamReplicas(infraSpec.Replicas)
 
