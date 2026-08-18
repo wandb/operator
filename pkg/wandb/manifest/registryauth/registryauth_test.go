@@ -66,6 +66,24 @@ func TestResolve_MissingSecret_Errors(t *testing.T) {
 	require.Contains(t, err.Error(), "not found")
 }
 
+func TestResolve_OpaqueSecretWithDockerConfig_Errors(t *testing.T) {
+	// Valid dockerconfigjson payload but typed Opaque: kubelet silently ignores such a secret on
+	// the workload pods we propagate this ref to, so the operator must reject it rather than let the
+	// manifest pull pass while every workload image pull falls back to anonymous and 401s.
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "reg", Namespace: "ns"},
+		Type:       corev1.SecretTypeOpaque,
+		Data: map[string][]byte{
+			corev1.DockerConfigJsonKey: dockerConfigJSON("myreg.example.com", "u", "p"),
+		},
+	}
+	c := fake.NewClientBuilder().WithObjects(secret).Build()
+	_, err := registryauth.Resolve(context.Background(), c, "ns",
+		[]corev1.LocalObjectReference{{Name: "reg"}}, false)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "type")
+}
+
 func TestResolve_MissingDockerConfigKey_Errors(t *testing.T) {
 	secret := dockerSecret("reg", map[string][]byte{"wrong": []byte("x")})
 	c := fake.NewClientBuilder().WithObjects(secret).Build()

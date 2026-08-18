@@ -77,6 +77,11 @@ func pullSecretCredential(
 			}
 			return nil, fmt.Errorf("read image pull secret %s/%s: %w", namespace, ref.Name, err)
 		}
+		// kubelet honors this same ref on the workload pods only if the secret is dockerconfigjson-typed;
+		// reject other types here so a mistyped secret fails at the operator, not silently at every pull.
+		if secret.Type != corev1.SecretTypeDockerConfigJson {
+			return nil, fmt.Errorf("image pull secret %s/%s has type %q, want %q", namespace, ref.Name, secret.Type, corev1.SecretTypeDockerConfigJson)
+		}
 		cfg, ok := secret.Data[corev1.DockerConfigJsonKey]
 		if !ok || len(cfg) == 0 {
 			return nil, fmt.Errorf("image pull secret %s/%s missing key %q", namespace, ref.Name, corev1.DockerConfigJsonKey)
