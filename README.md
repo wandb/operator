@@ -129,6 +129,7 @@ trust a CA on the W&B **application** workloads instead, use
 - [Migrating from Operator v1 to v2](docs/migrating-v1-to-v2.md)
 - [Monitoring and Telemetry Guide](docs/monitoring.md)
 - [Deploying on OpenShift](docs/openshift.md)
+- [Deploying Watchtower](docs/watchtower-deployment.md)
 
 ## Development
 

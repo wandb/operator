@@ -29,6 +29,11 @@ jobs:
             echo "Internal chart publishing requires 2.x.y-dev.<identifier>; got ${version}" >&2
             exit 1
           fi
+          wt_version="$(awk '$1 == "version:" { print $2; exit }' deploy/watchtower/Chart.yaml | tr -d '\"')"
+          if [[ "${wt_version}" != "${version}" ]]; then
+            echo "deploy/watchtower must be versioned with the operator; got ${wt_version} vs ${version}" >&2
+            exit 1
+          fi
           echo "version=${version}" >> "${GITHUB_OUTPUT}"
 
       - name: Install Helm
@@ -81,7 +86,7 @@ jobs:
             exit 1
           fi
 
-      - name: Package and publish development chart
+      - name: Package and publish development charts
         env:
           VERSION: ${{ steps.chart.outputs.version }}
         run: |
@@ -90,3 +95,5 @@ jobs:
           mkdir -p dist
           helm package deploy/operator --destination dist
           helm push "dist/operator-${VERSION}.tgz" "oci://${CHART_REPOSITORY}"
+          helm package deploy/watchtower --destination dist
+          helm push "dist/watchtower-${VERSION}.tgz" "oci://${CHART_REPOSITORY}"

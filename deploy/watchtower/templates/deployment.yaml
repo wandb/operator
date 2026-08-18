@@ -1,0 +1,134 @@
+{{- $basePath := include "watchtower.basePath" . }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "watchtower.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "watchtower.labels" . | nindent 4 }}
+spec:
+  # Deliberately not configurable: in-flight deploy jobs and their SSE streams
+  # live in the serving pod's memory, so a reconnect landing on a second pod
+  # would see no history.
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "watchtower.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "watchtower.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "watchtower.serviceAccountName" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: watchtower
+          image: {{ include "watchtower.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          # The operator image entrypoint is /manager; this selects the Watchtower
+          # binary that ships alongside it.
+          command:
+            {{- toYaml .Values.command | nindent 12 }}
+          args:
+            - --port
+            - {{ .Values.containerPort | quote }}
+          env:
+            - name: WATCHTOWER_MODE
+              value: {{ .Values.mode | quote }}
+            - name: WATCHTOWER_BASE_PATH
+              value: {{ $basePath | quote }}
+            {{- if eq .Values.mode "cluster" }}
+            # Never inlined: an env value here would be readable from the pod spec
+            # by anyone who can `kubectl get deployment`.
+            - name: WATCHTOWER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "watchtower.authSecretName" . }}
+                  key: {{ .Values.auth.secretKey }}
+            {{- end }}
+            - name: WATCHTOWER_WANDB_NAME
+              value: {{ include "watchtower.wandbName" . | quote }}
+            - name: WATCHTOWER_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            {{- range $name, $value := .Values.env }}
+            - name: {{ $name }}
+              value: {{ $value | quote }}
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.containerPort }}
+              protocol: TCP
+          # Health routes sit outside the auth gate but inside the base path, so
+          # the probes have to carry the prefix too.
+          livenessProbe:
+            httpGet:
+              path: {{ $basePath }}/healthz
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: {{ $basePath }}/ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          # Watchtower drives Helm and writes the air-gapped dependency bundle
+          # relative to its working directory, neither of which the read-only
+          # root filesystem allows.
+          workingDir: /home/watchtower
+          volumeMounts:
+            - name: home
+              mountPath: /home/watchtower
+            - name: helm
+              mountPath: /helm
+            - name: tmp
+              mountPath: /tmp
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+      volumes:
+        - name: home
+          emptyDir: {}
+        - name: helm
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

@@ -1,0 +1,13 @@
+apiVersion: v2
+name: watchtower
+description: A Helm chart for the W&B Watchtower cluster administration UI
+type: application
+# Versioned in lockstep with the operator: Watchtower's binary ships inside the
+# operator image, so the chart version doubles as the image tag it deploys. The
+# release pipeline enforces chart version == appVersion == operator release.
+version: 2.0.0-beta.3
+appVersion: "2.0.0-beta.3"
+maintainers:
+  - name: wandb
+    email: support@wandb.com
+    url: https://wandb.com

@@ -74,11 +74,17 @@ jobs:
             in_operator && $0 == "  image:" { in_image = 1; next }
             in_image && $1 == "tag:" { print $2; exit }
           ' deploy/operator/values.yaml | tr -d '\"')"
+          # The watchtower chart ships separately but deploys the operator image,
+          # so its version doubles as that image's tag and must track the release.
+          wt_chart_version="$(awk '$1 == "version:" { print $2; exit }' deploy/watchtower/Chart.yaml | tr -d '\"')"
+          wt_app_version="$(awk '$1 == "appVersion:" { print $2; exit }' deploy/watchtower/Chart.yaml | tr -d '\"')"
 
-          for value in "${chart_version}" "${app_version}" "${image_tag}"; do
+          for value in "${chart_version}" "${app_version}" "${image_tag}" \
+                       "${wt_chart_version}" "${wt_app_version}"; do
             if [[ "${value}" != "${version}" ]]; then
-              echo "Chart version, appVersion, and operator image tag must all equal ${version}" >&2
+              echo "Operator and watchtower chart versions, appVersions, and the operator image tag must all equal ${version}" >&2
               echo "Found chart=${chart_version}, appVersion=${app_version}, image=${image_tag}" >&2
+              echo "      watchtower chart=${wt_chart_version}, appVersion=${wt_app_version}" >&2
               exit 1
             fi
           done
@@ -153,7 +159,7 @@ jobs:
       - name: Lint charts
         run: ct lint --all --config deploy/ct.yaml
 
-      - name: Package and publish chart
+      - name: Package and publish charts
         env:
           VERSION: ${{ steps.release.outputs.version }}
         run: |
@@ -162,6 +168,10 @@ jobs:
           mkdir -p dist
           helm package deploy/operator --destination dist
           helm push "dist/operator-${VERSION}.tgz" "oci://${CHART_REPOSITORY}"
+          # Published as its own chart, not an operator dependency: Watchtower is a
+          # separate release with a separate lifecycle.
+          helm package deploy/watchtower --destination dist
+          helm push "dist/watchtower-${VERSION}.tgz" "oci://${CHART_REPOSITORY}"
 
       - name: Create GitHub release
         env:
