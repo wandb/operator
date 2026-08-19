@@ -1,7 +1,8 @@
-# Watchtower ships in this image as a second entrypoint: the deploy/watchtower
-# chart runs the same image with `command: ["/watchtower"]`. Its binary embeds a
-# Next.js static export, so it cannot be rebuilt from Go source here — lift the
-# binary out of the published Watchtower image instead.
+# Watchtower ships in this image as a second entrypoint: the operator synthesizes
+# an Application that runs the same image with `command: ["/watchtower"]`, and
+# finds this image by name through OPERATOR_IMAGE. Its binary embeds a Next.js
+# static export, so it cannot be rebuilt from Go source here — lift the binary out
+# of the published Watchtower image instead.
 ARG WATCHTOWER_IMAGE=us-docker.pkg.dev/wandb-production/public/wandb/watchtower
 ARG WATCHTOWER_VERSION=0.11.0
 

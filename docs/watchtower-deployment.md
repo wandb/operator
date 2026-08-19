@@ -1,8 +1,9 @@
 # Deploying Watchtower
 
 [Watchtower](https://github.com/wandb/watchtower) is the cluster administration UI
-that replaces the deprecated W&B console. This document covers how it is packaged
-and installed alongside the operator.
+that replaces the deprecated W&B console. The operator deploys it as an
+operator-owned component — there is no Watchtower chart, and nothing to install
+separately.
 
 ## Packaging: one image, two entrypoints
 
@@ -29,141 +30,212 @@ Pin a different release with:
 make docker-build WATCHTOWER_VERSION=0.12.0
 ```
 
-Selecting which of the two binaries runs is the container's `command`: the image
-`ENTRYPOINT` stays `/manager`, and the Watchtower Deployment overrides it with
-`/watchtower`.
+The Application the operator synthesizes selects the second entrypoint with
+`command: ["/watchtower"]` and `args: ["--port", "8080"]` — the binary's own
+default port is 9090, which would not match the Service or the probes.
 
-## Installation: a separate release
+### How the operator knows its own image
 
-`deploy/watchtower/` is its own chart and its own Helm release. It is **not** a
-dependency of `deploy/operator` — installing Watchtower does not install the
-operator, upgrading one does not touch the other, and deleting one leaves the
-other running. The only tie between them is the image.
+Because the binary lives inside the operator image, the reconciler has to name
+that image when it builds the Application. The operator chart passes it in:
 
-```bash
-helm install watchtower oci://us-docker.pkg.dev/wandb-production/charts/watchtower \
-  --version 2.0.0-beta.3 -n wandb --create-namespace
+```gotemplate
+{{- define "wandb-operator.operatorImageEnv" -}}
+- name: OPERATOR_IMAGE
+  value: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+{{- end -}}
 ```
 
-Both charts are published from this repo by the same release workflow, and the
-version check there holds the watchtower chart version, its appVersion, and the
-operator image tag equal to the release. So `--version 2.0.0-beta.3` deploys the
-Watchtower binary from operator image `2.0.0-beta.3` with no second version to
-track — which is also why `image.tag` can be left empty and defaults to the
-chart's appVersion.
+wired through `wandb-operator.envTpls` in `deploy/operator/values.yaml`, and read
+by `watchtowerImage()`. Resolving it at runtime is deliberate: a default tag
+compiled into the operator would drift on every release, so a 2.1.0 operator
+would quietly deploy a 2.0.0 Watchtower. `spec.watchtower.image` overrides it when
+set; leaving it empty is the normal case.
 
-It creates:
+If `OPERATOR_IMAGE` is unset the reconciler fails loudly rather than guessing.
 
-| Resource | Purpose |
-|----------|---------|
-| `Deployment` | The operator image run as `/watchtower --port 8080` |
-| `Service` | `NodePort`, publishing the Go HTTP server directly |
-| `ServiceAccount` | With its token projected — Watchtower calls the Kubernetes API |
-| `Role` + `RoleBinding` | Write access to the W&B CRs and to secrets |
-| `Secret` | The generated admin password (see Authentication below) |
-
-A minimal values file:
+## Configuration
 
 ```yaml
-service:
-  nodePort: 32080       # omit to let Kubernetes allocate one
-role:
-  type: ClusterRole     # Role scopes Watchtower to its own namespace
+apiVersion: apps.wandb.com/v2
+kind: WeightsAndBiases
+spec:
+  watchtower:
+    install: true                 # opt-in; defaults to false
+    basePath: /watchtower         # published route and container base path
+    authService: ""               # empty = derive from the server manifest
+    resources: {}                 # defaults to 100m / 256Mi requests
+    image: {}                     # empty = the operator's own image
+    serviceAccount:
+      create: true
 ```
 
-`replicas` is deliberately fixed at 1 and not exposed: in-flight deploy jobs and
-their SSE streams live in the serving pod's memory, so a reconnect landing on a
-second pod would see no history.
+`install` defaults to **false**. Watchtower grants cluster-wide access to anyone
+holding an admin credential, so turning it on is an explicit decision.
 
-## Routing: a node port, not an Ingress
+## What the operator creates
 
-Watchtower's own Go HTTP server is the public entry point. There is no Ingress
-path on the W&B hostname and no reverse proxy in front of it — the `NodePort`
-Service publishes the port on every node, and reaching it from the public
-internet is a matter of opening that port in the node firewall or security group.
-Nothing in this chart opens it.
+| Resource | Name | Notes |
+|----------|------|-------|
+| `Application` | `<cr>-watchtower` | `Kind: Deployment`, `replicas: 1`, labelled `weightsandbiases.apps.wandb.com/component=watchtower` so manifest-driven pruning skips it |
+| `Service` | `<cr>-watchtower` | ClusterIP `8080`, derived from the Application by the application controller |
+| `ServiceAccount` | `<cr>-watchtower` | Token automounted — unlike the W&B app pods, Watchtower calls the Kubernetes API |
+| `Secret` | `<cr>-watchtower-auth` | The fallback admin password (see Authentication) |
+| `Role` / `RoleBinding` | `<cr>-watchtower` | Namespaced reads |
+| `ClusterRole` / `ClusterRoleBinding` | `<namespace>-<cr>-watchtower` | Cluster-wide reads plus `weightsandbiases` `update`/`patch` |
+| Ingress path | `<basePath>` on the consolidated Ingress | Ingress mode |
+| `HTTPRoute` | via `Application.spec.httpRouteTemplate` | Gateway API mode, same hostnames as the app |
 
-Set `service.type` to `ClusterIP` for an internal-only install, or to
-`LoadBalancer` to get a dedicated address instead.
+`replicas` is deliberately **not** configurable: in-flight deploy jobs and their
+SSE streams live in the serving pod's memory, so a reconnect landing on a second
+pod would see no history.
+
+Status lands in `status.watchtowerStatus` (`ready`, `url`, `image`,
+`authService`). Watchtower never contributes to the CR's `Ready` condition.
+
+### Naming and multiple installs
+
+Every namespaced object is named from the CR, and cluster-scoped RBAC is
+additionally qualified with the namespace, so two `WeightsAndBiases` CRs can
+coexist in one namespace *and* in one cluster without sharing an Application,
+RBAC binding or Secret.
+
+Names go through `common.FitDefaultInfraName`, which hashes the CR name when the
+derived name would exceed the 63-character DNS-1123 label budget. The budget is a
+label rather than a subdomain because the application controller derives a Service
+from the Application name. Plain truncation would be wrong here: two CR names
+differing only past the cutoff would collapse onto one object.
+
+## Reconcile ordering
+
+Watchtower is reconciled inside `ReconcileWandbManifest`, in this order:
+
+```
+cleanupNetworkingModeResources + resetInactiveNetworkingStatus
+gateway block   (NetworkingModeGatewayAPI)
+ingress block   (NetworkingModeIngress)
+reconcileWatchtower
+─── infrastructure readiness gate ──────────────
+migrations, applications, …
+```
+
+Two properties this buys, both deliberate:
+
+**Networking and Watchtower sit above the infrastructure gate.** Watchtower exists
+to diagnose a broken install, so it has to come up when MySQL, Redis, Kafka, the
+object store or ClickHouse are *not* ready — which is when the reconcile returns
+early. Its route has to be published for the same reason, so the networking
+reconcile moved up with it.
+
+Moving the Ingress reconcile above the gate means infra Services may not exist
+yet. `resolveInfraRoutes` treats a missing Service as "skip this route" rather
+than an error — a route to a Service that is not there is not publishable, and it
+gets picked up on a later pass.
+
+**A Watchtower failure never blocks the W&B install.** `reconcileWatchtower`'s
+error is logged and stepped over, not returned. A bad image or an RBAC mistake
+must not stop infra, migrations and applications from reconciling. Nothing
+downstream reads a Watchtower readiness signal.
+
+One cosmetic consequence: on the first pass after enabling Watchtower, the Ingress
+publishes `<basePath>` before the Service exists, so the route 503s for one
+reconcile cycle.
+
+## Routing
+
+Watchtower is served from the W&B app's own hostname at `<basePath>`, not on a
+separate port or hostname. That is what makes the browser send the app's session
+cookie to it, which is what the OIDC auth path depends on.
+
+`basePath` defaults to `/watchtower` and is validated to be non-root — `/` is the
+W&B frontend's own path, and mounting Watchtower there would shadow the app it
+manages.
 
 ### The base path is a build-time value
 
-`basePath` defaults to `/watchtower` and cannot be changed on its own. Next.js
-bakes `basePath` into every asset URL and router href at build time, and the
-Watchtower binary refuses to start when its runtime base path disagrees with the
-compiled-in one — so serving at the root requires a Watchtower image built with
-`BASE_PATH=` empty, and `watchtower.basePath: ""` to match. The published image
-is built with `/watchtower`.
+`basePath` cannot be changed on its own. Next.js bakes `basePath` into every asset
+URL and router href at build time, and the Watchtower binary refuses to start when
+its runtime base path disagrees with the compiled-in one. Changing it requires a
+Watchtower image built with a matching `NEXT_PUBLIC_BASE_PATH`; the published
+image is built with `/watchtower`.
 
 The health probes carry the prefix for the same reason: `{basePath}/healthz` and
-`{basePath}/ready`, which sit outside the auth gate (the kubelet sends no cookie)
-but inside the base path.
+`{basePath}/ready`, which sit outside the auth gate — the kubelet holds no
+credential — but inside the base path.
 
-## RBAC
+## Authentication
 
-The chart's `Role` grants exactly what Watchtower needs to manage an install:
+Two independent credentials, either of which grants access. This mirrors what
+console did on-prem: an app session *or* a root password.
 
-- `apps.wandb.com` — `weightsandbiases`, `applications` and their `/status`
-  subresources, full verbs
-- core `secrets`, full verbs
+**The W&B app session.** Watchtower forwards the caller's `Cookie` and
+`Authorization` headers to `GET http://$WATCHTOWER_AUTH_SERVICE/oidc/auth` and
+allows the request when gorilla confirms an admin. It implements no OIDC of its
+own.
 
-`role.type` defaults to `ClusterRole`, so Watchtower can manage installs in any
-namespace. Set it to `Role` to confine it to its own release namespace.
+`spec.watchtower.authService` is normally left empty. The operator finds the
+manifest application that owns the `/oidc` ingress path — `api` in current
+manifests — and uses `<application name>:<ingress service port>`, since the
+application controller names each Service after its Application. That keeps
+working across manifest renames and port changes. If no application declares
+`/oidc`, reconciliation **fails** rather than deploying an unauthenticated
+Watchtower.
 
-Cluster-scoped names are qualified with the namespace —
-`<namespace>-<release>-watchtower` — because `ClusterRole` and
-`ClusterRoleBinding` names are cluster-global. Without that, a second Watchtower
-release in another namespace would adopt the first one's object and silently
-overwrite its rules and subject list. Namespaced `Role`s keep the plain name.
-
-Because the container runs with `readOnlyRootFilesystem: true`, the Deployment
-mounts `emptyDir`s at `/home/watchtower` (its working directory, where the
-air-gapped dependency bundle lands), `/helm` and `/tmp`.
-
-## Authentication: a chart-generated admin password
-
-Watchtower implements no OIDC and does not share the W&B app's session. That
-earlier design only worked because Watchtower was served under the app's
-hostname, so the browser sent the app's cookie along; published on its own origin
-it never arrives. A single admin password gates the UI instead.
-
-The chart generates it on first install into a Secret named
-`<release>-watchtower-auth` and injects it as `WATCHTOWER_PASSWORD` via
-`secretKeyRef` — never inlined in the pod spec, where anyone with
-`kubectl get deployment` could read it. Retrieve it with:
+**The generated admin password.** The operator creates
+`<cr>-watchtower-auth` on first reconcile and injects it as
+`WATCHTOWER_PASSWORD` via `secretKeyRef` — never inlined in the pod spec, where
+anyone with `kubectl get deployment` could read it. Retrieve it with:
 
 ```bash
-kubectl get secret -n wandb wandb-watchtower-auth \
+kubectl get secret -n wandb <cr>-watchtower-auth \
   -o jsonpath='{.data.password}' | base64 -d
 ```
 
-The template reads any existing Secret via `lookup` before generating, so
-`helm upgrade` preserves the password rather than silently rotating it and
-locking the admin out. Two overrides: `auth.existingSecret` to manage the Secret
-yourself (preferred for GitOps — a generated password is invisible until someone
-reads it), or `auth.password` to pin a value, which lands in the Helm release
-history and is best avoided.
+The password is generated once and never rewritten: regenerating on upgrade would
+lock the operator's user out of a working install. This is the path that keeps
+Watchtower usable when the W&B app itself is down, which is exactly when it is
+needed — so the two credentials are not redundant.
 
-On the wire: `POST <basePath>/login` checks the password in constant time and
-sets an `HttpOnly`, `SameSite=Lax` session cookie scoped to the base path,
-holding an expiry signed with an HMAC keyed on the password itself. There is no
-server-side session store — Watchtower is a single replica that restarts freely —
-and because the key is derived from the password, rotating the Secret invalidates
-every outstanding session for free. Sessions last 12 hours. `Secure` is set only
-when the request arrived over TLS, since the Service publishes plain HTTP and an
-unconditionally-Secure cookie would never be sent back.
+`secretKeyRef` env vars are resolved at pod creation and never refreshed, so
+rotation is two steps:
 
-Unauthenticated `/api/v1/*` calls get a JSON 401 so the frontend can render
-"session expired"; page loads redirect to the login form. `/healthz` and `/ready`
-stay outside the gate — the kubelet holds no session.
+```bash
+kubectl delete secret -n wandb <cr>-watchtower-auth   # reconcile regenerates it
+kubectl rollout restart deployment/<cr>-watchtower -n wandb
+```
 
-`mode` defaults to `cluster`, which is what turns the gate on. Setting it to
-`web` disables authentication entirely; only do that against a sandbox you do not
-care about.
+## RBAC
 
-### Still worth doing
+The apiserver refuses to grant permissions the operator does not itself hold, so
+two rules are **missing** from the ClusterRole the operator creates:
 
-The password is a shared secret with no rate limiting on the login endpoint. A
-32-character generated password is not guessable, but a user-chosen
-`auth.password` might be — consider a lockout or backoff before this is exposed
-broadly, and keep the node port firewalled to known source ranges regardless.
+- `apiextensions.k8s.io/customresourcedefinitions` `get`/`list` — used to detect
+  whether v2 is served
+- `pods/portforward` — telemetry port-forward
+
+Both need the operator's own ClusterRole widened first (kubebuilder markers in
+`internal/controller/weightsandbiases_controller.go`, then `make manifests`).
+Installing or upgrading the operator from inside the pod needs more again, and is
+not granted today.
+
+This constraint is specific to operator-created RBAC. It did not apply when a Helm
+chart created these objects, because Helm acts as the installing user.
+
+## Verifying a deployment
+
+The pod reaching `1/1 Ready` already confirms a lot: the readiness probe is
+`{basePath}/ready`, which only answers 200 once the Kubernetes client has
+initialized from the ServiceAccount token. Base path, RBAC and in-cluster
+credentials are all proven before you load a page.
+
+To confirm the running binary is the one you built, compare digests rather than
+tags:
+
+```bash
+kubectl exec -n wandb deploy/<cr>-watchtower -- sha256sum /watchtower
+docker run --rm --entrypoint sha256sum <watchtower-image> /watchtower
+```
+
+Nodes default to `imagePullPolicy: IfNotPresent` for any tag but `latest`, so a
+rebuilt floating tag can leave a node serving the old layer — which looks exactly
+like a change that did not land.

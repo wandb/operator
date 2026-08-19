@@ -138,6 +138,9 @@ func Reconcile(
 			if err = deleteInfraHTTPRoutes(ctx, client, wandb); err != nil {
 				return ctrl.Result{}, err
 			}
+			if err = deleteWatchtower(ctx, client, wandb); err != nil {
+				return ctrl.Result{}, err
+			}
 			if wandb.Spec.Networking.Mode == apiv2.NetworkingModeIngress {
 				if err = deleteConsolidatedIngress(ctx, client, wandb); err != nil {
 					return ctrl.Result{}, err
@@ -297,6 +300,37 @@ func ReconcileWandbManifest(
 
 	statusBefore := wandb.DeepCopy().Status
 
+	// Networking (gateway or ingress) need to be reconciled before infra gate.
+	// Watchtower relies on wandb networking for oidc auth
+	if err := cleanupNetworkingModeResources(ctx, client, wandb); err != nil {
+		logger.Error(err, "Failed to clean up stale networking resources")
+		return ctrl.Result{}, err
+	}
+	resetInactiveNetworkingStatus(wandb)
+
+	// Reconcile networking
+	switch wandb.Spec.Networking.Mode {
+	case apiv2.NetworkingModeGatewayAPI:
+		wandb.Status.GatewayStatus = nil
+		if err := reconcileGateway(ctx, client, wandb); err != nil {
+			logger.Error(err, "Failed to reconcile Gateway")
+			return ctrl.Result{}, err
+		}
+		if err := reconcileInfraHTTPRoutes(ctx, client, wandb, manifest); err != nil {
+			logger.Error(err, "Failed to reconcile infra HTTPRoutes")
+			return ctrl.Result{}, err
+		}
+	case apiv2.NetworkingModeIngress:
+		wandb.Status.IngressStatus = nil
+		if err := reconcileConsolidatedIngress(ctx, client, wandb, manifest); err != nil {
+			logger.Error(err, "Failed to reconcile consolidated Ingress")
+			return ctrl.Result{}, err
+		}
+	}
+	// Do not block on Watchtower failure to reconcile
+	if err := reconcileWatchtower(ctx, client, wandb, manifest); err != nil {
+		logger.Error(err, "Failed to reconcile Watchtower")
+	}
 	redisReady := redisAllReady(wandb)
 	mysqlReady := mysqlAllReady(wandb)
 	kafkaReady := wandb.Status.KafkaStatus.Ready
@@ -368,23 +402,9 @@ func ReconcileWandbManifest(
 		return ctrl.Result{}, err
 	}
 
-	if err := cleanupNetworkingModeResources(ctx, client, wandb); err != nil {
-		logger.Error(err, "Failed to clean up stale networking resources")
-		return ctrl.Result{}, err
-	}
-	resetInactiveNetworkingStatus(wandb)
-
 	if err := reconcileCustomCACerts(ctx, client, wandb); err != nil {
 		logger.Error(err, "Failed to reconcile custom CA certificates")
 		return ctrl.Result{}, err
-	}
-
-	if wandb.Spec.Networking.Mode == apiv2.NetworkingModeGatewayAPI {
-		wandb.Status.GatewayStatus = nil
-		if err := reconcileGateway(ctx, client, wandb); err != nil {
-			logger.Error(err, "Failed to reconcile Gateway")
-			return ctrl.Result{}, err
-		}
 	}
 
 	result, err = runMigrations(ctx, client, wandb, manifest)
@@ -418,13 +438,6 @@ func ReconcileWandbManifest(
 	} else {
 		logger.Info("Deferring legacy v1 deployment cleanup until all application Deployments are ready",
 			"notReady", notReady)
-	}
-
-	if wandb.Spec.Networking.Mode == apiv2.NetworkingModeGatewayAPI {
-		if err := reconcileInfraHTTPRoutes(ctx, client, wandb, manifest); err != nil {
-			logger.Error(err, "Failed to reconcile infra HTTPRoutes")
-			return ctrl.Result{}, err
-		}
 	}
 
 	if applicationsHealthy {
@@ -633,14 +646,6 @@ func reconcileApplications(
 		}
 	}
 
-	if wandb.Spec.Networking.Mode == apiv2.NetworkingModeIngress {
-		wandb.Status.IngressStatus = nil
-		if err := reconcileConsolidatedIngress(ctx, client, wandb, manifest); err != nil {
-			logger.Error("Failed to reconcile consolidated Ingress", "err", err)
-			return ctrl.Result{}, err
-		}
-	}
-
 	hostname, err := url.Parse(wandb.Spec.Wandb.Hostname)
 	if err != nil {
 		logger.Error("Failed to parse provided hostname", "hostname", wandb.Spec.Wandb.Hostname, "err", err)
@@ -686,6 +691,21 @@ func applicationManagedFieldsEqual(before, after *apiv2.Application) bool {
 }
 
 func buildHTTPRouteTemplate(wandb *apiv2.WeightsAndBiases, app serverManifest.Application) *apiv2.HTTPRouteTemplateSpec {
+	var paths []string
+	var pathType string
+	if app.Ingress != nil {
+		paths = app.Ingress.Paths
+		pathType = app.Ingress.PathType
+	}
+	return buildHTTPRouteTemplateForPaths(wandb, paths, pathType, resolveHTTPRouteServicePort(app))
+}
+
+func buildHTTPRouteTemplateForPaths(
+	wandb *apiv2.WeightsAndBiases,
+	paths []string,
+	pathType string,
+	servicePort *gatewayv1.PortNumber,
+) *apiv2.HTTPRouteTemplateSpec {
 	gwConfig := wandb.Spec.Networking.GatewayAPI
 
 	ref := wandb.Status.GatewayStatus.GatewayRef
@@ -696,7 +716,7 @@ func buildHTTPRouteTemplate(wandb *apiv2.WeightsAndBiases, app serverManifest.Ap
 		ns := gatewayv1.Namespace(ref.Namespace)
 		parentRef.Namespace = &ns
 	}
-	if gwConfig.ListenerName != nil {
+	if gwConfig != nil && gwConfig.ListenerName != nil {
 		sectionName := gatewayv1.SectionName(*gwConfig.ListenerName)
 		parentRef.SectionName = &sectionName
 	}
@@ -706,22 +726,15 @@ func buildHTTPRouteTemplate(wandb *apiv2.WeightsAndBiases, app serverManifest.Ap
 	for _, h := range wandb.Spec.Wandb.AdditionalHostnames {
 		hostnames = append(hostnames, gatewayv1.Hostname(h))
 	}
-
-	var paths []string
-	var pathType string
-	if app.Ingress != nil {
-		paths = app.Ingress.Paths
-		pathType = app.Ingress.PathType
-	}
-
 	return &apiv2.HTTPRouteTemplateSpec{
 		ParentRefs:  []gatewayv1.ParentReference{parentRef},
 		Hostnames:   hostnames,
 		Paths:       paths,
 		PathType:    pathType,
-		ServicePort: resolveHTTPRouteServicePort(app),
+		ServicePort: servicePort,
 	}
 }
+
 
 func resolveHTTPRouteServicePort(app serverManifest.Application) *gatewayv1.PortNumber {
 	if app.Ingress != nil && app.Ingress.ServicePort != "" {
