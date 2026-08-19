@@ -388,6 +388,26 @@ type WandbAppSpec struct {
 	// hand-editing.
 	// +optional
 	LegacyOverrides map[string]LegacyOverrides `json:"legacyOverrides,omitempty"`
+
+	// Applications overlays sizing-derived per-application config, keyed by
+	// manifest application name. Unknown keys are logged and ignored.
+	// +optional
+	Applications map[string]WandbApplicationOverride `json:"applications,omitempty"`
+}
+
+type WandbApplicationOverride struct {
+	// +optional
+	Autoscaling *ApplicationAutoscalingOverride `json:"autoscaling,omitempty"`
+}
+
+// +kubebuilder:validation:XValidation:rule="!has(self.minReplicas) || !has(self.maxReplicas) || self.minReplicas <= self.maxReplicas",message="minReplicas must be <= maxReplicas"
+type ApplicationAutoscalingOverride struct {
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	MinReplicas *int32 `json:"minReplicas,omitempty"`
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	MaxReplicas *int32 `json:"maxReplicas,omitempty"`
 }
 
 // LegacyOverridesGlobalKey is the reserved LegacyOverrides key whose env
