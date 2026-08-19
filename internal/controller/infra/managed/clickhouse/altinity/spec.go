@@ -7,8 +7,8 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
-	"github.com/wandb/operator/internal/controller/infra/objectstore"
 	"github.com/wandb/operator/internal/controller/infra/managed/clickhouse/altinity/keeper"
+	"github.com/wandb/operator/internal/controller/infra/objectstore"
 	"github.com/wandb/operator/internal/logx"
 	"github.com/wandb/operator/pkg/utils"
 	"github.com/wandb/operator/pkg/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
@@ -246,6 +246,7 @@ func ToClickHouseVendorSpec(
 
 	clickHouseImage := ClickHouseImage(mfst.Clickhouse["default"].Images["server"], wandb.Spec.Global.ImageRegistry)
 	podSpec := corev1.PodSpec{
+		ImagePullSecrets:             wandb.Spec.Global.ImagePullSecrets,
 		ServiceAccountName:           clickHouseServiceAccountName(spec),
 		AutomountServiceAccountToken: ptr.To(!objStorage.HasStaticCredentials()),
 		SecurityContext:              clickHousePodSecurityContext(),

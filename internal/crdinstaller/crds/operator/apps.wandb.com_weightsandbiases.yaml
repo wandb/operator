@@ -1210,6 +1210,15 @@ spec:
                     items:
                       type: string
                     type: array
+                  imagePullSecrets:
+                    items:
+                      properties:
+                        name:
+                          default: ""
+                          type: string
+                      type: object
+                      x-kubernetes-map-type: atomic
+                    type: array
                   imageRegistry:
                     type: string
                   proxy:

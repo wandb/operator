@@ -133,7 +133,8 @@ func ToObjectStoreVendorSpec(
 			Labels:    labels,
 		},
 		Spec: seaweedv1.SeaweedSpec{
-			Image: SeaweedImage(mfst.Bucket["default"].Images["seaweedfs"], wandb.Spec.Global.ImageRegistry),
+			Image:            SeaweedImage(mfst.Bucket["default"].Images["seaweedfs"], wandb.Spec.Global.ImageRegistry),
+			ImagePullSecrets: wandb.Spec.Global.ImagePullSecrets,
 			TLS: &seaweedv1.TLSSpec{
 				Enabled: infraSpec.SeaweedObjectStoreSpec.TlsEnabled,
 			},

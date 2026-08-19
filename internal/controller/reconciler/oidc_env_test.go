@@ -173,6 +173,7 @@ func TestResolveEnvvarsManifestBucketProxyBooleans(t *testing.T) {
 		context.Background(),
 		"file://"+filepath.Join(repoRoot, "hack", "testing-manifests", "server-manifest"),
 		"0.83.0-clickhouse-keeper.2",
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("load test server manifest: %v", err)
