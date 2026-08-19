@@ -169,6 +169,13 @@ func Reconcile(
 	}
 
 	/////////////////////////
+	// Promote known legacy env vars from legacyOverrides into typed spec fields,
+	// then drop them from legacyOverrides (the CR field is the source of truth)
+	if res, mapErr := mapLegacyEnvToCR(ctx, client, wandb); mapErr != nil || res.RequeueAfter > 0 {
+		return res, mapErr
+	}
+
+	/////////////////////////
 	// Fetch manifest early so infra sizing can be applied before provisioning
 	manifest, err := serverManifest.GetServerManifest(ctx, wandb.Spec.Wandb.ManifestRepository, wandb.Spec.Wandb.Version)
 	if err != nil {
