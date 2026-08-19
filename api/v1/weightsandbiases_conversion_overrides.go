@@ -250,9 +250,6 @@ func legacyEnvFromSection(section map[string]interface{}, sectionName string) ([
 			continue
 		}
 		for k, v := range m {
-			if isClickHouseReplicationEnv(k) {
-				continue
-			}
 			merged[k] = v
 		}
 	}

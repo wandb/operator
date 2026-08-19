@@ -202,10 +202,10 @@ type legacyClickHousePayload struct {
 	Database string `json:"database,omitempty"`
 	User     string `json:"user,omitempty"`
 	Password string `json:"password,omitempty"`
-	// Replication topology harvested from the v1 WF_CLICKHOUSE_REPLICATED* env
-	// vars; it travels with the connection rather than as a spec field.
-	Replicated        string `json:"replicated,omitempty"`
-	ReplicatedCluster string `json:"replicatedCluster,omitempty"`
+	// Replicated carries the structured global.clickhouse.replicated flag. The
+	// WF_CLICKHOUSE_REPLICATED[_CLUSTER] env vars are mapped at reconcile from
+	// legacyOverrides (mapLegacyEnvToCR), which can override this.
+	Replicated string `json:"replicated,omitempty"`
 }
 
 // migrateLegacyClickHouse drains the clickhouse-pending annotation into a
@@ -248,7 +248,6 @@ func migrateLegacyClickHouse(
 	fill(&conn.Username, "username", payload.User)
 	fill(&conn.Password, "password", payload.Password)
 	fill(&conn.Replicated, "replicated", payload.Replicated)
-	fill(&conn.ClusterName, "replicatedCluster", payload.ReplicatedCluster)
 
 	if err := materializeConvertedSecret(ctx, c, wandb, secretName, data); err != nil {
 		return false, err

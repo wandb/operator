@@ -100,11 +100,6 @@ func applyValueMappings(src *WeightsAndBiases, dst *appsv2.WeightsAndBiases) err
 		}
 	}
 
-	// After applyGlobalMappings, so the ClickHouse spec it attaches to exists.
-	if err := mapClickHouseReplication(values, dst); err != nil {
-		return err
-	}
-
 	return nil
 }
 
@@ -601,6 +596,18 @@ func mapClickHouse(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiase
 		}
 	}
 
+	// The structured replicated flag travels as a pending literal, so the
+	// reconciler materializes it into the connection Secret. It applies only when
+	// a connection exists (managed ClickHouse derives its own topology), and the
+	// env var WF_CLICKHOUSE_REPLICATED can still override it at reconcile.
+	if sawField {
+		if flag, ok, flagErr := nestedBoolLenient(chMap, "replicated"); flagErr != nil {
+			return fmt.Errorf("spec.values.global.clickhouse.replicated: %w", flagErr)
+		} else if ok {
+			remaining[clickHousePendingReplicatedKey] = strconv.FormatBool(flag)
+		}
+	}
+
 	if !sawField {
 		return nil
 	}
@@ -615,191 +622,11 @@ func mapClickHouse(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiase
 	return nil
 }
 
-const (
-	envClickHouseReplicated        = "WF_CLICKHOUSE_REPLICATED"
-	envClickHouseReplicatedCluster = "WF_CLICKHOUSE_REPLICATED_CLUSTER"
-
-	// Keys in the clickhouse-pending annotation payload; migrateLegacyClickHouse
-	// turns them into keys of the converted connection Secret.
-	clickHousePendingReplicatedKey = "replicated"
-	clickHousePendingClusterKey    = "replicatedCluster"
-)
-
-func isClickHouseReplicationEnv(name string) bool {
-	return name == envClickHouseReplicated || name == envClickHouseReplicatedCluster
-}
-
-type clickHouseEnvFinding struct {
-	source string
-	value  string
-}
-
-// mapClickHouseReplication lifts the replication env vars from anywhere in the v1
-// values into the clickhouse-pending annotation, alongside the other literals
-// this conversion can't express as selectors. The reconciler drains it into the
-// converted connection Secret
-func mapClickHouseReplication(values map[string]interface{}, dst *appsv2.WeightsAndBiases) error {
-	replicated, cluster, err := harvestClickHouseReplication(values)
-	if err != nil {
-		return err
-	}
-	if replicated == nil && cluster == "" {
-		return nil
-	}
-
-	spec, ok := dst.Spec.ClickHouse[appsv2.DefaultInstanceName]
-	if !ok || spec.ExternalClickHouse == nil {
-		logger.Info("dropping v1 ClickHouse replication env: no external ClickHouse to attach it to "+
-			"(managed ClickHouse derives its own topology)",
-			envClickHouseReplicated, replicated, envClickHouseReplicatedCluster, cluster)
-		return nil
-	}
-
-	pending, err := readClickHousePendingAnnotation(dst)
-	if err != nil {
-		return err
-	}
-	if replicated != nil {
-		pending[clickHousePendingReplicatedKey] = strconv.FormatBool(*replicated)
-	}
-	if cluster != "" {
-		pending[clickHousePendingClusterKey] = cluster
-	}
-	return writeAnnotation(dst, ClickHousePendingAnnotation, pending)
-}
-
-// readClickHousePendingAnnotation decodes the annotation mapClickHouse may have
-// already written, so replication merges into it instead of replacing it.
-func readClickHousePendingAnnotation(dst *appsv2.WeightsAndBiases) (map[string]interface{}, error) {
-	pending := map[string]interface{}{}
-	raw, found := dst.Annotations[ClickHousePendingAnnotation]
-	if !found || raw == "" {
-		return pending, nil
-	}
-	dec := json.NewDecoder(strings.NewReader(raw))
-	dec.UseNumber()
-	if err := dec.Decode(&pending); err != nil {
-		return nil, fmt.Errorf("decode %s: %w", ClickHousePendingAnnotation, err)
-	}
-	return pending, nil
-}
-
-// harvestClickHouseReplication scans every v1 values section for the replication
-// env vars. Per-application sections win over global. Applications
-// that disagree are a v2 misconfiguration, error.
-func harvestClickHouseReplication(values map[string]interface{}) (*bool, string, error) {
-	perApp := map[string][]clickHouseEnvFinding{}
-	global := map[string]clickHouseEnvFinding{}
-
-	sections := make([]string, 0, len(values))
-	for name := range values {
-		sections = append(sections, name)
-	}
-	sort.Strings(sections)
-
-	for _, name := range sections {
-		section, ok := values[name].(map[string]interface{})
-		if !ok {
-			continue
-		}
-		found, err := readClickHouseReplicationEnv(section, name)
-		if err != nil {
-			return nil, "", err
-		}
-		for envName, finding := range found {
-			if name == "global" {
-				global[envName] = finding
-				continue
-			}
-			perApp[envName] = append(perApp[envName], finding)
-		}
-	}
-
-	replicatedRaw, err := resolveClickHouseEnvFinding(envClickHouseReplicated, perApp, global)
-	if err != nil {
-		return nil, "", err
-	}
-	cluster, err := resolveClickHouseEnvFinding(envClickHouseReplicatedCluster, perApp, global)
-	if err != nil {
-		return nil, "", err
-	}
-
-	var replicated *bool
-	if replicatedRaw != "" {
-		parsed, parseErr := strconv.ParseBool(replicatedRaw)
-		if parseErr != nil {
-			return nil, "", fmt.Errorf("spec.values: %s=%q is not a boolean", envClickHouseReplicated, replicatedRaw)
-		}
-		replicated = ptr.To(parsed)
-	}
-
-	// global.clickhouse.replicated is the structured v1 flag; the env var is more
-	// explicit, so it only applies when no env var set one.
-	if replicated == nil {
-		if flag, found, flagErr := nestedBoolLenient(values, "global", "clickhouse", "replicated"); flagErr != nil {
-			return nil, "", flagErr
-		} else if found {
-			replicated = ptr.To(flag)
-		}
-	}
-
-	return replicated, cluster, nil
-}
-
-// readClickHouseReplicationEnv pulls the replication env vars out of one
-// section's env/extraEnv, with env winning over extraEnv as the chart did.
-func readClickHouseReplicationEnv(section map[string]interface{}, sectionName string) (map[string]clickHouseEnvFinding, error) {
-	out := map[string]clickHouseEnvFinding{}
-	for _, sub := range []string{"extraEnv", "env"} {
-		envMap, found, err := unstructured.NestedMap(section, sub)
-		if err != nil {
-			return nil, fmt.Errorf("spec.values.%s.%s: %w", sectionName, sub, err)
-		}
-		if !found {
-			continue
-		}
-		for _, envName := range []string{envClickHouseReplicated, envClickHouseReplicatedCluster} {
-			raw, ok := envMap[envName]
-			if !ok {
-				continue
-			}
-			value, isScalar := scalarToString(raw)
-			if !isScalar || value == "" || strings.Contains(value, "{{") {
-				continue
-			}
-			out[envName] = clickHouseEnvFinding{
-				source: fmt.Sprintf("spec.values.%s.%s.%s", sectionName, sub, envName),
-				value:  value,
-			}
-		}
-	}
-	return out, nil
-}
-
-// resolveClickHouseEnvFinding returns the winning value for one env name, erroring
-// when application sections disagree.
-func resolveClickHouseEnvFinding(
-	envName string,
-	perApp map[string][]clickHouseEnvFinding,
-	global map[string]clickHouseEnvFinding,
-) (string, error) {
-	findings := perApp[envName]
-	for i := 1; i < len(findings); i++ {
-		if findings[i].value != findings[0].value {
-			return "", fmt.Errorf(
-				"spec.values: %s=%q at %s conflicts with %q at %s; ClickHouse replication is a "+
-					"property of the datastore, so every application must agree",
-				envName, findings[0].value, findings[0].source, findings[i].value, findings[i].source)
-		}
-	}
-	if len(findings) > 0 {
-		return findings[0].value, nil
-	}
-	if finding, ok := global[envName]; ok {
-		return finding.value, nil
-	}
-	return "", nil
-}
+// clickHousePendingReplicatedKey carries the structured global.clickhouse.replicated
+// flag in the clickhouse-pending annotation; migrateLegacyClickHouse turns it into a
+// key of the converted connection Secret. The WF_CLICKHOUSE_REPLICATED[_CLUSTER] env
+// vars are mapped at reconcile from spec.wandb.legacyOverrides, not here.
+const clickHousePendingReplicatedKey = "replicated"
 
 // nestedBoolLenient reads a bool that v1 may have stringly-typed, treating an
 // uninterpretable value as absent so it can't make a v1 object unservable.
