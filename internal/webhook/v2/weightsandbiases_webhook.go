@@ -387,8 +387,10 @@ func validateNotificationSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 
 	if slack := notifications.Slack; slack != nil {
 		slackPath := base.Child("slack")
-		errors = append(errors, validateRequiredSecretSelector(slack.ClientID, slackPath.Child("clientId"))...)
-		errors = append(errors, validateRequiredSecretSelector(slack.ClientSecret, slackPath.Child("clientSecret"))...)
+		errors = append(errors, validateRequiredValueOrSecret(slack.ClientID, slackPath.Child("clientId"))...)
+		errors = append(errors, validateValueOrSecret(slack.ClientID, slackPath.Child("clientId"))...)
+		errors = append(errors, validateRequiredValueOrSecret(slack.ClientSecret, slackPath.Child("clientSecret"))...)
+		errors = append(errors, validateValueOrSecret(slack.ClientSecret, slackPath.Child("clientSecret"))...)
 	}
 
 	email := notifications.Email
@@ -405,15 +407,23 @@ func validateNotificationSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 		return errors
 	}
 	if email.Sink != nil {
-		errors = append(errors, validateRequiredSecretSelector(*email.Sink, emailPath.Child("sink"))...)
+		sinkPath := emailPath.Child("sink")
+		errors = append(errors, validateRequiredValueOrSecret(*email.Sink, sinkPath)...)
+		errors = append(errors, validateValueOrSecret(*email.Sink, sinkPath)...)
 		return errors
 	}
 
 	smtpPath := emailPath.Child("smtp")
-	errors = append(errors, validateRequiredSecretSelector(email.SMTP.Host, smtpPath.Child("host"))...)
-	errors = append(errors, validateRequiredSecretSelector(email.SMTP.Port, smtpPath.Child("port"))...)
-	errors = append(errors, validateRequiredSecretSelector(email.SMTP.Username, smtpPath.Child("username"))...)
-	errors = append(errors, validateRequiredSecretSelector(email.SMTP.Password, smtpPath.Child("password"))...)
+	for _, f := range []struct {
+		name string
+		val  appsv2.ValueOrSecret
+	}{
+		{"host", email.SMTP.Host}, {"port", email.SMTP.Port},
+		{"username", email.SMTP.Username}, {"password", email.SMTP.Password},
+	} {
+		errors = append(errors, validateRequiredValueOrSecret(f.val, smtpPath.Child(f.name))...)
+		errors = append(errors, validateValueOrSecret(f.val, smtpPath.Child(f.name))...)
+	}
 	return errors
 }
 
@@ -605,20 +615,6 @@ func validateRequiredValueOrSecret(v appsv2.ValueOrSecret, path *field.Path) fie
 	return nil
 }
 
-// validateRequiredSecretSelector requires a plain SecretKeySelector's name and
-// key. Used by fields that are secret-only (e.g. notification config), not the
-// value-or-secret connection fields.
-func validateRequiredSecretSelector(selector corev1.SecretKeySelector, path *field.Path) field.ErrorList {
-	var errors field.ErrorList
-	if selector.Name == "" {
-		errors = append(errors, field.Required(path.Child("name"), "secret name is required"))
-	}
-	if selector.Key == "" {
-		errors = append(errors, field.Required(path.Child("key"), "secret key is required"))
-	}
-	return errors
-}
-
 // validateValueOrSecret enforces that a ValueOrSecret sets at most one of a
 // literal value or a secret reference, and that a ValueFrom carries a
 // secretKeyRef. It does not require a value; callers enforce requiredness. The
@@ -714,6 +710,7 @@ func normalizeConnections(wandb *appsv2.WeightsAndBiases) {
 		spec.ExternalObjectStore.Normalize()
 	}
 	wandb.Spec.Wandb.OIDC.Normalize()
+	wandb.Spec.Wandb.Notifications.Normalize()
 }
 
 // validateObjectStoreConnection checks value-or-secret exclusivity on each

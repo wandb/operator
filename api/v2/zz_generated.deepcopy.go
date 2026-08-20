@@ -405,7 +405,7 @@ func (in *EmailSpec) DeepCopyInto(out *EmailSpec) {
 	*out = *in
 	if in.Sink != nil {
 		in, out := &in.Sink, &out.Sink
-		*out = new(v1.SecretKeySelector)
+		*out = new(ValueOrSecret)
 		(*in).DeepCopyInto(*out)
 	}
 	if in.SMTP != nil {

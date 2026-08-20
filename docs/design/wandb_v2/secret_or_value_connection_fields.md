@@ -1,7 +1,7 @@
 # String-or-secret connection fields
 
 **Status:** Implemented (Option 2) — validated by `make lint`/`make test` and westest
-**Scope:** `api/v2` external-connection + OIDC fields
+**Scope:** `api/v2` external-connection, OIDC, and notification (email/Slack) fields
 **Target release:** during v2 beta (`2.0.0-beta.3` today), before v2 GA
 
 ## Implementation status
@@ -18,6 +18,13 @@ Delivered and green:
   both pass against a locally-built operator.
 - The manifest `custom-resource` env resolver is union-aware (fixes the OIDC
   path); masq log-redaction is wired in `internal/logx`.
+
+After merging `origin/main`, the same envelope was extended to the new
+**notification** config (`spec.wandb.notifications`): email `sink`, SMTP
+`host`/`port`/`username`/`password`, and Slack `clientId`/`clientSecret` are now
+`ValueOrSecret` too — normalized and validated through the same helpers, with the
+SMTP resolver and email-sink materialization using `ResolveValue`. (`status.emailSink`
+stays a plain `SecretKeySelector` — it is operator-written output.)
 
 Still open: whether to **reject** a literal on strictly-secret fields (deferred,
 see [Open decisions](#open-decisions)).

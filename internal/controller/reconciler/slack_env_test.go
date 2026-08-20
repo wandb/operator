@@ -14,8 +14,8 @@ func TestResolveEnvvarsCustomResourceSlack(t *testing.T) {
 	wandb := &apiv2.WeightsAndBiases{ObjectMeta: metav1.ObjectMeta{Name: "wandb", Namespace: "default"}}
 	wandb.Spec.Wandb.Notifications = &apiv2.NotificationsSpec{}
 	wandb.Spec.Wandb.Notifications.Slack = &apiv2.SlackSpec{
-		ClientID:     emailTestSelector("slack", "client-id"),
-		ClientSecret: emailTestSelector("slack", "client-secret"),
+		ClientID:     emailTestValue("slack", "client-id"),
+		ClientSecret: emailTestValue("slack", "client-secret"),
 	}
 	envs := []serverManifest.EnvVar{
 		{

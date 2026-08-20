@@ -639,21 +639,60 @@ type NotificationsSpec struct {
 	Slack *SlackSpec `json:"slack,omitempty"`
 }
 
+// Normalize rewrites any legacy {name, key} field into the ValueFrom envelope.
+func (n *NotificationsSpec) Normalize() {
+	if n == nil {
+		return
+	}
+	n.Email.Normalize()
+	n.Slack.Normalize()
+}
+
 type EmailSMTPSpec struct {
-	Host     corev1.SecretKeySelector `json:"host"`
-	Port     corev1.SecretKeySelector `json:"port"`
-	Username corev1.SecretKeySelector `json:"username"`
-	Password corev1.SecretKeySelector `json:"password"`
+	Host     ValueOrSecret `json:"host"`
+	Port     ValueOrSecret `json:"port"`
+	Username ValueOrSecret `json:"username"`
+	Password ValueOrSecret `json:"password" masq:"secret"`
+}
+
+// Normalize rewrites any legacy {name, key} field into the ValueFrom envelope.
+func (s *EmailSMTPSpec) Normalize() {
+	if s == nil {
+		return
+	}
+	s.Host.Normalize()
+	s.Port.Normalize()
+	s.Username.Normalize()
+	s.Password.Normalize()
 }
 
 type EmailSpec struct {
-	Sink *corev1.SecretKeySelector `json:"sink,omitempty"`
-	SMTP *EmailSMTPSpec            `json:"smtp,omitempty"`
+	// Sink is a full notification sink URL; it may embed credentials.
+	Sink *ValueOrSecret `json:"sink,omitempty" masq:"secret"`
+	SMTP *EmailSMTPSpec `json:"smtp,omitempty"`
+}
+
+// Normalize rewrites any legacy {name, key} field into the ValueFrom envelope.
+func (e *EmailSpec) Normalize() {
+	if e == nil {
+		return
+	}
+	e.Sink.Normalize()
+	e.SMTP.Normalize()
 }
 
 type SlackSpec struct {
-	ClientID     corev1.SecretKeySelector `json:"clientId,omitempty"`
-	ClientSecret corev1.SecretKeySelector `json:"clientSecret,omitempty"`
+	ClientID     ValueOrSecret `json:"clientId,omitempty"`
+	ClientSecret ValueOrSecret `json:"clientSecret,omitempty" masq:"secret"`
+}
+
+// Normalize rewrites any legacy {name, key} field into the ValueFrom envelope.
+func (s *SlackSpec) Normalize() {
+	if s == nil {
+		return
+	}
+	s.ClientID.Normalize()
+	s.ClientSecret.Normalize()
 }
 
 type ManagedInfraSpec struct {
