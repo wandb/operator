@@ -260,6 +260,37 @@ func Reconcile(
 		return ctrl.Result{}, err
 	}
 
+	// Networking (gateway or ingress) need to be reconciled before infra gate.
+	// Watchtower relies on wandb networking for oidc auth
+	if err := cleanupNetworkingModeResources(ctx, client, wandb); err != nil {
+		log.Error("Failed to clean up stale networking resources", logx.ErrAttr(err))
+		return ctrl.Result{}, err
+	}
+	resetInactiveNetworkingStatus(wandb)
+
+	// Reconcile networking
+	switch wandb.Spec.Networking.Mode {
+	case apiv2.NetworkingModeGatewayAPI:
+		wandb.Status.GatewayStatus = nil
+		if err := reconcileGateway(ctx, client, wandb); err != nil {
+			log.Error("Failed to reconcile Gateway", logx.ErrAttr(err))
+			return ctrl.Result{}, err
+		}
+		if err := reconcileInfraHTTPRoutes(ctx, client, wandb, manifest); err != nil {
+			log.Error("Failed to reconcile infra HTTPRoutes", logx.ErrAttr(err))
+			return ctrl.Result{}, err
+		}
+	case apiv2.NetworkingModeIngress:
+		wandb.Status.IngressStatus = nil
+		if err := reconcileConsolidatedIngress(ctx, client, wandb, manifest); err != nil {
+			log.Error("Failed to reconcile consolidated Ingress", logx.ErrAttr(err))
+			return ctrl.Result{}, err
+		}
+	}
+	// Do not block on Watchtower failure to reconcile
+	if err := reconcileWatchtower(ctx, client, wandb, manifest); err != nil {
+		log.Error("Failed to reconcile Watchtower", logx.ErrAttr(err))
+	}
 	redisReady := redisAllReady(wandb)
 	mysqlReady := mysqlAllReady(wandb)
 	kafkaReady := wandb.Status.KafkaStatus.Ready
@@ -313,37 +344,6 @@ func ReconcileWandbManifest(
 
 	statusBefore := wandb.DeepCopy().Status
 
-	// Networking (gateway or ingress) need to be reconciled before infra gate.
-	// Watchtower relies on wandb networking for oidc auth
-	if err := cleanupNetworkingModeResources(ctx, client, wandb); err != nil {
-		logger.Error(err, "Failed to clean up stale networking resources")
-		return ctrl.Result{}, err
-	}
-	resetInactiveNetworkingStatus(wandb)
-
-	// Reconcile networking
-	switch wandb.Spec.Networking.Mode {
-	case apiv2.NetworkingModeGatewayAPI:
-		wandb.Status.GatewayStatus = nil
-		if err := reconcileGateway(ctx, client, wandb); err != nil {
-			logger.Error(err, "Failed to reconcile Gateway")
-			return ctrl.Result{}, err
-		}
-		if err := reconcileInfraHTTPRoutes(ctx, client, wandb, manifest); err != nil {
-			logger.Error(err, "Failed to reconcile infra HTTPRoutes")
-			return ctrl.Result{}, err
-		}
-	case apiv2.NetworkingModeIngress:
-		wandb.Status.IngressStatus = nil
-		if err := reconcileConsolidatedIngress(ctx, client, wandb, manifest); err != nil {
-			logger.Error(err, "Failed to reconcile consolidated Ingress")
-			return ctrl.Result{}, err
-		}
-	}
-	// Do not block on Watchtower failure to reconcile
-	if err := reconcileWatchtower(ctx, client, wandb, manifest); err != nil {
-		logger.Error(err, "Failed to reconcile Watchtower")
-	}
 	redisReady := redisAllReady(wandb)
 	mysqlReady := mysqlAllReady(wandb)
 	kafkaReady := wandb.Status.KafkaStatus.Ready
@@ -752,7 +752,6 @@ func buildHTTPRouteTemplateForPaths(
 		ServicePort: servicePort,
 	}
 }
-
 
 func resolveHTTPRouteServicePort(app serverManifest.Application) *gatewayv1.PortNumber {
 	if app.Ingress != nil && app.Ingress.ServicePort != "" {

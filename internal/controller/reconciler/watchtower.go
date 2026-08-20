@@ -180,8 +180,8 @@ func buildWatchtowerApplication(wandb *apiv2.WeightsAndBiases, authService strin
 					Tolerations:        watchtowerTolerations(wandb),
 					Containers: []corev1.Container{
 						{
-							Name:  watchtowerComponent,
-							Image: image,
+							Name:            watchtowerComponent,
+							Image:           image,
 							Command:         []string{"/watchtower"},
 							Args:            []string{"--port", fmt.Sprintf("%d", watchtowerContainerPort)},
 							SecurityContext: resolveContainerSecurityContext(),

@@ -538,3 +538,37 @@ func TestIsIngressReady(t *testing.T) {
 		})
 	}
 }
+
+// --- independence from infrastructure readiness -------------------------------
+
+// Watchtower exists to diagnose a broken install, so nothing in its reconcile
+// path may depend on the infrastructure being healthy. This is the property that
+// the two infra gates in Reconcile/ReconcileWandbManifest kept swallowing: the
+// code was correct, but unreachable.
+func TestReconcileWatchtowerIgnoresInfraReadiness(t *testing.T) {
+	t.Setenv(operatorImageEnvVar, testOperatorImage)
+
+	wandb := watchtowerTestCR("wandb", "wandb")
+	// Declare an object store instance with no ready status behind it. Without a
+	// declared instance allInstancesReady is vacuously true, and the precondition
+	// below would pass for the wrong reason.
+	wandb.Spec.ObjectStore = map[string]apiv2.ObjectStoreSpec{"default": {}}
+
+	require.False(t, wandb.Status.KafkaStatus.Ready, "precondition: kafka unready")
+	require.False(t, objectStoreAllReady(wandb), "precondition: object store unready")
+
+	c := watchtowerTestClient(t, wandb)
+	require.NoError(t, reconcileWatchtower(context.Background(), c, wandb, manifestWithOIDC()))
+
+	ctx := context.Background()
+	ns := wandb.Namespace
+
+	require.NoError(t, c.Get(ctx, types.NamespacedName{Name: watchtowerSecretName(wandb), Namespace: ns},
+		&corev1.Secret{}), "the admin password must exist even with infra down")
+	require.NoError(t, c.Get(ctx, types.NamespacedName{Name: watchtowerName(wandb), Namespace: ns},
+		&apiv2.Application{}), "the Application must exist even with infra down")
+	require.NoError(t, c.Get(ctx, types.NamespacedName{Name: watchtowerServiceAccountName(wandb), Namespace: ns},
+		&corev1.ServiceAccount{}), "the ServiceAccount must exist even with infra down")
+	require.NoError(t, c.Get(ctx, types.NamespacedName{Name: watchtowerName(wandb), Namespace: ns},
+		&rbacv1.Role{}), "the Role must exist even with infra down")
+}
