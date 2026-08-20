@@ -68,6 +68,13 @@ jobs:
           # operator-upgrade from-leg MUST be an official release, because the
           # scenario default (2.0.0-westest-validation.0) sorts ABOVE the nightly
           # (docs/nightly-westest-testing.md §6/§8).
+          #
+          # App-version sweep (Phase 3): local-kind-app-upgrade has a params: block,
+          # so its from/to app versions are CLI-overridable. Only published app
+          # versions are safe here (an unpublished version fails at image pull).
+          # 0.82.2 -> 0.83.0 are the official pins; add more pairs below as further
+          # releases ship. (local-kind-app-roundtrip is intentionally NOT swept —
+          # it has no params: block; see docs/nightly-westest-testing.md §8.)
           matrix="$(jq -cn --arg chart "${CHART_VERSION}" '
             [
               {scenario: "local-kind-ingress",           params: ""},
@@ -75,7 +82,9 @@ jobs:
               {scenario: "local-kind-oidc",              params: ""},
               {scenario: "local-kind-proxy",             params: ""},
               {scenario: "local-kind-operator-upgrade",  params: ("fromOperatorVersion=2.0.0-beta.3\ntoOperatorVersion=" + $chart)},
-              {scenario: "local-kind-operator-v1-to-v2", params: ("toOperatorVersion=" + $chart)}
+              {scenario: "local-kind-operator-v1-to-v2", params: ("toOperatorVersion=" + $chart)},
+              {scenario: "local-kind-app-upgrade",       params: "fromAppVersion=0.82.2\ntoAppVersion=0.83.0"}
+              # ,{scenario: "local-kind-app-upgrade",     params: "fromAppVersion=0.83.0\ntoAppVersion=<next-published>"}
             ]')"
           echo "matrix=${matrix}" >> "${GITHUB_OUTPUT}"
 
