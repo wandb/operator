@@ -17,8 +17,6 @@ limitations under the License.
 package v2
 
 import (
-	"strings"
-
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -141,55 +139,7 @@ type WeightsAndBiasesSpec struct {
 	// +optional
 	Networking NetworkingSpec `json:"networking,omitempty"`
 
-	Watchtower WatchtowerSpec `json:"watchtower,omitempty"`
-}
-
-type WatchtowerSpec struct {
-	Install        *bool                       `json:"install,omitempty"`
-	Image          WatchtowerImageSpec         `json:"image,omitempty"`
-	BasePath       string                      `json:"basePath,omitempty"`
-	AuthService    string                      `json:"authService,omitempty"`
-	Resources      corev1.ResourceRequirements `json:"resources,omitempty"`
-	ServiceAccount ManagedServiceAccountSpec   `json:"serviceAccount,omitempty"`
-}
-
-type WatchtowerImageSpec struct {
-	// +optional
-	Repository string `json:"repository,omitempty"`
-	// +optional
-	Tag string `json:"tag,omitempty"`
-	// +optional
-	Digest string `json:"digest,omitempty"`
-}
-
-func (s WatchtowerSpec) ResolvedBasePath() string {
-	basePath := s.BasePath
-	if basePath == "" {
-		basePath = DefaultWatchtowerBasePath
-	}
-	if !strings.HasPrefix(basePath, "/") {
-		basePath = "/" + basePath
-	}
-	return strings.TrimSuffix(basePath, "/")
-}
-
-// GetImage returns an explicitly configured Watchtower image, or "" when none is
-// set. Empty is the normal case. Binary shisp inside the operator's own image
-func (s WatchtowerSpec) GetImage(globalImageRegistry string) string {
-	if s.Image.Repository == "" {
-		return ""
-	}
-	repository := s.Image.Repository
-	if globalImageRegistry != "" {
-		repository = globalImageRegistry + "/" + repository
-	}
-	if s.Image.Digest != "" {
-		return repository + "@" + s.Image.Digest
-	}
-	if s.Image.Tag != "" {
-		return repository + ":" + s.Image.Tag
-	}
-	return repository
+	AdminConsoleEnabled *bool `json:"adminConsoleEnabled,omitempty"`
 }
 
 const (
@@ -234,7 +184,7 @@ type GlobalSpec struct {
 }
 
 func (w *WeightsAndBiases) WatchtowerEnabled() bool {
-	return w.Spec.Watchtower.Install != nil && *w.Spec.Watchtower.Install
+	return w.Spec.AdminConsoleEnabled != nil && *w.Spec.AdminConsoleEnabled
 }
 
 // ProxySpec is the forward-proxy configuration under spec.global.proxy.

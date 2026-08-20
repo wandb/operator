@@ -47,8 +47,8 @@ func watchtowerTestCR(name, namespace string) *apiv2.WeightsAndBiases {
 	return &apiv2.WeightsAndBiases{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 		Spec: apiv2.WeightsAndBiasesSpec{
-			Watchtower: apiv2.WatchtowerSpec{Install: ptr.To(true)},
-			Wandb:      apiv2.WandbAppSpec{Hostname: "wandb.example.com"},
+			AdminConsoleEnabled: ptr.To(true),
+			Wandb:               apiv2.WandbAppSpec{Hostname: "wandb.example.com"},
 		},
 	}
 }
@@ -231,19 +231,6 @@ func TestWatchtowerAuthServiceDerivesFromTheOIDCApplication(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "api:8081", authService)
 }
-
-func TestWatchtowerAuthServiceHonorsAnExplicitOverride(t *testing.T) {
-	wandb := watchtowerTestCR("wandb", "wandb")
-	wandb.Spec.Watchtower.AuthService = "custom-api:9999"
-
-	authService, err := watchtowerAuthService(wandb, manifestWithOIDC())
-
-	require.NoError(t, err)
-	require.Equal(t, "custom-api:9999", authService)
-}
-
-// Failing closed: deploying Watchtower with no way to validate a session would
-// leave the app-hostname route unauthenticated.
 func TestWatchtowerAuthServiceFailsWhenNoApplicationServesOIDC(t *testing.T) {
 	wandb := watchtowerTestCR("wandb", "wandb")
 	manifest := serverManifest.Manifest{
@@ -282,7 +269,7 @@ func TestWatchtowerIngressPathTargetsTheApplicationService(t *testing.T) {
 
 func TestWatchtowerIngressPathIsNilWhenDisabled(t *testing.T) {
 	wandb := watchtowerTestCR("wandb", "wandb")
-	wandb.Spec.Watchtower.Install = ptr.To(false)
+	wandb.Spec.AdminConsoleEnabled = ptr.To(false)
 
 	require.Nil(t, watchtowerIngressPath(wandb))
 }
@@ -297,13 +284,11 @@ func TestWatchtowerURL(t *testing.T) {
 		{"adds a scheme", "wandb.example.com", "", "https://wandb.example.com/console"},
 		{"keeps an explicit scheme", "http://wandb.example.com", "", "http://wandb.example.com/console"},
 		{"strips a trailing slash", "https://wandb.example.com/", "", "https://wandb.example.com/console"},
-		{"honors a custom base path", "wandb.example.com", "/admin", "https://wandb.example.com/admin"},
 		{"empty hostname yields no URL", "", "", ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			wandb := watchtowerTestCR("wandb", "wandb")
 			wandb.Spec.Wandb.Hostname = tc.hostname
-			wandb.Spec.Watchtower.BasePath = tc.basePath
 
 			require.Equal(t, tc.want, watchtowerURL(wandb))
 		})
@@ -323,36 +308,6 @@ func TestWatchtowerImageFallsBackToTheOperatorImage(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, testOperatorImage, image)
-}
-
-func TestWatchtowerImagePrefersTheSpecOverride(t *testing.T) {
-	t.Setenv(operatorImageEnvVar, testOperatorImage)
-	wandb := watchtowerTestCR("wandb", "wandb")
-	wandb.Spec.Watchtower.Image = apiv2.WatchtowerImageSpec{
-		Repository: "custom/watchtower",
-		Tag:        "1.2.3",
-	}
-
-	image, err := watchtowerImage(wandb)
-
-	require.NoError(t, err)
-	require.Equal(t, "custom/watchtower:1.2.3", image)
-}
-
-// Air-gapped installs retarget every image at a mirror.
-func TestWatchtowerImageOverrideHonorsTheGlobalRegistry(t *testing.T) {
-	t.Setenv(operatorImageEnvVar, testOperatorImage)
-	wandb := watchtowerTestCR("wandb", "wandb")
-	wandb.Spec.Global.ImageRegistry = "registry.internal"
-	wandb.Spec.Watchtower.Image = apiv2.WatchtowerImageSpec{
-		Repository: "custom/watchtower",
-		Digest:     "sha256:abc123",
-	}
-
-	image, err := watchtowerImage(wandb)
-
-	require.NoError(t, err)
-	require.Equal(t, "registry.internal/custom/watchtower@sha256:abc123", image)
 }
 
 // Failing beats guessing: an empty image would be rejected by the apiserver with
@@ -461,28 +416,6 @@ func TestDeleteWatchtowerRemovesEveryOwnedObject(t *testing.T) {
 
 	require.Nil(t, wandb.Status.WatchtowerStatus)
 }
-
-func TestDeleteWatchtowerLeavesAUserSuppliedServiceAccount(t *testing.T) {
-	wandb := watchtowerTestCR("wandb", "wandb")
-	wandb.Spec.Watchtower.ServiceAccount = apiv2.ManagedServiceAccountSpec{
-		Create:             ptr.To(false),
-		ServiceAccountName: "byo-account",
-	}
-
-	sa := &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{
-		Name: "byo-account", Namespace: wandb.Namespace,
-	}}
-	c := watchtowerTestClient(t, wandb, sa)
-
-	require.NoError(t, deleteWatchtower(context.Background(), c, wandb))
-
-	require.NoError(t, c.Get(context.Background(), types.NamespacedName{
-		Name: "byo-account", Namespace: wandb.Namespace,
-	}, &corev1.ServiceAccount{}), "a user-supplied ServiceAccount must be left alone")
-}
-
-// --- ingress readiness ------------------------------------------------------
-
 func TestIsIngressReady(t *testing.T) {
 	for _, tc := range []struct {
 		name    string

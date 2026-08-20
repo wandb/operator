@@ -337,7 +337,6 @@ func applyClickHouseDefaults(wandb *appsv2.WeightsAndBiases) {
 	}
 }
 
-
 func applyManagedServiceAccountDefaults(serviceAccount *appsv2.ManagedServiceAccountSpec, defaultName string) {
 	if serviceAccount.Create == nil {
 		serviceAccount.Create = ptr.To(true)
@@ -364,7 +363,6 @@ func validateSpec(_ context.Context, newWandb, oldWandb *appsv2.WeightsAndBiases
 	allErrors = append(allErrors, networkingErrors...)
 	warnings = append(warnings, networkingWarnings...)
 	allErrors = append(allErrors, validateProxySpec(newWandb)...)
-	allErrors = append(allErrors, validateWatchtowerSpec(newWandb)...)
 
 	if len(allErrors) == 0 {
 		return warnings, nil
@@ -375,41 +373,6 @@ func validateSpec(_ context.Context, newWandb, oldWandb *appsv2.WeightsAndBiases
 		newWandb.Name,
 		allErrors,
 	)
-}
-
-func validateWatchtowerSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
-	var errors field.ErrorList
-
-	if !wandb.WatchtowerEnabled() {
-		return errors
-	}
-
-	watchtower := wandb.Spec.Watchtower
-	watchtowerPath := field.NewPath("spec").Child("watchtower")
-
-	if basePath := watchtower.BasePath; basePath != "" {
-		switch {
-		case !strings.HasPrefix(basePath, "/"):
-			errors = append(errors, field.Invalid(
-				watchtowerPath.Child("basePath"), basePath, "must start with '/'",
-			))
-		case strings.Trim(basePath, "/") == "":
-			errors = append(errors, field.Invalid(
-				watchtowerPath.Child("basePath"), basePath, "must not be '/', which is served by the W&B frontend",
-			))
-		}
-	}
-
-	if authService := watchtower.AuthService; authService != "" {
-		if strings.Contains(authService, "://") || strings.Contains(authService, "/") {
-			errors = append(errors, field.Invalid(
-				watchtowerPath.Child("authService"), authService,
-				"must be a bare host:port, without a scheme or path",
-			))
-		}
-	}
-
-	return errors
 }
 
 func validateNotificationSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {

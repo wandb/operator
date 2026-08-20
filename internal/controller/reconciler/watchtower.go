@@ -114,7 +114,7 @@ func watchtowerURL(wandb *apiv2.WeightsAndBiases) string {
 	if !strings.Contains(hostname, "://") {
 		hostname = "https://" + hostname
 	}
-	return hostname + wandb.Spec.Watchtower.ResolvedBasePath()
+	return hostname + apiv2.DefaultWatchtowerBasePath
 }
 
 // deleteWatchtower removes every Watchtower resource. The cluster-scoped
@@ -136,16 +136,12 @@ func deleteWatchtower(ctx context.Context, c ctrlClient.Client, wandb *apiv2.Wei
 		}
 	}
 
-	// The ServiceAccount is owner-referenced and only deleted when the operator
-	// created it; a user-supplied account is left alone.
-	if ptr.Deref(wandb.Spec.Watchtower.ServiceAccount.Create, true) {
-		sa := &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{
-			Name:      watchtowerServiceAccountName(wandb),
-			Namespace: wandb.Namespace,
-		}}
-		if err := c.Delete(ctx, sa); err != nil && !apiErrors.IsNotFound(err) {
-			return fmt.Errorf("failed to delete Watchtower ServiceAccount: %w", err)
-		}
+	sa := &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{
+		Name:      watchtowerServiceAccountName(wandb),
+		Namespace: wandb.Namespace,
+	}}
+	if err := c.Delete(ctx, sa); err != nil && !apiErrors.IsNotFound(err) {
+		return fmt.Errorf("failed to delete Watchtower ServiceAccount: %w", err)
 	}
 
 	wandb.Status.WatchtowerStatus = nil
@@ -153,9 +149,8 @@ func deleteWatchtower(ctx context.Context, c ctrlClient.Client, wandb *apiv2.Wei
 }
 
 func buildWatchtowerApplication(wandb *apiv2.WeightsAndBiases, authService string, image string) *apiv2.Application {
-	watchtower := wandb.Spec.Watchtower
 	labels := watchtowerLabels(wandb)
-	basePath := watchtower.ResolvedBasePath()
+	basePath := apiv2.DefaultWatchtowerBasePath
 
 	app := &apiv2.Application{
 		ObjectMeta: metav1.ObjectMeta{
@@ -186,7 +181,7 @@ func buildWatchtowerApplication(wandb *apiv2.WeightsAndBiases, authService strin
 							Args:            []string{"--port", fmt.Sprintf("%d", watchtowerContainerPort)},
 							SecurityContext: resolveContainerSecurityContext(),
 							Env:             watchtowerEnv(wandb, authService, basePath),
-							Resources:       watchtowerResources(watchtower),
+							Resources:       watchtowerResources(),
 							Ports: []corev1.ContainerPort{{
 								Name:          watchtowerPortName,
 								ContainerPort: watchtowerContainerPort,
@@ -257,10 +252,6 @@ func watchtowerEnv(wandb *apiv2.WeightsAndBiases, authService, basePath string) 
 // cluster administration unauthenticated. spec.watchtower.authService is the
 // escape hatch for deployments whose manifest does not declare the path.
 func watchtowerAuthService(wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest) (string, error) {
-	if wandb.Spec.Watchtower.AuthService != "" {
-		return wandb.Spec.Watchtower.AuthService, nil
-	}
-
 	for _, app := range sortedManifestApplications(manifest) {
 		if app.Ingress == nil || app.Service == nil {
 			continue
@@ -308,7 +299,7 @@ func watchtowerIngressPath(wandb *apiv2.WeightsAndBiases) *networkingv1.HTTPIngr
 	}
 	pathType := networkingv1.PathTypePrefix
 	return &networkingv1.HTTPIngressPath{
-		Path:     wandb.Spec.Watchtower.ResolvedBasePath(),
+		Path:     apiv2.DefaultWatchtowerBasePath,
 		PathType: &pathType,
 		Backend: networkingv1.IngressBackend{
 			Service: &networkingv1.IngressServiceBackend{
@@ -335,10 +326,7 @@ func watchtowerProbe(path string) *corev1.Probe {
 
 // watchtowerResources keeps the UI modest by default; it is an admin console
 // whose heavy work happens in the cluster, not in this pod.
-func watchtowerResources(watchtower apiv2.WatchtowerSpec) corev1.ResourceRequirements {
-	if len(watchtower.Resources.Requests) > 0 || len(watchtower.Resources.Limits) > 0 {
-		return watchtower.Resources
-	}
+func watchtowerResources() corev1.ResourceRequirements {
 	return corev1.ResourceRequirements{
 		Requests: corev1.ResourceList{
 			corev1.ResourceCPU:    resource.MustParse("100m"),
@@ -348,9 +336,6 @@ func watchtowerResources(watchtower apiv2.WatchtowerSpec) corev1.ResourceRequire
 }
 
 func watchtowerImage(wandb *apiv2.WeightsAndBiases) (string, error) {
-	if override := wandb.Spec.Watchtower.GetImage(wandb.Spec.Global.ImageRegistry); override != "" {
-		return override, nil
-	}
 	image := os.Getenv(operatorImageEnvVar)
 	if image == "" {
 		return "", fmt.Errorf(
@@ -369,9 +354,6 @@ func watchtowerTolerations(wandb *apiv2.WeightsAndBiases) []corev1.Toleration {
 }
 
 func watchtowerServiceAccountName(wandb *apiv2.WeightsAndBiases) string {
-	if name := wandb.Spec.Watchtower.ServiceAccount.ServiceAccountName; name != "" {
-		return name
-	}
 	return watchtowerName(wandb)
 }
 
@@ -426,10 +408,6 @@ func reconcileWatchtowerSecret(ctx context.Context, c ctrlClient.Client, wandb *
 }
 
 func reconcileWatchtowerServiceAccount(ctx context.Context, c ctrlClient.Client, wandb *apiv2.WeightsAndBiases) error {
-	if !ptr.Deref(wandb.Spec.Watchtower.ServiceAccount.Create, true) {
-		return nil
-	}
-
 	serviceAccount := &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      watchtowerServiceAccountName(wandb),
@@ -438,10 +416,6 @@ func reconcileWatchtowerServiceAccount(ctx context.Context, c ctrlClient.Client,
 	}
 	_, err := controllerruntime.CreateOrUpdate(ctx, c, serviceAccount, func() error {
 		serviceAccount.Labels = utils.MergeMapsStringString(serviceAccount.Labels, watchtowerLabels(wandb))
-		serviceAccount.Annotations = utils.MergeMapsStringString(
-			serviceAccount.Annotations,
-			wandb.Spec.Watchtower.ServiceAccount.Annotations,
-		)
 		// Watchtower talks to the Kubernetes API with this token, so unlike the
 		// W&B application pods it must have one mounted.
 		serviceAccount.AutomountServiceAccountToken = ptr.To(true)
