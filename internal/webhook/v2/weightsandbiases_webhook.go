@@ -358,6 +358,7 @@ func validateSpec(_ context.Context, newWandb, oldWandb *appsv2.WeightsAndBiases
 	allErrors = append(allErrors, validateRedisSpec(newWandb)...)
 	allErrors = append(allErrors, validateObjectStoreSpec(newWandb)...)
 	allErrors = append(allErrors, validateClickHouseSpec(newWandb)...)
+	allErrors = append(allErrors, validateNotificationSpec(newWandb)...)
 	allErrors = append(allErrors, validateInfraNames(newWandb, oldWandb)...)
 	networkingErrors, networkingWarnings := validateNetworkingSpec(newWandb)
 	allErrors = append(allErrors, networkingErrors...)
@@ -408,6 +409,43 @@ func validateWatchtowerSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 		}
 	}
 
+func validateNotificationSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
+	var errors field.ErrorList
+	notifications := wandb.Spec.Wandb.Notifications
+	if notifications == nil {
+		return errors
+	}
+	base := field.NewPath("spec").Child("wandb").Child("notifications")
+
+	if slack := notifications.Slack; slack != nil {
+		slackPath := base.Child("slack")
+		errors = append(errors, validateRequiredSecretSelector(slack.ClientID, slackPath.Child("clientId"))...)
+		errors = append(errors, validateRequiredSecretSelector(slack.ClientSecret, slackPath.Child("clientSecret"))...)
+	}
+
+	email := notifications.Email
+	if email == nil {
+		return errors
+	}
+	emailPath := base.Child("email")
+	if email.Sink == nil && email.SMTP == nil {
+		errors = append(errors, field.Invalid(emailPath, "", "configure exactly one of sink or smtp"))
+		return errors
+	}
+	if email.Sink != nil && email.SMTP != nil {
+		errors = append(errors, field.Invalid(emailPath, "", "configure exactly one of sink or smtp"))
+		return errors
+	}
+	if email.Sink != nil {
+		errors = append(errors, validateRequiredSecretSelector(*email.Sink, emailPath.Child("sink"))...)
+		return errors
+	}
+
+	smtpPath := emailPath.Child("smtp")
+	errors = append(errors, validateRequiredSecretSelector(email.SMTP.Host, smtpPath.Child("host"))...)
+	errors = append(errors, validateRequiredSecretSelector(email.SMTP.Port, smtpPath.Child("port"))...)
+	errors = append(errors, validateRequiredSecretSelector(email.SMTP.Username, smtpPath.Child("username"))...)
+	errors = append(errors, validateRequiredSecretSelector(email.SMTP.Password, smtpPath.Child("password"))...)
 	return errors
 }
 
