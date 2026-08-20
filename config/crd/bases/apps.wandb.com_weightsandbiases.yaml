@@ -4522,6 +4522,13 @@ spec:
                             type: integer
                         type: object
                     type: object
+                  retention:
+                    properties:
+                      artifactGarbageCollection:
+                        type: boolean
+                      dataRetentionPeriod:
+                        type: string
+                    type: object
                   security:
                     properties:
                       allowAnonymousPublicProjects:
