@@ -588,8 +588,16 @@ jobs:
 `2.0.0-nightly-<datetime>` automatically. To test immediately, `workflow_dispatch`
 `nightly.yaml`.
 
-**Reproduce locally.** `westest run <scenario> --param toOperatorVersion=<chart_version>`
-(or `WESTEST_OPERATOR_CHART_VERSION=<chart_version> westest run <scenario>`), with
+**Get the westest binary.** `make westest` downloads the latest release from
+`wandb/westest` to `bin/westest` (needs an authenticated `gh` CLI, since the repo
+is private; set `WESTEST_VERSION` to pin a tag). This is also the **fallback for
+the cross-repo download** (§7): run it in a job with a token that can read
+`wandb/westest`, then pass `binary: bin/westest` to the action so it skips its own
+`gh release download`.
+
+**Reproduce locally.** `make westest`, then
+`bin/westest run <scenario> --param toOperatorVersion=<chart_version>` (or
+`WESTEST_OPERATOR_CHART_VERSION=<chart_version> bin/westest run <scenario>`), with
 the nightly chart version from the build job's summary.
 
 **Bump WESTest.** Change `env.WESTEST_VERSION` and the `uses:` tag in
