@@ -202,10 +202,10 @@ type legacyClickHousePayload struct {
 	Database string `json:"database,omitempty"`
 	User     string `json:"user,omitempty"`
 	Password string `json:"password,omitempty"`
-	// Replication topology harvested from the v1 WF_CLICKHOUSE_REPLICATED* env
-	// vars; it travels with the connection rather than as a spec field.
-	Replicated        string `json:"replicated,omitempty"`
-	ReplicatedCluster string `json:"replicatedCluster,omitempty"`
+	// Replicated carries the structured global.clickhouse.replicated flag. The
+	// WF_CLICKHOUSE_REPLICATED[_CLUSTER] env vars are mapped at reconcile from
+	// legacyOverrides (mapLegacyEnvToCR), which can override this.
+	Replicated string `json:"replicated,omitempty"`
 }
 
 // migrateLegacyClickHouse drains the clickhouse-pending annotation into a
@@ -227,7 +227,7 @@ func migrateLegacyClickHouse(
 		return false, fmt.Errorf("decode %s: %w", apiv1.ClickHousePendingAnnotation, err)
 	}
 
-	secretName := fmt.Sprintf("%s-clickhouse-converted", wandb.Name)
+	secretName := clickHouseConvertedSecretName(wandb)
 	conn := wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ExternalClickHouse
 	if conn == nil {
 		conn = &apiv2.ClickHouseConnection{}
@@ -248,7 +248,6 @@ func migrateLegacyClickHouse(
 	fill(&conn.Username, "username", payload.User)
 	fill(&conn.Password, "password", payload.Password)
 	fill(&conn.Replicated, "replicated", payload.Replicated)
-	fill(&conn.ClusterName, "replicatedCluster", payload.ReplicatedCluster)
 
 	if err := materializeConvertedSecret(ctx, c, wandb, secretName, data); err != nil {
 		return false, err
@@ -430,6 +429,45 @@ func migrateLegacyOIDC(
 
 	delete(wandb.Annotations, apiv1.OIDCPendingAnnotation)
 	return true, nil
+}
+
+func clickHouseConvertedSecretName(wandb *apiv2.WeightsAndBiases) string {
+	return fmt.Sprintf("%s-clickhouse-converted", wandb.Name)
+}
+
+// upsertConvertedSecretKeys merges data into an existing (or new) opaque Secret
+// without dropping keys other writers set — unlike materializeConvertedSecret,
+// which replaces Data. The env mapper adds keys to the same <cr>-*-converted
+// Secret migrateLegacy* already populated.
+func upsertConvertedSecretKeys(
+	ctx context.Context,
+	c ctrlClient.Client,
+	wandb *apiv2.WeightsAndBiases,
+	secretName string,
+	data map[string][]byte,
+) error {
+	if len(data) == 0 {
+		return nil
+	}
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      secretName,
+			Namespace: wandb.Namespace,
+		},
+	}
+	if _, err := ctrl.CreateOrUpdate(ctx, c, secret, func() error {
+		secret.Type = corev1.SecretTypeOpaque
+		if secret.Data == nil {
+			secret.Data = map[string][]byte{}
+		}
+		for k, v := range data {
+			secret.Data[k] = v
+		}
+		return nil
+	}); err != nil {
+		return fmt.Errorf("upsert %s: %w", secretName, err)
+	}
+	return nil
 }
 
 // materializeConvertedSecret CreateOrUpdates an opaque Secret with data,
