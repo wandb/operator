@@ -596,6 +596,18 @@ func mapClickHouse(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiase
 		}
 	}
 
+	// The structured replicated flag travels as a pending literal, so the
+	// reconciler materializes it into the connection Secret. It applies only when
+	// a connection exists (managed ClickHouse derives its own topology), and the
+	// env var WF_CLICKHOUSE_REPLICATED can still override it at reconcile.
+	if sawField {
+		if flag, ok, flagErr := nestedBoolLenient(chMap, "replicated"); flagErr != nil {
+			return fmt.Errorf("spec.values.global.clickhouse.replicated: %w", flagErr)
+		} else if ok {
+			remaining[clickHousePendingReplicatedKey] = strconv.FormatBool(flag)
+		}
+	}
+
 	if !sawField {
 		return nil
 	}
@@ -608,6 +620,30 @@ func mapClickHouse(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiase
 		return writeAnnotation(dst, ClickHousePendingAnnotation, remaining)
 	}
 	return nil
+}
+
+// clickHousePendingReplicatedKey carries the structured global.clickhouse.replicated
+// flag in the clickhouse-pending annotation; migrateLegacyClickHouse turns it into a
+// key of the converted connection Secret. The WF_CLICKHOUSE_REPLICATED[_CLUSTER] env
+// vars are mapped at reconcile from spec.wandb.legacyOverrides, not here.
+const clickHousePendingReplicatedKey = "replicated"
+
+// nestedBoolLenient reads a bool that v1 may have stringly-typed, treating an
+// uninterpretable value as absent so it can't make a v1 object unservable.
+func nestedBoolLenient(values map[string]interface{}, path ...string) (bool, bool, error) {
+	raw, found, err := unstructured.NestedFieldNoCopy(values, path...)
+	if err != nil || !found {
+		return false, false, nil
+	}
+	s, isScalar := scalarToString(raw)
+	if !isScalar {
+		return false, false, nil
+	}
+	parsed, parseErr := strconv.ParseBool(s)
+	if parseErr != nil {
+		return false, false, nil
+	}
+	return parsed, true, nil
 }
 
 // redisFields maps each v1 global.redis.<key> to a *RedisConnection setter.

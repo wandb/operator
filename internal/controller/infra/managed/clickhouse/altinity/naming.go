@@ -75,6 +75,7 @@ func (n *NsNameBuilder) ConnectionNsName() types.NamespacedName {
 func createNsNameBuilder(baseNsName types.NamespacedName) *NsNameBuilder {
 	return CreateNsNameBuilder(baseNsName)
 }
+func CHIClusterName() string { return chiClusterName }
 
 const (
 	// chiClusterName is the single cluster the CHI defines.

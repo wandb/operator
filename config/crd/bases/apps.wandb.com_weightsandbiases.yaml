@@ -525,6 +525,19 @@ spec:
                   properties:
                     externalClickhouse:
                       properties:
+                        clusterName:
+                          properties:
+                            key:
+                              type: string
+                            name:
+                              default: ""
+                              type: string
+                            optional:
+                              type: boolean
+                          required:
+                          - key
+                          type: object
+                          x-kubernetes-map-type: atomic
                         database:
                           properties:
                             key:
@@ -565,6 +578,19 @@ spec:
                           type: object
                           x-kubernetes-map-type: atomic
                         password:
+                          properties:
+                            key:
+                              type: string
+                            name:
+                              default: ""
+                              type: string
+                            optional:
+                              type: boolean
+                          required:
+                          - key
+                          type: object
+                          x-kubernetes-map-type: atomic
+                        replicated:
                           properties:
                             key:
                               type: string
@@ -4612,6 +4638,19 @@ spec:
                       type: array
                     connection:
                       properties:
+                        clusterName:
+                          properties:
+                            key:
+                              type: string
+                            name:
+                              default: ""
+                              type: string
+                            optional:
+                              type: boolean
+                          required:
+                          - key
+                          type: object
+                          x-kubernetes-map-type: atomic
                         database:
                           properties:
                             key:
@@ -4652,6 +4691,19 @@ spec:
                           type: object
                           x-kubernetes-map-type: atomic
                         password:
+                          properties:
+                            key:
+                              type: string
+                            name:
+                              default: ""
+                              type: string
+                            optional:
+                              type: boolean
+                          required:
+                          - key
+                          type: object
+                          x-kubernetes-map-type: atomic
+                        replicated:
                           properties:
                             key:
                               type: string
