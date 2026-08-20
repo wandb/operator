@@ -686,6 +686,7 @@ func validateClickHouseConnection(ext *appsv2.ClickHouseConnection, path *field.
 	}{
 		{"host", ext.Host}, {"tcpPort", ext.TCPPort}, {"httpPort", ext.HTTPPort},
 		{"database", ext.Database}, {"username", ext.Username}, {"password", ext.Password},
+		{"replicated", ext.Replicated}, {"clusterName", ext.ClusterName},
 	} {
 		errors = append(errors, validateValueOrSecret(f.val, path.Child(f.name))...)
 	}

@@ -870,6 +870,55 @@ func TestMigrateLegacyClickHouse_FullLiteralPayload(t *testing.T) {
 	require.Nil(t, conn.URL.SecretKeyRef())
 }
 
+// Replication travels with the connection, so the drain has to land it in the
+// converted Secret alongside host and database — that Secret is what the
+// applications read.
+// The structured global.clickhouse.replicated flag drains into the connection
+// Secret. Cluster (WF_CLICKHOUSE_REPLICATED_CLUSTER) is env-only now, mapped at
+// reconcile from legacyOverrides, so it never rides the pending annotation.
+func TestMigrateLegacyClickHouse_DrainsReplicatedFlag(t *testing.T) {
+	payload := `{"host":"clickhouse.example.com","port":8123,"replicated":"true"}`
+	client, wandb := newMigrationFixture(t, map[string]string{
+		apiv1.ClickHousePendingAnnotation: payload,
+	}, nil)
+
+	_, err := migrateLegacyAnnotations(context.Background(), client, wandb)
+	require.NoError(t, err)
+
+	secret, err := getClickHouseConvertedSecret(t, client)
+	require.NoError(t, err)
+	require.Equal(t, []byte("true"), secret.Data["replicated"])
+	require.NotContains(t, secret.Data, "replicatedCluster")
+
+	conn := wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ExternalClickHouse
+	require.NotNil(t, conn)
+	require.Equal(t, "wandb-clickhouse-converted", conn.Replicated.SecretKeyRef().Name)
+	require.Equal(t, "replicated", conn.Replicated.SecretKeyRef().Key)
+	require.Nil(t, conn.ClusterName.SecretKeyRef(), "cluster is env-only, mapped at reconcile")
+}
+
+// A payload with no replication leaves the selectors unset, so the connection
+// publishes no topology and applications keep their own default.
+func TestMigrateLegacyClickHouse_LeavesTopologyUnsetWhenAbsent(t *testing.T) {
+	payload := `{"host":"clickhouse.example.com","port":8123}`
+	client, wandb := newMigrationFixture(t, map[string]string{
+		apiv1.ClickHousePendingAnnotation: payload,
+	}, nil)
+
+	_, err := migrateLegacyAnnotations(context.Background(), client, wandb)
+	require.NoError(t, err)
+
+	secret, err := getClickHouseConvertedSecret(t, client)
+	require.NoError(t, err)
+	require.NotContains(t, secret.Data, "replicated")
+	require.NotContains(t, secret.Data, "replicatedCluster")
+
+	conn := wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ExternalClickHouse
+	require.NotNil(t, conn)
+	require.Nil(t, conn.Replicated.SecretKeyRef())
+	require.Nil(t, conn.ClusterName.SecretKeyRef())
+}
+
 func TestMigrateLegacyClickHouse_PartialPayload(t *testing.T) {
 	payload := `{"host":"clickhouse.example.com","password":"shh"}`
 	client, wandb := newMigrationFixture(t, map[string]string{

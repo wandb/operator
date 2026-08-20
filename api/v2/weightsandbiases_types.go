@@ -1028,6 +1028,12 @@ type ClickHouseConnection struct {
 
 	// URL is the operator-assembled URL; it may embed the password.
 	URL ValueOrSecret `json:"url,omitempty" masq:"secret"`
+
+	// Replicated tells applications whether to create ReplicatedMergeTree tables.
+	Replicated ValueOrSecret `json:"replicated,omitempty"`
+
+	// CLUSTER. Only meaningful when Replicated is true.
+	ClusterName ValueOrSecret `json:"clusterName,omitempty"`
 }
 
 // Normalize rewrites any legacy {name, key} field into the ValueFrom envelope.
@@ -1042,6 +1048,8 @@ func (c *ClickHouseConnection) Normalize() {
 	c.Username.Normalize()
 	c.Password.Normalize()
 	c.URL.Normalize()
+	c.Replicated.Normalize()
+	c.ClusterName.Normalize()
 }
 
 type ClickHouseConfig struct {

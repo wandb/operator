@@ -30,14 +30,18 @@ func WriteState(
 ) []metav1.Condition {
 	logger := ctrl.LoggerFrom(ctx)
 
+	// Unset values resolve to "" and are dropped, so an external ClickHouse that
+	// declares no topology simply has no such keys.
 	fields := map[string]apiv2.ValueOrSecret{
-		"url":      spec.URL,
-		"Host":     spec.Host,
-		"HTTPPort": spec.HTTPPort,
-		"TCPPort":  spec.TCPPort,
-		"User":     spec.Username,
-		"Password": spec.Password,
-		"Database": spec.Database,
+		"url":         spec.URL,
+		"Host":        spec.Host,
+		"HTTPPort":    spec.HTTPPort,
+		"TCPPort":     spec.TCPPort,
+		"User":        spec.Username,
+		"Password":    spec.Password,
+		"Database":    spec.Database,
+		"Replicated":  spec.Replicated,
+		"ClusterName": spec.ClusterName,
 	}
 
 	data, err := external.ResolveValueFields(ctx, c, wandb.Namespace, fields)
@@ -62,12 +66,12 @@ func ReadState(
 	newConditions []metav1.Condition,
 ) ([]metav1.Condition, *apiv2.ClickHouseConnection) {
 	nsName := types.NamespacedName{Namespace: wandb.Namespace, Name: connectionSecretName(key)}
-	_, conditions, found := external.ReadConnectionSecret(ctx, c, nsName, newConditions)
+	secret, conditions, found := external.ReadConnectionSecret(ctx, c, nsName, newConditions)
 	if !found {
 		return conditions, nil
 	}
 
-	return conditions, &apiv2.ClickHouseConnection{
+	conn := &apiv2.ClickHouseConnection{
 		URL:      apiv2.ValueFromSecret(nsName.Name, "url", false),
 		Host:     apiv2.ValueFromSecret(nsName.Name, "Host", false),
 		HTTPPort: apiv2.ValueFromSecret(nsName.Name, "HTTPPort", false),
@@ -76,6 +80,18 @@ func ReadState(
 		Password: apiv2.ValueFromSecret(nsName.Name, "Password", false),
 		Database: apiv2.ValueFromSecret(nsName.Name, "Database", false),
 	}
+
+	// Topology is optional for an external ClickHouse: the field is left unset
+	// when the user declared nothing, so consumers fall back to their own default
+	// instead of mounting a key that isn't there.
+	if _, ok := secret.Data["Replicated"]; ok {
+		conn.Replicated = apiv2.ValueFromSecret(nsName.Name, "Replicated", false)
+	}
+	if _, ok := secret.Data["ClusterName"]; ok {
+		conn.ClusterName = apiv2.ValueFromSecret(nsName.Name, "ClusterName", false)
+	}
+
+	return conditions, conn
 }
 
 func DeleteConnectionSecret(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, key string) error {

@@ -17,13 +17,15 @@ import (
 )
 
 type clickhouseConnInfo struct {
-	Host     string
-	TCPPort  string
-	HTTPPort string
-	User     string
-	Password string
-	Database string
-	Tls      bool
+	Host        string
+	TCPPort     string
+	HTTPPort    string
+	User        string
+	Password    string
+	Database    string
+	Tls         bool
+	Replicated  bool
+	ClusterName string
 }
 
 func (c *clickhouseConnInfo) toURL() string {
@@ -90,13 +92,15 @@ func writeClickHouseConnInfo(
 		},
 		Type: corev1.SecretTypeOpaque,
 		StringData: map[string]string{
-			urlKey:     connInfo.toURL(),
-			"Host":     connInfo.Host,
-			"TCPPort":  connInfo.TCPPort,
-			"HTTPPort": connInfo.HTTPPort,
-			"User":     connInfo.User,
-			"Password": connInfo.Password,
-			"Database": connInfo.Database,
+			urlKey:        connInfo.toURL(),
+			"Host":        connInfo.Host,
+			"TCPPort":     connInfo.TCPPort,
+			"HTTPPort":    connInfo.HTTPPort,
+			"User":        connInfo.User,
+			"Password":    connInfo.Password,
+			"Database":    connInfo.Database,
+			"Replicated":  strconv.FormatBool(connInfo.Replicated),
+			"ClusterName": connInfo.ClusterName,
 		},
 	}
 
@@ -112,5 +116,8 @@ func writeClickHouseConnInfo(
 		Username: apiv2.ValueFromSecret(nsName.Name, "User", false),
 		Password: apiv2.ValueFromSecret(nsName.Name, "Password", false),
 		Database: apiv2.ValueFromSecret(nsName.Name, "Database", false),
+		// The operator provisions the cluster, so these keys always exist.
+		Replicated:  apiv2.ValueFromSecret(nsName.Name, "Replicated", false),
+		ClusterName: apiv2.ValueFromSecret(nsName.Name, "ClusterName", false),
 	}, nil
 }

@@ -296,6 +296,19 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 					selector.Key = "Database"
 				case "url":
 					selector.Key = "url"
+				case "replicated", "replicated-cluster":
+					// Topology is published for managed ClickHouse, and for an
+					// external one only when its connection declares it. Skip the
+					// env var rather than mount a key that may not be there.
+					topology := status.Connection.Replicated
+					if src.Field == "replicated-cluster" {
+						topology = status.Connection.ClusterName
+					}
+					ref := topology.SecretKeyRef()
+					if ref == nil || ref.Key == "" {
+						continue
+					}
+					selector.Key = ref.Key
 				default:
 					// Unrecognized field; skip
 					continue
