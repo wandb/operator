@@ -70,8 +70,23 @@ func ResolveAutoscaling(app manifest.Application, wandb *v2.WeightsAndBiases) *v
 		}
 	}
 
+	if ao, ok := wandb.Spec.Wandb.Applications[app.Name]; ok && ao.Autoscaling != nil {
+		if ao.Autoscaling.MinReplicas != nil {
+			hpa.MinReplicas = ao.Autoscaling.MinReplicas
+		}
+		if ao.Autoscaling.MaxReplicas != nil {
+			hpa.MaxReplicas = *ao.Autoscaling.MaxReplicas
+		}
+	}
+
 	if hpa.MaxReplicas == 0 {
 		return nil
+	}
+
+	// A partial override can merge with sizing to produce Min > Max; raise Max
+	// to Min rather than emit an HPA the API server will reject.
+	if hpa.MinReplicas != nil && hpa.MaxReplicas < *hpa.MinReplicas {
+		hpa.MaxReplicas = *hpa.MinReplicas
 	}
 
 	return hpa

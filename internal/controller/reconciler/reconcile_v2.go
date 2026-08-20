@@ -343,6 +343,10 @@ func ReconcileWandbManifest(
 		return result, err
 	}
 
+	if err := reconcileEmailSink(ctx, client, wandb); err != nil {
+		return ctrl.Result{}, err
+	}
+
 	result, err = createKafkaTopics(ctx, client, wandb, manifest)
 	if err != nil {
 		return result, err
