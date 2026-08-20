@@ -104,14 +104,13 @@ func writeClickHouseConnInfo(
 		return nil, err
 	}
 
-	localRef := corev1.LocalObjectReference{Name: nsName.Name}
 	return &apiv2.ClickHouseConnection{
-		URL:      corev1.SecretKeySelector{LocalObjectReference: localRef, Key: urlKey, Optional: ptr.To(false)},
-		Host:     corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Host", Optional: ptr.To(false)},
-		HTTPPort: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "HTTPPort", Optional: ptr.To(false)},
-		TCPPort:  corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "TCPPort", Optional: ptr.To(false)},
-		Username: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "User", Optional: ptr.To(false)},
-		Password: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Password", Optional: ptr.To(false)},
-		Database: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Database", Optional: ptr.To(false)},
+		URL:      apiv2.ValueFromSecret(nsName.Name, urlKey, false),
+		Host:     apiv2.ValueFromSecret(nsName.Name, "Host", false),
+		HTTPPort: apiv2.ValueFromSecret(nsName.Name, "HTTPPort", false),
+		TCPPort:  apiv2.ValueFromSecret(nsName.Name, "TCPPort", false),
+		Username: apiv2.ValueFromSecret(nsName.Name, "User", false),
+		Password: apiv2.ValueFromSecret(nsName.Name, "Password", false),
+		Database: apiv2.ValueFromSecret(nsName.Name, "Database", false),
 	}, nil
 }

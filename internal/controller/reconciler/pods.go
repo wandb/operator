@@ -215,7 +215,11 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 				if !ok {
 					continue
 				}
-				selector := status.Connection.URL
+				ref := status.Connection.URL.SecretKeyRef()
+				if ref == nil {
+					continue
+				}
+				selector := *ref
 				// Record for potential direct assignment case
 				singleSecretSelector = selector
 				secretOnlyCount++
@@ -225,7 +229,11 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 				if !ok {
 					continue
 				}
-				selector := status.Connection.URL
+				ref := status.Connection.URL.SecretKeyRef()
+				if ref == nil {
+					continue
+				}
+				selector := *ref
 				singleSecretSelector = selector
 				secretOnlyCount++
 				addSecretComponent(selector, idx)
@@ -234,8 +242,12 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 				if !ok {
 					continue
 				}
+				urlRef := status.Connection.URL.SecretKeyRef()
+				if urlRef == nil {
+					continue
+				}
 				selector := v1.SecretKeySelector{
-					LocalObjectReference: status.Connection.URL.LocalObjectReference,
+					LocalObjectReference: urlRef.LocalObjectReference,
 				}
 				switch src.Field {
 				case "host":
@@ -262,8 +274,12 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 				if !ok {
 					continue
 				}
+				urlRef := status.Connection.URL.SecretKeyRef()
+				if urlRef == nil {
+					continue
+				}
 				selector := v1.SecretKeySelector{
-					LocalObjectReference: status.Connection.URL.LocalObjectReference,
+					LocalObjectReference: urlRef.LocalObjectReference,
 				}
 				switch src.Field {
 				case "host":
@@ -289,15 +305,19 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 				addSecretComponent(selector, idx)
 			case "kafka":
 				// kafka can be referenced as a full URL (no field) or by specific fields (host/port)
+				urlRef := wandb.Status.KafkaStatus.Connection.URL.SecretKeyRef()
+				if urlRef == nil {
+					continue
+				}
 				if src.Field == "" {
-					selector := wandb.Status.KafkaStatus.Connection.URL
+					selector := *urlRef
 					singleSecretSelector = selector
 					secretOnlyCount++
 					addSecretComponent(selector, idx)
 					break
 				}
 				selector := v1.SecretKeySelector{
-					LocalObjectReference: wandb.Status.KafkaStatus.Connection.URL.LocalObjectReference,
+					LocalObjectReference: urlRef.LocalObjectReference,
 				}
 				switch src.Field {
 				case "host":

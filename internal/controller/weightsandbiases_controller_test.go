@@ -225,14 +225,14 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 
 			wandb.Status.MySQLStatus = map[string]apiv2.MysqlInfraStatus{apiv2.DefaultInstanceName: {
 				WBInfraStatus: apiv2.WBInfraStatus{Ready: true},
-				Connection:    apiv2.MysqlConnection{URL: v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: WandbName}, Key: "test"}},
+				Connection:    apiv2.MysqlConnection{URL: apiv2.ValueFromSecret(WandbName, "test", false)},
 			}}
 			wandb.Status.RedisStatus = map[string]apiv2.RedisInfraStatus{apiv2.DefaultInstanceName: {WBInfraStatus: apiv2.WBInfraStatus{Ready: true}}}
 			wandb.Status.KafkaStatus.Ready = true
 			wandb.Status.ObjectStoreStatus = map[string]apiv2.ObjectStoreInfraStatus{apiv2.DefaultInstanceName: {WBInfraStatus: apiv2.WBInfraStatus{Ready: true}}}
 			wandb.Status.ClickHouseStatus = map[string]apiv2.ClickHouseInfraStatus{apiv2.DefaultInstanceName: {
 				WBInfraStatus: apiv2.WBInfraStatus{Ready: true},
-				Connection:    apiv2.ClickHouseConnection{URL: v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: WandbName}, Key: "test"}},
+				Connection:    apiv2.ClickHouseConnection{URL: apiv2.ValueFromSecret(WandbName, "test", false)},
 			}}
 
 			Expect(k8sClient.Status().Update(ctx, wandb)).Should(Succeed())
@@ -310,14 +310,14 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 
 			wandb.Status.MySQLStatus = map[string]apiv2.MysqlInfraStatus{apiv2.DefaultInstanceName: {
 				WBInfraStatus: apiv2.WBInfraStatus{Ready: true},
-				Connection:    apiv2.MysqlConnection{URL: v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: WandbName}, Key: "test"}},
+				Connection:    apiv2.MysqlConnection{URL: apiv2.ValueFromSecret(WandbName, "test", false)},
 			}}
 			wandb.Status.RedisStatus = map[string]apiv2.RedisInfraStatus{apiv2.DefaultInstanceName: {WBInfraStatus: apiv2.WBInfraStatus{Ready: true}}}
 			wandb.Status.KafkaStatus.Ready = true
 			wandb.Status.ObjectStoreStatus = map[string]apiv2.ObjectStoreInfraStatus{apiv2.DefaultInstanceName: {WBInfraStatus: apiv2.WBInfraStatus{Ready: true}}}
 			wandb.Status.ClickHouseStatus = map[string]apiv2.ClickHouseInfraStatus{apiv2.DefaultInstanceName: {
 				WBInfraStatus: apiv2.WBInfraStatus{Ready: true},
-				Connection:    apiv2.ClickHouseConnection{URL: v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: WandbName}, Key: "test"}},
+				Connection:    apiv2.ClickHouseConnection{URL: apiv2.ValueFromSecret(WandbName, "test", false)},
 			}}
 
 			Expect(k8sClient.Status().Update(ctx, wandb)).Should(Succeed())
@@ -398,10 +398,10 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			wandb.Status.ObjectStoreStatus = map[string]apiv2.ObjectStoreInfraStatus{apiv2.DefaultInstanceName: {WBInfraStatus: apiv2.WBInfraStatus{Ready: true}}}
 			wandb.Status.ClickHouseStatus = map[string]apiv2.ClickHouseInfraStatus{apiv2.DefaultInstanceName: {WBInfraStatus: apiv2.WBInfraStatus{Ready: true}}}
 			mysqlStatus := wandb.Status.MySQLStatus[apiv2.DefaultInstanceName]
-			mysqlStatus.Connection.URL = v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: WandbName}, Key: "test"}
+			mysqlStatus.Connection.URL = apiv2.ValueFromSecret(WandbName, "test", false)
 			wandb.Status.MySQLStatus[apiv2.DefaultInstanceName] = mysqlStatus
 			clickHouseStatus := wandb.Status.ClickHouseStatus[apiv2.DefaultInstanceName]
-			clickHouseStatus.Connection.URL = v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: WandbName}, Key: "test"}
+			clickHouseStatus.Connection.URL = apiv2.ValueFromSecret(WandbName, "test", false)
 			wandb.Status.ClickHouseStatus[apiv2.DefaultInstanceName] = clickHouseStatus
 			wandb.Status.Wandb.Migration.Version = wandb.Spec.Wandb.Version
 			wandb.Status.Wandb.Migration.LastSuccessVersion = wandb.Spec.Wandb.Version
@@ -502,14 +502,14 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			Expect(k8sClient.Get(ctx, wandbLookupKey, wandb)).Should(Succeed())
 			wandb.Status.MySQLStatus = map[string]apiv2.MysqlInfraStatus{apiv2.DefaultInstanceName: {
 				WBInfraStatus: apiv2.WBInfraStatus{Ready: true},
-				Connection:    apiv2.MysqlConnection{URL: v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: WandbName}, Key: "test"}},
+				Connection:    apiv2.MysqlConnection{URL: apiv2.ValueFromSecret(WandbName, "test", false)},
 			}}
 			wandb.Status.RedisStatus = map[string]apiv2.RedisInfraStatus{apiv2.DefaultInstanceName: {WBInfraStatus: apiv2.WBInfraStatus{Ready: true}}}
 			wandb.Status.KafkaStatus.Ready = true
 			wandb.Status.ObjectStoreStatus = map[string]apiv2.ObjectStoreInfraStatus{apiv2.DefaultInstanceName: {WBInfraStatus: apiv2.WBInfraStatus{Ready: true}}}
 			wandb.Status.ClickHouseStatus = map[string]apiv2.ClickHouseInfraStatus{apiv2.DefaultInstanceName: {
 				WBInfraStatus: apiv2.WBInfraStatus{Ready: true},
-				Connection:    apiv2.ClickHouseConnection{URL: v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: WandbName}, Key: "test"}},
+				Connection:    apiv2.ClickHouseConnection{URL: apiv2.ValueFromSecret(WandbName, "test", false)},
 			}}
 			wandb.Status.Wandb.Migration.Version = wandb.Spec.Wandb.Version
 			wandb.Status.Wandb.Migration.LastSuccessVersion = wandb.Spec.Wandb.Version
@@ -634,10 +634,10 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			wandb.Status.Wandb.Migration.Ready = false
 			wandb.Status.Wandb.Migration.Reason = "Running"
 			mysqlStatus := wandb.Status.MySQLStatus[apiv2.DefaultInstanceName]
-			mysqlStatus.Connection.URL = v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: WandbName}, Key: "test"}
+			mysqlStatus.Connection.URL = apiv2.ValueFromSecret(WandbName, "test", false)
 			wandb.Status.MySQLStatus[apiv2.DefaultInstanceName] = mysqlStatus
 			clickHouseStatus := wandb.Status.ClickHouseStatus[apiv2.DefaultInstanceName]
-			clickHouseStatus.Connection.URL = v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: WandbName}, Key: "test"}
+			clickHouseStatus.Connection.URL = apiv2.ValueFromSecret(WandbName, "test", false)
 			wandb.Status.ClickHouseStatus[apiv2.DefaultInstanceName] = clickHouseStatus
 			Expect(k8sClient.Status().Update(ctx, wandb)).Should(Succeed())
 
@@ -701,14 +701,14 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			// Mark infra as ready and migration as complete for old version
 			wandb.Status.MySQLStatus = map[string]apiv2.MysqlInfraStatus{apiv2.DefaultInstanceName: {
 				WBInfraStatus: apiv2.WBInfraStatus{Ready: true},
-				Connection:    apiv2.MysqlConnection{URL: v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: WandbName}, Key: "test"}},
+				Connection:    apiv2.MysqlConnection{URL: apiv2.ValueFromSecret(WandbName, "test", false)},
 			}}
 			wandb.Status.RedisStatus = map[string]apiv2.RedisInfraStatus{apiv2.DefaultInstanceName: {WBInfraStatus: apiv2.WBInfraStatus{Ready: true}}}
 			wandb.Status.KafkaStatus.Ready = true
 			wandb.Status.ObjectStoreStatus = map[string]apiv2.ObjectStoreInfraStatus{apiv2.DefaultInstanceName: {WBInfraStatus: apiv2.WBInfraStatus{Ready: true}}}
 			wandb.Status.ClickHouseStatus = map[string]apiv2.ClickHouseInfraStatus{apiv2.DefaultInstanceName: {
 				WBInfraStatus: apiv2.WBInfraStatus{Ready: true},
-				Connection:    apiv2.ClickHouseConnection{URL: v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: WandbName}, Key: "test"}},
+				Connection:    apiv2.ClickHouseConnection{URL: apiv2.ValueFromSecret(WandbName, "test", false)},
 			}}
 			wandb.Status.Wandb.Migration.Version = oldVersion
 			wandb.Status.Wandb.Migration.LastSuccessVersion = oldVersion

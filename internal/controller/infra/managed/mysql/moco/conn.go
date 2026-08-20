@@ -91,13 +91,12 @@ func writeMySQLConnInfo(
 		return nil, err
 	}
 
-	localRef := corev1.LocalObjectReference{Name: nsName.Name}
 	return &apiv2.MysqlConnection{
-		URL:      corev1.SecretKeySelector{LocalObjectReference: localRef, Key: urlKey, Optional: ptr.To(false)},
-		Host:     corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Host", Optional: ptr.To(false)},
-		Port:     corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Port", Optional: ptr.To(false)},
-		Database: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Database", Optional: ptr.To(false)},
-		Username: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Username", Optional: ptr.To(false)},
-		Password: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Password", Optional: ptr.To(false)},
+		URL:      apiv2.ValueFromSecret(nsName.Name, urlKey, false),
+		Host:     apiv2.ValueFromSecret(nsName.Name, "Host", false),
+		Port:     apiv2.ValueFromSecret(nsName.Name, "Port", false),
+		Database: apiv2.ValueFromSecret(nsName.Name, "Database", false),
+		Username: apiv2.ValueFromSecret(nsName.Name, "Username", false),
+		Password: apiv2.ValueFromSecret(nsName.Name, "Password", false),
 	}, nil
 }

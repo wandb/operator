@@ -53,29 +53,28 @@ func joinNoProxy(entries []string) string {
 	return strings.Join(out, ",")
 }
 
-// proxyValueEnvVars turns one ProxyValue into the upper/lower env-var pair for
-// the given base name. A literal value becomes a literal env var; a valueFrom
+// proxyValueEnvVars turns one ValueOrSecret into the upper/lower env-var pair for
+// the given base name. A literal value becomes a literal env var; a secret ref
 // becomes a SecretKeyRef env source (both casings reference the same key) so
 // credential-bearing URLs stay in the Secret and never land in the workload
 // spec. Returns nil when the value is unset.
-func proxyValueEnvVars(upper, lower string, pv *apiv2.ProxyValue) []corev1.EnvVar {
+func proxyValueEnvVars(upper, lower string, pv *apiv2.ValueOrSecret) []corev1.EnvVar {
 	if pv == nil {
 		return nil
 	}
-	switch {
-	case pv.Value != "":
+	if pv.Value != "" {
 		return []corev1.EnvVar{
 			{Name: upper, Value: pv.Value},
 			{Name: lower, Value: pv.Value},
 		}
-	case pv.ValueFrom != nil && pv.ValueFrom.SecretKeyRef != nil:
-		return []corev1.EnvVar{
-			{Name: upper, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: pv.ValueFrom.SecretKeyRef.DeepCopy()}},
-			{Name: lower, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: pv.ValueFrom.SecretKeyRef.DeepCopy()}},
-		}
-	default:
-		return nil
 	}
+	if ref := pv.SecretKeyRef(); ref != nil {
+		return []corev1.EnvVar{
+			{Name: upper, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: ref.DeepCopy()}},
+			{Name: lower, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: ref.DeepCopy()}},
+		}
+	}
+	return nil
 }
 
 // proxyEnvVars builds the full six-variable proxy env set for spec.global.proxy:

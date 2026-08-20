@@ -316,6 +316,10 @@ github.com/liggitt/tabwriter v0.0.0-20181228230101-89fcab3d43de h1:9TO3cAIGXtEhn
 github.com/liggitt/tabwriter v0.0.0-20181228230101-89fcab3d43de/go.mod h1:zAbeS9B/r2mtpb6U+EI2rYA5OAXxsYw6wTamcNW+zcE=
 github.com/lmittmann/tint v1.1.2 h1:2CQzrL6rslrsyjqLDwD11bZ5OpLBPU+g3G/r5LSfS8w=
 github.com/lmittmann/tint v1.1.2/go.mod h1:HIS3gSy7qNwGCj+5oRjAutErFBl4BzdQP6cJZ0NfMwE=
+github.com/m-mizutani/gt v0.1.0 h1:HCz+dE6zmlpceb4smal4hOyZyS+WHxGtiOTUJwA9n1A=
+github.com/m-mizutani/gt v0.1.0/go.mod h1:0MPYSfGBLmYjTduzADVmIqD58ELQ5IfBFiK/f0FmB3k=
+github.com/m-mizutani/masq v0.2.2 h1:C049XdUabx1T+cUuWUiWg9gGo7onrMAgqRe71tyBi58=
+github.com/m-mizutani/masq v0.2.2/go.mod h1:tDXVSkv0TlxdxV8dfkmKj974VQozK9llZSSCHhEkcJE=
 github.com/maruel/natural v1.1.1 h1:Hja7XhhmvEFhcByqDoHz9QZbkWey+COd9xWfCfn1ioo=
 github.com/maruel/natural v1.1.1/go.mod h1:v+Rfd79xlw1AgVBjbO0BEQmptqb5HvL/k9GRHB7ZKEg=
 github.com/mattn/go-colorable v0.1.14 h1:9A9LHSqF/7dyVVX6g0U9cwm9pG3kP9gSzcuIPHPsaIE=

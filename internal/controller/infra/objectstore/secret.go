@@ -9,7 +9,6 @@ import (
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -53,11 +52,10 @@ func (c ConnInfo) ToSecretData() map[string]string {
 // the rest are optional (external configs omit provider-dependent keys).
 func (c ConnInfo) ToObjectStoreConnection(secretName string, requireAll bool) *apiv2.ObjectStoreConnection {
 	data := c.ToSecretData()
-	localRef := corev1.LocalObjectReference{Name: secretName}
 
-	sel := func(key string) corev1.SecretKeySelector {
+	sel := func(key string) apiv2.ValueOrSecret {
 		optional := !requireAll && !connectionRequiredKeys[key]
-		return corev1.SecretKeySelector{LocalObjectReference: localRef, Key: key, Optional: ptr.To(optional)}
+		return apiv2.ValueFromSecret(secretName, key, optional)
 	}
 	has := func(key string) bool { _, ok := data[key]; return ok }
 
@@ -111,12 +109,17 @@ func Resolve(
 
 	resolver := &utils.ConnSecretResolver{Client: cl, Namespace: namespace, Cache: map[string]*corev1.Secret{}}
 
-	info := ConnInfo{
-		AccessKeyRef: conn.AccessKey,
-		SecretKeyRef: conn.SecretKey,
+	info := ConnInfo{}
+	// Status connections always carry the secret arm; capture the selectors for
+	// consumers that inject creds by reference (ClickHouse disk, Bufstream).
+	if ref := conn.AccessKey.SecretKeyRef(); ref != nil {
+		info.AccessKeyRef = *ref
+	}
+	if ref := conn.SecretKey.SecretKeyRef(); ref != nil {
+		info.SecretKeyRef = *ref
 	}
 
-	provider, err := resolver.Value(ctx, conn.Provider)
+	provider, err := resolver.ValueOrSecret(ctx, conn.Provider)
 	if err != nil {
 		return ConnInfo{}, err
 	}
@@ -127,33 +130,33 @@ func Resolve(
 	}
 	info.Provider = apiv2.ObjectStoreProvider(provider)
 
-	if info.Bucket, err = resolver.Value(ctx, conn.Bucket); err != nil {
+	if info.Bucket, err = resolver.ValueOrSecret(ctx, conn.Bucket); err != nil {
 		return ConnInfo{}, err
 	}
-	if info.Endpoint, err = resolver.Value(ctx, conn.Endpoint); err != nil {
+	if info.Endpoint, err = resolver.ValueOrSecret(ctx, conn.Endpoint); err != nil {
 		return ConnInfo{}, err
 	}
-	if info.Port, err = resolver.Value(ctx, conn.Port); err != nil {
+	if info.Port, err = resolver.ValueOrSecret(ctx, conn.Port); err != nil {
 		return ConnInfo{}, err
 	}
-	if info.Region, err = resolver.Value(ctx, conn.Region); err != nil {
+	if info.Region, err = resolver.ValueOrSecret(ctx, conn.Region); err != nil {
 		return ConnInfo{}, err
 	}
-	if info.AccessKey, err = resolver.Value(ctx, conn.AccessKey); err != nil {
+	if info.AccessKey, err = resolver.ValueOrSecret(ctx, conn.AccessKey); err != nil {
 		return ConnInfo{}, err
 	}
-	if info.SecretKey, err = resolver.Value(ctx, conn.SecretKey); err != nil {
+	if info.SecretKey, err = resolver.ValueOrSecret(ctx, conn.SecretKey); err != nil {
 		return ConnInfo{}, err
 	}
 	// A half-configured pair silently picks the wrong credential mode downstream.
 	if (info.AccessKey == "") != (info.SecretKey == "") {
 		return ConnInfo{}, fmt.Errorf("object store access key and secret key must be configured together")
 	}
-	if info.Path, err = resolver.Value(ctx, conn.Path); err != nil {
+	if info.Path, err = resolver.ValueOrSecret(ctx, conn.Path); err != nil {
 		return ConnInfo{}, err
 	}
 
-	forcePathStyleString, err := resolver.Value(ctx, conn.ForcePathStyle)
+	forcePathStyleString, err := resolver.ValueOrSecret(ctx, conn.ForcePathStyle)
 	if err != nil {
 		return ConnInfo{}, err
 	}
@@ -164,7 +167,7 @@ func Resolve(
 		info.ForcePathStyle = RequiresPathStyle(info.Endpoint)
 	}
 
-	tlsEnabledString, err := resolver.Value(ctx, conn.TlsEnabled)
+	tlsEnabledString, err := resolver.ValueOrSecret(ctx, conn.TlsEnabled)
 	if err != nil {
 		return ConnInfo{}, err
 	}
