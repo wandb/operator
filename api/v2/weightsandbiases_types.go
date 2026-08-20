@@ -832,6 +832,12 @@ type ClickHouseConnection struct {
 	Password corev1.SecretKeySelector `json:"password,omitempty"`
 
 	URL corev1.SecretKeySelector `json:"url,omitempty"`
+
+	// Replicated tells applications whether to create ReplicatedMergeTree tables.
+	Replicated corev1.SecretKeySelector `json:"replicated,omitempty"`
+
+	// CLUSTER. Only meaningful when Replicated is true.
+	ClusterName corev1.SecretKeySelector `json:"clusterName,omitempty"`
 }
 
 type ClickHouseConfig struct {
