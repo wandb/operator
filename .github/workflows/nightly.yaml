@@ -1,0 +1,117 @@
+name: Nightly WESTest
+
+# Nightly end-to-end testing of the operator via wandb/westest. Builds a nightly
+# operator image+chart, then runs WESTest scenarios against it on large runners.
+# See docs/nightly-westest-testing.md for the full plan, prerequisites, and phases.
+#
+# Currently workflow_dispatch-only. Do NOT enable the schedule trigger until the
+# prerequisites in docs/nightly-westest-testing.md §7 are met (notably: the
+# operator repo's GITHUB_TOKEN must be granted read access to the private
+# wandb/westest repo, and ubuntu-latest-8-cores must be available).
+
+on:
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: "Single scenario to run (blank = full Phase 1 smoke set)."
+        type: string
+        required: false
+        default: ""
+  # schedule:
+  #   - cron: "0 7 * * *" # 07:00 UTC daily
+
+concurrency:
+  group: nightly-westest
+  cancel-in-progress: false
+
+env:
+  # Pin the WESTest release; the action defaults to `latest`, which resolves by
+  # creation date and would make nightlies non-reproducible.
+  WESTEST_VERSION: v0.2.0
+
+jobs:
+  build:
+    uses: ./.github/workflows/nightly-build.yaml
+    permissions:
+      contents: read
+      id-token: write
+    secrets: inherit
+
+  setup:
+    name: Resolve scenario matrix
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - name: Build scenario matrix
+        id: matrix
+        env:
+          SCENARIO: ${{ inputs.scenario }}
+        run: |
+          set -euo pipefail
+          if [ -n "${SCENARIO}" ]; then
+            # Phase 0 bootstrap: a single scenario chosen at dispatch time.
+            matrix="$(printf '["%s"]' "${SCENARIO}")"
+          else
+            # Phase 1 smoke set (self-contained, no license, no cloud).
+            matrix='["local-kind-ingress","local-kind-gateway","local-kind-oidc","local-kind-proxy"]'
+          fi
+          echo "matrix=${matrix}" >> "${GITHUB_OUTPUT}"
+
+  test:
+    name: ${{ matrix.scenario }}
+    needs: [build, setup]
+    # The full local-kind stack needs >=8 vCPU; a standard runner leaves MySQL and
+    # the ClickHouse keeper Pending on Insufficient cpu.
+    runs-on: ubuntu-latest-8-cores
+    permissions:
+      contents: read
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        scenario: ${{ fromJSON(needs.setup.outputs.matrix) }}
+    env:
+      # Point every remote-chart scenario at the nightly chart. WESTest reads this
+      # env var (config.go); upgrade scenarios additionally override per-phase via
+      # --param (see docs/nightly-westest-testing.md §12 for the Phase 2/3 matrix).
+      WESTEST_OPERATOR_CHART_VERSION: ${{ needs.build.outputs.chart_version }}
+    steps:
+      - name: Run scenario
+        # Requires cross-repo read access to the private wandb/westest repo — the
+        # action downloads its release binary with the caller's github.token.
+        uses: wandb/westest/actions/run@v0.2.0
+        with:
+          scenario: ${{ matrix.scenario }}
+          westest-version: ${{ env.WESTEST_VERSION }}
+          upload-artifacts: "true"
+
+  report:
+    needs: [build, setup, test]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Summarize
+        run: |
+          echo "build=${{ needs.build.result }} chart=${{ needs.build.outputs.chart_version }}"
+          echo "test=${{ needs.test.result }}"
+      - name: Notify on failure
+        if: needs.build.result != 'success' || needs.test.result != 'success'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.WESTEST_SLACK_WEBHOOK }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SLACK_WEBHOOK_URL:-}" ]; then
+            echo "no WESTEST_SLACK_WEBHOOK configured; skipping notification"
+            exit 0
+          fi
+          run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          curl -fsSL -X POST -H 'Content-type: application/json' \
+            --data "{\"text\":\"Nightly WESTest failed — chart ${{ needs.build.outputs.chart_version }} — ${run_url}\"}" \
+            "${SLACK_WEBHOOK_URL}"
