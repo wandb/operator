@@ -1,0 +1,96 @@
+name: Weekly WESTest (heavy)
+
+# Phase 4 weekly WESTest: the heavier, slower, or product-guard scenarios that
+# don't belong on the nightly critical path. Builds a nightly operator image+chart
+# (reusing nightly-build.yaml) and runs the heavy self-contained set against it.
+# See docs/nightly-westest-testing.md §6 (Phase 4).
+#
+# workflow_dispatch-only for now; enable the weekly cron once the same
+# prerequisites as the nightly are met (cross-repo access to wandb/westest,
+# ubuntu-latest-8-cores). Cloud scenarios (aws-eks-*, gcp-gke-*) are intentionally
+# NOT here — they need cloud credentials + a license and stay on-demand.
+
+on:
+  workflow_dispatch: {}
+  # schedule:
+  #   - cron: "0 8 * * 0" # Sundays 08:00 UTC
+
+concurrency:
+  group: westest-weekly
+  cancel-in-progress: false
+
+env:
+  WESTEST_VERSION: v0.2.0
+
+jobs:
+  build:
+    uses: ./.github/workflows/nightly-build.yaml
+    permissions:
+      contents: read
+      id-token: write
+    secrets: inherit
+
+  test:
+    name: ${{ matrix.scenario }}
+    needs: build
+    runs-on: ubuntu-latest-8-cores
+    permissions:
+      contents: read
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        scenario:
+          # DB durability round-trip. Pins operator 2.0.0-beta.1 in its own
+          # scenario def (a product guard), so it does not test the nightly binary.
+          - local-kind-app-roundtrip
+          # Proxy edge variants (use the nightly chart via the env below).
+          - local-kind-proxy-tls
+          - local-kind-proxy-auth
+          - local-kind-proxy-misconfig
+          # - local-kind-airgap  # flakiest self-contained path; enable deliberately
+    env:
+      WESTEST_OPERATOR_CHART_VERSION: ${{ needs.build.outputs.chart_version }}
+    steps:
+      - name: Mint a token to read wandb/westest releases
+        id: westest-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.WESTEST_APP_ID }}
+          private-key: ${{ secrets.WESTEST_APP_PRIVATE_KEY }}
+          owner: wandb
+          repositories: westest
+      - name: Run scenario
+        uses: wandb/westest/actions/run@662b59b6199d99a84435d889e7d8cf6e94ebf74c
+        with:
+          scenario: ${{ matrix.scenario }}
+          github-token: ${{ steps.westest-token.outputs.token }}
+          westest-version: ${{ env.WESTEST_VERSION }}
+          upload-artifacts: "true"
+
+  report:
+    needs: [build, test]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Summarize
+        run: |
+          echo "build=${{ needs.build.result }} chart=${{ needs.build.outputs.chart_version }}"
+          echo "test=${{ needs.test.result }}"
+      - name: Notify on failure
+        if: needs.build.result != 'success' || needs.test.result != 'success'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.WESTEST_SLACK_WEBHOOK }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SLACK_WEBHOOK_URL:-}" ]; then
+            echo "no WESTEST_SLACK_WEBHOOK configured; skipping notification"
+            exit 0
+          fi
+          run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          curl -fsSL -X POST -H 'Content-type: application/json' \
+            --data "{\"text\":\"Weekly WESTest failed — chart ${{ needs.build.outputs.chart_version }} — ${run_url}\"}" \
+            "${SLACK_WEBHOOK_URL}"

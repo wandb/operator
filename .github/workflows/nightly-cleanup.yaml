@@ -1,0 +1,97 @@
+name: Nightly Cleanup
+
+# Garbage-collect old nightly operator images and charts from Artifact Registry
+# so they don't accumulate unbounded. Only artifacts whose tags are ALL
+# "*-nightly-*" and older than RETENTION_DAYS are considered — release tags
+# (2.x.y, v2.*, betas) are never matched.
+#
+# PREFERRED ALTERNATIVE: a native Artifact Registry cleanup policy on these repos
+# (declarative, nothing to maintain) — see docs/nightly-westest-testing.md §10.
+# This workflow is the fallback. It DEFAULTS TO DRY-RUN; the gcloud field names
+# and delete semantics should be validated against the live registry before it is
+# run with dry_run=false for the first time.
+
+on:
+  workflow_dispatch:
+    inputs:
+      retention_days:
+        description: "Delete nightly artifacts older than this many days."
+        type: string
+        required: false
+        default: "14"
+      dry_run:
+        description: "List what would be deleted without deleting."
+        type: boolean
+        required: false
+        default: true
+  # schedule:
+  #   - cron: "0 9 * * 0" # Sundays 09:00 UTC
+
+concurrency:
+  group: nightly-cleanup
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    name: GC old nightly artifacts
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+
+      - id: auth
+        name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          create_credentials_file: "true"
+          token_format: access_token
+          project_id: wandb-production
+          workload_identity_provider: ${{ secrets.CI_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.CI_WORKLOAD_IDENTITY_SERVICE_ACCOUNT }}
+
+      - name: Delete old nightly images and charts
+        env:
+          RETENTION_DAYS: ${{ inputs.retention_days }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          command -v jq >/dev/null 2>&1 || { echo "jq is required" >&2; exit 1; }
+
+          repos=(
+            us-docker.pkg.dev/wandb-production/public/wandb/operator
+            us-docker.pkg.dev/wandb-production/public/wandb/charts/operator
+          )
+          cutoff="$(date -u -d "${RETENTION_DAYS} days ago" +%Y-%m-%dT%H:%M:%SZ)"
+          echo "Cutoff: ${cutoff} (dry_run=${DRY_RUN})"
+
+          for repo in "${repos[@]}"; do
+            echo "== ${repo} =="
+            gcloud artifacts docker images list "${repo}" \
+              --include-tags --format=json > images.json
+
+            # Only versions that are older than the cutoff AND whose tags are ALL
+            # nightly tags (never a release digest that happens to be shared).
+            mapfile -t digests < <(jq -r --arg cutoff "${cutoff}" '
+              .[]
+              | select((.createTime < $cutoff)
+                       and ((.tags | length) > 0)
+                       and (all(.tags[]; test("-nightly-"))))
+              | .version' images.json)
+
+            if [ "${#digests[@]}" -eq 0 ]; then
+              echo "nothing to delete"
+              continue
+            fi
+
+            for digest in "${digests[@]}"; do
+              target="${repo}@${digest}"
+              if [ "${DRY_RUN}" = "true" ]; then
+                echo "[dry-run] would delete ${target}"
+              else
+                gcloud artifacts docker images delete "${target}" --delete-tags --quiet
+              fi
+            done
+          done
