@@ -2576,6 +2576,9 @@ spec:
               objectStore:
                 additionalProperties:
                   properties:
+                    bucketAttributionDisabled:
+                      default: false
+                      type: boolean
                     externalObjectStore:
                       properties:
                         accessKey:
@@ -4108,6 +4111,114 @@ spec:
                     type: string
                   manifestRepository:
                     type: string
+                  notifications:
+                    properties:
+                      email:
+                        properties:
+                          sink:
+                            properties:
+                              key:
+                                type: string
+                              name:
+                                default: ""
+                                type: string
+                              optional:
+                                type: boolean
+                            required:
+                            - key
+                            type: object
+                            x-kubernetes-map-type: atomic
+                          smtp:
+                            properties:
+                              host:
+                                properties:
+                                  key:
+                                    type: string
+                                  name:
+                                    default: ""
+                                    type: string
+                                  optional:
+                                    type: boolean
+                                required:
+                                - key
+                                type: object
+                                x-kubernetes-map-type: atomic
+                              password:
+                                properties:
+                                  key:
+                                    type: string
+                                  name:
+                                    default: ""
+                                    type: string
+                                  optional:
+                                    type: boolean
+                                required:
+                                - key
+                                type: object
+                                x-kubernetes-map-type: atomic
+                              port:
+                                properties:
+                                  key:
+                                    type: string
+                                  name:
+                                    default: ""
+                                    type: string
+                                  optional:
+                                    type: boolean
+                                required:
+                                - key
+                                type: object
+                                x-kubernetes-map-type: atomic
+                              username:
+                                properties:
+                                  key:
+                                    type: string
+                                  name:
+                                    default: ""
+                                    type: string
+                                  optional:
+                                    type: boolean
+                                required:
+                                - key
+                                type: object
+                                x-kubernetes-map-type: atomic
+                            required:
+                            - host
+                            - password
+                            - port
+                            - username
+                            type: object
+                        type: object
+                      slack:
+                        properties:
+                          clientId:
+                            properties:
+                              key:
+                                type: string
+                              name:
+                                default: ""
+                                type: string
+                              optional:
+                                type: boolean
+                            required:
+                            - key
+                            type: object
+                            x-kubernetes-map-type: atomic
+                          clientSecret:
+                            properties:
+                              key:
+                                type: string
+                              name:
+                                default: ""
+                                type: string
+                              optional:
+                                type: boolean
+                            required:
+                            - key
+                            type: object
+                            x-kubernetes-map-type: atomic
+                        type: object
+                    type: object
                   oidc:
                     properties:
                       authMethod:
@@ -4411,6 +4522,27 @@ spec:
                             type: integer
                         type: object
                     type: object
+                  security:
+                    properties:
+                      allowAnonymousPublicProjects:
+                        default: false
+                        type: boolean
+                      allowUserTeamCreation:
+                        default: false
+                        type: boolean
+                      disableCodeSaving:
+                        default: false
+                        type: boolean
+                      disableSSOProvisioning:
+                        default: false
+                        type: boolean
+                      hideUpgradeBanner:
+                        default: false
+                        type: boolean
+                      insecureAllowAPIKeyAdminAccess:
+                        default: false
+                        type: boolean
+                    type: object
                   serviceAccount:
                     properties:
                       annotations:
@@ -4619,6 +4751,19 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
+              emailSink:
+                properties:
+                  key:
+                    type: string
+                  name:
+                    default: ""
+                    type: string
+                  optional:
+                    type: boolean
+                required:
+                - key
+                type: object
+                x-kubernetes-map-type: atomic
               gatewayStatus:
                 properties:
                   addresses:
