@@ -409,6 +409,9 @@ func validateWatchtowerSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 		}
 	}
 
+	return errors
+}
+
 func validateNotificationSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 	var errors field.ErrorList
 	notifications := wandb.Spec.Wandb.Notifications

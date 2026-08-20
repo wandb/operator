@@ -193,7 +193,7 @@ func (s WatchtowerSpec) GetImage(globalImageRegistry string) string {
 }
 
 const (
-	DefaultWatchtowerBasePath           = "/watchtower"
+	DefaultWatchtowerBasePath           = "/console"
 	DefaultWatchtowerServiceAccountName = "wandb-watchtower"
 )
 

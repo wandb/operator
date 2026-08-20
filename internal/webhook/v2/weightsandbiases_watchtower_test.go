@@ -37,7 +37,7 @@ func TestValidateWatchtowerSpec(t *testing.T) {
 		},
 		{
 			name:       "explicit base path",
-			watchtower: appsv2.WatchtowerSpec{Install: ptr.To(true), BasePath: "/watchtower"},
+			watchtower: appsv2.WatchtowerSpec{Install: ptr.To(true), BasePath: "/console"},
 		},
 		{
 			name:       "custom base path",

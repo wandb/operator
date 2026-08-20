@@ -31,7 +31,7 @@ make docker-build WATCHTOWER_VERSION=0.12.0
 ```
 
 The Application the operator synthesizes selects the second entrypoint with
-`command: ["/watchtower"]` and `args: ["--port", "8080"]` — the binary's own
+`command: ["/console"]` and `args: ["--port", "8080"]` — the binary's own
 default port is 9090, which would not match the Service or the probes.
 
 ### How the operator knows its own image

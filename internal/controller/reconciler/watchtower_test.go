@@ -197,7 +197,7 @@ func secretPassword(secret *corev1.Secret) string {
 func TestWatchtowerEnvReferencesThePasswordSecret(t *testing.T) {
 	wandb := watchtowerTestCR("wandb", "wandb")
 
-	env := watchtowerEnv(wandb, "api:8081", "/watchtower")
+	env := watchtowerEnv(wandb, "api:8081", "/console")
 
 	byName := map[string]corev1.EnvVar{}
 	for _, e := range env {
@@ -212,7 +212,7 @@ func TestWatchtowerEnvReferencesThePasswordSecret(t *testing.T) {
 	require.Equal(t, watchtowerPasswordKey, password.ValueFrom.SecretKeyRef.Key)
 
 	require.Equal(t, "cluster", byName["WATCHTOWER_MODE"].Value)
-	require.Equal(t, "/watchtower", byName["WATCHTOWER_BASE_PATH"].Value)
+	require.Equal(t, "/console", byName["WATCHTOWER_BASE_PATH"].Value)
 	require.Equal(t, "api:8081", byName["WATCHTOWER_AUTH_SERVICE"].Value)
 	require.Equal(t, "wandb", byName["WATCHTOWER_WANDB_NAME"].Value)
 	require.Equal(t,
@@ -274,7 +274,7 @@ func TestWatchtowerIngressPathTargetsTheApplicationService(t *testing.T) {
 	path := watchtowerIngressPath(wandb)
 
 	require.NotNil(t, path)
-	require.Equal(t, "/watchtower", path.Path)
+	require.Equal(t, "/console", path.Path)
 	require.Equal(t, networkingv1.PathTypePrefix, *path.PathType)
 	require.Equal(t, watchtowerName(wandb), path.Backend.Service.Name)
 	require.Equal(t, watchtowerContainerPort, path.Backend.Service.Port.Number)
@@ -294,9 +294,9 @@ func TestWatchtowerURL(t *testing.T) {
 		basePath string
 		want     string
 	}{
-		{"adds a scheme", "wandb.example.com", "", "https://wandb.example.com/watchtower"},
-		{"keeps an explicit scheme", "http://wandb.example.com", "", "http://wandb.example.com/watchtower"},
-		{"strips a trailing slash", "https://wandb.example.com/", "", "https://wandb.example.com/watchtower"},
+		{"adds a scheme", "wandb.example.com", "", "https://wandb.example.com/console"},
+		{"keeps an explicit scheme", "http://wandb.example.com", "", "http://wandb.example.com/console"},
+		{"strips a trailing slash", "https://wandb.example.com/", "", "https://wandb.example.com/console"},
 		{"honors a custom base path", "wandb.example.com", "/admin", "https://wandb.example.com/admin"},
 		{"empty hostname yields no URL", "", "", ""},
 	} {
@@ -398,6 +398,7 @@ func TestBuildWatchtowerApplicationSelectsTheWatchtowerEntrypoint(t *testing.T) 
 		Spec.PodTemplate.Spec.Containers[0]
 
 	require.Equal(t, testOperatorImage, container.Image)
+	// The binary inside the image, not the URL prefix — those are independent.
 	require.Equal(t, []string{"/watchtower"}, container.Command)
 	// The binary defaults to 9090; the Service, container port and probes are 8080.
 	require.Equal(t, []string{"--port", "8080"}, container.Args)
@@ -410,8 +411,8 @@ func TestBuildWatchtowerApplicationProbesGoThroughTheBasePath(t *testing.T) {
 	container := buildWatchtowerApplication(wandb, "api:8081", testOperatorImage).
 		Spec.PodTemplate.Spec.Containers[0]
 
-	require.Equal(t, "/watchtower/healthz", container.LivenessProbe.HTTPGet.Path)
-	require.Equal(t, "/watchtower/ready", container.ReadinessProbe.HTTPGet.Path)
+	require.Equal(t, "/console/healthz", container.LivenessProbe.HTTPGet.Path)
+	require.Equal(t, "/console/ready", container.ReadinessProbe.HTTPGet.Path)
 }
 
 // --- teardown ---------------------------------------------------------------

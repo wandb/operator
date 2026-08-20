@@ -341,6 +341,10 @@ func reconcileNetworkingManifest(ctx context.Context, wandb *apiv2.WeightsAndBia
 	wandbManifest, err := manifest.GetServerManifest(ctx, wandb.Spec.Wandb.ManifestRepository, wandb.Spec.Wandb.Version, nil)
 	Expect(err).NotTo(HaveOccurred())
 
+	// Networking lives above Reconcile's infrastructure gate, in its own function,
+	// so it has to be driven separately from the manifest reconcile.
+	Expect(v2.ReconcileNetworkingAndWatchtower(ctx, k8sClient, wandb, wandbManifest)).To(Succeed())
+
 	_, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, telemetry.DefaultTelemetryRuntimeConfig())
 	Expect(err).NotTo(HaveOccurred())
 }

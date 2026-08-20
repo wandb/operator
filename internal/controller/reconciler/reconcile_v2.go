@@ -260,37 +260,10 @@ func Reconcile(
 		return ctrl.Result{}, err
 	}
 
-	// Networking (gateway or ingress) need to be reconciled before infra gate.
-	// Watchtower relies on wandb networking for oidc auth
-	if err := cleanupNetworkingModeResources(ctx, client, wandb); err != nil {
-		log.Error("Failed to clean up stale networking resources", logx.ErrAttr(err))
+	if err := ReconcileNetworkingAndWatchtower(ctx, client, wandb, manifest); err != nil {
 		return ctrl.Result{}, err
 	}
-	resetInactiveNetworkingStatus(wandb)
 
-	// Reconcile networking
-	switch wandb.Spec.Networking.Mode {
-	case apiv2.NetworkingModeGatewayAPI:
-		wandb.Status.GatewayStatus = nil
-		if err := reconcileGateway(ctx, client, wandb); err != nil {
-			log.Error("Failed to reconcile Gateway", logx.ErrAttr(err))
-			return ctrl.Result{}, err
-		}
-		if err := reconcileInfraHTTPRoutes(ctx, client, wandb, manifest); err != nil {
-			log.Error("Failed to reconcile infra HTTPRoutes", logx.ErrAttr(err))
-			return ctrl.Result{}, err
-		}
-	case apiv2.NetworkingModeIngress:
-		wandb.Status.IngressStatus = nil
-		if err := reconcileConsolidatedIngress(ctx, client, wandb, manifest); err != nil {
-			log.Error("Failed to reconcile consolidated Ingress", logx.ErrAttr(err))
-			return ctrl.Result{}, err
-		}
-	}
-	// Do not block on Watchtower failure to reconcile
-	if err := reconcileWatchtower(ctx, client, wandb, manifest); err != nil {
-		log.Error("Failed to reconcile Watchtower", logx.ErrAttr(err))
-	}
 	redisReady := redisAllReady(wandb)
 	mysqlReady := mysqlAllReady(wandb)
 	kafkaReady := wandb.Status.KafkaStatus.Ready
@@ -327,6 +300,65 @@ func consolidateResults(results []ctrl.Result) ctrl.Result {
 	return ctrl.Result{
 		RequeueAfter: lo.Min(durations),
 	}
+}
+
+// ReconcileNetworkingAndWatchtower publishes the W&B app's route — a Gateway plus
+// infra HTTPRoutes, or the consolidated Ingress — and then brings up Watchtower.
+//
+// Reconcile calls this *before* its infrastructure-readiness gate, and that
+// placement is the point: Watchtower exists to diagnose a broken install, so it
+// has to come up when MySQL, Redis, Kafka, the object store or ClickHouse are not
+// ready, which is exactly when Reconcile returns early. Its route has to be
+// published for the same reason, so networking moves up with it. Keep this above
+// that gate.
+//
+// A Watchtower failure is logged and stepped over rather than returned: a bad
+// image or an RBAC mistake must never stop the install it manages from
+// reconciling.
+func ReconcileNetworkingAndWatchtower(
+	ctx context.Context,
+	client ctrlClient.Client,
+	wandb *apiv2.WeightsAndBiases,
+	manifest serverManifest.Manifest,
+) error {
+	ctx, log := logx.WithSlog(ctx, logx.ReconcileInfraV2)
+
+	// Status is flushed here rather than left to ReconcileWandbManifest: that
+	// function is behind the infrastructure gate, so while infra is unready the
+	// gateway, ingress and Watchtower summaries would never reach the API — and an
+	// operator looking for Watchtower's URL during an outage would find nothing.
+	statusBefore := wandb.DeepCopy().Status
+
+	if err := cleanupNetworkingModeResources(ctx, client, wandb); err != nil {
+		log.Error("Failed to clean up stale networking resources", logx.ErrAttr(err))
+		return err
+	}
+	resetInactiveNetworkingStatus(wandb)
+
+	switch wandb.Spec.Networking.Mode {
+	case apiv2.NetworkingModeGatewayAPI:
+		wandb.Status.GatewayStatus = nil
+		if err := reconcileGateway(ctx, client, wandb); err != nil {
+			log.Error("Failed to reconcile Gateway", logx.ErrAttr(err))
+			return err
+		}
+		if err := reconcileInfraHTTPRoutes(ctx, client, wandb, manifest); err != nil {
+			log.Error("Failed to reconcile infra HTTPRoutes", logx.ErrAttr(err))
+			return err
+		}
+	case apiv2.NetworkingModeIngress:
+		wandb.Status.IngressStatus = nil
+		if err := reconcileConsolidatedIngress(ctx, client, wandb, manifest); err != nil {
+			log.Error("Failed to reconcile consolidated Ingress", logx.ErrAttr(err))
+			return err
+		}
+	}
+
+	if err := reconcileWatchtower(ctx, client, wandb, manifest); err != nil {
+		log.Error("Failed to reconcile Watchtower", logx.ErrAttr(err))
+	}
+
+	return updateWandbStatusIfChanged(ctx, client, wandb, statusBefore)
 }
 
 func ReconcileWandbManifest(
