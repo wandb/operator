@@ -153,3 +153,121 @@ func TestRunMigrationsSurfacesFailedJobPhaseAndReason(t *testing.T) {
 		t.Fatal("readiness message should identify the failed migration")
 	}
 }
+
+func TestRunMigrationsSecurityProfileCompatibility(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name             string
+		profile          *servermanifest.WorkloadSecurityProfile
+		wantProfiled     bool
+		wantRunAsNonRoot *bool
+		wantReadOnlyRoot *bool
+	}{
+		{name: "legacy absent profile"},
+		{name: "legacy empty profile", profile: &servermanifest.WorkloadSecurityProfile{}},
+		{
+			name: "enabled profile",
+			profile: &servermanifest.WorkloadSecurityProfile{
+				RunAsNonRoot:           boolPointer(true),
+				ReadOnlyRootFilesystem: boolPointer(true),
+			},
+			wantProfiled:     true,
+			wantRunAsNonRoot: boolPointer(true),
+			wantReadOnlyRoot: boolPointer(true),
+		},
+		{
+			name: "explicit false profile",
+			profile: &servermanifest.WorkloadSecurityProfile{
+				RunAsNonRoot:           boolPointer(false),
+				ReadOnlyRootFilesystem: boolPointer(false),
+			},
+			wantProfiled:     true,
+			wantRunAsNonRoot: boolPointer(false),
+			wantReadOnlyRoot: boolPointer(false),
+		},
+		{
+			name: "pod setting only",
+			profile: &servermanifest.WorkloadSecurityProfile{
+				RunAsNonRoot: boolPointer(true),
+			},
+			wantProfiled:     true,
+			wantRunAsNonRoot: boolPointer(true),
+		},
+		{
+			name: "container setting only",
+			profile: &servermanifest.WorkloadSecurityProfile{
+				ReadOnlyRootFilesystem: boolPointer(true),
+			},
+			wantProfiled:     true,
+			wantReadOnlyRoot: boolPointer(true),
+		},
+	}
+
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			scheme := runtime.NewScheme()
+			if err := apiv2.AddToScheme(scheme); err != nil {
+				t.Fatalf("add W&B API to scheme: %v", err)
+			}
+			if err := batchv1.AddToScheme(scheme); err != nil {
+				t.Fatalf("add batch API to scheme: %v", err)
+			}
+
+			const version = "0.84.0-security-profile-test"
+			wandb := &apiv2.WeightsAndBiases{
+				ObjectMeta: metav1.ObjectMeta{Name: "wandb", Namespace: "default"},
+				Spec: apiv2.WeightsAndBiasesSpec{
+					Wandb: apiv2.WandbAppSpec{Version: version},
+				},
+				Status: apiv2.WeightsAndBiasesStatus{
+					Wandb: apiv2.WandbStatus{
+						Migration: apiv2.WandbMigrationStatus{
+							Version: version,
+							Jobs:    map[string]apiv2.MigrationJobStatus{},
+						},
+					},
+				},
+			}
+			c := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithStatusSubresource(&apiv2.WeightsAndBiases{}).
+				WithObjects(wandb).
+				Build()
+			manifest := servermanifest.Manifest{
+				Migrations: map[string]servermanifest.MigrationJob{
+					"gorilla": {
+						Image:           servermanifest.ImageRef{Repository: "example/migrate", Tag: "test"},
+						SecurityProfile: test.profile,
+					},
+				},
+			}
+
+			if _, err := runMigrations(context.Background(), c, wandb, manifest); err != nil {
+				t.Fatalf("run migrations: %v", err)
+			}
+			job := &batchv1.Job{}
+			if err := c.Get(context.Background(), client.ObjectKey{Name: "wandb-gorilla", Namespace: "default"}, job); err != nil {
+				t.Fatalf("get rendered migration job: %v", err)
+			}
+			if len(job.Spec.Template.Spec.Containers) != 1 {
+				t.Fatalf("migration containers = %d, want 1", len(job.Spec.Template.Spec.Containers))
+			}
+			containerSecurityContext := job.Spec.Template.Spec.Containers[0].SecurityContext
+			if !test.wantProfiled {
+				if job.Spec.Template.Spec.SecurityContext != nil || containerSecurityContext != nil {
+					t.Fatalf("legacy migration gained security contexts: pod=%#v container=%#v", job.Spec.Template.Spec.SecurityContext, containerSecurityContext)
+				}
+				return
+			}
+
+			assertPodSecurityBaseline(t, job.Spec.Template.Spec.SecurityContext)
+			assertContainerSecurityBaseline(t, containerSecurityContext)
+			assertOptionalBool(t, "migration runAsNonRoot", job.Spec.Template.Spec.SecurityContext.RunAsNonRoot, test.wantRunAsNonRoot)
+			assertOptionalBool(t, "migration readOnlyRootFilesystem", containerSecurityContext.ReadOnlyRootFilesystem, test.wantReadOnlyRoot)
+		})
+	}
+}

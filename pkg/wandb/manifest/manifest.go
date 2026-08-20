@@ -179,6 +179,17 @@ type Application struct {
 	VolumeMounts []VolumeMount            `yaml:"volumeMounts,omitempty"`
 	Sizing       map[v2.Size]SizingConfig `yaml:"sizing,omitempty"`
 	Ingress      *AppIngressSpec          `yaml:"ingress,omitempty"`
+	// SecurityProfile opts this workload into security settings supported by
+	// newer server images. A nil or empty profile preserves legacy behavior.
+	SecurityProfile *WorkloadSecurityProfile `yaml:"securityProfile,omitempty"`
+}
+
+// WorkloadSecurityProfile controls security settings that require an explicit
+// server-manifest opt-in. Pointer fields distinguish an omitted setting from
+// an explicitly disabled one.
+type WorkloadSecurityProfile struct {
+	RunAsNonRoot           *bool `yaml:"runAsNonRoot,omitempty"`
+	ReadOnlyRootFilesystem *bool `yaml:"readOnlyRootFilesystem,omitempty"`
 }
 
 type AppIngressSpec struct {
@@ -274,6 +285,9 @@ type MigrationJob struct {
 	CommonVolumeMounts []string      `yaml:"commonVolumeMounts,omitempty"`
 	Env                []EnvVar      `yaml:"env,omitempty"`
 	VolumeMounts       []VolumeMount `yaml:"volumeMounts,omitempty"`
+	// SecurityProfile is optional so migration images from older server
+	// releases keep their existing runtime behavior.
+	SecurityProfile *WorkloadSecurityProfile `yaml:"securityProfile,omitempty"`
 }
 
 // FileSpec defines a single file to project into the application's container.
@@ -595,12 +609,41 @@ func mergeApplications(dst, src map[string]Application) {
 				}
 			}
 
+			mergedApp.SecurityProfile = mergeWorkloadSecurityProfiles(
+				mergedApp.SecurityProfile,
+				srcApp.SecurityProfile,
+			)
+
 			dst[name] = mergedApp
 		} else {
 			// New application
 			dst[name] = srcApp
 		}
 	}
+}
+
+func mergeWorkloadSecurityProfiles(dst, src *WorkloadSecurityProfile) *WorkloadSecurityProfile {
+	if src == nil {
+		return dst
+	}
+
+	if dst == nil {
+		dst = &WorkloadSecurityProfile{}
+	} else {
+		copy := *dst
+		dst = &copy
+	}
+
+	if src.RunAsNonRoot != nil {
+		value := *src.RunAsNonRoot
+		dst.RunAsNonRoot = &value
+	}
+	if src.ReadOnlyRootFilesystem != nil {
+		value := *src.ReadOnlyRootFilesystem
+		dst.ReadOnlyRootFilesystem = &value
+	}
+
+	return dst
 }
 
 func DownloadServerManifest(ctx context.Context, repository string, version string, auth *RegistryAuth) (Manifest, error) {
