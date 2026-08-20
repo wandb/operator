@@ -338,7 +338,7 @@ func markWandbReadyForNetworking(ctx context.Context, name, namespace string) *a
 }
 
 func reconcileNetworkingManifest(ctx context.Context, wandb *apiv2.WeightsAndBiases) {
-	wandbManifest, err := manifest.GetServerManifest(ctx, wandb.Spec.Wandb.ManifestRepository, wandb.Spec.Wandb.Version)
+	wandbManifest, err := manifest.GetServerManifest(ctx, wandb.Spec.Wandb.ManifestRepository, wandb.Spec.Wandb.Version, nil)
 	Expect(err).NotTo(HaveOccurred())
 
 	_, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, telemetry.DefaultTelemetryRuntimeConfig())
