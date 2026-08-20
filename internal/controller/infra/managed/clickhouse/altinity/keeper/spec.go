@@ -54,9 +54,10 @@ func ToKeeperVendorSpec(
 	labels := common.BuildWandbLabels(wandb, KeeperModuleName)
 
 	podSpec := corev1.PodSpec{
-		SecurityContext: keeperPodSecurityContext(),
-		Affinity:        wandb.GetAffinity(spec.ManagedInfraSpec),
-		Tolerations:     *wandb.GetTolerations(spec.ManagedInfraSpec),
+		ImagePullSecrets: wandb.Spec.Global.ImagePullSecrets,
+		SecurityContext:  keeperPodSecurityContext(),
+		Affinity:         wandb.GetAffinity(spec.ManagedInfraSpec),
+		Tolerations:      *wandb.GetTolerations(spec.ManagedInfraSpec),
 		Volumes: []corev1.Volume{
 			{
 				Name: keeperLogVolumeName,

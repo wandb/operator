@@ -334,6 +334,7 @@ func ToEtcdApplication(
 			},
 			PodTemplate: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
+					ImagePullSecrets:             wandb.Spec.Global.ImagePullSecrets,
 					ServiceAccountName:           kafkaServiceAccountName(infraSpec),
 					AutomountServiceAccountToken: ptr.To(false),
 					SecurityContext:              kafkaPodSecurityContext(),
@@ -586,6 +587,7 @@ func ToBufstreamApplication(
 			},
 			PodTemplate: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
+					ImagePullSecrets:             wandb.Spec.Global.ImagePullSecrets,
 					ServiceAccountName:           kafkaServiceAccountName(infraSpec),
 					AutomountServiceAccountToken: ptr.To(!storage.HasStaticCredentials()),
 					SecurityContext:              bufstreamPodSecurityContext(),

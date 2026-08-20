@@ -147,6 +147,13 @@ type GlobalSpec struct {
 	// with a registry pre-populated by `wsm registry mirror`.
 	ImageRegistry string `json:"imageRegistry,omitempty"`
 
+	// ImagePullSecrets references kubernetes.io/dockerconfigjson Secrets in the
+	// W&B namespace. They authenticate BOTH the operator's server-manifest pull
+	// and, propagated onto the workload ServiceAccount, the workloads' image
+	// pulls — a single credential for both.
+	// +optional
+	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+
 	// CustomCACerts contains PEM-encoded CA certificates that should be trusted
 	// by W&B application workloads.
 	// +optional
@@ -374,6 +381,14 @@ type WandbAppSpec struct {
 	// +optional
 	OIDC OidcSpec `json:"oidc,omitempty"`
 
+	// Notification Configurations
+	// +optional
+	Notifications *NotificationsSpec `json:"notifications,omitempty"`
+
+	// Security Flag Configurations
+	// +optional
+	Security SecuritySpec `json:"security,omitempty"`
+
 	// LegacyOverrides holds env/resource overrides extracted from v1
 	// spec.values, keyed by manifest application name plus the reserved
 	// "global" key (env only, applied to every application). Unknown keys are
@@ -381,15 +396,54 @@ type WandbAppSpec struct {
 	// hand-editing.
 	// +optional
 	LegacyOverrides map[string]LegacyOverrides `json:"legacyOverrides,omitempty"`
+
+	// Applications overlays sizing-derived per-application config, keyed by
+	// manifest application name. Unknown keys are logged and ignored.
+	// +optional
+	Applications map[string]WandbApplicationOverride `json:"applications,omitempty"`
+}
+
+type WandbApplicationOverride struct {
+	// +optional
+	Autoscaling *ApplicationAutoscalingOverride `json:"autoscaling,omitempty"`
+}
+
+// +kubebuilder:validation:XValidation:rule="!has(self.minReplicas) || !has(self.maxReplicas) || self.minReplicas <= self.maxReplicas",message="minReplicas must be <= maxReplicas"
+type ApplicationAutoscalingOverride struct {
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	MinReplicas *int32 `json:"minReplicas,omitempty"`
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	MaxReplicas *int32 `json:"maxReplicas,omitempty"`
 }
 
 // LegacyOverridesGlobalKey is the reserved LegacyOverrides key whose env
 // applies to every application and migration job.
 const LegacyOverridesGlobalKey = "global"
 
-// DefaultManifestRepository is used when spec.wandb.manifestRepository is
-// unset — by the defaulting webhook and by v1 conversion (which runs first).
-const DefaultManifestRepository = "oci://us-docker.pkg.dev/wandb-production/public/wandb/server-manifest"
+const (
+	// DefaultImageRegistry hosts the public W&B images and the server manifest.
+	// wsm mirrors both into one registry, so the manifest sits next to the images.
+	DefaultImageRegistry = "us-docker.pkg.dev/wandb-production/public"
+	// ManifestRepositorySuffix is the path under a registry where the server
+	// manifest lives; manifestRepository defaults to <imageRegistry>/<suffix>.
+	ManifestRepositorySuffix = "wandb/server-manifest"
+	// DefaultManifestRepository is used when spec.wandb.manifestRepository is
+	// unset and no spec.global.imageRegistry override is set.
+	DefaultManifestRepository = "oci://" + DefaultImageRegistry + "/" + ManifestRepositorySuffix
+)
+
+// ManifestRepositoryFor derives the server-manifest repository from an image
+// registry (spec.global.imageRegistry). An empty registry yields the public
+// default. This mirrors the wsm flow: the manifest is mirrored alongside the
+// images at <imageRegistry>/wandb/server-manifest.
+func ManifestRepositoryFor(imageRegistry string) string {
+	if imageRegistry == "" {
+		return DefaultManifestRepository
+	}
+	return "oci://" + imageRegistry + "/" + ManifestRepositorySuffix
+}
 
 // LegacyOverrides holds v1-derived overrides for one application (or "global").
 type LegacyOverrides struct {
@@ -454,6 +508,48 @@ type OidcSpec struct {
 	AuthMethod   corev1.SecretKeySelector `json:"authMethod,omitempty"`
 
 	SessionLength string `json:"sessionLength,omitempty"`
+}
+
+type SecuritySpec struct {
+	// +kubebuilder:default=false
+	AllowUserTeamCreation bool `json:"allowUserTeamCreation,omitempty"`
+
+	// +kubebuilder:default=false
+	DisableCodeSaving bool `json:"disableCodeSaving,omitempty"`
+
+	// +kubebuilder:default=false
+	AllowAnonymousPublicProjects bool `json:"allowAnonymousPublicProjects,omitempty"`
+
+	// +kubebuilder:default=false
+	DisableSSOProvisioning bool `json:"disableSSOProvisioning,omitempty"`
+
+	// +kubebuilder:default=false
+	InsecureAllowAPIKeyAdminAccess bool `json:"insecureAllowAPIKeyAdminAccess,omitempty"`
+
+	// +kubebuilder:default=false
+	HideUpgradeBanner bool `json:"hideUpgradeBanner,omitempty"`
+}
+
+type NotificationsSpec struct {
+	Email *EmailSpec `json:"email,omitempty"`
+	Slack *SlackSpec `json:"slack,omitempty"`
+}
+
+type EmailSMTPSpec struct {
+	Host     corev1.SecretKeySelector `json:"host"`
+	Port     corev1.SecretKeySelector `json:"port"`
+	Username corev1.SecretKeySelector `json:"username"`
+	Password corev1.SecretKeySelector `json:"password"`
+}
+
+type EmailSpec struct {
+	Sink *corev1.SecretKeySelector `json:"sink,omitempty"`
+	SMTP *EmailSMTPSpec            `json:"smtp,omitempty"`
+}
+
+type SlackSpec struct {
+	ClientID     corev1.SecretKeySelector `json:"clientId,omitempty"`
+	ClientSecret corev1.SecretKeySelector `json:"clientSecret,omitempty"`
 }
 
 type ManagedInfraSpec struct {
@@ -594,8 +690,10 @@ type KafkaReplicationConfig struct {
 
 // ObjectStoreSpec defines the desired state of the object store infrastructure component.
 type ObjectStoreSpec struct {
-	ManagedObjectStore  *ManagedObjectStoreSpec `json:"managedObjectStore,omitempty"`
-	ExternalObjectStore *ObjectStoreConnection  `json:"externalObjectStore,omitempty"`
+	// +kubebuilder:default=false
+	BucketAttributionDisabled bool                    `json:"bucketAttributionDisabled,omitempty"`
+	ManagedObjectStore        *ManagedObjectStoreSpec `json:"managedObjectStore,omitempty"`
+	ExternalObjectStore       *ObjectStoreConnection  `json:"externalObjectStore,omitempty"`
 }
 
 type ManagedObjectStoreSpec struct {
@@ -751,6 +849,7 @@ type WeightsAndBiasesStatus struct {
 	ObjectStoreStatus map[string]ObjectStoreInfraStatus `json:"objectStoreStatus,omitempty"`
 	ClickHouseStatus  map[string]ClickHouseInfraStatus  `json:"clickhouseStatus,omitempty"`
 	TelemetryStatus   TelemetryInfraStatus              `json:"telemetryStatus,omitempty"`
+	EmailSink         *corev1.SecretKeySelector         `json:"emailSink,omitempty"`
 	// GeneratedSecrets stores references to secrets generated by the operator
 	// from the server manifest's generatedSecrets section. The key is the
 	// logical secret name from the manifest, and the value is a SecretKeySelector

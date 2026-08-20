@@ -400,7 +400,10 @@ func runMysqlInitJobInstance(ctx context.Context, client client.Client, wandb *a
 			Spec: v1.JobSpec{
 				Template: corev1.PodTemplateSpec{
 					Spec: corev1.PodSpec{
-						RestartPolicy: corev1.RestartPolicyOnFailure,
+						// mysql-init runs before the W&B ServiceAccount exists, so set
+						// pull secrets on the pod directly rather than via the SA.
+						ImagePullSecrets: wandb.Spec.Global.ImagePullSecrets,
+						RestartPolicy:    corev1.RestartPolicyOnFailure,
 						Containers: []corev1.Container{
 							{
 								Name:    "moco-init",

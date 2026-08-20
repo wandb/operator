@@ -34,6 +34,8 @@ wandb-operator:
           value: ":8443"
         METRICS_SECURE:
           value: "false"
+        AWS_ECR_CACHE_DIR:
+          value: /tmp/ecr-cache
       securityContext:
         allowPrivilegeEscalation: false
         readOnlyRootFilesystem: true
@@ -62,6 +64,8 @@ wandb-operator:
       volumeMounts:
         - mountPath: /tmp/server-manifest
           name: server-manifest
+        - mountPath: /tmp/ecr-cache
+          name: ecr-cache
         - mountPath: /tmp/wandb-operator/serving-certs
           name: serving-certs
           readOnly: true
@@ -109,6 +113,8 @@ wandb-operator:
       type: RuntimeDefault
   volumes:
     - name: server-manifest
+      emptyDir: {}
+    - name: ecr-cache
       emptyDir: {}
     - name: serving-certs
       secret:
