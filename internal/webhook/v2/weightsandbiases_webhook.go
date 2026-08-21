@@ -254,8 +254,8 @@ func applyRedisDefaults(wandb *appsv2.WeightsAndBiases) {
 		if spec.ManagedRedis.Namespace == "" {
 			spec.ManagedRedis.Namespace = wandb.Namespace
 		}
-		if wandb.Spec.Size != appsv2.SizeDev {
-			spec.ManagedRedis.Sentinel.Enabled = true
+		if spec.ManagedRedis.Sentinel.Enabled == nil {
+			spec.ManagedRedis.Sentinel.Enabled = ptr.To(true)
 		}
 		wandb.Spec.Redis[key] = spec
 	}
@@ -883,7 +883,7 @@ func validateRedisChanges(newWandb, oldWandb *appsv2.WeightsAndBiases) field.Err
 			))
 		}
 
-		if oldSpec.Sentinel.Enabled != newSpec.Sentinel.Enabled {
+		if ptr.Deref(oldSpec.Sentinel.Enabled, true) != ptr.Deref(newSpec.Sentinel.Enabled, true) {
 			errors = append(errors, field.Invalid(
 				instancePath.Child("sentinel").Child("enabled"),
 				newSpec.Sentinel.Enabled,
