@@ -69,10 +69,12 @@ func TestComposeOperatorOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("compose failed: %v", err)
 	}
-	if len(crds) != 2 {
-		t.Fatalf("expected 2 operator CRDs, got %d", len(crds))
+	if len(crds) != 3 {
+		t.Fatalf("expected 3 operator CRDs, got %d", len(crds))
 	}
+	names := make(map[string]bool, len(crds))
 	for _, crd := range crds {
+		names[crd.Name] = true
 		if got := crd.Annotations["cert-manager.io/inject-ca-from"]; got != validOpts.CertInjectReference {
 			t.Errorf("%s: cert-manager annotation = %q, want %q", crd.Name, got, validOpts.CertInjectReference)
 		}
@@ -84,6 +86,15 @@ func TestComposeOperatorOnly(t *testing.T) {
 			}
 		}
 	}
+	for _, name := range []string{
+		"applications.apps.wandb.com",
+		"actionruns.apps.wandb.com",
+		"weightsandbiases.apps.wandb.com",
+	} {
+		if !names[name] {
+			t.Errorf("expected operator CRD %s to be included", name)
+		}
+	}
 }
 
 func TestComposeIncludesOptionalGroup(t *testing.T) {
@@ -93,8 +104,8 @@ func TestComposeIncludesOptionalGroup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("compose failed: %v", err)
 	}
-	if len(crds) <= 2 {
-		t.Fatalf("expected >2 CRDs when redis group included, got %d", len(crds))
+	if len(crds) <= 3 {
+		t.Fatalf("expected >3 CRDs when redis group included, got %d", len(crds))
 	}
 	// Redis CRDs must NOT have the cert-manager annotation we inject for operator CRDs.
 	for _, crd := range crds {
