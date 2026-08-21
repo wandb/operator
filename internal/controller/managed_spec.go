@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"reflect"
 
 	"github.com/wandb/operator/pkg/wandb/spec"
 	"github.com/wandb/operator/pkg/wandb/spec/charts"
@@ -178,64 +177,4 @@ func (r *WeightsAndBiasesReconciler) getManagedSpec(ctx context.Context, namespa
 		rawChart:  rawChart,
 		rawValues: rawValues,
 	}, nil
-}
-
-func managedSpecConfigurationMatches(managed *managedSpecSource, deployer *spec.Spec) (bool, error) {
-	if managed == nil || deployer == nil {
-		return false, nil
-	}
-
-	deployerChart, err := normalizeJSONValue(deployer.Chart)
-	if err != nil {
-		return false, fmt.Errorf("normalize Deployer chart: %w", err)
-	}
-	deployerValues, err := normalizeJSONValue(deployer.Values)
-	if err != nil {
-		return false, fmt.Errorf("normalize Deployer values: %w", err)
-	}
-
-	return managedJSONSubsetEqual(managed.rawChart, deployerChart) &&
-		managedJSONSubsetEqual(managed.rawValues, deployerValues), nil
-}
-
-func normalizeJSONValue(value interface{}) (interface{}, error) {
-	data, err := json.Marshal(value)
-	if err != nil {
-		return nil, err
-	}
-	var normalized interface{}
-	if err := json.Unmarshal(data, &normalized); err != nil {
-		return nil, err
-	}
-	return normalized, nil
-}
-
-func managedJSONSubsetEqual(managed, deployer interface{}) bool {
-	switch managedValue := managed.(type) {
-	case map[string]interface{}:
-		deployerValue, ok := deployer.(map[string]interface{})
-		if !ok {
-			return false
-		}
-		for key, managedChild := range managedValue {
-			deployerChild, ok := deployerValue[key]
-			if !ok || !managedJSONSubsetEqual(managedChild, deployerChild) {
-				return false
-			}
-		}
-		return true
-	case []interface{}:
-		deployerValue, ok := deployer.([]interface{})
-		if !ok || len(managedValue) != len(deployerValue) {
-			return false
-		}
-		for index, managedChild := range managedValue {
-			if !managedJSONSubsetEqual(managedChild, deployerValue[index]) {
-				return false
-			}
-		}
-		return true
-	default:
-		return reflect.DeepEqual(managed, deployer)
-	}
 }

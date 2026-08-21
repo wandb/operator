@@ -331,7 +331,16 @@ var _ = Describe("WeightsandbiasesController", func() {
 			ctx := context.Background()
 			recorder = record.NewFakeRecorder(10)
 			deployerClient = &deployerfakes.FakeDeployerInterface{}
-			deployerClient.GetSpecReturns(&deployerSpec, nil)
+			deployerValuesJSON, err := json.Marshal(deployerSpec.Values)
+			Expect(err).NotTo(HaveOccurred())
+			var deployerValues spec.Values
+			Expect(json.Unmarshal(deployerValuesJSON, &deployerValues)).To(Succeed())
+			deployerValues["global"] = map[string]interface{}{
+				"extraEnv": map[string]interface{}{"TAG_CLOUD": "GCP"},
+			}
+			deployerSpecForCutover := deployerSpec
+			deployerSpecForCutover.Values = deployerValues
+			deployerClient.GetSpecReturns(&deployerSpecForCutover, nil)
 			reconciler = &WeightsAndBiasesReconciler{
 				Client:                    k8sClient,
 				IsAirgapped:               false,
@@ -351,9 +360,16 @@ var _ = Describe("WeightsandbiasesController", func() {
 			}
 			Expect(k8sClient.Create(ctx, wandb)).To(Succeed())
 
-			chartJSON, err := json.Marshal(deployerSpec.Chart)
+			chartJSON, err := json.Marshal(deployerSpecForCutover.Chart)
 			Expect(err).NotTo(HaveOccurred())
-			valuesJSON, err := json.Marshal(deployerSpec.Values)
+			managedValuesJSON, err := json.Marshal(deployerValues)
+			Expect(err).NotTo(HaveOccurred())
+			var managedValues spec.Values
+			Expect(json.Unmarshal(managedValuesJSON, &managedValues)).To(Succeed())
+			managedGlobal := managedValues["global"].(map[string]interface{})
+			managedGlobal["cloudProvider"] = "gcp"
+			managedGlobal["extraEnv"].(map[string]interface{})["TAG_CUSTOMER_NS"] = "wandb-test"
+			valuesJSON, err := json.Marshal(managedValues)
 			Expect(err).NotTo(HaveOccurred())
 			managedSpec := &v1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{Name: managedSpecConfigMapName, Namespace: "default"},

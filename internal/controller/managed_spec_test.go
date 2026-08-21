@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"reflect"
 	"testing"
@@ -21,7 +22,10 @@ func TestManagedSpecSelection(t *testing.T) {
 	ctx := context.Background()
 	namespace := "default"
 	deployerSpec := testManagedSpec(map[string]interface{}{
-		"global": map[string]interface{}{"enabled": true},
+		"global": map[string]interface{}{
+			"enabled":  true,
+			"extraEnv": map[string]interface{}{"TAG_CLOUD": "GCP"},
+		},
 	})
 
 	t.Run("uses Deployer when managed spec is disabled even after cutover", func(t *testing.T) {
@@ -106,6 +110,9 @@ func TestManagedSpecSelection(t *testing.T) {
 				"global": map[string]interface{}{
 					"enabled": true,
 					"image":   map[string]interface{}{"tag": "deployer-only"},
+					"extraEnv": map[string]interface{}{
+						"TAG_CLOUD": "GCP",
+					},
 				},
 				"legacy": map[string]interface{}{"enabled": true},
 			})
@@ -124,7 +131,7 @@ func TestManagedSpecSelection(t *testing.T) {
 		if selection.selectedSpec == nil || selection.selectedSpec.Metadata != nil {
 			t.Fatal("selectBaseSpec did not return the managed ConfigMap spec")
 		}
-		if !reflect.DeepEqual(selection.selectedSpec.Values, deployerSpec.Values) {
+		if !reflect.DeepEqual(selection.selectedSpec.Values, spec.Values(testManagedValues(true))) {
 			t.Fatal("selectBaseSpec did not preserve the managed-owned values")
 		}
 	})
@@ -151,7 +158,7 @@ func TestManagedSpecSelection(t *testing.T) {
 		if selection.shouldCompleteCutover {
 			t.Fatal("cutover cannot be pending after it is active")
 		}
-		if selection.selectedSpec == nil || !selection.selectedSpec.IsEqual(deployerSpec) {
+		if selection.selectedSpec == nil || !selection.selectedSpec.IsEqual(testManagedSpec(testManagedValues(true))) {
 			t.Fatal("selectBaseSpec did not return the managed spec")
 		}
 		if calls != 0 {
@@ -303,15 +310,32 @@ func testManagedSpecReconciler(t *testing.T, objects ...client.Object) *WeightsA
 }
 
 func testManagedSpecConfigMap(namespace string, values map[string]interface{}) *corev1.ConfigMap {
-	valuesJSON := `{"global":{"enabled":true}}`
-	if enabled, ok := values["global"].(map[string]interface{})["enabled"].(bool); ok && !enabled {
-		valuesJSON = `{"global":{"enabled":false}}`
+	enabled := true
+	if value, ok := values["global"].(map[string]interface{})["enabled"].(bool); ok {
+		enabled = value
+	}
+	valuesJSON, err := json.Marshal(testManagedValues(enabled))
+	if err != nil {
+		panic(err)
 	}
 	return &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{Name: managedSpecConfigMapName, Namespace: namespace},
 		Data: map[string]string{
 			"chart":  `{"name":"operator-wandb","url":"https://charts.wandb.ai","version":"0.43.5"}`,
-			"values": valuesJSON,
+			"values": string(valuesJSON),
+		},
+	}
+}
+
+func testManagedValues(enabled bool) map[string]interface{} {
+	return map[string]interface{}{
+		"global": map[string]interface{}{
+			"cloudProvider": "gcp",
+			"enabled":       enabled,
+			"extraEnv": map[string]interface{}{
+				"TAG_CLOUD":       "GCP",
+				"TAG_CUSTOMER_NS": "wandb-test",
+			},
 		},
 	}
 }
