@@ -199,10 +199,10 @@ needed — so the two credentials are not redundant.
 `secretKeyRef` env vars are resolved at pod creation and never refreshed, so
 rotation is two steps:
 
-```bash
 kubectl delete secret -n wandb <cr>-watchtower-auth   # reconcile regenerates it
+until kubectl get secret -n wandb <cr>-watchtower-auth \
+  -o jsonpath='{.data.password}' | grep -q .; do sleep 1; done
 kubectl rollout restart deployment/<cr>-watchtower -n wandb
-```
 
 ## RBAC
 
