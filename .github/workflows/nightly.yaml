@@ -6,8 +6,8 @@ name: Nightly WESTest
 #
 # Currently workflow_dispatch-only. Do NOT enable the schedule trigger until the
 # prerequisites in docs/nightly-westest-testing.md §7 are met (notably: the
-# operator repo's GITHUB_TOKEN must be granted read access to the private
-# wandb/westest repo, and ubuntu-latest-8-cores must be available).
+# WESTEST_APP_ID / WESTEST_APP_PRIVATE_KEY secrets for the wandb/westest App token,
+# and ubuntu-latest-8-cores availability).
 
 on:
   workflow_dispatch:
@@ -81,12 +81,23 @@ jobs:
       # --param (see docs/nightly-westest-testing.md §12 for the Phase 2/3 matrix).
       WESTEST_OPERATOR_CHART_VERSION: ${{ needs.build.outputs.chart_version }}
     steps:
+      - name: Mint a token to read wandb/westest releases
+        id: westest-token
+        # GitHub App installation token scoped to wandb/westest so the action can
+        # download the release binary (the operator repo's GITHUB_TOKEN can't).
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.WESTEST_APP_ID }}
+          private-key: ${{ secrets.WESTEST_APP_PRIVATE_KEY }}
+          owner: wandb
+          repositories: westest
       - name: Run scenario
-        # Requires cross-repo read access to the private wandb/westest repo — the
-        # action downloads its release binary with the caller's github.token.
-        uses: wandb/westest/actions/run@v0.2.0
+        # Pinned to the westest main SHA that adds the github-token input (post-v0.2.0,
+        # no release tag yet); bump to a release tag once westest cuts one.
+        uses: wandb/westest/actions/run@662b59b6199d99a84435d889e7d8cf6e94ebf74c
         with:
           scenario: ${{ matrix.scenario }}
+          github-token: ${{ steps.westest-token.outputs.token }}
           westest-version: ${{ env.WESTEST_VERSION }}
           upload-artifacts: "true"
 

@@ -225,16 +225,18 @@ critical path.
 
 ## 7. Prerequisites checklist (must be done before Phase 1)
 
-- [ ] **Cross-repo read access to `wandb/westest`.** The action runs
-      `gh release download --repo wandb/westest` with the **caller's**
-      `github.token` (hardcoded — [action.yml:140-161](https://github.com/wandb/westest)),
-      and `wandb/westest` is private. The operator repo's `GITHUB_TOKEN` cannot
-      read it by default → **every test job 404s on step one**. Fix: in
-      `wandb/westest` → *Settings → Actions → General → Access* grant
-      "Accessible from repositories owned by the organization" (or make westest
-      `internal`). A PAT/App token can't be injected through the action (the token
-      is hardcoded); the only PAT route is pre-downloading the binary and passing
-      the action's `binary:` input.
+- [ ] **A token that can read `wandb/westest` releases.** The action downloads its
+      release binary with `gh` and `wandb/westest` is private, so the operator
+      repo's default `GITHUB_TOKEN` can't fetch it. The action's `github-token`
+      input takes an override; the test jobs mint a **GitHub App installation
+      token** scoped to `wandb/westest` (`actions/create-github-app-token`) and pass
+      it in. Requires secrets **`WESTEST_APP_ID`** + **`WESTEST_APP_PRIVATE_KEY`**
+      (App ID isn't sensitive — can be a `vars.` if preferred). The App must be
+      installed on `wandb/westest` with `contents: read`.
+- [ ] **Org action-sharing enabled on `wandb/westest`** so the operator repo can
+      `uses:` the action at all — *Settings → Actions → General → Access* →
+      "Accessible from repositories in the 'wandb' organization". (This covers the
+      action fetch; the App token above covers the release download.)
 - [ ] **`ubuntu-latest-8-cores` confirmed available** to this repo. The full
       local-kind stack (ClickHouse+Keeper, MySQL, Kafka, etcd, SeaweedFS, Redis +
       operators) needs ≥8 vCPU; standard ~2-vCPU runners leave MySQL and the
@@ -244,8 +246,10 @@ critical path.
 - [ ] **Pin `westest-version`** to an explicit release tag (`v0.2.0` today) — the
       action's default `latest` resolves by creation date and makes nightlies
       non-reproducible.
-- [ ] **Pin the action + its sub-actions by SHA** for supply-chain safety once the
-      westest release cadence is known (start on `@v0.2.0`).
+- [x] **Actions pinned by SHA.** `wandb/westest/actions/run` is pinned to the main
+      SHA that adds the `github-token` input (post-`v0.2.0`, no release tag yet);
+      bump to a release tag once westest cuts one. `actions/create-github-app-token`
+      is pinned to `v3.2.0`.
 - [ ] **Failure alerting** wired in the `report` job — no e2e paging exists today
       (`run-tests.yaml` is unit/envtest only), so reds would rot silently.
 - [ ] **GAR cleanup** decided (native cleanup policy preferred) — see [§10](#10-garbage-collection).
