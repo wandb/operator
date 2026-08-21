@@ -33,8 +33,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	corev1 "k8s.io/api/core/v1"
 
@@ -55,12 +57,13 @@ const resFinalizer = "finalizer.app.wandb.com"
 // WeightsAndBiasesReconciler reconciles a WeightsAndBiases object
 type WeightsAndBiasesReconciler struct {
 	client.Client
-	IsAirgapped    bool
-	DeployerClient deployer.DeployerInterface
-	Scheme         *runtime.Scheme
-	Recorder       record.EventRecorder
-	DryRun         bool
-	Debug          bool
+	IsAirgapped               bool
+	DeployerClient            deployer.DeployerInterface
+	Scheme                    *runtime.Scheme
+	Recorder                  record.EventRecorder
+	DryRun                    bool
+	Debug                     bool
+	ManagedSpecCutoverEnabled bool
 }
 
 //+kubebuilder:rbac:groups=apps.wandb.com,resources=weightsandbiases,verbs=get;list;watch;create;update;patch;delete
@@ -147,9 +150,12 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	license := utils.GetLicense(ctx, r.Client, wandb, crdSpec, userInputSpec)
 
-	var deployerSpec *spec.Spec
-	if !r.IsAirgapped {
-		deployerSpec, err = r.DeployerClient.GetSpec(deployer.GetSpecOptions{
+	getDeployerSpec := func() (*spec.Spec, error) {
+		if r.IsAirgapped {
+			return nil, nil
+		}
+
+		deployerSpec, err := r.DeployerClient.GetSpec(deployer.GetSpecOptions{
 			License:     license,
 			ActiveState: currentActiveSpec,
 			ReleaseId:   releaseID,
@@ -160,12 +166,13 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			// This scenario may occur if the user disables networking, or if the deployer
 			// is not operational, and a version has been deployed successfully. Rather than
 			// reverting to the container defaults, we've stored the most recent successful
-			// deployer release in the cache
-			// Attempt to retrieve the cached release
-			if deployerSpec, err = specManager.Get("latest-cached-release"); err != nil {
+			// deployer release in the cache.
+			deployerSpec, err = specManager.Get("latest-cached-release")
+			if err != nil {
 				log.Info("No cached release found", "error", err.Error())
+				deployerSpec = nil
 			}
-			if r.Debug {
+			if r.Debug && deployerSpec != nil {
 				log.Info("Using cached deployer spec", "spec", deployerSpec.SensitiveValuesMasked())
 			}
 		}
@@ -177,9 +184,22 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			if err := specManager.Set("latest-cached-release", deployerSpec); err != nil {
 				r.Recorder.Event(wandb, corev1.EventTypeNormal, "SecretWriteFailed", "Unable to write secret to kubernetes")
 				log.Error(err, "Unable to save latest release.")
-				return ctrlqueue.DoNotRequeue()
+				return nil, err
 			}
 		}
+		return deployerSpec, nil
+	}
+
+	baseSpec := currentActiveSpec
+	shouldCompleteManagedSpecCutover := false
+	if wandb.ObjectMeta.DeletionTimestamp.IsZero() {
+		selection, err := r.selectBaseSpec(ctx, wandb.Namespace, getDeployerSpec)
+		if err != nil {
+			log.Error(err, "Failed to select Deployer or managed spec")
+			return ctrlqueue.RequeueWithError(err)
+		}
+		baseSpec = selection.selectedSpec
+		shouldCompleteManagedSpecCutover = selection.shouldCompleteCutover
 	}
 
 	desiredSpec := new(spec.Spec)
@@ -205,13 +225,13 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		log.Info("Desired spec after merging userInputSpec", "spec", desiredSpec.SensitiveValuesMasked())
 	}
 
-	if err := desiredSpec.Merge(deployerSpec); err != nil {
-		log.Error(err, "Failed to merge deployer spec into desired spec")
+	if err := desiredSpec.Merge(baseSpec); err != nil {
+		log.Error(err, "Failed to merge selected base spec into desired spec")
 		return ctrlqueue.RequeueWithError(err)
 	}
 
 	if r.Debug {
-		log.Info("Desired spec after merging deployerSpec", "spec", desiredSpec.SensitiveValuesMasked())
+		log.Info("Desired spec after merging selected base spec", "spec", desiredSpec.SensitiveValuesMasked())
 	}
 
 	if err := desiredSpec.Merge(operator.Defaults(wandb, r.Scheme)); err != nil {
@@ -230,6 +250,10 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			log.Info("Active spec found", "spec", currentActiveSpec.SensitiveValuesMasked())
 			if currentActiveSpec.IsEqual(desiredSpec) {
 				log.Info("No changes found")
+				if err := r.completeManagedSpecCutoverIfNeeded(ctx, wandb.Namespace, shouldCompleteManagedSpecCutover); err != nil {
+					log.Error(err, "Failed to persist managed spec cutover")
+					return ctrlqueue.RequeueWithError(err)
+				}
 				statusManager.Set(status.Completed)
 				return ctrlqueue.Requeue(desiredSpec)
 			} else {
@@ -278,6 +302,10 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 		if r.Debug {
 			log.Info("Successfully saved active spec", "spec", desiredSpec.SensitiveValuesMasked())
+		}
+		if err := r.completeManagedSpecCutoverIfNeeded(ctx, wandb.Namespace, shouldCompleteManagedSpecCutover); err != nil {
+			log.Error(err, "Failed to persist managed spec cutover")
+			return ctrlqueue.RequeueWithError(err)
 		}
 
 		r.Recorder.Event(wandb, corev1.EventTypeNormal, "Completed", "Completed reconcile successfully")
@@ -370,11 +398,41 @@ func (r *WeightsAndBiasesReconciler) Delete(e event.DeleteEvent) bool {
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *WeightsAndBiasesReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	builder := ctrl.NewControllerManagedBy(mgr).
+	controllerBuilder := ctrl.NewControllerManagedBy(mgr).
 		For(&apiv1.WeightsAndBiases{}, builder.WithPredicates(filterWBEvents{})).
 		Owns(&corev1.Secret{}, builder.WithPredicates(filterSecretEvents{})).
 		Owns(&corev1.ConfigMap{})
-	return builder.Complete(r)
+	if r.ManagedSpecCutoverEnabled {
+		controllerBuilder = controllerBuilder.Watches(
+			&corev1.ConfigMap{},
+			handler.EnqueueRequestsFromMapFunc(r.managedSpecConfigMapRequests),
+			builder.WithPredicates(predicate.NewPredicateFuncs(isManagedSpecConfigMap)),
+		)
+	}
+	return controllerBuilder.Complete(r)
+}
+
+func isManagedSpecConfigMap(object client.Object) bool {
+	return object.GetName() == managedSpecConfigMapName || object.GetName() == managedSpecStateConfigMapName
+}
+
+func (r *WeightsAndBiasesReconciler) managedSpecConfigMapRequests(
+	ctx context.Context,
+	object client.Object,
+) []reconcile.Request {
+	instances := &apiv1.WeightsAndBiasesList{}
+	if err := r.List(ctx, instances, client.InNamespace(object.GetNamespace())); err != nil {
+		ctrllog.FromContext(ctx).Error(err, "Failed to list WeightsAndBiases instances for managed spec ConfigMap")
+		return nil
+	}
+
+	requests := make([]reconcile.Request, 0, len(instances.Items))
+	for _, instance := range instances.Items {
+		requests = append(requests, reconcile.Request{
+			NamespacedName: client.ObjectKeyFromObject(&instance),
+		})
+	}
+	return requests
 }
 
 type filterWBEvents struct {
