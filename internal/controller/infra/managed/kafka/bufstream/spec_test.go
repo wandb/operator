@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/infra/objectstore"
 	"github.com/wandb/operator/pkg/utils"
 	"github.com/wandb/operator/pkg/wandb/manifest"
@@ -63,6 +64,11 @@ func TestToEtcdApplication(t *testing.T) {
 	requireKafkaPodSecurityContext(t, app.Spec.PodTemplate.Spec.SecurityContext)
 	requireKafkaContainerSecurityContext(t, app.Spec.PodTemplate.Spec.Containers[0].SecurityContext)
 	require.NotNil(t, app.Spec.ServiceTemplate)
+	require.Equal(t, BuildWandbKafkaLabels(wandb), app.Labels)
+	require.Equal(t, "wandb-kafka-etcd", app.Spec.MetaTemplate.Labels[common.AppNameLabel])
+	require.Equal(t, common.PartOfWandb, app.Spec.MetaTemplate.Labels[common.AppPartOfLabel])
+	require.Equal(t, common.ManagedByWandbOperator, app.Spec.MetaTemplate.Labels[common.AppManagedByLabel])
+	require.Equal(t, KafkaModuleName, app.Spec.MetaTemplate.Labels[common.WandbComponentLabel])
 }
 
 func TestToEtcdApplicationHA(t *testing.T) {
@@ -130,6 +136,11 @@ func TestToBufstreamApplication(t *testing.T) {
 	require.Equal(t, "wandb-kafka", app.Name)
 	require.Equal(t, "Deployment", app.Spec.Kind)
 	require.NotNil(t, app.Spec.Replicas)
+	require.Equal(t, BuildWandbKafkaLabels(wandb), app.Labels)
+	require.Equal(t, "wandb-kafka", app.Spec.MetaTemplate.Labels[common.AppNameLabel])
+	require.Equal(t, common.PartOfWandb, app.Spec.MetaTemplate.Labels[common.AppPartOfLabel])
+	require.Equal(t, common.ManagedByWandbOperator, app.Spec.MetaTemplate.Labels[common.AppManagedByLabel])
+	require.Equal(t, KafkaModuleName, app.Spec.MetaTemplate.Labels[common.WandbComponentLabel])
 	require.Len(t, app.Spec.PodTemplate.Spec.InitContainers, 1)
 	ensureBucket := app.Spec.PodTemplate.Spec.InitContainers[0]
 	require.Equal(t, "ensure-bucket", ensureBucket.Name)

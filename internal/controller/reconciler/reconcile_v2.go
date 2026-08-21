@@ -575,6 +575,12 @@ func reconcileApplications(
 		application.Spec.PodTemplate.Spec.ImagePullSecrets = wandb.Spec.Global.ImagePullSecrets
 		setCustomCACertsChecksumAnnotation(&application.Spec.PodTemplate, caChecksum)
 
+		// MetaTemplate only: ObjectMeta ownership labels would skip pruning.
+		application.Spec.MetaTemplate.Labels = oputils.MergeMapsStringString(
+			application.Spec.MetaTemplate.Labels,
+			common.BuildApplicationLabels(wandb, app.Name),
+		)
+
 		application.Spec.HpaTemplate = ResolveAutoscaling(app, wandb)
 
 		// Set shared service account for all W&B applications
