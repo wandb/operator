@@ -356,4 +356,13 @@ $(GINKGO): $(LOCALBIN)
 	test -s $(LOCALBIN)/ginkgo || GOBIN=$(LOCALBIN) go install github.com/onsi/ginkgo/v2/ginkgo@latest
 
 
+## westest e2e binary (github.com/wandb/westest)
+WESTEST ?= $(LOCALBIN)/westest
+WESTEST_VERSION ?= latest
+WESTEST_REPO ?= wandb/westest
+
+.PHONY: westest
+westest: $(LOCALBIN) ## Download the westest e2e binary from wandb/westest releases (set WESTEST_VERSION to pin).
+	WESTEST_VERSION="$(WESTEST_VERSION)" WESTEST_REPO="$(WESTEST_REPO)" ./hack/scripts/download-westest.sh "$(WESTEST)"
+
 include dep-management.mk olm.mk
