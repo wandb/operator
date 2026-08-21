@@ -3977,6 +3977,26 @@ spec:
                     items:
                       type: string
                     type: array
+                  applications:
+                    additionalProperties:
+                      properties:
+                        autoscaling:
+                          properties:
+                            maxReplicas:
+                              format: int32
+                              minimum: 1
+                              type: integer
+                            minReplicas:
+                              format: int32
+                              minimum: 1
+                              type: integer
+                          type: object
+                          x-kubernetes-validations:
+                          - message: minReplicas must be <= maxReplicas
+                            rule: '!has(self.minReplicas) || !has(self.maxReplicas)
+                              || self.minReplicas <= self.maxReplicas'
+                      type: object
+                    type: object
                   bucketProxy:
                     type: boolean
                   features:
@@ -4527,6 +4547,13 @@ spec:
                             format: int32
                             type: integer
                         type: object
+                    type: object
+                  retention:
+                    properties:
+                      artifactGarbageCollection:
+                        type: boolean
+                      dataRetentionPeriod:
+                        type: string
                     type: object
                   security:
                     properties:
