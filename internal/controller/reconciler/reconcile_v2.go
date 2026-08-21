@@ -267,9 +267,11 @@ func Reconcile(
 		return ctrl.Result{}, err
 	}
 
-	if err := ReconcileNetworkingAndWatchtower(ctx, client, wandb, manifest); err != nil {
+	res, err = ReconcileNetworkingAndWatchtower(ctx, client, wandb, manifest)
+	if err != nil {
 		return ctrl.Result{}, err
 	}
+	ctrlResults = append(ctrlResults, res)
 
 	redisReady := redisAllReady(wandb)
 	mysqlReady := mysqlAllReady(wandb)
@@ -319,15 +321,17 @@ func consolidateResults(results []ctrl.Result) ctrl.Result {
 // published for the same reason, so networking moves up with it. Keep this above
 // that gate.
 //
-// A Watchtower failure is logged and stepped over rather than returned: a bad
-// image or an RBAC mistake must never stop the install it manages from
-// reconciling.
+// A Watchtower failure is never returned as an error: a bad image or an RBAC
+// mistake must not stop the install it manages from reconciling. It does come
+// back as a requeue, though — dropping it outright left a transient failure with
+// nothing to retry it, so Watchtower stayed down until an unrelated event
+// happened to trigger another pass.
 func ReconcileNetworkingAndWatchtower(
 	ctx context.Context,
 	client ctrlClient.Client,
 	wandb *apiv2.WeightsAndBiases,
 	manifest serverManifest.Manifest,
-) error {
+) (ctrl.Result, error) {
 	ctx, log := logx.WithSlog(ctx, logx.ReconcileInfraV2)
 
 	// Status is flushed here rather than left to ReconcileWandbManifest: that
@@ -338,7 +342,7 @@ func ReconcileNetworkingAndWatchtower(
 
 	if err := cleanupNetworkingModeResources(ctx, client, wandb); err != nil {
 		log.Error("Failed to clean up stale networking resources", logx.ErrAttr(err))
-		return err
+		return ctrl.Result{}, err
 	}
 	resetInactiveNetworkingStatus(wandb)
 
@@ -347,25 +351,29 @@ func ReconcileNetworkingAndWatchtower(
 		wandb.Status.GatewayStatus = nil
 		if err := reconcileGateway(ctx, client, wandb); err != nil {
 			log.Error("Failed to reconcile Gateway", logx.ErrAttr(err))
-			return err
+			return ctrl.Result{}, err
 		}
 		if err := reconcileInfraHTTPRoutes(ctx, client, wandb, manifest); err != nil {
 			log.Error("Failed to reconcile infra HTTPRoutes", logx.ErrAttr(err))
-			return err
+			return ctrl.Result{}, err
 		}
 	case apiv2.NetworkingModeIngress:
 		wandb.Status.IngressStatus = nil
 		if err := reconcileConsolidatedIngress(ctx, client, wandb, manifest); err != nil {
 			log.Error("Failed to reconcile consolidated Ingress", logx.ErrAttr(err))
-			return err
+			return ctrl.Result{}, err
 		}
 	}
 
+	// Requeue rather than propagate: the rest of the reconcile must still run, but
+	// the failure has to be retried by something.
+	var result ctrl.Result
 	if err := reconcileWatchtower(ctx, client, wandb, manifest); err != nil {
 		log.Error("Failed to reconcile Watchtower", logx.ErrAttr(err))
+		result.RequeueAfter = defaultRequeueDuration
 	}
 
-	return updateWandbStatusIfChanged(ctx, client, wandb, statusBefore)
+	return result, updateWandbStatusIfChanged(ctx, client, wandb, statusBefore)
 }
 
 func ReconcileWandbManifest(

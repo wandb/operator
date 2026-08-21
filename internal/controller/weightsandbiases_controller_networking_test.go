@@ -15,6 +15,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
@@ -219,6 +220,47 @@ var _ = Describe("WeightsAndBiases Networking", func() {
 		Expect(wandb.Status.IngressStatus.LoadBalancerIngress).To(HaveLen(1))
 		Expect(wandb.Status.IngressStatus.LoadBalancerIngress[0].IP).To(Equal("34.118.10.1"))
 	})
+
+	// Watchtower must not be able to take down the install it manages, but a
+	// failure still has to be retried by something — dropping it outright left a
+	// transient error with nothing to pick it back up.
+	It("requeues without failing the reconcile when Watchtower cannot be reconciled", func() {
+		ctx := context.Background()
+		wandbName := "network-watchtower-failure"
+		ingressClassName := "nginx"
+
+		wandb, service := newNetworkingWandb(wandbName, "")
+		wandb.Spec.AdminConsoleEnabled = ptr.To(true)
+		wandb.Spec.Networking = apiv2.NetworkingSpec{
+			Mode:    apiv2.NetworkingModeIngress,
+			Ingress: &apiv2.IngressConfig{IngressClassName: &ingressClassName},
+		}
+		Expect(k8sClient.Create(ctx, wandb)).To(Succeed())
+		Expect(k8sClient.Create(ctx, service)).To(Succeed())
+		DeferCleanup(deleteIfPresent, ctx, wandb)
+
+		// OPERATOR_IMAGE is what tells the reconciler which image carries the
+		// Watchtower binary; unset, watchtowerImage() fails.
+		GinkgoT().Setenv("OPERATOR_IMAGE", "")
+
+		wandb = markWandbReadyForNetworking(ctx, wandbName, wandbNamespace)
+		wandbManifest, err := manifest.GetServerManifest(ctx, wandb.Spec.Wandb.ManifestRepository, wandb.Spec.Wandb.Version, nil)
+		Expect(err).NotTo(HaveOccurred())
+
+		result, err := v2.ReconcileNetworkingAndWatchtower(ctx, k8sClient, wandb, wandbManifest)
+
+		// The error is swallowed so the rest of the reconcile still runs...
+		Expect(err).NotTo(HaveOccurred())
+		// ...but it comes back as a requeue so the failure is retried.
+		Expect(result.RequeueAfter).To(BeNumerically(">", 0))
+
+		// And networking was still published — the failure did not abort early.
+		ingress := &networkingv1.Ingress{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{
+			Name:      wandbName,
+			Namespace: wandbNamespace,
+		}, ingress)).To(Succeed())
+	})
 })
 
 func newNetworkingWandb(name string, infraNamespace string) (*apiv2.WeightsAndBiases, *corev1.Service) {
@@ -343,7 +385,8 @@ func reconcileNetworkingManifest(ctx context.Context, wandb *apiv2.WeightsAndBia
 
 	// Networking lives above Reconcile's infrastructure gate, in its own function,
 	// so it has to be driven separately from the manifest reconcile.
-	Expect(v2.ReconcileNetworkingAndWatchtower(ctx, k8sClient, wandb, wandbManifest)).To(Succeed())
+	_, err = v2.ReconcileNetworkingAndWatchtower(ctx, k8sClient, wandb, wandbManifest)
+	Expect(err).NotTo(HaveOccurred())
 
 	_, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, telemetry.DefaultTelemetryRuntimeConfig())
 	Expect(err).NotTo(HaveOccurred())

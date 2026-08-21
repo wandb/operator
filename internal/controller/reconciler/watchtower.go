@@ -367,8 +367,19 @@ func watchtowerSecretName(wandb *apiv2.WeightsAndBiases) string {
 
 // watchtowerClusterScopedName qualifies cluster-scoped RBAC with the CR's
 // namespace so two W&B installs in one cluster do not fight over one object.
+//
+// The separator is "." because a namespace is a DNS-1123 label and so cannot
+// contain one, which makes the first "." the unambiguous end of the namespace.
+// Joining with "-" would not: namespace "a-b" with CR "c" and namespace "a" with
+// CR "b-c" both render "a-b-c", reintroducing the collision this exists to stop.
+// FitDefaultInfraName then bounds the result to the 253 characters the apiserver
+// allows, hashing the joined key rather than truncating it.
 func watchtowerClusterScopedName(wandb *apiv2.WeightsAndBiases) string {
-	return fmt.Sprintf("%s-%s-watchtower", wandb.Namespace, wandb.Name)
+	return common.FitDefaultInfraName(
+		wandb.Namespace+"."+wandb.Name,
+		"-watchtower",
+		validation.DNS1123SubdomainMaxLength,
+	)
 }
 
 func watchtowerLabels(wandb *apiv2.WeightsAndBiases) map[string]string {

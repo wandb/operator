@@ -12,6 +12,7 @@ package reconciler
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -120,8 +121,47 @@ func TestWatchtowerClusterScopedNameIncludesNamespace(t *testing.T) {
 	prod := watchtowerTestCR("wandb", "wandb")
 	staging := watchtowerTestCR("wandb", "wandb-staging")
 
-	require.NotEqual(t, watchtowerClusterScopedName(prod), watchtowerClusterScopedName(staging))
-	require.Contains(t, watchtowerClusterScopedName(prod), "wandb")
+	require.Equal(t, "wandb-wandb-b8716-watchtower", watchtowerClusterScopedName(prod))
+	require.Equal(t, "wandb-staging-wandb-2b09f-watchtower", watchtowerClusterScopedName(staging))
+}
+
+// The namespace and CR name are joined with "." rather than "-" because a
+// namespace cannot contain one. Joined with "-" these two pairs would both
+// render "a-b-c-watchtower" and share a single ClusterRole.
+func TestWatchtowerClusterScopedNameSeparatorIsUnambiguous(t *testing.T) {
+	nsHasHyphen := watchtowerTestCR("c", "a-b")
+	nameHasHyphen := watchtowerTestCR("b-c", "a")
+
+	require.NotEqual(t,
+		watchtowerClusterScopedName(nsHasHyphen),
+		watchtowerClusterScopedName(nameHasHyphen),
+	)
+	require.Equal(t, "a-b-c-fb187-watchtower", watchtowerClusterScopedName(nsHasHyphen))
+	require.Equal(t, "a-b-c-ab8bb-watchtower", watchtowerClusterScopedName(nameHasHyphen))
+}
+
+// ClusterRole names are DNS-1123 subdomains, so a long CR name must be hashed
+// down rather than pushed past what the apiserver accepts.
+func TestWatchtowerClusterScopedNameStaysWithinSubdomainBudget(t *testing.T) {
+	longNS := strings.Repeat("n", validation.DNS1123LabelMaxLength)
+	longName := strings.Repeat("c", validation.DNS1123SubdomainMaxLength)
+
+	first := watchtowerTestCR(longName, longNS)
+	second := watchtowerTestCR(longName+"x", longNS)
+
+	for _, name := range []string{
+		watchtowerClusterScopedName(first),
+		watchtowerClusterScopedName(second),
+	} {
+		require.LessOrEqual(t, len(name), validation.DNS1123SubdomainMaxLength)
+		require.Empty(t, validation.IsDNS1123Subdomain(name), "name %q is not a valid subdomain", name)
+	}
+
+	// Truncation alone would collapse these onto one name; the hash keeps them apart.
+	require.NotEqual(t,
+		watchtowerClusterScopedName(first),
+		watchtowerClusterScopedName(second),
+	)
 }
 
 // --- the generated admin password -------------------------------------------
