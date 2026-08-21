@@ -57,7 +57,7 @@ jobs:
             matrix="$(printf '["%s"]' "${SCENARIO}")"
           else
             # Phase 1 smoke set (self-contained, no license, no cloud).
-            matrix='["local-kind-ingress","local-kind-gateway","local-kind-oidc","local-kind-proxy"]'
+            matrix='["local-kind-ingress","local-kind-gateway","local-kind-oidc-pkce","local-kind-oidc-implicit","local-kind-proxy"]'
           fi
           echo "matrix=${matrix}" >> "${GITHUB_OUTPUT}"
 
