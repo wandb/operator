@@ -10,10 +10,8 @@ import (
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/infra/external"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -37,7 +35,7 @@ func WriteState(
 ) []metav1.Condition {
 	logger := ctrl.LoggerFrom(ctx)
 
-	fields := map[string]corev1.SecretKeySelector{
+	fields := map[string]apiv2.ValueOrSecret{
 		"Host":     spec.Host,
 		"Port":     spec.Port,
 		"Password": spec.Password,
@@ -45,7 +43,7 @@ func WriteState(
 		"SslCa":    spec.SslCa,
 	}
 
-	data, err := external.ResolveFields(ctx, c, wandb.Namespace, fields)
+	data, err := external.ResolveValueFields(ctx, c, wandb.Namespace, fields)
 	if err != nil {
 		logger.Error(err, "failed to resolve external redis fields")
 		return []metav1.Condition{{
@@ -125,14 +123,13 @@ func ReadState(
 		return conditions, nil
 	}
 
-	localRef := corev1.LocalObjectReference{Name: nsName.Name}
 	return conditions, &apiv2.RedisConnection{
-		URL:      corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "url", Optional: ptr.To(false)},
-		Host:     corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Host", Optional: ptr.To(false)},
-		Port:     corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Port", Optional: ptr.To(false)},
-		Password: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Password", Optional: ptr.To(true)},
-		Tls:      corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Tls", Optional: ptr.To(true)},
-		SslCa:    corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "SslCa", Optional: ptr.To(true)},
+		URL:      apiv2.ValueFromSecret(nsName.Name, "url", false),
+		Host:     apiv2.ValueFromSecret(nsName.Name, "Host", false),
+		Port:     apiv2.ValueFromSecret(nsName.Name, "Port", false),
+		Password: apiv2.ValueFromSecret(nsName.Name, "Password", true),
+		Tls:      apiv2.ValueFromSecret(nsName.Name, "Tls", true),
+		SslCa:    apiv2.ValueFromSecret(nsName.Name, "SslCa", true),
 	}
 }
 

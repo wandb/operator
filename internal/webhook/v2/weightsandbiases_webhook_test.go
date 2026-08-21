@@ -141,10 +141,9 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 			_, err := validator.ValidateCreate(ctx, obj)
 
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("externalRedis.host.name"))
-			Expect(err.Error()).To(ContainSubstring("externalRedis.host.key"))
-			Expect(err.Error()).To(ContainSubstring("externalRedis.port.name"))
-			Expect(err.Error()).To(ContainSubstring("externalRedis.port.key"))
+			Expect(err.Error()).To(ContainSubstring("externalRedis.host"))
+			Expect(err.Error()).To(ContainSubstring("externalRedis.port"))
+			Expect(err.Error()).To(ContainSubstring("a value or secret reference is required"))
 		})
 
 		It("allows external Redis with host and port selectors", func() {
@@ -467,9 +466,6 @@ func boolPtr(v bool) *bool {
 	return &v
 }
 
-func secretKeySelector(name, key string) corev1.SecretKeySelector {
-	return corev1.SecretKeySelector{
-		LocalObjectReference: corev1.LocalObjectReference{Name: name},
-		Key:                  key,
-	}
+func secretKeySelector(name, key string) appsv2.ValueOrSecret {
+	return appsv2.ValueFromSecret(name, key, false)
 }

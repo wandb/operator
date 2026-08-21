@@ -296,10 +296,7 @@ func markWandbReadyForNetworking(ctx context.Context, name, namespace string) *a
 		apiv2.DefaultInstanceName: {
 			WBInfraStatus: apiv2.WBInfraStatus{Ready: true},
 			Connection: apiv2.MysqlConnection{
-				URL: corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{Name: name},
-					Key:                  "mysql-url",
-				},
+				URL: apiv2.ValueFromSecret(name, "mysql-url", false),
 			},
 		},
 	}
@@ -318,10 +315,7 @@ func markWandbReadyForNetworking(ctx context.Context, name, namespace string) *a
 		apiv2.DefaultInstanceName: {
 			WBInfraStatus: apiv2.WBInfraStatus{Ready: true},
 			Connection: apiv2.ClickHouseConnection{
-				URL: corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{Name: name},
-					Key:                  "clickhouse-url",
-				},
+				URL: apiv2.ValueFromSecret(name, "clickhouse-url", false),
 			},
 		},
 	}

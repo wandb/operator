@@ -44,14 +44,20 @@ func reconcileEmailSink(
 		return deleteGeneratedEmailSink(ctx, client, wandb)
 	}
 
-	// Use the sink given by the user
-	if emailSpec.Sink != nil {
-		wandb.Status.EmailSink = emailSpec.Sink.DeepCopy()
-		// The sink is already present under the same name, no need for changes
-		if emailSpec.Sink.Name == emailSinkSecretName(wandb) {
-			return nil
+	// Use the sink given by the user.
+	if emailSpec.Sink != nil && !emailSpec.Sink.IsZero() {
+		// A secret-ref sink is passed through to status unchanged.
+		if ref := emailSpec.Sink.SecretKeyRef(); ref != nil {
+			wandb.Status.EmailSink = ref.DeepCopy()
+			// Already the generated secret name means nothing to clean up.
+			if ref.Name == emailSinkSecretName(wandb) {
+				return nil
+			}
+			return deleteGeneratedEmailSink(ctx, client, wandb)
 		}
-		return deleteGeneratedEmailSink(ctx, client, wandb)
+		// A literal sink URL is materialized into the generated Secret so the
+		// app always consumes a SecretKeyRef.
+		return writeEmailSinkSecret(ctx, client, wandb, emailSpec.Sink.Value)
 	}
 
 	// email spec exists, but neither sink nor smtp was supplied
@@ -60,15 +66,23 @@ func reconcileEmailSink(
 		return deleteGeneratedEmailSink(ctx, client, wandb)
 	}
 
-	// Read the SMTP Secret values and build the sink URL
+	// Read the SMTP values and build the sink URL.
 	sink, err := resolveSMTPURL(ctx, client, wandb.Namespace, emailSpec.SMTP)
 	if err != nil {
 		return fmt.Errorf("resolve SMTP configuration: %w", err)
 	}
+	return writeEmailSinkSecret(ctx, client, wandb, sink)
+}
 
+// writeEmailSinkSecret materializes sink into the operator-owned email-sink
+// Secret and points status.emailSink at it.
+func writeEmailSinkSecret(
+	ctx context.Context,
+	client ctrlClient.Client,
+	wandb *apiv2.WeightsAndBiases,
+	sink string,
+) error {
 	secretName := emailSinkSecretName(wandb)
-	// Creates a new desired secret under the same namespace as the wandb application and under the `sink` key
-	// belonging to W&B
 	newSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      secretName,
@@ -87,7 +101,7 @@ func reconcileEmailSink(
 	}
 
 	actual := &corev1.Secret{}
-	err = client.Get(ctx, types.NamespacedName{Name: secretName, Namespace: wandb.Namespace}, actual)
+	err := client.Get(ctx, types.NamespacedName{Name: secretName, Namespace: wandb.Namespace}, actual)
 	if err != nil && !apierrors.IsNotFound(err) {
 		return fmt.Errorf("get email sink Secret: %w", err)
 	}
@@ -116,20 +130,20 @@ func resolveSMTPURL(
 	smtp *apiv2.EmailSMTPSpec,
 ) (string, error) {
 
-	host, err := external.ResolveSecretKey(ctx, client, namespace, smtp.Host)
+	host, err := external.ResolveValue(ctx, client, namespace, smtp.Host)
 	if err != nil {
 		return "", fmt.Errorf("host: %w", err)
 	}
-	port, err := external.ResolveSecretKey(ctx, client, namespace, smtp.Port)
+	port, err := external.ResolveValue(ctx, client, namespace, smtp.Port)
 	if err != nil {
 		return "", fmt.Errorf("port: %w", err)
 	}
 
-	username, err := external.ResolveSecretKey(ctx, client, namespace, smtp.Username)
+	username, err := external.ResolveValue(ctx, client, namespace, smtp.Username)
 	if err != nil {
 		return "", fmt.Errorf("username: %w", err)
 	}
-	password, err := external.ResolveSecretKey(ctx, client, namespace, smtp.Password)
+	password, err := external.ResolveValue(ctx, client, namespace, smtp.Password)
 	if err != nil {
 		return "", fmt.Errorf("password: %w", err)
 	}

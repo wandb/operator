@@ -135,6 +135,8 @@ func (d *WeightsAndBiasesCustomDefaulter) Default(ctx context.Context, obj runti
 	applyClickHouseDefaults(wandb)
 	applyProbeDefaults(wandb)
 
+	normalizeConnections(wandb)
+
 	if defaultStore, ok := wandb.Spec.ObjectStore["default"]; ok && defaultStore.ManagedObjectStore != nil {
 		wandb.Spec.Wandb.BucketProxy = true
 	}
@@ -385,8 +387,10 @@ func validateNotificationSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 
 	if slack := notifications.Slack; slack != nil {
 		slackPath := base.Child("slack")
-		errors = append(errors, validateRequiredSecretSelector(slack.ClientID, slackPath.Child("clientId"))...)
-		errors = append(errors, validateRequiredSecretSelector(slack.ClientSecret, slackPath.Child("clientSecret"))...)
+		errors = append(errors, validateRequiredValueOrSecret(slack.ClientID, slackPath.Child("clientId"))...)
+		errors = append(errors, validateValueOrSecret(slack.ClientID, slackPath.Child("clientId"))...)
+		errors = append(errors, validateRequiredValueOrSecret(slack.ClientSecret, slackPath.Child("clientSecret"))...)
+		errors = append(errors, validateValueOrSecret(slack.ClientSecret, slackPath.Child("clientSecret"))...)
 	}
 
 	email := notifications.Email
@@ -403,15 +407,23 @@ func validateNotificationSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 		return errors
 	}
 	if email.Sink != nil {
-		errors = append(errors, validateRequiredSecretSelector(*email.Sink, emailPath.Child("sink"))...)
+		sinkPath := emailPath.Child("sink")
+		errors = append(errors, validateRequiredValueOrSecret(*email.Sink, sinkPath)...)
+		errors = append(errors, validateValueOrSecret(*email.Sink, sinkPath)...)
 		return errors
 	}
 
 	smtpPath := emailPath.Child("smtp")
-	errors = append(errors, validateRequiredSecretSelector(email.SMTP.Host, smtpPath.Child("host"))...)
-	errors = append(errors, validateRequiredSecretSelector(email.SMTP.Port, smtpPath.Child("port"))...)
-	errors = append(errors, validateRequiredSecretSelector(email.SMTP.Username, smtpPath.Child("username"))...)
-	errors = append(errors, validateRequiredSecretSelector(email.SMTP.Password, smtpPath.Child("password"))...)
+	for _, f := range []struct {
+		name string
+		val  appsv2.ValueOrSecret
+	}{
+		{"host", email.SMTP.Host}, {"port", email.SMTP.Port},
+		{"username", email.SMTP.Username}, {"password", email.SMTP.Password},
+	} {
+		errors = append(errors, validateRequiredValueOrSecret(f.val, smtpPath.Child(f.name))...)
+		errors = append(errors, validateValueOrSecret(f.val, smtpPath.Child(f.name))...)
+	}
 	return errors
 }
 
@@ -535,6 +547,7 @@ func validateMySQLSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 				"managedMysql and externalMysql are mutually exclusive",
 			))
 		}
+		errors = append(errors, validateMysqlConnection(spec.ExternalMysql, instancePath.Child("externalMysql"))...)
 		if managed := spec.ManagedMysql; managed != nil {
 			if managed.Replicas != 0 && !appsv2.ValidMysqlReplicaCount(managed.Replicas) {
 				errors = append(errors, field.Invalid(
@@ -566,10 +579,13 @@ func validateRedisSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 			))
 		}
 
-		if externalRedis := spec.ExternalRedis; externalRedis != nil && !hasPendingLegacyRedis {
+		if externalRedis := spec.ExternalRedis; externalRedis != nil {
 			externalPath := instancePath.Child("externalRedis")
-			errors = append(errors, validateRequiredSecretSelector(externalRedis.Host, externalPath.Child("host"))...)
-			errors = append(errors, validateRequiredSecretSelector(externalRedis.Port, externalPath.Child("port"))...)
+			errors = append(errors, validateRedisConnection(externalRedis, externalPath)...)
+			if !hasPendingLegacyRedis {
+				errors = append(errors, validateRequiredValueOrSecret(externalRedis.Host, externalPath.Child("host"))...)
+				errors = append(errors, validateRequiredValueOrSecret(externalRedis.Port, externalPath.Child("port"))...)
+			}
 		}
 
 		if spec.ManagedRedis == nil {
@@ -590,13 +606,131 @@ func validateRedisSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 	return errors
 }
 
-func validateRequiredSecretSelector(selector corev1.SecretKeySelector, path *field.Path) field.ErrorList {
-	var errors field.ErrorList
-	if selector.Name == "" {
-		errors = append(errors, field.Required(path.Child("name"), "secret name is required"))
+// validateRequiredValueOrSecret errors when the value is unset. Exclusivity is
+// validated separately by the per-connection validators.
+func validateRequiredValueOrSecret(v appsv2.ValueOrSecret, path *field.Path) field.ErrorList {
+	if v.IsZero() {
+		return field.ErrorList{field.Required(path, "a value or secret reference is required")}
 	}
-	if selector.Key == "" {
-		errors = append(errors, field.Required(path.Child("key"), "secret key is required"))
+	return nil
+}
+
+// validateValueOrSecret enforces that a ValueOrSecret sets at most one of a
+// literal value or a secret reference, and that a ValueFrom carries a
+// secretKeyRef. It does not require a value; callers enforce requiredness. The
+// legacy name/key shape counts as the secret arm. The rejected value is redacted
+// so a secret literal is never echoed into the admission response.
+func validateValueOrSecret(v appsv2.ValueOrSecret, path *field.Path) field.ErrorList {
+	var errors field.ErrorList
+	hasValue := v.Value != ""
+	hasSecret := v.SecretKeyRef() != nil
+	if hasValue && hasSecret {
+		errors = append(errors, field.Invalid(path, "[redacted]", "set exactly one of value or valueFrom, not both"))
+		return errors
+	}
+	if v.ValueFrom != nil && v.ValueFrom.SecretKeyRef == nil {
+		errors = append(errors, field.Required(path.Child("valueFrom").Child("secretKeyRef"), "valueFrom requires secretKeyRef"))
+	}
+	return errors
+}
+
+// validateMysqlConnection checks value-or-secret exclusivity on each external
+// MySQL field. Field order is fixed for deterministic errors.
+func validateMysqlConnection(ext *appsv2.MysqlConnection, path *field.Path) field.ErrorList {
+	if ext == nil {
+		return nil
+	}
+	var errors field.ErrorList
+	for _, f := range []struct {
+		name string
+		val  appsv2.ValueOrSecret
+	}{
+		{"host", ext.Host}, {"port", ext.Port}, {"database", ext.Database},
+		{"username", ext.Username}, {"password", ext.Password}, {"tls", ext.Tls},
+		{"sslCa", ext.SslCa}, {"sslCert", ext.SslCert}, {"sslKey", ext.SslKey},
+	} {
+		errors = append(errors, validateValueOrSecret(f.val, path.Child(f.name))...)
+	}
+	return errors
+}
+
+// validateRedisConnection checks value-or-secret exclusivity on each external
+// Redis field.
+func validateRedisConnection(ext *appsv2.RedisConnection, path *field.Path) field.ErrorList {
+	if ext == nil {
+		return nil
+	}
+	var errors field.ErrorList
+	for _, f := range []struct {
+		name string
+		val  appsv2.ValueOrSecret
+	}{
+		{"host", ext.Host}, {"port", ext.Port}, {"password", ext.Password},
+		{"tls", ext.Tls}, {"sslCa", ext.SslCa},
+	} {
+		errors = append(errors, validateValueOrSecret(f.val, path.Child(f.name))...)
+	}
+	return errors
+}
+
+// validateClickHouseConnection checks value-or-secret exclusivity on each
+// external ClickHouse field.
+func validateClickHouseConnection(ext *appsv2.ClickHouseConnection, path *field.Path) field.ErrorList {
+	if ext == nil {
+		return nil
+	}
+	var errors field.ErrorList
+	for _, f := range []struct {
+		name string
+		val  appsv2.ValueOrSecret
+	}{
+		{"host", ext.Host}, {"tcpPort", ext.TCPPort}, {"httpPort", ext.HTTPPort},
+		{"database", ext.Database}, {"username", ext.Username}, {"password", ext.Password},
+		{"replicated", ext.Replicated}, {"clusterName", ext.ClusterName},
+	} {
+		errors = append(errors, validateValueOrSecret(f.val, path.Child(f.name))...)
+	}
+	return errors
+}
+
+// normalizeConnections rewrites the deprecated legacy {name, key} shape into the
+// ValueFrom envelope on every external connection field and OIDC field, so
+// stored objects converge on the envelope and existing CRs keep working without
+// user action. Each Normalize() is nil-safe.
+func normalizeConnections(wandb *appsv2.WeightsAndBiases) {
+	for _, spec := range wandb.Spec.MySQL {
+		spec.ExternalMysql.Normalize()
+	}
+	for _, spec := range wandb.Spec.Redis {
+		spec.ExternalRedis.Normalize()
+	}
+	for _, spec := range wandb.Spec.ClickHouse {
+		spec.ExternalClickHouse.Normalize()
+	}
+	for _, spec := range wandb.Spec.ObjectStore {
+		spec.ExternalObjectStore.Normalize()
+	}
+	wandb.Spec.Wandb.OIDC.Normalize()
+	wandb.Spec.Wandb.Notifications.Normalize()
+}
+
+// validateObjectStoreConnection checks value-or-secret exclusivity on each
+// external object-store field. Field order is fixed for deterministic errors.
+func validateObjectStoreConnection(ext *appsv2.ObjectStoreConnection, path *field.Path) field.ErrorList {
+	if ext == nil {
+		return nil
+	}
+	var errors field.ErrorList
+	for _, f := range []struct {
+		name string
+		val  appsv2.ValueOrSecret
+	}{
+		{"provider", ext.Provider}, {"endpoint", ext.Endpoint}, {"port", ext.Port},
+		{"accessKey", ext.AccessKey}, {"secretKey", ext.SecretKey}, {"bucket", ext.Bucket},
+		{"path", ext.Path}, {"region", ext.Region}, {"tlsEnabled", ext.TlsEnabled},
+		{"forcePathStyle", ext.ForcePathStyle},
+	} {
+		errors = append(errors, validateValueOrSecret(f.val, path.Child(f.name))...)
 	}
 	return errors
 }
@@ -651,13 +785,14 @@ func validateObjectStoreSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 
 		if ext := spec.ExternalObjectStore; ext != nil {
 			extPath := objectStorePath.Key(key).Child("externalObjectStore")
-			// provider is sourced from a secret key, so it is resolved and defaulted at reconcile time, not here.
-			if _, ok := wandb.GetAnnotations()[v1.BucketPendingAnnotation]; !ok && ext.Bucket.Name == "" {
+			// provider is resolved and defaulted at reconcile time, not here.
+			if _, ok := wandb.GetAnnotations()[v1.BucketPendingAnnotation]; !ok && ext.Bucket.IsZero() {
 				errors = append(errors, field.Required(
 					extPath.Child("bucket"),
-					"externalObjectStore requires a bucket secret reference",
+					"externalObjectStore requires a bucket value or secret reference",
 				))
 			}
+			errors = append(errors, validateObjectStoreConnection(ext, extPath)...)
 		}
 	}
 
@@ -679,6 +814,7 @@ func validateClickHouseSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 				"managedClickhouse and externalClickhouse are mutually exclusive",
 			))
 		}
+		errors = append(errors, validateClickHouseConnection(spec.ExternalClickHouse, instancePath.Child("externalClickhouse"))...)
 
 		managed := spec.ManagedClickHouse
 		if managed == nil {
@@ -907,7 +1043,7 @@ func validateProxySpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 	proxy := wandb.Spec.Global.Proxy
 	base := field.NewPath("spec").Child("global").Child("proxy")
 
-	validateValue := func(pv *appsv2.ProxyValue, child string) {
+	validateValue := func(pv *appsv2.ValueOrSecret, child string) {
 		if pv == nil {
 			return
 		}

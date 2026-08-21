@@ -14,11 +14,8 @@ import (
 
 const clickHouseConnSecret = "wandb-clickhouse-connection"
 
-func clickHouseSel(key string) corev1.SecretKeySelector {
-	return corev1.SecretKeySelector{
-		LocalObjectReference: corev1.LocalObjectReference{Name: clickHouseConnSecret},
-		Key:                  key,
-	}
+func clickHouseSel(key string) apiv2.ValueOrSecret {
+	return apiv2.ValueFromSecret(clickHouseConnSecret, key, false)
 }
 
 // wandbWithClickHouseConnection publishes a connection whose topology selectors
@@ -112,8 +109,8 @@ func TestResolveEnvvarsClickHouseReplicationFromConnectionSecret(t *testing.T) {
 // the env var has to be dropped and the application left on its own default.
 func TestResolveEnvvarsClickHouseReplicationSkippedWhenUnpublished(t *testing.T) {
 	conn := fullClickHouseConnection()
-	conn.Replicated = corev1.SecretKeySelector{}
-	conn.ClusterName = corev1.SecretKeySelector{}
+	conn.Replicated = apiv2.ValueOrSecret{}
+	conn.ClusterName = apiv2.ValueOrSecret{}
 	wandb := wandbWithClickHouseConnection(conn)
 
 	for _, field := range []string{"replicated", "replicated-cluster"} {
@@ -129,8 +126,8 @@ func TestResolveEnvvarsClickHouseReplicationSkippedWhenUnpublished(t *testing.T)
 // published.
 func TestResolveEnvvarsClickHouseHostUnaffectedByTopology(t *testing.T) {
 	conn := fullClickHouseConnection()
-	conn.Replicated = corev1.SecretKeySelector{}
-	conn.ClusterName = corev1.SecretKeySelector{}
+	conn.Replicated = apiv2.ValueOrSecret{}
+	conn.ClusterName = apiv2.ValueOrSecret{}
 
 	env, found := resolveClickHouseEnv(t, wandbWithClickHouseConnection(conn), "WF_CLICKHOUSE_HOST", "host")
 	if !found {
