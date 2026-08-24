@@ -96,9 +96,21 @@ jobs:
           # yq v4 is preinstalled on ubuntu-latest.
           yq -i '.["wandb-operator"].image.tag = strenv(IMAGE_TAG)' deploy/operator/values.yaml
 
+      - name: Mint a token to read wandb/watchtower releases
+        id: watchtower-token
+        # The image build downloads the Watchtower binary from that private repo;
+        # this repo's GITHUB_TOKEN can't reach it.
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.WESTEST_APP_ID }}
+          private-key: ${{ secrets.WESTEST_APP_PRIVATE_KEY }}
+          owner: wandb
+          repositories: watchtower
+
       - name: Build and push nightly image
         env:
           IMAGE_TAG: ${{ steps.version.outputs.image_tag }}
+          GH_TOKEN: ${{ steps.watchtower-token.outputs.token }}
         run: make docker-build docker-push IMG="${IMAGE_REPOSITORY}:${IMAGE_TAG}"
 
       - name: Resolve chart dependencies

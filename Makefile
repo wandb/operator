@@ -2,9 +2,9 @@
 IMG ?= controller:latest
 
 # Watchtower release whose binary is copied into the operator image as its second
-# entrypoint. Must be a tag that exists in WATCHTOWER_IMAGE — the build pulls it.
-WATCHTOWER_IMAGE ?= us-docker.pkg.dev/wandb-production/public/wandb/watchtower
-WATCHTOWER_VERSION ?= 0.11.0
+# entrypoint. Tag verbatim, leading "v" included. Fetching it needs GH_TOKEN — see
+# the comment at the top of the Dockerfile.
+WATCHTOWER_VERSION ?= v0.12.0-rc.1
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -214,9 +214,14 @@ run: manifests generate fmt vet ## Run the manager from your host.
 # (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 .PHONY: docker-build
-docker-build: ## Build controller docker image.
-	$(CONTAINER_TOOL) build --platform linux/amd64 \
-		--build-arg WATCHTOWER_IMAGE=$(WATCHTOWER_IMAGE) \
+docker-build: ## Build controller docker image. Requires GH_TOKEN with read access to wandb/watchtower.
+	@if [ -z "$${GH_TOKEN:-}" ]; then \
+		echo "GH_TOKEN is required: the build downloads the Watchtower binary from the private wandb/watchtower releases." >&2; \
+		echo "Locally: GH_TOKEN=\$$(gh auth token) make docker-build" >&2; \
+		exit 1; \
+	fi
+	DOCKER_BUILDKIT=1 $(CONTAINER_TOOL) build --platform linux/amd64 \
+		--secret id=gh_token,env=GH_TOKEN \
 		--build-arg WATCHTOWER_VERSION=$(WATCHTOWER_VERSION) \
 		-t ${IMG} -f Dockerfile .
 

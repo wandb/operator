@@ -9,12 +9,26 @@ on:
 jobs:
   build-and-scan:
     runs-on: ubuntu-latest
+    # The build pulls the Watchtower binary from the private wandb/watchtower
+    # releases, which needs an App token. Fork PRs get no secrets, so this job
+    # can't run for them; pull_request_target is not an option here because it
+    # would expose the token to the fork's Dockerfile.
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - name: Checkout code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Mint a token to read wandb/watchtower releases
+        id: watchtower-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.WESTEST_APP_ID }}
+          private-key: ${{ secrets.WESTEST_APP_PRIVATE_KEY }}
+          owner: wandb
+          repositories: watchtower
 
       - name: Build Docker image
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
@@ -25,6 +39,8 @@ jobs:
           tags: wandb/operator:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          secrets: |
+            gh_token=${{ steps.watchtower-token.outputs.token }}
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@c07df6fec6fa692e6fd1200d50aaa1fdd66f03c8 # master
