@@ -1,0 +1,59 @@
+apiVersion: apps.wandb.com/v2
+kind: WeightsAndBiases
+metadata:
+  name: weightsandbiases-sample
+  labels:
+    app.kubernetes.io/name: weightsandbiases
+    app.kubernetes.io/instance: weightsandbiases-sample
+    app.kubernetes.io/part-of: wandb-operator
+    app.kubernetes.io/managed-by: olm
+spec:
+  size: small
+  retentionPolicy:
+    onDelete: detach
+  mysql:
+    default:
+      externalMysql:
+        host:
+          name: wandb-mysql
+          key: host
+        port:
+          name: wandb-mysql
+          key: port
+        database:
+          name: wandb-mysql
+          key: database
+        username:
+          name: wandb-mysql
+          key: username
+        password:
+          name: wandb-mysql
+          key: password
+  redis:
+    default:
+      managedRedis:
+        storageSize: 1Gi
+  kafka:
+    managedKafka:
+      storageSize: 10Gi
+      replicas: 1
+  objectStore:
+    default:
+      externalObjectStore:
+        bucket:
+          name: wandb-object-store
+          key: bucket
+        accessKey:
+          name: wandb-object-store
+          key: accessKey
+        secretKey:
+          name: wandb-object-store
+          key: secretKey
+        region:
+          name: wandb-object-store
+          key: region
+  clickhouse:
+    default:
+      managedClickhouse:
+        storageSize: 10Gi
+        replicas: 1
