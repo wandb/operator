@@ -93,19 +93,20 @@ nightly from tripping `release.yaml`, which rejects `-dev` tags and enforces
 
 ## 4. Architecture
 
-Three workflow files:
+Workflow + action files:
 
 | File | Trigger | Purpose |
 |------|---------|---------|
 | `.github/workflows/nightly-build.yaml` | `workflow_call` | Reusable: derive version, build+push nightly image, bake tag into chart, package+push nightly chart. Emits `image_tag` / `chart_version` outputs. |
 | `.github/workflows/nightly.yaml` | `schedule` + `workflow_dispatch` | Orchestrator: `build` → fan-out `test` matrix on `ubuntu-latest-8-cores` → `report`. |
 | `.github/workflows/nightly-cleanup.yaml` | `schedule` (weekly) | Garbage-collect old `*-nightly-*` images and charts from GAR (or use a native Artifact Registry cleanup policy — see [§10](#10-garbage-collection)). |
+| `.github/actions/westest-run/` | (local action) | Local reimplementation of `wandb/westest/actions/run` (the public operator repo can't `uses:` the private one): installs tools, downloads the westest binary via `github-token`, runs the scenario, uploads artifacts. |
 
 ```mermaid
 flowchart TD
   cron["schedule / workflow_dispatch"] --> build
   build["build (nightly-build.yaml, workflow_call)<br/>id-token: write · WIF · publishes image+chart"] -->|image_tag, chart_version| test
-  test["test (matrix, ubuntu-latest-8-cores)<br/>wandb/westest/actions/run@v0.2.0"] --> report
+  test["test (matrix, ubuntu-latest-8-cores)<br/>./.github/actions/westest-run (App token)"] --> report
   build --> report
   report["report (if: always())<br/>summarize · notify on failure"]
 ```
@@ -225,18 +226,19 @@ critical path.
 
 ## 7. Prerequisites checklist (must be done before Phase 1)
 
-- [ ] **A token that can read `wandb/westest` releases.** The action downloads its
-      release binary with `gh` and `wandb/westest` is private, so the operator
-      repo's default `GITHUB_TOKEN` can't fetch it. The action's `github-token`
-      input takes an override; the test jobs mint a **GitHub App installation
-      token** scoped to `wandb/westest` (`actions/create-github-app-token`) and pass
-      it in. Requires secrets **`WESTEST_APP_ID`** + **`WESTEST_APP_PRIVATE_KEY`**
-      (App ID isn't sensitive — can be a `vars.` if preferred). The App must be
-      installed on `wandb/westest` with `contents: read`.
-- [ ] **Org action-sharing enabled on `wandb/westest`** so the operator repo can
-      `uses:` the action at all — *Settings → Actions → General → Access* →
-      "Accessible from repositories in the 'wandb' organization". (This covers the
-      action fetch; the App token above covers the release download.)
+- [ ] **A token that can read `wandb/westest` releases.** `wandb/operator` is
+      **public**, so it can't `uses:` the private `wandb/westest` action (GitHub
+      only shares a private repo's actions with private/internal consumers). Instead
+      the run logic is reimplemented as a local composite action
+      ([.github/actions/westest-run](../.github/actions/westest-run/action.yml)),
+      which downloads the released westest binary with `gh`. That download needs a
+      token with `contents: read` on `wandb/westest`: the test jobs mint a **GitHub
+      App installation token** scoped to `wandb/westest`
+      (`actions/create-github-app-token`) and pass it as `github-token`. Requires
+      secrets **`WESTEST_APP_ID`** + **`WESTEST_APP_PRIVATE_KEY`** (App ID isn't
+      sensitive — can be a `vars.`); the App must be installed on `wandb/westest`
+      with `contents: read`. No org action-sharing setting is needed since we don't
+      consume the remote action.
 - [ ] **`ubuntu-latest-8-cores` confirmed available** to this repo. The full
       local-kind stack (ClickHouse+Keeper, MySQL, Kafka, etcd, SeaweedFS, Redis +
       operators) needs ≥8 vCPU; standard ~2-vCPU runners leave MySQL and the
@@ -246,10 +248,11 @@ critical path.
 - [ ] **Pin `westest-version`** to an explicit release tag (`v0.2.0` today) — the
       action's default `latest` resolves by creation date and makes nightlies
       non-reproducible.
-- [x] **Actions pinned by SHA.** `wandb/westest/actions/run` is pinned to the main
-      SHA that adds the `github-token` input (post-`v0.2.0`, no release tag yet);
-      bump to a release tag once westest cuts one. `actions/create-github-app-token`
-      is pinned to `v3.2.0`.
+- [x] **Actions pinned by SHA.** The local `westest-run` action and its sub-actions
+      (setup-terraform/helm/kubectl/python, upload-artifact) plus
+      `actions/create-github-app-token` (`v3.2.0`) are SHA-pinned. Keep `westest-run`
+      in sync with the upstream `wandb/westest/actions/run` + the pinned
+      `WESTEST_VERSION`.
 - [ ] **Failure alerting** wired in the `report` job — no e2e paging exists today
       (`run-tests.yaml` is unit/envtest only), so reds would rot silently.
 - [ ] **GAR cleanup** decided (native cleanup policy preferred) — see [§10](#10-garbage-collection).
@@ -315,19 +318,36 @@ local checkout — no GAR write needed:
 ```yaml
 # .github/workflows/westest-pr.yaml  (workflow_dispatch, on-demand)
 - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-- uses: wandb/westest/actions/run@v0.2.0
+- id: westest-token
+  uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+  with:
+    app-id: ${{ secrets.WESTEST_APP_ID }}
+    private-key: ${{ secrets.WESTEST_APP_PRIVATE_KEY }}
+    owner: wandb
+    repositories: westest
+- uses: ./.github/actions/westest-run
   with:
     scenario: local-kind-operator-v1-to-v2
     operator-repo: ${{ github.workspace }}   # flips the operator source to local build
+    github-token: ${{ steps.westest-token.outputs.token }}
     westest-version: v0.2.0
 ```
 
-This is the same action, a different entrypoint: PR path = source build (no
-publish); nightly path = publish + remote chart.
+Same local action, a different entrypoint: PR path = source build (no publish);
+nightly path = publish + remote chart.
 
 ---
 
 ## 12. Reference implementation
+
+> **The committed files are the source of truth** — see
+> [`.github/workflows/nightly.yaml`](../.github/workflows/nightly.yaml),
+> [`nightly-build.yaml`](../.github/workflows/nightly-build.yaml),
+> [`nightly-cleanup.yaml`](../.github/workflows/nightly-cleanup.yaml),
+> [`westest-weekly.yaml`](../.github/workflows/westest-weekly.yaml), and the local
+> action [`.github/actions/westest-run/`](../.github/actions/westest-run/action.yml).
+> The YAML below is an illustrative snapshot and may lag the committed workflows
+> (e.g. the test jobs now mint an App token and call the local `./.github/actions/westest-run`).
 
 Ready-to-adapt YAML. Action pins and the WIF auth block mirror the existing
 workflows. **Do not enable the `schedule` trigger until the [prerequisites](#7-prerequisites-checklist-must-be-done-before-phase-1) are met** —
