@@ -57,7 +57,7 @@ jobs:
             matrix="$(printf '["%s"]' "${SCENARIO}")"
           else
             # Phase 1 smoke set (self-contained, no license, no cloud).
-            matrix='["local-kind-ingress","local-kind-gateway","local-kind-oidc","local-kind-proxy"]'
+            matrix='["local-kind-ingress","local-kind-gateway","local-kind-oidc-pkce","local-kind-oidc-implicit","local-kind-proxy"]'
           fi
           echo "matrix=${matrix}" >> "${GITHUB_OUTPUT}"
 
@@ -81,9 +81,11 @@ jobs:
       # --param (see docs/nightly-westest-testing.md §12 for the Phase 2/3 matrix).
       WESTEST_OPERATOR_CHART_VERSION: ${{ needs.build.outputs.chart_version }}
     steps:
+      - name: Checkout (for the local westest-run action)
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Mint a token to read wandb/westest releases
         id: westest-token
-        # GitHub App installation token scoped to wandb/westest so the action can
+        # GitHub App installation token scoped to wandb/westest so the run action can
         # download the release binary (the operator repo's GITHUB_TOKEN can't).
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
@@ -92,9 +94,10 @@ jobs:
           owner: wandb
           repositories: westest
       - name: Run scenario
-        # Pinned to the westest main SHA that adds the github-token input (post-v0.2.0,
-        # no release tag yet); bump to a release tag once westest cuts one.
-        uses: wandb/westest/actions/run@662b59b6199d99a84435d889e7d8cf6e94ebf74c
+        # Local reimplementation of wandb/westest/actions/run — wandb/operator is
+        # public and can't `uses:` a private repo's action. Keep in sync with
+        # upstream + WESTEST_VERSION. Downloads the westest binary via github-token.
+        uses: ./.github/actions/westest-run
         with:
           scenario: ${{ matrix.scenario }}
           github-token: ${{ steps.westest-token.outputs.token }}
