@@ -90,6 +90,7 @@ wandb-operator:
     - '{{ include "wandb-operator.caCertsVolume" . }}'
   envTpls:
     - '{{ include "wandb-operator.caCertsEnv" . }}'
+    - '{{ include "wandb-operator.operatorImageEnv" . }}'
 
   service:
     enabled: true

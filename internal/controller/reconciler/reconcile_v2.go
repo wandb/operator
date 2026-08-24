@@ -139,6 +139,9 @@ func Reconcile(
 			if err = deleteInfraHTTPRoutes(ctx, client, wandb); err != nil {
 				return ctrl.Result{}, err
 			}
+			if err = deleteWatchtower(ctx, client, wandb); err != nil {
+				return ctrl.Result{}, err
+			}
 			if wandb.Spec.Networking.Mode == apiv2.NetworkingModeIngress {
 				if err = deleteConsolidatedIngress(ctx, client, wandb); err != nil {
 					return ctrl.Result{}, err
@@ -264,6 +267,12 @@ func Reconcile(
 		return ctrl.Result{}, err
 	}
 
+	res, err = ReconcileNetworkingAndWatchtower(ctx, client, wandb, manifest)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	ctrlResults = append(ctrlResults, res)
+
 	redisReady := redisAllReady(wandb)
 	mysqlReady := mysqlAllReady(wandb)
 	kafkaReady := wandb.Status.KafkaStatus.Ready
@@ -300,6 +309,71 @@ func consolidateResults(results []ctrl.Result) ctrl.Result {
 	return ctrl.Result{
 		RequeueAfter: lo.Min(durations),
 	}
+}
+
+// ReconcileNetworkingAndWatchtower publishes the W&B app's route — a Gateway plus
+// infra HTTPRoutes, or the consolidated Ingress — and then brings up Watchtower.
+//
+// Reconcile calls this *before* its infrastructure-readiness gate, and that
+// placement is the point: Watchtower exists to diagnose a broken install, so it
+// has to come up when MySQL, Redis, Kafka, the object store or ClickHouse are not
+// ready, which is exactly when Reconcile returns early. Its route has to be
+// published for the same reason, so networking moves up with it. Keep this above
+// that gate.
+//
+// A Watchtower failure is never returned as an error: a bad image or an RBAC
+// mistake must not stop the install it manages from reconciling. It does come
+// back as a requeue, though — dropping it outright left a transient failure with
+// nothing to retry it, so Watchtower stayed down until an unrelated event
+// happened to trigger another pass.
+func ReconcileNetworkingAndWatchtower(
+	ctx context.Context,
+	client ctrlClient.Client,
+	wandb *apiv2.WeightsAndBiases,
+	manifest serverManifest.Manifest,
+) (ctrl.Result, error) {
+	ctx, log := logx.WithSlog(ctx, logx.ReconcileInfraV2)
+
+	// Status is flushed here rather than left to ReconcileWandbManifest: that
+	// function is behind the infrastructure gate, so while infra is unready the
+	// gateway, ingress and Watchtower summaries would never reach the API — and an
+	// operator looking for Watchtower's URL during an outage would find nothing.
+	statusBefore := wandb.DeepCopy().Status
+
+	if err := cleanupNetworkingModeResources(ctx, client, wandb); err != nil {
+		log.Error("Failed to clean up stale networking resources", logx.ErrAttr(err))
+		return ctrl.Result{}, err
+	}
+	resetInactiveNetworkingStatus(wandb)
+
+	switch wandb.Spec.Networking.Mode {
+	case apiv2.NetworkingModeGatewayAPI:
+		wandb.Status.GatewayStatus = nil
+		if err := reconcileGateway(ctx, client, wandb); err != nil {
+			log.Error("Failed to reconcile Gateway", logx.ErrAttr(err))
+			return ctrl.Result{}, err
+		}
+		if err := reconcileInfraHTTPRoutes(ctx, client, wandb, manifest); err != nil {
+			log.Error("Failed to reconcile infra HTTPRoutes", logx.ErrAttr(err))
+			return ctrl.Result{}, err
+		}
+	case apiv2.NetworkingModeIngress:
+		wandb.Status.IngressStatus = nil
+		if err := reconcileConsolidatedIngress(ctx, client, wandb, manifest); err != nil {
+			log.Error("Failed to reconcile consolidated Ingress", logx.ErrAttr(err))
+			return ctrl.Result{}, err
+		}
+	}
+
+	// Requeue rather than propagate: the rest of the reconcile must still run, but
+	// the failure has to be retried by something.
+	var result ctrl.Result
+	if err := reconcileWatchtower(ctx, client, wandb, manifest); err != nil {
+		log.Error("Failed to reconcile Watchtower", logx.ErrAttr(err))
+		result.RequeueAfter = defaultRequeueDuration
+	}
+
+	return result, updateWandbStatusIfChanged(ctx, client, wandb, statusBefore)
 }
 
 func ReconcileWandbManifest(
@@ -392,23 +466,9 @@ func ReconcileWandbManifest(
 		return ctrl.Result{}, err
 	}
 
-	if err := cleanupNetworkingModeResources(ctx, client, wandb); err != nil {
-		logger.Error(err, "Failed to clean up stale networking resources")
-		return ctrl.Result{}, err
-	}
-	resetInactiveNetworkingStatus(wandb)
-
 	if err := reconcileCustomCACerts(ctx, client, wandb); err != nil {
 		logger.Error(err, "Failed to reconcile custom CA certificates")
 		return ctrl.Result{}, err
-	}
-
-	if wandb.Spec.Networking.Mode == apiv2.NetworkingModeGatewayAPI {
-		wandb.Status.GatewayStatus = nil
-		if err := reconcileGateway(ctx, client, wandb); err != nil {
-			logger.Error(err, "Failed to reconcile Gateway")
-			return ctrl.Result{}, err
-		}
 	}
 
 	result, err = runMigrations(ctx, client, wandb, manifest)
@@ -442,13 +502,6 @@ func ReconcileWandbManifest(
 	} else {
 		logger.Info("Deferring legacy v1 deployment cleanup until all application Deployments are ready",
 			"notReady", notReady)
-	}
-
-	if wandb.Spec.Networking.Mode == apiv2.NetworkingModeGatewayAPI {
-		if err := reconcileInfraHTTPRoutes(ctx, client, wandb, manifest); err != nil {
-			logger.Error(err, "Failed to reconcile infra HTTPRoutes")
-			return ctrl.Result{}, err
-		}
 	}
 
 	if applicationsHealthy {
@@ -658,14 +711,6 @@ func reconcileApplications(
 		}
 	}
 
-	if wandb.Spec.Networking.Mode == apiv2.NetworkingModeIngress {
-		wandb.Status.IngressStatus = nil
-		if err := reconcileConsolidatedIngress(ctx, client, wandb, manifest); err != nil {
-			logger.Error("Failed to reconcile consolidated Ingress", "err", err)
-			return ctrl.Result{}, err
-		}
-	}
-
 	hostname, err := url.Parse(wandb.Spec.Wandb.Hostname)
 	if err != nil {
 		logger.Error("Failed to parse provided hostname", "hostname", wandb.Spec.Wandb.Hostname, "err", err)
@@ -711,6 +756,21 @@ func applicationManagedFieldsEqual(before, after *apiv2.Application) bool {
 }
 
 func buildHTTPRouteTemplate(wandb *apiv2.WeightsAndBiases, app serverManifest.Application) *apiv2.HTTPRouteTemplateSpec {
+	var paths []string
+	var pathType string
+	if app.Ingress != nil {
+		paths = app.Ingress.Paths
+		pathType = app.Ingress.PathType
+	}
+	return buildHTTPRouteTemplateForPaths(wandb, paths, pathType, resolveHTTPRouteServicePort(app))
+}
+
+func buildHTTPRouteTemplateForPaths(
+	wandb *apiv2.WeightsAndBiases,
+	paths []string,
+	pathType string,
+	servicePort *gatewayv1.PortNumber,
+) *apiv2.HTTPRouteTemplateSpec {
 	gwConfig := wandb.Spec.Networking.GatewayAPI
 
 	ref := wandb.Status.GatewayStatus.GatewayRef
@@ -721,7 +781,7 @@ func buildHTTPRouteTemplate(wandb *apiv2.WeightsAndBiases, app serverManifest.Ap
 		ns := gatewayv1.Namespace(ref.Namespace)
 		parentRef.Namespace = &ns
 	}
-	if gwConfig.ListenerName != nil {
+	if gwConfig != nil && gwConfig.ListenerName != nil {
 		sectionName := gatewayv1.SectionName(*gwConfig.ListenerName)
 		parentRef.SectionName = &sectionName
 	}
@@ -731,20 +791,12 @@ func buildHTTPRouteTemplate(wandb *apiv2.WeightsAndBiases, app serverManifest.Ap
 	for _, h := range wandb.Spec.Wandb.AdditionalHostnames {
 		hostnames = append(hostnames, gatewayv1.Hostname(h))
 	}
-
-	var paths []string
-	var pathType string
-	if app.Ingress != nil {
-		paths = app.Ingress.Paths
-		pathType = app.Ingress.PathType
-	}
-
 	return &apiv2.HTTPRouteTemplateSpec{
 		ParentRefs:  []gatewayv1.ParentReference{parentRef},
 		Hostnames:   hostnames,
 		Paths:       paths,
 		PathType:    pathType,
-		ServicePort: resolveHTTPRouteServicePort(app),
+		ServicePort: servicePort,
 	}
 }
 

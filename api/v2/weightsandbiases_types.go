@@ -138,7 +138,14 @@ type WeightsAndBiasesSpec struct {
 	// Networking configures how the W&B application is exposed externally.
 	// +optional
 	Networking NetworkingSpec `json:"networking,omitempty"`
+
+	AdminConsoleEnabled *bool `json:"adminConsoleEnabled,omitempty"`
 }
+
+const (
+	DefaultWatchtowerBasePath           = "/console"
+	DefaultWatchtowerServiceAccountName = "wandb-watchtower"
+)
 
 // GlobalSpec holds settings shared across every managed component.
 type GlobalSpec struct {
@@ -174,6 +181,10 @@ type GlobalSpec struct {
 	// Pair with CustomCACerts for a TLS-intercepting proxy.
 	// +optional
 	Proxy *ProxySpec `json:"proxy,omitempty"`
+}
+
+func (w *WeightsAndBiases) WatchtowerEnabled() bool {
+	return w.Spec.AdminConsoleEnabled != nil && *w.Spec.AdminConsoleEnabled
 }
 
 // ProxySpec is the forward-proxy configuration under spec.global.proxy.
@@ -860,7 +871,15 @@ type WeightsAndBiasesStatus struct {
 	// +optional
 	GatewayStatus *GatewayStatusSummary `json:"gatewayStatus,omitempty"`
 	// +optional
-	IngressStatus *IngressStatusSummary `json:"ingressStatus,omitempty"`
+	IngressStatus    *IngressStatusSummary    `json:"ingressStatus,omitempty"`
+	WatchtowerStatus *WatchtowerStatusSummary `json:"watchtowerStatus,omitempty"`
+}
+
+type WatchtowerStatusSummary struct {
+	Ready       bool   `json:"ready"`
+	URL         string `json:"url,omitempty"`
+	Image       string `json:"image,omitempty"`
+	AuthService string `json:"authService,omitempty"`
 }
 
 type GatewayStatusSummary struct {
@@ -873,6 +892,7 @@ type GatewayStatusSummary struct {
 type IngressStatusSummary struct {
 	Name                string                       `json:"name,omitempty"`
 	LoadBalancerIngress []corev1.LoadBalancerIngress `json:"loadBalancerIngress,omitempty"`
+	Ready               bool                         `json:"ready"`
 }
 
 type WandbStatus struct {
