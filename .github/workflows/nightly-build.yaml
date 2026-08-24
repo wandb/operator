@@ -107,10 +107,14 @@ jobs:
           owner: wandb
           repositories: watchtower
 
+      - name: Download the Watchtower binary
+        env:
+          GH_TOKEN: ${{ steps.watchtower-token.outputs.token }}
+        run: make download-watchtower
+
       - name: Build and push nightly image
         env:
           IMAGE_TAG: ${{ steps.version.outputs.image_tag }}
-          GH_TOKEN: ${{ steps.watchtower-token.outputs.token }}
         run: make docker-build docker-push IMG="${IMAGE_REPOSITORY}:${IMAGE_TAG}"
 
       - name: Resolve chart dependencies

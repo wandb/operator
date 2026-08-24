@@ -2,9 +2,12 @@
 IMG ?= controller:latest
 
 # Watchtower release whose binary is copied into the operator image as its second
-# entrypoint. Tag verbatim, leading "v" included. Fetching it needs GH_TOKEN — see
-# the comment at the top of the Dockerfile.
+# entrypoint. Tag verbatim, leading "v" included. `make download-watchtower`
+# fetches it into WATCHTOWER_BINARY; the image build only copies that file.
 WATCHTOWER_VERSION ?= v0.12.0-rc.1
+# The binary is arch-specific, so this also drives the image platform below.
+WATCHTOWER_ARCH ?= amd64
+WATCHTOWER_BINARY ?= watchtower
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -210,19 +213,55 @@ build-crd-installer: ## Build the crd-installer binary.
 run: manifests generate fmt vet ## Run the manager from your host.
 	go run ./cmd/manager
 
+# wandb/watchtower is private and no longer publishes a container image, so the
+# binary comes from its GitHub Release. A private repo's assets are not reachable
+# by their browser download URL — that 404s even with a token — so the release API
+# has to resolve the asset id first, then serve the bytes with
+# Accept: application/octet-stream.
+.PHONY: download-watchtower
+download-watchtower: ## Download the Watchtower binary into the repo root. Requires GH_TOKEN with read access to wandb/watchtower.
+	@command -v curl >/dev/null 2>&1 || { echo "curl is required but was not found." >&2; exit 1; }
+	@command -v jq >/dev/null 2>&1 || { echo "jq is required but was not found." >&2; exit 1; }
+	@if [ -z "$${GH_TOKEN:-}" ]; then \
+		echo "GH_TOKEN is required: wandb/watchtower is a private repository." >&2; \
+		echo "Locally: GH_TOKEN=\$$(gh auth token) make download-watchtower" >&2; \
+		exit 1; \
+	fi
+	@set -eu; \
+	api="https://api.github.com/repos/wandb/watchtower"; \
+	asset="watchtower-linux-$(WATCHTOWER_ARCH).tar.gz"; \
+	checksums="watchtower-linux-checksums.txt"; \
+	tmp="$$(mktemp -d)"; \
+	trap 'rm -rf "$$tmp"' EXIT; \
+	echo "Fetching $$asset from wandb/watchtower $(WATCHTOWER_VERSION)"; \
+	release="$$(curl -fsSL -H "Authorization: Bearer $$GH_TOKEN" \
+		"$$api/releases/tags/$(WATCHTOWER_VERSION)")"; \
+	for name in "$$asset" "$$checksums"; do \
+		id="$$(printf '%s' "$$release" | jq -r --arg n "$$name" '.assets[] | select(.name == $$n) | .id')"; \
+		if [ -z "$$id" ] || [ "$$id" = "null" ]; then \
+			echo "release $(WATCHTOWER_VERSION) has no asset named $$name" >&2; \
+			exit 1; \
+		fi; \
+		curl -fsSL -H "Authorization: Bearer $$GH_TOKEN" -H "Accept: application/octet-stream" \
+			-o "$$tmp/$$name" "$$api/releases/assets/$$id"; \
+	done; \
+	if command -v sha256sum >/dev/null 2>&1; then sha="sha256sum"; else sha="shasum -a 256"; fi; \
+	(cd "$$tmp" && grep "$$asset" "$$checksums" | $$sha -c -); \
+	tar -xzf "$$tmp/$$asset" -C "$$tmp"; \
+	mv "$$tmp/watchtower" "$(WATCHTOWER_BINARY)"; \
+	chmod 0755 "$(WATCHTOWER_BINARY)"; \
+	echo "Wrote $(WATCHTOWER_BINARY) (linux/$(WATCHTOWER_ARCH))"
+
 # If you wish to build the manager image targeting other platforms you can use the --platform flag.
 # (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 .PHONY: docker-build
-docker-build: ## Build controller docker image. Requires GH_TOKEN with read access to wandb/watchtower.
-	@if [ -z "$${GH_TOKEN:-}" ]; then \
-		echo "GH_TOKEN is required: the build downloads the Watchtower binary from the private wandb/watchtower releases." >&2; \
-		echo "Locally: GH_TOKEN=\$$(gh auth token) make docker-build" >&2; \
+docker-build: ## Build controller docker image. Run download-watchtower first.
+	@if [ ! -f "$(WATCHTOWER_BINARY)" ]; then \
+		echo "$(WATCHTOWER_BINARY) not found: run 'GH_TOKEN=\$$(gh auth token) make download-watchtower' first." >&2; \
 		exit 1; \
 	fi
-	DOCKER_BUILDKIT=1 $(CONTAINER_TOOL) build --platform linux/amd64 \
-		--secret id=gh_token,env=GH_TOKEN \
-		--build-arg WATCHTOWER_VERSION=$(WATCHTOWER_VERSION) \
+	$(CONTAINER_TOOL) build --platform linux/$(WATCHTOWER_ARCH) \
 		-t ${IMG} -f Dockerfile .
 
 .PHONY: docker-push

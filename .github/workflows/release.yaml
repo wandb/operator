@@ -151,10 +151,14 @@ jobs:
           owner: wandb
           repositories: watchtower
 
+      - name: Download the Watchtower binary
+        env:
+          GH_TOKEN: ${{ steps.watchtower-token.outputs.token }}
+        run: make download-watchtower
+
       - name: Build and publish image
         env:
           VERSION: ${{ steps.release.outputs.version }}
-          GH_TOKEN: ${{ steps.watchtower-token.outputs.token }}
         run: make docker-build docker-push IMG="${IMAGE_REPOSITORY}:${VERSION}"
 
       - name: Install chart-testing
