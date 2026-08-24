@@ -97,6 +97,12 @@ func (c ConnInfo) ToObjectStoreConnection(secretName string, requireAll bool) *a
 }
 
 // Resolve reads the connection's secret selectors into a ConnInfo.
+//
+// It expects an operator-written status connection: WriteState materializes any
+// user literal credential into the operator secret before status is written, so
+// AccessKey/SecretKey always carry the secret arm here. Passing a raw spec
+// connection whose credentials are literals would leave AccessKeyRef/SecretKeyRef
+// empty and starve the by-reference consumers (ClickHouse disk, Bufstream).
 func Resolve(
 	ctx context.Context,
 	cl client.Client,
@@ -110,8 +116,8 @@ func Resolve(
 	resolver := &utils.ConnSecretResolver{Client: cl, Namespace: namespace, Cache: map[string]*corev1.Secret{}}
 
 	info := ConnInfo{}
-	// Status connections always carry the secret arm; capture the selectors for
-	// consumers that inject creds by reference (ClickHouse disk, Bufstream).
+	// Capture the selectors for consumers that inject creds by reference
+	// (ClickHouse disk, Bufstream); see the precondition on Resolve.
 	if ref := conn.AccessKey.SecretKeyRef(); ref != nil {
 		info.AccessKeyRef = *ref
 	}

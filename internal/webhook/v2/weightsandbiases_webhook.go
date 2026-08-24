@@ -359,6 +359,7 @@ func validateSpec(_ context.Context, newWandb, oldWandb *appsv2.WeightsAndBiases
 	allErrors = append(allErrors, validateRedisSpec(newWandb)...)
 	allErrors = append(allErrors, validateObjectStoreSpec(newWandb)...)
 	allErrors = append(allErrors, validateClickHouseSpec(newWandb)...)
+	allErrors = append(allErrors, validateOIDCSpec(newWandb)...)
 	allErrors = append(allErrors, validateNotificationSpec(newWandb)...)
 	allErrors = append(allErrors, validateInfraNames(newWandb, oldWandb)...)
 	networkingErrors, networkingWarnings := validateNetworkingSpec(newWandb)
@@ -693,6 +694,25 @@ func validateClickHouseConnection(ext *appsv2.ClickHouseConnection, path *field.
 	return errors
 }
 
+// validateOIDCSpec enforces value-or-secret exclusivity on each OIDC field.
+// OIDC is optional, so no field is required here; this only rejects a field
+// that sets both value and valueFrom.
+func validateOIDCSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
+	oidc := wandb.Spec.Wandb.OIDC
+	base := field.NewPath("spec").Child("wandb").Child("oidc")
+	var errors field.ErrorList
+	for _, f := range []struct {
+		name string
+		val  appsv2.ValueOrSecret
+	}{
+		{"clientId", oidc.ClientId}, {"clientSecret", oidc.ClientSecret},
+		{"issuerUrl", oidc.IssuerUrl}, {"authMethod", oidc.AuthMethod},
+	} {
+		errors = append(errors, validateValueOrSecret(f.val, base.Child(f.name))...)
+	}
+	return errors
+}
+
 // normalizeConnections rewrites the deprecated legacy {name, key} shape into the
 // ValueFrom envelope on every external connection field and OIDC field, so
 // stored objects converge on the envelope and existing CRs keep working without
@@ -712,6 +732,12 @@ func normalizeConnections(wandb *appsv2.WeightsAndBiases) {
 	}
 	wandb.Spec.Wandb.OIDC.Normalize()
 	wandb.Spec.Wandb.Notifications.Normalize()
+	if p := wandb.Spec.Global.Proxy; p != nil {
+		// Proxy fields share ValueOrSecret, so the legacy {name,key} shape is
+		// accepted and normalized here too, consistent with every other field.
+		p.HTTPProxy.Normalize()
+		p.HTTPSProxy.Normalize()
+	}
 }
 
 // validateObjectStoreConnection checks value-or-secret exclusivity on each

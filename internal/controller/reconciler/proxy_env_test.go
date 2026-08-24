@@ -120,6 +120,27 @@ func TestProxyEnvVarsValueFromStaysSecretRef(t *testing.T) {
 	}
 }
 
+func TestProxyEnvVarsLegacyNameKeyStaysSecretRef(t *testing.T) {
+	// A pre-envelope {name, key} proxy is honored via SecretKeyRef(), so it
+	// resolves to a SecretKeyRef env var just like the ValueFrom shape.
+	proxy := &apiv2.ProxySpec{
+		HTTPSProxy: &apiv2.ValueOrSecret{Name: "egress-proxy", Key: "httpsProxy"},
+	}
+	vars := proxyEnvVars(proxy)
+	for _, name := range []string{"HTTPS_PROXY", "https_proxy"} {
+		v, ok := envByName(vars, name)
+		if !ok {
+			t.Fatalf("missing %q", name)
+		}
+		if v.Value != "" || v.ValueFrom == nil || v.ValueFrom.SecretKeyRef == nil {
+			t.Errorf("%s should be a SecretKeyRef, got %+v", name, v)
+		}
+		if v.ValueFrom.SecretKeyRef.Name != "egress-proxy" || v.ValueFrom.SecretKeyRef.Key != "httpsProxy" {
+			t.Errorf("%s secret ref wrong: %+v", name, v.ValueFrom.SecretKeyRef)
+		}
+	}
+}
+
 func TestProxyEnvVarsNil(t *testing.T) {
 	if proxyEnvVars(nil) != nil {
 		t.Errorf("nil proxy should yield no env vars")
