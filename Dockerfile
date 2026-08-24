@@ -7,7 +7,7 @@ ARG WATCHTOWER_IMAGE=us-docker.pkg.dev/wandb-production/public/wandb/watchtower
 ARG WATCHTOWER_VERSION=0.11.0
 
 # Build the manager binary
-FROM golang:1.26 AS manager-builder
+FROM golang:1.27 AS manager-builder
 
 ARG TARGETOS
 ARG TARGETARCH
