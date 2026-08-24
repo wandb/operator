@@ -81,6 +81,8 @@ spec:
             type: object
           spec:
             properties:
+              adminConsoleEnabled:
+                type: boolean
               affinity:
                 properties:
                   nodeAffinity:
@@ -5681,6 +5683,10 @@ spec:
                     type: array
                   name:
                     type: string
+                  ready:
+                    type: boolean
+                required:
+                - ready
                 type: object
               kafkaStatus:
                 properties:
@@ -7825,6 +7831,19 @@ spec:
                     type: object
                 required:
                 - hostname
+                type: object
+              watchtowerStatus:
+                properties:
+                  authService:
+                    type: string
+                  image:
+                    type: string
+                  ready:
+                    type: boolean
+                  url:
+                    type: string
+                required:
+                - ready
                 type: object
             required:
             - observedGeneration

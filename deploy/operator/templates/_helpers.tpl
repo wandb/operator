@@ -79,3 +79,8 @@ wandb-operator values. Each is inert unless a CA source is configured.
   value: "{{ $ca.mountPath | default "/etc/wandb/ca-certs" }}:/etc/ssl/certs:/etc/pki/tls/certs"
 {{- end -}}
 {{- end -}}
+
+{{- define "wandb-operator.operatorImageEnv" -}}
+- name: OPERATOR_IMAGE
+  value: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+{{- end -}}

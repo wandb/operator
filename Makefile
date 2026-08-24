@@ -1,6 +1,11 @@
 # Image URL to use all building/pushing image targets
 IMG ?= controller:latest
 
+# Watchtower release whose binary is copied into the operator image as its second
+# entrypoint. Must be a tag that exists in WATCHTOWER_IMAGE — the build pulls it.
+WATCHTOWER_IMAGE ?= us-docker.pkg.dev/wandb-production/public/wandb/watchtower
+WATCHTOWER_VERSION ?= 0.11.0
+
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
 GOBIN=$(shell go env GOPATH)/bin
@@ -210,7 +215,10 @@ run: manifests generate fmt vet ## Run the manager from your host.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 .PHONY: docker-build
 docker-build: ## Build controller docker image.
-	$(CONTAINER_TOOL) build --platform linux/amd64 -t ${IMG} -f Dockerfile .
+	$(CONTAINER_TOOL) build --platform linux/amd64 \
+		--build-arg WATCHTOWER_IMAGE=$(WATCHTOWER_IMAGE) \
+		--build-arg WATCHTOWER_VERSION=$(WATCHTOWER_VERSION) \
+		-t ${IMG} -f Dockerfile .
 
 .PHONY: docker-push
 docker-push:
@@ -347,5 +355,14 @@ ginkgo: $(GINKGO) ## Download ginkgo locally if necessary.
 $(GINKGO): $(LOCALBIN)
 	test -s $(LOCALBIN)/ginkgo || GOBIN=$(LOCALBIN) go install github.com/onsi/ginkgo/v2/ginkgo@latest
 
+
+## westest e2e binary (github.com/wandb/westest)
+WESTEST ?= $(LOCALBIN)/westest
+WESTEST_VERSION ?= latest
+WESTEST_REPO ?= wandb/westest
+
+.PHONY: westest
+westest: $(LOCALBIN) ## Download the westest e2e binary from wandb/westest releases (set WESTEST_VERSION to pin).
+	WESTEST_VERSION="$(WESTEST_VERSION)" WESTEST_REPO="$(WESTEST_REPO)" ./hack/scripts/download-westest.sh "$(WESTEST)"
 
 include dep-management.mk olm.mk
