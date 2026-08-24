@@ -1,8 +1,49 @@
+# VERSION defaults to the Helm chart appVersion (no leading v).
+VERSION ?= $(shell sed -n 's/^appVersion: *"\(.*\)"/\1/p' deploy/operator/Chart.yaml)
+CHANNELS ?= stable
+DEFAULT_CHANNEL ?= stable
+BUNDLE_METADATA_OPTS ?= --channels=$(CHANNELS) --default-channel=$(DEFAULT_CHANNEL)
+
+IMAGE_TAG_BASE ?= us-docker.pkg.dev/wandb-production/public/wandb/operator
+BUNDLE_IMG ?= $(IMAGE_TAG_BASE)-bundle:v$(VERSION)
+# Root Makefile defaults IMG to controller:latest; use the public image unless overridden.
+ifeq ($(origin IMG),file)
+BUNDLE_CONTROLLER_IMG := $(IMAGE_TAG_BASE):$(VERSION)
+else ifeq ($(IMG),controller:latest)
+BUNDLE_CONTROLLER_IMG := $(IMAGE_TAG_BASE):$(VERSION)
+else
+BUNDLE_CONTROLLER_IMG := $(IMG)
+endif
+
+BUNDLE_GEN_FLAGS ?= -q --overwrite --version $(VERSION) --package wandb-operator $(BUNDLE_METADATA_OPTS)
+
+# OpenShift floor from CRC 2.60.1 (OpenShift 4.21.8).
+OPENSHIFT_VERSIONS ?= v4.21
+BUNDLE_REPLACES ?= wandb-operator.v1.21.2
+COMMUNITY_BUNDLE_DIR ?= dist/community-operators/operators/wandb-operator/$(VERSION)
+
 .PHONY: bundle
 bundle: manifests kustomize ## Generate bundle manifests and metadata, then validate generated files.
+	@command -v operator-sdk >/dev/null 2>&1 || { \
+		echo "Error: operator-sdk is required. Install it from https://sdk.operatorframework.io/docs/installation/"; \
+		exit 1; \
+	}
 	operator-sdk generate kustomize manifests -q
-	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
+	cd config/manager && $(KUSTOMIZE) edit set image controller=$(BUNDLE_CONTROLLER_IMG)
 	$(KUSTOMIZE) build config/manifests | operator-sdk generate bundle $(BUNDLE_GEN_FLAGS)
+	printf 'resources:\n- manager.yaml\n' > config/manager/kustomization.yaml
+	operator-sdk bundle validate ./bundle
+
+.PHONY: bundle-community
+bundle-community: bundle ## Stamp community-operators-prod metadata and stage the version directory.
+	@command -v python3 >/dev/null 2>&1 || { echo "Error: python3 is required."; exit 1; }
+	python3 hack/scripts/prepare-community-bundle.py \
+		--bundle-dir ./bundle \
+		--dependencies config/olm/community/dependencies.yaml \
+		--openshift-versions $(OPENSHIFT_VERSIONS) \
+		--replaces $(BUNDLE_REPLACES) \
+		--container-image $(BUNDLE_CONTROLLER_IMG) \
+		--stage-dir $(COMMUNITY_BUNDLE_DIR)
 	operator-sdk bundle validate ./bundle
 
 .PHONY: bundle-build

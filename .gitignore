@@ -43,6 +43,8 @@ tilt-settings.star
 hack/testing-manifests/wandb/.generated/*.yaml
 /tilt_bin
 /dist
+/bundle
+/bundle.Dockerfile
 
 .DS_Store
 

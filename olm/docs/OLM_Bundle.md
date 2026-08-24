@@ -1,134 +1,183 @@
-
 # OLM Bundle Overview
 
-Operator Lifecycle Manager (OLM) has updated the method for storing operator bundles. Bundles are now packaged as container images, which include operator manifests and associated metadata. These images are compliant with OCI (Open Container Initiative) specifications, enabling them to be stored and pulled from any OCI-compliant container registry.
+This repository generates an Operator Lifecycle Manager (OLM) bundle that can
+be submitted to
+[community-operators-prod](https://github.com/redhat-openshift-ecosystem/community-operators-prod)
+under `operators/wandb-operator/<version>/`.
 
-The operator bundle image is designed as a scratch-based (non-runnable) container image. This bundle is utilized by OLM to install operators in OLM-enabled clusters, ensuring a streamlined and automated deployment process.
+The published 1.x packages (`1.0.0`, `1.21.2`) are the Helm-era operator and
+live in [`olm/olm-catalog/`](../olm-catalog/) as a snapshot. Do not generate
+into that directory. New versions are produced from current sources with
+`make bundle` / `make bundle-community`.
 
-The directory structure for an operator bundle is as follows:
+## Generate the bundle
+
+Requires `operator-sdk`, `kustomize` (`make kustomize` installs it), and
+`python3`.
+
+```bash
+# Uses deploy/operator/Chart.yaml appVersion and the public v2 image.
+make bundle
+
+# Optional overrides
+make bundle VERSION=2.0.0 IMG=us-docker.pkg.dev/wandb-production/public/wandb/operator:2.0.0
+```
+
+This writes `./bundle` (manifests, metadata, scorecard tests) and
+`bundle.Dockerfile` at the repo root, then runs `operator-sdk bundle validate`.
+
+## Stage a community-operators-prod directory
+
+```bash
+make bundle-community
+# or
+make bundle-community VERSION=2.0.0 BUNDLE_REPLACES=wandb-operator.v1.21.2
+```
+
+This stamps community-only metadata onto `./bundle` and copies the result to
+`dist/community-operators/operators/wandb-operator/<VERSION>/`:
+
+| File | Purpose |
+| --- | --- |
+| `manifests/` | CRDs, CSV, RBAC, webhook configs |
+| `metadata/annotations.yaml` | Package `wandb-operator`, channel `stable`, `com.redhat.openshift.versions: v4.21` |
+| `metadata/dependencies.yaml` | OLM package deps (see below) |
+| `tests/scorecard/` | Scorecard config |
+| `bundle.Dockerfile` | Scratch image for the version directory |
+
+`com.redhat.openshift.versions` is `v4.21` (OpenShift 4.21 and later), matching
+CRC 2.60.1 / OpenShift 4.21.8. The CSV `minKubeVersion` is `1.34.0`. The 1.x
+catalog entries stay on older OpenShift catalogs; only this version is 4.21+.
+
+The CSV `replaces` field defaults to `wandb-operator.v1.21.2`. Override
+`BUNDLE_REPLACES` when publishing a later 2.x.
+
+Package-level [`ci.yaml`](https://github.com/redhat-openshift-ecosystem/community-operators-prod/blob/main/operators/wandb-operator/ci.yaml)
+already exists upstream (`replaces-mode` and reviewers). Do not copy a second
+`ci.yaml` into the version directory.
+
+## Submit a community-operators-prod PR
+
+1. Fork [community-operators-prod](https://github.com/redhat-openshift-ecosystem/community-operators-prod).
+2. Copy the staged directory:
+
+   ```bash
+   cp -R dist/community-operators/operators/wandb-operator/<VERSION> \
+     /path/to/community-operators-prod/operators/wandb-operator/
+   ```
+
+3. Open a PR. Pipeline checks include bundle validation and scorecard.
+
+Typical failures: cert-manager CRs left in manifests, missing
+`com.redhat.openshift.versions`, unresolvable `olm.package` versions, or
+`replaces` not pointing at `wandb-operator.v1.21.2`. If the pipeline does not
+yet publish a 4.21 catalog, the `v4.21` floor may need a brief hold.
+
+## Upgrade from 1.21.2
+
+This bundle replaces `wandb-operator.v1.21.2`. It is a v1→v2 CRD conversion:
+the storage version is v2, conversion/defaulting/validation webhooks are
+required, and OLM must install those webhooks before the new CRD is applied.
+
+## Catalog dependencies
+
+`metadata/dependencies.yaml` declares operators that exist in
+community-operators-prod. Moco and SeaweedFS are omitted (not in the catalog).
+
+```yaml
+dependencies:
+  - type: olm.package
+    value: { packageName: redis-operator, version: ">=0.15.0" }
+  - type: olm.package
+    value: { packageName: clickhouse, version: ">=0.26.3" }
+  - type: olm.package
+    value: { packageName: grafana-operator, version: ">=5.21.0" }
+  - type: olm.package
+    value: { packageName: victoriametrics-operator, version: ">=0.66.3" }
+```
+
+OLM installs these when the wandb-operator Subscription is created. Grafana
+and VictoriaMetrics are optional Helm chart deps (telemetry); they are
+required OLM deps so a catalog install always pulls them.
+
+### Redis catalog vs Helm
+
+The Helm chart pins redis-operator **0.22.2**. OpenShift
+community-operators-prod currently maxes out at **0.15.1** (OperatorHub.io
+has 0.25.0; those are different catalogs). The OLM range is `>=0.15.0`, so a
+catalog install resolves **0.15.1**.
+
+Creating Redis CRs against 0.15.0 / 0.15.1 does **not** fail admission. The
+0.15.x CRDs use structural schemas: fields they do not define are stripped
+and stored without those keys. The wandb-operator apply still returns
+success.
+
+This operator does not set `readOnlyRootFilesystem` today. The 0.15.x
+`spec.securityContext` schema **does** include that field, so if it is added
+later it is applied, not ignored.
+
+| Field this operator writes | 0.15.x Redis / RedisReplication | 0.15.x RedisSentinel |
+| --- | --- | --- |
+| `spec.securityContext` (runAsNonRoot, drop ALL, …) | kept | kept |
+| `spec.securityContext.readOnlyRootFilesystem` (if set) | **applied** | **applied** |
+| `spec.storage.volumeMount` (`/tmp` emptyDir) | kept | n/a (Sentinel has no `storage`) |
+| `spec.volumeMount` (`/tmp` emptyDir) | n/a | **pruned** |
+| `spec.redisExporter.port` | **pruned** | **pruned** |
+| `spec.redisExporter.securityContext` | **pruned** | **pruned** |
+
+**Without RORFS (current code):** standalone and replication stay usable.
+Sentinel HA also runs because the container root FS stays writable, so the
+missing `/tmp` mount does not matter. Telemetry exporters start without the
+intended port (9121) and container security context — redis-operator uses
+its own defaults.
+
+**With RORFS on `spec.securityContext`:** standalone and replication can
+still work because `storage.volumeMount` survives and supplies `/tmp`.
+Sentinel cannot: RORFS is applied and `spec.volumeMount` is dropped, so
+Sentinel pods lose a writable `/tmp` and typically CrashLoop. That is a
+runtime failure, not a CRD validation error.
+
+Pruned fields also make desired ≠ live on every reconcile
+(`resourceContentEqual`), so Sentinel CRs (and any Redis CR with a
+telemetry exporter) are updated on each loop. The update succeeds; the
+unknown fields are stripped again.
+
+0.15.x on OpenShift also has separate upstream RBAC gaps for
+`redisreplications` / `redissentinels` (see
+[OT-CONTAINER-KIT/redis-operator#665](https://github.com/OT-CONTAINER-KIT/redis-operator/issues/665)
+and
+[#1665](https://github.com/OT-CONTAINER-KIT/redis-operator/issues/1665)).
+Those can block the redis-operator itself from reconciling HA CRs even
+when wandb-operator writes them successfully.
+
+For RORFS or Sentinel HA, install redis-operator **≥ 0.22.2** out of band,
+or use `spec.redis.default.externalRedis`. Do not rely on the catalog
+0.15.x operator.
+
+### Managed MySQL and object store
+
+Moco and SeaweedFS are not in the catalog. On an OLM-only cluster, use
+`spec.mysql.default.externalMysql` and
+`spec.objectStore.default.externalObjectStore` (and bring your own ingress on
+OpenShift). The bundle sample follows that shape. The generated ClusterRole
+still includes Moco/SeaweedFS verbs so out-of-band installs keep working.
+
+## Directory layout
 
 ```
-$ tree bundle
+$ tree dist/community-operators/operators/wandb-operator/<VERSION>
 
-bundle
-├── ci.yaml
+<VERSION>
+├── bundle.Dockerfile
 ├── manifests
+│   ├── apps.wandb.com_applications.yaml
 │   ├── apps.wandb.com_weightsandbiases.yaml
-│   ├── wandb-operator-manager_rbac.authorization.k8s.io_v1_clusterrole.yaml
-│   ├── wandb-operator-manager_rbac.authorization.k8s.io_v1_clusterrolebinding.yaml
+│   ├── ...
 │   └── wandb-operator.clusterserviceversion.yaml
 ├── metadata
-│   └── annotations.yaml
+│   ├── annotations.yaml
+│   └── dependencies.yaml
 └── tests
     └── scorecard
         └── config.yaml
-
 ```
-
-Each operator bundle must include a Cluster Service Version (CSV) file. Bundle metadata is stored in `bundle/metadata/annotations.yaml`, which provides essential information about the specific version of the operator available in the registry.
-
-Example content of `annotations.yaml`:
-
-```
-$ cat metadata/annotations.yaml
-
-annotations:
-  com.redhat.openshift.versions: v4.12
-  # Core bundle annotations.
-  operators.operatorframework.io.bundle.mediatype.v1: registry+v1
-  operators.operatorframework.io.bundle.manifests.v1: manifests/
-  operators.operatorframework.io.bundle.metadata.v1: metadata/
-  operators.operatorframework.io.bundle.package.v1: wandb-operator
-  operators.operatorframework.io.bundle.channels.v1: stable
-  operators.operatorframework.io.bundle.channel.default.v1: stable
-  operators.operatorframework.io.metrics.builder: operator-sdk-v1.37.0
-  operators.operatorframework.io.metrics.mediatype.v1: metrics+v1
-  operators.operatorframework.io.metrics.project_layout: go.kubebuilder.io/v3
-
-  # Annotations for testing.
-  operators.operatorframework.io.test.mediatype.v1: scorecard+v1
-  operators.operatorframework.io.test.config.v1: tests/scorecard/
-```
-
-## Building the Operator Bundle Image
-
-You can create a bundle image using the following `Dockerfile`:
-
-```
-$ cat bundle.Dockerfile
-
-FROM scratch
-
-# Core bundle labels.
-LABEL operators.operatorframework.io.bundle.mediatype.v1=registry+v1
-LABEL operators.operatorframework.io.bundle.manifests.v1=manifests/
-LABEL operators.operatorframework.io.bundle.metadata.v1=metadata/
-LABEL operators.operatorframework.io.bundle.package.v1=wandb-operator
-LABEL operators.operatorframework.io.bundle.channels.v1=stable
-LABEL operators.operatorframework.io.bundle.channel.default.v1=stable
-LABEL operators.operatorframework.io.metrics.builder=operator-sdk-v1.37.0
-LABEL operators.operatorframework.io.metrics.mediatype.v1=metrics+v1
-LABEL operators.operatorframework.io.metrics.project_layout=go.kubebuilder.io/v3
-
-# Labels for testing.
-LABEL operators.operatorframework.io.test.mediatype.v1=scorecard+v1
-LABEL operators.operatorframework.io.test.config.v1=tests/scorecard/
-
-# Copy files to locations specified by labels.
-COPY ./manifests /manifests/
-COPY ./metadata /metadata/
-COPY ./tests/scorecard /tests/scorecard/
-
-LABEL com.redhat.openshift.versions=v4.12
-```
-
-To build the image and push it to a public repository, use the following command:
-
-```
-docker build -f bundle.Dockerfile -t quay.io/wandb_tools/wandb-operator:v1.0.0 .
-```
-
-At this point, you have built the operator bundle image. To integrate it into Red Hat's certification pipeline, you can push the image for Red Hat verification. However, this image is not deployable as a CatalogSource on OpenShift yet.
-
-## Creating a CatalogSource for OpenShift
-
-To deploy the operator on OpenShift, you must create a `CatalogSource` from the bundle image. First, ensure that the `opm` tool is installed.
-
-Run the following command to create the `CatalogSource`:
-
-```
-opm index add --container-tool docker --bundles quay.io/wandb_tools/wandb-operator:v1.0.0  --tag quay.io/wandb_tools/wandb-operator-index:v1.0.0
-```
-
-This will generate an image that can be used as a `CatalogSource`: `quay.io/wandb_tools/wandb-operator-index:v1.0.0`.
-
-### Updating CSVs for New Versions
-
-If you want to replace an old CSV with a new one in your catalog, you can use the following command to include both bundles:
-
-```
-opm index add --container-tool=docker --bundles=quay.io/wandb_tools/wandb-operator:v1.0.0,quay.io/wandb_tools/wandb-operator:v1.0.1 --tag  quay.io/wandb_tools/wandb-operator-index:v1.0.1
-```
-
-This command creates an image (`v1.0.1`) that supersedes the older CSV (`v1.0.0`).
-
-## OLM Catalog Source Upgrade Chain
-
-When managing multiple versions of an operator, it is crucial for OLM to automatically upgrade to the latest version. To achieve this, the `CSV` must include a `replaces` field, indicating which previous CSV version it is replacing.
-
-Consider the following example where the initial version (`v1.0.0`) of the operator is created:
-
-```
-opm index add --container-tool docker --bundles quay.io/wandb_tools/wandb-operator:v1.0.0  --tag quay.io/wandb_tools/wandb-operator-index:v1.0.0
-```
-
-Once a new version (`v1.0.1`) is released, you can specify the `--from-index` option to ensure the upgrade chain links to the previous version:
-
-```
-opm index add --container-tool=docker --bundles=quay.io/wandb_tools/wandb-operator:v1.0.1 --from-index=quay.io/wandb_tools/wandb-operator-index:v1.0.0 --tag quay.io/wandb_tools/wandb-operator-index:v1.0.1
-
-```
-
-This ensures that `v1.0.1` will automatically replace `v1.0.0` when upgrading.
-
-You can continue this process for subsequent versions, and `opm` will manage the version upgrade chain via the `CSV` definitions.
