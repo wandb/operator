@@ -91,7 +91,9 @@ func reconcileConsolidatedIngress(ctx context.Context, c ctrlClient.Client, wand
 			},
 		})
 	}
-
+	if watchtowerPath := watchtowerIngressPath(wandb); watchtowerPath != nil {
+		paths = append(paths, *watchtowerPath)
+	}
 	if len(paths) == 0 {
 		return nil
 	}
@@ -170,6 +172,7 @@ func reconcileConsolidatedIngress(ctx context.Context, c ctrlClient.Client, wand
 				return err
 			}
 			wandb.Status.IngressStatus = summarizeIngressStatus(desired)
+			wandb.Status.IngressStatus.Ready = isIngressReady(current)
 			return nil
 		}
 		return err
@@ -180,7 +183,22 @@ func reconcileConsolidatedIngress(ctx context.Context, c ctrlClient.Client, wand
 		return err
 	}
 	wandb.Status.IngressStatus = summarizeIngressStatus(current)
+	wandb.Status.IngressStatus.Ready = isIngressReady(current)
 	return nil
+}
+
+// An Ingress has no Ready condition, so readiness is "an address was assigned"
+// This status is needed prior to creating watchtower application.
+func isIngressReady(ingress *networkingv1.Ingress) bool {
+	if ingress == nil {
+		return false
+	}
+	for _, lb := range ingress.Status.LoadBalancer.Ingress {
+		if lb.IP != "" || lb.Hostname != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func deleteConsolidatedIngress(ctx context.Context, c ctrlClient.Client, wandb *apiv2.WeightsAndBiases) error {

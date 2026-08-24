@@ -56,9 +56,13 @@ func resolveInfraRoutes(ctx context.Context, c ctrlClient.Client, wandb *apiv2.W
 			}
 			svcName := fmt.Sprintf("%s-s3", objectStoreSpec.Name)
 			port, err := resolveInfraServicePort(ctx, c, types.NamespacedName{Name: svcName, Namespace: objectStoreSpec.Namespace}, cfg.Ingress, 8333)
+			if apiErrors.IsNotFound(err) {
+				continue
+			}
 			if err != nil {
 				return nil, fmt.Errorf("bucket instance %q: %w", instanceName, err)
 			}
+
 			entries = append(entries, infraRouteEntry{
 				name:            fmt.Sprintf("%s-bucket-%s", wandb.Name, infraRouteInstanceName(crKey, instanceName)),
 				namespace:       objectStoreSpec.Namespace,
@@ -90,9 +94,13 @@ func resolveInfraRoutes(ctx context.Context, c ctrlClient.Client, wandb *apiv2.W
 				cfg.Ingress,
 				8123,
 			)
+			if apiErrors.IsNotFound(err) {
+				continue
+			}
 			if err != nil {
 				return nil, fmt.Errorf("clickhouse instance %q: %w", instanceName, err)
 			}
+
 			entries = append(entries, infraRouteEntry{
 				name:            fmt.Sprintf("%s-clickhouse-%s", wandb.Name, infraRouteInstanceName(crKey, instanceName)),
 				namespace:       chSpec.Namespace,
