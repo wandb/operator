@@ -1,10 +1,6 @@
 dependencies:
   - type: olm.package
     value:
-      packageName: redis-operator
-      version: ">=0.15.0"
-  - type: olm.package
-    value:
       packageName: clickhouse
       version: ">=0.26.3"
   - type: olm.package

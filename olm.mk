@@ -19,7 +19,7 @@ BUNDLE_GEN_FLAGS ?= -q --overwrite --version $(VERSION) --package wandb-operator
 
 # OpenShift floor from CRC 2.60.1 (OpenShift 4.21.8).
 OPENSHIFT_VERSIONS ?= v4.21
-BUNDLE_REPLACES ?= wandb-operator.v1.21.2
+BUNDLE_REPLACES ?= wandb-operator.v1.22.0
 COMMUNITY_BUNDLE_DIR ?= dist/community-operators/operators/wandb-operator/$(VERSION)
 
 .PHONY: bundle

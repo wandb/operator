@@ -53,3 +53,7 @@ hack/testing-manifests/wandb/.generated/*.yaml
 
 # various util artifacts
 .k8s-images
+
+# Python bytecode (hack/scripts/*.py)
+__pycache__/
+*.pyc

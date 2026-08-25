@@ -56,6 +56,44 @@ def set_csv_field(csv_text: str, field: str, value: str) -> str:
     return "\n".join(lines) + "\n"
 
 
+# Catalog redis-operator tops out at 0.15.1 and cannot reconcile the Redis
+# CRs this operator writes. Do not list those GVKs as required — OLM treats
+# required CRDs as install deps and will pull 0.15.1 even without a package dep.
+_REDIS_REQUIRED_CRD_NAMES = {
+    "redis.redis.redis.opstreelabs.in",
+    "redisreplications.redis.redis.opstreelabs.in",
+    "redissentinels.redis.redis.opstreelabs.in",
+}
+
+
+def drop_redis_required_crds(csv_text: str) -> str:
+    lines = csv_text.splitlines(keepends=True)
+    out: list[str] = []
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        if line.startswith("    - ") and i + 1 < len(lines):
+            block = [line]
+            j = i + 1
+            while j < len(lines) and (
+                lines[j].startswith("      ") or lines[j].strip() == ""
+            ):
+                block.append(lines[j])
+                j += 1
+            name = ""
+            for entry in block:
+                stripped = entry.strip()
+                if stripped.startswith("name:"):
+                    name = stripped.split(":", 1)[1].strip()
+                    break
+            if name in _REDIS_REQUIRED_CRD_NAMES:
+                i = j
+                continue
+        out.append(line)
+        i += 1
+    return "".join(out)
+
+
 def set_dockerfile_label(dockerfile_text: str, key: str, value: str) -> str:
     label = f"LABEL {key}={value}"
     lines = dockerfile_text.splitlines()
@@ -108,7 +146,8 @@ def main() -> int:
         )
     )
     shutil.copyfile(args.dependencies, bundle / "metadata" / "dependencies.yaml")
-    csv_text = set_csv_field(csvs[0].read_text(), "replaces", args.replaces)
+    csv_text = drop_redis_required_crds(csvs[0].read_text())
+    csv_text = set_csv_field(csv_text, "replaces", args.replaces)
     container_image = args.container_image
     if not container_image:
         for line in csv_text.splitlines():

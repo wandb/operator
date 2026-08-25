@@ -41,21 +41,6 @@ spec:
       name: weightsandbiases.apps.wandb.com
       version: v1
     required:
-    - description: Redis standalone instance managed by the OT Container Kit redis-operator.
-      displayName: Redis
-      kind: Redis
-      name: redis.redis.redis.opstreelabs.in
-      version: v1beta2
-    - description: Redis replication instance managed by the OT Container Kit redis-operator.
-      displayName: Redis Replication
-      kind: RedisReplication
-      name: redisreplications.redis.redis.opstreelabs.in
-      version: v1beta2
-    - description: Redis Sentinel instance managed by the OT Container Kit redis-operator.
-      displayName: Redis Sentinel
-      kind: RedisSentinel
-      name: redissentinels.redis.redis.opstreelabs.in
-      version: v1beta2
     - description: ClickHouse cluster managed by the Altinity ClickHouse operator.
       displayName: ClickHouse Installation
       kind: ClickHouseInstallation

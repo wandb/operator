@@ -31,8 +31,13 @@ spec:
           key: password
   redis:
     default:
-      managedRedis:
-        storageSize: 1Gi
+      externalRedis:
+        host:
+          name: wandb-redis
+          key: host
+        port:
+          name: wandb-redis
+          key: port
   kafka:
     managedKafka:
       storageSize: 10Gi
