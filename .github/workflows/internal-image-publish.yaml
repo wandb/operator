@@ -47,6 +47,22 @@ jobs:
       - name: Authorize Docker for Artifact Registry
         run: gcloud auth configure-docker us-docker.pkg.dev --quiet
 
+      - name: Mint a token to read wandb/watchtower releases
+        id: watchtower-token
+        # The image build downloads the Watchtower binary from that private repo;
+        # this repo's GITHUB_TOKEN can't reach it.
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.WESTEST_APP_ID }}
+          private-key: ${{ secrets.WESTEST_APP_PRIVATE_KEY }}
+          owner: wandb
+          repositories: watchtower
+
+      - name: Download the Watchtower binary
+        env:
+          GH_TOKEN: ${{ steps.watchtower-token.outputs.token }}
+        run: make download-watchtower
+
       - name: Build and publish development image
         env:
           IMAGE_REPOSITORY: us-docker.pkg.dev/wandb-production/public/wandb/operator

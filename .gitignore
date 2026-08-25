@@ -57,3 +57,6 @@ hack/testing-manifests/wandb/.generated/*.yaml
 # Python bytecode (hack/scripts/*.py)
 __pycache__/
 *.pyc
+
+# Downloaded by `make download-watchtower` for the image build
+/watchtower
