@@ -9,11 +9,6 @@ on:
 jobs:
   build-and-scan:
     runs-on: ubuntu-latest
-    # The build pulls the Watchtower binary from the private wandb/watchtower
-    # releases, which needs an App token. Fork PRs get no secrets, so this job
-    # can't run for them; pull_request_target is not an option here because it
-    # would expose the token to the fork's Dockerfile.
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - name: Checkout code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
