@@ -292,6 +292,16 @@ commonEnvvars:
         - name: security
           type: custom-resource
           field: spec.wandb.security.hideUpgradeBanner
+    - name: GORILLA_ARTIFACT_GC_ENABLED
+      sources:
+        - name: retention
+          type: custom-resource
+          field: spec.wandb.retention.artifactGarbageCollection
+    - name: GORILLA_DATA_RETENTION_PERIOD
+      sources:
+        - name: retention
+          type: custom-resource
+          field: spec.wandb.retention.dataRetentionPeriod
     - name: GORILLA_BUCKET_ATTRIBUTION_DISABLED
       sources:
         - name: object-store
@@ -542,6 +552,8 @@ commonEnvvars:
       value: "/tmp/wandb-home"
     - name: XDG_CACHE_HOME
       value: "/tmp/wandb-cache"
+    - name: WANDB_RUNTIME_CA_BUNDLE
+      value: "/tmp/wandb-ca-bundle.pem"
   pythonRuntimePaths:
     - name: PYTHONDONTWRITEBYTECODE
       value: "1"
@@ -580,7 +592,7 @@ applications:
       - runtimeTmp
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/anaconda2
-      tag: 0.84.0-notifications-security-flags.0
+      tag: 0.84.0-notifications-security-flags.1
     containers:
       - name: anaconda2
         ports:
@@ -632,7 +644,7 @@ applications:
             type: mysql
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.84.0-notifications-security-flags.0
+      tag: 0.84.0-notifications-security-flags.1
     containers:
       - name: api
         args:
@@ -678,7 +690,7 @@ applications:
       - runtimeTmp
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.84.0-notifications-security-flags.0
+      tag: 0.84.0-notifications-security-flags.1
     containers:
       - name: executor
         args:
@@ -698,7 +710,7 @@ applications:
       - runtimeTmp
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.84.0-notifications-security-flags.0
+      tag: 0.84.0-notifications-security-flags.1
   filestream:
     name: filestream
     features:
@@ -716,7 +728,7 @@ applications:
       - runtimeTmp
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.84.0-notifications-security-flags.0
+      tag: 0.84.0-notifications-security-flags.1
     containers:
       - name: filestream
   flat-run-fields-updater:
@@ -739,14 +751,14 @@ applications:
         value: "$(KAFKA_URL)/$(KAFKA_RUNS_V2_TOPIC_NAME)?consumer_group_id=flat-run-fields-updater"
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.84.0-notifications-security-flags.0
+      tag: 0.84.0-notifications-security-flags.1
     containers:
       - name: flat-run-fields-updater
   frontend:
     name: frontend
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/frontend-nginx
-      tag: 0.84.0-notifications-security-flags.0
+      tag: 0.84.0-notifications-security-flags.1
     commonEnvs:
       - frontend
     env:
@@ -839,7 +851,7 @@ applications:
         value: "memory://"
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.84.0-notifications-security-flags.0
+      tag: 0.84.0-notifications-security-flags.1
     containers:
       - name: glue
   metric-observer:
@@ -862,7 +874,7 @@ applications:
         value: "$(KAFKA_URL)/$(KAFKA_RUNS_V2_TOPIC_NAME)?consumer_group_id=metric-observer"
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.84.0-notifications-security-flags.0
+      tag: 0.84.0-notifications-security-flags.1
     containers:
       - name: metric-observer
   parquet:
@@ -882,7 +894,7 @@ applications:
       - runtimeTmp
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.84.0-notifications-security-flags.0
+      tag: 0.84.0-notifications-security-flags.1
     containers:
       - name: parquet
         ports:
@@ -904,7 +916,7 @@ applications:
     name: weave
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-python
-      tag: 0.84.0-notifications-security-flags.0
+      tag: 0.84.0-notifications-security-flags.1
     commonEnvs:
       - runtimePaths
       - pythonRuntimePaths
@@ -936,6 +948,7 @@ applications:
             path: /__weave/hello
       - name: weave-cache-clear
         command:
+          - /usr/local/bin/wandb-entrypoint
           - python
           - weave-public/weave_query/scripts/clear_cache.py
         resources:
@@ -960,7 +973,7 @@ applications:
     name: weave-trace
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
-      tag: 0.84.0-notifications-security-flags.0
+      tag: 0.84.0-notifications-security-flags.1
     commonEnvs:
       - clickhouse
       - kafka
@@ -1009,7 +1022,7 @@ applications:
     name: weave-trace-worker
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
-      tag: 0.84.0-notifications-security-flags.0
+      tag: 0.84.0-notifications-security-flags.1
     env:
       - name: DD_TRACE_ENABLED
         value: "false"
@@ -1032,7 +1045,7 @@ applications:
     legacyKey: weave-evaluate-model-worker
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
-      tag: 0.84.0-notifications-security-flags.0
+      tag: 0.84.0-notifications-security-flags.1
     env:
       - name: DD_TRACE_ENABLED
         value: "false"
@@ -1055,7 +1068,7 @@ migrations:
   gorilla:
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.84.0-notifications-security-flags.0
+      tag: 0.84.0-notifications-security-flags.1
     args:
       - "migrate"
       - "--db=$(GORILLA_METADATA_STORE)"
@@ -1072,7 +1085,7 @@ migrations:
   internal-signer:
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.84.0-notifications-security-flags.0
+      tag: 0.84.0-notifications-security-flags.1
     args:
       - "secret-generation-job"
     env:
@@ -1089,7 +1102,7 @@ migrations:
   weave-trace:
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
-      tag: 0.84.0-notifications-security-flags.0
+      tag: 0.84.0-notifications-security-flags.1
     args:
       - python
       - migrator.py
