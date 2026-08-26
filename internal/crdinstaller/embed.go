@@ -19,8 +19,9 @@ package crdinstaller
 import "embed"
 
 // Each group's CRDs are committed under crds/<group>/ and embedded here.
-// The `sync-crd-embed` target refreshes these files from the operator CRDs,
-// vendored operator CRDs, and pinned telemetry chart dependencies.
+// The source-of-truth lives outside this package (config/crd/bases for the
+// operator's own CRDs; pkg/vendored/<vendor>/crds for upstream) — the
+// `sync-crd-embed` Makefile target copies updates into these directories.
 
 //go:embed crds/operator/*.yaml
 var operatorCRDs embed.FS
