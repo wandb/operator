@@ -11,9 +11,11 @@ func NewHandler(opts *Options, loggerName string) *Handler {
 	opts = withDefaults(opts)
 
 	// Layer secret redaction onto ReplaceAttr in a local copy so repeated
-	// NewHandler calls never wrap the shared opts more than once.
+	// NewHandler calls never wrap the shared opts more than once. redact runs
+	// first: masq reflects on the struct's tags, so a caller ReplaceAttr must
+	// not flatten the value before secrets are stripped.
 	ho := *opts.HandlerOptions
-	ho.ReplaceAttr = chainReplaceAttr(opts.HandlerOptions.ReplaceAttr, redact)
+	ho.ReplaceAttr = chainReplaceAttr(redact, opts.HandlerOptions.ReplaceAttr)
 
 	var baseHandler slog.Handler
 	switch opts.Format {
