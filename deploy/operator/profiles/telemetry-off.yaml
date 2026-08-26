@@ -1,7 +1,8 @@
 telemetry:
   mode: "off"
   crds:
-    enabled: false
+    victoriaMetrics: false
+    grafana: false
 
 victoria-metrics-operator:
   enabled: false

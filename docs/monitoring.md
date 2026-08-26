@@ -57,7 +57,7 @@ Notes:
 - Use the preset files in `deploy/operator/profiles/` to avoid remembering those extra flags and to switch modes cleanly on an existing release.
 - `helm upgrade --install wandb-operator ./deploy/operator --reset-values -f ./deploy/operator/profiles/telemetry-full.yaml` installs the operator plus the full local telemetry stack.
 - `helm upgrade --install wandb-operator ./deploy/operator --reset-values -f ./deploy/operator/profiles/telemetry-off.yaml` disables the telemetry stack and its dependent operators.
-- When enabling telemetry on a release installed with `off`, first run an upgrade with `--reuse-values --set telemetry.crds.enabled=true`. After it succeeds, run the upgrade with the `telemetry-full.yaml` or `telemetry-forward.yaml` profile.
+- When enabling telemetry on a release installed with `off`, first run an upgrade with `--reuse-values --set telemetry.crds.victoriaMetrics=true` and, for `full`, `--set telemetry.crds.grafana=true`. After it succeeds, run the upgrade with the `telemetry-full.yaml` or `telemetry-forward.yaml` profile.
 - `helm install telemetry ./deploy/telemetry --set mode=full --set namespace=<ns>` installs just the telemetry resources and expects the VictoriaMetrics/Grafana operators and CRDs to already exist.
 - When rendering YAML manually, use `helm template <release> ./deploy/operator --include-crds ...` so the VictoriaMetrics and Grafana CRDs are present before apply.
 

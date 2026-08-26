@@ -132,11 +132,23 @@ func TestCrdInstallerTelemetryGroupsAreOptIn(t *testing.T) {
 		}
 	}
 
-	prepareArgs := append(baseArgs, "--set", "telemetry.crds.enabled=true")
-	prepareGroups := crdInstallerGroups(t, runHelmTemplate(t, prepareArgs...))
+	forwardArgs := append(baseArgs, "--set", "telemetry.crds.victoriaMetrics=true")
+	forwardGroups := crdInstallerGroups(t, runHelmTemplate(t, forwardArgs...))
+	if !hasGroup(forwardGroups, "victoriametrics") {
+		t.Errorf("crd-installer --groups=%q missing %q", forwardGroups, "victoriametrics")
+	}
+	if hasGroup(forwardGroups, "grafana") {
+		t.Errorf("crd-installer --groups=%q unexpectedly includes %q", forwardGroups, "grafana")
+	}
+
+	fullArgs := append(baseArgs,
+		"--set", "telemetry.crds.victoriaMetrics=true",
+		"--set", "telemetry.crds.grafana=true",
+	)
+	fullGroups := crdInstallerGroups(t, runHelmTemplate(t, fullArgs...))
 	for _, group := range []string{"victoriametrics", "grafana"} {
-		if !hasGroup(prepareGroups, group) {
-			t.Errorf("crd-installer --groups=%q missing %q", prepareGroups, group)
+		if !hasGroup(fullGroups, group) {
+			t.Errorf("crd-installer --groups=%q missing %q", fullGroups, group)
 		}
 	}
 }

@@ -14,7 +14,10 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "enabled": {
+            "victoriaMetrics": {
+              "type": "boolean"
+            },
+            "grafana": {
               "type": "boolean"
             }
           }

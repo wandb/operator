@@ -1,7 +1,8 @@
 telemetry:
   mode: "forward"
   crds:
-    enabled: true
+    victoriaMetrics: true
+    grafana: false
 
 victoria-metrics-operator:
   enabled: true

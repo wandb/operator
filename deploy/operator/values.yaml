@@ -248,7 +248,8 @@ telemetry:
   # forward: run the in-cluster Victoria stack and forward OTLP data externally
   mode: "off"
   crds:
-    enabled: false
+    victoriaMetrics: false
+    grafana: false
   namespace: wandb
   otel:
     secretName: wandb-otel-connection

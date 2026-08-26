@@ -18,8 +18,11 @@ installed regardless. Add new groups here as new subchart-CRD dependencies land.
 {{- if (dig "altinity-clickhouse-operator" "enabled" false .Values.AsMap) -}}
   {{- $groups = append $groups "clickhouse" -}}
 {{- end -}}
-{{- if (dig "telemetry" "crds" "enabled" false .Values.AsMap) -}}
-  {{- $groups = concat $groups (list "victoriametrics" "grafana") -}}
+{{- if (dig "telemetry" "crds" "victoriaMetrics" false .Values.AsMap) -}}
+  {{- $groups = append $groups "victoriametrics" -}}
+{{- end -}}
+{{- if (dig "telemetry" "crds" "grafana" false .Values.AsMap) -}}
+  {{- $groups = append $groups "grafana" -}}
 {{- end -}}
 {{- join "," $groups -}}
 {{- end -}}
