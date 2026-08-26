@@ -312,8 +312,7 @@ def build_operator_values(telemetry_namespace):
         "victoria-metrics-operator": {
             "enabled": telemetry_enabled,
             "crds": {
-                "enabled": False,
-                "plain": False,
+                "plain": True,
             },
             "admissionWebhooks": {
                 "enabled": False,
@@ -324,6 +323,9 @@ def build_operator_values(telemetry_namespace):
         },
         "telemetry": {
             "mode": settings.get("observabilityMode"),
+            "crds": {
+                "enabled": telemetry_enabled,
+            },
             "namespace": telemetry_namespace,
         },
     }

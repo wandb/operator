@@ -1,5 +1,7 @@
 telemetry:
   mode: "full"
+  crds:
+    enabled: true
   scrape:
     kubeStateMetrics: true
 

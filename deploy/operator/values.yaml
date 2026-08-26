@@ -225,9 +225,13 @@ victoria-metrics-operator:
     seccompProfile:
       type: RuntimeDefault
   crds:
-    # Installed upgrade-safely by the crd-installer Job; subchart ships the controller only.
-    enabled: false
-    plain: false
+    # Install Victoria CRDs through Helm's CRD phase so telemetry resources
+    # in this chart can be created in the same release.
+    plain: true
+    upgrade:
+      enabled: true
+      # Required to update the Victoria CRD Fields
+      forceConflicts: true
 
 grafana-operator:
   # Helm dependency conditions are boolean-only, so full installs
@@ -243,6 +247,8 @@ telemetry:
   # full: run the in-cluster Victoria stack and local Grafana
   # forward: run the in-cluster Victoria stack and forward OTLP data externally
   mode: "off"
+  crds:
+    enabled: false
   namespace: wandb
   otel:
     secretName: wandb-otel-connection

@@ -10,6 +10,15 @@
           "type": "string",
           "enum": ["off", "forward", "full"]
         },
+        "crds": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            }
+          }
+        },
         "namespace": {
           "type": "string"
         },

@@ -122,40 +122,25 @@ func TestStandaloneTelemetryChartFullModeRendersCoreStack(t *testing.T) {
 	mustContain(t, output, "datadog:")
 }
 
-// The crd-installer Job installs VM + Grafana CRDs in every mode so an off→full
-// upgrade never has to add CRDs (which Helm won't do on upgrade).
-func TestCrdInstallerAlwaysRequestsTelemetryGroups(t *testing.T) {
-	modes := []struct {
-		name  string
-		extra []string
-	}{
-		{"off", []string{"--set", "telemetry.mode=off"}},
-		{"forward", []string{
-			"--set", "telemetry.mode=forward",
-			"--set", "telemetry.forwarding.otlp.endpoint=https://otel.example.com",
-			"--set", "victoria-metrics-operator.enabled=true",
-		}},
-		{"full", []string{
-			"--set", "telemetry.mode=full",
-			"--set", "victoria-metrics-operator.enabled=true",
-			"--set", "grafana-operator.enabled=true",
-		}},
+func TestCrdInstallerTelemetryGroupsAreOptIn(t *testing.T) {
+	baseArgs := []string{"--set", "helmHooks.enabled=true", "--set", "wandb.install=false"}
+
+	offGroups := crdInstallerGroups(t, runHelmTemplate(t, baseArgs...))
+	for _, group := range []string{"victoriametrics", "grafana"} {
+		if hasGroup(offGroups, group) {
+			t.Errorf("crd-installer --groups=%q unexpectedly includes %q", offGroups, group)
+		}
 	}
-	for _, m := range modes {
-		t.Run(m.name, func(t *testing.T) {
-			args := append([]string{"--set", "helmHooks.enabled=true", "--set", "wandb.install=false"}, m.extra...)
-			output := runHelmTemplate(t, args...)
-			groups := crdInstallerGroups(t, output)
-			for _, g := range []string{"victoriametrics", "grafana"} {
-				if !strings.Contains(groups, g) {
-					t.Errorf("crd-installer --groups=%q missing %q", groups, g)
-				}
-			}
-		})
+
+	prepareArgs := append(baseArgs, "--set", "telemetry.crds.enabled=true")
+	prepareGroups := crdInstallerGroups(t, runHelmTemplate(t, prepareArgs...))
+	for _, group := range []string{"victoriametrics", "grafana"} {
+		if !hasGroup(prepareGroups, group) {
+			t.Errorf("crd-installer --groups=%q missing %q", prepareGroups, group)
+		}
 	}
 }
 
-// crdInstallerGroups returns the value of the crd-installer Job's --groups flag.
 func crdInstallerGroups(t *testing.T, output string) string {
 	t.Helper()
 	const marker = "--groups="
@@ -166,6 +151,15 @@ func crdInstallerGroups(t *testing.T, output string) string {
 	}
 	t.Fatalf("crd-installer --groups= flag not found in rendered output")
 	return ""
+}
+
+func hasGroup(groups, target string) bool {
+	for _, group := range strings.Split(groups, ",") {
+		if strings.TrimSpace(group) == target {
+			return true
+		}
+	}
+	return false
 }
 
 func runHelmTemplate(t *testing.T, extraArgs ...string) string {
