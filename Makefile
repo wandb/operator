@@ -58,7 +58,7 @@ generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="{./api/v1,./api/v2}"
 
 .PHONY: generate-vendored
-generate-vendored: ## Regenerate vendored Moco/VictoriaMetrics/Grafana CRDs from the operator's Helm chart dependencies.
+generate-vendored: ## Regenerate vendored Moco CRDs from the operator's Helm chart dependency.
 	@helm dependency update deploy/operator >/dev/null
 	@tar -xzOf deploy/operator/charts/moco-*.tgz moco/templates/generated/crds/moco_crds.yaml | \
 		sed -e '/^{{/d' \
@@ -70,13 +70,6 @@ generate-vendored: ## Regenerate vendored Moco/VictoriaMetrics/Grafana CRDs from
 		    -e "s|: '{{ .Release.Namespace }}'|: moco-system|g" \
 		> pkg/vendored/moco/crds/moco_crds.yaml
 	@echo "Regenerated pkg/vendored/moco/crds/moco_crds.yaml"
-	@mkdir -p pkg/vendored/victoria-metrics-operator/crds pkg/vendored/grafana-operator/crds
-	@tar -xzOf deploy/operator/charts/victoria-metrics-operator-*.tgz victoria-metrics-operator/crd.yaml \
-		> pkg/vendored/victoria-metrics-operator/crds/vm_crds.yaml
-	@rm -f pkg/vendored/grafana-operator/crds/*.yaml
-	@tar -xzf deploy/operator/charts/grafana-operator-*.tgz -C pkg/vendored/grafana-operator/crds \
-		--strip-components=3 grafana-operator/files/crds
-	@echo "Regenerated vendored VictoriaMetrics + Grafana CRDs"
 
 .PHONY: sync-crd-embed
 sync-crd-embed: manifests ## Sync embedded CRDs in internal/crdinstaller/crds from their source-of-truth locations.
@@ -85,8 +78,10 @@ sync-crd-embed: manifests ## Sync embedded CRDs in internal/crdinstaller/crds fr
 	@cp config/crd/bases/apps.wandb.com_*.yaml internal/crdinstaller/crds/operator/
 	@cp pkg/vendored/redis-operator/crds/*.yaml internal/crdinstaller/crds/redis/
 	@cp pkg/vendored/altinity-clickhouse/crds/clickhouse.altinity.com_clickhouseinstallations.yaml internal/crdinstaller/crds/clickhouse/
-	@cp pkg/vendored/victoria-metrics-operator/crds/*.yaml internal/crdinstaller/crds/victoriametrics/
-	@cp pkg/vendored/grafana-operator/crds/*.yaml internal/crdinstaller/crds/grafana/
+	@tar -xzOf deploy/operator/charts/victoria-metrics-operator-*.tgz victoria-metrics-operator/crd.yaml \
+		> internal/crdinstaller/crds/victoriametrics/vm_crds.yaml
+	@tar -xzf deploy/operator/charts/grafana-operator-*.tgz \
+		-C internal/crdinstaller/crds/grafana --strip-components=3 grafana-operator/files/crds
 	@echo "Synced CRDs into internal/crdinstaller/crds/{operator,redis,clickhouse,victoriametrics,grafana}/"
 
 .PHONY: fmt
