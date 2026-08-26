@@ -1,10 +1,11 @@
 # Watchtower ships in this image as a second entrypoint: the operator synthesizes
 # an Application that runs the same image with `command: ["/watchtower"]`, and
 # finds this image by name through OPERATOR_IMAGE. Its binary embeds a Next.js
-# static export, so it cannot be rebuilt from Go source here — lift the binary out
-# of the published Watchtower image instead.
-ARG WATCHTOWER_IMAGE=us-docker.pkg.dev/wandb-production/public/wandb/watchtower
-ARG WATCHTOWER_VERSION=0.11.0
+# static export, so it cannot be rebuilt from Go source here.
+#
+# This build does NOT download it. Run `make download-watchtower` first — that
+# pulls the binary for the target arch out of the private wandb/watchtower GitHub
+# Release into the repo root, and this build only copies the result.
 
 # Build the manager binary
 FROM golang:1.26 AS manager-builder
@@ -34,15 +35,14 @@ COPY internal/ internal/
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o manager ./cmd/manager
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o crd-installer ./cmd/crd-installer
 
-FROM ${WATCHTOWER_IMAGE}:${WATCHTOWER_VERSION} AS watchtower
-
 FROM registry.access.redhat.com/ubi9/ubi-minimal
 
 WORKDIR /
 COPY --from=manager-builder /workspace/manager .
 COPY --from=manager-builder /workspace/crd-installer .
-# Built CGO-free on golang:alpine, so it runs unmodified on this glibc base.
-COPY --from=watchtower /watchtower .
+# Released CGO-free and statically linked, so it runs unmodified on this glibc base.
+# Produced by `make download-watchtower`, not by this build.
+COPY watchtower /watchtower
 
 RUN mkdir -p /helm/.cache/helm /helm/.config/helm /helm/.local/share/helm && \
     chown -R 65532:65532 /helm
