@@ -3955,6 +3955,7 @@ spec:
                 - medium
                 - large
                 - xlarge
+                - 2xlarge
                 - xxlarge
                 type: string
               tolerations:

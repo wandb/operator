@@ -119,6 +119,14 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 			Expect(obj.Status.Wandb.Applications).To(HaveKey("api"))
 		})
 
+		It("normalizes the legacy xxlarge size spelling", func() {
+			obj.Spec.Size = appsv2.SizeXXLarge
+
+			Expect(defaulter.Default(ctx, obj)).To(Succeed())
+
+			Expect(obj.Spec.Size).To(Equal(appsv2.Size2XLarge))
+		})
+
 		It("returns an error for wrong object type", func() {
 			err := defaulter.Default(ctx, &corev1.Pod{})
 			Expect(err).To(HaveOccurred())
