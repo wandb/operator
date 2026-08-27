@@ -13,6 +13,16 @@ on:
         type: string
         required: false
         default: ""
+      channel:
+        description: "Version channel: nightly (scheduled) or dev (manual/branch)."
+        type: string
+        required: false
+        default: "nightly"
+      dev_tag:
+        description: "Optional label for dev builds (version becomes <base>-dev-<tag>-<timestamp>)."
+        type: string
+        required: false
+        default: ""
     outputs:
       image_tag:
         description: "Nightly operator image tag (== chart_version)."
@@ -43,24 +53,42 @@ jobs:
           persist-credentials: false
           ref: ${{ inputs.ref }}
 
-      - name: Derive nightly version
+      - name: Derive version
         id: version
         shell: bash
+        env:
+          CHANNEL: ${{ inputs.channel }}
+          DEV_TAG: ${{ inputs.dev_tag }}
         run: |
           set -euo pipefail
+          case "${CHANNEL}" in
+            nightly | dev) ;;
+            *) echo "invalid channel '${CHANNEL}' (want nightly|dev)" >&2; exit 1 ;;
+          esac
           ts="$(date -u +%Y%m%d-%H%M%S)"
           sha="$(git rev-parse --short=7 HEAD)"
           # Lead with the current chart's release line (strip any prerelease suffix).
           # TODO: once 2.0.0 is GA (Chart.yaml has no prerelease), lead with the NEXT
-          # semver (bump patch/minor) so nightlies sort ABOVE the last release rather
+          # semver (bump patch/minor) so builds sort ABOVE the last release rather
           # than below it as a 2.0.0 prerelease.
           base="$(awk '$1 == "version:" { print $2; exit }' deploy/operator/Chart.yaml | tr -d '"' | cut -d- -f1)"
+          # dev builds may carry a user label; sanitize it to a SemVer-safe token
+          # (alnum + single dashes, no dots) so the prerelease stays one identifier.
+          if [ "${CHANNEL}" = "dev" ] && [ -n "${DEV_TAG}" ]; then
+            safe_tag="$(printf '%s' "${DEV_TAG}" | tr -c 'A-Za-z0-9' '-' | sed -e 's/-\{2,\}/-/g' -e 's/^-//' -e 's/-$//')"
+          else
+            safe_tag=""
+          fi
           # One version string for BOTH the image tag and the chart version.
-          version="${base}-nightly-${ts}"
+          if [ -n "${safe_tag}" ]; then
+            version="${base}-${CHANNEL}-${safe_tag}-${ts}"
+          else
+            version="${base}-${CHANNEL}-${ts}"
+          fi
           echo "image_tag=${version}" >> "${GITHUB_OUTPUT}"
           echo "chart_version=${version}" >> "${GITHUB_OUTPUT}"
           {
-            echo "### Nightly build"
+            echo "### ${CHANNEL} build"
             echo "- version (image + chart): \`${version}\`"
             echo "- image: \`${IMAGE_REPOSITORY}:${version}\`"
             echo "- chart: \`${CHART_REPOSITORY}/operator:${version}\`"
@@ -88,7 +116,7 @@ jobs:
       - name: Authorize Docker for Artifact Registry
         run: gcloud auth configure-docker us-docker.pkg.dev --quiet
 
-      - name: Bake nightly image tag into chart values
+      - name: Bake image tag into chart values
         env:
           IMAGE_TAG: ${{ steps.version.outputs.image_tag }}
         run: |
@@ -112,7 +140,7 @@ jobs:
           GH_TOKEN: ${{ steps.watchtower-token.outputs.token }}
         run: make download-watchtower
 
-      - name: Build and push nightly image
+      - name: Build and push operator image
         env:
           IMAGE_TAG: ${{ steps.version.outputs.image_tag }}
         run: make docker-build docker-push IMG="${IMAGE_REPOSITORY}:${IMAGE_TAG}"
@@ -130,7 +158,7 @@ jobs:
           helm repo add ci-grafana https://grafana.github.io/helm-charts
           helm dependency build deploy/operator
 
-      - name: Package, verify, and push nightly chart
+      - name: Package, verify, and push operator chart
         env:
           IMAGE_TAG: ${{ steps.version.outputs.image_tag }}
           CHART_VERSION: ${{ steps.version.outputs.chart_version }}

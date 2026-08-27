@@ -493,6 +493,10 @@ type WandbAppSpec struct {
 	// +optional
 	Security SecuritySpec `json:"security,omitempty"`
 
+	// Retention Spec for the WandB application
+	// +optional
+	Retention *RetentionSpec `json:"retention,omitempty"`
+
 	// LegacyOverrides holds env/resource overrides extracted from v1
 	// spec.values, keyed by manifest application name plus the reserved
 	// "global" key (env only, applied to every application). Unknown keys are
@@ -704,6 +708,11 @@ func (s *SlackSpec) Normalize() {
 	}
 	s.ClientID.Normalize()
 	s.ClientSecret.Normalize()
+}
+
+type RetentionSpec struct {
+	ArtifactGarbageCollection bool             `json:"artifactGarbageCollection,omitempty"`
+	DataRetentionPeriod       *metav1.Duration `json:"dataRetentionPeriod,omitempty"`
 }
 
 type ManagedInfraSpec struct {

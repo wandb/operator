@@ -1,19 +1,42 @@
 name: Nightly WESTest
 
-# Nightly end-to-end testing of the operator via wandb/westest. Builds a nightly
-# operator image+chart, then runs WESTest scenarios against it on large runners.
+# End-to-end testing of the operator via wandb/westest. Builds an operator
+# image+chart and runs WESTest scenarios against it on large runners.
+#   - schedule                    -> nightly build (2.0.0-nightly-<timestamp>)
+#   - manual (workflow_dispatch)  -> dev build (2.0.0-dev-[<tag>-]<timestamp>),
+#                                    builds the dispatched branch; set `dev_tag`
+#                                    to label it.
+#   - manual + `operator_version` -> skip the build and test that already-published
+#                                    chart version.
 # See docs/nightly-westest-testing.md for the full plan, prerequisites, and phases.
 #
-# Currently workflow_dispatch-only. Do NOT enable the schedule trigger until the
-# prerequisites in docs/nightly-westest-testing.md §7 are met (notably: the
-# WESTEST_APP_ID / WESTEST_APP_PRIVATE_KEY secrets for the wandb/westest App token,
-# and ubuntu-latest-8-cores availability).
+# Do NOT enable the schedule trigger until the prerequisites in
+# docs/nightly-westest-testing.md §7 are met (WESTEST_APP_ID /
+# WESTEST_APP_PRIVATE_KEY secrets, and ubuntu-latest-8-cores availability).
 
 on:
   workflow_dispatch:
     inputs:
+      channel:
+        description: "Version channel for a manual build (schedule always uses nightly)."
+        type: choice
+        required: false
+        default: dev
+        options:
+          - dev
+          - nightly
       scenario:
-        description: "Single scenario to run (blank = full Phase 1 smoke set)."
+        description: "Single scenario to run (blank = full smoke set)."
+        type: string
+        required: false
+        default: ""
+      dev_tag:
+        description: "Optional label for a manual dev build (version becomes 2.0.0-dev-<tag>-<timestamp>). Ignored when operator_version is set."
+        type: string
+        required: false
+        default: ""
+      operator_version:
+        description: "Test against this already-published operator chart version (e.g. 2.0.0-beta.3) instead of building. When set, the build is skipped."
         type: string
         required: false
         default: ""
@@ -21,31 +44,56 @@ on:
   #   - cron: "0 7 * * *" # 07:00 UTC daily
 
 concurrency:
-  group: nightly-westest
+  # Serialize per ref so dev builds on different branches don't block each other;
+  # never cancel an in-flight run.
+  group: nightly-westest-${{ github.ref }}
   cancel-in-progress: false
 
 env:
   # Pin the WESTest release; the action defaults to `latest`, which resolves by
-  # creation date and would make nightlies non-reproducible.
+  # creation date and would make runs non-reproducible.
   WESTEST_VERSION: v0.2.0
 
 jobs:
   build:
+    # Skip the build when testing an already-published chart version.
+    if: ${{ inputs.operator_version == '' }}
     uses: ./.github/workflows/nightly-build.yaml
     permissions:
       contents: read
       id-token: write
     secrets: inherit
+    with:
+      # schedule -> nightly; manual -> the selected channel (default dev).
+      channel: ${{ github.event_name == 'schedule' && 'nightly' || inputs.channel }}
+      dev_tag: ${{ inputs.dev_tag }}
 
   setup:
-    name: Resolve scenario matrix
+    name: Resolve version & matrix
     needs: build
+    # Run when the build succeeded OR was skipped (published-version mode).
+    if: ${{ always() && needs.build.result != 'failure' && needs.build.result != 'cancelled' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
     outputs:
       matrix: ${{ steps.matrix.outputs.matrix }}
+      chart_version: ${{ steps.version.outputs.chart_version }}
     steps:
+      - name: Resolve operator chart version
+        id: version
+        env:
+          OPERATOR_VERSION: ${{ inputs.operator_version }}
+          BUILT_VERSION: ${{ needs.build.outputs.chart_version }}
+        run: |
+          set -euo pipefail
+          v="${OPERATOR_VERSION:-${BUILT_VERSION}}"
+          if [ -z "${v}" ]; then
+            echo "no operator chart version resolved (build skipped and operator_version empty?)" >&2
+            exit 1
+          fi
+          echo "chart_version=${v}" >> "${GITHUB_OUTPUT}"
+          echo "Testing operator chart version: ${v}"
       - name: Build scenario matrix
         id: matrix
         env:
@@ -53,10 +101,10 @@ jobs:
         run: |
           set -euo pipefail
           if [ -n "${SCENARIO}" ]; then
-            # Phase 0 bootstrap: a single scenario chosen at dispatch time.
+            # A single scenario chosen at dispatch time.
             matrix="$(printf '["%s"]' "${SCENARIO}")"
           else
-            # Phase 1 smoke set (self-contained, no license, no cloud).
+            # Smoke set (self-contained, no license, no cloud).
             matrix='["local-kind-ingress","local-kind-gateway","local-kind-oidc-pkce","local-kind-oidc-implicit","local-kind-proxy"]'
           fi
           echo "matrix=${matrix}" >> "${GITHUB_OUTPUT}"
@@ -64,6 +112,7 @@ jobs:
   test:
     name: ${{ matrix.scenario }}
     needs: [build, setup]
+    if: ${{ always() && needs.setup.result == 'success' && needs.build.result != 'failure' && needs.build.result != 'cancelled' }}
     # The full local-kind stack needs >=8 vCPU; a standard runner leaves MySQL and
     # the ClickHouse keeper Pending on Insufficient cpu.
     runs-on: ubuntu-latest-8-cores
@@ -76,10 +125,8 @@ jobs:
       matrix:
         scenario: ${{ fromJSON(needs.setup.outputs.matrix) }}
     env:
-      # Point every remote-chart scenario at the nightly chart. WESTest reads this
-      # env var (config.go); upgrade scenarios additionally override per-phase via
-      # --param (see docs/nightly-westest-testing.md §12 for the Phase 2/3 matrix).
-      WESTEST_OPERATOR_CHART_VERSION: ${{ needs.build.outputs.chart_version }}
+      # Point every scenario at the operator chart under test (built or published).
+      WESTEST_OPERATOR_CHART_VERSION: ${{ needs.setup.outputs.chart_version }}
     steps:
       - name: Checkout (for the local westest-run action)
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -113,10 +160,10 @@ jobs:
     steps:
       - name: Summarize
         run: |
-          echo "build=${{ needs.build.result }} chart=${{ needs.build.outputs.chart_version }}"
+          echo "build=${{ needs.build.result }} chart=${{ needs.setup.outputs.chart_version }}"
           echo "test=${{ needs.test.result }}"
       - name: Notify on failure
-        if: needs.build.result != 'success' || needs.test.result != 'success'
+        if: ${{ needs.build.result == 'failure' || needs.setup.result == 'failure' || needs.test.result == 'failure' }}
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.WESTEST_SLACK_WEBHOOK }}
         run: |
@@ -127,5 +174,5 @@ jobs:
           fi
           run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           curl -fsSL -X POST -H 'Content-type: application/json' \
-            --data "{\"text\":\"Nightly WESTest failed — chart ${{ needs.build.outputs.chart_version }} — ${run_url}\"}" \
+            --data "{\"text\":\"WESTest failed — chart ${{ needs.setup.outputs.chart_version }} — ${run_url}\"}" \
             "${SLACK_WEBHOOK_URL}"
