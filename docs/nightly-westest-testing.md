@@ -123,11 +123,24 @@ run` polling, and build + every scenario show up together in one Actions run.
 
 ## 5. Versioning scheme
 
+**Run modes** (the `nightly.yaml` dispatch chooses the version channel):
+
+| Trigger | Channel | Version | Build? |
+|---------|---------|---------|--------|
+| `schedule` | nightly | `2.0.0-nightly-<datetime>` | yes (builds the default branch) |
+| manual (`workflow_dispatch`) | `channel` dropdown — **dev** (default) or **nightly** | `2.0.0-dev-<datetime>` (or `2.0.0-dev-<dev_tag>-<datetime>`); `2.0.0-nightly-<datetime>` if channel=nightly | yes (builds the **dispatched branch**) |
+| manual + `operator_version` | — | the given published version | **no** — the build is skipped and tests run against that chart |
+
+The manual `channel` input is a dropdown (`dev`/`nightly`), defaulting to `dev`;
+`schedule` always forces `nightly` regardless. `dev_tag` is sanitized to a
+SemVer-safe token (non-alphanumerics → `-`, collapsed, trimmed), so
+`feature/JIRA-123` → `2.0.0-dev-feature-JIRA-123-<datetime>`.
+
 **The image tag and the chart version are the same string** — one
-`VERSION = <base>-nightly-<datetime>` used for both (they live in different GAR
-repos, so identical tags don't clash and are trivial to correlate). The value must
-be valid SemVer 2, because a **Helm chart version must be** (an image tag could be
-arbitrary, but matching them is the whole point here):
+`VERSION = <base>-<channel>-[<dev_tag>-]<datetime>` used for both (they live in
+different GAR repos, so identical tags don't clash and are trivial to correlate).
+The value must be valid SemVer 2, because a **Helm chart version must be** (an
+image tag could be arbitrary, but matching them is the whole point here):
 
 | Artifact | Tag / version | Note |
 |----------|---------------|------|
