@@ -16,11 +16,8 @@ import (
 
 const sourceSecretName = "external-clickhouse"
 
-func sourceSel(key string) corev1.SecretKeySelector {
-	return corev1.SecretKeySelector{
-		LocalObjectReference: corev1.LocalObjectReference{Name: sourceSecretName},
-		Key:                  key,
-	}
+func sourceSel(key string) apiv2.ValueOrSecret {
+	return apiv2.ValueFromSecret(sourceSecretName, key, false)
 }
 
 func externalTestWandb(conn *apiv2.ClickHouseConnection) *apiv2.WeightsAndBiases {
@@ -114,8 +111,8 @@ func TestWriteStateCopiesDeclaredTopologyIntoConnectionSecret(t *testing.T) {
 // selectors are unset, so the keys are simply absent.
 func TestWriteStateOmitsUndeclaredTopology(t *testing.T) {
 	declared := fullyDeclaredConnection()
-	declared.Replicated = corev1.SecretKeySelector{}
-	declared.ClusterName = corev1.SecretKeySelector{}
+	declared.Replicated = apiv2.ValueOrSecret{}
+	declared.ClusterName = apiv2.ValueOrSecret{}
 
 	wandb := externalTestWandb(declared)
 	c := externalTestClient(t, wandb, baseSourceData())
@@ -154,18 +151,18 @@ func TestReadStatePublishesTopologySelectorsWhenPresent(t *testing.T) {
 	_, conn := ReadState(context.Background(), c, wandb, apiv2.DefaultInstanceName, nil)
 
 	require.NotNil(t, conn)
-	require.Equal(t, ConnectionSecretName, conn.Replicated.Name)
-	require.Equal(t, "Replicated", conn.Replicated.Key)
-	require.Equal(t, ConnectionSecretName, conn.ClusterName.Name)
-	require.Equal(t, "ClusterName", conn.ClusterName.Key)
+	require.Equal(t, ConnectionSecretName, conn.Replicated.SecretKeyRef().Name)
+	require.Equal(t, "Replicated", conn.Replicated.SecretKeyRef().Key)
+	require.Equal(t, ConnectionSecretName, conn.ClusterName.SecretKeyRef().Name)
+	require.Equal(t, "ClusterName", conn.ClusterName.SecretKeyRef().Key)
 }
 
 // Pointing a container at a key that isn't in the Secret keeps it from starting,
 // so an absent topology must leave the selector unset.
 func TestReadStateLeavesTopologySelectorsUnsetWhenAbsent(t *testing.T) {
 	declared := fullyDeclaredConnection()
-	declared.Replicated = corev1.SecretKeySelector{}
-	declared.ClusterName = corev1.SecretKeySelector{}
+	declared.Replicated = apiv2.ValueOrSecret{}
+	declared.ClusterName = apiv2.ValueOrSecret{}
 
 	wandb := externalTestWandb(declared)
 	c := externalTestClient(t, wandb, baseSourceData(), withConnectionSecret(baseSourceData()))
@@ -173,7 +170,7 @@ func TestReadStateLeavesTopologySelectorsUnsetWhenAbsent(t *testing.T) {
 	_, conn := ReadState(context.Background(), c, wandb, apiv2.DefaultInstanceName, nil)
 
 	require.NotNil(t, conn)
-	require.Empty(t, conn.Replicated.Name)
-	require.Empty(t, conn.ClusterName.Name)
-	require.Equal(t, "Host", conn.Host.Key, "the rest of the connection must still resolve")
+	require.Nil(t, conn.Replicated.SecretKeyRef())
+	require.Nil(t, conn.ClusterName.SecretKeyRef())
+	require.Equal(t, "Host", conn.Host.SecretKeyRef().Key, "the rest of the connection must still resolve")
 }

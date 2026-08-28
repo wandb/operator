@@ -239,10 +239,11 @@ func createTopicIdempotent(ctx context.Context, admin *kadm.Client, topicName st
 // in-cluster broker host:port used by the admin client.
 func resolveKafkaBootstrap(ctx context.Context, cl client.Client, wandb *apiv2.WeightsAndBiases) (string, error) {
 	conn := wandb.Status.KafkaStatus.Connection
-	secretName := conn.Host.Name
-	if secretName == "" {
+	ref := conn.Host.SecretKeyRef()
+	if ref == nil || ref.Name == "" {
 		return "", fmt.Errorf("kafka connection secret not set in status")
 	}
+	secretName := ref.Name
 
 	spec := wandb.Spec.Kafka.ManagedKafka
 	secret := &corev1.Secret{}

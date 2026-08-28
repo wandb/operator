@@ -5,14 +5,10 @@ import (
 	"testing"
 
 	appsv2 "github.com/wandb/operator/api/v2"
-	corev1 "k8s.io/api/core/v1"
 )
 
-func notificationSelector(name, key string) corev1.SecretKeySelector {
-	return corev1.SecretKeySelector{
-		LocalObjectReference: corev1.LocalObjectReference{Name: name},
-		Key:                  key,
-	}
+func notificationSelector(name, key string) appsv2.ValueOrSecret {
+	return appsv2.ValueFromSecret(name, key, false)
 }
 
 func TestValidateNotificationSpec(t *testing.T) {
@@ -43,7 +39,7 @@ func TestValidateNotificationSpec(t *testing.T) {
 		{"Slack missing secret", func(w *appsv2.WeightsAndBiases) {
 			w.Spec.Wandb.Notifications = &appsv2.NotificationsSpec{}
 			w.Spec.Wandb.Notifications.Slack = &appsv2.SlackSpec{ClientID: notificationSelector("slack", "client-id")}
-		}, "secret name is required"},
+		}, "a value or secret reference is required"},
 		{"email sink", func(w *appsv2.WeightsAndBiases) {
 			w.Spec.Wandb.Notifications = &appsv2.NotificationsSpec{}
 			w.Spec.Wandb.Notifications.Email = &appsv2.EmailSpec{Sink: &sink}
@@ -62,10 +58,10 @@ func TestValidateNotificationSpec(t *testing.T) {
 		}, "exactly one"},
 		{"SMTP missing password", func(w *appsv2.WeightsAndBiases) {
 			smtp := validSMTP()
-			smtp.Password = corev1.SecretKeySelector{}
+			smtp.Password = appsv2.ValueOrSecret{}
 			w.Spec.Wandb.Notifications = &appsv2.NotificationsSpec{}
 			w.Spec.Wandb.Notifications.Email = &appsv2.EmailSpec{SMTP: smtp}
-		}, "secret name is required"},
+		}, "a value or secret reference is required"},
 	}
 
 	for _, tc := range cases {

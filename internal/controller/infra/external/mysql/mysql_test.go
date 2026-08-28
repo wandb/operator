@@ -16,11 +16,8 @@ import (
 
 const mysqlSourceSecretName = "external-mysql"
 
-func mysqlSel(key string) corev1.SecretKeySelector {
-	return corev1.SecretKeySelector{
-		LocalObjectReference: corev1.LocalObjectReference{Name: mysqlSourceSecretName},
-		Key:                  key,
-	}
+func mysqlSel(key string) apiv2.ValueOrSecret {
+	return apiv2.ValueFromSecret(mysqlSourceSecretName, key, false)
 }
 
 func TestWriteStateAddsCustomTLSParamsWhenCACertPresent(t *testing.T) {

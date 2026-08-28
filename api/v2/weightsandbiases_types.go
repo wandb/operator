@@ -191,11 +191,11 @@ func (w *WeightsAndBiases) WatchtowerEnabled() bool {
 type ProxySpec struct {
 	// HTTPProxy is the proxy URL for plain HTTP egress (HTTP_PROXY/http_proxy).
 	// +optional
-	HTTPProxy *ProxyValue `json:"httpProxy,omitempty"`
+	HTTPProxy *ValueOrSecret `json:"httpProxy,omitempty"`
 
 	// HTTPSProxy is the proxy URL for HTTPS egress (HTTPS_PROXY/https_proxy).
 	// +optional
-	HTTPSProxy *ProxyValue `json:"httpsProxy,omitempty"`
+	HTTPSProxy *ValueOrSecret `json:"httpsProxy,omitempty"`
 
 	// NoProxy holds EXTRA no-proxy entries appended to the operator-computed
 	// in-cluster exclusions. Use it for external endpoints (e.g. a BYOB object
@@ -205,26 +205,119 @@ type ProxySpec struct {
 	NoProxy []string `json:"noProxy,omitempty"`
 }
 
-// ProxyValue is a value-or-secret union mirroring corev1.EnvVar semantics:
-// exactly one of Value or ValueFrom must be set. Credential-bearing proxy URLs
-// (http://user:pass@host:port) MUST use ValueFrom; the webhook rejects userinfo
-// in a literal Value so credentials never land in the CR / etcd / kubectl output.
-type ProxyValue struct {
-	// Value is a literal proxy URL. Must not contain userinfo (credentials).
+// ValueOrSecret supplies a configuration value either as a literal (Value) or
+// from a Secret key (ValueFrom), mirroring corev1.EnvVar semantics: exactly one
+// arm is set, enforced by the webhook. Sensitive values MUST use ValueFrom so
+// they never land in the CR / etcd / kubectl output.
+//
+// The legacy Name/Key/Optional fields carry the historical bare-SecretKeySelector
+// shape ({name, key}) so existing CRs keep validating; the defaulting webhook
+// normalizes them into ValueFrom on admission. They are deprecated and will be
+// removed at v2 GA.
+type ValueOrSecret struct {
+	// Value is a literal value.
 	// +optional
 	Value string `json:"value,omitempty"`
 
-	// ValueFrom sources the proxy URL from a Secret key (may embed credentials).
+	// ValueFrom sources the value from a Secret key.
 	// +optional
-	ValueFrom *ProxyValueSource `json:"valueFrom,omitempty"`
+	ValueFrom *SecretValueSource `json:"valueFrom,omitempty"`
+
+	// Deprecated: use ValueFrom.secretKeyRef. Retained for backward compatibility
+	// with the pre-envelope {name, key} shape; normalized into ValueFrom by the
+	// defaulting webhook and removed at v2 GA.
+	// +optional
+	Name string `json:"name,omitempty"`
+	// Deprecated: use ValueFrom.secretKeyRef.
+	// +optional
+	Key string `json:"key,omitempty"`
+	// Deprecated: use ValueFrom.secretKeyRef.
+	// +optional
+	Optional *bool `json:"optional,omitempty"`
 }
 
-// ProxyValueSource mirrors corev1.EnvVarSource (the secret case): the proxy URL
-// is read from a Secret key.
-type ProxyValueSource struct {
+// SecretValueSource reads a value from a Secret key in the W&B namespace.
+type SecretValueSource struct {
 	// SecretKeyRef selects a key of a Secret in the W&B namespace.
 	// +optional
 	SecretKeyRef *corev1.SecretKeySelector `json:"secretKeyRef,omitempty"`
+}
+
+// IsZero reports whether neither a literal, an envelope secret ref, nor a legacy
+// secret ref is set.
+func (v *ValueOrSecret) IsZero() bool {
+	return v == nil || (v.Value == "" && v.ValueFrom == nil && v.Name == "")
+}
+
+// SecretKeyRef returns the effective secret selector: the canonical
+// ValueFrom.SecretKeyRef when set, otherwise one synthesized from the legacy
+// Name/Key/Optional fields, otherwise nil (a literal or unset value).
+func (v *ValueOrSecret) SecretKeyRef() *corev1.SecretKeySelector {
+	if v == nil {
+		return nil
+	}
+	if v.ValueFrom != nil && v.ValueFrom.SecretKeyRef != nil {
+		return v.ValueFrom.SecretKeyRef
+	}
+	if v.Name != "" {
+		return &corev1.SecretKeySelector{
+			LocalObjectReference: corev1.LocalObjectReference{Name: v.Name},
+			Key:                  v.Key,
+			Optional:             v.Optional,
+		}
+	}
+	return nil
+}
+
+// AsEnvVar renders the value as a container EnvVar: a literal keeps the value in
+// the pod spec, while a secret ref stays a live SecretKeyRef so the secret is
+// never materialized. Returns a zero EnvVar (name only) when unset.
+func (v *ValueOrSecret) AsEnvVar(name string) corev1.EnvVar {
+	if v != nil && v.Value != "" {
+		return corev1.EnvVar{Name: name, Value: v.Value}
+	}
+	if ref := v.SecretKeyRef(); ref != nil {
+		return corev1.EnvVar{Name: name, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: ref.DeepCopy()}}
+	}
+	return corev1.EnvVar{Name: name}
+}
+
+// LiteralValue wraps a literal string as a ValueOrSecret.
+func LiteralValue(s string) ValueOrSecret {
+	return ValueOrSecret{Value: s}
+}
+
+// Normalize rewrites the deprecated legacy {name, key} shape into the canonical
+// ValueFrom.SecretKeyRef, so stored objects converge on the envelope. It is a
+// no-op once the value is a literal or already an envelope secret ref. The
+// defaulting webhook calls this on admission.
+func (v *ValueOrSecret) Normalize() {
+	if v == nil || v.Name == "" || v.ValueFrom != nil {
+		return
+	}
+	v.ValueFrom = &SecretValueSource{SecretKeyRef: v.SecretKeyRef()}
+	v.Name, v.Key, v.Optional = "", "", nil
+}
+
+// ValueFromSelector wraps an existing SecretKeySelector as the secret arm of a
+// ValueOrSecret. Used by v1→v2 conversion, which classifies raw values into
+// selectors before this envelope existed.
+func ValueFromSelector(sel corev1.SecretKeySelector) ValueOrSecret {
+	return ValueOrSecret{ValueFrom: &SecretValueSource{SecretKeyRef: &sel}}
+}
+
+// ValueFromSecret builds the canonical secret arm pointing at name/key. Used by
+// status writers referencing the operator-owned connection secret.
+func ValueFromSecret(name, key string, optional bool) ValueOrSecret {
+	return ValueOrSecret{
+		ValueFrom: &SecretValueSource{
+			SecretKeyRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: name},
+				Key:                  key,
+				Optional:             &optional,
+			},
+		},
+	}
 }
 
 type NetworkingMode string
@@ -517,12 +610,23 @@ type InternalServiceAuth struct {
 
 // OidcSpec defines the structure for OpenID Connect (OIDC) configuration used in Wandb application deployments.
 type OidcSpec struct {
-	ClientId     corev1.SecretKeySelector `json:"clientId,omitempty"`
-	ClientSecret corev1.SecretKeySelector `json:"clientSecret,omitempty"`
-	IssuerUrl    corev1.SecretKeySelector `json:"issuerUrl,omitempty"`
-	AuthMethod   corev1.SecretKeySelector `json:"authMethod,omitempty"`
+	ClientId     ValueOrSecret `json:"clientId,omitempty"`
+	ClientSecret ValueOrSecret `json:"clientSecret,omitempty" masq:"secret"`
+	IssuerUrl    ValueOrSecret `json:"issuerUrl,omitempty"`
+	AuthMethod   ValueOrSecret `json:"authMethod,omitempty"`
 
 	SessionLength string `json:"sessionLength,omitempty"`
+}
+
+// Normalize rewrites any legacy {name, key} field into the ValueFrom envelope.
+func (o *OidcSpec) Normalize() {
+	if o == nil {
+		return
+	}
+	o.ClientId.Normalize()
+	o.ClientSecret.Normalize()
+	o.IssuerUrl.Normalize()
+	o.AuthMethod.Normalize()
 }
 
 type SecuritySpec struct {
@@ -550,21 +654,60 @@ type NotificationsSpec struct {
 	Slack *SlackSpec `json:"slack,omitempty"`
 }
 
+// Normalize rewrites any legacy {name, key} field into the ValueFrom envelope.
+func (n *NotificationsSpec) Normalize() {
+	if n == nil {
+		return
+	}
+	n.Email.Normalize()
+	n.Slack.Normalize()
+}
+
 type EmailSMTPSpec struct {
-	Host     corev1.SecretKeySelector `json:"host"`
-	Port     corev1.SecretKeySelector `json:"port"`
-	Username corev1.SecretKeySelector `json:"username"`
-	Password corev1.SecretKeySelector `json:"password"`
+	Host     ValueOrSecret `json:"host"`
+	Port     ValueOrSecret `json:"port"`
+	Username ValueOrSecret `json:"username"`
+	Password ValueOrSecret `json:"password" masq:"secret"`
+}
+
+// Normalize rewrites any legacy {name, key} field into the ValueFrom envelope.
+func (s *EmailSMTPSpec) Normalize() {
+	if s == nil {
+		return
+	}
+	s.Host.Normalize()
+	s.Port.Normalize()
+	s.Username.Normalize()
+	s.Password.Normalize()
 }
 
 type EmailSpec struct {
-	Sink *corev1.SecretKeySelector `json:"sink,omitempty"`
-	SMTP *EmailSMTPSpec            `json:"smtp,omitempty"`
+	// Sink is a full notification sink URL; it may embed credentials.
+	Sink *ValueOrSecret `json:"sink,omitempty" masq:"secret"`
+	SMTP *EmailSMTPSpec `json:"smtp,omitempty"`
+}
+
+// Normalize rewrites any legacy {name, key} field into the ValueFrom envelope.
+func (e *EmailSpec) Normalize() {
+	if e == nil {
+		return
+	}
+	e.Sink.Normalize()
+	e.SMTP.Normalize()
 }
 
 type SlackSpec struct {
-	ClientID     corev1.SecretKeySelector `json:"clientId,omitempty"`
-	ClientSecret corev1.SecretKeySelector `json:"clientSecret,omitempty"`
+	ClientID     ValueOrSecret `json:"clientId,omitempty"`
+	ClientSecret ValueOrSecret `json:"clientSecret,omitempty" masq:"secret"`
+}
+
+// Normalize rewrites any legacy {name, key} field into the ValueFrom envelope.
+func (s *SlackSpec) Normalize() {
+	if s == nil {
+		return
+	}
+	s.ClientID.Normalize()
+	s.ClientSecret.Normalize()
 }
 
 type RetentionSpec struct {
@@ -599,20 +742,37 @@ type ManagedMysqlSpec struct {
 
 type MysqlConnection struct {
 	// required
-	Host     corev1.SecretKeySelector `json:"host,omitempty"`
-	Port     corev1.SecretKeySelector `json:"port,omitempty"`
-	Database corev1.SecretKeySelector `json:"database,omitempty"`
-	Username corev1.SecretKeySelector `json:"username,omitempty"`
-	Password corev1.SecretKeySelector `json:"password,omitempty"`
+	Host     ValueOrSecret `json:"host,omitempty"`
+	Port     ValueOrSecret `json:"port,omitempty"`
+	Database ValueOrSecret `json:"database,omitempty"`
+	Username ValueOrSecret `json:"username,omitempty"`
+	Password ValueOrSecret `json:"password,omitempty" masq:"secret"`
 
 	// optional
-	Tls     corev1.SecretKeySelector `json:"tls,omitempty"`
-	SslCa   corev1.SecretKeySelector `json:"sslCa,omitempty"`
-	SslCert corev1.SecretKeySelector `json:"sslCert,omitempty"`
-	SslKey  corev1.SecretKeySelector `json:"sslKey,omitempty"`
+	Tls     ValueOrSecret `json:"tls,omitempty"`
+	SslCa   ValueOrSecret `json:"sslCa,omitempty"`
+	SslCert ValueOrSecret `json:"sslCert,omitempty"`
+	SslKey  ValueOrSecret `json:"sslKey,omitempty" masq:"secret"`
 
-	// generated by operator
-	URL corev1.SecretKeySelector `json:"url,omitempty"`
+	// URL is the operator-assembled DSN; it embeds the password.
+	URL ValueOrSecret `json:"url,omitempty" masq:"secret"`
+}
+
+// Normalize rewrites any legacy {name, key} field into the ValueFrom envelope.
+func (c *MysqlConnection) Normalize() {
+	if c == nil {
+		return
+	}
+	c.Host.Normalize()
+	c.Port.Normalize()
+	c.Database.Normalize()
+	c.Username.Normalize()
+	c.Password.Normalize()
+	c.Tls.Normalize()
+	c.SslCa.Normalize()
+	c.SslCert.Normalize()
+	c.SslKey.Normalize()
+	c.URL.Normalize()
 }
 
 type MySQLConfig struct {
@@ -643,13 +803,27 @@ type ManagedRedisSpec struct {
 }
 
 type RedisConnection struct {
-	Host     corev1.SecretKeySelector `json:"host,omitempty"`
-	Port     corev1.SecretKeySelector `json:"port,omitempty"`
-	Password corev1.SecretKeySelector `json:"password,omitempty"`
-	Tls      corev1.SecretKeySelector `json:"tls,omitempty"`
-	SslCa    corev1.SecretKeySelector `json:"sslCa,omitempty"`
+	Host     ValueOrSecret `json:"host,omitempty"`
+	Port     ValueOrSecret `json:"port,omitempty"`
+	Password ValueOrSecret `json:"password,omitempty" masq:"secret"`
+	Tls      ValueOrSecret `json:"tls,omitempty"`
+	SslCa    ValueOrSecret `json:"sslCa,omitempty"`
 
-	URL corev1.SecretKeySelector `json:"url,omitempty"`
+	// URL is the operator-assembled URL; it may embed the password.
+	URL ValueOrSecret `json:"url,omitempty" masq:"secret"`
+}
+
+// Normalize rewrites any legacy {name, key} field into the ValueFrom envelope.
+func (c *RedisConnection) Normalize() {
+	if c == nil {
+		return
+	}
+	c.Host.Normalize()
+	c.Port.Normalize()
+	c.Password.Normalize()
+	c.Tls.Normalize()
+	c.SslCa.Normalize()
+	c.URL.Normalize()
 }
 
 type RedisConfig struct {
@@ -687,12 +861,25 @@ type ManagedKafkaSpec struct {
 }
 
 type KafkaConnection struct {
-	Host           corev1.SecretKeySelector `json:"host,omitempty"`
-	Port           corev1.SecretKeySelector `json:"port,omitempty"`
-	BrokerEndpoint corev1.SecretKeySelector `json:"brokerEndpoint,omitempty"`
-	ClusterID      corev1.SecretKeySelector `json:"clusterID,omitempty"`
+	Host           ValueOrSecret `json:"host,omitempty"`
+	Port           ValueOrSecret `json:"port,omitempty"`
+	BrokerEndpoint ValueOrSecret `json:"brokerEndpoint,omitempty"`
+	ClusterID      ValueOrSecret `json:"clusterID,omitempty"`
 
-	URL corev1.SecretKeySelector `json:"url,omitempty"`
+	// URL is the operator-assembled connection URL.
+	URL ValueOrSecret `json:"url,omitempty" masq:"secret"`
+}
+
+// Normalize rewrites any legacy {name, key} field into the ValueFrom envelope.
+func (c *KafkaConnection) Normalize() {
+	if c == nil {
+		return
+	}
+	c.Host.Normalize()
+	c.Port.Normalize()
+	c.BrokerEndpoint.Normalize()
+	c.ClusterID.Normalize()
+	c.URL.Normalize()
 }
 
 type KafkaConfig struct {
@@ -746,20 +933,39 @@ const (
 )
 
 type ObjectStoreConnection struct {
-	// Provider selects the externalObjectStore backend (s3, gcs, or azure) from a secret key; defaults to s3 when absent.
-	Provider corev1.SecretKeySelector `json:"provider,omitempty"`
+	// Provider selects the externalObjectStore backend (s3, gcs, or azure); defaults to s3 when absent.
+	Provider ValueOrSecret `json:"provider,omitempty"`
 
-	Endpoint  corev1.SecretKeySelector `json:"endpoint,omitempty"`
-	Port      corev1.SecretKeySelector `json:"port,omitempty"`
-	AccessKey corev1.SecretKeySelector `json:"accessKey,omitempty"`
-	SecretKey corev1.SecretKeySelector `json:"secretKey,omitempty"`
-	Bucket    corev1.SecretKeySelector `json:"bucket,omitempty"`
+	Endpoint  ValueOrSecret `json:"endpoint,omitempty"`
+	Port      ValueOrSecret `json:"port,omitempty"`
+	AccessKey ValueOrSecret `json:"accessKey,omitempty" masq:"secret"`
+	SecretKey ValueOrSecret `json:"secretKey,omitempty" masq:"secret"`
+	Bucket    ValueOrSecret `json:"bucket,omitempty"`
 	// Path is an optional key prefix within the bucket under which W&B stores its data.
-	Path           corev1.SecretKeySelector `json:"path,omitempty"`
-	Region         corev1.SecretKeySelector `json:"region,omitempty"`
-	TlsEnabled     corev1.SecretKeySelector `json:"tlsEnabled,omitempty"`
-	ForcePathStyle corev1.SecretKeySelector `json:"forcePathStyle,omitempty"`
-	URL            corev1.SecretKeySelector `json:"url,omitempty"`
+	Path           ValueOrSecret `json:"path,omitempty"`
+	Region         ValueOrSecret `json:"region,omitempty"`
+	TlsEnabled     ValueOrSecret `json:"tlsEnabled,omitempty"`
+	ForcePathStyle ValueOrSecret `json:"forcePathStyle,omitempty"`
+	// URL is the operator-assembled connection URL; it embeds credentials as userinfo.
+	URL ValueOrSecret `json:"url,omitempty" masq:"secret"`
+}
+
+// Normalize rewrites any legacy {name, key} field into the ValueFrom envelope.
+func (c *ObjectStoreConnection) Normalize() {
+	if c == nil {
+		return
+	}
+	c.Provider.Normalize()
+	c.Endpoint.Normalize()
+	c.Port.Normalize()
+	c.AccessKey.Normalize()
+	c.SecretKey.Normalize()
+	c.Bucket.Normalize()
+	c.Path.Normalize()
+	c.Region.Normalize()
+	c.TlsEnabled.Normalize()
+	c.ForcePathStyle.Normalize()
+	c.URL.Normalize()
 }
 
 type ObjectStoreConfig struct {
@@ -833,20 +1039,37 @@ type ClickHouseKeeperSpec struct {
 }
 
 type ClickHouseConnection struct {
-	Host     corev1.SecretKeySelector `json:"host,omitempty"`
-	TCPPort  corev1.SecretKeySelector `json:"tcpPort,omitempty"`
-	HTTPPort corev1.SecretKeySelector `json:"httpPort,omitempty"`
-	Database corev1.SecretKeySelector `json:"database,omitempty"`
-	Username corev1.SecretKeySelector `json:"username,omitempty"`
-	Password corev1.SecretKeySelector `json:"password,omitempty"`
+	Host     ValueOrSecret `json:"host,omitempty"`
+	TCPPort  ValueOrSecret `json:"tcpPort,omitempty"`
+	HTTPPort ValueOrSecret `json:"httpPort,omitempty"`
+	Database ValueOrSecret `json:"database,omitempty"`
+	Username ValueOrSecret `json:"username,omitempty"`
+	Password ValueOrSecret `json:"password,omitempty" masq:"secret"`
 
-	URL corev1.SecretKeySelector `json:"url,omitempty"`
+	// URL is the operator-assembled URL; it may embed the password.
+	URL ValueOrSecret `json:"url,omitempty" masq:"secret"`
 
 	// Replicated tells applications whether to create ReplicatedMergeTree tables.
-	Replicated corev1.SecretKeySelector `json:"replicated,omitempty"`
+	Replicated ValueOrSecret `json:"replicated,omitempty"`
 
 	// CLUSTER. Only meaningful when Replicated is true.
-	ClusterName corev1.SecretKeySelector `json:"clusterName,omitempty"`
+	ClusterName ValueOrSecret `json:"clusterName,omitempty"`
+}
+
+// Normalize rewrites any legacy {name, key} field into the ValueFrom envelope.
+func (c *ClickHouseConnection) Normalize() {
+	if c == nil {
+		return
+	}
+	c.Host.Normalize()
+	c.TCPPort.Normalize()
+	c.HTTPPort.Normalize()
+	c.Database.Normalize()
+	c.Username.Normalize()
+	c.Password.Normalize()
+	c.URL.Normalize()
+	c.Replicated.Normalize()
+	c.ClusterName.Normalize()
 }
 
 type ClickHouseConfig struct {

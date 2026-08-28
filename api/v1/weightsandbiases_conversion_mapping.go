@@ -407,14 +407,8 @@ func mapBucket(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) e
 			if secretKeyName == "" {
 				secretKeyName = defaultBucketSecretKeyName
 			}
-			conn.AccessKey = corev1.SecretKeySelector{
-				LocalObjectReference: corev1.LocalObjectReference{Name: name},
-				Key:                  accessKeyName,
-			}
-			conn.SecretKey = corev1.SecretKeySelector{
-				LocalObjectReference: corev1.LocalObjectReference{Name: name},
-				Key:                  secretKeyName,
-			}
+			conn.AccessKey = appsv2.ValueFromSecret(name, accessKeyName, false)
+			conn.SecretKey = appsv2.ValueFromSecret(name, secretKeyName, false)
 		}
 	}
 
@@ -455,12 +449,12 @@ var mysqlFields = []struct {
 	v1Key  string
 	setRef func(*appsv2.MysqlConnection, corev1.SecretKeySelector)
 }{
-	{"host", func(c *appsv2.MysqlConnection, s corev1.SecretKeySelector) { c.Host = s }},
-	{"port", func(c *appsv2.MysqlConnection, s corev1.SecretKeySelector) { c.Port = s }},
-	{"database", func(c *appsv2.MysqlConnection, s corev1.SecretKeySelector) { c.Database = s }},
-	{"user", func(c *appsv2.MysqlConnection, s corev1.SecretKeySelector) { c.Username = s }},
-	{"password", func(c *appsv2.MysqlConnection, s corev1.SecretKeySelector) { c.Password = s }},
-	{"caCert", func(c *appsv2.MysqlConnection, s corev1.SecretKeySelector) { c.SslCa = s }},
+	{"host", func(c *appsv2.MysqlConnection, s corev1.SecretKeySelector) { c.Host = appsv2.ValueFromSelector(s) }},
+	{"port", func(c *appsv2.MysqlConnection, s corev1.SecretKeySelector) { c.Port = appsv2.ValueFromSelector(s) }},
+	{"database", func(c *appsv2.MysqlConnection, s corev1.SecretKeySelector) { c.Database = appsv2.ValueFromSelector(s) }},
+	{"user", func(c *appsv2.MysqlConnection, s corev1.SecretKeySelector) { c.Username = appsv2.ValueFromSelector(s) }},
+	{"password", func(c *appsv2.MysqlConnection, s corev1.SecretKeySelector) { c.Password = appsv2.ValueFromSelector(s) }},
+	{"caCert", func(c *appsv2.MysqlConnection, s corev1.SecretKeySelector) { c.SslCa = appsv2.ValueFromSelector(s) }},
 }
 
 // mapMySQL routes valueFrom-shaped fields to externalMysql.*, scalars to
@@ -500,16 +494,13 @@ func mapMySQL(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) er
 		return fmt.Errorf("spec.values.global.mysql.passwordSecret: %w", err)
 	} else if ok {
 		name, _, _ := unstructured.NestedString(ps, "name")
-		alreadyHasPassword := conn != nil && conn.Password.Name != ""
+		alreadyHasPassword := conn != nil && conn.Password.SecretKeyRef() != nil
 		if name != "" && !alreadyHasPassword {
 			key, _, _ := unstructured.NestedString(ps, "passwordKey")
 			if key == "" {
 				key = defaultMySQLPasswordSecretKey
 			}
-			conn.Password = corev1.SecretKeySelector{
-				LocalObjectReference: corev1.LocalObjectReference{Name: name},
-				Key:                  key,
-			}
+			conn.Password = appsv2.ValueFromSecret(name, key, false)
 			delete(remaining, "password")
 		}
 	}
@@ -530,11 +521,11 @@ var clickHouseFields = []struct {
 	v1Key  string
 	setRef func(*appsv2.ClickHouseConnection, corev1.SecretKeySelector)
 }{
-	{"host", func(c *appsv2.ClickHouseConnection, s corev1.SecretKeySelector) { c.Host = s }},
-	{"port", func(c *appsv2.ClickHouseConnection, s corev1.SecretKeySelector) { c.HTTPPort = s }},
-	{"database", func(c *appsv2.ClickHouseConnection, s corev1.SecretKeySelector) { c.Database = s }},
-	{"user", func(c *appsv2.ClickHouseConnection, s corev1.SecretKeySelector) { c.Username = s }},
-	{"password", func(c *appsv2.ClickHouseConnection, s corev1.SecretKeySelector) { c.Password = s }},
+	{"host", func(c *appsv2.ClickHouseConnection, s corev1.SecretKeySelector) { c.Host = appsv2.ValueFromSelector(s) }},
+	{"port", func(c *appsv2.ClickHouseConnection, s corev1.SecretKeySelector) { c.HTTPPort = appsv2.ValueFromSelector(s) }},
+	{"database", func(c *appsv2.ClickHouseConnection, s corev1.SecretKeySelector) { c.Database = appsv2.ValueFromSelector(s) }},
+	{"user", func(c *appsv2.ClickHouseConnection, s corev1.SecretKeySelector) { c.Username = appsv2.ValueFromSelector(s) }},
+	{"password", func(c *appsv2.ClickHouseConnection, s corev1.SecretKeySelector) { c.Password = appsv2.ValueFromSelector(s) }},
 }
 
 // mapClickHouse routes v1 global.clickhouse to externalClickhouse (like
@@ -578,7 +569,7 @@ func mapClickHouse(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiase
 		if err != nil {
 			return fmt.Errorf("spec.values.global.clickhouse.passwordSecret.name: %w", err)
 		}
-		alreadyHasPassword := conn.Password.Name != ""
+		alreadyHasPassword := conn.Password.SecretKeyRef() != nil
 		if name != "" && !alreadyHasPassword {
 			key, _, err := unstructured.NestedString(ps, "passwordKey")
 			if err != nil {
@@ -587,10 +578,7 @@ func mapClickHouse(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiase
 			if key == "" {
 				key = defaultClickHousePasswordSecretKey
 			}
-			conn.Password = corev1.SecretKeySelector{
-				LocalObjectReference: corev1.LocalObjectReference{Name: name},
-				Key:                  key,
-			}
+			conn.Password = appsv2.ValueFromSecret(name, key, false)
 			delete(remaining, "password")
 			sawField = true
 		}
@@ -651,10 +639,10 @@ var redisFields = []struct {
 	v1Key  string
 	setRef func(*appsv2.RedisConnection, corev1.SecretKeySelector)
 }{
-	{"host", func(c *appsv2.RedisConnection, s corev1.SecretKeySelector) { c.Host = s }},
-	{"port", func(c *appsv2.RedisConnection, s corev1.SecretKeySelector) { c.Port = s }},
-	{"password", func(c *appsv2.RedisConnection, s corev1.SecretKeySelector) { c.Password = s }},
-	{"caCert", func(c *appsv2.RedisConnection, s corev1.SecretKeySelector) { c.SslCa = s }},
+	{"host", func(c *appsv2.RedisConnection, s corev1.SecretKeySelector) { c.Host = appsv2.ValueFromSelector(s) }},
+	{"port", func(c *appsv2.RedisConnection, s corev1.SecretKeySelector) { c.Port = appsv2.ValueFromSelector(s) }},
+	{"password", func(c *appsv2.RedisConnection, s corev1.SecretKeySelector) { c.Password = appsv2.ValueFromSelector(s) }},
+	{"caCert", func(c *appsv2.RedisConnection, s corev1.SecretKeySelector) { c.SslCa = appsv2.ValueFromSelector(s) }},
 }
 
 // mapRedis routes valueFrom-shaped fields to externalRedis.*, scalars to
@@ -706,7 +694,7 @@ func mapRedis(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) er
 			return fmt.Errorf("spec.values.global.redis.%s.tls: %w", parent, classifyErr)
 		}
 		if ref != nil {
-			conn.Tls = *ref
+			conn.Tls = appsv2.ValueFromSelector(*ref)
 			break
 		}
 		if literal != "" {
@@ -719,16 +707,13 @@ func mapRedis(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) er
 		return fmt.Errorf("spec.values.global.redis.secret: %w", err)
 	} else if ok {
 		name, _, _ := unstructured.NestedString(sec, "secretName")
-		alreadyHasPassword := conn != nil && conn.Password.Name != ""
+		alreadyHasPassword := conn != nil && conn.Password.SecretKeyRef() != nil
 		if name != "" && !alreadyHasPassword {
 			key, _, _ := unstructured.NestedString(sec, "secretKey")
 			if key == "" {
 				key = defaultRedisPasswordSecretKey
 			}
-			conn.Password = corev1.SecretKeySelector{
-				LocalObjectReference: corev1.LocalObjectReference{Name: name},
-				Key:                  key,
-			}
+			conn.Password = appsv2.ValueFromSecret(name, key, false)
 			delete(remaining, "password")
 		}
 	}
@@ -749,10 +734,10 @@ var oidcFields = []struct {
 	v1Key  string
 	setRef func(*appsv2.OidcSpec, corev1.SecretKeySelector)
 }{
-	{"clientId", func(o *appsv2.OidcSpec, s corev1.SecretKeySelector) { o.ClientId = s }},
-	{"secret", func(o *appsv2.OidcSpec, s corev1.SecretKeySelector) { o.ClientSecret = s }},
-	{"authMethod", func(o *appsv2.OidcSpec, s corev1.SecretKeySelector) { o.AuthMethod = s }},
-	{"issuer", func(o *appsv2.OidcSpec, s corev1.SecretKeySelector) { o.IssuerUrl = s }},
+	{"clientId", func(o *appsv2.OidcSpec, s corev1.SecretKeySelector) { o.ClientId = appsv2.ValueFromSelector(s) }},
+	{"secret", func(o *appsv2.OidcSpec, s corev1.SecretKeySelector) { o.ClientSecret = appsv2.ValueFromSelector(s) }},
+	{"authMethod", func(o *appsv2.OidcSpec, s corev1.SecretKeySelector) { o.AuthMethod = appsv2.ValueFromSelector(s) }},
+	{"issuer", func(o *appsv2.OidcSpec, s corev1.SecretKeySelector) { o.IssuerUrl = appsv2.ValueFromSelector(s) }},
 }
 
 // mapOIDC routes valueFrom-shaped fields to spec.wandb.oidc.*, scalars to
@@ -791,16 +776,13 @@ func mapOIDC(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) err
 		return fmt.Errorf("spec.values.global.auth.oidc.oidcSecret: %w", err)
 	} else if ok {
 		name, _, _ := unstructured.NestedString(os, "name")
-		alreadyHasClientSecret := oidc.ClientSecret.Name != ""
+		alreadyHasClientSecret := oidc.ClientSecret.SecretKeyRef() != nil
 		if name != "" && !alreadyHasClientSecret {
 			key, _, _ := unstructured.NestedString(os, "secretKey")
 			if key == "" {
 				key = defaultOIDCClientSecretKey
 			}
-			oidc.ClientSecret = corev1.SecretKeySelector{
-				LocalObjectReference: corev1.LocalObjectReference{Name: name},
-				Key:                  key,
-			}
+			oidc.ClientSecret = appsv2.ValueFromSecret(name, key, false)
 			delete(remaining, "secret")
 		}
 	}

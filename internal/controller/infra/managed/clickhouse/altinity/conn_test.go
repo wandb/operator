@@ -95,9 +95,9 @@ var _ = Describe("ClickHouse connection topology", func() {
 			Expect(secret.StringData).To(HaveKeyWithValue("Replicated", "true"))
 			Expect(secret.StringData).To(HaveKeyWithValue("ClusterName", chiClusterName))
 
-			Expect(conn.Replicated.Name).To(Equal(nsnBuilder.ConnectionNsName().Name))
-			Expect(conn.Replicated.Key).To(Equal("Replicated"))
-			Expect(conn.ClusterName.Key).To(Equal("ClusterName"))
+			Expect(conn.Replicated.SecretKeyRef().Name).To(Equal(nsnBuilder.ConnectionNsName().Name))
+			Expect(conn.Replicated.SecretKeyRef().Key).To(Equal("Replicated"))
+			Expect(conn.ClusterName.SecretKeyRef().Key).To(Equal("ClusterName"))
 		})
 
 		// An unreplicated cluster must say so explicitly: applications need to

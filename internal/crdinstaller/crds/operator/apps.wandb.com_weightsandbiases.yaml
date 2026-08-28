@@ -532,118 +532,244 @@ spec:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         database:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         host:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         httpPort:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         password:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         replicated:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         tcpPort:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         url:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         username:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                       type: object
                     managedClickhouse:
                       properties:
@@ -1253,6 +1379,12 @@ spec:
                     properties:
                       httpProxy:
                         properties:
+                          key:
+                            type: string
+                          name:
+                            type: string
+                          optional:
+                            type: boolean
                           value:
                             type: string
                           valueFrom:
@@ -1274,6 +1406,12 @@ spec:
                         type: object
                       httpsProxy:
                         properties:
+                          key:
+                            type: string
+                          name:
+                            type: string
+                          optional:
+                            type: boolean
                           value:
                             type: string
                           valueFrom:
@@ -1862,131 +2000,271 @@ spec:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         host:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         password:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         port:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         sslCa:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         sslCert:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         sslKey:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         tls:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         url:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         username:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                       type: object
                     managedMysql:
                       properties:
@@ -2614,144 +2892,298 @@ spec:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         bucket:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         endpoint:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         forcePathStyle:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         path:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         port:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         provider:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         region:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         secretKey:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         tlsEnabled:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         url:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                       type: object
                     managedObjectStore:
                       properties:
@@ -3300,79 +3732,163 @@ spec:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         password:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         port:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         sslCa:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         tls:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         url:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                       type: object
                     managedRedis:
                       properties:
@@ -4148,14 +4664,28 @@ spec:
                               key:
                                 type: string
                               name:
-                                default: ""
                                 type: string
                               optional:
                                 type: boolean
-                            required:
-                            - key
+                              value:
+                                type: string
+                              valueFrom:
+                                properties:
+                                  secretKeyRef:
+                                    properties:
+                                      key:
+                                        type: string
+                                      name:
+                                        default: ""
+                                        type: string
+                                      optional:
+                                        type: boolean
+                                    required:
+                                    - key
+                                    type: object
+                                    x-kubernetes-map-type: atomic
+                                type: object
                             type: object
-                            x-kubernetes-map-type: atomic
                           smtp:
                             properties:
                               host:
@@ -4163,53 +4693,109 @@ spec:
                                   key:
                                     type: string
                                   name:
-                                    default: ""
                                     type: string
                                   optional:
                                     type: boolean
-                                required:
-                                - key
+                                  value:
+                                    type: string
+                                  valueFrom:
+                                    properties:
+                                      secretKeyRef:
+                                        properties:
+                                          key:
+                                            type: string
+                                          name:
+                                            default: ""
+                                            type: string
+                                          optional:
+                                            type: boolean
+                                        required:
+                                        - key
+                                        type: object
+                                        x-kubernetes-map-type: atomic
+                                    type: object
                                 type: object
-                                x-kubernetes-map-type: atomic
                               password:
                                 properties:
                                   key:
                                     type: string
                                   name:
-                                    default: ""
                                     type: string
                                   optional:
                                     type: boolean
-                                required:
-                                - key
+                                  value:
+                                    type: string
+                                  valueFrom:
+                                    properties:
+                                      secretKeyRef:
+                                        properties:
+                                          key:
+                                            type: string
+                                          name:
+                                            default: ""
+                                            type: string
+                                          optional:
+                                            type: boolean
+                                        required:
+                                        - key
+                                        type: object
+                                        x-kubernetes-map-type: atomic
+                                    type: object
                                 type: object
-                                x-kubernetes-map-type: atomic
                               port:
                                 properties:
                                   key:
                                     type: string
                                   name:
-                                    default: ""
                                     type: string
                                   optional:
                                     type: boolean
-                                required:
-                                - key
+                                  value:
+                                    type: string
+                                  valueFrom:
+                                    properties:
+                                      secretKeyRef:
+                                        properties:
+                                          key:
+                                            type: string
+                                          name:
+                                            default: ""
+                                            type: string
+                                          optional:
+                                            type: boolean
+                                        required:
+                                        - key
+                                        type: object
+                                        x-kubernetes-map-type: atomic
+                                    type: object
                                 type: object
-                                x-kubernetes-map-type: atomic
                               username:
                                 properties:
                                   key:
                                     type: string
                                   name:
-                                    default: ""
                                     type: string
                                   optional:
                                     type: boolean
-                                required:
-                                - key
+                                  value:
+                                    type: string
+                                  valueFrom:
+                                    properties:
+                                      secretKeyRef:
+                                        properties:
+                                          key:
+                                            type: string
+                                          name:
+                                            default: ""
+                                            type: string
+                                          optional:
+                                            type: boolean
+                                        required:
+                                        - key
+                                        type: object
+                                        x-kubernetes-map-type: atomic
+                                    type: object
                                 type: object
-                                x-kubernetes-map-type: atomic
                             required:
                             - host
                             - password
@@ -4224,27 +4810,55 @@ spec:
                               key:
                                 type: string
                               name:
-                                default: ""
                                 type: string
                               optional:
                                 type: boolean
-                            required:
-                            - key
+                              value:
+                                type: string
+                              valueFrom:
+                                properties:
+                                  secretKeyRef:
+                                    properties:
+                                      key:
+                                        type: string
+                                      name:
+                                        default: ""
+                                        type: string
+                                      optional:
+                                        type: boolean
+                                    required:
+                                    - key
+                                    type: object
+                                    x-kubernetes-map-type: atomic
+                                type: object
                             type: object
-                            x-kubernetes-map-type: atomic
                           clientSecret:
                             properties:
                               key:
                                 type: string
                               name:
-                                default: ""
                                 type: string
                               optional:
                                 type: boolean
-                            required:
-                            - key
+                              value:
+                                type: string
+                              valueFrom:
+                                properties:
+                                  secretKeyRef:
+                                    properties:
+                                      key:
+                                        type: string
+                                      name:
+                                        default: ""
+                                        type: string
+                                      optional:
+                                        type: boolean
+                                    required:
+                                    - key
+                                    type: object
+                                    x-kubernetes-map-type: atomic
+                                type: object
                             type: object
-                            x-kubernetes-map-type: atomic
                         type: object
                     type: object
                   oidc:
@@ -4254,53 +4868,109 @@ spec:
                           key:
                             type: string
                           name:
-                            default: ""
                             type: string
                           optional:
                             type: boolean
-                        required:
-                        - key
+                          value:
+                            type: string
+                          valueFrom:
+                            properties:
+                              secretKeyRef:
+                                properties:
+                                  key:
+                                    type: string
+                                  name:
+                                    default: ""
+                                    type: string
+                                  optional:
+                                    type: boolean
+                                required:
+                                - key
+                                type: object
+                                x-kubernetes-map-type: atomic
+                            type: object
                         type: object
-                        x-kubernetes-map-type: atomic
                       clientId:
                         properties:
                           key:
                             type: string
                           name:
-                            default: ""
                             type: string
                           optional:
                             type: boolean
-                        required:
-                        - key
+                          value:
+                            type: string
+                          valueFrom:
+                            properties:
+                              secretKeyRef:
+                                properties:
+                                  key:
+                                    type: string
+                                  name:
+                                    default: ""
+                                    type: string
+                                  optional:
+                                    type: boolean
+                                required:
+                                - key
+                                type: object
+                                x-kubernetes-map-type: atomic
+                            type: object
                         type: object
-                        x-kubernetes-map-type: atomic
                       clientSecret:
                         properties:
                           key:
                             type: string
                           name:
-                            default: ""
                             type: string
                           optional:
                             type: boolean
-                        required:
-                        - key
+                          value:
+                            type: string
+                          valueFrom:
+                            properties:
+                              secretKeyRef:
+                                properties:
+                                  key:
+                                    type: string
+                                  name:
+                                    default: ""
+                                    type: string
+                                  optional:
+                                    type: boolean
+                                required:
+                                - key
+                                type: object
+                                x-kubernetes-map-type: atomic
+                            type: object
                         type: object
-                        x-kubernetes-map-type: atomic
                       issuerUrl:
                         properties:
                           key:
                             type: string
                           name:
-                            default: ""
                             type: string
                           optional:
                             type: boolean
-                        required:
-                        - key
+                          value:
+                            type: string
+                          valueFrom:
+                            properties:
+                              secretKeyRef:
+                                properties:
+                                  key:
+                                    type: string
+                                  name:
+                                    default: ""
+                                    type: string
+                                  optional:
+                                    type: boolean
+                                required:
+                                - key
+                                type: object
+                                x-kubernetes-map-type: atomic
+                            type: object
                         type: object
-                        x-kubernetes-map-type: atomic
                       sessionLength:
                         type: string
                     type: object
@@ -4652,118 +5322,244 @@ spec:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         database:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         host:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         httpPort:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         password:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         replicated:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         tcpPort:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         url:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         username:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                       type: object
                     ready:
                       type: boolean
@@ -4944,66 +5740,136 @@ spec:
                           key:
                             type: string
                           name:
-                            default: ""
                             type: string
                           optional:
                             type: boolean
-                        required:
-                        - key
+                          value:
+                            type: string
+                          valueFrom:
+                            properties:
+                              secretKeyRef:
+                                properties:
+                                  key:
+                                    type: string
+                                  name:
+                                    default: ""
+                                    type: string
+                                  optional:
+                                    type: boolean
+                                required:
+                                - key
+                                type: object
+                                x-kubernetes-map-type: atomic
+                            type: object
                         type: object
-                        x-kubernetes-map-type: atomic
                       clusterID:
                         properties:
                           key:
                             type: string
                           name:
-                            default: ""
                             type: string
                           optional:
                             type: boolean
-                        required:
-                        - key
+                          value:
+                            type: string
+                          valueFrom:
+                            properties:
+                              secretKeyRef:
+                                properties:
+                                  key:
+                                    type: string
+                                  name:
+                                    default: ""
+                                    type: string
+                                  optional:
+                                    type: boolean
+                                required:
+                                - key
+                                type: object
+                                x-kubernetes-map-type: atomic
+                            type: object
                         type: object
-                        x-kubernetes-map-type: atomic
                       host:
                         properties:
                           key:
                             type: string
                           name:
-                            default: ""
                             type: string
                           optional:
                             type: boolean
-                        required:
-                        - key
+                          value:
+                            type: string
+                          valueFrom:
+                            properties:
+                              secretKeyRef:
+                                properties:
+                                  key:
+                                    type: string
+                                  name:
+                                    default: ""
+                                    type: string
+                                  optional:
+                                    type: boolean
+                                required:
+                                - key
+                                type: object
+                                x-kubernetes-map-type: atomic
+                            type: object
                         type: object
-                        x-kubernetes-map-type: atomic
                       port:
                         properties:
                           key:
                             type: string
                           name:
-                            default: ""
                             type: string
                           optional:
                             type: boolean
-                        required:
-                        - key
+                          value:
+                            type: string
+                          valueFrom:
+                            properties:
+                              secretKeyRef:
+                                properties:
+                                  key:
+                                    type: string
+                                  name:
+                                    default: ""
+                                    type: string
+                                  optional:
+                                    type: boolean
+                                required:
+                                - key
+                                type: object
+                                x-kubernetes-map-type: atomic
+                            type: object
                         type: object
-                        x-kubernetes-map-type: atomic
                       url:
                         properties:
                           key:
                             type: string
                           name:
-                            default: ""
                             type: string
                           optional:
                             type: boolean
-                        required:
-                        - key
+                          value:
+                            type: string
+                          valueFrom:
+                            properties:
+                              secretKeyRef:
+                                properties:
+                                  key:
+                                    type: string
+                                  name:
+                                    default: ""
+                                    type: string
+                                  optional:
+                                    type: boolean
+                                required:
+                                - key
+                                type: object
+                                x-kubernetes-map-type: atomic
+                            type: object
                         type: object
-                        x-kubernetes-map-type: atomic
                     type: object
                   ready:
                     type: boolean
@@ -5058,131 +5924,271 @@ spec:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         host:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         password:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         port:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         sslCa:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         sslCert:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         sslKey:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         tls:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         url:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         username:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                       type: object
                     ready:
                       type: boolean
@@ -5238,144 +6244,298 @@ spec:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         bucket:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         endpoint:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         forcePathStyle:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         path:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         port:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         provider:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         region:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         secretKey:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         tlsEnabled:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         url:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                       type: object
                     ready:
                       type: boolean
@@ -5436,79 +6596,163 @@ spec:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         password:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         port:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         sslCa:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         tls:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                         url:
                           properties:
                             key:
                               type: string
                             name:
-                              default: ""
                               type: string
                             optional:
                               type: boolean
-                          required:
-                          - key
+                            value:
+                              type: string
+                            valueFrom:
+                              properties:
+                                secretKeyRef:
+                                  properties:
+                                    key:
+                                      type: string
+                                    name:
+                                      default: ""
+                                      type: string
+                                    optional:
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              type: object
                           type: object
-                          x-kubernetes-map-type: atomic
                       type: object
                     ready:
                       type: boolean

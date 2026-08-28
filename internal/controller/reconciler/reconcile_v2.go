@@ -1403,30 +1403,44 @@ func resolveCRFieldEnvValue(obj any, path string) (string, bool) {
 		return value, true
 	case bool:
 		return strconv.FormatBool(value), true
+	case map[string]any:
+		// A ValueOrSecret envelope carrying a literal value.
+		tb, err := json.Marshal(value)
+		if err != nil {
+			return "", false
+		}
+		var v apiv2.ValueOrSecret
+		if err := json.Unmarshal(tb, &v); err == nil && v.Value != "" {
+			return v.Value, true
+		}
+		return "", false
 	default:
 		return "", false
 	}
 }
 
+// resolveCRFieldSecretSelector resolves a dotted CR field into the effective
+// secret selector. It understands the ValueOrSecret envelope (valueFrom or the
+// legacy {name, key} shape) as well as a bare SecretKeySelector node. A literal
+// value yields no selector (the caller falls back to resolveCRFieldEnvValue).
 func resolveCRFieldSecretSelector(obj any, path string) (corev1.SecretKeySelector, bool) {
 	cur, ok := resolveCRField(obj, path)
 	if !ok {
 		return corev1.SecretKeySelector{}, false
 	}
-	// Re-marshal the terminal node into a SecretKeySelector so we honor the same
-	// json tags (name/key/optional) the CRD uses.
 	tb, err := json.Marshal(cur)
 	if err != nil {
 		return corev1.SecretKeySelector{}, false
 	}
-	var sel corev1.SecretKeySelector
-	if err := json.Unmarshal(tb, &sel); err != nil {
+	var v apiv2.ValueOrSecret
+	if err := json.Unmarshal(tb, &v); err != nil {
 		return corev1.SecretKeySelector{}, false
 	}
-	if sel.Name == "" || sel.Key == "" {
+	ref := v.SecretKeyRef()
+	if ref == nil || ref.Name == "" || ref.Key == "" {
 		return corev1.SecretKeySelector{}, false
 	}
-	return sel, true
+	return *ref, true
 }
 
 // allInstancesReady reports whether every instance (managed or external) has a

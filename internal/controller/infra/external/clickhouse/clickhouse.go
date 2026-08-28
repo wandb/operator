@@ -6,10 +6,8 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/infra/external"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -32,9 +30,9 @@ func WriteState(
 ) []metav1.Condition {
 	logger := ctrl.LoggerFrom(ctx)
 
-	// Unset selectors resolve to "" and are dropped by ResolveFields, so an
-	// external ClickHouse that declares no topology simply has no such keys.
-	fields := map[string]corev1.SecretKeySelector{
+	// Unset values resolve to "" and are dropped, so an external ClickHouse that
+	// declares no topology simply has no such keys.
+	fields := map[string]apiv2.ValueOrSecret{
 		"url":         spec.URL,
 		"Host":        spec.Host,
 		"HTTPPort":    spec.HTTPPort,
@@ -46,7 +44,7 @@ func WriteState(
 		"ClusterName": spec.ClusterName,
 	}
 
-	data, err := external.ResolveFields(ctx, c, wandb.Namespace, fields)
+	data, err := external.ResolveValueFields(ctx, c, wandb.Namespace, fields)
 	if err != nil {
 		logger.Error(err, "failed to resolve external clickhouse fields")
 		return []metav1.Condition{{
@@ -73,25 +71,24 @@ func ReadState(
 		return conditions, nil
 	}
 
-	localRef := corev1.LocalObjectReference{Name: nsName.Name}
 	conn := &apiv2.ClickHouseConnection{
-		URL:      corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "url", Optional: ptr.To(false)},
-		Host:     corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Host", Optional: ptr.To(false)},
-		HTTPPort: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "HTTPPort", Optional: ptr.To(false)},
-		TCPPort:  corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "TCPPort", Optional: ptr.To(false)},
-		Username: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "User", Optional: ptr.To(false)},
-		Password: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Password", Optional: ptr.To(false)},
-		Database: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Database", Optional: ptr.To(false)},
+		URL:      apiv2.ValueFromSecret(nsName.Name, "url", false),
+		Host:     apiv2.ValueFromSecret(nsName.Name, "Host", false),
+		HTTPPort: apiv2.ValueFromSecret(nsName.Name, "HTTPPort", false),
+		TCPPort:  apiv2.ValueFromSecret(nsName.Name, "TCPPort", false),
+		Username: apiv2.ValueFromSecret(nsName.Name, "User", false),
+		Password: apiv2.ValueFromSecret(nsName.Name, "Password", false),
+		Database: apiv2.ValueFromSecret(nsName.Name, "Database", false),
 	}
 
-	// Topology is optional for an external ClickHouse: the selector is left unset
+	// Topology is optional for an external ClickHouse: the field is left unset
 	// when the user declared nothing, so consumers fall back to their own default
 	// instead of mounting a key that isn't there.
 	if _, ok := secret.Data["Replicated"]; ok {
-		conn.Replicated = corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Replicated", Optional: ptr.To(false)}
+		conn.Replicated = apiv2.ValueFromSecret(nsName.Name, "Replicated", false)
 	}
 	if _, ok := secret.Data["ClusterName"]; ok {
-		conn.ClusterName = corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "ClusterName", Optional: ptr.To(false)}
+		conn.ClusterName = apiv2.ValueFromSecret(nsName.Name, "ClusterName", false)
 	}
 
 	return conditions, conn

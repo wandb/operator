@@ -69,8 +69,8 @@ func TestMapLegacyEnvToCR_LiteralReplicatedFromGlobal(t *testing.T) {
 	require.Equal(t, []byte("true"), secret.Data[convertedClickHouseReplicatedKey])
 
 	conn := externalCH(wandb)
-	require.Equal(t, "wandb-clickhouse-converted", conn.Replicated.Name)
-	require.Equal(t, convertedClickHouseReplicatedKey, conn.Replicated.Key)
+	require.Equal(t, "wandb-clickhouse-converted", conn.Replicated.SecretKeyRef().Name)
+	require.Equal(t, convertedClickHouseReplicatedKey, conn.Replicated.SecretKeyRef().Key)
 
 	// Env stripped from legacyOverrides (map pruned to nil since it emptied).
 	require.Nil(t, wandb.Spec.Wandb.LegacyOverrides)
@@ -89,8 +89,8 @@ func TestMapLegacyEnvToCR_ClusterFromApp(t *testing.T) {
 	require.Equal(t, []byte("weavecluster"), secret.Data[convertedClickHouseClusterKey])
 
 	conn := externalCH(wandb)
-	require.Equal(t, "wandb-clickhouse-converted", conn.ClusterName.Name)
-	require.Equal(t, convertedClickHouseClusterKey, conn.ClusterName.Key)
+	require.Equal(t, "wandb-clickhouse-converted", conn.ClusterName.SecretKeyRef().Name)
+	require.Equal(t, convertedClickHouseClusterKey, conn.ClusterName.SecretKeyRef().Key)
 	require.Nil(t, wandb.Spec.Wandb.LegacyOverrides)
 }
 
@@ -151,8 +151,8 @@ func TestMapLegacyEnvToCR_SecretKeyRefRepointsField(t *testing.T) {
 	require.NoError(t, err)
 
 	conn := externalCH(wandb)
-	require.Equal(t, "user-ch", conn.Replicated.Name)
-	require.Equal(t, "replicated", conn.Replicated.Key)
+	require.Equal(t, "user-ch", conn.Replicated.SecretKeyRef().Name)
+	require.Equal(t, "replicated", conn.Replicated.SecretKeyRef().Key)
 
 	_, err = getClickHouseConvertedSecret(t, client)
 	require.Error(t, err, "no converted Secret should be written for a secretKeyRef source")
@@ -176,7 +176,7 @@ func TestMapLegacyEnvToCR_UnrepresentableValueFromPassthrough(t *testing.T) {
 	require.NoError(t, err)
 	require.Zero(t, res.RequeueAfter, "passthrough persists nothing")
 
-	require.Empty(t, externalCH(wandb).Replicated.Name)
+	require.Nil(t, externalCH(wandb).Replicated.SecretKeyRef())
 	require.Len(t, wandb.Spec.Wandb.LegacyOverrides[apiv2.LegacyOverridesGlobalKey].Env, 1)
 }
 
@@ -200,7 +200,7 @@ func TestMapLegacyEnvToCR_ManagedDropsAndRemoves(t *testing.T) {
 // into the operator-owned converted Secret (env beats the structured flag).
 func TestMapLegacyEnvToCR_OverridesConversionDerivedValue(t *testing.T) {
 	conn := &apiv2.ClickHouseConnection{
-		Replicated: secretSelector("wandb-clickhouse-converted", convertedClickHouseReplicatedKey),
+		Replicated: apiv2.ValueFromSecret("wandb-clickhouse-converted", convertedClickHouseReplicatedKey, false),
 	}
 	seed := &corev1.Secret{}
 	seed.Name = "wandb-clickhouse-converted"
@@ -223,7 +223,7 @@ func TestMapLegacyEnvToCR_OverridesConversionDerivedValue(t *testing.T) {
 // the env is still removed — the typed field wins.
 func TestMapLegacyEnvToCR_UserOwnedSelectorRespected(t *testing.T) {
 	conn := &apiv2.ClickHouseConnection{
-		Replicated: secretSelector("user-ch", "flag"),
+		Replicated: apiv2.ValueFromSecret("user-ch", "flag", false),
 	}
 	client, wandb := newEnvMapFixture(t, map[string]apiv2.LegacyOverrides{
 		apiv2.LegacyOverridesGlobalKey: {Env: []corev1.EnvVar{litEnv(envClickHouseReplicated, "true")}},
@@ -232,15 +232,15 @@ func TestMapLegacyEnvToCR_UserOwnedSelectorRespected(t *testing.T) {
 	_, err := mapLegacyEnvToCR(context.Background(), client, wandb)
 	require.NoError(t, err)
 
-	require.Equal(t, "user-ch", externalCH(wandb).Replicated.Name, "user field untouched")
-	require.Equal(t, "flag", externalCH(wandb).Replicated.Key)
+	require.Equal(t, "user-ch", externalCH(wandb).Replicated.SecretKeyRef().Name, "user field untouched")
+	require.Equal(t, "flag", externalCH(wandb).Replicated.SecretKeyRef().Key)
 	require.Nil(t, wandb.Spec.Wandb.LegacyOverrides, "env still removed")
 }
 
 // keepCR (cluster) does not overwrite a field the user already set.
 func TestMapLegacyEnvToCR_ClusterKeepCRWhenSet(t *testing.T) {
 	conn := &apiv2.ClickHouseConnection{
-		ClusterName: secretSelector("user-ch", "cluster"),
+		ClusterName: apiv2.ValueFromSecret("user-ch", "cluster", false),
 	}
 	client, wandb := newEnvMapFixture(t, map[string]apiv2.LegacyOverrides{
 		apiv2.LegacyOverridesGlobalKey: {Env: []corev1.EnvVar{litEnv(envClickHouseReplicatedCluster, "override")}},
@@ -249,8 +249,8 @@ func TestMapLegacyEnvToCR_ClusterKeepCRWhenSet(t *testing.T) {
 	_, err := mapLegacyEnvToCR(context.Background(), client, wandb)
 	require.NoError(t, err)
 
-	require.Equal(t, "user-ch", externalCH(wandb).ClusterName.Name)
-	require.Equal(t, "cluster", externalCH(wandb).ClusterName.Key)
+	require.Equal(t, "user-ch", externalCH(wandb).ClusterName.SecretKeyRef().Name)
+	require.Equal(t, "cluster", externalCH(wandb).ClusterName.SecretKeyRef().Key)
 	require.Nil(t, wandb.Spec.Wandb.LegacyOverrides)
 }
 
