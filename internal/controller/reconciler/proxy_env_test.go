@@ -62,8 +62,8 @@ func TestComputeNoProxyNoAPIServerHost(t *testing.T) {
 func TestProxyEnvVarsLiteral(t *testing.T) {
 	t.Setenv("KUBERNETES_SERVICE_HOST", "10.96.0.1")
 	proxy := &apiv2.ProxySpec{
-		HTTPProxy:  &apiv2.ProxyValue{Value: "http://proxy:3128"},
-		HTTPSProxy: &apiv2.ProxyValue{Value: "http://proxy:3128"},
+		HTTPProxy:  &apiv2.ValueOrSecret{Value: "http://proxy:3128"},
+		HTTPSProxy: &apiv2.ValueOrSecret{Value: "http://proxy:3128"},
 		NoProxy:    []string{"wandb.localhost"},
 	}
 	vars := proxyEnvVars(proxy)
@@ -88,8 +88,8 @@ func TestProxyEnvVarsLiteral(t *testing.T) {
 
 func TestProxyEnvVarsValueFromStaysSecretRef(t *testing.T) {
 	proxy := &apiv2.ProxySpec{
-		HTTPSProxy: &apiv2.ProxyValue{
-			ValueFrom: &apiv2.ProxyValueSource{
+		HTTPSProxy: &apiv2.ValueOrSecret{
+			ValueFrom: &apiv2.SecretValueSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{Name: "egress-proxy"},
 					Key:                  "httpsProxy",
@@ -120,6 +120,27 @@ func TestProxyEnvVarsValueFromStaysSecretRef(t *testing.T) {
 	}
 }
 
+func TestProxyEnvVarsLegacyNameKeyStaysSecretRef(t *testing.T) {
+	// A pre-envelope {name, key} proxy is honored via SecretKeyRef(), so it
+	// resolves to a SecretKeyRef env var just like the ValueFrom shape.
+	proxy := &apiv2.ProxySpec{
+		HTTPSProxy: &apiv2.ValueOrSecret{Name: "egress-proxy", Key: "httpsProxy"},
+	}
+	vars := proxyEnvVars(proxy)
+	for _, name := range []string{"HTTPS_PROXY", "https_proxy"} {
+		v, ok := envByName(vars, name)
+		if !ok {
+			t.Fatalf("missing %q", name)
+		}
+		if v.Value != "" || v.ValueFrom == nil || v.ValueFrom.SecretKeyRef == nil {
+			t.Errorf("%s should be a SecretKeyRef, got %+v", name, v)
+		}
+		if v.ValueFrom.SecretKeyRef.Name != "egress-proxy" || v.ValueFrom.SecretKeyRef.Key != "httpsProxy" {
+			t.Errorf("%s secret ref wrong: %+v", name, v.ValueFrom.SecretKeyRef)
+		}
+	}
+}
+
 func TestProxyEnvVarsNil(t *testing.T) {
 	if proxyEnvVars(nil) != nil {
 		t.Errorf("nil proxy should yield no env vars")
@@ -143,7 +164,7 @@ func TestApplyProxyToWorkload(t *testing.T) {
 	// With proxy: appends missing vars, does not clobber an existing HTTP_PROXY
 	// (appendMissing semantics — legacy/manifest precedence handled elsewhere).
 	wandb := &apiv2.WeightsAndBiases{}
-	wandb.Spec.Global.Proxy = &apiv2.ProxySpec{HTTPProxy: &apiv2.ProxyValue{Value: "http://proxy:3128"}}
+	wandb.Spec.Global.Proxy = &apiv2.ProxySpec{HTTPProxy: &apiv2.ValueOrSecret{Value: "http://proxy:3128"}}
 	got := applyProxyToWorkload(wandb, base)
 	if v, _ := envByName(got, "HTTP_PROXY"); v.Value != "manifest-value" {
 		t.Errorf("existing HTTP_PROXY should be preserved by appendMissing, got %q", v.Value)

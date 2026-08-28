@@ -4,11 +4,14 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"maps"
+	"net/http"
 	"net/url"
 	"os"
 	"path"
@@ -28,7 +31,8 @@ import (
 	"oras.land/oras-go/v2/content"
 	"oras.land/oras-go/v2/content/oci"
 	"oras.land/oras-go/v2/registry/remote"
-	//"oras.land/oras-go/v2/registry/remote/retry"
+	orasauth "oras.land/oras-go/v2/registry/remote/auth"
+	"oras.land/oras-go/v2/registry/remote/retry"
 
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/yaml"
@@ -293,7 +297,25 @@ type FileSpec struct {
 	ConfigMapRef string `yaml:"configMapRef,omitempty"`
 }
 
-func GetServerManifest(ctx context.Context, repository string, version string) (Manifest, error) {
+// RegistryAuth carries optional credentials for authenticating an OCI manifest
+// pull. It is resolved by the caller so this package stays free of any
+// Kubernetes dependency; a nil *RegistryAuth (or nil Credential) pulls
+// anonymously, preserving the original behavior.
+type RegistryAuth struct {
+	// Credential resolves an auth credential for a given registry host.
+	Credential orasauth.CredentialFunc
+	// PlainHTTP allows pulling over HTTP for insecure/in-cluster registries.
+	PlainHTTP bool
+}
+
+// IsFileRepository reports whether repository is a local file:// manifest, which
+// needs no registry credentials.
+func IsFileRepository(repository string) bool {
+	u, err := url.Parse(repository)
+	return err == nil && u.Scheme == "file"
+}
+
+func GetServerManifest(ctx context.Context, repository string, version string, auth *RegistryAuth) (Manifest, error) {
 	versionURL, err := url.Parse(repository)
 	if err != nil {
 		return Manifest{}, err
@@ -305,7 +327,7 @@ func GetServerManifest(ctx context.Context, repository string, version string) (
 	case "file":
 		return LoadManifestFromFile(ctx, repository, version)
 	default:
-		return DownloadServerManifest(ctx, repository, version)
+		return DownloadServerManifest(ctx, repository, version, auth)
 	}
 }
 
@@ -581,13 +603,16 @@ func mergeApplications(dst, src map[string]Application) {
 	}
 }
 
-func DownloadServerManifest(ctx context.Context, repository string, version string) (Manifest, error) {
+func DownloadServerManifest(ctx context.Context, repository string, version string, auth *RegistryAuth) (Manifest, error) {
 	logger := logx.GetSlog(ctx)
 	var manifest Manifest
 
 	repository = strings.TrimPrefix(repository, "oci://")
 
-	ociDir := "/tmp/server-manifest"
+	// Namespace the on-disk cache by repository so two CRs referencing different
+	// (possibly private) registries under the same version tag can never resolve
+	// each other's cached artifact.
+	ociDir := filepath.Join("/tmp/server-manifest", repositoryCacheKey(repository))
 	localRepo, err := oci.New(ociDir)
 	if err != nil {
 		return manifest, err
@@ -602,6 +627,17 @@ func DownloadServerManifest(ctx context.Context, repository string, version stri
 			logger.Error("failed to create repository", "repository", repository, "version", version, "error", err)
 			return manifest, err
 		}
+		if auth != nil {
+			remoteRepo.PlainHTTP = auth.PlainHTTP
+			if auth.Credential != nil {
+				remoteRepo.Client = &orasauth.Client{
+					Client:     retry.DefaultClient,
+					Header:     http.Header{"User-Agent": []string{"wandb-operator"}},
+					Cache:      orasauth.NewCache(),
+					Credential: auth.Credential,
+				}
+			}
+		}
 		descriptor, err = oras.Copy(ctx, remoteRepo, version, localRepo, version, oras.DefaultCopyOptions)
 		if err != nil {
 			logger.Error("failed to fetch image from remote", "repository", repository, "version", version, "error", err)
@@ -613,6 +649,13 @@ func DownloadServerManifest(ctx context.Context, repository string, version stri
 	}
 
 	return processManifest(ctx, localRepo, descriptor, logger)
+}
+
+// repositoryCacheKey derives a filesystem-safe, collision-resistant directory
+// name from a repository reference so each repository gets its own cache.
+func repositoryCacheKey(repository string) string {
+	sum := sha256.Sum256([]byte(repository))
+	return hex.EncodeToString(sum[:])
 }
 
 func processManifest(ctx context.Context, repo oras.ReadOnlyTarget, descriptor ocispec.Descriptor, logger *slog.Logger) (Manifest, error) {

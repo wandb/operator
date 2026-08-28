@@ -51,3 +51,6 @@ hack/testing-manifests/wandb/.generated/*.yaml
 
 # various util artifacts
 .k8s-images
+
+# Downloaded by `make download-watchtower` for the image build
+/watchtower

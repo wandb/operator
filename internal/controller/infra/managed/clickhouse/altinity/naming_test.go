@@ -1,15 +1,36 @@
 package altinity
 
 import (
+	"context"
 	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/pkg/wandb/manifest"
 	"k8s.io/apimachinery/pkg/util/validation"
 )
 
 var _ = Describe("managed ClickHouse naming", func() {
+	Describe("CHIClusterName", func() {
+		It("matches the cluster the CHI declares", func() {
+			wandb := clickHouseWandb()
+			spec := wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse
+
+			chi, err := ToClickHouseVendorSpec(
+				context.Background(), wandb, spec, clickHouseScheme(),
+				testObjectStorageConn(), testObjectStorageEndpoint, true, manifest.Manifest{},
+			)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(chi.Spec.Configuration.Clusters).To(HaveLen(1))
+			Expect(chi.Spec.Configuration.Clusters[0].Name).To(Equal(CHIClusterName()))
+		})
+
+		It("is not the Service-name derivation", func() {
+			Expect(CHIClusterName()).NotTo(Equal(ClusterName("wandb-clickhouse-chi")))
+		})
+	})
+
 	Describe("KeeperNsName", func() {
 		It("pairs the Keeper with the installation via the shared base name", func() {
 			spec := &apiv2.ManagedClickHouseSpec{Name: "wandb-legacy-overrides-v1-chi", Namespace: "wandb"}

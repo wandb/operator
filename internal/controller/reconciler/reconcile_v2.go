@@ -35,6 +35,7 @@ import (
 	"github.com/wandb/operator/internal/observability/telemetry"
 	oputils "github.com/wandb/operator/pkg/utils"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
+	"github.com/wandb/operator/pkg/wandb/manifest/registryauth"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
@@ -138,6 +139,9 @@ func Reconcile(
 			if err = deleteInfraHTTPRoutes(ctx, client, wandb); err != nil {
 				return ctrl.Result{}, err
 			}
+			if err = deleteWatchtower(ctx, client, wandb); err != nil {
+				return ctrl.Result{}, err
+			}
 			if wandb.Spec.Networking.Mode == apiv2.NetworkingModeIngress {
 				if err = deleteConsolidatedIngress(ctx, client, wandb); err != nil {
 					return ctrl.Result{}, err
@@ -169,8 +173,27 @@ func Reconcile(
 	}
 
 	/////////////////////////
-	// Fetch manifest early so infra sizing can be applied before provisioning
-	manifest, err := serverManifest.GetServerManifest(ctx, wandb.Spec.Wandb.ManifestRepository, wandb.Spec.Wandb.Version)
+	// Promote known legacy env vars from legacyOverrides into typed spec fields,
+	// then drop them from legacyOverrides (the CR field is the source of truth)
+	if res, mapErr := mapLegacyEnvToCR(ctx, client, wandb); mapErr != nil || res.RequeueAfter > 0 {
+		return res, mapErr
+	}
+
+	/////////////////////////
+	// Fetch manifest early so infra sizing can be applied before provisioning.
+	// Local file:// manifests need no registry credentials, so a missing pull
+	// secret must not block reconcile for them.
+	var registryAuth *serverManifest.RegistryAuth
+	if !serverManifest.IsFileRepository(wandb.Spec.Wandb.ManifestRepository) {
+		// Ambient cloud creds only for non-default (private) registries; the
+		// public default pulls anonymously and must not probe cloud metadata.
+		allowAmbient := wandb.Spec.Wandb.ManifestRepository != apiv2.DefaultManifestRepository
+		registryAuth, err = registryauth.Resolve(ctx, client, wandb.Namespace, wandb.Spec.Global.ImagePullSecrets, allowAmbient)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+	manifest, err := serverManifest.GetServerManifest(ctx, wandb.Spec.Wandb.ManifestRepository, wandb.Spec.Wandb.Version, registryAuth)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -244,6 +267,12 @@ func Reconcile(
 		return ctrl.Result{}, err
 	}
 
+	res, err = ReconcileNetworkingAndWatchtower(ctx, client, wandb, manifest)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	ctrlResults = append(ctrlResults, res)
+
 	redisReady := redisAllReady(wandb)
 	mysqlReady := mysqlAllReady(wandb)
 	kafkaReady := wandb.Status.KafkaStatus.Ready
@@ -280,6 +309,71 @@ func consolidateResults(results []ctrl.Result) ctrl.Result {
 	return ctrl.Result{
 		RequeueAfter: lo.Min(durations),
 	}
+}
+
+// ReconcileNetworkingAndWatchtower publishes the W&B app's route — a Gateway plus
+// infra HTTPRoutes, or the consolidated Ingress — and then brings up Watchtower.
+//
+// Reconcile calls this *before* its infrastructure-readiness gate, and that
+// placement is the point: Watchtower exists to diagnose a broken install, so it
+// has to come up when MySQL, Redis, Kafka, the object store or ClickHouse are not
+// ready, which is exactly when Reconcile returns early. Its route has to be
+// published for the same reason, so networking moves up with it. Keep this above
+// that gate.
+//
+// A Watchtower failure is never returned as an error: a bad image or an RBAC
+// mistake must not stop the install it manages from reconciling. It does come
+// back as a requeue, though — dropping it outright left a transient failure with
+// nothing to retry it, so Watchtower stayed down until an unrelated event
+// happened to trigger another pass.
+func ReconcileNetworkingAndWatchtower(
+	ctx context.Context,
+	client ctrlClient.Client,
+	wandb *apiv2.WeightsAndBiases,
+	manifest serverManifest.Manifest,
+) (ctrl.Result, error) {
+	ctx, log := logx.WithSlog(ctx, logx.ReconcileInfraV2)
+
+	// Status is flushed here rather than left to ReconcileWandbManifest: that
+	// function is behind the infrastructure gate, so while infra is unready the
+	// gateway, ingress and Watchtower summaries would never reach the API — and an
+	// operator looking for Watchtower's URL during an outage would find nothing.
+	statusBefore := wandb.DeepCopy().Status
+
+	if err := cleanupNetworkingModeResources(ctx, client, wandb); err != nil {
+		log.Error("Failed to clean up stale networking resources", logx.ErrAttr(err))
+		return ctrl.Result{}, err
+	}
+	resetInactiveNetworkingStatus(wandb)
+
+	switch wandb.Spec.Networking.Mode {
+	case apiv2.NetworkingModeGatewayAPI:
+		wandb.Status.GatewayStatus = nil
+		if err := reconcileGateway(ctx, client, wandb); err != nil {
+			log.Error("Failed to reconcile Gateway", logx.ErrAttr(err))
+			return ctrl.Result{}, err
+		}
+		if err := reconcileInfraHTTPRoutes(ctx, client, wandb, manifest); err != nil {
+			log.Error("Failed to reconcile infra HTTPRoutes", logx.ErrAttr(err))
+			return ctrl.Result{}, err
+		}
+	case apiv2.NetworkingModeIngress:
+		wandb.Status.IngressStatus = nil
+		if err := reconcileConsolidatedIngress(ctx, client, wandb, manifest); err != nil {
+			log.Error("Failed to reconcile consolidated Ingress", logx.ErrAttr(err))
+			return ctrl.Result{}, err
+		}
+	}
+
+	// Requeue rather than propagate: the rest of the reconcile must still run, but
+	// the failure has to be retried by something.
+	var result ctrl.Result
+	if err := reconcileWatchtower(ctx, client, wandb, manifest); err != nil {
+		log.Error("Failed to reconcile Watchtower", logx.ErrAttr(err))
+		result.RequeueAfter = defaultRequeueDuration
+	}
+
+	return result, updateWandbStatusIfChanged(ctx, client, wandb, statusBefore)
 }
 
 func ReconcileWandbManifest(
@@ -330,6 +424,10 @@ func ReconcileWandbManifest(
 		return result, err
 	}
 
+	if err := reconcileEmailSink(ctx, client, wandb); err != nil {
+		return ctrl.Result{}, err
+	}
+
 	result, err = createKafkaTopics(ctx, client, wandb, manifest)
 	if err != nil {
 		return result, err
@@ -368,23 +466,9 @@ func ReconcileWandbManifest(
 		return ctrl.Result{}, err
 	}
 
-	if err := cleanupNetworkingModeResources(ctx, client, wandb); err != nil {
-		logger.Error(err, "Failed to clean up stale networking resources")
-		return ctrl.Result{}, err
-	}
-	resetInactiveNetworkingStatus(wandb)
-
 	if err := reconcileCustomCACerts(ctx, client, wandb); err != nil {
 		logger.Error(err, "Failed to reconcile custom CA certificates")
 		return ctrl.Result{}, err
-	}
-
-	if wandb.Spec.Networking.Mode == apiv2.NetworkingModeGatewayAPI {
-		wandb.Status.GatewayStatus = nil
-		if err := reconcileGateway(ctx, client, wandb); err != nil {
-			logger.Error(err, "Failed to reconcile Gateway")
-			return ctrl.Result{}, err
-		}
 	}
 
 	result, err = runMigrations(ctx, client, wandb, manifest)
@@ -418,13 +502,6 @@ func ReconcileWandbManifest(
 	} else {
 		logger.Info("Deferring legacy v1 deployment cleanup until all application Deployments are ready",
 			"notReady", notReady)
-	}
-
-	if wandb.Spec.Networking.Mode == apiv2.NetworkingModeGatewayAPI {
-		if err := reconcileInfraHTTPRoutes(ctx, client, wandb, manifest); err != nil {
-			logger.Error(err, "Failed to reconcile infra HTTPRoutes")
-			return ctrl.Result{}, err
-		}
 	}
 
 	if applicationsHealthy {
@@ -548,6 +625,7 @@ func reconcileApplications(
 		application.Spec.PodTemplate.Spec.SecurityContext = resolvePodSecurityContext()
 		application.Spec.PodTemplate.Spec.Affinity = wandb.Spec.Affinity
 		application.Spec.PodTemplate.Spec.Tolerations = *wandb.Spec.Tolerations
+		application.Spec.PodTemplate.Spec.ImagePullSecrets = wandb.Spec.Global.ImagePullSecrets
 		setCustomCACertsChecksumAnnotation(&application.Spec.PodTemplate, caChecksum)
 
 		application.Spec.HpaTemplate = ResolveAutoscaling(app, wandb)
@@ -633,14 +711,6 @@ func reconcileApplications(
 		}
 	}
 
-	if wandb.Spec.Networking.Mode == apiv2.NetworkingModeIngress {
-		wandb.Status.IngressStatus = nil
-		if err := reconcileConsolidatedIngress(ctx, client, wandb, manifest); err != nil {
-			logger.Error("Failed to reconcile consolidated Ingress", "err", err)
-			return ctrl.Result{}, err
-		}
-	}
-
 	hostname, err := url.Parse(wandb.Spec.Wandb.Hostname)
 	if err != nil {
 		logger.Error("Failed to parse provided hostname", "hostname", wandb.Spec.Wandb.Hostname, "err", err)
@@ -686,6 +756,21 @@ func applicationManagedFieldsEqual(before, after *apiv2.Application) bool {
 }
 
 func buildHTTPRouteTemplate(wandb *apiv2.WeightsAndBiases, app serverManifest.Application) *apiv2.HTTPRouteTemplateSpec {
+	var paths []string
+	var pathType string
+	if app.Ingress != nil {
+		paths = app.Ingress.Paths
+		pathType = app.Ingress.PathType
+	}
+	return buildHTTPRouteTemplateForPaths(wandb, paths, pathType, resolveHTTPRouteServicePort(app))
+}
+
+func buildHTTPRouteTemplateForPaths(
+	wandb *apiv2.WeightsAndBiases,
+	paths []string,
+	pathType string,
+	servicePort *gatewayv1.PortNumber,
+) *apiv2.HTTPRouteTemplateSpec {
 	gwConfig := wandb.Spec.Networking.GatewayAPI
 
 	ref := wandb.Status.GatewayStatus.GatewayRef
@@ -696,7 +781,7 @@ func buildHTTPRouteTemplate(wandb *apiv2.WeightsAndBiases, app serverManifest.Ap
 		ns := gatewayv1.Namespace(ref.Namespace)
 		parentRef.Namespace = &ns
 	}
-	if gwConfig.ListenerName != nil {
+	if gwConfig != nil && gwConfig.ListenerName != nil {
 		sectionName := gatewayv1.SectionName(*gwConfig.ListenerName)
 		parentRef.SectionName = &sectionName
 	}
@@ -706,20 +791,12 @@ func buildHTTPRouteTemplate(wandb *apiv2.WeightsAndBiases, app serverManifest.Ap
 	for _, h := range wandb.Spec.Wandb.AdditionalHostnames {
 		hostnames = append(hostnames, gatewayv1.Hostname(h))
 	}
-
-	var paths []string
-	var pathType string
-	if app.Ingress != nil {
-		paths = app.Ingress.Paths
-		pathType = app.Ingress.PathType
-	}
-
 	return &apiv2.HTTPRouteTemplateSpec{
 		ParentRefs:  []gatewayv1.ParentReference{parentRef},
 		Hostnames:   hostnames,
 		Paths:       paths,
 		PathType:    pathType,
-		ServicePort: resolveHTTPRouteServicePort(app),
+		ServicePort: servicePort,
 	}
 }
 
@@ -1071,7 +1148,7 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 					Containers: []corev1.Container{
 						{
 							Name:         "migrate",
-							Image:        migrationTask.Image.GetImage(""),
+							Image:        migrationTask.Image.GetImage(wandb.Spec.Global.ImageRegistry),
 							Args:         migrationTask.Args,
 							Command:      migrationTask.Command,
 							Env:          envVars,
@@ -1080,6 +1157,7 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 					},
 					Volumes:            volumes,
 					ServiceAccountName: wandb.Spec.Wandb.ServiceAccount.ServiceAccountName,
+					ImagePullSecrets:   wandb.Spec.Global.ImagePullSecrets,
 				},
 			}
 			setCustomCACertsChecksumAnnotation(&podTemplate, caChecksum)
@@ -1325,30 +1403,44 @@ func resolveCRFieldEnvValue(obj any, path string) (string, bool) {
 		return value, true
 	case bool:
 		return strconv.FormatBool(value), true
+	case map[string]any:
+		// A ValueOrSecret envelope carrying a literal value.
+		tb, err := json.Marshal(value)
+		if err != nil {
+			return "", false
+		}
+		var v apiv2.ValueOrSecret
+		if err := json.Unmarshal(tb, &v); err == nil && v.Value != "" {
+			return v.Value, true
+		}
+		return "", false
 	default:
 		return "", false
 	}
 }
 
+// resolveCRFieldSecretSelector resolves a dotted CR field into the effective
+// secret selector. It understands the ValueOrSecret envelope (valueFrom or the
+// legacy {name, key} shape) as well as a bare SecretKeySelector node. A literal
+// value yields no selector (the caller falls back to resolveCRFieldEnvValue).
 func resolveCRFieldSecretSelector(obj any, path string) (corev1.SecretKeySelector, bool) {
 	cur, ok := resolveCRField(obj, path)
 	if !ok {
 		return corev1.SecretKeySelector{}, false
 	}
-	// Re-marshal the terminal node into a SecretKeySelector so we honor the same
-	// json tags (name/key/optional) the CRD uses.
 	tb, err := json.Marshal(cur)
 	if err != nil {
 		return corev1.SecretKeySelector{}, false
 	}
-	var sel corev1.SecretKeySelector
-	if err := json.Unmarshal(tb, &sel); err != nil {
+	var v apiv2.ValueOrSecret
+	if err := json.Unmarshal(tb, &v); err != nil {
 		return corev1.SecretKeySelector{}, false
 	}
-	if sel.Name == "" || sel.Key == "" {
+	ref := v.SecretKeyRef()
+	if ref == nil || ref.Name == "" || ref.Key == "" {
 		return corev1.SecretKeySelector{}, false
 	}
-	return sel, true
+	return *ref, true
 }
 
 // allInstancesReady reports whether every instance (managed or external) has a

@@ -67,7 +67,7 @@ func TestMain(m *testing.M) {
 func withConversionManifest(t *testing.T, apps map[string]serverManifest.Application) *atomic.Int32 {
 	t.Helper()
 	var calls atomic.Int32
-	SetConversionManifestGetter(func(_ context.Context, _, _ string) (serverManifest.Manifest, error) {
+	SetConversionManifestGetter(func(_ context.Context, _, _ string, _ *serverManifest.RegistryAuth) (serverManifest.Manifest, error) {
 		calls.Add(1)
 		return serverManifest.Manifest{Applications: apps}, nil
 	})
