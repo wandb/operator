@@ -5,12 +5,15 @@ metadata:
 spec:
   wandb:
     hostname: http://localhost
+    retention:
+      artifactGarbageCollection: true
+      dataRetentionPeriod: 168h
     internalServiceAuth:
       enabled: true
     features:
       proxy: true
     manifestRepository: "file:///server-manifest"
-    version: "0.79.0"
+    version: "0.84.0-notifications-security-flags.1"
   size: dev
   retentionPolicy:
     onDelete: detach
@@ -34,3 +37,4 @@ spec:
     managedClickhouse:
       telemetry:
         enabled: true
+

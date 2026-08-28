@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -30,9 +31,11 @@ import (
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/ctrlqueue"
 	"github.com/wandb/operator/internal/logx"
-	wmetrics "github.com/wandb/operator/internal/metrics"
+	wmetrics "github.com/wandb/operator/internal/observability/metrics"
+	"github.com/wandb/operator/internal/observability/telemetry"
 	oputils "github.com/wandb/operator/pkg/utils"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
+	"github.com/wandb/operator/pkg/wandb/manifest/registryauth"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
@@ -51,128 +54,6 @@ const CleanupFinalizer = "wandb.apps.wandb.com/cleanup"
 
 var defaultRequeueMinutes = 1
 var defaultRequeueDuration = time.Duration(defaultRequeueMinutes) * time.Minute
-
-var managedWorkloadTelemetryApplications = map[string]struct{}{
-	"api":                     {},
-	"executor":                {},
-	"filemeta":                {},
-	"filestream":              {},
-	"flat-run-fields-updater": {},
-	"glue":                    {},
-	"metric-observer":         {},
-	"parquet":                 {},
-}
-
-var managedWorkloadStatsdApplications = map[string]struct{}{
-	"api":                     {},
-	"executor":                {},
-	"filemeta":                {},
-	"filestream":              {},
-	"flat-run-fields-updater": {},
-	"glue":                    {},
-	"metric-observer":         {},
-	"parquet":                 {},
-}
-
-var managedWorkloadDatadogApplications = map[string]struct{}{
-	"anaconda2":                         {},
-	"weave-trace":                       {},
-	"weave-trace-worker":                {},
-	"weave-trace-evaluate-model-worker": {},
-}
-
-var managedWorkloadTelemetryEnvVars = []serverManifest.EnvVar{
-	{
-		Name: "OTEL_EXPORTER_OTLP_PROTOCOL",
-		Sources: []serverManifest.EnvSource{
-			{Type: "telemetry", Field: "protocol"},
-		},
-	},
-	{
-		Name: "OTEL_TRACES_EXPORTER",
-		Sources: []serverManifest.EnvSource{
-			{Type: "telemetry", Field: "tracesExporter"},
-		},
-	},
-	{
-		Name: "OTEL_METRICS_EXPORTER",
-		Sources: []serverManifest.EnvSource{
-			{Type: "telemetry", Field: "metricsExporter"},
-		},
-	},
-	{
-		Name: "OTEL_LOGS_EXPORTER",
-		Sources: []serverManifest.EnvSource{
-			{Type: "telemetry", Field: "logsExporter"},
-		},
-	},
-	{
-		Name: "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT",
-		Sources: []serverManifest.EnvSource{
-			{Type: "telemetry", Field: "metricsEndpoint"},
-		},
-	},
-	{
-		Name: "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT",
-		Sources: []serverManifest.EnvSource{
-			{Type: "telemetry", Field: "logsEndpoint"},
-		},
-	},
-	{
-		Name: "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
-		Sources: []serverManifest.EnvSource{
-			{Type: "telemetry", Field: "tracesEndpoint"},
-		},
-	},
-	{
-		Name: "OTEL_SERVICE_NAME",
-		Sources: []serverManifest.EnvSource{
-			{Type: "telemetry", Field: "serviceName"},
-		},
-	},
-	{
-		Name: "OTEL_RESOURCE_ATTRIBUTES",
-		Sources: []serverManifest.EnvSource{
-			{Type: "telemetry", Field: "resourceAttributes"},
-		},
-	},
-	{
-		Name: "GORILLA_TRACER",
-		Sources: []serverManifest.EnvSource{
-			{Type: "telemetry", Field: "gorillaTracer"},
-		},
-	},
-}
-
-var managedWorkloadStatsdEnvVars = []serverManifest.EnvVar{
-	{
-		Name: "GORILLA_STATSD_ADDRESS",
-		Sources: []serverManifest.EnvSource{
-			{Type: "telemetry", Field: "statsdAddress"},
-		},
-	},
-}
-
-var managedWorkloadDatadogEnvVars = []serverManifest.EnvVar{
-	{
-		Name: "DD_TRACE_AGENT_URL",
-		Sources: []serverManifest.EnvSource{
-			{Type: "telemetry", Field: "datadogTraceAgentURL"},
-		},
-	},
-	{
-		Name: "DD_AGENT_HOST",
-		Sources: []serverManifest.EnvSource{
-			{Type: "telemetry", Field: "datadogTraceAgentHost"},
-		},
-	},
-	{
-		Name: "DD_TRACE_AGENT_PORT",
-		Sources: []serverManifest.EnvSource{
-			{Type: "telemetry", Field: "datadogTraceAgentPort"},
-		},
-	},
-}
 
 type finalizerFunc func(context.Context, ctrlClient.Client, *apiv2.WeightsAndBiases) error
 
@@ -199,7 +80,7 @@ func Reconcile(
 	client ctrlClient.Client,
 	recorder record.EventRecorder,
 	wandb *apiv2.WeightsAndBiases,
-	telemetryConfig TelemetryRuntimeConfig,
+	telemetryConfig telemetry.TelemetryRuntimeConfig,
 ) (ctrl.Result, error) {
 	ctx, log := logx.WithSlog(ctx, logx.ReconcileInfraV2)
 
@@ -207,7 +88,7 @@ func Reconcile(
 
 	var errorCount int
 
-	wandb.Status.TelemetryStatus = summarizeTelemetryInfraStatus(ctx, client, telemetryConfig)
+	wandb.Status.TelemetryStatus = telemetry.SummarizeTelemetryInfraStatus(ctx, client, telemetryConfig)
 
 	/////////////////////////
 	// Retention Finalizer
@@ -258,6 +139,9 @@ func Reconcile(
 			if err = deleteInfraHTTPRoutes(ctx, client, wandb); err != nil {
 				return ctrl.Result{}, err
 			}
+			if err = deleteWatchtower(ctx, client, wandb); err != nil {
+				return ctrl.Result{}, err
+			}
 			if wandb.Spec.Networking.Mode == apiv2.NetworkingModeIngress {
 				if err = deleteConsolidatedIngress(ctx, client, wandb); err != nil {
 					return ctrl.Result{}, err
@@ -289,8 +173,27 @@ func Reconcile(
 	}
 
 	/////////////////////////
-	// Fetch manifest early so infra sizing can be applied before provisioning
-	manifest, err := serverManifest.GetServerManifest(ctx, wandb.Spec.Wandb.ManifestRepository, wandb.Spec.Wandb.Version)
+	// Promote known legacy env vars from legacyOverrides into typed spec fields,
+	// then drop them from legacyOverrides (the CR field is the source of truth)
+	if res, mapErr := mapLegacyEnvToCR(ctx, client, wandb); mapErr != nil || res.RequeueAfter > 0 {
+		return res, mapErr
+	}
+
+	/////////////////////////
+	// Fetch manifest early so infra sizing can be applied before provisioning.
+	// Local file:// manifests need no registry credentials, so a missing pull
+	// secret must not block reconcile for them.
+	var registryAuth *serverManifest.RegistryAuth
+	if !serverManifest.IsFileRepository(wandb.Spec.Wandb.ManifestRepository) {
+		// Ambient cloud creds only for non-default (private) registries; the
+		// public default pulls anonymously and must not probe cloud metadata.
+		allowAmbient := wandb.Spec.Wandb.ManifestRepository != apiv2.DefaultManifestRepository
+		registryAuth, err = registryauth.Resolve(ctx, client, wandb.Namespace, wandb.Spec.Global.ImagePullSecrets, allowAmbient)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+	manifest, err := serverManifest.GetServerManifest(ctx, wandb.Spec.Wandb.ManifestRepository, wandb.Spec.Wandb.Version, registryAuth)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -359,10 +262,16 @@ func Reconcile(
 		return ctrl.Result{}, errors.New("infra state update errors")
 	}
 
-	if err := reconcileTelemetryConnectionSecret(ctx, client, wandb, telemetryConfig); err != nil {
+	if err := telemetry.ReconcileTelemetryConnectionSecret(ctx, client, wandb, telemetryConfig); err != nil {
 		log.Error("failed to reconcile telemetry connection secret", logx.ErrAttr(err))
 		return ctrl.Result{}, err
 	}
+
+	res, err = ReconcileNetworkingAndWatchtower(ctx, client, wandb, manifest)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	ctrlResults = append(ctrlResults, res)
 
 	redisReady := redisAllReady(wandb)
 	mysqlReady := mysqlAllReady(wandb)
@@ -402,12 +311,77 @@ func consolidateResults(results []ctrl.Result) ctrl.Result {
 	}
 }
 
+// ReconcileNetworkingAndWatchtower publishes the W&B app's route — a Gateway plus
+// infra HTTPRoutes, or the consolidated Ingress — and then brings up Watchtower.
+//
+// Reconcile calls this *before* its infrastructure-readiness gate, and that
+// placement is the point: Watchtower exists to diagnose a broken install, so it
+// has to come up when MySQL, Redis, Kafka, the object store or ClickHouse are not
+// ready, which is exactly when Reconcile returns early. Its route has to be
+// published for the same reason, so networking moves up with it. Keep this above
+// that gate.
+//
+// A Watchtower failure is never returned as an error: a bad image or an RBAC
+// mistake must not stop the install it manages from reconciling. It does come
+// back as a requeue, though — dropping it outright left a transient failure with
+// nothing to retry it, so Watchtower stayed down until an unrelated event
+// happened to trigger another pass.
+func ReconcileNetworkingAndWatchtower(
+	ctx context.Context,
+	client ctrlClient.Client,
+	wandb *apiv2.WeightsAndBiases,
+	manifest serverManifest.Manifest,
+) (ctrl.Result, error) {
+	ctx, log := logx.WithSlog(ctx, logx.ReconcileInfraV2)
+
+	// Status is flushed here rather than left to ReconcileWandbManifest: that
+	// function is behind the infrastructure gate, so while infra is unready the
+	// gateway, ingress and Watchtower summaries would never reach the API — and an
+	// operator looking for Watchtower's URL during an outage would find nothing.
+	statusBefore := wandb.DeepCopy().Status
+
+	if err := cleanupNetworkingModeResources(ctx, client, wandb); err != nil {
+		log.Error("Failed to clean up stale networking resources", logx.ErrAttr(err))
+		return ctrl.Result{}, err
+	}
+	resetInactiveNetworkingStatus(wandb)
+
+	switch wandb.Spec.Networking.Mode {
+	case apiv2.NetworkingModeGatewayAPI:
+		wandb.Status.GatewayStatus = nil
+		if err := reconcileGateway(ctx, client, wandb); err != nil {
+			log.Error("Failed to reconcile Gateway", logx.ErrAttr(err))
+			return ctrl.Result{}, err
+		}
+		if err := reconcileInfraHTTPRoutes(ctx, client, wandb, manifest); err != nil {
+			log.Error("Failed to reconcile infra HTTPRoutes", logx.ErrAttr(err))
+			return ctrl.Result{}, err
+		}
+	case apiv2.NetworkingModeIngress:
+		wandb.Status.IngressStatus = nil
+		if err := reconcileConsolidatedIngress(ctx, client, wandb, manifest); err != nil {
+			log.Error("Failed to reconcile consolidated Ingress", logx.ErrAttr(err))
+			return ctrl.Result{}, err
+		}
+	}
+
+	// Requeue rather than propagate: the rest of the reconcile must still run, but
+	// the failure has to be retried by something.
+	var result ctrl.Result
+	if err := reconcileWatchtower(ctx, client, wandb, manifest); err != nil {
+		log.Error("Failed to reconcile Watchtower", logx.ErrAttr(err))
+		result.RequeueAfter = defaultRequeueDuration
+	}
+
+	return result, updateWandbStatusIfChanged(ctx, client, wandb, statusBefore)
+}
+
 func ReconcileWandbManifest(
 	ctx context.Context,
 	client ctrlClient.Client,
 	wandb *apiv2.WeightsAndBiases,
 	manifest serverManifest.Manifest,
-	telemetryConfig TelemetryRuntimeConfig,
+	telemetryConfig telemetry.TelemetryRuntimeConfig,
 ) (ctrl.Result, error) {
 	// Reconcile Wandb Manifest
 	logger := ctrl.LoggerFrom(ctx).WithName("reconcileWandbManifest")
@@ -450,6 +424,10 @@ func ReconcileWandbManifest(
 		return result, err
 	}
 
+	if err := reconcileEmailSink(ctx, client, wandb); err != nil {
+		return ctrl.Result{}, err
+	}
+
 	result, err = createKafkaTopics(ctx, client, wandb, manifest)
 	if err != nil {
 		return result, err
@@ -488,23 +466,9 @@ func ReconcileWandbManifest(
 		return ctrl.Result{}, err
 	}
 
-	if err := cleanupNetworkingModeResources(ctx, client, wandb); err != nil {
-		logger.Error(err, "Failed to clean up stale networking resources")
-		return ctrl.Result{}, err
-	}
-	resetInactiveNetworkingStatus(wandb)
-
 	if err := reconcileCustomCACerts(ctx, client, wandb); err != nil {
 		logger.Error(err, "Failed to reconcile custom CA certificates")
 		return ctrl.Result{}, err
-	}
-
-	if wandb.Spec.Networking.Mode == apiv2.NetworkingModeGatewayAPI {
-		wandb.Status.GatewayStatus = nil
-		if err := reconcileGateway(ctx, client, wandb); err != nil {
-			logger.Error(err, "Failed to reconcile Gateway")
-			return ctrl.Result{}, err
-		}
 	}
 
 	result, err = runMigrations(ctx, client, wandb, manifest)
@@ -540,13 +504,6 @@ func ReconcileWandbManifest(
 			"notReady", notReady)
 	}
 
-	if wandb.Spec.Networking.Mode == apiv2.NetworkingModeGatewayAPI {
-		if err := reconcileInfraHTTPRoutes(ctx, client, wandb, manifest); err != nil {
-			logger.Error(err, "Failed to reconcile infra HTTPRoutes")
-			return ctrl.Result{}, err
-		}
-	}
-
 	if applicationsHealthy {
 		setReadyStatus(
 			wandb,
@@ -574,7 +531,7 @@ func reconcileApplications(
 	client ctrlClient.Client,
 	wandb *apiv2.WeightsAndBiases,
 	manifest serverManifest.Manifest,
-	telemetryConfig TelemetryRuntimeConfig,
+	telemetryConfig telemetry.TelemetryRuntimeConfig,
 ) (ctrl.Result, error) {
 	logger := logx.GetSlog(ctx)
 	logger.Info("Reconciling applications")
@@ -609,7 +566,7 @@ func reconcileApplications(
 		if err != nil {
 			return ctrl.Result{}, err
 		}
-		envVars = applyWorkloadTelemetryDefaults(envVars, app.Name)
+		envVars = telemetry.ApplyWorkloadTelemetryDefaults(envVars, app.Name)
 
 		volumes, volumeMounts, err := resolveVolumeMounts(ctx, manifest, app.CommonVolumeMounts, app.VolumeMounts)
 		if err != nil {
@@ -668,6 +625,7 @@ func reconcileApplications(
 		application.Spec.PodTemplate.Spec.SecurityContext = resolvePodSecurityContext()
 		application.Spec.PodTemplate.Spec.Affinity = wandb.Spec.Affinity
 		application.Spec.PodTemplate.Spec.Tolerations = *wandb.Spec.Tolerations
+		application.Spec.PodTemplate.Spec.ImagePullSecrets = wandb.Spec.Global.ImagePullSecrets
 		setCustomCACertsChecksumAnnotation(&application.Spec.PodTemplate, caChecksum)
 
 		application.Spec.HpaTemplate = ResolveAutoscaling(app, wandb)
@@ -753,14 +711,6 @@ func reconcileApplications(
 		}
 	}
 
-	if wandb.Spec.Networking.Mode == apiv2.NetworkingModeIngress {
-		wandb.Status.IngressStatus = nil
-		if err := reconcileConsolidatedIngress(ctx, client, wandb, manifest); err != nil {
-			logger.Error("Failed to reconcile consolidated Ingress", "err", err)
-			return ctrl.Result{}, err
-		}
-	}
-
 	hostname, err := url.Parse(wandb.Spec.Wandb.Hostname)
 	if err != nil {
 		logger.Error("Failed to parse provided hostname", "hostname", wandb.Spec.Wandb.Hostname, "err", err)
@@ -806,6 +756,21 @@ func applicationManagedFieldsEqual(before, after *apiv2.Application) bool {
 }
 
 func buildHTTPRouteTemplate(wandb *apiv2.WeightsAndBiases, app serverManifest.Application) *apiv2.HTTPRouteTemplateSpec {
+	var paths []string
+	var pathType string
+	if app.Ingress != nil {
+		paths = app.Ingress.Paths
+		pathType = app.Ingress.PathType
+	}
+	return buildHTTPRouteTemplateForPaths(wandb, paths, pathType, resolveHTTPRouteServicePort(app))
+}
+
+func buildHTTPRouteTemplateForPaths(
+	wandb *apiv2.WeightsAndBiases,
+	paths []string,
+	pathType string,
+	servicePort *gatewayv1.PortNumber,
+) *apiv2.HTTPRouteTemplateSpec {
 	gwConfig := wandb.Spec.Networking.GatewayAPI
 
 	ref := wandb.Status.GatewayStatus.GatewayRef
@@ -816,7 +781,7 @@ func buildHTTPRouteTemplate(wandb *apiv2.WeightsAndBiases, app serverManifest.Ap
 		ns := gatewayv1.Namespace(ref.Namespace)
 		parentRef.Namespace = &ns
 	}
-	if gwConfig.ListenerName != nil {
+	if gwConfig != nil && gwConfig.ListenerName != nil {
 		sectionName := gatewayv1.SectionName(*gwConfig.ListenerName)
 		parentRef.SectionName = &sectionName
 	}
@@ -826,20 +791,12 @@ func buildHTTPRouteTemplate(wandb *apiv2.WeightsAndBiases, app serverManifest.Ap
 	for _, h := range wandb.Spec.Wandb.AdditionalHostnames {
 		hostnames = append(hostnames, gatewayv1.Hostname(h))
 	}
-
-	var paths []string
-	var pathType string
-	if app.Ingress != nil {
-		paths = app.Ingress.Paths
-		pathType = app.Ingress.PathType
-	}
-
 	return &apiv2.HTTPRouteTemplateSpec{
 		ParentRefs:  []gatewayv1.ParentReference{parentRef},
 		Hostnames:   hostnames,
 		Paths:       paths,
 		PathType:    pathType,
-		ServicePort: resolveHTTPRouteServicePort(app),
+		ServicePort: servicePort,
 	}
 }
 
@@ -862,36 +819,6 @@ func resolveHTTPRouteServicePort(app serverManifest.Application) *gatewayv1.Port
 	return nil
 }
 
-func applyWorkloadTelemetryDefaults(envVars []corev1.EnvVar, applicationName string) []corev1.EnvVar {
-	if applicationName == "" || !hasWorkloadTelemetryConfig(envVars) {
-		return envVars
-	}
-
-	serviceNameIndex := -1
-	for i, envVar := range envVars {
-		if envVar.Name != "OTEL_SERVICE_NAME" {
-			continue
-		}
-		serviceNameIndex = i
-		if envVar.Value != "" {
-			return envVars
-		}
-		break
-	}
-
-	serviceNameEnv := corev1.EnvVar{
-		Name:  "OTEL_SERVICE_NAME",
-		Value: applicationName,
-	}
-
-	if serviceNameIndex == -1 {
-		return append(envVars, serviceNameEnv)
-	}
-
-	envVars[serviceNameIndex] = serviceNameEnv
-	return envVars
-}
-
 func injectManagedWorkloadTelemetryEnvvars(
 	ctx context.Context,
 	client ctrlClient.Client,
@@ -899,69 +826,18 @@ func injectManagedWorkloadTelemetryEnvvars(
 	manifest serverManifest.Manifest,
 	app serverManifest.Application,
 	envVars []corev1.EnvVar,
-	telemetryConfig TelemetryRuntimeConfig,
+	telemetryConfig telemetry.TelemetryRuntimeConfig,
 ) ([]corev1.EnvVar, error) {
-
-	if !telemetryConfig.Enabled {
+	telemetryEnvVars := telemetry.ManagedWorkloadEnvVars(app.Name, telemetryConfig)
+	if len(telemetryEnvVars) == 0 {
 		return envVars, nil
 	}
 
-	if shouldInjectManagedWorkloadTelemetry(app.Name) {
-		var err error
-		envVars, err = appendResolvedManagedTelemetryEnvvars(ctx, client, wandb, manifest, envVars, managedWorkloadTelemetryEnvVars)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	if shouldInjectManagedWorkloadStatsd(app.Name) {
-		var err error
-		envVars, err = appendResolvedManagedTelemetryEnvvars(ctx, client, wandb, manifest, envVars, managedWorkloadStatsdEnvVars)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	if shouldInjectManagedWorkloadDatadog(app.Name) {
-		var err error
-		envVars, err = appendResolvedManagedTelemetryEnvvars(ctx, client, wandb, manifest, envVars, managedWorkloadDatadogEnvVars)
-		if err != nil {
-			return nil, err
-		}
-		envVars = appendMissingEnvVars(envVars, []corev1.EnvVar{{Name: "DD_SERVICE", Value: app.Name}})
-	}
-
-	return envVars, nil
-}
-
-func appendResolvedManagedTelemetryEnvvars(
-	ctx context.Context,
-	client ctrlClient.Client,
-	wandb *apiv2.WeightsAndBiases,
-	manifest serverManifest.Manifest,
-	envVars []corev1.EnvVar,
-	managedTelemetryEnvVars []serverManifest.EnvVar,
-) ([]corev1.EnvVar, error) {
-	telemetryEnvVars, err := resolveEnvvars(ctx, client, wandb, manifest, nil, managedTelemetryEnvVars)
+	resolved, err := resolveEnvvars(ctx, client, wandb, manifest, nil, telemetryEnvVars)
 	if err != nil {
 		return nil, err
 	}
-	return appendMissingEnvVars(envVars, telemetryEnvVars), nil
-}
-
-func shouldInjectManagedWorkloadTelemetry(appName string) bool {
-	_, ok := managedWorkloadTelemetryApplications[appName]
-	return ok
-}
-
-func shouldInjectManagedWorkloadStatsd(appName string) bool {
-	_, ok := managedWorkloadStatsdApplications[appName]
-	return ok
-}
-
-func shouldInjectManagedWorkloadDatadog(appName string) bool {
-	_, ok := managedWorkloadDatadogApplications[appName]
-	return ok
+	return appendMissingEnvVars(envVars, resolved), nil
 }
 
 func appendMissingEnvVars(existing []corev1.EnvVar, additions []corev1.EnvVar) []corev1.EnvVar {
@@ -979,23 +855,6 @@ func appendMissingEnvVars(existing []corev1.EnvVar, additions []corev1.EnvVar) [
 	}
 
 	return existing
-}
-
-func hasWorkloadTelemetryConfig(envVars []corev1.EnvVar) bool {
-	for _, envVar := range envVars {
-		switch envVar.Name {
-		case "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT",
-			"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT",
-			"OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
-			"OTEL_METRICS_EXPORTER",
-			"OTEL_LOGS_EXPORTER",
-			"OTEL_TRACES_EXPORTER",
-			"OTEL_SERVICE_NAME",
-			"GORILLA_TRACER":
-			return true
-		}
-	}
-	return false
 }
 
 func resolveJWTTokens(app serverManifest.Application, volumes []corev1.Volume, volumeMounts []corev1.VolumeMount) ([]corev1.Volume, []corev1.VolumeMount) {
@@ -1289,7 +1148,7 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 					Containers: []corev1.Container{
 						{
 							Name:         "migrate",
-							Image:        migrationTask.Image.GetImage(""),
+							Image:        migrationTask.Image.GetImage(wandb.Spec.Global.ImageRegistry),
 							Args:         migrationTask.Args,
 							Command:      migrationTask.Command,
 							Env:          envVars,
@@ -1298,6 +1157,7 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 					},
 					Volumes:            volumes,
 					ServiceAccountName: wandb.Spec.Wandb.ServiceAccount.ServiceAccountName,
+					ImagePullSecrets:   wandb.Spec.Global.ImagePullSecrets,
 				},
 			}
 			setCustomCACertsChecksumAnnotation(&podTemplate, caChecksum)
@@ -1498,7 +1358,7 @@ func generateSecrets(ctx context.Context, client ctrlClient.Client, wandb *apiv2
 
 // resolveCRField traverses a dotted field path (e.g., "spec.wandb.license") in the
 // provided custom resource object and returns the raw terminal value if present.
-// Typed accessors (resolveCRFieldString, resolveCRFieldSecretSelector, ...) build on
+// Typed accessors (resolveCRFieldEnvValue, resolveCRFieldSecretSelector, ...) build on
 // top of this to validate and cast the result to the type they expect.
 func resolveCRField(obj any, path string) (any, bool) {
 	if obj == nil || path == "" {
@@ -1528,37 +1388,59 @@ func resolveCRField(obj any, path string) (any, bool) {
 	return cur, true
 }
 
-// resolveCRFieldString resolves a dotted field path from the provided custom resource
-// object, returning the string value if present. Non-string terminal values are
-// treated as not found.
-func resolveCRFieldString(obj any, path string) (string, bool) {
+// resolveCRFieldEnvValue resolves a dotted field path from the provided custom
+// resource object into a literal Kubernetes environment variable value. String
+// values pass through unchanged, while booleans use their lowercase Go/Kubernetes
+// representation. Other terminal values are treated as not found.
+func resolveCRFieldEnvValue(obj any, path string) (string, bool) {
 	cur, ok := resolveCRField(obj, path)
 	if !ok {
 		return "", false
 	}
-	s, ok := cur.(string)
-	return s, ok
+
+	switch value := cur.(type) {
+	case string:
+		return value, true
+	case bool:
+		return strconv.FormatBool(value), true
+	case map[string]any:
+		// A ValueOrSecret envelope carrying a literal value.
+		tb, err := json.Marshal(value)
+		if err != nil {
+			return "", false
+		}
+		var v apiv2.ValueOrSecret
+		if err := json.Unmarshal(tb, &v); err == nil && v.Value != "" {
+			return v.Value, true
+		}
+		return "", false
+	default:
+		return "", false
+	}
 }
 
+// resolveCRFieldSecretSelector resolves a dotted CR field into the effective
+// secret selector. It understands the ValueOrSecret envelope (valueFrom or the
+// legacy {name, key} shape) as well as a bare SecretKeySelector node. A literal
+// value yields no selector (the caller falls back to resolveCRFieldEnvValue).
 func resolveCRFieldSecretSelector(obj any, path string) (corev1.SecretKeySelector, bool) {
 	cur, ok := resolveCRField(obj, path)
 	if !ok {
 		return corev1.SecretKeySelector{}, false
 	}
-	// Re-marshal the terminal node into a SecretKeySelector so we honor the same
-	// json tags (name/key/optional) the CRD uses.
 	tb, err := json.Marshal(cur)
 	if err != nil {
 		return corev1.SecretKeySelector{}, false
 	}
-	var sel corev1.SecretKeySelector
-	if err := json.Unmarshal(tb, &sel); err != nil {
+	var v apiv2.ValueOrSecret
+	if err := json.Unmarshal(tb, &v); err != nil {
 		return corev1.SecretKeySelector{}, false
 	}
-	if sel.Name == "" || sel.Key == "" {
+	ref := v.SecretKeyRef()
+	if ref == nil || ref.Name == "" || ref.Key == "" {
 		return corev1.SecretKeySelector{}, false
 	}
-	return sel, true
+	return *ref, true
 }
 
 // allInstancesReady reports whether every instance (managed or external) has a

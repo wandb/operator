@@ -1,4 +1,4 @@
-package reconciler
+package telemetry
 
 import (
 	"context"
@@ -16,7 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
-func reconcileTelemetryConnectionSecret(
+func ReconcileTelemetryConnectionSecret(
 	ctx context.Context,
 	client ctrlClient.Client,
 	wandb *apiv2.WeightsAndBiases,
@@ -32,20 +32,20 @@ func reconcileTelemetryConnectionSecret(
 	}
 
 	desiredData := map[string][]byte{
-		"OTEL_EXPORTER_OTLP_PROTOCOL":         []byte(connection.Protocol),
-		"OTEL_EXPORTER_OTLP_METRICS_ENDPOINT": []byte(connection.MetricsEndpoint),
-		"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT":    []byte(connection.LogsEndpoint),
-		"OTEL_EXPORTER_OTLP_TRACES_ENDPOINT":  []byte(connection.TracesEndpoint),
-		"OTEL_METRICS_EXPORTER":               []byte(connection.MetricsExporter),
-		"OTEL_LOGS_EXPORTER":                  []byte(connection.LogsExporter),
-		"OTEL_TRACES_EXPORTER":                []byte(connection.TracesExporter),
-		"OTEL_SERVICE_NAME":                   []byte(connection.ServiceName),
-		"OTEL_RESOURCE_ATTRIBUTES":            []byte(connection.ResourceAttributes),
-		"GORILLA_TRACER":                      []byte(connection.GorillaTracer),
-		"GORILLA_STATSD_ADDRESS":              []byte(connection.StatsdAddress),
-		"DD_TRACE_AGENT_URL":                  []byte(connection.DatadogTraceAgentURL),
-		"DD_AGENT_HOST":                       []byte(connection.DatadogTraceAgentHost),
-		"DD_TRACE_AGENT_PORT":                 []byte(connection.DatadogTraceAgentPort),
+		envOTLPProtocol:        []byte(connection.Protocol),
+		envOTLPMetricsEndpoint: []byte(connection.MetricsEndpoint),
+		envOTLPLogsEndpoint:    []byte(connection.LogsEndpoint),
+		envOTLPTracesEndpoint:  []byte(connection.TracesEndpoint),
+		envOTELMetricsExporter: []byte(connection.MetricsExporter),
+		envOTELLogsExporter:    []byte(connection.LogsExporter),
+		envOTELTracesExporter:  []byte(connection.TracesExporter),
+		envOTELServiceName:     []byte(connection.ServiceName),
+		envOTELResourceAttrs:   []byte(connection.ResourceAttributes),
+		envGorillaTracer:       []byte(connection.GorillaTracer),
+		envGorillaStatsd:       []byte(connection.StatsdAddress),
+		envDDTraceAgentURL:     []byte(connection.DatadogTraceAgentURL),
+		envDDAgentHost:         []byte(connection.DatadogTraceAgentHost),
+		envDDTraceAgentPort:    []byte(connection.DatadogTraceAgentPort),
 	}
 
 	secretLookup := types.NamespacedName{

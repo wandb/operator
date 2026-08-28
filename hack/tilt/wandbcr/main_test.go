@@ -89,12 +89,12 @@ func TestBuildCRExternalMySQLOnly(t *testing.T) {
 	if cr.Spec.MySQL[v2.DefaultInstanceName].ExternalMysql == nil {
 		t.Fatalf("external mysql should be configured")
 	}
-	assertSelector(t, cr.Spec.MySQL[v2.DefaultInstanceName].ExternalMysql.Host, externalMySQLSecret, "Host")
-	assertSelector(t, cr.Spec.MySQL[v2.DefaultInstanceName].ExternalMysql.Port, externalMySQLSecret, "Port")
-	assertSelector(t, cr.Spec.MySQL[v2.DefaultInstanceName].ExternalMysql.Database, externalMySQLSecret, "Database")
-	assertSelector(t, cr.Spec.MySQL[v2.DefaultInstanceName].ExternalMysql.Username, externalMySQLSecret, "Username")
-	assertSelector(t, cr.Spec.MySQL[v2.DefaultInstanceName].ExternalMysql.Password, externalMySQLSecret, "Password")
-	assertEmptySelector(t, cr.Spec.MySQL[v2.DefaultInstanceName].ExternalMysql.SslCa, "mysql sslCa")
+	assertValueSelector(t, cr.Spec.MySQL[v2.DefaultInstanceName].ExternalMysql.Host, externalMySQLSecret, "Host")
+	assertValueSelector(t, cr.Spec.MySQL[v2.DefaultInstanceName].ExternalMysql.Port, externalMySQLSecret, "Port")
+	assertValueSelector(t, cr.Spec.MySQL[v2.DefaultInstanceName].ExternalMysql.Database, externalMySQLSecret, "Database")
+	assertValueSelector(t, cr.Spec.MySQL[v2.DefaultInstanceName].ExternalMysql.Username, externalMySQLSecret, "Username")
+	assertValueSelector(t, cr.Spec.MySQL[v2.DefaultInstanceName].ExternalMysql.Password, externalMySQLSecret, "Password")
+	assertEmptyValue(t, cr.Spec.MySQL[v2.DefaultInstanceName].ExternalMysql.SslCa, "mysql sslCa")
 
 	if cr.Spec.Redis[v2.DefaultInstanceName].ManagedRedis == nil || cr.Spec.Redis[v2.DefaultInstanceName].ExternalRedis != nil {
 		t.Fatalf("redis should remain managed")
@@ -116,10 +116,10 @@ func TestBuildCRExternalRedisOnly(t *testing.T) {
 	if cr.Spec.Redis[v2.DefaultInstanceName].ExternalRedis == nil {
 		t.Fatalf("external redis should be configured")
 	}
-	assertSelector(t, cr.Spec.Redis[v2.DefaultInstanceName].ExternalRedis.Host, externalRedisSecret, "Host")
-	assertSelector(t, cr.Spec.Redis[v2.DefaultInstanceName].ExternalRedis.Port, externalRedisSecret, "Port")
-	assertEmptySelector(t, cr.Spec.Redis[v2.DefaultInstanceName].ExternalRedis.Password, "redis password")
-	assertEmptySelector(t, cr.Spec.Redis[v2.DefaultInstanceName].ExternalRedis.SslCa, "redis sslCa")
+	assertValueSelector(t, cr.Spec.Redis[v2.DefaultInstanceName].ExternalRedis.Host, externalRedisSecret, "Host")
+	assertValueSelector(t, cr.Spec.Redis[v2.DefaultInstanceName].ExternalRedis.Port, externalRedisSecret, "Port")
+	assertEmptyValue(t, cr.Spec.Redis[v2.DefaultInstanceName].ExternalRedis.Password, "redis password")
+	assertEmptyValue(t, cr.Spec.Redis[v2.DefaultInstanceName].ExternalRedis.SslCa, "redis sslCa")
 
 	if cr.Spec.MySQL[v2.DefaultInstanceName].ManagedMysql == nil || cr.Spec.MySQL[v2.DefaultInstanceName].ExternalMysql != nil {
 		t.Fatalf("mysql should remain managed")
@@ -141,13 +141,13 @@ func TestBuildCRExternalObjectStoreOnly(t *testing.T) {
 	if cr.Spec.ObjectStore[v2.DefaultInstanceName].ExternalObjectStore == nil {
 		t.Fatalf("external object store should be configured")
 	}
-	assertSelector(t, cr.Spec.ObjectStore[v2.DefaultInstanceName].ExternalObjectStore.Provider, externalObjectStoreSecret, "Provider")
-	assertSelector(t, cr.Spec.ObjectStore[v2.DefaultInstanceName].ExternalObjectStore.Endpoint, externalObjectStoreSecret, "Host")
-	assertSelector(t, cr.Spec.ObjectStore[v2.DefaultInstanceName].ExternalObjectStore.Port, externalObjectStoreSecret, "Port")
-	assertSelector(t, cr.Spec.ObjectStore[v2.DefaultInstanceName].ExternalObjectStore.Bucket, externalObjectStoreSecret, "Bucket")
-	assertSelector(t, cr.Spec.ObjectStore[v2.DefaultInstanceName].ExternalObjectStore.Region, externalObjectStoreSecret, "Region")
-	assertSelector(t, cr.Spec.ObjectStore[v2.DefaultInstanceName].ExternalObjectStore.AccessKey, externalObjectStoreSecret, "AccessKey")
-	assertSelector(t, cr.Spec.ObjectStore[v2.DefaultInstanceName].ExternalObjectStore.SecretKey, externalObjectStoreSecret, "SecretKey")
+	assertValueSelector(t, cr.Spec.ObjectStore[v2.DefaultInstanceName].ExternalObjectStore.Provider, externalObjectStoreSecret, "Provider")
+	assertValueSelector(t, cr.Spec.ObjectStore[v2.DefaultInstanceName].ExternalObjectStore.Endpoint, externalObjectStoreSecret, "Host")
+	assertValueSelector(t, cr.Spec.ObjectStore[v2.DefaultInstanceName].ExternalObjectStore.Port, externalObjectStoreSecret, "Port")
+	assertValueSelector(t, cr.Spec.ObjectStore[v2.DefaultInstanceName].ExternalObjectStore.Bucket, externalObjectStoreSecret, "Bucket")
+	assertValueSelector(t, cr.Spec.ObjectStore[v2.DefaultInstanceName].ExternalObjectStore.Region, externalObjectStoreSecret, "Region")
+	assertValueSelector(t, cr.Spec.ObjectStore[v2.DefaultInstanceName].ExternalObjectStore.AccessKey, externalObjectStoreSecret, "AccessKey")
+	assertValueSelector(t, cr.Spec.ObjectStore[v2.DefaultInstanceName].ExternalObjectStore.SecretKey, externalObjectStoreSecret, "SecretKey")
 
 	if cr.Spec.MySQL[v2.DefaultInstanceName].ManagedMysql == nil || cr.Spec.MySQL[v2.DefaultInstanceName].ExternalMysql != nil {
 		t.Fatalf("mysql should remain managed")
@@ -227,8 +227,8 @@ func TestBuildArtifactsExternalInfraWithCustomCA(t *testing.T) {
 	if configMap == nil {
 		t.Fatalf("custom CA ConfigMap should be generated")
 	}
-	assertSelector(t, cr.Spec.MySQL[v2.DefaultInstanceName].ExternalMysql.SslCa, externalMySQLTLSSecret, "ca.crt")
-	assertSelector(t, cr.Spec.Redis[v2.DefaultInstanceName].ExternalRedis.SslCa, externalRedisTLSSecret, "ca.crt")
+	assertValueSelector(t, cr.Spec.MySQL[v2.DefaultInstanceName].ExternalMysql.SslCa, externalMySQLTLSSecret, "ca.crt")
+	assertValueSelector(t, cr.Spec.Redis[v2.DefaultInstanceName].ExternalRedis.SslCa, externalRedisTLSSecret, "ca.crt")
 	if cr.Spec.ObjectStore[v2.DefaultInstanceName].ExternalObjectStore == nil {
 		t.Fatalf("external object store should be configured")
 	}
@@ -491,9 +491,18 @@ func assertSelector(t *testing.T, selector corev1.SecretKeySelector, name, key s
 	}
 }
 
-func assertEmptySelector(t *testing.T, selector corev1.SecretKeySelector, field string) {
+func assertValueSelector(t *testing.T, v v2.ValueOrSecret, name, key string) {
 	t.Helper()
-	if selector.Name != "" || selector.Key != "" {
-		t.Fatalf("%s selector should be empty, got %s/%s", field, selector.Name, selector.Key)
+	ref := v.SecretKeyRef()
+	if ref == nil {
+		t.Fatalf("selector = <nil>, want %s/%s", name, key)
+	}
+	assertSelector(t, *ref, name, key)
+}
+
+func assertEmptyValue(t *testing.T, v v2.ValueOrSecret, field string) {
+	t.Helper()
+	if ref := v.SecretKeyRef(); ref != nil {
+		t.Fatalf("%s selector should be empty, got %s/%s", field, ref.Name, ref.Key)
 	}
 }

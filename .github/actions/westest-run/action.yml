@@ -1,0 +1,260 @@
+name: "Run WESTest scenario"
+description: >-
+  Provision a local Kind cluster, deploy W&B through the operator, run a WESTest
+  scenario, and collect artifacts. Local reimplementation of
+  wandb/westest/actions/run — wandb/operator is public and can't `uses:` a private
+  repo's action, so we vendor the run logic here and download the released,
+  self-contained WESTest binary from wandb/westest (via `github-token`). Keep this
+  in sync with the upstream action + the pinned WESTEST version.
+
+inputs:
+  scenario:
+    description: "Scenario name, e.g. local-kind-app-upgrade (see `westest list`)."
+    required: true
+  params:
+    description: "Newline-separated NAME=VALUE scenario parameter overrides."
+    required: false
+    default: ""
+  operator-repo:
+    description: "Path to a checked-out operator to build from source (flips the operator source to local). Empty = published remote chart."
+    required: false
+    default: ""
+  keep:
+    description: "Keep the cluster after the run (passes --keep)."
+    required: false
+    default: "false"
+  westest-version:
+    description: "WESTest release tag to download (e.g. v0.2.0). Defaults to the latest release. Ignored when `binary` is set."
+    required: false
+    default: "latest"
+  binary:
+    description: "Path to a prebuilt westest binary. When set, the release download is skipped."
+    required: false
+    default: ""
+  github-token:
+    description: "Token used to download the WESTest release from wandb/westest with `gh` (needs contents: read on wandb/westest). Unused when `binary` is set."
+    required: false
+    default: ${{ github.token }}
+  wandb-version:
+    description: "W&B CLI (pip) version to install for `wandb verify`. Empty = latest."
+    required: false
+    default: ""
+  kind-version:
+    description: "kind binary version to install."
+    required: false
+    default: "v0.30.0"
+  license:
+    description: "W&B license file contents. Optional; not needed for local-kind scenarios. Written to a temp file and exported as WANDB_LICENSE_FILE when set."
+    required: false
+    default: ""
+  extra-hosts:
+    description: "Extra space-separated hostnames to point at 127.0.0.1, for hosts not modeled by the scenario."
+    required: false
+    default: ""
+  upload-artifacts:
+    description: "Upload the artifacts/ directory when the run finishes."
+    required: false
+    default: "true"
+
+outputs:
+  result:
+    description: "passed or failed."
+    value: ${{ steps.run.outputs.result }}
+  artifact-dir:
+    description: "Directory (relative to the workspace) containing this scenario's run artifacts."
+    value: ${{ steps.run.outputs.artifact-dir }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Terraform
+      uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+      with:
+        terraform_wrapper: false
+
+    - name: Set up Helm
+      uses: azure/setup-helm@bf6a7d304bc2fdb57e0331155b7ebf2c504acf0a # v4
+
+    - name: Set up kubectl
+      uses: azure/setup-kubectl@776406bce94f63e41d621b960d78ee25c8b76ede # v4
+
+    - name: Set up Python
+      uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+      with:
+        python-version: "3.11"
+
+    - name: Detect platform
+      id: platform
+      shell: bash
+      run: |
+        set -euo pipefail
+        case "$RUNNER_OS" in
+          Linux) os=linux ;;
+          macOS) os=darwin ;;
+          *) echo "::error::unsupported RUNNER_OS=$RUNNER_OS (WESTest supports Linux and macOS)"; exit 1 ;;
+        esac
+        case "$RUNNER_ARCH" in
+          X64) arch=amd64 ;;
+          ARM64) arch=arm64 ;;
+          *) echo "::error::unsupported RUNNER_ARCH=$RUNNER_ARCH (WESTest supports amd64 and arm64)"; exit 1 ;;
+        esac
+        echo "os=$os" >> "$GITHUB_OUTPUT"
+        echo "arch=$arch" >> "$GITHUB_OUTPUT"
+
+    - name: Install kind
+      shell: bash
+      env:
+        KIND_VERSION: ${{ inputs.kind-version }}
+        OS: ${{ steps.platform.outputs.os }}
+        ARCH: ${{ steps.platform.outputs.arch }}
+      run: |
+        set -euo pipefail
+        curl -fsSLo "$RUNNER_TEMP/kind" "https://kind.sigs.k8s.io/dl/${KIND_VERSION}/kind-${OS}-${ARCH}"
+        sudo install -m 0755 "$RUNNER_TEMP/kind" /usr/local/bin/kind
+        kind version
+
+    - name: Install W&B CLI
+      shell: bash
+      env:
+        WANDB_VERSION: ${{ inputs.wandb-version }}
+      run: |
+        set -euo pipefail
+        if [ -n "$WANDB_VERSION" ]; then
+          python -m pip install --quiet "wandb==${WANDB_VERSION}"
+        else
+          python -m pip install --quiet wandb
+        fi
+        wandb --version
+
+    - name: Download WESTest
+      if: ${{ inputs.binary == '' }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        WESTEST_RELEASE: ${{ inputs.westest-version }}
+        OS: ${{ steps.platform.outputs.os }}
+        ARCH: ${{ steps.platform.outputs.arch }}
+      run: |
+        set -euo pipefail
+        dldir="$RUNNER_TEMP/westest-dl"
+        mkdir -p "$dldir"
+        pattern="westest_*_${OS}_${ARCH}.tar.gz"
+        tag="$WESTEST_RELEASE"
+        if [ "$tag" = "latest" ]; then
+          # gh's implicit "latest" excludes prereleases; resolve the newest
+          # published release (prereleases included) explicitly instead.
+          tag="$(gh release list --repo wandb/westest --limit 1 --json tagName --jq '.[0].tagName')"
+          if [ -z "$tag" ]; then echo "::error::no WESTest releases found"; exit 1; fi
+        fi
+        gh release download "$tag" --repo wandb/westest \
+          --pattern "$pattern" --pattern checksums.txt --dir "$dldir"
+        archive="$(ls "$dldir"/westest_*_"${OS}"_"${ARCH}".tar.gz)"
+        # Verify the archive against the published checksums before extracting.
+        if [ -f "$dldir/checksums.txt" ]; then
+          line="$(grep " $(basename "$archive")\$" "$dldir/checksums.txt" || true)"
+          if [ -z "$line" ]; then echo "::error::no checksum entry for $(basename "$archive")"; exit 1; fi
+          if command -v sha256sum >/dev/null 2>&1; then
+            ( cd "$dldir" && printf '%s\n' "$line" | sha256sum -c - )
+          else
+            ( cd "$dldir" && printf '%s\n' "$line" | shasum -a 256 -c - )
+          fi
+        else
+          echo "::warning::checksums.txt not published; skipping integrity check"
+        fi
+        tar -xzf "$archive" -C "$dldir"
+        sudo install -m 0755 "$dldir/westest" /usr/local/bin/westest
+        westest version
+
+    - name: Use prebuilt WESTest binary
+      if: ${{ inputs.binary != '' }}
+      shell: bash
+      env:
+        WESTEST_BINARY: ${{ inputs.binary }}
+      run: |
+        set -euo pipefail
+        sudo install -m 0755 "$WESTEST_BINARY" /usr/local/bin/westest
+        westest version
+
+    - name: Preflight and host entries
+      shell: bash
+      env:
+        SCENARIO: ${{ inputs.scenario }}
+        EXTRA_HOSTS: ${{ inputs.extra-hosts }}
+      run: |
+        set -euo pipefail
+        # `doctor --fix-hosts` checks the required tooling and writes the
+        # scenario's /etc/hosts entries. Run under sudo (to write /etc/hosts) but
+        # preserve PATH so the tool check still sees the runner-installed tools.
+        sudo env "PATH=$PATH" westest doctor "$SCENARIO" --fix-hosts
+        for host in $EXTRA_HOSTS; do
+          echo "127.0.0.1 ${host}" | sudo tee -a /etc/hosts >/dev/null
+        done
+
+    - name: Prepare license
+      shell: bash
+      env:
+        LICENSE: ${{ inputs.license }}
+      run: |
+        set -euo pipefail
+        if [ -n "$LICENSE" ]; then
+          lf="$RUNNER_TEMP/wandb-license"
+          printf '%s' "$LICENSE" > "$lf"
+          echo "WANDB_LICENSE_FILE=$lf" >> "$GITHUB_ENV"
+        fi
+
+    - name: Assemble WESTest arguments
+      shell: bash
+      env:
+        PARAMS: ${{ inputs.params }}
+        OPERATOR_REPO: ${{ inputs.operator-repo }}
+        KEEP: ${{ inputs.keep }}
+      run: |
+        set -euo pipefail
+        # One argument per line so values survive verbatim into a bash array.
+        argfile="$RUNNER_TEMP/westest-args"
+        : > "$argfile"
+        while IFS= read -r line; do
+          trimmed="$(printf '%s' "$line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+          [ -z "$trimmed" ] && continue
+          printf -- '--param\n%s\n' "$trimmed" >> "$argfile"
+        done <<< "$PARAMS"
+        if [ -n "$OPERATOR_REPO" ]; then
+          printf -- '--operator-repo\n%s\n' "$OPERATOR_REPO" >> "$argfile"
+        fi
+        if [ "$KEEP" = "true" ]; then
+          printf -- '--keep\n' >> "$argfile"
+        fi
+
+    - name: Gate configuration
+      shell: bash
+      env:
+        SCENARIO: ${{ inputs.scenario }}
+      run: |
+        set -euo pipefail
+        # `config` fails fast (non-zero) on a bad override, before the long run.
+        mapfile -t args < "$RUNNER_TEMP/westest-args" 2>/dev/null || args=()
+        westest config "$SCENARIO" ${args[@]+"${args[@]}"}
+
+    - name: Run scenario
+      id: run
+      shell: bash
+      env:
+        SCENARIO: ${{ inputs.scenario }}
+      run: |
+        set -uo pipefail
+        mapfile -t args < "$RUNNER_TEMP/westest-args" 2>/dev/null || args=()
+        echo "artifact-dir=artifacts/${SCENARIO}" >> "$GITHUB_OUTPUT"
+        if westest run "$SCENARIO" ${args[@]+"${args[@]}"}; then
+          echo "result=passed" >> "$GITHUB_OUTPUT"
+        else
+          echo "result=failed" >> "$GITHUB_OUTPUT"
+          exit 1
+        fi
+
+    - name: Upload artifacts
+      if: ${{ always() && inputs.upload-artifacts == 'true' }}
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      with:
+        name: westest-${{ inputs.scenario }}
+        path: artifacts/
+        if-no-files-found: warn

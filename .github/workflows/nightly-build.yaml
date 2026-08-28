@@ -1,0 +1,179 @@
+name: Nightly Build (reusable)
+
+# Reusable build for nightly WESTest testing: derives one version string, builds
+# and pushes the operator image, bakes that tag into the chart, then packages and
+# pushes the chart to the same OCI repo the release path uses. See
+# docs/nightly-westest-testing.md.
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: "Git ref to build (blank = the caller's checkout ref)."
+        type: string
+        required: false
+        default: ""
+      channel:
+        description: "Version channel: nightly (scheduled) or dev (manual/branch)."
+        type: string
+        required: false
+        default: "nightly"
+      dev_tag:
+        description: "Optional label for dev builds (version becomes <base>-dev-<tag>-<timestamp>)."
+        type: string
+        required: false
+        default: ""
+    outputs:
+      image_tag:
+        description: "Nightly operator image tag (== chart_version)."
+        value: ${{ jobs.build.outputs.image_tag }}
+      chart_version:
+        description: "Nightly operator chart version (== image_tag)."
+        value: ${{ jobs.build.outputs.chart_version }}
+
+env:
+  IMAGE_REPOSITORY: us-docker.pkg.dev/wandb-production/public/wandb/operator
+  CHART_REPOSITORY: us-docker.pkg.dev/wandb-production/public/wandb/charts
+
+jobs:
+  build:
+    name: Build & publish nightly image + chart
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      image_tag: ${{ steps.version.outputs.image_tag }}
+      chart_version: ${{ steps.version.outputs.chart_version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ inputs.ref }}
+
+      - name: Derive version
+        id: version
+        shell: bash
+        env:
+          CHANNEL: ${{ inputs.channel }}
+          DEV_TAG: ${{ inputs.dev_tag }}
+        run: |
+          set -euo pipefail
+          case "${CHANNEL}" in
+            nightly | dev) ;;
+            *) echo "invalid channel '${CHANNEL}' (want nightly|dev)" >&2; exit 1 ;;
+          esac
+          ts="$(date -u +%Y%m%d-%H%M%S)"
+          sha="$(git rev-parse --short=7 HEAD)"
+          # Lead with the current chart's release line (strip any prerelease suffix).
+          # TODO: once 2.0.0 is GA (Chart.yaml has no prerelease), lead with the NEXT
+          # semver (bump patch/minor) so builds sort ABOVE the last release rather
+          # than below it as a 2.0.0 prerelease.
+          base="$(awk '$1 == "version:" { print $2; exit }' deploy/operator/Chart.yaml | tr -d '"' | cut -d- -f1)"
+          # dev builds may carry a user label; sanitize it to a SemVer-safe token
+          # (alnum + single dashes, no dots) so the prerelease stays one identifier.
+          if [ "${CHANNEL}" = "dev" ] && [ -n "${DEV_TAG}" ]; then
+            safe_tag="$(printf '%s' "${DEV_TAG}" | tr -c 'A-Za-z0-9' '-' | sed -e 's/-\{2,\}/-/g' -e 's/^-//' -e 's/-$//')"
+          else
+            safe_tag=""
+          fi
+          # One version string for BOTH the image tag and the chart version.
+          if [ -n "${safe_tag}" ]; then
+            version="${base}-${CHANNEL}-${safe_tag}-${ts}"
+          else
+            version="${base}-${CHANNEL}-${ts}"
+          fi
+          echo "image_tag=${version}" >> "${GITHUB_OUTPUT}"
+          echo "chart_version=${version}" >> "${GITHUB_OUTPUT}"
+          {
+            echo "### ${CHANNEL} build"
+            echo "- version (image + chart): \`${version}\`"
+            echo "- image: \`${IMAGE_REPOSITORY}:${version}\`"
+            echo "- chart: \`${CHART_REPOSITORY}/operator:${version}\`"
+            echo "- commit: \`${sha}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Install Helm
+        uses: azure/setup-helm@bf6a7d304bc2fdb57e0331155b7ebf2c504acf0a # v4
+        with:
+          version: v3.19.0
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+
+      - id: auth
+        name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          create_credentials_file: "true"
+          token_format: access_token
+          project_id: wandb-production
+          workload_identity_provider: ${{ secrets.CI_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.CI_WORKLOAD_IDENTITY_SERVICE_ACCOUNT }}
+
+      - name: Authorize Docker for Artifact Registry
+        run: gcloud auth configure-docker us-docker.pkg.dev --quiet
+
+      - name: Bake image tag into chart values
+        env:
+          IMAGE_TAG: ${{ steps.version.outputs.image_tag }}
+        run: |
+          set -euo pipefail
+          # yq v4 is preinstalled on ubuntu-latest.
+          yq -i '.["wandb-operator"].image.tag = strenv(IMAGE_TAG)' deploy/operator/values.yaml
+
+      - name: Mint a token to read wandb/watchtower releases
+        id: watchtower-token
+        # The image build downloads the Watchtower binary from that private repo;
+        # this repo's GITHUB_TOKEN can't reach it.
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.WESTEST_APP_ID }}
+          private-key: ${{ secrets.WESTEST_APP_PRIVATE_KEY }}
+          owner: wandb
+          repositories: watchtower
+
+      - name: Download the Watchtower binary
+        env:
+          GH_TOKEN: ${{ steps.watchtower-token.outputs.token }}
+        run: make download-watchtower
+
+      - name: Build and push operator image
+        env:
+          IMAGE_TAG: ${{ steps.version.outputs.image_tag }}
+        run: make docker-build docker-push IMG="${IMAGE_REPOSITORY}:${IMAGE_TAG}"
+
+      - name: Resolve chart dependencies
+        run: |
+          set -euo pipefail
+          helm repo add ci-wandb https://charts.wandb.ai/
+          helm repo add ci-moco https://cybozu-go.github.io/moco/
+          helm repo add ci-ot-container-kit https://ot-container-kit.github.io/helm-charts
+          helm repo add ci-seaweedfs https://seaweedfs.github.io/seaweedfs-operator/
+          helm repo add ci-prometheus-community https://prometheus-community.github.io/helm-charts
+          helm repo add ci-altinity https://helm.altinity.com
+          helm repo add ci-victoria-metrics https://victoriametrics.github.io/helm-charts/
+          helm repo add ci-grafana https://grafana.github.io/helm-charts
+          helm dependency build deploy/operator
+
+      - name: Package, verify, and push operator chart
+        env:
+          IMAGE_TAG: ${{ steps.version.outputs.image_tag }}
+          CHART_VERSION: ${{ steps.version.outputs.chart_version }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          helm package deploy/operator \
+            --version "${CHART_VERSION}" \
+            --app-version "${CHART_VERSION}" \
+            --destination dist
+          # Guard against the "green but stale" failure mode: the packaged chart
+          # must reference the nightly operator image, not the committed default.
+          if ! helm template "dist/operator-${CHART_VERSION}.tgz" \
+              | grep -qF "operator:${IMAGE_TAG}"; then
+            echo "Packaged chart does not reference ${IMAGE_REPOSITORY}:${IMAGE_TAG}" >&2
+            exit 1
+          fi
+          helm push "dist/operator-${CHART_VERSION}.tgz" "oci://${CHART_REPOSITORY}"

@@ -54,14 +54,26 @@ func ToKeeperVendorSpec(
 	labels := common.BuildWandbLabels(wandb, KeeperModuleName)
 
 	podSpec := corev1.PodSpec{
-		SecurityContext: keeperPodSecurityContext(),
-		Affinity:        wandb.GetAffinity(spec.ManagedInfraSpec),
-		Tolerations:     *wandb.GetTolerations(spec.ManagedInfraSpec),
+		ImagePullSecrets: wandb.Spec.Global.ImagePullSecrets,
+		SecurityContext:  keeperPodSecurityContext(),
+		Affinity:         wandb.GetAffinity(spec.ManagedInfraSpec),
+		Tolerations:      *wandb.GetTolerations(spec.ManagedInfraSpec),
+		Volumes: []corev1.Volume{
+			{
+				Name: keeperLogVolumeName,
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				},
+			},
+		},
 		Containers: []corev1.Container{
 			{
 				Name:            keeperContainerName,
 				Image:           KeeperImage(mfst.ClickhouseKeeper["default"].Images["keeper"], wandb.Spec.Global.ImageRegistry),
 				SecurityContext: keeperContainerSecurityContext(),
+				VolumeMounts: []corev1.VolumeMount{
+					{Name: keeperLogVolumeName, MountPath: keeperLogMountPath},
+				},
 			},
 		},
 	}

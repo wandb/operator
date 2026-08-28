@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	apiv2 "github.com/wandb/operator/api/v2"
-	wmetrics "github.com/wandb/operator/internal/metrics"
+	wmetrics "github.com/wandb/operator/internal/observability/metrics"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"

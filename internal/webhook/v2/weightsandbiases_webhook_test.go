@@ -28,6 +28,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// testPinnedVersion is any published-looking version; validateWandbSpec now
+// requires one, so fixtures that are not about versions still need it set.
+const testPinnedVersion = "0.83.1"
+
 var _ = Describe("WeightsAndBiases Webhook", func() {
 	var (
 		ctx       context.Context
@@ -41,8 +45,10 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 		ctx = context.Background()
 		obj = &appsv2.WeightsAndBiases{ObjectMeta: metav1.ObjectMeta{Name: "wandb", Namespace: "test-ns"}}
 		obj.Spec.Wandb.Hostname = "https://wandb.example.com"
+		obj.Spec.Wandb.Version = testPinnedVersion
 		oldObj = &appsv2.WeightsAndBiases{ObjectMeta: metav1.ObjectMeta{Name: "wandb", Namespace: "test-ns"}}
 		oldObj.Spec.Wandb.Hostname = "https://wandb.example.com"
+		oldObj.Spec.Wandb.Version = testPinnedVersion
 		validator = WeightsAndBiasesCustomValidator{}
 		defaulter = WeightsAndBiasesCustomDefaulter{}
 	})
@@ -124,7 +130,8 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 		It("allows create when ManagedRedis is nil", func() {
 			warnings, err := validator.ValidateCreate(ctx, obj)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(warnings).To(BeEmpty())		})
+			Expect(warnings).To(BeEmpty())
+		})
 
 		It("rejects external Redis without host and port selectors", func() {
 			obj.Spec.Redis = map[string]appsv2.RedisSpec{
@@ -134,10 +141,9 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 			_, err := validator.ValidateCreate(ctx, obj)
 
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("externalRedis.host.name"))
-			Expect(err.Error()).To(ContainSubstring("externalRedis.host.key"))
-			Expect(err.Error()).To(ContainSubstring("externalRedis.port.name"))
-			Expect(err.Error()).To(ContainSubstring("externalRedis.port.key"))
+			Expect(err.Error()).To(ContainSubstring("externalRedis.host"))
+			Expect(err.Error()).To(ContainSubstring("externalRedis.port"))
+			Expect(err.Error()).To(ContainSubstring("a value or secret reference is required"))
 		})
 
 		It("allows external Redis with host and port selectors", func() {
@@ -185,6 +191,55 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 			_, err := validator.ValidateCreate(ctx, obj)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("spec.wandb.hostname"))
+		})
+
+		It("rejects create when version is the mutable latest tag", func() {
+			obj.Spec.Wandb.Version = "latest"
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("spec.wandb.version"))
+			Expect(err.Error()).To(ContainSubstring("must be pinned"))
+		})
+
+		It("rejects a whitespace-padded latest", func() {
+			obj.Spec.Wandb.Version = " latest "
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("spec.wandb.version"))
+		})
+
+		It("rejects update to the latest tag", func() {
+			obj.Spec.Wandb.Version = "latest"
+
+			_, err := validator.ValidateUpdate(ctx, oldObj, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("spec.wandb.version"))
+		})
+
+		It("accepts a pinned version", func() {
+			obj.Spec.Wandb.Version = "0.83.1"
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("rejects an empty version", func() {
+			obj.Spec.Wandb.Version = ""
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("spec.wandb.version"))
+			Expect(err.Error()).To(ContainSubstring("version is required"))
+		})
+
+		It("rejects a whitespace-only version", func() {
+			obj.Spec.Wandb.Version = "   "
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("spec.wandb.version"))
 		})
 
 		It("rejects update when hostname is missing", func() {
@@ -398,6 +453,52 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 			Expect(err.Error()).To(ContainSubstring("gatewayRef is required"))
 		})
 
+		It("rejects an OIDC field that sets both value and valueFrom", func() {
+			obj.Spec.Wandb.OIDC.ClientSecret = appsv2.ValueOrSecret{
+				Value: "literal-secret",
+				ValueFrom: &appsv2.SecretValueSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: "oidc"},
+						Key:                  "clientSecret",
+					},
+				},
+			}
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("spec.wandb.oidc.clientSecret"))
+			Expect(err.Error()).To(ContainSubstring("set exactly one of value or valueFrom"))
+			Expect(err.Error()).NotTo(ContainSubstring("literal-secret"))
+		})
+
+		It("allows OIDC fields mixing a literal and a secret reference across fields", func() {
+			obj.Spec.Wandb.OIDC.ClientId = appsv2.LiteralValue("wandb")
+			obj.Spec.Wandb.OIDC.IssuerUrl = appsv2.LiteralValue("https://issuer.example.com")
+			obj.Spec.Wandb.OIDC.ClientSecret = secretKeySelector("oidc", "clientSecret")
+
+			warnings, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(warnings).To(BeEmpty())
+		})
+
+		It("normalizes a legacy {name,key} proxy so validation accepts it", func() {
+			obj.Spec.Global.Proxy = &appsv2.ProxySpec{
+				HTTPSProxy: &appsv2.ValueOrSecret{Name: "egress-proxy", Key: "httpsProxy"},
+			}
+
+			Expect(defaulter.Default(ctx, obj)).To(Succeed())
+			// Constructed with only the legacy {name,key}; a populated ValueFrom
+			// proves the defaulter normalized it into the envelope.
+			normalized := obj.Spec.Global.Proxy.HTTPSProxy
+			Expect(normalized.ValueFrom).ToNot(BeNil())
+			Expect(normalized.ValueFrom.SecretKeyRef.Name).To(Equal("egress-proxy"))
+			Expect(normalized.ValueFrom.SecretKeyRef.Key).To(Equal("httpsProxy"))
+
+			warnings, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(warnings).To(BeEmpty())
+		})
+
 		It("returns an error for wrong object type", func() {
 			_, err := validator.ValidateCreate(ctx, &corev1.Pod{})
 			Expect(err).To(HaveOccurred())
@@ -411,9 +512,6 @@ func boolPtr(v bool) *bool {
 	return &v
 }
 
-func secretKeySelector(name, key string) corev1.SecretKeySelector {
-	return corev1.SecretKeySelector{
-		LocalObjectReference: corev1.LocalObjectReference{Name: name},
-		Key:                  key,
-	}
+func secretKeySelector(name, key string) appsv2.ValueOrSecret {
+	return appsv2.ValueFromSecret(name, key, false)
 }

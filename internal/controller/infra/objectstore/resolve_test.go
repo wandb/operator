@@ -31,11 +31,8 @@ func resolveFixture(t *testing.T, data map[string]string) (*apiv2.ObjectStoreCon
 		Data:       raw,
 	}
 
-	connSel := func(key string) corev1.SecretKeySelector {
-		return corev1.SecretKeySelector{
-			LocalObjectReference: corev1.LocalObjectReference{Name: connSecretName},
-			Key:                  key,
-		}
+	connSel := func(key string) apiv2.ValueOrSecret {
+		return apiv2.ValueFromSecret(connSecretName, key, false)
 	}
 	conn := &apiv2.ObjectStoreConnection{
 		Provider:       connSel("Provider"),
@@ -92,8 +89,8 @@ func TestResolve_ExternalS3WithStaticCredentials(t *testing.T) {
 	require.True(t, info.HasStaticCredentials())
 
 	// The credential selectors are preserved for consumers that inject by ref.
-	require.Equal(t, conn.AccessKey, info.AccessKeyRef)
-	require.Equal(t, conn.SecretKey, info.SecretKeyRef)
+	require.Equal(t, *conn.AccessKey.SecretKeyRef(), info.AccessKeyRef)
+	require.Equal(t, *conn.SecretKey.SecretKeyRef(), info.SecretKeyRef)
 }
 
 func TestResolve_AmbientCredentials(t *testing.T) {

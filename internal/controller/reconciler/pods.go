@@ -7,6 +7,7 @@ import (
 
 	v2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/logx"
+	"github.com/wandb/operator/internal/observability/telemetry"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
 	"k8s.io/api/core/v1"
 	"k8s.io/utils/ptr"
@@ -214,7 +215,11 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 				if !ok {
 					continue
 				}
-				selector := status.Connection.URL
+				ref := status.Connection.URL.SecretKeyRef()
+				if ref == nil {
+					continue
+				}
+				selector := *ref
 				// Record for potential direct assignment case
 				singleSecretSelector = selector
 				secretOnlyCount++
@@ -224,7 +229,11 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 				if !ok {
 					continue
 				}
-				selector := status.Connection.URL
+				ref := status.Connection.URL.SecretKeyRef()
+				if ref == nil {
+					continue
+				}
+				selector := *ref
 				singleSecretSelector = selector
 				secretOnlyCount++
 				addSecretComponent(selector, idx)
@@ -233,8 +242,12 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 				if !ok {
 					continue
 				}
+				urlRef := status.Connection.URL.SecretKeyRef()
+				if urlRef == nil {
+					continue
+				}
 				selector := v1.SecretKeySelector{
-					LocalObjectReference: status.Connection.URL.LocalObjectReference,
+					LocalObjectReference: urlRef.LocalObjectReference,
 				}
 				switch src.Field {
 				case "host":
@@ -261,8 +274,12 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 				if !ok {
 					continue
 				}
+				urlRef := status.Connection.URL.SecretKeyRef()
+				if urlRef == nil {
+					continue
+				}
 				selector := v1.SecretKeySelector{
-					LocalObjectReference: status.Connection.URL.LocalObjectReference,
+					LocalObjectReference: urlRef.LocalObjectReference,
 				}
 				switch src.Field {
 				case "host":
@@ -279,6 +296,19 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 					selector.Key = "Database"
 				case "url":
 					selector.Key = "url"
+				case "replicated", "replicated-cluster":
+					// Topology is published for managed ClickHouse, and for an
+					// external one only when its connection declares it. Skip the
+					// env var rather than mount a key that may not be there.
+					topology := status.Connection.Replicated
+					if src.Field == "replicated-cluster" {
+						topology = status.Connection.ClusterName
+					}
+					ref := topology.SecretKeyRef()
+					if ref == nil || ref.Key == "" {
+						continue
+					}
+					selector.Key = ref.Key
 				default:
 					// Unrecognized field; skip
 					continue
@@ -288,15 +318,19 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 				addSecretComponent(selector, idx)
 			case "kafka":
 				// kafka can be referenced as a full URL (no field) or by specific fields (host/port)
+				urlRef := wandb.Status.KafkaStatus.Connection.URL.SecretKeyRef()
+				if urlRef == nil {
+					continue
+				}
 				if src.Field == "" {
-					selector := wandb.Status.KafkaStatus.Connection.URL
+					selector := *urlRef
 					singleSecretSelector = selector
 					secretOnlyCount++
 					addSecretComponent(selector, idx)
 					break
 				}
 				selector := v1.SecretKeySelector{
-					LocalObjectReference: wandb.Status.KafkaStatus.Connection.URL.LocalObjectReference,
+					LocalObjectReference: urlRef.LocalObjectReference,
 				}
 				switch src.Field {
 				case "host":
@@ -323,36 +357,10 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 						Name: secretName,
 					},
 				}
-				switch src.Field {
-				case "", "metrics", "metricsEndpoint":
-					selector.Key = "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT"
-				case "logs", "logsEndpoint":
-					selector.Key = "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"
-				case "traces", "tracesEndpoint":
-					selector.Key = "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"
-				case "metricsExporter":
-					selector.Key = "OTEL_METRICS_EXPORTER"
-				case "logsExporter":
-					selector.Key = "OTEL_LOGS_EXPORTER"
-				case "tracesExporter":
-					selector.Key = "OTEL_TRACES_EXPORTER"
-				case "protocol":
-					selector.Key = "OTEL_EXPORTER_OTLP_PROTOCOL"
-				case "serviceName":
-					selector.Key = "OTEL_SERVICE_NAME"
-				case "resourceAttributes":
-					selector.Key = "OTEL_RESOURCE_ATTRIBUTES"
-				case "gorillaTracer", "tracer":
-					selector.Key = "GORILLA_TRACER"
-				case "statsdAddress":
-					selector.Key = "GORILLA_STATSD_ADDRESS"
-				case "datadogTraceAgentURL", "ddTraceAgentURL":
-					selector.Key = "DD_TRACE_AGENT_URL"
-				case "datadogTraceAgentHost", "ddAgentHost":
-					selector.Key = "DD_AGENT_HOST"
-				case "datadogTraceAgentPort", "ddTraceAgentPort":
-					selector.Key = "DD_TRACE_AGENT_PORT"
-				default:
+
+				var isFound bool
+				selector.Key, isFound = telemetry.SecretKeyForField(src.Field)
+				if !isFound {
 					if strings.HasPrefix(src.Field, "OTEL_") {
 						selector.Key = src.Field
 					} else {
@@ -438,7 +446,7 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 					singleSecretSelector = sel
 					secretOnlyCount++
 					addSecretComponent(sel, idx)
-				} else if val, ok := resolveCRFieldString(wandb, src.Field); ok {
+				} else if val, ok := resolveCRFieldEnvValue(wandb, src.Field); ok {
 					// Treat as a literal component (not secret-backed)
 					logger.Debug("field found in CR", "cr", wandb.Name, "field", src.Field, "value", val)
 					components = append(components, val)

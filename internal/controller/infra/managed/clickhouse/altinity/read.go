@@ -24,14 +24,36 @@ func readConnectionDetails(actual *chiv1.ClickHouseInstallation) *clickhouseConn
 	clickhouseHTTPPort := strconv.Itoa(ClickHouseHTTPPort)
 	clickhouseTCPPort := strconv.Itoa(ClickHouseNativePort)
 
+	replicated, clusterName := readClusterTopology(actual)
+
 	return &clickhouseConnInfo{
-		Host:     clickhouseHost,
-		HTTPPort: clickhouseHTTPPort,
-		TCPPort:  clickhouseTCPPort,
-		User:     ClickHouseUser,
-		Password: ClickHousePassword,
-		Database: ClickHouseDatabase,
+		Host:        clickhouseHost,
+		HTTPPort:    clickhouseHTTPPort,
+		TCPPort:     clickhouseTCPPort,
+		User:        ClickHouseUser,
+		Password:    ClickHousePassword,
+		Database:    ClickHouseDatabase,
+		Replicated:  replicated,
+		ClusterName: clusterName,
 	}
+}
+
+// readClusterTopology reports whether applications should use
+// ReplicatedMergeTree, and the cluster their DDL runs ON CLUSTER.
+func readClusterTopology(actual *chiv1.ClickHouseInstallation) (bool, string) {
+	if actual.Spec.Configuration == nil {
+		return false, ""
+	}
+	for _, cluster := range actual.Spec.Configuration.Clusters {
+		if cluster == nil || cluster.Name != chiClusterName {
+			continue
+		}
+		if cluster.Layout == nil {
+			return false, ""
+		}
+		return cluster.Layout.ReplicasCount > 1, cluster.Name
+	}
+	return false, ""
 }
 
 func ReadState(

@@ -36,7 +36,7 @@ const testLegacyVersion = "0.83.0-test"
 // disableConversionManifestFetch keeps unit tests off the network; tests opt
 // in via withConversionManifest*.
 func disableConversionManifestFetch() {
-	SetConversionManifestGetter(func(_ context.Context, _, _ string) (serverManifest.Manifest, error) {
+	SetConversionManifestGetter(func(_ context.Context, _, _ string, _ *serverManifest.RegistryAuth) (serverManifest.Manifest, error) {
 		return serverManifest.Manifest{}, errors.New("manifest fetch disabled in unit tests")
 	})
 }
@@ -51,7 +51,7 @@ func TestMain(m *testing.M) {
 func withConversionManifest(t *testing.T, apps map[string]serverManifest.Application) *atomic.Int32 {
 	t.Helper()
 	var calls atomic.Int32
-	SetConversionManifestGetter(func(_ context.Context, _, _ string) (serverManifest.Manifest, error) {
+	SetConversionManifestGetter(func(_ context.Context, _, _ string, _ *serverManifest.RegistryAuth) (serverManifest.Manifest, error) {
 		calls.Add(1)
 		return serverManifest.Manifest{Applications: apps}, nil
 	})
@@ -91,7 +91,7 @@ func TestConvertTo_LegacyOverridesAbsent(t *testing.T) {
 
 func TestConvertTo_LegacyOverridesGlobalEnvPrecedence(t *testing.T) {
 	// No version in values: global env must convert without any manifest fetch.
-	SetConversionManifestGetter(func(_ context.Context, _, _ string) (serverManifest.Manifest, error) {
+	SetConversionManifestGetter(func(_ context.Context, _, _ string, _ *serverManifest.RegistryAuth) (serverManifest.Manifest, error) {
 		t.Fatal("manifest must not be resolved when no version is derived")
 		return serverManifest.Manifest{}, nil
 	})
@@ -387,7 +387,7 @@ func TestConvertTo_LegacyOverridesResourcesDefaultSizeIsSmall(t *testing.T) {
 }
 
 func TestConvertTo_LegacyOverridesManifestUnavailable(t *testing.T) {
-	SetConversionManifestGetter(func(_ context.Context, _, _ string) (serverManifest.Manifest, error) {
+	SetConversionManifestGetter(func(_ context.Context, _, _ string, _ *serverManifest.RegistryAuth) (serverManifest.Manifest, error) {
 		return serverManifest.Manifest{}, errors.New("registry unreachable")
 	})
 	t.Cleanup(disableConversionManifestFetch)
@@ -401,19 +401,58 @@ func TestConvertTo_LegacyOverridesManifestUnavailable(t *testing.T) {
 			"env": map[string]interface{}{"API_VAR": "1"},
 		},
 	}))
-	// A manifest fetch failure must never fail conversion: global env still
-	// converts, per-app extraction is skipped.
+	// Converting anyway would drop api's env while reporting success, so the
+	// write is rejected instead.
+	err := src.ConvertTo(dst)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "resolve server manifest")
+	require.Contains(t, err.Error(), testLegacyVersion)
+	require.Contains(t, err.Error(), "registry unreachable")
+}
+
+// TestConvertTo_LegacyOverridesManifestUnavailableNoAppSections: with nothing
+// per-application to lose, an unresolvable manifest is still fatal — the
+// manifest decides what counts as an application, so we can't know there was
+// nothing to map.
+func TestConvertTo_LegacyOverridesManifestUnavailableNoAppSections(t *testing.T) {
+	SetConversionManifestGetter(func(_ context.Context, _, _ string, _ *serverManifest.RegistryAuth) (serverManifest.Manifest, error) {
+		return serverManifest.Manifest{}, errors.New("registry unreachable")
+	})
+	t.Cleanup(disableConversionManifestFetch)
+
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(withVersion(map[string]interface{}{
+		"global": map[string]interface{}{"host": "http://wandb.example.com"},
+	}))
+	require.Error(t, src.ConvertTo(dst))
+}
+
+// TestConvertTo_NoVersionSkipsManifestFetch: without a version there is nothing
+// to resolve, so conversion proceeds and global env still converts.
+func TestConvertTo_NoVersionSkipsManifestFetch(t *testing.T) {
+	var calls atomic.Int32
+	SetConversionManifestGetter(func(_ context.Context, _, _ string, _ *serverManifest.RegistryAuth) (serverManifest.Manifest, error) {
+		calls.Add(1)
+		return serverManifest.Manifest{}, errors.New("registry unreachable")
+	})
+	t.Cleanup(disableConversionManifestFetch)
+
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{
+			"env": map[string]interface{}{"HTTP_PROXY": "http://proxy"},
+		},
+	})
 	require.NoError(t, src.ConvertTo(dst))
 
-	overrides := dst.Spec.Wandb.LegacyOverrides
-	require.Contains(t, overrides, appsv2.LegacyOverridesGlobalKey)
-	require.NotContains(t, overrides, "api")
+	require.Contains(t, dst.Spec.Wandb.LegacyOverrides, appsv2.LegacyOverridesGlobalKey)
+	require.Equal(t, int32(0), calls.Load(), "no version means no manifest fetch")
 }
 
 func TestConvertTo_LegacyOverridesManifestFailureCooldown(t *testing.T) {
 	// The cooldown keeps repeat conversions from stalling on an unreachable registry.
 	var calls atomic.Int32
-	SetConversionManifestGetter(func(_ context.Context, _, _ string) (serverManifest.Manifest, error) {
+	SetConversionManifestGetter(func(_ context.Context, _, _ string, _ *serverManifest.RegistryAuth) (serverManifest.Manifest, error) {
 		calls.Add(1)
 		return serverManifest.Manifest{}, errors.New("registry unreachable")
 	})
@@ -426,8 +465,8 @@ func TestConvertTo_LegacyOverridesManifestFailureCooldown(t *testing.T) {
 				"env": map[string]interface{}{"API_VAR": "1"},
 			},
 		}))
-		require.NoError(t, src.ConvertTo(dst))
-		require.NotContains(t, dst.Spec.Wandb.LegacyOverrides, "api")
+		// Every attempt fails, but from the cached failure rather than a refetch.
+		require.Error(t, src.ConvertTo(dst))
 	}
 
 	require.Equal(t, int32(1), calls.Load(), "repeat conversions within the cooldown must not retry the fetch")

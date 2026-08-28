@@ -56,7 +56,7 @@ var _ = Describe("ObjectStore sizing per tier", func() {
 		repoRoot, err := filepath.Abs(filepath.Join("..", "..", ".."))
 		Expect(err).NotTo(HaveOccurred())
 		repository := "file://" + filepath.Join(repoRoot, "hack", "testing-manifests", "server-manifest")
-		mfst, err = serverManifest.GetServerManifest(context.Background(), repository, localManifestVersion)
+		mfst, err = serverManifest.GetServerManifest(context.Background(), repository, localManifestVersion, nil)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(mfst.Bucket).To(HaveKey("default"))
 	})

@@ -146,6 +146,7 @@ func reconcileGateway(ctx context.Context, c ctrlClient.Client, wandb *apiv2.Wei
 }
 
 func deleteGateway(ctx context.Context, c ctrlClient.Client, wandb *apiv2.WeightsAndBiases) error {
+	ctx, logger := logx.WithSlog(ctx, "Gateway")
 	gatewayName := fmt.Sprintf("%s-gateway", wandb.Name)
 	gw := &gatewayv1.Gateway{}
 	if !utils.IsRegistered(c.Scheme(), gw) {
@@ -157,6 +158,16 @@ func deleteGateway(ctx context.Context, c ctrlClient.Client, wandb *apiv2.Weight
 		}
 		return err
 	}
+	// Never delete a gateway we don't own: a user may run their own gateway that
+	// happens to share our derived name.
+	owned, err := controllerutil.HasOwnerReference(gw.GetOwnerReferences(), wandb, c.Scheme())
+	if err != nil {
+		return err
+	}
+	if !owned {
+		return nil
+	}
+	logger.Info("Deleting gateway", "gateway", gatewayName)
 	return c.Delete(ctx, gw)
 }
 

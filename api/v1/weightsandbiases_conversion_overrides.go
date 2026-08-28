@@ -31,6 +31,7 @@ import (
 
 	appsv2 "github.com/wandb/operator/api/v2"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
+	"github.com/wandb/operator/pkg/wandb/manifest/registryauth"
 )
 
 const (
@@ -58,7 +59,7 @@ type manifestFailure struct {
 
 // SetConversionManifestGetter swaps the resolver and clears the failure
 // cooldowns. For tests; nil restores the default.
-func SetConversionManifestGetter(getter func(ctx context.Context, repository, version string) (serverManifest.Manifest, error)) {
+func SetConversionManifestGetter(getter func(ctx context.Context, repository, version string, auth *serverManifest.RegistryAuth) (serverManifest.Manifest, error)) {
 	manifestFailuresMu.Lock()
 	defer manifestFailuresMu.Unlock()
 	if getter == nil {
@@ -68,11 +69,60 @@ func SetConversionManifestGetter(getter func(ctx context.Context, repository, ve
 	manifestFailures = map[string]manifestFailure{}
 }
 
+// conversionManifestFetch derives the server-manifest repository and registry
+// auth for the conversion webhook from v1 global values, matching the reconciler:
+// the repository follows global.imageRegistry (where wsm mirrors it) and the
+// credentials come from global.imagePullSecrets, read via the injected
+// conversionReader. Best-effort — on any credential error it logs and returns
+// nil auth so the fetch still attempts anonymously.
+func conversionManifestFetch(namespace string, values map[string]interface{}) (string, *serverManifest.RegistryAuth) {
+	imageRegistry, _, _ := unstructured.NestedString(values, "global", "imageRegistry")
+	repository := appsv2.ManifestRepositoryFor(imageRegistry)
+
+	// Ambient cloud creds only for non-default (private) registries.
+	allowAmbient := imageRegistry != ""
+	refs := pullSecretRefs(values)
+	if (len(refs) == 0 && !allowAmbient) || conversionReader == nil {
+		return repository, nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), conversionLookupTimeout)
+	defer cancel()
+	auth, err := registryauth.Resolve(ctx, conversionReader, namespace, refs, allowAmbient)
+	if err != nil {
+		logger.Error(err, "failed to resolve image pull secrets for server-manifest fetch; attempting anonymous",
+			"namespace", namespace)
+		return repository, nil
+	}
+	return repository, auth
+}
+
+// pullSecretRefs reads global.imagePullSecrets, accepting either a list of names
+// or a list of {name: ...} maps (both shapes appear in helm values).
+func pullSecretRefs(values map[string]interface{}) []corev1.LocalObjectReference {
+	raw, found, err := unstructured.NestedSlice(values, "global", "imagePullSecrets")
+	if err != nil || !found {
+		return nil
+	}
+	var refs []corev1.LocalObjectReference
+	for _, item := range raw {
+		switch v := item.(type) {
+		case string:
+			if v != "" {
+				refs = append(refs, corev1.LocalObjectReference{Name: v})
+			}
+		case map[string]interface{}:
+			if name, ok := v["name"].(string); ok && name != "" {
+				refs = append(refs, corev1.LocalObjectReference{Name: name})
+			}
+		}
+	}
+	return refs
+}
+
 // legacyManifestApps maps each manifest application name to the v1 values key
-// holding its section (legacyKey when set, else the name). v1 values carry no
-// repository field, so the defaulting webhook's default repository is used.
-func legacyManifestApps(version string) (map[string]string, error) {
-	repository := appsv2.DefaultManifestRepository
+// holding its section (legacyKey when set, else the name).
+func legacyManifestApps(repository, version string, auth *serverManifest.RegistryAuth) (map[string]string, error) {
 	key := repository + "|" + version
 
 	manifestFailuresMu.Lock()
@@ -86,7 +136,7 @@ func legacyManifestApps(version string) (map[string]string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), manifestFetchTimeout)
 	defer cancel()
 
-	m, err := getter(ctx, repository, version)
+	m, err := getter(ctx, repository, version, auth)
 	if err != nil {
 		manifestFailuresMu.Lock()
 		manifestFailures[key] = manifestFailure{err: err, until: time.Now().Add(manifestFailureCooldown)}
@@ -131,7 +181,7 @@ func mapLegacyOverrides(values map[string]interface{}, dst *appsv2.WeightsAndBia
 		return fmt.Errorf("spec.values.global.size: %w", err)
 	}
 
-	if err := mapPerAppLegacyOverrides(values, dst.Spec.Wandb.Version, globalSize, overrides); err != nil {
+	if err := mapPerAppLegacyOverrides(dst.Namespace, values, dst.Spec.Wandb.Version, globalSize, overrides); err != nil {
 		return err
 	}
 
@@ -141,18 +191,24 @@ func mapLegacyOverrides(values map[string]interface{}, dst *appsv2.WeightsAndBia
 	return nil
 }
 
-// mapPerAppLegacyOverrides is best-effort: a manifest fetch failure must never
-// make v1 objects unservable, so it logs and skips instead of erroring.
-func mapPerAppLegacyOverrides(values map[string]interface{}, version, globalSize string, overrides map[string]appsv2.LegacyOverrides) error {
+// mapPerAppLegacyOverrides fails when a version is set but its manifest can't be
+// resolved: the manifest decides which values sections are applications, so
+// continuing would silently discard every per-application override while
+// reporting success.
+//
+// An absent version is not an error here — v1 routinely left the version to the
+// deployer channel, and there is nothing to drop when there is nothing to
+// resolve. "A version is required" is enforced on the v2 object by
+// validateWandbSpec, where the error names the field.
+func mapPerAppLegacyOverrides(namespace string, values map[string]interface{}, version, globalSize string, overrides map[string]appsv2.LegacyOverrides) error {
 	if version == "" {
 		logger.Info("no version derived from v1 values; skipping per-application legacy overrides")
 		return nil
 	}
-	apps, err := legacyManifestApps(version)
+	repository, auth := conversionManifestFetch(namespace, values)
+	apps, err := legacyManifestApps(repository, version, auth)
 	if err != nil {
-		logger.Error(err, "failed to resolve server manifest; skipping per-application legacy overrides",
-			"version", version)
-		return nil
+		return fmt.Errorf("resolve server manifest for version %q (required to map per-application env/resources overrides): %w", version, err)
 	}
 
 	appNames := make([]string, 0, len(apps))

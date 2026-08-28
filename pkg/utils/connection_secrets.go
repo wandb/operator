@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	apiv2 "github.com/wandb/operator/api/v2"
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -35,4 +36,16 @@ func (r *ConnSecretResolver) Value(ctx context.Context, sel v1.SecretKeySelector
 		r.Cache[sel.Name] = secret
 	}
 	return strings.TrimSpace(string(secret.Data[sel.Key])), nil
+}
+
+// ValueOrSecret returns a ValueOrSecret's literal value, or the trimmed value the
+// secret arm points at, or "" when unset.
+func (r *ConnSecretResolver) ValueOrSecret(ctx context.Context, v apiv2.ValueOrSecret) (string, error) {
+	if v.Value != "" {
+		return strings.TrimSpace(v.Value), nil
+	}
+	if ref := v.SecretKeyRef(); ref != nil {
+		return r.Value(ctx, *ref)
+	}
+	return "", nil
 }
