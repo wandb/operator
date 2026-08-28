@@ -207,8 +207,12 @@ func mapServiceAccount(values map[string]interface{}, dst *appsv2.WeightsAndBias
 		if block.create != nil && sa.Create == nil {
 			sa.Create = ptr.To(*block.create)
 		}
-		if block.name != "" && sa.ServiceAccountName == "" {
-			sa.ServiceAccountName = block.name
+		if sa.ServiceAccountName == "" {
+			if sa.Create != nil && !*sa.Create {
+				sa.ServiceAccountName = "default"
+			} else {
+				sa.ServiceAccountName = dst.Name + "-app"
+			}
 		}
 		if len(block.annotations) > 0 && len(sa.Annotations) == 0 {
 			sa.Annotations = block.annotations
