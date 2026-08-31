@@ -253,6 +253,12 @@ func buildListenerTLS(tlsConfig *apiv2.ListenerTLSConfig, wandb *apiv2.WeightsAn
 	listenerTLS := &gatewayv1.ListenerTLSConfig{
 		Mode: &mode,
 	}
+	if len(tlsConfig.Options) > 0 {
+		listenerTLS.Options = make(map[gatewayv1.AnnotationKey]gatewayv1.AnnotationValue, len(tlsConfig.Options))
+		for key, value := range tlsConfig.Options {
+			listenerTLS.Options[gatewayv1.AnnotationKey(key)] = gatewayv1.AnnotationValue(value)
+		}
+	}
 
 	if tlsConfig.CertificateRef != nil {
 		ref := gatewayv1.SecretObjectReference{

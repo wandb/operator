@@ -411,6 +411,11 @@ type ListenerTLSConfig struct {
 	Mode *string `json:"mode,omitempty"`
 	// +optional
 	CertificateRef *SecretRef `json:"certificateRef,omitempty"`
+	// Options contains implementation-specific TLS settings. Keys must use
+	// domain-prefixed names, such as networking.gke.io/pre-shared-certs.
+	// +optional
+	// +kubebuilder:validation:MaxProperties=16
+	Options map[string]string `json:"options,omitempty"`
 }
 
 type SecretRef struct {

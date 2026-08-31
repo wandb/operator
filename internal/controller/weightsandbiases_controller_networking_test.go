@@ -29,6 +29,10 @@ var _ = Describe("WeightsAndBiases Networking", func() {
 		infraNamespace := "network-gateway-managed-infra"
 		listenerName := "https"
 		gatewayClassName := "test-gateway-class"
+		tlsOptions := map[string]string{
+			"networking.gke.io/pre-shared-certs": "wandb-cert",
+			"example.com/min-tls-version":        "TLS_1_2",
+		}
 
 		createNamespaceIfMissing(ctx, infraNamespace)
 		wandb, objectStoreService := newNetworkingWandb(wandbName, infraNamespace)
@@ -41,8 +45,11 @@ var _ = Describe("WeightsAndBiases Networking", func() {
 					GatewayClassName: &gatewayClassName,
 					Listeners: []apiv2.GatewayListener{{
 						Name:     listenerName,
-						Port:     80,
-						Protocol: string(gatewayv1.HTTPProtocolType),
+						Port:     443,
+						Protocol: string(gatewayv1.HTTPSProtocolType),
+						TLS: &apiv2.ListenerTLSConfig{
+							Options: tlsOptions,
+						},
 					}},
 				},
 			},
@@ -63,6 +70,12 @@ var _ = Describe("WeightsAndBiases Networking", func() {
 		Expect(gateway.Spec.Listeners[0].AllowedRoutes.Namespaces).NotTo(BeNil())
 		Expect(gateway.Spec.Listeners[0].AllowedRoutes.Namespaces.From).NotTo(BeNil())
 		Expect(*gateway.Spec.Listeners[0].AllowedRoutes.Namespaces.From).To(Equal(gatewayv1.NamespacesFromAll))
+		Expect(gateway.Spec.Listeners[0].TLS).NotTo(BeNil())
+		Expect(gateway.Spec.Listeners[0].TLS.CertificateRefs).To(BeEmpty())
+		Expect(gateway.Spec.Listeners[0].TLS.Options).To(Equal(map[gatewayv1.AnnotationKey]gatewayv1.AnnotationValue{
+			"networking.gke.io/pre-shared-certs": "wandb-cert",
+			"example.com/min-tls-version":        "TLS_1_2",
+		}))
 
 		infraRoute := &gatewayv1.HTTPRoute{}
 		Expect(k8sClient.Get(ctx, types.NamespacedName{

@@ -2837,6 +2837,11 @@ spec:
                                       type: object
                                     mode:
                                       type: string
+                                    options:
+                                      additionalProperties:
+                                        type: string
+                                      maxProperties: 16
+                                      type: object
                                   type: object
                               required:
                               - name
