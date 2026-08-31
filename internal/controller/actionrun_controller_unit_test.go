@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"testing"
+	"time"
 
 	wandbv2 "github.com/wandb/operator/api/v2"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
@@ -260,6 +261,61 @@ func TestActionRunCollectsFailedCheckAsSuccessfulExecution(t *testing.T) {
 	}
 }
 
+func TestActionRunWaitsBrieflyForCompletedJobPod(t *testing.T) {
+	t.Parallel()
+
+	reconciler, fakeClient, run, job := completedActionRunWithoutPod(t,
+		time.Now().Add(-actionResultsGracePeriod/2))
+
+	result, err := reconciler.Reconcile(context.Background(), requestFor(run))
+	if err != nil {
+		t.Fatalf("reconcile completed ActionRun: %v", err)
+	}
+	if result.RequeueAfter != actionResultsRetryInterval {
+		t.Fatalf("requeueAfter = %s, want %s", result.RequeueAfter, actionResultsRetryInterval)
+	}
+
+	var updatedRun wandbv2.ActionRun
+	if err := fakeClient.Get(context.Background(), client.ObjectKeyFromObject(run), &updatedRun); err != nil {
+		t.Fatalf("get updated ActionRun: %v", err)
+	}
+	if updatedRun.Status.Phase != wandbv2.ActionRunPhaseRunning {
+		t.Fatalf("phase = %q, want Running", updatedRun.Status.Phase)
+	}
+	if got := conditionReason(updatedRun.Status.Conditions, actionConditionSucceeded); got != "ResultsPending" {
+		t.Fatalf("condition reason = %q, want ResultsPending for Job %q", got, job.Name)
+	}
+}
+
+func TestActionRunFailsWhenCompletedJobPodRemainsUnavailable(t *testing.T) {
+	t.Parallel()
+
+	reconciler, fakeClient, run, _ := completedActionRunWithoutPod(t,
+		time.Now().Add(-actionResultsGracePeriod-time.Minute))
+
+	result, err := reconciler.Reconcile(context.Background(), requestFor(run))
+	if err != nil {
+		t.Fatalf("reconcile completed ActionRun: %v", err)
+	}
+	if result.RequeueAfter != 0 {
+		t.Fatalf("requeueAfter = %s, want no requeue", result.RequeueAfter)
+	}
+
+	var updatedRun wandbv2.ActionRun
+	if err := fakeClient.Get(context.Background(), client.ObjectKeyFromObject(run), &updatedRun); err != nil {
+		t.Fatalf("get updated ActionRun: %v", err)
+	}
+	if updatedRun.Status.Phase != wandbv2.ActionRunPhaseFailed {
+		t.Fatalf("phase = %q, want Failed", updatedRun.Status.Phase)
+	}
+	if got := conditionReason(updatedRun.Status.Conditions, actionConditionSucceeded); got != "ResultsUnavailable" {
+		t.Fatalf("condition reason = %q, want ResultsUnavailable", got)
+	}
+	if updatedRun.Status.CompletedAt == nil {
+		t.Fatal("completedAt is nil, want the Job completion time")
+	}
+}
+
 func TestParseActionJSONLRejectsNoisyOutput(t *testing.T) {
 	t.Parallel()
 
@@ -304,6 +360,49 @@ applications:
 type staticActionLogReader struct {
 	output []byte
 	err    error
+}
+
+func completedActionRunWithoutPod(
+	t *testing.T,
+	completedAt time.Time,
+) (*ActionRunReconciler, client.Client, *wandbv2.ActionRun, *batchv1.Job) {
+	t.Helper()
+
+	testScheme := newActionTestScheme(t)
+	run := testActionRun()
+	application := testActionApplication()
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(testScheme).
+		WithStatusSubresource(&wandbv2.ActionRun{}, &batchv1.Job{}).
+		WithObjects(run, application).
+		Build()
+	reconciler := &ActionRunReconciler{
+		Client:  fakeClient,
+		Scheme:  testScheme,
+		PodLogs: &staticActionLogReader{},
+	}
+	if _, err := reconciler.Reconcile(context.Background(), requestFor(run)); err != nil {
+		t.Fatalf("create action Job: %v", err)
+	}
+
+	job := &batchv1.Job{}
+	if err := fakeClient.Get(context.Background(), types.NamespacedName{
+		Namespace: run.Namespace,
+		Name:      "weave-check-action",
+	}, job); err != nil {
+		t.Fatalf("get action Job: %v", err)
+	}
+	completionTime := metav1.NewTime(completedAt)
+	job.Status.CompletionTime = &completionTime
+	job.Status.Conditions = []batchv1.JobCondition{{
+		Type:               batchv1.JobComplete,
+		Status:             corev1.ConditionTrue,
+		LastTransitionTime: completionTime,
+	}}
+	if err := fakeClient.Status().Update(context.Background(), job); err != nil {
+		t.Fatalf("mark Job complete: %v", err)
+	}
+	return reconciler, fakeClient, run, job
 }
 
 func (r *staticActionLogReader) ReadPodLogs(

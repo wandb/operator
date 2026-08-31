@@ -48,6 +48,8 @@ import (
 const (
 	defaultActionTimeoutSeconds = int64(300)
 	maxActionOutputBytes        = int64(512 * 1024)
+	actionResultsRetryInterval  = 2 * time.Second
+	actionResultsGracePeriod    = 30 * time.Second
 	actionContainerName         = "action"
 	actionConditionSucceeded    = "Succeeded"
 	actionRunLabel              = "apps.wandb.com/action-run"
@@ -167,7 +169,7 @@ func (r *ActionRunReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 	}
 	if requeueForOutput {
-		return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
+		return ctrl.Result{RequeueAfter: actionResultsRetryInterval}, nil
 	}
 	return ctrl.Result{}, nil
 }
@@ -262,11 +264,11 @@ func resolveTriageAction(
 ) (wandbv2.ApplicationActionSpec, error) {
 	if application.Spec.Triage == nil {
 		return wandbv2.ApplicationActionSpec{}, fmt.Errorf(
-			"Application %q does not declare triage actions", application.Name)
+			"application %q does not declare triage actions", application.Name)
 	}
 	if len(application.Spec.Triage.Command) == 0 && len(application.Spec.Triage.Args) == 0 {
 		return wandbv2.ApplicationActionSpec{}, fmt.Errorf(
-			"Application %q triage runner must override command or args", application.Name)
+			"application %q triage runner must override command or args", application.Name)
 	}
 	for i := range application.Spec.Triage.Actions {
 		action := application.Spec.Triage.Actions[i]
@@ -275,7 +277,7 @@ func resolveTriageAction(
 		}
 	}
 	return wandbv2.ApplicationActionSpec{}, fmt.Errorf(
-		"Application %q does not declare triage action %q", application.Name, actionName)
+		"application %q does not declare triage action %q", application.Name, actionName)
 }
 
 func selectActionContainer(application *wandbv2.Application, name string) (*corev1.Container, error) {
@@ -293,7 +295,7 @@ func selectActionContainer(application *wandbv2.Application, name string) (*core
 			return &containers[i], nil
 		}
 	}
-	return nil, fmt.Errorf("Application %q has no container named %q", application.Name, name)
+	return nil, fmt.Errorf("application %q has no container named %q", application.Name, name)
 }
 
 func buildActionJob(
@@ -458,6 +460,14 @@ func (r *ActionRunReconciler) updateRunStatus(
 	if err != nil {
 		var unavailable *actionOutputUnavailableError
 		if errors.As(err, &unavailable) {
+			if actionResultsGracePeriodExpired(job, time.Now()) {
+				run.Status.Phase = wandbv2.ActionRunPhaseFailed
+				run.Status.CompletedAt = actionCompletionTime(job)
+				setActionCondition(run, metav1.ConditionFalse, "ResultsUnavailable",
+					fmt.Sprintf("action results remained unavailable for %s after Job completion: %s",
+						actionResultsGracePeriod, unavailable.Error()))
+				return false
+			}
 			setActionCondition(run, metav1.ConditionUnknown, "ResultsPending", unavailable.Error())
 			return true
 		}
@@ -528,6 +538,28 @@ func actionCompletionTime(job *batchv1.Job) *metav1.Time {
 	}
 	now := metav1.Now()
 	return &now
+}
+
+func actionResultsGracePeriodExpired(
+	job *batchv1.Job,
+	now time.Time,
+) bool {
+	unavailableSince, ok := actionResultsUnavailableSince(job)
+	return !ok || !now.Before(unavailableSince.Add(actionResultsGracePeriod))
+}
+
+func actionResultsUnavailableSince(job *batchv1.Job) (time.Time, bool) {
+	if job.Status.CompletionTime != nil && !job.Status.CompletionTime.IsZero() {
+		return job.Status.CompletionTime.Time, true
+	}
+	for _, condition := range job.Status.Conditions {
+		if condition.Type == batchv1.JobComplete &&
+			condition.Status == corev1.ConditionTrue &&
+			!condition.LastTransitionTime.IsZero() {
+			return condition.LastTransitionTime.Time, true
+		}
+	}
+	return time.Time{}, false
 }
 
 func jobComplete(job *batchv1.Job) bool {
