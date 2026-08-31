@@ -11,9 +11,12 @@ func resolveApplicationTriage(triage *serverManifest.ApplicationTriage) *apiv2.A
 		return nil
 	}
 
-	env := make([]corev1.EnvVar, len(triage.Env))
-	for i := range triage.Env {
-		env[i] = *triage.Env[i].DeepCopy()
+	var env []corev1.EnvVar
+	if len(triage.Env) > 0 {
+		env = make([]corev1.EnvVar, len(triage.Env))
+		for i := range triage.Env {
+			env[i] = *triage.Env[i].DeepCopy()
+		}
 	}
 	actions := make([]apiv2.ApplicationActionSpec, len(triage.Actions))
 	for i := range triage.Actions {

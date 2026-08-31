@@ -20,16 +20,16 @@ spec:
     containerName: my-app
     command: ["/bin/echo"]
     timeoutSeconds: 60
+    resources:
+      requests:
+        cpu: 25m
+        memory: 32Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
     actions:
       - name: default
         description: Run the default application diagnostic
-        resources:
-          requests:
-            cpu: 25m
-            memory: 32Mi
-          limits:
-            cpu: 100m
-            memory: 128Mi
 
   jobs:
     - metadata:

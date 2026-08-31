@@ -58,3 +58,14 @@ func TestResolveApplicationTriageCopiesCompactAction(t *testing.T) {
 		t.Fatal("resolved action aliases mutable manifest data")
 	}
 }
+
+func TestResolveApplicationTriagePreservesNilEnv(t *testing.T) {
+	input := &serverManifest.ApplicationTriage{
+		Actions: []serverManifest.TriageAction{{Name: "default"}},
+	}
+
+	resolved := resolveApplicationTriage(input)
+	if resolved.Env != nil {
+		t.Fatalf("env = %#v, want nil so the stored Application remains stable", resolved.Env)
+	}
+}
