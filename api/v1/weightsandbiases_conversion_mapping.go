@@ -197,7 +197,7 @@ func mapServiceAccount(values map[string]interface{}, dst *appsv2.WeightsAndBias
 	if len(blocks) == 0 {
 		return nil
 	}
-	if err := assertServiceAccountAgreement(blocks); err != nil {
+	if err := assertServiceAccountAgreement(blocks, dst.Name); err != nil {
 		return err
 	}
 
@@ -207,37 +207,42 @@ func mapServiceAccount(values map[string]interface{}, dst *appsv2.WeightsAndBias
 		if block.create != nil && sa.Create == nil {
 			sa.Create = ptr.To(*block.create)
 		}
-		if sa.ServiceAccountName == "" {
-			if sa.Create != nil && !*sa.Create {
-				sa.ServiceAccountName = "default"
-			} else {
-				sa.ServiceAccountName = dst.Name + "-app"
-			}
+		if block.name != "" && sa.ServiceAccountName == "" {
+			sa.ServiceAccountName = block.name
 		}
 		if len(block.annotations) > 0 && len(sa.Annotations) == 0 {
 			sa.Annotations = block.annotations
 		}
 	}
+	if sa.ServiceAccountName == "" {
+		sa.ServiceAccountName = derivedV1SAName(dst.Name, sa.Create)
+	}
 	return nil
+}
+
+func derivedV1SAName(release string, create *bool) string {
+	if create != nil && !*create {
+		return "default"
+	}
+	return release + "-app"
 }
 
 // assertServiceAccountAgreement fails when subcharts disagree on the identity.
 // v2 has one application ServiceAccount, so silently picking a winner would
 // point pods at the wrong cloud identity — the exact failure this mapper
 // exists to prevent.
-func assertServiceAccountAgreement(blocks []v1ServiceAccount) error {
-	var nameOwner, createOwner *v1ServiceAccount
+func assertServiceAccountAgreement(blocks []v1ServiceAccount, release string) error {
+	var identityOwner, createOwner *v1ServiceAccount
 	for i := range blocks {
 		block := &blocks[i]
-		if block.name != "" {
-			if nameOwner != nil && nameOwner.name != block.name {
+		if block.name != "" || block.create != nil {
+			if identityOwner == nil {
+				identityOwner = block
+			} else if got, want := block.effectiveName(release), identityOwner.effectiveName(release); got != want {
 				return fmt.Errorf(
-					"spec.values: %s.serviceAccount.name=%q conflicts with %s.serviceAccount.name=%q; "+
+					"spec.values: %s.serviceAccount resolves to %q but %s.serviceAccount resolves to %q; "+
 						"v2 has a single spec.wandb.serviceAccount, so set it explicitly",
-					nameOwner.subchart, nameOwner.name, block.subchart, block.name)
-			}
-			if nameOwner == nil {
-				nameOwner = block
+					identityOwner.subchart, want, block.subchart, got)
 			}
 		}
 		if block.create != nil {
@@ -253,6 +258,13 @@ func assertServiceAccountAgreement(blocks []v1ServiceAccount) error {
 		}
 	}
 	return nil
+}
+
+func (b v1ServiceAccount) effectiveName(release string) string {
+	if b.name != "" {
+		return b.name
+	}
+	return derivedV1SAName(release, b.create)
 }
 
 // readV1ServiceAccounts collects the serviceAccount block from each known
@@ -616,10 +628,18 @@ var clickHouseFields = []struct {
 	setRef func(*appsv2.ClickHouseConnection, corev1.SecretKeySelector)
 }{
 	{"host", func(c *appsv2.ClickHouseConnection, s corev1.SecretKeySelector) { c.Host = appsv2.ValueFromSelector(s) }},
-	{"port", func(c *appsv2.ClickHouseConnection, s corev1.SecretKeySelector) { c.HTTPPort = appsv2.ValueFromSelector(s) }},
-	{"database", func(c *appsv2.ClickHouseConnection, s corev1.SecretKeySelector) { c.Database = appsv2.ValueFromSelector(s) }},
-	{"user", func(c *appsv2.ClickHouseConnection, s corev1.SecretKeySelector) { c.Username = appsv2.ValueFromSelector(s) }},
-	{"password", func(c *appsv2.ClickHouseConnection, s corev1.SecretKeySelector) { c.Password = appsv2.ValueFromSelector(s) }},
+	{"port", func(c *appsv2.ClickHouseConnection, s corev1.SecretKeySelector) {
+		c.HTTPPort = appsv2.ValueFromSelector(s)
+	}},
+	{"database", func(c *appsv2.ClickHouseConnection, s corev1.SecretKeySelector) {
+		c.Database = appsv2.ValueFromSelector(s)
+	}},
+	{"user", func(c *appsv2.ClickHouseConnection, s corev1.SecretKeySelector) {
+		c.Username = appsv2.ValueFromSelector(s)
+	}},
+	{"password", func(c *appsv2.ClickHouseConnection, s corev1.SecretKeySelector) {
+		c.Password = appsv2.ValueFromSelector(s)
+	}},
 }
 
 // mapClickHouse routes v1 global.clickhouse to externalClickhouse (like

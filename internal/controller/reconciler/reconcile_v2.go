@@ -447,6 +447,14 @@ func ReconcileWandbManifest(
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
+	if internalServiceAuthEnabled(wandb) && resolveInternalServiceAuthIssuer(wandb) == "" {
+		// A wrong issuer 401s and panics the API, so block instead of guessing.
+		if err := updateReadyStatus(ctx, client, wandb, statusBefore, false,
+			serviceAccountIssuerUnknownReason, serviceAccountIssuerUnknownMessage); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
+	}
 	serviceAccountName := wandb.Spec.Wandb.ServiceAccount.ServiceAccountName
 
 	if wandb.Spec.Wandb.ServiceAccount.Create != nil && *wandb.Spec.Wandb.ServiceAccount.Create {

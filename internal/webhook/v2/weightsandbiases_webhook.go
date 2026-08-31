@@ -112,10 +112,6 @@ func (d *WeightsAndBiasesCustomDefaulter) Default(ctx context.Context, obj runti
 		wandb.Spec.Wandb.InternalServiceAuth.Enabled = ptr.To(true)
 	}
 
-	if wandb.Spec.Wandb.InternalServiceAuth.OIDCIssuer == "" && wandb.Spec.Wandb.InternalServiceAuth.Enabled != nil && *wandb.Spec.Wandb.InternalServiceAuth.Enabled {
-		wandb.Spec.Wandb.InternalServiceAuth.OIDCIssuer = "https://kubernetes.default.svc.cluster.local"
-	}
-
 	if wandb.Spec.Wandb.ServiceAccount.Create == nil {
 		wandb.Spec.Wandb.ServiceAccount.Create = ptr.To(true)
 	}
