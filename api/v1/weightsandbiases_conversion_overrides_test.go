@@ -39,7 +39,7 @@ const testLegacyVersion = "0.83.0-test"
 // overrides install their own via withConversionManifest*, and tests that need
 // the fetch to fail install an erroring resolver.
 func defaultConversionManifest() {
-	SetConversionManifestGetter(func(_ context.Context, _, _ string) (serverManifest.Manifest, error) {
+	SetConversionManifestGetter(func(_ context.Context, _, _ string, _ *serverManifest.RegistryAuth) (serverManifest.Manifest, error) {
 		return serverManifest.Manifest{}, nil
 	})
 }
@@ -49,7 +49,7 @@ func defaultConversionManifest() {
 func withFailingConversionManifest(t *testing.T, err error) *atomic.Int32 {
 	t.Helper()
 	var calls atomic.Int32
-	SetConversionManifestGetter(func(_ context.Context, _, _ string) (serverManifest.Manifest, error) {
+	SetConversionManifestGetter(func(_ context.Context, _, _ string, _ *serverManifest.RegistryAuth) (serverManifest.Manifest, error) {
 		calls.Add(1)
 		return serverManifest.Manifest{}, err
 	})
