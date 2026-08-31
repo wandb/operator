@@ -19,9 +19,7 @@ package crdinstaller
 import "embed"
 
 // Each group's CRDs are committed under crds/<group>/ and embedded here.
-// The source-of-truth lives outside this package (config/crd/bases for the
-// operator's own CRDs; pkg/vendored/<vendor>/crds for upstream) — the
-// `sync-crd-embed` Makefile target copies updates into these directories.
+// Telemetry CRDs are refreshed by `make generate-vendored`.
 
 //go:embed crds/operator/*.yaml
 var operatorCRDs embed.FS
@@ -32,11 +30,19 @@ var redisCRDs embed.FS
 //go:embed crds/clickhouse/*.yaml
 var clickhouseCRDs embed.FS
 
+//go:embed crds/victoriametrics/*.yaml
+var victoriaMetricsCRDs embed.FS
+
+//go:embed crds/grafana/*.yaml
+var grafanaCRDs embed.FS
+
 // optionalGroups maps the value used on the --groups CLI flag to the
 // matching embedded filesystem. The operator's own CRDs are NOT in here
 // because they're always installed regardless of which optional groups
 // are requested.
 var optionalGroups = map[string]embed.FS{
-	"redis":      redisCRDs,
-	"clickhouse": clickhouseCRDs,
+	"redis":           redisCRDs,
+	"clickhouse":      clickhouseCRDs,
+	"victoriametrics": victoriaMetricsCRDs,
+	"grafana":         grafanaCRDs,
 }

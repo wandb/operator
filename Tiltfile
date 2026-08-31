@@ -323,6 +323,10 @@ def build_operator_values(telemetry_namespace):
         },
         "telemetry": {
             "mode": settings.get("observabilityMode"),
+            "crds": {
+                "victoriaMetrics": telemetry_enabled,
+                "grafana": grafana_enabled,
+            },
             "namespace": telemetry_namespace,
         },
     }
@@ -693,6 +697,18 @@ if LOCAL_NETWORKING_MODE == "gateway":
     operator_deps.append("nginx-gateway-fabric")
 if settings.get("observabilityMode") != "off":
     operator_deps.append("WandB-Namespace")
+    local_resource(
+        "Telemetry-CRDs-Prepare",
+        "./hack/scripts/telemetry-crd-manager.sh --namespace %s --release-name wandb-operator --mode %s --values %s" % (
+            shell_quote(settings.get("operatorNamespace")),
+            shell_quote(settings.get("observabilityMode")),
+            shell_quote(OPERATOR_VALUES),
+        ),
+        deps=["hack/scripts/telemetry-crd-manager.sh"],
+        resource_deps=["Operator-Chart-Deps", "Operator-Build"],
+        labels=[GROUP_TELEMETRY],
+    )
+    operator_deps.append("Telemetry-CRDs-Prepare")
 
 operator_flags = ["--create-namespace"]
 if helm_supports_take_ownership():
