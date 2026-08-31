@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -29,7 +30,7 @@ var _ = Describe("WeightsAndBiases Networking", func() {
 		infraNamespace := "network-gateway-managed-infra"
 		listenerName := "https"
 		gatewayClassName := "test-gateway-class"
-		tlsOptions := map[string]string{
+		tlsOptions := map[string]apiv2.TLSOptionValue{
 			"networking.gke.io/pre-shared-certs": "wandb-cert",
 			"example.com/min-tls-version":        "TLS_1_2",
 		}
@@ -105,6 +106,37 @@ var _ = Describe("WeightsAndBiases Networking", func() {
 		Expect(wandb.Status.GatewayStatus.GatewayRef.Name).To(Equal(gatewayName))
 		Expect(wandb.Status.GatewayStatus.Ready).To(BeTrue())
 		Expect(wandb.Status.GatewayStatus.Addresses).To(ContainElement("10.0.0.5"))
+	})
+
+	It("rejects a listener TLS option value longer than the Gateway API allows", func() {
+		ctx := context.Background()
+		listenerName := "https"
+		gatewayClassName := "test-gateway-class"
+
+		wandb, _ := newNetworkingWandb("network-gateway-oversized-option", "")
+		wandb.Spec.Networking = apiv2.NetworkingSpec{
+			Mode: apiv2.NetworkingModeGatewayAPI,
+			GatewayAPI: &apiv2.GatewayAPIConfig{
+				ListenerName: &listenerName,
+				Gateway: apiv2.GatewayConfig{
+					Managed:          true,
+					GatewayClassName: &gatewayClassName,
+					Listeners: []apiv2.GatewayListener{{
+						Name:     listenerName,
+						Port:     443,
+						Protocol: string(gatewayv1.HTTPSProtocolType),
+						TLS: &apiv2.ListenerTLSConfig{
+							Options: map[string]apiv2.TLSOptionValue{
+								"example.com/oversized": apiv2.TLSOptionValue(strings.Repeat("a", 4097)),
+							},
+						},
+					}},
+				},
+			},
+		}
+
+		err := k8sClient.Create(ctx, wandb)
+		Expect(apierrors.IsInvalid(err)).To(BeTrue(), "expected admission to reject the oversized option, got %v", err)
 	})
 
 	It("reconciles applications against an external Gateway reference", func() {

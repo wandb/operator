@@ -827,7 +827,7 @@ func (in *ListenerTLSConfig) DeepCopyInto(out *ListenerTLSConfig) {
 	}
 	if in.Options != nil {
 		in, out := &in.Options, &out.Options
-		*out = make(map[string]string, len(*in))
+		*out = make(map[string]TLSOptionValue, len(*in))
 		for key, val := range *in {
 			(*out)[key] = val
 		}

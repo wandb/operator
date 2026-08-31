@@ -86,7 +86,7 @@ func TestDeleteGatewayDoesNotDeleteUnownedGateway(t *testing.T) {
 func TestBuildListenerTLSCopiesOptionsWithoutCertificateRefs(t *testing.T) {
 	wandb := newWandbForGateway()
 	tlsConfig := &apiv2.ListenerTLSConfig{
-		Options: map[string]string{
+		Options: map[string]apiv2.TLSOptionValue{
 			"networking.gke.io/pre-shared-certs": "wandb-cert",
 			"example.com/min-tls-version":        "TLS_1_2",
 		},
@@ -106,7 +106,7 @@ func TestBuildListenerTLSKeepsSecretFallbackWithOptions(t *testing.T) {
 	wandb := newWandbForGateway()
 	wandb.Spec.Networking.TLS = &apiv2.TLSConfig{SecretName: "wandb-tls"}
 	tlsConfig := &apiv2.ListenerTLSConfig{
-		Options: map[string]string{
+		Options: map[string]apiv2.TLSOptionValue{
 			"example.com/min-tls-version": "TLS_1_2",
 		},
 	}
