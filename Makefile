@@ -58,7 +58,7 @@ generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="{./api/v1,./api/v2}"
 
 .PHONY: generate-vendored
-generate-vendored: ## Regenerate vendored Moco CRDs from the operator's Helm chart dependency.
+generate-vendored: ## Regenerate CRDs from the operator's Helm chart dependencies.
 	@helm dependency update deploy/operator >/dev/null
 	@tar -xzOf deploy/operator/charts/moco-*.tgz moco/templates/generated/crds/moco_crds.yaml | \
 		sed -e '/^{{/d' \
@@ -70,9 +70,16 @@ generate-vendored: ## Regenerate vendored Moco CRDs from the operator's Helm cha
 		    -e "s|: '{{ .Release.Namespace }}'|: moco-system|g" \
 		> pkg/vendored/moco/crds/moco_crds.yaml
 	@echo "Regenerated pkg/vendored/moco/crds/moco_crds.yaml"
+	@mkdir -p internal/crdinstaller/crds/victoriametrics internal/crdinstaller/crds/grafana
+	@rm -f internal/crdinstaller/crds/victoriametrics/*.yaml internal/crdinstaller/crds/grafana/*.yaml
+	@tar -xzOf deploy/operator/charts/victoria-metrics-operator-*.tgz victoria-metrics-operator/crd.yaml \
+		> internal/crdinstaller/crds/victoriametrics/vm_crds.yaml
+	@tar -xzf deploy/operator/charts/grafana-operator-*.tgz \
+		-C internal/crdinstaller/crds/grafana --strip-components=3 grafana-operator/files/crds
+	@echo "Regenerated embedded VictoriaMetrics and Grafana CRDs"
 
 .PHONY: sync-crd-embed
-sync-crd-embed: manifests ## Sync embedded CRDs in internal/crdinstaller/crds from their source-of-truth locations.
+sync-crd-embed: manifests ## Sync embedded non-telemetry CRDs from their source-of-truth locations.
 	@mkdir -p internal/crdinstaller/crds/operator internal/crdinstaller/crds/redis internal/crdinstaller/crds/clickhouse
 	@rm -f internal/crdinstaller/crds/operator/*.yaml internal/crdinstaller/crds/redis/*.yaml internal/crdinstaller/crds/clickhouse/*.yaml
 	@cp config/crd/bases/apps.wandb.com_*.yaml internal/crdinstaller/crds/operator/
