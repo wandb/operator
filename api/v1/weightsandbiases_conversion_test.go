@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -44,9 +45,14 @@ func withConversionReader(t *testing.T, secrets ...*corev1.Secret) {
 }
 
 // activeSpecSecret builds a `<cr-name>-spec-active`-shaped Secret with the
-// given values map JSON-encoded into data.values.
+// given values map JSON-encoded into data.values. Conversion prefers these
+// values over the CR's, so — like newV1 — they get a version unless the fixture
+// already supplies one.
 func activeSpecSecret(t *testing.T, namespace, crName string, values map[string]interface{}) *corev1.Secret {
 	t.Helper()
+	if values != nil && derivedLegacyVersion(values) == "" {
+		values = withVersion(values)
+	}
 	raw, err := json.Marshal(values)
 	require.NoError(t, err)
 	return &corev1.Secret{
@@ -58,7 +64,21 @@ func activeSpecSecret(t *testing.T, namespace, crName string, values map[string]
 	}
 }
 
+// newV1 builds a convertible v1 CR: conversion rejects values from which no
+// version can be derived, so a tag is injected unless the fixture already
+// carries one. Tests that exercise the missing-version path use newV1NoVersion.
 func newV1(values map[string]interface{}) *WeightsAndBiases {
+	if values == nil {
+		values = map[string]interface{}{}
+	}
+	if derivedLegacyVersion(values) == "" {
+		values = withVersion(values)
+	}
+	return newV1NoVersion(values)
+}
+
+// newV1NoVersion builds the CR from values verbatim, supplying nothing.
+func newV1NoVersion(values map[string]interface{}) *WeightsAndBiases {
 	return &WeightsAndBiases{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "wandb",
@@ -70,14 +90,37 @@ func newV1(values map[string]interface{}) *WeightsAndBiases {
 	}
 }
 
+// derivedLegacyVersion mirrors mapVersion: app.image.tag, then api.image.tag.
+func derivedLegacyVersion(values map[string]interface{}) string {
+	for _, section := range []string{"app", "api"} {
+		tag, found, err := unstructured.NestedString(values, section, "image", "tag")
+		if err == nil && found && tag != "" {
+			return tag
+		}
+	}
+	return ""
+}
+
+// TestConvertTo_EmptyValues: absent values short-circuit applyValueMappings
+// before the version requirement, so a CR with no values at all still converts.
 func TestConvertTo_EmptyValues(t *testing.T) {
 	dst := &appsv2.WeightsAndBiases{}
-	require.NoError(t, newV1(nil).ConvertTo(dst))
+	require.NoError(t, newV1NoVersion(nil).ConvertTo(dst))
 	require.Equal(t, "wandb", dst.Name)
 	require.Empty(t, dst.Spec.Wandb.Hostname)
 	require.Empty(t, dst.Spec.Wandb.License)
 	require.Empty(t, string(dst.Spec.Size))
 	require.NotContains(t, dst.Annotations, OIDCPendingAnnotation)
+}
+
+// TestConvertTo_EmptyValuesMapFailsWithoutVersion: a present-but-empty values map
+// does run the mappings, and yields no version, so it is rejected. The contrast
+// with TestConvertTo_EmptyValues is the nil short-circuit, not the version.
+func TestConvertTo_EmptyValuesMapFailsWithoutVersion(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	err := newV1NoVersion(map[string]interface{}{}).ConvertTo(dst)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "manifest version required")
 }
 
 func TestConvertTo_NoGlobalKey(t *testing.T) {
@@ -217,13 +260,20 @@ func TestConvertTo_VersionEmptyAppFallsBackToApi(t *testing.T) {
 	require.Equal(t, "0.79.2", dst.Spec.Wandb.Version, "empty app tag should not consume the slot; api fallback applies")
 }
 
+// TestConvertTo_VersionAbsent: neither app nor api carries an image tag, so no
+// version can be derived and the conversion is rejected. The version is what
+// selects the server manifest, and without it the per-application overrides in
+// the values cannot be mapped.
 func TestConvertTo_VersionAbsent(t *testing.T) {
 	dst := &appsv2.WeightsAndBiases{}
-	src := newV1(map[string]interface{}{
+	src := newV1NoVersion(map[string]interface{}{
 		"global": map[string]interface{}{"host": "http://x"},
 	})
-	require.NoError(t, src.ConvertTo(dst))
-	require.Empty(t, dst.Spec.Wandb.Version)
+	err := src.ConvertTo(dst)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "manifest version required")
+	require.Contains(t, err.Error(), "spec.values.app.image.tag",
+		"the error should name the fields the deployer can set")
 }
 
 func TestConvertTo_VersionWithoutGlobal(t *testing.T) {
