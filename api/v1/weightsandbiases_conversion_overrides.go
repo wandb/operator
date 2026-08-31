@@ -372,6 +372,7 @@ func legacyResourcesFromSection(section map[string]interface{}, sectionName, glo
 	if size == "" {
 		size = legacyDefaultSize
 	}
+	size = string(appsv2.Size(size).Canonical())
 
 	merged := map[string]interface{}{}
 	for _, path := range [][]string{
