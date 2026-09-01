@@ -522,10 +522,18 @@ var clickHouseFields = []struct {
 	setRef func(*appsv2.ClickHouseConnection, corev1.SecretKeySelector)
 }{
 	{"host", func(c *appsv2.ClickHouseConnection, s corev1.SecretKeySelector) { c.Host = appsv2.ValueFromSelector(s) }},
-	{"port", func(c *appsv2.ClickHouseConnection, s corev1.SecretKeySelector) { c.HTTPPort = appsv2.ValueFromSelector(s) }},
-	{"database", func(c *appsv2.ClickHouseConnection, s corev1.SecretKeySelector) { c.Database = appsv2.ValueFromSelector(s) }},
-	{"user", func(c *appsv2.ClickHouseConnection, s corev1.SecretKeySelector) { c.Username = appsv2.ValueFromSelector(s) }},
-	{"password", func(c *appsv2.ClickHouseConnection, s corev1.SecretKeySelector) { c.Password = appsv2.ValueFromSelector(s) }},
+	{"port", func(c *appsv2.ClickHouseConnection, s corev1.SecretKeySelector) {
+		c.HTTPPort = appsv2.ValueFromSelector(s)
+	}},
+	{"database", func(c *appsv2.ClickHouseConnection, s corev1.SecretKeySelector) {
+		c.Database = appsv2.ValueFromSelector(s)
+	}},
+	{"user", func(c *appsv2.ClickHouseConnection, s corev1.SecretKeySelector) {
+		c.Username = appsv2.ValueFromSelector(s)
+	}},
+	{"password", func(c *appsv2.ClickHouseConnection, s corev1.SecretKeySelector) {
+		c.Password = appsv2.ValueFromSelector(s)
+	}},
 }
 
 // mapClickHouse routes v1 global.clickhouse to externalClickhouse (like
