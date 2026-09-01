@@ -1,6 +1,6 @@
 module github.com/wandb/operator
 
-go 1.26.7
+go 1.27
 
 godebug default=go1.26
 
