@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -29,6 +30,10 @@ var _ = Describe("WeightsAndBiases Networking", func() {
 		infraNamespace := "network-gateway-managed-infra"
 		listenerName := "https"
 		gatewayClassName := "test-gateway-class"
+		tlsOptions := map[string]apiv2.TLSOptionValue{
+			"networking.gke.io/pre-shared-certs": "wandb-cert",
+			"example.com/min-tls-version":        "TLS_1_2",
+		}
 
 		createNamespaceIfMissing(ctx, infraNamespace)
 		wandb, objectStoreService := newNetworkingWandb(wandbName, infraNamespace)
@@ -41,8 +46,11 @@ var _ = Describe("WeightsAndBiases Networking", func() {
 					GatewayClassName: &gatewayClassName,
 					Listeners: []apiv2.GatewayListener{{
 						Name:     listenerName,
-						Port:     80,
-						Protocol: string(gatewayv1.HTTPProtocolType),
+						Port:     443,
+						Protocol: string(gatewayv1.HTTPSProtocolType),
+						TLS: &apiv2.ListenerTLSConfig{
+							Options: tlsOptions,
+						},
 					}},
 				},
 			},
@@ -63,6 +71,12 @@ var _ = Describe("WeightsAndBiases Networking", func() {
 		Expect(gateway.Spec.Listeners[0].AllowedRoutes.Namespaces).NotTo(BeNil())
 		Expect(gateway.Spec.Listeners[0].AllowedRoutes.Namespaces.From).NotTo(BeNil())
 		Expect(*gateway.Spec.Listeners[0].AllowedRoutes.Namespaces.From).To(Equal(gatewayv1.NamespacesFromAll))
+		Expect(gateway.Spec.Listeners[0].TLS).NotTo(BeNil())
+		Expect(gateway.Spec.Listeners[0].TLS.CertificateRefs).To(BeEmpty())
+		Expect(gateway.Spec.Listeners[0].TLS.Options).To(Equal(map[gatewayv1.AnnotationKey]gatewayv1.AnnotationValue{
+			"networking.gke.io/pre-shared-certs": "wandb-cert",
+			"example.com/min-tls-version":        "TLS_1_2",
+		}))
 
 		infraRoute := &gatewayv1.HTTPRoute{}
 		Expect(k8sClient.Get(ctx, types.NamespacedName{
@@ -92,6 +106,37 @@ var _ = Describe("WeightsAndBiases Networking", func() {
 		Expect(wandb.Status.GatewayStatus.GatewayRef.Name).To(Equal(gatewayName))
 		Expect(wandb.Status.GatewayStatus.Ready).To(BeTrue())
 		Expect(wandb.Status.GatewayStatus.Addresses).To(ContainElement("10.0.0.5"))
+	})
+
+	It("rejects a listener TLS option value longer than the Gateway API allows", func() {
+		ctx := context.Background()
+		listenerName := "https"
+		gatewayClassName := "test-gateway-class"
+
+		wandb, _ := newNetworkingWandb("network-gateway-oversized-option", "")
+		wandb.Spec.Networking = apiv2.NetworkingSpec{
+			Mode: apiv2.NetworkingModeGatewayAPI,
+			GatewayAPI: &apiv2.GatewayAPIConfig{
+				ListenerName: &listenerName,
+				Gateway: apiv2.GatewayConfig{
+					Managed:          true,
+					GatewayClassName: &gatewayClassName,
+					Listeners: []apiv2.GatewayListener{{
+						Name:     listenerName,
+						Port:     443,
+						Protocol: string(gatewayv1.HTTPSProtocolType),
+						TLS: &apiv2.ListenerTLSConfig{
+							Options: map[string]apiv2.TLSOptionValue{
+								"example.com/oversized": apiv2.TLSOptionValue(strings.Repeat("a", 4097)),
+							},
+						},
+					}},
+				},
+			},
+		}
+
+		err := k8sClient.Create(ctx, wandb)
+		Expect(apierrors.IsInvalid(err)).To(BeTrue(), "expected admission to reject the oversized option, got %v", err)
 	})
 
 	It("reconciles applications against an external Gateway reference", func() {

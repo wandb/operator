@@ -84,6 +84,39 @@ The operator reconciles the resource, brings up the requested backing services,
 and rolls out the W&B application. See [`deploy/operator/values.yaml`](deploy/operator/values.yaml)
 for the available chart options and which component operators are enabled.
 
+### Gateway API TLS options
+
+Implementation-specific Gateway TLS settings can be passed through an explicit
+listener's `tls.options` map. For example, a Google-managed Compute SSL
+certificate can be attached to a global GKE Gateway as follows:
+
+```yaml
+spec:
+  wandb:
+    hostname: https://wandb.example.com
+  networking:
+    mode: gateway
+    gatewayAPI:
+      listenerName: https
+      gateway:
+        managed: true
+        gatewayClassName: gke-l7-global-external-managed
+        listeners:
+          - name: https
+            hostname: wandb.example.com
+            port: 443
+            protocol: HTTPS
+            tls:
+              mode: Terminate
+              options:
+                networking.gke.io/pre-shared-certs: wandb-cert
+```
+
+For a regional GKE Gateway backed by Certificate Manager, use
+`networking.gke.io/cert-manager-certs` instead. Global Certificate Manager
+certificate maps remain Gateway metadata annotations and should be configured
+under `spec.networking.annotations` with the key `networking.gke.io/certmap`.
+
 ### Custom CA certificates (air-gapped / private registry)
 
 When the operator must reach a private OCI registry served with a self-signed or
