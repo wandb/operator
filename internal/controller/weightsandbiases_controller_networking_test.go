@@ -251,6 +251,16 @@ var _ = Describe("WeightsAndBiases Networking", func() {
 		Expect(ingress.Spec.TLS[0].SecretName).To(Equal("wandb-tls"))
 		Expect(ingress.Spec.Rules).NotTo(BeEmpty())
 
+		beforeExternalMetadata := ingress.DeepCopy()
+		ingress.Annotations["ingress.example.com/controller-state"] = "preserve-me"
+		ingress.Labels["ingress.example.com/controller"] = "external"
+		Expect(k8sClient.Patch(
+			ctx,
+			ingress,
+			client.MergeFrom(beforeExternalMetadata),
+			client.FieldOwner("test-ingress-controller"),
+		)).To(Succeed())
+
 		ingress.Status.LoadBalancer.Ingress = []networkingv1.IngressLoadBalancerIngress{{
 			IP: "34.118.10.1",
 		}}
@@ -264,6 +274,27 @@ var _ = Describe("WeightsAndBiases Networking", func() {
 		Expect(wandb.Status.IngressStatus.Name).To(Equal(wandbName))
 		Expect(wandb.Status.IngressStatus.LoadBalancerIngress).To(HaveLen(1))
 		Expect(wandb.Status.IngressStatus.LoadBalancerIngress[0].IP).To(Equal("34.118.10.1"))
+
+		ingress = &networkingv1.Ingress{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{
+			Name:      wandbName,
+			Namespace: wandbNamespace,
+		}, ingress)).To(Succeed())
+		Expect(ingress.Annotations).To(HaveKeyWithValue("ingress.example.com/controller-state", "preserve-me"))
+		Expect(ingress.Labels).To(HaveKeyWithValue("ingress.example.com/controller", "external"))
+
+		delete(wandb.Spec.Networking.Annotations, "example.com/ingress")
+		Expect(k8sClient.Update(ctx, wandb)).To(Succeed())
+		reconcileNetworkingManifest(ctx, wandb)
+
+		ingress = &networkingv1.Ingress{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{
+			Name:      wandbName,
+			Namespace: wandbNamespace,
+		}, ingress)).To(Succeed())
+		Expect(ingress.Annotations).NotTo(HaveKey("example.com/ingress"))
+		Expect(ingress.Annotations).To(HaveKeyWithValue("ingress.example.com/controller-state", "preserve-me"))
+		Expect(ingress.Labels).To(HaveKeyWithValue("ingress.example.com/controller", "external"))
 	})
 
 	// Watchtower must not be able to take down the install it manages, but a

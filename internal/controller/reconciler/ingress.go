@@ -15,6 +15,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
+const ingressFieldOwner = "wandb-operator-ingress"
+
 // consolidatedIngressName returns spec.networking.ingress.name when set, or
 // the default "<cr-name>-ingress" otherwise.
 func consolidatedIngressName(wandb *apiv2.WeightsAndBiases) string {
@@ -130,6 +132,10 @@ func reconcileConsolidatedIngress(ctx context.Context, c ctrlClient.Client, wand
 	}
 
 	desired := &networkingv1.Ingress{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: networkingv1.SchemeGroupVersion.String(),
+			Kind:       "Ingress",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ingressName,
 			Namespace: wandb.Namespace,
@@ -164,26 +170,24 @@ func reconcileConsolidatedIngress(ctx context.Context, c ctrlClient.Client, wand
 		return err
 	}
 
-	current := &networkingv1.Ingress{}
-	err = c.Get(ctx, types.NamespacedName{Name: ingressName, Namespace: wandb.Namespace}, current)
-	if err != nil {
-		if apiErrors.IsNotFound(err) {
-			if err := c.Create(ctx, desired); err != nil {
-				return err
-			}
-			wandb.Status.IngressStatus = summarizeIngressStatus(desired)
-			wandb.Status.IngressStatus.Ready = isIngressReady(current)
-			return nil
-		}
+	// Apply only the fields this controller manages. In particular, labels and
+	// annotations are granular maps, so keys added by ingress controllers or
+	// other actors are preserved. Force ownership of the fields in desired
+	// because this controller is authoritative for the Ingress it owns.
+	if err := c.Patch(
+		ctx,
+		desired,
+		ctrlClient.Apply,
+		ctrlClient.FieldOwner(ingressFieldOwner),
+		ctrlClient.ForceOwnership,
+	); err != nil {
 		return err
 	}
 
-	desired.ResourceVersion = current.ResourceVersion
-	if err := c.Update(ctx, desired); err != nil {
-		return err
-	}
-	wandb.Status.IngressStatus = summarizeIngressStatus(current)
-	wandb.Status.IngressStatus.Ready = isIngressReady(current)
+	// Patch populates desired from the API response, including status fields
+	// that were not part of this controller's apply configuration.
+	wandb.Status.IngressStatus = summarizeIngressStatus(desired)
+	wandb.Status.IngressStatus.Ready = isIngressReady(desired)
 	return nil
 }
 
