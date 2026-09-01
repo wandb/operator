@@ -35,8 +35,13 @@ generated CRD schema is unchanged:
 
 ## Regenerating deepcopy
 
-`make generate` only covers `./api/v1` and `./api/v2`, so run this directly after editing the types:
+`zz_generated.deepcopy.go` is generated, never hand-edited. This package is included in the
+`generate` target's paths, so after editing the types run the same command as for `api/`:
 
 ```bash
-./bin/controller-gen object:headerFile="hack/boilerplate.go.txt" paths="./pkg/vendored/keda/..."
+make manifests generate sync-crd-embed
 ```
+
+The other vendored packages are **not** in those paths on purpose: `controller-gen` fails on the
+Altinity ClickHouse types (interface fields it can't model) and rewrites the Argo Rollouts output,
+which was copied verbatim from upstream rather than generated here.
