@@ -26,7 +26,7 @@ require (
 	github.com/onsi/gomega v1.42.1
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/pkg/errors v0.9.1
-	github.com/prometheus/client_golang v1.23.2
+	github.com/prometheus/client_golang v1.24.1
 	github.com/prometheus/client_model v0.6.2
 	github.com/samber/lo v1.52.0
 	github.com/sanity-io/litter v1.3.0
@@ -174,8 +174,8 @@ require (
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
 	github.com/pierrec/lz4/v4 v4.1.26 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
-	github.com/prometheus/common v0.67.5 // indirect
-	github.com/prometheus/procfs v0.20.1 // indirect
+	github.com/prometheus/common v0.70.1 // indirect
+	github.com/prometheus/procfs v0.21.1 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/robfig/cron/v3 v3.0.1 // indirect
 	github.com/rubenv/sql-migrate v1.8.0 // indirect
