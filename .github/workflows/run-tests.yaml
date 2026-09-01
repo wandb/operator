@@ -68,3 +68,23 @@ jobs:
         run: |
           go mod tidy
           git diff --exit-code go.mod go.sum
+
+  vulncheck:
+    name: Vulnerability Check
+    runs-on: ubuntu-latest
+    # Non-blocking: the current report includes advisories with no patched
+    # release (e.g. containerd GO-2026-5064), so gating on it would red-line
+    # every PR. Flip to blocking once the backlog is clear.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Setup Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: 1.26.3
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
+      - name: Run govulncheck
+        # Reports only advisories whose vulnerable symbols this repo actually
+        # reaches, unlike the dependency-graph alerts on the Security tab.
+        run: govulncheck ./...
