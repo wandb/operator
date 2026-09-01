@@ -1,0 +1,13 @@
+dependencies:
+  - type: olm.package
+    value:
+      packageName: clickhouse
+      version: ">=0.26.3"
+  - type: olm.package
+    value:
+      packageName: grafana-operator
+      version: ">=5.21.0"
+  - type: olm.package
+    value:
+      packageName: victoriametrics-operator
+      version: ">=0.66.3"
