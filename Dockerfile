@@ -8,7 +8,7 @@
 # Release into the repo root, and this build only copies the result.
 
 # Build the manager binary
-FROM golang:1.26 AS manager-builder
+FROM golang:1.27 AS manager-builder
 
 ARG TARGETOS
 ARG TARGETARCH

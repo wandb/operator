@@ -21,8 +21,8 @@ limitations under the License.
 package v2
 
 import (
-	"github.com/kedacore/keda/v2/apis/keda/v1alpha1"
 	argoproj_io_rolloutsv1alpha1 "github.com/wandb/operator/pkg/vendored/argo-rollouts/argoproj.io.rollouts/v1alpha1"
+	"github.com/wandb/operator/pkg/vendored/keda/keda.sh/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	batchv1 "k8s.io/api/batch/v1"
