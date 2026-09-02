@@ -15,7 +15,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
-const ingressFieldOwner = "wandb-operator-ingress"
 const ingressClassAnnotation = "kubernetes.io/ingress.class"
 
 // consolidatedIngressName returns spec.networking.ingress.name when set, or
@@ -186,7 +185,6 @@ func reconcileConsolidatedIngress(ctx context.Context, c ctrlClient.Client, wand
 		ctx,
 		desired,
 		ctrlClient.Apply,
-		ctrlClient.FieldOwner(ingressFieldOwner),
 		ctrlClient.ForceOwnership,
 	); err != nil {
 		return err

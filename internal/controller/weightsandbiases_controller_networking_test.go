@@ -248,6 +248,11 @@ var _ = Describe("WeightsAndBiases Networking", func() {
 		Expect(*ingress.Spec.IngressClassName).To(Equal(ingressClassName))
 		Expect(ingress.Annotations).To(HaveKeyWithValue("kubernetes.io/ingress.class", ingressClassName))
 		Expect(ingress.Annotations).To(HaveKeyWithValue("example.com/ingress", "enabled"))
+		fieldManagers := make([]string, 0, len(ingress.ManagedFields))
+		for _, managedField := range ingress.ManagedFields {
+			fieldManagers = append(fieldManagers, managedField.Manager)
+		}
+		Expect(fieldManagers).To(ContainElement(WeightsAndBiasesFieldManager))
 		Expect(ingress.Spec.TLS).To(HaveLen(1))
 		Expect(ingress.Spec.TLS[0].SecretName).To(Equal("wandb-tls"))
 		Expect(ingress.Spec.Rules).NotTo(BeEmpty())
@@ -340,7 +345,12 @@ var _ = Describe("WeightsAndBiases Networking", func() {
 		wandbManifest, err := manifest.GetServerManifest(ctx, wandb.Spec.Wandb.ManifestRepository, wandb.Spec.Wandb.Version, nil)
 		Expect(err).NotTo(HaveOccurred())
 
-		result, err := v2.ReconcileNetworkingAndWatchtower(ctx, k8sClient, wandb, wandbManifest)
+		result, err := v2.ReconcileNetworkingAndWatchtower(
+			ctx,
+			client.WithFieldOwner(k8sClient, WeightsAndBiasesFieldManager),
+			wandb,
+			wandbManifest,
+		)
 
 		// The error is swallowed so the rest of the reconcile still runs...
 		Expect(err).NotTo(HaveOccurred())
@@ -469,13 +479,14 @@ func markWandbReadyForNetworking(ctx context.Context, name, namespace string) *a
 func reconcileNetworkingManifest(ctx context.Context, wandb *apiv2.WeightsAndBiases) {
 	wandbManifest, err := manifest.GetServerManifest(ctx, wandb.Spec.Wandb.ManifestRepository, wandb.Spec.Wandb.Version, nil)
 	Expect(err).NotTo(HaveOccurred())
+	reconcileClient := client.WithFieldOwner(k8sClient, WeightsAndBiasesFieldManager)
 
 	// Networking lives above Reconcile's infrastructure gate, in its own function,
 	// so it has to be driven separately from the manifest reconcile.
-	_, err = v2.ReconcileNetworkingAndWatchtower(ctx, k8sClient, wandb, wandbManifest)
+	_, err = v2.ReconcileNetworkingAndWatchtower(ctx, reconcileClient, wandb, wandbManifest)
 	Expect(err).NotTo(HaveOccurred())
 
-	_, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, telemetry.DefaultTelemetryRuntimeConfig())
+	_, err = v2.ReconcileWandbManifest(ctx, reconcileClient, wandb, wandbManifest, telemetry.DefaultTelemetryRuntimeConfig())
 	Expect(err).NotTo(HaveOccurred())
 }
 
