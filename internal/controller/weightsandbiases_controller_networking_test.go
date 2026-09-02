@@ -246,6 +246,7 @@ var _ = Describe("WeightsAndBiases Networking", func() {
 		}, ingress)).To(Succeed())
 		Expect(ingress.Spec.IngressClassName).NotTo(BeNil())
 		Expect(*ingress.Spec.IngressClassName).To(Equal(ingressClassName))
+		Expect(ingress.Annotations).To(HaveKeyWithValue("kubernetes.io/ingress.class", ingressClassName))
 		Expect(ingress.Annotations).To(HaveKeyWithValue("example.com/ingress", "enabled"))
 		Expect(ingress.Spec.TLS).To(HaveLen(1))
 		Expect(ingress.Spec.TLS[0].SecretName).To(Equal("wandb-tls"))
@@ -295,6 +296,22 @@ var _ = Describe("WeightsAndBiases Networking", func() {
 		Expect(ingress.Annotations).NotTo(HaveKey("example.com/ingress"))
 		Expect(ingress.Annotations).To(HaveKeyWithValue("ingress.example.com/controller-state", "preserve-me"))
 		Expect(ingress.Labels).To(HaveKeyWithValue("ingress.example.com/controller", "external"))
+
+		wandb = getWandb(ctx, wandbName, wandbNamespace)
+		wandb.Spec.Networking.Ingress.IngressClassName = nil
+		wandb.Spec.Networking.Annotations = map[string]string{}
+		wandb.Spec.Networking.Annotations["kubernetes.io/ingress.class"] = "gce"
+		Expect(k8sClient.Update(ctx, wandb)).To(Succeed())
+		reconcileNetworkingManifest(ctx, wandb)
+
+		ingress = &networkingv1.Ingress{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{
+			Name:      wandbName,
+			Namespace: wandbNamespace,
+		}, ingress)).To(Succeed())
+		Expect(ingress.Spec.IngressClassName).NotTo(BeNil())
+		Expect(*ingress.Spec.IngressClassName).To(Equal("gce"))
+		Expect(ingress.Annotations).To(HaveKeyWithValue("kubernetes.io/ingress.class", "gce"))
 	})
 
 	// Watchtower must not be able to take down the install it manages, but a
