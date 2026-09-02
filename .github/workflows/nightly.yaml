@@ -129,7 +129,7 @@ jobs:
       WESTEST_OPERATOR_CHART_VERSION: ${{ needs.setup.outputs.chart_version }}
     steps:
       - name: Checkout (for the local westest-run action)
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Mint a token to read wandb/westest releases
         id: westest-token
         # GitHub App installation token scoped to wandb/westest so the run action can
