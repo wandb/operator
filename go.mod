@@ -2,7 +2,7 @@ module github.com/wandb/operator
 
 go 1.27
 
-godebug default=go1.26
+godebug default=go1.27
 
 require (
 	github.com/GoogleCloudPlatform/gke-gateway-api v1.4.0
