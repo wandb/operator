@@ -2,6 +2,7 @@ package reconciler
 
 import (
 	"context"
+	"fmt"
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
@@ -15,7 +16,39 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
-const ingressClassAnnotation = "kubernetes.io/ingress.class"
+const (
+	ingressClassAnnotation           = "kubernetes.io/ingress.class"
+	awsLoadBalancerIngressController = "ingress.k8s.aws/alb"
+)
+
+// ingressManaged treats nil as true for backward compatibility with objects
+// stored before the managed field was introduced. The webhook persists the
+// same default for newly created and updated ingress-mode objects.
+func ingressManaged(wandb *apiv2.WeightsAndBiases) bool {
+	return wandb.Spec.Networking.Mode == apiv2.NetworkingModeIngress &&
+		wandb.Spec.Networking.Ingress != nil &&
+		(wandb.Spec.Networking.Ingress.Managed == nil || *wandb.Spec.Networking.Ingress.Managed)
+}
+
+func ingressUsesAWSLoadBalancerController(
+	ctx context.Context,
+	c ctrlClient.Client,
+	wandb *apiv2.WeightsAndBiases,
+) (bool, error) {
+	if wandb.Spec.Networking.Mode != apiv2.NetworkingModeIngress ||
+		wandb.Spec.Networking.Ingress == nil ||
+		wandb.Spec.Networking.Ingress.IngressClassName == nil {
+		return false, nil
+	}
+
+	ingressClass := &networkingv1.IngressClass{}
+	name := *wandb.Spec.Networking.Ingress.IngressClassName
+	if err := c.Get(ctx, types.NamespacedName{Name: name}, ingressClass); err != nil {
+		return false, fmt.Errorf("get IngressClass %q: %w", name, err)
+	}
+
+	return string(ingressClass.Spec.Controller) == awsLoadBalancerIngressController, nil
+}
 
 // consolidatedIngressName returns spec.networking.ingress.name when set, or
 // the default "<cr-name>-ingress" otherwise.
@@ -177,6 +210,16 @@ func reconcileConsolidatedIngress(ctx context.Context, c ctrlClient.Client, wand
 		return err
 	}
 
+	current := &networkingv1.Ingress{}
+	err = c.Get(ctx, types.NamespacedName{Name: ingressName, Namespace: wandb.Namespace}, current)
+	if err != nil && !apiErrors.IsNotFound(err) {
+		return err
+	}
+	if err == nil && !ingressOwnedByWandb(current, wandb) {
+		return fmt.Errorf("Ingress %s/%s already exists and is not owned by WeightsAndBiases %s/%s",
+			current.Namespace, current.Name, wandb.Namespace, wandb.Name)
+	}
+
 	// Apply only the fields this controller manages. In particular, labels and
 	// annotations are granular maps, so keys added by ingress controllers or
 	// other actors are preserved. Force ownership of the fields in desired
@@ -220,7 +263,22 @@ func deleteConsolidatedIngress(ctx context.Context, c ctrlClient.Client, wandb *
 		}
 		return err
 	}
+	if !ingressOwnedByWandb(ingress, wandb) {
+		return nil
+	}
 	return c.Delete(ctx, ingress)
+}
+
+func ingressOwnedByWandb(ingress *networkingv1.Ingress, wandb *apiv2.WeightsAndBiases) bool {
+	for _, owner := range ingress.OwnerReferences {
+		if owner.APIVersion == apiv2.GroupVersion.String() &&
+			owner.Kind == "WeightsAndBiases" &&
+			owner.Name == wandb.Name &&
+			(owner.UID == "" || wandb.UID == "" || owner.UID == wandb.UID) {
+			return true
+		}
+	}
+	return false
 }
 
 func resolveIngressServicePort(app serverManifest.Application) networkingv1.ServiceBackendPort {

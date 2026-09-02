@@ -359,8 +359,13 @@ func ReconcileNetworkingAndWatchtower(
 		}
 	case apiv2.NetworkingModeIngress:
 		wandb.Status.IngressStatus = nil
-		if err := reconcileConsolidatedIngress(ctx, client, wandb, manifest); err != nil {
-			log.Error("Failed to reconcile consolidated Ingress", logx.ErrAttr(err))
+		if ingressManaged(wandb) {
+			if err := reconcileConsolidatedIngress(ctx, client, wandb, manifest); err != nil {
+				log.Error("Failed to reconcile consolidated Ingress", logx.ErrAttr(err))
+				return ctrl.Result{}, err
+			}
+		} else if err := deleteConsolidatedIngress(ctx, client, wandb); err != nil {
+			log.Error("Failed to delete previously managed consolidated Ingress", logx.ErrAttr(err))
 			return ctrl.Result{}, err
 		}
 	}
@@ -536,6 +541,10 @@ func reconcileApplications(
 	logger := logx.GetSlog(ctx)
 	logger.Info("Reconciling applications")
 	serviceAccountName := wandb.Spec.Wandb.ServiceAccount.ServiceAccountName
+	usesAWSIngress, err := ingressUsesAWSLoadBalancerController(ctx, client, wandb)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
 
 	if wandb.Spec.Wandb.InternalServiceAuth.Enabled != nil && *wandb.Spec.Wandb.InternalServiceAuth.Enabled {
 		if err := createOrUpdateOIDCDiscoveryClusterRoleBinding(ctx, client, wandb); err != nil {
@@ -651,6 +660,10 @@ func reconcileApplications(
 		} else {
 			// No service declared in manifest; ensure we clear any previous template
 			application.Spec.ServiceTemplate = nil
+		}
+		application.Spec.ServiceAnnotations = nil
+		if usesAWSIngress && app.Ingress != nil && application.Spec.ServiceTemplate != nil {
+			application.Spec.ServiceAnnotations = awsLoadBalancerHealthCheckAnnotations(containers)
 		}
 
 		if wandb.Spec.Networking.Mode == apiv2.NetworkingModeGatewayAPI && app.Ingress != nil &&

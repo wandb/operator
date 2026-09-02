@@ -349,6 +349,13 @@ type NetworkingSpec struct {
 }
 
 type IngressConfig struct {
+	// Managed controls whether the operator creates and manages the Ingress.
+	// When unset in ingress mode, the defaulting webhook sets it to true.
+	// Set it to false when an external Ingress routes to the operator-managed
+	// application Services.
+	// +optional
+	Managed *bool `json:"managed,omitempty"`
+
 	// +optional
 	IngressClassName *string `json:"ingressClassName,omitempty"`
 

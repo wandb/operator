@@ -93,6 +93,12 @@ func (d *WeightsAndBiasesCustomDefaulter) Default(ctx context.Context, obj runti
 		wandb.Spec.Tolerations = &[]corev1.Toleration{}
 	}
 
+	if wandb.Spec.Networking.Mode == appsv2.NetworkingModeIngress &&
+		wandb.Spec.Networking.Ingress != nil &&
+		wandb.Spec.Networking.Ingress.Managed == nil {
+		wandb.Spec.Networking.Ingress.Managed = ptr.To(true)
+	}
+
 	if wandb.Spec.Wandb.Features == nil {
 		wandb.Spec.Wandb.Features = make(map[string]bool)
 	}
@@ -1134,6 +1140,20 @@ func validateNetworkingSpec(wandb *appsv2.WeightsAndBiases) (field.ErrorList, ad
 			spec.GatewayAPI,
 			"gatewayAPI must not be set when mode is Ingress",
 		))
+	}
+
+	if spec.Mode == appsv2.NetworkingModeIngress {
+		if spec.Ingress == nil {
+			errors = append(errors, field.Required(
+				netPath.Child("ingress"),
+				"ingress is required when mode is ingress",
+			))
+		} else if spec.Ingress.IngressClassName == nil || strings.TrimSpace(*spec.Ingress.IngressClassName) == "" {
+			errors = append(errors, field.Required(
+				netPath.Child("ingress").Child("ingressClassName"),
+				"ingressClassName is required when mode is ingress",
+			))
+		}
 	}
 
 	if spec.Mode == appsv2.NetworkingModeGatewayAPI && spec.Ingress != nil {

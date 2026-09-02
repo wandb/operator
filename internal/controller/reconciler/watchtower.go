@@ -76,6 +76,13 @@ func reconcileWatchtower(
 		return err
 	}
 	desired := buildWatchtowerApplication(wandb, authService, image)
+	usesAWSIngress, err := ingressUsesAWSLoadBalancerController(ctx, c, wandb)
+	if err != nil {
+		return err
+	}
+	if usesAWSIngress {
+		desired.Spec.ServiceAnnotations = awsLoadBalancerHealthCheckAnnotations(desired.Spec.PodTemplate.Spec.Containers)
+	}
 
 	application := &apiv2.Application{
 		ObjectMeta: metav1.ObjectMeta{
