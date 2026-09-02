@@ -8,14 +8,12 @@ creates the matching GitHub Release.
 ## Tagged release
 
 1. Open a release pull request against `main`.
-2. Update `wandb.version` in `deploy/operator/values.yaml` to the intended W&B
-   server release.
-3. Set all three operator versions to the release number without a leading
+2. Set all three operator versions to the release number without a leading
    `v`:
    - `version` in `deploy/operator/Chart.yaml`
    - `appVersion` in `deploy/operator/Chart.yaml`
    - `wandb-operator.image.tag` in `deploy/operator/values.yaml`
-4. Run the chart validation commands used by CI:
+3. Run the chart validation commands used by CI:
 
    ```bash
    helm dependency build deploy/operator
@@ -23,8 +21,8 @@ creates the matching GitHub Release.
    helm lint --strict deploy/operator
    ```
 
-5. Merge the pull request after all required checks and approvals pass.
-6. Update the local branch and confirm it exactly matches the remote branch:
+4. Merge the pull request after all required checks and approvals pass.
+5. Update the local branch and confirm it exactly matches the remote branch:
 
    ```bash
    git switch main
@@ -32,7 +30,7 @@ creates the matching GitHub Release.
    test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
    ```
 
-7. Create and push an annotated release tag at that commit. Use a SemVer
+6. Create and push an annotated release tag at that commit. Use a SemVer
    prerelease suffix such as `-beta.2` or `-rc.1` for previews:
 
    ```bash
@@ -41,11 +39,11 @@ creates the matching GitHub Release.
    git push origin "${version}"
    ```
 
-8. Monitor the `Release v2` workflow. It publishes the versioned GAR image
+7. Monitor the `Release v2` workflow. It publishes the versioned GAR image
    first, then the matching OCI Helm chart, and creates the GitHub Release only
    after both artifacts succeed. A tag with a prerelease suffix creates a
    GitHub prerelease.
-9. Record the source commit, image digest, chart digest, and GitHub Release URL
+8. Record the source commit, image digest, chart digest, and GitHub Release URL
    in the release record.
 
 Tagged versions are immutable. Never move, delete, reuse, or overwrite a
