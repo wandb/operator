@@ -144,8 +144,7 @@ func (r *WeightsAndBiasesReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&batchv1.Job{}).
 		Owns(&corev1.Secret{}).
 		Owns(&corev1.ConfigMap{}).
-		Owns(&networkingv1.Ingress{}).
-		Watches(&networkingv1.IngressClass{}, handler.EnqueueRequestsFromMapFunc(r.mapIngressClassToWandb))
+		Owns(&networkingv1.Ingress{})
 	if utils.IsRegistered(r.Scheme, &gatewayv1.Gateway{}) {
 		b = b.Watches(&gatewayv1.Gateway{}, handler.EnqueueRequestsFromMapFunc(r.mapGatewayToWandb))
 	}
@@ -161,32 +160,6 @@ func (r *WeightsAndBiasesReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	return b.Complete(r)
-}
-
-func (r *WeightsAndBiasesReconciler) mapIngressClassToWandb(ctx context.Context, obj client.Object) []ctrl.Request {
-	ingressClass, ok := obj.(*networkingv1.IngressClass)
-	if !ok {
-		return nil
-	}
-
-	wandbList := &apiv2.WeightsAndBiasesList{}
-	if err := r.List(ctx, wandbList); err != nil {
-		return nil
-	}
-
-	requests := make([]ctrl.Request, 0)
-	for i := range wandbList.Items {
-		wandb := &wandbList.Items[i]
-		if wandb.Spec.Networking.Mode != apiv2.NetworkingModeIngress ||
-			wandb.Spec.Networking.Ingress == nil ||
-			wandb.Spec.Networking.Ingress.IngressClassName == nil ||
-			*wandb.Spec.Networking.Ingress.IngressClassName != ingressClass.Name {
-			continue
-		}
-		requests = append(requests, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(wandb)})
-	}
-
-	return requests
 }
 
 func (r *WeightsAndBiasesReconciler) loadTelemetryConfig(ctx context.Context) (telemetry.TelemetryRuntimeConfig, error) {
