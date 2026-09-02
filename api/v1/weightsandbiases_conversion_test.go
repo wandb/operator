@@ -467,6 +467,46 @@ func TestConvertTo_ServiceAccountConflictingNamesFails(t *testing.T) {
 	require.Contains(t, err.Error(), "single spec.wandb.serviceAccount")
 }
 
+// TestConvertTo_ServiceAccountSplitAcrossSubchartsFails: one subchart supplying
+// create while the other supplies name is still two identities — app resolves to
+// the chart's "default", api to its explicit name — so merging them would produce
+// an identity neither subchart used.
+func TestConvertTo_ServiceAccountSplitAcrossSubchartsFails(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"app": map[string]interface{}{
+			"serviceAccount": map[string]interface{}{"create": false},
+		},
+		"api": map[string]interface{}{
+			"serviceAccount": map[string]interface{}{"name": "api-sa"},
+		},
+	})
+	err := src.ConvertTo(dst)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "default")
+	require.Contains(t, err.Error(), "api-sa")
+	require.Contains(t, err.Error(), "single spec.wandb.serviceAccount")
+}
+
+// TestConvertTo_ServiceAccountSplitAgreeingIsOK: the same split is fine when the
+// two sides resolve to the same identity — api names the SA the chart would have
+// derived for app anyway.
+func TestConvertTo_ServiceAccountSplitAgreeingIsOK(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"app": map[string]interface{}{
+			"serviceAccount": map[string]interface{}{"create": false},
+		},
+		"api": map[string]interface{}{
+			"serviceAccount": map[string]interface{}{"name": "default"},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+	require.Equal(t, "default", dst.Spec.Wandb.ServiceAccount.ServiceAccountName)
+	require.NotNil(t, dst.Spec.Wandb.ServiceAccount.Create)
+	require.False(t, *dst.Spec.Wandb.ServiceAccount.Create)
+}
+
 func TestConvertTo_ServiceAccountConflictingCreateFails(t *testing.T) {
 	dst := &appsv2.WeightsAndBiases{}
 	src := newV1(map[string]interface{}{

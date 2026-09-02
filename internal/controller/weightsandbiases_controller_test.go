@@ -17,10 +17,12 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -360,6 +362,97 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			// The 0.76.1.yaml manifest should have some applications defined.
 			// We expect them to be created as Application CRs.
 			Expect(len(appList.Items)).Should(BeNumerically("==", len(wandbManifest.Applications)-1), "Expected all non-feature flagged applications to be created")
+		})
+
+		// The defaulter used to substitute kubeadm's issuer here, which 401s on any
+		// cluster that isn't kubeadm-defaulted. Restoring that default would make
+		// oidcIssuer non-empty at admission and silently skip this gate, so this
+		// spec is what keeps the guess from coming back.
+		It("Should block reconciliation when the service-account issuer is unknown", func() {
+			By("Clearing the issuer discovery would normally have supplied at start-up")
+			utils.SetServiceAccountIssuer("")
+			DeferCleanup(func() {
+				utils.SetServiceAccountIssuer("https://kubernetes.default.svc.cluster.local")
+			})
+
+			ctx := context.Background()
+			wandb := &apiv2.WeightsAndBiases{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      WandbName,
+					Namespace: WandbNamespace,
+				},
+				Spec: apiv2.WeightsAndBiasesSpec{
+					Size: apiv2.SizeDev,
+					Wandb: apiv2.WandbAppSpec{
+						Hostname:            "http://localhost",
+						Features:            map[string]bool{},
+						ManifestRepository:  manifestsRepository,
+						Version:             "0.83.0-clickhouse-keeper.2",
+						InternalServiceAuth: apiv2.InternalServiceAuth{Enabled: ptr.To(true)},
+					},
+					MySQL: map[string]apiv2.MySQLSpec{
+						apiv2.DefaultInstanceName: {ManagedMysql: &apiv2.ManagedMysqlSpec{}},
+					},
+					Redis: map[string]apiv2.RedisSpec{
+						apiv2.DefaultInstanceName: {ManagedRedis: &apiv2.ManagedRedisSpec{}},
+					},
+					Kafka: apiv2.KafkaSpec{ManagedKafka: &apiv2.ManagedKafkaSpec{}},
+					ObjectStore: map[string]apiv2.ObjectStoreSpec{
+						apiv2.DefaultInstanceName: {ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{}},
+					},
+					ClickHouse: map[string]apiv2.ClickHouseSpec{
+						apiv2.DefaultInstanceName: {ManagedClickHouse: &apiv2.ManagedClickHouseSpec{}},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, wandb)).Should(Succeed())
+
+			wandbLookupKey := types.NamespacedName{Name: wandb.Name, Namespace: wandb.Namespace}
+			Expect(k8sClient.Get(ctx, wandbLookupKey, wandb)).Should(Succeed())
+
+			By("Confirming the defaulter left oidcIssuer empty")
+			Expect(wandb.Spec.Wandb.InternalServiceAuth.Enabled).ShouldNot(BeNil())
+			Expect(*wandb.Spec.Wandb.InternalServiceAuth.Enabled).Should(BeTrue())
+			Expect(wandb.Spec.Wandb.InternalServiceAuth.OIDCIssuer).Should(BeEmpty())
+
+			By("Marking infrastructure and migrations ready so only the issuer gate remains")
+			wandb.Status.MySQLStatus = map[string]apiv2.MysqlInfraStatus{apiv2.DefaultInstanceName: {
+				WBInfraStatus: apiv2.WBInfraStatus{Ready: true},
+				Connection:    apiv2.MysqlConnection{URL: apiv2.ValueFromSecret(WandbName, "test", false)},
+			}}
+			wandb.Status.RedisStatus = map[string]apiv2.RedisInfraStatus{apiv2.DefaultInstanceName: {WBInfraStatus: apiv2.WBInfraStatus{Ready: true}}}
+			wandb.Status.KafkaStatus.Ready = true
+			wandb.Status.ObjectStoreStatus = map[string]apiv2.ObjectStoreInfraStatus{apiv2.DefaultInstanceName: {WBInfraStatus: apiv2.WBInfraStatus{Ready: true}}}
+			wandb.Status.ClickHouseStatus = map[string]apiv2.ClickHouseInfraStatus{apiv2.DefaultInstanceName: {
+				WBInfraStatus: apiv2.WBInfraStatus{Ready: true},
+				Connection:    apiv2.ClickHouseConnection{URL: apiv2.ValueFromSecret(WandbName, "test", false)},
+			}}
+			wandb.Status.Wandb.Migration.Version = wandb.Spec.Wandb.Version
+			wandb.Status.Wandb.Migration.LastSuccessVersion = wandb.Spec.Wandb.Version
+			wandb.Status.Wandb.Migration.Ready = true
+			wandb.Status.Wandb.Migration.Reason = "Complete"
+			wandb.Status.Wandb.MySQLInit = map[string]apiv2.MigrationJobStatus{apiv2.DefaultInstanceName: {Succeeded: true}}
+			Expect(k8sClient.Status().Update(ctx, wandb)).Should(Succeed())
+
+			By("Running the manifest reconcile")
+			wandbManifest, err := manifest.GetServerManifest(ctx, wandb.Spec.Wandb.ManifestRepository, wandb.Spec.Wandb.Version, nil)
+			Expect(err).Should(Succeed())
+			ctrlResult, err := v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, telemetry.DefaultTelemetryRuntimeConfig())
+			Expect(err).Should(Succeed())
+
+			By("Requeuing rather than deploying against a guessed issuer")
+			Expect(ctrlResult.RequeueAfter).Should(Equal(time.Minute))
+
+			appList := &apiv2.ApplicationList{}
+			Expect(k8sClient.List(ctx, appList, client.InNamespace(WandbNamespace))).Should(Succeed())
+			Expect(appList.Items).Should(BeEmpty(), "no application should be deployed with an unknown issuer")
+
+			By("Reporting an actionable reason on the Ready condition")
+			Expect(k8sClient.Get(ctx, wandbLookupKey, wandb)).Should(Succeed())
+			readyCondition := meta.FindStatusCondition(wandb.Status.Conditions, "Ready")
+			Expect(readyCondition).ShouldNot(BeNil())
+			Expect(readyCondition.Reason).Should(Equal("ServiceAccountIssuerUnknown"))
+			Expect(readyCondition.Message).Should(ContainSubstring("openid-configuration"))
 		})
 
 		It("Should advance status.observedGeneration only once applications are reconciled for a generation", func() {

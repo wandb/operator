@@ -24,6 +24,15 @@ rules:
       - weightsandbiases/finalizers
     verbs:
       - update
+  # Discovery of the cluster's service-account issuer, and the JWKS the built-in
+  # system:service-account-issuer-discovery ClusterRole also covers: the operator
+  # binds that role for the W&B services, and RBAC only lets it delegate
+  # permissions it holds itself.
+  - nonResourceURLs:
+      - /.well-known/openid-configuration
+      - /openid/v1/jwks
+    verbs:
+      - get
   - apiGroups:
       - apps.wandb.com
     resources:
