@@ -16,6 +16,7 @@ import (
 )
 
 const ingressFieldOwner = "wandb-operator-ingress"
+const ingressClassAnnotation = "kubernetes.io/ingress.class"
 
 // consolidatedIngressName returns spec.networking.ingress.name when set, or
 // the default "<cr-name>-ingress" otherwise.
@@ -150,9 +151,16 @@ func reconcileConsolidatedIngress(ctx context.Context, c ctrlClient.Client, wand
 		},
 	}
 
-	if wandb.Spec.Networking.Ingress != nil {
-		desired.Spec.IngressClassName = wandb.Spec.Networking.Ingress.IngressClassName
-		if *desired.Spec.IngressClassName == "nginx" {
+	ingressClassName := desired.Annotations[ingressClassAnnotation]
+	if wandb.Spec.Networking.Ingress != nil &&
+		wandb.Spec.Networking.Ingress.IngressClassName != nil &&
+		*wandb.Spec.Networking.Ingress.IngressClassName != "" {
+		ingressClassName = *wandb.Spec.Networking.Ingress.IngressClassName
+	}
+	if ingressClassName != "" {
+		desired.Spec.IngressClassName = &ingressClassName
+		desired.Annotations[ingressClassAnnotation] = ingressClassName
+		if ingressClassName == "nginx" {
 			desired.Annotations["nginx.ingress.kubernetes.io/proxy-body-size"] = "0"
 		}
 	}
