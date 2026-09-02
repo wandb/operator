@@ -122,6 +122,58 @@ func TestStandaloneTelemetryChartFullModeRendersCoreStack(t *testing.T) {
 	mustContain(t, output, "datadog:")
 }
 
+func TestCrdInstallerTelemetryGroupsAreOptIn(t *testing.T) {
+	baseArgs := []string{"--set", "helmHooks.enabled=true", "--set", "wandb.install=false"}
+
+	offGroups := crdInstallerGroups(t, runHelmTemplate(t, baseArgs...))
+	for _, group := range []string{"victoriametrics", "grafana"} {
+		if hasGroup(offGroups, group) {
+			t.Errorf("crd-installer --groups=%q unexpectedly includes %q", offGroups, group)
+		}
+	}
+
+	forwardArgs := append(baseArgs, "--set", "telemetry.crds.victoriaMetrics=true")
+	forwardGroups := crdInstallerGroups(t, runHelmTemplate(t, forwardArgs...))
+	if !hasGroup(forwardGroups, "victoriametrics") {
+		t.Errorf("crd-installer --groups=%q missing %q", forwardGroups, "victoriametrics")
+	}
+	if hasGroup(forwardGroups, "grafana") {
+		t.Errorf("crd-installer --groups=%q unexpectedly includes %q", forwardGroups, "grafana")
+	}
+
+	fullArgs := append(baseArgs,
+		"--set", "telemetry.crds.victoriaMetrics=true",
+		"--set", "telemetry.crds.grafana=true",
+	)
+	fullGroups := crdInstallerGroups(t, runHelmTemplate(t, fullArgs...))
+	for _, group := range []string{"victoriametrics", "grafana"} {
+		if !hasGroup(fullGroups, group) {
+			t.Errorf("crd-installer --groups=%q missing %q", fullGroups, group)
+		}
+	}
+}
+
+func crdInstallerGroups(t *testing.T, output string) string {
+	t.Helper()
+	const marker = "--groups="
+	for _, line := range strings.Split(output, "\n") {
+		if i := strings.Index(line, marker); i >= 0 {
+			return strings.TrimSpace(line[i+len(marker):])
+		}
+	}
+	t.Fatalf("crd-installer --groups= flag not found in rendered output")
+	return ""
+}
+
+func hasGroup(groups, target string) bool {
+	for _, group := range strings.Split(groups, ",") {
+		if strings.TrimSpace(group) == target {
+			return true
+		}
+	}
+	return false
+}
+
 func runHelmTemplate(t *testing.T, extraArgs ...string) string {
 	t.Helper()
 	output, err := runHelmTemplateWithError(t, filepath.Join("..", "..", "..", "deploy", "operator"), extraArgs...)

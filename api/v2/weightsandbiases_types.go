@@ -411,7 +411,17 @@ type ListenerTLSConfig struct {
 	Mode *string `json:"mode,omitempty"`
 	// +optional
 	CertificateRef *SecretRef `json:"certificateRef,omitempty"`
+	// Options contains implementation-specific TLS settings. Keys must use
+	// domain-prefixed names, such as networking.gke.io/pre-shared-certs.
+	// +optional
+	// +kubebuilder:validation:MaxProperties=16
+	Options map[string]TLSOptionValue `json:"options,omitempty"`
 }
+
+// TLSOptionValue mirrors the Gateway API AnnotationValue contract so options
+// rejected by the Gateway CRD are rejected on the WeightsAndBiases CR instead.
+// +kubebuilder:validation:MaxLength=4096
+type TLSOptionValue string
 
 type SecretRef struct {
 	Name string `json:"name"`

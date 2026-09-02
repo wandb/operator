@@ -2837,6 +2837,12 @@ spec:
                                       type: object
                                     mode:
                                       type: string
+                                    options:
+                                      additionalProperties:
+                                        maxLength: 4096
+                                        type: string
+                                      maxProperties: 16
+                                      type: object
                                   type: object
                               required:
                               - name
