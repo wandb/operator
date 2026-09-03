@@ -2863,6 +2863,8 @@ spec:
                     properties:
                       ingressClassName:
                         type: string
+                      managed:
+                        type: boolean
                       name:
                         type: string
                     type: object

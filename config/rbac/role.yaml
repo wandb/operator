@@ -279,6 +279,15 @@ rules:
 - apiGroups:
   - networking.k8s.io
   resources:
+  - ingressclasses
+  - ingresses/status
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - networking.k8s.io
+  resources:
   - ingresses
   - networkpolicies
   verbs:
@@ -288,14 +297,6 @@ rules:
   - list
   - patch
   - update
-  - watch
-- apiGroups:
-  - networking.k8s.io
-  resources:
-  - ingresses/status
-  verbs:
-  - get
-  - list
   - watch
 - apiGroups:
   - operator.victoriametrics.com
