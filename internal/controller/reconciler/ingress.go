@@ -44,6 +44,9 @@ func ingressUsesAWSLoadBalancerController(
 	ingressClass := &networkingv1.IngressClass{}
 	name := *wandb.Spec.Networking.Ingress.IngressClassName
 	if err := c.Get(ctx, types.NamespacedName{Name: name}, ingressClass); err != nil {
+		if apiErrors.IsNotFound(err) {
+			return false, nil
+		}
 		return false, fmt.Errorf("get IngressClass %q: %w", name, err)
 	}
 

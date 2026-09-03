@@ -11,6 +11,9 @@ operator reads that cluster-scoped `IngressClass` to determine which controller
 implements the Ingress, so its ClusterRole requires `get`, `list`, and `watch`
 on `networking.k8s.io/ingressclasses`.
 
+If the named `IngressClass` does not exist, reconciliation continues without
+applying any controller-specific Service configuration.
+
 By default, the operator creates and owns a consolidated Ingress:
 
 ```yaml

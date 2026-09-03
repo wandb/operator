@@ -365,6 +365,33 @@ var _ = Describe("WeightsAndBiases Networking", func() {
 			"alb.ingress.kubernetes.io/healthcheck-protocol", "HTTP"))
 	})
 
+	It("continues without controller-specific configuration when the IngressClass is missing", func() {
+		ctx := context.Background()
+		wandbName := "network-ingress-missing-class"
+		ingressClassName := "network-ingress-class-does-not-exist"
+
+		wandb, service := newNetworkingWandb(wandbName, "")
+		wandb.Spec.Networking = apiv2.NetworkingSpec{
+			Mode: apiv2.NetworkingModeIngress,
+			Ingress: &apiv2.IngressConfig{
+				Managed:          ptr.To(false),
+				IngressClassName: &ingressClassName,
+			},
+		}
+		Expect(k8sClient.Create(ctx, wandb)).To(Succeed())
+		Expect(k8sClient.Create(ctx, service)).To(Succeed())
+		DeferCleanup(deleteIfPresent, ctx, wandb)
+
+		wandb = markWandbReadyForNetworking(ctx, wandbName, wandbNamespace)
+		reconcileNetworkingManifest(ctx, wandb)
+
+		application := &apiv2.Application{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{
+			Name: "api", Namespace: wandbNamespace,
+		}, application)).To(Succeed())
+		Expect(application.Spec.ServiceAnnotations).To(BeEmpty())
+	})
+
 	// Watchtower must not be able to take down the install it manages, but a
 	// failure still has to be retried by something — dropping it outright left a
 	// transient error with nothing to pick it back up.
