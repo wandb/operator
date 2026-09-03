@@ -166,15 +166,8 @@ func mapVersion(values map[string]interface{}, dst *appsv2.WeightsAndBiases) err
 	return nil
 }
 
-// v1ServiceAccountSubcharts are the v1 sub-charts that can own the W&B
-// application identity, in precedence order: api first, then app. Infra
-// sub-charts (mysql, redis, …) are excluded — their serviceAccount blocks
-// configure those workloads, and v2 models them as ManagedServiceAccountSpec.
 var v1ServiceAccountSubcharts = []string{"api", "app"}
 
-// v1SubchartEnabledPath is each sub-chart's condition in operator-wandb's
-// Chart.yaml. They are deliberately different keys: `app` is gated on
-// app.install, `api` on global.api.enabled.
 var v1SubchartEnabledPath = map[string][]string{
 	"api": {"global", "api", "enabled"},
 	"app": {"app", "install"},
@@ -194,19 +187,11 @@ func (b v1ServiceAccount) hasOverrides() bool {
 	return b.createSet || b.name != "" || len(b.annotations) > 0
 }
 
-// mapServiceAccount carries v1's application ServiceAccount into v2's single
-// spec.wandb.serviceAccount.
-//
 // v1 gave each sub-chart its own ServiceAccount; v2 has one, so exactly one
 // sub-chart has to win: api first, then app. A sub-chart qualifies when it is
 // enabled, its serviceAccount block overrides something, and the chart creates
 // that account — a create=false block points at an account this operator does
 // not own, so there is nothing to carry.
-//
-// Carrying the name matters as much as the annotations: v2's defaulter fills in
-// create=true and serviceAccountName=wandb-app, so a dropped name makes the
-// operator stand up its own ServiceAccount and orphan the identity the
-// deployment's cloud IAM binding is attached to.
 func mapServiceAccount(values map[string]interface{}, dst *appsv2.WeightsAndBiases) error {
 	enabled := make(map[string]bool, len(v1ServiceAccountSubcharts))
 	anyEnabled := false
