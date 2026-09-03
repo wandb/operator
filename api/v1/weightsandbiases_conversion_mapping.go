@@ -190,13 +190,6 @@ func (b v1ServiceAccount) hasOverrides() bool {
 // spec.wandb.serviceAccount, taking the whole identity from one subchart: api
 // when it overrides anything, otherwise app, otherwise nothing and v2's own
 // defaults apply.
-//
-// Within the winning block, create and name are carried together: v2's CRD
-// defaults create=true and serviceAccountName=wandb-app, so dropping either one
-// makes the operator stand up its own ServiceAccount and orphan the identity the
-// deployment's cloud IAM binding is attached to. Carrying create without name is
-// worse still — pods would reference a ServiceAccount nothing creates and fail
-// admission.
 func mapServiceAccount(values map[string]interface{}, dst *appsv2.WeightsAndBiases) error {
 	blocks, err := readV1ServiceAccounts(values)
 	if err != nil {
