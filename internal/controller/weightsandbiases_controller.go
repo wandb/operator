@@ -250,6 +250,9 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			log.Info("Active spec found", "spec", currentActiveSpec.SensitiveValuesMasked())
 			if currentActiveSpec.IsEqual(desiredSpec) {
 				log.Info("No changes found")
+				if err := r.clearApplyPendingSince(ctx, wandb); err != nil {
+					log.Error(err, "Failed to clear apply pending annotation")
+				}
 				if err := r.completeManagedSpecCutoverIfNeeded(ctx, wandb.Namespace, shouldCompleteManagedSpecCutover); err != nil {
 					log.Error(err, "Failed to persist managed spec cutover")
 					return ctrlqueue.RequeueWithError(err)
@@ -260,6 +263,10 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				diff := currentActiveSpec.DiffValues(desiredSpec)
 				log.Info("Changes found", "diff", diff)
 			}
+		}
+
+		if err := r.ensureApplyPendingSince(ctx, wandb, time.Now()); err != nil {
+			log.Error(err, "Failed to persist apply pending annotation")
 		}
 
 		if desiredSpec.Chart == nil {
@@ -302,6 +309,9 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 		if r.Debug {
 			log.Info("Successfully saved active spec", "spec", desiredSpec.SensitiveValuesMasked())
+		}
+		if err := r.clearApplyPendingSince(ctx, wandb); err != nil {
+			log.Error(err, "Failed to clear apply pending annotation")
 		}
 		if err := r.completeManagedSpecCutoverIfNeeded(ctx, wandb.Namespace, shouldCompleteManagedSpecCutover); err != nil {
 			log.Error(err, "Failed to persist managed spec cutover")
