@@ -805,6 +805,12 @@ func parseActionJSONL(output []byte) ([]wandbv2.ActionResult, error) {
 		if len(line) == 0 {
 			continue
 		}
+		// Kubernetes exposes a container's stdout and stderr as one log stream.
+		// Ignore ordinary diagnostic lines, but keep JSON-looking lines strict so
+		// a malformed result cannot be silently dropped.
+		if line[0] != '{' {
+			continue
+		}
 
 		var raw actionJSONResult
 		decoder := json.NewDecoder(bytes.NewReader(line))

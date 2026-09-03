@@ -563,15 +563,28 @@ func TestActionRunOmitsResultsThatExceedStatusBudget(t *testing.T) {
 	}
 }
 
-func TestParseActionJSONLRejectsNoisyOutput(t *testing.T) {
+func TestParseActionJSONLAcceptsDiagnosticOutput(t *testing.T) {
 	t.Parallel()
 
-	_, err := parseActionJSONL([]byte(
-		`{"name":"starter-project","severity":"pass"}` + "\n" +
+	results, err := parseActionJSONL([]byte(
+		"*** initializing runtime CA bundle\n" +
+			`{"name":"starter-project","severity":"pass"}` + "\n" +
 			"debug: checking object\n",
 	))
+	if err != nil {
+		t.Fatalf("parse output with diagnostics: %v", err)
+	}
+	if len(results) != 1 || results[0].Name != "starter-project" {
+		t.Fatalf("results = %#v, want starter-project result", results)
+	}
+}
+
+func TestParseActionJSONLRejectsMalformedJSONResult(t *testing.T) {
+	t.Parallel()
+
+	_, err := parseActionJSONL([]byte("{not-json}\n"))
 	if err == nil {
-		t.Fatal("expected non-JSON output to be rejected")
+		t.Fatal("expected malformed JSON-looking output to be rejected")
 	}
 }
 
