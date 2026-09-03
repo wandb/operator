@@ -234,6 +234,23 @@ func secretPassword(secret *corev1.Secret) string {
 
 // --- container environment ---------------------------------------------------
 
+func TestReconcileWatchtowerRBACGrantsActionRunLifecycle(t *testing.T) {
+	wandb := watchtowerTestCR("wandb", "wandb")
+	c := watchtowerTestClient(t, wandb)
+
+	require.NoError(t, reconcileWatchtowerRBAC(context.Background(), c, wandb))
+
+	role := &rbacv1.Role{}
+	require.NoError(t, c.Get(context.Background(), types.NamespacedName{
+		Name: watchtowerName(wandb), Namespace: wandb.Namespace,
+	}, role))
+	require.Contains(t, role.Rules, rbacv1.PolicyRule{
+		APIGroups: []string{"apps.wandb.com"},
+		Resources: []string{"actionruns"},
+		Verbs:     []string{"get", "list", "watch", "create", "delete"},
+	})
+}
+
 func TestWatchtowerEnvReferencesThePasswordSecret(t *testing.T) {
 	wandb := watchtowerTestCR("wandb", "wandb")
 

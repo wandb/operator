@@ -1,7 +1,10 @@
 # This rule is not used by the project operator itself.
 # It is provided to allow the cluster admin to help manage permissions for users.
 #
-# Grants full permissions ('*') over ActionRun resources.
+# Grants full permissions ('*') over ActionRun resources. Creating an
+# ActionRun executes an administrator-published action with the referenced
+# application's service account, environment, secrets, and volumes. Bind this
+# role only to principals trusted to invoke those application capabilities.
 
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
