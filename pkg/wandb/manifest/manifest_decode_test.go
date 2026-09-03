@@ -18,7 +18,7 @@ var _ = Describe("Server manifest YAML decode", func() {
 	}
 
 	It("merges multiple manifest files from a version directory", func() {
-		m, err := manifest.LoadManifestFromFile(context.Background(), manifestRepository(), "0.83.0-clickhouse-keeper.2")
+		m, err := manifest.LoadManifestFromFile(context.Background(), manifestRepository(), "0.84.0-redis-replicas.0")
 		Expect(err).NotTo(HaveOccurred())
 
 		// Features (match current testing manifest values)
@@ -49,5 +49,9 @@ var _ = Describe("Server manifest YAML decode", func() {
 		// Sizing comes from the split sizing.yaml file.
 		Expect(m.Kafka.Sizing["default"].Replicas).To(Equal(int32(2)))
 		Expect(m.Bucket["default"].Sizing["default"].Replicas).To(Equal(int32(1)))
+		Expect(m.Redis["default"].Sizing["default"].Replicas).To(Equal(int32(1)))
+		Expect(m.Redis["default"].Sizing["default"].Sentinel.Replicas).To(Equal(int32(1)))
+		Expect(m.Redis["default"].Sizing["small"].Replicas).To(Equal(int32(3)))
+		Expect(m.Redis["default"].Sizing["small"].Sentinel.Replicas).To(Equal(int32(3)))
 	})
 })
