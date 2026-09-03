@@ -27,6 +27,7 @@ import (
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	"github.com/wandb/operator/internal/controller"
+	operatormetrics "github.com/wandb/operator/internal/metrics"
 	"github.com/wandb/operator/pkg/wandb/spec/channel/deployer"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
@@ -38,6 +39,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	controllermetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -228,6 +230,8 @@ func main() {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
 	}
+
+	controllermetrics.Registry.MustRegister(operatormetrics.NewApplyPendingCollector(mgr.GetCache()))
 
 	if err = (&controller.WeightsAndBiasesReconciler{
 		IsAirgapped:               airgapped,
