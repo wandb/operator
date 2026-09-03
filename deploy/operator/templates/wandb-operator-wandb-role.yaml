@@ -22,6 +22,8 @@ rules:
     resources:
       - actionruns
     verbs:
+      - create
+      - delete
       - get
       - list
       - watch
