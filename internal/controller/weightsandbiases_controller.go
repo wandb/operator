@@ -91,7 +91,8 @@ type WeightsAndBiasesReconciler struct {
 //+kubebuilder:rbac:groups=redis.redis.opstreelabs.in,resources=redis/status,verbs=get
 //+kubebuilder:rbac:groups=security.openshift.io,resources=securitycontextconstraints,resourceNames=nonroot-v2,verbs=use
 //+kubebuilder:rbac:urls=/metrics,verbs=get
-
+//+kubebuilder:rbac:urls=/.well-known/openid-configuration,verbs=get
+//+kubebuilder:rbac:urls=/openid/v1/jwks,verbs=get
 // Deprecated/Erroneously required RBAC rules
 //+kubebuilder:rbac:groups=extensions,resources=daemonsets;deployments;replicasets;ingresses;ingresses/status,verbs=get;list;watch
 

@@ -163,7 +163,6 @@ trust a CA on the W&B **application** workloads instead, use
 - [Monitoring and Telemetry Guide](docs/monitoring.md)
 - [Deploying on OpenShift](docs/openshift.md)
 - [Setting Up Console v2](docs/console-v2-setup.md)
-- [Deploying Watchtower](docs/watchtower-deployment.md)
 
 ## Development
 

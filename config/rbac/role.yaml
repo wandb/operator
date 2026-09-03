@@ -5,7 +5,9 @@ metadata:
   name: manager-role
 rules:
 - nonResourceURLs:
+  - /.well-known/openid-configuration
   - /metrics
+  - /openid/v1/jwks
   verbs:
   - get
 - apiGroups:

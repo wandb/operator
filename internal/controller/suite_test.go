@@ -29,6 +29,7 @@ import (
 	apiv1 "github.com/wandb/operator/api/v1"
 	apiv2 "github.com/wandb/operator/api/v2"
 	webhookv2 "github.com/wandb/operator/internal/webhook/v2"
+	"github.com/wandb/operator/pkg/utils"
 	clickhousekeeperv1 "github.com/wandb/operator/pkg/vendored/altinity-clickhouse/clickhouse-keeper.altinity.com/v1"
 	clickhousev1 "github.com/wandb/operator/pkg/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
 	argov1alpha1 "github.com/wandb/operator/pkg/vendored/argo-rollouts/argoproj.io.rollouts/v1alpha1"
@@ -106,6 +107,7 @@ var _ = BeforeSuite(func() {
 	err = gatewayv1.Install(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
+	utils.SetServiceAccountIssuer("https://kubernetes.default.svc.cluster.local")
 	// +kubebuilder:scaffold:scheme
 
 	By("bootstrapping test environment")

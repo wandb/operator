@@ -323,7 +323,7 @@ func TestConvertTo_ServiceAccountAnnotationsFallsBackToApi(t *testing.T) {
 		dst.Spec.Wandb.ServiceAccount.Annotations["iam.gke.io/gcp-service-account"])
 }
 
-func TestConvertTo_ServiceAccountAnnotationsAppWinsOverApi(t *testing.T) {
+func TestConvertTo_ServiceAccountAnnotationsApiWinsOverApp(t *testing.T) {
 	dst := &appsv2.WeightsAndBiases{}
 	src := newV1(map[string]interface{}{
 		"app": map[string]interface{}{
@@ -342,9 +342,9 @@ func TestConvertTo_ServiceAccountAnnotationsAppWinsOverApi(t *testing.T) {
 		},
 	})
 	require.NoError(t, src.ConvertTo(dst))
-	require.Equal(t, "from-app",
+	require.Equal(t, "from-api",
 		dst.Spec.Wandb.ServiceAccount.Annotations["iam.gke.io/gcp-service-account"],
-		"app annotations should take precedence over api when both present")
+		"api annotations should take precedence over app when both present")
 }
 
 func TestConvertTo_ServiceAccountAnnotationsEmptyAppFallsBackToApi(t *testing.T) {
@@ -367,6 +367,231 @@ func TestConvertTo_ServiceAccountAnnotationsEmptyAppFallsBackToApi(t *testing.T)
 	require.Equal(t, "from-api",
 		dst.Spec.Wandb.ServiceAccount.Annotations["iam.gke.io/gcp-service-account"],
 		"empty app annotations should not consume the slot; api fallback applies")
+}
+
+// TestConvertTo_ServiceAccountCreateFalseAndName: v2 defaults create=true and
+// serviceAccountName=wandb, so both must be carried or the operator stands up
+// its own ServiceAccount and orphans the v1 cloud identity.
+func TestConvertTo_ServiceAccountCreateFalseAndName(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"app": map[string]interface{}{
+			"serviceAccount": map[string]interface{}{
+				"create": false,
+				"name":   "my-existing-sa",
+				"annotations": map[string]interface{}{
+					"eks.amazonaws.com/role-arn": "arn:aws:iam::123456789012:role/wandb",
+				},
+			},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+
+	sa := dst.Spec.Wandb.ServiceAccount
+	require.NotNil(t, sa.Create, "create must be set explicitly; nil defaults to true")
+	require.False(t, *sa.Create)
+	require.Equal(t, "my-existing-sa", sa.ServiceAccountName)
+	require.Equal(t, "arn:aws:iam::123456789012:role/wandb",
+		sa.Annotations["eks.amazonaws.com/role-arn"])
+}
+
+func TestConvertTo_ServiceAccountCreateTrueWithName(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"app": map[string]interface{}{
+			"serviceAccount": map[string]interface{}{
+				"create": true,
+				"name":   "wandb-custom",
+			},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+
+	require.NotNil(t, dst.Spec.Wandb.ServiceAccount.Create)
+	require.True(t, *dst.Spec.Wandb.ServiceAccount.Create)
+	require.Equal(t, "wandb-custom", dst.Spec.Wandb.ServiceAccount.ServiceAccountName)
+}
+
+// TestConvertTo_ServiceAccountFallsBackToApi: api supplies the identity when
+// app has no serviceAccount block at all.
+func TestConvertTo_ServiceAccountFallsBackToApi(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"api": map[string]interface{}{
+			"serviceAccount": map[string]interface{}{
+				"create": false,
+				"name":   "api-sa",
+			},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+
+	require.False(t, *dst.Spec.Wandb.ServiceAccount.Create)
+	require.Equal(t, "api-sa", dst.Spec.Wandb.ServiceAccount.ServiceAccountName)
+}
+
+// TestConvertTo_ServiceAccountAgreeingSubchartsOK: identical blocks are not a
+// conflict.
+func TestConvertTo_ServiceAccountAgreeingSubchartsOK(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"app": map[string]interface{}{
+			"serviceAccount": map[string]interface{}{"create": false, "name": "shared-sa"},
+		},
+		"api": map[string]interface{}{
+			"serviceAccount": map[string]interface{}{"create": false, "name": "shared-sa"},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+
+	require.False(t, *dst.Spec.Wandb.ServiceAccount.Create)
+	require.Equal(t, "shared-sa", dst.Spec.Wandb.ServiceAccount.ServiceAccountName)
+}
+
+// TestConvertTo_ServiceAccountApiNameWinsOverApp: v2 has one application
+// ServiceAccount and api owns the identity, so api's name is the one carried.
+func TestConvertTo_ServiceAccountApiNameWinsOverApp(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"app": map[string]interface{}{
+			"serviceAccount": map[string]interface{}{"name": "app-sa"},
+		},
+		"api": map[string]interface{}{
+			"serviceAccount": map[string]interface{}{"name": "api-sa"},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+	require.Equal(t, "api-sa", dst.Spec.Wandb.ServiceAccount.ServiceAccountName)
+}
+
+func TestConvertTo_ServiceAccountApiCreateWinsOverApp(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"app": map[string]interface{}{
+			"serviceAccount": map[string]interface{}{"create": false, "name": "shared-sa"},
+		},
+		"api": map[string]interface{}{
+			"serviceAccount": map[string]interface{}{"create": true, "name": "shared-sa"},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+	require.NotNil(t, dst.Spec.Wandb.ServiceAccount.Create)
+	require.True(t, *dst.Spec.Wandb.ServiceAccount.Create)
+	require.Equal(t, "shared-sa", dst.Spec.Wandb.ServiceAccount.ServiceAccountName)
+}
+
+// TestConvertTo_ServiceAccountApiBlockTakenWholesale: the winning subchart
+// supplies the whole identity, so app's create is not merged into api's name.
+func TestConvertTo_ServiceAccountApiBlockTakenWholesale(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"app": map[string]interface{}{
+			"serviceAccount": map[string]interface{}{"create": false},
+		},
+		"api": map[string]interface{}{
+			"serviceAccount": map[string]interface{}{"name": "api-sa"},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+	require.Equal(t, "api-sa", dst.Spec.Wandb.ServiceAccount.ServiceAccountName)
+	require.Nil(t, dst.Spec.Wandb.ServiceAccount.Create)
+}
+
+// TestConvertTo_ServiceAccountFallsBackToAppWhenApiHasNoOverrides: an api block
+// that says nothing about the identity must not consume the slot.
+func TestConvertTo_ServiceAccountFallsBackToAppWhenApiHasNoOverrides(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"app": map[string]interface{}{
+			"serviceAccount": map[string]interface{}{"create": false, "name": "app-sa"},
+		},
+		"api": map[string]interface{}{
+			"serviceAccount": map[string]interface{}{"automount": true},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+	require.Equal(t, "app-sa", dst.Spec.Wandb.ServiceAccount.ServiceAccountName)
+	require.False(t, *dst.Spec.Wandb.ServiceAccount.Create)
+}
+
+// TestConvertTo_ServiceAccountDerivesApiNameFromSubchart: with create and no
+// name, v1's chart derived <release>-api for the api subchart, so the mapper
+// must not pin app's suffix.
+func TestConvertTo_ServiceAccountDerivesApiNameFromSubchart(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"api": map[string]interface{}{
+			"serviceAccount": map[string]interface{}{"create": true},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+	require.Equal(t, "wandb-api", dst.Spec.Wandb.ServiceAccount.ServiceAccountName)
+}
+
+// TestConvertTo_ServiceAccountInfraSubchartsIgnored: infra serviceAccount
+// blocks configure those workloads, not the application identity.
+func TestConvertTo_ServiceAccountInfraSubchartsIgnored(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"mysql": map[string]interface{}{
+			"serviceAccount": map[string]interface{}{"create": false, "name": "mysql-sa"},
+		},
+		"redis": map[string]interface{}{
+			"serviceAccount": map[string]interface{}{"create": false, "name": "redis-sa"},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst), "infra subcharts must not trigger a conflict")
+
+	require.Nil(t, dst.Spec.Wandb.ServiceAccount.Create)
+	require.Empty(t, dst.Spec.Wandb.ServiceAccount.ServiceAccountName)
+}
+
+// TestConvertTo_ServiceAccountCreateStringBool: helm values are frequently
+// stringly-typed.
+func TestConvertTo_ServiceAccountCreateStringBool(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"app": map[string]interface{}{
+			"serviceAccount": map[string]interface{}{"create": "false", "name": "my-sa"},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+
+	require.NotNil(t, dst.Spec.Wandb.ServiceAccount.Create)
+	require.False(t, *dst.Spec.Wandb.ServiceAccount.Create)
+}
+
+// TestConvertTo_ServiceAccountCreateNonBoolIsUnset: an uninterpretable flag
+// must not make a v1 object unservable.
+func TestConvertTo_ServiceAccountCreateNonBoolIsUnset(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"app": map[string]interface{}{
+			"serviceAccount": map[string]interface{}{
+				"create": map[string]interface{}{"nested": "nonsense"},
+				"name":   "my-sa",
+			},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+
+	require.Nil(t, dst.Spec.Wandb.ServiceAccount.Create, "unparseable create is unset")
+	require.Equal(t, "my-sa", dst.Spec.Wandb.ServiceAccount.ServiceAccountName)
+}
+
+// TestConvertTo_ServiceAccountNameOnlyNoCreate: name without create leaves
+// create unset so the v2 default (true) applies — v1's own chart default.
+func TestConvertTo_ServiceAccountNameOnlyNoCreate(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"app": map[string]interface{}{
+			"serviceAccount": map[string]interface{}{"name": "named-sa"},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+
+	require.Nil(t, dst.Spec.Wandb.ServiceAccount.Create)
+	require.Equal(t, "named-sa", dst.Spec.Wandb.ServiceAccount.ServiceAccountName)
 }
 
 func TestConvertTo_ServiceAccountAnnotationsAbsent(t *testing.T) {

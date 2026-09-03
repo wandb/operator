@@ -17,13 +17,16 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"crypto/tls"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	gkeGatewayApiNetworkingv1 "github.com/GoogleCloudPlatform/gke-gateway-api/apis/networking/v1"
 	mocov1beta2 "github.com/cybozu-go/moco/api/v1beta2"
@@ -74,6 +77,7 @@ var (
 )
 
 const defaultTelemetryConfigMapName = "wandb-operator-telemetry-config"
+const serviceAccountIssuerDiscoveryPath = "/.well-known/openid-configuration"
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
@@ -285,6 +289,13 @@ func main() {
 		setupLog.Error(err, "failed to register server resources")
 		os.Exit(1)
 	}
+	if err := discoverServiceAccountIssuerAtStartup(); err != nil {
+		setupLog.Error(err, "failed to discover the cluster service-account issuer; "+
+			"set spec.wandb.internalServiceAuth.oidcIssuer if internal service auth is enabled")
+	} else {
+		setupLog.Info("Discovered cluster service-account issuer",
+			"issuer", utils.ServiceAccountIssuer())
+	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme: scheme,
@@ -429,6 +440,51 @@ func resolveTelemetryConfigRef(nameOverride, namespaceOverride string) types.Nam
 
 	ref.Namespace = namespace
 	return ref
+}
+func discoverServiceAccountIssuerAtStartup() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	issuer, err := discoverServiceAccountIssuer(ctx)
+	if err != nil {
+		return err
+	}
+
+	utils.SetServiceAccountIssuer(issuer)
+	return nil
+}
+
+func discoverServiceAccountIssuer(ctx context.Context) (string, error) {
+	cfg, err := config.GetConfig()
+	if err != nil {
+		return "", err
+	}
+
+	discoveryClient, err := discovery.NewDiscoveryClientForConfig(cfg)
+	if err != nil {
+		return "", err
+	}
+
+	raw, err := discoveryClient.RESTClient().
+		Get().
+		AbsPath(serviceAccountIssuerDiscoveryPath).
+		Do(ctx).
+		Raw()
+	if err != nil {
+		return "", fmt.Errorf("get %s: %w", serviceAccountIssuerDiscoveryPath, err)
+	}
+
+	var doc struct {
+		Issuer string `json:"issuer"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		return "", fmt.Errorf("decode %s: %w", serviceAccountIssuerDiscoveryPath, err)
+	}
+	if doc.Issuer == "" {
+		return "", fmt.Errorf("%s returned no issuer", serviceAccountIssuerDiscoveryPath)
+	}
+
+	return doc.Issuer, nil
 }
 
 func detectRuntimeNamespace() (string, error) {
