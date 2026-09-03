@@ -2,6 +2,7 @@ package reconciler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -207,30 +208,101 @@ func createKafkaTopics(ctx context.Context, cl client.Client, wandb *apiv2.Weigh
 			continue
 		}
 
-		partitions := int32(1)
-		if topic.PartitionCount > 0 {
-			partitions = int32(topic.PartitionCount)
-		}
+		partitions, explicitlyOverridden := desiredKafkaTopicPartitionCount(kafkaSpec, topic)
 
-		if err := createTopicIdempotent(dialCtx, admin, topicName, partitions, replicationFactor); err != nil {
-			log.Error("failed to create kafka topic", logx.ErrAttr(err), "topic", topicName)
+		if err := reconcileKafkaTopic(dialCtx, admin, topicName, partitions, explicitlyOverridden, replicationFactor); err != nil {
+			log.Error("failed to reconcile kafka topic", logx.ErrAttr(err), "topic", topicName)
 			return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
 		}
-		log.Debug("ensured kafka topic", "topic", topicName, "partitions", partitions)
+		log.Debug("ensured kafka topic partition floor", "topic", topicName, "partitions", partitions)
 	}
 
 	return ctrl.Result{}, nil
 }
 
-func createTopicIdempotent(ctx context.Context, admin *kadm.Client, topicName string, partitions int32, replicationFactor int16) error {
+type kafkaTopicAdmin interface {
+	CreateTopics(context.Context, int32, int16, map[string]*string, ...string) (kadm.CreateTopicResponses, error)
+	ListTopics(context.Context, ...string) (kadm.TopicDetails, error)
+	UpdatePartitions(context.Context, int, ...string) (kadm.CreatePartitionsResponses, error)
+}
+
+func desiredKafkaTopicPartitionCount(kafkaSpec *apiv2.ManagedKafkaSpec, topic manifest.KafkaTopic) (int32, bool) {
+	partitions := int32(1)
+	if topic.PartitionCount > 0 {
+		partitions = int32(topic.PartitionCount)
+	}
+
+	topicName := topic.Topic
+	if topicName == "" {
+		topicName = topic.Name
+	}
+	if override, ok := kafkaSpec.Config.TopicPartitionOverrides[topicName]; ok {
+		return int32(override), true
+	}
+	return partitions, false
+}
+
+func reconcileKafkaTopic(ctx context.Context, admin kafkaTopicAdmin, topicName string, partitions int32, explicitlyOverridden bool, replicationFactor int16) error {
 	resp, err := admin.CreateTopics(ctx, partitions, replicationFactor, nil, topicName)
 	if err != nil {
 		return err
 	}
-	for _, ct := range resp {
-		if ct.Err != nil && ct.Err != kerr.TopicAlreadyExists {
-			return fmt.Errorf("create topic %q: %w", ct.Topic, ct.Err)
+	ct, ok := resp[topicName]
+	if !ok {
+		return fmt.Errorf("create topic %q: response did not include topic", topicName)
+	}
+	if ct.Err == nil {
+		return nil
+	}
+	if !errors.Is(ct.Err, kerr.TopicAlreadyExists) {
+		return fmt.Errorf("create topic %q: %w", ct.Topic, ct.Err)
+	}
+
+	details, err := admin.ListTopics(ctx, topicName)
+	if err != nil {
+		return fmt.Errorf("describe existing topic %q: %w", topicName, err)
+	}
+	detail, ok := details[topicName]
+	if !ok {
+		return fmt.Errorf("describe existing topic %q: response did not include topic", topicName)
+	}
+	if detail.Err != nil {
+		return fmt.Errorf("describe existing topic %q: %w", topicName, detail.Err)
+	}
+
+	existingPartitions := int32(len(detail.Partitions))
+	switch {
+	case existingPartitions == partitions:
+		return nil
+	case existingPartitions > partitions:
+		if !explicitlyOverridden {
+			// Manifest counts are creation defaults. Preserve the old idempotent
+			// behavior for topics that an administrator has already enlarged.
+			return nil
 		}
+		return fmt.Errorf(
+			"topic %q has %d partitions, exceeding the requested count %d; Kafka cannot decrease a topic's partition count; set spec.kafka.managedKafka.config.topicPartitionOverrides[%q] to at least %d or recreate the topic",
+			topicName,
+			existingPartitions,
+			partitions,
+			topicName,
+			existingPartitions,
+		)
+	}
+
+	// kadm.UpdatePartitions sends Kafka's CreatePartitions request with an
+	// absolute target, avoiding an accidental overshoot if another reconciler
+	// increases the topic between the metadata read and this request.
+	updateResp, err := admin.UpdatePartitions(ctx, int(partitions), topicName)
+	if err != nil {
+		return fmt.Errorf("increase topic %q to %d partitions: %w", topicName, partitions, err)
+	}
+	updated, ok := updateResp[topicName]
+	if !ok {
+		return fmt.Errorf("increase topic %q to %d partitions: response did not include topic", topicName, partitions)
+	}
+	if updated.Err != nil {
+		return fmt.Errorf("increase topic %q to %d partitions: %w", topicName, partitions, updated.Err)
 	}
 	return nil
 }

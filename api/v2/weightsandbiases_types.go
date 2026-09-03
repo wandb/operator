@@ -895,7 +895,14 @@ func (c *KafkaConnection) Normalize() {
 type KafkaConfig struct {
 	Resources         corev1.ResourceRequirements `json:"resources,omitempty"`
 	ReplicationConfig KafkaReplicationConfig      `json:"replicationConfig,omitempty"`
+	// TopicPartitionOverrides overrides manifest-defined partition counts by Kafka topic name.
+	// Existing topics can only be increased because Kafka does not support decreasing partitions.
+	TopicPartitionOverrides map[string]KafkaTopicPartitionCount `json:"topicPartitionOverrides,omitempty"`
 }
+
+// KafkaTopicPartitionCount is a positive Kafka topic partition count.
+// +kubebuilder:validation:Minimum=1
+type KafkaTopicPartitionCount int32
 
 type KafkaReplicationConfig struct {
 	DefaultReplicationFactor int32 `json:"defaultReplicationFactor,omitempty"`

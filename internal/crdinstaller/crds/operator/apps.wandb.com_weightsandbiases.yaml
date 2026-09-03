@@ -1933,6 +1933,12 @@ spec:
                                   x-kubernetes-int-or-string: true
                                 type: object
                             type: object
+                          topicPartitionOverrides:
+                            additionalProperties:
+                              format: int32
+                              minimum: 1
+                              type: integer
+                            type: object
                         type: object
                       name:
                         type: string
