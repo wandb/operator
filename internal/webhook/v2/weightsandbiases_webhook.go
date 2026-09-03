@@ -19,6 +19,7 @@ package v2
 import (
 	"context"
 	"fmt"
+	"maps"
 	"net/url"
 	"strings"
 
@@ -434,6 +435,7 @@ func validateChanges(_ context.Context, newWandb *appsv2.WeightsAndBiases, oldWa
 
 	allErrors = append(allErrors, validateRedisChanges(newWandb, oldWandb)...)
 	allErrors = append(allErrors, validateMySQLChanges(newWandb, oldWandb)...)
+	allErrors = append(allErrors, validateKafkaChanges(newWandb, oldWandb)...)
 
 	if len(allErrors) == 0 {
 		return warnings, nil
@@ -444,6 +446,27 @@ func validateChanges(_ context.Context, newWandb *appsv2.WeightsAndBiases, oldWa
 		newWandb.Name,
 		allErrors,
 	)
+}
+
+// validateKafkaChanges keeps partition-count selection a creation-time setting.
+// Changing a topic's partition count can reroute an ordering key while older
+// messages for that key remain queued on its original partition.
+func validateKafkaChanges(newWandb, oldWandb *appsv2.WeightsAndBiases) field.ErrorList {
+	var newOverrides, oldOverrides map[string]appsv2.KafkaTopicPartitionCount
+	if newWandb.Spec.Kafka.ManagedKafka != nil {
+		newOverrides = newWandb.Spec.Kafka.ManagedKafka.Config.TopicPartitionOverrides
+	}
+	if oldWandb.Spec.Kafka.ManagedKafka != nil {
+		oldOverrides = oldWandb.Spec.Kafka.ManagedKafka.Config.TopicPartitionOverrides
+	}
+	if maps.Equal(newOverrides, oldOverrides) {
+		return nil
+	}
+
+	return field.ErrorList{field.Forbidden(
+		field.NewPath("spec").Child("kafka").Child("managedKafka").Child("config").Child("topicPartitionOverrides"),
+		"immutable after creation because the operator does not resize existing Kafka topics",
+	)}
 }
 
 // validateHasDefaultInstance reports an error when a multi-instance infra type

@@ -56,10 +56,22 @@ func TestReconcileKafkaTopic(t *testing.T) {
 		require.Equal(t, int16(3), admin.createdReplicationFactor)
 		require.Equal(t, "weave.call_ended", admin.createdTopic)
 		require.False(t, admin.listed)
-		require.False(t, admin.updated)
 	})
 
-	t.Run("increases an existing topic", func(t *testing.T) {
+	t.Run("creates a new topic with the manifest default count", func(t *testing.T) {
+		admin := &fakeKafkaTopicAdmin{}
+		spec := &apiv2.ManagedKafkaSpec{}
+		topic := manifest.KafkaTopic{Name: "weave-worker", Topic: "weave.call_ended", PartitionCount: 16}
+		partitions, overridden := desiredKafkaTopicPartitionCount(spec, topic)
+
+		err := reconcileKafkaTopic(t.Context(), admin, "weave.call_ended", partitions, overridden, 1)
+
+		require.NoError(t, err)
+		require.Equal(t, int32(16), admin.createdPartitions)
+		require.False(t, admin.listed)
+	})
+
+	t.Run("rejects an explicit override above an existing topic count", func(t *testing.T) {
 		admin := &fakeKafkaTopicAdmin{
 			createTopicErr:     kerr.TopicAlreadyExists,
 			existingPartitions: 16,
@@ -67,14 +79,15 @@ func TestReconcileKafkaTopic(t *testing.T) {
 
 		err := reconcileKafkaTopic(t.Context(), admin, "weave.call_ended", 60, true, 1)
 
-		require.NoError(t, err)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "already exists with 16 partitions")
+		require.Contains(t, err.Error(), "requests 60")
+		require.Contains(t, err.Error(), "never resizes existing topics")
+		require.Contains(t, err.Error(), `topicPartitionOverrides["weave.call_ended"]`)
 		require.True(t, admin.listed)
-		require.True(t, admin.updated)
-		require.Equal(t, 60, admin.updatedPartitions)
-		require.Equal(t, "weave.call_ended", admin.updatedTopic)
 	})
 
-	t.Run("rejects an explicit override that would decrease an existing topic", func(t *testing.T) {
+	t.Run("rejects an explicit override below an existing topic count", func(t *testing.T) {
 		admin := &fakeKafkaTopicAdmin{
 			createTopicErr:     kerr.TopicAlreadyExists,
 			existingPartitions: 60,
@@ -83,36 +96,36 @@ func TestReconcileKafkaTopic(t *testing.T) {
 		err := reconcileKafkaTopic(t.Context(), admin, "weave.call_ended", 16, true, 1)
 
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "has 60 partitions, exceeding the requested count 16")
-		require.Contains(t, err.Error(), "Kafka cannot decrease")
+		require.Contains(t, err.Error(), "already exists with 60 partitions")
+		require.Contains(t, err.Error(), "requests 16")
+		require.Contains(t, err.Error(), "never resizes existing topics")
 		require.Contains(t, err.Error(), `topicPartitionOverrides["weave.call_ended"]`)
-		require.False(t, admin.updated)
 	})
 
-	t.Run("accepts an enlarged topic when using the manifest default", func(t *testing.T) {
-		admin := &fakeKafkaTopicAdmin{
-			createTopicErr:     kerr.TopicAlreadyExists,
-			existingPartitions: 96,
+	t.Run("accepts any existing topic count when using the manifest default", func(t *testing.T) {
+		for _, existingPartitions := range []int{8, 96} {
+			admin := &fakeKafkaTopicAdmin{
+				createTopicErr:     kerr.TopicAlreadyExists,
+				existingPartitions: existingPartitions,
+			}
+
+			err := reconcileKafkaTopic(t.Context(), admin, "weave.call_ended", 60, false, 1)
+
+			require.NoError(t, err)
+			require.False(t, admin.listed, "manifest counts apply only when creating topics")
 		}
-
-		err := reconcileKafkaTopic(t.Context(), admin, "weave.call_ended", 60, false, 1)
-
-		require.NoError(t, err)
-		require.True(t, admin.listed)
-		require.False(t, admin.updated)
 	})
 
-	t.Run("leaves an existing topic at the requested count", func(t *testing.T) {
+	t.Run("accepts an existing topic matching the explicit override", func(t *testing.T) {
 		admin := &fakeKafkaTopicAdmin{
 			createTopicErr:     kerr.TopicAlreadyExists,
 			existingPartitions: 60,
 		}
 
-		err := reconcileKafkaTopic(t.Context(), admin, "weave.call_ended", 60, false, 1)
+		err := reconcileKafkaTopic(t.Context(), admin, "weave.call_ended", 60, true, 1)
 
 		require.NoError(t, err)
 		require.True(t, admin.listed)
-		require.False(t, admin.updated)
 	})
 }
 
@@ -123,9 +136,6 @@ type fakeKafkaTopicAdmin struct {
 	createdReplicationFactor int16
 	createdTopic             string
 	listed                   bool
-	updated                  bool
-	updatedPartitions        int
-	updatedTopic             string
 }
 
 func (f *fakeKafkaTopicAdmin) CreateTopics(_ context.Context, partitions int32, replicationFactor int16, _ map[string]*string, topics ...string) (kadm.CreateTopicResponses, error) {
@@ -152,14 +162,5 @@ func (f *fakeKafkaTopicAdmin) ListTopics(_ context.Context, topics ...string) (k
 			Topic:      topic,
 			Partitions: partitions,
 		},
-	}, nil
-}
-
-func (f *fakeKafkaTopicAdmin) UpdatePartitions(_ context.Context, partitions int, topics ...string) (kadm.CreatePartitionsResponses, error) {
-	f.updated = true
-	f.updatedPartitions = partitions
-	f.updatedTopic = strings.Join(topics, ",")
-	return kadm.CreatePartitionsResponses{
-		f.updatedTopic: {Topic: f.updatedTopic},
 	}, nil
 }

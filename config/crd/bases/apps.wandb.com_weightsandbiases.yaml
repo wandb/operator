@@ -1940,6 +1940,11 @@ spec:
                               type: integer
                             type: object
                         type: object
+                        x-kubernetes-validations:
+                        - message: topicPartitionOverrides is immutable after creation
+                          rule: (!has(oldSelf.topicPartitionOverrides) && !has(self.topicPartitionOverrides))
+                            || (has(oldSelf.topicPartitionOverrides) && has(self.topicPartitionOverrides)
+                            && self.topicPartitionOverrides == oldSelf.topicPartitionOverrides)
                       name:
                         type: string
                       namespace:

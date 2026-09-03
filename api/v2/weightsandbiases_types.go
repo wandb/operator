@@ -892,11 +892,14 @@ func (c *KafkaConnection) Normalize() {
 	c.URL.Normalize()
 }
 
+// KafkaConfig configures managed Kafka.
+// +kubebuilder:validation:XValidation:rule="(!has(oldSelf.topicPartitionOverrides) && !has(self.topicPartitionOverrides)) || (has(oldSelf.topicPartitionOverrides) && has(self.topicPartitionOverrides) && self.topicPartitionOverrides == oldSelf.topicPartitionOverrides)",message="topicPartitionOverrides is immutable after creation"
 type KafkaConfig struct {
 	Resources         corev1.ResourceRequirements `json:"resources,omitempty"`
 	ReplicationConfig KafkaReplicationConfig      `json:"replicationConfig,omitempty"`
-	// TopicPartitionOverrides overrides manifest-defined partition counts by Kafka topic name.
-	// Existing topics can only be increased because Kafka does not support decreasing partitions.
+	// TopicPartitionOverrides selects creation-time partition counts by Kafka topic name.
+	// It is immutable after the WeightsAndBiases resource is created, and the operator
+	// never resizes an existing topic.
 	TopicPartitionOverrides map[string]KafkaTopicPartitionCount `json:"topicPartitionOverrides,omitempty"`
 }
 

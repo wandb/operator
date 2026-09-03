@@ -303,6 +303,66 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 			Expect(warnings).To(BeEmpty())
 		})
 
+		It("allows topic partition overrides on create", func() {
+			obj.Spec.Kafka.ManagedKafka = &appsv2.ManagedKafkaSpec{Config: appsv2.KafkaConfig{
+				TopicPartitionOverrides: map[string]appsv2.KafkaTopicPartitionCount{"weave.call_ended": 60},
+			}}
+
+			warnings, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(warnings).To(BeEmpty())
+		})
+
+		It("allows unchanged topic partition overrides on update", func() {
+			overrides := map[string]appsv2.KafkaTopicPartitionCount{"weave.call_ended": 60}
+			oldObj.Spec.Kafka.ManagedKafka = &appsv2.ManagedKafkaSpec{Config: appsv2.KafkaConfig{
+				TopicPartitionOverrides: overrides,
+			}}
+			obj.Spec.Kafka.ManagedKafka = &appsv2.ManagedKafkaSpec{Config: appsv2.KafkaConfig{
+				TopicPartitionOverrides: map[string]appsv2.KafkaTopicPartitionCount{"weave.call_ended": 60},
+			}}
+
+			warnings, err := validator.ValidateUpdate(ctx, oldObj, obj)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(warnings).To(BeEmpty())
+		})
+
+		It("rejects adding topic partition overrides on update", func() {
+			obj.Spec.Kafka.ManagedKafka = &appsv2.ManagedKafkaSpec{Config: appsv2.KafkaConfig{
+				TopicPartitionOverrides: map[string]appsv2.KafkaTopicPartitionCount{"weave.call_ended": 60},
+			}}
+
+			_, err := validator.ValidateUpdate(ctx, oldObj, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("topicPartitionOverrides"))
+			Expect(err.Error()).To(ContainSubstring("immutable after creation"))
+		})
+
+		It("rejects changing topic partition overrides on update", func() {
+			oldObj.Spec.Kafka.ManagedKafka = &appsv2.ManagedKafkaSpec{Config: appsv2.KafkaConfig{
+				TopicPartitionOverrides: map[string]appsv2.KafkaTopicPartitionCount{"weave.call_ended": 16},
+			}}
+			obj.Spec.Kafka.ManagedKafka = &appsv2.ManagedKafkaSpec{Config: appsv2.KafkaConfig{
+				TopicPartitionOverrides: map[string]appsv2.KafkaTopicPartitionCount{"weave.call_ended": 60},
+			}}
+
+			_, err := validator.ValidateUpdate(ctx, oldObj, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("topicPartitionOverrides"))
+			Expect(err.Error()).To(ContainSubstring("immutable after creation"))
+		})
+
+		It("rejects removing topic partition overrides on update", func() {
+			oldObj.Spec.Kafka.ManagedKafka = &appsv2.ManagedKafkaSpec{Config: appsv2.KafkaConfig{
+				TopicPartitionOverrides: map[string]appsv2.KafkaTopicPartitionCount{"weave.call_ended": 60},
+			}}
+
+			_, err := validator.ValidateUpdate(ctx, oldObj, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("topicPartitionOverrides"))
+			Expect(err.Error()).To(ContainSubstring("immutable after creation"))
+		})
+
 		It("rejects managed ClickHouse when no object store is configured", func() {
 			obj.Spec.ClickHouse = map[string]appsv2.ClickHouseSpec{appsv2.DefaultInstanceName: {ManagedClickHouse: &appsv2.ManagedClickHouseSpec{}}}
 
