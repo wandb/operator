@@ -77,7 +77,7 @@ func applyValueMappings(src *WeightsAndBiases, dst *appsv2.WeightsAndBiases) err
 	if err := mapVersion(values, dst); err != nil {
 		return err
 	}
-	if err := mapServiceAccountAnnotations(values, dst); err != nil {
+	if err := mapServiceAccount(values, dst); err != nil {
 		return err
 	}
 	if err := mapInternalJWTIssuer(values, dst); err != nil {
@@ -166,24 +166,122 @@ func mapVersion(values map[string]interface{}, dst *appsv2.WeightsAndBiases) err
 	return nil
 }
 
-// mapServiceAccountAnnotations maps v1's per-sub-chart ServiceAccount
-// annotations to v2's single spec.wandb.serviceAccount.annotations,
-// preferring `app` and falling back to `api`.
-func mapServiceAccountAnnotations(values map[string]interface{}, dst *appsv2.WeightsAndBiases) error {
-	anns, err := readServiceAccountAnnotations(values, "app")
-	if err != nil {
-		return err
+var v1ServiceAccountSubcharts = []string{"api", "app"}
+
+var v1SubchartEnabledPath = map[string][]string{
+	"api": {"global", "api", "enabled"},
+	"app": {"app", "install"},
+}
+
+// v1ServiceAccount is one sub-chart's serviceAccount block.
+type v1ServiceAccount struct {
+	subchart    string
+	createSet   bool
+	create      bool
+	name        string
+	annotations map[string]string
+}
+
+// hasOverrides reports whether the block says anything about the identity.
+func (b v1ServiceAccount) hasOverrides() bool {
+	return b.createSet || b.name != "" || len(b.annotations) > 0
+}
+
+// v1 gave each sub-chart its own ServiceAccount; v2 has one, so exactly one
+// sub-chart has to win: api first, then app. A sub-chart qualifies when it is
+// enabled, its serviceAccount block overrides something, and the chart creates
+// that account — a create=false block points at an account this operator does
+// not own, so there is nothing to carry.
+func mapServiceAccount(values map[string]interface{}, dst *appsv2.WeightsAndBiases) error {
+	enabled := make(map[string]bool, len(v1ServiceAccountSubcharts))
+	anyEnabled := false
+	for _, subchart := range v1ServiceAccountSubcharts {
+		// Absent means enabled: only an explicit false takes a sub-chart out.
+		enabled[subchart] = boolFromValues(values, true, v1SubchartEnabledPath[subchart]...)
+		anyEnabled = anyEnabled || enabled[subchart]
 	}
-	if len(anns) == 0 {
-		anns, err = readServiceAccountAnnotations(values, "api")
+	if !anyEnabled {
+		return fmt.Errorf(
+			"spec.values: app.install and global.api.enabled are both false; " +
+				"at least one of the app or api sub-charts must be enabled")
+	}
+
+	for _, subchart := range v1ServiceAccountSubcharts {
+		if !enabled[subchart] {
+			continue
+		}
+
+		block, err := readV1ServiceAccount(values, subchart)
 		if err != nil {
 			return err
 		}
+		// A create=false block names an account the chart did not make, and an
+		// empty block says nothing at all; neither is an identity to carry.
+		if !block.hasOverrides() || (block.createSet && !block.create) {
+			continue
+		}
+
+		sa := &dst.Spec.Wandb.ServiceAccount
+		sa.Create = ptr.To(true)
+		sa.ServiceAccountName = block.name
+		if sa.ServiceAccountName == "" {
+			sa.ServiceAccountName = derivedV1SAName(dst.Name, subchart)
+		}
+		if len(block.annotations) > 0 {
+			sa.Annotations = block.annotations
+		}
+		return nil
 	}
-	if len(anns) > 0 {
-		dst.Spec.Wandb.ServiceAccount.Annotations = anns
-	}
+
 	return nil
+}
+
+// readV1ServiceAccount reads values.<subchart>.serviceAccount.
+func readV1ServiceAccount(values map[string]interface{}, subchart string) (v1ServiceAccount, error) {
+	block := v1ServiceAccount{subchart: subchart}
+
+	saMap, found, err := unstructured.NestedMap(values, subchart, "serviceAccount")
+	if err != nil {
+		return block, fmt.Errorf("spec.values.%s.serviceAccount: %w", subchart, err)
+	}
+	if !found || len(saMap) == 0 {
+		return block, nil
+	}
+
+	// Non-boolean create is treated as unset rather than failing, so a
+	// stringly-typed helm value can't make a v1 object unservable.
+	if raw, ok := saMap["create"]; ok {
+		if str, isScalar := scalarToString(raw); isScalar {
+			if parsed, parseErr := strconv.ParseBool(str); parseErr == nil {
+				block.createSet = true
+				block.create = parsed
+			}
+		}
+	}
+
+	if block.name, _, err = unstructured.NestedString(saMap, "name"); err != nil {
+		return block, fmt.Errorf("spec.values.%s.serviceAccount.name: %w", subchart, err)
+	}
+	if block.annotations, _, err = unstructured.NestedStringMap(saMap, "annotations"); err != nil {
+		return block, fmt.Errorf("spec.values.%s.serviceAccount.annotations: %w", subchart, err)
+	}
+
+	return block, nil
+}
+
+// derivedV1SAName mirrors wandb-base's serviceAccountName helper for a created
+// account: the Helm release name (the CR name — see charts.Apply) plus the
+// sub-chart name, except that fullname collapses to the release name alone when
+// it already contains the sub-chart name.
+func derivedV1SAName(release, subchart string) string {
+	name := release + "-" + subchart
+	if strings.Contains(release, subchart) {
+		name = release
+	}
+	if len(name) > 63 {
+		name = name[:63]
+	}
+	return strings.TrimSuffix(name, "-")
 }
 
 // mapInternalJWTIssuer pulls the first entry from global.internalJWTMap (or
@@ -322,18 +420,6 @@ func readFirstInternalJWTIssuer(values map[string]interface{}, service string) (
 		return "", fmt.Errorf("spec.values.%s.internalJWTMap[0].issuer: %w", service, err)
 	}
 	return issuer, nil
-}
-
-// readServiceAccountAnnotations reads values.<service>.serviceAccount.annotations.
-func readServiceAccountAnnotations(values map[string]interface{}, service string) (map[string]string, error) {
-	anns, found, err := unstructured.NestedStringMap(values, service, "serviceAccount", "annotations")
-	if err != nil {
-		return nil, fmt.Errorf("spec.values.%s.serviceAccount.annotations: %w", service, err)
-	}
-	if !found {
-		return nil, nil
-	}
-	return anns, nil
 }
 
 func mapHostnameLicense(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) error {
