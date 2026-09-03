@@ -33,11 +33,12 @@ import (
 
 var logger = ctrl.Log.WithName("weightsandbiases-conversion")
 
-// Round-trip annotations stashed on v2 so ConvertFrom can reproduce the
-// original v1 chart/values across apiserver-internal v2 → v1 → v2 bounces.
+// Round-trip annotations carry fields that have no representation in the
+// other API version across apiserver-internal conversion bounces.
 const (
-	v1ChartAnnotation  = "legacy.operator.wandb.com/v1-chart"
-	v1ValuesAnnotation = "legacy.operator.wandb.com/v1-values"
+	v1ChartAnnotation                        = "legacy.operator.wandb.com/v1-chart"
+	v1ValuesAnnotation                       = "legacy.operator.wandb.com/v1-values"
+	v2KafkaTopicPartitionOverridesAnnotation = "legacy.operator.wandb.com/v2-kafka-topic-partition-overrides"
 )
 
 const conversionLookupTimeout = 5 * time.Second
@@ -99,9 +100,12 @@ func (src *WeightsAndBiases) ConvertTo(dstRaw conversion.Hub) error {
 		"source", src.Namespace+"/"+src.Name,
 	)
 
-	dst.ObjectMeta = src.ObjectMeta
+	dst.ObjectMeta = *src.ObjectMeta.DeepCopy()
 
 	if err := applyValueMappings(src, dst); err != nil {
+		return err
+	}
+	if err := restoreV2KafkaTopicPartitionOverrides(src, dst); err != nil {
 		return err
 	}
 
@@ -117,11 +121,67 @@ func (dst *WeightsAndBiases) ConvertFrom(srcRaw conversion.Hub) error {
 		"source", src.Namespace+"/"+src.Name,
 	)
 
-	dst.ObjectMeta = src.ObjectMeta
+	dst.ObjectMeta = *src.ObjectMeta.DeepCopy()
 
 	if err := loadV1Source(src, dst); err != nil {
 		return err
 	}
+	return stashV2KafkaTopicPartitionOverrides(src, dst)
+}
+
+func stashV2KafkaTopicPartitionOverrides(src *appsv2.WeightsAndBiases, dst *WeightsAndBiases) error {
+	overrides := map[string]appsv2.KafkaTopicPartitionCount(nil)
+	if src.Spec.Kafka.ManagedKafka != nil {
+		overrides = src.Spec.Kafka.ManagedKafka.Config.TopicPartitionOverrides
+	}
+	if len(overrides) == 0 {
+		delete(dst.Annotations, v2KafkaTopicPartitionOverridesAnnotation)
+		return nil
+	}
+
+	payload, err := json.Marshal(overrides)
+	if err != nil {
+		return fmt.Errorf("marshal %s: %w", v2KafkaTopicPartitionOverridesAnnotation, err)
+	}
+	if dst.Annotations == nil {
+		dst.Annotations = make(map[string]string)
+	}
+	dst.Annotations[v2KafkaTopicPartitionOverridesAnnotation] = string(payload)
+	return nil
+}
+
+func restoreV2KafkaTopicPartitionOverrides(src *WeightsAndBiases, dst *appsv2.WeightsAndBiases) error {
+	raw, ok := src.Annotations[v2KafkaTopicPartitionOverridesAnnotation]
+	if !ok {
+		return nil
+	}
+	if raw == "" {
+		delete(dst.Annotations, v2KafkaTopicPartitionOverridesAnnotation)
+		return nil
+	}
+
+	var overrides map[string]appsv2.KafkaTopicPartitionCount
+	if err := json.Unmarshal([]byte(raw), &overrides); err != nil {
+		return fmt.Errorf("unmarshal %s: %w", v2KafkaTopicPartitionOverridesAnnotation, err)
+	}
+	for topic, partitions := range overrides {
+		if partitions < 1 {
+			return fmt.Errorf(
+				"unmarshal %s: topic %q has invalid partition count %d; must be at least 1",
+				v2KafkaTopicPartitionOverridesAnnotation,
+				topic,
+				partitions,
+			)
+		}
+	}
+
+	if len(overrides) > 0 {
+		if dst.Spec.Kafka.ManagedKafka == nil {
+			dst.Spec.Kafka.ManagedKafka = &appsv2.ManagedKafkaSpec{}
+		}
+		dst.Spec.Kafka.ManagedKafka.Config.TopicPartitionOverrides = overrides
+	}
+	delete(dst.Annotations, v2KafkaTopicPartitionOverridesAnnotation)
 	return nil
 }
 
