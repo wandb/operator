@@ -166,12 +166,12 @@ func mapVersion(values map[string]interface{}, dst *appsv2.WeightsAndBiases) err
 	return nil
 }
 
-// v1ServiceAccountSubcharts are the v1 subcharts whose serviceAccount block
-// describes the W&B application identity, in precedence order. Infra subcharts
-// (mysql, redis, …) are deliberately excluded: their serviceAccount blocks
-// configure those workloads, and v2 models them separately as
-// ManagedServiceAccountSpec.
-var v1ServiceAccountSubcharts = []string{"app", "api"}
+// v1ServiceAccountSubcharts are the v1 subcharts whose serviceAccount block can
+// describe the W&B application identity, in precedence order: api first, then
+// app. Infra subcharts (mysql, redis, …) are deliberately excluded: their
+// serviceAccount blocks configure those workloads, and v2 models them
+// separately as ManagedServiceAccountSpec.
+var v1ServiceAccountSubcharts = []string{"api", "app"}
 
 // v1ServiceAccount is one subchart's serviceAccount block.
 type v1ServiceAccount struct {
@@ -181,90 +181,60 @@ type v1ServiceAccount struct {
 	annotations map[string]string
 }
 
+// hasOverrides reports whether the block says anything about the identity.
+func (b v1ServiceAccount) hasOverrides() bool {
+	return b.create != nil || b.name != "" || len(b.annotations) > 0
+}
+
 // mapServiceAccount maps v1's per-subchart ServiceAccount blocks to v2's single
-// spec.wandb.serviceAccount.
+// spec.wandb.serviceAccount, taking the whole identity from one subchart: api
+// when it overrides anything, otherwise app, otherwise nothing and v2's own
+// defaults apply.
 //
-// create and name must be carried together: v2's CRD defaults create=true and
-// serviceAccountName=wandb, so dropping either one makes the operator stand up
-// its own ServiceAccount and orphan the identity the deployment's cloud IAM
-// binding is attached to. Carrying create without name is worse still — pods
-// would reference a ServiceAccount nothing creates and fail admission.
+// Within the winning block, create and name are carried together: v2's CRD
+// defaults create=true and serviceAccountName=wandb-app, so dropping either one
+// makes the operator stand up its own ServiceAccount and orphan the identity the
+// deployment's cloud IAM binding is attached to. Carrying create without name is
+// worse still — pods would reference a ServiceAccount nothing creates and fail
+// admission.
 func mapServiceAccount(values map[string]interface{}, dst *appsv2.WeightsAndBiases) error {
 	blocks, err := readV1ServiceAccounts(values)
 	if err != nil {
 		return err
 	}
-	if len(blocks) == 0 {
-		return nil
-	}
-	if err := assertServiceAccountAgreement(blocks, dst.Name); err != nil {
-		return err
-	}
 
-	// First non-empty wins, so earlier subcharts take precedence.
-	sa := &dst.Spec.Wandb.ServiceAccount
 	for _, block := range blocks {
-		if block.create != nil && sa.Create == nil {
+		if !block.hasOverrides() {
+			continue
+		}
+
+		sa := &dst.Spec.Wandb.ServiceAccount
+		if block.create != nil {
 			sa.Create = ptr.To(*block.create)
 		}
-		if block.name != "" && sa.ServiceAccountName == "" {
-			sa.ServiceAccountName = block.name
-		}
-		if len(block.annotations) > 0 && len(sa.Annotations) == 0 {
+		if len(block.annotations) > 0 {
 			sa.Annotations = block.annotations
 		}
+		sa.ServiceAccountName = block.name
+		if sa.ServiceAccountName == "" {
+			// v1's chart derives the name per subchart when serviceAccount.name is
+			// empty; pin it so v2's defaulter cannot substitute its own constant.
+			sa.ServiceAccountName = derivedV1SAName(dst.Name, block.subchart, block.create)
+		}
+		return nil
 	}
-	if sa.ServiceAccountName == "" {
-		sa.ServiceAccountName = derivedV1SAName(dst.Name, sa.Create)
-	}
+
 	return nil
 }
 
-func derivedV1SAName(release string, create *bool) string {
+// derivedV1SAName mirrors wandb-base's serviceAccountName helper: the release
+// name plus the subchart when the chart creates the ServiceAccount, else the
+// namespace's "default".
+func derivedV1SAName(release, subchart string, create *bool) string {
 	if create != nil && !*create {
 		return "default"
 	}
-	return release + "-app"
-}
-
-// assertServiceAccountAgreement fails when subcharts disagree on the identity.
-// v2 has one application ServiceAccount, so silently picking a winner would
-// point pods at the wrong cloud identity — the exact failure this mapper
-// exists to prevent.
-func assertServiceAccountAgreement(blocks []v1ServiceAccount, release string) error {
-	var identityOwner, createOwner *v1ServiceAccount
-	for i := range blocks {
-		block := &blocks[i]
-		if block.name != "" || block.create != nil {
-			if identityOwner == nil {
-				identityOwner = block
-			} else if got, want := block.effectiveName(release), identityOwner.effectiveName(release); got != want {
-				return fmt.Errorf(
-					"spec.values: %s.serviceAccount resolves to %q but %s.serviceAccount resolves to %q; "+
-						"v2 has a single spec.wandb.serviceAccount, so set it explicitly",
-					identityOwner.subchart, want, block.subchart, got)
-			}
-		}
-		if block.create != nil {
-			if createOwner != nil && *createOwner.create != *block.create {
-				return fmt.Errorf(
-					"spec.values: %s.serviceAccount.create=%v conflicts with %s.serviceAccount.create=%v; "+
-						"v2 has a single spec.wandb.serviceAccount, so set it explicitly",
-					createOwner.subchart, *createOwner.create, block.subchart, *block.create)
-			}
-			if createOwner == nil {
-				createOwner = block
-			}
-		}
-	}
-	return nil
-}
-
-func (b v1ServiceAccount) effectiveName(release string) string {
-	if b.name != "" {
-		return b.name
-	}
-	return derivedV1SAName(release, b.create)
+	return release + "-" + subchart
 }
 
 // readV1ServiceAccounts collects the serviceAccount block from each known
