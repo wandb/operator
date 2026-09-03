@@ -24,6 +24,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"time"
 
@@ -46,18 +47,19 @@ import (
 )
 
 const (
-	defaultActionTimeoutSeconds = int64(300)
-	maxActionOutputBytes        = int64(512 * 1024)
-	actionResultsRetryInterval  = 2 * time.Second
-	actionResultsGracePeriod    = 30 * time.Second
-	actionContainerName         = "action"
-	actionConditionSucceeded    = "Succeeded"
-	actionRunLabel              = "apps.wandb.com/action-run"
-	actionApplicationLabel      = "apps.wandb.com/action-application"
-	actionTypeAnnotation        = "apps.wandb.com/action-type"
-	actionNameAnnotation        = "apps.wandb.com/action-name"
-	actionTypeEnv               = "WANDB_ACTION_TYPE"
-	actionNameEnv               = "WANDB_ACTION_NAME"
+	defaultActionTimeoutSeconds           = int64(300)
+	maxActionOutputBytes                  = int64(512 * 1024)
+	maxActionStatusBytes                  = 512 * 1024
+	actionResultsRetryInterval            = 2 * time.Second
+	actionResultsGracePeriod              = 30 * time.Second
+	actionConditionSucceeded              = "Succeeded"
+	actionRunLabel                        = "apps.wandb.com/action-run"
+	actionApplicationLabel                = "apps.wandb.com/action-application"
+	actionTypeAnnotation                  = "apps.wandb.com/action-type"
+	actionNameAnnotation                  = "apps.wandb.com/action-name"
+	actionApplicationGenerationAnnotation = "apps.wandb.com/action-application-generation"
+	actionTypeEnv                         = "WANDB_ACTION_TYPE"
+	actionNameEnv                         = "WANDB_ACTION_NAME"
 )
 
 // ActionPodLogReader reads structured output from a completed action pod. It
@@ -110,7 +112,9 @@ type ActionRunReconciler struct {
 	PodLogs ActionPodLogReader
 }
 
-// +kubebuilder:rbac:groups=apps.wandb.com,resources=actionruns,verbs=get;list;watch
+// The controller only reads ActionRuns; create/delete allow the manager to
+// delegate those verbs to its install-scoped Watchtower ServiceAccount.
+// +kubebuilder:rbac:groups=apps.wandb.com,resources=actionruns,verbs=get;list;watch;create;delete
 // +kubebuilder:rbac:groups=apps.wandb.com,resources=actionruns/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=apps.wandb.com,resources=applications,verbs=get;list;watch
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create
@@ -131,28 +135,19 @@ func (r *ActionRunReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			fmt.Sprintf("action type %q is not executable in this release", run.Spec.Type))
 	}
 
-	var application wandbv2.Application
-	applicationKey := types.NamespacedName{
-		Namespace: run.Namespace,
-		Name:      run.Spec.ApplicationRef.Name,
-	}
-	if err := r.Get(ctx, applicationKey, &application); err != nil {
-		if apierrors.IsNotFound(err) {
-			return r.failRun(ctx, &run, "ApplicationNotFound",
-				fmt.Sprintf("Application %q does not exist in namespace %q", applicationKey.Name, applicationKey.Namespace))
-		}
-		return ctrl.Result{}, err
-	}
-
-	action, err := resolveRequestedAction(&run, &application)
-	if err != nil {
-		return r.failRun(ctx, &run, "InvalidAction", err.Error())
-	}
-	job, err := r.getOrCreateActionJob(ctx, &run, &application, action)
+	job, err := r.getOrCreateActionJob(ctx, &run)
 	if err != nil {
 		var missing *actionJobMissingError
 		if errors.As(err, &missing) {
 			return r.failRun(ctx, &run, "JobMissing", missing.Error())
+		}
+		var applicationMissing *actionApplicationMissingError
+		if errors.As(err, &applicationMissing) {
+			return r.failRun(ctx, &run, "ApplicationNotFound", applicationMissing.Error())
+		}
+		var invalidAction *invalidActionError
+		if errors.As(err, &invalidAction) {
+			return r.failRun(ctx, &run, "InvalidAction", invalidAction.Error())
 		}
 		return ctrl.Result{}, err
 	}
@@ -160,9 +155,16 @@ func (r *ActionRunReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return r.failRun(ctx, &run, "JobNameCollision",
 			fmt.Sprintf("Job %q already exists and is not owned by this ActionRun", job.Name))
 	}
+	resolved, err := resolvedActionExecutionFromJob(job, run.Status.ResolvedExecution)
+	if err != nil {
+		return r.failRun(ctx, &run, "InvalidJob", err.Error())
+	}
 
 	statusBefore := run.DeepCopy().Status
-	requeueForOutput := r.updateRunStatus(ctx, &run, action, job)
+	requeueForOutput := r.updateRunStatus(ctx, &run, resolved, job)
+	if constrainActionStatusSize(&run, job) {
+		requeueForOutput = false
+	}
 	if !apiequality.Semantic.DeepEqual(statusBefore, run.Status) {
 		if err := r.Status().Update(ctx, &run); err != nil {
 			return ctrl.Result{}, err
@@ -181,7 +183,6 @@ type resolvedAction struct {
 	spec           wandbv2.ApplicationActionSpec
 	source         *corev1.Container
 	timeoutSeconds int64
-	resolved       *wandbv2.ActionResolvedExecution
 	jobName        string
 }
 
@@ -212,42 +213,81 @@ func resolveRequestedAction(
 		timeoutSeconds: timeoutSeconds,
 		jobName:        common.FitDefaultInfraName(run.Name, "-action", 63),
 	}
-	action.resolved = resolvedActionExecution(application, action)
 	return action, nil
 }
 
 func (r *ActionRunReconciler) getOrCreateActionJob(
 	ctx context.Context,
 	run *wandbv2.ActionRun,
-	application *wandbv2.Application,
-	action *resolvedAction,
 ) (*batchv1.Job, error) {
+	jobName := common.FitDefaultInfraName(run.Name, "-action", 63)
+	if run.Status.JobRef != nil {
+		jobName = run.Status.JobRef.Name
+	}
 	var job batchv1.Job
-	err := r.Get(ctx, types.NamespacedName{Namespace: run.Namespace, Name: action.jobName}, &job)
+	err := r.Get(ctx, types.NamespacedName{Namespace: run.Namespace, Name: jobName}, &job)
 	if err != nil && !apierrors.IsNotFound(err) {
 		return nil, err
 	}
-	if apierrors.IsNotFound(err) {
-		if run.Status.JobRef != nil {
-			return nil, &actionJobMissingError{name: run.Status.JobRef.Name}
+	if err == nil {
+		return &job, nil
+	}
+	if run.Status.JobRef != nil {
+		return nil, &actionJobMissingError{name: run.Status.JobRef.Name}
+	}
+
+	var application wandbv2.Application
+	applicationKey := types.NamespacedName{
+		Namespace: run.Namespace,
+		Name:      run.Spec.ApplicationRef.Name,
+	}
+	if err := r.Get(ctx, applicationKey, &application); err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil, &actionApplicationMissingError{name: applicationKey.Name, namespace: applicationKey.Namespace}
 		}
-		job = *buildActionJob(run, application, action)
-		if err := controllerutil.SetControllerReference(run, &job, r.Scheme); err != nil {
+		return nil, err
+	}
+	action, err := resolveRequestedAction(run, &application)
+	if err != nil {
+		return nil, &invalidActionError{err: err}
+	}
+	job = *buildActionJob(run, &application, action)
+	if err := controllerutil.SetControllerReference(run, &job, r.Scheme); err != nil {
+		return nil, err
+	}
+	if err := r.Create(ctx, &job); err != nil {
+		if !apierrors.IsAlreadyExists(err) {
 			return nil, err
 		}
-		if err := r.Create(ctx, &job); err != nil {
-			if !apierrors.IsAlreadyExists(err) {
-				return nil, err
-			}
-			if err := r.Get(ctx, types.NamespacedName{
-				Namespace: run.Namespace,
-				Name:      action.jobName,
-			}, &job); err != nil {
-				return nil, err
-			}
+		if err := r.Get(ctx, types.NamespacedName{
+			Namespace: run.Namespace,
+			Name:      action.jobName,
+		}, &job); err != nil {
+			return nil, err
 		}
 	}
 	return &job, nil
+}
+
+type actionApplicationMissingError struct {
+	name      string
+	namespace string
+}
+
+func (e *actionApplicationMissingError) Error() string {
+	return fmt.Sprintf("Application %q does not exist in namespace %q", e.name, e.namespace)
+}
+
+type invalidActionError struct {
+	err error
+}
+
+func (e *invalidActionError) Error() string {
+	return e.err.Error()
+}
+
+func (e *invalidActionError) Unwrap() error {
+	return e.err
 }
 
 type actionJobMissingError struct {
@@ -316,8 +356,9 @@ func buildActionJob(
 		actionApplicationLabel: common.FitDefaultInfraName(application.Name, "", 63),
 	}
 	annotations := map[string]string{
-		actionTypeAnnotation: string(action.actionType),
-		actionNameAnnotation: string(action.name),
+		actionTypeAnnotation:                  string(action.actionType),
+		actionNameAnnotation:                  string(action.name),
+		actionApplicationGenerationAnnotation: strconv.FormatInt(application.Generation, 10),
 	}
 	return &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
@@ -343,7 +384,7 @@ func buildActionContainer(
 	action *resolvedAction,
 ) corev1.Container {
 	container := corev1.Container{
-		Name:                     actionContainerName,
+		Name:                     source.Name,
 		Image:                    source.Image,
 		ImagePullPolicy:          source.ImagePullPolicy,
 		Command:                  append([]string(nil), source.Command...),
@@ -406,47 +447,85 @@ func defaultActionResources() corev1.ResourceRequirements {
 	}
 }
 
-func resolvedActionExecution(
-	application *wandbv2.Application,
-	action *resolvedAction,
-) *wandbv2.ActionResolvedExecution {
-	container := buildActionContainer(action.source, action.runner, action)
+func resolvedActionExecutionFromJob(
+	job *batchv1.Job,
+	previous *wandbv2.ActionResolvedExecution,
+) (*wandbv2.ActionResolvedExecution, error) {
+	if len(job.Spec.Template.Spec.Containers) != 1 {
+		return nil, fmt.Errorf("Job %q must contain exactly one action container, found %d",
+			job.Name, len(job.Spec.Template.Spec.Containers))
+	}
+	container := job.Spec.Template.Spec.Containers[0]
+	var applicationGeneration int64
+	if encodedGeneration := job.Annotations[actionApplicationGenerationAnnotation]; encodedGeneration != "" {
+		var err error
+		applicationGeneration, err = strconv.ParseInt(encodedGeneration, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("Job %q has invalid %q annotation: %w",
+				job.Name, actionApplicationGenerationAnnotation, err)
+		}
+	} else if previous != nil {
+		// Jobs created before the generation annotation was introduced can use
+		// the first snapshot already persisted on the run.
+		applicationGeneration = previous.ApplicationGeneration
+	}
+	var timeoutSeconds int64
+	if job.Spec.ActiveDeadlineSeconds != nil {
+		timeoutSeconds = *job.Spec.ActiveDeadlineSeconds
+	}
 	return &wandbv2.ActionResolvedExecution{
-		ApplicationGeneration: application.Generation,
-		ContainerName:         action.source.Name,
+		ApplicationGeneration: applicationGeneration,
+		ContainerName:         container.Name,
 		Image:                 container.Image,
 		Command:               append([]string(nil), container.Command...),
 		Args:                  append([]string(nil), container.Args...),
-		TimeoutSeconds:        action.timeoutSeconds,
-	}
+		TimeoutSeconds:        timeoutSeconds,
+	}, nil
 }
 
 func (r *ActionRunReconciler) updateRunStatus(
 	ctx context.Context,
 	run *wandbv2.ActionRun,
-	action *resolvedAction,
+	resolved *wandbv2.ActionResolvedExecution,
 	job *batchv1.Job,
 ) bool {
 	run.Status.Phase = wandbv2.ActionRunPhaseRunning
 	run.Status.ObservedGeneration = run.Generation
 	run.Status.JobRef = &corev1.LocalObjectReference{Name: job.Name}
-	run.Status.ResolvedExecution = action.resolved
+	run.Status.ResolvedExecution = resolved
 	run.Status.StartedAt = actionStartTime(run.Status.StartedAt, job)
 	run.Status.CompletedAt = nil
 	run.Status.Summary = nil
 	run.Status.Results = nil
 
 	if jobFailed(job) {
-		run.Status.Phase = wandbv2.ActionRunPhaseFailed
-		run.Status.CompletedAt = actionCompletionTime(job)
 		message := jobConditionMessage(job, batchv1.JobFailed)
 		if message == "" {
 			message = fmt.Sprintf("Job %q failed", job.Name)
 		}
-		if results, err := r.collectActionResults(ctx, job); err == nil {
-			run.Status.Results = results
-			run.Status.Summary = summarizeActionResults(results)
+		results, err := r.collectActionResults(ctx, job)
+		if err != nil {
+			var unavailable *actionOutputUnavailableError
+			if errors.As(err, &unavailable) && !actionResultsGracePeriodExpired(job, time.Now()) {
+				setActionCondition(run, metav1.ConditionUnknown, "ResultsPending",
+					fmt.Sprintf("%s; waiting for action results: %s", message, unavailable.Error()))
+				return true
+			}
+			run.Status.Phase = wandbv2.ActionRunPhaseFailed
+			run.Status.CompletedAt = actionCompletionTime(job)
+			if errors.As(err, &unavailable) {
+				message = fmt.Sprintf("%s; action results remained unavailable for %s: %s",
+					message, actionResultsGracePeriod, unavailable.Error())
+			} else {
+				message = fmt.Sprintf("%s; action results were invalid: %s", message, err)
+			}
+			setActionCondition(run, metav1.ConditionFalse, "JobFailed", message)
+			return false
 		}
+		run.Status.Phase = wandbv2.ActionRunPhaseFailed
+		run.Status.CompletedAt = actionCompletionTime(job)
+		run.Status.Results = results
+		run.Status.Summary = summarizeActionResults(results)
 		setActionCondition(run, metav1.ConditionFalse, "JobFailed", message)
 		return false
 	}
@@ -484,6 +563,38 @@ func (r *ActionRunReconciler) updateRunStatus(
 	setActionCondition(run, metav1.ConditionTrue, "ResultsCollected",
 		fmt.Sprintf("Collected %d action results", len(results)))
 	return false
+}
+
+// constrainActionStatusSize keeps structured output from turning every status
+// update into an oversized request. The Job result remains authoritative even
+// when the structured details cannot safely fit in the ActionRun object.
+func constrainActionStatusSize(run *wandbv2.ActionRun, job *batchv1.Job) bool {
+	encoded, err := json.Marshal(run.Status)
+	if err == nil && len(encoded) <= maxActionStatusBytes {
+		return false
+	}
+
+	run.Status.Results = nil
+	run.Status.Summary = nil
+	detail := fmt.Sprintf("structured action results exceed the %d-byte ActionRun status limit",
+		maxActionStatusBytes)
+	if err != nil {
+		detail = fmt.Sprintf("structured action results could not be encoded: %s", err)
+	}
+	if jobFailed(job) {
+		message := jobConditionMessage(job, batchv1.JobFailed)
+		if message == "" {
+			message = fmt.Sprintf("Job %q failed", job.Name)
+		}
+		setActionCondition(run, metav1.ConditionFalse, "JobFailed",
+			fmt.Sprintf("%s; results omitted: %s", message, detail))
+		return true
+	}
+
+	run.Status.Phase = wandbv2.ActionRunPhaseFailed
+	run.Status.CompletedAt = actionCompletionTime(job)
+	setActionCondition(run, metav1.ConditionFalse, "InvalidResults", detail)
+	return true
 }
 
 func setActionCondition(
@@ -536,6 +647,12 @@ func actionCompletionTime(job *batchv1.Job) *metav1.Time {
 	if job.Status.CompletionTime != nil {
 		return job.Status.CompletionTime.DeepCopy()
 	}
+	for _, condition := range job.Status.Conditions {
+		if (condition.Type == batchv1.JobComplete || condition.Type == batchv1.JobFailed) &&
+			condition.Status == corev1.ConditionTrue && !condition.LastTransitionTime.IsZero() {
+			return condition.LastTransitionTime.DeepCopy()
+		}
+	}
 	now := metav1.Now()
 	return &now
 }
@@ -553,7 +670,7 @@ func actionResultsUnavailableSince(job *batchv1.Job) (time.Time, bool) {
 		return job.Status.CompletionTime.Time, true
 	}
 	for _, condition := range job.Status.Conditions {
-		if condition.Type == batchv1.JobComplete &&
+		if (condition.Type == batchv1.JobComplete || condition.Type == batchv1.JobFailed) &&
 			condition.Status == corev1.ConditionTrue &&
 			!condition.LastTransitionTime.IsZero() {
 			return condition.LastTransitionTime.Time, true
@@ -618,8 +735,13 @@ func (r *ActionRunReconciler) collectActionResults(
 		return nil, fmt.Errorf("expected one pod for Job %q, found %d", job.Name, len(pods.Items))
 	}
 
+	if len(job.Spec.Template.Spec.Containers) != 1 {
+		return nil, fmt.Errorf("expected one action container in Job %q, found %d",
+			job.Name, len(job.Spec.Template.Spec.Containers))
+	}
 	output, err := r.PodLogs.ReadPodLogs(
-		ctx, job.Namespace, pods.Items[0].Name, actionContainerName, maxActionOutputBytes)
+		ctx, job.Namespace, pods.Items[0].Name,
+		job.Spec.Template.Spec.Containers[0].Name, maxActionOutputBytes)
 	if err != nil {
 		var tooLarge *actionOutputTooLargeError
 		if errors.As(err, &tooLarge) {

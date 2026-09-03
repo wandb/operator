@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/yaml"
 )
 
@@ -64,8 +66,8 @@ func TestActionRunCreatesBoundedJobFromApplication(t *testing.T) {
 		t.Fatalf("containers = %d, want exactly one", len(job.Spec.Template.Spec.Containers))
 	}
 	container := job.Spec.Template.Spec.Containers[0]
-	if container.Name != actionContainerName || container.Image != "weave:sha256-test" {
-		t.Fatalf("container = %#v, want action container with inherited image", container)
+	if container.Name != "weave-trace" || container.Image != "weave:sha256-test" {
+		t.Fatalf("container = %#v, want source container name and inherited image", container)
 	}
 	if got := container.Resources.Requests.Cpu().String(); got != "100m" {
 		t.Fatalf("CPU request = %q, want small default 100m", got)
@@ -98,6 +100,10 @@ func TestActionRunCreatesBoundedJobFromApplication(t *testing.T) {
 	}
 	if len(container.VolumeMounts) != 1 || len(job.Spec.Template.Spec.Volumes) != 1 {
 		t.Fatal("action Job must inherit the selected container's mounts and parent pod volumes")
+	}
+	resourceRef := envVar(container.Env, "CPU_LIMIT").ValueFrom.ResourceFieldRef
+	if resourceRef == nil || resourceRef.ContainerName != "weave-trace" {
+		t.Fatalf("resource field reference = %#v, want source container name", resourceRef)
 	}
 	if !metav1.IsControlledBy(&job, run) {
 		t.Fatal("action Job is not controlled by the ActionRun")
@@ -160,6 +166,115 @@ func TestActionRunSelectsOneNamedAction(t *testing.T) {
 	}
 	if got := envValue(container.Env, actionNameEnv); got != "deep" {
 		t.Fatalf("%s = %q, want deep", actionNameEnv, got)
+	}
+}
+
+func TestActionRunObservesExistingJobAfterApplicationIsDeleted(t *testing.T) {
+	t.Parallel()
+
+	testScheme := newActionTestScheme(t)
+	run := testActionRun()
+	application := testActionApplication()
+	logReader := &staticActionLogReader{output: []byte(
+		`{"name":"starter-project","severity":"pass"}` + "\n")}
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(testScheme).
+		WithStatusSubresource(&wandbv2.ActionRun{}, &batchv1.Job{}).
+		WithObjects(run, application).
+		Build()
+	reconciler := &ActionRunReconciler{Client: fakeClient, Scheme: testScheme, PodLogs: logReader}
+
+	if _, err := reconciler.Reconcile(context.Background(), requestFor(run)); err != nil {
+		t.Fatalf("create action Job: %v", err)
+	}
+	if err := fakeClient.Delete(context.Background(), application); err != nil {
+		t.Fatalf("delete Application: %v", err)
+	}
+
+	job := &batchv1.Job{}
+	if err := fakeClient.Get(context.Background(), types.NamespacedName{
+		Namespace: run.Namespace,
+		Name:      "weave-check-action",
+	}, job); err != nil {
+		t.Fatalf("get action Job: %v", err)
+	}
+	completionTime := metav1.Now()
+	job.Status.CompletionTime = &completionTime
+	job.Status.Conditions = []batchv1.JobCondition{{
+		Type:               batchv1.JobComplete,
+		Status:             corev1.ConditionTrue,
+		LastTransitionTime: completionTime,
+	}}
+	if err := fakeClient.Status().Update(context.Background(), job); err != nil {
+		t.Fatalf("mark Job complete: %v", err)
+	}
+	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{
+		Name:      "weave-check-action-pod",
+		Namespace: run.Namespace,
+		Labels:    map[string]string{"batch.kubernetes.io/job-name": job.Name},
+	}}
+	if err := fakeClient.Create(context.Background(), pod); err != nil {
+		t.Fatalf("create Job pod: %v", err)
+	}
+
+	if _, err := reconciler.Reconcile(context.Background(), requestFor(run)); err != nil {
+		t.Fatalf("observe action Job without Application: %v", err)
+	}
+	var updatedRun wandbv2.ActionRun
+	if err := fakeClient.Get(context.Background(), client.ObjectKeyFromObject(run), &updatedRun); err != nil {
+		t.Fatalf("get updated ActionRun: %v", err)
+	}
+	if updatedRun.Status.Phase != wandbv2.ActionRunPhaseSucceeded {
+		t.Fatalf("phase = %q, want Succeeded", updatedRun.Status.Phase)
+	}
+	if updatedRun.Status.ResolvedExecution == nil ||
+		updatedRun.Status.ResolvedExecution.ApplicationGeneration != 7 ||
+		updatedRun.Status.ResolvedExecution.Image != "weave:sha256-test" {
+		t.Fatalf("resolved execution = %#v, want immutable Job snapshot", updatedRun.Status.ResolvedExecution)
+	}
+	if logReader.containerName != "weave-trace" {
+		t.Fatalf("log container = %q, want source container name", logReader.containerName)
+	}
+}
+
+func TestActionRunRecoversSnapshotWhenJobCreationPrecededStatusUpdate(t *testing.T) {
+	t.Parallel()
+
+	testScheme := newActionTestScheme(t)
+	run := testActionRun()
+	application := testActionApplication()
+	action, err := resolveRequestedAction(run, application)
+	if err != nil {
+		t.Fatalf("resolve action: %v", err)
+	}
+	job := buildActionJob(run, application, action)
+	if err := controllerutil.SetControllerReference(run, job, testScheme); err != nil {
+		t.Fatalf("set Job owner: %v", err)
+	}
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(testScheme).
+		WithStatusSubresource(&wandbv2.ActionRun{}, &batchv1.Job{}).
+		// No Application is present, simulating a deletion after the Job create
+		// succeeded but before the first ActionRun status update.
+		WithObjects(run, job).
+		Build()
+	reconciler := &ActionRunReconciler{Client: fakeClient, Scheme: testScheme}
+
+	if _, err := reconciler.Reconcile(context.Background(), requestFor(run)); err != nil {
+		t.Fatalf("recover ActionRun from existing Job: %v", err)
+	}
+	var updatedRun wandbv2.ActionRun
+	if err := fakeClient.Get(context.Background(), client.ObjectKeyFromObject(run), &updatedRun); err != nil {
+		t.Fatalf("get recovered ActionRun: %v", err)
+	}
+	if updatedRun.Status.JobRef == nil || updatedRun.Status.JobRef.Name != job.Name {
+		t.Fatalf("jobRef = %#v, want %q", updatedRun.Status.JobRef, job.Name)
+	}
+	if updatedRun.Status.ResolvedExecution == nil ||
+		updatedRun.Status.ResolvedExecution.ApplicationGeneration != application.Generation ||
+		updatedRun.Status.ResolvedExecution.ContainerName != "weave-trace" {
+		t.Fatalf("resolved execution = %#v, want snapshot reconstructed from Job",
+			updatedRun.Status.ResolvedExecution)
 	}
 }
 
@@ -316,6 +431,138 @@ func TestActionRunFailsWhenCompletedJobPodRemainsUnavailable(t *testing.T) {
 	}
 }
 
+func TestActionRunRetriesFailedJobOutputThenCollectsIt(t *testing.T) {
+	t.Parallel()
+
+	reconciler, fakeClient, run, job := terminalActionRunWithoutPod(
+		t, batchv1.JobFailed, time.Now().Add(-actionResultsGracePeriod/2))
+	logReader := reconciler.PodLogs.(*staticActionLogReader)
+	logReader.output = []byte(`{"name":"connection","severity":"error","message":"timed out"}` + "\n")
+
+	result, err := reconciler.Reconcile(context.Background(), requestFor(run))
+	if err != nil {
+		t.Fatalf("reconcile failed ActionRun without pod: %v", err)
+	}
+	if result.RequeueAfter != actionResultsRetryInterval {
+		t.Fatalf("requeueAfter = %s, want %s", result.RequeueAfter, actionResultsRetryInterval)
+	}
+	var pendingRun wandbv2.ActionRun
+	if err := fakeClient.Get(context.Background(), client.ObjectKeyFromObject(run), &pendingRun); err != nil {
+		t.Fatalf("get pending ActionRun: %v", err)
+	}
+	if pendingRun.Status.Phase != wandbv2.ActionRunPhaseRunning ||
+		conditionReason(pendingRun.Status.Conditions, actionConditionSucceeded) != "ResultsPending" {
+		t.Fatalf("pending status = %#v, want Running/ResultsPending", pendingRun.Status)
+	}
+
+	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{
+		Name:      "weave-check-action-pod",
+		Namespace: run.Namespace,
+		Labels:    map[string]string{"batch.kubernetes.io/job-name": job.Name},
+	}}
+	if err := fakeClient.Create(context.Background(), pod); err != nil {
+		t.Fatalf("create failed Job pod: %v", err)
+	}
+	if _, err := reconciler.Reconcile(context.Background(), requestFor(run)); err != nil {
+		t.Fatalf("collect failed Job output: %v", err)
+	}
+	var completedRun wandbv2.ActionRun
+	if err := fakeClient.Get(context.Background(), client.ObjectKeyFromObject(run), &completedRun); err != nil {
+		t.Fatalf("get completed ActionRun: %v", err)
+	}
+	if completedRun.Status.Phase != wandbv2.ActionRunPhaseFailed || len(completedRun.Status.Results) != 1 {
+		t.Fatalf("completed status = %#v, want Failed with one result", completedRun.Status)
+	}
+	if conditionReason(completedRun.Status.Conditions, actionConditionSucceeded) != "JobFailed" {
+		t.Fatalf("conditions = %#v, want JobFailed", completedRun.Status.Conditions)
+	}
+}
+
+func TestActionRunFinalizesFailedJobWhenOutputRemainsUnavailable(t *testing.T) {
+	t.Parallel()
+
+	reconciler, fakeClient, run, _ := terminalActionRunWithoutPod(
+		t, batchv1.JobFailed, time.Now().Add(-actionResultsGracePeriod-time.Minute))
+
+	result, err := reconciler.Reconcile(context.Background(), requestFor(run))
+	if err != nil {
+		t.Fatalf("reconcile failed ActionRun: %v", err)
+	}
+	if result.RequeueAfter != 0 {
+		t.Fatalf("requeueAfter = %s, want no requeue", result.RequeueAfter)
+	}
+	var updatedRun wandbv2.ActionRun
+	if err := fakeClient.Get(context.Background(), client.ObjectKeyFromObject(run), &updatedRun); err != nil {
+		t.Fatalf("get finalized ActionRun: %v", err)
+	}
+	if updatedRun.Status.Phase != wandbv2.ActionRunPhaseFailed ||
+		conditionReason(updatedRun.Status.Conditions, actionConditionSucceeded) != "JobFailed" {
+		t.Fatalf("status = %#v, want Failed/JobFailed", updatedRun.Status)
+	}
+	if updatedRun.Status.CompletedAt == nil {
+		t.Fatal("completedAt is nil")
+	}
+}
+
+func TestActionRunOmitsResultsThatExceedStatusBudget(t *testing.T) {
+	t.Parallel()
+
+	testScheme := newActionTestScheme(t)
+	run := testActionRun()
+	application := testActionApplication()
+	logReader := &staticActionLogReader{output: []byte(fmt.Sprintf(
+		`{"name":"large","severity":"pass","message":%q}`+"\n",
+		strings.Repeat("<", 100*1024)))}
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(testScheme).
+		WithStatusSubresource(&wandbv2.ActionRun{}, &batchv1.Job{}).
+		WithObjects(run, application).
+		Build()
+	reconciler := &ActionRunReconciler{Client: fakeClient, Scheme: testScheme, PodLogs: logReader}
+
+	if _, err := reconciler.Reconcile(context.Background(), requestFor(run)); err != nil {
+		t.Fatalf("create action Job: %v", err)
+	}
+	job := &batchv1.Job{}
+	if err := fakeClient.Get(context.Background(), types.NamespacedName{
+		Namespace: run.Namespace,
+		Name:      "weave-check-action",
+	}, job); err != nil {
+		t.Fatalf("get action Job: %v", err)
+	}
+	completionTime := metav1.Now()
+	job.Status.CompletionTime = &completionTime
+	job.Status.Conditions = []batchv1.JobCondition{{
+		Type:               batchv1.JobComplete,
+		Status:             corev1.ConditionTrue,
+		LastTransitionTime: completionTime,
+	}}
+	if err := fakeClient.Status().Update(context.Background(), job); err != nil {
+		t.Fatalf("mark Job complete: %v", err)
+	}
+	if err := fakeClient.Create(context.Background(), &corev1.Pod{ObjectMeta: metav1.ObjectMeta{
+		Name:      "weave-check-action-pod",
+		Namespace: run.Namespace,
+		Labels:    map[string]string{"batch.kubernetes.io/job-name": job.Name},
+	}}); err != nil {
+		t.Fatalf("create Job pod: %v", err)
+	}
+
+	if _, err := reconciler.Reconcile(context.Background(), requestFor(run)); err != nil {
+		t.Fatalf("reconcile oversized results: %v", err)
+	}
+	var updatedRun wandbv2.ActionRun
+	if err := fakeClient.Get(context.Background(), client.ObjectKeyFromObject(run), &updatedRun); err != nil {
+		t.Fatalf("get updated ActionRun: %v", err)
+	}
+	if updatedRun.Status.Phase != wandbv2.ActionRunPhaseFailed || len(updatedRun.Status.Results) != 0 {
+		t.Fatalf("status = %#v, want Failed without results", updatedRun.Status)
+	}
+	if conditionReason(updatedRun.Status.Conditions, actionConditionSucceeded) != "InvalidResults" {
+		t.Fatalf("conditions = %#v, want InvalidResults", updatedRun.Status.Conditions)
+	}
+}
+
 func TestParseActionJSONLRejectsNoisyOutput(t *testing.T) {
 	t.Parallel()
 
@@ -358,13 +605,22 @@ applications:
 }
 
 type staticActionLogReader struct {
-	output []byte
-	err    error
+	output        []byte
+	err           error
+	containerName string
 }
 
 func completedActionRunWithoutPod(
 	t *testing.T,
 	completedAt time.Time,
+) (*ActionRunReconciler, client.Client, *wandbv2.ActionRun, *batchv1.Job) {
+	return terminalActionRunWithoutPod(t, batchv1.JobComplete, completedAt)
+}
+
+func terminalActionRunWithoutPod(
+	t *testing.T,
+	conditionType batchv1.JobConditionType,
+	transitionedAt time.Time,
 ) (*ActionRunReconciler, client.Client, *wandbv2.ActionRun, *batchv1.Job) {
 	t.Helper()
 
@@ -392,12 +648,15 @@ func completedActionRunWithoutPod(
 	}, job); err != nil {
 		t.Fatalf("get action Job: %v", err)
 	}
-	completionTime := metav1.NewTime(completedAt)
-	job.Status.CompletionTime = &completionTime
+	transitionTime := metav1.NewTime(transitionedAt)
+	if conditionType == batchv1.JobComplete {
+		job.Status.CompletionTime = &transitionTime
+	}
 	job.Status.Conditions = []batchv1.JobCondition{{
-		Type:               batchv1.JobComplete,
+		Type:               conditionType,
 		Status:             corev1.ConditionTrue,
-		LastTransitionTime: completionTime,
+		LastTransitionTime: transitionTime,
+		Message:            "action process exited with status 1",
 	}}
 	if err := fakeClient.Status().Update(context.Background(), job); err != nil {
 		t.Fatalf("mark Job complete: %v", err)
@@ -409,9 +668,10 @@ func (r *staticActionLogReader) ReadPodLogs(
 	_ context.Context,
 	_ string,
 	_ string,
-	_ string,
+	containerName string,
 	_ int64,
 ) ([]byte, error) {
+	r.containerName = containerName
 	return r.output, r.err
 }
 
@@ -476,6 +736,13 @@ func testActionApplication() *wandbv2.Application {
 						Env: []corev1.EnvVar{
 							{Name: "DATABASE_URL", Value: "mysql://wandb"},
 							{Name: "PYTHONPATH", Value: "/parent"},
+							{
+								Name: "CPU_LIMIT",
+								ValueFrom: &corev1.EnvVarSource{ResourceFieldRef: &corev1.ResourceFieldSelector{
+									ContainerName: "weave-trace",
+									Resource:      "limits.cpu",
+								}},
+							},
 						},
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
@@ -515,12 +782,16 @@ func requestFor(run *wandbv2.ActionRun) ctrl.Request {
 }
 
 func envValue(env []corev1.EnvVar, name string) string {
+	return envVar(env, name).Value
+}
+
+func envVar(env []corev1.EnvVar, name string) corev1.EnvVar {
 	for _, variable := range env {
 		if variable.Name == name {
-			return variable.Value
+			return variable
 		}
 	}
-	return fmt.Sprintf("<%s not found>", name)
+	return corev1.EnvVar{Value: fmt.Sprintf("<%s not found>", name)}
 }
 
 func conditionReason(conditions []metav1.Condition, conditionType string) string {

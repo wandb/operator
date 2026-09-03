@@ -458,6 +458,14 @@ func reconcileWatchtowerRBAC(ctx context.Context, c ctrlClient.Client, wandb *ap
 		// install's license and connection material, not the whole cluster's.
 		role.Rules = []rbacv1.PolicyRule{
 			{
+				// Creating an ActionRun executes an administrator-published action
+				// with the referenced application's identity. Keep this grant on
+				// Watchtower's install-scoped ServiceAccount.
+				APIGroups: []string{"apps.wandb.com"},
+				Resources: []string{"actionruns"},
+				Verbs:     []string{"get", "list", "watch", "create", "delete"},
+			},
+			{
 				APIGroups: []string{""},
 				Resources: []string{"secrets", "configmaps"},
 				Verbs:     []string{"get", "list", "watch"},
