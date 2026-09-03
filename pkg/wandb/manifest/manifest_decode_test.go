@@ -31,6 +31,10 @@ var _ = Describe("Server manifest YAML decode", func() {
 		Expect(m.Kafka.Topics[0].Topic).To(Equal("filestream"))
 		Expect(m.Kafka.Topics[0].PartitionCount).To(Equal(96))
 		Expect(m.Kafka.Topics[0].Features).To(ContainElement("filestreamQueue"))
+		Expect(m.Kafka.Topics).To(ContainElement(And(
+			HaveField("Topic", Equal("weave.call_ended")),
+			HaveField("PartitionCount", Equal(60)),
+		)))
 
 		// Applications basic presence
 		Expect(m.Applications).NotTo(BeEmpty())

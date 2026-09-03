@@ -66,7 +66,7 @@ kafka:
       partitionCount: 96
     - name: weave-worker
       topic: weave.call_ended
-      partitionCount: 16
+      partitionCount: 60
     - name: weave-evaluate-model-worker
       topic: weave.evaluate_model
       partitionCount: 16

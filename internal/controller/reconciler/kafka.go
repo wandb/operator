@@ -2,6 +2,7 @@ package reconciler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -159,8 +160,9 @@ func managedKafkaSpecNamespacedName(spec *apiv2.ManagedKafkaSpec) types.Namespac
 }
 
 // createKafkaTopics provisions the manifest-defined topics directly via the Kafka
-// Admin API. Bufstream is Kafka-protocol compatible, so topic creation is
-// idempotent: an already-existing topic is treated as success.
+// Admin API. Manifest counts and explicit overrides are used only at creation.
+// Existing topics are never resized; an explicit override must match their live
+// partition count.
 func createKafkaTopics(ctx context.Context, cl client.Client, wandb *apiv2.WeightsAndBiases, manifest manifest.Manifest) (ctrl.Result, error) {
 	if wandb.Spec.Kafka.ManagedKafka == nil {
 		return ctrl.Result{}, nil
@@ -207,32 +209,87 @@ func createKafkaTopics(ctx context.Context, cl client.Client, wandb *apiv2.Weigh
 			continue
 		}
 
-		partitions := int32(1)
-		if topic.PartitionCount > 0 {
-			partitions = int32(topic.PartitionCount)
-		}
+		partitions, explicitlyOverridden := desiredKafkaTopicPartitionCount(kafkaSpec, topic)
 
-		if err := createTopicIdempotent(dialCtx, admin, topicName, partitions, replicationFactor); err != nil {
-			log.Error("failed to create kafka topic", logx.ErrAttr(err), "topic", topicName)
+		if err := reconcileKafkaTopic(dialCtx, admin, topicName, partitions, explicitlyOverridden, replicationFactor); err != nil {
+			log.Error("failed to reconcile kafka topic", logx.ErrAttr(err), "topic", topicName)
 			return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
 		}
-		log.Debug("ensured kafka topic", "topic", topicName, "partitions", partitions)
+		log.Debug("ensured kafka topic", "topic", topicName, "creationPartitions", partitions)
 	}
 
 	return ctrl.Result{}, nil
 }
 
-func createTopicIdempotent(ctx context.Context, admin *kadm.Client, topicName string, partitions int32, replicationFactor int16) error {
+type kafkaTopicAdmin interface {
+	CreateTopics(context.Context, int32, int16, map[string]*string, ...string) (kadm.CreateTopicResponses, error)
+	ListTopics(context.Context, ...string) (kadm.TopicDetails, error)
+}
+
+func desiredKafkaTopicPartitionCount(kafkaSpec *apiv2.ManagedKafkaSpec, topic manifest.KafkaTopic) (int32, bool) {
+	partitions := int32(1)
+	if topic.PartitionCount > 0 {
+		partitions = int32(topic.PartitionCount)
+	}
+
+	topicName := topic.Topic
+	if topicName == "" {
+		topicName = topic.Name
+	}
+	if override, ok := kafkaSpec.Config.TopicPartitionOverrides[topicName]; ok {
+		return int32(override), true
+	}
+	return partitions, false
+}
+
+func reconcileKafkaTopic(ctx context.Context, admin kafkaTopicAdmin, topicName string, partitions int32, explicitlyOverridden bool, replicationFactor int16) error {
 	resp, err := admin.CreateTopics(ctx, partitions, replicationFactor, nil, topicName)
 	if err != nil {
 		return err
 	}
-	for _, ct := range resp {
-		if ct.Err != nil && ct.Err != kerr.TopicAlreadyExists {
-			return fmt.Errorf("create topic %q: %w", ct.Topic, ct.Err)
-		}
+	ct, ok := resp[topicName]
+	if !ok {
+		return fmt.Errorf("create topic %q: response did not include topic", topicName)
 	}
-	return nil
+	if ct.Err == nil {
+		return nil
+	}
+	if !errors.Is(ct.Err, kerr.TopicAlreadyExists) {
+		return fmt.Errorf("create topic %q: %w", ct.Topic, ct.Err)
+	}
+	if !explicitlyOverridden {
+		// Manifest counts are creation defaults. Existing topics may have been
+		// created from an older manifest or deliberately sized by an operator,
+		// and this controller never resizes them.
+		return nil
+	}
+
+	details, err := admin.ListTopics(ctx, topicName)
+	if err != nil {
+		return fmt.Errorf("describe existing topic %q: %w", topicName, err)
+	}
+	detail, ok := details[topicName]
+	if !ok {
+		return fmt.Errorf("describe existing topic %q: response did not include topic", topicName)
+	}
+	if detail.Err != nil {
+		return fmt.Errorf("describe existing topic %q: %w", topicName, detail.Err)
+	}
+
+	existingPartitions := int32(len(detail.Partitions))
+	if existingPartitions == partitions {
+		return nil
+	}
+
+	return fmt.Errorf(
+		"topic %q already exists with %d partitions, but immutable creation-time override spec.kafka.managedKafka.config.topicPartitionOverrides[%q] requests %d; the operator never resizes existing topics; recreate the topic with %d partitions before installation, or create the WeightsAndBiases resource with an override matching %d",
+		topicName,
+		existingPartitions,
+		topicName,
+		partitions,
+		partitions,
+		existingPartitions,
+	)
 }
 
 // resolveKafkaBootstrap reads the managed Kafka connection secret to obtain the
