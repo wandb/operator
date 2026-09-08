@@ -274,6 +274,10 @@ var _ = Describe("WeightsAndBiases Networking", func() {
 
 		ingress.Status.LoadBalancer.Ingress = []networkingv1.IngressLoadBalancerIngress{{
 			IP: "34.118.10.1",
+			Ports: []networkingv1.IngressPortStatus{{
+				Port:     443,
+				Protocol: corev1.ProtocolTCP,
+			}},
 		}}
 		Expect(k8sClient.Status().Update(ctx, ingress)).To(Succeed())
 
@@ -285,6 +289,8 @@ var _ = Describe("WeightsAndBiases Networking", func() {
 		Expect(wandb.Status.IngressStatus.Name).To(Equal(wandbName))
 		Expect(wandb.Status.IngressStatus.LoadBalancerIngress).To(HaveLen(1))
 		Expect(wandb.Status.IngressStatus.LoadBalancerIngress[0].IP).To(Equal("34.118.10.1"))
+		Expect(wandb.Status.IngressStatus.LoadBalancerIngress[0].Ports).To(HaveLen(1))
+		Expect(wandb.Status.IngressStatus.LoadBalancerIngress[0].Ports[0].Error).To(BeNil())
 
 		ingress = &networkingv1.Ingress{}
 		Expect(k8sClient.Get(ctx, types.NamespacedName{

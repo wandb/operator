@@ -6,7 +6,6 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
-	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	apiErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -307,12 +306,12 @@ func summarizeIngressStatus(ingress *networkingv1.Ingress) *apiv2.IngressStatusS
 		Name: ingress.Name,
 	}
 	for _, lb := range ingress.Status.LoadBalancer.Ingress {
-		loadBalancerIngress := corev1.LoadBalancerIngress{
+		loadBalancerIngress := apiv2.IngressLoadBalancerStatus{
 			IP:       lb.IP,
 			Hostname: lb.Hostname,
 		}
 		for _, port := range lb.Ports {
-			loadBalancerIngress.Ports = append(loadBalancerIngress.Ports, corev1.PortStatus{
+			loadBalancerIngress.Ports = append(loadBalancerIngress.Ports, apiv2.IngressPortStatus{
 				Port:     port.Port,
 				Protocol: port.Protocol,
 				Error:    port.Error,

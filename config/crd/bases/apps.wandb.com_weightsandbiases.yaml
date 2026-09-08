@@ -5688,7 +5688,6 @@ spec:
                               protocol:
                                 type: string
                             required:
-                            - error
                             - port
                             - protocol
                             type: object
