@@ -189,25 +189,15 @@ func (b v1ServiceAccount) hasOverrides() bool {
 
 // v1 gave each sub-chart its own ServiceAccount; v2 has one, so exactly one
 // sub-chart has to win: api first, then app. A sub-chart qualifies when it is
-// enabled, its serviceAccount block overrides something, and the chart creates
-// that account — a create=false block points at an account this operator does
-// not own, so there is nothing to carry.
+// enabled and its serviceAccount block overrides something.
 func mapServiceAccount(values map[string]interface{}, dst *appsv2.WeightsAndBiases) error {
-	enabled := make(map[string]bool, len(v1ServiceAccountSubcharts))
-	anyEnabled := false
 	for _, subchart := range v1ServiceAccountSubcharts {
-		// Absent means enabled: only an explicit false takes a sub-chart out.
-		enabled[subchart] = boolFromValues(values, true, v1SubchartEnabledPath[subchart]...)
-		anyEnabled = anyEnabled || enabled[subchart]
-	}
-	if !anyEnabled {
-		return fmt.Errorf(
-			"spec.values: app.install and global.api.enabled are both false; " +
-				"at least one of the app or api sub-charts must be enabled")
-	}
-
-	for _, subchart := range v1ServiceAccountSubcharts {
-		if !enabled[subchart] {
+		// A disabled sub-chart has no pods, so its block describes an identity
+		// nothing uses. Absent means enabled: only an explicit false takes a
+		// sub-chart out. Both being disabled is not an error here — conversion runs
+		// on every read of a stored object, so rejecting valid values would make
+		// those objects unreadable and unfixable.
+		if !boolFromValues(values, true, v1SubchartEnabledPath[subchart]...) {
 			continue
 		}
 
@@ -215,17 +205,31 @@ func mapServiceAccount(values map[string]interface{}, dst *appsv2.WeightsAndBias
 		if err != nil {
 			return err
 		}
-		// A create=false block names an account the chart did not make, and an
-		// empty block says nothing at all; neither is an identity to carry.
-		if !block.hasOverrides() || (block.createSet && !block.create) {
+		// An empty block says nothing about the identity, so it does not consume
+		// the slot.
+		if !block.hasOverrides() {
 			continue
 		}
 
+		// create=false is carried, not dropped: it is the bring-your-own-account
+		// case, where the user pre-made the ServiceAccount their cloud IAM role is
+		// bound to. v2 models create and the name independently, so it round-trips.
+		create := true // wandb-base defaults serviceAccount.create to true
+		if block.createSet {
+			create = block.create
+		}
+
 		sa := &dst.Spec.Wandb.ServiceAccount
-		sa.Create = ptr.To(true)
+		sa.Create = ptr.To(create)
 		sa.ServiceAccountName = block.name
 		if sa.ServiceAccountName == "" {
-			sa.ServiceAccountName = derivedV1SAName(dst.Name, subchart)
+			if create {
+				sa.ServiceAccountName = derivedV1SAName(dst.Name, subchart)
+			} else {
+				// wandb-base uses the namespace's default account when told not to
+				// create one.
+				sa.ServiceAccountName = "default"
+			}
 		}
 		if len(block.annotations) > 0 {
 			sa.Annotations = block.annotations

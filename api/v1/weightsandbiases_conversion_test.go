@@ -462,9 +462,44 @@ func TestConvertTo_ServiceAccountDerivedNameCollapses(t *testing.T) {
 	require.Equal(t, "rapid-wandb", dst.Spec.Wandb.ServiceAccount.ServiceAccountName)
 }
 
-// TestConvertTo_ServiceAccountSkipsCreateFalse: create=false names an account the
-// chart never made, so there is no identity to carry and app gets its turn.
-func TestConvertTo_ServiceAccountSkipsCreateFalse(t *testing.T) {
+// TestConvertTo_ServiceAccountCarriesCreateFalse: bring-your-own-account. The
+// user pre-made the ServiceAccount their cloud IAM role is bound to, so v2 must
+// reuse it rather than let the defaulter stand up wandb-app.
+func TestConvertTo_ServiceAccountCarriesCreateFalse(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"api": map[string]interface{}{
+			"serviceAccount": map[string]interface{}{"create": false, "name": "byo-sa"},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+
+	sa := dst.Spec.Wandb.ServiceAccount
+	require.NotNil(t, sa.Create)
+	require.False(t, *sa.Create)
+	require.Equal(t, "byo-sa", sa.ServiceAccountName)
+}
+
+// TestConvertTo_ServiceAccountCreateFalseNoNameBecomesDefault: wandb-base used
+// the namespace's default account when told not to create one.
+func TestConvertTo_ServiceAccountCreateFalseNoNameBecomesDefault(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"app": map[string]interface{}{
+			"serviceAccount": map[string]interface{}{"create": false},
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+
+	sa := dst.Spec.Wandb.ServiceAccount
+	require.NotNil(t, sa.Create)
+	require.False(t, *sa.Create)
+	require.Equal(t, "default", sa.ServiceAccountName)
+}
+
+// TestConvertTo_ServiceAccountCreateFalseApiStillWins: api owns the identity
+// whether or not it creates the account, so app is not consulted.
+func TestConvertTo_ServiceAccountCreateFalseApiStillWins(t *testing.T) {
 	dst := &appsv2.WeightsAndBiases{}
 	src := newV1(map[string]interface{}{
 		"api": map[string]interface{}{
@@ -475,19 +510,8 @@ func TestConvertTo_ServiceAccountSkipsCreateFalse(t *testing.T) {
 		},
 	})
 	require.NoError(t, src.ConvertTo(dst))
-	require.Equal(t, "app-sa", dst.Spec.Wandb.ServiceAccount.ServiceAccountName)
-}
-
-func TestConvertTo_ServiceAccountCreateFalseEverywhereLeavesDefaults(t *testing.T) {
-	dst := &appsv2.WeightsAndBiases{}
-	src := newV1(map[string]interface{}{
-		"api": map[string]interface{}{
-			"serviceAccount": map[string]interface{}{"create": false, "name": "byo-sa"},
-		},
-	})
-	require.NoError(t, src.ConvertTo(dst))
-	require.Empty(t, dst.Spec.Wandb.ServiceAccount.ServiceAccountName)
-	require.Nil(t, dst.Spec.Wandb.ServiceAccount.Create)
+	require.Equal(t, "byo-sa", dst.Spec.Wandb.ServiceAccount.ServiceAccountName)
+	require.False(t, *dst.Spec.Wandb.ServiceAccount.Create)
 }
 
 // TestConvertTo_ServiceAccountSkipsDisabledSubchart: a disabled sub-chart has no
@@ -509,19 +533,24 @@ func TestConvertTo_ServiceAccountSkipsDisabledSubchart(t *testing.T) {
 	require.Equal(t, "app-sa", dst.Spec.Wandb.ServiceAccount.ServiceAccountName)
 }
 
-// TestConvertTo_ServiceAccountBothSubchartsDisabledFails: nothing would serve the
-// W&B application, so the values are not convertible.
-func TestConvertTo_ServiceAccountBothSubchartsDisabledFails(t *testing.T) {
+// TestConvertTo_ServiceAccountBothSubchartsDisabledStillConverts: conversion runs
+// on every read of a stored v1 object, so rejecting a config we merely dislike
+// would leave those objects unreadable and unfixable.
+func TestConvertTo_ServiceAccountBothSubchartsDisabledStillConverts(t *testing.T) {
 	dst := &appsv2.WeightsAndBiases{}
 	src := newV1(map[string]interface{}{
 		"global": map[string]interface{}{
 			"api": map[string]interface{}{"enabled": false},
 		},
-		"app": map[string]interface{}{"install": false},
+		"app": map[string]interface{}{
+			"install":        false,
+			"serviceAccount": map[string]interface{}{"create": true, "name": "dead-sa"},
+		},
 	})
-	err := src.ConvertTo(dst)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "app.install and global.api.enabled are both false")
+	require.NoError(t, src.ConvertTo(dst))
+	require.Empty(t, dst.Spec.Wandb.ServiceAccount.ServiceAccountName,
+		"a disabled sub-chart's account must not be carried")
+	require.Nil(t, dst.Spec.Wandb.ServiceAccount.Create)
 }
 
 func TestConvertTo_ServiceAccountAnnotationsAbsent(t *testing.T) {
