@@ -57,13 +57,13 @@ const resFinalizer = "finalizer.app.wandb.com"
 // WeightsAndBiasesReconciler reconciles a WeightsAndBiases object
 type WeightsAndBiasesReconciler struct {
 	client.Client
-	IsAirgapped               bool
-	DeployerClient            deployer.DeployerInterface
-	Scheme                    *runtime.Scheme
-	Recorder                  record.EventRecorder
-	DryRun                    bool
-	Debug                     bool
-	ManagedSpecCutoverEnabled bool
+	IsAirgapped        bool
+	DeployerClient     deployer.DeployerInterface
+	Scheme             *runtime.Scheme
+	Recorder           record.EventRecorder
+	DryRun             bool
+	Debug              bool
+	ManagedSpecEnabled bool
 }
 
 //+kubebuilder:rbac:groups=apps.wandb.com,resources=weightsandbiases,verbs=get;list;watch;create;update;patch;delete
@@ -191,15 +191,13 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	baseSpec := currentActiveSpec
-	shouldCompleteManagedSpecCutover := false
 	if wandb.ObjectMeta.DeletionTimestamp.IsZero() {
 		selection, err := r.selectBaseSpec(ctx, wandb.Namespace, getDeployerSpec)
 		if err != nil {
 			log.Error(err, "Failed to select Deployer or managed spec")
 			return ctrlqueue.RequeueWithError(err)
 		}
-		baseSpec = selection.selectedSpec
-		shouldCompleteManagedSpecCutover = selection.shouldCompleteCutover
+		baseSpec = selection
 	}
 
 	desiredSpec := new(spec.Spec)
@@ -250,10 +248,6 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			log.Info("Active spec found", "spec", currentActiveSpec.SensitiveValuesMasked())
 			if currentActiveSpec.IsEqual(desiredSpec) {
 				log.Info("No changes found")
-				if err := r.completeManagedSpecCutoverIfNeeded(ctx, wandb.Namespace, shouldCompleteManagedSpecCutover); err != nil {
-					log.Error(err, "Failed to persist managed spec cutover")
-					return ctrlqueue.RequeueWithError(err)
-				}
 				statusManager.Set(status.Completed)
 				return ctrlqueue.Requeue(desiredSpec)
 			} else {
@@ -302,10 +296,6 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 		if r.Debug {
 			log.Info("Successfully saved active spec", "spec", desiredSpec.SensitiveValuesMasked())
-		}
-		if err := r.completeManagedSpecCutoverIfNeeded(ctx, wandb.Namespace, shouldCompleteManagedSpecCutover); err != nil {
-			log.Error(err, "Failed to persist managed spec cutover")
-			return ctrlqueue.RequeueWithError(err)
 		}
 
 		r.Recorder.Event(wandb, corev1.EventTypeNormal, "Completed", "Completed reconcile successfully")
@@ -402,7 +392,7 @@ func (r *WeightsAndBiasesReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&apiv1.WeightsAndBiases{}, builder.WithPredicates(filterWBEvents{})).
 		Owns(&corev1.Secret{}, builder.WithPredicates(filterSecretEvents{})).
 		Owns(&corev1.ConfigMap{})
-	if r.ManagedSpecCutoverEnabled {
+	if r.ManagedSpecEnabled {
 		controllerBuilder = controllerBuilder.Watches(
 			&corev1.ConfigMap{},
 			handler.EnqueueRequestsFromMapFunc(r.managedSpecConfigMapRequests),
@@ -413,7 +403,7 @@ func (r *WeightsAndBiasesReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func isManagedSpecConfigMap(object client.Object) bool {
-	return object.GetName() == managedSpecConfigMapName || object.GetName() == managedSpecStateConfigMapName
+	return object.GetName() == managedSpecConfigMapName
 }
 
 func (r *WeightsAndBiasesReconciler) managedSpecConfigMapRequests(

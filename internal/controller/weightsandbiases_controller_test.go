@@ -323,8 +323,8 @@ var _ = Describe("WeightsandbiasesController", func() {
 	//		})
 	//	})
 	//})
-	Describe("Managed spec cutover", Label("managed spec cutover"), func() {
-		const name = "test-managed-cutover"
+	Describe("Managed spec fallback", Label("managed spec fallback"), func() {
+		const name = "test-managed-fallback"
 		var deployerClient *deployerfakes.FakeDeployerInterface
 
 		BeforeEach(func() {
@@ -338,17 +338,17 @@ var _ = Describe("WeightsandbiasesController", func() {
 			deployerValues["global"] = map[string]interface{}{
 				"extraEnv": map[string]interface{}{"TAG_CLOUD": "GCP"},
 			}
-			deployerSpecForCutover := deployerSpec
-			deployerSpecForCutover.Values = deployerValues
-			deployerClient.GetSpecReturns(&deployerSpecForCutover, nil)
+			deployerBaseSpec := deployerSpec
+			deployerBaseSpec.Values = deployerValues
+			deployerClient.GetSpecReturns(&deployerBaseSpec, nil)
 			reconciler = &WeightsAndBiasesReconciler{
-				Client:                    k8sClient,
-				IsAirgapped:               false,
-				DeployerClient:            deployerClient,
-				Scheme:                    scheme.Scheme,
-				Recorder:                  recorder,
-				DryRun:                    true,
-				ManagedSpecCutoverEnabled: true,
+				Client:             k8sClient,
+				IsAirgapped:        false,
+				DeployerClient:     deployerClient,
+				Scheme:             scheme.Scheme,
+				Recorder:           recorder,
+				DryRun:             true,
+				ManagedSpecEnabled: true,
 			}
 
 			wandb := &wandbcomv1.WeightsAndBiases{
@@ -360,7 +360,7 @@ var _ = Describe("WeightsandbiasesController", func() {
 			}
 			Expect(k8sClient.Create(ctx, wandb)).To(Succeed())
 
-			chartJSON, err := json.Marshal(deployerSpecForCutover.Chart)
+			chartJSON, err := json.Marshal(deployerBaseSpec.Chart)
 			Expect(err).NotTo(HaveOccurred())
 			managedValuesJSON, err := json.Marshal(deployerValues)
 			Expect(err).NotTo(HaveOccurred())
@@ -393,7 +393,6 @@ var _ = Describe("WeightsandbiasesController", func() {
 
 			objects := []client.Object{
 				&v1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: managedSpecConfigMapName, Namespace: "default"}},
-				&v1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: managedSpecStateConfigMapName, Namespace: "default"}},
 				&v1.Secret{ObjectMeta: metav1.ObjectMeta{Name: name + "-spec-user", Namespace: "default"}},
 				&v1.Secret{ObjectMeta: metav1.ObjectMeta{Name: name + "-spec-active", Namespace: "default"}},
 				&v1.Secret{ObjectMeta: metav1.ObjectMeta{Name: name + "-latest-cached-release", Namespace: "default"}},
@@ -403,22 +402,27 @@ var _ = Describe("WeightsandbiasesController", func() {
 			}
 		})
 
-		It("persists cutover and does not call Deployer again", func() {
+		It("keeps fetching and caching Deployer while managed spec is selected", func() {
 			ctx := context.Background()
 			request := ctrl.Request{NamespacedName: types.NamespacedName{Name: name, Namespace: "default"}}
+			for i := 1; i <= 2; i++ {
+				_, err := reconciler.Reconcile(ctx, request)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(deployerClient.GetSpecCallCount()).To(Equal(i))
+			}
+			cached := &v1.Secret{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name + "-latest-cached-release", Namespace: "default"}, cached)).To(Succeed())
+			var cachedValues spec.Values
+			Expect(json.Unmarshal(cached.Data["values"], &cachedValues)).To(Succeed())
+			Expect(cachedValues["global"].(map[string]interface{})).NotTo(HaveKey("cloudProvider"))
 
-			_, err := reconciler.Reconcile(ctx, request)
-			Expect(err).NotTo(HaveOccurred())
-
-			state := &v1.ConfigMap{}
-			stateKey := types.NamespacedName{Name: managedSpecStateConfigMapName, Namespace: "default"}
-			Expect(k8sClient.Get(ctx, stateKey, state)).To(Succeed())
-			Expect(state.Data).To(HaveKeyWithValue(managedSpecStateKey, "true"))
-			Expect(deployerClient.GetSpecCallCount()).To(Equal(1))
-
-			_, err = reconciler.Reconcile(ctx, request)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(deployerClient.GetSpecCallCount()).To(Equal(1))
+			active := &v1.Secret{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name + "-spec-active", Namespace: "default"}, active)).To(Succeed())
+			var activeValues spec.Values
+			Expect(json.Unmarshal(active.Data["values"], &activeValues)).To(Succeed())
+			Expect(activeValues["global"].(map[string]interface{})).To(HaveKeyWithValue("cloudProvider", "gcp"))
+			oldState := &v1.ConfigMap{}
+			Expect(apierrors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{Name: "wandb-managed-spec-state", Namespace: "default"}, oldState))).To(BeTrue())
 		})
 
 		It("does not let a missing managed spec block deletion", func() {

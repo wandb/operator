@@ -6,6 +6,24 @@
 
 // TODO(user): An in-depth paragraph about your project and overview of use
 
+## Managed spec
+
+Set `MANAGED_SPEC_ENABLED=true` on the operator to prefer the
+`wandb-spec-managed` ConfigMap in the instance namespace. It must contain
+`chart` and `values` keys with JSON objects describing the chart and Helm values.
+The flag defaults to false and can also be set with `--managed-spec-enabled`.
+
+The operator continues fetching and caching the Deployer spec on each normal
+reconcile (except in airgapped mode). When the flag is enabled, it uses a valid
+managed spec directly, without comparing it to Deployer. If the ConfigMap is
+missing, it uses Deployer; if it cannot be read or decoded, it logs an error and
+uses Deployer. Existing Deployer cache fallback still applies during an outage.
+Chart rendering or apply failures follow the normal reconciliation error path.
+
+Selection is reevaluated on each reconcile. No cutover state is written or read;
+old `wandb-managed-spec-state` ConfigMaps can remain and are ignored. Setting
+the flag to false returns the operator to Deployer after restart.
+
 ## Development
 
 ### Prerequisites
