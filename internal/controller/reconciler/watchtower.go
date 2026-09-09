@@ -456,10 +456,22 @@ func reconcileWatchtowerRBAC(ctx context.Context, c ctrlClient.Client, wandb *ap
 		role.Labels = utils.MergeMapsStringString(role.Labels, labels)
 		// Secrets and ConfigMaps stay namespace-scoped: Watchtower reads the
 		// install's license and connection material, not the whole cluster's.
+		//
+		// Secrets are writable because Watchtower owns the credential-entry side
+		// of the console: OIDC client secrets, external datastore connections and
+		// notification credentials are all Secrets the admin creates there, and
+		// the CR only ever stores references to them. Write access is confined to
+		// this namespace by the Role, and the operator holds the same verbs, so
+		// this grants nothing the operator could not already do here.
 		role.Rules = []rbacv1.PolicyRule{
 			{
 				APIGroups: []string{""},
-				Resources: []string{"secrets", "configmaps"},
+				Resources: []string{"secrets"},
+				Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"configmaps"},
 				Verbs:     []string{"get", "list", "watch"},
 			},
 			{

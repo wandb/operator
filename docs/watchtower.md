@@ -154,7 +154,7 @@ anyone holding a W&B session, so turning it on is an explicit decision.
 | `Application` | `wandb-watchtower` | `Kind: Deployment`, `replicas: 1`, labelled `weightsandbiases.apps.wandb.com/component=watchtower` so manifest-driven pruning skips it |
 | `Service` | `wandb-watchtower` | ClusterIP `8080`, derived from the Application by the application controller |
 | `ServiceAccount` | `wandb-watchtower` | Token automounted — unlike the W&B app pods, Watchtower calls the Kubernetes API |
-| `Role` / `RoleBinding` | `wandb-watchtower` | Namespaced reads: secrets, configmaps, jobs, ingresses |
+| `Role` / `RoleBinding` | `wandb-watchtower` | Namespaced: full CRUD on secrets (Watchtower's secret manager creates the Secrets that CR fields reference — OIDC, external connections, notification credentials); reads on configmaps, jobs, ingresses |
 | `ClusterRole` / `ClusterRoleBinding` | `<namespace>-<cr-name>-watchtower` | Cluster-wide reads plus `weightsandbiases` `update/patch` |
 | Ingress path | `/watchtower` on the consolidated Ingress | Added in `reconcileConsolidatedIngress` |
 | `HTTPRoute` | via `Application.spec.httpRouteTemplate` | Gateway API mode only, same hostnames as the app |
