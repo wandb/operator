@@ -304,6 +304,31 @@ func TestWatchtowerEnvReferencesThePasswordSecret(t *testing.T) {
 
 // --- auth service derivation -------------------------------------------------
 
+// The DB-admin capability writes directly to the W&B application database, so
+// "absent unless explicitly asked for" is the security property worth pinning:
+// an unset operator env must leave no trace on the Watchtower pod.
+func TestWatchtowerEnvOmitsDBAdminUnlessOperatorOptsIn(t *testing.T) {
+	wandb := watchtowerTestCR("wandb", "wandb")
+
+	t.Setenv(dbAdminEnvVar, "")
+	for _, e := range watchtowerEnv(wandb, "api:8080", "/console") {
+		if e.Name == dbAdminEnvVar {
+			t.Fatalf("%s leaked into the pod env with the operator env unset", dbAdminEnvVar)
+		}
+	}
+
+	t.Setenv(dbAdminEnvVar, "true")
+	var got string
+	for _, e := range watchtowerEnv(wandb, "api:8080", "/console") {
+		if e.Name == dbAdminEnvVar {
+			got = e.Value
+		}
+	}
+	if got != "true" {
+		t.Errorf("%s = %q, want \"true\" when the operator opts in", dbAdminEnvVar, got)
+	}
+}
+
 func TestWatchtowerAuthServiceDerivesFromTheOIDCApplication(t *testing.T) {
 	wandb := watchtowerTestCR("wandb", "wandb")
 

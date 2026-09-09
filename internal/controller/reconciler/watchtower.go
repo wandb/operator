@@ -40,6 +40,14 @@ const (
 	// serves gorilla's /oidc/auth sub-request, used to derive AUTH_SERVICE.
 	watchtowerOIDCIngressPath = "/oidc"
 	operatorImageEnvVar       = "OPERATOR_IMAGE"
+
+	// dbAdminEnvVar opts Watchtower into the user-administration actions that
+	// write directly to the W&B application database (email-domain migration).
+	// It is forwarded from the operator's own environment rather than the CR:
+	// this is a deployment-level policy decision, like the RBAC below, not
+	// per-instance configuration. Unset means the feature stays off, and
+	// Watchtower hides the control rather than failing at click time.
+	dbAdminEnvVar = "WATCHTOWER_ENABLE_DB_ADMIN"
 )
 
 // reconcileWatchtower brings the operator-managed Watchtower deployment in line
@@ -224,7 +232,7 @@ func buildWatchtowerApplication(wandb *apiv2.WeightsAndBiases, authService strin
 // container: it is told where it is mounted and which service validates the
 // caller's session, so neither has to be baked into the image.
 func watchtowerEnv(wandb *apiv2.WeightsAndBiases, authService, basePath string) []corev1.EnvVar {
-	return []corev1.EnvVar{
+	env := []corev1.EnvVar{
 		// Locks the UI to the cluster it runs in: no context switching, no teardown.
 		{Name: "WATCHTOWER_MODE", Value: "cluster"},
 		{Name: "WATCHTOWER_BASE_PATH", Value: basePath},
@@ -240,6 +248,13 @@ func watchtowerEnv(wandb *apiv2.WeightsAndBiases, authService, basePath string) 
 			},
 		}},
 	}
+
+	// Forwarded only when set, so the default deployment carries no trace of it
+	// and the capability cannot be switched on by accident.
+	if v := os.Getenv(dbAdminEnvVar); v != "" {
+		env = append(env, corev1.EnvVar{Name: dbAdminEnvVar, Value: v})
+	}
+	return env
 }
 
 // watchtowerAuthService resolves the in-cluster host:port Watchtower calls to
