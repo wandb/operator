@@ -41,6 +41,18 @@ const (
 	watchtowerOIDCIngressPath = "/oidc"
 	operatorImageEnvVar       = "OPERATOR_IMAGE"
 
+	// secretWritesEnvVar opts Watchtower's namespaced Role into writing Secrets.
+	//
+	// Off by default, and deliberately a separate switch from dbAdminEnvVar: this
+	// grant is broad — create/update/delete on EVERY Secret in the install
+	// namespace, which is where the database, object-store, OIDC, license and
+	// operator-managed credentials all live. A compromised Watchtower with it
+	// could replace any of them. Without it Watchtower can still *reference*
+	// existing Secrets (the CR only ever stores refs), so the OIDC, external
+	// connection and notification flows keep working against Secrets an admin
+	// created out of band; only Watchtower's own secret-manager needs the write.
+	secretWritesEnvVar = "WATCHTOWER_ENABLE_SECRET_WRITES"
+
 	// dbAdminEnvVar opts Watchtower into the user-administration actions that
 	// write directly to the W&B application database (email-domain migration).
 	// It is forwarded from the operator's own environment rather than the CR:
@@ -472,17 +484,17 @@ func reconcileWatchtowerRBAC(ctx context.Context, c ctrlClient.Client, wandb *ap
 		// Secrets and ConfigMaps stay namespace-scoped: Watchtower reads the
 		// install's license and connection material, not the whole cluster's.
 		//
-		// Secrets are writable because Watchtower owns the credential-entry side
-		// of the console: OIDC client secrets, external datastore connections and
-		// notification credentials are all Secrets the admin creates there, and
-		// the CR only ever stores references to them. Write access is confined to
-		// this namespace by the Role, and the operator holds the same verbs, so
-		// this grants nothing the operator could not already do here.
+		// Reading Secrets is required for normal operation (license, connection
+		// material). Writing them is opt-in — see secretWritesEnvVar for why.
+		secretVerbs := []string{"get", "list", "watch"}
+		if os.Getenv(secretWritesEnvVar) != "" {
+			secretVerbs = append(secretVerbs, "create", "update", "patch", "delete")
+		}
 		role.Rules = []rbacv1.PolicyRule{
 			{
 				APIGroups: []string{""},
 				Resources: []string{"secrets"},
-				Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+				Verbs:     secretVerbs,
 			},
 			{
 				APIGroups: []string{""},

@@ -183,44 +183,52 @@ func TestReconcileWatchtowerSecretGeneratesAPassword(t *testing.T) {
 	require.Equal(t, corev1.SecretTypeOpaque, secret.Type)
 }
 
-// Watchtower's Role is a security boundary, so both halves of it are asserted:
-// secrets are writable because Watchtower's secret manager is what creates the
-// Secrets that CR fields reference, and everything else stays read-only. A test
-// here means widening this grant has to be a deliberate edit rather than a
-// side-effect of some other change.
-func TestReconcileWatchtowerRBACGrantsSecretWritesAndNothingElse(t *testing.T) {
-	wandb := watchtowerTestCR("wandb", "wandb")
-	c := watchtowerTestClient(t, wandb)
+// Watchtower's Role is a security boundary. Secret WRITES are the broad grant —
+// create/update/delete on every Secret in the install namespace, which holds the
+// database, object-store, OIDC, license and operator-managed credentials — so the
+// property worth pinning is that they are absent unless explicitly enabled.
+func TestReconcileWatchtowerRBACSecretWritesAreOptIn(t *testing.T) {
+	read := []string{"get", "list", "watch"}
+	write := append(append([]string{}, read...), "create", "update", "patch", "delete")
 
-	require.NoError(t, reconcileWatchtowerRBAC(context.Background(), c, wandb))
+	for _, tc := range []struct {
+		name string
+		env  string
+		want []string
+	}{
+		{"default install stays read-only", "", read},
+		{"opted in", "true", write},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv(secretWritesEnvVar, tc.env)
+			wandb := watchtowerTestCR("wandb", "wandb")
+			c := watchtowerTestClient(t, wandb)
+			require.NoError(t, reconcileWatchtowerRBAC(context.Background(), c, wandb))
 
-	role := &rbacv1.Role{}
-	require.NoError(t, c.Get(context.Background(), types.NamespacedName{
-		Name: watchtowerName(wandb), Namespace: wandb.Namespace,
-	}, role))
+			role := &rbacv1.Role{}
+			require.NoError(t, c.Get(context.Background(), types.NamespacedName{
+				Name: watchtowerName(wandb), Namespace: wandb.Namespace,
+			}, role))
 
-	verbsFor := func(resource string) []string {
-		for _, rule := range role.Rules {
-			for _, r := range rule.Resources {
-				if r == resource {
-					return rule.Verbs
+			verbsFor := func(resource string) []string {
+				for _, rule := range role.Rules {
+					for _, r := range rule.Resources {
+						if r == resource {
+							return rule.Verbs
+						}
+					}
 				}
+				return nil
 			}
-		}
-		return nil
-	}
 
-	require.ElementsMatch(t,
-		[]string{"get", "list", "watch", "create", "update", "patch", "delete"},
-		verbsFor("secrets"),
-		"secrets must be writable: Watchtower creates the Secrets that CR fields reference",
-	)
+			require.ElementsMatch(t, tc.want, verbsFor("secrets"))
 
-	// Nothing else in this namespace is writable. configmaps in particular sat in
-	// the same rule as secrets before the split, so it is the regression to catch.
-	for _, readOnly := range []string{"configmaps", "jobs", "cronjobs", "ingresses"} {
-		require.ElementsMatch(t, []string{"get", "list", "watch"}, verbsFor(readOnly),
-			"%s must stay read-only", readOnly)
+			// Nothing else is ever writable, opted in or not. configmaps shared a
+			// rule with secrets before the split, so it is the regression to catch.
+			for _, readOnly := range []string{"configmaps", "jobs", "cronjobs", "ingresses"} {
+				require.ElementsMatch(t, read, verbsFor(readOnly), "%s must stay read-only", readOnly)
+			}
+		})
 	}
 }
 
