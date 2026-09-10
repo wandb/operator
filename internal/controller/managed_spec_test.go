@@ -1,10 +1,11 @@
 package controller
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
-	"reflect"
+	"strings"
 	"testing"
 
 	appsv1 "github.com/wandb/operator/api/v1"
@@ -16,254 +17,102 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
-func TestManagedSpecSelection(t *testing.T) {
-	ctx := context.Background()
-	namespace := "default"
-	deployerSpec := testManagedSpec(map[string]interface{}{
-		"global": map[string]interface{}{
-			"enabled":  true,
-			"extraEnv": map[string]interface{}{"TAG_CLOUD": "GCP"},
-		},
-	})
-
-	t.Run("uses Deployer when managed spec is disabled even after cutover", func(t *testing.T) {
-		reconciler := testManagedSpecReconciler(
-			t,
-			testManagedSpecConfigMap(namespace, deployerSpec.Values),
-			&corev1.ConfigMap{
-				ObjectMeta: metav1.ObjectMeta{Name: managedSpecStateConfigMapName, Namespace: namespace},
-				Data:       map[string]string{managedSpecStateKey: "true"},
-			},
-		)
-		reconciler.ManagedSpecCutoverEnabled = false
-		calls := 0
-
-		selection, err := reconciler.selectBaseSpec(ctx, namespace, func() (*spec.Spec, error) {
-			calls++
-			return deployerSpec, nil
-		})
-
-		if err != nil {
-			t.Fatalf("selectBaseSpec returned an error: %v", err)
-		}
-		if selection.selectedSpec != deployerSpec {
-			t.Fatal("selectBaseSpec did not return the Deployer spec while managed spec was disabled")
-		}
-		if selection.shouldCompleteCutover {
-			t.Fatal("cutover must not be pending while managed spec is disabled")
-		}
-		if calls != 1 {
-			t.Fatalf("Deployer was called %d times, want 1", calls)
-		}
-	})
-
-	t.Run("uses Deployer when the managed spec does not exist", func(t *testing.T) {
-		reconciler := testManagedSpecReconciler(t)
-		calls := 0
-
-		selection, err := reconciler.selectBaseSpec(ctx, namespace, func() (*spec.Spec, error) {
-			calls++
-			return deployerSpec, nil
-		})
-
-		if err != nil {
-			t.Fatalf("selectBaseSpec returned an error: %v", err)
-		}
-		if selection.selectedSpec != deployerSpec {
-			t.Fatal("selectBaseSpec did not return the Deployer spec")
-		}
-		if selection.shouldCompleteCutover {
-			t.Fatal("cutover must not be pending without a managed spec")
-		}
-		if calls != 1 {
-			t.Fatalf("Deployer was called %d times, want 1", calls)
-		}
-	})
-
-	t.Run("uses Deployer when the managed spec differs", func(t *testing.T) {
-		reconciler := testManagedSpecReconciler(t, testManagedSpecConfigMap(namespace, map[string]interface{}{
-			"global": map[string]interface{}{"enabled": false},
-		}))
-
-		selection, err := reconciler.selectBaseSpec(ctx, namespace, func() (*spec.Spec, error) {
-			return deployerSpec, nil
-		})
-
-		if err != nil {
-			t.Fatalf("selectBaseSpec returned an error: %v", err)
-		}
-		if selection.selectedSpec != deployerSpec {
-			t.Fatal("selectBaseSpec did not return the Deployer spec")
-		}
-		if selection.shouldCompleteCutover {
-			t.Fatal("cutover must not be pending for a mismatched managed spec")
-		}
-	})
-
-	t.Run("selects matching managed-owned configuration and requests cutover", func(t *testing.T) {
-		reconciler := testManagedSpecReconciler(t, testManagedSpecConfigMap(namespace, deployerSpec.Values))
-
-		selection, err := reconciler.selectBaseSpec(ctx, namespace, func() (*spec.Spec, error) {
-			withMetadata := *testManagedSpec(map[string]interface{}{
-				"global": map[string]interface{}{
-					"enabled": true,
-					"image":   map[string]interface{}{"tag": "deployer-only"},
-					"extraEnv": map[string]interface{}{
-						"TAG_CLOUD": "GCP",
-					},
-				},
-				"legacy": map[string]interface{}{"enabled": true},
-			})
-			metadata := spec.Metadata{"releaseId": "release-1"}
-			withMetadata.Metadata = &metadata
-			withMetadata.Chart.(*charts.RepoRelease).Debug = true
-			return &withMetadata, nil
-		})
-
-		if err != nil {
-			t.Fatalf("selectBaseSpec returned an error: %v", err)
-		}
-		if !selection.shouldCompleteCutover {
-			t.Fatal("matching managed configuration must request cutover")
-		}
-		if selection.selectedSpec == nil || selection.selectedSpec.Metadata != nil {
-			t.Fatal("selectBaseSpec did not return the managed ConfigMap spec")
-		}
-		if !reflect.DeepEqual(selection.selectedSpec.Values, spec.Values(testManagedValues(true))) {
-			t.Fatal("selectBaseSpec did not preserve the managed-owned values")
-		}
-	})
-
-	t.Run("uses managed configuration without calling Deployer after cutover", func(t *testing.T) {
-		reconciler := testManagedSpecReconciler(
-			t,
-			testManagedSpecConfigMap(namespace, deployerSpec.Values),
-			&corev1.ConfigMap{
-				ObjectMeta: metav1.ObjectMeta{Name: managedSpecStateConfigMapName, Namespace: namespace},
-				Data:       map[string]string{managedSpecStateKey: "true"},
-			},
-		)
-		calls := 0
-
-		selection, err := reconciler.selectBaseSpec(ctx, namespace, func() (*spec.Spec, error) {
-			calls++
-			return nil, errors.New("Deployer must not be called")
-		})
-
-		if err != nil {
-			t.Fatalf("selectBaseSpec returned an error: %v", err)
-		}
-		if selection.shouldCompleteCutover {
-			t.Fatal("cutover cannot be pending after it is active")
-		}
-		if selection.selectedSpec == nil || !selection.selectedSpec.IsEqual(testManagedSpec(testManagedValues(true))) {
-			t.Fatal("selectBaseSpec did not return the managed spec")
-		}
-		if calls != 0 {
-			t.Fatalf("Deployer was called %d times after cutover, want 0", calls)
-		}
-	})
-
-	t.Run("fails closed when managed configuration is missing after cutover", func(t *testing.T) {
-		reconciler := testManagedSpecReconciler(t, &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{Name: managedSpecStateConfigMapName, Namespace: namespace},
-			Data:       map[string]string{managedSpecStateKey: "true"},
-		})
-		calls := 0
-
-		selection, err := reconciler.selectBaseSpec(ctx, namespace, func() (*spec.Spec, error) {
-			calls++
-			return deployerSpec, nil
-		})
-
-		if err == nil {
-			t.Fatal("selectBaseSpec succeeded without the managed spec after cutover")
-		}
-		if selection.selectedSpec != nil || selection.shouldCompleteCutover {
-			t.Fatal("selectBaseSpec returned a spec while failing closed")
-		}
-		if calls != 0 {
-			t.Fatalf("Deployer was called %d times after cutover, want 0", calls)
-		}
-	})
-
-	for _, value := range []string{"false", "1"} {
-		t.Run("rejects managed state "+value+" without calling Deployer", func(t *testing.T) {
-			reconciler := testManagedSpecReconciler(t, &corev1.ConfigMap{
-				ObjectMeta: metav1.ObjectMeta{Name: managedSpecStateConfigMapName, Namespace: namespace},
-				Data:       map[string]string{managedSpecStateKey: value},
-			})
-			calls := 0
-
-			_, err := reconciler.selectBaseSpec(ctx, namespace, func() (*spec.Spec, error) {
-				calls++
-				return deployerSpec, nil
-			})
-
-			if err == nil {
-				t.Fatalf("selectBaseSpec accepted managed state %q", value)
-			}
-			if calls != 0 {
-				t.Fatalf("Deployer was called %d times with invalid managed state, want 0", calls)
-			}
-		})
-	}
-}
-
-func TestMarkManagedSpecCutoverComplete(t *testing.T) {
-	ctx := context.Background()
-	namespace := "default"
-	reconciler := testManagedSpecReconciler(t)
-
-	if err := reconciler.markManagedSpecCutoverComplete(ctx, namespace); err != nil {
-		t.Fatalf("markManagedSpecCutoverComplete returned an error: %v", err)
-	}
-
-	state := &corev1.ConfigMap{}
-	key := client.ObjectKey{Name: managedSpecStateConfigMapName, Namespace: namespace}
-	if err := reconciler.Get(ctx, key, state); err != nil {
-		t.Fatalf("could not read managed spec state: %v", err)
-	}
-	if state.Data[managedSpecStateKey] != "true" {
-		t.Fatalf("managed state is %q, want true", state.Data[managedSpecStateKey])
-	}
-}
-
-func TestManagedJSONSubsetEqual(t *testing.T) {
-	tests := []struct {
-		name     string
-		managed  interface{}
-		deployer interface{}
-		matches  bool
+func TestSelectBaseSpec(t *testing.T) {
+	const namespace = "default"
+	for _, tc := range []struct {
+		name         string
+		enabled      bool
+		missing      bool
+		mutate       func(map[string]string)
+		wantManaged  bool
+		wantErrorLog bool
 	}{
-		{
-			name:     "ignores Deployer-only object keys",
-			managed:  map[string]interface{}{"api": map[string]interface{}{"enabled": true}},
-			deployer: map[string]interface{}{"api": map[string]interface{}{"enabled": true, "tag": "latest"}},
-			matches:  true,
-		},
-		{
-			name:     "rejects a different managed-owned value",
-			managed:  map[string]interface{}{"api": map[string]interface{}{"enabled": true}},
-			deployer: map[string]interface{}{"api": map[string]interface{}{"enabled": false}},
-			matches:  false,
-		},
-		{
-			name:     "requires arrays to have the same length",
-			managed:  []interface{}{map[string]interface{}{"name": "first"}},
-			deployer: []interface{}{map[string]interface{}{"name": "first"}, map[string]interface{}{"name": "second"}},
-			matches:  false,
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			if got := managedJSONSubsetEqual(test.managed, test.deployer); got != test.matches {
-				t.Fatalf("managedJSONSubsetEqual() = %t, want %t", got, test.matches)
+		{name: "disabled with valid managed spec"},
+		{name: "enabled with different managed values", enabled: true, wantManaged: true},
+		{name: "missing managed spec", enabled: true, missing: true},
+		{name: "missing values", enabled: true, mutate: func(d map[string]string) { delete(d, "values") }, wantErrorLog: true},
+		{name: "invalid values JSON", enabled: true, mutate: func(d map[string]string) { d["values"] = "{" }, wantErrorLog: true},
+		{name: "null values", enabled: true, mutate: func(d map[string]string) { d["values"] = "null" }, wantErrorLog: true},
+		{name: "non-object values", enabled: true, mutate: func(d map[string]string) { d["values"] = "[]" }, wantErrorLog: true},
+		{name: "missing chart", enabled: true, mutate: func(d map[string]string) { delete(d, "chart") }, wantErrorLog: true},
+		{name: "invalid chart JSON", enabled: true, mutate: func(d map[string]string) { d["chart"] = "{" }, wantErrorLog: true},
+		{name: "unsupported chart", enabled: true, mutate: func(d map[string]string) { d["chart"] = "{}" }, wantErrorLog: true},
+		{name: "disabled ignores invalid managed spec", mutate: func(d map[string]string) { d["values"] = "{" }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cm := testManagedSpecConfigMap(namespace, testManagedValues(true))
+			if tc.mutate != nil {
+				tc.mutate(cm.Data)
+			}
+			objects := []client.Object{
+				// Old cutover state must have no effect on selection.
+				&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "wandb-managed-spec-state", Namespace: namespace}, Data: map[string]string{"managed": "true"}},
+			}
+			if !tc.missing {
+				objects = append(objects, cm)
+			}
+			r := testManagedSpecReconciler(t, objects...)
+			r.ManagedSpecEnabled = tc.enabled
+			deployerSpec := testManagedSpec(testManagedValues(false))
+			var logs bytes.Buffer
+			ctx := ctrllog.IntoContext(context.Background(), zap.New(zap.WriteTo(&logs)))
+			calls := 0
+			for i := 0; i < 2; i++ {
+				selected, err := r.selectBaseSpec(ctx, namespace, func() (*spec.Spec, error) {
+					calls++
+					return deployerSpec, nil
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+				if tc.wantManaged {
+					if selected.Values["global"].(map[string]interface{})["enabled"] != true {
+						t.Fatal("expected managed values despite Deployer mismatch")
+					}
+				} else if selected != deployerSpec {
+					t.Fatal("expected Deployer fallback")
+				}
+			}
+			if calls != 2 {
+				t.Fatalf("Deployer called %d times, want 2", calls)
+			}
+			if got := strings.Contains(logs.String(), "\"level\":\"error\""); got != tc.wantErrorLog {
+				t.Fatalf("error log = %t, want %t; logs: %s", got, tc.wantErrorLog, logs.String())
 			}
 		})
+	}
+}
+
+func TestSelectBaseSpecPropagatesDeployerCacheError(t *testing.T) {
+	r := testManagedSpecReconciler(t, testManagedSpecConfigMap("default", testManagedValues(true)))
+	want := errors.New("cache write failed")
+	selected, err := r.selectBaseSpec(context.Background(), "default", func() (*spec.Spec, error) {
+		return nil, want
+	})
+	if selected != nil || !errors.Is(err, want) {
+		t.Fatalf("got %v, %v; want cache error", selected, err)
+	}
+}
+
+func TestSelectBaseSpecFallsBackAfterManagedSpecRemoval(t *testing.T) {
+	cm := testManagedSpecConfigMap("default", testManagedValues(true))
+	r := testManagedSpecReconciler(t, cm)
+	deployerSpec := testManagedSpec(testManagedValues(false))
+	getDeployer := func() (*spec.Spec, error) { return deployerSpec, nil }
+	selected, err := r.selectBaseSpec(context.Background(), "default", getDeployer)
+	if err != nil || selected == deployerSpec {
+		t.Fatalf("managed selection failed: %v", err)
+	}
+	if err := r.Client.Delete(context.Background(), cm); err != nil {
+		t.Fatal(err)
+	}
+	selected, err = r.selectBaseSpec(context.Background(), "default", getDeployer)
+	if err != nil || selected != deployerSpec {
+		t.Fatalf("fallback failed: %v", err)
 	}
 }
 
@@ -303,18 +152,14 @@ func testManagedSpecReconciler(t *testing.T, objects ...client.Object) *WeightsA
 		t.Fatalf("could not register core Kubernetes types: %v", err)
 	}
 	return &WeightsAndBiasesReconciler{
-		Client:                    fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build(),
-		Scheme:                    scheme,
-		ManagedSpecCutoverEnabled: true,
+		Client:             fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build(),
+		Scheme:             scheme,
+		ManagedSpecEnabled: true,
 	}
 }
 
 func testManagedSpecConfigMap(namespace string, values map[string]interface{}) *corev1.ConfigMap {
-	enabled := true
-	if value, ok := values["global"].(map[string]interface{})["enabled"].(bool); ok {
-		enabled = value
-	}
-	valuesJSON, err := json.Marshal(testManagedValues(enabled))
+	valuesJSON, err := json.Marshal(values)
 	if err != nil {
 		panic(err)
 	}
