@@ -58,7 +58,8 @@ var validSizes = map[string]appsv2.Size{
 	string(appsv2.SizeMedium):  appsv2.SizeMedium,
 	string(appsv2.SizeLarge):   appsv2.SizeLarge,
 	string(appsv2.SizeXLarge):  appsv2.SizeXLarge,
-	string(appsv2.SizeXXLarge): appsv2.SizeXXLarge,
+	string(appsv2.Size2XLarge): appsv2.Size2XLarge,
+	string(appsv2.SizeXXLarge): appsv2.Size2XLarge,
 }
 
 // applyValueMappings is the top-level conversion orchestrator. It resolves
