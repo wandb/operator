@@ -649,9 +649,9 @@ func (r *ApplicationReconciler) reconcileJobs(ctx context.Context, app *wandbv2.
 		if jobToReconcile.Labels == nil {
 			jobToReconcile.Labels = make(map[string]string)
 		}
-		jobToReconcile.Labels["app.kubernetes.io/name"] = app.Name
-		jobToReconcile.Labels["app.kubernetes.io/instance"] = app.Namespace
-		jobToReconcile.Labels["app.kubernetes.io/managed-by"] = "application-controller"
+		jobToReconcile.Labels[common.AppNameLabel] = app.Name
+		jobToReconcile.Labels[common.AppInstanceLabel] = app.Namespace
+		jobToReconcile.Labels[common.AppManagedByLabel] = common.ManagedByWandbOperator
 
 		if err = controllerutil.SetControllerReference(app, jobToReconcile, r.Scheme); err != nil {
 			return err
@@ -698,12 +698,12 @@ func (r *ApplicationReconciler) deleteJobs(ctx context.Context, app *wandbv2.App
 	logger.Info("Deleting Jobs", "Application", app.Name)
 
 	jobList := &batchv1.JobList{}
+	// Omit managed-by so pre-unification Jobs are still matched.
 	listOpts := []client.ListOption{
 		client.InNamespace(app.Namespace),
 		client.MatchingLabels{
-			"app.kubernetes.io/name":       app.Name,
-			"app.kubernetes.io/instance":   app.Namespace,
-			"app.kubernetes.io/managed-by": "application-controller",
+			common.AppNameLabel:     app.Name,
+			common.AppInstanceLabel: app.Namespace,
 		},
 	}
 
@@ -755,9 +755,9 @@ func (r *ApplicationReconciler) reconcileCronJobs(ctx context.Context, app *wand
 		if cronJobToReconcile.Labels == nil {
 			cronJobToReconcile.Labels = make(map[string]string)
 		}
-		cronJobToReconcile.Labels["app.kubernetes.io/name"] = app.Name
-		cronJobToReconcile.Labels["app.kubernetes.io/instance"] = app.Namespace
-		cronJobToReconcile.Labels["app.kubernetes.io/managed-by"] = "application-controller"
+		cronJobToReconcile.Labels[common.AppNameLabel] = app.Name
+		cronJobToReconcile.Labels[common.AppInstanceLabel] = app.Namespace
+		cronJobToReconcile.Labels[common.AppManagedByLabel] = common.ManagedByWandbOperator
 
 		if err = controllerutil.SetControllerReference(app, cronJobToReconcile, r.Scheme); err != nil {
 			return err
@@ -793,12 +793,12 @@ func (r *ApplicationReconciler) deleteCronJobs(ctx context.Context, app *wandbv2
 	logger.Info("Deleting CronJobs", "Application", app.Name)
 
 	cronJobList := &batchv1.CronJobList{}
+	// Omit managed-by so pre-unification CronJobs are still matched.
 	listOpts := []client.ListOption{
 		client.InNamespace(app.Namespace),
 		client.MatchingLabels{
-			"app.kubernetes.io/name":       app.Name,
-			"app.kubernetes.io/instance":   app.Namespace,
-			"app.kubernetes.io/managed-by": "application-controller",
+			common.AppNameLabel:     app.Name,
+			common.AppInstanceLabel: app.Namespace,
 		},
 	}
 
