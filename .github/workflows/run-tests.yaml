@@ -18,8 +18,6 @@ jobs:
           go-version: 1.25
       - name: Install dependencies
         run: go mod download
-      - name: Install Ginkgo
-        run: go install github.com/onsi/ginkgo/v2/ginkgo@latest
       - name: Tests
         run: make test-coverage
 
