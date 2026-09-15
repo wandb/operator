@@ -10,6 +10,9 @@ import (
 	"github.com/wandb/operator/internal/controller/common"
 	seaweedv1 "github.com/wandb/operator/pkg/vendored/seaweedfs-operator/seaweed.seaweedfs.com/v1"
 	"github.com/wandb/operator/pkg/wandb/manifest"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -84,4 +87,39 @@ var _ = Describe("SeaweedFS WriteState", func() {
 		Expect(conn).NotTo(BeNil())
 		Expect(hasCondition(conds, SeaweedConnectionInfoType, metav1.ConditionTrue)).To(BeTrue())
 	})
+
+	It("preserves existing StatefulSet claim template sizes", func() {
+		desired.Spec.Volume.Requests[corev1.ResourceStorage] = resource.MustParse("100Gi")
+		desired.Spec.Filer.Persistence.Resources.Requests[corev1.ResourceStorage] = resource.MustParse("50Gi")
+		volumeStatefulSet := statefulSetWithStorage(desired.Name+"-volume", desired.Namespace, "10Gi")
+		filerStatefulSet := statefulSetWithStorage(desired.Name+"-filer", desired.Namespace, "20Gi")
+		cl := fake.NewClientBuilder().
+			WithScheme(writeScheme()).
+			WithObjects(volumeStatefulSet, filerStatefulSet).
+			Build()
+
+		_, _ = WriteState(ctx, cl, specNsn, desired, envCfg, wandb)
+
+		actual := &seaweedv1.Seaweed{}
+		Expect(cl.Get(ctx, client.ObjectKeyFromObject(desired), actual)).To(Succeed())
+		Expect(actual.Spec.Volume.Requests[corev1.ResourceStorage]).To(Equal(resource.MustParse("10Gi")))
+		Expect(actual.Spec.Filer.Persistence.Resources.Requests[corev1.ResourceStorage]).To(Equal(resource.MustParse("20Gi")))
+	})
 })
+
+func statefulSetWithStorage(name, namespace, storage string) *appsv1.StatefulSet {
+	return &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		Spec: appsv1.StatefulSetSpec{
+			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{{
+				Spec: corev1.PersistentVolumeClaimSpec{
+					Resources: corev1.VolumeResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceStorage: resource.MustParse(storage),
+						},
+					},
+				},
+			}},
+		},
+	}
+}

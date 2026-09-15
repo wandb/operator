@@ -42,6 +42,7 @@ var _ = Describe("Keeper vendor spec", func() {
 
 		Expect(chk.Spec.Configuration.Clusters).To(HaveLen(1))
 		Expect(chk.Spec.Configuration.Clusters[0].Layout.ReplicasCount).To(Equal(5))
+		Expect(chk.Spec.Configuration.Settings.Get("keeper_server/enable_reconfiguration").String()).To(Equal("true"))
 
 		Expect(chk.Spec.Templates.VolumeClaimTemplates).To(HaveLen(1))
 		storage := chk.Spec.Templates.VolumeClaimTemplates[0].Spec.Resources.Requests[corev1.ResourceStorage]

@@ -189,6 +189,7 @@ type AppIngressSpec struct {
 
 type SizingConfig struct {
 	Replicas    int32                        `yaml:"replicas,omitempty"`
+	Sentinel    SentinelSizingConfig         `yaml:"sentinel,omitempty"`
 	Shards      int32                        `yaml:"shards,omitempty"`
 	Copies      int32                        `yaml:"copies,omitempty"`
 	VolumeSize  string                       `yaml:"volumeSize,omitempty"`
@@ -196,6 +197,10 @@ type SizingConfig struct {
 	Autoscaling *AutoscalingConfig           `yaml:"autoscaling,omitempty"`
 	// MetadataVolumeSize sizes the disk backing an object store's index/metadata
 	MetadataVolumeSize string `yaml:"metadataVolumeSize,omitempty"`
+}
+
+type SentinelSizingConfig struct {
+	Replicas int32 `yaml:"replicas,omitempty"`
 }
 
 type KafkaSizingConfig struct {
