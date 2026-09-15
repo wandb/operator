@@ -71,6 +71,6 @@ spec:
       dashboards: "grafana"
   datasource:
     name: VictoriaTraces
-    type: jaeger
+    type: tempo
     access: proxy
-    url: http://vtsingle-victoria-traces:10428/select/jaeger
+    url: http://vtsingle-victoria-traces:10428/select/tempo

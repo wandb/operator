@@ -7,7 +7,7 @@
       "pluginId": "victoriametrics-metrics-datasource",
       "pluginName": "VictoriaMetrics"
     },
-    {"name": "DS_VICTORIATRACES", "label": "VictoriaTraces", "type": "datasource", "pluginId": "jaeger", "pluginName": "Jaeger"}
+    {"name": "DS_VICTORIATRACES", "label": "VictoriaTraces", "type": "datasource", "pluginId": "tempo", "pluginName": "Tempo"}
   ],
   "annotations": {"list": []},
   "editable": true,
