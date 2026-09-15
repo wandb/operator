@@ -183,6 +183,55 @@ func TestReconcileWatchtowerSecretGeneratesAPassword(t *testing.T) {
 	require.Equal(t, corev1.SecretTypeOpaque, secret.Type)
 }
 
+// Watchtower's Role is a security boundary. Secret WRITES are the broad grant —
+// create/update/delete on every Secret in the install namespace, which holds the
+// database, object-store, OIDC, license and operator-managed credentials — so the
+// property worth pinning is that they are absent unless explicitly enabled.
+func TestReconcileWatchtowerRBACSecretWritesAreOptIn(t *testing.T) {
+	read := []string{"get", "list", "watch"}
+	write := append(append([]string{}, read...), "create", "update", "patch", "delete")
+
+	for _, tc := range []struct {
+		name string
+		env  string
+		want []string
+	}{
+		{"default install stays read-only", "", read},
+		{"opted in", "true", write},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv(secretWritesEnvVar, tc.env)
+			wandb := watchtowerTestCR("wandb", "wandb")
+			c := watchtowerTestClient(t, wandb)
+			require.NoError(t, reconcileWatchtowerRBAC(context.Background(), c, wandb))
+
+			role := &rbacv1.Role{}
+			require.NoError(t, c.Get(context.Background(), types.NamespacedName{
+				Name: watchtowerName(wandb), Namespace: wandb.Namespace,
+			}, role))
+
+			verbsFor := func(resource string) []string {
+				for _, rule := range role.Rules {
+					for _, r := range rule.Resources {
+						if r == resource {
+							return rule.Verbs
+						}
+					}
+				}
+				return nil
+			}
+
+			require.ElementsMatch(t, tc.want, verbsFor("secrets"))
+
+			// Nothing else is ever writable, opted in or not. configmaps shared a
+			// rule with secrets before the split, so it is the regression to catch.
+			for _, readOnly := range []string{"configmaps", "jobs", "cronjobs", "ingresses"} {
+				require.ElementsMatch(t, read, verbsFor(readOnly), "%s must stay read-only", readOnly)
+			}
+		})
+	}
+}
+
 // The whole point of create-if-not-found: an upgrade must not rotate the password
 // out from under whoever is holding it.
 func TestReconcileWatchtowerSecretPreservesAnExistingPassword(t *testing.T) {
@@ -262,6 +311,31 @@ func TestWatchtowerEnvReferencesThePasswordSecret(t *testing.T) {
 }
 
 // --- auth service derivation -------------------------------------------------
+
+// The DB-admin capability writes directly to the W&B application database, so
+// "absent unless explicitly asked for" is the security property worth pinning:
+// an unset operator env must leave no trace on the Watchtower pod.
+func TestWatchtowerEnvOmitsDBAdminUnlessOperatorOptsIn(t *testing.T) {
+	wandb := watchtowerTestCR("wandb", "wandb")
+
+	t.Setenv(dbAdminEnvVar, "")
+	for _, e := range watchtowerEnv(wandb, "api:8080", "/console") {
+		if e.Name == dbAdminEnvVar {
+			t.Fatalf("%s leaked into the pod env with the operator env unset", dbAdminEnvVar)
+		}
+	}
+
+	t.Setenv(dbAdminEnvVar, "true")
+	var got string
+	for _, e := range watchtowerEnv(wandb, "api:8080", "/console") {
+		if e.Name == dbAdminEnvVar {
+			got = e.Value
+		}
+	}
+	if got != "true" {
+		t.Errorf("%s = %q, want \"true\" when the operator opts in", dbAdminEnvVar, got)
+	}
+}
 
 func TestWatchtowerAuthServiceDerivesFromTheOIDCApplication(t *testing.T) {
 	wandb := watchtowerTestCR("wandb", "wandb")

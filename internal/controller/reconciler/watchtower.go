@@ -40,6 +40,26 @@ const (
 	// serves gorilla's /oidc/auth sub-request, used to derive AUTH_SERVICE.
 	watchtowerOIDCIngressPath = "/oidc"
 	operatorImageEnvVar       = "OPERATOR_IMAGE"
+
+	// secretWritesEnvVar opts Watchtower's namespaced Role into writing Secrets.
+	//
+	// Off by default, and deliberately a separate switch from dbAdminEnvVar: this
+	// grant is broad — create/update/delete on EVERY Secret in the install
+	// namespace, which is where the database, object-store, OIDC, license and
+	// operator-managed credentials all live. A compromised Watchtower with it
+	// could replace any of them. Without it Watchtower can still *reference*
+	// existing Secrets (the CR only ever stores refs), so the OIDC, external
+	// connection and notification flows keep working against Secrets an admin
+	// created out of band; only Watchtower's own secret-manager needs the write.
+	secretWritesEnvVar = "WATCHTOWER_ENABLE_SECRET_WRITES"
+
+	// dbAdminEnvVar opts Watchtower into the user-administration actions that
+	// write directly to the W&B application database (email-domain migration).
+	// It is forwarded from the operator's own environment rather than the CR:
+	// this is a deployment-level policy decision, like the RBAC below, not
+	// per-instance configuration. Unset means the feature stays off, and
+	// Watchtower hides the control rather than failing at click time.
+	dbAdminEnvVar = "WATCHTOWER_ENABLE_DB_ADMIN"
 )
 
 // reconcileWatchtower brings the operator-managed Watchtower deployment in line
@@ -224,7 +244,7 @@ func buildWatchtowerApplication(wandb *apiv2.WeightsAndBiases, authService strin
 // container: it is told where it is mounted and which service validates the
 // caller's session, so neither has to be baked into the image.
 func watchtowerEnv(wandb *apiv2.WeightsAndBiases, authService, basePath string) []corev1.EnvVar {
-	return []corev1.EnvVar{
+	env := []corev1.EnvVar{
 		// Locks the UI to the cluster it runs in: no context switching, no teardown.
 		{Name: "WATCHTOWER_MODE", Value: "cluster"},
 		{Name: "WATCHTOWER_BASE_PATH", Value: basePath},
@@ -240,6 +260,13 @@ func watchtowerEnv(wandb *apiv2.WeightsAndBiases, authService, basePath string) 
 			},
 		}},
 	}
+
+	// Forwarded only when set, so the default deployment carries no trace of it
+	// and the capability cannot be switched on by accident.
+	if v := os.Getenv(dbAdminEnvVar); v != "" {
+		env = append(env, corev1.EnvVar{Name: dbAdminEnvVar, Value: v})
+	}
+	return env
 }
 
 // watchtowerAuthService resolves the in-cluster host:port Watchtower calls to
@@ -456,10 +483,22 @@ func reconcileWatchtowerRBAC(ctx context.Context, c ctrlClient.Client, wandb *ap
 		role.Labels = utils.MergeMapsStringString(role.Labels, labels)
 		// Secrets and ConfigMaps stay namespace-scoped: Watchtower reads the
 		// install's license and connection material, not the whole cluster's.
+		//
+		// Reading Secrets is required for normal operation (license, connection
+		// material). Writing them is opt-in — see secretWritesEnvVar for why.
+		secretVerbs := []string{"get", "list", "watch"}
+		if os.Getenv(secretWritesEnvVar) != "" {
+			secretVerbs = append(secretVerbs, "create", "update", "patch", "delete")
+		}
 		role.Rules = []rbacv1.PolicyRule{
 			{
 				APIGroups: []string{""},
-				Resources: []string{"secrets", "configmaps"},
+				Resources: []string{"secrets"},
+				Verbs:     secretVerbs,
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"configmaps"},
 				Verbs:     []string{"get", "list", "watch"},
 			},
 			{
