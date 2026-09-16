@@ -40,6 +40,7 @@ import (
 	"github.com/wandb/operator/pkg/wandb/spec/channel/deployer"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/discovery"
+	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -336,6 +337,22 @@ func main() {
 		EnableRollouts: enableRollouts,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Application")
+		os.Exit(1)
+	}
+
+	kubernetesClient, err := kubernetes.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		setupLog.Error(err, "unable to create Kubernetes client", "controller", "ActionRun")
+		os.Exit(1)
+	}
+	if err = (&controller.ActionRunReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+		PodLogs: &controller.KubernetesActionPodLogReader{
+			CoreV1: kubernetesClient.CoreV1(),
+		},
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "ActionRun")
 		os.Exit(1)
 	}
 

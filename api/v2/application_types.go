@@ -67,6 +67,11 @@ type ApplicationSpec struct {
 	Jobs                 []batchv1.Job                              `json:"jobs,omitempty"`
 	CronJobs             []batchv1.CronJob                          `json:"cronJobs,omitempty"`
 
+	// Triage declares the bounded diagnostic actions that may be requested for
+	// this application through ActionRun resources whose type is triage.
+	// +optional
+	Triage *ApplicationTriageSpec `json:"triage,omitempty"`
+
 	// HTTPRouteTemplate is the desired HTTPRoute spec. Nil means no HTTPRoute.
 	// +optional
 	HTTPRouteTemplate *HTTPRouteTemplateSpec `json:"httpRouteTemplate,omitempty"`

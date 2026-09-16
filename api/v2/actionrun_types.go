@@ -66,6 +66,7 @@ type ApplicationReference struct {
 
 // ActionName identifies an action declared by an Application.
 // +kubebuilder:validation:MinLength=1
+// +kubebuilder:validation:MaxLength=63
 type ActionName string
 
 // ActionReference selects one action declared by the referenced
