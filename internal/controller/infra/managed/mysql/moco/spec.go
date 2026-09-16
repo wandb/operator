@@ -65,6 +65,7 @@ func ToMocoMySQLClusterSpec(
 		Data: map[string]string{
 			"sync_binlog":                    "1",
 			"innodb_flush_log_at_trx_commit": "1",
+			"local_infile":                   "ON",
 		},
 	}
 	if err := controllerutil.SetControllerReference(wandb, cm, scheme); err != nil {
