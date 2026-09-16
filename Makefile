@@ -4,7 +4,7 @@ IMG ?= controller:latest
 # Watchtower release whose binary is copied into the operator image as its second
 # entrypoint. Tag verbatim, leading "v" included. `make download-watchtower`
 # fetches it into WATCHTOWER_BINARY; the image build only copies that file.
-WATCHTOWER_VERSION ?= v0.13.0
+WATCHTOWER_VERSION ?= v0.12.0
 # The binary is arch-specific, so this also drives the image platform below.
 WATCHTOWER_ARCH ?= amd64
 WATCHTOWER_BINARY ?= watchtower
