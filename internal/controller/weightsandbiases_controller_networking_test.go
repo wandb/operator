@@ -246,10 +246,26 @@ var _ = Describe("WeightsAndBiases Networking", func() {
 		}, ingress)).To(Succeed())
 		Expect(ingress.Spec.IngressClassName).NotTo(BeNil())
 		Expect(*ingress.Spec.IngressClassName).To(Equal(ingressClassName))
+		Expect(ingress.Annotations).To(HaveKeyWithValue("kubernetes.io/ingress.class", ingressClassName))
 		Expect(ingress.Annotations).To(HaveKeyWithValue("example.com/ingress", "enabled"))
+		fieldManagers := make([]string, 0, len(ingress.ManagedFields))
+		for _, managedField := range ingress.ManagedFields {
+			fieldManagers = append(fieldManagers, managedField.Manager)
+		}
+		Expect(fieldManagers).To(ContainElement(WeightsAndBiasesFieldManager))
 		Expect(ingress.Spec.TLS).To(HaveLen(1))
 		Expect(ingress.Spec.TLS[0].SecretName).To(Equal("wandb-tls"))
 		Expect(ingress.Spec.Rules).NotTo(BeEmpty())
+
+		beforeExternalMetadata := ingress.DeepCopy()
+		ingress.Annotations["ingress.example.com/controller-state"] = "preserve-me"
+		ingress.Labels["ingress.example.com/controller"] = "external"
+		Expect(k8sClient.Patch(
+			ctx,
+			ingress,
+			client.MergeFrom(beforeExternalMetadata),
+			client.FieldOwner("test-ingress-controller"),
+		)).To(Succeed())
 
 		ingress.Status.LoadBalancer.Ingress = []networkingv1.IngressLoadBalancerIngress{{
 			IP: "34.118.10.1",
@@ -264,6 +280,43 @@ var _ = Describe("WeightsAndBiases Networking", func() {
 		Expect(wandb.Status.IngressStatus.Name).To(Equal(wandbName))
 		Expect(wandb.Status.IngressStatus.LoadBalancerIngress).To(HaveLen(1))
 		Expect(wandb.Status.IngressStatus.LoadBalancerIngress[0].IP).To(Equal("34.118.10.1"))
+
+		ingress = &networkingv1.Ingress{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{
+			Name:      wandbName,
+			Namespace: wandbNamespace,
+		}, ingress)).To(Succeed())
+		Expect(ingress.Annotations).To(HaveKeyWithValue("ingress.example.com/controller-state", "preserve-me"))
+		Expect(ingress.Labels).To(HaveKeyWithValue("ingress.example.com/controller", "external"))
+
+		delete(wandb.Spec.Networking.Annotations, "example.com/ingress")
+		Expect(k8sClient.Update(ctx, wandb)).To(Succeed())
+		reconcileNetworkingManifest(ctx, wandb)
+
+		ingress = &networkingv1.Ingress{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{
+			Name:      wandbName,
+			Namespace: wandbNamespace,
+		}, ingress)).To(Succeed())
+		Expect(ingress.Annotations).NotTo(HaveKey("example.com/ingress"))
+		Expect(ingress.Annotations).To(HaveKeyWithValue("ingress.example.com/controller-state", "preserve-me"))
+		Expect(ingress.Labels).To(HaveKeyWithValue("ingress.example.com/controller", "external"))
+
+		wandb = getWandb(ctx, wandbName, wandbNamespace)
+		wandb.Spec.Networking.Ingress.IngressClassName = nil
+		wandb.Spec.Networking.Annotations = map[string]string{}
+		wandb.Spec.Networking.Annotations["kubernetes.io/ingress.class"] = "gce"
+		Expect(k8sClient.Update(ctx, wandb)).To(Succeed())
+		reconcileNetworkingManifest(ctx, wandb)
+
+		ingress = &networkingv1.Ingress{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{
+			Name:      wandbName,
+			Namespace: wandbNamespace,
+		}, ingress)).To(Succeed())
+		Expect(ingress.Spec.IngressClassName).NotTo(BeNil())
+		Expect(*ingress.Spec.IngressClassName).To(Equal("gce"))
+		Expect(ingress.Annotations).To(HaveKeyWithValue("kubernetes.io/ingress.class", "gce"))
 	})
 
 	// Watchtower must not be able to take down the install it manages, but a
@@ -292,7 +345,12 @@ var _ = Describe("WeightsAndBiases Networking", func() {
 		wandbManifest, err := manifest.GetServerManifest(ctx, wandb.Spec.Wandb.ManifestRepository, wandb.Spec.Wandb.Version, nil)
 		Expect(err).NotTo(HaveOccurred())
 
-		result, err := v2.ReconcileNetworkingAndWatchtower(ctx, k8sClient, wandb, wandbManifest)
+		result, err := v2.ReconcileNetworkingAndWatchtower(
+			ctx,
+			client.WithFieldOwner(k8sClient, WeightsAndBiasesFieldManager),
+			wandb,
+			wandbManifest,
+		)
 
 		// The error is swallowed so the rest of the reconcile still runs...
 		Expect(err).NotTo(HaveOccurred())
@@ -421,13 +479,14 @@ func markWandbReadyForNetworking(ctx context.Context, name, namespace string) *a
 func reconcileNetworkingManifest(ctx context.Context, wandb *apiv2.WeightsAndBiases) {
 	wandbManifest, err := manifest.GetServerManifest(ctx, wandb.Spec.Wandb.ManifestRepository, wandb.Spec.Wandb.Version, nil)
 	Expect(err).NotTo(HaveOccurred())
+	reconcileClient := client.WithFieldOwner(k8sClient, WeightsAndBiasesFieldManager)
 
 	// Networking lives above Reconcile's infrastructure gate, in its own function,
 	// so it has to be driven separately from the manifest reconcile.
-	_, err = v2.ReconcileNetworkingAndWatchtower(ctx, k8sClient, wandb, wandbManifest)
+	_, err = v2.ReconcileNetworkingAndWatchtower(ctx, reconcileClient, wandb, wandbManifest)
 	Expect(err).NotTo(HaveOccurred())
 
-	_, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, telemetry.DefaultTelemetryRuntimeConfig())
+	_, err = v2.ReconcileWandbManifest(ctx, reconcileClient, wandb, wandbManifest, telemetry.DefaultTelemetryRuntimeConfig())
 	Expect(err).NotTo(HaveOccurred())
 }
 
