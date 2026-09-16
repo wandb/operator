@@ -11,8 +11,8 @@
       "name": "DS_VICTORIATRACES",
       "label": "VictoriaTraces",
       "type": "datasource",
-      "pluginId": "jaeger",
-      "pluginName": "Jaeger"
+      "pluginId": "tempo",
+      "pluginName": "Tempo"
     }
   ],
   "annotations": {
