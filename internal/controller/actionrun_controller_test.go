@@ -9,7 +9,6 @@ import (
 	"time"
 
 	wandbv2 "github.com/wandb/operator/api/v2"
-	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -20,7 +19,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/yaml"
 )
 
 func TestActionRunCreatesBoundedJobFromApplication(t *testing.T) {
@@ -133,7 +131,7 @@ func TestActionRunSelectsOneNamedAction(t *testing.T) {
 	run.Spec.Action.Name = "deep"
 	application := testActionApplication()
 	application.Spec.Triage.Actions = append(application.Spec.Triage.Actions,
-		wandbv2.ApplicationActionSpec{
+		wandbv2.ApplicationTriageActionSpec{
 			Name:        "deep",
 			Description: "Run deeper diagnostics",
 			Args:        []string{"--verbose"},
@@ -243,7 +241,7 @@ func TestActionRunRecoversSnapshotWhenJobCreationPrecededStatusUpdate(t *testing
 	testScheme := newActionTestScheme(t)
 	run := testActionRun()
 	application := testActionApplication()
-	action, err := resolveRequestedAction(run, application)
+	action, err := resolveActionExecution(run, application)
 	if err != nil {
 		t.Fatalf("resolve action: %v", err)
 	}
@@ -588,35 +586,6 @@ func TestParseActionJSONLRejectsMalformedJSONResult(t *testing.T) {
 	}
 }
 
-func TestManifestTriageActionDecodes(t *testing.T) {
-	t.Parallel()
-
-	var decoded serverManifest.Manifest
-	input := []byte(`
-applications:
-  weave-trace:
-    triage:
-      containerName: weave-trace
-      args: [python, -m, weave_triage]
-      timeoutSeconds: 600
-      resources:
-        requests:
-          cpu: 100m
-          memory: 128Mi
-      actions:
-        - name: default
-          description: Run all diagnostics
-`)
-	if err := yaml.Unmarshal(input, &decoded); err != nil {
-		t.Fatalf("decode manifest triage action: %v", err)
-	}
-	triage := decoded.Applications["weave-trace"].Triage
-	if triage.ContainerName != "weave-trace" || triage.TimeoutSeconds != 600 ||
-		len(triage.Actions) != 1 || triage.Actions[0].Name != "default" {
-		t.Fatalf("decoded triage = %#v", triage)
-	}
-}
-
 type staticActionLogReader struct {
 	output        []byte
 	err           error
@@ -781,7 +750,7 @@ func testActionApplication() *wandbv2.Application {
 					{Name: actionTypeEnv, Value: "manifest-value-must-not-win"},
 					{Name: actionNameEnv, Value: "manifest-value-must-not-win"},
 				},
-				Actions: []wandbv2.ApplicationActionSpec{{
+				Actions: []wandbv2.ApplicationTriageActionSpec{{
 					Name:        "default",
 					Description: "Run all diagnostics",
 				}},

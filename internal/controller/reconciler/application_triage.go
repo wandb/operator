@@ -18,9 +18,9 @@ func resolveApplicationTriage(triage *serverManifest.ApplicationTriage) *apiv2.A
 			env[i] = *triage.Env[i].DeepCopy()
 		}
 	}
-	actions := make([]apiv2.ApplicationActionSpec, len(triage.Actions))
+	actions := make([]apiv2.ApplicationTriageActionSpec, len(triage.Actions))
 	for i := range triage.Actions {
-		actions[i] = apiv2.ApplicationActionSpec{
+		actions[i] = apiv2.ApplicationTriageActionSpec{
 			Name:        apiv2.ActionName(triage.Actions[i].Name),
 			Description: triage.Actions[i].Description,
 			Args:        append([]string(nil), triage.Actions[i].Args...),
