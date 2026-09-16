@@ -2863,6 +2863,8 @@ spec:
                     properties:
                       ingressClassName:
                         type: string
+                      managed:
+                        type: boolean
                       name:
                         type: string
                     type: object
@@ -5686,7 +5688,6 @@ spec:
                               protocol:
                                 type: string
                             required:
-                            - error
                             - port
                             - protocol
                             type: object
