@@ -284,6 +284,23 @@ func secretPassword(secret *corev1.Secret) string {
 
 // --- container environment ---------------------------------------------------
 
+func TestReconcileWatchtowerRBACGrantsActionRunLifecycle(t *testing.T) {
+	wandb := watchtowerTestCR("wandb", "wandb")
+	c := watchtowerTestClient(t, wandb)
+
+	require.NoError(t, reconcileWatchtowerRBAC(context.Background(), c, wandb))
+
+	role := &rbacv1.Role{}
+	require.NoError(t, c.Get(context.Background(), types.NamespacedName{
+		Name: watchtowerName(wandb), Namespace: wandb.Namespace,
+	}, role))
+	require.Contains(t, role.Rules, rbacv1.PolicyRule{
+		APIGroups: []string{"apps.wandb.com"},
+		Resources: []string{"actionruns"},
+		Verbs:     []string{"get", "list", "watch", "create", "delete"},
+	})
+}
+
 func TestWatchtowerEnvReferencesThePasswordSecret(t *testing.T) {
 	wandb := watchtowerTestCR("wandb", "wandb")
 
@@ -376,7 +393,7 @@ func TestWatchtowerIngressPathTargetsTheApplicationService(t *testing.T) {
 	path := watchtowerIngressPath(wandb)
 
 	require.NotNil(t, path)
-	require.Equal(t, "/watchtower", path.Path)
+	require.Equal(t, "/console", path.Path)
 	require.Equal(t, networkingv1.PathTypePrefix, *path.PathType)
 	require.Equal(t, watchtowerName(wandb), path.Backend.Service.Name)
 	require.Equal(t, watchtowerContainerPort, path.Backend.Service.Port.Number)
@@ -396,9 +413,9 @@ func TestWatchtowerURL(t *testing.T) {
 		basePath string
 		want     string
 	}{
-		{"adds a scheme", "wandb.example.com", "", "https://wandb.example.com/watchtower"},
-		{"keeps an explicit scheme", "http://wandb.example.com", "", "http://wandb.example.com/watchtower"},
-		{"strips a trailing slash", "https://wandb.example.com/", "", "https://wandb.example.com/watchtower"},
+		{"adds a scheme", "wandb.example.com", "", "https://wandb.example.com/console"},
+		{"keeps an explicit scheme", "http://wandb.example.com", "", "http://wandb.example.com/console"},
+		{"strips a trailing slash", "https://wandb.example.com/", "", "https://wandb.example.com/console"},
 		{"empty hostname yields no URL", "", "", ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -481,8 +498,8 @@ func TestBuildWatchtowerApplicationProbesGoThroughTheBasePath(t *testing.T) {
 	container := buildWatchtowerApplication(wandb, "api:8081", testOperatorImage).
 		Spec.PodTemplate.Spec.Containers[0]
 
-	require.Equal(t, "/watchtower/healthz", container.LivenessProbe.HTTPGet.Path)
-	require.Equal(t, "/watchtower/ready", container.ReadinessProbe.HTTPGet.Path)
+	require.Equal(t, "/console/healthz", container.LivenessProbe.HTTPGet.Path)
+	require.Equal(t, "/console/ready", container.ReadinessProbe.HTTPGet.Path)
 }
 
 // --- teardown ---------------------------------------------------------------

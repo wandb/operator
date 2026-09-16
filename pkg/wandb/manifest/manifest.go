@@ -179,6 +179,26 @@ type Application struct {
 	VolumeMounts []VolumeMount            `yaml:"volumeMounts,omitempty"`
 	Sizing       map[v2.Size]SizingConfig `yaml:"sizing,omitempty"`
 	Ingress      *AppIngressSpec          `yaml:"ingress,omitempty"`
+	Triage       *ApplicationTriage       `yaml:"triage,omitempty"`
+}
+
+// ApplicationTriage declares a shared diagnostic runner and the actions
+// available for an application. The generated Application CR remains the
+// source of runtime pod configuration.
+type ApplicationTriage struct {
+	ContainerName  string                       `yaml:"containerName,omitempty"`
+	Command        []string                     `yaml:"command,omitempty"`
+	Args           []string                     `yaml:"args,omitempty"`
+	Env            []corev1.EnvVar              `yaml:"env,omitempty"`
+	Resources      *corev1.ResourceRequirements `yaml:"resources,omitempty"`
+	TimeoutSeconds int64                        `yaml:"timeoutSeconds,omitempty"`
+	Actions        []TriageAction               `yaml:"actions"`
+}
+
+type TriageAction struct {
+	Name        string   `yaml:"name"`
+	Description string   `yaml:"description,omitempty"`
+	Args        []string `yaml:"args,omitempty"`
 }
 
 type AppIngressSpec struct {
