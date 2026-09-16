@@ -1,0 +1,13 @@
+apiVersion: apps.wandb.com/v2
+kind: ActionRun
+metadata:
+  labels:
+    app.kubernetes.io/name: operator
+    app.kubernetes.io/managed-by: kustomize
+  generateName: actionrun-sample-
+spec:
+  type: triage
+  applicationRef:
+    name: application-sample
+  action:
+    name: default

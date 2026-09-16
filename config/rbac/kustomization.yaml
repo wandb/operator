@@ -25,7 +25,9 @@ resources:
 - application_admin_role.yaml
 - application_editor_role.yaml
 - application_viewer_role.yaml
+- actionrun_admin_role.yaml
+- actionrun_editor_role.yaml
+- actionrun_viewer_role.yaml
 - weightsandbiases_admin_role.yaml
 - weightsandbiases_editor_role.yaml
 - weightsandbiases_viewer_role.yaml
-
