@@ -143,7 +143,7 @@ type WeightsAndBiasesSpec struct {
 }
 
 const (
-	DefaultWatchtowerBasePath           = "/console"
+	DefaultWatchtowerBasePath           = "/watchtower"
 	DefaultWatchtowerServiceAccountName = "wandb-watchtower"
 )
 

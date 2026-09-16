@@ -83,6 +83,20 @@ var _ = Describe("Moco MySQL specs", func() {
 		expectMocoOpenShiftContainerSecurityContext(podSpec.Containers[0].SecurityContext)
 	})
 
+	It("enables local_infile for LOAD DATA LOCAL INFILE bulk writes", func() {
+		_, cm, err := ToMocoMySQLClusterSpec(
+			context.Background(),
+			apiv2.ManagedMysqlSpec{
+				Name: "mysql", Namespace: "wandb", Replicas: 3, StorageSize: "10Gi",
+			},
+			mocoWandb(),
+			mocoScheme(),
+			manifest.Manifest{},
+		)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(cm.Data).To(HaveKeyWithValue("local_infile", "ON"))
+	})
+
 	It("sets mysqld_exporter collectors only when telemetry is enabled", func() {
 		// A non-empty Collectors list is what makes Moco inject the mysqld_exporter sidecar.
 		enabled, _, err := ToMocoMySQLClusterSpec(
