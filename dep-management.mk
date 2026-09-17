@@ -18,20 +18,8 @@ find-deprecated:
 	@go build -gcflags='-m -d=deprecation' ./... 2>&1 | grep -i "deprecated" || echo "No deprecation warnings during build."
 
 .PHONY: check-vulnerabilities
-check-vulnerabilities:
-	@echo "Checking Go version compatibility..."
-	@GO_VERSION=$$(go version | awk '{print $$3}' | sed 's/go//'); \
-	GO_VERSION_REQUIRED=$$(grep -E "^go [0-9]+\.[0-9]+(\.[0-9]+)?" go.mod | awk '{print $$2}'); \
-	if [ "$$(printf '%s\n' "$$GO_VERSION_REQUIRED" "$$GO_VERSION" | sort -V | head -n1)" != "$$GO_VERSION_REQUIRED" ]; then \
-		echo "Error: This project requires Go $$GO_VERSION_REQUIRED but you have Go $$GO_VERSION"; \
-		echo "Please upgrade your Go installation to at least $$GO_VERSION_REQUIRED before running this command."; \
-		exit 1; \
-	fi; \
-	echo "Go version OK ($$GO_VERSION)"
-	@echo "Installing/updating govulncheck..."
-	@go install golang.org/x/vuln/cmd/govulncheck@latest
-	@echo "Checking for vulnerable dependencies..."
-	@govulncheck ./...
+check-vulnerabilities: govulncheck
+	$(GOVULNCHECK) ./...
 
 .PHONY: list-outdated
 list-outdated:

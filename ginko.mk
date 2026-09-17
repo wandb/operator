@@ -2,7 +2,7 @@
 test-ginko: manifests generate fmt vet envtest ginkgo ## Run tests.
 	@echo "Running tests..."
 	@KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" \
-	ginkgo -p -r --compilers=4 --timeout=5m --fail-fast --race --trace --randomize-all \
+	$(GINKGO) -p -r --compilers=4 --timeout=5m --fail-fast --race --trace --randomize-all \
 		--skip-package e2e \
 		--output-interceptor-mode=none \
 		--no-color=false \
@@ -15,7 +15,7 @@ test-ginko: manifests generate fmt vet envtest ginkgo ## Run tests.
 test-verbose: manifests generate fmt vet envtest ginkgo ## Run tests with verbose output.
 	@echo "Running tests in verbose mode..."
 	@KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" \
-	ginkgo -p -r -v --compilers=4 --timeout=5m --fail-fast --race --trace --randomize-all \
+	$(GINKGO) -p -r -v --compilers=4 --timeout=5m --fail-fast --race --trace --randomize-all \
 		--skip-package e2e \
 		--output-interceptor-mode=none \
 		--no-color=false \
@@ -28,7 +28,7 @@ test-verbose: manifests generate fmt vet envtest ginkgo ## Run tests with verbos
 test-watch: manifests generate fmt vet envtest ginkgo ## Run tests in watch mode.
 	@echo "Running tests in watch mode..."
 	@KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" \
-	ginkgo watch -p -r --compilers=4 --timeout=5m --fail-fast --race --trace --randomize-all \
+	$(GINKGO) watch -p -r --compilers=4 --timeout=5m --fail-fast --race --trace --randomize-all \
 		--skip-package e2e \
 		--output-interceptor-mode=none \
 		--no-color=false \
@@ -40,7 +40,7 @@ test-watch: manifests generate fmt vet envtest ginkgo ## Run tests in watch mode
 test-coverage: manifests generate fmt vet envtest ginkgo ## Run tests with coverage report.
 	@echo "Running tests with coverage..."
 	@KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" \
-	ginkgo -p -r --compilers=4 --timeout=5m --fail-fast --race --trace --randomize-all \
+	$(GINKGO) -p -r --compilers=4 --timeout=5m --fail-fast --race --trace --randomize-all \
 		--skip-package e2e \
 		--output-interceptor-mode=none \
 		--no-color=false \

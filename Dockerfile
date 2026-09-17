@@ -1,5 +1,5 @@
 # Build the manager binary
-FROM golang:1.25 AS manager-builder
+FROM --platform=$BUILDPLATFORM golang:1.27.1@sha256:f44f6e88636cfb311f9ebace870ded69d943f227bb3cb27d32ffd84ea18c43ea AS manager-builder
 
 ARG TARGETOS
 ARG TARGETARCH
@@ -18,14 +18,12 @@ COPY api/ api/
 COPY pkg/ pkg/
 COPY internal/ internal/
 
-# Build
-# the GOARCH has not a default value to allow the binary be built according to the host where the command
-# was called. For example, if we call make docker-build in a local env which has the Apple Silicon M1 SO
-# the docker BUILDPLATFORM arg will be linux/arm64 when for Apple x86 it will be linux/amd64. Therefore,
-# by leaving it empty we can ensure that the container and binary shipped on it will have the same platform.
+# Cross-compile for the requested image platform using the native build platform.
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o manager cmd/main.go
 
-FROM registry.access.redhat.com/ubi9/ubi-minimal
+FROM registry.access.redhat.com/ubi9/ubi-minimal:latest@sha256:7b8e25a1b56ca4d00219198f3b5b51a3e1693a5c4f5369c5e190d7d6cb3f980e
+# Include errata published since the base image was built.
+RUN microdnf upgrade --refresh -y && microdnf clean all
 WORKDIR /
 COPY --from=manager-builder /workspace/manager .
 
