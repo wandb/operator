@@ -37,4 +37,5 @@ jobs:
       - name: Reject fixable HIGH and CRITICAL vulnerabilities
         env:
           IMAGE: wandb/operator:${{ github.sha }}
+          TRIVY_CACHE_DIR: ${{ github.workspace }}/.cache/trivy
         run: trivy image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 "${IMAGE}"
