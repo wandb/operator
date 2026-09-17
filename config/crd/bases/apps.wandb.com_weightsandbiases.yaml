@@ -1933,7 +1933,18 @@ spec:
                                   x-kubernetes-int-or-string: true
                                 type: object
                             type: object
+                          topicPartitionOverrides:
+                            additionalProperties:
+                              format: int32
+                              minimum: 1
+                              type: integer
+                            type: object
                         type: object
+                        x-kubernetes-validations:
+                        - message: topicPartitionOverrides is immutable after creation
+                          rule: (!has(oldSelf.topicPartitionOverrides) && !has(self.topicPartitionOverrides))
+                            || (has(oldSelf.topicPartitionOverrides) && has(self.topicPartitionOverrides)
+                            && self.topicPartitionOverrides == oldSelf.topicPartitionOverrides)
                       name:
                         type: string
                       namespace:
