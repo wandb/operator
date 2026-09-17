@@ -4,7 +4,7 @@ on:
   push:
     branches: [v1]
   pull_request:
-    branches: [v1]
+    branches: [v1, '**/v1.*']
 
 jobs:
   build-and-scan:
@@ -26,6 +26,27 @@ jobs:
           no-cache: true
           tags: wandb/operator:${{ github.sha }}
 
+      - name: Verify the runtime image
+        env:
+          IMAGE: wandb/operator:${{ github.sha }}
+        run: |
+          docker run --rm --entrypoint /bin/sh "${IMAGE}" -ec '
+            test "$(id -u)" = 65532
+            for tool in curl rpm microdnf; do
+              if command -v "${tool}"; then
+                echo "Unexpected runtime tool: ${tool}" >&2
+                exit 1
+              fi
+            done
+            test -z "$(find /usr/lib /usr/lib64 -name "libcurl.so*")"
+            test -s /etc/pki/tls/certs/ca-bundle.crt
+            test -s /var/lib/rpm/rpmdb.sqlite
+            test -w "${HELM_CACHE_HOME}"
+            test -w "${HELM_CONFIG_HOME}"
+            test -w "${HELM_DATA_HOME}"
+            /manager --help
+          '
+
       - name: Scan OS packages and Go dependencies
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -33,9 +54,4 @@ jobs:
           image-ref: wandb/operator:${{ github.sha }}
           scanners: vuln
           severity: HIGH,CRITICAL
-
-      - name: Reject fixable HIGH and CRITICAL vulnerabilities
-        env:
-          IMAGE: wandb/operator:${{ github.sha }}
-          TRIVY_CACHE_DIR: ${{ github.workspace }}/.cache/trivy
-        run: trivy image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 "${IMAGE}"
+          exit-code: '1'

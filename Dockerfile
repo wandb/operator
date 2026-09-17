@@ -22,8 +22,13 @@ COPY internal/ internal/
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o manager cmd/main.go
 
 FROM registry.access.redhat.com/ubi9/ubi-minimal:latest@sha256:7b8e25a1b56ca4d00219198f3b5b51a3e1693a5c4f5369c5e190d7d6cb3f980e
-# Include errata published since the base image was built.
-RUN microdnf upgrade --refresh -y && microdnf clean all
+# Apply OS errata before removing curl and the package-management tools that
+# depend on it. The statically linked operator uses Go's HTTP clients at runtime.
+# Keep RPM's dependency checks enabled and retain its database for image scanners.
+RUN microdnf upgrade --refresh -y \
+    && microdnf clean all \
+    && rpm -e curl-minimal libcurl-minimal librepo libdnf microdnf \
+        rpm rpm-libs libsolv libmodulemd
 WORKDIR /
 COPY --from=manager-builder /workspace/manager .
 
