@@ -313,23 +313,46 @@ var _ = Describe("DeployerClient", func() {
 	})
 })
 
-// TestDockerfileCACerts tests that the CA certs from the Dockerfile are correctly installed
+// TestDockerfileRuntime checks the filesystem permissions in the final image.
+func TestDockerfileRuntime(t *testing.T) {
+	if os.Getenv("RUNNING_IN_CONTAINER") != "true" || os.Getenv("SKIP_CONTAINER_TESTS") != "" {
+		t.Skip("Skipping runtime image test - not running in container")
+	}
+	if os.Getuid() != 65532 || os.Getgid() != 65532 {
+		t.Fatalf("Expected UID/GID 65532, got %d/%d", os.Getuid(), os.Getgid())
+	}
+	for _, name := range []string{"HELM_CACHE_HOME", "HELM_CONFIG_HOME", "HELM_DATA_HOME"} {
+		t.Run(name, func(t *testing.T) {
+			path := os.Getenv(name)
+			if path == "" {
+				t.Fatalf("%s is not set", name)
+			}
+			file, err := os.CreateTemp(path, "runtime-test-*")
+			if err != nil {
+				t.Fatalf("Cannot write to %s: %v", path, err)
+			}
+			file.Close()
+			t.Cleanup(func() { os.Remove(file.Name()) })
+		})
+	}
+	// Helm also needs writable temporary storage for downloaded charts.
+	t.TempDir()
+}
+
+// TestDockerfileCACerts verifies Go's system trust store and real deployer HTTPS.
 func TestDockerfileCACerts(t *testing.T) {
 	// Skip if not running in the container environment or if skip flag is set
 	if os.Getenv("RUNNING_IN_CONTAINER") != "true" || os.Getenv("SKIP_CONTAINER_TESTS") != "" {
 		t.Skip("Skipping Dockerfile CA certificates test - not running in container")
 	}
 
-	// Try to access the CA cert directories that should be copied from the ubi-minimal image
-	caTrustPaths := []string{
-		"/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem",
-		"/etc/pki/ca-trust/source/anchors",
+	// Check the trust store that Go actually uses, independent of base-image layout.
+	roots, err := x509.SystemCertPool()
+	if err != nil || roots == nil {
+		t.Fatalf("Failed to load system CA certificates: %v", err)
 	}
-
-	for _, path := range caTrustPaths {
-		if _, err := os.Stat(path); err != nil {
-			t.Errorf("CA certificate path %s not found in container: %v", path, err)
-		}
+	if roots.Equal(x509.NewCertPool()) {
+		t.Fatal("System CA certificate pool is empty")
 	}
 
 	// Test a real HTTPS connection to verify certificates work

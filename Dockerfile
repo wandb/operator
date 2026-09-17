@@ -21,14 +21,16 @@ COPY internal/ internal/
 # Cross-compile for the requested image platform using the native build platform.
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o manager cmd/main.go
 
-FROM registry.access.redhat.com/ubi9/ubi-minimal:latest@sha256:7b8e25a1b56ca4d00219198f3b5b51a3e1693a5c4f5369c5e190d7d6cb3f980e
-# Include errata published since the base image was built.
-RUN microdnf upgrade --refresh -y && microdnf clean all
+# Prepare writable Helm directories before entering the shell-free runtime image.
+RUN mkdir -p /helm/.cache/helm /helm/.config/helm /helm/.local/share/helm
+
+# The CGO-disabled manager needs CA certificates and runtime data, not a C library,
+# shell, or package manager. Pin the multi-platform index for reproducible builds.
+FROM gcr.io/distroless/static-debian13:nonroot@sha256:e2e927ec666bae08560abb3c55d0659eceabb657f56b6782ab500a9fc7f555e3
 WORKDIR /
 COPY --from=manager-builder /workspace/manager .
 
-# Create a helm cache directory and set ownership to the non-root user
-RUN mkdir -p /helm/.cache/helm /helm/.config/helm /helm/.local/share/helm && chown -R 65532:65532 /helm
+COPY --from=manager-builder --chown=65532:65532 /helm /helm
 
 USER 65532:65532
 
