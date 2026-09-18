@@ -16,20 +16,33 @@ import (
 
 const appWorkloadCapabilityAll v1.Capability = "ALL"
 
-func resolvePodSecurityContext() *v1.PodSecurityContext {
-	return &v1.PodSecurityContext{
+func resolvePodSecurityContext(profile *serverManifest.WorkloadSecurityProfile) *v1.PodSecurityContext {
+	securityContext := &v1.PodSecurityContext{
 		SeccompProfile: resolveRuntimeDefaultSeccompProfile(),
 	}
+	if profile != nil && profile.RunAsNonRoot != nil {
+		securityContext.RunAsNonRoot = ptr.To(*profile.RunAsNonRoot)
+	}
+	return securityContext
 }
 
-func resolveContainerSecurityContext() *v1.SecurityContext {
-	return &v1.SecurityContext{
+func resolveContainerSecurityContext(profile *serverManifest.WorkloadSecurityProfile) *v1.SecurityContext {
+	securityContext := &v1.SecurityContext{
 		AllowPrivilegeEscalation: ptr.To(false),
 		Capabilities: &v1.Capabilities{
 			Drop: []v1.Capability{appWorkloadCapabilityAll},
 		},
 		SeccompProfile: resolveRuntimeDefaultSeccompProfile(),
 	}
+	if profile != nil && profile.ReadOnlyRootFilesystem != nil {
+		securityContext.ReadOnlyRootFilesystem = ptr.To(*profile.ReadOnlyRootFilesystem)
+	}
+	return securityContext
+}
+
+func hasWorkloadSecurityProfile(profile *serverManifest.WorkloadSecurityProfile) bool {
+	return profile != nil &&
+		(profile.RunAsNonRoot != nil || profile.ReadOnlyRootFilesystem != nil)
 }
 
 func resolveRuntimeDefaultSeccompProfile() *v1.SeccompProfile {
@@ -53,7 +66,7 @@ func resolveInitContainers(app serverManifest.Application, wandb *v2.WeightsAndB
 				Args:            initContainerSpec.Args,
 				Command:         initContainerSpec.Command,
 				VolumeMounts:    volumeMounts,
-				SecurityContext: resolveContainerSecurityContext(),
+				SecurityContext: resolveContainerSecurityContext(app.SecurityProfile),
 			}
 			initContainers = append(initContainers, initContainer)
 		}
@@ -99,7 +112,7 @@ func resolveContainers(app serverManifest.Application, wandb *v2.WeightsAndBiase
 				Command:         cmd,
 				Ports:           containerPorts,
 				VolumeMounts:    volumeMounts,
-				SecurityContext: resolveContainerSecurityContext(),
+				SecurityContext: resolveContainerSecurityContext(app.SecurityProfile),
 			}
 
 			if resources := ResolveResources(app, wandb, container.Resources); resources != nil {
@@ -127,7 +140,7 @@ func resolveContainers(app serverManifest.Application, wandb *v2.WeightsAndBiase
 			Args:            app.Args,
 			Command:         app.Command,
 			VolumeMounts:    volumeMounts,
-			SecurityContext: resolveContainerSecurityContext(),
+			SecurityContext: resolveContainerSecurityContext(app.SecurityProfile),
 		}
 
 		if resources := ResolveResources(app, wandb, nil); resources != nil {
