@@ -93,9 +93,9 @@ spec:
   datasource:
     name: VictoriaTraces
     uid: victoriatraces
-    type: jaeger
+    type: tempo
     access: proxy
-    url: {{ printf "%s/select/jaeger" (include "telemetry.tracesEndpoint" . | trimSuffix "/insert/opentelemetry/v1/traces") | quote }}
+    url: {{ printf "%s/select/tempo" (include "telemetry.tracesEndpoint" . | trimSuffix "/insert/opentelemetry/v1/traces") | quote }}
     jsonData:
       # Pivot from a trace to its logs in VictoriaLogs, correlating on service name.
       tracesToLogsV2:
