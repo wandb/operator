@@ -4,8 +4,8 @@
       "name": "DS_VICTORIAMETRICS",
       "label": "VictoriaMetrics",
       "type": "datasource",
-      "pluginId": "victoriametrics-metrics-datasource",
-      "pluginName": "VictoriaMetrics"
+      "pluginId": "prometheus",
+      "pluginName": "Prometheus"
     },
     {
       "name": "DS_VICTORIATRACES",
@@ -73,7 +73,7 @@
     {
       "type": "table",
       "title": "Service Image Versions",
-      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "datasource": {"type": "prometheus", "uid": "${DS_VICTORIAMETRICS}"},
       "gridPos": {"h": 12, "w": 16, "x": 0, "y": 10},
       "targets": [
         {
@@ -121,7 +121,7 @@
     {
       "type": "timeseries",
       "title": "W&B API Request Latency (p50 / p95 / p99)",
-      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "datasource": {"type": "prometheus", "uid": "${DS_VICTORIAMETRICS}"},
       "gridPos": {"h": 10, "w": 16, "x": 0, "y": 23},
       "targets": [
         {
@@ -169,7 +169,7 @@
     {
       "type": "timeseries",
       "title": "W&B API Request Rate by Status Code",
-      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "datasource": {"type": "prometheus", "uid": "${DS_VICTORIAMETRICS}"},
       "gridPos": {"h": 10, "w": 16, "x": 0, "y": 33},
       "targets": [
         {
@@ -206,7 +206,7 @@
       "type": "timeseries",
       "title": "Filestream HTTP Request Rate by Status",
       "description": "TODO: empty until gorilla emits an http.route label — only `/ping` is set today, so the `file_stream` filter matches nothing. The unsampled filestream signal is DogStatsD, which needs GORILLA_STATSD_PORT>0 (currently 0).",
-      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "datasource": {"type": "prometheus", "uid": "${DS_VICTORIAMETRICS}"},
       "gridPos": {"h": 10, "w": 16, "x": 0, "y": 44},
       "targets": [
         {
@@ -251,7 +251,7 @@
     {
       "type": "table",
       "title": "Top Operations by Slow Request Count (>2.5s)",
-      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "datasource": {"type": "prometheus", "uid": "${DS_VICTORIAMETRICS}"},
       "gridPos": {"h": 12, "w": 24, "x": 0, "y": 59},
       "targets": [
         {
@@ -301,7 +301,7 @@
         "name": "namespace",
         "label": "W&B Namespace",
         "type": "query",
-        "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+        "datasource": {"type": "prometheus", "uid": "${DS_VICTORIAMETRICS}"},
         "definition": "label_values(wandb_application_info, namespace)",
         "query": {
           "query": "label_values(wandb_application_info, namespace)",
