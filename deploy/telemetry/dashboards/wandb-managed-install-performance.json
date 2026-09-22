@@ -4,8 +4,8 @@
       "name": "DS_VICTORIAMETRICS",
       "label": "VictoriaMetrics",
       "type": "datasource",
-      "pluginId": "victoriametrics-metrics-datasource",
-      "pluginName": "VictoriaMetrics"
+      "pluginId": "prometheus",
+      "pluginName": "Prometheus"
     },
     {
       "name": "DS_VICTORIATRACES",
@@ -62,7 +62,7 @@
     {
       "type": "timeseries",
       "title": "Container Restarts (last hour, by container)",
-      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "datasource": {"type": "prometheus", "uid": "${DS_VICTORIAMETRICS}"},
       "gridPos": {"h": 10, "w": 16, "x": 0, "y": 7},
       "targets": [
         {
@@ -92,7 +92,7 @@
     {
       "type": "timeseries",
       "title": "Top Containers by CPU (% of limit)",
-      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "datasource": {"type": "prometheus", "uid": "${DS_VICTORIAMETRICS}"},
       "gridPos": {"h": 10, "w": 16, "x": 0, "y": 17},
       "targets": [
         {
@@ -122,7 +122,7 @@
     {
       "type": "timeseries",
       "title": "Top Containers by Memory (% of limit)",
-      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "datasource": {"type": "prometheus", "uid": "${DS_VICTORIAMETRICS}"},
       "gridPos": {"h": 10, "w": 16, "x": 0, "y": 27},
       "targets": [
         {
@@ -158,7 +158,7 @@
     {
       "type": "timeseries",
       "title": "MySQL CPU & Threads",
-      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "datasource": {"type": "prometheus", "uid": "${DS_VICTORIAMETRICS}"},
       "gridPos": {"h": 10, "w": 16, "x": 0, "y": 38},
       "targets": [
         {
@@ -198,7 +198,7 @@
     {
       "type": "timeseries",
       "title": "MySQL Throughput & Lock Pressure",
-      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "datasource": {"type": "prometheus", "uid": "${DS_VICTORIAMETRICS}"},
       "gridPos": {"h": 10, "w": 16, "x": 0, "y": 48},
       "targets": [
         {
@@ -243,7 +243,7 @@
     {
       "type": "timeseries",
       "title": "MySQL Errors & Slow Queries",
-      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "datasource": {"type": "prometheus", "uid": "${DS_VICTORIAMETRICS}"},
       "gridPos": {"h": 10, "w": 16, "x": 0, "y": 58},
       "targets": [
         {
@@ -289,7 +289,7 @@
     {
       "type": "timeseries",
       "title": "Redis CPU & Memory",
-      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "datasource": {"type": "prometheus", "uid": "${DS_VICTORIAMETRICS}"},
       "gridPos": {"h": 10, "w": 16, "x": 0, "y": 69},
       "targets": [
         {
@@ -331,7 +331,7 @@
     {
       "type": "timeseries",
       "title": "Redis Clients & Expired Keys",
-      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "datasource": {"type": "prometheus", "uid": "${DS_VICTORIAMETRICS}"},
       "gridPos": {"h": 10, "w": 16, "x": 0, "y": 79},
       "targets": [
         {
@@ -377,7 +377,7 @@
     {
       "type": "timeseries",
       "title": "Kafka Request Rate by API",
-      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "datasource": {"type": "prometheus", "uid": "${DS_VICTORIAMETRICS}"},
       "gridPos": {"h": 10, "w": 16, "x": 0, "y": 90},
       "targets": [
         {
@@ -398,7 +398,7 @@
     {
       "type": "stat",
       "title": "Bufstream Status",
-      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "datasource": {"type": "prometheus", "uid": "${DS_VICTORIAMETRICS}"},
       "gridPos": {"h": 4, "w": 8, "x": 16, "y": 90},
       "targets": [
         {
@@ -424,7 +424,7 @@
     {
       "type": "timeseries",
       "title": "Kafka Consumer Lag by Topic/Partition",
-      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "datasource": {"type": "prometheus", "uid": "${DS_VICTORIAMETRICS}"},
       "gridPos": {"h": 10, "w": 16, "x": 0, "y": 100},
       "targets": [
         {
@@ -445,7 +445,7 @@
     {
       "type": "timeseries",
       "title": "Kafka Request Latency p95 by API",
-      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "datasource": {"type": "prometheus", "uid": "${DS_VICTORIAMETRICS}"},
       "gridPos": {"h": 10, "w": 8, "x": 16, "y": 100},
       "targets": [
         {
@@ -466,7 +466,7 @@
     {
       "type": "timeseries",
       "title": "Kafka Byte Throughput (in/out)",
-      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "datasource": {"type": "prometheus", "uid": "${DS_VICTORIAMETRICS}"},
       "gridPos": {"h": 10, "w": 16, "x": 0, "y": 110},
       "targets": [
         {
@@ -492,7 +492,7 @@
     {
       "type": "timeseries",
       "title": "Partitions by Topic",
-      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "datasource": {"type": "prometheus", "uid": "${DS_VICTORIAMETRICS}"},
       "gridPos": {"h": 10, "w": 8, "x": 16, "y": 110},
       "targets": [
         {
@@ -528,7 +528,7 @@
     {
       "type": "timeseries",
       "title": "ClickHouse Memory, Connections, Merges",
-      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "datasource": {"type": "prometheus", "uid": "${DS_VICTORIAMETRICS}"},
       "gridPos": {"h": 10, "w": 16, "x": 0, "y": 121},
       "targets": [
         {
@@ -576,7 +576,7 @@
     {
       "type": "timeseries",
       "title": "Object Store Capacity Used % & Request Rate",
-      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "datasource": {"type": "prometheus", "uid": "${DS_VICTORIAMETRICS}"},
       "gridPos": {"h": 10, "w": 16, "x": 0, "y": 132},
       "targets": [
         {
@@ -628,7 +628,7 @@
     {
       "type": "timeseries",
       "title": "Slowest Storage Operations (p95, by span)",
-      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "datasource": {"type": "prometheus", "uid": "${DS_VICTORIAMETRICS}"},
       "gridPos": {"h": 10, "w": 16, "x": 0, "y": 143},
       "targets": [
         {
@@ -666,7 +666,7 @@
         "name": "namespace",
         "label": "W&B Namespace",
         "type": "query",
-        "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+        "datasource": {"type": "prometheus", "uid": "${DS_VICTORIAMETRICS}"},
         "definition": "label_values(wandb_application_info, namespace)",
         "query": {
           "query": "label_values(wandb_application_info, namespace)",

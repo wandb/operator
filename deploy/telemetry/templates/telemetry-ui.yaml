@@ -28,7 +28,7 @@ spec:
             - name: grafana
               env:
                 - name: GF_INSTALL_PLUGINS
-                  value: victoriametrics-metrics-datasource,victoriametrics-logs-datasource
+                  value: victoriametrics-logs-datasource
 ---
 apiVersion: grafana.integreatly.org/v1beta1
 kind: GrafanaDatasource
@@ -45,7 +45,8 @@ spec:
   datasource:
     name: VictoriaMetrics
     uid: victoriametrics
-    type: victoriametrics-metrics-datasource
+    # Grafana's Metrics Drilldown only accepts type "prometheus"
+    type: prometheus
     access: proxy
     url: {{ include "telemetry.metricsEndpoint" . | trimSuffix "/opentelemetry/v1/metrics" | quote }}
     isDefault: true
