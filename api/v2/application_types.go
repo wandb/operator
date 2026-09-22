@@ -59,7 +59,12 @@ type ApplicationSpec struct {
 	// +optional
 	ServiceName string `json:"serviceName,omitempty"`
 
-	ServiceTemplate      *corev1.ServiceSpec                        `json:"serviceTemplate,omitempty"`
+	ServiceTemplate *corev1.ServiceSpec `json:"serviceTemplate,omitempty"`
+	// ServiceAnnotations are applied only to the generated Service. This keeps
+	// controller-specific backend configuration separate from MetaTemplate,
+	// whose metadata is shared by all resources generated for the Application.
+	// +optional
+	ServiceAnnotations   map[string]string                          `json:"serviceAnnotations,omitempty"`
 	IngressTemplate      *networkingv1.IngressSpec                  `json:"ingressTemplate,omitempty"`
 	HpaTemplate          *autoscalingv2.HorizontalPodAutoscalerSpec `json:"hpaTemplate,omitempty"`
 	PdbTemplate          *policyv1.PodDisruptionBudgetSpec          `json:"pdbTemplate,omitempty"`

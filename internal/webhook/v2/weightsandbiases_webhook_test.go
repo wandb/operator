@@ -124,6 +124,36 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("expected an WeightsAndBiases object"))
 		})
+
+		It("defaults ingress managed to true only in ingress mode", func() {
+			ingressClassName := "alb"
+			obj.Spec.Networking.Mode = appsv2.NetworkingModeIngress
+			obj.Spec.Networking.Ingress = &appsv2.IngressConfig{IngressClassName: &ingressClassName}
+
+			Expect(defaulter.Default(ctx, obj)).To(Succeed())
+			Expect(obj.Spec.Networking.Ingress.Managed).NotTo(BeNil())
+			Expect(*obj.Spec.Networking.Ingress.Managed).To(BeTrue())
+		})
+
+		It("preserves an explicitly external ingress", func() {
+			ingressClassName := "alb"
+			obj.Spec.Networking.Mode = appsv2.NetworkingModeIngress
+			obj.Spec.Networking.Ingress = &appsv2.IngressConfig{
+				Managed:          boolPtr(false),
+				IngressClassName: &ingressClassName,
+			}
+
+			Expect(defaulter.Default(ctx, obj)).To(Succeed())
+			Expect(*obj.Spec.Networking.Ingress.Managed).To(BeFalse())
+		})
+
+		It("does not default ingress managed while networking mode is empty", func() {
+			ingressClassName := "alb"
+			obj.Spec.Networking.Ingress = &appsv2.IngressConfig{IngressClassName: &ingressClassName}
+
+			Expect(defaulter.Default(ctx, obj)).To(Succeed())
+			Expect(obj.Spec.Networking.Ingress.Managed).To(BeNil())
+		})
 	})
 
 	Context("When creating or updating WeightsAndBiases under Validating Webhook", func() {
@@ -417,6 +447,23 @@ var _ = Describe("WeightsAndBiases Webhook", func() {
 			_, err := validator.ValidateCreate(ctx, obj)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("gatewayAPI"))
+		})
+
+		It("requires ingress config when mode is ingress", func() {
+			obj.Spec.Networking.Mode = appsv2.NetworkingModeIngress
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("ingress is required"))
+		})
+
+		It("requires ingressClassName for managed and external ingresses", func() {
+			obj.Spec.Networking.Mode = appsv2.NetworkingModeIngress
+			obj.Spec.Networking.Ingress = &appsv2.IngressConfig{Managed: boolPtr(false)}
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("ingressClassName is required"))
 		})
 
 		It("requires gatewayAPI config when mode is gateway", func() {

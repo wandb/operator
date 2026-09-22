@@ -102,7 +102,7 @@ var _ = Describe("Application Controller", func() {
 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 
 			controllerReconciler := &ApplicationReconciler{
-				Client: k8sClient,
+				Client: client.WithFieldOwner(k8sClient, ApplicationFieldManager),
 				Scheme: k8sClient.Scheme(),
 			}
 
@@ -157,7 +157,7 @@ var _ = Describe("Application Controller", func() {
 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 
 			controllerReconciler := &ApplicationReconciler{
-				Client: k8sClient,
+				Client: client.WithFieldOwner(k8sClient, ApplicationFieldManager),
 				Scheme: k8sClient.Scheme(),
 			}
 
@@ -221,7 +221,7 @@ var _ = Describe("Application Controller", func() {
 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 
 			controllerReconciler := &ApplicationReconciler{
-				Client: k8sClient,
+				Client: client.WithFieldOwner(k8sClient, ApplicationFieldManager),
 				Scheme: k8sClient.Scheme(),
 			}
 
@@ -295,7 +295,7 @@ var _ = Describe("Application Controller", func() {
 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 
 			controllerReconciler := &ApplicationReconciler{
-				Client: k8sClient,
+				Client: client.WithFieldOwner(k8sClient, ApplicationFieldManager),
 				Scheme: k8sClient.Scheme(),
 			}
 
@@ -356,7 +356,7 @@ var _ = Describe("Application Controller", func() {
 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 
 			controllerReconciler := &ApplicationReconciler{
-				Client: k8sClient,
+				Client: client.WithFieldOwner(k8sClient, ApplicationFieldManager),
 				Scheme: k8sClient.Scheme(),
 			}
 
@@ -401,7 +401,7 @@ var _ = Describe("Application Controller", func() {
 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 
 			controllerReconciler := &ApplicationReconciler{
-				Client: k8sClient,
+				Client: client.WithFieldOwner(k8sClient, ApplicationFieldManager),
 				Scheme: k8sClient.Scheme(),
 			}
 
@@ -448,7 +448,7 @@ var _ = Describe("Application Controller", func() {
 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 
 			controllerReconciler := &ApplicationReconciler{
-				Client: k8sClient,
+				Client: client.WithFieldOwner(k8sClient, ApplicationFieldManager),
 				Scheme: k8sClient.Scheme(),
 			}
 
@@ -494,7 +494,7 @@ var _ = Describe("Application Controller", func() {
 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 
 			controllerReconciler := &ApplicationReconciler{
-				Client: k8sClient,
+				Client: client.WithFieldOwner(k8sClient, ApplicationFieldManager),
 				Scheme: k8sClient.Scheme(),
 			}
 
@@ -581,7 +581,10 @@ var _ = Describe("Application Controller", func() {
 			// call still fires the Owns(Service) watch and re-queues the
 			// Application — the hot loop this test pins.
 			counter := &serviceUpdateCounter{Client: k8sClient}
-			controllerReconciler := &ApplicationReconciler{Client: counter, Scheme: k8sClient.Scheme()}
+			controllerReconciler := &ApplicationReconciler{
+				Client: client.WithFieldOwner(counter, ApplicationFieldManager),
+				Scheme: k8sClient.Scheme(),
+			}
 
 			// 1. Add finalizer; 2. create Deployment and Service.
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
@@ -591,6 +594,7 @@ var _ = Describe("Application Controller", func() {
 
 			svc := &corev1.Service{}
 			Expect(k8sClient.Get(ctx, typeNamespacedName, svc)).To(Succeed())
+			resourceVersion := svc.ResourceVersion
 
 			// Steady state: the API server has defaulted fields the template leaves
 			// unset (protocol, targetPort, sessionAffinity, type, ...); reconciling
@@ -602,6 +606,144 @@ var _ = Describe("Application Controller", func() {
 			}
 			Expect(counter.updates).To(BeZero(),
 				"steady-state reconciles must not update the Service")
+			Expect(k8sClient.Get(ctx, typeNamespacedName, svc)).To(Succeed())
+			Expect(svc.ResourceVersion).To(Equal(resourceVersion),
+				"an unchanged SSA intent must not change the Service resourceVersion")
+		})
+
+		It("uses SSA to preserve external Service fields and prune operator annotations", func() {
+			resourceName := "test-service-ssa"
+			key := types.NamespacedName{Name: resourceName, Namespace: "default"}
+			resource := &apiv2.Application{
+				ObjectMeta: metav1.ObjectMeta{Name: resourceName, Namespace: "default"},
+				Spec: apiv2.ApplicationSpec{
+					Kind: "Deployment",
+					PodTemplate: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
+						Containers: []corev1.Container{{Name: "web", Image: "nginx"}},
+					}},
+					ServiceTemplate: &corev1.ServiceSpec{
+						Ports: []corev1.ServicePort{{Name: "http", Port: 80}},
+					},
+					ServiceAnnotations: map[string]string{"operator.example/health": "/ready"},
+				},
+			}
+			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+
+			reconciler := &ApplicationReconciler{
+				Client: client.WithFieldOwner(k8sClient, ApplicationFieldManager),
+				Scheme: k8sClient.Scheme(),
+			}
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: key})
+			Expect(err).NotTo(HaveOccurred())
+			_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: key})
+			Expect(err).NotTo(HaveOccurred())
+
+			service := &corev1.Service{}
+			Expect(k8sClient.Get(ctx, key, service)).To(Succeed())
+			clusterIP := service.Spec.ClusterIP
+			service.Annotations["external.example/owner"] = "preserve-me"
+			Expect(k8sClient.Update(ctx, service)).To(Succeed())
+
+			Expect(k8sClient.Get(ctx, key, resource)).To(Succeed())
+			resource.Spec.ServiceAnnotations = nil
+			Expect(k8sClient.Update(ctx, resource)).To(Succeed())
+			_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: key})
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(k8sClient.Get(ctx, key, service)).To(Succeed())
+			Expect(service.Annotations).To(HaveKeyWithValue("external.example/owner", "preserve-me"))
+			Expect(service.Annotations).NotTo(HaveKey("operator.example/health"))
+			Expect(service.Spec.ClusterIP).To(Equal(clusterIP))
+
+			var foundFieldManager bool
+			for _, fields := range service.ManagedFields {
+				if fields.Manager == ApplicationFieldManager && fields.Operation == metav1.ManagedFieldsOperationApply {
+					foundFieldManager = true
+					break
+				}
+			}
+			Expect(foundFieldManager).To(BeTrue())
+		})
+
+		It("preserves an API-allocated NodePort across SSA reconciles", func() {
+			resourceName := "test-service-nodeport-ssa"
+			key := types.NamespacedName{Name: resourceName, Namespace: "default"}
+			resource := &apiv2.Application{
+				ObjectMeta: metav1.ObjectMeta{Name: resourceName, Namespace: "default"},
+				Spec: apiv2.ApplicationSpec{
+					Kind: "Deployment",
+					PodTemplate: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
+						Containers: []corev1.Container{{Name: "web", Image: "nginx"}},
+					}},
+					ServiceTemplate: &corev1.ServiceSpec{
+						Type:  corev1.ServiceTypeNodePort,
+						Ports: []corev1.ServicePort{{Name: "http", Port: 80}},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+
+			reconciler := &ApplicationReconciler{
+				Client: client.WithFieldOwner(k8sClient, ApplicationFieldManager),
+				Scheme: k8sClient.Scheme(),
+			}
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: key})
+			Expect(err).NotTo(HaveOccurred())
+			_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: key})
+			Expect(err).NotTo(HaveOccurred())
+
+			service := &corev1.Service{}
+			Expect(k8sClient.Get(ctx, key, service)).To(Succeed())
+			allocatedNodePort := service.Spec.Ports[0].NodePort
+			Expect(allocatedNodePort).To(BeNumerically(">", 0))
+
+			_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: key})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Get(ctx, key, service)).To(Succeed())
+			Expect(service.Spec.Ports[0].NodePort).To(Equal(allocatedNodePort))
+		})
+
+		It("refuses to adopt an existing Service owned outside the Application", func() {
+			resourceName := "test-service-foreign"
+			key := types.NamespacedName{Name: resourceName, Namespace: "default"}
+			resource := &apiv2.Application{
+				ObjectMeta: metav1.ObjectMeta{Name: resourceName, Namespace: "default"},
+				Spec: apiv2.ApplicationSpec{
+					Kind: "Deployment",
+					PodTemplate: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
+						Containers: []corev1.Container{{Name: "web", Image: "nginx"}},
+					}},
+					ServiceTemplate: &corev1.ServiceSpec{Ports: []corev1.ServicePort{{Port: 80}}},
+				},
+			}
+			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+			foreignService := &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{Name: resourceName, Namespace: "default"},
+				Spec:       corev1.ServiceSpec{Ports: []corev1.ServicePort{{Port: 9000}}},
+			}
+			Expect(k8sClient.Create(ctx, foreignService)).To(Succeed())
+			DeferCleanup(deleteIfPresent, ctx, foreignService)
+
+			reconciler := &ApplicationReconciler{
+				Client: client.WithFieldOwner(k8sClient, ApplicationFieldManager),
+				Scheme: k8sClient.Scheme(),
+			}
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: key})
+			Expect(err).NotTo(HaveOccurred())
+			_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: key})
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("is not controlled by Application"))
+
+			service := &corev1.Service{}
+			Expect(k8sClient.Get(ctx, key, service)).To(Succeed())
+			Expect(service.Spec.Ports[0].Port).To(Equal(int32(9000)))
+
+			Expect(k8sClient.Get(ctx, key, resource)).To(Succeed())
+			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+			_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: key})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Get(ctx, key, service)).To(Succeed())
+			Expect(service.Spec.Ports[0].Port).To(Equal(int32(9000)))
 		})
 
 		It("should successfully reconcile Jobs and CronJobs", func() {
@@ -659,7 +801,7 @@ var _ = Describe("Application Controller", func() {
 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 
 			controllerReconciler := &ApplicationReconciler{
-				Client: k8sClient,
+				Client: client.WithFieldOwner(k8sClient, ApplicationFieldManager),
 				Scheme: k8sClient.Scheme(),
 			}
 
@@ -707,7 +849,7 @@ var _ = Describe("Application Controller", func() {
 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 
 			controllerReconciler := &ApplicationReconciler{
-				Client: k8sClient,
+				Client: client.WithFieldOwner(k8sClient, ApplicationFieldManager),
 				Scheme: k8sClient.Scheme(),
 			}
 

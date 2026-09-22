@@ -349,6 +349,13 @@ type NetworkingSpec struct {
 }
 
 type IngressConfig struct {
+	// Managed controls whether the operator creates and manages the Ingress.
+	// When unset in ingress mode, the defaulting webhook sets it to true.
+	// Set it to false when an external Ingress routes to the operator-managed
+	// application Services.
+	// +optional
+	Managed *bool `json:"managed,omitempty"`
+
 	// +optional
 	IngressClassName *string `json:"ingressClassName,omitempty"`
 
@@ -1132,9 +1139,40 @@ type GatewayStatusSummary struct {
 }
 
 type IngressStatusSummary struct {
-	Name                string                       `json:"name,omitempty"`
-	LoadBalancerIngress []corev1.LoadBalancerIngress `json:"loadBalancerIngress,omitempty"`
-	Ready               bool                         `json:"ready"`
+	Name                string                      `json:"name,omitempty"`
+	LoadBalancerIngress []IngressLoadBalancerStatus `json:"loadBalancerIngress,omitempty"`
+	Ready               bool                        `json:"ready"`
+}
+
+// IngressLoadBalancerStatus mirrors the externally visible fields of a
+// Kubernetes Ingress load-balancer status without inheriting validation markers
+// from Kubernetes API types into the WeightsAndBiases CRD.
+type IngressLoadBalancerStatus struct {
+	// +optional
+	IP string `json:"ip,omitempty"`
+
+	// +optional
+	Hostname string `json:"hostname,omitempty"`
+
+	// IPMode is retained for wire compatibility with the previous
+	// corev1.LoadBalancerIngress-based status schema.
+	// +optional
+	IPMode *corev1.LoadBalancerIPMode `json:"ipMode,omitempty"`
+
+	// +optional
+	// +listType=atomic
+	Ports []IngressPortStatus `json:"ports,omitempty"`
+}
+
+type IngressPortStatus struct {
+	Port int32 `json:"port"`
+
+	Protocol corev1.Protocol `json:"protocol"`
+
+	// +optional
+	// +kubebuilder:validation:Pattern=`^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$`
+	// +kubebuilder:validation:MaxLength=316
+	Error *string `json:"error,omitempty"`
 }
 
 type WandbStatus struct {
