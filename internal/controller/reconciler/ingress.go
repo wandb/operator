@@ -25,8 +25,9 @@ const (
 // same default for newly created and updated ingress-mode objects.
 func ingressManaged(wandb *apiv2.WeightsAndBiases) bool {
 	return wandb.Spec.Networking.Mode == apiv2.NetworkingModeIngress &&
-		wandb.Spec.Networking.Ingress != nil &&
-		(wandb.Spec.Networking.Ingress.Managed == nil || *wandb.Spec.Networking.Ingress.Managed)
+		(wandb.Spec.Networking.Ingress == nil ||
+			wandb.Spec.Networking.Ingress.Managed == nil ||
+			*wandb.Spec.Networking.Ingress.Managed)
 }
 
 func ingressUsesAWSLoadBalancerController(

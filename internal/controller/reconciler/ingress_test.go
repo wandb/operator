@@ -24,6 +24,69 @@ import (
 	apiv2 "github.com/wandb/operator/api/v2"
 )
 
+func TestIngressManaged(t *testing.T) {
+	tests := []struct {
+		name       string
+		networking apiv2.NetworkingSpec
+		want       bool
+	}{
+		{
+			name: "legacy ingress without config is managed",
+			networking: apiv2.NetworkingSpec{
+				Mode: apiv2.NetworkingModeIngress,
+			},
+			want: true,
+		},
+		{
+			name: "ingress without managed value is managed",
+			networking: apiv2.NetworkingSpec{
+				Mode:    apiv2.NetworkingModeIngress,
+				Ingress: &apiv2.IngressConfig{},
+			},
+			want: true,
+		},
+		{
+			name: "explicitly managed ingress is managed",
+			networking: apiv2.NetworkingSpec{
+				Mode: apiv2.NetworkingModeIngress,
+				Ingress: &apiv2.IngressConfig{
+					Managed: ptr.To(true),
+				},
+			},
+			want: true,
+		},
+		{
+			name: "explicitly unmanaged ingress is not managed",
+			networking: apiv2.NetworkingSpec{
+				Mode: apiv2.NetworkingModeIngress,
+				Ingress: &apiv2.IngressConfig{
+					Managed: ptr.To(false),
+				},
+			},
+			want: false,
+		},
+		{
+			name: "gateway mode is not managed as ingress",
+			networking: apiv2.NetworkingSpec{
+				Mode: apiv2.NetworkingModeGatewayAPI,
+			},
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			wandb := &apiv2.WeightsAndBiases{
+				Spec: apiv2.WeightsAndBiasesSpec{
+					Networking: tt.networking,
+				},
+			}
+
+			require.Equal(t, tt.want, ingressManaged(wandb))
+		})
+	}
+}
+
 func TestConsolidatedIngressName_DefaultsToCRName(t *testing.T) {
 	wandb := &apiv2.WeightsAndBiases{
 		ObjectMeta: metav1.ObjectMeta{Name: "wandb"},
