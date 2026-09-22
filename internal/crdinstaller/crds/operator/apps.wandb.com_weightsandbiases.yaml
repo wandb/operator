@@ -1328,6 +1328,8 @@ spec:
                         storageSize:
                           type: string
                         telemetry:
+                          default:
+                            enabled: true
                           properties:
                             enabled:
                               default: true
@@ -1965,6 +1967,8 @@ spec:
                       storageSize:
                         type: string
                       telemetry:
+                        default:
+                          enabled: true
                         properties:
                           enabled:
                             default: true
@@ -2761,6 +2765,8 @@ spec:
                         storageSize:
                           type: string
                         telemetry:
+                          default:
+                            enabled: true
                           properties:
                             enabled:
                               default: true
@@ -3704,6 +3710,8 @@ spec:
                         storageSize:
                           type: string
                         telemetry:
+                          default:
+                            enabled: true
                           properties:
                             enabled:
                               default: true
@@ -4435,6 +4443,8 @@ spec:
                         storageSize:
                           type: string
                         telemetry:
+                          default:
+                            enabled: true
                           properties:
                             enabled:
                               default: true

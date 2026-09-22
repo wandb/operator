@@ -754,6 +754,7 @@ type ManagedMysqlSpec struct {
 	Config      MySQLConfig `json:"config,omitempty"`
 	Namespace   string      `json:"namespace,omitempty"`
 	Name        string      `json:"name,omitempty"`
+	// +kubebuilder:default={enabled: true}
 	Telemetry   Telemetry   `json:"telemetry,omitempty"`
 }
 
@@ -816,6 +817,7 @@ type ManagedRedisSpec struct {
 	Sentinel    RedisSentinelSpec `json:"sentinel,omitempty"`
 	Namespace   string            `json:"namespace,omitempty"`
 	Name        string            `json:"name,omitempty"`
+	// +kubebuilder:default={enabled: true}
 	Telemetry   Telemetry         `json:"telemetry,omitempty"`
 }
 
@@ -871,6 +873,7 @@ type ManagedKafkaSpec struct {
 	Config      KafkaConfig `json:"config,omitempty"`
 	Namespace   string      `json:"namespace,omitempty"`
 	Name        string      `json:"name,omitempty"`
+	// +kubebuilder:default={enabled: true}
 	Telemetry   Telemetry   `json:"telemetry,omitempty"`
 	// ServiceAccount configures the identity used by the Bufstream broker.
 	ServiceAccount   ManagedServiceAccountSpec `json:"serviceAccount,omitempty"`
@@ -929,6 +932,7 @@ type ManagedObjectStoreSpec struct {
 	Config                 ObjectStoreConfig      `json:"config,omitempty"`
 	Namespace              string                 `json:"namespace,omitempty"`
 	Name                   string                 `json:"name,omitempty"`
+	// +kubebuilder:default={enabled: true}
 	Telemetry              Telemetry              `json:"telemetry,omitempty"`
 }
 
@@ -1010,6 +1014,7 @@ type ManagedClickHouseSpec struct {
 	Config      ClickHouseConfig `json:"config,omitempty"`
 	Namespace   string           `json:"namespace,omitempty"`
 	Name        string           `json:"name,omitempty"`
+	// +kubebuilder:default={enabled: true}
 	Telemetry   Telemetry        `json:"telemetry,omitempty"`
 	// ServiceAccount configures the identity used by ClickHouse server pods.
 	ServiceAccount ManagedServiceAccountSpec `json:"serviceAccount,omitempty"`
