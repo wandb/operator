@@ -47,7 +47,7 @@
     },
     {
       "type": "stat",
-      "title": "Scrape Success",
+      "title": "Telemetry Retrieval Successful",
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
@@ -103,7 +103,7 @@
     },
     {
       "type": "stat",
-      "title": "Down Targets",
+      "title": "Unsuccessful Retrieval",
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
@@ -2168,7 +2168,7 @@
       "gridPos": {"h": 8, "w": 8, "x": 16, "y": 138},
       "options": {
         "mode": "markdown",
-        "content": "### Read this FIRST when a dashboard looks wrong\n\n**What it shows** — the fraction of trace spans the collector failed to export to storage. If this is non-zero, the trace/RED panels across every dashboard are **undercounting** — the data itself is lossy, not the app.\n\n**What bad looks like** — sustained > ~1%. Above ~5% treat trace-derived numbers as unreliable.\n\n**Do next** — if failures are high, check the `victoria-otlp-gateway` collector pod and the VictoriaTraces backend before trusting any trace panel. Also cross-check **Scrape Success** / **Down Targets** at the top of this dashboard for metric-side gaps."
+        "content": "### Read this FIRST when a dashboard looks wrong\n\n**What it shows** — the fraction of trace spans the collector failed to export to storage. If this is non-zero, the trace/RED panels across every dashboard are **undercounting** — the data itself is lossy, not the app.\n\n**What bad looks like** — sustained > ~1%. Above ~5% treat trace-derived numbers as unreliable.\n\n**Do next** — if failures are high, check the `victoria-otlp-gateway` collector pod and the VictoriaTraces backend before trusting any trace panel. Also cross-check **Telemetry Retrieval Success** / **Unsuccessful Retrieval** at the top of this dashboard for metric-side gaps."
       }
     },
     {
