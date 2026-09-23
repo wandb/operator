@@ -42,21 +42,8 @@ func TestBuildCRDefaultGateway(t *testing.T) {
 	if cr.Spec.Wandb.InternalServiceAuth.Enabled == nil || *cr.Spec.Wandb.InternalServiceAuth.Enabled {
 		t.Fatalf("internal service auth should be explicitly disabled")
 	}
-	if cr.Spec.MySQL[v2.DefaultInstanceName].ManagedMysql == nil || cr.Spec.MySQL[v2.DefaultInstanceName].ManagedMysql.Telemetry.Enabled {
-		t.Fatalf("mysql telemetry should be disabled by default")
-	}
-	if cr.Spec.Redis[v2.DefaultInstanceName].ManagedRedis == nil || cr.Spec.Redis[v2.DefaultInstanceName].ManagedRedis.Telemetry.Enabled {
-		t.Fatalf("redis telemetry should be disabled by default")
-	}
-	if cr.Spec.Kafka.ManagedKafka == nil || cr.Spec.Kafka.ManagedKafka.Telemetry.Enabled {
-		t.Fatalf("kafka telemetry should be disabled by default")
-	}
-	if cr.Spec.ObjectStore[v2.DefaultInstanceName].ManagedObjectStore == nil || cr.Spec.ObjectStore[v2.DefaultInstanceName].ManagedObjectStore.Telemetry.Enabled {
-		t.Fatalf("object store telemetry should be disabled by default")
-	}
-	if cr.Spec.ClickHouse[v2.DefaultInstanceName].ManagedClickHouse == nil || cr.Spec.ClickHouse[v2.DefaultInstanceName].ManagedClickHouse.Telemetry.Enabled {
-		t.Fatalf("clickhouse telemetry should be disabled by default")
-	}
+	// An unset observability mode must match the operator's default, not contradict it.
+	assertManagedTelemetry(t, cr, true)
 	if cr.Spec.MySQL[v2.DefaultInstanceName].ExternalMysql != nil {
 		t.Fatalf("external mysql should be unset by default")
 	}
@@ -310,6 +297,78 @@ func TestBuildCRInvalidObservabilityModeReturnsError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "observability-mode") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestBuildCRAppliesTelemetryModeWhenBaseCROmitsComponents(t *testing.T) {
+	dir := t.TempDir()
+	crFile := filepath.Join(dir, "base.yaml")
+	base := `apiVersion: apps.wandb.com/v2
+kind: WeightsAndBiases
+metadata:
+  name: custom
+spec:
+  size: dev
+  wandb:
+    hostname: http://old.example
+`
+	if err := os.WriteFile(crFile, []byte(base), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, tc := range []struct {
+		mode string
+		want bool
+	}{
+		{mode: "off", want: false},
+		{mode: "full", want: true},
+	} {
+		t.Run(tc.mode, func(t *testing.T) {
+			cr, err := BuildCR(Options{CRFile: crFile, ObservabilityMode: tc.mode})
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertManagedTelemetry(t, cr, tc.want)
+		})
+	}
+}
+
+func assertManagedTelemetry(t *testing.T, cr *v2.WeightsAndBiases, want bool) {
+	t.Helper()
+
+	got := map[string]bool{}
+	for _, spec := range cr.Spec.MySQL {
+		if spec.ManagedMysql != nil {
+			got["mysql"] = spec.ManagedMysql.Telemetry.Enabled
+		}
+	}
+	for _, spec := range cr.Spec.Redis {
+		if spec.ManagedRedis != nil {
+			got["redis"] = spec.ManagedRedis.Telemetry.Enabled
+		}
+	}
+	if cr.Spec.Kafka.ManagedKafka != nil {
+		got["kafka"] = cr.Spec.Kafka.ManagedKafka.Telemetry.Enabled
+	}
+	for _, spec := range cr.Spec.ObjectStore {
+		if spec.ManagedObjectStore != nil {
+			got["objectStore"] = spec.ManagedObjectStore.Telemetry.Enabled
+		}
+	}
+	for _, spec := range cr.Spec.ClickHouse {
+		if spec.ManagedClickHouse != nil {
+			got["clickhouse"] = spec.ManagedClickHouse.Telemetry.Enabled
+		}
+	}
+
+	for _, component := range []string{"mysql", "redis", "kafka", "objectStore", "clickhouse"} {
+		enabled, ok := got[component]
+		if !ok {
+			t.Fatalf("%s managed spec missing, telemetry mode not applied", component)
+		}
+		if enabled != want {
+			t.Fatalf("%s telemetry = %v, want %v", component, enabled, want)
+		}
 	}
 }
 
