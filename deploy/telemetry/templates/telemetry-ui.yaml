@@ -11,6 +11,14 @@ metadata:
     app.kubernetes.io/part-of: wandb
 spec:
   config:
+    server:
+      # Watchtower reverse-proxies Grafana under its base path (<basePath>/grafana)
+      # behind the console login. serve_from_sub_path makes Grafana prefix its own
+      # asset/redirect URLs with that sub-path so they resolve through the proxy;
+      # %(domain)s keeps root_url host-agnostic (the proxy is same-origin). Keep the
+      # /console literal in step with the watchtower base path (DefaultWatchtowerBasePath).
+      root_url: "%(protocol)s://%(domain)s/console/grafana/"
+      serve_from_sub_path: "true"
     log:
       mode: console
     auth:
