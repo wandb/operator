@@ -45,6 +45,7 @@ settings = {
     "networkMode": "gateway",  # gateway or ingress
     "gatewayClass": "nginx",
     "ingressClass": "nginx",
+    "enableCoreDNSRewrite": True,
     "createCA": True,
     "issuerName": "",
 
@@ -56,6 +57,8 @@ settings = {
     "useExternalMysql": False,
     "useExternalRedis": False,
     "useExternalObjectStore": False,
+    "externalObjectStoreHostname": "s3.localhost",
+    "externalObjectStorePort": 8333,
     "useCustomCA": False,
 }
 
@@ -175,6 +178,33 @@ def url_port(url):
     return 80
 
 
+def url_origin(url):
+    value = str(url)
+    if "://" not in value:
+        fail("wandbHostname must include http:// or https://")
+    scheme, rest = value.split("://", 1)
+    if scheme not in ["http", "https"]:
+        fail("wandbHostname must use http:// or https://")
+    authority = rest.split("/", 1)[0]
+    if authority == "":
+        fail("wandbHostname must include a hostname")
+    return scheme + "://" + authority
+
+
+def validate_hostname(name, value):
+    value = str(value)
+    if value == "" or "://" in value or "/" in value or ":" in value or " " in value:
+        fail("%s must be a hostname without a scheme, path, or port" % name)
+    return value
+
+
+def validate_port(name, value):
+    port = int(value)
+    if port < 1 or port > 65535:
+        fail("%s must be between 1 and 65535" % name)
+    return port
+
+
 settings["networkMode"] = normalize_network_mode()
 settings["observabilityMode"] = normalize_observability_mode()
 settings["manifestSource"] = normalize_manifest_source()
@@ -188,6 +218,11 @@ USE_EXTERNAL_OBJECT_STORE = as_bool(settings.get("useExternalObjectStore"))
 USE_CUSTOM_CA = as_bool(settings.get("useCustomCA"))
 USE_EXTERNAL_INFRA = USE_EXTERNAL_MYSQL or USE_EXTERNAL_REDIS or USE_EXTERNAL_OBJECT_STORE
 USE_TEST_INFRA_TLS = USE_CUSTOM_CA and (USE_EXTERNAL_MYSQL or USE_EXTERNAL_REDIS)
+EXTERNAL_OBJECT_STORE_HOSTNAME = str(settings.get("externalObjectStoreHostname"))
+EXTERNAL_OBJECT_STORE_PORT = settings.get("externalObjectStorePort")
+if USE_EXTERNAL_OBJECT_STORE:
+    EXTERNAL_OBJECT_STORE_HOSTNAME = validate_hostname("externalObjectStoreHostname", EXTERNAL_OBJECT_STORE_HOSTNAME)
+    EXTERNAL_OBJECT_STORE_PORT = validate_port("externalObjectStorePort", EXTERNAL_OBJECT_STORE_PORT)
 
 if (USE_EXTERNAL_INFRA or USE_CUSTOM_CA) and not as_bool(settings.get("includeCR")):
     fail("useExternalMysql/useExternalRedis/useExternalObjectStore/useCustomCA require includeCR=True")
@@ -474,10 +509,63 @@ else:
   WANDB_HOSTNAME = WANDB_CR_CONTENT.get("spec", {}).get("wandb", {}).get("hostname", settings.get("wandbHostname"))
   LOCAL_NETWORKING_MODE = WANDB_CR_CONTENT.get("spec", {}).get("networking", {}).get("mode", settings.get("networkMode"))
 
+WANDB_ENDPOINT_PORT = url_port(WANDB_HOSTNAME)
+WANDB_ENDPOINT_HOST = url_host(WANDB_HOSTNAME)
+if USE_EXTERNAL_OBJECT_STORE:
+    if EXTERNAL_OBJECT_STORE_HOSTNAME == WANDB_ENDPOINT_HOST:
+        fail("externalObjectStoreHostname must differ from the W&B endpoint hostname")
+    if EXTERNAL_OBJECT_STORE_PORT == WANDB_ENDPOINT_PORT:
+        fail("externalObjectStorePort must differ from the W&B endpoint port")
+
+COREDNS_REWRITE_RESOURCE = ""
+COREDNS_REWRITES = []
+COREDNS_REWRITE_DEPS = []
+WANDB_COREDNS_REWRITE_TARGET = ""
+WANDB_COREDNS_REWRITE_ENABLED = (
+    as_bool(settings.get("includeCR")) and
+    as_bool(settings.get("enableCoreDNSRewrite")) and
+    WANDB_ENDPOINT_HOST not in ["localhost", "127.0.0.1", "::1"]
+)
+
+if WANDB_COREDNS_REWRITE_ENABLED:
+    if IS_CRC:
+        warn("enableCoreDNSRewrite is not supported on OpenShift; configure the OpenShift DNS Operator instead.")
+    elif LOCAL_NETWORKING_MODE == "gateway":
+        gateway = WANDB_CR_CONTENT.get("spec", {}).get("networking", {}).get("gatewayAPI", {}).get("gateway", {})
+        if gateway.get("managed", False):
+            gateway_class = gateway.get("gatewayClassName", settings.get("gatewayClass"))
+            gateway_service = "%s-gateway-%s" % (WANDB_NAME, gateway_class)
+            if len(gateway_service) > 63:
+                fail("CoreDNS rewrite does not support generated NGINX Gateway service names longer than 63 characters: %s" % gateway_service)
+            WANDB_COREDNS_REWRITE_TARGET = "%s.%s.svc.cluster.local" % (gateway_service, WANDB_NAMESPACE)
+            COREDNS_REWRITE_DEPS.append("nginx-gateway-fabric")
+        else:
+            warn("enableCoreDNSRewrite requires an operator-managed Gateway; skipping the rewrite for the external Gateway reference.")
+    elif LOCAL_NETWORKING_MODE == "ingress":
+        WANDB_COREDNS_REWRITE_TARGET = "ingress-nginx-controller.ingress-nginx.svc.cluster.local"
+        COREDNS_REWRITE_DEPS.append("ingress-nginx-controller")
+
+if WANDB_COREDNS_REWRITE_TARGET:
+    COREDNS_REWRITES.append([WANDB_ENDPOINT_HOST, WANDB_COREDNS_REWRITE_TARGET])
+
+if USE_EXTERNAL_OBJECT_STORE:
+    if as_bool(settings.get("enableCoreDNSRewrite")):
+        if IS_CRC:
+            fail("Tilt cannot configure the OpenShift DNS Operator for the external object store. Set a cluster-resolvable externalObjectStoreHostname and enableCoreDNSRewrite=False.")
+        COREDNS_REWRITES.append([
+            EXTERNAL_OBJECT_STORE_HOSTNAME,
+            "seaweedfs.%s.svc.cluster.local" % WANDB_NAMESPACE,
+        ])
+        COREDNS_REWRITE_DEPS.append("Test-Infra")
+    else:
+        warn("The external object-store hostname must resolve to seaweedfs.%s.svc.cluster.local from inside the cluster." % WANDB_NAMESPACE)
+
 endpoint_anchors = []
 if as_bool(settings.get("includeCR")):
     if LOCAL_NETWORKING_MODE in ["gateway", "ingress"]:
         endpoint_anchors.append("wandb-endpoint-anchor")
+    if USE_EXTERNAL_OBJECT_STORE:
+        endpoint_anchors.append("s3-endpoint-anchor")
 
 if settings.get("observabilityMode") == "full":
     endpoint_anchors += [
@@ -603,22 +691,30 @@ if USE_EXTERNAL_INFRA:
     if USE_TEST_INFRA_TLS:
         test_infra_deps.append("cert-manager")
 
+    test_infra_flags = [
+        "--create-namespace",
+        "--wait",
+        "--timeout=10m",
+        "--set=mysql.enabled=%s" % bool_string(USE_EXTERNAL_MYSQL),
+        "--set=redis.enabled=%s" % bool_string(USE_EXTERNAL_REDIS),
+        "--set=seaweedfs.enabled=%s" % bool_string(USE_EXTERNAL_OBJECT_STORE),
+        "--set=tls.enabled=%s" % bool_string(USE_TEST_INFRA_TLS),
+        "--set=mysql.tls.enabled=%s" % bool_string(USE_CUSTOM_CA and USE_EXTERNAL_MYSQL),
+        "--set=redis.tls.enabled=%s" % bool_string(USE_CUSTOM_CA and USE_EXTERNAL_REDIS),
+    ]
+    if USE_EXTERNAL_OBJECT_STORE:
+        test_infra_flags += [
+            "--set-string=seaweedfs.connection.host=%s" % EXTERNAL_OBJECT_STORE_HOSTNAME,
+            "--set=seaweedfs.service.apiPort=%d" % EXTERNAL_OBJECT_STORE_PORT,
+            "--set-string=seaweedfs.cors.allowedOrigins=%s" % url_origin(WANDB_HOSTNAME),
+        ]
+
     helm_resource(
         "Test-Infra",
         chart="./hack/testing-manifests/test-infra",
         release_name="test-infra",
         namespace=WANDB_NAMESPACE,
-        flags=[
-            "--create-namespace",
-            "--wait",
-            "--timeout=10m",
-            "--set=mysql.enabled=%s" % bool_string(USE_EXTERNAL_MYSQL),
-            "--set=redis.enabled=%s" % bool_string(USE_EXTERNAL_REDIS),
-            "--set=seaweedfs.enabled=%s" % bool_string(USE_EXTERNAL_OBJECT_STORE),
-            "--set=tls.enabled=%s" % bool_string(USE_TEST_INFRA_TLS),
-            "--set=mysql.tls.enabled=%s" % bool_string(USE_CUSTOM_CA and USE_EXTERNAL_MYSQL),
-            "--set=redis.tls.enabled=%s" % bool_string(USE_CUSTOM_CA and USE_EXTERNAL_REDIS),
-        ],
+        flags=test_infra_flags,
         deps=["hack/testing-manifests/test-infra/"],
         resource_deps=test_infra_deps,
         labels=[GROUP_WANDB_APP],
@@ -654,20 +750,61 @@ if LOCAL_NETWORKING_MODE == "ingress":
         resource_name="ingress-nginx-repo",
         labels=[GROUP_DEPENDENCIES],
     )
+    ingress_nginx_flags = [
+        "--create-namespace",
+        "--version=4.14.1",
+        "--set-string=controller.ingressClass=%s" % settings.get("ingressClass"),
+        "--set-string=controller.ingressClassResource.name=%s" % settings.get("ingressClass"),
+        "--set-string=controller.service.type=ClusterIP",
+    ]
+    if WANDB_COREDNS_REWRITE_TARGET:
+        if str(WANDB_HOSTNAME).startswith("https://"):
+            ingress_nginx_flags.append("--set=controller.service.ports.https=%d" % WANDB_ENDPOINT_PORT)
+        else:
+            ingress_nginx_flags.append("--set=controller.service.ports.http=%d" % WANDB_ENDPOINT_PORT)
+
     helm_resource(
         "ingress-nginx-controller",
         chart="ingress-nginx/ingress-nginx",
         release_name="ingress-nginx",
         namespace="ingress-nginx",
-        flags=[
-            "--create-namespace",
-            "--version=4.14.1",
-            "--set-string=controller.ingressClass=%s" % settings.get("ingressClass"),
-            "--set-string=controller.ingressClassResource.name=%s" % settings.get("ingressClass"),
-            "--set-string=controller.service.type=ClusterIP",
-        ],
+        flags=ingress_nginx_flags,
         resource_deps=["ingress-nginx-repo"],
         labels=[GROUP_DEPENDENCIES],
+    )
+
+if COREDNS_REWRITES:
+    coredns_script = "./hack/scripts/coredns-host-rewrite.sh"
+    coredns_args = []
+    for rewrite in COREDNS_REWRITES:
+        coredns_args.append(shell_quote(rewrite[0]))
+        coredns_args.append(shell_quote(rewrite[1]))
+    local_resource(
+        "CoreDNS-Host-Rewrites",
+        cmd="%s %s" % (coredns_script, " ".join(coredns_args)),
+        deps=[coredns_script],
+        resource_deps=COREDNS_REWRITE_DEPS,
+        labels=[GROUP_DEPENDENCIES],
+    )
+    COREDNS_REWRITE_RESOURCE = "CoreDNS-Host-Rewrites"
+
+if USE_EXTERNAL_OBJECT_STORE:
+    s3_endpoint_deps = ["Test-Infra"]
+    if COREDNS_REWRITE_RESOURCE:
+        s3_endpoint_deps.append(COREDNS_REWRITE_RESOURCE)
+    managed_endpoint_resource(
+        name="S3-Endpoint",
+        anchor_object="s3-endpoint-anchor:configmap:default",
+        deps=s3_endpoint_deps,
+        local_port=EXTERNAL_OBJECT_STORE_PORT,
+        remote_port=8333,
+        link_name="S3 object store",
+        local_host=EXTERNAL_OBJECT_STORE_HOSTNAME,
+        pod_selector={
+            "app.kubernetes.io/instance": "test-infra",
+            "app.kubernetes.io/name": "seaweedfs",
+        },
+        labels=[GROUP_WANDB_APP],
     )
 
 kube_state_metrics_flags = [
@@ -767,8 +904,12 @@ if as_bool(settings.get("includeCR")):
         wandb_deps.append("nginx-gateway-fabric")
     if LOCAL_NETWORKING_MODE == "ingress":
         wandb_deps.append("ingress-nginx-controller")
+    if COREDNS_REWRITE_RESOURCE:
+        wandb_deps.append(COREDNS_REWRITE_RESOURCE)
     if USE_EXTERNAL_INFRA:
         wandb_deps.append("Test-Infra")
+    if USE_EXTERNAL_OBJECT_STORE:
+        wandb_deps.append("S3-Endpoint")
     if USE_CUSTOM_CA:
         wandb_deps.append("Custom-CA-ConfigMap")
 
@@ -848,18 +989,15 @@ if as_bool(settings.get("includeCR")):
             labels=[GROUP_WANDB_APP],
         )
 
-    endpoint_port = url_port(WANDB_HOSTNAME)
-    endpoint_host = url_host(WANDB_HOSTNAME)
-
     if LOCAL_NETWORKING_MODE == "gateway":
         managed_endpoint_resource(
             name="Wandb-Endpoint",
             anchor_object="wandb-endpoint-anchor:configmap:default",
             deps=["Wandb", "nginx-gateway-fabric"],
-            local_port=endpoint_port,
-            remote_port=endpoint_port,
+            local_port=WANDB_ENDPOINT_PORT,
+            remote_port=WANDB_ENDPOINT_PORT,
             link_name="W&B gateway",
-            local_host=endpoint_host,
+            local_host=WANDB_ENDPOINT_HOST,
             pod_selector={
                 "app.kubernetes.io/instance": "nginx-gateway-fabric",
                 "app.kubernetes.io/managed-by": "nginx-gateway-fabric-nginx",
@@ -872,10 +1010,10 @@ if as_bool(settings.get("includeCR")):
             name="Wandb-Endpoint",
             anchor_object="wandb-endpoint-anchor:configmap:default",
             deps=["Wandb", "ingress-nginx-controller"],
-            local_port=endpoint_port,
+            local_port=WANDB_ENDPOINT_PORT,
             remote_port=80,
             link_name="W&B ingress",
-            local_host=endpoint_host,
+            local_host=WANDB_ENDPOINT_HOST,
             pod_selector={
                 "app.kubernetes.io/component": "controller",
                 "app.kubernetes.io/instance": "ingress-nginx",

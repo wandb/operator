@@ -50,6 +50,7 @@ spec:
             - -dir=/data
             - -s3
             - -s3.config=/etc/seaweedfs/s3.json
+            - {{ printf "-s3.allowedOrigins=%s" .Values.seaweedfs.cors.allowedOrigins | quote }}
           ports:
             - name: s3
               containerPort: 8333

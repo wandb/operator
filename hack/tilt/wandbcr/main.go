@@ -514,14 +514,19 @@ func patchExternalInfra(cr *v2.WeightsAndBiases, opts Options) {
 
 	if opts.ExternalObjectStore {
 		cr.Spec.ObjectStore[v2.DefaultInstanceName] = v2.ObjectStoreSpec{ExternalObjectStore: &v2.ObjectStoreConnection{
-			Provider:  valueFromSecret(externalObjectStoreSecret, "Provider"),
-			Endpoint:  valueFromSecret(externalObjectStoreSecret, "Host"),
-			Port:      valueFromSecret(externalObjectStoreSecret, "Port"),
-			Bucket:    valueFromSecret(externalObjectStoreSecret, "Bucket"),
-			Region:    valueFromSecret(externalObjectStoreSecret, "Region"),
-			AccessKey: valueFromSecret(externalObjectStoreSecret, "AccessKey"),
-			SecretKey: valueFromSecret(externalObjectStoreSecret, "SecretKey"),
+			Provider:       valueFromSecret(externalObjectStoreSecret, "Provider"),
+			Endpoint:       valueFromSecret(externalObjectStoreSecret, "Host"),
+			Port:           valueFromSecret(externalObjectStoreSecret, "Port"),
+			Bucket:         valueFromSecret(externalObjectStoreSecret, "Bucket"),
+			Region:         valueFromSecret(externalObjectStoreSecret, "Region"),
+			AccessKey:      valueFromSecret(externalObjectStoreSecret, "AccessKey"),
+			SecretKey:      valueFromSecret(externalObjectStoreSecret, "SecretKey"),
+			TlsEnabled:     valueFromSecret(externalObjectStoreSecret, "TlsEnabled"),
+			ForcePathStyle: valueFromSecret(externalObjectStoreSecret, "ForcePathStyle"),
 		}}
+		// External object-store testing must return direct presigned URLs so the
+		// browser exercises endpoint reachability and CORS rather than W&B proxying.
+		cr.Spec.Wandb.BucketProxy = false
 	}
 }
 

@@ -53,6 +53,12 @@ seaweedfs:
   secretKey: seaweedfs123
   bucket: wandb
   region: us-east-1
+  connection:
+    # Empty publishes the in-cluster Service hostname. Tilt overrides this
+    # with s3.localhost so browsers and cluster workloads use the same host.
+    host: ""
+  cors:
+    allowedOrigins: "*"
   service:
     name: seaweedfs
     apiPort: 8333
