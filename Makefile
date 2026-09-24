@@ -4,7 +4,7 @@ IMG ?= controller:latest
 # Watchtower release whose binary is copied into the operator image as its second
 # entrypoint. Tag verbatim, leading "v" included. `make download-watchtower`
 # fetches it into WATCHTOWER_BINARY; the image build only copies that file.
-WATCHTOWER_VERSION ?= v0.12.0-rc.1
+WATCHTOWER_VERSION ?= v0.12.1
 # The binary is arch-specific, so this also drives the image platform below.
 WATCHTOWER_ARCH ?= amd64
 WATCHTOWER_BINARY ?= watchtower
@@ -355,7 +355,7 @@ CONTROLLER_TOOLS_VERSION ?= v0.19.0
 ENVTEST_VERSION ?= $(shell go list -m -f "{{ .Version }}" sigs.k8s.io/controller-runtime | awk -F'[v.]' '{printf "release-%d.%d", $$2, $$3}')
 #ENVTEST_K8S_VERSION is the version of Kubernetes to use for setting up ENVTEST binaries (i.e. 1.31)
 ENVTEST_K8S_VERSION ?= $(shell go list -m -f "{{ .Version }}" k8s.io/api | awk -F'[v.]' '{printf "1.%d", $$3}')
-GOLANGCI_LINT_VERSION ?= v2.12.2
+GOLANGCI_LINT_VERSION ?= v2.13.2
 
 .PHONY: kustomize
 kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary.

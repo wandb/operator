@@ -217,7 +217,9 @@ var _ = Describe("WeightsAndBiases Networking", func() {
 	It("reconciles a consolidated Ingress and mirrors its load balancer status", func() {
 		ctx := context.Background()
 		wandbName := "network-ingress"
-		ingressClassName := "nginx"
+		ingressClassName := "network-ingress-nginx"
+		ingressClass := createIngressClass(ctx, ingressClassName, "k8s.io/ingress-nginx")
+		DeferCleanup(deleteIfPresent, ctx, ingressClass)
 
 		wandb, service := newNetworkingWandb(wandbName, "")
 		wandb.Spec.Networking = apiv2.NetworkingSpec{
@@ -235,6 +237,9 @@ var _ = Describe("WeightsAndBiases Networking", func() {
 		Expect(k8sClient.Create(ctx, wandb)).To(Succeed())
 		Expect(k8sClient.Create(ctx, service)).To(Succeed())
 		DeferCleanup(deleteIfPresent, ctx, wandb)
+		wandb = getWandb(ctx, wandbName, wandbNamespace)
+		Expect(wandb.Spec.Networking.Ingress.Managed).NotTo(BeNil())
+		Expect(*wandb.Spec.Networking.Ingress.Managed).To(BeTrue())
 
 		wandb = markWandbReadyForNetworking(ctx, wandbName, wandbNamespace)
 		reconcileNetworkingManifest(ctx, wandb)
@@ -246,13 +251,33 @@ var _ = Describe("WeightsAndBiases Networking", func() {
 		}, ingress)).To(Succeed())
 		Expect(ingress.Spec.IngressClassName).NotTo(BeNil())
 		Expect(*ingress.Spec.IngressClassName).To(Equal(ingressClassName))
+		Expect(ingress.Annotations).To(HaveKeyWithValue("kubernetes.io/ingress.class", ingressClassName))
 		Expect(ingress.Annotations).To(HaveKeyWithValue("example.com/ingress", "enabled"))
+		fieldManagers := make([]string, 0, len(ingress.ManagedFields))
+		for _, managedField := range ingress.ManagedFields {
+			fieldManagers = append(fieldManagers, managedField.Manager)
+		}
+		Expect(fieldManagers).To(ContainElement(WeightsAndBiasesFieldManager))
 		Expect(ingress.Spec.TLS).To(HaveLen(1))
 		Expect(ingress.Spec.TLS[0].SecretName).To(Equal("wandb-tls"))
 		Expect(ingress.Spec.Rules).NotTo(BeEmpty())
 
+		beforeExternalMetadata := ingress.DeepCopy()
+		ingress.Annotations["ingress.example.com/controller-state"] = "preserve-me"
+		ingress.Labels["ingress.example.com/controller"] = "external"
+		Expect(k8sClient.Patch(
+			ctx,
+			ingress,
+			client.MergeFrom(beforeExternalMetadata),
+			client.FieldOwner("test-ingress-controller"),
+		)).To(Succeed())
+
 		ingress.Status.LoadBalancer.Ingress = []networkingv1.IngressLoadBalancerIngress{{
 			IP: "34.118.10.1",
+			Ports: []networkingv1.IngressPortStatus{{
+				Port:     443,
+				Protocol: corev1.ProtocolTCP,
+			}},
 		}}
 		Expect(k8sClient.Status().Update(ctx, ingress)).To(Succeed())
 
@@ -264,6 +289,113 @@ var _ = Describe("WeightsAndBiases Networking", func() {
 		Expect(wandb.Status.IngressStatus.Name).To(Equal(wandbName))
 		Expect(wandb.Status.IngressStatus.LoadBalancerIngress).To(HaveLen(1))
 		Expect(wandb.Status.IngressStatus.LoadBalancerIngress[0].IP).To(Equal("34.118.10.1"))
+		Expect(wandb.Status.IngressStatus.LoadBalancerIngress[0].Ports).To(HaveLen(1))
+		Expect(wandb.Status.IngressStatus.LoadBalancerIngress[0].Ports[0].Error).To(BeNil())
+
+		ingress = &networkingv1.Ingress{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{
+			Name:      wandbName,
+			Namespace: wandbNamespace,
+		}, ingress)).To(Succeed())
+		Expect(ingress.Annotations).To(HaveKeyWithValue("ingress.example.com/controller-state", "preserve-me"))
+		Expect(ingress.Labels).To(HaveKeyWithValue("ingress.example.com/controller", "external"))
+
+		delete(wandb.Spec.Networking.Annotations, "example.com/ingress")
+		Expect(k8sClient.Update(ctx, wandb)).To(Succeed())
+		reconcileNetworkingManifest(ctx, wandb)
+
+		ingress = &networkingv1.Ingress{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{
+			Name:      wandbName,
+			Namespace: wandbNamespace,
+		}, ingress)).To(Succeed())
+		Expect(ingress.Annotations).NotTo(HaveKey("example.com/ingress"))
+		Expect(ingress.Annotations).To(HaveKeyWithValue("ingress.example.com/controller-state", "preserve-me"))
+		Expect(ingress.Labels).To(HaveKeyWithValue("ingress.example.com/controller", "external"))
+
+		wandb = getWandb(ctx, wandbName, wandbNamespace)
+		wandb.Spec.Networking.Ingress.Managed = ptr.To(false)
+		Expect(k8sClient.Update(ctx, wandb)).To(Succeed())
+		reconcileNetworkingManifest(ctx, wandb)
+		err := k8sClient.Get(ctx, types.NamespacedName{
+			Name: wandbName, Namespace: wandbNamespace,
+		}, &networkingv1.Ingress{})
+		Expect(apierrors.IsNotFound(err)).To(BeTrue())
+	})
+
+	It("configures AWS backend Services without managing the user's Ingress", func() {
+		ctx := context.Background()
+		wandbName := "network-ingress-external-aws"
+		ingressClassName := "network-ingress-external-aws-alb"
+		ingressClass := createIngressClass(ctx, ingressClassName, "ingress.k8s.aws/alb")
+		DeferCleanup(deleteIfPresent, ctx, ingressClass)
+
+		externalIngress := &networkingv1.Ingress{
+			ObjectMeta: metav1.ObjectMeta{Name: wandbName, Namespace: wandbNamespace},
+			Spec: networkingv1.IngressSpec{
+				IngressClassName: &ingressClassName,
+				DefaultBackend: &networkingv1.IngressBackend{Service: &networkingv1.IngressServiceBackend{
+					Name: "external-placeholder",
+					Port: networkingv1.ServiceBackendPort{Number: 80},
+				}},
+			},
+		}
+		Expect(k8sClient.Create(ctx, externalIngress)).To(Succeed())
+		DeferCleanup(deleteIfPresent, ctx, externalIngress)
+
+		wandb, service := newNetworkingWandb(wandbName, "")
+		wandb.Spec.Networking = apiv2.NetworkingSpec{
+			Mode: apiv2.NetworkingModeIngress,
+			Ingress: &apiv2.IngressConfig{
+				Managed:          ptr.To(false),
+				IngressClassName: &ingressClassName,
+			},
+		}
+		Expect(k8sClient.Create(ctx, wandb)).To(Succeed())
+		Expect(k8sClient.Create(ctx, service)).To(Succeed())
+		DeferCleanup(deleteIfPresent, ctx, wandb)
+
+		wandb = markWandbReadyForNetworking(ctx, wandbName, wandbNamespace)
+		reconcileNetworkingManifest(ctx, wandb)
+
+		preservedIngress := &networkingv1.Ingress{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{
+			Name: wandbName, Namespace: wandbNamespace,
+		}, preservedIngress)).To(Succeed())
+		Expect(preservedIngress.OwnerReferences).To(BeEmpty())
+
+		application := &apiv2.Application{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "api", Namespace: wandbNamespace}, application)).To(Succeed())
+		Expect(application.Spec.ServiceAnnotations).To(HaveKey("alb.ingress.kubernetes.io/healthcheck-path"))
+		Expect(application.Spec.ServiceAnnotations).To(HaveKeyWithValue(
+			"alb.ingress.kubernetes.io/healthcheck-protocol", "HTTP"))
+	})
+
+	It("continues without controller-specific configuration when the IngressClass is missing", func() {
+		ctx := context.Background()
+		wandbName := "network-ingress-missing-class"
+		ingressClassName := "network-ingress-class-does-not-exist"
+
+		wandb, service := newNetworkingWandb(wandbName, "")
+		wandb.Spec.Networking = apiv2.NetworkingSpec{
+			Mode: apiv2.NetworkingModeIngress,
+			Ingress: &apiv2.IngressConfig{
+				Managed:          ptr.To(false),
+				IngressClassName: &ingressClassName,
+			},
+		}
+		Expect(k8sClient.Create(ctx, wandb)).To(Succeed())
+		Expect(k8sClient.Create(ctx, service)).To(Succeed())
+		DeferCleanup(deleteIfPresent, ctx, wandb)
+
+		wandb = markWandbReadyForNetworking(ctx, wandbName, wandbNamespace)
+		reconcileNetworkingManifest(ctx, wandb)
+
+		application := &apiv2.Application{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{
+			Name: "api", Namespace: wandbNamespace,
+		}, application)).To(Succeed())
+		Expect(application.Spec.ServiceAnnotations).To(BeEmpty())
 	})
 
 	// Watchtower must not be able to take down the install it manages, but a
@@ -272,7 +404,9 @@ var _ = Describe("WeightsAndBiases Networking", func() {
 	It("requeues without failing the reconcile when Watchtower cannot be reconciled", func() {
 		ctx := context.Background()
 		wandbName := "network-watchtower-failure"
-		ingressClassName := "nginx"
+		ingressClassName := "network-watchtower-failure-nginx"
+		ingressClass := createIngressClass(ctx, ingressClassName, "k8s.io/ingress-nginx")
+		DeferCleanup(deleteIfPresent, ctx, ingressClass)
 
 		wandb, service := newNetworkingWandb(wandbName, "")
 		wandb.Spec.AdminConsoleEnabled = ptr.To(true)
@@ -292,7 +426,12 @@ var _ = Describe("WeightsAndBiases Networking", func() {
 		wandbManifest, err := manifest.GetServerManifest(ctx, wandb.Spec.Wandb.ManifestRepository, wandb.Spec.Wandb.Version, nil)
 		Expect(err).NotTo(HaveOccurred())
 
-		result, err := v2.ReconcileNetworkingAndWatchtower(ctx, k8sClient, wandb, wandbManifest)
+		result, err := v2.ReconcileNetworkingAndWatchtower(
+			ctx,
+			client.WithFieldOwner(k8sClient, WeightsAndBiasesFieldManager),
+			wandb,
+			wandbManifest,
+		)
 
 		// The error is swallowed so the rest of the reconcile still runs...
 		Expect(err).NotTo(HaveOccurred())
@@ -421,13 +560,14 @@ func markWandbReadyForNetworking(ctx context.Context, name, namespace string) *a
 func reconcileNetworkingManifest(ctx context.Context, wandb *apiv2.WeightsAndBiases) {
 	wandbManifest, err := manifest.GetServerManifest(ctx, wandb.Spec.Wandb.ManifestRepository, wandb.Spec.Wandb.Version, nil)
 	Expect(err).NotTo(HaveOccurred())
+	reconcileClient := client.WithFieldOwner(k8sClient, WeightsAndBiasesFieldManager)
 
 	// Networking lives above Reconcile's infrastructure gate, in its own function,
 	// so it has to be driven separately from the manifest reconcile.
-	_, err = v2.ReconcileNetworkingAndWatchtower(ctx, k8sClient, wandb, wandbManifest)
+	_, err = v2.ReconcileNetworkingAndWatchtower(ctx, reconcileClient, wandb, wandbManifest)
 	Expect(err).NotTo(HaveOccurred())
 
-	_, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, telemetry.DefaultTelemetryRuntimeConfig())
+	_, err = v2.ReconcileWandbManifest(ctx, reconcileClient, wandb, wandbManifest, telemetry.DefaultTelemetryRuntimeConfig())
 	Expect(err).NotTo(HaveOccurred())
 }
 
@@ -443,6 +583,17 @@ func createNamespaceIfMissing(ctx context.Context, name string) {
 	if err != nil && !apierrors.IsAlreadyExists(err) {
 		Expect(err).NotTo(HaveOccurred())
 	}
+}
+
+func createIngressClass(ctx context.Context, name, controller string) *networkingv1.IngressClass {
+	ingressClass := &networkingv1.IngressClass{
+		ObjectMeta: metav1.ObjectMeta{Name: name},
+		Spec: networkingv1.IngressClassSpec{
+			Controller: controller,
+		},
+	}
+	Expect(k8sClient.Create(ctx, ingressClass)).To(Succeed())
+	return ingressClass
 }
 
 func deleteIfPresent(ctx context.Context, obj client.Object) {

@@ -96,6 +96,13 @@ func reconcileWatchtower(
 		return err
 	}
 	desired := buildWatchtowerApplication(wandb, authService, image)
+	usesAWSIngress, err := ingressUsesAWSLoadBalancerController(ctx, c, wandb)
+	if err != nil {
+		return err
+	}
+	if usesAWSIngress {
+		desired.Spec.ServiceAnnotations = awsLoadBalancerHealthCheckAnnotations(desired.Spec.PodTemplate.Spec.Containers)
+	}
 
 	application := &apiv2.Application{
 		ObjectMeta: metav1.ObjectMeta{
@@ -491,6 +498,14 @@ func reconcileWatchtowerRBAC(ctx context.Context, c ctrlClient.Client, wandb *ap
 			secretVerbs = append(secretVerbs, "create", "update", "patch", "delete")
 		}
 		role.Rules = []rbacv1.PolicyRule{
+			{
+				// Creating an ActionRun executes an administrator-published action
+				// with the referenced application's identity. Keep this grant on
+				// Watchtower's install-scoped ServiceAccount.
+				APIGroups: []string{"apps.wandb.com"},
+				Resources: []string{"actionruns"},
+				Verbs:     []string{"get", "list", "watch", "create", "delete"},
+			},
 			{
 				APIGroups: []string{""},
 				Resources: []string{"secrets"},

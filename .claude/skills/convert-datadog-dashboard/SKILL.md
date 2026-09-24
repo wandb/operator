@@ -69,8 +69,8 @@ Use this skeleton, filling in `<component>` and the title:
       "name": "DS_VICTORIAMETRICS",
       "label": "VictoriaMetrics",
       "type": "datasource",
-      "pluginId": "victoriametrics-metrics-datasource",
-      "pluginName": "VictoriaMetrics"
+      "pluginId": "prometheus",
+      "pluginName": "Prometheus"
     }
   ],
   "annotations": { "list": [] },

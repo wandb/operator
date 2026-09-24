@@ -93,6 +93,12 @@ func (d *WeightsAndBiasesCustomDefaulter) Default(ctx context.Context, obj runti
 		wandb.Spec.Tolerations = &[]corev1.Toleration{}
 	}
 
+	if wandb.Spec.Networking.Mode == appsv2.NetworkingModeIngress &&
+		wandb.Spec.Networking.Ingress != nil &&
+		wandb.Spec.Networking.Ingress.Managed == nil {
+		wandb.Spec.Networking.Ingress.Managed = ptr.To(true)
+	}
+
 	if wandb.Spec.Wandb.Features == nil {
 		wandb.Spec.Wandb.Features = make(map[string]bool)
 	}
@@ -215,7 +221,7 @@ func applyMySQLDefaults(wandb *appsv2.WeightsAndBiases) {
 		wandb.Spec.MySQL = map[string]appsv2.MySQLSpec{}
 	}
 	if len(wandb.Spec.MySQL) == 0 {
-		wandb.Spec.MySQL[appsv2.DefaultInstanceName] = appsv2.MySQLSpec{ManagedMysql: &appsv2.ManagedMysqlSpec{}}
+		wandb.Spec.MySQL[appsv2.DefaultInstanceName] = appsv2.MySQLSpec{ManagedMysql: &appsv2.ManagedMysqlSpec{Telemetry: appsv2.Telemetry{Enabled: true}}}
 	}
 
 	for key, spec := range wandb.Spec.MySQL {
@@ -223,7 +229,7 @@ func applyMySQLDefaults(wandb *appsv2.WeightsAndBiases) {
 			continue
 		}
 		if spec.ManagedMysql == nil {
-			spec.ManagedMysql = &appsv2.ManagedMysqlSpec{}
+			spec.ManagedMysql = &appsv2.ManagedMysqlSpec{Telemetry: appsv2.Telemetry{Enabled: true}}
 		}
 		if spec.ManagedMysql.Name == "" {
 			spec.ManagedMysql.Name = moco.DefaultSpecName(wandb.Name, key)
@@ -240,7 +246,7 @@ func applyRedisDefaults(wandb *appsv2.WeightsAndBiases) {
 		wandb.Spec.Redis = map[string]appsv2.RedisSpec{}
 	}
 	if len(wandb.Spec.Redis) == 0 {
-		wandb.Spec.Redis[appsv2.DefaultInstanceName] = appsv2.RedisSpec{ManagedRedis: &appsv2.ManagedRedisSpec{}}
+		wandb.Spec.Redis[appsv2.DefaultInstanceName] = appsv2.RedisSpec{ManagedRedis: &appsv2.ManagedRedisSpec{Telemetry: appsv2.Telemetry{Enabled: true}}}
 	}
 
 	for key, spec := range wandb.Spec.Redis {
@@ -248,7 +254,7 @@ func applyRedisDefaults(wandb *appsv2.WeightsAndBiases) {
 			continue
 		}
 		if spec.ManagedRedis == nil {
-			spec.ManagedRedis = &appsv2.ManagedRedisSpec{}
+			spec.ManagedRedis = &appsv2.ManagedRedisSpec{Telemetry: appsv2.Telemetry{Enabled: true}}
 		}
 		if spec.ManagedRedis.Name == "" {
 			spec.ManagedRedis.Name = opstree.DefaultSpecName(wandb.Name, key)
@@ -265,7 +271,7 @@ func applyRedisDefaults(wandb *appsv2.WeightsAndBiases) {
 
 func applyKafkaDefaults(wandb *appsv2.WeightsAndBiases) {
 	if wandb.Spec.Kafka.ManagedKafka == nil {
-		wandb.Spec.Kafka.ManagedKafka = &appsv2.ManagedKafkaSpec{}
+		wandb.Spec.Kafka.ManagedKafka = &appsv2.ManagedKafkaSpec{Telemetry: appsv2.Telemetry{Enabled: true}}
 	}
 
 	spec := wandb.Spec.Kafka.ManagedKafka
@@ -286,7 +292,7 @@ func applyObjectStoreDefaults(wandb *appsv2.WeightsAndBiases) {
 		wandb.Spec.ObjectStore = map[string]appsv2.ObjectStoreSpec{}
 	}
 	if len(wandb.Spec.ObjectStore) == 0 {
-		wandb.Spec.ObjectStore[appsv2.DefaultInstanceName] = appsv2.ObjectStoreSpec{ManagedObjectStore: &appsv2.ManagedObjectStoreSpec{}}
+		wandb.Spec.ObjectStore[appsv2.DefaultInstanceName] = appsv2.ObjectStoreSpec{ManagedObjectStore: &appsv2.ManagedObjectStoreSpec{Telemetry: appsv2.Telemetry{Enabled: true}}}
 	}
 
 	for key, spec := range wandb.Spec.ObjectStore {
@@ -294,7 +300,7 @@ func applyObjectStoreDefaults(wandb *appsv2.WeightsAndBiases) {
 			continue
 		}
 		if spec.ManagedObjectStore == nil {
-			spec.ManagedObjectStore = &appsv2.ManagedObjectStoreSpec{}
+			spec.ManagedObjectStore = &appsv2.ManagedObjectStoreSpec{Telemetry: appsv2.Telemetry{Enabled: true}}
 		}
 		managed := spec.ManagedObjectStore
 		if managed.Name == "" {
@@ -318,7 +324,7 @@ func applyClickHouseDefaults(wandb *appsv2.WeightsAndBiases) {
 		wandb.Spec.ClickHouse = map[string]appsv2.ClickHouseSpec{}
 	}
 	if len(wandb.Spec.ClickHouse) == 0 {
-		wandb.Spec.ClickHouse[appsv2.DefaultInstanceName] = appsv2.ClickHouseSpec{ManagedClickHouse: &appsv2.ManagedClickHouseSpec{}}
+		wandb.Spec.ClickHouse[appsv2.DefaultInstanceName] = appsv2.ClickHouseSpec{ManagedClickHouse: &appsv2.ManagedClickHouseSpec{Telemetry: appsv2.Telemetry{Enabled: true}}}
 	}
 
 	for key, spec := range wandb.Spec.ClickHouse {
@@ -326,7 +332,7 @@ func applyClickHouseDefaults(wandb *appsv2.WeightsAndBiases) {
 			continue
 		}
 		if spec.ManagedClickHouse == nil {
-			spec.ManagedClickHouse = &appsv2.ManagedClickHouseSpec{}
+			spec.ManagedClickHouse = &appsv2.ManagedClickHouseSpec{Telemetry: appsv2.Telemetry{Enabled: true}}
 		}
 		if spec.ManagedClickHouse.Name == "" {
 			spec.ManagedClickHouse.Name = altinity.DefaultSpecName(wandb.Name, key)
@@ -1134,6 +1140,20 @@ func validateNetworkingSpec(wandb *appsv2.WeightsAndBiases) (field.ErrorList, ad
 			spec.GatewayAPI,
 			"gatewayAPI must not be set when mode is Ingress",
 		))
+	}
+
+	if spec.Mode == appsv2.NetworkingModeIngress {
+		if spec.Ingress == nil {
+			errors = append(errors, field.Required(
+				netPath.Child("ingress"),
+				"ingress is required when mode is ingress",
+			))
+		} else if spec.Ingress.IngressClassName == nil || strings.TrimSpace(*spec.Ingress.IngressClassName) == "" {
+			errors = append(errors, field.Required(
+				netPath.Child("ingress").Child("ingressClassName"),
+				"ingressClassName is required when mode is ingress",
+			))
+		}
 	}
 
 	if spec.Mode == appsv2.NetworkingModeGatewayAPI && spec.Ingress != nil {

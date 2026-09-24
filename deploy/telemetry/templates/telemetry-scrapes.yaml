@@ -24,6 +24,39 @@ spec:
       regex: (.+)
       targetLabel: __metrics_path__
       replacement: /api/v1/nodes/$1/proxy/metrics/cadvisor
+---
+# The scrape above goes through the apiserver proxy, which needs nodes/proxy. The VM
+# operator's generated role only grants nodes and nodes/metrics, so add it separately.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Release.Name }}-vmagent-nodes-proxy
+  labels:
+    app.kubernetes.io/component: telemetry
+    app.kubernetes.io/part-of: wandb
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - nodes/proxy
+    verbs:
+      - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Release.Name }}-vmagent-nodes-proxy
+  labels:
+    app.kubernetes.io/component: telemetry
+    app.kubernetes.io/part-of: wandb
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ .Release.Name }}-vmagent-nodes-proxy
+subjects:
+  - kind: ServiceAccount
+    name: vmagent-{{ include "telemetry.vmagentName" . }}
+    namespace: {{ include "telemetry.namespace" . }}
 {{- end }}
 
 {{- if .Values.scrape.operators }}

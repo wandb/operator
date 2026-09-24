@@ -34,6 +34,7 @@ func watchtowerTestClient(t *testing.T, objects ...ctrlClient.Object) ctrlClient
 	t.Helper()
 	scheme := runtime.NewScheme()
 	require.NoError(t, corev1.AddToScheme(scheme))
+	require.NoError(t, networkingv1.AddToScheme(scheme))
 	require.NoError(t, rbacv1.AddToScheme(scheme))
 	require.NoError(t, apiv2.AddToScheme(scheme))
 
@@ -282,6 +283,23 @@ func secretPassword(secret *corev1.Secret) string {
 }
 
 // --- container environment ---------------------------------------------------
+
+func TestReconcileWatchtowerRBACGrantsActionRunLifecycle(t *testing.T) {
+	wandb := watchtowerTestCR("wandb", "wandb")
+	c := watchtowerTestClient(t, wandb)
+
+	require.NoError(t, reconcileWatchtowerRBAC(context.Background(), c, wandb))
+
+	role := &rbacv1.Role{}
+	require.NoError(t, c.Get(context.Background(), types.NamespacedName{
+		Name: watchtowerName(wandb), Namespace: wandb.Namespace,
+	}, role))
+	require.Contains(t, role.Rules, rbacv1.PolicyRule{
+		APIGroups: []string{"apps.wandb.com"},
+		Resources: []string{"actionruns"},
+		Verbs:     []string{"get", "list", "watch", "create", "delete"},
+	})
+}
 
 func TestWatchtowerEnvReferencesThePasswordSecret(t *testing.T) {
 	wandb := watchtowerTestCR("wandb", "wandb")
@@ -619,4 +637,34 @@ func TestReconcileWatchtowerIgnoresInfraReadiness(t *testing.T) {
 		&corev1.ServiceAccount{}), "the ServiceAccount must exist even with infra down")
 	require.NoError(t, c.Get(ctx, types.NamespacedName{Name: watchtowerName(wandb), Namespace: ns},
 		&rbacv1.Role{}), "the Role must exist even with infra down")
+}
+
+func TestReconcileWatchtowerConfiguresAWSIngressHealthCheck(t *testing.T) {
+	t.Setenv(operatorImageEnvVar, testOperatorImage)
+
+	className := "alb"
+	wandb := watchtowerTestCR("wandb", "wandb")
+	wandb.Spec.Networking = apiv2.NetworkingSpec{
+		Mode: apiv2.NetworkingModeIngress,
+		Ingress: &apiv2.IngressConfig{
+			Managed:          ptr.To(false),
+			IngressClassName: &className,
+		},
+	}
+	ingressClass := &networkingv1.IngressClass{
+		ObjectMeta: metav1.ObjectMeta{Name: className},
+		Spec: networkingv1.IngressClassSpec{
+			Controller: awsLoadBalancerIngressController,
+		},
+	}
+
+	c := watchtowerTestClient(t, wandb, ingressClass)
+	require.NoError(t, reconcileWatchtower(context.Background(), c, wandb, manifestWithOIDC()))
+
+	application := &apiv2.Application{}
+	require.NoError(t, c.Get(context.Background(), types.NamespacedName{
+		Name: watchtowerName(wandb), Namespace: wandb.Namespace,
+	}, application))
+	require.Equal(t, "/console/ready", application.Spec.ServiceAnnotations[awsHealthCheckPathAnnotation])
+	require.Equal(t, "8080", application.Spec.ServiceAnnotations[awsHealthCheckPortAnnotation])
 }

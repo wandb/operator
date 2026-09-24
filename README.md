@@ -74,6 +74,8 @@ spec:
     version: <wandb-version>
   networking:
     mode: ingress
+    ingress:
+      ingressClassName: nginx
 ```
 
 ```bash
@@ -81,8 +83,10 @@ kubectl apply -f wandb.yaml
 ```
 
 The operator reconciles the resource, brings up the requested backing services,
-and rolls out the W&B application. See [`deploy/operator/values.yaml`](deploy/operator/values.yaml)
-for the available chart options and which component operators are enabled.
+and rolls out the W&B application. See [networking configuration](docs/networking.md)
+for managed and external Ingress behavior, and
+[`deploy/operator/values.yaml`](deploy/operator/values.yaml) for the available
+chart options and which component operators are enabled.
 
 ### Gateway API TLS options
 

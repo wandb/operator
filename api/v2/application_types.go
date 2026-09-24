@@ -59,13 +59,23 @@ type ApplicationSpec struct {
 	// +optional
 	ServiceName string `json:"serviceName,omitempty"`
 
-	ServiceTemplate      *corev1.ServiceSpec                        `json:"serviceTemplate,omitempty"`
+	ServiceTemplate *corev1.ServiceSpec `json:"serviceTemplate,omitempty"`
+	// ServiceAnnotations are applied only to the generated Service. This keeps
+	// controller-specific backend configuration separate from MetaTemplate,
+	// whose metadata is shared by all resources generated for the Application.
+	// +optional
+	ServiceAnnotations   map[string]string                          `json:"serviceAnnotations,omitempty"`
 	IngressTemplate      *networkingv1.IngressSpec                  `json:"ingressTemplate,omitempty"`
 	HpaTemplate          *autoscalingv2.HorizontalPodAutoscalerSpec `json:"hpaTemplate,omitempty"`
 	PdbTemplate          *policyv1.PodDisruptionBudgetSpec          `json:"pdbTemplate,omitempty"`
 	ScaledObjectTemplate *kedav1alpha1.ScaledObjectSpec             `json:"scaledObjectTemplate,omitempty"`
 	Jobs                 []batchv1.Job                              `json:"jobs,omitempty"`
 	CronJobs             []batchv1.CronJob                          `json:"cronJobs,omitempty"`
+
+	// Triage declares the bounded diagnostic actions that may be requested for
+	// this application through ActionRun resources whose type is triage.
+	// +optional
+	Triage *ApplicationTriageSpec `json:"triage,omitempty"`
 
 	// HTTPRouteTemplate is the desired HTTPRoute spec. Nil means no HTTPRoute.
 	// +optional
