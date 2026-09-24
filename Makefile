@@ -80,15 +80,15 @@ test-e2e: manifests generate fmt vet ## Run the e2e tests. Expected an isolated 
 
 .PHONY: lint
 lint: golangci-lint ## Run golangci-lint linter
-	$(GOLANGCI_LINT) run
+	$(GOLANGCI_LINT) run --config golangci.yaml
 
 .PHONY: lint-fix
 lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
-	$(GOLANGCI_LINT) run --fix
+	$(GOLANGCI_LINT) run --config golangci.yaml --fix
 
 .PHONY: lint-config
 lint-config: golangci-lint ## Verify golangci-lint linter configuration
-	$(GOLANGCI_LINT) config verify
+	$(GOLANGCI_LINT) config verify --config golangci.yaml
 
 REGISTRY_PORT ?= 5050
 REGISTRY_NAME ?= registry
@@ -155,7 +155,7 @@ run: manifests generate fmt vet ## Run a controller from your host.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 .PHONY: docker-build
 docker-build: ## Build docker image with the manager.
-	$(CONTAINER_TOOL) build -t ${IMG} .
+	$(CONTAINER_TOOL) build --pull -t ${IMG} .
 
 .PHONY: docker-push
 docker-push: ## Push docker image with the manager.
@@ -170,13 +170,10 @@ docker-push: ## Push docker image with the manager.
 PLATFORMS ?= linux/arm64,linux/amd64,linux/s390x,linux/ppc64le
 .PHONY: docker-buildx
 docker-buildx: ## Build and push docker image for the manager for cross-platform support
-	# copy existing Dockerfile and insert --platform=${BUILDPLATFORM} into Dockerfile.cross, and preserve the original Dockerfile
-	sed -e '1 s/\(^FROM\)/FROM --platform=\$$\{BUILDPLATFORM\}/; t' -e ' 1,// s//FROM --platform=\$$\{BUILDPLATFORM\}/' Dockerfile > Dockerfile.cross
 	- $(CONTAINER_TOOL) buildx create --name operator-builder
 	$(CONTAINER_TOOL) buildx use operator-builder
-	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${IMG} -f Dockerfile.cross .
+	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${IMG} .
 	- $(CONTAINER_TOOL) buildx rm operator-builder
-	rm Dockerfile.cross
 
 .PHONY: build-installer
 build-installer: manifests generate kustomize ## Generate a consolidated YAML with CRDs and deployment.
@@ -220,24 +217,28 @@ KUSTOMIZE ?= $(LOCALBIN)/kustomize
 CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
 ENVTEST ?= $(LOCALBIN)/setup-envtest
 GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
+GINKGO ?= $(LOCALBIN)/ginkgo
+GOVULNCHECK ?= $(LOCALBIN)/govulncheck
 
 ## Tool Versions
-KUSTOMIZE_VERSION ?= v5.5.0
-CONTROLLER_TOOLS_VERSION ?= v0.17.1
+KUSTOMIZE_VERSION ?= v5.8.1
+CONTROLLER_TOOLS_VERSION ?= v0.22.0
 #ENVTEST_VERSION is the version of controller-runtime release branch to fetch the envtest setup script (i.e. release-0.20)
 ENVTEST_VERSION ?= $(shell go list -m -f "{{ .Version }}" sigs.k8s.io/controller-runtime | awk -F'[v.]' '{printf "release-%d.%d", $$2, $$3}')
 #ENVTEST_K8S_VERSION is the version of Kubernetes to use for setting up ENVTEST binaries (i.e. 1.31)
 ENVTEST_K8S_VERSION ?= $(shell go list -m -f "{{ .Version }}" k8s.io/api | awk -F'[v.]' '{printf "1.%d", $$3}')
-GOLANGCI_LINT_VERSION ?= v1.63.4
+GOLANGCI_LINT_VERSION ?= v2.13.2
+GINKGO_VERSION ?= $(shell go list -m -f '{{ .Version }}' github.com/onsi/ginkgo/v2)
+GOVULNCHECK_VERSION ?= v1.8.0
 
 .PHONY: kustomize
 kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary.
-$(KUSTOMIZE): $(LOCALBIN)
+$(KUSTOMIZE): Makefile go.mod | $(LOCALBIN)
 	$(call go-install-tool,$(KUSTOMIZE),sigs.k8s.io/kustomize/kustomize/v5,$(KUSTOMIZE_VERSION))
 
 .PHONY: controller-gen
 controller-gen: $(CONTROLLER_GEN) ## Download controller-gen locally if necessary.
-$(CONTROLLER_GEN): $(LOCALBIN)
+$(CONTROLLER_GEN): Makefile go.mod | $(LOCALBIN)
 	$(call go-install-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen,$(CONTROLLER_TOOLS_VERSION))
 
 .PHONY: setup-envtest
@@ -250,13 +251,13 @@ setup-envtest: envtest ## Download the binaries required for ENVTEST in the loca
 
 .PHONY: envtest
 envtest: $(ENVTEST) ## Download setup-envtest locally if necessary.
-$(ENVTEST): $(LOCALBIN)
+$(ENVTEST): Makefile go.mod | $(LOCALBIN)
 	$(call go-install-tool,$(ENVTEST),sigs.k8s.io/controller-runtime/tools/setup-envtest,$(ENVTEST_VERSION))
 
 .PHONY: golangci-lint
 golangci-lint: $(GOLANGCI_LINT) ## Download golangci-lint locally if necessary.
-$(GOLANGCI_LINT): $(LOCALBIN)
-	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
+$(GOLANGCI_LINT): Makefile go.mod | $(LOCALBIN)
+	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/v2/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
 
 # go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
 # $1 - target path with name of binary
@@ -276,8 +277,11 @@ endef
 
 .PHONY: ginkgo
 ginkgo: $(GINKGO) ## Download ginkgo locally if necessary.
-$(GINKGO): $(LOCALBIN)
-	test -s $(LOCALBIN)/ginkgo || GOBIN=$(LOCALBIN) go install github.com/onsi/ginkgo/v2/ginkgo@latest
+$(GINKGO): Makefile go.mod | $(LOCALBIN)
+	$(call go-install-tool,$(GINKGO),github.com/onsi/ginkgo/v2/ginkgo,$(GINKGO_VERSION))
 
-
+.PHONY: govulncheck
+govulncheck: $(GOVULNCHECK) ## Download govulncheck locally if necessary.
+$(GOVULNCHECK): Makefile go.mod | $(LOCALBIN)
+	$(call go-install-tool,$(GOVULNCHECK),golang.org/x/vuln/cmd/govulncheck,$(GOVULNCHECK_VERSION))
 include dep-management.mk olm.mk ginko.mk

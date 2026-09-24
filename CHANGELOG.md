@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.23.1](https://github.com/wandb/operator/compare/v1.23.0...v1.23.1) (Unreleased)
+
+### Dependencies and security
+
+* Refresh direct and transitive Go dependencies, including Helm 4.3.0, Kubernetes libraries 0.37.0, controller-runtime 0.25.1, and the `x/net` and `x/crypto` security fixes from #361.
+* Build with Go 1.27.1 and a refreshed, digest-pinned UBI 9 minimal image, applying available OS package updates during the image build.
+* Update development tools and GitHub Actions, align the Ginkgo runner with `go.mod`, and check Go and container vulnerabilities in CI.
+
 ## [1.22.0](https://github.com/wandb/operator/compare/v1.21.3...v1.22.0) (2026-04-30)
 
 
