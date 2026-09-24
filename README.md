@@ -259,6 +259,8 @@ The default Tilt setup follows the normal operator install path:
 - builds the local controller image as `controller:latest`
 - creates a `WeightsAndBiases` CR in `wandb`
 - uses `networkMode="gateway"` with `http://localhost:8080`
+- rewrites non-loopback W&B hostnames through cluster CoreDNS so workloads can
+  call the same URL through the local gateway or ingress
 - uses the published server manifest repository by default
 - keeps telemetry off unless `observabilityMode="full"` is set
 
@@ -268,6 +270,23 @@ and `networkMode`.
 Set `networkMode="ingress"` to use the local ingress-nginx path instead of
 Gateway API; if `wandbHostname` is not set explicitly, ingress mode uses
 `http://wandb.localhost:8080`.
+
+`enableCoreDNSRewrite=True` makes the hostname from `wandbHostname` resolve to
+the local Gateway or ingress-nginx Service from inside the cluster. This is
+enabled by default for non-loopback hostnames such as `wandb.localhost`. Tilt
+updates its marked CoreDNS rules without replacing other CoreDNS configuration.
+The rules remain in the development cluster after Tilt stops. Set the option to
+`False` when cluster DNS is managed outside this local development setup.
+OpenShift is excluded because its DNS Operator owns cluster DNS configuration.
+
+Gateway mode defaults to the loopback-only `http://localhost:8080`. To use the
+same external-style URL from the host and from workloads, override it locally:
+
+```python
+SETTINGS = {
+    "wandbHostname": "http://wandb.localhost:8080",
+}
+```
 
 Tilt defaults `manifestSource="published"`, which leaves
 `spec.wandb.manifestRepository` empty so the W&B CR webhook applies the same
@@ -279,6 +298,15 @@ when using that local source.
 
 Use `crFile` for custom CR shapes; Tilt treats it as a base CR and still
 applies the scalar settings above.
+
+When `useExternalObjectStore=True`, Tilt exposes the test SeaweedFS S3 API at
+`http://s3.localhost:8333` by default. The connection Secret uses that same
+hostname for direct presigned URLs, Tilt forwards the port for host access, and
+CoreDNS resolves it to the SeaweedFS Service for cluster workloads. Override
+`externalObjectStoreHostname` or `externalObjectStorePort` if the defaults
+conflict with another local service. Keep `enableCoreDNSRewrite=True` unless
+the configured hostname already resolves to the SeaweedFS Service in the
+cluster. This automatic DNS setup is not supported on OpenShift.
 
 By default, Tilt is configured to only allow connections to the following Kubernetes contexts:
 

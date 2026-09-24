@@ -135,12 +135,42 @@ func TestBuildCRExternalObjectStoreOnly(t *testing.T) {
 	assertValueSelector(t, cr.Spec.ObjectStore[v2.DefaultInstanceName].ExternalObjectStore.Region, externalObjectStoreSecret, "Region")
 	assertValueSelector(t, cr.Spec.ObjectStore[v2.DefaultInstanceName].ExternalObjectStore.AccessKey, externalObjectStoreSecret, "AccessKey")
 	assertValueSelector(t, cr.Spec.ObjectStore[v2.DefaultInstanceName].ExternalObjectStore.SecretKey, externalObjectStoreSecret, "SecretKey")
+	assertValueSelector(t, cr.Spec.ObjectStore[v2.DefaultInstanceName].ExternalObjectStore.TlsEnabled, externalObjectStoreSecret, "TlsEnabled")
+	assertValueSelector(t, cr.Spec.ObjectStore[v2.DefaultInstanceName].ExternalObjectStore.ForcePathStyle, externalObjectStoreSecret, "ForcePathStyle")
+	if cr.Spec.Wandb.BucketProxy {
+		t.Fatalf("external object store should use direct presigned URLs")
+	}
 
 	if cr.Spec.MySQL[v2.DefaultInstanceName].ManagedMysql == nil || cr.Spec.MySQL[v2.DefaultInstanceName].ExternalMysql != nil {
 		t.Fatalf("mysql should remain managed")
 	}
 	if cr.Spec.Redis[v2.DefaultInstanceName].ManagedRedis == nil || cr.Spec.Redis[v2.DefaultInstanceName].ExternalRedis != nil {
 		t.Fatalf("redis should remain managed")
+	}
+}
+
+func TestBuildCRExternalObjectStoreDisablesBaseBucketProxy(t *testing.T) {
+	dir := t.TempDir()
+	crFile := filepath.Join(dir, "base.yaml")
+	base := `apiVersion: apps.wandb.com/v2
+kind: WeightsAndBiases
+metadata:
+  name: custom
+spec:
+  wandb:
+    hostname: http://old.example
+    bucketProxy: true
+`
+	if err := os.WriteFile(crFile, []byte(base), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cr, err := BuildCR(Options{CRFile: crFile, ExternalObjectStore: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cr.Spec.Wandb.BucketProxy {
+		t.Fatalf("external object store should override bucketProxy from the base CR")
 	}
 }
 
