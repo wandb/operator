@@ -287,14 +287,21 @@ type ContainerPort struct {
 // MigrationJob represents a migration invocation with an image and args, used
 // by the top-level "migrations" section (e.g., default, runsdb, usagedb).
 type MigrationJob struct {
-	Image              ImageRef      `yaml:"image"`
-	Args               []string      `yaml:"args,omitempty"`
-	Command            []string      `yaml:"command,omitempty"`
+	Image   ImageRef `yaml:"image"`
+	Args    []string `yaml:"args,omitempty"`
+	Command []string `yaml:"command,omitempty"`
+	// IgnoredErrorCodes marks container exit codes that complete the migration
+	// successfully. Omission defaults to 101; an explicit empty list disables it.
+	IgnoredErrorCodes  []int32       `yaml:"ignoredErrorCodes,omitempty"`
 	CommonEnvs         []string      `yaml:"commonEnvs,omitempty"`
 	CommonVolumeMounts []string      `yaml:"commonVolumeMounts,omitempty"`
 	Env                []EnvVar      `yaml:"env,omitempty"`
 	VolumeMounts       []VolumeMount `yaml:"volumeMounts,omitempty"`
 }
+
+// DefaultIgnoredMigrationErrorCode is applied to legacy manifests that omit
+// ignoredErrorCodes.
+const DefaultIgnoredMigrationErrorCode int32 = 101
 
 // FileSpec defines a single file to project into the application's container.
 // Exactly one of Inline or ConfigMapRef should be provided. The file is mounted
@@ -497,6 +504,9 @@ func mergeSimple(dst, src *Manifest) {
 			dst.Migrations = make(map[string]MigrationJob)
 		}
 		for k, v := range src.Migrations {
+			if v.IgnoredErrorCodes == nil {
+				v.IgnoredErrorCodes = []int32{DefaultIgnoredMigrationErrorCode}
+			}
 			dst.Migrations[k] = v
 		}
 	}

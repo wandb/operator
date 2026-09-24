@@ -11,6 +11,7 @@ import (
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -151,5 +152,180 @@ func TestRunMigrationsSurfacesFailedJobPhaseAndReason(t *testing.T) {
 	}
 	if message == "" {
 		t.Fatal("readiness message should identify the failed migration")
+	}
+}
+
+func TestRunMigrationsTreatsIgnoredErrorCodeAsSuccess(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := apiv2.AddToScheme(scheme); err != nil {
+		t.Fatalf("add W&B API to scheme: %v", err)
+	}
+	if err := batchv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add batch API to scheme: %v", err)
+	}
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add core API to scheme: %v", err)
+	}
+
+	const (
+		version = "0.83.2"
+		jobUID  = types.UID("gorilla-migration-job")
+	)
+	wandb := &apiv2.WeightsAndBiases{
+		ObjectMeta: metav1.ObjectMeta{Name: "wandb", Namespace: "default"},
+		Spec: apiv2.WeightsAndBiasesSpec{
+			Wandb: apiv2.WandbAppSpec{Version: version},
+		},
+		Status: apiv2.WeightsAndBiasesStatus{
+			Wandb: apiv2.WandbStatus{
+				Migration: apiv2.WandbMigrationStatus{
+					Version:            version,
+					LastSuccessVersion: "0.85.0",
+					Jobs:               map[string]apiv2.MigrationJobStatus{},
+				},
+			},
+		},
+	}
+	job := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{Name: "wandb-gorilla", Namespace: "default", UID: jobUID},
+		Status: batchv1.JobStatus{
+			Failed: 1,
+			Conditions: []batchv1.JobCondition{{
+				Type:    batchv1.JobFailed,
+				Status:  corev1.ConditionTrue,
+				Reason:  "BackoffLimitExceeded",
+				Message: "migration container repeatedly exited",
+			}},
+		},
+	}
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "wandb-gorilla-test",
+			Namespace: "default",
+			Labels: map[string]string{
+				batchv1.ControllerUidLabel: string(jobUID),
+			},
+		},
+		Status: corev1.PodStatus{
+			ContainerStatuses: []corev1.ContainerStatus{{
+				Name: "migrate",
+				LastTerminationState: corev1.ContainerState{
+					Terminated: &corev1.ContainerStateTerminated{
+						ExitCode: servermanifest.DefaultIgnoredMigrationErrorCode,
+					},
+				},
+			}},
+		},
+	}
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&apiv2.WeightsAndBiases{}).
+		WithObjects(wandb, job, pod).
+		Build()
+	manifest := servermanifest.Manifest{
+		Migrations: map[string]servermanifest.MigrationJob{
+			"gorilla": {
+				IgnoredErrorCodes: []int32{servermanifest.DefaultIgnoredMigrationErrorCode},
+			},
+		},
+	}
+
+	result, err := runMigrations(context.Background(), c, wandb, manifest)
+	if err != nil {
+		t.Fatalf("run migrations: %v", err)
+	}
+	if result.RequeueAfter != 0 {
+		t.Fatalf("successful migration should not requeue, got %s", result.RequeueAfter)
+	}
+	if !wandb.Status.Wandb.Migration.Ready || wandb.Status.Wandb.Migration.Phase != migrationPhaseSucceeded {
+		t.Fatalf("unexpected migration status: %#v", wandb.Status.Wandb.Migration)
+	}
+	if wandb.Status.Wandb.Migration.LastSuccessVersion != version {
+		t.Fatalf("last success version = %q, want %q", wandb.Status.Wandb.Migration.LastSuccessVersion, version)
+	}
+	jobStatus := wandb.Status.Wandb.Migration.Jobs["gorilla"]
+	if !jobStatus.Succeeded || jobStatus.Failed || jobStatus.Phase != migrationPhaseSucceeded {
+		t.Fatalf("unexpected gorilla migration status: %#v", jobStatus)
+	}
+	if jobStatus.Reason != "IgnoredErrorCode" {
+		t.Fatalf("migration reason = %q, want IgnoredErrorCode", jobStatus.Reason)
+	}
+}
+
+func TestMigrationJobPodExitedWithAnyCode(t *testing.T) {
+	tests := []struct {
+		name            string
+		containerStatus corev1.ContainerStatus
+		want            bool
+	}{
+		{
+			name: "current termination state",
+			containerStatus: corev1.ContainerStatus{
+				Name: "migrate",
+				State: corev1.ContainerState{
+					Terminated: &corev1.ContainerStateTerminated{ExitCode: servermanifest.DefaultIgnoredMigrationErrorCode},
+				},
+			},
+			want: true,
+		},
+		{
+			name: "different exit code",
+			containerStatus: corev1.ContainerStatus{
+				Name: "migrate",
+				State: corev1.ContainerState{
+					Terminated: &corev1.ContainerStateTerminated{ExitCode: 1},
+				},
+			},
+		},
+		{
+			name: "different container",
+			containerStatus: corev1.ContainerStatus{
+				Name: "sidecar",
+				State: corev1.ContainerState{
+					Terminated: &corev1.ContainerStateTerminated{ExitCode: servermanifest.DefaultIgnoredMigrationErrorCode},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			scheme := runtime.NewScheme()
+			if err := corev1.AddToScheme(scheme); err != nil {
+				t.Fatalf("add core API to scheme: %v", err)
+			}
+
+			const jobUID = types.UID("gorilla-migration-job")
+			job := &batchv1.Job{
+				ObjectMeta: metav1.ObjectMeta{Name: "wandb-gorilla", Namespace: "default", UID: jobUID},
+			}
+			pod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "wandb-gorilla-test",
+					Namespace: "default",
+					Labels: map[string]string{
+						batchv1.ControllerUidLabel: string(jobUID),
+					},
+				},
+				Status: corev1.PodStatus{ContainerStatuses: []corev1.ContainerStatus{tt.containerStatus}},
+			}
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(pod).Build()
+
+			gotCode, got, err := migrationJobPodExitedWithAnyCode(
+				context.Background(),
+				c,
+				job,
+				[]int32{servermanifest.DefaultIgnoredMigrationErrorCode},
+			)
+			if err != nil {
+				t.Fatalf("inspect migration pod: %v", err)
+			}
+			if got != tt.want {
+				t.Fatalf("migrationJobPodExitedWithAnyCode() = %t, want %t", got, tt.want)
+			}
+			if got && gotCode != servermanifest.DefaultIgnoredMigrationErrorCode {
+				t.Fatalf("ignored exit code = %d, want %d", gotCode, servermanifest.DefaultIgnoredMigrationErrorCode)
+			}
+		})
 	}
 }

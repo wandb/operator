@@ -1213,17 +1213,35 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 		}
 
-		if job.Status.Succeeded > 0 {
+		ignoredExitCode, ignoredError := int32(0), false
+		if job.Status.Succeeded == 0 && len(migrationTask.IgnoredErrorCodes) > 0 {
+			ignoredExitCode, ignoredError, err = migrationJobPodExitedWithAnyCode(
+				ctx,
+				client,
+				job,
+				migrationTask.IgnoredErrorCodes,
+			)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+
+		if job.Status.Succeeded > 0 || ignoredError {
 			jobStatus.Succeeded = true
 			jobStatus.Phase = migrationPhaseSucceeded
-			jobStatus.Reason = "JobSucceeded"
-			for _, cond := range job.Status.Conditions {
-				if cond.Type == batchv1.JobComplete && cond.Status == corev1.ConditionTrue {
-					if cond.Reason != "" {
-						jobStatus.Reason = cond.Reason
+			if ignoredError {
+				jobStatus.Reason = "IgnoredErrorCode"
+				jobStatus.Message = fmt.Sprintf("migration container exited with ignored error code %d", ignoredExitCode)
+			} else {
+				jobStatus.Reason = "JobSucceeded"
+				for _, cond := range job.Status.Conditions {
+					if cond.Type == batchv1.JobComplete && cond.Status == corev1.ConditionTrue {
+						if cond.Reason != "" {
+							jobStatus.Reason = cond.Reason
+						}
+						jobStatus.Message = cond.Message
+						break
 					}
-					jobStatus.Message = cond.Message
-					break
 				}
 			}
 		} else {
@@ -1285,6 +1303,53 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 	}
 
 	return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+}
+
+// migrationJobPodExitedWithAnyCode reports whether the migration container in
+// a Pod owned by job has exited with one of the configured ignored error codes.
+func migrationJobPodExitedWithAnyCode(
+	ctx context.Context,
+	client ctrlClient.Client,
+	job *batchv1.Job,
+	ignoredErrorCodes []int32,
+) (int32, bool, error) {
+	if job.UID == "" || len(ignoredErrorCodes) == 0 {
+		return 0, false, nil
+	}
+	ignored := make(map[int32]struct{}, len(ignoredErrorCodes))
+	for _, exitCode := range ignoredErrorCodes {
+		ignored[exitCode] = struct{}{}
+	}
+
+	pods := &corev1.PodList{}
+	if err := client.List(
+		ctx,
+		pods,
+		ctrlClient.InNamespace(job.Namespace),
+		ctrlClient.MatchingLabels{batchv1.ControllerUidLabel: string(job.UID)},
+	); err != nil {
+		return 0, false, fmt.Errorf("list pods for migration job %s/%s: %w", job.Namespace, job.Name, err)
+	}
+
+	for _, pod := range pods.Items {
+		for _, containerStatus := range pod.Status.ContainerStatuses {
+			if containerStatus.Name != "migrate" {
+				continue
+			}
+			if terminated := containerStatus.State.Terminated; terminated != nil {
+				if _, ok := ignored[terminated.ExitCode]; ok {
+					return terminated.ExitCode, true, nil
+				}
+			}
+			if terminated := containerStatus.LastTerminationState.Terminated; terminated != nil {
+				if _, ok := ignored[terminated.ExitCode]; ok {
+					return terminated.ExitCode, true, nil
+				}
+			}
+		}
+	}
+
+	return 0, false, nil
 }
 
 func generateSecrets(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest) (ctrl.Result, error) {

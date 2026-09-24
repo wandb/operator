@@ -2,6 +2,7 @@ package manifest_test
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -45,9 +46,39 @@ var _ = Describe("Server manifest YAML decode", func() {
 		Expect(m.Migrations).To(HaveKey("weave-trace"))
 		Expect(m.Migrations["gorilla"].Image.Repository).To(Equal("us-docker.pkg.dev/wandb-production/public/wandb/megabinary"))
 		Expect(m.Migrations["gorilla"].Args).To(ContainElement("migrate"))
+		Expect(m.Migrations["gorilla"].IgnoredErrorCodes).To(Equal([]int32{manifest.DefaultIgnoredMigrationErrorCode}))
 
 		// Sizing comes from the split sizing.yaml file.
 		Expect(m.Kafka.Sizing["default"].Replicas).To(Equal(int32(2)))
 		Expect(m.Bucket["default"].Sizing["default"].Replicas).To(Equal(int32(1)))
+	})
+
+	It("defaults omitted migration error codes while preserving explicit values", func() {
+		manifestRoot := GinkgoT().TempDir()
+		manifestYAML := []byte(`migrations:
+  defaulted:
+    image:
+      repository: example/defaulted
+  disabled:
+    image:
+      repository: example/disabled
+    ignoredErrorCodes: []
+  configured:
+    image:
+      repository: example/configured
+    ignoredErrorCodes: [7, 23]
+`)
+		Expect(os.WriteFile(filepath.Join(manifestRoot, "test.yaml"), manifestYAML, 0o600)).To(Succeed())
+
+		m, err := manifest.LoadManifestFromFile(
+			context.Background(),
+			"file://"+filepath.ToSlash(manifestRoot),
+			"test",
+		)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(m.Migrations["defaulted"].IgnoredErrorCodes).To(Equal([]int32{manifest.DefaultIgnoredMigrationErrorCode}))
+		Expect(m.Migrations["disabled"].IgnoredErrorCodes).To(BeEmpty())
+		Expect(m.Migrations["disabled"].IgnoredErrorCodes).NotTo(BeNil())
+		Expect(m.Migrations["configured"].IgnoredErrorCodes).To(Equal([]int32{7, 23}))
 	})
 })
