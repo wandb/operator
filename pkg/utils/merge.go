@@ -41,6 +41,12 @@ func convertSlice(i interface{}) []interface{} {
 }
 
 func Merge(src, dst interface{}) (interface{}, error) {
+	// Explicit nulls are values, not missing keys. Preserve the higher-priority
+	// source, including null, before reflecting on either value's type.
+	if src == nil || dst == nil {
+		return src, nil
+	}
+
 	srcType := reflect.TypeOf(src)
 	dstType := reflect.TypeOf(dst)
 	if srcType.Kind() != dstType.Kind() {
