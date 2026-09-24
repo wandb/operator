@@ -43,6 +43,8 @@ tilt-settings.star
 hack/testing-manifests/wandb/.generated/*.yaml
 /tilt_bin
 /dist
+/bundle
+/bundle.Dockerfile
 
 .DS_Store
 
@@ -51,6 +53,10 @@ hack/testing-manifests/wandb/.generated/*.yaml
 
 # various util artifacts
 .k8s-images
+
+# Python bytecode (hack/scripts/*.py)
+__pycache__/
+*.pyc
 
 # Downloaded by `make download-watchtower` for the image build
 /watchtower
