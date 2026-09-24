@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [1.23.1](https://github.com/wandb/operator/compare/v1.23.0...v1.23.1) (Unreleased)
 
+### Bug fixes
+
+* Preserve explicit null values and configuration precedence when merging specs instead of panicking on overlapping nulls, such as unset CPU limits.
+
 ### Dependencies and security
 
 * Refresh direct and transitive Go dependencies, including Helm 4.3.0, Kubernetes libraries 0.37.0, controller-runtime 0.25.1, and the `x/net` and `x/crypto` security fixes from #361.
