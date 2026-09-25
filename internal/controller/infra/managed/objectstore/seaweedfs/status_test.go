@@ -58,6 +58,7 @@ var _ = Describe("SeaweedFS status", func() {
 				{Type: SeaweedReportedReadyType, Status: metav1.ConditionTrue},
 				{Type: SeaweedWritableType, Status: metav1.ConditionTrue, Reason: "AllocationSucceeded"},
 				{Type: SeaweedS3ReachableType, Status: metav1.ConditionTrue, Reason: "EndpointReachable"},
+				{Type: SeaweedTopologyReadyType, Status: metav1.ConditionTrue, Reason: "TopologyReady"},
 			},
 			nil,
 			1,
@@ -65,5 +66,26 @@ var _ = Describe("SeaweedFS status", func() {
 
 		Expect(status.Ready).To(BeTrue())
 		Expect(status.State).To(Equal(common.HealthyState))
+	})
+
+	It("reports a failed topology migration as an error", func() {
+		status, _, _ := ComputeStatus(
+			context.Background(),
+			true,
+			nil,
+			[]metav1.Condition{
+				{Type: SeaweedCustomResourceType, Status: metav1.ConditionTrue},
+				{Type: SeaweedConnectionInfoType, Status: metav1.ConditionTrue},
+				{Type: SeaweedReportedReadyType, Status: metav1.ConditionTrue},
+				{Type: SeaweedWritableType, Status: metav1.ConditionTrue, Reason: "AllocationSucceeded"},
+				{Type: SeaweedS3ReachableType, Status: metav1.ConditionTrue, Reason: "EndpointReachable"},
+				{Type: SeaweedTopologyReadyType, Status: metav1.ConditionFalse, Reason: "ReplicationFailed"},
+			},
+			nil,
+			1,
+		)
+
+		Expect(status.Ready).To(BeFalse())
+		Expect(status.State).To(Equal(common.ErrorState))
 	})
 })
