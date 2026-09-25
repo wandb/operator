@@ -755,7 +755,7 @@ type ManagedMysqlSpec struct {
 	Namespace   string      `json:"namespace,omitempty"`
 	Name        string      `json:"name,omitempty"`
 	// +kubebuilder:default={enabled: true}
-	Telemetry   Telemetry   `json:"telemetry,omitempty"`
+	Telemetry Telemetry `json:"telemetry,omitempty"`
 }
 
 type MysqlConnection struct {
@@ -818,7 +818,7 @@ type ManagedRedisSpec struct {
 	Namespace   string            `json:"namespace,omitempty"`
 	Name        string            `json:"name,omitempty"`
 	// +kubebuilder:default={enabled: true}
-	Telemetry   Telemetry         `json:"telemetry,omitempty"`
+	Telemetry Telemetry `json:"telemetry,omitempty"`
 }
 
 type RedisConnection struct {
@@ -874,7 +874,7 @@ type ManagedKafkaSpec struct {
 	Namespace   string      `json:"namespace,omitempty"`
 	Name        string      `json:"name,omitempty"`
 	// +kubebuilder:default={enabled: true}
-	Telemetry   Telemetry   `json:"telemetry,omitempty"`
+	Telemetry Telemetry `json:"telemetry,omitempty"`
 	// ServiceAccount configures the identity used by the Bufstream broker.
 	ServiceAccount   ManagedServiceAccountSpec `json:"serviceAccount,omitempty"`
 	SkipDataRecovery bool                      `json:"skipDataRecovery,omitempty"`
@@ -933,7 +933,7 @@ type ManagedObjectStoreSpec struct {
 	Namespace              string                 `json:"namespace,omitempty"`
 	Name                   string                 `json:"name,omitempty"`
 	// +kubebuilder:default={enabled: true}
-	Telemetry              Telemetry              `json:"telemetry,omitempty"`
+	Telemetry Telemetry `json:"telemetry,omitempty"`
 }
 
 type SeaweedObjectStoreSpec struct {
@@ -1015,7 +1015,7 @@ type ManagedClickHouseSpec struct {
 	Namespace   string           `json:"namespace,omitempty"`
 	Name        string           `json:"name,omitempty"`
 	// +kubebuilder:default={enabled: true}
-	Telemetry   Telemetry        `json:"telemetry,omitempty"`
+	Telemetry Telemetry `json:"telemetry,omitempty"`
 	// ServiceAccount configures the identity used by ClickHouse server pods.
 	ServiceAccount ManagedServiceAccountSpec `json:"serviceAccount,omitempty"`
 
@@ -1260,8 +1260,11 @@ type TelemetryConnectionStatus struct {
 	LogsExporter          string `json:"logsExporter,omitempty"`
 	TracesExporter        string `json:"tracesExporter,omitempty"`
 	MetricsEndpoint       string `json:"metricsEndpoint,omitempty"`
+	MetricsReadEndpoint   string `json:"metricsReadEndpoint,omitempty"`
 	LogsEndpoint          string `json:"logsEndpoint,omitempty"`
+	LogsReadEndpoint      string `json:"logsReadEndpoint,omitempty"`
 	TracesEndpoint        string `json:"tracesEndpoint,omitempty"`
+	TracesReadEndpoint    string `json:"tracesReadEndpoint,omitempty"`
 	ServiceName           string `json:"serviceName,omitempty"`
 	ResourceAttributes    string `json:"resourceAttributes,omitempty"`
 	GorillaTracer         string `json:"gorillaTracer,omitempty"`
