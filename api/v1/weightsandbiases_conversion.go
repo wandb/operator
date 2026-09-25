@@ -36,8 +36,10 @@ var logger = ctrl.Log.WithName("weightsandbiases-conversion")
 // Round-trip annotations stashed on v2 so ConvertFrom can reproduce the
 // original v1 chart/values across apiserver-internal v2 → v1 → v2 bounces.
 const (
-	v1ChartAnnotation  = "legacy.operator.wandb.com/v1-chart"
-	v1ValuesAnnotation = "legacy.operator.wandb.com/v1-values"
+	// V1ChartAnnotation stores the original v1 chart configuration on a converted v2 resource.
+	V1ChartAnnotation = "legacy.operator.wandb.com/v1-chart"
+	// V1ValuesAnnotation stores the original v1 values on a converted v2 resource.
+	V1ValuesAnnotation = "legacy.operator.wandb.com/v1-values"
 )
 
 const conversionLookupTimeout = 5 * time.Second
@@ -137,8 +139,8 @@ func stashV1Source(src *WeightsAndBiases, dst *appsv2.WeightsAndBiases) error {
 	if dst.Annotations == nil {
 		dst.Annotations = make(map[string]string)
 	}
-	dst.Annotations[v1ChartAnnotation] = string(chartJSON)
-	dst.Annotations[v1ValuesAnnotation] = string(valuesJSON)
+	dst.Annotations[V1ChartAnnotation] = string(chartJSON)
+	dst.Annotations[V1ValuesAnnotation] = string(valuesJSON)
 	return nil
 }
 
@@ -146,14 +148,14 @@ func loadV1Source(src *appsv2.WeightsAndBiases, dst *WeightsAndBiases) error {
 	dst.Spec.Chart = Object{Object: map[string]interface{}{}}
 	dst.Spec.Values = Object{Object: map[string]interface{}{}}
 
-	if raw, ok := src.Annotations[v1ChartAnnotation]; ok && raw != "" {
+	if raw, ok := src.Annotations[V1ChartAnnotation]; ok && raw != "" {
 		if err := json.Unmarshal([]byte(raw), &dst.Spec.Chart.Object); err != nil {
-			return fmt.Errorf("unmarshal %s: %w", v1ChartAnnotation, err)
+			return fmt.Errorf("unmarshal %s: %w", V1ChartAnnotation, err)
 		}
 	}
-	if raw, ok := src.Annotations[v1ValuesAnnotation]; ok && raw != "" {
+	if raw, ok := src.Annotations[V1ValuesAnnotation]; ok && raw != "" {
 		if err := json.Unmarshal([]byte(raw), &dst.Spec.Values.Object); err != nil {
-			return fmt.Errorf("unmarshal %s: %w", v1ValuesAnnotation, err)
+			return fmt.Errorf("unmarshal %s: %w", V1ValuesAnnotation, err)
 		}
 	}
 	return nil

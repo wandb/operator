@@ -7,6 +7,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	apiv1 "github.com/wandb/operator/api/v1"
 	apiv2 "github.com/wandb/operator/api/v2"
 	v2 "github.com/wandb/operator/internal/controller/reconciler"
 	"github.com/wandb/operator/internal/observability/telemetry"
@@ -321,6 +322,125 @@ var _ = Describe("WeightsAndBiases Networking", func() {
 			Name: wandbName, Namespace: wandbNamespace,
 		}, &networkingv1.Ingress{})
 		Expect(apierrors.IsNotFound(err)).To(BeTrue())
+	})
+
+	It("adopts an ownerless Ingress from the converted v1 Helm release", func() {
+		ctx := context.Background()
+		wandbName := "network-ingress-v1-helm"
+
+		wandb, service := newNetworkingWandb(wandbName, "")
+		wandb.Annotations = map[string]string{
+			apiv1.V1ChartAnnotation:  `{"name":"operator-wandb"}`,
+			apiv1.V1ValuesAnnotation: `{}`,
+		}
+		wandb.Spec.Networking = apiv2.NetworkingSpec{
+			Mode: apiv2.NetworkingModeIngress,
+			Ingress: &apiv2.IngressConfig{
+				IngressClassName: ptr.To("nginx"),
+			},
+		}
+		legacyIngress := &networkingv1.Ingress{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      wandbName,
+				Namespace: wandbNamespace,
+				Labels: map[string]string{
+					"app.kubernetes.io/managed-by": "Helm",
+					"helm.sh/chart":                "operator-wandb-0.1.0",
+					"example.com/preserved-label":  "preserve-me",
+				},
+				Annotations: map[string]string{
+					"meta.helm.sh/release-name":      wandbName,
+					"meta.helm.sh/release-namespace": wandbNamespace,
+					"example.com/preserved":          "preserve-me",
+				},
+			},
+			Spec: networkingv1.IngressSpec{DefaultBackend: &networkingv1.IngressBackend{
+				Service: &networkingv1.IngressServiceBackend{
+					Name: "legacy-placeholder",
+					Port: networkingv1.ServiceBackendPort{Number: 80},
+				},
+			}},
+		}
+
+		Expect(k8sClient.Create(ctx, wandb)).To(Succeed())
+		Expect(k8sClient.Create(ctx, service)).To(Succeed())
+		Expect(k8sClient.Create(ctx, legacyIngress)).To(Succeed())
+		DeferCleanup(deleteIfPresent, ctx, wandb)
+		DeferCleanup(deleteIfPresent, ctx, legacyIngress)
+
+		wandb = markWandbReadyForNetworking(ctx, wandbName, wandbNamespace)
+		reconcileNetworkingManifest(ctx, wandb)
+
+		adopted := &networkingv1.Ingress{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{
+			Name: wandbName, Namespace: wandbNamespace,
+		}, adopted)).To(Succeed())
+		Expect(adopted.OwnerReferences).To(ConsistOf(metav1.OwnerReference{
+			APIVersion: apiv2.GroupVersion.String(),
+			Kind:       "WeightsAndBiases",
+			Name:       wandbName,
+			UID:        wandb.UID,
+		}))
+		Expect(adopted.Annotations).NotTo(HaveKey("meta.helm.sh/release-name"))
+		Expect(adopted.Annotations).NotTo(HaveKey("meta.helm.sh/release-namespace"))
+		Expect(adopted.Annotations).To(HaveKeyWithValue("example.com/preserved", "preserve-me"))
+		Expect(adopted.Labels).NotTo(HaveKey("helm.sh/chart"))
+		Expect(adopted.Labels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", "wandb-operator"))
+		Expect(adopted.Labels).To(HaveKeyWithValue("example.com/preserved-label", "preserve-me"))
+		Expect(adopted.Spec.DefaultBackend).To(BeNil())
+	})
+
+	It("migrates an existing v1 Ingress owner reference to v2", func() {
+		ctx := context.Background()
+		wandbName := "network-ingress-v1-owner"
+
+		wandb, service := newNetworkingWandb(wandbName, "")
+		wandb.Spec.Networking = apiv2.NetworkingSpec{
+			Mode: apiv2.NetworkingModeIngress,
+			Ingress: &apiv2.IngressConfig{
+				IngressClassName: ptr.To("nginx"),
+			},
+		}
+		Expect(k8sClient.Create(ctx, wandb)).To(Succeed())
+		Expect(k8sClient.Create(ctx, service)).To(Succeed())
+		DeferCleanup(deleteIfPresent, ctx, wandb)
+
+		wandb = getWandb(ctx, wandbName, wandbNamespace)
+		legacyIngress := &networkingv1.Ingress{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      wandbName,
+				Namespace: wandbNamespace,
+				OwnerReferences: []metav1.OwnerReference{{
+					APIVersion: apiv1.GroupVersion.String(),
+					Kind:       "WeightsAndBiases",
+					Name:       wandbName,
+					UID:        wandb.UID,
+				}},
+			},
+			Spec: networkingv1.IngressSpec{DefaultBackend: &networkingv1.IngressBackend{
+				Service: &networkingv1.IngressServiceBackend{
+					Name: "legacy-placeholder",
+					Port: networkingv1.ServiceBackendPort{Number: 80},
+				},
+			}},
+		}
+		Expect(k8sClient.Create(ctx, legacyIngress)).To(Succeed())
+		DeferCleanup(deleteIfPresent, ctx, legacyIngress)
+
+		wandb = markWandbReadyForNetworking(ctx, wandbName, wandbNamespace)
+		reconcileNetworkingManifest(ctx, wandb)
+
+		migrated := &networkingv1.Ingress{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{
+			Name: wandbName, Namespace: wandbNamespace,
+		}, migrated)).To(Succeed())
+		Expect(migrated.OwnerReferences).To(ConsistOf(metav1.OwnerReference{
+			APIVersion: apiv2.GroupVersion.String(),
+			Kind:       "WeightsAndBiases",
+			Name:       wandbName,
+			UID:        wandb.UID,
+		}))
+		Expect(migrated.Spec.DefaultBackend).To(BeNil())
 	})
 
 	It("configures AWS backend Services without managing the user's Ingress", func() {

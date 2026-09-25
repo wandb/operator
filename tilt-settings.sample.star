@@ -35,6 +35,10 @@ SETTINGS = {
     "gatewayClass": "nginx",
     "ingressClass": "nginx",
 
+    # Make a non-loopback W&B hostname (for example, wandb.localhost) resolve
+    # to the local gateway/ingress from inside the cluster.
+    "enableCoreDNSRewrite": True,
+
     # off, full, or forward. "full" enables VictoriaMetrics/Grafana operators
     # and exposes local telemetry endpoint resources.
     "observabilityMode": "off",
@@ -47,6 +51,10 @@ SETTINGS = {
     "useExternalMysql": False,
     "useExternalRedis": False,
     "useExternalObjectStore": False,
+    # useExternalObjectStore publishes direct presigned URLs at this endpoint.
+    # Tilt forwards the port locally and rewrites the hostname inside the cluster.
+    "externalObjectStoreHostname": "s3.localhost",
+    "externalObjectStorePort": 8333,
     "useCustomCA": False,
 
     # CRC/OpenShift Local uses the crc-admin context. Tilt auto-enables
