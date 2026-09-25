@@ -181,7 +181,7 @@ func TestConvertTo_ClickHouseReplicationPreservesV1Annotation(t *testing.T) {
 	require.NoError(t, src.ConvertTo(dst))
 
 	var decoded map[string]interface{}
-	require.NoError(t, json.Unmarshal([]byte(dst.Annotations[v1ValuesAnnotation]), &decoded))
+	require.NoError(t, json.Unmarshal([]byte(dst.Annotations[V1ValuesAnnotation]), &decoded))
 	global := decoded["global"].(map[string]interface{})
 	extra := global["extraEnv"].(map[string]interface{})
 	require.Equal(t, "true", extra["WF_CLICKHOUSE_REPLICATED"],
