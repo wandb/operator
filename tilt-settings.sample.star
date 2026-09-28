@@ -19,6 +19,10 @@ SETTINGS = {
     "retentionPolicy": "detach",
     "licenseFile": "",
 
+    # Download Watchtower and enable Console v2 at /console. Uses gh auth token;
+    # authenticate gh with read access to wandb/watchtower.
+    "adminConsoleEnabled": False,
+
     # Default to the published server manifest repository. Use
     # local mode only when developing against repo-local manifest definitions.
     "manifestSource": "published",

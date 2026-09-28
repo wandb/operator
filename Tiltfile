@@ -40,6 +40,7 @@ settings = {
     "size": "dev",
     "retentionPolicy": "detach",
     "licenseFile": "",
+    "adminConsoleEnabled": False,
     "manifestSource": "published",  # published or local
     "localManifestPath": "hack/testing-manifests/server-manifest",
     "networkMode": "gateway",  # gateway or ingress
@@ -216,6 +217,7 @@ USE_EXTERNAL_MYSQL = as_bool(settings.get("useExternalMysql"))
 USE_EXTERNAL_REDIS = as_bool(settings.get("useExternalRedis"))
 USE_EXTERNAL_OBJECT_STORE = as_bool(settings.get("useExternalObjectStore"))
 USE_CUSTOM_CA = as_bool(settings.get("useCustomCA"))
+ADMIN_CONSOLE_ENABLED = as_bool(settings.get("adminConsoleEnabled"))
 USE_EXTERNAL_INFRA = USE_EXTERNAL_MYSQL or USE_EXTERNAL_REDIS or USE_EXTERNAL_OBJECT_STORE
 USE_TEST_INFRA_TLS = USE_CUSTOM_CA and (USE_EXTERNAL_MYSQL or USE_EXTERNAL_REDIS)
 EXTERNAL_OBJECT_STORE_HOSTNAME = str(settings.get("externalObjectStoreHostname"))
@@ -228,6 +230,8 @@ if (USE_EXTERNAL_INFRA or USE_CUSTOM_CA) and not as_bool(settings.get("includeCR
     fail("useExternalMysql/useExternalRedis/useExternalObjectStore/useCustomCA require includeCR=True")
 if (USE_EXTERNAL_INFRA or USE_CUSTOM_CA) and settings.get("wandbCR", "") != "":
     fail("useExternalMysql/useExternalRedis/useExternalObjectStore/useCustomCA patch generated CRs; use crFile instead of wandbCR")
+if ADMIN_CONSOLE_ENABLED and settings.get("wandbCR", "") != "":
+    fail("adminConsoleEnabled patches generated CRs; use crFile instead of wandbCR")
 
 watch_settings(ignore=["**/.git", "**/*.out", GENERATED_DIR + "/**"])
 update_settings(k8s_upsert_timeout_secs=300)
@@ -259,6 +263,9 @@ def operator_dockerfile():
         "ADD tilt_bin/manager /manager",
         "ADD tilt_bin/crd-installer /crd-installer",
     ]
+
+    if ADMIN_CONSOLE_ENABLED:
+        lines.append("COPY tilt_bin/watchtower /watchtower")
 
     if settings.get("manifestSource") == "local":
         lines.append("ADD %s /server-manifest" % settings.get("localManifestPath"))
@@ -415,6 +422,7 @@ def build_wandb_cr():
       cmd += helper_flag("size", settings.get("size"))
       cmd += helper_flag("retention-policy", settings.get("retentionPolicy"))
       cmd += helper_flag("license-file", settings.get("licenseFile", ""))
+      cmd += helper_bool_flag("admin-console-enabled", ADMIN_CONSOLE_ENABLED)
       cmd += helper_flag("manifest-source", settings.get("manifestSource"))
       cmd += helper_flag("observability-mode", settings.get("observabilityMode"))
       cmd += helper_flag("network-mode", settings.get("networkMode"))
@@ -609,6 +617,15 @@ local_resource(
     ignore=["*/*/zz_generated.deepcopy.go"],
     labels=[GROUP_WANDB_OPERATOR],
 )
+
+if ADMIN_CONSOLE_ENABLED:
+    local_resource(
+        "Watchtower-Download",
+        # Match the architecture used by binary(), including any GOARCH override.
+        cmd='mkdir -p tilt_bin && GH_TOKEN=$(gh auth token) make download-watchtower WATCHTOWER_ARCH="$(go env GOARCH)" WATCHTOWER_BINARY=tilt_bin/watchtower',
+        deps=["Makefile"],
+        labels=[GROUP_WANDB_OPERATOR],
+    )
 
 local_resource(
     "Operator-Chart-Deps",
@@ -828,6 +845,8 @@ helm_resource(
 )
 
 operator_deps = ["Operator-Chart-Deps", "Operator-Build"]
+if ADMIN_CONSOLE_ENABLED:
+    operator_deps.append("Watchtower-Download")
 operator_deps.append("cert-manager")
 operator_deps.append("kube-state-metrics")
 if LOCAL_NETWORKING_MODE == "gateway":
@@ -1074,6 +1093,8 @@ if settings.get("observabilityMode") == "full":
     )
 
 docker_only = ["./tilt_bin/manager", "./tilt_bin/crd-installer"]
+if ADMIN_CONSOLE_ENABLED:
+    docker_only.append("./tilt_bin/watchtower")
 
 if settings.get("manifestSource") == "local":
   path = repo_path(settings.get("localManifestPath"))

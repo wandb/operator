@@ -11,6 +11,7 @@ Conditional resources:
 - `gateway-api-crds` and `nginx-gateway-fabric` appear when `networkMode="gateway"`.
 - `ingress-nginx-*` appears when `networkMode="ingress"`.
 - `Telemetry-Endpoint-*` appears only when `observabilityMode="full"`.
+- `Watchtower-Download` appears only when `adminConsoleEnabled=True`.
 
 Tilt generates the W&B CR through `go run ./hack/tilt/wandbcr`, then reads the
 typed YAML back for the resource name, namespace, networking mode, and endpoint
@@ -19,11 +20,24 @@ uses the published server manifest repository; `manifestSource="local"` mounts
 `localManifestPath` into the operator image at `/server-manifest` and writes
 `file:///server-manifest` into the generated CR.
 
+Set `"adminConsoleEnabled": True` in `tilt-settings.star` to enable Console v2
+at the W&B hostname's `/console` path. Tilt sets `GH_TOKEN` from `gh auth token`
+for the download, so authenticate the GitHub CLI with read access to the private
+`wandb/watchtower` repository before starting Tilt.
+
+Tilt runs `make download-watchtower` before building the operator image, using
+the same Go architecture as the local manager build. The binary is downloaded
+to `tilt_bin/watchtower` and copied into the image at `/watchtower`. The setting
+also writes `spec.adminConsoleEnabled` in the generated CR, including when
+`crFile` supplies a base CR. Use `crFile` instead of the legacy `wandbCR` setting
+with this option. Console is disabled by default.
+
 ```mermaid
 graph TD
     %% Bootstrap and dependencies
     operator_codegen["Operator-Codegen\n(Wandb-Operator)"]
     operator_build["Operator-Build\n(Wandb-Operator)"]
+    watchtower_download["Watchtower-Download\n(Wandb-Operator, optional)"]
     operator_chart_deps["Operator-Chart-Deps\n(Dependencies)"]
     wandb_crds_apply["WandB-CRDs-Apply\n(Dependencies)"]
     wandb_crds_ready["WandB-CRDs-Ready\n(Dependencies)"]
@@ -44,6 +58,7 @@ graph TD
     wandb_operator["wandb-operator\n(Wandb-Operator)"]
     operator_chart_deps --> wandb_operator
     operator_build --> wandb_operator
+    watchtower_download --> wandb_operator
     wandb_crds_ready --> wandb_operator
     cert_manager --> wandb_operator
     nginx_gateway_fabric --> wandb_operator
@@ -84,7 +99,7 @@ graph TD
     classDef telemetry fill:#fce7f3,stroke:#db2777
 
     class operator_chart_deps,wandb_crds_apply,wandb_crds_ready,cert_manager,gateway_api_crds,nginx_gateway_fabric,ingress_nginx_repo,ingress_nginx_controller,wandb_namespace dependencies
-    class operator_codegen,operator_build,wandb_operator,operator_webhook_ready operator
+    class operator_codegen,operator_build,watchtower_download,wandb_operator,operator_webhook_ready operator
     class wandb_ca,wandb,wandb_endpoint,dev_clean wandb
     class telemetry_grafana,telemetry_metrics,telemetry_logs,telemetry_traces telemetry
 ```

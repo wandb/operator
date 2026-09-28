@@ -6833,11 +6833,15 @@ spec:
                         type: string
                       logsExporter:
                         type: string
+                      logsReadEndpoint:
+                        type: string
                       managedNamespace:
                         type: string
                       metricsEndpoint:
                         type: string
                       metricsExporter:
+                        type: string
+                      metricsReadEndpoint:
                         type: string
                       protocol:
                         type: string
@@ -6850,6 +6854,8 @@ spec:
                       tracesEndpoint:
                         type: string
                       tracesExporter:
+                        type: string
+                      tracesReadEndpoint:
                         type: string
                     type: object
                   mode:
