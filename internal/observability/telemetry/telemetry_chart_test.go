@@ -124,6 +124,25 @@ func TestStandaloneTelemetryChartFullModeRendersCoreStack(t *testing.T) {
 	mustContain(t, output, "datadog:")
 }
 
+func TestTelemetryReadEndpointsMatchChartServices(t *testing.T) {
+	output := runHelmTemplateForChart(t, filepath.Join("..", "..", "..", "deploy", "telemetry"),
+		"--set", "mode=full",
+	)
+
+	cfg := DefaultTelemetryRuntimeConfig()
+	cfg.Enabled = true
+	cfg.Normalize()
+	resolved := cfg.ResolveEndpoints()
+
+	for _, endpoint := range []string{
+		resolved.MetricsReadEndpoint,
+		resolved.LogsReadEndpoint,
+		resolved.TracesReadEndpoint,
+	} {
+		mustContain(t, output, endpoint)
+	}
+}
+
 func TestCrdInstallerTelemetryGroupsAreOptIn(t *testing.T) {
 	baseArgs := []string{"--set", "helmHooks.enabled=true", "--set", "wandb.install=false"}
 

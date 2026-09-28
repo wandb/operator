@@ -13,12 +13,26 @@ const (
 	telemetryModeOff             = "off"
 	telemetryModeForward         = "forward"
 	telemetryModeFull            = "full"
+
+	telemetryMetricsReadEndpoint = "metricsReadEndpoint"
+	telemetryLogsReadEndpoint    = "logsReadEndpoint"
+	telemetryTracesReadEndpoint  = "tracesReadEndpoint"
+
+	telemetryMetricsReadName = "vmsingle-victoria-instance"
+	telemetryMetricsReadPort = 8428
+	telemetryLogsReadName    = "vlsingle-victoria-logs"
+	telemetryLogsReadPort    = 9428
+	telemetryTracesReadName  = "vtsingle-victoria-traces"
+	telemetryTracesReadPort  = 10428
 )
 
 type TelemetryEndpoints struct {
 	MetricsEndpoint       string
+	MetricsReadEndpoint   string
 	LogsEndpoint          string
+	LogsReadEndpoint      string
 	TracesEndpoint        string
+	TracesReadEndpoint    string
 	StatsdAddress         string
 	DatadogTraceAgentURL  string
 	DatadogTraceAgentHost string
@@ -103,12 +117,16 @@ func (cfg TelemetryRuntimeConfig) ResolveEndpoints() TelemetryEndpoints {
 		return TelemetryEndpoints{}
 	}
 
-	host := resolveServiceHost(telemetryOTLPGatewayName, cfg.Namespace)
+	namespace := cfg.Namespace
+	host := resolveServiceHost(telemetryOTLPGatewayName, namespace)
 	baseURL := fmt.Sprintf("http://%s:%d", host, telemetryOTLPGatewayHTTPPort)
 	return TelemetryEndpoints{
 		MetricsEndpoint:       fmt.Sprintf("%s/v1/metrics", baseURL),
+		MetricsReadEndpoint:   resolveReadEndpoint(telemetryMetricsReadName, namespace, telemetryMetricsReadPort),
 		LogsEndpoint:          fmt.Sprintf("%s/v1/logs", baseURL),
+		LogsReadEndpoint:      resolveReadEndpoint(telemetryLogsReadName, namespace, telemetryLogsReadPort),
 		TracesEndpoint:        fmt.Sprintf("%s/v1/traces", baseURL),
+		TracesReadEndpoint:    resolveReadEndpoint(telemetryTracesReadName, namespace, telemetryTracesReadPort),
 		StatsdAddress:         fmt.Sprintf("udp://%s:%d", host, telemetryStatsdPort),
 		DatadogTraceAgentURL:  fmt.Sprintf("http://%s:%d", host, telemetryDatadogTracePort),
 		DatadogTraceAgentHost: host,
@@ -121,4 +139,9 @@ func resolveServiceHost(name, namespace string) string {
 		return name
 	}
 	return fmt.Sprintf("%s.%s.svc", name, namespace)
+}
+
+func resolveReadEndpoint(readName string, namespace string, port int) string {
+	host := resolveServiceHost(readName, namespace)
+	return fmt.Sprintf("http://%s:%d", host, port)
 }
