@@ -26,23 +26,23 @@ import (
 
 // This test-only CR deliberately has no WeightsAndBiases fields or methods.
 // Registering it separately also exercises GVK resolution and status persistence.
-type redisTestDeployment struct {
+type exampleDeployment struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 	Spec              apiv2.BaseDeploymentSpec `json:"spec"`
-	Status            redisTestStatus          `json:"status"`
+	Status            exampleDeploymentStatus  `json:"status"`
 }
 
-type redisTestStatus struct {
+type exampleDeploymentStatus struct {
 	apiv2.BaseDeploymentStatus `json:",inline"`
 	ApplicationState           string `json:"applicationState"`
 }
 
-func (d *redisTestDeployment) GetBaseDeploymentSpec() *apiv2.BaseDeploymentSpec { return &d.Spec }
-func (d *redisTestDeployment) GetBaseDeploymentStatus() *apiv2.BaseDeploymentStatus {
+func (d *exampleDeployment) GetBaseDeploymentSpec() *apiv2.BaseDeploymentSpec { return &d.Spec }
+func (d *exampleDeployment) GetBaseDeploymentStatus() *apiv2.BaseDeploymentStatus {
 	return &d.Status.BaseDeploymentStatus
 }
-func (d *redisTestDeployment) DeepCopyObject() runtime.Object {
+func (d *exampleDeployment) DeepCopyObject() runtime.Object {
 	out := *d
 	d.DeepCopyInto(&out.ObjectMeta)
 	d.Spec.DeepCopyInto(&out.Spec)
@@ -50,7 +50,7 @@ func (d *redisTestDeployment) DeepCopyObject() runtime.Object {
 	return &out
 }
 
-var _ common.DeploymentResource = (*redisTestDeployment)(nil)
+var _ common.DeploymentResource = (*exampleDeployment)(nil)
 
 func redisDeploymentFixture(t *testing.T, kind string, sentinel bool) (client.Client, common.DeploymentResource) {
 	t.Helper()
@@ -60,7 +60,7 @@ func redisDeploymentFixture(t *testing.T, kind string, sentinel bool) (client.Cl
 	} {
 		require.NoError(t, add(scheme))
 	}
-	scheme.AddKnownTypeWithName(schema.GroupVersionKind{Group: "test.example.com", Version: "v1", Kind: "ExampleDeployment"}, &redisTestDeployment{})
+	scheme.AddKnownTypeWithName(schema.GroupVersionKind{Group: "test.example.com", Version: "v1", Kind: "ExampleDeployment"}, &exampleDeployment{})
 
 	var deployment common.DeploymentResource
 	if kind == "WeightsAndBiases" {
@@ -68,7 +68,7 @@ func redisDeploymentFixture(t *testing.T, kind string, sentinel bool) (client.Cl
 			Wandb: apiv2.WandbStatus{BaseWorkloadStatus: apiv2.BaseWorkloadStatus{Hostname: "keep.example.com"}},
 		}}
 	} else {
-		deployment = &redisTestDeployment{Status: redisTestStatus{ApplicationState: "keep"}}
+		deployment = &exampleDeployment{Status: exampleDeploymentStatus{ApplicationState: "keep"}}
 	}
 	deployment.SetName("example")
 	deployment.SetNamespace("test")
@@ -179,7 +179,7 @@ func TestRedisDeploymentLifecycle(t *testing.T) {
 				switch actual := actual.(type) {
 				case *apiv2.WeightsAndBiases:
 					require.Equal(t, "keep.example.com", actual.Status.Wandb.Hostname)
-				case *redisTestDeployment:
+				case *exampleDeployment:
 					require.Equal(t, "keep", actual.Status.ApplicationState)
 				}
 				// Equal base status must not invoke the Kubernetes client.

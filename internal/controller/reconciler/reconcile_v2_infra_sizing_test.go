@@ -121,7 +121,7 @@ var _ = Describe("Infra Sizing", func() {
 					},
 				},
 			}
-			v2.ApplyInfraSizing(wandb, manifest)
+			v2.ApplyInfraSizing(wandb.GetBaseDeploymentSpec(), manifest)
 			Expect(wandb.Spec.MySQL[apiv2.DefaultInstanceName].ManagedMysql.Replicas).To(Equal(int32(3)))
 			Expect(wandb.Spec.MySQL[apiv2.DefaultInstanceName].ManagedMysql.Config.Resources.Requests.Cpu().String()).To(Equal("2"))
 		})
@@ -154,7 +154,7 @@ var _ = Describe("Infra Sizing", func() {
 					},
 				},
 			}
-			v2.ApplyInfraSizing(wandb, manifest)
+			v2.ApplyInfraSizing(wandb.GetBaseDeploymentSpec(), manifest)
 			Expect(wandb.Spec.MySQL[apiv2.DefaultInstanceName].ManagedMysql.Replicas).To(Equal(int32(5)))
 			Expect(wandb.Spec.MySQL[apiv2.DefaultInstanceName].ManagedMysql.StorageSize).To(Equal("50Gi"))
 		})
@@ -180,7 +180,7 @@ var _ = Describe("Infra Sizing", func() {
 					},
 				},
 			}
-			v2.ApplyInfraSizing(wandb, manifest)
+			v2.ApplyInfraSizing(wandb.GetBaseDeploymentSpec(), manifest)
 			Expect(wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ManagedObjectStore.Copies).To(Equal(int32(2)))
 		})
 
@@ -204,7 +204,7 @@ var _ = Describe("Infra Sizing", func() {
 					},
 				},
 			}
-			v2.ApplyInfraSizing(wandb, manifest)
+			v2.ApplyInfraSizing(wandb.GetBaseDeploymentSpec(), manifest)
 			Expect(wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ManagedObjectStore.Copies).To(Equal(int32(1)))
 		})
 
@@ -234,7 +234,7 @@ var _ = Describe("Infra Sizing", func() {
 					},
 				},
 			}
-			v2.ApplyInfraSizing(wandb, manifest)
+			v2.ApplyInfraSizing(wandb.GetBaseDeploymentSpec(), manifest)
 			keeper := wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse.Keeper
 			Expect(keeper.Replicas).To(Equal(int32(3)))  // from manifest small tier
 			Expect(keeper.StorageSize).To(Equal("20Gi")) // user override preserved

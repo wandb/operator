@@ -25,7 +25,7 @@ var _ = Describe("ClickHouse vendor specs", func() {
 	It("renders hardened pod templates with writable runtime mounts", func() {
 		wandb := clickHouseWandb()
 
-		chi, err := ToClickHouseVendorSpec(context.Background(), wandb, wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse, clickHouseScheme(), testObjectStorageConn(), testObjectStorageEndpoint, true, manifest.Manifest{})
+		chi, err := ToClickHouseVendorSpec(context.Background(), wandb, wandb.GetBaseDeploymentSpec(), wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse, clickHouseScheme(), testObjectStorageConn(), testObjectStorageEndpoint, true, manifest.InfraConfig{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(chi).NotTo(BeNil())
 		Expect(chi.Spec.Templates.PodTemplates).To(HaveLen(1))
@@ -67,7 +67,7 @@ var _ = Describe("ClickHouse vendor specs", func() {
 		utils.SetOpenShiftMode(true)
 
 		wandb := clickHouseWandb()
-		chi, err := ToClickHouseVendorSpec(context.Background(), wandb, wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse, clickHouseScheme(), testObjectStorageConn(), testObjectStorageEndpoint, true, manifest.Manifest{})
+		chi, err := ToClickHouseVendorSpec(context.Background(), wandb, wandb.GetBaseDeploymentSpec(), wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse, clickHouseScheme(), testObjectStorageConn(), testObjectStorageEndpoint, true, manifest.InfraConfig{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(chi).NotTo(BeNil())
 
@@ -78,7 +78,7 @@ var _ = Describe("ClickHouse vendor specs", func() {
 
 	It("backs storage with the object store, sets a default policy, and wires keeper", func() {
 		wandb := clickHouseWandb()
-		chi, err := ToClickHouseVendorSpec(context.Background(), wandb, wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse, clickHouseScheme(), testObjectStorageConn(), testObjectStorageEndpoint, true, manifest.Manifest{})
+		chi, err := ToClickHouseVendorSpec(context.Background(), wandb, wandb.GetBaseDeploymentSpec(), wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse, clickHouseScheme(), testObjectStorageConn(), testObjectStorageEndpoint, true, manifest.InfraConfig{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(chi).NotTo(BeNil())
 
@@ -111,7 +111,7 @@ var _ = Describe("ClickHouse vendor specs", func() {
 
 	It("does not gate ClickHouse for bring-your-own object storage", func() {
 		wandb := clickHouseWandb()
-		chi, err := ToClickHouseVendorSpec(context.Background(), wandb, wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse, clickHouseScheme(), testObjectStorageConn(), testObjectStorageEndpoint, false, manifest.Manifest{})
+		chi, err := ToClickHouseVendorSpec(context.Background(), wandb, wandb.GetBaseDeploymentSpec(), wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse, clickHouseScheme(), testObjectStorageConn(), testObjectStorageEndpoint, false, manifest.InfraConfig{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(chi.Spec.Templates.PodTemplates[0].Spec.InitContainers).To(BeEmpty())
 	})
@@ -137,7 +137,7 @@ var _ = Describe("ClickHouse vendor specs", func() {
 		Expect(serviceAccount.AutomountServiceAccountToken).NotTo(BeNil())
 		Expect(*serviceAccount.AutomountServiceAccountToken).To(BeTrue())
 
-		chi, err := ToClickHouseVendorSpec(context.Background(), wandb, spec, clickHouseScheme(), objStorage, testObjectStorageEndpoint, false, manifest.Manifest{})
+		chi, err := ToClickHouseVendorSpec(context.Background(), wandb, wandb.GetBaseDeploymentSpec(), spec, clickHouseScheme(), objStorage, testObjectStorageEndpoint, false, manifest.InfraConfig{})
 		Expect(err).NotTo(HaveOccurred())
 		podSpec := chi.Spec.Templates.PodTemplates[0].Spec
 		Expect(podSpec.ServiceAccountName).To(Equal(serviceAccount.Name))
@@ -158,7 +158,7 @@ var _ = Describe("ClickHouse vendor specs", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(serviceAccount).To(BeNil())
 
-		chi, err := ToClickHouseVendorSpec(context.Background(), wandb, spec, clickHouseScheme(), testObjectStorageConn(), testObjectStorageEndpoint, false, manifest.Manifest{})
+		chi, err := ToClickHouseVendorSpec(context.Background(), wandb, wandb.GetBaseDeploymentSpec(), spec, clickHouseScheme(), testObjectStorageConn(), testObjectStorageEndpoint, false, manifest.InfraConfig{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(chi.Spec.Templates.PodTemplates[0].Spec.ServiceAccountName).To(Equal("existing-clickhouse-identity"))
 	})

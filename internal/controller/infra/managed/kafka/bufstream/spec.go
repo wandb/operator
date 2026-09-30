@@ -16,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const defaultEtcdStorageSize = "10Gi"
@@ -68,14 +69,14 @@ func resolveImage(img manifest.ImageRef, globalImageRegistry, fallback string) s
 	return fallback
 }
 
-// BuildWandbKafkaLabels returns the standard W&B labels for the Kafka module.
-func BuildWandbKafkaLabels(wandb *apiv2.WeightsAndBiases) map[string]string {
-	return common.BuildWandbLabels(wandb, KafkaModuleName)
+// BuildKafkaLabels returns the standard W&B labels for the Kafka module.
+func BuildKafkaLabels(owner client.Object) map[string]string {
+	return common.BuildWandbLabels(owner, KafkaModuleName)
 }
 
 // ToKafkaOnDeleteRule builds the on-delete retention rule for the Kafka module.
-func ToKafkaOnDeleteRule(wandb *apiv2.WeightsAndBiases, retentionPolicy apiv2.RetentionPolicy) common.OnDeleteRule {
-	return common.ToOnDeleteRule(wandb, retentionPolicy, KafkaModuleName)
+func ToKafkaOnDeleteRule(owner client.Object, retentionPolicy apiv2.RetentionPolicy) common.OnDeleteRule {
+	return common.ToOnDeleteRule(owner, retentionPolicy, KafkaModuleName)
 }
 
 // kafkaPodSecurityContext: etcd omits fixed IDs on OpenShift, pins them else.
@@ -134,19 +135,19 @@ func kafkaRuntimeDefaultSeccompProfile() *corev1.SeccompProfile {
 }
 
 // sameNamespace reports whether the managed Kafka resources live in the same
-// namespace as the owning WeightsAndBiases CR. Owner references are only valid
+// namespace as the owning deployment. Owner references are only valid
 // within a single namespace.
-func sameNamespace(wandb *apiv2.WeightsAndBiases, nsnBuilder *NsNameBuilder) bool {
-	return wandb.Namespace == nsnBuilder.Namespace()
+func sameNamespace(owner client.Object, nsnBuilder *NsNameBuilder) bool {
+	return owner.GetNamespace() == nsnBuilder.Namespace()
 }
 
-// setOwner sets the WeightsAndBiases controller reference on obj, but only when
+// setOwner sets the deployment controller reference on obj, but only when
 // it shares the CR's namespace, since owner references are namespace-scoped.
-func setOwner(wandb *apiv2.WeightsAndBiases, obj metav1.Object, nsnBuilder *NsNameBuilder, scheme *runtime.Scheme) error {
-	if !sameNamespace(wandb, nsnBuilder) {
+func setOwner(owner client.Object, obj metav1.Object, nsnBuilder *NsNameBuilder, scheme *runtime.Scheme) error {
+	if !sameNamespace(owner, nsnBuilder) {
 		return nil
 	}
-	return ctrl.SetControllerReference(wandb, obj, scheme)
+	return ctrl.SetControllerReference(owner, obj, scheme)
 }
 
 // intstrFromInt converts a port number to an IntOrString for service/probe specs.
@@ -154,10 +155,10 @@ func intstrFromInt(port int) intstr.IntOrString {
 	return intstr.FromInt32(int32(port))
 }
 
-// tolerations safely dereferences the wandb tolerations pointer, which may be
+// tolerations safely dereferences the owner tolerations pointer, which may be
 // nil when neither the component nor the CR specify any.
-func tolerations(wandb *apiv2.WeightsAndBiases, spec apiv2.ManagedInfraSpec) []corev1.Toleration {
-	if t := wandb.GetTolerations(spec); t != nil {
+func tolerations(deployment *apiv2.BaseDeploymentSpec, spec apiv2.ManagedInfraSpec) []corev1.Toleration {
+	if t := deployment.GetTolerations(spec); t != nil {
 		return *t
 	}
 	return nil
@@ -166,7 +167,7 @@ func tolerations(wandb *apiv2.WeightsAndBiases, spec apiv2.ManagedInfraSpec) []c
 // ToCredentialsSecret builds the secret that holds the object-store credentials
 // referenced by the broker config's env_var data sources.
 func ToCredentialsSecret(
-	wandb *apiv2.WeightsAndBiases,
+	owner client.Object,
 	nsnBuilder *NsNameBuilder,
 	storage objectstore.ConnInfo,
 	scheme *runtime.Scheme,
@@ -175,7 +176,7 @@ func ToCredentialsSecret(
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      nsnBuilder.CredentialsName(),
 			Namespace: nsnBuilder.Namespace(),
-			Labels:    BuildWandbKafkaLabels(wandb),
+			Labels:    BuildKafkaLabels(owner),
 		},
 		Type: corev1.SecretTypeOpaque,
 		StringData: map[string]string{
@@ -183,7 +184,7 @@ func ToCredentialsSecret(
 			EnvStorageSecretAccessKey: storage.SecretKey,
 		},
 	}
-	if err := setOwner(wandb, secret, nsnBuilder, scheme); err != nil {
+	if err := setOwner(owner, secret, nsnBuilder, scheme); err != nil {
 		return nil, err
 	}
 	return secret, nil
@@ -191,7 +192,7 @@ func ToCredentialsSecret(
 
 // ToConfigMap renders the bufstream.yaml into a ConfigMap.
 func ToConfigMap(
-	wandb *apiv2.WeightsAndBiases,
+	owner client.Object,
 	nsnBuilder *NsNameBuilder,
 	storage objectstore.ConnInfo,
 	scheme *runtime.Scheme,
@@ -210,11 +211,11 @@ func ToConfigMap(
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      nsnBuilder.ConfigMapName(),
 			Namespace: nsnBuilder.Namespace(),
-			Labels:    BuildWandbKafkaLabels(wandb),
+			Labels:    BuildKafkaLabels(owner),
 		},
 		Data: map[string]string{ConfigFileName: rendered},
 	}
-	if err := setOwner(wandb, cm, nsnBuilder, scheme); err != nil {
+	if err := setOwner(owner, cm, nsnBuilder, scheme); err != nil {
 		return nil, err
 	}
 	return cm, nil
@@ -222,12 +223,12 @@ func ToConfigMap(
 
 // ToServiceAccount builds the dedicated etcd/Bufstream SA for the SCC grant.
 func ToServiceAccount(
-	wandb *apiv2.WeightsAndBiases,
+	owner client.Object,
+	spec *apiv2.ManagedKafkaSpec,
 	nsnBuilder *NsNameBuilder,
 	storage objectstore.ConnInfo,
 	scheme *runtime.Scheme,
 ) (*corev1.ServiceAccount, error) {
-	spec := wandb.Spec.Kafka.ManagedKafka
 	if spec.ServiceAccount.Create != nil && !*spec.ServiceAccount.Create {
 		return nil, nil
 	}
@@ -236,12 +237,12 @@ func ToServiceAccount(
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        kafkaServiceAccountName(spec),
 			Namespace:   nsnBuilder.Namespace(),
-			Labels:      BuildWandbKafkaLabels(wandb),
+			Labels:      BuildKafkaLabels(owner),
 			Annotations: spec.ServiceAccount.Annotations,
 		},
 		AutomountServiceAccountToken: ptr.To(!storage.HasStaticCredentials()),
 	}
-	if err := setOwner(wandb, sa, nsnBuilder, scheme); err != nil {
+	if err := setOwner(owner, sa, nsnBuilder, scheme); err != nil {
 		return nil, err
 	}
 	return sa, nil
@@ -249,7 +250,8 @@ func ToServiceAccount(
 
 // ToSccRoleBinding binds the Kafka SA to nonroot-v2 for UID 65532 (OpenShift).
 func ToSccRoleBinding(
-	wandb *apiv2.WeightsAndBiases,
+	owner client.Object,
+	spec *apiv2.ManagedKafkaSpec,
 	nsnBuilder *NsNameBuilder,
 	scheme *runtime.Scheme,
 ) (*rbacv1.RoleBinding, error) {
@@ -257,7 +259,7 @@ func ToSccRoleBinding(
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      nsnBuilder.SccRoleBindingName(),
 			Namespace: nsnBuilder.Namespace(),
-			Labels:    BuildWandbKafkaLabels(wandb),
+			Labels:    BuildKafkaLabels(owner),
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: rbacv1.GroupName,
@@ -267,12 +269,12 @@ func ToSccRoleBinding(
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      kafkaServiceAccountName(wandb.Spec.Kafka.ManagedKafka),
+				Name:      kafkaServiceAccountName(spec),
 				Namespace: nsnBuilder.Namespace(),
 			},
 		},
 	}
-	if err := setOwner(wandb, rb, nsnBuilder, scheme); err != nil {
+	if err := setOwner(owner, rb, nsnBuilder, scheme); err != nil {
 		return nil, err
 	}
 	return rb, nil
@@ -282,13 +284,14 @@ func ToSccRoleBinding(
 // available StatefulSet: an odd-sized cluster (EtcdReplicas) fronted by a
 // headless Service that gives each member a stable peer DNS identity.
 func ToEtcdApplication(
-	wandb *apiv2.WeightsAndBiases,
+	owner client.Object,
+	deployment *apiv2.BaseDeploymentSpec,
 	nsnBuilder *NsNameBuilder,
 	scheme *runtime.Scheme,
-	mfst manifest.Manifest,
+	config manifest.KafkaConfig,
 ) (*apiv2.Application, error) {
-	infraSpec := wandb.Spec.Kafka.ManagedKafka
-	labels := BuildWandbKafkaLabels(wandb)
+	infraSpec := deployment.Kafka.ManagedKafka
+	labels := BuildKafkaLabels(owner)
 
 	storageSize := infraSpec.StorageSize
 	if storageSize == "" {
@@ -334,16 +337,16 @@ func ToEtcdApplication(
 			},
 			PodTemplate: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
-					ImagePullSecrets:             wandb.Spec.Global.ImagePullSecrets,
+					ImagePullSecrets:             deployment.Global.ImagePullSecrets,
 					ServiceAccountName:           kafkaServiceAccountName(infraSpec),
 					AutomountServiceAccountToken: ptr.To(false),
 					SecurityContext:              kafkaPodSecurityContext(),
-					Affinity:                     spreadAffinity(wandb, infraSpec.ManagedInfraSpec, labels),
-					Tolerations:                  tolerations(wandb, infraSpec.ManagedInfraSpec),
+					Affinity:                     spreadAffinity(deployment, infraSpec.ManagedInfraSpec, labels),
+					Tolerations:                  tolerations(deployment, infraSpec.ManagedInfraSpec),
 					Containers: []corev1.Container{
 						{
 							Name:            "etcd",
-							Image:           EtcdImage(mfst.Kafka.Images[imageKeyEtcd], wandb.Spec.Global.ImageRegistry),
+							Image:           EtcdImage(config.Images[imageKeyEtcd], deployment.Global.ImageRegistry),
 							Env:             etcdEnv,
 							SecurityContext: kafkaContainerSecurityContext(),
 							Ports: []corev1.ContainerPort{
@@ -386,7 +389,7 @@ func ToEtcdApplication(
 		},
 	}
 
-	if err := setOwner(wandb, app, nsnBuilder, scheme); err != nil {
+	if err := setOwner(owner, app, nsnBuilder, scheme); err != nil {
 		return nil, err
 	}
 	return app, nil
@@ -412,8 +415,8 @@ func etcdProbe() *corev1.Probe {
 // down quorum (etcd) or all brokers (Bufstream). GetAffinity may return a
 // non-nil but empty Affinity (from the CR's global affinity field), so an empty
 // value is treated the same as unset and gets the default spread.
-func spreadAffinity(wandb *apiv2.WeightsAndBiases, spec apiv2.ManagedInfraSpec, labels map[string]string) *corev1.Affinity {
-	if a := wandb.GetAffinity(spec); a != nil && (a.NodeAffinity != nil || a.PodAffinity != nil || a.PodAntiAffinity != nil) {
+func spreadAffinity(deployment *apiv2.BaseDeploymentSpec, spec apiv2.ManagedInfraSpec, labels map[string]string) *corev1.Affinity {
+	if a := deployment.GetAffinity(spec); a != nil && (a.NodeAffinity != nil || a.PodAffinity != nil || a.PodAntiAffinity != nil) {
 		return a
 	}
 	return &corev1.Affinity{
@@ -537,21 +540,22 @@ func effectiveBufstreamReplicas(requested int32) int32 {
 // ToBufstreamApplication builds the Application CR that deploys the stateless
 // Bufstream brokers as a Deployment.
 func ToBufstreamApplication(
-	wandb *apiv2.WeightsAndBiases,
+	owner client.Object,
+	deployment *apiv2.BaseDeploymentSpec,
 	nsnBuilder *NsNameBuilder,
 	storage objectstore.ConnInfo,
 	ensureBucket bool,
 	scheme *runtime.Scheme,
-	mfst manifest.Manifest,
+	config manifest.KafkaConfig,
 ) (*apiv2.Application, error) {
-	infraSpec := wandb.Spec.Kafka.ManagedKafka
-	labels := BuildWandbKafkaLabels(wandb)
+	infraSpec := deployment.Kafka.ManagedKafka
+	labels := BuildKafkaLabels(owner)
 
 	replicas := effectiveBufstreamReplicas(infraSpec.Replicas)
 
 	container := corev1.Container{
 		Name:            "bufstream",
-		Image:           BufstreamImage(mfst.Kafka.Images[imageKeyBufstream], wandb.Spec.Global.ImageRegistry),
+		Image:           BufstreamImage(config.Images[imageKeyBufstream], deployment.Global.ImageRegistry),
 		Args:            []string{"serve", "--config", fmt.Sprintf("%s/%s", ConfigMountPath, ConfigFileName)},
 		SecurityContext: bufstreamContainerSecurityContext(),
 		Ports: []corev1.ContainerPort{
@@ -570,7 +574,7 @@ func ToBufstreamApplication(
 
 	var initContainers []corev1.Container
 	if ensureBucket && needsBucketEnsure(storage) {
-		initContainers = append(initContainers, bucketEnsureContainer(nsnBuilder, storage, mfst.Kafka.Images[imageKeyBucketEnsure], wandb.Spec.Global.ImageRegistry))
+		initContainers = append(initContainers, bucketEnsureContainer(nsnBuilder, storage, config.Images[imageKeyBucketEnsure], deployment.Global.ImageRegistry))
 	}
 
 	app := &apiv2.Application{
@@ -587,12 +591,12 @@ func ToBufstreamApplication(
 			},
 			PodTemplate: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
-					ImagePullSecrets:             wandb.Spec.Global.ImagePullSecrets,
+					ImagePullSecrets:             deployment.Global.ImagePullSecrets,
 					ServiceAccountName:           kafkaServiceAccountName(infraSpec),
 					AutomountServiceAccountToken: ptr.To(!storage.HasStaticCredentials()),
 					SecurityContext:              bufstreamPodSecurityContext(),
-					Affinity:                     spreadAffinity(wandb, infraSpec.ManagedInfraSpec, labels),
-					Tolerations:                  tolerations(wandb, infraSpec.ManagedInfraSpec),
+					Affinity:                     spreadAffinity(deployment, infraSpec.ManagedInfraSpec, labels),
+					Tolerations:                  tolerations(deployment, infraSpec.ManagedInfraSpec),
 					InitContainers:               initContainers,
 					Containers:                   []corev1.Container{container},
 					Volumes: []corev1.Volume{
@@ -618,7 +622,7 @@ func ToBufstreamApplication(
 		},
 	}
 
-	if err := setOwner(wandb, app, nsnBuilder, scheme); err != nil {
+	if err := setOwner(owner, app, nsnBuilder, scheme); err != nil {
 		return nil, err
 	}
 	return app, nil

@@ -237,12 +237,12 @@ func infraSizingConfig[T any](m map[string]T, key string) (T, bool) {
 	return cfg, ok
 }
 
-func ApplyInfraSizing(wandb *v2.WeightsAndBiases, manifest manifest.Manifest) {
-	size := wandb.Spec.Size
+func ApplyInfraSizing(deployment *v2.BaseDeploymentSpec, manifest manifest.Manifest) {
+	size := deployment.Size
 
 	// MySQL: size each managed instance, preferring a manifest sizing config
 	// matching the instance key and falling back to the manifest "default".
-	for key, instance := range wandb.Spec.MySQL {
+	for key, instance := range deployment.MySQL {
 		spec := instance.ManagedMysql
 		if spec == nil {
 			continue
@@ -251,7 +251,7 @@ func ApplyInfraSizing(wandb *v2.WeightsAndBiases, manifest manifest.Manifest) {
 		if !ok {
 			continue
 		}
-		sizing := ResolveInfraSizing(mysqlConfig.Sizing, size, wandb.Spec.RequireLimits)
+		sizing := ResolveInfraSizing(mysqlConfig.Sizing, size, deployment.RequireLimits)
 		if spec.Replicas == 0 && sizing.Replicas != 0 {
 			spec.Replicas = sizing.Replicas
 		}
@@ -264,7 +264,7 @@ func ApplyInfraSizing(wandb *v2.WeightsAndBiases, manifest manifest.Manifest) {
 	}
 
 	// Redis
-	for key, instance := range wandb.Spec.Redis {
+	for key, instance := range deployment.Redis {
 		spec := instance.ManagedRedis
 		if spec == nil {
 			continue
@@ -273,7 +273,7 @@ func ApplyInfraSizing(wandb *v2.WeightsAndBiases, manifest manifest.Manifest) {
 		if !ok {
 			continue
 		}
-		sizing := ResolveInfraSizing(redisConfig.Sizing, size, wandb.Spec.RequireLimits)
+		sizing := ResolveInfraSizing(redisConfig.Sizing, size, deployment.RequireLimits)
 		if spec.StorageSize == "" && sizing.VolumeSize != "" {
 			spec.StorageSize = sizing.VolumeSize
 		}
@@ -283,7 +283,7 @@ func ApplyInfraSizing(wandb *v2.WeightsAndBiases, manifest manifest.Manifest) {
 	}
 
 	// ClickHouse
-	for key, instance := range wandb.Spec.ClickHouse {
+	for key, instance := range deployment.ClickHouse {
 		spec := instance.ManagedClickHouse
 		if spec == nil {
 			continue
@@ -293,7 +293,7 @@ func ApplyInfraSizing(wandb *v2.WeightsAndBiases, manifest manifest.Manifest) {
 		// (independent of the clickhouse block); CR values are treated as user
 		// overrides.
 		if keeperConfig, ok := infraSizingConfig(manifest.ClickhouseKeeper, key); ok {
-			keeperSizing := ResolveInfraSizing(keeperConfig.Sizing, size, wandb.Spec.RequireLimits)
+			keeperSizing := ResolveInfraSizing(keeperConfig.Sizing, size, deployment.RequireLimits)
 			if spec.Keeper.Replicas == 0 && keeperSizing.Replicas != 0 {
 				spec.Keeper.Replicas = keeperSizing.Replicas
 			}
@@ -309,7 +309,7 @@ func ApplyInfraSizing(wandb *v2.WeightsAndBiases, manifest manifest.Manifest) {
 		if !ok {
 			continue
 		}
-		sizing := ResolveInfraSizing(clickhouseConfig.Sizing, size, wandb.Spec.RequireLimits)
+		sizing := ResolveInfraSizing(clickhouseConfig.Sizing, size, deployment.RequireLimits)
 		if spec.Replicas == 0 && sizing.Replicas != 0 {
 			spec.Replicas = sizing.Replicas
 		}
@@ -322,7 +322,7 @@ func ApplyInfraSizing(wandb *v2.WeightsAndBiases, manifest manifest.Manifest) {
 	}
 
 	// ObjectStore (bucket)
-	for key, instance := range wandb.Spec.ObjectStore {
+	for key, instance := range deployment.ObjectStore {
 		spec := instance.ManagedObjectStore
 		if spec == nil {
 			continue
@@ -331,7 +331,7 @@ func ApplyInfraSizing(wandb *v2.WeightsAndBiases, manifest manifest.Manifest) {
 		if !ok {
 			continue
 		}
-		sizing := ResolveInfraSizing(objectStoreConfig.Sizing, size, wandb.Spec.RequireLimits)
+		sizing := ResolveInfraSizing(objectStoreConfig.Sizing, size, deployment.RequireLimits)
 		if spec.Replicas == 0 && sizing.Replicas != 0 {
 			spec.Replicas = sizing.Replicas
 		}
@@ -351,9 +351,9 @@ func ApplyInfraSizing(wandb *v2.WeightsAndBiases, manifest manifest.Manifest) {
 	}
 
 	// Kafka
-	if wandb.Spec.Kafka.ManagedKafka != nil {
-		if sizing := ResolveKafkaSizing(manifest.Kafka.Sizing, size, wandb.Spec.RequireLimits); sizing != nil {
-			spec := wandb.Spec.Kafka.ManagedKafka
+	if deployment.Kafka.ManagedKafka != nil {
+		if sizing := ResolveKafkaSizing(manifest.Kafka.Sizing, size, deployment.RequireLimits); sizing != nil {
+			spec := deployment.Kafka.ManagedKafka
 			if spec.Replicas == 0 && sizing.Replicas != 0 {
 				spec.Replicas = sizing.Replicas
 			}

@@ -34,7 +34,7 @@ var _ = Describe("Keeper vendor spec", func() {
 			},
 		}
 
-		chk, err := ToKeeperVendorSpec(context.Background(), wandb, wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse, keeperScheme(), keeperNsName(), manifest.Manifest{})
+		chk, err := ToKeeperVendorSpec(context.Background(), wandb, wandb.GetBaseDeploymentSpec(), wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse, keeperScheme(), keeperNsName(), manifest.InfraConfig{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(chk).NotTo(BeNil())
 		Expect(chk.Name).To(Equal("clickhouse-chk"))
@@ -84,7 +84,7 @@ var _ = Describe("Keeper vendor spec", func() {
 			},
 		}
 
-		chk, err := ToKeeperVendorSpec(context.Background(), wandb, wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse, keeperScheme(), keeperNsName(), mfst)
+		chk, err := ToKeeperVendorSpec(context.Background(), wandb, wandb.GetBaseDeploymentSpec(), wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse, keeperScheme(), keeperNsName(), mfst.ClickhouseKeeper["default"])
 		Expect(err).NotTo(HaveOccurred())
 		Expect(chk.Spec.Templates.PodTemplates[0].Spec.Containers[0].Image).
 			To(Equal("myregistry.io/docker.io/altinity/clickhouse-keeper:25.8"))
@@ -93,14 +93,14 @@ var _ = Describe("Keeper vendor spec", func() {
 	It("errors when keeper storage size is unset (no operator defaults)", func() {
 		wandb := keeperWandb()
 		wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse.Keeper = apiv2.ClickHouseKeeperSpec{}
-		_, err := ToKeeperVendorSpec(context.Background(), wandb, wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse, keeperScheme(), keeperNsName(), manifest.Manifest{})
+		_, err := ToKeeperVendorSpec(context.Background(), wandb, wandb.GetBaseDeploymentSpec(), wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse, keeperScheme(), keeperNsName(), manifest.InfraConfig{})
 		Expect(err).To(HaveOccurred())
 	})
 
 	It("omits fixed IDs in OpenShift mode", func() {
 		utils.SetOpenShiftMode(true)
 		wandb := keeperWandb()
-		chk, err := ToKeeperVendorSpec(context.Background(), wandb, wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse, keeperScheme(), keeperNsName(), manifest.Manifest{})
+		chk, err := ToKeeperVendorSpec(context.Background(), wandb, wandb.GetBaseDeploymentSpec(), wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse, keeperScheme(), keeperNsName(), manifest.InfraConfig{})
 		Expect(err).NotTo(HaveOccurred())
 		sc := chk.Spec.Templates.PodTemplates[0].Spec.SecurityContext
 		Expect(sc.RunAsUser).To(BeNil())

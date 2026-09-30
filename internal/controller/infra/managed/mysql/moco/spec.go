@@ -15,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	corev1ac "k8s.io/client-go/applyconfigurations/core/v1"
 	"k8s.io/utils/ptr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
@@ -49,9 +50,10 @@ const (
 func ToMocoMySQLClusterSpec(
 	ctx context.Context,
 	spec apiv2.ManagedMysqlSpec,
-	wandb *apiv2.WeightsAndBiases,
+	owner client.Object,
+	global apiv2.GlobalSpec,
 	scheme *runtime.Scheme,
-	mfst manifest.Manifest,
+	config manifest.InfraConfig,
 ) (*mocov1beta2.MySQLCluster, *corev1.ConfigMap, error) {
 
 	replicas := spec.Replicas
@@ -60,7 +62,7 @@ func ToMocoMySQLClusterSpec(
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      MyCnfConfigMapName(spec.Name),
 			Namespace: spec.Namespace,
-			Labels:    BuildWandbMysqlLabels(wandb),
+			Labels:    BuildMysqlLabels(owner),
 		},
 		Data: map[string]string{
 			"sync_binlog":                    "1",
@@ -68,20 +70,20 @@ func ToMocoMySQLClusterSpec(
 			"local_infile":                   "ON",
 		},
 	}
-	if err := controllerutil.SetControllerReference(wandb, cm, scheme); err != nil {
+	if err := controllerutil.SetControllerReference(owner, cm, scheme); err != nil {
 		return nil, nil, err
 	}
 
 	cluster := &mocov1beta2.MySQLCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: spec.Name, Namespace: spec.Namespace,
-			Labels: BuildWandbMysqlLabels(wandb),
+			Labels: BuildMysqlLabels(owner),
 		},
 		Spec: mocov1beta2.MySQLClusterSpec{
 			Replicas:           replicas,
 			MySQLConfigMapName: ptr.To(MyCnfConfigMapName(spec.Name)),
 			PodTemplate: mocov1beta2.PodTemplateSpec{
-				Spec:                buildMocoPodSpec(spec.Config.Resources, mfst.Mysql["default"].Images["mysql"], wandb),
+				Spec:                buildMocoPodSpec(spec.Config.Resources, config.Images["mysql"], global),
 				OverwriteContainers: mocoOverwriteContainers(),
 			},
 			VolumeClaimTemplates: []mocov1beta2.PersistentVolumeClaim{
@@ -98,16 +100,16 @@ func ToMocoMySQLClusterSpec(
 		cluster.Spec.Collectors = []string{"engine_innodb_status", "info_schema.innodb_metrics"}
 	}
 
-	if err := controllerutil.SetControllerReference(wandb, cluster, scheme); err != nil {
+	if err := controllerutil.SetControllerReference(owner, cluster, scheme); err != nil {
 		return nil, nil, err
 	}
 	return cluster, cm, nil
 }
 
-func buildMocoPodSpec(resources corev1.ResourceRequirements, img manifest.ImageRef, wandb *apiv2.WeightsAndBiases) mocov1beta2.PodSpecApplyConfiguration {
+func buildMocoPodSpec(resources corev1.ResourceRequirements, img manifest.ImageRef, global apiv2.GlobalSpec) mocov1beta2.PodSpecApplyConfiguration {
 	container := corev1ac.Container().
 		WithName("mysqld").
-		WithImage(MocoMySQLImage(img, wandb.Spec.Global.ImageRegistry)).
+		WithImage(MocoMySQLImage(img, global.ImageRegistry)).
 		WithSecurityContext(mocoContainerSecurityContext())
 
 	if resources.Requests != nil || resources.Limits != nil {
@@ -121,7 +123,7 @@ func buildMocoPodSpec(resources corev1.ResourceRequirements, img manifest.ImageR
 	podSpec := corev1ac.PodSpec().
 		WithSecurityContext(mocoPodSecurityContext()).
 		WithContainers(container)
-	for _, s := range wandb.Spec.Global.ImagePullSecrets {
+	for _, s := range global.ImagePullSecrets {
 		podSpec = podSpec.WithImagePullSecrets(corev1ac.LocalObjectReference().WithName(s.Name))
 	}
 	return mocov1beta2.PodSpecApplyConfiguration(*podSpec)
@@ -192,10 +194,10 @@ func buildPVCSpec(storageSize string) mocov1beta2.PersistentVolumeClaimSpecApply
 	return mocov1beta2.PersistentVolumeClaimSpecApplyConfiguration(*pvcSpec)
 }
 
-func BuildWandbMysqlLabels(wandb *apiv2.WeightsAndBiases) map[string]string {
-	return common.BuildWandbLabels(wandb, MysqlModuleName)
+func BuildMysqlLabels(owner client.Object) map[string]string {
+	return common.BuildWandbLabels(owner, MysqlModuleName)
 }
 
-func ToMysqlOnDeleteRule(wandb *apiv2.WeightsAndBiases, retentionPolicy apiv2.RetentionPolicy) common.OnDeleteRule {
-	return common.ToOnDeleteRule(wandb, retentionPolicy, MysqlModuleName)
+func ToMysqlOnDeleteRule(owner client.Object, retentionPolicy apiv2.RetentionPolicy) common.OnDeleteRule {
+	return common.ToOnDeleteRule(owner, retentionPolicy, MysqlModuleName)
 }

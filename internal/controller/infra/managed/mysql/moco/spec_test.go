@@ -34,9 +34,8 @@ var _ = Describe("Moco MySQL specs", func() {
 				Replicas:    3,
 				StorageSize: "10Gi",
 			},
-			mocoWandb(),
-			mocoScheme(),
-			manifest.Manifest{},
+			mocoWandb(), mocoWandb().GetBaseDeploymentSpec().Global,
+			mocoScheme(), manifest.InfraConfig{},
 		)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(cluster).NotTo(BeNil())
@@ -71,9 +70,8 @@ var _ = Describe("Moco MySQL specs", func() {
 				Replicas:    3,
 				StorageSize: "10Gi",
 			},
-			mocoWandb(),
-			mocoScheme(),
-			manifest.Manifest{},
+			mocoWandb(), mocoWandb().GetBaseDeploymentSpec().Global,
+			mocoScheme(), manifest.InfraConfig{},
 		)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(cluster).NotTo(BeNil())
@@ -89,9 +87,8 @@ var _ = Describe("Moco MySQL specs", func() {
 			apiv2.ManagedMysqlSpec{
 				Name: "mysql", Namespace: "wandb", Replicas: 3, StorageSize: "10Gi",
 			},
-			mocoWandb(),
-			mocoScheme(),
-			manifest.Manifest{},
+			mocoWandb(), mocoWandb().GetBaseDeploymentSpec().Global,
+			mocoScheme(), manifest.InfraConfig{},
 		)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(cm.Data).To(HaveKeyWithValue("local_infile", "ON"))
@@ -105,9 +102,8 @@ var _ = Describe("Moco MySQL specs", func() {
 				Name: "mysql", Namespace: "wandb", Replicas: 3, StorageSize: "10Gi",
 				Telemetry: apiv2.Telemetry{Enabled: true},
 			},
-			mocoWandb(),
-			mocoScheme(),
-			manifest.Manifest{},
+			mocoWandb(), mocoWandb().GetBaseDeploymentSpec().Global,
+			mocoScheme(), manifest.InfraConfig{},
 		)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(enabled.Spec.Collectors).NotTo(BeEmpty())
@@ -118,9 +114,8 @@ var _ = Describe("Moco MySQL specs", func() {
 				Name: "mysql", Namespace: "wandb", Replicas: 3, StorageSize: "10Gi",
 				Telemetry: apiv2.Telemetry{Enabled: false},
 			},
-			mocoWandb(),
-			mocoScheme(),
-			manifest.Manifest{},
+			mocoWandb(), mocoWandb().GetBaseDeploymentSpec().Global,
+			mocoScheme(), manifest.InfraConfig{},
 		)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(disabled.Spec.Collectors).To(BeEmpty())
@@ -135,9 +130,8 @@ var _ = Describe("Moco MySQL specs", func() {
 			desired, cm, err := ToMocoMySQLClusterSpec(
 				ctx,
 				apiv2.ManagedMysqlSpec{Name: "mysql", Namespace: "wandb", Replicas: replicas, StorageSize: "10Gi"},
-				mocoWandb(),
-				mocoScheme(),
-				manifest.Manifest{},
+				mocoWandb(), mocoWandb().GetBaseDeploymentSpec().Global,
+				mocoScheme(), manifest.InfraConfig{},
 			)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -199,9 +193,8 @@ var _ = Describe("Moco MySQL specs", func() {
 		desired, cm, err := ToMocoMySQLClusterSpec(
 			ctx,
 			apiv2.ManagedMysqlSpec{Name: "mysql", Namespace: "wandb", Replicas: 1, StorageSize: "10Gi"},
-			mocoWandb(),
-			mocoScheme(),
-			manifest.Manifest{},
+			mocoWandb(), mocoWandb().GetBaseDeploymentSpec().Global,
+			mocoScheme(), manifest.InfraConfig{},
 		)
 		Expect(err).NotTo(HaveOccurred())
 

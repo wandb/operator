@@ -52,7 +52,7 @@ func TestToEtcdApplication(t *testing.T) {
 	wandb := testWandb()
 	nsn := CreateNsNameBuilder(types.NamespacedName{Namespace: "default", Name: "wandb-kafka"})
 
-	app, err := ToEtcdApplication(wandb, nsn, testScheme(t), manifest.Manifest{})
+	app, err := ToEtcdApplication(wandb, wandb.GetBaseDeploymentSpec(), nsn, testScheme(t), manifest.KafkaConfig{})
 	require.NoError(t, err)
 
 	require.Equal(t, "wandb-kafka-etcd", app.Name)
@@ -72,7 +72,7 @@ func TestToEtcdApplicationHA(t *testing.T) {
 	wandb := testWandb()
 	nsn := CreateNsNameBuilder(types.NamespacedName{Namespace: "default", Name: "wandb-kafka"})
 
-	app, err := ToEtcdApplication(wandb, nsn, testScheme(t), manifest.Manifest{})
+	app, err := ToEtcdApplication(wandb, wandb.GetBaseDeploymentSpec(), nsn, testScheme(t), manifest.KafkaConfig{})
 	require.NoError(t, err)
 
 	// Odd-sized HA cluster fronted by a headless service.
@@ -126,7 +126,7 @@ func TestToBufstreamApplication(t *testing.T) {
 	wandb := testWandb()
 	nsn := CreateNsNameBuilder(types.NamespacedName{Namespace: "default", Name: "wandb-kafka"})
 
-	app, err := ToBufstreamApplication(wandb, nsn, testStorage(), true, testScheme(t), manifest.Manifest{})
+	app, err := ToBufstreamApplication(wandb, wandb.GetBaseDeploymentSpec(), nsn, testStorage(), true, testScheme(t), manifest.KafkaConfig{})
 	require.NoError(t, err)
 
 	require.Equal(t, "wandb-kafka", app.Name)
@@ -176,7 +176,7 @@ func TestBringYourOwnObjectStoresDoNotGetBucketInitializer(t *testing.T) {
 	}
 	for name, storage := range tests {
 		t.Run(name, func(t *testing.T) {
-			app, err := ToBufstreamApplication(wandb, nsn, storage, false, testScheme(t), manifest.Manifest{})
+			app, err := ToBufstreamApplication(wandb, wandb.GetBaseDeploymentSpec(), nsn, storage, false, testScheme(t), manifest.KafkaConfig{})
 			require.NoError(t, err)
 			require.Empty(t, app.Spec.PodTemplate.Spec.InitContainers)
 		})
@@ -189,7 +189,7 @@ func TestToBufstreamApplicationDefaultsReplicas(t *testing.T) {
 	wandb.Spec.Kafka.ManagedKafka.Replicas = 0
 	nsn := CreateNsNameBuilder(types.NamespacedName{Namespace: "default", Name: "wandb-kafka"})
 
-	app, err := ToBufstreamApplication(wandb, nsn, testStorage(), true, testScheme(t), manifest.Manifest{})
+	app, err := ToBufstreamApplication(wandb, wandb.GetBaseDeploymentSpec(), nsn, testStorage(), true, testScheme(t), manifest.KafkaConfig{})
 	require.NoError(t, err)
 	require.Equal(t, int32(BufstreamReplicas), *app.Spec.Replicas)
 }
@@ -200,13 +200,13 @@ func TestApplicationsSecurityContextInOpenShiftMode(t *testing.T) {
 	nsn := CreateNsNameBuilder(types.NamespacedName{Namespace: "default", Name: "wandb-kafka"})
 
 	// etcd tolerates an arbitrary UID, so it omits fixed IDs for restricted-v2.
-	etcd, err := ToEtcdApplication(wandb, nsn, testScheme(t), manifest.Manifest{})
+	etcd, err := ToEtcdApplication(wandb, wandb.GetBaseDeploymentSpec(), nsn, testScheme(t), manifest.KafkaConfig{})
 	require.NoError(t, err)
 	requireOpenShiftKafkaPodSecurityContext(t, etcd.Spec.PodTemplate.Spec.SecurityContext)
 	requireOpenShiftKafkaContainerSecurityContext(t, etcd.Spec.PodTemplate.Spec.Containers[0].SecurityContext)
 
 	// Bufstream keeps its fixed UID even on OpenShift (nonroot-v2 admits it).
-	bufstream, err := ToBufstreamApplication(wandb, nsn, testStorage(), true, testScheme(t), manifest.Manifest{})
+	bufstream, err := ToBufstreamApplication(wandb, wandb.GetBaseDeploymentSpec(), nsn, testStorage(), true, testScheme(t), manifest.KafkaConfig{})
 	require.NoError(t, err)
 	requireKafkaPodSecurityContext(t, bufstream.Spec.PodTemplate.Spec.SecurityContext)
 	requireKafkaContainerSecurityContext(t, bufstream.Spec.PodTemplate.Spec.Containers[0].SecurityContext)
@@ -219,13 +219,13 @@ func TestApplicationsUseDedicatedServiceAccount(t *testing.T) {
 	wandb := testWandb()
 	nsn := CreateNsNameBuilder(types.NamespacedName{Namespace: "default", Name: "wandb-kafka"})
 
-	etcd, err := ToEtcdApplication(wandb, nsn, testScheme(t), manifest.Manifest{})
+	etcd, err := ToEtcdApplication(wandb, wandb.GetBaseDeploymentSpec(), nsn, testScheme(t), manifest.KafkaConfig{})
 	require.NoError(t, err)
 	require.Equal(t, nsn.ServiceAccountName(), etcd.Spec.PodTemplate.Spec.ServiceAccountName)
 	require.NotNil(t, etcd.Spec.PodTemplate.Spec.AutomountServiceAccountToken)
 	require.False(t, *etcd.Spec.PodTemplate.Spec.AutomountServiceAccountToken)
 
-	bufstream, err := ToBufstreamApplication(wandb, nsn, testStorage(), true, testScheme(t), manifest.Manifest{})
+	bufstream, err := ToBufstreamApplication(wandb, wandb.GetBaseDeploymentSpec(), nsn, testStorage(), true, testScheme(t), manifest.KafkaConfig{})
 	require.NoError(t, err)
 	require.Equal(t, nsn.ServiceAccountName(), bufstream.Spec.PodTemplate.Spec.ServiceAccountName)
 	require.NotNil(t, bufstream.Spec.PodTemplate.Spec.AutomountServiceAccountToken)
@@ -246,20 +246,20 @@ func TestApplicationsUseWorkloadIdentityForAmbientCredentials(t *testing.T) {
 	storage.AccessKey = ""
 	storage.SecretKey = ""
 
-	sa, err := ToServiceAccount(wandb, nsn, storage, testScheme(t))
+	sa, err := ToServiceAccount(wandb, wandb.GetBaseDeploymentSpec().Kafka.ManagedKafka, nsn, storage, testScheme(t))
 	require.NoError(t, err)
 	require.Equal(t, "kafka-workload-identity", sa.Name)
 	require.Equal(t, wandb.Spec.Kafka.ManagedKafka.ServiceAccount.Annotations, sa.Annotations)
 	require.NotNil(t, sa.AutomountServiceAccountToken)
 	require.True(t, *sa.AutomountServiceAccountToken)
 
-	bufstream, err := ToBufstreamApplication(wandb, nsn, storage, false, testScheme(t), manifest.Manifest{})
+	bufstream, err := ToBufstreamApplication(wandb, wandb.GetBaseDeploymentSpec(), nsn, storage, false, testScheme(t), manifest.KafkaConfig{})
 	require.NoError(t, err)
 	require.Equal(t, sa.Name, bufstream.Spec.PodTemplate.Spec.ServiceAccountName)
 	require.NotNil(t, bufstream.Spec.PodTemplate.Spec.AutomountServiceAccountToken)
 	require.True(t, *bufstream.Spec.PodTemplate.Spec.AutomountServiceAccountToken)
 
-	etcd, err := ToEtcdApplication(wandb, nsn, testScheme(t), manifest.Manifest{})
+	etcd, err := ToEtcdApplication(wandb, wandb.GetBaseDeploymentSpec(), nsn, testScheme(t), manifest.KafkaConfig{})
 	require.NoError(t, err)
 	require.Equal(t, sa.Name, etcd.Spec.PodTemplate.Spec.ServiceAccountName)
 	require.NotNil(t, etcd.Spec.PodTemplate.Spec.AutomountServiceAccountToken)
@@ -270,7 +270,7 @@ func TestToServiceAccount(t *testing.T) {
 	wandb := testWandb()
 	nsn := CreateNsNameBuilder(types.NamespacedName{Namespace: "default", Name: "wandb-kafka"})
 
-	sa, err := ToServiceAccount(wandb, nsn, testStorage(), testScheme(t))
+	sa, err := ToServiceAccount(wandb, wandb.GetBaseDeploymentSpec().Kafka.ManagedKafka, nsn, testStorage(), testScheme(t))
 	require.NoError(t, err)
 	require.Equal(t, nsn.ServiceAccountName(), sa.Name)
 	require.Equal(t, "default", sa.Namespace)
@@ -289,11 +289,11 @@ func TestToServiceAccountCanReferenceExistingIdentity(t *testing.T) {
 	}
 	nsn := CreateNsNameBuilder(types.NamespacedName{Namespace: "default", Name: "wandb-kafka"})
 
-	sa, err := ToServiceAccount(wandb, nsn, testStorage(), testScheme(t))
+	sa, err := ToServiceAccount(wandb, wandb.GetBaseDeploymentSpec().Kafka.ManagedKafka, nsn, testStorage(), testScheme(t))
 	require.NoError(t, err)
 	require.Nil(t, sa)
 
-	app, err := ToBufstreamApplication(wandb, nsn, testStorage(), false, testScheme(t), manifest.Manifest{})
+	app, err := ToBufstreamApplication(wandb, wandb.GetBaseDeploymentSpec(), nsn, testStorage(), false, testScheme(t), manifest.KafkaConfig{})
 	require.NoError(t, err)
 	require.Equal(t, "existing-kafka-identity", app.Spec.PodTemplate.Spec.ServiceAccountName)
 }
@@ -302,7 +302,7 @@ func TestToSccRoleBinding(t *testing.T) {
 	wandb := testWandb()
 	nsn := CreateNsNameBuilder(types.NamespacedName{Namespace: "default", Name: "wandb-kafka"})
 
-	rb, err := ToSccRoleBinding(wandb, nsn, testScheme(t))
+	rb, err := ToSccRoleBinding(wandb, wandb.GetBaseDeploymentSpec().Kafka.ManagedKafka, nsn, testScheme(t))
 	require.NoError(t, err)
 	require.Equal(t, nsn.SccRoleBindingName(), rb.Name)
 	require.Equal(t, "default", rb.Namespace)
