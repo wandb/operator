@@ -168,6 +168,7 @@ trust a CA on the W&B **application** workloads instead, use
 - [Deploying on OpenShift](docs/openshift.md)
 - [Setting Up Console v2](docs/console-v2-setup.md)
 - [Deploying Watchtower](docs/watchtower-deployment.md)
+- [Server Manifest Contract Versioning (proposed design)](docs/design/wandb_v2/manifest_versioning.md)
 
 ## Development
 
