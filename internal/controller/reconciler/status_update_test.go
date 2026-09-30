@@ -14,7 +14,11 @@ import (
 func TestUpdateWandbStatusIfChangedSkipsEqualStatus(t *testing.T) {
 	t.Parallel()
 
-	wandb := &apiv2.WeightsAndBiases{Status: apiv2.WeightsAndBiasesStatus{Ready: true}}
+	wandb := &apiv2.WeightsAndBiases{Status: apiv2.WeightsAndBiasesStatus{
+		BaseDeploymentStatus: apiv2.BaseDeploymentStatus{
+			Ready: true,
+		},
+	}}
 	if err := updateWandbStatusIfChanged(context.Background(), nil, wandb, wandb.DeepCopy().Status); err != nil {
 		t.Fatalf("unchanged status returned an error: %v", err)
 	}

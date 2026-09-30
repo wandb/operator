@@ -23,7 +23,11 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Redis", func() {
 	It("defaults Redis namespace to the parent namespace", func() {
 		wandb := &apiv2.WeightsAndBiases{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
-			Spec:       apiv2.WeightsAndBiasesSpec{Redis: map[string]apiv2.RedisSpec{apiv2.DefaultInstanceName: {ManagedRedis: &apiv2.ManagedRedisSpec{}}}},
+			Spec: apiv2.WeightsAndBiasesSpec{
+				BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+					Redis: map[string]apiv2.RedisSpec{apiv2.DefaultInstanceName: {ManagedRedis: &apiv2.ManagedRedisSpec{}}},
+				},
+			},
 		}
 
 		err := defaulter.Default(ctx, wandb)
@@ -35,7 +39,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Redis", func() {
 		wandb := &apiv2.WeightsAndBiases{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
 			Spec: apiv2.WeightsAndBiasesSpec{
-				Redis: map[string]apiv2.RedisSpec{apiv2.DefaultInstanceName: {ManagedRedis: &apiv2.ManagedRedisSpec{Namespace: "custom-redis-namespace"}}},
+				BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+					Redis: map[string]apiv2.RedisSpec{apiv2.DefaultInstanceName: {ManagedRedis: &apiv2.ManagedRedisSpec{Namespace: "custom-redis-namespace"}}},
+				},
 			},
 		}
 
@@ -48,7 +54,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Redis", func() {
 		wandb := &apiv2.WeightsAndBiases{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
 			Spec: apiv2.WeightsAndBiasesSpec{
-				Redis: map[string]apiv2.RedisSpec{apiv2.DefaultInstanceName: {ManagedRedis: &apiv2.ManagedRedisSpec{StorageSize: "20Gi", Sentinel: apiv2.RedisSentinelSpec{Enabled: true}}}},
+				BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+					Redis: map[string]apiv2.RedisSpec{apiv2.DefaultInstanceName: {ManagedRedis: &apiv2.ManagedRedisSpec{StorageSize: "20Gi", Sentinel: apiv2.RedisSentinelSpec{Enabled: true}}}},
+				},
 			},
 		}
 
@@ -62,8 +70,10 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Redis", func() {
 		wandb := &apiv2.WeightsAndBiases{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
 			Spec: apiv2.WeightsAndBiasesSpec{
-				Redis: map[string]apiv2.RedisSpec{
-					apiv2.DefaultInstanceName: {ExternalRedis: &apiv2.RedisConnection{}},
+				BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+					Redis: map[string]apiv2.RedisSpec{
+						apiv2.DefaultInstanceName: {ExternalRedis: &apiv2.RedisConnection{}},
+					},
 				},
 			},
 		}

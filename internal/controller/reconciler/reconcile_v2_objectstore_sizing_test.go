@@ -34,14 +34,16 @@ func objectStoreWandb(size apiv2.Size) *apiv2.WeightsAndBiases {
 		TypeMeta:   metav1.TypeMeta{APIVersion: apiv2.GroupVersion.String(), Kind: "WeightsAndBiases"},
 		ObjectMeta: metav1.ObjectMeta{Name: "wandb", Namespace: "wandb"},
 		Spec: apiv2.WeightsAndBiasesSpec{
-			Size:        size,
-			Tolerations: &tolerations,
-			ObjectStore: map[string]apiv2.ObjectStoreSpec{
-				apiv2.DefaultInstanceName: {
-					ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{
-						Name:      "object-store",
-						Namespace: "wandb",
-						Config:    apiv2.ObjectStoreConfig{AccessKey: "admin"},
+			BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+				Size:        size,
+				Tolerations: &tolerations,
+				ObjectStore: map[string]apiv2.ObjectStoreSpec{
+					apiv2.DefaultInstanceName: {
+						ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{
+							Name:      "object-store",
+							Namespace: "wandb",
+							Config:    apiv2.ObjectStoreConfig{AccessKey: "admin"},
+						},
 					},
 				},
 			},

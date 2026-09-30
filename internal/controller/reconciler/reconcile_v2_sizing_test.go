@@ -28,8 +28,10 @@ var _ = Describe("ReconcileV2 Sizing", func() {
 			}
 			wandb := &apiv2.WeightsAndBiases{
 				Spec: apiv2.WeightsAndBiasesSpec{
-					Size:          "small",
-					RequireLimits: true,
+					BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+						Size:          "small",
+						RequireLimits: true,
+					},
 				},
 			}
 
@@ -59,8 +61,10 @@ var _ = Describe("ReconcileV2 Sizing", func() {
 			}
 			wandb := &apiv2.WeightsAndBiases{
 				Spec: apiv2.WeightsAndBiasesSpec{
-					Size:          "small",
-					RequireLimits: true,
+					BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+						Size:          "small",
+						RequireLimits: true,
+					},
 				},
 			}
 
@@ -83,8 +87,10 @@ var _ = Describe("ReconcileV2 Sizing", func() {
 			}
 			wandb := &apiv2.WeightsAndBiases{
 				Spec: apiv2.WeightsAndBiasesSpec{
-					Size:          "small",
-					RequireLimits: true,
+					BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+						Size:          "small",
+						RequireLimits: true,
+					},
 				},
 			}
 			containerRes := &corev1.ResourceRequirements{
@@ -115,8 +121,10 @@ var _ = Describe("ReconcileV2 Sizing", func() {
 			}
 			wandb := &apiv2.WeightsAndBiases{
 				Spec: apiv2.WeightsAndBiasesSpec{
-					Size:          "small",
-					RequireLimits: false,
+					BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+						Size:          "small",
+						RequireLimits: false,
+					},
 				},
 			}
 
@@ -145,8 +153,10 @@ var _ = Describe("ReconcileV2 Sizing", func() {
 			}
 			wandb := &apiv2.WeightsAndBiases{
 				Spec: apiv2.WeightsAndBiasesSpec{
-					Size:          "small",
-					RequireLimits: true,
+					BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+						Size:          "small",
+						RequireLimits: true,
+					},
 					Wandb: apiv2.WandbAppSpec{
 						LegacyOverrides: map[string]apiv2.LegacyOverrides{
 							"api": {
@@ -176,8 +186,10 @@ var _ = Describe("ReconcileV2 Sizing", func() {
 			app := serverManifest.Application{Name: "api"}
 			wandb := &apiv2.WeightsAndBiases{
 				Spec: apiv2.WeightsAndBiasesSpec{
-					Size:          "small",
-					RequireLimits: false,
+					BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+						Size:          "small",
+						RequireLimits: false,
+					},
 					Wandb: apiv2.WandbAppSpec{
 						LegacyOverrides: map[string]apiv2.LegacyOverrides{
 							"api": {
@@ -216,8 +228,10 @@ var _ = Describe("ReconcileV2 Sizing", func() {
 			}
 			wandb := &apiv2.WeightsAndBiases{
 				Spec: apiv2.WeightsAndBiasesSpec{
-					Size:          "small",
-					RequireLimits: true,
+					BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+						Size:          "small",
+						RequireLimits: true,
+					},
 					Wandb: apiv2.WandbAppSpec{
 						LegacyOverrides: map[string]apiv2.LegacyOverrides{
 							"api": {
@@ -253,7 +267,9 @@ var _ = Describe("ReconcileV2 Sizing", func() {
 			}
 			wandb := &apiv2.WeightsAndBiases{
 				Spec: apiv2.WeightsAndBiasesSpec{
-					Size: "small",
+					BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+						Size: "small",
+					},
 				},
 			}
 
@@ -284,7 +300,9 @@ var _ = Describe("ReconcileV2 Sizing", func() {
 			}
 			wandb := &apiv2.WeightsAndBiases{
 				Spec: apiv2.WeightsAndBiasesSpec{
-					Size: "small",
+					BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+						Size: "small",
+					},
 				},
 			}
 
@@ -310,13 +328,17 @@ var _ = Describe("ReconcileV2 Sizing", func() {
 			}
 			wandb := &apiv2.WeightsAndBiases{
 				Spec: apiv2.WeightsAndBiasesSpec{
-					Size: "large",
+					BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+						Size: "large",
+					},
 					Wandb: apiv2.WandbAppSpec{
-						Applications: map[string]apiv2.WandbApplicationOverride{
-							"weave-trace": {
-								Autoscaling: &apiv2.ApplicationAutoscalingOverride{
-									MinReplicas: ptr.To(int32(4)),
-									MaxReplicas: ptr.To(int32(10)),
+						BaseWorkloadSpec: apiv2.BaseWorkloadSpec{
+							Applications: map[string]apiv2.WandbApplicationOverride{
+								"weave-trace": {
+									Autoscaling: &apiv2.ApplicationAutoscalingOverride{
+										MinReplicas: ptr.To(int32(4)),
+										MaxReplicas: ptr.To(int32(10)),
+									},
 								},
 							},
 						},
@@ -346,12 +368,16 @@ var _ = Describe("ReconcileV2 Sizing", func() {
 			}
 			wandb := &apiv2.WeightsAndBiases{
 				Spec: apiv2.WeightsAndBiasesSpec{
-					Size: "large",
+					BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+						Size: "large",
+					},
 					Wandb: apiv2.WandbAppSpec{
-						Applications: map[string]apiv2.WandbApplicationOverride{
-							"weave-trace": {
-								Autoscaling: &apiv2.ApplicationAutoscalingOverride{
-									MaxReplicas: ptr.To(int32(10)),
+						BaseWorkloadSpec: apiv2.BaseWorkloadSpec{
+							Applications: map[string]apiv2.WandbApplicationOverride{
+								"weave-trace": {
+									Autoscaling: &apiv2.ApplicationAutoscalingOverride{
+										MaxReplicas: ptr.To(int32(10)),
+									},
 								},
 							},
 						},
@@ -381,12 +407,16 @@ var _ = Describe("ReconcileV2 Sizing", func() {
 			}
 			wandb := &apiv2.WeightsAndBiases{
 				Spec: apiv2.WeightsAndBiasesSpec{
-					Size: "large",
+					BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+						Size: "large",
+					},
 					Wandb: apiv2.WandbAppSpec{
-						Applications: map[string]apiv2.WandbApplicationOverride{
-							"weave-trace": {
-								Autoscaling: &apiv2.ApplicationAutoscalingOverride{
-									MinReplicas: ptr.To(int32(4)),
+						BaseWorkloadSpec: apiv2.BaseWorkloadSpec{
+							Applications: map[string]apiv2.WandbApplicationOverride{
+								"weave-trace": {
+									Autoscaling: &apiv2.ApplicationAutoscalingOverride{
+										MinReplicas: ptr.To(int32(4)),
+									},
 								},
 							},
 						},
@@ -416,13 +446,17 @@ var _ = Describe("ReconcileV2 Sizing", func() {
 			}
 			wandb := &apiv2.WeightsAndBiases{
 				Spec: apiv2.WeightsAndBiasesSpec{
-					Size: "large",
+					BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+						Size: "large",
+					},
 					Wandb: apiv2.WandbAppSpec{
-						Applications: map[string]apiv2.WandbApplicationOverride{
-							"executor": {
-								Autoscaling: &apiv2.ApplicationAutoscalingOverride{
-									MinReplicas: ptr.To(int32(99)),
-									MaxReplicas: ptr.To(int32(99)),
+						BaseWorkloadSpec: apiv2.BaseWorkloadSpec{
+							Applications: map[string]apiv2.WandbApplicationOverride{
+								"executor": {
+									Autoscaling: &apiv2.ApplicationAutoscalingOverride{
+										MinReplicas: ptr.To(int32(99)),
+										MaxReplicas: ptr.To(int32(99)),
+									},
 								},
 							},
 						},

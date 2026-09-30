@@ -328,19 +328,21 @@ func seaweedWandb() *apiv2.WeightsAndBiases {
 			Namespace: "wandb",
 		},
 		Spec: apiv2.WeightsAndBiasesSpec{
-			Tolerations: &tolerations,
-			ObjectStore: map[string]apiv2.ObjectStoreSpec{
-				apiv2.DefaultInstanceName: {
-					ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{
-						Name:        "object-store",
-						Namespace:   "wandb",
-						Replicas:    1,
-						StorageSize: "10Gi",
-						Config: apiv2.ObjectStoreConfig{
-							AccessKey: "admin",
-							Resources: corev1.ResourceRequirements{
-								Requests: corev1.ResourceList{
-									corev1.ResourceCPU: resource.MustParse("500m"),
+			BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+				Tolerations: &tolerations,
+				ObjectStore: map[string]apiv2.ObjectStoreSpec{
+					apiv2.DefaultInstanceName: {
+						ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{
+							Name:        "object-store",
+							Namespace:   "wandb",
+							Replicas:    1,
+							StorageSize: "10Gi",
+							Config: apiv2.ObjectStoreConfig{
+								AccessKey: "admin",
+								Resources: corev1.ResourceRequirements{
+									Requests: corev1.ResourceList{
+										corev1.ResourceCPU: resource.MustParse("500m"),
+									},
 								},
 							},
 						},

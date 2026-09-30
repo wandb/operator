@@ -88,14 +88,16 @@ func redisWandb(sentinel bool) *apiv2.WeightsAndBiases {
 			Namespace: "wandb",
 		},
 		Spec: apiv2.WeightsAndBiasesSpec{
-			Redis: map[string]apiv2.RedisSpec{
-				apiv2.DefaultInstanceName: {
-					ManagedRedis: &apiv2.ManagedRedisSpec{
-						Name:        "redis",
-						Namespace:   "wandb",
-						StorageSize: "1Gi",
-						Telemetry:   apiv2.Telemetry{Enabled: true},
-						Sentinel:    apiv2.RedisSentinelSpec{Enabled: sentinel},
+			BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+				Redis: map[string]apiv2.RedisSpec{
+					apiv2.DefaultInstanceName: {
+						ManagedRedis: &apiv2.ManagedRedisSpec{
+							Name:        "redis",
+							Namespace:   "wandb",
+							StorageSize: "1Gi",
+							Telemetry:   apiv2.Telemetry{Enabled: true},
+							Sentinel:    apiv2.RedisSentinelSpec{Enabled: sentinel},
+						},
 					},
 				},
 			},

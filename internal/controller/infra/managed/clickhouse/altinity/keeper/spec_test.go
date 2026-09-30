@@ -131,15 +131,17 @@ func keeperWandb() *apiv2.WeightsAndBiases {
 		},
 		ObjectMeta: metav1.ObjectMeta{Name: "wandb", Namespace: "wandb"},
 		Spec: apiv2.WeightsAndBiasesSpec{
-			Tolerations: &tolerations,
-			ClickHouse: map[string]apiv2.ClickHouseSpec{
-				apiv2.DefaultInstanceName: {
-					ManagedClickHouse: &apiv2.ManagedClickHouseSpec{
-						Name:      "clickhouse",
-						Namespace: "wandb",
-						Keeper: apiv2.ClickHouseKeeperSpec{
-							Replicas:    3,
-							StorageSize: "10Gi",
+			BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+				Tolerations: &tolerations,
+				ClickHouse: map[string]apiv2.ClickHouseSpec{
+					apiv2.DefaultInstanceName: {
+						ManagedClickHouse: &apiv2.ManagedClickHouseSpec{
+							Name:      "clickhouse",
+							Namespace: "wandb",
+							Keeper: apiv2.ClickHouseKeeperSpec{
+								Replicas:    3,
+								StorageSize: "10Gi",
+							},
 						},
 					},
 				},

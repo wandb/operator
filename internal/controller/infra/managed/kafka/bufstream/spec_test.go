@@ -25,12 +25,14 @@ func testWandb() *apiv2.WeightsAndBiases {
 	return &apiv2.WeightsAndBiases{
 		ObjectMeta: metav1.ObjectMeta{Name: "wandb", Namespace: "default"},
 		Spec: apiv2.WeightsAndBiasesSpec{
-			Kafka: apiv2.KafkaSpec{
-				ManagedKafka: &apiv2.ManagedKafkaSpec{
-					Name:        "wandb-kafka",
-					Namespace:   "default",
-					Replicas:    2,
-					StorageSize: "20Gi",
+			BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+				Kafka: apiv2.KafkaSpec{
+					ManagedKafka: &apiv2.ManagedKafkaSpec{
+						Name:        "wandb-kafka",
+						Namespace:   "default",
+						Replicas:    2,
+						StorageSize: "20Gi",
+					},
 				},
 			},
 		},

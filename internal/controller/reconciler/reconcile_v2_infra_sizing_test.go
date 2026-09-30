@@ -98,8 +98,10 @@ var _ = Describe("Infra Sizing", func() {
 		It("should apply manifest sizing to empty spec fields", func() {
 			wandb := &apiv2.WeightsAndBiases{
 				Spec: apiv2.WeightsAndBiasesSpec{
-					Size:  "small",
-					MySQL: map[string]apiv2.MySQLSpec{apiv2.DefaultInstanceName: {ManagedMysql: &apiv2.ManagedMysqlSpec{}}},
+					BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+						Size:  "small",
+						MySQL: map[string]apiv2.MySQLSpec{apiv2.DefaultInstanceName: {ManagedMysql: &apiv2.ManagedMysqlSpec{}}},
+					},
 				},
 			}
 			manifest := serverManifest.Manifest{
@@ -127,12 +129,14 @@ var _ = Describe("Infra Sizing", func() {
 		It("should not override user-specified spec fields", func() {
 			wandb := &apiv2.WeightsAndBiases{
 				Spec: apiv2.WeightsAndBiasesSpec{
-					Size: "small",
-					MySQL: map[string]apiv2.MySQLSpec{
-						apiv2.DefaultInstanceName: {
-							ManagedMysql: &apiv2.ManagedMysqlSpec{
-								Replicas:    5,
-								StorageSize: "50Gi",
+					BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+						Size: "small",
+						MySQL: map[string]apiv2.MySQLSpec{
+							apiv2.DefaultInstanceName: {
+								ManagedMysql: &apiv2.ManagedMysqlSpec{
+									Replicas:    5,
+									StorageSize: "50Gi",
+								},
 							},
 						},
 					},
@@ -158,9 +162,11 @@ var _ = Describe("Infra Sizing", func() {
 		It("should default object store copies from the manifest, treating CR values as overrides", func() {
 			wandb := &apiv2.WeightsAndBiases{
 				Spec: apiv2.WeightsAndBiasesSpec{
-					Size: "small",
-					ObjectStore: map[string]apiv2.ObjectStoreSpec{
-						apiv2.DefaultInstanceName: {ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{}},
+					BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+						Size: "small",
+						ObjectStore: map[string]apiv2.ObjectStoreSpec{
+							apiv2.DefaultInstanceName: {ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{}},
+						},
 					},
 				},
 			}
@@ -181,9 +187,11 @@ var _ = Describe("Infra Sizing", func() {
 		It("should not override a CR-specified object store copies value", func() {
 			wandb := &apiv2.WeightsAndBiases{
 				Spec: apiv2.WeightsAndBiasesSpec{
-					Size: "small",
-					ObjectStore: map[string]apiv2.ObjectStoreSpec{
-						apiv2.DefaultInstanceName: {ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{Copies: 1}},
+					BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+						Size: "small",
+						ObjectStore: map[string]apiv2.ObjectStoreSpec{
+							apiv2.DefaultInstanceName: {ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{Copies: 1}},
+						},
 					},
 				},
 			}
@@ -203,12 +211,14 @@ var _ = Describe("Infra Sizing", func() {
 		It("should apply keeper sizing from the clickhouseKeeper block, treating CR values as overrides", func() {
 			wandb := &apiv2.WeightsAndBiases{
 				Spec: apiv2.WeightsAndBiasesSpec{
-					Size: "small",
-					ClickHouse: map[string]apiv2.ClickHouseSpec{
-						apiv2.DefaultInstanceName: {
-							ManagedClickHouse: &apiv2.ManagedClickHouseSpec{
-								// User explicitly set keeper storage; the manifest must not override it.
-								Keeper: apiv2.ClickHouseKeeperSpec{StorageSize: "20Gi"},
+					BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+						Size: "small",
+						ClickHouse: map[string]apiv2.ClickHouseSpec{
+							apiv2.DefaultInstanceName: {
+								ManagedClickHouse: &apiv2.ManagedClickHouseSpec{
+									// User explicitly set keeper storage; the manifest must not override it.
+									Keeper: apiv2.ClickHouseKeeperSpec{StorageSize: "20Gi"},
+								},
 							},
 						},
 					},

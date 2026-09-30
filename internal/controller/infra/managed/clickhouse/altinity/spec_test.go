@@ -196,18 +196,20 @@ func clickHouseWandb() *apiv2.WeightsAndBiases {
 			Namespace: "wandb",
 		},
 		Spec: apiv2.WeightsAndBiasesSpec{
-			Tolerations: &tolerations,
-			ClickHouse: map[string]apiv2.ClickHouseSpec{
-				apiv2.DefaultInstanceName: {
-					ManagedClickHouse: &apiv2.ManagedClickHouseSpec{
-						Name:        "clickhouse",
-						Namespace:   "wandb",
-						Replicas:    1,
-						StorageSize: "10Gi",
-						Config: apiv2.ClickHouseConfig{
-							Resources: corev1.ResourceRequirements{
-								Requests: corev1.ResourceList{
-									corev1.ResourceCPU: resource.MustParse("500m"),
+			BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+				Tolerations: &tolerations,
+				ClickHouse: map[string]apiv2.ClickHouseSpec{
+					apiv2.DefaultInstanceName: {
+						ManagedClickHouse: &apiv2.ManagedClickHouseSpec{
+							Name:        "clickhouse",
+							Namespace:   "wandb",
+							Replicas:    1,
+							StorageSize: "10Gi",
+							Config: apiv2.ClickHouseConfig{
+								Resources: corev1.ResourceRequirements{
+									Requests: corev1.ResourceList{
+										corev1.ResourceCPU: resource.MustParse("500m"),
+									},
 								},
 							},
 						},

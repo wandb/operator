@@ -635,8 +635,10 @@ func TestConvertTo_IngressNameOverrideEmpty(t *testing.T) {
 func TestConvertTo_IngressNoModeOverrideWhenSet(t *testing.T) {
 	dst := &appsv2.WeightsAndBiases{
 		Spec: appsv2.WeightsAndBiasesSpec{
-			Networking: appsv2.NetworkingSpec{
-				Mode: appsv2.NetworkingModeGatewayAPI,
+			BaseDeploymentSpec: appsv2.BaseDeploymentSpec{
+				Networking: appsv2.NetworkingSpec{
+					Mode: appsv2.NetworkingModeGatewayAPI,
+				},
 			},
 		},
 	}

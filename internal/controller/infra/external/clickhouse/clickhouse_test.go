@@ -25,8 +25,10 @@ func externalTestWandb(conn *apiv2.ClickHouseConnection) *apiv2.WeightsAndBiases
 		TypeMeta:   metav1.TypeMeta{APIVersion: "apps.wandb.com/v2", Kind: "WeightsAndBiases"},
 		ObjectMeta: metav1.ObjectMeta{Name: "wandb", Namespace: "default"},
 		Spec: apiv2.WeightsAndBiasesSpec{
-			ClickHouse: map[string]apiv2.ClickHouseSpec{
-				apiv2.DefaultInstanceName: {ExternalClickHouse: conn},
+			BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+				ClickHouse: map[string]apiv2.ClickHouseSpec{
+					apiv2.DefaultInstanceName: {ExternalClickHouse: conn},
+				},
 			},
 		},
 	}
