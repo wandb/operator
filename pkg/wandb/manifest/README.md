@@ -67,8 +67,8 @@ new version promises both decoding and reconciliation support for its semantics.
 
 Every successfully loaded `Manifest` has a normalized `ManifestVersion`.
 `VersionExplicit()` reports whether the artifact declared it, for diagnostics.
-Code constructing a `Manifest` directly must set a supported version; zero only
-means omission at the wire boundary, not in a constructed object.
+Downstream reconciliation helpers consume manifests returned by these loaders
+and assume compatibility has already been established.
 
 Loaders return errors that can be inspected with `errors.As` through wrapping:
 
@@ -96,8 +96,7 @@ not cancel work started before the manifest selection changed.
 
 Deletion and retention finalizers run without loading the manifest. Adding the
 existing finalizer, updating status, and recording Events are permitted before
-the compatibility gate passes. Public helpers that accept a constructed manifest
-also check its version before writing resources.
+the compatibility gate passes.
 
 The existing conditions array reports the result without new CRD fields:
 

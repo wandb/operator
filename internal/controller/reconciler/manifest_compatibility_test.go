@@ -10,7 +10,6 @@ import (
 	apiv1 "github.com/wandb/operator/api/v1"
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/observability/telemetry"
-	"github.com/wandb/operator/pkg/wandb/manifest"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -132,15 +131,4 @@ func TestUnsupportedManifestDoesNotBlockFinalization(t *testing.T) {
 	require.Empty(t, events.Events, "finalization must not load or validate the manifest")
 	actual := &apiv2.WeightsAndBiases{}
 	require.True(t, apierrors.IsNotFound(c.Get(context.Background(), client.ObjectKeyFromObject(w), actual)))
-}
-
-func TestManifestHelpersRejectUnsupportedConstructedManifest(t *testing.T) {
-	c, w, _ := compatibilityFixture(t, "manifestVersion: 1\n")
-	m := manifest.Manifest{ManifestVersion: 2}
-	res, err := ReconcileWandbManifest(context.Background(), c, w, m, telemetry.TelemetryRuntimeConfig{})
-	require.NoError(t, err)
-	require.NotZero(t, res.RequeueAfter)
-	res, err = ReconcileNetworkingAndWatchtower(context.Background(), c, w, m)
-	require.NoError(t, err)
-	require.NotZero(t, res.RequeueAfter)
 }

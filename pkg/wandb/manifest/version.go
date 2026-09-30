@@ -59,18 +59,6 @@ func (e *ManifestDecodeError) Error() string {
 
 func (e *ManifestDecodeError) Unwrap() error { return e.Err }
 
-// ValidateVersion also protects callers that construct a Manifest directly.
-// Only the wire loader defaults an absent declaration; zero is not an alias.
-func ValidateVersion(version int) error {
-	if version <= 0 {
-		return &InvalidManifestVersionError{Detail: "expected a positive version on a decoded manifest"}
-	}
-	if _, ok := manifestDecoders[version]; !ok {
-		return &UnsupportedManifestVersionError{Version: version, Supported: SupportedVersions()}
-	}
-	return nil
-}
-
 // VersionExplicit reports whether the loaded artifact declared its version.
 func (m Manifest) VersionExplicit() bool { return m.versionExplicit }
 
@@ -95,10 +83,11 @@ func decodeManifestFiles(files map[string][]byte) (Manifest, error) {
 	if !explicit {
 		version = LegacyManifestVersion
 	}
-	if err := ValidateVersion(version); err != nil {
-		return Manifest{}, err
+	decoder, ok := manifestDecoders[version]
+	if !ok {
+		return Manifest{}, &UnsupportedManifestVersionError{Version: version, Supported: SupportedVersions()}
 	}
-	m, err := manifestDecoders[version](files)
+	m, err := decoder(files)
 	if err != nil {
 		return Manifest{}, err
 	}

@@ -83,7 +83,6 @@ func TestManifestVersionAcrossFragments(t *testing.T) {
 	require.Equal(t, []int{1}, versions)
 	versions[0] = 2
 	require.Equal(t, []int{1}, SupportedVersions())
-	require.Error(t, ValidateVersion(0))
 }
 
 func TestManifestVersionBeforePayloadDecoding(t *testing.T) {

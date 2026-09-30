@@ -33,13 +33,10 @@ func loadCompatibleManifest(ctx context.Context, c client.Client, recorder recor
 	return m, result, reportErr
 }
 
-// reportManifestCompatibility persists the decision before any manifest-driven
+// reportManifestCompatibility persists the loader result before any manifest-driven
 // writes. A permanent version error waits for a spec change or bounded retry;
 // retrieval and status-write failures retain normal controller error retries.
 func reportManifestCompatibility(ctx context.Context, c client.Client, recorder record.EventRecorder, wandb *apiv2.WeightsAndBiases, m manifest.Manifest, loadErr error) (ctrl.Result, error) {
-	if loadErr == nil {
-		loadErr = manifest.ValidateVersion(m.ManifestVersion)
-	}
 	before := wandb.DeepCopy().Status
 	previous := apimeta.FindStatusCondition(before.Conditions, manifestCompatibleCondition)
 	condition := metav1.Condition{

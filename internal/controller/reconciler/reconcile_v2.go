@@ -315,16 +315,14 @@ func consolidateResults(results []ctrl.Result) ctrl.Result {
 // back as a requeue, though — dropping it outright left a transient failure with
 // nothing to retry it, so Watchtower stayed down until an unrelated event
 // happened to trigger another pass.
+//
+// The caller must supply a manifest returned by the manifest loader.
 func ReconcileNetworkingAndWatchtower(
 	ctx context.Context,
 	client ctrlClient.Client,
 	wandb *apiv2.WeightsAndBiases,
 	manifest serverManifest.Manifest,
 ) (ctrl.Result, error) {
-	if err := serverManifest.ValidateVersion(manifest.ManifestVersion); err != nil {
-		return reportManifestCompatibility(ctx, client, nil, wandb, manifest, err)
-	}
-
 	ctx, log := logx.WithSlog(ctx, logx.ReconcileInfraV2)
 
 	// Status is flushed here rather than left to ReconcileWandbManifest: that
@@ -374,6 +372,8 @@ func ReconcileNetworkingAndWatchtower(
 	return result, updateWandbStatusIfChanged(ctx, client, wandb, statusBefore)
 }
 
+// ReconcileWandbManifest reconciles applications and migrations from a manifest
+// returned by the manifest loader.
 func ReconcileWandbManifest(
 	ctx context.Context,
 	client ctrlClient.Client,
@@ -381,10 +381,6 @@ func ReconcileWandbManifest(
 	manifest serverManifest.Manifest,
 	telemetryConfig telemetry.TelemetryRuntimeConfig,
 ) (ctrl.Result, error) {
-	if err := serverManifest.ValidateVersion(manifest.ManifestVersion); err != nil {
-		return reportManifestCompatibility(ctx, client, nil, wandb, manifest, err)
-	}
-
 	// Reconcile Wandb Manifest
 	logger := ctrl.LoggerFrom(ctx).WithName("reconcileWandbManifest")
 	logger.Info("Reconciling Wandb Manifest", "name", wandb.Name)
