@@ -24,7 +24,7 @@ var _ = Describe("Redis vendor specs", func() {
 	It("renders hardened standalone Redis settings", func() {
 		wandb := redisWandb(false)
 
-		redis, err := ToRedisStandaloneVendorSpec(context.Background(), wandb, wandb.Spec.Redis[apiv2.DefaultInstanceName].ManagedRedis, redisScheme(), manifest.Manifest{})
+		redis, err := ToRedisStandaloneVendorSpec(context.Background(), wandb, wandb.GetBaseDeploymentSpec(), wandb.Spec.Redis[apiv2.DefaultInstanceName].ManagedRedis, redisScheme(), manifest.InfraConfig{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(redis).NotTo(BeNil())
 
@@ -38,7 +38,7 @@ var _ = Describe("Redis vendor specs", func() {
 	It("renders hardened sentinel and replication Redis settings", func() {
 		wandb := redisWandb(true)
 
-		sentinel, err := ToRedisSentinelVendorSpec(context.Background(), wandb, wandb.Spec.Redis[apiv2.DefaultInstanceName].ManagedRedis, redisScheme(), manifest.Manifest{})
+		sentinel, err := ToRedisSentinelVendorSpec(context.Background(), wandb, wandb.GetBaseDeploymentSpec(), wandb.Spec.Redis[apiv2.DefaultInstanceName].ManagedRedis, redisScheme(), manifest.InfraConfig{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(sentinel).NotTo(BeNil())
 		expectRedisDefaultPodSecurityContext(sentinel.Spec.PodSecurityContext)
@@ -46,7 +46,7 @@ var _ = Describe("Redis vendor specs", func() {
 		Expect(sentinel.Spec.VolumeMount).NotTo(BeNil())
 		expectRedisWritableTmpMount(sentinel.Spec.VolumeMount.MountPath)
 
-		replication, err := ToRedisReplicationVendorSpec(context.Background(), wandb, wandb.Spec.Redis[apiv2.DefaultInstanceName].ManagedRedis, redisScheme(), manifest.Manifest{})
+		replication, err := ToRedisReplicationVendorSpec(context.Background(), wandb, wandb.GetBaseDeploymentSpec(), wandb.Spec.Redis[apiv2.DefaultInstanceName].ManagedRedis, redisScheme(), manifest.InfraConfig{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(replication).NotTo(BeNil())
 		expectRedisDefaultPodSecurityContext(replication.Spec.PodSecurityContext)
@@ -58,7 +58,7 @@ var _ = Describe("Redis vendor specs", func() {
 		utils.SetOpenShiftMode(true)
 
 		wandb := redisWandb(false)
-		redis, err := ToRedisStandaloneVendorSpec(context.Background(), wandb, wandb.Spec.Redis[apiv2.DefaultInstanceName].ManagedRedis, redisScheme(), manifest.Manifest{})
+		redis, err := ToRedisStandaloneVendorSpec(context.Background(), wandb, wandb.GetBaseDeploymentSpec(), wandb.Spec.Redis[apiv2.DefaultInstanceName].ManagedRedis, redisScheme(), manifest.InfraConfig{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(redis).NotTo(BeNil())
 

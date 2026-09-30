@@ -122,3 +122,24 @@ type BaseWorkloadStatus struct {
 	// +kubebuilder:default:={}
 	Applications map[string]ApplicationStatus `json:"applications,omitempty"`
 }
+
+func (s *BaseDeploymentSpec) GetRetentionPolicy(spec ManagedInfraSpec) RetentionPolicy {
+	if spec.RetentionPolicy != nil {
+		return *spec.RetentionPolicy
+	}
+	return s.RetentionPolicy
+}
+
+func (s *BaseDeploymentSpec) GetAffinity(spec ManagedInfraSpec) *corev1.Affinity {
+	if spec.Affinity != nil {
+		return spec.Affinity
+	}
+	return s.Affinity
+}
+
+func (s *BaseDeploymentSpec) GetTolerations(spec ManagedInfraSpec) *[]corev1.Toleration {
+	if spec.Tolerations != nil {
+		return spec.Tolerations
+	}
+	return s.Tolerations
+}

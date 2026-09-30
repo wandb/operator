@@ -208,7 +208,7 @@ func Reconcile(
 
 	/////////////////////////
 	// Write Infra State
-	redisConditions := redisWriteState(ctx, client, wandb, manifest)
+	redisConditions := redisWriteState(ctx, client, wandb, manifest.Redis[apiv2.DefaultInstanceName])
 	mysqlConditions := mysqlWriteState(ctx, client, wandb, manifest)
 	objectStoreConditions, objectStoreConnection := objectStoreWriteState(ctx, client, wandb, manifest)
 	kafkaConditions := kafkaWriteState(ctx, client, wandb, manifest)

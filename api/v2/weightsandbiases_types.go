@@ -423,25 +423,26 @@ type CertManagerConfig struct {
 	Issuer string `json:"issuer,omitempty"`
 }
 
+// GetBaseDeploymentSpec returns the shared settings embedded in this resource.
+func (w *WeightsAndBiases) GetBaseDeploymentSpec() *BaseDeploymentSpec {
+	return &w.Spec.BaseDeploymentSpec
+}
+
+// GetBaseDeploymentStatus returns the shared status embedded in this resource.
+func (w *WeightsAndBiases) GetBaseDeploymentStatus() *BaseDeploymentStatus {
+	return &w.Status.BaseDeploymentStatus
+}
+
 func (w *WeightsAndBiases) GetRetentionPolicy(spec ManagedInfraSpec) RetentionPolicy {
-	if spec.RetentionPolicy != nil {
-		return *spec.RetentionPolicy
-	}
-	return w.Spec.RetentionPolicy
+	return w.Spec.GetRetentionPolicy(spec)
 }
 
 func (w *WeightsAndBiases) GetAffinity(spec ManagedInfraSpec) *corev1.Affinity {
-	if spec.Affinity != nil {
-		return spec.Affinity
-	}
-	return w.Spec.Affinity
+	return w.Spec.GetAffinity(spec)
 }
 
 func (w *WeightsAndBiases) GetTolerations(spec ManagedInfraSpec) *[]corev1.Toleration {
-	if spec.Tolerations != nil {
-		return spec.Tolerations
-	}
-	return w.Spec.Tolerations
+	return w.Spec.GetTolerations(spec)
 }
 
 // ValidMysqlReplicaCount reports whether r is a count Moco accepts: a positive odd number.

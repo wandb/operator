@@ -1,7 +1,7 @@
 package common
 
 import (
-	apiv2 "github.com/wandb/operator/api/v2"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -22,11 +22,12 @@ func HasAllLabelKeys(existing, desired map[string]string) bool {
 }
 
 // BuildWandbLabels returns the standard wandb labels for resources managed
-// on behalf of the given WeightsAndBiases CR.
-func BuildWandbLabels(wandb *apiv2.WeightsAndBiases, componentName string) map[string]string {
+// on behalf of a deployment. Keep these legacy keys stable: PVC deletion
+// selectors and existing installations depend on them.
+func BuildWandbLabels(owner client.Object, componentName string) map[string]string {
 	return map[string]string{
-		WandbNameLabel:      wandb.Name,
-		WandbNamespaceLabel: wandb.Namespace,
+		WandbNameLabel:      owner.GetName(),
+		WandbNamespaceLabel: owner.GetNamespace(),
 		WandbComponentLabel: componentName,
 	}
 }

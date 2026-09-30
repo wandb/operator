@@ -3,6 +3,7 @@ package common
 import (
 	apiv2 "github.com/wandb/operator/api/v2"
 	"k8s.io/apimachinery/pkg/labels"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type OnDeletePolicy string
@@ -20,7 +21,7 @@ type OnDeleteRule struct {
 // ToOnDeleteRule maps the user-facing RetentionPolicy onto an OnDeleteRule
 // scoped to resources labelled with the given component name.
 func ToOnDeleteRule(
-	wandb *apiv2.WeightsAndBiases,
+	owner client.Object,
 	retentionPolicy apiv2.RetentionPolicy,
 	componentName string,
 ) OnDeleteRule {
@@ -30,6 +31,6 @@ func ToOnDeleteRule(
 	}
 	return OnDeleteRule{
 		Policy:   policy,
-		Selector: labels.SelectorFromSet(BuildWandbLabels(wandb, componentName)),
+		Selector: labels.SelectorFromSet(BuildWandbLabels(owner, componentName)),
 	}
 }
