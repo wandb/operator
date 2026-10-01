@@ -1,5 +1,8 @@
 # Infra V2 Reconciliation Flows
 
+> Status: Historical architecture snapshot; component choices and package layout have changed.
+> Current guidance: [developer guide](../../developer/architecture.md).
+
 Given that we're entering a WandB V2 Reconciliation, here is how the process flows from a coarse-grained
 perspective followed by narrower and more detailed views.
 

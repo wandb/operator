@@ -1,5 +1,8 @@
 # Legacy Overrides: carrying v1 helm values into v2
 
+> Status: Design history for implemented compatibility behavior; verify details against current code.
+> Current guidance: [developer guide](../../developer/api-development.md).
+
 ## Problem
 
 The v1 `WeightsAndBiases` spec is untyped: `spec.values` is an arbitrary map passed to

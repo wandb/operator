@@ -1,5 +1,8 @@
 # Legacy env-var → CR field mapping: from conversion special-case to a reconcile-time registry
 
+> Status: Original proposal; related implementation now exists in legacy_env_mapping.go. The proposal text below is retained as history.
+> Current guidance: [developer guide](../../developer/api-development.md).
+
 **Status:** Proposal (not yet implemented)
 **Related:** [legacy_overrides.md](legacy_overrides.md) (the `spec.wandb.legacyOverrides` mechanism this builds on)
 
