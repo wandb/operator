@@ -309,15 +309,19 @@ func baseCR(crFile string) (*v2.WeightsAndBiases, error) {
 			Kind:       "WeightsAndBiases",
 		},
 		Spec: v2.WeightsAndBiasesSpec{
+			BaseDeploymentSpec: v2.BaseDeploymentSpec{
+				MySQL:       map[string]v2.MySQLSpec{v2.DefaultInstanceName: {ManagedMysql: &v2.ManagedMysqlSpec{}}},
+				Redis:       map[string]v2.RedisSpec{v2.DefaultInstanceName: {ManagedRedis: &v2.ManagedRedisSpec{}}},
+				Kafka:       v2.KafkaSpec{ManagedKafka: &v2.ManagedKafkaSpec{}},
+				ObjectStore: map[string]v2.ObjectStoreSpec{v2.DefaultInstanceName: {ManagedObjectStore: &v2.ManagedObjectStoreSpec{}}},
+				ClickHouse:  map[string]v2.ClickHouseSpec{v2.DefaultInstanceName: {ManagedClickHouse: &v2.ManagedClickHouseSpec{}}},
+			},
 			Wandb: v2.WandbAppSpec{
-				Features:            map[string]bool{"proxy": true},
+				BaseWorkloadSpec: v2.BaseWorkloadSpec{
+					Features: map[string]bool{"proxy": true},
+				},
 				InternalServiceAuth: v2.InternalServiceAuth{Enabled: boolPtr(false)},
 			},
-			MySQL:       map[string]v2.MySQLSpec{v2.DefaultInstanceName: {ManagedMysql: &v2.ManagedMysqlSpec{}}},
-			Redis:       map[string]v2.RedisSpec{v2.DefaultInstanceName: {ManagedRedis: &v2.ManagedRedisSpec{}}},
-			Kafka:       v2.KafkaSpec{ManagedKafka: &v2.ManagedKafkaSpec{}},
-			ObjectStore: map[string]v2.ObjectStoreSpec{v2.DefaultInstanceName: {ManagedObjectStore: &v2.ManagedObjectStoreSpec{}}},
-			ClickHouse:  map[string]v2.ClickHouseSpec{v2.DefaultInstanceName: {ManagedClickHouse: &v2.ManagedClickHouseSpec{}}},
 		},
 	}, nil
 }

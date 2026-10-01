@@ -80,8 +80,10 @@ func writeStateFixtureProvider(t *testing.T, provider apiv2.ObjectStoreProvider,
 		TypeMeta:   metav1.TypeMeta{APIVersion: "apps.wandb.com/v2", Kind: "WeightsAndBiases"},
 		ObjectMeta: metav1.ObjectMeta{Name: "wandb", Namespace: "default"},
 		Spec: apiv2.WeightsAndBiasesSpec{
-			ObjectStore: map[string]apiv2.ObjectStoreSpec{
-				apiv2.DefaultInstanceName: {ExternalObjectStore: ext},
+			BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+				ObjectStore: map[string]apiv2.ObjectStoreSpec{
+					apiv2.DefaultInstanceName: {ExternalObjectStore: ext},
+				},
 			},
 		},
 	}
@@ -214,9 +216,13 @@ func TestWriteState_LiteralValues(t *testing.T) {
 	}
 	wandb := &apiv2.WeightsAndBiases{
 		ObjectMeta: metav1.ObjectMeta{Name: "wandb", Namespace: "default"},
-		Spec: apiv2.WeightsAndBiasesSpec{ObjectStore: map[string]apiv2.ObjectStoreSpec{
-			apiv2.DefaultInstanceName: {ExternalObjectStore: ext},
-		}},
+		Spec: apiv2.WeightsAndBiasesSpec{
+			BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+				ObjectStore: map[string]apiv2.ObjectStoreSpec{
+					apiv2.DefaultInstanceName: {ExternalObjectStore: ext},
+				},
+			},
+		},
 	}
 
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(wandb, source).Build()

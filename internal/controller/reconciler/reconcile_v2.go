@@ -55,21 +55,21 @@ const CleanupFinalizer = "wandb.apps.wandb.com/cleanup"
 var defaultRequeueMinutes = 1
 var defaultRequeueDuration = time.Duration(defaultRequeueMinutes) * time.Minute
 
-type finalizerFunc func(context.Context, ctrlClient.Client, *apiv2.WeightsAndBiases) error
+type finalizerFunc func(context.Context, ctrlClient.Client, common.DeploymentResource) error
 
 func runRetentionFinalizer(
 	ctx context.Context,
 	client ctrlClient.Client,
-	wandb *apiv2.WeightsAndBiases,
+	deployment common.DeploymentResource,
 	infraSpec apiv2.ManagedInfraSpec,
 	purgeFn finalizerFunc,
 	detachFn finalizerFunc,
 ) error {
-	switch wandb.GetRetentionPolicy(infraSpec).OnDelete {
+	switch deployment.GetBaseDeploymentSpec().GetRetentionPolicy(infraSpec).OnDelete {
 	case apiv2.PurgeOnDelete:
-		return purgeFn(ctx, client, wandb)
+		return purgeFn(ctx, client, deployment)
 	case apiv2.DetachOnDelete:
-		return detachFn(ctx, client, wandb)
+		return detachFn(ctx, client, deployment)
 	}
 	return nil
 }
@@ -110,6 +110,7 @@ func Reconcile(
 
 			// Multi-instance infra: the per-type retention dispatcher applies the
 			// configured policy to each managed or external instance.
+			cleanupWandbLegacyMinio(ctx, client, wandb)
 			for key, spec := range wandb.Spec.ObjectStore {
 				if err = runObjectStoreRetentionFinalizer(ctx, client, wandb, key, spec); err != nil {
 					return ctrl.Result{}, err
@@ -204,20 +205,21 @@ func Reconcile(
 	}
 
 	// Apply manifest-derived infra sizing before provisioning
-	ApplyInfraSizing(wandb, manifest)
+	ApplyInfraSizing(wandb.GetBaseDeploymentSpec(), manifest)
 
 	/////////////////////////
 	// Write Infra State
-	redisConditions := redisWriteState(ctx, client, wandb, manifest)
-	mysqlConditions := mysqlWriteState(ctx, client, wandb, manifest)
-	objectStoreConditions, objectStoreConnection := objectStoreWriteState(ctx, client, wandb, manifest)
-	kafkaConditions := kafkaWriteState(ctx, client, wandb, manifest)
-	clickHouseConditions := clickHouseWriteState(ctx, client, wandb, manifest)
+	redisConditions := redisWriteState(ctx, client, wandb, manifest.Redis[apiv2.DefaultInstanceName])
+	mysqlConditions := mysqlWriteState(ctx, client, wandb, manifest.Mysql[apiv2.DefaultInstanceName])
+	cleanupWandbLegacyMinio(ctx, client, wandb)
+	objectStoreConditions, objectStoreConnection := objectStoreWriteState(ctx, client, wandb, manifest.Bucket[apiv2.DefaultInstanceName])
+	kafkaConditions := kafkaWriteState(ctx, client, wandb, manifest.Kafka)
+	clickHouseConditions := clickHouseWriteState(ctx, client, wandb, manifest.Clickhouse[apiv2.DefaultInstanceName], manifest.ClickhouseKeeper[apiv2.DefaultInstanceName])
 
 	/////////////////////////
 	// Read Infra State
 	redisConditions, redisInfraConn := redisReadState(ctx, client, wandb, redisConditions)
-	mysqlConditions, mysqlInfraConn := mysqlReadState(ctx, client, wandb, mysqlConditions)
+	mysqlConditions, mysqlInfraConn := mysqlReadState(ctx, client, wandb, mysqlConditions, "wandb_local")
 	kafkaConditions, kafkaInfraConn := kafkaReadState(ctx, client, wandb, kafkaConditions)
 	objectStoreConditions = objectStoreReadState(ctx, client, wandb, objectStoreConditions)
 	clickHouseConditions, clickHouseInfraConn := clickHouseReadState(ctx, client, wandb, clickHouseConditions)
@@ -1468,20 +1470,20 @@ func allInstancesReady[S any, T any](specs map[string]S, statuses map[string]T, 
 	return true
 }
 
-func redisAllReady(wandb *apiv2.WeightsAndBiases) bool {
-	return allInstancesReady(wandb.Spec.Redis, wandb.Status.RedisStatus, func(s apiv2.RedisInfraStatus) bool { return s.Ready })
+func redisAllReady(deployment common.DeploymentResource) bool {
+	return allInstancesReady(deployment.GetBaseDeploymentSpec().Redis, deployment.GetBaseDeploymentStatus().RedisStatus, func(s apiv2.RedisInfraStatus) bool { return s.Ready })
 }
 
-func mysqlAllReady(wandb *apiv2.WeightsAndBiases) bool {
-	return allInstancesReady(wandb.Spec.MySQL, wandb.Status.MySQLStatus, func(s apiv2.MysqlInfraStatus) bool { return s.Ready })
+func mysqlAllReady(deployment common.DeploymentResource) bool {
+	return allInstancesReady(deployment.GetBaseDeploymentSpec().MySQL, deployment.GetBaseDeploymentStatus().MySQLStatus, func(s apiv2.MysqlInfraStatus) bool { return s.Ready })
 }
 
-func objectStoreAllReady(wandb *apiv2.WeightsAndBiases) bool {
-	return allInstancesReady(wandb.Spec.ObjectStore, wandb.Status.ObjectStoreStatus, func(s apiv2.ObjectStoreInfraStatus) bool { return s.Ready })
+func objectStoreAllReady(deployment common.DeploymentResource) bool {
+	return allInstancesReady(deployment.GetBaseDeploymentSpec().ObjectStore, deployment.GetBaseDeploymentStatus().ObjectStoreStatus, func(s apiv2.ObjectStoreInfraStatus) bool { return s.Ready })
 }
 
-func clickHouseAllReady(wandb *apiv2.WeightsAndBiases) bool {
-	return allInstancesReady(wandb.Spec.ClickHouse, wandb.Status.ClickHouseStatus, func(s apiv2.ClickHouseInfraStatus) bool { return s.Ready })
+func clickHouseAllReady(deployment common.DeploymentResource) bool {
+	return allInstancesReady(deployment.GetBaseDeploymentSpec().ClickHouse, deployment.GetBaseDeploymentStatus().ClickHouseStatus, func(s apiv2.ClickHouseInfraStatus) bool { return s.Ready })
 }
 
 // recordInfraStateMetrics publishes the current state of each dependency as

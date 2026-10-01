@@ -20,6 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -77,11 +78,11 @@ const (
 
 // pullSecretsPtr adapts global.imagePullSecrets to the redis CRD's pointer field,
 // returning nil when none are configured.
-func pullSecretsPtr(wandb *apiv2.WeightsAndBiases) *[]corev1.LocalObjectReference {
-	if len(wandb.Spec.Global.ImagePullSecrets) == 0 {
+func pullSecretsPtr(global apiv2.GlobalSpec) *[]corev1.LocalObjectReference {
+	if len(global.ImagePullSecrets) == 0 {
 		return nil
 	}
-	secrets := wandb.Spec.Global.ImagePullSecrets
+	secrets := global.ImagePullSecrets
 	return &secrets
 }
 
@@ -145,7 +146,7 @@ func redisRuntimeDefaultSeccompProfile() *corev1.SeccompProfile {
 
 // createRedisExporterConfig creates a RedisExporter configuration if telemetry is enabled.
 // Returns nil if telemetry is disabled.
-func createRedisExporterConfig(telemetry apiv2.Telemetry, img manifest.ImageRef, wandb *apiv2.WeightsAndBiases) *rediscommon.RedisExporter {
+func createRedisExporterConfig(telemetry apiv2.Telemetry, img manifest.ImageRef, globalImageRegistry string) *rediscommon.RedisExporter {
 	if !telemetry.Enabled {
 		return nil
 	}
@@ -154,7 +155,7 @@ func createRedisExporterConfig(telemetry apiv2.Telemetry, img manifest.ImageRef,
 	return &rediscommon.RedisExporter{
 		Enabled:         true,
 		Port:            &port,
-		Image:           DefaultRedisExporterImage(img, wandb.Spec.Global.ImageRegistry),
+		Image:           DefaultRedisExporterImage(img, globalImageRegistry),
 		ImagePullPolicy: corev1.PullIfNotPresent,
 		SecurityContext: redisContainerSecurityContext(),
 	}
@@ -165,10 +166,11 @@ func createRedisExporterConfig(telemetry apiv2.Telemetry, img manifest.ImageRef,
 // Returns an error if sentinel is enabled in the spec.
 func ToRedisStandaloneVendorSpec(
 	ctx context.Context,
-	wandb *apiv2.WeightsAndBiases,
+	owner client.Object,
+	deployment *apiv2.BaseDeploymentSpec,
 	spec *apiv2.ManagedRedisSpec,
 	scheme *runtime.Scheme,
-	mfst manifest.Manifest,
+	config manifest.InfraConfig,
 ) (*redisv1beta2.Redis, error) {
 	_, log := logx.WithSlog(ctx, logx.Redis)
 	if spec == nil {
@@ -195,19 +197,19 @@ func ToRedisStandaloneVendorSpec(
 		},
 		Spec: redisv1beta2.RedisSpec{
 			KubernetesConfig: rediscommon.KubernetesConfig{
-				Image:            RedisStandaloneImage(mfst.Redis["default"].Images["standalone"], wandb.Spec.Global.ImageRegistry),
+				Image:            RedisStandaloneImage(config.Images["standalone"], deployment.Global.ImageRegistry),
 				ImagePullPolicy:  corev1.PullIfNotPresent,
-				ImagePullSecrets: pullSecretsPtr(wandb),
+				ImagePullSecrets: pullSecretsPtr(deployment.Global),
 				Resources:        &corev1.ResourceRequirements{},
 			},
-			Affinity:           wandb.GetAffinity(spec.ManagedInfraSpec),
+			Affinity:           deployment.GetAffinity(spec.ManagedInfraSpec),
 			PodSecurityContext: redisPodSecurityContext(),
 			SecurityContext:    redisContainerSecurityContext(),
-			Tolerations:        wandb.GetTolerations(spec.ManagedInfraSpec),
+			Tolerations:        deployment.GetTolerations(spec.ManagedInfraSpec),
 			Storage: &rediscommon.Storage{
 				VolumeClaimTemplate: corev1.PersistentVolumeClaim{
 					ObjectMeta: metav1.ObjectMeta{
-						Labels: BuildWandbRedisLabels(wandb),
+						Labels: BuildRedisLabels(owner),
 					},
 					Spec: corev1.PersistentVolumeClaimSpec{
 						AccessModes: []corev1.PersistentVolumeAccessMode{
@@ -232,12 +234,12 @@ func ToRedisStandaloneVendorSpec(
 		}
 	}
 
-	if err := ctrl.SetControllerReference(wandb, redis, scheme); err != nil {
+	if err := ctrl.SetControllerReference(owner, redis, scheme); err != nil {
 		log.Error("failed to set owner reference on Redis CR", logx.ErrAttr(err))
 		return nil, fmt.Errorf("failed to set owner reference: %w", err)
 	}
 
-	redis.Spec.RedisExporter = createRedisExporterConfig(spec.Telemetry, mfst.Redis["default"].Images["exporter"], wandb)
+	redis.Spec.RedisExporter = createRedisExporterConfig(spec.Telemetry, config.Images["exporter"], deployment.Global.ImageRegistry)
 
 	return redis, nil
 }
@@ -247,10 +249,11 @@ func ToRedisStandaloneVendorSpec(
 // Returns an error if sentinel is not enabled in the spec.
 func ToRedisSentinelVendorSpec(
 	ctx context.Context,
-	wandb *apiv2.WeightsAndBiases,
+	owner client.Object,
+	deployment *apiv2.BaseDeploymentSpec,
 	spec *apiv2.ManagedRedisSpec,
 	scheme *runtime.Scheme,
-	mfst manifest.Manifest,
+	config manifest.InfraConfig,
 ) (*redissentinelv1beta2.RedisSentinel, error) {
 	_, log := logx.WithSlog(ctx, logx.Redis)
 	if spec == nil {
@@ -282,15 +285,15 @@ func ToRedisSentinelVendorSpec(
 		Spec: redissentinelv1beta2.RedisSentinelSpec{
 			Size: &sentinelCount,
 			KubernetesConfig: rediscommon.KubernetesConfig{
-				Image:            RedisSentinelImage(mfst.Redis["default"].Images["sentinel"], wandb.Spec.Global.ImageRegistry),
+				Image:            RedisSentinelImage(config.Images["sentinel"], deployment.Global.ImageRegistry),
 				ImagePullPolicy:  corev1.PullIfNotPresent,
-				ImagePullSecrets: pullSecretsPtr(wandb),
+				ImagePullSecrets: pullSecretsPtr(deployment.Global),
 				Resources:        &corev1.ResourceRequirements{},
 			},
 			PodSecurityContext: redisPodSecurityContext(),
 			SecurityContext:    redisContainerSecurityContext(),
-			Affinity:           wandb.GetAffinity(spec.ManagedInfraSpec),
-			Tolerations:        wandb.GetTolerations(spec.ManagedInfraSpec),
+			Affinity:           deployment.GetAffinity(spec.ManagedInfraSpec),
+			Tolerations:        deployment.GetTolerations(spec.ManagedInfraSpec),
 			VolumeMount:        redisAdditionalVolumePtr(),
 			RedisSentinelConfig: &redissentinelv1beta2.RedisSentinelConfig{
 				RedisSentinelConfig: rediscommon.RedisSentinelConfig{
@@ -310,13 +313,13 @@ func ToRedisSentinelVendorSpec(
 	}
 
 	// Set owner reference
-	if err := ctrl.SetControllerReference(wandb, sentinel, scheme); err != nil {
+	if err := ctrl.SetControllerReference(owner, sentinel, scheme); err != nil {
 		log.Error("failed to set owner reference on RedisSentinel CR", logx.ErrAttr(err))
 		return nil, fmt.Errorf("failed to set owner reference: %w", err)
 	}
 
 	// Add RedisExporter if telemetry is enabled
-	sentinel.Spec.RedisExporter = createRedisExporterConfig(spec.Telemetry, mfst.Redis["default"].Images["exporter"], wandb)
+	sentinel.Spec.RedisExporter = createRedisExporterConfig(spec.Telemetry, config.Images["exporter"], deployment.Global.ImageRegistry)
 
 	return sentinel, nil
 }
@@ -326,10 +329,11 @@ func ToRedisSentinelVendorSpec(
 // Returns an error if sentinel is not enabled in the spec.
 func ToRedisReplicationVendorSpec(
 	ctx context.Context,
-	wandb *apiv2.WeightsAndBiases,
+	owner client.Object,
+	deployment *apiv2.BaseDeploymentSpec,
 	spec *apiv2.ManagedRedisSpec,
 	scheme *runtime.Scheme,
-	mfst manifest.Manifest,
+	config manifest.InfraConfig,
 ) (*redisreplicationv1beta2.RedisReplication, error) {
 	_, log := logx.WithSlog(ctx, logx.Redis)
 	if spec == nil {
@@ -362,19 +366,19 @@ func ToRedisReplicationVendorSpec(
 		Spec: redisreplicationv1beta2.RedisReplicationSpec{
 			Size: &replicaCount,
 			KubernetesConfig: rediscommon.KubernetesConfig{
-				Image:            RedisReplicationImage(mfst.Redis["default"].Images["replication"], wandb.Spec.Global.ImageRegistry),
+				Image:            RedisReplicationImage(config.Images["replication"], deployment.Global.ImageRegistry),
 				ImagePullPolicy:  corev1.PullIfNotPresent,
-				ImagePullSecrets: pullSecretsPtr(wandb),
+				ImagePullSecrets: pullSecretsPtr(deployment.Global),
 				Resources:        &corev1.ResourceRequirements{},
 			},
 			PodSecurityContext: redisPodSecurityContext(),
 			SecurityContext:    redisContainerSecurityContext(),
-			Affinity:           wandb.GetAffinity(spec.ManagedInfraSpec),
-			Tolerations:        wandb.GetTolerations(spec.ManagedInfraSpec),
+			Affinity:           deployment.GetAffinity(spec.ManagedInfraSpec),
+			Tolerations:        deployment.GetTolerations(spec.ManagedInfraSpec),
 			Storage: &rediscommon.Storage{
 				VolumeClaimTemplate: corev1.PersistentVolumeClaim{
 					ObjectMeta: metav1.ObjectMeta{
-						Labels: BuildWandbRedisLabels(wandb),
+						Labels: BuildRedisLabels(owner),
 					},
 					Spec: corev1.PersistentVolumeClaimSpec{
 						AccessModes: []corev1.PersistentVolumeAccessMode{
@@ -401,21 +405,21 @@ func ToRedisReplicationVendorSpec(
 	}
 
 	// Set owner reference
-	if err := ctrl.SetControllerReference(wandb, replication, scheme); err != nil {
+	if err := ctrl.SetControllerReference(owner, replication, scheme); err != nil {
 		log.Error("failed to set owner reference on RedisReplication CR", logx.ErrAttr(err))
 		return nil, fmt.Errorf("failed to set owner reference: %w", err)
 	}
 
 	// Add RedisExporter if telemetry is enabled
-	replication.Spec.RedisExporter = createRedisExporterConfig(spec.Telemetry, mfst.Redis["default"].Images["exporter"], wandb)
+	replication.Spec.RedisExporter = createRedisExporterConfig(spec.Telemetry, config.Images["exporter"], deployment.Global.ImageRegistry)
 
 	return replication, nil
 }
 
-func BuildWandbRedisLabels(wandb *apiv2.WeightsAndBiases) map[string]string {
-	return common.BuildWandbLabels(wandb, RedisModuleName)
+func BuildRedisLabels(owner client.Object) map[string]string {
+	return common.BuildWandbLabels(owner, RedisModuleName)
 }
 
-func ToRedisOnDeleteRule(wandb *apiv2.WeightsAndBiases, retentionPolicy apiv2.RetentionPolicy) common.OnDeleteRule {
-	return common.ToOnDeleteRule(wandb, retentionPolicy, RedisModuleName)
+func ToRedisOnDeleteRule(owner client.Object, retentionPolicy apiv2.RetentionPolicy) common.OnDeleteRule {
+	return common.ToOnDeleteRule(owner, retentionPolicy, RedisModuleName)
 }

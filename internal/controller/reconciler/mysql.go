@@ -26,16 +26,16 @@ import (
 func mysqlWriteState(
 	ctx context.Context,
 	client client.Client,
-	wandb *apiv2.WeightsAndBiases,
-	mfst manifest.Manifest,
+	deployment common.DeploymentResource,
+	config manifest.InfraConfig,
 ) map[string][]metav1.Condition {
 	out := map[string][]metav1.Condition{}
-	for key, spec := range wandb.Spec.MySQL {
+	for key, spec := range deployment.GetBaseDeploymentSpec().MySQL {
 		switch {
 		case spec.ManagedMysql != nil:
-			out[key] = managedMysqlWriteState(ctx, client, wandb, spec.ManagedMysql, mfst)
+			out[key] = managedMysqlWriteState(ctx, client, deployment, spec.ManagedMysql, config)
 		case spec.ExternalMysql != nil:
-			out[key] = externalmysql.WriteState(ctx, client, wandb, key, spec.ExternalMysql)
+			out[key] = externalmysql.WriteState(ctx, client, deployment, key, spec.ExternalMysql)
 		}
 	}
 	return out
@@ -44,17 +44,18 @@ func mysqlWriteState(
 func mysqlReadState(
 	ctx context.Context,
 	client client.Client,
-	wandb *apiv2.WeightsAndBiases,
+	deployment common.DeploymentResource,
 	conditions map[string][]metav1.Condition,
+	database string,
 ) (map[string][]metav1.Condition, map[string]*apiv2.MysqlConnection) {
 	outConds := map[string][]metav1.Condition{}
 	outConns := map[string]*apiv2.MysqlConnection{}
-	for key, spec := range wandb.Spec.MySQL {
+	for key, spec := range deployment.GetBaseDeploymentSpec().MySQL {
 		switch {
 		case spec.ManagedMysql != nil:
-			outConds[key], outConns[key] = managedMysqlReadState(ctx, client, wandb, spec.ManagedMysql, conditions[key])
+			outConds[key], outConns[key] = managedMysqlReadState(ctx, client, deployment, spec.ManagedMysql, conditions[key], database)
 		case spec.ExternalMysql != nil:
-			outConds[key], outConns[key] = externalmysql.ReadState(ctx, client, wandb, key, conditions[key])
+			outConds[key], outConns[key] = externalmysql.ReadState(ctx, client, deployment, key, conditions[key])
 		default:
 			outConds[key] = conditions[key]
 		}
@@ -66,23 +67,23 @@ func mysqlInferStatus(
 	ctx context.Context,
 	client client.Client,
 	recorder record.EventRecorder,
-	wandb *apiv2.WeightsAndBiases,
+	deployment common.DeploymentResource,
 	conditions map[string][]metav1.Condition,
 	infraConns map[string]*apiv2.MysqlConnection,
 ) (ctrl.Result, error) {
-	if wandb.Status.MySQLStatus == nil {
-		wandb.Status.MySQLStatus = map[string]apiv2.MysqlInfraStatus{}
+	if deployment.GetBaseDeploymentStatus().MySQLStatus == nil {
+		deployment.GetBaseDeploymentStatus().MySQLStatus = map[string]apiv2.MysqlInfraStatus{}
 	}
 	var results []ctrl.Result
 	var firstErr error
-	for key, spec := range wandb.Spec.MySQL {
+	for key, spec := range deployment.GetBaseDeploymentSpec().MySQL {
 		var res ctrl.Result
 		var err error
 		switch {
 		case spec.ManagedMysql != nil:
-			res, err = managedMysqlInferStatus(ctx, client, recorder, wandb, key, conditions[key], infraConns[key])
+			res, err = managedMysqlInferStatus(ctx, client, recorder, deployment, key, conditions[key], infraConns[key])
 		case spec.ExternalMysql != nil:
-			res, err = externalMysqlInferStatus(ctx, client, wandb, key, conditions[key], infraConns[key])
+			res, err = externalMysqlInferStatus(ctx, client, deployment, key, conditions[key], infraConns[key])
 		}
 		results = append(results, res)
 		if err != nil && firstErr == nil {
@@ -94,12 +95,12 @@ func mysqlInferStatus(
 
 // runMysqlRetentionFinalizer applies the configured retention policy for a
 // single MySQL instance during deletion.
-func runMysqlRetentionFinalizer(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, key string, spec apiv2.MySQLSpec) error {
-	switch wandb.GetRetentionPolicy(mysqlInstanceInfraSpec(spec)).OnDelete {
+func runMysqlRetentionFinalizer(ctx context.Context, c client.Client, deployment common.DeploymentResource, key string, spec apiv2.MySQLSpec) error {
+	switch deployment.GetBaseDeploymentSpec().GetRetentionPolicy(mysqlInstanceInfraSpec(spec)).OnDelete {
 	case apiv2.PurgeOnDelete:
-		return mysqlPurgeFinalizer(ctx, c, wandb, key, spec)
+		return mysqlPurgeFinalizer(ctx, c, deployment, key, spec)
 	case apiv2.DetachOnDelete:
-		return mysqlDetachFinalizer(ctx, c, wandb, key, spec)
+		return mysqlDetachFinalizer(ctx, c, deployment, key, spec)
 	}
 	return nil
 }
@@ -114,17 +115,17 @@ func mysqlInstanceInfraSpec(spec apiv2.MySQLSpec) apiv2.ManagedInfraSpec {
 func mysqlPurgeFinalizer(
 	ctx context.Context,
 	client client.Client,
-	wandb *apiv2.WeightsAndBiases,
+	deployment common.DeploymentResource,
 	key string,
 	spec apiv2.MySQLSpec,
 ) error {
 	if managed := spec.ManagedMysql; managed != nil {
 		specNamespacedName := managedMysqlSpecNamespacedName(managed)
-		onDeleteRule := moco.ToMysqlOnDeleteRule(wandb, wandb.GetRetentionPolicy(managed.ManagedInfraSpec))
+		onDeleteRule := moco.ToMysqlOnDeleteRule(deployment, deployment.GetBaseDeploymentSpec().GetRetentionPolicy(managed.ManagedInfraSpec))
 		return moco.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule)
 	}
 	if spec.ExternalMysql != nil {
-		return externalmysql.DeleteConnectionSecret(ctx, client, wandb, key)
+		return externalmysql.DeleteConnectionSecret(ctx, client, deployment, key)
 	}
 	return nil
 }
@@ -132,7 +133,7 @@ func mysqlPurgeFinalizer(
 func mysqlDetachFinalizer(
 	ctx context.Context,
 	client client.Client,
-	wandb *apiv2.WeightsAndBiases,
+	deployment common.DeploymentResource,
 	_ string,
 	spec apiv2.MySQLSpec,
 ) error {
@@ -141,7 +142,7 @@ func mysqlDetachFinalizer(
 		return nil
 	}
 	specNamespacedName := managedMysqlSpecNamespacedName(managed)
-	return moco.DetachFinalizer(ctx, client, specNamespacedName, wandb)
+	return moco.DetachFinalizer(ctx, client, specNamespacedName, deployment)
 }
 
 // managed
@@ -149,9 +150,9 @@ func mysqlDetachFinalizer(
 func managedMysqlWriteState(
 	ctx context.Context,
 	client client.Client,
-	wandb *apiv2.WeightsAndBiases,
+	deployment common.DeploymentResource,
 	spec *apiv2.ManagedMysqlSpec,
-	mfst manifest.Manifest,
+	config manifest.InfraConfig,
 ) []metav1.Condition {
 	var specNamespacedName = managedMysqlSpecNamespacedName(spec)
 	logger := ctrl.LoggerFrom(ctx)
@@ -185,7 +186,7 @@ func managedMysqlWriteState(
 				}
 			}
 
-			dbPasswordSecret.Labels = moco.BuildWandbMysqlLabels(wandb)
+			dbPasswordSecret.Labels = moco.BuildMysqlLabels(deployment)
 			dbPasswordSecret.Data = map[string][]byte{
 				"rootUser":     []byte("root"),
 				"rootPassword": []byte(rootPassword),
@@ -214,13 +215,13 @@ func managedMysqlWriteState(
 		}
 	}
 
-	if conditions := moco.CheckDetached(ctx, client, specNamespacedName, wandb.GetUID(), spec.Replicas); conditions != nil {
+	if conditions := moco.CheckDetached(ctx, client, specNamespacedName, deployment.GetUID(), spec.Replicas); conditions != nil {
 		return conditions
 	}
 
 	var desired *mocov1beta2.MySQLCluster
 	var confMap *corev1.ConfigMap
-	desired, confMap, err = moco.ToMocoMySQLClusterSpec(ctx, *spec, wandb, client.Scheme(), mfst)
+	desired, confMap, err = moco.ToMocoMySQLClusterSpec(ctx, *spec, deployment, deployment.GetBaseDeploymentSpec().Global, client.Scheme(), config)
 	if err != nil {
 		logger.Error(err, "failed to translate moco spec")
 		return []metav1.Condition{
@@ -231,19 +232,20 @@ func managedMysqlWriteState(
 			},
 		}
 	}
-	return moco.WriteState(ctx, client, specNamespacedName, desired, confMap, moco.BuildWandbMysqlLabels(wandb))
+	return moco.WriteState(ctx, client, specNamespacedName, desired, confMap, moco.BuildMysqlLabels(deployment))
 }
 
 func managedMysqlReadState(
 	ctx context.Context,
 	client client.Client,
-	wandb *apiv2.WeightsAndBiases,
+	deployment common.DeploymentResource,
 	spec *apiv2.ManagedMysqlSpec,
 	newConditions []metav1.Condition,
+	database string,
 ) ([]metav1.Condition, *apiv2.MysqlConnection) {
 	specNamespacedName := managedMysqlSpecNamespacedName(spec)
 
-	readConditions, newInfraConn := moco.ReadState(ctx, client, specNamespacedName, wandb, moco.ToMysqlOnDeleteRule(wandb, wandb.GetRetentionPolicy(spec.ManagedInfraSpec)))
+	readConditions, newInfraConn := moco.ReadState(ctx, client, specNamespacedName, deployment, moco.ToMysqlOnDeleteRule(deployment, deployment.GetBaseDeploymentSpec().GetRetentionPolicy(spec.ManagedInfraSpec)), database)
 	newConditions = append(newConditions, readConditions...)
 	return newConditions, newInfraConn
 }
@@ -252,14 +254,14 @@ func managedMysqlInferStatus(
 	ctx context.Context,
 	client client.Client,
 	recorder record.EventRecorder,
-	wandb *apiv2.WeightsAndBiases,
+	deployment common.DeploymentResource,
 	key string,
 	newConditions []metav1.Condition,
 	newInfraConn *apiv2.MysqlConnection,
 ) (ctrl.Result, error) {
-	statusBefore := wandb.DeepCopy().Status
+	statusBefore := deployment.GetBaseDeploymentStatus().DeepCopy()
 	enabled := true
-	oldStatus := wandb.Status.MySQLStatus[key]
+	oldStatus := deployment.GetBaseDeploymentStatus().MySQLStatus[key]
 	oldConditions := oldStatus.Conditions
 	oldInfraConn := oldStatus.Connection
 
@@ -269,32 +271,32 @@ func managedMysqlInferStatus(
 		oldConditions,
 		newConditions,
 		utils.Coalesce(newInfraConn, &oldInfraConn),
-		wandb.Generation,
+		deployment.GetGeneration(),
 	)
 
 	for _, e := range events {
-		recorder.Event(wandb, e.Type, e.Reason, e.Message)
+		recorder.Event(deployment, e.Type, e.Reason, e.Message)
 	}
-	wandb.Status.MySQLStatus[key] = updatedStatus
-	err := updateWandbStatusIfChanged(ctx, client, wandb, statusBefore)
+	deployment.GetBaseDeploymentStatus().MySQLStatus[key] = updatedStatus
+	err := updateDeploymentStatusIfChanged(ctx, client, deployment, statusBefore)
 
 	return ctrlResult, err
 }
 
 // external
 
-func externalMysqlInferStatus(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, key string, newConditions []metav1.Condition, newInfraConn *apiv2.MysqlConnection) (ctrl.Result, error) {
-	statusBefore := wandb.DeepCopy().Status
-	oldStatus := wandb.Status.MySQLStatus[key]
+func externalMysqlInferStatus(ctx context.Context, c client.Client, deployment common.DeploymentResource, key string, newConditions []metav1.Condition, newInfraConn *apiv2.MysqlConnection) (ctrl.Result, error) {
+	statusBefore := deployment.GetBaseDeploymentStatus().DeepCopy()
+	oldStatus := deployment.GetBaseDeploymentStatus().MySQLStatus[key]
 	oldInfraConn := oldStatus.Connection
-	state, ready, updatedConditions := external.InferExternalStatus(oldStatus.Conditions, newConditions, wandb.Generation, newInfraConn != nil)
+	state, ready, updatedConditions := external.InferExternalStatus(oldStatus.Conditions, newConditions, deployment.GetGeneration(), newInfraConn != nil)
 	conn := utils.Coalesce(newInfraConn, &oldInfraConn)
 
-	wandb.Status.MySQLStatus[key] = apiv2.MysqlInfraStatus{
+	deployment.GetBaseDeploymentStatus().MySQLStatus[key] = apiv2.MysqlInfraStatus{
 		WBInfraStatus: apiv2.WBInfraStatus{Ready: ready, State: state, Conditions: updatedConditions},
 		Connection:    *conn,
 	}
-	return ctrl.Result{}, updateWandbStatusIfChanged(ctx, c, wandb, statusBefore)
+	return ctrl.Result{}, updateDeploymentStatusIfChanged(ctx, c, deployment, statusBefore)
 }
 
 // helpers

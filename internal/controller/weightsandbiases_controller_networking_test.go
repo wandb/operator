@@ -579,42 +579,46 @@ func newNetworkingWandb(name string, infraNamespace string) (*apiv2.WeightsAndBi
 			Namespace: "default",
 		},
 		Spec: apiv2.WeightsAndBiasesSpec{
-			Size: apiv2.SizeDev,
-			Wandb: apiv2.WandbAppSpec{
-				Hostname:           "http://localhost",
-				Features:           map[string]bool{},
-				ManifestRepository: manifestsRepository,
-				Version:            "0.83.0-clickhouse-keeper.2",
-				InternalServiceAuth: apiv2.InternalServiceAuth{
-					Enabled: &internalServiceAuthEnabled,
+			BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+				Size: apiv2.SizeDev,
+				RetentionPolicy: apiv2.RetentionPolicy{
+					OnDelete: apiv2.DetachOnDelete,
 				},
-			},
-			RetentionPolicy: apiv2.RetentionPolicy{
-				OnDelete: apiv2.DetachOnDelete,
-			},
-			MySQL: map[string]apiv2.MySQLSpec{
-				apiv2.DefaultInstanceName: {
-					ManagedMysql: &apiv2.ManagedMysqlSpec{},
+				MySQL: map[string]apiv2.MySQLSpec{
+					apiv2.DefaultInstanceName: {
+						ManagedMysql: &apiv2.ManagedMysqlSpec{},
+					},
 				},
-			},
-			Redis: map[string]apiv2.RedisSpec{
-				apiv2.DefaultInstanceName: {
-					ManagedRedis: &apiv2.ManagedRedisSpec{},
+				Redis: map[string]apiv2.RedisSpec{
+					apiv2.DefaultInstanceName: {
+						ManagedRedis: &apiv2.ManagedRedisSpec{},
+					},
 				},
-			},
-			Kafka: apiv2.KafkaSpec{
-				ManagedKafka: &apiv2.ManagedKafkaSpec{},
-			},
-			ObjectStore: map[string]apiv2.ObjectStoreSpec{
-				apiv2.DefaultInstanceName: {
-					ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{
-						Namespace: infraNamespace,
+				Kafka: apiv2.KafkaSpec{
+					ManagedKafka: &apiv2.ManagedKafkaSpec{},
+				},
+				ObjectStore: map[string]apiv2.ObjectStoreSpec{
+					apiv2.DefaultInstanceName: {
+						ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{
+							Namespace: infraNamespace,
+						},
+					},
+				},
+				ClickHouse: map[string]apiv2.ClickHouseSpec{
+					apiv2.DefaultInstanceName: {
+						ManagedClickHouse: &apiv2.ManagedClickHouseSpec{},
 					},
 				},
 			},
-			ClickHouse: map[string]apiv2.ClickHouseSpec{
-				apiv2.DefaultInstanceName: {
-					ManagedClickHouse: &apiv2.ManagedClickHouseSpec{},
+			Wandb: apiv2.WandbAppSpec{
+				BaseWorkloadSpec: apiv2.BaseWorkloadSpec{
+					Hostname:           "http://localhost",
+					Features:           map[string]bool{},
+					ManifestRepository: manifestsRepository,
+					Version:            "0.83.0-clickhouse-keeper.2",
+				},
+				InternalServiceAuth: apiv2.InternalServiceAuth{
+					Enabled: &internalServiceAuthEnabled,
 				},
 			},
 		},

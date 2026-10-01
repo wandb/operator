@@ -22,15 +22,15 @@ import (
 func WriteState(
 	ctx context.Context,
 	cl client.Client,
-	wandb *apiv2.WeightsAndBiases,
-	mfst manifest.Manifest,
+	deployment common.DeploymentResource,
+	config manifest.KafkaConfig,
 ) []metav1.Condition {
 	ctx, log := logx.WithSlog(ctx, logx.Kafka)
 
-	spec := wandb.Spec.Kafka.ManagedKafka
+	spec := deployment.GetBaseDeploymentSpec().Kafka.ManagedKafka
 	nsnBuilder := CreateNsNameBuilder(types.NamespacedName{Namespace: spec.Namespace, Name: spec.Name})
 
-	storage, ready, err := resolveStorage(ctx, cl, wandb, spec)
+	storage, ready, err := resolveStorage(ctx, cl, deployment, spec)
 	if err != nil {
 		log.Error("failed to resolve object store connection for bufstream", logx.ErrAttr(err))
 		return []metav1.Condition{
@@ -44,34 +44,33 @@ func WriteState(
 			{Type: ObjectStoreReadyType, Status: metav1.ConditionFalse, Reason: common.PendingCreateReason},
 		}
 	}
-	//objectStoreSpec, _ := apiv2.ResolveInstance(wandb.Spec.ObjectStore, bufstreamObjectStoreInstance)
 	ensureBucket := false
 
-	credsSecret, err := ToCredentialsSecret(wandb, nsnBuilder, storage, cl.Scheme())
+	credsSecret, err := ToCredentialsSecret(deployment, nsnBuilder, storage, cl.Scheme())
 	if err != nil {
 		return translateError(err)
 	}
-	configMap, err := ToConfigMap(wandb, nsnBuilder, storage, cl.Scheme())
+	configMap, err := ToConfigMap(deployment, nsnBuilder, storage, cl.Scheme())
 	if err != nil {
 		return translateError(err)
 	}
-	serviceAccount, err := ToServiceAccount(wandb, nsnBuilder, storage, cl.Scheme())
+	serviceAccount, err := ToServiceAccount(deployment, spec, nsnBuilder, storage, cl.Scheme())
 	if err != nil {
 		return translateError(err)
 	}
 	// On OpenShift, bind the SA to nonroot-v2 so broker runs as its fixed UID.
 	var sccRoleBinding *rbacv1.RoleBinding
 	if utils.IsOpenShift() {
-		sccRoleBinding, err = ToSccRoleBinding(wandb, nsnBuilder, cl.Scheme())
+		sccRoleBinding, err = ToSccRoleBinding(deployment, spec, nsnBuilder, cl.Scheme())
 		if err != nil {
 			return translateError(err)
 		}
 	}
-	etcdApp, err := ToEtcdApplication(wandb, nsnBuilder, cl.Scheme(), mfst)
+	etcdApp, err := ToEtcdApplication(deployment, deployment.GetBaseDeploymentSpec(), nsnBuilder, cl.Scheme(), config)
 	if err != nil {
 		return translateError(err)
 	}
-	bufstreamApp, err := ToBufstreamApplication(wandb, nsnBuilder, storage, ensureBucket, cl.Scheme(), mfst)
+	bufstreamApp, err := ToBufstreamApplication(deployment, deployment.GetBaseDeploymentSpec(), nsnBuilder, storage, ensureBucket, cl.Scheme(), config)
 	if err != nil {
 		return translateError(err)
 	}
@@ -166,10 +165,10 @@ const bufstreamObjectStoreInstance = "bufstream"
 func resolveStorage(
 	ctx context.Context,
 	cl client.Client,
-	wandb *apiv2.WeightsAndBiases,
+	deployment common.DeploymentResource,
 	spec *apiv2.ManagedKafkaSpec,
 ) (objectstore.ConnInfo, bool, error) {
-	status, ok := apiv2.ResolveInstance(wandb.Status.ObjectStoreStatus, bufstreamObjectStoreInstance)
+	status, ok := apiv2.ResolveInstance(deployment.GetBaseDeploymentStatus().ObjectStoreStatus, bufstreamObjectStoreInstance)
 	if !ok || !status.Ready {
 		return objectstore.ConnInfo{}, false, nil
 	}
