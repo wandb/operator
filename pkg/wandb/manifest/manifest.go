@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"maps"
 	"net/http"
 	"net/url"
 	"os"
@@ -35,13 +34,15 @@ import (
 	"oras.land/oras-go/v2/registry/remote/retry"
 
 	corev1 "k8s.io/api/core/v1"
-	"sigs.k8s.io/yaml"
 )
 
 // Manifest defines the structure of the server manifest YAML (e.g. 0.76.1.yaml).
 // It is intended to be a direct mapping of the YAML document for decoding via
 // gopkg.in/yaml.v3 or sigs.k8s.io/yaml.
 type Manifest struct {
+	ManifestVersion int `json:"manifestVersion,omitempty" yaml:"manifestVersion,omitempty"`
+	versionExplicit bool
+	// Deprecated: product version constraints are not enforced.
 	RequiredOperatorVersion string          `yaml:"requiredOperatorVersion"`
 	Features                map[string]bool `yaml:"features,omitempty"`
 	// Prefer plural, but accept singular key as found in some manifests.
@@ -390,27 +391,19 @@ func LoadManifestFromFile(ctx context.Context, repository string, version string
 }
 
 func loadManifestFromFiles(ctx context.Context, manifestFiles []string) (Manifest, error) {
-	logger := logx.GetSlog(ctx)
-	manifest := Manifest{}
-
-	for _, manifestFile := range manifestFiles {
-		manifestData, err := os.ReadFile(manifestFile)
+	files := make(map[string][]byte, len(manifestFiles))
+	for _, name := range manifestFiles {
+		data, err := os.ReadFile(name)
 		if err != nil {
-			logger.Error("failed to read manifest file", "file", manifestFile, "error", err)
-			return Manifest{}, err
+			return Manifest{}, fmt.Errorf("read manifest file %q: %w", name, err)
 		}
-		var fileManifest Manifest
-		if err = yaml.Unmarshal(manifestData, &fileManifest); err != nil {
-			logger.Error("failed to unmarshal manifest file", "file", manifestFile, "error", err)
-			return Manifest{}, fmt.Errorf("failed to unmarshal %q: %w", manifestFile, err)
-		}
-
-		// Simple merge: preserve existing data, add new data
-		mergeSimple(&manifest, &fileManifest)
+		files[name] = data
 	}
-
-	logger.Debug("loaded manifest files", "count", len(manifestFiles), "files", manifestFiles, "manifest", manifest)
-	return manifest, nil
+	m, err := decodeManifestFiles(files)
+	if err == nil {
+		logx.GetSlog(ctx).Debug("loaded manifest files", "files", manifestFiles, "manifestVersion", m.ManifestVersion)
+	}
+	return m, err
 }
 
 // mergeSimple performs a simple merge that preserves existing data and adds new data
@@ -713,8 +706,7 @@ func processManifest(ctx context.Context, repo oras.ReadOnlyTarget, descriptor o
 		for _, layer := range ociManifest.Layers {
 			layerReader, err := repo.Fetch(ctx, layer)
 			if err != nil {
-				logger.Error("failed to fetch layer", "digest", layer.Digest, "err", err)
-				continue
+				return Manifest{}, fmt.Errorf("fetch manifest layer %s: %w", layer.Digest, err)
 			}
 
 			var tr *tar.Reader
@@ -722,8 +714,7 @@ func processManifest(ctx context.Context, repo oras.ReadOnlyTarget, descriptor o
 				gzr, err := gzip.NewReader(layerReader)
 				if err != nil {
 					layerReader.Close()
-					logger.Error("failed to create gzip reader for layer", "digest", layer.Digest, "err", err)
-					continue
+					return Manifest{}, fmt.Errorf("decompress manifest layer %s: %w", layer.Digest, err)
 				}
 				tr = tar.NewReader(gzr)
 				defer gzr.Close()
@@ -738,8 +729,7 @@ func processManifest(ctx context.Context, repo oras.ReadOnlyTarget, descriptor o
 					break
 				}
 				if err != nil {
-					logger.Error("failed to read tar header", "err", err)
-					break
+					return Manifest{}, fmt.Errorf("read manifest layer %s: %w", layer.Digest, err)
 				}
 
 				if filepath.Ext(header.Name) != ".yaml" {
@@ -748,8 +738,7 @@ func processManifest(ctx context.Context, repo oras.ReadOnlyTarget, descriptor o
 
 				manifestBytes, err := io.ReadAll(tr)
 				if err != nil {
-					logger.Error("failed to read manifest file", "file", header.Name, "err", err)
-					continue
+					return Manifest{}, fmt.Errorf("read manifest file %q: %w", header.Name, err)
 				}
 
 				manifestFileContents[header.Name] = manifestBytes
@@ -760,19 +749,8 @@ func processManifest(ctx context.Context, repo oras.ReadOnlyTarget, descriptor o
 			return manifest, errors.New("no manifest yaml files found in image layers")
 		}
 
-		manifestFiles := slices.Sorted(maps.Keys(manifestFileContents))
-		for _, manifestFile := range manifestFiles {
-			var fileManifest Manifest
-			if err := yaml.Unmarshal(manifestFileContents[manifestFile], &fileManifest); err != nil {
-				logger.Error("failed to unmarshal manifest file", "file", manifestFile, "err", err)
-				return Manifest{}, fmt.Errorf("failed to unmarshal %q: %w", manifestFile, err)
-			}
+		return decodeManifestFiles(manifestFileContents)
 
-			mergeSimple(&manifest, &fileManifest)
-		}
-
-		logger.Debug("successfully unmarshaled manifest files", "files", manifestFiles, "manifest", manifest)
-		return manifest, nil
 	default:
 		return manifest, fmt.Errorf("unsupported media type: %s", descriptor.MediaType)
 	}
