@@ -209,22 +209,23 @@ func computeClickHouseReportedReadyCondition(
 			runningCount++
 		}
 	}
+	expectedPodCount := expectedClickHousePodCount(chi)
 
 	log.Info(
-		"Clickhouse pods status", "running", runningCount, "total", podCount,
+		"Clickhouse pods status", "running", runningCount, "reported", podCount, "expected", expectedPodCount,
 	)
 
 	status := metav1.ConditionUnknown
 	reason := ctrlcommon.UnknownReason
 	message := ""
 
-	if podCount > 0 && podCount == runningCount {
+	if expectedPodCount > 0 && podCount == expectedPodCount && podCount == runningCount {
 		status = metav1.ConditionTrue
 		reason = ctrlcommon.ResourceExistsReason
-	} else if podCount > 0 {
+	} else if expectedPodCount > 0 || podCount > 0 {
 		status = metav1.ConditionFalse
 		reason = ctrlcommon.NoResourceReason
-		message = fmt.Sprintf("%d of %d pods running", runningCount, podCount)
+		message = fmt.Sprintf("%d of %d expected pods running (%d reported)", runningCount, expectedPodCount, podCount)
 	}
 
 	return []metav1.Condition{
@@ -235,4 +236,26 @@ func computeClickHouseReportedReadyCondition(
 			Message: message,
 		},
 	}
+}
+
+func expectedClickHousePodCount(chi *chiv1.ClickHouseInstallation) int {
+	if chi == nil || chi.Spec.Configuration == nil {
+		return 0
+	}
+	var count int
+	for _, cluster := range chi.Spec.Configuration.Clusters {
+		if cluster == nil || cluster.Layout == nil {
+			continue
+		}
+		shards := cluster.Layout.ShardsCount
+		if shards < 1 {
+			shards = 1
+		}
+		replicas := cluster.Layout.ReplicasCount
+		if replicas < 1 {
+			replicas = 1
+		}
+		count += shards * replicas
+	}
+	return count
 }

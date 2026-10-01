@@ -2,6 +2,7 @@ package seaweedfs
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/samber/lo"
@@ -86,6 +87,13 @@ func applyDefaultConditions(conditions []metav1.Condition) []metav1.Condition {
 			Reason: common.NoResourceReason,
 		})
 	}
+	if !common.ContainsType(conditions, SeaweedTopologyReadyType) {
+		conditions = append(conditions, metav1.Condition{
+			Type:   SeaweedTopologyReadyType,
+			Status: metav1.ConditionUnknown,
+			Reason: common.NoResourceReason,
+		})
+	}
 
 	return conditions
 }
@@ -106,6 +114,7 @@ func inferInfraState(
 	impliedStates = inferStateFromCondition(ctx, SeaweedReportedReadyType, impliedStates, conditions)
 	impliedStates = inferStateFromCondition(ctx, SeaweedWritableType, impliedStates, conditions)
 	impliedStates = inferStateFromCondition(ctx, SeaweedS3ReachableType, impliedStates, conditions)
+	impliedStates = inferStateFromCondition(ctx, SeaweedTopologyReadyType, impliedStates, conditions)
 
 	hasImpliedState := func(target string) bool {
 		return len(lo.FilterValues(
@@ -161,11 +170,32 @@ func inferStateFromCondition(ctx context.Context, conditionType string, impliedS
 			impliedStates[conditionType] = inferState_SeaweedReportedReadyType(ctx, cond)
 		case SeaweedWritableType, SeaweedS3ReachableType:
 			impliedStates[conditionType] = inferState_SeaweedWritableType(ctx, cond)
+		case SeaweedTopologyReadyType:
+			impliedStates[conditionType] = inferState_SeaweedTopologyReadyType(ctx, cond)
 		default:
 			impliedStates[conditionType] = common.UnknownState
 		}
 	}
 	return impliedStates
+}
+
+func inferState_SeaweedTopologyReadyType(ctx context.Context, condition metav1.Condition) string {
+	log := logx.GetSlog(ctx)
+	result := common.PendingState
+	if condition.Status == metav1.ConditionTrue {
+		result = common.HealthyState
+	}
+	if condition.Status == metav1.ConditionFalse &&
+		(strings.Contains(condition.Reason, "Failed") ||
+			strings.Contains(condition.Reason, "Unsupported") ||
+			strings.Contains(condition.Reason, "Unexpected")) {
+		result = common.ErrorState
+	}
+	log.Debug(
+		"implied state", "state", result, "condition", condition.Type,
+		"reason", condition.Reason, "status", condition.Status,
+	)
+	return result
 }
 
 func inferState_SeaweedWritableType(ctx context.Context, condition metav1.Condition) string {

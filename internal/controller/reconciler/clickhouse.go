@@ -9,8 +9,10 @@ import (
 	externalch "github.com/wandb/operator/internal/controller/infra/external/clickhouse"
 	"github.com/wandb/operator/internal/controller/infra/managed/clickhouse/altinity"
 	"github.com/wandb/operator/internal/controller/infra/managed/clickhouse/altinity/keeper"
+	"github.com/wandb/operator/internal/controller/infra/managed/objectstore/seaweedfs"
 	"github.com/wandb/operator/pkg/utils"
 	"github.com/wandb/operator/pkg/wandb/manifest"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -28,12 +30,14 @@ func clickHouseWriteState(
 	client client.Client,
 	wandb *apiv2.WeightsAndBiases,
 	mfst manifest.Manifest,
+	objectStoreConditions map[string][]metav1.Condition,
 ) map[string][]metav1.Condition {
 	out := map[string][]metav1.Condition{}
+	topologyConditions, _ := apiv2.ResolveInstance(objectStoreConditions, clickHouseObjectStoreInstance)
 	for key, spec := range wandb.Spec.ClickHouse {
 		switch {
 		case spec.ManagedClickHouse != nil:
-			out[key] = managedClickHouseWriteState(ctx, client, wandb, spec.ManagedClickHouse, mfst)
+			out[key] = managedClickHouseWriteState(ctx, client, wandb, spec.ManagedClickHouse, mfst, topologyConditions)
 		case spec.ExternalClickHouse != nil:
 			out[key] = externalch.WriteState(ctx, client, wandb, key, spec.ExternalClickHouse)
 		}
@@ -150,6 +154,7 @@ func managedClickHouseWriteState(
 	wandb *apiv2.WeightsAndBiases,
 	spec *apiv2.ManagedClickHouseSpec,
 	mfst manifest.Manifest,
+	objectStoreConditions []metav1.Condition,
 ) []metav1.Condition {
 	log := ctrl.LoggerFrom(ctx)
 
@@ -178,6 +183,15 @@ func managedClickHouseWriteState(
 	objStoreStatus, _ := apiv2.ResolveInstance(wandb.Status.ObjectStoreStatus, clickHouseObjectStoreInstance)
 	objStoreSpec, _ := apiv2.ResolveInstance(wandb.Spec.ObjectStore, clickHouseObjectStoreInstance)
 	waitForObjectStore := objStoreSpec.ManagedObjectStore != nil
+	if waitForObjectStore && !apimeta.IsStatusConditionTrue(objectStoreConditions, seaweedfs.SeaweedTopologyReadyType) {
+		log.Info("waiting for SeaweedFS topology migration before reconciling ClickHouse")
+		return []metav1.Condition{{
+			Type:    common.ReconciledType,
+			Status:  metav1.ConditionFalse,
+			Reason:  common.PendingCreateReason,
+			Message: "waiting for SeaweedFS topology migration and verification",
+		}}
+	}
 
 	// Resolve the bucket connection; wait and requeue if it isn't ready yet.
 	objStorage, objStorageEndpoint, err := altinity.ResolveObjectStorage(ctx, client, spec, &objStoreStatus.Connection)

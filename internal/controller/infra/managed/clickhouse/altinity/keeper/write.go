@@ -60,6 +60,14 @@ func applyOwnedKeeper(obj, desired *chkv1.ClickHouseKeeperInstallation) {
 		labels[k] = v
 	}
 	obj.SetLabels(labels)
+	annotations := obj.GetAnnotations()
+	if annotations == nil {
+		annotations = map[string]string{}
+	}
+	if stableReplicas, ok := desired.GetAnnotations()[StableReplicasAnnotation]; ok {
+		annotations[StableReplicasAnnotation] = stableReplicas
+	}
+	obj.SetAnnotations(annotations)
 	obj.SetOwnerReferences(desired.GetOwnerReferences())
 	obj.Spec = desired.Spec
 }
@@ -67,5 +75,6 @@ func applyOwnedKeeper(obj, desired *chkv1.ClickHouseKeeperInstallation) {
 func keeperOwnedEqual(a, b *chkv1.ClickHouseKeeperInstallation) bool {
 	return common.JSONEqual(a.Spec, b.Spec) &&
 		common.JSONEqual(a.Labels, b.Labels) &&
+		a.GetAnnotations()[StableReplicasAnnotation] == b.GetAnnotations()[StableReplicasAnnotation] &&
 		common.JSONEqual(a.OwnerReferences, b.OwnerReferences)
 }

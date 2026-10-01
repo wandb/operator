@@ -10,5 +10,5 @@ const (
 )
 
 var NotReadyStates = []string{
-	ErrorState, PendingState, UnavailableState,
+	ErrorState, PendingState, DegradedState, UnknownState, UnavailableState,
 }

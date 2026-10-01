@@ -14,6 +14,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/utils/ptr"
 )
 
 var _ = Describe("Redis vendor specs", func() {
@@ -52,6 +53,53 @@ var _ = Describe("Redis vendor specs", func() {
 		expectRedisDefaultPodSecurityContext(replication.Spec.PodSecurityContext)
 		expectRedisDefaultContainerSecurityContext(replication.Spec.SecurityContext)
 		expectRedisWritableTmpMount(replication.Spec.Storage.VolumeMount.MountPath)
+	})
+
+	It("treats omitted Sentinel configuration as enabled", func() {
+		wandb := redisWandb(true)
+		wandb.Spec.Redis[apiv2.DefaultInstanceName].ManagedRedis.Sentinel.Enabled = nil
+		spec := wandb.Spec.Redis[apiv2.DefaultInstanceName].ManagedRedis
+
+		standalone, err := ToRedisStandaloneVendorSpec(context.Background(), wandb, spec, redisScheme(), manifest.Manifest{})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(standalone).To(BeNil())
+
+		sentinel, err := ToRedisSentinelVendorSpec(context.Background(), wandb, spec, redisScheme(), manifest.Manifest{})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(sentinel).NotTo(BeNil())
+
+		replication, err := ToRedisReplicationVendorSpec(context.Background(), wandb, spec, redisScheme(), manifest.Manifest{})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(replication).NotTo(BeNil())
+	})
+
+	DescribeTable("uses independently resolved Redis and Sentinel replica counts",
+		func(redisReplicas, sentinelReplicas int32) {
+			wandb := redisWandb(true)
+			spec := wandb.Spec.Redis[apiv2.DefaultInstanceName].ManagedRedis
+			spec.Replicas = redisReplicas
+			spec.Sentinel.Replicas = sentinelReplicas
+
+			sentinel, err := ToRedisSentinelVendorSpec(context.Background(), wandb, spec, redisScheme(), manifest.Manifest{})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(sentinel.Spec.Size).To(HaveValue(Equal(sentinelReplicas)))
+
+			replication, err := ToRedisReplicationVendorSpec(context.Background(), wandb, spec, redisScheme(), manifest.Manifest{})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(replication.Spec.Size).To(HaveValue(Equal(redisReplicas)))
+		},
+		Entry("single-node dev", int32(1), int32(1)),
+		Entry("independent counts", int32(2), int32(1)),
+		Entry("three-node small", int32(3), int32(3)),
+	)
+
+	It("defaults Sentinel replicas to three when no value is resolved", func() {
+		wandb := redisWandb(true)
+		spec := wandb.Spec.Redis[apiv2.DefaultInstanceName].ManagedRedis
+
+		sentinel, err := ToRedisSentinelVendorSpec(context.Background(), wandb, spec, redisScheme(), manifest.Manifest{})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(sentinel.Spec.Size).To(HaveValue(Equal(int32(3))))
 	})
 
 	It("omits fixed Redis IDs in OpenShift mode", func() {
@@ -95,7 +143,7 @@ func redisWandb(sentinel bool) *apiv2.WeightsAndBiases {
 						Namespace:   "wandb",
 						StorageSize: "1Gi",
 						Telemetry:   apiv2.Telemetry{Enabled: true},
-						Sentinel:    apiv2.RedisSentinelSpec{Enabled: sentinel},
+						Sentinel:    apiv2.RedisSentinelSpec{Enabled: ptr.To(sentinel)},
 					},
 				},
 			},
