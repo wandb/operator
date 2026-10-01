@@ -62,8 +62,8 @@ flags, and shared env-var/volume groups (see `Manifest` in
   This regenerates deepcopy methods, the CRD YAML in `config/crd/bases/`, and the
   embedded CRDs used by the crd-installer. CI fails if these are out of date.
 - **Tilt does NOT regenerate CRDs automatically** when API types change — it only
-  recompiles the controller binary. See [DEVELOPMENT.md](DEVELOPMENT.md) for the
-  full "what to run when X changes" matrix. When in doubt, restart Tilt.
+  recompiles the controller binary. See the [development workflow](docs/developer/workflow.md) for the
+  current code generation and deployment steps. When in doubt, restart Tilt.
 - **Don't edit generated files**: `zz_generated.deepcopy.go`, `config/crd/bases/*`,
   `internal/crdinstaller/crds/*`, and anything under `pkg/vendored/`. Edit the
   source and regenerate.
@@ -73,12 +73,12 @@ flags, and shared env-var/volume groups (see `Manifest` in
 ## Build / test / lint
 
 - `make test` — runs `manifests generate sync-crd-embed vet` + unit tests via
-  envtest (downloads binaries on first run); produces `coverage.html`.
+  envtest (downloads binaries on first run); produces `cover.out`.
 - `make lint` — golangci-lint. `make lint-fix` to autofix.
 - `make build` — regenerates, vets, and builds the manager + crd-installer binaries.
 - **Always run `make lint` and `make test` before considering a task complete.**
 - Tests use **Ginkgo/Gomega** (`suite_test.go` files set up envtest). CI runs
-  `make test-coverage` and `make build` on Go 1.25.
+  `make test` and `make build`; match the Go version in `go.mod` and the workflows.
 
 ## Commit & PR conventions
 
@@ -87,9 +87,10 @@ flags, and shared env-var/volume groups (see `Manifest` in
   `perf`, `test`, `build`, `ci`, `chore`, `revert`.
 - The subject **must start with an uppercase letter** (e.g.
   `feat: Add retention policy validation`).
-- Releases are automated via **semantic-release** off `main` (`feat` → minor,
-  `fix` → patch, `!`/`BREAKING CHANGE` → major). `CHANGELOG.md` is generated — do
-  not edit it by hand.
+- Releases use reviewed version changes and annotated tags. Follow
+  [the v2 release procedure](docs/developer/releasing.md) or
+  [v1 maintenance procedure](docs/developer/releasing-v1.md). Keep release history
+  under the release workflow; do not rewrite `CHANGELOG.md` as part of documentation edits.
 
 ## Code style
 
@@ -116,7 +117,7 @@ count++
 
 ## Where to learn more
 
-- [README.md](README.md) — local dev setup (Kind, Tilt, Kubebuilder, Kustomize).
-- [DEVELOPMENT.md](DEVELOPMENT.md) — the regenerate-on-change flow and common issues.
-- [docs/config-api.md](docs/config-api.md), [docs/infra-connection-settings.md](docs/infra-connection-settings.md),
-  [docs/monitoring.md](docs/monitoring.md) — CR config, external infra, telemetry.
+- [User guides](docs/user/README.md) — deployment and operations.
+- [Developer guides](docs/developer/README.md) — local setup, workflows, testing, and releases.
+- [Architecture](docs/developer/architecture.md) — current component map and reconciliation flow.
+- [Design records](docs/design/README.md) — rationale and historical proposals.
