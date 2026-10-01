@@ -256,6 +256,13 @@ rules:
   verbs:
   - get
 - apiGroups:
+  - metrics.k8s.io
+  resources:
+  - pods
+  verbs:
+  - get
+  - list
+- apiGroups:
   - moco.cybozu.com
   resources:
   - mysqlclusters
