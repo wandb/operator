@@ -50,6 +50,8 @@ func TestTelemetryChartFullModeRendersCoreStack(t *testing.T) {
 	mustNotContain(t, output, "name: vmui")
 	mustNotContain(t, output, "name: perses")
 	mustContain(t, output, "retentionPeriod: \"1d\"")
+	mustContain(t, output, "name: victoria-log-agent")
+	mustContain(t, output, "filelog:")
 }
 
 func TestTelemetryChartForwardModeSkipsGrafanaButAddsForwarding(t *testing.T) {
@@ -87,6 +89,7 @@ func TestTelemetryChartOffModeSkipsManagedStack(t *testing.T) {
 	mustNotContain(t, output, "kind: VTSingle")
 	mustNotContain(t, output, "name: victoria-otlp-gateway-config")
 	mustNotContain(t, output, "name: victoria-otlp-gateway")
+	mustNotContain(t, output, "name: victoria-log-agent")
 	mustNotContain(t, output, "kind: Grafana")
 	mustNotContain(t, output, "name: wandb-operator-telemetry-config")
 }

@@ -62,6 +62,19 @@
         }
       }
     },
+    "logAgent": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "resources": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
     "scrape": {
       "type": "object",
       "additionalProperties": false,

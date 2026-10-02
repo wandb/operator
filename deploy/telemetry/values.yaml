@@ -20,6 +20,15 @@ otlpGateway:
       drop:
         - ALL
     runAsNonRoot: true
+logAgent:
+  enabled: true
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
 scrape:
   enabled: true
   kubeletCadvisor: true
