@@ -102,6 +102,15 @@
             "enabled": {
               "type": "boolean"
             },
+            "extraNamespaces": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "tolerations": {
+              "type": "array"
+            },
             "resources": {
               "type": "object",
               "additionalProperties": true

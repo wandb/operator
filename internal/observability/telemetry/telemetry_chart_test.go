@@ -52,6 +52,8 @@ func TestTelemetryChartFullModeRendersCoreStack(t *testing.T) {
 	mustContain(t, output, "retentionPeriod: \"1d\"")
 	mustContain(t, output, "name: victoria-log-agent")
 	mustContain(t, output, "filelog:")
+	mustContain(t, output, "storage: file_storage")
+	mustContain(t, output, "type: regex_parser")
 }
 
 func TestTelemetryChartForwardModeSkipsGrafanaButAddsForwarding(t *testing.T) {

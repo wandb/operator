@@ -22,6 +22,8 @@ otlpGateway:
     runAsNonRoot: true
 logAgent:
   enabled: true
+  extraNamespaces: []
+  tolerations: []
   resources:
     requests:
       cpu: 50m
