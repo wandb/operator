@@ -11,13 +11,18 @@ metadata:
     app.kubernetes.io/part-of: wandb
 spec:
   config:
+    server:
+      root_url: "/console/grafana/"
+      serve_from_sub_path: "true"
     log:
       mode: console
     auth:
       disable_login_form: "true"
     auth.anonymous:
       enabled: "true"
-      org_role: Admin
+      org_role: Viewer
+    users:
+      viewers_can_edit: "true"
   preferences:
     homeDashboardUid: wandb-telemetry-overview
   deployment:
