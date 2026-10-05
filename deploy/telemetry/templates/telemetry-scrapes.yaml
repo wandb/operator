@@ -207,7 +207,9 @@ spec:
       relabelConfigs:
         - sourceLabels:
             - __meta_kubernetes_pod_label_app_kubernetes_io_name
-          regex: .*-api
+          # Match both the bare "api" label (some server-manifest versions) and the
+          # "<x>-api" form, so the gorilla app's :8181 metrics are always scraped.
+          regex: (.*-)?api
           action: keep
         - sourceLabels:
             - __meta_kubernetes_pod_ip
