@@ -610,6 +610,9 @@ applications:
         - port: 8080
           protocol: TCP
           name: anaconda2
+    securityProfile:
+      runAsNonRoot: true
+      readOnlyRootFilesystem: true
   api:
     name: api
     commonEnvs:
@@ -675,6 +678,9 @@ applications:
         - /oidc
       servicePort: "8080"
       pathType: Prefix
+    securityProfile:
+      runAsNonRoot: true
+      readOnlyRootFilesystem: true
   executor:
     name: executor
     commonEnvs:
@@ -695,6 +701,9 @@ applications:
       - name: executor
         args:
           - executor
+    securityProfile:
+      runAsNonRoot: true
+      readOnlyRootFilesystem: true
   filemeta:
     name: filemeta
     args:
@@ -711,6 +720,9 @@ applications:
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
       tag: 0.84.0-notifications-security-flags.1
+    securityProfile:
+      runAsNonRoot: true
+      readOnlyRootFilesystem: true
   filestream:
     name: filestream
     features:
@@ -731,6 +743,9 @@ applications:
       tag: 0.84.0-notifications-security-flags.1
     containers:
       - name: filestream
+    securityProfile:
+      runAsNonRoot: true
+      readOnlyRootFilesystem: true
   flat-run-fields-updater:
     name: flat-run-fields-updater
     args:
@@ -754,6 +769,9 @@ applications:
       tag: 0.84.0-notifications-security-flags.1
     containers:
       - name: flat-run-fields-updater
+    securityProfile:
+      runAsNonRoot: true
+      readOnlyRootFilesystem: true
   frontend:
     name: frontend
     image:
@@ -823,6 +841,9 @@ applications:
         source:
           type: emptyDir
           name: nginx-cache
+    securityProfile:
+      runAsNonRoot: true
+      readOnlyRootFilesystem: true
   glue:
     name: glue
     args:
@@ -854,6 +875,9 @@ applications:
       tag: 0.84.0-notifications-security-flags.1
     containers:
       - name: glue
+    securityProfile:
+      runAsNonRoot: true
+      readOnlyRootFilesystem: true
   metric-observer:
     name: metric-observer
     args:
@@ -877,6 +901,9 @@ applications:
       tag: 0.84.0-notifications-security-flags.1
     containers:
       - name: metric-observer
+    securityProfile:
+      runAsNonRoot: true
+      readOnlyRootFilesystem: true
   parquet:
     name: parquet
     args:
@@ -912,6 +939,9 @@ applications:
         - port: 8080
           protocol: TCP
           name: parquet
+    securityProfile:
+      runAsNonRoot: true
+      readOnlyRootFilesystem: true
   weave:
     name: weave
     image:
@@ -969,6 +999,9 @@ applications:
         source:
           type: emptyDir
           name: cache
+    securityProfile:
+      runAsNonRoot: true
+      readOnlyRootFilesystem: true
   weave-trace:
     name: weave-trace
     image:
@@ -1018,6 +1051,9 @@ applications:
           kubernetesServiceAccount:
             audience: internal-service
             expirationSeconds: 600
+    securityProfile:
+      runAsNonRoot: true
+      readOnlyRootFilesystem: true
   weave-trace-worker:
     name: weave-trace-worker
     image:
@@ -1040,6 +1076,9 @@ applications:
           - "python"
           - "-m"
           - "src.workers.scoring_worker"
+    securityProfile:
+      runAsNonRoot: true
+      readOnlyRootFilesystem: true
   weave-trace-evaluate-model-worker:
     name: weave-trace-evaluate-model-worker
     legacyKey: weave-evaluate-model-worker
@@ -1063,6 +1102,9 @@ applications:
           - "python"
           - "-m"
           - "src.workers.evaluate_model_worker.evaluate_model_worker"
+    securityProfile:
+      runAsNonRoot: true
+      readOnlyRootFilesystem: true
 
 migrations:
   gorilla:
