@@ -71,7 +71,7 @@ applications:
 	}
 
 	appProfile := loaded.Applications["api"].SecurityProfile
-	if appProfile == nil || appProfile.RunAsNonRoot == nil || *appProfile.RunAsNonRoot {
+	if appProfile.RunAsNonRoot == nil || *appProfile.RunAsNonRoot {
 		t.Fatalf("application runAsNonRoot = %#v, want explicit false", appProfile)
 	}
 	if appProfile.ReadOnlyRootFilesystem == nil || !*appProfile.ReadOnlyRootFilesystem {
@@ -81,8 +81,8 @@ applications:
 		t.Fatal("sizing fragment was not merged with the profiled application")
 	}
 	emptyAppProfile := loaded.Applications["legacy-compatible-empty"].SecurityProfile
-	if emptyAppProfile == nil || emptyAppProfile.RunAsNonRoot != nil || emptyAppProfile.ReadOnlyRootFilesystem != nil {
-		t.Fatalf("empty application security profile = %#v, want non-nil profile with nil settings", emptyAppProfile)
+	if emptyAppProfile.RunAsNonRoot != nil || emptyAppProfile.ReadOnlyRootFilesystem != nil {
+		t.Fatalf("empty application security profile = %#v, want nil settings", emptyAppProfile)
 	}
 
 	migrationProfile := loaded.Migrations["gorilla"].SecurityProfile
@@ -124,7 +124,7 @@ func TestLegacyManifestFixturesHaveNoWorkloadSecurityProfiles(t *testing.T) {
 			}
 
 			for name, app := range loaded.Applications {
-				if app.SecurityProfile != nil {
+				if app.SecurityProfile.RunAsNonRoot != nil || app.SecurityProfile.ReadOnlyRootFilesystem != nil {
 					t.Fatalf("legacy application %q unexpectedly has security profile %#v", name, app.SecurityProfile)
 				}
 			}
@@ -186,7 +186,7 @@ migrations:
 				t.Fatal(err)
 			}
 			app := loaded.Applications["api"]
-			checkProfile(t, app.SecurityProfile, test.nonRoot, test.readOnly)
+			checkProfile(t, &app.SecurityProfile, test.nonRoot, test.readOnly)
 			if app.Image.Repository != "example/api" || app.Sizing["default"].Replicas != 2 {
 				t.Fatalf("lost application fields: %#v", app)
 			}

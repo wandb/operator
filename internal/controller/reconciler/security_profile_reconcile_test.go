@@ -51,22 +51,22 @@ func TestReconcileApplicationsAddsAndClearsSecurityProfile(t *testing.T) {
 		WithObjects(initialApplication).
 		Build()
 
-	enabled := &servermanifest.WorkloadSecurityProfile{
-		RunAsNonRoot: boolPointer(true), ReadOnlyRootFilesystem: boolPointer(true),
+	enabled := servermanifest.WorkloadSecurityProfile{
+		RunAsNonRoot: new(true), ReadOnlyRootFilesystem: new(true),
 	}
 	for _, version := range []string{"0.84.9", "0.85.0", "0.85.0-rc.1", "1.0.0", "custom-build"} {
 		t.Run(version, func(t *testing.T) {
 			wandb.Spec.Wandb.Version = version
 			for _, transition := range []struct {
 				name    string
-				profile *servermanifest.WorkloadSecurityProfile
+				profile servermanifest.WorkloadSecurityProfile
 			}{
-				{"false", &servermanifest.WorkloadSecurityProfile{RunAsNonRoot: boolPointer(false), ReadOnlyRootFilesystem: boolPointer(false)}},
-				{"empty", &servermanifest.WorkloadSecurityProfile{}},
-				{"omitted", nil},
+				{"false", servermanifest.WorkloadSecurityProfile{RunAsNonRoot: new(false), ReadOnlyRootFilesystem: new(false)}},
+				{"empty", servermanifest.WorkloadSecurityProfile{}},
+				{"omitted", servermanifest.WorkloadSecurityProfile{}},
 			} {
 				t.Run(transition.name, func(t *testing.T) {
-					for _, profile := range []*servermanifest.WorkloadSecurityProfile{enabled, transition.profile} {
+					for _, profile := range []servermanifest.WorkloadSecurityProfile{enabled, transition.profile} {
 						manifest := servermanifest.Manifest{Applications: map[string]servermanifest.Application{
 							"api": {Name: "api", Image: servermanifest.ImageRef{Repository: "example/api", Tag: "test"},
 								SecurityProfile: profile,
@@ -83,10 +83,7 @@ func TestReconcileApplicationsAddsAndClearsSecurityProfile(t *testing.T) {
 							if err := c.Get(context.Background(), client.ObjectKey{Name: "api", Namespace: "default"}, actual); err != nil {
 								t.Fatal(err)
 							}
-							var nonRoot, readOnly *bool
-							if profile != nil {
-								nonRoot, readOnly = profile.RunAsNonRoot, profile.ReadOnlyRootFilesystem
-							}
+							nonRoot, readOnly := profile.RunAsNonRoot, profile.ReadOnlyRootFilesystem
 							pod := actual.Spec.PodTemplate.Spec
 							assertPodSecurityBaseline(t, pod.SecurityContext)
 							assertOptionalBool(t, "runAsNonRoot", pod.SecurityContext.RunAsNonRoot, nonRoot)

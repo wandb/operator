@@ -622,7 +622,7 @@ func reconcileApplications(
 		// across updates (e.g., duplicate "files-inline" volume names).
 		application.Spec.PodTemplate.Spec.Volumes = volumes
 		application.Spec.PodTemplate.Spec.InitContainers = initContainers
-		application.Spec.PodTemplate.Spec.SecurityContext = resolvePodSecurityContext(app.SecurityProfile)
+		application.Spec.PodTemplate.Spec.SecurityContext = resolvePodSecurityContext(&app.SecurityProfile)
 		application.Spec.PodTemplate.Spec.Affinity = wandb.Spec.Affinity
 		application.Spec.PodTemplate.Spec.Tolerations = *wandb.Spec.Tolerations
 		application.Spec.PodTemplate.Spec.ImagePullSecrets = wandb.Spec.Global.ImagePullSecrets

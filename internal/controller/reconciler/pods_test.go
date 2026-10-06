@@ -8,10 +8,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-func boolPointer(value bool) *bool {
-	return &value
-}
-
 func assertPodSecurityBaseline(t *testing.T, securityContext *corev1.PodSecurityContext) {
 	t.Helper()
 	if securityContext == nil {
@@ -100,27 +96,27 @@ func TestResolveSecurityProfileValues(t *testing.T) {
 		{
 			name: "enabled",
 			profile: &serverManifest.WorkloadSecurityProfile{
-				RunAsNonRoot:           boolPointer(true),
-				ReadOnlyRootFilesystem: boolPointer(true),
+				RunAsNonRoot:           new(true),
+				ReadOnlyRootFilesystem: new(true),
 			},
-			wantRunAsNonRoot: boolPointer(true),
-			wantReadOnlyRoot: boolPointer(true),
+			wantRunAsNonRoot: new(true),
+			wantReadOnlyRoot: new(true),
 		},
 		{
 			name: "explicitly disabled",
 			profile: &serverManifest.WorkloadSecurityProfile{
-				RunAsNonRoot:           boolPointer(false),
-				ReadOnlyRootFilesystem: boolPointer(false),
+				RunAsNonRoot:           new(false),
+				ReadOnlyRootFilesystem: new(false),
 			},
-			wantRunAsNonRoot: boolPointer(false),
-			wantReadOnlyRoot: boolPointer(false),
+			wantRunAsNonRoot: new(false),
+			wantReadOnlyRoot: new(false),
 		},
 		{
 			name: "mixed",
 			profile: &serverManifest.WorkloadSecurityProfile{
-				RunAsNonRoot: boolPointer(true),
+				RunAsNonRoot: new(true),
 			},
-			wantRunAsNonRoot: boolPointer(true),
+			wantRunAsNonRoot: new(true),
 		},
 	}
 
@@ -145,9 +141,9 @@ func TestResolveSecurityProfileValues(t *testing.T) {
 func TestResolveApplicationContainersApplyAndClearSecurityProfile(t *testing.T) {
 	t.Parallel()
 
-	profile := &serverManifest.WorkloadSecurityProfile{
-		RunAsNonRoot:           boolPointer(true),
-		ReadOnlyRootFilesystem: boolPointer(true),
+	profile := serverManifest.WorkloadSecurityProfile{
+		RunAsNonRoot:           new(true),
+		ReadOnlyRootFilesystem: new(true),
 	}
 	profiledApp := serverManifest.Application{
 		Name:            "worker",
@@ -166,20 +162,20 @@ func TestResolveApplicationContainersApplyAndClearSecurityProfile(t *testing.T) 
 	profiledInitContainers := resolveInitContainers(profiledApp, testWeightsAndBiases(), nil, nil)
 	for _, container := range append(profiledContainers, profiledInitContainers...) {
 		assertContainerSecurityBaseline(t, container.SecurityContext)
-		assertOptionalBool(t, container.Name+" readOnlyRootFilesystem", container.SecurityContext.ReadOnlyRootFilesystem, boolPointer(true))
+		assertOptionalBool(t, container.Name+" readOnlyRootFilesystem", container.SecurityContext.ReadOnlyRootFilesystem, new(true))
 	}
-	profiledPodSecurityContext := resolvePodSecurityContext(profiledApp.SecurityProfile)
-	assertOptionalBool(t, "profiled runAsNonRoot", profiledPodSecurityContext.RunAsNonRoot, boolPointer(true))
+	profiledPodSecurityContext := resolvePodSecurityContext(&profiledApp.SecurityProfile)
+	assertOptionalBool(t, "profiled runAsNonRoot", profiledPodSecurityContext.RunAsNonRoot, new(true))
 
 	legacyApp := profiledApp
-	legacyApp.SecurityProfile = nil
+	legacyApp.SecurityProfile = serverManifest.WorkloadSecurityProfile{}
 	legacyContainers := resolveContainers(legacyApp, testWeightsAndBiases(), nil, nil)
 	legacyInitContainers := resolveInitContainers(legacyApp, testWeightsAndBiases(), nil, nil)
 	for _, container := range append(legacyContainers, legacyInitContainers...) {
 		assertContainerSecurityBaseline(t, container.SecurityContext)
 		assertOptionalBool(t, container.Name+" readOnlyRootFilesystem after rollback", container.SecurityContext.ReadOnlyRootFilesystem, nil)
 	}
-	legacyPodSecurityContext := resolvePodSecurityContext(legacyApp.SecurityProfile)
+	legacyPodSecurityContext := resolvePodSecurityContext(&legacyApp.SecurityProfile)
 	assertPodSecurityBaseline(t, legacyPodSecurityContext)
 	assertOptionalBool(t, "runAsNonRoot after rollback", legacyPodSecurityContext.RunAsNonRoot, nil)
 }
@@ -190,15 +186,15 @@ func TestResolveSingleContainerAppliesSecurityProfile(t *testing.T) {
 	containers := resolveContainers(serverManifest.Application{
 		Name:  "api",
 		Image: serverManifest.ImageRef{Repository: "api", Tag: "test"},
-		SecurityProfile: &serverManifest.WorkloadSecurityProfile{
-			ReadOnlyRootFilesystem: boolPointer(false),
+		SecurityProfile: serverManifest.WorkloadSecurityProfile{
+			ReadOnlyRootFilesystem: new(false),
 		},
 	}, testWeightsAndBiases(), nil, nil)
 	if len(containers) != 1 {
 		t.Fatalf("containers = %d, want 1", len(containers))
 	}
 	assertContainerSecurityBaseline(t, containers[0].SecurityContext)
-	assertOptionalBool(t, "readOnlyRootFilesystem", containers[0].SecurityContext.ReadOnlyRootFilesystem, boolPointer(false))
+	assertOptionalBool(t, "readOnlyRootFilesystem", containers[0].SecurityContext.ReadOnlyRootFilesystem, new(false))
 }
 
 func assertOptionalBool(t *testing.T, name string, got, want *bool) {

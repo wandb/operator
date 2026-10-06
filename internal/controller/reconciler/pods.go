@@ -66,7 +66,7 @@ func resolveInitContainers(app serverManifest.Application, wandb *v2.WeightsAndB
 				Args:            initContainerSpec.Args,
 				Command:         initContainerSpec.Command,
 				VolumeMounts:    volumeMounts,
-				SecurityContext: resolveContainerSecurityContext(app.SecurityProfile),
+				SecurityContext: resolveContainerSecurityContext(&app.SecurityProfile),
 			}
 			initContainers = append(initContainers, initContainer)
 		}
@@ -112,7 +112,7 @@ func resolveContainers(app serverManifest.Application, wandb *v2.WeightsAndBiase
 				Command:         cmd,
 				Ports:           containerPorts,
 				VolumeMounts:    volumeMounts,
-				SecurityContext: resolveContainerSecurityContext(app.SecurityProfile),
+				SecurityContext: resolveContainerSecurityContext(&app.SecurityProfile),
 			}
 
 			if resources := ResolveResources(app, wandb, container.Resources); resources != nil {
@@ -140,7 +140,7 @@ func resolveContainers(app serverManifest.Application, wandb *v2.WeightsAndBiase
 			Args:            app.Args,
 			Command:         app.Command,
 			VolumeMounts:    volumeMounts,
-			SecurityContext: resolveContainerSecurityContext(app.SecurityProfile),
+			SecurityContext: resolveContainerSecurityContext(&app.SecurityProfile),
 		}
 
 		if resources := ResolveResources(app, wandb, nil); resources != nil {

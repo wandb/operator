@@ -181,8 +181,8 @@ type Application struct {
 	Ingress      *AppIngressSpec          `yaml:"ingress,omitempty"`
 	Triage       *ApplicationTriage       `yaml:"triage,omitempty"`
 	// SecurityProfile opts this workload into security settings supported by
-	// newer server images. A nil or empty profile preserves legacy behavior.
-	SecurityProfile *WorkloadSecurityProfile `yaml:"securityProfile,omitempty"`
+	// newer server images. An empty profile preserves legacy behavior.
+	SecurityProfile WorkloadSecurityProfile `yaml:"securityProfile,omitempty"`
 }
 
 // ApplicationTriage declares a shared diagnostic runner and the actions
@@ -642,25 +642,12 @@ func mergeApplications(dst, src map[string]Application) {
 	}
 }
 
-func mergeWorkloadSecurityProfiles(dst, src *WorkloadSecurityProfile) *WorkloadSecurityProfile {
-	if src == nil {
-		return dst
-	}
-
-	if dst == nil {
-		dst = &WorkloadSecurityProfile{}
-	} else {
-		copy := *dst
-		dst = &copy
-	}
-
+func mergeWorkloadSecurityProfiles(dst, src WorkloadSecurityProfile) WorkloadSecurityProfile {
 	if src.RunAsNonRoot != nil {
-		value := *src.RunAsNonRoot
-		dst.RunAsNonRoot = &value
+		dst.RunAsNonRoot = new(*src.RunAsNonRoot)
 	}
 	if src.ReadOnlyRootFilesystem != nil {
-		value := *src.ReadOnlyRootFilesystem
-		dst.ReadOnlyRootFilesystem = &value
+		dst.ReadOnlyRootFilesystem = new(*src.ReadOnlyRootFilesystem)
 	}
 
 	return dst

@@ -169,38 +169,38 @@ func TestRunMigrationsSecurityProfileCompatibility(t *testing.T) {
 		{
 			name: "enabled profile",
 			profile: &servermanifest.WorkloadSecurityProfile{
-				RunAsNonRoot:           boolPointer(true),
-				ReadOnlyRootFilesystem: boolPointer(true),
+				RunAsNonRoot:           new(true),
+				ReadOnlyRootFilesystem: new(true),
 			},
 			wantProfiled:     true,
-			wantRunAsNonRoot: boolPointer(true),
-			wantReadOnlyRoot: boolPointer(true),
+			wantRunAsNonRoot: new(true),
+			wantReadOnlyRoot: new(true),
 		},
 		{
 			name: "explicit false profile",
 			profile: &servermanifest.WorkloadSecurityProfile{
-				RunAsNonRoot:           boolPointer(false),
-				ReadOnlyRootFilesystem: boolPointer(false),
+				RunAsNonRoot:           new(false),
+				ReadOnlyRootFilesystem: new(false),
 			},
 			wantProfiled:     true,
-			wantRunAsNonRoot: boolPointer(false),
-			wantReadOnlyRoot: boolPointer(false),
+			wantRunAsNonRoot: new(false),
+			wantReadOnlyRoot: new(false),
 		},
 		{
 			name: "pod setting only",
 			profile: &servermanifest.WorkloadSecurityProfile{
-				RunAsNonRoot: boolPointer(true),
+				RunAsNonRoot: new(true),
 			},
 			wantProfiled:     true,
-			wantRunAsNonRoot: boolPointer(true),
+			wantRunAsNonRoot: new(true),
 		},
 		{
 			name: "container setting only",
 			profile: &servermanifest.WorkloadSecurityProfile{
-				ReadOnlyRootFilesystem: boolPointer(true),
+				ReadOnlyRootFilesystem: new(true),
 			},
 			wantProfiled:     true,
-			wantReadOnlyRoot: boolPointer(true),
+			wantReadOnlyRoot: new(true),
 		},
 	}
 
@@ -293,8 +293,8 @@ func TestSecurityProfileDoesNotRestartCompletedMigrations(t *testing.T) {
 	}
 	c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(&apiv2.WeightsAndBiases{}).WithObjects(wandb).Build()
 	for _, profile := range []*servermanifest.WorkloadSecurityProfile{
-		{RunAsNonRoot: boolPointer(true), ReadOnlyRootFilesystem: boolPointer(true)},
-		{RunAsNonRoot: boolPointer(false)}, {}, nil,
+		{RunAsNonRoot: new(true), ReadOnlyRootFilesystem: new(true)},
+		{RunAsNonRoot: new(false)}, {}, nil,
 	} {
 		manifest := servermanifest.Manifest{Migrations: map[string]servermanifest.MigrationJob{
 			"gorilla": {Image: servermanifest.ImageRef{Repository: "example/migrate", Tag: "test"}, SecurityProfile: profile},
