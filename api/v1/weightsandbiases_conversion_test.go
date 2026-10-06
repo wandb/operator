@@ -1889,7 +1889,7 @@ func TestConvertTo_StashedAnnotationsReflectCRNotActiveSpec(t *testing.T) {
 	dst := &appsv2.WeightsAndBiases{}
 	require.NoError(t, src.ConvertTo(dst))
 
-	stashed := dst.Annotations[v1ValuesAnnotation]
+	stashed := dst.Annotations[V1ValuesAnnotation]
 	var decoded map[string]interface{}
 	require.NoError(t, json.Unmarshal([]byte(stashed), &decoded))
 	global := decoded["global"].(map[string]interface{})

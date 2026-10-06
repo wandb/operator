@@ -36,7 +36,9 @@ func TestTelemetryChartFullModeRendersCoreStack(t *testing.T) {
 	mustContain(t, output, "kind: GrafanaDatasource")
 	mustContain(t, output, "url: \"http://vmsingle-victoria-instance:8428\"")
 	mustContain(t, output, "url: \"http://vlsingle-victoria-logs:9428\"")
-	mustContain(t, output, "url: \"http://vtsingle-victoria-traces:10428/select/jaeger\"")
+	mustContain(t, output, "url: \"http://vtsingle-victoria-traces:10428/select/tempo\"")
+	mustContain(t, output, "type: tempo")
+	mustNotContain(t, output, "type: jaeger")
 	mustContain(t, output, "inputName: DS_VICTORIATRACES")
 	mustContain(t, output, "datasourceName: VictoriaTraces")
 	mustContain(t, output, "\"title\": \"Open Traces in Explore\"")
@@ -120,6 +122,25 @@ func TestStandaloneTelemetryChartFullModeRendersCoreStack(t *testing.T) {
 	mustContain(t, output, "url: \"http://vmsingle-victoria-instance:8428\"")
 	mustContain(t, output, "statsd/dogstatsd:")
 	mustContain(t, output, "datadog:")
+}
+
+func TestTelemetryReadEndpointsMatchChartServices(t *testing.T) {
+	output := runHelmTemplateForChart(t, filepath.Join("..", "..", "..", "deploy", "telemetry"),
+		"--set", "mode=full",
+	)
+
+	cfg := DefaultTelemetryRuntimeConfig()
+	cfg.Enabled = true
+	cfg.Normalize()
+	resolved := cfg.ResolveEndpoints()
+
+	for _, endpoint := range []string{
+		resolved.MetricsReadEndpoint,
+		resolved.LogsReadEndpoint,
+		resolved.TracesReadEndpoint,
+	} {
+		mustContain(t, output, endpoint)
+	}
 }
 
 func TestCrdInstallerTelemetryGroupsAreOptIn(t *testing.T) {

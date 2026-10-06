@@ -12706,6 +12706,10 @@ spec:
                 - scaleTargetRef
                 - triggers
                 type: object
+              serviceAnnotations:
+                additionalProperties:
+                  type: string
+                type: object
               serviceName:
                 type: string
               serviceTemplate:

@@ -24,7 +24,7 @@ Each row tells you which Grafana `type` to emit and the field-level translations
   "type": "<grafana_type>",
   "title": "<dd_title>",
   "datasource": {
-    "type": "victoriametrics-metrics-datasource",
+    "type": "prometheus",
     "uid": "${DS_VICTORIAMETRICS}"
   },
   "gridPos": { "h": <h>, "w": <w*2>, "x": <x*2>, "y": <y> },

@@ -318,9 +318,12 @@ func main() {
 	}
 
 	if err = (&controller.WeightsAndBiasesReconciler{
-		IsAirgapped:        airgapped,
-		Recorder:           mgr.GetEventRecorderFor("weightsandbiases"),
-		Client:             mgr.GetClient(),
+		IsAirgapped: airgapped,
+		Recorder:    mgr.GetEventRecorderFor("weightsandbiases"),
+		Client: ctrlclient.WithFieldOwner(
+			mgr.GetClient(),
+			controller.WeightsAndBiasesFieldManager,
+		),
 		Scheme:             mgr.GetScheme(),
 		DeployerClient:     &deployer.DeployerClient{DeployerAPI: deployerAPI},
 		Debug:              debug,
@@ -332,7 +335,10 @@ func main() {
 	}
 
 	if err = (&controller.ApplicationReconciler{
-		Client:         mgr.GetClient(),
+		Client: ctrlclient.WithFieldOwner(
+			mgr.GetClient(),
+			controller.ApplicationFieldManager,
+		),
 		Scheme:         mgr.GetScheme(),
 		EnableRollouts: enableRollouts,
 	}).SetupWithManager(mgr); err != nil {

@@ -2,10 +2,11 @@ package reconciler
 
 import (
 	"context"
+	"fmt"
 
+	apiv1 "github.com/wandb/operator/api/v1"
 	apiv2 "github.com/wandb/operator/api/v2"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
-	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	apiErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -14,6 +15,48 @@ import (
 	ctrlClient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
+
+const (
+	ingressClassAnnotation           = "kubernetes.io/ingress.class"
+	awsLoadBalancerIngressController = "ingress.k8s.aws/alb"
+	appManagedByLabel                = "app.kubernetes.io/managed-by"
+	helmChartLabel                   = "helm.sh/chart"
+	helmReleaseNameAnnotation        = "meta.helm.sh/release-name"
+	helmReleaseNamespaceAnnotation   = "meta.helm.sh/release-namespace"
+)
+
+// ingressManaged treats nil as true for backward compatibility with objects
+// stored before the managed field was introduced. The webhook persists the
+// same default for newly created and updated ingress-mode objects.
+func ingressManaged(wandb *apiv2.WeightsAndBiases) bool {
+	return wandb.Spec.Networking.Mode == apiv2.NetworkingModeIngress &&
+		(wandb.Spec.Networking.Ingress == nil ||
+			wandb.Spec.Networking.Ingress.Managed == nil ||
+			*wandb.Spec.Networking.Ingress.Managed)
+}
+
+func ingressUsesAWSLoadBalancerController(
+	ctx context.Context,
+	c ctrlClient.Client,
+	wandb *apiv2.WeightsAndBiases,
+) (bool, error) {
+	if wandb.Spec.Networking.Mode != apiv2.NetworkingModeIngress ||
+		wandb.Spec.Networking.Ingress == nil ||
+		wandb.Spec.Networking.Ingress.IngressClassName == nil {
+		return false, nil
+	}
+
+	ingressClass := &networkingv1.IngressClass{}
+	name := *wandb.Spec.Networking.Ingress.IngressClassName
+	if err := c.Get(ctx, types.NamespacedName{Name: name}, ingressClass); err != nil {
+		if apiErrors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("get IngressClass %q: %w", name, err)
+	}
+
+	return string(ingressClass.Spec.Controller) == awsLoadBalancerIngressController, nil
+}
 
 // consolidatedIngressName returns spec.networking.ingress.name when set, or
 // the default "<cr-name>-ingress" otherwise.
@@ -118,6 +161,10 @@ func reconcileConsolidatedIngress(ctx context.Context, c ctrlClient.Client, wand
 	for k, v := range wandb.Spec.Networking.Annotations {
 		annotations[k] = v
 	}
+	if convertedFromV1(wandb) {
+		delete(annotations, helmReleaseNameAnnotation)
+		delete(annotations, helmReleaseNamespaceAnnotation)
+	}
 
 	if wandb.Spec.Networking.TLS != nil && wandb.Spec.Networking.TLS.CertManager != nil {
 		cm := wandb.Spec.Networking.TLS.CertManager
@@ -130,12 +177,16 @@ func reconcileConsolidatedIngress(ctx context.Context, c ctrlClient.Client, wand
 	}
 
 	desired := &networkingv1.Ingress{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: networkingv1.SchemeGroupVersion.String(),
+			Kind:       "Ingress",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ingressName,
 			Namespace: wandb.Namespace,
 			Labels: map[string]string{
-				"app.kubernetes.io/managed-by": "wandb-operator",
-				"app.kubernetes.io/instance":   wandb.Name,
+				appManagedByLabel:            "wandb-operator",
+				"app.kubernetes.io/instance": wandb.Name,
 			},
 			Annotations: annotations,
 		},
@@ -144,9 +195,16 @@ func reconcileConsolidatedIngress(ctx context.Context, c ctrlClient.Client, wand
 		},
 	}
 
-	if wandb.Spec.Networking.Ingress != nil {
-		desired.Spec.IngressClassName = wandb.Spec.Networking.Ingress.IngressClassName
-		if *desired.Spec.IngressClassName == "nginx" {
+	ingressClassName := desired.Annotations[ingressClassAnnotation]
+	if wandb.Spec.Networking.Ingress != nil &&
+		wandb.Spec.Networking.Ingress.IngressClassName != nil &&
+		*wandb.Spec.Networking.Ingress.IngressClassName != "" {
+		ingressClassName = *wandb.Spec.Networking.Ingress.IngressClassName
+	}
+	if ingressClassName != "" {
+		desired.Spec.IngressClassName = &ingressClassName
+		desired.Annotations[ingressClassAnnotation] = ingressClassName
+		if ingressClassName == "nginx" {
 			desired.Annotations["nginx.ingress.kubernetes.io/proxy-body-size"] = "0"
 		}
 	}
@@ -166,24 +224,43 @@ func reconcileConsolidatedIngress(ctx context.Context, c ctrlClient.Client, wand
 
 	current := &networkingv1.Ingress{}
 	err = c.Get(ctx, types.NamespacedName{Name: ingressName, Namespace: wandb.Namespace}, current)
-	if err != nil {
-		if apiErrors.IsNotFound(err) {
-			if err := c.Create(ctx, desired); err != nil {
+	if err != nil && !apiErrors.IsNotFound(err) {
+		return err
+	}
+	if err == nil {
+		owned := ingressOwnedByWandb(current, wandb)
+		ownedByV2 := ingressOwnedByV2Wandb(current, wandb)
+		adoptable := legacyIngressAdoptableByWandb(current, wandb)
+		if !owned && !adoptable {
+			return fmt.Errorf("Ingress %s/%s already exists and is not owned by WeightsAndBiases %s/%s",
+				current.Namespace, current.Name, wandb.Namespace, wandb.Name)
+		}
+		// Adoption is a one-time transition. Once the v2 owner reference is
+		// present, normal server-side apply reconciliation is sufficient.
+		if !ownedByV2 {
+			if err := adoptLegacyIngress(ctx, c, current, desired); err != nil {
 				return err
 			}
-			wandb.Status.IngressStatus = summarizeIngressStatus(desired)
-			wandb.Status.IngressStatus.Ready = isIngressReady(current)
-			return nil
 		}
+	}
+
+	// Apply only the fields this controller manages. In particular, labels and
+	// annotations are granular maps, so keys added by ingress controllers or
+	// other actors are preserved. Force ownership of the fields in desired
+	// because this controller is authoritative for the Ingress it owns.
+	if err := c.Patch(
+		ctx,
+		desired,
+		ctrlClient.Apply,
+		ctrlClient.ForceOwnership,
+	); err != nil {
 		return err
 	}
 
-	desired.ResourceVersion = current.ResourceVersion
-	if err := c.Update(ctx, desired); err != nil {
-		return err
-	}
-	wandb.Status.IngressStatus = summarizeIngressStatus(current)
-	wandb.Status.IngressStatus.Ready = isIngressReady(current)
+	// Patch populates desired from the API response, including status fields
+	// that were not part of this controller's apply configuration.
+	wandb.Status.IngressStatus = summarizeIngressStatus(desired)
+	wandb.Status.IngressStatus.Ready = isIngressReady(desired)
 	return nil
 }
 
@@ -210,7 +287,96 @@ func deleteConsolidatedIngress(ctx context.Context, c ctrlClient.Client, wandb *
 		}
 		return err
 	}
+	if !ingressOwnedByWandb(ingress, wandb) {
+		return nil
+	}
 	return c.Delete(ctx, ingress)
+}
+
+func ingressOwnedByWandb(ingress *networkingv1.Ingress, wandb *apiv2.WeightsAndBiases) bool {
+	for _, owner := range ingress.OwnerReferences {
+		if (owner.APIVersion == apiv1.GroupVersion.String() || owner.APIVersion == apiv2.GroupVersion.String()) &&
+			owner.Kind == "WeightsAndBiases" &&
+			owner.Name == wandb.Name &&
+			(owner.UID == "" || wandb.UID == "" || owner.UID == wandb.UID) {
+			return true
+		}
+	}
+	return false
+}
+
+func ingressOwnedByV2Wandb(ingress *networkingv1.Ingress, wandb *apiv2.WeightsAndBiases) bool {
+	for _, owner := range ingress.OwnerReferences {
+		if owner.APIVersion == apiv2.GroupVersion.String() &&
+			owner.Kind == "WeightsAndBiases" &&
+			owner.Name == wandb.Name &&
+			(owner.UID == "" || wandb.UID == "" || owner.UID == wandb.UID) {
+			return true
+		}
+	}
+	return false
+}
+
+// legacyIngressAdoptableByWandb identifies an ownerless Ingress created by the
+// Helm release managed by a v1 WeightsAndBiases resource. Conversion preserves
+// the CR UID but does not rewrite metadata on resources created by the v1
+// chart. Some legacy chart versions also omitted the instance label that the v1
+// reconciler used to discover resources and attach owner references.
+//
+// Requiring both conversion annotations and Helm's release identity keeps this
+// exception scoped to v1-to-v2 upgrades. An arbitrary same-named Ingress, or
+// one that already has any owner, must still be rejected.
+func legacyIngressAdoptableByWandb(ingress *networkingv1.Ingress, wandb *apiv2.WeightsAndBiases) bool {
+	if len(ingress.OwnerReferences) != 0 {
+		return false
+	}
+	if !convertedFromV1(wandb) {
+		return false
+	}
+
+	return ingress.Annotations[helmReleaseNameAnnotation] == wandb.Name &&
+		ingress.Annotations[helmReleaseNamespaceAnnotation] == wandb.Namespace
+}
+
+func convertedFromV1(wandb *apiv2.WeightsAndBiases) bool {
+	return wandb.Annotations[apiv1.V1ChartAnnotation] != "" &&
+		wandb.Annotations[apiv1.V1ValuesAnnotation] != ""
+}
+
+// adoptLegacyIngress atomically transfers ownership and removes v1 state. The
+// desired rules are included in the same patch so an Ingress whose only route
+// is the legacy default backend remains valid when that backend is removed.
+func adoptLegacyIngress(
+	ctx context.Context,
+	c ctrlClient.Client,
+	ingress *networkingv1.Ingress,
+	desired *networkingv1.Ingress,
+) error {
+	before := ingress.DeepCopy()
+
+	for _, annotation := range []string{helmReleaseNameAnnotation, helmReleaseNamespaceAnnotation} {
+		delete(ingress.Annotations, annotation)
+		delete(desired.Annotations, annotation)
+	}
+	if ingress.Labels[appManagedByLabel] == "Helm" {
+		delete(ingress.Labels, appManagedByLabel)
+	}
+	delete(ingress.Labels, helmChartLabel)
+	if ingress.Labels == nil {
+		ingress.Labels = map[string]string{}
+	}
+	for key, value := range desired.Labels {
+		ingress.Labels[key] = value
+	}
+	desiredCopy := desired.DeepCopy()
+	ingress.OwnerReferences = append([]metav1.OwnerReference(nil), desiredCopy.OwnerReferences...)
+	ingress.Spec.Rules = desiredCopy.Spec.Rules
+	ingress.Spec.DefaultBackend = nil
+
+	if err := c.Patch(ctx, ingress, ctrlClient.MergeFrom(before)); err != nil {
+		return fmt.Errorf("adopt legacy Ingress %s/%s: %w", ingress.Namespace, ingress.Name, err)
+	}
+	return nil
 }
 
 func resolveIngressServicePort(app serverManifest.Application) networkingv1.ServiceBackendPort {
@@ -236,12 +402,12 @@ func summarizeIngressStatus(ingress *networkingv1.Ingress) *apiv2.IngressStatusS
 		Name: ingress.Name,
 	}
 	for _, lb := range ingress.Status.LoadBalancer.Ingress {
-		loadBalancerIngress := corev1.LoadBalancerIngress{
+		loadBalancerIngress := apiv2.IngressLoadBalancerStatus{
 			IP:       lb.IP,
 			Hostname: lb.Hostname,
 		}
 		for _, port := range lb.Ports {
-			loadBalancerIngress.Ports = append(loadBalancerIngress.Ports, corev1.PortStatus{
+			loadBalancerIngress.Ports = append(loadBalancerIngress.Ports, apiv2.IngressPortStatus{
 				Port:     port.Port,
 				Protocol: port.Protocol,
 				Error:    port.Error,

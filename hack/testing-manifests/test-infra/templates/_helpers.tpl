@@ -23,6 +23,10 @@ app.kubernetes.io/component: {{ .component }}
 {{ .Values.seaweedfs.service.name }}.{{ .Release.Namespace }}.svc.cluster.local
 {{- end -}}
 
+{{- define "test-infra.seaweedfsConnectionHost" -}}
+{{- default (include "test-infra.seaweedfsHost" .) .Values.seaweedfs.connection.host -}}
+{{- end -}}
+
 {{- define "test-infra.mysqlTLS" -}}
 {{- if .Values.mysql.tls.enabled -}}true{{- end -}}
 {{- end -}}

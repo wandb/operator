@@ -61,6 +61,7 @@ type Options struct {
 	CreateCASet       bool
 	IssuerName        string
 
+	AdminConsoleEnabled    bool
 	ExternalMySQL          bool
 	ExternalRedis          bool
 	ExternalObjectStore    bool
@@ -80,8 +81,9 @@ func main() {
 	flag.StringVar(&opts.Size, "size", string(defaultSize), "W&B size")
 	flag.StringVar(&opts.RetentionPolicy, "retention-policy", string(defaultRetentionPolicy), "Retention policy on delete")
 	flag.StringVar(&opts.LicenseFile, "license-file", "", "Path to W&B license file")
+	flag.BoolVar(&opts.AdminConsoleEnabled, "admin-console-enabled", false, "Enable the operator-managed admin console")
 	flag.StringVar(&opts.ManifestSource, "manifest-source", defaultManifestSource, "Server manifest source: published or local")
-	flag.StringVar(&opts.ObservabilityMode, "observability-mode", "off", "Observability mode: off, full, or forward")
+	flag.StringVar(&opts.ObservabilityMode, "observability-mode", "", "Observability mode: off, full, or forward. Unset leaves telemetry to the operator.")
 	flag.StringVar(&opts.NetworkMode, "network-mode", "gateway", "Networking mode: gateway or ingress")
 	flag.StringVar(&opts.GatewayClass, "gateway-class", "nginx", "GatewayClass name for gateway mode")
 	flag.StringVar(&opts.IngressClass, "ingress-class", "nginx", "IngressClass name for ingress mode")
@@ -273,9 +275,6 @@ func applyDefaults(opts *Options) {
 	if opts.ManifestSource == "" {
 		opts.ManifestSource = defaultManifestSource
 	}
-	if opts.ObservabilityMode == "" {
-		opts.ObservabilityMode = "off"
-	}
 	if opts.NetworkMode == "" {
 		opts.NetworkMode = "gateway"
 	}
@@ -351,6 +350,7 @@ func patchScalarSpec(cr *v2.WeightsAndBiases, opts Options) {
 	cr.Spec.Wandb.InternalServiceAuth = v2.InternalServiceAuth{Enabled: boolPtr(false)}
 	cr.Spec.Size = v2.Size(opts.Size)
 	cr.Spec.RetentionPolicy.OnDelete = v2.OnDeletePolicy(opts.RetentionPolicy)
+	cr.Spec.AdminConsoleEnabled = boolPtr(opts.AdminConsoleEnabled)
 }
 
 func patchManifestRepository(cr *v2.WeightsAndBiases, manifestSource string) error {
@@ -433,14 +433,34 @@ func patchNetworking(cr *v2.WeightsAndBiases, opts Options) error {
 
 func patchTelemetry(cr *v2.WeightsAndBiases, observabilityMode string) error {
 	mode := normalizeObservabilityMode(observabilityMode)
-	var enabled bool
+	enabled := true
 	switch mode {
+	case "":
+		// Unset follows the operator's own default rather than pinning telemetry off.
 	case "off":
 		enabled = false
 	case "full", "forward":
 		enabled = true
 	default:
 		return fmt.Errorf("observability-mode must be one of: off, full, forward")
+	}
+
+	// A base CR that omits a component would otherwise keep the operator's own default,
+	// leaving telemetry on when the mode says off.
+	if len(cr.Spec.MySQL) == 0 {
+		cr.Spec.MySQL = map[string]v2.MySQLSpec{v2.DefaultInstanceName: {ManagedMysql: &v2.ManagedMysqlSpec{}}}
+	}
+	if len(cr.Spec.Redis) == 0 {
+		cr.Spec.Redis = map[string]v2.RedisSpec{v2.DefaultInstanceName: {ManagedRedis: &v2.ManagedRedisSpec{}}}
+	}
+	if cr.Spec.Kafka.ManagedKafka == nil {
+		cr.Spec.Kafka.ManagedKafka = &v2.ManagedKafkaSpec{}
+	}
+	if len(cr.Spec.ObjectStore) == 0 {
+		cr.Spec.ObjectStore = map[string]v2.ObjectStoreSpec{v2.DefaultInstanceName: {ManagedObjectStore: &v2.ManagedObjectStoreSpec{}}}
+	}
+	if len(cr.Spec.ClickHouse) == 0 {
+		cr.Spec.ClickHouse = map[string]v2.ClickHouseSpec{v2.DefaultInstanceName: {ManagedClickHouse: &v2.ManagedClickHouseSpec{}}}
 	}
 
 	for _, spec := range cr.Spec.MySQL {
@@ -497,14 +517,19 @@ func patchExternalInfra(cr *v2.WeightsAndBiases, opts Options) {
 
 	if opts.ExternalObjectStore {
 		cr.Spec.ObjectStore[v2.DefaultInstanceName] = v2.ObjectStoreSpec{ExternalObjectStore: &v2.ObjectStoreConnection{
-			Provider:  valueFromSecret(externalObjectStoreSecret, "Provider"),
-			Endpoint:  valueFromSecret(externalObjectStoreSecret, "Host"),
-			Port:      valueFromSecret(externalObjectStoreSecret, "Port"),
-			Bucket:    valueFromSecret(externalObjectStoreSecret, "Bucket"),
-			Region:    valueFromSecret(externalObjectStoreSecret, "Region"),
-			AccessKey: valueFromSecret(externalObjectStoreSecret, "AccessKey"),
-			SecretKey: valueFromSecret(externalObjectStoreSecret, "SecretKey"),
+			Provider:       valueFromSecret(externalObjectStoreSecret, "Provider"),
+			Endpoint:       valueFromSecret(externalObjectStoreSecret, "Host"),
+			Port:           valueFromSecret(externalObjectStoreSecret, "Port"),
+			Bucket:         valueFromSecret(externalObjectStoreSecret, "Bucket"),
+			Region:         valueFromSecret(externalObjectStoreSecret, "Region"),
+			AccessKey:      valueFromSecret(externalObjectStoreSecret, "AccessKey"),
+			SecretKey:      valueFromSecret(externalObjectStoreSecret, "SecretKey"),
+			TlsEnabled:     valueFromSecret(externalObjectStoreSecret, "TlsEnabled"),
+			ForcePathStyle: valueFromSecret(externalObjectStoreSecret, "ForcePathStyle"),
 		}}
+		// External object-store testing must return direct presigned URLs so the
+		// browser exercises endpoint reachability and CORS rather than W&B proxying.
+		cr.Spec.Wandb.BucketProxy = false
 	}
 }
 
@@ -585,9 +610,6 @@ func normalizeNetworkMode(mode string) string {
 }
 
 func normalizeObservabilityMode(mode string) string {
-	if mode == "" {
-		return "off"
-	}
 	return strings.ToLower(mode)
 }
 

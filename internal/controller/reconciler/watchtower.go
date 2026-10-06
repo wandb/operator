@@ -96,6 +96,13 @@ func reconcileWatchtower(
 		return err
 	}
 	desired := buildWatchtowerApplication(wandb, authService, image)
+	usesAWSIngress, err := ingressUsesAWSLoadBalancerController(ctx, c, wandb)
+	if err != nil {
+		return err
+	}
+	if usesAWSIngress {
+		desired.Spec.ServiceAnnotations = awsLoadBalancerHealthCheckAnnotations(desired.Spec.PodTemplate.Spec.Containers)
+	}
 
 	application := &apiv2.Application{
 		ObjectMeta: metav1.ObjectMeta{
@@ -573,6 +580,14 @@ func reconcileWatchtowerRBAC(ctx context.Context, c ctrlClient.Client, wandb *ap
 				APIGroups: []string{"apps"},
 				Resources: []string{"deployments", "statefulsets", "replicasets", "daemonsets"},
 				Verbs:     []string{"get", "list", "watch"},
+			},
+			{
+				// Pod CPU/memory usage from metrics-server, for the Metrics tab. The
+				// operator holds this too (see the wandb-operator ClusterRole), so the
+				// apiserver allows delegating it here.
+				APIGroups: []string{"metrics.k8s.io"},
+				Resources: []string{"pods"},
+				Verbs:     []string{"get", "list"},
 			},
 		}
 		// Cluster-scoped objects cannot own-reference a namespaced CR; cleanup

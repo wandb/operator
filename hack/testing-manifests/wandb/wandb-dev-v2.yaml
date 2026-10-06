@@ -17,24 +17,4 @@ spec:
   size: dev
   retentionPolicy:
     onDelete: detach
-  mysql:
-    managedMysql:
-      telemetry:
-        enabled: true
-  redis:
-    managedRedis:
-      telemetry:
-        enabled: true
-  kafka:
-    managedKafka:
-      telemetry:
-        enabled: true
-  objectStore:
-    managedObjectStore:
-      telemetry:
-        enabled: true
-  clickhouse:
-    managedClickhouse:
-      telemetry:
-        enabled: true
 

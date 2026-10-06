@@ -349,6 +349,13 @@ type NetworkingSpec struct {
 }
 
 type IngressConfig struct {
+	// Managed controls whether the operator creates and manages the Ingress.
+	// When unset in ingress mode, the defaulting webhook sets it to true.
+	// Set it to false when an external Ingress routes to the operator-managed
+	// application Services.
+	// +optional
+	Managed *bool `json:"managed,omitempty"`
+
 	// +optional
 	IngressClassName *string `json:"ingressClassName,omitempty"`
 
@@ -747,7 +754,8 @@ type ManagedMysqlSpec struct {
 	Config      MySQLConfig `json:"config,omitempty"`
 	Namespace   string      `json:"namespace,omitempty"`
 	Name        string      `json:"name,omitempty"`
-	Telemetry   Telemetry   `json:"telemetry,omitempty"`
+	// +kubebuilder:default={enabled: true}
+	Telemetry Telemetry `json:"telemetry,omitempty"`
 }
 
 type MysqlConnection struct {
@@ -809,7 +817,8 @@ type ManagedRedisSpec struct {
 	Sentinel    RedisSentinelSpec `json:"sentinel,omitempty"`
 	Namespace   string            `json:"namespace,omitempty"`
 	Name        string            `json:"name,omitempty"`
-	Telemetry   Telemetry         `json:"telemetry,omitempty"`
+	// +kubebuilder:default={enabled: true}
+	Telemetry Telemetry `json:"telemetry,omitempty"`
 }
 
 type RedisConnection struct {
@@ -864,7 +873,8 @@ type ManagedKafkaSpec struct {
 	Config      KafkaConfig `json:"config,omitempty"`
 	Namespace   string      `json:"namespace,omitempty"`
 	Name        string      `json:"name,omitempty"`
-	Telemetry   Telemetry   `json:"telemetry,omitempty"`
+	// +kubebuilder:default={enabled: true}
+	Telemetry Telemetry `json:"telemetry,omitempty"`
 	// ServiceAccount configures the identity used by the Bufstream broker.
 	ServiceAccount   ManagedServiceAccountSpec `json:"serviceAccount,omitempty"`
 	SkipDataRecovery bool                      `json:"skipDataRecovery,omitempty"`
@@ -922,7 +932,8 @@ type ManagedObjectStoreSpec struct {
 	Config                 ObjectStoreConfig      `json:"config,omitempty"`
 	Namespace              string                 `json:"namespace,omitempty"`
 	Name                   string                 `json:"name,omitempty"`
-	Telemetry              Telemetry              `json:"telemetry,omitempty"`
+	// +kubebuilder:default={enabled: true}
+	Telemetry Telemetry `json:"telemetry,omitempty"`
 }
 
 type SeaweedObjectStoreSpec struct {
@@ -1003,7 +1014,8 @@ type ManagedClickHouseSpec struct {
 	Config      ClickHouseConfig `json:"config,omitempty"`
 	Namespace   string           `json:"namespace,omitempty"`
 	Name        string           `json:"name,omitempty"`
-	Telemetry   Telemetry        `json:"telemetry,omitempty"`
+	// +kubebuilder:default={enabled: true}
+	Telemetry Telemetry `json:"telemetry,omitempty"`
 	// ServiceAccount configures the identity used by ClickHouse server pods.
 	ServiceAccount ManagedServiceAccountSpec `json:"serviceAccount,omitempty"`
 
@@ -1132,9 +1144,40 @@ type GatewayStatusSummary struct {
 }
 
 type IngressStatusSummary struct {
-	Name                string                       `json:"name,omitempty"`
-	LoadBalancerIngress []corev1.LoadBalancerIngress `json:"loadBalancerIngress,omitempty"`
-	Ready               bool                         `json:"ready"`
+	Name                string                      `json:"name,omitempty"`
+	LoadBalancerIngress []IngressLoadBalancerStatus `json:"loadBalancerIngress,omitempty"`
+	Ready               bool                        `json:"ready"`
+}
+
+// IngressLoadBalancerStatus mirrors the externally visible fields of a
+// Kubernetes Ingress load-balancer status without inheriting validation markers
+// from Kubernetes API types into the WeightsAndBiases CRD.
+type IngressLoadBalancerStatus struct {
+	// +optional
+	IP string `json:"ip,omitempty"`
+
+	// +optional
+	Hostname string `json:"hostname,omitempty"`
+
+	// IPMode is retained for wire compatibility with the previous
+	// corev1.LoadBalancerIngress-based status schema.
+	// +optional
+	IPMode *corev1.LoadBalancerIPMode `json:"ipMode,omitempty"`
+
+	// +optional
+	// +listType=atomic
+	Ports []IngressPortStatus `json:"ports,omitempty"`
+}
+
+type IngressPortStatus struct {
+	Port int32 `json:"port"`
+
+	Protocol corev1.Protocol `json:"protocol"`
+
+	// +optional
+	// +kubebuilder:validation:Pattern=`^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$`
+	// +kubebuilder:validation:MaxLength=316
+	Error *string `json:"error,omitempty"`
 }
 
 type WandbStatus struct {
@@ -1217,8 +1260,11 @@ type TelemetryConnectionStatus struct {
 	LogsExporter          string `json:"logsExporter,omitempty"`
 	TracesExporter        string `json:"tracesExporter,omitempty"`
 	MetricsEndpoint       string `json:"metricsEndpoint,omitempty"`
+	MetricsReadEndpoint   string `json:"metricsReadEndpoint,omitempty"`
 	LogsEndpoint          string `json:"logsEndpoint,omitempty"`
+	LogsReadEndpoint      string `json:"logsReadEndpoint,omitempty"`
 	TracesEndpoint        string `json:"tracesEndpoint,omitempty"`
+	TracesReadEndpoint    string `json:"tracesReadEndpoint,omitempty"`
 	ServiceName           string `json:"serviceName,omitempty"`
 	ResourceAttributes    string `json:"resourceAttributes,omitempty"`
 	GorillaTracer         string `json:"gorillaTracer,omitempty"`

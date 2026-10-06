@@ -4,10 +4,10 @@
       "name": "DS_VICTORIAMETRICS",
       "label": "VictoriaMetrics",
       "type": "datasource",
-      "pluginId": "victoriametrics-metrics-datasource",
-      "pluginName": "VictoriaMetrics"
+      "pluginId": "prometheus",
+      "pluginName": "Prometheus"
     },
-    {"name": "DS_VICTORIATRACES", "label": "VictoriaTraces", "type": "datasource", "pluginId": "jaeger", "pluginName": "Jaeger"}
+    {"name": "DS_VICTORIATRACES", "label": "VictoriaTraces", "type": "datasource", "pluginId": "tempo", "pluginName": "Tempo"}
   ],
   "annotations": {"list": []},
   "editable": true,
@@ -54,7 +54,7 @@
     {
       "type": "timeseries",
       "title": "Request rate by status code",
-      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "datasource": {"type": "prometheus", "uid": "${DS_VICTORIAMETRICS}"},
       "gridPos": {"h": 8, "w": 16, "x": 0, "y": 7},
       "targets": [
         {
@@ -78,7 +78,7 @@
     {
       "type": "timeseries",
       "title": "4xx vs 5xx request rate",
-      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "datasource": {"type": "prometheus", "uid": "${DS_VICTORIAMETRICS}"},
       "gridPos": {"h": 8, "w": 16, "x": 0, "y": 15},
       "targets": [
         {
@@ -107,7 +107,7 @@
     {
       "type": "timeseries",
       "title": "Error ratio (5xx / all requests)",
-      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "datasource": {"type": "prometheus", "uid": "${DS_VICTORIAMETRICS}"},
       "gridPos": {"h": 8, "w": 16, "x": 0, "y": 23},
       "targets": [
         {
@@ -137,7 +137,7 @@
     {
       "type": "timeseries",
       "title": "Request latency (p50 / p95 / p99)",
-      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "datasource": {"type": "prometheus", "uid": "${DS_VICTORIAMETRICS}"},
       "gridPos": {"h": 8, "w": 16, "x": 0, "y": 32},
       "targets": [
         {
@@ -172,7 +172,7 @@
     {
       "type": "timeseries",
       "title": "p95 latency by operation (top 10)",
-      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "datasource": {"type": "prometheus", "uid": "${DS_VICTORIAMETRICS}"},
       "gridPos": {"h": 8, "w": 16, "x": 0, "y": 40},
       "targets": [
         {
@@ -196,7 +196,7 @@
     {
       "type": "table",
       "title": "Top operations by slow request count (>2.5s)",
-      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "datasource": {"type": "prometheus", "uid": "${DS_VICTORIAMETRICS}"},
       "gridPos": {"h": 10, "w": 16, "x": 0, "y": 48},
       "targets": [
         {
@@ -253,7 +253,7 @@
     {
       "type": "timeseries",
       "title": "GraphQL operation rate by span (top, sampled)",
-      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "datasource": {"type": "prometheus", "uid": "${DS_VICTORIAMETRICS}"},
       "gridPos": {"h": 8, "w": 16, "x": 0, "y": 59},
       "targets": [
         {
@@ -278,7 +278,7 @@
     {
       "type": "timeseries",
       "title": "GraphQL p95 latency by span (sampled)",
-      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "datasource": {"type": "prometheus", "uid": "${DS_VICTORIAMETRICS}"},
       "gridPos": {"h": 8, "w": 16, "x": 0, "y": 67},
       "targets": [
         {
@@ -309,7 +309,7 @@
     {
       "type": "stat",
       "title": "GraphQL errors in range (sampled)",
-      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "datasource": {"type": "prometheus", "uid": "${DS_VICTORIAMETRICS}"},
       "gridPos": {"h": 4, "w": 12, "x": 0, "y": 76},
       "targets": [
         {
@@ -324,7 +324,7 @@
     {
       "type": "stat",
       "title": "Distinct erroring services",
-      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "datasource": {"type": "prometheus", "uid": "${DS_VICTORIAMETRICS}"},
       "gridPos": {"h": 4, "w": 12, "x": 12, "y": 76},
       "targets": [
         {
@@ -348,7 +348,7 @@
     {
       "type": "bargauge",
       "title": "Top services by error count",
-      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "datasource": {"type": "prometheus", "uid": "${DS_VICTORIAMETRICS}"},
       "gridPos": {"h": 9, "w": 12, "x": 0, "y": 84},
       "targets": [
         {
@@ -364,7 +364,7 @@
     {
       "type": "table",
       "title": "Top service × operation by errors",
-      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "datasource": {"type": "prometheus", "uid": "${DS_VICTORIAMETRICS}"},
       "gridPos": {"h": 9, "w": 12, "x": 12, "y": 84},
       "targets": [
         {
@@ -407,7 +407,7 @@
     {
       "type": "timeseries",
       "title": "GraphQL errors per minute, by service (sampled)",
-      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "datasource": {"type": "prometheus", "uid": "${DS_VICTORIAMETRICS}"},
       "gridPos": {"h": 9, "w": 16, "x": 0, "y": 98},
       "targets": [
         {
@@ -452,7 +452,7 @@
     {
       "type": "timeseries",
       "title": "History-reader span latency p95 (traces, sampled)",
-      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "datasource": {"type": "prometheus", "uid": "${DS_VICTORIAMETRICS}"},
       "gridPos": {"h": 9, "w": 16, "x": 0, "y": 113},
       "targets": [
         {
@@ -477,7 +477,7 @@
     {
       "type": "timeseries",
       "title": "Artifact operation latency p95 (traces, sampled)",
-      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "datasource": {"type": "prometheus", "uid": "${DS_VICTORIAMETRICS}"},
       "gridPos": {"h": 9, "w": 16, "x": 0, "y": 122},
       "targets": [
         {
@@ -502,7 +502,7 @@
     {
       "type": "bargauge",
       "title": "Top parquet/glue spans by call count (sampled)",
-      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+      "datasource": {"type": "prometheus", "uid": "${DS_VICTORIAMETRICS}"},
       "gridPos": {"h": 9, "w": 16, "x": 0, "y": 131},
       "targets": [
         {
@@ -535,7 +535,7 @@
         "name": "namespace",
         "label": "W&B Namespace",
         "type": "query",
-        "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
+        "datasource": {"type": "prometheus", "uid": "${DS_VICTORIAMETRICS}"},
         "definition": "label_values(wandb_application_info, namespace)",
         "query": {
           "query": "label_values(wandb_application_info, namespace)",

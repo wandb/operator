@@ -46,5 +46,8 @@ metadata:
     app.kubernetes.io/component: telemetry
     app.kubernetes.io/part-of: wandb
 spec:
+  # Grafana Tempo datasource support requires VictoriaTraces v0.9.4 or newer.
+  image:
+    tag: v0.9.4
   retentionPeriod: {{ .Values.retentionPeriod | quote }}
 {{- end }}

@@ -32,20 +32,23 @@ func ReconcileTelemetryConnectionSecret(
 	}
 
 	desiredData := map[string][]byte{
-		envOTLPProtocol:        []byte(connection.Protocol),
-		envOTLPMetricsEndpoint: []byte(connection.MetricsEndpoint),
-		envOTLPLogsEndpoint:    []byte(connection.LogsEndpoint),
-		envOTLPTracesEndpoint:  []byte(connection.TracesEndpoint),
-		envOTELMetricsExporter: []byte(connection.MetricsExporter),
-		envOTELLogsExporter:    []byte(connection.LogsExporter),
-		envOTELTracesExporter:  []byte(connection.TracesExporter),
-		envOTELServiceName:     []byte(connection.ServiceName),
-		envOTELResourceAttrs:   []byte(connection.ResourceAttributes),
-		envGorillaTracer:       []byte(connection.GorillaTracer),
-		envGorillaStatsd:       []byte(connection.StatsdAddress),
-		envDDTraceAgentURL:     []byte(connection.DatadogTraceAgentURL),
-		envDDAgentHost:         []byte(connection.DatadogTraceAgentHost),
-		envDDTraceAgentPort:    []byte(connection.DatadogTraceAgentPort),
+		envOTLPProtocol:              []byte(connection.Protocol),
+		envOTLPMetricsEndpoint:       []byte(connection.MetricsEndpoint),
+		envOTLPLogsEndpoint:          []byte(connection.LogsEndpoint),
+		envOTLPTracesEndpoint:        []byte(connection.TracesEndpoint),
+		envOTELMetricsExporter:       []byte(connection.MetricsExporter),
+		envOTELLogsExporter:          []byte(connection.LogsExporter),
+		envOTELTracesExporter:        []byte(connection.TracesExporter),
+		envOTELServiceName:           []byte(connection.ServiceName),
+		envOTELResourceAttrs:         []byte(connection.ResourceAttributes),
+		envGorillaTracer:             []byte(connection.GorillaTracer),
+		envGorillaStatsd:             []byte(connection.StatsdAddress),
+		envDDTraceAgentURL:           []byte(connection.DatadogTraceAgentURL),
+		envDDAgentHost:               []byte(connection.DatadogTraceAgentHost),
+		envDDTraceAgentPort:          []byte(connection.DatadogTraceAgentPort),
+		telemetryMetricsReadEndpoint: []byte(connection.MetricsReadEndpoint),
+		telemetryLogsReadEndpoint:    []byte(connection.LogsReadEndpoint),
+		telemetryTracesReadEndpoint:  []byte(connection.TracesReadEndpoint),
 	}
 
 	secretLookup := types.NamespacedName{

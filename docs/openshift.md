@@ -148,6 +148,8 @@ spec:
     version: <wandb-version>
   networking:
     mode: ingress
+    ingress:
+      ingressClassName: <ingress-class-name>
   objectStore:
     externalObjectStore:
       bucket:    { name: wandb-object-store, key: bucket }
