@@ -114,6 +114,9 @@ func applyGlobalMappings(globalMap map[string]interface{}, dst *appsv2.WeightsAn
 	if err := mapCustomCACerts(globalMap, dst); err != nil {
 		return err
 	}
+	if err := mapImageRegistry(globalMap, dst); err != nil {
+		return err
+	}
 	if err := mapOIDC(globalMap, dst); err != nil {
 		return err
 	}
@@ -128,6 +131,28 @@ func applyGlobalMappings(globalMap map[string]interface{}, dst *appsv2.WeightsAn
 	}
 	if err := mapClickHouse(globalMap, dst); err != nil {
 		return err
+	}
+
+	return nil
+}
+
+func mapImageRegistry(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) error {
+	registry, _, err := unstructured.NestedString(globalMap, "imageRegistry")
+	if err != nil {
+		return fmt.Errorf("spec.values.global.imageRegistry: %w", err)
+	}
+	if registry != "" {
+		dst.Spec.Global.ImageRegistry = registry
+	}
+
+	prefix, _, err := unstructured.NestedString(globalMap, "repositoryPrefix")
+	if err != nil {
+		return fmt.Errorf("spec.values.global.repositoryPrefix: %w", err)
+	}
+	if prefix != "" && registry == "" {
+		logger.Info("spec.values.global.repositoryPrefix has no v2 equivalent and is not converted; "+
+			"set spec.global.imageRegistry explicitly if images must resolve against a mirror",
+			"repositoryPrefix", prefix)
 	}
 
 	return nil
