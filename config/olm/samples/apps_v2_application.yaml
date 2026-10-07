@@ -1,0 +1,15 @@
+apiVersion: apps.wandb.com/v2
+kind: Application
+metadata:
+  name: application-sample
+  labels:
+    app.kubernetes.io/name: application
+    app.kubernetes.io/part-of: wandb-operator
+    app.kubernetes.io/managed-by: olm
+spec:
+  kind: Deployment
+  podTemplate:
+    spec:
+      containers:
+      - name: app
+        image: nginx:1.27

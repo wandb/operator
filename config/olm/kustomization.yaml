@@ -1,0 +1,22 @@
+# OLM-safe install: CRDs, RBAC, manager, webhooks. No cert-manager CRs —
+# OLM injects serving certs and CA bundles itself.
+namespace: operator-system
+namePrefix: operator-
+
+resources:
+- ../crd
+- ../rbac
+- ../manager
+- ../webhook
+- metrics_service.yaml
+
+patches:
+- path: manager_metrics_patch.yaml
+  target:
+    kind: Deployment
+- path: manager_webhook_olm_patch.yaml
+  target:
+    kind: Deployment
+- path: manager_openshift_patch.yaml
+  target:
+    kind: Deployment
