@@ -1124,6 +1124,8 @@ migrations:
       - runtimePaths
     commonVolumeMounts:
       - runtimeTmp
+    securityProfile:
+      readOnlyRootFilesystem: true
   internal-signer:
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
@@ -1141,6 +1143,8 @@ migrations:
       - runtimePaths
     commonVolumeMounts:
       - runtimeTmp
+    securityProfile:
+      readOnlyRootFilesystem: true
   weave-trace:
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
@@ -1154,3 +1158,5 @@ migrations:
       - pythonRuntimePaths
     commonVolumeMounts:
       - runtimeTmp
+    securityProfile:
+      readOnlyRootFilesystem: true

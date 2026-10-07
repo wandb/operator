@@ -35,6 +35,15 @@ applications:
     image:
       repository: example/legacy-compatible-empty
     securityProfile: {}
+  legacy-compatible-absent:
+    name: legacy-compatible-absent
+    image:
+      repository: example/legacy-compatible-absent
+  legacy-compatible-null:
+    name: legacy-compatible-null
+    image:
+      repository: example/legacy-compatible-null
+    securityProfile: null
 migrations:
   gorilla:
     image:
@@ -46,6 +55,13 @@ migrations:
     image:
       repository: example/legacy-compatible-empty
     securityProfile: {}
+  legacy-compatible-absent:
+    image:
+      repository: example/legacy-compatible-absent
+  legacy-compatible-null:
+    image:
+      repository: example/legacy-compatible-null
+    securityProfile: null
 `)
 	sizingYAML := []byte(`
 applications:
@@ -80,21 +96,26 @@ applications:
 	if loaded.Applications["api"].Sizing["default"].Replicas != 1 {
 		t.Fatal("sizing fragment was not merged with the profiled application")
 	}
-	emptyAppProfile := loaded.Applications["legacy-compatible-empty"].SecurityProfile
-	if emptyAppProfile.RunAsNonRoot != nil || emptyAppProfile.ReadOnlyRootFilesystem != nil {
-		t.Fatalf("empty application security profile = %#v, want nil settings", emptyAppProfile)
-	}
-
 	migrationProfile := loaded.Migrations["gorilla"].SecurityProfile
-	if migrationProfile == nil || migrationProfile.RunAsNonRoot == nil || !*migrationProfile.RunAsNonRoot {
+	if migrationProfile.RunAsNonRoot == nil || !*migrationProfile.RunAsNonRoot {
 		t.Fatalf("migration runAsNonRoot = %#v, want true", migrationProfile)
 	}
 	if migrationProfile.ReadOnlyRootFilesystem == nil || *migrationProfile.ReadOnlyRootFilesystem {
 		t.Fatalf("migration readOnlyRootFilesystem = %#v, want explicit false", migrationProfile)
 	}
-	emptyMigrationProfile := loaded.Migrations["legacy-compatible-empty"].SecurityProfile
-	if emptyMigrationProfile == nil || emptyMigrationProfile.RunAsNonRoot != nil || emptyMigrationProfile.ReadOnlyRootFilesystem != nil {
-		t.Fatalf("empty migration security profile = %#v, want non-nil profile with nil settings", emptyMigrationProfile)
+	for _, name := range []string{"legacy-compatible-empty", "legacy-compatible-absent", "legacy-compatible-null"} {
+		t.Run(name, func(t *testing.T) {
+			app, exists := loaded.Applications[name]
+			if !exists {
+				t.Fatalf("application %q was not decoded", name)
+			}
+			checkProfile(t, app.SecurityProfile, nil, nil)
+			migration, exists := loaded.Migrations[name]
+			if !exists {
+				t.Fatalf("migration %q was not decoded", name)
+			}
+			checkProfile(t, migration.SecurityProfile, nil, nil)
+		})
 	}
 }
 
@@ -129,7 +150,7 @@ func TestLegacyManifestFixturesHaveNoWorkloadSecurityProfiles(t *testing.T) {
 				}
 			}
 			for name, migration := range loaded.Migrations {
-				if migration.SecurityProfile != nil {
+				if migration.SecurityProfile.RunAsNonRoot != nil || migration.SecurityProfile.ReadOnlyRootFilesystem != nil {
 					t.Fatalf("legacy migration %q unexpectedly has security profile %#v", name, migration.SecurityProfile)
 				}
 			}
@@ -145,6 +166,7 @@ func TestSecurityProfileFragmentPrecedence(t *testing.T) {
 	}{
 		{"omitted", "", profileBool(true), profileBool(true)},
 		{"empty", "    securityProfile: {}", profileBool(true), profileBool(true)},
+		{"null", "    securityProfile: null", profileBool(true), profileBool(true)},
 		{"false overrides", "    securityProfile: {runAsNonRoot: false, readOnlyRootFilesystem: false}", profileBool(false), profileBool(false)},
 		{"partial inherits", "    securityProfile: {runAsNonRoot: false}", profileBool(false), profileBool(true)},
 	} {
@@ -186,7 +208,7 @@ migrations:
 				t.Fatal(err)
 			}
 			app := loaded.Applications["api"]
-			checkProfile(t, &app.SecurityProfile, test.nonRoot, test.readOnly)
+			checkProfile(t, app.SecurityProfile, test.nonRoot, test.readOnly)
 			if app.Image.Repository != "example/api" || app.Sizing["default"].Replicas != 2 {
 				t.Fatalf("lost application fields: %#v", app)
 			}
@@ -195,7 +217,7 @@ migrations:
 				t.Fatalf("migration was not replaced: %#v", migration)
 			}
 			switch test.name {
-			case "omitted", "empty":
+			case "omitted", "empty", "null":
 				checkProfile(t, migration.SecurityProfile, nil, nil)
 			case "partial inherits":
 				checkProfile(t, migration.SecurityProfile, profileBool(false), nil)
@@ -208,16 +230,12 @@ migrations:
 
 func profileBool(value bool) *bool { return &value }
 
-func checkProfile(t *testing.T, profile *manifest.WorkloadSecurityProfile, nonRoot, readOnly *bool) {
+func checkProfile(t *testing.T, profile manifest.WorkloadSecurityProfile, nonRoot, readOnly *bool) {
 	t.Helper()
-	var gotNonRoot, gotReadOnly *bool
-	if profile != nil {
-		gotNonRoot, gotReadOnly = profile.RunAsNonRoot, profile.ReadOnlyRootFilesystem
-	}
 	for _, pair := range []struct {
 		name      string
 		got, want *bool
-	}{{"runAsNonRoot", gotNonRoot, nonRoot}, {"readOnlyRootFilesystem", gotReadOnly, readOnly}} {
+	}{{"runAsNonRoot", profile.RunAsNonRoot, nonRoot}, {"readOnlyRootFilesystem", profile.ReadOnlyRootFilesystem, readOnly}} {
 		if (pair.got == nil) != (pair.want == nil) || pair.got != nil && *pair.got != *pair.want {
 			t.Errorf("%s = %v, want %v", pair.name, pair.got, pair.want)
 		}

@@ -197,7 +197,7 @@ func buildWatchtowerApplication(wandb *apiv2.WeightsAndBiases, authService strin
 			PodTemplate: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					ServiceAccountName: watchtowerServiceAccountName(wandb),
-					SecurityContext:    resolvePodSecurityContext(nil),
+					SecurityContext:    resolvePodSecurityContext(serverManifest.WorkloadSecurityProfile{}),
 					Affinity:           wandb.Spec.Affinity,
 					Tolerations:        watchtowerTolerations(wandb),
 					Containers: []corev1.Container{
@@ -206,7 +206,7 @@ func buildWatchtowerApplication(wandb *apiv2.WeightsAndBiases, authService strin
 							Image:           image,
 							Command:         []string{"/watchtower"},
 							Args:            []string{"--port", fmt.Sprintf("%d", watchtowerContainerPort)},
-							SecurityContext: resolveContainerSecurityContext(nil),
+							SecurityContext: resolveContainerSecurityContext(serverManifest.WorkloadSecurityProfile{}),
 							Env:             watchtowerEnv(wandb, authService, basePath),
 							Resources:       watchtowerResources(),
 							Ports: []corev1.ContainerPort{{

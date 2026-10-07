@@ -305,9 +305,9 @@ type MigrationJob struct {
 	CommonVolumeMounts []string      `yaml:"commonVolumeMounts,omitempty"`
 	Env                []EnvVar      `yaml:"env,omitempty"`
 	VolumeMounts       []VolumeMount `yaml:"volumeMounts,omitempty"`
-	// SecurityProfile is optional so migration images from older server
-	// releases keep their existing runtime behavior.
-	SecurityProfile *WorkloadSecurityProfile `yaml:"securityProfile,omitempty"`
+	// SecurityProfile opts this workload into security settings supported by
+	// newer server images. An empty profile preserves legacy behavior.
+	SecurityProfile WorkloadSecurityProfile `yaml:"securityProfile,omitempty"`
 }
 
 // FileSpec defines a single file to project into the application's container.

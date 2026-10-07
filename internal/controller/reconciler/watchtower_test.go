@@ -466,6 +466,17 @@ func TestBuildWatchtowerApplicationPinsOneReplica(t *testing.T) {
 	require.Equal(t, watchtowerName(wandb), app.Name)
 }
 
+func TestBuildWatchtowerApplicationPreservesSecurityBaseline(t *testing.T) {
+	wandb := watchtowerTestCR("wandb", "wandb")
+	pod := buildWatchtowerApplication(wandb, "api:8081", testOperatorImage).Spec.PodTemplate.Spec
+
+	assertPodSecurityBaseline(t, pod.SecurityContext)
+	assertOptionalBool(t, "runAsNonRoot", pod.SecurityContext.RunAsNonRoot, nil)
+	require.Len(t, pod.Containers, 1)
+	assertContainerSecurityBaseline(t, pod.Containers[0].SecurityContext)
+	assertOptionalBool(t, "readOnlyRootFilesystem", pod.Containers[0].SecurityContext.ReadOnlyRootFilesystem, nil)
+}
+
 // The component label is what makes manifest-driven Application pruning skip
 // this Application instead of deleting it every reconcile.
 func TestBuildWatchtowerApplicationCarriesTheComponentLabel(t *testing.T) {

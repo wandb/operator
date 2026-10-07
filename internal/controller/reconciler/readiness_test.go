@@ -159,16 +159,16 @@ func TestRunMigrationsSecurityProfileCompatibility(t *testing.T) {
 
 	tests := []struct {
 		name             string
-		profile          *servermanifest.WorkloadSecurityProfile
+		profile          servermanifest.WorkloadSecurityProfile
 		wantProfiled     bool
 		wantRunAsNonRoot *bool
 		wantReadOnlyRoot *bool
 	}{
 		{name: "legacy absent profile"},
-		{name: "legacy empty profile", profile: &servermanifest.WorkloadSecurityProfile{}},
+		{name: "legacy empty profile", profile: servermanifest.WorkloadSecurityProfile{}},
 		{
 			name: "enabled profile",
-			profile: &servermanifest.WorkloadSecurityProfile{
+			profile: servermanifest.WorkloadSecurityProfile{
 				RunAsNonRoot:           new(true),
 				ReadOnlyRootFilesystem: new(true),
 			},
@@ -178,7 +178,7 @@ func TestRunMigrationsSecurityProfileCompatibility(t *testing.T) {
 		},
 		{
 			name: "explicit false profile",
-			profile: &servermanifest.WorkloadSecurityProfile{
+			profile: servermanifest.WorkloadSecurityProfile{
 				RunAsNonRoot:           new(false),
 				ReadOnlyRootFilesystem: new(false),
 			},
@@ -188,7 +188,7 @@ func TestRunMigrationsSecurityProfileCompatibility(t *testing.T) {
 		},
 		{
 			name: "pod setting only",
-			profile: &servermanifest.WorkloadSecurityProfile{
+			profile: servermanifest.WorkloadSecurityProfile{
 				RunAsNonRoot: new(true),
 			},
 			wantProfiled:     true,
@@ -196,7 +196,7 @@ func TestRunMigrationsSecurityProfileCompatibility(t *testing.T) {
 		},
 		{
 			name: "container setting only",
-			profile: &servermanifest.WorkloadSecurityProfile{
+			profile: servermanifest.WorkloadSecurityProfile{
 				ReadOnlyRootFilesystem: new(true),
 			},
 			wantProfiled:     true,
@@ -292,9 +292,9 @@ func TestSecurityProfileDoesNotRestartCompletedMigrations(t *testing.T) {
 		}},
 	}
 	c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(&apiv2.WeightsAndBiases{}).WithObjects(wandb).Build()
-	for _, profile := range []*servermanifest.WorkloadSecurityProfile{
+	for _, profile := range []servermanifest.WorkloadSecurityProfile{
 		{RunAsNonRoot: new(true), ReadOnlyRootFilesystem: new(true)},
-		{RunAsNonRoot: new(false)}, {}, nil,
+		{RunAsNonRoot: new(false)}, {},
 	} {
 		manifest := servermanifest.Manifest{Migrations: map[string]servermanifest.MigrationJob{
 			"gorilla": {Image: servermanifest.ImageRef{Repository: "example/migrate", Tag: "test"}, SecurityProfile: profile},
