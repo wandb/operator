@@ -35,7 +35,6 @@ import (
 	"github.com/wandb/operator/internal/observability/telemetry"
 	oputils "github.com/wandb/operator/pkg/utils"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
-	"github.com/wandb/operator/pkg/wandb/manifest/registryauth"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
@@ -166,6 +165,12 @@ func Reconcile(
 		return ctrl.Result{}, nil
 	}
 
+	// Validate the artifact before legacy migrations can write Secrets or spec.
+	manifest, manifestResult, manifestErr := loadCompatibleManifest(ctx, client, recorder, wandb)
+	if manifestErr != nil || manifestResult.RequeueAfter > 0 {
+		return manifestResult, manifestErr
+	}
+
 	/////////////////////////
 	// Migrate legacy v1 conversion annotations into typed spec fields
 	if res, migErr := migrateLegacyAnnotations(ctx, client, wandb); migErr != nil || res.RequeueAfter > 0 {
@@ -179,26 +184,10 @@ func Reconcile(
 		return res, mapErr
 	}
 
-	/////////////////////////
-	// Fetch manifest early so infra sizing can be applied before provisioning.
-	// Local file:// manifests need no registry credentials, so a missing pull
-	// secret must not block reconcile for them.
-	var registryAuth *serverManifest.RegistryAuth
-	if !serverManifest.IsFileRepository(wandb.Spec.Wandb.ManifestRepository) {
-		// Ambient cloud creds only for non-default (private) registries; the
-		// public default pulls anonymously and must not probe cloud metadata.
-		allowAmbient := wandb.Spec.Wandb.ManifestRepository != apiv2.DefaultManifestRepository
-		registryAuth, err = registryauth.Resolve(ctx, client, wandb.Namespace, wandb.Spec.Global.ImagePullSecrets, allowAmbient)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-	}
-	manifest, err := serverManifest.GetServerManifest(ctx, wandb.Spec.Wandb.ManifestRepository, wandb.Spec.Wandb.Version, registryAuth)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-
 	// Override features from CR spec if present
+	if manifest.Features == nil {
+		manifest.Features = map[string]bool{}
+	}
 	for key, enabled := range wandb.Spec.Wandb.Features {
 		manifest.Features[key] = enabled
 	}
@@ -326,6 +315,8 @@ func consolidateResults(results []ctrl.Result) ctrl.Result {
 // back as a requeue, though — dropping it outright left a transient failure with
 // nothing to retry it, so Watchtower stayed down until an unrelated event
 // happened to trigger another pass.
+//
+// The caller must supply a manifest returned by the manifest loader.
 func ReconcileNetworkingAndWatchtower(
 	ctx context.Context,
 	client ctrlClient.Client,
@@ -381,6 +372,8 @@ func ReconcileNetworkingAndWatchtower(
 	return result, updateWandbStatusIfChanged(ctx, client, wandb, statusBefore)
 }
 
+// ReconcileWandbManifest reconciles applications and migrations from a manifest
+// returned by the manifest loader.
 func ReconcileWandbManifest(
 	ctx context.Context,
 	client ctrlClient.Client,
