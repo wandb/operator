@@ -592,7 +592,7 @@ applications:
       - runtimeTmp
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/anaconda2
-      tag: 0.85.1-rc.1790791511
+      tag: 0.85.1
     containers:
       - name: anaconda2
         ports:
@@ -647,7 +647,7 @@ applications:
             type: mysql
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.85.1-rc.1790791511
+      tag: 0.85.1
     containers:
       - name: api
         args:
@@ -696,7 +696,7 @@ applications:
       - runtimeTmp
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.85.1-rc.1790791511
+      tag: 0.85.1
     containers:
       - name: executor
         args:
@@ -719,7 +719,7 @@ applications:
       - runtimeTmp
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.85.1-rc.1790791511
+      tag: 0.85.1
     securityProfile:
       runAsNonRoot: true
       readOnlyRootFilesystem: true
@@ -740,7 +740,7 @@ applications:
       - runtimeTmp
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.85.1-rc.1790791511
+      tag: 0.85.1
     containers:
       - name: filestream
     securityProfile:
@@ -766,7 +766,7 @@ applications:
         value: "$(KAFKA_URL)/$(KAFKA_RUNS_V2_TOPIC_NAME)?consumer_group_id=flat-run-fields-updater"
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.85.1-rc.1790791511
+      tag: 0.85.1
     containers:
       - name: flat-run-fields-updater
     securityProfile:
@@ -776,7 +776,7 @@ applications:
     name: frontend
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/frontend-nginx
-      tag: 0.85.1-rc.1790791511
+      tag: 0.85.1
     commonEnvs:
       - frontend
     env:
@@ -841,9 +841,10 @@ applications:
         source:
           type: emptyDir
           name: nginx-cache
-    securityProfile:
-      runAsNonRoot: true
-      readOnlyRootFilesystem: true
+## TODO: no frontend support yet
+#    securityProfile:
+#      runAsNonRoot: true
+#      readOnlyRootFilesystem: true
   glue:
     name: glue
     args:
@@ -872,7 +873,7 @@ applications:
         value: "memory://"
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.85.1-rc.1790791511
+      tag: 0.85.1
     containers:
       - name: glue
     securityProfile:
@@ -898,7 +899,7 @@ applications:
         value: "$(KAFKA_URL)/$(KAFKA_RUNS_V2_TOPIC_NAME)?consumer_group_id=metric-observer"
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.85.1-rc.1790791511
+      tag: 0.85.1
     containers:
       - name: metric-observer
     securityProfile:
@@ -921,7 +922,7 @@ applications:
       - runtimeTmp
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.85.1-rc.1790791511
+      tag: 0.85.1
     containers:
       - name: parquet
         ports:
@@ -946,7 +947,7 @@ applications:
     name: weave
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-python
-      tag: 0.85.1-rc.1790791511
+      tag: 0.85.1
     commonEnvs:
       - runtimePaths
       - pythonRuntimePaths
@@ -1000,13 +1001,14 @@ applications:
           type: emptyDir
           name: cache
     securityProfile:
-      runAsNonRoot: true
+      ## TODO: fix slated for 0.86.0
+      # runAsNonRoot: true
       readOnlyRootFilesystem: true
   weave-trace:
     name: weave-trace
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
-      tag: 0.85.1-rc.1790791511
+      tag: 0.85.1
     commonEnvs:
       - clickhouse
       - kafka
@@ -1058,7 +1060,7 @@ applications:
     name: weave-trace-worker
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
-      tag: 0.85.1-rc.1790791511
+      tag: 0.85.1
     env:
       - name: DD_TRACE_ENABLED
         value: "false"
@@ -1084,7 +1086,7 @@ applications:
     legacyKey: weave-evaluate-model-worker
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
-      tag: 0.85.1-rc.1790791511
+      tag: 0.85.1
     env:
       - name: DD_TRACE_ENABLED
         value: "false"
@@ -1110,7 +1112,7 @@ migrations:
   gorilla:
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.85.1-rc.1790791511
+      tag: 0.85.1
     args:
       - "migrate"
       - "--db=$(GORILLA_METADATA_STORE)"
@@ -1130,7 +1132,7 @@ migrations:
   internal-signer:
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.85.1-rc.1790791511
+      tag: 0.85.1
     args:
       - "secret-generation-job"
     env:
@@ -1150,7 +1152,7 @@ migrations:
   weave-trace:
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
-      tag: 0.85.1-rc.1790791511
+      tag: 0.85.1
     args:
       - python
       - migrator.py
