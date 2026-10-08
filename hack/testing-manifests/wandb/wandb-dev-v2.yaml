@@ -13,7 +13,7 @@ spec:
     features:
       proxy: true
     manifestRepository: "file:///server-manifest"
-    version: "0.84.0-notifications-security-flags.1"
+    version: "0.85.1-rc.1790791511"
   size: dev
   retentionPolicy:
     onDelete: detach
