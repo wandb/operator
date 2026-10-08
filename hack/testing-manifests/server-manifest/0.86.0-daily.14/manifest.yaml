@@ -592,7 +592,7 @@ applications:
       - runtimeTmp
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/anaconda2
-      tag: 0.84.0-notifications-security-flags.1
+      tag: 0.86.0-daily.14
     containers:
       - name: anaconda2
         ports:
@@ -610,6 +610,9 @@ applications:
         - port: 8080
           protocol: TCP
           name: anaconda2
+    securityProfile:
+      runAsNonRoot: true
+      readOnlyRootFilesystem: true
   api:
     name: api
     commonEnvs:
@@ -644,7 +647,7 @@ applications:
             type: mysql
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.84.0-notifications-security-flags.1
+      tag: 0.86.0-daily.14
     containers:
       - name: api
         args:
@@ -675,6 +678,9 @@ applications:
         - /oidc
       servicePort: "8080"
       pathType: Prefix
+    securityProfile:
+      runAsNonRoot: true
+      readOnlyRootFilesystem: true
   executor:
     name: executor
     commonEnvs:
@@ -690,11 +696,14 @@ applications:
       - runtimeTmp
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.84.0-notifications-security-flags.1
+      tag: 0.86.0-daily.14
     containers:
       - name: executor
         args:
           - executor
+    securityProfile:
+      runAsNonRoot: true
+      readOnlyRootFilesystem: true
   filemeta:
     name: filemeta
     args:
@@ -710,7 +719,10 @@ applications:
       - runtimeTmp
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.84.0-notifications-security-flags.1
+      tag: 0.86.0-daily.14
+    securityProfile:
+      runAsNonRoot: true
+      readOnlyRootFilesystem: true
   filestream:
     name: filestream
     features:
@@ -728,9 +740,12 @@ applications:
       - runtimeTmp
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.84.0-notifications-security-flags.1
+      tag: 0.86.0-daily.14
     containers:
       - name: filestream
+    securityProfile:
+      runAsNonRoot: true
+      readOnlyRootFilesystem: true
   flat-run-fields-updater:
     name: flat-run-fields-updater
     args:
@@ -751,14 +766,17 @@ applications:
         value: "$(KAFKA_URL)/$(KAFKA_RUNS_V2_TOPIC_NAME)?consumer_group_id=flat-run-fields-updater"
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.84.0-notifications-security-flags.1
+      tag: 0.86.0-daily.14
     containers:
       - name: flat-run-fields-updater
+    securityProfile:
+      runAsNonRoot: true
+      readOnlyRootFilesystem: true
   frontend:
     name: frontend
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/frontend-nginx
-      tag: 0.84.0-notifications-security-flags.1
+      tag: 0.86.0-daily.14
     commonEnvs:
       - frontend
     env:
@@ -823,6 +841,10 @@ applications:
         source:
           type: emptyDir
           name: nginx-cache
+## TODO: no frontend support yet
+#    securityProfile:
+#      runAsNonRoot: true
+#      readOnlyRootFilesystem: true
   glue:
     name: glue
     args:
@@ -851,9 +873,12 @@ applications:
         value: "memory://"
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.84.0-notifications-security-flags.1
+      tag: 0.86.0-daily.14
     containers:
       - name: glue
+    securityProfile:
+      runAsNonRoot: true
+      readOnlyRootFilesystem: true
   metric-observer:
     name: metric-observer
     args:
@@ -874,9 +899,12 @@ applications:
         value: "$(KAFKA_URL)/$(KAFKA_RUNS_V2_TOPIC_NAME)?consumer_group_id=metric-observer"
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.84.0-notifications-security-flags.1
+      tag: 0.86.0-daily.14
     containers:
       - name: metric-observer
+    securityProfile:
+      runAsNonRoot: true
+      readOnlyRootFilesystem: true
   parquet:
     name: parquet
     args:
@@ -894,7 +922,7 @@ applications:
       - runtimeTmp
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.84.0-notifications-security-flags.1
+      tag: 0.86.0-daily.14
     containers:
       - name: parquet
         ports:
@@ -912,11 +940,14 @@ applications:
         - port: 8080
           protocol: TCP
           name: parquet
+    securityProfile:
+      runAsNonRoot: true
+      readOnlyRootFilesystem: true
   weave:
     name: weave
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-python
-      tag: 0.84.0-notifications-security-flags.1
+      tag: 0.86.0-daily.14
     commonEnvs:
       - runtimePaths
       - pythonRuntimePaths
@@ -969,11 +1000,14 @@ applications:
         source:
           type: emptyDir
           name: cache
+    securityProfile:
+      runAsNonRoot: true
+      readOnlyRootFilesystem: true
   weave-trace:
     name: weave-trace
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
-      tag: 0.84.0-notifications-security-flags.1
+      tag: 0.86.0-daily.14
     commonEnvs:
       - clickhouse
       - kafka
@@ -1018,11 +1052,14 @@ applications:
           kubernetesServiceAccount:
             audience: internal-service
             expirationSeconds: 600
+    securityProfile:
+      runAsNonRoot: true
+      readOnlyRootFilesystem: true
   weave-trace-worker:
     name: weave-trace-worker
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
-      tag: 0.84.0-notifications-security-flags.1
+      tag: 0.86.0-daily.14
     env:
       - name: DD_TRACE_ENABLED
         value: "false"
@@ -1040,12 +1077,15 @@ applications:
           - "python"
           - "-m"
           - "src.workers.scoring_worker"
+    securityProfile:
+      runAsNonRoot: true
+      readOnlyRootFilesystem: true
   weave-trace-evaluate-model-worker:
     name: weave-trace-evaluate-model-worker
     legacyKey: weave-evaluate-model-worker
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
-      tag: 0.84.0-notifications-security-flags.1
+      tag: 0.86.0-daily.14
     env:
       - name: DD_TRACE_ENABLED
         value: "false"
@@ -1063,12 +1103,15 @@ applications:
           - "python"
           - "-m"
           - "src.workers.evaluate_model_worker.evaluate_model_worker"
+    securityProfile:
+      runAsNonRoot: true
+      readOnlyRootFilesystem: true
 
 migrations:
   gorilla:
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.84.0-notifications-security-flags.1
+      tag: 0.86.0-daily.14
     args:
       - "migrate"
       - "--db=$(GORILLA_METADATA_STORE)"
@@ -1082,10 +1125,13 @@ migrations:
       - runtimePaths
     commonVolumeMounts:
       - runtimeTmp
+    securityProfile:
+      runAsNonRoot: true
+      readOnlyRootFilesystem: true
   internal-signer:
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
-      tag: 0.84.0-notifications-security-flags.1
+      tag: 0.86.0-daily.14
     args:
       - "secret-generation-job"
     env:
@@ -1099,10 +1145,13 @@ migrations:
       - runtimePaths
     commonVolumeMounts:
       - runtimeTmp
+    securityProfile:
+      runAsNonRoot: true
+      readOnlyRootFilesystem: true
   weave-trace:
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
-      tag: 0.84.0-notifications-security-flags.1
+      tag: 0.86.0-daily.14
     args:
       - python
       - migrator.py
@@ -1112,3 +1161,6 @@ migrations:
       - pythonRuntimePaths
     commonVolumeMounts:
       - runtimeTmp
+    securityProfile:
+      runAsNonRoot: true
+      readOnlyRootFilesystem: true

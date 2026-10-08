@@ -631,7 +631,7 @@ func reconcileApplications(
 		// across updates (e.g., duplicate "files-inline" volume names).
 		application.Spec.PodTemplate.Spec.Volumes = volumes
 		application.Spec.PodTemplate.Spec.InitContainers = initContainers
-		application.Spec.PodTemplate.Spec.SecurityContext = resolvePodSecurityContext()
+		applyWorkloadSecurityProfile(&application.Spec.PodTemplate.Spec, app.SecurityProfile)
 		application.Spec.PodTemplate.Spec.Affinity = wandb.Spec.Affinity
 		application.Spec.PodTemplate.Spec.Tolerations = *wandb.Spec.Tolerations
 		application.Spec.PodTemplate.Spec.ImagePullSecrets = wandb.Spec.Global.ImagePullSecrets
@@ -1173,6 +1173,9 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 					ServiceAccountName: wandb.Spec.Wandb.ServiceAccount.ServiceAccountName,
 					ImagePullSecrets:   wandb.Spec.Global.ImagePullSecrets,
 				},
+			}
+			if hasWorkloadSecurityProfile(migrationTask.SecurityProfile) {
+				applyWorkloadSecurityProfile(&podTemplate.Spec, migrationTask.SecurityProfile)
 			}
 			setCustomCACertsChecksumAnnotation(&podTemplate, caChecksum)
 

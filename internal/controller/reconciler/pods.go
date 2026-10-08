@@ -16,20 +16,42 @@ import (
 
 const appWorkloadCapabilityAll v1.Capability = "ALL"
 
-func resolvePodSecurityContext() *v1.PodSecurityContext {
-	return &v1.PodSecurityContext{
-		SeccompProfile: resolveRuntimeDefaultSeccompProfile(),
+func applyWorkloadSecurityProfile(pod *v1.PodSpec, profile serverManifest.WorkloadSecurityProfile) {
+	pod.SecurityContext = resolvePodSecurityContext(profile)
+	for i := range pod.Containers {
+		pod.Containers[i].SecurityContext = resolveContainerSecurityContext(profile)
+	}
+	for i := range pod.InitContainers {
+		pod.InitContainers[i].SecurityContext = resolveContainerSecurityContext(profile)
 	}
 }
 
-func resolveContainerSecurityContext() *v1.SecurityContext {
-	return &v1.SecurityContext{
-		AllowPrivilegeEscalation: ptr.To(false),
+func resolvePodSecurityContext(profile serverManifest.WorkloadSecurityProfile) *v1.PodSecurityContext {
+	securityContext := &v1.PodSecurityContext{
+		SeccompProfile: resolveRuntimeDefaultSeccompProfile(),
+	}
+	if profile.RunAsNonRoot != nil {
+		securityContext.RunAsNonRoot = new(*profile.RunAsNonRoot)
+	}
+	return securityContext
+}
+
+func resolveContainerSecurityContext(profile serverManifest.WorkloadSecurityProfile) *v1.SecurityContext {
+	securityContext := &v1.SecurityContext{
+		AllowPrivilegeEscalation: new(false),
 		Capabilities: &v1.Capabilities{
 			Drop: []v1.Capability{appWorkloadCapabilityAll},
 		},
 		SeccompProfile: resolveRuntimeDefaultSeccompProfile(),
 	}
+	if profile.ReadOnlyRootFilesystem != nil {
+		securityContext.ReadOnlyRootFilesystem = ptr.To(*profile.ReadOnlyRootFilesystem)
+	}
+	return securityContext
+}
+
+func hasWorkloadSecurityProfile(profile serverManifest.WorkloadSecurityProfile) bool {
+	return profile.RunAsNonRoot != nil || profile.ReadOnlyRootFilesystem != nil
 }
 
 func resolveRuntimeDefaultSeccompProfile() *v1.SeccompProfile {
@@ -47,13 +69,12 @@ func resolveInitContainers(app serverManifest.Application, wandb *v2.WeightsAndB
 				continue
 			}
 			initContainer := v1.Container{
-				Name:            initContainerSpec.Name,
-				Image:           initContainerSpec.Image.GetImage(wandb.Spec.Global.ImageRegistry),
-				Env:             envVars,
-				Args:            initContainerSpec.Args,
-				Command:         initContainerSpec.Command,
-				VolumeMounts:    volumeMounts,
-				SecurityContext: resolveContainerSecurityContext(),
+				Name:         initContainerSpec.Name,
+				Image:        initContainerSpec.Image.GetImage(wandb.Spec.Global.ImageRegistry),
+				Env:          envVars,
+				Args:         initContainerSpec.Args,
+				Command:      initContainerSpec.Command,
+				VolumeMounts: volumeMounts,
 			}
 			initContainers = append(initContainers, initContainer)
 		}
@@ -92,14 +113,13 @@ func resolveContainers(app serverManifest.Application, wandb *v2.WeightsAndBiase
 			}
 
 			c := v1.Container{
-				Name:            container.Name,
-				Image:           img,
-				Env:             envVars,
-				Args:            args,
-				Command:         cmd,
-				Ports:           containerPorts,
-				VolumeMounts:    volumeMounts,
-				SecurityContext: resolveContainerSecurityContext(),
+				Name:         container.Name,
+				Image:        img,
+				Env:          envVars,
+				Args:         args,
+				Command:      cmd,
+				Ports:        containerPorts,
+				VolumeMounts: volumeMounts,
 			}
 
 			if resources := ResolveResources(app, wandb, container.Resources); resources != nil {
@@ -121,13 +141,12 @@ func resolveContainers(app serverManifest.Application, wandb *v2.WeightsAndBiase
 	} else {
 		// Backward-compatible single-container behavior
 		c := v1.Container{
-			Name:            app.Name,
-			Image:           app.Image.GetImage(wandb.Spec.Global.ImageRegistry),
-			Env:             envVars,
-			Args:            app.Args,
-			Command:         app.Command,
-			VolumeMounts:    volumeMounts,
-			SecurityContext: resolveContainerSecurityContext(),
+			Name:         app.Name,
+			Image:        app.Image.GetImage(wandb.Spec.Global.ImageRegistry),
+			Env:          envVars,
+			Args:         app.Args,
+			Command:      app.Command,
+			VolumeMounts: volumeMounts,
 		}
 
 		if resources := ResolveResources(app, wandb, nil); resources != nil {
