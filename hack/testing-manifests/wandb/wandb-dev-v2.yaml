@@ -13,7 +13,7 @@ spec:
     features:
       proxy: true
     manifestRepository: "file:///server-manifest"
-    version: "0.85.1-rc.1790791511"
+    version: "0.85.1"
   size: dev
   retentionPolicy:
     onDelete: detach
