@@ -1125,6 +1125,7 @@ migrations:
     commonVolumeMounts:
       - runtimeTmp
     securityProfile:
+      runAsNonRoot: true
       readOnlyRootFilesystem: true
   internal-signer:
     image:
@@ -1144,6 +1145,7 @@ migrations:
     commonVolumeMounts:
       - runtimeTmp
     securityProfile:
+      runAsNonRoot: true
       readOnlyRootFilesystem: true
   weave-trace:
     image:
@@ -1159,4 +1161,5 @@ migrations:
     commonVolumeMounts:
       - runtimeTmp
     securityProfile:
+      runAsNonRoot: true
       readOnlyRootFilesystem: true
