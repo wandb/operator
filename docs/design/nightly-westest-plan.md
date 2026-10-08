@@ -1,3 +1,6 @@
+> Status: Historical rollout plan. A manual workflow is implemented; the scheduled trigger remains disabled in the current workflow.
+> See the [current developer guide](../developer/testing.md) before using these notes.
+
 # Nightly WESTest testing — plan & runbook
 
 **Status:** proposed (plan for review). **Owner:** `@wandb/on-prem-team`.
@@ -42,14 +45,14 @@ Two facts drive this entire plan:
 1. **WESTest installs the *published* operator chart from the same OCI repo this
    repo publishes to** — its baked-in default is literally
    `oci://us-docker.pkg.dev/wandb-production/public/wandb/charts/operator`
-   version `2.0.0-beta.3`, which matches our current [Chart.yaml](../deploy/operator/Chart.yaml).
+   version `2.0.0-beta.3`, which matches our current [Chart.yaml](../../deploy/operator/Chart.yaml).
    The chart version is overridable via `--param …operatorChartVersion` or the
    `WESTEST_OPERATOR_CHART_VERSION` env var
    ([config.go:27,30,309](https://github.com/wandb/westest)).
 
 2. **WESTest does not override the operator image.** The action has no image
    input; the operator binary that runs is whatever the installed chart's baked
-   `wandb-operator.image.tag` points at ([values.yaml:16-18](../deploy/operator/values.yaml)).
+   `wandb-operator.image.tag` points at ([values.yaml:16-18](../../deploy/operator/values.yaml)).
 
 > **The consequence that shapes everything:** to test *nightly operator code*, we
 > must first publish a **nightly chart whose `wandb-operator.image.tag` points at
@@ -87,7 +90,7 @@ flowchart LR
 The image-tag rewrite and the `Chart.yaml` version bump happen **only in the
 workflow's ephemeral checkout** — they are never committed. This is what keeps the
 nightly from tripping `release.yaml`, which rejects `-dev` tags and enforces
-`chart == appVersion == image.tag == git tag` ([release.yaml:41-84](../.github/workflows/release.yaml)).
+`chart == appVersion == image.tag == git tag` ([release.yaml:41-84](../../.github/workflows/release.yaml)).
 
 ---
 
@@ -243,7 +246,7 @@ critical path.
       **public**, so it can't `uses:` the private `wandb/westest` action (GitHub
       only shares a private repo's actions with private/internal consumers). Instead
       the run logic is reimplemented as a local composite action
-      ([.github/actions/westest-run](../.github/actions/westest-run/action.yml)),
+      ([.github/actions/westest-run](../../.github/actions/westest-run/action.yml)),
       which downloads the released westest binary with `gh`. That download needs a
       token with `contents: read` on `wandb/westest`: the test jobs mint a **GitHub
       App installation token** scoped to `wandb/westest`
@@ -354,11 +357,11 @@ nightly path = publish + remote chart.
 ## 12. Reference implementation
 
 > **The committed files are the source of truth** — see
-> [`.github/workflows/nightly.yaml`](../.github/workflows/nightly.yaml),
-> [`nightly-build.yaml`](../.github/workflows/nightly-build.yaml),
-> [`nightly-cleanup.yaml`](../.github/workflows/nightly-cleanup.yaml),
-> [`westest-weekly.yaml`](../.github/workflows/westest-weekly.yaml), and the local
-> action [`.github/actions/westest-run/`](../.github/actions/westest-run/action.yml).
+> [`.github/workflows/nightly.yaml`](../../.github/workflows/nightly.yaml),
+> [`nightly-build.yaml`](../../.github/workflows/nightly-build.yaml), and the local
+> action [`.github/actions/westest-run/`](../../.github/actions/westest-run/action.yml).
+> The proposed `nightly-cleanup.yaml` and `westest-weekly.yaml` files are not
+> present in this checkout.
 > The YAML below is an illustrative snapshot and may lag the committed workflows
 > (e.g. the test jobs now mint an App token and call the local `./.github/actions/westest-run`).
 
@@ -667,13 +670,13 @@ the nightly chart version from the build job's summary.
 ## References
 
 Operator repo:
-- [.github/workflows/release.yaml](../.github/workflows/release.yaml) — tag-driven release; four-way version equality; rejects `-dev`.
-- [.github/workflows/internal-image-publish.yaml](../.github/workflows/internal-image-publish.yaml) — `dev-<name>-<sha>` image tag regex; `make docker-build docker-push`.
-- [.github/workflows/internal-chart-publish.yaml](../.github/workflows/internal-chart-publish.yaml) — `2.x.y-dev.<id>` chart regex; reject-existing guard.
-- [.github/workflows/run-tests.yaml](../.github/workflows/run-tests.yaml) — unit/envtest only (no e2e today).
-- [.github/workflows/chart-validation.yaml](../.github/workflows/chart-validation.yaml) — the helm-repo add block reused above.
-- [deploy/operator/Chart.yaml](../deploy/operator/Chart.yaml), [deploy/operator/values.yaml](../deploy/operator/values.yaml) — chart version / `wandb-operator.image.tag`.
-- [Makefile](../Makefile) — `docker-build` / `docker-push`.
+- [.github/workflows/release.yaml](../../.github/workflows/release.yaml) — tag-driven release; four-way version equality; rejects `-dev`.
+- [.github/workflows/internal-image-publish.yaml](../../.github/workflows/internal-image-publish.yaml) — `dev-<name>-<sha>` image tag regex; `make docker-build docker-push`.
+- [.github/workflows/internal-chart-publish.yaml](../../.github/workflows/internal-chart-publish.yaml) — `2.x.y-dev.<id>` chart regex; reject-existing guard.
+- [.github/workflows/run-tests.yaml](../../.github/workflows/run-tests.yaml) — unit/envtest only (no e2e today).
+- [.github/workflows/chart-validation.yaml](../../.github/workflows/chart-validation.yaml) — the helm-repo add block reused above.
+- [deploy/operator/Chart.yaml](../../deploy/operator/Chart.yaml), [deploy/operator/values.yaml](../../deploy/operator/values.yaml) — chart version / `wandb-operator.image.tag`.
+- [Makefile](../../Makefile) — `docker-build` / `docker-push`.
 
 `wandb/westest` (verified against the repo):
 - `actions/run/action.yml` — inputs/outputs; hardcoded `GH_TOKEN: github.token`; `ubuntu-latest-8-cores` requirement; `westest-version: latest` default.

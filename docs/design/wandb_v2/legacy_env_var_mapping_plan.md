@@ -1,5 +1,8 @@
 # Implementation plan: reconcile-time legacy env-var → CR mapping (Option A)
 
+> Status: Historical implementation plan; related implementation now exists in legacy_env_mapping.go.
+> Current guidance: [developer guide](../../developer/api-development.md).
+
 Companion to [legacy_env_var_mapping.md](legacy_env_var_mapping.md). Implements
 **Option A**: the structured `global.clickhouse.replicated` flag is mapped to the
 typed field in the conversion webhook (a plain structured mapping); the raw env

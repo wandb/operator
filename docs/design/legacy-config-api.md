@@ -1,3 +1,6 @@
+> Status: Historical console integration note; current applicability is unverified.
+> See the [current developer guide](../developer/reconciliation.md) before using these notes.
+
 # Config API
 
 ## Creating First Config map

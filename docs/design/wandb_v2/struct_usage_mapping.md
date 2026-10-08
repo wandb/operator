@@ -1,5 +1,8 @@
 # Struct Usage Mapping
 
+> Status: Historical type and package snapshot; not a current API reference.
+> Current guidance: [developer guide](../../developer/architecture.md).
+
 This document maps struct definitions and their usage (reads/writes) across the wandb operator codebase.
 
 ## Legend

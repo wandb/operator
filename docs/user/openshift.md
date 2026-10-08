@@ -6,7 +6,7 @@ known limitations of running under OpenShift's default `restricted-v2` Security
 Context Constraint (SCC).
 
 For **local** OpenShift development with CRC + Tilt, see
-[`config/openshift-dev/README.md`](../config/openshift-dev/README.md) instead —
+[`config/openshift-dev/README.md`](../../config/openshift-dev/README.md) instead —
 that path is automated and does not require the manual steps below.
 
 ## Why OpenShift needs special handling
@@ -23,12 +23,17 @@ when it knows it is running on OpenShift, driven by two switches:
 
 | Switch | Where | Effect |
 | --- | --- | --- |
-| `OPENSHIFT=true` env on the operator | `profiles/openshift.yaml` | Makes `utils.IsOpenShift()` true, so managed infra specs omit fixed UID/GID and the Kafka pods get a dedicated SA bound to `nonroot-v2`. |
-| `openshift.enabled=true` chart value | `profiles/openshift.yaml` | Renders the OpenShift-only RBAC/SCC templates (`openshift-owner-finalizers-rbac.yaml`, `openshift-scc-rbac.yaml`). |
+| `OPENSHIFT=true` env on the operator | OpenShift values file | Makes managed infrastructure omit fixed UID/GID and gives Kafka a dedicated ServiceAccount bound to `nonroot-v2`. |
+| `openshift.enabled=true` chart value | OpenShift values file | Enables the OpenShift-specific RBAC and SCC grants. |
 
-Both are set for you by the `profiles/openshift.yaml` values overlay.
+Both are included in the values file below and the chart's OpenShift profile.
 
 ## Prerequisites
+
+Complete the shared [deployment prerequisites](planning.md), including
+cert-manager and persistent storage. Create the W&B namespace before its Secrets
+and resource, as in [installation](installation.md).
+
 
 - OpenShift 4.x cluster.
 - `cluster-admin` (or equivalent) for the install: the chart creates
@@ -38,6 +43,12 @@ Both are set for you by the `profiles/openshift.yaml` values overlay.
   cluster can pull from.
 
 ## Known limitations
+
+The frontend constraints below are inherited from the existing OpenShift guide
+and depend on the W&B image version. Revalidate them for your selected release;
+a tested OpenShift Route recipe is still tracked in the
+[documentation backlog](../developer/documentation.md#remaining-coverage).
+
 
 | Component | Limitation | Status / workaround |
 | --- | --- | --- |
@@ -57,8 +68,8 @@ not run under OpenShift's `restricted-v2` SCC (see
   (its S3 gateway binds an unprivileged port, so no root/`anyuid` grant is
   needed). You can still point the CR at an external object store (S3, GCS, Azure
   Blob, or any S3-compatible endpoint you run) via
-  `spec.objectStore.externalObjectStore` if you prefer. See
-  [Infrastructure Connection Settings](infra-connection-settings.md).
+  `spec.objectStore.default.externalObjectStore` if you prefer. See
+  [Infrastructure Connection Settings](infrastructure.md).
 
 The rest of the managed infra (MySQL, Redis, ClickHouse, Kafka) is supported on
 OpenShift via the adaptations described below.
@@ -67,17 +78,8 @@ OpenShift via the adaptations described below.
 
 ### 1. Install the operator with the OpenShift profile
 
-From a checkout of this repository:
-
-```bash
-helm install wandb-operator ./deploy/operator \
-  --namespace wandb-operators --create-namespace \
-  -f deploy/operator/profiles/openshift.yaml
-```
-
-Installing from the published OCI chart works the same way, but you must supply
-the OpenShift values yourself (the `-f` file must be a local path). Save the
-snippet below as `openshift-values.yaml`:
+Set `OPERATOR_VERSION` to the published v2 chart version you selected. Save the
+following as `openshift-values.yaml` and merge in your other chart settings:
 
 ```yaml
 openshift:
@@ -109,6 +111,7 @@ grafana-operator:
 ```bash
 helm install wandb-operator \
   oci://us-docker.pkg.dev/wandb-production/public/wandb/charts/operator \
+  --version "$OPERATOR_VERSION" \
   --namespace wandb-operators --create-namespace \
   -f openshift-values.yaml
 ```
@@ -146,18 +149,22 @@ spec:
     onDelete: detach
   wandb:
     version: <wandb-version>
+    hostname: https://wandb.example.com
   networking:
     mode: ingress
     ingress:
       ingressClassName: <ingress-class-name>
+      managed: false
   objectStore:
-    externalObjectStore:
-      bucket:    { name: wandb-object-store, key: bucket }
-      region:    { name: wandb-object-store, key: region }
-      accessKey: { name: wandb-object-store, key: accessKey }
-      secretKey: { name: wandb-object-store, key: secretKey }
-      # endpoint: { name: wandb-object-store, key: endpoint }
-      # port:     { name: wandb-object-store, key: port }
+    default:
+      externalObjectStore:
+        provider: {value: s3}
+        bucket: {valueFrom: {secretKeyRef: {name: wandb-object-store, key: bucket}}}
+        region: {valueFrom: {secretKeyRef: {name: wandb-object-store, key: region}}}
+        accessKey: {valueFrom: {secretKeyRef: {name: wandb-object-store, key: accessKey}}}
+        secretKey: {valueFrom: {secretKeyRef: {name: wandb-object-store, key: secretKey}}}
+        tlsEnabled: {value: "true"}
+        forcePathStyle: {value: "false"}
 ```
 
 ```bash
@@ -166,9 +173,8 @@ kubectl apply -f wandb.yaml
 
 On OpenShift you must front the deployment with the cluster's own edge — an
 OpenShift `Route` or your ingress controller — not a bundled load balancer or
-the bundled frontend. See
-[`docs/infra-connection-settings.md`](infra-connection-settings.md) for
-networking and object-store connection options.
+the bundled frontend. See [networking](networking.md) for routing and
+[infrastructure](infrastructure.md) for object-store connections.
 
 ### 3. Verify
 

@@ -1,5 +1,8 @@
 # Server manifest retrieval from private registries
 
+> Status: Original design; authenticated manifest retrieval is now implemented. Earlier descriptions of missing functionality are historical.
+> Current guidance: [developer guide](../../developer/reconciliation.md).
+
 ## Problem
 
 The operator resolves a version-specific **server manifest** (an OCI artifact)
