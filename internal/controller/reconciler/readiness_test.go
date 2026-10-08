@@ -127,6 +127,27 @@ func TestRunMigrationsSurfacesFailedJobPhaseAndReason(t *testing.T) {
 		},
 	}
 
+	if err := c.Get(context.Background(), client.ObjectKeyFromObject(job), job); err != nil {
+		t.Fatal(err)
+	}
+	job.OwnerReferences = []metav1.OwnerReference{{UID: wandb.UID}}
+	template, err := migrationPodTemplate(context.Background(), c, wandb, manifest, manifest.Migrations["weave-trace"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	credentials, err := generatedSecretChecksum(context.Background(), c, wandb, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hash, err := migrationInputHash(template, wandb.Spec.Wandb.Version, credentials)
+	if err != nil {
+		t.Fatal(err)
+	}
+	job.Annotations = map[string]string{workloadInputsAnnotation: hash}
+	if err := c.Update(context.Background(), job); err != nil {
+		t.Fatal(err)
+	}
+
 	result, err := runMigrations(context.Background(), c, wandb, manifest)
 	if err != nil {
 		t.Fatalf("run migrations: %v", err)

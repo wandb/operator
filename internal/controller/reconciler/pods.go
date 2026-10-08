@@ -179,6 +179,9 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 
 	var envVars []v1.EnvVar
 	for _, env := range combinedEnvs {
+		if len(env.Features) > 0 && !manifest.FeaturesEnabled(env.Features) {
+			continue
+		}
 		// If a literal value is provided, it's a simple case.
 		if env.Value != "" {
 			envVars = append(envVars, v1.EnvVar{Name: env.Name, Value: env.Value})

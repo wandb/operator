@@ -40,6 +40,20 @@ jobs:
       - name: Run chart-testing
         run: ct lint --all --config deploy/ct.yaml
 
+      - name: Validate test bootstrap and Launch profile
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s hack/scripts/tests -v
+          curl -fsSL https://github.com/wandb/helm-charts/releases/download/launch-agent-0.13.12/launch-agent-0.13.12.tgz -o /tmp/launch-agent.tgz
+          echo 'ab39c4dc6005cc2f1d130d06747e7a8653a89518372ef00e7a8ac24ed89b711a  /tmp/launch-agent.tgz' | sha256sum --check
+          helm lint --strict /tmp/launch-agent.tgz -f hack/testing-manifests/launch-agent/values.yaml
+          helm template wandb-launch-test /tmp/launch-agent.tgz --namespace wandb-launch-test \
+            -f hack/testing-manifests/launch-agent/values.yaml >/tmp/launch-rendered.yaml
+          if grep -Eq '^kind: (Secret|ClusterRoleBinding)$' /tmp/launch-rendered.yaml; then
+            echo 'Test Launch must use external credentials and namespace-scoped RBAC' >&2
+            exit 1
+          fi
+
       - name: Validate values schema
         run: |
           set -euo pipefail
