@@ -13,6 +13,7 @@ require (
 	github.com/cybozu-go/moco v0.34.0
 	github.com/go-logr/logr v1.4.3
 	github.com/go-playground/validator/v10 v10.30.3
+	github.com/go-sql-driver/mysql v1.9.3
 	github.com/golang/glog v1.2.5
 	github.com/google/go-containerregistry v0.21.9
 	github.com/google/uuid v1.6.0
@@ -32,7 +33,6 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/twmb/franz-go v1.21.3
 	github.com/twmb/franz-go/pkg/kadm v1.18.0
-	github.com/wandb/operator/preflight v0.0.0-00010101000000-000000000000
 	golang.org/x/exp v0.0.0-20250408133849-7e4ce0ab07d0
 	golang.org/x/text v0.41.0
 	gopkg.in/d4l3k/messagediff.v1 v1.2.1
@@ -132,7 +132,6 @@ require (
 	github.com/go-openapi/swag/yamlutils v0.25.5 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
-	github.com/go-sql-driver/mysql v1.9.3 // indirect
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
 	github.com/gobwas/glob v0.2.3 // indirect
 	github.com/golang-jwt/jwt/v4 v4.5.2 // indirect
@@ -240,7 +239,5 @@ require (
 )
 
 replace github.com/imdario/mergo => github.com/sunsingerus/mergo v0.0.0-20230507185449-fc6fffa94450
-
-replace github.com/wandb/operator/preflight => ./preflight
 
 replace go.podman.io/storage => go.podman.io/storage v1.61.1-0.20260203150839-646d7f9c5763

@@ -6568,6 +6568,8 @@ spec:
               preflights:
                 additionalProperties:
                   properties:
+                    inputVersion:
+                      type: string
                     message:
                       type: string
                     observedGeneration:
