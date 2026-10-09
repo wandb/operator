@@ -1166,7 +1166,7 @@ type WeightsAndBiasesStatus struct {
 	IngressStatus    *IngressStatusSummary       `json:"ingressStatus,omitempty"`
 	WatchtowerStatus *WatchtowerStatusSummary    `json:"watchtowerStatus,omitempty"`
 	SupportBundle    *SupportBundleStatusSummary `json:"supportBundle,omitempty"`
-	Preflights *PreflightStatus `json:"preflightStatus,omitempty"`
+	Preflights       *PreflightStatus            `json:"preflightStatus,omitempty"`
 }
 
 type SupportBundleStatusSummary struct {
@@ -1331,4 +1331,6 @@ type PreflightStatus struct {
 	Outcome            string `json:"outcome"`
 	Message            string `json:"message,omitempty"`
 	ObservedGeneration int64  `json:"observedGeneration"`
+	// +optional
+	InputVersion string `json:"inputVersion,omitempty"`
 }
