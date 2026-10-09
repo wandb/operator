@@ -1166,15 +1166,20 @@ type WeightsAndBiasesStatus struct {
 	IngressStatus    *IngressStatusSummary       `json:"ingressStatus,omitempty"`
 	WatchtowerStatus *WatchtowerStatusSummary    `json:"watchtowerStatus,omitempty"`
 	SupportBundle    *SupportBundleStatusSummary `json:"supportBundle,omitempty"`
+	Preflights *PreflightStatus `json:"preflightStatus,omitempty"`
 }
 
 type SupportBundleStatusSummary struct {
-	Ready              bool         `json:"ready"`
-	Image              string       `json:"image,omitempty"`
-	CronJob            string       `json:"cronJob,omitempty"`
-	Version            string       `json:"version,omitempty"`
-	Running            bool         `json:"running,omitempty"`
-	LastSuccessfulTime *metav1.Time `json:"lastSuccessfulTime,omitempty"`
+	Ready              bool                     `json:"ready"`
+	Image              string                   `json:"image,omitempty"`
+	CronJob            string                   `json:"cronJob,omitempty"`
+	Version            string                   `json:"version,omitempty"`
+	Running            bool                     `json:"running,omitempty"`
+	LastSuccessfulTime *metav1.Time             `json:"lastSuccessfulTime,omitempty"`
+	IngressStatus      *IngressStatusSummary    `json:"ingressStatus,omitempty"`
+	WatchtowerStatus   *WatchtowerStatusSummary `json:"watchtowerStatus,omitempty"`
+	// +optional
+	Preflights map[string]PreflightStatus `json:"preflights,omitempty"`
 }
 
 type WatchtowerStatusSummary struct {
@@ -1320,4 +1325,10 @@ type TelemetryConnectionStatus struct {
 	DatadogTraceAgentURL  string `json:"datadogTraceAgentURL,omitempty"`
 	DatadogTraceAgentHost string `json:"datadogTraceAgentHost,omitempty"`
 	DatadogTraceAgentPort string `json:"datadogTraceAgentPort,omitempty"`
+}
+
+type PreflightStatus struct {
+	Outcome            string `json:"outcome"`
+	Message            string `json:"message,omitempty"`
+	ObservedGeneration int64  `json:"observedGeneration"`
 }
