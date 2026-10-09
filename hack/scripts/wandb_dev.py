@@ -396,6 +396,7 @@ def bootstrap(
             "email": email,
             "username": username,
             "loginPassword": password or ("" if api_key else secrets.token_urlsafe(24)),
+            "loginPasswordVerified": "false",
             "apiKey": "",
         }
         # Save before the first server mutation so an interrupted signup can resume.
@@ -418,6 +419,18 @@ def bootstrap(
                 raise BootstrapError(
                     "The supplied user's personal entity must be onboarded and match the configured username"
                 )
+            if password:
+                server.login(email, password, username)
+                password_viewer = server.viewer()
+                if (
+                    not matches_user(password_viewer, data)
+                    or password_viewer["id"] != viewer["id"]
+                ):
+                    raise BootstrapError("Logged-in identity differs from the API-key user")
+                data.update(loginPassword=password, loginPasswordVerified="true")
+            elif data.get("loginPasswordVerified") != "true":
+                # API-key authentication cannot confirm a pending signup password.
+                data.update(loginPassword="", loginPasswordVerified="false")
             data.update(
                 apiKey=key,
                 userId=viewer["id"],
@@ -443,7 +456,7 @@ def bootstrap(
         # existing installation. Lost create responses resume via login above.
         server.require_empty_installation(admin_key)
         if password:
-            data["loginPassword"] = password
+            data.update(loginPassword=password, loginPasswordVerified="false")
             store.save(data)
         server.request(
             "/oidc/users",
@@ -468,9 +481,13 @@ def bootstrap(
         or not viewer.get("entity")
     ):
         raise BootstrapError("User onboarding did not complete")
-    data.update(userId=viewer["id"], entity=viewer["entity"], caBundle=ca_bundle)
-    if password:
-        data["loginPassword"] = password
+    data.update(
+        userId=viewer["id"],
+        entity=viewer["entity"],
+        caBundle=ca_bundle,
+        loginPassword=password or data["loginPassword"],
+        loginPasswordVerified="true",
+    )
     store.save(data)
     result = server.graphql(
         "mutation BootstrapKey($description: String!) { generateApiKey(input: {description: $description}) { secretApiKey apiKey { id } } }",
@@ -492,10 +509,10 @@ def show_credentials(data):
     print(
         f"W&B URL:  {data['baseUrl']}\nUsername: {data['username']}\nEmail:    {data['email']}"
     )
-    print(
-        "Password: "
-        + (data.get("loginPassword") or "not stored (use your existing login password)")
-    )
+    password = data.get("loginPassword")
+    if password and data.get("loginPasswordVerified") != "true":
+        password = "not verified (supply a known password through WANDB_DEV_PASSWORD)"
+    print("Password: " + (password or "not stored (use your existing login password)"))
     print("API key:  " + (data.get("apiKey") or "not generated yet"))
 
 

@@ -152,6 +152,8 @@ class BootstrapTests(unittest.TestCase):
 
     def test_fresh_install_and_rerun_use_one_user_and_one_key(self):
         first = self.run_bootstrap()
+        self.assertEqual(self.store.saved[0]["loginPasswordVerified"], "false")
+        self.assertEqual(first["loginPasswordVerified"], "true")
         login_count = self.server.login_count
         second = self.run_bootstrap()
         self.assertEqual(first, second)
@@ -275,8 +277,10 @@ class BootstrapTests(unittest.TestCase):
         with self.assertRaises(APIError):
             self.run_bootstrap()
         password = self.store.data["loginPassword"]
+        self.assertEqual(self.store.data["loginPasswordVerified"], "false")
         result = self.run_bootstrap()
         self.assertEqual(result["loginPassword"], password)
+        self.assertEqual(result["loginPasswordVerified"], "true")
         self.assertEqual(self.server.create_count, 1)
         self.assertEqual(self.server.entity_count, 1)
 
@@ -321,7 +325,101 @@ class BootstrapTests(unittest.TestCase):
         self.store.data = None
         result = self.run_bootstrap(api_key=key)
         self.assertEqual(result["loginPassword"], "")
+        self.assertEqual(result["loginPasswordVerified"], "false")
         self.assertEqual(len(self.server.keys), 1)
+
+    def test_api_key_retry_discards_password_from_failed_signup(self):
+        first = self.run_bootstrap()
+        self.store.data = None
+        with patch("wandb_dev.secrets.token_urlsafe", return_value="unverified-password"):
+            with self.assertRaisesRegex(BootstrapError, "existing user's"):
+                self.run_bootstrap()
+        self.assertEqual(self.store.data["loginPassword"], "unverified-password")
+        self.assertEqual(self.store.data["loginPasswordVerified"], "false")
+
+        result = self.run_bootstrap(api_key=first["apiKey"])
+        self.assertEqual(result["loginPassword"], "")
+        self.assertEqual(result["loginPasswordVerified"], "false")
+        self.assertEqual(self.store.data, result)
+        self.assertEqual(self.server.password, first["loginPassword"])
+        self.assertEqual(self.server.create_count, 1)
+        self.assertEqual(len(self.server.keys), 1)
+        with (
+            patch.dict(os.environ, {"CI": ""}),
+            contextlib.redirect_stdout(io.StringIO()) as output,
+        ):
+            show_credentials(result)
+        self.assertNotIn("unverified-password", output.getvalue())
+        self.assertIn("Password: not stored", output.getvalue())
+
+    def test_api_key_rerun_discards_legacy_password_without_verification(self):
+        self.run_bootstrap()
+        self.store.data.pop("loginPasswordVerified")
+        result = self.run_bootstrap()
+        self.assertEqual(result["loginPassword"], "")
+        self.assertEqual(result["loginPasswordVerified"], "false")
+        self.assertEqual(len(self.server.keys), 1)
+
+    def test_api_key_adoption_verifies_separately_supplied_password(self):
+        first = self.run_bootstrap()
+        self.store.data = None
+        with self.assertRaisesRegex(BootstrapError, "existing user's"):
+            self.run_bootstrap()
+        result = self.run_bootstrap(
+            api_key=first["apiKey"], password=first["loginPassword"]
+        )
+        self.assertEqual(result["loginPassword"], first["loginPassword"])
+        self.assertEqual(result["loginPasswordVerified"], "true")
+        self.assertEqual(self.store.data, result)
+        self.assertEqual(self.server.create_count, 1)
+        self.assertEqual(len(self.server.keys), 1)
+
+    def test_valid_api_key_does_not_confirm_incorrect_supplied_password(self):
+        first = self.run_bootstrap()
+        for existing_secret in (first, None):
+            with self.subTest(existing_secret=bool(existing_secret)):
+                self.store.data = copy.deepcopy(existing_secret)
+                with self.assertRaises(APIError):
+                    self.run_bootstrap(api_key=first["apiKey"], password="incorrect")
+                if existing_secret:
+                    self.assertEqual(self.store.data, first)
+                else:
+                    self.assertEqual(self.store.data["loginPasswordVerified"], "false")
+                self.assertEqual(self.server.password, first["loginPassword"])
+                self.assertEqual(self.server.create_count, 1)
+                self.assertEqual(len(self.server.keys), 1)
+
+    def test_api_key_and_password_must_authenticate_same_user(self):
+        first = self.run_bootstrap()
+        self.store.data = None
+        with patch.object(
+            self.server,
+            "viewer",
+            side_effect=[self.server.user, dict(self.server.user, id="another-user")],
+        ):
+            with self.assertRaisesRegex(BootstrapError, "API-key user"):
+                self.run_bootstrap(
+                    api_key=first["apiKey"], password=first["loginPassword"]
+                )
+        self.assertEqual(self.store.data["loginPasswordVerified"], "false")
+        self.assertEqual(self.server.create_count, 1)
+        self.assertEqual(len(self.server.keys), 1)
+
+    def test_pending_and_legacy_passwords_are_not_displayed(self):
+        with self.assertRaisesRegex(BootstrapError, "GLOBAL_ADMIN_API_KEY"):
+            self.run_bootstrap(admin_key=None)
+        data = self.store.load()
+        for verified in ("false", None):
+            if verified is None:
+                data.pop("loginPasswordVerified")
+            with (
+                self.subTest(verified=verified),
+                patch.dict(os.environ, {"CI": ""}),
+                contextlib.redirect_stdout(io.StringIO()) as output,
+            ):
+                show_credentials(data)
+            self.assertNotIn(data["loginPassword"], output.getvalue())
+            self.assertIn("Password: not verified", output.getvalue())
 
     def test_mismatched_identity_fails_without_mutation(self):
         self.run_bootstrap()

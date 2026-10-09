@@ -22,10 +22,9 @@ The hostname must resolve locally to the forwarded gateway/ingress and from pods
 to its Kubernetes Service. Artifact storage URLs must also be reachable from
 both environments. Tilt already configures CoreDNS rewrites for W&B and the
 optional external SeaweedFS endpoint. `localhost` cannot be used by Launch pods.
-Ensure `kind-operator` is in `allowedContexts` when using that cluster.
 
 ```bash
-tilt up --context kind-operator
+tilt up --context kind-wandb-operator
 ```
 
 Tilt enables `spec.wandb.enableGlobalAdminAPIKey` and runs
@@ -85,7 +84,10 @@ an absent or already-disabled local account needs no change. Cleanup errors fail
 bootstrap, and retrying reuses the saved credentials.
 
 The source Secret is `<wandbName>-dev-credentials` in the W&B namespace, with
-`username`, `email`, `loginPassword`, `apiKey`, and identity/server metadata.
+`username`, `email`, `loginPassword`, `loginPasswordVerified`, `apiKey`, and
+identity/server metadata. A password is marked verified only after signing in
+as the configured user; pending signup passwords are saved for retries but are
+not displayed as login credentials.
 The Launch namespace receives `wandb-api-key-<launchRelease>`; its `password`
 field contains the API key, not the human login password.
 
@@ -94,7 +96,7 @@ Set `bootstrapShowCredentials=False` to suppress automatic display. Retrieve
 them later through the manual `WandB-Show-Credentials` Tilt resource or:
 
 ```bash
-python3 hack/scripts/wandb_dev.py show-credentials --context kind-operator
+python3 hack/scripts/wandb_dev.py show-credentials --context kind-wandb-operator
 ```
 
 When `CI` is set to a truthy value, both commands suppress credential output.
@@ -103,7 +105,11 @@ Other diagnostics omit authentication response bodies and Secret manifests.
 For an existing installation, configure the existing user's email/username and
 supply `WANDB_DEV_PASSWORD` or `WANDB_DEV_API_KEY` through the process environment.
 With an API key alone, the helper cannot recover the existing login password and
-reports that it is not stored. An existing saved Secret pins the server and user;
+discards any saved password that has not been verified, including passwords in
+older Secrets without verification metadata. Supply `WANDB_DEV_PASSWORD` along
+with the API key to verify and save an existing login password. Previously
+verified passwords are retained on API-key-only reruns.
+An existing saved Secret pins the server and user;
 configuration mismatches fail rather than silently adopting another identity.
 If that Secret is lost, supply the existing password/key to resume. A lost
 response while generating a key may leave an unused key on the server; a retry
@@ -132,13 +138,13 @@ rejects it when the manifest manages this setting. The old Tilt
 Existing user credentials can be reused with the flag disabled. Once deployed:
 
 ```bash
-python3 hack/scripts/wandb_dev.py bootstrap --context kind-operator --show-credentials
-uv run hack/scripts/wandb_launch.py prepare --context kind-operator --values-output /tmp/launch-values.yaml
+python3 hack/scripts/wandb_dev.py bootstrap --context kind-wandb-operator --show-credentials
+uv run hack/scripts/wandb_launch.py prepare --context kind-wandb-operator --values-output /tmp/launch-values.yaml
 helm upgrade --install wandb-launch-test \
   https://github.com/wandb/helm-charts/releases/download/launch-agent-0.13.12/launch-agent-0.13.12.tgz \
-  --kube-context kind-operator --namespace wandb-launch-test \
+  --kube-context kind-wandb-operator --namespace wandb-launch-test \
   -f /tmp/launch-values.yaml --wait --timeout 10m
-uv run hack/scripts/wandb_launch.py smoke --context kind-operator
+uv run hack/scripts/wandb_launch.py smoke --context kind-wandb-operator
 ```
 
 `prepare --values-output` writes non-secret Helm values for the configured
