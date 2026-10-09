@@ -14,8 +14,8 @@ func TestParseSkipList(t *testing.T) {
 		want       map[string]bool
 	}{
 		{name: "empty runs everything", annotation: "", want: map[string]bool{}},
-		{name: "single check", annotation: ExternalDBCheck, want: map[string]bool{ExternalDBCheck: true}},
-		{name: "trims whitespace and drops empty entries", annotation: " externalDBCheck , other ,,", want: map[string]bool{ExternalDBCheck: true, "other": true}},
+		{name: "single check", annotation: ExternalMysqlCheck, want: map[string]bool{ExternalMysqlCheck: true}},
+		{name: "trims whitespace and drops empty entries", annotation: " externalMysqlCheck , other ,,", want: map[string]bool{ExternalMysqlCheck: true, "other": true}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -35,15 +35,10 @@ func TestRegistryConsistency(t *testing.T) {
 			t.Errorf("Checks[%q].Run is nil", name)
 		}
 	}
-	for path, check := range CRFieldChecks {
-		if _, ok := Checks[check.Name]; !ok {
-			t.Errorf("CRFieldChecks[%q] references unregistered check %q", path, check.Name)
-		}
-	}
 }
 
 func TestRunExternalDBCheck_MissingHost(t *testing.T) {
-	result := RunExternalDBCheck(context.Background(), map[string]string{})
+	result := RunExternalMysqlCheck(context.Background(), map[string]string{})
 	if result.Outcome != OutcomeFail {
 		t.Fatalf("Outcome = %q, want %q", result.Outcome, OutcomeFail)
 	}
@@ -58,7 +53,7 @@ func TestRunExternalDBCheck_Unreachable(t *testing.T) {
 	_, port, _ := net.SplitHostPort(l.Addr().String())
 	_ = l.Close()
 
-	result := RunExternalDBCheck(context.Background(), map[string]string{
+	result := RunExternalMysqlCheck(context.Background(), map[string]string{
 		ParamHost:     "127.0.0.1",
 		ParamPort:     port,
 		ParamUsername: "wandb",
@@ -67,7 +62,7 @@ func TestRunExternalDBCheck_Unreachable(t *testing.T) {
 	if result.Outcome != OutcomeFail {
 		t.Fatalf("Outcome = %q, want %q", result.Outcome, OutcomeFail)
 	}
-	if result.Check != ExternalDBCheck {
-		t.Errorf("Check = %q, want %q", result.Check, ExternalDBCheck)
+	if result.Check != ExternalMysqlCheck {
+		t.Errorf("Check = %q, want %q", result.Check, ExternalMysqlCheck)
 	}
 }

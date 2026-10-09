@@ -28,6 +28,8 @@ type CheckFunc func(ctx context.Context, params map[string]string) Result
 type Check struct {
 	Name string
 	Run  CheckFunc
+	CRField string
+	Params map[string]string
 }
 
 func ParseSkipList(annotation string) map[string]bool {
