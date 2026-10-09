@@ -493,7 +493,7 @@ func externalMysqlPreflight(ctx context.Context, c client.Client, wandb *apiv2.W
 	}
 
 	fieldPath := fmt.Sprintf("spec.mysql.%s.externalMysql", key)
-	passed, msg, err := runPreflightOnce(ctx, c, wandb, preflight.Checks[preflight.ExternalDBCheck], fieldPath, params)
+	passed, msg, err := runPreflightOnce(ctx, c, wandb, preflight.Checks[preflight.ExternalMysqlCheck], fieldPath, params)
 	if err != nil {
 		return []metav1.Condition{{Type: common.ReconciledType, Status: metav1.ConditionFalse, Reason: common.ApiErrorReason}}
 	}
