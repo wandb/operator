@@ -1,0 +1,10 @@
+apiVersion: apps.wandb.com/v2
+kind: WeightsAndBiases
+metadata:
+  name: wandb
+  namespace: wandb
+  annotations:
+    skipPreflights: ""
+spec:
+  mysql:
+    default: {}
