@@ -42,8 +42,9 @@ import (
 // It is intended to be a direct mapping of the YAML document for decoding via
 // gopkg.in/yaml.v3 or sigs.k8s.io/yaml.
 type Manifest struct {
-	RequiredOperatorVersion string          `yaml:"requiredOperatorVersion"`
-	Features                map[string]bool `yaml:"features,omitempty"`
+	RequiredOperatorVersion string                    `yaml:"requiredOperatorVersion"`
+	Features                map[string]bool           `json:"features,omitempty" yaml:"features,omitempty"`
+	FeatureBindings         map[string]FeatureBinding `json:"featureBindings,omitempty" yaml:"featureBindings,omitempty"`
 	// Prefer plural, but accept singular key as found in some manifests.
 	GeneratedSecrets []GeneratedSecret `yaml:"generatedSecrets,omitempty"`
 	// CommonEnvvars defines reusable groups of env vars that can be referenced
@@ -63,11 +64,16 @@ type Manifest struct {
 	Migrations map[string]MigrationJob `yaml:"migrations,omitempty"`
 }
 
+type FeatureBinding struct {
+	Field string `json:"field" yaml:"field"`
+}
+
 // GeneratedSecret represents the configuration for a dynamically generated secret.
 type GeneratedSecret struct {
-	Name          string `yaml:"name"`
-	Length        int    `yaml:"length"`
-	CharacterType string `yaml:"type"`
+	Name          string   `yaml:"name"`
+	Length        int      `yaml:"length"`
+	CharacterType string   `json:"type" yaml:"type"`
+	Features      []string `json:"features,omitempty" yaml:"features,omitempty"`
 	// UseExactName when true, creates the secret with the exact name specified without prefixing it with the CR name.
 	// This is useful for secrets that need to be referenced by external systems with a fixed name.
 	UseExactName bool `yaml:"useExactName,omitempty"`
@@ -258,6 +264,7 @@ type ContainerSpec struct {
 
 // EnvVar models an application environment variable sourced from manifest-defined services.
 type EnvVar struct {
+	Features     []string             `json:"features,omitempty" yaml:"features,omitempty"`
 	Name         string               `yaml:"name"`
 	Value        string               `yaml:"value,omitempty"`
 	ValueFrom    *corev1.EnvVarSource `yaml:"valueFrom,omitempty"`
@@ -442,6 +449,11 @@ func mergeSimple(dst, src *Manifest) {
 			dst.Features[k] = v
 		}
 	}
+
+	if dst.FeatureBindings == nil {
+		dst.FeatureBindings = map[string]FeatureBinding{}
+	}
+	maps.Copy(dst.FeatureBindings, src.FeatureBindings)
 
 	// Infrastructure configs - merge maps
 	if src.Bucket != nil {

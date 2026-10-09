@@ -77,6 +77,19 @@ func deploymentsHealthy(
 			notReady = append(notReady, name)
 			continue
 		}
+		app := &apiv2.Application{}
+		if err := c.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, app); err == nil {
+			if hash := app.Spec.PodTemplate.Annotations[workloadInputsAnnotation]; hash != "" {
+				if dep.Spec.Template.Annotations[workloadInputsAnnotation] != hash || dep.Spec.Replicas == nil ||
+					dep.Status.UpdatedReplicas != *dep.Spec.Replicas || dep.Status.AvailableReplicas != *dep.Spec.Replicas {
+					notReady = append(notReady, name)
+					continue
+				}
+			}
+		} else if !apiErrors.IsNotFound(err) {
+			notReady = append(notReady, name)
+			continue
+		}
 		if dep.Status.ObservedGeneration != dep.Generation ||
 			dep.Status.ReadyReplicas != dep.Status.Replicas ||
 			dep.Status.Replicas == 0 {

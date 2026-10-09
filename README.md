@@ -165,6 +165,7 @@ trust a CA on the W&B **application** workloads instead, use
 - [Infrastructure Connection Settings](docs/infra-connection-settings.md)
 - [Migrating from Operator v1 to v2](docs/migrating-v1-to-v2.md)
 - [Monitoring and Telemetry Guide](docs/monitoring.md)
+- [Launch agent and single-user test bootstrap](docs/launch-testing.md)
 - [Deploying on OpenShift](docs/openshift.md)
 - [Setting Up Console v2](docs/console-v2-setup.md)
 - [Deploying Watchtower](docs/watchtower-deployment.md)

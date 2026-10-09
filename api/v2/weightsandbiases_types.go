@@ -478,13 +478,17 @@ func ValidMysqlReplicaCount(r int32) bool {
 
 // WandbAppSpec defines the configuration for the Wandb application deployment.
 type WandbAppSpec struct {
-	Hostname            string              `json:"hostname"`
-	License             string              `json:"license,omitempty"`
-	ManifestRepository  string              `json:"manifestRepository,omitempty"`
-	Version             string              `json:"version"`
-	Features            map[string]bool     `json:"features"`
-	InternalServiceAuth InternalServiceAuth `json:"internalServiceAuth,omitempty"`
-	BucketProxy         bool                `json:"bucketProxy"`
+	// EnableGlobalAdminAPIKey provisions the manifest-defined bootstrap administrator credential.
+	// +kubebuilder:default=false
+	// +optional
+	EnableGlobalAdminAPIKey bool                `json:"enableGlobalAdminAPIKey,omitempty"`
+	Hostname                string              `json:"hostname"`
+	License                 string              `json:"license,omitempty"`
+	ManifestRepository      string              `json:"manifestRepository,omitempty"`
+	Version                 string              `json:"version"`
+	Features                map[string]bool     `json:"features"`
+	InternalServiceAuth     InternalServiceAuth `json:"internalServiceAuth,omitempty"`
+	BucketProxy             bool                `json:"bucketProxy"`
 
 	ServiceAccount ServiceAccountSpec `json:"serviceAccount,omitempty"`
 
@@ -1205,6 +1209,8 @@ type WandbMigrationStatus struct {
 }
 
 type MigrationJobStatus struct {
+	// InputHash identifies the version and resolved inputs used by this job.
+	InputHash string `json:"inputHash,omitempty"`
 	Name      string `json:"name,omitempty"`
 	Succeeded bool   `json:"succeeded,omitempty"`
 	Failed    bool   `json:"failed,omitempty"`
