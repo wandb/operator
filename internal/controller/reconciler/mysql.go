@@ -486,7 +486,7 @@ func externalMysqlPreflight(ctx context.Context, c client.Client, wandb *apiv2.W
 		return nil
 	}
 	inputVersion, err := secretInputVersion(ctx, c, wandb.Namespace,
-		spec.Host, spec.Port, spec.Username, spec.Password, spec.Tls, spec.SslCa, spec.SslCert, spec.SslKey)
+		spec.Host, spec.Port, spec.Database, spec.Username, spec.Password, spec.Tls, spec.SslCa, spec.SslCert, spec.SslKey)
 	if err != nil {
 		return []metav1.Condition{{Type: common.ReconciledType, Status: metav1.ConditionFalse, Reason: common.ApiErrorReason}}
 	}

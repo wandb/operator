@@ -3,11 +3,13 @@ package reconciler
 import (
 	"context"
 	"strings"
+	"time"
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/infra/external"
 	"github.com/wandb/operator/pkg/preflight"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -17,7 +19,12 @@ func preflightSkipped(wandb *apiv2.WeightsAndBiases, name string) bool {
 	return preflight.ParseSkipList(wandb.GetAnnotations()[preflight.SkipPreflightsAnnotation])[name]
 }
 
-// runPreflightOnce reports whether the check is skipped, already passed for this generation and Secret inputs, or passes now.
+// preflightRetryInterval is the fallback re-run interval for a non-passing check whose inputs haven't changed,
+// so a transiently unreachable dependency recovers without stalling every reconcile on the check's timeout.
+const preflightRetryInterval = 5 * time.Minute
+
+// runPreflightOnce reports whether the check is skipped or passes. Results are cached per generation and
+// Secret inputs; a pass is reused until those change, other outcomes until preflightRetryInterval elapses.
 func runPreflightOnce(
 	ctx context.Context,
 	c client.Client,
@@ -34,9 +41,13 @@ func runPreflightOnce(
 	key := check.Name + "/" + fieldPath
 	if prev, ok := wandb.Status.Preflights[key]; ok &&
 		prev.ObservedGeneration == wandb.Generation &&
-		prev.InputVersion == inputVersion &&
-		prev.Outcome == string(preflight.OutcomePass) {
-		return true, "", nil
+		prev.InputVersion == inputVersion {
+		if prev.Outcome == string(preflight.OutcomePass) {
+			return true, "", nil
+		}
+		if time.Since(prev.LastRunTime.Time) < preflightRetryInterval {
+			return false, prev.Message, nil
+		}
 	}
 
 	statusBefore := wandb.DeepCopy().Status
@@ -55,6 +66,7 @@ func runPreflightOnce(
 		Message:            result.Message,
 		ObservedGeneration: wandb.Generation,
 		InputVersion:       inputVersion,
+		LastRunTime:        metav1.Now(),
 	}
 
 	if err := updateWandbStatusIfChanged(ctx, c, wandb, statusBefore); err != nil {

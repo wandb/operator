@@ -23,6 +23,7 @@ func RunExternalMysqlCheck(ctx context.Context, conn *apiv2.MysqlConnection, res
 	v, err := resolveFields(ctx, resolve, map[string]apiv2.ValueOrSecret{
 		"host":     conn.Host,
 		"port":     conn.Port,
+		"database": conn.Database,
 		"username": conn.Username,
 		"password": conn.Password,
 		"tls":      conn.Tls,
@@ -45,6 +46,8 @@ func RunExternalMysqlCheck(ctx context.Context, conn *apiv2.MysqlConnection, res
 	cfg.Addr = net.JoinHostPort(v["host"], v["port"])
 	cfg.User = v["username"]
 	cfg.Passwd = v["password"]
+	// The operator doesn't create external databases, so the app needs this one to already exist.
+	cfg.DBName = v["database"]
 	cfg.Timeout = externalMysqlTimeout
 	// Same tls values the operator publishes in the application's DSN, so the check negotiates like the app.
 	cfg.TLSConfig = v["tls"]
@@ -93,7 +96,7 @@ func mysqlTLSConfig(host, mode, ca, cert, key string) (*tls.Config, error) {
 	if cert != "" || key != "" {
 		pair, err := tls.X509KeyPair([]byte(cert), []byte(key))
 		if err != nil {
-			return nil, fmt.Errorf("sslCert/sslKey: %w", err)
+			return nil, errors.New("invalid sslCert/sslKey")
 		}
 		cfg.Certificates = []tls.Certificate{pair}
 	}

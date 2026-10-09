@@ -1282,4 +1282,7 @@ type PreflightStatus struct {
 	ObservedGeneration int64  `json:"observedGeneration"`
 	// +optional
 	InputVersion string `json:"inputVersion,omitempty"`
+	// LastRunTime gates retries of a non-passing check so it isn't re-run on every reconcile.
+	// +optional
+	LastRunTime metav1.Time `json:"lastRunTime,omitempty"`
 }

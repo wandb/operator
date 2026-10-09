@@ -6570,6 +6570,9 @@ spec:
                   properties:
                     inputVersion:
                       type: string
+                    lastRunTime:
+                      format: date-time
+                      type: string
                     message:
                       type: string
                     observedGeneration:
