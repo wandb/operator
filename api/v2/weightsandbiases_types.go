@@ -1125,8 +1125,10 @@ type WeightsAndBiasesStatus struct {
 	// +optional
 	GatewayStatus *GatewayStatusSummary `json:"gatewayStatus,omitempty"`
 	// +optional
-	IngressStatus    *IngressStatusSummary    `json:"ingressStatus,omitempty"`
-	WatchtowerStatus *WatchtowerStatusSummary `json:"watchtowerStatus,omitempty"`
+	IngressStatus    *IngressStatusSummary      `json:"ingressStatus,omitempty"`
+	WatchtowerStatus *WatchtowerStatusSummary   `json:"watchtowerStatus,omitempty"`
+	// +optional
+	Preflights       map[string]PreflightStatus `json:"preflights,omitempty"`
 }
 
 type WatchtowerStatusSummary struct {
@@ -1272,4 +1274,10 @@ type TelemetryConnectionStatus struct {
 	DatadogTraceAgentURL  string `json:"datadogTraceAgentURL,omitempty"`
 	DatadogTraceAgentHost string `json:"datadogTraceAgentHost,omitempty"`
 	DatadogTraceAgentPort string `json:"datadogTraceAgentPort,omitempty"`
+}
+
+type PreflightStatus struct {
+	Outcome            string `json:"outcome"`
+	Message            string `json:"message,omitempty"`
+	ObservedGeneration int64  `json:"observedGeneration"`
 }

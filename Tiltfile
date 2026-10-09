@@ -612,7 +612,7 @@ local_resource(
 local_resource(
     "Operator-Build",
     binary(),
-    deps=["internal", "pkg", "api", "cmd"],
+    deps=["internal", "pkg", "api", "cmd", "preflight"],
     resource_deps=["Operator-Codegen"],
     ignore=["*/*/zz_generated.deepcopy.go"],
     labels=[GROUP_WANDB_OPERATOR],

@@ -12,6 +12,7 @@ import (
 	"github.com/wandb/operator/internal/controller/infra/managed/mysql/moco"
 	"github.com/wandb/operator/pkg/utils"
 	"github.com/wandb/operator/pkg/wandb/manifest"
+	"github.com/wandb/operator/preflight"
 	"k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -35,6 +36,10 @@ func mysqlWriteState(
 		case spec.ManagedMysql != nil:
 			out[key] = managedMysqlWriteState(ctx, client, wandb, spec.ManagedMysql, mfst)
 		case spec.ExternalMysql != nil:
+			if conds := externalMysqlPreflight(ctx, client, wandb, key, spec.ExternalMysql); conds != nil {
+				out[key] = conds
+				continue
+			}
 			out[key] = externalmysql.WriteState(ctx, client, wandb, key, spec.ExternalMysql)
 		}
 	}
@@ -474,4 +479,26 @@ func runMysqlInitJobInstance(ctx context.Context, client client.Client, wandb *a
 
 	logger.Info("MySQL init job still running")
 	return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
+}
+
+func externalMysqlPreflight(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, key string, spec *apiv2.MysqlConnection) []metav1.Condition {
+	params, err := external.ResolveValueFields(ctx, c, wandb.Namespace, map[string]apiv2.ValueOrSecret{
+		preflight.ParamHost:     spec.Host,
+		preflight.ParamPort:     spec.Port,
+		preflight.ParamUsername: spec.Username,
+		preflight.ParamPassword: spec.Password,
+	})
+	if err != nil {
+		return []metav1.Condition{{Type: common.ReconciledType, Status: metav1.ConditionFalse, Reason: common.ApiErrorReason}}
+	}
+
+	fieldPath := fmt.Sprintf("spec.mysql.%s.externalMysql", key)
+	passed, msg, err := runPreflightOnce(ctx, c, wandb, preflight.Checks[preflight.ExternalDBCheck], fieldPath, params)
+	if err != nil {
+		return []metav1.Condition{{Type: common.ReconciledType, Status: metav1.ConditionFalse, Reason: common.ApiErrorReason}}
+	}
+	if !passed {
+		return []metav1.Condition{{Type: common.ReconciledType, Status: metav1.ConditionFalse, Reason: common.PreflightFailedReason, Message: msg}}
+	}
+	return nil
 }

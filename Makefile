@@ -96,8 +96,13 @@ vet: ## Run go vet against code.
 	go vet ./...
 
 .PHONY: test
-test: manifests generate sync-crd-embed vet setup-envtest ## Run tests.
+test: manifests generate sync-crd-embed vet setup-envtest test-preflight ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test -v $$(go list ./... | grep -v /e2e | grep -v /vendored) -coverprofile cover.out
+
+# preflight is a separate Go module, so the root `go list ./...` does not include it.
+.PHONY: test-preflight
+test-preflight: ## Run preflight module tests.
+	cd preflight && go vet ./... && go test ./...
 
 .PHONY: setup-local-webhook
 setup-local-webhook: ## Setup local webhook development environment with certificates.

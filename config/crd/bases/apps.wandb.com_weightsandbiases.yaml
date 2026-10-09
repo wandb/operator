@@ -6565,6 +6565,21 @@ spec:
               observedGeneration:
                 format: int64
                 type: integer
+              preflights:
+                additionalProperties:
+                  properties:
+                    message:
+                      type: string
+                    observedGeneration:
+                      format: int64
+                      type: integer
+                    outcome:
+                      type: string
+                  required:
+                  - observedGeneration
+                  - outcome
+                  type: object
+                type: object
               ready:
                 type: boolean
               redisStatus:
