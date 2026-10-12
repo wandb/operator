@@ -148,23 +148,27 @@ func TestConvertTo_HostnameAndLicense(t *testing.T) {
 }
 
 func TestConvertTo_AllValidSizes(t *testing.T) {
-	cases := []appsv2.Size{
-		appsv2.SizeDev,
-		appsv2.SizeMicro,
-		appsv2.SizeSmall,
-		appsv2.SizeMedium,
-		appsv2.SizeLarge,
-		appsv2.SizeXLarge,
-		appsv2.SizeXXLarge,
+	cases := []struct {
+		input appsv2.Size
+		want  appsv2.Size
+	}{
+		{input: appsv2.SizeDev, want: appsv2.SizeDev},
+		{input: appsv2.SizeMicro, want: appsv2.SizeMicro},
+		{input: appsv2.SizeSmall, want: appsv2.SizeSmall},
+		{input: appsv2.SizeMedium, want: appsv2.SizeMedium},
+		{input: appsv2.SizeLarge, want: appsv2.SizeLarge},
+		{input: appsv2.SizeXLarge, want: appsv2.SizeXLarge},
+		{input: appsv2.Size2XLarge, want: appsv2.Size2XLarge},
+		{input: appsv2.SizeXXLarge, want: appsv2.Size2XLarge},
 	}
-	for _, size := range cases {
-		t.Run(string(size), func(t *testing.T) {
+	for _, tc := range cases {
+		t.Run(string(tc.input), func(t *testing.T) {
 			dst := &appsv2.WeightsAndBiases{}
 			src := newV1(map[string]interface{}{
-				"global": map[string]interface{}{"size": string(size)},
+				"global": map[string]interface{}{"size": string(tc.input)},
 			})
 			require.NoError(t, src.ConvertTo(dst))
-			require.Equal(t, size, dst.Spec.Size)
+			require.Equal(t, tc.want, dst.Spec.Size)
 		})
 	}
 }
