@@ -175,7 +175,7 @@ func ToRedisStandaloneVendorSpec(
 		return nil, nil
 	}
 
-	if spec.Sentinel.Enabled {
+	if ptr.Deref(spec.Sentinel.Enabled, true) {
 		return nil, nil
 	}
 
@@ -257,7 +257,7 @@ func ToRedisSentinelVendorSpec(
 		return nil, nil
 	}
 
-	if !spec.Sentinel.Enabled {
+	if !ptr.Deref(spec.Sentinel.Enabled, true) {
 		return nil, nil
 	}
 
@@ -265,8 +265,10 @@ func ToRedisSentinelVendorSpec(
 		Namespace: spec.Namespace, Name: spec.Name,
 	})
 
-	// TODO I dont think we want to default this at all?
-	sentinelCount := int32(3)
+	sentinelCount := spec.Sentinel.Replicas
+	if sentinelCount == 0 {
+		sentinelCount = int32(3)
+	}
 
 	// Get master name from config or use default
 	masterName := DefaultSentinelGroup
@@ -336,7 +338,7 @@ func ToRedisReplicationVendorSpec(
 		return nil, nil
 	}
 
-	if !spec.Sentinel.Enabled {
+	if !ptr.Deref(spec.Sentinel.Enabled, true) {
 		return nil, nil
 	}
 
@@ -351,8 +353,10 @@ func ToRedisReplicationVendorSpec(
 		return nil, fmt.Errorf("invalid storage size %q: %w", spec.StorageSize, err)
 	}
 
-	// TODO I dont think we want to default this at all?
-	replicaCount := int32(3)
+	replicaCount := spec.Replicas
+	if replicaCount == 0 {
+		replicaCount = int32(3)
+	}
 
 	replication := &redisreplicationv1beta2.RedisReplication{
 		ObjectMeta: metav1.ObjectMeta{

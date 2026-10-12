@@ -155,6 +155,37 @@ var _ = Describe("Infra Sizing", func() {
 			Expect(wandb.Spec.MySQL[apiv2.DefaultInstanceName].ManagedMysql.StorageSize).To(Equal("50Gi"))
 		})
 
+		It("should derive Redis and Sentinel replicas from the manifest while preserving explicit overrides", func() {
+			manifest := serverManifest.Manifest{
+				Redis: map[string]serverManifest.InfraConfig{
+					"default": {
+						Sizing: map[apiv2.Size]serverManifest.SizingConfig{
+							"default": {Replicas: 1, Sentinel: serverManifest.SentinelSizingConfig{Replicas: 1}},
+							"small":   {Replicas: 3, Sentinel: serverManifest.SentinelSizingConfig{Replicas: 3}},
+						},
+					},
+				},
+			}
+			wandb := &apiv2.WeightsAndBiases{
+				Spec: apiv2.WeightsAndBiasesSpec{
+					Size: apiv2.SizeSmall,
+					Redis: map[string]apiv2.RedisSpec{
+						apiv2.DefaultInstanceName: {ManagedRedis: &apiv2.ManagedRedisSpec{}},
+						"pinned": {ManagedRedis: &apiv2.ManagedRedisSpec{
+							Replicas: 5,
+							Sentinel: apiv2.RedisSentinelSpec{Replicas: 5},
+						}},
+					},
+				},
+			}
+
+			v2.ApplyInfraSizing(wandb, manifest)
+			Expect(wandb.Spec.Redis[apiv2.DefaultInstanceName].ManagedRedis.Replicas).To(Equal(int32(3)))
+			Expect(wandb.Spec.Redis[apiv2.DefaultInstanceName].ManagedRedis.Sentinel.Replicas).To(Equal(int32(3)))
+			Expect(wandb.Spec.Redis["pinned"].ManagedRedis.Replicas).To(Equal(int32(5)))
+			Expect(wandb.Spec.Redis["pinned"].ManagedRedis.Sentinel.Replicas).To(Equal(int32(5)))
+		})
+
 		It("should default object store copies from the manifest, treating CR values as overrides", func() {
 			wandb := &apiv2.WeightsAndBiases{
 				Spec: apiv2.WeightsAndBiasesSpec{
