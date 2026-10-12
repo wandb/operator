@@ -14,7 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func readConnectionDetails(ctx context.Context, c client.Client, actual *mocov1beta2.MySQLCluster, nn types.NamespacedName) *mysqlConnInfo {
+func readConnectionDetails(ctx context.Context, c client.Client, actual *mocov1beta2.MySQLCluster, nn types.NamespacedName, database string) *mysqlConnInfo {
 	log := logx.GetSlog(ctx)
 
 	cred := &corev1.Secret{}
@@ -31,7 +31,7 @@ func readConnectionDetails(ctx context.Context, c client.Client, actual *mocov1b
 		Host:     fmt.Sprintf("moco-%s-primary.%s.svc.cluster.local", actual.Name, actual.Namespace),
 		Port:     "3306",
 		User:     "moco-writable",
-		Database: "wandb_local",
+		Database: database,
 		Password: pw,
 	}
 }
@@ -42,6 +42,7 @@ func ReadState(
 	specNamespacedName types.NamespacedName,
 	wandbOwner client.Object,
 	onDeleteRule ctrlcommon.OnDeleteRule,
+	database string,
 ) ([]metav1.Condition, *apiv2.MysqlConnection) {
 	ctx, _ = logx.WithSlog(ctx, logx.Mysql)
 	log := logx.GetSlog(ctx)
@@ -93,7 +94,7 @@ func ReadState(
 	var connection *apiv2.MysqlConnection
 
 	if actual != nil {
-		connInfo := readConnectionDetails(ctx, k8sClient, actual, specNamespacedName)
+		connInfo := readConnectionDetails(ctx, k8sClient, actual, specNamespacedName, database)
 
 		connection, err = writeMySQLConnInfo(
 			ctx, k8sClient, wandbOwner, nsnBuilder, connInfo,

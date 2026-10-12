@@ -18,8 +18,8 @@ var _ = Describe("managed ClickHouse naming", func() {
 			spec := wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse
 
 			chi, err := ToClickHouseVendorSpec(
-				context.Background(), wandb, spec, clickHouseScheme(),
-				testObjectStorageConn(), testObjectStorageEndpoint, true, manifest.Manifest{},
+				context.Background(), wandb, wandb.GetBaseDeploymentSpec(), spec, clickHouseScheme(),
+				testObjectStorageConn(), testObjectStorageEndpoint, true, manifest.InfraConfig{},
 			)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(chi.Spec.Configuration.Clusters).To(HaveLen(1))

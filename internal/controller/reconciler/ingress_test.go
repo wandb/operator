@@ -80,7 +80,9 @@ func TestIngressManaged(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			wandb := &apiv2.WeightsAndBiases{
 				Spec: apiv2.WeightsAndBiasesSpec{
-					Networking: tt.networking,
+					BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+						Networking: tt.networking,
+					},
 				},
 			}
 
@@ -100,8 +102,10 @@ func TestConsolidatedIngressName_HonorsSpecOverride(t *testing.T) {
 	wandb := &apiv2.WeightsAndBiases{
 		ObjectMeta: metav1.ObjectMeta{Name: "wandb"},
 		Spec: apiv2.WeightsAndBiasesSpec{
-			Networking: apiv2.NetworkingSpec{
-				Ingress: &apiv2.IngressConfig{Name: "custom-name"},
+			BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+				Networking: apiv2.NetworkingSpec{
+					Ingress: &apiv2.IngressConfig{Name: "custom-name"},
+				},
 			},
 		},
 	}
@@ -112,8 +116,10 @@ func TestConsolidatedIngressName_EmptyOverrideFallsBack(t *testing.T) {
 	wandb := &apiv2.WeightsAndBiases{
 		ObjectMeta: metav1.ObjectMeta{Name: "wandb"},
 		Spec: apiv2.WeightsAndBiasesSpec{
-			Networking: apiv2.NetworkingSpec{
-				Ingress: &apiv2.IngressConfig{Name: ""},
+			BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+				Networking: apiv2.NetworkingSpec{
+					Ingress: &apiv2.IngressConfig{Name: ""},
+				},
 			},
 		},
 	}
@@ -126,10 +132,12 @@ func TestIngressUsesAWSLoadBalancerController_MissingClassSkipsDetection(t *test
 
 	wandb := &apiv2.WeightsAndBiases{
 		Spec: apiv2.WeightsAndBiasesSpec{
-			Networking: apiv2.NetworkingSpec{
-				Mode: apiv2.NetworkingModeIngress,
-				Ingress: &apiv2.IngressConfig{
-					IngressClassName: ptr.To("missing"),
+			BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+				Networking: apiv2.NetworkingSpec{
+					Mode: apiv2.NetworkingModeIngress,
+					Ingress: &apiv2.IngressConfig{
+						IngressClassName: ptr.To("missing"),
+					},
 				},
 			},
 		},

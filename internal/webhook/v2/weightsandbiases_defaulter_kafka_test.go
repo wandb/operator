@@ -23,7 +23,11 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Kafka", func() {
 	It("defaults Kafka namespace to the parent namespace", func() {
 		wandb := &apiv2.WeightsAndBiases{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
-			Spec:       apiv2.WeightsAndBiasesSpec{Kafka: apiv2.KafkaSpec{ManagedKafka: &apiv2.ManagedKafkaSpec{}}},
+			Spec: apiv2.WeightsAndBiasesSpec{
+				BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+					Kafka: apiv2.KafkaSpec{ManagedKafka: &apiv2.ManagedKafkaSpec{}},
+				},
+			},
 		}
 
 		err := defaulter.Default(ctx, wandb)
@@ -35,7 +39,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Kafka", func() {
 		wandb := &apiv2.WeightsAndBiases{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
 			Spec: apiv2.WeightsAndBiasesSpec{
-				Kafka: apiv2.KafkaSpec{ManagedKafka: &apiv2.ManagedKafkaSpec{Namespace: "custom-kafka-namespace"}},
+				BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+					Kafka: apiv2.KafkaSpec{ManagedKafka: &apiv2.ManagedKafkaSpec{Namespace: "custom-kafka-namespace"}},
+				},
 			},
 		}
 
@@ -48,7 +54,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Kafka", func() {
 		wandb := &apiv2.WeightsAndBiases{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
 			Spec: apiv2.WeightsAndBiasesSpec{
-				Kafka: apiv2.KafkaSpec{ManagedKafka: &apiv2.ManagedKafkaSpec{StorageSize: "20Gi", Replicas: 5}},
+				BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+					Kafka: apiv2.KafkaSpec{ManagedKafka: &apiv2.ManagedKafkaSpec{StorageSize: "20Gi", Replicas: 5}},
+				},
 			},
 		}
 

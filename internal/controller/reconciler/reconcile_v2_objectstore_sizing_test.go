@@ -34,14 +34,16 @@ func objectStoreWandb(size apiv2.Size) *apiv2.WeightsAndBiases {
 		TypeMeta:   metav1.TypeMeta{APIVersion: apiv2.GroupVersion.String(), Kind: "WeightsAndBiases"},
 		ObjectMeta: metav1.ObjectMeta{Name: "wandb", Namespace: "wandb"},
 		Spec: apiv2.WeightsAndBiasesSpec{
-			Size:        size,
-			Tolerations: &tolerations,
-			ObjectStore: map[string]apiv2.ObjectStoreSpec{
-				apiv2.DefaultInstanceName: {
-					ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{
-						Name:      "object-store",
-						Namespace: "wandb",
-						Config:    apiv2.ObjectStoreConfig{AccessKey: "admin"},
+			BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+				Size:        size,
+				Tolerations: &tolerations,
+				ObjectStore: map[string]apiv2.ObjectStoreSpec{
+					apiv2.DefaultInstanceName: {
+						ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{
+							Name:      "object-store",
+							Namespace: "wandb",
+							Config:    apiv2.ObjectStoreConfig{AccessKey: "admin"},
+						},
 					},
 				},
 			},
@@ -67,9 +69,9 @@ var _ = Describe("ObjectStore sizing per tier", func() {
 	DescribeTable("renders a healthy Seaweed spec for each size",
 		func(size apiv2.Size, wantReplicas int32, wantVolumeSize, wantReplication string, wantCPU string, wantFilerSize string) {
 			wandb := objectStoreWandb(size)
-			v2.ApplyInfraSizing(wandb, mfst)
+			v2.ApplyInfraSizing(wandb.GetBaseDeploymentSpec(), mfst)
 
-			seaweed, err := seaweedfs.ToObjectStoreVendorSpec(context.Background(), wandb, wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ManagedObjectStore, objectStoreScheme(), mfst)
+			seaweed, err := seaweedfs.ToObjectStoreVendorSpec(context.Background(), wandb, wandb.GetBaseDeploymentSpec(), wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ManagedObjectStore, objectStoreScheme(), mfst.Bucket["default"])
 			Expect(err).NotTo(HaveOccurred())
 			Expect(seaweed).NotTo(BeNil())
 
@@ -103,9 +105,9 @@ var _ = Describe("ObjectStore sizing per tier", func() {
 	It("lets a CR filer size override the manifest metadataVolumeSize", func() {
 		wandb := objectStoreWandb(apiv2.Size("large"))
 		wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ManagedObjectStore.SeaweedObjectStoreSpec.FilerStorageSize = "100Gi"
-		v2.ApplyInfraSizing(wandb, mfst)
+		v2.ApplyInfraSizing(wandb.GetBaseDeploymentSpec(), mfst)
 
-		seaweed, err := seaweedfs.ToObjectStoreVendorSpec(context.Background(), wandb, wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ManagedObjectStore, objectStoreScheme(), mfst)
+		seaweed, err := seaweedfs.ToObjectStoreVendorSpec(context.Background(), wandb, wandb.GetBaseDeploymentSpec(), wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ManagedObjectStore, objectStoreScheme(), mfst.Bucket["default"])
 		Expect(err).NotTo(HaveOccurred())
 		Expect(seaweed.Spec.Filer.Persistence.Resources.Requests[corev1.ResourceStorage]).To(Equal(resource.MustParse("100Gi")))
 	})

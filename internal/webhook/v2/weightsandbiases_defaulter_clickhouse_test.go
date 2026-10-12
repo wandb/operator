@@ -24,7 +24,11 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 	It("defaults ClickHouse namespace to the parent namespace", func() {
 		wandb := &apiv2.WeightsAndBiases{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
-			Spec:       apiv2.WeightsAndBiasesSpec{ClickHouse: map[string]apiv2.ClickHouseSpec{apiv2.DefaultInstanceName: {ManagedClickHouse: &apiv2.ManagedClickHouseSpec{}}}},
+			Spec: apiv2.WeightsAndBiasesSpec{
+				BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+					ClickHouse: map[string]apiv2.ClickHouseSpec{apiv2.DefaultInstanceName: {ManagedClickHouse: &apiv2.ManagedClickHouseSpec{}}},
+				},
+			},
 		}
 
 		err := defaulter.Default(ctx, wandb)
@@ -36,7 +40,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 		wandb := &apiv2.WeightsAndBiases{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
 			Spec: apiv2.WeightsAndBiasesSpec{
-				ClickHouse: map[string]apiv2.ClickHouseSpec{apiv2.DefaultInstanceName: {ManagedClickHouse: &apiv2.ManagedClickHouseSpec{Namespace: "custom-clickhouse-namespace"}}},
+				BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+					ClickHouse: map[string]apiv2.ClickHouseSpec{apiv2.DefaultInstanceName: {ManagedClickHouse: &apiv2.ManagedClickHouseSpec{Namespace: "custom-clickhouse-namespace"}}},
+				},
 			},
 		}
 
@@ -49,12 +55,14 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 		wandb := &apiv2.WeightsAndBiases{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
 			Spec: apiv2.WeightsAndBiasesSpec{
-				ClickHouse: map[string]apiv2.ClickHouseSpec{
-					apiv2.DefaultInstanceName: {
-						ManagedClickHouse: &apiv2.ManagedClickHouseSpec{
-							StorageSize: "100Gi",
-							Replicas:    2,
-							Version:     "24.1",
+				BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+					ClickHouse: map[string]apiv2.ClickHouseSpec{
+						apiv2.DefaultInstanceName: {
+							ManagedClickHouse: &apiv2.ManagedClickHouseSpec{
+								StorageSize: "100Gi",
+								Replicas:    2,
+								Version:     "24.1",
+							},
 						},
 					},
 				},
@@ -71,7 +79,11 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 	It("defaults the plain '<cr>-chi' name for CR names that fit", func() {
 		wandb := &apiv2.WeightsAndBiases{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
-			Spec:       apiv2.WeightsAndBiasesSpec{ClickHouse: map[string]apiv2.ClickHouseSpec{apiv2.DefaultInstanceName: {ManagedClickHouse: &apiv2.ManagedClickHouseSpec{}}}},
+			Spec: apiv2.WeightsAndBiasesSpec{
+				BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+					ClickHouse: map[string]apiv2.ClickHouseSpec{apiv2.DefaultInstanceName: {ManagedClickHouse: &apiv2.ManagedClickHouseSpec{}}},
+				},
+			},
 		}
 
 		g.Expect(defaulter.Default(ctx, wandb)).To(g.Succeed())
@@ -84,10 +96,14 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 	It("keys non-default instance names before the suffix", func() {
 		wandb := &apiv2.WeightsAndBiases{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
-			Spec: apiv2.WeightsAndBiasesSpec{ClickHouse: map[string]apiv2.ClickHouseSpec{
-				apiv2.DefaultInstanceName: {ManagedClickHouse: &apiv2.ManagedClickHouseSpec{}},
-				"analytics":               {ManagedClickHouse: &apiv2.ManagedClickHouseSpec{}},
-			}},
+			Spec: apiv2.WeightsAndBiasesSpec{
+				BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+					ClickHouse: map[string]apiv2.ClickHouseSpec{
+						apiv2.DefaultInstanceName: {ManagedClickHouse: &apiv2.ManagedClickHouseSpec{}},
+						"analytics":               {ManagedClickHouse: &apiv2.ManagedClickHouseSpec{}},
+					},
+				},
+			},
 		}
 
 		g.Expect(defaulter.Default(ctx, wandb)).To(g.Succeed())
@@ -98,7 +114,11 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 		// 32 chars: "<cr>-chi" would overflow the derived per-host volume names
 		wandb := &apiv2.WeightsAndBiases{
 			ObjectMeta: metav1.ObjectMeta{Name: "wandb-integration-environments-2", Namespace: "test-namespace"},
-			Spec:       apiv2.WeightsAndBiasesSpec{ClickHouse: map[string]apiv2.ClickHouseSpec{apiv2.DefaultInstanceName: {ManagedClickHouse: &apiv2.ManagedClickHouseSpec{}}}},
+			Spec: apiv2.WeightsAndBiasesSpec{
+				BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+					ClickHouse: map[string]apiv2.ClickHouseSpec{apiv2.DefaultInstanceName: {ManagedClickHouse: &apiv2.ManagedClickHouseSpec{}}},
+				},
+			},
 		}
 
 		g.Expect(defaulter.Default(ctx, wandb)).To(g.Succeed())
@@ -111,7 +131,11 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 		// persisted in the spec, so it must be deterministic
 		again := &apiv2.WeightsAndBiases{
 			ObjectMeta: wandb.ObjectMeta,
-			Spec:       apiv2.WeightsAndBiasesSpec{ClickHouse: map[string]apiv2.ClickHouseSpec{apiv2.DefaultInstanceName: {ManagedClickHouse: &apiv2.ManagedClickHouseSpec{}}}},
+			Spec: apiv2.WeightsAndBiasesSpec{
+				BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+					ClickHouse: map[string]apiv2.ClickHouseSpec{apiv2.DefaultInstanceName: {ManagedClickHouse: &apiv2.ManagedClickHouseSpec{}}},
+				},
+			},
 		}
 		g.Expect(defaulter.Default(ctx, again)).To(g.Succeed())
 		g.Expect(again.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse.Name).To(g.Equal(managed.Name))
@@ -121,10 +145,12 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 		wandb := &apiv2.WeightsAndBiases{
 			ObjectMeta: metav1.ObjectMeta{Name: "wandb-legacy-overrides-v1", Namespace: "test-namespace"},
 			Spec: apiv2.WeightsAndBiasesSpec{
-				MySQL:       map[string]apiv2.MySQLSpec{apiv2.DefaultInstanceName: {ManagedMysql: &apiv2.ManagedMysqlSpec{}}},
-				Redis:       map[string]apiv2.RedisSpec{apiv2.DefaultInstanceName: {ManagedRedis: &apiv2.ManagedRedisSpec{}}},
-				Kafka:       apiv2.KafkaSpec{ManagedKafka: &apiv2.ManagedKafkaSpec{}},
-				ObjectStore: map[string]apiv2.ObjectStoreSpec{apiv2.DefaultInstanceName: {ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{}}},
+				BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+					MySQL:       map[string]apiv2.MySQLSpec{apiv2.DefaultInstanceName: {ManagedMysql: &apiv2.ManagedMysqlSpec{}}},
+					Redis:       map[string]apiv2.RedisSpec{apiv2.DefaultInstanceName: {ManagedRedis: &apiv2.ManagedRedisSpec{}}},
+					Kafka:       apiv2.KafkaSpec{ManagedKafka: &apiv2.ManagedKafkaSpec{}},
+					ObjectStore: map[string]apiv2.ObjectStoreSpec{apiv2.DefaultInstanceName: {ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{}}},
+				},
 			},
 		}
 
@@ -139,8 +165,10 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ClickHouse", func() {
 		wandb := &apiv2.WeightsAndBiases{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
 			Spec: apiv2.WeightsAndBiasesSpec{
-				ClickHouse: map[string]apiv2.ClickHouseSpec{
-					apiv2.DefaultInstanceName: {ExternalClickHouse: &apiv2.ClickHouseConnection{}},
+				BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+					ClickHouse: map[string]apiv2.ClickHouseSpec{
+						apiv2.DefaultInstanceName: {ExternalClickHouse: &apiv2.ClickHouseConnection{}},
+					},
 				},
 			},
 		}

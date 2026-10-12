@@ -35,16 +35,16 @@ func ResolveSecretKey(ctx context.Context, c client.Client, namespace string, se
 	return string(val), nil
 }
 
-func BuildWandbOwnerRef(c client.Client, wandb *apiv2.WeightsAndBiases) (metav1.OwnerReference, error) {
-	gvk, err := c.GroupVersionKindFor(wandb)
+func BuildOwnerRef(c client.Client, owner client.Object) (metav1.OwnerReference, error) {
+	gvk, err := c.GroupVersionKindFor(owner)
 	if err != nil {
-		return metav1.OwnerReference{}, fmt.Errorf("could not get GVK for wandb owner: %w", err)
+		return metav1.OwnerReference{}, fmt.Errorf("could not get GVK for resource owner: %w", err)
 	}
 	return metav1.OwnerReference{
 		APIVersion:         gvk.GroupVersion().String(),
 		Kind:               gvk.Kind,
-		Name:               wandb.GetName(),
-		UID:                wandb.GetUID(),
+		Name:               owner.GetName(),
+		UID:                owner.GetUID(),
 		Controller:         ptr.To(false),
 		BlockOwnerDeletion: ptr.To(false),
 	}, nil
@@ -65,7 +65,7 @@ func DeleteConnectionSecret(ctx context.Context, c client.Client, nsName types.N
 func WriteConnectionSecret(
 	ctx context.Context,
 	c client.Client,
-	wandb *apiv2.WeightsAndBiases,
+	owner client.Object,
 	nsName types.NamespacedName,
 	data map[string]string,
 ) []metav1.Condition {
@@ -82,7 +82,7 @@ func WriteConnectionSecret(
 		actual = nil
 	}
 
-	ownerRef, err := BuildWandbOwnerRef(c, wandb)
+	ownerRef, err := BuildOwnerRef(c, owner)
 	if err != nil {
 		return []metav1.Condition{{
 			Type:   common.ReconciledType,

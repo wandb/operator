@@ -37,19 +37,21 @@ func resolveStorageFixture(t *testing.T, data map[string]string) (ctrlclient.Cli
 	wandb := &apiv2.WeightsAndBiases{
 		ObjectMeta: metav1.ObjectMeta{Name: "wandb", Namespace: "wandb"},
 		Status: apiv2.WeightsAndBiasesStatus{
-			ObjectStoreStatus: map[string]apiv2.ObjectStoreInfraStatus{
-				apiv2.DefaultInstanceName: {
-					WBInfraStatus: apiv2.WBInfraStatus{Ready: true},
-					Connection: apiv2.ObjectStoreConnection{
-						Provider:       sel("Provider"),
-						Bucket:         sel("Bucket"),
-						Endpoint:       sel("Host"),
-						Port:           sel("Port"),
-						Region:         sel("Region"),
-						AccessKey:      sel("AccessKey"),
-						SecretKey:      sel("SecretKey"),
-						ForcePathStyle: sel("ForcePathStyle"),
-						TlsEnabled:     sel("TlsEnabled"),
+			BaseDeploymentStatus: apiv2.BaseDeploymentStatus{
+				ObjectStoreStatus: map[string]apiv2.ObjectStoreInfraStatus{
+					apiv2.DefaultInstanceName: {
+						WBInfraStatus: apiv2.WBInfraStatus{Ready: true},
+						Connection: apiv2.ObjectStoreConnection{
+							Provider:       sel("Provider"),
+							Bucket:         sel("Bucket"),
+							Endpoint:       sel("Host"),
+							Port:           sel("Port"),
+							Region:         sel("Region"),
+							AccessKey:      sel("AccessKey"),
+							SecretKey:      sel("SecretKey"),
+							ForcePathStyle: sel("ForcePathStyle"),
+							TlsEnabled:     sel("TlsEnabled"),
+						},
 					},
 				},
 			},

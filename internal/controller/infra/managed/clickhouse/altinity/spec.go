@@ -21,6 +21,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -135,7 +136,7 @@ func writableEmptyDirVolume(name string) corev1.Volume {
 // only when object-store credentials are ambient (IAM / workload identity).
 // Returns nil when the spec opts out of ServiceAccount creation.
 func ToServiceAccount(
-	wandb *apiv2.WeightsAndBiases,
+	owner client.Object,
 	spec *apiv2.ManagedClickHouseSpec,
 	objStorage *objectstore.ConnInfo,
 	scheme *runtime.Scheme,
@@ -148,15 +149,15 @@ func ToServiceAccount(
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        clickHouseServiceAccountName(spec),
 			Namespace:   spec.Namespace,
-			Labels:      BuildWandbClickhouseLabels(wandb),
+			Labels:      BuildClickhouseLabels(owner),
 			Annotations: spec.ServiceAccount.Annotations,
 		},
 		// Ambient (IAM/workload-identity) credentials require the projected SA
 		// token; static access keys don't, so only automount when creds are ambient.
 		AutomountServiceAccountToken: ptr.To(!objStorage.HasStaticCredentials()),
 	}
-	if wandb.Namespace == spec.Namespace {
-		if err := ctrl.SetControllerReference(wandb, serviceAccount, scheme); err != nil {
+	if owner.GetNamespace() == spec.Namespace {
+		if err := ctrl.SetControllerReference(owner, serviceAccount, scheme); err != nil {
 			return nil, fmt.Errorf("failed to set owner reference on ClickHouse ServiceAccount: %w", err)
 		}
 	}
@@ -177,13 +178,14 @@ func clickHouseServiceAccountName(spec *apiv2.ManagedClickHouseSpec) string {
 // ClickHouseInstallation format used by the Altinity operator.
 func ToClickHouseVendorSpec(
 	ctx context.Context,
-	wandb *apiv2.WeightsAndBiases,
+	owner client.Object,
+	deployment *apiv2.BaseDeploymentSpec,
 	spec *apiv2.ManagedClickHouseSpec,
 	scheme *runtime.Scheme,
 	objStorage *objectstore.ConnInfo,
 	objStorageEndpoint string,
 	waitForObjectStore bool,
-	mfst manifest.Manifest,
+	config manifest.InfraConfig,
 ) (*v1.ClickHouseInstallation, error) {
 	_, log := logx.WithSlog(ctx, logx.ClickHouse)
 
@@ -240,18 +242,18 @@ func ToClickHouseVendorSpec(
 	}
 
 	reclaimPolicy := v1.PVCReclaimPolicyUnspecified
-	if wandb.GetRetentionPolicy(spec.ManagedInfraSpec).OnDelete == apiv2.PurgeOnDelete {
+	if deployment.GetRetentionPolicy(spec.ManagedInfraSpec).OnDelete == apiv2.PurgeOnDelete {
 		reclaimPolicy = v1.PVCReclaimPolicyDelete
 	}
 
-	clickHouseImage := ClickHouseImage(mfst.Clickhouse["default"].Images["server"], wandb.Spec.Global.ImageRegistry)
+	clickHouseImage := ClickHouseImage(config.Images["server"], deployment.Global.ImageRegistry)
 	podSpec := corev1.PodSpec{
-		ImagePullSecrets:             wandb.Spec.Global.ImagePullSecrets,
+		ImagePullSecrets:             deployment.Global.ImagePullSecrets,
 		ServiceAccountName:           clickHouseServiceAccountName(spec),
 		AutomountServiceAccountToken: ptr.To(!objStorage.HasStaticCredentials()),
 		SecurityContext:              clickHousePodSecurityContext(),
-		Affinity:                     wandb.GetAffinity(spec.ManagedInfraSpec),
-		Tolerations:                  *wandb.GetTolerations(spec.ManagedInfraSpec),
+		Affinity:                     deployment.GetAffinity(spec.ManagedInfraSpec),
+		Tolerations:                  ptr.Deref(deployment.GetTolerations(spec.ManagedInfraSpec), nil),
 		Volumes:                      clickHouseWritableVolumes(),
 		Containers: []corev1.Container{
 			{
@@ -314,7 +316,7 @@ func ToClickHouseVendorSpec(
 					{
 						Name: nsnBuilder.PodTemplateName(),
 						ObjectMeta: metav1.ObjectMeta{
-							Labels: BuildWandbClickhouseLabels(wandb),
+							Labels: BuildClickhouseLabels(owner),
 						},
 						Spec: podSpec,
 					},
@@ -323,7 +325,7 @@ func ToClickHouseVendorSpec(
 					{
 						Name: nsnBuilder.VolumeTemplateName(),
 						ObjectMeta: metav1.ObjectMeta{
-							Labels: BuildWandbClickhouseLabels(wandb),
+							Labels: BuildClickhouseLabels(owner),
 						},
 						StorageManagement: v1.StorageManagement{
 							PVCReclaimPolicy: reclaimPolicy,
@@ -345,7 +347,7 @@ func ToClickHouseVendorSpec(
 	}
 
 	// Set owner reference
-	if err := ctrl.SetControllerReference(wandb, chi, scheme); err != nil {
+	if err := ctrl.SetControllerReference(owner, chi, scheme); err != nil {
 		log.Error("failed to set owner reference on CHI CR", logx.ErrAttr(err))
 		return nil, fmt.Errorf("failed to set owner reference: %w", err)
 	}
@@ -386,12 +388,12 @@ exit 1`,
 	}
 }
 
-// BuildWandbClickhouseLabels returns the standard W&B labels for the ClickHouse module.
-func BuildWandbClickhouseLabels(wandb *apiv2.WeightsAndBiases) map[string]string {
-	return common.BuildWandbLabels(wandb, ClickhouseModuleName)
+// BuildClickhouseLabels returns the standard W&B labels for the ClickHouse module.
+func BuildClickhouseLabels(owner client.Object) map[string]string {
+	return common.BuildWandbLabels(owner, ClickhouseModuleName)
 }
 
 // ToClickHouseOnDeleteRule builds the on-delete retention rule for the ClickHouse module.
-func ToClickHouseOnDeleteRule(wandb *apiv2.WeightsAndBiases, retentionPolicy apiv2.RetentionPolicy) common.OnDeleteRule {
-	return common.ToOnDeleteRule(wandb, retentionPolicy, ClickhouseModuleName)
+func ToClickHouseOnDeleteRule(owner client.Object, retentionPolicy apiv2.RetentionPolicy) common.OnDeleteRule {
+	return common.ToOnDeleteRule(owner, retentionPolicy, ClickhouseModuleName)
 }

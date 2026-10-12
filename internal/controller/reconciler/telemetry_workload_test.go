@@ -23,9 +23,11 @@ func TestResolveEnvvarsTelemetrySourceUsesStatusSecret(t *testing.T) {
 	wandb := &apiv2.WeightsAndBiases{
 		ObjectMeta: metav1.ObjectMeta{Name: "wandb", Namespace: "default"},
 		Status: apiv2.WeightsAndBiasesStatus{
-			TelemetryStatus: apiv2.TelemetryInfraStatus{
-				Connection: apiv2.TelemetryConnectionStatus{
-					ConnectionSecret: "status-otel-secret",
+			BaseDeploymentStatus: apiv2.BaseDeploymentStatus{
+				TelemetryStatus: apiv2.TelemetryInfraStatus{
+					Connection: apiv2.TelemetryConnectionStatus{
+						ConnectionSecret: "status-otel-secret",
+					},
 				},
 			},
 		},
@@ -619,9 +621,11 @@ func telemetryStatusWandb(name, namespace, secretName string) *apiv2.WeightsAndB
 	return &apiv2.WeightsAndBiases{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 		Status: apiv2.WeightsAndBiasesStatus{
-			TelemetryStatus: apiv2.TelemetryInfraStatus{
-				Connection: apiv2.TelemetryConnectionStatus{
-					ConnectionSecret: secretName,
+			BaseDeploymentStatus: apiv2.BaseDeploymentStatus{
+				TelemetryStatus: apiv2.TelemetryInfraStatus{
+					Connection: apiv2.TelemetryConnectionStatus{
+						ConnectionSecret: secretName,
+					},
 				},
 			},
 		},

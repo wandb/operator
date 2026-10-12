@@ -36,8 +36,10 @@ func TestReconcileCustomCACertsCreatesInlineConfigMap(t *testing.T) {
 			UID:       "wandb-uid",
 		},
 		Spec: apiv2.WeightsAndBiasesSpec{
-			Global: apiv2.GlobalSpec{
-				CustomCACerts: []string{"---cert-one---", "---cert-two---"},
+			BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+				Global: apiv2.GlobalSpec{
+					CustomCACerts: []string{"---cert-one---", "---cert-two---"},
+				},
 			},
 		},
 	}
@@ -85,25 +87,29 @@ func TestApplyCustomCACertsToWorkloadAddsGlobalAndInfraMounts(t *testing.T) {
 			Namespace: "default",
 		},
 		Spec: apiv2.WeightsAndBiasesSpec{
-			Global: apiv2.GlobalSpec{
-				CustomCACerts:    []string{"---inline---"},
-				CACertsConfigMap: "user-ca-certs",
+			BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+				Global: apiv2.GlobalSpec{
+					CustomCACerts:    []string{"---inline---"},
+					CACertsConfigMap: "user-ca-certs",
+				},
 			},
 		},
 		Status: apiv2.WeightsAndBiasesStatus{
-			MySQLStatus: map[string]apiv2.MysqlInfraStatus{
-				apiv2.DefaultInstanceName: apiv2.MysqlInfraStatus{
-					Connection: apiv2.MysqlConnection{
-						SslCa:   apiv2.ValueFromSecret("wandb-mysql-connection", "SslCa", false),
-						SslCert: apiv2.ValueFromSecret("wandb-mysql-connection", "SslCert", false),
-						SslKey:  apiv2.ValueFromSecret("wandb-mysql-connection", "SslKey", false),
+			BaseDeploymentStatus: apiv2.BaseDeploymentStatus{
+				MySQLStatus: map[string]apiv2.MysqlInfraStatus{
+					apiv2.DefaultInstanceName: apiv2.MysqlInfraStatus{
+						Connection: apiv2.MysqlConnection{
+							SslCa:   apiv2.ValueFromSecret("wandb-mysql-connection", "SslCa", false),
+							SslCert: apiv2.ValueFromSecret("wandb-mysql-connection", "SslCert", false),
+							SslKey:  apiv2.ValueFromSecret("wandb-mysql-connection", "SslKey", false),
+						},
 					},
 				},
-			},
-			RedisStatus: map[string]apiv2.RedisInfraStatus{
-				apiv2.DefaultInstanceName: apiv2.RedisInfraStatus{
-					Connection: apiv2.RedisConnection{
-						SslCa: apiv2.ValueFromSecret("wandb-redis-connection", "SslCa", true),
+				RedisStatus: map[string]apiv2.RedisInfraStatus{
+					apiv2.DefaultInstanceName: apiv2.RedisInfraStatus{
+						Connection: apiv2.RedisConnection{
+							SslCa: apiv2.ValueFromSecret("wandb-redis-connection", "SslCa", true),
+						},
 					},
 				},
 			},
@@ -165,17 +171,19 @@ func TestApplyCustomCACertsToWorkloadSkipsMissingOptionalInfraKeys(t *testing.T)
 			Namespace: "default",
 		},
 		Status: apiv2.WeightsAndBiasesStatus{
-			MySQLStatus: map[string]apiv2.MysqlInfraStatus{
-				apiv2.DefaultInstanceName: apiv2.MysqlInfraStatus{
-					Connection: apiv2.MysqlConnection{
-						SslCa: apiv2.ValueFromSecret("wandb-mysql-connection", "SslCa", true),
+			BaseDeploymentStatus: apiv2.BaseDeploymentStatus{
+				MySQLStatus: map[string]apiv2.MysqlInfraStatus{
+					apiv2.DefaultInstanceName: apiv2.MysqlInfraStatus{
+						Connection: apiv2.MysqlConnection{
+							SslCa: apiv2.ValueFromSecret("wandb-mysql-connection", "SslCa", true),
+						},
 					},
 				},
-			},
-			RedisStatus: map[string]apiv2.RedisInfraStatus{
-				apiv2.DefaultInstanceName: apiv2.RedisInfraStatus{
-					Connection: apiv2.RedisConnection{
-						SslCa: apiv2.ValueFromSecret("wandb-redis-connection", "SslCa", true),
+				RedisStatus: map[string]apiv2.RedisInfraStatus{
+					apiv2.DefaultInstanceName: apiv2.RedisInfraStatus{
+						Connection: apiv2.RedisConnection{
+							SslCa: apiv2.ValueFromSecret("wandb-redis-connection", "SslCa", true),
+						},
 					},
 				},
 			},

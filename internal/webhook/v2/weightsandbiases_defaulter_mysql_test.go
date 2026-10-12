@@ -23,7 +23,11 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - MySQL", func() {
 	It("defaults MySQL namespace", func() {
 		wandb := &apiv2.WeightsAndBiases{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
-			Spec:       apiv2.WeightsAndBiasesSpec{MySQL: map[string]apiv2.MySQLSpec{apiv2.DefaultInstanceName: {ManagedMysql: &apiv2.ManagedMysqlSpec{}}}},
+			Spec: apiv2.WeightsAndBiasesSpec{
+				BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+					MySQL: map[string]apiv2.MySQLSpec{apiv2.DefaultInstanceName: {ManagedMysql: &apiv2.ManagedMysqlSpec{}}},
+				},
+			},
 		}
 
 		err := defaulter.Default(ctx, wandb)
@@ -35,10 +39,12 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - MySQL", func() {
 		wandb := &apiv2.WeightsAndBiases{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
 			Spec: apiv2.WeightsAndBiasesSpec{
-				MySQL: map[string]apiv2.MySQLSpec{
-					apiv2.DefaultInstanceName: {
-						ManagedMysql: &apiv2.ManagedMysqlSpec{
-							Namespace: "custom-moco-namespace",
+				BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+					MySQL: map[string]apiv2.MySQLSpec{
+						apiv2.DefaultInstanceName: {
+							ManagedMysql: &apiv2.ManagedMysqlSpec{
+								Namespace: "custom-moco-namespace",
+							},
 						},
 					},
 				},
@@ -54,7 +60,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - MySQL", func() {
 		wandb := &apiv2.WeightsAndBiases{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
 			Spec: apiv2.WeightsAndBiasesSpec{
-				MySQL: map[string]apiv2.MySQLSpec{apiv2.DefaultInstanceName: {ManagedMysql: &apiv2.ManagedMysqlSpec{StorageSize: "50Gi"}}},
+				BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+					MySQL: map[string]apiv2.MySQLSpec{apiv2.DefaultInstanceName: {ManagedMysql: &apiv2.ManagedMysqlSpec{StorageSize: "50Gi"}}},
+				},
 			},
 		}
 
@@ -67,8 +75,10 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - MySQL", func() {
 		wandb := &apiv2.WeightsAndBiases{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
 			Spec: apiv2.WeightsAndBiasesSpec{
-				MySQL: map[string]apiv2.MySQLSpec{
-					apiv2.DefaultInstanceName: {ExternalMysql: &apiv2.MysqlConnection{}},
+				BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+					MySQL: map[string]apiv2.MySQLSpec{
+						apiv2.DefaultInstanceName: {ExternalMysql: &apiv2.MysqlConnection{}},
+					},
 				},
 			},
 		}

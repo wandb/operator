@@ -18,6 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func KeeperImage(img manifest.ImageRef, globalImageRegistry string) string {
@@ -33,11 +34,12 @@ func KeeperImage(img manifest.ImageRef, globalImageRegistry string) string {
 // this package never sees the "-chi"-suffixed spec name.
 func ToKeeperVendorSpec(
 	ctx context.Context,
-	wandb *apiv2.WeightsAndBiases,
+	owner client.Object,
+	deployment *apiv2.BaseDeploymentSpec,
 	spec *apiv2.ManagedClickHouseSpec,
 	scheme *runtime.Scheme,
 	nsName types.NamespacedName,
-	mfst manifest.Manifest,
+	config manifest.InfraConfig,
 ) (*chkv1.ClickHouseKeeperInstallation, error) {
 	_, log := logx.WithSlog(ctx, logx.ClickHouse)
 	if spec == nil {
@@ -51,13 +53,13 @@ func ToKeeperVendorSpec(
 		return nil, fmt.Errorf("invalid keeper storageSize %q (expected from the server manifest's clickhouseKeeper sizing): %w", spec.Keeper.StorageSize, err)
 	}
 
-	labels := common.BuildWandbLabels(wandb, KeeperModuleName)
+	labels := common.BuildWandbLabels(owner, KeeperModuleName)
 
 	podSpec := corev1.PodSpec{
-		ImagePullSecrets: wandb.Spec.Global.ImagePullSecrets,
+		ImagePullSecrets: deployment.Global.ImagePullSecrets,
 		SecurityContext:  keeperPodSecurityContext(),
-		Affinity:         wandb.GetAffinity(spec.ManagedInfraSpec),
-		Tolerations:      *wandb.GetTolerations(spec.ManagedInfraSpec),
+		Affinity:         deployment.GetAffinity(spec.ManagedInfraSpec),
+		Tolerations:      ptr.Deref(deployment.GetTolerations(spec.ManagedInfraSpec), nil),
 		Volumes: []corev1.Volume{
 			{
 				Name: keeperLogVolumeName,
@@ -69,7 +71,7 @@ func ToKeeperVendorSpec(
 		Containers: []corev1.Container{
 			{
 				Name:            keeperContainerName,
-				Image:           KeeperImage(mfst.ClickhouseKeeper["default"].Images["keeper"], wandb.Spec.Global.ImageRegistry),
+				Image:           KeeperImage(config.Images["keeper"], deployment.Global.ImageRegistry),
 				SecurityContext: keeperContainerSecurityContext(),
 				VolumeMounts: []corev1.VolumeMount{
 					{Name: keeperLogVolumeName, MountPath: keeperLogMountPath},
@@ -131,7 +133,7 @@ func ToKeeperVendorSpec(
 		},
 	}
 
-	if err := ctrl.SetControllerReference(wandb, chk, scheme); err != nil {
+	if err := ctrl.SetControllerReference(owner, chk, scheme); err != nil {
 		log.Error("failed to set owner reference on CHK CR", logx.ErrAttr(err))
 		return nil, fmt.Errorf("failed to set owner reference: %w", err)
 	}
@@ -139,9 +141,9 @@ func ToKeeperVendorSpec(
 	return chk, nil
 }
 
-// BuildWandbKeeperLabels returns the standard W&B labels for Keeper resources.
-func BuildWandbKeeperLabels(wandb *apiv2.WeightsAndBiases) map[string]string {
-	return common.BuildWandbLabels(wandb, KeeperModuleName)
+// BuildKeeperLabels returns the standard W&B labels for Keeper resources.
+func BuildKeeperLabels(owner client.Object) map[string]string {
+	return common.BuildWandbLabels(owner, KeeperModuleName)
 }
 
 func keeperPodSecurityContext() *corev1.PodSecurityContext {

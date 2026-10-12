@@ -50,7 +50,11 @@ func watchtowerTestCR(name, namespace string) *apiv2.WeightsAndBiases {
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 		Spec: apiv2.WeightsAndBiasesSpec{
 			AdminConsoleEnabled: ptr.To(true),
-			Wandb:               apiv2.WandbAppSpec{Hostname: "wandb.example.com"},
+			Wandb: apiv2.WandbAppSpec{
+				BaseWorkloadSpec: apiv2.BaseWorkloadSpec{
+					Hostname: "wandb.example.com",
+				},
+			},
 		},
 	}
 }

@@ -87,44 +87,48 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 					Namespace: WandbNamespace,
 				},
 				Spec: apiv2.WeightsAndBiasesSpec{
-					Size: apiv2.SizeDev,
+					BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+						Size: apiv2.SizeDev,
+						MySQL: map[string]apiv2.MySQLSpec{
+							apiv2.DefaultInstanceName: {
+								ManagedMysql: &apiv2.ManagedMysqlSpec{
+									StorageSize: "10Gi",
+								},
+							},
+						},
+						Redis: map[string]apiv2.RedisSpec{
+							apiv2.DefaultInstanceName: {
+								ManagedRedis: &apiv2.ManagedRedisSpec{
+									StorageSize: "10Gi",
+								},
+							},
+						},
+						Kafka: apiv2.KafkaSpec{
+							ManagedKafka: &apiv2.ManagedKafkaSpec{
+								StorageSize: "10Gi",
+							},
+						},
+						ObjectStore: map[string]apiv2.ObjectStoreSpec{
+							apiv2.DefaultInstanceName: {
+								ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{
+									StorageSize: "10Gi",
+								},
+							},
+						},
+						ClickHouse: map[string]apiv2.ClickHouseSpec{
+							apiv2.DefaultInstanceName: {
+								ManagedClickHouse: &apiv2.ManagedClickHouseSpec{},
+							},
+						},
+					},
 					Wandb: apiv2.WandbAppSpec{
-						Hostname: "http://localhost",
-						Features: map[string]bool{
-							"proxy": true,
-						},
-						ManifestRepository: manifestsRepository,
-						Version:            "0.83.0-clickhouse-keeper.2",
-					},
-					MySQL: map[string]apiv2.MySQLSpec{
-						apiv2.DefaultInstanceName: {
-							ManagedMysql: &apiv2.ManagedMysqlSpec{
-								StorageSize: "10Gi",
+						BaseWorkloadSpec: apiv2.BaseWorkloadSpec{
+							Hostname: "http://localhost",
+							Features: map[string]bool{
+								"proxy": true,
 							},
-						},
-					},
-					Redis: map[string]apiv2.RedisSpec{
-						apiv2.DefaultInstanceName: {
-							ManagedRedis: &apiv2.ManagedRedisSpec{
-								StorageSize: "10Gi",
-							},
-						},
-					},
-					Kafka: apiv2.KafkaSpec{
-						ManagedKafka: &apiv2.ManagedKafkaSpec{
-							StorageSize: "10Gi",
-						},
-					},
-					ObjectStore: map[string]apiv2.ObjectStoreSpec{
-						apiv2.DefaultInstanceName: {
-							ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{
-								StorageSize: "10Gi",
-							},
-						},
-					},
-					ClickHouse: map[string]apiv2.ClickHouseSpec{
-						apiv2.DefaultInstanceName: {
-							ManagedClickHouse: &apiv2.ManagedClickHouseSpec{},
+							ManifestRepository: manifestsRepository,
+							Version:            "0.83.0-clickhouse-keeper.2",
 						},
 					},
 				},
@@ -166,19 +170,23 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 					Namespace: WandbNamespace,
 				},
 				Spec: apiv2.WeightsAndBiasesSpec{
+					BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+						MySQL: map[string]apiv2.MySQLSpec{
+							apiv2.DefaultInstanceName: {ManagedMysql: &apiv2.ManagedMysqlSpec{}},
+						},
+						Redis:       map[string]apiv2.RedisSpec{apiv2.DefaultInstanceName: {ManagedRedis: &apiv2.ManagedRedisSpec{}}},
+						Kafka:       apiv2.KafkaSpec{ManagedKafka: &apiv2.ManagedKafkaSpec{}},
+						ObjectStore: map[string]apiv2.ObjectStoreSpec{apiv2.DefaultInstanceName: {ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{}}},
+						ClickHouse:  map[string]apiv2.ClickHouseSpec{apiv2.DefaultInstanceName: {ManagedClickHouse: &apiv2.ManagedClickHouseSpec{}}},
+					},
 					Wandb: apiv2.WandbAppSpec{
-						Hostname:           "http://localhost",
-						Features:           map[string]bool{},
-						ManifestRepository: manifestsRepository,
-						Version:            "0.83.0-clickhouse-keeper.2",
+						BaseWorkloadSpec: apiv2.BaseWorkloadSpec{
+							Hostname:           "http://localhost",
+							Features:           map[string]bool{},
+							ManifestRepository: manifestsRepository,
+							Version:            "0.83.0-clickhouse-keeper.2",
+						},
 					},
-					MySQL: map[string]apiv2.MySQLSpec{
-						apiv2.DefaultInstanceName: {ManagedMysql: &apiv2.ManagedMysqlSpec{}},
-					},
-					Redis:       map[string]apiv2.RedisSpec{apiv2.DefaultInstanceName: {ManagedRedis: &apiv2.ManagedRedisSpec{}}},
-					Kafka:       apiv2.KafkaSpec{ManagedKafka: &apiv2.ManagedKafkaSpec{}},
-					ObjectStore: map[string]apiv2.ObjectStoreSpec{apiv2.DefaultInstanceName: {ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{}}},
-					ClickHouse:  map[string]apiv2.ClickHouseSpec{apiv2.DefaultInstanceName: {ManagedClickHouse: &apiv2.ManagedClickHouseSpec{}}},
 				},
 			}
 			Expect(k8sClient.Create(ctx, wandb)).Should(Succeed())
@@ -263,27 +271,31 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 					Namespace: WandbNamespace,
 				},
 				Spec: apiv2.WeightsAndBiasesSpec{
-					Size: apiv2.SizeDev,
+					BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+						Size: apiv2.SizeDev,
+						MySQL: map[string]apiv2.MySQLSpec{
+							apiv2.DefaultInstanceName: {ManagedMysql: &apiv2.ManagedMysqlSpec{}},
+						},
+						Redis: map[string]apiv2.RedisSpec{
+							apiv2.DefaultInstanceName: {ManagedRedis: &apiv2.ManagedRedisSpec{}},
+						},
+						Kafka: apiv2.KafkaSpec{
+							ManagedKafka: &apiv2.ManagedKafkaSpec{},
+						},
+						ObjectStore: map[string]apiv2.ObjectStoreSpec{
+							apiv2.DefaultInstanceName: {ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{}},
+						},
+						ClickHouse: map[string]apiv2.ClickHouseSpec{
+							apiv2.DefaultInstanceName: {ManagedClickHouse: &apiv2.ManagedClickHouseSpec{}},
+						},
+					},
 					Wandb: apiv2.WandbAppSpec{
-						Hostname:           "http://localhost",
-						Features:           map[string]bool{},
-						ManifestRepository: manifestsRepository,
-						Version:            "0.83.0-clickhouse-keeper.2",
-					},
-					MySQL: map[string]apiv2.MySQLSpec{
-						apiv2.DefaultInstanceName: {ManagedMysql: &apiv2.ManagedMysqlSpec{}},
-					},
-					Redis: map[string]apiv2.RedisSpec{
-						apiv2.DefaultInstanceName: {ManagedRedis: &apiv2.ManagedRedisSpec{}},
-					},
-					Kafka: apiv2.KafkaSpec{
-						ManagedKafka: &apiv2.ManagedKafkaSpec{},
-					},
-					ObjectStore: map[string]apiv2.ObjectStoreSpec{
-						apiv2.DefaultInstanceName: {ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{}},
-					},
-					ClickHouse: map[string]apiv2.ClickHouseSpec{
-						apiv2.DefaultInstanceName: {ManagedClickHouse: &apiv2.ManagedClickHouseSpec{}},
+						BaseWorkloadSpec: apiv2.BaseWorkloadSpec{
+							Hostname:           "http://localhost",
+							Features:           map[string]bool{},
+							ManifestRepository: manifestsRepository,
+							Version:            "0.83.0-clickhouse-keeper.2",
+						},
 					},
 				},
 			}
@@ -371,18 +383,22 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 					Namespace: WandbNamespace,
 				},
 				Spec: apiv2.WeightsAndBiasesSpec{
-					Size: apiv2.SizeDev,
-					Wandb: apiv2.WandbAppSpec{
-						Hostname:           "http://localhost",
-						Features:           map[string]bool{},
-						ManifestRepository: manifestsRepository,
-						Version:            "0.83.0-clickhouse-keeper.1",
+					BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+						Size:        apiv2.SizeDev,
+						MySQL:       map[string]apiv2.MySQLSpec{apiv2.DefaultInstanceName: {ManagedMysql: &apiv2.ManagedMysqlSpec{}}},
+						Redis:       map[string]apiv2.RedisSpec{apiv2.DefaultInstanceName: {ManagedRedis: &apiv2.ManagedRedisSpec{}}},
+						Kafka:       apiv2.KafkaSpec{ManagedKafka: &apiv2.ManagedKafkaSpec{}},
+						ObjectStore: map[string]apiv2.ObjectStoreSpec{apiv2.DefaultInstanceName: {ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{}}},
+						ClickHouse:  map[string]apiv2.ClickHouseSpec{apiv2.DefaultInstanceName: {ManagedClickHouse: &apiv2.ManagedClickHouseSpec{}}},
 					},
-					MySQL:       map[string]apiv2.MySQLSpec{apiv2.DefaultInstanceName: {ManagedMysql: &apiv2.ManagedMysqlSpec{}}},
-					Redis:       map[string]apiv2.RedisSpec{apiv2.DefaultInstanceName: {ManagedRedis: &apiv2.ManagedRedisSpec{}}},
-					Kafka:       apiv2.KafkaSpec{ManagedKafka: &apiv2.ManagedKafkaSpec{}},
-					ObjectStore: map[string]apiv2.ObjectStoreSpec{apiv2.DefaultInstanceName: {ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{}}},
-					ClickHouse:  map[string]apiv2.ClickHouseSpec{apiv2.DefaultInstanceName: {ManagedClickHouse: &apiv2.ManagedClickHouseSpec{}}},
+					Wandb: apiv2.WandbAppSpec{
+						BaseWorkloadSpec: apiv2.BaseWorkloadSpec{
+							Hostname:           "http://localhost",
+							Features:           map[string]bool{},
+							ManifestRepository: manifestsRepository,
+							Version:            "0.83.0-clickhouse-keeper.1",
+						},
+					},
 				},
 			}
 			Expect(k8sClient.Create(ctx, wandb)).Should(Succeed())
@@ -465,18 +481,22 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 					Namespace: WandbNamespace,
 				},
 				Spec: apiv2.WeightsAndBiasesSpec{
-					Size: apiv2.SizeDev,
-					Wandb: apiv2.WandbAppSpec{
-						Hostname:           "http://localhost",
-						Features:           map[string]bool{},
-						ManifestRepository: manifestsRepository,
-						Version:            "0.83.0-clickhouse-keeper.1",
+					BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+						Size:        apiv2.SizeDev,
+						MySQL:       map[string]apiv2.MySQLSpec{apiv2.DefaultInstanceName: {ManagedMysql: &apiv2.ManagedMysqlSpec{}}},
+						Redis:       map[string]apiv2.RedisSpec{apiv2.DefaultInstanceName: {ManagedRedis: &apiv2.ManagedRedisSpec{}}},
+						Kafka:       apiv2.KafkaSpec{ManagedKafka: &apiv2.ManagedKafkaSpec{}},
+						ObjectStore: map[string]apiv2.ObjectStoreSpec{apiv2.DefaultInstanceName: {ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{}}},
+						ClickHouse:  map[string]apiv2.ClickHouseSpec{apiv2.DefaultInstanceName: {ManagedClickHouse: &apiv2.ManagedClickHouseSpec{}}},
 					},
-					MySQL:       map[string]apiv2.MySQLSpec{apiv2.DefaultInstanceName: {ManagedMysql: &apiv2.ManagedMysqlSpec{}}},
-					Redis:       map[string]apiv2.RedisSpec{apiv2.DefaultInstanceName: {ManagedRedis: &apiv2.ManagedRedisSpec{}}},
-					Kafka:       apiv2.KafkaSpec{ManagedKafka: &apiv2.ManagedKafkaSpec{}},
-					ObjectStore: map[string]apiv2.ObjectStoreSpec{apiv2.DefaultInstanceName: {ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{}}},
-					ClickHouse:  map[string]apiv2.ClickHouseSpec{apiv2.DefaultInstanceName: {ManagedClickHouse: &apiv2.ManagedClickHouseSpec{}}},
+					Wandb: apiv2.WandbAppSpec{
+						BaseWorkloadSpec: apiv2.BaseWorkloadSpec{
+							Hostname:           "http://localhost",
+							Features:           map[string]bool{},
+							ManifestRepository: manifestsRepository,
+							Version:            "0.83.0-clickhouse-keeper.1",
+						},
+					},
 				},
 			}
 			Expect(k8sClient.Create(ctx, wandb)).Should(Succeed())
@@ -598,18 +618,22 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 					Namespace: WandbNamespace,
 				},
 				Spec: apiv2.WeightsAndBiasesSpec{
-					Size: apiv2.SizeDev,
-					Wandb: apiv2.WandbAppSpec{
-						Hostname:           "http://localhost",
-						Features:           map[string]bool{},
-						ManifestRepository: manifestsRepository,
-						Version:            "0.83.0-clickhouse-keeper.2",
+					BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+						Size:        apiv2.SizeDev,
+						MySQL:       map[string]apiv2.MySQLSpec{apiv2.DefaultInstanceName: {ManagedMysql: &apiv2.ManagedMysqlSpec{}}},
+						Redis:       map[string]apiv2.RedisSpec{apiv2.DefaultInstanceName: {ManagedRedis: &apiv2.ManagedRedisSpec{}}},
+						Kafka:       apiv2.KafkaSpec{ManagedKafka: &apiv2.ManagedKafkaSpec{}},
+						ObjectStore: map[string]apiv2.ObjectStoreSpec{apiv2.DefaultInstanceName: {ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{}}},
+						ClickHouse:  map[string]apiv2.ClickHouseSpec{apiv2.DefaultInstanceName: {ManagedClickHouse: &apiv2.ManagedClickHouseSpec{}}},
 					},
-					MySQL:       map[string]apiv2.MySQLSpec{apiv2.DefaultInstanceName: {ManagedMysql: &apiv2.ManagedMysqlSpec{}}},
-					Redis:       map[string]apiv2.RedisSpec{apiv2.DefaultInstanceName: {ManagedRedis: &apiv2.ManagedRedisSpec{}}},
-					Kafka:       apiv2.KafkaSpec{ManagedKafka: &apiv2.ManagedKafkaSpec{}},
-					ObjectStore: map[string]apiv2.ObjectStoreSpec{apiv2.DefaultInstanceName: {ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{}}},
-					ClickHouse:  map[string]apiv2.ClickHouseSpec{apiv2.DefaultInstanceName: {ManagedClickHouse: &apiv2.ManagedClickHouseSpec{}}},
+					Wandb: apiv2.WandbAppSpec{
+						BaseWorkloadSpec: apiv2.BaseWorkloadSpec{
+							Hostname:           "http://localhost",
+							Features:           map[string]bool{},
+							ManifestRepository: manifestsRepository,
+							Version:            "0.83.0-clickhouse-keeper.2",
+						},
+					},
 				},
 			}
 			Expect(k8sClient.Create(ctx, wandb)).Should(Succeed())
@@ -679,18 +703,22 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 					Namespace: WandbNamespace,
 				},
 				Spec: apiv2.WeightsAndBiasesSpec{
-					Size: apiv2.SizeDev,
-					Wandb: apiv2.WandbAppSpec{
-						Hostname:           "http://localhost",
-						Features:           map[string]bool{},
-						ManifestRepository: manifestsRepository,
-						Version:            oldVersion,
+					BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+						Size:        apiv2.SizeDev,
+						MySQL:       map[string]apiv2.MySQLSpec{apiv2.DefaultInstanceName: {ManagedMysql: &apiv2.ManagedMysqlSpec{}}},
+						Redis:       map[string]apiv2.RedisSpec{apiv2.DefaultInstanceName: {ManagedRedis: &apiv2.ManagedRedisSpec{}}},
+						Kafka:       apiv2.KafkaSpec{ManagedKafka: &apiv2.ManagedKafkaSpec{}},
+						ObjectStore: map[string]apiv2.ObjectStoreSpec{apiv2.DefaultInstanceName: {ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{}}},
+						ClickHouse:  map[string]apiv2.ClickHouseSpec{apiv2.DefaultInstanceName: {ManagedClickHouse: &apiv2.ManagedClickHouseSpec{}}},
 					},
-					MySQL:       map[string]apiv2.MySQLSpec{apiv2.DefaultInstanceName: {ManagedMysql: &apiv2.ManagedMysqlSpec{}}},
-					Redis:       map[string]apiv2.RedisSpec{apiv2.DefaultInstanceName: {ManagedRedis: &apiv2.ManagedRedisSpec{}}},
-					Kafka:       apiv2.KafkaSpec{ManagedKafka: &apiv2.ManagedKafkaSpec{}},
-					ObjectStore: map[string]apiv2.ObjectStoreSpec{apiv2.DefaultInstanceName: {ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{}}},
-					ClickHouse:  map[string]apiv2.ClickHouseSpec{apiv2.DefaultInstanceName: {ManagedClickHouse: &apiv2.ManagedClickHouseSpec{}}},
+					Wandb: apiv2.WandbAppSpec{
+						BaseWorkloadSpec: apiv2.BaseWorkloadSpec{
+							Hostname:           "http://localhost",
+							Features:           map[string]bool{},
+							ManifestRepository: manifestsRepository,
+							Version:            oldVersion,
+						},
+					},
 				},
 			}
 			Expect(k8sClient.Create(ctx, wandb)).Should(Succeed())

@@ -20,9 +20,11 @@ func wandbWithTwoMysqlInstances() *apiv2.WeightsAndBiases {
 	return &apiv2.WeightsAndBiases{
 		ObjectMeta: metav1.ObjectMeta{Name: "wb", Namespace: "default"},
 		Status: apiv2.WeightsAndBiasesStatus{
-			MySQLStatus: map[string]apiv2.MysqlInfraStatus{
-				apiv2.DefaultInstanceName: {Connection: apiv2.MysqlConnection{URL: mysqlURLSelector("default-conn")}},
-				"analytics":               {Connection: apiv2.MysqlConnection{URL: mysqlURLSelector("analytics-conn")}},
+			BaseDeploymentStatus: apiv2.BaseDeploymentStatus{
+				MySQLStatus: map[string]apiv2.MysqlInfraStatus{
+					apiv2.DefaultInstanceName: {Connection: apiv2.MysqlConnection{URL: mysqlURLSelector("default-conn")}},
+					"analytics":               {Connection: apiv2.MysqlConnection{URL: mysqlURLSelector("analytics-conn")}},
+				},
 			},
 		},
 	}

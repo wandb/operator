@@ -25,11 +25,11 @@ import (
 func kafkaWriteState(
 	ctx context.Context,
 	client client.Client,
-	wandb *apiv2.WeightsAndBiases,
-	mfst manifest.Manifest,
+	deployment common.DeploymentResource,
+	config manifest.KafkaConfig,
 ) []metav1.Condition {
-	if wandb.Spec.Kafka.ManagedKafka != nil {
-		return managedKafkaWriteState(ctx, client, wandb, mfst)
+	if deployment.GetBaseDeploymentSpec().Kafka.ManagedKafka != nil {
+		return managedKafkaWriteState(ctx, client, deployment, config)
 	}
 	return nil
 }
@@ -37,11 +37,11 @@ func kafkaWriteState(
 func kafkaReadState(
 	ctx context.Context,
 	client client.Client,
-	wandb *apiv2.WeightsAndBiases,
+	deployment common.DeploymentResource,
 	newConditions []metav1.Condition,
 ) ([]metav1.Condition, *apiv2.KafkaConnection) {
-	if wandb.Spec.Kafka.ManagedKafka != nil {
-		return managedKafkaReadState(ctx, client, wandb, newConditions)
+	if deployment.GetBaseDeploymentSpec().Kafka.ManagedKafka != nil {
+		return managedKafkaReadState(ctx, client, deployment, newConditions)
 	}
 	return newConditions, nil
 }
@@ -50,12 +50,12 @@ func kafkaInferStatus(
 	ctx context.Context,
 	client client.Client,
 	recorder record.EventRecorder,
-	wandb *apiv2.WeightsAndBiases,
+	deployment common.DeploymentResource,
 	newConditions []metav1.Condition,
 	newInfraConn *apiv2.KafkaConnection,
 ) (ctrl.Result, error) {
-	if wandb.Spec.Kafka.ManagedKafka != nil {
-		return managedKafkaInferStatus(ctx, client, recorder, wandb, newConditions, newInfraConn)
+	if deployment.GetBaseDeploymentSpec().Kafka.ManagedKafka != nil {
+		return managedKafkaInferStatus(ctx, client, recorder, deployment, newConditions, newInfraConn)
 	}
 	return ctrl.Result{}, nil
 }
@@ -63,11 +63,11 @@ func kafkaInferStatus(
 func kafkaPurgeFinalizer(
 	ctx context.Context,
 	client client.Client,
-	wandb *apiv2.WeightsAndBiases,
+	deployment common.DeploymentResource,
 ) error {
-	if spec := wandb.Spec.Kafka.ManagedKafka; spec != nil {
+	if spec := deployment.GetBaseDeploymentSpec().Kafka.ManagedKafka; spec != nil {
 		specNamespacedName := managedKafkaSpecNamespacedName(spec)
-		onDeleteRule := bufstream.ToKafkaOnDeleteRule(wandb, wandb.GetRetentionPolicy(spec.ManagedInfraSpec))
+		onDeleteRule := bufstream.ToKafkaOnDeleteRule(deployment, deployment.GetBaseDeploymentSpec().GetRetentionPolicy(spec.ManagedInfraSpec))
 		return bufstream.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule)
 	}
 	return nil
@@ -76,14 +76,14 @@ func kafkaPurgeFinalizer(
 func kafkaDetachFinalizer(
 	ctx context.Context,
 	client client.Client,
-	wandb *apiv2.WeightsAndBiases,
+	deployment common.DeploymentResource,
 ) error {
-	spec := wandb.Spec.Kafka.ManagedKafka
+	spec := deployment.GetBaseDeploymentSpec().Kafka.ManagedKafka
 	if spec == nil {
 		return nil
 	}
 	specNamespacedName := managedKafkaSpecNamespacedName(spec)
-	return bufstream.DetachFinalizer(ctx, client, specNamespacedName, wandb)
+	return bufstream.DetachFinalizer(ctx, client, specNamespacedName, deployment)
 }
 
 // managed
@@ -91,30 +91,30 @@ func kafkaDetachFinalizer(
 func managedKafkaWriteState(
 	ctx context.Context,
 	client client.Client,
-	wandb *apiv2.WeightsAndBiases,
-	mfst manifest.Manifest,
+	deployment common.DeploymentResource,
+	config manifest.KafkaConfig,
 ) []metav1.Condition {
-	spec := wandb.Spec.Kafka.ManagedKafka
+	spec := deployment.GetBaseDeploymentSpec().Kafka.ManagedKafka
 	specNamespacedName := managedKafkaSpecNamespacedName(spec)
 
-	if conditions := bufstream.CheckDetached(ctx, client, specNamespacedName, wandb.GetUID(), spec.Replicas); conditions != nil {
+	if conditions := bufstream.CheckDetached(ctx, client, specNamespacedName, deployment.GetUID(), spec.Replicas); conditions != nil {
 		return conditions
 	}
 
-	return bufstream.WriteState(ctx, client, wandb, mfst)
+	return bufstream.WriteState(ctx, client, deployment, config)
 }
 
 func managedKafkaReadState(
 	ctx context.Context,
 	client client.Client,
-	wandb *apiv2.WeightsAndBiases,
+	deployment common.DeploymentResource,
 	newConditions []metav1.Condition,
 ) ([]metav1.Condition, *apiv2.KafkaConnection) {
-	spec := wandb.Spec.Kafka.ManagedKafka
+	spec := deployment.GetBaseDeploymentSpec().Kafka.ManagedKafka
 
 	specNamespacedName := managedKafkaSpecNamespacedName(spec)
-	onDeleteRule := bufstream.ToKafkaOnDeleteRule(wandb, wandb.GetRetentionPolicy(spec.ManagedInfraSpec))
-	readConditions, newInfraConn := bufstream.ReadState(ctx, client, specNamespacedName, wandb, onDeleteRule)
+	onDeleteRule := bufstream.ToKafkaOnDeleteRule(deployment, deployment.GetBaseDeploymentSpec().GetRetentionPolicy(spec.ManagedInfraSpec))
+	readConditions, newInfraConn := bufstream.ReadState(ctx, client, specNamespacedName, deployment, onDeleteRule)
 	newConditions = append(newConditions, readConditions...)
 	return newConditions, newInfraConn
 }
@@ -123,13 +123,13 @@ func managedKafkaInferStatus(
 	ctx context.Context,
 	client client.Client,
 	recorder record.EventRecorder,
-	wandb *apiv2.WeightsAndBiases,
+	deployment common.DeploymentResource,
 	newConditions []metav1.Condition,
 	newInfraConn *apiv2.KafkaConnection,
 ) (ctrl.Result, error) {
-	statusBefore := wandb.DeepCopy().Status
-	oldConditions := wandb.Status.KafkaStatus.Conditions
-	oldInfraConn := wandb.Status.KafkaStatus.Connection
+	statusBefore := deployment.GetBaseDeploymentStatus().DeepCopy()
+	oldConditions := deployment.GetBaseDeploymentStatus().KafkaStatus.Conditions
+	oldInfraConn := deployment.GetBaseDeploymentStatus().KafkaStatus.Connection
 
 	enabled := true
 	updatedStatus, events, ctrlResult := bufstream.ComputeStatus(
@@ -138,13 +138,13 @@ func managedKafkaInferStatus(
 		oldConditions,
 		newConditions,
 		utils.Coalesce(newInfraConn, &oldInfraConn),
-		wandb.Generation,
+		deployment.GetGeneration(),
 	)
 	for _, e := range events {
-		recorder.Event(wandb, e.Type, e.Reason, e.Message)
+		recorder.Event(deployment, e.Type, e.Reason, e.Message)
 	}
-	wandb.Status.KafkaStatus = updatedStatus
-	err := updateWandbStatusIfChanged(ctx, client, wandb, statusBefore)
+	deployment.GetBaseDeploymentStatus().KafkaStatus = updatedStatus
+	err := updateDeploymentStatusIfChanged(ctx, client, deployment, statusBefore)
 
 	return ctrlResult, err
 }

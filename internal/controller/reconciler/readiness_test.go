@@ -23,15 +23,19 @@ func TestInferStateBlocksOnExternalInfrastructure(t *testing.T) {
 	wandb := &apiv2.WeightsAndBiases{
 		ObjectMeta: metav1.ObjectMeta{Name: "wandb", Namespace: "default", Generation: 2},
 		Spec: apiv2.WeightsAndBiasesSpec{
-			Redis: map[string]apiv2.RedisSpec{
-				apiv2.DefaultInstanceName: {ExternalRedis: &apiv2.RedisConnection{}},
+			BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+				Redis: map[string]apiv2.RedisSpec{
+					apiv2.DefaultInstanceName: {ExternalRedis: &apiv2.RedisConnection{}},
+				},
 			},
 		},
 		Status: apiv2.WeightsAndBiasesStatus{
-			Ready:              true,
-			ObservedGeneration: 2,
-			RedisStatus: map[string]apiv2.RedisInfraStatus{
-				apiv2.DefaultInstanceName: {},
+			BaseDeploymentStatus: apiv2.BaseDeploymentStatus{
+				Ready:              true,
+				ObservedGeneration: 2,
+				RedisStatus: map[string]apiv2.RedisInfraStatus{
+					apiv2.DefaultInstanceName: {},
+				},
 			},
 		},
 	}
@@ -94,7 +98,11 @@ func TestRunMigrationsSurfacesFailedJobPhaseAndReason(t *testing.T) {
 	wandb := &apiv2.WeightsAndBiases{
 		ObjectMeta: metav1.ObjectMeta{Name: "wandb", Namespace: "default"},
 		Spec: apiv2.WeightsAndBiasesSpec{
-			Wandb: apiv2.WandbAppSpec{Version: "0.82.2"},
+			Wandb: apiv2.WandbAppSpec{
+				BaseWorkloadSpec: apiv2.BaseWorkloadSpec{
+					Version: "0.82.2",
+				},
+			},
 		},
 		Status: apiv2.WeightsAndBiasesStatus{
 			Wandb: apiv2.WandbStatus{

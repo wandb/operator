@@ -15,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -87,10 +88,11 @@ func seaweedWritableVolumeMounts() []corev1.VolumeMount {
 
 func ToObjectStoreVendorSpec(
 	ctx context.Context,
-	wandb *apiv2.WeightsAndBiases,
+	owner client.Object,
+	deployment *apiv2.BaseDeploymentSpec,
 	infraSpec *apiv2.ManagedObjectStoreSpec,
 	scheme *runtime.Scheme,
-	mfst manifest.Manifest,
+	config manifest.InfraConfig,
 ) (*seaweedv1.Seaweed, error) {
 	_, log := logx.WithSlog(ctx, logx.ObjectStore)
 	if infraSpec == nil {
@@ -123,7 +125,7 @@ func ToObjectStoreVendorSpec(
 		return nil, fmt.Errorf("invalid filer storage size %q: %w", filerStorageSize, err)
 	}
 
-	labels := BuildWandbObjectStoreLabels(wandb)
+	labels := BuildObjectStoreLabels(owner)
 	labels["app"] = SeaweedName(specName)
 
 	seaweedCR := &seaweedv1.Seaweed{
@@ -133,8 +135,8 @@ func ToObjectStoreVendorSpec(
 			Labels:    labels,
 		},
 		Spec: seaweedv1.SeaweedSpec{
-			Image:            SeaweedImage(mfst.Bucket["default"].Images["seaweedfs"], wandb.Spec.Global.ImageRegistry),
-			ImagePullSecrets: wandb.Spec.Global.ImagePullSecrets,
+			Image:            SeaweedImage(config.Images["seaweedfs"], deployment.Global.ImageRegistry),
+			ImagePullSecrets: deployment.Global.ImagePullSecrets,
 			TLS: &seaweedv1.TLSSpec{
 				Enabled: infraSpec.SeaweedObjectStoreSpec.TlsEnabled,
 			},
@@ -171,8 +173,8 @@ func ToObjectStoreVendorSpec(
 			},
 			S3: &seaweedv1.S3GatewaySpec{
 				ComponentSpec: seaweedv1.ComponentSpec{
-					Affinity:     wandb.GetAffinity(infraSpec.ManagedInfraSpec),
-					Tolerations:  *wandb.GetTolerations(infraSpec.ManagedInfraSpec),
+					Affinity:     deployment.GetAffinity(infraSpec.ManagedInfraSpec),
+					Tolerations:  ptr.Deref(deployment.GetTolerations(infraSpec.ManagedInfraSpec), nil),
 					Volumes:      seaweedWritableVolumes(),
 					VolumeMounts: seaweedWritableVolumeMounts(),
 					Env: []corev1.EnvVar{{
@@ -214,12 +216,12 @@ func ToObjectStoreVendorSpec(
 					},
 				},
 			},
-			Affinity:    wandb.GetAffinity(infraSpec.ManagedInfraSpec),
-			Tolerations: *wandb.GetTolerations(infraSpec.ManagedInfraSpec),
+			Affinity:    deployment.GetAffinity(infraSpec.ManagedInfraSpec),
+			Tolerations: ptr.Deref(deployment.GetTolerations(infraSpec.ManagedInfraSpec), nil),
 		},
 	}
 
-	if err := ctrl.SetControllerReference(wandb, seaweedCR, scheme); err != nil {
+	if err := ctrl.SetControllerReference(owner, seaweedCR, scheme); err != nil {
 		log.Error("failed to set owner reference on Seaweed CR", logx.ErrAttr(err))
 		return nil, fmt.Errorf("failed to set owner reference: %w", err)
 	}
@@ -257,10 +259,10 @@ func ToObjectStoreEnvConfig(
 	}, nil
 }
 
-func BuildWandbObjectStoreLabels(wandb *apiv2.WeightsAndBiases) map[string]string {
-	return common.BuildWandbLabels(wandb, ObjectStoreModuleName)
+func BuildObjectStoreLabels(owner client.Object) map[string]string {
+	return common.BuildWandbLabels(owner, ObjectStoreModuleName)
 }
 
-func ToObjectStoreOnDeleteRule(wandb *apiv2.WeightsAndBiases, retentionPolicy apiv2.RetentionPolicy) common.OnDeleteRule {
-	return common.ToOnDeleteRule(wandb, retentionPolicy, ObjectStoreModuleName)
+func ToObjectStoreOnDeleteRule(owner client.Object, retentionPolicy apiv2.RetentionPolicy) common.OnDeleteRule {
+	return common.ToOnDeleteRule(owner, retentionPolicy, ObjectStoreModuleName)
 }

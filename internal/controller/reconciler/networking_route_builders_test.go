@@ -15,9 +15,11 @@ var _ = Describe("Networking Route Builders", func() {
 		wandb := &apiv2.WeightsAndBiases{
 			ObjectMeta: metav1.ObjectMeta{Name: "wandb", Namespace: "wandb-ns"},
 			Spec: apiv2.WeightsAndBiasesSpec{
-				ObjectStore: map[string]apiv2.ObjectStoreSpec{
-					apiv2.DefaultInstanceName: {
-						ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{Namespace: "wandb-ns"},
+				BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+					ObjectStore: map[string]apiv2.ObjectStoreSpec{
+						apiv2.DefaultInstanceName: {
+							ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{Namespace: "wandb-ns"},
+						},
 					},
 				},
 			},
@@ -34,9 +36,11 @@ var _ = Describe("Networking Route Builders", func() {
 		wandb := &apiv2.WeightsAndBiases{
 			ObjectMeta: metav1.ObjectMeta{Name: "wandb", Namespace: "wandb-ns"},
 			Spec: apiv2.WeightsAndBiasesSpec{
-				ObjectStore: map[string]apiv2.ObjectStoreSpec{
-					apiv2.DefaultInstanceName: {
-						ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{Namespace: "infra-ns"},
+				BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+					ObjectStore: map[string]apiv2.ObjectStoreSpec{
+						apiv2.DefaultInstanceName: {
+							ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{Namespace: "infra-ns"},
+						},
 					},
 				},
 			},
@@ -97,22 +101,28 @@ var _ = Describe("Networking Route Builders", func() {
 		wandb := &apiv2.WeightsAndBiases{
 			ObjectMeta: metav1.ObjectMeta{Name: "wandb", Namespace: "wandb-ns"},
 			Spec: apiv2.WeightsAndBiasesSpec{
-				Wandb: apiv2.WandbAppSpec{
-					Hostname:            "https://wandb.example.com",
-					AdditionalHostnames: []string{"alt.example.com"},
+				BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+					Networking: apiv2.NetworkingSpec{
+						Mode: apiv2.NetworkingModeGatewayAPI,
+						GatewayAPI: &apiv2.GatewayAPIConfig{
+							ListenerName: &listenerName,
+						},
+					},
 				},
-				Networking: apiv2.NetworkingSpec{
-					Mode: apiv2.NetworkingModeGatewayAPI,
-					GatewayAPI: &apiv2.GatewayAPIConfig{
-						ListenerName: &listenerName,
+				Wandb: apiv2.WandbAppSpec{
+					BaseWorkloadSpec: apiv2.BaseWorkloadSpec{
+						Hostname:            "https://wandb.example.com",
+						AdditionalHostnames: []string{"alt.example.com"},
 					},
 				},
 			},
 			Status: apiv2.WeightsAndBiasesStatus{
-				GatewayStatus: &apiv2.GatewayStatusSummary{
-					GatewayRef: &apiv2.GatewayReference{
-						Name:      "shared-gateway",
-						Namespace: "gateway-ns",
+				BaseDeploymentStatus: apiv2.BaseDeploymentStatus{
+					GatewayStatus: &apiv2.GatewayStatusSummary{
+						GatewayRef: &apiv2.GatewayReference{
+							Name:      "shared-gateway",
+							Namespace: "gateway-ns",
+						},
 					},
 				},
 			},

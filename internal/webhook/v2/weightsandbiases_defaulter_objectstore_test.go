@@ -23,7 +23,11 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ObjectStore", func() {
 	It("defaults ObjectStore namespace to the parent namespace", func() {
 		wandb := &apiv2.WeightsAndBiases{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
-			Spec:       apiv2.WeightsAndBiasesSpec{ObjectStore: map[string]apiv2.ObjectStoreSpec{apiv2.DefaultInstanceName: {ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{}}}},
+			Spec: apiv2.WeightsAndBiasesSpec{
+				BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+					ObjectStore: map[string]apiv2.ObjectStoreSpec{apiv2.DefaultInstanceName: {ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{}}},
+				},
+			},
 		}
 
 		err := defaulter.Default(ctx, wandb)
@@ -35,7 +39,9 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ObjectStore", func() {
 		wandb := &apiv2.WeightsAndBiases{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
 			Spec: apiv2.WeightsAndBiasesSpec{
-				ObjectStore: map[string]apiv2.ObjectStoreSpec{apiv2.DefaultInstanceName: {ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{Namespace: "custom-objectstore-namespace"}}},
+				BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+					ObjectStore: map[string]apiv2.ObjectStoreSpec{apiv2.DefaultInstanceName: {ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{Namespace: "custom-objectstore-namespace"}}},
+				},
 			},
 		}
 
@@ -48,12 +54,14 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ObjectStore", func() {
 		wandb := &apiv2.WeightsAndBiases{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
 			Spec: apiv2.WeightsAndBiasesSpec{
-				ObjectStore: map[string]apiv2.ObjectStoreSpec{
-					apiv2.DefaultInstanceName: {
-						ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{
-							StorageSize: "50Gi",
-							Replicas:    4,
-							Config:      apiv2.ObjectStoreConfig{AccessKey: "custom-admin"},
+				BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+					ObjectStore: map[string]apiv2.ObjectStoreSpec{
+						apiv2.DefaultInstanceName: {
+							ManagedObjectStore: &apiv2.ManagedObjectStoreSpec{
+								StorageSize: "50Gi",
+								Replicas:    4,
+								Config:      apiv2.ObjectStoreConfig{AccessKey: "custom-admin"},
+							},
 						},
 					},
 				},
@@ -71,8 +79,10 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - ObjectStore", func() {
 		wandb := &apiv2.WeightsAndBiases{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
 			Spec: apiv2.WeightsAndBiasesSpec{
-				ObjectStore: map[string]apiv2.ObjectStoreSpec{
-					apiv2.DefaultInstanceName: {ExternalObjectStore: &apiv2.ObjectStoreConnection{}},
+				BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+					ObjectStore: map[string]apiv2.ObjectStoreSpec{
+						apiv2.DefaultInstanceName: {ExternalObjectStore: &apiv2.ObjectStoreConnection{}},
+					},
 				},
 			},
 		}

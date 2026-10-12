@@ -29,7 +29,7 @@ func connectionSecretName(key string) string {
 func WriteState(
 	ctx context.Context,
 	c client.Client,
-	wandb *apiv2.WeightsAndBiases,
+	owner client.Object,
 	key string,
 	spec *apiv2.RedisConnection,
 ) []metav1.Condition {
@@ -43,7 +43,7 @@ func WriteState(
 		"SslCa":    spec.SslCa,
 	}
 
-	data, err := external.ResolveValueFields(ctx, c, wandb.Namespace, fields)
+	data, err := external.ResolveValueFields(ctx, c, owner.GetNamespace(), fields)
 	if err != nil {
 		logger.Error(err, "failed to resolve external redis fields")
 		return []metav1.Condition{{
@@ -89,8 +89,8 @@ func WriteState(
 
 	data["url"] = redisUrl.String()
 
-	nsName := types.NamespacedName{Namespace: wandb.Namespace, Name: connectionSecretName(key)}
-	return external.WriteConnectionSecret(ctx, c, wandb, nsName, data)
+	nsName := types.NamespacedName{Namespace: owner.GetNamespace(), Name: connectionSecretName(key)}
+	return external.WriteConnectionSecret(ctx, c, owner, nsName, data)
 }
 
 func validateConnectionData(data map[string]string) error {
@@ -113,11 +113,11 @@ func validateConnectionData(data map[string]string) error {
 func ReadState(
 	ctx context.Context,
 	c client.Client,
-	wandb *apiv2.WeightsAndBiases,
+	owner client.Object,
 	key string,
 	newConditions []metav1.Condition,
 ) ([]metav1.Condition, *apiv2.RedisConnection) {
-	nsName := types.NamespacedName{Namespace: wandb.Namespace, Name: connectionSecretName(key)}
+	nsName := types.NamespacedName{Namespace: owner.GetNamespace(), Name: connectionSecretName(key)}
 	_, conditions, found := external.ReadConnectionSecret(ctx, c, nsName, newConditions)
 	if !found {
 		return conditions, nil
@@ -133,9 +133,9 @@ func ReadState(
 	}
 }
 
-func DeleteConnectionSecret(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, key string) error {
+func DeleteConnectionSecret(ctx context.Context, c client.Client, owner client.Object, key string) error {
 	return external.DeleteConnectionSecret(ctx, c, types.NamespacedName{
-		Namespace: wandb.Namespace,
+		Namespace: owner.GetNamespace(),
 		Name:      connectionSecretName(key),
 	})
 }

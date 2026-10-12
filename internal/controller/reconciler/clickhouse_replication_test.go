@@ -24,8 +24,10 @@ func wandbWithClickHouseConnection(conn apiv2.ClickHouseConnection) *apiv2.Weigh
 	return &apiv2.WeightsAndBiases{
 		ObjectMeta: metav1.ObjectMeta{Name: "wandb", Namespace: "default"},
 		Status: apiv2.WeightsAndBiasesStatus{
-			ClickHouseStatus: map[string]apiv2.ClickHouseInfraStatus{
-				apiv2.DefaultInstanceName: {Connection: conn},
+			BaseDeploymentStatus: apiv2.BaseDeploymentStatus{
+				ClickHouseStatus: map[string]apiv2.ClickHouseInfraStatus{
+					apiv2.DefaultInstanceName: {Connection: conn},
+				},
 			},
 		},
 	}

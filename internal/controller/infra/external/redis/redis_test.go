@@ -37,12 +37,14 @@ func redisWriteStateFixture(t *testing.T, sourceData map[string][]byte) (ctrlcli
 		TypeMeta:   metav1.TypeMeta{APIVersion: "apps.wandb.com/v2", Kind: "WeightsAndBiases"},
 		ObjectMeta: metav1.ObjectMeta{Name: "wandb", Namespace: "default"},
 		Spec: apiv2.WeightsAndBiasesSpec{
-			Redis: map[string]apiv2.RedisSpec{apiv2.DefaultInstanceName: {
-				ExternalRedis: &apiv2.RedisConnection{
-					Host: redisSel("Host"),
-					Port: redisSel("Port"),
-				},
-			}},
+			BaseDeploymentSpec: apiv2.BaseDeploymentSpec{
+				Redis: map[string]apiv2.RedisSpec{apiv2.DefaultInstanceName: {
+					ExternalRedis: &apiv2.RedisConnection{
+						Host: redisSel("Host"),
+						Port: redisSel("Port"),
+					},
+				}},
+			},
 		},
 	}
 	if _, ok := sourceData["Password"]; ok {

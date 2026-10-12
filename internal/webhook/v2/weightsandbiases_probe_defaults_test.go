@@ -57,25 +57,27 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Probe defaults", func() {
 			ObjectMeta: v1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
 			Spec: appsv2.WeightsAndBiasesSpec{
 				Wandb: appsv2.WandbAppSpec{
-					Probes: appsv2.WandbProbeDefaults{
-						StartupProbe: &corev1.Probe{
-							ProbeHandler: corev1.ProbeHandler{
-								HTTPGet: &corev1.HTTPGetAction{Path: "/startup"},
-							},
-						},
-						LivenessProbe: &corev1.Probe{
-							ProbeHandler: corev1.ProbeHandler{
-								HTTPGet: &corev1.HTTPGetAction{
-									Path: "/healthz",
-									Port: intstr.FromInt(8080),
+					BaseWorkloadSpec: appsv2.BaseWorkloadSpec{
+						Probes: appsv2.WandbProbeDefaults{
+							StartupProbe: &corev1.Probe{
+								ProbeHandler: corev1.ProbeHandler{
+									HTTPGet: &corev1.HTTPGetAction{Path: "/startup"},
 								},
 							},
-						},
-						ReadinessProbe: &corev1.Probe{
-							ProbeHandler: corev1.ProbeHandler{
-								HTTPGet: &corev1.HTTPGetAction{
-									Path:   "/ready",
-									Scheme: corev1.URISchemeHTTPS,
+							LivenessProbe: &corev1.Probe{
+								ProbeHandler: corev1.ProbeHandler{
+									HTTPGet: &corev1.HTTPGetAction{
+										Path: "/healthz",
+										Port: intstr.FromInt(8080),
+									},
+								},
+							},
+							ReadinessProbe: &corev1.Probe{
+								ProbeHandler: corev1.ProbeHandler{
+									HTTPGet: &corev1.HTTPGetAction{
+										Path:   "/ready",
+										Scheme: corev1.URISchemeHTTPS,
+									},
 								},
 							},
 						},
@@ -119,35 +121,37 @@ var _ = Describe("WeightsAndBiasesCustomDefaulter - Probe defaults", func() {
 			ObjectMeta: v1.ObjectMeta{Name: "test-wandb", Namespace: "test-namespace"},
 			Spec: appsv2.WeightsAndBiasesSpec{
 				Wandb: appsv2.WandbAppSpec{
-					Probes: appsv2.WandbProbeDefaults{
-						StartupProbe: &corev1.Probe{
-							InitialDelaySeconds: 1,
-							PeriodSeconds:       3,
-							TimeoutSeconds:      7,
-							FailureThreshold:    60,
-							ProbeHandler: corev1.ProbeHandler{
-								HTTPGet: &corev1.HTTPGetAction{
-									Path: "/healthz/initialized",
-									Port: intstr.FromInt(8080),
+					BaseWorkloadSpec: appsv2.BaseWorkloadSpec{
+						Probes: appsv2.WandbProbeDefaults{
+							StartupProbe: &corev1.Probe{
+								InitialDelaySeconds: 1,
+								PeriodSeconds:       3,
+								TimeoutSeconds:      7,
+								FailureThreshold:    60,
+								ProbeHandler: corev1.ProbeHandler{
+									HTTPGet: &corev1.HTTPGetAction{
+										Path: "/healthz/initialized",
+										Port: intstr.FromInt(8080),
+									},
 								},
 							},
-						},
-						LivenessProbe: &corev1.Probe{
-							PeriodSeconds:    11,
-							TimeoutSeconds:   12,
-							SuccessThreshold: 1,
-							FailureThreshold: 13,
-							ProbeHandler: corev1.ProbeHandler{
-								HTTPGet: &corev1.HTTPGetAction{Path: "/healthz"},
+							LivenessProbe: &corev1.Probe{
+								PeriodSeconds:    11,
+								TimeoutSeconds:   12,
+								SuccessThreshold: 1,
+								FailureThreshold: 13,
+								ProbeHandler: corev1.ProbeHandler{
+									HTTPGet: &corev1.HTTPGetAction{Path: "/healthz"},
+								},
 							},
-						},
-						ReadinessProbe: &corev1.Probe{
-							PeriodSeconds:    21,
-							TimeoutSeconds:   22,
-							SuccessThreshold: 2,
-							FailureThreshold: 23,
-							ProbeHandler: corev1.ProbeHandler{
-								HTTPGet: &corev1.HTTPGetAction{Path: "/ready"},
+							ReadinessProbe: &corev1.Probe{
+								PeriodSeconds:    21,
+								TimeoutSeconds:   22,
+								SuccessThreshold: 2,
+								FailureThreshold: 23,
+								ProbeHandler: corev1.ProbeHandler{
+									HTTPGet: &corev1.HTTPGetAction{Path: "/ready"},
+								},
 							},
 						},
 					},

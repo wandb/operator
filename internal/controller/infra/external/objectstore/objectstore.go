@@ -33,7 +33,7 @@ func connectionSecretName(key string) string {
 func WriteState(
 	ctx context.Context,
 	c client.Client,
-	wandb *apiv2.WeightsAndBiases,
+	owner client.Object,
 	key string,
 	spec *apiv2.ObjectStoreConnection,
 ) ([]metav1.Condition, *apiv2.ObjectStoreConnection) {
@@ -52,7 +52,7 @@ func WriteState(
 		"ForcePathStyle": spec.ForcePathStyle,
 	}
 
-	data, err := external.ResolveValueFields(ctx, c, wandb.Namespace, fields)
+	data, err := external.ResolveValueFields(ctx, c, owner.GetNamespace(), fields)
 	if err != nil {
 		logger.Error(err, "failed to resolve external object store fields")
 		return []metav1.Condition{{
@@ -103,8 +103,8 @@ func WriteState(
 		connInfo.URL = buildS3URL(data)
 	}
 
-	nsName := types.NamespacedName{Namespace: wandb.Namespace, Name: connectionSecretName(key)}
-	if conditions := external.WriteConnectionSecret(ctx, c, wandb, nsName, connInfo.ToSecretData()); conditions != nil {
+	nsName := types.NamespacedName{Namespace: owner.GetNamespace(), Name: connectionSecretName(key)}
+	if conditions := external.WriteConnectionSecret(ctx, c, owner, nsName, connInfo.ToSecretData()); conditions != nil {
 		return conditions, nil
 	}
 
@@ -181,7 +181,7 @@ func joinBucketPrefix(base, prefix string) string {
 func ReadState(
 	_ context.Context,
 	_ client.Client,
-	_ *apiv2.WeightsAndBiases,
+	_ client.Object,
 	_ string,
 	newConditions []metav1.Condition,
 ) []metav1.Condition {
@@ -190,9 +190,9 @@ func ReadState(
 
 // DeleteConnectionSecret removes the connection secret written for the given
 // object-store instance key.
-func DeleteConnectionSecret(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, key string) error {
+func DeleteConnectionSecret(ctx context.Context, c client.Client, owner client.Object, key string) error {
 	return external.DeleteConnectionSecret(ctx, c, types.NamespacedName{
-		Namespace: wandb.Namespace,
+		Namespace: owner.GetNamespace(),
 		Name:      connectionSecretName(key),
 	})
 }

@@ -20,17 +20,17 @@ import (
 func objectStoreWriteState(
 	ctx context.Context,
 	client client.Client,
-	wandb *apiv2.WeightsAndBiases,
-	mfst manifest.Manifest,
+	deployment common.DeploymentResource,
+	config manifest.InfraConfig,
 ) (map[string][]metav1.Condition, map[string]*apiv2.ObjectStoreConnection) {
 	outConds := map[string][]metav1.Condition{}
 	outConns := map[string]*apiv2.ObjectStoreConnection{}
-	for key, spec := range wandb.Spec.ObjectStore {
+	for key, spec := range deployment.GetBaseDeploymentSpec().ObjectStore {
 		switch {
 		case spec.ManagedObjectStore != nil:
-			outConds[key], outConns[key] = managedObjectStoreWriteState(ctx, client, wandb, key, spec.ManagedObjectStore, mfst)
+			outConds[key], outConns[key] = managedObjectStoreWriteState(ctx, client, deployment, spec.ManagedObjectStore, config)
 		case spec.ExternalObjectStore != nil:
-			outConds[key], outConns[key] = externalobjectstore.WriteState(ctx, client, wandb, key, spec.ExternalObjectStore)
+			outConds[key], outConns[key] = externalobjectstore.WriteState(ctx, client, deployment, key, spec.ExternalObjectStore)
 		}
 	}
 	return outConds, outConns
@@ -39,16 +39,16 @@ func objectStoreWriteState(
 func objectStoreReadState(
 	ctx context.Context,
 	client client.Client,
-	wandb *apiv2.WeightsAndBiases,
+	deployment common.DeploymentResource,
 	conditions map[string][]metav1.Condition,
 ) map[string][]metav1.Condition {
 	out := map[string][]metav1.Condition{}
-	for key, spec := range wandb.Spec.ObjectStore {
+	for key, spec := range deployment.GetBaseDeploymentSpec().ObjectStore {
 		switch {
 		case spec.ManagedObjectStore != nil:
-			out[key] = managedObjectStoreReadState(ctx, client, wandb, spec.ManagedObjectStore, conditions[key])
+			out[key] = managedObjectStoreReadState(ctx, client, deployment, spec.ManagedObjectStore, conditions[key])
 		case spec.ExternalObjectStore != nil:
-			out[key] = externalobjectstore.ReadState(ctx, client, wandb, key, conditions[key])
+			out[key] = externalobjectstore.ReadState(ctx, client, deployment, key, conditions[key])
 		default:
 			out[key] = conditions[key]
 		}
@@ -60,23 +60,23 @@ func objectStoreInferStatus(
 	ctx context.Context,
 	client client.Client,
 	recorder record.EventRecorder,
-	wandb *apiv2.WeightsAndBiases,
+	deployment common.DeploymentResource,
 	conditions map[string][]metav1.Condition,
 	infraConns map[string]*apiv2.ObjectStoreConnection,
 ) (ctrl.Result, error) {
-	if wandb.Status.ObjectStoreStatus == nil {
-		wandb.Status.ObjectStoreStatus = map[string]apiv2.ObjectStoreInfraStatus{}
+	if deployment.GetBaseDeploymentStatus().ObjectStoreStatus == nil {
+		deployment.GetBaseDeploymentStatus().ObjectStoreStatus = map[string]apiv2.ObjectStoreInfraStatus{}
 	}
 	var results []ctrl.Result
 	var firstErr error
-	for key, spec := range wandb.Spec.ObjectStore {
+	for key, spec := range deployment.GetBaseDeploymentSpec().ObjectStore {
 		var res ctrl.Result
 		var err error
 		switch {
 		case spec.ManagedObjectStore != nil:
-			res, err = managedObjectStoreInferStatus(ctx, client, recorder, wandb, key, conditions[key], infraConns[key])
+			res, err = managedObjectStoreInferStatus(ctx, client, recorder, deployment, key, conditions[key], infraConns[key])
 		case spec.ExternalObjectStore != nil:
-			res, err = externalObjectStoreInferStatus(ctx, client, wandb, key, conditions[key], infraConns[key])
+			res, err = externalObjectStoreInferStatus(ctx, client, deployment, key, conditions[key], infraConns[key])
 		}
 		results = append(results, res)
 		if err != nil && firstErr == nil {
@@ -86,12 +86,12 @@ func objectStoreInferStatus(
 	return consolidateResults(results), firstErr
 }
 
-func runObjectStoreRetentionFinalizer(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, key string, spec apiv2.ObjectStoreSpec) error {
-	switch wandb.GetRetentionPolicy(objectStoreInstanceInfraSpec(spec)).OnDelete {
+func runObjectStoreRetentionFinalizer(ctx context.Context, c client.Client, deployment common.DeploymentResource, key string, spec apiv2.ObjectStoreSpec) error {
+	switch deployment.GetBaseDeploymentSpec().GetRetentionPolicy(objectStoreInstanceInfraSpec(spec)).OnDelete {
 	case apiv2.PurgeOnDelete:
-		return objectStorePurgeFinalizer(ctx, c, wandb, key, spec)
+		return objectStorePurgeFinalizer(ctx, c, deployment, key, spec)
 	case apiv2.DetachOnDelete:
-		return objectStoreDetachFinalizer(ctx, c, wandb, key, spec)
+		return objectStoreDetachFinalizer(ctx, c, deployment, key, spec)
 	}
 	return nil
 }
@@ -106,25 +106,17 @@ func objectStoreInstanceInfraSpec(spec apiv2.ObjectStoreSpec) apiv2.ManagedInfra
 func objectStorePurgeFinalizer(
 	ctx context.Context,
 	client client.Client,
-	wandb *apiv2.WeightsAndBiases,
+	deployment common.DeploymentResource,
 	key string,
 	spec apiv2.ObjectStoreSpec,
 ) error {
 	if managed := spec.ManagedObjectStore; managed != nil {
-		onDeleteRule := seaweedfs.ToObjectStoreOnDeleteRule(wandb, wandb.GetRetentionPolicy(managed.ManagedInfraSpec))
-		// Legacy MinIO predates multi-instance and is scoped to the CR, so only
-		// the default instance triggers its cleanup.
-		if key == apiv2.DefaultInstanceName {
-			_ = seaweedfs.CleanupLegacyMinio(
-				ctx, client, wandb.Name, wandb.Namespace, wandb.GetUID(),
-				true, onDeleteRule.Selector,
-			)
-		}
+		onDeleteRule := seaweedfs.ToObjectStoreOnDeleteRule(deployment, deployment.GetBaseDeploymentSpec().GetRetentionPolicy(managed.ManagedInfraSpec))
 		specNamespacedName := managedObjectStoreSpecNamespacedName(managed)
 		return seaweedfs.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule)
 	}
 	if spec.ExternalObjectStore != nil {
-		return externalobjectstore.DeleteConnectionSecret(ctx, client, wandb, key)
+		return externalobjectstore.DeleteConnectionSecret(ctx, client, deployment, key)
 	}
 	return nil
 }
@@ -132,22 +124,16 @@ func objectStorePurgeFinalizer(
 func objectStoreDetachFinalizer(
 	ctx context.Context,
 	client client.Client,
-	wandb *apiv2.WeightsAndBiases,
-	key string,
+	deployment common.DeploymentResource,
+	_ string,
 	spec apiv2.ObjectStoreSpec,
 ) error {
 	managed := spec.ManagedObjectStore
 	if managed == nil {
 		return nil
 	}
-	if key == apiv2.DefaultInstanceName {
-		_ = seaweedfs.CleanupLegacyMinio(
-			ctx, client, wandb.Name, wandb.Namespace, wandb.GetUID(),
-			false, nil,
-		)
-	}
 	specNamespacedName := managedObjectStoreSpecNamespacedName(managed)
-	return seaweedfs.DetachFinalizer(ctx, client, specNamespacedName, wandb)
+	return seaweedfs.DetachFinalizer(ctx, client, specNamespacedName, deployment)
 }
 
 // managed
@@ -155,32 +141,18 @@ func objectStoreDetachFinalizer(
 func managedObjectStoreWriteState(
 	ctx context.Context,
 	client client.Client,
-	wandb *apiv2.WeightsAndBiases,
-	key string,
+	deployment common.DeploymentResource,
 	spec *apiv2.ManagedObjectStoreSpec,
-	mfst manifest.Manifest,
+	config manifest.InfraConfig,
 ) ([]metav1.Condition, *apiv2.ObjectStoreConnection) {
 	log := ctrl.LoggerFrom(ctx)
 	var specNamespacedName = managedObjectStoreSpecNamespacedName(spec)
 
-	retentionPolicy := wandb.GetRetentionPolicy(spec.ManagedInfraSpec)
-	onDeleteRule := seaweedfs.ToObjectStoreOnDeleteRule(wandb, retentionPolicy)
-	if key == apiv2.DefaultInstanceName {
-		if err := seaweedfs.CleanupLegacyMinio(
-			ctx, client,
-			wandb.Name, wandb.Namespace, wandb.GetUID(),
-			onDeleteRule.Policy == common.Purge,
-			onDeleteRule.Selector,
-		); err != nil {
-			log.Error(err, "failed to clean up legacy MinIO resources")
-		}
-	}
-
-	if conditions := seaweedfs.CheckDetached(ctx, client, specNamespacedName, wandb.GetUID(), spec.Replicas); conditions != nil {
+	if conditions := seaweedfs.CheckDetached(ctx, client, specNamespacedName, deployment.GetUID(), spec.Replicas); conditions != nil {
 		return conditions, nil
 	}
 
-	desiredCr, err := seaweedfs.ToObjectStoreVendorSpec(ctx, wandb, spec, client.Scheme(), mfst)
+	desiredCr, err := seaweedfs.ToObjectStoreVendorSpec(ctx, deployment, deployment.GetBaseDeploymentSpec(), spec, client.Scheme(), config)
 	if err != nil {
 		log.Error(err, "failed to translate object store spec to vendor spec")
 		return []metav1.Condition{
@@ -204,24 +176,24 @@ func managedObjectStoreWriteState(
 		}, nil
 	}
 
-	conditions, connection := seaweedfs.WriteState(ctx, client, specNamespacedName, desiredCr, desiredConfig, wandb)
+	conditions, connection := seaweedfs.WriteState(ctx, client, specNamespacedName, desiredCr, desiredConfig, deployment)
 	return conditions, connection
 }
 
 func managedObjectStoreReadState(
 	ctx context.Context,
 	client client.Client,
-	wandb *apiv2.WeightsAndBiases,
+	deployment common.DeploymentResource,
 	spec *apiv2.ManagedObjectStoreSpec,
 	newConditions []metav1.Condition,
 ) []metav1.Condition {
 	specNamespacedName := managedObjectStoreSpecNamespacedName(spec)
-	retentionPolicy := wandb.GetRetentionPolicy(spec.ManagedInfraSpec)
+	retentionPolicy := deployment.GetBaseDeploymentSpec().GetRetentionPolicy(spec.ManagedInfraSpec)
 	readConditions := seaweedfs.ReadState(
 		ctx,
 		client,
 		specNamespacedName,
-		seaweedfs.ToObjectStoreOnDeleteRule(wandb, retentionPolicy),
+		seaweedfs.ToObjectStoreOnDeleteRule(deployment, retentionPolicy),
 	)
 	newConditions = append(newConditions, readConditions...)
 	return newConditions
@@ -231,14 +203,14 @@ func managedObjectStoreInferStatus(
 	ctx context.Context,
 	client client.Client,
 	recorder record.EventRecorder,
-	wandb *apiv2.WeightsAndBiases,
+	deployment common.DeploymentResource,
 	key string,
 	newConditions []metav1.Condition,
 	newInfraConn *apiv2.ObjectStoreConnection,
 ) (ctrl.Result, error) {
-	statusBefore := wandb.DeepCopy().Status
+	statusBefore := deployment.GetBaseDeploymentStatus().DeepCopy()
 	enabled := true
-	oldStatus := wandb.Status.ObjectStoreStatus[key]
+	oldStatus := deployment.GetBaseDeploymentStatus().ObjectStoreStatus[key]
 	oldConditions := oldStatus.Conditions
 	oldInfraConn := oldStatus.Connection
 
@@ -248,31 +220,31 @@ func managedObjectStoreInferStatus(
 		oldConditions,
 		newConditions,
 		utils.Coalesce(newInfraConn, &oldInfraConn),
-		wandb.Generation,
+		deployment.GetGeneration(),
 	)
 	for _, e := range events {
-		recorder.Event(wandb, e.Type, e.Reason, e.Message)
+		recorder.Event(deployment, e.Type, e.Reason, e.Message)
 	}
-	wandb.Status.ObjectStoreStatus[key] = updatedStatus
-	err := updateWandbStatusIfChanged(ctx, client, wandb, statusBefore)
+	deployment.GetBaseDeploymentStatus().ObjectStoreStatus[key] = updatedStatus
+	err := updateDeploymentStatusIfChanged(ctx, client, deployment, statusBefore)
 
 	return ctrlResult, err
 }
 
 // external
 
-func externalObjectStoreInferStatus(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, key string, newConditions []metav1.Condition, newInfraConn *apiv2.ObjectStoreConnection) (ctrl.Result, error) {
-	statusBefore := wandb.DeepCopy().Status
-	oldStatus := wandb.Status.ObjectStoreStatus[key]
+func externalObjectStoreInferStatus(ctx context.Context, c client.Client, deployment common.DeploymentResource, key string, newConditions []metav1.Condition, newInfraConn *apiv2.ObjectStoreConnection) (ctrl.Result, error) {
+	statusBefore := deployment.GetBaseDeploymentStatus().DeepCopy()
+	oldStatus := deployment.GetBaseDeploymentStatus().ObjectStoreStatus[key]
 	oldInfraConn := oldStatus.Connection
-	state, ready, updatedConditions := external.InferExternalStatus(oldStatus.Conditions, newConditions, wandb.Generation, newInfraConn != nil)
+	state, ready, updatedConditions := external.InferExternalStatus(oldStatus.Conditions, newConditions, deployment.GetGeneration(), newInfraConn != nil)
 	conn := utils.Coalesce(newInfraConn, &oldInfraConn)
 
-	wandb.Status.ObjectStoreStatus[key] = apiv2.ObjectStoreInfraStatus{
+	deployment.GetBaseDeploymentStatus().ObjectStoreStatus[key] = apiv2.ObjectStoreInfraStatus{
 		WBInfraStatus: apiv2.WBInfraStatus{Ready: ready, State: state, Conditions: updatedConditions},
 		Connection:    *conn,
 	}
-	return ctrl.Result{}, updateWandbStatusIfChanged(ctx, c, wandb, statusBefore)
+	return ctrl.Result{}, updateDeploymentStatusIfChanged(ctx, c, deployment, statusBefore)
 }
 
 // helpers
