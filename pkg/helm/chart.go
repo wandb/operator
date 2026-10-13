@@ -1,9 +1,11 @@
 package helm
 
 import (
+	"context"
 	"fmt"
 	"time"
 
+	"github.com/wandb/operator/pkg/wandb/spec/state"
 	"helm.sh/helm/v4/pkg/action"
 	chart "helm.sh/helm/v4/pkg/chart/v2"
 	chartutil "helm.sh/helm/v4/pkg/chart/v2/util"
@@ -11,6 +13,8 @@ import (
 	"helm.sh/helm/v4/pkg/kube"
 	"helm.sh/helm/v4/pkg/release"
 	releasecommon "helm.sh/helm/v4/pkg/release/common"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
@@ -81,6 +85,7 @@ func (c *ActionableChart) isInstalled() bool {
 	// Find the release with the highest revision using the Accessor interface,
 	// which handles any concrete release type (not just v1).
 	var latest release.Accessor
+	hasSuccessfulRelease := false
 	for _, r := range h {
 		acc, err := release.NewAccessor(r)
 		if err != nil {
@@ -89,9 +94,27 @@ func (c *ActionableChart) isInstalled() bool {
 		if latest == nil || acc.Version() > latest.Version() {
 			latest = acc
 		}
+		if acc.Status() == releasecommon.StatusDeployed.String() || acc.Status() == releasecommon.StatusSuperseded.String() {
+			hasSuccessfulRelease = true
+		}
 	}
 	if latest == nil {
 		return false
+	}
+
+	if latest.Status() == releasecommon.StatusFailed.String() && !hasSuccessfulRelease {
+		// Failed first installs must retry install hooks. Upgrade hooks may need
+		// resources that the initial install never created. The active spec keeps
+		// successful installs distinguishable after Helm prunes their history.
+		client, err := c.config.KubernetesClientSet()
+		if err == nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			_, err = client.CoreV1().Secrets(c.namespace).Get(ctx, state.ActiveSpecName(c.releaseName), metav1.GetOptions{})
+			if apierrors.IsNotFound(err) {
+				return false
+			}
+		}
 	}
 
 	return latest.Status() != releasecommon.StatusUninstalled.String()
@@ -114,6 +137,7 @@ func (c *ActionableChart) Install(
 	client := action.NewInstall(c.config)
 	client.ReleaseName = c.releaseName
 	client.Namespace = c.namespace
+	client.Replace = true
 	client.WaitStrategy = kube.HookOnlyStrategy
 	client.ServerSideApply = false
 	return client.Run(chart, values)

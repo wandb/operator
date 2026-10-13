@@ -24,6 +24,18 @@ Selection is reevaluated on each reconcile. No cutover state is written or read;
 old `wandb-managed-spec-state` ConfigMaps can remain and are ignored. Setting
 the flag to false returns the operator to Deployer after restart.
 
+## Failed install recovery
+
+If an initial Helm install fails, reconciliation retries it as an install so
+install hooks can create the resources that upgrade hooks require. Helm reuses
+the failed release name and retains its history.
+
+Failed upgrades continue using the upgrade path. A deployed or superseded Helm
+revision, or the operator's saved active spec, identifies an instance that has
+previously succeeded. The active spec preserves that distinction after older
+Helm revisions are pruned. If the operator cannot determine whether the active
+spec exists, it keeps the upgrade path.
+
 ## Development
 
 ### Prerequisites
