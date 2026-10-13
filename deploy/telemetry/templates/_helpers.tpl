@@ -46,6 +46,10 @@ victoria-traces
 victoria-otlp-gateway
 {{- end -}}
 
+{{- define "telemetry.logAgentName" -}}
+victoria-log-agent
+{{- end -}}
+
 {{- define "telemetry.metricsEndpoint" -}}
 {{- printf "http://vmsingle-%s:8428/opentelemetry/v1/metrics" (include "telemetry.vmsingleName" .) -}}
 {{- end -}}

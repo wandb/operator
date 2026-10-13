@@ -217,4 +217,119 @@ spec:
       port: 8888
       targetPort: metrics
       protocol: TCP
+{{- if .Values.logAgent.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "telemetry.logAgentName" . }}-config
+  namespace: {{ include "telemetry.namespace" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "telemetry.logAgentName" . }}
+    app.kubernetes.io/component: telemetry
+    app.kubernetes.io/part-of: wandb
+data:
+  collector.yaml: |
+    extensions:
+      file_storage:
+        directory: /var/lib/otelcol
+
+    receivers:
+      filelog:
+        include:
+{{- $operatorNamespace := .Release.Namespace }}
+{{- range concat (list (include "telemetry.namespace" .) $operatorNamespace) .Values.logAgent.extraNamespaces | uniq }}
+          - /var/log/pods/{{ . }}_*/*/*.log
+{{- end }}
+        exclude:
+          - /var/log/pods/{{ include "telemetry.namespace" . }}_{{ include "telemetry.logAgentName" . }}-*/*/*.log
+        # The container parser silently drops every line without the file path.
+        include_file_path: true
+        start_at: beginning
+        storage: file_storage
+        operators:
+          - type: container
+          # Trace-to-logs links filter on service; dd.service matches the span's service name.
+          - type: regex_parser
+            if: 'body matches "\"dd\\.service\""'
+            regex: '"dd\.service":\s*"(?P<service>[^"]+)"'
+
+    processors:
+      batch: {}
+
+    exporters:
+      otlphttp:
+        endpoint: http://{{ include "telemetry.otlpGatewayName" . }}:4318
+
+    service:
+      extensions: [file_storage]
+      pipelines:
+        logs:
+          receivers: [filelog]
+          processors: [batch]
+          exporters: [otlphttp]
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "telemetry.logAgentName" . }}
+  namespace: {{ include "telemetry.namespace" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "telemetry.logAgentName" . }}
+    app.kubernetes.io/component: telemetry
+    app.kubernetes.io/part-of: wandb
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "telemetry.logAgentName" . }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "telemetry.logAgentName" . }}
+        app.kubernetes.io/component: telemetry
+        app.kubernetes.io/part-of: wandb
+    spec:
+      automountServiceAccountToken: false
+      {{- with .Values.logAgent.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: otel-collector
+          image: "otel/opentelemetry-collector-contrib:0.102.1"
+          imagePullPolicy: IfNotPresent
+          args:
+            - --config=/etc/otelcol/collector.yaml
+          # Pod log files on the node are only readable by root.
+          securityContext:
+            runAsUser: 0
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          {{- with .Values.logAgent.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/otelcol
+            - name: pod-logs
+              mountPath: /var/log/pods
+              readOnly: true
+            - name: storage
+              mountPath: /var/lib/otelcol
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "telemetry.logAgentName" . }}-config
+        - name: pod-logs
+          hostPath:
+            path: /var/log/pods
+        - name: storage
+          hostPath:
+            path: /var/lib/{{ include "telemetry.logAgentName" . }}/{{ include "telemetry.namespace" . }}
+            type: DirectoryOrCreate
+{{- end }}
 {{- end }}

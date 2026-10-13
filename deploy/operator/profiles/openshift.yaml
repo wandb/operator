@@ -42,3 +42,8 @@ moco:
 
 grafana-operator:
   isOpenShift: true
+
+# restricted-v2 blocks the hostPath and root user the log agent needs.
+telemetry:
+  logAgent:
+    enabled: false
