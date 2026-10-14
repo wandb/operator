@@ -84,6 +84,7 @@ func clickHouseContainerSecurityContext() *corev1.SecurityContext {
 	securityContext := &corev1.SecurityContext{
 		RunAsNonRoot:             ptr.To(true),
 		AllowPrivilegeEscalation: ptr.To(false),
+		ReadOnlyRootFilesystem:   ptr.To(true),
 		Capabilities: &corev1.Capabilities{
 			Drop: []corev1.Capability{clickHouseCapabilityAll},
 		},
