@@ -23,6 +23,9 @@ SETTINGS = {
     # authenticate gh with read access to wandb/watchtower.
     "adminConsoleEnabled": False,
 
+    # Install the suspended support-bundle CronJob template
+    "supportBundleEnabled": True,
+
     # Default to the published server manifest repository. Use
     # local mode only when developing against repo-local manifest definitions.
     "manifestSource": "published",

@@ -41,6 +41,7 @@ settings = {
     "retentionPolicy": "detach",
     "licenseFile": "",
     "adminConsoleEnabled": False,
+    "supportBundleEnabled": True,
     "manifestSource": "published",  # published or local
     "localManifestPath": "hack/testing-manifests/server-manifest",
     "networkMode": "gateway",  # gateway or ingress
@@ -218,6 +219,7 @@ USE_EXTERNAL_REDIS = as_bool(settings.get("useExternalRedis"))
 USE_EXTERNAL_OBJECT_STORE = as_bool(settings.get("useExternalObjectStore"))
 USE_CUSTOM_CA = as_bool(settings.get("useCustomCA"))
 ADMIN_CONSOLE_ENABLED = as_bool(settings.get("adminConsoleEnabled"))
+SUPPORT_BUNDLE_ENABLED = as_bool(settings.get("supportBundleEnabled"))
 USE_EXTERNAL_INFRA = USE_EXTERNAL_MYSQL or USE_EXTERNAL_REDIS or USE_EXTERNAL_OBJECT_STORE
 USE_TEST_INFRA_TLS = USE_CUSTOM_CA and (USE_EXTERNAL_MYSQL or USE_EXTERNAL_REDIS)
 EXTERNAL_OBJECT_STORE_HOSTNAME = str(settings.get("externalObjectStoreHostname"))
@@ -423,6 +425,7 @@ def build_wandb_cr():
       cmd += helper_flag("retention-policy", settings.get("retentionPolicy"))
       cmd += helper_flag("license-file", settings.get("licenseFile", ""))
       cmd += helper_bool_flag("admin-console-enabled", ADMIN_CONSOLE_ENABLED)
+      cmd += helper_bool_flag("support-bundle-enabled", SUPPORT_BUNDLE_ENABLED)
       cmd += helper_flag("manifest-source", settings.get("manifestSource"))
       cmd += helper_flag("observability-mode", settings.get("observabilityMode"))
       cmd += helper_flag("network-mode", settings.get("networkMode"))
