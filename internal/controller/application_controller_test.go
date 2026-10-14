@@ -23,6 +23,7 @@ import (
 	. "github.com/onsi/gomega"
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
+	"github.com/wandb/operator/internal/observability/supportbundle"
 	"github.com/wandb/operator/pkg/vendored/argo-rollouts/argoproj.io.rollouts/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
@@ -978,6 +979,41 @@ var _ = Describe("Application Controller", func() {
 			_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: key})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(k8sClient.Get(ctx, key, found)).To(Succeed())
+		})
+
+		It("keeps the support-bundle CronJob template quiet after creation", func() {
+			wandb := &apiv2.WeightsAndBiases{ObjectMeta: metav1.ObjectMeta{Name: "sb", Namespace: "default"}}
+			wandb.Spec.Global.ImagePullSecrets = []corev1.LocalObjectReference{{Name: "pull"}}
+			bucket := supportbundle.BucketConnection{
+				URL:    &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "conn"}, Key: "url"},
+				Region: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "conn"}, Key: "Region"},
+			}
+			resource := supportbundle.Application(wandb, bucket)
+			key := types.NamespacedName{Name: resource.Name, Namespace: resource.Namespace}
+			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+
+			counter := &cronJobUpdateCounter{Client: k8sClient}
+			reconciler := &ApplicationReconciler{
+				Client: client.WithFieldOwner(counter, ApplicationFieldManager),
+				Scheme: k8sClient.Scheme(),
+			}
+			for i := 0; i < 2; i++ {
+				_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: key})
+				Expect(err).NotTo(HaveOccurred())
+			}
+			Expect(k8sClient.Get(ctx, key, resource)).To(Succeed())
+			Expect(resource.Status.Ready).To(BeTrue())
+
+			counter.updates = 0
+			for i := 0; i < 3; i++ {
+				_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: key})
+				Expect(err).NotTo(HaveOccurred())
+			}
+			Expect(counter.updates).To(BeZero())
+
+			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: key})
+			Expect(err).NotTo(HaveOccurred())
 		})
 
 		It("should successfully delete resources when Application is deleted", func() {
