@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"strconv"
 	"strings"
 
 	"github.com/wandb/operator/internal/controller/common"
@@ -11,7 +12,9 @@ import (
 	redisv1beta2 "github.com/wandb/operator/pkg/vendored/redis-operator/redis/v1beta2"
 	redisreplicationv1beta2 "github.com/wandb/operator/pkg/vendored/redis-operator/redisreplication/v1beta2"
 	redissentinelv1beta2 "github.com/wandb/operator/pkg/vendored/redis-operator/redissentinel/v1beta2"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -22,11 +25,6 @@ const (
 	SentinelType    = "RedisSentinel"
 	ReplicationType = "RedisReplication"
 	AppConnTypeName = "RedisAppConn"
-
-	// pvcTemplatePrefix is the volumeClaimTemplate name the opstree operator
-	// uses when creating StatefulSets, resulting in PVCs named
-	// "redis-data-{crName}-{ordinal}".
-	pvcTemplatePrefix = "redis-data"
 )
 
 func WriteState(
@@ -48,17 +46,17 @@ func WriteState(
 	results = append(results, writeReplicationState(ctx, cl, nsnBuilder, replicationDesired)...)
 
 	if len(wandbLabels) > 0 {
-		var pvcPrefixes []string
+		var statefulSetNames []string
 		var podPrefixes []string
 		if standaloneDesired != nil {
-			pvcPrefixes = append(pvcPrefixes, fmt.Sprintf("%s-%s-", pvcTemplatePrefix, nsnBuilder.StandaloneName()))
+			statefulSetNames = append(statefulSetNames, nsnBuilder.StandaloneName())
 			podPrefixes = append(podPrefixes, fmt.Sprintf("%s-", nsnBuilder.StandaloneName()))
 		}
 		if replicationDesired != nil {
-			pvcPrefixes = append(pvcPrefixes, fmt.Sprintf("%s-%s-", pvcTemplatePrefix, nsnBuilder.ReplicationName()))
+			statefulSetNames = append(statefulSetNames, nsnBuilder.ReplicationName())
 			podPrefixes = append(podPrefixes, fmt.Sprintf("%s-", nsnBuilder.ReplicationName()))
 		}
-		if err := ensurePVCLabels(ctx, cl, specNamespacedName.Namespace, pvcPrefixes, wandbLabels); err != nil {
+		if err := ensurePVCLabels(ctx, cl, specNamespacedName.Namespace, statefulSetNames, wandbLabels); err != nil {
 			results = append(results, metav1.Condition{
 				Type:   common.ReconciledType,
 				Status: metav1.ConditionFalse,
@@ -77,18 +75,33 @@ func WriteState(
 	return results
 }
 
-// ensurePVCLabels patches PVCs whose names match any of the given prefixes
-// that are missing the wandb labels. The opstree operator creates PVCs via
-// StatefulSet volumeClaimTemplates named "redis-data", so PVCs are named
-// "redis-data-{crName}-{ordinal}".
+// ensurePVCLabels derives PVC names from the actual StatefulSet templates.
+// Upstream defaults the template name to the CR name and can also configure it;
+// assuming a fixed template name leaves those PVCs without ownership labels.
 func ensurePVCLabels(
 	ctx context.Context,
 	cl client.Client,
 	namespace string,
-	namePrefixes []string,
+	statefulSetNames []string,
 	labels map[string]string,
 ) error {
 	log := logx.GetSlog(ctx)
+	var namePrefixes []string
+	for _, name := range statefulSetNames {
+		sts := &appsv1.StatefulSet{}
+		if err := cl.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, sts); err != nil {
+			if apierrors.IsNotFound(err) {
+				continue // The dependency controller has not created it yet.
+			}
+			return err
+		}
+		for _, template := range sts.Spec.VolumeClaimTemplates {
+			namePrefixes = append(namePrefixes, fmt.Sprintf("%s-%s-", template.Name, sts.Name))
+		}
+	}
+	if len(namePrefixes) == 0 {
+		return nil
+	}
 
 	pvcList := &corev1.PersistentVolumeClaimList{}
 	if err := cl.List(ctx, pvcList, &client.ListOptions{Namespace: namespace}); err != nil {
@@ -96,7 +109,7 @@ func ensurePVCLabels(
 	}
 
 	for _, pvc := range pvcList.Items {
-		if !matchesAnyPrefix(pvc.Name, namePrefixes) {
+		if !matchesPVCName(pvc.Name, namePrefixes) {
 			continue
 		}
 		if common.HasAllLabelKeys(pvc.Labels, labels) {
@@ -114,6 +127,18 @@ func ensurePVCLabels(
 		log.Debug("patched wandb labels onto PVC", "pvc", pvc.Name)
 	}
 	return nil
+}
+
+func matchesPVCName(name string, prefixes []string) bool {
+	for _, prefix := range prefixes {
+		if ordinal, ok := strings.CutPrefix(name, prefix); ok {
+			n, err := strconv.Atoi(ordinal)
+			if err == nil && n >= 0 && strconv.Itoa(n) == ordinal {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func ensurePodLabels(
