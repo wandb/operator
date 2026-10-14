@@ -35,6 +35,7 @@ import (
 //+kubebuilder:printcolumn:name="ObjectStore",type=string,JSONPath=`.status.objectStoreStatus.default.state`
 //+kubebuilder:printcolumn:name="ClickHouse",type=string,JSONPath=`.status.clickhouseStatus.default.state`
 //+kubebuilder:printcolumn:name="Migration",type=string,JSONPath=`.status.wandb.migration.phase`
+//+kubebuilder:printcolumn:name="SupportBundle",type=string,JSONPath=`.status.supportBundle.version`,priority=1
 
 // WeightsAndBiases is the Schema for the weightsandbiases API.
 type WeightsAndBiases struct {
@@ -140,6 +141,23 @@ type WeightsAndBiasesSpec struct {
 	Networking NetworkingSpec `json:"networking,omitempty"`
 
 	AdminConsoleEnabled *bool `json:"adminConsoleEnabled,omitempty"`
+
+	// SupportBundle installs a suspended support-bundle CronJob template; enabled by default.
+	// +kubebuilder:default={enabled: true}
+	// +optional
+	SupportBundle SupportBundleSpec `json:"supportBundle,omitempty"`
+}
+
+type SupportBundleSpec struct {
+	// Enabled installs the support-bundle template; set false to opt out.
+	// +kubebuilder:default=true
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// Version overrides the collector image tag, or defaults to the operator's pinned version
+	// +kubebuilder:validation:Pattern=`^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$`
+	// +optional
+	Version string `json:"version,omitempty"`
 }
 
 const (
@@ -1145,8 +1163,16 @@ type WeightsAndBiasesStatus struct {
 	// +optional
 	GatewayStatus *GatewayStatusSummary `json:"gatewayStatus,omitempty"`
 	// +optional
-	IngressStatus    *IngressStatusSummary    `json:"ingressStatus,omitempty"`
-	WatchtowerStatus *WatchtowerStatusSummary `json:"watchtowerStatus,omitempty"`
+	IngressStatus    *IngressStatusSummary       `json:"ingressStatus,omitempty"`
+	WatchtowerStatus *WatchtowerStatusSummary    `json:"watchtowerStatus,omitempty"`
+	SupportBundle    *SupportBundleStatusSummary `json:"supportBundle,omitempty"`
+}
+
+type SupportBundleStatusSummary struct {
+	Ready   bool   `json:"ready"`
+	Image   string `json:"image,omitempty"`
+	CronJob string `json:"cronJob,omitempty"`
+	Version string `json:"version,omitempty"`
 }
 
 type WatchtowerStatusSummary struct {
