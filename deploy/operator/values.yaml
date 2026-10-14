@@ -129,6 +129,10 @@ moco:
 
 redis-operator:
   enabled: true
+  # Required by managed Redis read-only roots: generate config on an emptyDir
+  # and bypass image entrypoints that append to /etc/redis at every startup.
+  featureGates:
+    GenerateConfigInInitContainer: true
   podSecurityContext:
     runAsNonRoot: true
     runAsUser: 1000

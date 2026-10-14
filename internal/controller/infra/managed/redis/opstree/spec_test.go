@@ -30,6 +30,9 @@ var _ = Describe("Redis vendor specs", func() {
 
 		expectRedisDefaultPodSecurityContext(redis.Spec.PodSecurityContext)
 		expectRedisDefaultContainerSecurityContext(redis.Spec.SecurityContext)
+		Expect(redis.Spec.InitContainer).NotTo(BeNil())
+		Expect(redis.Spec.InitContainer.Enabled).To(HaveValue(BeFalse()))
+		expectRedisDefaultContainerSecurityContext(redis.Spec.InitContainer.SecurityContext)
 		expectRedisWritableTmpMount(redis.Spec.Storage.VolumeMount.MountPath)
 		Expect(redis.Spec.RedisExporter).NotTo(BeNil())
 		expectRedisDefaultContainerSecurityContext(redis.Spec.RedisExporter.SecurityContext)
@@ -43,6 +46,9 @@ var _ = Describe("Redis vendor specs", func() {
 		Expect(sentinel).NotTo(BeNil())
 		expectRedisDefaultPodSecurityContext(sentinel.Spec.PodSecurityContext)
 		expectRedisDefaultContainerSecurityContext(sentinel.Spec.SecurityContext)
+		Expect(sentinel.Spec.InitContainer).NotTo(BeNil())
+		Expect(sentinel.Spec.InitContainer.Enabled).To(HaveValue(BeFalse()))
+		expectRedisDefaultContainerSecurityContext(sentinel.Spec.InitContainer.SecurityContext)
 		Expect(sentinel.Spec.VolumeMount).NotTo(BeNil())
 		expectRedisWritableTmpMount(sentinel.Spec.VolumeMount.MountPath)
 
@@ -51,6 +57,9 @@ var _ = Describe("Redis vendor specs", func() {
 		Expect(replication).NotTo(BeNil())
 		expectRedisDefaultPodSecurityContext(replication.Spec.PodSecurityContext)
 		expectRedisDefaultContainerSecurityContext(replication.Spec.SecurityContext)
+		Expect(replication.Spec.InitContainer).NotTo(BeNil())
+		Expect(replication.Spec.InitContainer.Enabled).To(HaveValue(BeFalse()))
+		expectRedisDefaultContainerSecurityContext(replication.Spec.InitContainer.SecurityContext)
 		expectRedisWritableTmpMount(replication.Spec.Storage.VolumeMount.MountPath)
 	})
 
@@ -64,6 +73,7 @@ var _ = Describe("Redis vendor specs", func() {
 
 		expectOpenShiftPodSecurityContext(redis.Spec.PodSecurityContext)
 		expectOpenShiftContainerSecurityContext(redis.Spec.SecurityContext)
+		expectOpenShiftContainerSecurityContext(redis.Spec.InitContainer.SecurityContext)
 		expectRedisWritableTmpMount(redis.Spec.Storage.VolumeMount.MountPath)
 	})
 })
@@ -127,6 +137,7 @@ func expectRedisDefaultContainerSecurityContext(securityContext *corev1.Security
 	Expect(*securityContext.RunAsNonRoot).To(BeTrue())
 	Expect(securityContext.AllowPrivilegeEscalation).NotTo(BeNil())
 	Expect(*securityContext.AllowPrivilegeEscalation).To(BeFalse())
+	Expect(securityContext.ReadOnlyRootFilesystem).To(HaveValue(BeTrue()))
 	Expect(securityContext.Capabilities).NotTo(BeNil())
 	Expect(securityContext.Capabilities.Drop).To(ContainElement(redisCapabilityAll))
 	Expect(securityContext.SeccompProfile).NotTo(BeNil())
@@ -163,6 +174,7 @@ func expectOpenShiftContainerSecurityContext(securityContext *corev1.SecurityCon
 	Expect(*securityContext.RunAsNonRoot).To(BeTrue())
 	Expect(securityContext.AllowPrivilegeEscalation).NotTo(BeNil())
 	Expect(*securityContext.AllowPrivilegeEscalation).To(BeFalse())
+	Expect(securityContext.ReadOnlyRootFilesystem).To(HaveValue(BeTrue()))
 	Expect(securityContext.Capabilities).NotTo(BeNil())
 	Expect(securityContext.Capabilities.Drop).To(ContainElement(redisCapabilityAll))
 	Expect(securityContext.SeccompProfile).NotTo(BeNil())

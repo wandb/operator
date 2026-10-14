@@ -106,6 +106,7 @@ func redisContainerSecurityContext() *corev1.SecurityContext {
 	securityContext := &corev1.SecurityContext{
 		RunAsNonRoot:             ptr.To(true),
 		AllowPrivilegeEscalation: ptr.To(false),
+		ReadOnlyRootFilesystem:   ptr.To(true),
 		Capabilities: &corev1.Capabilities{
 			Drop: []corev1.Capability{redisCapabilityAll},
 		},
@@ -116,6 +117,17 @@ func redisContainerSecurityContext() *corev1.SecurityContext {
 		securityContext.RunAsGroup = ptr.To(redisRunAsGroup)
 	}
 	return securityContext
+}
+
+// The pinned Redis operator's GenerateConfigInInitContainer feature uses this
+// context for its generated init-config container. Keep the separate custom
+// init container disabled; Image satisfies the vendor API's required field.
+func redisConfigInitContainer(image string) *rediscommon.InitContainer {
+	return &rediscommon.InitContainer{
+		Enabled:         ptr.To(false),
+		Image:           image,
+		SecurityContext: redisContainerSecurityContext(),
+	}
 }
 
 func redisWritableVolumeMount() rediscommon.AdditionalVolume {
@@ -203,6 +215,7 @@ func ToRedisStandaloneVendorSpec(
 			Affinity:           wandb.GetAffinity(spec.ManagedInfraSpec),
 			PodSecurityContext: redisPodSecurityContext(),
 			SecurityContext:    redisContainerSecurityContext(),
+			InitContainer:      redisConfigInitContainer(RedisStandaloneImage(mfst.Redis["default"].Images["standalone"], wandb.Spec.Global.ImageRegistry)),
 			Tolerations:        wandb.GetTolerations(spec.ManagedInfraSpec),
 			Storage: &rediscommon.Storage{
 				VolumeClaimTemplate: corev1.PersistentVolumeClaim{
@@ -289,6 +302,7 @@ func ToRedisSentinelVendorSpec(
 			},
 			PodSecurityContext: redisPodSecurityContext(),
 			SecurityContext:    redisContainerSecurityContext(),
+			InitContainer:      redisConfigInitContainer(RedisSentinelImage(mfst.Redis["default"].Images["sentinel"], wandb.Spec.Global.ImageRegistry)),
 			Affinity:           wandb.GetAffinity(spec.ManagedInfraSpec),
 			Tolerations:        wandb.GetTolerations(spec.ManagedInfraSpec),
 			VolumeMount:        redisAdditionalVolumePtr(),
@@ -369,6 +383,7 @@ func ToRedisReplicationVendorSpec(
 			},
 			PodSecurityContext: redisPodSecurityContext(),
 			SecurityContext:    redisContainerSecurityContext(),
+			InitContainer:      redisConfigInitContainer(RedisReplicationImage(mfst.Redis["default"].Images["replication"], wandb.Spec.Global.ImageRegistry)),
 			Affinity:           wandb.GetAffinity(spec.ManagedInfraSpec),
 			Tolerations:        wandb.GetTolerations(spec.ManagedInfraSpec),
 			Storage: &rediscommon.Storage{
