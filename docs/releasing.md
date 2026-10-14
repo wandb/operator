@@ -5,6 +5,22 @@ published from an annotated `v2.x.y` or `v2.x.y-<prerelease>` tag. A single
 workflow publishes the operator image and Helm chart from the same commit, then
 creates the matching GitHub Release.
 
+## Automated release
+
+The `Prepare Release v2` workflow runs the tagged release steps below:
+
+1. Run **Prepare Release v2** from the Actions tab with the new `version`
+   (the leading `v` is optional). `watchtower_version` can be left blank to use
+   the latest Watchtower release, set to `keep` to leave it unchanged, or set to
+   a specific tag.
+2. The workflow opens `chore(release): Operator <version>` from
+   `gha/releasing-<version>`. Review the PR and merge it once checks pass.
+3. Approve the paused `release` deployment on the workflow run. The workflow
+   checks that the PR is merged, tags its merge commit, and watches
+   `Release v2`. If you approve before merging, the job fails. Merge the PR and
+   re-run the failed job. Rejecting the deployment ends the run without
+   tagging.
+
 ## Tagged release
 
 1. Open a release pull request against `main`.

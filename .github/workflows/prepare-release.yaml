@@ -1,0 +1,324 @@
+name: Prepare Release v2
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Operator version, e.g. 2.0.0-beta.9 (leading v optional)"
+        required: true
+        type: string
+      watchtower_version:
+        description: "Watchtower tag: blank = latest release, or e.g. v0.13.1"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-v2-prepare
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Open release PR
+    if: github.repository_owner == 'wandb'
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.inputs.outputs.version }}
+      tag: ${{ steps.inputs.outputs.tag }}
+      pr_number: ${{ steps.pr.outputs.pr_number }}
+    steps:
+      - name: Normalize inputs
+        id: inputs
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Chart/image fields carry no "v"; the git tag always does.
+          version="${INPUT_VERSION#v}"
+          tag="v${version}"
+
+          if [[ ! "${tag}" =~ ^v2\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]]; then
+            echo "Expected 2.x.y or 2.x.y-<prerelease>; got ${INPUT_VERSION}" >&2
+            exit 1
+          fi
+          if [[ "${tag}" == *-dev || "${tag}" == *-dev.* ]]; then
+            echo "Development versions are published by Internal Chart Publish, not the tagged release workflow" >&2
+            exit 1
+          fi
+
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
+          echo "branch=gha/releasing-${version}" >> "${GITHUB_OUTPUT}"
+
+      - name: Mint a token for the release PR
+        id: app-token
+        # GITHUB_TOKEN pushes don't trigger CI on the PR, and the Makefile bump
+        # needs read access to the private wandb/watchtower repo.
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.WESTEST_APP_ID }}
+          private-key: ${{ secrets.WESTEST_APP_PRIVATE_KEY }}
+          owner: wandb
+          repositories: operator,watchtower
+
+      - name: Checkout main
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: main
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Check the release is new
+        env:
+          TAG: ${{ steps.inputs.outputs.tag }}
+          BRANCH: ${{ steps.inputs.outputs.branch }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null; then
+            echo "Tag ${TAG} already exists; tagged versions are immutable, pick a new version" >&2
+            exit 1
+          fi
+          if git ls-remote --exit-code --heads origin "${BRANCH}" >/dev/null; then
+            echo "Branch ${BRANCH} already exists; delete it or finish that release first" >&2
+            exit 1
+          fi
+
+      - name: Update Watchtower version
+        id: watchtower
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          INPUT_WATCHTOWER: ${{ inputs.watchtower_version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          current="$(awk '$1 == "WATCHTOWER_VERSION" { print $3; exit }' Makefile)"
+          case "${INPUT_WATCHTOWER}" in
+            keep)
+              wanted="${current}"
+              ;;
+            "")
+              wanted="$(gh api repos/wandb/watchtower/releases/latest --jq .tag_name)"
+              ;;
+            *)
+              # Makefile pins the tag verbatim, leading "v" included.
+              wanted="v${INPUT_WATCHTOWER#v}"
+              gh api "repos/wandb/watchtower/releases/tags/${wanted}" --silent
+              ;;
+          esac
+
+          if [[ "${wanted}" != "${current}" ]]; then
+            sed -i "s/^WATCHTOWER_VERSION ?= .*/WATCHTOWER_VERSION ?= ${wanted}/" Makefile
+          fi
+
+          echo "current=${current}" >> "${GITHUB_OUTPUT}"
+          echo "wanted=${wanted}" >> "${GITHUB_OUTPUT}"
+
+      - name: Update operator versions
+        env:
+          VERSION: ${{ steps.inputs.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          sed -i \
+            -e "s/^version: .*/version: ${VERSION}/" \
+            -e "s/^appVersion: .*/appVersion: \"${VERSION}\"/" \
+            deploy/operator/Chart.yaml
+
+          awk -v version="${VERSION}" '
+            $0 == "wandb-operator:" { in_operator = 1 }
+            in_operator && $0 == "  image:" { in_image = 1 }
+            in_image && !done && $1 == "tag:" { sub(/tag: .*/, "tag: " version); done = 1 }
+            { print }
+          ' deploy/operator/values.yaml > values.yaml.tmp
+          mv values.yaml.tmp deploy/operator/values.yaml
+
+          # Same extraction as release.yaml, so a missed edit fails here rather than at tag time.
+          chart_version="$(awk '$1 == "version:" { print $2; exit }' deploy/operator/Chart.yaml | tr -d '\"')"
+          app_version="$(awk '$1 == "appVersion:" { print $2; exit }' deploy/operator/Chart.yaml | tr -d '\"')"
+          image_tag="$(awk '
+            $0 == "wandb-operator:" { in_operator = 1; next }
+            in_operator && $0 == "  image:" { in_image = 1; next }
+            in_image && $1 == "tag:" { print $2; exit }
+          ' deploy/operator/values.yaml | tr -d '\"')"
+
+          for value in "${chart_version}" "${app_version}" "${image_tag}"; do
+            if [[ "${value}" != "${VERSION}" ]]; then
+              echo "Version bump failed: chart=${chart_version}, appVersion=${app_version}, image=${image_tag}" >&2
+              exit 1
+            fi
+          done
+
+          if git diff --quiet; then
+            echo "Nothing to change; main is already at ${VERSION}" >&2
+            exit 1
+          fi
+          git diff
+
+      - name: Open pull request
+        id: pr
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+          VERSION: ${{ steps.inputs.outputs.version }}
+          TAG: ${{ steps.inputs.outputs.tag }}
+          BRANCH: ${{ steps.inputs.outputs.branch }}
+          WATCHTOWER_CURRENT: ${{ steps.watchtower.outputs.current }}
+          WATCHTOWER_WANTED: ${{ steps.watchtower.outputs.wanted }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          bot_id="$(gh api "users/${APP_SLUG}%5Bbot%5D" --jq .id)"
+          git config user.name "${APP_SLUG}[bot]"
+          git config user.email "${bot_id}+${APP_SLUG}[bot]@users.noreply.github.com"
+
+          # pr-title.yaml requires the single commit to match the PR title.
+          title="chore(release): Operator ${VERSION}"
+          git switch -c "${BRANCH}"
+          git commit -am "${title}"
+          git push origin "${BRANCH}"
+
+          watchtower="unchanged (${WATCHTOWER_CURRENT})"
+          if [[ "${WATCHTOWER_WANTED}" != "${WATCHTOWER_CURRENT}" ]]; then
+            watchtower="${WATCHTOWER_CURRENT} → ${WATCHTOWER_WANTED}"
+          fi
+
+          body="$(cat <<EOF
+          Releasing Operator ${VERSION}.
+
+          - Chart \`version\`, \`appVersion\` and operator image tag: \`${VERSION}\`
+          - Watchtower: ${watchtower}
+
+          Opened by [Prepare Release v2](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}).
+          Once this is merged, approve the \`release\` gate on that run to tag \`${TAG}\` and start Release v2.
+          EOF
+          )"
+
+          pr_url="$(gh pr create --base main --head "${BRANCH}" --title "${title}" --body "${body}")"
+          echo "pr_number=${pr_url##*/}" >> "${GITHUB_OUTPUT}"
+          echo "Release PR: ${pr_url}" >> "${GITHUB_STEP_SUMMARY}"
+
+  tag:
+    name: Tag release
+    needs: prepare
+    runs-on: ubuntu-latest
+    # Required reviewers on this environment pause the run until someone approves or rejects.
+    environment: release
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Mint a token to push the tag
+        id: app-token
+        # A tag pushed with GITHUB_TOKEN would not trigger Release v2.
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.WESTEST_APP_ID }}
+          private-key: ${{ secrets.WESTEST_APP_PRIVATE_KEY }}
+          owner: wandb
+          repositories: operator
+
+      - name: Check the release PR is merged
+        id: merged
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          PR_NUMBER: ${{ needs.prepare.outputs.pr_number }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          state="$(gh pr view "${PR_NUMBER}" --repo "${GITHUB_REPOSITORY}" --json state --jq .state)"
+          if [[ "${state}" != "MERGED" ]]; then
+            echo "PR #${PR_NUMBER} is ${state}, not MERGED. Merge it, then re-run this job." >&2
+            exit 1
+          fi
+          merge_commit="$(gh pr view "${PR_NUMBER}" --repo "${GITHUB_REPOSITORY}" --json mergeCommit --jq .mergeCommit.oid)"
+          echo "merge_commit=${merge_commit}" >> "${GITHUB_OUTPUT}"
+
+      # Tag the reviewed merge commit, not whatever main points at by now.
+      - name: Checkout merge commit
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ steps.merged.outputs.merge_commit }}
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Create and push tag
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          MERGE_COMMIT: ${{ steps.merged.outputs.merge_commit }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git fetch --no-tags --force origin refs/heads/main:refs/remotes/origin/main
+          if ! git merge-base --is-ancestor "${MERGE_COMMIT}" refs/remotes/origin/main; then
+            echo "Merge commit ${MERGE_COMMIT} is not reachable from origin/main" >&2
+            exit 1
+          fi
+
+          chart_version="$(awk '$1 == "version:" { print $2; exit }' deploy/operator/Chart.yaml | tr -d '\"')"
+          app_version="$(awk '$1 == "appVersion:" { print $2; exit }' deploy/operator/Chart.yaml | tr -d '\"')"
+          image_tag="$(awk '
+            $0 == "wandb-operator:" { in_operator = 1; next }
+            in_operator && $0 == "  image:" { in_image = 1; next }
+            in_image && $1 == "tag:" { print $2; exit }
+          ' deploy/operator/values.yaml | tr -d '\"')"
+          for value in "${chart_version}" "${app_version}" "${image_tag}"; do
+            if [[ "${value}" != "${VERSION}" ]]; then
+              echo "Merge commit is not at ${VERSION}: chart=${chart_version}, appVersion=${app_version}, image=${image_tag}" >&2
+              exit 1
+            fi
+          done
+
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null; then
+            echo "Tag ${TAG} already exists" >&2
+            exit 1
+          fi
+
+          bot_id="$(gh api "users/${APP_SLUG}%5Bbot%5D" --jq .id)"
+          git config user.name "${APP_SLUG}[bot]"
+          git config user.email "${bot_id}+${APP_SLUG}[bot]@users.noreply.github.com"
+
+          git tag -a "${TAG}" -m "Operator ${TAG}" "${MERGE_COMMIT}"
+          git push origin "refs/tags/${TAG}"
+
+      - name: Watch Release v2
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          MERGE_COMMIT: ${{ steps.merged.outputs.merge_commit }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          run_id=""
+          for _ in $(seq 1 30); do
+            run_id="$(gh run list --repo "${GITHUB_REPOSITORY}" --workflow release.yaml --event push \
+              --json databaseId,headBranch --jq "map(select(.headBranch == \"${TAG}\"))[0].databaseId // empty")"
+            [[ -n "${run_id}" ]] && break
+            sleep 10
+          done
+          if [[ -z "${run_id}" ]]; then
+            echo "Release v2 run for ${TAG} did not start within 5 minutes" >&2
+            exit 1
+          fi
+
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${run_id}"
+          {
+            echo "Source commit: \`${MERGE_COMMIT}\`"
+            echo "Release v2 run: ${run_url}"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+          gh run watch "${run_id}" --repo "${GITHUB_REPOSITORY}" --exit-status
+
+          echo "GitHub Release: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/tag/${TAG}" >> "${GITHUB_STEP_SUMMARY}"
